@@ -14,7 +14,7 @@ export const BATCH_ID_PATTERNS = [
   /\bP\d{1,3}-B\d+(?:\.\d+)?[a-z]?\b/,      // P19-B6, P19-B6.5a  (phase-scoped batch + sub-batch)
   /\bB-NEW-\d+[a-z]?\b/,                     // B-NEW-53, B-NEW-53a (historical)
   /\bB\d{2,}\.\d+[a-z]?(?:-[A-Z])?\b/,       // B79.0n, B4.6-B style
-  /\bB-[A-Z][A-Z0-9]+(?:\.\d+)?\b/,          // B-NAMES, B-GOV, B-NAMES.1 (letter-named)
+  /\bB-[A-Z][A-Z0-9]+(?:-\d+)?(?:\.\d+)?\b/,  // B-NAMES, B-GOV, B-GOV-2, B-NAMES.1 (letter-named; -N suffix captured — Langston Step-4)
 ];
 
 // Commits that legitimately carry NO batch tag (not code pushes — pre-audit §1.b.i).
@@ -128,3 +128,40 @@ export const OPEN_STATE_BACKSTOP_HOURS = 48;
 // Emptiness floor (Obj-3 / C7 / C10): a doc touched but with <= this many net
 // content lines (after stripping whitespace/date-bump/TOC/heading-only) is "hollow".
 export const HOLLOW_NET_LINE_FLOOR = 3;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// B-GOV-2 (activation) constants
+// ─────────────────────────────────────────────────────────────────────────────
+
+// OBJ-1: a batch declares its change-class in its SCOPE-file header (NOT the commit
+// message — Langston Step-1). The checker resolves the batch's scope file from the
+// canonical Scope Files dir (filename contains the batch-id) and parses this marker.
+export const SCOPE_DIR = 'Claude Comms and Packages/Scope Files';
+export const CHANGE_CLASS_MARKER = /(?:^|\n)\s*(?:[-*>]\s*)?(?:\*\*)?change-class(?:\*\*)?\s*[:=]\s*`?([a-z_]+)`?/i;
+export const VALID_CLASSES = ['architecture', 'non_architecture', 'sub_batch', 'hotfix'];
+
+// OBJ-2: path-heuristic under-declaration guard. A diff touching these CORE ENGINE
+// paths but declaring a non-architecture class → route "class may be under-declared".
+// NOTE: substring match (`.includes`) — a typo'd path SILENTLY never matches (Langston
+// Step-4 b-2). Every entry below is grep-verified to resolve to a real file in the tree.
+export const CORE_ENGINE_PATHS = [
+  'server/services/signal-orchestrator',
+  'server/services/market-context-engine',        // MCE
+  'server/core/filters/signal_quality_evaluator', // SQE
+  'server/services/tec-evaluator',                // TEC (was the non-existent "trade-execution")
+  'server/services/strategy-engine',              // the 9 in-class quant strategies (Langston b-1: the omission its own body named)
+  'server/strategies',                            // file-based strategies (System-Manual scope, 2026-06-16)
+  'server/core/metrics/market-regime',
+  'server/core/metrics/regime-phase',
+  'server/config/canonical-regime-strategy-map',  // SSOT (was the non-existent "shared/...")
+  'server/asset_classes',
+];
+
+// OBJ-4c: an OPEN-declared batch open past this is a low-sev "still open?" escalation
+// (on top of the 48h ping) — OPEN must never become a silent permanent bypass.
+export const OPEN_STATE_MAX_AGE_HOURS = 24 * 7; // 7 days
+
+// OBJ-5d: SHADOW mode — the first batch-or-two after activation run with ALL governance
+// alerts downgraded to 'info' severity (visible, not paged) to calibrate against live
+// Phase-19 patterns before warning-sev is trusted. Env-overridable: GOV_SHADOW=0 to exit.
+export const SHADOW_MODE = process.env.GOV_SHADOW !== '0';

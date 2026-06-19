@@ -47,7 +47,7 @@
 - **Verify:** a batch declaring `sub_batch` whose diff touches `server/services/signal-orchestrator.ts` raises the under-declaration route; a docs-only batch does not.
 
 ### OBJ-3 — Dead-man heartbeat (self-liveness)
-- The poller writes a `lastTick` timestamp every tick (already in state); add a **silence-detector**: if `now - lastTick > TICK_MINUTES × HEARTBEAT_MISS_LIMIT`, emit a LOW-sev `governance-checker-silent` alert into the §10.5 queue. Implement so it fires even if the poller itself is dead — i.e. a **separate tiny systemd timer / check** (the checker can't report its own death), OR fold into the existing dawntrader cron-fire-evidence verifier pattern (it already detects stale schedules).
+- The poller writes a `lastTick` timestamp every tick (already in state); add a **silence-detector**: if `now - lastTick > TICK_MINUTES × HEARTBEAT_MISS_LIMIT`, emit a **`warning`-sev** `governance-checker-silent` alert into the §10.5 queue (a dead checker = enforcement OFF; it should page even during the shadow window, and the heartbeat does NOT honor shadow — Langston Step-4). Implement so it fires even if the poller itself is dead — i.e. a **separate tiny systemd timer / check** (the checker can't report its own death), OR fold into the existing dawntrader cron-fire-evidence verifier pattern (it already detects stale schedules).
 - **Verify:** stop the poller; within `HEARTBEAT_MISS_LIMIT` ticks a silent-checker alert appears.
 
 ### OBJ-4 — Long-autonomous-batch OPEN handling (Kyle directive 2026-06-17)

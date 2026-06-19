@@ -1,20 +1,24 @@
-# B-GOV governance-checker — systemd oneshot (Item 4: own process, NOT a while-true daemon,
-# isolated from the dawntrader node event loop). Paired with governance-checker.timer.
-# Deploy to a LOCAL clone on the box (NOT the gdrive FUSE mount — Langston C6).
+# B-GOV-2 governance-checker — systemd oneshot. Own process, NOT a while-true daemon,
+# isolated from the dawntrader node event loop. Paired with governance-checker.timer.
+# HOST = STAGING (188.245.193.8) (Langston B-GOV-2 Step-1: the alert queue lives here,
+# reliable always-on host, single clock, local CLI = no per-alert ssh). Runs against a
+# DEDICATED LOCAL clone (NOT the gdrive mount, NOT the live app checkout).
 [Unit]
-Description=B-GOV governance-checker tick (post-batch doc-set + deadline checker)
+Description=B-GOV-2 governance-checker tick (post-batch doc-set + deadline checker)
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=oneshot
-User=governance
+User=deploy
 WorkingDirectory=/opt/governance-checker/DawnTraderV3
-# Pure local clone; never the gdrive mount (C6). State persisted outside the repo tree.
+# Dedicated local clone (git reads). State persisted outside the repo tree.
 Environment=GOV_STATE_FILE=/var/lib/governance-checker/state.json
 Environment=GOV_BRANCH=origin/migration/aws-supabase
-Environment=GOV_STAGING=deploy@188.245.193.8
+# CLI runs LOCALLY on staging against the live app dir (no ssh — GOV_REMOTE unset).
 Environment=GOV_STAGING_REPO=/home/deploy/dawntrader
+# OBJ-5d: SHADOW for the first batch-or-two (all alerts → info); set GOV_SHADOW=0 to go live.
+Environment=GOV_SHADOW=1
 ExecStart=/usr/bin/node scripts/governance-checker/poller.mjs
-# Hard ceiling so a wedged git/ssh can never hang the box (the §18 lesson).
+# Hard ceiling so a wedged git can never hang the tick (the §18 lesson).
 TimeoutStartSec=120

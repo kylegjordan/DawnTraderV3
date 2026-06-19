@@ -19,9 +19,10 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 import {
-  extractBatchId, DEADLINE_HOURS, OPEN_STATE_BACKSTOP_HOURS, DEFAULT_CLASS,
+  extractBatchId, DEADLINE_HOURS, OPEN_STATE_BACKSTOP_HOURS, OPEN_STATE_MAX_AGE_HOURS,
+  DEFAULT_CLASS, SHADOW_MODE,
 } from './config.mjs';
-import { checkBatchDocset, classifyCommit } from './checker.mjs';
+import { checkBatchDocset, classifyCommit, diffTouchesCoreEngine, readDeclaredClass } from './checker.mjs';
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(SCRIPT_DIR, '..', '..');
@@ -47,7 +48,7 @@ export function computeBatchStates(commits) {
       continue;
     }
     if (!states.has(bid)) {
-      states.set(bid, { batchId: bid, firstCode: null, lastCode: null, hasGovernance: false });
+      states.set(bid, { batchId: bid, firstCode: null, lastCode: null, hasGovernance: false, _files: new Set() });
     }
     const s = states.get(bid);
     const t = Date.parse(c.date);
@@ -56,8 +57,11 @@ export function computeBatchStates(commits) {
       if (s.lastCode === null || t > s.lastCode) s.lastCode = t;
     }
     if (governance) s.hasGovernance = true;
+    for (const f of c.files) s._files.add(f); // B-GOV-2 OBJ-2: accumulate changed files for the path heuristic
   }
-  return { batches: [...states.values()], untaggedCode };
+  // materialize files (OBJ-2) and drop the Set
+  const batches = [...states.values()].map((s) => ({ ...s, files: [...s._files], _files: undefined }));
+  return { batches, untaggedCode };
 }
 
 // Decide which alerts to OPEN and which to RESOLVE, given batch states + declared
@@ -66,6 +70,10 @@ export function computeBatchStates(commits) {
 export function decideAlerts(batchStates, exceptions, nowMs, opts = {}) {
   const deadlineMs = (opts.deadlineHours ?? DEADLINE_HOURS) * HOUR_MS;
   const backstopMs = (opts.backstopHours ?? OPEN_STATE_BACKSTOP_HOURS) * HOUR_MS;
+  const maxAgeMs = (opts.maxOpenAgeHours ?? OPEN_STATE_MAX_AGE_HOURS) * HOUR_MS;
+  const shadow = opts.shadow ?? SHADOW_MODE;            // OBJ-5d: shadow downgrades to info
+  const coreCheck = opts.coreEngineCheck || diffTouchesCoreEngine; // OBJ-2 (injectable for tests)
+  const sev = (level) => (shadow ? 'info' : level);
   const open = exceptions.open || new Set();
   const openSince = exceptions.openSince || new Map();
   const na = exceptions.naConfirmed || new Set();
@@ -74,6 +82,31 @@ export function decideAlerts(batchStates, exceptions, nowMs, opts = {}) {
 
   for (const s of batchStates) {
     const declaredOpen = open.has(s.batchId);
+    const klass = s.declaredClass || DEFAULT_CLASS;
+
+    // (0a) OBJ-1: class undeclared → fail-closed to strictest + a low-sev flag.
+    const classKey = `gov-classundeclared:${s.batchId}`;
+    if (s.classDeclared === false) {
+      toOpen.push({
+        dedupeKey: classKey, severity: sev('info'),
+        title: `Change-class undeclared for ${s.batchId} — defaulting to strictest (architecture)`,
+        body: `Batch ${s.batchId} has no parseable change-class in its scope header; the checker is grading it against the architecture doc-set. Declare 'change-class:' in the scope header to grade it correctly.`,
+      });
+    } else if (s.classDeclared === true) {
+      toResolveKeys.push(classKey);
+    }
+
+    // (0b) OBJ-2: path-heuristic under-declaration guard.
+    const underKey = `gov-underdeclared:${s.batchId}`;
+    if (klass !== 'architecture' && s.files && coreCheck(s.files)) {
+      toOpen.push({
+        dedupeKey: underKey, severity: sev('warning'),
+        title: `Possible under-declared class: ${s.batchId} declared '${klass}' but its diff touches core engine paths`,
+        body: `Batch ${s.batchId} is declared '${klass}', but its changed files touch core engine code (strategy-engine / MCE / SQE / TEC / regime / signal orchestrator). Confirm the class is right (it may need 'architecture' so SYSTEM_MANUAL + SIM are required) — Langston to judge.`,
+      });
+    } else {
+      toResolveKeys.push(underKey);
+    }
 
     // (1) Deadline alert (C8: clears on FIRST governance push).
     const deadlineKey = `gov-deadline:${s.batchId}`;
@@ -81,27 +114,45 @@ export function decideAlerts(batchStates, exceptions, nowMs, opts = {}) {
       toResolveKeys.push(deadlineKey); // first governance push clears the deadline obligation
     } else if (!declaredOpen && s.lastCode !== null && nowMs - s.lastCode > deadlineMs) {
       toOpen.push({
-        dedupeKey: deadlineKey, severity: 'warning',
+        dedupeKey: deadlineKey, severity: sev('warning'),
         title: `Governance overdue: ${s.batchId} code pushed ${Math.round((nowMs - s.lastCode) / HOUR_MS)}h ago, no governance push`,
         body: `Batch ${s.batchId} had a code push but no governance-bearing push within ${opts.deadlineHours ?? DEADLINE_HOURS}h. Either close it (push the completion report + doc updates) or declare it OPEN in GOVERNANCE_EXCEPTIONS.md.`,
       });
     }
 
-    // (2) Stale-open route (C3: open can't be an infinite mute).
+    // (2) Stale-open route (C3 + OBJ-4c: OPEN can't be a silent permanent bypass).
     if (declaredOpen) {
       const since = openSince.get(s.batchId);
-      if (since != null && nowMs - since > backstopMs) {
+      const malKey = `gov-malformed-open:${s.batchId}`;
+      if (since == null) {
+        // OBJ-4c hole (Langston Step-4): an OPEN with no parseable since-date suspends the
+        // deadline forever AND defeats both backstops silently. Surface it loudly instead of
+        // letting a one-char date typo buy infinite suspension.
         toOpen.push({
-          dedupeKey: `gov-staleopen:${s.batchId}`, severity: 'info',
-          title: `Open batch ${s.batchId} has been open > ${opts.backstopHours ?? OPEN_STATE_BACKSTOP_HOURS}h — still legitimately open?`,
-          body: `Batch ${s.batchId} is declared OPEN (deadline suspended) but has been open over the backstop. Confirm it is still legitimately open or close it.`,
+          dedupeKey: malKey, severity: sev('warning'),
+          title: `OPEN batch ${s.batchId} has no parseable 'open since' date — backstops cannot run`,
+          body: `Batch ${s.batchId} is declared OPEN in GOVERNANCE_EXCEPTIONS.md but its open-since timestamp is missing/unparseable, so the 48h/7d backstops can never fire (a silent permanent bypass). Fix the date (ISO, e.g. 2026-06-18T12:00:00Z).`,
         });
+      } else {
+        toResolveKeys.push(malKey);
+        if (nowMs - since > maxAgeMs) {
+          toOpen.push({
+            dedupeKey: `gov-openmaxage:${s.batchId}`, severity: sev('warning'),
+            title: `Open batch ${s.batchId} has been OPEN > ${Math.round((opts.maxOpenAgeHours ?? OPEN_STATE_MAX_AGE_HOURS) / 24)}d — close it or re-justify`,
+            body: `Batch ${s.batchId} has been declared OPEN past the max-age backstop. OPEN must not become a permanent bypass of the doc-set check — close the batch or explicitly re-justify in GOVERNANCE_EXCEPTIONS.md.`,
+          });
+        } else if (nowMs - since > backstopMs) {
+          toOpen.push({
+            dedupeKey: `gov-staleopen:${s.batchId}`, severity: sev('info'),
+            title: `Open batch ${s.batchId} has been open > ${opts.backstopHours ?? OPEN_STATE_BACKSTOP_HOURS}h — still legitimately open?`,
+            body: `Batch ${s.batchId} is declared OPEN (deadline suspended) but has been open over the backstop. Confirm it is still legitimately open or close it.`,
+          });
+        }
       }
     }
 
     // (3) Doc-set gap (C8: persists until verified per Obj-13). Only meaningful once closed.
     if (s.hasGovernance) {
-      const klass = s.declaredClass || DEFAULT_CLASS;
       const check = (opts.docsetCheck || checkBatchDocset)(s.batchId, klass, { requiredOnly: true });
       // Iterate the FULL required set (not just the missing slice) so a doc-gap RESOLVES
       // when the doc later lands — resolve-on-verified-state, Obj-13 (Langston Step-4 a).
@@ -110,7 +161,7 @@ export function decideAlerts(batchStates, exceptions, nowMs, opts = {}) {
         const present = check.required[doc] === true;
         if (present || na.has(`${s.batchId}:${doc}`)) { toResolveKeys.push(key); continue; }
         toOpen.push({
-          dedupeKey: key, severity: 'warning',
+          dedupeKey: key, severity: sev('warning'),
           title: `Missing required governance doc: ${doc} for ${s.batchId}`,
           body: `Batch ${s.batchId} (class ${klass}) closed but required doc "${doc}" is absent or hollow. Update it, or mark it N/A (Langston-confirmed) in GOVERNANCE_EXCEPTIONS.md.`,
         });
@@ -121,8 +172,12 @@ export function decideAlerts(batchStates, exceptions, nowMs, opts = {}) {
 }
 
 // ── SIDE-EFFECT WRAPPERS (run only when deployed) ──────────────────────────────
+// OBJ-5c: a failed fetch degrades to fetchOk=false (the tick then flags low-sev + skips
+// evaluation, never a false RED off stale state).
 function gitFetchAndLog(n = 300) {
-  execFileSync('git', ['fetch', '--quiet', 'origin'], { cwd: REPO_ROOT });
+  let fetchOk = true;
+  try { execFileSync('git', ['fetch', '--quiet', 'origin'], { cwd: REPO_ROOT, timeout: 60000 }); }
+  catch (e) { fetchOk = false; console.warn(`[gov-checker] git fetch failed (stale local clone): ${String(e.message).slice(0, 150)}`); }
   const out = execFileSync('git', ['log', BRANCH, `-n${n}`, '--pretty=COMMIT|%H|%cI|%s', '--name-only'],
     { cwd: REPO_ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
   const commits = []; let cur = null;
@@ -132,7 +187,16 @@ function gitFetchAndLog(n = 300) {
     else if (line.trim() && cur) cur.files.push(line.trim());
   }
   if (cur) commits.push(cur);
-  return commits;
+  return { commits, fetchOk };
+}
+
+// OBJ-5 host change: the checker runs ON STAGING, so the system-alerts CLI runs LOCALLY
+// (no ssh per alert). GOV_REMOTE=1 falls back to ssh if ever run off-box.
+const RUN_REMOTE = process.env.GOV_REMOTE === '1';
+function runCli(cmd) {
+  return RUN_REMOTE
+    ? execFileSync('ssh', [STAGING, cmd], { encoding: 'utf8' })
+    : execFileSync('bash', ['-lc', cmd], { encoding: 'utf8' });
 }
 
 function loadState() { return existsSync(STATE_FILE) ? JSON.parse(readFileSync(STATE_FILE, 'utf8')) : { openAlerts: {}, lastTick: null }; }
@@ -148,13 +212,13 @@ const alertSink = {
     const cmd = `cd ${STAGING_REPO} && npm run -s system-alerts -- add ` +
       `--triggers-at ${new Date(nowMs).toISOString()} --category governance --severity ${severity} ` +
       `--title ${shq(title)} --body ${shq(body)} --metadata ${shq(meta)}`;
-    const out = execFileSync('ssh', [STAGING, cmd], { encoding: 'utf8' });
+    const out = runCli(cmd);
     const m = out.match(/"id":\s*"([0-9a-f-]+)"/);
     return m ? m[1] : null;
   },
   resolve(alertId) {
     const cmd = `cd ${STAGING_REPO} && npm run -s system-alerts -- resolve ${alertId} --by governance-checker`;
-    try { execFileSync('ssh', [STAGING, cmd], { encoding: 'utf8' }); }
+    try { runCli(cmd); }
     catch (e) {
       // An already-terminal / not-found resolve is benign; anything else is a REAL failure —
       // a silently-swallowed resolve = an alert we think we cleared but didn't (Langston Step-4 c).
@@ -184,11 +248,37 @@ function loadExceptions() {
 }
 
 export function tick(nowMs = Date.now()) {
-  const commits = gitFetchAndLog();
+  const state = loadState();
+  const { commits, fetchOk } = gitFetchAndLog();
+  // OBJ-5c: if the fetch failed, do NOT evaluate off stale state — flag + exit. A PERSISTENT
+  // blind streak escalates info → warning after 3 consecutive (Langston Step-4 c: a checker
+  // alive-but-network-blind for hours mustn't look healthy behind one un-paged info alert).
+  const FETCH_KEY = 'gov-fetch-failed';
+  if (!fetchOk) {
+    state.fetchFailStreak = (state.fetchFailStreak || 0) + 1;
+    const want = state.fetchFailStreak >= 3 ? 'warning' : 'info';
+    const payload = (sev) => ({ dedupeKey: FETCH_KEY, severity: sev,
+      title: `governance-checker could not fetch origin (${state.fetchFailStreak} consecutive tick${state.fetchFailStreak > 1 ? 's' : ''})`,
+      body: `git fetch failed; skipped evaluation to avoid false alarms off stale state. ${want === 'warning' ? 'Persistent — the checker has been network-blind across multiple ticks; enforcement is effectively paused. Investigate.' : 'Will retry next tick.'}` });
+    if (!state.openAlerts[FETCH_KEY]) {
+      const id = alertSink.add(payload(want), nowMs);
+      if (id) { state.openAlerts[FETCH_KEY] = id; state.fetchFailSev = want; }
+    } else if (state.fetchFailSev === 'info' && want === 'warning') {
+      // escalate: resolve the info alert + reopen at warning
+      alertSink.resolve(state.openAlerts[FETCH_KEY]); delete state.openAlerts[FETCH_KEY];
+      const id = alertSink.add(payload('warning'), nowMs);
+      if (id) { state.openAlerts[FETCH_KEY] = id; state.fetchFailSev = 'warning'; }
+    }
+    state.lastTick = nowMs; saveState(state);
+    return { opened: 0, resolved: 0, untaggedCode: 0, fetchOk: false };
+  }
+  state.fetchFailStreak = 0; state.fetchFailSev = undefined;
+  if (state.openAlerts[FETCH_KEY]) { alertSink.resolve(state.openAlerts[FETCH_KEY]); delete state.openAlerts[FETCH_KEY]; }
   const { batches, untaggedCode } = computeBatchStates(commits);
+  // OBJ-1: read each open batch's declared change-class from its scope header.
+  for (const b of batches) { const d = readDeclaredClass(b.batchId); b.declaredClass = d.class; b.classDeclared = d.declared; }
   const exceptions = loadExceptions();
   const { toOpen, toResolveKeys } = decideAlerts(batches, exceptions, nowMs);
-  const state = loadState();
   // dedupe via own state (logical key → alert id); only add if not already open.
   for (const a of toOpen) {
     if (!state.openAlerts[a.dedupeKey]) {

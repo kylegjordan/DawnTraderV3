@@ -15,6 +15,7 @@ import { dirname, join, resolve } from 'node:path';
 import {
   DOCS, CLASS_DOCSET, DEFAULT_CLASS, HOLLOW_NET_LINE_FLOOR, REQUIRED_IF,
   CODE_PREFIXES, GOVERNANCE_PREFIXES, HOUSEKEEPING_ONLY_PATHS, HOUSEKEEPING_ONLY_BASENAMES,
+  SCOPE_DIR, CHANGE_CLASS_MARKER, VALID_CLASSES, CORE_ENGINE_PATHS,
   extractBatchId, batchIdToFileRegex,
 } from './config.mjs';
 
@@ -147,4 +148,36 @@ export function recentBatchIds(n = 200) {
     if (bid && !seen.has(bid)) seen.set(bid, c.date);
   }
   return [...seen.keys()];
+}
+
+// ── B-GOV-2 OBJ-1: read a batch's DECLARED change-class from its scope-file header ──
+// Resolves the scope file from SCOPE_DIR (filename contains the batch-id), parses the
+// `change-class:` marker. Returns { class, declared, scopePath } — class falls back to
+// DEFAULT_CLASS (strictest) when undeclared/missing/unparseable (fail-closed, Langston).
+export function readDeclaredClass(batchId) {
+  const dir = join(REPO_ROOT, SCOPE_DIR);
+  if (!existsSync(dir)) return { class: DEFAULT_CLASS, declared: false, scopePath: null, reason: 'no-scope-dir' };
+  const re = batchIdToFileRegex(batchId);
+  // prefer a file whose name has the batch-id AND looks like a scope (not pre-audit/change-list)
+  // .sort() for deterministic selection when a batch has multiple scope files (Langston Step-4 a).
+  const candidates = readdirSync(dir).filter((n) => re.test(n) && /SCOPE/i.test(n)).sort();
+  if (candidates.length === 0) return { class: DEFAULT_CLASS, declared: false, scopePath: null, reason: 'no-scope-file' };
+  for (const name of candidates) {
+    let text;
+    try { text = readFileSync(join(dir, name), 'utf8'); } catch { continue; }
+    const m = text.match(CHANGE_CLASS_MARKER);
+    if (m) {
+      const cls = m[1].toLowerCase();
+      if (VALID_CLASSES.includes(cls)) return { class: cls, declared: true, scopePath: join(SCOPE_DIR, name), reason: 'declared' };
+      return { class: DEFAULT_CLASS, declared: false, scopePath: join(SCOPE_DIR, name), reason: `invalid-class:${cls}` };
+    }
+  }
+  return { class: DEFAULT_CLASS, declared: false, scopePath: join(SCOPE_DIR, candidates[0]), reason: 'no-marker' };
+}
+
+// ── B-GOV-2 OBJ-2: path-heuristic under-declaration guard ──
+// True if the batch's changed files touch a CORE ENGINE path. Pure (caller supplies the
+// file list from the batch's commits) so it is unit-testable without git.
+export function diffTouchesCoreEngine(files) {
+  return files.some((f) => CORE_ENGINE_PATHS.some((p) => f.includes(p)));
 }

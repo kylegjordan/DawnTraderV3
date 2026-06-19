@@ -1,0 +1,16 @@
+# B-GOV-2 OBJ-3 — dead-man heartbeat check. SEPARATE process from the poller so it can
+# detect the poller's death (a checker can't report its own death). Runs on STAGING.
+[Unit]
+Description=B-GOV-2 governance-checker dead-man heartbeat (is the checker alive?)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=deploy
+WorkingDirectory=/opt/governance-checker/DawnTraderV3
+Environment=GOV_STATE_FILE=/var/lib/governance-checker/state.json
+Environment=GOV_HB_STATE=/var/lib/governance-checker/heartbeat-state.json
+Environment=GOV_STAGING_REPO=/home/deploy/dawntrader
+ExecStart=/usr/bin/node scripts/governance-checker/heartbeat-check.mjs
+TimeoutStartSec=60
