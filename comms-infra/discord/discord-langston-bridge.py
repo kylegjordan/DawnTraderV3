@@ -281,7 +281,11 @@ def build_client(task_q):
         seen_set.add(message.id)
 
         author_is_kyle = (message.author.id == CFG["kyle_id"])
-        author_is_cc_bot = (message.author.id == CFG["cc_bot_id"])
+        # CC is recognized as the pinned CC bot OR a post from CC's webhook (the per-session
+        # display-name path) — so bot-to-bot still works when CC posts as "Claude Old"/"New".
+        wh_id = getattr(message, "webhook_id", None)
+        author_is_cc_bot = (message.author.id == CFG["cc_bot_id"]) or \
+                           (wh_id is not None and CFG.get("webhook_id") is not None and wh_id == CFG["webhook_id"])
         voice = dc.detect_voice_attachment(message)
         content = (message.content or "").strip()
 

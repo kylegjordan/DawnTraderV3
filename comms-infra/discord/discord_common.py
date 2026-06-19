@@ -81,6 +81,22 @@ def load_shared_config():
             cfg[opt.lower().replace("discord_", "")] = int(load_env_value(SHARED_CONFIG_FILE, opt))
         except Exception:
             cfg[opt.lower().replace("discord_", "")] = None
+    # Optional webhook for per-session display names (Claude Old / Claude New). CC_WEBHOOK_ID
+    # is derived from the URL so Langston still recognizes CC's webhook posts as "CC" (the
+    # address-gate keys on it in addition to CC_BOT_ID).
+    try:
+        cfg["webhook_url"] = load_env_value(SHARED_CONFIG_FILE, "CC_WEBHOOK_URL")
+        cfg["webhook_id"] = int(cfg["webhook_url"].rstrip("/").split("/webhooks/")[1].split("/")[0])
+    except Exception:
+        cfg["webhook_url"] = None
+        cfg["webhook_id"] = None
+    # Optional per-sender avatar icons (URLs), keyed by sender label.
+    cfg["avatars"] = {}
+    for key, label in (("AVATAR_CLAUDE_OLD", "Claude Old"), ("AVATAR_CLAUDE_NEW", "Claude New")):
+        try:
+            cfg["avatars"][label] = load_env_value(SHARED_CONFIG_FILE, key)
+        except Exception:
+            pass
     return cfg
 
 
@@ -108,65 +124,79 @@ def chunk_text(text, limit=MSG_LIMIT):
 
 INTER_CHUNK_DELAY_S = 0.35   # stay under the per-channel ~5 msg/5s limit on multi-chunk relays
 MAX_429_RETRIES = 4
+UA = "DawnTraderBridge (https://dawntrader, 1.0)"
 
 
-def rest_send(token, channel_id, content, log_file, mention_user_id=None):
-    """POST a message to a channel via the Discord REST API as the bot.
+def _post_json(url, headers, payload, log_file):
+    """Single POST with 429 Retry-After handling. Returns (ok: bool, resp_json|None)."""
+    body = json.dumps(payload).encode("utf-8")
+    for attempt in range(MAX_429_RETRIES + 1):
+        req = urllib.request.Request(url, data=body, method="POST", headers=headers)
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                raw = r.read()
+                return True, (json.loads(raw) if raw else None)
+        except urllib.error.HTTPError as e:
+            raw = e.read().decode("utf-8", errors="replace")
+            if e.code == 429 and attempt < MAX_429_RETRIES:
+                retry_after = e.headers.get("Retry-After")
+                try:
+                    wait = float(retry_after) if retry_after else float(json.loads(raw).get("retry_after", 1.0))
+                except Exception:
+                    wait = 1.0
+                log(f"POST 429, retry in {wait:.2f}s (attempt {attempt+1})", log_file)
+                time.sleep(min(wait + 0.1, 10))
+                continue
+            log(f"POST HTTP {e.code}: {raw[:300]}", log_file)
+            return False, None
+        except Exception as e:
+            log(f"POST error: {type(e).__name__}: {e}", log_file)
+            return False, None
+    return False, None
 
-    Auto-chunks at 2000. Returns the first chunk's message_id, or None if ANY chunk
-    ultimately failed (so callers never log a delivery that was truncated).
 
-    Langston review (2b): handle HTTP 429 with Retry-After + bounded retries, and a
-    small inter-chunk delay, so a multi-chunk relay can't silently drop tail chunks.
-    mention_user_id (Test 6 / §6.10): prepend <@id> to the FIRST chunk so Discord
-    actually pushes a phone notification (plain channel posts don't notify by default).
+def _send_chunks(url, base_headers, content, log_file, mention_user_id=None, extra_payload=None):
+    """Chunk + deliver content via repeated _post_json. Returns first chunk's message id or None.
+
+    Aborts (returns None) if any chunk fails, so callers never log a truncated delivery.
     """
-    url = f"{DISCORD_API}/channels/{channel_id}/messages"
     chunks = chunk_text(content)
     if mention_user_id:
         chunks[0] = f"<@{mention_user_id}> " + chunks[0]
     first_id = None
     for i, chunk in enumerate(chunks):
-        body = json.dumps({"content": chunk}).encode("utf-8")
-        sent = False
-        for attempt in range(MAX_429_RETRIES + 1):
-            req = urllib.request.Request(
-                url, data=body, method="POST",
-                headers={
-                    "Authorization": f"Bot {token}",
-                    "Content-Type": "application/json",
-                    "User-Agent": "DawnTraderBridge (https://dawntrader, 1.0)",
-                },
-            )
-            try:
-                with urllib.request.urlopen(req, timeout=30) as r:
-                    resp = json.loads(r.read())
-                    if i == 0:
-                        first_id = resp.get("id")
-                sent = True
-                break
-            except urllib.error.HTTPError as e:
-                raw = e.read().decode("utf-8", errors="replace")
-                if e.code == 429 and attempt < MAX_429_RETRIES:
-                    retry_after = e.headers.get("Retry-After")
-                    try:
-                        wait = float(retry_after) if retry_after else float(json.loads(raw).get("retry_after", 1.0))
-                    except Exception:
-                        wait = 1.0
-                    log(f"REST send 429, retry in {wait:.2f}s (chunk {i}, attempt {attempt+1})", log_file)
-                    time.sleep(min(wait + 0.1, 10))
-                    continue
-                log(f"REST send HTTP {e.code}: {raw[:300]}", log_file)
-                return None
-            except Exception as e:
-                log(f"REST send error: {type(e).__name__}: {e}", log_file)
-                return None
-        if not sent:
-            log(f"REST send: chunk {i} exhausted 429 retries — aborting (no truncated-delivery claim)", log_file)
+        payload = {"content": chunk}
+        if extra_payload:
+            payload.update(extra_payload)
+        ok, resp = _post_json(url, base_headers, payload, log_file)
+        if not ok:
+            log(f"send: chunk {i} failed — aborting (no truncated-delivery claim)", log_file)
             return None
+        if i == 0 and resp:
+            first_id = resp.get("id")
         if i < len(chunks) - 1:
             time.sleep(INTER_CHUNK_DELAY_S)
     return first_id
+
+
+def rest_send(token, channel_id, content, log_file, mention_user_id=None):
+    """POST to a channel as the bot. Auto-chunks at 2000, 429-safe (Langston review 2b).
+    mention_user_id (Test 6 / §6.10): @-mention so Discord pushes a phone notification."""
+    url = f"{DISCORD_API}/channels/{channel_id}/messages"
+    headers = {"Authorization": f"Bot {token}", "Content-Type": "application/json", "User-Agent": UA}
+    return _send_chunks(url, headers, content, log_file, mention_user_id=mention_user_id)
+
+
+def webhook_send(webhook_url, username, content, log_file, avatar_url=None, mention_user_id=None):
+    """POST via a Discord webhook with a per-message display NAME (and optional avatar),
+    so each CC session ("Claude Old" / "Claude New") shows as a distinct sender even though
+    they share one underlying app. ?wait=true makes Discord return the created message."""
+    url = webhook_url + ("&" if "?" in webhook_url else "?") + "wait=true"
+    headers = {"Content-Type": "application/json", "User-Agent": UA}
+    extra = {"username": username}
+    if avatar_url:
+        extra["avatar_url"] = avatar_url
+    return _send_chunks(url, headers, content, log_file, mention_user_id=mention_user_id, extra_payload=extra)
 
 
 def download_attachment(url, dest_path, log_file):

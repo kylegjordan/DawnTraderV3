@@ -186,20 +186,28 @@ def daemon():
     client.run(BOT_TOKEN, reconnect=True, log_handler=None)
 
 
-def send(message, notify=False):
-    """Post a message to the configured channel as the CC bot. Mirrors as cc_outbound.
+def send(message, notify=False, sender=None):
+    """Post a message to the configured channel. Mirrors as cc_outbound.
 
-    notify (Test 6 / §6.10): prepend an @-mention of Kyle so Discord actually pushes a
-    phone notification — plain channel posts don't notify under default settings.
+    sender ("Claude Old"/"Claude New"): if a webhook is configured, post via it with that
+    display name (+ optional avatar) so the two CC sessions show as distinct senders. Falls
+    back to a normal bot post (name "DawnTrader CC") when no webhook/sender is set.
+    notify (Test 6 / §6.10): @-mention Kyle so Discord pushes a phone notification.
     """
     channel_id = CFG["channel_id"]
     mention = CFG["kyle_id"] if notify else None
-    first_id = dc.rest_send(BOT_TOKEN, channel_id, message, LOG_FILE, mention_user_id=mention)
+    if sender and CFG.get("webhook_url"):
+        avatar = CFG.get("avatars", {}).get(sender)
+        first_id = dc.webhook_send(CFG["webhook_url"], sender, message, LOG_FILE,
+                                   avatar_url=avatar, mention_user_id=mention)
+    else:
+        first_id = dc.rest_send(BOT_TOKEN, channel_id, message, LOG_FILE, mention_user_id=mention)
     if first_id is None:
         print("send FAILED", file=sys.stderr)
         return None
     for chunk in dc.chunk_text(message):
-        append_inbox("cc_outbound", channel_id=channel_id, message_id=first_id, text=chunk, notify=notify)
+        append_inbox("cc_outbound", channel_id=channel_id, message_id=first_id, text=chunk,
+                     notify=notify, sender=sender)
     print(f"sent id={first_id}")
     return first_id
 
@@ -211,11 +219,12 @@ def main():
     s = sub.add_parser("send")
     s.add_argument("--message", required=True)
     s.add_argument("--notify", action="store_true", help="@-mention Kyle so Discord pushes a phone notification")
+    s.add_argument("--sender", default=None, help='display name for webhook posts, e.g. "Claude Old" / "Claude New"')
     args = parser.parse_args()
     if args.cmd in (None, "daemon"):
         daemon()
     elif args.cmd == "send":
-        send(args.message, notify=args.notify)
+        send(args.message, notify=args.notify, sender=args.sender)
 
 
 if __name__ == "__main__":

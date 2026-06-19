@@ -43,5 +43,10 @@ Inbound on BOTH transports stays live during parallel-run AND after the switch (
 - `echo 'COMMS_BACKEND=telegram' > /etc/dawntrader/comms-active.env`
 - CC's outbound returns to Telegram immediately; Langston-Telegram bridge was never stopped. Done.
 
-## Decommission Telegram (LATER — only after a clean bake window on Discord)
+## Post-switch governance pass (Kyle directive 2026-06-19 — do once comfortable on Discord)
+Two named housecleaning items, owned by the B-DISCORD close (not "someday"):
+1. **Rewrite ALL Telegram-based comms documentation to the Discord model.** Specifically: `CLAUDE.md` §6 (the whole three-way protocol — bot-to-bot now native, retire §6.5.0/.0a/.0b/.1 SSH-deliver apparatus) + §8 (Langston ops: bots, bridges, logs) + §6.9 wake channel (now also tails the Discord log) + §6.10; the SIM comms components; `MEMORY.md`/`MEMORY_CC_A/B.md` session-start steps (poll Discord inbox, post via Discord); and this repo's `comms-infra/` docs. Speaker-prefix convention → now ALSO the webhook display name.
+2. **Archive the Telegram topic-21 history into a searchable file.** Pull the topic-21 message history and save it as a searchable archive under `Claude Comms and Packages/Telegram Discussion Archives/` so the pre-Discord discussion record is preserved and greppable after Telegram is retired.
+
+## Decommission Telegram (LATER — only after the governance pass + a clean bake window on Discord)
 - Stop+disable `langston-bridge cc-comms-bridge`; archive per §5 rule 18; log in DELETED_COMPONENTS_LOG.md.
