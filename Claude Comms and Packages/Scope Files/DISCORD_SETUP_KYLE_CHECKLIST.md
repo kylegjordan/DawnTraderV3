@@ -20,12 +20,16 @@ Go to **discord.com/developers/applications** (logged in as the same account). D
 
 **Bot A — "DawnTrader CC"** (this is my voice; replaces @CCDTCommsBot)
 1. **New Application** → name it `DawnTrader CC` → Create.
-2. Left menu → **Bot**.
-3. Under **Privileged Gateway Intents**, turn ON **MESSAGE CONTENT INTENT** (this is the load-bearing one — it's what lets the bots read each other). You can also turn on Server Members + Presence; not required.
-4. Click **Reset Token** → **Copy** the token. Save it labeled "CC token." (Treat it like a password — anyone with it can post as the bot.)
+2. On **General Information**, copy the **Application ID** → save it labeled "CC bot ID." (Needed so Langston only listens to *this* bot, not any random bot.)
+3. Left menu → **Bot**.
+4. Under **Privileged Gateway Intents**, turn ON **MESSAGE CONTENT INTENT** (this is the load-bearing one — it's what lets the bots read each other). You can also turn on Server Members + Presence; not required.
+5. Click **Reset Token** → **Copy** the token. Save it labeled "CC token." (Treat it like a password — anyone with it can post as the bot.)
 
 **Bot B — "Langston"** (replaces @LangstonDTBot)
-- Repeat 1–4 exactly, naming it `Langston`. Save its token labeled "Langston token."
+- Repeat 1–5 exactly, naming it `Langston`. Save its token labeled "Langston token" and its Application ID labeled "Langston bot ID."
+
+## Step 4.5 — set the channel to push to your phone
+- So you actually get phone notifications during testing: right-click the channel → **Notification Settings** → **All Messages** (or leave it on "Only @mentions" — the bots will @-mention you on anything that must reach your phone). Either works; All Messages is simplest for the test.
 
 ## Step 5 — Invite both bots into your server
 For **each** of the two applications:
@@ -41,12 +45,13 @@ For **each** of the two applications:
 
 ---
 
-## Hand me these 5 values
+## Hand me these values
 1. **CC bot token**
 2. **Langston bot token**
-3. **Server (guild) ID**
+3. **CC bot ID** (the "DawnTrader CC" Application ID — loop-safety pin)
 4. **Channel ID**
 5. **Your Discord user ID**
+6. *(optional)* **Langston bot ID** + **Server ID**
 
 For the two tokens (they're secrets): easiest + safest is you paste them into two files on the server yourself, and I'll tell you the exact two one-line commands to do that when you're ready — that way I never handle the raw token. Or, if you'd rather just send them to me, I'll place them. Your call.
 

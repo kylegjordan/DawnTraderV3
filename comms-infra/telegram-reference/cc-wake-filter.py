@@ -54,7 +54,7 @@ for raw in sys.stdin:
         elif "langston-alert-invokes" in cur:
             if "invoke DONE" in line:
                 print(f"WAKE[ALERT-HANDLED-BY-LANGSTON]: {line[:300]} — read his response tail in /var/log/langston-alert-invokes.log + check if follow-through work is CC's", flush=True)
-        elif "cc-bridge-inbox" in cur:
+        elif "cc-bridge-inbox" in cur or "cc-discord-inbox" in cur:
             try:
                 d = json.loads(line)
             except Exception:

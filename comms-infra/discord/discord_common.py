@@ -69,14 +69,18 @@ def load_env_value(path, key):
 
 
 def load_shared_config():
-    """Returns dict with channel_id:int, kyle_id:int (guild_id optional)."""
+    """Returns dict: channel_id, kyle_id, cc_bot_id (pinned), langston_bot_id (opt), guild_id (opt)."""
     cfg = {}
     cfg["channel_id"] = int(load_env_value(SHARED_CONFIG_FILE, "DISCORD_CHANNEL_ID"))
     cfg["kyle_id"] = int(load_env_value(SHARED_CONFIG_FILE, "KYLE_DISCORD_ID"))
-    try:
-        cfg["guild_id"] = int(load_env_value(SHARED_CONFIG_FILE, "DISCORD_GUILD_ID"))
-    except Exception:
-        cfg["guild_id"] = None
+    # CC_BOT_ID pins which bot Langston accepts as "CC" (Langston review 1a) — not the
+    # generic .bot flag, so a stray webhook/utility bot can't trigger a paid Langston turn.
+    cfg["cc_bot_id"] = int(load_env_value(SHARED_CONFIG_FILE, "CC_BOT_ID"))
+    for opt in ("LANGSTON_BOT_ID", "DISCORD_GUILD_ID"):
+        try:
+            cfg[opt.lower().replace("discord_", "")] = int(load_env_value(SHARED_CONFIG_FILE, opt))
+        except Exception:
+            cfg[opt.lower().replace("discord_", "")] = None
     return cfg
 
 
@@ -102,35 +106,66 @@ def chunk_text(text, limit=MSG_LIMIT):
     return chunks
 
 
-def rest_send(token, channel_id, content, log_file):
+INTER_CHUNK_DELAY_S = 0.35   # stay under the per-channel ~5 msg/5s limit on multi-chunk relays
+MAX_429_RETRIES = 4
+
+
+def rest_send(token, channel_id, content, log_file, mention_user_id=None):
     """POST a message to a channel via the Discord REST API as the bot.
 
-    Auto-chunks at 2000 chars. Returns the message_id of the first chunk, or None.
+    Auto-chunks at 2000. Returns the first chunk's message_id, or None if ANY chunk
+    ultimately failed (so callers never log a delivery that was truncated).
+
+    Langston review (2b): handle HTTP 429 with Retry-After + bounded retries, and a
+    small inter-chunk delay, so a multi-chunk relay can't silently drop tail chunks.
+    mention_user_id (Test 6 / §6.10): prepend <@id> to the FIRST chunk so Discord
+    actually pushes a phone notification (plain channel posts don't notify by default).
     """
     url = f"{DISCORD_API}/channels/{channel_id}/messages"
+    chunks = chunk_text(content)
+    if mention_user_id:
+        chunks[0] = f"<@{mention_user_id}> " + chunks[0]
     first_id = None
-    for i, chunk in enumerate(chunk_text(content)):
+    for i, chunk in enumerate(chunks):
         body = json.dumps({"content": chunk}).encode("utf-8")
-        req = urllib.request.Request(
-            url, data=body, method="POST",
-            headers={
-                "Authorization": f"Bot {token}",
-                "Content-Type": "application/json",
-                "User-Agent": "DawnTraderBridge (https://dawntrader, 1.0)",
-            },
-        )
-        try:
-            with urllib.request.urlopen(req, timeout=30) as r:
-                resp = json.loads(r.read())
-                if i == 0:
-                    first_id = resp.get("id")
-        except urllib.error.HTTPError as e:
-            body_tail = e.read().decode("utf-8", errors="replace")[:300]
-            log(f"REST send HTTP {e.code}: {body_tail}", log_file)
+        sent = False
+        for attempt in range(MAX_429_RETRIES + 1):
+            req = urllib.request.Request(
+                url, data=body, method="POST",
+                headers={
+                    "Authorization": f"Bot {token}",
+                    "Content-Type": "application/json",
+                    "User-Agent": "DawnTraderBridge (https://dawntrader, 1.0)",
+                },
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=30) as r:
+                    resp = json.loads(r.read())
+                    if i == 0:
+                        first_id = resp.get("id")
+                sent = True
+                break
+            except urllib.error.HTTPError as e:
+                raw = e.read().decode("utf-8", errors="replace")
+                if e.code == 429 and attempt < MAX_429_RETRIES:
+                    retry_after = e.headers.get("Retry-After")
+                    try:
+                        wait = float(retry_after) if retry_after else float(json.loads(raw).get("retry_after", 1.0))
+                    except Exception:
+                        wait = 1.0
+                    log(f"REST send 429, retry in {wait:.2f}s (chunk {i}, attempt {attempt+1})", log_file)
+                    time.sleep(min(wait + 0.1, 10))
+                    continue
+                log(f"REST send HTTP {e.code}: {raw[:300]}", log_file)
+                return None
+            except Exception as e:
+                log(f"REST send error: {type(e).__name__}: {e}", log_file)
+                return None
+        if not sent:
+            log(f"REST send: chunk {i} exhausted 429 retries — aborting (no truncated-delivery claim)", log_file)
             return None
-        except Exception as e:
-            log(f"REST send error: {type(e).__name__}: {e}", log_file)
-            return None
+        if i < len(chunks) - 1:
+            time.sleep(INTER_CHUNK_DELAY_S)
     return first_id
 
 

@@ -25,8 +25,20 @@ Discord delivers one bot's messages to another bot (the `author.bot` flag exists
 - The two channels are independent: Kyle posting in Discord triggers only the Discord-Langston bot; posting in Telegram triggers only the Telegram-Langston bot. No cross-talk, no double-answers.
 - For testing, CC arms a SECOND wake watcher tailing the Discord log (the existing Telegram watcher is untouched).
 
-## 4. Inbox-log schema (unchanged — wake filter depends on it)
-Same `kind` values and fields the wake filter + §10.5 reader expect: `langston_inbound`, `langston_outbound`, `langston_silent`, `cc_outbound`, `voice_inbound`, `voice_inbound_failed`. Plus a `transport: "discord"` tag and Discord-native IDs (`guild_id`, `channel_id`, `author_id`) replacing Telegram's `chat_id`/`thread_id`/`sender_id` (both kept where sensible so the filter's username/text reads work). The wake filter keys off `text` + author identity, which are preserved.
+## 4. Inbox-log schema (must match cc-wake-filter.py — verified against the live filter)
+The wake filter keys on (a) the source-file path containing `cc-bridge-inbox` OR `cc-discord-inbox` (the filter was updated to add the Discord path), and (b) the `kind` value:
+- **Kyle text inbound → `kind: ""` (empty)** — the filter's Kyle path is `kind == ""`. The CC bridge writes Kyle's messages with empty kind + `sender_id`/`text` (mirrors the Telegram convention exactly). NOT `discord_inbound`.
+- **`voice_inbound` / `voice_inbound_failed`** — CC-side voice (filter wakes on `voice_inbound` via `text`).
+- **`langston_inbound` / `langston_outbound` / `langston_silent`** — Langston mirror entries; the filter wakes CC on a `langston_outbound` only when it carries a wake-tag (`@CC-WAKE` / "wake cc"), same as Telegram.
+- **`langston_inbound_voice` / `langston_inbound_voice_failed`** — Langston-side voice mirror entries (these match the Telegram bridge's own kind names; they are log-only, not wake triggers).
+- Every entry also carries `transport: "discord"` + Discord-native IDs. The Telegram fabric is unchanged.
+
+## 4.1 Loop safety — the mandatory address-gate (NOT optional)
+On Discord the two bots see each other, so CC's incidental posts (the auto-ACK, voice ACKs) would otherwise wake a *paid* Langston turn on every Kyle message. Fixes (all landed):
+- CC's redundant text auto-ACK is **removed** (in a shared channel Kyle sees his own message; the wake watcher wakes CC immediately).
+- Langston engages a CC-bot message **only when it names "Langston"** (mandatory address-gate), and only from the **pinned `CC_BOT_ID`** (not the generic `.bot` flag).
+- A **circuit breaker** in Langston's worker trips after `BOT_TURN_LIMIT` consecutive non-Kyle turns (hard floor under the soft `[SILENT]` discipline).
+- Both bridges **dedup** by message id (RESUME can redeliver `MESSAGE_CREATE`).
 
 ## 5. Langston bot logic (discord-langston-bridge.py)
 - Connect via gateway (discord.py), `intents.message_content = True`.

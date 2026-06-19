@@ -26,15 +26,18 @@ The concrete operational checklist. Build is done + committed; this is what CC e
 | 3 | **Bot-to-bot CC→Langston** | `cc-send` (backend=discord, temporarily) posts a message addressed to Langston | Langston's bot SEES the CC-bot message + replies in-channel — the capability Telegram blocks |
 | 4 | Voice note | Kyle sends a Discord voice message | transcript in log + ✅ preview ACK |
 | 5 | Wake watcher | any of the above | CC session wakes on the Discord event |
-| 6 | **Phone push parity** | Kyle backgrounds the app; a message/mention posts | Discord mobile push reaches Kyle's phone (gates §6.10 blocked-notify) |
+| 6 | **Phone push parity** | Kyle backgrounds the app; CC posts with `cc-send --notify` (@-mentions Kyle) OR channel set to All Messages | Discord mobile push reaches Kyle's phone (gates §6.10 blocked-notify). Plain posts do NOT notify by default — must @-mention or set All Messages |
 | 7 | Long chunked relay | post a >2000-char message via cc-send | arrives as clean multi-part, no truncation |
 
 Document results inline in this file under a "## Test run <date>" heading. Any failure → do NOT switch (no-op; we never left Telegram).
 
+## ⚠️ Trial-window constraint (Langston review 3): drive ONE channel at a time
+Inbound on BOTH transports stays live during parallel-run AND after the switch (Telegram keeps receiving until decommission — "dormant" describes outbound only). Because `cc-send` routes by the global `COMMS_BACKEND`, a message posted in the *other* channel would get its reply routed to the active one. So during the trial and the post-switch bake: **post in only one channel at a time.** Also note the two Langston brains (Telegram-Langston and Discord-Langston have separate session state) — don't expect shared context across channels.
+
 ## SWITCH (only after all 7 green + Kyle satisfied)
 - `echo 'COMMS_BACKEND=discord' > /etc/dawntrader/comms-active.env`
-- From now CC posts via `cc-send` → Discord; Langston auto-responds in-channel; wake watcher already tails both logs.
-- Telegram services LEFT RUNNING (dormant fallback).
+- From now CC posts via `cc-send` → Discord (add `--notify` on must-reach-phone messages → @-mention push); Langston auto-responds in-channel; wake watcher already tails both logs.
+- Telegram services LEFT RUNNING (outbound fallback; still receiving — drive one channel).
 - Update CLAUDE.md §6/§8 to the Discord model; retire §6.5.0/.0a/.0b/.1; SIM comms-component update; per §5 rule 18 the eventual Telegram removal goes in DELETED_COMPONENTS_LOG.md (later step, after a bake window).
 
 ## ROLLBACK (instant, lossless)

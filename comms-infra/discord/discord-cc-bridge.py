@@ -133,6 +133,9 @@ def daemon():
     intents = discord.Intents.default()
     intents.message_content = True
     client = discord.Client(intents=intents)
+    from collections import deque
+    seen = deque(maxlen=512)
+    seen_set = set()
 
     @client.event
     async def on_ready():
@@ -145,13 +148,24 @@ def daemon():
         is_dm = message.guild is None
         if not is_dm and message.channel.id != CFG["channel_id"]:
             return
-        author_is_bot = bool(getattr(message.author, "bot", False))
+        # CC bridge logs ONLY Kyle's messages. The Langston bridge mirrors its own
+        # langston_* entries, so logging bot messages here would double-log and confuse the
+        # wake filter. (Review: removed the generic-bot logging + the redundant auto-ACK.)
+        if message.author.id != CFG["kyle_id"]:
+            return
+        if message.id in seen_set:
+            return
+        if len(seen) == seen.maxlen:
+            seen_set.discard(seen[0])
+        seen.append(message.id)
+        seen_set.add(message.id)
+
         base = {
             "channel_id": message.channel.id,
             "message_id": message.id,
             "author_id": message.author.id,
             "author_name": str(message.author),
-            "author_is_bot": author_is_bot,
+            "author_is_bot": False,
         }
         voice = dc.detect_voice_attachment(message)
         if voice:
@@ -159,29 +173,33 @@ def daemon():
             log(f"voice enqueued: msg {message.id} from {message.author}")
             return
         content = (message.content or "").strip()
-        append_inbox("discord_inbound",
-                     channel_id=message.channel.id, message_id=message.id,
-                     author_id=message.author.id, sender_username=str(message.author),
-                     sender_is_bot=author_is_bot, is_dm=is_dm, text=content)
-        log(f"inbox: msg {message.id} from {message.author} bot={author_is_bot}: {content[:80]}")
-        # Auto-ACK human inbound only (skip bots so CC↔Langston doesn't get cluttered).
-        if not author_is_bot and content:
-            dc.rest_send(BOT_TOKEN, message.channel.id,
-                         f"✅ Logged (msg {message.id}) — CC will see this. For real-time, use the Claude Desktop conversation.",
-                         LOG_FILE)
+        # Kyle text inbound: empty kind so cc-wake-filter.py treats it as a Kyle message
+        # (its Telegram convention) + sender_id present for any field-based filtering.
+        append_inbox("", channel_id=message.channel.id, message_id=message.id,
+                     author_id=message.author.id, sender_id=message.author.id,
+                     sender_username=str(message.author), is_dm=is_dm, text=content)
+        log(f"inbox: Kyle msg {message.id}: {content[:80]}")
+        # No auto-ACK: redundant in a shared channel (Kyle sees his own message land; the
+        # wake watcher wakes CC immediately). Removing it also avoids the on-loop blocking
+        # send + a paid Langston turn per message (Langston review 1b/2a).
 
     client.run(BOT_TOKEN, reconnect=True, log_handler=None)
 
 
-def send(message):
-    """Post a message to the configured channel as the CC bot. Mirrors as cc_outbound."""
+def send(message, notify=False):
+    """Post a message to the configured channel as the CC bot. Mirrors as cc_outbound.
+
+    notify (Test 6 / §6.10): prepend an @-mention of Kyle so Discord actually pushes a
+    phone notification — plain channel posts don't notify under default settings.
+    """
     channel_id = CFG["channel_id"]
-    first_id = dc.rest_send(BOT_TOKEN, channel_id, message, LOG_FILE)
+    mention = CFG["kyle_id"] if notify else None
+    first_id = dc.rest_send(BOT_TOKEN, channel_id, message, LOG_FILE, mention_user_id=mention)
     if first_id is None:
         print("send FAILED", file=sys.stderr)
         return None
     for chunk in dc.chunk_text(message):
-        append_inbox("cc_outbound", channel_id=channel_id, message_id=first_id, text=chunk)
+        append_inbox("cc_outbound", channel_id=channel_id, message_id=first_id, text=chunk, notify=notify)
     print(f"sent id={first_id}")
     return first_id
 
@@ -192,11 +210,12 @@ def main():
     sub.add_parser("daemon")
     s = sub.add_parser("send")
     s.add_argument("--message", required=True)
+    s.add_argument("--notify", action="store_true", help="@-mention Kyle so Discord pushes a phone notification")
     args = parser.parse_args()
     if args.cmd in (None, "daemon"):
         daemon()
     elif args.cmd == "send":
-        send(args.message)
+        send(args.message, notify=args.notify)
 
 
 if __name__ == "__main__":

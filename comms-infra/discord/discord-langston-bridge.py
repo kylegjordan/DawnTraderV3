@@ -25,12 +25,14 @@ import datetime
 import json
 import os
 import queue
+import re
 import subprocess
 import sys
 import threading
 import time
 import traceback
 import uuid
+from collections import deque
 from pathlib import Path
 
 import discord  # provided by /opt/discord-bridges/venv
@@ -47,6 +49,10 @@ LOG_FILE = "/var/log/discord-langston-bridge.log"
 VOICE_ARCHIVE_ROOT = "/var/log/cc-bridge-voice-archive/discord-langston"
 CLAUDE_TIMEOUT = 900
 CLAUDE_MODEL = "claude-opus-4-8[1m]"
+# Circuit breaker (Langston review 1b): if this many CC-bot-authored turns occur with no
+# intervening Kyle message, stop auto-replying + post one alert. Hard floor under [SILENT].
+BOT_TURN_LIMIT = 6
+ADDRESS_RE = re.compile(r"langston", re.I)  # CC-bot messages engage Langston only when they name him
 
 BOT_TOKEN = dc.load_env_value(BOT_TOKEN_FILE, "DISCORD_BOT_TOKEN")
 OAUTH_TOKEN = dc.load_env_value(OAUTH_TOKEN_FILE, "CLAUDE_CODE_OAUTH_TOKEN")
@@ -147,12 +153,30 @@ def process_voice(task):
     return text, None
 
 
-def process_task(task, state):
-    """Handle one queued task (text or voice): invoke claude, post reply unless [SILENT]."""
+def process_task(task, state, breaker):
+    """Handle one queued task (text or voice): invoke claude, post reply unless [SILENT].
+
+    breaker (review 1b): {"bot_turns": int} — reset by a Kyle message, incremented by a
+    CC-bot message; trips after BOT_TURN_LIMIT consecutive non-Kyle turns.
+    """
     channel_id = task["channel_id"]
     msg_id = task["message_id"]
     is_dm = task["is_dm"]
     kind = task["kind"]
+
+    # ── Circuit breaker: a hard floor under the soft [SILENT] discipline ──────
+    if task["author_id"] == CFG["kyle_id"]:
+        breaker["bot_turns"] = 0
+    else:
+        breaker["bot_turns"] += 1
+        if breaker["bot_turns"] > BOT_TURN_LIMIT:
+            if breaker["bot_turns"] == BOT_TURN_LIMIT + 1:  # alert exactly once
+                dc.rest_send(BOT_TOKEN, channel_id,
+                             "⚠️ CC↔Langston circuit breaker tripped: too many consecutive automated turns "
+                             "with no message from Kyle. Pausing Langston auto-replies until Kyle posts.", LOG_FILE)
+            mirror_event("langston_silent", channel_id=channel_id, reply_to=msg_id, reason="circuit_breaker")
+            log(f"circuit breaker: skipping msg {msg_id} (bot_turns={breaker['bot_turns']})")
+            return
 
     if kind == "voice":
         prompt, error = process_voice(task)
@@ -203,6 +227,7 @@ def task_worker(task_q, state):
     """Single worker thread: serial claude invocation (one at a time)."""
     HEARTBEAT = 60
     last_heartbeat = time.time()
+    breaker = {"bot_turns": 0}
     while True:
         try:
             try:
@@ -213,7 +238,7 @@ def task_worker(task_q, state):
                     last_heartbeat = time.time()
                 continue
             try:
-                process_task(task, state)
+                process_task(task, state, breaker)
             except Exception as e:
                 log(f"task worker error: {type(e).__name__}: {e}\n{traceback.format_exc()[:500]}")
             finally:
@@ -232,6 +257,8 @@ def build_client(task_q):
     intents = discord.Intents.default()
     intents.message_content = True
     client = discord.Client(intents=intents)
+    seen = deque(maxlen=512)       # message-id dedup (review: RESUME can redeliver MESSAGE_CREATE)
+    seen_set = set()
 
     @client.event
     async def on_ready():
@@ -243,15 +270,34 @@ def build_client(task_q):
         if message.author.id == client.user.id:
             return
         is_dm = message.guild is None
-        # Allowlist: configured channel (or DM), from Kyle OR another bot (= CC bot).
         if not is_dm and message.channel.id != CFG["channel_id"]:
             return
+        # Dedup
+        if message.id in seen_set:
+            return
+        if len(seen) == seen.maxlen:
+            seen_set.discard(seen[0])
+        seen.append(message.id)
+        seen_set.add(message.id)
+
         author_is_kyle = (message.author.id == CFG["kyle_id"])
-        author_is_other_bot = bool(getattr(message.author, "bot", False))
-        if not (author_is_kyle or author_is_other_bot):
+        author_is_cc_bot = (message.author.id == CFG["cc_bot_id"])
+        voice = dc.detect_voice_attachment(message)
+        content = (message.content or "").strip()
+
+        # Address-gate (review 1a/1b): Kyle always engages; the CC bot (pinned id, not the
+        # generic .bot flag) engages ONLY when the message names Langston — so CC's ACK /
+        # bookkeeping posts never burn a paid Langston turn, and stray bots are ignored.
+        if voice:
+            if not author_is_kyle:
+                return  # only Kyle sends voice notes
+        elif author_is_kyle:
+            pass
+        elif author_is_cc_bot and ADDRESS_RE.search(content):
+            pass
+        else:
             return
 
-        voice = dc.detect_voice_attachment(message)
         base = {
             "channel_id": message.channel.id,
             "message_id": message.id,
@@ -263,7 +309,6 @@ def build_client(task_q):
             task_q.put({**base, "kind": "voice", "voice": voice})
             log(f"voice enqueued: msg {message.id} from {message.author}")
             return
-        content = (message.content or "").strip()
         if not content:
             return
         task_q.put({**base, "kind": "text", "content": content})
