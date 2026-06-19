@@ -16,11 +16,14 @@
 
 ---
 
+## ★ Grandfather cutoff (B-GOV-3 Obj-1, 2026-06-20)
+**Decision:** the checker does NOT retroactively enforce on batches that CLOSED before it went live. The 2026-06-19 flood (88 `info` alerts on P19-B1/B2/B3a/B3b/B4a, B-NEW-22, B67.1, and others) was exactly this — historical batches closed under older rules being graded against the new doc-set. **Mechanism (B-GOV-3 Obj-1, to implement):** a cutoff (date or commit) in `config.mjs` so only batches whose code-push is AFTER the cutoff are graded; everything before is grandfathered with no per-row seeding required. This ledger then holds only genuine POST-cutoff exceptions going forward. Cutoff value + Langston confirm = Obj-1 close. Until implemented, the timer stays disabled (no retroactive flood).
+
 ## Ledger
 
 | timestamp (UTC) | batch-id | input-type | value | confirmed_by | reason |
 |---|---|---|---|---|---|
-| _(none yet — B-GOV scaffold)_ | | | | | |
+| _(none yet — post-cutoff exceptions go here)_ | | | | | |
 
 <!--
 input-type ∈ { na-skip | open | umbrella-namespace | umbrella-done | class-override }
