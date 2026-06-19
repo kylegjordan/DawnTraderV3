@@ -208,6 +208,14 @@ def process_task(task, state, breaker):
                      author_id=task["author_id"], sender_username=task["author_name"],
                      text=prompt)
 
+    # Voice name-check (response discipline): a transcribed voice note that doesn't name
+    # Langston isn't his to answer — stay silent without burning a claude turn.
+    if kind == "voice" and not ADDRESS_RE.search(prompt):
+        mirror_event("langston_silent", channel_id=channel_id, reply_to=msg_id,
+                     reason="voice not addressed to Langston")
+        log(f"voice msg {msg_id} not addressed to Langston — silent")
+        return
+
     log(f"handling msg {msg_id} channel={channel_id} kind={kind}: {prompt[:120]}")
     response = invoke_claude(prompt, state["session_id"], state=state)
     resp_stripped = (response or "").strip()
@@ -298,13 +306,15 @@ def build_client(task_q):
         # Address-gate (review 1a/1b): Kyle always engages; the CC bot (pinned id, not the
         # generic .bot flag) engages ONLY when the message names Langston — so CC's ACK /
         # bookkeeping posts never burn a paid Langston turn, and stray bots are ignored.
+        # RESPONSE DISCIPLINE (Kyle 2026-06-19): Langston RESPONDS only when explicitly named
+        # "Langston" — from Kyle OR a CC. No name → not his to answer (it's for a CC, a CC↔CC
+        # exchange, or general). Everyone can be woken broadly; only Langston's REPLY is gated
+        # here so the channel doesn't get chaotic. (Voice gets the same check post-transcription.)
         if voice:
             if not author_is_kyle:
-                return  # only Kyle sends voice notes
+                return  # only Kyle sends voice notes; name-check happens after transcription
         elif author_is_kyle:
-            # Crossed-wire fix: if Kyle names a CC session and NOT Langston, it's not Langston's
-            # to answer — skip entirely (deterministic, no wasted Langston turn).
-            if CC_NAME_RE.search(content) and not ADDRESS_RE.search(content):
+            if not ADDRESS_RE.search(content):
                 return
         elif author_is_cc_bot and ADDRESS_RE.search(content):
             pass
