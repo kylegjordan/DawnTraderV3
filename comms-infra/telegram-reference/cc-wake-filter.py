@@ -24,6 +24,8 @@ NAMES = {
     "CC-A": [r"claude[\s_-]*old", r"old[\s_-]*claude", r"cc[\s_-]*a"],
     "CC-B": [r"claude[\s_-]*new", r"new[\s_-]*claude", r"cc[\s_-]*b"],
 }
+ALIAS_NAME = {"CC-A": "Claude Old", "CC-B": "Claude New"}  # for CC<->CC wake attribution
+MY_NAME = ALIAS_NAME.get(ALIAS, "")
 MY_RE = re.compile(r"@?\b(" + "|".join(NAMES.get(ALIAS, [])) + r")\b", re.I)
 OTHERS_RE = re.compile(
     r"@?\b(" + "|".join(p for k, v in NAMES.items() if k != ALIAS for p in v) + r")\b", re.I)
@@ -74,6 +76,15 @@ for raw in sys.stdin:
                 deliver, body = addressed_to_me(text)
                 if deliver:
                     print(f"WAKE[LANGSTON->{ALIAS}]: {body}", flush=True)
+            elif kind == "cc_outbound":
+                # CC<->CC waking: wake on the OTHER session's post if it names me. The `sender`
+                # field (set on Discord --sender posts) attributes it; sender==MY_NAME is my own
+                # post → never self-wake. No sender (e.g. Telegram) → not a CC<->CC trigger.
+                sender = d.get("sender")
+                if sender and sender != MY_NAME:
+                    deliver, body = addressed_to_me(text)
+                    if deliver:
+                        print(f"WAKE[{sender} via {tp}->{ALIAS}]: {body}", flush=True)
     except Exception:
         # never die on a malformed line
         continue
