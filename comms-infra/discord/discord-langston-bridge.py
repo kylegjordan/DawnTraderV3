@@ -52,7 +52,11 @@ CLAUDE_MODEL = "claude-opus-4-8[1m]"
 # Circuit breaker (Langston review 1b): if this many CC-bot-authored turns occur with no
 # intervening Kyle message, stop auto-replying + post one alert. Hard floor under [SILENT].
 BOT_TURN_LIMIT = 6
-ADDRESS_RE = re.compile(r"langston", re.I)  # CC-bot messages engage Langston only when they name him
+ADDRESS_RE = re.compile(r"langston", re.I)  # names Langston anywhere (used for Kyle + voice)
+# CC convention (Kyle 2026-06-19): a Claude session addresses Langston by putting his name at the
+# START of the post — so a passing mid-sentence mention does NOT wake him. Tolerates leading
+# markdown / quote / punctuation chars before the name.
+ADDRESS_START_RE = re.compile(r"^[\s*_~`>#:\".\-]*langston\b", re.I)
 # Name-routing (crossed-wire fix): a Kyle message that names a CC session but NOT Langston is
 # not Langston's to answer — skip it so the CC session handles it (mirrors the wake filter).
 CC_NAME_RE = re.compile(r"claude[\s_-]*(old|new)|(old|new)[\s_-]*claude|\bcc[\s_-]*[ab]\b", re.I)
@@ -316,8 +320,8 @@ def build_client(task_q):
         elif author_is_kyle:
             if not ADDRESS_RE.search(content):
                 return
-        elif author_is_cc_bot and ADDRESS_RE.search(content):
-            pass
+        elif author_is_cc_bot and ADDRESS_START_RE.match(content):
+            pass  # a CC post that STARTS with "Langston" (the addressing convention)
         else:
             return
 
