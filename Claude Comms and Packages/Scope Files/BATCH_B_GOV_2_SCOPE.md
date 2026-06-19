@@ -1,5 +1,6 @@
 # BATCH B-GOV-2 — Governance-Checker Activation (the HARD pre-activation gate, then turn it ON)
 
+> **change-class:** non_architecture (process tooling — checker scripts + systemd units + the CLAUDE.md convention; touches no trading/engine/regime/filter/math code)
 > **Owner:** Claude Old (CC-A) scopes AND implements (with Langston) — same as B-GOV; the checker is CC-A's domain (`scripts/governance-checker/`), independent of Claude New's Phase-19 trading-code work, so no shared-file collision.
 > **Status:** Step-1 scope → Langston Step-1 → CC-A implements Step-3+ → Langston Step-4 → **ACTIVATE** (install + enable the systemd timer) → Step-8.
 > **Why this exists:** B-GOV shipped the governance checker **INERT** (RUNNING_ISSUES #324). It does nothing today. B-GOV-2 is the gate that makes it actually run and then turns it on. Without B-GOV-2 the checker is dead-weight.
