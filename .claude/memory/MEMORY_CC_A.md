@@ -4,6 +4,8 @@
 
 ## ★ WHERE I AM (2026-06-19, late — context was at 95%, this is the lifeline)
 
+**★LATEST (right before my compaction): CN SHELL-SWAP COMPLETE.** Moniker TRANSFERRED to `f9ed24c3` (roster committed `b5a5ae238`, CC-B session_id 7f66d970→f9ed24c3, 7f66d970 RETIRED). New shell re-seeded to 68MB; the 86%-context was just loaded summaries → Kyle compacting it; Kyle is sending the new shell the start-as-CC-B prompt (run session-start, arm CC-B watcher, then reorg-B1). Awaiting CN's armed-confirmation = swap fully done. **MY NEXT = Discord feasibility study (recommended dive) + queue below.** CLEANUP PENDING (CC-A housekeeping): delete the old `7f66d970` transcript + the intermediate seed files (`SEED_1WEEK`/`SEED_2WEEK`/`TRIMMED2`/etc.), KEEP `7f66d970…BACKUP-20260619b-pre-reprune` (311MB safety) a while.
+
 ### CLAUDE NEW SHELL-SWAP — IN PROGRESS (the ACTIVE task)
 - CN's old session (`7f66d970`) was STUCK (311MB rendering freeze; yesterday's 309MB prune too gentle). Kyle decided to SWAP CN's shell to a fresh session (he believes the old shell is damaged — though see the 1M note, the "damage" symptom is likely just the cosmetic 1M-dropdown quirk + size).
 - **New session Kyle created = `f9ed24c3-9a40-4fa7-a9c4-f6c479801602`** ("Awaiting instructions").
