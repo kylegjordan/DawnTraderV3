@@ -9,6 +9,18 @@
 
 ---
 
+## ★ ACTIVE TRADING PIPELINE AUDIT — surfaced items + §13 homes (2026-06-18/19)
+
+> Source: `ACTIVE_TRADING_PIPELINE_AUDIT_AS_OF_2026-06-18.md` (3-way APPROVED) + the fee 3-way. Reorg plan: `Scope Files/P19_REORG_BOTH_CLASSES_PLAN_2026-06-19.md`.
+
+- **#328 — Dead `CriteriaLimiter` (`server/core/criteria-limiter.ts`).** The labeled "TCL — Directive 11.0B" class + `criteriaLimiter` singleton have ZERO callers (live promotion = `paper-execution-engine.checkRtbPromotion → getRankedSignals`, sorts finalScore). **HOME:** delete-on-the-spot per CLAUDE.md §5 #18 — its own small removal batch (full workflow + DELETED_COMPONENTS_LOG). No coupling. **OPEN.**
+- **#329 — Dead `getTopSignal`/`checkForPromotion` rankingScore ranker (`ready_to_buy_service.ts`).** Zero callers (closed dead pair) — this is where rankingScore ordering WOULD live if adopted. **HOME:** park WITH the ranking-fix batch (reorg B5) — revive-and-wire (if rankingScore ordering is adopted) OR delete. **OPEN.**
+- **#330 — Two fee-source paths (EV gate `getCachedCostMetrics` vs fill `getFrictionForAssetClass`).** Both resolve the same DB `fee_model` today (no live divergence) but are two code paths to one fact. **HOME:** reconcile-to-one, folded into the rung-2 maker build (touches the fee path). Low severity. **OPEN.**
+- **#331 — No regime-flip exit on the active path** (V5, confirmed absent). Whether one was intended is a FRESH decision (Nov-2025 canon non-binding). **HOME:** 3-way decides "not wanted + rationale" OR a roadmap item — not left as a bare observation. **OPEN (decision pending).**
+- **Audit headline (informational, no #):** fixing **#233** (EV-input plumbing) does NOT open crypto (pWin capped 0.60, live-DB confirmed); the binding constraint is the Tier-1 fee friction (~1.8% round-trip > edge). The gate-10 crypto-unblock is the **FEE LADDER** (rung-1 bigger targets / rung-2 maker / rung-3 pWin-ceiling-on-evidence — reorg D6), NOT input threading. #233 stays as accuracy + strong-trend parity (ONE fix-site at the RTB→promote metadata boundary, per Langston). The confidence-inversion (B-NEW-36/37/39) → Phase-25 25-2/3/10; size/concurrency study → 25-16.
+
+---
+
 ## ★ ITEM 3.5 HOMING-AUDIT RESOLUTIONS (2026-06-09) — authoritative for the changes below
 
 > The between-Phase-24→19 plan **item 3.5** walked every non-resolved entry in this file (~90) and confirmed each has an explicit roadmap home. **The full issue→home mapping lives in `Claude Comms and Packages/Scope Files/ITEM_3_5_ISSUE_HOMING_RECONCILIATION.md` (Langston second-pass applied).** That artifact is the SSOT for where each open issue gets done; the per-entry status cells further down remain valid but the reconciliation doc is the navigational map. Below are the entries whose STATE changed as a result of this audit.
