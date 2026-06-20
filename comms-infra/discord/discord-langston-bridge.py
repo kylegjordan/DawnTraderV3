@@ -61,6 +61,18 @@ ADDRESS_START_RE = re.compile(r"^[\s*_~`>#:\".\-]*langston\b", re.I)
 # not Langston's to answer — skip it so the CC session handles it (mirrors the wake filter).
 CC_NAME_RE = re.compile(r"claude[\s_-]*(old|new)|(old|new)[\s_-]*claude|\bcc[\s_-]*[ab]\b", re.I)
 
+
+def resolve_recipient_name(task):
+    """Who Langston is replying to, as a name the wake filter recognizes (Kyle 2026-06-20).
+    The CC sessions wake only when their name appears in a post; Langston's reply must therefore
+    LEAD with the addresser's name so their watcher catches it. The bridge knows the addresser
+    deterministically (the triggering message's author) — don't rely on Langston's wording.
+      - Kyle           -> "Kyle"
+      - a CC webhook post -> its display name IS the session name ("OLD Claude" / "NEW Claude")."""
+    if task.get("author_id") == CFG.get("kyle_id"):
+        return "Kyle"
+    return (task.get("author_display") or task.get("author_name") or "").strip()
+
 BOT_TOKEN = dc.load_env_value(BOT_TOKEN_FILE, "DISCORD_BOT_TOKEN")
 OAUTH_TOKEN = dc.load_env_value(OAUTH_TOKEN_FILE, "CLAUDE_CODE_OAUTH_TOKEN")
 CFG = dc.load_shared_config()
@@ -238,6 +250,11 @@ def process_task(task, state, breaker):
     cleaned = re.sub(r"\[SILENT\]", "", resp_stripped, flags=re.I).strip()
     if len(cleaned) < 3:
         cleaned = "Langston here — acknowledged."
+    # Lead with the addressee's name so their wake watcher catches the reply (Kyle 2026-06-20).
+    # Guarded so a reply Langston already opened with the name isn't double-prefixed.
+    recipient = resolve_recipient_name(task)
+    if recipient and not cleaned[:len(recipient) + 2].lower().startswith(recipient.lower()):
+        cleaned = f"{recipient} — {cleaned}"
     sent_id = dc.rest_send(BOT_TOKEN, channel_id, cleaned, LOG_FILE)
     mirror_event("langston_outbound", channel_id=channel_id, message_id=sent_id, reply_to=msg_id, text=cleaned)
     log(f"responded to msg {msg_id}")
@@ -332,6 +349,9 @@ def build_client(task_q):
             "message_id": message.id,
             "author_id": message.author.id,
             "author_name": str(message.author),
+            # For a CC webhook post the display name IS the session name (OLD Claude / NEW Claude),
+            # which is what resolve_recipient_name() leads Langston's reply with.
+            "author_display": getattr(message.author, "display_name", None) or getattr(message.author, "name", None),
             "is_dm": is_dm,
         }
         if voice:
