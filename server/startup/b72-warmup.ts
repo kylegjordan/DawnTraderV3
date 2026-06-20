@@ -227,5 +227,42 @@ export async function warmModuleConstantsForSyncCallers(): Promise<void> {
     }
   }
 
+  // reorg-B2 (Piece A/B, 2026-06-20): per-class ROI gate + target-floor/min-RR must be seeded
+  // for BOTH active spot classes. A partial seed passes the generic zero-row gate yet hard-fails
+  // mid-signal at the first per-class resolve (silent gate-off / wrong-bound) — so assert at boot.
+  // Cold-start warmup that THROWS, NEVER a silent global fallback (Langston Step-2 / §11 / #10).
+  {
+    const { getCachedNumberRequired } = await import('../services/module-constants-service.js');
+    const REORG_B2_REGIMES = [
+      'TREND_FRIENDLY_STABLE', 'HIGH_VOLATILITY_UNSTABLE', 'RANGE_BOUND_STABLE',
+      'IMPULSE_EXPANSION', 'STRUCTURAL_TRANSITION',
+    ] as const;
+    for (const assetClass of ['crypto_spot', 'xstock_spot'] as const) {
+      const k = { exchange: '*', assetClass, strategy: '*', regime: '*' };
+      for (const c of ['roi_flex_multiplier', 'roi_absolute_min', 'roi_absolute_max', 'target_floor_pct', 'min_rr'] as const) {
+        try {
+          getCachedNumberRequired('expectancy_gates', c, k);
+        } catch (err) {
+          throw new Error(
+            `[reorg-B2][warmup] expectancy_gates.${c} for asset_class='${assetClass}' missing — ` +
+            `migration drizzle/migrations/2026-06-20-reorg-b2-per-class-roi-target.sql has not been applied. ` +
+            `Apply migration before starting server. (${(err as Error).message})`,
+          );
+        }
+      }
+      for (const regime of REORG_B2_REGIMES) {
+        try {
+          getCachedNumberRequired('roi_gating', 'min_roi', { exchange: '*', assetClass, strategy: '*', regime });
+        } catch (err) {
+          throw new Error(
+            `[reorg-B2][warmup] roi_gating.min_roi for asset_class='${assetClass}' regime='${regime}' missing — ` +
+            `reorg-B2 migration not (fully) applied. (${(err as Error).message})`,
+          );
+        }
+      }
+    }
+    console.log('[reorg-B2][warmup] per-class ROI gate + target-floor/min-RR verified (expectancy_gates + roi_gating × 2 classes)');
+  }
+
   started = true;
 }

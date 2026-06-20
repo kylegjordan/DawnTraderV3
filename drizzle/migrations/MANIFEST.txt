@@ -144,3 +144,4 @@
 2026-06-16-p19-b6-daily-loss-warning-tiers.sql
 2026-06-17-p19-b6-5a-per-class-active-gate.sql
 2026-06-17-p19-b6-5c-drop-rtb-cwqi.sql
+2026-06-20-reorg-b2-per-class-roi-target.sql

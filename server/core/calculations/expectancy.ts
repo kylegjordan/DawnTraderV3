@@ -186,6 +186,19 @@ export function getExpectancyBreakdown(params: ExpectancyParams): {
  * @param regime - Market regime (BULL_STABLE, BEAR_VOLATILE, etc.)
  * @returns Minimum ROI threshold as decimal (e.g., 0.0125 = 1.25%)
  */
+/**
+ * reorg-B2 (Piece A): per-class target floor + min-RR for the central normalizer.
+ * Reads `module_constants` `expectancy_gates` per class — fail-closed (throws on a missing
+ * per-class row; the b72-warmup boot assertion guarantees the active classes are seeded).
+ */
+export function getPerClassTargetGate(assetClass: string): { floorPct: number; minRR: number } {
+  const _k = { exchange: '*', assetClass, strategy: '*', regime: '*' };
+  return {
+    floorPct: getCachedNumberRequired('expectancy_gates', 'target_floor_pct', _k),
+    minRR:    getCachedNumberRequired('expectancy_gates', 'min_rr',           _k),
+  };
+}
+
 export function getMinROIForRegime(regime: string, assetClass: string): number {
   // B72: read regime-specific ROI threshold from module_constants under
   // module='roi_gating' with regime-dimension scope. Most-specific-wins
