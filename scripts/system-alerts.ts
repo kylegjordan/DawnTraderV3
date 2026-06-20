@@ -175,6 +175,76 @@ async function pushToTelegram(alert: SystemAlert): Promise<void> {
   }
 }
 
+// ─── Discord push (B-DISCORD OBJ-5) ─────────────────────────────────────────
+// Posts the alert DIRECT to a dedicated Discord "alerts" webhook (Langston-approved:
+// staging posts direct, NOT via the Helsinki bridge, so a critical alert survives the
+// bridge box being down). The webhook URL is a SECRET → read from a staging file
+// (never the repo); absent ⇒ this is a no-op, so the path stays inert until Kyle
+// provisions the webhook. The webhook's intrinsic webhook_id is the structured marker
+// Langston's bridge always-engages on. Severity gating mirrors Telegram (info skips).
+
+function formatAlertTextDiscord(alert: SystemAlert): string {
+  const meta =
+    Object.keys(alert.metadata).length > 0
+      ? `\n_Metadata:_ \`${JSON.stringify(alert.metadata).slice(0, 300)}\``
+      : '';
+  const text =
+    `🚨 **SYSTEM ALERT — ${alert.severity.toUpperCase()}**\n` +
+    `**${alert.title}**\n${alert.body}\n` +
+    `_Category:_ ${alert.category}  ·  _Alert ID:_ \`${alert.id}\`${meta}`;
+  // Discord hard-caps content at 2000 chars; leave headroom.
+  return text.length > 1900 ? text.slice(0, 1900) + '…' : text;
+}
+
+async function discordWebhookSend(webhookUrl: string, content: string): Promise<boolean> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const res = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content }),
+      });
+      if (res.status === 429) {
+        const data = (await res.json().catch(() => ({}))) as { retry_after?: number };
+        const wait = Math.min((data.retry_after ?? 1) + 0.1, 10);
+        console.warn(`[fire-due] Discord webhook 429 — retry in ${wait}s (attempt ${attempt + 1})`);
+        await new Promise((r) => setTimeout(r, wait * 1000));
+        continue;
+      }
+      if (!res.ok) {
+        console.warn(`[fire-due] Discord webhook returned HTTP ${res.status}`);
+        return false;
+      }
+      return true;
+    } catch (err) {
+      console.warn('[fire-due] Discord webhook threw:', err);
+      return false;
+    }
+  }
+  return false;
+}
+
+async function pushToDiscord(alert: SystemAlert): Promise<void> {
+  // Resolve the secret webhook URL: prefer an explicit env var, else a secrets file.
+  let webhookUrl = process.env.ALERTS_DISCORD_WEBHOOK_URL || null;
+  if (!webhookUrl) {
+    const file = process.env.ALERTS_DISCORD_WEBHOOK_FILE || '/etc/langston/discord-alerts-webhook.env';
+    if (fs.existsSync(file)) {
+      const line = fs.readFileSync(file, 'utf-8').split('\n').find((l) => l.includes('ALERTS_WEBHOOK_URL='));
+      if (line) webhookUrl = line.split('=').slice(1).join('=').trim();
+    }
+  }
+  if (!webhookUrl) {
+    // Inert until Kyle provisions the alerts webhook — no Discord posting yet.
+    return;
+  }
+  // Mirror Telegram severity gating: warning + critical post; info skips.
+  if (alert.severity === 'warning' || alert.severity === 'critical') {
+    const ok = await discordWebhookSend(webhookUrl, formatAlertTextDiscord(alert));
+    if (ok) console.log(`[fire-due] Discord alert posted for ${alert.id}`);
+  }
+}
+
 /**
  * Single-quote a string for safe inclusion in a remote `sudo -u langston bash`
  * argv. Wraps in single quotes and escapes embedded single quotes via the
@@ -289,6 +359,7 @@ async function cmdFireDue(): Promise<void> {
     //   - Langston SSH invoke for warning + critical so a Langston session
     //     runs and performs §10.5 surfacing on his side. Fire-and-forget.
     await pushToTelegram(alert);
+    await pushToDiscord(alert); // B-DISCORD OBJ-5: also post to the Discord alerts webhook (inert until provisioned)
     await invokeLangstonForAlert(alert);
   }
 }
