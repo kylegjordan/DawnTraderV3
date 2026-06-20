@@ -46,7 +46,7 @@ export type TargetNormalizeInput = {
   reachAtrMax: number;
 };
 
-export type TargetNormalizeReason = 'rr_below_min' | 'unreachable' | 'invalid_geometry';
+export type TargetNormalizeReason = 'rr_below_min' | 'unreachable' | 'invalid_atr' | 'invalid_geometry';
 
 export type TargetNormalizeResult = {
   /** True iff the signal passes the floor-lift + the universal RR gate + the reachability gate. */
@@ -90,7 +90,12 @@ export function normalizeAndGateTarget(input: TargetNormalizeInput): TargetNorma
     return { ok: false, targetPrice, rr, atrsToTarget, lifted, reason: 'rr_below_min' };
   }
 
-  if (!(atr > 0) || atrsToTarget > reachAtrMax) {
+  if (!(atr > 0)) {
+    // ATR genuinely unavailable (a wiring/data bug, NOT a feasibility drop) — distinct loud reason so
+    // it is never silently masked as `unreachable` (Langston Step-4: fail loud, don't coerce-to-0).
+    return { ok: false, targetPrice, rr, atrsToTarget, lifted, reason: 'invalid_atr' };
+  }
+  if (atrsToTarget > reachAtrMax) {
     // The pair's volatility can't physically traverse the target within the ATR horizon → unreachable.
     return { ok: false, targetPrice, rr, atrsToTarget, lifted, reason: 'unreachable' };
   }

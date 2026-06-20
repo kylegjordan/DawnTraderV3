@@ -65,10 +65,10 @@ describe('P19 reorg-B2 — normalizeAndGateTarget (lift + RR + reachability)', (
     expect(r.atrsToTarget).toBeCloseTo(7, 6);
   });
 
-  it('reachability fails closed on atr<=0', () => {
+  it('atr<=0 → LOUD invalid_atr (wiring/data bug), distinct from a normal unreachable drop', () => {
     const r = normalizeAndGateTarget({ entryPrice: 100, stopPrice: 98, targetPrice: 105, floorPct: FLOOR, minRR: MINRR, atr: 0, reachAtrMax: REACH });
     expect(r.ok).toBe(false);
-    expect(r.reason).toBe('unreachable');
+    expect(r.reason).toBe('invalid_atr'); // never silently masked as 'unreachable' (Langston Step-4)
   });
 
   it('rejects invalid geometry (stop >= entry)', () => {

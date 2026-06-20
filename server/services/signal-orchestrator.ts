@@ -204,6 +204,12 @@ interface SizingContext {
   guardrails: GuardrailsV2 | null;
   mode: 'live' | 'paper';
   assetClass: AssetClass;
+  // reorg-B2 (Piece C): the canonical per-pipe ATR (mceContext.indicators.atr), set ONCE after the
+  // MCE context computes and BEFORE the strategy-dispatch loop, so buildSizedSignalForStrategy reads
+  // it off the universal carrier instead of an optional marketContext that 20 callers forget to pass
+  // (which silently fed atr=0 → reachability would drop 100% of active signals). Loud `invalid_atr`
+  // (not silent coerce-to-0) if it's ever genuinely missing.
+  atr?: number;
 }
 
 export class SignalOrchestrator {
@@ -1201,13 +1207,21 @@ export class SignalOrchestrator {
     // co-move the structural stop) when RR < minRR (Langston Step-2). Also replaces the old
     // `?? entry×1.015` V4 fallback literal — a target-less signal is now DROPPED, not fabricated.
     const _b2Gate = getPerClassTargetGate(sizingContext.assetClass);
+    // reorg-B2 (Piece C): ATR from the universal carrier (set once per pipe), marketContext as override.
+    const _b2Atr = marketContext?.atr ?? sizingContext.atr;
     const _b2 = normalizeAndGateTarget({
       entryPrice: rawSignal.entryPrice, stopPrice: rawSignal.stopPrice, targetPrice: rawSignal.targetPrice ?? NaN,
       floorPct: _b2Gate.floorPct, minRR: _b2Gate.minRR,
-      atr: marketContext?.atr ?? 0, reachAtrMax: _b2Gate.reachAtrMax,
+      atr: _b2Atr ?? NaN, reachAtrMax: _b2Gate.reachAtrMax,
     });
     if (!_b2.ok) {
-      console.warn(`[reorg-B2][TARGET_GATE][active] drop ${rawSignal.symbol}/${strategyId}: ${_b2.reason} rr=${_b2.rr.toFixed(2)} atrs=${_b2.atrsToTarget.toFixed(2)}`);
+      if (_b2.reason === 'invalid_atr') {
+        // LOUD: a wiring/data bug (ATR absent on both the SizingContext carrier AND marketContext),
+        // NEVER silently masked as a feasibility drop (Langston Step-4).
+        console.error(`[reorg-B2][TARGET_GATE][active][INVALID_ATR] ${rawSignal.symbol}/${strategyId} — ATR unavailable on the active build path (sizingContext.atr + marketContext both missing). Wiring bug — investigate.`);
+      } else {
+        console.warn(`[reorg-B2][TARGET_GATE][active] drop ${rawSignal.symbol}/${strategyId}: ${_b2.reason} rr=${_b2.rr.toFixed(2)} atrs=${_b2.atrsToTarget.toFixed(2)}`);
+      }
       return null;
     }
     const _b2Target = _b2.targetPrice;
@@ -1783,7 +1797,13 @@ export class SignalOrchestrator {
       };
 
       const ohlcAsAny = ohlcData as any[];
-      
+
+      // reorg-B2 (Piece C): stamp the canonical per-pipe ATR onto the SizingContext ONCE here —
+      // after the MCE context computes, before the strategy-dispatch loop — so every
+      // buildSizedSignalForStrategy call reads it off the universal carrier (the 3-arg callers never
+      // pass marketContext). Robust single-point feed, not 20 fragile call-site threads.
+      sizingContext.atr = mceContext.indicators.atr;
+
       // Directive 10.1: Only run strategies allowed for current regime
       if (activeStrategies.has('vwap_pullback')) {
         const rawSignal = this.strategyEngine.detectVWAPPullback(indicators, settings, ohlcAsAny, assetClass);
