@@ -20,4 +20,4 @@ DELETE FROM module_constants
     AND module_name IN ('expectancy_gates','roi_gating')
     AND asset_class IN ('crypto_spot','xstock_spot');
 DELETE FROM module_constants
-  WHERE module_name='expectancy_gates' AND constant_name IN ('target_floor_pct','min_rr');
+  WHERE module_name='expectancy_gates' AND constant_name IN ('target_floor_pct','min_rr','reach_atr_max');

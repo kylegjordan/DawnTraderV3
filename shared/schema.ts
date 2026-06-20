@@ -493,10 +493,6 @@ export const screenerFilters = pgTable("screener_filters", {
   corrMax: decimal("corr_max", { precision: 5, scale: 4 }).default("0.9200"),
   diMin: decimal("di_min", { precision: 5, scale: 2 }).default("55.00"),
   diMax: decimal("di_max", { precision: 5, scale: 2 }).default("100.00"),  // Batch 22: DI ceiling for reversal/oscillator families
-  // reorg-B2 (Piece C, 2026-06-20): movement/reachability bound = max ATRs-to-floor (c·√H).
-  // CONSERVATIVE default 4.00 (never pass-everything — Langston: a missing knob must not silently
-  // disable the filter). Per (mode, asset_class, filter_path); calibrated in Phase 25.
-  reachAtrMax: decimal("reach_atr_max", { precision: 6, scale: 2 }).default("4.00"),
 
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
@@ -2166,7 +2162,6 @@ export const insertScreenerFiltersSchema = createInsertSchema(screenerFilters).o
   vnMax: z.union([z.string(), z.number()]).transform(val => String(val)).optional(),
   corrMax: z.union([z.string(), z.number()]).transform(val => String(val)).optional(),
   diMin: z.union([z.string(), z.number()]).transform(val => String(val)).optional(),
-  reachAtrMax: z.union([z.string(), z.number()]).transform(val => String(val)).optional(), // reorg-B2 (Piece C)
 });
 
 export const insertStrategySettingsSchema = createInsertSchema(strategySettings).omit({

@@ -239,7 +239,7 @@ export async function warmModuleConstantsForSyncCallers(): Promise<void> {
     ] as const;
     for (const assetClass of ['crypto_spot', 'xstock_spot'] as const) {
       const k = { exchange: '*', assetClass, strategy: '*', regime: '*' };
-      for (const c of ['roi_flex_multiplier', 'roi_absolute_min', 'roi_absolute_max', 'target_floor_pct', 'min_rr'] as const) {
+      for (const c of ['roi_flex_multiplier', 'roi_absolute_min', 'roi_absolute_max', 'target_floor_pct', 'min_rr', 'reach_atr_max'] as const) {
         try {
           getCachedNumberRequired('expectancy_gates', c, k);
         } catch (err) {

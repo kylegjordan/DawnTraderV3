@@ -248,35 +248,11 @@ export function passesCoreMetricFilters(
 ): boolean {
   return LQ >= lqMin && VolNoise <= vnMax;
 }
-
-/**
- * reorg-B2 (Piece C): movement / reachability filter — does this pair's real volatility support
- * a target ≥ the per-class floor that is REACHABLE within the hold window?
- *
- * The per-strategy target is `mult × ATR`, so target-as-percent = `mult × ATR/price`. To reach a
- * `floorPct` target, the pair must travel `floorPct / (ATR/price)` ATRs. Because price diffuses with
- * √time (favorable excursion ≈ ATR·√H, NOT linear K-ATRs-in-K-bars — Langston Step-2), the reachable
- * bound `reachAtrMax` = c·√H is DB-governed per class (`screener_filters.reach_atr_max`), seeded
- * conservatively and calibrated in Phase 25.
- *
- * PASS iff `atrsToFloor = floorPct·price/ATR ≤ reachAtrMax`. A pair with too little volatility for its
- * price needs too many ATRs to reach the floor → FAIL (would sit open past the window / never fill the
- * bigger target). NOT a hidden gate — the caller counts the failure by-reason in the IMF diagnostics.
- *
- * @returns `{ pass, atrsToFloor }`. `atr<=0` or `price<=0` → `pass=false` (can't assess → fail-closed).
- */
-export function passesReachabilityFilter(
-  atr: number,
-  price: number,
-  floorPct: number,
-  reachAtrMax: number,
-): { pass: boolean; atrsToFloor: number } {
-  if (!(atr > 0) || !(price > 0) || !Number.isFinite(floorPct) || !Number.isFinite(reachAtrMax)) {
-    return { pass: false, atrsToFloor: Number.POSITIVE_INFINITY };
-  }
-  const atrsToFloor = (floorPct * price) / atr;
-  return { pass: atrsToFloor <= reachAtrMax, atrsToFloor };
-}
+// reorg-B2 (Piece C): the reachability/movement gate was folded INTO the central normalizer
+// (server/core/calculations/signal-target-normalizer.ts) at the two signal convergence points —
+// it shares entry+target+ATR there, so a separate filter-phase helper would be pure sprawl
+// (Langston consensus 2026-06-20). Reachability is path-INVARIANT (a feasibility check, not a
+// quality bar), so it lives per-class in the normalizer, not per-filterPath in screener_filters.
 
 /**
  * Directive 9.1: Compute all core metrics for a price series

@@ -1204,9 +1204,10 @@ export class SignalOrchestrator {
     const _b2 = normalizeAndGateTarget({
       entryPrice: rawSignal.entryPrice, stopPrice: rawSignal.stopPrice, targetPrice: rawSignal.targetPrice ?? NaN,
       floorPct: _b2Gate.floorPct, minRR: _b2Gate.minRR,
+      atr: marketContext?.atr ?? 0, reachAtrMax: _b2Gate.reachAtrMax,
     });
     if (!_b2.ok) {
-      console.warn(`[reorg-B2][TARGET_GATE][active] drop ${rawSignal.symbol}/${strategyId}: ${_b2.reason} rr=${_b2.rr.toFixed(2)}`);
+      console.warn(`[reorg-B2][TARGET_GATE][active] drop ${rawSignal.symbol}/${strategyId}: ${_b2.reason} rr=${_b2.rr.toFixed(2)} atrs=${_b2.atrsToTarget.toFixed(2)}`);
       return null;
     }
     const _b2Target = _b2.targetPrice;

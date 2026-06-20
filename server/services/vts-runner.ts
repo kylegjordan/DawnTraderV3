@@ -1183,10 +1183,11 @@ async function generatePhase10Signal(
   const _b2 = normalizeAndGateTarget({
     entryPrice, stopPrice: stopLoss, targetPrice: strategySignal.targetPrice,
     floorPct: _b2Gate.floorPct, minRR: _b2Gate.minRR,
+    atr: mceContext.indicators.atr, reachAtrMax: _b2Gate.reachAtrMax,
   });
   if (!_b2.ok) {
-    logSkippedSignal({ symbol, reason: 'Target_RR_Gate', regime, strategy, source: 'VTS' });
-    setNullReason('target_rr_gate');
+    logSkippedSignal({ symbol, reason: _b2.reason === 'unreachable' ? 'Target_Unreachable' : 'Target_RR_Gate', regime, strategy, source: 'VTS' });
+    setNullReason(_b2.reason === 'unreachable' ? 'target_unreachable' : 'target_rr_gate');
     return null;
   }
   const takeProfit = _b2.targetPrice;

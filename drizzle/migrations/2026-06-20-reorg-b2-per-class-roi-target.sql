@@ -27,11 +27,13 @@ INSERT INTO module_constants (module_name, exchange, asset_class, strategy, regi
   ('expectancy_gates','*','crypto_spot','*','*','roi_absolute_max','0.040'::jsonb,'reorg-b2'),
   ('expectancy_gates','*','crypto_spot','*','*','target_floor_pct','0.040'::jsonb,'reorg-b2'),
   ('expectancy_gates','*','crypto_spot','*','*','min_rr','2.5'::jsonb,'reorg-b2'),
+  ('expectancy_gates','*','crypto_spot','*','*','reach_atr_max','4.0'::jsonb,'reorg-b2'),
   ('expectancy_gates','*','xstock_spot','*','*','roi_flex_multiplier','0.6'::jsonb,'reorg-b2'),
   ('expectancy_gates','*','xstock_spot','*','*','roi_absolute_min','0.015'::jsonb,'reorg-b2'),
   ('expectancy_gates','*','xstock_spot','*','*','roi_absolute_max','0.040'::jsonb,'reorg-b2'),
   ('expectancy_gates','*','xstock_spot','*','*','target_floor_pct','0.040'::jsonb,'reorg-b2'),
-  ('expectancy_gates','*','xstock_spot','*','*','min_rr','2.5'::jsonb,'reorg-b2')
+  ('expectancy_gates','*','xstock_spot','*','*','min_rr','2.5'::jsonb,'reorg-b2'),
+  ('expectancy_gates','*','xstock_spot','*','*','reach_atr_max','4.0'::jsonb,'reorg-b2')
 ON CONFLICT (module_name, exchange, asset_class, strategy, regime, constant_name)
   DO UPDATE SET value = EXCLUDED.value, updated_by = EXCLUDED.updated_by;
 

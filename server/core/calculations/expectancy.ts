@@ -191,11 +191,13 @@ export function getExpectancyBreakdown(params: ExpectancyParams): {
  * Reads `module_constants` `expectancy_gates` per class — fail-closed (throws on a missing
  * per-class row; the b72-warmup boot assertion guarantees the active classes are seeded).
  */
-export function getPerClassTargetGate(assetClass: string): { floorPct: number; minRR: number } {
+export function getPerClassTargetGate(assetClass: string): { floorPct: number; minRR: number; reachAtrMax: number } {
   const _k = { exchange: '*', assetClass, strategy: '*', regime: '*' };
   return {
-    floorPct: getCachedNumberRequired('expectancy_gates', 'target_floor_pct', _k),
-    minRR:    getCachedNumberRequired('expectancy_gates', 'min_rr',           _k),
+    floorPct:    getCachedNumberRequired('expectancy_gates', 'target_floor_pct', _k),
+    minRR:       getCachedNumberRequired('expectancy_gates', 'min_rr',           _k),
+    // reorg-B2 (Piece C): path-INVARIANT reachability bound (c·√H), per class only (not per-filterPath).
+    reachAtrMax: getCachedNumberRequired('expectancy_gates', 'reach_atr_max',    _k),
   };
 }
 
