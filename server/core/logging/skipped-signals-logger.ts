@@ -24,7 +24,10 @@ export type SkipReason =
   | 'Duplicate_Position_Max'  // Batch 24: Add missing type — used by vts-runner.ts DUP_GUARD
   | 'BLOCKED_GOVERNANCE'
   | 'LEARNING_DEFERRED'
-  | 'Confidence_Floor';  // 11.7S: Mode-specific confidence threshold not met
+  | 'Confidence_Floor'  // 11.7S: Mode-specific confidence threshold not met
+  | 'Target_Unreachable'   // reorg-B2: reachability gate — atrsToTarget > reachAtrMax (feasibility drop)
+  | 'Target_RR_Gate'       // reorg-B2: universal RR gate — rr < minRR after the floor-lift
+  | 'Target_Invalid_ATR';  // reorg-B2: ATR genuinely unavailable (wiring/data bug — LOUD, never masked)
 
 export interface SkippedSignalEntry {
   timestamp: string;

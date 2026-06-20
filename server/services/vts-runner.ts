@@ -1186,8 +1186,17 @@ async function generatePhase10Signal(
     atr: mceContext.indicators.atr, reachAtrMax: _b2Gate.reachAtrMax,
   });
   if (!_b2.ok) {
-    logSkippedSignal({ symbol, reason: _b2.reason === 'unreachable' ? 'Target_Unreachable' : 'Target_RR_Gate', regime, strategy, source: 'VTS' });
-    setNullReason(_b2.reason === 'unreachable' ? 'target_unreachable' : 'target_rr_gate');
+    if (_b2.reason === 'invalid_atr') {
+      // LOUD: ATR genuinely unavailable on the VTS path — a wiring/data bug, NEVER silently masked as a
+      // feasibility drop (full parity with the active path; Langston Step-4). Hiding it corrupts the one
+      // thing VTS exists for — clean learning-data diagnostics.
+      console.error(`[reorg-B2][TARGET_GATE][VTS][INVALID_ATR] ${symbol}/${strategy} — ATR unavailable (mceContext.indicators.atr missing). Wiring bug — investigate.`);
+      logSkippedSignal({ symbol, reason: 'Target_Invalid_ATR', regime, strategy, source: 'VTS' });
+      setNullReason('target_invalid_atr');
+    } else {
+      logSkippedSignal({ symbol, reason: _b2.reason === 'unreachable' ? 'Target_Unreachable' : 'Target_RR_Gate', regime, strategy, source: 'VTS' });
+      setNullReason(_b2.reason === 'unreachable' ? 'target_unreachable' : 'target_rr_gate');
+    }
     return null;
   }
   const takeProfit = _b2.targetPrice;
