@@ -346,27 +346,57 @@ export function validateStopDistance(entryPrice: number, stopPrice: number): boo
 }
 
 /**
- * Validate reward-to-risk ratio (GUARD-4)
+ * reorg-B2.1: a per-class target gate (resolved by the CALLER via `getPerClassTargetGate(assetClass)`
+ * and injected here). This keeps strategy-helpers a PURE leaf module — it consumes the resolved shape
+ * and never reaches into the module-constants DB resolver itself (preserves the "DO NOT MODIFY / no
+ * external deps" contract; Langston design call 2026-06-21). The SSOT stays at the one cached resolver.
  */
-export function validateRR(entryPrice: number, stopPrice: number, targetPrice: number): boolean {
-  const risk = Math.abs(entryPrice - stopPrice);
-  const reward = Math.abs(targetPrice - entryPrice);
-  if (risk === 0) return false;
-  return (reward / risk) >= GLOBAL_CONSTANTS.MIN_RR_RATIO;
+export interface PerClassGuardGate {
+  minRR: number;       // per-class minimum reward-to-risk (expectancy_gates.min_rr)
+  reachAtrMax: number; // per-class max ATRs-to-target (expectancy_gates.reach_atr_max)
 }
 
 /**
- * Apply all global guards. Returns true if signal passes.
+ * Validate reward-to-risk ratio (GUARD-4). reorg-B2.1: per-class `minRR` is INJECTED (one SSOT at the
+ * resolver) — the hardcoded `GLOBAL_CONSTANTS.MIN_RR_RATIO=1.5` no longer gates (it stays only as the
+ * coherency seed/floor; the live threshold is the per-class value, killing the prior 1.5-vs-2.5 split-brain).
+ */
+export function validateRR(entryPrice: number, stopPrice: number, targetPrice: number, minRR: number): boolean {
+  const risk = Math.abs(entryPrice - stopPrice);
+  const reward = Math.abs(targetPrice - entryPrice);
+  if (risk === 0) return false;
+  return (reward / risk) >= minRR;
+}
+
+/**
+ * Validate target reachability (reorg-B2.1, GUARD-5): the target must be physically traversable within
+ * the per-class ATR horizon — `atrsToTarget = |target−entry| / effectiveATR ≤ reachAtrMax`. Assumes
+ * `effectiveATR > 0` (applyGlobalGuards rejects `effectiveATR===null` first; getEffectiveATR already
+ * floors ATR at ATR_MIN_RATIO), so there is no invalid-ATR case to mask here.
+ */
+export function validateReachability(entryPrice: number, targetPrice: number, effectiveATR: number, reachAtrMax: number): boolean {
+  if (!(effectiveATR > 0)) return false;
+  const atrsToTarget = Math.abs(targetPrice - entryPrice) / effectiveATR;
+  return atrsToTarget <= reachAtrMax;
+}
+
+/**
+ * Apply all global guards. Returns true if signal passes. reorg-B2.1: takes the injected per-class
+ * `gate` ({minRR, reachAtrMax}) — pure, no DB resolution here — and now also enforces reachability
+ * (GUARD-5), consolidating the gates the signal-target-normalizer applied so they run at signal
+ * generation for ALL strategies (file-based + the in-class 9 once wired in OBJ-4).
  */
 export function applyGlobalGuards(
   entryPrice: number,
   stopPrice: number,
   targetPrice: number,
-  effectiveATR: number | null
+  effectiveATR: number | null,
+  gate: PerClassGuardGate
 ): boolean {
   if (effectiveATR === null) return false;
   if (!validateStopDistance(entryPrice, stopPrice)) return false;
-  if (!validateRR(entryPrice, stopPrice, targetPrice)) return false;
+  if (!validateRR(entryPrice, stopPrice, targetPrice, gate.minRR)) return false;
+  if (!validateReachability(entryPrice, targetPrice, effectiveATR, gate.reachAtrMax)) return false;
   return true;
 }
 

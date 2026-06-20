@@ -30,6 +30,7 @@ import {
   findLocalMinima, GLOBAL_CONSTANTS,
   type OHLCCandle, type PatternInput
 } from './strategy-helpers';
+import { getPerClassTargetGate } from '../core/calculations/expectancy.js';
 import { REGIMES } from '../config/canonical-regime-strategy-map';
 import { setNullReason } from '../utils/null-reason-tracker.js';
 // B72 (2026-05-05): all strategy levers moved to module='strategy.volatility_edge'.
@@ -185,7 +186,8 @@ export function detectVolatilityEdge(
   const targetPrice = Math.min(measuredMoveTarget, atrTarget);
 
   // ── Global guards ──────────────────────────────────────────
-  if (!applyGlobalGuards(entryPrice, stopPrice, targetPrice, effectiveATR)) {
+  const gate = getPerClassTargetGate(assetClass);
+  if (!applyGlobalGuards(entryPrice, stopPrice, targetPrice, effectiveATR, gate)) {
     console.log(`${LOG_PREFIX} Global guards rejected signal`);
     setNullReason('guard_fail');
     return null;

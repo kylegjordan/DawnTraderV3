@@ -26,6 +26,7 @@ import {
   findLocalMinima, GLOBAL_CONSTANTS,
   type OHLCCandle, type PatternInput
 } from './strategy-helpers';
+import { getPerClassTargetGate } from '../core/calculations/expectancy.js';
 import { setNullReason } from '../utils/null-reason-tracker.js';
 import { getCachedNumberRequired, getCachedNumbersForModule } from '../services/module-constants-service.js';
 
@@ -172,7 +173,8 @@ export function detectReverseImpulse(
   const targetPrice = entryPrice + RI_TARGET_ATR_MULT * effectiveATR;
 
   // ── Global guards ──────────────────────────────────────────
-  if (!applyGlobalGuards(entryPrice, stopPrice, targetPrice, effectiveATR)) {
+  const gate = getPerClassTargetGate(assetClass);
+  if (!applyGlobalGuards(entryPrice, stopPrice, targetPrice, effectiveATR, gate)) {
     console.log(`${LOG_PREFIX} Global guards rejected signal`);
     setNullReason('guard_fail');
     return null;

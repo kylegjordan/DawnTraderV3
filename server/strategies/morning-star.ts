@@ -32,6 +32,7 @@ import {
   findLocalMinima, GLOBAL_CONSTANTS,
   type OHLCCandle, type PatternInput
 } from './strategy-helpers';
+import { getPerClassTargetGate } from '../core/calculations/expectancy.js';
 import { setNullReason } from '../utils/null-reason-tracker.js';
 import { getCachedNumberRequired, getCachedNumbersForModule } from '../services/module-constants-service.js';
 
@@ -171,7 +172,8 @@ export function detectMorningStar(
   const targetPrice = entryPrice + MS_TARGET_ATR_MULT * effectiveATR;
 
   // ── Global guards (ATR, stop distance, R:R) ──────────────────────────────
-  if (!applyGlobalGuards(entryPrice, stopPrice, targetPrice, effectiveATR)) {
+  const gate = getPerClassTargetGate(assetClass);
+  if (!applyGlobalGuards(entryPrice, stopPrice, targetPrice, effectiveATR, gate)) {
     console.log(`${LOG_PREFIX} Global guards failed. Skipping.`);
     setNullReason('guard_fail');
     return null;
