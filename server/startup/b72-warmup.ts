@@ -15,6 +15,8 @@
  */
 
 import { prefetchModule } from '../services/module-constants-service.js';
+// reorg-B2: use the canonical REGIMES constant (no hardcoded regime strings — regime_mapping_integrity).
+import { REGIMES } from '../config/canonical-regime-strategy-map.js';
 
 /**
  * Modules whose constants are read from synchronous code paths (strategy
@@ -234,8 +236,8 @@ export async function warmModuleConstantsForSyncCallers(): Promise<void> {
   {
     const { getCachedNumberRequired } = await import('../services/module-constants-service.js');
     const REORG_B2_REGIMES = [
-      'TREND_FRIENDLY_STABLE', 'HIGH_VOLATILITY_UNSTABLE', 'RANGE_BOUND_STABLE',
-      'IMPULSE_EXPANSION', 'STRUCTURAL_TRANSITION',
+      REGIMES.TREND_FRIENDLY_STABLE, REGIMES.HIGH_VOLATILITY_UNSTABLE, REGIMES.RANGE_BOUND_STABLE,
+      REGIMES.IMPULSE_EXPANSION, REGIMES.STRUCTURAL_TRANSITION,
     ] as const;
     for (const assetClass of ['crypto_spot', 'xstock_spot'] as const) {
       const k = { exchange: '*', assetClass, strategy: '*', regime: '*' };
