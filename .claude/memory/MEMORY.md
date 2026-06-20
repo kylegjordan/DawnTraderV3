@@ -6,6 +6,16 @@
 
 ---
 
+## ⛔ OPERATIONAL NON-NEGOTIABLES — READ FIRST, EVERY SESSION (both CC-A + CC-B; Kyle 2026-06-20 after CC-B drifted)
+> These survive compaction by living at the TOP. Violating any of these is a process failure, not a judgment call. If a long/compacted session is unsure whether it still has these in mind, RE-READ this block + CLAUDE.md §2/§5 before acting.
+1. **CI: NEVER push on top of RED CI.** BEFORE every push: `gh run list --branch migration/aws-supabase --limit 1`. If the head run is failing, STOP — fix it (or prove the red is not yours) BEFORE pushing more. Do NOT pile commits onto a red branch. A batch is NOT done until all 4 jobs are GREEN on the head commit (CLAUDE.md §2 step 5 + §5 #19).
+2. **Langston reviews the DIFF before push, and you ITERATE to consensus.** Step-4 = Langston reads the actual `git diff` BEFORE it is pushed; you go back-and-forth until consensus, not one-shot. Scope (Step-1) + pre-audit (Step-2) also get Langston review. Address him with his name at the START of the Discord post.
+3. **ITERATE TO COMPLETION — don't stop after a status update.** Keep processing the same turn; post progress as you pass milestones; ONLY stop on a genuine Kyle-only block (credential/provisioning/decision/approval) — then state the one blocker. (Full rule below in the protocol.)
+4. **Full 11-step workflow EVERY batch** (CLAUDE.md §2) — scope → pre-audit (SIM read) → implement → Langston diff review → push+CI-green → deploy → verify → Langston 2nd-pass → iterate → governance docs → completion report. Never skip a step; if tempted to skip, tell Kyle.
+5. **Commit hygiene:** test on the `C:\dev` bench (tsc baseline + vitest) BEFORE pushing (§7.1); stage EXPLICIT paths (never `-A`); batch-id at the START of the commit subject; push only from the GoogleDrive folder; verify CI green after.
+
+---
+
 ## SESSION-START PROTOCOL
 1. Read `CLAUDE.md` (§1 plain-language + CANONICAL-TERMS; §3 GOVERNANCE-TIERS; §5 NO-PATCHES; §6.5 Langston comms; §7.1 🔒storage; §9 SIM/SysManual-discipline + §9.3 UI-verify; §10.5 alerts).
    - ★**GOVERNANCE (Kyle reinforced 2026-06-16):** per-batch state docs are UNCONDITIONAL every batch AND sub-batch (completion report + BATCH_CATALOG + PHASE_HISTORY + RUNNING_ISSUES updated/closed/produced + MEMORY + PHASE_19_PLAN progress) regardless of any SIM/SysManual change; SIM gets a CONTENT update when a component/cross-cutting-state changes, SysManual when architecture/strategy/regime/filter/signal-pipeline/math changes — judge applicability (don't pad: a display/data-quality service is SIM-scope not SysManual-scope), but NEVER skip-by-default + reorganizing-a-doc ≠ updating-its-content (CLAUDE.md §9 anti-pattern; the why = the doc map is what keeps the system buildable). Don't claim "closed" until every applicable Tier-1/Tier-2 doc landed.
