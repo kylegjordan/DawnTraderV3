@@ -16,7 +16,9 @@ Captured verbatim-in-intent so none are lost. Owner: OLD Claude (CC-A) unless no
 
 7. **(Kyle's own action / FYI) Next batch coordinated via Discord.** Kyle will have the CURRENT NEW Claude start the next batch and they'll test how batch work flows over Discord. Not a CC-A task — noted so we watch how it goes and fold learnings into #2/#5.
 
-8. **Governance watcher: when does it leave shadow mode?** ANSWER (see below) — exit gated on 3 things; currently the timer is DISABLED. Track to go-live.
+8. **Governance watcher: when does it leave shadow mode?** ANSWER (see below) — exit gated on 3 things; currently the timer is DISABLED. Track to go-live. → scheduled as **B-GOV-3** (`B_GOV_3_SCOPE_governance-checker-golive.md`), slotted 2nd in OLD Claude's governance queue.
+
+9. **★ Topic-21 (Telegram) → a SEARCHABLE resource accessible by ALL THREE agents (Kyle directive 2026-06-20 — explicitly on the governance list).** Archive the full Telegram topic-21 thread history into a durable, greppable file under `Claude Comms and Packages/Telegram Discussion Archives/`, and make it reachable by OLD Claude, NEW Claude, AND Langston (in-repo so it's on everyone's mount + greppable; Langston reads it via his FUSE mount / `ssh staging`). This preserves the entire pre-Discord discussion record as a searchable knowledge base, not just a dead dump. **This is a formal governance deliverable** — folds into the B-DISCORD governance batch (#5). Mechanism: pull topic-21 history (the bridge inbox log + Telegram export), normalize to a searchable markdown/JSONL, commit, and reference it from the comms docs.
 
 ---
 
