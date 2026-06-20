@@ -54,5 +54,17 @@ ROI bounds ARE DB (`module_constants expectancy_gates`/`roi_gating`); the `adapt
 - **V3:** RR co-move-vs-drop decision when `RR' < minRR` after the lift.
 - **V4:** the orchestrator fallback-literal targets/stops (§3) — supersede/remove.
 
+## §8 — Langston Step-2 — PROCEED to Step-3 (Discord, 2026-06-20); resolutions LOCKED
+- **V3 — DROP + count by-reason when `RR' < minRR`; do NOT co-move the structural stop** (squeezing a structural stop to fake RR plants it in noise → premature stop-outs degrading Net Expectancy). Co-move only with its own justification, never the default.
+- **RR gate is UNIVERSAL** — apply `RR ≥ minRR_class` to ALL converged signals (native OR lifted), so the lift path is never stricter than the native path.
+- **Movement `screener_filters` column = SAME no-silent-fallback guarantee** — a missing `reachAtrMax` row must NOT silently disable the filter (pass-everything); mirror the b72-warmup per-class boot hard-fail.
+- **Delete the `assetClass:'*'` GLOBAL ROI row + the V4 orchestrator fallback literals ON THE SPOT** via the diff + DELETED_COMPONENTS_LOG (concrete homes at Step-3, not "maybe"; §15).
+√H + seed-conservative + Phase-25-calibrate confirmed sound. None blocking.
+
+## §9 — Step-3 progress (in flight, 2026-06-20)
+- **Piece A core SHIPPED in-chunk:** `server/core/calculations/signal-target-normalizer.ts` — pure `normalizeAndGateTarget` (lift-to-floor + universal RR gate, DROP-not-co-move, injected per-class floor/minRR). 7/7 unit tests green; tsc baseline green.
+- **OBJ-7 deletion SHIPPED in-chunk:** deprecated ROI consts removed from `adaptive-thresholds.ts` (kept `DEFAULT_SLIPPAGE`); DELETED_COMPONENTS_LOG entry added; tsc baseline green (zero importers, confirmed).
+- **REMAINING:** wire the normalizer into the 2 convergence sites (orchestrator `:1397` + vts-runner `callStrategyDetect`); Piece B (thread `assetClass` through the 4 expectancy fns + per-class `module_constants` seeds + boot assertion + delete the `'*'` row); Piece C (new `screener_filters` column + migration + wire into all filter paths + by-reason diagnostics + boot assertion); V4 (orchestrator fallback literals); migrations; full bench; Step-4 (Discord); CI; deploy; verify; governance; close.
+
 ---
-*On Step-2 Langston ACK (Discord) → Step-3 implement (resolve V1 first; central normalizer + per-class screener_filters movement column + per-class module_constants ROI seeds + boot-assertion + OBJ-7 deletion) → bench → Step-4 Langston diff review (Discord, thorough) → CI → deploy → verify → governance → close.*
+*Step-3 in flight → wire Piece A into the 2 sites → Piece B → Piece C → V4 → migrations → full bench → Step-4 Langston diff review (Discord, thorough) → CI → deploy → verify → governance → close.*

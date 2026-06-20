@@ -204,3 +204,21 @@
 **Archive copy:** none — inline orchestrator block + a return-field + a DB column (not whole files); git history is the authoritative archive (per this log's preamble). The cwqi migration + rollback SQL are versioned in `drizzle/migrations/`.
 **Removal commit:** _(recorded at P19-B6.5c Step-4/push)_
 **Reviewed by:** Langston Step-4 _pending_.
+
+---
+
+## P19 reorg-B2 (2026-06-20) — deprecated hardcoded ROI bounds (Kyle directive; never-leave-legacy rule 18)
+
+| Item | Location (pre-removal) | What it was |
+|---|---|---|
+| `ROI_MIN` (0.010), `ROI_MAX` (0.040), `ROI_FLEX_MULTIPLIER` (0.6), `FRICTION_SAFETY_BUFFER` (1.1), `ADAPTIVE_THRESHOLDS_CONFIG`, + the `[11.7C][Config]` boot log line | `server/config/adaptive-thresholds.ts` | The original hardcoded ROI-gate bounds + friction buffer. **DEPRECATED since B72 (2026-05-05)**, which migrated the LIVE ROI gate to `module_constants` (`expectancy_gates.roi_absolute_min/max/roi_flex_multiplier/friction_safety_buffer` + `roi_gating.min_roi`). The consts lingered as dead-but-loaded code (still logged at boot). |
+
+**Why removed:** Kyle directive 2026-06-20 — the deprecated bounds must be completely deleted so they can never be accidentally re-wired, especially as reorg-B2 Piece B makes the bounds **per-class in the DB**. Lingering dead constants that shadow the live DB-governed values are exactly the §15 / rule-18 hazard.
+
+**Blast-radius verification (certainty-before-cutting):** repo-wide grep — `server/config/adaptive-thresholds.ts` has **exactly ONE importer**, `server/core/calculations/expectancy.ts` (`:51-53`), importing ONLY `DEFAULT_SLIPPAGE` (kept). The deleted symbols have **ZERO importers** anywhere; their only remaining references are stale doc-comments in `expectancy.ts` (historically accurate). Confirmed by the tsc baseline gate staying GREEN after deletion (no new errors).
+
+**Left intentionally (NOT dead):** `DEFAULT_SLIPPAGE` — still imported by `expectancy.ts`; kept as a re-export from the canonical `exchange-defaults` source.
+
+**Archive copy:** none — a handful of const declarations (not a whole file); git history is the authoritative archive.
+**Removal commit:** _(recorded at reorg-B2 Step-3/push)_
+**Reviewed by:** Langston Step-4 _pending_ (Discord).

@@ -1,39 +1,18 @@
 /**
- * ══════════════════════════════════════════════════════════════════════════════
- * Directive 11.7C — Adaptive ROI Configuration
- * ══════════════════════════════════════════════════════════════════════════════
- * 
- * Centralized configuration for dynamic ROI thresholding via PredictiveConfidence.
- * These parameters control how trade acceptance criteria adapt based on:
- * - Market regime (BULL_STABLE, BEAR_VOLATILE, etc.)
- * - PredictiveConfidence from VTS telemetry
- * - Transaction costs (fees + slippage)
- * 
- * Schema: v1.0.0
- * Governance: Directive 11.7C Task 1
- * ══════════════════════════════════════════════════════════════════════════════
+ * Directive 11.7C — Adaptive ROI Configuration (ROI BOUNDS RETIRED).
+ *
+ * P19 reorg-B2 (2026-06-20, Kyle directive + never-leave-legacy rule 18): the deprecated
+ * hardcoded ROI bounds — `ROI_MIN` / `ROI_MAX` / `ROI_FLEX_MULTIPLIER`, `FRICTION_SAFETY_BUFFER`,
+ * and `ADAPTIVE_THRESHOLDS_CONFIG` — were DELETED. They were DEAD: B72 (2026-05-05) migrated the
+ * live ROI gate to `module_constants` (`expectancy_gates` / `roi_gating`), and these consts had
+ * ZERO importers (verified). Leaving them risked the deprecated bounds being accidentally re-wired
+ * (and reorg-B2's Piece B makes the bounds per-class in the DB). See `DELETED_COMPONENTS_LOG.md`.
+ *
+ * Only `DEFAULT_SLIPPAGE` remains — still imported by `expectancy.ts` — re-exported from the
+ * canonical `exchange-defaults` source.
  */
 
-// Batch 18J: Import canonical fee/slippage from Directive 11.3B source
+// Batch 18J: canonical fee/slippage from the Directive 11.3B source (exchange-defaults.ts).
 import { DEFAULT_SLIPPAGE as CANONICAL_SLIPPAGE } from './exchange-defaults';
 
-export const ROI_FLEX_MULTIPLIER = 0.6;   // ±30% flex range around regime baseline
-export const ROI_MIN = 0.010;             // 1.0% minimum threshold
-export const ROI_MAX = 0.040;             // 4.0% maximum threshold
-
-// B-4.5: DEFAULT_FEE RETIRED — fees are DB-governed (module_constants
-// 'fee_model'); ROI-gate callers pass the resolved per-class fee explicitly.
-export const DEFAULT_SLIPPAGE = CANONICAL_SLIPPAGE;    // 0.05% (Batch 18J: canonical source — exchange-defaults.ts)
-
-export const FRICTION_SAFETY_BUFFER = 1.1; // 10% safety buffer above friction floor
-
-export const ADAPTIVE_THRESHOLDS_CONFIG = {
-  roiFlexMultiplier: ROI_FLEX_MULTIPLIER,
-  roiMin: ROI_MIN,
-  roiMax: ROI_MAX,
-  defaultSlippage: DEFAULT_SLIPPAGE,
-  frictionSafetyBuffer: FRICTION_SAFETY_BUFFER,
-  version: '11.7C.1'
-};
-
-console.log(`[11.7C][Config] Adaptive thresholds loaded: ROI bounds [${(ROI_MIN * 100).toFixed(1)}%-${(ROI_MAX * 100).toFixed(1)}%], flex=${ROI_FLEX_MULTIPLIER}`);
+export const DEFAULT_SLIPPAGE = CANONICAL_SLIPPAGE; // 0.05% (canonical source — exchange-defaults.ts)
