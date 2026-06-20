@@ -1334,8 +1334,8 @@ async function generatePhase10Signal(
   // ══════════════════════════════════════════════════════════════════════════════
   // B-4.5: fee REQUIRED on the ROI fns; pass the SAME resolved costs the
   // Net-EV gate above just used (costMetrics.fee = DB-governed per-class taker).
-  const roiDetails = getROIDetails(entryPrice, takeProfit, regime, predictiveConfidence, costMetrics.fee, estimatedSlippage);
-  if (!isSignalProfitable(entryPrice, takeProfit, regime, predictiveConfidence, costMetrics.fee, estimatedSlippage)) {
+  const roiDetails = getROIDetails(entryPrice, takeProfit, regime, _assetClass, predictiveConfidence, costMetrics.fee, estimatedSlippage);
+  if (!isSignalProfitable(entryPrice, takeProfit, regime, _assetClass, predictiveConfidence, costMetrics.fee, estimatedSlippage)) {
     console.log(`[18L][ROI_Gate] VTS BYPASS: ${symbol} ROI ${roiDetails.roiPercent} < min ${roiDetails.minROIPercent} — allowing for ML learning`);
   }
   

@@ -329,9 +329,9 @@ export async function evaluateSignalQuality(input: SQEInput, options: SQEOptions
     const predictiveConf = getPredictiveConfidence(input.assetClass, canonicalSymbol, input.regime, input.strategy);
     // B-4.5: fee is REQUIRED — resolved per-class (DB-governed taker, fail-hard).
     const _b45Fee = getFrictionForAssetClass(input.assetClass).feeRateTaker;
-    if (!isSignalProfitable(input.entryPrice, input.targetPrice, input.regime, predictiveConf, _b45Fee)) {
+    if (!isSignalProfitable(input.entryPrice, input.targetPrice, input.regime, input.assetClass, predictiveConf, _b45Fee)) {
       const expectedROI = (input.targetPrice - input.entryPrice) / input.entryPrice;
-      const dynamicROI = getDynamicROIThreshold(input.regime, predictiveConf);
+      const dynamicROI = getDynamicROIThreshold(input.regime, input.assetClass, predictiveConf);
       failures.push(`ROI ${(expectedROI * 100).toFixed(2)}% < ${(dynamicROI * 100).toFixed(2)}% for ${input.regime} (conf=${predictiveConf.toFixed(2)})`);
       logSkippedSignal({
         symbol: canonicalSymbol,
@@ -487,9 +487,9 @@ export function evaluateSignalQualitySync(input: SQEInput, thresholds?: { finalS
   // Directive 11.7A Task 3: Regime-Aware ROI Gate (SQE parity with VTS) - Sync version
   if (input.entryPrice && input.targetPrice && input.regime) {
     // B-4.5: fee REQUIRED; `undefined` keeps the predictiveConfidence default (0.5).
-    if (!isSignalProfitable(input.entryPrice, input.targetPrice, input.regime, undefined, getFrictionForAssetClass(input.assetClass).feeRateTaker)) {
+    if (!isSignalProfitable(input.entryPrice, input.targetPrice, input.regime, input.assetClass, undefined, getFrictionForAssetClass(input.assetClass).feeRateTaker)) {
       const expectedROI = (input.targetPrice - input.entryPrice) / input.entryPrice;
-      const minROI = getMinROIForRegime(input.regime);
+      const minROI = getMinROIForRegime(input.regime, input.assetClass);
       failures.push(`ROI ${(expectedROI * 100).toFixed(2)}% < ${(minROI * 100).toFixed(2)}% for ${input.regime}`);
       logSkippedSignal({
         symbol: canonicalSymbol,

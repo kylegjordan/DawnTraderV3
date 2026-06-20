@@ -186,7 +186,7 @@ export function getExpectancyBreakdown(params: ExpectancyParams): {
  * @param regime - Market regime (BULL_STABLE, BEAR_VOLATILE, etc.)
  * @returns Minimum ROI threshold as decimal (e.g., 0.0125 = 1.25%)
  */
-export function getMinROIForRegime(regime: string): number {
+export function getMinROIForRegime(regime: string, assetClass: string): number {
   // B72: read regime-specific ROI threshold from module_constants under
   // module='roi_gating' with regime-dimension scope. Most-specific-wins
   // resolver returns the row whose regime field matches; if no per-regime
@@ -200,9 +200,10 @@ export function getMinROIForRegime(regime: string): number {
     [REGIMES.STRUCTURAL_TRANSITION]:    REGIMES.STRUCTURAL_TRANSITION,
   };
   const lookupRegime = known[regime] ?? REGIMES.STRUCTURAL_TRANSITION;
+  // reorg-B2 (Piece B): per-class — resolve roi_gating per assetClass (no global '*' fallback).
   return getCachedNumberRequired('roi_gating', 'min_roi', {
     exchange: '*',
-    assetClass: '*',
+    assetClass,
     strategy: '*',
     regime: lookupRegime,
   });
@@ -220,12 +221,14 @@ export function getMinROIForRegime(regime: string): number {
  * @param predictiveConfidence - Confidence score from VTS telemetry [0.0, 1.0]
  * @returns Dynamic ROI threshold bounded within ROI_MIN and ROI_MAX
  */
-export function getDynamicROIThreshold(regime: string, predictiveConfidence: number): number {
-  // B72: ROI flex/min/max read from module_constants (expectancy_gates).
-  const flex = getCachedNumberRequired('expectancy_gates', 'roi_flex_multiplier', _GLOBAL_KEY);
-  const lo   = getCachedNumberRequired('expectancy_gates', 'roi_absolute_min',    _GLOBAL_KEY);
-  const hi   = getCachedNumberRequired('expectancy_gates', 'roi_absolute_max',    _GLOBAL_KEY);
-  const base = getMinROIForRegime(regime);
+export function getDynamicROIThreshold(regime: string, assetClass: string, predictiveConfidence: number): number {
+  // B72 + reorg-B2 (Piece B): ROI flex/min/max read from module_constants (expectancy_gates),
+  // resolved PER CLASS (crypto vs xStock fee walls differ — a global gate mis-bounds one class).
+  const _k = { exchange: '*', assetClass, strategy: '*', regime: '*' };
+  const flex = getCachedNumberRequired('expectancy_gates', 'roi_flex_multiplier', _k);
+  const lo   = getCachedNumberRequired('expectancy_gates', 'roi_absolute_min',    _k);
+  const hi   = getCachedNumberRequired('expectancy_gates', 'roi_absolute_max',    _k);
+  const base = getMinROIForRegime(regime, assetClass);
   const boundedConfidence = Math.min(Math.max(predictiveConfidence, 0.0), 1.0);
   const dynamicROI = base * (1 - (boundedConfidence - 0.5) * flex);
   return Math.min(Math.max(dynamicROI, lo), hi);
@@ -249,16 +252,17 @@ export function getDynamicROIThreshold(regime: string, predictiveConfidence: num
  * @returns true if signal meets required ROI threshold
  */
 export function isSignalProfitable(
-  entryPrice: number, 
-  targetPrice: number, 
+  entryPrice: number,
+  targetPrice: number,
   regime: string,
+  assetClass: string,   // reorg-B2 (Piece B): per-class ROI gate (no silent global).
   predictiveConfidence: number = 0.5,
   fee: number,
   estimatedSlippage: number = DEFAULT_SLIPPAGE
 ): boolean {
   const roi = (targetPrice - entryPrice) / Math.max(entryPrice, 1e-8);
-  
-  const dynamicROI = getDynamicROIThreshold(regime, predictiveConfidence);
+
+  const dynamicROI = getDynamicROIThreshold(regime, assetClass, predictiveConfidence);
 
   // Directive 11.7C: Friction floor = (fee×2) + slippage×buffer (apply buffer only to slippage).
   // B72: buffer read from module_constants (expectancy_gates).
@@ -273,9 +277,10 @@ export function isSignalProfitable(
  * Directive 11.7C: Get ROI details for logging (enhanced with friction awareness)
  */
 export function getROIDetails(
-  entryPrice: number, 
-  targetPrice: number, 
+  entryPrice: number,
+  targetPrice: number,
   regime: string,
+  assetClass: string,   // reorg-B2 (Piece B): per-class ROI details.
   predictiveConfidence: number = 0.5,
   // B-4.5: REQUIRED — resolved per-asset-class fee (no static default).
   fee: number,
@@ -292,8 +297,8 @@ export function getROIDetails(
   predictiveConfidence: number;
 } {
   const roi = (targetPrice - entryPrice) / Math.max(entryPrice, 1e-8);
-  const minROI = getMinROIForRegime(regime);
-  const dynamicROI = getDynamicROIThreshold(regime, predictiveConfidence);
+  const minROI = getMinROIForRegime(regime, assetClass);
+  const dynamicROI = getDynamicROIThreshold(regime, assetClass, predictiveConfidence);
   // Directive 11.7C: Friction floor = (fee×2) + slippage×buffer (B72: from module_constants).
   const frictionBuffer = getCachedNumberRequired('expectancy_gates', 'friction_safety_buffer', _GLOBAL_KEY);
   const frictionFloor = (fee * 2) + (estimatedSlippage * frictionBuffer);
@@ -357,8 +362,8 @@ export function getAdaptiveExpectancy(regime: string, strategy: string): {
  * @param strategy - Strategy name
  * @returns Adjusted minimum ROI threshold
  */
-export function getAdjustedMinROI(regime: string, strategy: string): number {
-  const baseROI = getMinROIForRegime(regime);
+export function getAdjustedMinROI(regime: string, strategy: string, assetClass: string): number {
+  const baseROI = getMinROIForRegime(regime, assetClass);
   const adaptive = getAdaptiveExpectancy(regime, strategy);
   
   if (!adaptive) {
@@ -406,6 +411,7 @@ export function checkExpectancyDrift(currentConfidence: number, baseline: number
  */
 export function validateROIThresholdBounds(
   regime: string,
+  assetClass: string,   // reorg-B2 (Piece B): per-class bounds.
   confidence: number
 ): {
   isValid: boolean;
@@ -414,11 +420,12 @@ export function validateROIThresholdBounds(
   maxBound: number;
   error?: string;
 } {
-  const threshold = getDynamicROIThreshold(regime, confidence);
+  const threshold = getDynamicROIThreshold(regime, assetClass, confidence);
 
-  // B72: ROI bounds from module_constants ('expectancy_gates').
-  const roiMin = getCachedNumberRequired('expectancy_gates', 'roi_absolute_min', _GLOBAL_KEY);
-  const roiMax = getCachedNumberRequired('expectancy_gates', 'roi_absolute_max', _GLOBAL_KEY);
+  // B72 + reorg-B2: ROI bounds from module_constants ('expectancy_gates'), per class.
+  const _k = { exchange: '*', assetClass, strategy: '*', regime: '*' };
+  const roiMin = getCachedNumberRequired('expectancy_gates', 'roi_absolute_min', _k);
+  const roiMax = getCachedNumberRequired('expectancy_gates', 'roi_absolute_max', _k);
 
   const result = {
     isValid: true,
@@ -638,7 +645,9 @@ export function runRegressionGuardSuite(): Array<{
   
   for (const regime of ALL_REGIMES) {
     for (const confidence of CONFIDENCE_LEVELS) {
-      const validation = validateROIThresholdBounds(regime, confidence);
+      // reorg-B2: bounds are per-class; the regression guard validates against the
+      // canonical active class (crypto_spot) — the bounds-sanity check is class-agnostic in spirit.
+      const validation = validateROIThresholdBounds(regime, 'crypto_spot', confidence);
       results.push({
         regime,
         confidence,
