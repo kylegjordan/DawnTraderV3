@@ -90,6 +90,16 @@ def load_shared_config():
     except Exception:
         cfg["webhook_url"] = None
         cfg["webhook_id"] = None
+    # Optional dedicated SYSTEM-ALERTS webhook id (B-DISCORD OBJ-5). The §10.5 alert dispatcher
+    # posts each fired alert via a dedicated "DawnTrader Alerts" webhook; Langston's bridge
+    # ALWAYS engages on this webhook_id (bypassing the start-with-"Langston" gate) so a critical
+    # alert can never be silently dropped on phrasing. webhook_id is NOT a secret (the URL is) —
+    # it lives here in bridge config; it changes only if the webhook is deleted+recreated.
+    # Inert (None) until Kyle provisions the webhook → the always-engage path stays disabled.
+    try:
+        cfg["alerts_webhook_id"] = int(load_env_value(SHARED_CONFIG_FILE, "ALERTS_WEBHOOK_ID"))
+    except Exception:
+        cfg["alerts_webhook_id"] = None
     # Optional per-sender avatar icons (URLs), keyed by sender label.
     cfg["avatars"] = {}
     for key, label in (("AVATAR_CLAUDE_OLD", "OLD Claude"), ("AVATAR_CLAUDE_NEW", "NEW Claude")):

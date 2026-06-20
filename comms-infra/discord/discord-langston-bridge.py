@@ -184,7 +184,11 @@ def process_task(task, state, breaker):
     kind = task["kind"]
 
     # ── Circuit breaker: a hard floor under the soft [SILENT] discipline ──────
-    if task["author_id"] == CFG["kyle_id"]:
+    # System alerts bypass it entirely: an alert is a one-directional dispatcher post, NOT part
+    # of the CC↔Langston ping-pong the breaker guards, and must never be suppressed (OBJ-5).
+    if task.get("is_alert"):
+        pass
+    elif task["author_id"] == CFG["kyle_id"]:
         breaker["bot_turns"] = 0
     else:
         breaker["bot_turns"] += 1
@@ -219,7 +223,7 @@ def process_task(task, state, breaker):
                      silent_in_channel=not is_dm)
     else:
         prompt = task["content"]
-        mirror_event("langston_inbound",
+        mirror_event("langston_alert_inbound" if task.get("is_alert") else "langston_inbound",
                      channel_id=channel_id, message_id=msg_id,
                      author_id=task["author_id"], sender_username=task["author_name"],
                      text=prompt)
@@ -234,9 +238,17 @@ def process_task(task, state, breaker):
 
     # Langston is ONLY ever invoked when directly addressed (the bridge gates on his name), so tell
     # him so and require a substantive reply — Kyle 2026-06-19: "Langston responds when called, ALWAYS."
-    addressed_prompt = ("[Discord: you have been directly addressed by name. Respond substantively in "
-                        "one or a few lines. Do NOT reply with [SILENT] — on this channel you only "
-                        "receive messages addressed to you.]\n\n" + prompt)
+    # System alerts get a triage-framed prompt instead (OBJ-5): they arrive via the dedicated alerts
+    # webhook, not by name, and must be assessed + actioned, never [SILENT].
+    if task.get("is_alert"):
+        addressed_prompt = ("[Discord SYSTEM ALERT — routed to you from the §10.5 alert dispatcher. "
+                            "Assess it and respond with your triage in one or a few lines: severity, "
+                            "likely cause, and whether action is needed now or it is FYI. Do NOT reply "
+                            "with [SILENT].]\n\n" + prompt)
+    else:
+        addressed_prompt = ("[Discord: you have been directly addressed by name. Respond substantively in "
+                            "one or a few lines. Do NOT reply with [SILENT] — on this channel you only "
+                            "receive messages addressed to you.]\n\n" + prompt)
     log(f"handling msg {msg_id} channel={channel_id} kind={kind}: {prompt[:120]}")
     response = invoke_claude(addressed_prompt, state["session_id"], state=state)
     resp_stripped = (response or "").strip()
@@ -251,10 +263,13 @@ def process_task(task, state, breaker):
     if len(cleaned) < 3:
         cleaned = "Langston here — acknowledged."
     # Lead with the addressee's name so their wake watcher catches the reply (Kyle 2026-06-20).
-    # Guarded so a reply Langston already opened with the name isn't double-prefixed.
-    recipient = resolve_recipient_name(task)
-    if recipient and not cleaned[:len(recipient) + 2].lower().startswith(recipient.lower()):
-        cleaned = f"{recipient} — {cleaned}"
+    # Guarded so a reply Langston already opened with the name isn't double-prefixed. Skipped for
+    # alerts — the addresser is the alerts webhook (no session to wake); CC follow-through on an
+    # alert rides the existing alert-completion wake path, not a name in Langston's triage reply.
+    if not task.get("is_alert"):
+        recipient = resolve_recipient_name(task)
+        if recipient and not cleaned[:len(recipient) + 2].lower().startswith(recipient.lower()):
+            cleaned = f"{recipient} — {cleaned}"
     sent_id = dc.rest_send(BOT_TOKEN, channel_id, cleaned, LOG_FILE)
     mirror_event("langston_outbound", channel_id=channel_id, message_id=sent_id, reply_to=msg_id, text=cleaned)
     log(f"responded to msg {msg_id}")
@@ -326,6 +341,16 @@ def build_client(task_q):
         voice = dc.detect_voice_attachment(message)
         content = (message.content or "").strip()
 
+        # ALWAYS-ENGAGE for SYSTEM ALERTS (B-DISCORD OBJ-5, Langston-approved). A §10.5 alert is
+        # posted via a DEDICATED alerts webhook; its webhook_id is a Discord-native, immutable,
+        # not-body-settable field → the spoof-resistant structured marker. Langston engages on it
+        # UNCONDITIONALLY (bypassing the start-with-"Langston" gate) so a critical alert is never
+        # silently dropped on phrasing. Inert until Kyle provisions the webhook (alerts_webhook_id
+        # = None → this is never true). Scoped to EXACTLY this webhook so ordinary chatter can't
+        # trip it. The alert payload is the message content (the dispatcher formats it).
+        is_alert = (wh_id is not None and CFG.get("alerts_webhook_id") is not None
+                    and wh_id == CFG["alerts_webhook_id"])
+
         # Address-gate (review 1a/1b): Kyle always engages; the CC bot (pinned id, not the
         # generic .bot flag) engages ONLY when the message names Langston — so CC's ACK /
         # bookkeeping posts never burn a paid Langston turn, and stray bots are ignored.
@@ -333,7 +358,9 @@ def build_client(task_q):
         # "Langston" — from Kyle OR a CC. No name → not his to answer (it's for a CC, a CC↔CC
         # exchange, or general). Everyone can be woken broadly; only Langston's REPLY is gated
         # here so the channel doesn't get chaotic. (Voice gets the same check post-transcription.)
-        if voice:
+        if is_alert:
+            pass  # dedicated system-alerts webhook → always engage (OBJ-5), bypass the name gate
+        elif voice:
             if not author_is_kyle:
                 return  # only Kyle sends voice notes; name-check happens after transcription
         elif author_is_kyle:
@@ -352,8 +379,13 @@ def build_client(task_q):
             # For a CC webhook post the display name IS the session name (OLD Claude / NEW Claude),
             # which is what resolve_recipient_name() leads Langston's reply with.
             "author_display": getattr(message.author, "display_name", None) or getattr(message.author, "name", None),
+            "is_alert": is_alert,
             "is_dm": is_dm,
         }
+        if is_alert and not voice:
+            task_q.put({**base, "kind": "alert", "content": content})
+            log(f"ALERT enqueued: msg {message.id} via alerts webhook")
+            return
         if voice:
             task_q.put({**base, "kind": "voice", "voice": voice})
             log(f"voice enqueued: msg {message.id} from {message.author}")
