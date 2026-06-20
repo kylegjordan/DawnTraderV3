@@ -26,7 +26,11 @@
 
 **GO-LIVE GATE (all three green):** seed confirmed (Obj-1) + shadow silent (Obj-2) + backtest passes (Obj-3) → set `GOV_SHADOW=0` + `systemctl enable --now governance-checker.timer` on staging → live `warning`-sev paging. Run one live tick, confirm no false flood, confirm a real gap pages. Then B-GOV-3 closes.
 
-## Schedule / sequencing
-- **Next governance batch** (near-term; small — 3 objectives). Owner OLD Claude (CC-A); Langston confirms Obj-1 dispositions + Obj-3 dogfood.
-- Homed in: this scope; RUNNING_ISSUES (the B-GOV-2 calibration follow-ups consolidate here); `B_DISCORD_FOLLOWUPS_2026-06-20.md` item 8; POST_AUDIT_ROADMAP / PHASE_19_PLAN as a numbered item.
+## Schedule / sequencing — SLOTTED (Kyle asked 2026-06-20)
+**OLD Claude (CC-A) governance queue order:**
+1. **B-DISCORD governance write-up** (scope/pre-audit/completion/catalog/SIM + Telegram→Discord doc rewrites) — FIRST, because tonight's Discord work is context-warm and must be captured before it compacts (our own capture-while-warm rule; the 4h-deadline philosophy).
+2. **★ B-GOV-3 (this batch)** — SECOND, immediately after #1. Rationale for this exact slot: the just-completed B-DISCORD batch becomes the checker's FIRST clean post-cutoff batch to validate against in Obj-3 — turning on enforcement right when there's a fresh clean batch to grade.
+3. **CLAUDE.md slim + mission condense**, then the pruning/dedup capture.
+- **Timing:** both #1 and #2 fall in OLD Claude's next one or two working sessions (small batches). Langston confirms Obj-1 dispositions + Obj-3 dogfood (reachable on Discord now). NEW Claude's Phase-19 batch work runs in parallel and is unaffected.
+- Homed in: this scope; `B_DISCORD_FOLLOWUPS_2026-06-20.md` item 8; to also land in RUNNING_ISSUES + the phase plan as part of the B-DISCORD governance write-up (#1).
 - **No open-ended "later" — this batch IS the schedule.** If it stalls, that's a visible stalled batch, not a vague intention.
