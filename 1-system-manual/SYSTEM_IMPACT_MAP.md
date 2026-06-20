@@ -142,6 +142,17 @@ Kill-switch is **DB-backed per-mode**: `isKillSwitchTripped(mode)` (`guardrail-p
 - **Contamination**: ~~DI derived from NGC (BUG-004)~~ **RESOLVED** — DI now sourced from geometric price data via `calculateDirectionalIntegrity(closePrices)`
 - **Tests**: `expectancy-kernel.test.ts`, `net-ev-validation.test.ts`
 
+### 1.2a Target Normalizer + Per-Class ROI Gate (reorg-B2, 2026-06-20)
+- **File**: `server/core/calculations/signal-target-normalizer.ts` (`normalizeAndGateTarget`, pure); per-class resolution in `server/core/calculations/expectancy.ts` (`getPerClassTargetGate` + `assetClass`-threaded ROI fns); seeded by `drizzle/migrations/2026-06-20-reorg-b2-per-class-roi-target.sql`; fail-closed boot assertion in `server/startup/b72-warmup.ts`.
+- **What**: Governs the target SETTING (the actual opener) before the EV gate. LIFT target to `max(native, entry×(1+floorPct))` → UNIVERSAL RR gate (`rr<minRR` → drop, never co-moves the stop) → REACHABILITY gate (`atrsToTarget=(target−entry)/ATR ≤ reachAtrMax`; ATR≤0 → LOUD `invalid_atr`, never coerced to 0). Per-class knobs from `module_constants` (`expectancy_gates` + `roi_gating`), keyed `crypto_spot`/`xstock_spot`.
+- **Upstream**: strategy `entry/stop/target`; the per-pipe ATR (`mceContext.indicators.atr`, carried on `SizingContext.atr` for the active path / `marketContext.atr` for xStock active-dispatch); per-class `module_constants` rows.
+- **Downstream**: feeds the (possibly lifted) target into the Net Expectancy Kernel + sizing; drop-reasons surface by-reason (active `console.warn`/`console.error`; VTS `logSkippedSignal` + `setNullReason` — `Target_Unreachable`/`Target_RR_Gate`/`Target_Invalid_ATR`).
+- **Shared State**: applied at BOTH convergence points (active `buildSizedSignalForStrategy` + VTS `vts-runner`) so sim-to-live gate identically; the pure helper holds NO state. Per-class DB rows are process-cached via the module-constants resolver (warmed at boot).
+- **Execution**: Synchronous — per signal, pre-geometry.
+- **Blast Radius**: **CRITICAL** — gates/reshapes the target on every active AND VTS signal, both classes.
+- **friction MODEL vs MARGIN (architecture)**: the 6 ROI knobs + per-regime `min_roi` are per-class (global `'*'` rows DELETED — no silent fallback); `friction_safety_buffer` is a DELIBERATE single global `'*'` row — a uniform safety MARGIN on top of the already-per-class friction MODEL (`fee_model` + per-class spreads carry the crypto-vs-xStock differences), not a missed split. Phase-25 revisit: roadmap 25-18 / RUNNING_ISSUES #337.
+- **Tests**: `p19-reorg-b2-target-normalizer.test.ts` (8 — lift, dispersion, universal RR, unreachable, `invalid_atr`-distinct, geometry).
+
 ### 1.3 Cost Model
 - **File**: `server/core/cost-model.ts`
 - **What**: Computes real round-trip trading costs (spread + slippage + Kraken fees). Single source of truth for friction.

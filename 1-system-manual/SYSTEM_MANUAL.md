@@ -354,6 +354,26 @@ Signal passes if: expectedROI ≥ requiredROI
 
 This ensures no trade proceeds where costs eat the expected return.
 
+### ★ reorg-B2 (2026-06-20) — per-class target-setting normalizer + per-class ROI gate + the friction MODEL/MARGIN decomposition
+
+**The opener is the target-SETTING, not the ROI threshold.** The ROI gate above checks an ALREADY-SET target, so raising a floor alone only REJECTS more — it never opens a trade. Every strategy sets `targetPrice = entry + target_exit_atr_multiplier × ATR`, so reorg-B2 governs the target itself through one pure helper, `server/core/calculations/signal-target-normalizer.ts::normalizeAndGateTarget`, applied at BOTH signal convergence points — the active path (`signal-orchestrator.ts::buildSizedSignalForStrategy`) AND the VTS path (`vts-runner.ts`, which calls `strategyEngine.detect*` directly, not via the orchestrator) — so sim and live normalize/gate IDENTICALLY. Order = **LIFT → universal RR gate → reachability gate**:
+
+```
+target' = max(nativeTarget, entry × (1 + floorPct))      // LIFT weak targets to the per-class floor;
+                                                          //   strong native targets ride ABOVE it (dispersion preserved)
+rr      = (target' − entry) / (entry − stop)              // UNIVERSAL RR gate — ALL signals, native or lifted.
+         drop if rr < minRR  (reason rr_below_min)        //   NEVER co-move the structural stop to manufacture RR.
+atrsToTarget = (target' − entry) / ATR                    // REACHABILITY gate (path-INVARIANT feasibility, not a quality bar):
+         drop if atrsToTarget > reachAtrMax               //   the pair's volatility can't traverse the target in the ATR horizon.
+         drop (LOUD invalid_atr) if ATR not > 0           //   a genuinely-missing ATR is a wiring/data bug — fail loud, never coerce-to-0.
+```
+
+**Per-class resolution (Piece B).** `assetClass` is threaded through the `expectancy.ts` ROI functions (`getMinROIForRegime` / `getDynamicROIThreshold` / `isSignalProfitable` / `getROIDetails` / `validateROIThresholdBounds` / `getAdjustedMinROI`) and a new `getPerClassTargetGate(assetClass)`. The knobs resolve from `module_constants` modules `expectancy_gates` (`roi_flex_multiplier`, `roi_absolute_min`, `roi_absolute_max`, `target_floor_pct`, `min_rr`, `reach_atr_max`) + `roi_gating.min_roi` (per canonical regime), keyed per `asset_class` (`crypto_spot` / `xstock_spot`). The legacy global `'*'` ROI rows were **DELETED** (no silent global fallback), and a fail-closed boot assertion (`b72-warmup`, iterating `CANONICAL_REGIMES`) refuses to start the server if any per-class row is missing. The deprecated hardcoded `ROI_MIN` / `ROI_MAX` / `ROI_FLEX_MULTIPLIER` / `FRICTION_SAFETY_BUFFER` constants (`adaptive-thresholds.ts`) were removed (OBJ-7) — the §4 formulas above are now per-class DB-resolved, and the regime-table regime names there are legacy display labels for the canonical TFS/HVU/RBS/IE/ST.
+
+**Friction decomposition — per-class MODEL + global MARGIN (architecture decision, CC-B + Langston Step-8 2026-06-20).** Net Expectancy = Raw EV − Friction. The friction **MODEL** is per-class (the `fee_model` rates + per-class spreads carry the materially-different crypto-vs-xStock fee/spread/settlement profiles). The `friction_safety_buffer` (in `expectancy_gates`) is deliberately kept a single **global `'*'` row** — it is a uniform safety **margin applied on top of** the already-per-class model, not a second copy of per-class friction. A uniform margin on a per-class model is the correct decomposition, not a missed split. Phase-25 (roadmap 25-18 / RUNNING_ISSUES #337) carries the explicit trigger to revisit whether the buffer itself should differ per-class once the per-class friction models are calibrated.
+
+**Decision-grade EV reality (why reorg-B2 is plumbing, not the crypto opener).** At the Tier-1 taker fee wall (~1.8% round-trip) with the pWin ceiling 0.60, NetEV is net-negative even at a 4% target / 1.6% stop (`0.6·4 − 0.4·1.6 − 1.8 ≈ −0.04%`) — so the 11.8B EV gate HONESTLY refuses to open crypto at taker. reorg-B2 ships the rung-1 machinery + honest per-class values (4% / RR 2.5 / 4.0 ATRs, placeholder); the actual profitable crypto opener is the maker build (reorg-B7) + the pWin-ceiling recalibration (Phase-25).
+
 ---
 
 ## 5. Cost Model (Single Source of Truth)
