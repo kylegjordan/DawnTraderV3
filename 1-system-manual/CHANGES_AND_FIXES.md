@@ -2,6 +2,16 @@
 
 ---
 
+## FIX-2026-06-20-A — B-DISCORD: Discord comms fabric (parallel, unswitched) + Langston wake-routing fix
+
+**Class:** comms/ops infrastructure (non_architecture; no trading-engine/regime/strategy/signal/math touch). **Shipped:** 2026-06-19/20. Langston Step-1 PROCEED + OBJ-5 design approved (both via Discord). **Batch OPEN** — OBJ-5 (alerts→Discord) is design-complete but blocked on a one-time Kyle webhook provisioning; final completion report + close deferred until it builds.
+
+1. **Discord comms fabric built + deployed in PARALLEL with Telegram (NOT switched).** Native bot-to-bot messaging (the Telegram platform blocker) makes CC↔Langston an in-channel `on_message` exchange, obsoleting the §6.5 SSH-deliver/file-first/hung-instance apparatus. Components in-repo at `comms-infra/discord/` (`discord_common.py`, `discord-cc-bridge.py`, `discord-langston-bridge.py`, `cc-send`, two `.service` units, `comms-active.env`), deployed to Helsinki `/opt/discord-bridges/` (venv, discord.py 2.7.1). Separate inbox log `/var/log/cc-discord-inbox.jsonl`; switch `COMMS_BACKEND=telegram` (single source of truth `/etc/dawntrader/comms-active.env`); Telegram stays the live instant-rollback backend. Display names OLD Claude (CC-A) / NEW Claude (CC-B) via per-session webhook usernames. Loop-safety: self-guard, start-with-"Langston" address gate, circuit breaker, message-id dedup.
+2. **Langston bridge auto-leads every reply with the addressee's name — WAKE-ROUTING FIX.** Live failure observed: Langston answered NEW Claude's scope but named no one, so NEW Claude's wake watcher (keys on the session name appearing in a post) never fired and he sat waiting on a reply that had landed. Fix (deterministic, NOT prompt-reliant): `resolve_recipient_name()` derives the addressee from the triggering message's author (Kyle / OLD Claude / NEW Claude via webhook display name) and prepends `"<name> — "` to the outgoing reply, double-name-guarded. Deployed + restarted (`*.bak-20260620`); **live-verified** (Langston's next reply auto-led "OLD Claude —" and woke CC-A). Commit `ca8aa9aa1`.
+3. **Governance:** SIM (new Discord comms section + dual-backend Cross-Cutting Runtime State), CLAUDE.md §6 Discord banner (model + parallel status + Telegram-fallback posture) + §6.11 transcript-repair pointer, topic-21 searchable archive (654 entries), this entry, RUNNING_ISSUES (OBJ-5 blocked-on-Kyle + cutover-future), BATCH_CATALOG, PHASE_HISTORY. Scope `B_DISCORD_SCOPE.md`, pre-audit `B_DISCORD_PRE_AUDIT.md`, punch list `B_DISCORD_FOLLOWUPS_2026-06-20.md`.
+
+---
+
 ## FIX-2026-06-14-A — P19-B4a: xStock active-path wire-in + feed-safety (stamp-at-source collision root-fix + reb-2-12F source-text-coupling removal + pattern-cap interim correction + calibration_state tag)
 
 **Class:** asset-class-correctness (collision-mislabel structural root-fix) + diagnostic-coupling removal + risk-floor correction. **Fixed:** 2026-06-14 (commits per chunk: C1 `89b76c8b8`/`755857016`, C2 `d37e9cc9e`, C3 `df00c27c8`, C4 `450383164`, C5 `da83a48ad`, C6 `0cd3e0575`, C8 `71690d99e`), Langston Step-4 review. **Active trading OFF; the xStock active-dispatch path is DORMANT until P19-B7b flips `system_context.isEngineActive` (CLAUDE.md §9.1).**

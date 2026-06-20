@@ -19,6 +19,13 @@
 - **#331 — No regime-flip exit on the active path** (V5, confirmed absent). Whether one was intended is a FRESH decision (Nov-2025 canon non-binding). **HOME:** 3-way decides "not wanted + rationale" OR a roadmap item — not left as a bare observation. **OPEN (decision pending).**
 - **Audit headline (informational, no #):** fixing **#233** (EV-input plumbing) does NOT open crypto (pWin capped 0.60, live-DB confirmed); the binding constraint is the Tier-1 fee friction (~1.8% round-trip > edge). The gate-10 crypto-unblock is the **FEE LADDER** (rung-1 bigger targets / rung-2 maker / rung-3 pWin-ceiling-on-evidence — reorg D6), NOT input threading. #233 stays as accuracy + strong-trend parity (ONE fix-site at the RTB→promote metadata boundary, per Langston). The confidence-inversion (B-NEW-36/37/39) → Phase-25 25-2/3/10; size/concurrency study → 25-16.
 
+## ★ B-DISCORD open items (2026-06-20)
+
+> Source: `Scope Files/B_DISCORD_SCOPE.md` + punch list `B_DISCORD_FOLLOWUPS_2026-06-20.md`. The Discord comms fabric is built + parallel + unswitched (`COMMS_BACKEND=telegram`).
+
+- **#332 — B-DISCORD OBJ-5 (system alerts → Discord) BLOCKED ON KYLE.** Design finalized + Langston-approved: staging posts each fired §10.5 alert DIRECT to a dedicated Discord "alerts" webhook (failure-domain: must survive Helsinki down); the Langston bridge always-engages (bypassing the start-with-"Langston" gate) when `message.webhook_id == ALERTS_WEBHOOK_ID`. Webhook URL = secret (staging only); webhook_id = bridge config (changes on recreate). **BLOCKER:** Kyle must create ONE #general webhook ("DawnTrader Alerts") and hand CC the URL (→staging secret) + ID (→bridge config) — CC cannot create webhooks. **HOME:** completes within B-DISCORD once provisioned; the batch stays OPEN until then. **OPEN (blocked-on-Kyle).**
+- **#333 — Discord cutover (flip `COMMS_BACKEND=telegram`→`discord`).** A separate, deliberate go/no-go step per `comms-infra/discord/TEST_AND_SWITCH_RUNBOOK.md`; Telegram remains the live rollback until it closes. The deep CLAUDE.md narrative-strip of the obsolete Telegram §6.5 SSH-deliver apparatus rides with the R3 slim. **HOME:** post-B-DISCORD, Kyle-gated cutover decision. **OPEN (future, intentional).**
+
 ---
 
 ## ★ ITEM 3.5 HOMING-AUDIT RESOLUTIONS (2026-06-09) — authoritative for the changes below
