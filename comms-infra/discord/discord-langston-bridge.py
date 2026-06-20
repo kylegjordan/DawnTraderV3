@@ -51,14 +51,13 @@ CLAUDE_TIMEOUT = 900
 CLAUDE_MODEL = "claude-opus-4-8[1m]"
 # Circuit breaker (Langston review 1b): if this many CC-bot-authored turns occur with no
 # intervening Kyle message, stop auto-replying + post one alert. Hard floor under [SILENT].
-# Raised 6 -> 30 (Kyle 2026-06-20): a real autonomous CC↔Langston review loop (scope +
-# pre-audit + Step-4 + several iteration rounds + the OTHER CC's oversight flags) easily
-# exceeds 6 bot turns with Kyle merely watching, not posting — at 6 the breaker tripped
-# mid-review and silently dropped NEW Claude's Step-4 sign-off requests. The address-gate
-# (a CC post must START with "Langston") already bounds the surface to deliberate asks, so
-# 30 still catches a true runaway while letting a legitimate batch review complete. Kyle
-# posting anything still resets it to 0.
-BOT_TURN_LIMIT = 30
+# EFFECTIVELY REMOVED (Kyle directive 2026-06-20): a normal overnight CC↔Langston review run
+# is routinely 30-50 messages, so any low cap silently swallows legitimate work (it tripped at
+# 6, then 30 was still too low). Kyle wants the limit gone. Set to 100_000 = unreachable in
+# real use (years of traffic) while still bounding a pathological infinite-loop BUG so it can't
+# burn unlimited paid Langston turns. The address-gate (a CC post must START with "Langston")
+# already keeps ordinary chatter from triggering him. Kyle posting anything still resets to 0.
+BOT_TURN_LIMIT = 100_000
 ADDRESS_RE = re.compile(r"langston", re.I)  # names Langston anywhere (used for Kyle + voice)
 # CC convention (Kyle 2026-06-19): a Claude session addresses Langston by putting his name at the
 # START of the post — so a passing mid-sentence mention does NOT wake him. Tolerates leading
