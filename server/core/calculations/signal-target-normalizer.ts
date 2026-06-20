@@ -6,9 +6,9 @@
  * `strategyEngine.detect*` directly, NOT via the orchestrator, so a single orchestrator-only site
  * would break sim-to-live parity).
  *
- * FORMULA-AGNOSTIC: the 21 strategies (12 file-based `mult×ATR`, 9 in-class heterogeneous
+ * FORMULA-AGNOSTIC: the 19 strategies (10 file-based `mult×ATR`, 9 in-class heterogeneous
  * R-multiple/measured-move/percent) all set a final entry/stop/target; this helper sees only those
- * + the injected per-class knobs, so a per-strategy floor (21 drifting edits) is avoided.
+ * + the injected per-class knobs, so a per-strategy gate (19 drifting edits) is avoided.
  *
  * PURE FUNCTION — the caller injects the resolved per-class `floorPct` / `minRR` / `reachAtrMax`
  * (from `module_constants` `expectancy_gates`, via `getPerClassTargetGate`) + the pair ATR. No DB
@@ -63,10 +63,11 @@ export type TargetNormalizeResult = {
   reason?: TargetNormalizeReason;
 };
 
-/** Lift the target to the per-class floor, then apply the universal RR gate and the reachability gate.
+/** Apply the universal RR gate and the reachability gate to the strategy's NATIVE target.
+ *  reorg-B2.1: the floor-LIFT was REMOVED — never mutate the strategy's chosen target.
  *  Long-only. Drop (never co-move the stop, never relax reachability per-path) on a failed gate. */
 export function normalizeAndGateTarget(input: TargetNormalizeInput): TargetNormalizeResult {
-  const { entryPrice, stopPrice, targetPrice: nativeTarget, floorPct, minRR, atr, reachAtrMax } = input;
+  const { entryPrice, stopPrice, targetPrice: nativeTarget, minRR, atr, reachAtrMax } = input;
 
   // Geometry guard (long-only): finite, positive, stop strictly below entry.
   if (
@@ -76,9 +77,14 @@ export function normalizeAndGateTarget(input: TargetNormalizeInput): TargetNorma
     return { ok: false, targetPrice: nativeTarget, rr: 0, atrsToTarget: Number.POSITIVE_INFINITY, lifted: false, reason: 'invalid_geometry' };
   }
 
-  const floorTarget = entryPrice * (1 + floorPct);
-  const lifted = floorTarget > nativeTarget;
-  const targetPrice = lifted ? floorTarget : nativeTarget;
+  // reorg-B2.1 OBJ-1 (2026-06-21): the floor-LIFT is REMOVED — never mutate a strategy's target.
+  // The strategy's NATIVE target is used as-is; cost-coverage is enforced by the Net-Expectancy gate
+  // (11.8B — strict netEV>0 on active, −1% on VTS by design), reward/risk by the RR gate below.
+  // Lifting a sub-floor target to clear the RR gate was fabricating reward on the reward leg
+  // (the Net-Expectancy anti-pattern) and produced a target the strategy never chose. `floorPct` is
+  // now unused — retained on the input type only until OBJ-5 retires this helper into the shared guard.
+  const lifted = false;
+  const targetPrice = nativeTarget;
 
   const risk = entryPrice - stopPrice;   // > 0 by the guard above
   const reward = targetPrice - entryPrice;
