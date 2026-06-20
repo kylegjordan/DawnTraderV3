@@ -2398,6 +2398,37 @@ These two Python bridges run on the Hetzner Helsinki agent box (`204.168.141.77`
 
 ---
 
+## Discord Comms Fabric (Hetzner Helsinki) — Added B-DISCORD (2026-06-20)
+
+A SECOND, parallel comms backend built to replace the Telegram fabric above. **The win:** Discord delivers one bot's messages to another bot (bots receive each other's `MESSAGE_CREATE`), so **CC↔Langston is a native in-channel exchange** — the entire Telegram §6.5 SSH-deliver / file-first / hung-instance apparatus is obsoleted by a normal `on_message` handler. Telegram blocks bot-to-bot at the platform level; Discord does not.
+
+**Status (as of B-DISCORD): BUILT + DEPLOYED + TESTED, running in PARALLEL with Telegram — NOT switched.** The switch `COMMS_BACKEND=telegram` (in `/etc/dawntrader/comms-active.env`); cutover to `discord` is a separate, later, deliberate step (`comms-infra/discord/TEST_AND_SWITCH_RUNBOOK.md`). Telegram stays live as the instant-rollback backend. Bridge source lives IN-REPO at `comms-infra/discord/` (unlike the Telegram bridges which are out-of-repo at `/usr/local/bin/`) and is deployed to Helsinki `/opt/discord-bridges/` (venv, discord.py 2.7.1).
+
+| Component | Path | Upstream feeders | Downstream consumers | Blast radius |
+|-----------|------|------------------|----------------------|--------------|
+| `discord-cc-bridge.py` | repo `comms-infra/discord/` → Helsinki `/opt/discord-bridges/` | Discord gateway push (`on_message`) on the CC bot; whisper voice | `/var/log/cc-discord-inbox.jsonl`; `send` mode posts via REST or per-session webhook (display name) | LOW — boundary only; SEPARATE log from Telegram. |
+| `discord-langston-bridge.py` | same | Discord gateway push on the Langston bot; whisper voice | claude-cli (`--session-id <UUID> --model claude-opus-4-8[1m]`); `/var/log/cc-discord-inbox.jsonl` mirror | LOW — single-claude-at-a-time preserved (single FIFO worker). Auto-leads reply with addressee name (wake-routing). |
+| `discord_common.py` | repo `comms-infra/discord/` | — | shared helpers: config load, REST/webhook send (429 backoff), chunking, whisper transcribe, voice detect | LOW — library. |
+| `cc-send` | repo `comms-infra/discord/` | reads `COMMS_BACKEND` from `comms-active.env` | dispatches CC outbound → telegram OR discord bridge | LOW — switch indirection; CC always calls `cc-send`, never the underlying bridge. |
+| `/var/log/cc-discord-inbox.jsonl` | Helsinki | both Discord bridges | wake watcher tail + (OBJ-5) §10.5 alert surfacing | LOW — SEPARATE from `cc-bridge-inbox.jsonl`; same JSONL schema + `transport:"discord"`. |
+| `/etc/dawntrader/comms-active.env` | Helsinki | — | the `COMMS_BACKEND` single-source-of-truth switch (telegram\|discord) | LOW now (=telegram); the cutover control. |
+| `discord-cc-bridge.service` / `discord-langston-bridge.service` | Helsinki systemd | — | run the two Discord bridges (parallel to the Telegram services) | LOW. |
+| `/etc/langston/discord-cc-bot.env` / `discord-langston-bot.env` | Helsinki | Kyle-provisioned bot tokens (MESSAGE_CONTENT intent on) | the two bridges | LOW — boundary credentials, same class as the Telegram bot tokens. |
+
+### Cross-Cutting Runtime State (dual-backend liveness — §17 registry)
+- **`COMMS_BACKEND` switch** (`/etc/dawntrader/comms-active.env`): the single source of truth for which fabric is live for CC outbound. = `telegram` (current). Flipping it reroutes all CC outbound via `cc-send` with no code change; Telegram remains the running rollback.
+- **Two inbox logs run simultaneously:** `cc-bridge-inbox.jsonl` (Telegram, live) + `cc-discord-inbox.jsonl` (Discord, parallel-test). The CC wake watcher tails BOTH. They are schema-siblings; a schema change must bump `schema_version` across all four writers.
+- **Display-name routing:** CC posts on Discord as per-session webhook display names **OLD Claude** (CC-A) / **NEW Claude** (CC-B). The wake filter `cc-wake-filter.py` routes by these names; the Langston bridge `resolve_recipient_name()` leads replies with them.
+
+### "If I Change X, Check Y" — B-DISCORD additions
+- **Flip `COMMS_BACKEND` to discord (cutover)** → confirm both Discord services active + the wake watcher is tailing the Discord log BEFORE flipping; Telegram stays running as rollback; follow `TEST_AND_SWITCH_RUNBOOK.md`.
+- **Add/rename a CC session display name** → update the webhook username AND the wake-filter `NAMES`/`ALIAS_NAME` registry AND the Langston bridge `resolve_recipient_name` path — all three must agree or wake-routing breaks.
+- **Change the address-Langston gate** → `ADDRESS_START_RE` in `discord-langston-bridge.py`; a CC post must START with "Langston" to engage him. The OBJ-5 alert always-engage exception is a narrow, explicit bypass keyed off the dispatcher's structured `category` marker (NOT sender-name / body substring).
+- **Modify Discord bridge concurrency** → preserve the single-FIFO single-worker invariant (same critical rule as the Telegram Langston bridge).
+- **Change the inbox-log schema** → now four writers (2 Telegram + 2 Discord); bump `schema_version` across all; keep the Discord log a schema-sibling.
+
+---
+
 ## Price-Discontinuity Detector — Added B-NEW-42b (2026-05-17)
 
 NEW component shipped with B-NEW-42b commit `d8e0f5885`. Closes the 3 structural TEC gaps surfaced by B-NEW-42's Phase 0 audit.
