@@ -58,6 +58,10 @@ import { dataAggregator } from './data-aggregator.js';
 import { getWeightSync as getStrategyWeight, computeStrategyWeights } from '../utils/strategyWeights.js';
 import { getExposureMultiplierSync, computeExposureBias, getBiasSummaryForLog } from '../utils/strategyBias.js';
 import { computeNetExpectancyKernel } from '../core/calculations/net-expectancy-kernel.js';
+// reorg-B2 (Piece A): central per-class target-floor + the shared normalizer (applied at the
+// active convergence point in buildSizedSignalForStrategy; VTS applies the same in vts-runner).
+import { getPerClassTargetGate } from '../core/calculations/expectancy.js';
+import { normalizeAndGateTarget } from '../core/calculations/signal-target-normalizer.js';
 // M5B: Import disabled - VTS now runs autonomously, not from signal orchestrator
 // import { captureSignalForVTS } from './vts-runner.js';
 // Directive 9.3: Adaptive Kalman Filter integration
@@ -1191,13 +1195,29 @@ export class SignalOrchestrator {
     // See: server/services/vts-runner.ts → runAutonomousSimulation()
     // DEPRECATED: captureSignalForVTS() no longer called from signal orchestrator
 
+    // reorg-B2 (Piece A): central target-floor lift + universal RR gate (per-class) — the ACTIVE
+    // convergence point (SINGLE, post-strategy, pre-geometry/sizing — covers every active emit path
+    // that goes through sizing). The VTS path applies the SAME normalizer in vts-runner. DROP (never
+    // co-move the structural stop) when RR < minRR (Langston Step-2). Also replaces the old
+    // `?? entry×1.015` V4 fallback literal — a target-less signal is now DROPPED, not fabricated.
+    const _b2Gate = getPerClassTargetGate(sizingContext.assetClass);
+    const _b2 = normalizeAndGateTarget({
+      entryPrice: rawSignal.entryPrice, stopPrice: rawSignal.stopPrice, targetPrice: rawSignal.targetPrice ?? NaN,
+      floorPct: _b2Gate.floorPct, minRR: _b2Gate.minRR,
+    });
+    if (!_b2.ok) {
+      console.warn(`[reorg-B2][TARGET_GATE][active] drop ${rawSignal.symbol}/${strategyId}: ${_b2.reason} rr=${_b2.rr.toFixed(2)}`);
+      return null;
+    }
+    const _b2Target = _b2.targetPrice;
+
     // Directive 11.3A: Compute net geometry with cost-aware adjustments
     // B79.0n.MCE: assetClass REQUIRED — resolved from the signal symbol.
     const costMetrics = getCachedCostMetrics(rawSignal.symbol, sizingContext.assetClass);
     const netGeometry = computeNetGeometry(
       rawSignal.entryPrice,
       rawSignal.stopPrice,
-      rawSignal.targetPrice ?? rawSignal.entryPrice * 1.015,
+      _b2Target,
       costMetrics
     );
     const totalCost = computeTotalRoundTripCost(costMetrics.fee, costMetrics.slippage, costMetrics.spread);
@@ -1207,6 +1227,7 @@ export class SignalOrchestrator {
     // Directive 11.0E: Build sized signal with FinalScore-native metrics
     const sizedSignal: SizedStrategySignal = {
       ...rawSignal,
+      targetPrice: _b2Target,   // reorg-B2 (Piece A): the floored/gated target flows downstream.
       quantity: sizingResult.quantity,
       estimatedValue: sizingResult.estimatedValue,
       preComputedNotional: sizingResult.estimatedValue,

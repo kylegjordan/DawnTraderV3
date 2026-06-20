@@ -38,7 +38,9 @@ import { getCachedNumberRequired } from './module-constants-service.js';
 // Directive 11.8B-A2: Import canonical Net EV kernel for VTS profitability decisions
 import { computeNetExpectancyKernel } from '../core/calculations/net-expectancy-kernel.js';
 // Note: isSignalProfitable is retained as a regime-aware ROI pre-filter (not EV math)
-import { isSignalProfitable, getROIDetails, getDynamicROIThreshold } from '../core/calculations/expectancy.js';
+import { isSignalProfitable, getROIDetails, getDynamicROIThreshold, getPerClassTargetGate } from '../core/calculations/expectancy.js';
+// reorg-B2 (Piece A): shared central target-floor normalizer (applied at the VTS convergence point).
+import { normalizeAndGateTarget } from '../core/calculations/signal-target-normalizer.js';
 import { getPredictiveConfidence } from '../core/utils/score-calculator.js';
 import { logSkippedSignal } from '../core/logging/skipped-signals-logger.js';
 import { loadCalibration, applyCalibration, type CalibrationCoefficients } from '../utils/calibration.js';
@@ -1173,8 +1175,21 @@ async function generatePhase10Signal(
   // Use strategy-computed entry/stop/target (replaces generic volatility formula)
   strategySignal.symbol = symbol;
   const entryPrice = strategySignal.entryPrice;
-  const takeProfit = strategySignal.targetPrice;
   const stopLoss = strategySignal.stopPrice;
+  // reorg-B2 (Piece A): central target-floor lift + universal RR gate (per-class) — the VTS
+  // convergence point. VTS calls strategyEngine.detect* DIRECTLY (not via the orchestrator),
+  // so the SAME normalizer must run here too, or sim-to-live target parity breaks.
+  const _b2Gate = getPerClassTargetGate(_assetClass);
+  const _b2 = normalizeAndGateTarget({
+    entryPrice, stopPrice: stopLoss, targetPrice: strategySignal.targetPrice,
+    floorPct: _b2Gate.floorPct, minRR: _b2Gate.minRR,
+  });
+  if (!_b2.ok) {
+    logSkippedSignal({ symbol, reason: 'Target_RR_Gate', regime, strategy, source: 'VTS' });
+    setNullReason('target_rr_gate');
+    return null;
+  }
+  const takeProfit = _b2.targetPrice;
 
   // Batch 47f15: Setup-hash suppression — block re-entry if same entry/stop/target
   const setupKey = `${symbol}:${strategy}`;
