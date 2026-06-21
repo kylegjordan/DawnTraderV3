@@ -32,6 +32,12 @@ const thresholds = {
 vi.mock('../../services/module-constants-service.js', () => ({
   getCachedConstant: <T>(_module: string, _name: string) => gateValue.value as unknown as T,
   getCachedNumbersForModule: () => ({ ...thresholds }),
+  // reorg-B2.1 OBJ-4b (2026-06-21): orb is now wired into the shared guard, which reads the
+  // per-class target gate via getPerClassTargetGate → getCachedNumberRequired. Return PERMISSIVE
+  // values so the global guard never suppresses orb's detect-logic assertions — the guard is
+  // tested in strategy-helpers tests; this file isolates orb's own detect logic.
+  getCachedNumberRequired: (_module: string, name: string): number =>
+    (({ target_floor_pct: 0, min_rr: 0, reach_atr_max: 1e9 } as Record<string, number>)[name] ?? 0),
 }));
 
 // B79.0m.b2 (2026-05-11): mock null-reason-tracker so we can assert the

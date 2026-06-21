@@ -13,8 +13,16 @@
  * ═════════════════════════════════════════════════════════════════════════════
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { StrategyEngine, type TechnicalIndicators } from '../../services/strategy-engine';
+// reorg-B2.1 OBJ-4b (2026-06-21): StrategyEngine's vwap_pullback path is now wired into the shared
+// guard, which reads the per-class target gate via getPerClassTargetGate. Neutralize it (permissive)
+// so the guard never suppresses this file's GEOMETRY assertions — the guard is tested in
+// strategy-helpers tests; this file isolates the B63 Item-12 geometry-override contract.
+vi.mock('../../core/calculations/expectancy.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../core/calculations/expectancy.js')>();
+  return { ...actual, getPerClassTargetGate: () => ({ floorPct: 0, minRR: 0, reachAtrMax: 1e9 }) };
+});
 import type { PriceData } from '@shared/schema';
 import type { TradingSettings } from '@shared/schema';
 import { prefetchModule } from '../../services/module-constants-service.js';
