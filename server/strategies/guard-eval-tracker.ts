@@ -12,6 +12,8 @@
  * `null-reason-tracker.ts`). If guard evaluation ever becomes concurrent, make this eval-local.
  */
 
+import fs from 'fs';
+import path from 'path';
 import type { GuardDropReason } from './strategy-helpers.js'; // the guard owns the reason taxonomy (type-only, no runtime coupling)
 
 export interface GuardEvalRecord {
@@ -33,9 +35,51 @@ function _blank(): GuardEvalRecord {
   return { evals: 0, passes: 0, atrDrops: 0, stopDrops: 0, rrDrops: 0, reachDrops: 0, rrEvals: 0, rrSum: 0, rrMin: Infinity, rrMax: -Infinity };
 }
 
+// ── reorg-B2.2 OBJ-A: PERSISTENCE ──────────────────────────────────────────────────────────────────
+// The tracker must SURVIVE restarts (Kyle 2026-06-21: a restart should PAUSE+RESUME the suppression
+// window, not reset it) and be crash/OOM/reboot-proof (Langston's robustness flag). Checkpoint to a JSON
+// file in the gitignored logs/ dir — that path survives a git-pull deploy, a process restart, AND a host
+// reboot (the disk persists) — every ~60s, plus reload-on-module-load. On reload the saved counts are
+// RESTORED so the ≥48h window continues, and `_startedAt` is restored so it reflects the ORIGINAL window
+// start (the #373 wipe-detection stamp — a restart no longer looks like a fresh window).
+const _CKPT_PATH = path.join(process.cwd(), 'logs', 'guard-eval-checkpoint.json');
+let _startedAt: string | null = null;
+
+(function _reloadCheckpoint(): void {
+  try {
+    const d = JSON.parse(fs.readFileSync(_CKPT_PATH, 'utf-8'));
+    if (d && typeof d.startedAt === 'string') _startedAt = d.startedAt;
+    if (d && d.stats && typeof d.stats === 'object') {
+      for (const [k, v] of Object.entries(d.stats as Record<string, GuardEvalRecord>)) {
+        const r: GuardEvalRecord = { ..._blank(), ...v };
+        // Infinity does NOT survive JSON (serializes to null) — restore the min/max sentinels.
+        r.rrMin = Number.isFinite(r.rrMin) ? r.rrMin : Infinity;
+        r.rrMax = Number.isFinite(r.rrMax) ? r.rrMax : -Infinity;
+        _stats.set(k, r);
+      }
+    }
+  } catch { /* no checkpoint yet (fresh window) or unreadable — start clean */ }
+})();
+
+function _writeCheckpoint(): void {
+  try {
+    fs.mkdirSync(path.dirname(_CKPT_PATH), { recursive: true });
+    fs.writeFileSync(_CKPT_PATH, JSON.stringify({ startedAt: _startedAt, savedAt: new Date().toISOString(), stats: Object.fromEntries(_stats) }));
+  } catch { /* best-effort: a missed checkpoint loses < one cadence of evals; the RATE is unaffected */ }
+}
+// Periodic checkpoint off the hot path; unref so it never keeps the process alive (or hangs tests).
+const _ckptTimer = setInterval(_writeCheckpoint, 60_000);
+if (typeof _ckptTimer.unref === 'function') _ckptTimer.unref();
+
+/** The timestamp recording first started for the CURRENT counters (restored across restarts via the
+ *  checkpoint). The #373 wipe-detection stamp: if this is recent but the window should be old, a wipe
+ *  happened. */
+export function getGuardEvalStartedAt(): string | null { return _startedAt; }
+
 /** Record one guard evaluation for a strategy. `rr` is the computed reward-to-risk (for the suppression
  *  distribution); `pass` + `dropReason` capture the verdict. Cheap O(1), no I/O. */
 export function recordGuardEval(strategy: string, rr: number, pass: boolean, dropReason: GuardDropReason): void {
+  if (_startedAt === null) _startedAt = new Date().toISOString(); // window start (restored across restarts)
   let r = _stats.get(strategy);
   if (!r) { r = _blank(); _stats.set(strategy, r); }
   r.evals++;
@@ -67,4 +111,8 @@ export function getGuardEvalStats(): Record<string, GuardEvalRecord & { meanRR: 
   return out;
 }
 
-export function resetGuardEvalStats(): void { _stats.clear(); }
+export function resetGuardEvalStats(): void {
+  _stats.clear();
+  _startedAt = null;
+  try { fs.unlinkSync(_CKPT_PATH); } catch { /* no checkpoint to remove */ }
+}

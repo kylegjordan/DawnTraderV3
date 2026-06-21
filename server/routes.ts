@@ -8737,11 +8737,12 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   // In-memory counters; reset on restart. Read this over a VTS window to bring Kyle the suppression numbers.
   apiRouter.get('/diagnostics/guard-eval-stats', authenticateToken, async (_req: AuthenticatedRequest, res) => {
     try {
-      const { getGuardEvalStats } = await import('./strategies/guard-eval-tracker.js');
+      const { getGuardEvalStats, getGuardEvalStartedAt } = await import('./strategies/guard-eval-tracker.js');
       res.json({
         ok: true,
-        schema: 'guard-eval-stats/v1',
-        description: 'reorg-B2.1 per-strategy shared-guard suppression (rrSuppressionRate = rrDrops/evals over TOTAL evals — #372 precursor)',
+        schema: 'guard-eval-stats/v2',
+        description: 'reorg-B2.1/B2.2 per-strategy shared-guard suppression (rrSuppressionRate = rrDrops/evals over TOTAL evals — #372). trackerStartedAt = window start, persisted across restarts (#373 wipe-detection stamp).',
+        trackerStartedAt: getGuardEvalStartedAt(),
         stats: getGuardEvalStats(),
       });
     } catch (error: any) {
