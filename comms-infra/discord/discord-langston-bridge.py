@@ -256,7 +256,14 @@ def process_task(task, state, breaker):
                             "one or a few lines. Do NOT reply with [SILENT] — on this channel you only "
                             "receive messages addressed to you.]\n\n" + prompt)
     log(f"handling msg {msg_id} channel={channel_id} kind={kind}: {prompt[:120]}")
-    response = invoke_claude(addressed_prompt, state["session_id"], state=state)
+    # FRESH session id per invocation (fix 2026-06-21): a completed `claude -p --session-id X`
+    # leaves X locked, so REUSING a stable session across calls fails the FIRST attempt EVERY
+    # time with "Session ID already in use" → the rotation backstop fires on every message,
+    # adding latency (one reply took ~2 min) that made Langston look unresponsive on Discord.
+    # The bridge already had no real cross-turn continuity (it rotated every turn), so a fresh
+    # UUID per call is the clean fix: first-attempt success, no rotation, no latency. The
+    # rotation logic in invoke_claude stays as a backstop (now effectively never triggered).
+    response = invoke_claude(addressed_prompt, str(uuid.uuid4()), state=state)
     resp_stripped = (response or "").strip()
     is_bridge_error = resp_stripped.startswith("_Langston bridge error:") or resp_stripped.startswith("_Langston bridge:")
     if is_bridge_error and not is_dm:
