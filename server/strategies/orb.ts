@@ -57,6 +57,9 @@ import {
   getCachedNumbersForModule,
 } from '../services/module-constants-service.js';
 import { setNullReason } from '../utils/null-reason-tracker.js';
+import { applyGlobalGuards, clampEffectiveATR } from './strategy-helpers.js';
+import { getPerClassTargetGate } from '../core/calculations/expectancy.js';
+import { recordGuardEval } from './guard-eval-tracker.js';
 
 const STRATEGY_KEY = 'orb';
 const LOG_PREFIX = '[B79.0d][ORB]';
@@ -285,6 +288,17 @@ export function detectORB(
   const confidence = Math.max(0.55, Math.min(0.90, confRaw));
 
   console.log(`${LOG_PREFIX} ${symbol} ${direction} signal | range=[${rangeLow.toFixed(4)},${rangeHigh.toFixed(4)}] (h=${rangeHeight.toFixed(4)}, atr=${atr.toFixed(4)}, n=${rangeAtrNorm.toFixed(2)}) | px=${currentPrice.toFixed(4)} buf=${buffer.toFixed(4)} | volMult=${volumeMultiple.toFixed(2)} | conf=${confidence.toFixed(3)} | stop=${stopPrice.toFixed(4)} tp=${targetPrice.toFixed(4)}`);
+
+  // reorg-B2.1 OBJ-4: per-class shared guard (RR + reachability) at signal generation, consolidated
+  // from the downstream normalizer; record the suppression instrumentation (#372/#371). effectiveATR =
+  // the guard's clamp on this strategy's own ATR. Dominates the single signal return below.
+  {
+    const _gate = getPerClassTargetGate(assetClass);
+    const _effATR = clampEffectiveATR(atr, entryPrice);
+    const _gr = applyGlobalGuards(entryPrice, stopPrice, targetPrice, _effATR, _gate);
+    recordGuardEval('orb', _gr.rr, _gr.pass, _gr.dropReason);
+    if (!_gr.pass) { setNullReason('guard_fail'); return null; }
+  }
 
   return {
     symbol,

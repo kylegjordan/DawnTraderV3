@@ -8731,6 +8731,25 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // GET /api/diagnostics/guard-eval-stats - reorg-B2.1 OBJ-4: per-strategy shared-guard suppression stats
+  // (the #372 minRR-calibration precursor). Per guard-wired strategy: evals (the denominator, pass+fail),
+  // passes, drops by reason (rr/reach/stop/atr), meanRR, and rrSuppressionRate (= rrDrops / TOTAL evals).
+  // In-memory counters; reset on restart. Read this over a VTS window to bring Kyle the suppression numbers.
+  apiRouter.get('/diagnostics/guard-eval-stats', authenticateToken, async (_req: AuthenticatedRequest, res) => {
+    try {
+      const { getGuardEvalStats } = await import('./strategies/guard-eval-tracker.js');
+      res.json({
+        ok: true,
+        schema: 'guard-eval-stats/v1',
+        description: 'reorg-B2.1 per-strategy shared-guard suppression (rrSuppressionRate = rrDrops/evals over TOTAL evals — #372 precursor)',
+        stats: getGuardEvalStats(),
+      });
+    } catch (error: any) {
+      console.error('[reorg-B2.1] Error fetching guard-eval stats:', error);
+      res.status(500).json({ ok: false, error: 'Failed to fetch guard-eval stats', message: error.message });
+    }
+  });
+
   // POST /api/diagnostics/rtb-metrics/reset - Reset RTB metrics
   apiRouter.post('/diagnostics/rtb-metrics/reset', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {

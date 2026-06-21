@@ -337,6 +337,15 @@ export function getEffectiveATR(candles: OHLCCandle[], currentPrice: number): nu
   return Math.min(atr, currentPrice * GLOBAL_CONSTANTS.ATR_MAX_RATIO);
 }
 
+/** reorg-B2.1 OBJ-4: value-form of getEffectiveATR — apply the SAME min-floor + max-clamp to an
+ *  ALREADY-COMPUTED raw ATR. The in-class detectors + orb/strong_bull_trend compute their own ATR and
+ *  don't have a candle array handy at the guard call, so they feed the raw value through this to get the
+ *  guard's clamped ATR (identical contract to getEffectiveATR; returns null → guard `invalid_atr` drop). */
+export function clampEffectiveATR(rawATR: number, currentPrice: number): number | null {
+  if (!(rawATR > 0) || rawATR < currentPrice * GLOBAL_CONSTANTS.ATR_MIN_RATIO) return null;
+  return Math.min(rawATR, currentPrice * GLOBAL_CONSTANTS.ATR_MAX_RATIO);
+}
+
 /**
  * Validate stop distance (GUARD-1)
  */

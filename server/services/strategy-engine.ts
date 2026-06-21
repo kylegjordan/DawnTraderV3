@@ -16,6 +16,9 @@ import { detectVolatilityEdge } from '../strategies/volatility-edge.js';
 import { detectStrongBullTrend } from '../strategies/strong-bull-trend.js';
 import { detectORB } from '../strategies/orb.js';
 import type { PatternInput } from '../strategies/strategy-helpers.js';
+import { applyGlobalGuards, clampEffectiveATR } from '../strategies/strategy-helpers.js';
+import { getPerClassTargetGate } from '../core/calculations/expectancy.js';
+import { recordGuardEval } from '../strategies/guard-eval-tracker.js';
 import { setNullReason } from '../utils/null-reason-tracker.js';
 // B72.2: In-class quant strategies read tunable params from module_constants.
 import { getCachedNumbersForModule, getCachedConstant } from './module-constants-service.js';
@@ -288,6 +291,17 @@ export class StrategyEngine {
         output: { hasSignal: true, entryPrice: signal.entryPrice, stopPrice: signal.stopPrice, targetPrice: signal.targetPrice, confidence: signal.confidence }
       }));
 
+      // reorg-B2.1 OBJ-4: per-class shared guard (RR + reachability) at signal generation, consolidated
+      // from the downstream normalizer; record the suppression instrumentation (#372/#371). effectiveATR =
+      // the guard's clamp on this strategy's own ATR. Dominates the single signal return below.
+      {
+        const _gate = getPerClassTargetGate(assetClass);
+        const _effATR = clampEffectiveATR(atr, entryPrice);
+        const _gr = applyGlobalGuards(entryPrice, stopPrice, finalTarget, _effATR, _gate);
+        recordGuardEval('vwap_pullback', _gr.rr, _gr.pass, _gr.dropReason);
+        if (!_gr.pass) { setNullReason('guard_fail'); return null; }
+      }
+
       return signal;
     }
     
@@ -411,9 +425,20 @@ export class StrategyEngine {
         output: { hasSignal: true, entryPrice: signal.entryPrice, stopPrice: signal.stopPrice, targetPrice: signal.targetPrice, confidence: signal.confidence }
       }));
 
+      // reorg-B2.1 OBJ-4: per-class shared guard (RR + reachability) at signal generation, consolidated
+      // from the downstream normalizer; record the suppression instrumentation (#372/#371). effectiveATR =
+      // the guard's clamp on this strategy's own ATR. Dominates the single signal return below.
+      {
+        const _gate = getPerClassTargetGate(assetClass);
+        const _effATR = clampEffectiveATR(abcdAtr, entryPrice);
+        const _gr = applyGlobalGuards(entryPrice, stopPrice, targetPrice, _effATR, _gate);
+        recordGuardEval('abcd_long', _gr.rr, _gr.pass, _gr.dropReason);
+        if (!_gr.pass) { setNullReason('guard_fail'); return null; }
+      }
+
       return signal;
     }
-    
+
     setNullReason('breakout_fail');
     console.log(`[ABCD Strategy] ❌ No signal - breakout=${isBreakout}, volumeConfirmed=${hasVolumeConfirmation}`);
     console.log("[8.8.3-B][STRATEGY]", JSON.stringify({
@@ -532,9 +557,21 @@ export class StrategyEngine {
         output: { hasSignal: true, entryPrice: signal.entryPrice, stopPrice: signal.stopPrice, targetPrice: signal.targetPrice, confidence: signal.confidence }
       }));
 
+      // reorg-B2.1 OBJ-4: reachability ATR via computeATR(priceHistory) — this strategy's geometry is
+      // non-ATR (SMA/VWAP/realizedVol), so the pair ATR is the path-invariant feasibility input
+      // (reachability is a property of the PAIR, not the strategy). #371 covers the computeATR-vs-
+      // mceContext.atr divergence for ALL guard-wired in-class incl. these 3 non-ATR-geometry strategies.
+      {
+        const _gate = getPerClassTargetGate(assetClass);
+        const _effATR = clampEffectiveATR(computeATR(priceHistory), entryPrice);
+        const _gr = applyGlobalGuards(entryPrice, stopPrice, targetPrice, _effATR, _gate);
+        recordGuardEval('sma_trend_ride', _gr.rr, _gr.pass, _gr.dropReason);
+        if (!_gr.pass) { setNullReason('guard_fail'); return null; }
+      }
+
       return signal;
     }
-    
+
     setNullReason('indicator_filter');
     console.log(`[SMA Strategy] ❌ No signal - entryCondition=${entryCondition}, entrySignal=${entrySignal}`);
     console.log("[8.8.3-B][STRATEGY]", JSON.stringify({
@@ -632,9 +669,20 @@ export class StrategyEngine {
         output: { hasSignal: true, entryPrice: signal.entryPrice, stopPrice: signal.stopPrice, targetPrice: signal.targetPrice, confidence: signal.confidence }
       }));
 
+      // reorg-B2.1 OBJ-4: per-class shared guard (RR + reachability) at signal generation, consolidated
+      // from the downstream normalizer; record the suppression instrumentation (#372/#371). effectiveATR =
+      // the guard's clamp on this strategy's own ATR. Dominates the single signal return below.
+      {
+        const _gate = getPerClassTargetGate(assetClass);
+        const _effATR = clampEffectiveATR(atr, entryPrice);
+        const _gr = applyGlobalGuards(entryPrice, stopPrice, targetPrice, _effATR, _gate);
+        recordGuardEval('breakout', _gr.rr, _gr.pass, _gr.dropReason);
+        if (!_gr.pass) { setNullReason('guard_fail'); return null; }
+      }
+
       return signal;
     }
-    
+
     setNullReason('breakout_fail');
     console.log("[8.8.3-B][STRATEGY]", JSON.stringify({
       symbol: "(pending)",
@@ -721,9 +769,20 @@ export class StrategyEngine {
         output: { hasSignal: true, entryPrice: signal.entryPrice, stopPrice: signal.stopPrice, targetPrice: signal.targetPrice, confidence: signal.confidence }
       }));
 
+      // reorg-B2.1 OBJ-4: per-class shared guard (RR + reachability) at signal generation, consolidated
+      // from the downstream normalizer; record the suppression instrumentation (#372/#371). effectiveATR =
+      // the guard's clamp on this strategy's own ATR. Dominates the single signal return below.
+      {
+        const _gate = getPerClassTargetGate(assetClass);
+        const _effATR = clampEffectiveATR(atr, entryPrice);
+        const _gr = applyGlobalGuards(entryPrice, stopPrice, targetPrice, _effATR, _gate);
+        recordGuardEval('mean_reversion', _gr.rr, _gr.pass, _gr.dropReason);
+        if (!_gr.pass) { setNullReason('guard_fail'); return null; }
+      }
+
       return signal;
     }
-    
+
     setNullReason('indicator_filter');
     console.log("[8.8.3-B][STRATEGY]", JSON.stringify({
       symbol: "(pending)",
@@ -817,9 +876,21 @@ export class StrategyEngine {
         output: { hasSignal: true, entryPrice: signal.entryPrice, stopPrice: signal.stopPrice, targetPrice: signal.targetPrice, confidence: signal.confidence }
       }));
 
+      // reorg-B2.1 OBJ-4: per-class shared guard (RR + reachability) at signal generation, consolidated
+      // from the downstream normalizer; record the suppression instrumentation (#372/#371). effectiveATR =
+      // the guard's clamp on this strategy's own ATR. Dominates the single signal return below.
+      // recordGuardEval name = 'range_trade' per canonical SSOT (method is detectRangeTrading).
+      {
+        const _gate = getPerClassTargetGate(assetClass);
+        const _effATR = clampEffectiveATR(atr, entryPrice);
+        const _gr = applyGlobalGuards(entryPrice, stopPrice, targetPrice, _effATR, _gate);
+        recordGuardEval('range_trade', _gr.rr, _gr.pass, _gr.dropReason);
+        if (!_gr.pass) { setNullReason('guard_fail'); return null; }
+      }
+
       return signal;
     }
-    
+
     setNullReason('price_position');
     console.log("[8.8.3-B][STRATEGY]", JSON.stringify({
       symbol: "(pending)",
@@ -907,9 +978,21 @@ export class StrategyEngine {
         output: { hasSignal: true, entryPrice: signal.entryPrice, stopPrice: signal.stopPrice, targetPrice: signal.targetPrice, confidence: signal.confidence }
       }));
 
+      // reorg-B2.1 OBJ-4: reachability ATR via computeATR(priceHistory) — this strategy's geometry is
+      // non-ATR (SMA/VWAP/realizedVol), so the pair ATR is the path-invariant feasibility input
+      // (reachability is a property of the PAIR, not the strategy). #371 covers the computeATR-vs-
+      // mceContext.atr divergence for ALL guard-wired in-class incl. these 3 non-ATR-geometry strategies.
+      {
+        const _gate = getPerClassTargetGate(assetClass);
+        const _effATR = clampEffectiveATR(computeATR(priceHistory), entryPrice);
+        const _gr = applyGlobalGuards(entryPrice, stopPrice, targetPrice, _effATR, _gate);
+        recordGuardEval('vwap_bounce', _gr.rr, _gr.pass, _gr.dropReason);
+        if (!_gr.pass) { setNullReason('guard_fail'); return null; }
+      }
+
       return signal;
     }
-    
+
     setNullReason('price_position');
     console.log("[8.8.3-B][STRATEGY]", JSON.stringify({
       symbol: "(pending)",
@@ -997,6 +1080,8 @@ export class StrategyEngine {
         output: { hasSignal: true, entryPrice: signal.entryPrice, stopPrice: signal.stopPrice, targetPrice: signal.targetPrice, confidence: signal.confidence }
       }));
 
+      // reorg-B2.1 OBJ-4: SKIP guard wiring — disabled + inverted (short) geometry, see the disable note
+      // in this method's header (disabled at orchestrator/VTS per Batch 70.3). Omission is intentional.
       return signal;
     }
     
@@ -1513,7 +1598,19 @@ export class StrategyEngine {
       strength: confidence,
       direction: longSignal ? 'long' : 'short'
     }).catch(err => console.error('[Strategy] Telemetry error:', err));
-    
+
+    // reorg-B2.1 OBJ-4: reachability ATR via computeATR(priceHistory) — this strategy's geometry is
+    // non-ATR (SMA/VWAP/realizedVol), so the pair ATR is the path-invariant feasibility input
+    // (reachability is a property of the PAIR, not the strategy). #371 covers the computeATR-vs-
+    // mceContext.atr divergence for ALL guard-wired in-class incl. these 3 non-ATR-geometry strategies.
+    {
+      const _gate = getPerClassTargetGate(assetClass);
+      const _effATR = clampEffectiveATR(computeATR(priceHistory), entryPrice);
+      const _gr = applyGlobalGuards(entryPrice, stopPrice, targetPrice, _effATR, _gate);
+      recordGuardEval('dhma', _gr.rr, _gr.pass, _gr.dropReason);
+      if (!_gr.pass) { setNullReason('guard_fail'); return null; }
+    }
+
     return signal;
   }
 

@@ -36,7 +36,9 @@
 
 import type { StrategySignal, TechnicalIndicators } from '../services/strategy-engine';
 import type { AssetClass } from '@shared/asset-classes';
-import { parseCandles } from './strategy-helpers';
+import { parseCandles, applyGlobalGuards, clampEffectiveATR } from './strategy-helpers';
+import { getPerClassTargetGate } from '../core/calculations/expectancy.js';
+import { recordGuardEval } from './guard-eval-tracker.js';
 import { setNullReason } from '../utils/null-reason-tracker.js';
 import { getCachedNumberRequired, getCachedNumbersForModule } from '../services/module-constants-service.js';
 
@@ -164,6 +166,17 @@ export function detectStrongBullTrend(
     `${LOG_PREFIX} SIGNAL symbol=pair entry=${entryPrice.toFixed(6)} stop=${stopPrice.toFixed(6)} target=${targetPrice.toFixed(6)} ` +
     `DBS=${dbs.toFixed(3)} slope=${dbsSlope.toFixed(4)} nBarHigh=${nBarHigh.toFixed(6)} atr=${atr.toFixed(6)} confidence=${confidence.toFixed(3)}`
   );
+
+  // reorg-B2.1 OBJ-4: per-class shared guard (RR + reachability) at signal generation, consolidated
+  // from the downstream normalizer; record the suppression instrumentation (#372/#371). effectiveATR =
+  // the guard's clamp on this strategy's own ATR. Dominates the single signal return below.
+  {
+    const _gate = getPerClassTargetGate(assetClass);
+    const _effATR = clampEffectiveATR(atr, entryPrice);
+    const _gr = applyGlobalGuards(entryPrice, stopPrice, targetPrice, _effATR, _gate);
+    recordGuardEval(STRATEGY_KEY, _gr.rr, _gr.pass, _gr.dropReason);
+    if (!_gr.pass) { setNullReason('guard_fail'); return null; }
+  }
 
   return {
     symbol: '', // Populated by caller
