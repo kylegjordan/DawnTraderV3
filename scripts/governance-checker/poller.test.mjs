@@ -1,6 +1,6 @@
 // B-GOV poller — pure decision-logic tests (no git, no ssh, no filesystem).
 // Run: node scripts/governance-checker/poller.test.mjs
-import { computeBatchStates, decideAlerts } from './poller.mjs';
+import { computeBatchStates, decideAlerts, applyCutoff } from './poller.mjs';
 import { batchIdToFileRegex } from './config.mjs';
 
 const HOUR = 3600 * 1000;
@@ -150,6 +150,21 @@ const noStaleOpen = { open: new Set(), openSince: new Map(), naConfirmed: new Se
   ok('OBJ-5d: shadow mode downgrades deadline alert to info', shadowed && shadowed.severity === 'info');
   const live = decideAlerts(states, noStaleOpen, NOW, { shadow: false }).toOpen.find((a) => a.dedupeKey === 'gov-deadline:P19-B9');
   ok('OBJ-5d: non-shadow keeps deadline at warning', live && live.severity === 'warning');
+}
+
+// ── B-GOV-3 OBJ-1: grandfather cutoff (key on lastCode/close; straddlers enforced) ──
+{
+  const CUTOFF = Date.parse('2026-06-15T00:00:00Z');
+  const at = (d) => Date.parse(d + 'T00:00:00Z');
+  const before = { batchId: 'B-OLD', firstCode: at('2026-06-10'), lastCode: at('2026-06-12'), hasGovernance: true };
+  const after = { batchId: 'B-NEW', firstCode: at('2026-06-16'), lastCode: at('2026-06-17'), hasGovernance: true };
+  const straddler = { batchId: 'B-STRAD', firstCode: at('2026-06-13'), lastCode: at('2026-06-16'), hasGovernance: true }; // started before, closes after
+  const nullcode = { batchId: 'B-NULL', firstCode: null, lastCode: null, hasGovernance: true };
+  const kept = applyCutoff([before, after, straddler, nullcode], CUTOFF).map((b) => b.batchId);
+  ok('OBJ-1: pre-cutoff close is grandfathered (filtered out)', !kept.includes('B-OLD'));
+  ok('OBJ-1: post-cutoff close is enforced (kept)', kept.includes('B-NEW'));
+  ok('OBJ-1: straddler (started before, closes AFTER cutoff) is STILL enforced', kept.includes('B-STRAD'));
+  ok('OBJ-1: no-code-close (lastCode null) is grandfathered', !kept.includes('B-NULL'));
 }
 
 console.log(`\nPoller logic tests: ${pass} passed, ${fail} failed`);

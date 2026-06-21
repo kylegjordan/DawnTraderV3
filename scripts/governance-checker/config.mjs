@@ -165,3 +165,20 @@ export const OPEN_STATE_MAX_AGE_HOURS = 24 * 7; // 7 days
 // alerts downgraded to 'info' severity (visible, not paged) to calibrate against live
 // Phase-19 patterns before warning-sev is trusted. Env-overridable: GOV_SHADOW=0 to exit.
 export const SHADOW_MODE = process.env.GOV_SHADOW !== '0';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// B-GOV-3 (go-live) constants
+// ─────────────────────────────────────────────────────────────────────────────
+
+// OBJ-1: GRANDFATHER CUTOFF (the flood fix). The live poller ENFORCES only on batches
+// whose code CLOSES at/after this timestamp; everything that closed before go-live is
+// grandfathered (NOT retroactively flagged — the 2026-06-19 flood was exactly retroactive
+// grading of pre-checker history). Keyed on lastCode (close), NOT firstCode, so a STRADDLER
+// (started before go-live, closes after) is STILL enforced (Langston Step-2). A config
+// cutoff (vs 30 hand-rows) is the sustainable form (NO-PATCHES, Langston). Env-overridable
+// `GOV_CUTOFF` so the exact go-live timestamp is set AT the flip without a code change;
+// default grandfathers the recent clean closes (B-DISCORD/reorg-B2) + grades the first truly
+// post-cutoff batch. ★ The Obj-3 backtest BYPASSES this (runs the pure computeBatchStates/
+// decideAlerts directly, never the tick filter) so it can grade historical fixtures — applying
+// the cutoff there would filter every fixture out and pass vacuously (Langston Catch #1).
+export const ENFORCEMENT_CUTOFF_MS = Date.parse(process.env.GOV_CUTOFF || '2026-06-23T00:00:00Z');

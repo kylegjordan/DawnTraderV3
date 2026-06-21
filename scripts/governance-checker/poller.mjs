@@ -20,7 +20,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 import {
   extractBatchId, DEADLINE_HOURS, OPEN_STATE_BACKSTOP_HOURS, OPEN_STATE_MAX_AGE_HOURS,
-  DEFAULT_CLASS, SHADOW_MODE,
+  DEFAULT_CLASS, SHADOW_MODE, ENFORCEMENT_CUTOFF_MS,
 } from './config.mjs';
 import { checkBatchDocset, classifyCommit, diffTouchesCoreEngine, readDeclaredClass } from './checker.mjs';
 
@@ -62,6 +62,16 @@ export function computeBatchStates(commits) {
   // materialize files (OBJ-2) and drop the Set
   const batches = [...states.values()].map((s) => ({ ...s, files: [...s._files], _files: undefined }));
   return { batches, untaggedCode };
+}
+
+// B-GOV-3 OBJ-1: GRANDFATHER CUTOFF (pure, exported for unit test). A batch is enforceable iff
+// its code CLOSES at/after the cutoff — keyed on lastCode (NOT firstCode) so a straddler that
+// started before go-live but closes after is STILL enforced (Langston Step-2); a batch with no
+// determinable code-close (lastCode null = code aged out of the window / governance-only) is
+// grandfathered. ★ Used ONLY by the live tick — the Obj-3 backtest never calls it, so it grades
+// historical fixtures with the cutoff bypassed (Langston Catch #1).
+export function applyCutoff(batches, cutoffMs) {
+  return batches.filter((b) => b.lastCode !== null && b.lastCode >= cutoffMs);
 }
 
 // Decide which alerts to OPEN and which to RESOLVE, given batch states + declared
@@ -202,12 +212,27 @@ function runCli(cmd) {
 function loadState() { return existsSync(STATE_FILE) ? JSON.parse(readFileSync(STATE_FILE, 'utf8')) : { openAlerts: {}, lastTick: null }; }
 function saveState(s) { writeFileSync(STATE_FILE, JSON.stringify(s, null, 2)); }
 
+// B-GOV-3 OBJ-2: SHADOW = LOG-ONLY. In shadow mode the sink writes the intended alert to a
+// local log and NEVER touches the §10.5 queue. Why at the SINK (the producer), not the §10.5
+// reader: the reader surfaces even `info` severity (state=active, unacked) — so the old shadow,
+// which only downgraded severity, still PAGED (the 2026-06-19 88-alert flood). Log-only makes a
+// shadow run observable ONLY by deliberate inspection of this file, never a page. Fixing it at
+// the one producer beats making every §10.5 reader filter `category=governance`.
+const SHADOW_LOG = process.env.GOV_SHADOW_LOG || join(SCRIPT_DIR, '.gov-checker-shadow.log');
+function appendShadowLog(entry) {
+  try { writeFileSync(SHADOW_LOG, `${new Date().toISOString()} ${JSON.stringify(entry)}\n`, { flag: 'a' }); }
+  catch (e) { console.warn(`[gov-checker] shadow-log write failed: ${String(e.message).slice(0, 150)}`); }
+}
+
 // Alert sink: reuse the existing system-alerts CLI on staging (schema-safe, race-safe).
 // The CLI `add` prints the created alert as JSON (we parse .id); `resolve <id> --by`
 // is ID-based. The logical dedupe_key rides in --metadata for forensics; the poller
 // itself dedupes via state.openAlerts (logical-key → alert-id), so no CLI dedupe needed.
 const alertSink = {
   add({ dedupeKey, severity, title, body }, nowMs) {
+    // OBJ-2: shadow → log-only, no queue write. Return null so the tick does NOT record it in
+    // state.openAlerts (there is no real alert id), and resolve() stays a no-op in shadow.
+    if (SHADOW_MODE) { appendShadowLog({ phase: 'add', dedupeKey, severity, title, body }); return null; }
     const meta = JSON.stringify({ dedupe_key: dedupeKey, source: 'governance-checker' });
     const cmd = `cd ${STAGING_REPO} && npm run -s system-alerts -- add ` +
       `--triggers-at ${new Date(nowMs).toISOString()} --category governance --severity ${severity} ` +
@@ -217,6 +242,8 @@ const alertSink = {
     return m ? m[1] : null;
   },
   resolve(alertId) {
+    // OBJ-2: nothing is queued in shadow, so resolve is a no-op (log-only for symmetry).
+    if (SHADOW_MODE) { appendShadowLog({ phase: 'resolve', alertId }); return; }
     const cmd = `cd ${STAGING_REPO} && npm run -s system-alerts -- resolve ${alertId} --by governance-checker`;
     try { runCli(cmd); }
     catch (e) {
@@ -275,10 +302,18 @@ export function tick(nowMs = Date.now()) {
   state.fetchFailStreak = 0; state.fetchFailSev = undefined;
   if (state.openAlerts[FETCH_KEY]) { alertSink.resolve(state.openAlerts[FETCH_KEY]); delete state.openAlerts[FETCH_KEY]; }
   const { batches, untaggedCode } = computeBatchStates(commits);
-  // OBJ-1: read each open batch's declared change-class from its scope header.
-  for (const b of batches) { const d = readDeclaredClass(b.batchId); b.declaredClass = d.class; b.classDeclared = d.declared; }
+  // B-GOV-3 OBJ-1: GRANDFATHER CUTOFF — enforce only on batches whose code CLOSES at/after
+  // the cutoff (key on lastCode, NOT firstCode → a straddler that closes after go-live is
+  // still enforced). Pre-cutoff batches are grandfathered (no retroactive flagging — the
+  // flood fix). A batch with no determinable code-close (lastCode null = code aged out of the
+  // window / governance-only) is grandfathered too. ★ This filter lives ONLY in the live tick;
+  // the Obj-3 backtest calls computeBatchStates/decideAlerts directly and never hits it, so it
+  // grades historical fixtures with the cutoff bypassed (Langston Catch #1).
+  const enforceable = applyCutoff(batches, ENFORCEMENT_CUTOFF_MS);
+  // OBJ-1 (B-GOV-2): read each enforceable batch's declared change-class from its scope header.
+  for (const b of enforceable) { const d = readDeclaredClass(b.batchId); b.declaredClass = d.class; b.classDeclared = d.declared; }
   const exceptions = loadExceptions();
-  const { toOpen, toResolveKeys } = decideAlerts(batches, exceptions, nowMs);
+  const { toOpen, toResolveKeys } = decideAlerts(enforceable, exceptions, nowMs);
   // dedupe via own state (logical key → alert id); only add if not already open.
   for (const a of toOpen) {
     if (!state.openAlerts[a.dedupeKey]) {

@@ -29,7 +29,7 @@
 ## Schedule / sequencing — SLOTTED (Kyle asked 2026-06-20)
 **OLD Claude (CC-A) governance queue order:**
 1. **B-DISCORD governance write-up** (scope/pre-audit/completion/catalog/SIM + Telegram→Discord doc rewrites) — FIRST, because tonight's Discord work is context-warm and must be captured before it compacts (our own capture-while-warm rule; the 4h-deadline philosophy).
-2. **★ B-GOV-3 (this batch)** — SECOND, immediately after #1. Rationale for this exact slot: the just-completed B-DISCORD batch becomes the checker's FIRST clean post-cutoff batch to validate against in Obj-3 — turning on enforcement right when there's a fresh clean batch to grade.
+2. **★ B-GOV-3 (this batch)** — SECOND, immediately after #1. Rationale for this exact slot: the just-completed B-DISCORD batch is a clean, fully-documented close the Obj-3 backtest can validate against. **★ Doc-nit reconciled (Langston Step-2, 2026-06-21):** B-DISCORD is **grandfathered (pre-cutoff)**, so it is a backtest **FIXTURE** (a clean-close PASS case the dogfood grades), NOT a "first clean *post-cutoff* live" case — the first LIVE-graded batch is the first one that CLOSES at/after the go-live cutoff (e.g. reorg-B2.2 or later). The cutoff value is set deliberately to grandfather all current closes.
 3. **CLAUDE.md slim + mission condense**, then the pruning/dedup capture.
 - **Timing:** both #1 and #2 fall in OLD Claude's next one or two working sessions (small batches). Langston confirms Obj-1 dispositions + Obj-3 dogfood (reachable on Discord now). NEW Claude's Phase-19 batch work runs in parallel and is unaffected.
 - Homed in: this scope; `B_DISCORD_FOLLOWUPS_2026-06-20.md` item 8; to also land in RUNNING_ISSUES + the phase plan as part of the B-DISCORD governance write-up (#1).
