@@ -374,6 +374,16 @@ atrsToTarget = (target' − entry) / ATR                    // REACHABILITY gate
 
 **Decision-grade EV reality (why reorg-B2 is plumbing, not the crypto opener).** At the Tier-1 taker fee wall (~1.8% round-trip) with the pWin ceiling 0.60, NetEV is net-negative even at a 4% target / 1.6% stop (`0.6·4 − 0.4·1.6 − 1.8 ≈ −0.04%`) — so the 11.8B EV gate HONESTLY refuses to open crypto at taker. reorg-B2 ships the rung-1 machinery + honest per-class values (4% / RR 2.5 / 4.0 ATRs, placeholder); the actual profitable crypto opener is the maker build (reorg-B7) + the pWin-ceiling recalibration (Phase-25).
 
+### ★ reorg-B2.1 (2026-06-21) — the RR + reachability gates RELOCATE from the post-hoc normalizer INTO the strategies' shared guard at signal-gen; the floor-LIFT is DROPPED
+
+**Kyle's placement question:** a strategy "would never have produced a signal with a target like that" — so the validations belong where the signal is MADE, not in a post-hoc normalizer. Resolved (CC-B + Langston, all 19 canonical strategies reviewed):
+- **The floor-LIFT is DROPPED.** Lifting `target → max(native, entry×(1+floorPct))` was a *mutation* of the strategy's target, redundant with the 11.8B Net-Expectancy gate that already judges cost-coverage. The system no longer reshapes a strategy's target; it VALIDATES it and drops if it fails.
+- **RR + reachability move into the shared guard.** Every strategy already calls `strategy-helpers.ts::applyGlobalGuards`; that guard now runs `validateRR` + `validateReachability` and returns `GuardResult{pass, rr, atrsToTarget, dropReason}` at signal-gen. `applyGlobalGuards` stays a PURE leaf (no external deps; type-only `GuardDropReason`).
+- **ONE per-class SSOT.** `minRR`/`reachAtrMax` resolve from `getPerClassTargetGate(assetClass)` (reads `expectancy_gates` via `getCachedNumberRequired`, throws on missing — no silent fallback). This killed a live split-brain where file-based strategies used `MIN_RR_RATIO=1.5` while the normalizer applied 2.5; 1.5 is demoted to a seed.
+- **Reachability is a path-invariant PAIR property** — the 3 non-ATR-geometry strategies (`sma_trend_ride`, `vwap_bounce`, `dhma`) feed it a `computeATR(priceHistory)` pair-ATR; the gate asks only whether the pair can physically traverse to target given ATR, independent of how the strategy set its geometry.
+- **Visibility (no hidden gates):** every drop is recorded by-reason in the new in-memory `guard-eval-tracker.ts` (`GET /api/diagnostics/guard-eval-stats`) — the #372 per-strategy minRR-calibration precursor. The minRR seed (2.5) suppresses much of the suite by design; the per-strategy EV-preserving calibration is Phase-25 (#372), measured from this tracker, not a blind pick.
+- **The normalizer (`signal-target-normalizer.ts`) is KEPT as a net-neutral downstream bridge** (no longer lifts), to be RETIRED in reorg-B2.2 once the guard-vs-normalizer ATR-source divergence (#371) is measured (#373 gate). Net-Expectancy remains the final judge; this batch only relocates where the RR/reachability validations live and removes a redundant target mutation.
+
 ---
 
 ## 5. Cost Model (Single Source of Truth)
