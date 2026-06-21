@@ -33,6 +33,7 @@ import {
   type OHLCCandle, type PatternInput
 } from './strategy-helpers';
 import { getPerClassTargetGate } from '../core/calculations/expectancy.js';
+import { recordGuardEval } from './guard-eval-tracker.js';
 import { setNullReason } from '../utils/null-reason-tracker.js';
 // B72 (2026-05-05): all strategy levers moved to module='strategy.pivot_shift'.
 import { getCachedNumbersForModule } from '../services/module-constants-service.js';
@@ -180,7 +181,9 @@ export function detectPivotShift(
 
   // ── Global guards (ATR, stop distance, R:R) ──────────────────────────────
   const gate = getPerClassTargetGate(assetClass);
-  if (!applyGlobalGuards(entryPrice, stopPrice, targetPrice, effectiveATR, gate)) {
+  const _gr = applyGlobalGuards(entryPrice, stopPrice, targetPrice, effectiveATR, gate);
+  recordGuardEval('pivot_shift', _gr.rr, _gr.pass, _gr.dropReason);
+  if (!_gr.pass) {
     console.log(`${LOG_PREFIX} Global guards failed. Skipping.`);
     setNullReason('guard_fail');
     return null;

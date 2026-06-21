@@ -380,11 +380,22 @@ export function validateReachability(entryPrice: number, targetPrice: number, ef
   return atrsToTarget <= reachAtrMax;
 }
 
+/** reorg-B2.1 OBJ-4: the guard verdict + the computed values, so a caller can BOTH gate (`pass`) AND
+ *  record the suppression instrumentation (`rr` / `dropReason`) from ONE computation — no duplicate math. */
+export type GuardDropReason = 'invalid_atr' | 'stop_distance' | 'rr_below_min' | 'unreachable' | null;
+export interface GuardResult {
+  pass: boolean;
+  rr: number;           // reward-to-risk (for the #372 suppression distribution)
+  atrsToTarget: number; // reachability metric (for the #371 ATR-divergence measurement)
+  dropReason: GuardDropReason;
+}
+
 /**
- * Apply all global guards. Returns true if signal passes. reorg-B2.1: takes the injected per-class
- * `gate` ({minRR, reachAtrMax}) — pure, no DB resolution here — and now also enforces reachability
- * (GUARD-5), consolidating the gates the signal-target-normalizer applied so they run at signal
- * generation for ALL strategies (file-based + the in-class 9 once wired in OBJ-4).
+ * Apply all global guards. reorg-B2.1: takes the injected per-class `gate` ({minRR, reachAtrMax}) —
+ * pure, no DB resolution here — enforces stop-distance + RR + reachability (GUARD-5), and returns the
+ * verdict WITH the computed `rr`/`atrsToTarget`/`dropReason` so the call site can feed the suppression
+ * tracker without recomputing. Consolidates the gates the signal-target-normalizer applied so they run
+ * at signal generation for ALL strategies (the 8 already-gated file-based + the 10 wired in OBJ-4).
  */
 export function applyGlobalGuards(
   entryPrice: number,
@@ -392,12 +403,15 @@ export function applyGlobalGuards(
   targetPrice: number,
   effectiveATR: number | null,
   gate: PerClassGuardGate
-): boolean {
-  if (effectiveATR === null) return false;
-  if (!validateStopDistance(entryPrice, stopPrice)) return false;
-  if (!validateRR(entryPrice, stopPrice, targetPrice, gate.minRR)) return false;
-  if (!validateReachability(entryPrice, targetPrice, effectiveATR, gate.reachAtrMax)) return false;
-  return true;
+): GuardResult {
+  const risk = Math.abs(entryPrice - stopPrice);
+  const rr = risk > 0 ? Math.abs(targetPrice - entryPrice) / risk : 0;
+  const atrsToTarget = (effectiveATR !== null && effectiveATR > 0) ? Math.abs(targetPrice - entryPrice) / effectiveATR : Number.POSITIVE_INFINITY;
+  if (effectiveATR === null)                                                  return { pass: false, rr, atrsToTarget, dropReason: 'invalid_atr' };
+  if (!validateStopDistance(entryPrice, stopPrice))                           return { pass: false, rr, atrsToTarget, dropReason: 'stop_distance' };
+  if (!validateRR(entryPrice, stopPrice, targetPrice, gate.minRR))            return { pass: false, rr, atrsToTarget, dropReason: 'rr_below_min' };
+  if (!validateReachability(entryPrice, targetPrice, effectiveATR, gate.reachAtrMax)) return { pass: false, rr, atrsToTarget, dropReason: 'unreachable' };
+  return { pass: true, rr, atrsToTarget, dropReason: null };
 }
 
 /**

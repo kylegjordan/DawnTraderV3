@@ -31,6 +31,7 @@ import {
   type OHLCCandle, type PatternInput
 } from './strategy-helpers';
 import { getPerClassTargetGate } from '../core/calculations/expectancy.js';
+import { recordGuardEval } from './guard-eval-tracker.js';
 import { REGIMES } from '../config/canonical-regime-strategy-map';
 import { setNullReason } from '../utils/null-reason-tracker.js';
 // B72 (2026-05-05): all strategy levers moved to module='strategy.volatility_edge'.
@@ -187,7 +188,9 @@ export function detectVolatilityEdge(
 
   // ── Global guards ──────────────────────────────────────────
   const gate = getPerClassTargetGate(assetClass);
-  if (!applyGlobalGuards(entryPrice, stopPrice, targetPrice, effectiveATR, gate)) {
+  const _gr = applyGlobalGuards(entryPrice, stopPrice, targetPrice, effectiveATR, gate);
+  recordGuardEval('volatility_edge', _gr.rr, _gr.pass, _gr.dropReason);
+  if (!_gr.pass) {
     console.log(`${LOG_PREFIX} Global guards rejected signal`);
     setNullReason('guard_fail');
     return null;
