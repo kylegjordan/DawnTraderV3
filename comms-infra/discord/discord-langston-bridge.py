@@ -282,7 +282,11 @@ def process_task(task, state, breaker, task_q=None):
         # queue bug never breaks the reply. Alerts + self-advance re-invokes are not queue items.
         # FINDING-1 (Langston Step-4): gate on is_review_request — only an actual review request
         # enqueues, NOT every addressed inbound (coordination chatter must not create work-items).
-        if not task.get("is_alert") and not task.get("self_advance") and lq.is_review_request(prompt):
+        # Shakeout-2 finding (#344): an inbound that CARRIES a queue marker is a CONTROL message
+        # (e.g. an un-park `[[QUEUE id=X status=ready]] please re-review`) — it must NOT also enqueue
+        # as a phantom work-item, even though its prose may read as a review request.
+        if (not task.get("is_alert") and not task.get("self_advance")
+                and lq.is_review_request(prompt) and not lq.marker_attempted(prompt)):
             try:
                 items = lq.load_queue(QUEUE_FILE)
                 if not any(it.get("id") == str(msg_id) for it in items):

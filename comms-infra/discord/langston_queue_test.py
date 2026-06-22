@@ -122,5 +122,11 @@ q.mark_stale_surfaced(old, now=1000)
 ok("after mark_stale_surfaced: not re-surfaced until next ttl", q.stale_blocked(items, now=1050, ttl=ttl) == [])
 ok("re-surfaces again after another ttl", "Q51" in [s["id"] for s in q.stale_blocked(items, now=1101, ttl=ttl)])
 
+# ── #344 enqueue gate excludes marker-carrying CONTROL messages ───────────────
+_ctrl = 'Langston — [[QUEUE id=X status=ready]] dep landed, please re-review'
+ok("#344: control msg reads as review-request...", q.is_review_request(_ctrl) is True)
+ok("#344: ...but carries a marker -> excluded from enqueue (gate uses both)",
+   q.is_review_request(_ctrl) and q.marker_attempted(_ctrl) and not (q.is_review_request(_ctrl) and not q.marker_attempted(_ctrl)))
+
 print(f"\nlangston_queue tests: {P} passed, {F} failed")
 sys.exit(0 if F == 0 else 1)
