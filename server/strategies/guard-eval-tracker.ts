@@ -58,13 +58,27 @@ let _startedAt: string | null = null;
         _stats.set(k, r);
       }
     }
-  } catch { /* no checkpoint yet (fresh window) or unreadable — start clean */ }
+  } catch (err) {
+    // FINDING-2 (Langston Step-4): ENOENT = no checkpoint yet (fresh window) — expected, swallow silently.
+    // ANY OTHER error means a file that EXISTS but won't parse (a torn write / corruption) — that is a real
+    // wipe event the #373 stamp exists to surface, so LOG IT LOUDLY: a silent start-clean would re-stamp a
+    // false-fresh window invisibly (the exact failure #373 guards against — a silent swallow isn't airtight).
+    if ((err as NodeJS.ErrnoException)?.code !== 'ENOENT') {
+      console.error('[guard-eval-tracker] checkpoint reload FAILED (non-ENOENT — possible window WIPE):', err);
+    }
+  }
 })();
 
 function _writeCheckpoint(): void {
   try {
     fs.mkdirSync(path.dirname(_CKPT_PATH), { recursive: true });
-    fs.writeFileSync(_CKPT_PATH, JSON.stringify({ startedAt: _startedAt, savedAt: new Date().toISOString(), stats: Object.fromEntries(_stats) }));
+    // FINDING-1 (Langston Step-4): ATOMIC write — serialize to a tmp sibling then rename. rename() on the
+    // same filesystem is atomic, so a reader (reload-on-boot) ALWAYS sees the whole old-or-new file, never a
+    // torn partial from a reboot/OOM mid-write (which would throw in JSON.parse and silently wipe the window
+    // — the literal reboot-proof scenario this checkpoint claims to protect). Same dir = same fs = atomic.
+    const tmp = _CKPT_PATH + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify({ startedAt: _startedAt, savedAt: new Date().toISOString(), stats: Object.fromEntries(_stats) }));
+    fs.renameSync(tmp, _CKPT_PATH);
   } catch { /* best-effort: a missed checkpoint loses < one cadence of evals; the RATE is unaffected */ }
 }
 // Periodic checkpoint off the hot path; unref so it never keeps the process alive (or hangs tests).
