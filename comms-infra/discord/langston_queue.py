@@ -73,6 +73,46 @@ def new_item(item_id, requester, summary, pointer=None, gate_type=None, now=None
     }
 
 
+# ── OBJ-1 enqueue gate (Langston Step-4 FINDING-1) ────────────────────────────────
+# Only a CC's REVIEW REQUEST creates a queue item — NOT every addressed inbound. Coordination
+# chatter ("are you still on B2.1?", "coordinate on X", "thanks, noted") must not enqueue, or the
+# queue fills with non-reviewables and the self-advance loop tries to "work" them. Heuristic: an
+# explicit review-intent term, a workflow-step reference, or an inbox/diff pointer.
+_REVIEW_INTENT_RE = re.compile(
+    r"\b(review|step[\s-]*\d|diff|sign[\s-]*-?off|approve|changes[\s-]*-?needed|"
+    r"pre[\s-]*-?audit|completion[\s-]*report|verif|second[\s-]*-?pass|code[\s-]*-?review|"
+    r"scope|design[\s-]*ask)\b|/inbox/",
+    re.I,
+)
+
+
+def is_review_request(text):
+    """True iff the inbound reads as a review request (OBJ-1 enqueue gate). Conservative on the
+    NON-enqueue side is fine — a missed enqueue just means the CC re-asks; an over-enqueue pollutes
+    the loop, which is the exact thing FINDING-1 flags."""
+    if not text:
+        return False
+    return bool(_REVIEW_INTENT_RE.search(text))
+
+
+def park_unmarked(items, item_id, now=None):
+    """FINDING-2 (Langston Step-4): a self-advance reply that carried NO status marker for the item
+    it was working leaves that item `ready` → the next advance re-picks the SAME id → trips the
+    Tier-1 same-id HALT and pauses the WHOLE loop over a merely-missing marker. Park it (state=blocked,
+    LOUD via the caller) so the loop moves on to other ready items; a re-mark clears it. Returns the
+    parked item, or None if it's not found / already terminal (done|error) / already blocked."""
+    now = now if now is not None else time.time()
+    item = next((i for i in items if i.get("id") == str(item_id)), None)
+    if item is None or item.get("state") in ("done", "error", "blocked"):
+        return None
+    item["state"] = "blocked"
+    item["blocked_on"] = {"who": "Langston",
+                          "want": "status marker (none emitted; verdict is in the Discord prose) — re-mark to advance"}
+    item["last_touched_ts"] = now
+    item["unmarked_park"] = True
+    return item
+
+
 def infer_gate_type(text):
     """Best-effort gate_type from a request's wording (the requester can override explicitly)."""
     t = (text or "").lower()

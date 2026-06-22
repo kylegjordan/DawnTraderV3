@@ -62,5 +62,24 @@ ok("distinct-halt reason is loud (mentions cap + nudge)", "cap" in c2.should_hal
 c2.reset()
 ok("reset clears the cap (Kyle/CC post)", c2.should_halt()[0] is False and c2.distinct_advances == 0)
 
+# ── is_review_request: OBJ-1 enqueue gate (FINDING-1) ─────────────────────────
+ok("review req: 'please review my Step-4'", q.is_review_request("Langston, please review my Step-4 submission") is True)
+ok("review req: inbox pointer", q.is_review_request("Langston — diff at /home/langston/inbox/b-x/a.diff") is True)
+ok("review req: 'sign off on the completion report'", q.is_review_request("Langston, sign off on the completion report") is True)
+ok("review req: 'scope' ask", q.is_review_request("Langston, here's the scope for B-X — your Step-1 call?") is True)
+ok("NOT review: coordination chatter", q.is_review_request("Langston, coordinate with Claude New on B2.1 timing") is False)
+ok("NOT review: thanks/noted", q.is_review_request("Langston — thanks, noted, standing by") is False)
+ok("NOT review: empty", q.is_review_request("") is False)
+
+# ── park_unmarked: FINDING-2 (missing-marker must not dead-lock the loop) ──────
+it = [q.new_item("Q20", "CC-A", "x")]               # ready
+parked = q.park_unmarked(it, "Q20")
+ok("park_unmarked: ready -> blocked", parked is not None and it[0]["state"] == "blocked")
+ok("park_unmarked: blocked_on = Langston marker", it[0]["blocked_on"]["who"] == "Langston" and it[0].get("unmarked_park") is True)
+ok("park_unmarked: parked item is NOT ready -> pick_next_ready skips it (no same-id re-fire)", q.pick_next_ready(it) is None)
+done_it = [q.new_item("Q21", "CC-A", "x")]; done_it[0]["state"] = "done"
+ok("park_unmarked: already-done is a no-op", q.park_unmarked(done_it, "Q21") is None and done_it[0]["state"] == "done")
+ok("park_unmarked: unknown id -> None", q.park_unmarked([q.new_item("Q22", "CC-A", "x")], "NOPE") is None)
+
 print(f"\nlangston_queue tests: {P} passed, {F} failed")
 sys.exit(0 if F == 0 else 1)

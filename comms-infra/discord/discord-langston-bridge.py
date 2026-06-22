@@ -280,7 +280,9 @@ def process_task(task, state, breaker, task_q=None):
         # B-LANGSTON-QUEUE: track a real inbound REVIEW request as a queue item (PASSIVE — runs even
         # while the self-advance loop is disabled; it just maintains the queue file). try/except so a
         # queue bug never breaks the reply. Alerts + self-advance re-invokes are not queue items.
-        if not task.get("is_alert") and not task.get("self_advance"):
+        # FINDING-1 (Langston Step-4): gate on is_review_request — only an actual review request
+        # enqueues, NOT every addressed inbound (coordination chatter must not create work-items).
+        if not task.get("is_alert") and not task.get("self_advance") and lq.is_review_request(prompt):
             try:
                 items = lq.load_queue(QUEUE_FILE)
                 if not any(it.get("id") == str(msg_id) for it in items):
@@ -358,7 +360,20 @@ def process_task(task, state, breaker, task_q=None):
                 dc.rest_send(BOT_TOKEN, channel_id,
                              f"Kyle — Langston hit an ERROR on queue item {marker['id']}: "
                              f"{marker.get('reason', '?')} — parked, needs a look.", LOG_FILE)
-            lq.save_queue(QUEUE_FILE, items)
+        # FINDING-2 (Langston Step-4): a self-advance re-invoke whose reply carried NO marker for the
+        # item it was working would leave it `ready` → the next advance re-picks the SAME id → trips
+        # the Tier-1 same-id HALT and pauses the WHOLE loop over a merely-missing marker. Park that
+        # item (LOUD) so the loop continues to other ready items; a re-mark clears it.
+        if task.get("self_advance"):
+            mid = str(task.get("message_id", ""))
+            advanced_id = mid[4:] if mid.startswith("adv-") else None
+            if advanced_id and (not marker or marker.get("id") != advanced_id):
+                if lq.park_unmarked(items, advanced_id) is not None:
+                    dc.rest_send(BOT_TOKEN, channel_id,
+                                 f"Kyle — Langston replied on queue item {advanced_id} without a status "
+                                 f"marker; parked it so the self-advance loop keeps moving (its verdict is "
+                                 f"in the Discord prose above). Re-mark done/blocked/error to clear.", LOG_FILE)
+        lq.save_queue(QUEUE_FILE, items)
         if SELF_ADVANCE_ENABLED and not task.get("is_alert"):
             _self_advance(task_q, channel_id, items, task)
     except Exception as e:
