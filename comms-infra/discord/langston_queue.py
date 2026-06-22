@@ -38,15 +38,33 @@ DISTINCT_ADVANCE_CAP = 10
 #   [[QUEUE id=Q17 status=done]]
 #   [[QUEUE id=Q17 status=blocked on=CC-B want="staging deploy commit abcd123"]]
 #   [[QUEUE id=Q17 status=error reason="gdrive read hung on pointer file"]]
+# `ready` is a first-class status (#342): a CC (or Langston) emits it to UN-PARK a blocked item once
+# its dependency lands; pick_next_ready then re-picks it (the consumer already exists). want/reason
+# accept EITHER a quoted multi-word value OR an unquoted single token (#343, Langston Step-4): a
+# stateless LLM will sometimes omit quotes, and a malformed marker must not silently drop. `on=` and
+# the unquoted forms stop at whitespace or `]` so the trailing `]]` still anchors.
 _MARKER_RE = re.compile(
-    r"\[\[QUEUE\s+id=(?P<id>\S+)\s+status=(?P<status>done|blocked|error)"
-    r"(?:\s+on=(?P<on>\S+))?(?:\s+want=\"(?P<want>[^\"]*)\")?(?:\s+reason=\"(?P<reason>[^\"]*)\")?\s*\]\]",
+    r"\[\[QUEUE\s+id=(?P<id>[^\s\]]+)\s+status=(?P<status>done|blocked|error|ready)"
+    r"(?:\s+on=(?P<on>[^\s\]]+))?"
+    r"(?:\s+want=(?P<want>\"[^\"]*\"|[^\s\]]+))?"
+    r"(?:\s+reason=(?P<reason>\"[^\"]*\"|[^\s\]]+))?\s*\]\]",
     re.I,
 )
+# Detects a marker ATTEMPT even when the full grammar fails — so the caller can tell a
+# malformed-but-present marker (Langston signaled, grammar dropped it → LOUDER park) from a genuinely
+# absent marker (#343, Langston Step-4: "make the malformed-present case the LOUDER of the two").
+_MARKER_ATTEMPT_RE = re.compile(r"\[\[\s*QUEUE\b", re.I)
+
+
+def _unquote(v):
+    if v and len(v) >= 2 and v[0] == '"' and v[-1] == '"':
+        return v[1:-1]
+    return v
 
 
 def parse_marker(text):
-    """Return the LAST queue-marker dict in text, or None. Last-line wins (Langston emits one)."""
+    """Return the LAST well-formed queue-marker dict in text, or None. Last-line wins (Langston emits
+    one). A None here does NOT mean 'no marker' — use marker_attempted() to tell malformed from absent."""
     if not text:
         return None
     matches = list(_MARKER_RE.finditer(text))
@@ -57,10 +75,16 @@ def parse_marker(text):
     if m.group("on"):
         out["on"] = m.group("on")
     if m.group("want"):
-        out["want"] = m.group("want")
+        out["want"] = _unquote(m.group("want"))
     if m.group("reason"):
-        out["reason"] = m.group("reason")
+        out["reason"] = _unquote(m.group("reason"))
     return out
+
+
+def marker_attempted(text):
+    """True iff the text contains a `[[QUEUE ...` marker attempt (well-formed or not). Lets the caller
+    distinguish a MALFORMED-but-present marker from a genuinely absent one (#343)."""
+    return bool(text) and bool(_MARKER_ATTEMPT_RE.search(text))
 
 
 def new_item(item_id, requester, summary, pointer=None, gate_type=None, now=None):
@@ -95,22 +119,57 @@ def is_review_request(text):
     return bool(_REVIEW_INTENT_RE.search(text))
 
 
-def park_unmarked(items, item_id, now=None):
-    """FINDING-2 (Langston Step-4): a self-advance reply that carried NO status marker for the item
-    it was working leaves that item `ready` → the next advance re-picks the SAME id → trips the
+def park_unmarked(items, item_id, malformed=False, now=None):
+    """FINDING-2 (Langston Step-4): a self-advance reply that carried NO usable status marker for the
+    item it was working leaves that item `ready` → the next advance re-picks the SAME id → trips the
     Tier-1 same-id HALT and pauses the WHOLE loop over a merely-missing marker. Park it (state=blocked,
-    LOUD via the caller) so the loop moves on to other ready items; a re-mark clears it. Returns the
-    parked item, or None if it's not found / already terminal (done|error) / already blocked."""
+    LOUD via the caller) so the loop moves on; a re-mark clears it. `malformed=True` means a marker WAS
+    present but the grammar failed (#343) — recorded as a distinct, louder `park_kind` so a dropped
+    signal isn't mistaken for a forgotten one. Returns the parked item, or None if not found / already
+    terminal (done|error) / already blocked."""
     now = now if now is not None else time.time()
     item = next((i for i in items if i.get("id") == str(item_id)), None)
     if item is None or item.get("state") in ("done", "error", "blocked"):
         return None
     item["state"] = "blocked"
-    item["blocked_on"] = {"who": "Langston",
-                          "want": "status marker (none emitted; verdict is in the Discord prose) — re-mark to advance"}
+    if malformed:
+        item["blocked_on"] = {"who": "Langston",
+                              "want": "MALFORMED marker (a [[QUEUE ...]] was present but the grammar failed) — re-emit a valid marker"}
+        item["park_kind"] = "malformed_marker"
+    else:
+        item["blocked_on"] = {"who": "Langston",
+                              "want": "status marker (none emitted; verdict is in the Discord prose) — re-mark to advance"}
+        item["park_kind"] = "no_marker"
     item["last_touched_ts"] = now
     item["unmarked_park"] = True
     return item
+
+
+# ── blocked-item staleness (#342 follow-gap, Langston Step-4) ──────────────────────
+# A `blocked` item whose `want` never lands would sit forever — an open loop. Re-surface it to Kyle
+# on a TTL cadence so it can't silently rot. Re-surfacing (not auto-resolving) is deliberate: only the
+# real dependency landing (a `ready` marker) should un-park it.
+BLOCKED_TTL_SECONDS = 6 * 3600  # 6h
+
+
+def stale_blocked(items, now=None, ttl=None):
+    """Blocked items due for a staleness re-surface: blocked AND (now - last_surface) >= ttl, where
+    last_surface defaults to when it became blocked (last_touched_ts). Re-surfaces every ttl while it
+    stays blocked (mark_stale_surfaced advances the clock)."""
+    now = now if now is not None else time.time()
+    ttl = ttl if ttl is not None else BLOCKED_TTL_SECONDS
+    out = []
+    for i in items:
+        if i.get("state") != "blocked":
+            continue
+        last_surface = i.get("last_stale_surface_ts", i.get("last_touched_ts", now))
+        if (now - last_surface) >= ttl:
+            out.append(i)
+    return out
+
+
+def mark_stale_surfaced(item, now=None):
+    item["last_stale_surface_ts"] = now if now is not None else time.time()
 
 
 def infer_gate_type(text):
@@ -150,6 +209,14 @@ def apply_marker(items, marker, now=None):
     elif st == "error":
         item["state"] = "error"   # parked + must be flagged to Kyle by the caller; NEVER 'done'
         item["error_reason"] = marker.get("reason")
+    elif st == "ready":
+        # #342 circle-back UN-PARK: a CC/Langston re-readies a blocked item once its dependency lands;
+        # pick_next_ready re-picks it (the consumer already exists), so the self-advance loop retries it.
+        item["state"] = "ready"
+        item["blocked_on"] = None
+        item.pop("unmarked_park", None)
+        item.pop("park_kind", None)
+        item.pop("last_stale_surface_ts", None)
     return item, st
 
 

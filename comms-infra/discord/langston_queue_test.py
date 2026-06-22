@@ -81,5 +81,46 @@ done_it = [q.new_item("Q21", "CC-A", "x")]; done_it[0]["state"] = "done"
 ok("park_unmarked: already-done is a no-op", q.park_unmarked(done_it, "Q21") is None and done_it[0]["state"] == "done")
 ok("park_unmarked: unknown id -> None", q.park_unmarked([q.new_item("Q22", "CC-A", "x")], "NOPE") is None)
 
+# ── #343 marker: ready status, unquoted want/reason, malformed-vs-absent ──────
+ok("marker ready status", q.parse_marker("[[QUEUE id=Q30 status=ready]]") == {"id": "Q30", "status": "ready"})
+m = q.parse_marker("[[QUEUE id=Q31 status=blocked on=CC-A want=shakeout-artifact]]")
+ok("marker UNQUOTED want parses (#343)", m and m["status"] == "blocked" and m["want"] == "shakeout-artifact" and m["on"] == "CC-A")
+m = q.parse_marker('[[QUEUE id=Q32 status=blocked on=CC-B want="staging deploy abcd123"]]')
+ok("marker QUOTED multi-word want still parses + unquoted", m and m["want"] == "staging deploy abcd123")
+m = q.parse_marker('[[QUEUE id=Q33 status=error reason=gdrive-hung]]')
+ok("marker UNQUOTED reason parses", m and m["reason"] == "gdrive-hung")
+ok("marker_attempted: malformed present -> True", q.marker_attempted("verdict [[QUEUE id=Q status=bogus") is True)
+ok("marker_attempted: absent -> False", q.marker_attempted("just prose, no marker") is False)
+ok("malformed marker -> parse None BUT attempted True (the #343 split)",
+   q.parse_marker("text [[QUEUE blah no id]]") is None and q.marker_attempted("text [[QUEUE blah]]") is True)
+
+# ── #342 ready un-park transition ─────────────────────────────────────────────
+it = [q.new_item("Q40", "CC-A", "x")]
+q.park_unmarked(it, "Q40")
+ok("setup: Q40 parked blocked", it[0]["state"] == "blocked")
+q.apply_marker(it, {"id": "Q40", "status": "ready"})
+ok("ready un-parks blocked -> ready (#342)", it[0]["state"] == "ready" and it[0]["blocked_on"] is None and "unmarked_park" not in it[0])
+ok("un-parked item is now pickable again (consumer exists)", q.pick_next_ready(it) is not None and q.pick_next_ready(it)["id"] == "Q40")
+
+# ── #343 park_unmarked malformed flag ─────────────────────────────────────────
+it = [q.new_item("Q41", "CC-A", "x")]
+q.park_unmarked(it, "Q41", malformed=True)
+ok("malformed park sets distinct park_kind", it[0]["park_kind"] == "malformed_marker")
+it2 = [q.new_item("Q42", "CC-A", "x")]
+q.park_unmarked(it2, "Q42", malformed=False)
+ok("absent-marker park sets no_marker park_kind", it2[0]["park_kind"] == "no_marker")
+
+# ── #342 staleness re-surface ─────────────────────────────────────────────────
+ttl = 100
+fresh = q.new_item("Q50", "CC-A", "x", now=1000); fresh["state"] = "blocked"; fresh["last_touched_ts"] = 1000
+old = q.new_item("Q51", "CC-A", "x", now=1); old["state"] = "blocked"; old["last_touched_ts"] = 1
+ready_it = q.new_item("Q52", "CC-A", "x"); ready_it["last_touched_ts"] = 1  # ready, not blocked
+items = [fresh, old, ready_it]
+stale = q.stale_blocked(items, now=1000, ttl=ttl)
+ok("stale_blocked: only the long-blocked one (not fresh, not ready)", [s["id"] for s in stale] == ["Q51"])
+q.mark_stale_surfaced(old, now=1000)
+ok("after mark_stale_surfaced: not re-surfaced until next ttl", q.stale_blocked(items, now=1050, ttl=ttl) == [])
+ok("re-surfaces again after another ttl", "Q51" in [s["id"] for s in q.stale_blocked(items, now=1101, ttl=ttl)])
+
 print(f"\nlangston_queue tests: {P} passed, {F} failed")
 sys.exit(0 if F == 0 else 1)

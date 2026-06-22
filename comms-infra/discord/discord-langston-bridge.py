@@ -292,6 +292,22 @@ def process_task(task, state, breaker, task_q=None):
             except Exception as e:
                 log(f"queue: enqueue failed (non-fatal): {e}")
 
+        # #342 circle-back: a CC/Kyle can re-mark a queue item from an INBOUND message — chiefly
+        # `[[QUEUE id=X status=ready]]` to UN-PARK a blocked item once its dependency lands (the
+        # message starts with "Langston" to pass the gate; he then re-reviews it). Apply any inbound
+        # marker passively (try/except so it can never break the reply path).
+        if not task.get("is_alert") and not task.get("self_advance"):
+            try:
+                inbound_marker = lq.parse_marker(prompt)
+                if inbound_marker:
+                    items = lq.load_queue(QUEUE_FILE)
+                    it2, act2 = lq.apply_marker(items, inbound_marker)
+                    if it2 is not None:
+                        lq.save_queue(QUEUE_FILE, items)
+                        log(f"queue: inbound marker applied id={inbound_marker['id']} -> {act2}")
+            except Exception as e:
+                log(f"queue: inbound marker apply failed (non-fatal): {e}")
+
     # Voice name-check (response discipline): a transcribed voice note that doesn't name
     # Langston isn't his to answer — stay silent without burning a claude turn.
     if kind == "voice" and not ADDRESS_RE.search(prompt):
@@ -368,16 +384,49 @@ def process_task(task, state, breaker, task_q=None):
             mid = str(task.get("message_id", ""))
             advanced_id = mid[4:] if mid.startswith("adv-") else None
             if advanced_id and (not marker or marker.get("id") != advanced_id):
-                if lq.park_unmarked(items, advanced_id) is not None:
-                    dc.rest_send(BOT_TOKEN, channel_id,
-                                 f"Kyle — Langston replied on queue item {advanced_id} without a status "
-                                 f"marker; parked it so the self-advance loop keeps moving (its verdict is "
-                                 f"in the Discord prose above). Re-mark done/blocked/error to clear.", LOG_FILE)
+                # #343 (Langston Step-4): distinguish a MALFORMED-but-present marker (he signaled, the
+                # grammar dropped it → worse, park LOUDER) from a genuinely absent one.
+                malformed = (marker is None) and lq.marker_attempted(response)
+                if lq.park_unmarked(items, advanced_id, malformed=malformed) is not None:
+                    if malformed:
+                        dc.rest_send(BOT_TOKEN, channel_id,
+                                     f"⚠️ Kyle — Langston emitted a MALFORMED status marker on queue item "
+                                     f"{advanced_id} (a [[QUEUE ...]] was present but the grammar failed, so it "
+                                     f"was DROPPED — worse than a forgotten one). Parked it; his verdict is in "
+                                     f"the prose above. Re-emit a valid marker to clear.", LOG_FILE)
+                    else:
+                        dc.rest_send(BOT_TOKEN, channel_id,
+                                     f"Kyle — Langston replied on queue item {advanced_id} without a status "
+                                     f"marker; parked it so the self-advance loop keeps moving (its verdict is "
+                                     f"in the Discord prose above). Re-mark done/blocked/error to clear.", LOG_FILE)
         lq.save_queue(QUEUE_FILE, items)
         if SELF_ADVANCE_ENABLED and not task.get("is_alert"):
             _self_advance(task_q, channel_id, items, task)
     except Exception as e:
         log(f"queue: post-response handling failed (non-fatal): {e}")
+
+
+def _resurface_stale_blocked():
+    """#342 (Langston Step-4): re-surface blocked items whose `want` hasn't landed within the TTL so
+    they don't silently rot. Re-surface only (never auto-resolve) — only the real dependency landing
+    (a `ready` marker) un-parks. Gated on SELF_ADVANCE_ENABLED (part of the loop's lifecycle); fully
+    try/except so it can never break the worker."""
+    try:
+        items = lq.load_queue(QUEUE_FILE)
+        stale = lq.stale_blocked(items)
+        if not stale:
+            return
+        for it in stale:
+            bo = it.get("blocked_on") or {}
+            dc.rest_send(BOT_TOKEN, CFG["channel_id"],
+                         f"Kyle — queue item {it.get('id')} has been BLOCKED with no movement "
+                         f"(waiting on {bo.get('who', '?')} for: {bo.get('want', '?')}). Still parked — "
+                         f"needs the dependency to land, or a re-mark (`[[QUEUE id={it.get('id')} status=ready]]`).",
+                         LOG_FILE)
+            lq.mark_stale_surfaced(it)
+        lq.save_queue(QUEUE_FILE, items)
+    except Exception as e:
+        log(f"queue: stale re-surface failed (non-fatal): {e}")
 
 
 def task_worker(task_q, state):
@@ -393,6 +442,8 @@ def task_worker(task_q, state):
                 if time.time() - last_heartbeat >= HEARTBEAT:
                     log("task worker alive, queue depth=0")
                     last_heartbeat = time.time()
+                    if SELF_ADVANCE_ENABLED:
+                        _resurface_stale_blocked()
                 continue
             try:
                 process_task(task, state, breaker, task_q)
