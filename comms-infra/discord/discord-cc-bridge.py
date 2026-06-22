@@ -82,8 +82,17 @@ def handle_voice_task(task):
                  transcription_duration_ms=duration_ms,
                  audio_archive_path=archive_path, file_size=size)
     log(f"voice_inbound: msg {message_id} transcribed in {duration_ms}ms ({len(text)} chars)")
-    preview = text[:dc.ACK_PREVIEW_CHARS] + ("..." if len(text) > dc.ACK_PREVIEW_CHARS else "")
-    dc.rest_send(BOT_TOKEN, channel_id, f"✅ Voice transcribed: \"{preview}\" — Logged (msg {message_id}).", LOG_FILE)
+    # Post the FULL transcription (Kyle directive 2026-06-22: show the whole message, not a
+    # 1-2 sentence preview) attributed as "Kyle voice note transcription" via the webhook so it
+    # reads as Kyle's words, not a "DawnTrader CC" bot post. webhook_send auto-chunks at 2000.
+    # The leading 🎙️ guarantees the body never STARTS with "Langston" → it cannot trip Langston's
+    # address-gate (he already receives Kyle's voice directly via his own bridge; this ACK is
+    # Kyle-visibility only — must not cause a double-process).
+    label = "Kyle voice note transcription"
+    if CFG.get("webhook_url"):
+        dc.webhook_send(CFG["webhook_url"], label, f"🎙️ {text}", LOG_FILE)
+    else:
+        dc.rest_send(BOT_TOKEN, channel_id, f"🎙️ {label}: {text}", LOG_FILE)
 
 
 def fail_voice(task, reason, details, archive_path=None, duration_ms=None):
