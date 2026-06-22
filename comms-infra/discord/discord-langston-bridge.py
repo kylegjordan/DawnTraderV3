@@ -39,6 +39,17 @@ import discord  # provided by /opt/discord-bridges/venv
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import discord_common as dc
+import langston_queue as lq
+
+# ─── B-LANGSTON-QUEUE (review-queue auto-advance) ────────────────────────────
+# The self-advance LOOP is OFF by default (set LANGSTON_SELF_ADVANCE=1 to enable at the live
+# shakeout). While OFF, the bridge ONLY passively tracks the queue (enqueue + apply Langston's
+# done/blocked/error markers) — zero re-invoke, so it cannot run away. The loop's safety = the
+# two-tier CapTracker in langston_queue. Every queue op below is wrapped in try/except so a
+# queue bug can NEVER break Langston's live response path.
+SELF_ADVANCE_ENABLED = os.environ.get("LANGSTON_SELF_ADVANCE", "0") == "1"
+QUEUE_FILE = os.environ.get("LANGSTON_QUEUE_FILE", "/home/langston/.langston-review-queue.json")
+_cap = lq.CapTracker()
 
 # ─── Config ──────────────────────────────────────────────────────────────────
 BOT_TOKEN_FILE = "/etc/langston/discord-langston-bot.env"
@@ -178,7 +189,34 @@ def process_voice(task):
     return text, None
 
 
-def process_task(task, state, breaker):
+def _self_advance(task_q, channel_id, items, prev_task):
+    """B-LANGSTON-QUEUE: re-invoke Langston for the next READY queue item, guarded by the two-tier
+    cap (LOUD on trip — silence must always mean *done*, never *stuck*). Only called when
+    SELF_ADVANCE_ENABLED. Queue clear → no-op (Langston's own 'queue clear, standing by' announces)."""
+    if task_q is None:
+        return
+    nxt = lq.pick_next_ready(items)
+    if nxt is None:
+        return  # queue genuinely clear
+    halt, reason = _cap.should_halt()
+    if halt:
+        dc.rest_send(BOT_TOKEN, channel_id, f"Langston self-advance PAUSED — {reason}", LOG_FILE)
+        log(f"self-advance halted: {reason}")
+        return
+    _cap.register_advance(nxt["id"])
+    prompt = (f"[Discord SELF-ADVANCE — your previous review is done; work your NEXT queued item NOW. "
+              f"id={nxt['id']} gate={nxt['gate_type']} from {nxt['requester']}: {nxt['summary']} "
+              f"pointer={nxt.get('pointer')}. End your reply with a queue marker on the LAST line: "
+              f"[[QUEUE id={nxt['id']} status=done]]  (or  status=blocked on=<CC-A|CC-B|Kyle> want=\"..\"  "
+              f"or  status=error reason=\"..\"). If nothing else is ready, reply 'queue clear, standing by'.]")
+    task_q.put({"channel_id": channel_id, "message_id": f"adv-{nxt['id']}", "author_id": None,
+                "author_name": "self-advance", "author_display": "self-advance",
+                "is_dm": prev_task.get("is_dm", False), "kind": "text", "content": prompt,
+                "self_advance": True, "is_alert": False})
+    log(f"self-advance: re-invoking Langston for queue item {nxt['id']} (gate={nxt['gate_type']})")
+
+
+def process_task(task, state, breaker, task_q=None):
     """Handle one queued task (text or voice): invoke claude, post reply unless [SILENT].
 
     breaker (review 1b): {"bot_turns": int} — reset by a Kyle message, incremented by a
@@ -189,10 +227,16 @@ def process_task(task, state, breaker):
     is_dm = task["is_dm"]
     kind = task["kind"]
 
+    # B-LANGSTON-QUEUE: a REAL inbound (not a self-advance re-invoke) resets the runaway cap —
+    # any Kyle/CC post means we're not in an unattended loop. (No-op while the loop is disabled.)
+    if not task.get("self_advance"):
+        try: _cap.reset()
+        except Exception as e: log(f"queue: cap reset failed (non-fatal): {e}")
+
     # ── Circuit breaker: a hard floor under the soft [SILENT] discipline ──────
-    # System alerts bypass it entirely: an alert is a one-directional dispatcher post, NOT part
-    # of the CC↔Langston ping-pong the breaker guards, and must never be suppressed (OBJ-5).
-    if task.get("is_alert"):
+    # System alerts + self-advance re-invokes bypass it: neither is the CC↔Langston ping-pong the
+    # breaker guards (the self-advance loop has its OWN two-tier cap in langston_queue).
+    if task.get("is_alert") or task.get("self_advance"):
         pass
     elif task["author_id"] == CFG["kyle_id"]:
         breaker["bot_turns"] = 0
@@ -233,6 +277,18 @@ def process_task(task, state, breaker):
                      channel_id=channel_id, message_id=msg_id,
                      author_id=task["author_id"], sender_username=task["author_name"],
                      text=prompt)
+        # B-LANGSTON-QUEUE: track a real inbound REVIEW request as a queue item (PASSIVE — runs even
+        # while the self-advance loop is disabled; it just maintains the queue file). try/except so a
+        # queue bug never breaks the reply. Alerts + self-advance re-invokes are not queue items.
+        if not task.get("is_alert") and not task.get("self_advance"):
+            try:
+                items = lq.load_queue(QUEUE_FILE)
+                if not any(it.get("id") == str(msg_id) for it in items):
+                    items.append(lq.new_item(msg_id, task.get("author_display") or task.get("author_name", "?"),
+                                             prompt, gate_type=lq.infer_gate_type(prompt)))
+                    lq.save_queue(QUEUE_FILE, items)
+            except Exception as e:
+                log(f"queue: enqueue failed (non-fatal): {e}")
 
     # Voice name-check (response discipline): a transcribed voice note that doesn't name
     # Langston isn't his to answer — stay silent without burning a claude turn.
@@ -246,7 +302,10 @@ def process_task(task, state, breaker):
     # him so and require a substantive reply — Kyle 2026-06-19: "Langston responds when called, ALWAYS."
     # System alerts get a triage-framed prompt instead (OBJ-5): they arrive via the dedicated alerts
     # webhook, not by name, and must be assessed + actioned, never [SILENT].
-    if task.get("is_alert"):
+    if task.get("self_advance"):
+        # B-LANGSTON-QUEUE: a self-advance re-invoke carries its own queue-item prompt; use as-is.
+        addressed_prompt = prompt
+    elif task.get("is_alert"):
         addressed_prompt = ("[Discord SYSTEM ALERT — routed to you from the §10.5 alert dispatcher. "
                             "Assess it and respond with your triage in one or a few lines: severity, "
                             "likely cause, and whether action is needed now or it is FYI. Do NOT reply "
@@ -287,6 +346,24 @@ def process_task(task, state, breaker):
     mirror_event("langston_outbound", channel_id=channel_id, message_id=sent_id, reply_to=msg_id, text=cleaned)
     log(f"responded to msg {msg_id}")
 
+    # ── B-LANGSTON-QUEUE: apply Langston's done/blocked/error marker (PASSIVE, always-on), then
+    #    SELF-ADVANCE only if enabled. Whole block try/except → a queue bug never breaks the reply. ──
+    try:
+        items = lq.load_queue(QUEUE_FILE)
+        marker = lq.parse_marker(response)
+        if marker:
+            item, action = lq.apply_marker(items, marker)
+            if action == "error" and item is not None:
+                # error PARKS + must be flagged to Kyle (a wedged read must never silently vanish).
+                dc.rest_send(BOT_TOKEN, channel_id,
+                             f"Kyle — Langston hit an ERROR on queue item {marker['id']}: "
+                             f"{marker.get('reason', '?')} — parked, needs a look.", LOG_FILE)
+            lq.save_queue(QUEUE_FILE, items)
+        if SELF_ADVANCE_ENABLED and not task.get("is_alert"):
+            _self_advance(task_q, channel_id, items, task)
+    except Exception as e:
+        log(f"queue: post-response handling failed (non-fatal): {e}")
+
 
 def task_worker(task_q, state):
     """Single worker thread: serial claude invocation (one at a time)."""
@@ -303,7 +380,7 @@ def task_worker(task_q, state):
                     last_heartbeat = time.time()
                 continue
             try:
-                process_task(task, state, breaker)
+                process_task(task, state, breaker, task_q)
             except Exception as e:
                 log(f"task worker error: {type(e).__name__}: {e}\n{traceback.format_exc()[:500]}")
             finally:
