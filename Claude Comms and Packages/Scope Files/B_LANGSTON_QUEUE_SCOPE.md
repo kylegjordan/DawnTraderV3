@@ -28,5 +28,29 @@ Langston's proposal (verbatim, 2026-06-22), all three to be addressed:
 ## §4 — Verification
 Live shakeout next batch (Langston's offer): enqueue 2+ review items, confirm Langston works them back-to-back with no nudge, parks a deliberately-blocked one + circles back when unblocked, emits "queue clear" when empty, and the hard cap stops a forced runaway. It's a Helsinki bridge change (NOT staging) → unaffected by the 48h staging-observation window.
 
-## §5 — Open question for Langston (needs his read WITH this file as context)
-Confirm: (a) the bridge-tracked-external-queue approach (vs you holding it) — given §0 you can't hold it, so this is forced, but confirm the item schema covers what you need; (b) the hard-cap value for the self-advance loop; (c) the structured marker you'd emit to signal done vs blocked-on-X so the bridge can advance/park deterministically.
+## §5 — Open questions — RESOLVED (Langston read the file + converged 2026-06-22)
+(superseded by §6; he confirmed bridge-tracked is forced+correct and answered a/b/c.)
+
+## §6 — CONVERGED DESIGN (Langston 2026-06-22 — BUILD-READY, "good to build")
+
+**(a) ITEM SCHEMA (final):** `{ id, requester(CC-A/CC-B/Kyle), summary, pointer, state(ready|blocked|done), added_ts, gate_type, blocked_on, last_touched_ts }` where:
+- **`gate_type`** ∈ `step2 | step4-diff | step8-verify | design-ask` → drives PRIORITY ordering, NOT FIFO: a `step4-diff` is blocking a CC's push and must jump ahead of a non-urgent `design-ask` (don't make someone sit on a held push while Langston reads a doc). Order by gate-urgency.
+- **`blocked_on`** = STRUCTURED `{ who: CC-A/CC-B/Kyle, want: "<the awaited artifact/commit>" }` — the circle-back pass needs to know WHAT landing flips it to ready, not just who.
+- **`last_touched_ts`** → a parked item blocked too long gets SURFACED, not silently aging out.
+
+**(b) HARD CAP — TWO-TIER + LOUD stop (the safety spine):**
+- **Same-item guard (the real runaway signature):** if the bridge re-invokes on the SAME id TWICE without it reaching `done` → HALT immediately (cap = 2). That is the infinite-re-fire bug (item never marked done).
+- **Distinct-item advances:** **10** consecutive self-advances with no new Kyle/CC post (real depth is rarely >5; 10 = finite headroom). Kyle/CC posting resets it.
+- **★ LOUD on trip (load-bearing):** when a cap trips, Langston does NOT go silent — he emits "hit self-advance cap at N, X still ready, paused, nudge to continue." Silence must ALWAYS mean *done*, never *stuck* (piece 1's invariant). A silent cap-stop would break the whole design.
+
+**(c) MARKER — single machine-parseable LAST LINE, THREE statuses:**
+```
+[[QUEUE id=<id> status=done]]
+[[QUEUE id=<id> status=blocked on=<CC-A|CC-B|Kyle> want="<awaited artifact/commit>"]]
+[[QUEUE id=<id> status=error reason="<e.g. gdrive read hung on pointer>"]]
+```
+- **`done`** = review finished (covers APPROVE **and** CHANGES-NEEDED — verdict in the prose above; queue-wise it's done) → bridge advances.
+- **`blocked`** = parked → bridge circles back, flips to ready when `want` lands.
+- **`error`** = Langston couldn't act (esp. the §18 gdrive-mount-hang) → bridge must NOT mark done; park it + flag Kyle. Without this third state a wedged read silently vanishes from the queue.
+
+**Shakeout (§4) + Langston's added case:** force the same-item guard by feeding an item that never gets a `done` marker → confirm the bridge HALTS at 2 (not infinite re-fire).
