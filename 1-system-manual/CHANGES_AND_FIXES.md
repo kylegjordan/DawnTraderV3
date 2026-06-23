@@ -2,6 +2,20 @@
 
 ---
 
+## FIX-2026-06-24-A — P19 reorg-B3 (#233): EV-input thread + the promote-conversion `sourcePool`-drop latent bug
+
+**Batch:** reorg-B3 · deployed `99887f90e` (CI 4-green `28063929575`, staging restart#411). **Class: architecture (signal-pipeline).**
+
+**The headline change (#233 EV-input thread):** the Net-Expectancy kernel inputs DI + dbsScore were DROPPED at the orchestrator→RTB boundary (`sqeSignalInput.metadata` carried only `{strategyWeight, exposureBias}`), so the open-gate always read `signal.metadata?.DI`/`.dbsScore` = undefined → kernel defaults. reorg-B3 threads them from the routing-time FX5 survivor snapshot (which the active-filter-pool already carries for dbsScore; DI was being dropped at `addSurvivors`) through typed `rtb_signals.di_at_queue`/`dbs_score_at_queue` columns to the open-gate. See RUNNING_ISSUES #233 audit-headline resolution.
+
+**★ FIND 1 — latent bug (dormant active path; root-caused per Langston Step-4 cond 1):** the RTB-row→`promotedSignal` conversion in `paper-execution-engine.checkRtbPromotion` built `metadata: {source, originalSignalId, rtbQueueId, queuedAt}` and **never carried `sourcePool`** — even though the rtb row persists it (`queueSQESignal` `enrichedMetadata.sourcePool`). **Consequence (would have bitten at paper-active turn-on; no live damage because active trading is OFF):**
+- **EV (decisive):** the open-gate read `(signal as any).sourcePool ?? signal.metadata?.sourcePool` resolved to `undefined` for EVERY promoted signal → the kernel `quant-strong_trend` pWin branch NEVER fired → reorg-B3's dbsScore thread (the lone EV-relevant half, H2) would itself have been **inert**. This is why threading sourcePool is load-bearing for the whole batch, not a fix-in-passing.
+- **Telemetry/data-quality:** the trade/position-record `sourcePool` persists (`~:2408/:2496/:2987`) stored NULL for promoted signals → any sourcePool-keyed post-trade analysis blinded.
+- **Sizing/fill:** sourcePool-keyed paths (`~:2901/:2927`, e.g. pattern-pool reduced sizing) defaulted.
+- **Blast radius is single-point:** all consumers read off the promoted signal, so one thread (`promotedSignal.metadata.sourcePool = (signal.metadata as any)?.sourcePool`) fixes them all at once. Langston verified the rtb-row `metadata.sourcePool` is populated (so the fix is not itself inert).
+
+**Also in this batch:** OBJ-4 rtb-metrics EV-input proof surface (`evInputThreadProof`, forward-instrumentation); OBJ-5 HF9-vs-open-gate DI provenance documented (HF9 recompute left untouched — live VTS filter, DI accuracy-only); OBJ-2 friction audit clean (no change); OBJ-3 proven no-op. Deploy-verify (§9.3) additionally caught the rtb-metrics endpoint subset-mapping that silently dropped the OBJ-4 field → instance fix `99887f90e`, defect-class homed RUNNING_ISSUES #379. Residuals homed: #377 (xStock dbs source), #378 (di_at_open).
+
 ## FIX-2026-06-20-A — B-DISCORD: Discord comms fabric (parallel, unswitched) + Langston wake-routing fix
 
 **Class:** comms/ops infrastructure (non_architecture; no trading-engine/regime/strategy/signal/math touch). **Shipped:** 2026-06-19/20. Langston Step-1 PROCEED + OBJ-5 design approved (both via Discord). **Batch CLOSED 2026-06-21** — all 8 objectives MET. OBJ-5 (alerts→Discord) ACTIVATED + LIVE-VERIFIED: Kyle provisioned the dedicated alerts webhook (`1518017905936171092`); bridge always-engages on its `webhook_id` (commit `383d5c04e`); staging `pushToDiscord` direct-POSTs (commit `e4b5499be`). End-to-end test passed (staging→Discord→Langston always-engaged→triaged→resolved). Completion report `B_DISCORD_COMPLETION_REPORT.md`. Fabric stays PARALLEL/unswitched; cutover #333 future.

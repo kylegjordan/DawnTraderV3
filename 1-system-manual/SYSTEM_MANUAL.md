@@ -272,7 +272,10 @@ This is the core EV calculation. Every trade decision in the system ultimately p
 ### The Formula
 
 ```
-Pwin = 0.40 + (DI / 200)              // clamped to [0.40, 0.60]
+// B63 PATH-AWARE pWin — the kernel selects the branch by sourcePool:
+//   standard:      Pwin = 0.40 + (DI / 200)          // clamped to [0.40, 0.60]
+//   strong-trend:  Pwin = 0.40 + (|dbsScore| / 2)     // when sourcePool === 'quant-strong_trend'
+//   (DBS supersedes DI for strong trends — DI is no longer a reliable win-prob proxy there.)
 Ploss = 1 - Pwin
 
 DistTarget = |targetPrice - entryPrice|
@@ -299,6 +302,16 @@ NetRewardToRisk = NetEV / DistStop     // (if DistStop > 0)
 - Signal Orchestrator (active trading)
 - VTS Runner (simulation)
 - Trade Expectancy Gate (execution)
+
+### EV-input provenance — where DI + dbsScore come from at the open-gate (reorg-B3, #233, 2026-06-24)
+
+The kernel's two pWin inputs are **captured at signal-selection time and frozen onto the queued signal**, not recomputed at the open-gate:
+
+- **Origin:** the FX5 scanner computes `DI` and `dbsScore` per survivor; the **active-filter-pool** entry carries them (the routing-time snapshot — `dbsScore` is the SAME value that drove `quant-strong_trend` routing, so the kernel's strong-trend branch is coherent with the routing decision, never a split-brain). `getFX5DataForSymbol` exposes both.
+- **Carrier:** the orchestrator's `buildSizedSignalForStrategy` reads the pool entry once and writes the two scalars to **typed `rtb_signals` columns `di_at_queue` / `dbs_score_at_queue`** (the AT-QUEUE snapshot — NOT the freshest value at promote-instant; a future live-MCE re-read here would silently reintroduce the incoherence). At promote, `checkRtbPromotion` carries them (+ `sourcePool`) onto the `StrategySignal`; the open-gate reads them directly.
+- **Null → documented default, no coerce (Kyle #10):** a NULL column passes `undefined` to the kernel, which applies `DI = DI ?? 50` (standard 0.60 ceiling) / `dbsScore ?? 0` (strong-trend 0.40 floor). For **crypto** strong-trend the null path is unreachable (strong-trend ⟹ `|DBS|≥0.35` exclusive lane ⟹ scanner carried `dbsScore`); for **xStock** there is no crypto FX5 source yet, so xStock strong-trend pins the floor (fail-safe; real-fix homed RUNNING_ISSUES #377).
+- **Before reorg-B3 (the #233 bug):** these inputs were DROPPED at the orchestrator→RTB boundary (`sqeSignalInput.metadata` carried only `strategyWeight`/`exposureBias`), so the open-gate always read kernel defaults. **EV impact:** H1 — threading real `DI` gives ZERO upward EV lift (default `DI=50` already pins the standard branch at the 0.60 ceiling), so this is NOT a crypto opener; H2 — `dbsScore` is the lone EV-relevant thread (lifts strong-trend pWin off the 0.40 floor). `VolNoise`/`prices` are NOT kernel EV inputs (VolNoise is ranking-only) and were deliberately not threaded. A latent companion bug (the promote-conversion dropped `sourcePool` → the strong-trend branch never fired for promoted signals) was fixed in the same batch — see CHANGES_AND_FIXES FIX-2026-06-24-A.
+- **Observability:** the `rtb-metrics` `evInputThreadProof` surface (`strongTrendWithDbs > 0` = the thread working) is the live proof, gated on paper-active turn-on; the active path is dormant in VTS/passive, so reorg-B3 is verified now by integration test.
 
 ---
 
