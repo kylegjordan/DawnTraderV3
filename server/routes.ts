@@ -7864,15 +7864,30 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         familyMismatchDenominatorTotal: (quantStrategyEvalsLt + patternStrategyEvalsLt) + (lt?.nullReasonAggregate?.['family_filter_mismatch'] ?? 0),
       };
 
+      // reorg-B2.2 OBJ-B: per-class reward-vs-risk / reachability guard drops for xstock_spot — the same
+      // shared FilterDiagnosticsPanel renders data.guardDrops, so the xStock tab shows ONLY its class's
+      // suppression (Kyle's no-hidden-gates, per class).
+      let guardDrops: Record<string, unknown> = {};
+      let trackerStartedAt: string | null = null;
+      try {
+        const { getGuardEvalStatsByClass, getGuardEvalStartedAt } = await import('./strategies/guard-eval-tracker.js');
+        guardDrops = getGuardEvalStatsByClass('xstock_spot');
+        trackerStartedAt = getGuardEvalStartedAt();
+      } catch (err) {
+        console.warn('[reorg-B2.2][xstocks-filter-diagnostics] Could not get per-class guard-drop stats:', err);
+      }
+
       res.json({
         ok: true,
         timestamp: new Date().toISOString(),
-        schema: 'xstocks-filter-diagnostics/v2.0',
+        schema: 'xstocks-filter-diagnostics/v2.1',
         // FilterDiagnosticsData-compatible fields
         lastScan,
         rolling24h,
         signalRejections: { total: totalRejected, byReason, byRegime },
         vtsEvaluation,
+        guardDrops,
+        trackerStartedAt,
         // B79.0m.b iteration 2: lastCycleVtsEval is the just-finished cycle's
         // strategy-level funnel (distinct from the 24h `vtsEvaluation` panel).
         lastCycleVtsEval: ec ? {
@@ -8737,13 +8752,14 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   // In-memory counters; reset on restart. Read this over a VTS window to bring Kyle the suppression numbers.
   apiRouter.get('/diagnostics/guard-eval-stats', authenticateToken, async (_req: AuthenticatedRequest, res) => {
     try {
-      const { getGuardEvalStats, getGuardEvalStartedAt } = await import('./strategies/guard-eval-tracker.js');
+      const { getGuardEvalStats, getGuardEvalStatsPerClass, getGuardEvalStartedAt } = await import('./strategies/guard-eval-tracker.js');
       res.json({
         ok: true,
-        schema: 'guard-eval-stats/v2',
-        description: 'reorg-B2.1/B2.2 per-strategy shared-guard suppression (rrSuppressionRate = rrDrops/evals over TOTAL evals — #372). trackerStartedAt = window start, persisted across restarts (#373 wipe-detection stamp).',
+        schema: 'guard-eval-stats/v3',
+        description: 'reorg-B2.1/B2.2 shared-guard suppression. stats = STRATEGY-LEVEL aggregate (summed across asset classes, ratios re-derived from raw — the #372 read, unchanged shape). statsByClass = reorg-B2.2 per-(assetClass→strategy) breakdown (additive). rrSuppressionRate = rrDrops/evals over TOTAL evals. trackerStartedAt = window start, persisted across restarts (#373 wipe-detection stamp).',
         trackerStartedAt: getGuardEvalStartedAt(),
         stats: getGuardEvalStats(),
+        statsByClass: getGuardEvalStatsPerClass(),
       });
     } catch (error: any) {
       console.error('[reorg-B2.1] Error fetching guard-eval stats:', error);

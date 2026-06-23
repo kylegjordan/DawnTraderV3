@@ -1573,6 +1573,19 @@ router.get('/filter-diagnostics', requireAuth, async (_req: Request, res: Respon
     // Batch 52: PairFailureTracker cooldown REMOVED (Kyle directive 2026-04-06)
     // cooldownState no longer included in API response
 
+    // reorg-B2.2 OBJ-B: the per-class reward-vs-risk / reachability guard drops for THIS class (crypto_spot),
+    // so the crypto Filter-Diagnostics tab can show which strategies the per-class minRR/reachability gate
+    // suppresses (Kyle's no-hidden-gates). The shared FilterDiagnosticsPanel renders data.guardDrops.
+    let guardDrops: Record<string, unknown> = {};
+    let trackerStartedAt: string | null = null;
+    try {
+      const { getGuardEvalStatsByClass, getGuardEvalStartedAt } = await import('../strategies/guard-eval-tracker.js');
+      guardDrops = getGuardEvalStatsByClass('crypto_spot');
+      trackerStartedAt = getGuardEvalStartedAt();
+    } catch (err) {
+      console.warn('[reorg-B2.2][API] Could not get per-class guard-drop stats:', err);
+    }
+
     res.json({
       ok: true,
       lastScan,
@@ -1580,7 +1593,9 @@ router.get('/filter-diagnostics', requireAuth, async (_req: Request, res: Respon
       signalRejections,
       vtsEvaluation,
       lastCycleVtsEval,
-      schema: 'filter-diagnostics/v1.4',
+      guardDrops,
+      trackerStartedAt,
+      schema: 'filter-diagnostics/v1.5',
     });
   } catch (error) {
     console.error('[19H][API] Filter diagnostics failed:', error);

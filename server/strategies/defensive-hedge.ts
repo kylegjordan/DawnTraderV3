@@ -238,7 +238,7 @@ export function detectDefensiveHedge(
   // ── Global guards ──────────────────────────────────────────
   const gate = getPerClassTargetGate(assetClass);
   const _gr = applyGlobalGuards(entryPrice, stopPrice, targetPrice, effectiveATR, gate);
-  recordGuardEval('defensive_hedge', _gr.rr, _gr.pass, _gr.dropReason);
+  recordGuardEval('defensive_hedge', _gr.rr, _gr.pass, _gr.dropReason, assetClass);
   if (!_gr.pass) {
     console.log(`${LOG_PREFIX} Global guards rejected signal`);
     setNullReason('guard_fail');
