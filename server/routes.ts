@@ -8734,7 +8734,13 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         byBlockReason: summary.byReason,
         byStrategy: summary.byStrategy,
         bySymbol: includeRaw ? summary.bySymbol : Object.keys(summary.bySymbol).length,
-        invariantCheck: summary.invariantCheck
+        invariantCheck: summary.invariantCheck,
+        // reorg-B3 (#233, OBJ-4): the EV-input proof surface — strongTrendWithDbs>0 proves a
+        // non-default dbsScore reached the open-gate kernel on the strong-trend branch (#233 working).
+        // Forward-instrumentation: empty until paper-active turns on. recentEvInputSamples gated on
+        // ?raw=1 (it can carry per-signal rows).
+        evInputThreadProof: summary.evInputThreadProof,
+        recentEvInputSamples: includeRaw ? summary.recentEvInputSamples : summary.recentEvInputSamples.length,
       });
     } catch (error: any) {
       console.error('[8.8.3-I2] Error fetching RTB metrics:', error);
