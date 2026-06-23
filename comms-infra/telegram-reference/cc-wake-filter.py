@@ -57,8 +57,12 @@ for raw in sys.stdin:
             if deliver:
                 print(f"WAKE[CHANNEL->{ALIAS}]: {body[:400]}", flush=True)
         elif "langston-alert-invokes" in cur:
-            if "invoke DONE" in line:
-                print(f"WAKE[ALERT-HANDLED-BY-LANGSTON]: {line[:300]} — read his response tail in /var/log/langston-alert-invokes.log + check if follow-through work is CC's", flush=True)
+            # B-ALERT-PROTOCOL (#340): alert wakes are now OWNER-ROUTED — only the named
+            # owner wakes, via the [[ALERT .. owner=X ..]] marker in Langston's Discord triage
+            # (handled in the langston_outbound branch below). The old broadcast "invoke DONE
+            # -> BOTH CC sessions, every alert" wake is SUPERSEDED + was flooding both sessions
+            # on a backlog clear (Kyle caught it 2026-06-24). Removed.
+            pass
         elif "cc-bridge-inbox" in cur or "cc-discord-inbox" in cur:
             try:
                 d = json.loads(line)
