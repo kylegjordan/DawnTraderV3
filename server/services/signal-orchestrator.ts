@@ -738,6 +738,16 @@ export class SignalOrchestrator {
     const strategyWeight = getStrategyWeight(strategyId);
     // L10: Fetch exposure bias multiplier for this strategy
     const exposureBias = getExposureMultiplierSync(strategyId);
+
+    // reorg-B3 (#233, Option B): read the FX5 pool entry ONCE. It is the routing-time survivor
+    // snapshot for this symbol — the active-filter-pool DEDUPLICATES and does NOT refresh a
+    // non-expired entry (5-min TTL), so within a scan cycle this is the stable snapshot that drove
+    // this signal's routing. We capture di + dbsScore here as the AT-QUEUE EV inputs (frozen into
+    // the typed rtb_signals columns below, so a later pool refresh cannot drift them). dbsScore is
+    // the SAME survivor DBS that drove strong-trend routing → coherent with the open-gate
+    // strong-trend pWin branch. This call also supplies volume24h (it did before reorg-B3; now read
+    // once instead of inline). NULL when the symbol is absent from the pool → kernel defaults.
+    const fx5Data = activeFilterPool.getFX5DataForSymbol(rawSignal.symbol, sizingContext.mode);
     
     // Phase 14: FinalScore computed in extended metrics — no duplicate calculation needed
     // Build RTB signal using pre-computed values from extendedMetrics
@@ -766,7 +776,12 @@ export class SignalOrchestrator {
       trendStrength: 0.5,
       volatility: extendedMetrics.volatility ?? 0.3,
       currentPrice: rawSignal.entryPrice,
-      volume24h: activeFilterPool.getFX5DataForSymbol(rawSignal.symbol, sizingContext.mode)?.volume24h ?? null,
+      volume24h: fx5Data?.volume24h ?? null,
+      // reorg-B3 (#233): the at-queue EV inputs from the same FX5 survivor snapshot read above.
+      // Persisted to the typed di_at_queue / dbs_score_at_queue columns (NOT metadata). NULL when
+      // the symbol is absent from the pool → kernel documented defaults at the open-gate.
+      diAtQueue: fx5Data?.di ?? null,
+      dbsScoreAtQueue: fx5Data?.dbsScore ?? null,
       sourcePool: rawSignal.metadata?.sourcePool || undefined,
       signalType: (rawSignal as any).signalType || rawSignal.metadata?.signalType || 'QUANT',
       // P19-B4a (A1.5, Langston spine): resolver-backed, NOT metadata-OR-default.
@@ -2195,6 +2210,13 @@ export class SignalOrchestrator {
           const costMetrics = getCachedCostMetrics(symbol, assetClass);
           const frictionPct = computeTotalRoundTripCost(costMetrics.fee, costMetrics.slippage, costMetrics.spread);
           const frictionPerUnit = frictionPct * entry;
+          // reorg-B3 (#233, OBJ-5) DI-provenance note: this inline [HF9] NetEV pre-filter recomputes
+          // DI from closePrices at EVALUATE time (a fresh value for the pre-filter, on the live VTS
+          // path). The OPEN-GATE (paper-execution-engine) instead reads the AT-QUEUE DI snapshot from
+          // the rtb_signals.di_at_queue column (the routing-time survivor value). These two DI moments
+          // are intentionally distinct: reorg-B3 deliberately does NOT unify them here — changing this
+          // recompute would alter a live VTS-path filter's DI freshness, which is out of #233's scope
+          // (and DI is accuracy-only per H1 — no EV consequence). dbsScore is the EV-decisive thread.
           const DI = calculateDirectionalIntegrity(closePrices);
 
           const kernelResult = computeNetExpectancyKernel({

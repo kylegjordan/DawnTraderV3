@@ -1857,11 +1857,26 @@ export class PaperExecutionEngine {
         quantity: quantity,
         estimatedValue: notional,
         preComputedNotional: notional,
+        // reorg-B3 (#233): carry the at-queue EV inputs from the rtb row's TYPED columns onto the
+        // promoted StrategySignal (typed top-level fields, NOT metadata) so the open-gate Net-
+        // Expectancy kernel reads the routing-time FX5 survivor snapshot. Parsed string→number here
+        // (decimal columns arrive as strings); NULL stays NULL → kernel documented defaults at the
+        // gate (DI=50 / strong-trend 0.40 floor). The DB columns remain the queryable SSOT for the
+        // OBJ-4 rtb-metrics EV-reject breakdown; this object field is only the in-memory carrier.
+        diAtQueue: signal.diAtQueue != null ? parseFloat(signal.diAtQueue) : null,
+        dbsScoreAtQueue: signal.dbsScoreAtQueue != null ? parseFloat(signal.dbsScoreAtQueue) : null,
         metadata: {
           source: 'RTB_PROMOTION',
           originalSignalId: signal.signalId,
           rtbQueueId: signal.id,
           queuedAt: signal.queuedAt,
+          // reorg-B3 (#233): carry the rtb row's persisted sourcePool onto the promoted signal so the
+          // open-gate Net-Expectancy kernel can take the STRONG-TREND pWin branch. The conversion
+          // previously dropped sourcePool → the open-gate saw `undefined` → the kernel always used the
+          // standard DI branch, so the dbsScore thread (H2 — the lone EV-relevant fix) could NEVER
+          // fire on a real promoted signal. Read from the rtb row's persisted metadata.sourcePool
+          // (queueSQESignal enrichedMetadata). The open-gate reads it via `signal.metadata?.sourcePool`.
+          sourcePool: (signal.metadata as any)?.sourcePool,
         }
       } as any;
 
@@ -1888,7 +1903,11 @@ export class PaperExecutionEngine {
   // Phase 8.8.3-J7: Added cycleContext parameter for paper-mode sizing
   // Phase 8.8.4-A: Added signalId for SLAL lifecycle tracking
   private async executeSimulatedTrade(
-    signal: StrategySignal & { quantity?: number; estimatedValue?: number; signalId?: string },
+    // reorg-B3 (#233): diAtQueue/dbsScoreAtQueue are the at-queue EV inputs carried onto the
+    // promoted signal (already parsed string→number at the rtb-row→StrategySignal conversion).
+    // Optional → a non-promotion-path signal (FX5/orchestrator direct) simply has them undefined
+    // → kernel documented defaults.
+    signal: StrategySignal & { quantity?: number; estimatedValue?: number; signalId?: string; diAtQueue?: number | null; dbsScoreAtQueue?: number | null },
     settings: TradingSettings,
     cycleContext?: { portfolioValue: number; guardrails: GuardrailsV2 | null }
   ): Promise<OpenOutcome> {
@@ -2032,19 +2051,57 @@ export class PaperExecutionEngine {
     // Directive 11.8B: Net Expectancy Gate
     // Check if trade has positive mathematical expectancy after fees & slippage
     // B63: Forward sourcePool + dbsScore so the kernel uses DBS-based pWin for Path D signals.
+    //
+    // reorg-B3 (#233): DI + dbsScore now come from the TYPED rtb_signals columns (di_at_queue /
+    // dbs_score_at_queue) — the routing-time FX5 survivor snapshot frozen at queue — NOT from
+    // metadata (where they were never populated → kernel defaults, the #233 bug). Decimal columns
+    // arrive as strings; parse them. NULL → pass `undefined` and let the kernel apply its DOCUMENTED
+    // default (expectancy.ts `DI = DI ?? 50`; net-expectancy-kernel.ts `dbsScore ?? 0` → strong-trend
+    // 0.40 floor). NO coerce at THIS layer (Kyle #10): a NULL column reproduces today's default-path
+    // behavior exactly, deterministically. We deliberately do NOT add a metadata fallback for these
+    // two — they were never in metadata, so a fallback could only ever return undefined→default.
+    //
+    // NULL-on-strong-trend reachability (Langston conditions 3+4): for CRYPTO the floor default is
+    // belt-and-suspenders, NOT load-bearing — a strong-trend signal (sourcePool 'quant-strong_trend',
+    // |DBS|>=0.35) can ONLY originate from the FX5 scanner path, which ALWAYS carries dbsScore into
+    // the pool, so dbs_score_at_queue is provably non-null for crypto strong-trend. For XSTOCK there
+    // is no crypto FX5 source yet, so an xstock strong-trend signal reaches here with a NULL
+    // dbs_score_at_queue → the floor handler IS load-bearing there and fails SAFE (lower pWin, fewer
+    // entries). That xstock EV-input gap is surfaced (RUNNING_ISSUES), not papered over.
+    // VolNoise/prices remain metadata reads (unpopulated → kernel defaults; VolNoise is not a kernel
+    // EV input — ranking-only — so reorg-B3 deliberately does not thread it).
     const expectancyResult = evaluateTradeExpectancy(signal.symbol, {
       entryPrice: signal.entryPrice,
       targetPrice: signal.targetPrice,
       stopPrice: signal.stopPrice,
-      DI: signal.metadata?.DI,
+      DI: signal.diAtQueue ?? undefined,
       VolNoise: signal.metadata?.VolNoise,
       prices: signal.metadata?.prices,
       sourcePool: (signal as any).sourcePool ?? signal.metadata?.sourcePool,
-      dbsScore: signal.metadata?.dbsScore,
+      dbsScore: signal.dbsScoreAtQueue ?? undefined,
       // P19-B6.5d (OBJ-4): thread the carried stamp so EV friction is priced by the
       // signal's actual class, not re-derived from a (possibly collision) symbol.
     }, asValidAssetClass(signal.metadata?.assetClass) ?? undefined);
-    
+
+    // reorg-B3 (#233, OBJ-4): record the EV inputs that just reached the kernel — the OBJ-6 proof
+    // surface. A sample with dbsScore non-null + usedStrongTrendBranch=true proves the routing-time
+    // dbsScore reached evaluateTradeExpectancy and took the strong-trend pWin branch (the #233 fix
+    // working), vs defaulting to the floor. Forward-instrumentation: only fills on the active path.
+    const _evSourcePool = (signal as any).sourcePool ?? signal.metadata?.sourcePool;
+    rtbMetricsService.recordEvInputSample({
+      symbol: signal.symbol,
+      strategy: signal.strategy,
+      assetClass: asValidAssetClass(signal.metadata?.assetClass) ?? undefined,
+      DI: signal.diAtQueue ?? null,
+      dbsScore: signal.dbsScoreAtQueue ?? null,
+      sourcePool: _evSourcePool,
+      usedStrongTrendBranch: _evSourcePool === 'quant-strong_trend',
+      netEV: expectancyResult.netEV,
+      isTradeable: expectancyResult.isTradeable,
+      rejectionReason: expectancyResult.rejectionReason,
+      timestamp: Date.now(),
+    });
+
     if (!expectancyResult.isTradeable) {
       // [B4] Log funnel attempt blocked by Net Expectancy Gate
       b4Diagnostics.logFunnelEvent({

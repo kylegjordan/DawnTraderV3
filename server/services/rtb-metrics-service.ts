@@ -60,6 +60,33 @@ export interface RtbStats {
   sessionStart: Date;
 }
 
+/**
+ * reorg-B3 (#233, OBJ-4): the per-input snapshot of what actually reached the Net-Expectancy
+ * kernel at the open-gate. This is the OBJ-6 PROOF SURFACE — it makes the at-queue EV-input thread
+ * OBSERVABLE: a sample with `dbsScore` non-null + `usedStrongTrendBranch=true` proves a routing-time
+ * dbsScore reached `evaluateTradeExpectancy` and took the strong-trend pWin branch (the #233 fix
+ * working), instead of defaulting to the 0.40 floor (the bug). `DI`/`dbsScore` are the values
+ * FORWARDED to the kernel: null ⇒ the column was null ⇒ the kernel used its documented default.
+ *
+ * 🚨 FORWARD-INSTRUMENTATION (§9.1): this buffer only fills when the open-gate runs, which is the
+ * ACTIVE-trading path. The system is in VTS/passive (active trading OFF), so this surface stays
+ * EMPTY until paper-active turns on (Phase-19 turn-on). It is verified now by the reorg-B3
+ * integration test (which drives a sample through), and lights up live at turn-on.
+ */
+export interface EvInputSample {
+  symbol: string;
+  strategy: string;
+  assetClass?: string;
+  DI: number | null;               // value forwarded to the kernel (null ⇒ kernel default DI=50)
+  dbsScore: number | null;         // value forwarded to the kernel (null ⇒ kernel default 0 → floor)
+  sourcePool?: string;
+  usedStrongTrendBranch: boolean;  // sourcePool === 'quant-strong_trend' (kernel took the DBS branch)
+  netEV: number;
+  isTradeable: boolean;
+  rejectionReason?: string;
+  timestamp: number;
+}
+
 class RtbMetricsService {
   private static instance: RtbMetricsService;
 
@@ -205,7 +232,50 @@ class RtbMetricsService {
     timestamp: number;
   }> = [];
   private readonly MAX_BLOCK_EVENTS = 500;
-  
+
+  // reorg-B3 (#233, OBJ-4): bounded circular buffer of the EV inputs that reached the open-gate
+  // kernel. The OBJ-6 proof surface (forward-instrumentation — empty until paper-active turns on).
+  private evInputSamples: EvInputSample[] = [];
+  private readonly MAX_EV_INPUT_SAMPLES = 500;
+
+  /**
+   * reorg-B3 (#233, OBJ-4): record the EV inputs that reached `evaluateTradeExpectancy` at the
+   * open-gate. Called once per open-gate Net-Expectancy evaluation. Bounded buffer.
+   */
+  recordEvInputSample(sample: EvInputSample): void {
+    this.evInputSamples.push(sample);
+    if (this.evInputSamples.length > this.MAX_EV_INPUT_SAMPLES) {
+      this.evInputSamples = this.evInputSamples.slice(-this.MAX_EV_INPUT_SAMPLES);
+    }
+  }
+
+  /** reorg-B3 (#233, OBJ-4): full EV-input sample buffer for the rtb-metrics diagnostics surface. */
+  getEvInputSamples(): EvInputSample[] {
+    return [...this.evInputSamples];
+  }
+
+  /**
+   * reorg-B3 (#233, OBJ-6): compact proof summary derived from the EV-input samples — answers
+   * "did a NON-DEFAULT dbsScore reach the kernel and fire the strong-trend branch?" at a glance.
+   * `strongTrendWithDbs` > 0 is the #233-working proof. All zero until paper-active turns on.
+   */
+  getEvInputThreadProof(): {
+    totalSamples: number;
+    withNonNullDbs: number;
+    withNonNullDi: number;
+    strongTrendBranchFired: number;
+    strongTrendWithDbs: number;
+  } {
+    const s = this.evInputSamples;
+    return {
+      totalSamples: s.length,
+      withNonNullDbs: s.filter(x => x.dbsScore != null).length,
+      withNonNullDi: s.filter(x => x.DI != null).length,
+      strongTrendBranchFired: s.filter(x => x.usedStrongTrendBranch).length,
+      strongTrendWithDbs: s.filter(x => x.usedStrongTrendBranch && x.dbsScore != null).length,
+    };
+  }
+
   private recordBlockEvent(symbol: string, strategy: string, reason: string): void {
     this.blockEventBuffer.push({
       reason,
@@ -282,6 +352,9 @@ class RtbMetricsService {
     byStrategy: Record<string, { attempts: number; opened: number; blocked: number }>;
     bySymbol: Record<string, { attempts: number; opened: number; blocked: number; byReason: Record<string, number> }>;
     invariantCheck: { valid: boolean; message: string };
+    // reorg-B3 (#233, OBJ-4): the EV-input proof surface (empty until paper-active turns on).
+    evInputThreadProof: { totalSamples: number; withNonNullDbs: number; withNonNullDi: number; strongTrendBranchFired: number; strongTrendWithDbs: number };
+    recentEvInputSamples: EvInputSample[];
   } {
     // P19-B6.5e: invariant is now attemptsTotal === openedTotal + blockedTotal + openFailedTotal
     const { attemptsTotal, openedTotal, blockedTotal, openFailedTotal } = this.stats;
@@ -316,6 +389,10 @@ class RtbMetricsService {
           ? 'OK: attemptsTotal === openedTotal + blockedTotal + openFailedTotal && blockedTotal === sum(byReason)'
           : `MISMATCH: attempts=${attemptsTotal}, opened=${openedTotal}, blocked=${blockedTotal}, openFailed=${openFailedTotal}, reasonSum=${reasonSum}`,
       },
+      // reorg-B3 (#233, OBJ-4): EV-input proof surface — the compact proof + the most recent samples
+      // (bounded). Empty until paper-active turns on; the #233-working signal is strongTrendWithDbs>0.
+      evInputThreadProof: this.getEvInputThreadProof(),
+      recentEvInputSamples: this.evInputSamples.slice(-25),
     };
   }
 
@@ -335,6 +412,7 @@ class RtbMetricsService {
     this.initializeBlockReasons();
     this.bySymbol = {};
     this.byStrategy = {};
+    this.evInputSamples = []; // reorg-B3 (#233, OBJ-4): clear the EV-input proof buffer on session reset
     console.log(`[8.8.3-I2][RTB_METRICS_RESET] Session reset at ${this.stats.sessionStart.toISOString()}`);
   }
 

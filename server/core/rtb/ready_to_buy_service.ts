@@ -112,6 +112,13 @@ export interface SQESignalInput {
   atr?: number;
   currentPrice?: number; // Directive 8.8.4-C.14.B: Market price at queue time
   volume24h?: number | null; // Directive 8.8.4-C.14.B: 24h USD volume (NULL if not in FX5 pool)
+  // reorg-B3 (#233): Net-Expectancy kernel EV inputs captured AT QUEUE from the routing-time FX5
+  // survivor snapshot (active-filter-pool entry). Persisted to the typed rtb_signals.di_at_queue /
+  // dbs_score_at_queue columns (NOT metadata) so the open-gate reads the same snapshot that drove
+  // routing. NULL if the symbol is absent from the FX5 pool or hydrated via the no-DBS cold-cache
+  // path → kernel documented defaults (Kyle #10, no silent coerce).
+  diAtQueue?: number | null;       // Directional Integrity [0-100] at queue
+  dbsScoreAtQueue?: number | null; // Directional Bias Score [-1,1] at queue
   metadata?: Record<string, unknown>;
   skipSelfCheck?: boolean; // Directive 8.8.4-A3.R2: Skip self-dedupe during refreshAndRank
   sourcePool?: string;    // Batch 37: Family-qualified source pool
@@ -1835,6 +1842,14 @@ class ReadyToBuyService {
       // resolve-from-symbol-OR-THROW result computed above — no silent crypto_spot
       // default (CLAUDE.md §10). This is the column the A4 Phase-4 SET NOT NULL guards.
       assetClass: resolvedAssetClass,
+      // reorg-B3 (#233): persist the at-queue Net-Expectancy EV inputs to the typed columns (NOT
+      // metadata) so the open-gate reads the routing-time FX5 survivor snapshot directly. NULL-safe:
+      // the input scalars are number|null|undefined → write NULL when absent. For crypto these come
+      // from the FX5 pool entry; for xstock_spot the symbol is not in the crypto FX5 pool so both
+      // are NULL → kernel documented defaults (an xstock-native EV-input source is future work, not
+      // this batch — the columns are class-agnostic per D1, only the crypto source is wired here).
+      diAtQueue: input.diAtQueue != null ? input.diAtQueue.toString() : null,
+      dbsScoreAtQueue: input.dbsScoreAtQueue != null ? input.dbsScoreAtQueue.toString() : null,
     };
 
     // Directive 8.8.4-A3.R8: Log trace event for new signal insertion

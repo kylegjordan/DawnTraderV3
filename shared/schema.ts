@@ -1890,6 +1890,18 @@ export const rtbSignals = pgTable("rtb_signals", {
   // constraint enforces NOT NULL; Phase 4 column-level SET NOT NULL is
   // contingent on §6.4 zero-null verify-gate per Langston C-4.
   assetClass: varchar("asset_class", { length: 32 }),
+  // reorg-B3 (#233): the Net-Expectancy kernel EV inputs, captured AT QUEUE TIME as typed columns
+  // (decision-grade gate inputs → queryable by-input for the rtb-metrics EV-reject breakdown, not
+  // buried in the metadata JSONB). SEMANTICS (Langston-pinned): "at_queue" = the routing-time FX5
+  // survivor snapshot that DROVE this signal's entry — NOT the freshest value at the queue instant.
+  // This is the correct semantic for the EV thread: the dbsScore here is the same value that drove
+  // the strong-trend routing, so the open-gate strong-trend pWin branch can never disagree with how
+  // the signal was classified. DO NOT "fix" this to a live MCE re-read at promote time — that would
+  // silently reintroduce the split-brain. NULL ⇒ kernel documented default (di→standard pWin via
+  // DI=50; dbs→strong-trend 0.40 floor): deterministic, no silent coerce. Both nullable-backfill
+  // (mirrors the B79.0n.RTB assetClass column add).
+  diAtQueue: decimal("di_at_queue", { precision: 8, scale: 4 }),         // Directional Integrity [0-100] at queue
+  dbsScoreAtQueue: decimal("dbs_score_at_queue", { precision: 8, scale: 4 }), // Directional Bias Score [-1,1] at queue
 }, (table) => ({
   modeStatusIdx: index("rtb_signals_mode_status_idx").on(table.mode, table.status),
   symbolStrategyIdx: uniqueIndex("rtb_signals_symbol_strategy_idx").on(table.mode, table.symbol, table.strategy, table.status),

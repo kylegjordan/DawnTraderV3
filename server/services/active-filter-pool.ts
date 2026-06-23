@@ -42,6 +42,12 @@ export interface ActiveFilteredPair {
   dbsScore?: number;           // Directional Bias Score [-1, 1]
   dbsCategory?: string;        // 'UP_STRONG' | 'UP_MODERATE' | 'NEUTRAL' | 'DOWN_MODERATE' | 'DOWN_STRONG'
   dbsSlope?: number;           // Slope of DBS (current - 3-bar-prior), positive = rising
+  // reorg-B3 (#233): Directional Integrity captured at scan/routing time and carried as the
+  // AT-QUEUE survivor snapshot for the open-gate EV thread (paired with dbsScore above). The FX5
+  // scanner already computes DI (fx5-scanner.ts) but addSurvivors used to drop it; we stop
+  // dropping it so the open-gate reads the SAME survivor snapshot that drove this entry's routing,
+  // not a re-computed value. See the di_at_queue column comment for the at-queue semantics.
+  di?: number;                 // Directional Integrity [0-100], routing-time survivor snapshot
   fx5Snapshot?: {             // Optional: snapshot of FX5 metrics when added
     volume24h: number;
     dailyRange: number;
@@ -215,6 +221,10 @@ class ActiveFilterPoolService {
       dbsScore?: number;
       dbsCategory?: string;
       dbsSlope?: number;
+      // reorg-B3 (#233): Directional Integrity from the FX5 survivor. The scan survivor names this
+      // field `DI` (uppercase, fx5-scanner.ts) so the param matches it; stored lowercase as `di` on
+      // the pool entry. Carried so the open-gate EV thread reads the routing-time DI snapshot.
+      DI?: number;
       sourcePool?: string;
     }>,
     skipPassiveCheck: boolean = false
@@ -264,6 +274,8 @@ class ActiveFilterPoolService {
             dbsScore: survivor.dbsScore,
             dbsCategory: survivor.dbsCategory,
             dbsSlope: survivor.dbsSlope,
+            // reorg-B3 (#233): carry the survivor's DI as the at-queue snapshot (see ActiveFilteredPair.di)
+            di: survivor.DI,
             fx5Snapshot: {
               volume24h: survivor.volume24h,
               dailyRange: survivor.dailyRange,
@@ -296,6 +308,8 @@ class ActiveFilterPoolService {
           dbsScore: survivor.dbsScore,
           dbsCategory: survivor.dbsCategory,
           dbsSlope: survivor.dbsSlope,
+          // reorg-B3 (#233): carry the survivor's DI as the at-queue snapshot (see ActiveFilteredPair.di)
+          di: survivor.DI,
           fx5Snapshot: {
             volume24h: survivor.volume24h,
             dailyRange: survivor.dailyRange,
@@ -655,7 +669,7 @@ class ActiveFilterPoolService {
    * Returns null if symbol not found (for proper NULL storage)
    * Phase 14.5: Also checks pattern pool
    */
-  getFX5DataForSymbol(symbol: string, mode: 'paper' | 'live'): { price: number; volume24h: number } | null {
+  getFX5DataForSymbol(symbol: string, mode: 'paper' | 'live'): { price: number; volume24h: number; dbsScore?: number; di?: number } | null {
     const pool = this.getPool(mode);
 
     // Try direct lookup
@@ -695,7 +709,14 @@ class ActiveFilterPoolService {
 
     return {
       price: entry.price,
-      volume24h: entry.volume24h
+      volume24h: entry.volume24h,
+      // reorg-B3 (#233): expose the at-queue EV scalars (the routing-time survivor snapshot the pool
+      // already carries) so the orchestrator builder can capture di_at_queue + dbs_score_at_queue at
+      // the SAME call it already makes for volume24h. Both optional — entries hydrated via the
+      // non-scanner cold-cache path (unified-filter-gateway) lack OHLC-derived DBS/DI and return
+      // undefined here → NULL columns → kernel documented defaults (deterministic, no silent coerce).
+      dbsScore: entry.dbsScore,
+      di: entry.di
     };
   }
 }
