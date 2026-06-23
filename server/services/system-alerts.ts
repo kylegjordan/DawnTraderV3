@@ -360,6 +360,11 @@ export const RESURFACE_TTL_MS: Record<'active' | 'acknowledged', Record<'warning
   active: { critical: 2 * HOUR_MS, warning: 6 * HOUR_MS }, // un-acked = worse state = shorter fuse
   acknowledged: { critical: 4 * HOUR_MS, warning: 12 * HOUR_MS }, // owned + being worked = longer leash
 };
+// CAP the widening back-off (Langston Step-4 note): without it, an alert re-surfaced N× while
+// unclaimed then acked jumps to baseTtl·2^N (e.g. 12h·2³ = 96h for a warning) — more leash than
+// intended, and the doubling marches toward never-firing. Capping the multiplier bounds the max
+// re-nudge interval (acked warning ≤ 48h, acked critical ≤ 16h) and keeps a steady nudge cadence.
+export const RESURFACE_MAX_BACKOFF_MULT = 4;
 
 export interface ResurfaceDecision {
   alert: SystemAlert;
@@ -386,7 +391,7 @@ export function computeResurfaceStale(alerts: SystemAlert[], nowMs: number = Dat
     const count = typeof a.metadata?.resurface_count === 'number' ? (a.metadata.resurface_count as number) : 0;
     const lastResurfacedAt = a.metadata?.last_resurfaced_at;
     const lastMs = typeof lastResurfacedAt === 'string' ? Date.parse(lastResurfacedAt) : firedMs;
-    const gapMs = baseTtl * Math.pow(2, count); // widening back-off: 1×, 2×, 4× …
+    const gapMs = baseTtl * Math.min(Math.pow(2, count), RESURFACE_MAX_BACKOFF_MULT); // widening 1×→2×→4×, capped
     if (nowMs - lastMs >= gapMs) {
       out.push({ alert: a, resurfaceCount: count + 1, escalateToKyle: count >= 1 });
     }
@@ -417,6 +422,41 @@ export async function markResurfaced(id: string, nowMs: number = Date.now()): Pr
     writeAllAlertsAtomic(all);
   });
   return result;
+}
+
+export interface ResurfaceResult {
+  id: string;
+  delivered: boolean;
+  skipped?: 'resolved';
+}
+
+/**
+ * Orchestrate one re-surface pass (B-ALERT-PROTOCOL #340 — reworked after Langston Step-4
+ * CHANGES-NEEDED). For each stale alert: re-validate under a fresh read (skip if it RESOLVED
+ * between the unlocked compute snapshot and now — the race fix, so a just-resolved alert can't
+ * throw a bogus "STILL UNRESOLVED" post or a false Kyle escalation), DELIVER via the injected
+ * sink, and **advance the back-off (markResurfaced) ONLY when delivery actually succeeded.**
+ * An UNDELIVERED re-surface must NOT consume the window — otherwise the back-off marches toward
+ * never-firing while zero notifications reach anyone (the inverted-guarantee bug). The `deliver`
+ * sink is injected (the dispatcher owns the Telegram/Discord/Langston-invoke channels) so this
+ * orchestration is unit-testable without network IO.
+ */
+export async function processResurface(
+  nowMs: number,
+  deliver: (alert: SystemAlert, d: ResurfaceDecision) => Promise<boolean>,
+): Promise<ResurfaceResult[]> {
+  const out: ResurfaceResult[] = [];
+  for (const d of computeResurfaceStale(readAllAlerts(), nowMs)) {
+    const fresh = readAllAlerts().find((a) => a.id === d.alert.id);
+    if (!fresh || fresh.state === 'resolved') {
+      out.push({ id: d.alert.id, delivered: false, skipped: 'resolved' });
+      continue;
+    }
+    const delivered = await deliver({ ...fresh }, d);
+    if (delivered) await markResurfaced(d.alert.id, nowMs); // advance back-off ONLY on real delivery
+    out.push({ id: d.alert.id, delivered });
+  }
+  return out;
 }
 
 // ─── Read accessors (no lock — concurrent reads are safe) ─────────────────

@@ -110,6 +110,50 @@ describe('B-ALERT-PROTOCOL computeResurfaceStale', () => {
   });
 });
 
+describe('B-ALERT-PROTOCOL processResurface (delivery-gated back-off — the Step-4 blocker fix)', () => {
+  // Stand up a stale alert: active warning, fired 7h ago (> the 6h active TTL).
+  async function staleAlert(mod: any) {
+    const a = await mod.addAlert({ triggers_at: new Date(NOW - 7 * H).toISOString(), category: 'breakage', severity: 'warning', title: 't', body: 'b' });
+    await mod.fireDue(NOW - 7 * H); // promote → active, fired_at ~7h ago
+    return a;
+  }
+
+  it('does NOT advance the back-off when delivery FAILS (an undelivered re-surface must not consume the window)', async () => {
+    const mod = await load();
+    await staleAlert(mod);
+    const r = await mod.processResurface(NOW, async () => false); // every sink failed/unconfigured
+    expect(r).toHaveLength(1);
+    expect(r[0].delivered).toBe(false);
+    expect(mod.readAllAlerts()[0].metadata.resurface_count ?? 0).toBe(0); // back-off NOT advanced
+  });
+
+  it('advances the back-off exactly once when delivery SUCCEEDS', async () => {
+    const mod = await load();
+    await staleAlert(mod);
+    const r = await mod.processResurface(NOW, async () => true); // a channel delivered
+    expect(r[0].delivered).toBe(true);
+    expect(mod.readAllAlerts()[0].metadata.resurface_count).toBe(1); // advanced once
+  });
+
+  it('re-reads fresh per alert and SKIPS one resolved DURING the pass (the race guard — no bogus post/escalation)', async () => {
+    const mod = await load();
+    // two stale alerts (both active, fired 7h ago). a1 is older → processed first.
+    const a1 = await mod.addAlert({ triggers_at: new Date(NOW - 7 * H).toISOString(), category: 'breakage', severity: 'warning', title: 't1', body: 'b' });
+    const a2 = await mod.addAlert({ triggers_at: new Date(NOW - 7 * H).toISOString(), category: 'breakage', severity: 'warning', title: 't2', body: 'b' });
+    await mod.fireDue(NOW - 7 * H);
+    const delivered: string[] = [];
+    const r = await mod.processResurface(NOW, async (alert: any) => {
+      delivered.push(alert.id);
+      // simulate a CC resolving the OTHER alert while the first one is being delivered
+      if (delivered.length === 1) await mod.resolveAlert(a2.id, 'CC-A');
+      return true;
+    });
+    expect(delivered).toEqual([a1.id]);                      // a2 never delivered (re-read caught the resolve)
+    expect(r.find((x: any) => x.id === a2.id)?.skipped).toBe('resolved');
+    expect(r.find((x: any) => x.id === a2.id)?.delivered).toBe(false);
+  });
+});
+
 describe('B-ALERT-PROTOCOL markResurfaced', () => {
   it('bumps resurface_count + stamps last_resurfaced_at; is a no-op once the alert is resolved', async () => {
     const { addAlert, fireDue, markResurfaced, resolveAlert } = await load();

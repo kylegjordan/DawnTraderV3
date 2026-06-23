@@ -38,9 +38,7 @@ import {
   listAlerts,
   ackAlert,
   resolveAlert,
-  readAllAlerts,
-  computeResurfaceStale,
-  markResurfaced,
+  processResurface,
   ALERTS_FILE,
   type SystemAlert,
   type AlertCategory,
@@ -160,23 +158,27 @@ async function telegramSend(
   }
 }
 
-async function pushToTelegram(alert: SystemAlert): Promise<void> {
+// Returns true iff at least one Telegram destination actually delivered (B-ALERT-PROTOCOL
+// #340: the re-surface gates its back-off advance on real delivery across the sinks).
+async function pushToTelegram(alert: SystemAlert): Promise<boolean> {
   const tokenFile = process.env.CCDT_BOT_TOKEN_FILE || '/etc/langston/ccdt-bot.env';
   const token = await readTokenFile(tokenFile);
-  if (!token) return;
+  if (!token) return false;
   const markdownText = formatAlertText(alert, 'markdown');
+  let delivered = false;
 
   // Critical-tier: keep the DM push for backwards-compat (Kyle sees it
   // separately from the group thread).
   if (alert.severity === 'critical') {
-    await telegramSend(token, KYLE_DM_CHAT_ID, markdownText);
+    if (await telegramSend(token, KYLE_DM_CHAT_ID, markdownText)) delivered = true;
   }
 
   // Warning + critical: post to group topic 21 so the alert is also visible
   // alongside ordinary CC ↔ Langston traffic. info-severity skips both paths.
   if (alert.severity === 'warning' || alert.severity === 'critical') {
-    await telegramSend(token, TELEGRAM_GROUP_CHAT_ID, markdownText, TELEGRAM_BATCH_THREAD);
+    if (await telegramSend(token, TELEGRAM_GROUP_CHAT_ID, markdownText, TELEGRAM_BATCH_THREAD)) delivered = true;
   }
+  return delivered;
 }
 
 // ─── Discord push (B-DISCORD OBJ-5) ─────────────────────────────────────────
@@ -228,7 +230,9 @@ async function discordWebhookSend(webhookUrl: string, content: string): Promise<
   return false;
 }
 
-async function pushToDiscord(alert: SystemAlert): Promise<void> {
+// Returns true iff the Discord alerts webhook actually delivered (false when unprovisioned
+// or info-severity) — feeds the re-surface delivery gate (B-ALERT-PROTOCOL #340).
+async function pushToDiscord(alert: SystemAlert): Promise<boolean> {
   // Resolve the secret webhook URL: prefer an explicit env var, else a secrets file.
   let webhookUrl = process.env.ALERTS_DISCORD_WEBHOOK_URL || null;
   if (!webhookUrl) {
@@ -240,55 +244,37 @@ async function pushToDiscord(alert: SystemAlert): Promise<void> {
   }
   if (!webhookUrl) {
     // Inert until Kyle provisions the alerts webhook — no Discord posting yet.
-    return;
+    return false;
   }
   // Mirror Telegram severity gating: warning + critical post; info skips.
   if (alert.severity === 'warning' || alert.severity === 'critical') {
     const ok = await discordWebhookSend(webhookUrl, formatAlertTextDiscord(alert));
     if (ok) console.log(`[fire-due] Discord alert posted for ${alert.id}`);
+    return ok;
   }
+  return false;
 }
 
-// ─── B-ALERT-PROTOCOL (#340): no-silent-drop re-surface ─────────────────────
-// A stale unresolved alert is re-POSTED through the same alerts-webhook path so
-// it re-appears in Discord, Langston re-engages (re-emits the owner marker → the
-// owner CC is re-woken to chase closure), and Kyle is escalated by name on the
-// 2nd+ re-surface. Reuses every existing path; the widening back-off (in
-// computeResurfaceStale) keeps it a nudge, not a spam.
-
-function resolveAlertsWebhookUrl(): string | null {
-  let webhookUrl = process.env.ALERTS_DISCORD_WEBHOOK_URL || null;
-  if (!webhookUrl) {
-    const file = process.env.ALERTS_DISCORD_WEBHOOK_FILE || '/etc/langston/discord-alerts-webhook.env';
-    if (fs.existsSync(file)) {
-      const line = fs.readFileSync(file, 'utf-8').split('\n').find((l) => l.includes('ALERTS_WEBHOOK_URL='));
-      if (line) webhookUrl = line.split('=').slice(1).join('=').trim();
-    }
-  }
-  return webhookUrl;
-}
-
-function formatResurfaceTextDiscord(d: ResurfaceDecision, nowMs: number): string {
-  const a = d.alert;
-  const owner = a.acknowledged_by ? `owned by ${a.acknowledged_by}` : 'UNCLAIMED — nobody has acked it';
-  const firedMs = a.fired_at ? Date.parse(a.fired_at) : Date.parse(a.created_at);
+// ─── B-ALERT-PROTOCOL (#340): re-surface = "fire again, louder" ─────────────
+// Reworked after Langston Step-4 (CHANGES-NEEDED): a re-surface reuses the FIRE path's
+// FULL delivery (pushToTelegram + pushToDiscord + invokeLangstonForAlert) so it actually
+// re-engages Langston (→ he re-emits the owner marker → the owner CC is re-woken to chase
+// closure) and reaches whatever channel is live — NOT a Discord-webhook-only wall-post that
+// drops two sinks and silently delivers nothing in the Telegram-primary era. We just reframe
+// the alert (louder title + owner/age + the Kyle escalation on the 2nd+) and hand it to the
+// same sinks; the orchestration (processResurface) advances the back-off ONLY on real delivery.
+function frameResurface(alert: SystemAlert, d: ResurfaceDecision, nowMs: number): SystemAlert {
+  const firedMs = alert.fired_at ? Date.parse(alert.fired_at) : Date.parse(alert.created_at);
   const hrs = Math.max(0, Math.round((nowMs - firedMs) / 3_600_000));
+  const owner = alert.acknowledged_by ? `owned by ${alert.acknowledged_by}` : 'UNCLAIMED — nobody has acked it';
   const kyle = d.escalateToKyle
-    ? `\n\n**Kyle — this alert has been open ~${hrs}h with no resolution. Please push it to closure or reassign.**`
+    ? `\n\nKyle — open ~${hrs}h with no resolution; please push it to closure or reassign.`
     : '';
-  const text =
-    `⏰ **ALERT RE-SURFACE #${d.resurfaceCount} — STILL UNRESOLVED (${a.severity.toUpperCase()})**\n` +
-    `**${a.title}** — ${owner}, open ~${hrs}h.\n${a.body.slice(0, 600)}\n` +
-    `_Category:_ ${a.category}  ·  _Alert ID:_ \`${a.id}\`  ·  close it: \`resolve ${a.id} --by <you>\`${kyle}`;
-  return text.length > 1900 ? text.slice(0, 1900) + '…' : text;
-}
-
-async function pushResurface(d: ResurfaceDecision, nowMs: number): Promise<void> {
-  const webhookUrl = resolveAlertsWebhookUrl();
-  if (webhookUrl) {
-    const ok = await discordWebhookSend(webhookUrl, formatResurfaceTextDiscord(d, nowMs));
-    if (ok) console.log(`[fire-due] re-surfaced ${d.alert.id} to Discord (#${d.resurfaceCount}${d.escalateToKyle ? ', escalated to Kyle' : ''})`);
-  }
+  return {
+    ...alert,
+    title: `⏰ RE-SURFACE #${d.resurfaceCount} — STILL UNRESOLVED: ${alert.title}`,
+    body: `${owner}, open ~${hrs}h. ${alert.body}\nClose it: resolve ${alert.id} --by <you>.${kyle}`,
+  };
 }
 
 /**
@@ -319,12 +305,12 @@ function shellSingleQuote(s: string): string {
  *
  * Skipped in dev / non-staging envs (LANGSTON_INVOKE=0 disables explicitly).
  */
-async function invokeLangstonForAlert(alert: SystemAlert): Promise<void> {
+async function invokeLangstonForAlert(alert: SystemAlert): Promise<boolean> {
   if (process.env.LANGSTON_INVOKE === '0') {
     console.log(`[fire-due] LANGSTON_INVOKE=0 — skipping Langston invoke for ${alert.id}`);
-    return;
+    return false;
   }
-  if (alert.severity === 'info') return;
+  if (alert.severity === 'info') return false;
 
   const { execFile } = await import('node:child_process');
   const { promisify } = await import('node:util');
@@ -356,6 +342,7 @@ async function invokeLangstonForAlert(alert: SystemAlert): Promise<void> {
       { timeout: 20000 },
     );
     console.log(`[fire-due] Langston invoke launched on Helsinki for alert ${alert.id} (handler relays response to Telegram)`);
+    return true;
   } catch (err) {
     // Part C: SSH-level failure — the wrapper never ran, so its 5a relay can't
     // fire. This console.error line is the only signal that the invoke didn't
@@ -365,6 +352,7 @@ async function invokeLangstonForAlert(alert: SystemAlert): Promise<void> {
       `[fire-due] Langston invoke SSH FAILED for alert ${alert.id} (could not reach Helsinki): ` +
         `${err instanceof Error ? err.message : String(err)}`,
     );
+    return false;
   }
 }
 
@@ -409,17 +397,30 @@ async function cmdFireDue(): Promise<void> {
     }
   }
 
-  // B-ALERT-PROTOCOL (#340): no-silent-drop closure guarantee. Runs EVERY dispatch
-  // tick (independent of whether anything was promoted) — re-surfaces stale
-  // unresolved alerts so a diagnosed-but-unfixed alert can never silently rot.
+  // B-ALERT-PROTOCOL (#340): no-silent-drop closure guarantee. Runs EVERY dispatch tick
+  // (independent of promotions) — re-surfaces stale unresolved alerts so a diagnosed-but-
+  // unfixed alert can never silently rot. The re-surface FIRES AGAIN through the full fire
+  // path (so it actually re-engages Langston + re-wakes the owner + reaches the live channel),
+  // and the back-off advances ONLY on real delivery (processResurface) — an undelivered
+  // re-surface does NOT consume the window and retries next tick.
   const nowMs = Date.now();
-  const stale = computeResurfaceStale(readAllAlerts(), nowMs);
-  if (stale.length > 0) {
-    console.log(`[fire-due] re-surfacing ${stale.length} stale unresolved alert(s)`);
-    for (const d of stale) {
-      await pushResurface(d, nowMs);
-      await markResurfaced(d.alert.id, nowMs);
-    }
+  const results = await processResurface(nowMs, async (alert, d) => {
+    const framed = frameResurface(alert, d, nowMs);
+    const t = await pushToTelegram(framed);
+    const dc = await pushToDiscord(framed);
+    const lg = await invokeLangstonForAlert(framed);
+    return t || dc || lg; // delivered iff ANY sink succeeded
+  });
+  const delivered = results.filter((r) => r.delivered);
+  if (delivered.length > 0) {
+    console.log(`[fire-due] re-surfaced ${delivered.length} stale unresolved alert(s): ${delivered.map((r) => r.id).join(', ')}`);
+  }
+  const undelivered = results.filter((r) => !r.delivered && !r.skipped);
+  if (undelivered.length > 0) {
+    // No channel delivered — the closure guarantee could not reach anyone. Do NOT advance
+    // the back-off (already gated in processResurface); surface it loudly so the dead-channel
+    // condition is itself visible. Retries next tick.
+    console.warn(`[fire-due] WARNING: ${undelivered.length} stale alert(s) had NO delivery channel (Telegram+Discord+Langston all failed/unconfigured) — back-off NOT advanced, retrying next tick: ${undelivered.map((r) => r.id).join(', ')}`);
   }
 }
 
