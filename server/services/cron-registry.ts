@@ -33,7 +33,11 @@ import type { ScheduledTask } from 'node-cron';
 export interface RegisteredCronJob {
   /** Unique name for this schedule. Must match the task_name written to
    * scheduled_tasks_audit on fire. Snake_case convention. Examples:
-   * 'weekend_shutdown', 'xstock_universe_discovery_cron'. */
+   * 'xstock_universe_discovery_cron', 'awareness_state_update_cron'.
+   * (Comment-example scrub, B-ALERT-PROTOCOL 2026-06-24: dropped the former
+   * 'weekend_shutdown' example — that node-cron was retired in B-NEW-52
+   * 2026-06-06; weekend shutdown now runs as a poll-driven audit task, NOT a
+   * registered cron, so it must not appear as a cron-registry example.) */
   name: string;
   /** node-cron ScheduledTask handle, used by smoke test for getNextRun(). */
   task: ScheduledTask;
