@@ -29,6 +29,9 @@ MY_NAME = ALIAS_NAME.get(ALIAS, "")
 MY_RE = re.compile(r"@?\b(" + "|".join(NAMES.get(ALIAS, [])) + r")\b", re.I)
 OTHERS_RE = re.compile(
     r"@?\b(" + "|".join(p for k, v in NAMES.items() if k != ALIAS for p in v) + r")\b", re.I)
+# B-ALERT-PROTOCOL (#340): a system-alert triage reply ends with an owner marker
+# [[ALERT id=.. owner=<CC-A|CC-B|Kyle> action=".."]] — authoritative wake routing.
+ALERT_OWNER_RE = re.compile(r"\[\[ALERT\b[^\]]*\bowner=(CC-A|CC-B|Kyle)\b", re.I)
 
 def addressed_to_me(text):
     """Return (deliver?, text)."""
@@ -73,6 +76,15 @@ for raw in sys.stdin:
                 if deliver:
                     print(f"WAKE[KYLE-VOICE->{ALIAS}]: {body}", flush=True)
             elif kind == "langston_outbound":
+                # B-ALERT-PROTOCOL (#340): an alert-triage reply ends with an owner marker
+                # [[ALERT .. owner=<CC-A|CC-B|Kyle> ..]] — authoritative routing: owner==me
+                # wakes me; the other CC's marker suppresses (theirs); owner=Kyle wakes no CC
+                # (he sees it in-channel). The marker decides, so we stop here either way.
+                mo = ALERT_OWNER_RE.search(text)
+                if mo:
+                    if mo.group(1).upper() == ALIAS:
+                        print(f"WAKE[ALERT-OWNER->{ALIAS}]: {text}", flush=True)
+                    continue
                 # Wake when Langston (a) uses an explicit wake-tag (broadcast OK), or (b) names
                 # me specifically. NOT on his plain replies to Kyle (no name/tag) — too noisy.
                 if re.search(r"@?CC[- ]?WAKE|wake\s+(up\s+)?(cc|claude\s*code)", text, re.I):

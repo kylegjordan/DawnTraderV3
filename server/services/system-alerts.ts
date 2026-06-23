@@ -337,6 +337,88 @@ export async function resolveAlert(id: string, by: string): Promise<SystemAlert 
   return result;
 }
 
+// ─── B-ALERT-PROTOCOL (#340): no-silent-drop stale-alert re-surface ─────────
+//
+// The closure guarantee: a diagnosed-but-unresolved alert must never rot. This
+// is a PUSH mechanism (re-post + escalate), distinct from the pull-based §10.5
+// per-turn check (we are NOT piling a second patch on that — Langston Step-1).
+// Run from the dispatcher AFTER fireDue() (Langston Step-1 (d): same process,
+// holds the same file lock, no sibling cron). Kept as a SEPARATE PURE function
+// so the "exactly one re-surface per back-off window" invariant is unit-testable.
+//
+// Two-tier TTL (Langston Step-1 (b)): an `active` alert is UN-ACKED — nobody
+// owns it yet, the worse state — so it re-surfaces at the SHORT TTL; an
+// `acknowledged` (owned, being worked) alert gets a LONGER leash. Ack does NOT
+// reset the staleness clock — only `resolve` stops re-surfacing. The back-off
+// WIDENS each re-surface (1× → 2× → 4× TTL); the 2nd+ re-surface escalates to
+// Kyle by name (once it's in front of him the forcing function is done — nudge,
+// don't spam). `info` severity never pushes.
+
+const HOUR_MS = 3_600_000;
+/** Base TTL (ms) for the FIRST re-surface, by state then severity. */
+export const RESURFACE_TTL_MS: Record<'active' | 'acknowledged', Record<'warning' | 'critical', number>> = {
+  active: { critical: 2 * HOUR_MS, warning: 6 * HOUR_MS }, // un-acked = worse state = shorter fuse
+  acknowledged: { critical: 4 * HOUR_MS, warning: 12 * HOUR_MS }, // owned + being worked = longer leash
+};
+
+export interface ResurfaceDecision {
+  alert: SystemAlert;
+  /** This is the Nth re-surface (1-based). */
+  resurfaceCount: number;
+  /** 2nd and later re-surfaces escalate to Kyle by name. */
+  escalateToKyle: boolean;
+}
+
+/**
+ * PURE: which non-resolved alerts are due to re-surface at `nowMs`. Does not
+ * mutate — the caller posts each + calls markResurfaced(). The staleness clock
+ * runs from `fired_at` (or a re-surface), NEVER from `acknowledged_at` (ack must
+ * not reset it — only resolve stops re-surfacing); acking only swaps the alert
+ * onto the longer-leash TTL tier.
+ */
+export function computeResurfaceStale(alerts: SystemAlert[], nowMs: number = Date.now()): ResurfaceDecision[] {
+  const out: ResurfaceDecision[] = [];
+  for (const a of alerts) {
+    if (a.state !== 'active' && a.state !== 'acknowledged') continue; // scheduled/resolved never re-surface
+    if (a.severity === 'info') continue; // info never pushes
+    const baseTtl = RESURFACE_TTL_MS[a.state][a.severity];
+    const firedMs = a.fired_at ? Date.parse(a.fired_at) : Date.parse(a.created_at);
+    const count = typeof a.metadata?.resurface_count === 'number' ? (a.metadata.resurface_count as number) : 0;
+    const lastResurfacedAt = a.metadata?.last_resurfaced_at;
+    const lastMs = typeof lastResurfacedAt === 'string' ? Date.parse(lastResurfacedAt) : firedMs;
+    const gapMs = baseTtl * Math.pow(2, count); // widening back-off: 1×, 2×, 4× …
+    if (nowMs - lastMs >= gapMs) {
+      out.push({ alert: a, resurfaceCount: count + 1, escalateToKyle: count >= 1 });
+    }
+  }
+  return out;
+}
+
+/**
+ * Record that an alert was re-surfaced: bump `metadata.resurface_count` + stamp
+ * `metadata.last_resurfaced_at`. Under lock. Called by the dispatcher AFTER it
+ * posts the re-surface. Returns the updated alert, or null if not found / now
+ * resolved (a race where it resolved between compute and mark — skip).
+ */
+export async function markResurfaced(id: string, nowMs: number = Date.now()): Promise<SystemAlert | null> {
+  ensureFileExists();
+  let result: SystemAlert | null = null;
+  await withLock(() => {
+    const all = readAllAlerts();
+    const found = all.find((a) => a.id === id);
+    if (!found || found.state === 'resolved') return; // resolved between compute+mark → don't re-stamp
+    const count = typeof found.metadata?.resurface_count === 'number' ? (found.metadata.resurface_count as number) : 0;
+    found.metadata = {
+      ...found.metadata,
+      resurface_count: count + 1,
+      last_resurfaced_at: new Date(nowMs).toISOString(),
+    };
+    result = { ...found };
+    writeAllAlertsAtomic(all);
+  });
+  return result;
+}
+
 // ─── Read accessors (no lock — concurrent reads are safe) ─────────────────
 
 export interface ListAlertsOptions {

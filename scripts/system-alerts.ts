@@ -38,11 +38,15 @@ import {
   listAlerts,
   ackAlert,
   resolveAlert,
+  readAllAlerts,
+  computeResurfaceStale,
+  markResurfaced,
   ALERTS_FILE,
   type SystemAlert,
   type AlertCategory,
   type AlertSeverity,
   type AlertState,
+  type ResurfaceDecision,
 } from '../server/services/system-alerts.js';
 import * as fs from 'node:fs';
 
@@ -245,6 +249,48 @@ async function pushToDiscord(alert: SystemAlert): Promise<void> {
   }
 }
 
+// ─── B-ALERT-PROTOCOL (#340): no-silent-drop re-surface ─────────────────────
+// A stale unresolved alert is re-POSTED through the same alerts-webhook path so
+// it re-appears in Discord, Langston re-engages (re-emits the owner marker → the
+// owner CC is re-woken to chase closure), and Kyle is escalated by name on the
+// 2nd+ re-surface. Reuses every existing path; the widening back-off (in
+// computeResurfaceStale) keeps it a nudge, not a spam.
+
+function resolveAlertsWebhookUrl(): string | null {
+  let webhookUrl = process.env.ALERTS_DISCORD_WEBHOOK_URL || null;
+  if (!webhookUrl) {
+    const file = process.env.ALERTS_DISCORD_WEBHOOK_FILE || '/etc/langston/discord-alerts-webhook.env';
+    if (fs.existsSync(file)) {
+      const line = fs.readFileSync(file, 'utf-8').split('\n').find((l) => l.includes('ALERTS_WEBHOOK_URL='));
+      if (line) webhookUrl = line.split('=').slice(1).join('=').trim();
+    }
+  }
+  return webhookUrl;
+}
+
+function formatResurfaceTextDiscord(d: ResurfaceDecision, nowMs: number): string {
+  const a = d.alert;
+  const owner = a.acknowledged_by ? `owned by ${a.acknowledged_by}` : 'UNCLAIMED — nobody has acked it';
+  const firedMs = a.fired_at ? Date.parse(a.fired_at) : Date.parse(a.created_at);
+  const hrs = Math.max(0, Math.round((nowMs - firedMs) / 3_600_000));
+  const kyle = d.escalateToKyle
+    ? `\n\n**Kyle — this alert has been open ~${hrs}h with no resolution. Please push it to closure or reassign.**`
+    : '';
+  const text =
+    `⏰ **ALERT RE-SURFACE #${d.resurfaceCount} — STILL UNRESOLVED (${a.severity.toUpperCase()})**\n` +
+    `**${a.title}** — ${owner}, open ~${hrs}h.\n${a.body.slice(0, 600)}\n` +
+    `_Category:_ ${a.category}  ·  _Alert ID:_ \`${a.id}\`  ·  close it: \`resolve ${a.id} --by <you>\`${kyle}`;
+  return text.length > 1900 ? text.slice(0, 1900) + '…' : text;
+}
+
+async function pushResurface(d: ResurfaceDecision, nowMs: number): Promise<void> {
+  const webhookUrl = resolveAlertsWebhookUrl();
+  if (webhookUrl) {
+    const ok = await discordWebhookSend(webhookUrl, formatResurfaceTextDiscord(d, nowMs));
+    if (ok) console.log(`[fire-due] re-surfaced ${d.alert.id} to Discord (#${d.resurfaceCount}${d.escalateToKyle ? ', escalated to Kyle' : ''})`);
+  }
+}
+
 /**
  * Single-quote a string for safe inclusion in a remote `sudo -u langston bash`
  * argv. Wraps in single quotes and escapes embedded single quotes via the
@@ -348,19 +394,32 @@ async function cmdFireDue(): Promise<void> {
   const promoted = await fireDue();
   if (promoted.length === 0) {
     console.log('[fire-due] no scheduled alerts due');
-    return;
+  } else {
+    console.log(`[fire-due] promoted ${promoted.length} alert(s) to active`);
+    for (const alert of promoted) {
+      console.log(`  - ${alert.id} [${alert.severity}] ${alert.title}`);
+      // B-NEW-43 Phase 4 (2026-05-23, RUNNING_ISSUES #135 fix):
+      //   - Telegram push routes by severity (critical → DM + group topic 21;
+      //     warning → group topic 21 only; info → no push).
+      //   - Langston SSH invoke for warning + critical so a Langston session
+      //     runs and performs §10.5 surfacing on his side. Fire-and-forget.
+      await pushToTelegram(alert);
+      await pushToDiscord(alert); // B-DISCORD OBJ-5: also post to the Discord alerts webhook (inert until provisioned)
+      await invokeLangstonForAlert(alert);
+    }
   }
-  console.log(`[fire-due] promoted ${promoted.length} alert(s) to active`);
-  for (const alert of promoted) {
-    console.log(`  - ${alert.id} [${alert.severity}] ${alert.title}`);
-    // B-NEW-43 Phase 4 (2026-05-23, RUNNING_ISSUES #135 fix):
-    //   - Telegram push routes by severity (critical → DM + group topic 21;
-    //     warning → group topic 21 only; info → no push).
-    //   - Langston SSH invoke for warning + critical so a Langston session
-    //     runs and performs §10.5 surfacing on his side. Fire-and-forget.
-    await pushToTelegram(alert);
-    await pushToDiscord(alert); // B-DISCORD OBJ-5: also post to the Discord alerts webhook (inert until provisioned)
-    await invokeLangstonForAlert(alert);
+
+  // B-ALERT-PROTOCOL (#340): no-silent-drop closure guarantee. Runs EVERY dispatch
+  // tick (independent of whether anything was promoted) — re-surfaces stale
+  // unresolved alerts so a diagnosed-but-unfixed alert can never silently rot.
+  const nowMs = Date.now();
+  const stale = computeResurfaceStale(readAllAlerts(), nowMs);
+  if (stale.length > 0) {
+    console.log(`[fire-due] re-surfacing ${stale.length} stale unresolved alert(s)`);
+    for (const d of stale) {
+      await pushResurface(d, nowMs);
+      await markResurfaced(d.alert.id, nowMs);
+    }
   }
 }
 

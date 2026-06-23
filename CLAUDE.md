@@ -593,6 +593,8 @@ Every CC session — both CC (this) and Langston — must perform this check **b
 
 **Queue contents:** scheduled verifications (e.g., 14-day soak verification), one-off reminders, recurring health checks, breakage triggers. Dispatcher cron on staging promotes scheduled events to active when `triggers_at` arrives. See `Claude Comms and Packages/Scope Files/B_NEW_40_SCOPE.md` §2.8 for architecture.
 
+**★ Post-diagnosis handling (B-ALERT-PROTOCOL #340, 2026-06-23):** the per-turn check above is the PULL side (read + surface). What happens AFTER an alert is diagnosed — who owns the follow-through, the ack=owned / resolve=fixed discipline, the per-class action table, and the no-silent-drop re-surface closure guarantee — is the definitive process in **`1-system-manual/ALERT_HANDLING_PROTOCOL.md`**. Short version: Langston's triage ends with `[[ALERT id=.. owner=<CC-A|CC-B|Kyle> action=".."]]` → the wake routes to the owner → owner `ack --by` (claims) → does the work → `resolve --by` (the ONLY thing that stops the dispatcher re-surfacing it on a widening back-off + escalating to Kyle).
+
 ---
 
 ## 11. Kyle Preferences

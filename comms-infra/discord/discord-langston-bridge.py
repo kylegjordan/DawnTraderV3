@@ -328,10 +328,18 @@ def process_task(task, state, breaker, task_q=None):
         # B-LANGSTON-QUEUE: a self-advance re-invoke carries its own queue-item prompt; use as-is.
         addressed_prompt = prompt
     elif task.get("is_alert"):
+        # B-ALERT-PROTOCOL (#340): triage in plain language to Kyle, THEN assign the
+        # follow-through owner on a single machine-parseable LAST line so the alert is
+        # tracked to closure and the owning CC is woken (the wake filter routes on it).
         addressed_prompt = ("[Discord SYSTEM ALERT — routed to you from the §10.5 alert dispatcher. "
-                            "Assess it and respond with your triage in one or a few lines: severity, "
-                            "likely cause, and whether action is needed now or it is FYI. Do NOT reply "
-                            "with [SILENT].]\n\n" + prompt)
+                            "Assess it and respond with your triage to Kyle in plain language (a few lines): "
+                            "what it means, the likely cause, and whether action is needed now or it is FYI. "
+                            "Do NOT reply with [SILENT]. THEN end your reply with a single machine-parseable "
+                            "LAST line assigning who must carry the follow-through to closure:\n"
+                            "[[ALERT id=<the Alert ID shown in the alert> owner=<CC-A|CC-B|Kyle> action=\"<one line>\"]]\n"
+                            "Owner guide (your domain read OVERRIDES the category): governance/comms → CC-A; "
+                            "trading-engine/breakage → CC-B; needs Kyle's decision → Kyle. If genuinely no action "
+                            "is needed, still emit the marker as owner=Kyle action=\"FYI — no action needed\".]\n\n" + prompt)
     else:
         addressed_prompt = ("[Discord: you have been directly addressed by name. Respond substantively in "
                             "one or a few lines. Do NOT reply with [SILENT] — on this channel you only "
