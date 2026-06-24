@@ -408,7 +408,14 @@ Both bridges detect voice/audio Telegram messages and transcribe locally via `wh
 
 **Mechanics (re-arm EVERY session start — MEMORY.md session-start item 4.5 is the canonical command):** persistent Monitor running a self-healing SSH loop tailing the three Helsinki sources through the filter `C:\Users\kyleg\.claude\cc-wake-filter.py <ALIAS>`. The filter holds the name registry (adding a session = one registry line) and forces UTF-8 output (Windows cp1252 pipe encoding silently killed non-ASCII events — fixed 2026-06-11). Watcher dies with the session; the self-healing loop survives SSH drops and announces reconnects.
 
-**Limitation (honest):** the watcher lives inside an OPEN desktop session. Closed session = no wake (a known Claude Code platform gap — official feature requests for persistent external wake are open). Mitigation = the session-start re-arm step.
+**Limitation (honest):** the watcher lives inside an OPEN desktop session. Closed session = no wake (a known Claude Code platform gap). Within an open session, the OTHER killer is **context COMPACTION**, which destroys the watcher Monitor + all background tasks (documented Claude Code behavior — GitHub issue #25188) — this is why the watcher "works sometimes, not others."
+
+**★ RELIABILITY HARDENING (Kyle directive 2026-06-24, after an investigation of Anthropic docs + GitHub).** Re-arm is NOT once-per-session. Three layers, all of which survive compaction because they live OUTSIDE the conversation:
+1. **A `SessionStart` hook** (`matcher: "startup|resume|compact"`, in `.claude/settings.local.json`) auto-injects a re-arm reminder on every session start, resume, AND **post-compaction** — the compaction-proof trigger. It only `echo`s the reminder (no background process, so it avoids the pipe-blocking gotcha, GitHub #43123); the model arms the Monitor on its continuation turn.
+2. **The re-arm rule in BOTH this file (§6.9) and MEMORY item 4.5** — so the reloaded post-compaction context always carries it (Anthropic's documented best practice — files reload after compaction, in-session state does not).
+3. **Verify every turn:** a cheap `TaskList` check at the top of a turn; **re-arm ONLY if the watcher is absent** (never blind-arm — a duplicate Monitor double-wakes). Always re-arm after a compaction; then sweep the Discord inbox for anything missed during the gap.
+
+Investigated + rejected: Claude Code **Channels** (native Discord/Telegram push) — real + official but CLI-only (Kyle stays on the desktop app where the session context lives) and a flaky research preview; **session-scoped cron / a Monitor "heartbeat"** — both die on compaction exactly like the watcher, so they are NOT reliable backstops (only hooks + desktop-scheduled-tasks survive compaction). The honest residual: a watcher death from a NON-compaction cause while fully idle is uncovered, but that is rare (the self-healing SSH loop handles drops); a fully-closed session is the unfixable platform gap.
 
 ### 6.10 Remote Control + push-when-blocked (Kyle directive 2026-06-16) — DON'T be the bottleneck
 
