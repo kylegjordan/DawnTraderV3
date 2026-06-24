@@ -70,6 +70,14 @@ const KYLE_DM_CHAT_ID = 8734856533; // Kyle's private DM chat with @CCDTCommsBot
 const TELEGRAM_GROUP_CHAT_ID = -1003575211453; // Dawn Trader HQ group
 const TELEGRAM_BATCH_THREAD = 21; // Batch Implementation topic
 
+// B-DISCORD isolation (2026-06-24, Kyle directive): during the Discord-only test window, suppress the
+// Telegram alert legs — the alert post (pushToTelegram) AND the Telegram langston-alert-handler invoke
+// (invokeLangstonForAlert, which posts Langston's triage to Telegram) — so alerts + Langston's alert
+// triage flow over Discord ONLY. The Discord webhook path still engages Langston (the bridge
+// always-engages on the alerts webhook_id), so closure coverage is unchanged. Env-gated = a reversible
+// flip, not a code rollback; becomes moot/removable at the comms cutover (#333).
+const ALERT_DISCORD_ISOLATION = process.env.ALERT_DISCORD_ISOLATION === '1';
+
 // B-NEW-43 Phase 4 (2026-05-23, RUNNING_ISSUES #135 fix): the pre-fix
 // dispatcher only pushed `critical` severity to Kyle's DM. Warning-tier soak-
 // verification alerts (which are the majority) were silently promoted to
@@ -391,9 +399,9 @@ async function cmdFireDue(): Promise<void> {
       //     warning → group topic 21 only; info → no push).
       //   - Langston SSH invoke for warning + critical so a Langston session
       //     runs and performs §10.5 surfacing on his side. Fire-and-forget.
-      await pushToTelegram(alert);
+      if (!ALERT_DISCORD_ISOLATION) await pushToTelegram(alert);
       await pushToDiscord(alert); // B-DISCORD OBJ-5: also post to the Discord alerts webhook (inert until provisioned)
-      await invokeLangstonForAlert(alert);
+      if (!ALERT_DISCORD_ISOLATION) await invokeLangstonForAlert(alert);
     }
   }
 
@@ -406,10 +414,10 @@ async function cmdFireDue(): Promise<void> {
   const nowMs = Date.now();
   const results = await processResurface(nowMs, async (alert, d) => {
     const framed = frameResurface(alert, d, nowMs);
-    const t = await pushToTelegram(framed);
+    const t = ALERT_DISCORD_ISOLATION ? false : await pushToTelegram(framed);
     const dc = await pushToDiscord(framed);
-    const lg = await invokeLangstonForAlert(framed);
-    return t || dc || lg; // delivered iff ANY sink succeeded
+    const lg = ALERT_DISCORD_ISOLATION ? false : await invokeLangstonForAlert(framed);
+    return t || dc || lg; // delivered iff ANY sink succeeded (Discord only when isolation is on)
   });
   const delivered = results.filter((r) => r.delivered);
   if (delivered.length > 0) {
