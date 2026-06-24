@@ -27,7 +27,8 @@ export type SkipReason =
   | 'Confidence_Floor'  // 11.7S: Mode-specific confidence threshold not met
   | 'Target_Unreachable'   // reorg-B2: reachability gate — atrsToTarget > reachAtrMax (feasibility drop)
   | 'Target_RR_Gate'       // reorg-B2: universal RR gate — rr < minRR after the floor-lift
-  | 'Target_Invalid_ATR';  // reorg-B2: ATR genuinely unavailable (wiring/data bug — LOUD, never masked)
+  | 'Target_Invalid_ATR'   // reorg-B2: ATR genuinely unavailable (wiring/data bug — LOUD, never masked)
+  | 'Target_Invalid_Geometry'; // reorg-B3.2: malformed entry/stop/target geometry — a data-validity DROP on the VTS path (distinct from the quality gates, which now tag-don't-drop)
 
 export interface SkippedSignalEntry {
   timestamp: string;

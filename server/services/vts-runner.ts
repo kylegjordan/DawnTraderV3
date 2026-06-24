@@ -556,6 +556,12 @@ interface OpenVirtualTrade {
   // exit loop can route to the correct per-class config without a lookup.
   // Populated at trade-open via resolveAssetClass(symbol, exchange).
   assetClass: AssetClass;
+  // reorg-B3.2 (2026-06-24): the reorg-B2 quality-gate verdict this trade carries. 'passed' = cleared
+  // the RR/reachability gate; 'rr_below_min'/'unreachable' = the active path would suppress it but the
+  // VTS tags-and-simulates it for learning data. Optional — older in-flight trades + non-gated paths
+  // omit it (treated as 'passed'/unknown). Lets analysis filter the VTS population to the gate-passing
+  // "what active would do" subset.
+  vtsGateVerdict?: 'passed' | 'rr_below_min' | 'unreachable';
   // B-NEW-36 (2026-05-20): lifecycle marker hydrated from vts_open_trades.state.
   // 'open' = normal active trade (default; new inserts get DB DEFAULT 'open').
   // 'weekend_suspended' = paused by the off-hours session-lifecycle controller
@@ -1185,21 +1191,42 @@ async function generatePhase10Signal(
     floorPct: _b2Gate.floorPct, minRR: _b2Gate.minRR,
     atr: mceContext.indicators.atr, reachAtrMax: _b2Gate.reachAtrMax,
   });
+  // reorg-B3.2 (2026-06-24, CC-B + Langston + Kyle consensus): VTS = TAG-DON'T-DROP for the QUALITY/EV
+  // gates. The reorg-B2 gate, wired here for sim-to-live target parity, collapsed VTS volume 95-97%
+  // (opens ~150/day → 3-5/day, staging-confirmed) by hard-dropping every gated signal — strangling the
+  // learning engine AND making reorg-B2.3 CIRCULAR (you cannot calibrate the RR floor from a population
+  // the floor already filtered; only the REALIZED win/loss of rejected trades can falsify the floor).
+  // Fix: on the VTS (telemetry-only learning) path, the QUALITY gates (rr_below_min, unreachable) now
+  // LABEL the trade with their verdict and let it simulate to a close with the strategy's NATIVE target
+  // — capturing the counterfactual outcome the active gate would reject. Only DATA-VALIDITY failures
+  // (invalid_atr, invalid_geometry) still DROP, because simulating garbage isn't learning signal. The
+  // ACTIVE + LIVE paths keep the gate SUPPRESSING (same gate eval, different disposition per path); the
+  // verdict rides onto the trade record (vtsGateVerdict, below) so analysis can always filter back to
+  // the gate-passing "what active would do" view.
+  let vtsGateVerdict: 'passed' | 'rr_below_min' | 'unreachable' = 'passed';
   if (!_b2.ok) {
-    if (_b2.reason === 'invalid_atr') {
-      // LOUD: ATR genuinely unavailable on the VTS path — a wiring/data bug, NEVER silently masked as a
-      // feasibility drop (full parity with the active path; Langston Step-4). Hiding it corrupts the one
-      // thing VTS exists for — clean learning-data diagnostics.
-      console.error(`[reorg-B2][TARGET_GATE][VTS][INVALID_ATR] ${symbol}/${strategy} — ATR unavailable (mceContext.indicators.atr missing). Wiring bug — investigate.`);
-      logSkippedSignal({ symbol, reason: 'Target_Invalid_ATR', regime, strategy, source: 'VTS' });
-      setNullReason('target_invalid_atr');
+    if (_b2.reason === 'rr_below_min' || _b2.reason === 'unreachable') {
+      // QUALITY/EV gate: TAG-AND-SIMULATE on the VTS learning path (no drop). POSITIVE-NARROW on the two
+      // quality reasons so vtsGateVerdict assigns type-safely under strict-null — TargetNormalizeResult
+      // is a FLAT type, so `!_b2.ok` does NOT narrow `_b2.reason` (Langston Step-4 catch). This also
+      // future-proofs: a NEW reason added to the normalizer later falls through to the DROP default
+      // below rather than being silently mistagged as a quality verdict.
+      vtsGateVerdict = _b2.reason;
+      console.log(`[reorg-B3.2][VTS][TAG_NO_DROP] ${symbol}/${strategy} would-gate=${_b2.reason} rr=${_b2.rr.toFixed(2)} — simulating anyway for learning data (active path still suppresses).`);
     } else {
-      logSkippedSignal({ symbol, reason: _b2.reason === 'unreachable' ? 'Target_Unreachable' : 'Target_RR_Gate', regime, strategy, source: 'VTS' });
-      setNullReason(_b2.reason === 'unreachable' ? 'target_unreachable' : 'target_rr_gate');
+      // DROP — data-validity garbage (invalid_atr, invalid_geometry, or any unknown/missing reason),
+      // never a learning signal. invalid_atr stays LOUD (wiring/data bug, full parity with the active path).
+      if (_b2.reason === 'invalid_atr') {
+        console.error(`[reorg-B2][TARGET_GATE][VTS][INVALID_ATR] ${symbol}/${strategy} — ATR unavailable (mceContext.indicators.atr missing). Wiring bug — investigate.`);
+      }
+      logSkippedSignal({ symbol, reason: _b2.reason === 'invalid_atr' ? 'Target_Invalid_ATR' : 'Target_Invalid_Geometry', regime, strategy, source: 'VTS' });
+      setNullReason(_b2.reason === 'invalid_atr' ? 'target_invalid_atr' : 'target_invalid_geometry');
+      return null;
     }
-    return null;
   }
-  const takeProfit = _b2.targetPrice;
+  // Gate PASSED → _b2.targetPrice (reorg-B2.1 dropped the floor-lift, so this already equals the native
+  // target). TAG-DON'T-DROP → the strategy's NATIVE target so the realized outcome reflects the real signal.
+  const takeProfit = _b2.ok ? _b2.targetPrice : strategySignal.targetPrice;
 
   // Batch 47f15: Setup-hash suppression — block re-entry if same entry/stop/target
   const setupKey = `${symbol}:${strategy}`;
@@ -1601,6 +1628,11 @@ async function generatePhase10Signal(
     globalDirectionalBiasScore: getLastGlobalDBSScore(tradeAssetClass) ?? undefined,
     filterTier,  // HF9: IMF filter tier from FX5 scanner
     sourcePool: sourcePool,  // Batch 37: Propagate as-is, no fallback
+    // reorg-B3.2: the quality-gate verdict this VTS trade carries. 'passed' = cleared the reorg-B2
+    // RR/reachability gate; 'rr_below_min'/'unreachable' = the active path WOULD have suppressed it but
+    // the VTS tags-and-simulates anyway (learning data). Lets analysis filter to the gate-passing
+    // "what active would do" subset — so un-gating the VTS adds data without losing the realistic view.
+    vtsGateVerdict,
     // B65.2: snapshot volatility inputs at open for the trailing engine.
     // Defaults match the engine's own defaults when mceContext doesn't carry them.
     atrAtOpen: mceContext.indicators.atr,
