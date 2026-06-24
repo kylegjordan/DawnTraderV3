@@ -70,3 +70,11 @@ desktop.ini
 
 # Langston infrastructure credentials — never commit
 Claude Comms and Packages/Langston/LANGSTON_SETUP_REFERENCE.md
+
+# Runtime-generated files that the server rewrites at runtime → they drift on staging and BLOCK
+# every git pull (Kyle directive 2026-06-24: permanently fix, stop stash-working-around it).
+# logs/ is already ignored above; these are the audit/diagnostics manifests + the checker's runtime state.
+diagnostics/phase2f_route_manifest.json
+audit/phase30-fx4-6-report.md
+scripts/governance-checker/.gov-checker-state.json
+scripts/governance-checker/.gov-checker-shadow.log

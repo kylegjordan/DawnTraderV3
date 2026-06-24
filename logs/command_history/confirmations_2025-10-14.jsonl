@@ -1,3 +1,0 @@
-{"timestamp":"2025-10-14T00:02:03.871Z","userId":"6c591801-3072-431d-b192-30aaf426f15e","username":"testuser123","confirmationId":"confirm_1760400095011_2ihst1hik","confirmed":true,"result":{"success":false,"message":"No active trading engine found"}}
-{"timestamp":"2025-10-14T00:04:02.597Z","userId":"6c591801-3072-431d-b192-30aaf426f15e","username":"testuser123","confirmationId":"confirm_1760400187457_kzxsgd106","confirmed":false,"result":{"success":true,"message":"Command cancelled by user"}}
-{"timestamp":"2025-10-14T00:05:22.071Z","userId":"6c591801-3072-431d-b192-30aaf426f15e","username":"testuser123","confirmationId":"confirm_1760400269561_fk5c3x3ho","confirmed":false,"result":{"success":true,"message":"Command cancelled by user"}}
