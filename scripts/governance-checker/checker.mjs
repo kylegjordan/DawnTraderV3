@@ -9,7 +9,6 @@
 //    is INERT in production — it only runs on demand (the backtest harness).
 
 import { execFileSync } from 'node:child_process';
-import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 import {
@@ -23,8 +22,43 @@ const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 export const REPO_ROOT = resolve(SCRIPT_DIR, '..', '..');
 
 // ── git ──────────────────────────────────────────────────────────────────────
+// Kyle 2026-06-24 fix: GRADE AGAINST THE PUSHED BRANCH REF, not the working tree. Staging lags origin
+// between deploys, so reading doc files from the working tree made the checker see new batch commits but
+// MISS their (existing) doc files → a flood of false "missing doc" alerts. All commit + file reads now go
+// through GOV_REF after a fetch, so the checker always grades the actual pushed state, never a stale copy.
+const GOV_REF = process.env.GOV_REF || process.env.GOV_BRANCH || 'origin/migration/aws-supabase';
+let _fetchedThisRun = false;
+function ensureFetched() {
+  if (_fetchedThisRun) return;
+  _fetchedThisRun = true;
+  try {
+    const slash = GOV_REF.indexOf('/');
+    const remote = slash > 0 ? GOV_REF.slice(0, slash) : 'origin';
+    const branch = slash > 0 ? GOV_REF.slice(slash + 1) : GOV_REF;
+    execFileSync('git', ['fetch', '--quiet', remote, branch],
+      { cwd: REPO_ROOT, encoding: 'utf8', timeout: 60000, stdio: 'pipe' });
+  } catch { /* offline / fetch fail → grade against whatever GOV_REF currently points at */ }
+}
+// list basenames of files directly under `dir` AT GOV_REF; [] if the dir is absent at the ref.
+export function lsTreeNames(dir) {
+  ensureFetched();
+  try {
+    const out = execFileSync('git', ['ls-tree', '--name-only', GOV_REF, `${dir.replace(/\/+$/, '')}/`],
+      { cwd: REPO_ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+    return out.split('\n').filter(Boolean).map((p) => p.split('/').pop());
+  } catch { return []; }
+}
+// read a file's content AT GOV_REF; null if the file is absent at the ref.
+export function showFile(relPath) {
+  ensureFetched();
+  try {
+    return execFileSync('git', ['show', `${GOV_REF}:${relPath}`],
+      { cwd: REPO_ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+  } catch { return null; }
+}
 export function gitLog(n = 200) {
-  const out = execFileSync('git', ['log', `-n${n}`, '--pretty=COMMIT|%H|%cI|%s', '--name-only'],
+  ensureFetched();
+  const out = execFileSync('git', ['log', GOV_REF, `-n${n}`, '--pretty=COMMIT|%H|%cI|%s', '--name-only'],
     { cwd: REPO_ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
   const commits = [];
   let cur = null;
@@ -56,10 +90,8 @@ export function classifyCommit(files) {
 // doc's `match` pattern exist? Returns the matching path(s).
 export function findGlobDoc(batchId, docKey) {
   const spec = DOCS[docKey];
-  const dir = join(REPO_ROOT, spec.dir);
-  if (!existsSync(dir)) return [];
   const re = batchIdToFileRegex(batchId);
-  return readdirSync(dir)
+  return lsTreeNames(spec.dir)
     .filter((name) => re.test(name) && spec.match.test(name))
     .map((name) => join(spec.dir, name));
 }
@@ -67,9 +99,8 @@ export function findGlobDoc(batchId, docKey) {
 // entry doc: does the batch-id appear inside the shared append-style doc?
 export function findEntryDoc(batchId, docKey) {
   const spec = DOCS[docKey];
-  const p = join(REPO_ROOT, spec.path);
-  if (!existsSync(p)) return false;
-  const content = readFileSync(p, 'utf8');
+  const content = showFile(spec.path);
+  if (content === null) return false;
   return batchIdToFileRegex(batchId).test(content);
 }
 
@@ -92,9 +123,9 @@ export function netContentLines(text) {
     !/^[-=_*]{3,}$/.test(l));
 }
 export function isHollowFile(relPath) {
-  const p = join(REPO_ROOT, relPath);
-  if (!existsSync(p)) return true;
-  return netContentLines(readFileSync(p, 'utf8')).length <= HOLLOW_NET_LINE_FLOOR;
+  const content = showFile(relPath);
+  if (content === null) return true;
+  return netContentLines(content).length <= HOLLOW_NET_LINE_FLOOR;
 }
 
 // ── pre-audit structural check (Obj-4) ─────────────────────────────────────────
@@ -105,7 +136,7 @@ const CITES_MANUAL = /SYSTEM_MANUAL|System Manual/i;
 export function preAuditStructure(batchId) {
   const paths = findGlobDoc(batchId, 'pre_audit');
   if (paths.length === 0) return { filed: false };
-  const text = readFileSync(join(REPO_ROOT, paths[0]), 'utf8');
+  const text = showFile(paths[0]) || '';
   const fileLineCount = (text.match(new RegExp(FILE_LINE, 'g')) || []).length;
   return {
     filed: true,
@@ -155,16 +186,14 @@ export function recentBatchIds(n = 200) {
 // `change-class:` marker. Returns { class, declared, scopePath } — class falls back to
 // DEFAULT_CLASS (strictest) when undeclared/missing/unparseable (fail-closed, Langston).
 export function readDeclaredClass(batchId) {
-  const dir = join(REPO_ROOT, SCOPE_DIR);
-  if (!existsSync(dir)) return { class: DEFAULT_CLASS, declared: false, scopePath: null, reason: 'no-scope-dir' };
   const re = batchIdToFileRegex(batchId);
   // prefer a file whose name has the batch-id AND looks like a scope (not pre-audit/change-list)
   // .sort() for deterministic selection when a batch has multiple scope files (Langston Step-4 a).
-  const candidates = readdirSync(dir).filter((n) => re.test(n) && /SCOPE/i.test(n)).sort();
+  const candidates = lsTreeNames(SCOPE_DIR).filter((n) => re.test(n) && /SCOPE/i.test(n)).sort();
   if (candidates.length === 0) return { class: DEFAULT_CLASS, declared: false, scopePath: null, reason: 'no-scope-file' };
   for (const name of candidates) {
-    let text;
-    try { text = readFileSync(join(dir, name), 'utf8'); } catch { continue; }
+    const text = showFile(join(SCOPE_DIR, name));
+    if (text === null) continue;
     const m = text.match(CHANGE_CLASS_MARKER);
     if (m) {
       const cls = m[1].toLowerCase();
