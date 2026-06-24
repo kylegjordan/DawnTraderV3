@@ -77,4 +77,20 @@ too) — the right lens is the TAG_NO_DROP markers + `signalsGenerated`/opens ov
 `morning-star`, `orb`, `pivot-shift`, `reverse-impulse`, `strong-bull-trend`, `support-bounce`,
 `volatility-edge`), + `server/tests/unit/reorg-b3-3-guard-disposition.test.ts`.
 
-**Status:** awaiting Step-7 climb confirmation + Langston Step-8 + Kyle acknowledgment to CLOSE.
+## Step-8 — Langston independent verify: ✅ PASS
+
+Langston independently confirmed on staging (`ssh deploy@188.245.193.8`, not from this report): code head
+`ed9b8b626`, restart#413 online, CI `28118347545`; **10 `[VTS][TAG_NO_DROP]` markers firing since 17:57Z**
+(`USDC/AUD/strong_bull_trend rr=2.00`, `USDT/GBP/volatility_edge`) — the strategy-level un-strangle confirmed
+working ("the real fix B3.2 wasn't"). Governance `6fc8d9d03` clears his §16 gate (SYSTEM_MANUAL +15 lines
+content not just a TOC touch; SIM §1.2a-2 registry-applicability call reasoned correctly).
+
+**Edge resolution (the `rr=-0.00` finding) — Langston's call: RECLASSIFY.** `target<=entry` / `reward<=0`
+is degenerate geometry (Net-Expectancy noise), NOT a low-RR-but-valid counterfactual — it belongs in the
+validity-DROP bucket. The normalizer's `invalid_geometry` is asymmetric (nets `stop>=entry`, misses the
+reward leg). **Named home (§13): reorg-B3.3y** (RUNNING_ISSUES #383 + PHASE_19_PLAN) — a tiny crypto-normalizer
+symmetric-`invalid_geometry` fix + unit test, kept separate from B3.3x. Interim contamination bounded (the VTS
+Net-EV floor rejects a reward≤0 trade from opening). **Non-blocking** for B3.3 closure.
+
+**Status:** ✅ all 11 steps complete; Langston Step-8 PASS; reorg-B3.3y (#383) named per §13. **Code +
+governance deployed/pushed, CI 4-green, sync 0/0. Awaiting only Kyle's acknowledgment to formally CLOSE.**
