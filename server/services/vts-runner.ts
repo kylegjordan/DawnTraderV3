@@ -3104,6 +3104,12 @@ export interface RegisterOpenVtsTradeInput {
   // B-5 AMR: at-open weather stamp.
   amrClassification?: string;
   amrMode?: string;
+  // reorg-B3.3x: the VTS quality-gate verdict (the shared normalizer's reorg-B3.2 tag-don't-drop output).
+  // 'passed' cleared the RR/reachability gate; 'rr_below_min'/'unreachable' = the active path WOULD suppress
+  // it but VTS tags + simulates. Lands on the same in-memory OpenVirtualTrade record crypto's inline path uses
+  // (vts-runner ~:1649). In-memory-only — there is NO DB column (reorg-B3.2 no-migration; re-derivable from
+  // geometry). The xStock eval-cycle now passes it so xStock VTS trades carry the verdict at parity with crypto.
+  vtsGateVerdict?: 'passed' | 'rr_below_min' | 'unreachable';
 }
 
 /**
@@ -3184,6 +3190,10 @@ export async function registerOpenVtsTrade(input: RegisterOpenVtsTradeInput): Pr
     amrClassification: input.amrClassification ?? _amrWeatherMod?.getAmrWeatherReport(input.assetClass)?.classification,
     amrMode: input.amrMode ?? _amrWeatherMod?.getAmrWeatherReport(input.assetClass)?.resolvedMode ?? undefined,
     sourcePool: input.sourcePool,
+    // reorg-B3.3x: thread the caller's VTS gate verdict onto the shared OpenVirtualTrade record (parity with
+    // crypto's inline path). undefined → the OpenVirtualTrade optional field defaults; crypto callers that
+    // don't pass it are unaffected.
+    vtsGateVerdict: input.vtsGateVerdict,
     atrAtOpen: input.atrAtOpen,
     diAtOpen: 50,
     volNoiseAtOpen: 0.3,

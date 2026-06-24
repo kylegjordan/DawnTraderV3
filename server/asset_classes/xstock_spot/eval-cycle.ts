@@ -68,6 +68,11 @@ import { evaluateXstockFamilyIMF } from './imf-evaluator.js';
 import { evaluateXstockPatternFilter } from './pattern-filter.js';
 import { scanPatterns } from '../../services/pattern-recognizer.js';
 import { computeNetExpectancyKernel } from '../../core/calculations/net-expectancy-kernel.js';
+// reorg-B3.3x (2026-06-24): the SHARED VTS gate (reorg-B2 normalizer + reorg-B3.2 tag-don't-drop +
+// reorg-B3.3y target<=entry validity) — the same one crypto vts-runner runs. Unifies xStock VTS gating
+// onto the one SSOT instead of a hand-rolled second copy (Langston Option B).
+import { normalizeAndGateTarget } from '../../core/calculations/signal-target-normalizer.js';
+import { getPerClassTargetGate } from '../../core/calculations/expectancy.js';
 import { computeRealHybridScore, computeRealDecayPenalty } from '../../core/utils/vts-real-score.js';
 import { getPredictiveConfidence } from '../../core/utils/score-calculator.js';
 import { calculateRegimeScore } from '../../core/metrics/market-regime.js';
@@ -530,6 +535,8 @@ export async function evaluateXstockPairForVTS(
             stratPatternInput as any,
             symbol,
             ASSET_CLASS,
+            'tag', // reorg-B3.3x: xStock VTS un-strangle — the strategy guard no longer hard-drops quality
+                   // fails (rr_below_min/unreachable); the shared normalizer below tags + simulates them.
           );
         } catch (detectErr) {
           counters.errors++;
@@ -620,6 +627,68 @@ export async function evaluateXstockPairForVTS(
         const decayPenalty = computeRealDecayPenalty();
         const finalScore = computeFinalScore(hybridScore, predictiveConfidence, regimeWeight, decayPenalty);
 
+        // archiveSignalEval + archiveCommon HOISTED here (reorg-B3.3x) so the shared-normalizer validity-drop
+        // below can archive with the same fields as the downstream rejects. (Was declared just below the kernel.)
+        const { archiveSignalEval } = await import('../../services/data-archive/signal-eval-archiver.js');
+        const archiveCommon = {
+          symbol,
+          exchange: 'kraken',
+          assetClass: ASSET_CLASS,
+          source: 'vts-runner' as const,
+          strategy: strategyKey,
+          regimeLabel: regime ?? undefined,
+          finalScore,
+        };
+
+        // reorg-B3.3x (2026-06-24, Langston Option B): the SHARED VTS gate — the SAME `normalizeAndGateTarget`
+        // crypto runs at `vts-runner:~1189` (reorg-B2 RR/reachability + reorg-B3.2 tag-don't-drop + reorg-B3.3y
+        // `target<=entry` validity). xStock VTS lacked it (build-history gap, B79.0m); unified here onto the one
+        // SSOT instead of a hand-rolled second copy. Sequenced BEFORE the Net-EV floor (:~660) and ORTHOGONAL to
+        // it (geometry/RR/reachability vs friction-adjusted EV) — a tag'd-through signal still hits that floor
+        // exactly as today. On the VTS learning path the QUALITY gates (`rr_below_min`, `unreachable`) TAG
+        // (`vtsGateVerdict`) + simulate with the NATIVE target; DATA-VALIDITY (`invalid_atr`, `invalid_geometry`)
+        // DROP. The strategy-level un-strangle itself is the `'tag'` arg on `callStrategyDetect` above.
+        const _b3xGate = getPerClassTargetGate(ASSET_CLASS);
+        const _b3x = normalizeAndGateTarget({
+          entryPrice, stopPrice: stopLoss, targetPrice: takeProfit,
+          floorPct: _b3xGate.floorPct, minRR: _b3xGate.minRR,
+          atr: mceContext.indicators.atr, reachAtrMax: _b3xGate.reachAtrMax,
+        });
+        let vtsGateVerdict: 'passed' | 'rr_below_min' | 'unreachable' = 'passed';
+        if (!_b3x.ok) {
+          if (_b3x.reason === 'rr_below_min' || _b3x.reason === 'unreachable') {
+            // QUALITY/EV gate → TAG-AND-SIMULATE on the VTS learning path (native target retained; positive-narrow
+            // on the two quality reasons so `vtsGateVerdict` assigns type-safely — TargetNormalizeResult is flat).
+            vtsGateVerdict = _b3x.reason;
+            console.log(`[reorg-B3.3x][VTS][TAG_NO_DROP] ${symbol}/${strategyKey} would-gate=${_b3x.reason} rr=${_b3x.rr.toFixed(2)} — simulating anyway for learning data (active path still suppresses).`);
+          } else {
+            // DATA-VALIDITY (invalid_atr, invalid_geometry) → DROP; simulating garbage isn't learning signal.
+            if (_b3x.reason === 'invalid_atr') {
+              console.error(`[reorg-B2][TARGET_GATE][VTS][INVALID_ATR] ${symbol}/${strategyKey} — ATR unavailable (mceContext.indicators.atr missing). Wiring bug — investigate.`);
+            }
+            counters.signalsRejectedBySQE++;
+            if (lane.kind === 'pattern') counters.patternSignalsRejected++;
+            else counters.quantSignalsRejected++;
+            counters.byStrategy[strategyKey].rejected++;
+            const _b3xNull = _b3x.reason === 'invalid_atr' ? 'target_invalid_atr' : 'target_invalid_geometry';
+            counters.nullReasonAggregate[_b3xNull] = (counters.nullReasonAggregate[_b3xNull] ?? 0) + 1;
+            try {
+              archiveSignalEval({
+                mode: 'vts',
+                ...archiveCommon,
+                rejectStage: 'sqe',
+                gateDecision: { gate: 'target_normalizer', accepted: false, reason: _b3x.reason },
+                features: { sourcePool: lane.sourcePool, macro: buildMacroSnapshot() },
+                provenance: _provBase
+                  ? { ..._provBase, resolvedStopPrice: stopLoss, resolvedTargetPrice: takeProfit }
+                  : undefined,
+              });
+              counters.signalsArchived++;
+            } catch { counters.archiveFailures++; /* hot path */ }
+            continue;
+          }
+        }
+
         // Net EV gate.
         // B79.0n.MCE: assetClass REQUIRED — this is the xStock eval cycle, so
         // the file-level ASSET_CLASS constant ('xstock_spot') is passed directly.
@@ -644,16 +713,6 @@ export async function evaluateXstockPairForVTS(
           console.warn(`[B79.0m.b2][EVAL_KERNEL_FAIL] ${symbol}/${strategyKey} lane=${lane.sourcePool}: ${kernelErr instanceof Error ? kernelErr.message : kernelErr}`);
           continue;
         }
-        const archiveCommon = {
-          symbol,
-          exchange: 'kraken',
-          assetClass: ASSET_CLASS,
-          source: 'vts-runner' as const,
-          strategy: strategyKey,
-          regimeLabel: regime ?? undefined,
-          finalScore,
-        };
-        const { archiveSignalEval } = await import('../../services/data-archive/signal-eval-archiver.js');
         if (kernelResult.netEV <= VTS_NET_EV_FLOOR) {
           counters.signalsRejectedBySQE++;
           if (lane.kind === 'pattern') counters.patternSignalsRejected++;
@@ -750,6 +809,10 @@ export async function evaluateXstockPairForVTS(
           decayPenalty,
           pool: 'rotational' as const,
           sourcePool: lane.sourcePool,
+          // reorg-B3.3x: the shared-normalizer verdict — 'passed' cleared the RR/reachability gate;
+          // 'rr_below_min'/'unreachable' = the active path WOULD suppress it but VTS tags + simulates
+          // (parity with crypto's vts-runner trade record; the shared registerOpenVtsTrade sink carries it).
+          vtsGateVerdict,
           atrAtOpen: mceContext.indicators.atr,
           pairDirectionalBias: mceContext.directionalBias?.category,
           pairDirectionalBiasScore: mceContext.directionalBias?.score ?? null,
