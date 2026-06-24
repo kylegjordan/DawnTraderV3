@@ -69,10 +69,17 @@ export type TargetNormalizeResult = {
 export function normalizeAndGateTarget(input: TargetNormalizeInput): TargetNormalizeResult {
   const { entryPrice, stopPrice, targetPrice: nativeTarget, minRR, atr, reachAtrMax } = input;
 
-  // Geometry guard (long-only): finite, positive, stop strictly below entry.
+  // Geometry guard (long-only): finite, positive, and BOTH legs valid — `stop < entry < target`.
+  // reorg-B3.3y (2026-06-24): the guard was ASYMMETRIC — it caught a missing RISK leg (`stop >= entry`) but
+  // NOT a missing REWARD leg (`target <= entry`). A `target <= entry` long has reward ≤ 0 — degenerate
+  // geometry that can never pay, NOT a low-RR-but-valid trade. Without this leg it computed signed `rr ≤ 0`
+  // and fell into the `rr_below_min` QUALITY bucket, so on the VTS `'tag'` path (reorg-B3.3) it was
+  // tag-and-simulated instead of dropped (live: `USDT/GBP/volatility_edge rr=-0.00` ~1/min), polluting the
+  // low-RR counterfactual cohort. It belongs on the validity-DROP side, same class as `stop >= entry`. Active
+  // path is unchanged (it already dropped this as `rr_below_min`; now it drops as `invalid_geometry`).
   if (
     !Number.isFinite(entryPrice) || !Number.isFinite(stopPrice) || !Number.isFinite(nativeTarget) ||
-    entryPrice <= 0 || stopPrice <= 0 || stopPrice >= entryPrice
+    entryPrice <= 0 || stopPrice <= 0 || stopPrice >= entryPrice || nativeTarget <= entryPrice
   ) {
     return { ok: false, targetPrice: nativeTarget, rr: 0, atrsToTarget: Number.POSITIVE_INFINITY, lifted: false, reason: 'invalid_geometry' };
   }
