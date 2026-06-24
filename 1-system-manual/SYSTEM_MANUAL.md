@@ -412,6 +412,16 @@ The RR + reachability guard (above) runs the SAME math on every path, but the tw
 
 **Why this matters beyond volume.** Hard-dropping every gated signal made reorg-B2.3 (the per-`(strategy×class)` minRR baseline) CIRCULAR — you cannot calibrate a floor from a population the floor already filtered. Tag-and-simulate captures the realized win/loss of the rejected-but-geometrically-valid trades, so the floor can be set from outcomes on the FULL population. (Known-benign, intentionally-left: the strategy guard's reachability uses clamped ATR vs the normalizer's raw ATR — the guard is strictly stricter, label-neutral on both paths; the normalizer is authoritative for the recorded verdict. RUNNING_ISSUES #382.)
 
+**reorg-B3.3y (2026-06-24) — symmetric geometry validity.** The un-strangle EXPOSED an asymmetric geometry
+guard in `normalizeAndGateTarget`: it dropped a missing RISK leg (`stop >= entry`) as `invalid_geometry` but
+let a missing REWARD leg (`target <= entry`, reward ≤ 0) compute signed `rr ≤ 0` and fall into the
+`rr_below_min` QUALITY-tag bucket — so on the VTS `'tag'` path a degenerate reward≤0 long was simulated
+instead of dropped. Fixed by adding `nativeTarget <= entryPrice` to the guard: **a valid long requires
+`stop < entry < target`**, and a reward≤0 long is now `invalid_geometry` (validity-DROP on every path). The
+active path is unchanged (it already dropped these as `rr_below_min`; now `invalid_geometry` — only the
+reason label moves). This keeps the `rr_below_min` tag cohort to *geometrically-valid-but-low-RR* signals,
+the population reorg-B2.3's floor calibration actually studies.
+
 ---
 
 ## 5. Cost Model (Single Source of Truth)
