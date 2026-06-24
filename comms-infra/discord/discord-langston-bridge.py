@@ -198,11 +198,30 @@ def _self_advance(task_q, channel_id, items, prev_task):
     nxt = lq.pick_next_ready(items)
     if nxt is None:
         return  # queue genuinely clear
+    # C2 (#345): per-ITEM re-fire guard that SURVIVES _cap.reset() (a real inbound resets the CapTracker's
+    # same-id tier, which under sustained chatter let a stuck `ready` item re-fire forever — the churn that
+    # disabled self-advance). If this item already re-fired SAME_ID_CAP times without settling, PARK it
+    # (LOUD) instead of re-invoking; a re-mark clears it. Checked BEFORE the CapTracker (which stays as the
+    # distinct-advance backstop).
+    if lq.item_refire_halt(nxt):
+        if lq.park_unmarked(items, nxt["id"]) is not None:
+            lq.save_queue(QUEUE_FILE, items)
+        dc.rest_send(BOT_TOKEN, channel_id,
+                     f"Kyle — Langston self-advance PARKED queue item {nxt['id']}: it re-fired "
+                     f"{nxt.get('self_advance_refires', lq.SAME_ID_CAP)}x without a settle marker (per-item "
+                     f"runaway guard, survives inbound chatter). Re-mark [[QUEUE id={nxt['id']} status=ready]] "
+                     f"to retry once its blocker clears.", LOG_FILE)
+        log(f"self-advance per-item PARK: id={nxt['id']} refires>={lq.SAME_ID_CAP}")
+        return
     halt, reason = _cap.should_halt()
     if halt:
         dc.rest_send(BOT_TOKEN, channel_id, f"Langston self-advance PAUSED — {reason}", LOG_FILE)
         log(f"self-advance halted: {reason}")
         return
+    lq.register_item_refire(nxt)   # C2: bump the per-item re-fire count BEFORE re-invoking
+    lq.save_queue(QUEUE_FILE, items)  # ...and PERSIST it (Langston Step-4 fix): _self_advance runs after
+    # process_task's own save_queue, and the next cycle is a SEPARATE task that reloads from disk — without
+    # this write the increment is discarded every cycle, the counter stays 0, and item_refire_halt never trips.
     _cap.register_advance(nxt["id"])
     prompt = (f"[Discord SELF-ADVANCE — your previous review is done; work your NEXT queued item NOW. "
               f"id={nxt['id']} gate={nxt['gate_type']} from {nxt['requester']}: {nxt['summary']} "
@@ -224,6 +243,7 @@ def process_task(task, state, breaker, task_q=None):
     """
     channel_id = task["channel_id"]
     msg_id = task["message_id"]
+    enqueued_id = None  # OBJ-A (#345): set to the item id if THIS inbound enqueues a review item — drives the auto-settle below
     is_dm = task["is_dm"]
     kind = task["kind"]
 
@@ -290,9 +310,12 @@ def process_task(task, state, breaker, task_q=None):
             try:
                 items = lq.load_queue(QUEUE_FILE)
                 if not any(it.get("id") == str(msg_id) for it in items):
+                    # OBJ-B (#345): capture a re-fetchable pointer at enqueue (inbox path / repo file / sha).
                     items.append(lq.new_item(msg_id, task.get("author_display") or task.get("author_name", "?"),
-                                             prompt, gate_type=lq.infer_gate_type(prompt)))
+                                             prompt, pointer=lq.extract_pointer(prompt),
+                                             gate_type=lq.infer_gate_type(prompt)))
                     lq.save_queue(QUEUE_FILE, items)
+                    enqueued_id = str(msg_id)  # OBJ-A: this inbound created an item → auto-settle after the reply
             except Exception as e:
                 log(f"queue: enqueue failed (non-fatal): {e}")
 
@@ -341,9 +364,21 @@ def process_task(task, state, breaker, task_q=None):
                             "trading-engine/breakage → CC-B; needs Kyle's decision → Kyle. If genuinely no action "
                             "is needed, still emit the marker as owner=Kyle action=\"FYI — no action needed\".]\n\n" + prompt)
     else:
+        # OBJ-A (#345): if THIS inbound enqueued a review item, instruct Langston to emit a settle marker
+        # on his FIRST pass so the item never lingers `ready` (the old degraded re-pass). The instruction
+        # is CONDITIONAL — emit `done` only if he actually renders a review; if there's nothing to review
+        # he just says so and the bridge auto-settles to `noop` (never falsely marked "reviewed").
+        review_marker_instr = ""
+        if enqueued_id:
+            review_marker_instr = (
+                f" This message was queued as review item id={enqueued_id}. If you ACTUALLY render a review "
+                f"here, END your reply with a queue marker on the LAST line: [[QUEUE id={enqueued_id} status=done]] "
+                f"(or status=blocked on=<CC-A|CC-B|Kyle> want=\"..\" if you need something first, or "
+                f"status=error reason=\"..\"). If on reading it there is nothing to actually review, just say so "
+                f"briefly — do NOT emit a done marker; the bridge will auto-settle the item.")
         addressed_prompt = ("[Discord: you have been directly addressed by name. Respond substantively in "
                             "one or a few lines. Do NOT reply with [SILENT] — on this channel you only "
-                            "receive messages addressed to you.]\n\n" + prompt)
+                            "receive messages addressed to you." + review_marker_instr + "]\n\n" + prompt)
     log(f"handling msg {msg_id} channel={channel_id} kind={kind}: {prompt[:120]}")
     # FRESH session id per invocation (fix 2026-06-21): a completed `claude -p --session-id X`
     # leaves X locked, so REUSING a stable session across calls fails the FIRST attempt EVERY
@@ -411,6 +446,17 @@ def process_task(task, state, breaker, task_q=None):
                                      f"Kyle — Langston replied on queue item {advanced_id} without a status "
                                      f"marker; parked it so the self-advance loop keeps moving (its verdict is "
                                      f"in the Discord prose above). Re-mark done/blocked/error to clear.", LOG_FILE)
+        # OBJ-A (#345): a REAL inbound that enqueued an item must not leave it `ready` (the old degraded
+        # re-pass that re-fed Langston the truncated summary). If his reply already settled it (a marker
+        # targeting enqueued_id), nothing to do; otherwise AUTO-SETTLE to `noop` — it passed the heuristic
+        # gate but produced no review marker, so it is terminally cleared WITHOUT being falsely marked
+        # "done". This makes the settle robust to the model forgetting the marker (Langston Step-1 R1).
+        if enqueued_id and not task.get("self_advance"):
+            already_settled = (marker is not None and marker.get("id") == enqueued_id)
+            if not already_settled:
+                it_a, _ = lq.apply_marker(items, {"id": enqueued_id, "status": "noop"})
+                if it_a is not None:
+                    log(f"queue: OBJ-A auto-settled real-inbound item {enqueued_id} -> noop (no review marker emitted)")
         lq.save_queue(QUEUE_FILE, items)
         if SELF_ADVANCE_ENABLED and not task.get("is_alert"):
             _self_advance(task_q, channel_id, items, task)

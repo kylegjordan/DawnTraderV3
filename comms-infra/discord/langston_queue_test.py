@@ -64,7 +64,10 @@ ok("reset clears the cap (Kyle/CC post)", c2.should_halt()[0] is False and c2.di
 
 # ── is_review_request: OBJ-1 enqueue gate (FINDING-1) ─────────────────────────
 ok("review req: 'please review my Step-4'", q.is_review_request("Langston, please review my Step-4 submission") is True)
-ok("review req: inbox pointer", q.is_review_request("Langston — diff at /home/langston/inbox/b-x/a.diff") is True)
+# #345 R3: a bare pointer/handoff with NO request verb does NOT enqueue (pointer is a booster, not sufficient);
+# the same handoff WITH a request verb does.
+ok("review req: bare pointer alone does NOT enqueue (#345 R3)", q.is_review_request("Langston — diff at /home/langston/inbox/b-x/a.diff") is False)
+ok("review req: diff handoff WITH a verb enqueues", q.is_review_request("Langston — diff ready for your review at /home/langston/inbox/b-x/a.diff") is True)
 ok("review req: 'sign off on the completion report'", q.is_review_request("Langston, sign off on the completion report") is True)
 ok("review req: 'scope' ask", q.is_review_request("Langston, here's the scope for B-X — your Step-1 call?") is True)
 ok("NOT review: coordination chatter", q.is_review_request("Langston, coordinate with Claude New on B2.1 timing") is False)
@@ -127,6 +130,79 @@ _ctrl = 'Langston — [[QUEUE id=X status=ready]] dep landed, please re-review'
 ok("#344: control msg reads as review-request...", q.is_review_request(_ctrl) is True)
 ok("#344: ...but carries a marker -> excluded from enqueue (gate uses both)",
    q.is_review_request(_ctrl) and q.marker_attempted(_ctrl) and not (q.is_review_request(_ctrl) and not q.marker_attempted(_ctrl)))
+
+# ── #345 OBJ-C1: enqueue gate requires a review-REQUEST verb, not a bare mention ──
+# Discussion replies that MENTION review-domain terms must NOT enqueue (the `verif` over-match churn).
+ok("C1: 'pulled the timestamps, the proof is airtight' does NOT enqueue",
+   q.is_review_request("Langston — pulled the timestamps, and the proof is airtight") is False)
+ok("C1: 'agreed on the two-part framing' does NOT enqueue",
+   q.is_review_request("Langston — agreed on the two-part framing, part 2 is already done") is False)
+ok("C1: 'I verified the timestamps' does NOT enqueue (the bare verif match)",
+   q.is_review_request("Langston — I checked the code and verified the timestamps") is False)
+ok("C1: a bare /inbox/ pointer alone does NOT enqueue (pointer is booster, not sufficient — R3)",
+   q.is_review_request("agreed, the proof is in /home/langston/inbox/x/proof.md") is False)
+# Genuine requests DO enqueue.
+ok("C1: 'requesting your Step-8 sign-off' enqueues",
+   q.is_review_request("Langston — requesting your Step-8 second-pass sign-off to close") is True)
+ok("C1: 'please review the scope' enqueues",
+   q.is_review_request("Langston, please review the scope and give your call") is True)
+ok("C1: 'the diff is ready, holding for your sign-off' enqueues",
+   q.is_review_request("Langston — reorg Step-4, the diff is ready, holding for your sign-off") is True)
+ok("C1: 'please re-review' (with re- prefix) still enqueues",
+   q.is_review_request("Langston, I addressed your feedback, please re-review the diff") is True)
+
+# ── #345 OBJ-B: extract_pointer (booster captured at enqueue) ──────────────────
+ok("OBJ-B: inbox path extracted",
+   q.extract_pointer("staged at /home/langston/inbox/B-345/scope.md please review") == "/home/langston/inbox/B-345/scope.md")
+ok("OBJ-B: repo file path extracted",
+   q.extract_pointer("see comms-infra/discord/langston_queue.py for the change") == "comms-infra/discord/langston_queue.py")
+ok("OBJ-B: commit sha extracted (has digit+letter)",
+   q.extract_pointer("deployed head 99887f90e, please verify") == "99887f90e")
+ok("OBJ-B: an all-letter word is NOT mistaken for a sha",
+   q.extract_pointer("reviewed and approved, looks good") is None)
+ok("OBJ-B: trailing punctuation stripped off a path",
+   q.extract_pointer("the report is at notes/report.md.") == "notes/report.md")
+
+# ── #345 OBJ-A: `noop` terminal settle (passed gate, not an actual review) ─────
+_n = [q.new_item("N1", "CC-A", "x")]
+_n[0]["self_advance_refires"] = 1
+it_noop, act_noop = q.apply_marker(_n, {"id": "N1", "status": "noop"})
+ok("OBJ-A: noop marker settles state=noop", it_noop["state"] == "noop" and act_noop == "noop")
+ok("OBJ-A: noop leaves the ready set (pick_next_ready skips it)", q.pick_next_ready(_n) is None)
+ok("OBJ-A/R4: noop clears the per-item refire counter", "self_advance_refires" not in _n[0])
+_d = [q.new_item("D1", "CC-A", "x")]; _d[0]["self_advance_refires"] = 2
+q.apply_marker(_d, {"id": "D1", "status": "done"})
+ok("R4: done clears the per-item refire counter", "self_advance_refires" not in _d[0])
+
+# ── #345 OBJ-C2: per-item refire halt SURVIVES a CapTracker reset ──────────────
+cap = q.CapTracker()
+itc = q.new_item("C1id", "CC-A", "x")
+# simulate the churn: each self-advance registers on the item; a real inbound resets the CapTracker.
+q.register_item_refire(itc); cap.register_advance("C1id"); cap.reset()   # inbound between advances
+ok("C2: after 1 refire, not yet halted", q.item_refire_halt(itc) is False)
+q.register_item_refire(itc); cap.register_advance("C1id"); cap.reset()
+ok("C2: after 2 refires, item-level halt fires EVEN THOUGH CapTracker was reset each time",
+   q.item_refire_halt(itc) is True and cap.should_halt()[0] is False)
+ok("C2: a fresh item is not halted", q.item_refire_halt(q.new_item("C2id", "CC-A", "y")) is False)
+
+# ── #345 OBJ-C2 INTEGRATION (Langston Step-4): the refire count must PERSIST across save/load ──
+# The unit cases above operate on one in-memory object; the bridge re-invoke is a SEPARATE task that
+# reloads the queue from disk, so the increment is only real if _self_advance writes it back. This
+# test round-trips through save_queue/load_queue to catch the exact bug Langston caught.
+import tempfile as _tf, os as _osmod
+_tmpf = _tf.mktemp(suffix="-q345.json")
+try:
+    q.save_queue(_tmpf, [q.new_item("INT1", "CC-A", "x")])
+    for _ in range(2):  # simulate two self-advance cycles: load → pick → register_item_refire → save
+        _it = q.load_queue(_tmpf)
+        q.register_item_refire(q.pick_next_ready(_it))
+        q.save_queue(_tmpf, _it)
+    _final = q.load_queue(_tmpf)
+    ok("C2 integration: refire count PERSISTS across save/load round-trips", _final[0].get("self_advance_refires") == 2)
+    ok("C2 integration: item_refire_halt trips after 2 PERSISTED refires", q.item_refire_halt(_final[0]) is True)
+finally:
+    try: _osmod.unlink(_tmpf)
+    except Exception: pass
 
 print(f"\nlangston_queue tests: {P} passed, {F} failed")
 sys.exit(0 if F == 0 else 1)

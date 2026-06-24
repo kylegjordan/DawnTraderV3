@@ -44,7 +44,7 @@ DISTINCT_ADVANCE_CAP = 10
 # stateless LLM will sometimes omit quotes, and a malformed marker must not silently drop. `on=` and
 # the unquoted forms stop at whitespace or `]` so the trailing `]]` still anchors.
 _MARKER_RE = re.compile(
-    r"\[\[QUEUE\s+id=(?P<id>[^\s\]]+)\s+status=(?P<status>done|blocked|error|ready)"
+    r"\[\[QUEUE\s+id=(?P<id>[^\s\]]+)\s+status=(?P<status>done|blocked|error|ready|noop)"
     r"(?:\s+on=(?P<on>[^\s\]]+))?"
     r"(?:\s+want=(?P<want>\"[^\"]*\"|[^\s\]]+))?"
     r"(?:\s+reason=(?P<reason>\"[^\"]*\"|[^\s\]]+))?\s*\]\]",
@@ -97,26 +97,81 @@ def new_item(item_id, requester, summary, pointer=None, gate_type=None, now=None
     }
 
 
-# ── OBJ-1 enqueue gate (Langston Step-4 FINDING-1) ────────────────────────────────
-# Only a CC's REVIEW REQUEST creates a queue item — NOT every addressed inbound. Coordination
-# chatter ("are you still on B2.1?", "coordinate on X", "thanks, noted") must not enqueue, or the
-# queue fills with non-reviewables and the self-advance loop tries to "work" them. Heuristic: an
-# explicit review-intent term, a workflow-step reference, or an inbox/diff pointer.
-_REVIEW_INTENT_RE = re.compile(
-    r"\b(review|step[\s-]*\d|diff|sign[\s-]*-?off|approve|changes[\s-]*-?needed|"
-    r"pre[\s-]*-?audit|completion[\s-]*report|verif|second[\s-]*-?pass|code[\s-]*-?review|"
-    r"scope|design[\s-]*ask)\b|/inbox/",
+# ── OBJ-1 enqueue gate (Langston Step-4 FINDING-1; tightened #345 OBJ-C1) ──────────
+# Only a CC's REVIEW REQUEST creates a queue item — NOT every addressed inbound. The original gate
+# (FINDING-1) matched any review-DOMAIN term, including the bare token `verif` — so a discussion reply
+# that merely MENTIONED having "verified" something enqueued as a phantom review, and the self-advance
+# loop re-fed it forever (#345, the churn). C1 fix: require an explicit review-REQUEST verb/imperative.
+# A message that only DISCUSSES a review ("I verified X", "agreed on the diff", "the proof is in
+# /inbox/x.md") must NOT enqueue. A pointer is a BOOSTER (OBJ-B captures it), never sufficient alone
+# (Langston Step-1 R3). Conservative on the non-enqueue side is fine: a missed enqueue self-heals via
+# the CC re-asking with an explicit verb; an over-enqueue is the failure this batch kills.
+_REQUEST_VERB_RE = re.compile(
+    r"\b(?:"
+    r"please\s+(?:re-?)?(?:review|look(?:\s+at)?|sign|approve|weigh|check|verify)"
+    r"|requesting\s+(?:your|a\b)"
+    r"|request(?:ing)?\s+your\s+(?:review|step|sign|approval|verdict|call)"
+    r"|ready\s+for\s+(?:your\s+)?(?:review|step|sign|second[\s-]*pass|verification)"
+    r"|for\s+your\s+(?:review|step[\s-]*\d|sign[\s-]*-?off|approval|second[\s-]*pass|verdict|call)"
+    r"|can\s+you\s+(?:review|look|sign|weigh|approve|verify)"
+    r"|need\s+your\s+(?:review|sign[\s-]*-?off|approval|eyes|call|verdict|step)"
+    r"|review\s+(?:this|the|my|request|and\b)"
+    r"|sign[\s-]*-?off\b"
+    r"|weigh\s+in\b"
+    r"|step[\s-]*\d\b[^.\]]{0,48}\b(?:please|review|ready|staged|sign|for\s+your|second[\s-]*pass|call|verdict|read)"
+    r"|your\s+step[\s-]*\d\b"
+    r"|(?:please\s+)?(?:review|approve|sign\s+off\s+on)\s+(?:the\s+|my\s+|this\s+)?(?:scope|diff|pre[\s-]*audit|completion[\s-]*report|change[\s-]*list|pr\b)"
+    r")",
     re.I,
 )
 
 
 def is_review_request(text):
-    """True iff the inbound reads as a review request (OBJ-1 enqueue gate). Conservative on the
-    NON-enqueue side is fine — a missed enqueue just means the CC re-asks; an over-enqueue pollutes
-    the loop, which is the exact thing FINDING-1 flags."""
+    """True iff the inbound is an explicit review REQUEST (OBJ-1 gate, #345 C1). Requires a
+    review-request verb/imperative — NOT a bare mention of a review-domain term. Conservative on the
+    non-enqueue side by design (a missed enqueue self-heals via re-ask; an over-enqueue is the #345 churn)."""
     if not text:
         return False
-    return bool(_REVIEW_INTENT_RE.search(text))
+    return bool(_REQUEST_VERB_RE.search(text))
+
+
+# ── OBJ-B (#345): capture a re-fetchable pointer at enqueue ────────────────────────
+# When something DOES enqueue, store an inbox path / repo file / commit sha on the item so a re-feed
+# (or a human reading the queue) isn't degraded to the truncated 500-char summary. Booster only — this
+# does NOT gate enqueue (R3); is_review_request alone decides that.
+_POINTER_PATH_RE = re.compile(
+    r"(?:/home/langston/inbox/\S+|/inbox/\S+|(?:[\w.-]+/)+[\w.-]+\.(?:md|ts|tsx|py|js|sql)|[\w.-]+\.(?:md|ts|tsx|py|js|sql))",
+    re.I,
+)
+# A commit sha: 7–40 hex chars that contain BOTH a digit and a letter (so plain words like "reviewed"
+# or "deadbeef"-style all-letter tokens don't false-match).
+_POINTER_SHA_RE = re.compile(r"\b(?=[0-9a-f]*\d)(?=[0-9a-f]*[a-f])[0-9a-f]{7,40}\b", re.I)
+
+
+def extract_pointer(text):
+    """Best-effort re-fetchable pointer from an inbound, or None. Prefers a path over a sha."""
+    if not text:
+        return None
+    m = _POINTER_PATH_RE.search(text)
+    if m:
+        return m.group(0).rstrip(".,;:)")
+    m = _POINTER_SHA_RE.search(text)
+    return m.group(0) if m else None
+
+
+def register_item_refire(item, now=None):
+    """C2 (#345): persist the self-advance re-fire count ON THE ITEM (not the CapTracker, which a real
+    inbound resets) so a stuck item halts regardless of intervening chatter. Call BEFORE each
+    self-advance re-invoke of a still-`ready` item. Returns the new count. Cleared on terminal settle."""
+    item["self_advance_refires"] = item.get("self_advance_refires", 0) + 1
+    item["last_touched_ts"] = now if now is not None else time.time()
+    return item["self_advance_refires"]
+
+
+def item_refire_halt(item):
+    """True iff this item has re-fired >= SAME_ID_CAP times without settling — the bridge parks it
+    (LOUD) instead of re-invoking. Survives CapTracker.reset() because it lives on the item (#345 C2)."""
+    return item.get("self_advance_refires", 0) >= SAME_ID_CAP
 
 
 def park_unmarked(items, item_id, malformed=False, now=None):
@@ -203,6 +258,13 @@ def apply_marker(items, marker, now=None):
     st = marker["status"]
     if st == "done":
         item["state"] = "done"
+        item.pop("self_advance_refires", None)   # R4 (#345): terminal settle clears the per-id re-fire counter
+    elif st == "noop":
+        # OBJ-A (#345): a message that PASSED the heuristic enqueue gate (C1) but, on Langston reading it,
+        # was NOT an actual review — settle it terminally as `noop` (NOT `done`, so a real miss is never
+        # masked as "reviewed"). Like `done`, it leaves the ready set so the self-advance loop won't re-feed it.
+        item["state"] = "noop"
+        item.pop("self_advance_refires", None)
     elif st == "blocked":
         item["state"] = "blocked"
         item["blocked_on"] = {"who": marker.get("on"), "want": marker.get("want")}
@@ -217,6 +279,7 @@ def apply_marker(items, marker, now=None):
         item.pop("unmarked_park", None)
         item.pop("park_kind", None)
         item.pop("last_stale_surface_ts", None)
+        item.pop("self_advance_refires", None)   # R4 (#345): a re-readied topic starts its re-fire count fresh
     return item, st
 
 
