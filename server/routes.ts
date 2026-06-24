@@ -8723,24 +8723,25 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       const summary = rtbMetricsService.getSummary();
       const includeRaw = req.query.raw === '1';
-      
+
+      // reorg-B3.1 (#379): return getSummary() VERBATIM-minus-redaction. The endpoint used to
+      // hand-map a SUBSET of getSummary(), which silently dropped any field the map didn't enumerate
+      // (it dropped reorg-B3's evInputThreadProof until caught at deploy-verify, and still dropped
+      // openFailedByStage) — a defect class. Spreading the summary means a future getSummary field
+      // surfaces automatically; only the TWO intentional transforms are applied:
+      //   (1) byReason → byBlockReason (the legacy consumer key, execution-metrics.tsx), and
+      //   (2) the heavy bySymbol map + recentEvInputSamples array are gated to a COUNT unless ?raw=1.
+      // Default (no-raw) payload stays additive-safe for existing consumers: execution-metrics.tsx
+      // reads only totals / byBlockReason / invariantCheck / bySymbol, all preserved unchanged.
+      const { byReason, bySymbol, recentEvInputSamples, ...summaryRest } = summary;
       res.json({
         ok: true,
         phase: '8.8.3-I2',
         description: 'RTB Metrics Service - Single source of truth for RTB statistics',
-        timestamp: summary.timestamp,
-        sessionStart: summary.sessionStart,
-        totals: summary.totals,
-        byBlockReason: summary.byReason,
-        byStrategy: summary.byStrategy,
-        bySymbol: includeRaw ? summary.bySymbol : Object.keys(summary.bySymbol).length,
-        invariantCheck: summary.invariantCheck,
-        // reorg-B3 (#233, OBJ-4): the EV-input proof surface — strongTrendWithDbs>0 proves a
-        // non-default dbsScore reached the open-gate kernel on the strong-trend branch (#233 working).
-        // Forward-instrumentation: empty until paper-active turns on. recentEvInputSamples gated on
-        // ?raw=1 (it can carry per-signal rows).
-        evInputThreadProof: summary.evInputThreadProof,
-        recentEvInputSamples: includeRaw ? summary.recentEvInputSamples : summary.recentEvInputSamples.length,
+        ...summaryRest,
+        byBlockReason: byReason,
+        bySymbol: includeRaw ? bySymbol : Object.keys(bySymbol).length,
+        recentEvInputSamples: includeRaw ? recentEvInputSamples : recentEvInputSamples.length,
       });
     } catch (error: any) {
       console.error('[8.8.3-I2] Error fetching RTB metrics:', error);

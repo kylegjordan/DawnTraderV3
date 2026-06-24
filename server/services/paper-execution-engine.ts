@@ -2503,7 +2503,12 @@ export class PaperExecutionEngine {
           // B65.2 (2026-04-23): volatility snapshot at open, consumed by the
           // trailing-exit engine at every subsequent exit-check cycle.
           atr_at_open: (signal as any)?.metadata?.atr ?? 0,
-          di_at_open: (signal as any)?.metadata?.DI ?? 50,
+          // reorg-B3.1 (#378): read the at-queue DI carried on the promoted signal (reorg-B3) so the
+          // trailing-exit engine sees the REAL routing-time DI, not the constant 50 that the dead
+          // metadata.DI read always produced. Falls back to the legacy metadata.DI then 50 for any
+          // non-promotion-path signal. (vol_noise_at_open stays metadata-based: VolNoise is not a
+          // kernel EV input and was deliberately not threaded by reorg-B3.)
+          di_at_open: (signal as any)?.diAtQueue ?? (signal as any)?.metadata?.DI ?? 50,
           vol_noise_at_open: (signal as any)?.metadata?.VolNoise ?? 0.3,
         }
       });
