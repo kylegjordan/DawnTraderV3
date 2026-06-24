@@ -30,6 +30,7 @@ import {
   findLocalMinima, GLOBAL_CONSTANTS,
   type OHLCCandle, type PatternInput
 } from './strategy-helpers';
+import { guardForcesDrop, type GateDisposition } from './strategy-helpers';
 import { getPerClassTargetGate } from '../core/calculations/expectancy.js';
 import { recordGuardEval } from './guard-eval-tracker.js';
 import { REGIMES } from '../config/canonical-regime-strategy-map';
@@ -71,6 +72,7 @@ export function detectVolatilityEdge(
   candles: any[],
   patternSignal: PatternInput | null,
   assetClass: AssetClass,  // B79.0n.STRATEGY — REQUIRED per-class scope
+  gateDisposition: GateDisposition = 'enforce',
 ): StrategySignal | null {
   // B72: bulk read all strategy levers from module_constants.
   // B79.0n.STRATEGY: per-class resolver scope.
@@ -190,7 +192,7 @@ export function detectVolatilityEdge(
   const gate = getPerClassTargetGate(assetClass);
   const _gr = applyGlobalGuards(entryPrice, stopPrice, targetPrice, effectiveATR, gate);
   recordGuardEval('volatility_edge', _gr.rr, _gr.pass, _gr.dropReason, assetClass);
-  if (!_gr.pass) {
+  if (guardForcesDrop(_gr, gateDisposition)) {
     console.log(`${LOG_PREFIX} Global guards rejected signal`);
     setNullReason('guard_fail');
     return null;

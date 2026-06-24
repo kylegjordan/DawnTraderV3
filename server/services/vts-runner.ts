@@ -73,7 +73,7 @@ import { calculatePairRegime, getRegimeWeight, calculateRegimeScore, getNormaliz
 import { getMarketContextEngine } from './market-context-engine.js';
 // Phase 14 HF6: StrategyEngine for strategy-specific detect functions
 import { StrategyEngine, type StrategySignal, stampMaxHoldingMs } from './strategy-engine.js';
-import type { PatternInput } from '../strategies/strategy-helpers.js';
+import type { PatternInput, GateDisposition } from '../strategies/strategy-helpers.js';
 // Phase 14 HF6: Global friction/DBS getters for trade context dimensions
 import { getGlobalFriction, getLastGlobalDBSCategory, getLastGlobalDBSScore } from './market-indicators.js';
 // Phase 14: Real score calculator replaces simulation stubs
@@ -897,13 +897,20 @@ export function callStrategyDetect(
   patternInput: PatternInput | null,
   symbol: string,         // B79.0n.STRATEGY — REQUIRED (was optional)
   assetClass: AssetClass, // B79.0n.STRATEGY — REQUIRED + typed (was optional `string`)
+  // reorg-B3.3 (2026-06-24): per-PATH guard disposition. Default 'enforce' = the active/live
+  // drop-everything behavior. The VTS callers opt into 'tag' so the QUALITY/EV guards
+  // (rr_below_min, unreachable) DON'T drop at signal-gen — they flow forward to be tagged +
+  // simulated (un-strangling the learning engine; corrects the inert reorg-B3.2). Per Option A
+  // (Langston 2026-06-24) ONLY the crypto VTS path (vts-runner :1174) passes 'tag' this batch;
+  // the xStock eval-cycle stays default-'enforce' until reorg-B3.3x.
+  gateDisposition: GateDisposition = 'enforce',
 ): StrategySignal | null {
   // W2.1 (2026-06-06): central max-holding-ms stamp for the VTS dispatch path.
   // Guarantees every VTS-emitted signal carries an unambiguous
   // metadata.maxHoldingMs. Forward-prep only — VTS enforces holds via the 7-day
   // MAX_HOLD_MS valve, not this field (see stampMaxHoldingMs invariant).
   return stampMaxHoldingMs(
-    callStrategyDetectRaw(strategy, indicators, ohlcData, patternInput, symbol, assetClass),
+    callStrategyDetectRaw(strategy, indicators, ohlcData, patternInput, symbol, assetClass, gateDisposition),
     assetClass,
   );
 }
@@ -915,28 +922,29 @@ function callStrategyDetectRaw(
   patternInput: PatternInput | null,
   symbol: string,
   assetClass: AssetClass,
+  gateDisposition: GateDisposition = 'enforce', // reorg-B3.3 — threaded to every detector (see callStrategyDetect)
 ): StrategySignal | null {
   switch (strategy) {
     // ── Quant strategies ──
     case 'vwap_pullback':
-      return strategyEngine.detectVWAPPullback(indicators, STRATEGY_CALL_SETTINGS, ohlcData, assetClass);
+      return strategyEngine.detectVWAPPullback(indicators, STRATEGY_CALL_SETTINGS, ohlcData, assetClass, gateDisposition);
     case 'abcd_long':
-      return strategyEngine.detectABCDLong(ohlcData, STRATEGY_CALL_SETTINGS, assetClass);
+      return strategyEngine.detectABCDLong(ohlcData, STRATEGY_CALL_SETTINGS, assetClass, gateDisposition);
     case 'sma_trend_ride':
-      return strategyEngine.detectSMATrendRide(indicators, ohlcData, STRATEGY_CALL_SETTINGS, assetClass);
+      return strategyEngine.detectSMATrendRide(indicators, ohlcData, STRATEGY_CALL_SETTINGS, assetClass, gateDisposition);
     case 'breakout':
       // B72.2: detector reads params from module_constants 'strategy.breakout'.
-      return strategyEngine.detectBreakout(ohlcData, {}, assetClass);
+      return strategyEngine.detectBreakout(ohlcData, {}, assetClass, gateDisposition);
     case 'mean_reversion':
       // B72.2: detector reads params from module_constants 'strategy.mean_reversion'.
-      return strategyEngine.detectMeanReversion(indicators, ohlcData, {}, assetClass);
+      return strategyEngine.detectMeanReversion(indicators, ohlcData, {}, assetClass, gateDisposition);
     case 'range_trading':
     case 'range_trade':  // HF6B: Alias for canonical strategy map name
       // B72.2: detector reads params from module_constants 'strategy.range_trade'.
-      return strategyEngine.detectRangeTrading(ohlcData, {}, assetClass);
+      return strategyEngine.detectRangeTrading(ohlcData, {}, assetClass, gateDisposition);
     case 'vwap_bounce':
       // B72.2: detector reads params from module_constants 'strategy.vwap_bounce'.
-      return strategyEngine.detectVWAPBounce(indicators, ohlcData, {}, assetClass);
+      return strategyEngine.detectVWAPBounce(indicators, ohlcData, {}, assetClass, gateDisposition);
     case 'liquidity_trap':
       // Batch 45: DISABLED — strategy produces bearish geometry (stop > entry, target < entry)
       // which is incompatible with long-only system. Confirmed by system manual spec and
@@ -946,32 +954,32 @@ function callStrategyDetectRaw(
       return null;
     case 'dhma':
       // B72.2: detector reads params from module_constants 'strategy.dhma'.
-      return strategyEngine.detectDHMA(indicators, ohlcData, {}, assetClass);
+      return strategyEngine.detectDHMA(indicators, ohlcData, {}, assetClass, gateDisposition);
     // ── Pattern + Hybrid strategies ──
     case 'morning_star':
-      return strategyEngine.detectMorningStar(indicators, ohlcData, patternInput, assetClass);
+      return strategyEngine.detectMorningStar(indicators, ohlcData, patternInput, assetClass, gateDisposition);
     case 'inside_bar_reversal':
-      return strategyEngine.detectInsideBarReversal(indicators, ohlcData, patternInput, assetClass);
+      return strategyEngine.detectInsideBarReversal(indicators, ohlcData, patternInput, assetClass, gateDisposition);
     case 'support_bounce':
-      return strategyEngine.detectSupportBounce(indicators, ohlcData, patternInput, assetClass);
+      return strategyEngine.detectSupportBounce(indicators, ohlcData, patternInput, assetClass, gateDisposition);
     case 'pivot_shift':
-      return strategyEngine.detectPivotShift(indicators, ohlcData, patternInput, assetClass);
+      return strategyEngine.detectPivotShift(indicators, ohlcData, patternInput, assetClass, gateDisposition);
     case 'reverse_impulse':
-      return strategyEngine.detectReverseImpulse(indicators, ohlcData, patternInput, assetClass);
+      return strategyEngine.detectReverseImpulse(indicators, ohlcData, patternInput, assetClass, gateDisposition);
     case 'defensive_hedge':
       // Phase 14.1 HF8 (A3): Pass BTC candles for Spearman correlation (needs >= 32 candles)
       // B79.0n.STRATEGY: assetClass threads BEFORE btcCandles per wrapper signature.
-      return strategyEngine.detectDefensiveHedge(indicators, ohlcData, patternInput, btcOhlcCache.length >= 32 ? btcOhlcCache : undefined, assetClass);
+      return strategyEngine.detectDefensiveHedge(indicators, ohlcData, patternInput, btcOhlcCache.length >= 32 ? btcOhlcCache : undefined, assetClass, gateDisposition);
     case 'adaptive_flow':
-      return strategyEngine.detectAdaptiveFlow(indicators, ohlcData, patternInput, assetClass);
+      return strategyEngine.detectAdaptiveFlow(indicators, ohlcData, patternInput, assetClass, gateDisposition);
     case 'volatility_edge':
-      return strategyEngine.detectVolatilityEdge(indicators, ohlcData, patternInput, assetClass);
+      return strategyEngine.detectVolatilityEdge(indicators, ohlcData, patternInput, assetClass, gateDisposition);
     // B63: Strong Bull Trend (Path D) — QUANT, LONG-only
     case 'strong_bull_trend':
-      return strategyEngine.detectStrongBullTrend(indicators, ohlcData, patternInput, assetClass);
+      return strategyEngine.detectStrongBullTrend(indicators, ohlcData, patternInput, assetClass, gateDisposition);
     // B79.0d strategy. B79.0n.STRATEGY: ctx promoted to REQUIRED; fail-safe removed.
     case 'orb':
-      return strategyEngine.detectORB(symbol, ohlcData as any, indicators, { assetClass, symbol });
+      return strategyEngine.detectORB(symbol, ohlcData as any, indicators, { assetClass, symbol }, gateDisposition);
     default:
       console.warn(`[HF6][VTS] Unknown strategy: ${strategy}, no detect function available`);
       return null;
@@ -1171,7 +1179,13 @@ async function generatePhase10Signal(
   // function-entry skip) instead of re-resolving with a `?? 'crypto_spot'` default —
   // an unclassifiable symbol already returned null above, so no mislabel can occur.
   const _resolvedAssetClass = _assetClass;
-  const strategySignal = callStrategyDetect(strategy, stratDetectIndicators, ohlcAsAny, stratPatternInput, symbol, _resolvedAssetClass);
+  // reorg-B3.3 (2026-06-24): crypto VTS path opts into 'tag' — the QUALITY/EV guards (rr_below_min,
+  // unreachable) no longer DROP the signal at the strategy; they fall through tagged, then the existing
+  // reorg-B3.2 normalizer below (:~1189) re-derives the same verdict, sets vtsGateVerdict, and simulates
+  // to close. This is what makes reorg-B3.2 stop being inert (the strategy was dropping upstream of it).
+  // ACTIVE/LIVE (the orchestrator) omit the arg → default 'enforce' → suppression unchanged. (Option A:
+  // xStock eval-cycle stays default-'enforce' this batch; un-strangled in reorg-B3.3x.)
+  const strategySignal = callStrategyDetect(strategy, stratDetectIndicators, ohlcAsAny, stratPatternInput, symbol, _resolvedAssetClass, 'tag');
 
   if (!strategySignal) {
     console.log(`[HF6][VTS] ${symbol}: Strategy ${strategy} returned null - conditions not met, skipping`);

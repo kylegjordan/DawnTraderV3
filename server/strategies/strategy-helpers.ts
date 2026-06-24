@@ -424,6 +424,41 @@ export function applyGlobalGuards(
 }
 
 /**
+ * reorg-B3.3 (2026-06-24) — per-PATH guard disposition (the corrected VTS un-strangle).
+ *
+ * reorg-B2.1 consolidated the RR/reachability gate INTO the strategies at signal-gen, so every strategy
+ * hard-DROPS on guard-fail (`if (!_gr.pass) return null`). That strangled the VTS learning engine (1 signal
+ * across 136,779 evals; rr+reach drops ~95%+) AND made reorg-B3.2's downstream tag-don't-drop normalizer
+ * INERT (the signal dies at the strategy, upstream of it). This is the SSOT for the tag-vs-drop decision.
+ *
+ * - `'enforce'` (DEFAULT — active + live paths): ANY guard fail drops. Byte-identical to pre-B3.3 behavior,
+ *   so the active/live disposition is provably unchanged (the safety property — callers omit the param).
+ * - `'tag'` (VTS telemetry-only learning path): the QUALITY/EV gates (`rr_below_min`, `unreachable`) do NOT
+ *   drop — the signal flows forward to be LABELLED + simulated-to-close (capturing the counterfactual outcome
+ *   the active gate would reject; un-circularizes reorg-B2.3). DATA-VALIDITY failures (`invalid_atr`,
+ *   `stop_distance`) STILL drop on every path — simulating null-ATR / degenerate-stop geometry is garbage,
+ *   not learning signal.
+ */
+export type GateDisposition = 'enforce' | 'tag';
+
+/** reorg-B3.3: the QUALITY/EV guard reasons the VTS learning path TAGS instead of dropping. Everything else
+ *  (validity: invalid_atr, stop_distance) drops on every path. Keep in sync with the reorg-B2 normalizer's
+ *  quality-vs-validity split in vts-runner.ts:1206 (rr_below_min/unreachable = tag; invalid_* = drop). */
+const VTS_TAGGABLE_GUARD_REASONS: ReadonlySet<GuardDropReason> = new Set<GuardDropReason>(['rr_below_min', 'unreachable']);
+
+/**
+ * reorg-B3.3: does this guard verdict force a DROP, given the path disposition? Call site replaces the bare
+ * `if (!_gr.pass)` with `if (guardForcesDrop(_gr, gateDisposition))`. Defaults to 'enforce' so an un-threaded
+ * call (e.g. the orchestrator/active path) keeps the exact prior drop-everything behavior.
+ */
+export function guardForcesDrop(gr: GuardResult, disposition: GateDisposition = 'enforce'): boolean {
+  if (gr.pass) return false;
+  if (disposition === 'enforce') return true;
+  // 'tag' (VTS): quality/EV reasons pass through to be tagged + simulated; validity reasons still drop.
+  return !VTS_TAGGABLE_GUARD_REASONS.has(gr.dropReason);
+}
+
+/**
  * Clamp confidence to [0, 1]
  */
 export function clampConfidence(value: number): number {

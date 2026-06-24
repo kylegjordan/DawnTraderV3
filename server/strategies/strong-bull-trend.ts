@@ -37,6 +37,7 @@
 import type { StrategySignal, TechnicalIndicators } from '../services/strategy-engine';
 import type { AssetClass } from '@shared/asset-classes';
 import { parseCandles, applyGlobalGuards, clampEffectiveATR } from './strategy-helpers';
+import { guardForcesDrop, type GateDisposition } from './strategy-helpers';
 import { getPerClassTargetGate } from '../core/calculations/expectancy.js';
 import { recordGuardEval } from './guard-eval-tracker.js';
 import { setNullReason } from '../utils/null-reason-tracker.js';
@@ -71,6 +72,7 @@ export function detectStrongBullTrend(
   candles: any[],
   _patternSignal: any | null,
   assetClass: AssetClass,  // B79.0n.STRATEGY — REQUIRED per-class scope
+  gateDisposition: GateDisposition = 'enforce',
 ): StrategySignal | null {
   const dbs = indicators.dbsScore ?? 0;
   const dbsSlope = indicators.dbsSlope ?? 0;
@@ -175,7 +177,7 @@ export function detectStrongBullTrend(
     const _effATR = clampEffectiveATR(atr, entryPrice);
     const _gr = applyGlobalGuards(entryPrice, stopPrice, targetPrice, _effATR, _gate);
     recordGuardEval(STRATEGY_KEY, _gr.rr, _gr.pass, _gr.dropReason, assetClass);
-    if (!_gr.pass) { setNullReason('guard_fail'); return null; }
+    if (guardForcesDrop(_gr, gateDisposition)) { setNullReason('guard_fail'); return null; }
   }
 
   return {

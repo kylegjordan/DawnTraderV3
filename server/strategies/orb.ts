@@ -58,6 +58,7 @@ import {
 } from '../services/module-constants-service.js';
 import { setNullReason } from '../utils/null-reason-tracker.js';
 import { applyGlobalGuards, clampEffectiveATR } from './strategy-helpers.js';
+import { guardForcesDrop, type GateDisposition } from './strategy-helpers.js';
 import { getPerClassTargetGate } from '../core/calculations/expectancy.js';
 import { recordGuardEval } from './guard-eval-tracker.js';
 
@@ -150,6 +151,7 @@ export function detectORB(
   priceData: PriceData[],
   indicators: TechnicalIndicators,
   ctx: OrbContext,  // B79.0n.STRATEGY — REQUIRED (was optional with 'xstock_spot' back-compat default)
+  gateDisposition: GateDisposition = 'enforce',
 ): StrategySignal | null {
   // ── Defense guard (Q6) — detect-internal layer ──────────────────────────
   // Asset-class: xstock_spot only.
@@ -297,7 +299,7 @@ export function detectORB(
     const _effATR = clampEffectiveATR(atr, entryPrice);
     const _gr = applyGlobalGuards(entryPrice, stopPrice, targetPrice, _effATR, _gate);
     recordGuardEval('orb', _gr.rr, _gr.pass, _gr.dropReason, assetClass);
-    if (!_gr.pass) { setNullReason('guard_fail'); return null; }
+    if (guardForcesDrop(_gr, gateDisposition)) { setNullReason('guard_fail'); return null; }
   }
 
   return {

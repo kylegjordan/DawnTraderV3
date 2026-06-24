@@ -16,7 +16,7 @@ import { detectVolatilityEdge } from '../strategies/volatility-edge.js';
 import { detectStrongBullTrend } from '../strategies/strong-bull-trend.js';
 import { detectORB } from '../strategies/orb.js';
 import type { PatternInput } from '../strategies/strategy-helpers.js';
-import { applyGlobalGuards, clampEffectiveATR } from '../strategies/strategy-helpers.js';
+import { applyGlobalGuards, clampEffectiveATR, guardForcesDrop, type GateDisposition } from '../strategies/strategy-helpers.js';
 import { getPerClassTargetGate } from '../core/calculations/expectancy.js';
 import { recordGuardEval } from '../strategies/guard-eval-tracker.js';
 import { setNullReason } from '../utils/null-reason-tracker.js';
@@ -161,6 +161,7 @@ export class StrategyEngine {
     settings: TradingSettings,
     priceHistory: PriceData[] | undefined,
     assetClass: AssetClass,  // B79.0n.STRATEGY — REQUIRED per-class scope
+    gateDisposition: GateDisposition = 'enforce',  // reorg-B3.3 — VTS opts 'tag'; active/live default 'enforce'
   ): StrategySignal | null {
     // B63 Item 11: vwap_pullback PROMOTED into strong-trend lane. The prior B63 Item 6
     // `dbs >= 0.35` exclusion has been REMOVED — vwap_pullback is now eligible on both:
@@ -299,7 +300,7 @@ export class StrategyEngine {
         const _effATR = clampEffectiveATR(atr, entryPrice);
         const _gr = applyGlobalGuards(entryPrice, stopPrice, finalTarget, _effATR, _gate);
         recordGuardEval('vwap_pullback', _gr.rr, _gr.pass, _gr.dropReason, assetClass);
-        if (!_gr.pass) { setNullReason('guard_fail'); return null; }
+        if (guardForcesDrop(_gr, gateDisposition)) { setNullReason('guard_fail'); return null; }
       }
 
       return signal;
@@ -321,6 +322,7 @@ export class StrategyEngine {
     priceHistory: PriceData[],
     settings: TradingSettings,
     assetClass: AssetClass,  // B79.0n.STRATEGY — REQUIRED per-class scope
+    gateDisposition: GateDisposition = 'enforce',  // reorg-B3.3 — VTS opts 'tag'; active/live default 'enforce'
   ): StrategySignal | null {
     // B72.2: levers resolved from module_constants 'strategy.abcd_long'.
     // B79.0n.STRATEGY: per-class resolver scope.
@@ -433,7 +435,7 @@ export class StrategyEngine {
         const _effATR = clampEffectiveATR(abcdAtr, entryPrice);
         const _gr = applyGlobalGuards(entryPrice, stopPrice, targetPrice, _effATR, _gate);
         recordGuardEval('abcd_long', _gr.rr, _gr.pass, _gr.dropReason, assetClass);
-        if (!_gr.pass) { setNullReason('guard_fail'); return null; }
+        if (guardForcesDrop(_gr, gateDisposition)) { setNullReason('guard_fail'); return null; }
       }
 
       return signal;
@@ -456,6 +458,7 @@ export class StrategyEngine {
     priceHistory: PriceData[],
     settings: TradingSettings,
     assetClass: AssetClass,  // B79.0n.STRATEGY — REQUIRED per-class scope
+    gateDisposition: GateDisposition = 'enforce',  // reorg-B3.3 — VTS opts 'tag'; active/live default 'enforce'
   ): StrategySignal | null {
     // B63 Item 10: Counter-trend LONG guard (mirror-defect fix). sma_trend_ride is a
     // LONG-only trend-riding strategy; firing on strong NEGATIVE DBS pairs means entering
@@ -566,7 +569,7 @@ export class StrategyEngine {
         const _effATR = clampEffectiveATR(computeATR(priceHistory), entryPrice);
         const _gr = applyGlobalGuards(entryPrice, stopPrice, targetPrice, _effATR, _gate);
         recordGuardEval('sma_trend_ride', _gr.rr, _gr.pass, _gr.dropReason, assetClass);
-        if (!_gr.pass) { setNullReason('guard_fail'); return null; }
+        if (guardForcesDrop(_gr, gateDisposition)) { setNullReason('guard_fail'); return null; }
       }
 
       return signal;
@@ -588,6 +591,7 @@ export class StrategyEngine {
     priceHistory: PriceData[],
     params: any,
     assetClass: AssetClass,  // B79.0n.STRATEGY — REQUIRED per-class scope
+    gateDisposition: GateDisposition = 'enforce',  // reorg-B3.3 — VTS opts 'tag'; active/live default 'enforce'
   ): StrategySignal | null {
     // B72.2: levers resolved from module_constants 'strategy.breakout'.
     // B79.0n.STRATEGY: per-class resolver scope.
@@ -677,7 +681,7 @@ export class StrategyEngine {
         const _effATR = clampEffectiveATR(atr, entryPrice);
         const _gr = applyGlobalGuards(entryPrice, stopPrice, targetPrice, _effATR, _gate);
         recordGuardEval('breakout', _gr.rr, _gr.pass, _gr.dropReason, assetClass);
-        if (!_gr.pass) { setNullReason('guard_fail'); return null; }
+        if (guardForcesDrop(_gr, gateDisposition)) { setNullReason('guard_fail'); return null; }
       }
 
       return signal;
@@ -699,6 +703,7 @@ export class StrategyEngine {
     priceHistory: PriceData[],
     params: any,
     assetClass: AssetClass,  // B79.0n.STRATEGY — REQUIRED per-class scope
+    gateDisposition: GateDisposition = 'enforce',  // reorg-B3.3 — VTS opts 'tag'; active/live default 'enforce'
   ): StrategySignal | null {
     // B72.2: levers resolved from module_constants 'strategy.mean_reversion'.
     // B79.0n.STRATEGY: per-class resolver scope.
@@ -777,7 +782,7 @@ export class StrategyEngine {
         const _effATR = clampEffectiveATR(atr, entryPrice);
         const _gr = applyGlobalGuards(entryPrice, stopPrice, targetPrice, _effATR, _gate);
         recordGuardEval('mean_reversion', _gr.rr, _gr.pass, _gr.dropReason, assetClass);
-        if (!_gr.pass) { setNullReason('guard_fail'); return null; }
+        if (guardForcesDrop(_gr, gateDisposition)) { setNullReason('guard_fail'); return null; }
       }
 
       return signal;
@@ -798,6 +803,7 @@ export class StrategyEngine {
     priceHistory: PriceData[],
     params: any,
     assetClass: AssetClass,  // B79.0n.STRATEGY — REQUIRED per-class scope
+    gateDisposition: GateDisposition = 'enforce',  // reorg-B3.3 — VTS opts 'tag'; active/live default 'enforce'
   ): StrategySignal | null {
     // B72.2: levers resolved from module_constants 'strategy.range_trade'.
     // B79.0n.STRATEGY: per-class resolver scope.
@@ -885,7 +891,7 @@ export class StrategyEngine {
         const _effATR = clampEffectiveATR(atr, entryPrice);
         const _gr = applyGlobalGuards(entryPrice, stopPrice, targetPrice, _effATR, _gate);
         recordGuardEval('range_trade', _gr.rr, _gr.pass, _gr.dropReason, assetClass);
-        if (!_gr.pass) { setNullReason('guard_fail'); return null; }
+        if (guardForcesDrop(_gr, gateDisposition)) { setNullReason('guard_fail'); return null; }
       }
 
       return signal;
@@ -907,6 +913,7 @@ export class StrategyEngine {
     priceHistory: PriceData[],
     params: any,
     assetClass: AssetClass,  // B79.0n.STRATEGY — REQUIRED per-class scope
+    gateDisposition: GateDisposition = 'enforce',  // reorg-B3.3 — VTS opts 'tag'; active/live default 'enforce'
   ): StrategySignal | null {
     // B72.2: levers resolved from module_constants 'strategy.vwap_bounce'.
     // B79.0n.STRATEGY: per-class resolver scope.
@@ -987,7 +994,7 @@ export class StrategyEngine {
         const _effATR = clampEffectiveATR(computeATR(priceHistory), entryPrice);
         const _gr = applyGlobalGuards(entryPrice, stopPrice, targetPrice, _effATR, _gate);
         recordGuardEval('vwap_bounce', _gr.rr, _gr.pass, _gr.dropReason, assetClass);
-        if (!_gr.pass) { setNullReason('guard_fail'); return null; }
+        if (guardForcesDrop(_gr, gateDisposition)) { setNullReason('guard_fail'); return null; }
       }
 
       return signal;
@@ -1373,6 +1380,7 @@ export class StrategyEngine {
     priceHistory: PriceData[],
     params: any,
     assetClass: AssetClass,  // B79.0n.STRATEGY — REQUIRED per-class scope
+    gateDisposition: GateDisposition = 'enforce',  // reorg-B3.3 — VTS opts 'tag'; active/live default 'enforce'
   ): StrategySignal | null {
     // B72.2: levers resolved from module_constants 'strategy.dhma'.
     // B79.0n.STRATEGY: per-class resolver scope.
@@ -1631,8 +1639,9 @@ export class StrategyEngine {
     candles: PriceData[],
     patternSignal: PatternInput | null,
     assetClass: AssetClass,
+    gateDisposition: GateDisposition = 'enforce',
   ): StrategySignal | null {
-    return detectMorningStar(indicators, candles, patternSignal, assetClass);
+    return detectMorningStar(indicators, candles, patternSignal, assetClass, gateDisposition);
   }
 
   /**
@@ -1644,8 +1653,9 @@ export class StrategyEngine {
     candles: PriceData[],
     patternSignal: PatternInput | null,
     assetClass: AssetClass,
+    gateDisposition: GateDisposition = 'enforce',
   ): StrategySignal | null {
-    return detectInsideBarReversal(indicators, candles, patternSignal, assetClass);
+    return detectInsideBarReversal(indicators, candles, patternSignal, assetClass, gateDisposition);
   }
 
   /**
@@ -1657,8 +1667,9 @@ export class StrategyEngine {
     candles: PriceData[],
     patternSignal: PatternInput | null,
     assetClass: AssetClass,
+    gateDisposition: GateDisposition = 'enforce',
   ): StrategySignal | null {
-    return detectSupportBounce(indicators, candles, patternSignal, assetClass);
+    return detectSupportBounce(indicators, candles, patternSignal, assetClass, gateDisposition);
   }
 
   /**
@@ -1670,8 +1681,9 @@ export class StrategyEngine {
     candles: PriceData[],
     patternSignal: PatternInput | null,
     assetClass: AssetClass,
+    gateDisposition: GateDisposition = 'enforce',
   ): StrategySignal | null {
-    return detectPivotShift(indicators, candles, patternSignal, assetClass);
+    return detectPivotShift(indicators, candles, patternSignal, assetClass, gateDisposition);
   }
 
   /**
@@ -1683,8 +1695,9 @@ export class StrategyEngine {
     candles: PriceData[],
     patternSignal: PatternInput | null,
     assetClass: AssetClass,
+    gateDisposition: GateDisposition = 'enforce',
   ): StrategySignal | null {
-    return detectReverseImpulse(indicators, candles, patternSignal, assetClass);
+    return detectReverseImpulse(indicators, candles, patternSignal, assetClass, gateDisposition);
   }
 
   /**
@@ -1697,8 +1710,9 @@ export class StrategyEngine {
     patternSignal: PatternInput | null,
     btcCandles: PriceData[] | undefined,
     assetClass: AssetClass,
+    gateDisposition: GateDisposition = 'enforce',
   ): StrategySignal | null {
-    return detectDefensiveHedge(indicators, candles, patternSignal, assetClass, btcCandles);
+    return detectDefensiveHedge(indicators, candles, patternSignal, assetClass, btcCandles, gateDisposition);
   }
 
   /**
@@ -1710,8 +1724,9 @@ export class StrategyEngine {
     candles: PriceData[],
     patternSignal: PatternInput | null,
     assetClass: AssetClass,
+    gateDisposition: GateDisposition = 'enforce',
   ): StrategySignal | null {
-    return detectAdaptiveFlow(indicators, candles, patternSignal, assetClass);
+    return detectAdaptiveFlow(indicators, candles, patternSignal, assetClass, gateDisposition);
   }
 
   /**
@@ -1723,8 +1738,9 @@ export class StrategyEngine {
     candles: PriceData[],
     patternSignal: PatternInput | null,
     assetClass: AssetClass,
+    gateDisposition: GateDisposition = 'enforce',
   ): StrategySignal | null {
-    return detectVolatilityEdge(indicators, candles, patternSignal, assetClass);
+    return detectVolatilityEdge(indicators, candles, patternSignal, assetClass, gateDisposition);
   }
 
   /**
@@ -1737,8 +1753,9 @@ export class StrategyEngine {
     candles: PriceData[],
     patternSignal: PatternInput | null,
     assetClass: AssetClass,
+    gateDisposition: GateDisposition = 'enforce',
   ): StrategySignal | null {
-    return detectStrongBullTrend(indicators, candles, patternSignal, assetClass);
+    return detectStrongBullTrend(indicators, candles, patternSignal, assetClass, gateDisposition);
   }
 
   /**
@@ -1754,8 +1771,9 @@ export class StrategyEngine {
     candles: PriceData[],
     indicators: TechnicalIndicators,
     ctx: { assetClass: AssetClass; symbol: string; now?: Date },
+    gateDisposition: GateDisposition = 'enforce',
   ): StrategySignal | null {
-    return detectORB(symbol, candles, indicators, ctx);
+    return detectORB(symbol, candles, indicators, ctx, gateDisposition);
   }
 
   private calculateVolatility(data: PriceData[]): number {
