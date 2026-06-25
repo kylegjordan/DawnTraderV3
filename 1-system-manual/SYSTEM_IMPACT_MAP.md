@@ -2394,6 +2394,12 @@ After initial B79.0m.b2 ship, 6 follow-up commits closed Kyle's catalog of 9 dia
 
 **Blast radius:** **HIGH** — endpoint is the sole data source for the xStocks tab Filter Diagnostics panel. **Load time verified 60s → 0.94s (60× speedup).**
 
+**B-DIAG-387 (#387, 2026-06-25) — Net-EV-floor reject counter + dead-scaffold removal (observability-only):**
+- The endpoint's `vtsEvaluation.rejectedReasons.netEvBelowFloor` previously read `byReason['net_ev_below_floor'] || totalRejected` — `byReason`/`totalRejected` were permanently-empty "reference shape" scaffolding, so the tile reported **0 forever** (caused the retracted #386). NOW sourced from the lifetime accumulator: `lt.nullReasonAggregate['net_ev_rejected']`, written at the single eval-cycle reject site (`eval-cycle.ts:716`, `netEV ≤ VTS_NET_EV_FLOOR`) into `nullReasonAggregate` + the per-lane `quant/patternNullReasonAggregate` (key `net_ev_rejected`). Parity with the crypto vts-runner path (`vtsEvalCounters.rejectedReasons.netEvBelowFloor`). **In-memory key `net_ev_rejected` ↔ archive reason `net_ev_below_floor` (same event, two layers).**
+- **Pre-open/TCL gate reasons now surfaced** (`nullReasons.reentryCooldown/pricePastStop/pricePastTarget`, from `checkPreOpenGates`) — previously in `nullReasonAggregate` but rendered nowhere (no-hidden-gates).
+- **Dead scaffolding excised (§18, DELETED_COMPONENTS_LOG):** the `byStrategy`/`total*`/`byReason`/`byRegime` locals + the always-empty `signalRejections` response field. The xStock endpoint no longer emits `signalRejections` (no client reads it; crypto endpoint keeps its own). Client `FilterDiagnosticsData.signalRejections` relaxed to optional.
+- **Verified EXACT:** live endpoint `netEvBelowFloor` == `signal_eval_archive` (`reject_stage='sqe'`, `net_ev_below_floor`, xstock_spot) over the matched since-restart window (25 == 25).
+
 ### `client/src/components/machine-learning/xstocks-tab.tsx` (MODIFIED, B79.0m.b2 follow-up)
 
 **Change:** Per-Pair Fresh-Tick Latency panel (`<FreshnessPanel>`) removed from the render tree per Kyle directive 2026-05-12. The `useQuery` against `/api/xstocks/freshness` is left in place because the scanner-cycle header tooltip still consumes it. Description text above the Filter Pipeline Diagnostics panel updated to reflect post-B79.0m.b2 functional-crypto-parity state.
@@ -2404,6 +2410,7 @@ After initial B79.0m.b2 ship, 6 follow-up commits closed Kyle's catalog of 9 dia
 - **Modify a strategy's lane eligibility** → edit `lane-eligibility.ts`. Pattern lane reserved for `stratFamily === 'pattern'` only; family lanes admit pattern + family + hybrid (per HYBRID_FAMILY_ELIGIBILITY) + multi-family (per MULTI_FAMILY_ELIGIBILITY).
 - **Add UI consumer of a per-lane counter** → the endpoint surfaces them under `vtsEvaluation.<field>` and `lastCycleVtsEval.<field>`. Pattern-lane fields available: `patternPairsEvaluated`, `patternStrategyEvaluations`, `patternStrategyNulls`, `patternSignalsGenerated`, `patternSignalsRejected`. Quant-lane equivalents with `quant` prefix.
 - **Compute family-mismatch %** → divide `nullReasons.familyFilterMismatch` by `vtsEvaluation.familyMismatchDenominatorTotal` (NOT by `strategiesEvaluated`).
+- **Surface a NEW reject reason on the panel (B-DIAG-387)** → write the reason into `counters.nullReasonAggregate[<key>]` (+ the per-lane `quant/patternNullReasonAggregate[<key>]` for accurate Quant/Pattern columns) at the reject site in `eval-cycle.ts`; the lifetime merge (`scanner.ts`) carries it into `lt`; then add it to the endpoint's structured `nullReasons`/`rejectedReasons` in `routes.ts`. NEVER reintroduce an always-empty `byReason`/`total*` fallback (that hard-zeroed the Net-EV tile and caused #386). The Net-EV-floor count is keyed `net_ev_rejected` in-memory (↔ archive reason `net_ev_below_floor`). Validate against `signal_eval_archive` over a since-restart window.
 
 ---
 

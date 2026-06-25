@@ -222,3 +222,27 @@
 **Archive copy:** none — a handful of const declarations (not a whole file); git history is the authoritative archive.
 **Removal commit:** _(recorded at reorg-B2 Step-3/push)_
 **Reviewed by:** Langston Step-4 _pending_ (Discord).
+
+---
+
+## B-DIAG-387 (2026-06-25) — dead xStock filter-diagnostics "reference shape" scaffolding (#387; never-leave-legacy rule 18)
+
+| Item | Location (pre-removal) | What it was |
+|---|---|---|
+| `byStrategy`, `totalEvaluated`, `totalNulls`, `totalSignals`, `totalRejected`, `totalTrades`, `byReason`, `byRegime` locals | `server/routes.ts` `/api/xstocks/filter-diagnostics` (~L7412-7417, the block self-labeled "declaration scaffolding for the existing reference shape") | Permanently-empty locals. They were only ever no-op fallbacks: `(lt?.X ?? 0) \|\| totalX`, `live[r] ?? byReason[r] ?? 0`, `lt?.map ?? byReason`. |
+| `rejectedReasons: { netEvBelowFloor: byReason['net_ev_below_floor'] \|\| totalRejected }` read | same endpoint (~L7846) | **The #386 bug itself** — it read the empty `byReason` map → reported the xStock Net-EV-floor rejection count as `0` forever, which is what fooled CC-B into the retracted #386 "xStock clears EV" claim. |
+| `signalRejections: { total: totalRejected, byReason, byRegime }` response field | same endpoint (~L7889) | An always-`{ total:0, byReason:{}, byRegime:{} }` field on the xStock payload. No client consumer. |
+| `signalRejections` required-ness on `FilterDiagnosticsData` | `client/src/pages/machine-learning.tsx` (~L173) | Relaxed to optional (NOT deleted) — the **crypto** endpoint still emits a populated `signalRejections`; only xStock stopped. |
+
+**Why removed:** the dead `byReason`/`totalRejected` scaffolding was the direct cause of #386 (a decision-grade dashboard counter reading 0 forever). Per rule 18 it can't be left as commented/orphaned fallbacks where it could mislead again. All consumption now sources from the live `lt`/`ec`/`live` accumulators (the real Net-EV-floor count comes from `nullReasonAggregate['net_ev_rejected']`, written at the single reject site `eval-cycle.ts:716`).
+
+**Blast-radius verification (certainty-before-cutting):**
+- **Client consumers (repo-wide grep of `client/src`):** ZERO readers of `.signalRejections` or `.byRegime` for the xStock tab (or any tab) — only the type declaration, now made optional. The real per-reason rejection data is surfaced via `vtsEvaluation` (`rejectedReasons` + `nullReasonDetail` + the per-lane detail maps), which the panel does read.
+- **Crypto endpoint UNTOUCHED:** `server/routes/vts.ts` keeps its own populated `signalRejections` (from `getSkippedSignalsSummary`); this removal is scoped to the xStock endpoint only.
+- **tsc baseline GREEN after removal** (no new errors above baseline) — confirms no dangling reference to the deleted locals.
+
+**Left intentionally (NOT dead):** `signalRejections` on `FilterDiagnosticsData` (kept optional for the crypto payload shape); the crypto endpoint's `signalRejections` emission; all `lt`/`ec`/`live` accumulator fields (the live source of truth).
+
+**Archive copy:** none — inline endpoint locals + one response field (not a whole file); git history is the authoritative archive.
+**Removal commit:** `1c451f5b5`.
+**Reviewed by:** Langston Step-4 APPROVED (Discord, 2026-06-25) — the dead-scaffold excision was condition (1) of his approval.
