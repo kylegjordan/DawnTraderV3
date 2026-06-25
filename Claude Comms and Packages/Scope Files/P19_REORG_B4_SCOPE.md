@@ -4,7 +4,9 @@ change-class: architecture
 
 **Phase:** 19 · **Owner:** Claude New (CC-B) · **Plan home:** `P19_REORG_BOTH_CLASSES_PLAN_2026-06-19.md` row B4 (pulled forward, 3-way locked) · **Drafted:** 2026-06-25
 
-> **★ This is a DESIGN-CONSENSUS draft, not a final scope.** §0 states the locked goal; §2 surfaces the load-bearing design forks with my recommendation each, for Langston's Step-1 review. The objectives (§3) firm up once the forks are settled.
+> **★ STEP-1 CONSENSUS REACHED (CC-B + Langston, 2026-06-25).** §0 = locked goal; §2 = the forks (now settled — see the resolution after each); §3 = FIRMED objectives; §6 = the two hard gates before B4 close. Next: Step-2 pre-audit.
+>
+> **All 5 forks settled:** A → **separate `openShadowTrades` Map + parameterized resolver** (NOT filter-at-read; verified `resolveOpenVirtualTrades` iterates the in-memory Map at :2288/:2381, so shadow needs its own Map the resolver also drains — the live-counted `openVirtualTrades` stays shadow-free BY CONSTRUCTION). B → `(cycle_id, signal_id)` shadow-namespaced dedupe (exactly one shadow per pool member per cycle). C → C1 JSONB now; C2 (partial expression index on `context->>'shadow'`) decided AT the OBJ-2 pairing-query step (RUNNING_ISSUES-homed with that trigger). D → B4 = data engine; OBJ-2 captures the FULL decision-time scored-pool snapshot. E → defer SQE-rejected, RUNNING_ISSUES-homed with an explicit B5-evaluation trigger.
 
 ---
 
@@ -36,11 +38,27 @@ Open a **telemetry-only simulated trade for EVERY signal reaching the ready-to-b
 
 **FORK E — SQE-rejected inclusion.** The plan says "optionally, SQE-rejected signals, tagged." **My lean:** DEFER — start with the RTB pool (signals that passed SQE + reached RTB). Adding SQE-rejected sims is a bigger population + a separate tag; home it as a B4-followup if the pool data proves insufficient. (Scope discipline.)
 
-## 3. Provisional objectives (firm up post-consensus)
-- **OBJ-1:** At `getRankedSignals`, for every signal in the freshly-scored pool, open a shadow sim (reusing `registerOpenVtsTrade` + a shadow tag), EXCLUDED from the VTS open-cap + dedupe (per FORK A/B). Crypto + xStock.
-- **OBJ-2:** Shadow sims resolve to close via the existing exit machinery; on close, write a pool-pairing record (promoted_id ↔ alternatives + outcomes) for selection-quality (per FORK D).
-- **OBJ-3 (guardrail):** Fail-loud assertions that a shadow signal can NEVER reach `executePromotedSignal`/the real fill/`paper_sim_trades`; shadow never affects active caps/sizing/selection. A test proving the active path is byte-identical with the shadow layer on vs off.
-- **OBJ-4:** Telemetry/visibility (counts of shadow opens/closes per class) — minimal; the rich selection-quality view is reorg-B6.
+## 3. FIRMED objectives (Step-1 consensus)
+
+- **OBJ-1 — shadow-open the full RTB pool, off the hot path, in a separate Map.** At `ready_to_buy_service.getRankedSignals`, **AFTER the winner is sliced** (post-decision, fire-and-forget — a shadow-open failure/slowness must NEVER delay or alter the live promotion), open a shadow sim for every signal in the freshly-scored pool. Reuse `registerOpenVtsTrade`'s persistence (`vts_open_trades`, tagged `context.shadow=true` + `promoted_signal_id` + `cycle_id`) BUT insert into a **separate `openShadowTrades` Map, NOT `openVirtualTrades`** (FORK A — keeps the learning cap + all `openVirtualTrades` readers shadow-free by construction). Dedupe via a shadow-namespaced hash keyed on `(cycle_id, signal_id)` (FORK B — exactly one shadow per pool member per cycle). Crypto + xStock.
+- **OBJ-2 — resolve shadows to close + write the FORWARD-COMPLETE pairing record.** Parameterize `resolveOpenVirtualTrades` (:2264) to drain BOTH `openVirtualTrades` and `openShadowTrades` through the one existing close path. On the promotion-cycle boundary, capture a **full decision-time scored-pool snapshot** (FORK D — the load-bearing one): for the promoted pick AND each pool alternative — `signal_id`, `finalScore`, `rankingScore` (+ every ranker input B5 intends to test), plus `cycle_id`, `asset_class`, `regime-at-decision`; on close, attach the realized outcome (R / PnL, exit reason, holding time). **Snapshot at decision time, NOT recomputed at close** (scores drift). C1 JSONB for the open path; the C1→C2 decision (a partial expression index on `context->>'shadow'`, or a typed column) is made HERE when the pairing-query shape is known — RUNNING_ISSUES-homed with that trigger (FORK C).
+- **OBJ-3 — the guardrail, as TWO separate invariant tests.** (a) **Active path byte-identical** shadow-on vs shadow-off: a shadow signal can NEVER reach `executePromotedSignal` / the real fill / `paper_sim_trades` (fail-loud assert). (b) **VTS learning portfolio byte-identical** shadow-on vs shadow-off: the non-shadow `openVirtualTrades` count + `getMaxOpenTrades()` cap behavior + all count/accounting readers are unchanged (the FORK-A contamination surface; proven by the separate-Map design + the §6 reader enumeration).
+- **OBJ-4 — minimal telemetry.** Per-class shadow open/close counts surfaced for sanity; the rich selection-quality view rides reorg-B6, the score rides reorg-B5.
+
+## 4. Verification criteria
+- Staging: shadow sims open for the full RTB pool (count > the 1 promoted), tagged, in `vts_open_trades` (separate Map in memory); the real-open count + the regular VTS-learning-sim count + cap are provably unchanged vs baseline (OBJ-3 a+b). Pairing records written with the full decision-time scored-pool snapshot. Claude-in-Chrome UI/telemetry confirm (§9.3). Bench tsc baseline + vitest (incl. the two OBJ-3 tests); CI 4-green; no migration unless C2 lands (then `git add -f` + MANIFEST + rollback).
+
+## 5. SIM / System Manual applicability
+- **SIM:** YES — new pool-aware sim path + a new cross-cutting interaction at the RTB promotion boundary + the separate `openShadowTrades` Map (a new runtime singleton → §17 Cross-Cutting Liveness Registry) + a new writer to `vts_open_trades`.
+- **System Manual:** YES — the shadow-trade telemetry layer + the decision-time selection-quality capture, in the signal-pipeline chapter.
+
+## 6. Hard gates before B4 close (Langston Step-1)
+1. **Shadow excluded from EVERY cap/accounting reader** — the separate-Map design makes this true by construction; the Step-2 pre-audit enumerates every `openVirtualTrades` reader (cap gates :1544/:3032/:3455; dup/lane guards :1489/:1503/:3017/:3715; getStats :2961/:2981; cycle logs :2907/:2909; rehydrate :687; ranking-weights :4503/:4536) as the explicit proof. **CHANGES-NEEDED gate at Step-4 if any reader could see a shadow row.**
+2. **Pairing record forward-complete vs B5/B6 inputs** — before B4 ships, a forward field-check against the ranker inputs B5 will test + B6's Filter-Diag selection-quality view, so B4's schema never needs re-opening (§8#11 NO-PATCHES). **Langston's hard Step-2 check.**
+
+## 7. §13 named homes to land at Step-2 (RUNNING_ISSUES)
+- **C2-trigger:** "shadow `vts_open_trades` index — decide a partial expression index on `context->>'shadow'` (or typed column) when the OBJ-2 pairing-query shape is known; trigger = the close-time query scans shadow at pool volume."
+- **E-trigger:** "shadow SQE-rejected population study — revisit after B5 consumes B4's selection-quality data; if RTB-pool-only proves insufficient for B5's ranker, SQE-rejected shadow inclusion becomes a named B4-followup at that point."
 
 ## 4. Verification criteria
 - Staging: shadow sims open for the full RTB pool (count > the 1 promoted), tagged, in `vts_open_trades`; the regular VTS cap + the active opens are provably unaffected (real-open count + VTS-learning-sim count unchanged vs baseline). Selection-quality pairing records written at close. UI/telemetry confirms via Claude-in-Chrome (§9.3). Bench tsc baseline + vitest; CI 4-green; no live behavior change (OBJ-3 test).
