@@ -718,6 +718,25 @@ export async function evaluateXstockPairForVTS(
           if (lane.kind === 'pattern') counters.patternSignalsRejected++;
           else counters.quantSignalsRejected++;
           counters.byStrategy[strategyKey].rejected++;
+          // B-DIAG-387 (#387): record the net-EV-floor rejection so the dashboard
+          // "Net EV Below Floor" tile reflects reality. It was hard-zero because
+          // the endpoint read a dead `byReason` scaffold while this site bumped
+          // only signalsRejectedBySQE. The combined aggregate feeds the endpoint
+          // total via the lifetime accumulator (scanner.ts:1033); the per-lane
+          // 'net_ev_rejected' key feeds the panel's Quant/Pattern columns
+          // (machine-learning.tsx:3148-3149). Same key both places. NOTE:
+          // 'net_ev_rejected' is NOT in the Section-1 groupDefs, so it does not
+          // render or pollute the Setup-Nulls section total — it surfaces only
+          // in Section-3 via rejectedReasons.netEvBelowFloor.
+          counters.nullReasonAggregate['net_ev_rejected'] =
+            (counters.nullReasonAggregate['net_ev_rejected'] ?? 0) + 1;
+          if (lane.kind === 'pattern') {
+            counters.patternNullReasonAggregate['net_ev_rejected'] =
+              (counters.patternNullReasonAggregate['net_ev_rejected'] ?? 0) + 1;
+          } else {
+            counters.quantNullReasonAggregate['net_ev_rejected'] =
+              (counters.quantNullReasonAggregate['net_ev_rejected'] ?? 0) + 1;
+          }
           try {
             archiveSignalEval({
               mode: 'vts', // ITEM-4 step 2 (D1): xstock eval-cycle is VTS-side — carried stamp
@@ -756,6 +775,18 @@ export async function evaluateXstockPairForVTS(
           else counters.quantSignalsRejected++;
           counters.byStrategy[strategyKey].rejected++;
           counters.nullReasonAggregate[gateCheck.reason] = (counters.nullReasonAggregate[gateCheck.reason] ?? 0) + 1;
+          // B-DIAG-387 (#387) OBJ-2: also record the pre-open gate reason per-lane so
+          // the panel's Quant/Pattern columns are accurate (the combined aggregate
+          // alone left the per-pool cells at 0). Same if/else split the other reason
+          // sites use. Surfaces reentry_cooldown/price_past_stop/price_past_target —
+          // previously invisible gates (no-hidden-gates).
+          if (lane.kind === 'pattern') {
+            counters.patternNullReasonAggregate[gateCheck.reason] =
+              (counters.patternNullReasonAggregate[gateCheck.reason] ?? 0) + 1;
+          } else {
+            counters.quantNullReasonAggregate[gateCheck.reason] =
+              (counters.quantNullReasonAggregate[gateCheck.reason] ?? 0) + 1;
+          }
           try {
             archiveSignalEval({
               mode: 'vts', // ITEM-4 step 2 (D1): xstock eval-cycle is VTS-side — carried stamp

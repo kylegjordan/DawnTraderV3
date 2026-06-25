@@ -7409,12 +7409,14 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // populated by every cycle of `eval-cycle.ts`. That accumulator already
       // has byStrategy, byStrategyNullReasons, and nullReasonAggregate in the
       // correct shape with zero DB cost. Skipping the broken DB queries.
-      const byStrategy: Record<string, { evaluated: number; trueNulls: number; signals: number; rejected: number; trades: number }> = {};
-      let totalEvaluated = 0, totalNulls = 0, totalSignals = 0, totalRejected = 0, totalTrades = 0;
-      const byReason: Record<string, number> = {};
-      const byRegime: Record<string, number> = {};
-      // Note: lt-aggregate consumption happens below; this block remains as
-      // declaration scaffolding for the existing reference shape.
+      // B-DIAG-387 (#387): the dead "declaration scaffolding for the existing
+      // reference shape" (byStrategy/totalEvaluated/totalNulls/totalSignals/
+      // totalRejected/totalTrades/byReason/byRegime — all permanently empty) was
+      // removed here. Those empty locals were only ever no-op `|| 0` / `?? {}`
+      // fallbacks, and the `byReason['net_ev_below_floor'] || totalRejected` read
+      // they fed was the exact #386 bug (reported 0 forever). All consumption now
+      // sources directly from the live `lt`/`ec`/`live` accumulators. See
+      // DELETED_COMPONENTS_LOG.md (B-DIAG-387).
 
       // B79.0m.b2-followup (Kyle 2026-05-12 issue #1): the prior 24h universe
       // aggregate did `COUNT(DISTINCT symbol)` + `COUNT(DISTINCT date_trunc
@@ -7703,11 +7705,11 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // panel is labeled "24-Hour Rolling"). lastCycleVtsEval = the just-
       // finished cycle's view (mirrors lastScan but for the strategy-level
       // funnel). The frontend reads them independently — no field reuse.
-      const totalEvaluatedEff = (lt?.strategiesEvaluated ?? 0) || totalEvaluated;
-      const totalNullsEff = (lt?.strategyNulls ?? 0) || totalNulls;
-      const totalSignalsEff = (lt?.signalsGenerated ?? 0) || totalSignals;
-      const totalRejectedEff = (lt?.signalsRejectedBySQE ?? 0) || totalRejected;
-      const tradesOpenedEff = lt?.tradesOpened ?? totalTrades;
+      const totalEvaluatedEff = lt?.strategiesEvaluated ?? 0;
+      const totalNullsEff = lt?.strategyNulls ?? 0;
+      const totalSignalsEff = lt?.signalsGenerated ?? 0;
+      const totalRejectedEff = lt?.signalsRejectedBySQE ?? 0;
+      const tradesOpenedEff = lt?.tradesOpened ?? 0;
 
       // B-NEW-9 path A (Kyle directive 2026-05-13): DB-backed 24h trades-
       // opened counts. In-memory counters reset on PM2 restart, so 24h-
@@ -7764,7 +7766,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // reversal) never appear in the By Strategy panel because their counter
       // is created lazily on first iteration. DB has 10 xstock-enabled
       // strategies; panel was showing only the ones that fired this run.
-      const enrichedByStrategy: Record<string, any> = { ...(lt?.byStrategy ?? byStrategy) };
+      const enrichedByStrategy: Record<string, any> = { ...(lt?.byStrategy ?? {}) };
       try {
         const { STRATEGY_DISPLAY_NAMES, isStrategyEnabledForAssetClass } =
           await import('./config/canonical-regime-strategy-map.js');
@@ -7785,7 +7787,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
 
       const vtsEvaluation = {
         timestamp: Date.now(),
-        quantPairsEvaluated: quantPairsEval || (lt?.pairsEntered ?? totalEvaluated),
+        quantPairsEvaluated: quantPairsEval || (lt?.pairsEntered ?? 0),
         patternPairsEvaluated: patternPairsEval,
         // B-NEW-4 (2026-05-12): Pair-Pool Evaluations row in the shared
         // FilterDiagnosticsPanel reads quant/patternPairPoolEvaluations
@@ -7829,19 +7831,35 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         nullReasons: (() => {
           const live = lt?.nullReasonAggregate ?? {};
           return {
-            conditionsNotMet: live['conditions_not_met'] ?? byReason['conditions_not_met'] ?? 0,
-            adxGuard: live['adx_guard'] ?? byReason['adx_guard'] ?? 0,
-            duplicatePosition: live['duplicate_position'] ?? byReason['duplicate_position'] ?? 0,
+            conditionsNotMet: live['conditions_not_met'] ?? 0,
+            adxGuard: live['adx_guard'] ?? 0,
+            duplicatePosition: live['duplicate_position'] ?? 0,
             uniqueDuplicateCombos: 0,
-            maxOpenTrades: live['max_open_trades'] ?? byReason['max_open_trades'] ?? 0,
-            regimeNoStrategies: live['regime_no_strategies'] ?? byReason['regime_no_strategies'] ?? 0,
-            familyFilterMismatch: live['family_filter_mismatch'] ?? byReason['family_filter_mismatch'] ?? 0,
+            maxOpenTrades: live['max_open_trades'] ?? 0,
+            regimeNoStrategies: live['regime_no_strategies'] ?? 0,
+            familyFilterMismatch: live['family_filter_mismatch'] ?? 0,
             patternInputMissing: live['pattern_input_missing'] ?? 0,
             setupHashDedupe: live['setup_hash_dedupe'] ?? 0,
+            // B-DIAG-387 (#387) OBJ-2 (no-hidden-gates): surface the pre-open/TCL
+            // gate reasons that checkPreOpenGates emits (vts-runner.ts:3000) — these
+            // land in nullReasonAggregate but were rendered NOWHERE (neither the
+            // structured rows nor the panel groupDefs), so they were invisible
+            // gates. duplicate_position + max_open_trades already render above; the
+            // other three are surfaced here + as new panel rows.
+            reentryCooldown: live['reentry_cooldown'] ?? 0,
+            pricePastStop: live['price_past_stop'] ?? 0,
+            pricePastTarget: live['price_past_target'] ?? 0,
             unknown: live['unknown'] ?? 0,
           };
         })(),
-        rejectedReasons: { netEvBelowFloor: byReason['net_ev_below_floor'] || totalRejected },
+        // B-DIAG-387 (#387) OBJ-1: source the Net-EV-floor rejection count from the
+        // real lifetime accumulator (eval-cycle.ts:716 writes 'net_ev_rejected' into
+        // nullReasonAggregate). Was `byReason['net_ev_below_floor'] || totalRejected`
+        // — both permanently-empty scaffolding → reported 0 forever (the #386 bug).
+        // In-memory/dashboard key = 'net_ev_rejected' (client-dictated, see
+        // machine-learning.tsx:3148-3150); the archive records the SAME event under
+        // gate_decision.reason='net_ev_below_floor' (archiver-layer key).
+        rejectedReasons: { netEvBelowFloor: lt?.nullReasonAggregate?.['net_ev_rejected'] ?? 0 },
         // Prefer live in-memory byStrategy (with nulls/signals/rejected/trades fields)
         // over the archive aggregate when present; UI uses both interchangeably.
         // B-NEW-10: enriched with zero-rows for xstock-enabled strategies that
@@ -7849,13 +7867,13 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         byStrategy: enrichedByStrategy,
         // Full per-strategy null-reason breakdown (what each strategy is failing on).
         byStrategyNullReasons: lt?.byStrategyNullReasons ?? {},
-        nullReasonDetail: lt?.nullReasonAggregate ?? byReason,
+        nullReasonDetail: lt?.nullReasonAggregate ?? {},
         // B-NEW-12.b (2026-05-13): per-lane null-reason aggregates now
         // separately maintained in eval-cycle.ts. Was emitting the combined
         // aggregate in the quant slot + {} in pattern, which made the panel
         // double-count (quant column showed total instead of quant share)
         // so per-pool %s could exceed 100% (Kyle's 92.3% + 16.4% screenshot).
-        quantNullReasonDetail: (lt as any)?.quantNullReasonAggregate ?? lt?.nullReasonAggregate ?? byReason,
+        quantNullReasonDetail: (lt as any)?.quantNullReasonAggregate ?? lt?.nullReasonAggregate ?? {},
         patternNullReasonDetail: (lt as any)?.patternNullReasonAggregate ?? {},
         // B79.0m.b2-followup (Kyle 2026-05-12 issue #6): denominator for
         // family-mismatch % was strategiesEvaluated only (eligibility-pass),
@@ -7884,7 +7902,12 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         // FilterDiagnosticsData-compatible fields
         lastScan,
         rolling24h,
-        signalRejections: { total: totalRejected, byReason, byRegime },
+        // B-DIAG-387 (#387): the always-empty `signalRejections` field was removed
+        // with its dead feeder vars (totalRejected/byReason/byRegime). No client
+        // reads it for the xStock tab (verified: no `.signalRejections`/`.byRegime`
+        // consumer); the crypto endpoint keeps its own populated signalRejections.
+        // The real per-reason rejection data is surfaced via vtsEvaluation
+        // (rejectedReasons + nullReasonDetail). See DELETED_COMPONENTS_LOG.md.
         vtsEvaluation,
         guardDrops,
         trackerStartedAt,
@@ -7919,6 +7942,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           tradesOpened: ec.tradesOpened,
           setupHashDeduped: (ec as any).setupHashDeduped ?? 0,
           nullReasonDetail: ec.nullReasonAggregate ?? {},
+          // B-DIAG-387 (#387): per-cycle parity with the 24h vtsEvaluation block —
+          // surface the net-EV-floor rejection count for the just-finished cycle.
+          rejectedReasons: { netEvBelowFloor: ec.nullReasonAggregate?.['net_ev_rejected'] ?? 0 },
           // B-NEW-19 (Kyle directive 2026-05-13): per-lane null-reason aggregates
           // emitted at per-cycle granularity so the Last Scan section can render
           // the Quant/Pattern split for Pre-Eval Skips and compute Possible

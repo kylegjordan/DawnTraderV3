@@ -170,7 +170,12 @@ interface FilterDiagnosticsData {
       familyPaths?: Record<string, { imf: { failedLQ: number; failedVN: number; failedDI: number; passed: number; total: number }; survivors: number }>;
     };
   };
-  signalRejections: {
+  // B-DIAG-387 (#387): now optional. The crypto endpoint still emits a populated
+  // signalRejections (from getSkippedSignalsSummary); the xStock endpoint dropped
+  // it (it was always-empty dead scaffolding — see DELETED_COMPONENTS_LOG). No
+  // component reads this field for either tab; kept optional only for the crypto
+  // payload shape.
+  signalRejections?: {
     total: number;
     byReason: Record<string, number>;
     byRegime: Record<string, number>;
@@ -3126,6 +3131,31 @@ export function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagno
                                   const num = nr.familyFilterMismatch ?? 0;
                                   return denom > 0 ? `${Math.round(num / denom * 100)}%` : '0%';
                                 })()}</td>
+                              </tr>
+                              {/* B-DIAG-387 (#387) OBJ-2 (no-hidden-gates): the three pre-open
+                                  gate reasons checkPreOpenGates can emit that previously rendered
+                                  nowhere. Guarded `?? 0` so the shared panel renders 0 harmlessly
+                                  for any class whose endpoint doesn't (yet) surface them. */}
+                              <tr className="border-b hover:bg-muted/30">
+                                <td className="p-2">Re-entry Cooldown</td>
+                                {hasPoolDetail && <td className="p-2 text-right text-orange-500">{poolCell(quantDetail?.['reentry_cooldown'] ?? 0, quantEvals)}</td>}
+                                {hasPoolDetail && <td className="p-2 text-right text-orange-500">{poolCell(patternDetail?.['reentry_cooldown'] ?? 0, patternEvals)}</td>}
+                                <td className="p-2 text-right text-orange-500">{fmt(nr.reentryCooldown ?? 0)}</td>
+                                <td className="p-2 text-right">{pct(nr.reentryCooldown ?? 0)}%</td>
+                              </tr>
+                              <tr className="border-b hover:bg-muted/30">
+                                <td className="p-2">Price Past Stop (entry no longer viable)</td>
+                                {hasPoolDetail && <td className="p-2 text-right text-orange-500">{poolCell(quantDetail?.['price_past_stop'] ?? 0, quantEvals)}</td>}
+                                {hasPoolDetail && <td className="p-2 text-right text-orange-500">{poolCell(patternDetail?.['price_past_stop'] ?? 0, patternEvals)}</td>}
+                                <td className="p-2 text-right text-orange-500">{fmt(nr.pricePastStop ?? 0)}</td>
+                                <td className="p-2 text-right">{pct(nr.pricePastStop ?? 0)}%</td>
+                              </tr>
+                              <tr className="border-b hover:bg-muted/30">
+                                <td className="p-2">Price Past Target (entry no longer viable)</td>
+                                {hasPoolDetail && <td className="p-2 text-right text-orange-500">{poolCell(quantDetail?.['price_past_target'] ?? 0, quantEvals)}</td>}
+                                {hasPoolDetail && <td className="p-2 text-right text-orange-500">{poolCell(patternDetail?.['price_past_target'] ?? 0, patternEvals)}</td>}
+                                <td className="p-2 text-right text-orange-500">{fmt(nr.pricePastTarget ?? 0)}</td>
+                                <td className="p-2 text-right">{pct(nr.pricePastTarget ?? 0)}%</td>
                               </tr>
                             </tbody>
                           </table>
