@@ -85,6 +85,9 @@ import {
   _testClearEngineConfigCache,
   getTECDiagnostics,
 } from '../../services/trailing-exit-controller.js';
+// The mocked module-constants service (vi.mock above) — imported so the
+// B-TEC-SELFHEAL coalescer test can assert exactly-one refresh fired.
+import { getModuleConstants } from '../../services/module-constants-service.js';
 
 describe('B-NEW-40 — TEC refresh-hang hostile scenario', () => {
   const ASSET_CLASS = 'crypto_spot' as const;
@@ -184,5 +187,118 @@ describe('B-NEW-40 — TEC refresh-hang hostile scenario', () => {
     await vi.advanceTimersByTimeAsync(MAX_STALENESS_MS + 1000);
 
     expect(() => resolveTECConfig(ASSET_CLASS)).toThrow(/TEC_STALE_FAIL_CLOSED/);
+  });
+});
+
+/**
+ * ═════════════════════════════════════════════════════════════════════════════
+ * B-TEC-SELFHEAL (2026-06-25, RUNNING_ISSUES #349) — OBJ-1 self-heal + coalescer
+ * ═════════════════════════════════════════════════════════════════════════════
+ * Verifies the refresh-before-throw fix: a stale-past-ceiling consult still
+ * FAILS CLOSED (the safety property is preserved), but it now ALSO schedules the
+ * coalesced background refresh, so once that refresh SUCCEEDS the next consult
+ * self-heals WITHOUT a process restart — converting the old latch-until-restart
+ * into a transient ~1-cycle fence. Both halves are tested (Langston Step-1):
+ * hung refresh → still throws + inFlight appears; successful refresh → next
+ * consult returns cached. Plus the coalescer invariant (N stale consults → 1
+ * refresh) and the unprimed-class guard (no self-heal — boot hard-fail stays).
+ * ═════════════════════════════════════════════════════════════════════════════
+ */
+describe('B-TEC-SELFHEAL — OBJ-1 self-heal (refresh-before-throw) + coalescer', () => {
+  const ASSET_CLASS = 'crypto_spot' as const;
+  const CONFIG_TTL_MS = 60_000;
+  const MAX_STALENESS_MS = 5 * CONFIG_TTL_MS; // 300_000
+  const REFRESH_TIMEOUT_MS = 45_000;
+
+  let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(async () => {
+    consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    moduleConstantsHangControl.hang = false;
+    _testClearEngineConfigCache();
+    await primeTECConfig();
+    vi.useFakeTimers({ shouldAdvanceTime: false });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('SUCCESS half: a stale-past-ceiling consult STILL throws (fail-closed) AND schedules a self-heal refresh; once it succeeds the next consult returns cached — no restart', async () => {
+    moduleConstantsHangControl.hang = false; // the scheduled refresh will succeed
+    // Cross the 5min staleness ceiling from the prime in beforeEach.
+    vi.advanceTimersByTime(MAX_STALENESS_MS + 1000);
+
+    // First consult: past ceiling → fail-closed throw (safety property intact)…
+    expect(() => resolveTECConfig(ASSET_CLASS)).toThrow(/TEC_STALE_FAIL_CLOSED/);
+    // …AND the OBJ-1 fix scheduled a self-heal refresh (inFlight now appears).
+    const during = getTECDiagnostics().classes.find((c) => c.assetClass === ASSET_CLASS);
+    expect(during?.refreshInFlight).toBe(true);
+
+    // Advance past the 45s fence. This is the drain the existing test (a) uses:
+    // advancing across the timer boundary pumps the faked microtask queue
+    // (hasExplicitAssetClassRow → getModuleConstants → cache set). With hang=false
+    // the refresh RESOLVES via those microtasks and clears its own timeout before
+    // the 45s mark, so it lands and heals the cache. (A bare `await Promise.resolve()`
+    // and a sub-45s advance do NOT pump vitest's faked queue.)
+    await vi.advanceTimersByTimeAsync(REFRESH_TIMEOUT_MS + 1000);
+
+    // The cache self-healed: the next consult no longer throws and returns cached
+    // (lastSuccess was advanced by the refresh; age is now well under the ceiling).
+    expect(() => resolveTECConfig(ASSET_CLASS)).not.toThrow();
+    expect(resolveTECConfig(ASSET_CLASS).breakEvenEnabled).toBe(false);
+    const healed = getTECDiagnostics().classes.find((c) => c.assetClass === ASSET_CLASS);
+    expect(healed?.refreshInFlight).toBe(false);
+  });
+
+  it('HUNG half: while the refresh hangs, the stale consult STILL throws and only a SUCCESSFUL refresh clears staleness (fail-closed survives a hung refresh)', async () => {
+    moduleConstantsHangControl.hang = true; // the scheduled refresh hangs
+    vi.advanceTimersByTime(MAX_STALENESS_MS + 1000);
+
+    // Stale consult throws + schedules a (hung) refresh.
+    expect(() => resolveTECConfig(ASSET_CLASS)).toThrow(/TEC_STALE_FAIL_CLOSED/);
+    expect(
+      getTECDiagnostics().classes.find((c) => c.assetClass === ASSET_CLASS)?.refreshInFlight,
+    ).toBe(true);
+
+    // Hung refresh never clears staleness → still fails closed.
+    await vi.advanceTimersByTimeAsync(100);
+    expect(() => resolveTECConfig(ASSET_CLASS)).toThrow(/TEC_STALE_FAIL_CLOSED/);
+  });
+
+  it('COALESCER: N repeated stale consults of one class fire exactly ONE refresh (not N)', async () => {
+    moduleConstantsHangControl.hang = true; // the single refresh will hang then time out
+    vi.advanceTimersByTime(MAX_STALENESS_MS + 1000);
+
+    // 10 stale consults back-to-back — all fail closed; the FIRST schedules the
+    // refresh (sets inFlight synchronously), consults 2-10 short-circuit on the
+    // `!inFlight` coalescer guard.
+    for (let i = 0; i < 10; i++) {
+      expect(() => resolveTECConfig(ASSET_CLASS)).toThrow(/TEC_STALE_FAIL_CLOSED/);
+    }
+    // Exactly one in-flight refresh after all 10 stale consults.
+    expect(
+      getTECDiagnostics().classes.find((c) => c.assetClass === ASSET_CLASS)?.refreshInFlight,
+    ).toBe(true);
+
+    // Advance past the 45s fence: the SINGLE hung refresh times out and records
+    // exactly ONE consecutive failure. If the coalescer had failed and all 10
+    // consults each fired a refresh, the count would be 10 — so failCount === 1
+    // is the proof that the ~120/hr stuck-consult pattern costs a single refresh.
+    await vi.advanceTimersByTimeAsync(REFRESH_TIMEOUT_MS + 1000);
+    expect(
+      getTECDiagnostics().classes.find((c) => c.assetClass === ASSET_CLASS)?.consecutiveFailCount,
+    ).toBe(1);
+  });
+
+  it('UNPRIMED guard: an unprimed class does NOT schedule a self-heal refresh — it falls through to TEC_CACHE_MISS_FATAL (boot hard-fail invariant preserved)', () => {
+    // Clear the cache so the class is genuinely unprimed (no entry).
+    _testClearEngineConfigCache();
+    (getModuleConstants as unknown as { mockClear: () => void }).mockClear();
+
+    expect(() => resolveTECConfig(ASSET_CLASS)).toThrow(/TEC_CACHE_MISS_FATAL/);
+    // The unprimed-class guard returned early — NO self-heal refresh was fired.
+    expect((getModuleConstants as unknown as { mock: { calls: unknown[] } }).mock.calls.length).toBe(0);
   });
 });

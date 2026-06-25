@@ -230,13 +230,102 @@ function startResolveAggregator(): void {
  * wholesale snapshot replacement). This preserves consistency-within-cycle
  * and avoids rendering the function async.
  */
+// OBJ-1 (B-TEC-SELFHEAL, 2026-06-25 — RUNNING_ISSUES #349): schedule the
+// coalesced, NON-AWAITED background refresh for an EXPIRED-but-already-PRIMED
+// class. Extracted to a SINGLE call site — invoked at the TOP of
+// resolveTECConfig, BEFORE both the staleness throw and the cache-miss throw —
+// so a stale-past-ceiling consult still fails closed for THIS call but reheats
+// the cache for the NEXT one. This converts the old latch-until-restart into a
+// transient ~1-cycle fence. (PRIOR DEFECT: the refresh trigger sat AFTER the
+// staleness throw, so a past-ceiling consult threw before ever scheduling its
+// own recovery → the cache could only un-stale via a process restart; weekend
+// xStock reopen sat stuck ~17h on 06-22. See B_TEC_SELFHEAL_SCOPE.md.)
+//
+// ★ UNPRIMED-CLASS GUARD (Langston Step-2): fires ONLY when the class already
+// has a cache entry. An UNPRIMED class (no entry) is a boot HARD-FAIL invariant
+// — primeTECConfig() process.exits if a class fails to warm — so we DELIBERATELY
+// do NOT lazy-self-heal it here; it must fall through to [TEC_CACHE_MISS_FATAL].
+// Do NOT "fix" this guard into self-healing an unprimed class.
+//
+// ★ COALESCER (Langston Step-1): the !inFlight guard makes N stale consults of
+// one class produce exactly ONE in-flight refresh, not N — turning the
+// stuck-consult pattern (observed ~120/hr) into a single refresh.
+//
+// B-NEW-40 (2026-05-17): the refresh is wrapped in Promise.race against a 45s
+// timeout so the inFlight Map ALWAYS releases — even when the underlying pg
+// promise neither resolves nor rejects (silent-TCP-death). Without this a hung
+// refresh would trap the Map entry for the rest of process lifetime, blocking
+// every future refresh and producing the permanent TEC_STALE_FAIL_CLOSED
+// cascade observed 2026-05-15/-16. 45s budget: pool query_timeout (30s) rejects
+// the underlying query first; the 15s buffer covers event-loop scheduling,
+// deserialization, GC. Plain setTimeout (per-call one-shot, not recurring) —
+// no Central Clock churn (Langston Step-1 Q7).
+function scheduleBackgroundRefresh(
+  assetClass: AssetClass,
+  now: number,
+  expiresAt: number,
+): void {
+  // Unprimed class → NO self-heal (boot hard-fail invariant; see above). The
+  // caller (resolveTECConfig) then falls through to [TEC_CACHE_MISS_FATAL].
+  if (!tecConfigCache.has(assetClass)) return;
+  // Not yet expired, OR a refresh is already in flight (coalesced — one at a time).
+  if (now < expiresAt || tecConfigRefreshInFlight.has(assetClass)) return;
+
+  const REFRESH_TIMEOUT_MS = 45_000;
+  let timeoutHandle: NodeJS.Timeout | null = null;
+  const timeoutPromise = new Promise<never>((_resolve, reject) => {
+    timeoutHandle = setTimeout(() => {
+      reject(
+        new Error(
+          `[TEC_REFRESH_TIMEOUT] assetClass=${assetClass} refresh exceeded ` +
+          `${REFRESH_TIMEOUT_MS}ms budget without resolving or rejecting. ` +
+          `Underlying pg promise is hung — releasing inFlight Map so next ` +
+          `caller can attempt a fresh refresh.`,
+        ),
+      );
+    }, REFRESH_TIMEOUT_MS);
+  });
+
+  const promise = Promise.race([
+    refreshTECConfigForClass(assetClass),
+    timeoutPromise,
+  ])
+    .catch((err) => {
+      const failCount = (tecRefreshFailCount.get(assetClass) ?? 0) + 1;
+      tecRefreshFailCount.set(assetClass, failCount);
+      const isTimeout =
+        err instanceof Error && err.message.startsWith('[TEC_REFRESH_TIMEOUT]');
+      const logTag = isTimeout ? '[TEC_REFRESH_TIMEOUT]' : '[TEC_REFRESH_FAIL]';
+      console.error(
+        `${logTag} assetClass=${assetClass} background refresh failed ` +
+        `(consecutive_fail_count=${failCount}):`,
+        err,
+      );
+    })
+    .finally(() => {
+      if (timeoutHandle !== null) {
+        clearTimeout(timeoutHandle);
+      }
+      tecConfigRefreshInFlight.delete(assetClass);
+    });
+  tecConfigRefreshInFlight.set(assetClass, promise);
+}
+
 export function resolveTECConfig(assetClass: AssetClass): TrailingExitConfig {
   const now = Date.now();
   const expiresAt = tecConfigExpiresAt.get(assetClass) ?? 0;
 
+  // OBJ-1 (B-TEC-SELFHEAL): schedule the coalesced, non-awaited self-heal
+  // refresh FIRST — before EITHER throw — so a stale-past-ceiling consult
+  // reheats the cache for the next call even though it (correctly) fails closed
+  // here. Non-blocking: consult latency is unchanged.
+  scheduleBackgroundRefresh(assetClass, now, expiresAt);
+
   // B79.TEC (Langston Q1): max-staleness ceiling. If the last successful
   // refresh is older than 5×TTL, the cache is too stale to trust for a
   // kill-switch key. Fail closed instead of returning the snapshot.
+  // ★ UNCHANGED — the fail-closed safety property. OBJ-1 only added the
+  // self-heal SCHEDULE above; this throw is byte-for-byte identical.
   const lastSuccess = tecConfigLastSuccessAt.get(assetClass) ?? 0;
   if (lastSuccess > 0 && now - lastSuccess > CONFIG_MAX_STALENESS_MS) {
     const stalenessMs = now - lastSuccess;
@@ -246,67 +335,6 @@ export function resolveTECConfig(assetClass: AssetClass): TrailingExitConfig {
       `Investigate DB connectivity and [TEC_REFRESH_FAIL] count.`;
     console.error(msg);
     throw new Error(msg);
-  }
-
-  // Background refresh on stale entry — non-blocking, fire-and-forget,
-  // coalesced via inFlight Map (Langston Q1).
-  //
-  // B-NEW-40 (2026-05-17): wrap the refresh in Promise.race against a 45s
-  // timeout so the inFlight Map ALWAYS releases — even when the underlying pg
-  // promise neither resolves nor rejects (the silent-TCP-death failure mode).
-  // Without this, a single hung refresh traps the Map entry for the rest of
-  // process lifetime, blocking every future refresh attempt and producing the
-  // permanent TEC_STALE_FAIL_CLOSED cascade observed 2026-05-15 and -16.
-  //
-  // 45s budget: pool query_timeout (30s, server/db.ts) rejects the underlying
-  // query first; the 15s buffer covers event-loop scheduling, deserialization,
-  // and GC. Tighter (30-35s) risks false timeouts on legitimate slow refreshes
-  // during transient network blips. Looser (60s+) extends worst-case stale-
-  // fail-closed window unnecessarily.
-  //
-  // Central Clock alignment: per-call one-shot deadline; NOT recurring. Plain
-  // setTimeout is correct — subscribing to Central Clock for a 45s one-shot
-  // would add subscriber churn for zero scheduling benefit. (See pre-audit
-  // §2.6 Central Clock audit + Langston Step 1 Q7.)
-  if (now >= expiresAt && !tecConfigRefreshInFlight.has(assetClass)) {
-    const REFRESH_TIMEOUT_MS = 45_000;
-    let timeoutHandle: NodeJS.Timeout | null = null;
-    const timeoutPromise = new Promise<never>((_resolve, reject) => {
-      timeoutHandle = setTimeout(() => {
-        reject(
-          new Error(
-            `[TEC_REFRESH_TIMEOUT] assetClass=${assetClass} refresh exceeded ` +
-            `${REFRESH_TIMEOUT_MS}ms budget without resolving or rejecting. ` +
-            `Underlying pg promise is hung — releasing inFlight Map so next ` +
-            `caller can attempt a fresh refresh.`,
-          ),
-        );
-      }, REFRESH_TIMEOUT_MS);
-    });
-
-    const promise = Promise.race([
-      refreshTECConfigForClass(assetClass),
-      timeoutPromise,
-    ])
-      .catch((err) => {
-        const failCount = (tecRefreshFailCount.get(assetClass) ?? 0) + 1;
-        tecRefreshFailCount.set(assetClass, failCount);
-        const isTimeout =
-          err instanceof Error && err.message.startsWith('[TEC_REFRESH_TIMEOUT]');
-        const logTag = isTimeout ? '[TEC_REFRESH_TIMEOUT]' : '[TEC_REFRESH_FAIL]';
-        console.error(
-          `${logTag} assetClass=${assetClass} background refresh failed ` +
-          `(consecutive_fail_count=${failCount}):`,
-          err,
-        );
-      })
-      .finally(() => {
-        if (timeoutHandle !== null) {
-          clearTimeout(timeoutHandle);
-        }
-        tecConfigRefreshInFlight.delete(assetClass);
-      });
-    tecConfigRefreshInFlight.set(assetClass, promise);
   }
 
   const cached = tecConfigCache.get(assetClass);
@@ -554,6 +582,16 @@ export function _testClearEngineConfigCache(): void {
   }
   // Clear cache too — forces a hard-miss on next resolve unless re-primed.
   tecConfigCache.clear();
+  // B-TEC-SELFHEAL (2026-06-25): ALSO clear the companion maps for full test
+  // isolation. Previously only cache + expiresAt were reset, so a prior test's
+  // hung-refresh `inFlight` entry (or a stale `lastSuccessAt` / `failCount`)
+  // leaked into the next test — a consult would see the leaked inFlight, skip
+  // scheduling its own refresh, and the leaked entry's timeout (on a discarded
+  // fake clock) would never fire. That cross-test contamination broke the OBJ-1
+  // self-heal + coalescer tests. These maps are re-stamped by primeTECConfig().
+  tecConfigRefreshInFlight.clear();
+  tecConfigLastSuccessAt.clear();
+  tecRefreshFailCount.clear();
 }
 
 /**

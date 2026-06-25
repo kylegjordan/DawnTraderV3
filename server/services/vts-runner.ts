@@ -2418,32 +2418,54 @@ async function resolveOpenVirtualTrades(): Promise<{
           originalStopPrice: trade.originalStopPrice ?? trade.stopLoss,
         };
 
-    const decision = await evaluateTECExit({
-      // B80: per-trade keying. tradeId from the for-of iteration variable.
-      tradeId,
-      symbol: trade.symbol,
-      entryPrice: trade.entryPrice,
-      stopPrice: trade.stopLoss,
-      targetPrice: trade.takeProfit,
-      currentPrice,
-      atr: trade.atrAtOpen ?? 0,
-      holdDurationMs,
-      maxHoldMs: MAX_HOLD_MS,
-      context: {
-        exchange: 'kraken',
-        assetClass: trade.assetClass,
-        strategy: trade.strategy,
-        regime: trade.regime,
-      },
-      useTrailing: true,
-      DI: trade.diAtOpen ?? 50,
-      volNoise: trade.volNoiseAtOpen ?? 0.3,
-      callerMode: 'vts',
-      sourcePool: trade.sourcePool ?? null,
-      currentSlotTotal: Number.POSITIVE_INFINITY, // VTS: no concurrency cap
-      // B80: Option C+ seed (only on first cycle post-restart).
-      seed: tecSeed,
-    });
+    // OBJ-2 (B-TEC-SELFHEAL, 2026-06-25 — RUNNING_ISSUES #349): per-trade
+    // isolation around the exit-eval, mirroring the proven
+    // paper-execution-engine.ts:794 pattern. A [TEC_STALE_FAIL_CLOSED] (or any
+    // evaluateTECExit throw) for ONE open trade must NOT abort the whole exit
+    // loop — today there is no per-trade catch here, so a single stale-class
+    // trade propagates out of resolveOpenVirtualTrades and aborts the entire
+    // runPhase10SimulationCycle at its FIRST step (line ~3273), which also skips
+    // the scan/open phase (~3293). Catch + log loudly + skip THIS trade this
+    // cycle; the refresh OBJ-1 scheduled in resolveTECConfig reheats the class so
+    // the next cycle succeeds. `decision` is declared before the try so the
+    // unchanged post-processing below still sees it on the success path.
+    let decision: Awaited<ReturnType<typeof evaluateTECExit>>;
+    try {
+      decision = await evaluateTECExit({
+        // B80: per-trade keying. tradeId from the for-of iteration variable.
+        tradeId,
+        symbol: trade.symbol,
+        entryPrice: trade.entryPrice,
+        stopPrice: trade.stopLoss,
+        targetPrice: trade.takeProfit,
+        currentPrice,
+        atr: trade.atrAtOpen ?? 0,
+        holdDurationMs,
+        maxHoldMs: MAX_HOLD_MS,
+        context: {
+          exchange: 'kraken',
+          assetClass: trade.assetClass,
+          strategy: trade.strategy,
+          regime: trade.regime,
+        },
+        useTrailing: true,
+        DI: trade.diAtOpen ?? 50,
+        volNoise: trade.volNoiseAtOpen ?? 0.3,
+        callerMode: 'vts',
+        sourcePool: trade.sourcePool ?? null,
+        currentSlotTotal: Number.POSITIVE_INFINITY, // VTS: no concurrency cap
+        // B80: Option C+ seed (only on first cycle post-restart).
+        seed: tecSeed,
+      });
+    } catch (tecExitErr) {
+      console.error(
+        `[TEC_VTS_EXIT_EVAL_ISOLATED] tradeId=${tradeId} symbol=${trade.symbol} ` +
+        `assetClass=${trade.assetClass} — exit-eval threw; skipping THIS trade ` +
+        `this cycle (loop + scan/open continue):`,
+        tecExitErr,
+      );
+      continue;
+    }
 
     // [B83-DIAG] (2026-05-14) Per-trade decision diagnostic for stuck crypto
     // trades. Surface every key input + the evaluator's verdict so we can
