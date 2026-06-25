@@ -28,7 +28,7 @@ ALIAS_NAME = {"CC-A": "OLD Claude", "CC-B": "NEW Claude"}  # display names (Kyle
 MY_NAME = ALIAS_NAME.get(ALIAS, "")
 MY_RE = re.compile(r"@?\b(" + "|".join(NAMES.get(ALIAS, [])) + r")\b", re.I)
 OTHERS_RE = re.compile(
-    r"@?\b(" + "|".join(p for k, v in NAMES.items() if k != ALIAS for p in v) + r")\b", re.I)
+    r"@?\b(" + "|".join([p for k, v in NAMES.items() if k != ALIAS for p in v] + ["langston"]) + r")\b", re.I)
 # B-ALERT-PROTOCOL (#340): a system-alert triage reply ends with an owner marker
 # [[ALERT id=.. owner=<CC-A|CC-B|Kyle> action=".."]] — authoritative wake routing.
 ALERT_OWNER_RE = re.compile(r"\[\[ALERT\b[^\]]*\bowner=(CC-A|CC-B|Kyle)\b", re.I)
