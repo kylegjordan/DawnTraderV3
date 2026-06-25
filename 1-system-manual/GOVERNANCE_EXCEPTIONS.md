@@ -23,7 +23,8 @@
 
 | timestamp (UTC) | batch-id | input-type | value | confirmed_by | reason |
 |---|---|---|---|---|---|
-| _(none yet — post-cutoff exceptions go here)_ | | | | | |
+| 2026-06-25T10:36:03Z | B-NEW-40 | class-override | declared:non_architecture heuristic:architecture | langston | B-NEW-40 = the System-Alerts / soak-verification OBSERVABILITY infrastructure batch (non_architecture). The "architecture" default came from the checker mis-parsing 2026-06-25 soak-follow-up commits that LED their subject with "B-NEW-40" (e.g. "B-NEW-40 soak finding…") as a fresh batch close. Root parser fix homed at RUNNING_ISSUES #350 → B-GOV-4. |
+| 2026-06-25T10:36:03Z | B-NEW-40 | na-skip | system_manual | langston | non_architecture → System Manual not required. The 2026-06-25 follow-up commits (soak RUN + homing #349 to a RUNNING_ISSUES entry + one SIM S18 cross-cutting-registry row) touch ZERO engine/strategy/regime/signal-pipeline/math. Langston-alone (AGREES with correct config — not the arch-override three-way tier). Alerts 90ace091 + 8dbd9524 resolved. |
 
 <!--
 input-type ∈ { na-skip | open | umbrella-namespace | umbrella-done | class-override }
