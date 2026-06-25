@@ -7725,6 +7725,10 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       let trades24hPattern = 0;
       try {
         const dbStart = Date.now();
+        // reorg-B4: EXCLUDE shadow rows — they persist into this shared table
+        // (context.shadow=true) and would inflate the xStock 24h trade-count surface
+        // once live. Single-source predicate (Langston Step-4 finding).
+        const { VTS_OPEN_TRADES_EXCLUDE_SHADOW } = await import('./services/vts-trade-persistence.js');
         const tradeCountResult: any = await db.execute(sql`
           SELECT
             COUNT(*) FILTER (WHERE signal_type = 'PATTERN')::int AS pattern_count,
@@ -7732,6 +7736,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           FROM vts_open_trades
           WHERE asset_class = 'xstock_spot'
             AND opened_at > NOW() - INTERVAL '24 hours'
+            AND ${VTS_OPEN_TRADES_EXCLUDE_SHADOW}
         `);
         const tradeCountRow: any = (tradeCountResult as any).rows?.[0] ?? (tradeCountResult as any)[0];
         if (tradeCountRow) {

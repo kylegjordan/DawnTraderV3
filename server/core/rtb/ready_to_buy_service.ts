@@ -1677,7 +1677,82 @@ class ReadyToBuyService {
 
     console.log(`[8.8.4-C.14.B][RTB_RANKED] mode=${mode}, total=${signals.length}, valid=${validSignals.length}, returning top ${Math.min(limit, validSignals.length)}`);
 
+    // reorg-B4: shadow-trade capture (telemetry-only selection-quality layer). This
+    // method is the SOLE live caller of the promotion path, so this is exactly one
+    // capture per promotion cycle. For EVERY member of the full ranked pool (NOT
+    // just the top-`limit` that get promoted) open a counterfactual shadow trade +
+    // record the decision-time ranking inputs into the isolated rtb_shadow_pairings
+    // sink. Fire-and-forget OFF the hot path (own catch); the return value is
+    // unchanged. DORMANT until paper active trading is on (rtb_total=0 today).
+    void this.captureShadowPool(mode, validSignals, limit, assetClass).catch((err) => {
+      console.warn(`[reorg-B4][SHADOW_CAPTURE] capture threw (promotion unaffected):`, err instanceof Error ? err.message : err);
+    });
+
     return validSignals.slice(0, limit);
+  }
+
+  /**
+   * reorg-B4 — open one shadow trade per ranked-pool member (the promoted picks AND
+   * the non-promoted alternatives), each tagged with its promotionRank + a shared
+   * per-cycle cycleKey + whether the ranker selected it this cycle (`promoted` =
+   * rank < limit). The shadow layer is segregated by construction — see
+   * registerOpenShadowTrade. Dynamic import avoids an rtb↔vts-runner import cycle.
+   */
+  private async captureShadowPool(
+    mode: TradingMode,
+    pool: RtbSignal[],
+    limit: number,
+    assetClass?: AssetClass,
+  ): Promise<void> {
+    if (!pool || pool.length === 0) return;
+    const { registerOpenShadowTrade, nextShadowCycleKey } = await import('../../services/vts-runner.js');
+    const cycleKey = nextShadowCycleKey(mode, assetClass ?? 'all');
+    const num = (v: unknown): number | null => {
+      if (v === null || v === undefined) return null;
+      const n = parseFloat(String(v));
+      return Number.isFinite(n) ? n : null;
+    };
+    for (let i = 0; i < pool.length; i++) {
+      const s = pool[i];
+      const meta = (s.metadata ?? {}) as Record<string, any>;
+      const ac = (s.assetClass as AssetClass) ?? assetClass ?? 'crypto_spot';
+      const entryPrice = num(s.entryPrice);
+      const stopPrice = num(s.stopPrice);
+      if (entryPrice === null || stopPrice === null) continue; // a pool member with no geometry can't be shadow-simmed
+      const targetPrice = num(s.targetPrice) ?? entryPrice * 1.02; // mirror executePromotedSignal's default
+      try {
+        await registerOpenShadowTrade({
+          cycleKey,
+          mode,
+          assetClass: ac,
+          symbol: s.symbol,
+          strategy: s.strategy,
+          signalId: s.signalId,
+          regime: meta.regime ?? meta.pairRegime ?? null,
+          promotionRank: i,
+          promoted: i < limit,
+          entryPrice,
+          stopPrice,
+          targetPrice,
+          atrAtOpen: num(meta.atr ?? meta.atrAtOpen),
+          sourcePool: meta.sourcePool ?? null,
+          finalScore: num(s.finalScore),
+          hybridScore: num(s.hybridScore),
+          confidence: num(s.confidence),
+          regimeWeight: num(s.regimeWeight),
+          decayPenalty: num(s.decayPenalty),
+          rankingScore: num(meta.rankingScore),
+          diAtQueue: num(s.diAtQueue),
+          dbsScoreAtQueue: num(s.dbsScoreAtQueue),
+          // In-queue ⇒ this member already passed SQE; reject-reason is for the
+          // future SQE-rejected E-trigger (deferred — RUNNING_ISSUES §13).
+          sqeVerdict: meta.sqeVerdict ?? 'pass',
+          sqeRejectReason: null,
+        });
+      } catch (err) {
+        console.warn(`[reorg-B4][SHADOW_CAPTURE] ${s.symbol}/${s.strategy} open failed (continuing pool):`, err instanceof Error ? err.message : err);
+      }
+    }
   }
 
   /**

@@ -50,6 +50,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { db } from '../db.js';
 import { sql } from 'drizzle-orm';
+import { VTS_OPEN_TRADES_EXCLUDE_SHADOW } from './vts-trade-persistence.js';
 
 // VTS JSONL log directory — same constant pattern as vts-service.ts:153.
 // Files are date-partitioned: YYYY-MM-DD.json containing a JSON ARRAY.
@@ -155,12 +156,18 @@ export async function loadClosedVtsTradesFromDb(
   // Raw SQL — `vts_open_trades` is created via migration not Drizzle schema
   // (B79.0g-tx). Mirror the access pattern in vts-trade-persistence.ts.
   const sinceIso = since.toISOString();
+  // reorg-B4: EXCLUDE shadow rows. Shadow trades persist into this shared table
+  // (context.shadow=true) and close=true after shadowClose; without this filter the
+  // factor-replay + ablation learning population would silently absorb the full
+  // RTB-pool shadow set (a different population) — the OBJ-3b contamination this
+  // filter prevents. See VTS_OPEN_TRADES_EXCLUDE_SHADOW (Langston Step-4 finding).
   const result: any = await db.execute(sql`
     SELECT id, symbol, strategy, regime, pool, asset_class,
            opened_at, closed_at, context
     FROM vts_open_trades
     WHERE closed = true
       AND opened_at >= ${sinceIso}::timestamptz
+      AND ${VTS_OPEN_TRADES_EXCLUDE_SHADOW}
   `);
   const rows: any[] = (result as any).rows ?? result;
 

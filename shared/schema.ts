@@ -1912,8 +1912,75 @@ export const rtbSignals = pgTable("rtb_signals", {
   modeAssetClassStatusIdx: index("rtb_signals_mode_asset_class_status_idx").on(table.mode, table.assetClass, table.status),
 }));
 
+// ════════════════════════════════════════════════════════════════════════════
+// reorg-B4 (#shadow-trade telemetry layer, 2026-06-25) — the SELECTION-QUALITY
+// SINK. One row per RTB-pool member per promotion cycle: the promoted pick AND
+// every non-promoted alternative, with the DECISION-TIME ranking inputs snapshotted
+// at promotion (so reorg-B5 can re-weight without re-running history) + the realized
+// shadow OUTCOME filled at close. ★ ISOLATION INVARIANT (Langston Step-2): NO
+// learning consumer — ranker, outcomeFeedbackStore, telemetry-aggregator, ML/
+// expectancy/win-rate, regime stats — EVER reads this table. It is a pure B5/B6
+// analysis sink. The shadow close path (allowlist `shadowClose`) writes ONLY here;
+// it NEVER touches outcomeFeedbackStore.updateEma / recordPairTelemetry /
+// updateRollingAverages / the exit-archive. That + the separate `openShadowTrades`
+// Map = the by-construction segregation (open + closed side).
+export const rtbShadowPairings = pgTable("rtb_shadow_pairings", {
+  id: varchar("id").primaryKey(), // shadow trade id (== the openShadowTrades Map key)
+  // ── cycle/keys ──
+  cycleKey: varchar("cycle_key", { length: 80 }).notNull(), // composite: mode|assetClass|tsMs|seq (provably unique per promotion cycle)
+  mode: varchar("mode", { length: 16 }).notNull(),          // 'paper' | 'live'
+  assetClass: varchar("asset_class", { length: 32 }).notNull(),
+  regime: varchar("regime", { length: 50 }),                // global regime at the promotion decision
+  promotionRank: integer("promotion_rank"),                 // 0-based ordinal in the finalScore-sorted pool
+  // ★ SEMANTIC (Langston Step-4): `promoted` = the RANKER's top-N choice this cycle
+  // (promotionRank < openSlots) — it is NOT execution-confirmed. A B5 consumer must
+  // NOT read promoted=true as "the real trade happened"; execution friction (AMR
+  // defer / exec fail) is a separate axis. `promotedTradeId` stays NULL until a
+  // future real-trade-FK reconciliation (not done in B4; B5 ranking-eval doesn't
+  // need it — it needs the pool + ranks + outcomes).
+  promoted: boolean("promoted").notNull().default(false),   // ranker top-N choice (rank < openSlots), NOT execution-confirmed
+  promotedTradeId: varchar("promoted_trade_id"),            // real trade FK if later reconciled; NULL in B4
+  // ── decision-time ranking inputs (snapshotted AT promotion; NOT recomputed at close) ──
+  signalId: varchar("signal_id"),
+  symbol: varchar("symbol", { length: 20 }).notNull(),
+  strategy: varchar("strategy", { length: 50 }).notNull(),
+  entryPrice: decimal("entry_price", { precision: 20, scale: 8 }),
+  stopPrice: decimal("stop_price", { precision: 20, scale: 8 }),
+  targetPrice: decimal("target_price", { precision: 20, scale: 8 }),
+  finalScore: decimal("final_score", { precision: 10, scale: 6 }),     // the sort key
+  hybridScore: decimal("hybrid_score", { precision: 10, scale: 6 }),   // finalScore component (0.40)
+  confidence: decimal("confidence", { precision: 10, scale: 6 }),      // finalScore component (0.30)
+  regimeWeight: decimal("regime_weight", { precision: 10, scale: 6 }), // finalScore component (0.20)
+  decayPenalty: decimal("decay_penalty", { precision: 10, scale: 6 }), // finalScore component (-0.10)
+  rankingScore: decimal("ranking_score", { precision: 10, scale: 6 }), // the B5 candidate metric (inert on active today)
+  sourcePool: varchar("source_pool", { length: 32 }),                  // EV-path selector (quant-strong_trend → DBS path)
+  diAtQueue: decimal("di_at_queue", { precision: 8, scale: 4 }),       // EV input (may be null on active path — #233)
+  dbsScoreAtQueue: decimal("dbs_score_at_queue", { precision: 8, scale: 4 }),
+  sqeVerdict: varchar("sqe_verdict", { length: 32 }),                  // SQE pass/reject (pre-stocks the E-trigger; Langston add)
+  sqeRejectReason: varchar("sqe_reject_reason", { length: 64 }),
+  // ── realized outcome (filled at shadow close; NULL until then) ──
+  grossPnl: decimal("gross_pnl", { precision: 20, scale: 8 }),
+  netPnl: decimal("net_pnl", { precision: 20, scale: 8 }),
+  rMultiple: decimal("r_multiple", { precision: 10, scale: 4 }),
+  closeReason: varchar("close_reason", { length: 40 }),                // stop_hit | target_hit | shadow_max_hold | ...
+  exitPrice: decimal("exit_price", { precision: 20, scale: 8 }),
+  holdingMs: integer("holding_ms"),
+  closed: boolean("closed").notNull().default(false),
+  openedAt: timestamp("opened_at", { withTimezone: true }).defaultNow(),
+  closedAt: timestamp("closed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  cycleKeyIdx: index("rtb_shadow_pairings_cycle_key_idx").on(table.cycleKey),
+  modeAssetClassIdx: index("rtb_shadow_pairings_mode_asset_class_idx").on(table.mode, table.assetClass),
+  closedIdx: index("rtb_shadow_pairings_closed_idx").on(table.closed),
+}));
+
 export type RtbSignal = typeof rtbSignals.$inferSelect;
 export type InsertRtbSignal = typeof rtbSignals.$inferInsert;
+
+// reorg-B4 (2026-06-25): the shadow-pairing selection-quality sink types.
+export type RtbShadowPairing = typeof rtbShadowPairings.$inferSelect;
+export type InsertRtbShadowPairing = typeof rtbShadowPairings.$inferInsert;
 
 // Trading Audit Log - Track all trading engine start/stop actions (Phase 27.F.6)
 export const tradingAuditLog = pgTable("trading_audit_log", {

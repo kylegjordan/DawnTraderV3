@@ -655,6 +655,238 @@ interface OpenVirtualTrade {
 
 const openVirtualTrades: Map<string, OpenVirtualTrade> = new Map();
 
+// ════════════════════════════════════════════════════════════════════════════
+// reorg-B4 (2026-06-25) — the shadow-trade telemetry layer's SEPARATE open-trades
+// Map. Shadow sims live here, NOT in `openVirtualTrades` — so every reader of
+// `openVirtualTrades` (cap gates :1544/:3032/:3455, dup/lane guards :1489/:1503/
+// :3017/:3715, getStats :2961/:2981, ranking :4503/:4536) is shadow-free BY
+// CONSTRUCTION (no predicate to forget). The resolver `resolveOpenVirtualTrades`
+// drains BOTH Maps but dispatches PER-MAP-ORIGIN: real → `persistRealPriceTrade`;
+// shadow → `shadowClose` (an ALLOWLIST routine that writes ONLY the
+// `rtb_shadow_pairings` sink — NEVER outcomeFeedbackStore.updateEma /
+// recordPairTelemetry / updateRollingAverages / the exit-archive). That + this
+// separate Map = the by-construction open+closed-side segregation. See the
+// P19_REORG_B4 scope/pre-audit.
+const openShadowTrades: Map<string, OpenVirtualTrade> = new Map();
+
+// reorg-B4 shadow-population bound (Langston Step-2). The TTL is the real governor:
+// shadows resolve at first-of {stop, target, SHADOW_MAX_HOLD_MS}. The CAP is a true
+// backstop sized ABOVE steady-state (~2.9k–6.5k at the active picker's ~30s cadence
+// × 6h TTL vs the ~28.7h VTS avg hold), so it fires ONLY on a runaway anomaly — at
+// which point we reject-new + increment a drop counter + ALERT, never silently
+// rebiasing the selection-quality sample.
+const SHADOW_MAX_HOLD_MS = 6 * 60 * 60 * 1000; // 6h
+const SHADOW_CAP = 10000;
+let shadowDropCount = 0; // count of reject-new-at-cap events (surfaced + alerted; never silent)
+// reorg-B4: per-signal dedupe — a pool member that already has a LIVE shadow is
+// NOT re-opened on the next promotion cycle. Without this, the same queued signal
+// (which can sit in the pool across many cycles until promoted/expired) would open
+// one shadow PER cycle → uncontrolled creep. With it, the open-shadow population is
+// bounded at ~pool-size (TTL + SHADOW_CAP are then true backstops, not the primary
+// bound). Keyed by `${mode}:${signalId}` → shadow trade id; cleared at shadow close.
+const shadowOpenBySignal: Map<string, string> = new Map();
+
+/**
+ * reorg-B4 — the ONE derivation of the per-signal dedupe key, called at ALL three
+ * sites (open / rehydration re-seed / close delete) so they are byte-identical by
+ * construction (Langston Step-4: the open key and the rehydration key must match
+ * exactly, or a post-restart cycle re-opens a duplicate shadow across the very
+ * boundary the dedupe must survive). `mode`+`signalId` round-trip through
+ * `vts_open_trades.context` jsonb (they are NOT core columns → bundled into context
+ * by splitTradeForPersist → spread back by rehydrateOpenTrades), so the same inputs
+ * are available at all three sites. The `${symbol}:${strategy}` fallback only fires
+ * when signalId is genuinely absent, identically everywhere.
+ */
+export function shadowDedupeKey(
+  mode: string | undefined | null,
+  signalId: string | undefined | null,
+  symbol: string,
+  strategy: string,
+): string {
+  return `${mode ?? 'paper'}:${signalId ?? `${symbol}:${strategy}`}`;
+}
+// reorg-B4: monotonic per-promotion-cycle sequence — the 4th component of cycleKey
+// (mode|assetClass|tsMs|seq) so two cycles within the same ms are still provably
+// distinct (Langston Step-2: composite key, not ts+mode alone).
+let _shadowCycleSeq = 0;
+
+/**
+ * reorg-B4 — mint ONE cycleKey per promotion cycle. The promotion caller calls
+ * this once, then stamps every pool member's pairing row with the same key +
+ * its own promotionRank, so a downstream query can reconstruct the exact pool
+ * that was ranked at that decision.
+ */
+export function nextShadowCycleKey(mode: string, assetClass: string): string {
+  return `${mode}|${assetClass}|${Date.now()}|${_shadowCycleSeq++}`;
+}
+
+/**
+ * reorg-B4 decision-time input for opening ONE shadow trade (one RTB-pool member
+ * at one promotion cycle). Carries the exit-eval shell + the ranking-input
+ * snapshot that lands in `rtb_shadow_pairings`. All scoring fields optional —
+ * the active path may carry nulls (#233 EV inputs) and the sink records the
+ * honest absence.
+ */
+export interface RegisterOpenShadowTradeInput {
+  cycleKey: string;
+  mode: string;                 // 'paper' | 'live'
+  assetClass: AssetClass;
+  symbol: string;
+  strategy: string;
+  signalId?: string | null;
+  regime?: string | null;
+  promotionRank?: number | null;
+  promoted?: boolean;
+  entryPrice: number;
+  stopPrice: number;
+  targetPrice: number;
+  atrAtOpen?: number | null;
+  sourcePool?: string | null;
+  // ── ranking-input snapshot (decision-time; persisted, never recomputed) ──
+  finalScore?: number | null;
+  hybridScore?: number | null;
+  confidence?: number | null;
+  regimeWeight?: number | null;
+  decayPenalty?: number | null;
+  rankingScore?: number | null;
+  diAtQueue?: number | null;
+  dbsScoreAtQueue?: number | null;
+  sqeVerdict?: string | null;
+  sqeRejectReason?: string | null;
+}
+
+/**
+ * reorg-B4 — open ONE shadow trade. The shadow LIFECYCLE mirrors a real VTS
+ * trade (persist → Map → resolve → close) but is segregated BY CONSTRUCTION:
+ *
+ *   • it lands in `openShadowTrades`, NEVER `openVirtualTrades` — so every cap /
+ *     dedupe / lane / getStats / ranking reader of the live Map is shadow-free
+ *     with no predicate to forget;
+ *   • it persists to `vts_open_trades` with `context.shadow = true` so a restart
+ *     rehydrates it back into `openShadowTrades` (the rehydration split), NOT the
+ *     live Map;
+ *   • it writes the decision-time row to `rtb_shadow_pairings` (the isolated
+ *     selection-quality sink) — and the close path (`shadowClose`) writes ONLY
+ *     that sink, never a learning store.
+ *
+ * Returns the shadow trade id, or null if deduped (already a live shadow for this
+ * signal), capped (reject-new backstop), or the persist failed. Caller fires this
+ * fire-and-forget off the promotion hot path.
+ */
+export async function registerOpenShadowTrade(
+  input: RegisterOpenShadowTradeInput,
+): Promise<string | null> {
+  // Dedupe: one live shadow per (mode, signalId). Skip a re-open across cycles.
+  const dedupeKey = shadowDedupeKey(input.mode, input.signalId, input.symbol, input.strategy);
+  if (shadowOpenBySignal.has(dedupeKey)) {
+    return null;
+  }
+
+  // Cap backstop: reject-NEW at SHADOW_CAP (never evict-oldest — that would bias
+  // the selection-quality sample toward fast-resolvers). Count + alert, never silent.
+  if (openShadowTrades.size >= SHADOW_CAP) {
+    shadowDropCount++;
+    console.warn(
+      `[reorg-B4][SHADOW_CAP] openShadowTrades at cap (${SHADOW_CAP}); rejecting NEW shadow for ` +
+      `${input.symbol}/${input.strategy} (mode=${input.mode}). shadowDropCount=${shadowDropCount}. ` +
+      `This is a runaway backstop — the 6h TTL should keep steady-state well below the cap; ` +
+      `investigate if shadowDropCount climbs.`,
+    );
+    return null;
+  }
+
+  const tradeId = `shadow_${input.assetClass}_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+  const openedAt = Date.now();
+
+  // Minimal exit-eval shell + the `shadow:true` marker (bundled into context jsonb
+  // by splitTradeForPersist → drives the rehydration split). Sizing fields are
+  // nominal: selection-quality reads the netPnl FRACTION + R-multiple, not dollars.
+  const shadowTrade: OpenVirtualTrade = {
+    id: tradeId,
+    symbol: input.symbol,
+    assetClass: input.assetClass,
+    entryPrice: input.entryPrice,
+    stopLoss: input.stopPrice,
+    takeProfit: input.targetPrice,
+    positionSize: 1,
+    dollarValue: 1,
+    quantity: 0,
+    frictionCost: 0,
+    regime: input.regime ?? '',
+    regimeScore: 0,
+    signalType: 'SHADOW',
+    strategy: input.strategy,
+    patternType: null,
+    finalScore: input.finalScore ?? 0,
+    hybridScore: input.hybridScore ?? 0,
+    predictiveConfidence: input.confidence ?? 0,
+    regimeWeight: input.regimeWeight ?? 0,
+    decayPenalty: input.decayPenalty ?? 0,
+    pool: 'rotational',
+    openedAt,
+    executionContext: 'VTS',
+    sourcePool: input.sourcePool ?? undefined,
+    atrAtOpen: input.atrAtOpen ?? 0,
+    diAtOpen: input.diAtQueue ?? 50,
+    volNoiseAtOpen: 0.3,
+    originalStopPrice: input.stopPrice,
+    rungTargetHistory: [],
+    // reorg-B4: the discriminator + the dedupe re-seed inputs. splitTradeForPersist
+    // bundles unknown keys into context jsonb, so these round-trip through
+    // vts_open_trades: `shadow:true` drives the boot rehydration split, and
+    // mode/signalId let the rehydration re-seed the per-signal dedupe map exactly
+    // as it was keyed at open.
+    shadow: true,
+    mode: input.mode,
+    signalId: input.signalId ?? null,
+  } as unknown as OpenVirtualTrade;
+
+  // Persist BEFORE Map.set (mirrors registerOpenVtsTrade's ordering) so a failed
+  // insert leaves no orphan in-memory shadow and no untracked durable pairing row.
+  try {
+    const { insertOpenTrade } = await import('./vts-trade-persistence.js');
+    await insertOpenTrade(shadowTrade as any);
+    const { insertShadowPairing } = await import('./rtb-shadow-store.js');
+    await insertShadowPairing({
+      id: tradeId,
+      cycleKey: input.cycleKey,
+      mode: input.mode,
+      assetClass: input.assetClass,
+      regime: input.regime ?? null,
+      promotionRank: input.promotionRank ?? null,
+      promoted: input.promoted ?? false,
+      signalId: input.signalId ?? null,
+      symbol: input.symbol,
+      strategy: input.strategy,
+      entryPrice: input.entryPrice,
+      stopPrice: input.stopPrice,
+      targetPrice: input.targetPrice,
+      finalScore: input.finalScore ?? null,
+      hybridScore: input.hybridScore ?? null,
+      confidence: input.confidence ?? null,
+      regimeWeight: input.regimeWeight ?? null,
+      decayPenalty: input.decayPenalty ?? null,
+      rankingScore: input.rankingScore ?? null,
+      sourcePool: input.sourcePool ?? null,
+      diAtQueue: input.diAtQueue ?? null,
+      dbsScoreAtQueue: input.dbsScoreAtQueue ?? null,
+      sqeVerdict: input.sqeVerdict ?? null,
+      sqeRejectReason: input.sqeRejectReason ?? null,
+    });
+  } catch (persistErr) {
+    console.error(
+      `[reorg-B4][SHADOW_PERSIST_FAIL] shadow=${tradeId} symbol=${input.symbol} ` +
+      `asset_class=${input.assetClass} — aborting shadow-open:`,
+      persistErr instanceof Error ? persistErr.message : persistErr,
+    );
+    return null;
+  }
+
+  openShadowTrades.set(tradeId, shadowTrade);
+  shadowOpenBySignal.set(dedupeKey, tradeId);
+  return tradeId;
+}
+
 /**
  * B-NEW-36 (2026-05-20): expose the in-memory open-trades Map for the
  * off-hours session-lifecycle controller. The controller's bulk-suspend /
@@ -682,8 +914,30 @@ export async function rehydrateOpenVtsTrades(): Promise<void> {
     const { rehydrateOpenTrades, bootstrapOpenTradesFromMemory } = await import('./vts-trade-persistence.js');
     const rows = await rehydrateOpenTrades();
     if (rows.length > 0) {
-      for (const r of rows) openVirtualTrades.set(r.id, r as unknown as OpenVirtualTrade);
-      console.log(`[B79.0g][REHYDRATE] loaded ${rows.length} open VTS trades from DB`);
+      // reorg-B4: rehydration split. A persisted shadow row carries `shadow:true`
+      // in its context jsonb (spread onto the record by rehydrateOpenTrades). It
+      // MUST route into openShadowTrades — NOT the live Map — or it would defeat
+      // the in-memory separation (every live-Map reader would see it). Strict
+      // `=== true` so a missing/NULL discriminator fails SAFE to the live pool.
+      let liveCount = 0;
+      let shadowCount = 0;
+      for (const r of rows) {
+        if ((r as { shadow?: unknown }).shadow === true) {
+          openShadowTrades.set(r.id, r as unknown as OpenVirtualTrade);
+          // Re-seed the per-signal dedupe so a post-restart promotion cycle doesn't
+          // re-open a shadow that's already live for this signal. SAME key derivation
+          // as the open site (shadowDedupeKey) so the keys are byte-identical.
+          shadowOpenBySignal.set(
+            shadowDedupeKey((r as any).mode, (r as any).signalId, r.symbol, r.strategy),
+            r.id,
+          );
+          shadowCount++;
+        } else {
+          openVirtualTrades.set(r.id, r as unknown as OpenVirtualTrade);
+          liveCount++;
+        }
+      }
+      console.log(`[B79.0g][REHYDRATE] loaded ${liveCount} open VTS trades + ${shadowCount} shadow trades from DB`);
     } else if (openVirtualTrades.size > 0) {
       // Bootstrap path — first deploy of B79.0g, table empty but Map has entries.
       const seeded = await bootstrapOpenTradesFromMemory(
@@ -2938,6 +3192,222 @@ async function resolveOpenVirtualTrades(): Promise<{
 }
 
 /**
+ * reorg-B4 — the shadow close ALLOWLIST routine. Writes ONLY the segregated
+ * `rtb_shadow_pairings` sink + the shadow's own `vts_open_trades` backing row +
+ * its TEC engine state. It NEVER calls a learning store:
+ *   ✗ outcomeFeedbackStore.updateEma   ✗ telemetry.recordPairTelemetry
+ *   ✗ vtsService.persistRealPriceTrade ✗ archiveExitDecision
+ *   ✗ updateRollingAverages           ✗ paper_sim_trades
+ * That allowlist (not denylist) is the by-construction closed-side segregation
+ * Langston required at Step-2. The PnL/R-multiple math is identical to the real
+ * close cascade (vts-runner ~:2610/:2790) — a counterfactual priced the same way.
+ */
+/**
+ * reorg-B4 — the shadow outcome math, extracted PURE + exported so it can be
+ * unit-tested AND so the test can pin that it is identical to the real close
+ * cascade's formula (vts-runner ~:2610 grossPnl/netPnl + ~:2790 rMultiple). A
+ * counterfactual priced exactly like the real trade.
+ */
+export function computeShadowOutcomeMath(input: {
+  entryPrice: number;
+  exitPrice: number;
+  stopLoss: number;
+  frictionCost?: number;
+  openedAt: number;
+  now: number;
+}): { grossPnl: number; netPnl: number; rMultiple: number | null; holdingMs: number } {
+  const { entryPrice, exitPrice, stopLoss, frictionCost = 0, openedAt, now } = input;
+  const grossPnl = (exitPrice - entryPrice) / entryPrice;
+  const netPnl = grossPnl - frictionCost;
+  const holdingMs = now - openedAt;
+  const rMultiple =
+    entryPrice && stopLoss && entryPrice !== stopLoss
+      ? (exitPrice - entryPrice) / Math.abs(entryPrice - stopLoss)
+      : null;
+  return { grossPnl, netPnl, rMultiple, holdingMs };
+}
+
+async function shadowClose(
+  id: string,
+  trade: OpenVirtualTrade,
+  exitPrice: number,
+  exitReason: string,
+  now: number,
+): Promise<void> {
+  const { grossPnl, netPnl, rMultiple, holdingMs } = computeShadowOutcomeMath({
+    entryPrice: trade.entryPrice,
+    exitPrice,
+    stopLoss: trade.stopLoss,
+    frictionCost: trade.frictionCost ?? 0,
+    openedAt: trade.openedAt,
+    now,
+  });
+
+  // 1) The ONLY outcome write: the segregated selection-quality sink.
+  try {
+    const { updateShadowPairingOutcome } = await import('./rtb-shadow-store.js');
+    await updateShadowPairingOutcome(id, {
+      grossPnl,
+      netPnl,
+      rMultiple,
+      closeReason: exitReason,
+      exitPrice,
+      holdingMs: Math.round(holdingMs),
+    });
+  } catch (err) {
+    console.error(`[reorg-B4][SHADOW_OUTCOME_FAIL] shadow=${id} symbol=${trade.symbol}:`, err instanceof Error ? err.message : err);
+  }
+
+  // 2) Map delete FIRST (the correctness gate against re-running this close), then
+  //    soft-close the shadow's own backing row (idempotent via WHERE closed=false).
+  openShadowTrades.delete(id);
+  // SAME key derivation as open/rehydration so the entry actually clears (incl. on a
+  // TTL/shadow_max_hold expiry close — those route through here too, so an expired
+  // signal's dedupe entry is released and it can re-open later).
+  const dedupeKey = shadowDedupeKey((trade as any).mode, (trade as any).signalId, trade.symbol, trade.strategy);
+  if (shadowOpenBySignal.get(dedupeKey) === id) shadowOpenBySignal.delete(dedupeKey);
+  try {
+    const { markOpenTradeClosed } = await import('./vts-trade-persistence.js');
+    await markOpenTradeClosed(id);
+  } catch (err) {
+    console.error(`[reorg-B4][SHADOW_MARK_CLOSED_FAIL] shadow=${id}:`, err instanceof Error ? err.message : err);
+  }
+
+  // 3) Clear the shadow's TEC engine state (it's exit-MECHANICS, not a learning
+  //    sink; shadows populate it so we must clear it — bounded by cap + TTL).
+  try {
+    const { clearTrailingState } = await import('./trailing-exit-controller.js');
+    clearTrailingState(id);
+  } catch (err) {
+    console.error(`[reorg-B4][SHADOW_TEC_CLEAR_FAIL] shadow=${id}:`, err instanceof Error ? err.message : err);
+  }
+}
+
+/**
+ * reorg-B4 — the SHADOW resolver pass. A sibling to resolveOpenVirtualTrades that
+ * drains `openShadowTrades` ONLY. Kept fully separate (own price fetch, own loop)
+ * so the live resolver above is byte-identical (OBJ-3b) and shadow logic touches
+ * nothing on the learning path BY CONSTRUCTION. Reuses the SAME exit-math service
+ * `evaluateTECExit` the real resolver uses (vts-runner:2458) — ZERO drift: a change
+ * to the exit math is auto-applied to shadows. The ONLY shadow-specific differences
+ * are PARAMETERS/ACTIONS, not forked math: `maxHoldMs = SHADOW_MAX_HOLD_MS` (6h vs
+ * 7d), and the close ACTION is `shadowClose` (isolated sink) vs the real cascade.
+ *
+ * No-op while `openShadowTrades` is empty — which it is until paper-mode active
+ * trading is turned on (the promotion boundary is dormant at rtb_total=0 today).
+ */
+async function resolveOpenShadowTrades(): Promise<{ shadowResolved: number }> {
+  const now = Date.now();
+  let shadowResolved = 0;
+  if (openShadowTrades.size === 0) {
+    return { shadowResolved };
+  }
+
+  // Price fetch — mirrors resolveOpenVirtualTrades' asset-class dispatch. Kept
+  // duplicated (not extracted) ON PURPOSE: isolation over DRY for a telemetry-only
+  // layer means the live resolver is never touched.
+  const cryptoSymbols = new Set<string>();
+  const xstockSymbols = new Set<string>();
+  for (const t of openShadowTrades.values()) {
+    if (t.assetClass === 'xstock_spot') xstockSymbols.add(t.symbol);
+    else cryptoSymbols.add(t.symbol);
+  }
+  const bucketType: CacheBucketType = 'vtsSimulation';
+  const cryptoSymbolList = Array.from(cryptoSymbols);
+  for (const symbol of cryptoSymbolList) priceCache.subscribe(symbol, bucketType);
+  if (cryptoSymbolList.length > 0) await new Promise(resolve => setTimeout(resolve, 100));
+  const cryptoPriceMap = cryptoSymbolList.length > 0
+    ? await priceCache.getBatch(bucketType, cryptoSymbolList)
+    : new Map<string, CachedPrice>();
+
+  const xstockPriceMap = new Map<string, { price: number }>();
+  if (xstockSymbols.size > 0) {
+    try {
+      const xstockSymbolListSql = Array.from(xstockSymbols).map((s) => `'${s.replace(/'/g, "''")}'`).join(',');
+      const result: any = await db.execute(sql.raw(`
+        SELECT DISTINCT ON (symbol) symbol::text AS symbol, last::text AS price
+        FROM xstock_spot_ticker_snap
+        WHERE captured_at > NOW() - INTERVAL '5 minutes' AND symbol IN (${xstockSymbolListSql})
+        ORDER BY symbol, captured_at DESC
+      `));
+      const rows = (result as any).rows ?? result;
+      if (Array.isArray(rows)) {
+        for (const r of rows as Array<{ symbol: string; price: string }>) {
+          const price = parseFloat(r.price);
+          if (Number.isFinite(price) && price > 0) xstockPriceMap.set(r.symbol, { price });
+        }
+      }
+    } catch (err) {
+      console.error(`[reorg-B4][SHADOW_XSTOCK_PRICE_FETCH] failed:`, err instanceof Error ? err.message : err);
+    }
+  }
+  const getShadowPrice = (symbol: string, assetClass?: string): number | null => {
+    if (assetClass === 'xstock_spot') return xstockPriceMap.get(symbol)?.price ?? null;
+    const p = cryptoPriceMap.get(symbol);
+    return p && p.price > 0 ? p.price : null;
+  };
+
+  const { getTrailingState } = await import('./trailing-exit-controller.js');
+  const toClose: Array<{ id: string; trade: OpenVirtualTrade; exitPrice: number; exitReason: string }> = [];
+  for (const [tradeId, trade] of openShadowTrades) {
+    if (!trade.assetClass) { openShadowTrades.delete(tradeId); continue; }
+    const holdDurationMs = now - trade.openedAt;
+    const currentPrice = getShadowPrice(trade.symbol, trade.assetClass);
+    const existingTecState = getTrailingState(tradeId);
+    const tecSeed = existingTecState ? undefined : {
+      tradeMode: 'TARGET' as const,
+      ladderRung: trade.ladderRungsHit ?? 0,
+      originalStopPrice: trade.originalStopPrice ?? trade.stopLoss,
+    };
+    let decision: Awaited<ReturnType<typeof evaluateTECExit>>;
+    try {
+      decision = await evaluateTECExit({
+        tradeId,
+        symbol: trade.symbol,
+        entryPrice: trade.entryPrice,
+        stopPrice: trade.stopLoss,
+        targetPrice: trade.takeProfit,
+        currentPrice,
+        atr: trade.atrAtOpen ?? 0,
+        holdDurationMs,
+        maxHoldMs: SHADOW_MAX_HOLD_MS, // ← the ONLY exit-math PARAM that differs from the real pass
+        context: {
+          exchange: 'kraken',
+          assetClass: trade.assetClass,
+          strategy: trade.strategy,
+          regime: trade.regime,
+        },
+        useTrailing: true,
+        DI: trade.diAtOpen ?? 50,
+        volNoise: trade.volNoiseAtOpen ?? 0.3,
+        callerMode: 'vts',
+        sourcePool: trade.sourcePool ?? null,
+        currentSlotTotal: Number.POSITIVE_INFINITY,
+        seed: tecSeed,
+      });
+    } catch (tecErr) {
+      console.error(`[reorg-B4][SHADOW_EXIT_EVAL_ISOLATED] shadow=${tradeId} symbol=${trade.symbol} — skipping this cycle:`, tecErr instanceof Error ? tecErr.message : tecErr);
+      continue;
+    }
+    if (decision.newStopPrice !== undefined && decision.newStopPrice > trade.stopLoss) {
+      trade.stopLoss = decision.newStopPrice;
+    }
+    if (!decision.shouldExit) continue;
+    const reason = decision.exitReason === 'stale_timeout' ? 'shadow_max_hold' : (decision.exitReason ?? 'timeout');
+    toClose.push({ id: tradeId, trade, exitPrice: decision.exitPrice, exitReason: reason });
+  }
+
+  for (const { id, trade, exitPrice, exitReason } of toClose) {
+    await shadowClose(id, trade, exitPrice, exitReason, now);
+    shadowResolved++;
+  }
+  if (shadowResolved > 0) {
+    console.log(`[reorg-B4][SHADOW_RESOLVE] closed ${shadowResolved} shadow trades, ${openShadowTrades.size} still open (dropCount=${shadowDropCount})`);
+  }
+  return { shadowResolved };
+}
+
+/**
  * Helper function to format hold duration in human-readable format
  */
 function formatHoldDuration(ms: number): string {
@@ -3293,6 +3763,16 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
 
   // Directive 11.6: First resolve any open trades before creating new ones
   await resolveOpenVirtualTrades();
+
+  // reorg-B4: drain the SEPARATE shadow-trade Map (telemetry-only selection-quality
+  // layer). No-op until paper-mode active trading is on (the promotion boundary that
+  // opens shadows is dormant at rtb_total=0 today). Own try/catch — a shadow-resolve
+  // fault must never perturb the live VTS cycle.
+  try {
+    await resolveOpenShadowTrades();
+  } catch (shadowErr) {
+    console.error(`[reorg-B4][SHADOW_RESOLVE_FAULT] shadow pass threw (live cycle unaffected):`, shadowErr instanceof Error ? shadowErr.message : shadowErr);
+  }
 
   // ITEM-4 O1 (2026-06-09): the tradingActive cycle-skip guard is REMOVED.
   // VTS is a standalone always-on producer — it runs regardless of paper/live

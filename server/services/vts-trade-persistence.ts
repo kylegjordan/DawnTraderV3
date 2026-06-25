@@ -41,6 +41,24 @@ import { sql } from 'drizzle-orm';
 import { safeResolveAssetClass, type AssetClass } from '../../shared/asset-classes.js';
 
 /**
+ * reorg-B4 (2026-06-25) — the CANONICAL shadow-exclusion predicate for every
+ * NON-shadow-path read of the shared `vts_open_trades` table. reorg-B4 persists
+ * shadow trades as real rows in THIS shared table (tagged `context.shadow=true`),
+ * so any learning / telemetry / replay reader that does NOT filter them would
+ * ingest the full RTB-pool shadow population as if it were the per-strategy-eval
+ * VTS learning set — the exact OBJ-3b contamination the batch exists to prevent.
+ *
+ * Compose this fragment into the WHERE clause of EVERY non-shadow read of
+ * `vts_open_trades` (`... AND ${VTS_OPEN_TRADES_EXCLUDE_SHADOW}`). Legacy + live
+ * rows carry no `shadow` key → `context->>'shadow'` is NULL → `IS DISTINCT FROM
+ * 'true'` → included. Shadow rows → 'true' → excluded. The SHADOW resolver
+ * (`resolveOpenShadowTrades`) reads the in-memory `openShadowTrades` Map, never
+ * this table, so it is unaffected. ★ Single source so a future table reader can't
+ * silently forget the filter (Langston Step-4 load-bearing finding).
+ */
+export const VTS_OPEN_TRADES_EXCLUDE_SHADOW = sql`(context->>'shadow') IS DISTINCT FROM 'true'`;
+
+/**
  * B-NEW-36 (2026-05-20) — lifecycle marker on vts_open_trades.state.
  * 'open' = normal active trade
  * 'weekend_suspended' = paused during Fri 8PM ET → Sun 8PM ET (xstock_spot only;
@@ -310,7 +328,10 @@ export async function bootstrapOpenTradesFromMemory(
   // deleted history rows do not block the re-resolve bootstrap path —
   // they're just GC bookkeeping. Preserves the B79.0g Q4 re-resolve
   // semantic across the new soft-delete world (Langston pre-audit Q4).
-  const existing = await db.execute<{ count: string }>(sql`SELECT COUNT(*) AS count FROM vts_open_trades WHERE closed = false`);
+  // reorg-B4: exclude shadow open rows from the boot-gate count — a shadow row
+  // must not make the table read as "already populated" and suppress the
+  // re-resolve bootstrap of real trades.
+  const existing = await db.execute<{ count: string }>(sql`SELECT COUNT(*) AS count FROM vts_open_trades WHERE closed = false AND ${VTS_OPEN_TRADES_EXCLUDE_SHADOW}`);
   const existingRows = (existing as any).rows ?? (existing as unknown as any[]);
   const existingCount = parseInt(String(existingRows[0]?.count ?? '0'), 10);
   if (existingCount > 0) return null;
