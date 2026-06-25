@@ -113,6 +113,9 @@ import {
   recordDepthGateBlock,
   type DepthSnapshot,
 } from './execution/depth-source.js';
+// P19-B6.6 (#236): xStock price-discovery-liveness — the 2nd half of the fill-time
+// "is the book real?" guard, called at the open seam AFTER the depth gate passes.
+import { evaluateXstockPriceLiveness } from '../asset_classes/xstock_spot/price-liveness.js';
 // B-4.5: fees are DB-governed per asset class — resolved per symbol at the
 // fill sites via the single cost-model merge (no static fee field).
 import { getFrictionForAssetClass } from '../core/math/cost-model.js';
@@ -2211,6 +2214,24 @@ export class PaperExecutionEngine {
       // P19-B6.5e: ALSO fold into the I3 invariant so the open no longer vanishes from attempts=opened+blocked+openFailed.
       rtbMetricsService.recordOpenFailed(signal.symbol, signal.strategy, 'DEPTH_GATE', _gate.reason);
       return { opened: false, stage: 'DEPTH_GATE', reason: _gate.reason };
+    }
+
+    // P19-B6.6 (#236): price-discovery-LIVENESS — the 2nd half of the fill-time "is the
+    // book real?" guard. Runs AFTER the depth gate (cheap single top-of-book row) passes —
+    // depth-first ordering, explicit. xStock-ONLY (crypto trades 24/7, no holiday/halt
+    // analog → a liveness gate would false-block a quiet altcoin). Fail-closed: the token's
+    // `last` must have actually MOVED within the window, else the book is dead-but-quoted
+    // (holiday / LULD halt / glitch / feed death) → block. Same recordDepthGateBlock
+    // telemetry path; the reason codes (flat_last vs no_data/sparse/liveness_*) distinguish
+    // a genuine dead market from a feed/config outage. Dormant until B7b (§9.1).
+    if (_openClass === 'xstock_spot') {
+      const _live = await evaluateXstockPriceLiveness(signal.symbol);
+      if (!_live.live) {
+        console.warn(`[P19-B6.6][LIVENESS_BLOCK:${this.mode}] ${signal.symbol} (${_openClass}) ${_live.reason} — skipping open`);
+        recordDepthGateBlock(_openClass, _live.reason); // distinct reason bucket from the depth gate
+        rtbMetricsService.recordOpenFailed(signal.symbol, signal.strategy, 'LIVENESS_GATE', _live.reason);
+        return { opened: false, stage: 'LIVENESS_GATE', reason: _live.reason };
+      }
     }
 
     // P19-B4b.1: entry fill via the DEPTH-WALKED OrderPlacer port — the placer walks the

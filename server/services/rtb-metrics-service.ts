@@ -43,6 +43,7 @@ export type OpenFailStage =
   | 'SIZING_INVALID'      // quantity <= 0 / no valid portfolio value
   | 'UNCLASSIFIABLE'      // open/trade asset-class could not be resolved
   | 'DEPTH_GATE'          // 24/5 book-depth-sufficiency gate (no_book/stale/thin/insufficient)
+  | 'LIVENESS_GATE'       // P19-B6.6 (#236): xStock price-discovery-liveness (flat_last/no_data/sparse/timeout)
   | 'FILL_REJECTED'       // depth-walked fill rejected / non-filled / zero qty
   | 'DUP_POSITION'        // duplicate-position guard
   | 'TRADE_INSERT_ERROR'  // DB trade/position insert threw
