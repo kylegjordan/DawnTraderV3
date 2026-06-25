@@ -2780,7 +2780,164 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       res.status(500).json({ ok: false, error: 'Failed to fetch AJ16 RTB diagnostics' });
     }
   });
-  
+
+  // reorg-B4.1 — shadow-trade selection-quality read (the "did we pick the best?" view).
+  // READ-ONLY; never writes any store. Groups the per-cycle pool-membership records
+  // (rtb_shadow_pool_members) by promotion cycle, LEFT JOINs each member to its
+  // resolving shadow trade (rtb_shadow_pairings) for the realized outcome, and returns
+  // the most-recent cycles paginated + the currently-open shadows + a selection-quality
+  // summary computed over the returned cycles. DORMANT today (rtb_total=0 → no rows).
+  // pool_size comes from the stamp, never COUNT(*) (a tolerated member-write skip can
+  // leave fewer rows than the pool had — Langston Step-2).
+  apiRouter.get('/shadow-trades/by-cycle', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const mode = (req.query.mode as string) === 'live' ? 'live' : 'paper';
+      const assetClass = (req.query.assetClass as string) || null; // null = all classes
+      const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? '20'), 10) || 20, 1), 100);
+      const offset = Math.max(parseInt(String(req.query.offset ?? '0'), 10) || 0, 0);
+
+      // Total distinct cycles (for pagination).
+      const countRes: any = await db.execute(sql`
+        SELECT COUNT(DISTINCT cycle_key)::int AS n
+        FROM rtb_shadow_pool_members
+        WHERE mode = ${mode}
+          AND (${assetClass}::text IS NULL OR asset_class = ${assetClass})
+      `);
+      const totalCycles = Number(((countRes as any).rows?.[0] ?? (countRes as any)[0])?.n ?? 0);
+
+      // Page of cycles (most-recent first) JOINed to members + outcomes, one query.
+      const rowsRes: any = await db.execute(sql`
+        WITH page_cycles AS (
+          SELECT cycle_key, MIN(created_at) AS opened_at, MAX(pool_size) AS pool_size
+          FROM rtb_shadow_pool_members
+          WHERE mode = ${mode}
+            AND (${assetClass}::text IS NULL OR asset_class = ${assetClass})
+          GROUP BY cycle_key
+          ORDER BY MIN(created_at) DESC
+          LIMIT ${limit} OFFSET ${offset}
+        )
+        SELECT pc.cycle_key, pc.opened_at, pc.pool_size,
+               m.signal_id, m.symbol, m.strategy, m.asset_class, m.promotion_rank,
+               m.promoted, m.final_score, m.confidence, m.regime, m.shadow_trade_id,
+               p.closed, p.net_pnl, p.gross_pnl, p.r_multiple, p.close_reason,
+               p.exit_price, p.entry_price, p.holding_ms, p.closed_at
+        FROM page_cycles pc
+        JOIN rtb_shadow_pool_members m ON m.cycle_key = pc.cycle_key
+          AND (${assetClass}::text IS NULL OR m.asset_class = ${assetClass})
+        LEFT JOIN rtb_shadow_pairings p ON p.id = m.shadow_trade_id
+        ORDER BY pc.opened_at DESC, m.promotion_rank ASC
+      `);
+      const rows: any[] = (rowsRes as any).rows ?? rowsRes ?? [];
+
+      // Group rows by cycle.
+      const cycleMap = new Map<string, any>();
+      for (const r of rows) {
+        let c = cycleMap.get(r.cycle_key);
+        if (!c) {
+          c = { cycleKey: r.cycle_key, openedAt: r.opened_at, poolSize: Number(r.pool_size ?? 0), members: [] };
+          cycleMap.set(r.cycle_key, c);
+        }
+        const np = r.net_pnl === null || r.net_pnl === undefined ? null : parseFloat(r.net_pnl);
+        c.members.push({
+          rank: Number(r.promotion_rank),
+          promoted: r.promoted === true,
+          symbol: r.symbol,
+          strategy: r.strategy,
+          assetClass: r.asset_class,
+          finalScore: r.final_score === null ? null : parseFloat(r.final_score),
+          confidence: r.confidence === null ? null : parseFloat(r.confidence),
+          regime: r.regime ?? null,
+          closed: r.closed === true,
+          netPnl: np,
+          grossPnl: r.gross_pnl === null ? null : parseFloat(r.gross_pnl),
+          rMultiple: r.r_multiple === null ? null : parseFloat(r.r_multiple),
+          closeReason: r.close_reason ?? null,
+          exitPrice: r.exit_price === null ? null : parseFloat(r.exit_price),
+          entryPrice: r.entry_price === null ? null : parseFloat(r.entry_price),
+          holdingMs: r.holding_ms === null ? null : Number(r.holding_ms),
+        });
+      }
+      const cycles = Array.from(cycleMap.values());
+
+      // Selection-quality summary — a SEPARATE aggregate over ALL FULLY-CLOSED cycles
+      // (NOT the page, NOT partial cycles). Langston Step-4 F1+F2: the headline metric
+      // "did the ranker pick the best of the field?" cannot be answered until the FIELD
+      // has resolved — `bool_and(p.closed)` gates each cycle on EVERY member closed, so a
+      // still-resolving cycle can never be scored prematurely (the §11 self-correcting-
+      // wrong trap); and computing it over all cycles (not the limit/offset page) means
+      // the cards are stable lifetime stats, not page-scoped numbers that silently shift
+      // on pagination. Bounded over time by the #390 retention sweep; trivial while dormant.
+      let cyclesEvaluated = 0, promotedWasBest = 0, promotedAboveMedian = 0;
+      const summaryRes: any = await db.execute(sql`
+        WITH closed_cycles AS (
+          SELECT m.cycle_key
+          FROM rtb_shadow_pool_members m
+          JOIN rtb_shadow_pairings p ON p.id = m.shadow_trade_id
+          WHERE m.mode = ${mode}
+            AND (${assetClass}::text IS NULL OR m.asset_class = ${assetClass})
+          GROUP BY m.cycle_key
+          HAVING bool_and(p.closed)                                                       -- EVERY member resolved
+             AND COUNT(*) FILTER (WHERE p.net_pnl IS NOT NULL) >= 2                        -- a field to compare
+             AND COUNT(*) FILTER (WHERE m.promoted AND p.net_pnl IS NOT NULL) >= 1         -- a closed promoted pick
+        ),
+        cycle_stats AS (
+          SELECT m.cycle_key,
+                 MAX(p.net_pnl) AS best_pnl,
+                 percentile_cont(0.5) WITHIN GROUP (ORDER BY p.net_pnl) AS median_pnl,
+                 MAX(p.net_pnl) FILTER (WHERE m.promoted) AS promoted_best_pnl
+          FROM rtb_shadow_pool_members m
+          JOIN rtb_shadow_pairings p ON p.id = m.shadow_trade_id
+          WHERE m.cycle_key IN (SELECT cycle_key FROM closed_cycles)
+            AND p.net_pnl IS NOT NULL
+          GROUP BY m.cycle_key
+        )
+        SELECT COUNT(*)::int AS cycles_evaluated,
+               COUNT(*) FILTER (WHERE promoted_best_pnl >= best_pnl)::int   AS promoted_was_best,
+               COUNT(*) FILTER (WHERE promoted_best_pnl >= median_pnl)::int AS promoted_above_median
+        FROM cycle_stats
+      `);
+      const sumRow: any = (summaryRes as any).rows?.[0] ?? (summaryRes as any)[0] ?? {};
+      cyclesEvaluated = Number(sumRow.cycles_evaluated ?? 0);
+      promotedWasBest = Number(sumRow.promoted_was_best ?? 0);
+      promotedAboveMedian = Number(sumRow.promoted_above_median ?? 0);
+
+      // Currently-open shadows (in flight).
+      const openRes: any = await db.execute(sql`
+        SELECT id, symbol, strategy, asset_class, entry_price, stop_price, target_price, opened_at
+        FROM rtb_shadow_pairings
+        WHERE mode = ${mode} AND closed = false
+          AND (${assetClass}::text IS NULL OR asset_class = ${assetClass})
+        ORDER BY opened_at DESC
+        LIMIT 200
+      `);
+      const openRows: any[] = (openRes as any).rows ?? openRes ?? [];
+      const openShadows = openRows.map((r: any) => ({
+        id: r.id, symbol: r.symbol, strategy: r.strategy, assetClass: r.asset_class,
+        entryPrice: r.entry_price === null ? null : parseFloat(r.entry_price),
+        stopPrice: r.stop_price === null ? null : parseFloat(r.stop_price),
+        targetPrice: r.target_price === null ? null : parseFloat(r.target_price),
+        openedAt: r.opened_at,
+      }));
+
+      res.json({
+        ok: true,
+        mode,
+        assetClass,
+        totalCycles,
+        limit,
+        offset,
+        cycles,
+        openShadows,
+        summary: { cyclesEvaluated, promotedWasBest, promotedAboveMedian },
+        dormant: totalCycles === 0,
+        generatedAt: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      console.error('[reorg-B4.1] Error fetching shadow-trades by-cycle:', error?.message);
+      res.status(500).json({ ok: false, error: 'Failed to fetch shadow-trade selection-quality data' });
+    }
+  });
+
   // Phase 8.8.3-AJ16: Generate full diagnostic report
   apiRouter.get('/diagnostics/aj16-rtb/report', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {

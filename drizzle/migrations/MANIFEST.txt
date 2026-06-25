@@ -147,3 +147,4 @@
 2026-06-20-reorg-b2-per-class-roi-target.sql
 2026-06-24-p19-reorg-b3-rtb-ev-inputs.sql
 2026-06-25-p19-reorg-b4-shadow-pairings.sql
+2026-06-26-p19-reorg-b4-1-shadow-pool-members.sql

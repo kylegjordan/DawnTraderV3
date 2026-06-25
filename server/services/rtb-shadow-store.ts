@@ -54,6 +54,36 @@ export interface ShadowPairingOpenRow {
   sqeRejectReason?: string | null;
 }
 
+/**
+ * reorg-B4.1 — a per-cycle pool-membership row (EVENT grain: one per cycle × signal).
+ * Captures the signal's rank + promoted-flag THIS cycle + the decision-time score
+ * snapshot + an FK to the resolving shadow trade. The outcome is NOT here (joined
+ * from rtb_shadow_pairings via shadowTradeId). poolSize is the stamped ranked-signal
+ * count at capture (the SSOT for "N candidates", never COUNT(*) of member rows).
+ */
+export interface ShadowPoolMemberRow {
+  cycleKey: string;
+  mode: string;
+  assetClass: string;
+  signalId?: string | null;
+  shadowTradeId: string;   // FK → rtb_shadow_pairings.id (NOT NULL — always a resolved trade)
+  symbol: string;
+  strategy: string;
+  promotionRank: number;
+  promoted: boolean;
+  poolSize: number;
+  finalScore?: number | null;
+  hybridScore?: number | null;
+  confidence?: number | null;
+  regimeWeight?: number | null;
+  decayPenalty?: number | null;
+  rankingScore?: number | null;
+  diAtQueue?: number | null;
+  dbsScoreAtQueue?: number | null;
+  sqeVerdict?: string | null;
+  regime?: string | null;
+}
+
 /** Realized outcome, written once at shadow close. */
 export interface ShadowPairingCloseOutcome {
   grossPnl: number;
@@ -91,6 +121,33 @@ export async function insertShadowPairing(row: ShadowPairingOpenRow): Promise<vo
       false, NOW(), NOW()
     )
     ON CONFLICT (id) DO NOTHING
+  `);
+}
+
+/**
+ * reorg-B4.1 — INSERT one per-cycle pool-membership row. Written EVERY cycle for
+ * every pool member (NOT deduped — that's the point; it captures rank/promoted at
+ * THIS cycle). The caller (captureShadowPool) resolves the shadow trade FIRST and
+ * only calls this with a confirmed-persisted `shadowTradeId` (so the FK is always
+ * valid — a member row is never written without its trade). A failure here is
+ * LOGGED + TOLERATED by the caller (telemetry loss of one row, no corruption,
+ * no dangling FK). Writes ONLY rtb_shadow_pool_members — no learning store.
+ */
+export async function insertShadowPoolMember(row: ShadowPoolMemberRow): Promise<void> {
+  await db.execute(sql`
+    INSERT INTO rtb_shadow_pool_members (
+      cycle_key, mode, asset_class, signal_id, shadow_trade_id, symbol, strategy,
+      promotion_rank, promoted, pool_size, final_score, hybrid_score, confidence,
+      regime_weight, decay_penalty, ranking_score, di_at_queue, dbs_score_at_queue,
+      sqe_verdict, regime, created_at
+    ) VALUES (
+      ${row.cycleKey}, ${row.mode}, ${row.assetClass}, ${row.signalId ?? null},
+      ${row.shadowTradeId}, ${row.symbol}, ${row.strategy}, ${row.promotionRank},
+      ${row.promoted}, ${row.poolSize}, ${row.finalScore ?? null}, ${row.hybridScore ?? null},
+      ${row.confidence ?? null}, ${row.regimeWeight ?? null}, ${row.decayPenalty ?? null},
+      ${row.rankingScore ?? null}, ${row.diAtQueue ?? null}, ${row.dbsScoreAtQueue ?? null},
+      ${row.sqeVerdict ?? null}, ${row.regime ?? null}, NOW()
+    )
   `);
 }
 

@@ -769,17 +769,26 @@ export interface RegisterOpenShadowTradeInput {
  *     selection-quality sink) — and the close path (`shadowClose`) writes ONLY
  *     that sink, never a learning store.
  *
- * Returns the shadow trade id, or null if deduped (already a live shadow for this
- * signal), capped (reject-new backstop), or the persist failed. Caller fires this
+ * Returns the shadow trade id — the EXISTING one if a live shadow already exists for
+ * this signal (dedupe), or the NEW one on open. Returns null ONLY on a genuine
+ * failure: cap-reject (reject-new backstop) or persist-fail. (reorg-B4.1 widened the
+ * dedupe return from null→id so the per-cycle pool-member row can FK the trade; null
+ * now means "no trade to reference, skip the member-write".) Caller fires this
  * fire-and-forget off the promotion hot path.
  */
 export async function registerOpenShadowTrade(
   input: RegisterOpenShadowTradeInput,
 ): Promise<string | null> {
-  // Dedupe: one live shadow per (mode, signalId). Skip a re-open across cycles.
+  // Dedupe: one live shadow per (mode, signalId). Skip a re-OPEN across cycles, but
+  // reorg-B4.1: RETURN the existing trade id (not null) so the per-cycle pool-member
+  // row can FK it. The contract is now: returns the shadow trade id (existing on
+  // dedupe / new on open); null ONLY on a genuine failure (cap-reject / persist-fail).
+  // Verified safe (Langston Step-2): the sole caller discards the return today, so
+  // widening null→id breaks no control flow.
   const dedupeKey = shadowDedupeKey(input.mode, input.signalId, input.symbol, input.strategy);
-  if (shadowOpenBySignal.has(dedupeKey)) {
-    return null;
+  const existingId = shadowOpenBySignal.get(dedupeKey);
+  if (existingId !== undefined) {
+    return existingId;
   }
 
   // Cap backstop: reject-NEW at SHADOW_CAP (never evict-oldest — that would bias

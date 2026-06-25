@@ -188,7 +188,9 @@ describe('reorg-B4 exit-math same-service drift guard', () => {
 describe('reorg-B4 shadow capture hook (full-pool, ranker-selected flag)', () => {
   test('captureShadowPool iterates the full pool and flags promoted = rank < limit', () => {
     const body = extractFunctionBody(rtbServiceSrc, 'private async captureShadowPool(');
-    expect(body).toContain('promoted: i < limit');
+    // reorg-B4.1 refactored the literal to a hoisted const (`const promoted = i < limit`)
+    // so it can be reused on both the trade-open and the per-cycle member-row write.
+    expect(body).toContain('const promoted = i < limit');
     expect(body).toContain('promotionRank: i');
     expect(body).toContain('registerOpenShadowTrade');
   });

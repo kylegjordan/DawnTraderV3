@@ -1982,6 +1982,54 @@ export type InsertRtbSignal = typeof rtbSignals.$inferInsert;
 export type RtbShadowPairing = typeof rtbShadowPairings.$inferSelect;
 export type InsertRtbShadowPairing = typeof rtbShadowPairings.$inferInsert;
 
+// ════════════════════════════════════════════════════════════════════════════
+// reorg-B4.1 (#shadow per-cycle pool membership, 2026-06-26) — the EVENT-grain
+// companion to rtb_shadow_pairings (the trade-entity grain). One row per
+// (promotion cycle × pool member): captures that signal's rank + promoted-flag
+// AT THAT CYCLE, snapshotted decision-time scores, and an FK to the resolving
+// shadow trade in rtb_shadow_pairings (where the outcome lives, ONCE — never
+// duplicated). This is what makes the "did the ranker pick the best at cycle N?"
+// view reconstructable: rtb_shadow_pairings stamps rank/promoted at FIRST
+// appearance only; a signal that lingers or is promoted on a LATER cycle needs
+// this per-cycle record. Written EVERY cycle for every pool member (NOT deduped);
+// the resolving TRADE is still deduped one-per-signal. ★ ISOLATION: same as the
+// reorg-B4 family — NO learning consumer reads it; pure B5/B6 analysis sink.
+// ★ pool_size is STAMPED from the ranked-signal count at capture (Langston Step-2):
+// a tolerated member-write failure can leave fewer rows than the pool had, so
+// "pool size N" MUST come from this stamp, never COUNT(*) of member rows.
+export const rtbShadowPoolMembers = pgTable("rtb_shadow_pool_members", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  cycleKey: varchar("cycle_key", { length: 80 }).notNull(), // groups the pool at one promotion cycle
+  mode: varchar("mode", { length: 16 }).notNull(),
+  assetClass: varchar("asset_class", { length: 32 }).notNull(), // the MEMBER's class (filter dim)
+  signalId: varchar("signal_id"),
+  shadowTradeId: varchar("shadow_trade_id").notNull(),         // FK → rtb_shadow_pairings.id (the resolving trade + outcome)
+  symbol: varchar("symbol", { length: 20 }).notNull(),
+  strategy: varchar("strategy", { length: 50 }).notNull(),
+  promotionRank: integer("promotion_rank").notNull(),         // 0-based ordinal in the finalScore sort THIS cycle
+  promoted: boolean("promoted").notNull().default(false),     // rank < openSlots THIS cycle (ranker-selected, NOT execution-confirmed)
+  poolSize: integer("pool_size").notNull(),                   // ranked-signal count at capture (the SSOT for "N candidates"; never COUNT(*))
+  // ── decision-time score snapshot (this cycle) ──
+  finalScore: decimal("final_score", { precision: 10, scale: 6 }),
+  hybridScore: decimal("hybrid_score", { precision: 10, scale: 6 }),
+  confidence: decimal("confidence", { precision: 10, scale: 6 }),
+  regimeWeight: decimal("regime_weight", { precision: 10, scale: 6 }),
+  decayPenalty: decimal("decay_penalty", { precision: 10, scale: 6 }),
+  rankingScore: decimal("ranking_score", { precision: 10, scale: 6 }),
+  diAtQueue: decimal("di_at_queue", { precision: 8, scale: 4 }),
+  dbsScoreAtQueue: decimal("dbs_score_at_queue", { precision: 8, scale: 4 }),
+  sqeVerdict: varchar("sqe_verdict", { length: 32 }),
+  regime: varchar("regime", { length: 50 }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  modeAssetClassCycleIdx: index("rtb_shadow_pool_members_mode_asset_cycle_idx").on(table.mode, table.assetClass, table.cycleKey),
+  shadowTradeIdx: index("rtb_shadow_pool_members_shadow_trade_idx").on(table.shadowTradeId),
+  cycleKeyIdx: index("rtb_shadow_pool_members_cycle_key_idx").on(table.cycleKey),
+}));
+
+export type RtbShadowPoolMember = typeof rtbShadowPoolMembers.$inferSelect;
+export type InsertRtbShadowPoolMember = typeof rtbShadowPoolMembers.$inferInsert;
+
 // Trading Audit Log - Track all trading engine start/stop actions (Phase 27.F.6)
 export const tradingAuditLog = pgTable("trading_audit_log", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

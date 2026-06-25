@@ -8,9 +8,10 @@ import MaintenanceBanner from "@/components/maintenance/maintenance-banner";
 import ModeBanner from "@/components/mode-banner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { BarChart3, TrendingUp, Lightbulb, AlertTriangle, History, Layers } from "lucide-react";
+import { BarChart3, TrendingUp, Lightbulb, AlertTriangle, History, Layers, Ghost } from "lucide-react";
 import { FilterInsights } from "@/components/trading/filter-insights";
 import { TradeHistoryTab } from "@/components/trading/trade-history-tab";
+import { ShadowTradesTab } from "@/components/trading/shadow-trades-tab";
 import { PatternScanning } from "@/components/trading/pattern-scanning";
 import { Button } from "@/components/ui/button";
 
@@ -88,7 +89,7 @@ function TradingPageContent() {
 
       {/* B2: Tab order changed to reflect natural trading funnel: Filter → Ready → Open → History */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-5" data-testid="trading-tabs">
+        <TabsList className="grid w-full grid-cols-6" data-testid="trading-tabs">
           <TabsTrigger value="insights" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-filter-insights">
             <Lightbulb className="w-3 h-3 sm:w-4 sm:h-4" />
             <span className="hidden xs:inline">Filter Insights</span>
@@ -108,6 +109,11 @@ function TradingPageContent() {
             <History className="w-3 h-3 sm:w-4 sm:h-4" />
             <span className="hidden xs:inline">Trade History</span>
             <span className="xs:hidden">History</span>
+          </TabsTrigger>
+          <TabsTrigger value="shadows" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-shadow-trades">
+            <Ghost className="w-3 h-3 sm:w-4 sm:h-4" />
+            <span className="hidden xs:inline">Shadows</span>
+            <span className="xs:hidden">Shadow</span>
           </TabsTrigger>
           <TabsTrigger value="patterns" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-3" data-testid="tab-pattern-scanning">
             <Layers className="w-3 h-3 sm:w-4 sm:h-4" />
@@ -131,6 +137,10 @@ function TradingPageContent() {
 
         <TabsContent value="history" className="mt-6">
           <TradeHistoryTab />
+        </TabsContent>
+
+        <TabsContent value="shadows" className="mt-6">
+          <ShadowTradesTab />
         </TabsContent>
 
         <TabsContent value="patterns" className="mt-6">

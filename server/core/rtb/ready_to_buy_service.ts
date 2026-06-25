@@ -1697,6 +1697,15 @@ class ReadyToBuyService {
    * per-cycle cycleKey + whether the ranker selected it this cycle (`promoted` =
    * rank < limit). The shadow layer is segregated by construction — see
    * registerOpenShadowTrade. Dynamic import avoids an rtb↔vts-runner import cycle.
+   *
+   * reorg-B4.1 — ALSO write a per-cycle pool-membership row for every member each
+   * cycle (the EVENT grain), FK'd to the resolving shadow trade. The shadow TRADE is
+   * deduped one-per-signal (its outcome resolves once); the member ROW is written
+   * every cycle so rank/promoted are captured per-cycle (the "did we pick the best
+   * at cycle N?" view). Boundary (Langston Step-2): resolve the trade id FIRST; only
+   * write the member row when it's non-null (so a dangling FK is impossible); a
+   * member-write failure is logged + tolerated (one telemetry row lost, no
+   * corruption). `poolSize` is stamped from the ranked-signal count, NOT COUNT(*).
    */
   private async captureShadowPool(
     mode: TradingMode,
@@ -1706,7 +1715,9 @@ class ReadyToBuyService {
   ): Promise<void> {
     if (!pool || pool.length === 0) return;
     const { registerOpenShadowTrade, nextShadowCycleKey } = await import('../../services/vts-runner.js');
+    const { insertShadowPoolMember } = await import('../../services/rtb-shadow-store.js');
     const cycleKey = nextShadowCycleKey(mode, assetClass ?? 'all');
+    const poolSize = pool.length; // the ranked-signal count at capture — the SSOT for "N candidates" (stamped, never COUNT(*))
     const num = (v: unknown): number | null => {
       if (v === null || v === undefined) return null;
       const n = parseFloat(String(v));
@@ -1720,35 +1731,82 @@ class ReadyToBuyService {
       const stopPrice = num(s.stopPrice);
       if (entryPrice === null || stopPrice === null) continue; // a pool member with no geometry can't be shadow-simmed
       const targetPrice = num(s.targetPrice) ?? entryPrice * 1.02; // mirror executePromotedSignal's default
+      const promoted = i < limit;
+      const regime = meta.regime ?? meta.pairRegime ?? null;
+      const finalScore = num(s.finalScore);
+      const hybridScore = num(s.hybridScore);
+      const confidence = num(s.confidence);
+      const regimeWeight = num(s.regimeWeight);
+      const decayPenalty = num(s.decayPenalty);
+      const rankingScore = num(meta.rankingScore);
+      const diAtQueue = num(s.diAtQueue);
+      const dbsScoreAtQueue = num(s.dbsScoreAtQueue);
+      const sqeVerdict = meta.sqeVerdict ?? 'pass';
       try {
-        await registerOpenShadowTrade({
+        // Resolve the shadow TRADE first (existing id on dedupe, new on open, null on fail/cap).
+        const shadowTradeId = await registerOpenShadowTrade({
           cycleKey,
           mode,
           assetClass: ac,
           symbol: s.symbol,
           strategy: s.strategy,
           signalId: s.signalId,
-          regime: meta.regime ?? meta.pairRegime ?? null,
+          regime,
           promotionRank: i,
-          promoted: i < limit,
+          promoted,
           entryPrice,
           stopPrice,
           targetPrice,
           atrAtOpen: num(meta.atr ?? meta.atrAtOpen),
           sourcePool: meta.sourcePool ?? null,
-          finalScore: num(s.finalScore),
-          hybridScore: num(s.hybridScore),
-          confidence: num(s.confidence),
-          regimeWeight: num(s.regimeWeight),
-          decayPenalty: num(s.decayPenalty),
-          rankingScore: num(meta.rankingScore),
-          diAtQueue: num(s.diAtQueue),
-          dbsScoreAtQueue: num(s.dbsScoreAtQueue),
+          finalScore,
+          hybridScore,
+          confidence,
+          regimeWeight,
+          decayPenalty,
+          rankingScore,
+          diAtQueue,
+          dbsScoreAtQueue,
           // In-queue ⇒ this member already passed SQE; reject-reason is for the
           // future SQE-rejected E-trigger (deferred — RUNNING_ISSUES §13).
-          sqeVerdict: meta.sqeVerdict ?? 'pass',
+          sqeVerdict,
           sqeRejectReason: null,
         });
+        // reorg-B4.1: only write the per-cycle member row when a valid trade id was
+        // resolved (null = cap-reject/persist-fail → no trade to FK → skip). This makes
+        // a dangling FK impossible by construction (Langston Step-2 boundary).
+        if (shadowTradeId) {
+          try {
+            await insertShadowPoolMember({
+              cycleKey,
+              mode,
+              assetClass: ac,
+              signalId: s.signalId,
+              shadowTradeId,
+              symbol: s.symbol,
+              strategy: s.strategy,
+              promotionRank: i,
+              promoted,
+              poolSize,
+              finalScore,
+              hybridScore,
+              confidence,
+              regimeWeight,
+              decayPenalty,
+              rankingScore,
+              diAtQueue,
+              dbsScoreAtQueue,
+              sqeVerdict,
+              regime,
+            });
+          } catch (memberErr) {
+            // Tolerated: one telemetry member row lost for one cycle; the trade +
+            // its outcome are intact, no dangling FK. A persisted cycle can thus
+            // hold FEWER member rows than the pool had — readers must use pool_size,
+            // never COUNT(*) (Langston Step-2 watch item).
+            console.warn(`[reorg-B4.1][SHADOW_MEMBER] ${s.symbol}/${s.strategy} member-write failed (tolerated):`, memberErr instanceof Error ? memberErr.message : memberErr);
+          }
+        }
       } catch (err) {
         console.warn(`[reorg-B4][SHADOW_CAPTURE] ${s.symbol}/${s.strategy} open failed (continuing pool):`, err instanceof Error ? err.message : err);
       }
