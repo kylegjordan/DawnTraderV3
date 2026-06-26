@@ -1,0 +1,1621 @@
+diff --git a/1-system-manual/DELETED_COMPONENTS_LOG.md b/1-system-manual/DELETED_COMPONENTS_LOG.md
+index 8ab2ba26e..298c1baf2 100644
+--- a/1-system-manual/DELETED_COMPONENTS_LOG.md
++++ b/1-system-manual/DELETED_COMPONENTS_LOG.md
+@@ -6,6 +6,30 @@
+ 
+ ---
+ 
++## 2026-06-26 — Vestigial secondary market-data WebSocket subsystem (P19-B6.7 / #301)
++
++**Removed:** the "Directive 8.9.0-B Secondary WebSocket Adapter" and its coordinator wrapper.
++
++| Item | Location (pre-removal) | What it was |
++|---|---|---|
++| `market-data-ws.ts` | `server/services/market-data-ws.ts` | A second Kraken WS adapter (`getMarketDataWS()` singleton), separate from the primary `kraken-websocket-adapter.ts`. Connected on construction but **never delivered a tick or completed a subscription in its entire logged history** (`MD-WS_TICK`=0, `Sub OK`=0 since Apr 3). Live-spammed `[MD-WS] Data stale` every 30s (30s heartbeat vs 2s stale threshold; tick-timestamp only bumped by pongs). |
++| `market-data-coordinator.ts` | `server/services/market-data-coordinator.ts` | `getMarketDataCoordinator()` singleton wrapping the 2nd WS + a never-exercised REST-fallback bookkeeping (`usingFallback`/`dataSource`). Its `'tick'`/`cortex-update` outputs were dead-ended; only `getStatus()` was consumed. |
++
++**Why removed:** a dead feed that every health/safety consumer mis-read as "connected/healthy" because the dead socket kept a TCP connection open. **Phase-19 landmine:** `feed-integrity-monitor` (boot-started, 5-min cron) graded this dead feed and would raise false CRITICAL `feed_health` alerts every 5 min once Phase-19 lifts dormant-mode suppression; `parity-gate` false-PASSED the Phase-21 go-live WS gate off it. CLAUDE.md §5 rule 18: delete now, do not leave lingering.
++
++**Blast-radius verification (certainty-before-cutting):**
++- **Tick-output consumers: ZERO** (`coordinator.on('tick')`/`getLatestTick`/`getDataSource`) — the only historical consumer (realtime-paper-executor) was already deleted in #300/B4b.2.
++- **`subscribeToPair` callers: ZERO** — the current build never drove a subscription (so the historical "Sub Error" log volume was pre-#300 residue).
++- **The 4 status-only consumers were re-pointed FIRST** at the primary `krakenWebSocketAdapter` (parity-gate, health-monitor, system-health-monitor, feed-integrity-monitor), then `tsc --noEmit` proved zero dangling references BEFORE deletion, then a repo-wide grep confirmed no remaining code reference.
++- **Primary adapter ⟂ this subsystem: PROVEN** — `kraken-websocket-adapter.ts` had zero reference to it, and no price-cache / VTS / warmup / signal path touched it.
++- `OrderBookSnapshot` (the one still-used export, type-only) re-homed inline into its sole consumer `slippage-fee-model.ts`.
++- **Left intentionally:** nothing — the symbol-canonicalizer header comment listing `MarketDataCoordinator` was also removed.
++
++**Archive copies:** `1-system-manual/_archive/deleted-code/market-data-ws.ts.20260626-P19B6.7.removed`, `…/market-data-coordinator.ts.20260626-P19B6.7.removed`
++**Removal commit:** _(recorded at P19-B6.7 close)_
++
++---
++
+ ## 2026-06-13 — Legacy live-trading STUB cluster (P19-B2)
+ 
+ **Removed:** the pre-cleave `LiveTradingService` stub and its orphaned surface.
+diff --git a/drizzle/migrations/2026-06-26-p19-b6-7-feed-health-seed.sql b/drizzle/migrations/2026-06-26-p19-b6-7-feed-health-seed.sql
+new file mode 100644
+index 000000000..ab1ef06af
+--- /dev/null
++++ b/drizzle/migrations/2026-06-26-p19-b6-7-feed-health-seed.sql
+@@ -0,0 +1,47 @@
++-- P19-B6.7 (#301) — feed-health ALARM per-asset-class thresholds + xStock warmup grace.
++--
++-- The feed-integrity alarm was re-pointed off the removed vestigial 2nd WebSocket onto
++-- the PRIMARY adapter's real per-symbol tick-age (server/services/feed-integrity-monitor.ts
++-- → gradePerClassFeedLiveness in market-data/feed-health-aggregate.ts). The alarm grades
++-- FEED-LEVEL aliveness = the FRESHEST subscribed symbol's age, PER ASSET CLASS, because
++-- crypto (24/7) and xStock (24/5, market-hours) have different legitimate-quiet profiles:
++--
++--   crypto_spot — always graded (no market-closed concept; threshold absorbs weekend
++--                 thin-book). warning 5s / critical 10s on the freshest crypto symbol
++--                 (matches the prior global env defaults FEED_WARNING/CRITICAL_TICK_AGE_SEC).
++--   xstock_spot — graded only over symbols that are OPEN (isXstockMarketOpenUTC, per-symbol;
++--                 class-critical suppressed when ALL xStock symbols are closed). More lenient
++--                 (warning 60s / critical 120s) since BBO cadence is slower than crypto.
++--   xstock_spot warmup_grace_ms — after the market reopens the freshest age is stale-by-
++--                 construction (hours since last close) until the first quotes land; suppress
++--                 the xStock-class critical for this long after the open transition so the
++--                 alarm doesn't false-fire at every bell (deterministic warmup, CLAUDE.md §8#11).
++--
++-- Per-asset-class (§11). exchange/strategy/regime = wildcard. DB-tunable, not hardcoded
++-- (Langston P19-B6.7 Step-2). Read via getCachedNumberRequired (warmed cache); the monitor
++-- reads defensively (a config gap logs + skips the liveness grade that cycle — it must never
++-- crash the alarm nor false-fire a critical off a missing knob).
++
++BEGIN;
++
++INSERT INTO module_constants
++  (module_name, constant_name, value, asset_class, exchange, regime, strategy, updated_at, updated_by)
++VALUES
++  ('feed_health', 'warning_age_ms',  '5000'::jsonb,   'crypto_spot', '*', '*', '*', NOW(), 'p19-b6-7'),
++  ('feed_health', 'critical_age_ms', '10000'::jsonb,  'crypto_spot', '*', '*', '*', NOW(), 'p19-b6-7'),
++  ('feed_health', 'warning_age_ms',  '60000'::jsonb,  'xstock_spot', '*', '*', '*', NOW(), 'p19-b6-7'),
++  ('feed_health', 'critical_age_ms', '120000'::jsonb, 'xstock_spot', '*', '*', '*', NOW(), 'p19-b6-7'),
++  ('feed_health', 'warmup_grace_ms', '120000'::jsonb, 'xstock_spot', '*', '*', '*', NOW(), 'p19-b6-7')
++ON CONFLICT (module_name, exchange, asset_class, strategy, regime, constant_name) DO NOTHING;
++
++-- Verify all 5 rows resolve (fail the migration loudly if the seed is incomplete).
++DO $$
++DECLARE n int;
++BEGIN
++  SELECT count(*) INTO n FROM module_constants WHERE module_name = 'feed_health';
++  IF n < 5 THEN
++    RAISE EXCEPTION 'P19-B6.7 seed incomplete: expected 5 feed_health rows, found %', n;
++  END IF;
++END $$;
++
++COMMIT;
+diff --git a/drizzle/migrations/MANIFEST.txt b/drizzle/migrations/MANIFEST.txt
+index fd475bb1d..3bdc9af9f 100644
+--- a/drizzle/migrations/MANIFEST.txt
++++ b/drizzle/migrations/MANIFEST.txt
+@@ -149,3 +149,4 @@
+ 2026-06-25-p19-reorg-b4-shadow-pairings.sql
+ 2026-06-26-p19-reorg-b4-1-shadow-pool-members.sql
+ 2026-06-26-p19-b6-6-price-liveness-seed.sql
++2026-06-26-p19-b6-7-feed-health-seed.sql
+diff --git a/server/services/feed-integrity-monitor.ts b/server/services/feed-integrity-monitor.ts
+index 3a733085b..7471c0d87 100644
+--- a/server/services/feed-integrity-monitor.ts
++++ b/server/services/feed-integrity-monitor.ts
+@@ -1,5 +1,16 @@
+-import { getMarketDataCoordinator } from './market-data-coordinator';
+-import { getMarketDataWS } from './market-data-ws';
++// P19-B6.7 (#301): the vestigial 2nd-WS subsystem (market-data-coordinator/market-data-ws)
++// was removed. The alarm now grades the PRIMARY adapter's real per-symbol tick-age, per
++// asset class, with the xStock class market-hours-gated + a post-open warmup grace.
++import { krakenWebSocketAdapter } from '../exchanges/kraken/kraken-websocket-adapter.js';
++import {
++  gradePerClassFeedLiveness,
++  type SymbolFreshness,
++  type PerClassThresholds,
++  type FeedAliveGrade,
++} from './market-data/feed-health-aggregate.js';
++import { resolveAssetClass } from '../../shared/asset-classes.js';
++import { isXstockMarketOpenUTC } from '../asset_classes/xstock_spot/market-hours.js';
++import { getCachedNumberRequired } from './module-constants-service.js';
+ import fs from 'fs';
+ 
+ /**
+@@ -94,8 +105,14 @@ interface AlertState {
+  * - Accurate grading based on all metrics
+  */
+ class FeedIntegrityMonitorService {
+-  private coordinator = getMarketDataCoordinator();
+-  private ws = getMarketDataWS();
++  // P19-B6.7 (#301): warmup-grace state for the xStock-class alarm — when the per-symbol
++  // market-open gate last transitioned closed→open (suppress xStock critical for
++  // warmup_grace_ms after, so the stale-at-close age doesn't false-fire at the bell).
++  private xstockWasOpen = false;
++  private xstockOpenedAtMs: number | null = null;
++  // The primary adapter exposes CUMULATIVE reconnectAttempts; track the delta per cycle.
++  private lastReconnectAttempts = 0;
++  private configWarnLogged = false;
+   private healthHistory: HealthSnapshot[] = [];
+   private readonly MAX_HISTORY = 12; // 12 snapshots = 1 hour at 5-min intervals
+   private lastCheckTime: number = 0;
+@@ -174,49 +191,116 @@ class FeedIntegrityMonitorService {
+    * Get current feed health metrics with interval reconnect tracking
+    */
+   public getHealthMetrics(): FeedHealthMetrics {
+-    const coordinatorStatus = this.coordinator.getStatus();
+-    const wsStatus = this.ws.getStatus();
+     const now = Date.now();
+-    
++    const wsStatus = krakenWebSocketAdapter.getStatus();
++
+     // Get interval reconnect count from last snapshot
+-    const reconnectCount = this.healthHistory.length > 0 
++    const reconnectCount = this.healthHistory.length > 0
+       ? this.healthHistory[this.healthHistory.length - 1].reconnectsSinceLastCheck
+       : 0;
+-    
+-    // Calculate tick age (time since last data update)
+-    const tickAgeMs = wsStatus.lastTickAgeMs >= 0 ? wsStatus.lastTickAgeMs : 0;
+-    const tickAgeSec = Math.round(tickAgeMs / 1000);
+-    
+-    // Calculate latency (average from recent history)
++
++    // P19-B6.7 (#301): per-asset-class FEED-LEVEL liveness (freshest-symbol age; xStock
++    // market-hours-gated + warmup grace). This owns the "is data flowing" dimension.
++    const { grade: livenessGrade, worstAgeSec } = this.computeLiveness(now);
++
++    // Calculate latency (average from recent history; now sourced from primary pong RTT)
+     const latencyMs = this.calculateAverageLatency();
+-    
++
+     // Calculate time-based uptime percentage
+     const uptimePercent = this.calculateTimeBasedUptime();
+-    
++
+     // Calculate error rate from history
+     const errorRate = this.calculateErrorRate();
+-    
+-    // Determine feed type
+-    const feedType: 'websocket' | 'rest_fallback' = 
+-      coordinatorStatus.dataSource === 'ws' ? 'websocket' : 'rest_fallback';
+-    
+-    // Determine health status using spec thresholds (with interval reconnects)
+-    const healthStatus = this.categorizeHealthBySpec(reconnectCount, tickAgeSec, latencyMs, uptimePercent);
+-    
++
++    // Connection-quality grade (reconnects/latency/uptime). tickAge term is 0 because the
++    // per-class LIVENESS grade owns staleness; final status = the worse of the two.
++    const connQuality = this.categorizeHealthBySpec(reconnectCount, 0, latencyMs, uptimePercent);
++    const healthStatus = this.worseStatus(livenessGrade, connQuality);
++
+     return {
+-      feedType,
++      feedType: 'websocket', // only the primary WS feed exists (no REST fallback post-#301)
+       latencyMs: Math.round(latencyMs),
+-      stalenessSec: tickAgeSec,
++      stalenessSec: worstAgeSec,
+       uptimePercent: parseFloat(uptimePercent.toFixed(2)),
+-      pairCount: coordinatorStatus.subscribedPairs,
++      pairCount: wsStatus.subscribedCount,
+       errorRate: parseFloat(errorRate.toFixed(4)),
+       reconnectCount,
+-      tickAgeSec,
++      tickAgeSec: worstAgeSec,
+       status: healthStatus,
+       lastUpdateISO: new Date().toISOString(),
+     };
+   }
+ 
++  /**
++   * P19-B6.7 (#301): read the PRIMARY adapter and grade FEED-LEVEL liveness per asset class.
++   * Defensive: a missing/unwarmed DB threshold logs once and skips the liveness grade
++   * (returns healthy) — the alarm must never crash nor false-fire a critical off a config gap.
++   */
++  private computeLiveness(now: number): { grade: FeedAliveGrade; worstAgeSec: number } {
++    const health: SymbolFreshness[] = krakenWebSocketAdapter
++      .getI8EWsHealth()
++      .map((h) => ({ symbol: h.symbol, ageMs: h.ageMs }));
++
++    // xStock open-state transition → (re)start the warmup grace on the closed→open edge.
++    const anyXstockOpen = health.some(
++      (h) => resolveAssetClass(h.symbol, 'kraken') === 'xstock_spot' && isXstockMarketOpenUTC(h.symbol, new Date(now)),
++    );
++    if (anyXstockOpen && !this.xstockWasOpen) this.xstockOpenedAtMs = now;
++    this.xstockWasOpen = anyXstockOpen;
++
++    const warmupGraceMs = this.tryGetConfig('xstock_spot', 'warmup_grace_ms');
++    const xstockWarmupRemainingMs =
++      this.xstockOpenedAtMs !== null && warmupGraceMs !== null
++        ? Math.max(0, warmupGraceMs - (now - this.xstockOpenedAtMs))
++        : 0;
++
++    const thresholds: Record<string, PerClassThresholds> = {};
++    for (const cls of ['crypto_spot', 'xstock_spot']) {
++      const warningMs = this.tryGetConfig(cls, 'warning_age_ms');
++      const criticalMs = this.tryGetConfig(cls, 'critical_age_ms');
++      if (warningMs !== null && criticalMs !== null) thresholds[cls] = { warningMs, criticalMs };
++    }
++    if (Object.keys(thresholds).length === 0) {
++      return { grade: 'healthy', worstAgeSec: 0 }; // config not warmed yet → do not alarm
++    }
++
++    const result = gradePerClassFeedLiveness(health, {
++      classify: (sym) => resolveAssetClass(sym, 'kraken'),
++      thresholds,
++      xstockClassKey: 'xstock_spot',
++      isXstockSymbolOpen: (sym) => isXstockMarketOpenUTC(sym, new Date(now)),
++      xstockWarmupRemainingMs,
++    });
++
++    let worstAgeMs = 0;
++    for (const c of result.classes) {
++      if (c.suppressed || c.freshestAgeMs === null) continue;
++      if (c.freshestAgeMs > worstAgeMs) worstAgeMs = c.freshestAgeMs;
++    }
++    return { grade: result.overall, worstAgeSec: Math.round(worstAgeMs / 1000) };
++  }
++
++  /** Read a per-asset-class feed_health knob (DB §11), null if unavailable (never throws). */
++  private tryGetConfig(assetClass: string, name: string): number | null {
++    try {
++      return getCachedNumberRequired('feed_health', name, {
++        exchange: '*', assetClass, strategy: '*', regime: '*',
++      });
++    } catch {
++      if (!this.configWarnLogged) {
++        this.configWarnLogged = true;
++        console.warn(`[FeedIntegrity] feed_health config not warmed yet (${name}/${assetClass}); skipping liveness grade this cycle`);
++      }
++      return null;
++    }
++  }
++
++  /** Return the more severe of two feed-health statuses. */
++  private worseStatus(a: FeedHealthStatus, b: FeedHealthStatus): FeedHealthStatus {
++    const rank: Record<FeedHealthStatus, number> = { healthy: 0, warning: 1, critical: 2 };
++    return rank[a] >= rank[b] ? a : b;
++  }
++
+   /**
+    * Categorize feed health per spec:
+    * WARNING: ≥3 reconnects OR ≥5s tick age
+@@ -257,10 +341,11 @@ class FeedIntegrityMonitorService {
+    */
+   private calculateAverageLatency(): number {
+     if (this.healthHistory.length === 0) {
+-      const wsStatus = this.ws.getStatus();
+-      return wsStatus.lastTickAgeMs >= 0 ? wsStatus.lastTickAgeMs : 0;
++      // P19-B6.7 (#301): primary adapter pong RTT (fixes the old tick-age-as-latency proxy).
++      const diag = krakenWebSocketAdapter.getDiagnostics();
++      return diag.lastPongAgeMs >= 0 ? diag.lastPongAgeMs : 0;
+     }
+-    
++
+     const sum = this.healthHistory.reduce((acc, snap) => acc + snap.latencyMs, 0);
+     return sum / this.healthHistory.length;
+   }
+@@ -297,29 +382,24 @@ class FeedIntegrityMonitorService {
+    * Record a health snapshot with interval-based reconnect tracking
+    */
+   public recordSnapshot(): void {
+-    const coordinatorStatus = this.coordinator.getStatus();
+     const now = Date.now();
+-    
+-    // Get interval reconnect count (resets counter)
+-    const intervalReconnects = this.ws.getAndResetReconnectCount();
+-    
+-    const wsStatus = this.ws.getStatus();
+-    const tickAgeMs = wsStatus.lastTickAgeMs >= 0 ? wsStatus.lastTickAgeMs : 0;
+-    const tickAgeSec = Math.round(tickAgeMs / 1000);
+-    
+-    // Note: latencyMs should be ping-pong RTT, but for now using tick age as proxy
+-    // TODO: Implement proper RTT tracking in MarketDataWebSocket
+-    const latencyMs = tickAgeMs;
++    const wsStatus = krakenWebSocketAdapter.getStatus();
++    const diag = krakenWebSocketAdapter.getDiagnostics();
++
++    // P19-B6.7 (#301): the primary adapter exposes CUMULATIVE reconnectAttempts; derive the
++    // per-interval delta (the prior 2nd-WS exposed a reset-on-read counter).
++    const intervalReconnects = Math.max(0, wsStatus.reconnectAttempts - this.lastReconnectAttempts);
++    this.lastReconnectAttempts = wsStatus.reconnectAttempts;
++
++    // Per-class FEED-LEVEL liveness (owns staleness); latency = primary pong RTT.
++    const { grade: livenessGrade, worstAgeSec } = this.computeLiveness(now);
++    const latencyMs = diag.lastPongAgeMs >= 0 ? diag.lastPongAgeMs : 0;
+     const uptimePercent = this.calculateTimeBasedUptime();
+-    
+-    // Determine if this snapshot is healthy using interval reconnects
+-    const isHealthy = this.categorizeHealthBySpec(
+-      intervalReconnects,
+-      tickAgeSec,
+-      latencyMs,
+-      uptimePercent
+-    ) === 'healthy';
+-    
++
++    // Healthy iff BOTH liveness and connection-quality are healthy (tickAge term 0 — liveness owns it).
++    const connQuality = this.categorizeHealthBySpec(intervalReconnects, 0, latencyMs, uptimePercent);
++    const isHealthy = this.worseStatus(livenessGrade, connQuality) === 'healthy';
++
+     // Update time-based uptime tracking
+     if (this.lastHealthCheckTime > 0) {
+       const minutesElapsed = (now - this.lastHealthCheckTime) / (60 * 1000);
+@@ -329,16 +409,16 @@ class FeedIntegrityMonitorService {
+       }
+     }
+     this.lastHealthCheckTime = now;
+-    
++
+     // Record snapshot with interval reconnects
+     const snapshot: HealthSnapshot = {
+       timestamp: now,
+       latencyMs,
+       wasHealthy: isHealthy,
+-      wasConnected: coordinatorStatus.wsConnected,
+-      errorOccurred: !coordinatorStatus.wsConnected && !coordinatorStatus.usingFallback,
++      wasConnected: wsStatus.isConnected,
++      errorOccurred: !wsStatus.isConnected,
+       reconnectsSinceLastCheck: intervalReconnects,
+-      tickAgeSec,
++      tickAgeSec: worstAgeSec,
+     };
+     
+     this.healthHistory.push(snapshot);
+diff --git a/server/services/health-monitor.ts b/server/services/health-monitor.ts
+index bff3e4214..436645abd 100644
+--- a/server/services/health-monitor.ts
++++ b/server/services/health-monitor.ts
+@@ -519,25 +519,25 @@ class HealthMonitor extends EventEmitter {
+    */
+   private async checkMarketDataHealth(): Promise<MarketDataHealth> {
+     try {
+-      // Import market data coordinator
+-      const { getMarketDataCoordinator } = await import('./market-data-coordinator.js');
+-      const marketDataCoordinator = getMarketDataCoordinator();
+-      const status = marketDataCoordinator.getStatus();
+-
+-      const websocketStatus = status.wsConnected
+-        ? 'connected'
+-        : (status.dataSource === 'rest_fallback' ? 'blocked_fallback_rest' : 'disconnected');
+-
+-      const ok = websocketStatus === 'connected' || 
+-                 (websocketStatus === 'blocked_fallback_rest' && status.lastTickAgeMs !== null && status.lastTickAgeMs < this.config.market.fallbackMaxAgeMs);
++      // P19-B6.7 (#301): read the PRIMARY adapter, not the removed 2nd-WS coordinator.
++      // No REST-fallback feed exists (that was a coordinator-only concept), so health =
++      // primary WS connected AND delivering fresh ticks (freshest-symbol age across the
++      // whole subscribed set — stays fresh while ANY symbol ticks, e.g. crypto 24/7).
++      const { krakenWebSocketAdapter } = await import('../exchanges/kraken/kraken-websocket-adapter.js');
++      const { freshestSymbolAgeMs } = await import('./market-data/feed-health-aggregate.js');
++      const status = krakenWebSocketAdapter.getStatus();
++      const freshestAgeMs = freshestSymbolAgeMs(krakenWebSocketAdapter.getI8EWsHealth());
++
++      const websocketStatus = status.isConnected ? 'connected' : 'disconnected';
++      const ok = status.isConnected && freshestAgeMs !== null && freshestAgeMs < this.config.market.fallbackMaxAgeMs;
+ 
+       return {
+         ok,
+         websocketStatus: websocketStatus as any,
+-        lastMessageAgeMs: status.lastTickAgeMs,
+-        restFallbackActive: status.dataSource === 'rest_fallback',
+-        retryBackoffMs: status.wsReconnects > 0 ? Math.min(1000 * Math.pow(2, status.wsReconnects), 16000) : null,
+-        details: { reconnects: status.wsReconnects },
++        lastMessageAgeMs: freshestAgeMs,
++        restFallbackActive: false,
++        retryBackoffMs: status.reconnectAttempts > 0 ? Math.min(1000 * Math.pow(2, status.reconnectAttempts), 16000) : null,
++        details: { reconnects: status.reconnectAttempts },
+       };
+     } catch (error: any) {
+       console.error('[41F-C][CHECK] Error checking market data:', error.message);
+diff --git a/server/services/market-data-coordinator.ts b/server/services/market-data-coordinator.ts
+deleted file mode 100644
+index 6d3648fd0..000000000
+--- a/server/services/market-data-coordinator.ts
++++ /dev/null
+@@ -1,197 +0,0 @@
+-import { getMarketDataWS, TickData } from './market-data-ws';
+-import { EventEmitter } from 'events';
+-
+-/**
+- * Coordinates between WebSocket and REST fallback for market data
+- * Routes data to StrategyBob and Cortex
+- */
+-
+-interface MarketDataConfig {
+-  enableWebSocket: boolean;
+-  restFallbackEnabled: boolean;
+-  staleThresholdMs: number;
+-}
+-
+-class MarketDataCoordinator extends EventEmitter {
+-  private wsClient = getMarketDataWS();
+-  private config: MarketDataConfig;
+-  private usingFallback = false;
+-  private latestTicks: Map<string, TickData> = new Map();
+-  private fallbackCheckInterval: NodeJS.Timeout | null = null;
+-
+-  constructor(config?: Partial<MarketDataConfig>) {
+-    super();
+-    this.config = {
+-      enableWebSocket: config?.enableWebSocket ?? true,
+-      restFallbackEnabled: config?.restFallbackEnabled ?? true,
+-      staleThresholdMs: config?.staleThresholdMs ?? 2000,
+-    };
+-
+-    this.setupWebSocketHandlers();
+-    
+-    if (this.config.enableWebSocket) {
+-      this.wsClient.connect();
+-    }
+-
+-    // Monitor for fallback needs
+-    this.startFallbackMonitor();
+-  }
+-
+-  /**
+-   * Setup WebSocket event handlers
+-   */
+-  private setupWebSocketHandlers(): void {
+-    // Forward tick data to consumers
+-    this.wsClient.on('tick', (tick: TickData) => {
+-      this.latestTicks.set(tick.symbol, tick);
+-      this.usingFallback = false;
+-      
+-      // Route to StrategyBob/Cortex
+-      this.emit('tick', tick);
+-      
+-      // Update Cortex snapshot
+-      this.updateCortexSnapshot({
+-        marketDataSource: 'ws',
+-        lastWsTickISO: tick.timestamp,
+-        lastTickSymbol: tick.symbol,
+-      });
+-    });
+-
+-    // Handle connection events
+-    this.wsClient.on('connected', () => {
+-      console.log('[MD-Coordinator] WebSocket connected, fallback disabled');
+-      this.usingFallback = false;
+-    });
+-
+-    this.wsClient.on('disconnected', () => {
+-      console.log('[MD-Coordinator] WebSocket disconnected');
+-      this.handleFallback();
+-    });
+-
+-    this.wsClient.on('stale', (ageMs: number) => {
+-      console.warn(`[MD-Coordinator] WebSocket data stale (${ageMs}ms), checking fallback...`);
+-      if (ageMs > this.config.staleThresholdMs) {
+-        this.handleFallback();
+-      }
+-    });
+-
+-    // Handle WebSocket errors gracefully (prevents app crash)
+-    this.wsClient.on('error', (error: Error) => {
+-      console.warn('[MD-Coordinator] WebSocket error (using REST fallback):', error.message);
+-      this.handleFallback();
+-    });
+-  }
+-
+-  /**
+-   * Monitor and activate REST fallback when needed
+-   */
+-  private startFallbackMonitor(): void {
+-    this.fallbackCheckInterval = setInterval(() => {
+-      const wsStatus = this.wsClient.getStatus();
+-      
+-      if (wsStatus.isStale || !wsStatus.connected) {
+-        this.handleFallback();
+-      }
+-    }, 5000); // Check every 5 seconds
+-  }
+-
+-  /**
+-   * Activate REST fallback
+-   */
+-  private handleFallback(): void {
+-    if (!this.config.restFallbackEnabled) {
+-      console.warn('[MD-Coordinator] Fallback disabled, no alternative data source');
+-      return;
+-    }
+-
+-    if (!this.usingFallback) {
+-      console.log('[MD-Coordinator] ⚠️  Fallback=REST (WS stale > 2s)');
+-      this.usingFallback = true;
+-      
+-      // Update Cortex
+-      this.updateCortexSnapshot({
+-        marketDataSource: 'rest_fallback',
+-        fallbackReason: 'WS stale or disconnected',
+-      });
+-    }
+-  }
+-
+-  /**
+-   * Get latest tick for a symbol (WS or fallback)
+-   */
+-  public getLatestTick(symbol: string): TickData | undefined {
+-    return this.latestTicks.get(symbol);
+-  }
+-
+-  /**
+-   * Subscribe to a trading pair
+-   */
+-  public subscribeToPair(pair: string): void {
+-    if (this.config.enableWebSocket) {
+-      this.wsClient.subscribeToPair(pair);
+-    }
+-  }
+-
+-  /**
+-   * Unsubscribe from a trading pair
+-   */
+-  public unsubscribeFromPair(pair: string): void {
+-    if (this.config.enableWebSocket) {
+-      this.wsClient.unsubscribeFromPair(pair);
+-    }
+-  }
+-
+-  /**
+-   * Get current data source
+-   */
+-  public getDataSource(): 'ws' | 'rest_fallback' {
+-    return this.usingFallback ? 'rest_fallback' : 'ws';
+-  }
+-
+-  /**
+-   * Get status for health monitoring
+-   */
+-  public getStatus() {
+-    const wsStatus = this.wsClient.getStatus();
+-    
+-    return {
+-      dataSource: this.getDataSource(),
+-      wsConnected: wsStatus.connected,
+-      wsReconnects: wsStatus.reconnects,
+-      lastTickAgeMs: wsStatus.lastTickAgeMs,
+-      subscribedPairs: wsStatus.subscribedPairs.length,
+-      usingFallback: this.usingFallback,
+-    };
+-  }
+-
+-  /**
+-   * Update Cortex snapshot with market data info
+-   */
+-  private updateCortexSnapshot(data: any): void {
+-    // This will be integrated with Cortex in next step
+-    this.emit('cortex-update', data);
+-  }
+-
+-  /**
+-   * Disconnect and cleanup
+-   */
+-  public shutdown(): void {
+-    if (this.fallbackCheckInterval) {
+-      clearInterval(this.fallbackCheckInterval);
+-    }
+-    this.wsClient.disconnect();
+-    console.log('[MD-Coordinator] Shutdown complete');
+-  }
+-}
+-
+-// Singleton instance
+-let coordinatorInstance: MarketDataCoordinator | null = null;
+-
+-export function getMarketDataCoordinator(): MarketDataCoordinator {
+-  if (!coordinatorInstance) {
+-    coordinatorInstance = new MarketDataCoordinator();
+-  }
+-  return coordinatorInstance;
+-}
+-
+-export { MarketDataCoordinator };
+diff --git a/server/services/market-data-ws.ts b/server/services/market-data-ws.ts
+deleted file mode 100644
+index 9a744face..000000000
+--- a/server/services/market-data-ws.ts
++++ /dev/null
+@@ -1,406 +0,0 @@
+-/**
+- * Directive 8.9.0-B: Secondary WebSocket Adapter (Analytics)
+- * 
+- * Upgraded to Kraken WebSocket v2 for consistent data with primary adapter.
+- * Used by FeedIntegrityMonitor, MarketDataCoordinator, and SlippageFeeModel.
+- */
+-import WebSocket from 'ws';
+-import { EventEmitter } from 'events';
+-import { translateV2ToV1, isValidV2TickerUpdate } from './market-data/kraken-v2-translator.js';
+-
+-export interface TickData {
+-  symbol: string;
+-  bid: number;
+-  ask: number;
+-  last: number;
+-  timestamp: string;
+-  source: 'ws' | 'rest_fallback';
+-  bidVolume?: number;
+-  askVolume?: number;
+-}
+-
+-export interface OrderBookSnapshot {
+-  symbol: string;
+-  bids: [number, number][]; // [price, volume]
+-  asks: [number, number][]; // [price, volume]
+-  timestamp: string;
+-}
+-
+-interface WSConfig {
+-  url: string;
+-  heartbeatInterval: number;
+-  reconnectDelayBase: number;
+-  reconnectDelayMax: number;
+-  staleThresholdMs: number;
+-}
+-
+-export class MarketDataWebSocket extends EventEmitter {
+-  private ws: WebSocket | null = null;
+-  private config: WSConfig;
+-  private subscribedPairs: Set<string> = new Set();
+-  private reconnectAttempts = 0;
+-  private reconnectTimer: NodeJS.Timeout | null = null;
+-  private heartbeatTimer: NodeJS.Timeout | null = null;
+-  private lastTickTimestamp: number = 0;
+-  private isConnected = false;
+-  private reconnectCount = 0;
+-  
+-  // 8.9.4-Patch: Stateful mini-book tracking for stable mid-price computation
+-  private orderBooks = new Map<string, { bids: Map<number, number>; asks: Map<number, number> }>();
+-  private lastSeq: Record<string, number> = {};
+-
+-  constructor(config?: Partial<WSConfig>) {
+-    super();
+-    this.config = {
+-      url: config?.url || 'wss://ws.kraken.com/v2', // 8.9.4: Production v2 endpoint with book channel
+-      heartbeatInterval: config?.heartbeatInterval || 30000,
+-      reconnectDelayBase: config?.reconnectDelayBase || 1000,
+-      reconnectDelayMax: config?.reconnectDelayMax || 30000,
+-      staleThresholdMs: config?.staleThresholdMs || 2000,
+-    };
+-  }
+-
+-  public connect(): void {
+-    if (this.ws) {
+-      console.log('[MD-WS] Already connected or connecting');
+-      return;
+-    }
+-
+-    console.log(`[MD-WS] Connecting to ${this.config.url}...`);
+-    this.ws = new WebSocket(this.config.url);
+-
+-    this.ws.on('open', () => {
+-      console.log('[MD-WS] ✅ Connected to Kraken WebSocket');
+-      this.isConnected = true;
+-      this.reconnectAttempts = 0;
+-      
+-      // Resubscribe to all previously subscribed pairs
+-      if (this.subscribedPairs.size > 0) {
+-        console.log(`[MD-WS] Resubscribing to ${this.subscribedPairs.size} pairs...`);
+-        this.subscribedPairs.forEach(pair => this.subscribeToPair(pair));
+-      }
+-
+-      this.startHeartbeat();
+-      this.emit('connected');
+-    });
+-
+-    this.ws.on('message', (data: WebSocket.Data) => {
+-      try {
+-        const message = JSON.parse(data.toString());
+-        this.handleMessage(message);
+-      } catch (error) {
+-        console.error('[MD-WS] Error parsing message:', error);
+-      }
+-    });
+-
+-    this.ws.on('error', (error) => {
+-      console.error('[MD-WS] WebSocket error:', error);
+-      this.emit('error', error);
+-    });
+-
+-    this.ws.on('close', () => {
+-      console.log('[MD-WS] Connection closed');
+-      this.isConnected = false;
+-      this.stopHeartbeat();
+-      this.ws = null;
+-      this.scheduleReconnect();
+-      this.emit('disconnected');
+-    });
+-
+-    this.ws.on('pong', () => {
+-      // Heartbeat acknowledged
+-      this.lastTickTimestamp = Date.now();
+-    });
+-  }
+-
+-  private handleMessage(message: any): void {
+-    // 8.9.0-B: Handle v2 Ticker Updates
+-    // v2 format: { channel: "ticker", type: "update"|"snapshot", data: [{symbol, bid, ask, ...}] }
+-    if (message && typeof message === 'object' && message.channel === 'ticker') {
+-      if (message.type === 'update' || message.type === 'snapshot') {
+-        const updates = message.data || [];
+-        for (const update of updates) {
+-          if (!isValidV2TickerUpdate(update)) continue;
+-          
+-          const safeData = translateV2ToV1(update);
+-          const tickData: TickData = {
+-            symbol: update.symbol,
+-            bid: parseFloat(safeData.b[0]),
+-            ask: parseFloat(safeData.a[0]),
+-            last: parseFloat(safeData.c[0]),
+-            timestamp: new Date().toISOString(),
+-            source: 'ws',
+-            bidVolume: update.bid_qty,
+-            askVolume: update.ask_qty,
+-          };
+-          
+-          this.lastTickTimestamp = Date.now();
+-          this.emit('tick', tickData);
+-          console.log(`[8.9.0-B][MD-WS_TICK] ${update.symbol} price=${tickData.last}`);
+-        }
+-      }
+-      return;
+-    }
+-    
+-    // 8.9.4-Patch: Handle v2 Book Updates with stateful mini-book
+-    if (message && typeof message === 'object' && message.channel === 'book') {
+-      if (message.type === 'update' || message.type === 'snapshot') {
+-        const updates = message.data || [];
+-        for (const update of updates) {
+-          const symbol = update.symbol;
+-          
+-          // 8.9.4-Patch: Sequence validation for out-of-order detection
+-          if (update.checksum !== undefined) {
+-            const seq = update.checksum;
+-            if (seq <= (this.lastSeq[symbol] ?? 0)) {
+-              console.warn(`[8.9.4-P][MD-WS][SEQ][${symbol}] Out-of-order delta, resyncing.`);
+-              this.orderBooks.delete(symbol);
+-            }
+-            this.lastSeq[symbol] = seq;
+-          }
+-          
+-          // 8.9.4-Patch: Initialize or get mini-book for this symbol
+-          if (!this.orderBooks.has(symbol)) {
+-            this.orderBooks.set(symbol, { bids: new Map(), asks: new Map() });
+-          }
+-          const book = this.orderBooks.get(symbol)!;
+-          
+-          // 8.9.4-Patch: Apply delta updates to mini-book
+-          if (update.bids) {
+-            for (const item of update.bids) {
+-              const price = parseFloat(item.price);
+-              const qty = parseFloat(item.qty);
+-              if (qty === 0) {
+-                book.bids.delete(price);
+-              } else {
+-                book.bids.set(price, qty);
+-              }
+-            }
+-          }
+-          
+-          if (update.asks) {
+-            for (const item of update.asks) {
+-              const price = parseFloat(item.price);
+-              const qty = parseFloat(item.qty);
+-              if (qty === 0) {
+-                book.asks.delete(price);
+-              } else {
+-                book.asks.set(price, qty);
+-              }
+-            }
+-          }
+-          
+-          // 8.9.4-Patch: Compute best bid/ask from stateful mini-book
+-          const sortedBids = Array.from(book.bids.entries()).sort((a, b) => b[0] - a[0]);
+-          const sortedAsks = Array.from(book.asks.entries()).sort((a, b) => a[0] - b[0]);
+-          
+-          // (P19-B4b.2 / #300) Dead 'orderbook' emission + snapshot construction removed.
+-          // Only consumer chain (market-data-coordinator order-book store -> deleted
+-          // realtime-paper-executor) is gone. The mini-book + the midpoint-tick emission
+-          // below are LIVE and unchanged. The OrderBookSnapshot interface export is
+-          // retained (slippage-fee-model type-imports it).
+-          this.lastTickTimestamp = Date.now();
+-          
+-          // Emit tick with midpoint for stable pricing
+-          if (sortedBids.length > 0 && sortedAsks.length > 0) {
+-            const bestBid = sortedBids[0][0];
+-            const bestAsk = sortedAsks[0][0];
+-            const midpoint = (bestBid + bestAsk) / 2;
+-            
+-            const tickData: TickData = {
+-              symbol: symbol,
+-              bid: bestBid,
+-              ask: bestAsk,
+-              last: midpoint,
+-              timestamp: new Date().toISOString(),
+-              source: 'ws',
+-            };
+-            this.emit('tick', tickData);
+-          }
+-        }
+-      }
+-      return;
+-    }
+-    
+-    // 8.9.0-B: Handle v2 Subscription Responses
+-    if (message && typeof message === 'object' && message.method) {
+-      if (message.method === 'subscribe') {
+-        if (message.success) {
+-          console.log(`[8.9.0-B][MD-WS] Sub OK: ${message.result?.symbol}`);
+-        } else {
+-          console.error(`[8.9.0-B][MD-WS] Sub Error: ${message.error}`);
+-        }
+-      }
+-      return;
+-    }
+-    
+-    // 8.9.0-B: Handle v2 Heartbeat
+-    if (message && typeof message === 'object' && message.channel === 'heartbeat') {
+-      this.lastTickTimestamp = Date.now();
+-      return;
+-    }
+-  }
+-
+-  public subscribeToPair(pair: string): void {
+-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+-      console.log(`[MD-WS] Queuing subscription for ${pair} (not connected)`);
+-      this.subscribedPairs.add(pair);
+-      return;
+-    }
+-
+-    this.subscribedPairs.add(pair);
+-
+-    // 8.9.4: v2 subscription format for ticker (trade-based updates)
+-    // Book channel provides BBO updates for continuous midpoint pricing
+-    const tickerSub = {
+-      method: 'subscribe',
+-      params: {
+-        channel: 'ticker',
+-        symbol: [pair],
+-        snapshot: true
+-      }
+-    };
+-
+-    // 8.9.4: v2 subscription format for order book (continuous BBO updates)
+-    const bookSub = {
+-      method: 'subscribe',
+-      params: {
+-        channel: 'book',
+-        symbol: [pair],
+-        depth: 10,  // Top 10 levels for redundancy
+-        snapshot: true
+-      }
+-    };
+-
+-    this.ws.send(JSON.stringify(tickerSub));
+-    this.ws.send(JSON.stringify(bookSub));
+-    
+-    console.log(`[8.9.0-B][MD-WS] Subscribed to ${pair}`);
+-  }
+-
+-  public unsubscribeFromPair(pair: string): void {
+-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+-      this.subscribedPairs.delete(pair);
+-      return;
+-    }
+-
+-    // 8.9.0-B: v2 unsubscribe format
+-    const tickerUnsub = {
+-      method: 'unsubscribe',
+-      params: {
+-        channel: 'ticker',
+-        symbol: [pair]
+-      }
+-    };
+-
+-    const bookUnsub = {
+-      method: 'unsubscribe',
+-      params: {
+-        channel: 'book',
+-        symbol: [pair]
+-      }
+-    };
+-
+-    this.ws.send(JSON.stringify(tickerUnsub));
+-    this.ws.send(JSON.stringify(bookUnsub));
+-    this.subscribedPairs.delete(pair);
+-    
+-    console.log(`[8.9.0-B][MD-WS] Unsubscribed from ${pair}`);
+-  }
+-
+-  private startHeartbeat(): void {
+-    this.stopHeartbeat();
+-    this.heartbeatTimer = setInterval(() => {
+-      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+-        this.ws.ping();
+-        
+-        // Check if data is stale
+-        const ageMs = Date.now() - this.lastTickTimestamp;
+-        if (ageMs > this.config.staleThresholdMs) {
+-          console.warn(`[MD-WS] Data stale: ${ageMs}ms since last tick`);
+-          this.emit('stale', ageMs);
+-        }
+-      }
+-    }, this.config.heartbeatInterval);
+-  }
+-
+-  private stopHeartbeat(): void {
+-    if (this.heartbeatTimer) {
+-      clearInterval(this.heartbeatTimer);
+-      this.heartbeatTimer = null;
+-    }
+-  }
+-
+-  private scheduleReconnect(): void {
+-    if (this.reconnectTimer) {
+-      return; // Already scheduled
+-    }
+-
+-    const delay = Math.min(
+-      this.config.reconnectDelayBase * Math.pow(2, this.reconnectAttempts),
+-      this.config.reconnectDelayMax
+-    );
+-
+-    console.log(`[MD-WS] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts + 1})`);
+-    
+-    this.reconnectTimer = setTimeout(() => {
+-      this.reconnectTimer = null;
+-      this.reconnectAttempts++;
+-      this.reconnectCount++;
+-      this.connect();
+-    }, delay);
+-  }
+-
+-  public disconnect(): void {
+-    console.log('[MD-WS] Disconnecting...');
+-    
+-    this.stopHeartbeat();
+-    
+-    if (this.reconnectTimer) {
+-      clearTimeout(this.reconnectTimer);
+-      this.reconnectTimer = null;
+-    }
+-
+-    if (this.ws) {
+-      this.ws.close();
+-      this.ws = null;
+-    }
+-
+-    this.isConnected = false;
+-  }
+-
+-  public getStatus() {
+-    const ageMs = this.lastTickTimestamp > 0 ? Date.now() - this.lastTickTimestamp : -1;
+-    
+-    return {
+-      connected: this.isConnected,
+-      reconnects: this.reconnectCount,
+-      lastTickAgeMs: ageMs,
+-      subscribedPairs: Array.from(this.subscribedPairs),
+-      isStale: ageMs > this.config.staleThresholdMs,
+-    };
+-  }
+-
+-  public getLastTickAge(): number {
+-    return this.lastTickTimestamp > 0 ? Date.now() - this.lastTickTimestamp : -1;
+-  }
+-
+-  /**
+-   * Get and reset reconnect count (for interval-based monitoring)
+-   */
+-  public getAndResetReconnectCount(): number {
+-    const count = this.reconnectCount;
+-    this.reconnectCount = 0;
+-    return count;
+-  }
+-}
+-
+-// Singleton instance
+-let mdWsInstance: MarketDataWebSocket | null = null;
+-
+-export function getMarketDataWS(): MarketDataWebSocket {
+-  if (!mdWsInstance) {
+-    mdWsInstance = new MarketDataWebSocket();
+-  }
+-  return mdWsInstance;
+-}
+diff --git a/server/services/market-data/feed-health-aggregate.ts b/server/services/market-data/feed-health-aggregate.ts
+new file mode 100644
+index 000000000..afd7fc750
+--- /dev/null
++++ b/server/services/market-data/feed-health-aggregate.ts
+@@ -0,0 +1,199 @@
++/**
++ * P19-B6.7 — Feed-health aggregation primitives (pure, no I/O).
++ *
++ * After the vestigial 2nd WebSocket (#301) was removed, the four feed-health
++ * consumers read the PRIMARY adapter's per-symbol health (`getI8EWsHealth()`).
++ * That is per-symbol; the consumers need ONE signal each — and the correct
++ * aggregate differs by consumer (Langston/CC-A Step-2 consensus):
++ *
++ *  - ALARM (feed-integrity-monitor)  → FEED-LEVEL aliveness = FRESHEST-symbol age.
++ *      "the feed is alive if ANY subscribed symbol ticked; critical only when
++ *       NONE ticked within threshold." Worst-case-per-symbol would false-CRITICAL
++ *       on a single legitimately-quiet illiquid pair — the inverse of the bug
++ *       B6.7 removes. So the alarm grades the freshest symbol.
++ *  - GO-LIVE GATE (parity-gate)      → PROPORTION-fresh, worst-case-conservative.
++ *      A readiness gate must NOT pass off one lively symbol; require most of the
++ *      subscribed set fresh, err toward not-ready.
++ *  - STATUS / DISPLAY (health-monitor, system-health-monitor) → freshest-symbol.
++ *
++ * These are pure functions over a minimal shape so they unit-test without a live
++ * adapter. Asset-class partitioning + the xStock market-hours gate + warmup grace
++ * live at the ALARM call site (feed-integrity-monitor), not here.
++ */
++
++/** Minimal per-symbol freshness shape (subset of the primary adapter's getI8EWsHealth() rows). */
++export interface SymbolFreshness {
++  symbol: string;
++  /** ms since this symbol's last tick; null = it has never ticked (no data yet). */
++  ageMs: number | null;
++}
++
++/**
++ * FRESHEST-symbol age = the minimum ageMs across symbols that have ticked.
++ * Returns null when NO symbol has ticked (the whole set is silent / no data) —
++ * the "is the feed alive at all" signal. Symbols with ageMs === null (never
++ * ticked) do not count as fresh and are skipped.
++ */
++export function freshestSymbolAgeMs(items: SymbolFreshness[]): number | null {
++  let best: number | null = null;
++  for (const it of items) {
++    if (it.ageMs === null || it.ageMs === undefined) continue;
++    if (best === null || it.ageMs < best) best = it.ageMs;
++  }
++  return best;
++}
++
++/**
++ * Proportion (0..1) of the set that is fresh (ageMs <= thresholdMs). Symbols that
++ * have never ticked (null) count as NOT fresh. An empty set returns 0 — vacuously
++ * "not ready" — which is the conservative choice for a go-live gate (never PASS on
++ * an empty / unknown feed).
++ */
++export function proportionFresh(items: SymbolFreshness[], thresholdMs: number): number {
++  if (items.length === 0) return 0;
++  let fresh = 0;
++  for (const it of items) {
++    if (it.ageMs !== null && it.ageMs !== undefined && it.ageMs <= thresholdMs) fresh++;
++  }
++  return fresh / items.length;
++}
++
++/**
++ * GO-LIVE GATE readiness (parity-gate). P19-B6.7 (#301): the removed 2nd WS stayed
++ * TCP-connected while delivering zero ticks, so "connected" alone false-PASSED the
++ * go-live gate. Readiness now requires BOTH: (a) connected with acceptable uptime
++ * (derived from reconnects), AND (b) a CONSERVATIVE proportion of subscribed symbols
++ * actually delivering fresh ticks (worst-case aggregate — not freshest-one). Pure so
++ * it unit-tests both directions without a live adapter.
++ */
++export interface WsReadinessOpts {
++  simulationDurationMs: number;
++  minWsUptimePercent: number;
++  freshTickMaxMs: number;
++  minSymbolsFreshPercent: number;
++}
++export interface WsReadiness {
++  passed: boolean;
++  uptimePercent: number;
++  freshPercent: number;
++}
++export function assessWsReadiness(
++  status: { isConnected: boolean; reconnectAttempts: number },
++  health: SymbolFreshness[],
++  opts: WsReadinessOpts,
++): WsReadiness {
++  const estimatedChecks = Math.max(120, opts.simulationDurationMs / 5000);
++  const uptimePercent = status.isConnected
++    ? Math.max(0, (1 - status.reconnectAttempts / estimatedChecks) * 100)
++    : 0;
++  const freshPercent = proportionFresh(health, opts.freshTickMaxMs) * 100;
++  const passed = uptimePercent >= opts.minWsUptimePercent
++    && freshPercent >= opts.minSymbolsFreshPercent;
++  return { passed, uptimePercent, freshPercent };
++}
++
++export type FeedAliveGrade = 'healthy' | 'warning' | 'critical';
++
++/**
++ * Grade FEED-LEVEL aliveness from the freshest-symbol age (the ALARM aggregate).
++ * `freshestAgeMs === null` (no symbol has ticked at all) → the feed is silent →
++ * critical-eligible. The CALLER is responsible for suppressing this where silence
++ * is legitimate (xStock market closed, post-open warmup grace, dormant mode).
++ *
++ * Two thresholds on the SAME aggregate (warning < critical) — not a second
++ * aggregate. Asset-class-specific threshold values come from DB config (§11).
++ */
++export function gradeFeedAliveness(
++  freshestAgeMs: number | null,
++  warningMs: number,
++  criticalMs: number,
++): FeedAliveGrade {
++  if (freshestAgeMs === null) return 'critical';
++  if (freshestAgeMs >= criticalMs) return 'critical';
++  if (freshestAgeMs >= warningMs) return 'warning';
++  return 'healthy';
++}
++
++/**
++ * PER-ASSET-CLASS feed-liveness grade (the ALARM, P19-B6.7 OBJ-3). The primary
++ * adapter serves BOTH crypto (24/7) and xStock (24/5) symbols whose legitimate quiet
++ * periods differ, so the alarm grades each class separately and the overall alarm is
++ * the worst NON-SUPPRESSED class. Suppression (no false alarm) applies when a class is
++ * legitimately quiet:
++ *   - xStock: market closed (per-symbol `isXstockSymbolOpen`; class suppressed only when
++ *     ALL subscribed xStock symbols are closed — half-days/holidays fall out per-symbol),
++ *     OR within the post-open WARMUP GRACE (the freshest age is stale-by-construction at
++ *     the bell, before the first quotes land).
++ *   - any class with no (considered) symbols → suppressed.
++ * Crypto has no market-closed concept → always graded (its threshold absorbs weekend
++ * thin-book). Pure + dependency-injected so it unit-tests without a live adapter/clock/DB.
++ */
++export type ClassSuppressReason = 'market_closed' | 'warmup_grace' | 'no_symbols' | null;
++export interface PerClassThresholds { warningMs: number; criticalMs: number; }
++export interface ClassLivenessResult {
++  assetClass: string;
++  freshestAgeMs: number | null;
++  symbolCount: number;
++  suppressed: boolean;
++  suppressReason: ClassSuppressReason;
++  grade: FeedAliveGrade;
++}
++export interface PerClassLivenessOpts {
++  /** symbol → asset-class key (e.g. resolveAssetClass(sym,'kraken')). */
++  classify: (symbol: string) => string;
++  /** per-asset-class warning/critical freshest-age thresholds (from DB §11). */
++  thresholds: Record<string, PerClassThresholds>;
++  /** the asset-class key treated as xStock (market-hours gated). */
++  xstockClassKey: string;
++  /** per-symbol xStock market-open predicate (isXstockMarketOpenUTC). */
++  isXstockSymbolOpen: (symbol: string) => boolean;
++  /** ms of post-open warmup grace still in effect (>0 ⇒ suppress xStock critical/warning). */
++  xstockWarmupRemainingMs: number;
++}
++export function gradePerClassFeedLiveness(
++  health: SymbolFreshness[],
++  opts: PerClassLivenessOpts,
++): { classes: ClassLivenessResult[]; overall: FeedAliveGrade } {
++  const byClass = new Map<string, SymbolFreshness[]>();
++  for (const h of health) {
++    const cls = opts.classify(h.symbol);
++    const arr = byClass.get(cls);
++    if (arr) arr.push(h); else byClass.set(cls, [h]);
++  }
++
++  const rank: Record<FeedAliveGrade, number> = { healthy: 0, warning: 1, critical: 2 };
++  const classes: ClassLivenessResult[] = [];
++  let overall: FeedAliveGrade = 'healthy';
++
++  for (const [cls, syms] of byClass) {
++    let considered = syms;
++    let suppressed = false;
++    let suppressReason: ClassSuppressReason = null;
++
++    if (cls === opts.xstockClassKey) {
++      considered = syms.filter((sym) => opts.isXstockSymbolOpen(sym.symbol));
++      if (considered.length === 0) {
++        suppressed = true;
++        suppressReason = 'market_closed'; // all subscribed xStock symbols closed
++      } else if (opts.xstockWarmupRemainingMs > 0) {
++        suppressed = true;
++        suppressReason = 'warmup_grace'; // just reopened; quotes not landed yet
++      }
++    }
++    if (!suppressed && considered.length === 0) {
++      suppressed = true;
++      suppressReason = 'no_symbols';
++    }
++
++    const freshestAgeMs = freshestSymbolAgeMs(considered);
++    const th = opts.thresholds[cls];
++    const grade: FeedAliveGrade = suppressed || !th
++      ? 'healthy'
++      : gradeFeedAliveness(freshestAgeMs, th.warningMs, th.criticalMs);
++
++    classes.push({ assetClass: cls, freshestAgeMs, symbolCount: considered.length, suppressed, suppressReason, grade });
++    if (!suppressed && rank[grade] > rank[overall]) overall = grade;
++  }
++
++  return { classes, overall };
++}
+diff --git a/server/services/market-scanner.ts b/server/services/market-scanner.ts
+index b766babf4..cd0d73e1f 100644
+--- a/server/services/market-scanner.ts
++++ b/server/services/market-scanner.ts
+@@ -568,6 +568,22 @@ export async function collectAdaptiveBatch(
+   
+   const krakenUniverseSize = allPairs.length;
+   console.log(`[AdaptiveScan][11.4C.1] Kraken universe: ${krakenUniverseSize} pairs`);
++
++  // P19-B6.7 (#396) OBJ-4: PURE telemetry (no behavior change) — when the Kraken universe
++  // itself comes back short, the downstream refill (market-scanner ~:600) CANNOT rescue it
++  // (it tops up FROM allPairs), so that cycle scans few pairs. Attribute the cause live:
++  // was getTicker() short, was getTradablePairs() short, or did the pairInfo join drop rows?
++  // The actual fix is homed P19-B6.9 (RUNNING_ISSUES #396); this only captures the evidence.
++  if (krakenUniverseSize < SCANNER_PARAMS.BATCH_SIZE) {
++    const tickerCount = Object.keys(tickers).length;
++    const pairsCount = Object.keys(pairsObj).length;
++    const joinDrops = tickerCount - krakenUniverseSize; // ticker keys with no pairInfo match
++    console.warn(
++      `[AdaptiveScan][11.4C.1][#396] SHORT UNIVERSE ${krakenUniverseSize}/${SCANNER_PARAMS.BATCH_SIZE} — ` +
++      `getTicker=${tickerCount} pairs, getTradablePairs=${pairsCount} pairs, pairInfo-join-drops=${joinDrops}. ` +
++      `Cause: ${tickerCount < SCANNER_PARAMS.BATCH_SIZE ? 'getTicker SHORT' : pairsCount < tickerCount ? 'getTradablePairs SHORT (join drops)' : 'join-filter'}.`
++    );
++  }
+   
+   // STEP 2: Get adaptive batch from AdaptiveScanManager
+   const adaptiveScanManager = getAdaptiveScanManager();
+diff --git a/server/services/parity-gate.ts b/server/services/parity-gate.ts
+index d00ed53d1..151f8c673 100644
+--- a/server/services/parity-gate.ts
++++ b/server/services/parity-gate.ts
+@@ -1,5 +1,8 @@
+ import { executionTiming } from './execution-timing';
+-import { getMarketDataCoordinator } from './market-data-coordinator';
++// P19-B6.7 (#301): the vestigial 2nd-WS coordinator was removed; the go-live WS-readiness
++// check now reads the PRIMARY adapter via the tested assessWsReadiness aggregate.
++import { krakenWebSocketAdapter } from '../exchanges/kraken/kraken-websocket-adapter.js';
++import { assessWsReadiness } from './market-data/feed-health-aggregate.js';
+ import { rateControl } from './rate-control';
+ import { filePersistence } from './file-persistence';
+ 
+@@ -28,6 +31,10 @@ class ParityGateService {
+     maxSlippageBps: 15,  // 15 basis points
+     minWsUptime: 99,     // 99%
+     rateErrorsAllowed: 0,
++    // P19-B6.7 (#301): a connected socket is not enough (the dead 2nd WS proved that) —
++    // the go-live gate also requires the feed to be BROADLY delivering fresh ticks.
++    freshTickMaxMs: 10000,       // a symbol is "fresh" if it ticked within 10s
++    minSymbolsFreshPercent: 80,  // require ≥80% of subscribed symbols fresh (conservative)
+   };
+ 
+   /**
+@@ -74,22 +81,27 @@ class ParityGateService {
+       );
+     }
+ 
+-    // Check 4: WebSocket uptime (use reconnect count and connection status)
+-    const mdCoordinator = getMarketDataCoordinator();
+-    const mdStatus = mdCoordinator.getStatus();
+-    
+-    // Calculate uptime based on reconnects and current status
+-    // Uptime = (1 - (reconnects / estimated_checks)) * 100
+-    // Assume 1 check per 5 seconds for 10 min = 120 checks
+-    const estimatedChecks = Math.max(120, simulationDurationMs / 5000);
+-    const wsUptimePercent = mdStatus.wsConnected 
+-      ? Math.max(0, (1 - (mdStatus.wsReconnects / estimatedChecks)) * 100)
+-      : 0;
+-    
+-    const wsUptimePassed = wsUptimePercent >= this.thresholds.minWsUptime;
++    // Check 4: WebSocket feed readiness (PRIMARY adapter). P19-B6.7 (#301): the removed
++    // 2nd WS stayed TCP-connected while delivering zero ticks, so "connected" alone
++    // false-PASSED this go-live gate. assessWsReadiness requires connected+uptime AND a
++    // conservative proportion of subscribed symbols delivering fresh ticks (worst-case
++    // aggregate for a go-live gate — tested both directions in the helper unit suite).
++    const wsReadiness = assessWsReadiness(
++      krakenWebSocketAdapter.getStatus(),
++      krakenWebSocketAdapter.getI8EWsHealth().map(h => ({ symbol: h.symbol, ageMs: h.ageMs })),
++      {
++        simulationDurationMs,
++        minWsUptimePercent: this.thresholds.minWsUptime,
++        freshTickMaxMs: this.thresholds.freshTickMaxMs,
++        minSymbolsFreshPercent: this.thresholds.minSymbolsFreshPercent,
++      },
++    );
++    const wsUptimePercent = wsReadiness.uptimePercent;
++    const wsUptimePassed = wsReadiness.passed;
+     if (!wsUptimePassed) {
+       blockingReasons.push(
+-        `WebSocket uptime too low: ${wsUptimePercent.toFixed(1)}% (min: ${this.thresholds.minWsUptime}%)`
++        `WebSocket feed not ready: uptime ${wsReadiness.uptimePercent.toFixed(1)}% (min ${this.thresholds.minWsUptime}%), ` +
++        `fresh symbols ${wsReadiness.freshPercent.toFixed(1)}% (min ${this.thresholds.minSymbolsFreshPercent}%)`
+       );
+     }
+ 
+diff --git a/server/services/slippage-fee-model.ts b/server/services/slippage-fee-model.ts
+index e7efe8b9e..b60c3a02e 100644
+--- a/server/services/slippage-fee-model.ts
++++ b/server/services/slippage-fee-model.ts
+@@ -1,4 +1,11 @@
+-import { OrderBookSnapshot } from './market-data-ws';
++// P19-B6.7 (#301): OrderBookSnapshot re-homed here (sole consumer) when the
++// vestigial 2nd WebSocket (market-data-ws.ts) was removed. Type-only — no runtime dep.
++export interface OrderBookSnapshot {
++  symbol: string;
++  bids: [number, number][]; // [price, volume]
++  asks: [number, number][]; // [price, volume]
++  timestamp: string;
++}
+ // B-4.5: fees are DB-governed per asset class (module_constants 'fee_model',
+ // warmed at boot, fail-hard). Static DEFAULT_TAKER/MAKER_FEE retired.
+ import { getCachedNumberRequired } from './module-constants-service.js';
+diff --git a/server/services/system-health-monitor.ts b/server/services/system-health-monitor.ts
+index 2507e130a..8484c5d81 100644
+--- a/server/services/system-health-monitor.ts
++++ b/server/services/system-health-monitor.ts
+@@ -1,7 +1,10 @@
+ import os from 'os';
+ import { performance } from 'perf_hooks';
+ import { filePersistence } from './file-persistence';
+-import { getMarketDataCoordinator } from './market-data-coordinator';
++// P19-B6.7 (#301): the vestigial 2nd-WS coordinator was removed; read the PRIMARY
++// adapter's health directly (freshest-symbol age = "is the feed alive at all").
++import { krakenWebSocketAdapter } from '../exchanges/kraken/kraken-websocket-adapter.js';
++import { freshestSymbolAgeMs } from './market-data/feed-health-aggregate.js';
+ import { rateControl } from './rate-control';
+ import { executionTiming } from './execution-timing';
+ 
+@@ -291,13 +294,17 @@ class SystemHealthMonitor {
+       // (P19-B4b.2 / #300) Read directly from the live services. The
+       // realtime-paper-executor that previously wrapped these (getStatus()) was a
+       // dead pass-through over exactly these three sources and has been deleted.
+-      const mdStatus = getMarketDataCoordinator().getStatus();
++      // (P19-B6.7 / #301) Market-data health now reads the PRIMARY adapter, not the
++      // removed 2nd-WS coordinator. No fallback feed exists, so the source is the
++      // primary WS when connected; lastTickAge is the freshest-symbol age (display).
++      const wsStatus = krakenWebSocketAdapter.getStatus();
++      const freshestAgeMs = freshestSymbolAgeMs(krakenWebSocketAdapter.getI8EWsHealth());
+       const rateStatus = rateControl.getStatus('private');
+       const execTimingMetrics = executionTiming.getMetrics(10);
+ 
+       return {
+-        marketDataSource: mdStatus.dataSource as 'ws' | 'rest_fallback' | 'N/A',
+-        lastTickAgeMs: mdStatus.lastTickAgeMs,
++        marketDataSource: (wsStatus.isConnected ? 'ws' : 'N/A') as 'ws' | 'rest_fallback' | 'N/A',
++        lastTickAgeMs: freshestAgeMs ?? -1,
+         avgSubmitAckMs: execTimingMetrics.avgSubmitAckMs,
+         avgSlippageBps: execTimingMetrics.avgSlippageBps,
+         avgFeesPerTrade: execTimingMetrics.avgFeesPerTrade,
+diff --git a/server/services/utils/symbol-canonicalizer.ts b/server/services/utils/symbol-canonicalizer.ts
+index 7357f95e6..cd5fe1e20 100644
+--- a/server/services/utils/symbol-canonicalizer.ts
++++ b/server/services/utils/symbol-canonicalizer.ts
+@@ -6,7 +6,6 @@
+  * - Screener filters
+  * - Guardrails
+  * - Strategy prechecks
+- * - MarketDataCoordinator
+  *
+  * ─── ALSO HOSTS: KNOWN_NONEXISTENT_NAMES registry (Kyle directive 2026-04-30) ───
+  *
+diff --git a/server/tests/unit/p19-b6-7-feed-health-aggregate.test.ts b/server/tests/unit/p19-b6-7-feed-health-aggregate.test.ts
+new file mode 100644
+index 000000000..c6359c7ab
+--- /dev/null
++++ b/server/tests/unit/p19-b6-7-feed-health-aggregate.test.ts
+@@ -0,0 +1,230 @@
++import { describe, it, expect } from 'vitest';
++import {
++  freshestSymbolAgeMs,
++  proportionFresh,
++  gradeFeedAliveness,
++  assessWsReadiness,
++  gradePerClassFeedLiveness,
++  type SymbolFreshness,
++  type PerClassLivenessOpts,
++} from '../../services/market-data/feed-health-aggregate';
++
++const s = (symbol: string, ageMs: number | null): SymbolFreshness => ({ symbol, ageMs });
++
++describe('P19-B6.7 feed-health-aggregate — freshestSymbolAgeMs (ALARM aggregate)', () => {
++  it('returns the minimum ageMs across symbols that have ticked', () => {
++    expect(freshestSymbolAgeMs([s('A', 5000), s('B', 800), s('C', 30000)])).toBe(800);
++  });
++
++  it('skips never-ticked (null) symbols when others have ticked', () => {
++    expect(freshestSymbolAgeMs([s('A', null), s('B', 1200), s('C', null)])).toBe(1200);
++  });
++
++  it('returns null when NO symbol has ticked (feed silent / no data)', () => {
++    expect(freshestSymbolAgeMs([s('A', null), s('B', null)])).toBeNull();
++    expect(freshestSymbolAgeMs([])).toBeNull();
++  });
++
++  // The inverse-of-the-bug guard: ONE legitimately-quiet illiquid symbol must NOT
++  // drag the feed-level signal to "stale" while other symbols are ticking fresh.
++  it('one quiet illiquid symbol does NOT mask a healthy feed (freshest stays fresh)', () => {
++    const ageMs = freshestSymbolAgeMs([s('ILLIQUID', 45000), s('BTC/USD', 600), s('ETH/USD', 900)]);
++    expect(ageMs).toBe(600); // freshest is the lively pair → feed reads alive
++  });
++});
++
++describe('P19-B6.7 feed-health-aggregate — gradeFeedAliveness (ALARM grade, 2 thresholds, 1 aggregate)', () => {
++  const warn = 5000;
++  const crit = 10000;
++
++  it('(silent) fresh feed → healthy', () => {
++    expect(gradeFeedAliveness(800, warn, crit)).toBe('healthy');
++  });
++
++  it('warning band → warning', () => {
++    expect(gradeFeedAliveness(6000, warn, crit)).toBe('warning');
++  });
++
++  it('(positive) feed dead / freshest past critical → critical', () => {
++    expect(gradeFeedAliveness(12000, warn, crit)).toBe('critical');
++  });
++
++  it('(positive) NO symbol ticked at all (null) → critical-eligible', () => {
++    expect(gradeFeedAliveness(null, warn, crit)).toBe('critical');
++  });
++
++  // (negative) one quiet illiquid symbol while others tick → freshest is fresh → NOT critical.
++  it('(negative) one quiet symbol + others fresh → healthy, NOT critical', () => {
++    const freshest = freshestSymbolAgeMs([s('ILLIQUID', 60000), s('BTC/USD', 700)]);
++    expect(gradeFeedAliveness(freshest, warn, crit)).toBe('healthy');
++  });
++
++  it('thresholds are inclusive at the critical boundary', () => {
++    expect(gradeFeedAliveness(10000, warn, crit)).toBe('critical');
++    expect(gradeFeedAliveness(9999, warn, crit)).toBe('warning');
++  });
++});
++
++describe('P19-B6.7 feed-health-aggregate — proportionFresh (GO-LIVE GATE aggregate, conservative)', () => {
++  it('fraction of the set that is fresh within threshold', () => {
++    const items = [s('A', 500), s('B', 800), s('C', 30000), s('D', 600)];
++    expect(proportionFresh(items, 2000)).toBe(0.75); // 3 of 4 fresh
++  });
++
++  it('never-ticked (null) symbols count as NOT fresh', () => {
++    expect(proportionFresh([s('A', 500), s('B', null)], 2000)).toBe(0.5);
++  });
++
++  // Conservative for a go-live gate: an empty / unknown set is "not ready" (0), never PASS.
++  it('empty set returns 0 (vacuously not-ready, never false-PASS)', () => {
++    expect(proportionFresh([], 2000)).toBe(0);
++  });
++
++  // The gate must NOT pass off one lively symbol when most of the set is stale.
++  it('one fresh symbol among many stale → low proportion (gate would block)', () => {
++    const items = [s('A', 600), s('B', 40000), s('C', 50000), s('D', 60000)];
++    expect(proportionFresh(items, 2000)).toBe(0.25);
++  });
++});
++
++describe('P19-B6.7 feed-health-aggregate — assessWsReadiness (parity-gate, BOTH directions)', () => {
++  const opts = {
++    simulationDurationMs: 600_000,
++    minWsUptimePercent: 99,
++    freshTickMaxMs: 10_000,
++    minSymbolsFreshPercent: 80,
++  };
++
++  it('PASSES on a healthy primary feed (connected, no reconnects, all symbols fresh)', () => {
++    const r = assessWsReadiness(
++      { isConnected: true, reconnectAttempts: 0 },
++      [s('BTC/USD', 600), s('ETH/USD', 900), s('SOL/USD', 1200)],
++      opts,
++    );
++    expect(r.passed).toBe(true);
++    expect(r.uptimePercent).toBe(100);
++    expect(r.freshPercent).toBe(100);
++  });
++
++  // THE dead-feed scenario: the removed 2nd WS stayed TCP-connected while delivering
++  // zero ticks. Connected-but-stale MUST now BLOCK (the false-PASS this batch kills).
++  it('BLOCKS when connected but NO symbol is delivering fresh ticks (the dead-feed false-PASS)', () => {
++    const r = assessWsReadiness(
++      { isConnected: true, reconnectAttempts: 0 },
++      [s('BTC/USD', 45000), s('ETH/USD', 60000), s('SOL/USD', null)],
++      opts,
++    );
++    expect(r.passed).toBe(false);
++    expect(r.freshPercent).toBe(0);
++  });
++
++  it('BLOCKS when disconnected (uptime 0)', () => {
++    const r = assessWsReadiness(
++      { isConnected: false, reconnectAttempts: 0 },
++      [s('BTC/USD', 600)],
++      opts,
++    );
++    expect(r.passed).toBe(false);
++    expect(r.uptimePercent).toBe(0);
++  });
++
++  it('BLOCKS when only a minority of symbols are fresh (below the conservative proportion floor)', () => {
++    const r = assessWsReadiness(
++      { isConnected: true, reconnectAttempts: 0 },
++      [s('A', 600), s('B', 40000), s('C', 50000), s('D', 60000)], // 25% fresh < 80%
++      opts,
++    );
++    expect(r.passed).toBe(false);
++    expect(r.freshPercent).toBe(25);
++  });
++});
++
++describe('P19-B6.7 feed-health-aggregate — gradePerClassFeedLiveness (ALARM, OBJ-3 matrix)', () => {
++  // crypto symbols start XBT/ETH..., xStock symbols end in "x/USD" in this stub classifier.
++  const classify = (sym: string): string => (/x\/USD$/.test(sym) ? 'xstock_spot' : 'crypto_spot');
++  const thresholds = {
++    crypto_spot: { warningMs: 5000, criticalMs: 10000 },
++    xstock_spot: { warningMs: 60000, criticalMs: 120000 },
++  };
++  const base = (over: Partial<PerClassLivenessOpts> = {}): PerClassLivenessOpts => ({
++    classify,
++    thresholds,
++    xstockClassKey: 'xstock_spot',
++    isXstockSymbolOpen: () => true,
++    xstockWarmupRemainingMs: 0,
++    ...over,
++  });
++
++  it('(silent) all symbols fresh → overall healthy', () => {
++    const r = gradePerClassFeedLiveness([s('XBT/USD', 600), s('ETH/USD', 900), s('AAPLx/USD', 1500)], base());
++    expect(r.overall).toBe('healthy');
++  });
++
++  it('(positive) crypto feed dead (all crypto stale) → overall critical', () => {
++    const r = gradePerClassFeedLiveness([s('XBT/USD', 30000), s('ETH/USD', 45000)], base());
++    expect(r.overall).toBe('critical');
++  });
++
++  it('(negative) one quiet illiquid crypto symbol + others fresh → healthy (freshest, not worst-case)', () => {
++    const r = gradePerClassFeedLiveness([s('ILLIQ/USD', 60000), s('XBT/USD', 700)], base());
++    expect(r.overall).toBe('healthy');
++  });
++
++  it('xStock market CLOSED (all xStock symbols closed) → xStock SUPPRESSED (market_closed), overall not critical', () => {
++    const r = gradePerClassFeedLiveness(
++      [s('XBT/USD', 700), s('AAPLx/USD', 9_000_000), s('TSLAx/USD', 9_000_000)],
++      base({ isXstockSymbolOpen: () => false }),
++    );
++    const xs = r.classes.find((c) => c.assetClass === 'xstock_spot')!;
++    expect(xs.suppressed).toBe(true);
++    expect(xs.suppressReason).toBe('market_closed');
++    expect(r.overall).toBe('healthy'); // crypto fresh; xStock legitimately quiet
++  });
++
++  it('half-day: only OPEN xStock symbols are graded (per-symbol gate)', () => {
++    const openOnly = (sym: string) => sym === 'AAPLx/USD'; // TSLAx closed (half-day)
++    const r = gradePerClassFeedLiveness(
++      [s('AAPLx/USD', 1500), s('TSLAx/USD', 9_000_000)],
++      base({ isXstockSymbolOpen: openOnly }),
++    );
++    const xs = r.classes.find((c) => c.assetClass === 'xstock_spot')!;
++    expect(xs.suppressed).toBe(false);
++    expect(xs.symbolCount).toBe(1);       // only the open symbol counted
++    expect(xs.grade).toBe('healthy');     // and it is fresh
++  });
++
++  it('(positive) xStock OPEN + dead, past warmup → critical', () => {
++    const r = gradePerClassFeedLiveness(
++      [s('AAPLx/USD', 200000)],
++      base({ isXstockSymbolOpen: () => true, xstockWarmupRemainingMs: 0 }),
++    );
++    expect(r.overall).toBe('critical');
++  });
++
++  it('(reopen grace) xStock just reopened, stale-at-close age, WITHIN warmup → suppressed, NOT critical', () => {
++    const r = gradePerClassFeedLiveness(
++      [s('AAPLx/USD', 9_000_000)], // hours since last close
++      base({ isXstockSymbolOpen: () => true, xstockWarmupRemainingMs: 120000 }),
++    );
++    const xs = r.classes.find((c) => c.assetClass === 'xstock_spot')!;
++    expect(xs.suppressed).toBe(true);
++    expect(xs.suppressReason).toBe('warmup_grace');
++    expect(r.overall).toBe('healthy');
++  });
++
++  it('(reopen grace expired) still stale after grace → critical', () => {
++    const r = gradePerClassFeedLiveness(
++      [s('AAPLx/USD', 9_000_000)],
++      base({ isXstockSymbolOpen: () => true, xstockWarmupRemainingMs: 0 }),
++    );
++    expect(r.overall).toBe('critical');
++  });
++
++  it('mixed: crypto healthy + xStock open-and-dead → overall critical (worst non-suppressed class)', () => {
++    const r = gradePerClassFeedLiveness(
++      [s('XBT/USD', 700), s('AAPLx/USD', 200000)],
++      base({ isXstockSymbolOpen: () => true }),
++    );
++    expect(r.overall).toBe('critical');
++  });
++});
