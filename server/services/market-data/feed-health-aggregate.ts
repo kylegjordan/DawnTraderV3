@@ -113,3 +113,87 @@ export function gradeFeedAliveness(
   if (freshestAgeMs >= warningMs) return 'warning';
   return 'healthy';
 }
+
+/**
+ * PER-ASSET-CLASS feed-liveness grade (the ALARM, P19-B6.7 OBJ-3). The primary
+ * adapter serves BOTH crypto (24/7) and xStock (24/5) symbols whose legitimate quiet
+ * periods differ, so the alarm grades each class separately and the overall alarm is
+ * the worst NON-SUPPRESSED class. Suppression (no false alarm) applies when a class is
+ * legitimately quiet:
+ *   - xStock: market closed (per-symbol `isXstockSymbolOpen`; class suppressed only when
+ *     ALL subscribed xStock symbols are closed — half-days/holidays fall out per-symbol),
+ *     OR within the post-open WARMUP GRACE (the freshest age is stale-by-construction at
+ *     the bell, before the first quotes land).
+ *   - any class with no (considered) symbols → suppressed.
+ * Crypto has no market-closed concept → always graded (its threshold absorbs weekend
+ * thin-book). Pure + dependency-injected so it unit-tests without a live adapter/clock/DB.
+ */
+export type ClassSuppressReason = 'market_closed' | 'warmup_grace' | 'no_symbols' | null;
+export interface PerClassThresholds { warningMs: number; criticalMs: number; }
+export interface ClassLivenessResult {
+  assetClass: string;
+  freshestAgeMs: number | null;
+  symbolCount: number;
+  suppressed: boolean;
+  suppressReason: ClassSuppressReason;
+  grade: FeedAliveGrade;
+}
+export interface PerClassLivenessOpts {
+  /** symbol → asset-class key (e.g. resolveAssetClass(sym,'kraken')). */
+  classify: (symbol: string) => string;
+  /** per-asset-class warning/critical freshest-age thresholds (from DB §11). */
+  thresholds: Record<string, PerClassThresholds>;
+  /** the asset-class key treated as xStock (market-hours gated). */
+  xstockClassKey: string;
+  /** per-symbol xStock market-open predicate (isXstockMarketOpenUTC). */
+  isXstockSymbolOpen: (symbol: string) => boolean;
+  /** ms of post-open warmup grace still in effect (>0 ⇒ suppress xStock critical/warning). */
+  xstockWarmupRemainingMs: number;
+}
+export function gradePerClassFeedLiveness(
+  health: SymbolFreshness[],
+  opts: PerClassLivenessOpts,
+): { classes: ClassLivenessResult[]; overall: FeedAliveGrade } {
+  const byClass = new Map<string, SymbolFreshness[]>();
+  for (const h of health) {
+    const cls = opts.classify(h.symbol);
+    const arr = byClass.get(cls);
+    if (arr) arr.push(h); else byClass.set(cls, [h]);
+  }
+
+  const rank: Record<FeedAliveGrade, number> = { healthy: 0, warning: 1, critical: 2 };
+  const classes: ClassLivenessResult[] = [];
+  let overall: FeedAliveGrade = 'healthy';
+
+  for (const [cls, syms] of byClass) {
+    let considered = syms;
+    let suppressed = false;
+    let suppressReason: ClassSuppressReason = null;
+
+    if (cls === opts.xstockClassKey) {
+      considered = syms.filter((sym) => opts.isXstockSymbolOpen(sym.symbol));
+      if (considered.length === 0) {
+        suppressed = true;
+        suppressReason = 'market_closed'; // all subscribed xStock symbols closed
+      } else if (opts.xstockWarmupRemainingMs > 0) {
+        suppressed = true;
+        suppressReason = 'warmup_grace'; // just reopened; quotes not landed yet
+      }
+    }
+    if (!suppressed && considered.length === 0) {
+      suppressed = true;
+      suppressReason = 'no_symbols';
+    }
+
+    const freshestAgeMs = freshestSymbolAgeMs(considered);
+    const th = opts.thresholds[cls];
+    const grade: FeedAliveGrade = suppressed || !th
+      ? 'healthy'
+      : gradeFeedAliveness(freshestAgeMs, th.warningMs, th.criticalMs);
+
+    classes.push({ assetClass: cls, freshestAgeMs, symbolCount: considered.length, suppressed, suppressReason, grade });
+    if (!suppressed && rank[grade] > rank[overall]) overall = grade;
+  }
+
+  return { classes, overall };
+}
