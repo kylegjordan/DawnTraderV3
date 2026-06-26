@@ -55,10 +55,12 @@ Formula (§4 LOCKED): **spread** (rrMin≠rrMax) → `floor = max(1.0, round(mea
 | strong_bull_trend | fixed-RR | max(1.0, 2.000−0.05=1.95) | **1.95** |
 | range_trade | spread | max(1.0, 1.901×0.90=1.711) | **1.71** |
 | reverse_impulse | spread | max(1.0, 2.662×0.90=2.395) | **2.40** |
-| support_bounce | spread | max(1.0, 0.861×0.90=0.775) → **CLAMP** | **1.00** |
-| volatility_edge | spread | max(1.0, 0.686×0.90=0.617) → **CLAMP** | **1.00** |
-| morning_star | spread | HELD (D) [formula→1.39] | **1.00** |
+| morning_star | spread | max(1.0, 1.543×0.90=1.389) | **1.39** |
+| support_bounce | spread | max(1.0, 0.861×0.90=0.775) → **CLAMP** (sub-1.0 mean) | **1.00** |
+| volatility_edge | spread | max(1.0, 0.686×0.90=0.617) → **CLAMP** (sub-1.0 mean) | **1.00** |
 | defensive_hedge / vwap_bounce / inside_bar_reversal / pivot_shift | THIN | no row → `*` | **2.00** (`*`) |
+
+> **★ CORRECTION (Langston Step-2):** crypto morning_star mean = 1.543 (NOT sub-1.0) → it gets its ordinary **formula floor 1.39**, NOT a "held at 1.0". Holding it at 1.0 would LOOSEN its gate by 0.39 RR (admit the 1.0–1.39 band calibration drops) = unsuppress-as-side-effect, which scope §4-D forbids. (D) is reserved strictly for the genuinely sub-1.0-mean cases below.
 
 ### xstock_spot floors
 | strategy | type | arithmetic | floor |
@@ -74,13 +76,21 @@ Formula (§4 LOCKED): **spread** (rrMin≠rrMax) → `floor = max(1.0, round(mea
 
 **Max-per-class floor (deliverable 9 — the unknown-token fail-closed substitution):** crypto = **2.88** (mean_reversion); xStock = **2.16** (pivot_shift). **Global max (unknown asset_class too) = 2.88.** A drifted/unknown token resolves to these — strictly ≥ the `*` 2.0, so fail-CLOSED (stricter), never the permissive default.
 
-### ★ FINDING for decision (D) — it governs a SET of three, not just morning_star
-The data shows **three** sub-1.0-mean strategies, all structurally low-reward (mean below break-even-ish), all clamping to the 1.0 floor and staying heavily suppressed even there:
-- **morning_star** — xStock mean 0.944 (35,662 ev, 98.6% suppressed), crypto mean 1.543 (less extreme but low).
-- **volatility_edge** — crypto mean 0.686 (87.1% suppressed).
-- **support_bounce** — crypto mean 0.861 (95.4% suppressed).
+### ★ FINDING for decision (D) — only ONE cell is a real (D) call, and (D) changes ZERO floors this batch (Langston Step-2 corrected)
+Three strategies have a **sub-1.0 mean RR**, and all three clamp to the 1.0 floor *by formula, regardless of (D)* — so (D) is irrelevant to their floors:
+- **morning_star (xStock)** — mean 0.944 → formula 0.85 → clamp 1.0.
+- **volatility_edge (crypto)** — mean 0.686 → formula 0.62 → clamp 1.0.
+- **support_bounce (crypto)** — mean 0.861 → formula 0.78 → clamp 1.0.
 
-(D) is the same philosophy question for all three: trade structurally-low-reward strategies (accept many small-reward signals) or keep them suppressed and route throughput to the better-reward strategies (Phase-25 25-20). The batch holds **all three at the 1.0 clamp** regardless of (D) — so it is not blocking. Recommendation unchanged: keep suppressed at 1.0, route to 25-20; surface to Kyle that the set is three, not one.
+**morning_star on crypto is the ONLY real (D) cell** — mean 1.543 (NOT sub-1.0), formula floor 1.39. Seeding it at 1.0 would be a discretionary override *below* its data-derived floor = a loosening (scope §4-D forbids). **This batch seeds it at the formula 1.39**; (D) later decides whether to push it *higher* (to suppress) — never to 1.0.
+
+**So (D) changes ZERO floors this batch** (all floors are formula-set). (D) is a pure **Phase-25 25-20 throughput-philosophy** question.
+
+**★ METHODOLOGY CORRECTION (Langston Step-2) — this batch makes NO net-expectancy / "stays suppressed" claim, and must not:**
+- **Mean RR ≠ Net Expectancy.** A low-RR / high-win-rate strategy can be net-POSITIVE (the entire mean-reversion family is). Whether to trade vs suppress a low-RR strategy needs realized **win-rate × RR − friction per strategy** — which this batch does NOT have. So we do NOT assert these strategies are net-negative or should be suppressed; that is precisely the 25-20 question (25-20 owns the win-rate calibration).
+- **The suppression %s are NOT decision-grade for post-batch behavior (§5 rule 13).** They are `rrDrops/evals` measured under TODAY's flat `*`=2.5 gate (verified: the only live min_rr rows are crypto/xStock `*`=2.5). After this batch most floors DROP, so those percentages do not describe post-batch behavior. (Data-integrity note resolved: strong_bull_trend showing 93.5% not 100% under 2.5 despite fixed-RR 2.0 is NOT a floor anomaly — `rrSuppressionRate`'s denominator is TOTAL evals including atr/stop/reach short-circuits that never reach the RR check; the 6.5% gap is those short-circuits, current floor confirmed 2.5.)
+
+**Recommendation to Kyle:** the floors are set by the data-derived formula and the batch unsuppresses nothing (§4-D satisfied). (D) — whether to push the structurally-low-mean strategies higher (suppress) or invest in making them tradeable — is a **net-expectancy/throughput question for 25-20**, NOT decidable from RR here. One real (D) cell (crypto morning_star), held at its formula 1.39 pending that decision.
 
 ---
 
@@ -112,7 +122,19 @@ The per-strategy minRR gate (`getPerClassTargetGate` → `applyGlobalGuards`/`no
 
 ---
 
-## §6 — OPEN ITEMS / Step-3 confirmations
+## §6 — OPEN ITEMS / Step-3 confirmations + Step-4 carry-forwards
 1. Step-3 `tsc` confirms the ~22-caller enumeration is complete (no missed `getPerClassTargetGate` site).
-2. The migration seeds the per-strategy rows above (crypto 7 rows + xStock 4 rows; thin strategies get NO row → inherit `*`); `*` per-class default rows set to 2.0; the old global `expectancy_gates.min_rr=2.5` is removed/superseded.
-3. (D) morning_star — Kyle's open call; batch proceeds at the 1.0 clamp for all three sub-1.0-mean strategies regardless.
+2. The migration seeds the per-strategy rows above (**crypto 8 rows**: mean_reversion 2.88, vwap_pullback 2.44, strong_bull_trend 1.95, range_trade 1.71, reverse_impulse 2.40, morning_star **1.39**, support_bounce 1.00, volatility_edge 1.00; **xStock 4 rows**: vwap_pullback 1.96, sma_trend_ride 1.95, pivot_shift 2.16, vwap_bounce 1.95; xStock morning_star 1.00 also seeded; thin strategies get NO row → inherit `*`); `*` per-class default = 2.0; the old global `expectancy_gates.min_rr=2.5` removed/superseded.
+3. (D) — Kyle's open call; **changes ZERO floors this batch** (the three sub-1.0 cases clamp to 1.0 by formula; crypto morning_star is 1.39 by formula). Pure Phase-25 25-20 throughput question.
+
+### Step-4 carry-forwards (Langston — verify CONCRETELY at the diff, not re-assert)
+- **CF-1 — no-non-strategy-arg caller:** the chokepoint-correctness claim rests on every `getPerClassTargetGate` caller passing a strategy token. Step-4 must verify it tsc-concretely (22-caller enumeration, every arg traced to a strategy token) — if even one passes a non-strategy token pre-canonicalization, the single-chokepoint guarantee breaks.
+- **CF-2 — rrSumSq eviction parity = SAME code path:** `rrSumSq` + `rrSum` must be evicted by the SAME eviction function touching both atomically — NOT two parallel evictions that happen to align (a §8#11 patch; if they drift, reconstructed σ is over a different sample than the mean = garbage for 25-20). Step-4 reads the eviction function.
+
+### FYI-to-Kyle (Langston — not a blocker)
+- **mean_reversion-crypto 2.5→2.88 flips the system's BEST-RR strategy from 0%→non-zero suppression.** Its rrMin is 2.533 (currently under the 2.5 floor → nothing drops); at 2.88 the 2.533–2.88 band starts getting cut. By-design (notch below its own mean; the Net-Expectancy gate is the real downstream judge) — but the one strategy getting *stricter* is the strongest one, and that's intentional, not a misfire.
+
+### Step-10 governance homes (Langston §13/§18 — name now, land at close)
+- **SIM** — content update to the **Cross-Cutting Runtime State / Singletons & Liveness Registry** (the `canonicalizeStrategyName` chokepoint is new cross-cutting runtime state + the gate-resolution path changes) PLUS the per-class gate-resolution component entry. NOT just BATCH_CATALOG/PHASE_HISTORY.
+- **System Manual** — content update to the signal-pipeline / gate chapter: the per-(strategy×class) floor-derivation method + the double-gate topology.
+- (Standard Tier-1 still applies: BATCH_CATALOG, PHASE_HISTORY, PHASE_19_PLAN, RUNNING_ISSUES, completion report, MEMORY.)
