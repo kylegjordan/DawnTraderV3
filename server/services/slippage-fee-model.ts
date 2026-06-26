@@ -1,4 +1,11 @@
-import { OrderBookSnapshot } from './market-data-ws';
+// P19-B6.7 (#301): OrderBookSnapshot re-homed here (sole consumer) when the
+// vestigial 2nd WebSocket (market-data-ws.ts) was removed. Type-only — no runtime dep.
+export interface OrderBookSnapshot {
+  symbol: string;
+  bids: [number, number][]; // [price, volume]
+  asks: [number, number][]; // [price, volume]
+  timestamp: string;
+}
 // B-4.5: fees are DB-governed per asset class (module_constants 'fee_model',
 // warmed at boot, fail-hard). Static DEFAULT_TAKER/MAKER_FEE retired.
 import { getCachedNumberRequired } from './module-constants-service.js';
