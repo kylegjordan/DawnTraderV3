@@ -1,7 +1,10 @@
 import os from 'os';
 import { performance } from 'perf_hooks';
 import { filePersistence } from './file-persistence';
-import { getMarketDataCoordinator } from './market-data-coordinator';
+// P19-B6.7 (#301): the vestigial 2nd-WS coordinator was removed; read the PRIMARY
+// adapter's health directly (freshest-symbol age = "is the feed alive at all").
+import { krakenWebSocketAdapter } from '../exchanges/kraken/kraken-websocket-adapter.js';
+import { freshestSymbolAgeMs } from './market-data/feed-health-aggregate.js';
 import { rateControl } from './rate-control';
 import { executionTiming } from './execution-timing';
 
@@ -291,13 +294,17 @@ class SystemHealthMonitor {
       // (P19-B4b.2 / #300) Read directly from the live services. The
       // realtime-paper-executor that previously wrapped these (getStatus()) was a
       // dead pass-through over exactly these three sources and has been deleted.
-      const mdStatus = getMarketDataCoordinator().getStatus();
+      // (P19-B6.7 / #301) Market-data health now reads the PRIMARY adapter, not the
+      // removed 2nd-WS coordinator. No fallback feed exists, so the source is the
+      // primary WS when connected; lastTickAge is the freshest-symbol age (display).
+      const wsStatus = krakenWebSocketAdapter.getStatus();
+      const freshestAgeMs = freshestSymbolAgeMs(krakenWebSocketAdapter.getI8EWsHealth());
       const rateStatus = rateControl.getStatus('private');
       const execTimingMetrics = executionTiming.getMetrics(10);
 
       return {
-        marketDataSource: mdStatus.dataSource as 'ws' | 'rest_fallback' | 'N/A',
-        lastTickAgeMs: mdStatus.lastTickAgeMs,
+        marketDataSource: (wsStatus.isConnected ? 'ws' : 'N/A') as 'ws' | 'rest_fallback' | 'N/A',
+        lastTickAgeMs: freshestAgeMs ?? -1,
         avgSubmitAckMs: execTimingMetrics.avgSubmitAckMs,
         avgSlippageBps: execTimingMetrics.avgSlippageBps,
         avgFeesPerTrade: execTimingMetrics.avgFeesPerTrade,

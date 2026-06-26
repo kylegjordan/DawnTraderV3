@@ -519,25 +519,25 @@ class HealthMonitor extends EventEmitter {
    */
   private async checkMarketDataHealth(): Promise<MarketDataHealth> {
     try {
-      // Import market data coordinator
-      const { getMarketDataCoordinator } = await import('./market-data-coordinator.js');
-      const marketDataCoordinator = getMarketDataCoordinator();
-      const status = marketDataCoordinator.getStatus();
+      // P19-B6.7 (#301): read the PRIMARY adapter, not the removed 2nd-WS coordinator.
+      // No REST-fallback feed exists (that was a coordinator-only concept), so health =
+      // primary WS connected AND delivering fresh ticks (freshest-symbol age across the
+      // whole subscribed set — stays fresh while ANY symbol ticks, e.g. crypto 24/7).
+      const { krakenWebSocketAdapter } = await import('../exchanges/kraken/kraken-websocket-adapter.js');
+      const { freshestSymbolAgeMs } = await import('./market-data/feed-health-aggregate.js');
+      const status = krakenWebSocketAdapter.getStatus();
+      const freshestAgeMs = freshestSymbolAgeMs(krakenWebSocketAdapter.getI8EWsHealth());
 
-      const websocketStatus = status.wsConnected
-        ? 'connected'
-        : (status.dataSource === 'rest_fallback' ? 'blocked_fallback_rest' : 'disconnected');
-
-      const ok = websocketStatus === 'connected' || 
-                 (websocketStatus === 'blocked_fallback_rest' && status.lastTickAgeMs !== null && status.lastTickAgeMs < this.config.market.fallbackMaxAgeMs);
+      const websocketStatus = status.isConnected ? 'connected' : 'disconnected';
+      const ok = status.isConnected && freshestAgeMs !== null && freshestAgeMs < this.config.market.fallbackMaxAgeMs;
 
       return {
         ok,
         websocketStatus: websocketStatus as any,
-        lastMessageAgeMs: status.lastTickAgeMs,
-        restFallbackActive: status.dataSource === 'rest_fallback',
-        retryBackoffMs: status.wsReconnects > 0 ? Math.min(1000 * Math.pow(2, status.wsReconnects), 16000) : null,
-        details: { reconnects: status.wsReconnects },
+        lastMessageAgeMs: freshestAgeMs,
+        restFallbackActive: false,
+        retryBackoffMs: status.reconnectAttempts > 0 ? Math.min(1000 * Math.pow(2, status.reconnectAttempts), 16000) : null,
+        details: { reconnects: status.reconnectAttempts },
       };
     } catch (error: any) {
       console.error('[41F-C][CHECK] Error checking market data:', error.message);
