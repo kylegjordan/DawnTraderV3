@@ -8441,7 +8441,7 @@ if (!JWT_SECRET) {
 |------|-------|--------|---------|
 | `server/routes.ts` | 23,349 | ACTIVE | Monolithic router — 635 inline endpoints + 26 route file mounts |
 | `server/services/auth-service.ts` | 47 | ACTIVE | Password utilities (bcrypt, validation) |
-| `server/services/market-data-ws.ts` | 410 | ACTIVE | Kraken WebSocket v2 adapter (analytics) |
+| `server/services/market-data-ws.ts` | — | 🗑 REMOVED (P19-B6.7 / #301) | vestigial 2nd WS — deleted, archived `_archive/deleted-code/*.20260626-P19B6.7.removed` (§8, §16) |
 | `server/middleware/singleTenantGuard.ts` | 57 | ACTIVE | userId violation detection |
 | `server/middleware/canonical-validation.ts` | 214 | ACTIVE | Regime/strategy canonical enforcement |
 | `server/middleware/bob-routing.ts` | 101 | LEGACY | Bob Core transparent interception (Walter-era) |
