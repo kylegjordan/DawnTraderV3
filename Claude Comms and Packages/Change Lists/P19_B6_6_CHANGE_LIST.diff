@@ -1,0 +1,583 @@
+diff --git a/drizzle/migrations/2026-06-26-p19-b6-6-price-liveness-seed.sql b/drizzle/migrations/2026-06-26-p19-b6-6-price-liveness-seed.sql
+new file mode 100644
+index 000000000..cb6a92a9b
+--- /dev/null
++++ b/drizzle/migrations/2026-06-26-p19-b6-6-price-liveness-seed.sql
+@@ -0,0 +1,58 @@
++-- P19-B6.6 (#236) — xStock price-discovery-LIVENESS fill-gate knobs (module_constants).
++--
++-- The 2nd half of the fill-time "is the book real?" guard (1st half = the B4b.1
++-- book-depth-sufficiency gate, #295). Both fire at the engine open seam, fail-closed;
++-- depth runs FIRST (cheap top-of-book row), liveness only on depth-pass.
++--
++-- Resolved by server/asset_classes/xstock_spot/price-liveness.ts → resolvePriceLivenessConfig
++-- (fail-CLOSED if absent/mistyped — CLAUDE.md rule 11/15: a missing safety knob blocks the
++-- fill loudly, never silently defaults). Per-asset-class; exchange/strategy/regime = wildcard.
++-- xstock_spot ONLY — crypto trades 24/7 globally (no holiday/halt analog); a liveness gate on
++-- a quiet altcoin would false-block. DORMANT until P19-B7b turns xStock active-paper on (§9.1).
++--
++-- SEED VALUES + CALIBRATION (P19_B6_6_PRE_AUDIT.md §0E — measured from 3 weekday sessions of
++-- archived xstock_spot_ticker_snap; a `last` CHANGE = a real trade print):
++--
++--   window_ms        = 2,700,000  -- 45 min, PINNED. Passes every genuinely-active admitted
++--                                    name with >=2x margin (worst-day in-RTH inter-trade p99
++--                                    <=20m) while EXCLUDING the deep-but-slow ETF/foreign-equity
++--                                    tokens (EWN/EWP/TOTL, p99 42-68m) whose ~50-min cadence
++--                                    makes any fill a stale-reference fill. Justified by type-II
++--                                    frozen-but-quoted-book detection speed (a longer window is
++--                                    strictly worse there and does NOT rescue the slow tail —
++--                                    EWN's 68m quiet-day p99 clears 60m anyway), NOT "p99 margin".
++--                                    Tier-extensible (a more-specific module_constants row) if
++--                                    post-B7b live data shows a genuinely-active name slower than
++--                                    45m (RUNNING_ISSUES #391).
++--   min_moves        = 1          -- >=1 `last` change in the window = "price-discovering".
++--   min_snaps        = 5          -- need >=5 snapshots in the window to trust a "flat" verdict;
++--                                    fewer → sparse_snapshots (insufficient evidence → block).
++--   query_timeout_ms = 2000       -- hard timeout on the windowed scan; timeout → FAIL-CLOSED
++--                                    (block), never pass. The scan is index-bounded
++--                                    (xstock_spot_ticker_snap_<part>_symbol_captured_at_idx).
++--   enabled          = true       -- gate ON. (Kill-switch: false → gate passes through.)
++
++BEGIN;
++
++INSERT INTO module_constants
++  (module_name, constant_name, value, asset_class, exchange, regime, strategy, updated_at, updated_by)
++VALUES
++  ('price_discovery_liveness', 'window_ms',        '2700000'::jsonb, 'xstock_spot', '*', '*', '*', NOW(), 'p19-b6-6'),
++  ('price_discovery_liveness', 'min_moves',        '1'::jsonb,       'xstock_spot', '*', '*', '*', NOW(), 'p19-b6-6'),
++  ('price_discovery_liveness', 'min_snaps',        '5'::jsonb,       'xstock_spot', '*', '*', '*', NOW(), 'p19-b6-6'),
++  ('price_discovery_liveness', 'query_timeout_ms', '2000'::jsonb,    'xstock_spot', '*', '*', '*', NOW(), 'p19-b6-6'),
++  ('price_discovery_liveness', 'enabled',          'true'::jsonb,    'xstock_spot', '*', '*', '*', NOW(), 'p19-b6-6')
++ON CONFLICT (module_name, exchange, asset_class, strategy, regime, constant_name) DO NOTHING;
++
++-- Verify all 5 rows resolve (fail the migration loudly if the seed is incomplete).
++DO $$
++DECLARE n int;
++BEGIN
++  SELECT count(*) INTO n FROM module_constants
++   WHERE module_name = 'price_discovery_liveness' AND asset_class = 'xstock_spot';
++  IF n < 5 THEN
++    RAISE EXCEPTION 'P19-B6.6 seed incomplete: expected 5 price_discovery_liveness/xstock_spot rows, found %', n;
++  END IF;
++END $$;
++
++COMMIT;
+diff --git a/drizzle/migrations/MANIFEST.txt b/drizzle/migrations/MANIFEST.txt
+index 78ae08995..fd475bb1d 100644
+--- a/drizzle/migrations/MANIFEST.txt
++++ b/drizzle/migrations/MANIFEST.txt
+@@ -148,3 +148,4 @@
+ 2026-06-24-p19-reorg-b3-rtb-ev-inputs.sql
+ 2026-06-25-p19-reorg-b4-shadow-pairings.sql
+ 2026-06-26-p19-reorg-b4-1-shadow-pool-members.sql
++2026-06-26-p19-b6-6-price-liveness-seed.sql
+diff --git a/server/asset_classes/xstock_spot/price-liveness.ts b/server/asset_classes/xstock_spot/price-liveness.ts
+new file mode 100644
+index 000000000..71ae12ade
+--- /dev/null
++++ b/server/asset_classes/xstock_spot/price-liveness.ts
+@@ -0,0 +1,233 @@
++/**
++ * ════════════════════════════════════════════════════════════════════════════
++ * P19-B6.6 (#236) — xStock price-discovery-LIVENESS fill gate
++ * ════════════════════════════════════════════════════════════════════════════
++ *
++ * The SECOND half of the fill-time "is the book real?" guard (the first half is
++ * the B4b.1 book-depth-sufficiency gate, #295). Both fire at the engine open seam,
++ * fail-closed, surfaced via the same `recordDepthGateBlock` telemetry; depth runs
++ * FIRST (one cheap top-of-book row), liveness only on depth-pass.
++ *
++ * WHAT IT CHECKS: has THIS TOKEN's Kraken book actually PRICE-DISCOVERED recently —
++ * i.e. has the traded `last` price CHANGED at least `min_moves` times within the
++ * last `window_ms`? This catches the #236 hole the depth + freshness gates miss:
++ * on a US-equity holiday / half-day / LULD halt / exchange glitch, the 24/5 token
++ * feed keeps emitting snapshots (fresh `captured_at`, depth still quoted) but the
++ * underlying is closed so `last` is FROZEN — both other gates pass and a fill would
++ * land on a dead-but-quoted book at a stale reference price.
++ *
++ * SEMANTICS (precise — not "is ARCA open"): this gates on the TOKEN's own Kraken-book
++ * price-discovery cadence. A liquid token trading 24/7 on Kraken (MU/NVDA) PASSES
++ * during a US holiday — correctly, because the paper fill executes on Kraken's live
++ * book. "Holiday" is the motivating case, not the mechanism; the gate blocks whenever
++ * the token's book stops price-discovering (holiday, halt, glitch, feed death).
++ *
++ * xStock-ONLY: crypto trades 24/7 globally (no holiday analog); a liveness gate on a
++ * quiet altcoin would false-block. The caller only invokes this for `xstock_spot`.
++ *
++ * WINDOW = 45 min (PINNED, P19_B6_6_PRE_AUDIT.md §0E): calibrated from 3 weekday
++ * sessions of archived `xstock_spot_ticker_snap`. 45 passes every genuinely-active
++ * admitted name with ≥2× margin (worst-day in-RTH inter-trade p99 ≤20m) while
++ * EXCLUDING the deep-but-slow ETF/foreign-equity tokens (EWN/EWP/TOTL, 42–68m) whose
++ * ~50-min cadence makes any fill a stale-reference fill. Justified by type-II
++ * frozen-but-quoted-book detection speed (a longer window is strictly worse there and
++ * does not rescue the slow tail), NOT by "p99 margin". DORMANT until B7b (§9.1).
++ *
++ * FAIL-CLOSED (rule 11/15): missing config / query timeout / query error / no data /
++ * sparse data / flat `last` → BLOCK the open loudly. A safety gate's safe failure is
++ * "do not fill". Reason codes distinguish a feed/config outage (`no_data` /
++ * `liveness_config_missing` / `liveness_timeout`) from a genuine dead market
++ * (`flat_last`) so an outage never masquerades as a holiday.
++ * ════════════════════════════════════════════════════════════════════════════
++ */
++
++import { db } from '../../db.js';
++import { sql } from 'drizzle-orm';
++import { getModuleConstants } from '../../services/module-constants-service.js';
++
++export interface PriceLivenessConfig {
++  /** Trailing window (ms) over which `last` must have moved (45 min, P19-B6.6). */
++  windowMs: number;
++  /** Minimum number of `last` CHANGES (trade prints) in the window to be "live". */
++  minMoves: number;
++  /** Minimum snapshots in the window to trust a verdict (else sparse → fail-closed). */
++  minSnaps: number;
++  /** Hard timeout (ms) on the windowed query — timeout fails CLOSED (block). */
++  queryTimeoutMs: number;
++  /** Kill-switch: when false the gate is OFF (passes through). Default-seeded true. */
++  enabled: boolean;
++}
++
++/** Result of the windowed `last`-move read over `xstock_spot_ticker_snap`. */
++export interface LastMoveStats {
++  /** Snapshots present in the window. */
++  snapCount: number;
++  /** Distinct `last` changes (trade prints) in the window. */
++  moveCount: number;
++  /** Ms since the most recent `last` CHANGE in the window (null when none). */
++  msSinceLastMove: number | null;
++}
++
++export interface LivenessResult { live: boolean; reason: string; }
++
++const REQUIRED_KEYS = ['window_ms', 'min_moves', 'min_snaps', 'query_timeout_ms', 'enabled'] as const;
++
++interface CachedConfig { value: PriceLivenessConfig | null; expiresAt: number; }
++let _cache: CachedConfig | null = null;
++const _CACHE_TTL_MS = 60_000;
++const _NULL_TTL_MS = 5_000;
++
++/** Test-only cache reset. */
++export function _testClearPriceLivenessCache(): void { _cache = null; }
++
++/**
++ * Resolve the xStock price-liveness config from `module_constants`
++ * (module `price_discovery_liveness`, asset_class `xstock_spot`). Returns `null`
++ * (fail-closed) if the row set is missing/incomplete or the lookup throws. Both hits
++ * and the fail-closed null are cached (short TTL on null) so the open seam never
++ * hammers the resolver; a freshly-seeded row appears ≤60s.
++ */
++export async function resolvePriceLivenessConfig(): Promise<PriceLivenessConfig | null> {
++  const now = Date.now();
++  if (_cache && now < _cache.expiresAt) return _cache.value;
++
++  let value: PriceLivenessConfig | null = null;
++  try {
++    const rows = await getModuleConstants('price_discovery_liveness', {
++      exchange: '*',
++      assetClass: 'xstock_spot',
++      strategy: '*',
++      regime: '*',
++    });
++    // window_ms/min_moves/min_snaps/query_timeout_ms are numbers; enabled is boolean.
++    const numMissing = (['window_ms', 'min_moves', 'min_snaps', 'query_timeout_ms'] as const)
++      .filter((k) => typeof rows[k] !== 'number');
++    const enabledOk = typeof rows['enabled'] === 'boolean';
++    if (numMissing.length > 0 || !enabledOk) {
++      const missing = [...numMissing, ...(enabledOk ? [] : ['enabled'])];
++      console.error(
++        `[P19-B6.6][PRICE_LIVENESS_CONFIG] FAIL-CLOSED: missing/mistyped module_constants keys [${missing.join(', ')}] — blocking xStock active fills until seeded`,
++      );
++      value = null;
++    } else {
++      value = {
++        windowMs: rows['window_ms'] as number,
++        minMoves: rows['min_moves'] as number,
++        minSnaps: rows['min_snaps'] as number,
++        queryTimeoutMs: rows['query_timeout_ms'] as number,
++        enabled: rows['enabled'] as boolean,
++      };
++    }
++  } catch (err) {
++    console.error('[P19-B6.6][PRICE_LIVENESS_CONFIG] resolve threw — FAIL-CLOSED (blocking fills):', err);
++    value = null;
++  }
++  _cache = { value, expiresAt: now + (value ? _CACHE_TTL_MS : _NULL_TTL_MS) };
++  return value;
++}
++
++/**
++ * Windowed `last`-move read over `xstock_spot_ticker_snap`, index-bounded by
++ * `(symbol, captured_at)` (`xstock_spot_ticker_snap_<part>_symbol_captured_at_idx`)
++ * and the time window. Hard-timed via Promise.race — a timeout REJECTS so the caller
++ * fails closed (the orphaned server query is harmless for a per-open gate). One scan.
++ */
++export async function getRecentLastMoveStats(
++  symbol: string,
++  windowMs: number,
++  queryTimeoutMs: number,
++): Promise<LastMoveStats> {
++  const windowSec = Math.max(1, Math.round(windowMs / 1000));
++  const queryP = db.execute<{ snap_count: string | number; move_count: string | number; ms_since_last_move: string | number | null }>(sql`
++    WITH w AS (
++      SELECT last, captured_at,
++             LAG(last) OVER (ORDER BY captured_at) AS prev_last
++      FROM xstock_spot_ticker_snap
++      WHERE symbol = ${symbol}
++        AND captured_at > NOW() - make_interval(secs => ${windowSec})
++    )
++    SELECT
++      count(*) AS snap_count,
++      count(*) FILTER (WHERE last IS DISTINCT FROM prev_last AND prev_last IS NOT NULL) AS move_count,
++      EXTRACT(EPOCH FROM (NOW() - max(captured_at) FILTER (WHERE last IS DISTINCT FROM prev_last AND prev_last IS NOT NULL))) * 1000 AS ms_since_last_move
++    FROM w
++  `);
++  let timer: NodeJS.Timeout | undefined;
++  const timeoutP = new Promise<never>((_, reject) => {
++    timer = setTimeout(() => reject(new Error(`liveness query timeout >${queryTimeoutMs}ms`)), queryTimeoutMs);
++  });
++  try {
++    const res = await Promise.race([queryP, timeoutP]);
++    const rows = (res as any).rows ?? (res as unknown as any[]);
++    const r = Array.isArray(rows) ? rows[0] : undefined;
++    const snapCount = Number(r?.snap_count ?? 0);
++    const moveCount = Number(r?.move_count ?? 0);
++    const rawSince = r?.ms_since_last_move;
++    const msSinceLastMove = rawSince === null || rawSince === undefined ? null : Number(rawSince);
++    return {
++      snapCount: Number.isFinite(snapCount) ? snapCount : 0,
++      moveCount: Number.isFinite(moveCount) ? moveCount : 0,
++      msSinceLastMove: msSinceLastMove !== null && Number.isFinite(msSinceLastMove) ? msSinceLastMove : null,
++    };
++  } finally {
++    if (timer) clearTimeout(timer);
++  }
++}
++
++/**
++ * PURE verdict: is the token's book price-discovering? Fail-closed reason taxonomy
++ * (Langston Step-2 #3 — a feed/config outage must be distinguishable from a holiday):
++ *   - `no_data`          — zero snapshots in the window (feed outage)
++ *   - `sparse_snapshots` — snapshots present but < minSnaps (insufficient evidence)
++ *   - `flat_last`        — enough snapshots, but < minMoves `last` changes (dead/holiday book)
++ *   - `live`             — ≥ minMoves changes (a price-discovering market)
++ */
++export function assessPriceLiveness(stats: LastMoveStats, config: PriceLivenessConfig): LivenessResult {
++  if (stats.snapCount <= 0) {
++    return { live: false, reason: 'no_data window had 0 snapshots' };
++  }
++  if (stats.snapCount < config.minSnaps) {
++    return { live: false, reason: `sparse_snapshots snaps=${stats.snapCount}<${config.minSnaps}` };
++  }
++  if (stats.moveCount < config.minMoves) {
++    const ageStr = stats.msSinceLastMove === null ? 'none-in-window' : `${Math.round(stats.msSinceLastMove)}ms`;
++    return { live: false, reason: `flat_last moves=${stats.moveCount}<${config.minMoves} lastMove=${ageStr} window=${config.windowMs}ms` };
++  }
++  return { live: true, reason: 'live' };
++}
++
++/**
++ * Orchestrate the gate for one xStock symbol at the open seam. NEVER throws (the
++ * open path must not blow up). Returns `{ live, reason }`; the caller blocks the open
++ * on `!live` and records the reason via `recordDepthGateBlock` + `recordOpenFailed`.
++ *
++ * `deps` is dependency injection for unit tests (default = real config + real query).
++ */
++export async function evaluateXstockPriceLiveness(
++  symbol: string,
++  deps?: {
++    resolveConfig?: () => Promise<PriceLivenessConfig | null>;
++    getStats?: (symbol: string, windowMs: number, queryTimeoutMs: number) => Promise<LastMoveStats>;
++  },
++): Promise<LivenessResult> {
++  const resolveConfig = deps?.resolveConfig ?? resolvePriceLivenessConfig;
++  const getStats = deps?.getStats ?? getRecentLastMoveStats;
++  try {
++    const config = await resolveConfig();
++    if (!config) return { live: false, reason: 'liveness_config_missing' };
++    if (!config.enabled) return { live: true, reason: 'liveness_disabled' }; // kill-switch: gate OFF → pass
++    let stats: LastMoveStats;
++    try {
++      stats = await getStats(symbol, config.windowMs, config.queryTimeoutMs);
++    } catch (err: any) {
++      // Timeout or query error → FAIL-CLOSED (block). Distinguish timeout for telemetry.
++      const isTimeout = /timeout/i.test(err?.message ?? '');
++      console.error(`[P19-B6.6][PRICE_LIVENESS] ${symbol} stats read ${isTimeout ? 'TIMED OUT' : 'threw'} — fail-closed block:`, err?.message ?? err);
++      return { live: false, reason: isTimeout ? 'liveness_timeout' : 'liveness_query_error' };
++    }
++    return assessPriceLiveness(stats, config);
++  } catch (err: any) {
++    console.error(`[P19-B6.6][PRICE_LIVENESS] ${symbol} unexpected — fail-closed block:`, err?.message ?? err);
++    return { live: false, reason: 'liveness_error' };
++  }
++}
+diff --git a/server/services/paper-execution-engine.ts b/server/services/paper-execution-engine.ts
+index 4e0cdbfd3..c940472b8 100644
+--- a/server/services/paper-execution-engine.ts
++++ b/server/services/paper-execution-engine.ts
+@@ -113,6 +113,9 @@ import {
+   recordDepthGateBlock,
+   type DepthSnapshot,
+ } from './execution/depth-source.js';
++// P19-B6.6 (#236): xStock price-discovery-liveness — the 2nd half of the fill-time
++// "is the book real?" guard, called at the open seam AFTER the depth gate passes.
++import { evaluateXstockPriceLiveness } from '../asset_classes/xstock_spot/price-liveness.js';
+ // B-4.5: fees are DB-governed per asset class — resolved per symbol at the
+ // fill sites via the single cost-model merge (no static fee field).
+ import { getFrictionForAssetClass } from '../core/math/cost-model.js';
+@@ -2213,6 +2216,24 @@ export class PaperExecutionEngine {
+       return { opened: false, stage: 'DEPTH_GATE', reason: _gate.reason };
+     }
+ 
++    // P19-B6.6 (#236): price-discovery-LIVENESS — the 2nd half of the fill-time "is the
++    // book real?" guard. Runs AFTER the depth gate (cheap single top-of-book row) passes —
++    // depth-first ordering, explicit. xStock-ONLY (crypto trades 24/7, no holiday/halt
++    // analog → a liveness gate would false-block a quiet altcoin). Fail-closed: the token's
++    // `last` must have actually MOVED within the window, else the book is dead-but-quoted
++    // (holiday / LULD halt / glitch / feed death) → block. Same recordDepthGateBlock
++    // telemetry path; the reason codes (flat_last vs no_data/sparse/liveness_*) distinguish
++    // a genuine dead market from a feed/config outage. Dormant until B7b (§9.1).
++    if (_openClass === 'xstock_spot') {
++      const _live = await evaluateXstockPriceLiveness(signal.symbol);
++      if (!_live.live) {
++        console.warn(`[P19-B6.6][LIVENESS_BLOCK:${this.mode}] ${signal.symbol} (${_openClass}) ${_live.reason} — skipping open`);
++        recordDepthGateBlock(_openClass, _live.reason); // distinct reason bucket from the depth gate
++        rtbMetricsService.recordOpenFailed(signal.symbol, signal.strategy, 'LIVENESS_GATE', _live.reason);
++        return { opened: false, stage: 'LIVENESS_GATE', reason: _live.reason };
++      }
++    }
++
+     // P19-B4b.1: entry fill via the DEPTH-WALKED OrderPlacer port — the placer walks the
+     // gate's ask snapshot → VWAP fill (replaces the flat 0.05% slippage). `partial` = the
+     // book thinned between gate and fill (size the position down); `rejected` = no fillable book.
+diff --git a/server/services/rtb-metrics-service.ts b/server/services/rtb-metrics-service.ts
+index 88993c4e7..87cb5ed90 100644
+--- a/server/services/rtb-metrics-service.ts
++++ b/server/services/rtb-metrics-service.ts
+@@ -43,6 +43,7 @@ export type OpenFailStage =
+   | 'SIZING_INVALID'      // quantity <= 0 / no valid portfolio value
+   | 'UNCLASSIFIABLE'      // open/trade asset-class could not be resolved
+   | 'DEPTH_GATE'          // 24/5 book-depth-sufficiency gate (no_book/stale/thin/insufficient)
++  | 'LIVENESS_GATE'       // P19-B6.6 (#236): xStock price-discovery-liveness (flat_last/no_data/sparse/timeout)
+   | 'FILL_REJECTED'       // depth-walked fill rejected / non-filled / zero qty
+   | 'DUP_POSITION'        // duplicate-position guard
+   | 'TRADE_INSERT_ERROR'  // DB trade/position insert threw
+diff --git a/server/tests/unit/p19-b6-6-price-liveness.test.ts b/server/tests/unit/p19-b6-6-price-liveness.test.ts
+new file mode 100644
+index 000000000..de05ee078
+--- /dev/null
++++ b/server/tests/unit/p19-b6-6-price-liveness.test.ts
+@@ -0,0 +1,214 @@
++/**
++ * ══════════════════════════════════════════════════════════════════════════════
++ * P19-B6.6 (#236) — xStock price-discovery-liveness fill gate.
++ * ══════════════════════════════════════════════════════════════════════════════
++ * Pins the load-bearing behavior + wire-in:
++ *   - the PURE verdict (assessPriceLiveness) and its fail-closed reason taxonomy
++ *     (live / flat_last / sparse_snapshots / no_data) — a feed/config outage must be
++ *     distinguishable from a genuine dead market (Langston Step-2 #3).
++ *   - the orchestrator (evaluateXstockPriceLiveness) fail-closes on missing config,
++ *     query timeout, and query error, NEVER throws, and honors the enabled kill-switch.
++ *   - the config resolver is fail-closed (missing/mistyped → null).
++ *   - the windowed query is index-bounded (symbol + captured_at range) + timeout-fail-closed.
++ *   - the open-seam wire-in is xStock-only, runs AFTER the depth gate (depth-first), and
++ *     blocks via the same recordDepthGateBlock telemetry + recordOpenFailed('LIVENESS_GATE').
++ *
++ * db + module-constants-service are mocked so the pure/orchestrator logic runs without a DB
++ * (the injected-deps orchestrator never touches the real ones; the resolver test drives the
++ * mocked getModuleConstants directly).
++ * ══════════════════════════════════════════════════════════════════════════════
++ */
++import { describe, test, expect, vi, beforeEach } from 'vitest';
++import fs from 'fs';
++import path from 'path';
++
++vi.mock('../../db.js', () => ({ db: { execute: vi.fn() } }));
++vi.mock('../../services/module-constants-service.js', () => ({ getModuleConstants: vi.fn() }));
++
++import {
++  assessPriceLiveness,
++  evaluateXstockPriceLiveness,
++  resolvePriceLivenessConfig,
++  _testClearPriceLivenessCache,
++  type PriceLivenessConfig,
++  type LastMoveStats,
++} from '../../asset_classes/xstock_spot/price-liveness.js';
++import { getModuleConstants } from '../../services/module-constants-service.js';
++
++const CFG: PriceLivenessConfig = { windowMs: 2_700_000, minMoves: 1, minSnaps: 5, queryTimeoutMs: 2000, enabled: true };
++const stats = (snapCount: number, moveCount: number, msSinceLastMove: number | null = null): LastMoveStats =>
++  ({ snapCount, moveCount, msSinceLastMove });
++
++const SRC = path.resolve(__dirname, '../..');
++const peeSrc = fs.readFileSync(path.join(SRC, 'services/paper-execution-engine.ts'), 'utf8');
++const metricsSrc = fs.readFileSync(path.join(SRC, 'services/rtb-metrics-service.ts'), 'utf8');
++const livenessSrc = fs.readFileSync(path.join(SRC, 'asset_classes/xstock_spot/price-liveness.ts'), 'utf8');
++
++describe('P19-B6.6 assessPriceLiveness (pure verdict + reason taxonomy)', () => {
++  test('≥ minMoves changes in a well-populated window → live', () => {
++    const r = assessPriceLiveness(stats(120, 3, 1000), CFG);
++    expect(r.live).toBe(true);
++    expect(r.reason).toBe('live');
++  });
++
++  test('enough snapshots but 0 moves (holiday / dead-but-quoted book) → flat_last block', () => {
++    const r = assessPriceLiveness(stats(120, 0), CFG);
++    expect(r.live).toBe(false);
++    expect(r.reason.startsWith('flat_last')).toBe(true);
++  });
++
++  test('snapshots present but < minSnaps → sparse_snapshots block (insufficient evidence, not "flat")', () => {
++    const r = assessPriceLiveness(stats(3, 0), CFG);
++    expect(r.live).toBe(false);
++    expect(r.reason.startsWith('sparse_snapshots')).toBe(true);
++  });
++
++  test('zero snapshots (feed outage) → no_data block — distinct from flat_last', () => {
++    const r = assessPriceLiveness(stats(0, 0), CFG);
++    expect(r.live).toBe(false);
++    expect(r.reason.startsWith('no_data')).toBe(true);
++  });
++
++  test('reason codes for the three block kinds are mutually distinct (outage ≠ holiday)', () => {
++    const kinds = [stats(0, 0), stats(3, 0), stats(120, 0)]
++      .map((s) => assessPriceLiveness(s, CFG).reason.split(' ')[0]);
++    expect(new Set(kinds).size).toBe(3);
++    expect(kinds).toEqual(['no_data', 'sparse_snapshots', 'flat_last']);
++  });
++});
++
++describe('P19-B6.6 evaluateXstockPriceLiveness (orchestrator — fail-closed, never throws)', () => {
++  test('config missing (null) → fail-closed block with liveness_config_missing', async () => {
++    const r = await evaluateXstockPriceLiveness('SPYx/USD', { resolveConfig: async () => null });
++    expect(r.live).toBe(false);
++    expect(r.reason).toBe('liveness_config_missing');
++  });
++
++  test('enabled=false kill-switch → passes through (gate OFF)', async () => {
++    const r = await evaluateXstockPriceLiveness('SPYx/USD', {
++      resolveConfig: async () => ({ ...CFG, enabled: false }),
++      getStats: async () => { throw new Error('must not be called'); },
++    });
++    expect(r.live).toBe(true);
++    expect(r.reason).toBe('liveness_disabled');
++  });
++
++  test('stats query TIMEOUT → fail-closed block with liveness_timeout', async () => {
++    const r = await evaluateXstockPriceLiveness('EWN/USD', {
++      resolveConfig: async () => CFG,
++      getStats: async () => { throw new Error('liveness query timeout >2000ms'); },
++    });
++    expect(r.live).toBe(false);
++    expect(r.reason).toBe('liveness_timeout');
++  });
++
++  test('stats query ERROR (non-timeout) → fail-closed block with liveness_query_error', async () => {
++    const r = await evaluateXstockPriceLiveness('EWN/USD', {
++      resolveConfig: async () => CFG,
++      getStats: async () => { throw new Error('connection reset'); },
++    });
++    expect(r.live).toBe(false);
++    expect(r.reason).toBe('liveness_query_error');
++  });
++
++  test('live stats → live (passes the gate)', async () => {
++    const r = await evaluateXstockPriceLiveness('MUx/USD', {
++      resolveConfig: async () => CFG,
++      getStats: async () => stats(200, 12, 500),
++    });
++    expect(r.live).toBe(true);
++    expect(r.reason).toBe('live');
++  });
++
++  test('flat book → block (orchestrator routes the pure verdict through)', async () => {
++    const r = await evaluateXstockPriceLiveness('EWNx/USD', {
++      resolveConfig: async () => CFG,
++      getStats: async () => stats(120, 0),
++    });
++    expect(r.live).toBe(false);
++    expect(r.reason.startsWith('flat_last')).toBe(true);
++  });
++
++  test('resolveConfig itself throwing → caught, fail-closed block (never throws out)', async () => {
++    const r = await evaluateXstockPriceLiveness('SPYx/USD', {
++      resolveConfig: async () => { throw new Error('boom'); },
++    });
++    expect(r.live).toBe(false);
++    expect(r.reason).toBe('liveness_error');
++  });
++});
++
++describe('P19-B6.6 resolvePriceLivenessConfig (DB-resolved, fail-closed)', () => {
++  beforeEach(() => { _testClearPriceLivenessCache(); vi.mocked(getModuleConstants).mockReset(); });
++
++  test('complete + correctly-typed row set → config', async () => {
++    vi.mocked(getModuleConstants).mockResolvedValue({
++      window_ms: 2_700_000, min_moves: 1, min_snaps: 5, query_timeout_ms: 2000, enabled: true,
++    } as any);
++    const cfg = await resolvePriceLivenessConfig();
++    expect(cfg).not.toBeNull();
++    expect(cfg!.windowMs).toBe(2_700_000);
++    expect(cfg!.enabled).toBe(true);
++  });
++
++  test('missing a numeric key → null (fail-closed)', async () => {
++    vi.mocked(getModuleConstants).mockResolvedValue({
++      window_ms: 2_700_000, min_moves: 1, min_snaps: 5, /* query_timeout_ms missing */ enabled: true,
++    } as any);
++    expect(await resolvePriceLivenessConfig()).toBeNull();
++  });
++
++  test('enabled present but mistyped (string, not boolean) → null (fail-closed)', async () => {
++    vi.mocked(getModuleConstants).mockResolvedValue({
++      window_ms: 2_700_000, min_moves: 1, min_snaps: 5, query_timeout_ms: 2000, enabled: 'true',
++    } as any);
++    expect(await resolvePriceLivenessConfig()).toBeNull();
++  });
++
++  test('lookup throws → null (fail-closed)', async () => {
++    vi.mocked(getModuleConstants).mockRejectedValue(new Error('db down'));
++    expect(await resolvePriceLivenessConfig()).toBeNull();
++  });
++});
++
++describe('P19-B6.6 windowed query — index-bounded + timeout-fail-closed (source)', () => {
++  test('the read filters by symbol AND a captured_at window (index-bounded, not a full scan)', () => {
++    expect(livenessSrc).toMatch(/WHERE symbol = \$\{symbol\}/);
++    expect(livenessSrc).toMatch(/captured_at > NOW\(\) - make_interval\(secs => \$\{windowSec\}\)/);
++    expect(livenessSrc).not.toMatch(/SELECT \* FROM xstock_spot_ticker_snap/);
++  });
++
++  test('the windowed read is hard-timed via Promise.race so a slow query fails closed', () => {
++    expect(livenessSrc).toMatch(/Promise\.race/);
++    expect(livenessSrc).toMatch(/setTimeout/);
++    // a timeout maps to the liveness_timeout reason in the orchestrator
++    expect(livenessSrc).toMatch(/liveness_timeout/);
++  });
++});
++
++describe('P19-B6.6 open-seam wire-in (source — depth-first, xStock-only, telemetry)', () => {
++  test('OpenFailStage carries LIVENESS_GATE', () => {
++    expect(metricsSrc).toMatch(/'LIVENESS_GATE'/);
++  });
++
++  test('liveness is invoked at the open seam, xStock-only', () => {
++    expect(peeSrc).toMatch(/evaluateXstockPriceLiveness\(signal\.symbol\)/);
++    // guarded by the resolved open class being xstock_spot
++    expect(peeSrc).toMatch(/if \(_openClass === 'xstock_spot'\)\s*\{\s*const _live = await evaluateXstockPriceLiveness/);
++  });
++
++  test('DEPTH-FIRST ordering: the depth gate is evaluated BEFORE the liveness gate', () => {
++    const depthIdx = peeSrc.indexOf('_evaluateOpenDepthGate(signal.symbol');
++    const liveIdx = peeSrc.indexOf('evaluateXstockPriceLiveness(signal.symbol)');
++    expect(depthIdx).toBeGreaterThan(-1);
++    expect(liveIdx).toBeGreaterThan(depthIdx);
++  });
++
++  test('a liveness block is observable: recordDepthGateBlock + recordOpenFailed(LIVENESS_GATE) + stage', () => {
++    const seg = peeSrc.slice(peeSrc.indexOf('evaluateXstockPriceLiveness(signal.symbol)'),
++                             peeSrc.indexOf('evaluateXstockPriceLiveness(signal.symbol)') + 700);
++    expect(seg).toMatch(/recordDepthGateBlock\(_openClass, _live\.reason\)/);
++    expect(seg).toMatch(/recordOpenFailed\(signal\.symbol, signal\.strategy, 'LIVENESS_GATE', _live\.reason\)/);
++    expect(seg).toMatch(/stage: 'LIVENESS_GATE'/);
++  });
++});
