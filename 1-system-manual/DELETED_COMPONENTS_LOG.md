@@ -26,7 +26,7 @@
 - **Left intentionally:** nothing — the symbol-canonicalizer header comment listing `MarketDataCoordinator` was also removed.
 
 **Archive copies:** `1-system-manual/_archive/deleted-code/market-data-ws.ts.20260626-P19B6.7.removed`, `…/market-data-coordinator.ts.20260626-P19B6.7.removed`
-**Removal commit:** _(recorded at P19-B6.7 close)_
+**Removal commit:** `d0a40fabc` (P19-B6.7 Step-3 5/N; deployed staging restart#421, CI `28266067266` all-4-green).
 
 ---
 
