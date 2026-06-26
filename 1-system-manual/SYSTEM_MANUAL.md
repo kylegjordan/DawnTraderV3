@@ -7091,7 +7091,7 @@ Comprehensive engine-level health monitoring with 5-second heartbeat, auto-recov
 |-----------|-------------|-------------|
 | Paper/Live Queue | OperationQueue.getStatus() | Depth <10, executing job <3s |
 | Paper/Live Engine | global.tradingEngines map | Running + tick <60s ago |
-| Market Data | MarketDataCoordinator | WS connected or REST fallback <20s |
+| Market Data | krakenWebSocketAdapter (primary; P19-B6.7 — was the removed MarketDataCoordinator) | connected AND freshest subscribed symbol fresh |
 | SSOT Cache | MarketEvaluationService | Hit rate >50% |
 | Database | `SELECT 1` probe | Query time <1s |
 | Broadcasts | Internal tracking | Last broadcast <30s, avg latency <100ms |
@@ -7118,17 +7118,30 @@ Comprehensive engine-level health monitoring with 5-second heartbeat, auto-recov
 
 ## 16. Feed Integrity Monitor
 
-**File:** `server/services/feed-integrity-monitor.ts` (~572 lines)
+**File:** `server/services/feed-integrity-monitor.ts` + the pure aggregator `server/services/market-data/feed-health-aggregate.ts` (P19-B6.7).
 
 ### Purpose
-Monitors Kraken WebSocket and REST fallback feed health with configurable thresholds, grading, and alert deduplication.
+The SOLE operator `feed_health` alarm path (and feed-health grader). Boot-started (`feed-integrity-auto-check.ts`, cron `*/5`), it grades the live trading feed and raises `AlertsService.createAlert(feed_health)` on warning/critical (suppressed in dormant mode = active-trading OFF).
 
-### Health Categories
-| Status | Criteria |
+### P19-B6.7 (#301) — re-pointed onto the PRIMARY feed, per-class freshest-age alarm
+The monitor previously graded a **vestigial 2nd WebSocket** (`market-data-ws.ts`/`market-data-coordinator.ts`) that had delivered **0 ticks / 0 successful subscriptions since April** while a TCP connection stayed open — so every consumer mis-read it as "connected/healthy" and the alarm would have raised false CRITICALs the moment Phase-19 lifts dormant suppression. P19-B6.7 **deleted that subsystem (§15)** and re-pointed the alarm onto the PRIMARY `krakenWebSocketAdapter`'s real per-symbol tick-age (`getI8EWsHealth()`).
+
+**The alarm aggregate is FEED-LEVEL aliveness, PER ASSET CLASS — the OPPOSITE of the go-live gate's aggregate, by design:**
+- **Alarm (this monitor):** the **freshest** subscribed symbol's age per class (`gradePerClassFeedLiveness`). "The feed is alive if ANY symbol ticked; critical only when NONE within the critical threshold." Worst-case-per-symbol would false-CRITICAL on one legitimately-quiet illiquid pair — the inverse of the bug B6.7 removes.
+- **Crypto (24/7):** always graded; threshold absorbs weekend thin-book.
+- **xStock (24/5):** graded only over symbols `isXstockMarketOpenUTC` reports OPEN (per-symbol — half-days/holidays fall out); the class is suppressed when ALL xStock symbols are closed, AND for a **post-open warmup grace** (`feed_health.warmup_grace_ms`) after the closed→open edge so the stale-at-close age doesn't false-fire at the bell (deterministic warmup, §8#11).
+- **Overall status** = worse of (per-class liveness) and the orthogonal connection-quality grade (reconnects / uptime / latency — `categorizeHealthBySpec` with the tick-age term zeroed, since liveness owns staleness). Latency = the primary adapter's averaged inter-heartbeat-interval proxy (`getHealthMetrics().avgHeartbeatLatency`; NOT true RTT — Kraken v2 heartbeats are server-pushed).
+- The companion **go-live GATE** (`parity-gate`, `assessWsReadiness`) uses the conservative complement: connected + uptime AND a proportion-of-symbols-fresh floor (kills the dead-feed false-PASS).
+
+### Configuration
+Per-asset-class warning/critical freshest-age thresholds + the xStock warmup grace are **DB-governed** (`module_constants 'feed_health'`, §11; read defensively via `getCachedNumberRequired` — an unwarmed/missing knob skips the liveness grade that cycle, never crashes nor false-fires). The A–F grade + connection-quality thresholds remain env-configurable (`FEED_*`).
+
+### Health Categories (per-class liveness term)
+| Status | Criteria (per asset class, on the freshest symbol) |
 |--------|----------|
-| Healthy | <3 reconnects AND <5s tick age |
-| Warning | ≥3 reconnects OR ≥5s tick age |
-| Critical | ≥5 reconnects OR ≥10s tick age |
+| Healthy | freshest age < class `warning_age_ms` |
+| Warning | freshest age ≥ class `warning_age_ms` |
+| Critical | freshest age ≥ class `critical_age_ms`, or NO symbol has ticked (and class not suppressed) |
 
 ### Grading System (A-F)
 | Grade | Max Latency | Min Uptime | Max Reconnects | Max Tick Age |
@@ -7960,9 +7973,9 @@ Coherency validation: PUT requests pass through `GuardrailPolicy.validateCoheren
 
 **Directive**: 8.9.0-B (Secondary WebSocket Adapter — Analytics)
 **Lines**: ~410
-**Status**: ACTIVE
+**Status**: 🗑 **REMOVED — P19-B6.7 (#301, 2026-06-26).** Vestigial: delivered 0 ticks / 0 successful subscriptions since April while live-spamming `[MD-WS] Data stale` every 30s. Deleted with its `market-data-coordinator.ts` wrapper (§15 — archived `_archive/deleted-code/*.20260626-P19B6.7.removed`, DELETED_COMPONENTS_LOG). Its 4 status-only consumers (feed-integrity-monitor, parity-gate, system-health-monitor, health-monitor) were re-pointed onto the PRIMARY `kraken-websocket-adapter.ts` (§2.1 / §16). Its one still-used export, the type-only `OrderBookSnapshot`, was re-homed inline into `slippage-fee-model.ts`. The text below is retained for historical reference only.
 
-### Purpose
+### Purpose (historical — REMOVED)
 
 Secondary outbound WebSocket connection to Kraken's v2 API (`wss://ws.kraken.com/v2`). Used by FeedIntegrityMonitor, MarketDataCoordinator, and SlippageFeeModel for analytics-quality market data.
 
