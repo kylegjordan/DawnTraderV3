@@ -1,7 +1,7 @@
 # P19-B6.6 — price-discovery-liveness fill gate (xStock) — SCOPE
 
 **Batch:** P19-B6.6
-**change-class:** architecture
+change-class: architecture
 **Owner:** CC-B (Claude New) · **Reviewer:** Langston
 **Issue:** RUNNING_ISSUES #236 · **Cross-ref:** #295 (the depth-sufficiency gate, the other half of the fill-time "is the book real" guard)
 **Drafted:** 2026-06-26 (Step-1)
