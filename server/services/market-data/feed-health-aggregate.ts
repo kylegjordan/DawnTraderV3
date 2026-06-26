@@ -58,6 +58,40 @@ export function proportionFresh(items: SymbolFreshness[], thresholdMs: number): 
   return fresh / items.length;
 }
 
+/**
+ * GO-LIVE GATE readiness (parity-gate). P19-B6.7 (#301): the removed 2nd WS stayed
+ * TCP-connected while delivering zero ticks, so "connected" alone false-PASSED the
+ * go-live gate. Readiness now requires BOTH: (a) connected with acceptable uptime
+ * (derived from reconnects), AND (b) a CONSERVATIVE proportion of subscribed symbols
+ * actually delivering fresh ticks (worst-case aggregate — not freshest-one). Pure so
+ * it unit-tests both directions without a live adapter.
+ */
+export interface WsReadinessOpts {
+  simulationDurationMs: number;
+  minWsUptimePercent: number;
+  freshTickMaxMs: number;
+  minSymbolsFreshPercent: number;
+}
+export interface WsReadiness {
+  passed: boolean;
+  uptimePercent: number;
+  freshPercent: number;
+}
+export function assessWsReadiness(
+  status: { isConnected: boolean; reconnectAttempts: number },
+  health: SymbolFreshness[],
+  opts: WsReadinessOpts,
+): WsReadiness {
+  const estimatedChecks = Math.max(120, opts.simulationDurationMs / 5000);
+  const uptimePercent = status.isConnected
+    ? Math.max(0, (1 - status.reconnectAttempts / estimatedChecks) * 100)
+    : 0;
+  const freshPercent = proportionFresh(health, opts.freshTickMaxMs) * 100;
+  const passed = uptimePercent >= opts.minWsUptimePercent
+    && freshPercent >= opts.minSymbolsFreshPercent;
+  return { passed, uptimePercent, freshPercent };
+}
+
 export type FeedAliveGrade = 'healthy' | 'warning' | 'critical';
 
 /**

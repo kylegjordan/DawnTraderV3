@@ -3,6 +3,7 @@ import {
   freshestSymbolAgeMs,
   proportionFresh,
   gradeFeedAliveness,
+  assessWsReadiness,
   type SymbolFreshness,
 } from '../../services/market-data/feed-health-aggregate';
 
@@ -81,5 +82,57 @@ describe('P19-B6.7 feed-health-aggregate — proportionFresh (GO-LIVE GATE aggre
   it('one fresh symbol among many stale → low proportion (gate would block)', () => {
     const items = [s('A', 600), s('B', 40000), s('C', 50000), s('D', 60000)];
     expect(proportionFresh(items, 2000)).toBe(0.25);
+  });
+});
+
+describe('P19-B6.7 feed-health-aggregate — assessWsReadiness (parity-gate, BOTH directions)', () => {
+  const opts = {
+    simulationDurationMs: 600_000,
+    minWsUptimePercent: 99,
+    freshTickMaxMs: 10_000,
+    minSymbolsFreshPercent: 80,
+  };
+
+  it('PASSES on a healthy primary feed (connected, no reconnects, all symbols fresh)', () => {
+    const r = assessWsReadiness(
+      { isConnected: true, reconnectAttempts: 0 },
+      [s('BTC/USD', 600), s('ETH/USD', 900), s('SOL/USD', 1200)],
+      opts,
+    );
+    expect(r.passed).toBe(true);
+    expect(r.uptimePercent).toBe(100);
+    expect(r.freshPercent).toBe(100);
+  });
+
+  // THE dead-feed scenario: the removed 2nd WS stayed TCP-connected while delivering
+  // zero ticks. Connected-but-stale MUST now BLOCK (the false-PASS this batch kills).
+  it('BLOCKS when connected but NO symbol is delivering fresh ticks (the dead-feed false-PASS)', () => {
+    const r = assessWsReadiness(
+      { isConnected: true, reconnectAttempts: 0 },
+      [s('BTC/USD', 45000), s('ETH/USD', 60000), s('SOL/USD', null)],
+      opts,
+    );
+    expect(r.passed).toBe(false);
+    expect(r.freshPercent).toBe(0);
+  });
+
+  it('BLOCKS when disconnected (uptime 0)', () => {
+    const r = assessWsReadiness(
+      { isConnected: false, reconnectAttempts: 0 },
+      [s('BTC/USD', 600)],
+      opts,
+    );
+    expect(r.passed).toBe(false);
+    expect(r.uptimePercent).toBe(0);
+  });
+
+  it('BLOCKS when only a minority of symbols are fresh (below the conservative proportion floor)', () => {
+    const r = assessWsReadiness(
+      { isConnected: true, reconnectAttempts: 0 },
+      [s('A', 600), s('B', 40000), s('C', 50000), s('D', 60000)], // 25% fresh < 80%
+      opts,
+    );
+    expect(r.passed).toBe(false);
+    expect(r.freshPercent).toBe(25);
   });
 });

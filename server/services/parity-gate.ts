@@ -1,5 +1,8 @@
 import { executionTiming } from './execution-timing';
-import { getMarketDataCoordinator } from './market-data-coordinator';
+// P19-B6.7 (#301): the vestigial 2nd-WS coordinator was removed; the go-live WS-readiness
+// check now reads the PRIMARY adapter via the tested assessWsReadiness aggregate.
+import { krakenWebSocketAdapter } from '../exchanges/kraken/kraken-websocket-adapter.js';
+import { assessWsReadiness } from './market-data/feed-health-aggregate.js';
 import { rateControl } from './rate-control';
 import { filePersistence } from './file-persistence';
 
@@ -28,6 +31,10 @@ class ParityGateService {
     maxSlippageBps: 15,  // 15 basis points
     minWsUptime: 99,     // 99%
     rateErrorsAllowed: 0,
+    // P19-B6.7 (#301): a connected socket is not enough (the dead 2nd WS proved that) —
+    // the go-live gate also requires the feed to be BROADLY delivering fresh ticks.
+    freshTickMaxMs: 10000,       // a symbol is "fresh" if it ticked within 10s
+    minSymbolsFreshPercent: 80,  // require ≥80% of subscribed symbols fresh (conservative)
   };
 
   /**
@@ -74,22 +81,27 @@ class ParityGateService {
       );
     }
 
-    // Check 4: WebSocket uptime (use reconnect count and connection status)
-    const mdCoordinator = getMarketDataCoordinator();
-    const mdStatus = mdCoordinator.getStatus();
-    
-    // Calculate uptime based on reconnects and current status
-    // Uptime = (1 - (reconnects / estimated_checks)) * 100
-    // Assume 1 check per 5 seconds for 10 min = 120 checks
-    const estimatedChecks = Math.max(120, simulationDurationMs / 5000);
-    const wsUptimePercent = mdStatus.wsConnected 
-      ? Math.max(0, (1 - (mdStatus.wsReconnects / estimatedChecks)) * 100)
-      : 0;
-    
-    const wsUptimePassed = wsUptimePercent >= this.thresholds.minWsUptime;
+    // Check 4: WebSocket feed readiness (PRIMARY adapter). P19-B6.7 (#301): the removed
+    // 2nd WS stayed TCP-connected while delivering zero ticks, so "connected" alone
+    // false-PASSED this go-live gate. assessWsReadiness requires connected+uptime AND a
+    // conservative proportion of subscribed symbols delivering fresh ticks (worst-case
+    // aggregate for a go-live gate — tested both directions in the helper unit suite).
+    const wsReadiness = assessWsReadiness(
+      krakenWebSocketAdapter.getStatus(),
+      krakenWebSocketAdapter.getI8EWsHealth().map(h => ({ symbol: h.symbol, ageMs: h.ageMs })),
+      {
+        simulationDurationMs,
+        minWsUptimePercent: this.thresholds.minWsUptime,
+        freshTickMaxMs: this.thresholds.freshTickMaxMs,
+        minSymbolsFreshPercent: this.thresholds.minSymbolsFreshPercent,
+      },
+    );
+    const wsUptimePercent = wsReadiness.uptimePercent;
+    const wsUptimePassed = wsReadiness.passed;
     if (!wsUptimePassed) {
       blockingReasons.push(
-        `WebSocket uptime too low: ${wsUptimePercent.toFixed(1)}% (min: ${this.thresholds.minWsUptime}%)`
+        `WebSocket feed not ready: uptime ${wsReadiness.uptimePercent.toFixed(1)}% (min ${this.thresholds.minWsUptime}%), ` +
+        `fresh symbols ${wsReadiness.freshPercent.toFixed(1)}% (min ${this.thresholds.minSymbolsFreshPercent}%)`
       );
     }
 
