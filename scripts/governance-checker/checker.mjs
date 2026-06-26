@@ -111,6 +111,46 @@ export function docPresent(batchId, docKey) {
   return false;
 }
 
+// ── B-GOV-4 OBJ-3/4: shared closed-detection primitive (git FIRST-ADD commit time) ───────────
+// The SINGLE source of truth for "when did this batch close / re-open", consumed by BOTH the
+// OBJ-3 closed-quiescent anchor and the OBJ-4 doc-set sentinel (no split-brain on "closed").
+// Anchored on the FIRST-ADD commit of the doc (`git log --diff-filter=A --reverse … | head -1`),
+// NOT `-1`/latest-touch: a later governance-backfill or doc-reorg EDIT to a closed batch's report
+// must NOT drag the close event forward and re-un-grandfather it (Langston Step-2 #1 — the
+// B-NEW-40 bug through a different door). The first-add is immutable once the file exists.
+// (Delete+re-add at the same path anchors on the ORIGINAL add = the real first close, which is the
+// intended close semantics — Langston Step-3; correct-by-construction on the linear branch history,
+// no ancestor-guard needed.) Reuses findGlobDoc → the same id↔filename mapping as everywhere else.
+function gitPath(p) { return p.replace(/\\/g, '/'); } // forward slashes for git (cross-platform)
+function firstAddCommitMs(relPath) {
+  ensureFetched();
+  try {
+    const out = execFileSync('git',
+      ['log', GOV_REF, '--diff-filter=A', '--reverse', '--format=%cI', '--', gitPath(relPath)],
+      { cwd: REPO_ROOT, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
+    const first = out.split('\n').find(Boolean); // --reverse ⇒ oldest ADD first
+    return first ? Date.parse(first) : null;
+  } catch { return null; }
+}
+// Earliest first-add time across the batch's matching doc(s); null if the doc is absent at GOV_REF.
+export function completionReportCommitTime(batchId) {
+  const times = findGlobDoc(batchId, 'completion_report').map(firstAddCommitMs).filter((t) => t !== null);
+  return times.length ? Math.min(...times) : null;
+}
+// LATEST scope first-add (Math.MAX, not min) — Langston Step-4 Finding 1. The re-open signal is a
+// NEW scope rev filed AFTER the completion report; Math.min would always collapse to the original
+// Step-1 scope (< completion) and the re-open branch would be inert (cry-silence on a genuine
+// re-open). Math.max keys on the newest scope add, so a post-close scope rev trips re-open. Its only
+// false-positive — a doc-reorg RENAME re-adding a CLOSED batch's scope post-completion → reads as a
+// re-open → re-grades — is HARMLESS: a properly-closed batch has a complete doc-set, so re-grading
+// fires no doc-gap (deadline already resolved, class declared). LIMITATION (§11): detection requires
+// a new scope FILE; an IN-PLACE edit to the existing scope is a modify, invisible to --diff-filter=A
+// (acceptable — a real re-open files a new scope rev or, by convention, uses a new (sub-)batch id).
+export function scopeCommitTime(batchId) {
+  const times = findGlobDoc(batchId, 'scope').map(firstAddCommitMs).filter((t) => t !== null);
+  return times.length ? Math.max(...times) : null;
+}
+
 // ── emptiness (Obj-3 / C7 / C10) ──────────────────────────────────────────────
 // Strip whitespace-only, pure-date-bump, TOC-reorder, and heading-only lines, then
 // count remaining net content lines. A file at/under HOLLOW_NET_LINE_FLOOR is hollow.

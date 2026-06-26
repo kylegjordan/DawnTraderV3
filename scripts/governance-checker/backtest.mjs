@@ -33,11 +33,14 @@ for (const bid of bids.slice(0, 20)) {
 const results = [];
 function assert(name, cond, detail) { results.push({ name, pass: !!cond, detail }); }
 
-// A) No false alarm on a known-good clean close (P19-B6 was a full, properly-closed batch).
-const good = rows.find((r) => r.bid === 'P19-B6');
-assert('A: known-good P19-B6 has scope+completion+catalog present (no false alarm)',
+// A) No false alarm on a known-good clean close. B-GOV-4: use the most-recent batch in the window
+// that genuinely closed (has both a completion report and a scope) — DRIFT-PROOF, vs a hardcoded id
+// that ages out of the 200-commit window (the original `P19-B6` fixture has since aged out, a
+// pre-existing fixture-drift failure unrelated to the parser/race fix).
+const good = rows.find((r) => r.present.completion_report && r.present.scope);
+assert('A: a known-good closed batch (most recent in window) has scope+completion+catalog (no false alarm)',
   good && good.present.scope && good.present.completion_report && good.present.batch_catalog,
-  good ? JSON.stringify(good.present) : 'P19-B6 not found in window');
+  good ? `${good.bid}: ${JSON.stringify(good.present)}` : 'no closed batch with scope+completion in window');
 
 // B) Catches B3b's known missing pre-audit (filed under its own name = false).
 const b3b = preAuditStructure('P19-B3b');

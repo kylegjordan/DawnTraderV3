@@ -1,0 +1,37 @@
+# B-GOV-4 — Completion Report
+
+change-class: non_architecture
+
+**Owner:** OLD Claude (CC-A). **Closed:** 2026-06-26 (pending Kyle ack). **Scope-seed:** RUNNING_ISSUES #350 (parser false-positives) + #397 (close-before-docset race, absorbed from CC-B with consent 2026-06-26). **Touches ONLY** `scripts/governance-checker/*` — zero engine/strategy/regime/signal-pipeline code.
+
+## What this batch does (plain)
+The governance-checker was firing false alert bursts that erode trust in the alert queue (Kyle's cry-wolf concern). A live audit found ~22 of ~30 recent governance alerts were false, from three mechanisms — and one already caused a bad downstream triage (a false "missing docs" burst on P19-B6.6 was read as real and nearly re-tasked CC-B to rewrite docs that existed). B-GOV-4 fixes all three so the checker only fires on real gaps.
+
+## Objectives (YES / NO / PARTIAL + evidence)
+
+- **OBJ-1 (#350a) — grade only a LEADING-token batch-id: YES.** `extractLeadingBatchId` (config.mjs) returns a batch-id only when it starts the subject; `computeBatchStates` uses it. A mid-subject contextual reference no longer establishes a gradable batch. *Evidence:* unit tests (mid-subject → null, computeBatchStates ignores a mid-subject B-GOV-4 ref); live probe — B-GOV-4 (referenced only mid-subject) is NOT graded.
+- **OBJ-2 (#350b) — capture the FULL hyphenated name: YES.** `BATCH_ID_PATTERNS[3]` broadened `(?:-\d+)?` → `(?:-[A-Z0-9]+)*` so multi-segment names capture whole; `batchIdToFileRegex` unchanged. *Evidence:* unit tests (`B-TEC-SELFHEAL`, `B-LANGSTON-QUEUE-345` whole; `B-GOV-2`/`B-GOV`/`B-NAMES.1`/`B-NEW-40` regressions green); live probe — B-TEC phantom GONE, B-TEC-SELFHEAL captured whole.
+- **OBJ-3 (#350c) — pin a closed batch's enforcement to its close event: YES.** `anchorClosedBatches` (poller.mjs) pins a closed-quiescent batch's `lastCode` to its completion-report FIRST-ADD commit time (immutable), so a later leading re-mention can't refresh it past the grandfather cutoff; a re-open (scope first-add strictly after the report first-add) re-enrolls. No scope-required gate (empirically would cry-silence the many legitimately-closed-no-scope batches). *Evidence:* unit tests (pinned-immune-to-re-mention, strict-`>` re-open, same-commit-not-a-reopen, new-batch-still-graded); live probe — B-NEW-40 pinned to 2026-05-17 → grandfathered.
+- **OBJ-4 (#397) — doc-set graded on a completion SENTINEL + order-independent auto-resolve + orphan re-verify: YES.** `decideAlerts` block (3) triggers on `hasCompletionReport` (the Step-11 close artifact) not first-governance-commit → eliminates the close-before-docset race; the deadline (block 1) stays on `hasGovernance` so a no-report batch still surfaces. Durability = order-independent auto-resolve (the existing in-window re-resolve + the new orphan sweep), not push-order. The orphan sweep (`decideOrphanSweep` + `tick`) RE-VERIFIES doc presence at GOV_REF (whole-tree `docPresent`, not the `-n300` window) before resolving — never blind-resolves, so a real aged-out gap stays surfaced. *Evidence:* unit tests (no-report→no-gap; report+missing→gap; no-report-still-fires-deadline; orphan present→resolved vs still-missing→kept).
+- **OBJ-5 — tests + backtest green: YES.** `poller.test.mjs` 64/64 (was 48; +16). `backtest.mjs` OBJ-11 GATE PASS — its hardcoded `P19-B6` fixture had aged out of the 200-commit window (pre-existing drift, independent of this change); made drift-proof (find the most-recent genuinely-closed batch).
+- **OBJ-6 — verified-correct on real data + retire stale exceptions: YES.** Live behavioral probe vs origin confirms all four #350 behaviors fixed. GOVERNANCE_EXCEPTIONS rows retired: B-GOV-4 `open`, `B-TEC` phantom-suppression (made unnecessary by the fix). [CI run + staging deploy IDs: filled at close.]
+
+## Surfaced + homed (proactive, §9 / §9.4)
+- **`reorg-B<n>` lowercase batch-ids match NO parser pattern** → the checker never grades reorg-* batches at all (a pre-existing cry-SILENCE/coverage gap, orthogonal to the #350/#397 false-positives). NOT chased here (scope creep + the exact cry-silence risk Langston flagged). Homed: RUNNING_ISSUES (new entry) + flag to CC-B as a separate checker-coverage follow-up.
+
+## Governance files changed
+- `scripts/governance-checker/{config,checker,poller,poller.test,backtest}.mjs` (the fix + tests)
+- `Claude Comms and Packages/Scope Files/B_GOV_4_{SCOPE,PRE_AUDIT}.md`
+- `Claude Comms and Packages/Batch Completion/B_GOV_4_COMPLETION_REPORT.md` (this)
+- `1-system-manual/BATCH_CATALOG.md` (new row) · `PHASE_HISTORY.md` (plain-language entry) · `RUNNING_ISSUES.md` (#350 RESOLVED, #397 RESOLVED + re-homed from CC-B to B-GOV-4, new #341 reorg-coverage entry)
+- `PHASE_19_PLAN.md`: **N/A** — B-GOV-4 is a B-GOV-family governance-tooling batch, not a Phase-19 sequence item (the §1 board / §5 log track the B1–B14 sequence); the checker's own `REQUIRED_IF` predicate `/^P19-/` confirms `phase_19_plan` is not required for a non-P19 id. (§9 applicability judgment, stated not skipped.)
+- `GOVERNANCE_EXCEPTIONS.md`: the B-GOV-4 `open` + `B-TEC` phantom rows are retired in the **post-deploy finalize**, NOT this push — kept until the fixed checker is live so the OLD (still-buggy) checker can't re-fire the B-TEC phantom in the gap between push and deploy.
+- SIM / SYSTEM_MANUAL: **N/A** — governance tooling, no engine architecture/strategy/regime/filter/pipeline/math (Langston-confirmed Step-2).
+- MEMORY_CC_A + repo mirror; Langston MEMORY.
+
+## Review trail
+- Langston Step-1: APPROVED (six-objective decomposition; one-predicate + shared close-primitive notes).
+- Langston Step-2: APPROVED for implementation; two binding findings folded (first-ADD anchor not latest-touch; orphan sweep must re-verify not blind-resolve).
+- Langston Step-4 (diff): **APPROVED** (2026-06-26). Two findings folded: (1) re-open detection switched `scopeCommitTime` to `Math.max` (latest scope add — `Math.min` was inert for a realistic post-close scope rev) — its only false-positive (a doc-reorg rename re-adding a closed batch's scope) is harmless since re-grading a complete closed batch fires no gap; (2) the Catch-#1 comment corrected (the backtest calls neither `computeBatchStates` nor `decideAlerts`). Finding-2 (backtest doc-gap coverage) confirmed no loss — the backtest asserts on `docPresent`/`preAuditStructure` directly, never `decideAlerts`.
+- Langston Step-8 (verify): [pending — post-deploy].
+- CI: [pending — run id post-push] · Deploy: [pending — checker clone pull on staging].

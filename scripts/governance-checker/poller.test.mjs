@@ -1,7 +1,7 @@
 // B-GOV poller — pure decision-logic tests (no git, no ssh, no filesystem).
 // Run: node scripts/governance-checker/poller.test.mjs
-import { computeBatchStates, decideAlerts, applyCutoff } from './poller.mjs';
-import { batchIdToFileRegex } from './config.mjs';
+import { computeBatchStates, decideAlerts, applyCutoff, anchorClosedBatches, decideOrphanSweep } from './poller.mjs';
+import { batchIdToFileRegex, extractBatchId, extractLeadingBatchId } from './config.mjs';
 
 const HOUR = 3600 * 1000;
 const NOW = Date.parse('2026-06-17T12:00:00Z');
@@ -61,7 +61,7 @@ const noStaleOpen = { open: new Set(), openSince: new Map(), naConfirmed: new Se
 
 // ── doc-set gap: opens for missing required, distinct from deadline (C8) ────────
 {
-  const states = [{ batchId: 'P19-B9', firstCode: NOW - 5 * HOUR, lastCode: NOW - 5 * HOUR, hasGovernance: true }];
+  const states = [{ batchId: 'P19-B9', firstCode: NOW - 5 * HOUR, lastCode: NOW - 5 * HOUR, hasGovernance: true, hasCompletionReport: true }];
   const stubGap = () => ({ required: { sim: false, system_manual: false } });
   const { toOpen } = decideAlerts(states, noStaleOpen, NOW, { docsetCheck: stubGap });
   ok('doc-gap opens for missing sim', hasKey(toOpen, 'gov-docgap:P19-B9:sim'));
@@ -70,7 +70,7 @@ const noStaleOpen = { open: new Set(), openSince: new Map(), naConfirmed: new Se
 
 // ── doc-set gap RESOLVES when the doc is later supplied (Langston Step-4 a / Obj-13) ──
 {
-  const states = [{ batchId: 'P19-B9', firstCode: NOW - 5 * HOUR, lastCode: NOW - 5 * HOUR, hasGovernance: true }];
+  const states = [{ batchId: 'P19-B9', firstCode: NOW - 5 * HOUR, lastCode: NOW - 5 * HOUR, hasGovernance: true, hasCompletionReport: true }];
   const stubPresent = () => ({ required: { sim: true } });
   const { toOpen, toResolveKeys } = decideAlerts(states, noStaleOpen, NOW, { docsetCheck: stubPresent });
   ok('doc-gap RESOLVES once the required doc is present', toResolveKeys.includes('gov-docgap:P19-B9:sim'));
@@ -94,7 +94,7 @@ const noStaleOpen = { open: new Set(), openSince: new Map(), naConfirmed: new Se
 
 // ── confirmed N/A clears a doc-gap instead of opening it (Item 3 / Obj-6) ───────
 {
-  const states = [{ batchId: 'P19-B9', firstCode: NOW - 5 * HOUR, lastCode: NOW - 5 * HOUR, hasGovernance: true }];
+  const states = [{ batchId: 'P19-B9', firstCode: NOW - 5 * HOUR, lastCode: NOW - 5 * HOUR, hasGovernance: true, hasCompletionReport: true }];
   const exc = { open: new Set(), openSince: new Map(), naConfirmed: new Set(['P19-B9:sim']) };
   const stubGap = () => ({ required: { sim: false } });
   const { toOpen, toResolveKeys } = decideAlerts(states, exc, NOW, { docsetCheck: stubGap });
@@ -165,6 +165,88 @@ const noStaleOpen = { open: new Set(), openSince: new Map(), naConfirmed: new Se
   ok('OBJ-1: post-cutoff close is enforced (kept)', kept.includes('B-NEW'));
   ok('OBJ-1: straddler (started before, closes AFTER cutoff) is STILL enforced', kept.includes('B-STRAD'));
   ok('OBJ-1: no-code-close (lastCode null) is grandfathered', !kept.includes('B-NULL'));
+}
+
+// ── B-GOV-4 OBJ-1: leading-token extraction (a mid-subject ref must not establish a batch) ──
+{
+  ok('OBJ-1: leading bare batch-id extracts', extractLeadingBatchId('P19-B6.6 Step-1: scope') === 'P19-B6.6');
+  ok('OBJ-1: leading id with adjacent context extracts', extractLeadingBatchId('B-DIAG-387 (#387): fix') === 'B-DIAG-387');
+  ok('OBJ-1: MID-subject reference does NOT extract (null)',
+    extractLeadingBatchId('Governance: concretize #350 B-GOV-4 home') === null);
+  ok('OBJ-1: plain-descriptor commit does NOT extract', extractLeadingBatchId('MEMORY_CC_A: state refresh') === null);
+  ok('OBJ-1: leading whitespace tolerated', extractLeadingBatchId('  B-GOV-4 Step-3: code') === 'B-GOV-4');
+  const cs = computeBatchStates([{ date: iso(1), subject: 'Governance ledger: home parser-fix at #350 -> B-GOV-4', files: ['1-system-manual/RUNNING_ISSUES.md'] }]);
+  ok('OBJ-1: computeBatchStates ignores a mid-subject B-GOV-4 reference', !cs.batches.some((b) => b.batchId === 'B-GOV-4'));
+}
+
+// ── B-GOV-4 OBJ-2: multi-hyphen-name capture (no B-TEC-SELFHEAL → B-TEC truncation) ──
+{
+  ok('OBJ-2: B-TEC-SELFHEAL captured WHOLE (not truncated to B-TEC)', extractBatchId('B-TEC-SELFHEAL Step-3: fix') === 'B-TEC-SELFHEAL');
+  ok('OBJ-2: B-LANGSTON-QUEUE-345 captured whole', extractBatchId('B-LANGSTON-QUEUE-345 close') === 'B-LANGSTON-QUEUE-345');
+  ok('OBJ-2: B-GOV-2 still captured whole (regression)', extractBatchId('B-GOV-2 shipped') === 'B-GOV-2');
+  ok('OBJ-2: B-GOV still captured (regression)', extractBatchId('B-GOV done') === 'B-GOV');
+  ok('OBJ-2: B-NAMES.1 sub-suffix still captured (regression)', extractBatchId('B-NAMES.1 foo') === 'B-NAMES.1');
+  ok('OBJ-2: B-NEW-40 still routed to the B-NEW pattern (regression)', extractBatchId('B-NEW-40 soak finding') === 'B-NEW-40');
+  ok('OBJ-1+2: leading B-TEC-SELFHEAL extracts whole', extractLeadingBatchId('B-TEC-SELFHEAL Step-10/11: close') === 'B-TEC-SELFHEAL');
+}
+
+// ── B-GOV-4 OBJ-3: anchorClosedBatches — pin closed-quiescent to the close event; re-open re-enrolls ──
+// NOTE: scopeAddTime here is what scopeCommitTime returns = the LATEST scope first-add (Math.max), so
+// a value AFTER completionAddTime models a genuine post-close scope rev (realistic re-open), not a
+// fabricated first-scope-after-close (Langston Step-4 Finding 1 — the Math.min inertness is fixed).
+{
+  const CUT = Date.parse('2026-06-23T00:00:00Z');
+  const at = (d) => Date.parse(d);
+  const closedRemention = { batchId: 'B-NEW-40', lastCode: at('2026-06-25T10:00:00Z'),
+    completionAddTime: at('2026-05-18T00:00:00Z'), scopeAddTime: at('2026-05-17T00:00:00Z') };
+  anchorClosedBatches([closedRemention]);
+  ok('OBJ-3: closed-quiescent batch pinned to completion-report add (immune to re-mention)',
+    closedRemention.lastCode === at('2026-05-18T00:00:00Z'));
+  ok('OBJ-3: pinned closed batch is grandfathered (cutoff filters it out)', applyCutoff([closedRemention], CUT).length === 0);
+  ok('OBJ-3: hasCompletionReport set true for a closed batch', closedRemention.hasCompletionReport === true);
+
+  const reopened = { batchId: 'B-RE', lastCode: at('2026-06-25T00:00:00Z'),
+    completionAddTime: at('2026-06-10T00:00:00Z'), scopeAddTime: at('2026-06-24T00:00:00Z') };
+  anchorClosedBatches([reopened]);
+  ok('OBJ-3: re-opened batch (LATEST scope add > completion add = a post-close scope rev) keeps recent lastCode + re-enrolls',
+    reopened.lastCode === at('2026-06-25T00:00:00Z') && applyCutoff([reopened], CUT).length === 1);
+
+  const sameCommit = { batchId: 'B-SAME', lastCode: at('2026-06-25T00:00:00Z'),
+    completionAddTime: at('2026-05-01T00:00:00Z'), scopeAddTime: at('2026-05-01T00:00:00Z') };
+  anchorClosedBatches([sameCommit]);
+  ok('OBJ-3: scope add == completion add is NOT a re-open (strict >, stays pinned)', sameCommit.lastCode === at('2026-05-01T00:00:00Z'));
+
+  const newBatch = { batchId: 'P19-B9', lastCode: at('2026-06-25T00:00:00Z'), completionAddTime: null, scopeAddTime: at('2026-06-24T00:00:00Z') };
+  anchorClosedBatches([newBatch]);
+  ok('OBJ-3: new batch (no completion report) keeps lastCode + hasCompletionReport=false (still graded)',
+    newBatch.lastCode === at('2026-06-25T00:00:00Z') && newBatch.hasCompletionReport === false);
+}
+
+// ── B-GOV-4 OBJ-4: doc-set SENTINEL — the gap fires only once the completion report is present ──
+{
+  const stubGap = () => ({ required: { sim: false } });
+  const preReport = [{ batchId: 'P19-B9', firstCode: NOW - 5 * HOUR, lastCode: NOW - 5 * HOUR, hasGovernance: true, hasCompletionReport: false }];
+  ok('OBJ-4: governance present but NO completion report → no doc-gap (close-before-docset race eliminated)',
+    !hasKey(decideAlerts(preReport, noStaleOpen, NOW, { docsetCheck: stubGap }).toOpen, 'gov-docgap:P19-B9:sim'));
+  const postReport = [{ batchId: 'P19-B9', firstCode: NOW - 5 * HOUR, lastCode: NOW - 5 * HOUR, hasGovernance: true, hasCompletionReport: true }];
+  ok('OBJ-4: completion report present + doc missing → doc-gap fires',
+    hasKey(decideAlerts(postReport, noStaleOpen, NOW, { docsetCheck: stubGap }).toOpen, 'gov-docgap:P19-B9:sim'));
+  const noReportOverdue = [{ batchId: 'P19-B9', firstCode: NOW - 5 * HOUR, lastCode: NOW - 5 * HOUR, hasGovernance: false, hasCompletionReport: false }];
+  ok('OBJ-4: a no-report/abandoned batch still fires the DEADLINE (deadline independent of sentinel — does not go dark)',
+    hasKey(decideAlerts(noReportOverdue, noStaleOpen, NOW).toOpen, 'gov-deadline:P19-B9'));
+}
+
+// ── B-GOV-4 OBJ-4b: orphan sweep RE-VERIFIES at the ref — present→resolve, still-missing→keep ──
+{
+  const openKeys = ['gov-docgap:OLD-CLOSED:sim', 'gov-docgap:OLD-GAP:pre_audit', 'gov-docgap:IN-WIN:scope'];
+  const enforceableIds = new Set(['IN-WIN']);   // only IN-WIN is still in this tick's window
+  const verify = (bid) => bid === 'OLD-CLOSED'; // OLD-CLOSED's doc is now present; OLD-GAP is still missing
+  const { resolve, keep } = decideOrphanSweep(openKeys, enforceableIds, verify);
+  ok('OBJ-4b: out-of-window orphan whose doc is NOW present → resolved', resolve.includes('gov-docgap:OLD-CLOSED:sim'));
+  ok('OBJ-4b: out-of-window orphan whose doc is STILL missing → KEPT (no cry-silence on a real aged-out gap)',
+    keep.includes('gov-docgap:OLD-GAP:pre_audit'));
+  ok('OBJ-4b: in-window key is NOT swept (handled by decideAlerts)',
+    !resolve.includes('gov-docgap:IN-WIN:scope') && !keep.includes('gov-docgap:IN-WIN:scope'));
 }
 
 console.log(`\nPoller logic tests: ${pass} passed, ${fail} failed`);

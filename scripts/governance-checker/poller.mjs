@@ -19,10 +19,13 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 import {
-  extractBatchId, DEADLINE_HOURS, OPEN_STATE_BACKSTOP_HOURS, OPEN_STATE_MAX_AGE_HOURS,
+  extractLeadingBatchId, DEADLINE_HOURS, OPEN_STATE_BACKSTOP_HOURS, OPEN_STATE_MAX_AGE_HOURS,
   DEFAULT_CLASS, SHADOW_MODE, ENFORCEMENT_CUTOFF_MS,
 } from './config.mjs';
-import { checkBatchDocset, classifyCommit, diffTouchesCoreEngine, readDeclaredClass } from './checker.mjs';
+import {
+  checkBatchDocset, classifyCommit, diffTouchesCoreEngine, readDeclaredClass,
+  docPresent, completionReportCommitTime, scopeCommitTime,
+} from './checker.mjs';
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(SCRIPT_DIR, '..', '..');
@@ -42,7 +45,9 @@ export function computeBatchStates(commits) {
   let untaggedCode = 0;
   for (const c of commits) {
     const { code, governance, housekeepingOnly } = classifyCommit(c.files);
-    const bid = extractBatchId(c.subject);
+    // B-GOV-4 OBJ-1: grade only a LEADING-token batch-id. A mid-subject reference is contextual,
+    // not the commit's own batch, and must not establish/refresh a gradable batch (#350a).
+    const bid = extractLeadingBatchId(c.subject);
     if (!bid) {
       if (code && !housekeepingOnly) untaggedCode++; // C4: untagged CODE push = blind spot
       continue;
@@ -72,6 +77,44 @@ export function computeBatchStates(commits) {
 // historical fixtures with the cutoff bypassed (Langston Catch #1).
 export function applyCutoff(batches, cutoffMs) {
   return batches.filter((b) => b.lastCode !== null && b.lastCode >= cutoffMs);
+}
+
+// B-GOV-4 OBJ-3: pin a CLOSED-QUIESCENT batch's enforcement timestamp to its completion-report
+// FIRST-ADD (the immutable close event), so a later commit that merely LEADS with the closed id
+// (e.g. `B-NEW-40 soak finding: …` touching scripts/) can no longer refresh lastCode and
+// un-grandfather it (the #350 root vector). A re-open (the batch's LATEST scope first-add — see
+// scopeCommitTime/Math.max — STRICTLY after the report first-add, i.e. a NEW scope rev filed
+// post-close) is NOT closed-quiescent → keeps its real recent lastCode → re-enrolls. Also surfaces
+// `hasCompletionReport` — the OBJ-4 doc-set SENTINEL (same shared primitive, no split-brain).
+// PURE: caller injects `completionAddTime`/`scopeAddTime` (git first-add ms) onto each batch, so
+// this is unit-testable without git. No scope-file requirement (empirically many legitimately-
+// closed batches have no in-repo scope → requiring one would cry-SILENCE them; pre-audit §5).
+export function anchorClosedBatches(batches) {
+  for (const b of batches) {
+    const closed = b.completionAddTime != null;
+    const reopened = closed && b.scopeAddTime != null && b.scopeAddTime > b.completionAddTime; // strict >
+    b.hasCompletionReport = closed;
+    if (closed && !reopened) b.lastCode = b.completionAddTime; // pin to the immutable close event
+  }
+  return batches;
+}
+
+// B-GOV-4 OBJ-4b: decide which ORPHANED doc-gap alerts to resolve vs keep. An alert opened while a
+// batch was in-window gets stranded once the batch leaves the `-n300` window (decideAlerts no
+// longer iterates it → its key never re-enters toResolveKeys → re-surfaces forever; the P19-B6.6
+// symptom). Resolve such orphans — but RE-VERIFY first via the injected `verify(bid,doc)` (the live
+// tick passes a whole-tree GOV_REF check), NEVER blind-resolve: a genuinely-missing doc on a closed
+// batch that merely aged out must STAY surfaced (Langston Step-2 Finding 2 — no cry-silence). PURE.
+export function decideOrphanSweep(openAlertKeys, enforceableIds, verify) {
+  const resolve = [], keep = [];
+  for (const key of openAlertKeys) {
+    const m = /^gov-docgap:(.+):([^:]+)$/.exec(key);
+    if (!m) continue;                          // only doc-gap orphans are swept here
+    const bid = m[1], doc = m[2];
+    if (enforceableIds.has(bid)) continue;     // still in-window → handled by decideAlerts
+    (verify(bid, doc) ? resolve : keep).push(key);
+  }
+  return { resolve, keep };
 }
 
 // Decide which alerts to OPEN and which to RESOLVE, given batch states + declared
@@ -161,8 +204,14 @@ export function decideAlerts(batchStates, exceptions, nowMs, opts = {}) {
       }
     }
 
-    // (3) Doc-set gap (C8: persists until verified per Obj-13). Only meaningful once closed.
-    if (s.hasGovernance) {
+    // (3) Doc-set gap (C8: persists until verified per Obj-13). B-GOV-4 OBJ-4: trigger on the
+    // COMPLETION-REPORT SENTINEL (`hasCompletionReport`), NOT first-governance-commit — the report
+    // is the Step-11 close artifact (mandatory §4), so by construction it cannot exist before the
+    // batch is genuinely closing, eliminating the close-before-docset race (#397). The deadline
+    // (block 1) still keys on hasGovernance, so a no-report/abandoned batch is NOT silenced — it
+    // surfaces via the deadline. Durability under a slightly-early report = order-independent
+    // auto-resolve (this re-resolve loop + the OBJ-4b orphan sweep), NOT push-order convention.
+    if (s.hasCompletionReport) {
       const check = (opts.docsetCheck || checkBatchDocset)(s.batchId, klass, { requiredOnly: true });
       // Iterate the FULL required set (not just the missing slice) so a doc-gap RESOLVES
       // when the doc later lands — resolve-on-verified-state, Obj-13 (Langston Step-4 a).
@@ -302,13 +351,24 @@ export function tick(nowMs = Date.now()) {
   state.fetchFailStreak = 0; state.fetchFailSev = undefined;
   if (state.openAlerts[FETCH_KEY]) { alertSink.resolve(state.openAlerts[FETCH_KEY]); delete state.openAlerts[FETCH_KEY]; }
   const { batches, untaggedCode } = computeBatchStates(commits);
-  // B-GOV-3 OBJ-1: GRANDFATHER CUTOFF — enforce only on batches whose code CLOSES at/after
-  // the cutoff (key on lastCode, NOT firstCode → a straddler that closes after go-live is
-  // still enforced). Pre-cutoff batches are grandfathered (no retroactive flagging — the
-  // flood fix). A batch with no determinable code-close (lastCode null = code aged out of the
-  // window / governance-only) is grandfathered too. ★ This filter lives ONLY in the live tick;
-  // the Obj-3 backtest calls computeBatchStates/decideAlerts directly and never hits it, so it
-  // grades historical fixtures with the cutoff bypassed (Langston Catch #1).
+  // B-GOV-4 OBJ-3/4: enrich each batch with the shared close-detection primitive (git FIRST-ADD
+  // commit time of its completion report + scope), then PIN closed-quiescent batches to their
+  // immutable close event BEFORE the grandfather cutoff — so a later leading re-mention of a closed
+  // id cannot refresh lastCode past the cutoff and re-grade it. Also sets hasCompletionReport (the
+  // OBJ-4 doc-set sentinel). (Both git reads happen on-box at GOV_REF; the pure logic is in
+  // anchorClosedBatches so it stays unit-testable.)
+  for (const b of batches) {
+    b.completionAddTime = completionReportCommitTime(b.batchId);
+    b.scopeAddTime = scopeCommitTime(b.batchId);
+  }
+  anchorClosedBatches(batches);
+  // B-GOV-3 OBJ-1: GRANDFATHER CUTOFF — enforce only on batches whose (now anchored) close is
+  // at/after the cutoff (key on lastCode → a straddler that closes after go-live is still
+  // enforced). Pre-cutoff batches are grandfathered (no retroactive flagging — the flood fix). A
+  // batch with no determinable close (lastCode null) is grandfathered too. ★ This filter lives
+  // ONLY in the live tick; the Obj-3 backtest tests docPresent/preAuditStructure directly and
+  // applies no cutoff, so it grades historical fixtures with the cutoff bypassed (Langston Catch #1;
+  // mechanism corrected B-GOV-4 Step-4 — the backtest calls neither computeBatchStates nor decideAlerts).
   const enforceable = applyCutoff(batches, ENFORCEMENT_CUTOFF_MS);
   // OBJ-1 (B-GOV-2): read each enforceable batch's declared change-class from its scope header.
   for (const b of enforceable) { const d = readDeclaredClass(b.batchId); b.declaredClass = d.class; b.classDeclared = d.declared; }
@@ -325,10 +385,27 @@ export function tick(nowMs = Date.now()) {
     const id = state.openAlerts[k];
     if (id) { alertSink.resolve(id); delete state.openAlerts[k]; }
   }
+  // B-GOV-4 OBJ-4b: orphan re-verify sweep. Resolve doc-gap alerts whose batch left the -n300
+  // window (decideAlerts no longer iterates them, so their keys can't re-enter toResolveKeys and
+  // they re-surface forever — the P19-B6.6 symptom) — but RE-VERIFY at GOV_REF first (whole-tree
+  // docPresent/N-A, not the window), never blind-resolve, so a genuinely-missing aged-out doc
+  // stays surfaced (Langston Step-2 Finding 2).
+  const enforceableIds = new Set(enforceable.map((b) => b.batchId));
+  const verifyDoc = (bid, doc) => docPresent(bid, doc) || exceptions.naConfirmed.has(`${bid}:${doc}`);
+  const { resolve: orphanResolve, keep: orphanKeep } =
+    decideOrphanSweep(Object.keys(state.openAlerts), enforceableIds, verifyDoc);
+  for (const key of orphanResolve) {
+    const id = state.openAlerts[key];
+    if (id) { alertSink.resolve(id); delete state.openAlerts[key]; }
+    console.warn(`[gov-checker] orphan-sweep RESOLVED ${key} (verified satisfied at ${BRANCH})`);
+  }
+  for (const key of orphanKeep) {
+    console.warn(`[gov-checker] orphan-sweep KEPT ${key} (still missing out-of-window — real gap, not silenced)`);
+  }
   if (untaggedCode > 0) console.warn(`[gov-checker] ${untaggedCode} untagged CODE commits in window (low-sev; see Obj-9)`);
   state.lastTick = nowMs;
   saveState(state);
-  return { opened: toOpen.length, resolved: toResolveKeys.length, untaggedCode };
+  return { opened: toOpen.length, resolved: toResolveKeys.length + orphanResolve.length, untaggedCode };
 }
 
 // CLI entry (only when run directly on the box)

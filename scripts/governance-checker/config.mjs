@@ -14,7 +14,12 @@ export const BATCH_ID_PATTERNS = [
   /\bP\d{1,3}-B\d+(?:\.\d+)?[a-z]?\b/,      // P19-B6, P19-B6.5a  (phase-scoped batch + sub-batch)
   /\bB-NEW-\d+[a-z]?\b/,                     // B-NEW-53, B-NEW-53a (historical)
   /\bB\d{2,}\.\d+[a-z]?(?:-[A-Z])?\b/,       // B79.0n, B4.6-B style
-  /\bB-[A-Z][A-Z0-9]+(?:-\d+)?(?:\.\d+)?\b/,  // B-NAMES, B-GOV, B-GOV-2, B-NAMES.1 (letter-named; -N suffix captured — Langston Step-4)
+  // B-GOV-4 OBJ-2: capture the FULL hyphenated name. The old `(?:-\d+)?` only allowed a
+  // single numeric suffix (B-GOV-2) and TRUNCATED multi-segment names — B-TEC-SELFHEAL was
+  // graded as the phantom `B-TEC` (#350 second failure mode). `(?:-[A-Z0-9]+)*` captures every
+  // hyphen-joined uppercase/alnum segment (B-TEC-SELFHEAL, B-LANGSTON-QUEUE-345, B-GOV-2),
+  // still stopping at whitespace or a lowercase continuation; `.<n>` sub-batch suffix preserved.
+  /\bB-[A-Z][A-Z0-9]+(?:-[A-Z0-9]+)*(?:\.\d+)?\b/,  // B-NAMES, B-GOV, B-GOV-2, B-TEC-SELFHEAL, B-NAMES.1
 ];
 
 // Commits that legitimately carry NO batch tag (not code pushes — pre-audit §1.b.i).
@@ -29,6 +34,28 @@ export function extractBatchId(subject) {
   for (const re of BATCH_ID_PATTERNS) {
     const m = subject.match(re);
     if (m) return m[0];
+  }
+  return null;
+}
+
+// B-GOV-4 OBJ-1: LEADING-token extraction for the GRADING path. A batch-id is treated as a
+// batch-being-worked only if it is the leading token of the commit subject (the declared
+// own-batch position). A batch-id appearing only MID-subject is a contextual reference and must
+// NOT establish/refresh a gradable batch — that mid-subject match (#350 first failure mode)
+// un-grandfathered closed batches (B-NEW-40 led, but also "…concretize #350 B-GOV-4 home" matched
+// B-GOV-4 mid-subject) and even graded never-existent ids. Empirically safe to anchor: zero
+// conventional-commit `type(scope):` prefixes in 400 origin subjects (pre-audit §5), so there is
+// no prefix to skip — our convention leads with the bare batch-id or a plain descriptor.
+// `m.index === 0` (after trimming leading whitespace) ⇒ the match starts the subject. NON-grading
+// callers (e.g. recentBatchIds, the backtest display) keep using extractBatchId (any position).
+// NOTE (Langston Step-4 minor): a bracketed/quoted leading id (`[B-GOV-4] …`) returns null because
+// m.index fails on the `[`. Fine under the bare-id-leading convention (pre-audit §5); revisit only
+// if the subject-prefix convention ever changes (it would quietly drop those batches from grading).
+export function extractLeadingBatchId(subject) {
+  const s = subject.replace(/^\s+/, '');
+  for (const re of BATCH_ID_PATTERNS) {
+    const m = s.match(re);
+    if (m && m.index === 0) return m[0];
   }
   return null;
 }
