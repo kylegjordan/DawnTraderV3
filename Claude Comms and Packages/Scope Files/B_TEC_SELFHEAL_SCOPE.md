@@ -1,5 +1,7 @@
 # B-TEC-SELFHEAL — Scope
 
+change-class: architecture
+
 **Owner:** OLD Claude (CC-A). **Drafted:** 2026-06-25. **change-class: architecture** (touches the core trailing-exit-controller / kill-switch safety path + control-flow + possibly adds always-on runtime state → fail-closed declaration; Langston may down-declare). **Phase-19 sub-batch** (Langston-suggested 2026-06-25). **Supersedes / re-scopes:** the mis-framed `B-XSTOCK-TEC-WARMUP` row in PHASE_19_PLAN + RUNNING_ISSUES #349 (the reopen-warm framing is dropped — the real fix is general self-heal + isolation).
 
 ---
