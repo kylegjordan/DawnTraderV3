@@ -274,8 +274,12 @@ class FeedIntegrityMonitorService {
 
     let worstAgeMs = 0;
     for (const c of result.classes) {
-      if (c.suppressed || c.freshestAgeMs === null) continue;
-      if (c.freshestAgeMs > worstAgeMs) worstAgeMs = c.freshestAgeMs;
+      if (c.suppressed) continue;
+      // P19-B6.7 (Langston Step-4 ②): a null-driven critical (no symbol EVER ticked) has no
+      // finite age — surface the class critical threshold as a sentinel so stalenessSec does
+      // not misleadingly read 0s on a genuinely dead feed.
+      const ageMs = c.freshestAgeMs ?? (c.grade === 'critical' ? (thresholds[c.assetClass]?.criticalMs ?? 0) : 0);
+      if (ageMs > worstAgeMs) worstAgeMs = ageMs;
     }
     return { grade: result.overall, worstAgeSec: Math.round(worstAgeMs / 1000) };
   }
@@ -341,9 +345,9 @@ class FeedIntegrityMonitorService {
    */
   private calculateAverageLatency(): number {
     if (this.healthHistory.length === 0) {
-      // P19-B6.7 (#301): primary adapter pong RTT (fixes the old tick-age-as-latency proxy).
-      const diag = krakenWebSocketAdapter.getDiagnostics();
-      return diag.lastPongAgeMs >= 0 ? diag.lastPongAgeMs : 0;
+      // P19-B6.7 (#301): smoothed inter-heartbeat latency proxy (see recordSnapshot note —
+      // not a true RTT; Kraken v2 heartbeats are server-pushed).
+      return krakenWebSocketAdapter.getHealthMetrics().avgHeartbeatLatency;
     }
 
     const sum = this.healthHistory.reduce((acc, snap) => acc + snap.latencyMs, 0);
@@ -384,16 +388,18 @@ class FeedIntegrityMonitorService {
   public recordSnapshot(): void {
     const now = Date.now();
     const wsStatus = krakenWebSocketAdapter.getStatus();
-    const diag = krakenWebSocketAdapter.getDiagnostics();
 
     // P19-B6.7 (#301): the primary adapter exposes CUMULATIVE reconnectAttempts; derive the
     // per-interval delta (the prior 2nd-WS exposed a reset-on-read counter).
     const intervalReconnects = Math.max(0, wsStatus.reconnectAttempts - this.lastReconnectAttempts);
     this.lastReconnectAttempts = wsStatus.reconnectAttempts;
 
-    // Per-class FEED-LEVEL liveness (owns staleness); latency = primary pong RTT.
+    // Per-class FEED-LEVEL liveness owns staleness; latency is a SMOOTHED PROXY (Langston
+    // Step-4): true ping→pong RTT is not available from Kraken v2's server-pushed heartbeats,
+    // so we use the adapter's averaged inter-heartbeat latency (avg of ≤60 samples) rather
+    // than a single sawtooth pong-age point-sample that could throw a lone false WARNING.
     const { grade: livenessGrade, worstAgeSec } = this.computeLiveness(now);
-    const latencyMs = diag.lastPongAgeMs >= 0 ? diag.lastPongAgeMs : 0;
+    const latencyMs = krakenWebSocketAdapter.getHealthMetrics().avgHeartbeatLatency;
     const uptimePercent = this.calculateTimeBasedUptime();
 
     // Healthy iff BOTH liveness and connection-quality are healthy (tickAge term 0 — liveness owns it).

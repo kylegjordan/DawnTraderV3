@@ -44,7 +44,7 @@ private computeLiveness(now: number): { grade: FeedAliveGrade; worstAgeSec: numb
   /* worstAgeSec = worst non-suppressed class freshest age */ return { grade: result.overall, worstAgeSec };
 }
 ```
-- `getHealthMetrics()` + `recordSnapshot()`: status = `worseStatus(livenessGrade, categorizeHealthBySpec(reconnects, /*tickAge*/0, latency, uptime))` — **liveness owns staleness** (tickAge term 0); connection-quality (reconnects/latency/uptime) re-sourced from the primary adapter. latency = `getDiagnostics().lastPongAgeMs` (fixes the old tick-age-as-latency TODO). interval reconnects = delta of cumulative `reconnectAttempts`.
+- `getHealthMetrics()` + `recordSnapshot()`: status = `worseStatus(livenessGrade, categorizeHealthBySpec(reconnects, /*tickAge*/0, latency, uptime))` — **liveness owns staleness** (tickAge term 0); connection-quality (reconnects/latency/uptime) re-sourced from the primary adapter. **latency = `getHealthMetrics().avgHeartbeatLatency`** (Langston Step-4 ①: a SMOOTHED inter-heartbeat-interval PROXY — NOT true RTT, which Kraken v2's server-pushed heartbeats don't expose; the old TODO is NOT "fixed", it's an honest proxy that is orthogonal to liveness and clear of the 2s warning boundary, unlike the `lastPongAgeMs` sawtooth). interval reconnects = delta of cumulative `reconnectAttempts`.
 - `tryGetConfig` swallows an unwarmed-cache throw → returns null → the cycle skips the liveness grade (never crash, never false-fire off a config gap).
 
 **`server/services/parity-gate.ts`** — Check-4 now calls `assessWsReadiness(getStatus(), getI8EWsHealth(), {…thresholds})`; added thresholds `freshTickMaxMs:10000`, `minSymbolsFreshPercent:80`.
