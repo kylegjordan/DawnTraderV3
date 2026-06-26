@@ -1,5 +1,16 @@
-import { getMarketDataCoordinator } from './market-data-coordinator';
-import { getMarketDataWS } from './market-data-ws';
+// P19-B6.7 (#301): the vestigial 2nd-WS subsystem (market-data-coordinator/market-data-ws)
+// was removed. The alarm now grades the PRIMARY adapter's real per-symbol tick-age, per
+// asset class, with the xStock class market-hours-gated + a post-open warmup grace.
+import { krakenWebSocketAdapter } from '../exchanges/kraken/kraken-websocket-adapter.js';
+import {
+  gradePerClassFeedLiveness,
+  type SymbolFreshness,
+  type PerClassThresholds,
+  type FeedAliveGrade,
+} from './market-data/feed-health-aggregate.js';
+import { resolveAssetClass } from '../../shared/asset-classes.js';
+import { isXstockMarketOpenUTC } from '../asset_classes/xstock_spot/market-hours.js';
+import { getCachedNumberRequired } from './module-constants-service.js';
 import fs from 'fs';
 
 /**
@@ -94,8 +105,14 @@ interface AlertState {
  * - Accurate grading based on all metrics
  */
 class FeedIntegrityMonitorService {
-  private coordinator = getMarketDataCoordinator();
-  private ws = getMarketDataWS();
+  // P19-B6.7 (#301): warmup-grace state for the xStock-class alarm — when the per-symbol
+  // market-open gate last transitioned closed→open (suppress xStock critical for
+  // warmup_grace_ms after, so the stale-at-close age doesn't false-fire at the bell).
+  private xstockWasOpen = false;
+  private xstockOpenedAtMs: number | null = null;
+  // The primary adapter exposes CUMULATIVE reconnectAttempts; track the delta per cycle.
+  private lastReconnectAttempts = 0;
+  private configWarnLogged = false;
   private healthHistory: HealthSnapshot[] = [];
   private readonly MAX_HISTORY = 12; // 12 snapshots = 1 hour at 5-min intervals
   private lastCheckTime: number = 0;
@@ -174,47 +191,114 @@ class FeedIntegrityMonitorService {
    * Get current feed health metrics with interval reconnect tracking
    */
   public getHealthMetrics(): FeedHealthMetrics {
-    const coordinatorStatus = this.coordinator.getStatus();
-    const wsStatus = this.ws.getStatus();
     const now = Date.now();
-    
+    const wsStatus = krakenWebSocketAdapter.getStatus();
+
     // Get interval reconnect count from last snapshot
-    const reconnectCount = this.healthHistory.length > 0 
+    const reconnectCount = this.healthHistory.length > 0
       ? this.healthHistory[this.healthHistory.length - 1].reconnectsSinceLastCheck
       : 0;
-    
-    // Calculate tick age (time since last data update)
-    const tickAgeMs = wsStatus.lastTickAgeMs >= 0 ? wsStatus.lastTickAgeMs : 0;
-    const tickAgeSec = Math.round(tickAgeMs / 1000);
-    
-    // Calculate latency (average from recent history)
+
+    // P19-B6.7 (#301): per-asset-class FEED-LEVEL liveness (freshest-symbol age; xStock
+    // market-hours-gated + warmup grace). This owns the "is data flowing" dimension.
+    const { grade: livenessGrade, worstAgeSec } = this.computeLiveness(now);
+
+    // Calculate latency (average from recent history; now sourced from primary pong RTT)
     const latencyMs = this.calculateAverageLatency();
-    
+
     // Calculate time-based uptime percentage
     const uptimePercent = this.calculateTimeBasedUptime();
-    
+
     // Calculate error rate from history
     const errorRate = this.calculateErrorRate();
-    
-    // Determine feed type
-    const feedType: 'websocket' | 'rest_fallback' = 
-      coordinatorStatus.dataSource === 'ws' ? 'websocket' : 'rest_fallback';
-    
-    // Determine health status using spec thresholds (with interval reconnects)
-    const healthStatus = this.categorizeHealthBySpec(reconnectCount, tickAgeSec, latencyMs, uptimePercent);
-    
+
+    // Connection-quality grade (reconnects/latency/uptime). tickAge term is 0 because the
+    // per-class LIVENESS grade owns staleness; final status = the worse of the two.
+    const connQuality = this.categorizeHealthBySpec(reconnectCount, 0, latencyMs, uptimePercent);
+    const healthStatus = this.worseStatus(livenessGrade, connQuality);
+
     return {
-      feedType,
+      feedType: 'websocket', // only the primary WS feed exists (no REST fallback post-#301)
       latencyMs: Math.round(latencyMs),
-      stalenessSec: tickAgeSec,
+      stalenessSec: worstAgeSec,
       uptimePercent: parseFloat(uptimePercent.toFixed(2)),
-      pairCount: coordinatorStatus.subscribedPairs,
+      pairCount: wsStatus.subscribedCount,
       errorRate: parseFloat(errorRate.toFixed(4)),
       reconnectCount,
-      tickAgeSec,
+      tickAgeSec: worstAgeSec,
       status: healthStatus,
       lastUpdateISO: new Date().toISOString(),
     };
+  }
+
+  /**
+   * P19-B6.7 (#301): read the PRIMARY adapter and grade FEED-LEVEL liveness per asset class.
+   * Defensive: a missing/unwarmed DB threshold logs once and skips the liveness grade
+   * (returns healthy) — the alarm must never crash nor false-fire a critical off a config gap.
+   */
+  private computeLiveness(now: number): { grade: FeedAliveGrade; worstAgeSec: number } {
+    const health: SymbolFreshness[] = krakenWebSocketAdapter
+      .getI8EWsHealth()
+      .map((h) => ({ symbol: h.symbol, ageMs: h.ageMs }));
+
+    // xStock open-state transition → (re)start the warmup grace on the closed→open edge.
+    const anyXstockOpen = health.some(
+      (h) => resolveAssetClass(h.symbol, 'kraken') === 'xstock_spot' && isXstockMarketOpenUTC(h.symbol, new Date(now)),
+    );
+    if (anyXstockOpen && !this.xstockWasOpen) this.xstockOpenedAtMs = now;
+    this.xstockWasOpen = anyXstockOpen;
+
+    const warmupGraceMs = this.tryGetConfig('xstock_spot', 'warmup_grace_ms');
+    const xstockWarmupRemainingMs =
+      this.xstockOpenedAtMs !== null && warmupGraceMs !== null
+        ? Math.max(0, warmupGraceMs - (now - this.xstockOpenedAtMs))
+        : 0;
+
+    const thresholds: Record<string, PerClassThresholds> = {};
+    for (const cls of ['crypto_spot', 'xstock_spot']) {
+      const warningMs = this.tryGetConfig(cls, 'warning_age_ms');
+      const criticalMs = this.tryGetConfig(cls, 'critical_age_ms');
+      if (warningMs !== null && criticalMs !== null) thresholds[cls] = { warningMs, criticalMs };
+    }
+    if (Object.keys(thresholds).length === 0) {
+      return { grade: 'healthy', worstAgeSec: 0 }; // config not warmed yet → do not alarm
+    }
+
+    const result = gradePerClassFeedLiveness(health, {
+      classify: (sym) => resolveAssetClass(sym, 'kraken'),
+      thresholds,
+      xstockClassKey: 'xstock_spot',
+      isXstockSymbolOpen: (sym) => isXstockMarketOpenUTC(sym, new Date(now)),
+      xstockWarmupRemainingMs,
+    });
+
+    let worstAgeMs = 0;
+    for (const c of result.classes) {
+      if (c.suppressed || c.freshestAgeMs === null) continue;
+      if (c.freshestAgeMs > worstAgeMs) worstAgeMs = c.freshestAgeMs;
+    }
+    return { grade: result.overall, worstAgeSec: Math.round(worstAgeMs / 1000) };
+  }
+
+  /** Read a per-asset-class feed_health knob (DB §11), null if unavailable (never throws). */
+  private tryGetConfig(assetClass: string, name: string): number | null {
+    try {
+      return getCachedNumberRequired('feed_health', name, {
+        exchange: '*', assetClass, strategy: '*', regime: '*',
+      });
+    } catch {
+      if (!this.configWarnLogged) {
+        this.configWarnLogged = true;
+        console.warn(`[FeedIntegrity] feed_health config not warmed yet (${name}/${assetClass}); skipping liveness grade this cycle`);
+      }
+      return null;
+    }
+  }
+
+  /** Return the more severe of two feed-health statuses. */
+  private worseStatus(a: FeedHealthStatus, b: FeedHealthStatus): FeedHealthStatus {
+    const rank: Record<FeedHealthStatus, number> = { healthy: 0, warning: 1, critical: 2 };
+    return rank[a] >= rank[b] ? a : b;
   }
 
   /**
@@ -257,10 +341,11 @@ class FeedIntegrityMonitorService {
    */
   private calculateAverageLatency(): number {
     if (this.healthHistory.length === 0) {
-      const wsStatus = this.ws.getStatus();
-      return wsStatus.lastTickAgeMs >= 0 ? wsStatus.lastTickAgeMs : 0;
+      // P19-B6.7 (#301): primary adapter pong RTT (fixes the old tick-age-as-latency proxy).
+      const diag = krakenWebSocketAdapter.getDiagnostics();
+      return diag.lastPongAgeMs >= 0 ? diag.lastPongAgeMs : 0;
     }
-    
+
     const sum = this.healthHistory.reduce((acc, snap) => acc + snap.latencyMs, 0);
     return sum / this.healthHistory.length;
   }
@@ -297,29 +382,24 @@ class FeedIntegrityMonitorService {
    * Record a health snapshot with interval-based reconnect tracking
    */
   public recordSnapshot(): void {
-    const coordinatorStatus = this.coordinator.getStatus();
     const now = Date.now();
-    
-    // Get interval reconnect count (resets counter)
-    const intervalReconnects = this.ws.getAndResetReconnectCount();
-    
-    const wsStatus = this.ws.getStatus();
-    const tickAgeMs = wsStatus.lastTickAgeMs >= 0 ? wsStatus.lastTickAgeMs : 0;
-    const tickAgeSec = Math.round(tickAgeMs / 1000);
-    
-    // Note: latencyMs should be ping-pong RTT, but for now using tick age as proxy
-    // TODO: Implement proper RTT tracking in MarketDataWebSocket
-    const latencyMs = tickAgeMs;
+    const wsStatus = krakenWebSocketAdapter.getStatus();
+    const diag = krakenWebSocketAdapter.getDiagnostics();
+
+    // P19-B6.7 (#301): the primary adapter exposes CUMULATIVE reconnectAttempts; derive the
+    // per-interval delta (the prior 2nd-WS exposed a reset-on-read counter).
+    const intervalReconnects = Math.max(0, wsStatus.reconnectAttempts - this.lastReconnectAttempts);
+    this.lastReconnectAttempts = wsStatus.reconnectAttempts;
+
+    // Per-class FEED-LEVEL liveness (owns staleness); latency = primary pong RTT.
+    const { grade: livenessGrade, worstAgeSec } = this.computeLiveness(now);
+    const latencyMs = diag.lastPongAgeMs >= 0 ? diag.lastPongAgeMs : 0;
     const uptimePercent = this.calculateTimeBasedUptime();
-    
-    // Determine if this snapshot is healthy using interval reconnects
-    const isHealthy = this.categorizeHealthBySpec(
-      intervalReconnects,
-      tickAgeSec,
-      latencyMs,
-      uptimePercent
-    ) === 'healthy';
-    
+
+    // Healthy iff BOTH liveness and connection-quality are healthy (tickAge term 0 — liveness owns it).
+    const connQuality = this.categorizeHealthBySpec(intervalReconnects, 0, latencyMs, uptimePercent);
+    const isHealthy = this.worseStatus(livenessGrade, connQuality) === 'healthy';
+
     // Update time-based uptime tracking
     if (this.lastHealthCheckTime > 0) {
       const minutesElapsed = (now - this.lastHealthCheckTime) / (60 * 1000);
@@ -329,16 +409,16 @@ class FeedIntegrityMonitorService {
       }
     }
     this.lastHealthCheckTime = now;
-    
+
     // Record snapshot with interval reconnects
     const snapshot: HealthSnapshot = {
       timestamp: now,
       latencyMs,
       wasHealthy: isHealthy,
-      wasConnected: coordinatorStatus.wsConnected,
-      errorOccurred: !coordinatorStatus.wsConnected && !coordinatorStatus.usingFallback,
+      wasConnected: wsStatus.isConnected,
+      errorOccurred: !wsStatus.isConnected,
       reconnectsSinceLastCheck: intervalReconnects,
-      tickAgeSec,
+      tickAgeSec: worstAgeSec,
     };
     
     this.healthHistory.push(snapshot);

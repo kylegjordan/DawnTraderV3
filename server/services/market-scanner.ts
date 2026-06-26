@@ -568,6 +568,22 @@ export async function collectAdaptiveBatch(
   
   const krakenUniverseSize = allPairs.length;
   console.log(`[AdaptiveScan][11.4C.1] Kraken universe: ${krakenUniverseSize} pairs`);
+
+  // P19-B6.7 (#396) OBJ-4: PURE telemetry (no behavior change) — when the Kraken universe
+  // itself comes back short, the downstream refill (market-scanner ~:600) CANNOT rescue it
+  // (it tops up FROM allPairs), so that cycle scans few pairs. Attribute the cause live:
+  // was getTicker() short, was getTradablePairs() short, or did the pairInfo join drop rows?
+  // The actual fix is homed P19-B6.9 (RUNNING_ISSUES #396); this only captures the evidence.
+  if (krakenUniverseSize < SCANNER_PARAMS.BATCH_SIZE) {
+    const tickerCount = Object.keys(tickers).length;
+    const pairsCount = Object.keys(pairsObj).length;
+    const joinDrops = tickerCount - krakenUniverseSize; // ticker keys with no pairInfo match
+    console.warn(
+      `[AdaptiveScan][11.4C.1][#396] SHORT UNIVERSE ${krakenUniverseSize}/${SCANNER_PARAMS.BATCH_SIZE} — ` +
+      `getTicker=${tickerCount} pairs, getTradablePairs=${pairsCount} pairs, pairInfo-join-drops=${joinDrops}. ` +
+      `Cause: ${tickerCount < SCANNER_PARAMS.BATCH_SIZE ? 'getTicker SHORT' : pairsCount < tickerCount ? 'getTradablePairs SHORT (join drops)' : 'join-filter'}.`
+    );
+  }
   
   // STEP 2: Get adaptive batch from AdaptiveScanManager
   const adaptiveScanManager = getAdaptiveScanManager();

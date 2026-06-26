@@ -6,6 +6,30 @@
 
 ---
 
+## 2026-06-26 — Vestigial secondary market-data WebSocket subsystem (P19-B6.7 / #301)
+
+**Removed:** the "Directive 8.9.0-B Secondary WebSocket Adapter" and its coordinator wrapper.
+
+| Item | Location (pre-removal) | What it was |
+|---|---|---|
+| `market-data-ws.ts` | `server/services/market-data-ws.ts` | A second Kraken WS adapter (`getMarketDataWS()` singleton), separate from the primary `kraken-websocket-adapter.ts`. Connected on construction but **never delivered a tick or completed a subscription in its entire logged history** (`MD-WS_TICK`=0, `Sub OK`=0 since Apr 3). Live-spammed `[MD-WS] Data stale` every 30s (30s heartbeat vs 2s stale threshold; tick-timestamp only bumped by pongs). |
+| `market-data-coordinator.ts` | `server/services/market-data-coordinator.ts` | `getMarketDataCoordinator()` singleton wrapping the 2nd WS + a never-exercised REST-fallback bookkeeping (`usingFallback`/`dataSource`). Its `'tick'`/`cortex-update` outputs were dead-ended; only `getStatus()` was consumed. |
+
+**Why removed:** a dead feed that every health/safety consumer mis-read as "connected/healthy" because the dead socket kept a TCP connection open. **Phase-19 landmine:** `feed-integrity-monitor` (boot-started, 5-min cron) graded this dead feed and would raise false CRITICAL `feed_health` alerts every 5 min once Phase-19 lifts dormant-mode suppression; `parity-gate` false-PASSED the Phase-21 go-live WS gate off it. CLAUDE.md §5 rule 18: delete now, do not leave lingering.
+
+**Blast-radius verification (certainty-before-cutting):**
+- **Tick-output consumers: ZERO** (`coordinator.on('tick')`/`getLatestTick`/`getDataSource`) — the only historical consumer (realtime-paper-executor) was already deleted in #300/B4b.2.
+- **`subscribeToPair` callers: ZERO** — the current build never drove a subscription (so the historical "Sub Error" log volume was pre-#300 residue).
+- **The 4 status-only consumers were re-pointed FIRST** at the primary `krakenWebSocketAdapter` (parity-gate, health-monitor, system-health-monitor, feed-integrity-monitor), then `tsc --noEmit` proved zero dangling references BEFORE deletion, then a repo-wide grep confirmed no remaining code reference.
+- **Primary adapter ⟂ this subsystem: PROVEN** — `kraken-websocket-adapter.ts` had zero reference to it, and no price-cache / VTS / warmup / signal path touched it.
+- `OrderBookSnapshot` (the one still-used export, type-only) re-homed inline into its sole consumer `slippage-fee-model.ts`.
+- **Left intentionally:** nothing — the symbol-canonicalizer header comment listing `MarketDataCoordinator` was also removed.
+
+**Archive copies:** `1-system-manual/_archive/deleted-code/market-data-ws.ts.20260626-P19B6.7.removed`, `…/market-data-coordinator.ts.20260626-P19B6.7.removed`
+**Removal commit:** _(recorded at P19-B6.7 close)_
+
+---
+
 ## 2026-06-13 — Legacy live-trading STUB cluster (P19-B2)
 
 **Removed:** the pre-cleave `LiveTradingService` stub and its orphaned surface.

@@ -6,7 +6,6 @@
  * - Screener filters
  * - Guardrails
  * - Strategy prechecks
- * - MarketDataCoordinator
  *
  * ─── ALSO HOSTS: KNOWN_NONEXISTENT_NAMES registry (Kyle directive 2026-04-30) ───
  *
