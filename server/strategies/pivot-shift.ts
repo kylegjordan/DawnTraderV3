@@ -182,7 +182,7 @@ export function detectPivotShift(
   const targetPrice = entryPrice + PS_TARGET_ATR_MULT * effectiveATR;
 
   // ── Global guards (ATR, stop distance, R:R) ──────────────────────────────
-  const gate = getPerClassTargetGate(assetClass);
+  const gate = getPerClassTargetGate(assetClass, 'pivot_shift');
   const _gr = applyGlobalGuards(entryPrice, stopPrice, targetPrice, effectiveATR, gate);
   recordGuardEval('pivot_shift', _gr.rr, _gr.pass, _gr.dropReason, assetClass);
   if (guardForcesDrop(_gr, gateDisposition)) {

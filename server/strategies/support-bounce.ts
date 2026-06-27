@@ -264,7 +264,7 @@ export function detectSupportBounce(
   const targetPrice = entryPrice + SB_TARGET_ATR_MULT * effectiveATR;
 
   // ── Global guards (ATR, stop distance, R:R) ──────────────────────────────
-  const gate = getPerClassTargetGate(assetClass);
+  const gate = getPerClassTargetGate(assetClass, 'support_bounce');
   const _gr = applyGlobalGuards(entryPrice, stopPrice, targetPrice, effectiveATR, gate);
   recordGuardEval('support_bounce', _gr.rr, _gr.pass, _gr.dropReason, assetClass);
   if (guardForcesDrop(_gr, gateDisposition)) {

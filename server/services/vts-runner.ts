@@ -1462,7 +1462,7 @@ async function generatePhase10Signal(
   // reorg-B2 (Piece A): central target-floor lift + universal RR gate (per-class) — the VTS
   // convergence point. VTS calls strategyEngine.detect* DIRECTLY (not via the orchestrator),
   // so the SAME normalizer must run here too, or sim-to-live target parity breaks.
-  const _b2Gate = getPerClassTargetGate(_assetClass);
+  const _b2Gate = getPerClassTargetGate(_assetClass, strategy);
   const _b2 = normalizeAndGateTarget({
     entryPrice, stopPrice: stopLoss, targetPrice: strategySignal.targetPrice,
     floorPct: _b2Gate.floorPct, minRR: _b2Gate.minRR,

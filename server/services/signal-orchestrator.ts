@@ -1221,7 +1221,7 @@ export class SignalOrchestrator {
     // that goes through sizing). The VTS path applies the SAME normalizer in vts-runner. DROP (never
     // co-move the structural stop) when RR < minRR (Langston Step-2). Also replaces the old
     // `?? entry×1.015` V4 fallback literal — a target-less signal is now DROPPED, not fabricated.
-    const _b2Gate = getPerClassTargetGate(sizingContext.assetClass);
+    const _b2Gate = getPerClassTargetGate(sizingContext.assetClass, strategyId);
     // reorg-B2 (Piece C): ATR from the universal carrier (set once per pipe), marketContext as override.
     const _b2Atr = marketContext?.atr ?? sizingContext.atr;
     const _b2 = normalizeAndGateTarget({

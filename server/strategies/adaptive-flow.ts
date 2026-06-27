@@ -177,7 +177,7 @@ export function detectAdaptiveFlow(
   const targetPrice = entryPrice + AF_TARGET_ATR_MULT * effectiveATR;
 
   // ── Global guards ──────────────────────────────────────────
-  const gate = getPerClassTargetGate(assetClass);
+  const gate = getPerClassTargetGate(assetClass, 'adaptive_flow');
   const _gr = applyGlobalGuards(entryPrice, stopPrice, targetPrice, effectiveATR, gate);
   recordGuardEval('adaptive_flow', _gr.rr, _gr.pass, _gr.dropReason, assetClass);
   if (guardForcesDrop(_gr, gateDisposition)) {

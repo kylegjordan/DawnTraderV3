@@ -176,7 +176,7 @@ export function detectReverseImpulse(
   const targetPrice = entryPrice + RI_TARGET_ATR_MULT * effectiveATR;
 
   // ── Global guards ──────────────────────────────────────────
-  const gate = getPerClassTargetGate(assetClass);
+  const gate = getPerClassTargetGate(assetClass, 'reverse_impulse');
   const _gr = applyGlobalGuards(entryPrice, stopPrice, targetPrice, effectiveATR, gate);
   recordGuardEval('reverse_impulse', _gr.rr, _gr.pass, _gr.dropReason, assetClass);
   if (guardForcesDrop(_gr, gateDisposition)) {

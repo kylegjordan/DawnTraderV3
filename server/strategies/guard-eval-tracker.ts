@@ -26,6 +26,9 @@ export interface GuardEvalRecord {
   reachDrops: number;   // dropped by reachability > per-class reachAtrMax (reached the RR check first)
   rrEvals: number;      // evals that REACHED the RR check (pass + rr_below_min + unreachable) — meanRR denominator
   rrSum: number;        // Σ rr over rrEvals → mean RR (excludes atr/stop short-circuits so it isn't skewed)
+  rrSumSq: number;      // reorg-B2.3 OBJ-6: Σ rr² over the SAME rrEvals sample → reconstructable σ for Phase-25 25-20
+                        //   (dispersion-aware floors). Evicted with rrSum by the same `_stats.clear()` (parity by
+                        //   construction — there is no per-field eviction) + initialised together in `_blank()`.
   rrMin: number;
   rrMax: number;
 }
@@ -37,7 +40,7 @@ export interface GuardEvalRecord {
 const _stats = new Map<string, GuardEvalRecord>();
 
 function _blank(): GuardEvalRecord {
-  return { evals: 0, passes: 0, atrDrops: 0, stopDrops: 0, rrDrops: 0, reachDrops: 0, rrEvals: 0, rrSum: 0, rrMin: Infinity, rrMax: -Infinity };
+  return { evals: 0, passes: 0, atrDrops: 0, stopDrops: 0, rrDrops: 0, reachDrops: 0, rrEvals: 0, rrSum: 0, rrSumSq: 0, rrMin: Infinity, rrMax: -Infinity };
 }
 
 // Composite-key helpers. `::` separates strategy from assetClass; strategy keys are simple snake_case and
@@ -64,7 +67,7 @@ function _derive(r: GuardEvalRecord): DerivedRecord {
 function _accumulate(into: GuardEvalRecord, from: GuardEvalRecord): void {
   into.evals += from.evals; into.passes += from.passes; into.atrDrops += from.atrDrops;
   into.stopDrops += from.stopDrops; into.rrDrops += from.rrDrops; into.reachDrops += from.reachDrops;
-  into.rrEvals += from.rrEvals; into.rrSum += from.rrSum;
+  into.rrEvals += from.rrEvals; into.rrSum += from.rrSum; into.rrSumSq += from.rrSumSq;
   into.rrMin = Math.min(into.rrMin, from.rrMin); into.rrMax = Math.max(into.rrMax, from.rrMax);
 }
 
@@ -153,6 +156,7 @@ export function recordGuardEval(strategy: string, rr: number, pass: boolean, dro
   if (reachedRR && Number.isFinite(rr)) {
     r.rrEvals++;
     r.rrSum += rr;
+    r.rrSumSq += rr * rr; // reorg-B2.3 OBJ-6: same rrEvals sample as rrSum (consumed together at 25-20 for σ)
     if (rr < r.rrMin) r.rrMin = rr;
     if (rr > r.rrMax) r.rrMax = rr;
   }

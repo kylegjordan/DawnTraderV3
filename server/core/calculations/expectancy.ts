@@ -51,7 +51,8 @@ import { covarianceEngine } from '../../utils/covariance-engine.js';
 import {
   DEFAULT_SLIPPAGE,
 } from '../../config/adaptive-thresholds';
-import { REGIMES } from '../../config/canonical-regime-strategy-map';
+import { REGIMES, resolveCanonicalStrategy } from '../../config/canonical-regime-strategy-map';
+import { recordUnknownStrategyAtGate } from '../observability/unknown-strategy-counter.js';
 // B72 (2026-05-05): per-regime ROI thresholds + winrate boost floors moved to
 // module_constants. Modules 'roi_gating' (per-regime min_roi) +
 // 'expectancy_tuning' (winrate floors) prefetched in b72-warmup.ts.
@@ -191,14 +192,43 @@ export function getExpectancyBreakdown(params: ExpectancyParams): {
  * Reads `module_constants` `expectancy_gates` per class — fail-closed (throws on a missing
  * per-class row; the b72-warmup boot assertion guarantees the active classes are seeded).
  */
-export function getPerClassTargetGate(assetClass: string): { floorPct: number; minRR: number; reachAtrMax: number } {
-  const _k = { exchange: '*', assetClass, strategy: '*', regime: '*' };
+export function getPerClassTargetGate(assetClass: string, strategy?: string): { floorPct: number; minRR: number; reachAtrMax: number } {
+  // reorg-B2.3: floorPct + reachAtrMax stay PER-CLASS (strategy:'*'); only min_rr goes per-(strategy×class).
+  const _classKey = { exchange: '*', assetClass, strategy: '*', regime: '*' };
   return {
-    floorPct:    getCachedNumberRequired('expectancy_gates', 'target_floor_pct', _k),
-    minRR:       getCachedNumberRequired('expectancy_gates', 'min_rr',           _k),
+    floorPct:    getCachedNumberRequired('expectancy_gates', 'target_floor_pct', _classKey),
+    minRR:       _resolvePerStrategyMinRR(assetClass, strategy),
     // reorg-B2 (Piece C): path-INVARIANT reachability bound (c·√H), per class only (not per-filterPath).
-    reachAtrMax: getCachedNumberRequired('expectancy_gates', 'reach_atr_max',    _k),
+    reachAtrMax: getCachedNumberRequired('expectancy_gates', 'reach_atr_max',    _classKey),
   };
+}
+
+/**
+ * reorg-B2.3 — resolve the per-(strategy×class) minRR floor at the SINGLE CHOKEPOINT.
+ *
+ * The strategy token is canonicalized HERE (one normalization, not threaded to all ~22 gate callers),
+ * so every caller may pass its raw token (literal / constant / variable) and they cannot disagree by
+ * construction. Most-specific-wins: a seeded (assetClass, canonicalStrategy) row is used when present,
+ * else the per-class '*' default.
+ *
+ * UNKNOWN token (canonicalizer returns null) → fail CLOSED: substitute the conservative
+ * `min_rr_unknown_floor` (the max-per-class RR — a seeded DB constant, NOT a TS literal) so a drifted
+ * token gets the STRICTEST gate in its class, never the permissive '*' default. The substitution is the
+ * safety guarantee; the tripwire counter is observability only (a missed count can't open the gate).
+ * `getCachedNumberRequired` resolves the asset-class row, or falls back to the global '*' row when the
+ * asset_class itself is unresolved (the global-max fail-closed).
+ */
+function _resolvePerStrategyMinRR(assetClass: string, strategy?: string): number {
+  if (strategy === undefined || strategy === null || strategy === '') {
+    // No strategy supplied — the per-class '*' default (back-compat for any non-strategy caller).
+    return getCachedNumberRequired('expectancy_gates', 'min_rr', { exchange: '*', assetClass, strategy: '*', regime: '*' });
+  }
+  const canonical = resolveCanonicalStrategy(strategy);
+  if (canonical === null) {
+    recordUnknownStrategyAtGate(assetClass, strategy);
+    return getCachedNumberRequired('expectancy_gates', 'min_rr_unknown_floor', { exchange: '*', assetClass, strategy: '*', regime: '*' });
+  }
+  return getCachedNumberRequired('expectancy_gates', 'min_rr', { exchange: '*', assetClass, strategy: canonical, regime: '*' });
 }
 
 export function getMinROIForRegime(regime: string, assetClass: string): number {

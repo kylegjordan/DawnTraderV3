@@ -173,7 +173,7 @@ export function detectStrongBullTrend(
   // from the downstream normalizer; record the suppression instrumentation (#372/#371). effectiveATR =
   // the guard's clamp on this strategy's own ATR. Dominates the single signal return below.
   {
-    const _gate = getPerClassTargetGate(assetClass);
+    const _gate = getPerClassTargetGate(assetClass, STRATEGY_KEY);
     const _effATR = clampEffectiveATR(atr, entryPrice);
     const _gr = applyGlobalGuards(entryPrice, stopPrice, targetPrice, _effATR, _gate);
     recordGuardEval(STRATEGY_KEY, _gr.rr, _gr.pass, _gr.dropReason, assetClass);

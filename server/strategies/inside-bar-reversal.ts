@@ -190,7 +190,7 @@ export function detectInsideBarReversal(
   targetPrice = entryPrice + IB_TARGET_ATR_MULT * effectiveATR;
 
   // ── Global guards (ATR, stop distance, R:R) ──────────────────────────────
-  const gate = getPerClassTargetGate(assetClass);
+  const gate = getPerClassTargetGate(assetClass, 'inside_bar_reversal');
   const _gr = applyGlobalGuards(entryPrice, stopPrice, targetPrice, effectiveATR, gate);
   recordGuardEval('inside_bar_reversal', _gr.rr, _gr.pass, _gr.dropReason, assetClass);
   if (guardForcesDrop(_gr, gateDisposition)) {

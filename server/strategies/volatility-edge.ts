@@ -189,7 +189,7 @@ export function detectVolatilityEdge(
   const targetPrice = Math.min(measuredMoveTarget, atrTarget);
 
   // ── Global guards ──────────────────────────────────────────
-  const gate = getPerClassTargetGate(assetClass);
+  const gate = getPerClassTargetGate(assetClass, 'volatility_edge');
   const _gr = applyGlobalGuards(entryPrice, stopPrice, targetPrice, effectiveATR, gate);
   recordGuardEval('volatility_edge', _gr.rr, _gr.pass, _gr.dropReason, assetClass);
   if (guardForcesDrop(_gr, gateDisposition)) {

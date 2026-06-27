@@ -150,3 +150,4 @@
 2026-06-26-p19-reorg-b4-1-shadow-pool-members.sql
 2026-06-26-p19-b6-6-price-liveness-seed.sql
 2026-06-26-p19-b6-7-feed-health-seed.sql
+2026-06-27-p19-reorg-b2-3-per-strategy-minrr.sql

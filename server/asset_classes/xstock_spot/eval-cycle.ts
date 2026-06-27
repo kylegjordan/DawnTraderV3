@@ -648,7 +648,7 @@ export async function evaluateXstockPairForVTS(
         // exactly as today. On the VTS learning path the QUALITY gates (`rr_below_min`, `unreachable`) TAG
         // (`vtsGateVerdict`) + simulate with the NATIVE target; DATA-VALIDITY (`invalid_atr`, `invalid_geometry`)
         // DROP. The strategy-level un-strangle itself is the `'tag'` arg on `callStrategyDetect` above.
-        const _b3xGate = getPerClassTargetGate(ASSET_CLASS);
+        const _b3xGate = getPerClassTargetGate(ASSET_CLASS, strategyKey);
         const _b3x = normalizeAndGateTarget({
           entryPrice, stopPrice: stopLoss, targetPrice: takeProfit,
           floorPct: _b3xGate.floorPct, minRR: _b3xGate.minRR,

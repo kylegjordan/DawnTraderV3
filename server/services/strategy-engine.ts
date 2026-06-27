@@ -296,7 +296,7 @@ export class StrategyEngine {
       // from the downstream normalizer; record the suppression instrumentation (#372/#371). effectiveATR =
       // the guard's clamp on this strategy's own ATR. Dominates the single signal return below.
       {
-        const _gate = getPerClassTargetGate(assetClass);
+        const _gate = getPerClassTargetGate(assetClass, 'vwap_pullback');
         const _effATR = clampEffectiveATR(atr, entryPrice);
         const _gr = applyGlobalGuards(entryPrice, stopPrice, finalTarget, _effATR, _gate);
         recordGuardEval('vwap_pullback', _gr.rr, _gr.pass, _gr.dropReason, assetClass);
@@ -431,7 +431,7 @@ export class StrategyEngine {
       // from the downstream normalizer; record the suppression instrumentation (#372/#371). effectiveATR =
       // the guard's clamp on this strategy's own ATR. Dominates the single signal return below.
       {
-        const _gate = getPerClassTargetGate(assetClass);
+        const _gate = getPerClassTargetGate(assetClass, 'abcd_long');
         const _effATR = clampEffectiveATR(abcdAtr, entryPrice);
         const _gr = applyGlobalGuards(entryPrice, stopPrice, targetPrice, _effATR, _gate);
         recordGuardEval('abcd_long', _gr.rr, _gr.pass, _gr.dropReason, assetClass);
@@ -565,7 +565,7 @@ export class StrategyEngine {
       // (reachability is a property of the PAIR, not the strategy). #371 covers the computeATR-vs-
       // mceContext.atr divergence for ALL guard-wired in-class incl. these 3 non-ATR-geometry strategies.
       {
-        const _gate = getPerClassTargetGate(assetClass);
+        const _gate = getPerClassTargetGate(assetClass, 'sma_trend_ride');
         const _effATR = clampEffectiveATR(computeATR(priceHistory), entryPrice);
         const _gr = applyGlobalGuards(entryPrice, stopPrice, targetPrice, _effATR, _gate);
         recordGuardEval('sma_trend_ride', _gr.rr, _gr.pass, _gr.dropReason, assetClass);
@@ -677,7 +677,7 @@ export class StrategyEngine {
       // from the downstream normalizer; record the suppression instrumentation (#372/#371). effectiveATR =
       // the guard's clamp on this strategy's own ATR. Dominates the single signal return below.
       {
-        const _gate = getPerClassTargetGate(assetClass);
+        const _gate = getPerClassTargetGate(assetClass, 'breakout');
         const _effATR = clampEffectiveATR(atr, entryPrice);
         const _gr = applyGlobalGuards(entryPrice, stopPrice, targetPrice, _effATR, _gate);
         recordGuardEval('breakout', _gr.rr, _gr.pass, _gr.dropReason, assetClass);
@@ -778,7 +778,7 @@ export class StrategyEngine {
       // from the downstream normalizer; record the suppression instrumentation (#372/#371). effectiveATR =
       // the guard's clamp on this strategy's own ATR. Dominates the single signal return below.
       {
-        const _gate = getPerClassTargetGate(assetClass);
+        const _gate = getPerClassTargetGate(assetClass, 'mean_reversion');
         const _effATR = clampEffectiveATR(atr, entryPrice);
         const _gr = applyGlobalGuards(entryPrice, stopPrice, targetPrice, _effATR, _gate);
         recordGuardEval('mean_reversion', _gr.rr, _gr.pass, _gr.dropReason, assetClass);
@@ -887,7 +887,7 @@ export class StrategyEngine {
       // the guard's clamp on this strategy's own ATR. Dominates the single signal return below.
       // recordGuardEval name = 'range_trade' per canonical SSOT (method is detectRangeTrading).
       {
-        const _gate = getPerClassTargetGate(assetClass);
+        const _gate = getPerClassTargetGate(assetClass, 'range_trade');
         const _effATR = clampEffectiveATR(atr, entryPrice);
         const _gr = applyGlobalGuards(entryPrice, stopPrice, targetPrice, _effATR, _gate);
         recordGuardEval('range_trade', _gr.rr, _gr.pass, _gr.dropReason, assetClass);
@@ -990,7 +990,7 @@ export class StrategyEngine {
       // (reachability is a property of the PAIR, not the strategy). #371 covers the computeATR-vs-
       // mceContext.atr divergence for ALL guard-wired in-class incl. these 3 non-ATR-geometry strategies.
       {
-        const _gate = getPerClassTargetGate(assetClass);
+        const _gate = getPerClassTargetGate(assetClass, 'vwap_bounce');
         const _effATR = clampEffectiveATR(computeATR(priceHistory), entryPrice);
         const _gr = applyGlobalGuards(entryPrice, stopPrice, targetPrice, _effATR, _gate);
         recordGuardEval('vwap_bounce', _gr.rr, _gr.pass, _gr.dropReason, assetClass);
@@ -1612,7 +1612,7 @@ export class StrategyEngine {
     // (reachability is a property of the PAIR, not the strategy). #371 covers the computeATR-vs-
     // mceContext.atr divergence for ALL guard-wired in-class incl. these 3 non-ATR-geometry strategies.
     {
-      const _gate = getPerClassTargetGate(assetClass);
+      const _gate = getPerClassTargetGate(assetClass, 'dhma');
       const _effATR = clampEffectiveATR(computeATR(priceHistory), entryPrice);
       const _gr = applyGlobalGuards(entryPrice, stopPrice, targetPrice, _effATR, _gate);
       recordGuardEval('dhma', _gr.rr, _gr.pass, _gr.dropReason, assetClass);

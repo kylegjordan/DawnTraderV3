@@ -238,7 +238,7 @@ export function detectDefensiveHedge(
   const targetPrice = entryPrice + DH_TARGET_ATR_MULT * effectiveATR;
 
   // ── Global guards ──────────────────────────────────────────
-  const gate = getPerClassTargetGate(assetClass);
+  const gate = getPerClassTargetGate(assetClass, 'defensive_hedge');
   const _gr = applyGlobalGuards(entryPrice, stopPrice, targetPrice, effectiveATR, gate);
   recordGuardEval('defensive_hedge', _gr.rr, _gr.pass, _gr.dropReason, assetClass);
   if (guardForcesDrop(_gr, gateDisposition)) {
