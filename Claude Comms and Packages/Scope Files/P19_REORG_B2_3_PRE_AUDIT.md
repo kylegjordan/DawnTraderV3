@@ -92,6 +92,8 @@ Three strategies have a **sub-1.0 mean RR**, and all three clamp to the 1.0 floo
 
 **Recommendation to Kyle:** the floors are set by the data-derived formula and the batch unsuppresses nothing (§4-D satisfied). (D) — whether to push the structurally-low-mean strategies higher (suppress) or invest in making them tradeable — is a **net-expectancy/throughput question for 25-20**, NOT decidable from RR here. One real (D) cell (crypto morning_star), held at its formula 1.39 pending that decision.
 
+> **★ KYLE DECISION (D) — 2026-06-27: KEEP ACTIVE, judge later on results.** The three structurally-low-mean strategies (xStock morning_star, crypto volatility_edge, crypto support_bounce) stay active at their data-derived floors; the trade-vs-shelve call is **deferred to Phase-25 25-20**, decided on realized win-rate × RR − friction (NOT reward-size). This batch ships the formula floors unchanged (already its default — (D) changed zero floors). **Home: Phase-25 25-20** must evaluate these three (+ crypto morning_star at 1.39) on net-expectancy and decide trade-vs-suppress then.
+
 ---
 
 ## §3 — DOUBLE-GATE TOPOLOGY (deliverable 1)
