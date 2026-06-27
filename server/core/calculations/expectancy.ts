@@ -192,7 +192,7 @@ export function getExpectancyBreakdown(params: ExpectancyParams): {
  * Reads `module_constants` `expectancy_gates` per class — fail-closed (throws on a missing
  * per-class row; the b72-warmup boot assertion guarantees the active classes are seeded).
  */
-export function getPerClassTargetGate(assetClass: string, strategy?: string): { floorPct: number; minRR: number; reachAtrMax: number } {
+export function getPerClassTargetGate(assetClass: string, strategy: string): { floorPct: number; minRR: number; reachAtrMax: number } {
   // reorg-B2.3: floorPct + reachAtrMax stay PER-CLASS (strategy:'*'); only min_rr goes per-(strategy×class).
   const _classKey = { exchange: '*', assetClass, strategy: '*', regime: '*' };
   return {
@@ -218,11 +218,13 @@ export function getPerClassTargetGate(assetClass: string, strategy?: string): { 
  * `getCachedNumberRequired` resolves the asset-class row, or falls back to the global '*' row when the
  * asset_class itself is unresolved (the global-max fail-closed).
  */
-function _resolvePerStrategyMinRR(assetClass: string, strategy?: string): number {
-  if (strategy === undefined || strategy === null || strategy === '') {
-    // No strategy supplied — the per-class '*' default (back-compat for any non-strategy caller).
-    return getCachedNumberRequired('expectancy_gates', 'min_rr', { exchange: '*', assetClass, strategy: '*', regime: '*' });
-  }
+function _resolvePerStrategyMinRR(assetClass: string, strategy: string): number {
+  // `strategy` is REQUIRED (Langston Step-4): every gate caller passes a strategy token, tsc-enforced — a
+  // future/unedited caller that omits it fails the COMPILE, not silently drops to the permissive '*' default
+  // (the §8#10 silent-fallback-for-a-DB-governed-setting trap). There is NO silent permissive branch: an
+  // empty / unknown / drifted token canonicalizes to null below and fails CLOSED (strict floor + tripwire),
+  // never the lenient default — an empty strategy is at least as suspect as a typo, so it gets the same
+  // strict treatment, not a looser one.
   const canonical = resolveCanonicalStrategy(strategy);
   if (canonical === null) {
     recordUnknownStrategyAtGate(assetClass, strategy);

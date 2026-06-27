@@ -665,6 +665,10 @@ export function normalizeStrategy(strategy: string): string {
  * `null` if the token is not a known canonical strategy (→ the gate logs loud + fails closed).
  */
 export function resolveCanonicalStrategy(strategy: string): string | null {
+  // Falsy (empty / and defensively undefined-null from an `any`/JS caller) → null = the fail-closed signal.
+  // NEVER crash on the gate hot path (a raw normalizeStrategy(undefined) would throw on .toLowerCase()), and
+  // NEVER treat empty as the permissive default — an empty strategy is at least as suspect as a typo.
+  if (!strategy) return null;
   const normalized = normalizeStrategy(strategy);
   return Object.prototype.hasOwnProperty.call(STRATEGY_DISPLAY_NAMES, normalized) ? normalized : null;
 }

@@ -78,7 +78,10 @@ async function _raiseUnknownStrategyAlert(assetClass: string, rawToken: string):
         `Unrecognized strategy token "${rawToken}" reached the per-class minRR gate ` +
         `(assetClass=${assetClass}) and was failed CLOSED to the conservative floor. A strategy-name ` +
         `drift slipped past the canonicalization SSOT — investigate the emitting site. (reorg-B2.3 tripwire)`,
-      metadata: { assetClass, rawToken, source: 'getPerClassTargetGate', counts: getUnknownStrategyCounts() },
+      // NOTE (Langston Step-4): mode is hardcoded 'paper' for the alert envelope, but this is a CODE-DRIFT
+      // observability alert that fires on BOTH the paper AND live gate paths — it is NOT a paper-only event.
+      // `firesOnAllModes: true` records that so a future reader doesn't mistake it for paper-path-scoped.
+      metadata: { assetClass, rawToken, source: 'getPerClassTargetGate', firesOnAllModes: true, counts: getUnknownStrategyCounts() },
     });
   }
 }

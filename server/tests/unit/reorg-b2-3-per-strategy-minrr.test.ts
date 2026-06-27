@@ -65,8 +65,12 @@ describe('reorg-B2.3 per-strategy minRR — live path', () => {
     expect(getPerClassTargetGate('crypto_spot', 'mean_reversion').minRR).toBe(2.0);
   });
 
-  it('back-compat: no strategy arg → per-class * default', () => {
-    expect(getPerClassTargetGate('crypto_spot').minRR).toBe(2.0);
+  it('empty-string strategy fails CLOSED — no silent permissive path (Langston Step-4 CF-1)', () => {
+    // `strategy` is required; an empty token canonicalizes to null → strict min_rr_unknown_floor + tripwire,
+    // NOT the permissive * 2.0. An empty strategy is at least as suspect as a typo → same strict treatment.
+    const gate = getPerClassTargetGate('crypto_spot', '');
+    expect(gate.minRR).toBe(2.88);
+    expect(getUnknownStrategyCounts()).toEqual({ crypto_spot: 1 });
   });
 });
 
@@ -80,7 +84,9 @@ describe('reorg-B2.3 fail-closed unknown-token path', () => {
 
   it('the unknown floor (2.88) is STRICTER than the * default (2.0) — genuinely fail-closed', () => {
     const unknown = getPerClassTargetGate('crypto_spot', 'nope').minRR;
-    const defaultFloor = getPerClassTargetGate('crypto_spot').minRR;
+    // a canonical-but-unseeded strategy resolves the permissive per-class * default (2.0)
+    const defaultFloor = getPerClassTargetGate('crypto_spot', 'mean_reversion').minRR;
+    expect(defaultFloor).toBe(2.0);
     expect(unknown).toBeGreaterThan(defaultFloor);
   });
 });
