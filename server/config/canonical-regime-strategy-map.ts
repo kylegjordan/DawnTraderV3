@@ -588,7 +588,12 @@ export const LEGACY_TO_CANONICAL: Record<string, string> = {
   SupportBounce: 'support_bounce',
   InsideBarReversal: 'inside_bar_reversal',
   MorningStar: 'morning_star',
-  DHMA: 'dhma'
+  DHMA: 'dhma',
+  // reorg-B2.3: snake_case StrategyType drift — the orchestrator/paper-position-sizing `StrategyType`
+  // union emits `range_trading`, but the canonical key is `range_trade`. Cure it HERE at the SSOT
+  // (benefits every `normalizeStrategy` caller, not just the per-class minRR gate). Checked before the
+  // lowercase pass, so the exact `range_trading` token maps deterministically.
+  range_trading: 'range_trade',
 };
 
 /**
@@ -646,6 +651,22 @@ export function normalizeStrategy(strategy: string): string {
     return lowerKey;
   }
   return strategy;
+}
+
+/**
+ * reorg-B2.3: fail-CLOSED canonical resolver for the per-class minRR gate.
+ *
+ * `normalizeStrategy` IDENTITY-RETURNS on an unknown token (its contract — `getTypeForStrategy`
+ * and others depend on that fall-through). That is exactly why it can't be called bare in a
+ * fail-closed gate: an unknown/drifted string would pass through as if canonical and silently
+ * resolve to the permissive `*` default. This wrapper adds null-on-miss semantics WITHOUT
+ * touching the existing contract: it normalizes (so aliases + the `range_trading` drift are cured)
+ * then confirms membership in the `STRATEGY_DISPLAY_NAMES` SSOT. Returns the canonical name, or
+ * `null` if the token is not a known canonical strategy (→ the gate logs loud + fails closed).
+ */
+export function resolveCanonicalStrategy(strategy: string): string | null {
+  const normalized = normalizeStrategy(strategy);
+  return Object.prototype.hasOwnProperty.call(STRATEGY_DISPLAY_NAMES, normalized) ? normalized : null;
 }
 
 export function getTypeForStrategy(strategy: string, throwOnUnknown: boolean = false): CanonicalSignalType {
