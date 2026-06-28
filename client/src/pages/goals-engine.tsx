@@ -1,5 +1,4 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import GuardrailsTab from "@/components/goals/guardrails-tab";
 import StrategiesTab from "@/components/goals/strategies-tab";
 import CoherencyRulesTab from "@/components/goals/coherency-rules-tab";
 import DiagnosticsTab from "@/components/goals/diagnostics-tab";

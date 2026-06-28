@@ -6,6 +6,22 @@
 
 ---
 
+## 2026-06-29 — Stranded legacy guardrails-tab UI (P19-B6.8 / #302)
+
+**Removed:** the old pre-v2 guardrails tab component and its orphaned copy-to-live modal.
+
+| Item | Location (pre-removal) | What it was |
+|---|---|---|
+| `guardrails-tab.tsx` (`GuardrailsTab`) | `client/src/components/goals/guardrails-tab.tsx` | The OLD guardrails UI (pre-`guardrails_v2` era). Read/wrote the DEPRECATED `/api/guardrails` (GET→v2 but **PUT→`upsertGuardrails` which THROWS** `[9.7] deprecated`) + the GLOBAL `/api/settings` (which now allow-lists ONLY `timezone`, rejecting risk fields). **Imported in `goals-engine.tsx` but NEVER RENDERED** — the live guardrails tab mounts only `<CoreFourGuardrails/>` (the v2 component). So every guardrail save it offered was a dead/throwing path with zero user impact. Stranded-dead, superseded by the landed v2 migration. |
+| `copy-to-live-modal.tsx` (`CopyToLiveModal`) | `client/src/components/goals/copy-to-live-modal.tsx` | The paper→live guardrail-copy modal, imported ONLY by `guardrails-tab.tsx` (grep-confirmed sole importer) — orphaned the moment GuardrailsTab is removed. |
+
+**Why removed:** CLAUDE.md §5 rule 18 (never leave lingering legacy). Surfaced during the P19-B6.8 verification that the live guardrails tab (`CoreFourGuardrails` → `/api/guardrails-v2`, per-mode) already works, making GuardrailsTab a confusing dead duplicate. **Blast-radius (certainty-before-cutting, Langston Step-1):** GuardrailsTab's only reference was the one `goals-engine.tsx:2` import (no conditional/feature-flag render swap); copy-to-live-modal's only importer was GuardrailsTab; tsc-trace after removal = zero dangling references (grep-confirmed across client/ + server/). Stranded-dead, NOT an unfinished intended-replacement (CoreFourGuardrails uses the newest [9.7] `/api/guardrails-v2` and IS the rendered forward UI).
+
+**Archive copy:** `1-system-manual/_archive/deleted-code/guardrails-tab.tsx.removed` + `copy-to-live-modal.tsx.removed` (git history authoritative).
+**Removal commit:** (this batch P19-B6.8).
+**Reviewed by:** Langston Step-1 consensus (stranded-dead accepted) + Step-4 diff review (pending).
+**NOTE — NOT removed here (separate dated home P19-B6.10):** the old `guardrails` TABLE + `PUT /api/guardrails` + `upsertGuardrails` throw-stub stay until their live server callers migrate to v2 (`reasoning-orchestrator.ts:500` reads the old table directly; `intent-executor.ts:418` calls the throwing upsert) — cross-blast-radius (§15(b)), scheduled P19-B6.10.
+
 ## 2026-06-26 — Vestigial secondary market-data WebSocket subsystem (P19-B6.7 / #301)
 
 **Removed:** the "Directive 8.9.0-B Secondary WebSocket Adapter" and its coordinator wrapper.

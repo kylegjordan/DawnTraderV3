@@ -41,7 +41,7 @@ interface GuardrailsV2 {
 }
 
 interface GuardrailParam {
-  key: keyof Pick<GuardrailsV2, 'portfolioRiskPerTradePct' | 'symbolCooldownMinutes' | 'maxOpenPositions' | 'dailyLossKillSwitchPct' | 'maxPositionPercentPct' | 'maxTotalExposurePct'>;
+  key: keyof Pick<GuardrailsV2, 'portfolioRiskPerTradePct' | 'symbolCooldownMinutes' | 'maxOpenPositions' | 'dailyLossKillSwitchPct' | 'dailyLossWarning1Pct' | 'dailyLossWarning2Pct' | 'maxPositionPercentPct' | 'maxTotalExposurePct'>;
   label: string;
   description: string;
   unit: string;
@@ -76,6 +76,20 @@ const CORE_FOUR_PARAMS_BASE: Omit<GuardrailParam, 'description'>[] = [
     label: 'Daily Loss Kill Switch',
     unit: '%'
   },
+  // P19-B6.8: the two daily-loss WARNING tiers — stored as % OF the kill-switch threshold (NOT % of
+  // portfolio). They were DB-backed + firing in daily-loss-budget.ts but never user-settable; surfaced here
+  // so the user controls the failsafe alert levels (Kyle directive — #323 folded into B6.8). Coherency
+  // (RULE_011, enforced per-mode at save + server): 0 < warn1 < warn2 < 100.
+  {
+    key: 'dailyLossWarning1Pct',
+    label: 'Daily Loss Warning 1',
+    unit: '% of kill switch'
+  },
+  {
+    key: 'dailyLossWarning2Pct',
+    label: 'Daily Loss Warning 2',
+    unit: '% of kill switch'
+  },
   {
     key: 'maxPositionPercentPct',
     label: 'Max Position Percent',
@@ -98,6 +112,8 @@ const GUARDRAIL_DESCRIPTIONS: Record<string, string> = {
   symbolCooldownMinutes: 'After a trade closes on a symbol, wait this many minutes before opening another trade on the same symbol.',
   maxOpenPositions: 'The maximum number of simultaneous open positions allowed at once.',
   dailyLossKillSwitchPct: 'If your portfolio loses this percent or more in a single day, trading automatically stops until you resume.',
+  dailyLossWarning1Pct: 'First early-warning alert, as a percent of your Daily Loss Kill Switch. e.g. 50 alerts you when the day\'s loss reaches half of your kill-switch limit — well before trading stops. Must be below Warning 2.',
+  dailyLossWarning2Pct: 'Second early-warning alert, as a percent of your Daily Loss Kill Switch. e.g. 75 alerts you at three-quarters of your kill-switch limit — the last warning before trading auto-stops at 100%. Must be above Warning 1 and below 100.',
   maxPositionPercentPct: 'The maximum size of any single position as a percent of your total portfolio value. Larger positions will be blocked.'
 };
 
@@ -223,6 +239,21 @@ export function CoreFourGuardrails() {
   };
 
   const handleSave = () => {
+    // P19-B6.8: per-mode daily-loss warning-tier coherency (RULE_011) — validated against THIS mode's
+    // effective row (edited values merged over the loaded mode row), so paper and live never cross-bleed.
+    // The tiers are % OF the kill-switch threshold, so 0 < warn1 < warn2 < 100 guarantees BOTH warnings
+    // fire strictly before this same mode's hard kill (warn2 < 100% of kill). Server re-validates (defense).
+    const eff = { ...(guardrails?.data ?? {}), ...editedValues } as Partial<GuardrailsV2>;
+    const w1 = Number(eff.dailyLossWarning1Pct);
+    const w2 = Number(eff.dailyLossWarning2Pct);
+    if (!(Number.isFinite(w1) && Number.isFinite(w2) && w1 > 0 && w1 < w2 && w2 < 100)) {
+      toast({
+        title: "Invalid daily-loss warning tiers",
+        description: `Warning levels must satisfy 0 < Warning 1 (${w1}) < Warning 2 (${w2}) < 100 — each is a percent of the kill switch, for ${mode} mode.`,
+        variant: "destructive",
+      });
+      return;
+    }
     updateMutation.mutate(editedValues);
   };
 

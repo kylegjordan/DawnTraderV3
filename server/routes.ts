@@ -1599,7 +1599,16 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const maxTotalExposurePct = rawPayload.maxTotalExposurePct !== undefined
         ? parseFloat(String(rawPayload.maxTotalExposurePct))
         : undefined;
-      
+
+      // P19-B6.8: daily-loss WARNING tiers (% OF the kill threshold) — now user-settable from the guardrails
+      // tab. RULE_011 (guardrailPolicy.validate below) enforces 0 < warn1 < warn2 < 100 PER MODE.
+      const dailyLossWarning1Pct = rawPayload.dailyLossWarning1Pct !== undefined
+        ? parseFloat(String(rawPayload.dailyLossWarning1Pct))
+        : undefined;
+      const dailyLossWarning2Pct = rawPayload.dailyLossWarning2Pct !== undefined
+        ? parseFloat(String(rawPayload.dailyLossWarning2Pct))
+        : undefined;
+
       // REB 8.8.3-H: Low-Priced Coin Protection (LPCP) fields
       const lowPriceThreshold = rawPayload.lowPriceThreshold !== undefined
         ? parseFloat(String(rawPayload.lowPriceThreshold))
@@ -1620,6 +1629,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       if (symbolCooldownMinutes !== undefined) validationPayload.symbolCooldownMinutes = symbolCooldownMinutes;
       if (maxOpenPositions !== undefined) validationPayload.maxOpenPositions = maxOpenPositions;
       if (dailyLossKillSwitchPct !== undefined) validationPayload.dailyLossKillSwitchPct = dailyLossKillSwitchPct;
+      if (dailyLossWarning1Pct !== undefined) validationPayload.dailyLossWarning1Pct = dailyLossWarning1Pct;
+      if (dailyLossWarning2Pct !== undefined) validationPayload.dailyLossWarning2Pct = dailyLossWarning2Pct;
       if (maxPositionPercentPct !== undefined) validationPayload.maxPositionPercentPct = maxPositionPercentPct;
       if (maxTotalExposurePct !== undefined) validationPayload.maxTotalExposurePct = maxTotalExposurePct;
       if (lowPriceThreshold !== undefined) validationPayload.lowPriceThreshold = lowPriceThreshold;
@@ -1667,6 +1678,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       if (symbolCooldownMinutes !== undefined) updatePayload.symbolCooldownMinutes = symbolCooldownMinutes;
       if (maxOpenPositions !== undefined) updatePayload.maxOpenPositions = maxOpenPositions;
       if (dailyLossKillSwitchPct !== undefined) updatePayload.dailyLossKillSwitchPct = String(dailyLossKillSwitchPct);
+      if (dailyLossWarning1Pct !== undefined) updatePayload.dailyLossWarning1Pct = String(dailyLossWarning1Pct);
+      if (dailyLossWarning2Pct !== undefined) updatePayload.dailyLossWarning2Pct = String(dailyLossWarning2Pct);
       if (maxPositionPercentPct !== undefined) updatePayload.maxPositionPercentPct = String(maxPositionPercentPct);
       if (maxTotalExposurePct !== undefined) updatePayload.maxTotalExposurePct = String(maxTotalExposurePct);
       if (lowPriceThreshold !== undefined) updatePayload.lowPriceThreshold = String(lowPriceThreshold);
