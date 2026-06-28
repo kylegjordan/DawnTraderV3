@@ -33,6 +33,8 @@ interface GuardrailsV2 {
   symbolCooldownMinutes: number;
   maxOpenPositions: number;
   dailyLossKillSwitchPct: number;
+  dailyLossWarning1Pct: number; // P19-B6.8: tier-1 daily-loss warning, % OF the kill threshold
+  dailyLossWarning2Pct: number; // P19-B6.8: tier-2 daily-loss warning, % OF the kill threshold
   maxPositionPercentPct: number; // REB 8.8.3-G: Max position size as % of portfolio
   maxTotalExposurePct: number; // Phase 8.8.3-B3: Max total portfolio exposure %
   isManualOverride: boolean;
