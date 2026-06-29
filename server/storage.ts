@@ -782,6 +782,11 @@ export class DatabaseStorage implements IStorage {
         symbolCooldownMinutes: data.symbolCooldownMinutes ?? existing.symbolCooldownMinutes,
         maxOpenPositions: data.maxOpenPositions ?? existing.maxOpenPositions,
         dailyLossKillSwitchPct: data.dailyLossKillSwitchPct ?? existing.dailyLossKillSwitchPct,
+        // P19-B6.8: the daily-loss warning tiers were in the table (B6) + validated (RULE_011) + read by the
+        // failsafe, but the UPDATE merge-map dropped them — so a user save never persisted. Now merged like
+        // every sibling field (?? existing) so the user-set per-mode warning levels actually save.
+        dailyLossWarning1Pct: data.dailyLossWarning1Pct ?? existing.dailyLossWarning1Pct,
+        dailyLossWarning2Pct: data.dailyLossWarning2Pct ?? existing.dailyLossWarning2Pct,
         // Phase 8.8.3-J7.1: Add missing guardrail fields
         maxPositionPercentPct: data.maxPositionPercentPct ?? existing.maxPositionPercentPct,
         // Phase 8.8.3-B3: Max Total Portfolio Exposure
