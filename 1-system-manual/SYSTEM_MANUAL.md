@@ -3229,6 +3229,10 @@ TIER 5 — ADAPTIVE LEARNING (tuning protection parameters)
 | `symbolCooldownMinutes` | >= 0 (warn > 90) | Minutes before re-trading same symbol |
 | `maxOpenPositions` | 1-20 | Maximum concurrent open positions |
 | `dailyLossKillSwitchPct` | 1.00%-25.00% | Portfolio loss % triggering auto-shutdown |
+| `dailyLossWarning1Pct` | 0 < w1 < w2 < 100 | **(P19-B6.8 — now user-visible)** Tier-1 early-warning alert, as % OF the kill-switch threshold |
+| `dailyLossWarning2Pct` | 0 < w1 < w2 < 100 | **(P19-B6.8 — now user-visible)** Tier-2 early-warning alert, as % OF the kill-switch threshold |
+
+> **P19-B6.8 (2026-06-29) — the guardrails tab is the LIVE `CoreFourGuardrails` component (`/api/guardrails-v2` GET+PUT, per current mode); it is the per-mode (paper+live) source of truth.** B6.8 surfaced the two daily-loss WARNING TIERS as user controls (they were DB-backed + RULE_011-validated + read by `daily-loss-budget.ts` since B6, but not user-settable). Wiring spans 4 places — the UI param list + client coherency, the PUT endpoint extraction/validation/update allow-list, RULE_011 server coherency (`guardrail-policy.ts`), AND the `upsertGuardrailsV2` UPDATE merge-map (`storage.ts` — the place a Step-8 DB-cross-check caught was silently dropping them). The OLD pre-v2 guardrails tab (`guardrails-tab.tsx`) was stranded-dead (imported-never-rendered) and §15-removed (see DELETED_COMPONENTS_LOG); its deprecated `/api/guardrails` PUT (`upsertGuardrails` throws) + the old `guardrails` table retire in P19-B6.10.
 
 **Extended Parameters**:
 
