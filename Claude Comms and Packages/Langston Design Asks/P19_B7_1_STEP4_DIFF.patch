@@ -1,0 +1,1048 @@
+diff --git a/drizzle/migrations/2026-06-30-p19-b7-1-ranker-config.sql b/drizzle/migrations/2026-06-30-p19-b7-1-ranker-config.sql
+new file mode 100644
+index 000000000..752e0281f
+--- /dev/null
++++ b/drizzle/migrations/2026-06-30-p19-b7-1-ranker-config.sql
+@@ -0,0 +1,48 @@
++-- P19-B7.1 — pluggable-ranker config + degenerate-geometry microstructure floor.
++--
++-- The live ready-to-buy picker (ready_to_buy_service.getRankedSignals) now ranks the pool
++-- by a SELECTABLE key (OBJ-1), defaulting to the expected R-multiple `R = netEV / risk_price`
++-- (OBJ-2) — risk-normalized, net-of-cost, CROSS-ASSET comparable (the field-standard
++-- Van-Tharp/Kelly objective; replaces the friction-blind, reward:risk-blind finalScore sort).
++-- The friction-blind finalScore ("confidence") + the inert VTS rankingScore remain only as
++-- shadow-A/B CONTROL arms. Selection is DB-governed with NO hidden default (CLAUDE.md §5 r15):
++-- the reader (getCachedStringRequired) THROWS if this row is absent, so the seed is mandatory.
++--
++--   active_ranker            — 'r_multiple' (default) | 'confidence' | 'ranking_score'.
++--   min_atr_fraction_floor   — OBJ-3 PRIMARY floor: a stop tighter than this × ATR is
++--                              un-executable → the candidate is REJECTED from ranking before
++--                              the kernel's :0 R-fallback can become a sort key. Cross-asset-
++--                              clean (ATR scales with each asset's own volatility). Conservative
++--                              degenerate-only default 0.10; Phase-25-tunable.
++--   min_abs_risk_fraction    — the absolute-executability floor as a fraction of entry price
++--                              (the cross-asset-clean fractional stand-in for a min-tick), used
++--                              when ATR is unavailable. 0.0005 = 5 bps; a sub-5bps stop is
++--                              un-executable given spread+fees.
++--
++-- Global config (asset_class/exchange/strategy/regime = wildcard) — the ranker selection is a
++-- system-wide picker setting, not per-class. Read via getCachedStringRequired /
++-- getCachedNumberRequired against the warmed rtb_ranking module cache.
++
++BEGIN;
++
++INSERT INTO module_constants
++  (module_name, constant_name, value, asset_class, exchange, regime, strategy, updated_at, updated_by)
++VALUES
++  ('rtb_ranking', 'active_ranker',          '"r_multiple"'::jsonb, '*', '*', '*', '*', NOW(), 'p19-b7-1'),
++  ('rtb_ranking', 'min_atr_fraction_floor', '0.10'::jsonb,         '*', '*', '*', '*', NOW(), 'p19-b7-1'),
++  ('rtb_ranking', 'min_abs_risk_fraction',  '0.0005'::jsonb,       '*', '*', '*', '*', NOW(), 'p19-b7-1')
++ON CONFLICT (module_name, exchange, asset_class, strategy, regime, constant_name) DO NOTHING;
++
++-- Verify all 3 rows resolve (fail the migration loudly if the seed is incomplete).
++DO $$
++DECLARE n int;
++BEGIN
++  SELECT count(*) INTO n FROM module_constants
++   WHERE module_name = 'rtb_ranking'
++     AND constant_name IN ('active_ranker', 'min_atr_fraction_floor', 'min_abs_risk_fraction');
++  IF n < 3 THEN
++    RAISE EXCEPTION 'P19-B7.1 seed incomplete: expected 3 rtb_ranking ranker rows, found %', n;
++  END IF;
++END $$;
++
++COMMIT;
+diff --git a/drizzle/migrations/2026-06-30-p19-b7-1-shadow-r-multiple.sql b/drizzle/migrations/2026-06-30-p19-b7-1-shadow-r-multiple.sql
+new file mode 100644
+index 000000000..4af9f18c1
+--- /dev/null
++++ b/drizzle/migrations/2026-06-30-p19-b7-1-shadow-r-multiple.sql
+@@ -0,0 +1,44 @@
++-- P19-B7.1 (OBJ-4) — shadow-layer decision-time ranker outputs for the Phase-25 selection-IC.
++--
++-- The reorg-B4 shadow layer already captures the decision-time score inputs + the realized
++-- r_multiple at close. B7.1 adds the NEW ranker's decision-time outputs so Phase-25 can measure
++-- whether the predicted R-multiple actually orders the realized R-multiple (the selection-IC
++-- GO/NO-GO that proves the ranker beats friction), and segment that measurement honestly:
++--
++--   predicted_r_multiple   — the rank-time R = netEV ÷ risk_price the ranker assigned at decision
++--                            (the predicted quality; realized r_multiple is the existing outcome col).
++--   pwin_floored           — pWin was floor-defaulted (NULL dbsScore on a strong-trend path), NOT
++--                            real-DI-derived → a floored-pWin candidate is NOT cross-class comparable
++--                            to a real-DI crypto candidate until Phase-25 calibration (segments the IC).
++--   cross_class_promotion  — this cycle's rank-0 winner is a different asset class than the rank-1
++--                            runner-up → the cross-class selection the floored-pWin limitation bears
++--                            on; tagged so the limitation is auditable, not just stated (Langston Q2).
++--
++-- Added to BOTH grains: rtb_shadow_pairings (trade-entity) + rtb_shadow_pool_members (per-cycle event).
++-- All telemetry-only (no learning consumer reads them); DORMANT until paper-active trading is on.
++
++BEGIN;
++
++ALTER TABLE rtb_shadow_pairings
++  ADD COLUMN IF NOT EXISTS predicted_r_multiple   numeric(10,4),
++  ADD COLUMN IF NOT EXISTS pwin_floored           boolean NOT NULL DEFAULT false,
++  ADD COLUMN IF NOT EXISTS cross_class_promotion  boolean NOT NULL DEFAULT false;
++
++ALTER TABLE rtb_shadow_pool_members
++  ADD COLUMN IF NOT EXISTS predicted_r_multiple   numeric(10,4),
++  ADD COLUMN IF NOT EXISTS pwin_floored           boolean NOT NULL DEFAULT false,
++  ADD COLUMN IF NOT EXISTS cross_class_promotion  boolean NOT NULL DEFAULT false;
++
++-- Verify all 6 columns landed (3 per table) — fail loudly if incomplete.
++DO $$
++DECLARE n int;
++BEGIN
++  SELECT count(*) INTO n FROM information_schema.columns
++   WHERE table_name IN ('rtb_shadow_pairings', 'rtb_shadow_pool_members')
++     AND column_name IN ('predicted_r_multiple', 'pwin_floored', 'cross_class_promotion');
++  IF n < 6 THEN
++    RAISE EXCEPTION 'P19-B7.1 shadow-r-multiple incomplete: expected 6 columns, found %', n;
++  END IF;
++END $$;
++
++COMMIT;
+diff --git a/drizzle/migrations/MANIFEST.txt b/drizzle/migrations/MANIFEST.txt
+index d820b4d35..a0809373e 100644
+--- a/drizzle/migrations/MANIFEST.txt
++++ b/drizzle/migrations/MANIFEST.txt
+@@ -151,3 +151,5 @@
+ 2026-06-26-p19-b6-6-price-liveness-seed.sql
+ 2026-06-26-p19-b6-7-feed-health-seed.sql
+ 2026-06-27-p19-reorg-b2-3-per-strategy-minrr.sql
++2026-06-30-p19-b7-1-ranker-config.sql
++2026-06-30-p19-b7-1-shadow-r-multiple.sql
+diff --git a/server/core/calculations/expectancy.ts b/server/core/calculations/expectancy.ts
+index f9ef66503..1213241d4 100644
+--- a/server/core/calculations/expectancy.ts
++++ b/server/core/calculations/expectancy.ts
+@@ -100,6 +100,11 @@ export interface TradeExpectancyResult {
+   pWin: number;
+   pLoss: number;
+   meanCorrelation: number;
++  // P19-B7.1 (OBJ-2): the expected R-multiple = netEV ÷ risk_price (= the kernel's own
++  // `netRewardToRisk`, net-expectancy-kernel.ts:117, distStop>0 ∞-guarded). Surfaced (not
++  // re-derived) so the live ranker can sort by risk-normalized net-of-cost EV — the
++  // cross-asset-comparable ranking key. PASS-THROUGH of the kernel value; do NOT recompute.
++  netRewardToRisk: number;
+ }
+ 
+ /**
+@@ -590,7 +595,7 @@ function calculateQualityScore(
+  * @param tradeMeta - Trade metadata (entry, target, stop prices + optional DI/VolNoise)
+  * @returns TradeExpectancyResult with isTradeable, netEV, score, and optional rejection reason
+  */
+-export function evaluateTradeExpectancy(symbol: string, tradeMeta: TradeMeta, assetClass?: AssetClass): TradeExpectancyResult {
++export function evaluateTradeExpectancy(symbol: string, tradeMeta: TradeMeta, assetClass?: AssetClass, quiet: boolean = false): TradeExpectancyResult {
+   let DI = tradeMeta.DI;
+   let VolNoise = tradeMeta.VolNoise;
+   
+@@ -618,7 +623,7 @@ export function evaluateTradeExpectancy(symbol: string, tradeMeta: TradeMeta, as
+     console.warn(`[11.8B-A][ExpectancyGate][SKIP] unclassifiable ${symbol} — cannot price friction; returning non-tradeable (skip, not throw)`);
+     return {
+       isTradeable: false, ev: 0, netEV: 0, rawEV: 0, friction: 0,
+-      score: 0, pWin: 0, pLoss: 0, meanCorrelation: 0,
++      score: 0, pWin: 0, pLoss: 0, meanCorrelation: 0, netRewardToRisk: 0,
+       rejectionReason: `unclassifiable symbol ${symbol} — cannot resolve asset class to price friction`,
+     };
+   }
+@@ -645,7 +650,8 @@ export function evaluateTradeExpectancy(symbol: string, tradeMeta: TradeMeta, as
+     diPWinFactor: getCachedNumberRequired('directional_integrity', 'di_pwin_factor', _GLOBAL_KEY),
+   });
+   
+-  const { netEV, rawEV, pWin, pLoss } = kernelResult;
++  // P19-B7.1 (OBJ-2): surface the kernel's own netRewardToRisk (the R-multiple) — pass-through, not re-derived.
++  const { netEV, rawEV, pWin, pLoss, netRewardToRisk } = kernelResult;
+   const enrichedMeta = { ...tradeMeta, DI, VolNoise };
+   const { score, meanCorrelation } = calculateQualityScore(enrichedMeta, symbol, netEV);
+   
+@@ -664,10 +670,15 @@ export function evaluateTradeExpectancy(symbol: string, tradeMeta: TradeMeta, as
+     pWin,
+     pLoss,
+     meanCorrelation,
++    netRewardToRisk, // P19-B7.1 (OBJ-2): R-multiple pass-through from the kernel
+     rejectionReason
+   };
+   
+-  console.log(`[11.8B-A][ExpectancyGate] symbol=${symbol} NetEV=${netEV.toFixed(6)} RawEV=${rawEV.toFixed(6)} Friction=${friction.toFixed(6)} Score=${score.toFixed(1)} pWin=${pWin.toFixed(2)} DI=${DI.toFixed(1)} VolNoise=${VolNoise.toFixed(3)} ρ̄=${meanCorrelation.toFixed(3)} tradeable=${isTradeable}`);
++  // P19-B7.1 (OBJ-2): `quiet` suppresses this per-call log when the function is used pool-wide at
++  // rank-time (the ranker calls it once per candidate; the gate-time call at the open path stays loud).
++  if (!quiet) {
++    console.log(`[11.8B-A][ExpectancyGate] symbol=${symbol} NetEV=${netEV.toFixed(6)} RawEV=${rawEV.toFixed(6)} Friction=${friction.toFixed(6)} Score=${score.toFixed(1)} pWin=${pWin.toFixed(2)} DI=${DI.toFixed(1)} VolNoise=${VolNoise.toFixed(3)} ρ̄=${meanCorrelation.toFixed(3)} tradeable=${isTradeable}`);
++  }
+   
+   return result;
+ }
+diff --git a/server/core/metrics/selection-ic.ts b/server/core/metrics/selection-ic.ts
+new file mode 100644
+index 000000000..b26340cd9
+--- /dev/null
++++ b/server/core/metrics/selection-ic.ts
+@@ -0,0 +1,146 @@
++// ════════════════════════════════════════════════════════════════════════════
++// P19-B7.1 (OBJ-4) — SELECTION-IC: does the ranker's predicted R-multiple actually
++// order the realized R-multiple? This is the Phase-25 GO/NO-GO that proves the new
++// ranker beats friction (picking ONE per cycle is low-breadth — Grinold's Fundamental
++// Law IR ≈ IC·√breadth — so the per-pick selection IC must be genuinely positive or we
++// just pay friction). PURE math, no I/O — the shadow store feeds it the per-cycle
++// (predicted, realized) cross-sections; the GO/NO-GO RUN is Phase-25 (data accrues only
++// once paper-active trading is on). Built now so the harness + its test exist + are stable.
++//
++// Method (the correct Grinold formulation, NOT pooling the whole sample):
++//   1. Per CYCLE, compute the CROSS-SECTIONAL Spearman rank IC over that cycle's full
++//      candidate pool (predicted-R vs realized-R) — "did we order THIS cycle's pool right?".
++//   2. Study the DISTRIBUTION of those per-cycle ICs. The mean IC is the skill estimate.
++//   3. WINDOW-CLUSTER the standard error: serially-adjacent cycles share regime/market
++//      state, so treating each cycle as independent understates the SE. Average ICs within
++//      a time window into one cluster observation, then take the SE across clusters.
++//   4. A min-N gate drops cycles whose pool is too small for a meaningful per-cycle IC.
++//   5. Report PER-REGIME-FAMILY (Simpson's paradox: a positive aggregate can hide a
++//      negative IC in one regime, and the GO/NO-GO rides on the per-regime truth).
++// ════════════════════════════════════════════════════════════════════════════
++
++/** One promotion cycle's cross-section: predicted-R and realized-R, index-aligned per candidate. */
++export interface SelectionICCycle {
++  cycleKey: string;
++  regime: string | null;
++  windowKey: string; // the cluster bucket (e.g. a day/hour string) for window-clustered SE
++  predicted: number[];
++  realized: number[];
++}
++
++export interface SelectionICStats {
++  nCycles: number;       // cycles meeting the min-N gate (contributing an IC)
++  nClusters: number;     // distinct window buckets among those cycles
++  meanIC: number | null; // the skill estimate (mean of per-cycle ICs)
++  clusteredSE: number | null;
++  ci95: [number, number] | null;
++}
++
++export interface SelectionICResult extends SelectionICStats {
++  belowMinN: number;     // cycles dropped: pool smaller than minN
++  degenerate: number;    // cycles dropped: zero variance in predicted or realized (no orderable spread)
++  perCycleICs: number[]; // the raw distribution (for diagnostics / a reliability view)
++  perRegime: Record<string, SelectionICStats>;
++}
++
++/**
++ * Tie-aware Spearman rank correlation (Pearson on fractional ranks). Returns null when
++ * n<2 or either side has zero variance (no orderable spread → IC undefined, not 0).
++ */
++export function spearmanRho(predicted: number[], realized: number[]): number | null {
++  const n = predicted.length;
++  if (n < 2 || realized.length !== n) return null;
++  const rp = fractionalRanks(predicted);
++  const rr = fractionalRanks(realized);
++  if (rp === null || rr === null) return null; // zero-variance side
++  return pearson(rp, rr);
++}
++
++/** Fractional (tie-averaged) ranks; null if all values are equal (zero variance). */
++function fractionalRanks(xs: number[]): number[] | null {
++  const n = xs.length;
++  const idx = xs.map((v, i) => ({ v, i })).sort((a, b) => a.v - b.v);
++  const ranks = new Array<number>(n);
++  let k = 0;
++  while (k < n) {
++    let j = k;
++    while (j + 1 < n && idx[j + 1].v === idx[k].v) j++;
++    const avgRank = (k + j) / 2 + 1; // 1-based average rank over the tie block
++    for (let m = k; m <= j; m++) ranks[idx[m].i] = avgRank;
++    k = j + 1;
++  }
++  // zero variance ⇒ every value tied ⇒ all ranks equal ⇒ undefined correlation
++  if (ranks.every((r) => r === ranks[0])) return null;
++  return ranks;
++}
++
++function pearson(a: number[], b: number[]): number | null {
++  const n = a.length;
++  const ma = mean(a), mb = mean(b);
++  let num = 0, da = 0, dbv = 0;
++  for (let i = 0; i < n; i++) {
++    const xa = a[i] - ma, xb = b[i] - mb;
++    num += xa * xb; da += xa * xa; dbv += xb * xb;
++  }
++  if (da === 0 || dbv === 0) return null;
++  return num / Math.sqrt(da * dbv);
++}
++
++const mean = (xs: number[]): number => xs.reduce((s, x) => s + x, 0) / xs.length;
++
++/**
++ * Compute window-clustered IC stats from a list of per-cycle ICs tagged with their window bucket.
++ * Each window bucket is averaged into ONE cluster observation; the SE is taken across clusters
++ * (de-correlates serially-adjacent cycles). With one cycle per bucket this reduces to the plain
++ * per-cycle distribution SE. Returns nulls when there are too few clusters for an SE.
++ */
++function clusteredStats(perCycle: { ic: number; windowKey: string }[]): SelectionICStats {
++  const nCycles = perCycle.length;
++  if (nCycles === 0) return { nCycles: 0, nClusters: 0, meanIC: null, clusteredSE: null, ci95: null };
++  // Average ICs within each window bucket → one observation per cluster.
++  const byWindow = new Map<string, number[]>();
++  for (const { ic, windowKey } of perCycle) {
++    (byWindow.get(windowKey) ?? byWindow.set(windowKey, []).get(windowKey)!).push(ic);
++  }
++  const clusterMeans = [...byWindow.values()].map(mean);
++  const nClusters = clusterMeans.length;
++  const meanIC = mean(clusterMeans);
++  if (nClusters < 2) {
++    return { nCycles, nClusters, meanIC, clusteredSE: null, ci95: null };
++  }
++  // Sample SD of the cluster means → SE of their mean.
++  let ss = 0;
++  for (const c of clusterMeans) ss += (c - meanIC) ** 2;
++  const sd = Math.sqrt(ss / (nClusters - 1));
++  const se = sd / Math.sqrt(nClusters);
++  return { nCycles, nClusters, meanIC, clusteredSE: se, ci95: [meanIC - 1.96 * se, meanIC + 1.96 * se] };
++}
++
++/**
++ * The selection-IC harness. minN gates each cycle's pool size (a per-cycle IC on a 2-3 candidate
++ * pool is noise). Cycles with zero predicted/realized variance are counted as `degenerate` and
++ * excluded (their IC is undefined, not 0). Per-regime stats use the SAME clustered-SE method.
++ */
++export function computeSelectionIC(
++  cycles: SelectionICCycle[],
++  opts: { minN?: number } = {},
++): SelectionICResult {
++  const minN = opts.minN ?? 5;
++  let belowMinN = 0, degenerate = 0;
++  const kept: { ic: number; windowKey: string; regime: string | null }[] = [];
++  for (const c of cycles) {
++    if (c.predicted.length < minN) { belowMinN++; continue; }
++    const ic = spearmanRho(c.predicted, c.realized);
++    if (ic === null) { degenerate++; continue; }
++    kept.push({ ic, windowKey: c.windowKey, regime: c.regime });
++  }
++  const overall = clusteredStats(kept);
++  const perRegime: Record<string, SelectionICStats> = {};
++  const byRegime = new Map<string, { ic: number; windowKey: string }[]>();
++  for (const k of kept) {
++    const key = k.regime ?? 'unknown';
++    (byRegime.get(key) ?? byRegime.set(key, []).get(key)!).push({ ic: k.ic, windowKey: k.windowKey });
++  }
++  for (const [regime, rows] of byRegime) perRegime[regime] = clusteredStats(rows);
++  return { ...overall, belowMinN, degenerate, perCycleICs: kept.map((k) => k.ic), perRegime };
++}
+diff --git a/server/core/rtb/ready_to_buy_service.ts b/server/core/rtb/ready_to_buy_service.ts
+index a66f15d87..29b8cd9a1 100644
+--- a/server/core/rtb/ready_to_buy_service.ts
++++ b/server/core/rtb/ready_to_buy_service.ts
+@@ -27,7 +27,10 @@
+ import { storage } from '../../storage';
+ // B72 (2026-05-05): MIN_QUEUE_CONFIDENCE migrated to module='queue_admission'.
+ // Read via cached sync resolver. Module prefetched in b72-warmup.
+-import { getCachedNumberRequired } from '../../services/module-constants-service.js';
++import { getCachedNumberRequired, getCachedStringRequired } from '../../services/module-constants-service.js';
++// P19-B7.1 (OBJ-1/2): rank-time R-multiple = reuse the gate's own friction+kernel via the
++// wrapper (sample-free; the EV-input sample is a SEPARATE open-path call). Reads .netRewardToRisk.
++import { evaluateTradeExpectancy } from '../calculations/expectancy.js';
+ const _RTB_GK = { exchange: '*', assetClass: '*', strategy: '*', regime: '*' };
+ import { calculateFinalScore, calculateRegimeWeight } from '../utils/score-calculator';
+ import { signalQualityEvaluator, type SQEInput } from '../filters/signal_quality_evaluator';
+@@ -177,6 +180,53 @@ function getFinalscoreDecayLambda(): number {
+   return getCachedNumberRequired('rtb_ranking', 'finalscore_decay_lambda', _RTB_GK);
+ }
+ 
++// ─────────────────────────────────────────────────────────────────────────────
++// P19-B7.1 — PLUGGABLE RANKER (OBJ-1) + rank-time R-multiple (OBJ-2) + degenerate-
++// geometry reject/floor (OBJ-3). The live picker (getRankedSignals) ranks the
++// ready-to-buy pool by the configured key. DEFAULT = the expected R-multiple
++// (`R = netEV ÷ risk_price`) — risk-normalized, net-of-cost, CROSS-ASSET comparable
++// (Van Tharp R-multiples / Kelly growth-optimal for sequential single-bets). The
++// friction-blind `finalScore` ("rank-by-confidence") + the inert `rankingScore` exist
++// only as shadow-A/B CONTROL arms. DB-configured, NO hidden default (§5 rule 15).
++// ─────────────────────────────────────────────────────────────────────────────
++export const RANKER_STRATEGIES = ['r_multiple', 'confidence', 'ranking_score'] as const;
++export type RankerStrategy = (typeof RANKER_STRATEGIES)[number];
++
++/** Active ranker — fail-hard from module_constants (no hidden default; typo/unknown rejected). */
++function getActiveRanker(): RankerStrategy {
++  return getCachedStringRequired('rtb_ranking', 'active_ranker', _RTB_GK, RANKER_STRATEGIES) as RankerStrategy;
++}
++
++/**
++ * OBJ-3 microstructure floor (CAPITAL-INDEPENDENT — distinct from OBJ-5's capital/heat
++ * clamp-bind). risk_price = |entry − stop|; a sub-floor stop is UN-EXECUTABLE (the sizer
++ * would size nonsense) and is REJECTED from ranking — primary — so the kernel's own
++ * `distStop>0 ? … : 0` R-fallback can never become a sort key. Floor basis:
++ * max(min_ATR_fraction × ATR, min_abs_risk_fraction × entry) — min-ATR-fraction PRIMARY
++ * (regime/price-scaling, cross-asset-clean), the entry-fraction underneath as the absolute-
++ * executability floor only (the cross-asset-clean fractional stand-in for a min-tick, used
++ * when ATR is unavailable). Both DB-governed, fail-hard.
++ */
++function rankRiskFloorPrice(entryPrice: number, atr: number | null): number {
++  const minAtrFrac = getCachedNumberRequired('rtb_ranking', 'min_atr_fraction_floor', _RTB_GK);
++  const minAbsFrac = getCachedNumberRequired('rtb_ranking', 'min_abs_risk_fraction', _RTB_GK);
++  return computeRankRiskFloor(entryPrice, atr, minAtrFrac, minAbsFrac);
++}
++
++/**
++ * P19-B7.1 (OBJ-3): the PURE floor math (params injected, no DB) — testable in isolation,
++ * mirroring the kernel's pure-with-injected-constants design. floor = max(min_ATR_fraction × ATR,
++ * min_abs_risk_fraction × entry); ATR term drops out (→ 0) when ATR is unavailable, leaving the
++ * absolute entry-fraction floor. Cross-asset-clean (ATR scales with each asset's own volatility).
++ */
++export function computeRankRiskFloor(
++  entryPrice: number, atr: number | null, minAtrFrac: number, minAbsFrac: number,
++): number {
++  const atrFloor = (atr !== null && Number.isFinite(atr) && atr > 0) ? minAtrFrac * atr : 0;
++  const absFloor = minAbsFrac * entryPrice;
++  return Math.max(atrFloor, absFloor);
++}
++
+ /**
+  * Directive 11.0E: Calculate decay penalty for FinalScore
+  * 
+@@ -1634,8 +1684,80 @@ class ReadyToBuyService {
+   }
+ 
+   /**
+-   * Phase 8.8.4-C.14.B: Get ranked signals for multi-signal promotion
+-   * Returns top N signals sorted by FinalScore descending
++   * P19-B7.1 (OBJ-3): true if the signal's stop is executable — risk_price = |entry − stop| ≥ the
++   * capital-independent microstructure floor (max(min_ATR_fraction × ATR, min_abs_risk_fraction ×
++   * entry)). A sub-floor stop is un-executable (the sizer would size nonsense) → rejected from
++   * ranking upstream, so the kernel's :0 R-fallback is never a sort key.
++   */
++  private passesGeometryFloor(signal: RtbSignal): boolean {
++    const entry = parseFloat(signal.entryPrice);
++    const stop = parseFloat(signal.stopPrice);
++    if (!Number.isFinite(entry) || !Number.isFinite(stop)) return false;
++    const riskPrice = Math.abs(entry - stop);
++    if (riskPrice <= 0) return false;
++    const meta = (signal.metadata ?? {}) as Record<string, any>;
++    const atrRaw = meta.atr ?? meta.atrAtOpen;
++    const atrNum = atrRaw != null ? Number(atrRaw) : NaN;
++    const atr = Number.isFinite(atrNum) ? atrNum : null;
++    return riskPrice >= rankRiskFloorPrice(entry, atr);
++  }
++
++  /**
++   * P19-B7.1 (OBJ-1/2): the sort key for a signal under the active ranker.
++   * - r_multiple (default): the expected R-multiple = evaluateTradeExpectancy(...).netRewardToRisk —
++   *   REUSE of the gate's own friction+kernel (sample-free, quiet). The number that ranks is the
++   *   number the gate later confirms (zero divergence surface).
++   * - confidence (control): the friction-blind finalScore (≈ confidence − decay).
++   * - ranking_score (control): the inert VTS rankingScore, falling back to finalScore.
++   */
++  private computeRankKey(signal: RtbSignal, ranker: RankerStrategy, assetClass?: AssetClass): number {
++    if (ranker === 'confidence') return parseFloat(signal.finalScore || '0');
++    if (ranker === 'ranking_score') {
++      const meta = (signal.metadata ?? {}) as Record<string, any>;
++      const rsNum = meta.rankingScore != null ? Number(meta.rankingScore) : NaN;
++      return Number.isFinite(rsNum) ? rsNum : parseFloat(signal.finalScore || '0');
++    }
++    return this.signalRMultiple(signal, assetClass); // r_multiple (default)
++  }
++
++  /**
++   * P19-B7.1 (OBJ-2): the expected R-multiple for a candidate at rank time. Mirrors the open
++   * path's tradeMeta build (paper-execution-engine.ts:2076-2087) and reads the kernel's own
++   * `netRewardToRisk` surfaced on the result — REUSE over recompute (no parallel friction model;
++   * the same number the gate later confirms). Sample-free: `recordEvInputSample` lives ONLY in the
++   * open path, so rank-time ranking records no EV-input sample (no-double-sample by construction).
++   * Returns -Infinity on unpriceable input so it sorts to the bottom (degenerate geometry is
++   * already rejected upstream by passesGeometryFloor).
++   */
++  private signalRMultiple(signal: RtbSignal, assetClass?: AssetClass): number {
++    const entry = parseFloat(signal.entryPrice);
++    const stop = parseFloat(signal.stopPrice);
++    if (!Number.isFinite(entry) || !Number.isFinite(stop)) return -Infinity;
++    const meta = (signal.metadata ?? {}) as Record<string, any>;
++    const targetNum = signal.targetPrice != null ? parseFloat(signal.targetPrice) : NaN;
++    const target = Number.isFinite(targetNum) ? targetNum : entry * 1.02; // mirror executePromotedSignal default
++    const di = signal.diAtQueue != null ? Number(signal.diAtQueue) : undefined;
++    const dbs = signal.dbsScoreAtQueue != null ? Number(signal.dbsScoreAtQueue) : undefined;
++    const ac = asValidAssetClass(signal.assetClass as unknown as string)
++      ?? asValidAssetClass(meta.assetClass)
++      ?? assetClass;
++    const result = evaluateTradeExpectancy(signal.symbol, {
++      entryPrice: entry,
++      targetPrice: target,
++      stopPrice: stop,
++      DI: di !== undefined && Number.isFinite(di) ? di : undefined,
++      VolNoise: meta.VolNoise,
++      prices: meta.prices,
++      sourcePool: (signal as any).sourcePool ?? meta.sourcePool,
++      dbsScore: dbs !== undefined && Number.isFinite(dbs) ? dbs : undefined,
++    }, ac, /* quiet */ true);
++    return Number.isFinite(result.netRewardToRisk) ? result.netRewardToRisk : -Infinity;
++  }
++
++  /**
++   * Phase 8.8.4-C.14.B: Get ranked signals for multi-signal promotion.
++   * P19-B7.1: ranked by the configured ranker (default = expected R-multiple; §5 r15 no hidden
++   * default), after rejecting degenerate-geometry candidates (OBJ-3).
+    * R9.3-C: expiresAt filter removed - lifecycle governed by SQE only
+    */
+   async getRankedSignals(mode: TradingMode, limit: number = 15, assetClass?: AssetClass): Promise<RtbSignal[]> {
+@@ -1668,14 +1790,29 @@ class ReadyToBuyService {
+       console.warn(`[19F][RTB] Pair-level guard check failed in getRankedSignals:`, err);
+     }
+ 
+-    // Sort by FinalScore descending (highest quality first)
+-    validSignals.sort((a, b) => {
+-      const scoreA = parseFloat(a.finalScore || '0');
+-      const scoreB = parseFloat(b.finalScore || '0');
+-      return scoreB - scoreA;
+-    });
+-
+-    console.log(`[8.8.4-C.14.B][RTB_RANKED] mode=${mode}, total=${signals.length}, valid=${validSignals.length}, returning top ${Math.min(limit, validSignals.length)}`);
++    // ── P19-B7.1 — rank by the configured key (default = expected R-multiple) ──
++    // OBJ-3: reject degenerate-geometry (un-executable near-zero stop) BEFORE ranking —
++    // PRIMARY, so the kernel's `distStop>0 ? … : 0` R-fallback can never become a sort key
++    // (the floor is the arithmetic guard; the reject is what kills the un-executable trade).
++    {
++      const beforeGeo = validSignals.length;
++      validSignals = validSignals.filter(s => this.passesGeometryFloor(s));
++      const geoRejected = beforeGeo - validSignals.length;
++      if (geoRejected > 0) {
++        console.log(`[P19-B7.1][RANK] OBJ-3 rejected ${geoRejected} degenerate-geometry signal(s) (risk_price < microstructure floor) before ranking`);
++      }
++    }
++    // OBJ-1/2: memoize each survivor's sort key, then sort plain-descending. For the default
++    // r_multiple ranker, computeRankKey reuses the gate's own friction+kernel via the wrapper
++    // (sample-free; reads the surfaced netRewardToRisk) — the number that ranks is the number
++    // the gate later confirms. Plain DESC: negative-R losers sort to the bottom (no abs/clamp).
++    const ranker = getActiveRanker();
++    const rankKey = new Map<string, number>();
++    for (const s of validSignals) rankKey.set(s.signalId, this.computeRankKey(s, ranker, assetClass));
++    validSignals.sort((a, b) => (rankKey.get(b.signalId) ?? -Infinity) - (rankKey.get(a.signalId) ?? -Infinity));
++
++    const topKey = validSignals.length > 0 ? rankKey.get(validSignals[0].signalId) : undefined;
++    console.log(`[8.8.4-C.14.B][RTB_RANKED] mode=${mode}, ranker=${ranker}, total=${signals.length}, valid=${validSignals.length}, topKey=${topKey != null ? topKey.toFixed(4) : 'n/a'}, returning top ${Math.min(limit, validSignals.length)}`);
+ 
+     // reorg-B4: shadow-trade capture (telemetry-only selection-quality layer). This
+     // method is the SOLE live caller of the promotion path, so this is exactly one
+@@ -1718,6 +1855,13 @@ class ReadyToBuyService {
+     const { insertShadowPoolMember } = await import('../../services/rtb-shadow-store.js');
+     const cycleKey = nextShadowCycleKey(mode, assetClass ?? 'all');
+     const poolSize = pool.length; // the ranked-signal count at capture — the SSOT for "N candidates" (stamped, never COUNT(*))
++    // P19-B7.1 (OBJ-4): per-cycle cross-class flag — the rank-0 winner is a different asset class
++    // than the rank-1 runner-up (the cross-class selection the floored-pWin limitation bears on;
++    // Langston Q2). Meaningful only on a mixed-class (global) pool; always false on a per-class pool.
++    // The pool arrives in ranked order (rank 0 = the picked winner).
++    const crossClassPromotion = pool.length >= 2
++      && pool[0].assetClass != null && pool[1].assetClass != null
++      && pool[0].assetClass !== pool[1].assetClass;
+     const num = (v: unknown): number | null => {
+       if (v === null || v === undefined) return null;
+       const n = parseFloat(String(v));
+@@ -1741,6 +1885,16 @@ class ReadyToBuyService {
+       const rankingScore = num(meta.rankingScore);
+       const diAtQueue = num(s.diAtQueue);
+       const dbsScoreAtQueue = num(s.dbsScoreAtQueue);
++      // P19-B7.1 (OBJ-4): the new ranker's decision-time R-multiple for this candidate — reuse the
++      // rank-time helper (the gate's own friction+kernel, sample-free). Store null (not -Infinity)
++      // on a non-finite result so the decimal column stays clean. pwinFloored = the documented
++      // floor-defaulted case: a strong-trend path that reached the kernel with NULL dbsScore (the
++      // xStock EV-input gap) defaults pWin to the floor instead of a real-DI value → NOT cross-class
++      // comparable until Phase-25 calibration. The raw di/dbs columns stay as the auditable backstop.
++      const _predR = this.signalRMultiple(s, ac);
++      const predictedRMultiple = Number.isFinite(_predR) ? _predR : null;
++      const _srcPool = (s as any).sourcePool ?? meta.sourcePool ?? null;
++      const pwinFloored = _srcPool === 'quant-strong_trend' && dbsScoreAtQueue === null;
+       const sqeVerdict = meta.sqeVerdict ?? 'pass';
+       try {
+         // Resolve the shadow TRADE first (existing id on dedupe, new on open, null on fail/cap).
+@@ -1767,6 +1921,9 @@ class ReadyToBuyService {
+           rankingScore,
+           diAtQueue,
+           dbsScoreAtQueue,
++          predictedRMultiple, // P19-B7.1 (OBJ-4)
++          pwinFloored,
++          crossClassPromotion,
+           // In-queue ⇒ this member already passed SQE; reject-reason is for the
+           // future SQE-rejected E-trigger (deferred — RUNNING_ISSUES §13).
+           sqeVerdict,
+@@ -1796,6 +1953,9 @@ class ReadyToBuyService {
+               rankingScore,
+               diAtQueue,
+               dbsScoreAtQueue,
++              predictedRMultiple, // P19-B7.1 (OBJ-4)
++              pwinFloored,
++              crossClassPromotion,
+               sqeVerdict,
+               regime,
+             });
+diff --git a/server/services/module-constants-service.ts b/server/services/module-constants-service.ts
+index 01def9c9c..4fe4357df 100644
+--- a/server/services/module-constants-service.ts
++++ b/server/services/module-constants-service.ts
+@@ -419,6 +419,38 @@ export function getCachedNumberRequired(
+   return v;
+ }
+ 
++/**
++ * P19-B7.1 (OBJ-1): fail-hard STRING reader — same contract as getCachedNumberRequired
++ * but for categorical config (e.g. the active-ranker selection). THROWS on cold cache or
++ * missing row (no hidden default — §5 rule 15: a DB-governed setting fails hard when absent,
++ * never silently falls back). `allowed`, when given, also rejects an unrecognized value so a
++ * typo'd ranker name can't silently pick a wrong sort.
++ */
++export function getCachedStringRequired(
++  moduleName: string,
++  constantName: string,
++  key: ResolutionKey,
++  allowed?: readonly string[],
++): string {
++  const v = getCachedConstant<unknown>(moduleName, constantName, key);
++  if (v === undefined) {
++    throw new Error(
++      `module_constants: required row missing for ${moduleName}.${constantName} key=${JSON.stringify(key)}. Seed via Drizzle migration.`,
++    );
++  }
++  if (typeof v !== 'string') {
++    throw new Error(
++      `module_constants: ${moduleName}.${constantName} expected string, got ${typeof v} (${String(v)})`,
++    );
++  }
++  if (allowed && !allowed.includes(v)) {
++    throw new Error(
++      `module_constants: ${moduleName}.${constantName}='${v}' not in allowed set {${allowed.join(', ')}}`,
++    );
++  }
++  return v;
++}
++
+ /**
+  * Background refresh interval — re-prefetches every warmed module every
+  * CACHE_TTL_MS so SQL UPDATEs propagate to sync callers within ~60s.
+diff --git a/server/services/paper-execution-engine.ts b/server/services/paper-execution-engine.ts
+index c940472b8..414503f04 100644
+--- a/server/services/paper-execution-engine.ts
++++ b/server/services/paper-execution-engine.ts
+@@ -3016,7 +3016,22 @@ export class PaperExecutionEngine {
+             // no silent crypto_spot fallback (Langston Step 2 Probe 8 ACK).
+             assetClass: _sizeClass,
+           });
+-          
++
++          // P19-B7.1 (OBJ-5): record the SIZED signal's effective-risk-fraction (sized-risk ÷
++          // intended-risk) for the clamp-bind watch — the denominator-correct population (per sized
++          // signal, NOT per candidate). boundRate (rtbMetricsService.getSizingClampProof) is the
++          // Phase-25 input that decides whether R-rank stays or switches to realized-$EV.
++          if (sizingResult.sizingDetails) {
++            rtbMetricsService.recordSizingClampSample({
++              symbol: signal.symbol,
++              strategy: signal.strategy,
++              assetClass: typeof _sizeClass === 'string' ? _sizeClass : undefined,
++              effectiveRiskFractionRatio: sizingResult.sizingDetails.effectiveRiskFractionRatio,
++              wasClamped: sizingResult.sizingDetails.wasClamped,
++              timestamp: Date.now(),
++            });
++          }
++
+           if (sizingResult.quantity > 0 && sizingResult.estimatedValue > 0) {
+             // 11.7S: Apply mode overlay to position size
+             const adjustedQuantity = sizingResult.quantity * modeOverlay.positionSizeMultiplier;
+diff --git a/server/services/paper-position-sizing.ts b/server/services/paper-position-sizing.ts
+index 9176b889c..23c1bb19f 100644
+--- a/server/services/paper-position-sizing.ts
++++ b/server/services/paper-position-sizing.ts
+@@ -97,6 +97,11 @@ export interface PaperPositionSizingResult {
+     maxNotional: number;
+     bufferedMaxNotional: number;
+     wasClamped: boolean;
++    // P19-B7.1 (OBJ-5): sized dollar-risk after ALL reductions (notional clamp + covariance
++    // correlationScale) ÷ intended riskAmount. ≤1; = 1 when the position risks exactly its
++    // intended fraction. Absorbs BOTH reductions — including correlationScale, which never flips
++    // wasClamped (CC-A A.2b) — so this single field is the bind signal a wasClamped-only watch misses.
++    effectiveRiskFractionRatio: number;
+   };
+ }
+ 
+@@ -203,7 +208,24 @@ export function sizePaperPositionForSignal(params: PaperPositionSizingParams): P
+     estimatedValue = quantity * entryPrice;
+     console.log(`[9.4][SIZE] ${symbol} scaled ${correlationScale.toFixed(2)}× due to covariance`);
+   }
+-  
++
++  // P19-B7.1 (OBJ-5): the effective-risk-fraction ratio = actual dollar-risk after ALL reductions
++  // (notional clamp + covariance correlationScale) ÷ the intended riskAmount. One field absorbing
++  // BOTH reductions — crucially correlationScale, which does NOT flip wasClamped (CC-A A.2b), so a
++  // wasClamped-only watch is blind to covariance decoherence. = 1 when the position risks exactly
++  // its intended fraction; < 1 when a clamp or the covariance scale held it below. The open-path /
++  // shadow telemetry bins on this to measure how often R-rank decoheres from realized-$EV (Phase-25:
++  // >~15-20% bind → switch the honest ranker to realized-$EV at the post-clamp executed size).
++  const effectiveRiskFractionRatio = riskAmount > 0 ? (quantity * stopDistance) / riskAmount : 0;
++  // INVARIANT (OBJ-5, UPPER BOUND not equality — CC-A): fixed-fractional-risk sizing risks AT MOST
++  // riskAmount; clamps + the covariance scale only REDUCE. A ratio materially > 1 means a sizing
++  // path risked MORE than intended → the R-rank↔sizing coherence (R-rank == $EV-rank) silently
++  // breaks (a future notional-sizer regression would trip this). WARN, do not throw — a live sizing
++  // bug must surface loudly, not crash the trading cycle.
++  if (effectiveRiskFractionRatio > 1.01) {
++    console.warn(`[P19-B7.1][OBJ-5][SIZING_INVARIANT] ${symbol} effectiveRiskFractionRatio=${effectiveRiskFractionRatio.toFixed(4)} > 1 — sizing risked MORE than intended (fixed-fractional-risk invariant violated); R-rank↔sizing coherence broken. Investigate (notional-sizer regression?).`);
++  }
++
+   if (!Number.isFinite(quantity) || !Number.isFinite(estimatedValue)) {
+     console.log(`[B6][SIZING] Final validation failed for ${symbol} - returning 0`);
+     return invalidResult;
+@@ -253,7 +275,8 @@ export function sizePaperPositionForSignal(params: PaperPositionSizingParams): P
+       exposureBudget,
+       maxNotional,
+       bufferedMaxNotional,
+-      wasClamped
++      wasClamped,
++      effectiveRiskFractionRatio // P19-B7.1 (OBJ-5)
+     }
+   };
+ }
+diff --git a/server/services/rtb-metrics-service.ts b/server/services/rtb-metrics-service.ts
+index 87cb5ed90..072fd07ab 100644
+--- a/server/services/rtb-metrics-service.ts
++++ b/server/services/rtb-metrics-service.ts
+@@ -88,6 +88,25 @@ export interface EvInputSample {
+   timestamp: number;
+ }
+ 
++/**
++ * P19-B7.1 (OBJ-5): one sized-signal's risk-fraction telemetry — the clamp-bind watch.
++ * Recorded once per actually-SIZED signal at the open path (NOT per candidate — denominator
++ * trap). `effectiveRiskFractionRatio` = sized dollar-risk ÷ intended riskAmount (≤1); `bound` =
++ * the ratio fell materially below 1 (a clamp or the covariance scale held the position below its
++ * intended risk). The Phase-25 GO/NO-GO reads the bind-RATE: >~15-20% bound → the sizer is
++ * piecewise-notional in practice, R-rank overstates the top of the book → switch the honest
++ * ranker to realized-$EV at the executed size; <~5% → noise, keep R. All zero until paper-active.
++ */
++export interface SizingClampSample {
++  symbol: string;
++  strategy: string;
++  assetClass?: string;
++  effectiveRiskFractionRatio: number;
++  wasClamped: boolean;     // the notional cap bound (sizer's own flag)
++  bound: boolean;          // ratio < BIND_THRESHOLD (absorbs notional clamp AND covariance scale)
++  timestamp: number;
++}
++
+ class RtbMetricsService {
+   private static instance: RtbMetricsService;
+ 
+@@ -255,6 +274,41 @@ class RtbMetricsService {
+     return [...this.evInputSamples];
+   }
+ 
++  // ── P19-B7.1 (OBJ-5): the sizing clamp-bind watch (the wired deliverable, not prose). ──
++  private sizingClampSamples: SizingClampSample[] = [];
++  private readonly MAX_SIZING_CLAMP_SAMPLES = 500;
++  /** A position risking < this fraction of its intended risk counts as "bound" (clamp/scale held it down). */
++  private readonly SIZING_BIND_THRESHOLD = 0.95;
++
++  /** P19-B7.1 (OBJ-5): record one SIZED signal's effective-risk-fraction. Bounded buffer; called once per open-path sizing. */
++  recordSizingClampSample(sample: Omit<SizingClampSample, 'bound'>): void {
++    const bound = Number.isFinite(sample.effectiveRiskFractionRatio)
++      && sample.effectiveRiskFractionRatio < this.SIZING_BIND_THRESHOLD;
++    this.sizingClampSamples.push({ ...sample, bound });
++    if (this.sizingClampSamples.length > this.MAX_SIZING_CLAMP_SAMPLES) {
++      this.sizingClampSamples = this.sizingClampSamples.slice(-this.MAX_SIZING_CLAMP_SAMPLES);
++    }
++  }
++
++  /** P19-B7.1 (OBJ-5): full sizing-clamp sample buffer for the diagnostics surface. */
++  getSizingClampSamples(): SizingClampSample[] {
++    return [...this.sizingClampSamples];
++  }
++
++  /**
++   * P19-B7.1 (OBJ-5): the clamp-bind summary — the Phase-25 decision input. `boundRate` is the
++   * fraction of SIZED signals held below their intended risk by a clamp or the covariance scale.
++   * >~0.15-0.20 → R-rank decoheres from realized-$EV in practice (switch the honest ranker to
++   * realized-$EV at executed size; §13). All zero until paper-active trading is on.
++   */
++  getSizingClampProof(): { totalSamples: number; boundCount: number; boundRate: number | null; meanRatio: number | null } {
++    const s = this.sizingClampSamples;
++    if (s.length === 0) return { totalSamples: 0, boundCount: 0, boundRate: null, meanRatio: null };
++    const boundCount = s.filter((x) => x.bound).length;
++    const meanRatio = s.reduce((a, x) => a + x.effectiveRiskFractionRatio, 0) / s.length;
++    return { totalSamples: s.length, boundCount, boundRate: boundCount / s.length, meanRatio };
++  }
++
+   /**
+    * reorg-B3 (#233, OBJ-6): compact proof summary derived from the EV-input samples — answers
+    * "did a NON-DEFAULT dbsScore reach the kernel and fire the strong-trend branch?" at a glance.
+@@ -356,6 +410,9 @@ class RtbMetricsService {
+     // reorg-B3 (#233, OBJ-4): the EV-input proof surface (empty until paper-active turns on).
+     evInputThreadProof: { totalSamples: number; withNonNullDbs: number; withNonNullDi: number; strongTrendBranchFired: number; strongTrendWithDbs: number };
+     recentEvInputSamples: EvInputSample[];
++    // P19-B7.1 (OBJ-5): the sizing clamp-bind watch surface (empty until paper-active turns on).
++    sizingClampProof: { totalSamples: number; boundCount: number; boundRate: number | null; meanRatio: number | null };
++    recentSizingClampSamples: SizingClampSample[];
+   } {
+     // P19-B6.5e: invariant is now attemptsTotal === openedTotal + blockedTotal + openFailedTotal
+     const { attemptsTotal, openedTotal, blockedTotal, openFailedTotal } = this.stats;
+@@ -394,6 +451,10 @@ class RtbMetricsService {
+       // (bounded). Empty until paper-active turns on; the #233-working signal is strongTrendWithDbs>0.
+       evInputThreadProof: this.getEvInputThreadProof(),
+       recentEvInputSamples: this.evInputSamples.slice(-25),
++      // P19-B7.1 (OBJ-5): the sizing clamp-bind watch — boundRate is the Phase-25 ranker decision
++      // input (>~0.15-0.20 → switch the honest ranker to realized-$EV). Zero until paper-active.
++      sizingClampProof: this.getSizingClampProof(),
++      recentSizingClampSamples: this.sizingClampSamples.slice(-25),
+     };
+   }
+ 
+@@ -414,6 +475,7 @@ class RtbMetricsService {
+     this.bySymbol = {};
+     this.byStrategy = {};
+     this.evInputSamples = []; // reorg-B3 (#233, OBJ-4): clear the EV-input proof buffer on session reset
++    this.sizingClampSamples = []; // P19-B7.1 (OBJ-5): clear the sizing clamp-bind buffer on session reset
+     console.log(`[8.8.3-I2][RTB_METRICS_RESET] Session reset at ${this.stats.sessionStart.toISOString()}`);
+   }
+ 
+diff --git a/server/services/rtb-shadow-store.ts b/server/services/rtb-shadow-store.ts
+index 33bb63c02..472e092f9 100644
+--- a/server/services/rtb-shadow-store.ts
++++ b/server/services/rtb-shadow-store.ts
+@@ -50,6 +50,10 @@ export interface ShadowPairingOpenRow {
+   sourcePool?: string | null;
+   diAtQueue?: number | null;
+   dbsScoreAtQueue?: number | null;
++  // P19-B7.1 (OBJ-4): decision-time ranker outputs for the selection-IC harness.
++  predictedRMultiple?: number | null;
++  pwinFloored?: boolean;
++  crossClassPromotion?: boolean;
+   sqeVerdict?: string | null;
+   sqeRejectReason?: string | null;
+ }
+@@ -80,6 +84,10 @@ export interface ShadowPoolMemberRow {
+   rankingScore?: number | null;
+   diAtQueue?: number | null;
+   dbsScoreAtQueue?: number | null;
++  // P19-B7.1 (OBJ-4): per-cycle decision-time ranker outputs (selection-IC inputs).
++  predictedRMultiple?: number | null;
++  pwinFloored?: boolean;
++  crossClassPromotion?: boolean;
+   sqeVerdict?: string | null;
+   regime?: string | null;
+ }
+@@ -108,6 +116,7 @@ export async function insertShadowPairing(row: ShadowPairingOpenRow): Promise<vo
+       promoted_trade_id, signal_id, symbol, strategy, entry_price, stop_price,
+       target_price, final_score, hybrid_score, confidence, regime_weight,
+       decay_penalty, ranking_score, source_pool, di_at_queue, dbs_score_at_queue,
++      predicted_r_multiple, pwin_floored, cross_class_promotion,
+       sqe_verdict, sqe_reject_reason, closed, opened_at, created_at
+     ) VALUES (
+       ${row.id}, ${row.cycleKey}, ${row.mode}, ${row.assetClass},
+@@ -117,7 +126,9 @@ export async function insertShadowPairing(row: ShadowPairingOpenRow): Promise<vo
+       ${row.targetPrice ?? null}, ${row.finalScore ?? null}, ${row.hybridScore ?? null},
+       ${row.confidence ?? null}, ${row.regimeWeight ?? null}, ${row.decayPenalty ?? null},
+       ${row.rankingScore ?? null}, ${row.sourcePool ?? null}, ${row.diAtQueue ?? null},
+-      ${row.dbsScoreAtQueue ?? null}, ${row.sqeVerdict ?? null}, ${row.sqeRejectReason ?? null},
++      ${row.dbsScoreAtQueue ?? null},
++      ${row.predictedRMultiple ?? null}, ${row.pwinFloored ?? false}, ${row.crossClassPromotion ?? false},
++      ${row.sqeVerdict ?? null}, ${row.sqeRejectReason ?? null},
+       false, NOW(), NOW()
+     )
+     ON CONFLICT (id) DO NOTHING
+@@ -139,6 +150,7 @@ export async function insertShadowPoolMember(row: ShadowPoolMemberRow): Promise<
+       cycle_key, mode, asset_class, signal_id, shadow_trade_id, symbol, strategy,
+       promotion_rank, promoted, pool_size, final_score, hybrid_score, confidence,
+       regime_weight, decay_penalty, ranking_score, di_at_queue, dbs_score_at_queue,
++      predicted_r_multiple, pwin_floored, cross_class_promotion,
+       sqe_verdict, regime, created_at
+     ) VALUES (
+       ${row.cycleKey}, ${row.mode}, ${row.assetClass}, ${row.signalId ?? null},
+@@ -146,6 +158,7 @@ export async function insertShadowPoolMember(row: ShadowPoolMemberRow): Promise<
+       ${row.promoted}, ${row.poolSize}, ${row.finalScore ?? null}, ${row.hybridScore ?? null},
+       ${row.confidence ?? null}, ${row.regimeWeight ?? null}, ${row.decayPenalty ?? null},
+       ${row.rankingScore ?? null}, ${row.diAtQueue ?? null}, ${row.dbsScoreAtQueue ?? null},
++      ${row.predictedRMultiple ?? null}, ${row.pwinFloored ?? false}, ${row.crossClassPromotion ?? false},
+       ${row.sqeVerdict ?? null}, ${row.regime ?? null}, NOW()
+     )
+   `);
+diff --git a/server/services/vts-runner.ts b/server/services/vts-runner.ts
+index cdc323425..a87121ac2 100644
+--- a/server/services/vts-runner.ts
++++ b/server/services/vts-runner.ts
+@@ -751,6 +751,10 @@ export interface RegisterOpenShadowTradeInput {
+   rankingScore?: number | null;
+   diAtQueue?: number | null;
+   dbsScoreAtQueue?: number | null;
++  // P19-B7.1 (OBJ-4): the new ranker's decision-time outputs (selection-IC harness).
++  predictedRMultiple?: number | null;
++  pwinFloored?: boolean;
++  crossClassPromotion?: boolean;
+   sqeVerdict?: string | null;
+   sqeRejectReason?: string | null;
+ }
+@@ -879,6 +883,9 @@ export async function registerOpenShadowTrade(
+       sourcePool: input.sourcePool ?? null,
+       diAtQueue: input.diAtQueue ?? null,
+       dbsScoreAtQueue: input.dbsScoreAtQueue ?? null,
++      predictedRMultiple: input.predictedRMultiple ?? null, // P19-B7.1 (OBJ-4)
++      pwinFloored: input.pwinFloored ?? false,
++      crossClassPromotion: input.crossClassPromotion ?? false,
+       sqeVerdict: input.sqeVerdict ?? null,
+       sqeRejectReason: input.sqeRejectReason ?? null,
+     });
+diff --git a/server/tests/unit/p19-b7-1-ranking.test.ts b/server/tests/unit/p19-b7-1-ranking.test.ts
+new file mode 100644
+index 000000000..a8affae80
+--- /dev/null
++++ b/server/tests/unit/p19-b7-1-ranking.test.ts
+@@ -0,0 +1,136 @@
++// P19-B7.1 — the ranking fix (R-multiple ranker). DB-free unit coverage of the load-bearing
++// correctness: the R-multiple identity + dimensional/cross-asset property (OBJ-2), the degenerate-
++// geometry floor math (OBJ-3), the selection-IC harness (OBJ-4), and the no-double-EV-sample
++// structural guarantee (OBJ-2 Step-4 anchor). Runtime ranker-selection / reject / sizing-bind paths
++// are exercised on staging once paper-active (they read warmed module_constants); the math + the
++// structural sample-isolation are proven here.
++import { describe, it, expect } from 'vitest';
++import { readFileSync } from 'fs';
++import { join } from 'path';
++import { computeNetExpectancyKernel } from '../../core/calculations/net-expectancy-kernel';
++import { computeRankRiskFloor, RANKER_STRATEGIES } from '../../core/rtb/ready_to_buy_service';
++import { spearmanRho, computeSelectionIC, type SelectionICCycle } from '../../core/metrics/selection-ic';
++
++describe('P19-B7.1 OBJ-2 — the R-multiple is the kernel netEV ÷ risk_price (price-delta, dimensionless)', () => {
++  const base = { totalFriction: 0, DI: 60, volNoise: 0.3 };
++
++  it('netRewardToRisk === netEV / distStop (the identity we surface, not a re-derivation)', () => {
++    const r = computeNetExpectancyKernel({ entryPrice: 100, stopPrice: 98, targetPrice: 106, ...base });
++    expect(r.distStop).toBeCloseTo(2, 9);
++    expect(r.netRewardToRisk).toBeCloseTo(r.netEV / r.distStop, 9);
++  });
++
++  it('is dimensionless / cross-asset comparable — same geometry RATIO on a $0.50 token and a $200 xStock → same R', () => {
++    // identical reward:risk multiples, friction-free, same pWin inputs → the R-multiple must match
++    // regardless of absolute price level (that is the whole cross-asset point).
++    const lo = computeNetExpectancyKernel({ entryPrice: 0.50, stopPrice: 0.49, targetPrice: 0.53, ...base }); // risk 0.02, reward 0.06 (×3)
++    const hi = computeNetExpectancyKernel({ entryPrice: 200, stopPrice: 196, targetPrice: 212, ...base });     // risk 0.02, reward 0.06 (×3)
++    expect(lo.netRewardToRisk).toBeCloseTo(hi.netRewardToRisk, 6);
++  });
++
++  it('negative net-EV → negative R (losers sort to the bottom; no abs/clamp collapses the sign)', () => {
++    // tiny target, heavy friction → net-negative EV.
++    const r = computeNetExpectancyKernel({ entryPrice: 100, stopPrice: 95, targetPrice: 100.5, totalFriction: 2, DI: 50, volNoise: 0.3 });
++    expect(r.netEV).toBeLessThan(0);
++    expect(r.netRewardToRisk).toBeLessThan(0);
++  });
++
++  it('distStop === 0 → R = 0 (the built-in ∞-guard; gate-reject is primary upstream)', () => {
++    const r = computeNetExpectancyKernel({ entryPrice: 100, stopPrice: 100, targetPrice: 106, ...base });
++    expect(r.distStop).toBe(0);
++    expect(r.netRewardToRisk).toBe(0);
++  });
++});
++
++describe('P19-B7.1 OBJ-3 — degenerate-geometry microstructure floor (capital-independent)', () => {
++  const minAtrFrac = 0.10, minAbsFrac = 0.0005;
++
++  it('ATR-fraction is PRIMARY when ATR is available', () => {
++    // entry 100, ATR 4 → atrFloor = 0.4; absFloor = 0.05 → floor = 0.4
++    expect(computeRankRiskFloor(100, 4, minAtrFrac, minAbsFrac)).toBeCloseTo(0.4, 9);
++  });
++
++  it('falls back to the absolute entry-fraction floor when ATR is unavailable', () => {
++    expect(computeRankRiskFloor(100, null, minAtrFrac, minAbsFrac)).toBeCloseTo(0.05, 9);
++    expect(computeRankRiskFloor(100, 0, minAtrFrac, minAbsFrac)).toBeCloseTo(0.05, 9);
++  });
++
++  it('a near-zero stop falls below the floor (→ rejected); a normal stop clears it', () => {
++    const floor = computeRankRiskFloor(100, 4, minAtrFrac, minAbsFrac); // 0.4
++    expect(Math.abs(100 - 99.99)).toBeLessThan(floor);  // 0.01 stop → reject
++    expect(Math.abs(100 - 98)).toBeGreaterThan(floor);  // 2.0 stop  → keep
++  });
++});
++
++describe('P19-B7.1 OBJ-4 — Spearman selection-IC', () => {
++  it('perfect rank agreement → +1, perfect inversion → −1', () => {
++    expect(spearmanRho([1, 2, 3, 4], [10, 20, 30, 40])).toBeCloseTo(1, 9);
++    expect(spearmanRho([1, 2, 3, 4], [40, 30, 20, 10])).toBeCloseTo(-1, 9);
++  });
++  it('zero variance on a side → null (undefined, NOT 0)', () => {
++    expect(spearmanRho([1, 1, 1], [1, 2, 3])).toBeNull();
++    expect(spearmanRho([5], [5])).toBeNull(); // n<2
++  });
++  it('handles ties via fractional ranks', () => {
++    expect(spearmanRho([1, 2, 2, 3], [1, 2, 2, 3])).toBeCloseTo(1, 9);
++  });
++});
++
++describe('P19-B7.1 OBJ-4 — computeSelectionIC (per-cycle, min-N gate, per-regime, clustered SE)', () => {
++  const mk = (cycleKey: string, regime: string, windowKey: string, predicted: number[], realized: number[]): SelectionICCycle =>
++    ({ cycleKey, regime, windowKey, predicted, realized });
++
++  it('drops cycles below min-N and flags zero-variance cycles as degenerate', () => {
++    const cycles = [
++      mk('c1', 'TFS', 'd1', [1, 2, 3, 4, 5], [1, 2, 3, 4, 5]),   // kept, IC=+1
++      mk('c2', 'TFS', 'd1', [1, 2], [2, 1]),                      // below minN(5) → dropped
++      mk('c3', 'TFS', 'd2', [1, 1, 1, 1, 1], [1, 2, 3, 4, 5]),    // zero variance → degenerate
++    ];
++    const r = computeSelectionIC(cycles, { minN: 5 });
++    expect(r.belowMinN).toBe(1);
++    expect(r.degenerate).toBe(1);
++    expect(r.nCycles).toBe(1);
++    expect(r.meanIC).toBeCloseTo(1, 9);
++  });
++
++  it('reports a per-regime breakdown (Simpson-paradox guard) and a clustered SE across windows', () => {
++    const cycles = [
++      mk('a', 'TFS', 'd1', [1, 2, 3, 4, 5], [1, 2, 3, 4, 5]),   // +1
++      mk('b', 'TFS', 'd2', [1, 2, 3, 4, 5], [1, 2, 3, 4, 5]),   // +1
++      mk('c', 'HVU', 'd1', [1, 2, 3, 4, 5], [5, 4, 3, 2, 1]),   // −1
++      mk('d', 'HVU', 'd2', [1, 2, 3, 4, 5], [5, 4, 3, 2, 1]),   // −1
++    ];
++    const r = computeSelectionIC(cycles, { minN: 5 });
++    expect(r.perRegime['TFS'].meanIC).toBeCloseTo(1, 9);
++    expect(r.perRegime['HVU'].meanIC).toBeCloseTo(-1, 9);
++    expect(r.meanIC).toBeCloseTo(0, 9); // aggregate hides the split — the per-regime view is the truth
++    expect(r.nClusters).toBe(2);        // two window buckets
++    expect(r.clusteredSE).not.toBeNull();
++  });
++});
++
++describe('P19-B7.1 OBJ-2 — no-double-EV-sample (structural guarantee, source-level)', () => {
++  const read = (rel: string) => readFileSync(join(process.cwd(), rel), 'utf8');
++
++  it('the expectancy wrapper does NOT record an EV-input sample (the sample is open-path only)', () => {
++    const wrapper = read('server/core/calculations/expectancy.ts');
++    expect(wrapper).not.toMatch(/recordEvInputSample/);
++  });
++
++  it('the open path is the SOLE recorder of EV-input samples', () => {
++    const openPath = read('server/services/paper-execution-engine.ts');
++    expect(openPath).toMatch(/recordEvInputSample/);
++  });
++
++  it('the rank-time helper reuses evaluateTradeExpectancy with quiet=true (no pool-spam, no sample)', () => {
++    const rtb = read('server/core/rtb/ready_to_buy_service.ts');
++    // signalRMultiple calls evaluateTradeExpectancy with the quiet flag.
++    expect(rtb).toMatch(/evaluateTradeExpectancy\([\s\S]*?\/\* quiet \*\/ true\)/);
++  });
++});
++
++describe('P19-B7.1 OBJ-1 — the ranker strategy set', () => {
++  it('exposes r_multiple (default) + the two control arms, no others', () => {
++    expect(RANKER_STRATEGIES).toEqual(['r_multiple', 'confidence', 'ranking_score']);
++  });
++});
+diff --git a/shared/schema.ts b/shared/schema.ts
+index 9e03d40a5..55a159195 100644
+--- a/shared/schema.ts
++++ b/shared/schema.ts
+@@ -1956,6 +1956,11 @@ export const rtbShadowPairings = pgTable("rtb_shadow_pairings", {
+   sourcePool: varchar("source_pool", { length: 32 }),                  // EV-path selector (quant-strong_trend → DBS path)
+   diAtQueue: decimal("di_at_queue", { precision: 8, scale: 4 }),       // EV input (may be null on active path — #233)
+   dbsScoreAtQueue: decimal("dbs_score_at_queue", { precision: 8, scale: 4 }),
++  // ── P19-B7.1 (OBJ-4): the new ranker's decision-time outputs, snapshotted for the
++  // Phase-25 selection-IC harness (does predicted-R order realized-R?). ──
++  predictedRMultiple: decimal("predicted_r_multiple", { precision: 10, scale: 4 }), // the rank-time R = netEV ÷ risk_price (the predicted quality, vs the realized r_multiple at close)
++  pwinFloored: boolean("pwin_floored").notNull().default(false),       // pWin was floor-defaulted (NULL dbsScore on a strong-trend path), NOT real-DI-derived → NOT cross-class comparable until Phase-25 calibration
++  crossClassPromotion: boolean("cross_class_promotion").notNull().default(false), // this cycle's rank-0 winner is a DIFFERENT asset class than the rank-1 runner-up (the cross-class selection the floored-pWin limitation bears on; Langston Q2 guard)
+   sqeVerdict: varchar("sqe_verdict", { length: 32 }),                  // SQE pass/reject (pre-stocks the E-trigger; Langston add)
+   sqeRejectReason: varchar("sqe_reject_reason", { length: 64 }),
+   // ── realized outcome (filled at shadow close; NULL until then) ──
+@@ -2018,6 +2023,10 @@ export const rtbShadowPoolMembers = pgTable("rtb_shadow_pool_members", {
+   rankingScore: decimal("ranking_score", { precision: 10, scale: 6 }),
+   diAtQueue: decimal("di_at_queue", { precision: 8, scale: 4 }),
+   dbsScoreAtQueue: decimal("dbs_score_at_queue", { precision: 8, scale: 4 }),
++  // ── P19-B7.1 (OBJ-4): per-cycle decision-time ranker outputs (the selection-IC inputs) ──
++  predictedRMultiple: decimal("predicted_r_multiple", { precision: 10, scale: 4 }), // rank-time R = netEV ÷ risk_price THIS cycle (predicted quality; the realized r_multiple lives on the FK'd pairing)
++  pwinFloored: boolean("pwin_floored").notNull().default(false),       // pWin floor-defaulted (NULL dbsScore on strong-trend), not real-DI — segments the Phase-25 calibration
++  crossClassPromotion: boolean("cross_class_promotion").notNull().default(false), // this cycle's rank-0 winner is a different asset class than the rank-1 runner-up (Langston Q2)
+   sqeVerdict: varchar("sqe_verdict", { length: 32 }),
+   regime: varchar("regime", { length: 50 }),
+   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
