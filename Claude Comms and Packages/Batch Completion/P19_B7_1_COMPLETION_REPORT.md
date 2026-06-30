@@ -23,7 +23,7 @@
 
 ## Verification (Step-7, staging)
 - HTTP 200; boot clean (no fail-hard ranker-config crash → the 3 seed rows resolve; only a pre-existing unrelated `/home/runner` perm warning).
-- 2 migrations applied + their internal `DO`-block assertions passed (3 `rtb_ranking` rows + 6 shadow columns).
+- 2 migrations applied + their internal `DO`-block assertions passed (3 `module_constants` rows under `module_name='rtb_ranking'` — NOT a standalone table — + 6 shadow columns across the two shadow tables). Langston Step-8 independently re-confirmed each resolves single-scoped.
 - Staging DB: `active_ranker="r_multiple"`, `min_atr_fraction_floor=0.10`, `min_abs_risk_fraction=0.0005`.
 - Bench: tsc-baseline GREEN (0 regressions); **20** new B7.1 tests + **51** affected existing tests pass.
 - CI: run `28478843721` all-4-green.
@@ -51,4 +51,4 @@
 `server/*` (8 code files) + `shared/schema.ts` + `server/core/metrics/selection-ic.ts` (new) + `server/tests/unit/p19-b7-1-ranking.test.ts` (new) · 2 migrations + MANIFEST · **SYSTEM_MANUAL.md** (Ch1 "P19-B7.1 — Live-picker ranker" + Chapter-11 selection-quality extension) · **SYSTEM_IMPACT_MAP.md** (B7.1 ranking-fix callout) · **BATCH_CATALOG.md** · **PHASE_HISTORY.md** · **PHASE_19_PLAN.md** (§1 board + §5 design-lock + close) · **ADJUSTMENT_FRAMEWORK.md** (ranker knobs) · **RUNNING_ISSUES.md** (#399 umbrella) · MEMORY (CC-B + Langston §10.b) · this completion report.
 
 ## Status
-Code shipped + deployed + verified (Step-7). **Langston Step-8 + Kyle acknowledgment pending.** Batch CLOSED only after both.
+Code shipped + deployed + verified (Step-7). **Langston Step-8 = PASS (2026-06-30, no blocking findings — all 4 areas independently confirmed on origin/staging: health, no-double-sample framing, governance content per the 2026-06-16 rule, completion report).** Only **Kyle's acknowledgment** remains. Batch CLOSED on Kyle's ack.
