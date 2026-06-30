@@ -31,3 +31,25 @@ EV comparison IS the right backbone (post passively iff `maker-EV > taker-EV`), 
 5. **Scope boundary:** agree B7.2 = decision + paper economics + #330 reconcile, with the REAL post-only order lifecycle deferred to Phase-21? And #330 folded in here (touches the fee path) — agree?
 
 Iterate with me to consensus on these, then I'll draft the Step-1 scope + we bring the agreed recommendation to Kyle.
+
+---
+
+## ★★ REVISION (Kyle 2026-07-01 — a better architecture; RE-CONSENSUS needed)
+Kyle pushed on the pipeline placement and landed on a cleaner shape than our v1 consensus (which was "gate/rank on TAKER-EV, decide entry-mode at the END"). **His reframe (and I agree it's better — defending the best design, not caving):**
+
+**1. BEST-OF-BOTH comparison computed EARLY — at/just-after signal generation, BEFORE the SQE.** Each signal is represented by its BEST opportunity (max of maker-EV and taker-EV); that best version flows through SQE → RTB rank → execution. **Why it's better:** evaluating every signal on the WORSE (taker) option understates the real opportunity AND can never open crypto (the SQE ROI gate + the open-path Net-EV gate sit UPSTREAM of where v1 put the decision, so maker economics never reach the gates that reject crypto). Computing best-of-both early is the ONLY placement that lets a taker-unprofitable-but-maker-profitable signal survive the SQE + get ranked = the actual "crypto opener."
+
+**2. ★ The conservatism moves from the ARCHITECTURE to a single PARAMETER — a deliberately pessimistic, signal-strength-conditioned adverse-selection HAIRCUT on the maker side.** Maker only WINS the comparison when its fee+spread advantage survives a worst-case A estimate. As Phase-25 calibrates A, the haircut tightens + the comparison sharpens — NO re-architecture. This is a cleaner place for the caution than crippling the pipeline to taker-only, and it makes urgency ENDOGENOUS (strong/fast → large haircut → taker wins; patient/reversal → small → maker wins) exactly as the survey said. (The explicit hard floor from v1-Q1 stays as belt-and-suspenders on top.)
+
+**3. ★ CONVERT-SAFETY RULE (my refinement — the piece that makes it safe).** The comparison decides the PLAN; the make-then-take ladder still plays out at execution. Trap: a signal profitable ONLY on maker (failed taker — the pure opener) that posts maker and DOESN'T fill must NOT blindly convert to a taker entry we already know is a LOSER. So at the convert step: **only cross to taker if taker-EV is STILL positive; else CANCEL (no trade).** One rule handles both — taker-profitable signals safely convert; maker-only signals cancel rather than open a guaranteed loss. (The conservative haircut bounds the FILLED-maker adverse-selection risk; convert-safety bounds the NO-FILL case; paper mode bounds the residual to learning-pollution, not loss.)
+
+**4. Honest caveat (unchanged):** paper fills are model-vs-model → they exercise the path + flow telemetry but do NOT calibrate the haircut (real A data = Phase-21 live). Pre-calibration the haircut is a conservative guess; acceptable in paper (no real money) as the way to open crypto + prove the path.
+
+**Net change vs v1 consensus:** gate/rank on BEST-OF-BOTH (with the conservative haircut) instead of taker-only; execute with the convert-safety rule. Everything else from v1 (EV-backbone, A-vs-C separation, honest fill model = trade-through, data fence, #330-consolidate, async/non-blocking, SysManual+SIM content, §13 named Phase-21/Phase-25 homes) carries forward.
+
+**RE-CONSENSUS QUESTIONS (Langston + OLD Claude):**
+- **RA:** Agree best-of-both-before-SQE (conservatism in the haircut) beats v1's taker-only-gate? The decisive points: it's the only placement that opens crypto, it's paper (no real loss), and convert-safety bounds the no-fill trap. Push back if you think the optimistic-haircut risk to SELECTION/RANKING still outweighs — but note the convert-safety + paper-mode + pessimistic-haircut stack.
+- **RB:** Convert-safety rule (cross only if taker-EV still >0, else cancel) — agree it cleanly handles the maker-only-signal trap?
+- **RC:** Signal-conditioned conservative haircut as the single conservatism knob (urgency endogenous; hard floor on top) — agree?
+- **RD:** B7.1 integration now flips: RTB ranks on best-of-both netEV÷risk (not taker-only). With the conservative haircut + convert-safety, is that sound? (v1 said rank-on-taker; this revises it.)
+- **RE:** Does this collapse Q2 into "how conservative is the haircut" (architecture opens crypto by default; the haircut dials how much)? Kyle still owns the haircut-conservatism level; the architecture is settled.
