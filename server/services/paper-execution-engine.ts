@@ -3017,22 +3017,22 @@ export class PaperExecutionEngine {
             assetClass: _sizeClass,
           });
 
-          // P19-B7.1 (OBJ-5): record the SIZED signal's effective-risk-fraction (sized-risk ÷
-          // intended-risk) for the clamp-bind watch — the denominator-correct population (per sized
-          // signal, NOT per candidate). boundRate (rtbMetricsService.getSizingClampProof) is the
-          // Phase-25 input that decides whether R-rank stays or switches to realized-$EV.
-          if (sizingResult.sizingDetails) {
-            rtbMetricsService.recordSizingClampSample({
-              symbol: signal.symbol,
-              strategy: signal.strategy,
-              assetClass: typeof _sizeClass === 'string' ? _sizeClass : undefined,
-              effectiveRiskFractionRatio: sizingResult.sizingDetails.effectiveRiskFractionRatio,
-              wasClamped: sizingResult.sizingDetails.wasClamped,
-              timestamp: Date.now(),
-            });
-          }
-
           if (sizingResult.quantity > 0 && sizingResult.estimatedValue > 0) {
+            // P19-B7.1 (OBJ-5, Langston CHANGE-1): record the SIZED signal's effective-risk-fraction
+            // for the clamp-bind watch — INSIDE the opened-gate so the population is EXACTLY opened
+            // positions (per actually-SIZED signal, NOT per candidate). A clamped-to-zero-but-valid
+            // result would otherwise stamp ratio=0 → bound=true and inflate boundRate with non-trades,
+            // biasing the Phase-25 go/no-go (boundRate >~15-20% flips the ranker to realized-$EV).
+            if (sizingResult.sizingDetails) {
+              rtbMetricsService.recordSizingClampSample({
+                symbol: signal.symbol,
+                strategy: signal.strategy,
+                assetClass: typeof _sizeClass === 'string' ? _sizeClass : undefined,
+                effectiveRiskFractionRatio: sizingResult.sizingDetails.effectiveRiskFractionRatio,
+                wasClamped: sizingResult.sizingDetails.wasClamped,
+                timestamp: Date.now(),
+              });
+            }
             // 11.7S: Apply mode overlay to position size
             const adjustedQuantity = sizingResult.quantity * modeOverlay.positionSizeMultiplier;
             const adjustedValue = sizingResult.estimatedValue * modeOverlay.positionSizeMultiplier;

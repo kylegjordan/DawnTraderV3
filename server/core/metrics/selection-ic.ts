@@ -97,20 +97,25 @@ const mean = (xs: number[]): number => xs.reduce((s, x) => s + x, 0) / xs.length
 function clusteredStats(perCycle: { ic: number; windowKey: string }[]): SelectionICStats {
   const nCycles = perCycle.length;
   if (nCycles === 0) return { nCycles: 0, nClusters: 0, meanIC: null, clusteredSE: null, ci95: null };
-  // Average ICs within each window bucket → one observation per cluster.
+  // CHANGE-3 (Langston): the POINT ESTIMATE is PERIOD-equal — the mean of the per-cycle ICs (textbook
+  // Grinold) — NOT the mean of the cluster means. The SE is CLUSTERED across window buckets (averaging
+  // ICs within a window into one observation) to de-correlate serially-adjacent cycles. The two
+  // coincide at one-cycle-per-window but diverge once a window holds unequal cycle counts — and the
+  // headline IC the Phase-25 GO/NO-GO rides on must be the period-equal one.
+  const meanIC = mean(perCycle.map((p) => p.ic));
   const byWindow = new Map<string, number[]>();
   for (const { ic, windowKey } of perCycle) {
     (byWindow.get(windowKey) ?? byWindow.set(windowKey, []).get(windowKey)!).push(ic);
   }
   const clusterMeans = [...byWindow.values()].map(mean);
   const nClusters = clusterMeans.length;
-  const meanIC = mean(clusterMeans);
   if (nClusters < 2) {
     return { nCycles, nClusters, meanIC, clusteredSE: null, ci95: null };
   }
-  // Sample SD of the cluster means → SE of their mean.
+  // Sample SD of the cluster means → clustered SE of the mean (the CI is centered on the period-equal point estimate).
+  const clusterGrandMean = mean(clusterMeans);
   let ss = 0;
-  for (const c of clusterMeans) ss += (c - meanIC) ** 2;
+  for (const c of clusterMeans) ss += (c - clusterGrandMean) ** 2;
   const sd = Math.sqrt(ss / (nClusters - 1));
   const se = sd / Math.sqrt(nClusters);
   return { nCycles, nClusters, meanIC, clusteredSE: se, ci95: [meanIC - 1.96 * se, meanIC + 1.96 * se] };

@@ -42,6 +42,26 @@ describe('P19-B7.1 OBJ-2 — the R-multiple is the kernel netEV ÷ risk_price (p
   });
 });
 
+describe('P19-B7.1 OBJ-4 — pWinFloored is read from the kernel OUTPUT, complete across ALL floor paths (CHANGE-2)', () => {
+  // The wrapper flags floored = (pWin <= minPWin). These assert the kernel floors pWin in the cases
+  // the OLD derivation (strong-trend && null-dbs) MISSED — proving the output-read is the complete fix.
+  const F = 0.40; // DEFAULT_MIN_PWIN
+  const g = { entryPrice: 100, stopPrice: 98, targetPrice: 106, totalFriction: 0 };
+
+  it('DI-branch DI<=0 floors pWin (the case the strong-trend-only derivation missed)', () => {
+    const r = computeNetExpectancyKernel({ ...g, DI: 0 });   // non-strong-trend, DI=0 → pWin at floor
+    expect(r.pWin).toBeLessThanOrEqual(F + 1e-9);            // → flagged floored (correct)
+  });
+  it('strong-trend with NULL dbs floors pWin', () => {
+    const r = computeNetExpectancyKernel({ ...g, sourcePool: 'quant-strong_trend' }); // dbs undefined → absDbs 0 → floor
+    expect(r.pWin).toBeLessThanOrEqual(F + 1e-9);
+  });
+  it('a healthy DI does NOT floor pWin (flagged not-floored)', () => {
+    const r = computeNetExpectancyKernel({ ...g, DI: 80 });
+    expect(r.pWin).toBeGreaterThan(F + 1e-9);
+  });
+});
+
 describe('P19-B7.1 OBJ-3 — degenerate-geometry microstructure floor (capital-independent)', () => {
   const minAtrFrac = 0.10, minAbsFrac = 0.0005;
 
@@ -106,6 +126,21 @@ describe('P19-B7.1 OBJ-4 — computeSelectionIC (per-cycle, min-N gate, per-regi
     expect(r.meanIC).toBeCloseTo(0, 9); // aggregate hides the split — the per-regime view is the truth
     expect(r.nClusters).toBe(2);        // two window buckets
     expect(r.clusteredSE).not.toBeNull();
+  });
+
+  it('CHANGE-3: the point estimate is PERIOD-weighted (mean of per-cycle ICs), not cluster-weighted', () => {
+    // window d1 holds TWO cycles (IC +1, +1); window d2 holds ONE (IC −1).
+    // period-equal mean = (1 + 1 − 1)/3 = +0.3333 ; cluster-weighted would be (mean(1,1) + (−1))/2 = 0.
+    const perfect = [1, 2, 3, 4, 5], inverse = [5, 4, 3, 2, 1], asc = [1, 2, 3, 4, 5];
+    const cycles = [
+      mk('a', 'TFS', 'd1', asc, perfect),  // +1
+      mk('b', 'TFS', 'd1', asc, perfect),  // +1  (same window d1)
+      mk('c', 'TFS', 'd2', asc, inverse),  // −1  (window d2)
+    ];
+    const r = computeSelectionIC(cycles, { minN: 5 });
+    expect(r.nCycles).toBe(3);
+    expect(r.nClusters).toBe(2);
+    expect(r.meanIC).toBeCloseTo(1 / 3, 9); // period-equal, NOT 0 (which cluster-weighting would give)
   });
 });
 

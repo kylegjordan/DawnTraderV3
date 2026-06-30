@@ -305,7 +305,10 @@ class RtbMetricsService {
     const s = this.sizingClampSamples;
     if (s.length === 0) return { totalSamples: 0, boundCount: 0, boundRate: null, meanRatio: null };
     const boundCount = s.filter((x) => x.bound).length;
-    const meanRatio = s.reduce((a, x) => a + x.effectiveRiskFractionRatio, 0) / s.length;
+    // CHANGE-1 (Langston): guard the mean against a non-finite ratio — one NaN/undefined would
+    // otherwise poison the whole summary via reduce. meanRatio is over the finite ratios only.
+    const finite = s.filter((x) => Number.isFinite(x.effectiveRiskFractionRatio));
+    const meanRatio = finite.length > 0 ? finite.reduce((a, x) => a + x.effectiveRiskFractionRatio, 0) / finite.length : null;
     return { totalSamples: s.length, boundCount, boundRate: boundCount / s.length, meanRatio };
   }
 

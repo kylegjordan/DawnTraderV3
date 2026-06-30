@@ -105,6 +105,10 @@ export interface TradeExpectancyResult {
   // re-derived) so the live ranker can sort by risk-normalized net-of-cost EV — the
   // cross-asset-comparable ranking key. PASS-THROUGH of the kernel value; do NOT recompute.
   netRewardToRisk: number;
+  // P19-B7.1 (OBJ-4): pWin was floor-defaulted (the kernel's computed pWin sits at the injected
+  // floor — no real signal edge). Derived from the kernel's OWN output vs the floor (complete across
+  // ALL floor paths), NOT a re-implementation of the floor trigger. Segments the Phase-25 calibration.
+  pWinFloored: boolean;
 }
 
 /**
@@ -623,7 +627,7 @@ export function evaluateTradeExpectancy(symbol: string, tradeMeta: TradeMeta, as
     console.warn(`[11.8B-A][ExpectancyGate][SKIP] unclassifiable ${symbol} — cannot price friction; returning non-tradeable (skip, not throw)`);
     return {
       isTradeable: false, ev: 0, netEV: 0, rawEV: 0, friction: 0,
-      score: 0, pWin: 0, pLoss: 0, meanCorrelation: 0, netRewardToRisk: 0,
+      score: 0, pWin: 0, pLoss: 0, meanCorrelation: 0, netRewardToRisk: 0, pWinFloored: false,
       rejectionReason: `unclassifiable symbol ${symbol} — cannot resolve asset class to price friction`,
     };
   }
@@ -634,6 +638,9 @@ export function evaluateTradeExpectancy(symbol: string, tradeMeta: TradeMeta, as
   // B72: Inject pWin parameters from module_constants so the kernel stays
   // pure-math while values become DB-tunable. Modules: 'expectancy_kernel'
   // (pwin_floor, pwin_ceiling) + 'directional_integrity' (di_pwin_factor).
+  // P19-B7.1 (OBJ-4): the pWin floor THIS call supplies to the kernel — captured so we can detect a
+  // floored pWin by comparing the kernel's output against it (see pWinFloored below).
+  const _minPWin = getCachedNumberRequired('expectancy_kernel', 'pwin_floor', _GLOBAL_KEY);
   const kernelResult = computeNetExpectancyKernel({
     entryPrice: tradeMeta.entryPrice,
     stopPrice: tradeMeta.stopPrice,
@@ -645,13 +652,19 @@ export function evaluateTradeExpectancy(symbol: string, tradeMeta: TradeMeta, as
     sourcePool: tradeMeta.sourcePool,
     dbsScore: tradeMeta.dbsScore,
     // B72: caller-injected pWin params (from module_constants).
-    minPWin:      getCachedNumberRequired('expectancy_kernel',     'pwin_floor',     _GLOBAL_KEY),
+    minPWin:      _minPWin,
     maxPWin:      getCachedNumberRequired('expectancy_kernel',     'pwin_ceiling',   _GLOBAL_KEY),
     diPWinFactor: getCachedNumberRequired('directional_integrity', 'di_pwin_factor', _GLOBAL_KEY),
   });
-  
+
   // P19-B7.1 (OBJ-2): surface the kernel's own netRewardToRisk (the R-multiple) — pass-through, not re-derived.
   const { netEV, rawEV, pWin, pLoss, netRewardToRisk } = kernelResult;
+  // P19-B7.1 (OBJ-4, Langston CHANGE-2): pWin was FLOORED iff the kernel's computed pWin sits at the
+  // floor we injected. Read from the kernel's OWN output (pWin) vs the floor THIS wrapper supplied —
+  // NOT by re-deriving the kernel's floor-trigger conditions (the B72.1/consumer-reconstructs-producer
+  // trap). This is exact + complete: it catches EVERY path the kernel floors on (strong-trend
+  // null/zero/negative dbs AND DI ≤ 0 on the DI branch), and can never drift from the kernel's logic.
+  const pWinFloored = pWin <= _minPWin + 1e-9;
   const enrichedMeta = { ...tradeMeta, DI, VolNoise };
   const { score, meanCorrelation } = calculateQualityScore(enrichedMeta, symbol, netEV);
   
@@ -671,6 +684,7 @@ export function evaluateTradeExpectancy(symbol: string, tradeMeta: TradeMeta, as
     pLoss,
     meanCorrelation,
     netRewardToRisk, // P19-B7.1 (OBJ-2): R-multiple pass-through from the kernel
+    pWinFloored,     // P19-B7.1 (OBJ-4): kernel-output-derived floored-pWin flag
     rejectionReason
   };
   

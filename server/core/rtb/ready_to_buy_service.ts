@@ -1717,22 +1717,23 @@ class ReadyToBuyService {
       const rsNum = meta.rankingScore != null ? Number(meta.rankingScore) : NaN;
       return Number.isFinite(rsNum) ? rsNum : parseFloat(signal.finalScore || '0');
     }
-    return this.signalRMultiple(signal, assetClass); // r_multiple (default)
+    return this.signalRMultiple(signal, assetClass).r; // r_multiple (default)
   }
 
   /**
-   * P19-B7.1 (OBJ-2): the expected R-multiple for a candidate at rank time. Mirrors the open
-   * path's tradeMeta build (paper-execution-engine.ts:2076-2087) and reads the kernel's own
-   * `netRewardToRisk` surfaced on the result — REUSE over recompute (no parallel friction model;
-   * the same number the gate later confirms). Sample-free: `recordEvInputSample` lives ONLY in the
-   * open path, so rank-time ranking records no EV-input sample (no-double-sample by construction).
-   * Returns -Infinity on unpriceable input so it sorts to the bottom (degenerate geometry is
-   * already rejected upstream by passesGeometryFloor).
+   * P19-B7.1 (OBJ-2/4): the expected R-multiple for a candidate at rank time + the kernel's own
+   * floored-pWin flag. Mirrors the open path's tradeMeta build (paper-execution-engine.ts:2076-2087)
+   * and reads the kernel's own `netRewardToRisk` + `pWinFloored` surfaced on the result — REUSE over
+   * recompute (no parallel friction model + no re-derivation of the kernel's floor trigger; the same
+   * numbers the gate uses). Sample-free: `recordEvInputSample` lives ONLY in the open path, so
+   * rank-time ranking records no EV-input sample (no-double-sample by construction). Returns
+   * `r=-Infinity` on unpriceable input so it sorts to the bottom (degenerate geometry is already
+   * rejected upstream by passesGeometryFloor).
    */
-  private signalRMultiple(signal: RtbSignal, assetClass?: AssetClass): number {
+  private signalRMultiple(signal: RtbSignal, assetClass?: AssetClass): { r: number; pwinFloored: boolean } {
     const entry = parseFloat(signal.entryPrice);
     const stop = parseFloat(signal.stopPrice);
-    if (!Number.isFinite(entry) || !Number.isFinite(stop)) return -Infinity;
+    if (!Number.isFinite(entry) || !Number.isFinite(stop)) return { r: -Infinity, pwinFloored: false };
     const meta = (signal.metadata ?? {}) as Record<string, any>;
     const targetNum = signal.targetPrice != null ? parseFloat(signal.targetPrice) : NaN;
     const target = Number.isFinite(targetNum) ? targetNum : entry * 1.02; // mirror executePromotedSignal default
@@ -1751,7 +1752,10 @@ class ReadyToBuyService {
       sourcePool: (signal as any).sourcePool ?? meta.sourcePool,
       dbsScore: dbs !== undefined && Number.isFinite(dbs) ? dbs : undefined,
     }, ac, /* quiet */ true);
-    return Number.isFinite(result.netRewardToRisk) ? result.netRewardToRisk : -Infinity;
+    return {
+      r: Number.isFinite(result.netRewardToRisk) ? result.netRewardToRisk : -Infinity,
+      pwinFloored: result.pWinFloored,
+    };
   }
 
   /**
@@ -1885,16 +1889,15 @@ class ReadyToBuyService {
       const rankingScore = num(meta.rankingScore);
       const diAtQueue = num(s.diAtQueue);
       const dbsScoreAtQueue = num(s.dbsScoreAtQueue);
-      // P19-B7.1 (OBJ-4): the new ranker's decision-time R-multiple for this candidate — reuse the
-      // rank-time helper (the gate's own friction+kernel, sample-free). Store null (not -Infinity)
-      // on a non-finite result so the decimal column stays clean. pwinFloored = the documented
-      // floor-defaulted case: a strong-trend path that reached the kernel with NULL dbsScore (the
-      // xStock EV-input gap) defaults pWin to the floor instead of a real-DI value → NOT cross-class
-      // comparable until Phase-25 calibration. The raw di/dbs columns stay as the auditable backstop.
-      const _predR = this.signalRMultiple(s, ac);
-      const predictedRMultiple = Number.isFinite(_predR) ? _predR : null;
-      const _srcPool = (s as any).sourcePool ?? meta.sourcePool ?? null;
-      const pwinFloored = _srcPool === 'quant-strong_trend' && dbsScoreAtQueue === null;
+      // P19-B7.1 (OBJ-4): the new ranker's decision-time R-multiple + floored-pWin flag for this
+      // candidate — reuse the rank-time helper (the gate's own friction+kernel, sample-free). Store
+      // null (not -Infinity) on a non-finite R so the decimal column stays clean. `pwinFloored` comes
+      // straight from the kernel's OWN output (CHANGE-2, Langston): pWin sitting at the injected floor
+      // — complete across ALL floor paths (strong-trend null/zero/neg dbs AND DI≤0), no re-derivation
+      // that could drift from the kernel. The raw di/dbs columns remain as the auditable backstop.
+      const _re = this.signalRMultiple(s, ac);
+      const predictedRMultiple = Number.isFinite(_re.r) ? _re.r : null;
+      const pwinFloored = _re.pwinFloored;
       const sqeVerdict = meta.sqeVerdict ?? 'pass';
       try {
         // Resolve the shadow TRADE first (existing id on dedupe, new on open, null on fail/cap).
