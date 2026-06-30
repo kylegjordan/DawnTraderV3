@@ -50,6 +50,10 @@ export interface ShadowPairingOpenRow {
   sourcePool?: string | null;
   diAtQueue?: number | null;
   dbsScoreAtQueue?: number | null;
+  // P19-B7.1 (OBJ-4): decision-time ranker outputs for the selection-IC harness.
+  predictedRMultiple?: number | null;
+  pwinFloored?: boolean;
+  crossClassPromotion?: boolean;
   sqeVerdict?: string | null;
   sqeRejectReason?: string | null;
 }
@@ -80,6 +84,10 @@ export interface ShadowPoolMemberRow {
   rankingScore?: number | null;
   diAtQueue?: number | null;
   dbsScoreAtQueue?: number | null;
+  // P19-B7.1 (OBJ-4): per-cycle decision-time ranker outputs (selection-IC inputs).
+  predictedRMultiple?: number | null;
+  pwinFloored?: boolean;
+  crossClassPromotion?: boolean;
   sqeVerdict?: string | null;
   regime?: string | null;
 }
@@ -108,6 +116,7 @@ export async function insertShadowPairing(row: ShadowPairingOpenRow): Promise<vo
       promoted_trade_id, signal_id, symbol, strategy, entry_price, stop_price,
       target_price, final_score, hybrid_score, confidence, regime_weight,
       decay_penalty, ranking_score, source_pool, di_at_queue, dbs_score_at_queue,
+      predicted_r_multiple, pwin_floored, cross_class_promotion,
       sqe_verdict, sqe_reject_reason, closed, opened_at, created_at
     ) VALUES (
       ${row.id}, ${row.cycleKey}, ${row.mode}, ${row.assetClass},
@@ -117,7 +126,9 @@ export async function insertShadowPairing(row: ShadowPairingOpenRow): Promise<vo
       ${row.targetPrice ?? null}, ${row.finalScore ?? null}, ${row.hybridScore ?? null},
       ${row.confidence ?? null}, ${row.regimeWeight ?? null}, ${row.decayPenalty ?? null},
       ${row.rankingScore ?? null}, ${row.sourcePool ?? null}, ${row.diAtQueue ?? null},
-      ${row.dbsScoreAtQueue ?? null}, ${row.sqeVerdict ?? null}, ${row.sqeRejectReason ?? null},
+      ${row.dbsScoreAtQueue ?? null},
+      ${row.predictedRMultiple ?? null}, ${row.pwinFloored ?? false}, ${row.crossClassPromotion ?? false},
+      ${row.sqeVerdict ?? null}, ${row.sqeRejectReason ?? null},
       false, NOW(), NOW()
     )
     ON CONFLICT (id) DO NOTHING
@@ -139,6 +150,7 @@ export async function insertShadowPoolMember(row: ShadowPoolMemberRow): Promise<
       cycle_key, mode, asset_class, signal_id, shadow_trade_id, symbol, strategy,
       promotion_rank, promoted, pool_size, final_score, hybrid_score, confidence,
       regime_weight, decay_penalty, ranking_score, di_at_queue, dbs_score_at_queue,
+      predicted_r_multiple, pwin_floored, cross_class_promotion,
       sqe_verdict, regime, created_at
     ) VALUES (
       ${row.cycleKey}, ${row.mode}, ${row.assetClass}, ${row.signalId ?? null},
@@ -146,6 +158,7 @@ export async function insertShadowPoolMember(row: ShadowPoolMemberRow): Promise<
       ${row.promoted}, ${row.poolSize}, ${row.finalScore ?? null}, ${row.hybridScore ?? null},
       ${row.confidence ?? null}, ${row.regimeWeight ?? null}, ${row.decayPenalty ?? null},
       ${row.rankingScore ?? null}, ${row.diAtQueue ?? null}, ${row.dbsScoreAtQueue ?? null},
+      ${row.predictedRMultiple ?? null}, ${row.pwinFloored ?? false}, ${row.crossClassPromotion ?? false},
       ${row.sqeVerdict ?? null}, ${row.regime ?? null}, NOW()
     )
   `);

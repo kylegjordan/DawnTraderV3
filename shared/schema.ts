@@ -1956,6 +1956,11 @@ export const rtbShadowPairings = pgTable("rtb_shadow_pairings", {
   sourcePool: varchar("source_pool", { length: 32 }),                  // EV-path selector (quant-strong_trend → DBS path)
   diAtQueue: decimal("di_at_queue", { precision: 8, scale: 4 }),       // EV input (may be null on active path — #233)
   dbsScoreAtQueue: decimal("dbs_score_at_queue", { precision: 8, scale: 4 }),
+  // ── P19-B7.1 (OBJ-4): the new ranker's decision-time outputs, snapshotted for the
+  // Phase-25 selection-IC harness (does predicted-R order realized-R?). ──
+  predictedRMultiple: decimal("predicted_r_multiple", { precision: 10, scale: 4 }), // the rank-time R = netEV ÷ risk_price (the predicted quality, vs the realized r_multiple at close)
+  pwinFloored: boolean("pwin_floored").notNull().default(false),       // pWin was floor-defaulted (NULL dbsScore on a strong-trend path), NOT real-DI-derived → NOT cross-class comparable until Phase-25 calibration
+  crossClassPromotion: boolean("cross_class_promotion").notNull().default(false), // this cycle's rank-0 winner is a DIFFERENT asset class than the rank-1 runner-up (the cross-class selection the floored-pWin limitation bears on; Langston Q2 guard)
   sqeVerdict: varchar("sqe_verdict", { length: 32 }),                  // SQE pass/reject (pre-stocks the E-trigger; Langston add)
   sqeRejectReason: varchar("sqe_reject_reason", { length: 64 }),
   // ── realized outcome (filled at shadow close; NULL until then) ──
@@ -2018,6 +2023,10 @@ export const rtbShadowPoolMembers = pgTable("rtb_shadow_pool_members", {
   rankingScore: decimal("ranking_score", { precision: 10, scale: 6 }),
   diAtQueue: decimal("di_at_queue", { precision: 8, scale: 4 }),
   dbsScoreAtQueue: decimal("dbs_score_at_queue", { precision: 8, scale: 4 }),
+  // ── P19-B7.1 (OBJ-4): per-cycle decision-time ranker outputs (the selection-IC inputs) ──
+  predictedRMultiple: decimal("predicted_r_multiple", { precision: 10, scale: 4 }), // rank-time R = netEV ÷ risk_price THIS cycle (predicted quality; the realized r_multiple lives on the FK'd pairing)
+  pwinFloored: boolean("pwin_floored").notNull().default(false),       // pWin floor-defaulted (NULL dbsScore on strong-trend), not real-DI — segments the Phase-25 calibration
+  crossClassPromotion: boolean("cross_class_promotion").notNull().default(false), // this cycle's rank-0 winner is a different asset class than the rank-1 runner-up (Langston Q2)
   sqeVerdict: varchar("sqe_verdict", { length: 32 }),
   regime: varchar("regime", { length: 50 }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),

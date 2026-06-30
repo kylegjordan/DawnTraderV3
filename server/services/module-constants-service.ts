@@ -420,6 +420,38 @@ export function getCachedNumberRequired(
 }
 
 /**
+ * P19-B7.1 (OBJ-1): fail-hard STRING reader — same contract as getCachedNumberRequired
+ * but for categorical config (e.g. the active-ranker selection). THROWS on cold cache or
+ * missing row (no hidden default — §5 rule 15: a DB-governed setting fails hard when absent,
+ * never silently falls back). `allowed`, when given, also rejects an unrecognized value so a
+ * typo'd ranker name can't silently pick a wrong sort.
+ */
+export function getCachedStringRequired(
+  moduleName: string,
+  constantName: string,
+  key: ResolutionKey,
+  allowed?: readonly string[],
+): string {
+  const v = getCachedConstant<unknown>(moduleName, constantName, key);
+  if (v === undefined) {
+    throw new Error(
+      `module_constants: required row missing for ${moduleName}.${constantName} key=${JSON.stringify(key)}. Seed via Drizzle migration.`,
+    );
+  }
+  if (typeof v !== 'string') {
+    throw new Error(
+      `module_constants: ${moduleName}.${constantName} expected string, got ${typeof v} (${String(v)})`,
+    );
+  }
+  if (allowed && !allowed.includes(v)) {
+    throw new Error(
+      `module_constants: ${moduleName}.${constantName}='${v}' not in allowed set {${allowed.join(', ')}}`,
+    );
+  }
+  return v;
+}
+
+/**
  * Background refresh interval — re-prefetches every warmed module every
  * CACHE_TTL_MS so SQL UPDATEs propagate to sync callers within ~60s.
  * Started lazily on first prefetchModule() call. No-op in test env.

@@ -100,6 +100,11 @@ export interface TradeExpectancyResult {
   pWin: number;
   pLoss: number;
   meanCorrelation: number;
+  // P19-B7.1 (OBJ-2): the expected R-multiple = netEV ÷ risk_price (= the kernel's own
+  // `netRewardToRisk`, net-expectancy-kernel.ts:117, distStop>0 ∞-guarded). Surfaced (not
+  // re-derived) so the live ranker can sort by risk-normalized net-of-cost EV — the
+  // cross-asset-comparable ranking key. PASS-THROUGH of the kernel value; do NOT recompute.
+  netRewardToRisk: number;
 }
 
 /**
@@ -590,7 +595,7 @@ function calculateQualityScore(
  * @param tradeMeta - Trade metadata (entry, target, stop prices + optional DI/VolNoise)
  * @returns TradeExpectancyResult with isTradeable, netEV, score, and optional rejection reason
  */
-export function evaluateTradeExpectancy(symbol: string, tradeMeta: TradeMeta, assetClass?: AssetClass): TradeExpectancyResult {
+export function evaluateTradeExpectancy(symbol: string, tradeMeta: TradeMeta, assetClass?: AssetClass, quiet: boolean = false): TradeExpectancyResult {
   let DI = tradeMeta.DI;
   let VolNoise = tradeMeta.VolNoise;
   
@@ -618,7 +623,7 @@ export function evaluateTradeExpectancy(symbol: string, tradeMeta: TradeMeta, as
     console.warn(`[11.8B-A][ExpectancyGate][SKIP] unclassifiable ${symbol} — cannot price friction; returning non-tradeable (skip, not throw)`);
     return {
       isTradeable: false, ev: 0, netEV: 0, rawEV: 0, friction: 0,
-      score: 0, pWin: 0, pLoss: 0, meanCorrelation: 0,
+      score: 0, pWin: 0, pLoss: 0, meanCorrelation: 0, netRewardToRisk: 0,
       rejectionReason: `unclassifiable symbol ${symbol} — cannot resolve asset class to price friction`,
     };
   }
@@ -645,7 +650,8 @@ export function evaluateTradeExpectancy(symbol: string, tradeMeta: TradeMeta, as
     diPWinFactor: getCachedNumberRequired('directional_integrity', 'di_pwin_factor', _GLOBAL_KEY),
   });
   
-  const { netEV, rawEV, pWin, pLoss } = kernelResult;
+  // P19-B7.1 (OBJ-2): surface the kernel's own netRewardToRisk (the R-multiple) — pass-through, not re-derived.
+  const { netEV, rawEV, pWin, pLoss, netRewardToRisk } = kernelResult;
   const enrichedMeta = { ...tradeMeta, DI, VolNoise };
   const { score, meanCorrelation } = calculateQualityScore(enrichedMeta, symbol, netEV);
   
@@ -664,10 +670,15 @@ export function evaluateTradeExpectancy(symbol: string, tradeMeta: TradeMeta, as
     pWin,
     pLoss,
     meanCorrelation,
+    netRewardToRisk, // P19-B7.1 (OBJ-2): R-multiple pass-through from the kernel
     rejectionReason
   };
   
-  console.log(`[11.8B-A][ExpectancyGate] symbol=${symbol} NetEV=${netEV.toFixed(6)} RawEV=${rawEV.toFixed(6)} Friction=${friction.toFixed(6)} Score=${score.toFixed(1)} pWin=${pWin.toFixed(2)} DI=${DI.toFixed(1)} VolNoise=${VolNoise.toFixed(3)} ρ̄=${meanCorrelation.toFixed(3)} tradeable=${isTradeable}`);
+  // P19-B7.1 (OBJ-2): `quiet` suppresses this per-call log when the function is used pool-wide at
+  // rank-time (the ranker calls it once per candidate; the gate-time call at the open path stays loud).
+  if (!quiet) {
+    console.log(`[11.8B-A][ExpectancyGate] symbol=${symbol} NetEV=${netEV.toFixed(6)} RawEV=${rawEV.toFixed(6)} Friction=${friction.toFixed(6)} Score=${score.toFixed(1)} pWin=${pWin.toFixed(2)} DI=${DI.toFixed(1)} VolNoise=${VolNoise.toFixed(3)} ρ̄=${meanCorrelation.toFixed(3)} tradeable=${isTradeable}`);
+  }
   
   return result;
 }

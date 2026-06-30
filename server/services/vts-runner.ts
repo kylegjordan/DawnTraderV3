@@ -751,6 +751,10 @@ export interface RegisterOpenShadowTradeInput {
   rankingScore?: number | null;
   diAtQueue?: number | null;
   dbsScoreAtQueue?: number | null;
+  // P19-B7.1 (OBJ-4): the new ranker's decision-time outputs (selection-IC harness).
+  predictedRMultiple?: number | null;
+  pwinFloored?: boolean;
+  crossClassPromotion?: boolean;
   sqeVerdict?: string | null;
   sqeRejectReason?: string | null;
 }
@@ -879,6 +883,9 @@ export async function registerOpenShadowTrade(
       sourcePool: input.sourcePool ?? null,
       diAtQueue: input.diAtQueue ?? null,
       dbsScoreAtQueue: input.dbsScoreAtQueue ?? null,
+      predictedRMultiple: input.predictedRMultiple ?? null, // P19-B7.1 (OBJ-4)
+      pwinFloored: input.pwinFloored ?? false,
+      crossClassPromotion: input.crossClassPromotion ?? false,
       sqeVerdict: input.sqeVerdict ?? null,
       sqeRejectReason: input.sqeRejectReason ?? null,
     });

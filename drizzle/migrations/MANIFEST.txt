@@ -151,3 +151,5 @@
 2026-06-26-p19-b6-6-price-liveness-seed.sql
 2026-06-26-p19-b6-7-feed-health-seed.sql
 2026-06-27-p19-reorg-b2-3-per-strategy-minrr.sql
+2026-06-30-p19-b7-1-ranker-config.sql
+2026-06-30-p19-b7-1-shadow-r-multiple.sql
