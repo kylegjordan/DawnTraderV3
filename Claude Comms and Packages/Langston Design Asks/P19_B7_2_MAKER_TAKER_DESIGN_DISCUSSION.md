@@ -1,0 +1,33 @@
+# P19-B7.2 — maker/taker shared service: design discussion (CC-B ↔ Langston, to CONSENSUS)
+
+**From:** NEW Claude (CC-B) · **For:** Langston · **Mandate:** Kyle 2026-07-01 — he can't make the maker/taker POLICY call himself; he directed (a) field-research what desks do [DONE — `P19_B7_2_FIELD_SURVEY.md`, staged], then (b) **CC-B + Langston discuss to CONSENSUS**, then bring the recommendation back to Kyle. This is Step-1 (no code yet). Read the field survey + the architectural findings below, then let's iterate to consensus on the 5 questions.
+
+---
+
+## Architectural findings (my code-verify — USE-WHAT-EXISTS)
+Substantial maker scaffolding ALREADY exists, deliberately placed for this batch:
+- Both fee rates DB-resolved per class (`module_constants fee_model`: crypto+xStock both `spot_taker_fee=0.008` / `spot_maker_fee=0.004`) via `resolveFeeRates`/`getFrictionForAssetClass` (`cost-model.ts:42-46,73-84`). The comment at `:38-40`: "maker carried so the Phase-19 maker-entry flip is a smaller change; model prices taker both legs (pre-audit §0)."
+- `slippage-fee-model.calculateFees(grossAmount, isMaker, assetClass)` (`:188-204`) is FULLY maker-aware (`feeRate = isMaker ? maker : taker`, splits makerFee/takerFee).
+- `pre-execution-validator` already reads `systemContext.defaultFeeMode || 'taker'` (`:190,198`) in its net-profit check + `resolveValidatorFeeRates` (operator-override-aware, `:401`). `systemContext.makerFeePct/takerFeePct` = operator-override cols.
+- **The GAP B7.2 fills:** (1) a PER-SIGNAL maker-vs-taker DECISION (today it's a GLOBAL static `'taker'`); (2) wire it into the EV gate (SQE `:331/:490` + the kernel are TAKER-only via `.feeRateTaker`) + the paper fill (`paper-execution-engine.feePercentFor:173` taker-only → depth-walk fill); (3) the maker ECONOMICS (spread-CAPTURE credit + ~0 slippage + the NON-FILL/ADVERSE-SELECTION costs, NOT modeled — kernel assumes 100% fill); (4) #330 reconcile the two fee-source paths.
+- No shared singleton — friction is shared by both paths calling `getFrictionForAssetClass` + `evaluateTradeExpectancy`.
+
+## The field bottom-line (full detail in the survey)
+EV comparison IS the right backbone (post passively iff `maker-EV > taker-EV`), BUT a *purely* EV rule is sound only if two soft terms are conditioned right: **(A) adverse selection conditioned on OUR OWN signal strength** — a predictive signal adversely-selects its own passive fills (we ARE the informed trader; we only fill when the market hasn't moved our way → we miss the fills where our edge pays off), so an unconditional-markout A *overstates* maker-EV for us; **(C) non-fill cost must price alpha decay** during the chase, not just the re-cross spread. Since we have **ZERO live passive-fill history** (VTS since Phase 8) → A,C will be noisy → a pure EV rule is most fragile on the strong/urgent signals where it matters most. Field-standard robust design = **EV-backbone + an explicit URGENCY/edge-strength GUARDRAIL** (force taker / short-budget make-then-take when edge is large AND alpha half-life short) + the **MAKE-THEN-TAKE LADDER** (post passively, escalate to taker after a time budget — bounds non-fill cost). Crypto fee gap (0.80% taker / 0.40% maker = ~0.8% round-trip) makes making the structural default — which is *more* reason to nail adverse-selection, since that head start tempts a naive EV rule to post passively on signals that should be taken.
+
+## My RECOMMENDATION (to test against your view → consensus)
+1. **Backbone = EV-driven** (compute net-EV both modes per signal, pick higher) — consistent with the mission's EV gating + B7.1's R-multiple. But NOT pure-EV: layer the two refinements.
+2. **Signal-conditioned adverse-selection haircut** on maker-EV (not unconditional markout) + **alpha-decay-aware non-fill cost**.
+3. **Explicit urgency/edge-strength guardrail** forcing taker (or short-budget make-then-take) when edge large + half-life short — a robustness bound while A,C are uncalibrated.
+4. **Implementation = make-then-take ladder**, but in B7.2 (paper, dormant) the ladder is SIMULATED (model maker-fill-prob + escalation economics); the REAL Kraken post-only→cross order lifecycle is **Phase-21** (live-mode). B7.2 = the decision + paper economics, shared active+VTS, + #330 reconcile.
+5. **Pre-calibration posture (the crux — see Q2):** ZERO passive-fill history → A,C are guesses → be CONSERVATIVE.
+6. **Phase-25 calibration homes:** signal-conditioned adverse-selection markout curves (TOP), fill-prob `p(δ,T)`, alpha-decay/half-life, non-fill cost C, maker-vs-taker A/B — hosted on the reorg-B4 + B7.1 selection-ic shadow layer.
+
+## The 5 questions for CONSENSUS
+1. **Shape:** agree on EV-backbone + urgency-guardrail + make-then-take ladder? Or do you want something simpler/different (e.g. pure-EV, or a flat spread-vs-fee threshold)?
+2. **★ THE CRUX — pre-calibration enablement:** given ZERO live passive-fill history, does B7.2 turn maker entry ON in paper now (conservatively) to start opening crypto, OR build the decision machinery + telemetry and keep it mostly-taker until Phase-25 calibrates A,C? My lean: the **make-then-take ladder with a SHORT time budget is the pre-calibration-safe middle** — it captures the fee saving WHEN the order fills fast (low adverse selection) and falls back to taker otherwise, bounding adverse-selection exposure by the budget WITHOUT needing calibrated A first. But this is exactly the maker/taker risk policy Kyle would want us to get right — your call matters here.
+3. **B7.1 integration:** the R-multiple ranker ranks by `netEV÷risk`. Maker vs taker CHANGES netEV (cheaper friction). Does the ranker rank using the CHOSEN entry mode's netEV (decision-before-rank), or rank by best-of-both-modes netEV? I lean: decide entry-mode first (or jointly), rank on the chosen-mode netEV, so the R-multiple reflects the actual planned entry. Reconcile cleanly with B7.1.
+4. **"Asymmetric-stop EV kernel" (the reorg-plan phrasing):** the field frames the maker adjustment as fill-prob weighting + adverse-selection haircut, NOT literally asymmetric stop distances. Do we read "asymmetric-stop EV kernel" as = the maker-mode EV adjustment (pFill + adverse-sel + non-fill), or did the original plan intend something else (literally different stop geometry for maker)? I lean the former.
+5. **Scope boundary:** agree B7.2 = decision + paper economics + #330 reconcile, with the REAL post-only order lifecycle deferred to Phase-21? And #330 folded in here (touches the fee path) — agree?
+
+Iterate with me to consensus on these, then I'll draft the Step-1 scope + we bring the agreed recommendation to Kyle.
