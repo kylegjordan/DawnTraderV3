@@ -47,6 +47,8 @@
 |---|---|
 | SQE admission gates (`sqe_config.min_final_score`, `min_regime_weight`) | `screener_filters` row → `module_constants` `sqe_config` → `SQE_DEFAULT_THRESHOLDS` static mirror |
 | RTB freshness decay (`rtb_ranking.finalscore_decay_lambda`) | `process.env.FINALSCORE_DECAY_RATE` → `module_constants` `rtb_ranking` |
+| RTB live-picker ranker (P19-B7.1: `rtb_ranking.active_ranker` = `r_multiple`(default)\|`confidence`\|`ranking_score`) | `module_constants` `rtb_ranking` → **fail-hard, NO static default** (`getCachedStringRequired`; a missing row THROWS — §5 r15, no silent fallback) |
+| RTB degenerate-geometry floor (P19-B7.1: `rtb_ranking.min_atr_fraction_floor`=0.10, `rtb_ranking.min_abs_risk_fraction`=0.0005) | `module_constants` `rtb_ranking` → fail-hard (`getCachedNumberRequired`). Conservative degenerate-only placeholders, Phase-25-tunable. The ranking-domain executability floor (capital-independent), distinct from the emit-stage GUARD-1 `MIN_STOP_DISTANCE_BPS` |
 | TCL warmup threshold (`rtb_config.tcl_warmup_threshold_signals`) | `process.env.TCL_SIGNAL_THRESHOLD` → `module_constants` `rtb_config` |
 | net-EV pWin parameters (`expectancy_kernel.pwin_floor`/`ceiling`, `directional_integrity.di_pwin_factor`) | Caller-injected from `module_constants` → kernel default seed (kernel pure-math, no DB read) |
 

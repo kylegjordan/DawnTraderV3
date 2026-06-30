@@ -200,7 +200,7 @@ This section documents the mathematical foundation of DawnTrader — every formu
 **Directive**: 10.9A
 **Status**: ACTIVE — LOCKED (Object.freeze, DO NOT MODIFY without review)
 
-The FinalScore formula is the system's primary signal ranking mechanism:
+The FinalScore formula (the FORMULA stays LOCKED below; **its role as the live PICKER ranker was superseded by P19-B7.1 — see "P19-B7.1 — Live-picker ranker" immediately after this section**):
 
 ```
 FinalScore = (HybridScore × 0.4) + (Confidence × 0.3) + (RegimeWeight × 0.2) - (DecayPenalty × 0.1)
@@ -218,7 +218,32 @@ FinalScore = (HybridScore × 0.4) + (Confidence × 0.3) + (RegimeWeight × 0.2) 
 - **Max theoretical FinalScore**: 0.9 (all components = 1.0, DecayPenalty = 0)
 - **Minimum viable FinalScore**: 0.35 (SQE gate)
 
-**Consumers**: SQE, RTB Refresh, VTS scoring, adaptive-goals-weight.ts, all signal ranking.
+**Consumers**: SQE, RTB Refresh, VTS scoring, adaptive-goals-weight.ts. **(No longer the live-picker sort key — P19-B7.1.)**
+
+---
+
+### P19-B7.1 — Live-picker ranker: the expected R-multiple (supersedes FinalScore-as-picker)
+
+**Directive**: P19-B7.1 (2026-06-30) · **Status**: ACTIVE (dormant until paper-active trading turns on, B8)
+
+The live ready-to-buy picker (`getRankedSignals`, `ready_to_buy_service.ts`) no longer sorts by the friction-blind, reward:risk-blind `FinalScore`. It ranks by the **expected R-multiple** — risk-normalized, net-of-cost expected value, the field-standard cross-asset opportunity score (Van Tharp R-multiples / Kelly growth-optimal for sequential single-bets):
+
+```
+rank by  R = netEV ÷ risk_price     (DESC)
+  netEV     = the Net-Expectancy kernel's net-of-friction EV, in PRICE-delta units
+              (net-expectancy-kernel.ts: pWin·distTarget − pLoss·distStop − frictionPrice)
+  risk_price = (entry − stop)
+```
+
+R is dimensionless (price ÷ price), so a crypto candidate and a tokenized-stock (xStock) candidate are comparable on one scale — the cross-asset opportunity requirement. **Why the change:** the pipeline is RANK-then-EV-GATE; ranking on gross FinalScore let a high-confidence, small-target, net-NEGATIVE signal out-rank a lower-confidence, big-net-EV one, and the EV gate then merely *bounced* the gross-quality pick instead of the ranker promoting the best net-EV one. Ranking by R unifies the two: the #1-ranked is the best net-EV survivor and the gate just confirms `netEV > 0`. **RANK is distinct from the GATE** — the ranker sets order; the Net-Expectancy gate independently decides GO/NO-GO.
+
+**Key properties:**
+- **Pluggable, no hidden default (§5 r15):** the active ranker is DB-governed (`module_constants` `rtb_ranking.active_ranker`, fail-hard) — `r_multiple` (default) | `confidence` (the old FinalScore sort, honestly named) | `ranking_score` (the inert VTS score). The two non-default arms exist only as shadow-A/B controls.
+- **Reuse, not re-derivation:** R is the kernel's OWN `netRewardToRisk` (`net-expectancy-kernel.ts`, `distStop>0` ∞-guarded), surfaced through `evaluateTradeExpectancy`'s result. Rank-time reuses that wrapper (`quiet` mode) — the number that ranks is the identical number the gate later confirms. The EV-input calibration sample is recorded ONLY at the open path, so rank-time ranking records no sample (no-double-sample by construction).
+- **Degenerate-geometry reject + microstructure floor (OBJ-3):** a near-zero-stop signal is un-executable; it is REJECTED from ranking (primary) before the kernel's `:0` R-fallback can become a sort key. The floor `max(min_ATR_fraction × ATR, min_abs_risk_fraction × entry)` is a ranking-domain, capital-independent executability guard (see §16-knobs below), distinct from sizing's capital/heat clamp. **Relationship to GUARD-1:** `strategy-helpers.ts` `MIN_STOP_DISTANCE_BPS` (30 bps) is the PRIMARY admission min-stop at strategy-EMIT (flat price-fraction); the ranker floor is a defense-in-depth ranking-stage guard that ALSO adds the cross-asset ATR-fraction dimension GUARD-1's flat-bps lacks — they are different-stage layers, not one fact in two places (single-sourcing the absolute bps is a considered Phase-25 cleanup, RUNNING_ISSUES #399).
+- **pWin still uncalibrated (Phase-25):** R is only as good as pWin; the DI→pWin map is crude pre-calibration. Within a class the bias is ~rank-preserving; ACROSS classes it is not, so the full cross-asset promise is gated on the Phase-25 pWin calibration (RUNNING_ISSUES #399). The `pwin_floored` shadow flag (read from the kernel's own output, not re-derived) segments floored-vs-real-pWin candidates for that calibration.
+
+**New canonical knobs (§16-class):** `rtb_ranking.active_ranker` (string), `rtb_ranking.min_atr_fraction_floor` (0.10, conservative degenerate-only placeholder), `rtb_ranking.min_abs_risk_fraction` (0.0005 = 5 bps; the absolute-executability floor / ATR-missing fallback). All DB-tunable; the floor defaults are Phase-25-tunable placeholders.
 
 ---
 
@@ -5313,6 +5338,8 @@ reorg-B4 attaches a **selection-quality telemetry layer** to the promotion bound
 **Isolation (the load-bearing property).** The layer must never perturb the live trading path or the VTS learning path, achieved by construction, not by flags: shadows live in a SEPARATE in-memory Map `openShadowTrades` (registry **S19**) so no cap / dedupe / ranking reader of the live `openVirtualTrades` ever sees them; the close path is an allowlist (`shadowClose`) that writes ONLY `rtb_shadow_pairings` and never an `outcomeFeedbackStore` / telemetry / archive learning sink; and because shadows also persist into the shared `vts_open_trades` table (tagged `context.shadow=true`, for restart-rehydration), every non-shadow read of that table — the factor-replay/ablation learning feed foremost — excludes them via the single shared `VTS_OPEN_TRADES_EXCLUDE_SHADOW` predicate. Population is bounded by `(mode,signalId)` dedupe (~pool-size) plus a 6h TTL and a 10k reject-new cap. **Dormant today** (rtb_total=0 → nothing is promoted → no shadow rows; lights up at paper-active turn-on, ~B9). Full cross-cutting detail + the two B9-gated hardening items (RUNNING_ISSUES #388/#389) are in the SIM "reorg-B4 SHADOW-TRADE TELEMETRY LAYER" callout + registry S19.
 
 **reorg-B4.1 (2026-06-26) — per-cycle pool membership + the Shadows visibility tab.** reorg-B4 records a signal's rank/`promoted` flag only at its FIRST appearance in the pool. But a signal can linger across cycles (its rank drifting as the field changes) or be promoted on a later cycle — so "the pool ranked at cycle N, and which one we promoted" is not reconstructable from the one-per-signal record alone. reorg-B4.1 adds the **event-grain** companion table `rtb_shadow_pool_members` (one row per promotion-cycle × pool member, written EVERY cycle), FK'd (logically — `NOT NULL`, no DB `REFERENCES`/CASCADE; integrity by resolve-first ordering) to the resolving shadow trade in `rtb_shadow_pairings` (where the outcome still lives once). This is the data behind the **Shadows tab** (`active-trades.tsx`, after Trade History): per cycle it shows the ranked pool with the promoted pick marked and each candidate's realized outcome beside it (the "did we pick the best?" view), plus open shadows in flight and a selection-quality summary — `GET /api/shadow-trades/by-cycle`, whose summary is a SQL aggregate over only **fully-closed** cycles (`bool_and(p.closed)`) so it can't score a still-resolving field, and over **all** cycles (not the page) so the headline stats are stable. `pool_size` is stamped at capture and used for "N candidates" (never `COUNT(*)`, since a tolerated member-write skip can leave fewer rows). Same isolation family — no learning consumer reads either table. Retention of the un-deduped member rows is RUNNING_ISSUES #390 (B9).
+
+**P19-B7.1 (2026-06-30) — predicted-R capture + the selection-IC harness (the ranking-fix proof).** B7.1 made the live ranker the expected R-multiple (Chapter 1, "P19-B7.1 — Live-picker ranker") and extended this shadow layer to MEASURE whether the new ranker actually predicts winners. Three columns were added to BOTH `rtb_shadow_pairings` (trade grain) and `rtb_shadow_pool_members` (event grain): `predicted_r_multiple` (the rank-time R the ranker assigned at decision — vs the existing realized `r_multiple` at close), `pwin_floored` (pWin was floor-defaulted — read from the kernel's OWN output `pWin ≤ minPWin`, complete across every floor path, NOT a consumer re-derivation that could drift), and `cross_class_promotion` (this cycle's rank-0 winner is a different asset class than the rank-1 runner-up — tags the cross-class selections the floored-pWin limitation bears on). The new pure module `server/core/metrics/selection-ic.ts` computes the **selection Information Coefficient**: per-cycle cross-sectional tie-aware Spearman(predicted-R, realized-R) over the full pool, the distribution of those per-cycle ICs with a **window-CLUSTERED standard error** (de-correlates serially-adjacent cycles), a **period-equal point estimate** (textbook Grinold — mean of per-cycle ICs, not cluster means), reported **per-regime-family** (Simpson's-paradox guard) with a min-N gate. A genuinely-positive selection IC is the proof the ranker beats friction (picking one-per-cycle is low-breadth — Grinold's Fundamental Law). The GO/NO-GO RUN is Phase-25 (data accrues only once paper-active is on); the harness + its tests ship now. Still telemetry-only/dormant; same isolation family. Phase-25 homes (pWin calibration, fractional-Kelly, xStock dbsScore-gap, the IC go/no-go, per-class haircut) = RUNNING_ISSUES #399.
 
 ---
 
