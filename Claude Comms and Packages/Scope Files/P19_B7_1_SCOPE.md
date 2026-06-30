@@ -48,7 +48,10 @@ SYSTEM_MANUAL Ch1 (ranking/scoring math — the R-multiple objective) + Ch4 (RTB
 ## Verification criteria
 Pure-compute no-double-EV-sample test (hard); per-term price dimensional unit-test; pluggable-ranker selection; degenerate-geometry reject + floor test; R-multiple correctness (price-delta ÷ price-distance = dimensionless, cross-asset sanity on a high-price vs low-price example); shadow R-multiple + per-regime selection-IC capture; bench tsc-baseline + vitest; CI 4-green. §9.3 applies only if a ranker-selection UI surfaces.
 
-## Open for Langston (final scope sign-off)
-1. `risk_floor` / reject-threshold value — tie to the sizer's effective "too tight" (min-tick / min-ATR-fraction); confirm the exact basis.
-2. The symmetric per-class pWin haircut pre-calibration — in B7.1 or defer to Phase-25 with only the explicit flag now?
-3. Confirm the OBJ list + that the §13 Phase-25 homes are the right granularity.
+## Langston sign-off (2026-06-30 — "cleared to proceed to Step-2/implementation"); 3 answers folded
+1. **`risk_floor` / reject / clamp basis = a min-ATR-FRACTION, pulled from the SIZER'S ACTUAL CONSTANT (same source — HARD condition: not a parallel value that can drift).** Min-tick is exchange-specific (means different things on a $0.50 token vs a $200 xStock) → it does NOT normalize cross-asset, which is the whole point; min-tick sits underneath only as the absolute-executability floor. **One number → three consumers (OBJ-3 reject, OBJ-3 floor, OBJ-5 clamp boundary).** → Step-2 implementation task: locate the sizer's ATR-fraction constant and source the ranker's floor from it.
+2. **No per-class haircut NOW — ship only the explicit not-comparable + provisional-until-calibrated FLAG** (a pre-calibration haircut is itself an uncalibrated guess — two layers of fudge on a floored pWin, unmeasurable until shadow data lands). The haircut itself = a **named, dated Phase-25 §13 home** (not "consider a haircut" floating in prose).
+3. **OBJ list confirmed + FIVE §13 Phase-25 homes, EACH landed in RUNNING_ISSUES with its home stated (not merely enumerated in the completion report): (1) pWin calibration, (2) fractional-Kelly sizing, (3) xStock dbsScore-gap, (4) selection-IC go/no-go, (5) per-class pWin haircut.**
+
+## ★ Step-4 verification anchor (Langston, non-optional)
+The **no-double-EV-sample test (OBJ-2)** must PROVE that running the pool-wide rank-time compute leaves the EV-input dataset **ROW-COUNT unchanged** vs a gate-only cycle — demonstrated empirically, not "a flag is set." This is Phase-25 calibration-data integrity, so it is shown, not asserted, at Step-4.
