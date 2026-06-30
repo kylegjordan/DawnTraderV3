@@ -1,0 +1,54 @@
+# P19-B7.1 — Scope (Step-1): the ranking fix
+
+change-class: architecture
+
+**Owner:** Claude New (CC-B) · **Ultimate scope reviewer:** Langston · **Inputs:** `P19_B7_1_PRE_AUDIT.md` (internal deep-trace) + `P19_B7_1_FIELD_SURVEY.md` (external prior art, 2 sourced surveys) + `P19_B7_1_CC_A_INDEPENDENT_DIG.md` (independent 2nd-eyes) + a code-verification of the 3 load-bearing facts. Field/Langston/CC-A/internal **converged**; Kyle approved the reframe + the field-first approach + the cross-asset requirement.
+
+---
+
+## Objective
+Replace the friction-blind `finalScore` ranker on the live picker (`getRankedSignals`, `ready_to_buy_service.ts:1671`) with a **risk-normalized, net-of-cost expected-value ranker = the expected R-multiple**, so the system selects the best opportunity **across asset classes** on a common, comparable basis (Kyle's core requirement). Justified on the **structural friction-blindness** (RANK-by-gross-finalScore → EV-GATE-bounces-the-net-negative-pick), NOT the fragile anti-predictive r (which the roadmap mandates re-validating + whose B63 siblings don't replicate). The calibrated win-probability that makes it fully trustworthy is **Phase-25** (data-gated on real outcomes).
+
+## The ranking score — CONFIRMED by code-verify
+```
+rank by  R = netEV ÷ risk_price        (descending)
+  netEV     = evaluateTradeExpectancy's value — VERIFIED in PRICE-delta units
+              (net-expectancy-kernel.ts:114-115: pWin·distTarget − pLoss·distStop − frictionPrice;
+               friction already ×entry → price units)
+  risk_price = (entry − stop), FLOORED at risk_floor
+```
+- netEV is **price-delta** (verified), so `R = netEV ÷ risk_price` is dimensionally clean (price ÷ price = dimensionless R-multiple). The earlier "double-normalization" worry assumed netEV was ÷entry — code-verify proved it is NOT, so this form is correct.
+- R-units make a crypto candidate and a tokenized-stock candidate comparable — the field-standard cross-asset normalization (Van Tharp R-multiples / CTA vol-scaling / Kelly growth-optimal for sequential single-bets).
+- **RANK distinct from GATE:** the ranker sets ORDER; the gate still independently decides GO/NO-GO at `netEV > 0`. An all-net-negative pool = clean no-trade under both.
+
+## Objectives
+**OBJ-1 — pluggable ranker, default = R-multiple.** A selectable sort strategy in `getRankedSignals` (`:1671`): candidates **`R-multiple` (new default)** | `finalScore` (control — name it honestly "rank-by-confidence", since finalScore is degenerate ≈ confidence−decay) | `rankingScore`. DB/config-selected via `module_constants` (no hidden default — §5 rule 15). The `finalScore`/`rankingScore` arms exist only as shadow-A/B controls.
+
+**OBJ-2 — pure, side-effect-free R-multiple compute (Langston HARD condition / trap-7).** A pure `computeRMultiple(signal)` that reuses the gate's net-EV math **without** the EV-input-sample side-effect `evaluateTradeExpectancy` currently records — running the gate pool-wide at rank time must NOT double-fire that sample (it would corrupt the EV-input dataset that Phase-25 pWin calibration depends on = self-defeating). Separate pure path or a suppress-sample flag; **a no-double-EV-sample test is non-optional.** The `cost` term = the SAME friction model the gate uses, in PRICE units. **Dimensional unit-test asserts each numerator term is a price individually** (two errors can cancel into a clean-looking ratio).
+
+**OBJ-3 — degenerate-geometry handling: REJECT primary, floor secondary (CC-A final).** The geometry gate today enforces sign/validity only (verified `signal-target-normalizer.ts:80-84`) — a near-zero `(entry−stop)` PASSES. **Reject the un-executable near-zero-stop trade upstream** (a tiny stop is un-executable; the sizer would size nonsense) — reject KILLS it; the **risk_price floor is ONLY the ranker's arithmetic infinity-guard** and must NOT mask a degenerate executed stop. **One shared "too tight": the reject threshold + the floor = the SAME min-tick / min-ATR-fraction the sizer uses** (else phantom near-∞-R the sizer would never take).
+
+**OBJ-4 — shadow A/B instrumentation (the Phase-25 proof harness).** Extend reorg-B4 `rtb_shadow_pairings` to capture the **R-multiple** at decision time + whether `pWin` was real-DI-derived or floor-defaulted. **Selection-IC = per-cycle CROSS-SECTIONAL Spearman IC** (within each cycle's candidate set, did predicted-R order realized-R?), then study the **distribution of those per-cycle ICs with window-CLUSTERED standard errors** — the correct Grinold formulation (CC-A, Langston-adopted; supersedes pooling the whole sample). Computed over the **FULL candidate pool (promoted + non-promoted** — isolates ranker skill from the promotion cut), reported **per-regime-family (Simpson's paradox: a positive aggregate can hide a negative IC in one of the 5 regimes, and the go/no-go rides on it)**, with a **min-N gate + CI** (per-cycle IC on a 20-30 candidate set is noise) and **§19.4 sibling-control on CLEAN windows**. This IS the Phase-25 GO/NO-GO that the new ranker actually beats friction (one-pick-per-cycle is low-breadth — Grinold — so genuinely-positive selection-IC is the proof we're not just paying friction).
+
+**OBJ-5 — ranking↔sizing coherence: enforced invariant + clamp telemetry.** Code-verify confirmed the sizer is **fixed-fractional-RISK** (`paper-position-sizing.ts:179` `quantity = riskAmount ÷ stopDistance`) → R-rank is coherent with sizing. **Assert risk-normalized sizing as a documented enforced invariant** (so a future notional-sizer change is caught — R-rank silently decoheres under notional sizing). Its **clamps** (maxPositionPercentPct / maxTotalExposurePct / notional-cap×0.97 / per-symbol-or-portfolio-heat cap) make it piecewise-notional when binding; the `wasClamped` flag is already logged (`:228`). Add **clamp-bind telemetry measured on SIZED signals (NOT candidate signals — denominator trap):** the fraction of actually-sized signals that hit the min-size floor, the max-size ceiling, or the heat cap (the one Langston bets binds most). **Objective bar (Langston, hard pass/fail):** **>~15-20% bind → the sizer is piecewise-notional in practice, R-rank silently overstates the top of the book → the honest ranker becomes realized-$EV net of friction at the POST-CLAMP executed size; <~5% → noise, keep R; in-between = judgment.** The realized-$EV ranker stays **SHELVED as the contingency** (NOT built now — code-verify confirmed genuine fixed-fractional-risk, so path (a) holds); **IF the measured bind-rate comes back high, the realized-$EV swap gets a NAMED §13 home the moment it's confirmed, not "later."** Bind-rate is a paper-run measurement (needs paper-active data). **★ The OBJ-3 div-guard floor / reject threshold and THIS clamp-bind boundary are the SAME threshold (Langston): a sub-floor stop is exactly the regime where the cap binds and R-rank decoheres — one boundary, not two.**
+
+## xStock handling (Langston Q3 — crude + explicit, provisional)
+xStock strong-trend reaches the kernel with NULL `dbs_score_at_queue` → 0.40 pWin floor. **Ship crude, do NOT hard-block** (blocking forks the path — xStock would fall back to finalScore, the exact inconsistency we're removing). But: (a) the floor is **LOGGED at ranking** (no silent fallback, §5 r15); (b) the shadow records **real-DI-derived vs floor-defaulted** (Phase-25 segments on it); (c) **FLAG explicitly that a floored-pWin xStock candidate is NOT comparable to a real-DI-pWin crypto candidate** — so the cross-class comparison is **provisional-until-calibrated**; (d) the dbsScore-gap closure gets a **DATED Phase-25/xStock §13 home** + is a **HARD prerequisite for xStock LIVE enablement** (crude is fine for paper, not live).
+
+## ★ Honest limitation to STATE in scope (Langston flag 2 — don't oversell)
+Within a class, uncalibrated-pWin bias is ~monotonic / rank-preserving → ranking is solid. **Across classes — exactly Kyle's headline requirement — it is NOT rank-preserving**, so the cross-asset capability is **partially gated on the Phase-25 pWin calibration we don't have yet.** Pre-calibration posture is conservative; consider a **symmetric per-class pWin haircut** until Platt/isotonic calibration lands (xStock's floor covers only one direction). The within-class win is real and immediate; the full cross-class promise tightens up in Phase-25.
+
+## BUILD NOW vs PHASE-25
+- **NOW (B7.1):** pluggable ranker + the pure side-effect-free R-multiple compute + reject/floor degenerate-geometry guard + shadow R-multiple + selection-IC instrumentation (per-regime, full-pool) + capital-weighted clamp telemetry + the risk-normalized-sizing invariant. Uses CURRENT taker friction (auto-improves when B7.2 maker/taker lands — same friction model) + CRUDE DI-derived pWin (conservative).
+- **PHASE-25 (data-gated; §13 homes, dated):** the calibrated regime-conditioned pWin pipeline (base-rates → Platt/isotonic → reliability/Brier → shrink-to-base-rate / fractional-Kelly → meta-labeling) — the make-or-break; the **selection-IC GO/NO-GO**; **fractional-Kelly sizing** (rank-by-R and our fixed-fractional sizing are on different bases until this lands — named, not an open loop); the **xStock dbsScore-gap** closure.
+
+## Governance plan (architecture → CHANGES-NEEDED gates at Step-4/8)
+SYSTEM_MANUAL Ch1 (ranking/scoring math — the R-multiple objective) + Ch4 (RTB ranker) **CONTENT**; SIM (§1.5/§4.3 — ranker construct + the gate-as-ranker pure-reuse + shadow R-multiple capture; cross-cutting) **CONTENT**; RUNNING_ISSUES (the Phase-25 §13 homes: pWin calibration, fractional-Kelly sizing, xStock dbsScore-gap, selection-IC go/no-go); ADJUSTMENT_FRAMEWORK (the ranker-selection knob); migration (ranker-config rows + shadow R-multiple column); BATCH_CATALOG; PHASE_19_PLAN §1/§5; completion report.
+
+## Verification criteria
+Pure-compute no-double-EV-sample test (hard); per-term price dimensional unit-test; pluggable-ranker selection; degenerate-geometry reject + floor test; R-multiple correctness (price-delta ÷ price-distance = dimensionless, cross-asset sanity on a high-price vs low-price example); shadow R-multiple + per-regime selection-IC capture; bench tsc-baseline + vitest; CI 4-green. §9.3 applies only if a ranker-selection UI surfaces.
+
+## Open for Langston (final scope sign-off)
+1. `risk_floor` / reject-threshold value — tie to the sizer's effective "too tight" (min-tick / min-ATR-fraction); confirm the exact basis.
+2. The symmetric per-class pWin haircut pre-calibration — in B7.1 or defer to Phase-25 with only the explicit flag now?
+3. Confirm the OBJ list + that the §13 Phase-25 homes are the right granularity.

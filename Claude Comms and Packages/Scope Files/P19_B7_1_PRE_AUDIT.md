@@ -14,6 +14,8 @@ The first reframe ("wire the VTS-only `rankingScore` onto the active picker") is
 
 Justified on the **structural** problem, NOT the fragile anti-predictive correlation.
 
+> **★ RECONCILED (2026-06-30, Langston correction + field survey + code-verify) — the canonical form is the RISK-NORMALIZED net-EV = the EXPECTED R-MULTIPLE, not raw net-EV.** Wherever this doc body (§4, etc.) says "rank by net-EV DESC," read **`rank by R = netEV ÷ (entry−stop)` DESC** — the field-standard cross-asset normalization (Kyle's requirement). Code-verify confirmed `netEV` is in PRICE-delta units (`net-expectancy-kernel.ts:114`, NOT ÷entry), so `R = netEV ÷ (entry−stop)` is the correct dimensionally-clean R-multiple. **The authoritative, fully-folded design is now `P19_B7_1_SCOPE.md` (Step-1)** — this pre-audit is the Step-2 input that fed it.
+
 ---
 
 ## 1. The structural problem (the real case — CC-A, confirmed by CC-B's lineage)
