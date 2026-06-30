@@ -210,6 +210,18 @@ function getActiveRanker(): RankerStrategy {
 function rankRiskFloorPrice(entryPrice: number, atr: number | null): number {
   const minAtrFrac = getCachedNumberRequired('rtb_ranking', 'min_atr_fraction_floor', _RTB_GK);
   const minAbsFrac = getCachedNumberRequired('rtb_ranking', 'min_abs_risk_fraction', _RTB_GK);
+  return computeRankRiskFloor(entryPrice, atr, minAtrFrac, minAbsFrac);
+}
+
+/**
+ * P19-B7.1 (OBJ-3): the PURE floor math (params injected, no DB) — testable in isolation,
+ * mirroring the kernel's pure-with-injected-constants design. floor = max(min_ATR_fraction × ATR,
+ * min_abs_risk_fraction × entry); ATR term drops out (→ 0) when ATR is unavailable, leaving the
+ * absolute entry-fraction floor. Cross-asset-clean (ATR scales with each asset's own volatility).
+ */
+export function computeRankRiskFloor(
+  entryPrice: number, atr: number | null, minAtrFrac: number, minAbsFrac: number,
+): number {
   const atrFloor = (atr !== null && Number.isFinite(atr) && atr > 0) ? minAtrFrac * atr : 0;
   const absFloor = minAbsFrac * entryPrice;
   return Math.max(atrFloor, absFloor);

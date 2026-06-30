@@ -3016,7 +3016,22 @@ export class PaperExecutionEngine {
             // no silent crypto_spot fallback (Langston Step 2 Probe 8 ACK).
             assetClass: _sizeClass,
           });
-          
+
+          // P19-B7.1 (OBJ-5): record the SIZED signal's effective-risk-fraction (sized-risk ÷
+          // intended-risk) for the clamp-bind watch — the denominator-correct population (per sized
+          // signal, NOT per candidate). boundRate (rtbMetricsService.getSizingClampProof) is the
+          // Phase-25 input that decides whether R-rank stays or switches to realized-$EV.
+          if (sizingResult.sizingDetails) {
+            rtbMetricsService.recordSizingClampSample({
+              symbol: signal.symbol,
+              strategy: signal.strategy,
+              assetClass: typeof _sizeClass === 'string' ? _sizeClass : undefined,
+              effectiveRiskFractionRatio: sizingResult.sizingDetails.effectiveRiskFractionRatio,
+              wasClamped: sizingResult.sizingDetails.wasClamped,
+              timestamp: Date.now(),
+            });
+          }
+
           if (sizingResult.quantity > 0 && sizingResult.estimatedValue > 0) {
             // 11.7S: Apply mode overlay to position size
             const adjustedQuantity = sizingResult.quantity * modeOverlay.positionSizeMultiplier;

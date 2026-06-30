@@ -97,6 +97,11 @@ export interface PaperPositionSizingResult {
     maxNotional: number;
     bufferedMaxNotional: number;
     wasClamped: boolean;
+    // P19-B7.1 (OBJ-5): sized dollar-risk after ALL reductions (notional clamp + covariance
+    // correlationScale) ÷ intended riskAmount. ≤1; = 1 when the position risks exactly its
+    // intended fraction. Absorbs BOTH reductions — including correlationScale, which never flips
+    // wasClamped (CC-A A.2b) — so this single field is the bind signal a wasClamped-only watch misses.
+    effectiveRiskFractionRatio: number;
   };
 }
 
@@ -203,7 +208,24 @@ export function sizePaperPositionForSignal(params: PaperPositionSizingParams): P
     estimatedValue = quantity * entryPrice;
     console.log(`[9.4][SIZE] ${symbol} scaled ${correlationScale.toFixed(2)}× due to covariance`);
   }
-  
+
+  // P19-B7.1 (OBJ-5): the effective-risk-fraction ratio = actual dollar-risk after ALL reductions
+  // (notional clamp + covariance correlationScale) ÷ the intended riskAmount. One field absorbing
+  // BOTH reductions — crucially correlationScale, which does NOT flip wasClamped (CC-A A.2b), so a
+  // wasClamped-only watch is blind to covariance decoherence. = 1 when the position risks exactly
+  // its intended fraction; < 1 when a clamp or the covariance scale held it below. The open-path /
+  // shadow telemetry bins on this to measure how often R-rank decoheres from realized-$EV (Phase-25:
+  // >~15-20% bind → switch the honest ranker to realized-$EV at the post-clamp executed size).
+  const effectiveRiskFractionRatio = riskAmount > 0 ? (quantity * stopDistance) / riskAmount : 0;
+  // INVARIANT (OBJ-5, UPPER BOUND not equality — CC-A): fixed-fractional-risk sizing risks AT MOST
+  // riskAmount; clamps + the covariance scale only REDUCE. A ratio materially > 1 means a sizing
+  // path risked MORE than intended → the R-rank↔sizing coherence (R-rank == $EV-rank) silently
+  // breaks (a future notional-sizer regression would trip this). WARN, do not throw — a live sizing
+  // bug must surface loudly, not crash the trading cycle.
+  if (effectiveRiskFractionRatio > 1.01) {
+    console.warn(`[P19-B7.1][OBJ-5][SIZING_INVARIANT] ${symbol} effectiveRiskFractionRatio=${effectiveRiskFractionRatio.toFixed(4)} > 1 — sizing risked MORE than intended (fixed-fractional-risk invariant violated); R-rank↔sizing coherence broken. Investigate (notional-sizer regression?).`);
+  }
+
   if (!Number.isFinite(quantity) || !Number.isFinite(estimatedValue)) {
     console.log(`[B6][SIZING] Final validation failed for ${symbol} - returning 0`);
     return invalidResult;
@@ -253,7 +275,8 @@ export function sizePaperPositionForSignal(params: PaperPositionSizingParams): P
       exposureBudget,
       maxNotional,
       bufferedMaxNotional,
-      wasClamped
+      wasClamped,
+      effectiveRiskFractionRatio // P19-B7.1 (OBJ-5)
     }
   };
 }
