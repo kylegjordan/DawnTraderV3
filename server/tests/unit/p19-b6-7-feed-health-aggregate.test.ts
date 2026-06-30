@@ -4,6 +4,7 @@ import {
   proportionFresh,
   gradeFeedAliveness,
   assessWsReadiness,
+  computeRollingWindowReadiness,
   gradePerClassFeedLiveness,
   type SymbolFreshness,
   type PerClassLivenessOpts,
@@ -87,30 +88,69 @@ describe('P19-B6.7 feed-health-aggregate — proportionFresh (GO-LIVE GATE aggre
   });
 });
 
-describe('P19-B6.7 feed-health-aggregate — assessWsReadiness (parity-gate, BOTH directions)', () => {
+describe('P19-B6.7 / B6.9 feed-health-aggregate — assessWsReadiness (parity-gate, BOTH directions)', () => {
+  // P19-B6.9 (#398): opts no longer carries simulationDurationMs; uptime is the rolling-window
+  // value (windowedUptimePercent) passed in by the caller from feedIntegrityMonitor.
   const opts = {
-    simulationDurationMs: 600_000,
     minWsUptimePercent: 99,
     freshTickMaxMs: 10_000,
     minSymbolsFreshPercent: 80,
   };
 
-  it('PASSES on a healthy primary feed (connected, no reconnects, all symbols fresh)', () => {
+  it('PASSES on a healthy primary feed (connected, windowed uptime 100, all symbols fresh)', () => {
     const r = assessWsReadiness(
-      { isConnected: true, reconnectAttempts: 0 },
+      { isConnected: true, windowedUptimePercent: 100 },
       [s('BTC/USD', 600), s('ETH/USD', 900), s('SOL/USD', 1200)],
       opts,
     );
     expect(r.passed).toBe(true);
     expect(r.uptimePercent).toBe(100);
     expect(r.freshPercent).toBe(100);
+    expect(r.warmingUp).toBe(false);
+  });
+
+  // P19-B6.9 (#398) REGRESSION — the failure the rolling window fixes: a long-lived process can
+  // have huge LIFETIME reconnects yet a perfectly clean RECENT window. The old cumulative formula
+  // spuriously failed the go-live gate; with the rolling-window uptime (100 here), it must PASS.
+  it('PASSES with a clean recent window despite high lifetime reconnects (#398 fix)', () => {
+    const r = assessWsReadiness(
+      { isConnected: true, windowedUptimePercent: 100 }, // rolling 1h: 0 recent reconnects
+      [s('BTC/USD', 600), s('ETH/USD', 900), s('SOL/USD', 1200)],
+      opts,
+    );
+    expect(r.passed).toBe(true);
+    expect(r.uptimePercent).toBe(100);
+  });
+
+  // P19-B6.9 (#398): warming up — too few recent samples → windowedUptimePercent null →
+  // fail-closed (do NOT clear go-live on an unknown feed), surfaced via warmingUp.
+  it('BLOCKS (fail-closed) when warming up — windowed uptime null (insufficient recent samples)', () => {
+    const r = assessWsReadiness(
+      { isConnected: true, windowedUptimePercent: null },
+      [s('BTC/USD', 600), s('ETH/USD', 900), s('SOL/USD', 1200)],
+      opts,
+    );
+    expect(r.passed).toBe(false);
+    expect(r.warmingUp).toBe(true);
+    expect(r.uptimePercent).toBeNull();
+  });
+
+  // P19-B6.9: a rolling-window uptime below the floor → blocks (recent instability caught).
+  it('BLOCKS when the rolling-window uptime is below the floor', () => {
+    const r = assessWsReadiness(
+      { isConnected: true, windowedUptimePercent: 80 },
+      [s('BTC/USD', 600), s('ETH/USD', 900), s('SOL/USD', 1200)],
+      opts,
+    );
+    expect(r.passed).toBe(false);
+    expect(r.warmingUp).toBe(false);
   });
 
   // THE dead-feed scenario: the removed 2nd WS stayed TCP-connected while delivering
-  // zero ticks. Connected-but-stale MUST now BLOCK (the false-PASS this batch kills).
+  // zero ticks. Connected-but-stale MUST BLOCK (the false-PASS B6.7 killed).
   it('BLOCKS when connected but NO symbol is delivering fresh ticks (the dead-feed false-PASS)', () => {
     const r = assessWsReadiness(
-      { isConnected: true, reconnectAttempts: 0 },
+      { isConnected: true, windowedUptimePercent: 100 },
       [s('BTC/USD', 45000), s('ETH/USD', 60000), s('SOL/USD', null)],
       opts,
     );
@@ -120,7 +160,7 @@ describe('P19-B6.7 feed-health-aggregate — assessWsReadiness (parity-gate, BOT
 
   it('BLOCKS when disconnected (uptime 0)', () => {
     const r = assessWsReadiness(
-      { isConnected: false, reconnectAttempts: 0 },
+      { isConnected: false, windowedUptimePercent: 100 },
       [s('BTC/USD', 600)],
       opts,
     );
@@ -130,7 +170,7 @@ describe('P19-B6.7 feed-health-aggregate — assessWsReadiness (parity-gate, BOT
 
   it('BLOCKS when only a minority of symbols are fresh (below the conservative proportion floor)', () => {
     const r = assessWsReadiness(
-      { isConnected: true, reconnectAttempts: 0 },
+      { isConnected: true, windowedUptimePercent: 100 },
       [s('A', 600), s('B', 40000), s('C', 50000), s('D', 60000)], // 25% fresh < 80%
       opts,
     );
@@ -226,5 +266,57 @@ describe('P19-B6.7 feed-health-aggregate — gradePerClassFeedLiveness (ALARM, O
       base({ isXstockSymbolOpen: () => true }),
     );
     expect(r.overall).toBe('critical');
+  });
+});
+
+describe('P19-B6.9 (#398) — computeRollingWindowReadiness (rolling-window WS uptime)', () => {
+  const MIN = 6; // matches feed-integrity-monitor.MIN_READINESS_SAMPLES
+
+  it('full clean window (12 snapshots, 0 reconnects) → 100% uptime, ready', () => {
+    const r = computeRollingWindowReadiness(new Array(12).fill(0), MIN);
+    expect(r.ready).toBe(true);
+    expect(r.uptimePercent).toBe(100);
+    expect(r.samplesPresent).toBe(12);
+    expect(r.windowReconnects).toBe(0);
+  });
+
+  it('DENOMINATOR is samples-present, NOT since-boot: 1 reconnect over 12 present → 91.7%', () => {
+    const ring = [0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0]; // 12 present, 1 reconnect
+    const r = computeRollingWindowReadiness(ring, MIN);
+    expect(r.samplesPresent).toBe(12);
+    expect(r.windowReconnects).toBe(1);
+    expect(r.uptimePercent).toBeCloseTo((1 - 1 / 12) * 100, 5);
+  });
+
+  it('SELF-HEAL: a bad window aged down to a clean 8-sample window → 100% (old reconnects rolled off)', () => {
+    // The bad snapshots have shifted out of the ring; only clean recent intervals remain.
+    const r = computeRollingWindowReadiness([0, 0, 0, 0, 0, 0, 0, 0], MIN);
+    expect(r.ready).toBe(true);
+    expect(r.uptimePercent).toBe(100);
+  });
+
+  it('MIN-SAMPLE FLOOR (fail-closed warm-up): < MIN samples → ready:false, uptimePercent:null', () => {
+    const r = computeRollingWindowReadiness([0, 0], MIN); // only 2 present
+    expect(r.ready).toBe(false);
+    expect(r.uptimePercent).toBeNull();
+    expect(r.samplesPresent).toBe(2);
+  });
+
+  it('cold start (empty ring) → warm-up (ready:false, null)', () => {
+    const r = computeRollingWindowReadiness([], MIN);
+    expect(r.ready).toBe(false);
+    expect(r.uptimePercent).toBeNull();
+  });
+
+  it('heavy recent instability (≥1 reconnect/interval avg) → clamped to 0%, not negative', () => {
+    const r = computeRollingWindowReadiness([2, 1, 3, 1, 2, 1, 1, 1], MIN); // Σ12 over 8
+    expect(r.uptimePercent).toBe(0);
+    expect(r.ready).toBe(true); // ready to JUDGE (enough samples); the gate then blocks on 0% < floor
+  });
+
+  it('at exactly MIN samples it computes (boundary inclusive)', () => {
+    const r = computeRollingWindowReadiness(new Array(MIN).fill(0), MIN);
+    expect(r.ready).toBe(true);
+    expect(r.uptimePercent).toBe(100);
   });
 });

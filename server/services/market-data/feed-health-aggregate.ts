@@ -61,35 +61,68 @@ export function proportionFresh(items: SymbolFreshness[], thresholdMs: number): 
 /**
  * GO-LIVE GATE readiness (parity-gate). P19-B6.7 (#301): the removed 2nd WS stayed
  * TCP-connected while delivering zero ticks, so "connected" alone false-PASSED the
- * go-live gate. Readiness now requires BOTH: (a) connected with acceptable uptime
- * (derived from reconnects), AND (b) a CONSERVATIVE proportion of subscribed symbols
- * actually delivering fresh ticks (worst-case aggregate — not freshest-one). Pure so
- * it unit-tests both directions without a live adapter.
+ * go-live gate. Readiness requires BOTH: (a) connected with acceptable uptime, AND
+ * (b) a CONSERVATIVE proportion of subscribed symbols actually delivering fresh ticks
+ * (worst-case aggregate — not freshest-one). Pure so it unit-tests both directions.
+ *
+ * P19-B6.9 (#398): the uptime axis is now the ROLLING-WINDOW value supplied by
+ * `feedIntegrityMonitor.getRollingWindowReadiness()` (last-1h ring, denominator = snapshots
+ * present), NOT the old cumulative-lifetime-`reconnectAttempts` / fixed-120 formula that drifted
+ * a healthy long-lived process below the floor. `windowedUptimePercent === null` ⇒ the ring has
+ * too few recent samples (warm-up) ⇒ fail-closed (don't clear go-live on an unknown feed).
  */
 export interface WsReadinessOpts {
-  simulationDurationMs: number;
   minWsUptimePercent: number;
   freshTickMaxMs: number;
   minSymbolsFreshPercent: number;
 }
 export interface WsReadiness {
   passed: boolean;
-  uptimePercent: number;
+  uptimePercent: number | null; // null = warming up (too few recent samples to judge)
   freshPercent: number;
+  warmingUp: boolean;
 }
 export function assessWsReadiness(
-  status: { isConnected: boolean; reconnectAttempts: number },
+  input: { isConnected: boolean; windowedUptimePercent: number | null },
   health: SymbolFreshness[],
   opts: WsReadinessOpts,
 ): WsReadiness {
-  const estimatedChecks = Math.max(120, opts.simulationDurationMs / 5000);
-  const uptimePercent = status.isConnected
-    ? Math.max(0, (1 - status.reconnectAttempts / estimatedChecks) * 100)
-    : 0;
+  const { isConnected, windowedUptimePercent } = input;
+  const warmingUp = isConnected && windowedUptimePercent === null;
+  const uptimePercent = isConnected ? windowedUptimePercent : 0;
+  const uptimeReady =
+    isConnected && windowedUptimePercent !== null && windowedUptimePercent >= opts.minWsUptimePercent;
   const freshPercent = proportionFresh(health, opts.freshTickMaxMs) * 100;
-  const passed = uptimePercent >= opts.minWsUptimePercent
-    && freshPercent >= opts.minSymbolsFreshPercent;
-  return { passed, uptimePercent, freshPercent };
+  const passed = uptimeReady && freshPercent >= opts.minSymbolsFreshPercent;
+  return { passed, uptimePercent, freshPercent, warmingUp };
+}
+
+export interface RollingWsReadiness {
+  ready: boolean;
+  uptimePercent: number | null; // null = warming up (samplesPresent < minSamples)
+  samplesPresent: number;
+  windowReconnects: number;
+}
+/**
+ * P19-B6.9 (#398): the ROLLING-WINDOW WS uptime, pure. `reconnectsPerInterval` = the per-interval
+ * reconnect counts in the feed-integrity ring (newest-last; the caller passes the ring's
+ * `reconnectsSinceLastCheck` values). Uptime = `(1 − Σreconnects / samplesPresent) × 100`, where the
+ * DENOMINATOR is the number of samples PRESENT in the window — NOT intervals-since-boot — so a bad
+ * window ages out as snapshots roll off (the self-healing the old cumulative parity-gate formula
+ * lacked). Below `minSamples` the value is dominated by too few samples (≤2 → 50% swings), so it
+ * returns `ready:false / uptimePercent:null` (fail-closed warm-up) rather than a misleading number.
+ */
+export function computeRollingWindowReadiness(
+  reconnectsPerInterval: number[],
+  minSamples: number,
+): RollingWsReadiness {
+  const samplesPresent = reconnectsPerInterval.length;
+  const windowReconnects = reconnectsPerInterval.reduce((sum, n) => sum + Math.max(0, n), 0);
+  if (samplesPresent < minSamples) {
+    return { ready: false, uptimePercent: null, samplesPresent, windowReconnects };
+  }
+  const uptimePercent = Math.max(0, Math.min(100, (1 - windowReconnects / samplesPresent) * 100));
+  return { ready: true, uptimePercent, samplesPresent, windowReconnects };
 }
 
 export type FeedAliveGrade = 'healthy' | 'warning' | 'critical';

@@ -3,6 +3,9 @@ import { executionTiming } from './execution-timing';
 // check now reads the PRIMARY adapter via the tested assessWsReadiness aggregate.
 import { krakenWebSocketAdapter } from '../exchanges/kraken/kraken-websocket-adapter.js';
 import { assessWsReadiness } from './market-data/feed-health-aggregate.js';
+// P19-B6.9 (#398): WS-readiness uptime now comes from the feed-integrity-monitor's ROLLING 1h
+// window (getRollingWindowReadiness), not a cumulative-lifetime-reconnects formula.
+import { getFeedIntegrityMonitor } from './feed-integrity-monitor';
 import { rateControl } from './rate-control';
 import { filePersistence } from './file-persistence';
 
@@ -17,7 +20,7 @@ export interface ParityCheckResult {
     executionLatency: { passed: boolean; actual: number; threshold: number; };
     slippage: { passed: boolean; actual: number; threshold: number; };
     rateLimits: { passed: boolean; errors: number; };
-    wsUptime: { passed: boolean; actual: number; threshold: number; };
+    wsUptime: { passed: boolean; actual: number | null; threshold: number; }; // actual=null ⇒ warming up (P19-B6.9)
     feesModeled: { passed: boolean; };
   };
   blockingReasons: string[];
@@ -87,10 +90,12 @@ class ParityGateService {
     // conservative proportion of subscribed symbols delivering fresh ticks (worst-case
     // aggregate for a go-live gate — tested both directions in the helper unit suite).
     const wsReadiness = assessWsReadiness(
-      krakenWebSocketAdapter.getStatus(),
+      {
+        isConnected: krakenWebSocketAdapter.getStatus().isConnected,
+        windowedUptimePercent: getFeedIntegrityMonitor().getRollingWindowReadiness().uptimePercent,
+      },
       krakenWebSocketAdapter.getI8EWsHealth().map(h => ({ symbol: h.symbol, ageMs: h.ageMs })),
       {
-        simulationDurationMs,
         minWsUptimePercent: this.thresholds.minWsUptime,
         freshTickMaxMs: this.thresholds.freshTickMaxMs,
         minSymbolsFreshPercent: this.thresholds.minSymbolsFreshPercent,
@@ -99,8 +104,11 @@ class ParityGateService {
     const wsUptimePercent = wsReadiness.uptimePercent;
     const wsUptimePassed = wsReadiness.passed;
     if (!wsUptimePassed) {
+      const uptimeStr = wsReadiness.warmingUp
+        ? 'warming up (insufficient recent feed-health samples — rolling 1h window)'
+        : `uptime ${(wsReadiness.uptimePercent ?? 0).toFixed(1)}% (min ${this.thresholds.minWsUptime}%)`;
       blockingReasons.push(
-        `WebSocket feed not ready: uptime ${wsReadiness.uptimePercent.toFixed(1)}% (min ${this.thresholds.minWsUptime}%), ` +
+        `WebSocket feed not ready: ${uptimeStr}, ` +
         `fresh symbols ${wsReadiness.freshPercent.toFixed(1)}% (min ${this.thresholds.minSymbolsFreshPercent}%)`
       );
     }
@@ -177,9 +185,9 @@ class ParityGateService {
     report += `- **Threshold:** 0 errors\n\n`;
     
     // WebSocket Uptime
-    report += `### 4. WebSocket Uptime\n`;
+    report += `### 4. WebSocket Uptime (rolling 1h window)\n`;
     report += `- **Status:** ${result.checks.wsUptime.passed ? '✅ Pass' : '❌ Fail'}\n`;
-    report += `- **Actual:** ${result.checks.wsUptime.actual.toFixed(1)}%\n`;
+    report += `- **Actual:** ${result.checks.wsUptime.actual === null ? 'warming up (insufficient recent samples)' : result.checks.wsUptime.actual.toFixed(1) + '%'}\n`;
     report += `- **Threshold:** ≥ ${result.checks.wsUptime.threshold}%\n\n`;
     
     // Fees Modeled

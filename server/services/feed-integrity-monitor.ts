@@ -4,9 +4,11 @@
 import { krakenWebSocketAdapter } from '../exchanges/kraken/kraken-websocket-adapter.js';
 import {
   gradePerClassFeedLiveness,
+  computeRollingWindowReadiness,
   type SymbolFreshness,
   type PerClassThresholds,
   type FeedAliveGrade,
+  type RollingWsReadiness,
 } from './market-data/feed-health-aggregate.js';
 import { resolveAssetClass } from '../../shared/asset-classes.js';
 import { isXstockMarketOpenUTC } from '../asset_classes/xstock_spot/market-hours.js';
@@ -115,6 +117,11 @@ class FeedIntegrityMonitorService {
   private configWarnLogged = false;
   private healthHistory: HealthSnapshot[] = [];
   private readonly MAX_HISTORY = 12; // 12 snapshots = 1 hour at 5-min intervals
+  // P19-B6.9 (#398): minimum recent snapshots before the rolling-window WS uptime gates go-live
+  // readiness. Below this the windowed % is dominated by too few samples (≤2 → 50% swings), so
+  // getRollingWindowReadiness() reports warming-up/not-ready (fail-closed) instead of a misleading
+  // number. 6 = 30 min (half the 1h ring) — a go-live decision should rest on ≥30 min of recent intervals.
+  private readonly MIN_READINESS_SAMPLES = 6;
   private lastCheckTime: number = 0;
   private alertState: AlertState = {
     lastAlertTime: 0,
@@ -229,6 +236,29 @@ class FeedIntegrityMonitorService {
       status: healthStatus,
       lastUpdateISO: new Date().toISOString(),
     };
+  }
+
+  /**
+   * P19-B6.9 (#398): WS-readiness uptime over the ROLLING 1h window — for the Phase-21 go-live
+   * parity gate. Replaces the old cumulative-since-boot formula in `assessWsReadiness` that
+   * derived uptime from the adapter's LIFETIME `reconnectAttempts` over a fixed denominator, which
+   * made a healthy long-lived process drift below the 99% floor and spuriously fail the gate.
+   *
+   * Denominator = snapshots PRESENT in the ring (`healthHistory.length`, capped at MAX_HISTORY=12),
+   * NOT intervals-since-boot — so a bad hour ages out as snapshots roll off (the self-healing
+   * property the cumulative metric lacked). `windowReconnects` = Σ per-interval reconnects in the ring.
+   *
+   * Below `MIN_READINESS_SAMPLES` the windowed % is dominated by too few samples (≤2 → 50% swings),
+   * so we return `ready:false, uptimePercent:null` (fail-closed warm-up) rather than a misleading
+   * number — a go-live readiness decision must rest on ≥30 min of recent feed-health intervals.
+   */
+  public getRollingWindowReadiness(): RollingWsReadiness {
+    // Delegate to the pure helper (unit-tested in feed-health-aggregate); the monitor just maps
+    // its ring → the per-interval reconnect counts. Denominator = samples present in the ring.
+    return computeRollingWindowReadiness(
+      this.healthHistory.map((snap) => snap.reconnectsSinceLastCheck),
+      this.MIN_READINESS_SAMPLES,
+    );
   }
 
   /**
