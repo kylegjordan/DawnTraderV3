@@ -29,7 +29,7 @@ export default function GoalsEnginePage() {
             data-testid="tab-guardrails"
           >
             <Shield className="w-4 h-4" />
-            <span className="text-xs sm:text-sm">Guardrails</span>
+            <span className="text-xs sm:text-sm">Paper Guardrails</span>
           </TabsTrigger>
           <TabsTrigger 
             value="screener" 
@@ -67,8 +67,10 @@ export default function GoalsEnginePage() {
 
         <TabsContent value="guardrails" className="mt-6">
           <div className="space-y-6">
-            <CoreFourGuardrails />
+            <CoreFourGuardrails mode="paper" />
             {/* Directive 11.8B-C: LPCP hidden (backend preserved) */}
+            {/* P19-B6.8a: this tab is pinned to PAPER. A "Live Guardrails" tab
+                (<CoreFourGuardrails mode="live" />) will be added per Kyle 2026-06-30. */}
           </div>
         </TabsContent>
 

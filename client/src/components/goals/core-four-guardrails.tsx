@@ -9,14 +9,12 @@ import { useState, useEffect } from "react";
 import { Shield, Save, Lock, Info } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
-import { useTradingMode } from "@/contexts/trading-mode-context";
-import { 
+import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { ModeIndicator } from "./mode-indicator";
 
 /**
  * Phase 3b: Core Guardrails Component (now 5 guardrails as of REB 8.8.3-G)
@@ -152,9 +150,15 @@ interface PortfolioSummaryResponse {
   netPnlPercent: number;
 }
 
-export function CoreFourGuardrails() {
+// P19-B6.8a: this tab is PINNED to a single mode via a required `mode` prop —
+// NOT the ambient global trading-mode toggle. Paper active trading, live active
+// trading, and VTS now run as separate concurrent systems (Kyle 2026-06-30), so
+// each mode gets its OWN dedicated guardrails tab ("Paper Guardrails" now; a
+// "Live Guardrails" tab renders <CoreFourGuardrails mode="live" /> when added).
+// Pinning makes the big "PAPER MODE" header always truthful — without it, the
+// ambient toggle (which defaults to 'live') would mislabel live risk-limits as paper.
+export function CoreFourGuardrails({ mode }: { mode: 'paper' | 'live' }) {
   const { toast } = useToast();
-  const { mode } = useTradingMode();
   const [hasChanges, setHasChanges] = useState(false);
   const [editedValues, setEditedValues] = useState<Partial<GuardrailsV2>>({});
   
@@ -283,10 +287,20 @@ export function CoreFourGuardrails() {
       <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30">
         <div className="flex items-center justify-between">
           <div>
-            <CardTitle className="flex items-center gap-2">
-              <Shield className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-              Core Guardrails
-              <ModeIndicator />
+            <CardTitle className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xl sm:text-2xl">
+              <Shield className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+              <span>Core Guardrails</span>
+              <span className="text-muted-foreground font-semibold">—</span>
+              <span
+                className={
+                  mode === 'live'
+                    ? "font-extrabold uppercase tracking-wide text-blue-600 dark:text-blue-400"
+                    : "font-extrabold uppercase tracking-wide text-purple-600 dark:text-purple-400"
+                }
+                data-testid={`guardrails-mode-header-${mode}`}
+              >
+                {mode === 'live' ? 'Live' : 'Paper'} Mode
+              </span>
             </CardTitle>
             <p className="text-sm text-muted-foreground mt-2">
               Risk tolerance settings you control. These parameters govern position sizing and risk limits.

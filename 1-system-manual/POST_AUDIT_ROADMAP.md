@@ -578,6 +578,7 @@ The B65.2 functional ship deleted the paper-execution-engine consumption of meta
 - Validate cost-model accuracy against real Kraken fee schedules
 
 ### 21.3 Live Mode Guardrails
+- **21-3a (NEW, P19-B6.8a 2026-06-30 — RUNNING_ISSUES #401): add the "Live Guardrails" tab to the Guardrails & Filters page** — a one-liner now that `CoreFourGuardrails` takes a required `mode` prop: a `TabsTrigger value="guardrails-live"` + `<CoreFourGuardrails mode="live" />`. P19-B6.8a pinned the existing tab to PAPER ("Paper Guardrails"), so **live-mode guardrails are currently UI-uneditable** — this item restores live-guardrail editability and MUST land before live active trading turns on. Deliberate interim gap (CC-B + Langston Step-4 consensus): acceptable only because live is dormant until this phase.
 - Validate all risk management guardrails for live mode
 - Test emergency shutdown procedures
 - Validate database monitoring alerts function correctly
