@@ -21,6 +21,8 @@
 
 **The current trading posture:** the system has been in VTS / passive learning since end of Phase 8. Phase 19 is the work that turns Paper-Mode active trading back ON and debugs it end-to-end. Live trading is Phase 21, gated behind paper calibration comfort (see §2).
 
+> **★ Phase-19 TAIL — formalized batch numbers (Kyle renumber 2026-06-30; authoritative detail in `PHASE_19_PLAN.md` §1/§5):** the run-up to the paper switch-on is **P19-B7 = ranking fix (B7.1, the make-or-break) → maker/taker shared service (B7.2 — D6 rung-2, the real crypto opener at the fee wall) → crypto gate-10 lifecycle proof** → **P19-B8 = paper monitoring screens for BOTH classes + THE SWITCH-ON (staged crypto→xStock) + an explicit xStock lifecycle proof** (the flip lives inside B8) → **P19-B9 = sustained paper run + audit** (B8 = make-it-work; B9 = run-for-real + audit for Phase-25). This resolved a naming collision (two things were numbered "~B7" — the maker/taker service vs the paper UI shells). **Both-classes EXPLICIT (D1/D3/D7):** crypto AND xStock both run the full scan→filter→evaluate→signal→RTB→promote pipeline together (shared, not gated); only active EXECUTION is one-class-at-a-time during the validation window; both paper-working by Phase-19 close.
+
 ---
 ## §2 — THE RUN ORDER (canonical — phase NUMBERS are NOT the run order)
 
