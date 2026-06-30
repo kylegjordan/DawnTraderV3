@@ -1,7 +1,8 @@
 # P19-B6.9 — Scope (Step-1)
 
 **Batch:** P19-B6.9 — scanner short-universe (#396) + parity-gate WS-uptime trap (#398) — pre-Phase-21 go-live-path hardening
-**change-class:** non_architecture *(observability + a dormant go-live-gate metric fix + a defensive fetch guard; no strategy/regime/filter/signal-pipeline/math change. Flagged for Langston cross-check: #398 touches the go-live WS-readiness GATE computation, though it is dormant until Phase-21.)*
+change-class: non_architecture
+> Rationale: observability + a dormant go-live-gate metric fix; no strategy/regime/filter/signal-pipeline/math change. NOT SIM-exempt — #398 changes a cross-cutting go-live-gate's consumption relationship (parity-gate → feed-integrity ring), so SIM + SysManual got CONTENT updates at close (Langston Step-1/8 confirmed).
 **Owner:** Claude New (CC-B) · **Reviewer:** Langston
 **Homes:** P19-B6.7 §13 (both issues homed here). RUNNING_ISSUES #396, #398.
 
