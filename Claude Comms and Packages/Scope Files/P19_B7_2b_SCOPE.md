@@ -1,6 +1,8 @@
 # P19-B7.2b — Complete the shared maker/taker service: VTS wiring + fee-mode visibility (Kyle directive 2026-07-01)
 
-**Owner:** CC-B · **Reviewer:** Langston (Step-1/2/4/8) · **2nd-eyes:** CC-A · **change-class: architecture**
+**Owner:** CC-B · **Reviewer:** Langston (Step-1/2/4/8) · **2nd-eyes:** CC-A
+
+change-class: architecture
 
 **Why (Kyle, after B7.2 close):** B7.2 built the maker/taker best-of-both decision as a shared standalone function BUT only the ACTIVE path (live + paper) actually calls it — the **VTS still runs its own separate taker-only Net-EV gate**. The decision was agreed to be a service SHARED across active-live, active-paper, AND the VTS. Also, the chosen entry fee mode is stored on the ready-to-buy row but does NOT carry onto the open-position / closed-trade records, and nothing SHOWS it in the UI — Kyle wants to see, per trade, WHICH fees were used (maker vs taker), in the RTB table + the open-trades table + the closed-trades table, for BOTH VTS and paper-active.
 
