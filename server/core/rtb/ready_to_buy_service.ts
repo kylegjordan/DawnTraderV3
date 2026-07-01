@@ -65,7 +65,7 @@ import { getCachedCostMetrics, computeTotalRoundTripCost, computeNetGeometry, ge
 // signal orchestrator + VTS call (F6).
 import { decideMakerTaker, entryUrgencyClassForFamily } from '../math/maker-taker-decision.js';
 import { resolveMakerTakerHaircut } from '../../services/maker-taker-config.js';
-import { STRATEGY_FAMILY_MAP } from '../../config/canonical-regime-strategy-map.js';
+import { STRATEGY_FAMILY_MAP, normalizeStrategy } from '../../config/canonical-regime-strategy-map.js';
 import { getCachedSpread } from '../metrics/cost-metrics.js';
 import { getNormalizedVolatility as getVolatility } from '../metrics/market-metrics.js';
 // Phase 14.5: Ranking weights for cross-family signal comparison
@@ -864,7 +864,14 @@ class ReadyToBuyService {
           maxPWin:      getCachedNumberRequired('expectancy_kernel',     'pwin_ceiling',   _mtGK),
           diPWinFactor: getCachedNumberRequired('directional_integrity', 'di_pwin_factor', _mtGK),
           signalStrength: refreshedFinalScore,
-          urgencyClass: entryUrgencyClassForFamily(STRATEGY_FAMILY_MAP[signal.strategy]),
+          // P19-B7.2b (Langston Step-4 confirm B): canonicalize the strategy key so the
+          // refresh re-decide keys STRATEGY_FAMILY_MAP on the SAME canonical name gen-time
+          // used (orchestrator's `_canonicalStrategy`, signal-orchestrator.ts:474). rtb_signals
+          // stores the raw `strategy` (e.g. 'range_trading'), but the map keys on 'range_trade'
+          // — a bare lookup would return undefined → default urgency → a DIFFERENT maker/taker
+          // mode than gen-time on identical data. normalizeStrategy cures the drift (identity on
+          // already-canonical tokens), keeping the refresh same-vintage with gen-time.
+          urgencyClass: entryUrgencyClassForFamily(STRATEGY_FAMILY_MAP[normalizeStrategy(signal.strategy)]),
           haircut: resolveMakerTakerHaircut(geomClass),
         });
         _b72bRefreshedMT = {

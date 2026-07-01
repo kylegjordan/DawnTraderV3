@@ -1684,7 +1684,11 @@ async function generatePhase10Signal(
     maxPWin:      getCachedNumberRequired('expectancy_kernel',     'pwin_ceiling',   _VTS_GK),
     diPWinFactor: getCachedNumberRequired('directional_integrity', 'di_pwin_factor', _VTS_GK),
     signalStrength: finalScore,
-    urgencyClass: entryUrgencyClassForFamily(STRATEGY_FAMILY_MAP[strategy]),
+    // P19-B7.2b (Langston Step-4 confirm B): canonicalize before the family lookup — the
+    // shared decideMakerTaker urgency must key on the canonical strategy name (normalizeStrategy
+    // cures the `range_trading`→`range_trade` drift; identity on already-canonical tokens), so a
+    // raw token can't collapse to default urgency and mis-pick maker/taker. Parity with the RTB path.
+    urgencyClass: entryUrgencyClassForFamily(STRATEGY_FAMILY_MAP[normalizeStrategy(strategy)]),
     haircut: resolveMakerTakerHaircut(_assetClass),
   });
   // The per-side entry fee actually used by the chosen mode (carried onto the trade record).
