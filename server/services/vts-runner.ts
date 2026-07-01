@@ -65,7 +65,12 @@ import { KrakenService } from '../exchanges/kraken/kraken.js';
 import { ohlcCache } from './ohlc-cache.js';
 import { computeStrategyWeights, getWeightSync } from '../utils/strategyWeights.js';
 import { computeExposureBias, getExposureMultiplierSync } from '../utils/strategyBias.js';
-import { getCachedCostMetrics, computeNetGeometry } from '../core/math/cost-model.js';
+import { getCachedCostMetrics, computeNetGeometry, getFrictionForAssetClass } from '../core/math/cost-model.js';
+// P19-B7.2b (OBJ-A): the SHARED maker/taker best-of-both entry decision (same pure
+// function the active path calls — F6) + its per-class DB-governed haircut resolver.
+// The VTS calls it before its Net-EV gate so VTS evaluates on best-of-both too.
+import { decideMakerTaker, entryUrgencyClassForFamily } from '../core/math/maker-taker-decision.js';
+import { resolveMakerTakerHaircut } from './maker-taker-config.js';
 import { compareLatestSessions, savePaperSessionTrades, getPaperSessionTrades } from './vts-live-comparison-audit.js';
 import { SCORE_WEIGHTS } from '../config/score-weights.config.js';
 import { calculatePairRegime, getRegimeWeight, calculateRegimeScore, getNormalizedRegimeWithDetails } from '../core/metrics/market-regime.js';
@@ -89,6 +94,7 @@ import {
   getStrategiesForRegime,
   normalizeStrategy,
   normalizePatternToCanonical,
+  STRATEGY_FAMILY_MAP,
   type CanonicalRegimeType as MarketRegimeType,
   type CanonicalSignalType,
   type CanonicalPatternType,
@@ -540,6 +546,12 @@ interface Phase10TradeRecord {
   pairDirectionalBiasScore?: number | null;
   globalDirectionalBiasScore?: number | null;
   filterTier?: 'standard' | 'relaxed';  // HF9: IMF filter tier
+  // P19-B7.2b (OBJ-B): the maker/taker entry fee-mode this trade OPENED on, carried
+  // from the OpenVirtualTrade record onto the closed archive so the VTS closed-trades
+  // UI can show WHICH fee the entry paid. ENTRY-leg only (exit pays taker today).
+  // Optional — pre-B7.2b records lack it (UI renders NULL as an em-dash).
+  chosenEntryMode?: 'taker' | 'maker';
+  entryFeeRate?: number;
 }
 
 /**
@@ -572,6 +584,12 @@ interface OpenVirtualTrade {
   //   means closed trades are already absent from the Map, but the column is
   //   kept consistent for DB-side queries).
   state?: import('./vts-trade-persistence.js').VtsOpenTradeState;
+  // P19-B7.2b (OBJ-A/B): the SHARED maker/taker best-of-both entry decision for this
+  // VTS trade + the actual per-side entry fee rate used. Optional (older in-flight
+  // trades omit it → NULL, never coerced to a default mode). Carried to vts_open_trades
+  // + the vts_trades_*.json closed payload for the fee-mode UI column.
+  chosenEntryMode?: 'taker' | 'maker';
+  entryFeeRate?: number;
   entryPrice: number;
   stopLoss: number;
   takeProfit: number;
@@ -1637,6 +1655,42 @@ async function generatePhase10Signal(
     diPWinFactor: getCachedNumberRequired('directional_integrity', 'di_pwin_factor', _VTS_GK),
   });
   
+  // ══════════════════════════════════════════════════════════════════════════════
+  // P19-B7.2b (OBJ-A): the SHARED maker/taker best-of-both entry decision.
+  // The VTS calls the SAME `decideMakerTaker` the active path uses (F6 — one shared
+  // function, no duplicated economics), HERE, BEFORE the VTS Net-EV gate below, so the
+  // VTS evaluates on the best-of-both netEV too (Kyle: the decision is a service
+  // SHARED across active-live, active-paper, AND the VTS). NOTE (Kyle 2026-07-01): the
+  // VTS has NO SQE — this decision is standalone and unrelated to the SQE; on the
+  // ACTIVE path the shared decision sits just BEFORE the SQE (not inside it — the SQE
+  // stays calculation-free, a pure quality gate). The taker leg passes the SAME inputs
+  // the kernel above just used (identical DI / sourcePool / dbsScore / pWin params /
+  // canonical friction), so `decision.takerNetEV` == `kernelResult.netEV` — only the
+  // maker leg + the haircut are new. Data-fenced: VTS maker fills are model-vs-model
+  // (non-calibration); real adverse selection is Phase-21.
+  // ══════════════════════════════════════════════════════════════════════════════
+  const _vtsFriction = getFrictionForAssetClass(_assetClass);
+  const _vtsMtDecision = decideMakerTaker({
+    entryPrice,
+    stopPrice: stopLoss,
+    targetPrice: takeProfit,
+    costs: costMetrics,
+    feeRateMaker: _vtsFriction.feeRateMaker,
+    feeRateTaker: _vtsFriction.feeRateTaker,
+    DI,
+    sourcePool,
+    dbsScore: propagatedDbs?.score,
+    minPWin:      getCachedNumberRequired('expectancy_kernel',     'pwin_floor',     _VTS_GK),
+    maxPWin:      getCachedNumberRequired('expectancy_kernel',     'pwin_ceiling',   _VTS_GK),
+    diPWinFactor: getCachedNumberRequired('directional_integrity', 'di_pwin_factor', _VTS_GK),
+    signalStrength: finalScore,
+    urgencyClass: entryUrgencyClassForFamily(STRATEGY_FAMILY_MAP[strategy]),
+    haircut: resolveMakerTakerHaircut(_assetClass),
+  });
+  // The per-side entry fee actually used by the chosen mode (carried onto the trade record).
+  const _vtsEntryFeeRate = _vtsMtDecision.chosenMode === 'maker' ? _vtsFriction.feeRateMaker : _vtsFriction.feeRateTaker;
+  console.log(`[P19-B7.2b][VTS][MAKER_TAKER] ${symbol}/${strategy}: chose ${_vtsMtDecision.chosenMode} (taker=${_vtsMtDecision.takerNetEV.toFixed(6)}, maker-adj=${_vtsMtDecision.makerNetEVAdjusted.toFixed(6)})`);
+
   // Batch 52 Fix 19C: All byStrategy counter increments moved to caller (runPhase10SimulationCycle)
   // to prevent double-counting. Inner function only sets nullReason for caller to classify.
 
@@ -1644,7 +1698,10 @@ async function generatePhase10Signal(
   // Active trading still uses strict netEV > 0 (in signal-orchestrator.ts)
   // VTS allows marginally negative EV for ML boundary learning
   // Signals with slightly negative EV teach the model where the profitability edge is
-  if (kernelResult.netEV <= VTS_NET_EV_FLOOR) {
+  // P19-B7.2b (OBJ-A): gate on the CHOSEN best-of-both netEV (not the taker-only
+  // kernelResult) — a taker-marginal / maker-better signal is evaluated on its best
+  // option, consistent with the active path.
+  if (_vtsMtDecision.chosenNetEV <= VTS_NET_EV_FLOOR) {
     logSkippedSignal({
       symbol,
       reason: 'Net_EV_Negative',
@@ -1653,7 +1710,7 @@ async function generatePhase10Signal(
       strategy,
       source: 'VTS'
     });
-    console.log(`[18L][NetEV] Skipping ${symbol}: Net EV=${kernelResult.netEV.toFixed(6)} <= ${VTS_NET_EV_FLOOR} (rawEV=${kernelResult.rawEV.toFixed(6)}, friction=${totalFriction.toFixed(6)})`);
+    console.log(`[18L][NetEV] Skipping ${symbol}: chosen ${_vtsMtDecision.chosenMode} Net EV=${_vtsMtDecision.chosenNetEV.toFixed(6)} <= ${VTS_NET_EV_FLOOR} (taker=${kernelResult.netEV.toFixed(6)}, rawEV=${kernelResult.rawEV.toFixed(6)}, friction=${totalFriction.toFixed(6)})`);
     // Batch 50: Mark as post-signal rejection so caller doesn't count as strategy null
     setNullReason('net_ev_rejected');
     return null;
@@ -1855,6 +1912,11 @@ async function generatePhase10Signal(
     id: tradeId,
     symbol,
     assetClass: tradeAssetClass,
+    // P19-B7.2b (OBJ-A/B): carry the shared maker/taker decision + the actual entry
+    // fee rate onto the VTS trade record → vts_open_trades + the vts_trades_*.json
+    // closed payload → the fee-mode UI column.
+    chosenEntryMode: _vtsMtDecision.chosenMode,
+    entryFeeRate: _vtsEntryFeeRate,
     entryPrice,
     stopLoss: adjustedStopLoss,       // 11.7S: Mode-adjusted stop loss
     takeProfit: adjustedTakeProfit,   // 11.7S: Mode-adjusted take profit
@@ -2895,8 +2957,13 @@ async function resolveOpenVirtualTrades(): Promise<{
       pairDirectionalBiasScore: trade.pairDirectionalBiasScore,
       globalDirectionalBiasScore: trade.globalDirectionalBiasScore,
       sourcePool: trade.sourcePool,
+      // P19-B7.2b (OBJ-B): carry the maker/taker entry fee-mode onto the closed
+      // archive (from the OpenVirtualTrade record) → the vts_trades_*.json closed
+      // payload → the VTS closed-trades UI fee-mode column. Entry-leg only.
+      chosenEntryMode: trade.chosenEntryMode,
+      entryFeeRate: trade.entryFeeRate,
     };
-    
+
     // Add to session trades
     phase10SessionTrades.push(closedTradeRecord);
     
@@ -3004,6 +3071,10 @@ async function resolveOpenVirtualTrades(): Promise<{
         // B-5 AMR: propagate the at-open weather stamp to the closed record.
         amrClassification: trade.amrClassification,
         amrMode: trade.amrMode,
+        // P19-B7.2b (OBJ-B): propagate the maker/taker entry fee-mode to the closed
+        // VTS JSON record → the Closed Simulated Trades UI fee-mode column. Entry-leg only.
+        chosenEntryMode: trade.chosenEntryMode,
+        entryFeeRate: trade.entryFeeRate,
       });
       if (result.persisted) persisted++;
       if (result.mlTriggered) mlQueued++;
@@ -5001,6 +5072,11 @@ export async function getOpenVirtualTradesForML(): Promise<Array<{
   originalStopPrice: number | null;
   latchTriggerPrice: number | null;
   rungTargetHistory: number[] | null;
+  // P19-B7.2b (OBJ-B): the maker/taker entry fee-mode + per-side rate the entry
+  // opened on, surfaced to the Open Simulated Trades (VTS) UI fee-mode column.
+  // NULL for pre-B7.2b trades (UI renders an em-dash). Entry-leg only.
+  chosenEntryMode: 'taker' | 'maker' | null;
+  entryFeeRate: number | null;
 }>> {
   const now = Date.now();
   const trades: Array<any> = [];
@@ -5109,6 +5185,9 @@ export async function getOpenVirtualTradesForML(): Promise<Array<{
       patternType: trade.patternType || null,
       pool: trade.pool.toUpperCase(),
       sourcePool: trade.sourcePool || ("unknown" as string),
+      // P19-B7.2b (OBJ-B): maker/taker entry fee-mode for the fee-mode column.
+      chosenEntryMode: trade.chosenEntryMode ?? null,
+      entryFeeRate: trade.entryFeeRate ?? null,
       dollarValue: parseFloat(tradeDollarValue.toFixed(2)),  // Directive 11.6H: Fixed USD exposure
       quantity: parseFloat(tradeQuantity.toFixed(6)),        // Directive 11.6H: Variable coin units
       entryPrice: trade.entryPrice,

@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { cn } from "@/lib/utils";
+import { cn, formatEntryFeeMode } from "@/lib/utils";
 import { useTradingMode } from "@/contexts/trading-mode-context";
 import { useToast } from "@/hooks/use-toast";
 import { useWebSocket } from "@/hooks/use-websocket";
@@ -125,6 +125,9 @@ interface ActiveTrade {
   marketFrictionLabel?: string;
   // Batch 19E: Source pool tracking
   sourcePool?: string | null;
+  // P19-B7.2b (OBJ-C): the maker/taker entry fee-mode the position opened on.
+  chosenEntryMode?: string | null;
+  entryFeeRate?: number | string | null;
 }
 
 interface PortfolioSummary {
@@ -379,7 +382,14 @@ function TradeRow({
           </Badge>
         ) : <span className="text-muted-foreground">—</span>}
       </td>
-      
+
+      {/* P19-B7.2b (OBJ-C): Entry Fee Mode (maker/taker) — NULL renders em-dash */}
+      <td className="px-3 py-3">
+        <span className="text-xs font-medium" data-testid={`text-entry-fee-mode-${trade.id}`}>
+          {formatEntryFeeMode(trade.chosenEntryMode, trade.entryFeeRate)}
+        </span>
+      </td>
+
       {/* 4. Qty / Value (stacked) */}
       <td className="px-3 py-3">
         <div className="text-xs space-y-0.5">
@@ -1228,6 +1238,8 @@ export default function ActiveTradesV2() {
                   <SortableHeader field="slotNumber" label="Slot" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortableHeader field="strategy" label="Strategy" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <th className="px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Pool</th>
+                  {/* P19-B7.2b (OBJ-C): entry fee-mode (maker/taker) column */}
+                  <th className="px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Entry Fee Mode</th>
                   <SortableHeader field="quantity" label="Qty / Value" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortableHeader field="intendedEntryPrice" label="Entry" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortableHeader field="takeProfit" label="Target (TP)" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />

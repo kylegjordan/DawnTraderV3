@@ -1685,6 +1685,12 @@ export const paperSimTrades = pgTable("paper_sim_trades", {
   assetClass: text("asset_class").notNull().default("crypto_spot"),
   strategyName: strategyTypeEnum("strategy_name").notNull(),
   side: varchar("side", { length: 10 }).notNull(), // 'buy' or 'sell'
+  // P19-B7.2b (OBJ-B): the maker/taker ENTRY decision + the actual per-side entry fee
+  // rate used, carried from the signal → open position → this closed trade so the UI
+  // shows which fee mode this trade opened on. NULL for pre-B7.2b trades (never coerced
+  // to a default mode — rule-10 / Langston Step-2). ENTRY-leg only (exit pays taker).
+  chosenEntryMode: varchar("chosen_entry_mode", { length: 8 }), // 'taker' | 'maker' | NULL
+  entryFeeRate: decimal("entry_fee_rate", { precision: 10, scale: 6 }),
   quantity: decimal("quantity", { precision: 20, scale: 8 }).notNull(),
   entryPrice: decimal("entry_price", { precision: 20, scale: 8 }).notNull(),
   exitPrice: decimal("exit_price", { precision: 20, scale: 8 }),
@@ -1785,6 +1791,11 @@ export const paperSimOpenPositions = pgTable("paper_sim_open_positions", {
   volumeBucket: varchar("volume_bucket", { length: 20 }), // 'High' | 'Medium' | 'Low' | 'Very Low'
   // Phase 8.8.3-C1: Entry fee for projected total fees display
   entryFee: decimal("entry_fee", { precision: 20, scale: 8 }).default("0"),
+  // P19-B7.2b (OBJ-B): the maker/taker ENTRY decision + the actual per-side entry fee
+  // rate used, carried from the signal onto this open position (and forward to the
+  // closed trade). NULL for pre-B7.2b positions (never coerced — rule-10). ENTRY-leg only.
+  chosenEntryMode: varchar("chosen_entry_mode", { length: 8 }), // 'taker' | 'maker' | NULL
+  entryFeeRate: decimal("entry_fee_rate", { precision: 10, scale: 6 }),
   // Phase 8.8.3-C4: Intended entry price for slippage tracking
   intendedEntryPrice: decimal("intended_entry_price", { precision: 20, scale: 8 }),
   entrySlippage: decimal("entry_slippage", { precision: 20, scale: 8 }).default("0"),
@@ -1910,17 +1921,14 @@ export const rtbSignals = pgTable("rtb_signals", {
   // units; wide precision spans micro-cap → BTC entry scales.
   chosenEntryMode: varchar("chosen_entry_mode", { length: 8 }).default('taker'), // 'taker' | 'maker'
   chosenNetEv: decimal("chosen_net_ev", { precision: 20, scale: 10 }),
-  takerNetEv: decimal("taker_net_ev", { precision: 20, scale: 10 }),               // taker-leg netEV (convert-safety baseline)
+  takerNetEv: decimal("taker_net_ev", { precision: 20, scale: 10 }),               // taker-leg netEV (diagnostic)
   makerNetEvAdjusted: decimal("maker_net_ev_adjusted", { precision: 20, scale: 10 }), // haircut-adjusted maker netEV
-  // P19-B7.2 OBJ-4 — make-then-take ladder state. A signal whose planned entry is
-  // maker rests as maker_pending in the RTB refresh; on fill it opens as maker, on
-  // time-budget expiry convert-safety re-checks taker-EV (kernel) and converts or
-  // expires. Slot-free while waiting, slot-checked (S1 count + S4 concentration)
-  // AT FILL. Live (Phase-21) a real resting order ties up capital; paper does not.
-  makerPending: boolean("maker_pending").default(false),
-  makerPostedAt: timestamp("maker_posted_at"),
-  makerLimitPrice: decimal("maker_limit_price", { precision: 20, scale: 10 }),
-  makerBudgetExpiresAt: timestamp("maker_budget_expires_at"),
+  // P19-B7.2b (Kyle model 2026-07-01): the B7.2 OBJ-4 in-queue make-then-take ladder
+  // state columns (maker_pending / maker_posted_at / maker_limit_price /
+  // maker_budget_expires_at) were REMOVED — wrong stage. A queued signal carries a
+  // maker/taker DECISION only; the maker resting order lives post-promotion (on Kraken)
+  // = Phase-21. The columns were never populated in prod (active trading OFF), so the
+  // B7.2b migration drops them cleanly. See DELETED_COMPONENTS_LOG.
 }, (table) => ({
   modeStatusIdx: index("rtb_signals_mode_status_idx").on(table.mode, table.status),
   symbolStrategyIdx: uniqueIndex("rtb_signals_symbol_strategy_idx").on(table.mode, table.symbol, table.strategy, table.status),

@@ -12210,7 +12210,10 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           volumeBucket: volumeBucket, // 'High', 'Medium', 'Low', 'Very Low'
           positionValue: quantity * currentPrice, // Total value of position
           // Directive 9.2: Trade mode for trailing exit system
-          tradeMode: (pos as any).tradeMode || 'TARGET' // TARGET or TRAILING_TAKE (MOONBAG)
+          tradeMode: (pos as any).tradeMode || 'TARGET', // TARGET or TRAILING_TAKE (MOONBAG)
+          // P19-B7.2b (OBJ-B): maker/taker entry fee-mode for the fee-mode column.
+          chosenEntryMode: (pos as any).chosenEntryMode ?? null,
+          entryFeeRate: (pos as any).entryFeeRate ?? null
         };
       }));
       

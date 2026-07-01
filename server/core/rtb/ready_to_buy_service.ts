@@ -58,7 +58,14 @@ import { poolBus } from '../../services/pool-broadcast';
 // Directive 10.9A: Math Core Harmonization - Version-tracked weights (inlined calculation)
 import { SCORE_WEIGHTS, SCORE_WEIGHTS_VERSION } from '../../config/score-weights.config.js';
 // Directive 11.3A: Net Expectancy Standardization - Cost Model & Spread
-import { getCachedCostMetrics, computeTotalRoundTripCost, computeNetGeometry } from '../math/cost-model.js';
+import { getCachedCostMetrics, computeTotalRoundTripCost, computeNetGeometry, getFrictionForAssetClass } from '../math/cost-model.js';
+// P19-B7.2b (OBJ-E, Kyle 2026-07-01): the RTB refresh RE-RUNS the shared maker/taker
+// best-of-both decision on CURRENT market data so a signal sitting in the RTBQ keeps a
+// live entry-mode + chosen netEV (not frozen at gen-time). Same shared function the
+// signal orchestrator + VTS call (F6).
+import { decideMakerTaker, entryUrgencyClassForFamily } from '../math/maker-taker-decision.js';
+import { resolveMakerTakerHaircut } from '../../services/maker-taker-config.js';
+import { STRATEGY_FAMILY_MAP } from '../../config/canonical-regime-strategy-map.js';
 import { getCachedSpread } from '../metrics/cost-metrics.js';
 import { getNormalizedVolatility as getVolatility } from '../metrics/market-metrics.js';
 // Phase 14.5: Ranking weights for cross-family signal comparison
@@ -748,137 +755,10 @@ class ReadyToBuyService {
    * Directive 11.3A: Enhanced with conditional geometry refresh
    * Signals ranked by FinalScore with decayPenalty
    */
-  /**
-   * P19-B7.2 (OBJ-4) — make-then-take ladder host: the maker-pending wait +
-   * CONVERT-SAFETY, running inside the 30s RTB refresh (Kyle's direction — reuse
-   * the loop that already re-evaluates each queued signal on CURRENT data).
-   *
-   * A signal whose planned entry is maker rests as maker_pending; each tick:
-   *   (1) HONEST fill check — did the market TRADE THROUGH the resting limit since
-   *       posting? For a long buy limit that is price ≤ the limit. Single per-tick
-   *       observation = conservative (an observed touch-through, never optimistic).
-   *       On fill: clear maker_pending → the TCL promotes it → the OPEN PATH opens
-   *       it as maker, running its existing S1 (max-positions) + S4 (concentration)
-   *       guardrails = slot-checked AT FILL (Langston Step-2 item 4).
-   *   (2) budget still open, unfilled → keep waiting (no reconfirm churn).
-   *   (3) budget EXPIRED, unfilled → CONVERT-SAFETY: recompute the taker net-EV on
-   *       CURRENT inputs via the net-expectancy KERNEL (evaluateTradeExpectancy —
-   *       NOT computeNetGeometry, whose identically-named netRewardToRisk is a GROSS
-   *       ratio, the CC-A landmine). If taker net-EV > 0 → ATOMIC full re-snapshot
-   *       to taker (Langston item 3: overwrite the whole decision snapshot with the
-   *       fresh-friction vintage so the [11.8B] gate can't kill the converted opener
-   *       on its stale-negative maker-era snapshot). Else → EXPIRE (never open a
-   *       known loser — the maker-only signal cancels rather than cross into a
-   *       guaranteed taker loss).
-   *
-   * ⚠ SCAFFOLDING (§9.1): this ladder does NOT open a real Kraken resting order —
-   * active trading is OFF and the real post-only place/reprice/cancel lifecycle is
-   * Phase-21. In paper (dormant until B8) the ladder is SIMULATED via the per-tick
-   * trade-through check above. The DECISION + convert-safety logic is what B7.2
-   * lands; the live order mechanics are the named Phase-21 §13 home.
-   *
-   * Returns handled=true when it took terminal/holding action (fill / convert /
-   * expire / keep-waiting), so refreshSingleSignal skips the normal reconfirm flow.
-   */
-  private async processMakerPending(signal: RtbSignal, mode: TradingMode): Promise<{ handled: boolean; passed: boolean }> {
-    const normalizedSymbol = normalizePairKey(signal.symbol);
-    const nowMs = Date.now();
-    const makerLimit = signal.makerLimitPrice != null ? Number(signal.makerLimitPrice) : null;
-    const budgetExpiresAt = signal.makerBudgetExpiresAt ? new Date(signal.makerBudgetExpiresAt).getTime() : null;
-    const ac = asValidAssetClass(signal.assetClass) ?? safeResolveAssetClass(normalizedSymbol, 'kraken');
-
-    // (1) Honest fill check — trade-through of the resting maker limit.
-    let currentPrice: number | null = null;
-    try {
-      const { livePricingAdapter } = await import('../../services/live-pricing-adapter.js');
-      const priceResult = await livePricingAdapter.getPriceWithFallback(normalizedSymbol, 3000);
-      currentPrice = priceResult?.price ?? null;
-    } catch (err) {
-      console.warn(`[P19-B7.2][MAKER_PENDING] price fetch failed for ${normalizedSymbol}:`, err instanceof Error ? err.message : err);
-    }
-    if (makerLimit != null && currentPrice != null && currentPrice <= makerLimit) {
-      await storage.updateRtbSignal(signal.id, { makerPending: false, status: 'reconfirmed', lastRefreshedAt: new Date() });
-      console.log(`[P19-B7.2][MAKER_FILL] ${normalizedSymbol} traded through ${makerLimit} (px=${currentPrice}) → fills as maker; open path runs S1+S4 at fill`);
-      return { handled: true, passed: true };
-    }
-
-    // (2) Still within budget, unfilled → keep resting.
-    if (budgetExpiresAt == null || nowMs < budgetExpiresAt) {
-      return { handled: true, passed: true };
-    }
-
-    // (3) Budget expired, unfilled → CONVERT-SAFETY (kernel, not computeNetGeometry).
-    const entry = parseFloat(signal.entryPrice);
-    const stop = parseFloat(signal.stopPrice);
-    const targetNum = signal.targetPrice != null ? parseFloat(signal.targetPrice) : NaN;
-    const target = Number.isFinite(targetNum) ? targetNum : entry * 1.02;
-    const di = signal.diAtQueue != null ? Number(signal.diAtQueue) : undefined;
-    const dbs = signal.dbsScoreAtQueue != null ? Number(signal.dbsScoreAtQueue) : undefined;
-    const takerResult = ac == null ? null : evaluateTradeExpectancy(normalizedSymbol, {
-      entryPrice: entry,
-      targetPrice: target,
-      stopPrice: stop,
-      DI: di !== undefined && Number.isFinite(di) ? di : undefined,
-      dbsScore: dbs !== undefined && Number.isFinite(dbs) ? dbs : undefined,
-      sourcePool: (signal as any).sourcePool ?? (signal.metadata as any)?.sourcePool,
-    }, ac, /* quiet */ true);
-
-    if (takerResult != null && takerResult.netEV > 0) {
-      // ATOMIC full re-snapshot to taker: friction is fresh (evaluateTradeExpectancy
-      // reads current getCachedCostMetrics); DI stays the at-queue value (accuracy-
-      // only per audit H1 — no EV consequence), and the [11.8B] gate reads the single
-      // re-stamped chosen_net_ev directly, so there is no mixed vintage in the gate
-      // decision. This is what lets the converted opener pass F2 instead of dying on
-      // its stale-negative maker-era snapshot.
-      await storage.updateRtbSignal(signal.id, {
-        makerPending: false,
-        chosenEntryMode: 'taker',
-        chosenNetEv: takerResult.netEV.toString(),
-        takerNetEv: takerResult.netEV.toString(),
-        status: 'reconfirmed',
-        lastRefreshedAt: new Date(),
-      });
-      console.log(`[P19-B7.2][CONVERT] ${normalizedSymbol} maker budget expired, taker netEV=${takerResult.netEV.toFixed(6)}>0 → converted to taker (atomic re-snapshot)`);
-      return { handled: true, passed: true };
-    }
-
-    await this.expireSignal(signal.id, `maker budget expired + taker netEV non-positive (convert-safety) — no trade`);
-    console.log(`[P19-B7.2][EXPIRE] ${normalizedSymbol} maker budget expired, taker netEV non-positive → expired (never open a known loser)`);
-    return { handled: true, passed: false };
-  }
-
-  /**
-   * P19-B7.2 (OBJ-4): mark a maker-chosen signal as maker_pending (POSTED) — set by
-   * the promotion loop when it rests a passive order instead of opening now. Keeps
-   * the signal in the queue (status unchanged) but flips maker_pending so the
-   * getRankedSignals mutual-exclusion filter holds it out of ranking while it waits.
-   */
-  async markMakerPending(
-    signalId: string,
-    fields: { makerLimitPrice: number; makerPostedAt: Date; makerBudgetExpiresAt: Date },
-  ): Promise<void> {
-    await storage.updateRtbSignal(signalId, {
-      makerPending: true,
-      makerLimitPrice: fields.makerLimitPrice.toString(),
-      makerPostedAt: fields.makerPostedAt,
-      makerBudgetExpiresAt: fields.makerBudgetExpiresAt,
-    });
-  }
 
   private async refreshSingleSignal(signal: RtbSignal, mode: TradingMode): Promise<{ passed: boolean }> {
     const normalizedSymbol = normalizePairKey(signal.symbol);
     const now = new Date();
-
-    // P19-B7.2 (OBJ-4): a maker_pending signal is in the make-then-take wait — its
-    // fill / convert-safety / expire lifecycle is handled here, NOT the normal
-    // reconfirm flow. (Dormant until active trading is on — §9.1.)
-    if ((signal as any).makerPending === true) {
-      const mp = await this.processMakerPending(signal, mode);
-      if (mp.handled) {
-        this.signalRefreshStates.delete(this._refreshKey(mode, signal.signalId));
-        return { passed: mp.passed };
-      }
-    }
 
     // Directive 11.0E: Extract FinalScore-native metrics from signal
     const metadata = signal.metadata as Record<string, any> || {};
@@ -892,7 +772,18 @@ class ReadyToBuyService {
     const currentVol = getVolatility(normalizedSymbol);
     let netExpectedEdge = metadata.netExpectedEdge;
     let geometryRefreshed = false;
-    
+    // P19-B7.2b (OBJ-E): holds the RE-RUN maker/taker decision (on CURRENT data) so the
+    // reconfirm update below can refresh the snapshot columns. Null → no refresh this tick
+    // (geometry unchanged / unclassifiable) → the existing gen-time snapshot stands.
+    let _b72bRefreshedMT: { chosenMode: 'taker' | 'maker'; chosenNetEV: number; takerNetEV: number; makerNetEVAdjusted: number; entryFeeRate: number } | null = null;
+    // P19-B7.2b (OBJ-E score-timing, Langston Step-4 gate): capture the geometry inputs
+    // here, but DEFER the decideMakerTaker call until AFTER refreshedFinalScore is computed
+    // below — signalStrength must consume the DECAYED score (what the ranker/gate operate
+    // on), not the stale stored finalScore. Null → geometry didn't refresh this tick.
+    let _b72bMTInputs:
+      | { geomClass: AssetClass; costMetrics: ReturnType<typeof getCachedCostMetrics>; entryPrice: number; stopPrice: number; targetPrice: number }
+      | null = null;
+
     if (shouldRecalculateGeometry(signal, currentVol, currentSpread)) {
       // P19-B4a (C4): getCachedCostMetrics REQUIRES assetClass. PREFER the row's
       // stamp — rtb_signals.asset_class (schema.ts:1885) is stamped at queue-write
@@ -912,6 +803,13 @@ class ReadyToBuyService {
         netExpectedEdge = geometry.netExpectedEdge;
         geometryRefreshed = true;
         console.log(`[11.3A][GEOMETRY_REFRESH] ${normalizedSymbol}: netEdge=${(netExpectedEdge * 100).toFixed(3)}%`);
+
+        // ── P19-B7.2b (OBJ-E, Kyle 2026-07-01): CAPTURE the geometry inputs so the
+        // maker/taker best-of-both decision can be RE-RUN below, AFTER the decayed score
+        // (refreshedFinalScore) is computed — signalStrength must consume the decayed
+        // score, not the stale stored finalScore (Langston Step-4 score-timing gate).
+        // The actual decideMakerTaker call is deferred to the post-score block.
+        _b72bMTInputs = { geomClass, costMetrics, entryPrice, stopPrice, targetPrice };
       } else if (geomClass === null) {
         console.warn(`[11.3A][GEOMETRY_SKIP] unclassifiable ${normalizedSymbol} — skipping geometry refresh (no valid stamp, unresolvable)`);
       }
@@ -928,7 +826,60 @@ class ReadyToBuyService {
       (regimeWeight ?? 0) * W.REGIME -
       (decayPenalty ?? 0) * W.DECAY
     ));
-    
+
+    // ── P19-B7.2b (OBJ-E, Kyle 2026-07-01; Langston Step-4 score-timing gate): RE-RUN the
+    // maker/taker best-of-both decision on CURRENT market data (same shared decideMakerTaker
+    // the orchestrator + VTS call — F6), so a signal reconfirming in the RTBQ keeps a LIVE
+    // entry-mode + chosen netEV instead of the frozen gen-time snapshot. Runs HERE (after
+    // refreshedFinalScore) so signalStrength consumes the DECAYED score — the exact value
+    // the ranker/gate operate on — not the stale stored finalScore. The friction (spread/fee)
+    // that drives the maker-vs-taker choice is what the geometry refresh re-read
+    // (getCachedCostMetrics), so the decision stays current as the market moves. DI/DBS stay
+    // the at-queue basis (di_at_queue — the refresh has no fresh-DI source; DI is accuracy-only
+    // per audit H1, so no maker/taker consequence). Only runs when geometry shifted this tick
+    // (_b72bMTInputs set); otherwise the gen-time snapshot stands. LOAD-BEARING: chosen_net_ev
+    // drives BOTH the B7.1 ranker (queue order → who gets promoted) AND the [11.8B] open-gate,
+    // so keeping it current matters — and the refresh writes chosen_net_ev + the decision +
+    // the decayed finalScore in the SINGLE updateRtbSignal below (atomic; no half-updated row
+    // the ranker/gate could read). distStop (entry−stop) is NOT mutated by refresh, so the
+    // ranker's r = chosen_net_ev/distStop has an atomic numerator + an invariant denominator.
+    // (B7.2b, Kyle model 2026-07-01: a signal in the RTBQ carries a DECISION only — it works
+    // NO order; the maker order goes out at PROMOTION, and its fill/timeout/convert lifecycle
+    // is post-promotion — simulated for paper+VTS in B7.2c, real Kraken resting-order in
+    // Phase-21. The B7.2 in-queue maker_pending/convert-safety was the wrong stage, removed.)
+    if (_b72bMTInputs) {
+      try {
+        const { geomClass, costMetrics, entryPrice, stopPrice, targetPrice } = _b72bMTInputs;
+        const _mtFr = getFrictionForAssetClass(geomClass);
+        const _mtGK = { exchange: '*', assetClass: '*', strategy: '*', regime: '*' };
+        const _mt = decideMakerTaker({
+          entryPrice, stopPrice, targetPrice,
+          costs: costMetrics,
+          feeRateMaker: _mtFr.feeRateMaker,
+          feeRateTaker: _mtFr.feeRateTaker,
+          DI: signal.diAtQueue != null ? Number(signal.diAtQueue) : undefined,
+          sourcePool: (signal as any).sourcePool ?? (signal.metadata as any)?.sourcePool,
+          dbsScore: signal.dbsScoreAtQueue != null ? Number(signal.dbsScoreAtQueue) : undefined,
+          minPWin:      getCachedNumberRequired('expectancy_kernel',     'pwin_floor',     _mtGK),
+          maxPWin:      getCachedNumberRequired('expectancy_kernel',     'pwin_ceiling',   _mtGK),
+          diPWinFactor: getCachedNumberRequired('directional_integrity', 'di_pwin_factor', _mtGK),
+          signalStrength: refreshedFinalScore,
+          urgencyClass: entryUrgencyClassForFamily(STRATEGY_FAMILY_MAP[signal.strategy]),
+          haircut: resolveMakerTakerHaircut(geomClass),
+        });
+        _b72bRefreshedMT = {
+          chosenMode: _mt.chosenMode,
+          chosenNetEV: _mt.chosenNetEV,
+          takerNetEV: _mt.takerNetEV,
+          makerNetEVAdjusted: _mt.makerNetEVAdjusted,
+          entryFeeRate: _mt.chosenMode === 'maker' ? _mtFr.feeRateMaker : _mtFr.feeRateTaker,
+        };
+        console.log(`[P19-B7.2b][RTB_REFRESH][MAKER_TAKER] ${normalizedSymbol}: re-decided ${_mt.chosenMode} (chosen netEV=${_mt.chosenNetEV.toFixed(6)}, taker=${_mt.takerNetEV.toFixed(6)}) on current data + decayed score`);
+      } catch (mtErr) {
+        console.warn(`[P19-B7.2b][RTB_REFRESH][MAKER_TAKER] ${normalizedSymbol}: decision re-run failed (keeping gen-time snapshot):`, mtErr instanceof Error ? mtErr.message : mtErr);
+      }
+    }
+
     // Phase 14: SQE revalidation — pass pre-computed FinalScore/RegimeWeight (no backfill)
     // P19-B4a (C4): assetClass REQUIRED on SQEInput. PREFER the row's stamp
     // (rtb_signals.asset_class, schema.ts:1885, stamped at queue-write — the source
@@ -974,6 +925,17 @@ class ReadyToBuyService {
       confidence: confidence.toString(),
       finalScore: refreshedFinalScore.toString(),
       lastRefreshedAt: now,
+      // P19-B7.2b (OBJ-E): refresh the maker/taker decision snapshot on current data
+      // when it was re-run this tick (geometry shifted); otherwise the gen-time snapshot
+      // stands. chosen_net_ev is what the [11.8B] open-gate + the B7.1 ranker read, so
+      // keeping it current means a signal reconfirming in the RTBQ is gated + ranked on
+      // its LIVE best-of-both, not a stale gen-time number.
+      ...(_b72bRefreshedMT ? {
+        chosenEntryMode: _b72bRefreshedMT.chosenMode,
+        chosenNetEv: _b72bRefreshedMT.chosenNetEV.toString(),
+        takerNetEv: _b72bRefreshedMT.takerNetEV.toString(),
+        makerNetEvAdjusted: _b72bRefreshedMT.makerNetEVAdjusted.toString(),
+      } : {}),
       metadata: {
         ...metadata,
         lastReconfirmedAt: now.toISOString(),
@@ -1928,19 +1890,6 @@ class ReadyToBuyService {
     // R9.3-C: No expiry filter - all queued signals are valid (SQE governs lifecycle)
     // R9.3-A: Filter out signals currently being refreshed
     let validSignals = signals.filter(s => !this.isSignalRefreshing(mode, s.signalId));
-
-    // P19-B7.2 (OBJ-4) MUTUAL EXCLUSION: a maker_pending signal is resting a passive
-    // order in the make-then-take wait — it must NOT also compete for an open slot
-    // through the ranker (double-count). It re-enters promotion only after the refresh
-    // clears maker_pending (on fill) or converts it to taker.
-    {
-      const beforeMp = validSignals.length;
-      validSignals = validSignals.filter(s => (s as any).makerPending !== true);
-      const mpExcluded = beforeMp - validSignals.length;
-      if (mpExcluded > 0) {
-        console.log(`[P19-B7.2][RANK] excluded ${mpExcluded} maker_pending signal(s) from promotion (resting in the make-then-take wait)`);
-      }
-    }
 
     // Batch 19F: Pair-level promotion guard (prevent overexposure)
     // Filter out signals for pairs that already have active trades

@@ -1795,41 +1795,13 @@ export class PaperExecutionEngine {
           }
         }
 
-        // ── P19-B7.2 (OBJ-4): make-then-take POST ─────────────────────────────
-        // A maker-chosen signal that has NEVER been posted rests as maker_pending
-        // instead of opening now: mark the ladder state and `continue` — it stays in
-        // the queue, does NOT consume a slot (slot-free-while-waiting), and the RTB
-        // refresh manages its fill / convert-safety / expire lifecycle. It re-enters
-        // promotion only after the refresh clears maker_pending — as MAKER on a
-        // trade-through fill (makerPostedAt set → opens below), or as TAKER after a
-        // convert. The getRankedSignals mutual-exclusion filter keeps it out of the
-        // ranking while it rests. ⚠ SCAFFOLDING (§9.1): dormant until active trading
-        // is on; the real Kraken post-only resting order is Phase-21 — here we mark
-        // state and simulate the wait via the refresh's per-tick trade-through check.
-        {
-          const _b72ChosenMode = (signal.chosenEntryMode as 'taker' | 'maker' | undefined) ?? 'taker';
-          const _b72NeverPosted = signal.makerPostedAt == null;
-          if (_b72ChosenMode === 'maker' && _b72NeverPosted) {
-            try {
-              const { resolveMakerTimeBudgetMs } = await import('./maker-taker-config.js');
-              const _b72Class = asValidAssetClass(signal.metadata?.assetClass)
-                ?? asValidAssetClass((signal as any).assetClass)
-                ?? safeResolveAssetClass(signal.symbol, 'kraken')
-                ?? 'crypto_spot';
-              const budgetMs = resolveMakerTimeBudgetMs(_b72Class);
-              const nowD = new Date();
-              await readyToBuyService.markMakerPending(signal.id, {
-                makerLimitPrice: parseFloat(signal.entryPrice),
-                makerPostedAt: nowD,
-                makerBudgetExpiresAt: new Date(nowD.getTime() + budgetMs),
-              });
-              console.log(`[P19-B7.2][MAKER_POST] ${signal.symbol} posted maker limit @ ${signal.entryPrice} (budget ${budgetMs}ms) — resting, slot-free, not opened this cycle`);
-              continue; // slot-free-while-waiting: do NOT remove from queue / open / decrement openSlots
-            } catch (postErr) {
-              console.warn(`[P19-B7.2][MAKER_POST] failed to post maker_pending for ${signal.symbol}; falling through to normal open:`, postErr instanceof Error ? postErr.message : postErr);
-            }
-          }
-        }
+        // P19-B7.2b (Kyle model 2026-07-01): a maker-chosen signal is NOT posted as a
+        // resting order in the RTBQ (the B7.2 make-then-take-POST branch was removed —
+        // wrong stage; the signal carries a decision only while queued). At promotion it
+        // proceeds to open. The real Kraken maker resting-order placement + fill/timeout/
+        // convert lifecycle is post-promotion = Phase-21 (RUNNING_ISSUES + Phase-21 plan);
+        // dormant in Phase-19, so a promoted maker-chosen signal opens through the normal
+        // path below with its chosen mode carried on the signal for the [11.8B] gate.
 
         // Directive 8.8.4-A3.R1: RTB removal must precede trade creation to prevent double-activation
         // Step 1: Remove signal from RTB queue BEFORE attempting trade execution
@@ -2476,6 +2448,18 @@ export class PaperExecutionEngine {
         return { opened: false, stage: 'UNCLASSIFIABLE', reason: 'unclassifiable symbol at trade-create' };
       }
 
+      // ── P19-B7.2b (OBJ-B): the maker/taker entry fee-mode + its per-side fee RATE for
+      // this trade's asset class, carried onto the paper-active open-position + closed-trade
+      // records so the UI can show WHICH fee the ENTRY paid. _b72ChosenMode is the decision
+      // snapshot (from rtb_signals.chosen_entry_mode via the promoted signal; defaults taker).
+      // The rate is the class's per-side rate for that mode (fail-hard via cost-model). Once
+      // the B7.2c pending maker-fill sim lands, a maker-chosen promotion fills at the maker
+      // rate; a taker-chosen fills immediately at taker — so the recorded rate matches the
+      // actual entry fill by construction (this code doesn't run until active trading is ON,
+      // which is after B7.2c). Entry-leg only — the exit pays taker for both classes today.
+      const _b72Friction = getFrictionForAssetClass(_tradeClass);
+      const _b72EntryFeeRate = _b72ChosenMode === 'maker' ? _b72Friction.feeRateMaker : _b72Friction.feeRateTaker;
+
       const trade = await storage.createPaperSimTrade(this.mode, {
         symbol: signal.symbol,
         baseCurrency,
@@ -2503,6 +2487,9 @@ export class PaperExecutionEngine {
         phaseAgeSeconds: _b67_2_1_ctx?.regime.phaseAgeSeconds ?? null,
         strategyPhaseWeight: _b67_2_1_phaseWeight,
         regimeConfidenceModulated: _b67_2_1_modulatedConf,
+        // P19-B7.2b (OBJ-B): the maker/taker entry fee-mode + per-side rate.
+        chosenEntryMode: _b72ChosenMode,
+        entryFeeRate: _b72EntryFeeRate.toString(),
         metadata: signal.metadata || {}
       });
 
@@ -2581,6 +2568,9 @@ export class PaperExecutionEngine {
         assetClass: _tradeClass,
         // Batch 19E: Persist sourcePool from signal metadata
         sourcePool: (signal as any)?.metadata?.sourcePool || (signal as any)?.sourcePool || null,
+        // P19-B7.2b (OBJ-B): the maker/taker entry fee-mode + per-side rate.
+        chosenEntryMode: _b72ChosenMode,
+        entryFeeRate: _b72EntryFeeRate.toString(),
         metadata: {
           ...signal.metadata,
           tradeId: trade.id,

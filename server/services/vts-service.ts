@@ -788,6 +788,11 @@ export class VTSService extends EventEmitter {
     // B-5 AMR: at-open weather stamp (pass-through to the persisted record).
     amrClassification?: string;
     amrMode?: string;
+    // P19-B7.2b (OBJ-B): maker/taker entry fee-mode + per-side rate, persisted into
+    // the closed VTS JSON so the Closed Simulated Trades fee-mode column can read it
+    // back. Optional — omitted callers (and pre-B7.2b trades) read back as null.
+    chosenEntryMode?: 'taker' | 'maker';
+    entryFeeRate?: number;
   }): Promise<{ persisted: boolean; mlTriggered: boolean }> {
     // Compute expected edge at entry time (predicted profit based on take profit distance)
     const tpDistance = (tradeData.takeProfit - tradeData.entryPrice) / tradeData.entryPrice;
@@ -923,6 +928,11 @@ export class VTSService extends EventEmitter {
       // evidence for the Phase-19 flip read; dials were never touched).
       amrClassification: tradeData.amrClassification ?? null,
       amrMode: tradeData.amrMode ?? null,
+      // P19-B7.2b (OBJ-B): maker/taker entry fee-mode persisted into the closed VTS
+      // JSON record → read back by getClosedVTSTradesFromLogs → Closed Simulated
+      // Trades fee-mode column. Entry-leg only.
+      chosenEntryMode: tradeData.chosenEntryMode ?? null,
+      entryFeeRate: tradeData.entryFeeRate ?? null,
     } as any;
 
     // Add to closedTrades for ML calibration access

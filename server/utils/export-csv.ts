@@ -146,6 +146,11 @@ export async function getClosedVTSTradesFromLogs(days: number = 7): Promise<Arra
   amrClassification: string | null;
   amrMode: string | null;
   entryLiquidityKind: string | null;
+  // P19-B7.2b (OBJ-B): maker/taker entry fee-mode + per-side rate read back from the
+  // closed VTS JSON for the Closed Simulated Trades fee-mode column. null for pre-B7.2b
+  // trades (UI renders an em-dash). Entry-leg only.
+  chosenEntryMode: string | null;
+  entryFeeRate: number | null;
 }>> {
   const vtsDir = path.join(process.cwd(), 'logs', 'virtual_trades');
   const cutoffDate = Date.now() - (days * 24 * 60 * 60 * 1000);
@@ -296,6 +301,9 @@ export async function getClosedVTSTradesFromLogs(days: number = 7): Promise<Arra
             // VTS close path, consumed by the Phase-19 flip read.
             amrClassification: typeof trade.amrClassification === 'string' ? trade.amrClassification : null,
             amrMode: typeof trade.amrMode === 'string' ? trade.amrMode : null,
+            // P19-B7.2b (OBJ-B): maker/taker entry fee-mode read-back for the fee-mode column.
+            chosenEntryMode: typeof trade.chosenEntryMode === 'string' ? trade.chosenEntryMode : null,
+            entryFeeRate: typeof trade.entryFeeRate === 'number' ? trade.entryFeeRate : null,
           });
         }
       } catch (err) {

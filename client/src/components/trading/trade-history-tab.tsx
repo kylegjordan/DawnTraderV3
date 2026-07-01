@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { cn } from "@/lib/utils";
+import { cn, formatEntryFeeMode } from "@/lib/utils";
 import { useTradingMode } from "@/contexts/trading-mode-context";
 import { apiFetch } from "@/lib/api";
 import { getFrictionColorClasses, getRegimeBadgeClassName, getFrictionLabel, formatRegimeTitle } from "@/utils/frictionColor";
@@ -715,6 +715,8 @@ export function TradeHistoryTab() {
                       <th className="px-3 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Class</th>
                       <SortableHeader column="strategyName" label="Strategy" currentSort={sortBy} currentOrder={order} onSort={handleSort} />
                       <th className="px-3 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Pool</th>
+                      {/* P19-B7.2b (OBJ-C): entry fee-mode (maker/taker) column */}
+                      <th className="px-3 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Entry Fee Mode</th>
                       <SortableHeader column="quantity" label="Qty" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="right" />
                       <SortableHeader column="entryPrice" label="Entry" currentSort={sortBy} currentOrder={order} onSort={handleSort} />
                       <SortableHeader column="exitPrice" label="Exit" currentSort={sortBy} currentOrder={order} onSort={handleSort} />
@@ -789,6 +791,11 @@ export function TradeHistoryTab() {
                                 {((trade as any).sourcePool as string).toUpperCase()}
                               </Badge>
                             ) : <span className="text-muted-foreground text-xs">—</span>}
+                          </td>
+
+                          {/* P19-B7.2b (OBJ-C): Entry Fee Mode (maker/taker) — NULL renders em-dash */}
+                          <td className="p-2 text-xs" data-testid={`text-entry-fee-mode-${trade.id}`}>
+                            {formatEntryFeeMode((trade as any).chosenEntryMode, (trade as any).entryFeeRate)}
                           </td>
 
                           {/* 3. Quantity - C2A */}

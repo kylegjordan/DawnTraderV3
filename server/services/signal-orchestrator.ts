@@ -666,6 +666,86 @@ export class SignalOrchestrator {
     // authoritative source per the one-sizingContext-one-class-one-pipe invariant.
     const sqeAssetClass = sizingContext.assetClass;
 
+    // reorg-B3 (#233, Option B): read the FX5 pool entry ONCE. It is the routing-time survivor
+    // snapshot for this symbol — the active-filter-pool DEDUPLICATES and does NOT refresh a
+    // non-expired entry (5-min TTL), so within a scan cycle this is the stable snapshot that drove
+    // this signal's routing. We capture di + dbsScore here as the AT-QUEUE EV inputs (frozen into
+    // the typed rtb_signals columns below, so a later pool refresh cannot drift them). dbsScore is
+    // the SAME survivor DBS that drove strong-trend routing → coherent with the open-gate
+    // strong-trend pWin branch. This call also supplies volume24h (it did before reorg-B3; now read
+    // once instead of inline). NULL when the symbol is absent from the pool → kernel defaults.
+    const fx5Data = activeFilterPool.getFX5DataForSymbol(rawSignal.symbol, sizingContext.mode);
+
+    // ── P19-B7.2: BEST-OF-BOTH maker/taker ENTRY decision (OBJ-1/OBJ-2/OBJ-3) ──
+    // Computed ONCE here, at the shared build convergence (covers quant + hybrid +
+    // pattern + xStock — all funnel through buildSizedSignalForStrategy), on the
+    // SAME at-queue DI/DBS basis captured for the snapshot below (fx5Data.di /
+    // .dbsScore) so the maker/taker comparison and the [11.8B] open-gate read one
+    // consistent vintage (F2). The chosen best netEV is snapshotted onto the RTB
+    // row and is the SINGLE value every downstream EV consumer reads — the
+    // [11.8B] open-gate and the B7.1 ranker — so a taker-unprofitable /
+    // maker-profitable signal (the crypto opener) survives to be ranked + opened.
+    //
+    // Placement (P19-B7.2b, Kyle directive 2026-07-01): this decision is a STANDALONE
+    // service that runs JUST BEFORE the SQE — signal-gen → sizing → THIS decision →
+    // SQE. The SQE stays a pure, calculation-FREE quality gate; the decision is NOT
+    // inside it. Placing it before the SQE (a) mirrors the VTS, which runs the SAME
+    // shared decideMakerTaker() before its own Net-EV gate (F6), and (b) is
+    // future-proof: even if the SQE's optional ROI sub-check
+    // (signal_quality_evaluator.ts:327, guarded `if (entryPrice && targetPrice &&
+    // regime)`, dormant on the active path today) is ever activated, it can no longer
+    // reject a maker-chosen opener upstream because best-of-both is already decided.
+    // The chosen netEV flows PAST the calc-free SQE via the snapshot below to the
+    // [11.8B] open-gate + the B7.1 ranker (the sole active-path taker-EV gate today is
+    // that [11.8B] open-gate — Active-Trading-Path-Audit H1). VTS: same function, its
+    // own Net-EV gate (no SQE in the VTS).
+    const _mtCosts = getCachedCostMetrics(rawSignal.symbol, sizingContext.assetClass);
+    const _mtFriction = getFrictionForAssetClass(sizingContext.assetClass);
+    const _mtFeeRateMaker = _mtFriction.feeRateMaker;
+    const _mtFeeRateTaker = _mtFriction.feeRateTaker; // single-source the taker−maker fee delta (Langston Q1)
+    const _mtGlobalKey = { exchange: '*', assetClass: '*', strategy: '*', regime: '*' };
+    const _mtDecision = decideMakerTaker({
+      entryPrice: rawSignal.entryPrice,
+      stopPrice: rawSignal.stopPrice,
+      targetPrice: rawSignal.targetPrice,
+      costs: _mtCosts,
+      feeRateMaker: _mtFeeRateMaker,
+      feeRateTaker: _mtFeeRateTaker,
+      // Same at-queue DI/DBS basis as the diAtQueue/dbsScoreAtQueue snapshot below
+      // (F2 single-basis). NULL → kernel documented defaults, exactly as the
+      // open-gate treats a null di_at_queue.
+      DI: fx5Data?.di ?? undefined,
+      sourcePool: rawSignal.metadata?.sourcePool || undefined,
+      dbsScore: fx5Data?.dbsScore ?? undefined,
+      minPWin:      getCachedNumberRequired('expectancy_kernel',     'pwin_floor',     _mtGlobalKey),
+      maxPWin:      getCachedNumberRequired('expectancy_kernel',     'pwin_ceiling',   _mtGlobalKey),
+      diPWinFactor: getCachedNumberRequired('directional_integrity', 'di_pwin_factor', _mtGlobalKey),
+      // Signal strength proxy = the deterministic FinalScore (0..1). Drives the
+      // adverse-selection slope + the hard taker floor.
+      signalStrength: extendedMetrics.finalScore,
+      urgencyClass: entryUrgencyClassForFamily(STRATEGY_FAMILY_MAP[_canonicalStrategy]),
+      haircut: resolveMakerTakerHaircut(sizingContext.assetClass),
+    });
+    console.log(
+      `[P19-B7.2][MAKER_TAKER] ${rawSignal.symbol}/${strategyId}: chose ${_mtDecision.chosenMode} ` +
+      `(taker netEV=${_mtDecision.takerNetEV.toFixed(6)}, maker-adj netEV=${_mtDecision.makerNetEVAdjusted.toFixed(6)}, ` +
+      `A=${(_mtDecision.adverseSelectionPct * 100).toFixed(3)}% C=${(_mtDecision.nonFillCostPct * 100).toFixed(3)}% ` +
+      `floor=${_mtDecision.hardFloorFired})`,
+    );
+    // P19-B7.2 (OBJ-6): record the decision for the maker-PICK-RATE monitor (too-loose-haircut
+    // early warning). Bounded buffer; paper maker-fill outcomes stay data-fenced (non-calibration).
+    rtbMetricsService.recordMakerTakerDecision({
+      symbol: rawSignal.symbol,
+      strategy: strategyId,
+      assetClass: sizingContext.assetClass,
+      chosenMode: _mtDecision.chosenMode,
+      takerNetEV: _mtDecision.takerNetEV,
+      makerNetEVAdjusted: _mtDecision.makerNetEVAdjusted,
+      adverseSelectionPct: _mtDecision.adverseSelectionPct,
+      nonFillCostPct: _mtDecision.nonFillCostPct,
+      hardFloorFired: _mtDecision.hardFloorFired,
+      timestamp: Date.now(),
+    });
     const sqeInput: SQEInput = {
       signalId,
       symbol: rawSignal.symbol,
@@ -746,83 +826,6 @@ export class SignalOrchestrator {
     // L10: Fetch exposure bias multiplier for this strategy
     const exposureBias = getExposureMultiplierSync(strategyId);
 
-    // reorg-B3 (#233, Option B): read the FX5 pool entry ONCE. It is the routing-time survivor
-    // snapshot for this symbol — the active-filter-pool DEDUPLICATES and does NOT refresh a
-    // non-expired entry (5-min TTL), so within a scan cycle this is the stable snapshot that drove
-    // this signal's routing. We capture di + dbsScore here as the AT-QUEUE EV inputs (frozen into
-    // the typed rtb_signals columns below, so a later pool refresh cannot drift them). dbsScore is
-    // the SAME survivor DBS that drove strong-trend routing → coherent with the open-gate
-    // strong-trend pWin branch. This call also supplies volume24h (it did before reorg-B3; now read
-    // once instead of inline). NULL when the symbol is absent from the pool → kernel defaults.
-    const fx5Data = activeFilterPool.getFX5DataForSymbol(rawSignal.symbol, sizingContext.mode);
-
-    // ── P19-B7.2: BEST-OF-BOTH maker/taker ENTRY decision (OBJ-1/OBJ-2/OBJ-3) ──
-    // Computed ONCE here, at the shared build convergence (covers quant + hybrid +
-    // pattern + xStock — all funnel through buildSizedSignalForStrategy), on the
-    // SAME at-queue DI/DBS basis captured for the snapshot below (fx5Data.di /
-    // .dbsScore) so the maker/taker comparison and the [11.8B] open-gate read one
-    // consistent vintage (F2). The chosen best netEV is snapshotted onto the RTB
-    // row and is the SINGLE value every downstream EV consumer reads — the
-    // [11.8B] open-gate and the B7.1 ranker — so a taker-unprofitable /
-    // maker-profitable signal (the crypto opener) survives to be ranked + opened.
-    //
-    // Placement note (verified P19-B7.2 Step-2/3): on the ACTIVE path the SQE
-    // ROI gate (signal_quality_evaluator.ts:327) is DORMANT — it is guarded by
-    // `if (entryPrice && targetPrice && regime)` and this active sqeInput does
-    // not set them — so the sole active-path taker-EV gate is the [11.8B]
-    // open-gate on the snapshot (Active-Trading-Path-Audit H1). Computing
-    // best-of-both here (after the SQE quality gate, before the RTB snapshot)
-    // therefore loses no maker-opener. ⚠ If the active SQE ROI gate is ever
-    // activated, best-of-both must move BEFORE the SQE evaluate (or the gate must
-    // read this snapshot) — flagged in the B7.2 completion report + SysManual.
-    // VTS applies the SAME decideMakerTaker() in vts-runner (F6 shared function).
-    const _mtCosts = getCachedCostMetrics(rawSignal.symbol, sizingContext.assetClass);
-    const _mtFriction = getFrictionForAssetClass(sizingContext.assetClass);
-    const _mtFeeRateMaker = _mtFriction.feeRateMaker;
-    const _mtFeeRateTaker = _mtFriction.feeRateTaker; // single-source the taker−maker fee delta (Langston Q1)
-    const _mtGlobalKey = { exchange: '*', assetClass: '*', strategy: '*', regime: '*' };
-    const _mtDecision = decideMakerTaker({
-      entryPrice: rawSignal.entryPrice,
-      stopPrice: rawSignal.stopPrice,
-      targetPrice: rawSignal.targetPrice,
-      costs: _mtCosts,
-      feeRateMaker: _mtFeeRateMaker,
-      feeRateTaker: _mtFeeRateTaker,
-      // Same at-queue DI/DBS basis as the diAtQueue/dbsScoreAtQueue snapshot below
-      // (F2 single-basis). NULL → kernel documented defaults, exactly as the
-      // open-gate treats a null di_at_queue.
-      DI: fx5Data?.di ?? undefined,
-      sourcePool: rawSignal.metadata?.sourcePool || undefined,
-      dbsScore: fx5Data?.dbsScore ?? undefined,
-      minPWin:      getCachedNumberRequired('expectancy_kernel',     'pwin_floor',     _mtGlobalKey),
-      maxPWin:      getCachedNumberRequired('expectancy_kernel',     'pwin_ceiling',   _mtGlobalKey),
-      diPWinFactor: getCachedNumberRequired('directional_integrity', 'di_pwin_factor', _mtGlobalKey),
-      // Signal strength proxy = the deterministic FinalScore (0..1). Drives the
-      // adverse-selection slope + the hard taker floor.
-      signalStrength: extendedMetrics.finalScore,
-      urgencyClass: entryUrgencyClassForFamily(STRATEGY_FAMILY_MAP[_canonicalStrategy]),
-      haircut: resolveMakerTakerHaircut(sizingContext.assetClass),
-    });
-    console.log(
-      `[P19-B7.2][MAKER_TAKER] ${rawSignal.symbol}/${strategyId}: chose ${_mtDecision.chosenMode} ` +
-      `(taker netEV=${_mtDecision.takerNetEV.toFixed(6)}, maker-adj netEV=${_mtDecision.makerNetEVAdjusted.toFixed(6)}, ` +
-      `A=${(_mtDecision.adverseSelectionPct * 100).toFixed(3)}% C=${(_mtDecision.nonFillCostPct * 100).toFixed(3)}% ` +
-      `floor=${_mtDecision.hardFloorFired})`,
-    );
-    // P19-B7.2 (OBJ-6): record the decision for the maker-PICK-RATE monitor (too-loose-haircut
-    // early warning). Bounded buffer; paper maker-fill outcomes stay data-fenced (non-calibration).
-    rtbMetricsService.recordMakerTakerDecision({
-      symbol: rawSignal.symbol,
-      strategy: strategyId,
-      assetClass: sizingContext.assetClass,
-      chosenMode: _mtDecision.chosenMode,
-      takerNetEV: _mtDecision.takerNetEV,
-      makerNetEVAdjusted: _mtDecision.makerNetEVAdjusted,
-      adverseSelectionPct: _mtDecision.adverseSelectionPct,
-      nonFillCostPct: _mtDecision.nonFillCostPct,
-      hardFloorFired: _mtDecision.hardFloorFired,
-      timestamp: Date.now(),
-    });
 
     // Phase 14: FinalScore computed in extended metrics — no duplicate calculation needed
     // Build RTB signal using pre-computed values from extendedMetrics

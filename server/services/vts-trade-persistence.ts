@@ -102,12 +102,18 @@ function splitTradeForPersist(t: OpenVirtualTradeRecord): { core: any; context: 
   const {
     id, symbol, assetClass, entryPrice, stopLoss, takeProfit, positionSize,
     dollarValue, quantity, regime, signalType, strategy, pool, openedAt,
+    // P19-B7.2b (OBJ-B): the maker/taker entry fee-mode — promoted to typed
+    // columns (chosen_entry_mode / entry_fee_rate) so the VTS open-trades UI can
+    // query it directly, consistent with the paper-active tables. Destructured out
+    // of `...context` so it lives in ONE home (the typed column), not duplicated.
+    chosenEntryMode, entryFeeRate,
     ...context
   } = t;
   return {
     core: {
       id, symbol, assetClass, entryPrice, stopLoss, takeProfit, positionSize,
       dollarValue, quantity, regime, signalType, strategy, pool, openedAt,
+      chosenEntryMode, entryFeeRate,
     },
     context,
   };
@@ -125,13 +131,14 @@ export async function insertOpenTrade(trade: OpenVirtualTradeRecord): Promise<vo
     INSERT INTO vts_open_trades (
       id, symbol, asset_class, entry_price, stop_loss, take_profit,
       position_size, dollar_value, quantity, regime, signal_type, strategy,
-      pool, opened_at, context, inserted_at, updated_at
+      pool, opened_at, chosen_entry_mode, entry_fee_rate, context, inserted_at, updated_at
     ) VALUES (
       ${core.id}, ${core.symbol}, ${core.assetClass},
       ${core.entryPrice}, ${core.stopLoss}, ${core.takeProfit},
       ${core.positionSize}, ${core.dollarValue}, ${core.quantity},
       ${core.regime}, ${core.signalType}, ${core.strategy}, ${core.pool},
       to_timestamp(${core.openedAt} / 1000.0),
+      ${core.chosenEntryMode ?? null}, ${core.entryFeeRate ?? null},
       ${JSON.stringify(context)}::jsonb,
       NOW(), NOW()
     )
@@ -275,11 +282,13 @@ export async function rehydrateOpenTrades(): Promise<OpenVirtualTradeRecord[]> {
     pool: string;
     opened_at: Date;
     state: string;
+    chosen_entry_mode: string | null;
+    entry_fee_rate: string | null;
     context: Record<string, any>;
   }>(sql`
     SELECT id, symbol, asset_class, entry_price, stop_loss, take_profit,
            position_size, dollar_value, quantity, regime, signal_type, strategy,
-           pool, opened_at, state, context
+           pool, opened_at, state, chosen_entry_mode, entry_fee_rate, context
     FROM vts_open_trades
     WHERE closed = false
   `);
@@ -309,6 +318,11 @@ export async function rehydrateOpenTrades(): Promise<OpenVirtualTradeRecord[]> {
     // belt-and-suspenders; DB CHECK guarantees the value is valid.
     state: (r.state as VtsOpenTradeState) ?? 'open',
     ...(r.context ?? {}),
+    // P19-B7.2b (OBJ-B): surface the typed maker/taker fee-mode columns; placed AFTER
+    // the context spread so a NEW row's typed column wins, with a fallback to legacy
+    // context for pre-B7.2b rows that stored these in the jsonb blob.
+    chosenEntryMode: r.chosen_entry_mode ?? (r.context as any)?.chosenEntryMode,
+    entryFeeRate: r.entry_fee_rate != null ? parseFloat(r.entry_fee_rate) : (r.context as any)?.entryFeeRate,
   }));
 }
 

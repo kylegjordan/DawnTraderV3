@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { RefreshCw, TrendingUp, ArrowUpDown, Clock } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, formatEntryFeeMode } from "@/lib/utils";
 import { useWebSocket } from "@/hooks/use-websocket";
 import { getFrictionColorClasses, getRegimeBadgeClassName, getFrictionLabel, formatRegimeTitle } from "@/utils/frictionColor";
 
@@ -31,6 +31,9 @@ interface TradingSignal {
   marketRegime?: string;
   marketFrictionScore?: number;
   marketFrictionLabel?: string;
+  // P19-B7.2b (OBJ-C): the maker/taker entry fee-mode snapshot carried on rtb_signals.
+  chosenEntryMode?: string | null;
+  entryFeeRate?: number | string | null;
 }
 
 interface TradingSignalsResponse {
@@ -304,6 +307,8 @@ export default function ReadyToBuyTable() {
                   <SortHeader field="strategy" label="Strategy" />
                   <SortHeader field="marketRegime" label="Regime" />
                   <SortHeader field="marketFriction" label="Friction" />
+                  {/* P19-B7.2b (OBJ-C): entry fee-mode (maker/taker) column — non-sortable */}
+                  <th className="text-left py-2 px-3 font-medium" data-testid="header-entry-fee-mode">Entry Fee Mode</th>
                   <SortHeader field="status" label="Status" />
                 </tr>
               </thead>
@@ -452,6 +457,10 @@ export default function ReadyToBuyTable() {
                         ) : (
                           <span className="text-muted-foreground text-xs">—</span>
                         )}
+                      </td>
+                      {/* P19-B7.2b (OBJ-C): entry fee-mode (maker/taker) — NULL renders em-dash */}
+                      <td className="py-3 px-3 text-xs" data-testid={`text-entry-fee-mode-${index}`}>
+                        {formatEntryFeeMode(signal.chosenEntryMode, signal.entryFeeRate)}
                       </td>
                       <td className="py-3 px-3" data-testid={`text-status-${index}`}>
                         <span className={cn(

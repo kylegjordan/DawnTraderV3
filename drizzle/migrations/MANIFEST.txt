@@ -154,3 +154,4 @@
 2026-06-30-p19-b7-1-ranker-config.sql
 2026-06-30-p19-b7-1-shadow-r-multiple.sql
 2026-07-01-p19-b7-2-maker-taker.sql
+2026-07-01-p19-b7-2b-fee-mode-columns.sql

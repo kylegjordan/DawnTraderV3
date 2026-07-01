@@ -13,6 +13,7 @@ import { apiFetch } from "@/lib/api";
 import { ensureValidToken } from "@/lib/auth";
 import { format } from "date-fns";
 import { getFrictionLabel } from "@/utils/frictionColor";
+import { formatEntryFeeMode } from "@/lib/utils";
 
 interface OpenTrade {
   symbol: string;
@@ -69,6 +70,9 @@ interface OpenTrade {
   // null/undefined on trades opened before B.2.UI (no backfill → renders "—").
   entryLiquidityValue?: number | null;
   entryLiquidityKind?: 'depth_usd' | 'volume_qty' | null;
+  // P19-B7.2b (OBJ-C): the maker/taker entry fee-mode the VTS trade opened on.
+  chosenEntryMode?: string | null;
+  entryFeeRate?: number | null;
 }
 
 interface ClosedTrade {
@@ -125,6 +129,9 @@ interface ClosedTrade {
   // null/undefined on trades opened before B.2.UI (no backfill → renders "—").
   entryLiquidityValue?: number | null;
   entryLiquidityKind?: 'depth_usd' | 'volume_qty' | null;
+  // P19-B7.2b (OBJ-C): the maker/taker entry fee-mode the VTS trade opened on.
+  chosenEntryMode?: string | null;
+  entryFeeRate?: number | null;
 }
 
 type AdjustmentType =
@@ -611,6 +618,8 @@ function OpenTradesTable({ trades }: { trades: OpenTrade[] }) {
               <th className="px-3 py-2 text-left font-medium text-muted-foreground">Signal/Pattern</th>
               <SortableHeader label="Pool (I/R)" field="pool" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
               <th className="px-3 py-2 text-left font-medium text-muted-foreground">Source Pool</th>
+              {/* P19-B7.2b (OBJ-C): entry fee-mode (maker/taker) column */}
+              <th className="px-3 py-2 text-left font-medium text-muted-foreground" title="The maker/taker entry fee-mode this trade opened on (entry-side fee only). '—' for trades opened before this column existed.">Entry Fee Mode</th>
               {/* B65.2: TEC State column — trade mode + latch flags from trailing engine */}
               <th className="px-3 py-2 text-left font-medium text-muted-foreground" title="Trailing-exit engine state: TARGET = aiming at original target; TRAILING = moonbag (trailing for more upside after target hit). BE = break-even stop locked at 1×ATR gain.">TEC State</th>
               {/* B.2.UI (2026-06-02): entry-liquidity captured at trade-open.
@@ -641,7 +650,7 @@ function OpenTradesTable({ trades }: { trades: OpenTrade[] }) {
           <tbody>
             {sortedTrades.length === 0 ? (
               <tr>
-                <td colSpan={27} className="px-3 py-8 text-center text-muted-foreground">
+                <td colSpan={28} className="px-3 py-8 text-center text-muted-foreground">
                   No open simulated trades
                 </td>
               </tr>
@@ -716,6 +725,10 @@ function OpenTradesTable({ trades }: { trades: OpenTrade[] }) {
                     <Badge variant="outline" className={`text-xs ${getSourcePoolBadgeColor(trade.sourcePool ?? 'unknown')}`}>
                       {(trade.sourcePool ?? 'unknown').toUpperCase()}
                     </Badge>
+                  </td>
+                  {/* P19-B7.2b (OBJ-C): Entry Fee Mode (maker/taker) — NULL renders em-dash */}
+                  <td className="px-3 py-2 text-xs whitespace-nowrap">
+                    {formatEntryFeeMode(trade.chosenEntryMode, trade.entryFeeRate)}
                   </td>
                   {/* B65.2: TEC State — moonbag mode + break-even lock visibility */}
                   {/* B65.4 (2026-04-25): MOONBAG badge shows live ladder rung count (MB×N) */}
@@ -955,6 +968,8 @@ function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
               <th className="px-3 py-2 text-left font-medium text-muted-foreground">Signal/Pattern</th>
               <SortableHeader label="Pool (I/R)" field="pool" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
               <th className="px-3 py-2 text-left font-medium text-muted-foreground">Source Pool</th>
+              {/* P19-B7.2b (OBJ-C): entry fee-mode (maker/taker) column */}
+              <th className="px-3 py-2 text-left font-medium text-muted-foreground" title="The maker/taker entry fee-mode this trade opened on (entry-side fee only). '—' for trades opened before this column existed.">Entry Fee Mode</th>
               {/* B65.2-HF2c: TEC State column on Closed Simulated Trades for parity with Open table */}
               <th className="px-3 py-2 text-left font-medium text-muted-foreground" title="Trailing-exit mode the trade ended in. TARGET = closed at static target/stop/timeout; MOONBAG = flipped into trailing mode at target and closed via trailing stop or moonbag-duration cap.">TEC State</th>
               {/* B.2.UI (2026-06-02): entry-liquidity captured at trade-open.
@@ -984,7 +999,7 @@ function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
           <tbody>
             {sortedTrades.length === 0 ? (
               <tr>
-                <td colSpan={26} className="px-3 py-8 text-center text-muted-foreground">
+                <td colSpan={27} className="px-3 py-8 text-center text-muted-foreground">
                   No closed trades in the last 7 days
                 </td>
               </tr>
@@ -1059,6 +1074,10 @@ function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
                     <Badge variant="outline" className={`text-xs ${getSourcePoolBadgeColor(trade.sourcePool ?? 'unknown')}`}>
                       {(trade.sourcePool ?? 'unknown').toUpperCase()}
                     </Badge>
+                  </td>
+                  {/* P19-B7.2b (OBJ-C): Entry Fee Mode (maker/taker) — NULL renders em-dash */}
+                  <td className="px-3 py-2 text-xs whitespace-nowrap">
+                    {formatEntryFeeMode(trade.chosenEntryMode, trade.entryFeeRate)}
                   </td>
                   {/* B65.2-HF2c: TEC State column on Closed — TARGET vs MOONBAG end-state */}
                   {/* B65.4 (2026-04-25): MOONBAG badge shows ladder rung count (MB×N) when present */}

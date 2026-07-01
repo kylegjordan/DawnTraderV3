@@ -6,6 +6,34 @@
 
 ---
 
+## 2026-07-01 — In-queue maker "make-then-take" resting-order machinery (P19-B7.2b / wrong-stage)
+
+**Removed:** the B7.2 OBJ-4 in-RTBQ maker-pending / convert-safety lifecycle — the code that tried to WORK a resting maker order while a signal sat in the ready-to-buy queue. **Wrong stage** (Kyle model clarification 2026-07-01): a queued signal carries a maker/taker **DECISION only** and works NO order; the maker order is placed only at **PROMOTION** (Kraken in live; simulated for paper+VTS), so its resting/fill/timeout/convert lifecycle belongs post-promotion, not in the queue.
+
+| Item | Location (pre-removal) | What it was |
+|---|---|---|
+| `markMakerPending()` method | `server/core/rtb/ready_to_buy_service.ts` | Marked a queued signal maker-pending + stamped `maker_posted_at`/`maker_limit_price`/`maker_budget_expires_at` — as if a resting order existed in-queue. |
+| `processMakerPending()` method | `server/core/rtb/ready_to_buy_service.ts` | The per-refresh in-queue maker-order lifecycle driver (budget-expiry → convert-to-taker-or-drop) — the "make-then-take" ladder, run at the wrong stage. |
+| `refreshSingleSignal` maker-pending branch | `server/core/rtb/ready_to_buy_service.ts` | Top-of-refresh `if ((signal as any).makerPending === true) { … }` early-branch that ran the in-queue lifecycle instead of the normal reconfirm. |
+| `getRankedSignals` mutual-exclusion filter | `server/core/rtb/ready_to_buy_service.ts` | The filter that excluded maker-pending rows from ranking — needed only because in-queue signals were (wrongly) holding orders. Removed: every queued signal now ranks on its `chosen_net_ev` decision, uniformly. |
+| Promotion-loop maker-POST branch | `server/services/paper-execution-engine.ts` | The promotion path that called `markMakerPending` to post an in-queue maker order. Replaced by a comment noting the maker order is placed AT promotion (paper+VTS sim = B7.2c; live Kraken resting order = Phase-21). |
+| 4 `rtb_signals` columns | `shared/schema.ts` + DROP migration `2026-07-01-p19-b7-2b-fee-mode-columns.sql` | `maker_pending`, `maker_posted_at`, `maker_limit_price`, `maker_budget_expires_at` — the in-queue lifecycle state. Never populated in prod (active trading OFF since Phase 8), so the DROP is clean. |
+
+**Why removed:** CLAUDE.md §5 rule 18 (never leave lingering legacy) + the wrong-stage correction. Leaving the in-queue lifecycle stubbed would risk a dead path re-entering the live system when Phase-19 flips active trading ON, and would contradict the locked model (RTBQ = decision only). Delete-on-the-spot (§15(a)), full workflow.
+
+**Blast-radius verification (certainty-before-cutting — Langston Step-4 gate #2):**
+- **Zero remaining references to `processMakerPending` / `markMakerPending`** anywhere in `server/` + `client/` (repo-wide grep — only doc/comment mentions of the removal survive).
+- **Zero remaining readers of the 4 columns:** no `select *` reader, no ORM field (the drizzle column definitions were removed from `schema.ts` — comment-only marker remains), no view/materialized read, no `makerPending`/`makerPostedAt`/`makerLimitPrice`/`makerBudgetExpiresAt` field access. "Never populated" justifies the drop; "never referenced" is what makes it safe.
+- **`tsc --noEmit` clean** after the type-field removal + the mutual-exclusion branch came out of `getRankedSignals` (bench-verified).
+- **Migration is forward-only** with an HONEST down-migration: the rollback `…-rollback.sql` re-adds the 4 columns as nullable/default (recreate-as-nullable) — the data was never populated so no value is lost either direction.
+- **Left intentionally:** the maker/taker DECISION service (`decideMakerTaker`, `maker-taker-decision.ts`) and the `chosen_entry_mode`/`chosen_net_ev`/`taker_net_ev`/`maker_net_ev_adjusted` snapshot columns STAY — they are the correct in-queue artifact (decision only). Only the resting-order MACHINERY was wrong-stage.
+
+**Interim-constraint note (Langston Step-4 intent gate):** with the in-queue maker machinery gone, a `decideMakerTaker`→**maker** verdict has its execution path built in the **very next sub-batch B7.2c** (the post-promotion pending maker-fill simulation for paper + VTS), which lands BEFORE active trading is switched ON (P19-B8). Live Kraken resting-order = Phase-21. So there is no window where active trading is ON with a maker verdict the executor cannot honor.
+
+**Archive copy:** none as whole-file (the host files `ready_to_buy_service.ts` / `paper-execution-engine.ts` / `schema.ts` remain in the live tree); git history is the authoritative archive for the removed blocks.
+**Removal commit:** _(recorded at P19-B7.2b close)_
+**Reviewed by:** Langston Step-4 diff review — _pending_ (the delete-on-the-spot disposition was pre-agreed in the B7.2b design round, 2026-07-01).
+
 ## 2026-06-29 — Stranded legacy guardrails-tab UI (P19-B6.8 / #302)
 
 **Removed:** the old pre-v2 guardrails tab component and its orphaned copy-to-live modal.
