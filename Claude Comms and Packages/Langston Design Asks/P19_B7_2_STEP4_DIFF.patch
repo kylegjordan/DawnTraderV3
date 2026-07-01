@@ -1,0 +1,1200 @@
+diff --git a/drizzle/migrations/MANIFEST.txt b/drizzle/migrations/MANIFEST.txt
+index a0809373e..6ba201aba 100644
+--- a/drizzle/migrations/MANIFEST.txt
++++ b/drizzle/migrations/MANIFEST.txt
+@@ -153,3 +153,4 @@
+ 2026-06-27-p19-reorg-b2-3-per-strategy-minrr.sql
+ 2026-06-30-p19-b7-1-ranker-config.sql
+ 2026-06-30-p19-b7-1-shadow-r-multiple.sql
++2026-07-01-p19-b7-2-maker-taker.sql
+diff --git a/server/core/rtb/ready_to_buy_service.ts b/server/core/rtb/ready_to_buy_service.ts
+index d1cc93290..7873c1c4d 100644
+--- a/server/core/rtb/ready_to_buy_service.ts
++++ b/server/core/rtb/ready_to_buy_service.ts
+@@ -122,6 +122,15 @@ export interface SQESignalInput {
+   // path → kernel documented defaults (Kyle #10, no silent coerce).
+   diAtQueue?: number | null;       // Directional Integrity [0-100] at queue
+   dbsScoreAtQueue?: number | null; // Directional Bias Score [-1,1] at queue
++  // P19-B7.2: the best-of-both maker/taker entry-decision snapshot (OBJ-1/OBJ-3),
++  // captured at the shared signal-build convergence and persisted to the typed
++  // rtb_signals columns so the [11.8B] open-gate + the B7.1 ranker read one
++  // consistent value. chosenNetEv is the SINGLE-CONSISTENT-NUMBER (the
++  // haircut-adjusted best netEV, NEVER the raw maker EV).
++  chosenEntryMode?: 'taker' | 'maker';  // the planned entry mode
++  chosenNetEv?: number | null;          // the best (chosen-mode) net-EV — what gates + ranks
++  takerNetEv?: number | null;           // the taker-leg net-EV (diagnostic + convert-safety baseline)
++  makerNetEvAdjusted?: number | null;   // the haircut-adjusted maker net-EV (diagnostic)
+   metadata?: Record<string, unknown>;
+   skipSelfCheck?: boolean; // Directive 8.8.4-A3.R2: Skip self-dedupe during refreshAndRank
+   sourcePool?: string;    // Batch 37: Family-qualified source pool
+@@ -739,10 +748,138 @@ class ReadyToBuyService {
+    * Directive 11.3A: Enhanced with conditional geometry refresh
+    * Signals ranked by FinalScore with decayPenalty
+    */
++  /**
++   * P19-B7.2 (OBJ-4) — make-then-take ladder host: the maker-pending wait +
++   * CONVERT-SAFETY, running inside the 30s RTB refresh (Kyle's direction — reuse
++   * the loop that already re-evaluates each queued signal on CURRENT data).
++   *
++   * A signal whose planned entry is maker rests as maker_pending; each tick:
++   *   (1) HONEST fill check — did the market TRADE THROUGH the resting limit since
++   *       posting? For a long buy limit that is price ≤ the limit. Single per-tick
++   *       observation = conservative (an observed touch-through, never optimistic).
++   *       On fill: clear maker_pending → the TCL promotes it → the OPEN PATH opens
++   *       it as maker, running its existing S1 (max-positions) + S4 (concentration)
++   *       guardrails = slot-checked AT FILL (Langston Step-2 item 4).
++   *   (2) budget still open, unfilled → keep waiting (no reconfirm churn).
++   *   (3) budget EXPIRED, unfilled → CONVERT-SAFETY: recompute the taker net-EV on
++   *       CURRENT inputs via the net-expectancy KERNEL (evaluateTradeExpectancy —
++   *       NOT computeNetGeometry, whose identically-named netRewardToRisk is a GROSS
++   *       ratio, the CC-A landmine). If taker net-EV > 0 → ATOMIC full re-snapshot
++   *       to taker (Langston item 3: overwrite the whole decision snapshot with the
++   *       fresh-friction vintage so the [11.8B] gate can't kill the converted opener
++   *       on its stale-negative maker-era snapshot). Else → EXPIRE (never open a
++   *       known loser — the maker-only signal cancels rather than cross into a
++   *       guaranteed taker loss).
++   *
++   * ⚠ SCAFFOLDING (§9.1): this ladder does NOT open a real Kraken resting order —
++   * active trading is OFF and the real post-only place/reprice/cancel lifecycle is
++   * Phase-21. In paper (dormant until B8) the ladder is SIMULATED via the per-tick
++   * trade-through check above. The DECISION + convert-safety logic is what B7.2
++   * lands; the live order mechanics are the named Phase-21 §13 home.
++   *
++   * Returns handled=true when it took terminal/holding action (fill / convert /
++   * expire / keep-waiting), so refreshSingleSignal skips the normal reconfirm flow.
++   */
++  private async processMakerPending(signal: RtbSignal, mode: TradingMode): Promise<{ handled: boolean; passed: boolean }> {
++    const normalizedSymbol = normalizePairKey(signal.symbol);
++    const nowMs = Date.now();
++    const makerLimit = signal.makerLimitPrice != null ? Number(signal.makerLimitPrice) : null;
++    const budgetExpiresAt = signal.makerBudgetExpiresAt ? new Date(signal.makerBudgetExpiresAt).getTime() : null;
++    const ac = asValidAssetClass(signal.assetClass) ?? safeResolveAssetClass(normalizedSymbol, 'kraken');
++
++    // (1) Honest fill check — trade-through of the resting maker limit.
++    let currentPrice: number | null = null;
++    try {
++      const { livePricingAdapter } = await import('../../services/live-pricing-adapter.js');
++      const priceResult = await livePricingAdapter.getPriceWithFallback(normalizedSymbol, 3000);
++      currentPrice = priceResult?.price ?? null;
++    } catch (err) {
++      console.warn(`[P19-B7.2][MAKER_PENDING] price fetch failed for ${normalizedSymbol}:`, err instanceof Error ? err.message : err);
++    }
++    if (makerLimit != null && currentPrice != null && currentPrice <= makerLimit) {
++      await storage.updateRtbSignal(signal.id, { makerPending: false, status: 'reconfirmed', lastRefreshedAt: new Date() });
++      console.log(`[P19-B7.2][MAKER_FILL] ${normalizedSymbol} traded through ${makerLimit} (px=${currentPrice}) → fills as maker; open path runs S1+S4 at fill`);
++      return { handled: true, passed: true };
++    }
++
++    // (2) Still within budget, unfilled → keep resting.
++    if (budgetExpiresAt == null || nowMs < budgetExpiresAt) {
++      return { handled: true, passed: true };
++    }
++
++    // (3) Budget expired, unfilled → CONVERT-SAFETY (kernel, not computeNetGeometry).
++    const entry = parseFloat(signal.entryPrice);
++    const stop = parseFloat(signal.stopPrice);
++    const targetNum = signal.targetPrice != null ? parseFloat(signal.targetPrice) : NaN;
++    const target = Number.isFinite(targetNum) ? targetNum : entry * 1.02;
++    const di = signal.diAtQueue != null ? Number(signal.diAtQueue) : undefined;
++    const dbs = signal.dbsScoreAtQueue != null ? Number(signal.dbsScoreAtQueue) : undefined;
++    const takerResult = ac == null ? null : evaluateTradeExpectancy(normalizedSymbol, {
++      entryPrice: entry,
++      targetPrice: target,
++      stopPrice: stop,
++      DI: di !== undefined && Number.isFinite(di) ? di : undefined,
++      dbsScore: dbs !== undefined && Number.isFinite(dbs) ? dbs : undefined,
++      sourcePool: (signal as any).sourcePool ?? (signal.metadata as any)?.sourcePool,
++    }, ac, /* quiet */ true);
++
++    if (takerResult != null && takerResult.netEV > 0) {
++      // ATOMIC full re-snapshot to taker: friction is fresh (evaluateTradeExpectancy
++      // reads current getCachedCostMetrics); DI stays the at-queue value (accuracy-
++      // only per audit H1 — no EV consequence), and the [11.8B] gate reads the single
++      // re-stamped chosen_net_ev directly, so there is no mixed vintage in the gate
++      // decision. This is what lets the converted opener pass F2 instead of dying on
++      // its stale-negative maker-era snapshot.
++      await storage.updateRtbSignal(signal.id, {
++        makerPending: false,
++        chosenEntryMode: 'taker',
++        chosenNetEv: takerResult.netEV.toString(),
++        takerNetEv: takerResult.netEV.toString(),
++        status: 'reconfirmed',
++        lastRefreshedAt: new Date(),
++      });
++      console.log(`[P19-B7.2][CONVERT] ${normalizedSymbol} maker budget expired, taker netEV=${takerResult.netEV.toFixed(6)}>0 → converted to taker (atomic re-snapshot)`);
++      return { handled: true, passed: true };
++    }
++
++    await this.expireSignal(signal.id, `maker budget expired + taker netEV non-positive (convert-safety) — no trade`);
++    console.log(`[P19-B7.2][EXPIRE] ${normalizedSymbol} maker budget expired, taker netEV non-positive → expired (never open a known loser)`);
++    return { handled: true, passed: false };
++  }
++
++  /**
++   * P19-B7.2 (OBJ-4): mark a maker-chosen signal as maker_pending (POSTED) — set by
++   * the promotion loop when it rests a passive order instead of opening now. Keeps
++   * the signal in the queue (status unchanged) but flips maker_pending so the
++   * getRankedSignals mutual-exclusion filter holds it out of ranking while it waits.
++   */
++  async markMakerPending(
++    signalId: string,
++    fields: { makerLimitPrice: number; makerPostedAt: Date; makerBudgetExpiresAt: Date },
++  ): Promise<void> {
++    await storage.updateRtbSignal(signalId, {
++      makerPending: true,
++      makerLimitPrice: fields.makerLimitPrice.toString(),
++      makerPostedAt: fields.makerPostedAt,
++      makerBudgetExpiresAt: fields.makerBudgetExpiresAt,
++    });
++  }
++
+   private async refreshSingleSignal(signal: RtbSignal, mode: TradingMode): Promise<{ passed: boolean }> {
+     const normalizedSymbol = normalizePairKey(signal.symbol);
+     const now = new Date();
+-    
++
++    // P19-B7.2 (OBJ-4): a maker_pending signal is in the make-then-take wait — its
++    // fill / convert-safety / expire lifecycle is handled here, NOT the normal
++    // reconfirm flow. (Dormant until active trading is on — §9.1.)
++    if ((signal as any).makerPending === true) {
++      const mp = await this.processMakerPending(signal, mode);
++      if (mp.handled) {
++        this.signalRefreshStates.delete(this._refreshKey(mode, signal.signalId));
++        return { passed: mp.passed };
++      }
++    }
++
+     // Directive 11.0E: Extract FinalScore-native metrics from signal
+     const metadata = signal.metadata as Record<string, any> || {};
+     const confidence = parseFloat(signal.confidence || '0.5');
+@@ -1752,8 +1889,21 @@ class ReadyToBuyService {
+       sourcePool: (signal as any).sourcePool ?? meta.sourcePool,
+       dbsScore: dbs !== undefined && Number.isFinite(dbs) ? dbs : undefined,
+     }, ac, /* quiet */ true);
++    // P19-B7.2 (OBJ-3): rank on the CHOSEN-mode netEV (the best-of-both snapshot),
++    // consistent with the [11.8B] open-gate — the number that ranks is the number
++    // that gates. R = chosenNetEv / risk_price. For a taker-chosen signal this
++    // equals the taker recompute above (same at-queue inputs, same kernel); for a
++    // maker-chosen opener it reflects the haircut-adjusted maker netEV that will
++    // actually be gated + opened, so the opener ranks on its real planned entry.
++    // NULL snapshot (pre-B7.2 rows / un-snapshotted path) → the taker recompute.
++    const chosenNetEv = signal.chosenNetEv != null ? Number(signal.chosenNetEv) : null;
++    const distStop = Math.abs(entry - stop);
++    let r = Number.isFinite(result.netRewardToRisk) ? result.netRewardToRisk : -Infinity;
++    if (chosenNetEv != null && Number.isFinite(chosenNetEv) && distStop > 0) {
++      r = chosenNetEv / distStop;
++    }
+     return {
+-      r: Number.isFinite(result.netRewardToRisk) ? result.netRewardToRisk : -Infinity,
++      r,
+       pwinFloored: result.pWinFloored,
+     };
+   }
+@@ -1779,6 +1929,19 @@ class ReadyToBuyService {
+     // R9.3-A: Filter out signals currently being refreshed
+     let validSignals = signals.filter(s => !this.isSignalRefreshing(mode, s.signalId));
+ 
++    // P19-B7.2 (OBJ-4) MUTUAL EXCLUSION: a maker_pending signal is resting a passive
++    // order in the make-then-take wait — it must NOT also compete for an open slot
++    // through the ranker (double-count). It re-enters promotion only after the refresh
++    // clears maker_pending (on fill) or converts it to taker.
++    {
++      const beforeMp = validSignals.length;
++      validSignals = validSignals.filter(s => (s as any).makerPending !== true);
++      const mpExcluded = beforeMp - validSignals.length;
++      if (mpExcluded > 0) {
++        console.log(`[P19-B7.2][RANK] excluded ${mpExcluded} maker_pending signal(s) from promotion (resting in the make-then-take wait)`);
++      }
++    }
++
+     // Batch 19F: Pair-level promotion guard (prevent overexposure)
+     // Filter out signals for pairs that already have active trades
+     try {
+@@ -2146,6 +2309,13 @@ class ReadyToBuyService {
+       // this batch — the columns are class-agnostic per D1, only the crypto source is wired here).
+       diAtQueue: input.diAtQueue != null ? input.diAtQueue.toString() : null,
+       dbsScoreAtQueue: input.dbsScoreAtQueue != null ? input.dbsScoreAtQueue.toString() : null,
++      // P19-B7.2: persist the best-of-both maker/taker snapshot to the typed
++      // rtb_signals columns (class-agnostic per D1 — both classes share the
++      // decision). chosenNetEv is what the [11.8B] open-gate + B7.1 ranker read.
++      chosenEntryMode: input.chosenEntryMode ?? 'taker',
++      chosenNetEv: input.chosenNetEv != null ? input.chosenNetEv.toString() : null,
++      takerNetEv: input.takerNetEv != null ? input.takerNetEv.toString() : null,
++      makerNetEvAdjusted: input.makerNetEvAdjusted != null ? input.makerNetEvAdjusted.toString() : null,
+     };
+ 
+     // Directive 8.8.4-A3.R8: Log trace event for new signal insertion
+diff --git a/server/services/paper-execution-engine.ts b/server/services/paper-execution-engine.ts
+index 27bcf13c8..e7e4cf1f3 100644
+--- a/server/services/paper-execution-engine.ts
++++ b/server/services/paper-execution-engine.ts
+@@ -1795,6 +1795,42 @@ export class PaperExecutionEngine {
+           }
+         }
+ 
++        // ── P19-B7.2 (OBJ-4): make-then-take POST ─────────────────────────────
++        // A maker-chosen signal that has NEVER been posted rests as maker_pending
++        // instead of opening now: mark the ladder state and `continue` — it stays in
++        // the queue, does NOT consume a slot (slot-free-while-waiting), and the RTB
++        // refresh manages its fill / convert-safety / expire lifecycle. It re-enters
++        // promotion only after the refresh clears maker_pending — as MAKER on a
++        // trade-through fill (makerPostedAt set → opens below), or as TAKER after a
++        // convert. The getRankedSignals mutual-exclusion filter keeps it out of the
++        // ranking while it rests. ⚠ SCAFFOLDING (§9.1): dormant until active trading
++        // is on; the real Kraken post-only resting order is Phase-21 — here we mark
++        // state and simulate the wait via the refresh's per-tick trade-through check.
++        {
++          const _b72ChosenMode = (signal.chosenEntryMode as 'taker' | 'maker' | undefined) ?? 'taker';
++          const _b72NeverPosted = signal.makerPostedAt == null;
++          if (_b72ChosenMode === 'maker' && _b72NeverPosted) {
++            try {
++              const { resolveMakerTimeBudgetMs } = await import('./maker-taker-config.js');
++              const _b72Class = asValidAssetClass(signal.metadata?.assetClass)
++                ?? asValidAssetClass((signal as any).assetClass)
++                ?? safeResolveAssetClass(signal.symbol, 'kraken')
++                ?? 'crypto_spot';
++              const budgetMs = resolveMakerTimeBudgetMs(_b72Class);
++              const nowD = new Date();
++              await readyToBuyService.markMakerPending(signal.id, {
++                makerLimitPrice: parseFloat(signal.entryPrice),
++                makerPostedAt: nowD,
++                makerBudgetExpiresAt: new Date(nowD.getTime() + budgetMs),
++              });
++              console.log(`[P19-B7.2][MAKER_POST] ${signal.symbol} posted maker limit @ ${signal.entryPrice} (budget ${budgetMs}ms) — resting, slot-free, not opened this cycle`);
++              continue; // slot-free-while-waiting: do NOT remove from queue / open / decrement openSlots
++            } catch (postErr) {
++              console.warn(`[P19-B7.2][MAKER_POST] failed to post maker_pending for ${signal.symbol}; falling through to normal open:`, postErr instanceof Error ? postErr.message : postErr);
++            }
++          }
++        }
++
+         // Directive 8.8.4-A3.R1: RTB removal must precede trade creation to prevent double-activation
+         // Step 1: Remove signal from RTB queue BEFORE attempting trade execution
+         await readyToBuyService.promoteSignal(signal.id, 'pending');
+@@ -1868,6 +1904,13 @@ export class PaperExecutionEngine {
+         // OBJ-4 rtb-metrics EV-reject breakdown; this object field is only the in-memory carrier.
+         diAtQueue: signal.diAtQueue != null ? parseFloat(signal.diAtQueue) : null,
+         dbsScoreAtQueue: signal.dbsScoreAtQueue != null ? parseFloat(signal.dbsScoreAtQueue) : null,
++        // P19-B7.2 (OBJ-3): carry the best-of-both maker/taker snapshot onto the promoted
++        // signal so the [11.8B] open-gate reads the CHOSEN-mode netEV (the single-consistent
++        // number), not a taker-only recompute — this is what lets a maker-chosen crypto
++        // opener (taker-EV<0, maker-adjusted-EV>0) pass the gate. NULL (pre-B7.2 rows) →
++        // the gate falls back to its taker recompute (no behavior change).
++        chosenEntryMode: (signal.chosenEntryMode as 'taker' | 'maker' | undefined) ?? 'taker',
++        chosenNetEv: signal.chosenNetEv != null ? parseFloat(signal.chosenNetEv) : null,
+         metadata: {
+           source: 'RTB_PROMOTION',
+           originalSignalId: signal.signalId,
+@@ -1910,7 +1953,7 @@ export class PaperExecutionEngine {
+     // promoted signal (already parsed string→number at the rtb-row→StrategySignal conversion).
+     // Optional → a non-promotion-path signal (FX5/orchestrator direct) simply has them undefined
+     // → kernel documented defaults.
+-    signal: StrategySignal & { quantity?: number; estimatedValue?: number; signalId?: string; diAtQueue?: number | null; dbsScoreAtQueue?: number | null },
++    signal: StrategySignal & { quantity?: number; estimatedValue?: number; signalId?: string; diAtQueue?: number | null; dbsScoreAtQueue?: number | null; chosenEntryMode?: 'taker' | 'maker'; chosenNetEv?: number | null },
+     settings: TradingSettings,
+     cycleContext?: { portfolioValue: number; guardrails: GuardrailsV2 | null }
+   ): Promise<OpenOutcome> {
+@@ -2105,7 +2148,23 @@ export class PaperExecutionEngine {
+       timestamp: Date.now(),
+     });
+ 
+-    if (!expectancyResult.isTradeable) {
++    // ── P19-B7.2 (OBJ-3): honor the best-of-both chosen-mode netEV ────────────
++    // evaluateTradeExpectancy recomputes the TAKER leg (its only rejection is the
++    // EV sign, netEV>0). The best-of-both decision was made once at signal-gen and
++    // snapshotted as chosen_net_ev (the single-consistent number — for maker it is
++    // the haircut-adjusted, pFill-weighted maker netEV). Take the EV-SIGN pass/fail
++    // from that snapshot so a maker-chosen crypto opener (taker netEV<0, chosen
++    // netEV>0) passes while its taker recompute would reject. The taker recompute
++    // still supplies score/pWin/diagnostics. NULL snapshot (pre-B7.2 rows / a
++    // non-snapshotted path) → fall back to the taker isTradeable (no change).
++    // The chosen-leg taker branch equals this recompute exactly (same at-queue DI,
++    // same kernel, same friction), so a taker-chosen signal is unaffected.
++    const _b72ChosenNetEv = (signal as any).chosenNetEv != null ? Number((signal as any).chosenNetEv) : null;
++    const _b72ChosenMode: 'taker' | 'maker' = ((signal as any).chosenEntryMode as 'taker' | 'maker') ?? 'taker';
++    const _b72IsTradeable = _b72ChosenNetEv != null ? (_b72ChosenNetEv > 0) : expectancyResult.isTradeable;
++    const _b72EffectiveNetEv = _b72ChosenNetEv != null ? _b72ChosenNetEv : expectancyResult.netEV;
++
++    if (!_b72IsTradeable) {
+       // [B4] Log funnel attempt blocked by Net Expectancy Gate
+       b4Diagnostics.logFunnelEvent({
+         symbol: signal.symbol,
+@@ -2113,32 +2172,39 @@ export class PaperExecutionEngine {
+         stage: 'attempt',
+         block_reason: 'EV_REJECT'
+       });
+-      
+-      console.log(`[11.8B][EV_BLOCK] ${signal.symbol} rejected: ${expectancyResult.rejectionReason}`);
+-      console.log(`[PaperExecution:${this.mode}] Paper trade rejected by Net Expectancy Gate: ${expectancyResult.rejectionReason}`);
+-      
++
++      const _b72RejReason = _b72ChosenNetEv != null
++        ? `chosen ${_b72ChosenMode} NetEV=${_b72EffectiveNetEv.toFixed(6)} (best-of-both non-positive after friction + haircut)`
++        : expectancyResult.rejectionReason;
++      console.log(`[11.8B][EV_BLOCK] ${signal.symbol} rejected: ${_b72RejReason}`);
++      console.log(`[PaperExecution:${this.mode}] Paper trade rejected by Net Expectancy Gate: ${_b72RejReason}`);
++
+       // Log rejection
+       await storage.createPaperSimTradeLog(this.mode, {
+         tradeId: null,
+         positionId: null,
+         eventType: 'trade_rejected',
+-        message: `Trade rejected by Net Expectancy Gate: ${signal.symbol} - ${expectancyResult.rejectionReason}`,
++        message: `Trade rejected by Net Expectancy Gate: ${signal.symbol} - ${_b72RejReason}`,
+         metadata: {
+           signal: tradeCandidate,
+-          rejectionReason: expectancyResult.rejectionReason,
++          rejectionReason: _b72RejReason,
+           code: 'EV_REJECT',
+-          ev: expectancyResult.ev,
++          // P19-B7.2: the effective (chosen-mode best-of-both) EV drove the decision.
++          ev: _b72EffectiveNetEv,
++          chosenEntryMode: _b72ChosenMode,
++          takerNetEv: expectancyResult.netEV,
+           score: expectancyResult.score
+         }
+       });
+ 
+       // P19-B6.5e: Net-Expectancy gate is a POST-guardrail open-stage failure.
+-      rtbMetricsService.recordOpenFailed(signal.symbol, signal.strategy, 'EV_REJECT', expectancyResult.rejectionReason || 'negative net expectancy');
+-      return { opened: false, stage: 'EV_REJECT', reason: expectancyResult.rejectionReason || 'negative net expectancy' };
++      rtbMetricsService.recordOpenFailed(signal.symbol, signal.strategy, 'EV_REJECT', _b72RejReason || 'negative net expectancy');
++      return { opened: false, stage: 'EV_REJECT', reason: _b72RejReason || 'negative net expectancy' };
+     }
+ 
+     // Log expectancy gate pass with score for future analytics
+-    console.log(`[11.8B][EV_PASS] ${signal.symbol} EV=${expectancyResult.ev.toFixed(6)} Score=${expectancyResult.score.toFixed(1)}`);
++    // P19-B7.2: report the chosen entry mode + its effective (best-of-both) EV.
++    console.log(`[11.8B][EV_PASS] ${signal.symbol} mode=${_b72ChosenMode} EV=${_b72EffectiveNetEv.toFixed(6)} (taker=${expectancyResult.netEV.toFixed(6)}) Score=${expectancyResult.score.toFixed(1)}`);
+ 
+     // [B4] Log funnel RTB - signal passed all guardrails, ready to buy
+     b4Diagnostics.logFunnelEvent({
+diff --git a/server/services/rtb-metrics-service.ts b/server/services/rtb-metrics-service.ts
+index 7b043a395..e869f4754 100644
+--- a/server/services/rtb-metrics-service.ts
++++ b/server/services/rtb-metrics-service.ts
+@@ -107,6 +107,20 @@ export interface SizingClampSample {
+   timestamp: number;
+ }
+ 
++/** P19-B7.2 (OBJ-6): one maker/taker best-of-both decision, recorded at signal-gen. */
++export interface MakerTakerDecisionSample {
++  symbol: string;
++  strategy: string;
++  assetClass?: string;
++  chosenMode: 'taker' | 'maker';
++  takerNetEV: number;
++  makerNetEVAdjusted: number;
++  adverseSelectionPct: number;
++  nonFillCostPct: number;
++  hardFloorFired: boolean;
++  timestamp: number;
++}
++
+ class RtbMetricsService {
+   private static instance: RtbMetricsService;
+ 
+@@ -295,6 +309,38 @@ class RtbMetricsService {
+     return [...this.sizingClampSamples];
+   }
+ 
++  // ── P19-B7.2 (OBJ-6): maker/taker decision telemetry + the maker-PICK-RATE monitoring line ──
++  private makerTakerSamples: MakerTakerDecisionSample[] = [];
++  private readonly MAX_MAKER_TAKER_SAMPLES = 500;
++
++  /** Record one maker/taker best-of-both decision (called once per signal at gen). Bounded buffer. */
++  recordMakerTakerDecision(sample: MakerTakerDecisionSample): void {
++    this.makerTakerSamples.push(sample);
++    if (this.makerTakerSamples.length > this.MAX_MAKER_TAKER_SAMPLES) {
++      this.makerTakerSamples = this.makerTakerSamples.slice(-this.MAX_MAKER_TAKER_SAMPLES);
++    }
++  }
++
++  getMakerTakerSamples(): MakerTakerDecisionSample[] {
++    return [...this.makerTakerSamples];
++  }
++
++  /**
++   * P19-B7.2 (OBJ-6, Langston Step-2 item 1): the maker-PICK-RATE — the early-warning monitor for a
++   * too-loose adverse-selection haircut. An implausibly high maker-pick rate (before any live
++   * calibration exists) means the haircut is under-set and best-of-both is silently converting
++   * EV-negative maker fills into "passing" signals. All zero until paper-active trading is on; the
++   * paper maker-fill outcomes remain DATA-FENCED (non-calibration — model-vs-model; real adverse
++   * selection is Phase-21 live data).
++   */
++  getMakerPickProof(): { totalSamples: number; makerCount: number; takerCount: number; makerPickRate: number | null; hardFloorCount: number } {
++    const s = this.makerTakerSamples;
++    if (s.length === 0) return { totalSamples: 0, makerCount: 0, takerCount: 0, makerPickRate: null, hardFloorCount: 0 };
++    const makerCount = s.filter((x) => x.chosenMode === 'maker').length;
++    const hardFloorCount = s.filter((x) => x.hardFloorFired).length;
++    return { totalSamples: s.length, makerCount, takerCount: s.length - makerCount, makerPickRate: makerCount / s.length, hardFloorCount };
++  }
++
+   /**
+    * P19-B7.1 (OBJ-5): the clamp-bind summary — the Phase-25 decision input. `boundRate` is the
+    * fraction of SIZED signals held below their intended risk by a clamp or the covariance scale.
+@@ -416,6 +462,9 @@ class RtbMetricsService {
+     // P19-B7.1 (OBJ-5): the sizing clamp-bind watch surface (empty until paper-active turns on).
+     sizingClampProof: { totalSamples: number; boundCount: number; boundRate: number | null; meanRatio: number | null };
+     recentSizingClampSamples: SizingClampSample[];
++    // P19-B7.2 (OBJ-6): maker/taker decision watch — makerPickRate is the too-loose-haircut early warning.
++    makerPickProof: { totalSamples: number; makerCount: number; takerCount: number; makerPickRate: number | null; hardFloorCount: number };
++    recentMakerTakerSamples: MakerTakerDecisionSample[];
+   } {
+     // P19-B6.5e: invariant is now attemptsTotal === openedTotal + blockedTotal + openFailedTotal
+     const { attemptsTotal, openedTotal, blockedTotal, openFailedTotal } = this.stats;
+@@ -458,6 +507,10 @@ class RtbMetricsService {
+       // input (>~0.15-0.20 → switch the honest ranker to realized-$EV). Zero until paper-active.
+       sizingClampProof: this.getSizingClampProof(),
+       recentSizingClampSamples: this.sizingClampSamples.slice(-25),
++      // P19-B7.2 (OBJ-6): the maker-pick-rate watch — an implausibly high makerPickRate before live
++      // calibration = the haircut is too loose (Langston Step-2 item 1). Zero until paper-active.
++      makerPickProof: this.getMakerPickProof(),
++      recentMakerTakerSamples: this.makerTakerSamples.slice(-25),
+     };
+   }
+ 
+diff --git a/server/services/signal-orchestrator.ts b/server/services/signal-orchestrator.ts
+index 1b5a036cb..d25cc1241 100644
+--- a/server/services/signal-orchestrator.ts
++++ b/server/services/signal-orchestrator.ts
+@@ -87,7 +87,7 @@ import { TIMEFRAME_CONFIG } from '../config/system-guards.js';
+ // Directive 10.9A: Math Core Harmonization - Version-tracked weights
+ import { SCORE_WEIGHTS, SCORE_WEIGHTS_VERSION } from '../config/score-weights.config.js';
+ // Directive 11.3A: Net Expectancy Standardization - Canonical Cost Model
+-import { getCachedCostMetrics, computeNetGeometry, computeTotalRoundTripCost } from '../core/math/cost-model.js';
++import { getCachedCostMetrics, computeNetGeometry, computeTotalRoundTripCost, getFrictionForAssetClass } from '../core/math/cost-model.js';
+ // Directive 11.4F.1B: Canonical regime-strategy mapping (single source of truth)
+ import {
+   CANONICAL_REGIME_STRATEGY_MAP as REGIME_STRATEGY_MAP,
+@@ -99,8 +99,15 @@ import {
+   resolvePatternConsumingStrategy,
+   getPatternNoMatchDropStats,
+   isStrategyEnabledForAssetClass,
++  STRATEGY_FAMILY_MAP,
+   type CanonicalRegimeType as MarketRegimeType
+ } from '../config/canonical-regime-strategy-map.js';
++// P19-B7.2: the shared maker/taker best-of-both entry decision (pure) + its
++// per-class DB-governed haircut resolver (fail-hard). Computed once at the
++// shared signal-build convergence, snapshotted onto the RTB row (OBJ-1/OBJ-3).
++import { decideMakerTaker, entryUrgencyClassForFamily } from '../core/math/maker-taker-decision.js';
++import { resolveMakerTakerHaircut } from './maker-taker-config.js';
++import { rtbMetricsService } from './rtb-metrics-service.js';
+ // Directive 11.4H Task 1: Symbol normalization at data ingress
+ import { normalizeToInternalSymbol } from '../markets/kraken-symbol-resolver.js';
+ // Phase 13: Market Context Engine for centralized indicator + regime computation
+@@ -748,7 +755,72 @@ export class SignalOrchestrator {
+     // strong-trend pWin branch. This call also supplies volume24h (it did before reorg-B3; now read
+     // once instead of inline). NULL when the symbol is absent from the pool → kernel defaults.
+     const fx5Data = activeFilterPool.getFX5DataForSymbol(rawSignal.symbol, sizingContext.mode);
+-    
++
++    // ── P19-B7.2: BEST-OF-BOTH maker/taker ENTRY decision (OBJ-1/OBJ-2/OBJ-3) ──
++    // Computed ONCE here, at the shared build convergence (covers quant + hybrid +
++    // pattern + xStock — all funnel through buildSizedSignalForStrategy), on the
++    // SAME at-queue DI/DBS basis captured for the snapshot below (fx5Data.di /
++    // .dbsScore) so the maker/taker comparison and the [11.8B] open-gate read one
++    // consistent vintage (F2). The chosen best netEV is snapshotted onto the RTB
++    // row and is the SINGLE value every downstream EV consumer reads — the
++    // [11.8B] open-gate and the B7.1 ranker — so a taker-unprofitable /
++    // maker-profitable signal (the crypto opener) survives to be ranked + opened.
++    //
++    // Placement note (verified P19-B7.2 Step-2/3): on the ACTIVE path the SQE
++    // ROI gate (signal_quality_evaluator.ts:327) is DORMANT — it is guarded by
++    // `if (entryPrice && targetPrice && regime)` and this active sqeInput does
++    // not set them — so the sole active-path taker-EV gate is the [11.8B]
++    // open-gate on the snapshot (Active-Trading-Path-Audit H1). Computing
++    // best-of-both here (after the SQE quality gate, before the RTB snapshot)
++    // therefore loses no maker-opener. ⚠ If the active SQE ROI gate is ever
++    // activated, best-of-both must move BEFORE the SQE evaluate (or the gate must
++    // read this snapshot) — flagged in the B7.2 completion report + SysManual.
++    // VTS applies the SAME decideMakerTaker() in vts-runner (F6 shared function).
++    const _mtCosts = getCachedCostMetrics(rawSignal.symbol, sizingContext.assetClass);
++    const _mtFeeRateMaker = getFrictionForAssetClass(sizingContext.assetClass).feeRateMaker;
++    const _mtGlobalKey = { exchange: '*', assetClass: '*', strategy: '*', regime: '*' };
++    const _mtDecision = decideMakerTaker({
++      entryPrice: rawSignal.entryPrice,
++      stopPrice: rawSignal.stopPrice,
++      targetPrice: rawSignal.targetPrice,
++      costs: _mtCosts,
++      feeRateMaker: _mtFeeRateMaker,
++      // Same at-queue DI/DBS basis as the diAtQueue/dbsScoreAtQueue snapshot below
++      // (F2 single-basis). NULL → kernel documented defaults, exactly as the
++      // open-gate treats a null di_at_queue.
++      DI: fx5Data?.di ?? undefined,
++      sourcePool: rawSignal.metadata?.sourcePool || undefined,
++      dbsScore: fx5Data?.dbsScore ?? undefined,
++      minPWin:      getCachedNumberRequired('expectancy_kernel',     'pwin_floor',     _mtGlobalKey),
++      maxPWin:      getCachedNumberRequired('expectancy_kernel',     'pwin_ceiling',   _mtGlobalKey),
++      diPWinFactor: getCachedNumberRequired('directional_integrity', 'di_pwin_factor', _mtGlobalKey),
++      // Signal strength proxy = the deterministic FinalScore (0..1). Drives the
++      // adverse-selection slope + the hard taker floor.
++      signalStrength: extendedMetrics.finalScore,
++      urgencyClass: entryUrgencyClassForFamily(STRATEGY_FAMILY_MAP[_canonicalStrategy]),
++      haircut: resolveMakerTakerHaircut(sizingContext.assetClass),
++    });
++    console.log(
++      `[P19-B7.2][MAKER_TAKER] ${rawSignal.symbol}/${strategyId}: chose ${_mtDecision.chosenMode} ` +
++      `(taker netEV=${_mtDecision.takerNetEV.toFixed(6)}, maker-adj netEV=${_mtDecision.makerNetEVAdjusted.toFixed(6)}, ` +
++      `A=${(_mtDecision.adverseSelectionPct * 100).toFixed(3)}% C=${(_mtDecision.nonFillCostPct * 100).toFixed(3)}% ` +
++      `floor=${_mtDecision.hardFloorFired})`,
++    );
++    // P19-B7.2 (OBJ-6): record the decision for the maker-PICK-RATE monitor (too-loose-haircut
++    // early warning). Bounded buffer; paper maker-fill outcomes stay data-fenced (non-calibration).
++    rtbMetricsService.recordMakerTakerDecision({
++      symbol: rawSignal.symbol,
++      strategy: strategyId,
++      assetClass: sizingContext.assetClass,
++      chosenMode: _mtDecision.chosenMode,
++      takerNetEV: _mtDecision.takerNetEV,
++      makerNetEVAdjusted: _mtDecision.makerNetEVAdjusted,
++      adverseSelectionPct: _mtDecision.adverseSelectionPct,
++      nonFillCostPct: _mtDecision.nonFillCostPct,
++      hardFloorFired: _mtDecision.hardFloorFired,
++      timestamp: Date.now(),
++    });
++
+     // Phase 14: FinalScore computed in extended metrics — no duplicate calculation needed
+     // Build RTB signal using pre-computed values from extendedMetrics
+     const sqeSignalInput: SQESignalInput = {
+@@ -782,6 +854,13 @@ export class SignalOrchestrator {
+       // the symbol is absent from the pool → kernel documented defaults at the open-gate.
+       diAtQueue: fx5Data?.di ?? null,
+       dbsScoreAtQueue: fx5Data?.dbsScore ?? null,
++      // P19-B7.2: the best-of-both maker/taker snapshot (OBJ-1/OBJ-3). chosenNetEV
++      // is the SINGLE-CONSISTENT-NUMBER every downstream EV consumer reads (the
++      // [11.8B] open-gate + the B7.1 ranker) — never the raw un-haircut maker EV.
++      chosenEntryMode: _mtDecision.chosenMode,
++      chosenNetEv: _mtDecision.chosenNetEV,
++      takerNetEv: _mtDecision.takerNetEV,
++      makerNetEvAdjusted: _mtDecision.makerNetEVAdjusted,
+       sourcePool: rawSignal.metadata?.sourcePool || undefined,
+       signalType: (rawSignal as any).signalType || rawSignal.metadata?.signalType || 'QUANT',
+       // P19-B4a (A1.5, Langston spine): resolver-backed, NOT metadata-OR-default.
+diff --git a/server/startup/b72-warmup.ts b/server/startup/b72-warmup.ts
+index ea092655c..5711824f9 100644
+--- a/server/startup/b72-warmup.ts
++++ b/server/startup/b72-warmup.ts
+@@ -111,6 +111,12 @@ const PREFETCH_MODULES = [
+   'amr_input_health',     // Obj-15b sentinel rails (R1-R5)
+   'amr_external_equity',  // Obj-14b equity feed knobs (CBOE/FRED/ECB sources)
+   'ranking_context_bonus',// Obj-10 (#217) shadow terms + bull-compat mapping
++  // P19-B7.2 (2026-07-01): per-asset-class maker/taker entry-decision haircut
++  // knobs (adverse-selection base/slope, non-fill cost + urgency deltas, pFill,
++  // hard-floor, ladder time budget) — read synchronously by the shared
++  // decideMakerTaker caller in the signal-gen hot path. MUST be warm; fail-hard
++  // on missing rows (START TIGHT seeds live in the B7.2 migration).
++  'maker_taker',
+   // Future: more Slice 2/3/4 modules added here as source replacements ship.
+ ];
+ 
+diff --git a/shared/schema.ts b/shared/schema.ts
+index 55a159195..80299013d 100644
+--- a/shared/schema.ts
++++ b/shared/schema.ts
+@@ -1902,6 +1902,25 @@ export const rtbSignals = pgTable("rtb_signals", {
+   // (mirrors the B79.0n.RTB assetClass column add).
+   diAtQueue: decimal("di_at_queue", { precision: 8, scale: 4 }),         // Directional Integrity [0-100] at queue
+   dbsScoreAtQueue: decimal("dbs_score_at_queue", { precision: 8, scale: 4 }), // Directional Bias Score [-1,1] at queue
++  // P19-B7.2: the best-of-both maker/taker entry-decision snapshot, captured at
++  // the shared signal-build convergence. chosen_net_ev is the SINGLE-CONSISTENT
++  // pWin-weighted netEV the [11.8B] open-gate + the B7.1 ranker read (the chosen
++  // mode's value — for maker it is haircut-adjusted, NEVER the raw maker EV).
++  // Class-agnostic (both classes share the decision — D1). netEV is in price
++  // units; wide precision spans micro-cap → BTC entry scales.
++  chosenEntryMode: varchar("chosen_entry_mode", { length: 8 }).default('taker'), // 'taker' | 'maker'
++  chosenNetEv: decimal("chosen_net_ev", { precision: 20, scale: 10 }),
++  takerNetEv: decimal("taker_net_ev", { precision: 20, scale: 10 }),               // taker-leg netEV (convert-safety baseline)
++  makerNetEvAdjusted: decimal("maker_net_ev_adjusted", { precision: 20, scale: 10 }), // haircut-adjusted maker netEV
++  // P19-B7.2 OBJ-4 — make-then-take ladder state. A signal whose planned entry is
++  // maker rests as maker_pending in the RTB refresh; on fill it opens as maker, on
++  // time-budget expiry convert-safety re-checks taker-EV (kernel) and converts or
++  // expires. Slot-free while waiting, slot-checked (S1 count + S4 concentration)
++  // AT FILL. Live (Phase-21) a real resting order ties up capital; paper does not.
++  makerPending: boolean("maker_pending").default(false),
++  makerPostedAt: timestamp("maker_posted_at"),
++  makerLimitPrice: decimal("maker_limit_price", { precision: 20, scale: 10 }),
++  makerBudgetExpiresAt: timestamp("maker_budget_expires_at"),
+ }, (table) => ({
+   modeStatusIdx: index("rtb_signals_mode_status_idx").on(table.mode, table.status),
+   symbolStrategyIdx: uniqueIndex("rtb_signals_symbol_strategy_idx").on(table.mode, table.symbol, table.strategy, table.status),
+
+===== NEW FILE: server/core/math/maker-taker-decision.ts =====
+/**
+ * ══════════════════════════════════════════════════════════════════════════════
+ * P19-B7.2 — Maker/Taker Entry Decision (pure math authority; SHARED active + VTS)
+ * ══════════════════════════════════════════════════════════════════════════════
+ *
+ * The per-signal ENTRY execution decision: does this signal open as a TAKER
+ * (cross the spread, pay the taker fee, near-certain immediate fill) or as a
+ * MAKER (rest a passive limit, pay the lower maker fee + save the spread, but
+ * risk non-fill and adverse selection)?
+ *
+ * This is the STRUCTURAL crypto opener. At the July-9 Kraken Tier-1 fee wall
+ * (0.80% taker / 0.40% maker ≈ 1.8% round-trip taker friction) the honest EV
+ * gate refuses most crypto on taker economics; the ~0.8% round-trip maker
+ * advantage is what lets a taker-unprofitable / maker-profitable signal open.
+ * (Active-Trading-Path-Audit H1: friction dominates; pWin already at the 0.60
+ * ceiling; #233 input-threading gives no lift → maker execution is the opener.)
+ *
+ * DESIGN (field survey P19_B7_2_FIELD_SURVEY.md + 3-way consensus):
+ *   - BEST-OF-BOTH backbone: compute taker-EV and maker-EV, take the better.
+ *   - BOTH EVs run through the SAME net-expectancy KERNEL — the only difference
+ *     is the friction term (maker saves the entry-leg fee diff + spread + entry
+ *     slippage). This guarantees the maker/taker comparison and every downstream
+ *     EV consumer speak the same pWin-weighted netEV units.
+ *   - Conservatism lives in ONE place: a per-asset-class, signal-conditioned
+ *     adverse-selection HAIRCUT on the maker side, with an explicit pFill so the
+ *     NON-FILL branch is booked as an opportunity-cost LOSS (never EV=0 —
+ *     Langston Step-2 item 1: a predictive signal fills its passive order
+ *     preferentially when the market is about to run against it and MISSES the
+ *     fills where its edge would have paid). START TIGHT (Kyle 2026-07-01):
+ *     the haircut is a deliberately pessimistic uncalibrated guess until live
+ *     passive-fill data exists (Phase-21), so maker only wins when its advantage
+ *     robustly survives a worst-case adverse-selection estimate.
+ *   - Urgency is ENDOGENOUS via the continuation-vs-reversal prior (the one
+ *     signal that needs no calibration data — field survey addendum #1):
+ *     continuation/momentum → bigger non-fill cost + a hard taker floor;
+ *     reversal/mean-reversion → smaller non-fill cost (the resting bid fills on
+ *     the dip the thesis wants; adverse selection is partly ALIGNED).
+ *
+ * This module is PURE: synchronous, no side effects, no logging, no I/O, no DB.
+ * Config is resolved by the CALLER (per-class, DB-governed, fail-hard) and
+ * injected — mirrors the net-expectancy kernel's caller-injection pattern so the
+ * math stays pure and the same function serves the active pipeline AND VTS.
+ * ══════════════════════════════════════════════════════════════════════════════
+ */
+
+import {
+  computeNetExpectancyKernel,
+  type NetExpectancyKernelResult,
+} from '../calculations/net-expectancy-kernel.js';
+import { computeTotalRoundTripCost, type CostComponents } from './cost-model.js';
+import type { StrategyFamily } from '../../config/canonical-regime-strategy-map.js';
+
+export type EntryMode = 'taker' | 'maker';
+
+/**
+ * The pre-calibration urgency prior derived from the strategy family. Needs NO
+ * data (field survey addendum #1, Cartea-Wang): as the alpha signal strengthens
+ * the optimal execution shifts from posting (making) toward taking.
+ *   - continuation: momentum/breakout/strong-trend — the edge is in a move
+ *     already starting; a resting order is left behind → taker-leaning.
+ *   - reversal: mean-reversion/range — you want to buy weakness; a resting bid
+ *     fills on the dip the thesis wants → maker-leaning, adverse-sel aligned.
+ *   - neutral: pattern/hybrid/unclassified — no strong prior either way.
+ */
+export type EntryUrgencyClass = 'continuation' | 'reversal' | 'neutral';
+
+/**
+ * Per-asset-class maker/taker haircut configuration. Every field is a fraction
+ * of entry price (same units as the cost components). DB-governed
+ * (module_constants), fail-hard, resolved by the caller. START TIGHT.
+ */
+export interface MakerTakerHaircutConfig {
+  /** Static, conservative passive-fill probability (0..1). Non-fill is booked as
+   *  an opportunity-cost loss weighted by (1 - pFill). Not learned — the paper
+   *  maker-fill data is model-vs-model and data-fenced; real pFill = Phase-21. */
+  makerFillProbability: number;
+  /** Adverse-selection cost on FILL, base rate (fraction of entry). */
+  adverseSelectionBase: number;
+  /** Adverse-selection slope: A = base + slope * signalStrength (monotonic ↑ in
+   *  strength — a stronger/more-informed signal adversely-selects its own fills
+   *  harder). */
+  adverseSelectionStrengthMult: number;
+  /** Non-fill opportunity cost (missed edge), base rate (fraction of entry). */
+  nonFillCostBase: number;
+  /** Added to the non-fill cost for continuation signals (fast alpha decay → a
+   *  non-fill misses the move). */
+  nonFillContinuationPenalty: number;
+  /** Subtracted from the non-fill cost for reversal signals (patient edge; a
+   *  non-fill costs little). Clamped so C ≥ 0. */
+  nonFillReversalDiscount: number;
+  /** Hard guardrail floor (belt-and-suspenders, independent of the EV compare):
+   *  a continuation signal with strength ≥ this threshold is FORCED to taker
+   *  regardless of the maker-EV compare. Defends against a miscalibrated prior. */
+  hardFloorContinuationStrength: number;
+}
+
+export interface MakerTakerDecisionInput {
+  entryPrice: number;
+  stopPrice: number;
+  targetPrice: number;
+  /** Per-symbol TAKER cost components (fee = taker fee, + slippage + spread) —
+   *  the SAME value [HF9]/[11.8B] use as the taker baseline. */
+  costs: CostComponents;
+  /** DB-resolved maker fee for the asset class (getFrictionForAssetClass). */
+  feeRateMaker: number;
+  // pWin inputs — passed straight through to the kernel (identical on both legs).
+  DI?: number;
+  sourcePool?: string;
+  dbsScore?: number;
+  minPWin?: number;
+  maxPWin?: number;
+  diPWinFactor?: number;
+  /** Signal strength in [0,1] (finalScore/predictive confidence). Drives the
+   *  adverse-selection slope + the hard floor. */
+  signalStrength: number;
+  /** Urgency prior from the strategy family. */
+  urgencyClass: EntryUrgencyClass;
+  /** Per-class haircut config (DB-governed, fail-hard, injected by the caller). */
+  haircut: MakerTakerHaircutConfig;
+}
+
+export interface MakerTakerDecisionResult {
+  chosenMode: EntryMode;
+  /** The netEV that flows to every downstream consumer (the SINGLE-CONSISTENT
+   *  NUMBER — OBJ-3). For taker it is the kernel taker netEV; for maker it is the
+   *  haircut-adjusted, pFill-weighted maker netEV (NEVER the raw maker netEV). */
+  chosenNetEV: number;
+  takerNetEV: number;
+  /** Maker netEV assuming a certain fill, BEFORE the adverse-selection/non-fill
+   *  haircut. Diagnostic only — never gates or ranks. */
+  makerNetEVRaw: number;
+  /** The haircut-adjusted, pFill-weighted maker netEV that competes with taker. */
+  makerNetEVAdjusted: number;
+  makerEntryAdvantagePct: number;
+  adverseSelectionPct: number;
+  nonFillCostPct: number;
+  hardFloorFired: boolean;
+  taker: NetExpectancyKernelResult;
+  maker: NetExpectancyKernelResult;
+}
+
+function clamp01(x: number): number {
+  return Math.max(0, Math.min(1, x));
+}
+
+/**
+ * Map a strategy family to its entry-urgency prior. Pure, total, no data needed.
+ */
+export function entryUrgencyClassForFamily(
+  family: StrategyFamily | undefined | null,
+): EntryUrgencyClass {
+  switch (family) {
+    case 'trend':
+    case 'breakout':
+    case 'strong_trend':
+      return 'continuation';
+    case 'reversal':
+    case 'oscillator':
+      return 'reversal';
+    // pattern, hybrid, undefined → no strong prior
+    default:
+      return 'neutral';
+  }
+}
+
+/**
+ * The best-of-both maker/taker entry decision. Pure; both EVs via the same
+ * kernel; conservatism entirely in the injected per-class haircut.
+ */
+export function decideMakerTaker(
+  input: MakerTakerDecisionInput,
+): MakerTakerDecisionResult {
+  const {
+    entryPrice,
+    stopPrice,
+    targetPrice,
+    costs,
+    feeRateMaker,
+    DI,
+    sourcePool,
+    dbsScore,
+    minPWin,
+    maxPWin,
+    diPWinFactor,
+    signalStrength,
+    urgencyClass,
+    haircut,
+  } = input;
+
+  const kernelCommon = {
+    entryPrice,
+    stopPrice,
+    targetPrice,
+    DI,
+    sourcePool,
+    dbsScore,
+    minPWin,
+    maxPWin,
+    diPWinFactor,
+  };
+
+  // ── TAKER leg — identical to the [HF9]/[11.8B] taker baseline ──────────────
+  const takerFrictionPct = computeTotalRoundTripCost(
+    costs.fee,
+    costs.slippage,
+    costs.spread,
+  );
+  const taker = computeNetExpectancyKernel({
+    ...kernelCommon,
+    totalFriction: takerFrictionPct * entryPrice,
+  });
+
+  // ── MAKER leg — save the ENTRY leg's fee diff + spread + entry slippage ────
+  // Round-trip cost = 2·fee + 2·slip + spread (spread applied once, at entry).
+  // A maker ENTRY pays the maker fee instead of the taker fee, rests passively
+  // (≈0 entry slippage), and does not cross the spread. Conservatively we treat
+  // the spread as SAVED (not earned as a credit) — START TIGHT. The exit leg is
+  // identical to taker and cancels in the comparison.
+  const makerEntryAdvantagePct =
+    (costs.fee - feeRateMaker) + costs.spread + costs.slippage;
+  const makerFrictionPct = takerFrictionPct - makerEntryAdvantagePct;
+  const maker = computeNetExpectancyKernel({
+    ...kernelCommon,
+    totalFriction: makerFrictionPct * entryPrice,
+  });
+
+  // ── The conservatism knob: signal-conditioned haircut + explicit pFill ─────
+  const strength = clamp01(signalStrength);
+  const adverseSelectionPct =
+    haircut.adverseSelectionBase + haircut.adverseSelectionStrengthMult * strength;
+  let nonFillCostPct = haircut.nonFillCostBase;
+  if (urgencyClass === 'continuation') {
+    nonFillCostPct += haircut.nonFillContinuationPenalty;
+  } else if (urgencyClass === 'reversal') {
+    nonFillCostPct = Math.max(0, nonFillCostPct - haircut.nonFillReversalDiscount);
+  }
+
+  const pFill = clamp01(haircut.makerFillProbability);
+  const adverseSelectionPerUnit = adverseSelectionPct * entryPrice;
+  const nonFillCostPerUnit = nonFillCostPct * entryPrice;
+
+  // E[maker] = P(fill)·(netEV_onFill − adverseSelection) − P(no-fill)·nonFillCost
+  // The non-fill branch is an opportunity-cost LOSS, never zero (Langston item 1).
+  const makerNetEVOnFill = maker.netEV - adverseSelectionPerUnit;
+  const makerNetEVAdjusted =
+    pFill * makerNetEVOnFill - (1 - pFill) * nonFillCostPerUnit;
+
+  // ── Hard guardrail floor: strong continuation → force taker ────────────────
+  const hardFloorFired =
+    urgencyClass === 'continuation' &&
+    strength >= haircut.hardFloorContinuationStrength;
+
+  let chosenMode: EntryMode;
+  if (hardFloorFired) {
+    chosenMode = 'taker';
+  } else {
+    chosenMode = makerNetEVAdjusted > taker.netEV ? 'maker' : 'taker';
+  }
+  const chosenNetEV = chosenMode === 'maker' ? makerNetEVAdjusted : taker.netEV;
+
+  return {
+    chosenMode,
+    chosenNetEV,
+    takerNetEV: taker.netEV,
+    makerNetEVRaw: maker.netEV,
+    makerNetEVAdjusted,
+    makerEntryAdvantagePct,
+    adverseSelectionPct,
+    nonFillCostPct,
+    hardFloorFired,
+    taker,
+    maker,
+  };
+}
+
+===== NEW FILE: server/services/maker-taker-config.ts =====
+/**
+ * P19-B7.2 — Maker/taker haircut config resolver (DB-governed, fail-hard).
+ *
+ * Resolves the per-asset-class maker/taker entry-decision knobs from the warmed
+ * `maker_taker` module_constants module and hands them to the PURE
+ * decideMakerTaker() function (caller-injection pattern — the math module stays
+ * DB-free). START TIGHT seeds live in the B7.2 migration; a missing row throws
+ * (no silent fallback — Kyle NO-PATCHES / no-hardcoded-DB-defaults). The module
+ * is warmed at boot by b72-warmup, so a cold/missing row is a deploy-time
+ * failure, not a mid-scan one.
+ */
+
+import { getCachedNumberRequired } from './module-constants-service.js';
+import type { AssetClass } from '../../shared/asset-classes.js';
+import type { MakerTakerHaircutConfig } from '../core/math/maker-taker-decision.js';
+
+function classKey(assetClass: AssetClass) {
+  return { exchange: '*', assetClass, strategy: '*', regime: '*' };
+}
+
+/**
+ * Resolve the per-class haircut config. Fail-hard on any missing knob.
+ */
+export function resolveMakerTakerHaircut(
+  assetClass: AssetClass,
+): MakerTakerHaircutConfig {
+  const key = classKey(assetClass);
+  const g = (constant: string) => getCachedNumberRequired('maker_taker', constant, key);
+  return {
+    makerFillProbability:          g('maker_fill_probability'),
+    adverseSelectionBase:          g('adverse_selection_base'),
+    adverseSelectionStrengthMult:  g('adverse_selection_strength_mult'),
+    nonFillCostBase:               g('non_fill_cost_base'),
+    nonFillContinuationPenalty:    g('non_fill_continuation_penalty'),
+    nonFillReversalDiscount:       g('non_fill_reversal_discount'),
+    hardFloorContinuationStrength: g('hard_floor_continuation_strength'),
+  };
+}
+
+/**
+ * Resolve the per-class make-then-take ladder time budget (ms). The maker order
+ * rests up to this long before convert-safety fires (OBJ-4, in the RTB refresh).
+ * Tied to the conservative pFill — a short budget bounds non-fill exposure.
+ */
+export function resolveMakerTimeBudgetMs(assetClass: AssetClass): number {
+  return getCachedNumberRequired('maker_taker', 'maker_time_budget_ms', classKey(assetClass));
+}
+
+===== NEW FILE: server/tests/unit/p19-b7-2-maker-taker.test.ts =====
+// P19-B7.2 — the maker/taker best-of-both entry decision (the structural crypto opener).
+// DB-free unit coverage of the load-bearing correctness: both EVs run through the SAME kernel
+// (only friction differs), the single-consistent-number invariant (the CHOSEN value is never the
+// raw un-haircut maker EV), the non-fill-is-negative property (Langston Step-2 item 1), the
+// opens-crypto property (a taker-negative / maker-positive signal is chosen as maker with a
+// positive chosen EV), the hard taker floor, urgency endogeneity, and the family→urgency map.
+// The DB-governed per-class haircut values + the runtime snapshot/refresh wiring are exercised on
+// staging once paper-active; the decision MATH is proven here against the same net-expectancy kernel
+// the [11.8B] gate and the B7.1 ranker use.
+import { describe, it, expect } from 'vitest';
+import { computeNetExpectancyKernel } from '../../core/calculations/net-expectancy-kernel';
+import {
+  decideMakerTaker,
+  entryUrgencyClassForFamily,
+  type MakerTakerHaircutConfig,
+  type MakerTakerDecisionInput,
+} from '../../core/math/maker-taker-decision';
+
+// The START-TIGHT crypto haircut seeds (mirrors the B7.2 migration crypto_spot rows).
+const CRYPTO_HAIRCUT: MakerTakerHaircutConfig = {
+  makerFillProbability: 0.50,
+  adverseSelectionBase: 0.0015,
+  adverseSelectionStrengthMult: 0.0035,
+  nonFillCostBase: 0.0010,
+  nonFillContinuationPenalty: 0.0030,
+  nonFillReversalDiscount: 0.0008,
+  hardFloorContinuationStrength: 0.70,
+};
+
+// Crypto Tier-1 friction components (taker fee 0.80%, maker 0.40%).
+const CRYPTO_COSTS = { fee: 0.008, slippage: 0.0005, spread: 0.001 };
+const FEE_MAKER = 0.004;
+
+// pWin pinned to 0.5 (minPWin=maxPWin) so the geometry math is deterministic + kernel-independent
+// of the DI→pWin curve for these property tests.
+function baseInput(over: Partial<MakerTakerDecisionInput> = {}): MakerTakerDecisionInput {
+  return {
+    entryPrice: 100,
+    stopPrice: 98,     // risk 2
+    targetPrice: 105.5, // reward 5.5
+    costs: CRYPTO_COSTS,
+    feeRateMaker: FEE_MAKER,
+    minPWin: 0.5,
+    maxPWin: 0.5,
+    diPWinFactor: 200,
+    signalStrength: 0.3,
+    urgencyClass: 'reversal',
+    haircut: CRYPTO_HAIRCUT,
+    ...over,
+  };
+}
+
+describe('P19-B7.2 — both EVs run through the SAME kernel; only friction differs', () => {
+  it('takerNetEV equals the kernel netEV computed with the taker round-trip friction', () => {
+    const d = decideMakerTaker(baseInput());
+    // takerFrictionPct = 2*fee + 2*slip + spread = 0.018 ; per-unit at entry 100 = 1.8
+    const takerFrictionPerUnit = (2 * 0.008 + 2 * 0.0005 + 0.001) * 100;
+    const k = computeNetExpectancyKernel({
+      entryPrice: 100, stopPrice: 98, targetPrice: 105.5,
+      totalFriction: takerFrictionPerUnit, minPWin: 0.5, maxPWin: 0.5,
+    });
+    expect(d.takerNetEV).toBeCloseTo(k.netEV, 9);
+    expect(d.takerNetEV).toBeCloseTo(-0.05, 9); // rawEV 1.75 − friction 1.8
+  });
+
+  it('the maker leg saves the entry-leg fee diff + spread + entry slippage → higher raw netEV', () => {
+    const d = decideMakerTaker(baseInput());
+    // makerEntryAdvantage = (0.008−0.004) + 0.001 + 0.0005 = 0.0055 (of entry)
+    expect(d.makerEntryAdvantagePct).toBeCloseTo(0.0055, 9);
+    expect(d.makerNetEVRaw).toBeGreaterThan(d.takerNetEV);
+    expect(d.makerNetEVRaw).toBeCloseTo(0.5, 9); // rawEV 1.75 − maker friction 1.25
+  });
+});
+
+describe('P19-B7.2 OBJ-3 — single-consistent-number invariant', () => {
+  it('chosenNetEV is the chosen mode value, and when maker it is the HAIRCUT-ADJUSTED (never the raw) maker EV', () => {
+    const d = decideMakerTaker(baseInput()); // weak reversal opener → maker
+    expect(d.chosenMode).toBe('maker');
+    expect(d.chosenNetEV).toBeCloseTo(d.makerNetEVAdjusted, 9);
+    // the raw (pre-haircut) maker EV must NOT be what flows downstream
+    expect(d.chosenNetEV).not.toBeCloseTo(d.makerNetEVRaw, 6);
+    expect(d.makerNetEVAdjusted).toBeLessThan(d.makerNetEVRaw);
+  });
+
+  it('a taker-chosen signal reports chosenNetEV === takerNetEV', () => {
+    // strong continuation → hard floor forces taker
+    const d = decideMakerTaker(baseInput({ signalStrength: 0.9, urgencyClass: 'continuation' }));
+    expect(d.chosenMode).toBe('taker');
+    expect(d.chosenNetEV).toBeCloseTo(d.takerNetEV, 9);
+  });
+});
+
+describe('P19-B7.2 OBJ-2 — non-fill is booked as an opportunity-cost LOSS, never EV=0 (Langston item 1)', () => {
+  it('the (1−pFill) non-fill term strictly reduces the adjusted maker EV below the fill-only value', () => {
+    const d = decideMakerTaker(baseInput());
+    const pFill = CRYPTO_HAIRCUT.makerFillProbability;
+    const A = (CRYPTO_HAIRCUT.adverseSelectionBase + CRYPTO_HAIRCUT.adverseSelectionStrengthMult * 0.3) * 100;
+    const makerNetEVOnFill = d.makerNetEVRaw - A;
+    const fillOnlyValue = pFill * makerNetEVOnFill; // if non-fill were booked at zero
+    expect(d.makerNetEVAdjusted).toBeLessThan(fillOnlyValue); // the non-fill loss pulls it down
+  });
+});
+
+describe('P19-B7.2 — the OPENS-CRYPTO property (the whole point)', () => {
+  it('a taker-NEGATIVE / maker-POSITIVE signal is chosen as maker with a positive chosen EV', () => {
+    const d = decideMakerTaker(baseInput()); // taker −0.05, weak reversal
+    expect(d.takerNetEV).toBeLessThan(0);       // taker refuses it
+    expect(d.chosenMode).toBe('maker');
+    expect(d.chosenNetEV).toBeGreaterThan(0);   // opens on the maker economics
+    expect(d.chosenNetEV).toBeCloseTo(0.1125, 6);
+  });
+
+  it('a badly-taker-negative signal is NOT rescued by the ~0.55% maker advantage (still refused)', () => {
+    // target 103 → reward 3 → rawEV 0.5 ; taker netEV = 0.5 − 1.8 = −1.3 (far below the maker window)
+    const d = decideMakerTaker(baseInput({ targetPrice: 103 }));
+    expect(d.takerNetEV).toBeCloseTo(-1.3, 9);
+    expect(d.chosenNetEV).toBeLessThan(0); // maker can't flip it → no false open
+  });
+});
+
+describe('P19-B7.2 OBJ-2 — hard taker floor + urgency endogeneity', () => {
+  it('a strong CONTINUATION signal is forced to taker even when the maker EV would otherwise win', () => {
+    const weak = decideMakerTaker(baseInput({ urgencyClass: 'continuation', signalStrength: 0.5 }));
+    const strong = decideMakerTaker(baseInput({ urgencyClass: 'continuation', signalStrength: 0.9 }));
+    expect(strong.hardFloorFired).toBe(true);
+    expect(strong.chosenMode).toBe('taker');
+    expect(weak.hardFloorFired).toBe(false);
+  });
+
+  it('reversal signals carry a smaller non-fill cost than continuation → maker is more favorable', () => {
+    const rev = decideMakerTaker(baseInput({ urgencyClass: 'reversal' }));
+    const cont = decideMakerTaker(baseInput({ urgencyClass: 'continuation' }));
+    expect(rev.nonFillCostPct).toBeLessThan(cont.nonFillCostPct);
+    expect(rev.makerNetEVAdjusted).toBeGreaterThan(cont.makerNetEVAdjusted);
+  });
+
+  it('adverse selection increases monotonically with signal strength', () => {
+    const lo = decideMakerTaker(baseInput({ signalStrength: 0.2 }));
+    const hi = decideMakerTaker(baseInput({ signalStrength: 0.8 }));
+    expect(hi.adverseSelectionPct).toBeGreaterThan(lo.adverseSelectionPct);
+  });
+});
+
+describe('P19-B7.2 — family → entry-urgency prior (no calibration data needed)', () => {
+  it('continuation families (trend / breakout / strong_trend) → continuation', () => {
+    expect(entryUrgencyClassForFamily('trend')).toBe('continuation');
+    expect(entryUrgencyClassForFamily('breakout')).toBe('continuation');
+    expect(entryUrgencyClassForFamily('strong_trend')).toBe('continuation');
+  });
+  it('reversal / oscillator families → reversal', () => {
+    expect(entryUrgencyClassForFamily('reversal')).toBe('reversal');
+    expect(entryUrgencyClassForFamily('oscillator')).toBe('reversal');
+  });
+  it('pattern / hybrid / undefined → neutral (no strong prior)', () => {
+    expect(entryUrgencyClassForFamily('pattern')).toBe('neutral');
+    expect(entryUrgencyClassForFamily('hybrid')).toBe('neutral');
+    expect(entryUrgencyClassForFamily(undefined)).toBe('neutral');
+  });
+});
+
+===== NEW FILE: drizzle/migrations/2026-07-01-p19-b7-2-maker-taker.sql =====
+-- P19-B7.2 — maker/taker best-of-both entry decision (the structural crypto opener).
+--
+-- At the July-9 Kraken Tier-1 fee wall (0.80% taker / 0.40% maker ≈ 1.8% round-trip
+-- taker friction) the honest Net-Expectancy gate refuses most crypto on taker
+-- economics. This batch computes, per signal at the shared build convergence
+-- (signal-orchestrator.buildSizedSignalForStrategy — quant + hybrid + pattern +
+-- xStock all funnel through it), a BEST-OF-BOTH maker/taker net-EV comparison and
+-- snapshots the chosen (better) net-EV onto the RTB row, so a taker-unprofitable /
+-- maker-profitable signal survives to be ranked (B7.1) and opened ([11.8B] gate).
+-- Conservatism lives in ONE place: a per-asset-class, signal-conditioned adverse-
+-- selection haircut with an explicit pFill (the non-fill branch is booked as an
+-- opportunity-cost LOSS, never EV=0). START TIGHT (Kyle 2026-07-01) — the haircut
+-- is a deliberately pessimistic uncalibrated guess until live passive-fill data
+-- exists (Phase-21); Phase-25 calibrates it and it tightens with no re-architecture.
+--
+-- TWO parts:
+--   (1) rtb_signals columns: the decision snapshot + the make-then-take ladder state.
+--   (2) module_constants `maker_taker` seeds, PER-ASSET-CLASS (crypto_spot,
+--       xstock_spot) — DB-governed, fail-hard (b72-warmup asserts non-zero rows;
+--       the resolver throws on a missing knob — no hidden default, CLAUDE.md §5 r15).
+
+BEGIN;
+
+-- ── (1) rtb_signals columns ───────────────────────────────────────────────────
+-- All nullable / defaulted so the add is a safe online column-add (mirrors the
+-- reorg-B3 di_at_queue / dbs_score_at_queue add). chosen_net_ev is what the
+-- open-gate + ranker read; net-EV is in price units (wide precision spans
+-- micro-cap → BTC entry scales). The maker_* columns hold the ladder state.
+ALTER TABLE rtb_signals
+  ADD COLUMN IF NOT EXISTS chosen_entry_mode       varchar(8) DEFAULT 'taker',
+  ADD COLUMN IF NOT EXISTS chosen_net_ev           numeric(20,10),
+  ADD COLUMN IF NOT EXISTS taker_net_ev            numeric(20,10),
+  ADD COLUMN IF NOT EXISTS maker_net_ev_adjusted   numeric(20,10),
+  ADD COLUMN IF NOT EXISTS maker_pending           boolean DEFAULT false,
+  ADD COLUMN IF NOT EXISTS maker_posted_at         timestamp,
+  ADD COLUMN IF NOT EXISTS maker_limit_price       numeric(20,10),
+  ADD COLUMN IF NOT EXISTS maker_budget_expires_at timestamp;
+
+-- ── (2) module_constants `maker_taker` — per-class START-TIGHT seeds ───────────
+-- All rates are fractions of entry price (same units as the cost components).
+--   maker_fill_probability          — static conservative pFill (0..1). Non-fill
+--                                     is weighted by (1 - pFill) as a loss.
+--   adverse_selection_base          — A base (cost-on-fill).
+--   adverse_selection_strength_mult — A slope: A = base + mult * signalStrength
+--                                     (↑ with strength — a stronger signal
+--                                     adversely-selects its own passive fills harder).
+--   non_fill_cost_base              — C base (missed-edge opportunity cost).
+--   non_fill_continuation_penalty   — added to C for continuation signals (fast
+--                                     alpha decay → a non-fill misses the move).
+--   non_fill_reversal_discount      — subtracted from C for reversal signals
+--                                     (patient edge; a non-fill costs little).
+--   hard_floor_continuation_strength— strong continuation ≥ this → force taker
+--                                     (belt-and-suspenders over the EV compare).
+--   maker_time_budget_ms            — the make-then-take ladder budget; short, to
+--                                     bound non-fill exposure (RTB refresh = 30s).
+-- Crypto: taker 0.80% / maker 0.40% → makerEntryAdvantage ≈ 0.55% of entry; the
+-- haircut at max strength (~0.5%) nearly eats it — maker wins only for weaker /
+-- reversal / patient signals. xStock leans slightly more maker-friendly (a maker
+-- rebate is possible per the July-2026 schedule) but stays TIGHT pre-calibration.
+INSERT INTO module_constants
+  (module_name, constant_name, value, asset_class, exchange, regime, strategy, updated_at, updated_by)
+VALUES
+  ('maker_taker', 'maker_fill_probability',           '0.50'::jsonb,   'crypto_spot', '*', '*', '*', NOW(), 'p19-b7-2'),
+  ('maker_taker', 'adverse_selection_base',           '0.0015'::jsonb, 'crypto_spot', '*', '*', '*', NOW(), 'p19-b7-2'),
+  ('maker_taker', 'adverse_selection_strength_mult',  '0.0035'::jsonb, 'crypto_spot', '*', '*', '*', NOW(), 'p19-b7-2'),
+  ('maker_taker', 'non_fill_cost_base',               '0.0010'::jsonb, 'crypto_spot', '*', '*', '*', NOW(), 'p19-b7-2'),
+  ('maker_taker', 'non_fill_continuation_penalty',    '0.0030'::jsonb, 'crypto_spot', '*', '*', '*', NOW(), 'p19-b7-2'),
+  ('maker_taker', 'non_fill_reversal_discount',       '0.0008'::jsonb, 'crypto_spot', '*', '*', '*', NOW(), 'p19-b7-2'),
+  ('maker_taker', 'hard_floor_continuation_strength', '0.70'::jsonb,   'crypto_spot', '*', '*', '*', NOW(), 'p19-b7-2'),
+  ('maker_taker', 'maker_time_budget_ms',             '60000'::jsonb,  'crypto_spot', '*', '*', '*', NOW(), 'p19-b7-2'),
+
+  ('maker_taker', 'maker_fill_probability',           '0.50'::jsonb,   'xstock_spot', '*', '*', '*', NOW(), 'p19-b7-2'),
+  ('maker_taker', 'adverse_selection_base',           '0.0010'::jsonb, 'xstock_spot', '*', '*', '*', NOW(), 'p19-b7-2'),
+  ('maker_taker', 'adverse_selection_strength_mult',  '0.0025'::jsonb, 'xstock_spot', '*', '*', '*', NOW(), 'p19-b7-2'),
+  ('maker_taker', 'non_fill_cost_base',               '0.0008'::jsonb, 'xstock_spot', '*', '*', '*', NOW(), 'p19-b7-2'),
+  ('maker_taker', 'non_fill_continuation_penalty',    '0.0025'::jsonb, 'xstock_spot', '*', '*', '*', NOW(), 'p19-b7-2'),
+  ('maker_taker', 'non_fill_reversal_discount',       '0.0006'::jsonb, 'xstock_spot', '*', '*', '*', NOW(), 'p19-b7-2'),
+  ('maker_taker', 'hard_floor_continuation_strength', '0.70'::jsonb,   'xstock_spot', '*', '*', '*', NOW(), 'p19-b7-2'),
+  ('maker_taker', 'maker_time_budget_ms',             '60000'::jsonb,  'xstock_spot', '*', '*', '*', NOW(), 'p19-b7-2')
+ON CONFLICT (module_name, exchange, asset_class, strategy, regime, constant_name) DO NOTHING;
+
+-- Verify both classes fully seeded (16 rows) — fail the migration loudly otherwise.
+DO $$
+DECLARE n int;
+BEGIN
+  SELECT count(*) INTO n FROM module_constants WHERE module_name = 'maker_taker';
+  IF n < 16 THEN
+    RAISE EXCEPTION 'maker_taker seed incomplete: expected >= 16 rows, found %', n;
+  END IF;
+END $$;
+
+COMMIT;

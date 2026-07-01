@@ -107,6 +107,20 @@ export interface SizingClampSample {
   timestamp: number;
 }
 
+/** P19-B7.2 (OBJ-6): one maker/taker best-of-both decision, recorded at signal-gen. */
+export interface MakerTakerDecisionSample {
+  symbol: string;
+  strategy: string;
+  assetClass?: string;
+  chosenMode: 'taker' | 'maker';
+  takerNetEV: number;
+  makerNetEVAdjusted: number;
+  adverseSelectionPct: number;
+  nonFillCostPct: number;
+  hardFloorFired: boolean;
+  timestamp: number;
+}
+
 class RtbMetricsService {
   private static instance: RtbMetricsService;
 
@@ -295,6 +309,38 @@ class RtbMetricsService {
     return [...this.sizingClampSamples];
   }
 
+  // ── P19-B7.2 (OBJ-6): maker/taker decision telemetry + the maker-PICK-RATE monitoring line ──
+  private makerTakerSamples: MakerTakerDecisionSample[] = [];
+  private readonly MAX_MAKER_TAKER_SAMPLES = 500;
+
+  /** Record one maker/taker best-of-both decision (called once per signal at gen). Bounded buffer. */
+  recordMakerTakerDecision(sample: MakerTakerDecisionSample): void {
+    this.makerTakerSamples.push(sample);
+    if (this.makerTakerSamples.length > this.MAX_MAKER_TAKER_SAMPLES) {
+      this.makerTakerSamples = this.makerTakerSamples.slice(-this.MAX_MAKER_TAKER_SAMPLES);
+    }
+  }
+
+  getMakerTakerSamples(): MakerTakerDecisionSample[] {
+    return [...this.makerTakerSamples];
+  }
+
+  /**
+   * P19-B7.2 (OBJ-6, Langston Step-2 item 1): the maker-PICK-RATE — the early-warning monitor for a
+   * too-loose adverse-selection haircut. An implausibly high maker-pick rate (before any live
+   * calibration exists) means the haircut is under-set and best-of-both is silently converting
+   * EV-negative maker fills into "passing" signals. All zero until paper-active trading is on; the
+   * paper maker-fill outcomes remain DATA-FENCED (non-calibration — model-vs-model; real adverse
+   * selection is Phase-21 live data).
+   */
+  getMakerPickProof(): { totalSamples: number; makerCount: number; takerCount: number; makerPickRate: number | null; hardFloorCount: number } {
+    const s = this.makerTakerSamples;
+    if (s.length === 0) return { totalSamples: 0, makerCount: 0, takerCount: 0, makerPickRate: null, hardFloorCount: 0 };
+    const makerCount = s.filter((x) => x.chosenMode === 'maker').length;
+    const hardFloorCount = s.filter((x) => x.hardFloorFired).length;
+    return { totalSamples: s.length, makerCount, takerCount: s.length - makerCount, makerPickRate: makerCount / s.length, hardFloorCount };
+  }
+
   /**
    * P19-B7.1 (OBJ-5): the clamp-bind summary — the Phase-25 decision input. `boundRate` is the
    * fraction of SIZED signals held below their intended risk by a clamp or the covariance scale.
@@ -416,6 +462,9 @@ class RtbMetricsService {
     // P19-B7.1 (OBJ-5): the sizing clamp-bind watch surface (empty until paper-active turns on).
     sizingClampProof: { totalSamples: number; boundCount: number; boundRate: number | null; meanRatio: number | null };
     recentSizingClampSamples: SizingClampSample[];
+    // P19-B7.2 (OBJ-6): maker/taker decision watch — makerPickRate is the too-loose-haircut early warning.
+    makerPickProof: { totalSamples: number; makerCount: number; takerCount: number; makerPickRate: number | null; hardFloorCount: number };
+    recentMakerTakerSamples: MakerTakerDecisionSample[];
   } {
     // P19-B6.5e: invariant is now attemptsTotal === openedTotal + blockedTotal + openFailedTotal
     const { attemptsTotal, openedTotal, blockedTotal, openFailedTotal } = this.stats;
@@ -458,6 +507,10 @@ class RtbMetricsService {
       // input (>~0.15-0.20 → switch the honest ranker to realized-$EV). Zero until paper-active.
       sizingClampProof: this.getSizingClampProof(),
       recentSizingClampSamples: this.sizingClampSamples.slice(-25),
+      // P19-B7.2 (OBJ-6): the maker-pick-rate watch — an implausibly high makerPickRate before live
+      // calibration = the haircut is too loose (Langston Step-2 item 1). Zero until paper-active.
+      makerPickProof: this.getMakerPickProof(),
+      recentMakerTakerSamples: this.makerTakerSamples.slice(-25),
     };
   }
 

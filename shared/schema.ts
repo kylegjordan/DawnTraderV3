@@ -1902,6 +1902,25 @@ export const rtbSignals = pgTable("rtb_signals", {
   // (mirrors the B79.0n.RTB assetClass column add).
   diAtQueue: decimal("di_at_queue", { precision: 8, scale: 4 }),         // Directional Integrity [0-100] at queue
   dbsScoreAtQueue: decimal("dbs_score_at_queue", { precision: 8, scale: 4 }), // Directional Bias Score [-1,1] at queue
+  // P19-B7.2: the best-of-both maker/taker entry-decision snapshot, captured at
+  // the shared signal-build convergence. chosen_net_ev is the SINGLE-CONSISTENT
+  // pWin-weighted netEV the [11.8B] open-gate + the B7.1 ranker read (the chosen
+  // mode's value — for maker it is haircut-adjusted, NEVER the raw maker EV).
+  // Class-agnostic (both classes share the decision — D1). netEV is in price
+  // units; wide precision spans micro-cap → BTC entry scales.
+  chosenEntryMode: varchar("chosen_entry_mode", { length: 8 }).default('taker'), // 'taker' | 'maker'
+  chosenNetEv: decimal("chosen_net_ev", { precision: 20, scale: 10 }),
+  takerNetEv: decimal("taker_net_ev", { precision: 20, scale: 10 }),               // taker-leg netEV (convert-safety baseline)
+  makerNetEvAdjusted: decimal("maker_net_ev_adjusted", { precision: 20, scale: 10 }), // haircut-adjusted maker netEV
+  // P19-B7.2 OBJ-4 — make-then-take ladder state. A signal whose planned entry is
+  // maker rests as maker_pending in the RTB refresh; on fill it opens as maker, on
+  // time-budget expiry convert-safety re-checks taker-EV (kernel) and converts or
+  // expires. Slot-free while waiting, slot-checked (S1 count + S4 concentration)
+  // AT FILL. Live (Phase-21) a real resting order ties up capital; paper does not.
+  makerPending: boolean("maker_pending").default(false),
+  makerPostedAt: timestamp("maker_posted_at"),
+  makerLimitPrice: decimal("maker_limit_price", { precision: 20, scale: 10 }),
+  makerBudgetExpiresAt: timestamp("maker_budget_expires_at"),
 }, (table) => ({
   modeStatusIdx: index("rtb_signals_mode_status_idx").on(table.mode, table.status),
   symbolStrategyIdx: uniqueIndex("rtb_signals_symbol_strategy_idx").on(table.mode, table.symbol, table.strategy, table.status),

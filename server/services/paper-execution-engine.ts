@@ -1795,6 +1795,42 @@ export class PaperExecutionEngine {
           }
         }
 
+        // ── P19-B7.2 (OBJ-4): make-then-take POST ─────────────────────────────
+        // A maker-chosen signal that has NEVER been posted rests as maker_pending
+        // instead of opening now: mark the ladder state and `continue` — it stays in
+        // the queue, does NOT consume a slot (slot-free-while-waiting), and the RTB
+        // refresh manages its fill / convert-safety / expire lifecycle. It re-enters
+        // promotion only after the refresh clears maker_pending — as MAKER on a
+        // trade-through fill (makerPostedAt set → opens below), or as TAKER after a
+        // convert. The getRankedSignals mutual-exclusion filter keeps it out of the
+        // ranking while it rests. ⚠ SCAFFOLDING (§9.1): dormant until active trading
+        // is on; the real Kraken post-only resting order is Phase-21 — here we mark
+        // state and simulate the wait via the refresh's per-tick trade-through check.
+        {
+          const _b72ChosenMode = (signal.chosenEntryMode as 'taker' | 'maker' | undefined) ?? 'taker';
+          const _b72NeverPosted = signal.makerPostedAt == null;
+          if (_b72ChosenMode === 'maker' && _b72NeverPosted) {
+            try {
+              const { resolveMakerTimeBudgetMs } = await import('./maker-taker-config.js');
+              const _b72Class = asValidAssetClass(signal.metadata?.assetClass)
+                ?? asValidAssetClass((signal as any).assetClass)
+                ?? safeResolveAssetClass(signal.symbol, 'kraken')
+                ?? 'crypto_spot';
+              const budgetMs = resolveMakerTimeBudgetMs(_b72Class);
+              const nowD = new Date();
+              await readyToBuyService.markMakerPending(signal.id, {
+                makerLimitPrice: parseFloat(signal.entryPrice),
+                makerPostedAt: nowD,
+                makerBudgetExpiresAt: new Date(nowD.getTime() + budgetMs),
+              });
+              console.log(`[P19-B7.2][MAKER_POST] ${signal.symbol} posted maker limit @ ${signal.entryPrice} (budget ${budgetMs}ms) — resting, slot-free, not opened this cycle`);
+              continue; // slot-free-while-waiting: do NOT remove from queue / open / decrement openSlots
+            } catch (postErr) {
+              console.warn(`[P19-B7.2][MAKER_POST] failed to post maker_pending for ${signal.symbol}; falling through to normal open:`, postErr instanceof Error ? postErr.message : postErr);
+            }
+          }
+        }
+
         // Directive 8.8.4-A3.R1: RTB removal must precede trade creation to prevent double-activation
         // Step 1: Remove signal from RTB queue BEFORE attempting trade execution
         await readyToBuyService.promoteSignal(signal.id, 'pending');
@@ -1868,6 +1904,13 @@ export class PaperExecutionEngine {
         // OBJ-4 rtb-metrics EV-reject breakdown; this object field is only the in-memory carrier.
         diAtQueue: signal.diAtQueue != null ? parseFloat(signal.diAtQueue) : null,
         dbsScoreAtQueue: signal.dbsScoreAtQueue != null ? parseFloat(signal.dbsScoreAtQueue) : null,
+        // P19-B7.2 (OBJ-3): carry the best-of-both maker/taker snapshot onto the promoted
+        // signal so the [11.8B] open-gate reads the CHOSEN-mode netEV (the single-consistent
+        // number), not a taker-only recompute — this is what lets a maker-chosen crypto
+        // opener (taker-EV<0, maker-adjusted-EV>0) pass the gate. NULL (pre-B7.2 rows) →
+        // the gate falls back to its taker recompute (no behavior change).
+        chosenEntryMode: (signal.chosenEntryMode as 'taker' | 'maker' | undefined) ?? 'taker',
+        chosenNetEv: signal.chosenNetEv != null ? parseFloat(signal.chosenNetEv) : null,
         metadata: {
           source: 'RTB_PROMOTION',
           originalSignalId: signal.signalId,
@@ -1910,7 +1953,7 @@ export class PaperExecutionEngine {
     // promoted signal (already parsed string→number at the rtb-row→StrategySignal conversion).
     // Optional → a non-promotion-path signal (FX5/orchestrator direct) simply has them undefined
     // → kernel documented defaults.
-    signal: StrategySignal & { quantity?: number; estimatedValue?: number; signalId?: string; diAtQueue?: number | null; dbsScoreAtQueue?: number | null },
+    signal: StrategySignal & { quantity?: number; estimatedValue?: number; signalId?: string; diAtQueue?: number | null; dbsScoreAtQueue?: number | null; chosenEntryMode?: 'taker' | 'maker'; chosenNetEv?: number | null },
     settings: TradingSettings,
     cycleContext?: { portfolioValue: number; guardrails: GuardrailsV2 | null }
   ): Promise<OpenOutcome> {
@@ -2105,7 +2148,23 @@ export class PaperExecutionEngine {
       timestamp: Date.now(),
     });
 
-    if (!expectancyResult.isTradeable) {
+    // ── P19-B7.2 (OBJ-3): honor the best-of-both chosen-mode netEV ────────────
+    // evaluateTradeExpectancy recomputes the TAKER leg (its only rejection is the
+    // EV sign, netEV>0). The best-of-both decision was made once at signal-gen and
+    // snapshotted as chosen_net_ev (the single-consistent number — for maker it is
+    // the haircut-adjusted, pFill-weighted maker netEV). Take the EV-SIGN pass/fail
+    // from that snapshot so a maker-chosen crypto opener (taker netEV<0, chosen
+    // netEV>0) passes while its taker recompute would reject. The taker recompute
+    // still supplies score/pWin/diagnostics. NULL snapshot (pre-B7.2 rows / a
+    // non-snapshotted path) → fall back to the taker isTradeable (no change).
+    // The chosen-leg taker branch equals this recompute exactly (same at-queue DI,
+    // same kernel, same friction), so a taker-chosen signal is unaffected.
+    const _b72ChosenNetEv = (signal as any).chosenNetEv != null ? Number((signal as any).chosenNetEv) : null;
+    const _b72ChosenMode: 'taker' | 'maker' = ((signal as any).chosenEntryMode as 'taker' | 'maker') ?? 'taker';
+    const _b72IsTradeable = _b72ChosenNetEv != null ? (_b72ChosenNetEv > 0) : expectancyResult.isTradeable;
+    const _b72EffectiveNetEv = _b72ChosenNetEv != null ? _b72ChosenNetEv : expectancyResult.netEV;
+
+    if (!_b72IsTradeable) {
       // [B4] Log funnel attempt blocked by Net Expectancy Gate
       b4Diagnostics.logFunnelEvent({
         symbol: signal.symbol,
@@ -2113,32 +2172,39 @@ export class PaperExecutionEngine {
         stage: 'attempt',
         block_reason: 'EV_REJECT'
       });
-      
-      console.log(`[11.8B][EV_BLOCK] ${signal.symbol} rejected: ${expectancyResult.rejectionReason}`);
-      console.log(`[PaperExecution:${this.mode}] Paper trade rejected by Net Expectancy Gate: ${expectancyResult.rejectionReason}`);
-      
+
+      const _b72RejReason = _b72ChosenNetEv != null
+        ? `chosen ${_b72ChosenMode} NetEV=${_b72EffectiveNetEv.toFixed(6)} (best-of-both non-positive after friction + haircut)`
+        : expectancyResult.rejectionReason;
+      console.log(`[11.8B][EV_BLOCK] ${signal.symbol} rejected: ${_b72RejReason}`);
+      console.log(`[PaperExecution:${this.mode}] Paper trade rejected by Net Expectancy Gate: ${_b72RejReason}`);
+
       // Log rejection
       await storage.createPaperSimTradeLog(this.mode, {
         tradeId: null,
         positionId: null,
         eventType: 'trade_rejected',
-        message: `Trade rejected by Net Expectancy Gate: ${signal.symbol} - ${expectancyResult.rejectionReason}`,
+        message: `Trade rejected by Net Expectancy Gate: ${signal.symbol} - ${_b72RejReason}`,
         metadata: {
           signal: tradeCandidate,
-          rejectionReason: expectancyResult.rejectionReason,
+          rejectionReason: _b72RejReason,
           code: 'EV_REJECT',
-          ev: expectancyResult.ev,
+          // P19-B7.2: the effective (chosen-mode best-of-both) EV drove the decision.
+          ev: _b72EffectiveNetEv,
+          chosenEntryMode: _b72ChosenMode,
+          takerNetEv: expectancyResult.netEV,
           score: expectancyResult.score
         }
       });
 
       // P19-B6.5e: Net-Expectancy gate is a POST-guardrail open-stage failure.
-      rtbMetricsService.recordOpenFailed(signal.symbol, signal.strategy, 'EV_REJECT', expectancyResult.rejectionReason || 'negative net expectancy');
-      return { opened: false, stage: 'EV_REJECT', reason: expectancyResult.rejectionReason || 'negative net expectancy' };
+      rtbMetricsService.recordOpenFailed(signal.symbol, signal.strategy, 'EV_REJECT', _b72RejReason || 'negative net expectancy');
+      return { opened: false, stage: 'EV_REJECT', reason: _b72RejReason || 'negative net expectancy' };
     }
 
     // Log expectancy gate pass with score for future analytics
-    console.log(`[11.8B][EV_PASS] ${signal.symbol} EV=${expectancyResult.ev.toFixed(6)} Score=${expectancyResult.score.toFixed(1)}`);
+    // P19-B7.2: report the chosen entry mode + its effective (best-of-both) EV.
+    console.log(`[11.8B][EV_PASS] ${signal.symbol} mode=${_b72ChosenMode} EV=${_b72EffectiveNetEv.toFixed(6)} (taker=${expectancyResult.netEV.toFixed(6)}) Score=${expectancyResult.score.toFixed(1)}`);
 
     // [B4] Log funnel RTB - signal passed all guardrails, ready to buy
     b4Diagnostics.logFunnelEvent({

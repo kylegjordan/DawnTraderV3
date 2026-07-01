@@ -111,6 +111,12 @@ const PREFETCH_MODULES = [
   'amr_input_health',     // Obj-15b sentinel rails (R1-R5)
   'amr_external_equity',  // Obj-14b equity feed knobs (CBOE/FRED/ECB sources)
   'ranking_context_bonus',// Obj-10 (#217) shadow terms + bull-compat mapping
+  // P19-B7.2 (2026-07-01): per-asset-class maker/taker entry-decision haircut
+  // knobs (adverse-selection base/slope, non-fill cost + urgency deltas, pFill,
+  // hard-floor, ladder time budget) — read synchronously by the shared
+  // decideMakerTaker caller in the signal-gen hot path. MUST be warm; fail-hard
+  // on missing rows (START TIGHT seeds live in the B7.2 migration).
+  'maker_taker',
   // Future: more Slice 2/3/4 modules added here as source replacements ship.
 ];
 
