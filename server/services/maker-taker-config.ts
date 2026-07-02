@@ -38,10 +38,40 @@ export function resolveMakerTakerHaircut(
 }
 
 /**
- * Resolve the per-class make-then-take ladder time budget (ms). The maker order
- * rests up to this long before convert-safety fires (OBJ-4, in the RTB refresh).
- * Tied to the conservative pFill — a short budget bounds non-fill exposure.
+ * Resolve the per-class expected-fill window (ms). P19-B7.2c re-purposed this as
+ * the SOFT tier/T1 telemetry boundary (a maker fill inside it = "filled fast");
+ * it no longer drives any order lifecycle. The HARD lifecycle timeout is
+ * resolveMakerMaxPendingMs below. (NEW meaning documented in ADJUSTMENT_FRAMEWORK.)
  */
 export function resolveMakerTimeBudgetMs(assetClass: AssetClass): number {
   return getCachedNumberRequired('maker_taker', 'maker_time_budget_ms', classKey(assetClass));
+}
+
+/**
+ * P19-B7.2c — the per-class HARD-DROP timeout (ms) for a post-promotion PENDING
+ * maker order (Kyle: ~1h crypto, timeout = DROPPED, period — no convert
+ * re-evaluation). Load-time invariant (Langston Q5): the hard-drop must not fire
+ * before the soft expected-fill window — incoherent config fails LOUDLY here
+ * (fail-hard, not clamp: a misconfig is a deploy-time bug, not a runtime guess).
+ */
+export function resolveMakerMaxPendingMs(assetClass: AssetClass): number {
+  const key = classKey(assetClass);
+  const maxPendingMs = getCachedNumberRequired('maker_taker', 'maker_max_pending_ms', key);
+  const timeBudgetMs = getCachedNumberRequired('maker_taker', 'maker_time_budget_ms', key);
+  if (maxPendingMs < timeBudgetMs) {
+    throw new Error(
+      `[P19-B7.2c][maker_taker] incoherent config for ${assetClass}: maker_max_pending_ms (${maxPendingMs}) < maker_time_budget_ms (${timeBudgetMs}) — the hard-drop cannot fire before the expected-fill window`,
+    );
+  }
+  return maxPendingMs;
+}
+
+/**
+ * P19-B7.2c — the VTS maker/taker TWIN kill-knob (per class; 1 = twinning on,
+ * 0 = off). DB-governed so twinning can be switched off without a deploy if the
+ * doubled VTS open volume misbehaves (Kyle). Numeric 1/0 by design — reuses the
+ * existing fail-hard number getter.
+ */
+export function resolveTwinEnabled(assetClass: AssetClass): boolean {
+  return getCachedNumberRequired('maker_taker', 'twin_enabled', classKey(assetClass)) === 1;
 }

@@ -12213,7 +12213,11 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           tradeMode: (pos as any).tradeMode || 'TARGET', // TARGET or TRAILING_TAKE (MOONBAG)
           // P19-B7.2b (OBJ-B): maker/taker entry fee-mode for the fee-mode column.
           chosenEntryMode: (pos as any).chosenEntryMode ?? null,
-          entryFeeRate: (pos as any).entryFeeRate ?? null
+          entryFeeRate: (pos as any).entryFeeRate ?? null,
+          // P19-B7.2c: a resting maker order shows a PENDING badge (state='pending').
+          state: (pos as any).state ?? 'open',
+          makerLimitPrice: (pos as any).makerLimitPrice ?? null,
+          makerDeadline: (pos as any).makerDeadline ?? null
         };
       }));
       
@@ -12688,9 +12692,14 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       // Phase 8.8.3-B3: Filter out ghost trades from analytics
       // Ghost trades = closed trades without proper exit_price or close_reason
+      // P19-B7.2c: this ALSO (correctly) excludes closeReason='never_filled' rows —
+      // a dropped pending maker has NO exit price (it never opened), so it can never
+      // enter win-rate/expectancy here. The explicit closeReason check makes the
+      // exclusion typed + durable even if a future record carries a synthetic price.
       const validTrades = allTrades.filter(trade => {
         // Only consider properly closed trades (have closedAt, exit_price, and close_reason)
         if (!trade.closedAt) return false;
+        if (trade.closeReason === 'never_filled') return false; // visible in the list, never in stats
         const hasExitPrice = trade.exitPrice && parseFloat(trade.exitPrice.toString()) > 0;
         const hasCloseReason = trade.closeReason && trade.closeReason.trim() !== '';
         return hasExitPrice && hasCloseReason;

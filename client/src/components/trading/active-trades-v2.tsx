@@ -128,6 +128,10 @@ interface ActiveTrade {
   // P19-B7.2b (OBJ-C): the maker/taker entry fee-mode the position opened on.
   chosenEntryMode?: string | null;
   entryFeeRate?: number | string | null;
+  // P19-B7.2c: 'pending' = a resting maker order holding a slot, not yet filled.
+  state?: string;
+  makerLimitPrice?: string | number | null;
+  makerDeadline?: string | null;
 }
 
 interface PortfolioSummary {
@@ -359,6 +363,13 @@ function TradeRow({
             {strategyNames[trade.strategy] || trade.strategy}
           </Badge>
           {/* Directive 9.2: Trade Mode Indicator */}
+          {/* P19-B7.2c: a resting maker order shows PENDING (holds a slot, not filled)
+              until the real price trades through its limit or the deadline drops it. */}
+          {trade.state === 'pending' ? (
+            <span className="px-2 py-0.5 rounded text-xs font-bold bg-amber-100 text-amber-700 border border-amber-300">
+              PENDING
+            </span>
+          ) : (
           <span className={cn(
             "px-2 py-0.5 rounded text-xs font-bold",
             trade.tradeMode === 'TRAILING_TAKE'
@@ -367,6 +378,7 @@ function TradeRow({
           )}>
             {trade.tradeMode === 'TRAILING_TAKE' ? 'MOONBAG' : 'Targeting'}
           </span>
+          )}
         </div>
       </td>
 

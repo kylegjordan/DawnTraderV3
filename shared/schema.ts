@@ -1796,6 +1796,17 @@ export const paperSimOpenPositions = pgTable("paper_sim_open_positions", {
   // closed trade). NULL for pre-B7.2b positions (never coerced — rule-10). ENTRY-leg only.
   chosenEntryMode: varchar("chosen_entry_mode", { length: 8 }), // 'taker' | 'maker' | NULL
   entryFeeRate: decimal("entry_fee_rate", { precision: 10, scale: 6 }),
+  // P19-B7.2c (SIMPLIFIED, Kyle 2026-07-02): post-promotion PENDING maker-order
+  // lifecycle. A maker-chosen promotion rests as state='pending' (holds a slot, NOT
+  // filled) until the real price trades through the limit (→ 'open' at limit + maker
+  // fee) or the hard-drop deadline fires (→ DROPPED, period — no convert re-evaluation;
+  // recorded visibly as never-filled but excluded from stats/learning). 'open' = a
+  // normal filled position (default). maker_limit_price = the resting limit (the
+  // maker-FILL price). maker_deadline = the hard-drop instant. NULL for taker /
+  // pre-B7.2c positions.
+  state: varchar("state", { length: 16 }).default("open"), // 'open' | 'pending'
+  makerLimitPrice: decimal("maker_limit_price", { precision: 20, scale: 10 }),
+  makerDeadline: timestamp("maker_deadline"),
   // Phase 8.8.3-C4: Intended entry price for slippage tracking
   intendedEntryPrice: decimal("intended_entry_price", { precision: 20, scale: 8 }),
   entrySlippage: decimal("entry_slippage", { precision: 20, scale: 8 }).default("0"),

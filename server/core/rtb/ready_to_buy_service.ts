@@ -136,7 +136,7 @@ export interface SQESignalInput {
   // haircut-adjusted best netEV, NEVER the raw maker EV).
   chosenEntryMode?: 'taker' | 'maker';  // the planned entry mode
   chosenNetEv?: number | null;          // the best (chosen-mode) net-EV — what gates + ranks
-  takerNetEv?: number | null;           // the taker-leg net-EV (diagnostic + convert-safety baseline)
+  takerNetEv?: number | null;           // the taker-leg net-EV (diagnostic + the B7.2c marketable-at-placement stored-taker check)
   makerNetEvAdjusted?: number | null;   // the haircut-adjusted maker net-EV (diagnostic)
   metadata?: Record<string, unknown>;
   skipSelfCheck?: boolean; // Directive 8.8.4-A3.R2: Skip self-dedupe during refreshAndRank

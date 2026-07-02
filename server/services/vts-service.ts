@@ -708,6 +708,135 @@ export class VTSService extends EventEmitter {
    * Ensures ML pipeline receives VTS_REAL_PRICE trades
    * @returns Object with persisted=true and mlTriggered=true if ML calibration was triggered
    */
+  /**
+   * P19-B7.2c — persist a NEVER-FILLED pending maker record to the closed JSON store
+   * ONLY. This is deliberately NOT persistRealPriceTrade: a dropped pending never
+   * opened, has no fill and no P&L — so it must NOT enter `closedTrades` (ML
+   * calibration reads it), session metrics, or any trade-outcome learning surface
+   * (a phantom flat trade poisons win-rate AND mislabels training data — Langston Q6).
+   * It IS written to the vts_trades_*.json store so the Closed Simulated Trades UI can
+   * show it (Kyle: visible ≠ counted), flagged with the TYPED discriminators
+   * resultType='never_filled' + countsInAggregates=false. It COUNTS in the maker
+   * fill-rate/report-card denominator (that's its purpose) — that reader keys on
+   * resultType, not on the excluded P&L aggregates.
+   */
+  async persistNeverFilledRecord(rec: {
+    originalTradeId: string;
+    symbol: string;
+    assetClass: string;
+    strategy: string;
+    regime: string;
+    signalType: string;
+    pool: 'ideal' | 'rotational';
+    sourcePool?: string;
+    makerLimitPrice: number;
+    openedAt: number;
+    droppedAt: number;
+    chosenEntryMode?: 'taker' | 'maker';
+    entryFeeRate?: number;
+    // P19-B7.2c TWINS: a never-filled maker TWIN is a paired fill-rate observation.
+    mtTwin?: boolean;
+    mtPairId?: string;
+  }): Promise<void> {
+    const record = {
+      mtTwin: rec.mtTwin === true,
+      mtPairId: rec.mtPairId ?? null,
+      id: rec.originalTradeId, // keeps the vts_ prefix → passes the reader's id filter
+      source: 'vts',
+      resultType: 'never_filled', // TYPED discriminator (never the display string)
+      countsInAggregates: false,  // TYPED exclusion flag — aggregates/learning filter on this
+      neverFilled: true,
+      symbol: rec.symbol,
+      assetClass: rec.assetClass,
+      strategy: rec.strategy,
+      regime: rec.regime,
+      signalType: rec.signalType,
+      pool: rec.pool,
+      sourcePool: rec.sourcePool,
+      chosenEntryMode: rec.chosenEntryMode ?? 'maker',
+      entryFeeRate: rec.entryFeeRate,
+      makerLimitPrice: rec.makerLimitPrice,
+      entryPrice: null,  // never filled — there IS no entry
+      exitPrice: null,
+      grossProfit: null,
+      netProfit: null,
+      fees: null,
+      entryTime: rec.openedAt,
+      exitTime: rec.droppedAt, // the drop instant (satisfies the reader's exitTime cutoff)
+      status: 'closed',
+      exitReason: 'never_filled',
+      schemaVersion: '1.6.7',
+    };
+    await this.logTrade(record as any);
+  }
+
+  /**
+   * P19-B7.2c TWINS — persist a closed TWIN's outcome to the closed JSON store ONLY.
+   * Like persistNeverFilledRecord, this deliberately bypasses `closedTrades`, session
+   * metrics, telemetry, and every learning surface: a twin is the NON-chosen
+   * counterfactual leg, and its REAL outcome numbers exist solely for the
+   * maker-vs-taker comparison dataset (joined on mtPairId to its chosen sibling).
+   * TYPED flags: mtTwin=true + countsInAggregates=false. The comparison record carries
+   * the trade-through-floor caveat: sim maker fills require a strict trade-through, so
+   * measured fill rates are a conservative FLOOR (Langston — carried ON the record).
+   */
+  async persistTwinClosedRecord(rec: {
+    twinId: string;
+    mtPairId: string;
+    symbol: string;
+    assetClass: string;
+    strategy: string;
+    regime: string;
+    signalType: string;
+    pool: 'ideal' | 'rotational';
+    sourcePool?: string;
+    chosenEntryMode?: 'taker' | 'maker';
+    entryFeeRate?: number;
+    entryPrice: number;
+    exitPrice: number;
+    exitReason: string;
+    grossPnl: number;
+    netPnl: number;
+    dollarPnl: number;
+    positionSize: number;
+    openedAt: number;
+    closedAt: number;
+  }): Promise<void> {
+    const record = {
+      id: rec.twinId, // vts_..._twin — passes the reader's id prefix filter
+      source: 'vts',
+      mtTwin: true,               // TYPED twin tag
+      mtPairId: rec.mtPairId,     // join key to the chosen sibling
+      countsInAggregates: false,  // TYPED exclusion — never in win-rate/expectancy/ML
+      fillRateCaveat: 'trade_through_floor', // sim fill = conservative floor (on-record)
+      resultType: rec.exitReason === 'stop_hit' ? 'stop_loss'
+        : (rec.exitReason === 'target_hit' || rec.exitReason === 'trailing_stop_hit' || rec.exitReason === 'moonbag_timeout') ? 'take_profit'
+        : rec.exitReason === 'break_even_stop' ? 'break_even_stop'
+        : 'timeout',
+      exitReason: rec.exitReason,
+      symbol: rec.symbol,
+      assetClass: rec.assetClass,
+      strategy: rec.strategy,
+      regime: rec.regime,
+      signalType: rec.signalType,
+      pool: rec.pool,
+      sourcePool: rec.sourcePool,
+      chosenEntryMode: rec.chosenEntryMode,
+      entryFeeRate: rec.entryFeeRate,
+      entryPrice: rec.entryPrice,
+      exitPrice: rec.exitPrice,
+      grossProfit: rec.grossPnl,
+      netProfit: rec.netPnl,
+      dollarPnl: rec.dollarPnl,
+      positionSize: rec.positionSize,
+      entryTime: rec.openedAt,
+      exitTime: rec.closedAt,
+      status: 'closed',
+      schemaVersion: '1.6.7',
+    };
+    await this.logTrade(record as any);
+  }
+
   async persistRealPriceTrade(tradeData: {
     symbol: string;
     entryTime: number;

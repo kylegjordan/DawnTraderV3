@@ -151,6 +151,14 @@ export async function getClosedVTSTradesFromLogs(days: number = 7): Promise<Arra
   // trades (UI renders an em-dash). Entry-leg only.
   chosenEntryMode: string | null;
   entryFeeRate: number | null;
+  // P19-B7.2c: TYPED aggregates-exclusion flag. false for never-filled pending maker
+  // records AND closed TWINS (both visible in the closed table, EXCLUDED from
+  // win-rate/expectancy + ML learning; never-filled rows COUNT in the maker fill-rate
+  // denominator; twins feed the maker-vs-taker comparison joined on mtPairId).
+  // Aggregation + training queries filter on THIS, never on outcome strings.
+  countsInAggregates: boolean;
+  mtTwin: boolean;
+  mtPairId: string | null;
 }>> {
   const vtsDir = path.join(process.cwd(), 'logs', 'virtual_trades');
   const cutoffDate = Date.now() - (days * 24 * 60 * 60 * 1000);
@@ -177,7 +185,53 @@ export async function getClosedVTSTradesFromLogs(days: number = 7): Promise<Arra
           
           const exitTimestamp = new Date(exitTime).getTime();
           if (exitTimestamp < cutoffDate) continue;
-          
+
+          // ── P19-B7.2c: NEVER-FILLED pending maker records pass through EXPLICITLY —
+          // they have no fill (entry/exit null) so the completeness filter below would
+          // silently skip them, but Kyle wants them VISIBLE in the closed records.
+          // TYPED flags: resultType='never_filled' + countsInAggregates=false — the row
+          // is display-visible + counts in the maker fill-rate denominator, but is
+          // EXCLUDED from win-rate/expectancy aggregates + the ML learning set. Numeric
+          // fields are 0 (render-safe); the UI shows "Never filled — dropped" keyed on
+          // resultType, never on a display string.
+          if (trade.resultType === 'never_filled') {
+            trades.push({
+              symbol: trade.symbol,
+              assetClass: trade.assetClass || 'crypto_spot',
+              regime: trade.regime, strategy: trade.strategy,
+              signalType: trade.signalType, patternType: null,
+              pool: (trade.pool ?? 'rotational').toUpperCase?.() ?? trade.pool,
+              sourcePool: trade.sourcePool ?? 'unknown',
+              dollarValue: 0, quantity: 0,
+              entryPrice: trade.makerLimitPrice ?? 0, // the price the order RESTED at (informational)
+              exitPrice: 0, target: 0, stopLoss: 0,
+              resultType: 'never_filled',
+              countsInAggregates: false,
+              grossProfitValue: 0, grossProfitPercent: '0.00%', costs: 0,
+              netProfitValue: 0, netProfitPercent: '0.00%',
+              finalScore: 0, hybridScore: 0, expectedEdge: 0, regimeWeight: 0,
+              entryTime: new Date(trade.entryTime).toISOString(),
+              exitTime: new Date(exitTimestamp).toISOString(),
+              durationMinutes: Math.round((exitTimestamp - new Date(trade.entryTime).getTime()) / 60000),
+              globalRegime: null, pairFriction: null, globalFriction: null,
+              pairDirectionalBias: null, globalDirectionalBias: null,
+              pairDirectionalBiasScore: null, globalDirectionalBiasScore: null,
+              filterTier: null, tradeMode: 'TARGET', exitReason: 'never_filled',
+              ladderRungsHit: 0, originalStopPrice: null, latchTriggerPrice: null,
+              rungTargetHistory: null, pairIdHash: null,
+              regimeConfidenceRaw: null, macroModifierValue: null, phase: null,
+              phaseAgeSeconds: null, strategyPhaseWeight: null, regimeConfidenceModulated: null,
+              entryLiquidityValue: null, amrClassification: null, amrMode: null,
+              entryLiquidityKind: null,
+              chosenEntryMode: trade.chosenEntryMode ?? 'maker',
+              entryFeeRate: typeof trade.entryFeeRate === 'number' ? trade.entryFeeRate : null,
+              // A never-filled TWIN maker is itself fill-rate data (paired) — tag flows through.
+              mtTwin: trade.mtTwin === true,
+              mtPairId: typeof trade.mtPairId === 'string' ? trade.mtPairId : null,
+            });
+            continue;
+          }
+
           const entryPrice = trade.entryPrice || trade.signal?.entryPrice;
           const exitPrice = trade.exitPrice || trade.resolvedPrice;
           
@@ -304,6 +358,13 @@ export async function getClosedVTSTradesFromLogs(days: number = 7): Promise<Arra
             // P19-B7.2b (OBJ-B): maker/taker entry fee-mode read-back for the fee-mode column.
             chosenEntryMode: typeof trade.chosenEntryMode === 'string' ? trade.chosenEntryMode : null,
             entryFeeRate: typeof trade.entryFeeRate === 'number' ? trade.entryFeeRate : null,
+            // P19-B7.2c: normal filled-and-closed trades COUNT in all aggregates; a
+            // closed TWIN (complete outcome numbers, but the non-chosen counterfactual
+            // leg) is visible + comparison-joinable yet EXCLUDED — keyed on the TYPED
+            // mtTwin tag, never an outcome string.
+            countsInAggregates: trade.mtTwin === true ? false : true,
+            mtTwin: trade.mtTwin === true,
+            mtPairId: typeof trade.mtPairId === 'string' ? trade.mtPairId : null,
           });
         }
       } catch (err) {

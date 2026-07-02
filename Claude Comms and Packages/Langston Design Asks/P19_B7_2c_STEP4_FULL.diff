@@ -1,0 +1,1428 @@
+diff --git a/client/src/components/trading/active-trades-v2.tsx b/client/src/components/trading/active-trades-v2.tsx
+index e00b50aab..98b3ddd8c 100644
+--- a/client/src/components/trading/active-trades-v2.tsx
++++ b/client/src/components/trading/active-trades-v2.tsx
+@@ -128,6 +128,10 @@ interface ActiveTrade {
+   // P19-B7.2b (OBJ-C): the maker/taker entry fee-mode the position opened on.
+   chosenEntryMode?: string | null;
+   entryFeeRate?: number | string | null;
++  // P19-B7.2c: 'pending' = a resting maker order holding a slot, not yet filled.
++  state?: string;
++  makerLimitPrice?: string | number | null;
++  makerDeadline?: string | null;
+ }
+ 
+ interface PortfolioSummary {
+@@ -359,6 +363,13 @@ function TradeRow({
+             {strategyNames[trade.strategy] || trade.strategy}
+           </Badge>
+           {/* Directive 9.2: Trade Mode Indicator */}
++          {/* P19-B7.2c: a resting maker order shows PENDING (holds a slot, not filled)
++              until the real price trades through its limit or the deadline drops it. */}
++          {trade.state === 'pending' ? (
++            <span className="px-2 py-0.5 rounded text-xs font-bold bg-amber-100 text-amber-700 border border-amber-300">
++              PENDING
++            </span>
++          ) : (
+           <span className={cn(
+             "px-2 py-0.5 rounded text-xs font-bold",
+             trade.tradeMode === 'TRAILING_TAKE'
+@@ -367,6 +378,7 @@ function TradeRow({
+           )}>
+             {trade.tradeMode === 'TRAILING_TAKE' ? 'MOONBAG' : 'Targeting'}
+           </span>
++          )}
+         </div>
+       </td>
+ 
+diff --git a/client/src/components/trading/trade-history-tab.tsx b/client/src/components/trading/trade-history-tab.tsx
+index c1f8b165f..b1ce0daf9 100644
+--- a/client/src/components/trading/trade-history-tab.tsx
++++ b/client/src/components/trading/trade-history-tab.tsx
+@@ -824,10 +824,13 @@ export function TradeHistoryTab() {
+                                   trade.closeReason === 'trailing_stop_hit' && "bg-emerald-500/20 text-emerald-600 border-emerald-500/50",
+                                   trade.closeReason === 'moonbag_timeout' && "bg-amber-500/20 text-amber-600 border-amber-500/50",
+                                   trade.closeReason === 'break_even_stop' && "bg-slate-500/20 text-slate-600 border-slate-400/50",
+-                                  trade.closeReason === 'stop_hit' && "bg-red-500/20 text-red-600 border-red-500/50"
++                                  trade.closeReason === 'stop_hit' && "bg-red-500/20 text-red-600 border-red-500/50",
++                                  // P19-B7.2c: a dropped pending maker (visible, excluded from stats)
++                                  trade.closeReason === 'never_filled' && "bg-slate-500/20 text-slate-400 border-slate-500/40"
+                                 )}
+                               >
+                                 {!trade.closedAt ? 'Open' :
++                                 trade.closeReason === 'never_filled' ? 'Never filled — dropped' :
+                                  trade.closeReason === 'target_hit' ? 'Target' :
+                                  trade.closeReason === 'trailing_stop_hit' ? 'Trail' :
+                                  trade.closeReason === 'moonbag_timeout' ? 'M.Cap' :
+diff --git a/client/src/pages/machine-learning.tsx b/client/src/pages/machine-learning.tsx
+index 4e2b774e0..61b8169bd 100644
+--- a/client/src/pages/machine-learning.tsx
++++ b/client/src/pages/machine-learning.tsx
+@@ -73,6 +73,11 @@ interface OpenTrade {
+   // P19-B7.2b (OBJ-C): the maker/taker entry fee-mode the VTS trade opened on.
+   chosenEntryMode?: string | null;
+   entryFeeRate?: number | null;
++  // P19-B7.2c: 'pending' = a resting maker order awaiting fill (PENDING badge);
++  // mtTwin = the tagged non-chosen comparison leg (paired via mtPairId).
++  state?: string;
++  mtTwin?: boolean;
++  mtPairId?: string | null;
+ }
+ 
+ interface ClosedTrade {
+@@ -132,6 +137,12 @@ interface ClosedTrade {
+   // P19-B7.2b (OBJ-C): the maker/taker entry fee-mode the VTS trade opened on.
+   chosenEntryMode?: string | null;
+   entryFeeRate?: number | null;
++  // P19-B7.2c: 'never_filled' resultType = a dropped pending maker (visible, excluded
++  // from stats); mtTwin = the tagged non-chosen comparison leg; countsInAggregates =
++  // the TYPED exclusion flag.
++  mtTwin?: boolean;
++  mtPairId?: string | null;
++  countsInAggregates?: boolean;
+ }
+ 
+ type AdjustmentType =
+@@ -728,7 +739,19 @@ function OpenTradesTable({ trades }: { trades: OpenTrade[] }) {
+                   </td>
+                   {/* P19-B7.2b (OBJ-C): Entry Fee Mode (maker/taker) — NULL renders em-dash */}
+                   <td className="px-3 py-2 text-xs whitespace-nowrap">
+-                    {formatEntryFeeMode(trade.chosenEntryMode, trade.entryFeeRate)}
++                    <div className="flex flex-col gap-0.5">
++                      <span>{formatEntryFeeMode(trade.chosenEntryMode, trade.entryFeeRate)}</span>
++                      {/* P19-B7.2c: a resting maker order shows PENDING until it fills or drops */}
++                      {(trade as any).state === 'pending' && (
++                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-700 border border-amber-300 w-fit">PENDING</span>
++                      )}
++                      {/* P19-B7.2c (Kyle): which leg the decision service actually picked */}
++                      {(trade as any).mtTwin === true ? (
++                        <span className="text-[10px] text-muted-foreground">twin (not chosen)</span>
++                      ) : (trade as any).mtTwin === false && trade.chosenEntryMode ? (
++                        <span className="text-[10px] text-muted-foreground">chosen</span>
++                      ) : null}
++                    </div>
+                   </td>
+                   {/* B65.2: TEC State — moonbag mode + break-even lock visibility */}
+                   {/* B65.4 (2026-04-25): MOONBAG badge shows live ladder rung count (MB×N) */}
+@@ -1077,7 +1100,19 @@ function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
+                   </td>
+                   {/* P19-B7.2b (OBJ-C): Entry Fee Mode (maker/taker) — NULL renders em-dash */}
+                   <td className="px-3 py-2 text-xs whitespace-nowrap">
+-                    {formatEntryFeeMode(trade.chosenEntryMode, trade.entryFeeRate)}
++                    <div className="flex flex-col gap-0.5">
++                      <span>{formatEntryFeeMode(trade.chosenEntryMode, trade.entryFeeRate)}</span>
++                      {/* P19-B7.2c: a resting maker order shows PENDING until it fills or drops */}
++                      {(trade as any).state === 'pending' && (
++                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-700 border border-amber-300 w-fit">PENDING</span>
++                      )}
++                      {/* P19-B7.2c (Kyle): which leg the decision service actually picked */}
++                      {(trade as any).mtTwin === true ? (
++                        <span className="text-[10px] text-muted-foreground">twin (not chosen)</span>
++                      ) : (trade as any).mtTwin === false && trade.chosenEntryMode ? (
++                        <span className="text-[10px] text-muted-foreground">chosen</span>
++                      ) : null}
++                    </div>
+                   </td>
+                   {/* B65.2-HF2c: TEC State column on Closed — TARGET vs MOONBAG end-state */}
+                   {/* B65.4 (2026-04-25): MOONBAG badge shows ladder rung count (MB×N) when present */}
+@@ -1123,6 +1158,13 @@ function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
+                   <td className="px-3 py-2 text-center">
+                     {/* B65.2-HF2c: Moonbag state moved to a dedicated TEC State column.
+                         This cell keeps the expanded result mapping (Trail Stop / Moonbag Cap) only. */}
++                    {/* P19-B7.2c: a dropped pending maker — visible, keyed on the TYPED
++                        resultType (never a display string); excluded from stats/learning. */}
++                    {trade.resultType?.toLowerCase?.() === 'never_filled' ? (
++                      <Badge variant="outline" className="text-xs bg-slate-500/20 text-slate-400 border-slate-500/40">
++                        Never filled — dropped
++                      </Badge>
++                    ) : (
+                     <Badge variant="outline" className={`text-xs ${getResultBadgeColor(trade.resultType)}`}>
+                       {trade.resultType === 'TRAILING_STOP_HIT' || trade.resultType === 'MOONBAG_TIMEOUT' ? (
+                         <TrendingUp className="w-3 h-3 mr-1 inline" />
+@@ -1135,6 +1177,7 @@ function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
+                       )}
+                       {getResultLabel(trade.resultType)}
+                     </Badge>
++                    )}
+                   </td>
+                   <td className="px-3 py-2 text-right">
+                     <div className="flex flex-col gap-0.5">
+diff --git a/drizzle/migrations/2026-07-01-p19-b7-2c-pending-maker.sql b/drizzle/migrations/2026-07-01-p19-b7-2c-pending-maker.sql
+new file mode 100644
+index 000000000..17028f06f
+--- /dev/null
++++ b/drizzle/migrations/2026-07-01-p19-b7-2c-pending-maker.sql
+@@ -0,0 +1,75 @@
++-- P19-B7.2c — post-promotion PENDING maker-order fill lifecycle (paper + VTS).
++--
++-- Kyle model (LOCKED; SIMPLIFIED 2026-07-02): a maker-chosen promotion does NOT fill
++-- immediately — it rests as a PENDING open trade holding a slot and fills only on honest
++-- side-aware trade-through of the REAL price (buy: price<=limit). TIMEOUT = DROP, period
++-- (no convert re-evaluation — Kyle cut it; an unfilled maker after ~1h means price never
++-- came to us). Marketable-at-placement = the STORED gen-time taker_net_ev check (already
++-- on the rtb_signals row): >0 → open as taker now, else drop. A dropped/never-filled
++-- pending is recorded VISIBLY in the closed records ("never filled") but EXCLUDED from
++-- stats + learning. VTS additionally opens the NON-chosen leg as a tagged TWIN (pair id,
++-- shadow-style exemptions) for maker-vs-taker learning. Real Kraken resting order =
++-- Phase-21. All ADDs nullable/defaulted = safe online column-adds.
++
++BEGIN;
++
++-- ── (1) paper_sim_open_positions — pending-maker lifecycle + EV-snapshot columns ──────
++--   state             — 'open' (default; a normal filled position) | 'pending' (a maker
++--                       order resting, holding a slot, not yet filled). Filled/converted →
++--                       'open'; dropped → row removed (never a closed-trade).
++--   maker_limit_price — the resting maker limit (= the signal entry). The maker-FILL price.
++--   maker_deadline    — the hard-drop timeout instant (now + maker_max_pending_ms).
++ALTER TABLE paper_sim_open_positions
++  ADD COLUMN IF NOT EXISTS state             varchar(16) DEFAULT 'open',
++  ADD COLUMN IF NOT EXISTS maker_limit_price numeric(20,10),
++  ADD COLUMN IF NOT EXISTS maker_deadline    timestamp;
++
++-- ── (2) vts_open_trades — pending-maker typed columns (state col already exists, B-NEW-36)
++-- di/dbs/vol are already carried on the VTS OpenVirtualTrade record; only the maker
++-- resting-order fields are new here.
++ALTER TABLE vts_open_trades
++  ADD COLUMN IF NOT EXISTS maker_limit_price numeric(20,10),
++  ADD COLUMN IF NOT EXISTS maker_deadline    timestamp;
++
++-- ── (3) vts_open_trades — AMEND the state CHECK to allow 'pending' (closed=false) ────────
++-- BOTH classes (the maker/taker decision applies to crypto AND xStock; xStock's pending
++-- deadline is weekend-aware in code via isXstockMarketOpenUTC — NOT crypto-only). The
++-- weekend_suspended → xstock_spot scoping clause is preserved unchanged.
++ALTER TABLE vts_open_trades DROP CONSTRAINT IF EXISTS vts_open_trades_state_consistency;
++ALTER TABLE vts_open_trades
++  ADD CONSTRAINT vts_open_trades_state_consistency
++  CHECK (
++    (
++      (closed = false AND state IN ('open', 'weekend_suspended', 'pending'))
++      OR
++      (closed = true AND state = 'closed')
++    )
++    AND
++    (state <> 'weekend_suspended' OR asset_class = 'xstock_spot')
++  );
++
++-- ── (4) module_constants `maker_taker` — the hard-drop max-age knob + inert tier placeholder
++--   maker_max_pending_ms        — the HARD-DROP timeout (a pending maker older than this →
++--                                 convert valve). START-TIGHT ~1h (Kyle); calibrated Phase-25
++--                                 on real fill data. Load-time invariant (in code):
++--                                 maker_max_pending_ms >= maker_time_budget_ms (the soft T1
++--                                 window; existing knob, its NEW meaning documented in
++--                                 ADJUSTMENT_FRAMEWORK). fail-hard resolver (no hidden default).
++--   maker_late_fill_haircut_pct — INERT Phase-25 placeholder (=0 now): the tiered diminishing-
++--                                 returns adverse-selection haircut applied to a LATE maker
++--                                 fill. Seeded at 0 so it is provably inert (the OBJ-7 test
++--                                 asserts fill price == limit EXACTLY with this knob present) —
++--                                 Phase-25 calibrates it once real fill-latency data exists.
++INSERT INTO module_constants
++  (module_name, constant_name, value, asset_class, exchange, regime, strategy, updated_at, updated_by)
++VALUES
++  ('maker_taker', 'maker_max_pending_ms',        '3600000'::jsonb, 'crypto_spot', '*', '*', '*', NOW(), 'p19-b7-2c'),
++  ('maker_taker', 'maker_late_fill_haircut_pct', '0'::jsonb,       'crypto_spot', '*', '*', '*', NOW(), 'p19-b7-2c'),
++  ('maker_taker', 'twin_enabled',                '1'::jsonb,       'crypto_spot', '*', '*', '*', NOW(), 'p19-b7-2c'),
++
++  ('maker_taker', 'maker_max_pending_ms',        '3600000'::jsonb, 'xstock_spot', '*', '*', '*', NOW(), 'p19-b7-2c'),
++  ('maker_taker', 'maker_late_fill_haircut_pct', '0'::jsonb,       'xstock_spot', '*', '*', '*', NOW(), 'p19-b7-2c'),
++  ('maker_taker', 'twin_enabled',                '1'::jsonb,       'xstock_spot', '*', '*', '*', NOW(), 'p19-b7-2c')
++ON CONFLICT (module_name, exchange, asset_class, strategy, regime, constant_name) DO NOTHING;
++
++COMMIT;
+diff --git a/drizzle/migrations/MANIFEST.txt b/drizzle/migrations/MANIFEST.txt
+index 6ed8ad39e..da1e3fd7c 100644
+--- a/drizzle/migrations/MANIFEST.txt
++++ b/drizzle/migrations/MANIFEST.txt
+@@ -155,3 +155,4 @@
+ 2026-06-30-p19-b7-1-shadow-r-multiple.sql
+ 2026-07-01-p19-b7-2-maker-taker.sql
+ 2026-07-01-p19-b7-2b-fee-mode-columns.sql
++2026-07-01-p19-b7-2c-pending-maker.sql
+diff --git a/server/core/trading/pending-maker-logic.ts b/server/core/trading/pending-maker-logic.ts
+new file mode 100644
+index 000000000..69bb695eb
+--- /dev/null
++++ b/server/core/trading/pending-maker-logic.ts
+@@ -0,0 +1,61 @@
++/**
++ * P19-B7.2c — PURE pending-maker decision logic, shared by the paper monitor pre-pass
++ * (`paper-execution-engine._processPendingMaker`) and the VTS resolve pre-pass
++ * (`vts-runner.resolveOpenVirtualTrades`) so the two paths CANNOT drift (R2 parity).
++ *
++ * Model (Kyle, LOCKED + SIMPLIFIED 2026-07-02):
++ *  - FILL: honest side-aware trade-through of the REAL price — a resting BUY fills iff
++ *    price ≤ limit; a resting SELL iff price ≥ limit. Never optimistic.
++ *  - DROP: past the hard-drop deadline (`maker_max_pending_ms`) → dropped, period
++ *    (no convert re-evaluation).
++ *  - PRECEDENCE (R2): if a pending both trades through AND is past its deadline in the
++ *    SAME tick, FILL WINS (it filled as maker before the deadline).
++ *  - The tiered fill-quality knobs are INERT placeholders: a fill is ALWAYS at the
++ *    limit exactly (no haircut applied) until Phase-25 calibrates on real fill data.
++ */
++
++export type PendingSide = 'buy' | 'sell';
++export type PendingOutcome = 'fill' | 'drop' | 'rest';
++
++/** Side-aware honest trade-through: did the real price trade through the resting limit? */
++export function tradedThrough(side: PendingSide, currentPrice: number, limit: number): boolean {
++  if (!Number.isFinite(currentPrice) || !Number.isFinite(limit)) return false;
++  return side === 'buy' ? currentPrice <= limit : currentPrice >= limit;
++}
++
++/**
++ * Marketable-at-placement: the market is ALREADY at/through the limit the moment the
++ * maker order would be placed — a real post-only would REJECT. (Same comparator as the
++ * fill; named separately because the CONSEQUENCE differs: at placement it routes to the
++ * stored-taker check, at monitor time it is a fill.)
++ */
++export function isMarketableAtPlacement(side: PendingSide, currentPrice: number, limit: number): boolean {
++  return tradedThrough(side, currentPrice, limit);
++}
++
++/**
++ * One pending order, one tick → one outcome. FILL WINS over the deadline in the same
++ * tick (R2). A null/unavailable price can never fill; it can still hard-drop.
++ */
++export function evaluatePendingMaker(args: {
++  side: PendingSide;
++  currentPrice: number | null;
++  limit: number;
++  nowMs: number;
++  deadlineMs: number | null;
++}): PendingOutcome {
++  const { side, currentPrice, limit, nowMs, deadlineMs } = args;
++  if (currentPrice != null && tradedThrough(side, currentPrice, limit)) return 'fill'; // FILL WINS (R2)
++  if (deadlineMs != null && nowMs >= deadlineMs) return 'drop';
++  return 'rest';
++}
++
++/**
++ * The maker FILL price — ALWAYS the limit, exactly. The inert Phase-25 tier knobs
++ * (`maker_late_fill_haircut_pct`, seeded 0) are deliberately NOT inputs here: the
++ * OBJ-7 inert-tier test pins fill === limit so an accidental future wiring of the
++ * placeholder knobs is caught at CI, not in production fill data (Langston Q4 guard).
++ */
++export function makerFillPrice(limit: number): number {
++  return limit;
++}
+diff --git a/server/routes.ts b/server/routes.ts
+index 712ff6929..515658e93 100644
+--- a/server/routes.ts
++++ b/server/routes.ts
+@@ -12213,7 +12213,11 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
+           tradeMode: (pos as any).tradeMode || 'TARGET', // TARGET or TRAILING_TAKE (MOONBAG)
+           // P19-B7.2b (OBJ-B): maker/taker entry fee-mode for the fee-mode column.
+           chosenEntryMode: (pos as any).chosenEntryMode ?? null,
+-          entryFeeRate: (pos as any).entryFeeRate ?? null
++          entryFeeRate: (pos as any).entryFeeRate ?? null,
++          // P19-B7.2c: a resting maker order shows a PENDING badge (state='pending').
++          state: (pos as any).state ?? 'open',
++          makerLimitPrice: (pos as any).makerLimitPrice ?? null,
++          makerDeadline: (pos as any).makerDeadline ?? null
+         };
+       }));
+       
+@@ -12688,9 +12692,14 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
+       
+       // Phase 8.8.3-B3: Filter out ghost trades from analytics
+       // Ghost trades = closed trades without proper exit_price or close_reason
++      // P19-B7.2c: this ALSO (correctly) excludes closeReason='never_filled' rows —
++      // a dropped pending maker has NO exit price (it never opened), so it can never
++      // enter win-rate/expectancy here. The explicit closeReason check makes the
++      // exclusion typed + durable even if a future record carries a synthetic price.
+       const validTrades = allTrades.filter(trade => {
+         // Only consider properly closed trades (have closedAt, exit_price, and close_reason)
+         if (!trade.closedAt) return false;
++        if (trade.closeReason === 'never_filled') return false; // visible in the list, never in stats
+         const hasExitPrice = trade.exitPrice && parseFloat(trade.exitPrice.toString()) > 0;
+         const hasCloseReason = trade.closeReason && trade.closeReason.trim() !== '';
+         return hasExitPrice && hasCloseReason;
+diff --git a/server/services/maker-taker-config.ts b/server/services/maker-taker-config.ts
+index b31f7d904..fb218594a 100644
+--- a/server/services/maker-taker-config.ts
++++ b/server/services/maker-taker-config.ts
+@@ -38,10 +38,40 @@ export function resolveMakerTakerHaircut(
+ }
+ 
+ /**
+- * Resolve the per-class make-then-take ladder time budget (ms). The maker order
+- * rests up to this long before convert-safety fires (OBJ-4, in the RTB refresh).
+- * Tied to the conservative pFill — a short budget bounds non-fill exposure.
++ * Resolve the per-class expected-fill window (ms). P19-B7.2c re-purposed this as
++ * the SOFT tier/T1 telemetry boundary (a maker fill inside it = "filled fast");
++ * it no longer drives any order lifecycle. The HARD lifecycle timeout is
++ * resolveMakerMaxPendingMs below. (NEW meaning documented in ADJUSTMENT_FRAMEWORK.)
+  */
+ export function resolveMakerTimeBudgetMs(assetClass: AssetClass): number {
+   return getCachedNumberRequired('maker_taker', 'maker_time_budget_ms', classKey(assetClass));
+ }
++
++/**
++ * P19-B7.2c — the per-class HARD-DROP timeout (ms) for a post-promotion PENDING
++ * maker order (Kyle: ~1h crypto, timeout = DROPPED, period — no convert
++ * re-evaluation). Load-time invariant (Langston Q5): the hard-drop must not fire
++ * before the soft expected-fill window — incoherent config fails LOUDLY here
++ * (fail-hard, not clamp: a misconfig is a deploy-time bug, not a runtime guess).
++ */
++export function resolveMakerMaxPendingMs(assetClass: AssetClass): number {
++  const key = classKey(assetClass);
++  const maxPendingMs = getCachedNumberRequired('maker_taker', 'maker_max_pending_ms', key);
++  const timeBudgetMs = getCachedNumberRequired('maker_taker', 'maker_time_budget_ms', key);
++  if (maxPendingMs < timeBudgetMs) {
++    throw new Error(
++      `[P19-B7.2c][maker_taker] incoherent config for ${assetClass}: maker_max_pending_ms (${maxPendingMs}) < maker_time_budget_ms (${timeBudgetMs}) — the hard-drop cannot fire before the expected-fill window`,
++    );
++  }
++  return maxPendingMs;
++}
++
++/**
++ * P19-B7.2c — the VTS maker/taker TWIN kill-knob (per class; 1 = twinning on,
++ * 0 = off). DB-governed so twinning can be switched off without a deploy if the
++ * doubled VTS open volume misbehaves (Kyle). Numeric 1/0 by design — reuses the
++ * existing fail-hard number getter.
++ */
++export function resolveTwinEnabled(assetClass: AssetClass): boolean {
++  return getCachedNumberRequired('maker_taker', 'twin_enabled', classKey(assetClass)) === 1;
++}
+diff --git a/server/services/paper-execution-engine.ts b/server/services/paper-execution-engine.ts
+index a5f2a177a..d4bd082ae 100644
+--- a/server/services/paper-execution-engine.ts
++++ b/server/services/paper-execution-engine.ts
+@@ -119,6 +119,12 @@ import { evaluateXstockPriceLiveness } from '../asset_classes/xstock_spot/price-
+ // B-4.5: fees are DB-governed per asset class — resolved per symbol at the
+ // fill sites via the single cost-model merge (no static fee field).
+ import { getFrictionForAssetClass } from '../core/math/cost-model.js';
++// P19-B7.2c: the pending-maker hard-drop timeout (per-class, fail-hard, load-time invariant).
++import { resolveMakerMaxPendingMs } from './maker-taker-config.js';
++// P19-B7.2c (R3): the xStock hard-drop must not fire inside the weekend-closed window.
++import { isXstockMarketOpenUTC } from '../asset_classes/xstock_spot/market-hours.js';
++// P19-B7.2c: the shared PURE pending-maker fill/drop decision (paper+VTS parity — R2).
++import { evaluatePendingMaker, makerFillPrice, isMarketableAtPlacement } from '../core/trading/pending-maker-logic.js';
+ import { covarianceEngine } from '../utils/covariance-engine.js';
+ import { recordPaperTrade, type PaperTradeRecord } from './vts-live-comparison-audit.js';
+ import { evaluateTradeExpectancy } from '../core/calculations/expectancy.js';
+@@ -778,6 +784,62 @@ export class PaperExecutionEngine {
+     }
+   }
+ 
++  /**
++   * P19-B7.2c — process one PENDING maker position per monitor tick (Kyle model,
++   * SIMPLIFIED 2026-07-02). A pending is a resting maker order: it holds a slot but has
++   * no fill. Two outcomes, FILL WINS in the same tick (R2):
++   *  1. FILL — honest side-aware trade-through: the real price traded through the resting
++   *     limit (buy: price ≤ limit) → state 'pending'→'open' at the limit + the maker fee
++   *     already reserved at placement. The position then enters the normal exit path on
++   *     subsequent ticks.
++   *  2. HARD-DROP — past `maker_deadline` (~1h, `maker_max_pending_ms`) → DROPPED, period
++   *     (no convert re-evaluation — an unfilled maker buy means price never came to us).
++   *     The open position is deleted (slot freed) and its paper_sim_trades row is closed
++   *     as closeReason='never_filled' (the TYPED discriminator; visible in the closed
++   *     records with no P&L, EXCLUDED from win-rate/expectancy aggregates + learning,
++   *     but COUNTED in the maker fill-rate denominator).
++   *  R3: for xStock the hard-drop must NOT fire while the market is closed
++   *     (weekend window) — a shut book can't honestly fill, so the drop waits for the
++   *     first open tick (conservative approximation, documented in the scope).
++   */
++  private async _processPendingMaker(position: any, currentPrice: number): Promise<void> {
++    const limit = position.makerLimitPrice != null ? parseFloat(position.makerLimitPrice) : NaN;
++    if (!Number.isFinite(limit)) {
++      console.error(`[P19-B7.2c][PENDING_INVALID:${this.mode}] ${position.symbol} pending with no maker_limit_price — leaving untouched (investigate)`);
++      return;
++    }
++    // ONE outcome per tick via the shared PURE logic (paper + VTS parity by construction;
++    // side-aware comparator, FILL WINS over the deadline in the same tick — R2).
++    const side = (position.side ?? 'buy') as 'buy' | 'sell';
++    const deadlineMs = position.makerDeadline ? new Date(position.makerDeadline).getTime() : null;
++    const outcome = evaluatePendingMaker({ side, currentPrice, limit, nowMs: Date.now(), deadlineMs });
++    if (outcome === 'fill') {
++      await storage.updatePaperSimOpenPosition(this.mode, position.id, {
++        state: 'open',
++        currentPrice: currentPrice.toString(),
++        lastUpdated: new Date(),
++      } as any);
++      console.log(`[P19-B7.2c][MAKER_FILLED:${this.mode}] ${position.symbol}: price ${currentPrice} traded through limit ${limit} — pending→open at ${makerFillPrice(limit)} + maker fee (reserved at placement)`);
++      return;
++    }
++    if (outcome === 'drop') {
++      // R3: xStock — never fire the drop inside the weekend-closed window.
++      if ((position.assetClass ?? 'crypto_spot') === 'xstock_spot' && !isXstockMarketOpenUTC(position.symbol, new Date())) {
++        return; // market shut — wait for the first open tick
++      }
++      const tradeId = (position.metadata as any)?.tradeId;
++      if (tradeId) {
++        await storage.updatePaperSimTrade(this.mode, tradeId, {
++          closedAt: new Date(),
++          closeReason: 'never_filled', // TYPED discriminator — visible, excluded from aggregates/learning
++        } as any);
++      }
++      await storage.deletePaperSimOpenPosition(this.mode, position.id);
++      console.log(`[P19-B7.2c][MAKER_NEVER_FILLED:${this.mode}] ${position.symbol}: pending maker at ${limit} hit the hard-drop deadline unfilled — dropped (slot freed, never-filled record${tradeId ? '' : ' — no tradeId on metadata, position removed only'})`);
++    }
++    // 'rest' — still resting; nothing to do this tick.
++  }
++
+   private async checkOpenPositions(): Promise<void> {
+     // I7-ROOT-FIX: Track evaluation timing
+     this.lastEvaluateAt = Date.now();
+@@ -862,6 +924,15 @@ export class PaperExecutionEngine {
+         const lastTick = this.lastPriceTickTime.get(position.symbol) || now;
+         const diffMs = now - lastTick;
+         this.lastPriceTickTime.set(position.symbol, now);
++
++        // ── P19-B7.2c: PENDING maker pre-pass — a resting maker order holds a slot but
++        // has NO fill, so it never enters the TEC exit path. Fill (honest trade-through)
++        // wins over the deadline in the same tick (R2). Handled then `continue`d.
++        if ((position as any).state === 'pending') {
++          await this._processPendingMaker(position, currentPrice);
++          positionsEvaluated++;
++          continue;
++        }
+         
+         const tickEntry = {
+           symbol: position.symbol,
+@@ -1883,6 +1954,11 @@ export class PaperExecutionEngine {
+         // the gate falls back to its taker recompute (no behavior change).
+         chosenEntryMode: (signal.chosenEntryMode as 'taker' | 'maker' | undefined) ?? 'taker',
+         chosenNetEv: signal.chosenNetEv != null ? parseFloat(signal.chosenNetEv) : null,
++        // P19-B7.2c: the gen-time TAKER-leg netEV (produced by the kernel inside
++        // decideMakerTaker at signal-gen — taker-priced by construction). Read by the
++        // marketable-at-placement stored-taker check: if a maker order can't be rested
++        // (market already through the limit), takerNetEv>0 → open as taker now, else drop.
++        takerNetEv: signal.takerNetEv != null ? parseFloat(signal.takerNetEv) : null,
+         metadata: {
+           source: 'RTB_PROMOTION',
+           originalSignalId: signal.signalId,
+@@ -1925,7 +2001,7 @@ export class PaperExecutionEngine {
+     // promoted signal (already parsed string→number at the rtb-row→StrategySignal conversion).
+     // Optional → a non-promotion-path signal (FX5/orchestrator direct) simply has them undefined
+     // → kernel documented defaults.
+-    signal: StrategySignal & { quantity?: number; estimatedValue?: number; signalId?: string; diAtQueue?: number | null; dbsScoreAtQueue?: number | null; chosenEntryMode?: 'taker' | 'maker'; chosenNetEv?: number | null },
++    signal: StrategySignal & { quantity?: number; estimatedValue?: number; signalId?: string; diAtQueue?: number | null; dbsScoreAtQueue?: number | null; chosenEntryMode?: 'taker' | 'maker'; chosenNetEv?: number | null; takerNetEv?: number | null },
+     settings: TradingSettings,
+     cycleContext?: { portfolioValue: number; guardrails: GuardrailsV2 | null }
+   ): Promise<OpenOutcome> {
+@@ -2272,9 +2348,51 @@ export class PaperExecutionEngine {
+       }
+     }
+ 
++    // ── P19-B7.2c: post-promotion PENDING maker order (Kyle model, SIMPLIFIED 2026-07-02).
++    // A maker-chosen promotion does NOT fill now — it RESTS as a state='pending' position
++    // (holds a slot) at the maker limit (= the signal entry) until the real price trades
++    // through it (monitor pre-pass → 'open' at limit + maker fee) or the hard-drop deadline
++    // fires (→ DROPPED, period — no convert re-evaluation). EXCEPT: if the market is ALREADY
++    // through the limit at placement (best ask ≤ limit for a buy), a real post-only would
++    // REJECT — so run the stored-taker check instead: the gen-time takerNetEv (the kernel's
++    // taker leg inside decideMakerTaker — taker-priced by construction; gate is a gen
++    // snapshot ≤~30s stale via the promotion loop, the fill is live — documented
++    // approximation) → >0 falls through to the NORMAL taker fill below with the record
++    // flipped to taker (accounting-only; the EV kernel never reads the mode), else DROP
++    // (maker_marketable_dropped — a non-trade, never a closed-trade P&L).
++    let _b72cEffectiveMode: 'taker' | 'maker' = _b72ChosenMode;
++    let _b72cPendingMaker = false;
++    const _b72cLimit = signal.entryPrice;
++    if (_b72ChosenMode === 'maker') {
++      const _b72cBestAsk = _gate.snapshot.asks[0]?.price;
++      if (_b72cBestAsk != null && isMarketableAtPlacement('buy', _b72cBestAsk, _b72cLimit)) {
++        const _b72cStoredTakerEv = signal.takerNetEv;
++        if (_b72cStoredTakerEv != null && _b72cStoredTakerEv > 0) {
++          _b72cEffectiveMode = 'taker';
++          console.log(`[P19-B7.2c][MARKETABLE_TAKER_FALLBACK:${this.mode}] ${signal.symbol}: maker limit ${_b72cLimit} already marketable (bestAsk=${_b72cBestAsk}) — stored takerNetEv=${_b72cStoredTakerEv.toFixed(6)}>0 → opening as taker now`);
++        } else {
++          console.log(`[P19-B7.2c][MAKER_MARKETABLE_DROPPED:${this.mode}] ${signal.symbol}: maker limit ${_b72cLimit} already marketable (bestAsk=${_b72cBestAsk}) and stored takerNetEv=${_b72cStoredTakerEv ?? 'null'} not positive — dropped (non-trade)`);
++          rtbMetricsService.recordOpenFailed(signal.symbol, signal.strategy, 'MAKER_MARKETABLE_DROPPED', 'maker limit marketable at placement; stored taker EV not positive');
++          return { opened: false, stage: 'MAKER_MARKETABLE_DROPPED', reason: 'maker marketable at placement; taker EV not positive' };
++        }
++      } else {
++        _b72cPendingMaker = true;
++      }
++    }
++
+     // P19-B4b.1: entry fill via the DEPTH-WALKED OrderPlacer port — the placer walks the
+     // gate's ask snapshot → VWAP fill (replaces the flat 0.05% slippage). `partial` = the
+     // book thinned between gate and fill (size the position down); `rejected` = no fillable book.
++    // P19-B7.2c: SKIPPED for a pending maker — no fill happens now; the position rests at
++    // the limit with the maker fee RESERVED (charged only if/when the monitor pre-pass fills it).
++    let actualEntryPrice: number;
++    let entryFee: number;
++    let totalSlippage: number;
++    if (_b72cPendingMaker) {
++      actualEntryPrice = _b72cLimit;
++      entryFee = _b72cLimit * quantity * getFrictionForAssetClass(_openClass).feeRateMaker;
++      totalSlippage = 0; // a maker fill at the resting limit pays no taker slippage
++    } else {
+     const _openFill = await this.orderPlacer.openOrder({
+       symbol: signal.symbol, side: 'buy', quantity, intendedPrice: signal.entryPrice,
+       mode: this.mode, assetClass: _openClass, bookAsks: _gate.snapshot.asks,
+@@ -2304,10 +2422,11 @@ export class PaperExecutionEngine {
+       rtbMetricsService.recordOpenFailed(signal.symbol, signal.strategy, 'FILL_REJECTED', 'filled quantity = 0');
+       return { opened: false, stage: 'FILL_REJECTED', reason: 'filled quantity = 0' };
+     }
+-    const actualEntryPrice = _openFill.fillPrice;
++    actualEntryPrice = _openFill.fillPrice;
++    entryFee = _openFill.feeQuote;
++    totalSlippage = _openFill.slippageQuote;
++    }
+     const positionValue = actualEntryPrice * quantity;
+-    const entryFee = _openFill.feeQuote;
+-    const totalSlippage = _openFill.slippageQuote;
+ 
+     console.log(`  Quantity: ${quantity.toFixed(4)}, Position Value: $${positionValue.toFixed(2)}`);
+     console.log(`  Entry Slippage: $${totalSlippage.toFixed(2)}, Entry Fee: $${entryFee.toFixed(2)}`);
+@@ -2458,7 +2577,9 @@ export class PaperExecutionEngine {
+       // actual entry fill by construction (this code doesn't run until active trading is ON,
+       // which is after B7.2c). Entry-leg only — the exit pays taker for both classes today.
+       const _b72Friction = getFrictionForAssetClass(_tradeClass);
+-      const _b72EntryFeeRate = _b72ChosenMode === 'maker' ? _b72Friction.feeRateMaker : _b72Friction.feeRateTaker;
++      // P19-B7.2c: keyed on the EFFECTIVE mode — the marketable-at-placement taker
++      // fallback flips maker→taker, and the record must show the fee actually paid.
++      const _b72EntryFeeRate = _b72cEffectiveMode === 'maker' ? _b72Friction.feeRateMaker : _b72Friction.feeRateTaker;
+ 
+       const trade = await storage.createPaperSimTrade(this.mode, {
+         symbol: signal.symbol,
+@@ -2488,7 +2609,7 @@ export class PaperExecutionEngine {
+         strategyPhaseWeight: _b67_2_1_phaseWeight,
+         regimeConfidenceModulated: _b67_2_1_modulatedConf,
+         // P19-B7.2b (OBJ-B): the maker/taker entry fee-mode + per-side rate.
+-        chosenEntryMode: _b72ChosenMode,
++        chosenEntryMode: _b72cEffectiveMode,
+         entryFeeRate: _b72EntryFeeRate.toString(),
+         metadata: signal.metadata || {}
+       });
+@@ -2569,8 +2690,17 @@ export class PaperExecutionEngine {
+         // Batch 19E: Persist sourcePool from signal metadata
+         sourcePool: (signal as any)?.metadata?.sourcePool || (signal as any)?.sourcePool || null,
+         // P19-B7.2b (OBJ-B): the maker/taker entry fee-mode + per-side rate.
+-        chosenEntryMode: _b72ChosenMode,
++        chosenEntryMode: _b72cEffectiveMode,
+         entryFeeRate: _b72EntryFeeRate.toString(),
++        // P19-B7.2c: a maker-chosen promotion RESTS as state='pending' at the limit,
++        // holding a slot, until the monitor pre-pass fills it (real trade-through) or
++        // the hard-drop deadline fires (dropped — never a closed trade). Taker/filled
++        // positions keep the default state='open' with NULL maker fields.
++        ...(_b72cPendingMaker ? {
++          state: 'pending',
++          makerLimitPrice: _b72cLimit.toString(),
++          makerDeadline: new Date(Date.now() + resolveMakerMaxPendingMs(_openClass)),
++        } : {}),
+         metadata: {
+           ...signal.metadata,
+           tradeId: trade.id,
+diff --git a/server/services/rtb-metrics-service.ts b/server/services/rtb-metrics-service.ts
+index e869f4754..fe494836a 100644
+--- a/server/services/rtb-metrics-service.ts
++++ b/server/services/rtb-metrics-service.ts
+@@ -45,6 +45,7 @@ export type OpenFailStage =
+   | 'DEPTH_GATE'          // 24/5 book-depth-sufficiency gate (no_book/stale/thin/insufficient)
+   | 'LIVENESS_GATE'       // P19-B6.6 (#236): xStock price-discovery-liveness (flat_last/no_data/sparse/timeout)
+   | 'FILL_REJECTED'       // depth-walked fill rejected / non-filled / zero qty
++  | 'MAKER_MARKETABLE_DROPPED' // P19-B7.2c: maker limit already marketable at placement + stored taker EV not positive → dropped (non-trade)
+   | 'DUP_POSITION'        // duplicate-position guard
+   | 'TRADE_INSERT_ERROR'  // DB trade/position insert threw
+   | 'OTHER';
+@@ -158,7 +159,7 @@ class RtbMetricsService {
+     // P19-B6.5e: initialize the open-stage failure breakdown
+     const stages: OpenFailStage[] = [
+       'DRY_RUN', 'EV_REJECT', 'SIZING_INVALID', 'UNCLASSIFIABLE', 'DEPTH_GATE',
+-      'FILL_REJECTED', 'DUP_POSITION', 'TRADE_INSERT_ERROR', 'OTHER'
++      'FILL_REJECTED', 'MAKER_MARKETABLE_DROPPED', 'DUP_POSITION', 'TRADE_INSERT_ERROR', 'OTHER'
+     ];
+     for (const stage of stages) {
+       this.stats.openFailedByStage[stage] = 0;
+diff --git a/server/services/vts-runner.ts b/server/services/vts-runner.ts
+index b06f614e9..ba0dc0610 100644
+--- a/server/services/vts-runner.ts
++++ b/server/services/vts-runner.ts
+@@ -70,7 +70,9 @@ import { getCachedCostMetrics, computeNetGeometry, getFrictionForAssetClass } fr
+ // function the active path calls — F6) + its per-class DB-governed haircut resolver.
+ // The VTS calls it before its Net-EV gate so VTS evaluates on best-of-both too.
+ import { decideMakerTaker, entryUrgencyClassForFamily } from '../core/math/maker-taker-decision.js';
+-import { resolveMakerTakerHaircut } from './maker-taker-config.js';
++import { resolveMakerTakerHaircut, resolveMakerMaxPendingMs, resolveTwinEnabled } from './maker-taker-config.js';
++// P19-B7.2c: the shared PURE pending-maker fill/drop decision (paper+VTS parity — R2).
++import { evaluatePendingMaker, makerFillPrice, isMarketableAtPlacement } from '../core/trading/pending-maker-logic.js';
+ import { compareLatestSessions, savePaperSessionTrades, getPaperSessionTrades } from './vts-live-comparison-audit.js';
+ import { SCORE_WEIGHTS } from '../config/score-weights.config.js';
+ import { calculatePairRegime, getRegimeWeight, calculateRegimeScore, getNormalizedRegimeWithDetails } from '../core/metrics/market-regime.js';
+@@ -590,6 +592,20 @@ interface OpenVirtualTrade {
+   // + the vts_trades_*.json closed payload for the fee-mode UI column.
+   chosenEntryMode?: 'taker' | 'maker';
+   entryFeeRate?: number;
++  // P19-B7.2c: pending-maker lifecycle. A maker-chosen VTS trade is born state='pending'
++  // resting at makerLimitPrice (= entryPrice) until the resolve pre-pass fills it on an
++  // honest trade-through or drops it past makerDeadline (epoch ms; never a closed trade).
++  makerLimitPrice?: number;
++  makerDeadline?: number;
++  // P19-B7.2c TWINS (Kyle): the NON-chosen maker/taker leg opened alongside the chosen
++  // one for paired learning. mtTwin=true marks the twin (TYPED tag — the exemption
++  // predicate is "mtTwin === true", so an untagged/normal trade can NEVER inherit the
++  // twin exemptions; non-twins simply omit the field). mtPairId = the CHOSEN trade's id
++  // (the join key for the maker-vs-taker comparison). Twins are EXEMPT from the slot cap
++  // + per-underlying cap, EXCLUDED from main stats/ML (countsInAggregates=false on their
++  // closed records), and killable via the maker_taker.twin_enabled DB knob.
++  mtTwin?: boolean;
++  mtPairId?: string;
+   entryPrice: number;
+   stopLoss: number;
+   takeProfit: number;
+@@ -1872,7 +1888,11 @@ async function generatePhase10Signal(
+   
+   // Check if we can accept more open trades
+   const maxOpenTrades = getMaxOpenTrades();
+-  if (openVirtualTrades.size >= maxOpenTrades) {
++  // P19-B7.2c: the slot cap counts REAL (non-twin) trades only — a tagged twin must
++  // never consume a slot a real trade could use (Langston twin-integrity item; the
++  // predicate is the TYPED mtTwin tag, so an untagged trade can never be exempted).
++  const _nonTwinOpenCount = Array.from(openVirtualTrades.values()).filter((t) => t.mtTwin !== true).length;
++  if (_nonTwinOpenCount >= maxOpenTrades) {
+     console.log(`[11.6][VTS] Max open trades reached (${maxOpenTrades}), skipping new trade for ${symbol}`);
+     // Batch 50: Mark as post-signal rejection so caller doesn't count as strategy null
+     setNullReason('max_open_trades');
+@@ -1885,7 +1905,8 @@ async function generatePhase10Signal(
+   // bypasses the cap during the A/B observation window. Same gate as the
+   // active-trading path in signal-orchestrator.
+   try {
+-    const openSymbols = Array.from(openVirtualTrades.values()).map((t) => t.symbol);
++    // P19-B7.2c: twins excluded from the clustering/per-underlying gate too (typed tag).
++    const openSymbols = Array.from(openVirtualTrades.values()).filter((t) => t.mtTwin !== true).map((t) => t.symbol);
+     const capDecision = await checkPerUnderlyingCap(symbol, openSymbols);
+     console.log(formatDecisionLog(symbol, capDecision));
+     if (!capDecision.allowed) {
+@@ -1912,6 +1933,31 @@ async function generatePhase10Signal(
+     return null;
+   }
+ 
++  // ── P19-B7.2c: pending-maker bifurcation (parity with the paper placement, Kyle
++  // model SIMPLIFIED 2026-07-02). A maker-chosen VTS trade does NOT open filled — it
++  // rests as state='pending' at the limit (= entry) until the resolve pre-pass fills it
++  // on an honest trade-through or drops it at the hard-deadline. EXCEPT marketable-at-
++  // placement (current price already ≤ the buy limit — a real post-only would REJECT):
++  // run the stored-taker check on the decision's OWN taker leg (fresher than paper's —
++  // it was computed seconds ago in this same call): takerNetEV>0 → open as TAKER now
++  // (effective-mode flip, accounting-only), else skip the trade entirely (non-trade).
++  let _vtsEffectiveMode: 'taker' | 'maker' = _vtsMtDecision.chosenMode;
++  let _vtsPendingMaker = false;
++  if (_vtsMtDecision.chosenMode === 'maker') {
++    if (isMarketableAtPlacement('buy', currentMarketPrice, entryPrice)) {
++      if (_vtsMtDecision.takerNetEV > 0) {
++        _vtsEffectiveMode = 'taker';
++        console.log(`[P19-B7.2c][VTS][MARKETABLE_TAKER_FALLBACK] ${symbol}/${strategy}: maker limit ${entryPrice} already marketable (price=${currentMarketPrice}) — takerNetEV=${_vtsMtDecision.takerNetEV.toFixed(6)}>0 → opening as taker now`);
++      } else {
++        console.log(`[P19-B7.2c][VTS][MAKER_MARKETABLE_DROPPED] ${symbol}/${strategy}: maker limit ${entryPrice} marketable (price=${currentMarketPrice}) and takerNetEV=${_vtsMtDecision.takerNetEV.toFixed(6)} not positive — dropped (non-trade)`);
++        setNullReason('maker_marketable_dropped');
++        return null;
++      }
++    } else {
++      _vtsPendingMaker = true;
++    }
++  }
++
+   const openTrade: OpenVirtualTrade = {
+     id: tradeId,
+     symbol,
+@@ -1919,8 +1965,16 @@ async function generatePhase10Signal(
+     // P19-B7.2b (OBJ-A/B): carry the shared maker/taker decision + the actual entry
+     // fee rate onto the VTS trade record → vts_open_trades + the vts_trades_*.json
+     // closed payload → the fee-mode UI column.
+-    chosenEntryMode: _vtsMtDecision.chosenMode,
+-    entryFeeRate: _vtsEntryFeeRate,
++    // P19-B7.2c: EFFECTIVE mode (the marketable fallback flips maker→taker; the fee
++    // shown is the fee actually paid). A pending maker is born state='pending' resting
++    // at the limit with the maker fee; taker/filled trades keep the default 'open'.
++    chosenEntryMode: _vtsEffectiveMode,
++    entryFeeRate: _vtsEffectiveMode === 'maker' ? _vtsFriction.feeRateMaker : _vtsFriction.feeRateTaker,
++    ...(_vtsPendingMaker ? {
++      state: 'pending' as const,
++      makerLimitPrice: entryPrice,
++      makerDeadline: Date.now() + resolveMakerMaxPendingMs(tradeAssetClass),
++    } : {}),
+     entryPrice,
+     stopLoss: adjustedStopLoss,       // 11.7S: Mode-adjusted stop loss
+     takeProfit: adjustedTakeProfit,   // 11.7S: Mode-adjusted take profit
+@@ -2031,6 +2085,50 @@ async function generatePhase10Signal(
+     return null;
+   }
+   openVirtualTrades.set(tradeId, openTrade);
++
++  // ── P19-B7.2c TWINS (Kyle): open the NON-chosen maker/taker leg as a TAGGED TWIN so
++  // the VTS learns the paired comparison (measured fill rates + outcome deltas + a
++  // decision-service report card — the haircut-calibration prior, pre-live). SAME entry
++  // conventions as a chosen leg of that mode (apples-to-apples): a taker twin opens
++  // filled at the signal entry + taker fee; a maker twin rests pending at the limit +
++  // deadline. Twins are TAGGED (mtTwin/mtPairId), slot/cap-EXEMPT (the count filters
++  // exclude them), excluded from main stats/ML at close, and DB-killable
++  // (maker_taker.twin_enabled). SKIPPED (degenerate, logged) when: the twin would be a
++  // marketable maker (can't honestly rest), or the chosen leg was itself the marketable
++  // taker-fallback. Twin failure NEVER blocks the real trade (try/catch).
++  try {
++    if (resolveTwinEnabled(tradeAssetClass)) {
++      const _twinMode: 'taker' | 'maker' | null =
++        _vtsPendingMaker ? 'taker'
++        : (_vtsMtDecision.chosenMode === 'taker' ? 'maker' : null); // null = marketable-fallback chosen leg → degenerate
++      if (_twinMode === 'maker' && isMarketableAtPlacement('buy', currentMarketPrice, entryPrice)) {
++        console.log(`[P19-B7.2c][VTS][TWIN_SKIPPED] ${symbol}/${strategy}: maker twin would be marketable at placement — no honest rest possible`);
++      } else if (_twinMode == null) {
++        console.log(`[P19-B7.2c][VTS][TWIN_SKIPPED] ${symbol}/${strategy}: chosen leg was the marketable taker-fallback — comparison degenerate`);
++      } else {
++        const twinId = `${tradeId}_twin`;
++        const twinTrade: OpenVirtualTrade = {
++          ...openTrade,
++          id: twinId,
++          mtTwin: true,
++          mtPairId: tradeId,
++          chosenEntryMode: _twinMode,
++          entryFeeRate: _twinMode === 'maker' ? _vtsFriction.feeRateMaker : _vtsFriction.feeRateTaker,
++          ...(_twinMode === 'maker'
++            ? { state: 'pending' as const, makerLimitPrice: entryPrice, makerDeadline: Date.now() + resolveMakerMaxPendingMs(tradeAssetClass) }
++            : { state: 'open' as const, makerLimitPrice: undefined, makerDeadline: undefined }),
++        };
++        const { insertOpenTrade } = await import('./vts-trade-persistence.js');
++        await insertOpenTrade(twinTrade as any);
++        openVirtualTrades.set(twinId, twinTrade);
++        const _twinCount = Array.from(openVirtualTrades.values()).filter((t) => t.mtTwin === true).length;
++        console.log(`[P19-B7.2c][VTS][TWIN_OPENED] ${symbol}/${strategy}: ${_twinMode} twin ${twinId} paired to chosen ${_vtsEffectiveMode} (open twins now: ${_twinCount})`);
++      }
++    }
++  } catch (twinErr) {
++    console.error(`[P19-B7.2c][VTS][TWIN_FAIL] ${symbol}/${strategy}: twin open failed (real trade unaffected):`, twinErr instanceof Error ? twinErr.message : twinErr);
++  }
++
+   // Batch 47f15: Record setup hash to prevent identical re-entry
+   lastSetupHash.set(`${symbol}:${strategy}`, computeSetupHash(entryPrice, stopLoss, takeProfit));
+   // Directive 11.8C: Enhanced entry logging with execution context
+@@ -2724,6 +2822,60 @@ async function resolveOpenVirtualTrades(): Promise<{
+     const priceData = priceDataMap.get(trade.symbol, trade.assetClass);
+     const currentPrice = priceData && priceData.price > 0 ? priceData.price : null;
+ 
++    // ── P19-B7.2c: PENDING maker pre-pass (parity with paper's _processPendingMaker).
++    // A resting maker order holds a slot but has NO fill — it never enters the TEC exit
++    // path. FILL WINS over the deadline in the same tick (R2). VTS trades are long-only
++    // by construction (buy side), so the trade-through comparator is price ≤ limit.
++    if (trade.state === 'pending') {
++      const _pLimit = trade.makerLimitPrice;
++      if (_pLimit == null || !Number.isFinite(_pLimit)) {
++        console.error(`[P19-B7.2c][VTS][PENDING_INVALID] ${tradeId} pending with no makerLimitPrice — leaving untouched (investigate)`);
++        continue;
++      }
++      // ONE outcome per tick via the shared PURE logic (same module as paper — R2 parity).
++      const _pOutcome = evaluatePendingMaker({
++        side: 'buy', // VTS trades are long-only by construction
++        currentPrice, limit: _pLimit, nowMs: now, deadlineMs: trade.makerDeadline ?? null,
++      });
++      if (_pOutcome === 'fill') {
++        trade.state = 'open';
++        const { markPendingMakerFilled } = await import('./vts-trade-persistence.js');
++        await markPendingMakerFilled(tradeId);
++        console.log(`[P19-B7.2c][VTS][MAKER_FILLED] ${trade.symbol}: price ${currentPrice} traded through limit ${_pLimit} — pending→open at ${makerFillPrice(_pLimit)} + maker fee`);
++        continue; // fills this tick; exit-eval starts next cycle
++      }
++      if (_pOutcome === 'drop') {
++        // R3: xStock — never fire the drop inside the weekend-closed window.
++        if (trade.assetClass === 'xstock_spot') {
++          const { isXstockMarketOpenUTC } = await import('../asset_classes/xstock_spot/market-hours.js');
++          if (!isXstockMarketOpenUTC(trade.symbol, new Date())) continue; // shut book — wait for the first open tick
++        }
++        openVirtualTrades.delete(tradeId);
++        const { markOpenTradeClosed } = await import('./vts-trade-persistence.js');
++        await markOpenTradeClosed(tradeId);
++        await vtsService.persistNeverFilledRecord({
++          originalTradeId: tradeId,
++          symbol: trade.symbol,
++          assetClass: trade.assetClass,
++          strategy: trade.strategy,
++          regime: trade.regime,
++          signalType: trade.signalType,
++          pool: trade.pool,
++          sourcePool: trade.sourcePool,
++          makerLimitPrice: _pLimit,
++          openedAt: trade.openedAt,
++          droppedAt: now,
++          chosenEntryMode: trade.chosenEntryMode,
++          entryFeeRate: trade.entryFeeRate,
++          mtTwin: trade.mtTwin,
++          mtPairId: trade.mtPairId,
++        });
++        console.log(`[P19-B7.2c][VTS][MAKER_NEVER_FILLED] ${trade.symbol}: pending maker at ${_pLimit} hit the hard-drop deadline unfilled — dropped (slot freed, never-filled record)`);
++        continue;
++      }
++      continue; // still resting — no exit eval for a position with no fill
++    }
++
+     // B79.TEC (2026-05-08): assetClass MUST come from the trade record,
+     // not a hardcoded literal. OpenVirtualTrade.assetClass is populated at
+     // open via resolveAssetClass(symbol, exchange) (vts-runner:1733). No
+@@ -2925,7 +3077,48 @@ async function resolveOpenVirtualTrades(): Promise<{
+     
+     // Calculate dollar P&L based on position size
+     const dollarPnl = trade.positionSize * netPnl;
+-    
++
++    // ── P19-B7.2c TWINS: a closing TWIN takes the SHORT cascade — its outcome is
++    // recorded to the closed JSON store (the maker-vs-taker comparison record, tagged
++    // mtTwin/mtPairId + countsInAggregates=false) and NOTHING ELSE: no
++    // phase10SessionTrades, no telemetry, no persistRealPriceTrade (closedTrades/ML/
++    // session metrics), no exit-decision archive, no outcome feedback — a twin must
++    // never leak into win-rate, expectancy, or any learning surface (Langston Q6-class
++    // integrity; the comparison reader keys on mtPairId).
++    if ((trade as any).mtTwin === true) {
++      openVirtualTrades.delete(id);
++      try {
++        const { markOpenTradeClosed } = await import('./vts-trade-persistence.js');
++        await markOpenTradeClosed(id);
++        await vtsService.persistTwinClosedRecord({
++          twinId: id,
++          mtPairId: (trade as any).mtPairId,
++          symbol: trade.symbol,
++          assetClass: trade.assetClass,
++          strategy: trade.strategy,
++          regime: trade.regime,
++          signalType: trade.signalType,
++          pool: trade.pool,
++          sourcePool: trade.sourcePool,
++          chosenEntryMode: trade.chosenEntryMode,
++          entryFeeRate: trade.entryFeeRate,
++          entryPrice: trade.entryPrice,
++          exitPrice,
++          exitReason,
++          grossPnl,
++          netPnl,
++          dollarPnl,
++          positionSize: trade.positionSize,
++          openedAt: trade.openedAt,
++          closedAt: now,
++        });
++        console.log(`[P19-B7.2c][VTS][TWIN_CLOSED] ${trade.symbol} twin ${id} (pair ${(trade as any).mtPairId}): ${exitReason} netPnl=${(netPnl * 100).toFixed(2)}% — comparison record written, no stats/ML touch`);
++      } catch (twinCloseErr) {
++        console.error(`[P19-B7.2c][VTS][TWIN_CLOSE_FAIL] ${id}:`, twinCloseErr instanceof Error ? twinCloseErr.message : twinCloseErr);
++      }
++      continue;
++    }
++
+     // Create completed trade record
+     const closedTradeRecord: Phase10TradeRecord = {
+       symbol: trade.symbol,
+@@ -5081,6 +5274,11 @@ export async function getOpenVirtualTradesForML(): Promise<Array<{
+   // NULL for pre-B7.2b trades (UI renders an em-dash). Entry-leg only.
+   chosenEntryMode: 'taker' | 'maker' | null;
+   entryFeeRate: number | null;
++  // P19-B7.2c: 'pending' = a resting maker order (PENDING badge); mtTwin/mtPairId =
++  // the tagged non-chosen twin (the "chosen"/"twin" line under Entry Fee Mode).
++  state: string;
++  mtTwin: boolean;
++  mtPairId: string | null;
+ }>> {
+   const now = Date.now();
+   const trades: Array<any> = [];
+@@ -5192,6 +5390,10 @@ export async function getOpenVirtualTradesForML(): Promise<Array<{
+       // P19-B7.2b (OBJ-B): maker/taker entry fee-mode for the fee-mode column.
+       chosenEntryMode: trade.chosenEntryMode ?? null,
+       entryFeeRate: trade.entryFeeRate ?? null,
++      // P19-B7.2c: PENDING badge + chosen/twin line.
++      state: trade.state ?? 'open',
++      mtTwin: trade.mtTwin === true,
++      mtPairId: trade.mtPairId ?? null,
+       dollarValue: parseFloat(tradeDollarValue.toFixed(2)),  // Directive 11.6H: Fixed USD exposure
+       quantity: parseFloat(tradeQuantity.toFixed(6)),        // Directive 11.6H: Variable coin units
+       entryPrice: trade.entryPrice,
+diff --git a/server/services/vts-service.ts b/server/services/vts-service.ts
+index 0ff664f45..555a0aa96 100644
+--- a/server/services/vts-service.ts
++++ b/server/services/vts-service.ts
+@@ -708,6 +708,135 @@ export class VTSService extends EventEmitter {
+    * Ensures ML pipeline receives VTS_REAL_PRICE trades
+    * @returns Object with persisted=true and mlTriggered=true if ML calibration was triggered
+    */
++  /**
++   * P19-B7.2c — persist a NEVER-FILLED pending maker record to the closed JSON store
++   * ONLY. This is deliberately NOT persistRealPriceTrade: a dropped pending never
++   * opened, has no fill and no P&L — so it must NOT enter `closedTrades` (ML
++   * calibration reads it), session metrics, or any trade-outcome learning surface
++   * (a phantom flat trade poisons win-rate AND mislabels training data — Langston Q6).
++   * It IS written to the vts_trades_*.json store so the Closed Simulated Trades UI can
++   * show it (Kyle: visible ≠ counted), flagged with the TYPED discriminators
++   * resultType='never_filled' + countsInAggregates=false. It COUNTS in the maker
++   * fill-rate/report-card denominator (that's its purpose) — that reader keys on
++   * resultType, not on the excluded P&L aggregates.
++   */
++  async persistNeverFilledRecord(rec: {
++    originalTradeId: string;
++    symbol: string;
++    assetClass: string;
++    strategy: string;
++    regime: string;
++    signalType: string;
++    pool: 'ideal' | 'rotational';
++    sourcePool?: string;
++    makerLimitPrice: number;
++    openedAt: number;
++    droppedAt: number;
++    chosenEntryMode?: 'taker' | 'maker';
++    entryFeeRate?: number;
++    // P19-B7.2c TWINS: a never-filled maker TWIN is a paired fill-rate observation.
++    mtTwin?: boolean;
++    mtPairId?: string;
++  }): Promise<void> {
++    const record = {
++      mtTwin: rec.mtTwin === true,
++      mtPairId: rec.mtPairId ?? null,
++      id: rec.originalTradeId, // keeps the vts_ prefix → passes the reader's id filter
++      source: 'vts',
++      resultType: 'never_filled', // TYPED discriminator (never the display string)
++      countsInAggregates: false,  // TYPED exclusion flag — aggregates/learning filter on this
++      neverFilled: true,
++      symbol: rec.symbol,
++      assetClass: rec.assetClass,
++      strategy: rec.strategy,
++      regime: rec.regime,
++      signalType: rec.signalType,
++      pool: rec.pool,
++      sourcePool: rec.sourcePool,
++      chosenEntryMode: rec.chosenEntryMode ?? 'maker',
++      entryFeeRate: rec.entryFeeRate,
++      makerLimitPrice: rec.makerLimitPrice,
++      entryPrice: null,  // never filled — there IS no entry
++      exitPrice: null,
++      grossProfit: null,
++      netProfit: null,
++      fees: null,
++      entryTime: rec.openedAt,
++      exitTime: rec.droppedAt, // the drop instant (satisfies the reader's exitTime cutoff)
++      status: 'closed',
++      exitReason: 'never_filled',
++      schemaVersion: '1.6.7',
++    };
++    await this.logTrade(record as any);
++  }
++
++  /**
++   * P19-B7.2c TWINS — persist a closed TWIN's outcome to the closed JSON store ONLY.
++   * Like persistNeverFilledRecord, this deliberately bypasses `closedTrades`, session
++   * metrics, telemetry, and every learning surface: a twin is the NON-chosen
++   * counterfactual leg, and its REAL outcome numbers exist solely for the
++   * maker-vs-taker comparison dataset (joined on mtPairId to its chosen sibling).
++   * TYPED flags: mtTwin=true + countsInAggregates=false. The comparison record carries
++   * the trade-through-floor caveat: sim maker fills require a strict trade-through, so
++   * measured fill rates are a conservative FLOOR (Langston — carried ON the record).
++   */
++  async persistTwinClosedRecord(rec: {
++    twinId: string;
++    mtPairId: string;
++    symbol: string;
++    assetClass: string;
++    strategy: string;
++    regime: string;
++    signalType: string;
++    pool: 'ideal' | 'rotational';
++    sourcePool?: string;
++    chosenEntryMode?: 'taker' | 'maker';
++    entryFeeRate?: number;
++    entryPrice: number;
++    exitPrice: number;
++    exitReason: string;
++    grossPnl: number;
++    netPnl: number;
++    dollarPnl: number;
++    positionSize: number;
++    openedAt: number;
++    closedAt: number;
++  }): Promise<void> {
++    const record = {
++      id: rec.twinId, // vts_..._twin — passes the reader's id prefix filter
++      source: 'vts',
++      mtTwin: true,               // TYPED twin tag
++      mtPairId: rec.mtPairId,     // join key to the chosen sibling
++      countsInAggregates: false,  // TYPED exclusion — never in win-rate/expectancy/ML
++      fillRateCaveat: 'trade_through_floor', // sim fill = conservative floor (on-record)
++      resultType: rec.exitReason === 'stop_hit' ? 'stop_loss'
++        : (rec.exitReason === 'target_hit' || rec.exitReason === 'trailing_stop_hit' || rec.exitReason === 'moonbag_timeout') ? 'take_profit'
++        : rec.exitReason === 'break_even_stop' ? 'break_even_stop'
++        : 'timeout',
++      exitReason: rec.exitReason,
++      symbol: rec.symbol,
++      assetClass: rec.assetClass,
++      strategy: rec.strategy,
++      regime: rec.regime,
++      signalType: rec.signalType,
++      pool: rec.pool,
++      sourcePool: rec.sourcePool,
++      chosenEntryMode: rec.chosenEntryMode,
++      entryFeeRate: rec.entryFeeRate,
++      entryPrice: rec.entryPrice,
++      exitPrice: rec.exitPrice,
++      grossProfit: rec.grossPnl,
++      netProfit: rec.netPnl,
++      dollarPnl: rec.dollarPnl,
++      positionSize: rec.positionSize,
++      entryTime: rec.openedAt,
++      exitTime: rec.closedAt,
++      status: 'closed',
++      schemaVersion: '1.6.7',
++    };
++    await this.logTrade(record as any);
++  }
++
+   async persistRealPriceTrade(tradeData: {
+     symbol: string;
+     entryTime: number;
+diff --git a/server/services/vts-trade-persistence.ts b/server/services/vts-trade-persistence.ts
+index 85621fe3c..4e914b051 100644
+--- a/server/services/vts-trade-persistence.ts
++++ b/server/services/vts-trade-persistence.ts
+@@ -65,7 +65,12 @@ export const VTS_OPEN_TRADES_EXCLUDE_SHADOW = sql`(context->>'shadow') IS DISTIN
+  *   DB CHECK constraint enforces the asset_class scoping)
+  * 'closed' = trade is closed (mirrors closed=true)
+  */
+-export type VtsOpenTradeState = 'open' | 'weekend_suspended' | 'closed';
++/**
++ * P19-B7.2c adds 'pending': a resting maker order awaiting an honest trade-through
++ * fill — holds a slot, has NO fill yet; the resolve-loop pre-pass flips it to 'open'
++ * on fill or drops it at the hard-deadline (never a closed trade).
++ */
++export type VtsOpenTradeState = 'open' | 'weekend_suspended' | 'closed' | 'pending';
+ 
+ // We intentionally use a typed-but-flexible structural type for the trade
+ // record passed in. The full `OpenVirtualTrade` interface lives in
+@@ -107,6 +112,10 @@ function splitTradeForPersist(t: OpenVirtualTradeRecord): { core: any; context:
+     // query it directly, consistent with the paper-active tables. Destructured out
+     // of `...context` so it lives in ONE home (the typed column), not duplicated.
+     chosenEntryMode, entryFeeRate,
++    // P19-B7.2c: pending-maker lifecycle — typed columns (Langston Q3: not context
++    // JSON; the resolve pre-pass reads them every cycle). `state` written at INSERT
++    // so a pending row is born 'pending' (previously the DB default 'open' stood).
++    state, makerLimitPrice, makerDeadline,
+     ...context
+   } = t;
+   return {
+@@ -114,6 +123,7 @@ function splitTradeForPersist(t: OpenVirtualTradeRecord): { core: any; context:
+       id, symbol, assetClass, entryPrice, stopLoss, takeProfit, positionSize,
+       dollarValue, quantity, regime, signalType, strategy, pool, openedAt,
+       chosenEntryMode, entryFeeRate,
++      state, makerLimitPrice, makerDeadline,
+     },
+     context,
+   };
+@@ -131,7 +141,9 @@ export async function insertOpenTrade(trade: OpenVirtualTradeRecord): Promise<vo
+     INSERT INTO vts_open_trades (
+       id, symbol, asset_class, entry_price, stop_loss, take_profit,
+       position_size, dollar_value, quantity, regime, signal_type, strategy,
+-      pool, opened_at, chosen_entry_mode, entry_fee_rate, context, inserted_at, updated_at
++      pool, opened_at, chosen_entry_mode, entry_fee_rate,
++      state, maker_limit_price, maker_deadline,
++      context, inserted_at, updated_at
+     ) VALUES (
+       ${core.id}, ${core.symbol}, ${core.assetClass},
+       ${core.entryPrice}, ${core.stopLoss}, ${core.takeProfit},
+@@ -139,6 +151,9 @@ export async function insertOpenTrade(trade: OpenVirtualTradeRecord): Promise<vo
+       ${core.regime}, ${core.signalType}, ${core.strategy}, ${core.pool},
+       to_timestamp(${core.openedAt} / 1000.0),
+       ${core.chosenEntryMode ?? null}, ${core.entryFeeRate ?? null},
++      ${core.state ?? 'open'},
++      ${core.makerLimitPrice ?? null},
++      ${core.makerDeadline != null ? new Date(core.makerDeadline) : null},
+       ${JSON.stringify(context)}::jsonb,
+       NOW(), NOW()
+     )
+@@ -165,6 +180,23 @@ export async function insertOpenTrade(trade: OpenVirtualTradeRecord): Promise<vo
+  * close UPDATE fails for every trade once the B-NEW-36 migration lands.
+  * Pre-audit §4.1.
+  */
++/**
++ * P19-B7.2c — flip a PENDING maker order to OPEN on an honest trade-through fill.
++ * Idempotent via `WHERE state='pending'` (a retry after partial failure matches
++ * zero rows). The entry price + reserved maker fee were written at placement and
++ * do not change on fill (the fill IS the resting limit).
++ */
++export async function markPendingMakerFilled(tradeId: string): Promise<void> {
++  await db.execute(sql`
++    UPDATE vts_open_trades
++       SET state = 'open',
++           updated_at = NOW()
++     WHERE id = ${tradeId}
++       AND state = 'pending'
++       AND closed = false
++  `);
++}
++
+ export async function markOpenTradeClosed(tradeId: string): Promise<void> {
+   await db.execute(sql`
+     UPDATE vts_open_trades
+@@ -284,11 +316,14 @@ export async function rehydrateOpenTrades(): Promise<OpenVirtualTradeRecord[]> {
+     state: string;
+     chosen_entry_mode: string | null;
+     entry_fee_rate: string | null;
++    maker_limit_price: string | null;
++    maker_deadline: Date | null;
+     context: Record<string, any>;
+   }>(sql`
+     SELECT id, symbol, asset_class, entry_price, stop_loss, take_profit,
+            position_size, dollar_value, quantity, regime, signal_type, strategy,
+-           pool, opened_at, state, chosen_entry_mode, entry_fee_rate, context
++           pool, opened_at, state, chosen_entry_mode, entry_fee_rate,
++           maker_limit_price, maker_deadline, context
+     FROM vts_open_trades
+     WHERE closed = false
+   `);
+@@ -323,6 +358,10 @@ export async function rehydrateOpenTrades(): Promise<OpenVirtualTradeRecord[]> {
+     // context for pre-B7.2b rows that stored these in the jsonb blob.
+     chosenEntryMode: r.chosen_entry_mode ?? (r.context as any)?.chosenEntryMode,
+     entryFeeRate: r.entry_fee_rate != null ? parseFloat(r.entry_fee_rate) : (r.context as any)?.entryFeeRate,
++    // P19-B7.2c: pending-maker lifecycle fields (epoch ms in memory; typed cols in DB).
++    // A rehydrated 'pending' flows into the resolve pre-pass like any live pending.
++    makerLimitPrice: r.maker_limit_price != null ? parseFloat(r.maker_limit_price) : undefined,
++    makerDeadline: r.maker_deadline != null ? new Date(r.maker_deadline).getTime() : undefined,
+   }));
+ }
+ 
+diff --git a/server/storage.ts b/server/storage.ts
+index 12c7ce5a1..01913d74a 100644
+--- a/server/storage.ts
++++ b/server/storage.ts
+@@ -3300,12 +3300,21 @@ export class DatabaseStorage implements IStorage {
+     
+     // Phase 8.8.3-C-FINAL PART 1: Ghost filter in SQL - only return valid trades
+     // Valid trade = closed_at IS NOT NULL AND exit_price > 0 AND close_reason IS NOT NULL AND close_reason != ''
++    // P19-B7.2c: never_filled rows (a dropped pending maker — closed, NO exit price by
++    // construction) pass the ghost filter EXPLICITLY so they are VISIBLE in the closed
++    // list (Kyle); they are excluded from analytics separately (typed closeReason check
++    // at the analytics endpoint), i.e. visible ≠ counted.
+     if (filters.closedOnly) {
+       conditions.push(sql`${paperSimTrades.closedAt} IS NOT NULL`);
+-      conditions.push(sql`${paperSimTrades.exitPrice} IS NOT NULL`);
+-      conditions.push(sql`${paperSimTrades.exitPrice} > 0`);
+-      conditions.push(sql`${paperSimTrades.closeReason} IS NOT NULL`);
+-      conditions.push(sql`${paperSimTrades.closeReason} != ''`);
++      conditions.push(sql`(
++        ${paperSimTrades.closeReason} = 'never_filled'
++        OR (
++          ${paperSimTrades.exitPrice} IS NOT NULL
++          AND ${paperSimTrades.exitPrice} > 0
++          AND ${paperSimTrades.closeReason} IS NOT NULL
++          AND ${paperSimTrades.closeReason} != ''
++        )
++      )`);
+     }
+     if (filters.symbol) {
+       conditions.push(sql`LOWER(${paperSimTrades.symbol}) LIKE LOWER(${'%' + filters.symbol + '%'})`);
+diff --git a/server/tests/unit/p19-b7-2c-pending-maker.test.ts b/server/tests/unit/p19-b7-2c-pending-maker.test.ts
+new file mode 100644
+index 000000000..7c6b9a892
+--- /dev/null
++++ b/server/tests/unit/p19-b7-2c-pending-maker.test.ts
+@@ -0,0 +1,108 @@
++/**
++ * P19-B7.2c — pending-maker lifecycle tests (Kyle model, SIMPLIFIED 2026-07-02).
++ *
++ * Covers the OBJ-7 named list's pure/logic surface:
++ *  - fill-on-trade-through (side-aware) / no-fill-without-trade-through
++ *  - fill-wins-on-same-tick precedence (R2)
++ *  - hard-drop = drop, period (no convert) / rest before the deadline
++ *  - marketable-at-placement predicate (the stored-taker check's trigger)
++ *  - inert-tier guard: the maker fill price is the limit EXACTLY (Langston Q4 —
++ *    catches an accidental future wiring of the placeholder tier knobs at CI)
++ *  - config invariant: maker_max_pending_ms >= maker_time_budget_ms throws LOUDLY (Q5)
++ *  - twin kill-knob semantics (numeric 1/0)
++ * Engine-integration behaviors (slot hold/free across loops, non-trade telemetry,
++ * weekend deadline pause, UI badges) are staging-verified at Step-7/8 per the scope.
++ */
++import { describe, it, expect, vi, beforeEach } from 'vitest';
++import {
++  tradedThrough,
++  isMarketableAtPlacement,
++  evaluatePendingMaker,
++  makerFillPrice,
++} from '../../core/trading/pending-maker-logic.js';
++
++// ── config resolvers: mock the module-constants cache (fail-hard getter) ──────────
++const constants = new Map<string, number>();
++vi.mock('../../services/module-constants-service.js', () => ({
++  getCachedNumberRequired: (module: string, constant: string, _key: unknown) => {
++    const v = constants.get(`${module}.${constant}`);
++    if (v == null) throw new Error(`missing ${module}.${constant}`);
++    return v;
++  },
++}));
++import { resolveMakerMaxPendingMs, resolveTwinEnabled } from '../../services/maker-taker-config.js';
++
++describe('P19-B7.2c — pending-maker pure logic (shared paper+VTS)', () => {
++  it('fill-on-trade-through: a resting BUY fills iff price <= limit (side-aware)', () => {
++    expect(tradedThrough('buy', 99.99, 100)).toBe(true);
++    expect(tradedThrough('buy', 100, 100)).toBe(true);      // touch-through boundary
++    expect(tradedThrough('buy', 100.01, 100)).toBe(false);  // above the limit = no fill
++    // sell side is symmetric (build-it-correct §5 #11 even though long-only today)
++    expect(tradedThrough('sell', 100.01, 100)).toBe(true);
++    expect(tradedThrough('sell', 99.99, 100)).toBe(false);
++  });
++
++  it('no-fill-without-trade-through: a null/NaN price can NEVER fill', () => {
++    expect(evaluatePendingMaker({ side: 'buy', currentPrice: null, limit: 100, nowMs: 0, deadlineMs: null })).toBe('rest');
++    expect(tradedThrough('buy', NaN, 100)).toBe(false);
++  });
++
++  it('R2 precedence: trade-through AND past-deadline in the SAME tick → FILL WINS', () => {
++    expect(evaluatePendingMaker({
++      side: 'buy', currentPrice: 99, limit: 100, nowMs: 2_000, deadlineMs: 1_000,
++    })).toBe('fill');
++  });
++
++  it('hard-drop: past the deadline with no trade-through → DROP, period (no convert outcome exists)', () => {
++    const out = evaluatePendingMaker({ side: 'buy', currentPrice: 101, limit: 100, nowMs: 2_000, deadlineMs: 1_000 });
++    expect(out).toBe('drop');
++    // the outcome union has NO 'convert' member — the convert valve was cut by design
++    expect(['fill', 'drop', 'rest']).toContain(out);
++  });
++
++  it('rest: before the deadline with no trade-through → keep resting (slot stays held)', () => {
++    expect(evaluatePendingMaker({ side: 'buy', currentPrice: 101, limit: 100, nowMs: 500, deadlineMs: 1_000 })).toBe('rest');
++    // a pending with no deadline recorded rests indefinitely rather than guessing
++    expect(evaluatePendingMaker({ side: 'buy', currentPrice: 101, limit: 100, nowMs: 500, deadlineMs: null })).toBe('rest');
++  });
++
++  it('marketable-at-placement: market already at/through the limit (a real post-only would reject)', () => {
++    expect(isMarketableAtPlacement('buy', 99.5, 100)).toBe(true);   // best ask below our buy limit
++    expect(isMarketableAtPlacement('buy', 100.5, 100)).toBe(false); // limit rests below market — honest rest
++  });
++
++  it('inert-tier guard (Langston Q4): the maker fill price is the limit EXACTLY — no tier haircut', () => {
++    expect(makerFillPrice(100)).toBe(100);
++    expect(makerFillPrice(0.1234567891)).toBe(0.1234567891);
++    // makerFillPrice takes ONLY the limit — the placeholder tier knobs are not inputs,
++    // so wiring them in requires a signature change this test (and Step-4) would catch.
++    expect(makerFillPrice.length).toBe(1);
++  });
++});
++
++describe('P19-B7.2c — config resolvers (fail-hard + the Q5 invariant)', () => {
++  beforeEach(() => constants.clear());
++
++  it('maker_max_pending_ms resolves when coherent (max >= time budget)', () => {
++    constants.set('maker_taker.maker_max_pending_ms', 3_600_000);
++    constants.set('maker_taker.maker_time_budget_ms', 60_000);
++    expect(resolveMakerMaxPendingMs('crypto_spot' as any)).toBe(3_600_000);
++  });
++
++  it('Q5 invariant: a hard-drop SHORTER than the expected-fill window throws LOUDLY at load', () => {
++    constants.set('maker_taker.maker_max_pending_ms', 30_000);
++    constants.set('maker_taker.maker_time_budget_ms', 60_000);
++    expect(() => resolveMakerMaxPendingMs('crypto_spot' as any)).toThrow(/incoherent config/);
++  });
++
++  it('fail-hard: a missing knob throws (no hidden default — §5 r15)', () => {
++    expect(() => resolveMakerMaxPendingMs('crypto_spot' as any)).toThrow(/missing/);
++  });
++
++  it('twin kill-knob: numeric 1 = on, 0 = off (DB-switchable without deploy)', () => {
++    constants.set('maker_taker.twin_enabled', 1);
++    expect(resolveTwinEnabled('crypto_spot' as any)).toBe(true);
++    constants.set('maker_taker.twin_enabled', 0);
++    expect(resolveTwinEnabled('crypto_spot' as any)).toBe(false);
++  });
++});
+diff --git a/server/utils/export-csv.ts b/server/utils/export-csv.ts
+index bd41fde29..ab6160196 100644
+--- a/server/utils/export-csv.ts
++++ b/server/utils/export-csv.ts
+@@ -151,6 +151,14 @@ export async function getClosedVTSTradesFromLogs(days: number = 7): Promise<Arra
+   // trades (UI renders an em-dash). Entry-leg only.
+   chosenEntryMode: string | null;
+   entryFeeRate: number | null;
++  // P19-B7.2c: TYPED aggregates-exclusion flag. false for never-filled pending maker
++  // records AND closed TWINS (both visible in the closed table, EXCLUDED from
++  // win-rate/expectancy + ML learning; never-filled rows COUNT in the maker fill-rate
++  // denominator; twins feed the maker-vs-taker comparison joined on mtPairId).
++  // Aggregation + training queries filter on THIS, never on outcome strings.
++  countsInAggregates: boolean;
++  mtTwin: boolean;
++  mtPairId: string | null;
+ }>> {
+   const vtsDir = path.join(process.cwd(), 'logs', 'virtual_trades');
+   const cutoffDate = Date.now() - (days * 24 * 60 * 60 * 1000);
+@@ -177,7 +185,53 @@ export async function getClosedVTSTradesFromLogs(days: number = 7): Promise<Arra
+           
+           const exitTimestamp = new Date(exitTime).getTime();
+           if (exitTimestamp < cutoffDate) continue;
+-          
++
++          // ── P19-B7.2c: NEVER-FILLED pending maker records pass through EXPLICITLY —
++          // they have no fill (entry/exit null) so the completeness filter below would
++          // silently skip them, but Kyle wants them VISIBLE in the closed records.
++          // TYPED flags: resultType='never_filled' + countsInAggregates=false — the row
++          // is display-visible + counts in the maker fill-rate denominator, but is
++          // EXCLUDED from win-rate/expectancy aggregates + the ML learning set. Numeric
++          // fields are 0 (render-safe); the UI shows "Never filled — dropped" keyed on
++          // resultType, never on a display string.
++          if (trade.resultType === 'never_filled') {
++            trades.push({
++              symbol: trade.symbol,
++              assetClass: trade.assetClass || 'crypto_spot',
++              regime: trade.regime, strategy: trade.strategy,
++              signalType: trade.signalType, patternType: null,
++              pool: (trade.pool ?? 'rotational').toUpperCase?.() ?? trade.pool,
++              sourcePool: trade.sourcePool ?? 'unknown',
++              dollarValue: 0, quantity: 0,
++              entryPrice: trade.makerLimitPrice ?? 0, // the price the order RESTED at (informational)
++              exitPrice: 0, target: 0, stopLoss: 0,
++              resultType: 'never_filled',
++              countsInAggregates: false,
++              grossProfitValue: 0, grossProfitPercent: '0.00%', costs: 0,
++              netProfitValue: 0, netProfitPercent: '0.00%',
++              finalScore: 0, hybridScore: 0, expectedEdge: 0, regimeWeight: 0,
++              entryTime: new Date(trade.entryTime).toISOString(),
++              exitTime: new Date(exitTimestamp).toISOString(),
++              durationMinutes: Math.round((exitTimestamp - new Date(trade.entryTime).getTime()) / 60000),
++              globalRegime: null, pairFriction: null, globalFriction: null,
++              pairDirectionalBias: null, globalDirectionalBias: null,
++              pairDirectionalBiasScore: null, globalDirectionalBiasScore: null,
++              filterTier: null, tradeMode: 'TARGET', exitReason: 'never_filled',
++              ladderRungsHit: 0, originalStopPrice: null, latchTriggerPrice: null,
++              rungTargetHistory: null, pairIdHash: null,
++              regimeConfidenceRaw: null, macroModifierValue: null, phase: null,
++              phaseAgeSeconds: null, strategyPhaseWeight: null, regimeConfidenceModulated: null,
++              entryLiquidityValue: null, amrClassification: null, amrMode: null,
++              entryLiquidityKind: null,
++              chosenEntryMode: trade.chosenEntryMode ?? 'maker',
++              entryFeeRate: typeof trade.entryFeeRate === 'number' ? trade.entryFeeRate : null,
++              // A never-filled TWIN maker is itself fill-rate data (paired) — tag flows through.
++              mtTwin: trade.mtTwin === true,
++              mtPairId: typeof trade.mtPairId === 'string' ? trade.mtPairId : null,
++            });
++            continue;
++          }
++
+           const entryPrice = trade.entryPrice || trade.signal?.entryPrice;
+           const exitPrice = trade.exitPrice || trade.resolvedPrice;
+           
+@@ -304,6 +358,13 @@ export async function getClosedVTSTradesFromLogs(days: number = 7): Promise<Arra
+             // P19-B7.2b (OBJ-B): maker/taker entry fee-mode read-back for the fee-mode column.
+             chosenEntryMode: typeof trade.chosenEntryMode === 'string' ? trade.chosenEntryMode : null,
+             entryFeeRate: typeof trade.entryFeeRate === 'number' ? trade.entryFeeRate : null,
++            // P19-B7.2c: normal filled-and-closed trades COUNT in all aggregates; a
++            // closed TWIN (complete outcome numbers, but the non-chosen counterfactual
++            // leg) is visible + comparison-joinable yet EXCLUDED — keyed on the TYPED
++            // mtTwin tag, never an outcome string.
++            countsInAggregates: trade.mtTwin === true ? false : true,
++            mtTwin: trade.mtTwin === true,
++            mtPairId: typeof trade.mtPairId === 'string' ? trade.mtPairId : null,
+           });
+         }
+       } catch (err) {
+diff --git a/shared/schema.ts b/shared/schema.ts
+index 7fe57038e..fb832d607 100644
+--- a/shared/schema.ts
++++ b/shared/schema.ts
+@@ -1796,6 +1796,17 @@ export const paperSimOpenPositions = pgTable("paper_sim_open_positions", {
+   // closed trade). NULL for pre-B7.2b positions (never coerced — rule-10). ENTRY-leg only.
+   chosenEntryMode: varchar("chosen_entry_mode", { length: 8 }), // 'taker' | 'maker' | NULL
+   entryFeeRate: decimal("entry_fee_rate", { precision: 10, scale: 6 }),
++  // P19-B7.2c (SIMPLIFIED, Kyle 2026-07-02): post-promotion PENDING maker-order
++  // lifecycle. A maker-chosen promotion rests as state='pending' (holds a slot, NOT
++  // filled) until the real price trades through the limit (→ 'open' at limit + maker
++  // fee) or the hard-drop deadline fires (→ DROPPED, period — no convert re-evaluation;
++  // recorded visibly as never-filled but excluded from stats/learning). 'open' = a
++  // normal filled position (default). maker_limit_price = the resting limit (the
++  // maker-FILL price). maker_deadline = the hard-drop instant. NULL for taker /
++  // pre-B7.2c positions.
++  state: varchar("state", { length: 16 }).default("open"), // 'open' | 'pending'
++  makerLimitPrice: decimal("maker_limit_price", { precision: 20, scale: 10 }),
++  makerDeadline: timestamp("maker_deadline"),
+   // Phase 8.8.3-C4: Intended entry price for slippage tracking
+   intendedEntryPrice: decimal("intended_entry_price", { precision: 20, scale: 8 }),
+   entrySlippage: decimal("entry_slippage", { precision: 20, scale: 8 }).default("0"),

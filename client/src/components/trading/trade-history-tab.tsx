@@ -824,10 +824,13 @@ export function TradeHistoryTab() {
                                   trade.closeReason === 'trailing_stop_hit' && "bg-emerald-500/20 text-emerald-600 border-emerald-500/50",
                                   trade.closeReason === 'moonbag_timeout' && "bg-amber-500/20 text-amber-600 border-amber-500/50",
                                   trade.closeReason === 'break_even_stop' && "bg-slate-500/20 text-slate-600 border-slate-400/50",
-                                  trade.closeReason === 'stop_hit' && "bg-red-500/20 text-red-600 border-red-500/50"
+                                  trade.closeReason === 'stop_hit' && "bg-red-500/20 text-red-600 border-red-500/50",
+                                  // P19-B7.2c: a dropped pending maker (visible, excluded from stats)
+                                  trade.closeReason === 'never_filled' && "bg-slate-500/20 text-slate-400 border-slate-500/40"
                                 )}
                               >
                                 {!trade.closedAt ? 'Open' :
+                                 trade.closeReason === 'never_filled' ? 'Never filled — dropped' :
                                  trade.closeReason === 'target_hit' ? 'Target' :
                                  trade.closeReason === 'trailing_stop_hit' ? 'Trail' :
                                  trade.closeReason === 'moonbag_timeout' ? 'M.Cap' :

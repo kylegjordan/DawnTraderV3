@@ -538,7 +538,7 @@ export interface IStorage {
   createPaperSimTrade(mode: TradingMode, trade: InsertPaperSimTrade): Promise<PaperSimTrade>;
   updatePaperSimTrade(mode: TradingMode, id: string, updates: Partial<PaperSimTrade>): Promise<PaperSimTrade>;
   getPaperSimTrade(mode: TradingMode, id: string): Promise<PaperSimTrade | undefined>;
-  getPaperSimTrades(mode: TradingMode, filters?: { limit?: number; closedOnly?: boolean }): Promise<PaperSimTrade[]>;
+  getPaperSimTrades(mode: TradingMode, filters?: { limit?: number; closedOnly?: boolean; includeNeverFilled?: boolean }): Promise<PaperSimTrade[]>;
   // Phase 8.8.3-C5: Paginated trades with sorting support
   getPaperSimTradesPaginated(mode: TradingMode, filters: {
     limit?: number;
@@ -553,7 +553,7 @@ export interface IStorage {
     dateTo?: Date;
   }): Promise<{ trades: PaperSimTrade[]; totalCount: number }>;
   getPaperSimTradesBySymbol(mode: TradingMode, symbol: string): Promise<PaperSimTrade[]>;
-  getPaperSimTradesGlobal(mode: TradingMode, filters?: { limit?: number; closedOnly?: boolean }): Promise<PaperSimTrade[]>; // Phase 27.F.14.B: Global-per-mode query for LATTI
+  getPaperSimTradesGlobal(mode: TradingMode, filters?: { limit?: number; closedOnly?: boolean; includeNeverFilled?: boolean }): Promise<PaperSimTrade[]>; // Phase 27.F.14.B: Global-per-mode query for LATTI
   
   // Open positions
   createPaperSimOpenPosition(mode: TradingMode, position: InsertPaperSimOpenPosition): Promise<PaperSimOpenPosition>;
@@ -3245,16 +3245,24 @@ export class DatabaseStorage implements IStorage {
     return trade || undefined;
   }
 
-  async getPaperSimTrades(mode: TradingMode, filters?: { limit?: number; closedOnly?: boolean }): Promise<PaperSimTrade[]> {
+  async getPaperSimTrades(mode: TradingMode, filters?: { limit?: number; closedOnly?: boolean; includeNeverFilled?: boolean }): Promise<PaperSimTrade[]> {
     // Phase 27.F.15.B.2: Global query, mode-based only
     const limit = filters?.limit || 100;
     const closedOnly = filters?.closedOnly ?? false;
-    
+
     const conditions = [];
     if (closedOnly) {
       conditions.push(sql`${paperSimTrades.closedAt} IS NOT NULL` as any);
     }
-    
+    // P19-B7.2c TYPED GUARD (Langston Step-4 condition 4): never_filled rows (a dropped
+    // pending maker — an order that never traded) are EXCLUDED at the SQL level BY DEFAULT
+    // so no aggregate/ML/session-metrics reader can accidentally count a phantom flat.
+    // Visibility is opt-in: the paginated UI list passes them explicitly; a fill-rate
+    // reader sets includeNeverFilled: true.
+    if (!filters?.includeNeverFilled) {
+      conditions.push(sql`${paperSimTrades.closeReason} IS DISTINCT FROM 'never_filled'` as any);
+    }
+
     if (conditions.length > 0) {
       return await db.select()
         .from(paperSimTrades)
@@ -3262,7 +3270,7 @@ export class DatabaseStorage implements IStorage {
         .orderBy(desc(paperSimTrades.openedAt))
         .limit(limit);
     }
-    
+
     return await db.select()
       .from(paperSimTrades)
       .orderBy(desc(paperSimTrades.openedAt))
@@ -3271,9 +3279,13 @@ export class DatabaseStorage implements IStorage {
 
   async getPaperSimTradesBySymbol(mode: TradingMode, symbol: string): Promise<PaperSimTrade[]> {
     // Phase 27.F.15.B.2: Global query, mode-based only
+    // P19-B7.2c: never_filled rows excluded by default (typed guard — see getPaperSimTrades).
     return await db.select()
       .from(paperSimTrades)
-      .where(eq(paperSimTrades.symbol, symbol))
+      .where(and(
+        eq(paperSimTrades.symbol, symbol),
+        sql`${paperSimTrades.closeReason} IS DISTINCT FROM 'never_filled'`
+      ))
       .orderBy(desc(paperSimTrades.openedAt));
   }
 
@@ -3300,12 +3312,21 @@ export class DatabaseStorage implements IStorage {
     
     // Phase 8.8.3-C-FINAL PART 1: Ghost filter in SQL - only return valid trades
     // Valid trade = closed_at IS NOT NULL AND exit_price > 0 AND close_reason IS NOT NULL AND close_reason != ''
+    // P19-B7.2c: never_filled rows (a dropped pending maker — closed, NO exit price by
+    // construction) pass the ghost filter EXPLICITLY so they are VISIBLE in the closed
+    // list (Kyle); they are excluded from analytics separately (typed closeReason check
+    // at the analytics endpoint), i.e. visible ≠ counted.
     if (filters.closedOnly) {
       conditions.push(sql`${paperSimTrades.closedAt} IS NOT NULL`);
-      conditions.push(sql`${paperSimTrades.exitPrice} IS NOT NULL`);
-      conditions.push(sql`${paperSimTrades.exitPrice} > 0`);
-      conditions.push(sql`${paperSimTrades.closeReason} IS NOT NULL`);
-      conditions.push(sql`${paperSimTrades.closeReason} != ''`);
+      conditions.push(sql`(
+        ${paperSimTrades.closeReason} = 'never_filled'
+        OR (
+          ${paperSimTrades.exitPrice} IS NOT NULL
+          AND ${paperSimTrades.exitPrice} > 0
+          AND ${paperSimTrades.closeReason} IS NOT NULL
+          AND ${paperSimTrades.closeReason} != ''
+        )
+      )`);
     }
     if (filters.symbol) {
       conditions.push(sql`LOWER(${paperSimTrades.symbol}) LIKE LOWER(${'%' + filters.symbol + '%'})`);
@@ -3369,15 +3390,19 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Phase 27.F.14.B: Global-per-mode query for LATTI baseline calculations
-  async getPaperSimTradesGlobal(mode: TradingMode, filters?: { limit?: number; closedOnly?: boolean }): Promise<PaperSimTrade[]> {
+  async getPaperSimTradesGlobal(mode: TradingMode, filters?: { limit?: number; closedOnly?: boolean; includeNeverFilled?: boolean }): Promise<PaperSimTrade[]> {
     const limit = filters?.limit || 1000; // Higher default for global aggregation
     const closedOnly = filters?.closedOnly ?? false;
-    
+
     const conditions = [];
     if (closedOnly) {
       conditions.push(sql`${paperSimTrades.closedAt} IS NOT NULL` as any);
     }
-    
+    // P19-B7.2c: never_filled rows excluded by default (typed guard — see getPaperSimTrades).
+    if (!filters?.includeNeverFilled) {
+      conditions.push(sql`${paperSimTrades.closeReason} IS DISTINCT FROM 'never_filled'` as any);
+    }
+
     const query = db.select()
       .from(paperSimTrades)
       .orderBy(desc(paperSimTrades.closedAt))

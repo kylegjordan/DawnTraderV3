@@ -73,6 +73,11 @@ interface OpenTrade {
   // P19-B7.2b (OBJ-C): the maker/taker entry fee-mode the VTS trade opened on.
   chosenEntryMode?: string | null;
   entryFeeRate?: number | null;
+  // P19-B7.2c: 'pending' = a resting maker order awaiting fill (PENDING badge);
+  // mtTwin = the tagged non-chosen comparison leg (paired via mtPairId).
+  state?: string;
+  mtTwin?: boolean;
+  mtPairId?: string | null;
 }
 
 interface ClosedTrade {
@@ -132,6 +137,12 @@ interface ClosedTrade {
   // P19-B7.2b (OBJ-C): the maker/taker entry fee-mode the VTS trade opened on.
   chosenEntryMode?: string | null;
   entryFeeRate?: number | null;
+  // P19-B7.2c: 'never_filled' resultType = a dropped pending maker (visible, excluded
+  // from stats); mtTwin = the tagged non-chosen comparison leg; countsInAggregates =
+  // the TYPED exclusion flag.
+  mtTwin?: boolean;
+  mtPairId?: string | null;
+  countsInAggregates?: boolean;
 }
 
 type AdjustmentType =
@@ -728,7 +739,19 @@ function OpenTradesTable({ trades }: { trades: OpenTrade[] }) {
                   </td>
                   {/* P19-B7.2b (OBJ-C): Entry Fee Mode (maker/taker) — NULL renders em-dash */}
                   <td className="px-3 py-2 text-xs whitespace-nowrap">
-                    {formatEntryFeeMode(trade.chosenEntryMode, trade.entryFeeRate)}
+                    <div className="flex flex-col gap-0.5">
+                      <span>{formatEntryFeeMode(trade.chosenEntryMode, trade.entryFeeRate)}</span>
+                      {/* P19-B7.2c: a resting maker order shows PENDING until it fills or drops */}
+                      {(trade as any).state === 'pending' && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-700 border border-amber-300 w-fit">PENDING</span>
+                      )}
+                      {/* P19-B7.2c (Kyle): which leg the decision service actually picked */}
+                      {(trade as any).mtTwin === true ? (
+                        <span className="text-[10px] text-muted-foreground">twin (not chosen)</span>
+                      ) : (trade as any).mtTwin === false && trade.chosenEntryMode ? (
+                        <span className="text-[10px] text-muted-foreground">chosen</span>
+                      ) : null}
+                    </div>
                   </td>
                   {/* B65.2: TEC State — moonbag mode + break-even lock visibility */}
                   {/* B65.4 (2026-04-25): MOONBAG badge shows live ladder rung count (MB×N) */}
@@ -1077,7 +1100,19 @@ function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
                   </td>
                   {/* P19-B7.2b (OBJ-C): Entry Fee Mode (maker/taker) — NULL renders em-dash */}
                   <td className="px-3 py-2 text-xs whitespace-nowrap">
-                    {formatEntryFeeMode(trade.chosenEntryMode, trade.entryFeeRate)}
+                    <div className="flex flex-col gap-0.5">
+                      <span>{formatEntryFeeMode(trade.chosenEntryMode, trade.entryFeeRate)}</span>
+                      {/* P19-B7.2c: a resting maker order shows PENDING until it fills or drops */}
+                      {(trade as any).state === 'pending' && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-700 border border-amber-300 w-fit">PENDING</span>
+                      )}
+                      {/* P19-B7.2c (Kyle): which leg the decision service actually picked */}
+                      {(trade as any).mtTwin === true ? (
+                        <span className="text-[10px] text-muted-foreground">twin (not chosen)</span>
+                      ) : (trade as any).mtTwin === false && trade.chosenEntryMode ? (
+                        <span className="text-[10px] text-muted-foreground">chosen</span>
+                      ) : null}
+                    </div>
                   </td>
                   {/* B65.2-HF2c: TEC State column on Closed — TARGET vs MOONBAG end-state */}
                   {/* B65.4 (2026-04-25): MOONBAG badge shows ladder rung count (MB×N) when present */}
@@ -1123,6 +1158,13 @@ function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
                   <td className="px-3 py-2 text-center">
                     {/* B65.2-HF2c: Moonbag state moved to a dedicated TEC State column.
                         This cell keeps the expanded result mapping (Trail Stop / Moonbag Cap) only. */}
+                    {/* P19-B7.2c: a dropped pending maker — visible, keyed on the TYPED
+                        resultType (never a display string); excluded from stats/learning. */}
+                    {trade.resultType?.toLowerCase?.() === 'never_filled' ? (
+                      <Badge variant="outline" className="text-xs bg-slate-500/20 text-slate-400 border-slate-500/40">
+                        Never filled — dropped
+                      </Badge>
+                    ) : (
                     <Badge variant="outline" className={`text-xs ${getResultBadgeColor(trade.resultType)}`}>
                       {trade.resultType === 'TRAILING_STOP_HIT' || trade.resultType === 'MOONBAG_TIMEOUT' ? (
                         <TrendingUp className="w-3 h-3 mr-1 inline" />
@@ -1135,6 +1177,7 @@ function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
                       )}
                       {getResultLabel(trade.resultType)}
                     </Badge>
+                    )}
                   </td>
                   <td className="px-3 py-2 text-right">
                     <div className="flex flex-col gap-0.5">

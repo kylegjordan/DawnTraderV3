@@ -65,7 +65,12 @@ export const VTS_OPEN_TRADES_EXCLUDE_SHADOW = sql`(context->>'shadow') IS DISTIN
  *   DB CHECK constraint enforces the asset_class scoping)
  * 'closed' = trade is closed (mirrors closed=true)
  */
-export type VtsOpenTradeState = 'open' | 'weekend_suspended' | 'closed';
+/**
+ * P19-B7.2c adds 'pending': a resting maker order awaiting an honest trade-through
+ * fill — holds a slot, has NO fill yet; the resolve-loop pre-pass flips it to 'open'
+ * on fill or drops it at the hard-deadline (never a closed trade).
+ */
+export type VtsOpenTradeState = 'open' | 'weekend_suspended' | 'closed' | 'pending';
 
 // We intentionally use a typed-but-flexible structural type for the trade
 // record passed in. The full `OpenVirtualTrade` interface lives in
@@ -107,6 +112,10 @@ function splitTradeForPersist(t: OpenVirtualTradeRecord): { core: any; context: 
     // query it directly, consistent with the paper-active tables. Destructured out
     // of `...context` so it lives in ONE home (the typed column), not duplicated.
     chosenEntryMode, entryFeeRate,
+    // P19-B7.2c: pending-maker lifecycle — typed columns (Langston Q3: not context
+    // JSON; the resolve pre-pass reads them every cycle). `state` written at INSERT
+    // so a pending row is born 'pending' (previously the DB default 'open' stood).
+    state, makerLimitPrice, makerDeadline,
     ...context
   } = t;
   return {
@@ -114,6 +123,7 @@ function splitTradeForPersist(t: OpenVirtualTradeRecord): { core: any; context: 
       id, symbol, assetClass, entryPrice, stopLoss, takeProfit, positionSize,
       dollarValue, quantity, regime, signalType, strategy, pool, openedAt,
       chosenEntryMode, entryFeeRate,
+      state, makerLimitPrice, makerDeadline,
     },
     context,
   };
@@ -131,7 +141,9 @@ export async function insertOpenTrade(trade: OpenVirtualTradeRecord): Promise<vo
     INSERT INTO vts_open_trades (
       id, symbol, asset_class, entry_price, stop_loss, take_profit,
       position_size, dollar_value, quantity, regime, signal_type, strategy,
-      pool, opened_at, chosen_entry_mode, entry_fee_rate, context, inserted_at, updated_at
+      pool, opened_at, chosen_entry_mode, entry_fee_rate,
+      state, maker_limit_price, maker_deadline,
+      context, inserted_at, updated_at
     ) VALUES (
       ${core.id}, ${core.symbol}, ${core.assetClass},
       ${core.entryPrice}, ${core.stopLoss}, ${core.takeProfit},
@@ -139,6 +151,9 @@ export async function insertOpenTrade(trade: OpenVirtualTradeRecord): Promise<vo
       ${core.regime}, ${core.signalType}, ${core.strategy}, ${core.pool},
       to_timestamp(${core.openedAt} / 1000.0),
       ${core.chosenEntryMode ?? null}, ${core.entryFeeRate ?? null},
+      ${core.state ?? 'open'},
+      ${core.makerLimitPrice ?? null},
+      ${core.makerDeadline != null ? new Date(core.makerDeadline) : null},
       ${JSON.stringify(context)}::jsonb,
       NOW(), NOW()
     )
@@ -165,6 +180,23 @@ export async function insertOpenTrade(trade: OpenVirtualTradeRecord): Promise<vo
  * close UPDATE fails for every trade once the B-NEW-36 migration lands.
  * Pre-audit §4.1.
  */
+/**
+ * P19-B7.2c — flip a PENDING maker order to OPEN on an honest trade-through fill.
+ * Idempotent via `WHERE state='pending'` (a retry after partial failure matches
+ * zero rows). The entry price + reserved maker fee were written at placement and
+ * do not change on fill (the fill IS the resting limit).
+ */
+export async function markPendingMakerFilled(tradeId: string): Promise<void> {
+  await db.execute(sql`
+    UPDATE vts_open_trades
+       SET state = 'open',
+           updated_at = NOW()
+     WHERE id = ${tradeId}
+       AND state = 'pending'
+       AND closed = false
+  `);
+}
+
 export async function markOpenTradeClosed(tradeId: string): Promise<void> {
   await db.execute(sql`
     UPDATE vts_open_trades
@@ -284,11 +316,14 @@ export async function rehydrateOpenTrades(): Promise<OpenVirtualTradeRecord[]> {
     state: string;
     chosen_entry_mode: string | null;
     entry_fee_rate: string | null;
+    maker_limit_price: string | null;
+    maker_deadline: Date | null;
     context: Record<string, any>;
   }>(sql`
     SELECT id, symbol, asset_class, entry_price, stop_loss, take_profit,
            position_size, dollar_value, quantity, regime, signal_type, strategy,
-           pool, opened_at, state, chosen_entry_mode, entry_fee_rate, context
+           pool, opened_at, state, chosen_entry_mode, entry_fee_rate,
+           maker_limit_price, maker_deadline, context
     FROM vts_open_trades
     WHERE closed = false
   `);
@@ -323,6 +358,10 @@ export async function rehydrateOpenTrades(): Promise<OpenVirtualTradeRecord[]> {
     // context for pre-B7.2b rows that stored these in the jsonb blob.
     chosenEntryMode: r.chosen_entry_mode ?? (r.context as any)?.chosenEntryMode,
     entryFeeRate: r.entry_fee_rate != null ? parseFloat(r.entry_fee_rate) : (r.context as any)?.entryFeeRate,
+    // P19-B7.2c: pending-maker lifecycle fields (epoch ms in memory; typed cols in DB).
+    // A rehydrated 'pending' flows into the resolve pre-pass like any live pending.
+    makerLimitPrice: r.maker_limit_price != null ? parseFloat(r.maker_limit_price) : undefined,
+    makerDeadline: r.maker_deadline != null ? new Date(r.maker_deadline).getTime() : undefined,
   }));
 }
 

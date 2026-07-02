@@ -45,6 +45,7 @@ export type OpenFailStage =
   | 'DEPTH_GATE'          // 24/5 book-depth-sufficiency gate (no_book/stale/thin/insufficient)
   | 'LIVENESS_GATE'       // P19-B6.6 (#236): xStock price-discovery-liveness (flat_last/no_data/sparse/timeout)
   | 'FILL_REJECTED'       // depth-walked fill rejected / non-filled / zero qty
+  | 'MAKER_MARKETABLE_DROPPED' // P19-B7.2c: maker limit already marketable at placement + stored taker EV not positive → dropped (non-trade)
   | 'DUP_POSITION'        // duplicate-position guard
   | 'TRADE_INSERT_ERROR'  // DB trade/position insert threw
   | 'OTHER';
@@ -158,7 +159,7 @@ class RtbMetricsService {
     // P19-B6.5e: initialize the open-stage failure breakdown
     const stages: OpenFailStage[] = [
       'DRY_RUN', 'EV_REJECT', 'SIZING_INVALID', 'UNCLASSIFIABLE', 'DEPTH_GATE',
-      'FILL_REJECTED', 'DUP_POSITION', 'TRADE_INSERT_ERROR', 'OTHER'
+      'FILL_REJECTED', 'MAKER_MARKETABLE_DROPPED', 'DUP_POSITION', 'TRADE_INSERT_ERROR', 'OTHER'
     ];
     for (const stage of stages) {
       this.stats.openFailedByStage[stage] = 0;

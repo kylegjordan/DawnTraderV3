@@ -119,6 +119,12 @@ import { evaluateXstockPriceLiveness } from '../asset_classes/xstock_spot/price-
 // B-4.5: fees are DB-governed per asset class — resolved per symbol at the
 // fill sites via the single cost-model merge (no static fee field).
 import { getFrictionForAssetClass } from '../core/math/cost-model.js';
+// P19-B7.2c: the pending-maker hard-drop timeout (per-class, fail-hard, load-time invariant).
+import { resolveMakerMaxPendingMs } from './maker-taker-config.js';
+// P19-B7.2c (R3): the xStock hard-drop must not fire inside the weekend-closed window.
+import { isXstockMarketOpenUTC } from '../asset_classes/xstock_spot/market-hours.js';
+// P19-B7.2c: the shared PURE pending-maker fill/drop decision (paper+VTS parity — R2).
+import { evaluatePendingMaker, makerFillPrice, isMarketableAtPlacement } from '../core/trading/pending-maker-logic.js';
 import { covarianceEngine } from '../utils/covariance-engine.js';
 import { recordPaperTrade, type PaperTradeRecord } from './vts-live-comparison-audit.js';
 import { evaluateTradeExpectancy } from '../core/calculations/expectancy.js';
@@ -778,6 +784,66 @@ export class PaperExecutionEngine {
     }
   }
 
+  /**
+   * P19-B7.2c — process one PENDING maker position per monitor tick (Kyle model,
+   * SIMPLIFIED 2026-07-02). A pending is a resting maker order: it holds a slot but has
+   * no fill. Two outcomes, FILL WINS in the same tick (R2):
+   *  1. FILL — honest side-aware trade-through: the real price traded through the resting
+   *     limit (buy: price ≤ limit) → state 'pending'→'open' at the limit + the maker fee
+   *     already reserved at placement. The position then enters the normal exit path on
+   *     subsequent ticks.
+   *  2. HARD-DROP — past `maker_deadline` (~1h, `maker_max_pending_ms`) → DROPPED, period
+   *     (no convert re-evaluation — an unfilled maker buy means price never came to us).
+   *     The open position is deleted (slot freed) and its paper_sim_trades row is closed
+   *     as closeReason='never_filled' (the TYPED discriminator; visible in the closed
+   *     records with no P&L, EXCLUDED from win-rate/expectancy aggregates + learning,
+   *     but COUNTED in the maker fill-rate denominator).
+   *  R3: for xStock the hard-drop must NOT fire while the market is closed
+   *     (weekend window) — a shut book can't honestly fill, so the drop waits for the
+   *     first open tick (conservative approximation, documented in the scope).
+   */
+  private async _processPendingMaker(position: any, currentPrice: number): Promise<void> {
+    const limit = position.makerLimitPrice != null ? parseFloat(position.makerLimitPrice) : NaN;
+    if (!Number.isFinite(limit)) {
+      console.error(`[P19-B7.2c][PENDING_INVALID:${this.mode}] ${position.symbol} pending with no maker_limit_price — leaving untouched (investigate)`);
+      return;
+    }
+    // ONE outcome per tick via the shared PURE logic (paper + VTS parity by construction;
+    // side-aware comparator, FILL WINS over the deadline in the same tick — R2).
+    // Zero/garbage-price guard (Langston Step-4): a non-positive tick (feed glitch) would
+    // satisfy `0 <= limit` and spuriously FILL a buy — treat it as no-price (null), exactly
+    // like the VTS resolve loop's `price > 0 ? price : null`. A null price can still hard-drop.
+    const safePrice = Number.isFinite(currentPrice) && currentPrice > 0 ? currentPrice : null;
+    const side = (position.side ?? 'buy') as 'buy' | 'sell';
+    const deadlineMs = position.makerDeadline ? new Date(position.makerDeadline).getTime() : null;
+    const outcome = evaluatePendingMaker({ side, currentPrice: safePrice, limit, nowMs: Date.now(), deadlineMs });
+    if (outcome === 'fill') {
+      await storage.updatePaperSimOpenPosition(this.mode, position.id, {
+        state: 'open',
+        currentPrice: currentPrice.toString(),
+        lastUpdated: new Date(),
+      } as any);
+      console.log(`[P19-B7.2c][MAKER_FILLED:${this.mode}] ${position.symbol}: price ${currentPrice} traded through limit ${limit} — pending→open at ${makerFillPrice(limit)} + maker fee (reserved at placement)`);
+      return;
+    }
+    if (outcome === 'drop') {
+      // R3: xStock — never fire the drop inside the weekend-closed window.
+      if ((position.assetClass ?? 'crypto_spot') === 'xstock_spot' && !isXstockMarketOpenUTC(position.symbol, new Date())) {
+        return; // market shut — wait for the first open tick
+      }
+      const tradeId = (position.metadata as any)?.tradeId;
+      if (tradeId) {
+        await storage.updatePaperSimTrade(this.mode, tradeId, {
+          closedAt: new Date(),
+          closeReason: 'never_filled', // TYPED discriminator — visible, excluded from aggregates/learning
+        } as any);
+      }
+      await storage.deletePaperSimOpenPosition(this.mode, position.id);
+      console.log(`[P19-B7.2c][MAKER_NEVER_FILLED:${this.mode}] ${position.symbol}: pending maker at ${limit} hit the hard-drop deadline unfilled — dropped (slot freed, never-filled record${tradeId ? '' : ' — no tradeId on metadata, position removed only'})`);
+    }
+    // 'rest' — still resting; nothing to do this tick.
+  }
+
   private async checkOpenPositions(): Promise<void> {
     // I7-ROOT-FIX: Track evaluation timing
     this.lastEvaluateAt = Date.now();
@@ -862,6 +928,15 @@ export class PaperExecutionEngine {
         const lastTick = this.lastPriceTickTime.get(position.symbol) || now;
         const diffMs = now - lastTick;
         this.lastPriceTickTime.set(position.symbol, now);
+
+        // ── P19-B7.2c: PENDING maker pre-pass — a resting maker order holds a slot but
+        // has NO fill, so it never enters the TEC exit path. Fill (honest trade-through)
+        // wins over the deadline in the same tick (R2). Handled then `continue`d.
+        if ((position as any).state === 'pending') {
+          await this._processPendingMaker(position, currentPrice);
+          positionsEvaluated++;
+          continue;
+        }
         
         const tickEntry = {
           symbol: position.symbol,
@@ -1883,6 +1958,11 @@ export class PaperExecutionEngine {
         // the gate falls back to its taker recompute (no behavior change).
         chosenEntryMode: (signal.chosenEntryMode as 'taker' | 'maker' | undefined) ?? 'taker',
         chosenNetEv: signal.chosenNetEv != null ? parseFloat(signal.chosenNetEv) : null,
+        // P19-B7.2c: the gen-time TAKER-leg netEV (produced by the kernel inside
+        // decideMakerTaker at signal-gen — taker-priced by construction). Read by the
+        // marketable-at-placement stored-taker check: if a maker order can't be rested
+        // (market already through the limit), takerNetEv>0 → open as taker now, else drop.
+        takerNetEv: signal.takerNetEv != null ? parseFloat(signal.takerNetEv) : null,
         metadata: {
           source: 'RTB_PROMOTION',
           originalSignalId: signal.signalId,
@@ -1925,7 +2005,7 @@ export class PaperExecutionEngine {
     // promoted signal (already parsed string→number at the rtb-row→StrategySignal conversion).
     // Optional → a non-promotion-path signal (FX5/orchestrator direct) simply has them undefined
     // → kernel documented defaults.
-    signal: StrategySignal & { quantity?: number; estimatedValue?: number; signalId?: string; diAtQueue?: number | null; dbsScoreAtQueue?: number | null; chosenEntryMode?: 'taker' | 'maker'; chosenNetEv?: number | null },
+    signal: StrategySignal & { quantity?: number; estimatedValue?: number; signalId?: string; diAtQueue?: number | null; dbsScoreAtQueue?: number | null; chosenEntryMode?: 'taker' | 'maker'; chosenNetEv?: number | null; takerNetEv?: number | null },
     settings: TradingSettings,
     cycleContext?: { portfolioValue: number; guardrails: GuardrailsV2 | null }
   ): Promise<OpenOutcome> {
@@ -2272,9 +2352,51 @@ export class PaperExecutionEngine {
       }
     }
 
+    // ── P19-B7.2c: post-promotion PENDING maker order (Kyle model, SIMPLIFIED 2026-07-02).
+    // A maker-chosen promotion does NOT fill now — it RESTS as a state='pending' position
+    // (holds a slot) at the maker limit (= the signal entry) until the real price trades
+    // through it (monitor pre-pass → 'open' at limit + maker fee) or the hard-drop deadline
+    // fires (→ DROPPED, period — no convert re-evaluation). EXCEPT: if the market is ALREADY
+    // through the limit at placement (best ask ≤ limit for a buy), a real post-only would
+    // REJECT — so run the stored-taker check instead: the gen-time takerNetEv (the kernel's
+    // taker leg inside decideMakerTaker — taker-priced by construction; gate is a gen
+    // snapshot ≤~30s stale via the promotion loop, the fill is live — documented
+    // approximation) → >0 falls through to the NORMAL taker fill below with the record
+    // flipped to taker (accounting-only; the EV kernel never reads the mode), else DROP
+    // (maker_marketable_dropped — a non-trade, never a closed-trade P&L).
+    let _b72cEffectiveMode: 'taker' | 'maker' = _b72ChosenMode;
+    let _b72cPendingMaker = false;
+    const _b72cLimit = signal.entryPrice;
+    if (_b72ChosenMode === 'maker') {
+      const _b72cBestAsk = _gate.snapshot.asks[0]?.price;
+      if (_b72cBestAsk != null && isMarketableAtPlacement('buy', _b72cBestAsk, _b72cLimit)) {
+        const _b72cStoredTakerEv = signal.takerNetEv;
+        if (_b72cStoredTakerEv != null && _b72cStoredTakerEv > 0) {
+          _b72cEffectiveMode = 'taker';
+          console.log(`[P19-B7.2c][MARKETABLE_TAKER_FALLBACK:${this.mode}] ${signal.symbol}: maker limit ${_b72cLimit} already marketable (bestAsk=${_b72cBestAsk}) — stored takerNetEv=${_b72cStoredTakerEv.toFixed(6)}>0 → opening as taker now`);
+        } else {
+          console.log(`[P19-B7.2c][MAKER_MARKETABLE_DROPPED:${this.mode}] ${signal.symbol}: maker limit ${_b72cLimit} already marketable (bestAsk=${_b72cBestAsk}) and stored takerNetEv=${_b72cStoredTakerEv ?? 'null'} not positive — dropped (non-trade)`);
+          rtbMetricsService.recordOpenFailed(signal.symbol, signal.strategy, 'MAKER_MARKETABLE_DROPPED', 'maker limit marketable at placement; stored taker EV not positive');
+          return { opened: false, stage: 'MAKER_MARKETABLE_DROPPED', reason: 'maker marketable at placement; taker EV not positive' };
+        }
+      } else {
+        _b72cPendingMaker = true;
+      }
+    }
+
     // P19-B4b.1: entry fill via the DEPTH-WALKED OrderPlacer port — the placer walks the
     // gate's ask snapshot → VWAP fill (replaces the flat 0.05% slippage). `partial` = the
     // book thinned between gate and fill (size the position down); `rejected` = no fillable book.
+    // P19-B7.2c: SKIPPED for a pending maker — no fill happens now; the position rests at
+    // the limit with the maker fee RESERVED (charged only if/when the monitor pre-pass fills it).
+    let actualEntryPrice: number;
+    let entryFee: number;
+    let totalSlippage: number;
+    if (_b72cPendingMaker) {
+      actualEntryPrice = _b72cLimit;
+      entryFee = _b72cLimit * quantity * getFrictionForAssetClass(_openClass).feeRateMaker;
+      totalSlippage = 0; // a maker fill at the resting limit pays no taker slippage
+    } else {
     const _openFill = await this.orderPlacer.openOrder({
       symbol: signal.symbol, side: 'buy', quantity, intendedPrice: signal.entryPrice,
       mode: this.mode, assetClass: _openClass, bookAsks: _gate.snapshot.asks,
@@ -2304,10 +2426,11 @@ export class PaperExecutionEngine {
       rtbMetricsService.recordOpenFailed(signal.symbol, signal.strategy, 'FILL_REJECTED', 'filled quantity = 0');
       return { opened: false, stage: 'FILL_REJECTED', reason: 'filled quantity = 0' };
     }
-    const actualEntryPrice = _openFill.fillPrice;
+    actualEntryPrice = _openFill.fillPrice;
+    entryFee = _openFill.feeQuote;
+    totalSlippage = _openFill.slippageQuote;
+    }
     const positionValue = actualEntryPrice * quantity;
-    const entryFee = _openFill.feeQuote;
-    const totalSlippage = _openFill.slippageQuote;
 
     console.log(`  Quantity: ${quantity.toFixed(4)}, Position Value: $${positionValue.toFixed(2)}`);
     console.log(`  Entry Slippage: $${totalSlippage.toFixed(2)}, Entry Fee: $${entryFee.toFixed(2)}`);
@@ -2458,7 +2581,9 @@ export class PaperExecutionEngine {
       // actual entry fill by construction (this code doesn't run until active trading is ON,
       // which is after B7.2c). Entry-leg only — the exit pays taker for both classes today.
       const _b72Friction = getFrictionForAssetClass(_tradeClass);
-      const _b72EntryFeeRate = _b72ChosenMode === 'maker' ? _b72Friction.feeRateMaker : _b72Friction.feeRateTaker;
+      // P19-B7.2c: keyed on the EFFECTIVE mode — the marketable-at-placement taker
+      // fallback flips maker→taker, and the record must show the fee actually paid.
+      const _b72EntryFeeRate = _b72cEffectiveMode === 'maker' ? _b72Friction.feeRateMaker : _b72Friction.feeRateTaker;
 
       const trade = await storage.createPaperSimTrade(this.mode, {
         symbol: signal.symbol,
@@ -2488,7 +2613,7 @@ export class PaperExecutionEngine {
         strategyPhaseWeight: _b67_2_1_phaseWeight,
         regimeConfidenceModulated: _b67_2_1_modulatedConf,
         // P19-B7.2b (OBJ-B): the maker/taker entry fee-mode + per-side rate.
-        chosenEntryMode: _b72ChosenMode,
+        chosenEntryMode: _b72cEffectiveMode,
         entryFeeRate: _b72EntryFeeRate.toString(),
         metadata: signal.metadata || {}
       });
@@ -2569,8 +2694,17 @@ export class PaperExecutionEngine {
         // Batch 19E: Persist sourcePool from signal metadata
         sourcePool: (signal as any)?.metadata?.sourcePool || (signal as any)?.sourcePool || null,
         // P19-B7.2b (OBJ-B): the maker/taker entry fee-mode + per-side rate.
-        chosenEntryMode: _b72ChosenMode,
+        chosenEntryMode: _b72cEffectiveMode,
         entryFeeRate: _b72EntryFeeRate.toString(),
+        // P19-B7.2c: a maker-chosen promotion RESTS as state='pending' at the limit,
+        // holding a slot, until the monitor pre-pass fills it (real trade-through) or
+        // the hard-drop deadline fires (dropped — never a closed trade). Taker/filled
+        // positions keep the default state='open' with NULL maker fields.
+        ...(_b72cPendingMaker ? {
+          state: 'pending',
+          makerLimitPrice: _b72cLimit.toString(),
+          makerDeadline: new Date(Date.now() + resolveMakerMaxPendingMs(_openClass)),
+        } : {}),
         metadata: {
           ...signal.metadata,
           tradeId: trade.id,
