@@ -20,7 +20,9 @@ change-class: non_architecture
 Bot accounts + token env files (Kyle's call to delete); voice-prune timer; `Telegram Discussion Archives/`; the Discord fabric. **Dispatcher Telegram-leg code + `ALERT_DISCORD_ISOLATION` drop-in → #351 / B-TELEGRAM-DECOMM-2** (app-repo code change; kept out of this batch to avoid entering the trading-app deploy queue mid-P19-B7.2c; the drop-in STAYS until that code is deleted).
 
 ## CI
-No app-code changes (docs + repo archive files only). Head-of-branch CI green per §5.19 checked at push.
+No app-code changes (docs + repo archive files only). CI on the close commit: **run `28598407527` — completed success, all 4 jobs GREEN** (§5.19 satisfied).
+
+## Step-8 (Langston, independent — Discord 2026-07-02): **PASS, approved for close.** Verified: both dead services `inactive` + unit files ABSENT from `list-unit-files`; both Discord services `active`; archive dir present; his own CLAUDE.md/MEMORY match his actual world. NEW Claude independently confirmed the service states + re-armed his wake watcher on the 3-source tail (liveness-tested).
 
 ## Governance files changed
 `CLAUDE.md` (comms banner → decommissioned; §6.1/§6.3/§6.4/§6.6/§6.7/§6.9/§6.10/§8/§8.2 swept; rule 21 Fable status), `1-system-manual/SYSTEM_IMPACT_MAP.md` (Discord fabric → single-backend), `1-system-manual/RUNNING_ISSUES.md` (#348 RESOLVED, #351 opened w/ named home), `1-system-manual/DELETED_COMPONENTS_LOG.md` (full entry), `1-system-manual/BATCH_CATALOG.md`, `1-system-manual/PHASE_HISTORY.md`, shared `MEMORY.md` (items 4/4.5/4.6/4.8 + cutover block; truth + repo mirror), `MEMORY_CC_A.md` (truth + mirror), Langston `/home/langston/CLAUDE.md` + `/home/langston/MEMORY.md` (per §2 step 10.b), scope `B_TELEGRAM_DECOMM_SCOPE.md`, this report. PHASE_19_PLAN: N/A (not a Phase-19 batch — comms infra side-batch; no Phase-19 sequencing change). SYSTEM_MANUAL: N/A (no trading architecture/math touched; Langston-confirmed scope class).
