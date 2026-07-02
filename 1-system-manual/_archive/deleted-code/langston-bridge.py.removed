@@ -1,0 +1,648 @@
+#!/usr/bin/env python3
+"""
+Langston Telegram bridge.
+
+Polls Telegram getUpdates for messages directed at @LangstonDTBot, invokes
+Claude Code in print mode with a stable session-id (so conversation context
+persists across invocations), and posts the reply back to Telegram.
+
+Filtering:
+- Sender must be Kyle (user ID 8734856533) or CC_RELAY_USER_ID.
+- DM messages: handled.
+- Group messages: only the DawnTrader HQ group (-1003575211453), topic 21,
+  AND must @mention the bot OR be a reply to one of the bot's messages.
+
+State at /home/langston/.langston-bridge-state.json: tracks last_update_id
+(Telegram offset cursor) and session_id (Claude Code conversation UUID).
+Session UUID is stable for the life of the bridge; rotate by deleting the
+state file.
+
+B-NEW-41 (2026-05-17): adds voice transcription + unifies the inbound
+pipeline. Per Langston Step 2 Rev 1: ALL inbound (text + voice) is routed
+through a SINGLE worker thread that consumes a queue.Queue. This guarantees
+single-claude-at-a-time invariant — the main poll loop is now a pure
+enqueuer, never blocks on claude or whisper.
+"""
+import datetime
+import json
+import os
+import queue
+import subprocess
+import sys
+import threading
+import time
+import traceback
+import urllib.request
+import urllib.parse
+import urllib.error
+import uuid
+from pathlib import Path
+
+# Config
+BOT_TOKEN_FILE = "/etc/langston/telegram-bot.env"
+OAUTH_TOKEN_FILE = "/etc/langston/oauth.env"
+WORK_DIR = "/home/langston"
+MIRROR_LOG = "/var/log/cc-bridge-inbox.jsonl"  # shared with cc-comms-bridge so main CC sees Langston traffic
+STATE_FILE = "/home/langston/.langston-bridge-state.json"
+LOG_FILE = "/var/log/langston-bridge.log"
+
+# Identity
+KYLE_USER_ID = 8734856533
+CC_RELAY_USER_ID = 8758978168
+ALLOWED_SENDERS = {KYLE_USER_ID, CC_RELAY_USER_ID}
+GROUP_ID = -1003575211453
+TOPIC_ID = 21  # Batch Implementation
+BOT_USERNAME = "LangstonDTBot"
+
+POLL_TIMEOUT = 25
+CLAUDE_TIMEOUT = 900  # 15 min cap on one Claude invocation
+
+# B-NEW-41 voice transcription config
+WHISPER_CLI = "/opt/whisper.cpp/build/bin/whisper-cli"
+WHISPER_MODEL = "/opt/whisper.cpp/models/ggml-small.en.bin"
+WHISPER_THREADS = "3"
+WHISPER_TIMEOUT_S = 120
+FFMPEG_BIN = "/usr/bin/ffmpeg"  # B-NEW-41 hotfix: whisper-cli v1.8.4 only reads WAV; convert Ogg first
+FFMPEG_TIMEOUT_S = 30
+VOICE_ARCHIVE_ROOT = "/var/log/cc-bridge-voice-archive/langston"  # B-NEW-41 hotfix: per-bridge subdir prevents cross-user file ownership collisions
+TG_FILE_SIZE_CAP = 20 * 1024 * 1024
+ACK_PREVIEW_CHARS = 100
+HEARTBEAT_INTERVAL_S = 60
+
+
+def log(msg):
+    line = f"{time.strftime('%Y-%m-%d %H:%M:%S')} {msg}"
+    print(line, file=sys.stderr, flush=True)
+    try:
+        with open(LOG_FILE, "a") as f:
+            f.write(line + "\n")
+    except Exception:
+        pass
+
+
+def load_token(path, key):
+    for line in Path(path).read_text().splitlines():
+        line = line.strip()
+        if line.startswith(f"{key}="):
+            return line.split("=", 1)[1].strip()
+    raise RuntimeError(f"{key} not found in {path}")
+
+
+BOT_TOKEN = load_token(BOT_TOKEN_FILE, "TELEGRAM_BOT_TOKEN")
+OAUTH_TOKEN = load_token(OAUTH_TOKEN_FILE, "CLAUDE_CODE_OAUTH_TOKEN")
+TG_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
+
+
+def mirror_event(kind, **fields):
+    """Append a JSON line to the shared inbox log so main CC sees it.
+
+    Atomic write: single f.write call per entry. POSIX guarantees atomicity
+    under PIPE_BUF (4KB) for regular files. Sufficient for our entries.
+    """
+    entry = {"ts": datetime.datetime.now().astimezone().isoformat(), "source": "langston-bridge", "kind": kind, **fields}
+    try:
+        with open(MIRROR_LOG, "a") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except Exception as e:
+        log(f"mirror write failed: {e}")
+
+
+def load_state():
+    if Path(STATE_FILE).exists():
+        try:
+            return json.loads(Path(STATE_FILE).read_text())
+        except Exception:
+            log("state file corrupt, starting fresh")
+    return {"last_update_id": 0, "session_id": str(uuid.uuid4())}
+
+
+def save_state(state):
+    Path(STATE_FILE).write_text(json.dumps(state, indent=2))
+
+
+def tg_request(method, params=None, timeout=30):
+    url = f"{TG_API}/{method}"
+    if params:
+        data = json.dumps(params).encode("utf-8")
+        req = urllib.request.Request(
+            url, data=data, method="POST",
+            headers={"Content-Type": "application/json"},
+        )
+    else:
+        req = urllib.request.Request(url, method="GET")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", errors="replace")[:300]
+        log(f"TG {method} HTTP {e.code}: {body}")
+        return None
+    except Exception as e:
+        log(f"TG {method} error: {type(e).__name__}: {e}")
+        return None
+
+
+def tg_download_file(file_path, dest_path):
+    """B-NEW-41: download a file from Telegram. Returns (success: bool, size: int)."""
+    url = f"https://api.telegram.org/file/bot{BOT_TOKEN}/{file_path}"
+    try:
+        req = urllib.request.Request(url, method="GET")
+        with urllib.request.urlopen(req, timeout=60) as r:
+            data = r.read()
+        Path(dest_path).parent.mkdir(parents=True, exist_ok=True)
+        with open(dest_path, "wb") as f:
+            f.write(data)
+        return True, len(data)
+    except Exception as e:
+        log(f"TG file download failed: {type(e).__name__}: {e}")
+        return False, 0
+
+
+def get_updates(offset, timeout):
+    return tg_request(
+        "getUpdates",
+        {"offset": offset, "timeout": timeout, "allowed_updates": ["message"]},
+        timeout=timeout + 10,
+    )
+
+
+def send_message(chat_id, text, thread_id=None, reply_to=None):
+    """Send. Returns the Telegram message_id of the first chunk, or None on failure."""
+    if not text:
+        text = "_(empty response)_"
+    chunks = []
+    LIMIT = 3800
+    while len(text) > LIMIT:
+        cut = text.rfind("\n", 0, LIMIT)
+        if cut < LIMIT // 2:
+            cut = LIMIT
+        chunks.append(text[:cut])
+        text = text[cut:].lstrip("\n")
+    chunks.append(text)
+
+    first_id = None
+    for i, chunk in enumerate(chunks):
+        params = {"chat_id": chat_id, "text": chunk, "parse_mode": "Markdown"}
+        if thread_id:
+            params["message_thread_id"] = thread_id
+        if i == 0 and reply_to:
+            params["reply_to_message_id"] = reply_to
+            params["allow_sending_without_reply"] = True
+        r = tg_request("sendMessage", params)
+        if r is None or not r.get("ok"):
+            # Fallback: retry without parse_mode (Markdown parse errors common)
+            params.pop("parse_mode", None)
+            r = tg_request("sendMessage", params)
+        if r and r.get("ok") and i == 0:
+            first_id = r["result"]["message_id"]
+    return first_id
+
+
+def react(chat_id, message_id, emoji="👀"):
+    tg_request(
+        "setMessageReaction",
+        {"chat_id": chat_id, "message_id": message_id, "reaction": [{"type": "emoji", "emoji": emoji}]},
+    )
+
+
+def should_handle(msg):
+    """Return (handle: bool, cleaned_text: str). Used for TEXT messages.
+
+    Voice messages bypass this for text-content reasons but reuse the same
+    allowlist logic via should_handle_voice below.
+    """
+    sender = msg.get("from") or {}
+    if sender.get("id") not in ALLOWED_SENDERS:
+        return False, ""
+    chat = msg.get("chat") or {}
+    chat_id = chat.get("id")
+    text = msg.get("text") or msg.get("caption") or ""
+
+    # DM
+    if chat.get("type") == "private":
+        return True, text.strip()
+
+    # Group: pass every message in topic 21 from allowed senders to Langston.
+    # He uses judgment to decide whether to respond (returns [SILENT] when not his to answer).
+    if chat_id == GROUP_ID:
+        thread_id = msg.get("message_thread_id")
+        if thread_id != TOPIC_ID:
+            return False, ""
+        mention = f"@{BOT_USERNAME}"
+        cleaned = text
+        for m in (mention, mention.lower(), mention.upper()):
+            cleaned = cleaned.replace(m, "")
+        return True, cleaned.strip()
+
+    return False, ""
+
+
+def should_handle_voice(msg):
+    """B-NEW-41: same allowlist as should_handle but for voice/audio messages.
+
+    Returns True if this voice should be transcribed + sent to Langston.
+    """
+    sender = msg.get("from") or {}
+    if sender.get("id") not in ALLOWED_SENDERS:
+        return False
+    chat = msg.get("chat") or {}
+    if chat.get("type") == "private":
+        return True
+    if chat.get("id") == GROUP_ID and msg.get("message_thread_id") == TOPIC_ID:
+        return True
+    return False
+
+
+def detect_voice_or_audio(msg):
+    """B-NEW-41: return (file_id, voice_kind) if msg has voice/audio, else (None, None)."""
+    voice = msg.get("voice")
+    if voice and voice.get("file_id"):
+        return voice["file_id"], "voice"
+    audio = msg.get("audio")
+    if audio and audio.get("file_id"):
+        return audio["file_id"], "audio"
+    return None, None
+
+
+def transcribe_audio(audio_path):
+    """B-NEW-41 hotfix: convert Ogg/Opus → 16kHz mono WAV via ffmpeg, then whisper-cli.
+
+    Returns (text: str|None, error: str|None, duration_ms: int).
+
+    Whisper.cpp v1.8.4's whisper-cli only reads WAV; Telegram voice notes
+    are Opus-in-Ogg, so ffmpeg conversion is required as a prep step.
+    """
+    t0 = time.time()
+    wav_path = f"/tmp/whisper-in-{os.getpid()}-{int(t0*1000)}.wav"
+    out_prefix = f"/tmp/whisper-out-{os.getpid()}-{int(t0*1000)}"
+
+    # Step 1: ffmpeg → 16kHz mono WAV
+    ffmpeg_args = [
+        FFMPEG_BIN, "-loglevel", "error", "-y",
+        "-i", audio_path,
+        "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le",
+        wav_path,
+    ]
+    try:
+        ff = subprocess.run(ffmpeg_args, capture_output=True, text=True, timeout=FFMPEG_TIMEOUT_S)
+        if ff.returncode != 0:
+            return None, f"ffmpeg exit={ff.returncode} stderr_tail={ff.stderr[-500:]}", int((time.time() - t0) * 1000)
+        if not Path(wav_path).exists():
+            return None, f"ffmpeg produced no WAV output (stderr: {ff.stderr[-500:]})", int((time.time() - t0) * 1000)
+    except subprocess.TimeoutExpired:
+        return None, f"ffmpeg timeout after {FFMPEG_TIMEOUT_S}s", int((time.time() - t0) * 1000)
+    except Exception as e:
+        return None, f"ffmpeg invoke error: {type(e).__name__}: {e}", int((time.time() - t0) * 1000)
+
+    # Step 2: whisper-cli on the WAV
+    args = [
+        WHISPER_CLI,
+        "-m", WHISPER_MODEL,
+        "-f", wav_path,
+        "-t", WHISPER_THREADS,
+        "-otxt",
+        "-of", out_prefix,
+        "-nt",
+    ]
+    try:
+        result = subprocess.run(
+            args, capture_output=True, text=True, timeout=WHISPER_TIMEOUT_S
+        )
+        elapsed_ms = int((time.time() - t0) * 1000)
+        try:
+            Path(wav_path).unlink()
+        except Exception:
+            pass
+        if result.returncode != 0:
+            return None, f"whisper exit={result.returncode} stderr_tail={result.stderr[-500:]}", elapsed_ms
+        txt_path = out_prefix + ".txt"
+        if not Path(txt_path).exists():
+            return None, f"whisper produced no output file (stderr: {result.stderr[-500:]})", elapsed_ms
+        text = Path(txt_path).read_text(encoding="utf-8").strip()
+        try:
+            Path(txt_path).unlink()
+        except Exception:
+            pass
+        if not text:
+            return None, "whisper produced empty transcription", elapsed_ms
+        return text, None, elapsed_ms
+    except subprocess.TimeoutExpired:
+        try:
+            Path(wav_path).unlink()
+        except Exception:
+            pass
+        return None, f"whisper timeout after {WHISPER_TIMEOUT_S}s", int((time.time() - t0) * 1000)
+    except Exception as e:
+        try:
+            Path(wav_path).unlink()
+        except Exception:
+            pass
+        return None, f"whisper invoke error: {type(e).__name__}: {e}", int((time.time() - t0) * 1000)
+
+
+def invoke_claude(prompt, session_id, state=None, _retry_count=0):
+    """Invoke claude-cli with session_id. On "Session ID already in use" error,
+    automatically rotate to a fresh UUID, persist to state, and retry once.
+
+    B-NEW-41 hotfix (Kyle 2026-05-17): claude-cli intermittently refuses the
+    bridge's canonical UUID with "Session ID already in use" even when no other
+    claude process is running (timing-sensitive lock from CLI internals). Auto-
+    rotating the UUID + persisting to state recovers gracefully — at the cost
+    of losing prior conversation context, which Langston's CLAUDE.md+MEMORY
+    auto-load on session start mitigates.
+    """
+    env = os.environ.copy()
+    env["CLAUDE_CODE_OAUTH_TOKEN"] = OAUTH_TOKEN
+    env["HOME"] = WORK_DIR
+    env["PATH"] = "/usr/local/bin:/usr/bin:/bin"
+
+    args = [
+        "/usr/bin/claude",
+        "-p", prompt,
+        "--session-id", session_id, "--model", "claude-opus-4-8[1m]",
+        "--permission-mode", "acceptEdits",
+    ]
+    log(f"invoking claude (prompt={len(prompt)} chars, session={session_id[:8]}..., retry={_retry_count})")
+    t0 = time.time()
+    try:
+        result = subprocess.run(
+            args, env=env, cwd=WORK_DIR,
+            capture_output=True, text=True, timeout=CLAUDE_TIMEOUT,
+        )
+        elapsed = time.time() - t0
+        if result.returncode != 0:
+            stderr_lc = (result.stderr or "").lower()
+            log(f"claude exit {result.returncode} after {elapsed:.1f}s: stderr={result.stderr[:300]}")
+            # Auto-rotate on session lock collision (once per invocation)
+            if "already in use" in stderr_lc and state is not None and _retry_count == 0:
+                new_uuid = str(uuid.uuid4())
+                log(f"session UUID locked, rotating {session_id[:8]}... -> {new_uuid[:8]}...")
+                state["session_id"] = new_uuid
+                save_state(state)
+                return invoke_claude(prompt, new_uuid, state=state, _retry_count=_retry_count + 1)
+            return f"_Langston bridge error: claude returned exit code {result.returncode}_\n\n```\n{result.stderr[:1500]}\n```"
+        log(f"claude returned {len(result.stdout)} chars in {elapsed:.1f}s")
+        return result.stdout.strip()
+    except subprocess.TimeoutExpired:
+        log(f"claude timeout after {CLAUDE_TIMEOUT}s")
+        return "_Langston bridge: claude invocation timed out (15 min cap)_"
+    except Exception as e:
+        log(f"claude invoke error: {type(e).__name__}: {e}")
+        return f"_Langston bridge: invoke error — {type(e).__name__}: {e}_"
+
+
+# ─── B-NEW-41 unified worker (text + voice through single FIFO) ──────────────
+
+def task_worker(task_q, state):
+    """Worker thread that consumes the task queue serially.
+
+    Single-claude-at-a-time invariant: only one invoke_claude runs at any moment,
+    regardless of whether the trigger was text or transcribed voice. This prevents
+    two concurrent claude --session-id <same UUID> subprocesses from corrupting
+    session state (Langston Step 2 Rev 1).
+    """
+    last_heartbeat = time.time()
+    while True:
+        try:
+            try:
+                task = task_q.get(timeout=HEARTBEAT_INTERVAL_S)
+            except queue.Empty:
+                now = time.time()
+                if now - last_heartbeat >= HEARTBEAT_INTERVAL_S:
+                    log(f"task worker alive, queue depth=0")
+                    last_heartbeat = now
+                continue
+            try:
+                process_task(task, state)
+            except Exception as e:
+                log(f"task worker error on task: {type(e).__name__}: {e}\n{traceback.format_exc()[:500]}")
+            finally:
+                task_q.task_done()
+            if time.time() - last_heartbeat >= HEARTBEAT_INTERVAL_S:
+                log(f"task worker alive, queue depth={task_q.qsize()}")
+                last_heartbeat = time.time()
+        except Exception as e:
+            log(f"task worker outer loop error (resuming): {type(e).__name__}: {e}")
+            time.sleep(1)
+
+
+def process_task(task, state):
+    """Handle one queued task (text or voice). Invokes claude, posts reply."""
+    chat_id = task["chat_id"]
+    thread_id = task["thread_id"]
+    msg_id = task["message_id"]
+    kind = task["kind"]
+    msg = task["msg"]
+
+    if kind == "voice":
+        # B-NEW-41 hotfix (Kyle 2026-05-17): distinguish DM vs group.
+        #   - DM with @LangstonDTBot: full UX (preview ACK + fallback notice on failure).
+        #   - Group topic 21: silent on voice (cc-comms-bridge handles user-facing ACK
+        #     since both bots monitor that thread). Just invoke claude; post only if
+        #     non-[SILENT]. This prevents the "two bots respond / one with error" UX
+        #     Kyle reported when cc-comms-bridge succeeded and langston-bridge failed
+        #     in a race for the same archive file.
+        chat_type = (msg.get("chat") or {}).get("type")
+        is_dm = (chat_type == "private")
+
+        prompt, error = process_voice(task)
+        if prompt is None:
+            # Transcription failed
+            if is_dm:
+                fallback_text = (
+                    f"⚠️ Voice transcription failed (reason: {error[:200]}). "
+                    f"Please retry as text or paste the message again. (msg {msg_id})"
+                )
+                send_message(chat_id, fallback_text, thread_id=thread_id, reply_to=msg_id)
+            # else: group topic 21 — silent failure; cc-comms-bridge will surface ACK.
+            mirror_event(
+                "langston_inbound_voice_failed",
+                chat_id=chat_id, thread_id=thread_id, message_id=msg_id,
+                file_id=task.get("file_id"), failure_reason=error[:500],
+                silent_in_group=not is_dm,
+            )
+            return
+        # Voice transcribed successfully.
+        if is_dm:
+            # DM: post preview ACK so Kyle sees transcription before Langston's claude reply.
+            # No "Now invoking Langston..." suffix per Langston Step 4 obs #1 — that suffix
+            # over-promises if Langston returns [SILENT] (no response to post).
+            preview = prompt[:ACK_PREVIEW_CHARS] + ("..." if len(prompt) > ACK_PREVIEW_CHARS else "")
+            ack_text = f"✅ Voice transcribed: \"{preview}\""
+            send_message(chat_id, ack_text, thread_id=thread_id, reply_to=msg_id)
+        # else: group topic 21 — silent on success. cc-comms-bridge posts user-facing ACK.
+        # Langston only speaks via the claude-cli reply path below.
+        mirror_event(
+            "langston_inbound_voice",
+            chat_id=chat_id, thread_id=thread_id, message_id=msg_id,
+            sender_id=(msg.get("from") or {}).get("id"),
+            sender_username=(msg.get("from") or {}).get("username"),
+            text=prompt,
+            transcription_source="whisper.cpp/ggml-small.en",
+            transcription_duration_ms=task.get("transcription_duration_ms"),
+            audio_duration_s=(msg.get(task.get("voice_kind")) or {}).get("duration"),
+            audio_archive_path=task.get("audio_archive_path"),
+            file_id=task.get("file_id"),
+            silent_in_group=not is_dm,
+        )
+    else:
+        # Text path
+        prompt = task["cleaned"]
+        mirror_event(
+            "langston_inbound",
+            chat_id=chat_id, thread_id=thread_id, message_id=msg_id,
+            sender_id=(msg.get("from") or {}).get("id"),
+            sender_username=(msg.get("from") or {}).get("username"),
+            text=prompt,
+        )
+
+    log(f"handling msg {msg_id} chat={chat_id} thread={thread_id} kind={kind}: {prompt[:120]}")
+    try:
+        react(chat_id, msg_id, "👀")
+    except Exception:
+        pass
+
+    response = invoke_claude(prompt, state["session_id"], state=state)
+    resp_stripped = (response or "").strip()
+    is_silent = (not resp_stripped) or resp_stripped.upper().startswith("[SILENT]") or resp_stripped.upper() == "SILENT"
+    # B-NEW-41 hotfix: bridge-error wrapped responses are also treated as silent
+    # in group chats (still mirrored for debugging). In DMs they post normally so
+    # the user sees what went wrong.
+    is_bridge_error = resp_stripped.startswith("_Langston bridge error:") or resp_stripped.startswith("_Langston bridge:")
+    chat_type = (msg.get("chat") or {}).get("type")
+    is_dm = (chat_type == "private")
+    if is_bridge_error and not is_dm:
+        is_silent = True
+    if is_silent:
+        mirror_event(
+            "langston_silent",
+            chat_id=chat_id, thread_id=thread_id, reply_to=msg_id,
+            reason=resp_stripped[:200],
+        )
+        log(f"silent on msg {msg_id} (no Telegram post)")
+    else:
+        sent_id = send_message(chat_id, response, thread_id=thread_id, reply_to=msg_id)
+        mirror_event(
+            "langston_outbound",
+            chat_id=chat_id, thread_id=thread_id, message_id=sent_id,
+            reply_to=msg_id, text=response,
+        )
+        log(f"responded to msg {msg_id}")
+
+
+def process_voice(task):
+    """Download + transcribe a voice/audio task. Returns (text, None) or (None, error)."""
+    file_id = task["file_id"]
+    message_id = task["message_id"]
+
+    meta = tg_request("getFile", {"file_id": file_id})
+    if not meta or not meta.get("ok"):
+        return None, f"getFile_failed: {str(meta)[:200]}"
+    file_size = meta["result"].get("file_size", 0)
+    if file_size > TG_FILE_SIZE_CAP:
+        return None, f"oversize {file_size}>{TG_FILE_SIZE_CAP}"
+    file_path = meta["result"].get("file_path")
+    if not file_path:
+        return None, "no_file_path"
+
+    date_str = time.strftime("%Y-%m-%d")
+    archive_dir = Path(VOICE_ARCHIVE_ROOT) / date_str
+    archive_dir.mkdir(parents=True, exist_ok=True)
+    ext = Path(file_path).suffix or ".ogg"
+    archive_path = str(archive_dir / f"{message_id}{ext}")
+    ok, actual_size = tg_download_file(file_path, archive_path)
+    if not ok:
+        return None, f"download_failed: file_path={file_path}"
+    if actual_size == 0:
+        return None, f"zero_byte_file: file_path={file_path}"
+
+    task["audio_archive_path"] = archive_path
+
+    log(f"voice: transcribing {archive_path} (size={actual_size}B)")
+    text, error, duration_ms = transcribe_audio(archive_path)
+    task["transcription_duration_ms"] = duration_ms
+    if text is None:
+        return None, error
+    return text, None
+
+
+# ─── Main poll loop (pure enqueuer; never blocks on claude or whisper) ──────
+
+def main():
+    state = load_state()
+    save_state(state)
+    log(f"Langston bridge starting (B-NEW-41: unified worker queue). session_id={state['session_id']} last_update_id={state['last_update_id']}")
+
+    task_q = queue.Queue()
+    worker = threading.Thread(target=task_worker, args=(task_q, state), daemon=True, name="task-worker")
+    worker.start()
+    log(f"task worker thread started (daemon, name={worker.name})")
+
+    consecutive_errors = 0
+    while True:
+        try:
+            updates = get_updates(state["last_update_id"] + 1, POLL_TIMEOUT)
+            if updates is None:
+                consecutive_errors += 1
+                wait = min(60, 2 ** min(consecutive_errors, 5))
+                log(f"poll error #{consecutive_errors}, sleeping {wait}s")
+                time.sleep(wait)
+                continue
+            consecutive_errors = 0
+            if not updates.get("ok"):
+                log(f"getUpdates not ok: {updates}")
+                time.sleep(5)
+                continue
+
+            for update in updates.get("result", []):
+                state["last_update_id"] = max(state["last_update_id"], update["update_id"])
+                msg = update.get("message")
+                if not msg:
+                    continue
+
+                # B-NEW-41: voice/audio detection — enqueue voice task, skip text path
+                file_id, voice_kind = detect_voice_or_audio(msg)
+                if file_id and should_handle_voice(msg):
+                    log(f"voice detected: msg {msg['message_id']} kind={voice_kind}, enqueueing")
+                    task_q.put({
+                        "kind": "voice",
+                        "msg": msg,
+                        "chat_id": msg["chat"]["id"],
+                        "thread_id": msg.get("message_thread_id"),
+                        "message_id": msg["message_id"],
+                        "file_id": file_id,
+                        "voice_kind": voice_kind,
+                    })
+                    continue
+                if file_id:
+                    # Voice from disallowed sender/chat — silently skip
+                    continue
+
+                # Text path
+                try:
+                    handle, cleaned = should_handle(msg)
+                except Exception as e:
+                    log(f"should_handle error: {e}")
+                    continue
+                if not handle:
+                    continue
+                task_q.put({
+                    "kind": "text",
+                    "msg": msg,
+                    "chat_id": msg["chat"]["id"],
+                    "thread_id": msg.get("message_thread_id"),
+                    "message_id": msg["message_id"],
+                    "cleaned": cleaned,
+                })
+
+            save_state(state)
+        except KeyboardInterrupt:
+            log("KeyboardInterrupt, exiting")
+            break
+        except Exception as e:
+            log(f"main loop error: {type(e).__name__}: {e}\n{traceback.format_exc()[:1000]}")
+            time.sleep(10)
+
+
+if __name__ == "__main__":
+    main()

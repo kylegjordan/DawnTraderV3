@@ -314,3 +314,27 @@
 **Archive copy:** none — inline endpoint locals + one response field (not a whole file); git history is the authoritative archive.
 **Removal commit:** `1c451f5b5`.
 **Reviewed by:** Langston Step-4 APPROVED (Discord, 2026-06-25) — the dead-scaffold excision was condition (1) of his approval.
+
+---
+
+## 2026-07-02 — B-TELEGRAM-DECOMM (#348): the Telegram comms bridges (Helsinki)
+
+| Item | Location (pre-removal) | What it was |
+|---|---|---|
+| `langston-bridge.service` + `/usr/local/bin/langston-bridge.py` | Helsinki systemd + /usr/local/bin | Long-polled `@LangstonDTBot` getUpdates; invoked Langston's claude-cli on Telegram inbound; posted replies to Telegram; whisper voice leg. |
+| `cc-comms-bridge.service` + `/usr/local/bin/cc-comms-bridge` | Helsinki systemd + /usr/local/bin | Long-polled `@CCDTCommsBot`; wrote Kyle's Telegram inbound to `/var/log/cc-bridge-inbox.jsonl`; provided CC's Telegram outbound CLI. |
+| `cc-send` telegram routing leg | `/usr/local/bin/cc-send` (Helsinki) | The `COMMS_BACKEND=telegram` branch — replaced by a LOUD FATAL error naming this log (no silent dead branch). |
+| Wake-watcher Telegram tail | both CC sessions' Monitor command | `cc-bridge-inbox.jsonl` dropped from the multi-tail (now 3 sources: Discord inbox, alert-invokes, wake file). |
+
+**Why removed:** Discord has been the sole live backend since cutover #333 (2026-06-25); the bake check (#348, alert `e4bb6055`) passed 2026-07-02 with 1,492 messages / 0 errors / traffic every day / zero bridge-journal errors over the full window. Kyle green-lit the teardown the same day. Rule 18: running-but-unused services are lingering legacy (a re-enable-by-accident vector back into live comms — Langston's Step-1 call was REMOVE the unit files, not leave inert-in-place).
+
+**Blast-radius verification:** both services `inactive` + unit files removed + `daemon-reload` + zero remaining bridge processes; Discord bridges untouched (`active`); live `cc-send` Discord post delivered + woke NEW Claude's watcher (receipt confirmed in-channel); deliberate `COMMS_BACKEND=telegram` test failed loudly then env restored. Dependencies swept: Langston persona CLAUDE.md/MEMORY (his own flag — rewritten to the Discord model), wake watchers (3-source), CLAUDE.md §6/§8, SIM Discord-fabric, shared MEMORY.
+
+**Left intentionally (NOT dead):**
+- Bot accounts + token env files (`/etc/langston/telegram-bot.env`, `/etc/langston/ccdt-bot.env`) — registered-but-unused; deleting the accounts is Kyle's call.
+- `/var/log/cc-bridge-inbox.jsonl` + voice archive + `cc-voice-archive-prune.timer` — frozen history + self-emptying prune.
+- The staging alert dispatcher's `pushToTelegram`/`langston-alert-handler` code + the `ALERT_DISCORD_ISOLATION=1` drop-in (which SUPPRESSES them and must stay until the code is deleted) — **#351 / B-TELEGRAM-DECOMM-2**.
+- Repo `Telegram Discussion Archives/` + `_archive/TELEGRAM_COMMS_APPARATUS_ARCHIVED_2026-07-01.md` — the historical record + restore reference.
+
+**Archive copies:** Helsinki `/root/telegram-bridges-archive-2026-07-02/` (scripts, unit files, state files, pre-decomm Langston CLAUDE.md/MEMORY) + repo `1-system-manual/_archive/deleted-code/{langston-bridge.py,cc-comms-bridge,langston-bridge.service,cc-comms-bridge.service}.removed`.
+**Reviewed by:** Langston Step-1 PROCEED (Discord, 2026-07-02) with the remove-unit-files ruling + the persona-sweep and voice-disposition riders (all executed).
