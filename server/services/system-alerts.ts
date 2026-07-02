@@ -263,10 +263,10 @@ export async function addAlert(opts: AddAlertOptions): Promise<SystemAlert> {
 /**
  * Dispatcher invocation: promote `scheduled` entries whose `triggers_at <= NOW()`
  * to `active`. Returns the entries that were promoted (so callers can fire
- * Telegram notifications etc.).
+ * the Discord alerts-webhook notification etc.).
  *
  * Idempotency: state mutation persists even if subsequent post-promotion steps
- * (e.g. Telegram push) fail — caller handles push errors separately.
+ * (e.g. the Discord push) fail — caller handles push errors separately.
  */
 export async function fireDue(nowMs: number = Date.now()): Promise<SystemAlert[]> {
   ensureFileExists();
@@ -438,7 +438,7 @@ export interface ResurfaceResult {
  * sink, and **advance the back-off (markResurfaced) ONLY when delivery actually succeeded.**
  * An UNDELIVERED re-surface must NOT consume the window — otherwise the back-off marches toward
  * never-firing while zero notifications reach anyone (the inverted-guarantee bug). The `deliver`
- * sink is injected (the dispatcher owns the Telegram/Discord/Langston-invoke channels) so this
+ * sink is injected (the dispatcher owns the Discord alerts-webhook channel — the sole push sink since B-TELEGRAM-DECOMM-2) so this
  * orchestration is unit-testable without network IO.
  */
 export async function processResurface(

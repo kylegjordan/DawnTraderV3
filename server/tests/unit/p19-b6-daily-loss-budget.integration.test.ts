@@ -59,7 +59,7 @@ describe('P19-B6 force-trip (gate 7: trip + recovery + idempotency + gating)', (
     expect(String(tripSpy.mock.calls[0][1])).toContain('DAILY_LOSS_THRESHOLD_EXCEEDED');
     expect(tripSpy.mock.calls[0][3]).toBe(10); // threshold passed through
     expect(peekDailyLossBudgetState('paper')?.killInProgress).toBe(true);
-    expect(addAlertSpy).toHaveBeenCalled();   // operational/Telegram surface
+    expect(addAlertSpy).toHaveBeenCalled();   // operational/Discord-alerts surface
     expect(createAlertSpy).toHaveBeenCalled(); // user-facing website banner
   });
 

@@ -215,7 +215,7 @@ export function getDailyLossEvalStats(): { failures: Record<string, number> } {
 
 // ─── Alert helper — fires on BOTH surfaces (each independently fault-isolated) ────────────────
 //   (1) the operational §10.5 queue (`.jsonl` via addAlert) — the per-turn CC/Langston channel +
-//       the dispatcher's Telegram push (away-from-keyboard awareness);
+//       the dispatcher's Discord alerts-webhook push (away-from-keyboard awareness);
 //   (2) the USER-FACING website notification (DB `system_alerts` via AlertsService.createAlert →
 //       GET /api/alerts → the dismissible alert banner/panel; the user clicks to acknowledge and
 //       it goes away). Reads are mode-global (AlertsService comment), so one row per event shows
@@ -230,7 +230,7 @@ async function fireAlert(
   dedupeKey?: string, // omitted → no operational-queue dedup (e.g. the trip-FAILED retry alert,
                       // which should re-surface on every failing close as escalating emergency)
 ): Promise<void> {
-  // (1) Operational queue / Telegram.
+  // (1) Operational queue / Discord alerts webhook.
   try {
     const { addAlert } = await import('./system-alerts.js');
     await addAlert({
