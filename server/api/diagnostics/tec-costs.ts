@@ -16,12 +16,15 @@ import { Router, Request, Response } from 'express';
 import {
   getCostMetrics,
   getOrSetCostMetrics,
-  getCacheStats,
   getCacheTTLRemaining,
   getAllCachedSymbols,
   getCacheSize,
 } from '../../core/cache/cost-cache.js';
-import { computeTotalRoundTripCost } from '../../core/math/cost-model.js';
+// P19-B7.2a (#330): the cache serves measured microstructure only; the fee is
+// composed from the B-4.5 merge site (the symbol cache is structurally
+// crypto-lane-only — every cached symbol is crypto_spot, so the class fee is
+// exact for this diagnostics surface). Stats via the fee-bearing wrapper.
+import { computeTotalRoundTripCost, getFrictionForAssetClass, getCostCacheStatsWithFee } from '../../core/math/cost-model.js';
 
 const router = Router();
 
@@ -39,29 +42,30 @@ router.get('/costs', (_req: Request, res: Response) => {
   const startTime = performance.now();
   
   const symbols = getAllCachedSymbols();
+  const takerFee = getFrictionForAssetClass('crypto_spot').feeRateTaker; // merge-site fee (cache = crypto lane)
   const diagnostics: CostDiagnosticsResponse[] = symbols.map(symbol => {
     const metrics = getCostMetrics(symbol);
     const ttl = getCacheTTLRemaining(symbol);
-    
+
     if (metrics) {
       return {
         symbol,
-        takerFee: metrics.fee,
+        takerFee,
         slippage: metrics.slippage,
         spread: metrics.spread,
-        totalCost: computeTotalRoundTripCost(metrics.fee, metrics.slippage, metrics.spread),
+        totalCost: computeTotalRoundTripCost(takerFee, metrics.slippage, metrics.spread),
         source: 'memory' as const,
         ttlRemaining: ttl,
       };
     }
-    
+
     const defaults = getOrSetCostMetrics(symbol);
     return {
       symbol,
-      takerFee: defaults.fee,
+      takerFee,
       slippage: defaults.slippage,
       spread: defaults.spread,
-      totalCost: computeTotalRoundTripCost(defaults.fee, defaults.slippage, defaults.spread),
+      totalCost: computeTotalRoundTripCost(takerFee, defaults.slippage, defaults.spread),
       source: 'default' as const,
       ttlRemaining: getCacheTTLRemaining(symbol),
     };
@@ -85,13 +89,14 @@ router.get('/costs/:symbol', (req: Request, res: Response) => {
   
   const metrics = getOrSetCostMetrics(symbol);
   const ttl = getCacheTTLRemaining(symbol);
-  const totalCost = computeTotalRoundTripCost(metrics.fee, metrics.slippage, metrics.spread);
-  
+  const takerFee = getFrictionForAssetClass('crypto_spot').feeRateTaker; // P19-B7.2a: merge-site fee
+  const totalCost = computeTotalRoundTripCost(takerFee, metrics.slippage, metrics.spread);
+
   const duration = performance.now() - startTime;
-  
+
   const response: CostDiagnosticsResponse = {
     symbol,
-    takerFee: metrics.fee,
+    takerFee,
     slippage: metrics.slippage,
     spread: metrics.spread,
     totalCost,
@@ -111,7 +116,7 @@ router.get('/costs/:symbol', (req: Request, res: Response) => {
 router.get('/costs-summary', (_req: Request, res: Response) => {
   const startTime = performance.now();
   
-  const stats = getCacheStats();
+  const stats = getCostCacheStatsWithFee(); // P19-B7.2a: fee-bearing wrapper (merge-site avgFee)
   const cacheSize = getCacheSize();
   
   const duration = performance.now() - startTime;

@@ -8690,32 +8690,35 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     try {
       const startTime = performance.now();
       const { getCostMetrics, getAllCachedSymbols, getCacheTTLRemaining, getOrSetCostMetrics } = await import('./core/cache/cost-cache.js');
-      const { computeTotalRoundTripCost } = await import('./core/math/cost-model.js');
-      
+      // P19-B7.2a (#330): fee from the B-4.5 merge site — the cache serves
+      // measured microstructure only (the symbol cache is crypto-lane-only).
+      const { computeTotalRoundTripCost, getFrictionForAssetClass } = await import('./core/math/cost-model.js');
+      const takerFee = getFrictionForAssetClass('crypto_spot').feeRateTaker;
+
       const symbols = getAllCachedSymbols();
       const diagnostics = symbols.map(symbol => {
         const metrics = getCostMetrics(symbol);
         const ttl = getCacheTTLRemaining(symbol);
-        
+
         if (metrics) {
           return {
             symbol,
-            takerFee: metrics.fee,
+            takerFee,
             slippage: metrics.slippage,
             spread: metrics.spread,
-            totalCost: computeTotalRoundTripCost(metrics.fee, metrics.slippage, metrics.spread),
+            totalCost: computeTotalRoundTripCost(takerFee, metrics.slippage, metrics.spread),
             source: 'memory',
             ttlRemaining: ttl,
           };
         }
-        
+
         const defaults = getOrSetCostMetrics(symbol);
         return {
           symbol,
-          takerFee: defaults.fee,
+          takerFee,
           slippage: defaults.slippage,
           spread: defaults.spread,
-          totalCost: computeTotalRoundTripCost(defaults.fee, defaults.slippage, defaults.spread),
+          totalCost: computeTotalRoundTripCost(takerFee, defaults.slippage, defaults.spread),
           source: 'default',
           ttlRemaining: getCacheTTLRemaining(symbol),
         };
@@ -8743,19 +8746,20 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const startTime = performance.now();
       const { symbol } = req.params;
       const { getOrSetCostMetrics, getCacheTTLRemaining } = await import('./core/cache/cost-cache.js');
-      const { computeTotalRoundTripCost } = await import('./core/math/cost-model.js');
-      
+      const { computeTotalRoundTripCost, getFrictionForAssetClass } = await import('./core/math/cost-model.js');
+
       const metrics = getOrSetCostMetrics(symbol);
       const ttl = getCacheTTLRemaining(symbol);
-      const totalCost = computeTotalRoundTripCost(metrics.fee, metrics.slippage, metrics.spread);
-      
+      const takerFee = getFrictionForAssetClass('crypto_spot').feeRateTaker; // P19-B7.2a: merge-site fee
+      const totalCost = computeTotalRoundTripCost(takerFee, metrics.slippage, metrics.spread);
+
       const duration = performance.now() - startTime;
-      
+
       res.json({
         ok: true,
         data: {
           symbol,
-          takerFee: metrics.fee,
+          takerFee,
           slippage: metrics.slippage,
           spread: metrics.spread,
           totalCost,
@@ -8776,10 +8780,11 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   apiRouter.get('/diagnostics/tec/costs-summary', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const startTime = performance.now();
-      const { getCacheStats, getCacheSize } = await import('./core/cache/cost-cache.js');
-      const { computeTotalRoundTripCost } = await import('./core/math/cost-model.js');
-      
-      const stats = getCacheStats();
+      const { getCacheSize } = await import('./core/cache/cost-cache.js');
+      // P19-B7.2a: fee-bearing stats wrapper (merge-site avgFee — see cost-model).
+      const { computeTotalRoundTripCost, getCostCacheStatsWithFee } = await import('./core/math/cost-model.js');
+
+      const stats = getCostCacheStatsWithFee();
       const cacheSize = getCacheSize();
       
       const duration = performance.now() - startTime;

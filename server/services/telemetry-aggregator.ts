@@ -26,6 +26,10 @@ import { getScoreWeightsMetadata, SCORE_WEIGHTS_VERSION } from '../config/score-
 import { REGIMES } from '../config/canonical-regime-strategy-map.js';
 // B-4.7 (#162): per-class telemetry records + per-class dominant-regime vote.
 import type { AssetClass } from '../../shared/asset-classes.js';
+// P19-B7.2a (#330): fee composed at read time from the B-4.5 merge site (the
+// cost-cache no longer stores fees); class from the pair entry's AT-WRITE
+// stamp (B-4.7 #163 pattern) — pairTelemetry spans BOTH classes.
+import { getFrictionForAssetClass } from '../core/math/cost-model.js';
 import { SCHEMA_VERSION, SCHEMA_DIRECTIVE, METRIC_ENGINE_VERSION } from '../config/schema-version.js';
 import { 
   loadRecentTelemetry, 
@@ -1408,7 +1412,14 @@ export class TelemetryAggregatorService {
       }
       // Use getOrSetCostMetrics as final fallback (ensures non-null with defaults)
       const finalCostMetrics = costMetrics ?? getOrSetCostMetrics(p.symbol);
-      const frictionScore = computeMarketFriction(finalCostMetrics.spread, finalCostMetrics.slippage, finalCostMetrics.fee);
+      // P19-B7.2a: fee from the merge site, class from the entry's AT-WRITE
+      // stamp (the B-4.7 #163 pattern used at inferStrategy — telemetry spans
+      // both classes; crypto fallback covers pre-B-4.7 rehydrated records only).
+      // NOT a hardcode: the fee's class follows the pair's own class (Langston
+      // Step-2 CHANGE-1), so the compose stays correct when B79/B81 lights up
+      // more classes.
+      const _pairClass = p.entry.assetClass === 'xstock_spot' ? 'xstock_spot' as const : 'crypto_spot' as const;
+      const frictionScore = computeMarketFriction(finalCostMetrics.spread, finalCostMetrics.slippage, getFrictionForAssetClass(_pairClass).feeRateTaker);
       
       return {
         rank: index + 1,

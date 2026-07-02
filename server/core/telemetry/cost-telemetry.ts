@@ -17,8 +17,9 @@
 
 import { db } from '../../db.js';
 import { telemetryHistory } from '../../../shared/schema.js';
-import { getCacheStats } from '../cache/cost-cache.js';
-import { computeTotalRoundTripCost } from '../math/cost-model.js';
+// P19-B7.2a (#330): stats via the fee-bearing wrapper — the cache no longer
+// stores fees; avgFee is composed from the B-4.5 merge site in cost-model.
+import { computeTotalRoundTripCost, getCostCacheStatsWithFee } from '../math/cost-model.js';
 import { lt, and, eq, sql } from 'drizzle-orm';
 import crypto from 'crypto';
 import { SCHEMA_VERSION } from '../../config/schema-version.js';
@@ -73,8 +74,8 @@ function computeChecksum(snapshot: CostSnapshot): string {
 
 export async function persistCostSnapshot(): Promise<CostSnapshot | null> {
   try {
-    const stats = getCacheStats();
-    
+    const stats = getCostCacheStatsWithFee();
+
     if (stats.symbolCount === 0) {
       console.log('[11.3C][CostTelemetry] Skip snapshot: no cached symbols');
       return null;

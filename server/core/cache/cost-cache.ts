@@ -25,21 +25,16 @@ import {
   DEFAULT_SLIPPAGE,
   DEFAULT_SPREAD,
 } from '../../config/exchange-defaults.js';
-// B-4.5: the cache's default fee is DB-resolved (module_constants 'fee_model',
-// warmed at boot, fail-hard). DEFAULT_TAKER_FEE + DEFAULT_COST_BUNDLE retired.
-import { getCachedNumberRequired } from '../../services/module-constants-service.js';
 
-// The symbol cache is structurally crypto-lane only — getCachedCostMetrics
-// (cost-model.ts) consults it solely for crypto_spot; xStock synthesizes from
-// the friction merge. Hence the crypto_spot key here.
-function resolveCryptoTakerFee(): number {
-  return getCachedNumberRequired('fee_model', 'spot_taker_fee', {
-    exchange: '*', assetClass: 'crypto_spot', strategy: '*', regime: '*',
-  });
-}
+// P19-B7.2a (#330): the FEE no longer lives in this cache AT ALL. The cache's
+// charter is per-symbol MEASURED microstructure (spread; slippage default) —
+// the fee is a per-CLASS governed fact owned by the B-4.5 single merge site
+// (cost-model.getFrictionForAssetClass), composed at READ time by every
+// consumer. `resolveCryptoTakerFee` (the second fee resolver) is DELETED;
+// the governed fee can no longer be clamped or served stale by construction
+// (it never enters setCostMetrics, where MAX_COST_BOUND lives).
 
 export interface CostMetrics {
-  fee: number;
   slippage: number;
   spread: number;
 }
@@ -111,7 +106,9 @@ export function setCostMetrics(symbol: string, data: Partial<CostMetrics>): Cost
     spreadIn = existing.v.spread; // prior good measurement retained
   }
   const clamped: CostMetrics = {
-    fee: Math.min(data.fee ?? resolveCryptoTakerFee(), MAX_COST_BOUND),
+    // The clamp bounds MEASURED quantities only (a bad tick can blow out a
+    // spread/slippage reading) — the governed fee never passes through here
+    // (P19-B7.2a; the B-4.5 buried-clamp anti-pattern closed on the default path).
     slippage: Math.min(data.slippage ?? DEFAULT_SLIPPAGE, MAX_COST_BOUND),
     spread: Math.min(spreadIn ?? DEFAULT_SPREAD, MAX_COST_BOUND),
   };
@@ -125,8 +122,8 @@ export function getOrSetCostMetrics(symbol: string): CostMetrics {
   // B-4.5: DEFAULT_COST_BUNDLE retired (it embedded the static fee).
   // B-5.1: spread here is DEFAULT_SPREAD (≥0) — the negative-reject path is
   // unreachable, so the non-null assertion is sound.
+  // P19-B7.2a: no fee seeded — the fee is composed at read time by consumers.
   return setCostMetrics(symbol, {
-    fee: resolveCryptoTakerFee(),
     slippage: DEFAULT_SLIPPAGE,
     spread: DEFAULT_SPREAD,
   })!;
@@ -153,31 +150,32 @@ export function getAllCachedSymbols(): string[] {
   return Array.from(cache.keys());
 }
 
+// P19-B7.2a: getCacheStats reports MEASURED stats only (the cache's charter).
+// The fee-bearing shape the 4 production stat readers consume (tec-costs API,
+// cost-telemetry, routes cost-diagnostics, the cost-drift monitor) moved to
+// cost-model.getCostCacheStatsWithFee(), which composes avgFee from the B-4.5
+// merge site (this file cannot import cost-model — circular).
 export function getCacheStats(): {
   symbolCount: number;
-  avgFee: number;
   avgSlippage: number;
   avgSpread: number;
 } {
   pruneExpiredEntries();
-  
+
   const entries = Array.from(cache.values());
   if (entries.length === 0) {
     return {
       symbolCount: 0,
-      avgFee: resolveCryptoTakerFee(),
       avgSlippage: DEFAULT_SLIPPAGE,
       avgSpread: DEFAULT_SPREAD,
     };
   }
 
-  const sumFee = entries.reduce((sum, e) => sum + e.v.fee, 0);
   const sumSlippage = entries.reduce((sum, e) => sum + e.v.slippage, 0);
   const sumSpread = entries.reduce((sum, e) => sum + e.v.spread, 0);
 
   return {
     symbolCount: entries.length,
-    avgFee: sumFee / entries.length,
     avgSlippage: sumSlippage / entries.length,
     avgSpread: sumSpread / entries.length,
   };
@@ -196,10 +194,9 @@ export function startObservabilityLoop(): void {
     const stats = getCacheStats();
     if (stats.symbolCount > 0) {
       console.log(
-        `[CostEngine] avgFee=${(stats.avgFee * 100).toFixed(2)}% ` +
-        `avgSlip=${(stats.avgSlippage * 100).toFixed(2)}% ` +
+        `[CostEngine] avgSlip=${(stats.avgSlippage * 100).toFixed(2)}% ` +
         `avgSpread=${(stats.avgSpread * 100).toFixed(2)}% ` +
-        `(symbols=${stats.symbolCount})`
+        `(symbols=${stats.symbolCount})` // P19-B7.2a: fee dropped (governed per-class fact, not a cache measurement)
       );
     }
   }, 60_000);

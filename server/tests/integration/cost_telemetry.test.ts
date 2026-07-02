@@ -18,6 +18,9 @@ import { prefetchModule } from '../../services/module-constants-service.js';
 import { beforeAll as __b43_beforeAll } from 'vitest';
 __b43_beforeAll(async () => {
   await prefetchModule("position_sizing");
+  // P19-B7.2a: persistCostSnapshot/checkForDrift now compose avgFee from the
+  // B-4.5 merge site (fee_model) — warm it like server boot does.
+  await prefetchModule("fee_model");
 });
 
 
@@ -44,17 +47,19 @@ describe('Directive 11.3C: Persistent Cost Telemetry & Drift Monitoring', () => 
       const { setCostMetrics, clearCostCache, getCacheSize } = await import('../../core/cache/cost-cache.js');
       
       clearCostCache();
-      setCostMetrics('BTC/USD', { fee: 0.0026, slippage: 0.0005, spread: 0.001 });
-      setCostMetrics('ETH/USD', { fee: 0.0026, slippage: 0.0005, spread: 0.001 });
-      
+      setCostMetrics('BTC/USD', { slippage: 0.0005, spread: 0.001 });
+      setCostMetrics('ETH/USD', { slippage: 0.0005, spread: 0.001 });
+
       const cacheSize = getCacheSize();
       expect(cacheSize).toBe(2);
-      
+
       const snapshot = await persistCostSnapshot();
-      
+
       if (snapshot !== null) {
         expect(snapshot.symbolCount).toBe(2);
-        expect(snapshot.avgFee).toBeCloseTo(0.0026, 6);
+        // P19-B7.2a: avgFee composes from the merge site (fee_model Tier-1
+        // taker), never from cache entries.
+        expect(snapshot.avgFee).toBeCloseTo(0.008, 6);
       }
     });
     

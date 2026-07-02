@@ -79,11 +79,12 @@ describe('Directive 11.3B: Cost Engine Consolidation', () => {
     it('should cache and retrieve cost metrics', async () => {
       const { setCostMetrics, getCostMetrics } = await import('../../core/cache/cost-cache.js');
       
-      setCostMetrics('BTC/USD', { fee: 0.003, slippage: 0.001, spread: 0.002 });
+      setCostMetrics('BTC/USD', { slippage: 0.001, spread: 0.002 });
       const cached = getCostMetrics('BTC/USD');
-      
+
       expect(cached).not.toBeNull();
-      expect(cached!.fee).toBe(0.003);
+      // P19-B7.2a: the cache stores MEASURED microstructure only — no fee field.
+      expect('fee' in cached!).toBe(false);
       expect(cached!.slippage).toBe(0.001);
       expect(cached!.spread).toBe(0.002);
     });
@@ -92,10 +93,11 @@ describe('Directive 11.3B: Cost Engine Consolidation', () => {
       const { setCostMetrics, getCostMetrics } = await import('../../core/cache/cost-cache.js');
       const { MAX_COST_BOUND } = await import('../../config/exchange-defaults.js');
       
-      setCostMetrics('ETH/USD', { fee: 0.05, slippage: 0.02, spread: 0.03 });
+      setCostMetrics('ETH/USD', { slippage: 0.02, spread: 0.03 });
       const cached = getCostMetrics('ETH/USD');
-      
-      expect(cached!.fee).toBe(MAX_COST_BOUND);
+
+      // P19-B7.2a: the clamp bounds MEASURED quantities; the governed fee never
+      // enters the cache (un-clampable by construction).
       expect(cached!.slippage).toBe(MAX_COST_BOUND);
       expect(cached!.spread).toBe(MAX_COST_BOUND);
     });
@@ -105,9 +107,10 @@ describe('Directive 11.3B: Cost Engine Consolidation', () => {
       const { DEFAULT_SLIPPAGE, DEFAULT_SPREAD } = await import('../../config/exchange-defaults.js');
       
       const metrics = getOrSetCostMetrics('SOL/USD');
-      
-      // B-4.5: default fee is the DB-resolved Tier-1 taker, not a static const.
-      expect(metrics.fee).toBe(B45_TIER1_TAKER);
+
+      // P19-B7.2a: no fee in the cache shape — consumers compose it from the
+      // B-4.5 merge site (see the Cost Model Integration tests below).
+      expect('fee' in metrics).toBe(false);
       expect(metrics.slippage).toBe(DEFAULT_SLIPPAGE);
       expect(metrics.spread).toBe(DEFAULT_SPREAD);
     });
@@ -115,7 +118,7 @@ describe('Directive 11.3B: Cost Engine Consolidation', () => {
     it('C5: should lookup in < 0.1 ms (performance test)', async () => {
       const { setCostMetrics, getCostMetrics } = await import('../../core/cache/cost-cache.js');
       
-      setCostMetrics('PERF/USD', { fee: 0.002, slippage: 0.001, spread: 0.001 });
+      setCostMetrics('PERF/USD', { slippage: 0.001, spread: 0.001 });
       
       const iterations = 1000;
       const start = performance.now();
@@ -131,11 +134,11 @@ describe('Directive 11.3B: Cost Engine Consolidation', () => {
     it('C4: should expire entries after TTL (60s)', async () => {
       const { setCostMetrics, getCostMetrics, setEntryTimestamp, CACHE_TTL_MS } = await import('../../core/cache/cost-cache.js');
       
-      setCostMetrics('TTL/USD', { fee: 0.003, slippage: 0.001, spread: 0.002 });
-      
+      setCostMetrics('TTL/USD', { slippage: 0.001, spread: 0.002 });
+
       const cachedBefore = getCostMetrics('TTL/USD');
       expect(cachedBefore).not.toBeNull();
-      expect(cachedBefore!.fee).toBe(0.003);
+      expect(cachedBefore!.spread).toBe(0.002);
       
       setEntryTimestamp('TTL/USD', Date.now() - CACHE_TTL_MS - 1);
       
@@ -146,8 +149,8 @@ describe('Directive 11.3B: Cost Engine Consolidation', () => {
     it('C4: should prune expired entries from getAllCachedSymbols', async () => {
       const { setCostMetrics, getAllCachedSymbols, setEntryTimestamp, CACHE_TTL_MS } = await import('../../core/cache/cost-cache.js');
       
-      setCostMetrics('VALID/USD', { fee: 0.002, slippage: 0.001, spread: 0.001 });
-      setCostMetrics('EXPIRED/USD', { fee: 0.003, slippage: 0.001, spread: 0.002 });
+      setCostMetrics('VALID/USD', { slippage: 0.001, spread: 0.001 });
+      setCostMetrics('EXPIRED/USD', { slippage: 0.001, spread: 0.002 });
       
       setEntryTimestamp('EXPIRED/USD', Date.now() - CACHE_TTL_MS - 1);
       
@@ -204,22 +207,29 @@ describe('Directive 11.3B: Cost Engine Consolidation', () => {
       
       expect(getCacheSize()).toBe(0);
       
-      setCostMetrics('BTC/USD', { fee: 0.002, slippage: 0.001, spread: 0.001 });
-      setCostMetrics('ETH/USD', { fee: 0.002, slippage: 0.001, spread: 0.001 });
-      
+      setCostMetrics('BTC/USD', { slippage: 0.001, spread: 0.001 });
+      setCostMetrics('ETH/USD', { slippage: 0.001, spread: 0.001 });
+
       expect(getCacheSize()).toBe(2);
     });
     
-    it('should compute average statistics', async () => {
+    it('should compute average statistics (measured legs) + merge-site avgFee via the wrapper', async () => {
       const { setCostMetrics, getCacheStats } = await import('../../core/cache/cost-cache.js');
-      
-      setCostMetrics('BTC/USD', { fee: 0.002, slippage: 0.001, spread: 0.001 });
-      setCostMetrics('ETH/USD', { fee: 0.004, slippage: 0.001, spread: 0.001 });
-      
+      const { getCostCacheStatsWithFee } = await import('../../core/math/cost-model.js');
+
+      setCostMetrics('BTC/USD', { slippage: 0.001, spread: 0.002 });
+      setCostMetrics('ETH/USD', { slippage: 0.003, spread: 0.004 });
+
       const stats = getCacheStats();
-      
       expect(stats.symbolCount).toBe(2);
-      expect(stats.avgFee).toBe(0.003);
+      expect(stats.avgSlippage).toBe(0.002);
+      expect(stats.avgSpread).toBe(0.003);
+      // P19-B7.2a: avgFee lives on the fee-bearing wrapper, composed from the
+      // B-4.5 merge site (the 4 production stat readers consume this shape).
+      expect('avgFee' in stats).toBe(false);
+      const withFee = getCostCacheStatsWithFee();
+      expect(withFee.avgFee).toBe(B45_TIER1_TAKER);
+      expect(withFee.symbolCount).toBe(2);
     });
   });
   

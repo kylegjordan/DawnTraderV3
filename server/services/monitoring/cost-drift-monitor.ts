@@ -16,8 +16,10 @@
  */
 
 import { getCostHistory, type CostSnapshot } from '../../core/telemetry/cost-telemetry.js';
-import { getCacheStats } from '../../core/cache/cost-cache.js';
-import { computeTotalRoundTripCost } from '../../core/math/cost-model.js';
+// P19-B7.2a (#330): stats via the fee-bearing wrapper — avgFee now composes
+// from the B-4.5 merge site, so this monitor's fee-delta fires ONLY on a real
+// fee_model change (never a cache clamp/TTL artifact). Strictly more truthful.
+import { computeTotalRoundTripCost, getCostCacheStatsWithFee } from '../../core/math/cost-model.js';
 
 const DRIFT_THRESHOLD = 0.50;
 const MAX_ALERTS = 100;
@@ -93,7 +95,7 @@ export async function checkForDrift(): Promise<DriftAlert[]> {
     return [];
   }
   
-  const current = getCacheStats();
+  const current = getCostCacheStatsWithFee();
   if (current.symbolCount === 0) {
     return [];
   }

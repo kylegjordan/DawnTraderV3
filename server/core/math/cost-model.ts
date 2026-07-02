@@ -176,7 +176,18 @@ export function getCachedCostMetrics(symbol: string, assetClass: AssetClass): Co
   // When cost-cache gains an asset_class dimension (B81 filter-as-first-class),
   // this dispatch collapses back into a single cache lookup.
   if (assetClass === 'crypto_spot') {
-    return getOrSetCostMetrics(symbol);
+    // P19-B7.2a (#330): the cache serves MEASURED microstructure only (spread/
+    // slippage); the FEE is composed here at READ time from the B-4.5 single
+    // merge site — one road to the fee fact. A poisoned/stale cache entry can
+    // no longer affect the fee, a fee_model change is visible on the next read
+    // (no cache TTL on the fee), and the governed fee never meets the
+    // MAX_COST_BOUND clamp (measurements-only) by construction.
+    const measured = getOrSetCostMetrics(symbol);
+    return {
+      fee: getFrictionForAssetClass('crypto_spot').feeRateTaker,
+      slippage: measured.slippage,
+      spread: measured.spread,
+    };
   }
   // B-5 AMR (Obj-12 / Pull-in A): xstock_spot reads the per-symbol MEASURED
   // spread when the friction-sample store has a fresh valid sample - the
@@ -206,6 +217,28 @@ export function getCostMetricsCache(): Map<string, CachedCostMetrics> {
   const stats = getCacheStats();
   const result = new Map<string, CachedCostMetrics>();
   return result;
+}
+
+/**
+ * P19-B7.2a (#330): the fee-bearing cache-stats shape the production stat
+ * readers consume (TEC-costs diagnostics, cost-telemetry persistence, the
+ * routes cost-diagnostics endpoint, the cost-drift monitor). `avgFee` is
+ * composed from the B-4.5 single merge site — with the fee no longer stored
+ * per cache entry, the "average fee over cached symbols" IS the class fee
+ * (the symbol cache is structurally crypto-lane-only; cost-cache.ts header).
+ * Consequence: the drift monitor's fee-delta now fires ONLY on a real
+ * fee_model change, never a clamp/TTL artifact.
+ * ⚠️ B81 coupling: this single-class assumption holds only while the cache is
+ * single-lane — the B81 asset-class re-key must revisit it (RUNNING_ISSUES #330→B81 pointer).
+ */
+export function getCostCacheStatsWithFee(): {
+  symbolCount: number;
+  avgFee: number;
+  avgSlippage: number;
+  avgSpread: number;
+} {
+  const stats = getCacheStats();
+  return { ...stats, avgFee: getFrictionForAssetClass('crypto_spot').feeRateTaker };
 }
 
 export function clearCostMetricsCache(): void {

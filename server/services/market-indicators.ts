@@ -39,7 +39,7 @@ import { getCostMetrics as getCacheMetrics, getCacheSize, getAllCachedSymbols } 
 // B-5 AMR (Obj-13/F7): xstock friction reads the scanner-fed measured-sample
 // store - the cost cache is structurally crypto-lane only (cost-cache.ts:32).
 import { getXstockFrictionSample } from '../asset_classes/xstock_spot/friction-sample-store.js';
-import { getDefaultCostComponentsForAssetClass } from '../core/math/cost-model.js';
+import { getDefaultCostComponentsForAssetClass, getFrictionForAssetClass } from '../core/math/cost-model.js';
 import { activeFilterPool } from './active-filter-pool.js';
 import { getTelemetryAggregator } from './telemetry-aggregator.js';
 import { checkRegimeTransition, checkFrictionTransition } from '../utils/market-events.js';
@@ -271,6 +271,13 @@ export function computeGlobalFrictionWithDetails(assetClass: AssetClass, auditOu
       .filter(symbol => safeResolveAssetClass(symbol, 'kraken') === assetClass)
       .slice(0, 500);
 
+    // P19-B7.2a (#330): the fee is composed from the B-4.5 merge site at read
+    // time — the cache no longer stores it. Keyed on THIS function's assetClass
+    // parameter (not a hardcode): the sample is already class-filtered above,
+    // and xstock_spot never reaches this loop (routed to the store read at the
+    // top) — so the class fee is exact for every sampled symbol by construction.
+    const _classFee = getFrictionForAssetClass(assetClass).feeRateTaker;
+
     let totalFriction = 0;
     let count = 0;
 
@@ -284,7 +291,7 @@ export function computeGlobalFrictionWithDetails(assetClass: AssetClass, auditOu
       // entries) — a negative spread is not a measurement; skip it rather
       // than let it deflate the universe friction average.
       if (metrics && metrics.spread >= 0) {
-        const friction = computeMarketFriction(metrics.spread, metrics.slippage, metrics.fee);
+        const friction = computeMarketFriction(metrics.spread, metrics.slippage, _classFee);
         totalFriction += friction;
         count++;
 
@@ -297,7 +304,7 @@ export function computeGlobalFrictionWithDetails(assetClass: AssetClass, auditOu
         });
         // B-5 Obj-15a: same-pass sample for the audit dump (incl. the fee/
         // slippage components the recompute leg needs).
-        auditOut?.samples.push({ symbol, spread: metrics.spread, slippage: metrics.slippage, fee: metrics.fee, friction });
+        auditOut?.samples.push({ symbol, spread: metrics.spread, slippage: metrics.slippage, fee: _classFee, friction });
       }
     }
 
