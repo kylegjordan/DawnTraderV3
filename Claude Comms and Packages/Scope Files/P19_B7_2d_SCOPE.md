@@ -1,5 +1,7 @@
 # P19-B7.2d Scope — wire the maker/taker decision + pending/twin lifecycle into the xStock VTS lane (#434)
 
+change-class: non_architecture
+
 **Batch:** P19-B7.2d · **change-class: non_architecture** (wiring an EXISTING shared architecture into the lane that missed it — no new design) · **Drafted:** 2026-07-03 (CC-B) · **Issue:** #434 (Kyle screenshot find — all 116 open xStock VTS rows have NULL fee mode incl. post-B7.2b opens) · **Sequencing (Kyle 2026-07-03):** B7.2d FIRST, then B-RENAME resumes.
 
 ## The gap, precisely
