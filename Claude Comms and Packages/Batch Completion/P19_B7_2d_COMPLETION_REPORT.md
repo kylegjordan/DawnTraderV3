@@ -26,5 +26,5 @@ This report says **"BOTH VTS lanes are now wired"** because THIS batch makes it 
 - The R3 weekend guard's first xStock-pending weekend crossing = next weekend boundary (soak note).
 - xStock VTS volume may tick UP (maker-marginal signals now pass the best-of-both floor) and twins add tagged rows — expected effects, called out per scope, kill-knob available.
 
-## Step-8 (Langston second-pass)
-*Pending at write time — appended below on receipt.*
+## Step-8 (Langston second-pass) — **PASS** (2026-07-02 ~23:05Z)
+Independently verified on staging: (1) the lane is live and honest — post-deploy cycles run xStock symbols (MRNA/MRVL/MSTR/MU/NEE/OXY/SHW/SLB/SMCI/SNDK/SPGI/STX/TER…) through `[MAKER_TAKER]` with real per-symbol maker-adj numbers, which is itself downstream proof the 11 `xstock_spot` knob rows are loaded and effective ("you can't compute the haircut without them — stronger than reading the seed rows back"); (2) the honest boundary holds exactly as disclosed — no stamped xStock open/pending/twin yet (floor-rejects only), accepted as a #433-pattern soak rider, not a blocker; (3) rehydrate consistent — ZRO/EUR alive and simulating post-restart; (4) pm2 online, HTTP 200, CI 4-green, zero deltas from Step-4; governance list hits the §16 content-update bar. **Carried rider (Langston):** when the first stamped xStock open + the §9.3 Chrome check land, post them to Discord — that evidence is what retires the boundary; it must close on evidence, not on the next batch assuming it did. *(Watcher armed; rides with #433.)*
