@@ -2102,7 +2102,7 @@ async function generatePhase10Signal(
         _vtsPendingMaker ? 'taker'
         : (_vtsMtDecision.chosenMode === 'taker' ? 'maker' : null); // null = marketable-fallback chosen leg → degenerate
       if (_twinMode === 'maker' && isMarketableAtPlacement('buy', currentMarketPrice, entryPrice)) {
-        console.log(`[P19-B7.2c][VTS][TWIN_SKIPPED] ${symbol}/${strategy}: maker twin would be marketable at placement — no honest rest possible`);
+        console.log(`[P19-B7.2c][VTS][TWIN_SKIPPED] ${symbol}/${strategy}: maker twin would be marketable at placement — no honest rest possible (limit=${entryPrice} market=${currentMarketPrice} gap=${(currentMarketPrice - entryPrice).toExponential(4)} gapBps=${entryPrice > 0 ? (((currentMarketPrice - entryPrice) / entryPrice) * 10000).toFixed(2) : 'n/a'})`);
       } else if (_twinMode == null) {
         console.log(`[P19-B7.2c][VTS][TWIN_SKIPPED] ${symbol}/${strategy}: chosen leg was the marketable taker-fallback — comparison degenerate`);
       } else {
@@ -2122,7 +2122,13 @@ async function generatePhase10Signal(
         await insertOpenTrade(twinTrade as any);
         openVirtualTrades.set(twinId, twinTrade);
         const _twinCount = Array.from(openVirtualTrades.values()).filter((t) => t.mtTwin === true).length;
-        console.log(`[P19-B7.2c][VTS][TWIN_OPENED] ${symbol}/${strategy}: ${_twinMode} twin ${twinId} paired to chosen ${_vtsEffectiveMode} (open twins now: ${_twinCount})`);
+        // Placement-time honest-rest evidence (Langston #433 rider): for a maker twin,
+        // log the SIGN + SIZE of the limit-vs-market gap AT PLACEMENT so a rested limit
+        // sitting a rounding-hair off the market is visible in the log, not inferred.
+        const _twinGapNote = _twinMode === 'maker'
+          ? ` limit=${entryPrice} market=${currentMarketPrice} gap=${(currentMarketPrice - entryPrice).toExponential(4)} gapBps=${entryPrice > 0 ? (((currentMarketPrice - entryPrice) / entryPrice) * 10000).toFixed(2) : 'n/a'}`
+          : '';
+        console.log(`[P19-B7.2c][VTS][TWIN_OPENED] ${symbol}/${strategy}: ${_twinMode} twin ${twinId} paired to chosen ${_vtsEffectiveMode} (open twins now: ${_twinCount})${_twinGapNote}`);
       }
     }
   } catch (twinErr) {
