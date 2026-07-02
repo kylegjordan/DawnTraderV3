@@ -27,6 +27,14 @@
 
 ---
 
+## FIX-2026-07-03-A — P19-B7.2d (#434): the xStock VTS lane never ran the maker/taker decision — wired + a LANE-SCOPED-CLAIMS process lesson
+
+**Symptom (Kyle screenshot):** every open xStock VTS row showed an em-dash in the ML Entry-Fee-Mode column, including post-B7.2b opens (crypto's 28 dashes were legacy dash-by-design; xStock's 116 were a live gap). **Cause:** the xStock VTS opens trades through its own path (`asset_classes/xstock_spot/eval-cycle.ts`), and the B7.2b VTS wiring landed only in the crypto lane (`vts-runner.generatePhase10Signal`). Economics were HONEST (kernel taker-priced) — missing were the maker option, the fee-mode stamp, and the B7.2c pending/twin machinery. **Fix (P19-B7.2d, `127c6d845`, deployed 2026-07-02 22:52Z):** the shared decision + stamp + pending bifurcation transcribed into the eval-cycle seam at crypto parity; twins unified onto the NEW shared `maybeOpenTwin` (crypto's inline block extracted under Langston's narrow B79.0m.b lock-lift, both-branches regression-pinned via pure `planTwin`); `RegisterOpenVtsTradeInput` widened for the passthrough.
+
+**★ PROCESS LESSON (both CC-B and Langston owned the miss): a completion claim about "the VTS" (or any multi-lane system) MUST be stated LANE-SCOPED and verified PER LANE.** The B7.2b claim "VTS wired" passed CC-B's completion write-up AND Langston's Step-4/8 because the crypto lane WAS wired and nobody pressed on whether the xStock eval-cycle went through the same seam — the completion check was asset-class-blind. Rule going forward: when a batch claims a capability landed "in the VTS"/"in the pipeline", the completion report names WHICH lanes (crypto VTS / xStock VTS / paper-active / live) were verified, each with its own evidence line; a shared-module change does NOT imply all lanes consume it — verify the SEAM per lane, not the module. (Same family as the §9.3 no-assumptions rule; surfaced by a Kyle screenshot, which is exactly the failure mode §11 says the crew must catch first.)
+
+---
+
 ## FIX-2026-07-02-A — P19-B7.2a (#330): the cost-cache's second fee road removed (one road to the fee fact)
 
 **Class:** fee-provenance consolidation (a duplicate resolver + a buried clamp on a governed value + a staleness window, all structural — no live price divergence existed). **Fixed:** 2026-07-02, commit `4b9d62fc9`, Langston Step-1 rev2/Step-2/Step-4 all reviewed (two real probe-undercounts caught and folded: 4 direct `.fee` cache readers; 4 `avgFee` stat readers). **Provenance change, not price — 0.008 either road today; asserted, not assumed, on the friction path.**
