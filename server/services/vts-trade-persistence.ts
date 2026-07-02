@@ -219,6 +219,14 @@ export async function markOpenTradeClosed(tradeId: string): Promise<void> {
  * state immediately. Caller passes a reference to the
  * `openVirtualTrades` Map (keyed by trade id); we mutate entries in place.
  *
+ * ⚠️ P19-B7.2d LOAD-BEARING PREDICATE: both the SQL `AND state = 'open'` and the
+ * in-memory `trade.state === 'open'` filter EXCLUDE state='pending' rows. A
+ * pending (unfilled resting maker) must NEVER be suspended — the Sunday restore
+ * flips weekend_suspended → 'open', which would convert an UNFILLED order into
+ * an open position WITHOUT a fill. Pending rows pass the weekend boundary
+ * untouched (they fill on an honest trade-through or hard-drop at deadline via
+ * the resolve pre-pass). Do not widen either predicate.
+ *
  * Returns the number of DB rows updated.
  */
 export async function markAllXstockWeekendSuspended(
@@ -257,6 +265,10 @@ export async function markAllXstockWeekendSuspended(
  * B-NEW-36 (2026-05-20) — bulk-restore all weekend-suspended xstock_spot
  * trades to 'open'. Called on Sunday 8 PM ET and at boot when outside the
  * weekend-close window. Mirrors to in-memory Map per pre-audit §4.2.
+ *
+ * ⚠️ P19-B7.2d: restores ONLY state='weekend_suspended' rows (SQL + in-memory
+ * predicates) — a state='pending' row can never be flipped to 'open' here (see
+ * the suspend-side note above; pending must fill honestly or drop at deadline).
  *
  * Returns the number of DB rows updated.
  */

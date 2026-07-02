@@ -72,7 +72,7 @@ import { getCachedCostMetrics, computeNetGeometry, getFrictionForAssetClass } fr
 import { decideMakerTaker, entryUrgencyClassForFamily } from '../core/math/maker-taker-decision.js';
 import { resolveMakerTakerHaircut, resolveMakerMaxPendingMs, resolveTwinEnabled } from './maker-taker-config.js';
 // P19-B7.2c: the shared PURE pending-maker fill/drop decision (paper+VTS parity — R2).
-import { evaluatePendingMaker, makerFillPrice, isMarketableAtPlacement } from '../core/trading/pending-maker-logic.js';
+import { evaluatePendingMaker, makerFillPrice, isMarketableAtPlacement, planTwin } from '../core/trading/pending-maker-logic.js';
 import { compareLatestSessions, savePaperSessionTrades, getPaperSessionTrades } from './vts-live-comparison-audit.js';
 import { SCORE_WEIGHTS } from '../config/score-weights.config.js';
 import { calculatePairRegime, getRegimeWeight, calculateRegimeScore, getNormalizedRegimeWithDetails } from '../core/metrics/market-regime.js';
@@ -2095,45 +2095,20 @@ async function generatePhase10Signal(
   // exclude them), excluded from main stats/ML at close, and DB-killable
   // (maker_taker.twin_enabled). SKIPPED (degenerate, logged) when: the twin would be a
   // marketable maker (can't honestly rest), or the chosen leg was itself the marketable
-  // taker-fallback. Twin failure NEVER blocks the real trade (try/catch).
-  try {
-    if (resolveTwinEnabled(tradeAssetClass)) {
-      const _twinMode: 'taker' | 'maker' | null =
-        _vtsPendingMaker ? 'taker'
-        : (_vtsMtDecision.chosenMode === 'taker' ? 'maker' : null); // null = marketable-fallback chosen leg → degenerate
-      if (_twinMode === 'maker' && isMarketableAtPlacement('buy', currentMarketPrice, entryPrice)) {
-        console.log(`[P19-B7.2c][VTS][TWIN_SKIPPED] ${symbol}/${strategy}: maker twin would be marketable at placement — no honest rest possible (limit=${entryPrice} market=${currentMarketPrice} gap=${(currentMarketPrice - entryPrice).toExponential(4)} gapBps=${entryPrice > 0 ? (((currentMarketPrice - entryPrice) / entryPrice) * 10000).toFixed(2) : 'n/a'})`);
-      } else if (_twinMode == null) {
-        console.log(`[P19-B7.2c][VTS][TWIN_SKIPPED] ${symbol}/${strategy}: chosen leg was the marketable taker-fallback — comparison degenerate`);
-      } else {
-        const twinId = `${tradeId}_twin`;
-        const twinTrade: OpenVirtualTrade = {
-          ...openTrade,
-          id: twinId,
-          mtTwin: true,
-          mtPairId: tradeId,
-          chosenEntryMode: _twinMode,
-          entryFeeRate: _twinMode === 'maker' ? _vtsFriction.feeRateMaker : _vtsFriction.feeRateTaker,
-          ...(_twinMode === 'maker'
-            ? { state: 'pending' as const, makerLimitPrice: entryPrice, makerDeadline: Date.now() + resolveMakerMaxPendingMs(tradeAssetClass) }
-            : { state: 'open' as const, makerLimitPrice: undefined, makerDeadline: undefined }),
-        };
-        const { insertOpenTrade } = await import('./vts-trade-persistence.js');
-        await insertOpenTrade(twinTrade as any);
-        openVirtualTrades.set(twinId, twinTrade);
-        const _twinCount = Array.from(openVirtualTrades.values()).filter((t) => t.mtTwin === true).length;
-        // Placement-time honest-rest evidence (Langston #433 rider): for a maker twin,
-        // log the SIGN + SIZE of the limit-vs-market gap AT PLACEMENT so a rested limit
-        // sitting a rounding-hair off the market is visible in the log, not inferred.
-        const _twinGapNote = _twinMode === 'maker'
-          ? ` limit=${entryPrice} market=${currentMarketPrice} gap=${(currentMarketPrice - entryPrice).toExponential(4)} gapBps=${entryPrice > 0 ? (((currentMarketPrice - entryPrice) / entryPrice) * 10000).toFixed(2) : 'n/a'}`
-          : '';
-        console.log(`[P19-B7.2c][VTS][TWIN_OPENED] ${symbol}/${strategy}: ${_twinMode} twin ${twinId} paired to chosen ${_vtsEffectiveMode} (open twins now: ${_twinCount})${_twinGapNote}`);
-      }
-    }
-  } catch (twinErr) {
-    console.error(`[P19-B7.2c][VTS][TWIN_FAIL] ${symbol}/${strategy}: twin open failed (real trade unaffected):`, twinErr instanceof Error ? twinErr.message : twinErr);
-  }
+  // taker-fallback. Twin failure NEVER blocks the real trade.
+  // P19-B7.2d: the inline block moved to the SHARED `maybeOpenTwin` (this file, below
+  // registerOpenVtsTrade) so the xstock eval-cycle opens twins through the SAME seam —
+  // parity by construction. Narrow B79.0m.b lock-lift (Langston Step-2): twin sub-block
+  // only; this function's PRIMARY open above stays inline.
+  await maybeOpenTwin({
+    chosenTradeId: tradeId,
+    decisionChosenMode: _vtsMtDecision.chosenMode,
+    effectiveMode: _vtsEffectiveMode,
+    pendingMaker: _vtsPendingMaker,
+    feeRateMaker: _vtsFriction.feeRateMaker,
+    feeRateTaker: _vtsFriction.feeRateTaker,
+    currentMarketPrice,
+  });
 
   // Batch 47f15: Record setup hash to prevent identical re-entry
   lastSetupHash.set(`${symbol}:${strategy}`, computeSetupHash(entryPrice, stopLoss, takeProfit));
@@ -3892,6 +3867,15 @@ export interface RegisterOpenVtsTradeInput {
   // (vts-runner ~:1649). In-memory-only — there is NO DB column (reorg-B3.2 no-migration; re-derivable from
   // geometry). The xStock eval-cycle now passes it so xStock VTS trades carry the verdict at parity with crypto.
   vtsGateVerdict?: 'passed' | 'rr_below_min' | 'unreachable';
+  // P19-B7.2d (#434): the maker/taker decision + pending-lifecycle stamp, passed by the
+  // xstock eval-cycle (lane parity with crypto's inline open at ~:1971-1977). Absent →
+  // undefined → the pre-B7.2d default (legacy rows stay dashed; dash-by-design).
+  chosenEntryMode?: 'taker' | 'maker';
+  entryFeeRate?: number;
+  /** 'pending' = a maker-chosen open resting at the limit (B7.2c lifecycle). */
+  state?: 'pending';
+  makerLimitPrice?: number;
+  makerDeadline?: number;
 }
 
 /**
@@ -3940,6 +3924,17 @@ export async function registerOpenVtsTrade(input: RegisterOpenVtsTradeInput): Pr
     id: tradeId,
     symbol: input.symbol,
     assetClass: input.assetClass,
+    // P19-B7.2d (#434): maker/taker decision + B7.2c pending-lifecycle passthrough.
+    // Same conditional-spread shape as crypto's inline open (~:1971-1977): a pending
+    // maker is born state='pending' resting at the limit + deadline; taker/filled
+    // opens keep the default 'open'. Absent (pre-B7.2d callers) → fields undefined.
+    chosenEntryMode: input.chosenEntryMode,
+    entryFeeRate: input.entryFeeRate,
+    ...(input.state === 'pending' ? {
+      state: 'pending' as const,
+      makerLimitPrice: input.makerLimitPrice,
+      makerDeadline: input.makerDeadline,
+    } : {}),
     entryPrice: input.entryPrice,
     stopLoss: input.stopLoss,
     takeProfit: input.takeProfit,
@@ -4022,6 +4017,103 @@ export async function registerOpenVtsTrade(input: RegisterOpenVtsTradeInput): Pr
     `strategy=${input.strategy} regime=${input.regime}`,
   );
   return tradeId;
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// P19-B7.2d — maybeOpenTwin: the SHARED twin-open seam, called by BOTH VTS lanes
+// (crypto's inline open path AND the xstock eval-cycle) so twin parity is by
+// construction, not transcription. Extracted from the crypto lane's inline twin
+// block (:2099-2136 pre-B7.2d) under Langston's NARROW B79.0m.b lock-lift
+// (Step-2, 2026-07-03): the lift covers THIS twin sub-block ONLY — crypto's
+// PRIMARY open stays inline; the general retrofit of crypto's trade-open through
+// `registerOpenVtsTrade` remains B79.0n+ future work.
+//
+// The decision half (twin-mode selection + skip reasons) is the PURE `planTwin`
+// (core/trading/pending-maker-logic.ts) — regression-tested on BOTH the open and
+// skip branches against the inline block's semantics. This shell resolves the
+// per-class knobs, applies the overlay to the chosen leg's record, and does the
+// I/O (insertOpenTrade + Map.set + logs).
+//
+// ⚠️ Twins do NOT route through `registerOpenVtsTrade`: the twin id is DERIVED
+// (`${tradeId}_twin`) and the record is inserted directly, exactly as the inline
+// block did. Routing through the register would trip its duplicate-id guard
+// semantics and re-run default-resolution against an already-resolved record.
+//
+// Twin failure NEVER blocks the real trade (try/catch — the chosen leg is
+// already persisted + registered when this runs).
+// ═════════════════════════════════════════════════════════════════════════════
+export interface MaybeOpenTwinInput {
+  /** id of the JUST-REGISTERED chosen leg (already persisted + in openVirtualTrades). */
+  chosenTradeId: string;
+  /** The DECISION's chosenMode (PRE-marketable-fallback) — drives twin-mode selection. */
+  decisionChosenMode: 'taker' | 'maker';
+  /** The EFFECTIVE mode the chosen leg opened with (post-fallback) — log context only. */
+  effectiveMode: 'taker' | 'maker';
+  /** Whether the chosen leg opened as a resting pending maker. */
+  pendingMaker: boolean;
+  /** Per-class DB-governed fee rates (getFrictionForAssetClass at the caller). */
+  feeRateMaker: number;
+  feeRateTaker: number;
+  /** Market price AT PLACEMENT (marketable check + honest-rest gap log). */
+  currentMarketPrice: number;
+}
+
+export async function maybeOpenTwin(input: MaybeOpenTwinInput): Promise<void> {
+  try {
+    const chosenTrade = openVirtualTrades.get(input.chosenTradeId);
+    if (!chosenTrade) {
+      console.warn(`[P19-B7.2d][VTS][TWIN] chosenTradeId=${input.chosenTradeId} not in openVirtualTrades — twin skipped`);
+      return;
+    }
+    // symbol/strategy/entryPrice/assetClass read off the chosen leg's record —
+    // identical to the caller's locals by construction (the record was built from them).
+    const { symbol, strategy, entryPrice } = chosenTrade;
+    const tradeAssetClass = chosenTrade.assetClass;
+    const plan = planTwin({
+      twinEnabled: resolveTwinEnabled(tradeAssetClass),
+      pendingMaker: input.pendingMaker,
+      decisionChosenMode: input.decisionChosenMode,
+      limitPrice: entryPrice,
+      currentMarketPrice: input.currentMarketPrice,
+      feeRateMaker: input.feeRateMaker,
+      feeRateTaker: input.feeRateTaker,
+      // Lazy — resolved only in the maker-twin open branch, exactly where the
+      // inline block called the fail-hard resolver (behavior-identity).
+      makerMaxPendingMs: () => resolveMakerMaxPendingMs(tradeAssetClass),
+      nowMs: Date.now(),
+    });
+    if (plan.kind === 'skip') {
+      if (plan.reason === 'marketable_maker') {
+        console.log(`[P19-B7.2c][VTS][TWIN_SKIPPED] ${symbol}/${strategy}: maker twin would be marketable at placement — no honest rest possible (limit=${entryPrice} market=${input.currentMarketPrice} gap=${(input.currentMarketPrice - entryPrice).toExponential(4)} gapBps=${entryPrice > 0 ? (((input.currentMarketPrice - entryPrice) / entryPrice) * 10000).toFixed(2) : 'n/a'})`);
+      } else if (plan.reason === 'degenerate_fallback') {
+        console.log(`[P19-B7.2c][VTS][TWIN_SKIPPED] ${symbol}/${strategy}: chosen leg was the marketable taker-fallback — comparison degenerate`);
+      }
+      // twin_disabled: silent, exactly as the inline `if (resolveTwinEnabled(...))` wrapper was.
+      return;
+    }
+    const twinId = `${input.chosenTradeId}_twin`;
+    const twinTrade: OpenVirtualTrade = {
+      ...chosenTrade,
+      id: twinId,
+      mtTwin: true,
+      mtPairId: input.chosenTradeId,
+      ...plan.overlay,
+    };
+    const { insertOpenTrade } = await import('./vts-trade-persistence.js');
+    await insertOpenTrade(twinTrade as any);
+    openVirtualTrades.set(twinId, twinTrade);
+    const _twinCount = Array.from(openVirtualTrades.values()).filter((t) => t.mtTwin === true).length;
+    // Placement-time honest-rest evidence (Langston #433 rider): for a maker twin,
+    // log the SIGN + SIZE of the limit-vs-market gap AT PLACEMENT so a rested limit
+    // sitting a rounding-hair off the market is visible in the log, not inferred.
+    const _twinGapNote = plan.twinMode === 'maker'
+      ? ` limit=${entryPrice} market=${input.currentMarketPrice} gap=${(input.currentMarketPrice - entryPrice).toExponential(4)} gapBps=${entryPrice > 0 ? (((input.currentMarketPrice - entryPrice) / entryPrice) * 10000).toFixed(2) : 'n/a'}`
+      : '';
+    console.log(`[P19-B7.2c][VTS][TWIN_OPENED] ${symbol}/${strategy}: ${plan.twinMode} twin ${twinId} paired to chosen ${input.effectiveMode} (open twins now: ${_twinCount})${_twinGapNote}`);
+  } catch (twinErr) {
+    const t = openVirtualTrades.get(input.chosenTradeId);
+    console.error(`[P19-B7.2c][VTS][TWIN_FAIL] ${t?.symbol ?? input.chosenTradeId}/${t?.strategy ?? '?'}: twin open failed (real trade unaffected):`, twinErr instanceof Error ? twinErr.message : twinErr);
+  }
 }
 
 /**
