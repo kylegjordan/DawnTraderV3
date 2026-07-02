@@ -338,3 +338,21 @@
 
 **Archive copies:** Helsinki `/root/telegram-bridges-archive-2026-07-02/` (scripts, unit files, state files, pre-decomm Langston CLAUDE.md/MEMORY) + repo `1-system-manual/_archive/deleted-code/{langston-bridge.py,cc-comms-bridge,langston-bridge.service,cc-comms-bridge.service}.removed`.
 **Reviewed by:** Langston Step-1 PROCEED (Discord, 2026-07-02) with the remove-unit-files ruling + the persona-sweep and voice-disposition riders (all executed).
+
+
+---
+
+## 2026-07-02 — B-TELEGRAM-DECOMM-2 (#351 + #107): the alert dispatcher's Telegram legs
+
+| Item | Location (pre-removal) | What it was |
+|---|---|---|
+| `pushToTelegram` + `telegramSend` + `readTokenFile` + `formatAlertText` + `KYLE_DM_CHAT_ID`/`TELEGRAM_GROUP_CHAT_ID`/`TELEGRAM_BATCH_THREAD` | `scripts/system-alerts.ts` | The B-NEW-43 #135 Telegram alert push (critical→Kyle DM + topic 21; warning→topic 21). The hardcoded DM chat-id was open issue #107 — resolved by deletion. |
+| `invokeLangstonForAlert` + `shellSingleQuote` | `scripts/system-alerts.ts` | The B-NEW-46 Telegram-era Langston SSH invoke (detached Helsinki wrapper + topic-21 relay). Replaced by the Discord alerts-webhook always-engage (#332). |
+| `ALERT_DISCORD_ISOLATION` env gate + the staging systemd drop-in `system-alerts-dispatcher.service.d/discord-isolation.conf` | `scripts/system-alerts.ts` + staging systemd | The 2026-06-24 suppression flip that kept the Telegram legs dead-in-prod during the Discord bake — moot once the code is gone; drop-in removed AFTER the deploy (ordering: code first, so no dead-channel post window). |
+| `/usr/local/bin/langston-alert-handler.sh` | Helsinki | The B-NEW-46 wrapper (claude invoke + Telegram relay) — orphaned by the invoke removal. |
+
+**Why removed:** rule 18 — the legs had been suppressed-but-present since 06-24 (a re-enable vector); Discord + the §10.5 per-turn queue pull carry 100% of alert delivery + Langston engagement (his own Step-1 confirmation: no alert class reached him only via the SSH invoke).
+**Blast-radius verification:** all deleted symbols single-file with sole-callers (pre-audit greps); Langston independently verified no stray refs on staging + the `false||dc||false` behavior-parity; bench tsc-baseline no regressions + vitest 2122 passed/0 failed; live post-deploy proof: test alert `72fafa61` → "Discord alert posted", zero Telegram attempts, Langston bridge engaged.
+**Left intentionally:** `/var/log/langston-alert-invokes.log` + the watcher tails of it (frozen, harmless); token env files (Kyle's bot-account call); `LANGSTON_INVOKE` env references died with the invoke.
+**Archive copies:** Helsinki `/root/telegram-bridges-archive-2026-07-02/langston-alert-handler.sh` + repo `_archive/deleted-code/langston-alert-handler.sh.removed`. The in-file deletions: git history (commit `21c080208`).
+**Reviewed by:** Langston Step-1 PROCEED (2 riders: info-severity parity — verified no behavior change; sole-sink WARNING text — swept) + Step-4 APPROVE-to-push (Discord, 2026-07-02).
