@@ -65,8 +65,13 @@ const REGIME_CONFIG: Record<string, { label: string; icon: typeof TrendingUp; co
 export default function DailyBriefCard() {
   const { mode, isPaper } = useTradingMode();
   
+  // P19-B-RENAME Wave-1 (Kyle ruling): the Walter-era /api/paper/briefs route +
+  // paper_daily_briefs table were deleted (never written — the paper branch always
+  // rendered the empty state from an empty table). Paper mode now renders that same
+  // empty state directly; daily reports return later rebuilt on our own ML.
   const { data: brief, isLoading } = useQuery<DailyBrief | null>({
-    queryKey: isPaper ? ['/api/paper/briefs/today'] : ['/api/daily-briefs/today']
+    queryKey: ['/api/daily-briefs/today'],
+    enabled: !isPaper,
   });
 
   const { data: marketInsights } = useQuery<MarketAnalysis>({

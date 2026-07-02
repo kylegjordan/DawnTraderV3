@@ -64,8 +64,12 @@ export default function PortfolioOverview() {
     refetchOnReconnect: true,
   });
 
+  // P19-B-RENAME Wave-1 (Kyle ruling): the Walter-era /api/paper/briefs route +
+  // table were deleted (never written — paper mode always got an empty list).
+  // Paper mode keeps the empty-list default without a query.
   const { data: dailyBriefs = [], isLoading: briefsLoading } = useQuery<DailyBrief[]>({
-    queryKey: isPaper ? ['/api/paper/briefs', { limit: 30 }] : ['/api/daily-briefs', { limit: 30 }],
+    queryKey: ['/api/daily-briefs', { limit: 30 }],
+    enabled: !isPaper,
   });
 
   const portfolioMetrics = isPaper ? paperPortfolioMetrics : livePortfolioMetrics;

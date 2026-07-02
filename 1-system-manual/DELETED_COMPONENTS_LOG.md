@@ -6,6 +6,25 @@
 
 ---
 
+## 2026-07-03 — P19-B-RENAME Wave-1: dead paper-era components (Kyle rulings + Langston-reconciled M5 verdict)
+
+**Why:** #413 — the paper→active naming cleanup's deletion wave (rule 18: nothing lingers). Every item verified dead by consumer-walk + tsc + grep-to-zero (only deliberate tombstone comments remain). Archive copies: `1-system-manual/_archive/deleted-code/*.removed` (git history is the authoritative archive).
+
+| Item | Location (pre-removal) | What it was / why dead |
+|---|---|---|
+| M5 validation harness engine | `server/services/paper_validation_engine.ts` | The 8.8.4-M5 controlled-validation session engine. Imported ONLY by the two dead route files below; its latency recording fired only inside its own `startValidationSession` fetch loop, which nothing in production ever starts. Langston initially split (keep-engine vs full-set) — reconciled FULL SET on the trace: no live consumer exists. |
+| M5 validation routes | `server/routes/paper_validation.ts` | `/api/validation/*` — zero consumers (client/scripts/tests). |
+| M5 pricing routes | `server/routes/pricing.ts` | `/api/pricing/latency` + `/cache-info` + `/status` — zero consumers, and served CONSTANT-ZERO latency (no session ever recorded). The original OPEN-3 "extract the rolling-latency tracker" was REVERSED at implementation depth (§9.2 delta, Langston-concurred ×3): there was nothing live to extract. Real feed-latency telemetry, if wanted, gets built fed from the real price path. |
+| Both M5 mounts | `server/routes.ts` (~:21866-21874) | The `/api/validation` + `/api/pricing` registrations. |
+| Guard-blocked CLI chain | `server/paper-trading-start.ts`, `server/paper-trading-stop.ts`, `server/services/paper-48hr-simulation.ts`, `scripts/test-phase-6-5-setup.ts` | Pre-modern CLI trading start/stop + 48hr sim + its setup script; guard-blocked, only intra-chain importers. The 48hr file was the sole non-live importer of paper-portfolio-manager. |
+| `PAPER_TRADING_USER_ID` env | read only by the CLI chain | userId-coupled legacy (rule-18 theme); dies with its readers. |
+| Client scan diagnostic | `client/src/components/goals/paper-sim-diagnostic.tsx` | Zero importers incl. lazy/App.tsx (CC-A verified, CC-B conceded). The SERVER sibling stays (live; renames in Wave 2). |
+| Root strays | `test-guardrails-paper.ts`, `after-click-paper.png` | Untethered root-level test file + screenshot. |
+| Walter tables + methods + client legs | `paper_daily_briefs` + `paper_ai_reports` tables (DROP migration `2026-07-03-p19-b-rename-w1-drop-walter-tables.sql`); storage interface+impl methods (`createPaperDailyBrief`/`updatePaperDailyBrief`/`getPaperDailyBrief(s)`/`finalizePaperDailyBrief`/`createPaperAIReport`/`getPaperAIReports`); schema decls/relations/insert-schemas/types; routes `/api/paper/briefs(/today)`; client paper branches (DailyBriefCard, portfolio-overview, ai-insights) | **Kyle ruling 2026-07-03:** Walter-era (the early OpenAI-via-API embed that never worked). Both tables live-verified EMPTY; the create/update methods had ZERO callers — read-only routes served an empty table forever. Daily reports return later rebuilt on our own ML (POST_AUDIT_ROADMAP note). userId-coupled legacy. |
+| `PaperExecutionServiceLegacy` tombstone | `server/services/mode-registry.ts:7-14` | Phase-8.8.3-B9 runtime guard against a legacy service that no longer exists anywhere (the global was never set by anything). |
+
+**Left intentionally (so a later grep doesn't read as a missed sweep):** the tombstone comments at the former mount/route/method/query sites referencing the deleted names; `server/services/paper-metrics.ts` + `/api/paper/metrics*` (OPEN-2 — rides the `paper_trades` retirement follow-up batch, liveness proven).
+
 ## 2026-07-01 — In-queue maker "make-then-take" resting-order machinery (P19-B7.2b / wrong-stage)
 
 **Removed:** the B7.2 OBJ-4 in-RTBQ maker-pending / convert-safety lifecycle — the code that tried to WORK a resting maker order while a signal sat in the ready-to-buy queue. **Wrong stage** (Kyle model clarification 2026-07-01): a queued signal carries a maker/taker **DECISION only** and works NO order; the maker order is placed only at **PROMOTION** (Kraken in live; simulated for paper+VTS), so its resting/fill/timeout/convert lifecycle belongs post-promotion, not in the queue.

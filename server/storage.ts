@@ -36,8 +36,6 @@ import {
   aiOpportunities,
   dailyBriefs,
   paperTrades,
-  paperDailyBriefs,
-  paperAIReports,
   signalWeights,
   predictionOutcomes,
   featureSnapshots,
@@ -121,10 +119,6 @@ import {
   type InsertDailyBrief,
   type PaperTrade,
   type InsertPaperTrade,
-  type PaperDailyBrief,
-  type InsertPaperDailyBrief,
-  type PaperAIReport,
-  type InsertPaperAIReport,
   type SignalWeight,
   type InsertSignalWeight,
   type PredictionOutcome,
@@ -409,16 +403,9 @@ export interface IStorage {
   getOpenPaperTrades(): Promise<PaperTrade[]>;
   deleteAllPaperTrades(): Promise<void>;
 
-  // Paper daily brief methods
-  createPaperDailyBrief(brief: InsertPaperDailyBrief): Promise<PaperDailyBrief>;
-  updatePaperDailyBrief(id: string, updates: Partial<PaperDailyBrief>): Promise<PaperDailyBrief>;
-  getPaperDailyBrief(date: string): Promise<PaperDailyBrief | undefined>;
-  getPaperDailyBriefs(filters?: { status?: string; limit?: number }): Promise<PaperDailyBrief[]>;
-  finalizePaperDailyBrief(id: string): Promise<PaperDailyBrief>;
-
-  // Paper AI report methods
-  createPaperAIReport(report: InsertPaperAIReport): Promise<PaperAIReport>;
-  getPaperAIReports(userId: string, type?: string, limit?: number): Promise<PaperAIReport[]>;
+  // P19-B-RENAME Wave-1 (Kyle ruling, rule 18): the Walter-era paper daily-brief +
+  // paper AI-report methods were DELETED with their tables (both live-verified empty;
+  // the create/update methods had zero callers — nothing ever wrote them).
 
   // Signal weight methods
   getSignalWeights(userId: string, strategy?: string, mode?: string): Promise<SignalWeight[]>;
@@ -2428,87 +2415,8 @@ export class DatabaseStorage implements IStorage {
     await db.delete(paperTrades);
   }
 
-  // Paper daily brief methods
-  async createPaperDailyBrief(brief: InsertPaperDailyBrief): Promise<PaperDailyBrief> {
-    const [result] = await db.insert(paperDailyBriefs).values(brief).returning();
-    return result;
-  }
-
-  async updatePaperDailyBrief(id: string, updates: Partial<PaperDailyBrief>): Promise<PaperDailyBrief> {
-    const [result] = await db
-      .update(paperDailyBriefs)
-      .set({ ...updates, updatedAt: new Date() })
-      .where(eq(paperDailyBriefs.id, id))
-      .returning();
-    return result;
-  }
-
-  async getPaperDailyBrief(date: string): Promise<PaperDailyBrief | undefined> {
-    const [result] = await db
-      .select()
-      .from(paperDailyBriefs)
-      .where(eq(paperDailyBriefs.date, date));
-    return result || undefined;
-  }
-
-  async getPaperDailyBriefs(filters?: { status?: string; limit?: number }): Promise<PaperDailyBrief[]> {
-    const conditions: any[] = [];
-    
-    if (filters?.status) {
-      conditions.push(eq(paperDailyBriefs.status, filters.status as any));
-    }
-    
-    const query = db
-      .select()
-      .from(paperDailyBriefs)
-      .where(and(...conditions))
-      .orderBy(desc(paperDailyBriefs.date));
-    
-    if (filters?.limit) {
-      query.limit(filters.limit);
-    }
-    
-    return await query;
-  }
-
-  async finalizePaperDailyBrief(id: string): Promise<PaperDailyBrief> {
-    const [result] = await db
-      .update(paperDailyBriefs)
-      .set({ 
-        status: 'final' as const,
-        finalizedAt: new Date(),
-        updatedAt: new Date()
-      })
-      .where(eq(paperDailyBriefs.id, id))
-      .returning();
-    return result;
-  }
-
-  // Paper AI report methods
-  async createPaperAIReport(report: InsertPaperAIReport): Promise<PaperAIReport> {
-    const [result] = await db.insert(paperAIReports).values(report).returning();
-    return result;
-  }
-
-  async getPaperAIReports(userId: string, type?: string, limit?: number): Promise<PaperAIReport[]> {
-    const conditions = [eq(paperAIReports.userId, userId)];
-    
-    if (type) {
-      conditions.push(eq(paperAIReports.reportType, type));
-    }
-    
-    const query = db
-      .select()
-      .from(paperAIReports)
-      .where(and(...conditions))
-      .orderBy(desc(paperAIReports.generatedAt));
-    
-    if (limit) {
-      query.limit(limit);
-    }
-    
-    return await query;
-  }
+  // P19-B-RENAME Wave-1 (Kyle ruling, rule 18): Walter-era paper daily-brief +
+  // paper AI-report method implementations deleted with their tables.
 
   // Signal weight methods
   async getSignalWeights(userId: string, strategy?: string, mode?: string): Promise<SignalWeight[]> {

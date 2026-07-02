@@ -1208,36 +1208,10 @@ export const paperTrades = pgTable("paper_trades", {
 });
 
 // Paper daily briefs (simulated trading day summaries)
-export const paperDailyBriefs = pgTable("paper_daily_briefs", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").references(() => users.id).notNull(),
-  date: varchar("date", { length: 10 }).notNull(), // YYYY-MM-DD
-  status: dailyBriefStatusEnum("status").default("in_progress"),
-  headline: varchar("headline", { length: 200 }),
-  summary: text("summary"),
-  narrative: text("narrative"),
-  metrics: jsonb("metrics"), // Same structure as live briefs
-  trades: jsonb("trades"), // {top_winners: [], top_losers: [], closed: [], open: []}
-  learnings: jsonb("learnings"),
-  systemHealth: jsonb("system_health"), // {status, issues: []}
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
-  finalizedAt: timestamp("finalized_at", { withTimezone: true }),
-  emailSentAt: timestamp("email_sent_at", { withTimezone: true }),
-});
-
-// Paper AI reports (simulated trading analysis)
-export const paperAIReports = pgTable("paper_ai_reports", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").references(() => users.id).notNull(),
-  reportType: varchar("report_type", { length: 50 }).notNull(),
-  period: varchar("period", { length: 50 }).notNull(),
-  content: text("content").notNull(),
-  insights: jsonb("insights"),
-  recommendations: jsonb("recommendations"),
-  metrics: jsonb("metrics"),
-  generatedAt: timestamp("generated_at", { withTimezone: true }).defaultNow(),
-});
+// P19-B-RENAME Wave-1 (Kyle ruling, rule 18): the Walter-era `paper_daily_briefs` +
+// `paper_ai_reports` tables were DROPPED (both live-verified empty; nothing ever wrote
+// them — the OpenAI-via-API embed they served never worked). The daily-reports concept
+// returns later rebuilt on our own ML (POST_AUDIT_ROADMAP note). userId-coupled legacy.
 
 // ===== LEARNING FEEDBACK ENGINE TABLES =====
 
@@ -2139,8 +2113,6 @@ export const usersRelations = relations(users, ({ many }) => ({
   opportunityRuns: many(aiOpportunityRuns),
   opportunities: many(aiOpportunities),
   dailyBriefs: many(dailyBriefs),
-  paperDailyBriefs: many(paperDailyBriefs),
-  paperAIReports: many(paperAIReports),
   learningSources: many(learningSources),
   signalWeights: many(signalWeights),
   predictionOutcomes: many(predictionOutcomes),
@@ -2218,20 +2190,6 @@ export const dailyBriefsRelations = relations(dailyBriefs, ({ one }) => ({
 }));
 
 // Phase 27.F.15.A: Removed paperTradesRelations - table is now global
-
-export const paperDailyBriefsRelations = relations(paperDailyBriefs, ({ one }) => ({
-  user: one(users, {
-    fields: [paperDailyBriefs.userId],
-    references: [users.id],
-  }),
-}));
-
-export const paperAIReportsRelations = relations(paperAIReports, ({ one }) => ({
-  user: one(users, {
-    fields: [paperAIReports.userId],
-    references: [users.id],
-  }),
-}));
 
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
@@ -2452,17 +2410,6 @@ export const insertDailyBriefSchema = createInsertSchema(dailyBriefs).omit({
 export const insertPaperTradeSchema = createInsertSchema(paperTrades).omit({
   id: true,
   entryTime: true,
-});
-
-export const insertPaperDailyBriefSchema = createInsertSchema(paperDailyBriefs).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
-
-export const insertPaperAIReportSchema = createInsertSchema(paperAIReports).omit({
-  id: true,
-  generatedAt: true,
 });
 
 // Learning Feedback Engine insert schemas
@@ -2740,12 +2687,6 @@ export type DailyBrief = typeof dailyBriefs.$inferSelect;
 
 export type InsertPaperTrade = z.infer<typeof insertPaperTradeSchema>;
 export type PaperTrade = typeof paperTrades.$inferSelect;
-
-export type InsertPaperDailyBrief = z.infer<typeof insertPaperDailyBriefSchema>;
-export type PaperDailyBrief = typeof paperDailyBriefs.$inferSelect;
-
-export type InsertPaperAIReport = z.infer<typeof insertPaperAIReportSchema>;
-export type PaperAIReport = typeof paperAIReports.$inferSelect;
 
 export type InsertLearningSource = z.infer<typeof insertLearningSourceSchema>;
 export type LearningSource = typeof learningSources.$inferSelect;

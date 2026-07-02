@@ -13,19 +13,19 @@ import { cn } from "@/lib/utils";
 export default function AIInsights() {
   const { mode, isPaper } = useTradingMode();
   const { aiReports: liveAIReports, reportsLoading: liveReportsLoading } = useAI();
-  
-  const { data: paperAIReports = [], isLoading: paperReportsLoading } = useQuery<any[]>({
-    queryKey: ['/api/paper/ai-reports'],
-    enabled: isPaper,
-  });
-  
+
+  // P19-B-RENAME Wave-1 (Kyle ruling): the Walter-era /api/paper/ai-reports query was
+  // a dead call (NO server route ever existed; the paper_ai_reports table — dropped —
+  // was never written). Paper mode shows the same no-reports empty state it always
+  // effectively showed; AI daily reports return later rebuilt on our own ML.
+
   // Fetch user settings for timezone conversion
-  const { data: settings } = useQuery<{ timezone?: string; timeFormat?: string }>({ 
+  const { data: settings } = useQuery<{ timezone?: string; timeFormat?: string }>({
     queryKey: ['/api/settings'],
   });
-  
-  const aiReports = isPaper ? paperAIReports : liveAIReports;
-  const reportsLoading = isPaper ? paperReportsLoading : liveReportsLoading;
+
+  const aiReports = isPaper ? [] : liveAIReports;
+  const reportsLoading = isPaper ? false : liveReportsLoading;
   
   // Get the most recent daily report
   const latestReport = aiReports.find(report => report.reportType === 'daily');

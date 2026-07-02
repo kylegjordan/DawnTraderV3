@@ -4,14 +4,9 @@
 import type { PaperExecutionEngine } from './paper-execution-engine';
 import type { MicroExecutionService } from './micro-execution-service';
 
-/**
- * Phase 8.8.3-B9: Runtime guard to prevent legacy engine usage
- * This ensures only the V3 PaperExecutionEngine is ever used in DawnTrader V3.
- */
-if ((global as any).PaperExecutionServiceLegacy) {
-  throw new Error('[B9][FATAL] Legacy PaperExecutionService is not supported in DawnTrader V3. Use PaperExecutionEngine instead.');
-}
-console.log('[ENGINE][INIT] Using PaperExecutionEngine (V3) - Legacy engine blocked');
+// P19-B-RENAME Wave-1 (rule 18): the Phase-8.8.3-B9 `PaperExecutionServiceLegacy`
+// runtime tombstone was removed — the legacy service it guarded against has not
+// existed anywhere in the codebase for many phases (global never set by anything).
 
 /**
  * Phase 27.F.15.B.4: ModeRegistry - Production Telemetry Layer

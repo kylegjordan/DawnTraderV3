@@ -5250,41 +5250,12 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
-  apiRouter.get('/paper/briefs/today', authenticateToken, async (req: AuthenticatedRequest, res) => {
-    try {
-      const userId = req.user!.id;
-      const today = new Date().toISOString().split('T')[0];
-      
-      // B-NEW-43 chunk 14: Phase 41F-L userId-purge straggler.
-      // storage.getPaperDailyBrief takes only `(date)` per the modern
-      // mode-based architecture; the prior userId arg was a holdover from
-      // the user-coupled era.
-      const brief = await storage.getPaperDailyBrief(today);
-      res.json(brief || null);
-    } catch (error) {
-      console.error('Error fetching today\'s paper brief:', error);
-      res.status(500).json({ error: 'Failed to fetch today\'s paper brief' });
-    }
-  });
-
-  apiRouter.get('/paper/briefs', authenticateToken, async (req: AuthenticatedRequest, res) => {
-    try {
-      const userId = req.user!.id;
-      const { status, limit } = req.query;
-      
-      // B-NEW-43 chunk 14: Phase 41F-L userId-purge straggler — same as
-      // getPaperDailyBrief above. Modern signature takes `(filters?)` only.
-      const briefs = await storage.getPaperDailyBriefs({
-        status: status as string,
-        limit: limit ? parseInt(limit as string) : 30
-      });
-      
-      res.json(briefs);
-    } catch (error) {
-      console.error('Error fetching paper briefs:', error);
-      res.status(500).json({ error: 'Failed to fetch paper briefs' });
-    }
-  });
+  // P19-B-RENAME Wave-1 (Kyle ruling, rule 18): the Walter-era paper daily-brief
+  // routes (/paper/briefs/today + /paper/briefs) are DELETED with their tables
+  // (paper_daily_briefs + paper_ai_reports — both live-verified EMPTY; nothing ever
+  // wrote them: the create/update storage methods had zero callers). The daily-reports
+  // concept returns later rebuilt on our own ML (POST_AUDIT_ROADMAP note). The paper
+  // branches of DailyBriefCard/portfolio-overview now render their empty states directly.
 
   apiRouter.get('/paper/metrics', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
@@ -21863,15 +21834,14 @@ Please:
   apiRouter.use('/back-audit', backAuditRouter.default);
   console.log('[M4] Back-Audit & System Integrity routes mounted at /api/back-audit');
 
-  // Directive 8.8.4-M5: Mount Paper Validation (Controlled Paper-Mode Validation) routes
-  const paperValidationRouter = await import('./routes/paper_validation.js');
-  apiRouter.use('/validation', paperValidationRouter.default);
-  console.log('[M5] Paper Validation routes mounted at /api/validation');
-
-  // Directive 8.8.4-M5: Mount Pricing (Feed Latency & Cache) routes
-  const pricingRouter = await import('./routes/pricing.js');
-  apiRouter.use('/pricing', pricingRouter.default);
-  console.log('[M5] Pricing routes mounted at /api/pricing');
+  // P19-B-RENAME Wave-1 (rule 18): the M5 validation harness is DELETED — the
+  // /api/validation + /api/pricing route sets had ZERO consumers (client/scripts/
+  // tests all empty), and the harness's latency data was written only by its own
+  // validation-session loop (nothing ever starts a session in production → the
+  // pricing endpoints served constant zeros). Full set removed: paper_validation_
+  // engine.ts + routes/paper_validation.ts + routes/pricing.ts + these two mounts.
+  // See DELETED_COMPONENTS_LOG.md. Real feed-latency telemetry, if ever wanted,
+  // gets built fed from the real price path.
 
   // Directive 8.8.4-M5-R1: Mount Calibration Report routes
   const calibrationRouter = await import('./routes/calibration.js');
