@@ -94,13 +94,13 @@ export default function AITransparencyPage() {
 
   // Fetch paper trading simulation data (Milestone 18)
   const { data: paperSimData, isLoading: paperSimLoading } = useQuery<{ ok: boolean; isRunning: boolean; stats: any }>({
-    queryKey: ['/api/paper-sim/metrics'],
+    queryKey: ['/api/active-engine/metrics'],
     refetchInterval: 5000, // More frequent refresh for responsive status updates
     staleTime: 0, // Always consider data stale for immediate updates
   });
 
   const { data: paperPositionsData, isLoading: paperPositionsLoading } = useQuery<{ ok: boolean; positions: any[] }>({
-    queryKey: ['/api/paper-sim/positions'],
+    queryKey: ['/api/active-engine/positions'],
     refetchInterval: 5000, // More frequent refresh for responsive status updates
     staleTime: 0, // Always consider data stale for immediate updates
   });

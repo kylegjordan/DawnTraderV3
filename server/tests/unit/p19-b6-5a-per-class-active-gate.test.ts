@@ -32,7 +32,7 @@ vi.mock('../../services/cluster-bus.js', () => ({ clusterBus: { emit: () => {}, 
 vi.mock('../../services/context-bridge.js', () => ({ contextBridge: { broadcast: async () => {} } }));
 
 // Active-dispatch leaf deps (mirrors p19-b4a-c2-xstock-dispatch.test.ts) so the connector is drivable.
-vi.mock('../../services/paper-sim-service.js', () => ({
+vi.mock('../../services/active-engine-service.js', () => ({
   getOrchestratorByMode: () => { orchSpy(); return { dispatchExternalSignal: async () => null }; },
 }));
 vi.mock('../../services/guardrail-settings.js', () => ({ getPortfolioBalanceV2: async () => 1000 }));

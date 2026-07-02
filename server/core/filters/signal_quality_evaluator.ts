@@ -23,7 +23,7 @@ import { logSkippedSignal } from '../logging/skipped-signals-logger.js';
 // Phase 14.1 HF8 (B3): Confidence floor imports for centralized mode-based qualification
 import { resolveStrategyMode, getModeOverlay, meetsConfidenceFloor } from '../governance/strategy-modes.js';
 import type { RegimeStability } from '../../config/strategy-governance.js';
-// HF9 Item B: Governance gate imports (migrated from paper-execution-engine)
+// HF9 Item B: Governance gate imports (migrated from active-execution-engine)
 import { isStrategyEligible } from '../governance/strategy-eligibility.js';
 import { getStrategyDependency } from '../../config/strategy-governance.js';
 // B79.0n.ORCHESTRATOR (2026-05-27): per-asset-class pattern pool guardrails
@@ -382,7 +382,7 @@ export async function evaluateSignalQuality(input: SQEInput, options: SQEOptions
     }
   }
 
-  // HF9 Item B: Governance gate (migrated from paper-execution-engine Directive 11.7R-E)
+  // HF9 Item B: Governance gate (migrated from active-execution-engine Directive 11.7R-E)
   // Checks strategy eligibility based on regime stability and dependency level.
   // VTS signals pass skipGovernanceGate=true (VTS has its own inline governance checks).
   // B79.0b N3 cleanup (Langston Q1 revise): dropped `input.strategy &&` from

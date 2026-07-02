@@ -13,7 +13,7 @@
  *     (`dailyLossWarning1Pct` / `dailyLossWarning2Pct`, stored as % OF the kill threshold),
  *   - fires an INFO/WARNING system-alert at the warning tiers (ratchet + hysteresis re-arm),
  *   - on breach, auto-trips the EXISTING `guardrailPolicy.tripKillSwitch` (which already
- *     flattens all open positions via `stopPaperSimulation → forceCloseAllOpenPositionsOnStop`
+ *     flattens all open positions via `stopActiveEngine → forceCloseAllOpenPositionsOnStop`
  *     — so we do NOT restore the Phase-8 `closeAllTrades`; that would double-close) + a
  *     CRITICAL system-alert.
  *
@@ -109,7 +109,7 @@ export function classifyTier(
 
 async function compute24hSnapshot(mode: TradingMode): Promise<DailyLossSnapshot> {
   const { getPortfolioBalanceV2 } = await import('./guardrail-settings.js');
-  const { getEngineSessionStart } = await import('./paper-execution-engine.js');
+  const { getEngineSessionStart } = await import('./active-execution-engine.js');
 
   const now = Date.now();
   const twentyFourHoursAgo = new Date(now - 24 * 60 * 60 * 1000);
@@ -290,7 +290,7 @@ export async function evaluateDailyLossBudgetOnClose(mode: TradingMode): Promise
     const verdict = await computeDailyLossVerdict(mode);
     if (!verdict) return;
 
-    const { getEngineSessionStart } = await import('./paper-execution-engine.js');
+    const { getEngineSessionStart } = await import('./active-execution-engine.js');
     const ss = getEngineSessionStart(mode);
     const epoch = ss ? ss.getTime() : null;
     const st = getState(mode, epoch);
@@ -366,7 +366,7 @@ async function doKill(mode: TradingMode, verdict: DailyLossVerdict, epoch: numbe
   console.log(`[DailyLossBudget] 🚨 KILL (${mode}): ${reason}`);
 
   // Trip the existing kill switch — this ALSO flattens all open positions via
-  // stopPaperSimulation → forceCloseAllOpenPositionsOnStop (we do NOT close separately).
+  // stopActiveEngine → forceCloseAllOpenPositionsOnStop (we do NOT close separately).
   const { guardrailPolicy } = await import('./guardrail-policy.js');
   await guardrailPolicy.tripKillSwitch(mode, reason, verdict.lossPercent, verdict.killThreshold);
 

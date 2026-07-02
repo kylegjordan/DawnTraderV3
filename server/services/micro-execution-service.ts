@@ -1,6 +1,6 @@
 import { storage } from '../storage';
 import { contextBridge } from './context-bridge';
-import type { PaperExecutionEngine } from './paper-execution-engine';
+import type { ActiveExecutionEngine } from './active-execution-engine';
 
 /**
  * Phase 27.F.14.MICRO: Micro-Execution Service
@@ -33,7 +33,7 @@ export class MicroExecutionService {
   private mode: 'live' | 'paper';
   private isRunning: boolean = false;
   private microLoopInterval: NodeJS.Timeout | null = null;
-  private paperEngine: PaperExecutionEngine | null = null;
+  private paperEngine: ActiveExecutionEngine | null = null;
   
   // Configuration (loaded from guardrails)
   private intervalMs: number = 8000; // Default 8 seconds
@@ -57,7 +57,7 @@ export class MicroExecutionService {
   /**
    * Link to the main paper execution engine
    */
-  setPaperEngine(engine: PaperExecutionEngine): void {
+  setPaperEngine(engine: ActiveExecutionEngine): void {
     this.paperEngine = engine;
   }
   
@@ -339,7 +339,7 @@ export class MicroExecutionService {
   /**
    * Trigger symbol check via paper engine
    * Note: This is a placeholder - the actual integration will depend on
-   * how we want to expose this in PaperExecutionEngine
+   * how we want to expose this in ActiveExecutionEngine
    */
   private async triggerSymbolCheck(symbol: string): Promise<void> {
     // For now, just log that we would trigger a check
@@ -348,7 +348,7 @@ export class MicroExecutionService {
     
     console.log(`[MicroLoop] Would trigger execution check for ${symbol}`);
     
-    // TODO: Integrate with PaperExecutionEngine.checkSymbolForSignal()
+    // TODO: Integrate with ActiveExecutionEngine.checkSymbolForSignal()
   }
   
   /**

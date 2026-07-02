@@ -5,7 +5,7 @@
  *   1. The shared `stampMaxHoldingMs` helper (strategy-engine.ts): resolves
  *      `max_holding_ms` from module_constants, falls back to the documented
  *      default, and no-ops when a signal already carries the field.
- *   2. The paper-execution-engine force-close decision: a signal whose hold is
+ *   2. The active-execution-engine force-close decision: a signal whose hold is
  *      21_600_000 ms (6h) is force-closed AT/AFTER 6h, NOT before — compared in
  *      milliseconds (the old code read the value as HOURS).
  *   3. The historic-signal-generator clock-anchored conversion: the intended
@@ -74,7 +74,7 @@ describe('B.5 W2.1 — stampMaxHoldingMs shared helper', () => {
 });
 
 describe('B.5 W2.1 — paper-execution force-close compares in MILLISECONDS', () => {
-  // Mirrors the exact decision logic in paper-execution-engine.ts checkExitConditions:
+  // Mirrors the exact decision logic in active-execution-engine.ts checkExitConditions:
   //   const elapsedMs = Date.now() - openTime;
   //   if (elapsedMs >= maxHoldingMs) -> force close.
   // A 6h hold (21_600_000 ms) must NOT close at 5h59m and MUST close at 6h.

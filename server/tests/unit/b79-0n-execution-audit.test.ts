@@ -7,7 +7,7 @@
  *   - CHUNK A: TradeClosedEvent gains optional assetClass field; emit site
  *     populates it from position.assetClass (canonical SSOT read, not
  *     re-resolved). Canary log present.
- *   - CHUNK B: outcomeFeedback hook (paper-execution-engine.ts:L1376) reads
+ *   - CHUNK B: outcomeFeedback hook (active-execution-engine.ts:L1376) reads
  *     position.assetClass first, falls back to safeResolveAssetClass as
  *     belt-and-suspenders (not load-bearing — L922 NO_FALLBACK hard-fails
  *     before flow reaches L1376 if assetClass missing).
@@ -27,8 +27,8 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-const PAPER_EXEC_SRC = readFileSync(
-  join(process.cwd(), 'server/services/paper-execution-engine.ts'),
+const ACTIVE_EXEC_SRC = readFileSync(
+  join(process.cwd(), 'server/services/active-execution-engine.ts'),
   'utf-8',
 );
 const EVENT_BUS_SRC = readFileSync(
@@ -56,15 +56,15 @@ describe('B79.0n.EXECUTION — audit + regression-lock tests', () => {
       expect(EVENT_BUS_SRC).toMatch(/c13-validation-service[\s\S]*?L103-107 collection only/);
     });
 
-    it('Test 3 — emit site at paper-execution-engine populates assetClass from position record', () => {
+    it('Test 3 — emit site at active-execution-engine populates assetClass from position record', () => {
       // CHUNK A emit-site change: read from position.assetClass (canonical SSOT
       // write at L2147 createPaperSimOpenPosition), NOT re-resolve from symbol.
-      expect(PAPER_EXEC_SRC).toMatch(/_tcAssetClass\s*=\s*\(position as any\)\.assetClass/);
-      expect(PAPER_EXEC_SRC).toMatch(/eventBus\.emitTradeClosed\(\{[\s\S]*?assetClass:\s*_tcAssetClass[\s\S]*?\}\)/);
+      expect(ACTIVE_EXEC_SRC).toMatch(/_tcAssetClass\s*=\s*\(position as any\)\.assetClass/);
+      expect(ACTIVE_EXEC_SRC).toMatch(/eventBus\.emitTradeClosed\(\{[\s\S]*?assetClass:\s*_tcAssetClass[\s\S]*?\}\)/);
     });
 
     it('Test 4 — canary log present at emit site (Langston Step 2 B2 mitigation)', () => {
-      expect(PAPER_EXEC_SRC).toMatch(/\[B79\.0n\.EXECUTION\]\[EMIT_TRADE_CLOSED\][\s\S]*?mode=[\s\S]*?class=[\s\S]*?symbol=/);
+      expect(ACTIVE_EXEC_SRC).toMatch(/\[B79\.0n\.EXECUTION\]\[EMIT_TRADE_CLOSED\][\s\S]*?mode=[\s\S]*?class=[\s\S]*?symbol=/);
     });
   });
 
@@ -75,17 +75,17 @@ describe('B79.0n.EXECUTION — audit + regression-lock tests', () => {
       // re-resolve to `position.assetClass ?? safeResolveAssetClass(...)` read-from-record
       // with belt-and-suspenders fallback. The if (_assetClass !== null) guard
       // ensures no-throw clean-skip when fallback also returns null.
-      expect(PAPER_EXEC_SRC).toMatch(
+      expect(ACTIVE_EXEC_SRC).toMatch(
         /_assetClass\s*=\s*\(position as any\)\.assetClass\s*\?\?\s*safeResolveAssetClass\(position\.symbol,\s*['"]kraken['"]\)/,
       );
       // No-throw skip semantics: if _assetClass null, the updateEma is skipped
       // (entire block wrapped in `if (_assetClass !== null)`).
       // ITEM-4 step 2 (D9): updateEma now takes the REQUIRED source partition
       // first (_learnSource = this engine's carried mode) — assetClass follows.
-      expect(PAPER_EXEC_SRC).toMatch(/if \(_assetClass !== null\) \{[\s\S]*?outcomeFeedbackStore\.updateEma\(\s*_learnSource,\s*_assetClass/);
+      expect(ACTIVE_EXEC_SRC).toMatch(/if \(_assetClass !== null\) \{[\s\S]*?outcomeFeedbackStore\.updateEma\(\s*_learnSource,\s*_assetClass/);
       // Comment annotates belt-and-suspenders doctrine per Langston Step 2 B2 reframe.
-      expect(PAPER_EXEC_SRC).toMatch(/BELT-AND-SUSPENDERS, NOT load-bearing/);
-      expect(PAPER_EXEC_SRC).toMatch(/L922 B79\.TEC NO_FALLBACK hard-fails/);
+      expect(ACTIVE_EXEC_SRC).toMatch(/BELT-AND-SUSPENDERS, NOT load-bearing/);
+      expect(ACTIVE_EXEC_SRC).toMatch(/L922 B79\.TEC NO_FALLBACK hard-fails/);
     });
   });
 

@@ -58,7 +58,7 @@ export const DEFAULT_MAX_HOLDING_MS = 24 * 60 * 60 * 1000; // 86_400_000
  * CRITICAL INVARIANT: forward-prep only. VTS enforces holds via the 7-day global
  * MAX_HOLD_MS valve in tec-evaluator/vts-runner, NOT via metadata.maxHoldingMs;
  * the only consumer of metadata.maxHoldingMs is the (currently dormant)
- * active-paper enforcer in paper-execution-engine.ts. Stamping the field changes
+ * active-paper enforcer in active-execution-engine.ts. Stamping the field changes
  * no live behavior — it just makes the field present and unit-consistent.
  */
 export function stampMaxHoldingMs(

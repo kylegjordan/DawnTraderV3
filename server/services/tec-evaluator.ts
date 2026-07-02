@@ -2,7 +2,7 @@
  * B65.2 — TEC Exit Evaluator
  *
  * Centralized exit-decision function consumed by both VTS (vts-runner.ts) and
- * paper execution (paper-execution-engine.ts). Replaces two separately-evolved
+ * paper execution (active-execution-engine.ts). Replaces two separately-evolved
  * inline exit-decision blocks with one authoritative primitive.
  *
  * ## Parity scope (B65.2)
@@ -38,18 +38,18 @@
  *
  *   - **UPDATE 2026-04-25:** the original B65.3 sub-batch ("migrate metadata
  *     percentage trailing onto ATR TEC") was found MOOT during the B65.2 audit
- *     because paper-execution-engine.ts no longer consumes
+ *     because active-execution-engine.ts no longer consumes
  *     `metadata.trailingStopPercent` for exit decisions — that path was
  *     deleted as part of the B65.2 functional ship. The only residual
  *     reference is one `highWaterMark` write at trade-open
- *     (paper-execution-engine.ts:1929) retained for legacy dashboards and
+ *     (active-execution-engine.ts:1929) retained for legacy dashboards and
  *     explicitly comment-flagged as not consumed by exit logic. Phase 16
  *     legacy cleanup will remove that residual write plus any remaining
  *     percentage-trailing references for the ABCD / SMA Trend Ride strategy
  *     detectors if those strategies are themselves being retired.
  *   - Paper's `metadata.maxHoldingMs` (position-specific override, milliseconds;
  *     W2.1 2026-06-06 — was the ambiguous `metadata.maxHoldingPeriod`) stays
- *     inline in paper-execution-engine.ts. VTS's MAX_HOLD_MS (global 7-day
+ *     inline in active-execution-engine.ts. VTS's MAX_HOLD_MS (global 7-day
  *     safety valve) is passed in through `maxHoldMs`.
  *   - The TEC state machine's persistence debounce (Directive 9.2.D) is still
  *     hardcoded at 5000ms inside trailing-exit-controller.ts. Re-wiring that

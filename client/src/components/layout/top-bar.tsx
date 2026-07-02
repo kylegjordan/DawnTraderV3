@@ -100,10 +100,10 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
     openTradesCount: number;
     slotsAvailable: number;
   }>({
-    queryKey: ['/api/paper-sim/portfolio-summary'],
+    queryKey: ['/api/active-engine/portfolio-summary'],
     queryFn: async () => {
       try {
-        const response = await apiRequest('GET', '/api/paper-sim/portfolio-summary');
+        const response = await apiRequest('GET', '/api/active-engine/portfolio-summary');
         return response;
       } catch (error) {
         return { ok: false, startingBalance: 0, currentBalance: 0, netPnl: 0, netPnlPercent: 0, totalPositionValue: 0 };
@@ -149,7 +149,7 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
       
       // Minimal invalidations - only trading status queries
       queryClient.invalidateQueries({ queryKey: ['/api/trading/status'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/active-engine/status'] });
       
       // Update local mode if changed
       const mode = latestUpdate.payload?.mode || latestUpdate.data?.mode;
@@ -164,7 +164,7 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
     const tradeClosedUpdates = wsMessages.filter((msg: any) => msg.type === 'trade_closed');
     if (tradeClosedUpdates.length > 0 && currentMode === 'paper') {
       console.log('[TopBar][I10-FIX] Trade closed - refreshing portfolio summary');
-      queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/portfolio-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/active-engine/portfolio-summary'] });
     }
   }, [wsMessages, queryClient, currentMode]);
 
@@ -177,7 +177,7 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
       // Throttle to max once every 3 seconds to avoid UI thrashing
       if (now - lastPortfolioRefresh > 3000) {
         console.log('[TopBar][I10-FIX] Price update - refreshing portfolio summary (throttled)');
-        queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/portfolio-summary'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/active-engine/portfolio-summary'] });
         setLastPortfolioRefresh(now);
       }
     }
@@ -191,7 +191,7 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
       console.log('[Phase-27.F.14.N][TradingSync] Received trading_data_updated event:', latestUpdate);
       
       // Invalidate all trading-related queries for immediate cross-session sync
-      queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/filtered-pairs'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/active-engine/filtered-pairs'] });
       queryClient.invalidateQueries({ queryKey: ['/api/trading-signals'] });
       queryClient.invalidateQueries({ queryKey: ['/api/filters/diagnostics'] });
       queryClient.invalidateQueries({ queryKey: ['/api/trading/status'] });
@@ -283,7 +283,7 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
       });
       
       // Refetch status to ensure UI reflects actual backend state
-      await queryClient.refetchQueries({ queryKey: ['/api/paper-sim/status'] });
+      await queryClient.refetchQueries({ queryKey: ['/api/active-engine/status'] });
       await queryClient.refetchQueries({ queryKey: ['/api/trading/status'] });
     }
   };
@@ -303,7 +303,7 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
     });
     
     try {
-      const result = await apiRequest('POST', '/api/paper-sim/start', { mode: 'continue' });
+      const result = await apiRequest('POST', '/api/active-engine/start', { mode: 'continue' });
       
       // Check if balance confirmation is required
       if (result && typeof result === 'object' && 'requiresConfirmation' in result && result.requiresConfirmation) {
@@ -316,7 +316,7 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
       // REB 2.8.9/2.8.10: Invalidate portfolio queries for immediate balance update
       console.log('[REB 2.8.10] Invalidating portfolio and goals queries after paper trading start');
       await queryClient.invalidateQueries({ queryKey: ['/api/paper/portfolio/state'] });
-      await queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'] });
+      await queryClient.invalidateQueries({ queryKey: ['/api/active-engine/status'] });
       // REB 2.8.10: Add goals invalidations
       await queryClient.invalidateQueries({ queryKey: [`/api/goals/summary?mode=paper`] });
       await queryClient.invalidateQueries({ queryKey: ['/api/system/trading-pace'] });
@@ -350,7 +350,7 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
     });
     
     try {
-      await apiRequest('POST', '/api/paper-sim/start', { 
+      await apiRequest('POST', '/api/active-engine/start', { 
         mode: 'new', 
         initialBalance: balance 
       });
@@ -358,7 +358,7 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
       // REB 2.8.9/2.8.10: Invalidate portfolio queries for immediate balance update
       console.log('[REB 2.8.10] Invalidating portfolio and goals queries after new simulation start');
       await queryClient.invalidateQueries({ queryKey: ['/api/paper/portfolio/state'] });
-      await queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'] });
+      await queryClient.invalidateQueries({ queryKey: ['/api/active-engine/status'] });
       // REB 2.8.10: Add goals invalidations
       await queryClient.invalidateQueries({ queryKey: [`/api/goals/summary?mode=paper`] });
       await queryClient.invalidateQueries({ queryKey: ['/api/system/trading-pace'] });
@@ -465,14 +465,14 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
     
     try {
       // Send balance confirmation to backend
-      await apiRequest('POST', '/api/paper-sim/confirm-balance', { 
+      await apiRequest('POST', '/api/active-engine/confirm-balance', { 
         balance, 
         mode: currentMode 
       });
       
       // Refresh portfolio after balance confirmation
       await queryClient.invalidateQueries({ queryKey: ['portfolio-overview', 'paper'] });
-      await queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'] });
+      await queryClient.invalidateQueries({ queryKey: ['/api/active-engine/status'] });
       
       // Close the modal
       setShowBalanceConfirmation(false);
@@ -509,7 +509,7 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
       });
       
       // Refetch status to ensure UI reflects actual backend state
-      await queryClient.refetchQueries({ queryKey: ['/api/paper-sim/status'] });
+      await queryClient.refetchQueries({ queryKey: ['/api/active-engine/status'] });
       await queryClient.refetchQueries({ queryKey: ['/api/trading/status'] });
     }
   };

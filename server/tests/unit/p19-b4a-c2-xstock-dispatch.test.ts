@@ -24,7 +24,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 let captured: any = null;
 let engineActive = true;
 
-vi.mock('../../services/paper-sim-service.js', () => ({
+vi.mock('../../services/active-engine-service.js', () => ({
   getOrchestratorByMode: () => ({
     dispatchExternalSignal: async (rawSignal: any, strategyId: any, sizingContext: any, marketContext: any) => {
       captured = { rawSignal, strategyId, sizingContext, marketContext };

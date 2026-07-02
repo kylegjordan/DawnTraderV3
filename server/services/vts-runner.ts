@@ -1596,7 +1596,7 @@ async function generatePhase10Signal(
   // - ❌ Never generates a virtual trade
   // ══════════════════════════════════════════════════════════════════════════════
   // Phase 14: Governance gate REMOVED from VTS path — generates trades for ALL strategies
-  // Governance remains in active trading path (paper-execution-engine.ts processSignal)
+  // Governance remains in active trading path (active-execution-engine.ts processSignal)
 
   // Compute global stability (kept for observability — stored on trade record)
   const stabilityResult = computeGlobalStability(
@@ -2889,7 +2889,7 @@ async function resolveOpenVirtualTrades(): Promise<{
 
     // OBJ-2 (B-TEC-SELFHEAL, 2026-06-25 — RUNNING_ISSUES #349): per-trade
     // isolation around the exit-eval, mirroring the proven
-    // paper-execution-engine.ts:794 pattern. A [TEC_STALE_FAIL_CLOSED] (or any
+    // active-execution-engine.ts:794 pattern. A [TEC_STALE_FAIL_CLOSED] (or any
     // evaluateTECExit throw) for ONE open trade must NOT abort the whole exit
     // loop — today there is no per-trade catch here, so a single stale-class
     // trade propagates out of resolveOpenVirtualTrades and aborts the entire

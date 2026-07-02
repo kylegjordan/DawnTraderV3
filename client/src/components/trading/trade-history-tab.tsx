@@ -214,9 +214,9 @@ function AnalyticsPanel({ range }: { range: string }) {
   
   // Point 1: Updated React Query options to prevent data from becoming undefined
   const { data, isFetching, refetch } = useQuery<AnalyticsResponse>({
-    queryKey: ['/api/paper-sim/trades/analytics', range],
+    queryKey: ['/api/active-engine/trades/analytics', range],
     queryFn: async () => {
-      return await apiFetch(`/api/paper-sim/trades/analytics?range=${range}`);
+      return await apiFetch(`/api/active-engine/trades/analytics?range=${range}`);
     },
     enabled: isPaper,
     staleTime: Infinity,
@@ -496,7 +496,7 @@ export function TradeHistoryTab() {
     limit: number;
     offset: number;
   }>({
-    queryKey: ['/api/paper-sim/trades', { 
+    queryKey: ['/api/active-engine/trades', { 
       paginated: 'true',
       limit: pageSize, 
       offset: page * pageSize,
@@ -535,7 +535,7 @@ export function TradeHistoryTab() {
         params.set('dateTo', localEnd.toISOString());
         console.log(`[C-FINAL-2][FE] dateTo local=${appliedFilters.dateTo} -> UTC=${localEnd.toISOString()}`);
       }
-      return apiFetch(`/api/paper-sim/trades?${params.toString()}`);
+      return apiFetch(`/api/active-engine/trades?${params.toString()}`);
     },
     enabled: isPaper,
     staleTime: 30000,

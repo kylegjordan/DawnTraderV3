@@ -81,7 +81,7 @@ describe('reorg-B3 (#233): at-queue EV-input thread', () => {
     beforeEach(() => rtbMetricsService.reset());
 
     it('a strong-trend open-gate eval with a non-default dbsScore is provable via getEvInputThreadProof', () => {
-      // Mirrors exactly the open-gate's recordEvInputSample call (paper-execution-engine) after the
+      // Mirrors exactly the open-gate's recordEvInputSample call (active-execution-engine) after the
       // Net-Expectancy evaluation — the dbsScore/DI here are the carried at-queue column values.
       rtbMetricsService.recordEvInputSample({
         symbol: 'B3STRONG/USD', strategy: 'strong_bull_trend', assetClass: 'crypto_spot',

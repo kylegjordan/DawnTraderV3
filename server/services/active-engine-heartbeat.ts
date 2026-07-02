@@ -12,7 +12,7 @@
 import { storage } from '../storage';
 import { clusterBus } from './cluster-bus';
 
-class PaperSimHeartbeatService {
+class ActiveEngineHeartbeatService {
   private heartbeatInterval: NodeJS.Timeout | null = null;
   private readonly HEARTBEAT_INTERVAL_MS = 30 * 1000; // 30 seconds
   private isRunning = false;
@@ -61,14 +61,14 @@ class PaperSimHeartbeatService {
       console.log('[PaperSimHeartbeat] Running heartbeat check...');
       
       // Phase 27.F.9: Reconciliation guard - heal any mismatch automatically
-      const { getGlobalPaperSimManager, clearGlobalPaperSimManager } = await import('./paper-sim-service');
+      const { getGlobalActiveEngineManager, clearGlobalActiveEngineManager } = await import('./active-engine-service');
       const activeSessions = await storage.getActivePaperSimSessions();
-      const globalManager = getGlobalPaperSimManager();
+      const globalManager = getGlobalActiveEngineManager();
       
       // Heal orphaned global manager (manager exists but no DB session)
       if (globalManager && activeSessions.length === 0) {
         console.warn('[PaperSimHeartbeat] Orphaned global manager detected – cleaning up');
-        clearGlobalPaperSimManager();
+        clearGlobalActiveEngineManager();
       }
       
       console.log(`[PaperSimHeartbeat] Found ${activeSessions.length} active session(s)`);
@@ -92,7 +92,7 @@ class PaperSimHeartbeatService {
         activeSessions: activeSessions.length,
         timestamp: new Date().toISOString(),
         success: true,
-      }, 'paper_sim_heartbeat');
+      }, 'active_engine_heartbeat');
 
     } catch (error: any) {
       console.error('[PaperSimHeartbeat] Error during heartbeat check:', error);
@@ -100,10 +100,10 @@ class PaperSimHeartbeatService {
       // Emit error event
       try {
         await clusterBus.publish('health_alert', {
-          alert: 'paper_sim_heartbeat_failure',
+          alert: 'active_engine_heartbeat_failure',
           error: error.message,
           timestamp: new Date().toISOString(),
-        }, 'paper_sim_heartbeat');
+        }, 'active_engine_heartbeat');
       } catch (busError) {
         console.error('[PaperSimHeartbeat] Failed to emit health alert:', busError);
       }
@@ -145,13 +145,13 @@ class PaperSimHeartbeatService {
           
           // Emit warning
           await clusterBus.publish('health_alert', {
-            alert: 'paper_sim_mode_mismatch',
+            alert: 'active_engine_mode_mismatch',
             sessionId,
             userId,
             systemContextMode: systemContext.tradingMode,
             expectedMode: 'paper',
             timestamp: new Date().toISOString(),
-          }, 'paper_sim_heartbeat');
+          }, 'active_engine_heartbeat');
           
           // Auto-correct: Stop the simulation as it's running in wrong mode
           console.log(`[PaperSimHeartbeat] Auto-stopping session ${sessionId} due to mode mismatch`);
@@ -167,8 +167,8 @@ class PaperSimHeartbeatService {
       }
       
       // Verify in-memory manager exists and check consistency
-      const { getPaperSimulationStatus } = await import('./paper-sim-service');
-      const status = await getPaperSimulationStatus(userId);
+      const { getActiveEngineStatus } = await import('./active-engine-service');
+      const status = await getActiveEngineStatus(userId);
       
       // Phase 27.F.13.C.D: Null-safety guard for reconciliation
       if (!status || !status.reconciliation) {
@@ -181,12 +181,12 @@ class PaperSimHeartbeatService {
         
         // Emit warning
         await clusterBus.publish('health_alert', {
-          alert: 'paper_sim_state_inconsistent',
+          alert: 'active_engine_state_inconsistent',
           sessionId,
           userId,
           reconciliation: status.reconciliation,
           timestamp: new Date().toISOString(),
-        }, 'paper_sim_heartbeat');
+        }, 'active_engine_heartbeat');
       } else {
         console.log(`[PaperSimHeartbeat] ✅ Session ${sessionId} healthy`);
       }
@@ -261,10 +261,10 @@ class PaperSimHeartbeatService {
         // Auto-resume: Restart the in-memory manager
         console.log(`[PaperSimHeartbeat] Auto-resuming session ${sessionId}...`);
         
-        const { startPaperSimulation } = await import('./paper-sim-service');
+        const { startActiveEngine } = await import('./active-engine-service');
         
         // This will check if already running and create manager if needed
-        const result = await startPaperSimulation(userId);
+        const result = await startActiveEngine(userId);
         
         if (result.success) {
           console.log(`[PaperSimHeartbeat] ✅ Session ${sessionId} auto-resumed successfully`);
@@ -277,7 +277,7 @@ class PaperSimHeartbeatService {
             userId,
             timestamp: new Date().toISOString(),
             success: true,
-          }, 'paper_sim_heartbeat');
+          }, 'active_engine_heartbeat');
         } else {
           console.error(`[PaperSimHeartbeat] Failed to auto-resume session ${sessionId}:`, result.message);
         }
@@ -301,7 +301,7 @@ class PaperSimHeartbeatService {
           userId,
           timestamp: new Date().toISOString(),
           success: true,
-        }, 'paper_sim_heartbeat');
+        }, 'active_engine_heartbeat');
       }
 
     } catch (error: any) {
@@ -324,4 +324,4 @@ class PaperSimHeartbeatService {
 }
 
 // Export singleton instance
-export const paperSimHeartbeat = new PaperSimHeartbeatService();
+export const activeEngineHeartbeat = new ActiveEngineHeartbeatService();

@@ -26,7 +26,7 @@ let weekendClose = false;
 let tickAgeMs: number | null = 1000;
 let alertSpy = vi.fn();
 
-vi.mock('../../services/paper-sim-service.js', () => ({
+vi.mock('../../services/active-engine-service.js', () => ({
   getOrchestratorByMode: () => ({
     dispatchExternalSignal: async (rawSignal: any, strategyId: any, sizingContext: any, marketContext: any) => {
       captured = { rawSignal, strategyId, sizingContext, marketContext };

@@ -64,14 +64,14 @@ async function runValidation() {
   
   // Step 2: Get portfolio summary
   console.log('[2/5] Getting portfolio summary...');
-  const portfolio = await makeRequest('/paper-sim/portfolio-summary');
+  const portfolio = await makeRequest('/active-engine/portfolio-summary');
   console.log(`      Starting Balance: $${portfolio.startingBalance}`);
   console.log(`      Current Balance: $${portfolio.currentBalance}`);
   console.log(`      Open Positions: ${portfolio.openPositionsCount}`);
   
   // Step 3: Check C14 validation status
   console.log('[3/5] Checking C14 validation status...');
-  const c14Status = await makeRequest('/paper-sim/c14-validation/status');
+  const c14Status = await makeRequest('/active-engine/c14-validation/status');
   console.log(`      Active: ${c14Status.active}`);
   if (c14Status.active) {
     console.log(`      Session ID: ${c14Status.sessionId}`);

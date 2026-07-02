@@ -64,7 +64,7 @@ interface UniverseScanResult {
   nextScanAt?: string; // Phase 27.F.19b: Next scheduled scan time (ISO string)
 }
 
-export class PaperSimDiagnosticService {
+export class ActiveScanDiagnosticService {
   private krakenService: KrakenService;
   private strategyEngine: StrategyEngine;
 
@@ -75,7 +75,7 @@ export class PaperSimDiagnosticService {
 
   /**
    * Phase B7.A: Reset session state for hard reset flow
-   * PaperSimDiagnosticService is stateless, so this is a no-op
+   * ActiveScanDiagnosticService is stateless, so this is a no-op
    */
   resetSession(): void {
     console.log('[B7.A][DIAGNOSTIC] Session reset (no-op - service is stateless)');
@@ -96,7 +96,7 @@ export class PaperSimDiagnosticService {
     }
 
     // Phase 27.F.13.M: Get global screener filters (mode-only, no userId)
-    // B79.0n.STORAGE (2026-05-21): paper-sim diagnostic reads canonical crypto baseline.
+    // B79.0n.STORAGE (2026-05-21): active-engine diagnostic reads canonical crypto baseline.
     const screenerSettings = await storage.getCanonicalScreenerConfig({ mode });
     
     // Phase 41F-L.E2E-PURGE: User-level settings removed - using mode-level defaults
@@ -459,7 +459,7 @@ export class PaperSimDiagnosticService {
     };
 
     // Run strategy detectors (lightweight - no position sizing)
-    // B79.0n.STRATEGY (2026-05-24): paper-sim-diagnostic is crypto-only Phase 27.F.12
+    // B79.0n.STRATEGY (2026-05-24): active-scan-diagnostic is crypto-only Phase 27.F.12
     // diagnostic probe. Threading 'crypto_spot' as const. Phase 16 register entry #136-n.
     const vwapSignal = this.strategyEngine.detectVWAPPullback(indicators, settings, priceData, 'crypto_spot');
     const abcdSignal = this.strategyEngine.detectABCDLong(priceData, settings, 'crypto_spot');
@@ -531,4 +531,4 @@ export class PaperSimDiagnosticService {
 }
 
 // Export singleton instance
-export const paperSimDiagnosticService = new PaperSimDiagnosticService();
+export const activeScanDiagnosticService = new ActiveScanDiagnosticService();

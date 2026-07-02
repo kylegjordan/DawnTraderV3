@@ -800,7 +800,7 @@ export default function ActiveTradesV2() {
   // Phase 8.8.3-I9 Part C: Reset Session Mutation
   const resetSessionMutation = useMutation({
     mutationFn: async () => {
-      return await apiFetch('/api/paper-sim/reset', { method: 'POST', body: JSON.stringify({ mode: 'paper' }) });
+      return await apiFetch('/api/active-engine/reset', { method: 'POST', body: JSON.stringify({ mode: 'paper' }) });
     },
     onSuccess: (result: any) => {
       toast({
@@ -808,9 +808,9 @@ export default function ActiveTradesV2() {
         description: result?.message || "Paper trading session has been cleared. Set new balance when you restart trading.",
       });
       // Invalidate relevant queries
-      queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/active-trades'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/portfolio-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/active-engine/active-trades'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/active-engine/status'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/active-engine/portfolio-summary'] });
       // Directive 8.8.4-C.14.D: Clear RTB signals table
       queryClient.invalidateQueries({ queryKey: ['/api/trading-signals'] });
       console.log('[8.8.4-C.14.D][RESET] Invalidated /api/trading-signals query');
@@ -832,7 +832,7 @@ export default function ActiveTradesV2() {
   const [lastDataRefreshAt, setLastDataRefreshAt] = useState<string | null>(null);
   
   const { data, isLoading, refetch } = useQuery<ActiveTradesResponse>({
-    queryKey: ['/api/paper-sim/active-trades'],
+    queryKey: ['/api/active-engine/active-trades'],
     enabled: isPaper,
     refetchInterval: 10000, // Phase 8.8.3-B3.6: 10 second refresh for metadata only (prices from WS)
     refetchIntervalInBackground: true, // Continue refreshing even when tab is not focused
@@ -959,21 +959,21 @@ export default function ActiveTradesV2() {
       'trade_opened',
       'trade_closed',
       'position_update',
-      'paper_trade_executed',
+      'active_trade_executed',
       'trading_state_changed',
       'scan_tick'
     ];
     
     if (tradeEventTypes.includes(lastMessage.type)) {
       // Invalidate and refetch on trade events
-      queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/active-trades'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/active-engine/active-trades'] });
     }
   }, [messages, isPaper, queryClient]);
   
   // Phase 8.8.3-A1: Updated to use standardized success response
   const closeTradeMutation = useMutation({
     mutationFn: async (id: string) => {
-      return await apiFetch(`/api/paper-sim/close-trade/${id}`, {
+      return await apiFetch(`/api/active-engine/close-trade/${id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reason: 'manual_close' })
@@ -997,7 +997,7 @@ export default function ActiveTradesV2() {
           variant: "destructive",
         });
       }
-      queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/active-trades'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/active-engine/active-trades'] });
     },
     onError: (error) => {
       console.error('[8.8.3-A1][ERROR] Close trade mutation error:', error);
@@ -1012,7 +1012,7 @@ export default function ActiveTradesV2() {
   // Phase 8.8.3-A3: Updated to use standardized success response
   const clearStrandedMutation = useMutation({
     mutationFn: async () => {
-      return await apiFetch('/api/paper-sim/force-clear-stranded', { 
+      return await apiFetch('/api/active-engine/force-clear-stranded', { 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });
@@ -1034,7 +1034,7 @@ export default function ActiveTradesV2() {
           variant: "destructive",
         });
       }
-      queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/active-trades'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/active-engine/active-trades'] });
     },
     onError: (error) => {
       console.error('[8.8.3-A3][ERROR] Clear stranded mutation error:', error);

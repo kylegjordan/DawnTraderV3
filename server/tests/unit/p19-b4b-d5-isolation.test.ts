@@ -77,25 +77,25 @@ describe('P19-B4b D5 — risk-concentration per-mode isolation (S4 no-clobber)',
   });
 });
 
-describe('P19-B4b D5 — paper-sim manager per-mode isolation (S1)', () => {
+describe('P19-B4b D5 — active-engine manager per-mode isolation (S1)', () => {
   it('paper and live managers occupy separate slots', async () => {
-    const { getGlobalPaperSimManager, setGlobalPaperSimManager, clearGlobalPaperSimManager } =
-      await import('../../services/paper-sim-service.js');
-    clearGlobalPaperSimManager('paper');
-    clearGlobalPaperSimManager('live');
+    const { getGlobalActiveEngineManager, setGlobalActiveEngineManager, clearGlobalActiveEngineManager } =
+      await import('../../services/active-engine-service.js');
+    clearGlobalActiveEngineManager('paper');
+    clearGlobalActiveEngineManager('live');
 
     const paperMgr = { id: 'paper-mgr' };
     const liveMgr = { id: 'live-mgr' };
-    setGlobalPaperSimManager(paperMgr, 'paper');
-    setGlobalPaperSimManager(liveMgr, 'live');
+    setGlobalActiveEngineManager(paperMgr, 'paper');
+    setGlobalActiveEngineManager(liveMgr, 'live');
 
-    expect(getGlobalPaperSimManager('paper')).toBe(paperMgr);
-    expect(getGlobalPaperSimManager('live')).toBe(liveMgr);
-    expect(getGlobalPaperSimManager()).toBe(paperMgr); // default mode = paper (back-compat)
+    expect(getGlobalActiveEngineManager('paper')).toBe(paperMgr);
+    expect(getGlobalActiveEngineManager('live')).toBe(liveMgr);
+    expect(getGlobalActiveEngineManager()).toBe(paperMgr); // default mode = paper (back-compat)
 
-    clearGlobalPaperSimManager('paper');
-    expect(getGlobalPaperSimManager('paper')).toBeNull();
-    expect(getGlobalPaperSimManager('live')).toBe(liveMgr); // unaffected by clearing paper
-    clearGlobalPaperSimManager('live');
+    clearGlobalActiveEngineManager('paper');
+    expect(getGlobalActiveEngineManager('paper')).toBeNull();
+    expect(getGlobalActiveEngineManager('live')).toBe(liveMgr); // unaffected by clearing paper
+    clearGlobalActiveEngineManager('live');
   });
 });

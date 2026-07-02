@@ -26,7 +26,7 @@ cat > "$LOG_FILE" << EOF
 # Components Monitored:
 # - ready_to_buy_service.ts
 # - fx5-scanner.ts  
-# - paper-execution-engine.ts
+# - active-execution-engine.ts
 #
 # Pattern Filters:
 # - [FX5Scanner]

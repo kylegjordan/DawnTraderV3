@@ -248,7 +248,7 @@ export class OperationQueue {
 }
 
 // Global queue instances (one per mode)
-export const paperOperationQueue = new OperationQueue('paper-trading');
+export const activeOperationQueue = new OperationQueue('paper-trading');
 export const liveOperationQueue = new OperationQueue('live-trading');
 
 /**
@@ -257,7 +257,7 @@ export const liveOperationQueue = new OperationQueue('live-trading');
 export async function shutdownAllQueues(): Promise<void> {
   console.log('[41F-B][QUEUE] Shutting down all operation queues...');
   await Promise.all([
-    paperOperationQueue.shutdown(),
+    activeOperationQueue.shutdown(),
     liveOperationQueue.shutdown(),
   ]);
   console.log('[41F-B][QUEUE] All queues shut down successfully');
@@ -272,7 +272,7 @@ export async function initializeQueues(): Promise<void> {
   
   // Clear any orphaned jobs (server restart clears in-memory state automatically)
   // But we log the initialization for observability
-  const paperStatus = paperOperationQueue.getStatus();
+  const paperStatus = activeOperationQueue.getStatus();
   const liveStatus = liveOperationQueue.getStatus();
   
   console.log('[41F-B][RECOVERY] Paper queue status:', {
@@ -316,12 +316,12 @@ export async function initializeQueues(): Promise<void> {
     }
     
     // Clear any global manager state (should already be null on fresh start, but ensure it).
-    // P19-B4b D5: per-mode accessor (paper). Dynamic import avoids the paper-sim-service ↔
+    // P19-B4b D5: per-mode accessor (paper). Dynamic import avoids the active-engine-service ↔
     // operation-queue import cycle.
-    const { getGlobalPaperSimManager, clearGlobalPaperSimManager } = await import('../services/paper-sim-service.js');
-    if (getGlobalPaperSimManager('paper')) {
+    const { getGlobalActiveEngineManager, clearGlobalActiveEngineManager } = await import('../services/active-engine-service.js');
+    if (getGlobalActiveEngineManager('paper')) {
       console.warn('[41F-B][RECOVERY] Clearing orphaned global paper portfolio manager');
-      clearGlobalPaperSimManager('paper');
+      clearGlobalActiveEngineManager('paper');
     }
     
     if ((global as any).tradingEngines) {

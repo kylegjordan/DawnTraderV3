@@ -5,19 +5,19 @@
 set -e
 
 API_URL="${API_URL:-http://localhost:5000}"
-TOKEN="${PAPER_SIM_TOKEN:-}"
+TOKEN="${ACTIVE_ENGINE_TOKEN:-}"
 
 echo "[A3.R9.0.B] Starting paper trading via API..."
 echo "[A3.R9.0.B] API URL: $API_URL"
 
 if [ -z "$TOKEN" ]; then
   echo "[A3.R9.0.B][ERROR] No authentication token provided."
-  echo "[A3.R9.0.B][ERROR] Set PAPER_SIM_TOKEN environment variable with a valid JWT token."
+  echo "[A3.R9.0.B][ERROR] Set ACTIVE_ENGINE_TOKEN environment variable with a valid JWT token."
   echo "[A3.R9.0.B][ERROR] To get a token, login via the UI and extract it from browser storage."
   exit 1
 fi
 
-response=$(curl -s -w "\n%{http_code}" -X POST "$API_URL/api/paper-sim/start" \
+response=$(curl -s -w "\n%{http_code}" -X POST "$API_URL/api/active-engine/start" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json")
 

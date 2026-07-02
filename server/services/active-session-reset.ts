@@ -15,7 +15,7 @@
 import { storage } from '../storage';
 import { b4Diagnostics } from './b4-diagnostics.js';
 import { b5SizingAudit } from './b5-sizing-audit.js';
-import { getGlobalPaperSimManager, clearGlobalPaperSimManager, getEngineByMode, getOrchestratorByMode } from './paper-sim-service.js';
+import { getGlobalActiveEngineManager, clearGlobalActiveEngineManager, getEngineByMode, getOrchestratorByMode } from './active-engine-service.js';
 import { reset24hWindow, resetHourlyScanHistory } from './fx5-24h-window.js';
 import { krakenWebSocketAdapter } from '../exchanges/kraken/kraken-websocket-adapter.js';
 import { livePricingAdapter } from './live-pricing-adapter.js';
@@ -36,18 +36,18 @@ export interface HardResetResult {
   };
 }
 
-class PaperSessionResetService {
-  private static instance: PaperSessionResetService;
+class ActiveSessionResetService {
+  private static instance: ActiveSessionResetService;
 
   private constructor() {
-    console.log('[8.8.3-A2R] PaperSessionResetService initialized');
+    console.log('[8.8.3-A2R] ActiveSessionResetService initialized');
   }
 
-  public static getInstance(): PaperSessionResetService {
-    if (!PaperSessionResetService.instance) {
-      PaperSessionResetService.instance = new PaperSessionResetService();
+  public static getInstance(): ActiveSessionResetService {
+    if (!ActiveSessionResetService.instance) {
+      ActiveSessionResetService.instance = new ActiveSessionResetService();
     }
-    return PaperSessionResetService.instance;
+    return ActiveSessionResetService.instance;
   }
 
   /**
@@ -137,7 +137,7 @@ class PaperSessionResetService {
    * Clears ALL paper session state: engine, sizing, orchestrator,
    * filters/signals, diagnostics, and DB rows for open positions.
    */
-  async hardResetPaperSimulation(mode: 'paper' | 'live' = 'paper'): Promise<HardResetResult> {
+  async hardResetActiveEngine(mode: 'paper' | 'live' = 'paper'): Promise<HardResetResult> {
     console.log(`[8.8.3-A2R][HARD_RESET] Starting hard reset for mode=${mode}`);
     const startTime = Date.now();
 
@@ -158,7 +158,7 @@ class PaperSessionResetService {
 
     try {
       // 1) Stop and clear global paper portfolio manager (contains engine + orchestrator)
-      const manager = getGlobalPaperSimManager();
+      const manager = getGlobalActiveEngineManager();
       if (manager) {
         try {
           if (typeof manager.stop === 'function') {
@@ -175,7 +175,7 @@ class PaperSessionResetService {
           console.warn(`[8.8.3-A2R][HARD_RESET] Manager stop warning:`, managerErr);
         }
         
-        clearGlobalPaperSimManager();
+        clearGlobalActiveEngineManager();
         result.details.engineReset = true;
         result.details.orchestratorReset = true;
         console.log(`[8.8.3-A2R][HARD_RESET] Global manager cleared`);
@@ -294,7 +294,7 @@ class PaperSessionResetService {
       // 5) Clear global paper sim state (per-mode). P19-B4b D5: routed through the accessor;
       //    the vestigial operation-lock / busy-flag clears were removed (mechanism deleted —
       //    see DELETED_COMPONENTS_LOG.md).
-      clearGlobalPaperSimManager('paper');
+      clearGlobalActiveEngineManager('paper');
 
       // Phase 8.8.3-A2R: Lightweight post-reset integrity audit
       await this.checkPostResetState(mode);
@@ -315,4 +315,4 @@ class PaperSessionResetService {
   }
 }
 
-export const paperSessionResetService = PaperSessionResetService.getInstance();
+export const activeSessionResetService = ActiveSessionResetService.getInstance();

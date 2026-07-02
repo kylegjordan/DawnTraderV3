@@ -307,13 +307,13 @@ class StateAwarenessService {
     // P19-B4b D5: routed through the per-mode accessor (mode='paper'). NOTE (#297): this dormant
     // agent-intent subsystem is paper-only today; when #297 revives its live branch this 'paper'
     // default must be revisited.
-    const { getGlobalPaperSimManager } = await import('./paper-sim-service.js');
-    const globalPaperPortfolioManager = getGlobalPaperSimManager('paper');
-    if (globalPaperPortfolioManager) {
+    const { getGlobalActiveEngineManager } = await import('./active-engine-service.js');
+    const globalActivePortfolioManager = getGlobalActiveEngineManager('paper');
+    if (globalActivePortfolioManager) {
       // Check if it's actually running (has monitoring interval)
-      const isRunning = globalPaperPortfolioManager.isRunning || 
-                       (globalPaperPortfolioManager.executionEngine && 
-                        globalPaperPortfolioManager.executionEngine.isRunning);
+      const isRunning = globalActivePortfolioManager.isRunning || 
+                       (globalActivePortfolioManager.executionEngine && 
+                        globalActivePortfolioManager.executionEngine.isRunning);
       paperStatus = isRunning ? 'active' : 'stopped';
     }
     

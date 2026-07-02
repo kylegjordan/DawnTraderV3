@@ -589,7 +589,7 @@ export const LEGACY_TO_CANONICAL: Record<string, string> = {
   InsideBarReversal: 'inside_bar_reversal',
   MorningStar: 'morning_star',
   DHMA: 'dhma',
-  // reorg-B2.3: snake_case StrategyType drift — the orchestrator/paper-position-sizing `StrategyType`
+  // reorg-B2.3: snake_case StrategyType drift — the orchestrator/active-position-sizing `StrategyType`
   // union emits `range_trading`, but the canonical key is `range_trade`. Cure it HERE at the SSOT
   // (benefits every `normalizeStrategy` caller, not just the per-class minRR gate). Checked before the
   // lowercase pass, so the exact `range_trading` token maps deterministically.

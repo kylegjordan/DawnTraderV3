@@ -566,7 +566,7 @@ export class TradingStateSync {
       this.lastBroadcastTime = now;
       this.lastBroadcastPayload.stateKey = stateKey;
       
-      // Phase 32.D-Fix.1: Determine current mode with paper-sim-aware logic
+      // Phase 32.D-Fix.1: Determine current mode with active-engine-aware logic
       // Priority: Active paper sim > in-memory mode > context timestamps
       let currentMode: TradingMode;
       if (userId === 'system-reconciliation') {
@@ -768,8 +768,8 @@ export class TradingStateSync {
       const { getEngine } = await import('./mode-registry.js');
       let getOrchestratorByMode: ((m: TradingMode) => any) | null = null;
       try {
-        ({ getOrchestratorByMode } = await import('./paper-sim-service.js'));
-      } catch { /* paper-sim-service not always importable in every context */ }
+        ({ getOrchestratorByMode } = await import('./active-engine-service.js'));
+      } catch { /* active-engine-service not always importable in every context */ }
 
       const perMode: Array<[TradingMode, any]> = [
         ['paper', paperContext],

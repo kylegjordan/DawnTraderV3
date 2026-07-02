@@ -8,7 +8,7 @@
  *
  * Replaces direct `import { PATTERN_POOL_GUARDRAILS } from
  * '../asset_classes/crypto_spot/pattern-pool-filters.js'` at 3 consumer sites
- * (`server/services/paper-position-sizing.ts:29`,
+ * (`server/services/active-position-sizing.ts:29`,
  * `server/core/filters/signal_quality_evaluator.ts:28`, and
  * `server/routes.ts:12645` diagnostic) with a single per-asset-class dispatch
  * function. Crypto signals continue to read crypto literal constants (no

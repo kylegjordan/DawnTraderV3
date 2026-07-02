@@ -31,7 +31,7 @@ vi.mock('../../services/guardrail-policy', () => ({
   },
 }));
 vi.mock('../../services/guardrail-settings', () => ({ getPortfolioBalanceV2: vi.fn(async () => 10000) }));
-vi.mock('../../services/paper-execution-engine', () => ({ getEngineSessionStart: vi.fn(() => new Date(Date.now() - 3_600_000)) }));
+vi.mock('../../services/active-execution-engine', () => ({ getEngineSessionStart: vi.fn(() => new Date(Date.now() - 3_600_000)) }));
 vi.mock('../../services/system-alerts', () => ({ addAlert: (...a: any[]) => addAlertSpy(...a) }));
 vi.mock('../../services/alerts-service', () => ({ AlertsService: { createAlert: (...a: any[]) => createAlertSpy(...a) } }));
 

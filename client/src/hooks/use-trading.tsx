@@ -88,7 +88,7 @@ export function useTrading() {
       
       // Phase 35.3.A: Use debounced invalidation to reduce render bursts
       debouncedInvalidate([
-        ['/api/paper-sim/status'],
+        ['/api/active-engine/status'],
         ['/api/system/config']
       ]);
     }
@@ -124,7 +124,7 @@ export function useTrading() {
       startedBy: string; // User ID who started the simulation
     } | null;
   }>({
-    queryKey: ['/api/paper-sim/status'],
+    queryKey: ['/api/active-engine/status'],
     refetchInterval: 5000, // More frequent updates for responsive UI
     staleTime: 0, // Always consider data stale for immediate updates
     refetchOnWindowFocus: true
@@ -141,14 +141,14 @@ export function useTrading() {
     mutationFn: async (options: StartTradingOptions) => {
       // Phase 8.8.3-B7.1: Paper simulation requires explicit mode ('new' or 'continue')
       if (options.type === 'paper-new') {
-        return await apiRequest('POST', '/api/paper-sim/start', {
+        return await apiRequest('POST', '/api/active-engine/start', {
           mode: 'new',
           initialBalance: options.initialBalance,
         });
       }
 
       if (options.type === 'paper-continue') {
-        return await apiRequest('POST', '/api/paper-sim/start', {
+        return await apiRequest('POST', '/api/active-engine/start', {
           mode: 'continue',
         });
       }
@@ -161,8 +161,8 @@ export function useTrading() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/trading/status'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/metrics'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/active-engine/status'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/active-engine/metrics'] });
     },
     onError: (error: unknown) => {
       // ITEM-4 step 3 (2026-06-10): the live-engine Phase-21 gate returns a
@@ -190,7 +190,7 @@ export function useTrading() {
     mutationFn: async (mode: 'live' | 'paper') => {
       if (mode === 'paper') {
         // Stop Paper Trading Simulation Engine
-        return await apiRequest('POST', '/api/paper-sim/stop');
+        return await apiRequest('POST', '/api/active-engine/stop');
       } else {
         // Stop Live Trading Engine
         return await apiRequest('POST', '/api/trading/stop');
@@ -198,19 +198,19 @@ export function useTrading() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/trading/status'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/metrics'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/active-engine/status'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/active-engine/metrics'] });
     }
   });
 
   // Phase 27.F.13.C: Reset paper simulation
   const resetPaperSimMutation = useMutation({
     mutationFn: async (newBalance: number) => {
-      return await apiRequest('POST', '/api/paper-sim/reset', { newBalance });
+      return await apiRequest('POST', '/api/active-engine/reset', { newBalance });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/metrics'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/active-engine/status'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/active-engine/metrics'] });
       // Invalidate portfolio overview for both modes
       queryClient.invalidateQueries({ queryKey: ['portfolio-overview', 'paper'] });
       queryClient.invalidateQueries({ queryKey: ['portfolio-overview', 'live'] });

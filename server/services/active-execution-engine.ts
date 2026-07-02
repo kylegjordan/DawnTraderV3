@@ -34,7 +34,7 @@
  *    - Falls back to Kraken REST if cache stale
  *    - Evaluates SL/TP against fetched price
  * 
- * 4. API EXPOSURE (/api/paper-sim/active-trades)
+ * 4. API EXPOSURE (/api/active-engine/active-trades)
  *    - For each position, calls:
  *        livePricingAdapter.getPriceWithFallback(symbol, 5000)
  *    - Returns: currentPrice, priceSource, priceAgeMs
@@ -53,7 +53,7 @@ import { PaperOrderPlacer } from './execution/order-placer.js'; // P19-B3a: type
 import type { OrderPlacer } from './execution/types.js'; // P19-B3a: FillResult/port contract
 import { KrakenService } from '../exchanges/kraken/kraken.js';
 // B72 (2026-05-05): MONITOR_INTERVAL_MS + CONTINUOUS_PROMOTION_INTERVAL_MS
-// moved to module='paper_execution'.
+// moved to module='active_execution'.
 import { getCachedNumberRequired } from './module-constants-service.js';
 // B65.2: centralized exit-decision primitive shared with VTS
 import { evaluateTECExit } from './tec-evaluator';
@@ -66,7 +66,7 @@ import { buildSettingsFromGuardrails, calculateRiskAmount } from './guardrail-se
 import type { TradingSettings, PriceData, InsertExecutionAttemptAudit, GuardrailsV2 } from '@shared/schema';
 import { contextBridge } from './context-bridge';
 import { activeFilterPool, type ActiveFilteredPair } from './active-filter-pool';
-import { sizePaperPositionForSignal, validatePaperPortfolioValue, type StrategyType } from './paper-position-sizing';
+import { sizeActivePositionForSignal, validateActivePortfolioValue, type StrategyType } from './active-position-sizing';
 // B67.3 follow-up: re-export the cohort-hash function under a clearer name for use
 // at trade-open. Same FNV-1a hash the admission gate uses — keeping a single source.
 import { assignCohortHash as assignCohortHashForPersistence } from './per-underlying-cap';
@@ -148,7 +148,7 @@ export function getEngineSessionStart(mode: 'live' | 'paper'): Date | null {
   return engineSessionStart.get(mode) || null;
 }
 
-export class PaperExecutionEngine {
+export class ActiveExecutionEngine {
   private mode: 'live' | 'paper'; // Phase 27.F.15.B.2: Mode-based only, global per mode
   private isRunning: boolean = false;
   private isCycleRunning: boolean = false; // Re-entrancy guard
@@ -200,9 +200,9 @@ export class PaperExecutionEngine {
     if (!suff.sufficient) return { pass: false, reason: suff.reason, snapshot };
     return { pass: true, reason: 'ok', snapshot };
   }
-  // B72: monitoring interval read at setInterval start from module='paper_execution'.
+  // B72: monitoring interval read at setInterval start from module='active_execution'.
   private get MONITOR_INTERVAL_MS(): number {
-    return getCachedNumberRequired('paper_execution', 'monitoring_interval_ms',
+    return getCachedNumberRequired('active_execution', 'monitoring_interval_ms',
       { exchange: '*', assetClass: '*', strategy: '*', regime: '*' });
   }
   private readonly MAX_PRICE_HISTORY = 100; // Keep last 100 candles per symbol
@@ -231,9 +231,9 @@ export class PaperExecutionEngine {
 
   // Directive 8.8.8: Continuous promotion loop interval (30 seconds)
   private continuousPromotionInterval: NodeJS.Timeout | null = null;
-  // B72: RTB-promotion loop interval from module='paper_execution'.
+  // B72: RTB-promotion loop interval from module='active_execution'.
   private get CONTINUOUS_PROMOTION_INTERVAL_MS(): number {
-    return getCachedNumberRequired('paper_execution', 'rtb_promotion_loop_interval_ms',
+    return getCachedNumberRequired('active_execution', 'rtb_promotion_loop_interval_ms',
       { exchange: '*', assetClass: '*', strategy: '*', regime: '*' });
   }
 
@@ -629,7 +629,7 @@ export class PaperExecutionEngine {
   /**
    * Phase 8.8.3: Force-close a position for manual stop
    * Public wrapper for private closePosition with manual_stop exit condition.
-   * Used by PaperPortfolioManager.forceCloseAllOpenPositionsOnStop()
+   * Used by ActivePortfolioManager.forceCloseAllOpenPositionsOnStop()
    * 
    * @param positionId - The position ID to close
    * @param exitPrice - Current market price for the position
@@ -1397,7 +1397,7 @@ export class PaperExecutionEngine {
       quantity: quantity
     }).catch(() => {});
 
-    // B70 Step 3.5: exit-decision archive — actual paper-sim exit. Fire-and-
+    // B70 Step 3.5: exit-decision archive — actual active-engine exit. Fire-and-
     // forget, try/catch wrapped — must never block closePosition.
     try {
       const { archiveExitDecision } = await import('./data-archive/exit-decision-archiver.js');
@@ -1434,7 +1434,7 @@ export class PaperExecutionEngine {
         symbol: position.symbol,
         exchange,
         assetClass,
-        source: 'paper-execution-engine',
+        source: 'active-execution-engine',
         strategy: position.strategyName ?? undefined,
         exitReason: mappedReason,
         entryPrice: avgPrice,
@@ -1558,9 +1558,9 @@ export class PaperExecutionEngine {
           timestamp: new Date().toISOString()
         };
         recordPaperTrade(paperTradeRecord);
-        console.log(`[M5C.1][PAPER_TRADE_RECORDED] ${position.symbol}/${position.strategyName} profit=${netPnl.toFixed(2)}`);
+        console.log(`[M5C.1][ACTIVE_TRADE_RECORDED] ${position.symbol}/${position.strategyName} profit=${netPnl.toFixed(2)}`);
       } catch (recordErr) {
-        console.warn(`[M5C.1][PAPER_RECORD_FAILED] ${position.symbol}:`, recordErr);
+        console.warn(`[M5C.1][ACTIVE_RECORD_FAILED] ${position.symbol}:`, recordErr);
       }
     }
 
@@ -2499,7 +2499,7 @@ export class PaperExecutionEngine {
             symbol: signal.symbol,
             exchange: 'kraken',
             assetClass: _evalClass,
-            source: 'paper-execution-engine',
+            source: 'active-execution-engine',
             strategy: signal.strategy,
             rejectStage: 'tcl',
             confidenceModulated: signal.confidence,
@@ -2734,7 +2734,7 @@ export class PaperExecutionEngine {
       // P19-B5a: terminal ADMIT capture — the position ACTUALLY OPENED (survived
       // SQE, RTB confidence-revalidation, and the TCL dedup gate). Distinct from the
       // orchestrator 'admitted' row (which marks SQE-pass → queued); source
-      // 'paper-execution-engine' disambiguates the funnel endpoint. Dormant until
+      // 'active-execution-engine' disambiguates the funnel endpoint. Dormant until
       // paper-active (the open path only runs then). Fire-and-forget, try/catch.
       try {
         const { archiveSignalEval } = await import('./data-archive/signal-eval-archiver.js');
@@ -2743,7 +2743,7 @@ export class PaperExecutionEngine {
           symbol: signal.symbol,
           exchange: 'kraken',
           assetClass: _tradeClass,
-          source: 'paper-execution-engine',
+          source: 'active-execution-engine',
           strategy: signal.strategy,
           rejectStage: 'admitted',
           confidenceModulated: signal.confidence,
@@ -2873,7 +2873,7 @@ export class PaperExecutionEngine {
       // [27.F.14.DIAG] DIAGNOSTIC: Trade insert successful
       console.log(`[DB] trade_insert_ok {tradeId:${trade.id}, symbol:${signal.symbol}}`);
       contextBridge.broadcast({
-        type: 'paper_trade_opened' as any,
+        type: 'active_trade_opened' as any,
         mode: this.mode,
         payload: {
           tradeId: trade.id,
@@ -3194,7 +3194,7 @@ export class PaperExecutionEngine {
             console.warn('[B6][SIZING_SKIP] unclassifiable ' + signal.symbol + ' — cannot size, skipping');
             return { opened: false, stage: 'OTHER', reason: 'unclassifiable symbol at fallback sizing' };
           }
-          const sizingResult = sizePaperPositionForSignal({
+          const sizingResult = sizeActivePositionForSignal({
             mode: this.mode, // P19-B4b D5: per-mode concentration sizing
             portfolioValue,
             guardrails,

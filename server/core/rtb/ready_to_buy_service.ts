@@ -1828,7 +1828,7 @@ class ReadyToBuyService {
 
   /**
    * P19-B7.1 (OBJ-2/4): the expected R-multiple for a candidate at rank time + the kernel's own
-   * floored-pWin flag. Mirrors the open path's tradeMeta build (paper-execution-engine.ts:2076-2087)
+   * floored-pWin flag. Mirrors the open path's tradeMeta build (active-execution-engine.ts:2076-2087)
    * and reads the kernel's own `netRewardToRisk` + `pWinFloored` surfaced on the result — REUSE over
    * recompute (no parallel friction model + no re-derivation of the kernel's floor trigger; the same
    * numbers the gate uses). Sample-free: `recordEvInputSample` lives ONLY in the open path, so

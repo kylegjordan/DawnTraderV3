@@ -41,14 +41,14 @@ const PREFETCH_MODULES = [
   'vts_scoring',          // vts-real-score.ts decay lambda
   'goals_weighting',      // adaptive-goals-weight.ts AI weight cap
   'dbs_calculation',      // directional-bias-store.ts global DBS sample floor
-  'paper_sizing',         // paper-position-sizing.ts max position buffer factor
+  'active_sizing',         // active-position-sizing.ts max position buffer factor
   'vts_service',          // vts-service.ts calibration trigger interval
   'cost_model',           // cost-metrics.ts default avg return
   'learning_governance',  // learning-cooldown.ts min batch size (regime=TRANSITION)
   // Slice 2c — pattern pool, drift, paper exec, orchestrator timing:
   'pattern_pool_gates',   // pattern-filter-profile.ts RSI bounds + guardrails
   'drift_detector',       // drift-descriptions.ts boundaries
-  'paper_execution',      // paper-execution-engine.ts intervals
+  'active_execution',      // active-execution-engine.ts intervals
   'signal_orchestrator',  // signal-orchestrator.ts evaluation/refresh intervals
   // Slice 2d — VTS runner caps + regime age:
   'vts_runner',           // vts-runner.ts max_concurrent / max_open / cooldown / hash tolerance + expiry

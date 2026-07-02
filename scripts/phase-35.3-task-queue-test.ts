@@ -47,9 +47,9 @@ async function runSimulation() {
   process.env.TEST_START_TIME = Date.now().toString();
   
   console.log('\n📋 INSTRUCTIONS:');
-  console.log('1. Start paper trading via the UI: /api/paper-sim/start');
+  console.log('1. Start paper trading via the UI: /api/active-engine/start');
   console.log('2. Let it run for 10 minutes');
-  console.log('3. Stop paper trading: /api/paper-sim/stop');
+  console.log('3. Stop paper trading: /api/active-engine/stop');
   console.log('4. Or just let this script run for 10 minutes automatically\n');
   console.log('⏳ Test running... waiting 10 minutes...\n');
   

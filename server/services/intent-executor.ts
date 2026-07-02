@@ -197,24 +197,24 @@ class IntentExecutionService {
     const { storage } = await import('../storage');
     
     if (mode === 'paper') {
-      // Start paper trading via PaperPortfolioManager
+      // Start paper trading via ActivePortfolioManager
       // P19-B4b D5: per-mode accessor (mode='paper'). NOTE (#297): this dormant agent-intent
-      // subsystem is paper-only today (and the PaperPortfolioManager(userId) call below has a
+      // subsystem is paper-only today (and the ActivePortfolioManager(userId) call below has a
       // known wrong-arg vs the (mode, userId?) constructor); when #297 revives the live branch
       // this 'paper' default AND that call must be revisited together. Routing through the
       // accessor keeps the manager on the single per-mode store (no second raw global slot).
-      const { getGlobalPaperSimManager, setGlobalPaperSimManager } = await import('../services/paper-sim-service.js');
-      const globalPaperPortfolioManager = getGlobalPaperSimManager('paper');
+      const { getGlobalActiveEngineManager, setGlobalActiveEngineManager } = await import('../services/active-engine-service.js');
+      const globalActivePortfolioManager = getGlobalActiveEngineManager('paper');
 
-      if (globalPaperPortfolioManager) {
+      if (globalActivePortfolioManager) {
         throw new Error('Paper trading simulation already running (system-wide)');
       }
 
-      const { PaperPortfolioManager } = await import('../services/paper-portfolio-manager');
-      const manager = new PaperPortfolioManager(userId);
+      const { ActivePortfolioManager } = await import('../services/active-portfolio-manager');
+      const manager = new ActivePortfolioManager(userId);
 
       // Set global manager and register session
-      setGlobalPaperSimManager(manager, 'paper');
+      setGlobalActiveEngineManager(manager, 'paper');
       (global as any).registerSimulationSession({
         sessionId: `intent_${Date.now()}`,
         startedBy: userId,
@@ -260,20 +260,20 @@ class IntentExecutionService {
     const { storage } = await import('../storage');
     
     if (mode === 'paper') {
-      // Stop paper trading via PaperPortfolioManager
+      // Stop paper trading via ActivePortfolioManager
       // P19-B4b D5: per-mode accessor (mode='paper'). #297 dormant — see executeStartTrading note.
-      const { getGlobalPaperSimManager, clearGlobalPaperSimManager } = await import('../services/paper-sim-service.js');
-      const globalPaperPortfolioManager = getGlobalPaperSimManager('paper');
+      const { getGlobalActiveEngineManager, clearGlobalActiveEngineManager } = await import('../services/active-engine-service.js');
+      const globalActivePortfolioManager = getGlobalActiveEngineManager('paper');
 
-      if (!globalPaperPortfolioManager) {
+      if (!globalActivePortfolioManager) {
         throw new Error('No paper trading simulation is running');
       }
 
-      await globalPaperPortfolioManager.stop();
+      await globalActivePortfolioManager.stop();
 
       // Deregister session and clear global manager
       (global as any).deregisterSimulationSession();
-      clearGlobalPaperSimManager('paper');
+      clearGlobalActiveEngineManager('paper');
       
       // Update user status
       await storage.updateUser(userId, { tradingStatus: 'stopped' });
@@ -502,7 +502,7 @@ class IntentExecutionService {
         }
       };
     } else {
-      const { getGlobalPaperSimManager: _getPaperMgr } = await import('../services/paper-sim-service.js');
+      const { getGlobalActiveEngineManager: _getPaperMgr } = await import('../services/active-engine-service.js');
       const globalPaperManager = _getPaperMgr('paper'); // P19-B4b D5: per-mode accessor (#297 dormant)
 
       if (!globalPaperManager) {

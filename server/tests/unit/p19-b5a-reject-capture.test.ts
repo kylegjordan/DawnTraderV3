@@ -120,13 +120,13 @@ describe('P19-B5a — reject rows capture REAL scores (NO-PATCHES)', () => {
   it('paper-engine terminal admit row marks the opened position', () => {
     archiveSignalEval({
       mode: 'paper_sim', symbol: 'SOL/USD', exchange: 'kraken', assetClass: 'crypto_spot',
-      source: 'paper-execution-engine', strategy: 'breakout', rejectStage: 'admitted',
+      source: 'active-execution-engine', strategy: 'breakout', rejectStage: 'admitted',
       confidenceModulated: 0.77,
       gateDecision: { gate: 'admitted', accepted: true, path: 'paper-execution-open' },
     });
     const [, row] = enqueueSpy.mock.calls[0] as [string, any];
     expect(row.reject_stage).toBe('admitted');
-    expect(row.source).toBe('paper-execution-engine');
+    expect(row.source).toBe('active-execution-engine');
     expect(row.confidence_modulated).toBe(0.77);
   });
 });

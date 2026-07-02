@@ -4,7 +4,7 @@
  * ════════════════════════════════════════════════════════════════════════════
  *
  * Verifies that the 4 consumer-site swaps from Chunks B/C/D/E land correctly:
- *   - paper-position-sizing.ts: assetClass is REQUIRED on PaperPositionSizingParams
+ *   - active-position-sizing.ts: assetClass is REQUIRED on ActivePositionSizingParams
  *   - signal_quality_evaluator.ts: input.assetClass routes to dispatcher
  *   - routes.ts diagnostic: per-class JSON shape
  *   - signal-orchestrator.ts: dead imports (PATTERN_POOL_GUARDRAILS,
@@ -28,26 +28,26 @@ vi.mock('../../services/module-constants-service.js', () => ({
       if (name === 'pattern_final_score_min') return 0.45;
       if (name === 'pattern_max_position_pct') return 0.50;
     }
-    if (module === 'paper_sizing' && name === 'max_position_buffer_factor') return 0.97;
+    if (module === 'active_sizing' && name === 'max_position_buffer_factor') return 0.97;
     throw new Error(`[mock] unrecognized constant ${module}.${name}`);
   },
 }));
 
 describe('B79.0n.ORCHESTRATOR — consumer-site swap regression locks', () => {
-  describe('paper-position-sizing.ts (Chunk B)', () => {
-    it('PaperPositionSizingParams type has REQUIRED assetClass field', async () => {
+  describe('active-position-sizing.ts (Chunk B)', () => {
+    it('ActivePositionSizingParams type has REQUIRED assetClass field', async () => {
       // Compile-time contract: import the type and try to construct without
       // assetClass — TypeScript should reject. Runtime check: the property
       // is in the type's keyof shape.
-      const mod = await import('../../services/paper-position-sizing.js');
-      // PaperPositionSizingParams is a type alias — we can't keyof at runtime,
+      const mod = await import('../../services/active-position-sizing.js');
+      // ActivePositionSizingParams is a type alias — we can't keyof at runtime,
       // but we can confirm the module exports the expected functions.
-      expect(typeof mod.sizePaperPositionForSignal).toBe('function');
+      expect(typeof mod.sizeActivePositionForSignal).toBe('function');
     });
 
     it('production source file imports getPatternPoolGuardrailsForAssetClass (not PATTERN_POOL_GUARDRAILS)', () => {
       const src = readFileSync(
-        join(process.cwd(), 'server/services/paper-position-sizing.ts'),
+        join(process.cwd(), 'server/services/active-position-sizing.ts'),
         'utf-8',
       );
       // Positive assertion: dispatcher import present

@@ -42,9 +42,9 @@ import { KrakenService } from '../exchanges/kraken/kraken.js';
 import { storage } from '../storage';
 import type { TradingSettings, ScreenerFilters, PriceData, GuardrailsV2 } from '@shared/schema';
 import { telemetryTrace } from './telemetry-trace.js';
-import { PaperSimDiagnosticService } from './paper-sim-diagnostic.js';
+import { ActiveScanDiagnosticService } from './active-scan-diagnostic.js';
 import { b5SizingAudit } from './b5-sizing-audit.js';
-import { sizePaperPositionForSignal, type StrategyType } from './paper-position-sizing.js';
+import { sizeActivePositionForSignal, type StrategyType } from './active-position-sizing.js';
 import { tradingModeToRunMode } from './run-mode-controller.js'; // ITEM-4 step 2: single-site TradingMode->RunMode map
 import { getPortfolioBalanceV2 } from './guardrail-settings.js';
 import { c5FinancialDiagnostics } from './c5-financial-diagnostics.js';
@@ -224,7 +224,7 @@ export class SignalOrchestrator {
   private strategyEngine: StrategyEngine;
   // Phase 8.8.7: FilteredPairsService DEPRECATED - using activeFilterPool instead
   private kraken: KrakenService;
-  private diagnosticService: PaperSimDiagnosticService;
+  private diagnosticService: ActiveScanDiagnosticService;
   private isRunning: boolean = false;
   private evaluationTimer: NodeJS.Timeout | null = null;
   private weightsRefreshTimer: NodeJS.Timeout | null = null; // L9: Timer for strategy weights cache refresh
@@ -254,7 +254,7 @@ export class SignalOrchestrator {
     this.strategyEngine = new StrategyEngine();
     // Phase 8.8.7: FilteredPairsService DEPRECATED - using activeFilterPool instead
     this.kraken = new KrakenService();
-    this.diagnosticService = new PaperSimDiagnosticService();
+    this.diagnosticService = new ActiveScanDiagnosticService();
   }
 
   async start(onSignal: (signal: StrategySignal) => Promise<void>): Promise<void> {
@@ -512,7 +512,7 @@ export class SignalOrchestrator {
     });
 
     // Phase 8.8.4-B.3: STEP 1 - Sizing FIRST (before metrics computation)
-    const sizingResult = sizePaperPositionForSignal({
+    const sizingResult = sizeActivePositionForSignal({
       mode: sizingContext.mode, // P19-B4b D5: per-mode concentration sizing
       portfolioValue: sizingContext.portfolioValue,
       guardrails: sizingContext.guardrails,
@@ -2297,7 +2297,7 @@ export class SignalOrchestrator {
           const frictionPerUnit = frictionPct * entry;
           // reorg-B3 (#233, OBJ-5) DI-provenance note: this inline [HF9] NetEV pre-filter recomputes
           // DI from closePrices at EVALUATE time (a fresh value for the pre-filter, on the live VTS
-          // path). The OPEN-GATE (paper-execution-engine) instead reads the AT-QUEUE DI snapshot from
+          // path). The OPEN-GATE (active-execution-engine) instead reads the AT-QUEUE DI snapshot from
           // the rtb_signals.di_at_queue column (the routing-time survivor value). These two DI moments
           // are intentionally distinct: reorg-B3 deliberately does NOT unify them here — changing this
           // recompute would alter a live VTS-path filter's DI freshness, which is out of #233's scope

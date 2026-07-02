@@ -27,13 +27,13 @@
  * ════════════════════════════════════════════════════════════════════════════
  */
 
-import { getOrchestratorByMode } from '../../services/paper-sim-service.js';
+import { getOrchestratorByMode } from '../../services/active-engine-service.js';
 import { getPortfolioBalanceV2 } from '../../services/guardrail-settings.js';
 import { storage } from '../../storage.js';
 import { tradingStateSync, isAssetClassActiveInContext } from '../../services/trading-state-sync.js';
 import { STRATEGY_DISPLAY_NAMES } from '../../config/canonical-regime-strategy-map.js';
 import type { StrategySignal } from '../../services/strategy-engine.js';
-import type { StrategyType } from '../../services/paper-position-sizing.js';
+import type { StrategyType } from '../../services/active-position-sizing.js';
 import type { AssetClass } from '../../../shared/asset-classes.js';
 import { db } from '../../db.js';
 import { sql } from 'drizzle-orm';
@@ -159,7 +159,7 @@ export async function dispatchXstockActiveSignal(input: XstockActiveDispatchInpu
     }
     // (a) #295 (P19-B4b.1): the RTH liquid-fill-window CLOCK gate is RETIRED here —
     //     replaced by the direct 24/5 BOOK-DEPTH-SUFFICIENCY gate at the engine open
-    //     seam (PaperExecutionEngine._evaluateOpenDepthGate, both asset classes). The
+    //     seam (ActiveExecutionEngine._evaluateOpenDepthGate, both asset classes). The
     //     clock was a proxy for "is the book deep enough"; it was wrong in BOTH
     //     directions (blocked fillable off-hours books, passed thin RTH books). The
     //     other two C3 gates — freshness (b) + the silent-stall watchdog — STAY

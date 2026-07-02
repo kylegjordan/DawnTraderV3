@@ -60,7 +60,7 @@ export interface PaperTradeExecutedEvent {
 }
 
 export interface LifecycleEventPayload {
-  type: 'signal_validated' | 'ready_to_trade' | 'paper_trade_executed';
+  type: 'signal_validated' | 'ready_to_trade' | 'active_trade_executed';
   payload: SignalValidatedEvent | ReadyToTradeEvent | PaperTradeExecutedEvent;
 }
 
@@ -144,7 +144,7 @@ class LifecycleEventsService {
     contextBridge.broadcast({
       type: 'trade_event',
       payload: {
-        eventType: 'paper_trade_executed',
+        eventType: 'active_trade_executed',
         ...fullEvent,
       },
     });

@@ -7,7 +7,7 @@
  * - Default mode is 'vts' before any refresh
  * - refreshMode reads tradingStateSync.isEngineActive flags and resolves
  *   to the correct mode
- * - Live takes precedence over paper-sim
+ * - Live takes precedence over active-engine
  * - Paper takes precedence over vts
  * - Hold-previous-value on transient error
  * - getCurrentMode() returns synchronously without waiting

@@ -40,7 +40,7 @@ const stats = (snapCount: number, moveCount: number, msSinceLastMove: number | n
   ({ snapCount, moveCount, msSinceLastMove });
 
 const SRC = path.resolve(__dirname, '../..');
-const peeSrc = fs.readFileSync(path.join(SRC, 'services/paper-execution-engine.ts'), 'utf8');
+const peeSrc = fs.readFileSync(path.join(SRC, 'services/active-execution-engine.ts'), 'utf8');
 const metricsSrc = fs.readFileSync(path.join(SRC, 'services/rtb-metrics-service.ts'), 'utf8');
 const livenessSrc = fs.readFileSync(path.join(SRC, 'asset_classes/xstock_spot/price-liveness.ts'), 'utf8');
 

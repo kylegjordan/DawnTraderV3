@@ -25,9 +25,9 @@ export function PortfolioSummaryStrip() {
   const queryClient = useQueryClient();
   
   const { data, isLoading, isFetching } = useQuery<PortfolioSummaryData>({
-    queryKey: ['/api/paper-sim/portfolio-summary'],
+    queryKey: ['/api/active-engine/portfolio-summary'],
     queryFn: async () => {
-      return await apiFetch('/api/paper-sim/portfolio-summary');
+      return await apiFetch('/api/active-engine/portfolio-summary');
     },
     enabled: isPaper,
     refetchInterval: 10000,
@@ -45,13 +45,13 @@ export function PortfolioSummaryStrip() {
       'trade_opened',
       'trade_closed',
       'position_update',
-      'paper_trade_executed',
+      'active_trade_executed',
       'trading_state_changed',
       'scan_tick'
     ];
     
     if (tradeEventTypes.includes(lastMessage.type)) {
-      queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/portfolio-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/active-engine/portfolio-summary'] });
     }
   }, [messages, isPaper, queryClient]);
   

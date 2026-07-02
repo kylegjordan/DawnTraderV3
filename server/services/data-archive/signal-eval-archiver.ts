@@ -82,7 +82,7 @@ export function ensureSignalEvalArchiverRegistered(): void {
 export type SignalEvalSource =
   | 'vts-runner'
   | 'signal-orchestrator'
-  | 'paper-execution-engine'
+  | 'active-execution-engine'
   // P19-B5a: active-path scanner pre_filter capture sources (crypto path).
   | 'market-scanner'
   | 'fx5-scanner'

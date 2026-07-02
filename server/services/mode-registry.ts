@@ -1,7 +1,7 @@
 /**
  * Phase 27.F.14.MICRO: Import types for engine management
  */
-import type { PaperExecutionEngine } from './paper-execution-engine';
+import type { ActiveExecutionEngine } from './active-execution-engine';
 import type { MicroExecutionService } from './micro-execution-service';
 
 // P19-B-RENAME Wave-1 (rule 18): the Phase-8.8.3-B9 `PaperExecutionServiceLegacy`
@@ -49,13 +49,13 @@ export const ModeRegistry: ModeRegistryType = {
  * Phase 27.F.14.MICRO: Engine Instance Registry
  * Stores global engine instances per mode
  */
-const engineInstances: Map<string, PaperExecutionEngine | null> = new Map();
+const engineInstances: Map<string, ActiveExecutionEngine | null> = new Map();
 const microExecutionInstances: Map<string, MicroExecutionService | null> = new Map();
 
 /**
  * Register a paper execution engine for a mode
  */
-export function registerEngine(mode: 'live' | 'paper', engine: PaperExecutionEngine): void {
+export function registerEngine(mode: 'live' | 'paper', engine: ActiveExecutionEngine): void {
   engineInstances.set(mode, engine);
   console.log(`[ModeRegistry] Registered ${mode} execution engine`);
 }
@@ -63,7 +63,7 @@ export function registerEngine(mode: 'live' | 'paper', engine: PaperExecutionEng
 /**
  * Get the registered engine for a mode
  */
-export function getEngine(mode: 'live' | 'paper'): PaperExecutionEngine | null {
+export function getEngine(mode: 'live' | 'paper'): ActiveExecutionEngine | null {
   return engineInstances.get(mode) || null;
 }
 

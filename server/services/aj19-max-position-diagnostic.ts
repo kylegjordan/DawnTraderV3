@@ -25,7 +25,7 @@ export interface MaxPositionDiagnosticEntry {
   symbol: string;
   strategy: string;
   
-  // P2 Sizing Values (from paper-position-sizing)
+  // P2 Sizing Values (from active-position-sizing)
   p2PortfolioValue?: number;
   p2RiskPerTradePct?: number;
   p2RiskAmount?: number;

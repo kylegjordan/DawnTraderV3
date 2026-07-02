@@ -429,7 +429,7 @@ app.use((req, res, next) => {
 
   // Phase 27.F.8: Reset PaperSim service state FIRST (before any other services)
   try {
-    const { resetPaperSimService, resumeActiveEngines } = await import('./services/paper-sim-service');
+    const { resetPaperSimService, resumeActiveEngines } = await import('./services/active-engine-service');
     resetPaperSimService();
     
     // R9.3.HF-4.FIX: Resume engines that should be running after server restart
@@ -1414,15 +1414,15 @@ app.use((req, res, next) => {
 
     // Phase 23: Paper Simulation Heartbeat & Recovery
     try {
-      const { paperSimHeartbeat } = await import('./services/paper_sim_heartbeat');
+      const { activeEngineHeartbeat } = await import('./services/active-engine-heartbeat');
       
       // Run recovery logic on startup
       // Set autoResume to false for now - can be made configurable via env variable
       const autoResume = process.env.AUTO_RESUME_SIMULATIONS === 'true';
-      await paperSimHeartbeat.recoverSessions(autoResume);
+      await activeEngineHeartbeat.recoverSessions(autoResume);
       
       // Start heartbeat monitoring
-      paperSimHeartbeat.start();
+      activeEngineHeartbeat.start();
       console.log('[PaperSimHeartbeat] ✅ Recovery complete and heartbeat started');
     } catch (error) {
       console.error('[PaperSimHeartbeat] ⚠️ Startup failed:', error);
@@ -1434,9 +1434,9 @@ app.use((req, res, next) => {
     // 2026-05-27 — verified zero production callers across server/ + client/ +
     // shared/ before delete. File was Phase 8.8.4-C.6 cron-based 30s refresh
     // already superseded by ReadyToBuyService.startRefreshCycle() (Central-
-    // Clock-synchronized) wired into PaperExecutionEngine lifecycle. Original
+    // Clock-synchronized) wired into ActiveExecutionEngine lifecycle. Original
     // deprecation comment + boot path were never wired post-supersession.
-    console.log('[B79.0n.RTB] rtb_queue_refresher.ts retired (legacy file deleted; ReadyToBuyService.startRefreshCycle is canonical via PaperExecutionEngine lifecycle)');
+    console.log('[B79.0n.RTB] rtb_queue_refresher.ts retired (legacy file deleted; ReadyToBuyService.startRefreshCycle is canonical via ActiveExecutionEngine lifecycle)');
 
     // Phase 8.9: Start Autonomy Layer (hourly self-checks, daily optimization)
     try {

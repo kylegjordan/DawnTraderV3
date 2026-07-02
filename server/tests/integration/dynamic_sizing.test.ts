@@ -231,7 +231,7 @@ describe('Directive 11.3: Dynamic Sizing Engine', () => {
 
   describe('DSE Multiplier Application', () => {
     it('should apply DSE multiplier to position sizing result', async () => {
-      const { applyDSEMultiplier } = await import('../../services/paper-position-sizing.js');
+      const { applyDSEMultiplier } = await import('../../services/active-position-sizing.js');
       
       const baseResult = {
         quantity: 1.0,
@@ -247,7 +247,7 @@ describe('Directive 11.3: Dynamic Sizing Engine', () => {
     });
 
     it('should clamp DSE multiplier to bounds', async () => {
-      const { applyDSEMultiplier } = await import('../../services/paper-position-sizing.js');
+      const { applyDSEMultiplier } = await import('../../services/active-position-sizing.js');
       
       const baseResult = {
         quantity: 1.0,

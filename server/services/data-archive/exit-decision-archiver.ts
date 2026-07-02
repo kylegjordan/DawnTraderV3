@@ -4,7 +4,7 @@
  * Captures actual exit decisions (parallel to B73 counterfactual exit-strategy
  * ablation). Hooks into:
  *   - vts-runner.ts:exit-loop → source='vts-runner'
- *   - paper-execution-engine.ts:closePosition → source='paper-execution-engine'
+ *   - active-execution-engine.ts:closePosition → source='active-execution-engine'
  *   - (Phase 21 live exit source TBD — live reuses the paper engine path, mode='live';
  *      legacy live-trading-service removed P19-B2 2026-06-13, see DELETED_COMPONENTS_LOG.md)
  *
@@ -51,7 +51,7 @@ export function ensureExitDecisionArchiverRegistered(): void {
 
 export type ExitDecisionSource =
   | 'vts-runner'
-  | 'paper-execution-engine';
+  | 'active-execution-engine';
 export type ExitReason =
   | 'BE_stop'
   | 'SL_hit'

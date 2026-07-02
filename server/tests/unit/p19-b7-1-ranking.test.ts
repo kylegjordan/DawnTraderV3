@@ -153,7 +153,7 @@ describe('P19-B7.1 OBJ-2 — no-double-EV-sample (structural guarantee, source-l
   });
 
   it('the open path is the SOLE recorder of EV-input samples', () => {
-    const openPath = read('server/services/paper-execution-engine.ts');
+    const openPath = read('server/services/active-execution-engine.ts');
     expect(openPath).toMatch(/recordEvInputSample/);
   });
 

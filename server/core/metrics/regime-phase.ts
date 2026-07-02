@@ -107,7 +107,7 @@ interface PairPhaseEntry {
 /**
  * B79.0n.CONFIDENCE-CHAIN (2026-05-25): persistent path moved out of /tmp/
  * (which gets wiped on pm2 restart) into /home/deploy/dawntrader/data/. Same
- * path-family as outcomeFeedbackStore + paper-portfolio-manager state. The
+ * path-family as outcomeFeedbackStore + active-portfolio-manager state. The
  * constructor prefers the new path; falls back to legacy /tmp/ for one
  * migration cycle. Unlike outcomeFeedbackStore, there is NO key-shape
  * change — the phase store has always been keyed by `symbol` (asset class

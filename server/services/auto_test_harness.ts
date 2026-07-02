@@ -8,8 +8,8 @@
 
 import { storage } from '../storage';
 // Directive 12.2.7: nlai-action-registry import removed (deprecated)
-import { paperSimHeartbeat } from './paper_sim_heartbeat';
-import { startPaperSimulation, stopPaperSimulation, getPaperSimulationStatus } from './paper-sim-service';
+import { activeEngineHeartbeat } from './active-engine-heartbeat';
+import { startActiveEngine, stopActiveEngine, getActiveEngineStatus } from './active-engine-service';
 import { db } from '../db';
 import { clusterBusEvent } from '@shared/schema';
 import { eq, desc } from 'drizzle-orm';
@@ -143,7 +143,7 @@ class AutoTestHarness {
           action: 'start_simulation',
           description: 'Start paper trading simulation',
           execute: async () => {
-            return await startPaperSimulation(this.testUserId);
+            return await startActiveEngine(this.testUserId);
           },
           verify: async (result) => {
             // Verify result success
@@ -159,7 +159,7 @@ class AutoTestHarness {
           action: 'check_status',
           description: 'Check simulation status',
           execute: async () => {
-            return await getPaperSimulationStatus(this.testUserId);
+            return await getActiveEngineStatus(this.testUserId);
           },
           verify: async (result) => {
             return result.isRunning && result.reconciliation.isConsistent;
@@ -169,7 +169,7 @@ class AutoTestHarness {
           action: 'stop_simulation',
           description: 'Stop paper trading simulation',
           execute: async () => {
-            return await stopPaperSimulation(this.testUserId);
+            return await stopActiveEngine(this.testUserId);
           },
           verify: async (result) => {
             // Verify result success
@@ -198,7 +198,7 @@ class AutoTestHarness {
           action: 'check_heartbeat_status',
           description: 'Verify heartbeat service is running',
           execute: async () => {
-            return paperSimHeartbeat.getStatus();
+            return activeEngineHeartbeat.getStatus();
           },
           verify: async (status) => {
             return status.isRunning && status.intervalMs === 30000;
@@ -211,7 +211,7 @@ class AutoTestHarness {
             // Query cluster bus events for heartbeat
             const events = await db.select()
               .from(clusterBusEvent)
-              .where(eq(clusterBusEvent.sourceNode, 'paper_sim_heartbeat'))
+              .where(eq(clusterBusEvent.sourceNode, 'active_engine_heartbeat'))
               .orderBy(desc(clusterBusEvent.timestamp))
               .limit(5);
             return events;

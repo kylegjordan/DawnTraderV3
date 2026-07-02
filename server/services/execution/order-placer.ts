@@ -8,7 +8,7 @@
  * the real order book (P19-B4b.1, replacing the flat 0.05% slippage of B3a). The
  * VWAP from walking the book IS the fill price; fees stay per-class (B-4.5).
  * Everything else (position write, P/L, learning capture, exit archive) stays in
- * `PaperExecutionEngine` as mode-generic bookkeeping that consumes the `FillResult`.
+ * `ActiveExecutionEngine` as mode-generic bookkeeping that consumes the `FillResult`.
  *
  * FILL MODEL:
  *  - OPEN (buy): walk the ask side for `quantity`. The VWAP is the fill price; if

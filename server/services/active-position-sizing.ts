@@ -32,11 +32,11 @@ import { getScalingFactor } from './risk-concentration.js';
 // crypto's literal 0.15) via the dispatcher.
 import { getPatternPoolGuardrailsForAssetClass } from '../asset_classes/pattern-pool-dispatch.js';
 import type { AssetClass } from '../../shared/asset-classes.js';
-// B72 (2026-05-05): getMaxPositionBufferFactor() moved to module='paper_sizing'.
+// B72 (2026-05-05): getMaxPositionBufferFactor() moved to module='active_sizing'.
 import { getCachedNumberRequired } from './module-constants-service.js';
 
 function getMaxPositionBufferFactor(): number {
-  return getCachedNumberRequired('paper_sizing', 'max_position_buffer_factor',
+  return getCachedNumberRequired('active_sizing', 'max_position_buffer_factor',
     { exchange: '*', assetClass: '*', strategy: '*', regime: '*' });
 }
 
@@ -46,13 +46,13 @@ function getMaxPositionBufferFactor(): number {
  * This prevents trades from being blocked by MAX_POSITION during execution.
  *
  * B72: literal removed — value now read via getMaxPositionBufferFactor()
- * declared above (module_constants 'paper_sizing.max_position_buffer_factor',
+ * declared above (module_constants 'active_sizing.max_position_buffer_factor',
  * seeded at 0.97).
  */
 
 export type StrategyType = 'vwap_pullback' | 'abcd_long' | 'sma_trend_ride' | 'breakout' | 'mean_reversion' | 'range_trading' | 'vwap_bounce' | 'liquidity_trap' | 'dhma';
 
-export interface PaperPositionSizingParams {
+export interface ActivePositionSizingParams {
   portfolioValue: number;
   guardrails: GuardrailsV2 | null | undefined;
   entryPrice: number;
@@ -83,7 +83,7 @@ export interface PaperPositionSizingParams {
   mode: 'live' | 'paper';
 }
 
-export interface PaperPositionSizingResult {
+export interface ActivePositionSizingResult {
   quantity: number;
   estimatedValue: number;
   sizingDetails?: {
@@ -123,10 +123,10 @@ export interface PaperPositionSizingResult {
  * Returns { quantity: 0, estimatedValue: 0 } for any invalid input
  * (NaN, zero, negative values, malformed data)
  */
-export function sizePaperPositionForSignal(params: PaperPositionSizingParams): PaperPositionSizingResult {
+export function sizeActivePositionForSignal(params: ActivePositionSizingParams): ActivePositionSizingResult {
   const { portfolioValue, guardrails, entryPrice, stopPrice, symbol, strategy, mode } = params;
   
-  const invalidResult: PaperPositionSizingResult = { quantity: 0, estimatedValue: 0 };
+  const invalidResult: ActivePositionSizingResult = { quantity: 0, estimatedValue: 0 };
   
   if (!Number.isFinite(portfolioValue) || portfolioValue <= 0) {
     console.log(`[B6][SIZING] Invalid portfolioValue (${portfolioValue}) for ${symbol} - returning 0`);
@@ -285,7 +285,7 @@ export function sizePaperPositionForSignal(params: PaperPositionSizingParams): P
  * Validate that a portfolio value is usable for sizing.
  * Returns the value if valid, throws if not.
  */
-export function validatePaperPortfolioValue(balance: string | number | null | undefined, source: string): number {
+export function validateActivePortfolioValue(balance: string | number | null | undefined, source: string): number {
   if (balance === null || balance === undefined) {
     console.error(`[B6][PORTFOLIO_ERROR] No portfolio balance found from ${source}`);
     throw new Error(`Paper portfolio value not found. Cannot size positions.`);
@@ -314,14 +314,14 @@ export function validatePaperPortfolioValue(balance: string | number | null | un
  * - Transaction costs (spread + slippage)
  * - Adaptive learning confidence
  */
-export interface DSEAdjustedResult extends PaperPositionSizingResult {
+export interface DSEAdjustedResult extends ActivePositionSizingResult {
   dseMultiplier?: number;
   dseAdjusted?: boolean;
   originalQuantity?: number;
 }
 
 export function applyDSEMultiplier(
-  result: PaperPositionSizingResult,
+  result: ActivePositionSizingResult,
   dseMultiplier: number,
   symbol: string
 ): DSEAdjustedResult {

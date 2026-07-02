@@ -277,8 +277,8 @@ export async function runPaperPhase(durationMinutes: number = 30): Promise<{ suc
     await disablePassiveLearning();
     startPaperTradeRecording();
     
-    const { startPaperSimulation } = await import('./paper-sim-service.js');
-    const simResult = await startPaperSimulation('m5e-validation', { startingBalance: 827 });
+    const { startActiveEngine } = await import('./active-engine-service.js');
+    const simResult = await startActiveEngine('m5e-validation', { startingBalance: 827 });
     console.log(`[M5E][PHASE_B] Paper simulation started: ${simResult?.success ? 'OK' : 'FAILED'}`);
     
     console.log('[M5E][PHASE_B] Paper trading engine activated - trades will execute against live Kraken data');
@@ -311,8 +311,8 @@ async function completePaperPhase(): Promise<void> {
   console.log('[M5E][PHASE_B] Paper trading phase complete');
   
   try {
-    const { stopPaperSimulation } = await import('./paper-sim-service.js');
-    await stopPaperSimulation('m5e-validation');
+    const { stopActiveEngine } = await import('./active-engine-service.js');
+    await stopActiveEngine('m5e-validation');
     console.log('[M5E][PHASE_B] Paper simulation stopped');
   } catch (err) {
     console.error('[M5E][PHASE_B] Failed to stop paper simulation:', err);

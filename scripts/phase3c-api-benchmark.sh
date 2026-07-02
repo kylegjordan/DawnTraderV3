@@ -42,7 +42,7 @@ ENDPOINTS=(
   "/api/goals"
   "/api/portfolio/overview"
   "/api/system/health"
-  "/api/paper-sim/status"
+  "/api/active-engine/status"
   "/api/guardrails-v2"
   "/api/filters-v2"
   "/api/strategies/settings"

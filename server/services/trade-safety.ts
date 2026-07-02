@@ -24,7 +24,7 @@ import { b4Diagnostics } from './b4-diagnostics.js';
 import { b5SizingAudit } from './b5-sizing-audit.js';
 import { i1RtbDiagnostics } from './i1-rtb-diagnostics-service.js';
 import { rtbMetricsService } from './rtb-metrics-service.js';
-import { getGlobalPaperSimManager } from './paper-sim-service.js';
+import { getGlobalActiveEngineManager } from './active-engine-service.js';
 import { signalLifecycleAudit, type RejectionReason } from '../core/audit/signal_lifecycle_audit.js';
 import { isCorrelatedExposure, riskConcentrationAnalyzer } from './risk-concentration.js';
 import { getCachedNumberRequired } from './module-constants-service.js';
@@ -357,7 +357,7 @@ async function checkPositionSizeCap(
   const maxPositionValue = (portfolioValue * maxPositionPercent) / 100;
   
   // AJ10.1: Trust pre-computed notional from P2 sizing if available
-  // This is the canonical value calculated by paper-position-sizing.ts
+  // This is the canonical value calculated by active-position-sizing.ts
   let positionValue: number;
   let sizingSource: string;
   const preComputedNotionalMissing = trade.preComputedNotional === undefined || 
@@ -365,7 +365,7 @@ async function checkPositionSizeCap(
     trade.preComputedNotional <= 0;
   
   if (!preComputedNotionalMissing) {
-    // Use the pre-sized value - this was already calculated with the 3% buffer in paper-position-sizing.ts
+    // Use the pre-sized value - this was already calculated with the 3% buffer in active-position-sizing.ts
     positionValue = trade.preComputedNotional!;
     sizingSource = 'pre-sized (P2)';
     console.log(`[AJ10.1][TRUST_PRESIZED] Using pre-computed notional=$${positionValue.toFixed(2)} for ${trade.symbol}`);
@@ -401,7 +401,7 @@ async function checkPositionSizeCap(
     current_total_exposure: 0, // Would need open positions to calculate
     calculated_quantity: trade.preComputedNotional ? trade.preComputedNotional / trade.entryPrice : 0,
     calculated_notional: positionValue,
-    buffered_max_notional: maxPositionValue * 0.97, // 3% buffer from paper-position-sizing
+    buffered_max_notional: maxPositionValue * 0.97, // 3% buffer from active-position-sizing
     block_reason: wouldBlock ? 'MAX_POSITION' : 'PASS'
   });
 
@@ -678,7 +678,7 @@ export async function checkGuardrailRisk(
   
   // [8.8.3-I2] Check ENGINE_STOPPING first - block new trades during hard stop
   if (mode === 'paper') {
-    const manager = getGlobalPaperSimManager();
+    const manager = getGlobalActiveEngineManager();
     if (manager && typeof manager.getStopInProgress === 'function' && manager.getStopInProgress()) {
       console.log(`[8.8.3-I2][ENGINE_STOPPING] Blocking trade for ${trade.symbol} - hard stop in progress`);
       const result: TradeSafetyResult = {

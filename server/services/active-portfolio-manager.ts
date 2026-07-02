@@ -1,5 +1,5 @@
 import { storage } from '../storage';
-import { PaperExecutionEngine } from './paper-execution-engine';
+import { ActiveExecutionEngine } from './active-execution-engine';
 import { MicroExecutionService } from './micro-execution-service';
 import { KrakenService } from '../exchanges/kraken/kraken.js';
 import { registerEngine, registerMicroService } from './mode-registry';
@@ -39,10 +39,10 @@ interface PortfolioHealth {
   };
 }
 
-export class PaperPortfolioManager {
+export class ActivePortfolioManager {
   private mode: 'live' | 'paper'; // Phase 27.F.13.O: Mode-based (not per-user)
   private userId: string; // Phase 27.F.13.O: Kept for audit/logging only
-  private executionEngine: PaperExecutionEngine;
+  private executionEngine: ActiveExecutionEngine;
   private microExecutionService: MicroExecutionService; // Phase 27.F.14.MICRO
   private kraken: KrakenService;
   private isRunning: boolean = false;
@@ -62,9 +62,9 @@ export class PaperPortfolioManager {
   constructor(mode: 'live' | 'paper', userId?: string) {
     this.mode = mode;
     this.userId = userId || 'system'; // Fallback for backward compatibility
-    // P19-B3b: PaperExecutionEngine is mode-based — the legacy userId constructor
+    // P19-B3b: ActiveExecutionEngine is mode-based — the legacy userId constructor
     // arg was dropped (engine no longer user-coupled). Pass mode only.
-    this.executionEngine = new PaperExecutionEngine(mode);
+    this.executionEngine = new ActiveExecutionEngine(mode);
     this.microExecutionService = new MicroExecutionService(mode); // Phase 27.F.14.MICRO
     this.kraken = new KrakenService();
     
@@ -711,7 +711,7 @@ export class PaperPortfolioManager {
   }
 
   // Public getters for external access
-  getExecutionEngine(): PaperExecutionEngine {
+  getExecutionEngine(): ActiveExecutionEngine {
     return this.executionEngine;
   }
 

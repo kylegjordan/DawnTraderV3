@@ -28,8 +28,8 @@ import type { AssetClass } from '../../../shared/asset-classes.js';
 import type { BookLevel } from './depth-walk.js';
 
 /**
- * Trading mode. Matches `PaperExecutionEngine.mode` (`'live' | 'paper'`, declared
- * inline at paper-execution-engine.ts:120 — there is no canonical `shared/`
+ * Trading mode. Matches `ActiveExecutionEngine.mode` (`'live' | 'paper'`, declared
+ * inline at active-execution-engine.ts:120 — there is no canonical `shared/`
  * TradingMode export; it is redefined locally in several modules). Inlined here
  * to avoid coupling the port to a non-canonical location.
  */

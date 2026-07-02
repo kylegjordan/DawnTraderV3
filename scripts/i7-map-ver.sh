@@ -54,7 +54,7 @@ curl -s "http://localhost:5000/api/diagnostics/i7-ws-f/coverage" \
   > "$OUTPUT_DIR/ws_f_coverage.json"
 
 echo "  → Active Trades (Paper Sim)"
-curl -s "http://localhost:5000/api/paper-sim/active-trades" \
+curl -s "http://localhost:5000/api/active-engine/active-trades" \
   -H "Authorization: Bearer $TOKEN" \
   > "$OUTPUT_DIR/active_trades.json"
 
@@ -173,11 +173,11 @@ if [ "$1" != "--skip-live" ]; then
   
   # V3.2 - Start fresh simulation
   echo "  → Starting paper simulation..."
-  curl -s -X POST "http://localhost:5000/api/paper-sim/stop" \
+  curl -s -X POST "http://localhost:5000/api/active-engine/stop" \
     -H "Authorization: Bearer $TOKEN" \
     -H "Content-Type: application/json" > /dev/null 2>&1 || true
   
-  curl -s -X POST "http://localhost:5000/api/paper-sim/start" \
+  curl -s -X POST "http://localhost:5000/api/active-engine/start" \
     -H "Authorization: Bearer $TOKEN" \
     -H "Content-Type: application/json" \
     -d '{"mode":"continue"}' \
@@ -204,7 +204,7 @@ if [ "$1" != "--skip-live" ]; then
   }' > "$OUTPUT_DIR/trace_stage_summary.json" 2>/dev/null || echo '{"totalTraces":0,"stageCounts":[]}' > "$OUTPUT_DIR/trace_stage_summary.json"
   
   # Stop simulation
-  curl -s -X POST "http://localhost:5000/api/paper-sim/stop" \
+  curl -s -X POST "http://localhost:5000/api/active-engine/stop" \
     -H "Authorization: Bearer $TOKEN" \
     -H "Content-Type: application/json" > /dev/null 2>&1 || true
   

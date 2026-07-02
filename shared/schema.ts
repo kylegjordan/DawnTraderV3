@@ -1745,7 +1745,7 @@ export const paperSimOpenPositions = pgTable("paper_sim_open_positions", {
   symbol: varchar("symbol", { length: 20 }).notNull(),
   // B69 (2026-05-03): asset class + exchange for cross-cutting analysis.
   // New rows are populated via `safeResolveAssetClass(symbol, exchange)` at
-  // paper-execution-engine open. Defaults match pre-B69 reality.
+  // active-execution-engine open. Defaults match pre-B69 reality.
   exchange: text("exchange").notNull().default("kraken"),
   assetClass: text("asset_class").notNull().default("crypto_spot"),
   strategyName: strategyTypeEnum("strategy_name").notNull(),
@@ -1795,7 +1795,7 @@ export const paperSimOpenPositions = pgTable("paper_sim_open_positions", {
   metadata: jsonb("metadata"), // Signal details, entry reasons, etc.
   // B-NEW-43 chunk 7 (2026-05-23): the B69 `exchange` + `assetClass` columns
   // are already declared earlier in this table at lines ~1744-1745 — the
-  // duplicate declarations here were a copy-paste from another paper-sim
+  // duplicate declarations here were a copy-paste from another active-engine
   // table and never caught because tsc was running with continue-on-error.
 }, (table) => ({
   symbolIdx: uniqueIndex("paper_sim_open_positions_symbol_idx").on(table.symbol),

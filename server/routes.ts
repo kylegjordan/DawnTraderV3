@@ -51,7 +51,7 @@ import { memoryLifecycle } from "./services/memory-lifecycle";
 import { getPermissionsForRole, Permission } from './config/permissions.js';
 import type { UserRole } from './config/permissions.js';
 import { randomUUID } from 'crypto';
-import { getPaperSimulationStatus } from './services/paper-sim-service';
+import { getActiveEngineStatus } from './services/active-engine-service';
 import { numericNormalizationMiddleware } from './utils/numeric-normalizer.js';
 import { contextBridge } from './services/context-bridge.js';
 import { getCache, setCache, coalesce } from './services/cache';
@@ -2688,11 +2688,11 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // Phase 4A: Use coalescing to prevent duplicate scans
       const result = await coalesce(cacheKey, async () => {
         // Import diagnostic service
-        const { paperSimDiagnosticService } = await import('./services/paper-sim-diagnostic.js');
+        const { activeScanDiagnosticService } = await import('./services/active-scan-diagnostic.js');
         
         // Get live scan results from diagnostic service (same source as Filter Insights)
         // Phase 27.F.21: Use limit=9999 to evaluate ENTIRE universe (same as all other endpoints)
-        const scanResult = await paperSimDiagnosticService.performUniverseScan({
+        const scanResult = await activeScanDiagnosticService.performUniverseScan({
           userId,
           mode,
           limit: 9999,
@@ -3917,12 +3917,12 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const startEnginePromise = (async () => {
         // Phase 27.F.13.B: Start the correct engine based on mode
         if (mode === 'paper') {
-          console.log('[ENGINE_INIT][DEBUG] Entering INIT state (importing paper-sim-service)');
-          console.log('[ENGINE_STARTING_PAPER] Importing paper-sim-service...');
+          console.log('[ENGINE_INIT][DEBUG] Entering INIT state (importing active-engine-service)');
+          console.log('[ENGINE_STARTING_PAPER] Importing active-engine-service...');
           // Start paper trading simulation
-          const { startPaperSimulation } = await import('./services/paper-sim-service.js');
-          console.log(`[ENGINE_STARTING_PAPER] Calling startPaperSimulation (balance: $${startingBalance})...`);
-          const result = await startPaperSimulation(userId, { 
+          const { startActiveEngine } = await import('./services/active-engine-service.js');
+          console.log(`[ENGINE_STARTING_PAPER] Calling startActiveEngine (balance: $${startingBalance})...`);
+          const result = await startActiveEngine(userId, { 
             skipAutoWatchlist: true,
             startingBalance // REB 8.8.3-D: Pass extracted balance to paper simulation
           });
@@ -4118,8 +4118,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // Phase 27.F.13.B: Stop the correct engine based on current mode
       if (currentMode === 'paper') {
         // Stop paper trading simulation
-        const { stopPaperSimulation } = await import('./services/paper-sim-service.js');
-        await stopPaperSimulation(userId);
+        const { stopActiveEngine } = await import('./services/active-engine-service.js');
+        await stopActiveEngine(userId);
         console.log(`[TradingStop] Paper simulation stopped for user ${userId}`);
       } else {
         // Phase 27.F.15.B.3: Stop global live trading engine
@@ -4216,9 +4216,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // Force stop the specified mode's engine
       if (mode === 'paper') {
         try {
-          const { stopPaperSimulation, clearGlobalPaperSimManager } = await import('./services/paper-sim-service.js');
-          await stopPaperSimulation(userId); // Use current user for manager lookup
-          clearGlobalPaperSimManager();
+          const { stopActiveEngine, clearGlobalActiveEngineManager } = await import('./services/active-engine-service.js');
+          await stopActiveEngine(userId); // Use current user for manager lookup
+          clearGlobalActiveEngineManager();
           console.log(`[ForceStop] Paper simulation force-stopped`);
         } catch (err) {
           console.error(`[ForceStop] Error stopping paper sim:`, err);
@@ -4593,7 +4593,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           cash = cashValue;
           crypto = cryptoValue;
           syncTimestamp = undefined;
-          balanceSource = 'paper-sim';
+          balanceSource = 'active-engine';
           balanceError = undefined;
         } else {
           // [9.6.3] Live mode - ALWAYS use Kraken valuation for consistency
@@ -5879,8 +5879,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   // NOTE: Paper trading is SYSTEM-WIDE. Only ONE simulation can run at a time.
   // All users see the same simulation status.
   
-  // P19-B4b D5: the manager is now a lazily-initialized per-mode Map inside paper-sim-service
-  // (getGlobalPaperSimManager), so no global init is needed here. The operation-lock init was
+  // P19-B4b D5: the manager is now a lazily-initialized per-mode Map inside active-engine-service
+  // (getGlobalActiveEngineManager), so no global init is needed here. The operation-lock init was
   // removed with the vestigial lock/flag mechanism (see DELETED_COMPONENTS_LOG.md).
 
   // Global system-wide simulation session registry
@@ -5913,7 +5913,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   };
 
   // Internal endpoint for 48hr simulation script to register session (no auth required - internal use only)
-  apiRouter.post('/internal/paper-sim/register-session', async (req, res) => {
+  apiRouter.post('/internal/active-engine/register-session', async (req, res) => {
     try {
       const { sessionId, startedBy, startTime, type } = req.body;
       
@@ -5938,7 +5938,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   });
 
   // Internal endpoint for 48hr simulation script to deregister session (no auth required - internal use only)
-  apiRouter.post('/internal/paper-sim/deregister-session', async (req, res) => {
+  apiRouter.post('/internal/active-engine/deregister-session', async (req, res) => {
     try {
       if (globalSimulationSession) {
         console.log(`[SimRegistry] Deregistered GLOBAL session ${globalSimulationSession.sessionId} via API`);
@@ -10457,13 +10457,13 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   // ===== Phase 8.8.3-I7-ROOT-FIX: Engine Status Diagnostics =====
   
   // GET /api/diagnostics/i7-root/engine-status - Phase 8.8.3-I7-PM-FOCUS: Engine status diagnostics
-  // Returns comprehensive status snapshot from PaperPortfolioManager
+  // Returns comprehensive status snapshot from ActivePortfolioManager
   apiRouter.get('/diagnostics/i7-root/engine-status', async (req, res) => {
     try {
-      const { getGlobalPaperSimManager, getOrchestratorByMode, getEngineByMode } = await import('./services/paper-sim-service.js');
+      const { getGlobalActiveEngineManager, getOrchestratorByMode, getEngineByMode } = await import('./services/active-engine-service.js');
       
-      // Get actual paper manager state (this is what paper-sim/start actually starts)
-      const paperManager = getGlobalPaperSimManager();
+      // Get actual paper manager state (this is what active-engine/start actually starts)
+      const paperManager = getGlobalActiveEngineManager();
       
       // Phase 8.8.3-I7-PM-FOCUS: Get status snapshot from manager if available
       let paperSnapshot: any = null;
@@ -10523,10 +10523,10 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   // Returns detailed per-position pricing info for active trade price/exit diagnostics
   apiRouter.get('/diagnostics/i7-price/status', async (req, res) => {
     try {
-      const { getGlobalPaperSimManager, getEngineByMode } = await import('./services/paper-sim-service.js');
+      const { getGlobalActiveEngineManager, getEngineByMode } = await import('./services/active-engine-service.js');
       
       // Get paper engine status
-      const paperManager = getGlobalPaperSimManager();
+      const paperManager = getGlobalActiveEngineManager();
       const paperEngine = getEngineByMode('paper');
       
       let paperPriceStatus: any = null;
@@ -11217,7 +11217,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
 
   // Phase 41D: Balance confirmation endpoint disabled (no longer required)
   // Endpoint kept as no-op for backwards compatibility
-  apiRouter.post('/paper-sim/confirm-balance', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/active-engine/confirm-balance', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { balance } = req.body;
       console.log('[41D] confirm-balance called (no-op) - balance confirmation system disabled');
@@ -11227,9 +11227,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
-  apiRouter.post('/paper-sim/start', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/active-engine/start', authenticateToken, async (req: AuthenticatedRequest, res) => {
     const t0 = Date.now();
-    console.log(`[41D-ROUTE-1] /paper-sim/start entered at ${new Date().toISOString()}`);
+    console.log(`[41D-ROUTE-1] /active-engine/start entered at ${new Date().toISOString()}`);
     
     const userId = req.user!.id;
     const { mode, initialBalance } = req.body || {};
@@ -11240,7 +11240,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     if (mode !== 'new' && mode !== 'continue') {
       console.log(`[B7.1][ERROR] Invalid mode: ${mode}`);
       return res.status(400).json({
-        error: 'Invalid mode. Expected "new" or "continue" for paper-sim start.',
+        error: 'Invalid mode. Expected "new" or "continue" for active-engine start.',
         received: mode
       });
     }
@@ -11252,8 +11252,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // Continue mode preserves existing state (trades, positions, portfolio)
       if (mode === 'new') {
         console.log(`[B7.1][HARD_RESET] Running hardResetPaperSim + resetPaper() before new simulation...`);
-        const { paperSessionResetService } = await import('./services/paper-session-reset.js');
-        const resetResult = await paperSessionResetService.hardResetPaperSimulation('paper');
+        const { activeSessionResetService } = await import('./services/active-session-reset.js');
+        const resetResult = await activeSessionResetService.hardResetActiveEngine('paper');
         console.log(`[B7.1][HARD_RESET] Complete:`, {
           success: resetResult.success,
           closedTrades: resetResult.details.closedTrades,
@@ -11264,7 +11264,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         // Broadcast reset completion to invalidate UI caches immediately
         const { contextBridge } = await import('./services/context-bridge.js');
         await contextBridge.broadcast({
-          type: 'paper_sim_reset',
+          type: 'active_engine_reset',
           payload: {
             mode: 'paper',
             resetResult: resetResult.details,
@@ -11287,8 +11287,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         console.log(`[Phase-27.F.14.J] Starting NEW simulation with balance $${balance}`);
         
         // Stop paper simulation if running (gracefully handle if already stopped)
-        const { stopPaperSimulation } = await import('./services/paper-sim-service.js');
-        const stopResult = await stopPaperSimulation(userId);
+        const { stopActiveEngine } = await import('./services/active-engine-service.js');
+        const stopResult = await stopActiveEngine(userId);
         if (!stopResult.success && !stopResult.message?.includes('not running')) {
           console.warn('[Phase-27.F.14.J] Stop failed but continuing:', stopResult.message);
         }
@@ -11338,9 +11338,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         console.log('[LATTI][Paper] Trading pace reset to baseline (guardrails and filters preserved)');
         
         // Start the simulation
-        const { startPaperSimulation } = await import('./services/paper-sim-service.js');
-        // REB 2.8.13: Pass startingBalance to startPaperSimulation (required after REB 2.8.12)
-        const result = await startPaperSimulation(userId, { startingBalance: balance });
+        const { startActiveEngine } = await import('./services/active-engine-service.js');
+        // REB 2.8.13: Pass startingBalance to startActiveEngine (required after REB 2.8.12)
+        const result = await startActiveEngine(userId, { startingBalance: balance });
         
         // Directive 12.2.3: Bob Core cache invalidation removed (Batch 7B)
 
@@ -11393,9 +11393,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       console.log(`[REB 2.8.13] Continue simulation with existing balance: $${existingBalance}`);
       
       // Continue with existing baseline
-      const { startPaperSimulation } = await import('./services/paper-sim-service.js');
-      // REB 2.8.13: Pass startingBalance to startPaperSimulation (required after REB 2.8.12)
-      const result = await startPaperSimulation(userId, { startingBalance: existingBalance });
+      const { startActiveEngine } = await import('./services/active-engine-service.js');
+      // REB 2.8.13: Pass startingBalance to startActiveEngine (required after REB 2.8.12)
+      const result = await startActiveEngine(userId, { startingBalance: existingBalance });
       
       // Directive 12.2.3: Bob Core cache invalidation removed (Batch 7B)
       
@@ -11418,18 +11418,18 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     } catch (error: any) {
       console.error('Error starting paper trading simulation:', error);
       // P19-B4b D5: vestigial operation-lock / busy-flag clears removed (mechanism deleted —
-      // superseded by paperOperationQueue since Phase 41F). See DELETED_COMPONENTS_LOG.md.
+      // superseded by activeOperationQueue since Phase 41F). See DELETED_COMPONENTS_LOG.md.
       res.status(500).json({ error: error.message || 'Failed to start paper trading simulation' });
     }
   });
 
-  apiRouter.post('/paper-sim/stop', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/active-engine/stop', authenticateToken, async (req: AuthenticatedRequest, res) => {
     const userId = req.user!.id;
     
     try {
       // Use unified service function to ensure consistent state management
-      const { stopPaperSimulation } = await import('./services/paper-sim-service.js');
-      const result = await stopPaperSimulation(userId);
+      const { stopActiveEngine } = await import('./services/active-engine-service.js');
+      const result = await stopActiveEngine(userId);
       
       // Directive 12.2.3: Bob Core cache invalidation removed (Batch 7B)
       
@@ -11457,7 +11457,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   });
 
   // Phase 27.F.13.C + B7.A: Reset paper simulation with hard reset
-  apiRouter.post('/paper-sim/reset', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/active-engine/reset', authenticateToken, async (req: AuthenticatedRequest, res) => {
     const userId = req.user!.id;
     const { newBalance, mode: requestedMode } = req.body;
     
@@ -11498,8 +11498,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       console.log(`[PaperSim] Resetting simulation for user ${userId} with balance $${balance}`);
       
       // Phase 8.8.3-B7.A: Use hard reset service for complete cleanup
-      const { paperSessionResetService } = await import('./services/paper-session-reset.js');
-      const resetResult = await paperSessionResetService.hardResetPaperSimulation(mode);
+      const { activeSessionResetService } = await import('./services/active-session-reset.js');
+      const resetResult = await activeSessionResetService.hardResetActiveEngine(mode);
       
       if (!resetResult.success) {
         console.error(`[B7.A] Hard reset failed:`, resetResult.message);
@@ -11523,7 +11523,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         console.log(`[PaperSim] Hard reset: cleared trades, positions, and logs`);
       }
       
-      // 8.8.4-C.14.C: RTB signals already cleared via hardResetPaperSimulation -> clearReadyToBuy
+      // 8.8.4-C.14.C: RTB signals already cleared via hardResetActiveEngine -> clearReadyToBuy
       // Note: Removed duplicate storage.deleteAllTradingSignals call as clearReadyToBuy provides WebSocket broadcast
       
       // Reset portfolio state for paper mode
@@ -11563,7 +11563,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   });
 
   // Phase 8.8.4-C.11: Clear residual backend data before validation session
-  apiRouter.post('/paper-sim/clear-data', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/active-engine/clear-data', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const mode = 'paper';
       console.log('[8.8.4-C.11][CLEAR_DATA] Starting residual data cleanup');
@@ -11599,7 +11599,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   });
 
   // Phase 8.8.4-C.11: Start validation session
-  apiRouter.post('/paper-sim/validation-session/start', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/active-engine/validation-session/start', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { durationHours = 3 } = req.body;
       const { validationSessionService } = await import('./services/validation-session-service.js');
@@ -11618,7 +11618,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   });
 
   // Phase 8.8.4-C.11: Stop validation session
-  apiRouter.post('/paper-sim/validation-session/stop', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/active-engine/validation-session/stop', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { validationSessionService } = await import('./services/validation-session-service.js');
       
@@ -11636,7 +11636,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   });
 
   // Phase 8.8.4-C.11: Get validation session status and report
-  apiRouter.get('/paper-sim/validation-session/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/active-engine/validation-session/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { validationSessionService } = await import('./services/validation-session-service.js');
       
@@ -11654,7 +11654,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   });
 
   // Phase 8.8.4-C.11: Trigger manual status report
-  apiRouter.post('/paper-sim/validation-session/report', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/active-engine/validation-session/report', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { validationSessionService } = await import('./services/validation-session-service.js');
       
@@ -11675,7 +11675,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   });
 
   // Phase 8.8.4-C.11: Start SQE distribution logging
-  apiRouter.post('/paper-sim/sqe-distribution/start', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/active-engine/sqe-distribution/start', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { intervalMinutes = 10, durationMinutes = 30 } = req.body;
       const { validationSessionService } = await import('./services/validation-session-service.js');
@@ -11693,7 +11693,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   });
 
   // Phase 8.8.4-C.13: Start C.13 validation session with relaxed SQE thresholds
-  apiRouter.post('/paper-sim/c13-validation/start', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/active-engine/c13-validation/start', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { durationHours = 3, intervalMinutes = 30 } = req.body;
       const { c13ValidationService } = await import('./services/c13-validation-service.js');
@@ -11717,7 +11717,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   });
 
   // Phase 8.8.4-C.13: Stop C.13 validation session
-  apiRouter.post('/paper-sim/c13-validation/stop', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/active-engine/c13-validation/stop', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { c13ValidationService } = await import('./services/c13-validation-service.js');
       
@@ -11735,7 +11735,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   });
 
   // Phase 8.8.4-C.13: Get C.13 validation session status
-  apiRouter.get('/paper-sim/c13-validation/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/active-engine/c13-validation/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { c13ValidationService } = await import('./services/c13-validation-service.js');
       
@@ -11754,7 +11754,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   });
 
   // Phase 8.8.4-C.14: Start C.14 comprehensive validation session
-  apiRouter.post('/paper-sim/c14-validation/start', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/active-engine/c14-validation/start', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { durationHours = 3, intervalMinutes = 30 } = req.body;
       const { c14ValidationService } = await import('./services/c14-validation-service.js');
@@ -11778,7 +11778,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   });
 
   // Phase 8.8.4-C.14: Stop C.14 validation session
-  apiRouter.post('/paper-sim/c14-validation/stop', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/active-engine/c14-validation/stop', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { c14ValidationService } = await import('./services/c14-validation-service.js');
       
@@ -11796,7 +11796,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   });
 
   // Phase 8.8.4-C.14: Get C.14 validation session status
-  apiRouter.get('/paper-sim/c14-validation/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/active-engine/c14-validation/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { c14ValidationService } = await import('./services/c14-validation-service.js');
       
@@ -11815,7 +11815,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   });
 
   // Phase 8.8.4-C.14: Clear RTB queue
-  apiRouter.delete('/paper-sim/clear-rtb', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.delete('/active-engine/clear-rtb', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { readyToBuyService } = await import('./core/rtb/ready_to_buy_service.js');
       
@@ -11833,7 +11833,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   });
 
   // Phase 8.8.4-C.14: Clear trades
-  apiRouter.delete('/paper-sim/clear-trades', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.delete('/active-engine/clear-trades', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const mode: 'paper' | 'live' = 'paper';
       
@@ -11851,7 +11851,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   });
 
   // Phase 8.8.4-C.14: Update paper simulation config (starting_balance)
-  apiRouter.patch('/paper-sim/config', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.patch('/active-engine/config', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { starting_balance } = req.body;
       
@@ -11879,12 +11879,12 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   });
 
   // Paper trading status
-  apiRouter.get('/paper-sim/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/active-engine/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
     // Directive 12.2.3: Bob Core transparent routing removed (Batch 7B)
     try {
       // Return GLOBAL system-wide status (same for all users)
-      const { getGlobalPaperSimManager } = await import('./services/paper-sim-service.js');
-      const hasUISimulation = getGlobalPaperSimManager('paper') !== null; // P19-B4b D5: per-mode accessor
+      const { getGlobalActiveEngineManager } = await import('./services/active-engine-service.js');
+      const hasUISimulation = getGlobalActiveEngineManager('paper') !== null; // P19-B4b D5: per-mode accessor
       const globalSession = (global as any).getGlobalSession() as SimulationSession | null;
       const has48HrSimulation = !!(globalSession && globalSession.isRunning);
       
@@ -11910,7 +11910,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
 
   // Phase 8.8.3-C5: Enhanced trades endpoint with pagination, sorting, and filtering
   // Phase 8.8.3-C-FINAL: Ghost filter moved to SQL, closeReason filter added
-  apiRouter.get('/paper-sim/trades', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/active-engine/trades', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { limit, offset, sortBy, order, closedOnly, symbol, strategy, closeReason, dateFrom, dateTo, paginated } = req.query;
@@ -11984,7 +11984,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
-  apiRouter.get('/paper-sim/positions', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/active-engine/positions', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const positions = await storage.getPaperSimOpenPositions('paper');
@@ -11998,7 +11998,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   // Phase 8.8.3-B1: Enhanced Active Trades endpoint with slot visibility and integrity checking
   // Phase 8.8.3-I6: Now uses live prices from LivePricingAdapter instead of stale DB prices
   // Phase 8.8.3-I9: Added frequency and volume data
-  apiRouter.get('/paper-sim/active-trades', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/active-engine/active-trades', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       
@@ -12204,7 +12204,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       // B3: Calculate portfolio summary
       // Phase 8.8.3-C7-FIX: Use same calculation as portfolio-summary endpoint
-      const { getEngineSessionStart } = await import('./services/paper-execution-engine.js');
+      const { getEngineSessionStart } = await import('./services/active-execution-engine.js');
       const portfolioState = await storage.getPortfolioState({ mode: 'paper' });
       const startingBalance = portfolioState ? parseFloat(portfolioState.startingBalance?.toString() || portfolioState.balance?.toString() || '0') : 0;
       
@@ -12257,9 +12257,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
 
   // Phase 8.8.3-B3: Portfolio Summary endpoint - available on all trading tabs
   // Current Balance = starting_balance + SUM(realized P/L from closed trades in current session)
-  apiRouter.get('/paper-sim/portfolio-summary', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/active-engine/portfolio-summary', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const { getEngineSessionStart } = await import('./services/paper-execution-engine');
+      const { getEngineSessionStart } = await import('./services/active-execution-engine');
       const mode = 'paper' as const;
       
       // Get portfolio state
@@ -12361,7 +12361,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   });
 
   // Phase 8.8.3-B1: Close single trade endpoint
-  apiRouter.post('/paper-sim/close-trade/:id', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/active-engine/close-trade/:id', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { id } = req.params;
@@ -12406,7 +12406,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       }
       const FEE_PERCENT = getFrictionForAssetClass(_exitPosClass).feeRateTaker * 100; // B-4.5: DB-governed per-class
       
-      // Calculate exit slippage (same formula as paper-execution-engine.ts line 772-780)
+      // Calculate exit slippage (same formula as active-execution-engine.ts line 772-780)
       const exitSlippagePerUnit = currentPrice * (SLIPPAGE_PERCENT / 100);
       const actualExitPrice = currentPrice - exitSlippagePerUnit; // Worse price due to slippage
       const exitValue = actualExitPrice * quantity;
@@ -12513,7 +12513,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   });
 
   // Phase 8.8.3-B2: Force clear all stranded trades endpoint
-  apiRouter.post('/paper-sim/force-clear-stranded', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/active-engine/force-clear-stranded', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       
@@ -12601,7 +12601,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
 
   // Phase 8.8.3-B1/B2: Trade History Analytics endpoint with new metrics
   // Phase 8.8.3-C6: Current Simulation = trades opened since engine was last started
-  apiRouter.get('/paper-sim/trades/analytics', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/active-engine/trades/analytics', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { range = 'session' } = req.query;
@@ -12612,7 +12612,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       let isCurrentSimulation = false;
       
       // Phase 8.8.3-C6: Get actual engine running state for all responses
-      const { getEngineSessionStart } = await import('./services/paper-execution-engine.js');
+      const { getEngineSessionStart } = await import('./services/active-execution-engine.js');
       const engineStartTime = getEngineSessionStart('paper');
       const isEngineRunning = engineStartTime !== null;
       
@@ -12850,12 +12850,12 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
-  apiRouter.get('/paper-sim/metrics', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/active-engine/metrics', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
-      const status = await getPaperSimulationStatus(userId);
-      const { getGlobalPaperSimManager } = await import('./services/paper-sim-service.js');
-      const manager = getGlobalPaperSimManager('paper'); // P19-B4b D5: per-mode accessor
+      const status = await getActiveEngineStatus(userId);
+      const { getGlobalActiveEngineManager } = await import('./services/active-engine-service.js');
+      const manager = getGlobalActiveEngineManager('paper'); // P19-B4b D5: per-mode accessor
       
       if (!status.isRunning || !manager) {
         const stats = await storage.getPaperSimStats('paper');
@@ -12889,12 +12889,12 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
-  apiRouter.get('/paper-sim/health', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/active-engine/health', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
-      const status = await getPaperSimulationStatus(userId);
-      const { getGlobalPaperSimManager } = await import('./services/paper-sim-service.js');
-      const manager = getGlobalPaperSimManager('paper'); // P19-B4b D5: per-mode accessor
+      const status = await getActiveEngineStatus(userId);
+      const { getGlobalActiveEngineManager } = await import('./services/active-engine-service.js');
+      const manager = getGlobalActiveEngineManager('paper'); // P19-B4b D5: per-mode accessor
       
       if (!status.isRunning || !manager) {
         return res.status(400).json({ error: 'Paper trading simulation not running' });
@@ -12908,12 +12908,12 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
-  apiRouter.post('/paper-sim/close-all', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/active-engine/close-all', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
-      const status = await getPaperSimulationStatus(userId);
-      const { getGlobalPaperSimManager } = await import('./services/paper-sim-service.js');
-      const manager = getGlobalPaperSimManager('paper'); // P19-B4b D5: per-mode accessor
+      const status = await getActiveEngineStatus(userId);
+      const { getGlobalActiveEngineManager } = await import('./services/active-engine-service.js');
+      const manager = getGlobalActiveEngineManager('paper'); // P19-B4b D5: per-mode accessor
       
       if (!status.isRunning || !manager) {
         return res.status(400).json({ error: 'Paper trading simulation not running' });
@@ -12929,9 +12929,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
-  // B7.A: Duplicate reset route removed - use main route at /api/paper-sim/reset with hard reset service
+  // B7.A: Duplicate reset route removed - use main route at /api/active-engine/reset with hard reset service
 
-  apiRouter.get('/paper-sim/logs', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/active-engine/logs', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const { limit } = req.query;
@@ -12948,7 +12948,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
 
   // Phase 38.2: Unified Filtering - Uses Market Evaluation SSOT
   // Ensures identical filtering to SignalOrchestrator (no more 17 vs 662 discrepancy)
-  apiRouter.get('/paper-sim/filtered-pairs', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/active-engine/filtered-pairs', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const mode = (req.query.mode as 'paper' | 'live') || 'paper';
@@ -12957,7 +12957,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const { contextBridge } = await import('./services/context-bridge.js');
       
       // Phase 41F-L.E2E-PURGE: Get screener filters from mode-level config
-      // B79.0n.STORAGE (2026-05-21): paper-sim filtered-pairs reads canonical crypto baseline.
+      // B79.0n.STORAGE (2026-05-21): active-engine filtered-pairs reads canonical crypto baseline.
       const screenerFilters = await storage.getCanonicalScreenerConfig({ mode });
       if (!screenerFilters) {
         return res.status(400).json({ error: 'Screener filters not configured for this mode' });
@@ -13169,7 +13169,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           lastReviewed: '2026-05-27',
           knownGaps: [
             'fees are per-class DB-governed as of B-4.5 (fee_model merge); SLIPPAGE dispatch remains class-member wildcard — per-class slippage deferred to Phase 25/26 calibration',
-            'sizing-core risk-pct/max-position-pct mode-keyed not class-keyed (paper-position-sizing.ts:141-180); deferred to Phase 25/26',
+            'sizing-core risk-pct/max-position-pct mode-keyed not class-keyed (active-position-sizing.ts:141-180); deferred to Phase 25/26',
             'narrative-feed TRADE_OPENED/TRADE_CLOSED payload lacks assetClass; dormant — re-review at narrative-feed activation or annual audit',
           ],
         },
@@ -13182,7 +13182,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
 
   // Phase 27.F.12: Universe Scan & Filter Trace (read-only diagnostic, admin/owner only)
   // Phase 4A Remediation: Added caching with 45s TTL
-  apiRouter.get('/paper-sim/diagnostics/scan', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/active-engine/diagnostics/scan', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       // Check for admin or owner role
       const userRole = req.user?.role;
@@ -13209,9 +13209,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
 
       // Phase 4A: Use coalescing to prevent duplicate scans
       const scanResult = await coalesce(cacheKey, async () => {
-        const { paperSimDiagnosticService } = await import('./services/paper-sim-diagnostic.js');
+        const { activeScanDiagnosticService } = await import('./services/active-scan-diagnostic.js');
         
-        return await paperSimDiagnosticService.performUniverseScan({
+        return await activeScanDiagnosticService.performUniverseScan({
           userId,
           mode: scanMode,
           limit: scanLimit,
@@ -13231,7 +13231,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   });
 
   // REB 2.8.5A: 24h metrics now use FX5-native window (legacy aggregator removed)
-  apiRouter.get('/paper-sim/diagnostics/scan-24h', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/active-engine/diagnostics/scan-24h', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { get24hSummary } = await import('./services/fx5-24h-window.js');
       const { mode } = req.query;
@@ -13255,7 +13255,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   });
 
   // REB 2.8.3: Latest FX5 scan data from Stage-3 cache (REST endpoint for Filter Insights)
-  apiRouter.get('/paper-sim/diagnostics/scan-latest', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/active-engine/diagnostics/scan-latest', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { stage3Cache } = await import('./services/stage3-state-cache.js');
       const { mode } = req.query;
@@ -13340,9 +13340,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   });
 
   // Phase 27.F.14.DIAG: Last Cycle Telemetry (diagnostic endpoint)
-  apiRouter.get('/paper-sim/last-cycle', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  apiRouter.get('/active-engine/last-cycle', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const { PaperExecutionEngine } = await import('./services/paper-execution-engine.js');
+      const { ActiveExecutionEngine } = await import('./services/active-execution-engine.js');
       const { modeRegistry } = await import('./services/mode-registry.js');
       
       // Get paper execution engine from mode registry
@@ -16437,7 +16437,7 @@ Provide specific, actionable recommendations.`,
       const hours = parseInt(req.query.hours as string) || 24;
 
       // AJ8: Get session start time - metrics only count from session start
-      const { getEngineSessionStart } = await import('./services/paper-execution-engine.js');
+      const { getEngineSessionStart } = await import('./services/active-execution-engine.js');
       const sessionStart = getEngineSessionStart(mode);
       
       const stats = await storage.getExecutionAttemptMetrics(mode, sessionStart);
@@ -16464,7 +16464,7 @@ Provide specific, actionable recommendations.`,
       const mode = (req.query.mode as 'live' | 'paper') || 'paper';
       
       // AJ8: Get session start time - metrics only count from session start
-      const { getEngineSessionStart } = await import('./services/paper-execution-engine.js');
+      const { getEngineSessionStart } = await import('./services/active-execution-engine.js');
       const sessionStart = getEngineSessionStart(mode);
       
       const metrics = await storage.getExecutionAttemptMetrics(mode, sessionStart);
@@ -16500,7 +16500,7 @@ Provide specific, actionable recommendations.`,
       const mode = (req.query.mode as 'live' | 'paper') || 'paper';
       
       // AJ8: Get session start time - metrics only count from session start
-      const { getEngineSessionStart } = await import('./services/paper-execution-engine.js');
+      const { getEngineSessionStart } = await import('./services/active-execution-engine.js');
       const sessionStart = getEngineSessionStart(mode);
       
       const metrics = await storage.getExecutionAttemptMetrics(mode, sessionStart);
@@ -16566,7 +16566,7 @@ Provide specific, actionable recommendations.`,
       const mode = (req.query.mode as 'live' | 'paper') || 'paper';
       
       // AJ8: Get session start time - metrics only count from session start
-      const { getEngineSessionStart } = await import('./services/paper-execution-engine.js');
+      const { getEngineSessionStart } = await import('./services/active-execution-engine.js');
       const sessionStart = getEngineSessionStart(mode);
       
       const metrics = await storage.getExecutionAttemptMetrics(mode, sessionStart);
@@ -17689,8 +17689,8 @@ Please:
       // (legacy start_live_trading action removed P19-B2 2026-06-13 — see DELETED_COMPONENTS_LOG.md)
       if (approval.action) {
         if (approval.action === 'start_paper_simulation') {
-          const { startPaperSimulation } = await import('./services/paper-sim-service');
-          const result = await startPaperSimulation(userId);
+          const { startActiveEngine } = await import('./services/active-engine-service');
+          const result = await startActiveEngine(userId);
           executionResult = { success: result.success, message: result.message, data: result.data };
           console.log(`[Phase 27.2] Executed start_paper_simulation:`, executionResult);
         }
@@ -18612,7 +18612,7 @@ Please:
       
       const liveEngineStatus = globalLiveEngine.getStatus?.() || { tradingStatus: 'stopped' };
       
-      const paperStatus = await getPaperSimulationStatus(userId);
+      const paperStatus = await getActiveEngineStatus(userId);
       const paperEngineStatus = { 
         isRunning: paperStatus.isRunning,
         status: paperStatus.isRunning ? 'running' : 'stopped'

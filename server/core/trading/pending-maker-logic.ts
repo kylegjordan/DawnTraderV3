@@ -1,6 +1,6 @@
 /**
  * P19-B7.2c — PURE pending-maker decision logic, shared by the paper monitor pre-pass
- * (`paper-execution-engine._processPendingMaker`) and the VTS resolve pre-pass
+ * (`active-execution-engine._processPendingMaker`) and the VTS resolve pre-pass
  * (`vts-runner.resolveOpenVirtualTrades`) so the two paths CANNOT drift (R2 parity).
  *
  * Model (Kyle, LOCKED + SIMPLIFIED 2026-07-02):

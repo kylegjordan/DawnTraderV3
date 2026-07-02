@@ -19,7 +19,7 @@
  */
 
 import { EventEmitter } from 'events';
-import { paperOperationQueue, liveOperationQueue } from '../utils/operation-queue.js';
+import { activeOperationQueue, liveOperationQueue } from '../utils/operation-queue.js';
 import { storage } from '../storage.js';
 
 // ========================================
@@ -396,7 +396,7 @@ class HealthMonitor extends EventEmitter {
    */
   private async checkQueueHealth(mode: 'paper' | 'live'): Promise<QueueHealth> {
     try {
-      const queue = mode === 'paper' ? paperOperationQueue : liveOperationQueue;
+      const queue = mode === 'paper' ? activeOperationQueue : liveOperationQueue;
       const status = queue.getStatus();
 
       // Calculate ages

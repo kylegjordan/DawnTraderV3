@@ -526,8 +526,8 @@ class GuardrailPolicyService {
     // 4. Stop the appropriate engine
     try {
       if (mode === 'paper') {
-        const { stopPaperSimulation } = await import('./paper-sim-service.js');
-        await stopPaperSimulation('system'); // System-initiated stop
+        const { stopActiveEngine } = await import('./active-engine-service.js');
+        await stopActiveEngine('system'); // System-initiated stop
         console.log(`[GuardrailPolicy][KS-B] Paper simulation stopped`);
       } else {
         // P19-B3b: the live trading engine does not exist yet (Phase-21 work). The

@@ -164,9 +164,9 @@ export function CoreFourGuardrails({ mode }: { mode: 'paper' | 'live' }) {
   
   // Phase 8.8.3-C7-FIX: Fetch portfolio summary to get Current Balance (same source as guardrail calculations)
   const { data: portfolioData } = useQuery<PortfolioSummaryResponse>({
-    queryKey: ['/api/paper-sim/portfolio-summary'],
+    queryKey: ['/api/active-engine/portfolio-summary'],
     queryFn: async () => {
-      const response = await fetch('/api/paper-sim/portfolio-summary', {
+      const response = await fetch('/api/active-engine/portfolio-summary', {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }

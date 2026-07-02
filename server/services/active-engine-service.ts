@@ -10,7 +10,7 @@ import { storage } from '../storage.js';
 import type { InsertPaperSimSession } from '../../shared/schema.js';
 import { tradingStateSync } from './trading-state-sync.js';
 import { KrakenService } from '../exchanges/kraken/kraken.js';
-import { paperOperationQueue } from '../utils/operation-queue.js';
+import { activeOperationQueue } from '../utils/operation-queue.js';
 import { reset24hWindow, resetHourlyScanHistory } from './fx5-24h-window.js';
 import { b4Diagnostics } from './b4-diagnostics.js';
 import { i1TradeLifecycleDiagnostics } from './i1-trade-lifecycle-diagnostics.js';
@@ -19,11 +19,11 @@ import { rtbMetricsService } from './rtb-metrics-service.js';
 import { krakenWebSocketAdapter } from '../exchanges/kraken/kraken-websocket-adapter.js';
 import { c5FinancialDiagnostics } from './c5-financial-diagnostics.js';
 
-console.log('[41E-S][LIVE-CODE] paper-sim-service.ts loaded');
+console.log('[41E-S][LIVE-CODE] active-engine-service.ts loaded');
 console.log('[8.8.3-I3][LOADED] Trade status consistency module integrated');
 console.log('[41F][QUEUE] Paper operation queue integrated');
 
-export interface PaperSimResult {
+export interface ActiveEngineResult {
   success: boolean;
   message: string;
   data?: any;
@@ -34,11 +34,11 @@ export interface PaperSimResult {
 
 // Phase 41E-S / P19-B4b D5: Auto-clear orphaned managers (manager exists but no DB session).
 // The stale busy-flag / operation-lock branches that used to live here were REMOVED — that
-// mechanism was vestigial (superseded by paperOperationQueue since Phase 41F; verified never
+// mechanism was vestigial (superseded by activeOperationQueue since Phase 41F; verified never
 // acquired anywhere, only defensively cleared). See 1-system-manual/DELETED_COMPONENTS_LOG.md.
 async function clearStaleBusyFlag() {
   // Phase 41E-S: Clear orphaned managers (manager exists but no DB session)
-  const hasManager = !!getGlobalPaperSimManager();
+  const hasManager = !!getGlobalActiveEngineManager();
   if (hasManager) {
     const { db } = await import('../db.js');
     const { paperSimSessions } = await import('../../shared/schema.js');
@@ -54,7 +54,7 @@ async function clearStaleBusyFlag() {
     
     if (!hasDbSession) {
       console.log(`[SAFEGUARD] Detected orphaned manager - clearing...`);
-      clearGlobalPaperSimManager();
+      clearGlobalActiveEngineManager();
     }
   }
 }
@@ -138,7 +138,7 @@ async function populateWatchlistAsync(userId: string, mode: 'paper' | 'live' = '
     // Phase 41F-L.E2E-PURGE: Get mode-level settings
     // B79.0n.STORAGE (2026-05-21 + Langston Step 4 reclassification): empty-watchlist
     // auto-populate is a runtime crypto-trading routing path (feeds
-    // krakenService.getEligiblePairs + seeds paper-sim watchlist). Use explicit
+    // krakenService.getEligiblePairs + seeds active-engine watchlist). Use explicit
     // crypto_spot per (a) crypto-intentional category, NOT the canonical-baseline helper.
     const filters = await storage.getScreenerFilters({ mode, assetClass: 'crypto_spot', filterPath: 'active_quant' });
     
@@ -226,43 +226,43 @@ async function populateWatchlistAsync(userId: string, mode: 'paper' | 'live' = '
 // The accessors default to 'paper' so every existing paper-only caller is behavior-identical;
 // live wiring (Phase 21) passes mode='live'.
 // (The vestigial globalPaperSimOperationLock / globalPaperSimBusyFlag globals were removed —
-//  superseded by paperOperationQueue since Phase 41F. See DELETED_COMPONENTS_LOG.md.)
-type PaperSimMode = 'live' | 'paper';
+//  superseded by activeOperationQueue since Phase 41F. See DELETED_COMPONENTS_LOG.md.)
+type ActiveEngineMode = 'live' | 'paper';
 declare global {
-  var globalPaperPortfolioManagers: Map<PaperSimMode, any> | undefined;
+  var globalActivePortfolioManagers: Map<ActiveEngineMode, any> | undefined;
 }
 
-function _paperSimManagers(): Map<PaperSimMode, any> {
-  if (!global.globalPaperPortfolioManagers) {
-    global.globalPaperPortfolioManagers = new Map();
+function _paperSimManagers(): Map<ActiveEngineMode, any> {
+  if (!global.globalActivePortfolioManagers) {
+    global.globalActivePortfolioManagers = new Map();
   }
-  return global.globalPaperPortfolioManagers;
+  return global.globalActivePortfolioManagers;
 }
 
 /**
  * Phase 27.F.9 / P19-B4b D5: Synchronized per-mode Manager API.
  * Provides atomic access to the active PaperSim manager for a given mode (default 'paper').
  */
-export function getGlobalPaperSimManager(mode: PaperSimMode = 'paper'): any {
+export function getGlobalActiveEngineManager(mode: ActiveEngineMode = 'paper'): any {
   return _paperSimManagers().get(mode) || null;
 }
 
-export function setGlobalPaperSimManager(manager: any, mode: PaperSimMode = 'paper'): void {
+export function setGlobalActiveEngineManager(manager: any, mode: ActiveEngineMode = 'paper'): void {
   _paperSimManagers().set(mode, manager);
   console.log(`[PaperSimService] Manager registered globally (mode=${mode})`);
 }
 
-export function clearGlobalPaperSimManager(mode: PaperSimMode = 'paper'): void {
+export function clearGlobalActiveEngineManager(mode: ActiveEngineMode = 'paper'): void {
   _paperSimManagers().delete(mode);
   console.log(`[PaperSimService] Manager cleared from global scope (mode=${mode})`);
 }
 
 /**
  * Phase 8.8.3-B7.A: Get engine instance by mode for direct reset
- * Used by PaperSessionResetService when no manager is available
+ * Used by ActiveSessionResetService when no manager is available
  */
 export function getEngineByMode(mode: 'paper' | 'live'): any | null {
-  const manager = getGlobalPaperSimManager();
+  const manager = getGlobalActiveEngineManager();
   if (manager && typeof manager.getEngine === 'function') {
     return manager.getEngine();
   }
@@ -275,10 +275,10 @@ export function getEngineByMode(mode: 'paper' | 'live'): any | null {
 
 /**
  * Phase 8.8.3-B7.A: Get orchestrator instance by mode for direct reset
- * Used by PaperSessionResetService when no manager is available
+ * Used by ActiveSessionResetService when no manager is available
  */
 export function getOrchestratorByMode(mode: 'paper' | 'live'): any | null {
-  const manager = getGlobalPaperSimManager();
+  const manager = getGlobalActiveEngineManager();
   if (manager && typeof manager.getOrchestrator === 'function') {
     return manager.getOrchestrator();
   }
@@ -411,7 +411,7 @@ async function reconcileIncompleteTrades(mode: 'paper' | 'live', sessionId: stri
  * - If no running session, creates new session and starts portfolio manager
  * - Emits cluster bus event on new session start
  */
-export async function startPaperSimulation(
+export async function startActiveEngine(
   userId: string,
   options?: {
     startingBalance?: number;
@@ -420,13 +420,13 @@ export async function startPaperSimulation(
     metadata?: any;
     skipAutoWatchlist?: boolean; // Phase 27.F.13.I: Skip slow Kraken API calls during startup
   }
-): Promise<PaperSimResult> {
+): Promise<ActiveEngineResult> {
   const t0 = Date.now();
-  console.log(`[41F][QUEUE] startPaperSimulation called (userId: ${userId}, balance: ${options?.startingBalance})`);
+  console.log(`[41F][QUEUE] startActiveEngine called (userId: ${userId}, balance: ${options?.startingBalance})`);
   
   // Phase 41F: Use operation queue instead of busy flag and operation lock
   try {
-    const queueResult = await paperOperationQueue.enqueue(
+    const queueResult = await activeOperationQueue.enqueue(
     async () => {
       try {
         console.log(`[41D-DEBUG-5] Checking DB for existing session (t+${Date.now()-t0}ms)`);
@@ -435,7 +435,7 @@ export async function startPaperSimulation(
         const existingSession = await storage.getActivePaperSimSession(mode);
         console.log(`[41D-DEBUG-6] DB check complete - exists: ${!!existingSession} (t+${Date.now()-t0}ms)`);
         
-        const existingManager = getGlobalPaperSimManager();
+        const existingManager = getGlobalActiveEngineManager();
         console.log(`[41D-DEBUG-7] Manager check complete - exists: ${!!existingManager} (t+${Date.now()-t0}ms)`);
 
         
@@ -496,10 +496,10 @@ export async function startPaperSimulation(
         if (existingSession && !existingManager) {
           // Reconcile: DB session exists but manager was lost (e.g., server restart)
           console.log('[PaperSimService] Reconciling manager from database session');
-          const { PaperPortfolioManager } = await import('./paper-portfolio-manager.js');
+          const { ActivePortfolioManager } = await import('./active-portfolio-manager.js');
           // Phase 27.F.13.O + Phase 3D: Use mode instead of userId
-          const manager = new PaperPortfolioManager(mode, userId);
-          setGlobalPaperSimManager(manager);
+          const manager = new ActivePortfolioManager(mode, userId);
+          setGlobalActiveEngineManager(manager);
           await manager.start('api');
           
           // Phase 8.8.3-I6-FIX: Set trading mode to 'paper' for correct WebSocket broadcasts
@@ -524,7 +524,7 @@ export async function startPaperSimulation(
         if (!existingSession && existingManager) {
           // Orphaned manager exists without DB session - clear it
           console.warn('[PaperSimService] Orphaned manager detected without DB session - clearing');
-          clearGlobalPaperSimManager();
+          clearGlobalActiveEngineManager();
         }
 
         // No existing session - create new one atomically
@@ -583,13 +583,13 @@ export async function startPaperSimulation(
 
         // Phase 27.F.9: Create and register manager atomically (both local and global)
         // Phase 27.F.13.O: Use mode-based constructor
-        console.log('[ENGINE_CHECKPOINT_8] Importing PaperPortfolioManager...');
-        const { PaperPortfolioManager } = await import('./paper-portfolio-manager.js');
+        console.log('[ENGINE_CHECKPOINT_8] Importing ActivePortfolioManager...');
+        const { ActivePortfolioManager } = await import('./active-portfolio-manager.js');
         console.log('[ENGINE_CHECKPOINT_9] Creating manager instance...');
-        const manager = new PaperPortfolioManager(mode, userId);
+        const manager = new ActivePortfolioManager(mode, userId);
         
         console.log('[ENGINE_CHECKPOINT_10] Registering manager globally...');
-        setGlobalPaperSimManager(manager);
+        setGlobalActiveEngineManager(manager);
         console.log('[ENGINE_CHECKPOINT_11] Manager registered, starting manager...');
         
         // Phase 41C-FIX: Start manager synchronously with proper error handling
@@ -665,7 +665,7 @@ export async function startPaperSimulation(
             }
             
             // Clean up manager reference and mark session as failed
-            clearGlobalPaperSimManager();
+            clearGlobalActiveEngineManager();
             const failedSession = await storage.getPaperSimSessionBySessionId(sessionId);
             if (failedSession) {
               await storage.updatePaperSimSession(failedSession.id, { status: 'failed' });
@@ -676,7 +676,7 @@ export async function startPaperSimulation(
         } catch (managerError: any) {
           console.error('[ENGINE_ERROR] Manager start failed:', managerError);
           // Rollback on manager start failure
-          clearGlobalPaperSimManager();
+          clearGlobalActiveEngineManager();
           // Find the session we just created and mark it as failed
           const failedSession = await storage.getPaperSimSessionBySessionId(sessionId);
           if (failedSession) {
@@ -700,7 +700,7 @@ export async function startPaperSimulation(
         // Emit cluster bus event for distributed awareness
         try {
           const { clusterBus } = await import('./cluster-bus.js');
-          clusterBus.emit('paper_sim_started', {
+          clusterBus.emit('active_engine_started', {
             sessionId,
             userId,
             startedAt: startedAt.toISOString(),
@@ -732,7 +732,7 @@ export async function startPaperSimulation(
         };
       } catch (error: any) {
         // Phase 41C-FIX: Complete rollback - clean up manager AND database session
-        clearGlobalPaperSimManager();
+        clearGlobalActiveEngineManager();
         
         // Roll back database session if it was created
         try {
@@ -775,7 +775,7 @@ export async function startPaperSimulation(
     
     return queueResult;
   } catch (error: any) {
-    console.error('[41F][QUEUE] startPaperSimulation queue error:', error);
+    console.error('[41F][QUEUE] startActiveEngine queue error:', error);
     return {
       success: false,
       message: `Error starting paper trading simulation: ${error.message}`,
@@ -791,12 +791,12 @@ export async function startPaperSimulation(
  * - If running session exists, stops manager and updates database
  * - Emits cluster bus event on successful stop
  */
-export async function stopPaperSimulation(userId: string): Promise<PaperSimResult> {
-  console.log(`[41F][QUEUE] stopPaperSimulation called (userId: ${userId})`);
+export async function stopActiveEngine(userId: string): Promise<ActiveEngineResult> {
+  console.log(`[41F][QUEUE] stopActiveEngine called (userId: ${userId})`);
   
   // Phase 41F: Use operation queue instead of busy flag and operation lock
   try {
-    const queueResult = await paperOperationQueue.enqueue(
+    const queueResult = await activeOperationQueue.enqueue(
     async () => {
       try {
         // Phase 3D: Mode-based session lookup
@@ -808,7 +808,7 @@ export async function stopPaperSimulation(userId: string): Promise<PaperSimResul
           console.log('[PaperSimService] Paper trading already stopped or not started');
           
           // Phase 27.F.9: Clean up orphaned in-memory manager if exists
-          const orphanedManager = getGlobalPaperSimManager();
+          const orphanedManager = getGlobalActiveEngineManager();
           if (orphanedManager) {
             console.log('[PaperSimService] Cleaning up orphaned manager');
             try {
@@ -816,7 +816,7 @@ export async function stopPaperSimulation(userId: string): Promise<PaperSimResul
             } catch (cleanupError) {
               console.warn('[PaperSimService] Error cleaning up manager:', cleanupError);
             }
-            clearGlobalPaperSimManager();
+            clearGlobalActiveEngineManager();
           }
           
           return {
@@ -828,7 +828,7 @@ export async function stopPaperSimulation(userId: string): Promise<PaperSimResul
         }
 
         // Phase 27.F.9: Stop portfolio manager and clear both references
-        const currentManager = getGlobalPaperSimManager();
+        const currentManager = getGlobalActiveEngineManager();
         const t0 = Date.now();
         
         if (currentManager) {
@@ -904,7 +904,7 @@ export async function stopPaperSimulation(userId: string): Promise<PaperSimResul
               // Non-blocking: continue with stop even if reconciliation fails
             }
             
-            clearGlobalPaperSimManager();
+            clearGlobalActiveEngineManager();
             console.log(`[8.8.3-I2][STOP_FLOW][9_COMPLETE] Manager shutdown completed in ${Date.now() - t0}ms`);
           } finally {
             // 5. Always clear the stop flag in finally block
@@ -955,7 +955,7 @@ export async function stopPaperSimulation(userId: string): Promise<PaperSimResul
         // Emit cluster bus event for distributed awareness
         try {
           const { clusterBus } = await import('./cluster-bus.js');
-          clusterBus.emit('paper_sim_stopped', {
+          clusterBus.emit('active_engine_stopped', {
             sessionId: existingSession.sessionId,
             userId,
             stoppedAt: stoppedAt.toISOString(),
@@ -1024,7 +1024,7 @@ export async function stopPaperSimulation(userId: string): Promise<PaperSimResul
     
     return queueResult;
   } catch (error: any) {
-    console.error('[41F][QUEUE] stopPaperSimulation queue error:', error);
+    console.error('[41F][QUEUE] stopActiveEngine queue error:', error);
     return {
       success: false,
       message: `Error stopping paper trading simulation: ${error.message}`,
@@ -1039,14 +1039,14 @@ export async function stopPaperSimulation(userId: string): Promise<PaperSimResul
  * - Reconciles with in-memory manager state
  * - Returns unified status with diagnostics
  */
-export async function getPaperSimulationStatus(userId: string): Promise<any> {
+export async function getActiveEngineStatus(userId: string): Promise<any> {
   try {
     // Phase 3D: Get session from database using mode (single source of truth)
     const mode = 'paper';
     const dbSession = await storage.getActivePaperSimSession(mode);
     
     // Get in-memory manager state (check for both null and undefined)
-    const hasManager = !!getGlobalPaperSimManager('paper');
+    const hasManager = !!getGlobalActiveEngineManager('paper');
     
     // State reconciliation diagnostics
     const isConsistent = (dbSession !== undefined) === hasManager;
@@ -1098,7 +1098,7 @@ export function resetPaperSimService(): void {
   
   // Clear in-memory manager (per-mode). P19-B4b D5: routed through the accessor; the vestigial
   // operation-lock clear was removed (mechanism deleted — see DELETED_COMPONENTS_LOG.md).
-  const orphanedManager = getGlobalPaperSimManager('paper');
+  const orphanedManager = getGlobalActiveEngineManager('paper');
   if (orphanedManager) {
     console.log('[PaperSimService] Clearing orphaned manager from previous session');
     try {
@@ -1111,7 +1111,7 @@ export function resetPaperSimService(): void {
     } catch (error) {
       console.warn('[PaperSimService] Failed to stop orphaned manager:', error);
     }
-    clearGlobalPaperSimManager('paper');
+    clearGlobalActiveEngineManager('paper');
   }
 
   console.log('[PaperSimService] ✅ Reset complete - clean state confirmed');
@@ -1144,9 +1144,9 @@ export async function resumeActiveEngines(): Promise<void> {
         console.log(`[R9.3.HF-4.FIX] Found active session: ${existingSession.sessionId}`);
         
         // Import and start the manager
-        const { PaperPortfolioManager } = await import('./paper-portfolio-manager.js');
-        const manager = new PaperPortfolioManager('paper', existingSession.startedBy || 'system-resume');
-        setGlobalPaperSimManager(manager);
+        const { ActivePortfolioManager } = await import('./active-portfolio-manager.js');
+        const manager = new ActivePortfolioManager('paper', existingSession.startedBy || 'system-resume');
+        setGlobalActiveEngineManager(manager);
         await manager.start('internal');
         
         // Set trading mode for live pricing

@@ -231,7 +231,7 @@ export function FilterInsights() {
   // REB 2.8.9: Fixed React Query polling - added refetchIntervalInBackground and staleTime:0
   // This ensures polling NEVER pauses when tab loses focus or modal opens
   const { data: scanLatestData, isLoading: isLoadingScan } = useQuery<ScanLatestResponse>({
-    queryKey: ['/api/paper-sim/diagnostics/scan-latest?mode=paper'],
+    queryKey: ['/api/active-engine/diagnostics/scan-latest?mode=paper'],
     refetchInterval: 5000, // Refresh every 5 seconds for near-real-time updates
     refetchIntervalInBackground: true, // REB 2.8.9: CRITICAL - Keep polling when tab loses focus
     refetchOnWindowFocus: true,
@@ -242,7 +242,7 @@ export function FilterInsights() {
   // REB 2.8.9: Fixed React Query polling - added refetchIntervalInBackground and staleTime:0
   // REB 2.8.10: Changed from 30s to 5s to sync with scan-latest updates
   const { data: scan24hData, isLoading: isLoading24h } = useQuery<Scan24hResponse>({
-    queryKey: ['/api/paper-sim/diagnostics/scan-24h?mode=paper'],
+    queryKey: ['/api/active-engine/diagnostics/scan-24h?mode=paper'],
     refetchInterval: 5000, // REB 2.8.10: Match scan-latest interval for synchronized updates
     refetchIntervalInBackground: true, // REB 2.8.9: CRITICAL - Keep polling when tab loses focus
     refetchOnWindowFocus: true,

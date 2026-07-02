@@ -348,7 +348,7 @@ class E2EValidator {
       // Test key API endpoints  
       const endpoints = [
         { path: '/api/filters/diagnostics', name: 'Filter Insights' },
-        { path: '/api/paper-sim/diagnostics/scan?mode=paper&limit=10', name: 'Diagnostic Scan' },
+        { path: '/api/active-engine/diagnostics/scan?mode=paper&limit=10', name: 'Diagnostic Scan' },
         { path: '/api/paper/trades?limit=50', name: 'Trades' },
         { path: '/api/portfolio/overview?mode=paper', name: 'Portfolio Overview' },
         { path: '/api/paper/metrics/earnings-chart?days=30', name: 'Earnings Chart' }

@@ -96,7 +96,7 @@ export default function Watchlist() {
   
   // Phase 27.F.19b: Fetch diagnostics for nextScanAt
   const { data: diagnosticsData } = useQuery<{ nextScanAt?: string }>({
-    queryKey: ['/api/paper-sim/diagnostics/scan?mode=paper&limit=10&trace=false&strategies=false'],
+    queryKey: ['/api/active-engine/diagnostics/scan?mode=paper&limit=10&trace=false&strategies=false'],
     staleTime: 10 * 1000, // 10 seconds
     refetchInterval: 10 * 1000, // Auto-refresh every 10 seconds
   });

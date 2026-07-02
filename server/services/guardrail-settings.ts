@@ -81,7 +81,7 @@ export async function getPortfolioBalanceV2(
 
     // [9.6.3] Get realized P/L from closed trades - mode-aware
     // Import dynamically to avoid circular dependency
-    const { getEngineSessionStart } = await import('./paper-execution-engine.js');
+    const { getEngineSessionStart } = await import('./active-execution-engine.js');
     const sessionStart = getEngineSessionStart(mode);
     
     // [9.6.3] Mode-aware trade query: paper uses getPaperSimTrades, live uses getTrades

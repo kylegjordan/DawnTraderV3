@@ -45,8 +45,8 @@ export function useSystemHealth() {
     // Detect paper trading status change
     if (prev.paperTrading?.isRunning !== health.paperTrading?.isRunning) {
       console.log('[SystemHealth] Paper trading status changed, refreshing dashboard...');
-      queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/status'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/paper-sim/metrics'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/active-engine/status'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/active-engine/metrics'] });
     }
 
     // Detect goals count change (for current mode)

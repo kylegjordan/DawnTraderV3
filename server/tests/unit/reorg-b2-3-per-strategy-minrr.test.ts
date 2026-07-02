@@ -22,7 +22,7 @@ import {
   __resetUnknownStrategyCountsForTest,
 } from '../../core/observability/unknown-strategy-counter.js';
 import { _seedModuleCacheForTests } from '../../services/module-constants-service.js';
-import type { StrategyType } from '../../services/paper-position-sizing.js';
+import type { StrategyType } from '../../services/active-position-sizing.js';
 
 const K = (assetClass: string, strategy: string, constantName: string, value: number) => ({
   moduleName: 'expectancy_gates', exchange: '*', assetClass, strategy, regime: '*', constantName, value,

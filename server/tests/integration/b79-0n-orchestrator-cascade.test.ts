@@ -34,12 +34,12 @@ vi.mock('../../services/module-constants-service.js', () => ({
         return key.assetClass === 'xstock_spot' ? 0.50 : 0.15;
       }
     }
-    if (module === 'paper_sizing' && name === 'max_position_buffer_factor') return 0.97;
+    if (module === 'active_sizing' && name === 'max_position_buffer_factor') return 0.97;
     throw new Error(`[mock] unrecognized constant ${module}.${name}`);
   },
 }));
 
-import { sizePaperPositionForSignal } from '../../services/paper-position-sizing.js';
+import { sizeActivePositionForSignal } from '../../services/active-position-sizing.js';
 import { getPatternPoolGuardrailsForAssetClass } from '../../asset_classes/pattern-pool-dispatch.js';
 
 describe('B79.0n.ORCHESTRATOR — per-class cascade integration', () => {
@@ -62,7 +62,7 @@ describe('B79.0n.ORCHESTRATOR — per-class cascade integration', () => {
     };
 
     it('xstock pattern signal sized against xstock 0.50 MAX_POSITION_PCT', () => {
-      const result = sizePaperPositionForSignal({
+      const result = sizeActivePositionForSignal({
         ...baseParams,
         symbol: 'AAPLx/USD',
         strategy: 'breakout',
@@ -78,7 +78,7 @@ describe('B79.0n.ORCHESTRATOR — per-class cascade integration', () => {
     });
 
     it('crypto pattern signal sized against crypto 0.15 MAX_POSITION_PCT (unchanged)', () => {
-      const result = sizePaperPositionForSignal({
+      const result = sizeActivePositionForSignal({
         ...baseParams,
         symbol: 'BTC/USD',
         strategy: 'breakout',
@@ -89,13 +89,13 @@ describe('B79.0n.ORCHESTRATOR — per-class cascade integration', () => {
     });
 
     it('xstock pattern signal allows LARGER position than crypto for the same risk inputs (0.50 vs 0.15 cap)', () => {
-      const xstockResult = sizePaperPositionForSignal({
+      const xstockResult = sizeActivePositionForSignal({
         ...baseParams,
         symbol: 'AAPLx/USD',
         strategy: 'breakout',
         assetClass: 'xstock_spot',
       });
-      const cryptoResult = sizePaperPositionForSignal({
+      const cryptoResult = sizeActivePositionForSignal({
         ...baseParams,
         symbol: 'BTC/USD',
         strategy: 'breakout',

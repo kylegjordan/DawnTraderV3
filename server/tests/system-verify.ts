@@ -87,14 +87,14 @@ async function test2_PaperTradingStart(): Promise<void> {
   
   // Stop any existing session first
   try {
-    await apiCall('POST', '/api/paper-sim/stop');
+    await apiCall('POST', '/api/active-engine/stop');
     await new Promise(resolve => setTimeout(resolve, 500));
   } catch (err) {
     // Ignore if no session was running
   }
   
   // Start paper trading
-  await apiCall('POST', '/api/paper-sim/start');
+  await apiCall('POST', '/api/active-engine/start');
   
   // Wait a moment for registration
   await new Promise(resolve => setTimeout(resolve, 1000));
@@ -167,7 +167,7 @@ async function test4_DashboardSync(): Promise<void> {
   console.log('   - This test verifies backend data is accessible');
   
   // Verify dashboard endpoints return fresh data
-  const status = await apiCall('GET', '/api/paper-sim/status');
+  const status = await apiCall('GET', '/api/active-engine/status');
   const goalsSummary = await apiCall('GET', '/api/goals/summary?mode=paper');
   
   if (!status.isRunning) {
@@ -187,7 +187,7 @@ async function test5_PaperTradingStop(): Promise<void> {
   console.log('\n🛑 Test 5: Stop Paper Trading');
   
   // Stop paper trading
-  await apiCall('POST', '/api/paper-sim/stop');
+  await apiCall('POST', '/api/active-engine/stop');
   
   // Wait a moment for deregistration
   await new Promise(resolve => setTimeout(resolve, 1000));
