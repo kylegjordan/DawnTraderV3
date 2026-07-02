@@ -7,7 +7,7 @@
  * Commands:
  *   add        Insert a scheduled alert
  *   fire-due   Dispatcher: promote scheduled entries whose triggers_at <= NOW()
- *              to active; push critical-severity entries to Telegram
+ *              to active; post warning/critical entries to the Discord alerts webhook
  *   list       Print alerts (optionally filtered by state and/or category)
  *   ack        Acknowledge an alert by id
  *   resolve    Mark an alert resolved (terminal state, kept for history)
@@ -23,9 +23,12 @@
  *   npm run system-alerts -- ack abc-123-uuid --by kyle
  *   npm run system-alerts -- resolve abc-123-uuid --by cc-session-2026-05-31
  *
- * Telegram push: requires CCDT_BOT_TOKEN_FILE env var pointing to
- * /etc/langston/ccdt-bot.env (or wherever the bot token lives).
- * Critical-severity alerts ping Kyle's DM at chat_id 8734856533.
+ * Discord push: reads the secret alerts-webhook URL from ALERTS_DISCORD_WEBHOOK_URL
+ * or /etc/langston/discord-alerts-webhook.env (B-DISCORD OBJ-5). Langston's bridge
+ * always-engages on the webhook's id, so posting the alert IS the Langston engagement.
+ * (The Telegram push + Langston SSH-invoke legs were REMOVED by B-TELEGRAM-DECOMM-2,
+ * 2026-07-02 — see DELETED_COMPONENTS_LOG.md; history: B-NEW-43 #135 severity routing,
+ * B-NEW-46 handler relay, B-DISCORD isolation gate.)
  *
  * Reference: B_NEW_40_SCOPE.md §2.8
  * ═════════════════════════════════════════════════════════════════════════════
@@ -64,138 +67,13 @@ function requireFlag(args: string[], name: string): string {
   return v;
 }
 
-// ─── Telegram push + Langston invoke (for fire-due) ─────────────────────────
-
-const KYLE_DM_CHAT_ID = 8734856533; // Kyle's private DM chat with @CCDTCommsBot
-const TELEGRAM_GROUP_CHAT_ID = -1003575211453; // Dawn Trader HQ group
-const TELEGRAM_BATCH_THREAD = 21; // Batch Implementation topic
-
-// B-DISCORD isolation (2026-06-24, Kyle directive): during the Discord-only test window, suppress the
-// Telegram alert legs — the alert post (pushToTelegram) AND the Telegram langston-alert-handler invoke
-// (invokeLangstonForAlert, which posts Langston's triage to Telegram) — so alerts + Langston's alert
-// triage flow over Discord ONLY. The Discord webhook path still engages Langston (the bridge
-// always-engages on the alerts webhook_id), so closure coverage is unchanged. Env-gated = a reversible
-// flip, not a code rollback; becomes moot/removable at the comms cutover (#333).
-const ALERT_DISCORD_ISOLATION = process.env.ALERT_DISCORD_ISOLATION === '1';
-
-// B-NEW-43 Phase 4 (2026-05-23, RUNNING_ISSUES #135 fix): the pre-fix
-// dispatcher only pushed `critical` severity to Kyle's DM. Warning-tier soak-
-// verification alerts (which are the majority) were silently promoted to
-// `active` with no Telegram visibility — Kyle relied entirely on the §10.5
-// per-turn pull check, which has two coverage gaps (no active CC session,
-// Langston not persistently running). This batch fixes both gaps by (1)
-// posting EVERY non-info-severity promotion to group topic 21 for Kyle
-// visibility, and (2) invoking Langston via SSH so a Langston session runs
-// and performs his side of the §10.5 surfacing.
-
-async function readTokenFile(tokenFile: string): Promise<string | null> {
-  if (!fs.existsSync(tokenFile)) {
-    console.warn(`[fire-due] Telegram bot-token file ${tokenFile} not found — skipping push`);
-    return null;
-  }
-  const tokenLine = fs.readFileSync(tokenFile, 'utf-8').split('\n').find((l) => l.includes('TOKEN='));
-  if (!tokenLine) {
-    console.warn(`[fire-due] no TOKEN= line in ${tokenFile} — skipping push`);
-    return null;
-  }
-  return tokenLine.split('=').slice(1).join('=').trim();
-}
-
-function formatAlertText(alert: SystemAlert, mode: 'markdown' | 'plain'): string {
-  if (mode === 'markdown') {
-    return (
-      `🚨 *SYSTEM ALERT — ${alert.severity.toUpperCase()}*\n\n` +
-      `*${alert.title}*\n\n` +
-      `${alert.body}\n\n` +
-      `_Category: ${alert.category}_\n` +
-      `_Alert ID: \`${alert.id}\`_\n` +
-      (Object.keys(alert.metadata).length > 0
-        ? `_Metadata: \`${JSON.stringify(alert.metadata).slice(0, 300)}\`_`
-        : '')
-    );
-  }
-  return (
-    `SYSTEM ALERT — ${alert.severity.toUpperCase()}\n\n` +
-    `${alert.title}\n\n` +
-    `${alert.body}\n\n` +
-    `Category: ${alert.category}\n` +
-    `Alert ID: ${alert.id}\n` +
-    (Object.keys(alert.metadata).length > 0
-      ? `Metadata: ${JSON.stringify(alert.metadata).slice(0, 300)}`
-      : '')
-  );
-}
-
-async function telegramSend(
-  token: string,
-  chatId: number,
-  text: string,
-  threadId?: number,
-  parseMode: 'Markdown' | 'plain' = 'Markdown',
-): Promise<boolean> {
-  // B-NEW-43 Phase 4 chunk-12 (2026-05-23, post-token-deploy hotfix):
-  // The parseMode parameter previously defaulted to 'Markdown' with type
-  // `'Markdown' | undefined`. The Markdown-parse-fail fallback recursed with
-  // explicit `undefined`, but JS default-parameter semantics treat explicit-
-  // undefined as use-the-default, so the recursion re-enabled Markdown
-  // forever — producing the infinite "returned not-ok: can't parse entities"
-  // loop observed when Phase 4 first went live on staging with a real token.
-  // Switched the sentinel to the literal string 'plain' so the recursion is
-  // explicit and the default-substitution trap is gone.
-  try {
-    const body: Record<string, unknown> = { chat_id: chatId, text };
-    if (threadId !== undefined) body.message_thread_id = threadId;
-    if (parseMode === 'Markdown') body.parse_mode = 'Markdown';
-    const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    const data = (await res.json()) as { ok?: boolean; description?: string };
-    if (!data.ok) {
-      console.warn(`[fire-due] Telegram send to chat=${chatId} thread=${threadId} returned not-ok:`, data.description);
-      // Markdown parse failures: retry once with parseMode='plain' (no recursion past this — 'plain' branch falls through to return false).
-      if (parseMode === 'Markdown' && data.description?.toLowerCase().includes("can't parse")) {
-        return telegramSend(token, chatId, text, threadId, 'plain');
-      }
-    }
-    return data.ok ?? false;
-  } catch (err) {
-    console.warn(`[fire-due] Telegram send to chat=${chatId} thread=${threadId} threw:`, err);
-    return false;
-  }
-}
-
-// Returns true iff at least one Telegram destination actually delivered (B-ALERT-PROTOCOL
-// #340: the re-surface gates its back-off advance on real delivery across the sinks).
-async function pushToTelegram(alert: SystemAlert): Promise<boolean> {
-  const tokenFile = process.env.CCDT_BOT_TOKEN_FILE || '/etc/langston/ccdt-bot.env';
-  const token = await readTokenFile(tokenFile);
-  if (!token) return false;
-  const markdownText = formatAlertText(alert, 'markdown');
-  let delivered = false;
-
-  // Critical-tier: keep the DM push for backwards-compat (Kyle sees it
-  // separately from the group thread).
-  if (alert.severity === 'critical') {
-    if (await telegramSend(token, KYLE_DM_CHAT_ID, markdownText)) delivered = true;
-  }
-
-  // Warning + critical: post to group topic 21 so the alert is also visible
-  // alongside ordinary CC ↔ Langston traffic. info-severity skips both paths.
-  if (alert.severity === 'warning' || alert.severity === 'critical') {
-    if (await telegramSend(token, TELEGRAM_GROUP_CHAT_ID, markdownText, TELEGRAM_BATCH_THREAD)) delivered = true;
-  }
-  return delivered;
-}
-
 // ─── Discord push (B-DISCORD OBJ-5) ─────────────────────────────────────────
 // Posts the alert DIRECT to a dedicated Discord "alerts" webhook (Langston-approved:
 // staging posts direct, NOT via the Helsinki bridge, so a critical alert survives the
 // bridge box being down). The webhook URL is a SECRET → read from a staging file
 // (never the repo); absent ⇒ this is a no-op, so the path stays inert until Kyle
 // provisions the webhook. The webhook's intrinsic webhook_id is the structured marker
-// Langston's bridge always-engages on. Severity gating mirrors Telegram (info skips).
+// Langston's bridge always-engages on. Severity gating: warning+critical post, info skips.
 
 function formatAlertTextDiscord(alert: SystemAlert): string {
   const meta =
@@ -254,7 +132,7 @@ async function pushToDiscord(alert: SystemAlert): Promise<boolean> {
     // Inert until Kyle provisions the alerts webhook — no Discord posting yet.
     return false;
   }
-  // Mirror Telegram severity gating: warning + critical post; info skips.
+  // Severity gating (carried from the B-NEW-43 #135 routing): warning + critical post; info skips.
   if (alert.severity === 'warning' || alert.severity === 'critical') {
     const ok = await discordWebhookSend(webhookUrl, formatAlertTextDiscord(alert));
     if (ok) console.log(`[fire-due] Discord alert posted for ${alert.id}`);
@@ -264,13 +142,12 @@ async function pushToDiscord(alert: SystemAlert): Promise<boolean> {
 }
 
 // ─── B-ALERT-PROTOCOL (#340): re-surface = "fire again, louder" ─────────────
-// Reworked after Langston Step-4 (CHANGES-NEEDED): a re-surface reuses the FIRE path's
-// FULL delivery (pushToTelegram + pushToDiscord + invokeLangstonForAlert) so it actually
-// re-engages Langston (→ he re-emits the owner marker → the owner CC is re-woken to chase
-// closure) and reaches whatever channel is live — NOT a Discord-webhook-only wall-post that
-// drops two sinks and silently delivers nothing in the Telegram-primary era. We just reframe
-// the alert (louder title + owner/age + the Kyle escalation on the 2nd+) and hand it to the
-// same sinks; the orchestration (processResurface) advances the back-off ONLY on real delivery.
+// A re-surface reuses the FIRE path's delivery (pushToDiscord — the sole sink since
+// B-TELEGRAM-DECOMM-2) so it actually re-engages Langston (the alerts webhook always-engages
+// his bridge → he re-emits the owner marker → the owner CC is re-woken to chase closure).
+// We reframe the alert (louder title + owner/age + the Kyle escalation on the 2nd+) and hand
+// it to the same sink; the orchestration (processResurface) advances the back-off ONLY on
+// real delivery, so a Discord outage does not consume the re-surface window.
 function frameResurface(alert: SystemAlert, d: ResurfaceDecision, nowMs: number): SystemAlert {
   const firedMs = alert.fired_at ? Date.parse(alert.fired_at) : Date.parse(alert.created_at);
   const hrs = Math.max(0, Math.round((nowMs - firedMs) / 3_600_000));
@@ -283,85 +160,6 @@ function frameResurface(alert: SystemAlert, d: ResurfaceDecision, nowMs: number)
     title: `⏰ RE-SURFACE #${d.resurfaceCount} — STILL UNRESOLVED: ${alert.title}`,
     body: `${owner}, open ~${hrs}h. ${alert.body}\nClose it: resolve ${alert.id} --by <you>.${kyle}`,
   };
-}
-
-/**
- * Single-quote a string for safe inclusion in a remote `sudo -u langston bash`
- * argv. Wraps in single quotes and escapes embedded single quotes via the
- * '\'' idiom. Alert fields (title/body) are operator/CC-authored, but quoting
- * defensively keeps a stray quote from breaking the remote command.
- */
-function shellSingleQuote(s: string): string {
-  return `'${String(s).replace(/'/g, `'\\''`)}'`;
-}
-
-/**
- * Invoke Langston for an active alert. Delegates to the Helsinki-side wrapper
- * `langston-alert-handler.sh` (B-NEW-46), which runs a fresh Langston
- * claude-cli session, logs the response, AND relays it to Telegram topic 21
- * via @LangstonDTBot so Kyle sees a visible confirmation — closing the gap
- * where Langston's alert handling was a silent server-side acknowledgment
- * (Kyle directive 2026-05-28).
- *
- * The SSH call launches the wrapper detached (setsid) ON Helsinki and returns
- * immediately, so the dispatcher does NOT block on Langston's multi-minute
- * session. Because the SSH itself is now fast, we AWAIT it and capture the
- * exit code (B-NEW-46 Part C / Langston B-NEW-45 Q4.a) — an SSH-level failure
- * (can't reach Helsinki) is the one failure the wrapper-side relay can't cover,
- * so it's logged here. All other failure modes (session error / timeout /
- * empty) are relayed to Telegram by the wrapper itself (its 5a invariant).
- *
- * Skipped in dev / non-staging envs (LANGSTON_INVOKE=0 disables explicitly).
- */
-async function invokeLangstonForAlert(alert: SystemAlert): Promise<boolean> {
-  if (process.env.LANGSTON_INVOKE === '0') {
-    console.log(`[fire-due] LANGSTON_INVOKE=0 — skipping Langston invoke for ${alert.id}`);
-    return false;
-  }
-  if (alert.severity === 'info') return false;
-
-  const { execFile } = await import('node:child_process');
-  const { promisify } = await import('node:util');
-  const execFileAsync = promisify(execFile);
-
-  // Positional args to the wrapper: id severity category title body.
-  // Body capped at 2000 chars (the wrapper embeds it in the claude-cli prompt).
-  const args = [alert.id, alert.severity, alert.category, alert.title, alert.body.slice(0, 2000)];
-  const quotedArgs = args.map(shellSingleQuote).join(' ');
-
-  // Launch the wrapper detached on Helsinki via setsid (survives SSH close);
-  // SSH returns once the background job is launched, not when it finishes.
-  //
-  // NO `bash -c '...'` wrapper: ssh already runs the remote command through
-  // the login shell, so the redirects + `&` are interpreted there. Wrapping in
-  // `bash -c '...'` would open an outer single-quote region that structurally
-  // collides with shellSingleQuote's inner `'<arg>'` quoting — the args would
-  // leak as outer-shell word boundaries (title truncated at first space, body
-  // dropped). Langston B-NEW-46 Step 4 blocker; verified via remote-shell repro
-  // that the un-wrapped form delivers all 5 args with spaces intact.
-  const remoteCmd =
-    `sudo -u langston setsid /usr/local/bin/langston-alert-handler.sh ${quotedArgs} ` +
-    `>> /var/log/langston-alert-invokes.log 2>&1 < /dev/null &`;
-
-  try {
-    await execFileAsync(
-      'ssh',
-      ['-o', 'StrictHostKeyChecking=no', '-o', 'ConnectTimeout=10', 'root@204.168.141.77', remoteCmd],
-      { timeout: 20000 },
-    );
-    console.log(`[fire-due] Langston invoke launched on Helsinki for alert ${alert.id} (handler relays response to Telegram)`);
-    return true;
-  } catch (err) {
-    // Part C: SSH-level failure — the wrapper never ran, so its 5a relay can't
-    // fire. This console.error line is the only signal that the invoke didn't
-    // reach Langston; the dispatcher systemd unit captures stderr via
-    // StandardError=append:/var/log/dawntrader/system-alerts-dispatcher.log.
-    console.error(
-      `[fire-due] Langston invoke SSH FAILED for alert ${alert.id} (could not reach Helsinki): ` +
-        `${err instanceof Error ? err.message : String(err)}`,
-    );
-    return false;
-  }
 }
 
 // ─── Subcommand implementations ────────────────────────────────────────────
@@ -394,14 +192,12 @@ async function cmdFireDue(): Promise<void> {
     console.log(`[fire-due] promoted ${promoted.length} alert(s) to active`);
     for (const alert of promoted) {
       console.log(`  - ${alert.id} [${alert.severity}] ${alert.title}`);
-      // B-NEW-43 Phase 4 (2026-05-23, RUNNING_ISSUES #135 fix):
-      //   - Telegram push routes by severity (critical → DM + group topic 21;
-      //     warning → group topic 21 only; info → no push).
-      //   - Langston SSH invoke for warning + critical so a Langston session
-      //     runs and performs §10.5 surfacing on his side. Fire-and-forget.
-      if (!ALERT_DISCORD_ISOLATION) await pushToTelegram(alert);
-      await pushToDiscord(alert); // B-DISCORD OBJ-5: also post to the Discord alerts webhook (inert until provisioned)
-      if (!ALERT_DISCORD_ISOLATION) await invokeLangstonForAlert(alert);
+      // Sole delivery sink (B-TELEGRAM-DECOMM-2): the Discord alerts webhook —
+      // warning + critical post (info skips); posting it always-engages
+      // Langston's bridge (webhook_id), which performs the §10.5 triage +
+      // owner-routing. The §10.5 per-turn pull of the queue file remains the
+      // push-independent backstop.
+      await pushToDiscord(alert);
     }
   }
 
@@ -414,10 +210,7 @@ async function cmdFireDue(): Promise<void> {
   const nowMs = Date.now();
   const results = await processResurface(nowMs, async (alert, d) => {
     const framed = frameResurface(alert, d, nowMs);
-    const t = ALERT_DISCORD_ISOLATION ? false : await pushToTelegram(framed);
-    const dc = await pushToDiscord(framed);
-    const lg = ALERT_DISCORD_ISOLATION ? false : await invokeLangstonForAlert(framed);
-    return t || dc || lg; // delivered iff ANY sink succeeded (Discord only when isolation is on)
+    return pushToDiscord(framed); // delivered iff the sole sink succeeded (behavior-identical to the isolation-on state: false || dc || false)
   });
   const delivered = results.filter((r) => r.delivered);
   if (delivered.length > 0) {
@@ -428,7 +221,7 @@ async function cmdFireDue(): Promise<void> {
     // No channel delivered — the closure guarantee could not reach anyone. Do NOT advance
     // the back-off (already gated in processResurface); surface it loudly so the dead-channel
     // condition is itself visible. Retries next tick.
-    console.warn(`[fire-due] WARNING: ${undelivered.length} stale alert(s) had NO delivery channel (Telegram+Discord+Langston all failed/unconfigured) — back-off NOT advanced, retrying next tick: ${undelivered.map((r) => r.id).join(', ')}`);
+    console.warn(`[fire-due] WARNING: ${undelivered.length} stale alert(s) had NO delivery channel (the Discord alerts webhook failed or is unconfigured — the sole push sink since B-TELEGRAM-DECOMM-2) — back-off NOT advanced, retrying next tick: ${undelivered.map((r) => r.id).join(', ')}`);
   }
 }
 
