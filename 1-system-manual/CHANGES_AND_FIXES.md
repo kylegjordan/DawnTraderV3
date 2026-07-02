@@ -27,6 +27,21 @@
 
 ---
 
+## FIX-2026-07-02-A — P19-B7.2a (#330): the cost-cache's second fee road removed (one road to the fee fact)
+
+**Class:** fee-provenance consolidation (a duplicate resolver + a buried clamp on a governed value + a staleness window, all structural — no live price divergence existed). **Fixed:** 2026-07-02, commit `4b9d62fc9`, Langston Step-1 rev2/Step-2/Step-4 all reviewed (two real probe-undercounts caught and folded: 4 direct `.fee` cache readers; 4 `avgFee` stat readers). **Provenance change, not price — 0.008 either road today; asserted, not assumed, on the friction path.**
+
+1. **The fee no longer lives in the per-symbol cost-cache.** `CostMetrics` dropped `fee`; `resolveCryptoTakerFee()` (the second `fee_model` resolver) DELETED (§15, DELETED_COMPONENTS_LOG); the `setCostMetrics` fee default/clamp leg and `getOrSetCostMetrics` fee seed removed. tsc enforces the consolidation — any residual fee reader of the cache is a compile error.
+2. **Every consumer composes the fee at READ time from the B-4.5 merge site**, class from each site's own context: `getCachedCostMetrics` crypto lane + tec-costs + routes cost-diagnostics (`crypto_spot` — they enumerate the structurally crypto-only symbol cache); `market-indicators` (the enclosing function's `assetClass` param — class-filtered sample); `telemetry-aggregator` (the pair entry's at-write class stamp, B-4.7 #163 pattern).
+3. **Three structural defects closed:** the duplicate resolver; the `MAX_COST_BOUND` clamp can no longer touch a governed fee (it bounds measured spread/slippage only — the fee never enters `setCostMetrics`); the fee has no cache TTL (a `fee_model` change is live on the next read — was served up to 5 min stale per crypto symbol).
+4. **The 4 production `avgFee` stat readers** (tec-costs API, cost-telemetry persistence, routes summary, cost-drift monitor) switched to the new `cost-model.getCostCacheStatsWithFee` (cache can't import cost-model — circular). The drift monitor's fee-delta now fires ONLY on a real `fee_model` move, never a clamp/TTL artifact.
+5. **Named guards** (`p19-b7-2a-fee-consolidation.test.ts`, 5 tests): poisoned-fee-cannot-leak, fee_model-visibility (no TTL), friction-path identity BOTH classes **incl. a diverged-fees leg that fails on any crypto hardcode at a friction site**, clamp-for-measurements-only (a 3%-above-bound governed fee passes unclamped), stats-wrapper shape.
+
+**Forward-coupling → B81 (RUNNING_ISSUES #330 pointers):** the wrapper's single-class `avgFee` AND the telemetry-aggregator two-class ternary must widen at the B81 cache asset-class re-key.
+**Governance:** SIM §2.5 charter-narrowed + the B-4.5 consumer-table strike, SYSTEM_MANUAL B-4.5 supersession completion line (both blocks), DELETED_COMPONENTS_LOG, RUNNING_ISSUES #330 RESOLVED, BATCH_CATALOG, PHASE_HISTORY, PHASE_19_PLAN, this entry, completion report.
+
+---
+
 ## FIX-2026-06-14-A — P19-B4a: xStock active-path wire-in + feed-safety (stamp-at-source collision root-fix + reb-2-12F source-text-coupling removal + pattern-cap interim correction + calibration_state tag)
 
 **Class:** asset-class-correctness (collision-mislabel structural root-fix) + diagnostic-coupling removal + risk-floor correction. **Fixed:** 2026-06-14 (commits per chunk: C1 `89b76c8b8`/`755857016`, C2 `d37e9cc9e`, C3 `df00c27c8`, C4 `450383164`, C5 `da83a48ad`, C6 `0cd3e0575`, C8 `71690d99e`), Langston Step-4 review. **Active trading OFF; the xStock active-dispatch path is DORMANT until P19-B7b flips `system_context.isEngineActive` (CLAUDE.md §9.1).**

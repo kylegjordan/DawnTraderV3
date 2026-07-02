@@ -356,3 +356,16 @@
 **Left intentionally:** `/var/log/langston-alert-invokes.log` + the watcher tails of it (frozen, harmless); token env files (Kyle's bot-account call); `LANGSTON_INVOKE` env references died with the invoke.
 **Archive copies:** Helsinki `/root/telegram-bridges-archive-2026-07-02/langston-alert-handler.sh` + repo `_archive/deleted-code/langston-alert-handler.sh.removed`. The in-file deletions: git history (commit `21c080208`).
 **Reviewed by:** Langston Step-1 PROCEED (2 riders: info-severity parity — verified no behavior change; sole-sink WARNING text — swept) + Step-4 APPROVE-to-push (Discord, 2026-07-02).
+
+---
+
+## 2026-07-02 — P19-B7.2a (#330): the cost-cache's second fee resolver
+
+| Item | Location (pre-removal) | What it was |
+|---|---|---|
+| `resolveCryptoTakerFee()` | `server/core/cache/cost-cache.ts:35` | A SECOND `fee_model.spot_taker_fee` resolver (taker-only, crypto_spot-hardcoded) that existed solely so the per-symbol cost-cache could store a fee — the literal #330 "two code paths to one fact." With it went the cache's fee storage entirely: `CostMetrics.fee`, the `setCostMetrics` fee default/clamp leg, `getOrSetCostMetrics`' fee seed, `getCacheStats.avgFee` (+ the observability log's fee field). |
+
+**Why:** the fee is a per-CLASS governed fact owned by the B-4.5 single merge site (`cost-model.getFrictionForAssetClass`), not a per-symbol measurement. Storing it in the cache duplicated the resolver, silently clamped a governed value to `MAX_COST_BOUND` (the exact anti-pattern B-4.5 killed on the write path via `updateCachedCostMetrics`), and served it up to 5 min stale per symbol. Every consumer now composes the fee at READ time from the merge site (class from each site's own context).
+**Blast-radius verification:** both internal callers (the `setCostMetrics` default + the `getCacheStats` empty branch) rewired to the merge site; zero external callers — tsc-proven (the shape drop makes any residual reader a compile error; baseline green) + repo-wide grep clean. The fee-bearing stats shape the 4 production stat readers consume moved to `cost-model.getCostCacheStatsWithFee` (cost-cache cannot import cost-model — circular).
+**Archive:** function-level deletion — git history (`4b9d62fc9^`) is the archive; no separate `.removed` copy (in-file function, not a component file).
+**Reviewed by:** Langston Step-2 CHANGE-2 (named the disposition requirement) + Step-4 APPROVE-to-push (verified the deletion + both rewires + zero remaining callers in-file).
