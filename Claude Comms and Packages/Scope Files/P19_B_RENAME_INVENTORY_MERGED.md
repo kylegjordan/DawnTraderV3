@@ -25,7 +25,9 @@
 
 CC-B proposed `active_trades`; **CC-A's stronger finding: the table is the closed-trade sink for BOTH systems** — VTS closes migrate INTO it (B79.0g Q5) — so `active_trades` would misname the VTS rows exactly the way `paper_sim` misnames the active rows today. **Merged recommendation: `closed_trades`** (system-agnostic sink; existing source/mode columns distinguish origin). This is the highest-traffic table (~15 raw-SQL files) — Kyle's call on the name.
 
-## 5. Consolidated OPEN decisions for Kyle + Langston sign-off
+## 5. Consolidated OPEN decisions — **KYLE RULED 2026-07-03**
+
+> **Kyle:** OPEN-7 = **DELETE** `paper_daily_briefs` + `paper_ai_reports` — Walter-era relics (the early OpenAI-via-API embed that never worked). The daily-reports CONCEPT returns later, rebuilt on our own machine learning / injected AI — record that as a future-roadmap note, not a preserved table. Everything else: proceed on CC-A + CC-B + Langston consensus. Consensus positions: OPEN-1 → **`closed_trades`** · OPEN-3 → **extract the rolling-latency tracker, delete the rest of the M5 harness** (both CCs lean; Langston confirms at sign-off) · OPEN-4 → **clean cut** on the API paths · OPEN-2 → `paper_trades` retirement homed as its own follow-up · OPEN-5 → Langston's outside-the-repo sweep gates Wave 2 · OPEN-6 → liveness walk at Step-2 decides rename-vs-delete.
 
 - **OPEN-1** `paper_sim_trades` → `closed_trades` (recommended) vs `active_trades`.
 - **OPEN-2** legacy `paper_trades` table (schema-commented "legacy"; ~10 readers incl. M5-era + metrics): NOT part of B-RENAME — home its retirement as a named follow-up batch (both lists agree).
