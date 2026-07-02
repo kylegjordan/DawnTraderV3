@@ -1,5 +1,7 @@
 # P19-B7.2a Scope — #330 fee-resolver consolidation (one road to the fee fact)
 
+change-class: non_architecture
+
 **Batch:** P19-B7.2a · **change-class: non_architecture** · **Drafted:** 2026-07-02, **REV 2** (Step-1 CHANGES folded — Langston caught the undercounted caller probe) · **Issue home:** RUNNING_ISSUES #330 (SPLIT out of B7.2 by CC-B + Langston consensus 2026-07-01)
 **Reviewer:** Langston (Step-1 this document → Step-2 pre-audit → Step-4 diff)
 
