@@ -818,6 +818,10 @@ export class PaperExecutionEngine {
     const deadlineMs = position.makerDeadline ? new Date(position.makerDeadline).getTime() : null;
     const outcome = evaluatePendingMaker({ side, currentPrice: safePrice, limit, nowMs: Date.now(), deadlineMs });
     if (outcome === 'fill') {
+      // NOTE: openedAt stays stamped at PLACEMENT, not at this fill — resting time is
+      // included in any holding-duration analytic (cosmetic; EV/expectancy unaffected
+      // since entry price is the limit either way). A true in-market duration needs a
+      // filledAt stamp — Phase-25 fill-rate report card decides if it wants one.
       await storage.updatePaperSimOpenPosition(this.mode, position.id, {
         state: 'open',
         currentPrice: currentPrice.toString(),
