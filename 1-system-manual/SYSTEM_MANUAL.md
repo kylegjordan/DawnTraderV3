@@ -1,4 +1,6 @@
 # DawnTrader System Manual — Unified Reference
+> **🔑 P19-B-RENAME NAME KEY (2026-07-03) — the paper→active rename shipped.** The LIVING sections below use the NEW names; DATED history entries (the archive from "# Change History" down / any pre-2026-07-03 per-batch note) keep the names of their era — translate via: active-execution-engine→**active-execution-engine** · active-engine-service→**active-engine-service** · active-portfolio-manager→**active-portfolio-manager** · active-position-sizing→**active-position-sizing** · paper-session-reset→**active-session-reset** · paper_sim_heartbeat→**active-engine-heartbeat** · paper-sim-diagnostic (server)→**active-scan-diagnostic** · tables: closed_trades→**closed_trades** · active_open_positions→**active_open_positions** · active_engine_sessions→**active_engine_sessions** · active_trade_logs→**active_trade_logs** · routes /api/paper-sim/*→**/api/active-engine/*** · events paper_sim_*→**active_engine_*** · module keys paper_execution/paper_sizing→**active_execution/active_sizing**. Deliberate old-name survivors: the persisted `'paper_sim'` discriminator (#405 keep-as-data), legacy `paper_trades`+paper-metrics (OPEN-2), the `'paper'|'live'` mode axis, shipped migrations.
+
 
 > **Author**: Claude Code (System Cartographer)
 > **Consolidated**: 2026-02-17
@@ -98,7 +100,7 @@ Quick reference: which components are authoritative, which are contaminated, and
 ### Authoritative Components (Trust These)
 | Component | File(s) | Authority |
 |-----------|---------|-----------|
-| **Net Expectancy Kernel** | `signal-orchestrator.ts`, `paper-execution-engine.ts` | Sole EV authority. Mathematically correct. |
+| **Net Expectancy Kernel** | `signal-orchestrator.ts`, `active-execution-engine.ts` | Sole EV authority. Mathematically correct. |
 | **cost-model.ts** | `server/core/cost-model.ts` | Cost-of-trade authority. Real spread + slippage + fees. |
 | **calculatePairRegime()** | `server/core/metrics/market-regime.ts` | Canonical pair-level regime classification. 5 regimes. DBS-integrated (B62): accepts `dbsScore` parameter, gates RBS/TFS/IE. |
 | **Market Context Engine (MCE)** | `server/services/market-context-engine.ts`, `server/types/market-context.ts` | Centralized VWAP/SMA/ATR/regime computation. Signal orchestrator and VTS both call `MCE.computeContext()`. Singleton, 60s cache TTL. |
@@ -126,7 +128,7 @@ Quick reference: which components are authoritative, which are contaminated, and
 ### Development Authority
 | Component | Status | Notes |
 |-----------|--------|-------|
-| **PaperExecutionEngine** | PRIMARY, AUTHORITATIVE | ~2,308 lines. The active development and execution authority. |
+| **ActiveExecutionEngine** | PRIMARY, AUTHORITATIVE | ~2,308 lines. The active development and execution authority. |
 | **TradingEngine (live)** | SECONDARY, DORMANT | ~766 lines. Contains placeholder code, simulated fills (Math.random), goal alignment. Defer rebuild until paper mode is fully stable. Strategic fork pending: refactor to mirror paper core, or delete and rebuild from paper core. |
 | **VTS Runner** | ACTIVE, AUTHORITATIVE | Real price data, real regime, real governance, real scoring (BUG-001 resolved B15-17). Dual-path (quant + pattern), 60s cycles, pool-split null tracking. Pattern-strategy canonical routing (B57). |
 
@@ -467,7 +469,7 @@ the population reorg-B2.3's floor calibration actually studies.
 
 ### P19-B7.2 — Maker/taker best-of-both entry decision (the structural crypto opener)
 
-**Directive**: P19-B7.2 (2026-07-01) · **Status**: ACTIVE (dormant until paper-active trading turns on, B8) · **Files**: `server/core/math/maker-taker-decision.ts` (NEW, pure), `server/services/maker-taker-config.ts` (NEW, DB resolver), wired at `signal-orchestrator.buildSizedSignalForStrategy`, read at `paper-execution-engine` `[11.8B]` gate + `ready_to_buy_service` ranker + refresh.
+**Directive**: P19-B7.2 (2026-07-01) · **Status**: ACTIVE (dormant until paper-active trading turns on, B8) · **Files**: `server/core/math/maker-taker-decision.ts` (NEW, pure), `server/services/maker-taker-config.ts` (NEW, DB resolver), wired at `signal-orchestrator.buildSizedSignalForStrategy`, read at `active-execution-engine` `[11.8B]` gate + `ready_to_buy_service` ranker + refresh.
 
 **Why**: at the Tier-1 taker fee wall (~1.8% round-trip) the `[11.8B]` Net-Expectancy gate HONESTLY refuses most crypto on taker economics (H1). Resting a passive order costs ~half (maker 0.40% vs taker 0.80%); that ~0.55%-of-entry advantage is the structural opener. B7.2 prices **both** ways per signal and carries the better.
 
@@ -618,13 +620,13 @@ Cached for 30 seconds. Falls back to DEFAULT_SPREAD (0.1%) on failure.
 > **★ B-4.5 SUPERSESSION (2026-06-11) — FEES ARE DB-GOVERNED, TIER 1.** Every static fee figure in this section (0.26% taker / 0.16% maker / `DEFAULT_TAKER_FEE` / `DEFAULT_COST_BUNDLE` / 0.72% round-trip) is SUPERSEDED. Fee rates live in `module_constants` module **`fee_model`** (per `asset_class`: `spot_taker_fee` 0.008 / `spot_maker_fee` 0.004 decimal — Kraken July-2026 cross-platform **Tier 1**, the account's verified standing), warmed at boot (`b72-warmup` strict assertion: both constants × both spot classes + (0,0.05] sanity rails — server refuses to start otherwise) and merged at the SINGLE site `cost-model.getFrictionForAssetClass` (new object per call; the static friction modules carry **NaN fee tombstones**). The model prices **TAKER BOTH LEGS by default** (engine reality); **★ P19-B7.2 (2026-07-01) ACTIVATES the maker fee** in a per-signal maker-vs-taker ENTRY decision (see "P19-B7.2 — Maker/taker best-of-both entry decision" below) — `feeRateMaker` is no longer merely "stored for evaluation." Round-trip friction (taker both legs): **1.80% crypto_spot / 1.82% xstock_spot**. `MAX_COST_BOUND` 0.01→0.02 (per-component sanity ceiling; headroom over the 0.008 taker). The `system_context.maker_fee_pct/taker_fee_pct` columns are a pure OPERATOR OVERRIDE surface (NULL = use fee_model; explicit value incl. 0 wins — `resolveValidatorFeeRates`); their Tier-6 schema defaults were removed (third-copy residue). **★ P19-B7.2a (2026-07-02, #330) completed the consolidation:** the cost-cache no longer stores fees AT ALL (its second resolver `resolveCryptoTakerFee` deleted; the fee un-clampable + TTL-free by construction) — every consumer composes the fee at read time from this single merge site, so "single fee merge site" is now literally true across the codebase, not just on the orchestrator lane. Details: `B_4_5_FEE_MODEL_CHANGE_LIST.md` + completion report.
 
 
-> **★ P19-B4b.1 SUPERSESSION (2026-06-16 — the ACTIVE paper fill now depth-walks; DORMANT til B7b).** The model documented in the rest of this section (`slippage-fee-model.ts` — order-book walk + conservative-no-book estimate + the stochastic **Box-Muller micro-move**) is the model used by the DORMANT `pre-execution-validator` path (the `realtime-paper-executor` was DELETED in P19-B4b.2/#300), NOT the active paper engine. **The active `PaperExecutionEngine` fill seam now uses its own honest depth-walk** (`server/services/execution/depth-walk.ts`, golden-tested vs `calculatePriceImpact`):
+> **★ P19-B4b.1 SUPERSESSION (2026-06-16 — the ACTIVE paper fill now depth-walks; DORMANT til B7b).** The model documented in the rest of this section (`slippage-fee-model.ts` — order-book walk + conservative-no-book estimate + the stochastic **Box-Muller micro-move**) is the model used by the DORMANT `pre-execution-validator` path (the `realtime-paper-executor` was DELETED in P19-B4b.2/#300), NOT the active paper engine. **The active `ActiveExecutionEngine` fill seam now uses its own honest depth-walk** (`server/services/execution/depth-walk.ts`, golden-tested vs `calculatePriceImpact`):
 > - **OPEN (buy):** walk the live **ask** book → VWAP fill price (replaces the flat 0.05% slippage). If the order exceeds the book at the gate's measured depth → a `partial` and the engine **sizes the position down to the filled qty** (never overstates exposure). The fill is anchored on the real book ask, not the signal price; `slippageQuote` = signed `(fillPrice − intendedPrice)·qty` (can be negative on a favorable book — correctly consumed by the signed `grossPnl − totalCost` P/L).
 > - **CLOSE (sell):** walk the live **bid** book and **ALWAYS full-fill** (a market exit always gets out — never a phantom stuck position); any remainder beyond the captured book is priced with the **DB-resolved per-class `beyond_depth_penalty_bps`** (`module_constants fill_depth_gate`), NOT a magic constant.
 > - **Determinism (RNG-free):** the Box-Muller micro-move is **dropped** on the active seam — same book + same order → same fill, so paper Net Expectancy stays analyzable and sim-to-live parity is assertable.
-> - **24/5 book-depth-sufficiency + warmth gate (#295):** before an active OPEN, `PaperExecutionEngine._evaluateOpenDepthGate` requires (per asset class, DB-resolved, **fail-closed**) a fresh book (`warmth_max_age_ms`: crypto 5s / xStock 15s), ≥ `min_levels`, and available depth ≥ order-notional × `sufficiency_multiple` (crypto 3× over the 10-level book / xStock 2× over top-of-book). This **REPLACES the B4a-C3 RTH liquid-fill-window CLOCK proxy** (retired as a fill gate — it was wrong in both directions; the predicate is retained only for the silent-stall watchdog's threshold). Per-class depth source: crypto = live Kraken WS `book` (depth=10) via `getBookForFill`; xStock = latest `xstock_spot_ticker_snap` top-of-book (the same `askDepthUsd` that feeds the LQ gates). The `sufficiency_multiple` is an **EV knob** (seeded so walking to that depth still leaves Net Expectancy positive; precise calibration → the Phase-25 run). See SIM §9.14 + `P19_B4b_1_COMPLETION_REPORT.md`.
+> - **24/5 book-depth-sufficiency + warmth gate (#295):** before an active OPEN, `ActiveExecutionEngine._evaluateOpenDepthGate` requires (per asset class, DB-resolved, **fail-closed**) a fresh book (`warmth_max_age_ms`: crypto 5s / xStock 15s), ≥ `min_levels`, and available depth ≥ order-notional × `sufficiency_multiple` (crypto 3× over the 10-level book / xStock 2× over top-of-book). This **REPLACES the B4a-C3 RTH liquid-fill-window CLOCK proxy** (retired as a fill gate — it was wrong in both directions; the predicate is retained only for the silent-stall watchdog's threshold). Per-class depth source: crypto = live Kraken WS `book` (depth=10) via `getBookForFill`; xStock = latest `xstock_spot_ticker_snap` top-of-book (the same `askDepthUsd` that feeds the LQ gates). The `sufficiency_multiple` is an **EV knob** (seeded so walking to that depth still leaves Net Expectancy positive; precise calibration → the Phase-25 run). See SIM §9.14 + `P19_B4b_1_COMPLETION_REPORT.md`.
 >
-> - **Price-discovery-LIVENESS gate — xStock only (#236, P19-B6.6; DORMANT til B7b).** The SECOND half of the fill-time "is the book real?" guard (depth = "enough on the book"; liveness = "is the book a live, price-discovering market"). Runs at the SAME open seam **immediately after** the depth gate (`paper-execution-engine.ts`, xStock-only branch) — **depth-first ordering** (the cheap single-row depth read gates first; the windowed liveness read runs only on depth-pass). **SEMANTICS (precise — NOT "is ARCA open"):** it gates on **this token's own Kraken-book price-discovery cadence** — has the traded `last` price actually CHANGED ≥ `min_moves` times within the trailing `window_ms`? A liquid token trading 24/7 on Kraken (MU/NVDA) **passes during a US equity holiday — correctly**, because the paper fill executes on Kraken's live book; "holiday" is the motivating case (#236's hole: on a holiday/half-day/LULD-halt the 24/5 token feed keeps emitting fresh snapshots with depth quoted, but the underlying is closed so `last` is FROZEN — both the freshness and depth gates pass and a fill would land on a dead-but-quoted book), NOT the mechanism — the gate blocks whenever the book stops price-discovering (holiday, halt, glitch, feed death). **Window = 45 min (single, NOT tiered; `module_constants price_discovery_liveness`: `window_ms`=2,700,000, `min_moves`=1, `min_snaps`=5, `query_timeout_ms`=2000, `enabled`).** Calibrated from 3 weekday sessions of archived `xstock_spot_ticker_snap`: 45 passes every genuinely-active admitted name with ≥2× margin (worst-day in-RTH inter-trade p99 ≤20m) while EXCLUDING the deep-but-slow ETF/foreign-equity tokens (EWN/EWP/TOTL, 42–68m) — a ~50-min price-discovery cadence makes any fill a stale-reference fill, so excluding them is the gate working. **Justified by type-II frozen-but-quoted-book detection speed** (a longer window is strictly worse there and does not rescue the slow tail), NOT by p99 margin. No tiering needed because the upstream LQ gate (`lq_min` 38/33) removes the only names where quiet-but-open is indistinguishable from dead; the lone residual is a strong_trend GOTU-class name (~33m, bounded by the 2× depth-sufficiency cap — RUNNING_ISSUES #391). **FAIL-CLOSED everywhere** (missing config / query timeout / query error / `no_data` / `sparse_snapshots` / `flat_last` → block); the windowed `last`-move read is index-bounded on `(symbol, captured_at)` with a **Promise.race hard timeout that fails closed** (the depth gate has NO query timeout, so liveness is strictly more defensive; the orphaned server-side query on a Promise.race timeout is an accepted residual, academic while dormant). **Reason taxonomy** (`flat_last` vs `no_data`/`sparse_snapshots`/`liveness_timeout`) keeps a feed/config outage distinguishable from a genuine dead book. **Telemetry:** a liveness block records via the SAME `recordDepthGateBlock` per-class counter (distinct reason-buckets) + `recordOpenFailed(...,'LIVENESS_GATE',...)` into the I3 invariant — ⚠️ **note: that counter is named for "depth" but now aggregates BOTH gates; read liveness blocks by their `flat_last`/`no_data`/`sparse_snapshots`/`liveness_*` reason-bucket, not as depth blocks.** **Open-edge:** at RTH open the trailing window is flat pre-market for the slow names (liquid tokens trade pre-market on Kraken, unaffected) → a slow ETF token is no-fill until its first in-RTH print (expected/conservative). The B7b pre-flight **gate-#13** requires BOTH the depth gate AND this liveness gate green per class. See SIM (price-liveness assessor + the `price-liveness._cache` config singleton) + `P19_B6_6_COMPLETION_REPORT.md`.
+> - **Price-discovery-LIVENESS gate — xStock only (#236, P19-B6.6; DORMANT til B7b).** The SECOND half of the fill-time "is the book real?" guard (depth = "enough on the book"; liveness = "is the book a live, price-discovering market"). Runs at the SAME open seam **immediately after** the depth gate (`active-execution-engine.ts`, xStock-only branch) — **depth-first ordering** (the cheap single-row depth read gates first; the windowed liveness read runs only on depth-pass). **SEMANTICS (precise — NOT "is ARCA open"):** it gates on **this token's own Kraken-book price-discovery cadence** — has the traded `last` price actually CHANGED ≥ `min_moves` times within the trailing `window_ms`? A liquid token trading 24/7 on Kraken (MU/NVDA) **passes during a US equity holiday — correctly**, because the paper fill executes on Kraken's live book; "holiday" is the motivating case (#236's hole: on a holiday/half-day/LULD-halt the 24/5 token feed keeps emitting fresh snapshots with depth quoted, but the underlying is closed so `last` is FROZEN — both the freshness and depth gates pass and a fill would land on a dead-but-quoted book), NOT the mechanism — the gate blocks whenever the book stops price-discovering (holiday, halt, glitch, feed death). **Window = 45 min (single, NOT tiered; `module_constants price_discovery_liveness`: `window_ms`=2,700,000, `min_moves`=1, `min_snaps`=5, `query_timeout_ms`=2000, `enabled`).** Calibrated from 3 weekday sessions of archived `xstock_spot_ticker_snap`: 45 passes every genuinely-active admitted name with ≥2× margin (worst-day in-RTH inter-trade p99 ≤20m) while EXCLUDING the deep-but-slow ETF/foreign-equity tokens (EWN/EWP/TOTL, 42–68m) — a ~50-min price-discovery cadence makes any fill a stale-reference fill, so excluding them is the gate working. **Justified by type-II frozen-but-quoted-book detection speed** (a longer window is strictly worse there and does not rescue the slow tail), NOT by p99 margin. No tiering needed because the upstream LQ gate (`lq_min` 38/33) removes the only names where quiet-but-open is indistinguishable from dead; the lone residual is a strong_trend GOTU-class name (~33m, bounded by the 2× depth-sufficiency cap — RUNNING_ISSUES #391). **FAIL-CLOSED everywhere** (missing config / query timeout / query error / `no_data` / `sparse_snapshots` / `flat_last` → block); the windowed `last`-move read is index-bounded on `(symbol, captured_at)` with a **Promise.race hard timeout that fails closed** (the depth gate has NO query timeout, so liveness is strictly more defensive; the orphaned server-side query on a Promise.race timeout is an accepted residual, academic while dormant). **Reason taxonomy** (`flat_last` vs `no_data`/`sparse_snapshots`/`liveness_timeout`) keeps a feed/config outage distinguishable from a genuine dead book. **Telemetry:** a liveness block records via the SAME `recordDepthGateBlock` per-class counter (distinct reason-buckets) + `recordOpenFailed(...,'LIVENESS_GATE',...)` into the I3 invariant — ⚠️ **note: that counter is named for "depth" but now aggregates BOTH gates; read liveness blocks by their `flat_last`/`no_data`/`sparse_snapshots`/`liveness_*` reason-bucket, not as depth blocks.** **Open-edge:** at RTH open the trailing window is flat pre-market for the slow names (liquid tokens trade pre-market on Kraken, unaffected) → a slow ETF token is no-fill until its first in-RTH print (expected/conservative). The B7b pre-flight **gate-#13** requires BOTH the depth gate AND this liveness gate green per class. See SIM (price-liveness assessor + the `price-liveness._cache` config singleton) + `P19_B6_6_COMPLETION_REPORT.md`.
 
 **File**: `server/services/slippage-fee-model.ts`
 **Status**: ACTIVE in the dormant `pre-execution-validator` path (the `realtime-paper-executor` was DELETED in P19-B4b.2/#300); SUPERSEDED on the active paper-engine seam by `execution/depth-walk.ts` (see banner above). (Remaining dead-path consolidation — `pre-execution-validator` — coordinates with #297; `calculatePriceImpact` stays as the `depth-walk.ts` golden-test reference until its dead callers go.)
@@ -685,7 +687,7 @@ All fee and slippage constants across the codebase now import from the canonical
 | Slippage | 0.05% (0.0005) | `DEFAULT_SLIPPAGE` |
 | Spread | 0.10% (0.0010) | `DEFAULT_SPREAD` |
 
-Files migrated in Batch 18J: `paper-execution-engine.ts`, `routes.ts` (2 locations), `adaptive-thresholds.ts`, `cost-metrics.ts`. These previously had hardcoded old values (FEE=0.10%, SLIPPAGE=0.15%) that predated the exchange-defaults.ts unification.
+Files migrated in Batch 18J: `active-execution-engine.ts`, `routes.ts` (2 locations), `adaptive-thresholds.ts`, `cost-metrics.ts`. These previously had hardcoded old values (FEE=0.10%, SLIPPAGE=0.15%) that predated the exchange-defaults.ts unification.
 
 ---
 
@@ -941,11 +943,11 @@ SQE is the final signal gatekeeper before signals enter the RTB queue. It evalua
 
 | Gate | Threshold | Source |
 |------|-----------|--------|
-| FinalScore | ≥ 0.35 | Computed or backfilled. SQE is sole authority — duplicate checks in paper-execution-engine and RTB removed (HF8). |
+| FinalScore | ≥ 0.35 | Computed or backfilled. SQE is sole authority — duplicate checks in active-execution-engine and RTB removed (HF8). |
 | RegimeWeight | ≥ 0.30 | Computed or backfilled |
 | ROI Gate | ≥ dynamic threshold | Regime + PredictiveConfidence |
 | Confidence Floor | Mode-dependent | NORMAL=0.60, DEFENSIVE=0.70, SURVIVAL=0.80 (Directive 11.7S). Requires `regimeStability` in input. VTS signals bypass via `skipConfidenceFloor` option (cold-start). Added HF8. |
-| Governance Gate (11.7R-E) | Strategy-dependent | Checks `isStrategyEligible()` based on `regimeStability` + `getStrategyDependency()`. HIGH-dependency strategies blocked in UNSTABLE regime. Requires `strategy` + `regimeStability` in input. VTS bypass via `skipGovernanceGate` option (VTS has own inline governance). Migrated from paper-execution-engine in HF9. |
+| Governance Gate (11.7R-E) | Strategy-dependent | Checks `isStrategyEligible()` based on `regimeStability` + `getStrategyDependency()`. HIGH-dependency strategies blocked in UNSTABLE regime. Requires `strategy` + `regimeStability` in input. VTS bypass via `skipGovernanceGate` option (VTS has own inline governance). Migrated from active-execution-engine in HF9. |
 
 **All legacy metrics purged**: NGC, CWQI, ProfitRate, and Risk are no longer gating factors. The interface still carries `ngc` as a field name (it's the confidence carrier), but it is NOT independently gated.
 
@@ -3213,7 +3215,7 @@ Additionally imported by:
 13. [PDC Engine](#13-pdc-engine)
 14. [Risk Concentration Analyzer](#14-risk-concentration-analyzer)
 15. [Covariance Engine](#15-covariance-engine)
-16. [Paper Portfolio Manager](#16-paper-portfolio-manager)
+16. [Paper Portfolio Manager](#16-active-portfolio-manager)
 17. [Portfolio Aggregator](#17-portfolio-aggregator)
 18. [Kraken Service](#18-kraken-service)
 19. [Legacy Classification: SafetyGuardrails Service](#19-legacy-classification-safetyguardrails-service)
@@ -3587,7 +3589,7 @@ The kill switch is DawnTrader's emergency shutdown mechanism. Understanding its 
 ### Triggers
 
 1. **Manual**: User clicks stop button → API route → `guardrailPolicy.tripKillSwitch()`
-2. **Automatic (P19-B6 — now IMPLEMENTED, was previously documented-but-absent)**: `server/services/daily-loss-budget.ts` (`evaluateDailyLossBudgetOnClose`, a `setImmediate`-deferred fire-and-forget hook off `paper-execution-engine`'s `tradeClosedHandler`) computes the **session-anchored rolling-24h realized loss %** (`max(now−24h, engineSessionStart)` window; `getPortfolioBalanceV2` denominator; `≤0`-balance → force-breach) and, on breach of the per-mode `dailyLossKillSwitchPct`, calls `tripKillSwitch` (which flattens all open positions via the existing `stopPaperSimulation → forceCloseAllOpenPositionsOnStop` — NOT a separate close). Two warning tiers (`dailyLossWarning1Pct`/`dailyLossWarning2Pct` = % OF the kill threshold; coherency RULE_011 `0<w1<w2<100`) fire info/warning alerts first (ratchet + hysteresis re-arm). Re-entrancy is closed by trip-persists-before-flatten + the `setImmediate` defer + a synchronous in-memory `killInProgress` latch. Restored from the deleted Phase-8 `risk-manager.ts` (`594aad717^`). It is a **circuit-breaker on the current run** (a restart rebaselines the window via `resetDailyLossBudgetState`), NOT a hard calendar-day lockout. DORMANT-in-effect until active paper trading is on (gated on `isEngineActive`)
+2. **Automatic (P19-B6 — now IMPLEMENTED, was previously documented-but-absent)**: `server/services/daily-loss-budget.ts` (`evaluateDailyLossBudgetOnClose`, a `setImmediate`-deferred fire-and-forget hook off `active-execution-engine`'s `tradeClosedHandler`) computes the **session-anchored rolling-24h realized loss %** (`max(now−24h, engineSessionStart)` window; `getPortfolioBalanceV2` denominator; `≤0`-balance → force-breach) and, on breach of the per-mode `dailyLossKillSwitchPct`, calls `tripKillSwitch` (which flattens all open positions via the existing `stopPaperSimulation → forceCloseAllOpenPositionsOnStop` — NOT a separate close). Two warning tiers (`dailyLossWarning1Pct`/`dailyLossWarning2Pct` = % OF the kill threshold; coherency RULE_011 `0<w1<w2<100`) fire info/warning alerts first (ratchet + hysteresis re-arm). Re-entrancy is closed by trip-persists-before-flatten + the `setImmediate` defer + a synchronous in-memory `killInProgress` latch. Restored from the deleted Phase-8 `risk-manager.ts` (`594aad717^`). It is a **circuit-breaker on the current run** (a restart rebaselines the window via `resetDailyLossBudgetState`), NOT a hard calendar-day lockout. DORMANT-in-effect until active paper trading is on (gated on `isEngineActive`)
 3. **SafetyGuardrails toggle**: Legacy wrapper delegates to `guardrailPolicy`
 4. **Cluster bus**: `kill_switch_activated` event for multi-node awareness
 
@@ -3875,7 +3877,7 @@ Supports `exportState()` / `importState()` for persistence across restarts.
 
 ## 16. Paper Portfolio Manager
 
-**File**: `server/services/paper-portfolio-manager.ts`
+**File**: `server/services/active-portfolio-manager.ts`
 **Pattern**: Instance per mode (not singleton)
 
 ### Responsibilities
@@ -4123,7 +4125,7 @@ All L-Series systems must be removed together in a **coordinated wave**. Before 
 
 ### RISK-029: Paper Portfolio Manager Uses Hardcoded Starting Capital — ACCEPTED
 - **Severity**: LOW-MEDIUM → **LOW** (Kyle accepted, 2026-02-16)
-- **Location**: `server/services/paper-portfolio-manager.ts` lines 539-541, 670-672
+- **Location**: `server/services/active-portfolio-manager.ts` lines 539-541, 670-672
 - **Problem**: `checkPortfolioHealth()` and `calculateMaxDrawdown()` assume `startingCapital = 10000` (hardcoded) for exposure and drawdown calculations. This does not match the actual portfolio_state.balance which may differ.
 - **Kyle Decision (2026-02-16)**: Hardcoded $10,000 is acceptable for now. Optional future enhancement: throw error if portfolio_state.balance is missing instead of defaulting.
 - **Fix**: No immediate action required. Optional future: throw error on missing balance.
@@ -4188,7 +4190,7 @@ The L-Series autonomy cluster (MCP, ARE, GASP, MOF, MACO, ECS, DCE, etc.) was di
 | `server/services/pre-execution-validator.ts` | ~292 | ACTIVE (Goal Alignment DEPRECATED) | Two active gates + one deprecated gate |
 | `server/services/circuit-breaker.ts` | ~336 | ACTIVE | Infrastructure fault tolerance |
 | `server/services/risk-concentration.ts` | ~369 | ACTIVE | Correlation-weighted exposure control |
-| `server/services/paper-portfolio-manager.ts` | ~725 | ACTIVE | Paper trading lifecycle management |
+| `server/services/active-portfolio-manager.ts` | ~725 | ACTIVE | Paper trading lifecycle management |
 | `server/services/portfolio-aggregator.ts` | ~243 | ACTIVE | Portfolio-level metrics aggregation |
 | `server/services/kraken.ts` | ~750+ | ACTIVE (LOCKED) | Kraken REST API client |
 | `server/core/risk/dynamic-sizing-engine.ts` | ~314 | ACTIVE | Predictive position sizing |
@@ -4232,7 +4234,7 @@ The L-Series autonomy cluster (MCP, ARE, GASP, MOF, MACO, ECS, DCE, etc.) was di
 
 1. [Architecture Overview](#1-architecture-overview)
 2. [Dual Execution Engine Architecture](#2-dual-execution-engine-architecture)
-3. [PaperExecutionEngine (Primary)](#3-paperexecutionengine-primary)
+3. [ActiveExecutionEngine (Primary)](#3-paperexecutionengine-primary)
 4. [TradingEngine (Live-Capable)](#4-tradingengine-live-capable)
 5. [TrailingExitController](#5-trailingexitcontroller)
 6. [MicroExecutionService](#6-microexecutionservice)
@@ -4259,7 +4261,7 @@ The L-Series autonomy cluster (MCP, ARE, GASP, MOF, MACO, ECS, DCE, etc.) was di
 
 ## 1. Architecture Overview
 
-DawnTrader's trade execution operates through a **dual-engine architecture** with clearly separated responsibilities for paper and live trading. The system has evolved organically, with the PaperExecutionEngine becoming the dominant, actively-maintained engine (~2,308 lines) while the TradingEngine (~766 lines) retains live-mode capabilities but contains significant placeholder code.
+DawnTrader's trade execution operates through a **dual-engine architecture** with clearly separated responsibilities for paper and live trading. The system has evolved organically, with the ActiveExecutionEngine becoming the dominant, actively-maintained engine (~2,308 lines) while the TradingEngine (~766 lines) retains live-mode capabilities but contains significant placeholder code.
 
 ### High-Level Execution Flow
 
@@ -4270,7 +4272,7 @@ Signal Source (FX5 → SignalOrchestrator → SQE → RTB → TCL)
 ┌──────────────────────────────────────────────────────┐
 │  EXECUTION ENGINE LAYER                              │
 │                                                      │
-│  PaperExecutionEngine (paper mode — PRIMARY)         │
+│  ActiveExecutionEngine (paper mode — PRIMARY)         │
 │  ├── processSignal() → guardrails → expectancy gate  │
 │  ├── executeSimulatedTrade() → sizing → DB write     │
 │  ├── monitoringCycle() (1.5s loop)                   │
@@ -4321,7 +4323,7 @@ FX5 (30s scans) → SignalOrchestrator (exposure/correlation/cooldown)
     → SQE (FinalScore + RegimeWeight)
     → Ready-to-Buy Queue (30s refresh, TTL=30s)
     → TCL (ranking by FinalScore, 2-min or 15-signal trigger)
-    → PaperExecutionEngine.processSignal()
+    → ActiveExecutionEngine.processSignal()
     → executeSimulatedTrade() (guardrails → EV gate → sizing → DB)
 ```
 
@@ -4342,9 +4344,9 @@ All signal generation now flows exclusively through the FX5 → RTB → TCL pipe
 
 ### The Two Engines
 
-| Property | PaperExecutionEngine | TradingEngine |
+| Property | ActiveExecutionEngine | TradingEngine |
 |----------|---------------------|---------------|
-| **File** | `paper-execution-engine.ts` | `trading-engine.ts` |
+| **File** | `active-execution-engine.ts` | `trading-engine.ts` |
 | **Lines** | ~2,308 | ~766 |
 | **Primary Mode** | Paper | Live + Paper |
 | **Monitoring** | 1.5s cycle with re-entrancy guard | `monitorActiveTrades()` via strategyEngine |
@@ -4360,7 +4362,7 @@ All signal generation now flows exclusively through the FX5 → RTB → TCL pipe
 
 ### Key Asymmetry: Goal Alignment
 
-The PaperExecutionEngine does NOT contain Goal Alignment logic (it was architecturally removed). However, the TradingEngine still computes and applies `goalAlignmentScore`:
+The ActiveExecutionEngine does NOT contain Goal Alignment logic (it was architecturally removed). However, the TradingEngine still computes and applies `goalAlignmentScore`:
 
 ```typescript
 // TradingEngine, line 249:
@@ -4371,11 +4373,11 @@ This is a **SECOND location** of Goal Alignment beyond `pre-execution-validator.
 
 ---
 
-## 3. PaperExecutionEngine (Primary)
+## 3. ActiveExecutionEngine (Primary)
 
-**File**: `server/services/paper-execution-engine.ts` (~2,308 lines)
+**File**: `server/services/active-execution-engine.ts` (~2,308 lines)
 **Directive**: 11.0E (FinalScore Unification)
-**Class**: `PaperExecutionEngine`
+**Class**: `ActiveExecutionEngine`
 
 ### 3.1 Configuration Constants
 
@@ -4654,7 +4656,7 @@ Where pure-trail (B65.2) had only a single target-latch event per trade and HWM-
 - **Multi-rung gap handling** — a single price update that gaps past multiple rung targets ratchets through all crossed rungs in sequence (while-loop in `updatePosition`). Each rung locks its floor before advancing.
 - **Backward compat** — pre-B65.4 persisted states (`targetLatched=true` without ladder fields) migrate on `importStates()` to `ladderRung=1, currentRungTarget=originalTarget, currentRungFloor=0`. Engine reconciles correctly from `currentPrice` on the next cycle.
 - **`ladderRungsHit` captured on close** — the closed-trade record carries the rung count. Trade with `trailing_stop_hit` and `ladderRungsHit=3` ran past original target plus two more rung targets before reversing. Trade with `ladderRungsHit=1` reached original target then reversed before rung 2.
-- **B65.4.2 observability columns (2026-04-28)** — `paper_sim_trades` adds `original_stop_price`, `latch_trigger_price`, `rung_target_history` columns. TrailingState captures `originalStopPrice` at init, `latchTriggerPrice` at first target latch, `rungTargetHistory[]` appended at each ratchet. Surfaced in both open + closed CSV exports + `/api/vts/ml/open`. Made the ladder counterfactual analysis report (template at `B65_4_1_LADDER_TABLE_2026_04_28.md`) readable directly from CSV without grepping PM2 logs.
+- **B65.4.2 observability columns (2026-04-28)** — `closed_trades` adds `original_stop_price`, `latch_trigger_price`, `rung_target_history` columns. TrailingState captures `originalStopPrice` at init, `latchTriggerPrice` at first target latch, `rungTargetHistory[]` appended at each ratchet. Surfaced in both open + closed CSV exports + `/api/vts/ml/open`. Made the ladder counterfactual analysis report (template at `B65_4_1_LADDER_TABLE_2026_04_28.md`) readable directly from CSV without grepping PM2 logs.
 
 ### 5.1.1 Moonbag Qualifier (B65.2)
 
@@ -4782,7 +4784,7 @@ if ((global as any).PaperExecutionServiceLegacy) {
 
 Stores global references to engine instances per mode:
 
-- `registerEngine(mode, engine)` — stores PaperExecutionEngine reference
+- `registerEngine(mode, engine)` — stores ActiveExecutionEngine reference
 - `getEngine(mode)` — retrieves engine for a mode
 - `registerMicroService(mode, service)` — stores MicroExecutionService reference
 - `getMicroService(mode)` — retrieves micro service for a mode
@@ -4913,7 +4915,7 @@ No replacement file was created for the deleted types — the new types live wit
 
 ### 11.2 ⚠ StrategyType Mismatch — RESOLVED-BY-DELETION (B65.2)
 
-The 9-strategy `StrategyType` union type that lived in this file (and triggered RISK-033 in CHANGES_AND_FIXES) is no longer a concern: the file was deleted in B65.2 and the active `StrategyType` definitions in the live codebase (e.g. `server/services/trade-executor.ts`, `paper-execution-engine.ts`) carry the full 17-strategy roster. The original BUG-002/BUG-003 mismatch is now strictly historical.
+The 9-strategy `StrategyType` union type that lived in this file (and triggered RISK-033 in CHANGES_AND_FIXES) is no longer a concern: the file was deleted in B65.2 and the active `StrategyType` definitions in the live codebase (e.g. `server/services/trade-executor.ts`, `active-execution-engine.ts`) carry the full 17-strategy roster. The original BUG-002/BUG-003 mismatch is now strictly historical.
 
 ### 11.3 Trade Lifecycle Flow Documentation — superseded
 
@@ -5104,9 +5106,9 @@ NLAI Action Request
 
 ### 14.4 Conditional Removal: ExecutionPolicyController
 
-Kyle's directive: *"If ExecutionPolicyController is used solely as NLAI approval gate: Remove with NLAI. If it also controls execution style within PaperExecutionEngine: Simplify to static behavior."*
+Kyle's directive: *"If ExecutionPolicyController is used solely as NLAI approval gate: Remove with NLAI. If it also controls execution style within ActiveExecutionEngine: Simplify to static behavior."*
 
-**Audit finding**: ExecutionPolicyController is imported only by NLAI-related modules (nlai-execution-broker). It does NOT control execution behavior within PaperExecutionEngine.
+**Audit finding**: ExecutionPolicyController is imported only by NLAI-related modules (nlai-execution-broker). It does NOT control execution behavior within ActiveExecutionEngine.
 
 **Verdict**: Remove with NLAI.
 
@@ -5170,7 +5172,7 @@ Dispatched NLAI actions through the ExecutionPolicyController for approval, then
 
 ## 17. Paper Simulation Service
 
-**File**: `server/services/paper-sim-service.ts`
+**File**: `server/services/active-engine-service.ts`
 
 ### 17.1 Session Management
 
@@ -5189,7 +5191,7 @@ DawnTrader's exit management operates through multiple layers:
 ### 18.1 Exit Hierarchy
 
 ```
-Layer 1: PaperExecutionEngine.checkExitConditions()
+Layer 1: ActiveExecutionEngine.checkExitConditions()
   │  Checks: target_hit, stop_hit, trailing_stop_hit, max_holding_period
   │  Frequency: Every 1.5 seconds
   │
@@ -5270,7 +5272,7 @@ B79.0n.RTB (sub-batch 11 of 18 in the B79.0n umbrella v4 arc) extends every prev
 - `getQueueDepth(): Record<AssetClass, Record<TradingMode, number>>` — hierarchical count Map keyed by class → mode → depth.
 - `getQueuedSignals(mode, assetClass?)` + `getRankedSignals(mode, limit, assetClass?)` — optional per-class filter for hot read paths via the new `rtb_signals_mode_asset_class_status_idx` composite index.
 
-**Legacy `rtb_queue_refresher.ts` RETIRED.** Zero production callers verified via Grep across server/client/shared. `ReadyToBuyService.startRefreshCycle` is canonical via `PaperExecutionEngine` lifecycle. `server/index.ts` retired-comment block at line 1329 references the deletion.
+**Legacy `rtb_queue_refresher.ts` RETIRED.** Zero production callers verified via Grep across server/client/shared. `ReadyToBuyService.startRefreshCycle` is canonical via `ActiveExecutionEngine` lifecycle. `server/index.ts` retired-comment block at line 1329 references the deletion.
 
 **Boot pre-warm + HARD-FAIL.** `server/index.ts` enumerates 4 active classes + their cadence values at boot; HARD-FAIL via `process.exit(1)` if any rtb_config.refresh_interval_ms row missing. Log line: `[B79.0n.RTB][BOOT] 4-class refresh cadence loaded: crypto_spot=30000ms crypto_perp=30000ms xstock_spot=30000ms xstock_perp=30000ms`.
 
@@ -5280,7 +5282,7 @@ B79.0n.RTB (sub-batch 11 of 18 in the B79.0n umbrella v4 arc) extends every prev
 
 **LOCKED-module override pattern (canonical reference for Kyle-authorized per-class scope without algorithmic redesign).** `rtb-refresh-service.ts` `signalBuckets` topology refactor authorized per umbrella v4 row #11: per-class bucket allocation + per-class pool sizing + per-class ACT calibration in scope; algorithmic redesign / cadence changes / ACT scaler rewrites OUT of scope. Captured as ASSET_CLASS_ONBOARDING_WORKFLOW §4.21 with B79.0n.RTB as worked example.
 
-**Active-trading impact today ZERO.** paper_sim_trades + trades both empty; per-class buckets stay empty until scanner pipeline emits signals; structural pre-warm-only exercise. Active signal flow lands in WIRE-IN (#16).
+**Active-trading impact today ZERO.** closed_trades + trades both empty; per-class buckets stay empty until scanner pipeline emits signals; structural pre-warm-only exercise. Active signal flow lands in WIRE-IN (#16).
 
 **Cross-references.**
 - SIM "Recent additions (B79.0n.RTB — Phase 24 — 2026-05-27)" mirrors the component-level enumeration with blast-radius analysis.
@@ -5290,9 +5292,9 @@ B79.0n.RTB (sub-batch 11 of 18 in the B79.0n umbrella v4 arc) extends every prev
 
 B79.0n.EXECUTION (sub-batch 13 of 16 in B79.0n umbrella v4 arc) is the last per-class plumbing sub-batch before WIRE-IN (#14, Phase 19a). Three surgical changes land: (1) the TRADE_CLOSED event payload gains an optional `assetClass?: string` field for downstream disambiguation; (2) the outcomeFeedback hook at the trade-close path switches from re-resolve to read-from-record SSOT discipline; (3) the orchestrator-per-class-state diagnostic endpoint restructures to a nested-by-layer payload with an inline knownGaps registry.
 
-**TradeClosedEvent additive field (CHUNK A).** `server/lib/event-bus.ts:24-51` extends the `TradeClosedEvent` interface with `assetClass?: string` mirroring the `PromotionEvent.assetClass` C-7 doctrine from B79.0n.RTB (now codified in ASSET_CLASS_ONBOARDING_WORKFLOW §4.23 as the "additive event-payload field pattern"). The emit site at `paper-execution-engine.ts:1545` populates from `position.assetClass` — read from the canonical SSOT (write at L2147 `createPaperSimOpenPosition` per B79.TEC Finding 2), NOT re-resolved from symbol. A canary log line `[B79.0n.EXECUTION][EMIT_TRADE_CLOSED] mode= class= symbol= tradeId=` fires on every close per Langston Step 2 B2 mitigation — gives operators a runtime witness that `assetClass` populates correctly per class once xstock active trading lights up at WIRE-IN. All 3 listeners (paper-execution-engine self-handler at L184-188 mode-filter only, c13-validation-service at L103-107 collection only, c14-validation-service at L123-127 collection only) verified safe via Step 1.b A2 grep — zero JSON.stringify/structured-clone/telemetry-emit production hits on `TradeClosedEvent` shape. Same C-7 doctrine: consumers that need to disambiguate read this field, consumers that don't are unaffected.
+**TradeClosedEvent additive field (CHUNK A).** `server/lib/event-bus.ts:24-51` extends the `TradeClosedEvent` interface with `assetClass?: string` mirroring the `PromotionEvent.assetClass` C-7 doctrine from B79.0n.RTB (now codified in ASSET_CLASS_ONBOARDING_WORKFLOW §4.23 as the "additive event-payload field pattern"). The emit site at `active-execution-engine.ts:1545` populates from `position.assetClass` — read from the canonical SSOT (write at L2147 `createPaperSimOpenPosition` per B79.TEC Finding 2), NOT re-resolved from symbol. A canary log line `[B79.0n.EXECUTION][EMIT_TRADE_CLOSED] mode= class= symbol= tradeId=` fires on every close per Langston Step 2 B2 mitigation — gives operators a runtime witness that `assetClass` populates correctly per class once xstock active trading lights up at WIRE-IN. All 3 listeners (active-execution-engine self-handler at L184-188 mode-filter only, c13-validation-service at L103-107 collection only, c14-validation-service at L123-127 collection only) verified safe via Step 1.b A2 grep — zero JSON.stringify/structured-clone/telemetry-emit production hits on `TradeClosedEvent` shape. Same C-7 doctrine: consumers that need to disambiguate read this field, consumers that don't are unaffected.
 
-**Position-record SSOT cleanup (CHUNK B).** `paper-execution-engine.ts:1376` (outcomeFeedback hook) switches from `safeResolveAssetClass(position.symbol, 'kraken')` re-resolve to `position.assetClass ?? safeResolveAssetClass(position.symbol, 'kraken')` belt-and-suspenders fallback. Per Langston Step 2 B2 reframe: the fallback is **defensive, NOT load-bearing** — line 922 B79.TEC NO_FALLBACK hard-fails on a position missing `assetClass` BEFORE flow ever reaches L1376. The `??` short-circuits to record-read on the happy path; the `safeResolveAssetClass` branch only ever fires if a future caller path bypasses L922 invariants. Zero runtime cost on the happy path. The `if (_assetClass !== null)` guard preserves no-throw skip semantics for null returns.
+**Position-record SSOT cleanup (CHUNK B).** `active-execution-engine.ts:1376` (outcomeFeedback hook) switches from `safeResolveAssetClass(position.symbol, 'kraken')` re-resolve to `position.assetClass ?? safeResolveAssetClass(position.symbol, 'kraken')` belt-and-suspenders fallback. Per Langston Step 2 B2 reframe: the fallback is **defensive, NOT load-bearing** — line 922 B79.TEC NO_FALLBACK hard-fails on a position missing `assetClass` BEFORE flow ever reaches L1376. The `??` short-circuits to record-read on the happy path; the `safeResolveAssetClass` branch only ever fires if a future caller path bypasses L922 invariants. Zero runtime cost on the happy path. The `if (_assetClass !== null)` guard preserves no-throw skip semantics for null returns.
 
 **Diagnostic endpoint v2 nested-by-layer (CHUNK C).** `/api/diagnostics/orchestrator-per-class-state` URL retained per Langston Q3 ACK (continuity over misleading-URL cost; zero callers verified across client/server/scripts via Step 1.b A6 thorough grep — only definition site at `server/routes.ts`). Payload restructured to nested-by-layer with inline `_meta` registry:
 
@@ -5312,8 +5314,8 @@ B79.0n.EXECUTION (sub-batch 13 of 16 in B79.0n umbrella v4 arc) is the last per-
     "coverage": ["orchestrator", "execution"],
     "lastReviewed": "2026-05-27",
     "knownGaps": [
-      "fee/slippage dispatch is class-member wildcard (paper-execution-engine.ts:126-127); per-class dispatch deferred to Phase 25/26 calibration",
-      "sizing-core risk-pct/max-position-pct mode-keyed not class-keyed (paper-position-sizing.ts:141-180); deferred to Phase 25/26",
+      "fee/slippage dispatch is class-member wildcard (active-execution-engine.ts:126-127); per-class dispatch deferred to Phase 25/26 calibration",
+      "sizing-core risk-pct/max-position-pct mode-keyed not class-keyed (active-position-sizing.ts:141-180); deferred to Phase 25/26",
       "narrative-feed TRADE_OPENED/TRADE_CLOSED payload lacks assetClass; dormant — re-review at narrative-feed activation or annual audit"
     ]
   }
@@ -5341,13 +5343,13 @@ Execution-layer compute reads `storage.getPaperSimOpenPositions('paper')` + `sto
 **Cross-references:**
 - ASSET_CLASS_ONBOARDING_WORKFLOW §4.23 codifies the additive event-payload field pattern with `TradeClosedEvent.assetClass?: string` as canonical reference implementation (alongside `PromotionEvent.assetClass?: string` from B79.0n.RTB).
 - ASSET_CLASS_ONBOARDING_WORKFLOW §4.24 codifies the deferred-gap registry closure rule with `/api/diagnostics/orchestrator-per-class-state` v2 `_meta.knownGaps` as canonical reference implementation.
-- SIM "Recent additions (B79.0n.EXECUTION — Phase 24 — 2026-05-27)" mirrors the component-level enumeration with blast-radius analysis (CRITICAL = paper-execution-engine; MEDIUM = event-bus; LOW = routes.ts; NONE = c13/c14/narrative-feed/session-lifecycle-controller/trading-engine/micro-execution-service).
+- SIM "Recent additions (B79.0n.EXECUTION — Phase 24 — 2026-05-27)" mirrors the component-level enumeration with blast-radius analysis (CRITICAL = active-execution-engine; MEDIUM = event-bus; LOW = routes.ts; NONE = c13/c14/narrative-feed/session-lifecycle-controller/trading-engine/micro-execution-service).
 
 ---
 
 ### 19.5 — B79.0n.ORCHESTRATOR: Per-class consumer-site swap pattern (2026-05-27)
 
-B79.0n.ORCHESTRATOR (sub-batch 12 of 16 in B79.0n umbrella v4 arc, renumbered from #13 after POOL skip) closes the last 3 production consumer sites that still imported pattern-pool guardrails directly from `crypto_spot/pattern-pool-filters.js` — `paper-position-sizing.ts`, `signal_quality_evaluator.ts`, and the `/pattern-pool` diagnostic route in `routes.ts`. Each previously read crypto's literal `PATTERN_POOL_GUARDRAILS` regardless of the asset class of the signal being processed; xstock pattern signals therefore got crypto's 15% position cap (vs xstock's DB-resolved 50%) and crypto's 0.45 final-score floor (same value today as xstock, but the routing was class-bound and would have remained wrong if values diverged).
+B79.0n.ORCHESTRATOR (sub-batch 12 of 16 in B79.0n umbrella v4 arc, renumbered from #13 after POOL skip) closes the last 3 production consumer sites that still imported pattern-pool guardrails directly from `crypto_spot/pattern-pool-filters.js` — `active-position-sizing.ts`, `signal_quality_evaluator.ts`, and the `/pattern-pool` diagnostic route in `routes.ts`. Each previously read crypto's literal `PATTERN_POOL_GUARDRAILS` regardless of the asset class of the signal being processed; xstock pattern signals therefore got crypto's 15% position cap (vs xstock's DB-resolved 50%) and crypto's 0.45 final-score floor (same value today as xstock, but the routing was class-bound and would have remained wrong if values diverged).
 
 **The dispatcher pattern (mirrors B79.0n.MCE `getFrictionForAssetClass`).** New file `server/asset_classes/pattern-pool-dispatch.ts` exports `getPatternPoolGuardrailsForAssetClass(assetClass: AssetClass): PatternPoolGuardrails`. The function is a domain-specific dispatcher — co-located by domain (pattern-pool) rather than collected in a central `dispatch.ts` SSOT, which would have created an all-classes-import-from-every-domain coupling problem. Exhaustive `switch` over the 8-member AssetClass union: `crypto_spot` returns the crypto module's `PATTERN_POOL_GUARDRAILS`; `xstock_spot` returns the xstock module's `XSTOCK_PATTERN_POOL_GUARDRAILS` (DB-resolved getters per B79.0n.PATTERN-DETECT); the remaining 6 classes (4 perp + 4 reserved-future) throw `[CLASS_NOT_WIRED]` with activation breadcrumbs pointing future onboarders at ASSET_CLASS_ONBOARDING_WORKFLOW.md §4.22. The default branch holds a `const _exhaustive: never = assetClass` compile-time exhaustiveness lock — adding a new AssetClass enum value without updating the dispatcher fails `tsc` before merge. Return type is explicitly typed as `PatternPoolGuardrails` (an interface defined in the dispatcher file) — not inferred — locking the shape contract.
 
@@ -5355,7 +5357,7 @@ B79.0n.ORCHESTRATOR (sub-batch 12 of 16 in B79.0n umbrella v4 arc, renumbered fr
 
 **POOL skip cleanup as collateral.** Umbrella v4 row #12 (POOL) was SKIPPED 2026-05-27 — xStock's 489-pair universe doesn't have the selection-problem ARM was designed to solve (1500-pair crypto universe vs 300-pair scan budget). The 3 dead factory ARM constructions left behind by B79.0a + B79.0n.TELEMETRY (xstock_spot/xstock_perp/crypto_perp factory bootstrap calls that nobody read) were cleaned up as part of ORCHESTRATOR: `ratioManager: AdaptiveRatioManager` field deleted from the `AssetClassInstances` interface, AdaptiveRatioManager import deleted, 3 factory constructions deleted, 3 test file dispositions (1 delete + 2 refactors). Crypto's module-level `adaptiveRatioManager` singleton at `adaptive-ratio-manager.ts:307` is the live ARM for crypto's FX5 scanner and stays untouched.
 
-**Caller-thread discipline (Langston Step 2 Probe 8 ACK).** `sizePaperPositionForSignal` signature gains REQUIRED `assetClass: AssetClass` field; both call sites (paper-execution-engine.ts:2529 + signal-orchestrator.ts:432) resolve it via `resolveAssetClass(signal.symbol, 'kraken')` deterministically — NOT via `signal.metadata?.assetClass || 'crypto_spot'` silent fallback. The reasoning: `resolveAssetClass` IS the canonical resolver; metadata.assetClass was itself computed via the same resolver; threading metadata adds a hop without adding signal. If `resolveAssetClass` ever disagrees with metadata.assetClass for a given symbol, that's a real bug we want surfaced at the sizing boundary, not silently reconciled in favor of metadata. Throws on B69-unregistered symbols at the boundary (correct fail-fast behavior).
+**Caller-thread discipline (Langston Step 2 Probe 8 ACK).** `sizePaperPositionForSignal` signature gains REQUIRED `assetClass: AssetClass` field; both call sites (active-execution-engine.ts:2529 + signal-orchestrator.ts:432) resolve it via `resolveAssetClass(signal.symbol, 'kraken')` deterministically — NOT via `signal.metadata?.assetClass || 'crypto_spot'` silent fallback. The reasoning: `resolveAssetClass` IS the canonical resolver; metadata.assetClass was itself computed via the same resolver; threading metadata adds a hop without adding signal. If `resolveAssetClass` ever disagrees with metadata.assetClass for a given symbol, that's a real bug we want surfaced at the sizing boundary, not silently reconciled in favor of metadata. Throws on B69-unregistered symbols at the boundary (correct fail-fast behavior).
 
 **Behavioral correction observable post-deploy.** Step 8 verification via the new `GET /api/diagnostics/orchestrator-per-class-state` endpoint confirmed: `crypto_spot` returns `{ FINAL_SCORE_FLOOR: 0.45, MAX_POSITION_PCT: 0.15 }` (unchanged from pre-batch crypto literal); `xstock_spot` returns `{ FINAL_SCORE_FLOOR: 0.45, MAX_POSITION_PCT: 0.50 }` (real behavioral correction — xstock pattern signals now route to the 50% cap from `module_constants.pattern_pool_gates.xstock_spot.pattern_max_position_pct` instead of the crypto-bound 15%); `crypto_perp` and `xstock_perp` return `{ status: 'CLASS_NOT_WIRED', reason }`. Active-trading impact is ZERO today because active trading is off; the behavioral correction takes effect at WIRE-IN (#14) when the xstock scanner emits live signals. Phase 19 calibration window validates xstock's 0.50 placeholder value at that point.
 
@@ -5383,9 +5385,9 @@ reorg-B4 attaches a **selection-quality telemetry layer** to the promotion bound
 
 | This Section | Related To | Connection |
 |-------------|------------|------------|
-| PaperExecutionEngine | Phase 3 (Signal Orchestrator) | Receives signals via RTB → TCL → processSignal() |
-| PaperExecutionEngine | Phase 4 (Trade Safety) | Calls `checkGuardrailRisk()` before execution |
-| PaperExecutionEngine | Phase 4 (Guardrails V2) | Reads guardrails for position limits, kill switch |
+| ActiveExecutionEngine | Phase 3 (Signal Orchestrator) | Receives signals via RTB → TCL → processSignal() |
+| ActiveExecutionEngine | Phase 4 (Trade Safety) | Calls `checkGuardrailRisk()` before execution |
+| ActiveExecutionEngine | Phase 4 (Guardrails V2) | Reads guardrails for position limits, kill switch |
 | TrailingExitController | Phase 4 (Cost Model) | Uses `computeNetBreakeven()`, `computeNetTargetFloor()` |
 | TradingEngine Goal Alignment | Phase 4 §7 (Pre-Execution Validator) | SECOND location of deprecated Goal Alignment |
 | SLAL | Phase 3 (Signal Orchestrator) | Instruments GENERATION/SIZING stages |
@@ -5458,7 +5460,7 @@ Kyle's directive for ongoing audits: if any subsystem operates in parallel to th
 
 | File | Lines | Directive | Status |
 |------|-------|-----------|--------|
-| `paper-execution-engine.ts` | ~2,308 | 11.0E | ✅ Primary engine (AUTHORITATIVE) |
+| `active-execution-engine.ts` | ~2,308 | 11.0E | ✅ Primary engine (AUTHORITATIVE) |
 | `trading-engine.ts` | ~766 | Phase 37 | ⏸️ Deferred — live mode not in scope. Contains deprecated Goal Alignment. |
 | `trailing-exit-controller.ts` | ~335 | 9.2.A / 11.3A | ✅ Active trailing exit |
 | `micro-execution-service.ts` | ~374 | 27.F.14.MICRO | 🟡 Experimental/dormant — accepted by Kyle |
@@ -5467,7 +5469,7 @@ Kyle's directive for ongoing audits: if any subsystem operates in parallel to th
 | `execution-timing.ts` | ~274 | — | ✅ Order timing instrumentation |
 | `bob-trade.ts` | ~252 | 27.F.15.A | ✅ Trade data cache |
 | `price-cache.ts` | ~448 | 8.8.4-A4.R10R-4 | 🔒 LOCKED |
-| `paper-sim-service.ts` | ~300+ | — | ✅ Session management |
+| `active-engine-service.ts` | ~300+ | — | ✅ Session management |
 
 ### LEGACY Execution Files (Phase 5 Addendum — Kyle Deprecated NLAI)
 
@@ -5497,7 +5499,7 @@ Kyle's directive for ongoing audits: if any subsystem operates in parallel to th
 The only execution path currently in scope for architectural validation is:
 
 ```
-FX5 → SQE → RTB → TCL → PaperExecutionEngine → DSE → TradeSafety → Exit Loop
+FX5 → SQE → RTB → TCL → ActiveExecutionEngine → DSE → TradeSafety → Exit Loop
 ```
 
 Anything outside this path is non-blocking unless it:
@@ -6889,7 +6891,7 @@ The startup sequence enforced by `server/index.ts` is:
 **Directive:** Phase 2D
 
 ### Purpose
-Verifies single-tenant database architecture by checking that no `user_id` columns exist in the 5 core operational tables: `portfolio_state`, `strategy_settings`, `paper_sim_sessions`, `system_context`, `trading_settings_legacy`.
+Verifies single-tenant database architecture by checking that no `user_id` columns exist in the 5 core operational tables: `portfolio_state`, `strategy_settings`, `active_engine_sessions`, `system_context`, `trading_settings_legacy`.
 
 ### Behavior
 - If `SINGLE_TENANT=false`: skips check entirely
@@ -7082,7 +7084,7 @@ interface ScheduledTask {
 - All results logged to `transparencyLog` table
 - Task errors don't crash — caught and logged
 
-**⚠️ POST-AUDIT INVESTIGATION REQUIRED (Kyle, Phase 7 Addendum):** At boot, 15+ scheduled tasks are registered and started, including AI summaries, weekly expert insights, semantic ingestion, optimization analysis, diagnostic analysis, audit anomaly tasks, plus the AutonomyScheduler, AwarenessScheduler, and LearningCycleService started separately. **None of these are directly required for the core paper trading path** (FX5 → SQE → RTB → TCL → PaperExecutionEngine). Kyle's directive: Investigate each scheduled task post-audit — does it directly support core paper trading? Is it autonomy-era infrastructure? Is it observational only? Can it be disabled in a "Core Trading Mode"? Should it be deprecated or removed? **No immediate shutdown required. Formal review required.**
+**⚠️ POST-AUDIT INVESTIGATION REQUIRED (Kyle, Phase 7 Addendum):** At boot, 15+ scheduled tasks are registered and started, including AI summaries, weekly expert insights, semantic ingestion, optimization analysis, diagnostic analysis, audit anomaly tasks, plus the AutonomyScheduler, AwarenessScheduler, and LearningCycleService started separately. **None of these are directly required for the core paper trading path** (FX5 → SQE → RTB → TCL → ActiveExecutionEngine). Kyle's directive: Investigate each scheduled task post-audit — does it directly support core paper trading? Is it autonomy-era infrastructure? Is it observational only? Can it be disabled in a "Core Trading Mode"? Should it be deprecated or removed? **No immediate shutdown required. Formal review required.**
 
 Tasks #5 (CLE) and #6 (CWA) are specifically flagged as Walter-era learning components (Continuous Learning Engine and Cognitive Weight Adjustment). If the Walter-era stack is confirmed dead (Phase 6), these tasks may be executing against dead systems.
 
@@ -7573,7 +7575,7 @@ These systems **directly support** the active paper trading pipeline and are con
 
 ```
 FX5 Scanner → SQE (Signal Quality Evaluator) → RTB (Ready To Buy) →
-TCL (Trade Candidate List) → PaperExecutionEngine →
+TCL (Trade Candidate List) → ActiveExecutionEngine →
 Signal Generation → Risk Management → Execution → Telemetry → Calibration
 ```
 
@@ -9960,7 +9962,7 @@ Specialized diagnostic modules provide deep inspection of specific subsystems:
 | `b4-diagnostics.ts` | B4 trading diagnostics |
 | `c5-financial-diagnostics.ts` | Financial metric diagnostics |
 | `i1-rtb-diagnostics-service.ts` | I1 Ready-to-Brief pipeline |
-| `paper-sim-diagnostic.ts` | Paper simulation diagnostics |
+| `active-scan-diagnostic.ts` | Paper simulation diagnostics |
 | `system-truth-diagnostic.ts` | Ground truth verification |
 | `task-queue-diagnostics.ts` | Task queue health |
 
@@ -10308,10 +10310,10 @@ These tables serve the canonical paper/live trading flow:
 | `trading_signals` | Signal detection log | 3 indexes, metadata (jsonb) | Y |
 | `trades` | Live/paper trade records | 22 columns, 2 indexes, metadata (jsonb) | Y |
 | `portfolio_state` | Balance tracking | uniqueIndex(contextId, mode) | Y |
-| `paper_sim_trades` | Paper simulation trades | ~30 columns, 4 indexes | Y (paper only) |
-| `paper_sim_open_positions` | Open paper positions | ~25 columns, uniqueIdx on symbol | Y (paper only) |
-| `paper_sim_trade_logs` | Paper trade event log | 3 indexes, metadata (jsonb) | N |
-| `paper_sim_sessions` | Paper session management | 3 indexes, metadata (jsonb) | N |
+| `closed_trades` | Paper simulation trades | ~30 columns, 4 indexes | Y (paper only) |
+| `active_open_positions` | Open paper positions | ~25 columns, uniqueIdx on symbol | Y (paper only) |
+| `active_trade_logs` | Paper trade event log | 3 indexes, metadata (jsonb) | N |
+| `active_engine_sessions` | Paper session management | 3 indexes, metadata (jsonb) | N |
 | `rtb_signals` | Ready-to-Brief signal queue | ~25 columns, 5 indexes | Y |
 | `execution_attempt_audit` | Execution decision log | 14 columns, 5 indexes, executionDecision/blockReason enums | Y |
 | `system_context` | Engine state / LATTI | ~25 columns, 3 indexes, extensive defaults | Y |
@@ -10632,7 +10634,7 @@ The 10 GB limit is a Neon free/starter tier constraint. With ~71 legacy tables p
 At server boot, `assertSingleTenantDB()` queries `information_schema.columns` to verify that `user_id` columns do NOT exist in the 5 operational tables:
 - `portfolio_state`
 - `strategy_settings`
-- `paper_sim_sessions`
+- `active_engine_sessions`
 - `system_context`
 - `trading_settings_legacy`
 
@@ -10715,7 +10717,7 @@ The schema defines over 200 indexes across ~160 tables. No index usage review ha
 
 Several high-volume append-only tables would benefit from time-based partitioning:
 - `telemetry_history` — continuous signal telemetry, grows with every cycle
-- `paper_sim_trade_logs` — every trade event logged
+- `active_trade_logs` — every trade event logged
 - `execution_attempt_audit` — every execution decision logged
 - `safety_telemetry` — guardrail check results
 - `error_logs` — diagnostic errors
@@ -10798,7 +10800,7 @@ There is no defined data retention policy for any table. Every row ever written 
 
 4. **Index usage review (Section 14.5)** — ~200+ indexes with no usage audit. Unused indexes waste storage and slow writes. Recommend `pg_stat_user_indexes` audit.
 
-5. **Table partitioning (Section 14.6)** — Append-only tables (telemetry_history, paper_sim_trade_logs, execution_attempt_audit, etc.) need time-based partitioning for retention and performance.
+5. **Table partitioning (Section 14.6)** — Append-only tables (telemetry_history, active_trade_logs, execution_attempt_audit, etc.) need time-based partitioning for retention and performance.
 
 6. **Migration rebaseline (Section 14.7)** — Schema cannot be reconstructed from migration history. Recommend generating a fresh baseline migration from current schema.ts.
 
