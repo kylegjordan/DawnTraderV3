@@ -90,6 +90,21 @@ Define the per-class threshold as a **friction-divergence bound**, computed from
 
 ---
 
+## 4b. Two net-new findings (second sweep)
+
+**(i) The minimum-order floor skews the OPPOSITE direction from impact — and it makes decision #2 the more load-bearing guard.**
+Kraken enforces a per-pair **cost minimum** (notional floor) and a base-currency volume minimum (≈ 1 USD-equivalent) — "if your order doesn't meet the cost minimum, the order will be canceled." **[S11]** The asymmetry the earlier pass under-stated: the min-floor constrains the *small* account, not the big one. If live starts at ~$800 and a %-sized order on a thin pair falls below the floor, **live physically cannot place that trade** — but a paper book compounded to $4,000 places it every time. So an over-grown paper book doesn't only over-fill (impact skew); it **never learns the "too small to exist" constraint** that binds the live account.
+- The **triggered** re-anchor (decision #1) catches only the *impact* skew (paper too big → walks too much book). It does **not** catch the min-floor skew.
+- The **launch-time hard re-anchor** (decision #2) fixes *both* — at launch paper = live, so paper hits the same floor live does.
+- **Therefore decision #2 is the more load-bearing of the two guards**, and B8.2 gets a concrete acceptance item: *after any re-anchor, the min-notional/min-order check must read the CURRENT (re-anchored) paper balance*, so paper honors the same floor live faces. This is testable and silently rots if unasserted.
+
+**(ii) Scale-invariant learning is a published, solved problem — the dollar-agnostic fence is on a paved road.**
+Our fence + balance-ratio-at-open tag is, in ML terms, reward/feature scale-normalization, and there's published precedent it works: reward-range normalization yields RL agents whose performance is invariant to reward magnitude, where the un-normalized model's accuracy is "limited to certain reward magnitudes." **[S12]** Trading-specific RL confirms the practice — actions scaled to max-allowed-position, risk-adjusted (per-unit-risk) returns rather than raw dollar P&L, inputs normalized to "generalize across portfolio sizes." **[S13]**
+- **Validates** the decision-skew fence (all thresholds/comparisons in %/R/bps; enumerated dollar-boundary set only for sizing-notional, min-notional, fee computation) as standard technique, not paranoia.
+- **Refinement with a citable why:** the literature warns running/global normalization "introduces non-stationarity into the learning objective." **[S13]** Translation: normalize each trade at **write-time against its fixed balance-ratio-at-open tag**, never via a live-updating global normalizer that shifts as the book compounds. Our design already tags at open — that's the stationary-reference approach, which is correct. State the *why* in B8.2 scope so a later "simplification" into a live normalizer doesn't reintroduce the trap.
+
+---
+
 ## 5. What this pass changes vs. leaves alone
 
 **Leaves alone (validated as-is):**
@@ -105,7 +120,12 @@ Define the per-class threshold as a **friction-divergence bound**, computed from
 **Flags for B8.2 scope (no new open loops — all have homes):**
 - The `X bps` per-class threshold value → ADJUSTMENT_FRAMEWORK entry (home already agreed).
 - The friction estimator (square-root model against per-class depth/ADV) is a small piece of engine work B8.2 needs; name it in the B8.2 scope so it's not discovered late. If it's heavier than expected, that's a scope conversation with CC-B, not a silent carry.
-- Nothing here touches decisions #1/#2 as *policy* — it's purely how the trigger computes.
+- **Min-notional-floor honoring after re-anchor** (§4b-i) → B8.2 acceptance item; the floor check reads the current re-anchored balance. This is the guard against the small-account skew that decision #1 alone can't catch.
+- **A triggered re-anchor must re-base the balance figure for FUTURE sizing only — it must NOT force-close open paper positions** (contrast: IBKR requires flatten-before-reset; we deliberately choose not to, so a mid-run trigger can't act as a stealth kill-switch). State explicitly in B8.2.
+- **Every triggered re-anchor is a logged governance event** (which class's friction budget was crossed, old→new balance) — not a silent snap. Preserves Kyle's "watch it grow" confidence signal by making the one discontinuity legible; pre-anchor growth stays on the lifetime scoreboard (already locked).
+- **Normalize learning at write-time against the fixed balance-ratio-at-open tag, never a live-updating global normalizer** (§4b-ii) → one-line note in B8.2 scope to prevent a future non-stationarity regression.
+- **Add a paper-vs-live divergence readout to B8.3** once live is on — the reconciliation artifact that makes the shadow book earn its keep AND empirically measures the friction skew the threshold bounds. Name it as a B8.3 dashboard item now (§13 discipline) rather than a "later."
+- Nothing here touches decisions #1/#2 as *policy* — it's purely how the trigger computes and how the run is instrumented.
 
 ---
 
@@ -121,6 +141,9 @@ Define the per-class threshold as a **friction-divergence bound**, computed from
 - **[S8]** IBKR — *Paper Trading Account Reset* (resettable practice balance). https://ibkrguides.com/student-trading-lab-professor/en-us/account-reset.htm  ·  Alpaca — *Paper Trading* (resettable to arbitrary amount). https://docs.alpaca.markets/us/docs/paper-trading
 - **[S9]** Lucid Trading — *New Live Structure* (on live transition, simulated funded account set to dormant, capital allocated). https://support.lucidtrading.com/en/articles/13425130-new-live-structure
 - **[S10]** My Funded Futures — *Understanding Rapid Live* (on move to live, simulated prop accounts closed; eligible funded accounts transitioned). https://help.myfundedfutures.com/en/articles/13134718-understanding-rapid-live
+- **[S11]** Kraken — *Overview of cryptocurrency minimums / minimum order size* and *Cost minimum for trading* (per-pair notional floor; order canceled if cost minimum not met). https://support.kraken.com/articles/205893708-minimum-order-size-volume-for-trading  ·  https://support.kraken.com/articles/12425041458708-cost-minimum-for-trading
+- **[S12]** *Achieving Scale-Invariant Reinforcement Learning Performance with Reward Range Normalization* (magnitude-invariant performance via reward-range normalization). https://www.researchgate.net/publication/386459816_Achieving_Scale-Invariant_Reinforcement_Learning_Performance_with_Reward_Range_Normalization
+- **[S13]** *A Reinforcement Learning Framework for Quantitative Trading* (arXiv 2411.07585, per-unit-risk returns, position scaled to max-allowed, input normalization across portfolio sizes) ·  *Normalization and effective learning rates in RL* (arXiv 2407.01800, running normalization → non-stationarity caution). https://arxiv.org/html/2411.07585v1  ·  https://arxiv.org/html/2407.01800v1
 
 ---
 *Prepared by Langston, 2026-07-03. Citation-grade field pass per Kyle decision #3. Policy choices (1) + (2) stand as decided; this refines implementation only.*
