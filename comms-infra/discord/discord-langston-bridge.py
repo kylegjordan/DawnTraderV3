@@ -474,12 +474,20 @@ def _resurface_stale_blocked():
         stale = lq.stale_blocked(items)
         if not stale:
             return
+        WHO_NAME = {"CC-A": "OLD Claude", "CC-B": "NEW Claude", "Langston": "Langston", "Kyle": "Kyle"}
         for it in stale:
             bo = it.get("blocked_on") or {}
+            owner = WHO_NAME.get(bo.get("who", ""), bo.get("who") or "one of the Claudes")
+            # Plain-language, addressed to the session that OWES the dependency (its name wakes it) --
+            # never a raw-id dump at Kyle (Kyle directive 2026-07-03). Kyle gets FYI framing only.
+            about = (it.get("summary") or "").replace("Langston \u2014 ", "")[:160]
+            waiting_for = (bo.get("want") or "the promised follow-up")[:160]
             dc.rest_send(BOT_TOKEN, CFG["channel_id"],
-                         f"Kyle — queue item {it.get('id')} has been BLOCKED with no movement "
-                         f"(waiting on {bo.get('who', '?')} for: {bo.get('want', '?')}). Still parked — "
-                         f"needs the dependency to land, or a re-mark (`[[QUEUE id={it.get('id')} status=ready]]`).",
+                         f"{owner} \u2014 one of Langston's review items is still parked waiting on you. "
+                         f"What it is: {about}... What it needs: {waiting_for}. "
+                         f"If this already happened in a later exchange, clear the old entry with "
+                         f"`[[QUEUE id={it.get('id')} status=done]]`; if it is still owed, land it. "
+                         f"(Kyle: FYI only \u2014 {owner} owns this; no action needed from you.)",
                          LOG_FILE)
             lq.mark_stale_surfaced(it)
         lq.save_queue(QUEUE_FILE, items)
