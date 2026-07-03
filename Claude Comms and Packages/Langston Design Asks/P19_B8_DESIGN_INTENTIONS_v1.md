@@ -114,7 +114,7 @@ Langston reviewed via three stateless passes (14:50 Discord + 14:51 staged `P19_
 - **B8.3** — per-mode dashboards (Kyle's stats + profit factor, expectancy-R, max drawdown, total fees, slot utilization + the three-balances labeling).
 - **B8.4** — switch-on (crypto→xStock per D7) + P19-B8-AC1/AC2. **GATING PRECONDITION: AC1 restart-with-open-positions proven on BOTH legs** — (leg 1, pre-switch-on, CI: seed session+positions in test DB, call resumeActiveEngines on a FRESH reloaded instance (not the same in-memory object), assert full rehydration — kills #404 dormant leg; (leg 2, first hours post-switch-on: DELIBERATE scheduled pm2 restart with real open positions; pass = byte-identical open state (position count, entry prices, session id, stop/target state) + ZERO duplicate re-entry + ZERO orphaned positions — not "it came back up").
 
-## Kyle-owned decisions (open)
-1. Threshold re-anchor: TRIGGERED (rec) vs recommend-only.
-2. Hard re-anchor at live-launch: YES (rec) vs no.
-3. Commission Langston's citation-grade field-research pass before §4 locks: optional.
+## Kyle-owned decisions — ★ DECIDED (Kyle, 2026-07-03: "A, A, A")
+1. Threshold re-anchor: **TRIGGERED (automatic)** — crossing the per-class physics threshold snaps paper's balance back to the real Kraken value on its own; learning + lifetime scoreboard untouched; run continues.
+2. Hard re-anchor at live-launch: **YES** — the day live mode turns on, paper resets to match the real account and runs as a true side-by-side shadow; pre-launch growth preserved as warm-up history.
+3. Langston's citation-grade field-research pass: **YES — COMMISSIONED** before §4/B8.2 formally locks. Scope of the pass: how professional firms handle practice/shadow-account balance policy (sizing to live capital, re-anchor cadence, long-running paper books). The pass VALIDATES/REFINES the threshold + re-anchor design; Kyle's policy choices (1) + (2) stand as decided. **Sequencing consequence: B8.1 (page reorg) proceeds NOW in parallel — only B8.2 (balance policy) waits on the research pass + §4 formal lock.**
