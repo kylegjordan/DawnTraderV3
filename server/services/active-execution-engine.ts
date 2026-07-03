@@ -768,7 +768,7 @@ export class ActiveExecutionEngine {
       console.error(`[PaperExecution:${this.mode}] Monitoring cycle error:`, error);
       
       // Log error to trade logs (Phase 27.F.15.B.2: Global mode-based)
-      await storage.createPaperSimTradeLog(this.mode, {
+      await storage.createActiveTradeLog(this.mode, {
         tradeId: null,
         positionId: null,
         eventType: 'error',
@@ -1520,7 +1520,7 @@ export class ActiveExecutionEngine {
       });
 
       // Log the exit event with C2 breakdown
-      await storage.createPaperSimTradeLog(this.mode, {
+      await storage.createActiveTradeLog(this.mode, {
         tradeId: trade.id,
         positionId: positionId,
         eventType: 'position_closed',
@@ -2119,7 +2119,7 @@ export class ActiveExecutionEngine {
       });
       
       // Log rejection
-      await storage.createPaperSimTradeLog(this.mode, {
+      await storage.createActiveTradeLog(this.mode, {
         tradeId: null,
         positionId: null,
         eventType: 'trade_rejected',
@@ -2236,7 +2236,7 @@ export class ActiveExecutionEngine {
       console.log(`[PaperExecution:${this.mode}] Paper trade rejected by Net Expectancy Gate: ${_b72RejReason}`);
 
       // Log rejection
-      await storage.createPaperSimTradeLog(this.mode, {
+      await storage.createActiveTradeLog(this.mode, {
         tradeId: null,
         positionId: null,
         eventType: 'trade_rejected',
@@ -2809,7 +2809,7 @@ export class ActiveExecutionEngine {
       }
 
       // Log the entry event
-      await storage.createPaperSimTradeLog(this.mode, {
+      await storage.createActiveTradeLog(this.mode, {
         tradeId: trade.id,
         positionId: null,
         eventType: 'position_opened',
@@ -2949,7 +2949,7 @@ export class ActiveExecutionEngine {
   }
 
   async getTradeLogs(limit: number = 100) {
-    return await storage.getPaperSimTradeLogs(this.mode, { limit });
+    return await storage.getActiveTradeLogs(this.mode, { limit });
   }
 
   async getStats() {

@@ -11519,7 +11519,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         // Hard reset: full cleanup including trade history
         await storage.deleteAllPaperSimTrades('paper');
         await storage.deleteAllPaperSimOpenPositions('paper');
-        await storage.deleteAllPaperSimTradeLogs('paper');
+        await storage.deleteAllActiveTradeLogs('paper');
         console.log(`[PaperSim] Hard reset: cleared trades, positions, and logs`);
       }
       
@@ -11581,7 +11581,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       console.log(`[8.8.4-C.11][CLEAR_DATA] Cleared ${signalsDeleted} RTB signals`);
       
       // Clear trade logs
-      await storage.deleteAllPaperSimTradeLogs(mode);
+      await storage.deleteAllActiveTradeLogs(mode);
       console.log('[8.8.4-C.11][CLEAR_DATA] Cleared trade logs');
       
       res.json({
@@ -12936,7 +12936,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const userId = req.user!.id;
       const { limit } = req.query;
       
-      const logs = await storage.getPaperSimTradeLogs('paper', {
+      const logs = await storage.getActiveTradeLogs('paper', {
         limit: limit ? parseInt(limit as string) : 100
       });
       res.json(logs);

@@ -600,10 +600,10 @@ export class ActivePortfolioManager {
           });
 
           // Log the close event
-          // P19-B3b: createPaperSimTradeLog is (mode, log); thread this.mode. The
-          // legacy userId field was dropped from paper_sim_trade_logs (single-tenant,
+          // P19-B3b: createActiveTradeLog is (mode, log); thread this.mode. The
+          // legacy userId field was dropped from active_trade_logs (single-tenant,
           // mode-based) so it is removed from the log object.
-          await storage.createPaperSimTradeLog(this.mode, {
+          await storage.createActiveTradeLog(this.mode, {
             tradeId: trade.id,
             positionId: position.id,
             eventType: 'position_closed',

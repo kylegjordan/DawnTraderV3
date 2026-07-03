@@ -1803,7 +1803,7 @@ export const paperSimOpenPositions = pgTable("paper_sim_open_positions", {
 }));
 
 // Trade Logs - Chronological event log for paper trading transparency - GLOBAL
-export const paperSimTradeLogs = pgTable("paper_sim_trade_logs", {
+export const activeTradeLogs = pgTable("active_trade_logs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   tradeId: varchar("trade_id"), // References paper_sim_trades.id (nullable for system events)
   positionId: varchar("position_id"), // References paper_sim_open_positions.id (nullable)
@@ -1812,9 +1812,9 @@ export const paperSimTradeLogs = pgTable("paper_sim_trade_logs", {
   message: text("message").notNull(),
   metadata: jsonb("metadata"), // Additional context (prices, quantities, reasons)
 }, (table) => ({
-  timestampIdx: index("paper_sim_trade_logs_timestamp_idx").on(table.timestamp),
-  tradeIdIdx: index("paper_sim_trade_logs_trade_id_idx").on(table.tradeId),
-  eventTypeIdx: index("paper_sim_trade_logs_event_type_idx").on(table.eventType),
+  timestampIdx: index("active_trade_logs_timestamp_idx").on(table.timestamp),
+  tradeIdIdx: index("active_trade_logs_trade_id_idx").on(table.tradeId),
+  eventTypeIdx: index("active_trade_logs_event_type_idx").on(table.eventType),
 }));
 
 // Paper Sim Sessions - Persistent tracking of simulation start/stop sessions
@@ -2559,7 +2559,7 @@ export const insertPaperSimOpenPositionSchema = createInsertSchema(paperSimOpenP
   lastUpdated: true,
 });
 
-export const insertPaperSimTradeLogSchema = createInsertSchema(paperSimTradeLogs).omit({
+export const insertActiveTradeLogSchema = createInsertSchema(activeTradeLogs).omit({
   id: true,
   timestamp: true,
 });
@@ -2769,8 +2769,8 @@ export type PaperSimTrade = typeof paperSimTrades.$inferSelect;
 export type InsertPaperSimOpenPosition = z.infer<typeof insertPaperSimOpenPositionSchema>;
 export type PaperSimOpenPosition = typeof paperSimOpenPositions.$inferSelect;
 
-export type InsertPaperSimTradeLog = z.infer<typeof insertPaperSimTradeLogSchema>;
-export type PaperSimTradeLog = typeof paperSimTradeLogs.$inferSelect;
+export type InsertActiveTradeLog = z.infer<typeof insertActiveTradeLogSchema>;
+export type ActiveTradeLog = typeof activeTradeLogs.$inferSelect;
 
 export type InsertPaperSimSession = z.infer<typeof insertPaperSimSessionSchema>;
 export type PaperSimSession = typeof paperSimSessions.$inferSelect;

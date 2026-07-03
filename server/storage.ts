@@ -166,9 +166,9 @@ import {
   type PaperSimOpenPosition,
   type InsertPaperSimOpenPosition,
   paperSimOpenPositions,
-  type PaperSimTradeLog,
-  type InsertPaperSimTradeLog,
-  paperSimTradeLogs,
+  type ActiveTradeLog,
+  type InsertActiveTradeLog,
+  activeTradeLogs,
   type PaperSimSession,
   type InsertPaperSimSession,
   paperSimSessions,
@@ -552,9 +552,9 @@ export interface IStorage {
   deleteAllPaperSimOpenPositions(mode: TradingMode): Promise<void>; // Phase 27.F.13.C: Reset simulation
   
   // Trade logs
-  createPaperSimTradeLog(mode: TradingMode, log: InsertPaperSimTradeLog): Promise<PaperSimTradeLog>;
-  getPaperSimTradeLogs(mode: TradingMode, filters?: { limit?: number; tradeId?: string }): Promise<PaperSimTradeLog[]>;
-  deleteAllPaperSimTradeLogs(mode: TradingMode): Promise<void>; // Phase 27.F.13.C: Reset simulation
+  createActiveTradeLog(mode: TradingMode, log: InsertActiveTradeLog): Promise<ActiveTradeLog>;
+  getActiveTradeLogs(mode: TradingMode, filters?: { limit?: number; tradeId?: string }): Promise<ActiveTradeLog[]>;
+  deleteAllActiveTradeLogs(mode: TradingMode): Promise<void>; // Phase 27.F.13.C: Reset simulation
   deleteAllPaperSimTrades(mode: TradingMode): Promise<void>; // Phase 27.F.13.C: Reset simulation
   cleanOldPaperSimTrades(mode: TradingMode, hoursOld: number): Promise<number>; // Phase 27.F.13.F: Cleanup old closed trades
   
@@ -3392,8 +3392,8 @@ export class DatabaseStorage implements IStorage {
     await db.delete(paperSimOpenPositions);
   }
 
-  async deleteAllPaperSimTradeLogs(mode: TradingMode): Promise<void> {
-    await db.delete(paperSimTradeLogs);
+  async deleteAllActiveTradeLogs(mode: TradingMode): Promise<void> {
+    await db.delete(activeTradeLogs);
   }
 
   async deleteAllPaperSimTrades(mode: TradingMode): Promise<void> {
@@ -3416,31 +3416,31 @@ export class DatabaseStorage implements IStorage {
     return result.length;
   }
 
-  async createPaperSimTradeLog(mode: TradingMode, log: InsertPaperSimTradeLog): Promise<PaperSimTradeLog> {
-    const [result] = await db.insert(paperSimTradeLogs).values(log).returning();
+  async createActiveTradeLog(mode: TradingMode, log: InsertActiveTradeLog): Promise<ActiveTradeLog> {
+    const [result] = await db.insert(activeTradeLogs).values(log).returning();
     return result;
   }
 
-  async getPaperSimTradeLogs(mode: TradingMode, filters?: { limit?: number; tradeId?: string }): Promise<PaperSimTradeLog[]> {
+  async getActiveTradeLogs(mode: TradingMode, filters?: { limit?: number; tradeId?: string }): Promise<ActiveTradeLog[]> {
     // Phase 27.F.15.B.2: Global query, mode-based only
     const limit = filters?.limit || 100;
     
     const conditions = [];
     if (filters?.tradeId) {
-      conditions.push(eq(paperSimTradeLogs.tradeId, filters.tradeId));
+      conditions.push(eq(activeTradeLogs.tradeId, filters.tradeId));
     }
     
     if (conditions.length > 0) {
       return await db.select()
-        .from(paperSimTradeLogs)
+        .from(activeTradeLogs)
         .where(and(...conditions))
-        .orderBy(desc(paperSimTradeLogs.timestamp))
+        .orderBy(desc(activeTradeLogs.timestamp))
         .limit(limit);
     }
     
     return await db.select()
-      .from(paperSimTradeLogs)
-      .orderBy(desc(paperSimTradeLogs.timestamp))
+      .from(activeTradeLogs)
+      .orderBy(desc(activeTradeLogs.timestamp))
       .limit(limit);
   }
 
