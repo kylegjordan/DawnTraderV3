@@ -2101,7 +2101,7 @@ export class ActiveExecutionEngine {
       }));
       
       // [27.F.14.B] INSTRUMENTATION: Risk check failed
-      console.log(`[27.F.14.B][PaperSim] risk_check_failed {symbol:"${signal.symbol}", reason:"${riskCheck.reason}"}`);
+      console.log(`[27.F.14.B][ActiveEngine] risk_check_failed {symbol:"${signal.symbol}", reason:"${riskCheck.reason}"}`);
       contextBridge.broadcast({
         type: 'trading_pipeline_event' as any,
         payload: {
@@ -2271,7 +2271,7 @@ export class ActiveExecutionEngine {
     });
 
     // [27.F.14.B] INSTRUMENTATION: Risk check passed
-    console.log(`[27.F.14.B][PaperSim] risk_check_passed {symbol:"${signal.symbol}"}`);
+    console.log(`[27.F.14.B][ActiveEngine] risk_check_passed {symbol:"${signal.symbol}"}`);
     contextBridge.broadcast({
       type: 'trading_pipeline_event' as any,
       payload: {
@@ -2440,7 +2440,7 @@ export class ActiveExecutionEngine {
     console.log(`  Entry Slippage: $${totalSlippage.toFixed(2)}, Entry Fee: $${entryFee.toFixed(2)}`);
 
     // [27.F.14.B] INSTRUMENTATION: Order computed
-    console.log(`[27.F.14.B][PaperSim] order_computed {symbol:"${signal.symbol}", quantity:${quantity.toFixed(4)}, entry:${actualEntryPrice.toFixed(2)}, stop:${signal.stopPrice.toFixed(2)}, target:${signal.targetPrice.toFixed(2)}}`);
+    console.log(`[27.F.14.B][ActiveEngine] order_computed {symbol:"${signal.symbol}", quantity:${quantity.toFixed(4)}, entry:${actualEntryPrice.toFixed(2)}, stop:${signal.stopPrice.toFixed(2)}, target:${signal.targetPrice.toFixed(2)}}`);
     contextBridge.broadcast({
       type: 'trading_pipeline_event' as any,
       payload: {
@@ -2953,7 +2953,7 @@ export class ActiveExecutionEngine {
   }
 
   async getStats() {
-    return await storage.getPaperSimStats(this.mode);
+    return await storage.getActiveEngineStats(this.mode);
   }
 
   // Phase 27.F.14.DIAG: Telemetry accessor for last cycle diagnostics

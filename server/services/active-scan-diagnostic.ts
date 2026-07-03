@@ -1,5 +1,5 @@
 /**
- * Phase 27.F.12 - PaperSim Universe Scan & Filter Trace
+ * Phase 27.F.12 - ActiveEngine Universe Scan & Filter Trace
  * Read-only diagnostic service to verify end-to-end filtering without starting engines
  */
 

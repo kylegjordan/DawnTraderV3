@@ -281,7 +281,7 @@ class ActiveSessionResetService {
 
       // 4) Clear DB state for open paper positions and trades
       try {
-        const dbResult = await storage.hardResetPaperSim(mode);
+        const dbResult = await storage.hardResetActiveEngineTables(mode);
         result.details.closedTrades = dbResult.closedTrades;
         result.details.clearedPositions = dbResult.clearedPositions;
         result.details.databaseReset = true;

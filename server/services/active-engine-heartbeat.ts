@@ -22,11 +22,11 @@ class ActiveEngineHeartbeatService {
    */
   start(): void {
     if (this.isRunning) {
-      console.log('[PaperSimHeartbeat] Already running');
+      console.log('[ActiveEngineHeartbeat] Already running');
       return;
     }
 
-    console.log('[PaperSimHeartbeat] Starting heartbeat scheduler (interval: 30s)');
+    console.log('[ActiveEngineHeartbeat] Starting heartbeat scheduler (interval: 30s)');
     
     this.isRunning = true;
     
@@ -49,7 +49,7 @@ class ActiveEngineHeartbeatService {
     }
     
     this.isRunning = false;
-    console.log('[PaperSimHeartbeat] Stopped heartbeat scheduler');
+    console.log('[ActiveEngineHeartbeat] Stopped heartbeat scheduler');
   }
 
   /**
@@ -58,7 +58,7 @@ class ActiveEngineHeartbeatService {
    */
   private async runHeartbeatCheck(): Promise<void> {
     try {
-      console.log('[PaperSimHeartbeat] Running heartbeat check...');
+      console.log('[ActiveEngineHeartbeat] Running heartbeat check...');
       
       // Phase 27.F.9: Reconciliation guard - heal any mismatch automatically
       const { getGlobalActiveEngineManager, clearGlobalActiveEngineManager } = await import('./active-engine-service');
@@ -67,11 +67,11 @@ class ActiveEngineHeartbeatService {
       
       // Heal orphaned global manager (manager exists but no DB session)
       if (globalManager && activeSessions.length === 0) {
-        console.warn('[PaperSimHeartbeat] Orphaned global manager detected – cleaning up');
+        console.warn('[ActiveEngineHeartbeat] Orphaned global manager detected – cleaning up');
         clearGlobalActiveEngineManager();
       }
       
-      console.log(`[PaperSimHeartbeat] Found ${activeSessions.length} active session(s)`);
+      console.log(`[ActiveEngineHeartbeat] Found ${activeSessions.length} active session(s)`);
       
       if (activeSessions.length === 0) {
         return;
@@ -80,7 +80,7 @@ class ActiveEngineHeartbeatService {
       // Check each session (Phase 27.F.13.C.D: Added null-safety guards)
       for (const session of activeSessions) {
         if (!session) {
-          console.warn('[PaperSimHeartbeat] Session undefined — skipping check');
+          console.warn('[ActiveEngineHeartbeat] Session undefined — skipping check');
           continue;
         }
         await this.checkSession(session);
@@ -95,7 +95,7 @@ class ActiveEngineHeartbeatService {
       }, 'active_engine_heartbeat');
 
     } catch (error: any) {
-      console.error('[PaperSimHeartbeat] Error during heartbeat check:', error);
+      console.error('[ActiveEngineHeartbeat] Error during heartbeat check:', error);
       
       // Emit error event
       try {
@@ -105,7 +105,7 @@ class ActiveEngineHeartbeatService {
           timestamp: new Date().toISOString(),
         }, 'active_engine_heartbeat');
       } catch (busError) {
-        console.error('[PaperSimHeartbeat] Failed to emit health alert:', busError);
+        console.error('[ActiveEngineHeartbeat] Failed to emit health alert:', busError);
       }
     }
   }
@@ -119,7 +119,7 @@ class ActiveEngineHeartbeatService {
     try {
       // Phase 27.F.13.C.D: Null-safety guard
       if (!session) {
-        console.warn('[PaperSimHeartbeat] Session undefined — skipping check');
+        console.warn('[ActiveEngineHeartbeat] Session undefined — skipping check');
         return;
       }
       
@@ -127,11 +127,11 @@ class ActiveEngineHeartbeatService {
       const userId = session.userId;
       
       if (!sessionId || !userId) {
-        console.warn('[PaperSimHeartbeat] Session missing required fields — skipping check');
+        console.warn('[ActiveEngineHeartbeat] Session missing required fields — skipping check');
         return;
       }
       
-      console.log(`[PaperSimHeartbeat] Checking session ${sessionId} for user ${userId}`);
+      console.log(`[ActiveEngineHeartbeat] Checking session ${sessionId} for user ${userId}`);
 
       // Phase 27.4.2: Cross-verify against system_context (single source of truth)
       // Phase 27.F.13.O: Use mode for global context
@@ -141,7 +141,7 @@ class ActiveEngineHeartbeatService {
       if (systemContext) {
         // Check if trading mode is set to paper
         if (systemContext.tradingMode !== 'paper') {
-          console.warn(`[PaperSimHeartbeat] ⚠️ Mode mismatch for session ${sessionId}: system_context=${systemContext.tradingMode}, expected=paper`);
+          console.warn(`[ActiveEngineHeartbeat] ⚠️ Mode mismatch for session ${sessionId}: system_context=${systemContext.tradingMode}, expected=paper`);
           
           // Emit warning
           await clusterBus.publish('health_alert', {
@@ -154,7 +154,7 @@ class ActiveEngineHeartbeatService {
           }, 'active_engine_heartbeat');
           
           // Auto-correct: Stop the simulation as it's running in wrong mode
-          console.log(`[PaperSimHeartbeat] Auto-stopping session ${sessionId} due to mode mismatch`);
+          console.log(`[ActiveEngineHeartbeat] Auto-stopping session ${sessionId} due to mode mismatch`);
           await storage.updateActiveEngineSession(sessionId, {
             status: 'stopped',
             stoppedAt: new Date(),
@@ -163,7 +163,7 @@ class ActiveEngineHeartbeatService {
           return; // Skip further checks
         }
         
-        console.log(`[PaperSimHeartbeat] Mode verification passed: ${systemContext.tradingMode}`);
+        console.log(`[ActiveEngineHeartbeat] Mode verification passed: ${systemContext.tradingMode}`);
       }
       
       // Verify in-memory manager exists and check consistency
@@ -172,12 +172,12 @@ class ActiveEngineHeartbeatService {
       
       // Phase 27.F.13.C.D: Null-safety guard for reconciliation
       if (!status || !status.reconciliation) {
-        console.warn(`[PaperSimHeartbeat] Session ${sessionId} status incomplete — skipping consistency check`);
+        console.warn(`[ActiveEngineHeartbeat] Session ${sessionId} status incomplete — skipping consistency check`);
         return;
       }
       
       if (!status.reconciliation.isConsistent) {
-        console.warn(`[PaperSimHeartbeat] ⚠️ Session ${sessionId} is in inconsistent state:`, status.reconciliation);
+        console.warn(`[ActiveEngineHeartbeat] ⚠️ Session ${sessionId} is in inconsistent state:`, status.reconciliation);
         
         // Emit warning
         await clusterBus.publish('health_alert', {
@@ -188,11 +188,11 @@ class ActiveEngineHeartbeatService {
           timestamp: new Date().toISOString(),
         }, 'active_engine_heartbeat');
       } else {
-        console.log(`[PaperSimHeartbeat] ✅ Session ${sessionId} healthy`);
+        console.log(`[ActiveEngineHeartbeat] ✅ Session ${sessionId} healthy`);
       }
 
     } catch (error: any) {
-      console.error(`[PaperSimHeartbeat] Error checking session:`, error);
+      console.error(`[ActiveEngineHeartbeat] Error checking session:`, error);
     }
   }
 
@@ -202,31 +202,31 @@ class ActiveEngineHeartbeatService {
    */
   async recoverSessions(autoResume: boolean = false): Promise<void> {
     try {
-      console.log('[PaperSimHeartbeat] Starting session recovery...');
+      console.log('[ActiveEngineHeartbeat] Starting session recovery...');
       
       // Get all sessions marked as running in database
       const sessions = await storage.getRunningEngineSessions();
       
       if (sessions.length === 0) {
-        console.log('[PaperSimHeartbeat] No sessions to recover');
+        console.log('[ActiveEngineHeartbeat] No sessions to recover');
         return;
       }
 
-      console.log(`[PaperSimHeartbeat] Found ${sessions.length} session(s) to recover`);
+      console.log(`[ActiveEngineHeartbeat] Found ${sessions.length} session(s) to recover`);
 
       for (const session of sessions) {
         // Phase 27.F.13.C.D: Null-safety guard
         if (!session) {
-          console.warn('[PaperSimHeartbeat] Session undefined — skipping recovery');
+          console.warn('[ActiveEngineHeartbeat] Session undefined — skipping recovery');
           continue;
         }
         await this.recoverSession(session, autoResume);
       }
 
-      console.log('[PaperSimHeartbeat] ✅ Session recovery complete');
+      console.log('[ActiveEngineHeartbeat] ✅ Session recovery complete');
 
     } catch (error: any) {
-      console.error('[PaperSimHeartbeat] Error during session recovery:', error);
+      console.error('[ActiveEngineHeartbeat] Error during session recovery:', error);
     }
   }
 
@@ -238,7 +238,7 @@ class ActiveEngineHeartbeatService {
     try {
       // Phase 27.F.13.C.D: Null-safety guard
       if (!session) {
-        console.warn('[PaperSimHeartbeat] Session undefined — skipping recovery');
+        console.warn('[ActiveEngineHeartbeat] Session undefined — skipping recovery');
         return;
       }
       
@@ -246,20 +246,20 @@ class ActiveEngineHeartbeatService {
       const userId = session.userId;
       
       if (!sessionId || !userId) {
-        console.warn('[PaperSimHeartbeat] Session missing required fields — skipping recovery');
+        console.warn('[ActiveEngineHeartbeat] Session missing required fields — skipping recovery');
         return;
       }
       
       const startedAt = new Date(session.startedAt);
       
-      console.log(`[PaperSimHeartbeat] Recovering session ${sessionId} (user: ${userId}, started: ${startedAt.toISOString()})`);
+      console.log(`[ActiveEngineHeartbeat] Recovering session ${sessionId} (user: ${userId}, started: ${startedAt.toISOString()})`);
 
       // Check if session should still be running
       // For now, we don't have a duration limit, so check if it was interrupted
       
       if (autoResume) {
         // Auto-resume: Restart the in-memory manager
-        console.log(`[PaperSimHeartbeat] Auto-resuming session ${sessionId}...`);
+        console.log(`[ActiveEngineHeartbeat] Auto-resuming session ${sessionId}...`);
         
         const { startActiveEngine } = await import('./active-engine-service');
         
@@ -267,7 +267,7 @@ class ActiveEngineHeartbeatService {
         const result = await startActiveEngine(userId);
         
         if (result.success) {
-          console.log(`[PaperSimHeartbeat] ✅ Session ${sessionId} auto-resumed successfully`);
+          console.log(`[ActiveEngineHeartbeat] ✅ Session ${sessionId} auto-resumed successfully`);
           
           // Emit recovery event
           await clusterBus.publish('task_completed', {
@@ -279,19 +279,19 @@ class ActiveEngineHeartbeatService {
             success: true,
           }, 'active_engine_heartbeat');
         } else {
-          console.error(`[PaperSimHeartbeat] Failed to auto-resume session ${sessionId}:`, result.message);
+          console.error(`[ActiveEngineHeartbeat] Failed to auto-resume session ${sessionId}:`, result.message);
         }
         
       } else {
         // Clean stop: Mark as stopped since server restarted
-        console.log(`[PaperSimHeartbeat] Cleanly stopping interrupted session ${sessionId}...`);
+        console.log(`[ActiveEngineHeartbeat] Cleanly stopping interrupted session ${sessionId}...`);
         
         await storage.updateActiveEngineSession(sessionId, {
           status: 'stopped',
           stoppedAt: new Date(),
         });
         
-        console.log(`[PaperSimHeartbeat] ✅ Session ${sessionId} marked as stopped`);
+        console.log(`[ActiveEngineHeartbeat] ✅ Session ${sessionId} marked as stopped`);
         
         // Emit recovery event
         await clusterBus.publish('task_completed', {
@@ -305,7 +305,7 @@ class ActiveEngineHeartbeatService {
       }
 
     } catch (error: any) {
-      console.error(`[PaperSimHeartbeat] Error recovering session:`, error);
+      console.error(`[ActiveEngineHeartbeat] Error recovering session:`, error);
     }
   }
 

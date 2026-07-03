@@ -462,7 +462,7 @@ export class ActivePortfolioManager {
   }
 
   async getPortfolioMetrics(): Promise<PortfolioMetrics> {
-    const stats = await storage.getPaperSimStats(this.mode);
+    const stats = await storage.getActiveEngineStats(this.mode);
     const trades = await storage.getPaperSimTrades(this.mode, { limit: 1000, closedOnly: true });
 
     // Calculate max drawdown
@@ -500,7 +500,7 @@ export class ActivePortfolioManager {
   }
 
   async checkPortfolioHealth(): Promise<PortfolioHealth> {
-    const stats = await storage.getPaperSimStats(this.mode);
+    const stats = await storage.getActiveEngineStats(this.mode);
     const trades = await storage.getPaperSimTrades(this.mode, { limit: 1000, closedOnly: true });
     const openPositions = await storage.getActiveOpenPositions(this.mode);
 

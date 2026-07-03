@@ -115,7 +115,7 @@ export function useTrading() {
   }, [wsMessages, queryClient, debouncedInvalidate]);
 
   // Paper trading simulation status (SYSTEM-WIDE - all users see the same status)
-  const { data: paperSimStatus, isLoading: paperSimStatusLoading } = useQuery<{ 
+  const { data: activeEngineStatus, isLoading: activeEngineStatusLoading } = useQuery<{ 
     isRunning: boolean;
     sessionInfo?: {
       sessionId: string;
@@ -204,7 +204,7 @@ export function useTrading() {
   });
 
   // Phase 27.F.13.C: Reset paper simulation
-  const resetPaperSimMutation = useMutation({
+  const resetActiveEngineMutation = useMutation({
     mutationFn: async (newBalance: number) => {
       return await apiRequest('POST', '/api/active-engine/reset', { newBalance });
     },
@@ -306,15 +306,15 @@ export function useTrading() {
   });
 
   // Phase 32.D-Fix.Final: Helper to derive active state from authoritative source
-  function deriveIsActive(state?: TradingStatus, paperSimStatus?: { isRunning?: boolean }) {
+  function deriveIsActive(state?: TradingStatus, activeEngineStatus?: { isRunning?: boolean }) {
     // Authoritative boolean first (from server's active field)
     if (state && typeof state.active === 'boolean') return state.active;
     
     // Best-effort on first paint before server data arrives
-    if (!state) return !!paperSimStatus?.isRunning;
+    if (!state) return !!activeEngineStatus?.isRunning;
     
     // Fallback to mode-specific flags if active field not present
-    if (state.mode === 'paper') return !!(state.isEngineActivePaper || paperSimStatus?.isRunning);
+    if (state.mode === 'paper') return !!(state.isEngineActivePaper || activeEngineStatus?.isRunning);
     return !!state.isEngineActiveLive;
   }
 
@@ -323,16 +323,16 @@ export function useTrading() {
   const isTradingActive =
     typeof tradingStatus?.active === 'boolean'
       ? tradingStatus.active
-      : deriveIsActive(tradingStatus, paperSimStatus);
-  const isTradingActivePaper = deriveIsActive(tradingStatus, paperSimStatus);
+      : deriveIsActive(tradingStatus, activeEngineStatus);
+  const isTradingActivePaper = deriveIsActive(tradingStatus, activeEngineStatus);
   const isTradingActiveLive = deriveIsActive(tradingStatus, undefined);
 
   return {
     // Status and control
     tradingStatus,
     statusLoading,
-    paperSimStatus,
-    paperSimStatusLoading,
+    activeEngineStatus,
+    activeEngineStatusLoading,
     isTradingActive,  // Phase 32.D-Fix.Final: Single authoritative active state
     isTradingActivePaper,
     isTradingActiveLive,
@@ -340,8 +340,8 @@ export function useTrading() {
     stopTrading: stopTradingMutation.mutateAsync,
     isStarting: startTradingMutation.isPending,
     isStopping: stopTradingMutation.isPending,
-    resetPaperSim: resetPaperSimMutation.mutateAsync,
-    isResettingPaperSim: resetPaperSimMutation.isPending,
+    resetActiveEngine: resetActiveEngineMutation.mutateAsync,
+    isResettingActiveEngine: resetActiveEngineMutation.isPending,
 
     // Portfolio
     portfolioMetrics,

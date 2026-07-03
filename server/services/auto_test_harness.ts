@@ -55,7 +55,7 @@ class AutoTestHarness {
     console.log(`[AutoTest] Using test user ID: ${this.testUserId}`);
 
     const scenarios: TestScenario[] = [
-      this.createPaperSimStartStopScenario(),
+      this.createActiveEngineStartStopScenario(),
       // Directive 12.2.7: createMultiIntentScenario removed (depended on NLAI)
       this.createHeartbeatScenario(),
     ];
@@ -135,7 +135,7 @@ class AutoTestHarness {
   /**
    * Scenario 1: Start + Stop Simulation
    */
-  private createPaperSimStartStopScenario(): TestScenario {
+  private createActiveEngineStartStopScenario(): TestScenario {
     return {
       name: 'Paper Simulation Start/Stop',
       steps: [

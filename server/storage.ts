@@ -559,7 +559,7 @@ export interface IStorage {
   cleanOldPaperSimTrades(mode: TradingMode, hoursOld: number): Promise<number>; // Phase 27.F.13.F: Cleanup old closed trades
   
   // Stats
-  getPaperSimStats(mode: TradingMode): Promise<{
+  getActiveEngineStats(mode: TradingMode): Promise<{
     totalTrades: number;
     openPositions: number;
     closedTrades: number;
@@ -3444,7 +3444,7 @@ export class DatabaseStorage implements IStorage {
       .limit(limit);
   }
 
-  async getPaperSimStats(mode: TradingMode): Promise<{
+  async getActiveEngineStats(mode: TradingMode): Promise<{
     totalTrades: number;
     openPositions: number;
     closedTrades: number;
@@ -3559,7 +3559,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getRunningEngineSession(mode: 'live' | 'paper'): Promise<ActiveEngineSession | undefined> {
-    console.log('[3D] PaperSim query fixed: mode-based session lookup');
+    console.log('[3D] ActiveEngine query fixed: mode-based session lookup');
     const [session] = await db.select()
       .from(activeEngineSessions)
       .where(and(
@@ -4118,7 +4118,7 @@ export class DatabaseStorage implements IStorage {
    * Note: paperSimTrades and activeOpenPositions are single-tenant (no mode column).
    * activeEngineSessions has a mode column for session tracking.
    */
-  async hardResetPaperSim(mode: 'paper' | 'live' = 'paper'): Promise<{ closedTrades: number; clearedPositions: number }> {
+  async hardResetActiveEngineTables(mode: 'paper' | 'live' = 'paper'): Promise<{ closedTrades: number; clearedPositions: number }> {
     console.log(`[B7.A][DB] Starting hard reset for mode=${mode}`);
     
     const { paperSimTrades, activeOpenPositions, activeEngineSessions } = await import('@shared/schema');

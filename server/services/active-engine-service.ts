@@ -75,20 +75,20 @@ export async function checkBalanceConfirmationRequired(mode: 'live' | 'paper' = 
     
     // Check if confirmation is missing or stale (>24 hours old)
     if (!balanceLastConfirmed) {
-      console.log(`[PaperSim] Portfolio balance confirmation required (mode=${mode}, never confirmed)`);
+      console.log(`[ActiveEngine] Portfolio balance confirmation required (mode=${mode}, never confirmed)`);
       return { required: true, currentBalance };
     }
     
     const hoursSinceConfirmation = (Date.now() - balanceLastConfirmed.getTime()) / (1000 * 60 * 60);
     if (hoursSinceConfirmation > 24) {
-      console.log(`[PaperSim] Portfolio balance confirmation required (mode=${mode}, last confirmed ${hoursSinceConfirmation.toFixed(1)}h ago)`);
+      console.log(`[ActiveEngine] Portfolio balance confirmation required (mode=${mode}, last confirmed ${hoursSinceConfirmation.toFixed(1)}h ago)`);
       return { required: true, currentBalance };
     }
     
-    console.log(`[PaperSim] Balance confirmation recent (${hoursSinceConfirmation.toFixed(1)}h ago), proceeding with start`);
+    console.log(`[ActiveEngine] Balance confirmation recent (${hoursSinceConfirmation.toFixed(1)}h ago), proceeding with start`);
     return { required: false, currentBalance };
   } catch (error) {
-    console.error('[PaperSim] Error checking balance confirmation:', error);
+    console.error('[ActiveEngine] Error checking balance confirmation:', error);
     // Phase 41F-L.E2E-FIX: Return null instead of $800 fallback
     return { required: true, currentBalance: null };
   }
@@ -109,9 +109,9 @@ export async function confirmPortfolioBalance(mode: 'live' | 'paper', balance: n
       balanceLastConfirmed: new Date()
     });
     
-    console.log(`[PaperSim] Portfolio balance confirmed: $${balance} for mode=${mode}`);
+    console.log(`[ActiveEngine] Portfolio balance confirmed: $${balance} for mode=${mode}`);
   } catch (error) {
-    console.error('[PaperSim] Error confirming portfolio balance:', error);
+    console.error('[ActiveEngine] Error confirming portfolio balance:', error);
     throw error;
   }
 }
@@ -225,14 +225,14 @@ async function populateWatchlistAsync(userId: string, mode: 'paper' | 'live' = '
 // last owned those ceilings for BOTH modes. Now each mode has its own manager.
 // The accessors default to 'paper' so every existing paper-only caller is behavior-identical;
 // live wiring (Phase 21) passes mode='live'.
-// (The vestigial globalPaperSimOperationLock / globalPaperSimBusyFlag globals were removed —
+// (The vestigial globalActiveEngineOperationLock / globalActiveEngineBusyFlag globals were removed —
 //  superseded by activeOperationQueue since Phase 41F. See DELETED_COMPONENTS_LOG.md.)
 type ActiveEngineMode = 'live' | 'paper';
 declare global {
   var globalActivePortfolioManagers: Map<ActiveEngineMode, any> | undefined;
 }
 
-function _paperSimManagers(): Map<ActiveEngineMode, any> {
+function _activeEngineManagers(): Map<ActiveEngineMode, any> {
   if (!global.globalActivePortfolioManagers) {
     global.globalActivePortfolioManagers = new Map();
   }
@@ -241,20 +241,20 @@ function _paperSimManagers(): Map<ActiveEngineMode, any> {
 
 /**
  * Phase 27.F.9 / P19-B4b D5: Synchronized per-mode Manager API.
- * Provides atomic access to the active PaperSim manager for a given mode (default 'paper').
+ * Provides atomic access to the active ActiveEngine manager for a given mode (default 'paper').
  */
 export function getGlobalActiveEngineManager(mode: ActiveEngineMode = 'paper'): any {
-  return _paperSimManagers().get(mode) || null;
+  return _activeEngineManagers().get(mode) || null;
 }
 
 export function setGlobalActiveEngineManager(manager: any, mode: ActiveEngineMode = 'paper'): void {
-  _paperSimManagers().set(mode, manager);
-  console.log(`[PaperSimService] Manager registered globally (mode=${mode})`);
+  _activeEngineManagers().set(mode, manager);
+  console.log(`[ActiveEngineService] Manager registered globally (mode=${mode})`);
 }
 
 export function clearGlobalActiveEngineManager(mode: ActiveEngineMode = 'paper'): void {
-  _paperSimManagers().delete(mode);
-  console.log(`[PaperSimService] Manager cleared from global scope (mode=${mode})`);
+  _activeEngineManagers().delete(mode);
+  console.log(`[ActiveEngineService] Manager cleared from global scope (mode=${mode})`);
 }
 
 /**
@@ -474,7 +474,7 @@ export async function startActiveEngine(
           }
           
           // Manager is truly running - return idempotent success
-          console.log(`[PaperSimService] Paper trading already running (session: ${existingSession.sessionId})`);
+          console.log(`[ActiveEngineService] Paper trading already running (session: ${existingSession.sessionId})`);
           
           // Phase 8.8.3-I6-FIX: Ensure trading mode is correct (idempotent safety)
           livePricingAdapter.setTradingMode('paper');
@@ -495,7 +495,7 @@ export async function startActiveEngine(
         
         if (existingSession && !existingManager) {
           // Reconcile: DB session exists but manager was lost (e.g., server restart)
-          console.log('[PaperSimService] Reconciling manager from database session');
+          console.log('[ActiveEngineService] Reconciling manager from database session');
           const { ActivePortfolioManager } = await import('./active-portfolio-manager.js');
           // Phase 27.F.13.O + Phase 3D: Use mode instead of userId
           const manager = new ActivePortfolioManager(mode, userId);
@@ -523,7 +523,7 @@ export async function startActiveEngine(
         
         if (!existingSession && existingManager) {
           // Orphaned manager exists without DB session - clear it
-          console.warn('[PaperSimService] Orphaned manager detected without DB session - clearing');
+          console.warn('[ActiveEngineService] Orphaned manager detected without DB session - clearing');
           clearGlobalActiveEngineManager();
         }
 
@@ -694,7 +694,7 @@ export async function startActiveEngine(
             isRunning: true,
             type: 'paper'
           });
-          console.log('[PaperSimService] Global session registered');
+          console.log('[ActiveEngineService] Global session registered');
         }
         
         // Emit cluster bus event for distributed awareness
@@ -708,7 +708,7 @@ export async function startActiveEngine(
             mode: 'paper',
           });
         } catch (busError) {
-          console.warn('[PaperSimService] Failed to emit cluster bus event:', busError);
+          console.warn('[ActiveEngineService] Failed to emit cluster bus event:', busError);
           // Non-blocking error - simulation still works
         }
 
@@ -739,14 +739,14 @@ export async function startActiveEngine(
           const mode = 'paper';
           const existingSession = await storage.getRunningEngineSession(mode);
           if (existingSession) {
-            console.log(`[PaperSimService] Rolling back database session: ${existingSession.sessionId}`);
+            console.log(`[ActiveEngineService] Rolling back database session: ${existingSession.sessionId}`);
             await storage.updateActiveEngineSession(existingSession.id, { status: 'failed' });
           }
         } catch (rollbackError) {
-          console.error('[PaperSimService] Failed to rollback database session:', rollbackError);
+          console.error('[ActiveEngineService] Failed to rollback database session:', rollbackError);
         }
         
-        console.error('[PaperSimService] Error during start, rollback complete:', error);
+        console.error('[ActiveEngineService] Error during start, rollback complete:', error);
         throw error;
       }
     },
@@ -805,16 +805,16 @@ export async function stopActiveEngine(userId: string): Promise<ActiveEngineResu
         
         if (!existingSession) {
           // IDEMPOTENT: No running session, return success
-          console.log('[PaperSimService] Paper trading already stopped or not started');
+          console.log('[ActiveEngineService] Paper trading already stopped or not started');
           
           // Phase 27.F.9: Clean up orphaned in-memory manager if exists
           const orphanedManager = getGlobalActiveEngineManager();
           if (orphanedManager) {
-            console.log('[PaperSimService] Cleaning up orphaned manager');
+            console.log('[ActiveEngineService] Cleaning up orphaned manager');
             try {
               await orphanedManager.stop();
             } catch (cleanupError) {
-              console.warn('[PaperSimService] Error cleaning up manager:', cleanupError);
+              console.warn('[ActiveEngineService] Error cleaning up manager:', cleanupError);
             }
             clearGlobalActiveEngineManager();
           }
@@ -920,13 +920,13 @@ export async function stopActiveEngine(userId: string): Promise<ActiveEngineResu
             console.log('[8.8.3-I2][STOP_FLOW][END] Hard stop sequence complete');
           }
         } else {
-          console.warn('[PaperSimService] No active manager found, updating database only');
+          console.warn('[ActiveEngineService] No active manager found, updating database only');
         }
         
         // Deregister global session
         if (typeof (global as any).deregisterSimulationSession === 'function') {
           (global as any).deregisterSimulationSession();
-          console.log('[PaperSimService] Global session deregistered');
+          console.log('[ActiveEngineService] Global session deregistered');
         }
 
         // Calculate final metrics
@@ -948,8 +948,8 @@ export async function stopActiveEngine(userId: string): Promise<ActiveEngineResu
         reset24hWindow('paper');
         resetHourlyScanHistory('paper');
 
-        console.log(`[PaperSimService] Stopped session: ${existingSession.sessionId}, duration: ${runDuration}ms`);
-        console.log('[PaperSimService] Manager cleared (service + global), DB session ended');
+        console.log(`[ActiveEngineService] Stopped session: ${existingSession.sessionId}, duration: ${runDuration}ms`);
+        console.log('[ActiveEngineService] Manager cleared (service + global), DB session ended');
         console.log('[41F-B] Critical teardown complete, preparing HTTP response...');
 
         // Emit cluster bus event for distributed awareness
@@ -963,7 +963,7 @@ export async function stopActiveEngine(userId: string): Promise<ActiveEngineResu
             mode: 'paper',
           });
         } catch (busError) {
-          console.warn('[PaperSimService] Failed to emit cluster bus event:', busError);
+          console.warn('[ActiveEngineService] Failed to emit cluster bus event:', busError);
           // Non-blocking error
         }
 
@@ -984,7 +984,7 @@ export async function stopActiveEngine(userId: string): Promise<ActiveEngineResu
           shouldBroadcast: true, // Phase 41F-B: Trigger broadcasts after queue completion
         };
       } catch (error: any) {
-        console.error('[PaperSimService] Error during stop:', error);
+        console.error('[ActiveEngineService] Error during stop:', error);
         throw error;
       }
     },
@@ -1052,7 +1052,7 @@ export async function getActiveEngineStatus(userId: string): Promise<any> {
     const isConsistent = (dbSession !== undefined) === hasManager;
     
     if (!isConsistent) {
-      console.warn('[PaperSimService] State desync detected:', {
+      console.warn('[ActiveEngineService] State desync detected:', {
         hasDbSession: !!dbSession,
         hasManager,
         sessionId: dbSession?.sessionId || null,
@@ -1079,7 +1079,7 @@ export async function getActiveEngineStatus(userId: string): Promise<any> {
       },
     };
   } catch (error: any) {
-    console.error('[PaperSimService] Error getting status:', error);
+    console.error('[ActiveEngineService] Error getting status:', error);
     return {
       isRunning: false,
       sessionInfo: null,
@@ -1089,34 +1089,34 @@ export async function getActiveEngineStatus(userId: string): Promise<any> {
 }
 
 /**
- * Phase 27.F.8: Reset PaperSim service state
+ * Phase 27.F.8: Reset ActiveEngine service state
  * Clears all in-memory state to ensure clean startup
  * Call this on server boot to prevent ghost managers from persisting across restarts
  */
-export function resetPaperSimService(): void {
-  console.log('[PaperSimService] Resetting service state...');
+export function resetActiveEngineService(): void {
+  console.log('[ActiveEngineService] Resetting service state...');
   
   // Clear in-memory manager (per-mode). P19-B4b D5: routed through the accessor; the vestigial
   // operation-lock clear was removed (mechanism deleted — see DELETED_COMPONENTS_LOG.md).
   const orphanedManager = getGlobalActiveEngineManager('paper');
   if (orphanedManager) {
-    console.log('[PaperSimService] Clearing orphaned manager from previous session');
+    console.log('[ActiveEngineService] Clearing orphaned manager from previous session');
     try {
       // Attempt graceful stop if manager has stop method
       if (typeof orphanedManager.stop === 'function') {
         orphanedManager.stop().catch((err: any) => {
-          console.warn('[PaperSimService] Error during manager cleanup:', err);
+          console.warn('[ActiveEngineService] Error during manager cleanup:', err);
         });
       }
     } catch (error) {
-      console.warn('[PaperSimService] Failed to stop orphaned manager:', error);
+      console.warn('[ActiveEngineService] Failed to stop orphaned manager:', error);
     }
     clearGlobalActiveEngineManager('paper');
   }
 
-  console.log('[PaperSimService] ✅ Reset complete - clean state confirmed');
-  console.log('[PaperSimService] Initialized - no active sessions');
-  console.log('[PaperSimService] State: { hasManager: false, hasDbSession: false }');
+  console.log('[ActiveEngineService] ✅ Reset complete - clean state confirmed');
+  console.log('[ActiveEngineService] Initialized - no active sessions');
+  console.log('[ActiveEngineService] State: { hasManager: false, hasDbSession: false }');
 }
 
 /**

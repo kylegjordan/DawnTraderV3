@@ -4428,7 +4428,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // Check paper simulation engine status (system-wide)
       // Phase 27.F.13: Check global session for accurate running status
       const globalSession = (global as any).getGlobalSession?.() as SimulationSession | null;
-      const isPaperSimRunning = !!(globalSession && globalSession.isRunning);
+      const isActiveEngineRunning = !!(globalSession && globalSession.isRunning);
       
       // Phase 27.F.15.B.3: Check global live engine status
       const isLiveEngineRunning = globalLiveEngine.isEngineRunning();
@@ -4465,7 +4465,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       // Phase 8.5 Addendum K.4.1: Log database-sourced data
       console.log(`[Addendum-K.4.1] LiveDataSource = Database (balance: $${liveBalance}, strategies: ${liveActiveStrategies.length}, engine: ${isLiveEngineRunning ? 'running' : 'stopped'})`);
-      console.log(`[Addendum-K.4.1] PaperDataSource = Database (balance: $${paperBalance}, strategies: ${paperActiveStrategies.length}, engine: ${isPaperSimRunning ? 'running' : 'stopped'})`);
+      console.log(`[Addendum-K.4.1] PaperDataSource = Database (balance: $${paperBalance}, strategies: ${paperActiveStrategies.length}, engine: ${isActiveEngineRunning ? 'running' : 'stopped'})`);
       
       // Phase 27.F.3: Log unified state authority verification
       console.log(`[Phase-27.F.3] Unified State: mode=${currentMode}, active=${isEngineActive}, lastUpdate=${systemContext?.updatedAt || 'N/A'}`);
@@ -4476,7 +4476,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       // Get ready to buy signals (if paper engine is running)
       let readyToBuy = 0;
-      if (isPaperSimRunning && currentMode === 'paper') {
+      if (isActiveEngineRunning && currentMode === 'paper') {
         const openPositions = await storage.getActiveOpenPositions('paper');
         readyToBuy = Math.max(0, filteredPairs - openPositions.length);
       }
@@ -4485,7 +4485,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       // Phase 32.D-Fix.Final: Compute authoritative active state
       // Active = true if EITHER engine is running (paper OR live)
-      const active = !!(isPaperSimRunning || isLiveEngineRunning);
+      const active = !!(isActiveEngineRunning || isLiveEngineRunning);
       
       // Phase 27.F.3: Unified Trading State Authority object
       // Phase 27.F.13.O: Added audit fields
@@ -4515,7 +4515,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         currentMode,
         isEngineActive: active,  // Phase 32.D-Fix.Final: Ensure consistency with active
         // Phase 27.F.12 + 32.D-Fix.Final: Mode-specific engine status
-        isEngineActivePaper: !!isPaperSimRunning,
+        isEngineActivePaper: !!isActiveEngineRunning,
         isEngineActiveLive: !!isLiveEngineRunning,
         passiveLearning: !active,  // Phase 32.D-Fix.Final: Passive learning when stopped
         ts: lastTickISO,  // Phase 32.D-Fix.Final: timestamp
@@ -4532,13 +4532,13 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           portfolioBalance: paperBalance,
           activeStrategies: paperActiveStrategies,
           activeStrategiesCount: paperActiveStrategies.length,
-          engineActive: isPaperSimRunning,
-          engineStatus: isPaperSimRunning ? 'running' : 'stopped',
+          engineActive: isActiveEngineRunning,
+          engineStatus: isActiveEngineRunning ? 'running' : 'stopped',
           dataSource: 'database'
         },
         // Legacy fields for backwards compatibility (use current mode)
         mode: currentMode,
-        engineActive: currentMode === 'paper' ? isPaperSimRunning : isLiveEngineRunning,
+        engineActive: currentMode === 'paper' ? isActiveEngineRunning : isLiveEngineRunning,
         activeStrategies: currentMode === 'paper' ? paperActiveStrategies : liveActiveStrategies,
         activeStrategiesCount: currentMode === 'paper' ? paperActiveStrategies.length : liveActiveStrategies.length,
         portfolioBalance: currentMode === 'paper' ? paperBalance : liveBalance,
@@ -10001,7 +10001,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   apiRouter.get('/diagnostics/i7-persist/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       // Get positions from active_open_positions (what the engine uses)
-      const paperSimPositions = await storage.getActiveOpenPositions('paper');
+      const activeEnginePositions = await storage.getActiveOpenPositions('paper');
       
       // Get positions from paper_trades table (legacy/unused)
       const paperTrades = await storage.getOpenPaperTrades();
@@ -10015,8 +10015,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         timestamp: new Date().toISOString(),
         description: 'Paper trade persistence status - comparing data sources',
         active_open_positions: {
-          count: paperSimPositions.length,
-          symbols: paperSimPositions.map(p => p.symbol),
+          count: activeEnginePositions.length,
+          symbols: activeEnginePositions.map(p => p.symbol),
           note: 'This is the CORRECT table used by paper execution engine'
         },
         paper_trades_table: {
@@ -11251,7 +11251,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // Phase 8.8.3-B7.1: Hard reset ONLY on mode='new'
       // Continue mode preserves existing state (trades, positions, portfolio)
       if (mode === 'new') {
-        console.log(`[B7.1][HARD_RESET] Running hardResetPaperSim + resetPaper() before new simulation...`);
+        console.log(`[B7.1][HARD_RESET] Running hardResetActiveEngineTables + resetPaper() before new simulation...`);
         const { activeSessionResetService } = await import('./services/active-session-reset.js');
         const resetResult = await activeSessionResetService.hardResetActiveEngine('paper');
         console.log(`[B7.1][HARD_RESET] Complete:`, {
@@ -11295,11 +11295,11 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         
         // Reset baseline and portfolio state
         const systemContext = await storage.getSystemContext('paper');
-        console.log('[PaperSimReset] Retrieved system context for mode: paper');
+        console.log('[ActiveEngineReset] Retrieved system context for mode: paper');
         
         // Phase 27.F.14.M: Reset portfolio balance for paper mode using updatePortfolioBalance
         await storage.updatePortfolioBalance({ mode: 'paper', balance });
-        console.log(`[PaperSim] Started simulation (balance=$${balance})`);
+        console.log(`[ActiveEngine] Started simulation (balance=$${balance})`);
         
         // Phase 27.F.14.M: Broadcast portfolio balance update to all clients
         const { contextBridge } = await import('./services/context-bridge.js');
@@ -11479,7 +11479,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       if (newBalance !== undefined && !isNaN(parseFloat(newBalance))) {
         balance = parseFloat(newBalance);
-        console.log(`[PaperSim] Hard reset with new balance: $${balance}`);
+        console.log(`[ActiveEngine] Hard reset with new balance: $${balance}`);
       } else {
         // Soft reset: fetch current balance from portfolio state
         isSoftReset = true;
@@ -11492,10 +11492,10 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         // positional args (id, 'paper'). Restructured to the modern shape.
         const portfolioState = await storage.getPortfolioState({ globalContextId: systemContext.id, mode: 'paper' });
         balance = portfolioState ? parseFloat(portfolioState.cash || '10000') : 10000;
-        console.log(`[PaperSim] Soft reset using existing balance: $${balance}`);
+        console.log(`[ActiveEngine] Soft reset using existing balance: $${balance}`);
       }
       
-      console.log(`[PaperSim] Resetting simulation for user ${userId} with balance $${balance}`);
+      console.log(`[ActiveEngine] Resetting simulation for user ${userId} with balance $${balance}`);
       
       // Phase 8.8.3-B7.A: Use hard reset service for complete cleanup
       const { activeSessionResetService } = await import('./services/active-session-reset.js');
@@ -11514,13 +11514,13 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       if (isSoftReset) {
         // Soft reset: only clear open positions, preserve trade history
         await storage.deleteAllActiveOpenPositions('paper');
-        console.log(`[PaperSim] Soft reset: cleared open positions, trade history preserved`);
+        console.log(`[ActiveEngine] Soft reset: cleared open positions, trade history preserved`);
       } else {
         // Hard reset: full cleanup including trade history
         await storage.deleteAllPaperSimTrades('paper');
         await storage.deleteAllActiveOpenPositions('paper');
         await storage.deleteAllActiveTradeLogs('paper');
-        console.log(`[PaperSim] Hard reset: cleared trades, positions, and logs`);
+        console.log(`[ActiveEngine] Hard reset: cleared trades, positions, and logs`);
       }
       
       // 8.8.4-C.14.C: RTB signals already cleared via hardResetActiveEngine -> clearReadyToBuy
@@ -11528,7 +11528,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       // Reset portfolio state for paper mode
       const systemContext = await storage.getSystemContext('paper');
-      console.log('[PaperSimReset] Retrieved system context for mode: paper');
+      console.log('[ActiveEngineReset] Retrieved system context for mode: paper');
       await storage.upsertPortfolioState({
         globalContextId: systemContext!.id,
         mode: 'paper',
@@ -11542,7 +11542,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       // Directive 12.2.3: Bob Core cache invalidation removed (Batch 7B)
 
-      console.log(`[PaperSim] Reset complete - new balance: $${balance}`);
+      console.log(`[ActiveEngine] Reset complete - new balance: $${balance}`);
       
       res.json({
         success: true,
@@ -11554,7 +11554,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         hardResetDetails: resetResult.details
       });
     } catch (error: any) {
-      console.error('[PaperSim] Error resetting simulation:', error);
+      console.error('[ActiveEngine] Error resetting simulation:', error);
       res.status(500).json({
         success: false,
         error: error.message || 'Failed to reset paper simulation'
@@ -12858,7 +12858,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const manager = getGlobalActiveEngineManager('paper'); // P19-B4b D5: per-mode accessor
       
       if (!status.isRunning || !manager) {
-        const stats = await storage.getPaperSimStats('paper');
+        const stats = await storage.getActiveEngineStats('paper');
         return res.json({
           isRunning: false,
           stats: {
@@ -13126,7 +13126,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // today; flagged in _meta.knownGaps for Phase 25/26 calibration).
       const executionPerClass: Record<string, { openPositions: number; recentCloses24h: number; feePercent: number; slippagePercent: number } | { status: string }> = {};
       try {
-        const paperSimOpen = await storage.getActiveOpenPositions('paper');
+        const activeEngineOpen = await storage.getActiveOpenPositions('paper');
         const recentClosedAll = await storage.getPaperSimTrades('paper', { closedOnly: true, limit: 500 });
         const cutoffMs = Date.now() - 24 * 60 * 60 * 1000;
         const recentClosed24h = recentClosedAll.filter((t: any) => {
@@ -13141,7 +13141,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
             executionPerClass[cls] = { status: 'CLASS_NOT_WIRED' };
             continue;
           }
-          const open = paperSimOpen.filter((p: any) => p.assetClass === cls).length;
+          const open = activeEngineOpen.filter((p: any) => p.assetClass === cls).length;
           const closed = recentClosed24h.filter((t: any) => t.assetClass === cls).length;
           executionPerClass[cls] = {
             openPositions: open,

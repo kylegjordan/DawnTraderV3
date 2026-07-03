@@ -93,7 +93,7 @@ export default function AITransparencyPage() {
   });
 
   // Fetch paper trading simulation data (Milestone 18)
-  const { data: paperSimData, isLoading: paperSimLoading } = useQuery<{ ok: boolean; isRunning: boolean; stats: any }>({
+  const { data: activeEngineData, isLoading: activeEngineLoading } = useQuery<{ ok: boolean; isRunning: boolean; stats: any }>({
     queryKey: ['/api/active-engine/metrics'],
     refetchInterval: 5000, // More frequent refresh for responsive status updates
     staleTime: 0, // Always consider data stale for immediate updates
@@ -358,8 +358,8 @@ export default function AITransparencyPage() {
   const learningMetrics = learningMetricsData?.metrics || null;
   const proposals = proposalsData?.proposals || [];
   const historicSignalsStats = historicSignalsData?.stats || null;
-  const paperSimMetrics = paperSimData?.stats || null;
-  const isSimRunning = paperSimData?.isRunning || false;
+  const activeEngineMetrics = activeEngineData?.stats || null;
+  const isSimRunning = activeEngineData?.isRunning || false;
   const paperPositions = paperPositionsData?.positions || [];
   const orchestratorLogs = orchestratorLogsData?.logs ?? [];
   const learningSummary = learningSummaryData?.summary || null;
@@ -1815,9 +1815,9 @@ export default function AITransparencyPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {paperSimLoading ? (
+              {activeEngineLoading ? (
                 <div className="text-sm text-muted-foreground">Loading paper trading data...</div>
-              ) : !paperSimMetrics ? (
+              ) : !activeEngineMetrics ? (
                 <div className="text-sm text-muted-foreground">
                   No paper trading simulation data available. Start the simulation engine to begin paper trading.
                 </div>
@@ -1840,15 +1840,15 @@ export default function AITransparencyPage() {
                       <div className="p-4 border rounded-lg bg-card" data-testid="card-total-trades">
                         <div className="text-sm text-muted-foreground mb-1">Total Trades</div>
                         <div className="text-2xl font-bold text-foreground" data-testid="text-total-trades">
-                          {paperSimMetrics.totalTrades || 0}
+                          {activeEngineMetrics.totalTrades || 0}
                         </div>
                       </div>
                       
                       <div className="p-4 border rounded-lg bg-card" data-testid="card-win-rate">
                         <div className="text-sm text-muted-foreground mb-1">Win Rate</div>
                         <div className="text-2xl font-bold text-foreground" data-testid="text-win-rate">
-                          {paperSimMetrics.winRate !== null && paperSimMetrics.winRate !== undefined 
-                            ? `${paperSimMetrics.winRate.toFixed(1)}%` 
+                          {activeEngineMetrics.winRate !== null && activeEngineMetrics.winRate !== undefined 
+                            ? `${activeEngineMetrics.winRate.toFixed(1)}%` 
                             : 'N/A'}
                         </div>
                       </div>
@@ -1857,20 +1857,20 @@ export default function AITransparencyPage() {
                         <div className="text-sm text-muted-foreground mb-1">Total P/L</div>
                         <div 
                           className={`text-2xl font-bold ${
-                            paperSimMetrics.totalPnl > 0 ? 'text-green-500' : 
-                            paperSimMetrics.totalPnl < 0 ? 'text-red-500' : 
+                            activeEngineMetrics.totalPnl > 0 ? 'text-green-500' : 
+                            activeEngineMetrics.totalPnl < 0 ? 'text-red-500' : 
                             'text-foreground'
                           }`}
                           data-testid="text-total-pnl"
                         >
-                          ${paperSimMetrics.totalPnl?.toFixed(2) || '0.00'}
+                          ${activeEngineMetrics.totalPnl?.toFixed(2) || '0.00'}
                         </div>
                       </div>
                       
                       <div className="p-4 border rounded-lg bg-card" data-testid="card-sharpe-ratio">
                         <div className="text-sm text-muted-foreground mb-1">Sharpe Ratio</div>
                         <div className="text-2xl font-bold text-foreground" data-testid="text-sharpe-ratio">
-                          {paperSimMetrics.sharpeRatio?.toFixed(2) || 'N/A'}
+                          {activeEngineMetrics.sharpeRatio?.toFixed(2) || 'N/A'}
                         </div>
                       </div>
                     </div>
@@ -1881,17 +1881,17 @@ export default function AITransparencyPage() {
                     <div className="p-3 border rounded-lg bg-card">
                       <div className="text-xs text-muted-foreground mb-1">Max Drawdown</div>
                       <div 
-                        className={`text-lg font-bold ${paperSimMetrics.maxDrawdown >= 15 ? 'text-red-500' : 'text-foreground'}`}
+                        className={`text-lg font-bold ${activeEngineMetrics.maxDrawdown >= 15 ? 'text-red-500' : 'text-foreground'}`}
                         data-testid="text-max-drawdown"
                       >
-                        {paperSimMetrics.maxDrawdown?.toFixed(2) || '0.00'}%
+                        {activeEngineMetrics.maxDrawdown?.toFixed(2) || '0.00'}%
                       </div>
                     </div>
                     
                     <div className="p-3 border rounded-lg bg-card">
                       <div className="text-xs text-muted-foreground mb-1">Profit Factor</div>
                       <div className="text-lg font-bold text-foreground" data-testid="text-profit-factor">
-                        {paperSimMetrics.profitFactor?.toFixed(2) || 'N/A'}
+                        {activeEngineMetrics.profitFactor?.toFixed(2) || 'N/A'}
                       </div>
                     </div>
                     
@@ -1899,14 +1899,14 @@ export default function AITransparencyPage() {
                       <div className="text-xs text-muted-foreground mb-1">Avg Return</div>
                       <div 
                         className={`text-lg font-bold ${
-                          paperSimMetrics.avgReturn > 0 ? 'text-green-500' : 
-                          paperSimMetrics.avgReturn < 0 ? 'text-red-500' : 
+                          activeEngineMetrics.avgReturn > 0 ? 'text-green-500' : 
+                          activeEngineMetrics.avgReturn < 0 ? 'text-red-500' : 
                           'text-foreground'
                         }`}
                         data-testid="text-avg-return"
                       >
-                        {paperSimMetrics.avgReturn !== null && paperSimMetrics.avgReturn !== undefined 
-                          ? `${paperSimMetrics.avgReturn > 0 ? '+' : ''}${paperSimMetrics.avgReturn.toFixed(2)}%` 
+                        {activeEngineMetrics.avgReturn !== null && activeEngineMetrics.avgReturn !== undefined 
+                          ? `${activeEngineMetrics.avgReturn > 0 ? '+' : ''}${activeEngineMetrics.avgReturn.toFixed(2)}%` 
                           : 'N/A'}
                       </div>
                     </div>
@@ -1957,11 +1957,11 @@ export default function AITransparencyPage() {
                   )}
 
                   {/* Strategy Breakdown */}
-                  {paperSimMetrics.byStrategy && paperSimMetrics.byStrategy.length > 0 && (
+                  {activeEngineMetrics.byStrategy && activeEngineMetrics.byStrategy.length > 0 && (
                     <div>
                       <h4 className="text-sm font-medium text-foreground mb-3">Performance by Strategy</h4>
                       <div className="space-y-2">
-                        {paperSimMetrics.byStrategy.map((strategy: any, idx: number) => (
+                        {activeEngineMetrics.byStrategy.map((strategy: any, idx: number) => (
                           <div 
                             key={idx} 
                             className="p-3 border rounded-lg hover:bg-accent/50 transition-colors"

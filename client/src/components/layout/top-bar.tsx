@@ -44,7 +44,7 @@ interface TopBarProps {
 export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarProps) {
   const { 
     tradingStatus,
-    paperSimStatus,
+    activeEngineStatus,
     isTradingActive,  // Phase 32.D-Fix.Final: Single authoritative active state
     startTrading, 
     stopTrading, 
@@ -202,12 +202,12 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
 
   // Phase 32.D-Fix.5: Force UI re-render when active state changes
   useEffect(() => {
-    if (tradingStatus?.isEngineActivePaper || paperSimStatus?.isRunning) {
+    if (tradingStatus?.isEngineActivePaper || activeEngineStatus?.isRunning) {
       console.log('[32.D-Fix.5] Detected active trading → refreshing dependent widgets');
       queryClient.invalidateQueries({ queryKey: ['/api/dashboard/overview'] });
       queryClient.invalidateQueries({ queryKey: ['/api/goals/summary'] });
     }
-  }, [tradingStatus?.isEngineActivePaper, paperSimStatus?.isRunning, queryClient]);
+  }, [tradingStatus?.isEngineActivePaper, activeEngineStatus?.isRunning, queryClient]);
 
   const handleTradingToggle = async (enabled: boolean) => {
     console.log('[Phase-27.F.6] Toggle clicked:', { enabled, mode: currentMode });

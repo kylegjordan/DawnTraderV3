@@ -427,16 +427,16 @@ app.use((req, res, next) => {
     console.error('[Queue] ⚠️ Initialization failed:', error);
   }
 
-  // Phase 27.F.8: Reset PaperSim service state FIRST (before any other services)
+  // Phase 27.F.8: Reset ActiveEngine service state FIRST (before any other services)
   try {
-    const { resetPaperSimService, resumeActiveEngines } = await import('./services/active-engine-service');
-    resetPaperSimService();
+    const { resetActiveEngineService, resumeActiveEngines } = await import('./services/active-engine-service');
+    resetActiveEngineService();
     
     // R9.3.HF-4.FIX: Resume engines that should be running after server restart
     // This ensures Central Clock subscribers (TCL watchdog, FX5 scanner, Stage3 emitter) are rehydrated
     await resumeActiveEngines();
   } catch (error) {
-    console.error('[PaperSimService] ⚠️ Reset failed:', error);
+    console.error('[ActiveEngineService] ⚠️ Reset failed:', error);
   }
 
   // Reset rate limiter for clean test state (non-production only)
@@ -1423,9 +1423,9 @@ app.use((req, res, next) => {
       
       // Start heartbeat monitoring
       activeEngineHeartbeat.start();
-      console.log('[PaperSimHeartbeat] ✅ Recovery complete and heartbeat started');
+      console.log('[ActiveEngineHeartbeat] ✅ Recovery complete and heartbeat started');
     } catch (error) {
-      console.error('[PaperSimHeartbeat] ⚠️ Startup failed:', error);
+      console.error('[ActiveEngineHeartbeat] ⚠️ Startup failed:', error);
     }
 
     // Directive 12.2.3 Batch 7B-hotfix: LearningCycleService init removed (100% Bob-dependent, file deleted)
