@@ -163,9 +163,9 @@ import {
   type PaperSimTrade,
   type InsertPaperSimTrade,
   paperSimTrades,
-  type PaperSimOpenPosition,
-  type InsertPaperSimOpenPosition,
-  paperSimOpenPositions,
+  type ActiveOpenPosition,
+  type InsertActiveOpenPosition,
+  activeOpenPositions,
   type ActiveTradeLog,
   type InsertActiveTradeLog,
   activeTradeLogs,
@@ -543,13 +543,13 @@ export interface IStorage {
   getPaperSimTradesGlobal(mode: TradingMode, filters?: { limit?: number; closedOnly?: boolean; includeNeverFilled?: boolean }): Promise<PaperSimTrade[]>; // Phase 27.F.14.B: Global-per-mode query for LATTI
   
   // Open positions
-  createPaperSimOpenPosition(mode: TradingMode, position: InsertPaperSimOpenPosition): Promise<PaperSimOpenPosition>;
-  updatePaperSimOpenPosition(mode: TradingMode, id: string, updates: Partial<PaperSimOpenPosition>): Promise<PaperSimOpenPosition>;
-  getPaperSimOpenPosition(mode: TradingMode, id: string): Promise<PaperSimOpenPosition | undefined>;
-  getPaperSimOpenPositionBySymbol(mode: TradingMode, symbol: string): Promise<PaperSimOpenPosition | undefined>;
-  getPaperSimOpenPositions(mode: TradingMode): Promise<PaperSimOpenPosition[]>;
-  deletePaperSimOpenPosition(mode: TradingMode, id: string): Promise<void>;
-  deleteAllPaperSimOpenPositions(mode: TradingMode): Promise<void>; // Phase 27.F.13.C: Reset simulation
+  createActiveOpenPosition(mode: TradingMode, position: InsertActiveOpenPosition): Promise<ActiveOpenPosition>;
+  updateActiveOpenPosition(mode: TradingMode, id: string, updates: Partial<ActiveOpenPosition>): Promise<ActiveOpenPosition>;
+  getActiveOpenPosition(mode: TradingMode, id: string): Promise<ActiveOpenPosition | undefined>;
+  getActiveOpenPositionBySymbol(mode: TradingMode, symbol: string): Promise<ActiveOpenPosition | undefined>;
+  getActiveOpenPositions(mode: TradingMode): Promise<ActiveOpenPosition[]>;
+  deleteActiveOpenPosition(mode: TradingMode, id: string): Promise<void>;
+  deleteAllActiveOpenPositions(mode: TradingMode): Promise<void>; // Phase 27.F.13.C: Reset simulation
   
   // Trade logs
   createActiveTradeLog(mode: TradingMode, log: InsertActiveTradeLog): Promise<ActiveTradeLog>;
@@ -1544,9 +1544,9 @@ export class DatabaseStorage implements IStorage {
     // Paper simulation positions are stored separately from the trades table
     if (mode === 'paper') {
       const paperResult = await db
-        .select({ id: paperSimOpenPositions.id })
-        .from(paperSimOpenPositions)
-        .where(eq(paperSimOpenPositions.symbol, normalizedSymbol))
+        .select({ id: activeOpenPositions.id })
+        .from(activeOpenPositions)
+        .where(eq(activeOpenPositions.symbol, normalizedSymbol))
         .limit(1);
       
       if (paperResult.length > 0) {
@@ -3323,7 +3323,7 @@ export class DatabaseStorage implements IStorage {
     return await query;
   }
 
-  async createPaperSimOpenPosition(mode: TradingMode, position: InsertPaperSimOpenPosition): Promise<PaperSimOpenPosition> {
+  async createActiveOpenPosition(mode: TradingMode, position: InsertActiveOpenPosition): Promise<ActiveOpenPosition> {
     // [I8C-SYMBOL-NORM] Normalize symbol to canonical BASE/QUOTE format
     const canonicalSymbol = normalizeToInternalSymbol(position.symbol);
     if (position.symbol !== canonicalSymbol) {
@@ -3333,7 +3333,7 @@ export class DatabaseStorage implements IStorage {
     
     // Phase 8.8.3-I8E: Handle unique constraint violations gracefully
     try {
-      const [result] = await db.insert(paperSimOpenPositions).values(normalizedPosition).returning();
+      const [result] = await db.insert(activeOpenPositions).values(normalizedPosition).returning();
       return result;
     } catch (error: any) {
       // Check for unique constraint violation (code 23505 in PostgreSQL)
@@ -3341,8 +3341,8 @@ export class DatabaseStorage implements IStorage {
         console.log(`[I8E-DB-DEDUP] Duplicate position blocked: ${canonicalSymbol}/${position.side} - constraint prevented insert`);
         // Return the existing position instead
         const existing = await db.select()
-          .from(paperSimOpenPositions)
-          .where(eq(paperSimOpenPositions.symbol, canonicalSymbol));
+          .from(activeOpenPositions)
+          .where(eq(activeOpenPositions.symbol, canonicalSymbol));
         if (existing.length > 0) {
           console.log(`[I8E-DB-DEDUP] Returning existing position: ${existing[0].id}`);
           return existing[0];
@@ -3353,43 +3353,43 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async updatePaperSimOpenPosition(mode: TradingMode, id: string, updates: Partial<PaperSimOpenPosition>): Promise<PaperSimOpenPosition> {
-    const [result] = await db.update(paperSimOpenPositions)
+  async updateActiveOpenPosition(mode: TradingMode, id: string, updates: Partial<ActiveOpenPosition>): Promise<ActiveOpenPosition> {
+    const [result] = await db.update(activeOpenPositions)
       .set({ ...updates, lastUpdated: new Date() })
-      .where(eq(paperSimOpenPositions.id, id))
+      .where(eq(activeOpenPositions.id, id))
       .returning();
     return result;
   }
 
-  async getPaperSimOpenPosition(mode: TradingMode, id: string): Promise<PaperSimOpenPosition | undefined> {
+  async getActiveOpenPosition(mode: TradingMode, id: string): Promise<ActiveOpenPosition | undefined> {
     const [position] = await db.select()
-      .from(paperSimOpenPositions)
-      .where(eq(paperSimOpenPositions.id, id));
+      .from(activeOpenPositions)
+      .where(eq(activeOpenPositions.id, id));
     return position || undefined;
   }
 
-  async getPaperSimOpenPositionBySymbol(mode: TradingMode, symbol: string): Promise<PaperSimOpenPosition | undefined> {
+  async getActiveOpenPositionBySymbol(mode: TradingMode, symbol: string): Promise<ActiveOpenPosition | undefined> {
     // Phase 27.F.15.B.2: Global query, mode-based only
     const [position] = await db.select()
-      .from(paperSimOpenPositions)
-      .where(eq(paperSimOpenPositions.symbol, symbol));
+      .from(activeOpenPositions)
+      .where(eq(activeOpenPositions.symbol, symbol));
     return position || undefined;
   }
 
-  async getPaperSimOpenPositions(mode: TradingMode): Promise<PaperSimOpenPosition[]> {
+  async getActiveOpenPositions(mode: TradingMode): Promise<ActiveOpenPosition[]> {
     // Phase 27.F.15.B.2: Global query, mode-based only
     return await db.select()
-      .from(paperSimOpenPositions)
-      .orderBy(desc(paperSimOpenPositions.openedAt));
+      .from(activeOpenPositions)
+      .orderBy(desc(activeOpenPositions.openedAt));
   }
 
-  async deletePaperSimOpenPosition(mode: TradingMode, id: string): Promise<void> {
-    await db.delete(paperSimOpenPositions).where(eq(paperSimOpenPositions.id, id));
+  async deleteActiveOpenPosition(mode: TradingMode, id: string): Promise<void> {
+    await db.delete(activeOpenPositions).where(eq(activeOpenPositions.id, id));
   }
 
   // Phase 27.F.13.C: Reset simulation methods - Phase 27.F.15.B.2: Mode-based only
-  async deleteAllPaperSimOpenPositions(mode: TradingMode): Promise<void> {
-    await db.delete(paperSimOpenPositions);
+  async deleteAllActiveOpenPositions(mode: TradingMode): Promise<void> {
+    await db.delete(activeOpenPositions);
   }
 
   async deleteAllActiveTradeLogs(mode: TradingMode): Promise<void> {
@@ -3465,7 +3465,7 @@ export class DatabaseStorage implements IStorage {
       .from(paperSimTrades);
 
     const openPositions = await db.select()
-      .from(paperSimOpenPositions);
+      .from(activeOpenPositions);
 
     const totalTrades = trades.length;
     const closedTrades = trades.filter(t => t.closedAt).length;
@@ -4115,13 +4115,13 @@ export class DatabaseStorage implements IStorage {
   /**
    * Phase 8.8.3-B7.A: Hard reset paper simulation
    * Closes all open trades and clears all open positions for a clean session start.
-   * Note: paperSimTrades and paperSimOpenPositions are single-tenant (no mode column).
+   * Note: paperSimTrades and activeOpenPositions are single-tenant (no mode column).
    * activeEngineSessions has a mode column for session tracking.
    */
   async hardResetPaperSim(mode: 'paper' | 'live' = 'paper'): Promise<{ closedTrades: number; clearedPositions: number }> {
     console.log(`[B7.A][DB] Starting hard reset for mode=${mode}`);
     
-    const { paperSimTrades, paperSimOpenPositions, activeEngineSessions } = await import('@shared/schema');
+    const { paperSimTrades, activeOpenPositions, activeEngineSessions } = await import('@shared/schema');
     
     let closedTrades = 0;
     let clearedPositions = 0;
@@ -4142,9 +4142,9 @@ export class DatabaseStorage implements IStorage {
       console.log(`[B7.A][DB] Closed ${closedTrades} open trades`);
       
       // 2. Delete all open positions snapshot
-      // Note: paperSimOpenPositions is single-tenant, no mode column
+      // Note: activeOpenPositions is single-tenant, no mode column
       const deletePositionsResult = await db
-        .delete(paperSimOpenPositions)
+        .delete(activeOpenPositions)
         .returning();
       
       clearedPositions = deletePositionsResult.length;

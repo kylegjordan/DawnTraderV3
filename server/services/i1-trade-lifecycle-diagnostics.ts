@@ -52,7 +52,7 @@ interface HardStopSummary {
   positionsRemainingOpen: number;
   timestamp: Date;
   dbCounts: {
-    paper_sim_open_positions: number;
+    active_open_positions: number;
     paper_sim_trades: number;
   };
 }
@@ -292,7 +292,7 @@ class I1TradeLifecycleDiagnosticsService {
     positionsClosedByHardStop: number;
     positionsRemainingOpen: number;
     dbCounts: {
-      paper_sim_open_positions: number;
+      active_open_positions: number;
       paper_sim_trades: number;
     };
   }): void {

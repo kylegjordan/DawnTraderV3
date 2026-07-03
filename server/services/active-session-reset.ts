@@ -71,7 +71,7 @@ class ActiveSessionResetService {
       }
 
       // 2. No open paper positions in DB
-      const openPositions = await storage.getPaperSimOpenPositions(mode);
+      const openPositions = await storage.getActiveOpenPositions(mode);
       if (openPositions.length > 0) {
         issues.push(`Found ${openPositions.length} open positions in DB after reset`);
       }

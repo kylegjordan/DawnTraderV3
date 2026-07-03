@@ -618,20 +618,20 @@ async function syncTradeModeToStorage(symbol: string, tradeMode: TradeMode): Pro
   try {
     const { storage } = await import('../storage.js');
     // Update paper positions
-    const paperPositions = await storage.getPaperSimOpenPositions('paper');
+    const paperPositions = await storage.getActiveOpenPositions('paper');
     const paperPosition = paperPositions.find((p: any) => p.symbol === symbol);
     if (paperPosition) {
-      // P19-B3b: updatePaperSimOpenPosition signature is (mode, id, updates);
+      // P19-B3b: updateActiveOpenPosition signature is (mode, id, updates);
       // this position was fetched from the 'paper' set, so thread that mode.
-      await storage.updatePaperSimOpenPosition('paper', paperPosition.id, { tradeMode });
+      await storage.updateActiveOpenPosition('paper', paperPosition.id, { tradeMode });
       console.log(`[9.2][MODE_SYNC] ${symbol} DB updated to ${tradeMode}`);
     }
     // Also check live positions
-    const livePositions = await storage.getPaperSimOpenPositions('live');
+    const livePositions = await storage.getActiveOpenPositions('live');
     const livePosition = livePositions.find((p: any) => p.symbol === symbol);
     if (livePosition) {
       // P19-B3b: fetched from the 'live' set — thread 'live' as the mode arg.
-      await storage.updatePaperSimOpenPosition('live', livePosition.id, { tradeMode });
+      await storage.updateActiveOpenPosition('live', livePosition.id, { tradeMode });
       console.log(`[9.2][MODE_SYNC] ${symbol} DB (live) updated to ${tradeMode}`);
     }
   } catch (err) {
@@ -732,7 +732,7 @@ export interface PositionUpdate {
   /**
    * B80 (2026-05-13): per-trade keying. TEC state Map is keyed by tradeId.
    * VTS callers pass the OpenVirtualTrade.id; paper/live callers pass the
-   * paper_sim_open_positions.id (DB UUID). Required.
+   * active_open_positions.id (DB UUID). Required.
    */
   tradeId: string;
   symbol: string;

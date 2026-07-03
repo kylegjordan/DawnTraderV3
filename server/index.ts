@@ -475,7 +475,7 @@ app.use((req, res, next) => {
     
     // Audit active positions for mapping coverage
     const [paperPositions, liveTrades] = await Promise.all([
-      storage.getPaperSimOpenPositions('paper'),
+      storage.getActiveOpenPositions('paper'),
       storage.getActiveTrades('live')
     ]);
     
@@ -1006,8 +1006,8 @@ app.use((req, res, next) => {
         const { storage } = await import('./storage');
         
         // Check both paper and live positions
-        const paperPositions = await storage.getPaperSimOpenPositions('paper');
-        const livePositions = await storage.getPaperSimOpenPositions('live');
+        const paperPositions = await storage.getActiveOpenPositions('paper');
+        const livePositions = await storage.getActiveOpenPositions('live');
         
         const paperSymbols = paperPositions.map(p => p.symbol);
         const liveSymbols = livePositions.map(p => p.symbol);

@@ -57,8 +57,8 @@ vi.mock('../../core/math/cost-model.js', () => ({
 
 vi.mock('../../storage.js', () => ({
   storage: {
-    getPaperSimOpenPositions: async () => [],
-    updatePaperSimOpenPosition: async () => undefined,
+    getActiveOpenPositions: async () => [],
+    updateActiveOpenPosition: async () => undefined,
   },
 }));
 

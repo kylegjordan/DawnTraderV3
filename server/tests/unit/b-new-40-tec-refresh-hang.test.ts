@@ -63,8 +63,8 @@ vi.mock('../../services/module-constants-service.js', async () => {
 // Storage stub — module imports it but the path under test doesn't exercise it.
 vi.mock('../../storage.js', () => ({
   storage: {
-    getPaperSimOpenPositions: async () => [],
-    updatePaperSimOpenPosition: async () => undefined,
+    getActiveOpenPositions: async () => [],
+    updateActiveOpenPosition: async () => undefined,
   },
 }));
 

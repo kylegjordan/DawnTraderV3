@@ -51,7 +51,7 @@ export class CriteriaLimiter {
   async getOpenSlots(mode: TradingMode): Promise<number> {
     try {
       const positions = mode === 'paper' 
-        ? await storage.getPaperSimOpenPositions(mode)
+        ? await storage.getActiveOpenPositions(mode)
         : await storage.getActiveTrades(mode);
       
       const guardrails = await storage.getGuardrailsV2({ mode });

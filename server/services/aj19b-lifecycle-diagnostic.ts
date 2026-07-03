@@ -5,7 +5,7 @@
  * 
  * Hypothesis: The MAX_POSITION guardrail thinks slots are permanently full because:
  * 1. Trades open correctly (slot count increases)
- * 2. But when trades close, deletePaperSimOpenPosition() fails or is skipped
+ * 2. But when trades close, deleteActiveOpenPosition() fails or is skipped
  * 3. So the DB still has rows, and guardrails see max slots forever
  * 
  * This service logs:
@@ -173,7 +173,7 @@ class AJ19BLifecycleDiagnostic {
     if (!this.isEnabled) return;
     
     // Get current DB count using correct mode
-    const dbPositions = await storage.getPaperSimOpenPositions(mode);
+    const dbPositions = await storage.getActiveOpenPositions(mode);
     const dbCount = dbPositions.length;
     
     const fullEvent: LifecycleOpenEvent = {
@@ -225,7 +225,7 @@ class AJ19BLifecycleDiagnostic {
     if (!this.isEnabled) return;
     
     // Get current DB count AFTER the close attempt using correct mode
-    const dbPositions = await storage.getPaperSimOpenPositions(mode);
+    const dbPositions = await storage.getActiveOpenPositions(mode);
     const dbCount = dbPositions.length;
     
     const fullEvent: LifecycleCloseEvent = {
@@ -287,7 +287,7 @@ class AJ19BLifecycleDiagnostic {
    */
   async runReconciliation(cycleId: string, mode: 'paper' | 'live' = 'paper'): Promise<ReconciliationEvent> {
     // Get DB count
-    const dbPositions = await storage.getPaperSimOpenPositions(mode);
+    const dbPositions = await storage.getActiveOpenPositions(mode);
     const dbOpenCount = dbPositions.length;
     const dbPositionIds = new Set(dbPositions.map(p => String(p.id)));
     
@@ -402,7 +402,7 @@ class AJ19BLifecycleDiagnostic {
    */
   async getSummary(mode: 'live' | 'paper' = 'paper'): Promise<LifecycleSummary> {
     // Get current DB state for the specified mode
-    const dbPositions = await storage.getPaperSimOpenPositions(mode);
+    const dbPositions = await storage.getActiveOpenPositions(mode);
     
     // Build close reason breakdown
     const closesByReason: Record<string, number> = {};

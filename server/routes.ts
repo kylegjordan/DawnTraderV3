@@ -2973,7 +2973,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const { activeFilterPool } = await import('./services/active-filter-pool.js');
       
       const activePool = activeFilterPool.getActivePool(mode);
-      const openPositions = await storage.getPaperSimOpenPositions(mode);
+      const openPositions = await storage.getActiveOpenPositions(mode);
       
       aj16Diagnostic.forceSnapshot(mode, {
         activeFilteredPairs: activePool.length,
@@ -3479,7 +3479,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     try {
       const mode = (req.query.mode as 'live' | 'paper') || 'paper';
       
-      const positions = await storage.getPaperSimOpenPositions(mode);
+      const positions = await storage.getActiveOpenPositions(mode);
       
       res.json({
         ok: true,
@@ -3515,19 +3515,19 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         });
       }
       
-      const positions = await storage.getPaperSimOpenPositions(mode);
+      const positions = await storage.getActiveOpenPositions(mode);
       const deleteCount = positions.length;
       
       for (const position of positions) {
         try {
-          await storage.deletePaperSimOpenPosition(mode, position.id);
+          await storage.deleteActiveOpenPosition(mode, position.id);
           console.log(`[AJ19B][FORCE_DELETE] Deleted position ${position.id} (${position.symbol})`);
         } catch (err: any) {
           console.error(`[AJ19B][FORCE_DELETE_ERROR] Failed to delete position ${position.id}:`, err.message);
         }
       }
       
-      const remainingPositions = await storage.getPaperSimOpenPositions(mode);
+      const remainingPositions = await storage.getActiveOpenPositions(mode);
       
       res.json({
         ok: true,
@@ -4477,7 +4477,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // Get ready to buy signals (if paper engine is running)
       let readyToBuy = 0;
       if (isPaperSimRunning && currentMode === 'paper') {
-        const openPositions = await storage.getPaperSimOpenPositions('paper');
+        const openPositions = await storage.getActiveOpenPositions('paper');
         readyToBuy = Math.max(0, filteredPairs - openPositions.length);
       }
       
@@ -4645,7 +4645,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         
         // [9.6.3] Get mode-specific metrics from storage queries
         const openPositions = mode === 'paper' 
-          ? await storage.getPaperSimOpenPositions(mode)
+          ? await storage.getActiveOpenPositions(mode)
           : await storage.getActiveTrades(mode);
         const closedTrades = mode === 'paper'
           ? await storage.getPaperSimTrades(mode, { closedOnly: true })
@@ -9513,7 +9513,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const mode = (req.query.mode as 'paper' | 'live') || 'paper';
       const { krakenWebSocketAdapter } = await import('./exchanges/kraken/kraken-websocket-adapter.js');
       
-      const openPositions = await storage.getPaperSimOpenPositions(mode);
+      const openPositions = await storage.getActiveOpenPositions(mode);
       const wsSubscribed = krakenWebSocketAdapter.getSubscribedSymbols();
       
       const linkageDetails = openPositions.map(pos => {
@@ -9562,7 +9562,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const { krakenWebSocketAdapter } = await import('./exchanges/kraken/kraken-websocket-adapter.js');
       
       // Get open positions for the current mode
-      const openPositions = await storage.getPaperSimOpenPositions(mode);
+      const openPositions = await storage.getActiveOpenPositions(mode);
       const positionSymbols = openPositions.map(p => p.symbol);
       
       // Get subscription map data from adapter
@@ -9710,9 +9710,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     try {
       const { krakenWebSocketAdapter } = await import('./exchanges/kraken/kraken-websocket-adapter.js');
       
-      // I7-PERSIST-FIX: Get active symbols from paper_sim_open_positions (actual data) + live trades
+      // I7-PERSIST-FIX: Get active symbols from active_open_positions (actual data) + live trades
       const [paperPositions, liveTrades] = await Promise.all([
-        storage.getPaperSimOpenPositions('paper'),
+        storage.getActiveOpenPositions('paper'),
         storage.getActiveTrades('live')
       ]);
       const activeSymbols = [...new Set([
@@ -9753,9 +9753,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     try {
       const { krakenWebSocketAdapter } = await import('./exchanges/kraken/kraken-websocket-adapter.js');
       
-      // I7-PERSIST-FIX: Get active symbols from paper_sim_open_positions (actual data) + live trades
+      // I7-PERSIST-FIX: Get active symbols from active_open_positions (actual data) + live trades
       const [paperPositions, liveTrades] = await Promise.all([
-        storage.getPaperSimOpenPositions('paper'),
+        storage.getActiveOpenPositions('paper'),
         storage.getActiveTrades('live')
       ]);
       const activeSymbols = [...new Set([
@@ -9784,9 +9784,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     try {
       const { krakenWebSocketAdapter } = await import('./exchanges/kraken/kraken-websocket-adapter.js');
       
-      // I7-PERSIST-FIX: Get active symbols from paper_sim_open_positions (actual data) + live trades
+      // I7-PERSIST-FIX: Get active symbols from active_open_positions (actual data) + live trades
       const [paperPositions, liveTrades] = await Promise.all([
-        storage.getPaperSimOpenPositions('paper'),
+        storage.getActiveOpenPositions('paper'),
         storage.getActiveTrades('live')
       ]);
       const activeSymbols = [...new Set([
@@ -9814,9 +9814,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     try {
       const { krakenWebSocketAdapter } = await import('./exchanges/kraken/kraken-websocket-adapter.js');
       
-      // I7-PERSIST-FIX: Get active symbols from paper_sim_open_positions (actual data) + live trades
+      // I7-PERSIST-FIX: Get active symbols from active_open_positions (actual data) + live trades
       const [paperPositions, liveTrades] = await Promise.all([
-        storage.getPaperSimOpenPositions('paper'),
+        storage.getActiveOpenPositions('paper'),
         storage.getActiveTrades('live')
       ]);
       const activeSymbols = [...new Set([
@@ -9897,7 +9897,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       // Get open positions from both paper and live
       const [paperPositions, liveTrades] = await Promise.all([
-        storage.getPaperSimOpenPositions('paper'),
+        storage.getActiveOpenPositions('paper'),
         storage.getActiveTrades('live')
       ]);
       const allSymbols = [...new Set([
@@ -9936,7 +9936,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       // Get open positions to audit
       const [paperPositions, liveTrades] = await Promise.all([
-        storage.getPaperSimOpenPositions('paper'),
+        storage.getActiveOpenPositions('paper'),
         storage.getActiveTrades('live')
       ]);
       const allSymbols = [...new Set([
@@ -10000,8 +10000,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   // GET /api/diagnostics/i7-persist/status - Phase 8.8.3-I7-PERSIST-FIX: Compare engine vs DB position counts
   apiRouter.get('/diagnostics/i7-persist/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      // Get positions from paper_sim_open_positions (what the engine uses)
-      const paperSimPositions = await storage.getPaperSimOpenPositions('paper');
+      // Get positions from active_open_positions (what the engine uses)
+      const paperSimPositions = await storage.getActiveOpenPositions('paper');
       
       // Get positions from paper_trades table (legacy/unused)
       const paperTrades = await storage.getOpenPaperTrades();
@@ -10014,7 +10014,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         phase: '8.8.3-I7-PERSIST-FIX',
         timestamp: new Date().toISOString(),
         description: 'Paper trade persistence status - comparing data sources',
-        paper_sim_open_positions: {
+        active_open_positions: {
           count: paperSimPositions.length,
           symbols: paperSimPositions.map(p => p.symbol),
           note: 'This is the CORRECT table used by paper execution engine'
@@ -10028,7 +10028,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           count: liveTrades.length,
           symbols: liveTrades.map(t => t.symbol)
         },
-        fix_applied: 'I7-WS-F endpoints now use getPaperSimOpenPositions instead of getOpenPaperTrades'
+        fix_applied: 'I7-WS-F endpoints now use getActiveOpenPositions instead of getOpenPaperTrades'
       });
     } catch (error: any) {
       console.error('[I7-PERSIST] Error fetching status:', error);
@@ -10049,7 +10049,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       // Get active symbols from paper positions + live trades
       const [paperPositions, liveTrades] = await Promise.all([
-        storage.getPaperSimOpenPositions('paper'),
+        storage.getActiveOpenPositions('paper'),
         storage.getActiveTrades('live')
       ]);
       
@@ -10266,7 +10266,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       // Get active symbols from paper positions + live trades
       const [paperPositions, liveTrades] = await Promise.all([
-        storage.getPaperSimOpenPositions('paper'),
+        storage.getActiveOpenPositions('paper'),
         storage.getActiveTrades('live')
       ]);
       
@@ -10475,7 +10475,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       let openPositionsCount = 0;
       try {
         const { storage } = await import('./storage.js');
-        const openPositions = await storage.getPaperSimOpenPositions('paper');
+        const openPositions = await storage.getActiveOpenPositions('paper');
         openPositionsCount = openPositions.length;
       } catch (e) {
         // Ignore errors, use 0
@@ -10536,7 +10536,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         // Fallback: manual construction if engine doesn't have the method yet
         const { storage } = await import('./storage.js');
         const { livePricingAdapter } = await import('./services/live-pricing-adapter.js');
-        const openPositions = await storage.getPaperSimOpenPositions('paper');
+        const openPositions = await storage.getActiveOpenPositions('paper');
         const now = Date.now();
         
         const positions = await Promise.all(openPositions.map(async (pos: any) => {
@@ -11513,12 +11513,12 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // Only clear open positions - trade history remains for review
       if (isSoftReset) {
         // Soft reset: only clear open positions, preserve trade history
-        await storage.deleteAllPaperSimOpenPositions('paper');
+        await storage.deleteAllActiveOpenPositions('paper');
         console.log(`[PaperSim] Soft reset: cleared open positions, trade history preserved`);
       } else {
         // Hard reset: full cleanup including trade history
         await storage.deleteAllPaperSimTrades('paper');
-        await storage.deleteAllPaperSimOpenPositions('paper');
+        await storage.deleteAllActiveOpenPositions('paper');
         await storage.deleteAllActiveTradeLogs('paper');
         console.log(`[PaperSim] Hard reset: cleared trades, positions, and logs`);
       }
@@ -11573,7 +11573,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       console.log(`[8.8.4-C.11][CLEAR_DATA] Cleared ${tradesDeleted} paper trades`);
       
       // Clear open positions
-      await storage.deleteAllPaperSimOpenPositions(mode);
+      await storage.deleteAllActiveOpenPositions(mode);
       console.log('[8.8.4-C.11][CLEAR_DATA] Cleared open positions');
       
       // Clear RTB signals
@@ -11838,7 +11838,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const mode: 'paper' | 'live' = 'paper';
       
       await storage.deleteAllPaperSimTrades(mode);
-      await storage.deleteAllPaperSimOpenPositions(mode);
+      await storage.deleteAllActiveOpenPositions(mode);
       
       res.json({
         ok: true,
@@ -11987,7 +11987,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   apiRouter.get('/active-engine/positions', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
-      const positions = await storage.getPaperSimOpenPositions('paper');
+      const positions = await storage.getActiveOpenPositions('paper');
       res.json({ ok: true, positions });
     } catch (error) {
       console.error('Error fetching paper sim positions:', error);
@@ -12006,8 +12006,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const { krakenWebSocketAdapter } = await import('./exchanges/kraken/kraken-websocket-adapter.js');
       const { activeFilterPool } = await import('./services/active-filter-pool.js');
       
-      // Get open positions from paper_sim_open_positions
-      const positions = await storage.getPaperSimOpenPositions('paper');
+      // Get open positions from active_open_positions
+      const positions = await storage.getActiveOpenPositions('paper');
       
       // Get guardrail settings for max open positions using dynamic slot calculation
       const { getDynamicSlots } = await import('./services/dynamic-slots.js');
@@ -12284,7 +12284,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       // Phase 8.8.3-I6: Get open positions for "Open Position Value" using LIVE prices
       // Phase 8.8.3-I10-FIX: Also calculate unrealized P/L from open positions
-      const openPositions = await storage.getPaperSimOpenPositions(mode);
+      const openPositions = await storage.getActiveOpenPositions(mode);
       let totalPositionValue = 0;
       let unrealizedPnl = 0;
       
@@ -12368,7 +12368,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const { reason } = req.body;
       
       // Get the position to close
-      const positions = await storage.getPaperSimOpenPositions('paper');
+      const positions = await storage.getActiveOpenPositions('paper');
       const position = positions.find(p => p.id === id);
       
       if (!position) {
@@ -12481,7 +12481,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       }
       
       // Delete from open positions
-      await storage.deletePaperSimOpenPosition('paper', id);
+      await storage.deleteActiveOpenPosition('paper', id);
       
       // Broadcast update via WebSocket
       contextBridge.broadcast({
@@ -12518,7 +12518,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const userId = req.user!.id;
       
       // Get all open positions
-      const positions = await storage.getPaperSimOpenPositions('paper');
+      const positions = await storage.getActiveOpenPositions('paper');
       
       if (positions.length === 0) {
         // Phase 8.8.3-A3: Standardized success response (includes clearedCount for backward compatibility)
@@ -12576,7 +12576,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           });
           
           // Delete from open positions
-          await storage.deletePaperSimOpenPosition('paper', position.id);
+          await storage.deleteActiveOpenPosition('paper', position.id);
           clearedCount++;
           
           console.log(`[B2-ClearStranded] Cleared position ${position.symbol} (${position.id})`);
@@ -13120,13 +13120,13 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       }
 
       // B79.0n.EXECUTION CHUNK C: execution-layer state per active class.
-      // openPositions: live count from paper_sim_open_positions table by mode/class.
+      // openPositions: live count from active_open_positions table by mode/class.
       // recentCloses24h: count from paper_sim_trades closed within last 24h.
       // feePercent/slippagePercent: surfaces current values (WILDCARD class-member
       // today; flagged in _meta.knownGaps for Phase 25/26 calibration).
       const executionPerClass: Record<string, { openPositions: number; recentCloses24h: number; feePercent: number; slippagePercent: number } | { status: string }> = {};
       try {
-        const paperSimOpen = await storage.getPaperSimOpenPositions('paper');
+        const paperSimOpen = await storage.getActiveOpenPositions('paper');
         const recentClosedAll = await storage.getPaperSimTrades('paper', { closedOnly: true, limit: 500 });
         const cutoffMs = Date.now() - 24 * 60 * 60 * 1000;
         const recentClosed24h = recentClosedAll.filter((t: any) => {
@@ -14538,7 +14538,7 @@ Provide specific, actionable recommendations.`,
       const { getPortfolioBalanceV2 } = await import('./services/guardrail-settings.js');
       const currentBalance = await getPortfolioBalanceV2(mode) || 50000;
       const openPositions = mode === 'paper' 
-        ? await storage.getPaperSimOpenPositions(mode)
+        ? await storage.getActiveOpenPositions(mode)
         : await storage.getActiveTrades(mode);
       const metrics = {
         openTradesCount: openPositions.length,

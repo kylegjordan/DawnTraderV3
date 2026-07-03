@@ -58,7 +58,7 @@ describe('B79.0n.EXECUTION — audit + regression-lock tests', () => {
 
     it('Test 3 — emit site at active-execution-engine populates assetClass from position record', () => {
       // CHUNK A emit-site change: read from position.assetClass (canonical SSOT
-      // write at L2147 createPaperSimOpenPosition), NOT re-resolve from symbol.
+      // write at L2147 createActiveOpenPosition), NOT re-resolve from symbol.
       expect(ACTIVE_EXEC_SRC).toMatch(/_tcAssetClass\s*=\s*\(position as any\)\.assetClass/);
       expect(ACTIVE_EXEC_SRC).toMatch(/eventBus\.emitTradeClosed\(\{[\s\S]*?assetClass:\s*_tcAssetClass[\s\S]*?\}\)/);
     });

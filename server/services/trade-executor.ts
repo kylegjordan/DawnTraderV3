@@ -14,7 +14,7 @@ import { checkGuardrailRisk, type TradeCandidate } from './trade-safety.js';
 import { buildSettingsFromGuardrails, calculateRiskAmount } from './guardrail-settings.js';
 import { lifecycleEventsService } from './lifecycle-events.js';
 import { nanoid } from 'nanoid';
-import type { TradingSettings, PaperSimTrade, InsertPaperSimTrade, InsertPaperSimOpenPosition } from '@shared/schema';
+import type { TradingSettings, PaperSimTrade, InsertPaperSimTrade, InsertActiveOpenPosition } from '@shared/schema';
 
 export type StrategyType = 'vwap_pullback' | 'abcd_long' | 'sma_trend_ride' | 'breakout' | 'mean_reversion' | 'range_trading' | 'vwap_bounce' | 'liquidity_trap' | 'dhma';
 
@@ -207,7 +207,7 @@ export class PaperTradeExecutor extends BaseTradeExecutor {
 
       await storage.createPaperSimTrade('paper', trade);
 
-      const position: InsertPaperSimOpenPosition = {
+      const position: InsertActiveOpenPosition = {
         symbol: signal.symbol,
         strategyName: signal.strategy,
         side: 'buy',
@@ -224,7 +224,7 @@ export class PaperTradeExecutor extends BaseTradeExecutor {
         metadata: signal.metadata || {},
       };
 
-      await storage.createPaperSimOpenPosition('paper', position);
+      await storage.createActiveOpenPosition('paper', position);
 
       lifecycleEventsService.emitPaperTradeExecuted({
         mode: 'paper',

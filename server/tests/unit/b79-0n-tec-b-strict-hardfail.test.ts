@@ -57,8 +57,8 @@ vi.mock('../../services/module-constants-service.js', () => ({
 
 vi.mock('../../storage.js', () => ({
   storage: {
-    getPaperSimOpenPositions: async () => [],
-    updatePaperSimOpenPosition: async () => undefined,
+    getActiveOpenPositions: async () => [],
+    updateActiveOpenPosition: async () => undefined,
   },
 }));
 

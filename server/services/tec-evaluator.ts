@@ -103,7 +103,7 @@ export interface TECExitContext {
 export interface TECExitInput {
   /**
    * B80 (2026-05-13): per-trade keying. VTS callers pass OpenVirtualTrade.id;
-   * paper/live callers pass paper_sim_open_positions.id (DB UUID). Required.
+   * paper/live callers pass active_open_positions.id (DB UUID). Required.
    * See BATCH_80_SCOPE.md + RUNNING_ISSUES #105.
    */
   tradeId: string;

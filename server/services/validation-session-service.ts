@@ -8,7 +8,7 @@
  */
 
 import { storage } from '../storage.js';
-import type { RtbSignal, PaperSimOpenPosition, PaperSimTrade } from '@shared/schema.js';
+import type { RtbSignal, ActiveOpenPosition, PaperSimTrade } from '@shared/schema.js';
 
 type TradingMode = 'paper' | 'live';
 
@@ -76,7 +76,7 @@ class ValidationSessionService {
     try {
       const [rtbSignals, openPositions, closedTrades] = await Promise.all([
         storage.getRtbSignals({ mode, status: 'active' }),
-        storage.getPaperSimOpenPositions(mode),
+        storage.getActiveOpenPositions(mode),
         storage.getPaperSimTrades(mode, { limit: 1000, closedOnly: true }),
       ]);
 

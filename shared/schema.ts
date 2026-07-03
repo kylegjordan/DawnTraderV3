@@ -1740,7 +1740,7 @@ export const paperSimTrades = pgTable("paper_sim_trades", {
 }));
 
 // Open Positions - Currently active simulated positions - GLOBAL
-export const paperSimOpenPositions = pgTable("paper_sim_open_positions", {
+export const activeOpenPositions = pgTable("active_open_positions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   symbol: varchar("symbol", { length: 20 }).notNull(),
   // B69 (2026-05-03): asset class + exchange for cross-cutting analysis.
@@ -1798,15 +1798,15 @@ export const paperSimOpenPositions = pgTable("paper_sim_open_positions", {
   // duplicate declarations here were a copy-paste from another active-engine
   // table and never caught because tsc was running with continue-on-error.
 }, (table) => ({
-  symbolIdx: uniqueIndex("paper_sim_open_positions_symbol_idx").on(table.symbol),
-  strategyIdx: index("paper_sim_open_positions_strategy_idx").on(table.strategyName),
+  symbolIdx: uniqueIndex("active_open_positions_symbol_idx").on(table.symbol),
+  strategyIdx: index("active_open_positions_strategy_idx").on(table.strategyName),
 }));
 
 // Trade Logs - Chronological event log for paper trading transparency - GLOBAL
 export const activeTradeLogs = pgTable("active_trade_logs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   tradeId: varchar("trade_id"), // References paper_sim_trades.id (nullable for system events)
-  positionId: varchar("position_id"), // References paper_sim_open_positions.id (nullable)
+  positionId: varchar("position_id"), // References active_open_positions.id (nullable)
   timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow(),
   eventType: varchar("event_type", { length: 50 }).notNull(), // 'position_opened', 'position_closed', 'stop_triggered', 'target_hit', 'guardrail_triggered', 'error'
   message: text("message").notNull(),
@@ -2554,7 +2554,7 @@ export const insertPaperSimTradeSchema = createInsertSchema(paperSimTrades).omit
   id: true,
 });
 
-export const insertPaperSimOpenPositionSchema = createInsertSchema(paperSimOpenPositions).omit({
+export const insertActiveOpenPositionSchema = createInsertSchema(activeOpenPositions).omit({
   id: true,
   lastUpdated: true,
 });
@@ -2766,8 +2766,8 @@ export type HistoricSignal = typeof historicSignals.$inferSelect;
 export type InsertPaperSimTrade = z.infer<typeof insertPaperSimTradeSchema>;
 export type PaperSimTrade = typeof paperSimTrades.$inferSelect;
 
-export type InsertPaperSimOpenPosition = z.infer<typeof insertPaperSimOpenPositionSchema>;
-export type PaperSimOpenPosition = typeof paperSimOpenPositions.$inferSelect;
+export type InsertActiveOpenPosition = z.infer<typeof insertActiveOpenPositionSchema>;
+export type ActiveOpenPosition = typeof activeOpenPositions.$inferSelect;
 
 export type InsertActiveTradeLog = z.infer<typeof insertActiveTradeLogSchema>;
 export type ActiveTradeLog = typeof activeTradeLogs.$inferSelect;

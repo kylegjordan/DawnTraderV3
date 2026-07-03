@@ -83,7 +83,7 @@ export function assignCohortHash(symbol: string): 0 | 1 {
  * Check whether opening a new trade on `symbol` would breach the per-
  * underlying cap. Caller passes its current set of open-trade symbols
  * (typically the keys of the in-memory open-positions map for VTS, or a
- * SELECT on paper_sim_open_positions for paper).
+ * SELECT on active_open_positions for paper).
  *
  * @param symbol — pair being evaluated for entry
  * @param openTradeSymbols — symbols of all currently-open trades on the

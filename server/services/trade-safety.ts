@@ -9,7 +9,7 @@
  */
 
 import { storage } from '../storage';
-import { TradingSettings, PaperSimOpenPosition, Trade } from '@shared/schema';
+import { TradingSettings, ActiveOpenPosition, Trade } from '@shared/schema';
 import { 
   buildSettingsFromGuardrails as _buildSettingsFromGuardrails, 
   getRiskPercentageV2, 
@@ -92,11 +92,11 @@ interface ActivePosition {
 /**
  * Phase 8.8.3-H4: Get active positions from correct table based on trading mode
  * Live mode: reads from trades table
- * Paper mode: reads from paper_sim_open_positions table
+ * Paper mode: reads from active_open_positions table
  */
 async function getActivePositions(mode: 'live' | 'paper'): Promise<ActivePosition[]> {
   if (mode === 'paper') {
-    const paperPositions = await storage.getPaperSimOpenPositions('paper');
+    const paperPositions = await storage.getActiveOpenPositions('paper');
     return paperPositions.map(p => ({
       symbol: p.symbol,
       quantity: p.quantity,

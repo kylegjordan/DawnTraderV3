@@ -134,7 +134,7 @@ class C13ValidationService {
 
     const tclStatus = tclWatchdog.getStatus(mode);
     const rtbQueue = await readyToBuyService.getQueuedSignals(mode);
-    const openPositions = await storage.getPaperSimOpenPositions(mode);
+    const openPositions = await storage.getActiveOpenPositions(mode);
     const trades = await storage.getPaperSimTrades(mode);
     const closedTrades = trades.filter(t => t.closeReason !== null);
 

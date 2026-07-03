@@ -160,7 +160,7 @@ class C14ValidationService {
       
       // Clear trades and positions
       await storage.deleteAllPaperSimTrades(mode);
-      await storage.deleteAllPaperSimOpenPositions(mode);
+      await storage.deleteAllActiveOpenPositions(mode);
       console.log(`[8.8.4-C.14][SANITIZE] Cleared trades and positions`);
       
       // Reset TCL watchdog state if available
@@ -197,7 +197,7 @@ class C14ValidationService {
     const now = new Date();
 
     const rtbQueue = await readyToBuyService.getQueuedSignals(mode);
-    const openPositions = await storage.getPaperSimOpenPositions(mode);
+    const openPositions = await storage.getActiveOpenPositions(mode);
     const trades = await storage.getPaperSimTrades(mode);
     const closedTrades = trades.filter(t => t.closeReason !== null);
 

@@ -303,7 +303,7 @@ export class ActiveExecutionEngine {
       const tclActive = tclWatchdog.isActive(this.mode);
       if (!tclActive) return;
 
-      const openPositions = await storage.getPaperSimOpenPositions(this.mode);
+      const openPositions = await storage.getActiveOpenPositions(this.mode);
       const modeSettings = await buildSettingsFromGuardrails(this.mode);
       const maxTrades = modeSettings.maxOpenTrades || 15;
       const openSlots = maxTrades - openPositions.length;
@@ -396,7 +396,7 @@ export class ActiveExecutionEngine {
       // Phase 8.8.3-I8C: Set up open positions provider for reconnect and audit
       const mode = this.mode;
       krakenWebSocketAdapter.setI8COpenPositionsProvider(async () => {
-        const positions = await storage.getPaperSimOpenPositions(mode);
+        const positions = await storage.getActiveOpenPositions(mode);
         return positions.map(p => p.symbol);
       });
       
@@ -592,7 +592,7 @@ export class ActiveExecutionEngine {
       tpTriggered: boolean;
     }>;
   }> {
-    const openPositions = await storage.getPaperSimOpenPositions(this.mode);
+    const openPositions = await storage.getActiveOpenPositions(this.mode);
     const now = Date.now();
     
     const positions = await Promise.all(openPositions.map(async (pos) => {
@@ -756,7 +756,7 @@ export class ActiveExecutionEngine {
     
     try {
       // Phase 8.8.3-I7-PM-FOCUS: Get current open positions count for ENGINE_TICK log
-      const openPositions = await storage.getPaperSimOpenPositions(this.mode);
+      const openPositions = await storage.getActiveOpenPositions(this.mode);
       console.log(`[I7-PM-FOCUS][ENGINE_TICK] mode=${this.mode} positions=${openPositions.length} ts=${new Date().toISOString()}`);
       
       // Step 1: Check open positions for exit conditions
@@ -822,7 +822,7 @@ export class ActiveExecutionEngine {
       // included in any holding-duration analytic (cosmetic; EV/expectancy unaffected
       // since entry price is the limit either way). A true in-market duration needs a
       // filledAt stamp — Phase-25 fill-rate report card decides if it wants one.
-      await storage.updatePaperSimOpenPosition(this.mode, position.id, {
+      await storage.updateActiveOpenPosition(this.mode, position.id, {
         state: 'open',
         currentPrice: currentPrice.toString(),
         lastUpdated: new Date(),
@@ -842,7 +842,7 @@ export class ActiveExecutionEngine {
           closeReason: 'never_filled', // TYPED discriminator — visible, excluded from aggregates/learning
         } as any);
       }
-      await storage.deletePaperSimOpenPosition(this.mode, position.id);
+      await storage.deleteActiveOpenPosition(this.mode, position.id);
       console.log(`[P19-B7.2c][MAKER_NEVER_FILLED:${this.mode}] ${position.symbol}: pending maker at ${limit} hit the hard-drop deadline unfilled — dropped (slot freed, never-filled record${tradeId ? '' : ' — no tradeId on metadata, position removed only'})`);
     }
     // 'rest' — still resting; nothing to do this tick.
@@ -853,7 +853,7 @@ export class ActiveExecutionEngine {
     this.lastEvaluateAt = Date.now();
     this.lastExitChecks = [];
     
-    const openPositions = await storage.getPaperSimOpenPositions(this.mode);
+    const openPositions = await storage.getActiveOpenPositions(this.mode);
     
     // Phase 8.8.3-I7-PRICE-FIX (A3): Aggregate exit evaluation stats
     let positionsEvaluated = 0;
@@ -983,7 +983,7 @@ export class ActiveExecutionEngine {
         console.log(`[8.8.3-I6][ENGINE_PNL_CALC] symbol=${position.symbol} entry=${avgPrice} live=${currentPrice} pnl=${pnl.toFixed(4)} pnlPct=${pnlPercent.toFixed(4)}%`);
 
         // Update position with current P/L
-        await storage.updatePaperSimOpenPosition(this.mode, position.id, {
+        await storage.updateActiveOpenPosition(this.mode, position.id, {
           currentPrice: currentPrice.toString(),
           unrealizedPnl: pnl.toString(),
           unrealizedPnlPercent: pnlPercent.toString()
@@ -1076,11 +1076,11 @@ export class ActiveExecutionEngine {
       // Current open-position count drives the concurrency cap for paper.
       // Reading size from storage once per exit-check is cheap enough; if
       // this becomes a hot path we'll cache at the service level.
-      const currentOpenPositions = await storage.getPaperSimOpenPositions(this.mode);
+      const currentOpenPositions = await storage.getActiveOpenPositions(this.mode);
       const currentSlotTotal = currentOpenPositions.length;
 
       // B79.TEC (2026-05-08): assetClass MUST come from the position record,
-      // not a hardcoded literal. paper_sim_open_positions.asset_class has
+      // not a hardcoded literal. active_open_positions.asset_class has
       // been populated since B69 — we read it directly. If a row somehow
       // lacks it (legacy data), throw rather than silently default to
       // crypto_spot (CLAUDE.md §11 NO_FALLBACK doctrine).
@@ -1110,7 +1110,7 @@ export class ActiveExecutionEngine {
 
       const decision = await evaluateTECExit({
         // B80 (2026-05-13): per-trade keying. paper/live positions key by
-        // the DB row id (paper_sim_open_positions.id).
+        // the DB row id (active_open_positions.id).
         tradeId: position.id,
         symbol: position.symbol,
         entryPrice: avgPrice,
@@ -1141,7 +1141,7 @@ export class ActiveExecutionEngine {
       // row so the next exit-check cycle sees it AND the UI shows the
       // ratcheted stop instead of the static entry-time stop.
       if (decision.newStopPrice !== undefined && stopLoss !== null && decision.newStopPrice > stopLoss) {
-        await storage.updatePaperSimOpenPosition(this.mode, position.id, {
+        await storage.updateActiveOpenPosition(this.mode, position.id, {
           stopLoss: decision.newStopPrice.toString(),
         });
       }
@@ -1171,7 +1171,7 @@ export class ActiveExecutionEngine {
 
       // B65.2: write trade_mode on mode change (TARGET → TRAILING_TAKE).
       if (decision.modeChanged) {
-        await storage.updatePaperSimOpenPosition(this.mode, position.id, {
+        await storage.updateActiveOpenPosition(this.mode, position.id, {
           tradeMode: 'TRAILING_TAKE',
         });
       }
@@ -1265,7 +1265,7 @@ export class ActiveExecutionEngine {
     exitCondition: ExitCondition,
     priceSource?: string
   ): Promise<void> {
-    const position = await storage.getPaperSimOpenPosition(this.mode, positionId);
+    const position = await storage.getActiveOpenPosition(this.mode, positionId);
     if (!position) {
       console.warn(`[PaperExecution:${this.mode}] Position ${positionId} not found`);
       return;
@@ -1578,7 +1578,7 @@ export class ActiveExecutionEngine {
         if (cfg !== null) {
           // B79.0n.EXECUTION CHUNK B (2026-05-27): position-record SSOT.
           // Read assetClass directly from the position record (canonical SSOT
-          // write at createPaperSimOpenPosition L2147). Defensive fallback to
+          // write at createActiveOpenPosition L2147). Defensive fallback to
           // safeResolveAssetClass is BELT-AND-SUSPENDERS, NOT load-bearing —
           // L922 B79.TEC NO_FALLBACK hard-fails on a position missing
           // assetClass before flow ever reaches this hook. The fallback locks
@@ -1619,7 +1619,7 @@ export class ActiveExecutionEngine {
     }
 
     // [AJ19-B] Trade lifecycle CLOSE event - track slot counts before/after delete
-    const slotCountBefore = (await storage.getPaperSimOpenPositions(this.mode)).length;
+    const slotCountBefore = (await storage.getActiveOpenPositions(this.mode)).length;
     let deleteSuccessful = false;
     let deleteError: string | undefined;
     
@@ -1638,7 +1638,7 @@ export class ActiveExecutionEngine {
 
     // Delete open position with error handling for AJ19-B
     try {
-      await storage.deletePaperSimOpenPosition(this.mode, positionId);
+      await storage.deleteActiveOpenPosition(this.mode, positionId);
       deleteSuccessful = true;
       console.log(`[AJ19-B][DELETE_SUCCESS] positionId=${positionId} | symbol=${position.symbol}`);
       
@@ -1658,7 +1658,7 @@ export class ActiveExecutionEngine {
     }
     
     // Get slot count after delete attempt
-    const slotCountAfter = (await storage.getPaperSimOpenPositions(this.mode)).length;
+    const slotCountAfter = (await storage.getActiveOpenPositions(this.mode)).length;
     
     // Map exit condition to close reason enum
     const closeReasonMap: Record<string, 'SL' | 'TP' | 'TRAILING_STOP' | 'MANUAL' | 'KILL_SWITCH' | 'ENGINE_STOP' | 'UNKNOWN'> = {
@@ -1768,7 +1768,7 @@ export class ActiveExecutionEngine {
 
     // Phase 8.8.4-C.12: Emit TRADE_CLOSED event (triggers RTB promotion via event handler)
     // B79.0n.EXECUTION CHUNK A (2026-05-27): populate assetClass from position
-    // record (canonical SSOT write at L2147 createPaperSimOpenPosition). Same
+    // record (canonical SSOT write at L2147 createActiveOpenPosition). Same
     // C-7 doctrine as PromotionEvent — additive optional field, zero handler
     // breakage. See TradeClosedEvent interface in server/lib/event-bus.ts.
     const _tcAssetClass = (position as any).assetClass as string | undefined;
@@ -1806,7 +1806,7 @@ export class ActiveExecutionEngine {
       }
 
       // Phase 8.8.4-C.14.B: Calculate available slots for multi-signal promotion
-      const openPositions = await storage.getPaperSimOpenPositions(this.mode);
+      const openPositions = await storage.getActiveOpenPositions(this.mode);
       const modeSettings = await buildSettingsFromGuardrails(this.mode);
       const maxTrades = modeSettings.maxOpenTrades || 15;
       let openSlots = maxTrades - openPositions.length;
@@ -2463,7 +2463,7 @@ export class ActiveExecutionEngine {
 
     // Phase 8.8.3-I7-PM-FOCUS (C1): Check for duplicate BEFORE creating trade
     // This prevents orphan trade records when duplicate is detected
-    const existingPositions = await storage.getPaperSimOpenPositions(this.mode);
+    const existingPositions = await storage.getActiveOpenPositions(this.mode);
     const existingPositionForSymbol = existingPositions.find(p => p.symbol === signal.symbol);
     if (existingPositionForSymbol) {
       const existingCount = existingPositions.filter(p => p.symbol === signal.symbol).length;
@@ -2667,7 +2667,7 @@ export class ActiveExecutionEngine {
 
       // Create open position - Phase 8.8.3-C-FINAL: Include entryFee
       // Directive 10.3: Include signal type fields
-      const openPosition = await storage.createPaperSimOpenPosition(this.mode, {
+      const openPosition = await storage.createActiveOpenPosition(this.mode, {
         symbol: signal.symbol,
         strategyName: signal.strategy,
         side: 'buy',
@@ -2792,7 +2792,7 @@ export class ActiveExecutionEngine {
 
       // [AJ19-B] Trade lifecycle OPEN event - log slot counts
       try {
-        const openPositionsAfter = await storage.getPaperSimOpenPositions(this.mode);
+        const openPositionsAfter = await storage.getActiveOpenPositions(this.mode);
         await aj19bDiagnostic.logOpen({
           tradeId: trade.id,
           positionId: openPosition.id,
@@ -2933,7 +2933,7 @@ export class ActiveExecutionEngine {
 
   // Public methods for external control
   async getStatus(): Promise<{ isRunning: boolean; openPositions: number }> {
-    const openPositions = await storage.getPaperSimOpenPositions(this.mode);
+    const openPositions = await storage.getActiveOpenPositions(this.mode);
     return {
       isRunning: this.isRunning,
       openPositions: openPositions.length
@@ -2941,7 +2941,7 @@ export class ActiveExecutionEngine {
   }
 
   async getOpenPositions() {
-    return await storage.getPaperSimOpenPositions(this.mode);
+    return await storage.getActiveOpenPositions(this.mode);
   }
 
   async getTradeHistory(limit: number = 50) {
@@ -3108,7 +3108,7 @@ export class ActiveExecutionEngine {
         // never to skipping the whole gate.
         let _sameClassCount: number | undefined;
         try {
-          const _gateOpenPositions = await storage.getPaperSimOpenPositions(this.mode);
+          const _gateOpenPositions = await storage.getActiveOpenPositions(this.mode);
           _sameClassCount = _gateOpenPositions.filter(p => (asValidAssetClass((p as { assetClass?: unknown }).assetClass) ?? safeResolveAssetClass(p.symbol, 'kraken')) === _amrClass).length;
         } catch (countErr) {
           console.warn(`[B-5][Paper] open-position count fetch failed (slot gate skips this signal): ${countErr instanceof Error ? countErr.message : countErr}`);

@@ -274,7 +274,7 @@ export class ActivePortfolioManager {
     });
 
     const { livePricingAdapter } = await import('./live-pricing-adapter.js');
-    const openPositions = await storage.getPaperSimOpenPositions(this.mode);
+    const openPositions = await storage.getActiveOpenPositions(this.mode);
 
     if (!openPositions || openPositions.length === 0) {
       console.log('[DEBUG-B9][MANAGER_FORCE_CLOSE_ON_STOP][NO_OPEN_POSITIONS]');
@@ -366,7 +366,7 @@ export class ActivePortfolioManager {
     });
 
     // [8.8.3-I1] Log hard stop summary for diagnostics
-    const openPositionsRemaining = await storage.getPaperSimOpenPositions(this.mode);
+    const openPositionsRemaining = await storage.getActiveOpenPositions(this.mode);
     const tradesCount = (await storage.getPaperSimTrades(this.mode, { limit: 1000 })).length;
     const session = await storage.getRunningEngineSession(this.mode);
     
@@ -376,7 +376,7 @@ export class ActivePortfolioManager {
       positionsClosedByHardStop: closedCount,
       positionsRemainingOpen: openPositionsRemaining.length,
       dbCounts: {
-        paper_sim_open_positions: openPositionsRemaining.length,
+        active_open_positions: openPositionsRemaining.length,
         paper_sim_trades: tradesCount
       }
     });
@@ -502,7 +502,7 @@ export class ActivePortfolioManager {
   async checkPortfolioHealth(): Promise<PortfolioHealth> {
     const stats = await storage.getPaperSimStats(this.mode);
     const trades = await storage.getPaperSimTrades(this.mode, { limit: 1000, closedOnly: true });
-    const openPositions = await storage.getPaperSimOpenPositions(this.mode);
+    const openPositions = await storage.getActiveOpenPositions(this.mode);
 
     const issues: string[] = [];
     let status: 'healthy' | 'warning' | 'critical' = 'healthy';
@@ -556,7 +556,7 @@ export class ActivePortfolioManager {
   }
 
   async closeAllPositions(reason: string = 'manual_close'): Promise<void> {
-    const openPositions = await storage.getPaperSimOpenPositions(this.mode);
+    const openPositions = await storage.getActiveOpenPositions(this.mode);
     
     console.log(`[PaperPortfolio:${this.userId}] Closing all ${openPositions.length} positions - ${reason}`);
 
@@ -618,8 +618,8 @@ export class ActivePortfolioManager {
         }
 
         // Delete open position
-        // P19-B3b: deletePaperSimOpenPosition signature is (mode, id) — thread this.mode.
-        await storage.deletePaperSimOpenPosition(this.mode, position.id);
+        // P19-B3b: deleteActiveOpenPosition signature is (mode, id) — thread this.mode.
+        await storage.deleteActiveOpenPosition(this.mode, position.id);
       } catch (error) {
         console.error(`[PaperPortfolio:${this.userId}] Error closing position ${position.symbol}:`, error);
       }

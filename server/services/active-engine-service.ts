@@ -329,7 +329,7 @@ async function reconcileIncompleteTrades(mode: 'paper' | 'live', sessionId: stri
     console.log(`[8.8.3-I3][STOP_FLOW] Found ${incompleteTrades.length} incomplete trades to check`);
     
     // Get remaining open positions (should be 0 after force-close, but check to be safe)
-    const openPositions = await storage.getPaperSimOpenPositions(mode);
+    const openPositions = await storage.getActiveOpenPositions(mode);
     const openPositionSymbols = new Set(openPositions.map(p => p.symbol));
     
     for (const trade of incompleteTrades) {
@@ -608,7 +608,7 @@ export async function startActiveEngine(
           // Phase 8.8.3-I4 B4: Start periodic price tick health logging
           krakenWebSocketAdapter.startPriceTickHealthLogging(async () => {
             try {
-              const positions = await storage.getPaperSimOpenPositions('paper');
+              const positions = await storage.getActiveOpenPositions('paper');
               return positions.map(p => p.symbol);
             } catch {
               return [];
@@ -869,7 +869,7 @@ export async function stopActiveEngine(userId: string): Promise<ActiveEngineResu
             // 4. DB verification after force-close - ensure no open positions remain
             console.log('[8.8.3-I2][STOP_FLOW][7_DB_VERIFICATION]');
             try {
-              const remainingOpen = await storage.getPaperSimOpenPositions('paper');
+              const remainingOpen = await storage.getActiveOpenPositions('paper');
               if (remainingOpen.length > 0) {
                 console.error('[8.8.3-I2][STOP_FLOW][CRITICAL] OPEN POSITIONS REMAIN AFTER FORCE-CLOSE!', {
                   count: remainingOpen.length,
@@ -881,7 +881,7 @@ export async function stopActiveEngine(userId: string): Promise<ActiveEngineResu
                 for (const orphan of remainingOpen) {
                   console.log(`[8.8.3-I2][STOP_FLOW][CLEANUP] Force-removing orphan position: ${orphan.symbol} (${orphan.id})`);
                   try {
-                    await storage.deletePaperSimOpenPosition('paper', orphan.id);
+                    await storage.deleteActiveOpenPosition('paper', orphan.id);
                     console.log(`[8.8.3-I2][STOP_FLOW][CLEANUP_SUCCESS] Removed orphan: ${orphan.id}`);
                   } catch (cleanupErr) {
                     console.error(`[8.8.3-I2][STOP_FLOW][CLEANUP_FAILED] Could not remove orphan: ${orphan.id}`, cleanupErr);
