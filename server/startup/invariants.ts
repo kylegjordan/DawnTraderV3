@@ -16,7 +16,7 @@ export async function assertSingleTenantDB() {
     const operationalTables = [
       'portfolio_state',
       'strategy_settings',
-      'paper_sim_sessions',
+      'active_engine_sessions',
       'system_context',
       'trading_settings_legacy'
     ];
@@ -26,7 +26,7 @@ export async function assertSingleTenantDB() {
       FROM information_schema.columns
       WHERE column_name ILIKE 'user_id'
         AND table_schema = 'public'
-        AND table_name IN ('portfolio_state', 'strategy_settings', 'paper_sim_sessions', 'system_context', 'trading_settings_legacy')
+        AND table_name IN ('portfolio_state', 'strategy_settings', 'active_engine_sessions', 'system_context', 'trading_settings_legacy')
       ORDER BY table_name
     `);
 

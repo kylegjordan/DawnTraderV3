@@ -1819,7 +1819,7 @@ export const activeTradeLogs = pgTable("active_trade_logs", {
 
 // Paper Sim Sessions - Persistent tracking of simulation start/stop sessions
 // Phase 2C: Single-tenant - userId removed
-export const paperSimSessions = pgTable("paper_sim_sessions", {
+export const activeEngineSessions = pgTable("active_engine_sessions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   sessionId: varchar("session_id", { length: 100 }).notNull().unique(),
   mode: varchar("mode", { length: 10 }).notNull().default("paper"), // Always 'paper' but included for consistency
@@ -1833,9 +1833,9 @@ export const paperSimSessions = pgTable("paper_sim_sessions", {
   startedBy: varchar("started_by", { length: 50 }).default("manual"), // 'manual', 'api', 'scheduled'
   metadata: jsonb("metadata"), // Additional session context
 }, (table) => ({
-  statusIdx: index("paper_sim_sessions_status_idx").on(table.status),
-  sessionIdIdx: uniqueIndex("paper_sim_sessions_session_id_idx").on(table.sessionId),
-  startedAtIdx: index("paper_sim_sessions_started_at_idx").on(table.startedAt),
+  statusIdx: index("active_engine_sessions_status_idx").on(table.status),
+  sessionIdIdx: uniqueIndex("active_engine_sessions_session_id_idx").on(table.sessionId),
+  startedAtIdx: index("active_engine_sessions_started_at_idx").on(table.startedAt),
 }));
 
 // Phase 8.8.4-B: RTB Signal Status Enum
@@ -2564,7 +2564,7 @@ export const insertActiveTradeLogSchema = createInsertSchema(activeTradeLogs).om
   timestamp: true,
 });
 
-export const insertPaperSimSessionSchema = createInsertSchema(paperSimSessions).omit({
+export const insertActiveEngineSessionSchema = createInsertSchema(activeEngineSessions).omit({
   id: true,
   startedAt: true,
 });
@@ -2772,8 +2772,8 @@ export type PaperSimOpenPosition = typeof paperSimOpenPositions.$inferSelect;
 export type InsertActiveTradeLog = z.infer<typeof insertActiveTradeLogSchema>;
 export type ActiveTradeLog = typeof activeTradeLogs.$inferSelect;
 
-export type InsertPaperSimSession = z.infer<typeof insertPaperSimSessionSchema>;
-export type PaperSimSession = typeof paperSimSessions.$inferSelect;
+export type InsertActiveEngineSession = z.infer<typeof insertActiveEngineSessionSchema>;
+export type ActiveEngineSession = typeof activeEngineSessions.$inferSelect;
 
 // Phase 8.8.3-J: Execution Attempt Audit types
 export type InsertExecutionAttemptAudit = z.infer<typeof insertExecutionAttemptAuditSchema>;

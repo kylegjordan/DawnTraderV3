@@ -55,7 +55,7 @@ SELECT
   started_at,
   stopped_at,
   session_metrics
-FROM paper_sim_sessions
+FROM active_engine_sessions
 WHERE active=true;
 
 -- ========================================
@@ -67,7 +67,7 @@ SELECT
   active,
   started_at,
   stopped_at
-FROM paper_sim_sessions s
+FROM active_engine_sessions s
 WHERE active=true
   AND NOT EXISTS (
     SELECT 1 
@@ -87,7 +87,7 @@ FROM system_context c
 WHERE session_id IS NOT NULL
   AND NOT EXISTS (
     SELECT 1 
-    FROM paper_sim_sessions s 
+    FROM active_engine_sessions s 
     WHERE s.id=c.session_id
   );
 
@@ -95,7 +95,7 @@ WHERE session_id IS NOT NULL
 -- G. Active Session Counts
 -- ========================================
 SELECT 'Paper Sessions' AS type, COUNT(*) AS count
-FROM paper_sim_sessions 
+FROM active_engine_sessions 
 WHERE active=true
 UNION ALL
 SELECT 'System Context Records' AS type, COUNT(*) AS count

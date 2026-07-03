@@ -290,21 +290,21 @@ export async function initializeQueues(): Promise<void> {
   try {
     const { storage } = await import('../storage.js');
     const { db } = await import('../db.js');
-    const { paperSimSessions } = await import('../../shared/schema.js');
+    const { activeEngineSessions } = await import('../../shared/schema.js');
     const { eq } = await import('drizzle-orm');
     
     // Find any running paper sessions (these should have been stopped on previous shutdown)
     const runningSessions = await db
       .select()
-      .from(paperSimSessions)
-      .where(eq(paperSimSessions.status, 'running'));
+      .from(activeEngineSessions)
+      .where(eq(activeEngineSessions.status, 'running'));
     
     if (runningSessions.length > 0) {
       console.warn(`[41F-B][RECOVERY] Found ${runningSessions.length} orphaned paper trading session(s) from previous run`);
       
       // Mark them as stopped (graceful recovery)
       for (const session of runningSessions) {
-        await storage.updatePaperSimSession(session.id, {
+        await storage.updateActiveEngineSession(session.id, {
           status: 'stopped',
           stoppedAt: new Date(),
           runForMs: new Date().getTime() - new Date(session.startedAt).getTime(),

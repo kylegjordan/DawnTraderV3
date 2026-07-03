@@ -62,7 +62,7 @@ class ActiveEngineHeartbeatService {
       
       // Phase 27.F.9: Reconciliation guard - heal any mismatch automatically
       const { getGlobalActiveEngineManager, clearGlobalActiveEngineManager } = await import('./active-engine-service');
-      const activeSessions = await storage.getActivePaperSimSessions();
+      const activeSessions = await storage.getRunningEngineSessions();
       const globalManager = getGlobalActiveEngineManager();
       
       // Heal orphaned global manager (manager exists but no DB session)
@@ -155,7 +155,7 @@ class ActiveEngineHeartbeatService {
           
           // Auto-correct: Stop the simulation as it's running in wrong mode
           console.log(`[PaperSimHeartbeat] Auto-stopping session ${sessionId} due to mode mismatch`);
-          await storage.updatePaperSimSession(sessionId, {
+          await storage.updateActiveEngineSession(sessionId, {
             status: 'stopped',
             stoppedAt: new Date(),
           });
@@ -205,7 +205,7 @@ class ActiveEngineHeartbeatService {
       console.log('[PaperSimHeartbeat] Starting session recovery...');
       
       // Get all sessions marked as running in database
-      const sessions = await storage.getActivePaperSimSessions();
+      const sessions = await storage.getRunningEngineSessions();
       
       if (sessions.length === 0) {
         console.log('[PaperSimHeartbeat] No sessions to recover');
@@ -286,7 +286,7 @@ class ActiveEngineHeartbeatService {
         // Clean stop: Mark as stopped since server restarted
         console.log(`[PaperSimHeartbeat] Cleanly stopping interrupted session ${sessionId}...`);
         
-        await storage.updatePaperSimSession(sessionId, {
+        await storage.updateActiveEngineSession(sessionId, {
           status: 'stopped',
           stoppedAt: new Date(),
         });

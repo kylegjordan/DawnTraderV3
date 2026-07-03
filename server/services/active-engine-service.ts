@@ -7,7 +7,7 @@
 
 import { nanoid } from 'nanoid';
 import { storage } from '../storage.js';
-import type { InsertPaperSimSession } from '../../shared/schema.js';
+import type { InsertActiveEngineSession } from '../../shared/schema.js';
 import { tradingStateSync } from './trading-state-sync.js';
 import { KrakenService } from '../exchanges/kraken/kraken.js';
 import { activeOperationQueue } from '../utils/operation-queue.js';
@@ -41,13 +41,13 @@ async function clearStaleBusyFlag() {
   const hasManager = !!getGlobalActiveEngineManager();
   if (hasManager) {
     const { db } = await import('../db.js');
-    const { paperSimSessions } = await import('../../shared/schema.js');
+    const { activeEngineSessions } = await import('../../shared/schema.js');
     const { eq } = await import('drizzle-orm');
     
     const activeSessions = await db
       .select()
-      .from(paperSimSessions)
-      .where(eq(paperSimSessions.status, 'running'))
+      .from(activeEngineSessions)
+      .where(eq(activeEngineSessions.status, 'running'))
       .limit(1);
     
     const hasDbSession = activeSessions.length > 0;
@@ -432,7 +432,7 @@ export async function startActiveEngine(
         console.log(`[41D-DEBUG-5] Checking DB for existing session (t+${Date.now()-t0}ms)`);
         // Phase 27.F.9 + Phase 3D: Mode-based session lookup
         const mode = 'paper';
-        const existingSession = await storage.getActivePaperSimSession(mode);
+        const existingSession = await storage.getRunningEngineSession(mode);
         console.log(`[41D-DEBUG-6] DB check complete - exists: ${!!existingSession} (t+${Date.now()-t0}ms)`);
         
         const existingManager = getGlobalActiveEngineManager();
@@ -537,13 +537,13 @@ export async function startActiveEngine(
           : null;
 
         // Phase 27.F.9: Create session in database FIRST (source of truth)
-        // Note: Single-tenant system - userId not stored in paperSimSessions table
+        // Note: Single-tenant system - userId not stored in activeEngineSessions table
         // Require startingBalance to be provided (no fallback defaults)
         if (!options?.startingBalance) {
           throw new Error('startingBalance is required to start paper trading');
         }
         
-        const sessionData: InsertPaperSimSession = {
+        const sessionData: InsertActiveEngineSession = {
           sessionId,
           mode: 'paper',
           status: 'running',
@@ -555,7 +555,7 @@ export async function startActiveEngine(
         };
 
         console.log('[ENGINE_DB_CHECKPOINT_1] Creating paper sim session in database...');
-        const dbSession = await storage.createPaperSimSession(sessionData);
+        const dbSession = await storage.createActiveEngineSession(sessionData);
         console.log(`[ENGINE_DB_CHECKPOINT_2] Session created in database: ${sessionId}`);
         
         // [B4] Reset diagnostic session for clean data capture (after DB session created)
@@ -666,9 +666,9 @@ export async function startActiveEngine(
             
             // Clean up manager reference and mark session as failed
             clearGlobalActiveEngineManager();
-            const failedSession = await storage.getPaperSimSessionBySessionId(sessionId);
+            const failedSession = await storage.getActiveEngineSessionBySessionId(sessionId);
             if (failedSession) {
-              await storage.updatePaperSimSession(failedSession.id, { status: 'failed' });
+              await storage.updateActiveEngineSession(failedSession.id, { status: 'failed' });
             }
             
             throw new Error(`Failed to sync portfolio balance: ${balanceUpdateError.message}`);
@@ -678,9 +678,9 @@ export async function startActiveEngine(
           // Rollback on manager start failure
           clearGlobalActiveEngineManager();
           // Find the session we just created and mark it as failed
-          const failedSession = await storage.getPaperSimSessionBySessionId(sessionId);
+          const failedSession = await storage.getActiveEngineSessionBySessionId(sessionId);
           if (failedSession) {
-            await storage.updatePaperSimSession(failedSession.id, { status: 'failed' });
+            await storage.updateActiveEngineSession(failedSession.id, { status: 'failed' });
           }
           throw new Error(`Failed to start trading engine: ${managerError.message}`);
         }
@@ -737,10 +737,10 @@ export async function startActiveEngine(
         // Roll back database session if it was created
         try {
           const mode = 'paper';
-          const existingSession = await storage.getActivePaperSimSession(mode);
+          const existingSession = await storage.getRunningEngineSession(mode);
           if (existingSession) {
             console.log(`[PaperSimService] Rolling back database session: ${existingSession.sessionId}`);
-            await storage.updatePaperSimSession(existingSession.id, { status: 'failed' });
+            await storage.updateActiveEngineSession(existingSession.id, { status: 'failed' });
           }
         } catch (rollbackError) {
           console.error('[PaperSimService] Failed to rollback database session:', rollbackError);
@@ -801,7 +801,7 @@ export async function stopActiveEngine(userId: string): Promise<ActiveEngineResu
       try {
         // Phase 3D: Mode-based session lookup
         const mode = 'paper';
-        const existingSession = await storage.getActivePaperSimSession(mode);
+        const existingSession = await storage.getRunningEngineSession(mode);
         
         if (!existingSession) {
           // IDEMPOTENT: No running session, return success
@@ -936,7 +936,7 @@ export async function stopActiveEngine(userId: string): Promise<ActiveEngineResu
         // Update session in database (end DB session)
         const t1 = Date.now();
         console.log('[41E-S][TIMING] Starting DB session update...');
-        await storage.updatePaperSimSession(existingSession.id, {
+        await storage.updateActiveEngineSession(existingSession.id, {
           status: 'stopped',
           stoppedAt: stoppedAt,
           runForMs: runDuration,
@@ -1043,7 +1043,7 @@ export async function getActiveEngineStatus(userId: string): Promise<any> {
   try {
     // Phase 3D: Get session from database using mode (single source of truth)
     const mode = 'paper';
-    const dbSession = await storage.getActivePaperSimSession(mode);
+    const dbSession = await storage.getRunningEngineSession(mode);
     
     // Get in-memory manager state (check for both null and undefined)
     const hasManager = !!getGlobalActiveEngineManager('paper');
@@ -1138,7 +1138,7 @@ export async function resumeActiveEngines(): Promise<void> {
       console.log('[R9.3.HF-4.FIX] Paper engine should be running - resuming...');
       
       // Check if there's an existing session in the database
-      const existingSession = await storage.getActivePaperSimSession('paper');
+      const existingSession = await storage.getRunningEngineSession('paper');
       
       if (existingSession) {
         console.log(`[R9.3.HF-4.FIX] Found active session: ${existingSession.sessionId}`);

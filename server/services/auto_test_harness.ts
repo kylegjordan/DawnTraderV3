@@ -151,7 +151,7 @@ class AutoTestHarness {
 
             // Verify database session created (Phase 3D: mode-based query)
             const mode = 'paper';
-            const session = await storage.getActivePaperSimSession(mode);
+            const session = await storage.getRunningEngineSession(mode);
             return !!session && session.status === 'running';
           },
         },
@@ -177,7 +177,7 @@ class AutoTestHarness {
 
             // Verify database session stopped (Phase 3D: mode-based query)
             const mode = 'paper';
-            const session = await storage.getActivePaperSimSession(mode);
+            const session = await storage.getRunningEngineSession(mode);
             return !session; // Should be no active session
           },
         },

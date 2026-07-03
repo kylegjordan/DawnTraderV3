@@ -24,7 +24,7 @@ export const SINGLE_TENANT_CONFIG = {
   TABLES_MIGRATED: [
     'portfolio_state',
     'strategy_settings',
-    'paper_sim_sessions',
+    'active_engine_sessions',
     'system_context',
     'trading_settings_legacy'
   ]

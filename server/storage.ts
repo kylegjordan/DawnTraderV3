@@ -169,9 +169,9 @@ import {
   type ActiveTradeLog,
   type InsertActiveTradeLog,
   activeTradeLogs,
-  type PaperSimSession,
-  type InsertPaperSimSession,
-  paperSimSessions,
+  type ActiveEngineSession,
+  type InsertActiveEngineSession,
+  activeEngineSessions,
   type ExecutionAttemptAudit,
   type InsertExecutionAttemptAudit,
   executionAttemptAudit,
@@ -577,13 +577,13 @@ export interface IStorage {
   }>;
   
   // Paper simulation session methods
-  createPaperSimSession(session: InsertPaperSimSession): Promise<PaperSimSession>;
-  updatePaperSimSession(id: string, updates: Partial<PaperSimSession>): Promise<PaperSimSession>;
-  getPaperSimSession(id: string): Promise<PaperSimSession | undefined>;
-  getPaperSimSessionBySessionId(sessionId: string): Promise<PaperSimSession | undefined>;
-  getActivePaperSimSession(mode: 'live' | 'paper'): Promise<PaperSimSession | undefined>;
-  getActivePaperSimSessions(): Promise<PaperSimSession[]>; // Get all active sessions (for heartbeat)
-  getPaperSimSessions(userId: string, filters?: { limit?: number; status?: string }): Promise<PaperSimSession[]>;
+  createActiveEngineSession(session: InsertActiveEngineSession): Promise<ActiveEngineSession>;
+  updateActiveEngineSession(id: string, updates: Partial<ActiveEngineSession>): Promise<ActiveEngineSession>;
+  getActiveEngineSession(id: string): Promise<ActiveEngineSession | undefined>;
+  getActiveEngineSessionBySessionId(sessionId: string): Promise<ActiveEngineSession | undefined>;
+  getRunningEngineSession(mode: 'live' | 'paper'): Promise<ActiveEngineSession | undefined>;
+  getRunningEngineSessions(): Promise<ActiveEngineSession[]>; // Get all active sessions (for heartbeat)
+  getActiveEngineSessions(userId: string, filters?: { limit?: number; status?: string }): Promise<ActiveEngineSession[]>;
   
   // Phase 8.8.3-J: Execution Attempt Audit methods (read-only diagnostics)
   createExecutionAttemptAudit(audit: InsertExecutionAttemptAudit): Promise<ExecutionAttemptAudit>;
@@ -3531,66 +3531,66 @@ export class DatabaseStorage implements IStorage {
   }
   
   // Paper simulation session methods
-  async createPaperSimSession(session: InsertPaperSimSession): Promise<PaperSimSession> {
-    const [result] = await db.insert(paperSimSessions).values(session).returning();
+  async createActiveEngineSession(session: InsertActiveEngineSession): Promise<ActiveEngineSession> {
+    const [result] = await db.insert(activeEngineSessions).values(session).returning();
     return result;
   }
 
-  async updatePaperSimSession(id: string, updates: Partial<PaperSimSession>): Promise<PaperSimSession> {
-    const [result] = await db.update(paperSimSessions)
+  async updateActiveEngineSession(id: string, updates: Partial<ActiveEngineSession>): Promise<ActiveEngineSession> {
+    const [result] = await db.update(activeEngineSessions)
       .set(updates)
-      .where(eq(paperSimSessions.id, id))
+      .where(eq(activeEngineSessions.id, id))
       .returning();
     return result;
   }
 
-  async getPaperSimSession(id: string): Promise<PaperSimSession | undefined> {
+  async getActiveEngineSession(id: string): Promise<ActiveEngineSession | undefined> {
     const [session] = await db.select()
-      .from(paperSimSessions)
-      .where(eq(paperSimSessions.id, id));
+      .from(activeEngineSessions)
+      .where(eq(activeEngineSessions.id, id));
     return session || undefined;
   }
 
-  async getPaperSimSessionBySessionId(sessionId: string): Promise<PaperSimSession | undefined> {
+  async getActiveEngineSessionBySessionId(sessionId: string): Promise<ActiveEngineSession | undefined> {
     const [session] = await db.select()
-      .from(paperSimSessions)
-      .where(eq(paperSimSessions.sessionId, sessionId));
+      .from(activeEngineSessions)
+      .where(eq(activeEngineSessions.sessionId, sessionId));
     return session || undefined;
   }
 
-  async getActivePaperSimSession(mode: 'live' | 'paper'): Promise<PaperSimSession | undefined> {
+  async getRunningEngineSession(mode: 'live' | 'paper'): Promise<ActiveEngineSession | undefined> {
     console.log('[3D] PaperSim query fixed: mode-based session lookup');
     const [session] = await db.select()
-      .from(paperSimSessions)
+      .from(activeEngineSessions)
       .where(and(
-        eq(paperSimSessions.mode, mode),
-        eq(paperSimSessions.status, 'running')
+        eq(activeEngineSessions.mode, mode),
+        eq(activeEngineSessions.status, 'running')
       ))
-      .orderBy(desc(paperSimSessions.startedAt))
+      .orderBy(desc(activeEngineSessions.startedAt))
       .limit(1);
     return session || undefined;
   }
 
-  async getActivePaperSimSessions(): Promise<PaperSimSession[]> {
+  async getRunningEngineSessions(): Promise<ActiveEngineSession[]> {
     // Get all running sessions across all users (for heartbeat monitoring)
     return await db.select()
-      .from(paperSimSessions)
-      .where(eq(paperSimSessions.status, 'running'))
-      .orderBy(desc(paperSimSessions.startedAt));
+      .from(activeEngineSessions)
+      .where(eq(activeEngineSessions.status, 'running'))
+      .orderBy(desc(activeEngineSessions.startedAt));
   }
 
-  async getPaperSimSessions(userId: string, filters?: { limit?: number; status?: string }): Promise<PaperSimSession[]> {
+  async getActiveEngineSessions(userId: string, filters?: { limit?: number; status?: string }): Promise<ActiveEngineSession[]> {
     const limit = filters?.limit || 50;
 
-    // P19-B3b: paper_sim_sessions is single-tenant (Phase 2C — userId column
+    // P19-B3b: active_engine_sessions is single-tenant (Phase 2C — userId column
     // removed). The legacy userId-equality filter referenced a dropped column;
     // remove it. The userId param is retained for interface compatibility but no
     // longer filters (mode-based, single-tenant). Optional status filter stays.
-    const query = db.select().from(paperSimSessions)
-      .orderBy(desc(paperSimSessions.startedAt));
+    const query = db.select().from(activeEngineSessions)
+      .orderBy(desc(activeEngineSessions.startedAt));
 
     if (filters?.status) {
-      return await query.where(eq(paperSimSessions.status, filters.status as any)).limit(limit);
+      return await query.where(eq(activeEngineSessions.status, filters.status as any)).limit(limit);
     }
 
     return await query.limit(limit);
@@ -4116,12 +4116,12 @@ export class DatabaseStorage implements IStorage {
    * Phase 8.8.3-B7.A: Hard reset paper simulation
    * Closes all open trades and clears all open positions for a clean session start.
    * Note: paperSimTrades and paperSimOpenPositions are single-tenant (no mode column).
-   * paperSimSessions has a mode column for session tracking.
+   * activeEngineSessions has a mode column for session tracking.
    */
   async hardResetPaperSim(mode: 'paper' | 'live' = 'paper'): Promise<{ closedTrades: number; clearedPositions: number }> {
     console.log(`[B7.A][DB] Starting hard reset for mode=${mode}`);
     
-    const { paperSimTrades, paperSimOpenPositions, paperSimSessions } = await import('@shared/schema');
+    const { paperSimTrades, paperSimOpenPositions, activeEngineSessions } = await import('@shared/schema');
     
     let closedTrades = 0;
     let clearedPositions = 0;
@@ -4152,18 +4152,18 @@ export class DatabaseStorage implements IStorage {
       
       // 3. End any running paper sim sessions (this table HAS a mode column)
       await db
-        .update(paperSimSessions)
+        .update(activeEngineSessions)
         .set({
           status: 'stopped',
           stoppedAt: new Date(),
-          // P19-B3b: paper_sim_sessions has no stoppedBy column (only startedAt/
+          // P19-B3b: active_engine_sessions has no stoppedBy column (only startedAt/
           // stoppedAt/startedBy). The stop is recorded by status='stopped' +
           // stoppedAt; the 'hard_reset' provenance is in the [B7.A][DB] log line
           // above. Removed the nonexistent-column reference.
         })
         .where(and(
-          eq(paperSimSessions.mode, mode),
-          eq(paperSimSessions.status, 'running')
+          eq(activeEngineSessions.mode, mode),
+          eq(activeEngineSessions.status, 'running')
         ));
       
       console.log(`[B7.A][DB] Hard reset complete: ${closedTrades} trades closed, ${clearedPositions} positions cleared`);

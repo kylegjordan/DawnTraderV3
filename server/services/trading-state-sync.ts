@@ -572,7 +572,7 @@ export class TradingStateSync {
       if (userId === 'system-reconciliation') {
         // For system reconciliation, check if paper simulation is actively running
         // Use global query to detect any active paper sessions across all users
-        const activePaperSessions = await storage.getActivePaperSimSessions().catch(() => []);
+        const activePaperSessions = await storage.getRunningEngineSessions().catch(() => []);
         if (activePaperSessions.length > 0) {
           // Active paper trading session(s) exist - force paper mode
           currentMode = 'paper';

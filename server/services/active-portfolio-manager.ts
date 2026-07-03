@@ -368,7 +368,7 @@ export class ActivePortfolioManager {
     // [8.8.3-I1] Log hard stop summary for diagnostics
     const openPositionsRemaining = await storage.getPaperSimOpenPositions(this.mode);
     const tradesCount = (await storage.getPaperSimTrades(this.mode, { limit: 1000 })).length;
-    const session = await storage.getActivePaperSimSession(this.mode);
+    const session = await storage.getRunningEngineSession(this.mode);
     
     i1TradeLifecycleDiagnostics.logHardStopSummary({
       sessionId: session?.sessionId || 'unknown',
