@@ -10,7 +10,7 @@
  * pin that construction so a future edit can't silently break the isolation:
  *
  *   OBJ-3a — active path byte-identical: the shadow apparatus never reaches
- *            executePromotedSignal / paper_sim_trades.
+ *            executePromotedSignal / closed_trades.
  *   OBJ-3b — VTS-learning byte-identical (closed-side): shadowClose is an
  *            ALLOWLIST — it touches ONLY the isolated rtb_shadow_pairings sink
  *            (+ the shadow's own backing row + its TEC state), never a learning
@@ -86,7 +86,7 @@ const FORBIDDEN_SINKS = [
   'updateRollingAverages',
   'persistRealPriceTrade',
   'archiveExitDecision',
-  'paper_sim_trades',
+  'closed_trades',
   'phase10SessionTrades',
 ];
 
@@ -166,7 +166,7 @@ describe('reorg-B4 active path byte-identical (OBJ-3a)', () => {
     const shadowCloseBody = stripComments(extractFunctionBody(vtsRunnerSrc, 'async function shadowClose('));
     for (const body of [registerBody, resolveBody, shadowCloseBody]) {
       expect(body).not.toContain('executePromotedSignal');
-      expect(body).not.toContain('paper_sim_trades');
+      expect(body).not.toContain('closed_trades');
     }
   });
 });

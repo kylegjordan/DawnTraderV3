@@ -72,6 +72,9 @@ describe('B65.1 migration validation', () => {
         path.join(MIGRATIONS_DIR, '2026-04-23-b65-add-exchange-asset-class.sql'),
         'utf-8',
       );
+      // P19-B-RENAME W3 note: this test validates the SHIPPED (immutable) B65 migration,
+      // whose SQL predates the W3 table rename — the HISTORICAL name paper_sim_trades
+      // is the correct expectation here and must never be 'modernized'.
       for (const table of ['watchlist_pairs', 'trading_signals', 'trades', 'paper_sim_trades']) {
         expect(sql).toContain(`ALTER TABLE ${table}`);
       }
@@ -89,7 +92,7 @@ describe('B65.1 migration validation', () => {
     });
   });
 
-  describe('Migration 2 — baseCurrency on trades + paper_sim_trades', () => {
+  describe('Migration 2 — baseCurrency on trades + paper_sim_trades (historical name)', () => {
     it('uses COALESCE(NULLIF(SPLIT_PART)) pattern per Langston review', () => {
       const sql = fs.readFileSync(
         path.join(MIGRATIONS_DIR, '2026-04-23-b65-add-base-currency-to-trades.sql'),

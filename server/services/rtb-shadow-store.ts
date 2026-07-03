@@ -9,7 +9,7 @@
  *   ★ ISOLATION INVARIANT (Langston Step-2): nothing here ever touches a
  *     learning sink. No `outcomeFeedbackStore.updateEma`, no
  *     `telemetry.recordPairTelemetry`, no `updateRollingAverages`, no
- *     exit-decision archive, no `paper_sim_trades`. It writes ONE table —
+ *     exit-decision archive, no `closed_trades`. It writes ONE table —
  *     `rtb_shadow_pairings` — which NO learning consumer (ranker /
  *     outcomeFeedbackStore / telemetry-aggregator / ML / expectancy /
  *     win-rate / regime stats) ever reads. It is a pure B5/B6 analysis sink.

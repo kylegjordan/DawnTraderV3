@@ -238,15 +238,15 @@ async function checkSymbolCooldown(
       return { ok: true };
     }
 
-    // P19-B6.5b (F3 / audit H16): active-paper closes write to paper_sim_trades, NOT the legacy
+    // P19-B6.5b (F3 / audit H16): active-paper closes write to closed_trades, NOT the legacy
     // `trades` table — so reading getTrades() for paper made this per-symbol cooldown a SILENT NO-OP
     // (it always found zero closed trades → returned ok:true → cooldown never enforced). Re-point paper
-    // mode to paper_sim_trades (the same table daily-loss-budget already reads correctly). Live keeps
+    // mode to closed_trades (the same table daily-loss-budget already reads correctly). Live keeps
     // the legacy `trades` read until the Phase-21 live path is built. Both branches resolve a single
     // most-recent CLOSED-trade timestamp for this symbol.
     let lastTradeTime: number | null = null;
     if (mode === 'paper') {
-      const { trades: paperTrades } = await storage.getPaperSimTradesPaginated(mode, {
+      const { trades: paperTrades } = await storage.getClosedTradesPaginated(mode, {
         symbol: trade.symbol,
         closedOnly: true,
         sortBy: 'closedAt',

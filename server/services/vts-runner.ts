@@ -3462,7 +3462,7 @@ async function resolveOpenVirtualTrades(): Promise<{
  * its TEC engine state. It NEVER calls a learning store:
  *   ✗ outcomeFeedbackStore.updateEma   ✗ telemetry.recordPairTelemetry
  *   ✗ vtsService.persistRealPriceTrade ✗ archiveExitDecision
- *   ✗ updateRollingAverages           ✗ paper_sim_trades
+ *   ✗ updateRollingAverages           ✗ closed_trades
  * That allowlist (not denylist) is the by-construction closed-side segregation
  * Langston required at Step-2. The PnL/R-multiple math is identical to the real
  * close cascade (vts-runner ~:2610/:2790) — a counterfactual priced the same way.

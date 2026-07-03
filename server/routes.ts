@@ -4648,7 +4648,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           ? await storage.getActiveOpenPositions(mode)
           : await storage.getActiveTrades(mode);
         const closedTrades = mode === 'paper'
-          ? await storage.getPaperSimTrades(mode, { closedOnly: true })
+          ? await storage.getClosedTrades(mode, { closedOnly: true })
           : await storage.getTrades(mode, { status: 'closed' });
         
         const metrics = {
@@ -4698,7 +4698,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     try {
       const mode = (req.query.mode as 'live' | 'paper') || 'paper';
       const closedTrades = mode === 'paper'
-        ? await storage.getPaperSimTrades(mode, { closedOnly: true })
+        ? await storage.getClosedTrades(mode, { closedOnly: true })
         : await storage.getTrades(mode, { status: 'closed' });
       
       const totalEarnings = closedTrades.reduce((sum, t) => sum + parseFloat((t as any).pnl || t.realizedPL || '0'), 0);
@@ -4716,7 +4716,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const days = parseInt(req.query.days as string) || 30;
       
       const closedTrades = mode === 'paper'
-        ? await storage.getPaperSimTrades(mode, { closedOnly: true })
+        ? await storage.getClosedTrades(mode, { closedOnly: true })
         : await storage.getTrades(mode, { status: 'closed' });
       
       // Group by date and calculate daily P/L
@@ -11517,7 +11517,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         console.log(`[ActiveEngine] Soft reset: cleared open positions, trade history preserved`);
       } else {
         // Hard reset: full cleanup including trade history
-        await storage.deleteAllPaperSimTrades('paper');
+        await storage.deleteAllClosedTrades('paper');
         await storage.deleteAllActiveOpenPositions('paper');
         await storage.deleteAllActiveTradeLogs('paper');
         console.log(`[ActiveEngine] Hard reset: cleared trades, positions, and logs`);
@@ -11569,7 +11569,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       console.log('[8.8.4-C.11][CLEAR_DATA] Starting residual data cleanup');
       
       // Clear paper trades
-      const tradesDeleted = await storage.deleteAllPaperSimTrades(mode);
+      const tradesDeleted = await storage.deleteAllClosedTrades(mode);
       console.log(`[8.8.4-C.11][CLEAR_DATA] Cleared ${tradesDeleted} paper trades`);
       
       // Clear open positions
@@ -11837,7 +11837,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     try {
       const mode: 'paper' | 'live' = 'paper';
       
-      await storage.deleteAllPaperSimTrades(mode);
+      await storage.deleteAllClosedTrades(mode);
       await storage.deleteAllActiveOpenPositions(mode);
       
       res.json({
@@ -11938,12 +11938,12 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         }
         
         // Phase 8.8.3-C-FINAL: Ghost filter now in SQL, no post-query filtering needed
-        console.log(`[C-FINAL-2][ROUTES] Calling getPaperSimTradesPaginated with filters:`, JSON.stringify({
+        console.log(`[C-FINAL-2][ROUTES] Calling getClosedTradesPaginated with filters:`, JSON.stringify({
           ...filters,
           dateFrom: filters.dateFrom?.toISOString(),
           dateTo: filters.dateTo?.toISOString()
         }));
-        const result = await storage.getPaperSimTradesPaginated('paper', filters);
+        const result = await storage.getClosedTradesPaginated('paper', filters);
         
         res.json({
           trades: result.trades,
@@ -11961,7 +11961,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       if (limit) options.limit = parseInt(limit as string);
       if (closedOnly) options.closedOnly = closedOnly === 'true';
       
-      const trades = await storage.getPaperSimTrades('paper', options);
+      const trades = await storage.getClosedTrades('paper', options);
       
       // Phase 8.8.3-C-FINAL: Ghost trade filtering for legacy path
       const validTrades = trades.filter((trade: any) => {
@@ -12210,7 +12210,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       // Phase 8.8.3-C7-FIX: Calculate realized P/L from closed trades (same as portfolio-summary)
       const sessionStart = getEngineSessionStart('paper');
-      const allTrades = await storage.getPaperSimTrades('paper', { closedOnly: true });
+      const allTrades = await storage.getClosedTrades('paper', { closedOnly: true });
       const sessionTrades = sessionStart 
         ? allTrades.filter(t => t.closedAt && new Date(t.closedAt) >= sessionStart)
         : allTrades;
@@ -12270,7 +12270,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const sessionStart = getEngineSessionStart(mode);
       
       // Get all closed trades in current session
-      const allTrades = await storage.getPaperSimTrades(mode, { closedOnly: true });
+      const allTrades = await storage.getClosedTrades(mode, { closedOnly: true });
       
       // Filter to only trades closed in current session
       const sessionTrades = sessionStart 
@@ -12439,7 +12439,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       console.log(`[8.8.3-C7-FIX][MANUAL_CLOSE_COSTS] symbol=${position.symbol} exitPrice=${currentPrice.toFixed(4)} actualExitPrice=${actualExitPrice.toFixed(4)} entryFee=${entryFee.toFixed(4)} exitFee=${exitFee.toFixed(4)} entrySlip=${entrySlippage.toFixed(4)} exitSlip=${exitSlippage.toFixed(4)} totalCost=${totalCost.toFixed(4)} grossPnl=${grossPnl.toFixed(4)} netPnl=${netPnl.toFixed(4)}`);
       
       // Build closed trade payload with all cost fields
-      // B65.1-HF2 (2026-04-23): baseCurrency is NOT NULL on paper_sim_trades. Derive from symbol.
+      // B65.1-HF2 (2026-04-23): baseCurrency is NOT NULL on closed_trades. Derive from symbol.
       const closedTradePayload = {
         symbol: position.symbol,
         baseCurrency: position.symbol.split('/')[0] || position.symbol,
@@ -12473,7 +12473,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       // Move to closed trades
       try {
-        await storage.createPaperSimTrade('paper', closedTradePayload);
+        await storage.createClosedTrade('paper', closedTradePayload);
       } catch (insertError) {
         const insertErrorMsg = insertError instanceof Error ? insertError.message : String(insertError);
         console.error('[8.8.3-B1][INSERT_ERROR]', insertErrorMsg, insertError);
@@ -12554,7 +12554,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           const pnlPercent = entryPrice > 0 ? ((currentPrice - entryPrice) / entryPrice) * 100 : 0;
           
           // Create closed trade record
-          await storage.createPaperSimTrade('paper', {
+          await storage.createClosedTrade('paper', {
             id: position.id,
             symbol: position.symbol,
             strategyName: position.strategyName,
@@ -12664,7 +12664,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       }
       
       // Get trades within range
-      const allTrades = await storage.getPaperSimTrades('paper', {});
+      const allTrades = await storage.getClosedTrades('paper', {});
       
       // Phase 8.8.3-B3: Filter out ghost trades from analytics
       // Ghost trades = closed trades without proper exit_price or close_reason
@@ -13121,13 +13121,13 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
 
       // B79.0n.EXECUTION CHUNK C: execution-layer state per active class.
       // openPositions: live count from active_open_positions table by mode/class.
-      // recentCloses24h: count from paper_sim_trades closed within last 24h.
+      // recentCloses24h: count from closed_trades closed within last 24h.
       // feePercent/slippagePercent: surfaces current values (WILDCARD class-member
       // today; flagged in _meta.knownGaps for Phase 25/26 calibration).
       const executionPerClass: Record<string, { openPositions: number; recentCloses24h: number; feePercent: number; slippagePercent: number } | { status: string }> = {};
       try {
         const activeEngineOpen = await storage.getActiveOpenPositions('paper');
-        const recentClosedAll = await storage.getPaperSimTrades('paper', { closedOnly: true, limit: 500 });
+        const recentClosedAll = await storage.getClosedTrades('paper', { closedOnly: true, limit: 500 });
         const cutoffMs = Date.now() - 24 * 60 * 60 * 1000;
         const recentClosed24h = recentClosedAll.filter((t: any) => {
           if (!t.closedAt) return false;

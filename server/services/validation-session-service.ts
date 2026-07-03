@@ -8,7 +8,7 @@
  */
 
 import { storage } from '../storage.js';
-import type { RtbSignal, ActiveOpenPosition, PaperSimTrade } from '@shared/schema.js';
+import type { RtbSignal, ActiveOpenPosition, ClosedTrade } from '@shared/schema.js';
 
 type TradingMode = 'paper' | 'live';
 
@@ -77,10 +77,10 @@ class ValidationSessionService {
       const [rtbSignals, openPositions, closedTrades] = await Promise.all([
         storage.getRtbSignals({ mode, status: 'active' }),
         storage.getActiveOpenPositions(mode),
-        storage.getPaperSimTrades(mode, { limit: 1000, closedOnly: true }),
+        storage.getClosedTrades(mode, { limit: 1000, closedOnly: true }),
       ]);
 
-      const pnlValues = closedTrades.map((t: PaperSimTrade) => parseFloat(String(t.netPnl || t.pnl || 0)));
+      const pnlValues = closedTrades.map((t: ClosedTrade) => parseFloat(String(t.netPnl || t.pnl || 0)));
       const avgPnL = pnlValues.length > 0 ? pnlValues.reduce((a: number, b: number) => a + b, 0) / pnlValues.length : 0;
 
       const wins = pnlValues.filter((p: number) => p > 0).length;
@@ -127,12 +127,12 @@ class ValidationSessionService {
     if (!this.currentSession) return;
 
     const mode = this.currentSession.mode;
-    const closedTrades = await storage.getPaperSimTrades(mode, { limit: 1000, closedOnly: true });
+    const closedTrades = await storage.getClosedTrades(mode, { limit: 1000, closedOnly: true });
     const rtbSignals = await storage.getRtbSignals({ mode });
 
 
 
-    const pnlValues = closedTrades.map((t: PaperSimTrade) => parseFloat(String(t.netPnl || t.pnl || 0)));
+    const pnlValues = closedTrades.map((t: ClosedTrade) => parseFloat(String(t.netPnl || t.pnl || 0)));
     const totalPnL = pnlValues.reduce((a: number, b: number) => a + b, 0);
     const wins = pnlValues.filter((p: number) => p > 0).length;
     const winRate = pnlValues.length > 0 ? (wins / pnlValues.length) * 100 : 0;

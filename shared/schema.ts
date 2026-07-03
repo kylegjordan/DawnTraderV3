@@ -1649,7 +1649,7 @@ export const historicSignals = pgTable("historic_signals", {
 // Milestone 18: Paper Trading Simulation Engine Tables
 
 // Paper Trades - Historical record of closed simulated trades - GLOBAL
-export const paperSimTrades = pgTable("paper_sim_trades", {
+export const closedTradesTable = pgTable("closed_trades", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   symbol: varchar("symbol", { length: 20 }).notNull(),
   // B65 (2026-04-23): baseCurrency + exchange + assetClass for per-underlying
@@ -1733,10 +1733,10 @@ export const paperSimTrades = pgTable("paper_sim_trades", {
   regimeConfidenceModulated: real("regime_confidence_modulated"),
   metadata: jsonb("metadata"), // Signal details, market context, etc.
 }, (table) => ({
-  symbolIdx: index("paper_sim_trades_symbol_idx").on(table.symbol),
-  strategyIdx: index("paper_sim_trades_strategy_idx").on(table.strategyName),
-  openedAtIdx: index("paper_sim_trades_opened_at_idx").on(table.openedAt),
-  closedAtIdx: index("paper_sim_trades_closed_at_idx").on(table.closedAt),
+  symbolIdx: index("closed_trades_symbol_idx").on(table.symbol),
+  strategyIdx: index("closed_trades_strategy_idx").on(table.strategyName),
+  openedAtIdx: index("closed_trades_opened_at_idx").on(table.openedAt),
+  closedAtIdx: index("closed_trades_closed_at_idx").on(table.closedAt),
 }));
 
 // Open Positions - Currently active simulated positions - GLOBAL
@@ -1805,7 +1805,7 @@ export const activeOpenPositions = pgTable("active_open_positions", {
 // Trade Logs - Chronological event log for paper trading transparency - GLOBAL
 export const activeTradeLogs = pgTable("active_trade_logs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  tradeId: varchar("trade_id"), // References paper_sim_trades.id (nullable for system events)
+  tradeId: varchar("trade_id"), // References closed_trades.id (nullable for system events)
   positionId: varchar("position_id"), // References active_open_positions.id (nullable)
   timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow(),
   eventType: varchar("event_type", { length: 50 }).notNull(), // 'position_opened', 'position_closed', 'stop_triggered', 'target_hit', 'guardrail_triggered', 'error'
@@ -2087,7 +2087,7 @@ export const executionAttemptAudit = pgTable("execution_attempt_audit", {
   portfolioValue: decimal("portfolio_value", { precision: 20, scale: 2 }),
   riskAmount: decimal("risk_amount", { precision: 20, scale: 2 }),
   positionSize: decimal("position_size", { precision: 20, scale: 8 }),
-  tradeId: varchar("trade_id"), // Set only when decision = OPENED, references paper_sim_trades.id
+  tradeId: varchar("trade_id"), // Set only when decision = OPENED, references closed_trades.id
 }, (table) => ({
   createdAtIdx: index("execution_attempt_audit_created_at_idx").on(table.createdAt),
   modeIdx: index("execution_attempt_audit_mode_idx").on(table.mode),
@@ -2550,7 +2550,7 @@ export const insertHistoricSignalSchema = createInsertSchema(historicSignals).om
   evaluatedAt: true,
 });
 
-export const insertPaperSimTradeSchema = createInsertSchema(paperSimTrades).omit({
+export const insertClosedTradeSchema = createInsertSchema(closedTradesTable).omit({
   id: true,
 });
 
@@ -2763,8 +2763,8 @@ export type AssetCapability = typeof assetCapabilities.$inferSelect;
 export type InsertHistoricSignal = z.infer<typeof insertHistoricSignalSchema>;
 export type HistoricSignal = typeof historicSignals.$inferSelect;
 
-export type InsertPaperSimTrade = z.infer<typeof insertPaperSimTradeSchema>;
-export type PaperSimTrade = typeof paperSimTrades.$inferSelect;
+export type InsertClosedTrade = z.infer<typeof insertClosedTradeSchema>;
+export type ClosedTrade = typeof closedTradesTable.$inferSelect;
 
 export type InsertActiveOpenPosition = z.infer<typeof insertActiveOpenPositionSchema>;
 export type ActiveOpenPosition = typeof activeOpenPositions.$inferSelect;

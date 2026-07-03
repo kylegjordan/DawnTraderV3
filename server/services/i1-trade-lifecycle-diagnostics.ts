@@ -53,7 +53,7 @@ interface HardStopSummary {
   timestamp: Date;
   dbCounts: {
     active_open_positions: number;
-    paper_sim_trades: number;
+    closed_trades: number;
   };
 }
 
@@ -293,7 +293,7 @@ class I1TradeLifecycleDiagnosticsService {
     positionsRemainingOpen: number;
     dbCounts: {
       active_open_positions: number;
-      paper_sim_trades: number;
+      closed_trades: number;
     };
   }): void {
     const hardStopSummary: HardStopSummary = {

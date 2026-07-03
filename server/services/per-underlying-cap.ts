@@ -38,7 +38,7 @@
  * actually reject.
  *
  * Reference: BATCH_67_SCOPE.md §5
- * Schema:    shared/schema.ts :: paperSimTrades.pairIdHash
+ * Schema:    shared/schema.ts :: closedTradesTable.pairIdHash
  * Migration: drizzle/migrations/2026-04-28-b67-3-per-underlying-cap-pair-hash.sql
  */
 

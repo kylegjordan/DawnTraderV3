@@ -84,9 +84,9 @@ WHERE asset_class = 'xstock_spot'
 GROUP BY asset_class, strategy;
 
 \echo ''
-\echo '--- 5. paper_sim_trades (paper_trades + trades have no asset_class column — pre-B69 schema) ---'
-SELECT 'paper_sim_trades' AS tbl, asset_class, symbol, COUNT(*) AS row_count
-FROM paper_sim_trades
+\echo '--- 5. closed_trades (paper_trades + trades have no asset_class column — pre-B69 schema) ---'
+SELECT 'closed_trades' AS tbl, asset_class, symbol, COUNT(*) AS row_count
+FROM closed_trades
 WHERE symbol IN (
   'BDX/USD','CVX/USD','DASH/USD','EDU/USD','MET/USD','OPEN/USD','PEP/USD','SUI/USD','T/USD',
   'BDX/EUR','CVX/EUR','DASH/EUR','EDU/EUR','MET/EUR','OPEN/EUR','PEP/EUR','SUI/EUR','T/EUR'
@@ -124,7 +124,7 @@ ORDER BY tbl, symbol;
 --   AND symbol IN ('BDX/USD','CVX/USD','DASH/USD','EDU/USD','MET/USD','OPEN/USD','PEP/USD','SUI/USD','T/USD',
 --                  'BDX/EUR','CVX/EUR','DASH/EUR','EDU/EUR','MET/EUR','OPEN/EUR','PEP/EUR','SUI/EUR','T/EUR');
 --
--- -- paper_sim_trades / paper_trades / trades
+-- -- closed_trades / paper_trades / trades
 -- -- (similar pattern; only run if audit shows non-zero counts)
 --
 -- COMMIT;

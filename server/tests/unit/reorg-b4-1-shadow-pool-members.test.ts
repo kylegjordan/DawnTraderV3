@@ -42,7 +42,7 @@ function extractFunctionBody(src: string, signaturePrefix: string): string {
 
 const FORBIDDEN_SINKS = [
   'outcomeFeedbackStore', 'recordPairTelemetry', 'updateRollingAverages',
-  'persistRealPriceTrade', 'archiveExitDecision', 'paper_sim_trades',
+  'persistRealPriceTrade', 'archiveExitDecision', 'closed_trades',
 ];
 
 describe('reorg-B4.1 — insertShadowPoolMember sink purity', () => {

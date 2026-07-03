@@ -556,7 +556,7 @@ export function scanPatterns(candles: Candle[], symbol: string, assetClass: Asse
  *
  * P19-B6.5c (2026-06-17): this function no longer asserts a `strategy`. It used to
  * fabricate a non-canonical `pattern_<name>` label (e.g. `pattern_abcd`) that is NOT
- * a valid `strategy_type` enum value, so the RTB insert (and paper_sim_trades /
+ * a valid `strategy_type` enum value, so the RTB insert (and closed_trades /
  * trades downstream) rejected every pattern signal — the B6.5b dry-run's 8,503
  * drops. Patterns are TRIGGERS, not strategies; the consuming CANONICAL strategy is
  * resolved by the caller (the signal orchestrator) via

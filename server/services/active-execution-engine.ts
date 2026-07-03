@@ -794,7 +794,7 @@ export class ActiveExecutionEngine {
    *     subsequent ticks.
    *  2. HARD-DROP — past `maker_deadline` (~1h, `maker_max_pending_ms`) → DROPPED, period
    *     (no convert re-evaluation — an unfilled maker buy means price never came to us).
-   *     The open position is deleted (slot freed) and its paper_sim_trades row is closed
+   *     The open position is deleted (slot freed) and its closed_trades row is closed
    *     as closeReason='never_filled' (the TYPED discriminator; visible in the closed
    *     records with no P&L, EXCLUDED from win-rate/expectancy aggregates + learning,
    *     but COUNTED in the maker fill-rate denominator).
@@ -837,7 +837,7 @@ export class ActiveExecutionEngine {
       }
       const tradeId = (position.metadata as any)?.tradeId;
       if (tradeId) {
-        await storage.updatePaperSimTrade(this.mode, tradeId, {
+        await storage.updateClosedTrade(this.mode, tradeId, {
           closedAt: new Date(),
           closeReason: 'never_filled', // TYPED discriminator — visible, excluded from aggregates/learning
         } as any);
@@ -1465,7 +1465,7 @@ export class ActiveExecutionEngine {
     }
 
     // Find the corresponding trade record
-    const trades = await storage.getPaperSimTradesBySymbol(this.mode,  position.symbol);
+    const trades = await storage.getClosedTradesBySymbol(this.mode,  position.symbol);
     const trade = trades.find(t => t.openedAt && !t.closedAt);
     
     if (trade) {
@@ -1488,7 +1488,7 @@ export class ActiveExecutionEngine {
       const finalRungHistory: number[] | null = _finalState?.rungTargetHistory ?? null;
 
       // Update trade record - Phase 8.8.3-C2: Include all cost/P&L breakdown fields
-      await storage.updatePaperSimTrade(this.mode, trade.id, {
+      await storage.updateClosedTrade(this.mode, trade.id, {
         exitPrice: actualExitPrice.toString(),
         pnl: netPnl.toString(),
         pnlPercent: pnlPercent.toString(),
@@ -2533,7 +2533,7 @@ export class ActiveExecutionEngine {
       
       console.log(`[10.3] Trade Execute: ${signal.symbol} | Type=${signalType} | Pattern=${patternType || 'N/A'} | Strength=${patternStrength || 'N/A'}`);
       
-      // B65.1-HF2 (2026-04-23): baseCurrency is NOT NULL on paper_sim_trades. Derive from symbol.
+      // B65.1-HF2 (2026-04-23): baseCurrency is NOT NULL on closed_trades. Derive from symbol.
       const baseCurrency = signal.symbol.split('/')[0] || signal.symbol;
 
       // B67.3 follow-up: persist cohort hash on trade record at trade-open. Used at
@@ -2589,7 +2589,7 @@ export class ActiveExecutionEngine {
       // fallback flips maker→taker, and the record must show the fee actually paid.
       const _b72EntryFeeRate = _b72cEffectiveMode === 'maker' ? _b72Friction.feeRateMaker : _b72Friction.feeRateTaker;
 
-      const trade = await storage.createPaperSimTrade(this.mode, {
+      const trade = await storage.createClosedTrade(this.mode, {
         symbol: signal.symbol,
         baseCurrency,
         strategyName: signal.strategy,
@@ -2945,7 +2945,7 @@ export class ActiveExecutionEngine {
   }
 
   async getTradeHistory(limit: number = 50) {
-    return await storage.getPaperSimTrades(this.mode, { limit, closedOnly: true });
+    return await storage.getClosedTrades(this.mode, { limit, closedOnly: true });
   }
 
   async getTradeLogs(limit: number = 100) {

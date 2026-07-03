@@ -90,7 +90,7 @@ class C5FinancialDiagnostics {
         ? parseFloat(portfolioAny.startingBalance) 
         : displayedCurrentBalance;
 
-      const closedTrades = await storage.getPaperSimTrades(mode);
+      const closedTrades = await storage.getClosedTrades(mode);
       const realizedNetPnlTotal = closedTrades.reduce((sum, trade) => {
         const netPnl = trade.netPnl ? parseFloat(trade.netPnl) : (trade.pnl ? parseFloat(trade.pnl) : 0);
         return sum + netPnl;
@@ -140,7 +140,7 @@ class C5FinancialDiagnostics {
         : 0;
       const currentBalance = portfolioState ? parseFloat(portfolioState.balance) : 0;
 
-      const closedTrades = await storage.getPaperSimTrades(mode);
+      const closedTrades = await storage.getClosedTrades(mode);
       const realizedNetPnl = closedTrades.reduce((sum, trade) => {
         const netPnl = trade.netPnl ? parseFloat(trade.netPnl) : (trade.pnl ? parseFloat(trade.pnl) : 0);
         return sum + netPnl;

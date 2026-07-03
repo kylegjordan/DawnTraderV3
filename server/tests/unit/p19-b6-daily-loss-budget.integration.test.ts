@@ -19,7 +19,7 @@ vi.mock('../../storage', () => ({
     getGuardrailsV2: vi.fn(async () => ({
       dailyLossKillSwitchPct: '10', dailyLossWarning1Pct: '50', dailyLossWarning2Pct: '75',
     })),
-    getPaperSimTrades: vi.fn(async () => [{ closedAt: new Date(), pnl: '-9999' }]), // ~99% loss
+    getClosedTrades: vi.fn(async () => [{ closedAt: new Date(), pnl: '-9999' }]), // ~99% loss
     getTrades: vi.fn(async () => []),
     getAllUsers: vi.fn(async () => [{ id: 'u1', role: 'owner' }]),
   },

@@ -44,7 +44,7 @@
  * producers (B67.1+) ship. At that point, the source-specific outcome
  * lookups are populated:
  *
- *   - Active-signal path: join via signal_id → trades / paper_sim_trades on
+ *   - Active-signal path: join via signal_id → trades / closed_trades on
  *     the trade record's signal_id field. Wires in when active paper trading
  *     produces ablation rows.
  *
@@ -219,15 +219,15 @@ export async function runReplayAblation(): Promise<ReplayStats> {
     );
 
     // ── Step 2: replay active-signal rows ──
-    // Implementation: query `paper_sim_trades` for closed trades, join by
-    // signalId. Currently active trading is OFF (paper_sim_trades has 0 rows
+    // Implementation: query `closed_trades` for closed trades, join by
+    // signalId. Currently active trading is OFF (closed_trades has 0 rows
     // total) so this loop runs but processes nothing. When active trading
     // turns back on this path becomes hot. The lookup logic is implemented
     // here for forward-compat — the logic itself doesn't care whether the
     // table is empty.
     if (stats.pendingActiveSignalRows > 0) {
       try {
-        const { paperSimTrades } = await import('../../shared/schema.js');
+        const { closedTradesTable } = await import('../../shared/schema.js');
         const pendingActiveRows = await db
           .select()
           .from(regimeFactorAlternates)
@@ -241,7 +241,7 @@ export async function runReplayAblation(): Promise<ReplayStats> {
 
         for (const row of pendingActiveRows) {
           if (row.signalId === null) continue;
-          // Join: paper_sim_trades doesn't store signalId today (no
+          // Join: closed_trades doesn't store signalId today (no
           // explicit FK). Until that wire-in lands the active-path replay
           // is structurally limited. Marker outcome is set so future runs
           // skip these rows; the row stays for forward-replay analysis.
@@ -250,7 +250,7 @@ export async function runReplayAblation(): Promise<ReplayStats> {
             .set({
               replayOutcome: {
                 outcome: 'unreplayable_active_no_signal_id_join',
-                notes: 'paper_sim_trades does not currently store signalId; awaiting schema link in a future commit',
+                notes: 'closed_trades does not currently store signalId; awaiting schema link in a future commit',
               } as any,
               replayCompletedAt: new Date(),
             })

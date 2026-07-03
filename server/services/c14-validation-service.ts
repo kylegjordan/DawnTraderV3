@@ -159,7 +159,7 @@ class C14ValidationService {
       console.log(`[8.8.4-C.14][SANITIZE] Cleared ${clearedRtb} RTB signals`);
       
       // Clear trades and positions
-      await storage.deleteAllPaperSimTrades(mode);
+      await storage.deleteAllClosedTrades(mode);
       await storage.deleteAllActiveOpenPositions(mode);
       console.log(`[8.8.4-C.14][SANITIZE] Cleared trades and positions`);
       
@@ -198,7 +198,7 @@ class C14ValidationService {
 
     const rtbQueue = await readyToBuyService.getQueuedSignals(mode);
     const openPositions = await storage.getActiveOpenPositions(mode);
-    const trades = await storage.getPaperSimTrades(mode);
+    const trades = await storage.getClosedTrades(mode);
     const closedTrades = trades.filter(t => t.closeReason !== null);
 
     const currentRtbIds = new Set(rtbQueue.map(s => s.signalId));
@@ -357,7 +357,7 @@ ${Object.entries(snapshot.filterRejections).length > 0
     const resultsPath = path.join(process.cwd(), 'logs', 'validation', 'results_8.8.4-C.14_final.md');
     const mode = this.session.mode;
 
-    const trades = await storage.getPaperSimTrades(mode);
+    const trades = await storage.getClosedTrades(mode);
     const closedTrades = trades.filter(t => t.closeReason !== null);
     
     const profitableTrades = closedTrades.filter(t => parseFloat(String(t.netPnl || t.pnl || 0)) > 0);

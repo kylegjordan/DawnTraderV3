@@ -160,9 +160,9 @@ import {
   type HistoricSignal,
   type InsertHistoricSignal,
   historicSignals,
-  type PaperSimTrade,
-  type InsertPaperSimTrade,
-  paperSimTrades,
+  type ClosedTrade,
+  type InsertClosedTrade,
+  closedTradesTable,
   type ActiveOpenPosition,
   type InsertActiveOpenPosition,
   activeOpenPositions,
@@ -522,12 +522,12 @@ export interface IStorage {
 
   // Paper simulation methods (Milestone 18) - Phase 27.F.15.B.2: Global per mode with explicit mode parameter
   // Paper trades
-  createPaperSimTrade(mode: TradingMode, trade: InsertPaperSimTrade): Promise<PaperSimTrade>;
-  updatePaperSimTrade(mode: TradingMode, id: string, updates: Partial<PaperSimTrade>): Promise<PaperSimTrade>;
-  getPaperSimTrade(mode: TradingMode, id: string): Promise<PaperSimTrade | undefined>;
-  getPaperSimTrades(mode: TradingMode, filters?: { limit?: number; closedOnly?: boolean; includeNeverFilled?: boolean }): Promise<PaperSimTrade[]>;
+  createClosedTrade(mode: TradingMode, trade: InsertClosedTrade): Promise<ClosedTrade>;
+  updateClosedTrade(mode: TradingMode, id: string, updates: Partial<ClosedTrade>): Promise<ClosedTrade>;
+  getClosedTrade(mode: TradingMode, id: string): Promise<ClosedTrade | undefined>;
+  getClosedTrades(mode: TradingMode, filters?: { limit?: number; closedOnly?: boolean; includeNeverFilled?: boolean }): Promise<ClosedTrade[]>;
   // Phase 8.8.3-C5: Paginated trades with sorting support
-  getPaperSimTradesPaginated(mode: TradingMode, filters: {
+  getClosedTradesPaginated(mode: TradingMode, filters: {
     limit?: number;
     offset?: number;
     sortBy?: 'openedAt' | 'closedAt' | 'symbol' | 'pnl' | 'pnlPercent' | 'strategyName';
@@ -538,9 +538,9 @@ export interface IStorage {
     closeReason?: string;
     dateFrom?: Date;
     dateTo?: Date;
-  }): Promise<{ trades: PaperSimTrade[]; totalCount: number }>;
-  getPaperSimTradesBySymbol(mode: TradingMode, symbol: string): Promise<PaperSimTrade[]>;
-  getPaperSimTradesGlobal(mode: TradingMode, filters?: { limit?: number; closedOnly?: boolean; includeNeverFilled?: boolean }): Promise<PaperSimTrade[]>; // Phase 27.F.14.B: Global-per-mode query for LATTI
+  }): Promise<{ trades: ClosedTrade[]; totalCount: number }>;
+  getClosedTradesBySymbol(mode: TradingMode, symbol: string): Promise<ClosedTrade[]>;
+  getClosedTradesGlobal(mode: TradingMode, filters?: { limit?: number; closedOnly?: boolean; includeNeverFilled?: boolean }): Promise<ClosedTrade[]>; // Phase 27.F.14.B: Global-per-mode query for LATTI
   
   // Open positions
   createActiveOpenPosition(mode: TradingMode, position: InsertActiveOpenPosition): Promise<ActiveOpenPosition>;
@@ -555,8 +555,8 @@ export interface IStorage {
   createActiveTradeLog(mode: TradingMode, log: InsertActiveTradeLog): Promise<ActiveTradeLog>;
   getActiveTradeLogs(mode: TradingMode, filters?: { limit?: number; tradeId?: string }): Promise<ActiveTradeLog[]>;
   deleteAllActiveTradeLogs(mode: TradingMode): Promise<void>; // Phase 27.F.13.C: Reset simulation
-  deleteAllPaperSimTrades(mode: TradingMode): Promise<void>; // Phase 27.F.13.C: Reset simulation
-  cleanOldPaperSimTrades(mode: TradingMode, hoursOld: number): Promise<number>; // Phase 27.F.13.F: Cleanup old closed trades
+  deleteAllClosedTrades(mode: TradingMode): Promise<void>; // Phase 27.F.13.C: Reset simulation
+  cleanOldClosedTrades(mode: TradingMode, hoursOld: number): Promise<number>; // Phase 27.F.13.F: Cleanup old closed trades
   
   // Stats
   getActiveEngineStats(mode: TradingMode): Promise<{
@@ -3127,40 +3127,40 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Paper simulation methods (Milestone 18)
-  async createPaperSimTrade(mode: TradingMode, trade: InsertPaperSimTrade): Promise<PaperSimTrade> {
+  async createClosedTrade(mode: TradingMode, trade: InsertClosedTrade): Promise<ClosedTrade> {
     // [I8C-SYMBOL-NORM] Normalize symbol to canonical BASE/QUOTE format
     const canonicalSymbol = normalizeToInternalSymbol(trade.symbol);
     if (trade.symbol !== canonicalSymbol) {
       console.log(`[I8C-SYMBOL-NORM] raw=${trade.symbol} canonical=${canonicalSymbol}`);
     }
     const normalizedTrade = { ...trade, symbol: canonicalSymbol };
-    const [result] = await db.insert(paperSimTrades).values(normalizedTrade).returning();
+    const [result] = await db.insert(closedTradesTable).values(normalizedTrade).returning();
     return result;
   }
 
-  async updatePaperSimTrade(mode: TradingMode, id: string, updates: Partial<PaperSimTrade>): Promise<PaperSimTrade> {
-    const [result] = await db.update(paperSimTrades)
+  async updateClosedTrade(mode: TradingMode, id: string, updates: Partial<ClosedTrade>): Promise<ClosedTrade> {
+    const [result] = await db.update(closedTradesTable)
       .set(updates)
-      .where(eq(paperSimTrades.id, id))
+      .where(eq(closedTradesTable.id, id))
       .returning();
     return result;
   }
 
-  async getPaperSimTrade(mode: TradingMode, id: string): Promise<PaperSimTrade | undefined> {
+  async getClosedTrade(mode: TradingMode, id: string): Promise<ClosedTrade | undefined> {
     const [trade] = await db.select()
-      .from(paperSimTrades)
-      .where(eq(paperSimTrades.id, id));
+      .from(closedTradesTable)
+      .where(eq(closedTradesTable.id, id));
     return trade || undefined;
   }
 
-  async getPaperSimTrades(mode: TradingMode, filters?: { limit?: number; closedOnly?: boolean; includeNeverFilled?: boolean }): Promise<PaperSimTrade[]> {
+  async getClosedTrades(mode: TradingMode, filters?: { limit?: number; closedOnly?: boolean; includeNeverFilled?: boolean }): Promise<ClosedTrade[]> {
     // Phase 27.F.15.B.2: Global query, mode-based only
     const limit = filters?.limit || 100;
     const closedOnly = filters?.closedOnly ?? false;
 
     const conditions = [];
     if (closedOnly) {
-      conditions.push(sql`${paperSimTrades.closedAt} IS NOT NULL` as any);
+      conditions.push(sql`${closedTradesTable.closedAt} IS NOT NULL` as any);
     }
     // P19-B7.2c TYPED GUARD (Langston Step-4 condition 4): never_filled rows (a dropped
     // pending maker — an order that never traded) are EXCLUDED at the SQL level BY DEFAULT
@@ -3168,38 +3168,38 @@ export class DatabaseStorage implements IStorage {
     // Visibility is opt-in: the paginated UI list passes them explicitly; a fill-rate
     // reader sets includeNeverFilled: true.
     if (!filters?.includeNeverFilled) {
-      conditions.push(sql`${paperSimTrades.closeReason} IS DISTINCT FROM 'never_filled'` as any);
+      conditions.push(sql`${closedTradesTable.closeReason} IS DISTINCT FROM 'never_filled'` as any);
     }
 
     if (conditions.length > 0) {
       return await db.select()
-        .from(paperSimTrades)
+        .from(closedTradesTable)
         .where(and(...conditions))
-        .orderBy(desc(paperSimTrades.openedAt))
+        .orderBy(desc(closedTradesTable.openedAt))
         .limit(limit);
     }
 
     return await db.select()
-      .from(paperSimTrades)
-      .orderBy(desc(paperSimTrades.openedAt))
+      .from(closedTradesTable)
+      .orderBy(desc(closedTradesTable.openedAt))
       .limit(limit);
   }
 
-  async getPaperSimTradesBySymbol(mode: TradingMode, symbol: string): Promise<PaperSimTrade[]> {
+  async getClosedTradesBySymbol(mode: TradingMode, symbol: string): Promise<ClosedTrade[]> {
     // Phase 27.F.15.B.2: Global query, mode-based only
-    // P19-B7.2c: never_filled rows excluded by default (typed guard — see getPaperSimTrades).
+    // P19-B7.2c: never_filled rows excluded by default (typed guard — see getClosedTrades).
     return await db.select()
-      .from(paperSimTrades)
+      .from(closedTradesTable)
       .where(and(
-        eq(paperSimTrades.symbol, symbol),
-        sql`${paperSimTrades.closeReason} IS DISTINCT FROM 'never_filled'`
+        eq(closedTradesTable.symbol, symbol),
+        sql`${closedTradesTable.closeReason} IS DISTINCT FROM 'never_filled'`
       ))
-      .orderBy(desc(paperSimTrades.openedAt));
+      .orderBy(desc(closedTradesTable.openedAt));
   }
 
   // Phase 8.8.3-C5: Paginated trades with sorting and filtering support
   // Phase 8.8.3-C-FINAL: Ghost filter moved to SQL, dateTo end-of-day fix, closeReason filter
-  async getPaperSimTradesPaginated(mode: TradingMode, filters: {
+  async getClosedTradesPaginated(mode: TradingMode, filters: {
     limit?: number;
     offset?: number;
     sortBy?: 'openedAt' | 'closedAt' | 'symbol' | 'pnl' | 'pnlPercent' | 'strategyName';
@@ -3210,7 +3210,7 @@ export class DatabaseStorage implements IStorage {
     closeReason?: string;
     dateFrom?: Date;
     dateTo?: Date;
-  }): Promise<{ trades: PaperSimTrade[]; totalCount: number }> {
+  }): Promise<{ trades: ClosedTrade[]; totalCount: number }> {
     const limit = filters.limit || 50;
     const offset = filters.offset || 0;
     const sortBy = filters.sortBy || 'closedAt';
@@ -3225,55 +3225,55 @@ export class DatabaseStorage implements IStorage {
     // list (Kyle); they are excluded from analytics separately (typed closeReason check
     // at the analytics endpoint), i.e. visible ≠ counted.
     if (filters.closedOnly) {
-      conditions.push(sql`${paperSimTrades.closedAt} IS NOT NULL`);
+      conditions.push(sql`${closedTradesTable.closedAt} IS NOT NULL`);
       conditions.push(sql`(
-        ${paperSimTrades.closeReason} = 'never_filled'
+        ${closedTradesTable.closeReason} = 'never_filled'
         OR (
-          ${paperSimTrades.exitPrice} IS NOT NULL
-          AND ${paperSimTrades.exitPrice} > 0
-          AND ${paperSimTrades.closeReason} IS NOT NULL
-          AND ${paperSimTrades.closeReason} != ''
+          ${closedTradesTable.exitPrice} IS NOT NULL
+          AND ${closedTradesTable.exitPrice} > 0
+          AND ${closedTradesTable.closeReason} IS NOT NULL
+          AND ${closedTradesTable.closeReason} != ''
         )
       )`);
     }
     if (filters.symbol) {
-      conditions.push(sql`LOWER(${paperSimTrades.symbol}) LIKE LOWER(${'%' + filters.symbol + '%'})`);
+      conditions.push(sql`LOWER(${closedTradesTable.symbol}) LIKE LOWER(${'%' + filters.symbol + '%'})`);
     }
     if (filters.strategy && filters.strategy !== 'all') {
-      conditions.push(eq(paperSimTrades.strategyName, filters.strategy as any));
+      conditions.push(eq(closedTradesTable.strategyName, filters.strategy as any));
     }
     // Phase 8.8.3-C-FINAL PART 4: Add closeReason filter
     if (filters.closeReason && filters.closeReason !== 'all') {
-      conditions.push(sql`${paperSimTrades.closeReason} = ${filters.closeReason}`);
+      conditions.push(sql`${closedTradesTable.closeReason} = ${filters.closeReason}`);
     }
     // Phase 8.8.3-C-FINAL-2: Date filters now receive UTC ISO timestamps from frontend
     // Frontend converts user's local date selection to UTC boundaries before sending
     // We use the timestamps directly - no re-adjustment needed
     if (filters.dateFrom) {
       console.log(`[C-FINAL-2][DATE_FILTER] dateFrom=${filters.dateFrom.toISOString()} (using directly)`);
-      conditions.push(sql`${paperSimTrades.closedAt} >= ${filters.dateFrom}`);
+      conditions.push(sql`${closedTradesTable.closedAt} >= ${filters.dateFrom}`);
     }
     if (filters.dateTo) {
       console.log(`[C-FINAL-2][DATE_FILTER] dateTo=${filters.dateTo.toISOString()} (using directly)`);
-      conditions.push(sql`${paperSimTrades.closedAt} <= ${filters.dateTo}`);
+      conditions.push(sql`${closedTradesTable.closedAt} <= ${filters.dateTo}`);
     }
     
     // Phase 8.8.3-C-FINAL: Expanded sort columns for all Trade History columns
     const sortColumn = {
-      openedAt: paperSimTrades.openedAt,
-      closedAt: paperSimTrades.closedAt,
-      symbol: paperSimTrades.symbol,
-      pnl: paperSimTrades.pnl,
-      pnlPercent: paperSimTrades.pnlPercent,
-      strategyName: paperSimTrades.strategyName,
-      entryPrice: paperSimTrades.entryPrice,
-      exitPrice: paperSimTrades.exitPrice,
-      quantity: paperSimTrades.quantity,
-      closeReason: paperSimTrades.closeReason,
-      confidence: paperSimTrades.confidence,
-      totalFee: paperSimTrades.totalFee,
-      entrySlippage: paperSimTrades.entrySlippage,
-      exitSlippage: paperSimTrades.exitSlippage,
+      openedAt: closedTradesTable.openedAt,
+      closedAt: closedTradesTable.closedAt,
+      symbol: closedTradesTable.symbol,
+      pnl: closedTradesTable.pnl,
+      pnlPercent: closedTradesTable.pnlPercent,
+      strategyName: closedTradesTable.strategyName,
+      entryPrice: closedTradesTable.entryPrice,
+      exitPrice: closedTradesTable.exitPrice,
+      quantity: closedTradesTable.quantity,
+      closeReason: closedTradesTable.closeReason,
+      confidence: closedTradesTable.confidence,
+      totalFee: closedTradesTable.totalFee,
+      entrySlippage: closedTradesTable.entrySlippage,
+      exitSlippage: closedTradesTable.exitSlippage,
     }[sortBy];
     
     const orderFn = order === 'asc' ? asc : desc;
@@ -3281,11 +3281,11 @@ export class DatabaseStorage implements IStorage {
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
     
     const [countResult] = await db.select({ count: sql<number>`count(*)::int` })
-      .from(paperSimTrades)
+      .from(closedTradesTable)
       .where(whereClause);
     
     const trades = await db.select()
-      .from(paperSimTrades)
+      .from(closedTradesTable)
       .where(whereClause)
       .orderBy(orderFn(sortColumn))
       .limit(limit)
@@ -3298,22 +3298,22 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Phase 27.F.14.B: Global-per-mode query for LATTI baseline calculations
-  async getPaperSimTradesGlobal(mode: TradingMode, filters?: { limit?: number; closedOnly?: boolean; includeNeverFilled?: boolean }): Promise<PaperSimTrade[]> {
+  async getClosedTradesGlobal(mode: TradingMode, filters?: { limit?: number; closedOnly?: boolean; includeNeverFilled?: boolean }): Promise<ClosedTrade[]> {
     const limit = filters?.limit || 1000; // Higher default for global aggregation
     const closedOnly = filters?.closedOnly ?? false;
 
     const conditions = [];
     if (closedOnly) {
-      conditions.push(sql`${paperSimTrades.closedAt} IS NOT NULL` as any);
+      conditions.push(sql`${closedTradesTable.closedAt} IS NOT NULL` as any);
     }
-    // P19-B7.2c: never_filled rows excluded by default (typed guard — see getPaperSimTrades).
+    // P19-B7.2c: never_filled rows excluded by default (typed guard — see getClosedTrades).
     if (!filters?.includeNeverFilled) {
-      conditions.push(sql`${paperSimTrades.closeReason} IS DISTINCT FROM 'never_filled'` as any);
+      conditions.push(sql`${closedTradesTable.closeReason} IS DISTINCT FROM 'never_filled'` as any);
     }
 
     const query = db.select()
-      .from(paperSimTrades)
-      .orderBy(desc(paperSimTrades.closedAt))
+      .from(closedTradesTable)
+      .orderBy(desc(closedTradesTable.closedAt))
       .limit(limit);
     
     if (conditions.length > 0) {
@@ -3396,20 +3396,20 @@ export class DatabaseStorage implements IStorage {
     await db.delete(activeTradeLogs);
   }
 
-  async deleteAllPaperSimTrades(mode: TradingMode): Promise<void> {
-    await db.delete(paperSimTrades);
+  async deleteAllClosedTrades(mode: TradingMode): Promise<void> {
+    await db.delete(closedTradesTable);
   }
 
   // Phase 27.F.13.F: Cleanup method for old closed paper sim trades
-  async cleanOldPaperSimTrades(mode: TradingMode, hoursOld: number): Promise<number> {
+  async cleanOldClosedTrades(mode: TradingMode, hoursOld: number): Promise<number> {
     const cutoffDate = new Date();
     cutoffDate.setHours(cutoffDate.getHours() - hoursOld);
     
     const result = await db
-      .delete(paperSimTrades)
+      .delete(closedTradesTable)
       .where(and(
-        isNotNull(paperSimTrades.closedAt),
-        lte(paperSimTrades.closedAt, cutoffDate)
+        isNotNull(closedTradesTable.closedAt),
+        lte(closedTradesTable.closedAt, cutoffDate)
       ))
       .returning();
     
@@ -3462,7 +3462,7 @@ export class DatabaseStorage implements IStorage {
   }> {
     // Phase 27.F.15.B.2: Global query, mode-based only
     const trades = await db.select()
-      .from(paperSimTrades);
+      .from(closedTradesTable);
 
     const openPositions = await db.select()
       .from(activeOpenPositions);
@@ -4115,27 +4115,27 @@ export class DatabaseStorage implements IStorage {
   /**
    * Phase 8.8.3-B7.A: Hard reset paper simulation
    * Closes all open trades and clears all open positions for a clean session start.
-   * Note: paperSimTrades and activeOpenPositions are single-tenant (no mode column).
+   * Note: closedTradesTable and activeOpenPositions are single-tenant (no mode column).
    * activeEngineSessions has a mode column for session tracking.
    */
   async hardResetActiveEngineTables(mode: 'paper' | 'live' = 'paper'): Promise<{ closedTrades: number; clearedPositions: number }> {
     console.log(`[B7.A][DB] Starting hard reset for mode=${mode}`);
     
-    const { paperSimTrades, activeOpenPositions, activeEngineSessions } = await import('@shared/schema');
+    const { closedTradesTable, activeOpenPositions, activeEngineSessions } = await import('@shared/schema');
     
     let closedTrades = 0;
     let clearedPositions = 0;
     
     try {
       // 1. Close any open paper trades with hard_reset reason
-      // Note: paperSimTrades is single-tenant, no mode column
+      // Note: closedTradesTable is single-tenant, no mode column
       const closeTradesResult = await db
-        .update(paperSimTrades)
+        .update(closedTradesTable)
         .set({ 
           closedAt: new Date(), 
           closeReason: 'hard_reset' 
         })
-        .where(isNull(paperSimTrades.closedAt))
+        .where(isNull(closedTradesTable.closedAt))
         .returning();
       
       closedTrades = closeTradesResult.length;

@@ -14,7 +14,7 @@ import { checkGuardrailRisk, type TradeCandidate } from './trade-safety.js';
 import { buildSettingsFromGuardrails, calculateRiskAmount } from './guardrail-settings.js';
 import { lifecycleEventsService } from './lifecycle-events.js';
 import { nanoid } from 'nanoid';
-import type { TradingSettings, PaperSimTrade, InsertPaperSimTrade, InsertActiveOpenPosition } from '@shared/schema';
+import type { TradingSettings, ClosedTrade, InsertClosedTrade, InsertActiveOpenPosition } from '@shared/schema';
 
 export type StrategyType = 'vwap_pullback' | 'abcd_long' | 'sma_trend_ride' | 'breakout' | 'mean_reversion' | 'range_trading' | 'vwap_bounce' | 'liquidity_trap' | 'dhma';
 
@@ -183,10 +183,10 @@ export class PaperTradeExecutor extends BaseTradeExecutor {
 
       // B65.1-HF2 (2026-04-23): derive baseCurrency from symbol at insert time.
       // Matches migration rule: COALESCE(NULLIF(SPLIT_PART(symbol, '/', 1), ''), symbol).
-      // baseCurrency is NOT NULL on paper_sim_trades as of B65.1 for per-underlying tracking.
+      // baseCurrency is NOT NULL on closed_trades as of B65.1 for per-underlying tracking.
       const baseCurrency = signal.symbol.split('/')[0] || signal.symbol;
 
-      const trade: InsertPaperSimTrade = {
+      const trade: InsertClosedTrade = {
         symbol: signal.symbol,
         baseCurrency,
         strategyName: signal.strategy,
@@ -205,7 +205,7 @@ export class PaperTradeExecutor extends BaseTradeExecutor {
         metadata: signal.metadata || {},
       };
 
-      await storage.createPaperSimTrade('paper', trade);
+      await storage.createClosedTrade('paper', trade);
 
       const position: InsertActiveOpenPosition = {
         symbol: signal.symbol,

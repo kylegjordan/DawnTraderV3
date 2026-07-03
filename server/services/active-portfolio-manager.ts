@@ -367,7 +367,7 @@ export class ActivePortfolioManager {
 
     // [8.8.3-I1] Log hard stop summary for diagnostics
     const openPositionsRemaining = await storage.getActiveOpenPositions(this.mode);
-    const tradesCount = (await storage.getPaperSimTrades(this.mode, { limit: 1000 })).length;
+    const tradesCount = (await storage.getClosedTrades(this.mode, { limit: 1000 })).length;
     const session = await storage.getRunningEngineSession(this.mode);
     
     i1TradeLifecycleDiagnostics.logHardStopSummary({
@@ -377,7 +377,7 @@ export class ActivePortfolioManager {
       positionsRemainingOpen: openPositionsRemaining.length,
       dbCounts: {
         active_open_positions: openPositionsRemaining.length,
-        paper_sim_trades: tradesCount
+        closed_trades: tradesCount
       }
     });
 
@@ -463,7 +463,7 @@ export class ActivePortfolioManager {
 
   async getPortfolioMetrics(): Promise<PortfolioMetrics> {
     const stats = await storage.getActiveEngineStats(this.mode);
-    const trades = await storage.getPaperSimTrades(this.mode, { limit: 1000, closedOnly: true });
+    const trades = await storage.getClosedTrades(this.mode, { limit: 1000, closedOnly: true });
 
     // Calculate max drawdown
     const maxDrawdown = this.calculateMaxDrawdown(trades);
@@ -501,7 +501,7 @@ export class ActivePortfolioManager {
 
   async checkPortfolioHealth(): Promise<PortfolioHealth> {
     const stats = await storage.getActiveEngineStats(this.mode);
-    const trades = await storage.getPaperSimTrades(this.mode, { limit: 1000, closedOnly: true });
+    const trades = await storage.getClosedTrades(this.mode, { limit: 1000, closedOnly: true });
     const openPositions = await storage.getActiveOpenPositions(this.mode);
 
     const issues: string[] = [];
@@ -563,7 +563,7 @@ export class ActivePortfolioManager {
     for (const position of openPositions) {
       try {
         // Find the corresponding trade
-        const trades = await storage.getPaperSimTradesBySymbol(this.mode, position.symbol);
+        const trades = await storage.getClosedTradesBySymbol(this.mode, position.symbol);
         const trade = trades.find(t => t.openedAt && !t.closedAt);
         
         if (trade) {
@@ -590,8 +590,8 @@ export class ActivePortfolioManager {
           const pnlPercent = ((currentPrice - avgPrice) / avgPrice) * 100;
 
           // Update trade record
-          // P19-B3b: updatePaperSimTrade signature is (mode, id, updates) — thread this.mode.
-          await storage.updatePaperSimTrade(this.mode, trade.id, {
+          // P19-B3b: updateClosedTrade signature is (mode, id, updates) — thread this.mode.
+          await storage.updateClosedTrade(this.mode, trade.id, {
             exitPrice: currentPrice.toString(),
             pnl: pnl.toString(),
             pnlPercent: pnlPercent.toString(),

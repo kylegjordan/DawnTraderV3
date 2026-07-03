@@ -316,7 +316,7 @@ async function reconcileIncompleteTrades(mode: 'paper' | 'live', sessionId: stri
   
   try {
     // Get all trades for this mode (including unclosed ones)
-    const allTrades = await storage.getPaperSimTrades(mode, { limit: 1000 });
+    const allTrades = await storage.getClosedTrades(mode, { limit: 1000 });
     
     // Filter to only trades where closed_at is NULL
     const incompleteTrades = allTrades.filter(t => t.closedAt === null);
@@ -365,7 +365,7 @@ async function reconcileIncompleteTrades(mode: 'paper' | 'live', sessionId: stri
         const pnlPercent = entryPrice > 0 ? ((exitPrice - entryPrice) / entryPrice) * 100 : 0;
         
         // Update trade with close info
-        await storage.updatePaperSimTrade(mode, trade.id, {
+        await storage.updateClosedTrade(mode, trade.id, {
           closedAt: new Date(),
           exitPrice: exitPrice.toString(),
           pnl: pnl.toString(),

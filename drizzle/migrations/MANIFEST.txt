@@ -161,3 +161,4 @@
 2026-07-03-p19-b-rename-w3-b4-trade-logs.sql
 2026-07-03-p19-b-rename-w3-b3-sessions.sql
 2026-07-03-p19-b-rename-w3-b2-open-positions.sql
+2026-07-03-p19-b-rename-w3-b1-closed-trades.sql

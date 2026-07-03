@@ -9,17 +9,17 @@
  *     row, not by re-resolving from canonical symbol form (which is
  *     ambiguous post-canonicalization for the 9 collision tickers in
  *     XSTOCK_SPOT_KRAKEN_COLLISIONS).
- *   - Closed-trade migration is atomic with paper_sim_trades INSERT
+ *   - Closed-trade migration is atomic with closed_trades INSERT
  *     (single transaction, Q5 lock).
  *
  * DESIGN (Langston Q1-Q5 lock 2026-05-10)
  * ---------------------------------------
- * Q1: NEW table `vts_open_trades` — separate from paper_sim_trades to keep
+ * Q1: NEW table `vts_open_trades` — separate from closed_trades to keep
  *     ML-pipeline closed-table reads off the open-trade churn write path.
  * Q2: ON-CLOSE SNAPSHOT — the open-trade row reflects entry-time state +
  *     last-snapshot context; mid-trade mutations stay in-memory + the
  *     dedicated TEC trailing_states table; a final snapshot on close
- *     captures the full state into paper_sim_trades.
+ *     captures the full state into closed_trades.
  * Q3: REHYDRATE via TEC rejoin — vts_open_trades carries trade-shell;
  *     TEC's existing rehydrate path restores ratcheted-stop history.
  * Q4: BOOTSTRAP-SNAPSHOT on first deploy — if `vts_open_trades` is empty
@@ -28,7 +28,7 @@
  *     so legacy bad asset_class values don't freeze into DB (Langston
  *     B79.0g revisions add'l #1).
  * Q5: ATOMIC close-time migration — DELETE-from-vts_open_trades +
- *     INSERT-into-paper_sim_trades wrapped in a single transaction.
+ *     INSERT-into-closed_trades wrapped in a single transaction.
  *
  * NOTE: This module is the writer for vts_open_trades. The reader for
  * UI display (`getOpenVirtualTradesForML` in vts-runner.ts) continues to

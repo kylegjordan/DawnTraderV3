@@ -17,7 +17,7 @@
 --   TOTAL    : 4862
 --
 -- This script flips them back to crypto_spot. Other tables (trading_signals,
--- regime_factor_alternates, exit_strategy_alternates, paper_sim_trades) had
+-- regime_factor_alternates, exit_strategy_alternates, closed_trades) had
 -- 0 mis-tagged rows so are not touched.
 
 BEGIN;

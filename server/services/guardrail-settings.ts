@@ -84,10 +84,10 @@ export async function getPortfolioBalanceV2(
     const { getEngineSessionStart } = await import('./active-execution-engine.js');
     const sessionStart = getEngineSessionStart(mode);
     
-    // [9.6.3] Mode-aware trade query: paper uses getPaperSimTrades, live uses getTrades
+    // [9.6.3] Mode-aware trade query: paper uses getClosedTrades, live uses getTrades
     let allTrades: any[];
     if (mode === 'paper') {
-      allTrades = await storage.getPaperSimTrades(mode, { closedOnly: true });
+      allTrades = await storage.getClosedTrades(mode, { closedOnly: true });
     } else {
       // Live mode: use getTrades with closed status filter
       const liveTrades = await storage.getTrades(mode, { status: 'closed' });

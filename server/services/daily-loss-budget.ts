@@ -121,7 +121,7 @@ async function compute24hSnapshot(mode: TradingMode): Promise<DailyLossSnapshot>
   // Mode-aware closed-trade query (same sources as getPortfolioBalanceV2).
   let closed: Array<{ closedAt: Date | string | null; pnl: unknown }>;
   if (mode === 'paper') {
-    const trades = await storage.getPaperSimTrades(mode, { closedOnly: true });
+    const trades = await storage.getClosedTrades(mode, { closedOnly: true });
     closed = trades.map((t: any) => ({ closedAt: t.closedAt, pnl: t.pnl }));
   } else {
     const trades = await storage.getTrades(mode, { status: 'closed' });
