@@ -8121,8 +8121,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           lastError: diag.lastError,
           // P19-B8.1 (defect d2): error-state lifecycle — lastError is the
           // active alarm (cleared on next healthy cycle); these keep history.
-          lastErrorAt: (diag as any).lastErrorAt ?? null,
-          errorCount: (diag as any).errorCount ?? 0,
+          lastErrorAt: diag.lastErrorAt ?? null,
+          errorCount: diag.errorCount ?? 0,
           hostileSimActive: diag.hostileSimActive,
           rolling24hApproxCycles: rolling24hCycles,
           // P19-B8.1 (defect c): was the hardcoded rolling24hTickRows=0

@@ -422,6 +422,10 @@ export function getCachedNumbersForModule(
       `module_constants: module '${moduleName}' is not warm. Call prefetchModule('${moduleName}') at server startup before sync reads.`,
     );
   }
+  // P19-B8.1 (Langston Step-4 gate): ALL THREE sync readers observe stale-serve
+  // — this bulk per-strategy path included, so a wedged refresher can never
+  // serve the strategy levers silently-stale forever.
+  maybeWarnStaleServe(moduleName, cached);
 
   // Group by constantName, pick best per group
   const byConstant = new Map<string, { row: ModuleConstant; score: number }>();
@@ -515,9 +519,9 @@ function ensureBackgroundRefresher(): void {
     const moduleNames = Array.from(cache.keys());
     for (const moduleName of moduleNames) {
       prefetchModule(moduleName).catch((err) => {
-        // Don't crash the loop — log and continue. Stale cache is preferable
-        // to a crashed refresher; if the DB is unhealthy the consumer reads
-        // will throw on missing data anyway.
+        // Don't crash the loop — log and continue. Post-B8.1 swap-on-success,
+        // a failed refresh leaves the previous entry serving (stale-while-
+        // revalidate); persistent staleness surfaces via maybeWarnStaleServe.
         // eslint-disable-next-line no-console
         console.error(`[module-constants] background refresh failed for '${moduleName}':`, err);
       });
