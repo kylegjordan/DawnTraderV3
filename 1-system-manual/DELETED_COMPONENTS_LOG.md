@@ -388,3 +388,23 @@
 **Blast-radius verification:** both internal callers (the `setCostMetrics` default + the `getCacheStats` empty branch) rewired to the merge site; zero external callers — tsc-proven (the shape drop makes any residual reader a compile error; baseline green) + repo-wide grep clean. The fee-bearing stats shape the 4 production stat readers consume moved to `cost-model.getCostCacheStatsWithFee` (cost-cache cannot import cost-model — circular).
 **Archive:** function-level deletion — git history (`4b9d62fc9^`) is the archive; no separate `.removed` copy (in-file function, not a component file).
 **Reviewed by:** Langston Step-2 CHANGE-2 (named the disposition requirement) + Step-4 APPROVE-to-push (verified the deletion + both rewires + zero remaining callers in-file).
+
+---
+
+## 2026-07-04 — P19-B8.1: Trading-page dissolution deletions (three-mode-page reorg)
+
+| Item | Where | What it was |
+|---|---|---|
+| `client/src/pages/active-trades.tsx` | repo | The single 6-tab Trading page — dissolved into the three mode pages (Live/Paper/VTS via the ModeTradingPage shell + manifests); `/active-trades` route now redirects to `/paper-trading`. |
+| `client/src/components/trading/pattern-scanning.tsx` | repo | Pattern Scanning tab (Phase 14.5 B19C debugging window for the pattern-repair era). Kyle ruling 2026-07-03: the pattern lane reports via the per-mode Filter Diagnostics + Open Trades now. Also the source of the whole-page `.toFixed` crash. |
+| `GET /api/pattern-pool` route block (`server/routes.ts`) | repo | The tab's display endpoint — sole consumer was the tab (full both-directions trace in `P19_B8_1_PRE_AUDIT.md` §1). |
+| `client/src/pages/filter-insights.tsx` + `/insights` route | repo | Standalone Filter Insights page (surfaced by the Step-1 architectural read). Retired with the tab — replaced by per-mode Filter Diagnostics. |
+| `client/src/components/trading/filter-insights.tsx` | repo | The Filter Insights component (active-scan view). Both consumers (the tab + the standalone page) deleted together. |
+| `filter-insights.tsx.changes` + `.patch` | repo | Tracked patch-application artifacts for the deleted component (historical strays). |
+
+**Why removed:** Kyle locked design 2026-07-03 (P19-B8 design intentions + consensus addendum) — one home per view; Filter Insights superseded by per-mode/per-class Filter Diagnostics.
+**KEPT (corrected delete set — pre-audit §1):** `pattern-pool-dispatch.ts` + both per-class `pattern-pool-filters.ts` + their barrel exports — consumed by the SQE (`signal_quality_evaluator.ts:35`), `active-position-sizing.ts:33`, `active-filter-pool.ts:24` (types), and the per-class state diagnostic. The original "delete the dispatcher too" plan was WRONG and caught by the conditioned re-trace.
+**Also moved-not-deleted:** VTS Open/Closed trade views + both FD panels → Virtual Simulations page (ML page keeps Predictive Adjustments / Regime Archive / DBS Pair Tracking); trading toggle + paper modals → `PaperTradingControls` on the Paper page; live confirm modals left unmounted for the Phase-21 live-controls build (left-intentionally, not lingering — named future home).
+**Blast-radius verification:** bench tsc-baseline no regressions + vitest 2004 passed (parity with HEAD); consumer traces in `P19_B8_1_PRE_AUDIT.md` §1/§2.
+**Archive copies:** `_archive/deleted-code/*.20260704-P19B8.1.removed` (6 files); route block in git history (commit `57617c3c9`).
+**Reviewed by:** Langston Step-1 APPROVED ×2 + Step-2 APPROVED (certainty-before-cutting condition discharged); Step-4 diff review pending.
