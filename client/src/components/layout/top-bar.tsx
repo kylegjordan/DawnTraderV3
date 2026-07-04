@@ -1,6 +1,5 @@
 import { Menu, Clock, Globe, AlertTriangle, MoreVertical, RotateCcw, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import {
   AlertDialog,
@@ -12,13 +11,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ConfirmLiveTradingModal } from "@/components/trading/confirm-live-trading-modal";
-import { ConfirmStopLiveTradingModal } from "@/components/trading/confirm-stop-live-trading-modal";
-import { ConfirmBalanceModal } from "@/components/trading/confirm-balance-modal";
-import { SimulationStartupModal } from "@/components/modals/simulation-startup-modal";
 import { useTrading } from "@/hooks/use-trading";
-import { useToast } from "@/hooks/use-toast";
-import { useUserRole } from "@/hooks/useUserRole";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -42,17 +35,10 @@ interface TopBarProps {
 }
 
 export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarProps) {
-  const { 
-    tradingStatus,
-    activeEngineStatus,
-    isTradingActive,  // Phase 32.D-Fix.Final: Single authoritative active state
-    startTrading, 
-    stopTrading, 
-    isStarting, 
-    isStopping
-  } = useTrading();
-  const { toast } = useToast();
-  const { canEdit, role, can } = useUserRole();
+  // P19-B8.1: trading-control hooks (start/stop/toggle, role gating) moved to
+  // PaperTradingControls; the top bar keeps only the status reads that drive
+  // its widget-refresh effects.
+  const { tradingStatus, activeEngineStatus } = useTrading();
   const queryClient = useQueryClient();
   const [utcTimeDate, setUtcTimeDate] = useState<string>('');
   const [localTimeDate, setLocalTimeDate] = useState<string>('');
@@ -60,11 +46,6 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
   const [localCompact, setLocalCompact] = useState<string>('');
   const [localTzAbbr, setLocalTzAbbr] = useState<string>('');
   const [timePreference, setTimePreference] = useState<'local' | 'utc'>('local');
-  const [showLiveConfirmation, setShowLiveConfirmation] = useState(false);
-  const [showStopConfirmation, setShowStopConfirmation] = useState(false);
-  const [showBalanceConfirmation, setShowBalanceConfirmation] = useState(false);
-  const [balanceToConfirm, setBalanceToConfirm] = useState(800);
-  const [showSimulationStartup, setShowSimulationStartup] = useState(false); // Phase 27.F.14.I
   const [, setLocation] = useLocation();
   const { messages: wsMessages} = useWebSocket();
 
@@ -209,382 +190,10 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
     }
   }, [tradingStatus?.isEngineActivePaper, activeEngineStatus?.isRunning, queryClient]);
 
-  const handleTradingToggle = async (enabled: boolean) => {
-    console.log('[Phase-27.F.6] Toggle clicked:', { enabled, mode: currentMode });
-    
-    // Phase 33.B: Front-end busy guard - prevent rapid toggling
-    if (isStarting || isStopping) {
-      toast({
-        title: "Please wait",
-        description: "Trading engine is busy. Please wait for the current operation to complete.",
-        variant: "default",
-      });
-      return;
-    }
-    
-    // Phase 27.F.6: Show confirmation modals for live trading
-    if (currentMode === 'live') {
-      if (enabled) {
-        // Starting live trading - show confirmation
-        setShowLiveConfirmation(true);
-        return;
-      } else {
-        // Stopping live trading - show stop confirmation
-        setShowStopConfirmation(true);
-        return;
-      }
-    }
-    
-    // Phase 27.F.14.I: For Paper mode, show simulation startup modal when starting
-    if (enabled) {
-      console.log('[Phase-27.F.14.I] Showing simulation startup modal...');
-      setShowSimulationStartup(true);
-      return;
-    }
-    
-    // Stopping paper mode - proceed directly
-    try {
-      console.log('[Phase-27.F.6] Stopping paper trading...');
-      await stopTrading('paper');
-      // Phase 33.A: Toast removed - WebSocket will trigger UI feedback
-    } catch (error: any) {
-      let errorMessage = "Failed to toggle trading status";
-      
-      // Parse error message from API response
-      if (error?.message) {
-        try {
-          // Extract JSON from error message (format: "400: {json}")
-          const jsonMatch = error.message.match(/\d+:\s*({.*})/);
-          if (jsonMatch) {
-            const errorData = JSON.parse(jsonMatch[1]);
-            
-            // Phase 27.F.14.D-POST: Check if balance confirmation is required in error
-            if (errorData.requiresConfirmation) {
-              console.log('[Phase-27.F.14.D-POST] Balance confirmation required (from error)');
-              setBalanceToConfirm(errorData.currentBalance || 800);
-              setShowBalanceConfirmation(true);
-              return; // Wait for user to confirm balance
-            }
-            
-            errorMessage = errorData.message || errorData.error || errorMessage;
-          } else {
-            errorMessage = error.message;
-          }
-        } catch {
-          errorMessage = error.message;
-        }
-      }
-      
-      console.error('[Phase-27.F.6] Trading toggle error:', errorMessage);
-      toast({
-        title: "Error",
-        description: errorMessage,
-        variant: "destructive",
-      });
-      
-      // Refetch status to ensure UI reflects actual backend state
-      await queryClient.refetchQueries({ queryKey: ['/api/active-engine/status'] });
-      await queryClient.refetchQueries({ queryKey: ['/api/trading/status'] });
-    }
-  };
-
-  // Phase 27.F.14.I: Handle Continue Previous Simulation
-  const handleContinueSimulation = async () => {
-    console.log('[Phase-27.F.14.I] Continue previous simulation');
-    
-    // REB 2.8.13: Purge cached portfolio data to prevent stale $10k values
-    queryClient.removeQueries({ queryKey: ['portfolio-overview', 'paper'] });
-    console.log('[REB 2.8.13] Purged portfolio cache before continue simulation');
-    
-    // Phase 32.D-Fix.6 Fix #4: Immediate toast feedback for instant user response
-    toast({
-      title: "Starting Paper Trading...",
-      description: "Activating simulation engine and loading market data",
-    });
-    
-    try {
-      const result = await apiRequest('POST', '/api/active-engine/start', { mode: 'continue' });
-      
-      // Check if balance confirmation is required
-      if (result && typeof result === 'object' && 'requiresConfirmation' in result && result.requiresConfirmation) {
-        console.log('[Phase-27.F.14.I] Balance confirmation required');
-        setBalanceToConfirm(result.currentBalance || 800);
-        setShowBalanceConfirmation(true);
-        return;
-      }
-      
-      // REB 2.8.9/2.8.10: Invalidate portfolio queries for immediate balance update
-      console.log('[REB 2.8.10] Invalidating portfolio and goals queries after paper trading start');
-      await queryClient.invalidateQueries({ queryKey: ['/api/paper/portfolio/state'] });
-      await queryClient.invalidateQueries({ queryKey: ['/api/active-engine/status'] });
-      // REB 2.8.10: Add goals invalidations
-      await queryClient.invalidateQueries({ queryKey: [`/api/goals/summary?mode=paper`] });
-      await queryClient.invalidateQueries({ queryKey: ['/api/system/trading-pace'] });
-      
-      toast({
-        title: "Simulation Continued",
-        description: "Resumed previous simulation with existing baseline",
-      });
-    } catch (error: any) {
-      console.error('[Phase-27.F.14.I] Continue simulation error:', error);
-      toast({
-        title: "Error",
-        description: error.message || "Failed to continue simulation",
-        variant: "destructive",
-      });
-    }
-  };
-
-  // Phase 27.F.14.I: Handle Start New Simulation
-  const handleStartNewSimulation = async (balance: number) => {
-    console.log('[Phase-27.F.14.I] Start new simulation with balance:', balance);
-    
-    // REB 2.8.13: Purge cached portfolio data to prevent stale $10k values
-    queryClient.removeQueries({ queryKey: ['portfolio-overview', 'paper'] });
-    console.log('[REB 2.8.13] Purged portfolio cache before new simulation');
-    
-    // Phase 32.D-Fix.6 Fix #4: Immediate toast feedback for instant user response
-    toast({
-      title: "Starting Paper Trading...",
-      description: `Activating new simulation with $${balance.toFixed(2)} balance`,
-    });
-    
-    try {
-      await apiRequest('POST', '/api/active-engine/start', { 
-        mode: 'new', 
-        initialBalance: balance 
-      });
-      
-      // REB 2.8.9/2.8.10: Invalidate portfolio queries for immediate balance update
-      console.log('[REB 2.8.10] Invalidating portfolio and goals queries after new simulation start');
-      await queryClient.invalidateQueries({ queryKey: ['/api/paper/portfolio/state'] });
-      await queryClient.invalidateQueries({ queryKey: ['/api/active-engine/status'] });
-      // REB 2.8.10: Add goals invalidations
-      await queryClient.invalidateQueries({ queryKey: [`/api/goals/summary?mode=paper`] });
-      await queryClient.invalidateQueries({ queryKey: ['/api/system/trading-pace'] });
-      
-      toast({
-        title: "New Simulation Started",
-        description: `Started fresh simulation with $${balance.toFixed(2)} balance`,
-      });
-    } catch (error: any) {
-      console.error('[Phase-27.F.14.I] Start new simulation error:', error);
-      toast({
-        title: "Error",
-        description: error.message || "Failed to start new simulation",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleConfirmLiveTrading = async () => {
-    console.log('[Phase-27.F.6] Live trading start confirmed');
-    
-    try {
-      await startTrading({ type: 'live' });
-      
-      // Minimal invalidations - WebSocket will handle most updates
-      await queryClient.invalidateQueries({ queryKey: ['/api/trading/status'] });
-      await queryClient.invalidateQueries({ queryKey: ['portfolio-overview', 'live'] });
-      
-    } catch (error: any) {
-      let errorMessage = "Failed to start Live Trading";
-      
-      // Parse error message from API response
-      if (error?.message) {
-        try {
-          // Extract JSON from error message (format: "400: {json}")
-          const jsonMatch = error.message.match(/\d+:\s*({.*})/);
-          if (jsonMatch) {
-            const errorData = JSON.parse(jsonMatch[1]);
-            errorMessage = errorData.message || errorData.error || errorMessage;
-          } else {
-            errorMessage = error.message;
-          }
-        } catch {
-          errorMessage = error.message;
-        }
-      }
-      
-      console.error('[Phase-27.F.6] Live trading start error:', errorMessage);
-      toast({
-        title: "Error",
-        description: errorMessage,
-        variant: "destructive",
-      });
-      
-      // Refetch status to ensure UI reflects actual backend state
-      await queryClient.refetchQueries({ queryKey: ['/api/trading/status'] });
-    }
-  };
-
-  const handleConfirmStopLiveTrading = async () => {
-    console.log('[Phase-27.F.6] Live trading stop confirmed');
-    
-    try {
-      await stopTrading('live');
-      
-      // Minimal invalidations - WebSocket will handle most updates
-      await queryClient.invalidateQueries({ queryKey: ['/api/trading/status'] });
-      await queryClient.invalidateQueries({ queryKey: ['portfolio-overview', 'live'] });
-      
-    } catch (error: any) {
-      let errorMessage = "Failed to stop Live Trading";
-      
-      // Parse error message from API response
-      if (error?.message) {
-        try {
-          // Extract JSON from error message (format: "400: {json}")
-          const jsonMatch = error.message.match(/\d+:\s*({.*})/);
-          if (jsonMatch) {
-            const errorData = JSON.parse(jsonMatch[1]);
-            errorMessage = errorData.message || errorData.error || errorMessage;
-          } else {
-            errorMessage = error.message;
-          }
-        } catch {
-          errorMessage = error.message;
-        }
-      }
-      
-      console.error('[Phase-27.F.6] Live trading stop error:', errorMessage);
-      toast({
-        title: "Error",
-        description: errorMessage,
-        variant: "destructive",
-      });
-      
-      // Refetch status to ensure UI reflects actual backend state
-      await queryClient.refetchQueries({ queryKey: ['/api/trading/status'] });
-    }
-  };
-
-  // Phase 27.F.14.D-POST: Handle balance confirmation
-  const handleConfirmBalance = async (balance: number) => {
-    console.log('[Phase-27.F.14.D-POST] Confirming balance:', balance);
-    
-    try {
-      // Send balance confirmation to backend
-      await apiRequest('POST', '/api/active-engine/confirm-balance', { 
-        balance, 
-        mode: currentMode 
-      });
-      
-      // Refresh portfolio after balance confirmation
-      await queryClient.invalidateQueries({ queryKey: ['portfolio-overview', 'paper'] });
-      await queryClient.invalidateQueries({ queryKey: ['/api/active-engine/status'] });
-      
-      // Close the modal
-      setShowBalanceConfirmation(false);
-      
-      // Retry starting trading with explicit continue mode
-      console.log('[Phase-27.F.14.D-POST] Balance confirmed, retrying start...');
-      await startTrading({ type: 'paper-continue' });
-      
-      // Phase 33.A: Toast removed - WebSocket will trigger UI feedback
-    } catch (error: any) {
-      let errorMessage = "Failed to confirm balance and start trading";
-      
-      // Parse error message from API response
-      if (error?.message) {
-        try {
-          // Extract JSON from error message (format: "400: {json}")
-          const jsonMatch = error.message.match(/\d+:\s*({.*})/);
-          if (jsonMatch) {
-            const errorData = JSON.parse(jsonMatch[1]);
-            errorMessage = errorData.message || errorData.error || errorMessage;
-          } else {
-            errorMessage = error.message;
-          }
-        } catch {
-          errorMessage = error.message;
-        }
-      }
-      
-      console.error('[Phase-27.F.14.D-POST] Balance confirmation error:', errorMessage);
-      toast({
-        title: "Error",
-        description: errorMessage,
-        variant: "destructive",
-      });
-      
-      // Refetch status to ensure UI reflects actual backend state
-      await queryClient.refetchQueries({ queryKey: ['/api/active-engine/status'] });
-      await queryClient.refetchQueries({ queryKey: ['/api/trading/status'] });
-    }
-  };
-
-  const handleModeChange = async (newMode: 'live' | 'paper') => {
-    // Phase 27.F.1: Don't switch if already in that mode
-    if (newMode === currentMode) {
-      return;
-    }
-
-    try {
-      // Phase 27.F.1: Use /api/trading/set-mode to trigger WebSocket broadcast
-      await apiRequest('POST', '/api/trading/set-mode', { 
-        mode: newMode,
-        reason: `User switched to ${newMode} mode via UI`
-      });
-      
-      // Optimistic UI update
-      setMode(newMode);
-      
-      toast({
-        title: "Mode Changed",
-        description: `Switched to ${newMode === 'live' ? 'Live' : 'Paper'} trading mode`,
-      });
-      
-      // WebSocket event will trigger automatic refetch via listener above
-    } catch (error: any) {
-      console.error('Failed to update mode:', error);
-      
-      // Parse error message for better UX
-      let errorMessage = "Failed to update trading mode";
-      if (error?.message) {
-        try {
-          const jsonMatch = error.message.match(/\d+:\s*({.*})/);
-          if (jsonMatch) {
-            const errorData = JSON.parse(jsonMatch[1]);
-            errorMessage = errorData.message || errorData.error || errorMessage;
-          } else {
-            errorMessage = error.message;
-          }
-        } catch {
-          errorMessage = error.message;
-        }
-      }
-      
-      toast({
-        title: "Error",
-        description: errorMessage,
-        variant: "destructive",
-      });
-      
-      // Refetch to ensure UI reflects actual backend state
-      await queryClient.refetchQueries({ queryKey: ['/api/trading/status'] });
-    }
-  };
-
-  // Phase 32.D-Fix.Final: Use authoritative isTradingActive from hook
-  const isActive = isTradingActive;
-  
-  // Debug: Visual check for state synchronization
-  console.log('[DEBUG][TopBar]', {
-    mode: tradingStatus?.mode,
-    active: tradingStatus?.active,
-    isTradingActive,
-    passiveLearning: tradingStatus?.passiveLearning
-  });
-  
-  // Phase 32.D-Fix.Final: Compute banner text based on mode and active state
-  const bannerText = currentMode === 'paper'
-    ? (isActive
-        ? 'Paper Trading Mode — Active (Simulated Trades Executing)'
-        : 'Paper Trading Mode — Stopped')
-    : (isActive
-        ? 'Live Trading Mode — Active'
-        : 'Live Trading Mode — Stopped');
+  // P19-B8.1: the seven trading-control handlers (toggle, continue/new
+  // simulation, live confirm/stop, balance confirm, mode change) moved to
+  // PaperTradingControls with the toggle; live-mode handlers return with
+  // the Phase-21 live-controls build.
 
   return (
     <header 
@@ -606,167 +215,13 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
             </Button>
           )}
           
-          {/* Mobile Controls (< md) */}
-          <div className="flex md:hidden items-center gap-2">
-            {/* Trading Status Dropdown for Mobile */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={isStarting || isStopping || !canEdit}
-                  className={cn(
-                    "flex items-center gap-1.5 px-2 py-1.5 bg-muted rounded-md text-xs font-medium h-auto",
-                    !canEdit && "opacity-50 cursor-not-allowed"
-                  )}
-                  data-testid="dropdown-trading-status-mobile"
-                >
-                  <span className={`status-dot ${isActive ? 'active' : 'inactive'}`} />
-                  <span className={isActive ? 'text-success' : 'text-destructive'}>
-                    {isActive ? 'Active' : 'Stopped'}
-                  </span>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start">
-                <DropdownMenuLabel>Trading Status</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={() => handleTradingToggle(true)}
-                  disabled={isActive || isStarting || isStopping || !canEdit}
-                  className="flex items-center gap-2"
-                  data-testid="menu-start-trading"
-                >
-                  <span className="status-dot active" />
-                  <span className="text-success font-medium">Start Trading</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => handleTradingToggle(false)}
-                  disabled={!isActive || isStarting || isStopping || !canEdit}
-                  className="flex items-center gap-2"
-                  data-testid="menu-stop-trading"
-                >
-                  <span className="status-dot inactive" />
-                  <span className="text-destructive font-medium">Stop Trading</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            {/* Mode Dropdown for Mobile */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="flex items-center gap-1.5 px-2 py-1.5 bg-muted rounded-md text-xs font-semibold h-auto"
-                  data-testid="dropdown-mode-mobile"
-                >
-                  {currentMode === 'live' ? 'LIVE' : 'PAPER'}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start">
-                <DropdownMenuLabel>Trading Mode</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={() => handleModeChange('live')}
-                  disabled={!can('trade_live') || currentMode === 'live'}
-                  className={cn(
-                    "font-semibold",
-                    currentMode === 'live' && "text-base font-bold text-foreground"
-                  )}
-                  data-testid="menu-live-mode"
-                >
-                  Live
-                  {currentMode === 'live' && ' ✓'}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => handleModeChange('paper')}
-                  disabled={!can('trade_paper') || currentMode === 'paper'}
-                  className={cn(
-                    "font-semibold",
-                    currentMode === 'paper' && "text-base font-bold text-foreground"
-                  )}
-                  data-testid="menu-paper-mode"
-                >
-                  Paper
-                  {currentMode === 'paper' && ' ✓'}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-
-          {/* Desktop Controls (≥ md) */}
-          <div className="hidden md:flex items-center gap-3">
-            {/* Start/Stop Toggle */}
-            <div className="flex flex-col gap-1">
-              <div className="flex items-center gap-3 px-4 py-2 bg-muted rounded-lg">
-                <span className="text-sm font-medium text-foreground">Trading</span>
-                <Switch
-                  checked={isActive}
-                  onCheckedChange={handleTradingToggle}
-                  disabled={isStarting || isStopping || !canEdit}
-                  className="data-[state=checked]:bg-success"
-                  data-testid="switch-trading"
-                  title={!canEdit ? `Viewers cannot control trading (Role: ${role})` : ''}
-                />
-                <div className="flex items-center gap-1">
-                  <span className={`status-dot ${isActive ? 'active' : 'inactive'}`} />
-                  <span className={`text-xs font-semibold ${isActive ? 'text-success' : 'text-destructive'}`}>
-                    {isActive ? 'ACTIVE' : 'STOPPED'}
-                  </span>
-                </div>
-              </div>
-            </div>
-            
-            {/* Mode Toggle - Phase 27.3: Permission-gated */}
-            <div className="flex items-center gap-2 px-4 py-2 bg-muted rounded-lg">
-              <Button
-                variant={currentMode === 'live' ? 'default' : 'ghost'}
-                size="sm"
-                onClick={() => handleModeChange('live')}
-                disabled={!can('trade_live')}
-                className={cn(
-                  "px-3 py-1 text-xs font-semibold rounded h-auto",
-                  currentMode === 'live' 
-                    ? "bg-primary text-primary-foreground" 
-                    : "text-muted-foreground hover:bg-secondary hover:text-foreground",
-                  !can('trade_live') && "opacity-50 cursor-not-allowed"
-                )}
-                title={!can('trade_live') ? `Live trading requires trade_live permission (Role: ${role})` : ''}
-                data-testid="button-live-mode"
-              >
-                LIVE
-              </Button>
-              <Button
-                variant={currentMode === 'paper' ? 'default' : 'ghost'}
-                size="sm"
-                onClick={() => handleModeChange('paper')}
-                disabled={!can('trade_paper')}
-                className={cn(
-                  "px-3 py-1 text-xs font-semibold rounded h-auto",
-                  currentMode === 'paper' 
-                    ? "bg-primary text-primary-foreground" 
-                    : "text-muted-foreground hover:bg-secondary hover:text-foreground",
-                  !can('trade_paper') && "opacity-50 cursor-not-allowed"
-                )}
-                title={!can('trade_paper') ? `Paper trading requires trade_paper permission (Role: ${role})` : ''}
-                data-testid="button-paper-mode"
-              >
-                PAPER
-              </Button>
-            </div>
-
-            {/* REB 2.8.6B: Passive Learning Indicator (derived from !isEngineActive) */}
-            {tradingStatus?.passiveLearning && (
-              <div className="flex items-center gap-0.5 px-0.5 py-0 bg-blue-500/10 border border-blue-500/30 rounded mr-2">
-                <div className="flex items-center gap-0.5">
-                  <div className="w-0.5 h-0.5 bg-blue-500 rounded-full animate-pulse" />
-                  <span className="text-[6px] font-semibold text-blue-600 dark:text-blue-400 whitespace-nowrap">
-                    PASSIVE LEARNING
-                  </span>
-                </div>
-              </div>
-            )}
-          </div>
+          {/* P19-B8.1: the trading toggle, LIVE/PAPER mode selector, and
+              passive-learning chip MOVED off the top bar — start/stop lives
+              inside each mode page (PaperTradingControls on Paper Trading;
+              Live controls arrive with Phase 21; the VTS page carries the
+              always-on passive-learning badge). The top bar keeps only
+              mode-neutral display: menu, clocks, and (until B8.3 relocates it
+              with the three-balances labeling) the portfolio metrics strip. */}
         </div>
         
         {/* Right Actions */}
@@ -915,36 +370,11 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
         </div>
       )}
 
-      {/* Phase 27.F.6: Live Trading Confirmation Modals */}
-      <ConfirmLiveTradingModal
-        open={showLiveConfirmation}
-        onOpenChange={setShowLiveConfirmation}
-        onConfirm={handleConfirmLiveTrading}
-      />
-      
-      <ConfirmStopLiveTradingModal
-        open={showStopConfirmation}
-        onOpenChange={setShowStopConfirmation}
-        onConfirm={handleConfirmStopLiveTrading}
-      />
-      
-      {/* Phase 27.F.14.D-POST: Balance Confirmation Modal */}
-      <ConfirmBalanceModal
-        open={showBalanceConfirmation}
-        onOpenChange={setShowBalanceConfirmation}
-        currentBalance={balanceToConfirm}
-        onConfirm={handleConfirmBalance}
-        mode={currentMode}
-      />
-      
-      {/* Phase 27.F.14.I: Simulation Startup Modal */}
-      <SimulationStartupModal
-        open={showSimulationStartup}
-        onClose={() => setShowSimulationStartup(false)}
-        onContinue={handleContinueSimulation}
-        onStartNew={handleStartNewSimulation}
-        defaultBalance={balanceToConfirm}
-      />
+      {/* P19-B8.1: the trading-control modals moved with the toggle —
+          SimulationStartupModal + ConfirmBalanceModal now mount inside
+          PaperTradingControls on the Paper Trading page; the two live-mode
+          confirm modals are unmounted until the Phase-21 live-controls build
+          re-homes them on the Live Trading page. */}
     </header>
   );
 }

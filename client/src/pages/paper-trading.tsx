@@ -15,12 +15,14 @@ import { TradeHistoryTab } from "@/components/trading/trade-history-tab";
 import { ShadowTradesTab } from "@/components/trading/shadow-trades-tab";
 import { XstocksTab } from "@/components/machine-learning/xstocks-tab";
 import { CryptoFilterDiagnosticsTab } from "@/components/vts/vts-tabs";
+import { PaperTradingControls } from "@/components/trading/paper-trading-controls";
 
 const config: ModeTradingPageConfig = {
   mode: 'paper',
   title: "Paper Trading",
   subtitle: "Active trading in paper mode — full pipeline, Kraken-vetted internal fills, no real money",
   defaultTab: "fd-crypto",
+  controls: <PaperTradingControls />,
   tabs: [
     { key: "fd-crypto", label: "Crypto Filter Diagnostics", shortLabel: "Crypto FD", icon: Lightbulb, render: () => <CryptoFilterDiagnosticsTab /> },
     { key: "fd-xstock", label: "xStock Filter Diagnostics", shortLabel: "xStock FD", icon: LineChart, render: () => <XstocksTab /> },
