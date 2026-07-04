@@ -19,7 +19,11 @@ import { AlertTriangle, X } from "lucide-react";
 
 const Settings = lazy(() => import("@/pages/settings"));
 const WatchlistPage = lazy(() => import("@/pages/watchlist"));
-const ActiveTradesPage = lazy(() => import("@/pages/active-trades"));
+// P19-B8.1: the single Trading page is replaced by three mode pages (one
+// shared shell + per-mode tab manifests). /active-trades redirects to Paper.
+const LiveTradingPage = lazy(() => import("@/pages/live-trading"));
+const PaperTradingPage = lazy(() => import("@/pages/paper-trading"));
+const VirtualSimulationsPage = lazy(() => import("@/pages/virtual-simulations"));
 const ReportsPage = lazy(() => import("@/pages/reports"));
 const DailyBriefPage = lazy(() => import("@/pages/daily-brief"));
 const BriefingsPage = lazy(() => import("@/pages/briefings"));
@@ -27,7 +31,8 @@ const GoalsEnginePage = lazy(() => import("@/pages/goals-engine"));
 const SystemsPage = lazy(() => import("@/pages/systems"));
 const AITransparencyPage = lazy(() => import("@/pages/ai-transparency"));
 const SystemConfigPage = lazy(() => import("@/pages/system-config"));
-const FilterInsightsPage = lazy(() => import("@/pages/filter-insights"));
+// P19-B8.1: FilterInsightsPage deleted — the Filter Insights view is retired,
+// replaced by the per-mode Filter Diagnostics tabs on the three mode pages.
 const AnalyticsPage = lazy(() => import("@/pages/analytics"));
 const MachineLearningPage = lazy(() => import("@/pages/machine-learning"));
 const SystemAlertsPage = lazy(() => import("@/pages/system-alerts"));
@@ -213,8 +218,18 @@ function Router() {
               <Route path="/dashboard">
                 {() => <ProfiledRoute id="Dashboard" component={Dashboard} />}
               </Route>
+              <Route path="/live-trading">
+                {() => <ProfiledRoute id="LiveTrading" component={LiveTradingPage} />}
+              </Route>
+              <Route path="/paper-trading">
+                {() => <ProfiledRoute id="PaperTrading" component={PaperTradingPage} />}
+              </Route>
+              <Route path="/virtual-simulations">
+                {() => <ProfiledRoute id="VirtualSimulations" component={VirtualSimulationsPage} />}
+              </Route>
+              {/* P19-B8.1: legacy bookmark path → its successor (Paper) */}
               <Route path="/active-trades">
-                {() => <ProfiledRoute id="Trading" component={ActiveTradesPage} />}
+                <Redirect to="/paper-trading" />
               </Route>
               <Route path="/systems">
                 {() => <ProfiledRoute id="Analytics" component={SystemsPage} />}
@@ -229,7 +244,6 @@ function Router() {
               <Route path="/ai-transparency" component={AITransparencyPage} />
               <Route path="/analytics" component={AnalyticsPage} />
               <Route path="/machine-learning" component={MachineLearningPage} />
-              <Route path="/insights" component={FilterInsightsPage} />
               <Route path="/system-alerts" component={SystemAlertsPage} />
               <Route path="/settings" component={Settings} />
               <Route path="/system/config" component={SystemConfigPage} />

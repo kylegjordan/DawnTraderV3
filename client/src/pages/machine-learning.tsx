@@ -5,20 +5,15 @@ import { Badge } from "@/components/ui/badge";
 import { getAssetName, setXstockNameOverlay, setCryptoNameOverlay } from "@shared/asset-names";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Brain, RefreshCw, Download, Clock, Target, AlertTriangle, Sliders, Activity, Filter, LineChart } from "lucide-react";
-// B79.0i.a: dedicated xStocks observation tab
-import { XstocksTab } from "@/components/machine-learning/xstocks-tab";
+import { Brain, RefreshCw, Download, Target, AlertTriangle, Sliders, Activity, Filter } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { ensureValidToken } from "@/lib/auth";
 import { format } from "date-fns";
-// P19-B8.1 (C1): VTS trade tables + filter-diagnostics panel + shared types/helpers extracted
-// to client/src/components/vts/ (pure extraction, zero behavior change).
-import { OpenTradesTable } from "@/components/vts/vts-open-trades-table";
-import { ClosedTradesTable } from "@/components/vts/vts-closed-trades-table";
-import { FilterDiagnosticsPanel } from "@/components/vts/vts-filter-diagnostics-panel";
+// P19-B8.1: this page is the learning/calibration analytics home. The four
+// mode-trading views (VTS Open/Closed trades + both Filter Diagnostics tabs)
+// moved to the Virtual Simulations page — one home per view (rule 18). The
+// diagnostics QUERY stays: DbsPairTrackingPanel reads the same payload.
 import {
-  type OpenTrade,
-  type ClosedTrade,
   type FilterDiagnosticsData,
   type B63DbsSnapshot,
   type B63DbsAggregate,
@@ -1083,7 +1078,7 @@ function DbsPairTrackingPanel({ data, isLoading }: { data: FilterDiagnosticsData
 
 
 export default function MachineLearningPage() {
-  const [activeTab, setActiveTab] = useState("open");
+  const [activeTab, setActiveTab] = useState("adjustments");
   const queryClient = useQueryClient();
 
   // B79.0n.UD-HOTFIX (2026-05-21): fetch the server-side xStock name map once
@@ -1116,29 +1111,6 @@ export default function MachineLearningPage() {
     },
     refetchInterval: 60 * 60 * 1000,  // 1 hour
     staleTime: 30 * 60 * 1000,
-  });
-
-  const { data: openData, isLoading: openLoading, refetch: refetchOpen } = useQuery<{
-    success: boolean;
-    count: number;
-    trades: OpenTrade[];
-  }>({
-    queryKey: ['/api/vts/ml/open'],
-    queryFn: () => apiFetch('/api/vts/ml/open'),
-    refetchInterval: 60000,
-    staleTime: 30000,
-  });
-
-  const { data: closedData, isLoading: closedLoading, refetch: refetchClosed } = useQuery<{
-    success: boolean;
-    count: number;
-    days: number;
-    trades: ClosedTrade[];
-  }>({
-    queryKey: ['/api/vts/ml/closed'],
-    queryFn: () => apiFetch('/api/vts/ml/closed?days=7'),
-    refetchInterval: 300000,
-    staleTime: 60000,
   });
 
   const { data: adjustmentsData, isLoading: adjustmentsLoading, refetch: refetchAdjustments } = useQuery<{
@@ -1233,52 +1205,8 @@ export default function MachineLearningPage() {
     }
   };
 
-  const handleExportOpen = async () => {
-    try {
-      const token = await ensureValidToken();
-      const response = await fetch('/api/vts/ml/open/export', {
-        credentials: 'include',
-        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
-      });
-      if (!response.ok) throw new Error('Export failed');
-      
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `vts_open_trades_${new Date().toISOString().slice(0, 10)}.csv`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('Export failed:', error);
-    }
-  };
-
-  const handleExportClosed = async () => {
-    try {
-      const token = await ensureValidToken();
-      const response = await fetch('/api/vts/ml/closed/export?days=7', {
-        credentials: 'include',
-        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
-      });
-      if (!response.ok) throw new Error('Export failed');
-      
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `vts_closed_trades_7d_${new Date().toISOString().slice(0, 10)}.csv`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('Export failed:', error);
-    }
-  };
-
+  // P19-B8.1: the open/closed-trade queries + CSV exports moved with their
+  // tabs to the Virtual Simulations page (components/vts/vts-tabs.tsx).
   const handleExportAdjustments = async () => {
     try {
       const token = await ensureValidToken();
@@ -1302,8 +1230,6 @@ export default function MachineLearningPage() {
     }
   };
 
-  const openTrades = openData?.trades || [];
-  const closedTrades = closedData?.trades || [];
   const adjustments = adjustmentsData?.adjustments || [];
   const archiveRecords = archiveData?.records || [];
   const archiveSummary = archiveSummaryData?.summary || null;
@@ -1329,17 +1255,11 @@ export default function MachineLearningPage() {
               `inline-flex` (no wrap), which left the last few tabs running
               off-screen on half-width windows. `flex-wrap h-auto` allows
               wrapping; the strip still renders as a single row at full width. */}
+          {/* P19-B8.1: the four mode-trading views (VTS Open/Closed trades +
+              both Filter Diagnostics tabs) MOVED to the Virtual Simulations
+              page — one home per view (rule 18, no duplicates). This page is
+              the learning/calibration analytics home. */}
           <TabsList className="flex-wrap h-auto">
-            <TabsTrigger value="open" className="flex items-center gap-2">
-              <Target className="w-4 h-4" />
-              Open Trades
-              <Badge variant="secondary" className="ml-1">{openTrades.length}</Badge>
-            </TabsTrigger>
-            <TabsTrigger value="closed" className="flex items-center gap-2">
-              <Clock className="w-4 h-4" />
-              Closed Trades (7d)
-              <Badge variant="secondary" className="ml-1">{closedTrades.length}</Badge>
-            </TabsTrigger>
             <TabsTrigger value="adjustments" className="flex items-center gap-2">
               <Sliders className="w-4 h-4" />
               Predictive Adjustments
@@ -1350,46 +1270,13 @@ export default function MachineLearningPage() {
               Regime Archive
               <Badge variant="secondary" className="ml-1">{archiveRecords.length}</Badge>
             </TabsTrigger>
-            <TabsTrigger value="diagnostics" className="flex items-center gap-2">
-              <Filter className="w-4 h-4" />
-              Filter Diagnostics
-            </TabsTrigger>
             <TabsTrigger value="dbs-tracking" className="flex items-center gap-2">
               <Filter className="w-4 h-4" />
               DBS Pair Tracking
             </TabsTrigger>
-            {/* B79.0i.a: xStocks observation tab (last per Langston Q7) */}
-            <TabsTrigger value="xstocks" className="flex items-center gap-2" data-testid="tab-xstocks">
-              <LineChart className="w-4 h-4" />
-              xStocks Filter Diagnostics
-            </TabsTrigger>
           </TabsList>
 
           <div className="flex items-center gap-2">
-            {activeTab === 'open' && (
-              <>
-                <Button variant="outline" size="sm" onClick={() => refetchOpen()}>
-                  <RefreshCw className="w-4 h-4 mr-2" />
-                  Refresh
-                </Button>
-                <Button variant="outline" size="sm" onClick={handleExportOpen}>
-                  <Download className="w-4 h-4 mr-2" />
-                  Export CSV
-                </Button>
-              </>
-            )}
-            {activeTab === 'closed' && (
-              <>
-                <Button variant="outline" size="sm" onClick={() => refetchClosed()}>
-                  <RefreshCw className="w-4 h-4 mr-2" />
-                  Refresh
-                </Button>
-                <Button variant="outline" size="sm" onClick={handleExportClosed}>
-                  <Download className="w-4 h-4 mr-2" />
-                  Export CSV
-                </Button>
-              </>
-            )}
             {activeTab === 'adjustments' && (
               <>
                 <Button variant="outline" size="sm" onClick={() => refetchAdjustments()}>
@@ -1411,50 +1298,6 @@ export default function MachineLearningPage() {
           </div>
         </div>
 
-        <TabsContent value="open">
-          <Card>
-            <CardHeader className="py-3">
-              <CardTitle className="text-lg flex items-center justify-between">
-                <span>Open Simulated Trades</span>
-                <span className="text-sm font-normal text-muted-foreground">
-                  Auto-refresh: 60s | Max: 300 trades
-                </span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              {openLoading ? (
-                <div className="flex items-center justify-center py-12">
-                  <RefreshCw className="w-6 h-6 animate-spin text-muted-foreground" />
-                </div>
-              ) : (
-                <OpenTradesTable trades={openTrades} />
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="closed">
-          <Card>
-            <CardHeader className="py-3">
-              <CardTitle className="text-lg flex items-center justify-between">
-                <span>Closed Simulated Trades (Last 7 Days)</span>
-                <span className="text-sm font-normal text-muted-foreground">
-                  Auto-refresh: 5 min
-                </span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              {closedLoading ? (
-                <div className="flex items-center justify-center py-12">
-                  <RefreshCw className="w-6 h-6 animate-spin text-muted-foreground" />
-                </div>
-              ) : (
-                <ClosedTradesTable trades={closedTrades} />
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
         <TabsContent value="adjustments">
           <PredictiveAdjustmentsPanel 
             adjustments={adjustments}
@@ -1474,23 +1317,11 @@ export default function MachineLearningPage() {
           />
         </TabsContent>
 
-        <TabsContent value="diagnostics">
-          <FilterDiagnosticsPanel
-            data={diagnosticsData}
-            isLoading={diagnosticsLoading}
-          />
-        </TabsContent>
-
         <TabsContent value="dbs-tracking">
           <DbsPairTrackingPanel
             data={diagnosticsData}
             isLoading={diagnosticsLoading}
           />
-        </TabsContent>
-
-        {/* B79.0i.a: xStocks observation tab content. All 5 panels stack in this single component. */}
-        <TabsContent value="xstocks">
-          <XstocksTab />
         </TabsContent>
       </Tabs>
     </div>

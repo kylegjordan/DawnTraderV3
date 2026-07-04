@@ -14,7 +14,9 @@ import {
   Newspaper,
   Sparkles,
   Brain,
-  Bell
+  Bell,
+  Zap,
+  FlaskConical
 } from "lucide-react";
 import { useTrading } from "@/hooks/use-trading";
 import { Button } from "@/components/ui/button";
@@ -28,9 +30,13 @@ interface SidebarProps {
   className?: string;
 }
 
+// P19-B8.1: "Trading" replaced by the three mode pages (Kyle's locked nav
+// order — Live at top, Paper beneath, Virtual Simulations below).
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: Home },
-  { name: "Trading", href: "/active-trades", icon: BarChart3 },
+  { name: "Live Trading", href: "/live-trading", icon: Zap },
+  { name: "Paper Trading", href: "/paper-trading", icon: BarChart3 },
+  { name: "Virtual Simulations", href: "/virtual-simulations", icon: FlaskConical },
   { name: "Guardrails & Filters", href: "/goals-engine", icon: Shield },
   { name: "Analytics & Diagnostics", href: "/analytics", icon: Activity },
   { name: "Machine Learning", href: "/machine-learning", icon: Brain },

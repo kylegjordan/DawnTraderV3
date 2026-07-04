@@ -13021,63 +13021,12 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
-  // Batch 19C: Pattern pool status endpoint
-  // B79.0n.ORCHESTRATOR (2026-05-27): per-class diagnostic via dispatcher.
-  // Default assetClass=crypto_spot (back-compat); `?assetClass=xstock_spot`
-  // returns xstock guardrails (DB-resolved). Perp classes throw CLASS_NOT_WIRED.
-  apiRouter.get('/pattern-pool', authenticateToken, async (req: AuthenticatedRequest, res) => {
-    try {
-      const mode = (req.query.mode as 'paper' | 'live') || 'paper';
-      const requestedAssetClass = (req.query.assetClass as string) || 'crypto_spot';
-      const { activeFilterPool } = await import('./services/active-filter-pool.js');
-      // Batch 48: Regime override imports removed — DB is sole authority for thresholds
-      // B79.0n.ORCHESTRATOR: PATTERN_POOL_THRESHOLDS + PATTERN_POOL_STRATEGIES still
-      // class-bound (crypto_spot-only) per current pattern-recognizer wiring; only
-      // PATTERN_POOL_GUARDRAILS gets per-class dispatch (the swap surface for this
-      // batch). THRESHOLDS + STRATEGIES per-class deferred to Phase 16 shim removal.
-      const { PATTERN_POOL_THRESHOLDS, PATTERN_POOL_STRATEGIES } = await import('./asset_classes/crypto_spot/pattern-pool-filters.js');
-      const { getPatternPoolGuardrailsForAssetClass } = await import('./asset_classes/pattern-pool-dispatch.js');
-      const { ASSET_CLASSES } = await import('../shared/asset-classes.js');
-
-      // Validate assetClass query param against canonical enum before dispatch
-      const validClasses = Object.values(ASSET_CLASSES);
-      if (!validClasses.includes(requestedAssetClass as any)) {
-        return res.status(400).json({
-          ok: false,
-          error: `Invalid assetClass='${requestedAssetClass}'. Valid: ${validClasses.join(', ')}`,
-        });
-      }
-      const guardrails = getPatternPoolGuardrailsForAssetClass(requestedAssetClass as any);
-
-      const patternPool = activeFilterPool.getPatternPool(mode);
-      const patternPoolSize = activeFilterPool.getPatternPoolSize(mode);
-      const quantPoolSize = activeFilterPool.getPoolSize(mode);
-
-      res.json({
-        ok: true,
-        data: {
-          assetClass: requestedAssetClass,
-          patternPool: patternPool.map(p => ({
-            symbol: p.symbol,
-            price: p.price ?? 0,
-            volume24h: p.volume24h ?? 0,
-            dailyRange: p.dailyRange ?? 0,
-            firstSeen: p.firstSeen,
-            lastUpdated: p.lastUpdated,
-            expiresAt: p.expiresAt,
-          })),
-          patternPoolSize,
-          quantPoolSize,
-          thresholds: PATTERN_POOL_THRESHOLDS,
-          guardrails,
-          strategies: PATTERN_POOL_STRATEGIES,
-        },
-      });
-    } catch (error) {
-      console.error('[19C][B79.0n.ORCHESTRATOR] Pattern pool endpoint error:', error);
-      res.status(500).json({ ok: false, error: error instanceof Error ? error.message : 'Failed to fetch pattern pool data' });
-    }
-  });
+  // P19-B8.1: GET /pattern-pool DELETED (rule 18). Its sole consumer was the
+  // Pattern Scanning tab (pattern-scanning.tsx), deleted with the Trading-page
+  // dissolution — the pattern lane's numbers live in the per-mode Filter
+  // Diagnostics tabs. pattern-pool-dispatch.ts + both pattern-pool-filters.ts
+  // modules STAY: the SQE, active-position-sizing, and the per-class state
+  // diagnostic below consume them (pre-audit §1 corrected delete set).
 
   // B79.0n.ORCHESTRATOR (2026-05-27) + B79.0n.EXECUTION (2026-05-27 CHUNK C):
   // per-class state diagnostic. No-auth public (B79.0a pattern). URL retained
