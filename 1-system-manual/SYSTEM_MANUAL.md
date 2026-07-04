@@ -11372,13 +11372,16 @@ Most-specific-wins resolution via `moduleConstantsService.ts`. Dimension scoring
 
 | Helper | Purpose | Throws on |
 |---|---|---|
-| `prefetchModule(moduleName)` | Async warmup at boot | DB error (boot fails) |
-| `getCachedConstant<T>()` | Sync resolver, any type | Cold cache |
+| `prefetchModule(moduleName)` | Async warmup at boot **+ every 60s refresh (P19-B8.1: swap-on-success — reads fresh FIRST, then atomically replaces the cache entry; never delete-first)** | DB error (boot fails; a REFRESH failure leaves the previous entry serving — stale-while-revalidate) |
+| `getCachedConstant<T>()` | Sync resolver, any type | Cold cache (true cold-start only, post-B8.1) |
 | `getCachedNumberRequired()` | Sync number, no fallback | Cold cache, missing row, non-numeric |
-| `getCachedNumbersForModule()` | Sync bulk Record | Cold cache |
-| 60s background refresher | Re-prefetches warmed modules | Logs + continues on per-module DB error |
+| `getCachedNumbersForModule()` | Sync bulk Record (per-strategy levers) | Cold cache |
+| 60s background refresher | Re-prefetches warmed modules | Logs + continues on per-module DB error (previous entry keeps serving) |
+| `maybeWarnStaleServe` (P19-B8.1) | Stale-serve observability in ALL THREE sync readers: `[STALE_SERVE]` warn when serving >5min past the last successful refresh (rate-limited 1/min/module) — a wedged refresher is visible, never silently masked | never (warn-only) |
 
 **Hard-fail discipline:** every module read from sync code MUST be in `PREFETCH_MODULES` list at `server/startup/b72-warmup.ts`. Server boot throws if any prefetch returns zero rows.
+
+**★ P19-B8.1 race fix (2026-07-04):** the refresher's old `cache.delete()`-before-async-read opened a per-refresh window where sync readers threw "is not warm" (~hourly live on `dbs_calculation`/`amr_friction_sample`, widening with DB latency). Swap-on-success closed the window; `invalidateModuleCache` is now expire-not-delete; the admin write path re-warms via `await prefetchModule` for instant sync visibility. Boot hard-fail semantics unchanged — SWR is refresh resilience, NOT a DB-governed-value fallback.
 
 ## Boot-order invariant (B72 hotfix)
 
