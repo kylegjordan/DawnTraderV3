@@ -8119,9 +8119,16 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           pairsFreshLastCycle: diag.pairsFreshLastCycle,
           pairsStaleLastCycle: diag.pairsStaleLastCycle,
           lastError: diag.lastError,
+          // P19-B8.1 (defect d2): error-state lifecycle — lastError is the
+          // active alarm (cleared on next healthy cycle); these keep history.
+          lastErrorAt: (diag as any).lastErrorAt ?? null,
+          errorCount: (diag as any).errorCount ?? 0,
           hostileSimActive: diag.hostileSimActive,
           rolling24hApproxCycles: rolling24hCycles,
-          rolling24hApproxPairsScanned: rolling24hTickRows,
+          // P19-B8.1 (defect c): was the hardcoded rolling24hTickRows=0
+          // ("dropped — never accurate"); now the scanner-lifetime pairs-
+          // entered accumulator — same source the FD rolling block reads.
+          rolling24hApproxPairsScanned: lt?.pairsEntered ?? 0,
         },
       });
     } catch (error: any) {

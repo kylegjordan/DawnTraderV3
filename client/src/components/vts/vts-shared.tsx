@@ -185,6 +185,12 @@ export interface FilterDiagnosticsData {
   // no guard evaluations recorded for this class yet (rendered as a distinct "no evaluations" state).
   guardDrops?: Record<string, GuardDropRecord>;
   trackerStartedAt?: string | null;
+  // P19-B8.1 (defect a): DB-backed 24h trades-opened, emitted by
+  // /api/vts/filter-diagnostics v1.6. The panel's "Trades Opened" rows
+  // previously read vtsEvaluation.quantTradesOpened/patternTradesOpened —
+  // keys the endpoint never carried — so they rendered the ?? 0 fallback
+  // forever. This typed field is the honest, restart-proof source.
+  tradesOpened24h?: { total: number; quant: number; pattern: number };
 }
 
 // reorg-B2.2 OBJ-B: one strategy's shared-guard suppression for a single asset class. Raw counters + the

@@ -165,15 +165,19 @@ export function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagno
                     <td className="p-2 text-right text-xs text-muted-foreground">—</td>
                     <td className="p-2 text-xs text-muted-foreground">Sum of 4 family rejection counts</td>
                   </tr>
-                  {/* Batch 48: Family-Qualified Unique — the true unique pair count after family IMF */}
+                  {/* Batch 48: Family-Qualified Unique — the true unique pair count after family IMF.
+                      P19-B8.1 (defect b): read BOTH response shapes — crypto's fx5 rolling puts
+                      totalFamilyQualifiedUnique at the top level; the xstock endpoint nests it
+                      under rolling24h.aggregated. The top-level-only read rendered 0 for xStock
+                      against 136k+ real (server verified live). */}
                   <tr className="border-b hover:bg-muted/30">
                     <td className="p-2 font-medium">Family-Qualified (Unique Pairs)</td>
                     <td className="p-2 text-right text-teal-600">
-                      {fmt((rolling24h as any).totalFamilyQualifiedUnique ?? 0)}
+                      {fmt((rolling24h as any).totalFamilyQualifiedUnique ?? (r24 as any)?.totalFamilyQualifiedUnique ?? 0)}
                     </td>
                     <td className="p-2 text-right text-muted-foreground">—</td>
                     <td className="p-2 text-right text-teal-600">
-                      {fmt((rolling24h as any).totalFamilyQualifiedUnique ?? 0)}
+                      {fmt((rolling24h as any).totalFamilyQualifiedUnique ?? (r24 as any)?.totalFamilyQualifiedUnique ?? 0)}
                     </td>
                     <td className="p-2 text-xs text-muted-foreground">Unique pairs passing ≥1 family IMF (before fan-out expansion)</td>
                   </tr>
@@ -283,11 +287,14 @@ export function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagno
                         <td className="p-2 text-right text-xs text-red-400">{fmt(((ve as any).quantStrategyNulls ?? 0) + ((ve as any).patternStrategyNulls ?? 0))}</td>
                         <td className="p-2 text-xs text-muted-foreground">In-memory counter, resets on PM2 restart.</td>
                       </tr>
+                      {/* P19-B8.1 (defect a): reads the typed tradesOpened24h field (endpoint
+                          v1.6) — the old quantTradesOpened/patternTradesOpened keys never
+                          existed on vtsEvaluation, so this row rendered 0 forever. */}
                       <tr className="bg-muted/30 font-semibold border-t-2 border-primary/20">
                         <td className="p-2">Trades Opened <span className="text-[10px] text-muted-foreground">(DB-backed, 24h rolling)</span></td>
-                        <td className="p-2 text-right text-green-600">{fmt((ve as any).quantTradesOpened ?? 0)}</td>
-                        <td className="p-2 text-right text-green-600">{fmt((ve as any).patternTradesOpened ?? 0)}</td>
-                        <td className="p-2 text-right text-green-600">{fmt(((ve as any).quantTradesOpened ?? 0) + ((ve as any).patternTradesOpened ?? 0))}</td>
+                        <td className="p-2 text-right text-green-600">{fmt(data?.tradesOpened24h?.quant ?? 0)}</td>
+                        <td className="p-2 text-right text-green-600">{fmt(data?.tradesOpened24h?.pattern ?? 0)}</td>
+                        <td className="p-2 text-right text-green-600">{fmt(data?.tradesOpened24h?.total ?? 0)}</td>
                         <td className="p-2 text-xs text-muted-foreground">After all gates passed (Net EV + pre-open + dedupe). Sourced from vts_open_trades DB row count — scope differs from in-memory Strategy counters above.</td>
                       </tr>
                     </>
@@ -843,10 +850,10 @@ export function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagno
                           <td className="p-2 text-right text-xs text-orange-500">{fmt(ve.quantStrategyNulls + ((ve as any).patternStrategyNulls ?? 0))}</td>
                         </tr>
                         <tr className="bg-muted/30 font-semibold border-t-2 border-primary/20">
-                          <td className="p-2">Trades Opened <span className="text-[10px] text-muted-foreground">(post-gate)</span></td>
-                          <td className="p-2 text-right text-green-600">{fmt((ve as any).quantTradesOpened ?? 0)}</td>
-                          <td className="p-2 text-right text-green-600">{fmt((ve as any).patternTradesOpened ?? 0)}</td>
-                          <td className="p-2 text-right font-semibold text-green-600">{fmt(((ve as any).quantTradesOpened ?? 0) + ((ve as any).patternTradesOpened ?? 0))}</td>
+                          <td className="p-2">Trades Opened <span className="text-[10px] text-muted-foreground">(post-gate; DB-backed 24h)</span></td>
+                          <td className="p-2 text-right text-green-600">{fmt(data?.tradesOpened24h?.quant ?? 0)}</td>
+                          <td className="p-2 text-right text-green-600">{fmt(data?.tradesOpened24h?.pattern ?? 0)}</td>
+                          <td className="p-2 text-right font-semibold text-green-600">{fmt(data?.tradesOpened24h?.total ?? 0)}</td>
                         </tr>
                       </>
                     );
@@ -954,9 +961,9 @@ export function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagno
                       </tr>
                       <tr className="bg-muted/30 font-semibold">
                         <td className="p-2">Trades Opened <span className="text-xs text-muted-foreground">(DB-backed, 24h rolling — scope differs from in-memory rows above)</span></td>
-                        <td className="p-2 text-right text-green-600">{fmt((ve as any).quantTradesOpened ?? 0)}</td>
-                        <td className="p-2 text-right text-green-600">{fmt((ve as any).patternTradesOpened ?? 0)}</td>
-                        <td className="p-2 text-right font-semibold text-green-600">{fmt(((ve as any).quantTradesOpened ?? 0) + ((ve as any).patternTradesOpened ?? 0))}</td>
+                        <td className="p-2 text-right text-green-600">{fmt(data?.tradesOpened24h?.quant ?? 0)}</td>
+                        <td className="p-2 text-right text-green-600">{fmt(data?.tradesOpened24h?.pattern ?? 0)}</td>
+                        <td className="p-2 text-right font-semibold text-green-600">{fmt(data?.tradesOpened24h?.total ?? 0)}</td>
                       </tr>
                     </tbody>
                   </table>

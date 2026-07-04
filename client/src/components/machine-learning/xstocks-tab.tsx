@@ -167,9 +167,20 @@ function ScannerCycleHeader({ data, isLoading }: { data: XstocksFilterDiagnostic
             <Stat label="Pairs Scanned (~)" value={s.rolling24hApproxPairsScanned.toLocaleString()} />
           </div>
         </div>
+        {/* P19-B8.1 (defect d2): lastError is now an ACTIVE alarm (cleared on
+            the next healthy cycle server-side); the subdued history line keeps
+            flapping errors visible after they clear. */}
         {s.lastError && (
           <div className="mt-4 p-3 border border-destructive/50 bg-destructive/5 rounded text-sm">
             <span className="font-semibold text-destructive">Last Error:</span> {s.lastError}
+            {(s as any).lastErrorAt && (
+              <span className="text-xs text-muted-foreground ml-2">at {new Date((s as any).lastErrorAt).toLocaleString()}</span>
+            )}
+          </div>
+        )}
+        {!s.lastError && ((s as any).errorCount ?? 0) > 0 && (
+          <div className="mt-4 text-xs text-muted-foreground">
+            No active errors. Last error {(s as any).lastErrorAt ? `at ${new Date((s as any).lastErrorAt).toLocaleString()}` : 'time unknown'} · {(s as any).errorCount} total this process.
           </div>
         )}
       </CardContent>
