@@ -41,7 +41,8 @@ import { Badge } from "@/components/ui/badge";
 import { Activity, Wifi, WifiOff, AlertCircle } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { format } from "date-fns";
-import { FilterDiagnosticsPanel, type FilterDiagnosticsData } from "@/pages/machine-learning";
+// P19-B8.1 (C1): panel + type now live in the extracted VTS component (was @/pages/machine-learning).
+import { FilterDiagnosticsPanel, type FilterDiagnosticsData } from "@/components/vts/vts-filter-diagnostics-panel";
 import { FactorCalibrationSection, ExitStrategyAblationSection } from "@/pages/analytics";
 
 // ---------------------------------------------------------------------------

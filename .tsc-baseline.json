@@ -55,7 +55,7 @@
    }
   },
   {
-   "path": "client/src/pages/machine-learning.tsx",
+   "path": "client/src/components/vts/vts-filter-diagnostics-panel.tsx",
    "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
    "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
    "errors": {

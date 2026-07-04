@@ -1,0 +1,1347 @@
+// P19-B8.1 (C1): FilterDiagnosticsPanel extracted verbatim from client/src/pages/machine-learning.tsx
+// (pure extraction, zero behavior change).
+import React from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { RefreshCw } from "lucide-react";
+import type { FilterDiagnosticsData } from "./vts-shared";
+
+// Batch 19H: Filter Pipeline Diagnostics Panel
+// B79.0i.a: exported so xstocks-tab can re-render same panel with xstock-scoped data
+export type { FilterDiagnosticsData };
+export function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsData | undefined; isLoading: boolean }) {
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <RefreshCw className="w-6 h-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!data || !data.ok) {
+    return (
+      <div className="text-center py-8 text-muted-foreground">
+        No diagnostics data available. Waiting for first FX5 scan cycle...
+      </div>
+    );
+  }
+
+  const { lastScan, rolling24h } = data;
+
+  const formatFilterName = (key: string): string => {
+    const names: Record<string, string> = {
+      failed_min_volume: 'Min Volume',
+      // B.2.UI (2026-06-02): order-book depth gate (xStock min_depth_usd two-way)
+      failed_min_depth: 'Min Depth',
+      failed_spread: 'Max Spread',
+      failed_daily_range: 'Daily Range',
+      failed_min_price: 'Min Price',
+      failed_max_price: 'Max Price',
+      failed_stablecoin: 'Stablecoin',
+      failed_quote_currency: 'Quote Currency',
+      failed_history: 'Min History',
+      failed_market_cap: 'Market Cap',
+      failed_guardrail_risk: 'Guardrail Risk',
+      failed_correlation: 'Correlation',
+      already_active: 'Already Active',
+      passed_all_filters: 'Passed All',
+      // reorg-B2.2 OBJ-B: the GuardDropReason enum values (no raw enum key leaks to the UI).
+      rr_below_min: 'Reward-vs-Risk',
+      unreachable: 'Unreachable',
+      stop_distance: 'Stop Distance',
+      invalid_atr: 'Invalid ATR',
+    };
+    return names[key] || key;
+  };
+
+  const getRejectionColor = (count: number, total: number): string => {
+    if (total === 0) return '';
+    const pct = count / total;
+    if (pct > 0.5) return 'text-red-500 font-semibold';
+    if (pct > 0.2) return 'text-orange-500';
+    if (pct > 0) return 'text-yellow-600';
+    return 'text-green-600';
+  };
+
+  // Batch 19I: Format numbers with comma separators
+  const fmt = (n: number | undefined | null): string => {
+    if (n === undefined || n === null) return '—';
+    return n.toLocaleString();
+  };
+
+  return (
+    <div className="space-y-4 max-w-4xl">
+      {/* Batch 42: Pipeline Summary Table — 24h aggregated */}
+      <Card>
+        <CardHeader className="py-3">
+          <CardTitle className="text-lg">Pipeline Summary (24h)
+            {rolling24h && <span className="text-xs font-normal text-muted-foreground ml-2">{fmt(rolling24h.totalScans)} scans · {fmt(rolling24h.totalPairsScanned)} pair evaluations · {fmt(rolling24h.uniquePairsScanned)} unique</span>}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          {rolling24h && rolling24h.totalScans > 0 ? (() => {
+            const r24 = rolling24h.aggregated;
+            const quantGlobalPassed = (r24.quant.global as Record<string, number>)['passed_all_filters'] ?? 0;
+            const patternGlobalPassed = r24.pattern.global
+              ? ((r24.pattern.global as Record<string, number>)['passed_all_filters'] ?? 0)
+              : null;
+            const pct = (n: number, d: number) => d > 0 ? ` (${Math.round(n / d * 100)}%)` : '';
+            const universe = rolling24h.totalPairsScanned;
+            const familySurvivorsTotal = r24.familyPaths
+              ? ['trend', 'reversal', 'breakout', 'oscillator', 'strong_trend'].reduce((sum, f) => sum + (r24.familyPaths?.[f]?.survivors ?? 0), 0)
+              : 0;
+            const ve = data?.vtsEvaluation;
+            return (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b bg-muted/50">
+                    <th className="text-left p-2 font-medium">Stage</th>
+                    <th className="text-right p-2 font-medium">Quant</th>
+                    <th className="text-right p-2 font-medium">Pattern</th>
+                    <th className="text-right p-2 font-medium">Total</th>
+                    <th className="text-left p-2 font-medium text-muted-foreground text-xs">Counting Basis</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="border-b hover:bg-muted/30">
+                    <td className="p-2 font-medium">Universe Scanned</td>
+                    <td className="p-2 text-right">{fmt(universe)}</td>
+                    <td className="p-2 text-right">{fmt(universe)}</td>
+                    <td className="p-2 text-right text-muted-foreground">—</td>
+                    <td className="p-2 text-xs text-muted-foreground">Same universe enters both paths</td>
+                  </tr>
+                  <tr className="border-b hover:bg-muted/30">
+                    <td className="p-2 font-medium">Global Filters Passed</td>
+                    <td className="p-2 text-right text-blue-500">
+                      {fmt(quantGlobalPassed)}<span className="text-xs text-muted-foreground">{pct(quantGlobalPassed, universe)}</span>
+                    </td>
+                    <td className="p-2 text-right text-blue-500">
+                      {patternGlobalPassed !== null
+                        ? <>{fmt(patternGlobalPassed)}<span className="text-xs text-muted-foreground">{pct(patternGlobalPassed, universe)}</span></>
+                        : '—'}
+                    </td>
+                    <td className="p-2 text-right text-blue-500">
+                      {fmt(quantGlobalPassed + (patternGlobalPassed ?? 0))}
+                    </td>
+                    <td className="p-2 text-xs text-muted-foreground">vs. Universe (not deduped — pair can be in both)</td>
+                  </tr>
+                  <tr className="border-b hover:bg-muted/30">
+                    <td className="p-2 font-medium">Family IMF Passed <span className="text-[10px] text-muted-foreground">(family-qualified entries)</span></td>
+                    <td className="p-2 text-right text-orange-500">
+                      {fmt(r24.quant.imf.passed)}<span className="text-xs text-muted-foreground">{pct(r24.quant.imf.passed, quantGlobalPassed * 4)}</span>
+                    </td>
+                    <td className="p-2 text-right text-orange-500">
+                      {r24.pattern.imf
+                        ? <>{fmt(r24.pattern.imf.passed)}<span className="text-xs text-muted-foreground">{pct(r24.pattern.imf.passed, patternGlobalPassed ?? 0)}</span></>
+                        : '—'}
+                    </td>
+                    <td className="p-2 text-right text-orange-500">
+                      {fmt(r24.quant.imf.passed + (r24.pattern.imf?.passed ?? 0))}
+                    </td>
+                    <td className="p-2 text-xs text-muted-foreground">Quant: sum across 4 families (fan-out). Pattern: passed pattern IMF.</td>
+                  </tr>
+                  {r24.familyPaths && (
+                    <tr className="border-b hover:bg-muted/30">
+                      <td className="p-2 pl-6 text-xs text-muted-foreground">↳ Per-Family Breakdown</td>
+                      <td className="p-2 text-right text-xs text-orange-400">
+                        {['trend', 'reversal', 'breakout', 'oscillator', 'strong_trend'].map(f =>
+                          `${f[0].toUpperCase()}:${fmt(r24.familyPaths?.[f]?.survivors ?? 0)}`
+                        ).join(' ')}
+                      </td>
+                      <td className="p-2 text-right text-muted-foreground">—</td>
+                      <td className="p-2 text-right text-muted-foreground">—</td>
+                      <td className="p-2 text-xs text-muted-foreground">Each pair counted once per family it passes</td>
+                    </tr>
+                  )}
+                  <tr className="border-b hover:bg-muted/30">
+                    <td className="p-2 pl-6 text-xs text-muted-foreground">↳ LQ / VN / DI rejections <span className="text-[10px] italic">(aggregate across families)</span></td>
+                    <td className="p-2 text-right text-xs text-muted-foreground">
+                      {fmt(r24.quant.imf.failedLQ)} / {fmt(r24.quant.imf.failedVN)} / {fmt(r24.quant.imf.failedDI ?? 0)}
+                    </td>
+                    <td className="p-2 text-right text-xs text-muted-foreground">
+                      {r24.pattern.imf
+                        ? `${fmt(r24.pattern.imf.failedLQ)} / ${fmt(r24.pattern.imf.failedVN)} / ${fmt(r24.pattern.imf.failedDI)}`
+                        : '—'}
+                    </td>
+                    <td className="p-2 text-right text-xs text-muted-foreground">—</td>
+                    <td className="p-2 text-xs text-muted-foreground">Sum of 4 family rejection counts</td>
+                  </tr>
+                  {/* Batch 48: Family-Qualified Unique — the true unique pair count after family IMF */}
+                  <tr className="border-b hover:bg-muted/30">
+                    <td className="p-2 font-medium">Family-Qualified (Unique Pairs)</td>
+                    <td className="p-2 text-right text-teal-600">
+                      {fmt((rolling24h as any).totalFamilyQualifiedUnique ?? 0)}
+                    </td>
+                    <td className="p-2 text-right text-muted-foreground">—</td>
+                    <td className="p-2 text-right text-teal-600">
+                      {fmt((rolling24h as any).totalFamilyQualifiedUnique ?? 0)}
+                    </td>
+                    <td className="p-2 text-xs text-muted-foreground">Unique pairs passing ≥1 family IMF (before fan-out expansion)</td>
+                  </tr>
+                  <tr className="border-b hover:bg-muted/30">
+                    <td className="p-2 font-medium">Family Fan-Out (IMF Survivors)</td>
+                    <td className="p-2 text-right text-orange-500">{fmt(r24.quant.survivors)}</td>
+                    <td className="p-2 text-right text-orange-500">{fmt(r24.pattern.survivors)}</td>
+                    <td className="p-2 text-right text-orange-500">{fmt(r24.quant.survivors + r24.pattern.survivors)}</td>
+                    <td className="p-2 text-xs text-muted-foreground">1 pair × N families = N entries (expansion for per-family evaluation)</td>
+                  </tr>
+                  {/* Batch 52: Pipeline flow — survivors → benchmarks removed → VTS destination */}
+                  <tr className="border-b hover:bg-muted/30">
+                    <td className="p-2 pl-6 text-xs text-muted-foreground">↳ Benchmarks Removed</td>
+                    <td className="p-2 text-right text-xs text-red-400">{fmt(r24.quant.imf.benchmarkBypassed ?? 0)}</td>
+                    <td className="p-2 text-right text-xs text-red-400">{fmt(r24.pattern.imf?.benchmarkBypassed ?? 0)}</td>
+                    <td className="p-2 text-right text-xs text-red-400">{fmt((r24.quant.imf.benchmarkBypassed ?? 0) + (r24.pattern.imf?.benchmarkBypassed ?? 0))}</td>
+                    <td className="p-2 text-xs text-muted-foreground">Benchmark pairs excluded before VTS (cumulative 24h)</td>
+                  </tr>
+                  <tr className="bg-green-500/10 font-semibold border-t-2 border-green-500/30">
+                    <td className="p-2">→ VTS Destination <span className="text-[10px] text-muted-foreground">(post-benchmark)</span></td>
+                    <td className="p-2 text-right text-green-700">{fmt(r24.quant.survivors - (r24.quant.imf.benchmarkBypassed ?? 0))}</td>
+                    <td className="p-2 text-right text-green-700">{fmt(r24.pattern.survivors - (r24.pattern.imf?.benchmarkBypassed ?? 0))}</td>
+                    <td className="p-2 text-right text-green-700 font-bold">{fmt((r24.quant.survivors - (r24.quant.imf.benchmarkBypassed ?? 0)) + (r24.pattern.survivors - (r24.pattern.imf?.benchmarkBypassed ?? 0)))}</td>
+                    <td className="p-2 text-xs text-muted-foreground">Survivors minus benchmarks (cumulative 24h)</td>
+                  </tr>
+                  {ve && (
+                    <>
+                      <tr className="bg-muted/50 border-y">
+                        <td colSpan={5} className="p-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">VTS Evaluation Metrics <span className="font-normal">(VTS-side counters — pairs processed after cooldown/skip filters)</span></td>
+                      </tr>
+                      {/* B-NEW-19 (Kyle directive 2026-05-13): re-ordered pipeline math so it
+                          flows subtractively. Order is now:
+                            Pair-Pool Evaluations (= VTS Destination = IMF Survivors, lane fan-out)
+                              ↓ × strategies-in-regime-pool (asset-class-enabled)
+                            Possible Strategy Iterations  (= Pre-Eval Skips + Strategy Evaluations)
+                              − Pre-Eval Skips            (family-mismatch / duplicate / max-open /
+                                                          regime-no-strats — strategy iterations
+                                                          that didn't run detect())
+                              = Strategy Evaluations
+                                  − Strategy Nulls
+                                  = Signals Generated
+                          Pre-Eval Skips render WITHOUT leading minus signs per Kyle 2026-05-13. */}
+                      <tr className="border-b hover:bg-muted/30 bg-blue-500/5">
+                        <td className="p-2 font-medium">Pair-Pool Evaluations</td>
+                        <td className="p-2 text-right">{fmt((ve as any).quantPairPoolEvaluations ?? 0)}</td>
+                        <td className="p-2 text-right">{fmt((ve as any).patternPairPoolEvaluations ?? 0)}</td>
+                        <td className="p-2 text-right font-semibold">{fmt(((ve as any).quantPairPoolEvaluations ?? 0) + ((ve as any).patternPairPoolEvaluations ?? 0))}</td>
+                        <td className="p-2 text-xs text-muted-foreground">Same as VTS Destination — lane fan-out count (a pair passing N families produces N entries here). 24h cumulative.</td>
+                      </tr>
+                      {(() => {
+                        const nr2 = (ve.nullReasons ?? {}) as any;
+                        const qDetail = ((ve as any).quantNullReasonDetail ?? {}) as Record<string, number>;
+                        const pDetail = ((ve as any).patternNullReasonDetail ?? {}) as Record<string, number>;
+                        const noPriceSkip = (ve as any).pairsSkippedNoPrice ?? 0;
+                        const ohlcSkip = (ve as any).pairsSkippedInsufficientOHLC ?? 0;
+                        const familyMismatch = nr2.familyFilterMismatch ?? 0;
+                        const dupPos = nr2.duplicatePosition ?? 0;
+                        const maxOpen = nr2.maxOpenTrades ?? 0;
+                        const regimeNoStrat = nr2.regimeNoStrategies ?? 0;
+                        const qFamily = qDetail['family_filter_mismatch'] ?? 0;
+                        const pFamily = pDetail['family_filter_mismatch'] ?? 0;
+                        const qDup = qDetail['duplicate_position'] ?? 0;
+                        const pDup = pDetail['duplicate_position'] ?? 0;
+                        const qMaxOpen = qDetail['max_open_trades'] ?? 0;
+                        const pMaxOpen = pDetail['max_open_trades'] ?? 0;
+                        const qNoRegime = qDetail['regime_no_strategies'] ?? 0;
+                        const pNoRegime = pDetail['regime_no_strategies'] ?? 0;
+                        const quantSkips = qFamily + qDup + qMaxOpen + qNoRegime;
+                        const patternSkips = pFamily + pDup + pMaxOpen + pNoRegime;
+                        const totalSkips24h = noPriceSkip + ohlcSkip + familyMismatch + dupPos + maxOpen + regimeNoStrat;
+                        // B-NEW-19: Possible Strategy Iterations = Pre-Eval Skips + Strategy Evaluations
+                        const qEvals = (ve as any).quantStrategyEvaluations ?? 0;
+                        const pEvals = (ve as any).patternStrategyEvaluations ?? 0;
+                        const qPossible = quantSkips + qEvals;
+                        const pPossible = patternSkips + pEvals;
+                        const totalPossible = totalSkips24h + qEvals + pEvals;
+                        return (
+                          <>
+                            <tr className="border-b hover:bg-muted/30 bg-indigo-500/5">
+                              <td className="p-2 font-medium">Possible Strategy Iterations</td>
+                              <td className="p-2 text-right text-indigo-600">{fmt(qPossible)}</td>
+                              <td className="p-2 text-right text-indigo-600">{fmt(pPossible)}</td>
+                              <td className="p-2 text-right text-indigo-600 font-semibold">{fmt(totalPossible)}</td>
+                              <td className="p-2 text-xs text-muted-foreground">Each pair-lane entry iterates through every asset-class-enabled strategy in its regime's pool. = Pre-Eval Skips + Strategy Evaluations.</td>
+                            </tr>
+                            <tr className="border-b hover:bg-muted/30">
+                              <td className="p-2 pl-6 text-xs text-muted-foreground">↳ Pre-Evaluation Skips</td>
+                              <td className="p-2 text-right text-xs text-orange-500">{fmt(quantSkips)}</td>
+                              <td className="p-2 text-right text-xs text-orange-500">{fmt(patternSkips)}</td>
+                              <td className="p-2 text-right text-xs text-orange-500">{fmt(totalSkips24h)}</td>
+                              <td className="p-2 text-xs text-muted-foreground">Strategy iterations that didn't run detect(). noPrice={fmt(noPriceSkip)}, OHLC={fmt(ohlcSkip)}, familyMismatch={fmt(familyMismatch)}, duplicate={fmt(dupPos)}, maxOpen={fmt(maxOpen)}, regimeNoStrats={fmt(regimeNoStrat)}. Lane cols = per-lane split of family_mismatch+duplicate+maxOpen+regimeNoStrats; pair-level (noPrice/OHLC) fire pre-lane and are in Total only.</td>
+                            </tr>
+                          </>
+                        );
+                      })()}
+                      <tr className="border-b hover:bg-muted/30">
+                        <td className="p-2 font-medium">= Strategy Evaluations <span className="text-[10px] text-muted-foreground">(since process start)</span></td>
+                        <td className="p-2 text-right">{fmt((ve as any).quantStrategyEvaluations ?? 0)}</td>
+                        <td className="p-2 text-right">{fmt((ve as any).patternStrategyEvaluations ?? 0)}</td>
+                        <td className="p-2 text-right">{fmt(((ve as any).quantStrategyEvaluations ?? 0) + ((ve as any).patternStrategyEvaluations ?? 0))}</td>
+                        <td className="p-2 text-xs text-muted-foreground">Per-strategy per-pair detect() calls. Possible Strategy Iterations minus Pre-Eval Skips. In-memory counter, resets on PM2 restart.</td>
+                      </tr>
+                      <tr className="border-b hover:bg-muted/30">
+                        <td className="p-2 pl-6 text-xs text-muted-foreground">↳ Strategy Nulls <span className="text-[10px]">(since process start)</span></td>
+                        <td className="p-2 text-right text-xs text-red-400">{fmt((ve as any).quantStrategyNulls ?? 0)}</td>
+                        <td className="p-2 text-right text-xs text-red-400">{fmt((ve as any).patternStrategyNulls ?? 0)}</td>
+                        <td className="p-2 text-right text-xs text-red-400">{fmt(((ve as any).quantStrategyNulls ?? 0) + ((ve as any).patternStrategyNulls ?? 0))}</td>
+                        <td className="p-2 text-xs text-muted-foreground">In-memory counter, resets on PM2 restart.</td>
+                      </tr>
+                      <tr className="bg-muted/30 font-semibold border-t-2 border-primary/20">
+                        <td className="p-2">Trades Opened <span className="text-[10px] text-muted-foreground">(DB-backed, 24h rolling)</span></td>
+                        <td className="p-2 text-right text-green-600">{fmt((ve as any).quantTradesOpened ?? 0)}</td>
+                        <td className="p-2 text-right text-green-600">{fmt((ve as any).patternTradesOpened ?? 0)}</td>
+                        <td className="p-2 text-right text-green-600">{fmt(((ve as any).quantTradesOpened ?? 0) + ((ve as any).patternTradesOpened ?? 0))}</td>
+                        <td className="p-2 text-xs text-muted-foreground">After all gates passed (Net EV + pre-open + dedupe). Sourced from vts_open_trades DB row count — scope differs from in-memory Strategy counters above.</td>
+                      </tr>
+                    </>
+                  )}
+                </tbody>
+              </table>
+            );
+          })() : (
+            <div className="p-4 text-muted-foreground text-center">No 24h scan data accumulated yet</div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* reorg-B2.2 OBJ-B: Reward-vs-Risk / Reachability Gate (per strategy, this asset class).
+          The shared post-signal-build guard (RR + reachability + stop-distance + invalid-ATR) lives at
+          signal generation — its drops aren't part of the IMF/scan-phase filter breakdown above. Surfaced
+          here per class (Kyle's no-hidden-gates). Distinct "no evaluations" state ≠ a misleading 0%. */}
+      <Card>
+        <CardHeader className="py-3">
+          <CardTitle className="text-lg flex items-center justify-between">
+            <span>Reward-vs-Risk / Reachability Gate</span>
+            <span className="text-sm font-normal text-muted-foreground">
+              per strategy{data.trackerStartedAt ? ` · since ${new Date(data.trackerStartedAt).toLocaleString()}` : ''}
+            </span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          {(() => {
+            const gd = data.guardDrops;
+            const rows = gd ? Object.entries(gd) : [];
+            if (rows.length === 0) {
+              return (
+                <div className="p-4 text-muted-foreground text-center">
+                  No guard evaluations recorded for this asset class yet — the reward-vs-risk / reachability gate hasn't evaluated a signal here.
+                </div>
+              );
+            }
+            // Most-suppressed first (the #372 calibration read: which strategies the per-class minRR cuts).
+            rows.sort((a, b) => b[1].rrSuppressionRate - a[1].rrSuppressionRate);
+            return (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/50">
+                      <th className="text-left p-2 font-medium">Strategy</th>
+                      <th className="text-right p-2 font-medium">Evals</th>
+                      <th className="text-right p-2 font-medium">Passed</th>
+                      <th className="text-right p-2 font-medium">{formatFilterName('rr_below_min')}</th>
+                      <th className="text-right p-2 font-medium">{formatFilterName('unreachable')}</th>
+                      <th className="text-right p-2 font-medium">{formatFilterName('stop_distance')}</th>
+                      <th className="text-right p-2 font-medium">{formatFilterName('invalid_atr')}</th>
+                      <th className="text-right p-2 font-medium">Mean RR</th>
+                      <th className="text-right p-2 font-medium">RR Suppression</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map(([strategy, s]) => (
+                      <tr key={strategy} className="border-b hover:bg-muted/30">
+                        <td className="p-2 font-medium">{strategy}</td>
+                        <td className="p-2 text-right">{fmt(s.evals)}</td>
+                        <td className="p-2 text-right text-green-600">{fmt(s.passes)}</td>
+                        <td className={`p-2 text-right ${getRejectionColor(s.rrDrops, s.evals)}`}>{fmt(s.rrDrops)}</td>
+                        <td className={`p-2 text-right ${getRejectionColor(s.reachDrops, s.evals)}`}>{fmt(s.reachDrops)}</td>
+                        <td className="p-2 text-right text-muted-foreground">{fmt(s.stopDrops)}</td>
+                        <td className="p-2 text-right text-muted-foreground">{fmt(s.atrDrops)}</td>
+                        <td className="p-2 text-right">{s.rrEvals > 0 ? s.meanRR.toFixed(2) : '—'}</td>
+                        <td className={`p-2 text-right ${getRejectionColor(s.rrDrops, s.evals)}`}>
+                          {s.evals > 0 ? `${(s.rrSuppressionRate * 100).toFixed(1)}%` : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })()}
+        </CardContent>
+      </Card>
+
+      {/* TABLE 1: Last Scan Stats */}
+      <Card>
+        <CardHeader className="py-3">
+          <CardTitle className="text-lg flex items-center justify-between">
+            <span>Last Scan — Filter Breakdown</span>
+            <span className="text-sm font-normal text-muted-foreground">
+              {lastScan ? `${new Date(lastScan.timestamp).toLocaleTimeString()} · ${lastScan.mode} · ${lastScan.totalPairsScanned} pairs scanned` : 'No scan data'}
+            </span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          {lastScan ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b bg-muted/50">
+                    <th className="text-left p-2 font-medium">Filter</th>
+                    <th className="text-right p-2 font-medium">Quant Global</th>
+                    <th className="text-right p-2 font-medium">Pattern Global</th>
+                    <th className="text-right p-2 font-medium">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(lastScan.quant.global)
+                    // B-NEW-7 (2026-05-12): `applicable` is an object holding
+                    // N/A flags for the panel — not a numeric counter. Skip
+                    // here so it doesn't render as "[object Object]".
+                    .filter(([key, value]) => typeof value === 'number')
+                    .map(([key, value]) => (
+                    <tr key={key} className="border-b hover:bg-muted/30">
+                      <td className="p-2">{formatFilterName(key)}</td>
+                      <td className={`p-2 text-right ${key === 'passed_all_filters' ? 'text-green-600 font-semibold' : getRejectionColor(value as number, lastScan.totalPairsScanned)}`}>
+                        {fmt(value as number)}
+                      </td>
+                      <td className={`p-2 text-right ${lastScan.pattern.global && key in lastScan.pattern.global ? (key === 'passed_all_filters' ? 'text-green-600 font-semibold' : getRejectionColor((lastScan.pattern.global as Record<string, number>)[key] || 0, lastScan.totalPairsScanned)) : 'text-muted-foreground'}`}>
+                        {lastScan.pattern.global && key in (lastScan.pattern.global as Record<string, number>)
+                          ? fmt((lastScan.pattern.global as Record<string, number>)[key])
+                          : '—'}
+                      </td>
+                      <td className={`p-2 text-right ${key === 'passed_all_filters' ? 'text-green-600 font-semibold' : ''}`}>
+                        {lastScan.pattern.global && key in (lastScan.pattern.global as Record<string, number>)
+                          ? fmt((value as number) + ((lastScan.pattern.global as Record<string, number>)[key] || 0))
+                          : fmt(value as number)}
+                      </td>
+                    </tr>
+                  ))}
+                  {/* IMF Section Header */}
+                  <tr className="border-b bg-muted/50">
+                    <td colSpan={4} className="p-2 font-medium text-xs uppercase tracking-wider">Family IMF Metrics (aggregate across 4 families)</td>
+                  </tr>
+                  <tr className="border-b hover:bg-muted/30">
+                    <td className="p-2">Failed LQ</td>
+                    <td className={`p-2 text-right ${getRejectionColor(lastScan.quant.imf.failedLQ, lastScan.quant.imf.total)}`}>{fmt(lastScan.quant.imf.failedLQ)}</td>
+                    <td className={`p-2 text-right ${lastScan.pattern.imf ? getRejectionColor(lastScan.pattern.imf.failedLQ, lastScan.pattern.imf.total) : 'text-muted-foreground'}`}>
+                      {lastScan.pattern.imf ? fmt(lastScan.pattern.imf.failedLQ) : '—'}
+                    </td>
+                    <td className="p-2 text-right">{fmt(lastScan.quant.imf.failedLQ + (lastScan.pattern.imf?.failedLQ ?? 0))}</td>
+                  </tr>
+                  <tr className="border-b hover:bg-muted/30">
+                    <td className="p-2">Failed VN</td>
+                    <td className={`p-2 text-right ${getRejectionColor(lastScan.quant.imf.failedVN, lastScan.quant.imf.total)}`}>{fmt(lastScan.quant.imf.failedVN)}</td>
+                    <td className={`p-2 text-right ${lastScan.pattern.imf ? getRejectionColor(lastScan.pattern.imf.failedVN, lastScan.pattern.imf.total) : 'text-muted-foreground'}`}>
+                      {lastScan.pattern.imf ? fmt(lastScan.pattern.imf.failedVN) : '—'}
+                    </td>
+                    <td className="p-2 text-right">{fmt(lastScan.quant.imf.failedVN + (lastScan.pattern.imf?.failedVN ?? 0))}</td>
+                  </tr>
+                  <tr className="border-b hover:bg-muted/30">
+                    <td className="p-2">Failed DI</td>
+                    <td className={`p-2 text-right ${getRejectionColor(lastScan.quant.imf.failedDI ?? 0, lastScan.quant.imf.total)}`}>
+                      {fmt(lastScan.quant.imf.failedDI ?? 0)}
+                    </td>
+                    <td className={`p-2 text-right ${lastScan.pattern.imf ? getRejectionColor(lastScan.pattern.imf.failedDI, lastScan.pattern.imf.total) : 'text-muted-foreground'}`}>
+                      {lastScan.pattern.imf ? fmt(lastScan.pattern.imf.failedDI) : '—'}
+                    </td>
+                    <td className="p-2 text-right">{fmt((lastScan.quant.imf.failedDI ?? 0) + (lastScan.pattern.imf?.failedDI ?? 0))}</td>
+                  </tr>
+                  <tr className="border-b hover:bg-muted/30 font-semibold">
+                    <td className="p-2">Family IMF Passed (fan-out total)</td>
+                    <td className="p-2 text-right text-green-600">{fmt(lastScan.quant.imf.passed)}</td>
+                    <td className="p-2 text-right text-green-600">{lastScan.pattern.imf ? fmt(lastScan.pattern.imf.passed) : '—'}</td>
+                    <td className="p-2 text-right text-green-600">{fmt(lastScan.quant.imf.passed + (lastScan.pattern.imf?.passed ?? 0))}</td>
+                  </tr>
+                  {/* Batch 22: Family Path IMF Results */}
+                  {data?.lastScan?.familyPaths && (
+                    <>
+                      <tr className="bg-muted/30">
+                        <td colSpan={4} className="p-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                          Family Path IMF Breakdown (per-family detail)
+                        </td>
+                      </tr>
+                      {['trend', 'reversal', 'breakout', 'oscillator', 'strong_trend'].map(family => {
+                        const fp = (data.lastScan as any)?.familyPaths?.[family];
+                        if (!fp) return null;
+                        const familyLabel: Record<string, string> = { trend: 'Trend Family', reversal: 'Reversal Family', breakout: 'Breakout Family', oscillator: 'Oscillator Family' };
+                        return (
+                          <tr key={family} className="border-b hover:bg-muted/30">
+                            <td className="p-2 font-medium">{familyLabel[family] ?? family}</td>
+                            <td className="p-2 text-right">
+                              <span className="text-green-600">{fp.survivors}</span>
+                              <span className="text-muted-foreground text-xs ml-1">
+                                / {fp.imf?.total ?? 0}
+                              </span>
+                            </td>
+                            <td className="p-2 text-right text-xs text-muted-foreground">
+                              LQ:{fp.imf?.failedLQ ?? 0} VN:{fp.imf?.failedVN ?? 0} DI:{fp.imf?.failedDI ?? 0}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </>
+                  )}
+                  {/* Batch 52: Pipeline flow — survivors → benchmarks removed → VTS destination (moved below family breakdown per Kyle/Langston) */}
+                  <tr className="bg-muted/30 font-semibold">
+                    <td className="p-2">IMF Survivors (incl. benchmarks)</td>
+                    <td className="p-2 text-right text-green-600">{fmt(lastScan.quant.survivors)}</td>
+                    <td className="p-2 text-right text-green-600">{fmt(lastScan.pattern.survivors)}</td>
+                    <td className="p-2 text-right text-green-600">{fmt(lastScan.quant.survivors + lastScan.pattern.survivors)}</td>
+                  </tr>
+                  <tr className="border-b hover:bg-muted/30">
+                    <td className="p-2 pl-6 text-xs text-muted-foreground">↳ Benchmarks Removed</td>
+                    <td className="p-2 text-right text-xs text-red-400">{fmt(lastScan.quant.imf.benchmarkBypassed)}</td>
+                    <td className="p-2 text-right text-xs text-red-400">{lastScan.pattern.imf ? fmt(lastScan.pattern.imf.benchmarkBypassed) : '—'}</td>
+                    <td className="p-2 text-right text-xs text-red-400">{fmt(lastScan.quant.imf.benchmarkBypassed + (lastScan.pattern.imf?.benchmarkBypassed ?? 0))}</td>
+                  </tr>
+                  <tr className="bg-green-500/10 font-semibold border-t-2 border-green-500/30">
+                    <td className="p-2">→ VTS Destination <span className="text-[10px] text-muted-foreground">(post-benchmark)</span></td>
+                    <td className="p-2 text-right text-green-700">{fmt(lastScan.quant.survivors - lastScan.quant.imf.benchmarkBypassed)}</td>
+                    <td className="p-2 text-right text-green-700">{fmt(lastScan.pattern.survivors - (lastScan.pattern.imf?.benchmarkBypassed ?? 0))}</td>
+                    <td className="p-2 text-right text-green-700 font-bold text-base">{fmt((lastScan.quant.survivors - lastScan.quant.imf.benchmarkBypassed) + (lastScan.pattern.survivors - (lastScan.pattern.imf?.benchmarkBypassed ?? 0)))}</td>
+                  </tr>
+                  {/* Batch 51 HF2: Restored VTS Signal Funnel in Last Scan with last-cycle data (Kyle directive)
+                      B-NEW-19 (Kyle 2026-05-13): Restructured to match Pipeline Summary 24h order —
+                      Pair-Pool Evals first, then Possible Strategy Iterations, then per-lane Pre-Eval
+                      Skip breakdown, then Strategy Evaluations. Per-lane Quant/Pattern split wired
+                      using lc.quantNullReasonDetail / patternNullReasonDetail emitted by routes.ts
+                      (xstock) and vts-runner snapshot (crypto). No leading minus signs. */}
+                  {data?.lastCycleVtsEval && (() => {
+                    const lc = data.lastCycleVtsEval;
+                    const totalEvals = lc.totalStrategyEvaluations || 0;
+                    const totalNulls = (lc.quantStrategyNulls || 0) + (lc.patternStrategyNulls || 0);
+                    const signals = lc.signalsGenerated || 0;
+                    const rejected = lc.signalsRejected || 0;
+                    const trades = signals - rejected;
+                    const qDetail = ((lc as any).quantNullReasonDetail ?? {}) as Record<string, number>;
+                    const pDetail = ((lc as any).patternNullReasonDetail ?? {}) as Record<string, number>;
+                    const skippedNoPrice = lc.pairsSkippedNoPrice || 0;
+                    const skippedOHLC = lc.pairsSkippedInsufficientOHLC || 0;
+                    const skippedMaxTrades = (lc.nullReasons as any)?.maxOpenTrades || (lc.nullReasonDetail as any)?.['max_open_trades'] || 0;
+                    const skippedNoRegime = (lc.nullReasons as any)?.regimeNoStrategies || (lc.nullReasonDetail as any)?.['regime_no_strategies'] || 0;
+                    const skippedDuplicate = (lc.nullReasons as any)?.duplicatePosition || (lc.nullReasonDetail as any)?.['duplicate_position'] || 0;
+                    const skippedFamilyMismatch = (lc.nullReasons as any)?.familyFilterMismatch || (lc.nullReasonDetail as any)?.['family_filter_mismatch'] || 0;
+                    const totalPreEvalSkips = skippedNoPrice + skippedOHLC + skippedMaxTrades + skippedNoRegime + skippedDuplicate + skippedFamilyMismatch;
+                    // Per-lane split (lane-level reasons only; pair-level noPrice/OHLC go to Total).
+                    const qFamily = qDetail['family_filter_mismatch'] ?? 0;
+                    const pFamily = pDetail['family_filter_mismatch'] ?? 0;
+                    const qDup = qDetail['duplicate_position'] ?? 0;
+                    const pDup = pDetail['duplicate_position'] ?? 0;
+                    const qMaxOpen = qDetail['max_open_trades'] ?? 0;
+                    const pMaxOpen = pDetail['max_open_trades'] ?? 0;
+                    const qNoRegime = qDetail['regime_no_strategies'] ?? 0;
+                    const pNoRegime = pDetail['regime_no_strategies'] ?? 0;
+                    const quantSkips = qFamily + qDup + qMaxOpen + qNoRegime;
+                    const patternSkips = pFamily + pDup + pMaxOpen + pNoRegime;
+                    // Possible Strategy Iterations = Pre-Eval Skips + Strategy Evaluations
+                    const qPairPool = (lc.quantPairPoolEvaluations ?? lc.quantPairsEvaluated) || 0;
+                    const pPairPool = (lc.patternPairPoolEvaluations ?? lc.patternPairsEvaluated) || 0;
+                    const qEvals = lc.quantStrategyEvaluations || 0;
+                    const pEvals = lc.patternStrategyEvaluations || 0;
+                    const qPossible = quantSkips + qEvals;
+                    const pPossible = patternSkips + pEvals;
+                    const totalPossible = totalPreEvalSkips + totalEvals;
+                    return (
+                      <>
+                        <tr className="border-b bg-blue-500/5"><td colSpan={4} className="p-2 font-medium text-xs text-blue-600">VTS Signal Funnel (Last Cycle)</td></tr>
+                        <tr className="border-b hover:bg-muted/30 bg-blue-500/5">
+                          <td className="p-2 pl-4 font-medium">Pair-Pool Evaluations</td>
+                          <td className="p-2 text-right">{fmt(qPairPool)}</td>
+                          <td className="p-2 text-right">{fmt(pPairPool)}</td>
+                          <td className="p-2 text-right font-semibold">{fmt(qPairPool + pPairPool)}</td>
+                        </tr>
+                        <tr className="border-b hover:bg-muted/30 bg-indigo-500/5">
+                          <td className="p-2 pl-4 font-medium">Possible Strategy Iterations</td>
+                          <td className="p-2 text-right text-indigo-600">{fmt(qPossible)}</td>
+                          <td className="p-2 text-right text-indigo-600">{fmt(pPossible)}</td>
+                          <td className="p-2 text-right text-indigo-600 font-semibold">{fmt(totalPossible)}</td>
+                        </tr>
+                        <tr className="border-b hover:bg-muted/30">
+                          <td className="p-2 pl-6 text-xs text-muted-foreground">↳ Pre-Evaluation Skips</td>
+                          <td className="p-2 text-right text-xs text-orange-500">{fmt(quantSkips)}</td>
+                          <td className="p-2 text-right text-xs text-orange-500">{fmt(patternSkips)}</td>
+                          <td className="p-2 text-right text-xs text-orange-500">{fmt(totalPreEvalSkips)}</td>
+                        </tr>
+                        <tr className="border-b hover:bg-muted/30">
+                          <td className="p-2 pl-8 text-xs text-muted-foreground">↳ No Price Data</td>
+                          <td colSpan={2}></td>
+                          <td className="p-2 text-right text-xs text-orange-400">{fmt(skippedNoPrice)}</td>
+                        </tr>
+                        <tr className="border-b hover:bg-muted/30">
+                          <td className="p-2 pl-8 text-xs text-muted-foreground">↳ Insufficient OHLC</td>
+                          <td colSpan={2}></td>
+                          <td className="p-2 text-right text-xs text-orange-400">{fmt(skippedOHLC)}</td>
+                        </tr>
+                        <tr className="border-b hover:bg-muted/30">
+                          <td className="p-2 pl-8 text-xs text-muted-foreground">↳ Family Filter Mismatch</td>
+                          <td className="p-2 text-right text-xs text-orange-400">{fmt(qFamily)}</td>
+                          <td className="p-2 text-right text-xs text-orange-400">{fmt(pFamily)}</td>
+                          <td className="p-2 text-right text-xs text-orange-400">{fmt(skippedFamilyMismatch)}</td>
+                        </tr>
+                        <tr className="border-b hover:bg-muted/30">
+                          <td className="p-2 pl-8 text-xs text-muted-foreground">↳ Duplicate Position</td>
+                          <td className="p-2 text-right text-xs text-orange-400">{fmt(qDup)}</td>
+                          <td className="p-2 text-right text-xs text-orange-400">{fmt(pDup)}</td>
+                          <td className="p-2 text-right text-xs text-orange-400">{fmt(skippedDuplicate)}</td>
+                        </tr>
+                        <tr className="border-b hover:bg-muted/30">
+                          <td className="p-2 pl-8 text-xs text-muted-foreground">↳ Max Open Trades</td>
+                          <td className="p-2 text-right text-xs text-orange-400">{fmt(qMaxOpen)}</td>
+                          <td className="p-2 text-right text-xs text-orange-400">{fmt(pMaxOpen)}</td>
+                          <td className="p-2 text-right text-xs text-orange-400">{fmt(skippedMaxTrades)}</td>
+                        </tr>
+                        <tr className="border-b hover:bg-muted/30">
+                          <td className="p-2 pl-8 text-xs text-muted-foreground">↳ Regime Has No Strategies</td>
+                          <td className="p-2 text-right text-xs text-orange-400">{fmt(qNoRegime)}</td>
+                          <td className="p-2 text-right text-xs text-orange-400">{fmt(pNoRegime)}</td>
+                          <td className="p-2 text-right text-xs text-orange-400">{fmt(skippedNoRegime)}</td>
+                        </tr>
+                        <tr className="border-b hover:bg-muted/30">
+                          <td className="p-2 pl-4">= Strategy Evaluations</td>
+                          <td className="p-2 text-right">{fmt(qEvals)}</td>
+                          <td className="p-2 text-right">{fmt(pEvals)}</td>
+                          <td className="p-2 text-right">{fmt(totalEvals)}</td>
+                        </tr>
+                        <tr className="border-b hover:bg-muted/30">
+                          <td className="p-2 pl-4">Strategy Nulls (no setup)</td>
+                          <td className="p-2 text-right text-amber-500">{fmt(lc.quantStrategyNulls || 0)}</td>
+                          <td className="p-2 text-right text-amber-500">{fmt(lc.patternStrategyNulls || 0)}</td>
+                          <td className="p-2 text-right text-amber-500">{fmt(totalNulls)}</td>
+                        </tr>
+                        <tr className="border-b hover:bg-muted/30">
+                          <td className="p-2 pl-4">Signals Produced</td>
+                          <td className="p-2 text-right text-green-600">{fmt(lc.quantSignalsGenerated || 0)}</td>
+                          <td className="p-2 text-right text-green-600">{fmt(lc.patternSignalsGenerated || 0)}</td>
+                          <td className="p-2 text-right text-green-600">{fmt(signals)}</td>
+                        </tr>
+                        <tr className="border-b hover:bg-muted/30">
+                          <td className="p-2 pl-4">Post-Signal Rejections</td>
+                          <td className="p-2 text-right text-red-500">{fmt(lc.quantSignalsRejected || 0)}</td>
+                          <td className="p-2 text-right text-red-500">{fmt(lc.patternSignalsRejected || 0)}</td>
+                          <td className="p-2 text-right text-red-500">{fmt(rejected)}</td>
+                        </tr>
+                        <tr className="border-b hover:bg-muted/30 font-semibold">
+                          <td className="p-2 pl-4">Trades Opened</td>
+                          <td colSpan={3} className="p-2 text-right text-green-700">{fmt(trades >= 0 ? trades : 0)}</td>
+                        </tr>
+                      </>
+                    );
+                  })()}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="p-4 text-muted-foreground text-center">No scan data yet</div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* TABLE 2: 24-Hour Rolling Aggregates */}
+      <Card>
+        <CardHeader className="py-3">
+          <CardTitle className="text-lg flex items-center justify-between">
+            <span>24-Hour Rolling Aggregates</span>
+            <span className="text-xs font-normal text-orange-400">(in-memory — resets on restart)</span>
+            <span className="text-sm font-normal text-muted-foreground">
+              {rolling24h.totalScans} scans · {fmt(rolling24h.totalPairsScanned)} total pairs · {fmt(rolling24h.uniquePairsScanned)} unique
+            </span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          {rolling24h.totalScans > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b bg-muted/50">
+                    <th className="text-left p-2 font-medium">Filter</th>
+                    <th className="text-right p-2 font-medium">Quant Global (24h)</th>
+                    <th className="text-right p-2 font-medium">Pattern Global (24h)</th>
+                    <th className="text-right p-2 font-medium">Total (24h)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(rolling24h.aggregated.quant.global)
+                    // B-NEW-7 (2026-05-12): same `applicable`-object-as-string
+                    // fix as the Last Scan table above. Skip non-numeric keys.
+                    .filter(([key, value]) => typeof value === 'number')
+                    .map(([key, value]) => {
+                    const patternVal = rolling24h.aggregated.pattern.global && key in (rolling24h.aggregated.pattern.global as Record<string, number>)
+                      ? (rolling24h.aggregated.pattern.global as Record<string, number>)[key]
+                      : null;
+                    const total = (value as number) + (patternVal ?? 0);
+                    return (
+                      <tr key={key} className="border-b hover:bg-muted/30">
+                        <td className="p-2">{formatFilterName(key)}</td>
+                        <td className={`p-2 text-right ${key === 'passed_all_filters' ? 'text-green-600 font-semibold' : getRejectionColor(value as number, rolling24h.totalPairsScanned)}`}>
+                          {fmt(value as number)}
+                        </td>
+                        <td className={`p-2 text-right ${patternVal !== null ? (key === 'passed_all_filters' ? 'text-green-600 font-semibold' : '') : 'text-muted-foreground'}`}>
+                          {patternVal !== null ? fmt(patternVal) : '—'}
+                        </td>
+                        <td className={`p-2 text-right font-medium ${key === 'passed_all_filters' ? 'text-green-600' : ''}`}>
+                          {fmt(total)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  <tr className="border-b bg-muted/50">
+                    <td colSpan={4} className="p-2 font-medium text-xs uppercase tracking-wider">Family IMF Metrics (24h aggregate across families)</td>
+                  </tr>
+                  <tr className="border-b hover:bg-muted/30">
+                    <td className="p-2">Failed LQ</td>
+                    <td className="p-2 text-right">{fmt(rolling24h.aggregated.quant.imf.failedLQ)}</td>
+                    <td className="p-2 text-right">{rolling24h.aggregated.pattern.imf ? fmt(rolling24h.aggregated.pattern.imf.failedLQ) : '—'}</td>
+                    <td className="p-2 text-right font-medium">{fmt(rolling24h.aggregated.quant.imf.failedLQ + (rolling24h.aggregated.pattern.imf?.failedLQ ?? 0))}</td>
+                  </tr>
+                  <tr className="border-b hover:bg-muted/30">
+                    <td className="p-2">Failed VN</td>
+                    <td className="p-2 text-right">{fmt(rolling24h.aggregated.quant.imf.failedVN)}</td>
+                    <td className="p-2 text-right">{rolling24h.aggregated.pattern.imf ? fmt(rolling24h.aggregated.pattern.imf.failedVN) : '—'}</td>
+                    <td className="p-2 text-right font-medium">{fmt(rolling24h.aggregated.quant.imf.failedVN + (rolling24h.aggregated.pattern.imf?.failedVN ?? 0))}</td>
+                  </tr>
+                  <tr className="border-b hover:bg-muted/30">
+                    <td className="p-2">Failed DI</td>
+                    <td className="p-2 text-right">{fmt(rolling24h.aggregated.quant.imf.failedDI ?? 0)}</td>
+                    <td className="p-2 text-right">{rolling24h.aggregated.pattern.imf ? fmt(rolling24h.aggregated.pattern.imf.failedDI) : '—'}</td>
+                    <td className="p-2 text-right font-medium">{fmt((rolling24h.aggregated.quant.imf.failedDI ?? 0) + (rolling24h.aggregated.pattern.imf?.failedDI ?? 0))}</td>
+                  </tr>
+                  <tr className="border-b hover:bg-muted/30 font-semibold">
+                    <td className="p-2">IMF Passed (fan-out total)</td>
+                    <td className="p-2 text-right text-green-600">{fmt(rolling24h.aggregated.quant.imf.passed)}</td>
+                    <td className="p-2 text-right text-green-600">{fmt(rolling24h.aggregated.pattern.imf?.passed ?? 0)}</td>
+                    <td className="p-2 text-right text-green-600 font-medium">{fmt(rolling24h.aggregated.quant.imf.passed + (rolling24h.aggregated.pattern.imf?.passed ?? 0))}</td>
+                  </tr>
+                  {/* Family Path IMF Results — quant only, should reconcile with quant IMF Passed above */}
+                  {rolling24h.aggregated.familyPaths && (() => {
+                    const familyTotal = ['trend', 'reversal', 'breakout', 'oscillator', 'strong_trend'].reduce((sum, f) =>
+                      sum + (rolling24h.aggregated.familyPaths?.[f]?.survivors ?? 0), 0);
+                    return (
+                    <>
+                      <tr className="bg-muted/30">
+                        <td colSpan={4} className="p-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                          Family Path IMF Results (24h — quant families)
+                        </td>
+                      </tr>
+                      {['trend', 'reversal', 'breakout', 'oscillator', 'strong_trend'].map(family => {
+                        const fp = rolling24h.aggregated.familyPaths?.[family];
+                        if (!fp) return null;
+                        const familyLabel: Record<string, string> = { trend: 'Trend Family', reversal: 'Reversal Family', breakout: 'Breakout Family', oscillator: 'Oscillator Family' };
+                        return (
+                          <tr key={`24h-${family}`} className="border-b hover:bg-muted/30">
+                            <td className="p-2 font-medium">{familyLabel[family] ?? family}</td>
+                            <td className="p-2 text-right">
+                              <span className="text-green-600">{fmt(fp.survivors)}</span>
+                              <span className="text-muted-foreground text-xs ml-1">
+                                / {fmt(fp.imf?.total ?? 0)}
+                              </span>
+                            </td>
+                            <td className="p-2 text-right text-xs text-muted-foreground">
+                              LQ:{fmt(fp.imf?.failedLQ ?? 0)} VN:{fmt(fp.imf?.failedVN ?? 0)} DI:{fmt(fp.imf?.failedDI ?? 0)}
+                            </td>
+                            <td className="p-2 text-right text-xs text-muted-foreground">—</td>
+                          </tr>
+                        );
+                      })}
+                      <tr className="border-b hover:bg-muted/30 font-semibold">
+                        <td className="p-2 pl-6 text-xs">↳ Family Total (quant fan-out)</td>
+                        <td className="p-2 text-right text-green-600">{fmt(familyTotal)}</td>
+                        <td className="p-2 text-right text-muted-foreground">—</td>
+                        <td className="p-2 text-right text-green-600">{fmt(familyTotal)}</td>
+                      </tr>
+                    </>
+                    );
+                  })()}
+                  {/* Pipeline flow: IMF Survivors → Benchmarks Removed → VTS Destination */}
+                  <tr className="bg-muted/50 border-y">
+                    <td colSpan={4} className="p-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Pipeline Flow (24h cumulative)</td>
+                  </tr>
+                  <tr className="border-b hover:bg-muted/30 font-semibold">
+                    <td className="p-2">IMF Survivors (incl. benchmarks)</td>
+                    <td className="p-2 text-right text-green-600">{fmt(rolling24h.aggregated.quant.survivors)}</td>
+                    <td className="p-2 text-right text-green-600">{fmt(rolling24h.aggregated.pattern.survivors)}</td>
+                    <td className="p-2 text-right text-green-600 font-medium">{fmt(rolling24h.aggregated.quant.survivors + rolling24h.aggregated.pattern.survivors)}</td>
+                  </tr>
+                  <tr className="border-b hover:bg-muted/30">
+                    <td className="p-2 pl-6 text-xs text-muted-foreground">↳ Benchmarks Removed</td>
+                    <td className="p-2 text-right text-xs text-red-400">{fmt(rolling24h.aggregated.quant.imf.benchmarkBypassed)}</td>
+                    <td className="p-2 text-right text-xs text-red-400">{fmt(rolling24h.aggregated.pattern.imf?.benchmarkBypassed ?? 0)}</td>
+                    <td className="p-2 text-right text-xs text-red-400">{fmt(rolling24h.aggregated.quant.imf.benchmarkBypassed + (rolling24h.aggregated.pattern.imf?.benchmarkBypassed ?? 0))}</td>
+                  </tr>
+                  <tr className="bg-green-500/10 font-semibold border-t-2 border-green-500/30">
+                    <td className="p-2">→ VTS Destination <span className="text-[10px] text-muted-foreground">(post-benchmark)</span></td>
+                    <td className="p-2 text-right text-green-700">{fmt(rolling24h.aggregated.quant.survivors - rolling24h.aggregated.quant.imf.benchmarkBypassed)}</td>
+                    <td className="p-2 text-right text-green-700">{fmt(rolling24h.aggregated.pattern.survivors - (rolling24h.aggregated.pattern.imf?.benchmarkBypassed ?? 0))}</td>
+                    <td className="p-2 text-right text-green-700 font-bold">{fmt((rolling24h.aggregated.quant.survivors - rolling24h.aggregated.quant.imf.benchmarkBypassed) + (rolling24h.aggregated.pattern.survivors - (rolling24h.aggregated.pattern.imf?.benchmarkBypassed ?? 0)))}</td>
+                  </tr>
+                  {/* Batch 52 Fix 18: Merged VTS Evaluation Breakdown into this table (was separate card)
+                      B-NEW-19 (Kyle 2026-05-13): Restructured to subtractive flow.
+                        Pair-Pool Evaluations → Possible Strategy Iterations → Pre-Eval Skips →
+                        Strategy Evaluations → Strategy Nulls → Trades Opened.
+                      Per-lane split for Pre-Eval Skips now reads ve.quantNullReasonDetail /
+                      ve.patternNullReasonDetail (previously rendered noPrice in quant col and
+                      OHLC in pattern col — semantically wrong). No leading minus signs. */}
+                  {data?.vtsEvaluation && (() => {
+                    const ve = data.vtsEvaluation!;
+                    const nr3 = (ve.nullReasons ?? {}) as any;
+                    const qDetail = ((ve as any).quantNullReasonDetail ?? {}) as Record<string, number>;
+                    const pDetail = ((ve as any).patternNullReasonDetail ?? {}) as Record<string, number>;
+                    const noPrice = (ve as any).pairsSkippedNoPrice ?? 0;
+                    const ohlc = (ve as any).pairsSkippedInsufficientOHLC ?? 0;
+                    const qFamily = qDetail['family_filter_mismatch'] ?? 0;
+                    const pFamily = pDetail['family_filter_mismatch'] ?? 0;
+                    const qDup = qDetail['duplicate_position'] ?? 0;
+                    const pDup = pDetail['duplicate_position'] ?? 0;
+                    const qMaxOpen = qDetail['max_open_trades'] ?? 0;
+                    const pMaxOpen = pDetail['max_open_trades'] ?? 0;
+                    const qNoRegime = qDetail['regime_no_strategies'] ?? 0;
+                    const pNoRegime = pDetail['regime_no_strategies'] ?? 0;
+                    const quantSkips = qFamily + qDup + qMaxOpen + qNoRegime;
+                    const patternSkips = pFamily + pDup + pMaxOpen + pNoRegime;
+                    const preEvalTotal =
+                      noPrice + ohlc +
+                      (nr3.familyFilterMismatch ?? 0) +
+                      (nr3.duplicatePosition ?? 0) +
+                      (nr3.maxOpenTrades ?? 0) +
+                      (nr3.regimeNoStrategies ?? 0);
+                    const qPairPool = ve.quantPairPoolEvaluations ?? ve.quantPairsEvaluated;
+                    const pPairPool = ve.patternPairPoolEvaluations ?? ve.patternPairsEvaluated;
+                    const qEvals = (ve as any).quantStrategyEvaluations ?? 0;
+                    const pEvals = (ve as any).patternStrategyEvaluations ?? 0;
+                    const qPossible = quantSkips + qEvals;
+                    const pPossible = patternSkips + pEvals;
+                    const totalPossible = preEvalTotal + ve.totalStrategyEvaluations;
+                    return (
+                      <>
+                        <tr className="bg-muted/50 border-y">
+                          <td colSpan={4} className="p-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">VTS Evaluation (24h rolling — VTS-side counters)</td>
+                        </tr>
+                        <tr className="border-b hover:bg-muted/30 bg-blue-500/5">
+                          <td className="p-2 font-medium">Pair-Pool Evaluations</td>
+                          <td className="p-2 text-right text-blue-600">{fmt(qPairPool)}</td>
+                          <td className="p-2 text-right text-blue-600">{fmt(pPairPool)}</td>
+                          <td className="p-2 text-right font-semibold text-blue-600">{fmt(qPairPool + pPairPool)}</td>
+                        </tr>
+                        <tr className="border-b hover:bg-muted/30 bg-indigo-500/5">
+                          <td className="p-2 font-medium">Possible Strategy Iterations</td>
+                          <td className="p-2 text-right text-indigo-600">{fmt(qPossible)}</td>
+                          <td className="p-2 text-right text-indigo-600">{fmt(pPossible)}</td>
+                          <td className="p-2 text-right font-semibold text-indigo-600">{fmt(totalPossible)}</td>
+                        </tr>
+                        <tr className="border-b hover:bg-muted/30">
+                          <td className="p-2 pl-6 text-xs text-muted-foreground">↳ Pre-Evaluation Skips <span className="text-[10px]">(sum of all pre-detect rejections)</span></td>
+                          <td className="p-2 text-right text-xs text-orange-500">{fmt(quantSkips)}</td>
+                          <td className="p-2 text-right text-xs text-orange-500">{fmt(patternSkips)}</td>
+                          <td className="p-2 text-right text-xs text-orange-500">{fmt(preEvalTotal)}</td>
+                        </tr>
+                        <tr className="border-b hover:bg-muted/30">
+                          <td className="p-2">= Strategy Evaluations</td>
+                          <td className="p-2 text-right">{fmt(qEvals)}</td>
+                          <td className="p-2 text-right">{fmt(pEvals)}</td>
+                          <td className="p-2 text-right font-semibold">{fmt(ve.totalStrategyEvaluations)}</td>
+                        </tr>
+                        <tr className="border-b hover:bg-muted/30">
+                          <td className="p-2 pl-6 text-xs text-muted-foreground">↳ Strategy Nulls</td>
+                          <td className="p-2 text-right text-xs text-orange-500">{fmt(ve.quantStrategyNulls)}</td>
+                          <td className="p-2 text-right text-xs text-orange-500">{fmt((ve as any).patternStrategyNulls ?? 0)}</td>
+                          <td className="p-2 text-right text-xs text-orange-500">{fmt(ve.quantStrategyNulls + ((ve as any).patternStrategyNulls ?? 0))}</td>
+                        </tr>
+                        <tr className="bg-muted/30 font-semibold border-t-2 border-primary/20">
+                          <td className="p-2">Trades Opened <span className="text-[10px] text-muted-foreground">(post-gate)</span></td>
+                          <td className="p-2 text-right text-green-600">{fmt((ve as any).quantTradesOpened ?? 0)}</td>
+                          <td className="p-2 text-right text-green-600">{fmt((ve as any).patternTradesOpened ?? 0)}</td>
+                          <td className="p-2 text-right font-semibold text-green-600">{fmt(((ve as any).quantTradesOpened ?? 0) + ((ve as any).patternTradesOpened ?? 0))}</td>
+                        </tr>
+                      </>
+                    );
+                  })()}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="p-4 text-muted-foreground text-center">No 24h data accumulated yet</div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* TABLE 4: VTS Evaluation Detail (Batch 19I) — expanded breakdown */}
+      <Card className="max-w-4xl">
+        <CardHeader className="py-3">
+          <CardTitle className="text-lg flex items-center justify-between">
+            <span>VTS Evaluation Detail</span>
+            <span className="text-sm font-normal text-muted-foreground">
+              {data?.vtsEvaluation ? '24-Hour Rolling — Strategy & Null Reason Breakdown' : 'No VTS data yet'}
+            </span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          {data?.vtsEvaluation ? (() => {
+            const ve = data.vtsEvaluation!;
+            return (
+              <div className="space-y-4">
+                {/* Source Pool Summary */}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b bg-muted/50">
+                        <th className="text-left p-2 font-medium">Metric</th>
+                        <th className="text-right p-2 font-medium">Quant Pool</th>
+                        <th className="text-right p-2 font-medium">Pattern Pool</th>
+                        <th className="text-right p-2 font-medium">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {/* Pattern detection, strategy evals, nulls, signals — detail view */}
+                      <tr className="border-b hover:bg-muted/30">
+                        <td className="p-2">Pattern Detection <span className="text-xs text-muted-foreground">(BUY pattern scan results)</span></td>
+                        <td className="p-2 text-right">
+                          {((ve as any).quantPatternDetected > 0 || (ve as any).quantPatternNoDetection > 0) ? (
+                            <>
+                              <span className="text-green-600">{fmt((ve as any).quantPatternDetected ?? 0)}</span>
+                              {' / '}
+                              <span className="text-red-500">{fmt((ve as any).quantPatternNoDetection ?? 0)}</span>
+                            </>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
+                        <td className="p-2 text-right">
+                          {ve.patternPairsEvaluated > 0 ? (
+                            <>
+                              <span className="text-green-600">{fmt(ve.patternDetected)}</span>
+                              {' / '}
+                              <span className="text-red-500">{fmt(ve.patternNoDetection)}</span>
+                              <span className="text-xs text-muted-foreground ml-1">
+                                ({Math.round(ve.patternDetected / ve.patternPairsEvaluated * 100)}% hit)
+                              </span>
+                            </>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
+                        <td className="p-2 text-right">
+                          {(() => {
+                            const qd = (ve as any).quantPatternDetected ?? 0;
+                            const qnd = (ve as any).quantPatternNoDetection ?? 0;
+                            const totalDetected = qd + ve.patternDetected;
+                            const totalNoDetection = qnd + ve.patternNoDetection;
+                            if (totalDetected + totalNoDetection > 0) {
+                              return (
+                                <>
+                                  <span className="text-green-600">{fmt(totalDetected)}</span>
+                                  {' / '}
+                                  <span className="text-red-500">{fmt(totalNoDetection)}</span>
+                                </>
+                              );
+                            }
+                            return <span className="text-muted-foreground">—</span>;
+                          })()}
+                        </td>
+                      </tr>
+                      <tr className="border-b hover:bg-muted/30">
+                        <td className="p-2">Total Strategy Evaluations <span className="text-xs text-muted-foreground">(since process start — in-memory, resets on PM2 restart)</span></td>
+                        <td className="p-2 text-right">{fmt((ve as any).quantStrategyEvaluations ?? 0)}</td>
+                        <td className="p-2 text-right">{fmt((ve as any).patternStrategyEvaluations ?? 0)}</td>
+                        <td className="p-2 text-right font-semibold">{fmt(ve.totalStrategyEvaluations)}</td>
+                      </tr>
+                      <tr className="border-b hover:bg-muted/30">
+                        <td className="p-2">True Strategy Nulls <span className="text-xs text-muted-foreground">(since process start — no setup found, excludes post-signal rejections)</span></td>
+                        <td className="p-2 text-right text-orange-500">{fmt(ve.quantStrategyNulls)}</td>
+                        <td className="p-2 text-right text-orange-500">{fmt((ve as any).patternStrategyNulls ?? 0)}</td>
+                        <td className="p-2 text-right font-semibold text-orange-500">{fmt(ve.quantStrategyNulls + ((ve as any).patternStrategyNulls ?? 0))}</td>
+                      </tr>
+                      <tr className="border-b hover:bg-muted/30">
+                        <td className="p-2">Signals Rejected (Net EV Below Floor) <span className="text-xs text-muted-foreground">(since process start — strategy fired but signal failed EV check)</span></td>
+                        <td className="p-2 text-right text-red-500">{fmt((ve as any).quantSignalsRejected ?? 0)}</td>
+                        <td className="p-2 text-right text-red-500">{fmt((ve as any).patternSignalsRejected ?? 0)}</td>
+                        <td className="p-2 text-right font-semibold text-red-500">{fmt((ve as any).signalsRejected ?? 0)}</td>
+                      </tr>
+                      <tr className="bg-muted/30 font-semibold">
+                        <td className="p-2">Trades Opened <span className="text-xs text-muted-foreground">(DB-backed, 24h rolling — scope differs from in-memory rows above)</span></td>
+                        <td className="p-2 text-right text-green-600">{fmt((ve as any).quantTradesOpened ?? 0)}</td>
+                        <td className="p-2 text-right text-green-600">{fmt((ve as any).patternTradesOpened ?? 0)}</td>
+                        <td className="p-2 text-right font-semibold text-green-600">{fmt(((ve as any).quantTradesOpened ?? 0) + ((ve as any).patternTradesOpened ?? 0))}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* By Strategy Breakdown */}
+                {Object.keys(ve.byStrategy).length > 0 && (
+                  <div className="overflow-x-auto">
+                    <div className="px-2 py-1 text-xs font-medium uppercase tracking-wider text-muted-foreground bg-muted/50">
+                      By Strategy
+                    </div>
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b bg-muted/30">
+                          <th className="text-left p-2 font-medium">Strategy</th>
+                          <th className="text-right p-2 font-medium">Evaluated</th>
+                          <th className="text-right p-2 font-medium">True Nulls</th>
+                          <th className="text-right p-2 font-medium">Null %</th>
+                          <th className="text-right p-2 font-medium">Signals</th>
+                          <th className="text-right p-2 font-medium">Rejected</th>
+                          <th className="text-right p-2 font-medium">Trades</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {Object.entries(ve.byStrategy)
+                          .sort(([,a], [,b]) => b.evaluated - a.evaluated)
+                          .map(([strategy, counts]) => (
+                            <tr key={strategy} className="border-b hover:bg-muted/30">
+                              <td className="p-2 font-mono text-xs">{strategy}</td>
+                              <td className="p-2 text-right">{fmt(counts.evaluated)}</td>
+                              <td className="p-2 text-right text-orange-500">{fmt(counts.nulls)}</td>
+                              <td className="p-2 text-right text-muted-foreground">{counts.evaluated > 0 ? `${(counts.nulls / counts.evaluated * 100).toFixed(1)}%` : '—'}</td>
+                              <td className="p-2 text-right text-blue-600">{fmt(counts.preRejectionSignals || 0)}</td>
+                              <td className="p-2 text-right text-amber-600">{fmt(counts.rejected || 0)}</td>
+                              <td className="p-2 text-right text-green-600">{fmt(counts.signals)}</td>
+                            </tr>
+                          ))
+                        }
+                        {/* Batch 22 HF4: Total row for by-strategy breakdown */}
+                        {(() => {
+                          const totals = Object.values(ve.byStrategy).reduce(
+                            (acc, c: any) => ({
+                              evaluated: acc.evaluated + c.evaluated,
+                              nulls: acc.nulls + c.nulls,
+                              preRejectionSignals: acc.preRejectionSignals + (c.preRejectionSignals || 0),
+                              rejected: acc.rejected + (c.rejected || 0),
+                              signals: acc.signals + c.signals
+                            }),
+                            { evaluated: 0, nulls: 0, preRejectionSignals: 0, rejected: 0, signals: 0 }
+                          );
+                          return (
+                            <tr className="border-t-2 bg-muted/30 font-semibold">
+                              <td className="p-2">TOTAL</td>
+                              <td className="p-2 text-right">{fmt(totals.evaluated)}</td>
+                              <td className="p-2 text-right text-orange-500">{fmt(totals.nulls)}</td>
+                              <td className="p-2 text-right text-muted-foreground">{totals.evaluated > 0 ? `${(totals.nulls / totals.evaluated * 100).toFixed(1)}%` : '—'}</td>
+                              <td className="p-2 text-right text-blue-600">{fmt(totals.preRejectionSignals)}</td>
+                              <td className="p-2 text-right text-amber-600">{fmt(totals.rejected)}</td>
+                              <td className="p-2 text-right text-green-600">{fmt(totals.signals)}</td>
+                            </tr>
+                          );
+                        })()}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {/* Batch 38: 3-Layer Null Reason Display */}
+                {ve.nullReasons && (
+                  <div className="overflow-x-auto">
+                    {(() => {
+                      const nr = ve.nullReasons as any;
+                      const detail = (ve as any).nullReasonDetail as Record<string, number> | undefined;
+                      const quantDetail = (ve as any).quantNullReasonDetail as Record<string, number> | undefined;
+                      const patternDetail = (ve as any).patternNullReasonDetail as Record<string, number> | undefined;
+                      const hasPoolDetail = !!(quantDetail && Object.keys(quantDetail).length > 0) || !!(patternDetail && Object.keys(patternDetail).length > 0);
+                      const rejectedReasons = (ve as any).rejectedReasons as Record<string, number> | undefined;
+                      const totalStratNulls = ve.quantStrategyNulls + ((ve as any).patternStrategyNulls ?? 0);
+                      const totalEvals = ve.totalStrategyEvaluations || 1;
+                      const quantEvals = (ve as any).quantStrategyEvaluations ?? 0;
+                      const patternEvals = (ve as any).patternStrategyEvaluations ?? 0;
+                      const pct = (n: number) => totalStratNulls > 0 ? Math.round(n / totalStratNulls * 100) : 0;
+                      const poolFmt = (count: number, evals: number) => evals > 0 ? `${fmt(count)} / ${fmt(evals)}` : fmt(count);
+                      const poolCell = (count: number, evals: number) => {
+                        if (evals <= 0) return fmt(count);
+                        const p = evals > 0 ? (count / evals * 100).toFixed(1) : '0.0';
+                        return `${fmt(count)} / ${fmt(evals)} (${p}%)`;
+                      };
+                      const pctOfEvals = (n: number) => totalEvals > 0 ? Math.round(n / totalEvals * 100) : 0;
+                      const reasonLabels: Record<string, string> = {
+                        'unknown': 'Not Yet Instrumented',
+                        'insufficient_data': 'Insufficient Price Data / Candles',
+                        'no_pattern': 'No Pattern Detected',
+                        'abcd_structure_not_found': 'ABCD Structure Not Found',
+                        'weak_pattern': 'Pattern Too Weak (below strength threshold)',
+                        'indicator_filter': 'Indicator Out of Range (RSI/ADX/momentum)',
+                        'volume_insufficient': 'Volume Confirmation Failed',
+                        'price_position': 'Price Not in Required Zone',
+                        'guard_fail': 'ATR / Stop / R:R Guard Failed',
+                        'range_not_found': 'No Valid Range / Support Level Found',
+                        'correlation_fail': 'Correlation Check Failed',
+                        'volatility_filter': 'Volatility Percentile Too Low',
+                        'breakout_fail': 'No Breakout Detected',
+                        'toxicity_high': 'High Toxicity (DHMA)',
+                        'spread_wide': 'Spread Too Wide (DHMA)',
+                        'regime_alignment': 'Regime Alignment Failed',
+                      };
+                      const groupDefs: { label: string; keys: string[] }[] = [
+                        { label: 'A — Data & Setup', keys: ['insufficient_data', 'unknown'] },
+                        { label: 'B — Pattern Detection', keys: ['no_pattern', 'abcd_structure_not_found', 'weak_pattern', 'breakout_fail'] },
+                        { label: 'C — Indicator & Volatility', keys: ['indicator_filter', 'volatility_filter'] },
+                        { label: 'D — Volume & Price', keys: ['volume_insufficient', 'price_position', 'range_not_found'] },
+                        { label: 'E — Risk Guards', keys: ['guard_fail', 'correlation_fail'] },
+                        { label: 'F — Regime & Spread', keys: ['regime_alignment', 'toxicity_high', 'spread_wide'] },
+                      ];
+                      const SectionHeader = ({ title, colorClass }: { title: string; colorClass: string }) => (
+                        <div className={`border-l-4 pl-3 py-1.5 mx-2 my-1 ${colorClass}`}>
+                          <span className="text-xs font-semibold uppercase tracking-wider">{title}</span>
+                        </div>
+                      );
+                      return (
+                        <>
+                          {/* SECTION 1: Setup Nulls */}
+                          <SectionHeader title="Setup Nulls (Strategy Evaluation)" colorClass="border-blue-500 bg-blue-50/40 dark:bg-blue-950/20 text-blue-700 dark:text-blue-400" />
+                          <table className="w-full text-sm mb-2">
+                            <thead>
+                              <tr className="border-b bg-muted/30">
+                                <th className="text-left p-2 font-medium">Category</th>
+                                {hasPoolDetail && <th className="text-right p-2 font-medium">Quant (nulls / evals)</th>}
+                                {hasPoolDetail && <th className="text-right p-2 font-medium">Pattern (nulls / evals)</th>}
+                                <th className="text-right p-2 font-medium">{hasPoolDetail ? 'Total' : 'Count'}</th>
+                                <th className="text-right p-2 font-medium">% of Strategy Nulls</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <tr className="border-b hover:bg-muted/30 font-medium">
+                                <td className="p-2">Strategy Conditions Not Met</td>
+                                {hasPoolDetail && <td className="p-2 text-right text-orange-500">{poolFmt(ve.quantStrategyNulls ?? 0, quantEvals)}</td>}
+                                {hasPoolDetail && <td className="p-2 text-right text-orange-500">{poolFmt((ve as any).patternStrategyNulls ?? 0, patternEvals)}</td>}
+                                <td className="p-2 text-right text-orange-500">{fmt(nr.conditionsNotMet ?? 0)}</td>
+                                <td className="p-2 text-right">{pct(nr.conditionsNotMet ?? 0)}%</td>
+                              </tr>
+                              {detail && Object.keys(detail).length > 0 && groupDefs.map(group => {
+                                const groupEntries = group.keys
+                                  .map(k => ({ key: k, count: detail[k] ?? 0 }))
+                                  .filter(e => e.count > 0);
+                                if (groupEntries.length === 0) return null;
+                                return (
+                                  <React.Fragment key={group.label}>
+                                    <tr className="bg-muted/10">
+                                      <td colSpan={hasPoolDetail ? 5 : 3} className="p-1.5 pl-6 text-xs font-semibold text-muted-foreground uppercase tracking-wide">{group.label}</td>
+                                    </tr>
+                                    {groupEntries.map(({ key, count }) => (
+                                      <tr key={key} className="border-b hover:bg-muted/20">
+                                        <td className="p-2 pl-10 text-xs text-muted-foreground">↳ {reasonLabels[key] || key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</td>
+                                        {hasPoolDetail && <td className="p-2 text-right text-xs text-orange-400">{poolCell(quantDetail?.[key] ?? 0, quantEvals)}</td>}
+                                        {hasPoolDetail && <td className="p-2 text-right text-xs text-orange-400">{poolCell(patternDetail?.[key] ?? 0, patternEvals)}</td>}
+                                        <td className="p-2 text-right text-xs text-orange-400">{fmt(count)}</td>
+                                        <td className="p-2 text-right text-xs text-muted-foreground">{pct(count)}%</td>
+                                      </tr>
+                                    ))}
+                                  </React.Fragment>
+                                );
+                              })}
+                              <tr className="border-b hover:bg-muted/30 font-medium">
+                                <td className="p-2">ADX Guard</td>
+                                {hasPoolDetail && <td className="p-2 text-right text-orange-500">{fmt(nr.adxGuard ?? 0)}</td>}
+                                {hasPoolDetail && <td className="p-2 text-right text-orange-500">—</td>}
+                                <td className="p-2 text-right text-orange-500">{fmt(nr.adxGuard ?? 0)}</td>
+                                <td className="p-2 text-right">{pct(nr.adxGuard ?? 0)}%</td>
+                              </tr>
+                              {/* B-NEW-11 (2026-05-13): Section Total row — makes drift visible.
+                                  Sums all displayed counts in this section + compares against
+                                  totalStratNulls. >100% indicates a reason is being double-counted
+                                  or a pre-eval skip leaked into the section; <100% indicates
+                                  uncategorized nulls. */}
+                              {(() => {
+                                const sectionTotal =
+                                  (nr.conditionsNotMet ?? 0) +
+                                  (nr.adxGuard ?? 0) +
+                                  groupDefs.flatMap(g => g.keys).reduce((s, k) => s + (detail?.[k] ?? 0), 0);
+                                const sectionPct = totalStratNulls > 0 ? Math.round(sectionTotal / totalStratNulls * 100) : 0;
+                                const driftWarn = sectionPct > 100 || (totalStratNulls > 0 && sectionPct < 95);
+                                return (
+                                  <tr className={`border-t-2 ${driftWarn ? 'border-amber-500 bg-amber-50/40 dark:bg-amber-950/20' : 'border-blue-500/30 bg-blue-50/20 dark:bg-blue-950/10'} font-semibold`}>
+                                    <td className="p-2">Section Total <span className="text-[10px] text-muted-foreground">(sum of all rows above)</span></td>
+                                    {hasPoolDetail && <td className="p-2 text-right">—</td>}
+                                    {hasPoolDetail && <td className="p-2 text-right">—</td>}
+                                    <td className="p-2 text-right">{fmt(sectionTotal)}</td>
+                                    <td className={`p-2 text-right ${driftWarn ? 'text-amber-600 dark:text-amber-400' : ''}`}>{sectionPct}%{driftWarn && <span className="ml-1 text-[10px]">⚠</span>}</td>
+                                  </tr>
+                                );
+                              })()}
+                            </tbody>
+                          </table>
+
+                          {/* SECTION 2: Pre-Evaluation Skips (pair skipped before strategy.detect() called) */}
+                          <SectionHeader title="Pre-Evaluation Skips" colorClass="border-yellow-500 bg-yellow-50/40 dark:bg-yellow-950/20 text-yellow-700 dark:text-yellow-400" />
+                          <table className="w-full text-sm mb-2">
+                            <thead>
+                              <tr className="border-b bg-muted/30">
+                                <th className="text-left p-2 font-medium">Category</th>
+                                {hasPoolDetail && <th className="text-right p-2 font-medium">Quant (nulls / evals)</th>}
+                                {hasPoolDetail && <th className="text-right p-2 font-medium">Pattern (nulls / evals)</th>}
+                                <th className="text-right p-2 font-medium">{hasPoolDetail ? 'Total' : 'Count'}</th>
+                                <th className="text-right p-2 font-medium">% of Strategy Nulls</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <tr className="border-b hover:bg-muted/30">
+                                <td className="p-2">Duplicate Position</td>
+                                {hasPoolDetail && <td className="p-2 text-right text-orange-500">{poolCell(quantDetail?.['duplicate_position'] ?? 0, quantEvals)}</td>}
+                                {hasPoolDetail && <td className="p-2 text-right text-orange-500">{poolCell(patternDetail?.['duplicate_position'] ?? 0, patternEvals)}</td>}
+                                <td className="p-2 text-right text-orange-500">{fmt(nr.duplicatePosition ?? 0)}</td>
+                                <td className="p-2 text-right">{pct(nr.duplicatePosition ?? 0)}%</td>
+                              </tr>
+                              <tr className="border-b hover:bg-muted/30">
+                                <td className="p-2">Max Open Trades</td>
+                                {hasPoolDetail && <td className="p-2 text-right text-orange-500">{poolCell(quantDetail?.['max_open_trades'] ?? 0, quantEvals)}</td>}
+                                {hasPoolDetail && <td className="p-2 text-right text-orange-500">{poolCell(patternDetail?.['max_open_trades'] ?? 0, patternEvals)}</td>}
+                                <td className="p-2 text-right text-orange-500">{fmt(nr.maxOpenTrades ?? 0)}</td>
+                                <td className="p-2 text-right">{pct(nr.maxOpenTrades ?? 0)}%</td>
+                              </tr>
+                              <tr className="border-b hover:bg-muted/30">
+                                <td className="p-2">Regime Has No Strategies</td>
+                                {hasPoolDetail && <td className="p-2 text-right text-orange-500">{poolCell(quantDetail?.['regime_no_strategies'] ?? 0, quantEvals)}</td>}
+                                {hasPoolDetail && <td className="p-2 text-right text-orange-500">{poolCell(patternDetail?.['regime_no_strategies'] ?? 0, patternEvals)}</td>}
+                                <td className="p-2 text-right text-orange-500">{fmt(nr.regimeNoStrategies ?? 0)}</td>
+                                <td className="p-2 text-right">{pct(nr.regimeNoStrategies ?? 0)}%</td>
+                              </tr>
+                              <tr className="border-b hover:bg-muted/30">
+                                <td className="p-2">Family Filter Mismatch</td>
+                                {hasPoolDetail && <td className="p-2 text-right text-orange-500">{poolCell(quantDetail?.['family_filter_mismatch'] ?? 0, quantEvals)}</td>}
+                                {hasPoolDetail && <td className="p-2 text-right text-orange-500">{poolCell(patternDetail?.['family_filter_mismatch'] ?? 0, patternEvals)}</td>}
+                                <td className="p-2 text-right text-orange-500">{fmt(nr.familyFilterMismatch ?? 0)}</td>
+                                {/* B-NEW-12 (RUNNING_ISSUES #101): family_filter_mismatch is a
+                                    pre-eval skip — fires BEFORE strategy.detect(), so it's not
+                                    counted in totalStratNulls. Use the correct denominator
+                                    emitted by the endpoint: familyMismatchDenominatorTotal =
+                                    strategiesEvaluated (eligibility-pass) + family_filter_mismatch
+                                    (eligibility-fail). Was showing 158%/177% before this fix. */}
+                                <td className="p-2 text-right">{(() => {
+                                  const denom = (ve as any).familyMismatchDenominatorTotal ?? 0;
+                                  const num = nr.familyFilterMismatch ?? 0;
+                                  return denom > 0 ? `${Math.round(num / denom * 100)}%` : '0%';
+                                })()}</td>
+                              </tr>
+                              {/* B-DIAG-387 (#387) OBJ-2 (no-hidden-gates): the three pre-open
+                                  gate reasons checkPreOpenGates can emit that previously rendered
+                                  nowhere. Guarded `?? 0` so the shared panel renders 0 harmlessly
+                                  for any class whose endpoint doesn't (yet) surface them. */}
+                              <tr className="border-b hover:bg-muted/30">
+                                <td className="p-2">Re-entry Cooldown</td>
+                                {hasPoolDetail && <td className="p-2 text-right text-orange-500">{poolCell(quantDetail?.['reentry_cooldown'] ?? 0, quantEvals)}</td>}
+                                {hasPoolDetail && <td className="p-2 text-right text-orange-500">{poolCell(patternDetail?.['reentry_cooldown'] ?? 0, patternEvals)}</td>}
+                                <td className="p-2 text-right text-orange-500">{fmt(nr.reentryCooldown ?? 0)}</td>
+                                <td className="p-2 text-right">{pct(nr.reentryCooldown ?? 0)}%</td>
+                              </tr>
+                              <tr className="border-b hover:bg-muted/30">
+                                <td className="p-2">Price Past Stop (entry no longer viable)</td>
+                                {hasPoolDetail && <td className="p-2 text-right text-orange-500">{poolCell(quantDetail?.['price_past_stop'] ?? 0, quantEvals)}</td>}
+                                {hasPoolDetail && <td className="p-2 text-right text-orange-500">{poolCell(patternDetail?.['price_past_stop'] ?? 0, patternEvals)}</td>}
+                                <td className="p-2 text-right text-orange-500">{fmt(nr.pricePastStop ?? 0)}</td>
+                                <td className="p-2 text-right">{pct(nr.pricePastStop ?? 0)}%</td>
+                              </tr>
+                              <tr className="border-b hover:bg-muted/30">
+                                <td className="p-2">Price Past Target (entry no longer viable)</td>
+                                {hasPoolDetail && <td className="p-2 text-right text-orange-500">{poolCell(quantDetail?.['price_past_target'] ?? 0, quantEvals)}</td>}
+                                {hasPoolDetail && <td className="p-2 text-right text-orange-500">{poolCell(patternDetail?.['price_past_target'] ?? 0, patternEvals)}</td>}
+                                <td className="p-2 text-right text-orange-500">{fmt(nr.pricePastTarget ?? 0)}</td>
+                                <td className="p-2 text-right">{pct(nr.pricePastTarget ?? 0)}%</td>
+                              </tr>
+                            </tbody>
+                          </table>
+
+                          {/* SECTION 3: Post-Signal Rejections (signal WAS produced, then rejected) */}
+                          <SectionHeader title="Post-Signal Rejections (strategy fired, trade blocked)" colorClass="border-red-500 bg-red-50/40 dark:bg-red-950/20 text-red-700 dark:text-red-400" />
+                          <table className="w-full text-sm mb-2">
+                            <thead>
+                              <tr className="border-b bg-muted/30">
+                                <th className="text-left p-2 font-medium">Category</th>
+                                {hasPoolDetail && <th className="text-right p-2 font-medium">Quant (nulls / evals)</th>}
+                                {hasPoolDetail && <th className="text-right p-2 font-medium">Pattern (nulls / evals)</th>}
+                                <th className="text-right p-2 font-medium">{hasPoolDetail ? 'Total' : 'Count'}</th>
+                                <th className="text-right p-2 font-medium">% of Evaluations</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <tr className="border-b hover:bg-muted/30">
+                                <td className="p-2">Net EV Below Floor</td>
+                                {hasPoolDetail && <td className="p-2 text-right text-red-500">{poolCell(quantDetail?.['net_ev_rejected'] ?? 0, quantEvals)}</td>}
+                                {hasPoolDetail && <td className="p-2 text-right text-red-500">{poolCell(patternDetail?.['net_ev_rejected'] ?? 0, patternEvals)}</td>}
+                                <td className="p-2 text-right text-red-500">{fmt(rejectedReasons?.netEvBelowFloor ?? 0)}</td>
+                                <td className="p-2 text-right">{pctOfEvals(rejectedReasons?.netEvBelowFloor ?? 0)}%</td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </>
+                      );
+                    })()}
+                  </div>
+                )}
+              </div>
+            );
+          })() : (
+            <div className="p-4 text-muted-foreground text-center">No VTS evaluation data yet — waiting for next VTS cycle</div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Batch 50: Removed redundant "Signal Rejection Breakdown (24h)" section.
+         Post-signal rejections are now shown in the VTS Evaluation Breakdown above
+         with accurate counts from VTS counters. The old section used a separate
+         logSkippedSignal tracker with conflicting numbers. */}
+      {/* Batch 52: Cooldown Exclusions card REMOVED (Kyle directive 2026-04-06)
+         PairFailureTracker cooldown was redundant — batch size fixed at ~300/cycle
+         regardless. Adaptive ratio manager handles pair selection. */}
+
+      {/* Batch 34: Metric Distribution — moved to bottom, redesigned with plain language */}
+      {(data?.lastScan as any)?.metricDistribution && (
+        <Card className="max-w-4xl">
+          <CardHeader className="py-3">
+            <CardTitle className="text-lg">Filter Metric Ranges (Last Scan — updates each 30s cycle)</CardTitle>
+            <p className="text-sm text-muted-foreground mt-1">
+              Shows the spread of metric values across pairs that survived global filters. Helps assess whether thresholds are calibrated correctly — if the threshold sits in the middle of the range, it is actively filtering; if all values are well above/below the threshold, the filter is not doing meaningful work.
+            </p>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              {(() => {
+                const dist = (data?.lastScan as any).metricDistribution;
+                const hasPools = dist?.quant && dist?.pattern;
+                const sections = hasPools
+                  ? [
+                      { label: 'Quant Pool', data: dist.quant, pools: ['lq', 'di'] },
+                      { label: 'Pattern Pool', data: dist.pattern, pools: ['lq', 'di'] },
+                    ]
+                  : [{ label: 'All Survivors', data: dist?.combined || dist, pools: ['lq', 'di', 'vn'] }];
+
+                return sections.map((section) => (
+                  <div key={section.label} className="mb-4">
+                    <div className="px-2 py-1 bg-muted/30 font-medium text-sm">{section.label}</div>
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b bg-muted/50">
+                          <th className="text-left p-2 font-medium">Metric</th>
+                          <th className="text-right p-2 font-medium">Lowest</th>
+                          <th className="text-right p-2 font-medium">25th %ile</th>
+                          <th className="text-right p-2 font-medium">Middle Value</th>
+                          <th className="text-right p-2 font-medium">75th %ile</th>
+                          <th className="text-right p-2 font-medium">Highest</th>
+                          <th className="text-right p-2 font-medium">Pairs</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {section.pools.map((key) => {
+                          const d = section.data?.[key];
+                          if (!d || d.count === 0) return null;
+                          const labels: Record<string, string> = {
+                            lq: 'Liquidity Quality (higher = more liquid)',
+                            di: 'Directional Integrity (higher = stronger trend)',
+                            vn: 'Volume Noise (lower = cleaner volume)',
+                          };
+                          return (
+                            <tr key={key} className="border-b hover:bg-muted/30">
+                              <td className="p-2 font-medium">{labels[key] || key}</td>
+                              <td className="p-2 text-right">{d.min}</td>
+                              <td className="p-2 text-right">{d.p25}</td>
+                              <td className="p-2 text-right font-semibold">{d.median}</td>
+                              <td className="p-2 text-right">{d.p75}</td>
+                              <td className="p-2 text-right">{d.max}</td>
+                              <td className="p-2 text-right text-muted-foreground">{d.count}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                ));
+              })()}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+    </div>
+  );
+}
