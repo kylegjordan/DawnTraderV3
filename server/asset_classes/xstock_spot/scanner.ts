@@ -112,6 +112,12 @@ interface ScannerDiagnostics {
   pairsFreshLastCycle: number;
   pairsStaleLastCycle: number;
   lastError: string | null;
+  // P19-B8.1 (defect d, error-state lifecycle — Langston condition): lastError
+  // is the ACTIVE-alarm field, cleared on the next successful cycle so the
+  // panel can never show a forever-stale error; lastErrorAt + errorCount are
+  // retained HISTORY so a flapping error stays visible after it clears.
+  lastErrorAt: string | null;
+  errorCount: number;
   hostileSimActive: boolean;
   // B79.0c — universe-split telemetry for diagnostics endpoint.
   lastUniverseSize: number;
@@ -193,6 +199,8 @@ class XstockSpotScannerService {
     pairsFreshLastCycle: 0,
     pairsStaleLastCycle: 0,
     lastError: null,
+    lastErrorAt: null,
+    errorCount: 0,
     lastUniverseSize: 0,
     lastArcaOpen: false,
     hostileSimActive: false,
@@ -1109,9 +1117,15 @@ class XstockSpotScannerService {
 
       // Touch xstock instances to keep them warm + verify two-instance pattern.
       void xstockInstances.telemetry; // observability tap
+
+      // P19-B8.1 (defect d): clear-on-success — a completed cycle retires the
+      // active alarm; lastErrorAt/errorCount keep the history visible.
+      this.diag.lastError = null;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       this.diag.lastError = msg;
+      this.diag.lastErrorAt = new Date().toISOString();
+      this.diag.errorCount += 1;
       console.error(`[B79.0a][SCAN_CYCLE_ERROR] tick=${tick.tickNumber}:`, err);
     } finally {
       this.isScanning = false;

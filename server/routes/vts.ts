@@ -1586,6 +1586,45 @@ router.get('/filter-diagnostics', requireAuth, async (_req: Request, res: Respon
       console.warn('[reorg-B2.2][API] Could not get per-class guard-drop stats:', err);
     }
 
+    // P19-B8.1 (defect a): DB-backed 24h trades-opened for the panel's
+    // "Trades Opened" row. That row previously read a key this response never
+    // emitted (getVTSEvalRolling24h() has no tradesOpened field), so it
+    // rendered its ?? 0 fallback forever — 0 displayed against 143 real
+    // crypto opens in the DB. Query vts_open_trades directly (crypto_spot,
+    // shadow rows excluded — same single-source predicate as the xstock
+    // endpoint, routes.ts xstocks-filter-diagnostics) so the figure is
+    // restart-proof and honestly 24h-rolling.
+    let tradesOpened24h = { total: 0, quant: 0, pattern: 0 };
+    try {
+      const dbStart = Date.now();
+      const { db } = await import('../db.js');
+      const { sql } = await import('drizzle-orm');
+      const { VTS_OPEN_TRADES_EXCLUDE_SHADOW } = await import('../services/vts-trade-persistence.js');
+      const countResult: any = await db.execute(sql`
+        SELECT
+          COUNT(*)::int AS total,
+          COUNT(*) FILTER (WHERE signal_type = 'QUANT')::int AS quant_count,
+          COUNT(*) FILTER (WHERE signal_type = 'PATTERN')::int AS pattern_count
+        FROM vts_open_trades
+        WHERE asset_class = 'crypto_spot'
+          AND opened_at > NOW() - INTERVAL '24 hours'
+          AND ${VTS_OPEN_TRADES_EXCLUDE_SHADOW}
+      `);
+      const row: any = (countResult as any).rows?.[0] ?? (countResult as any)[0];
+      if (row) {
+        tradesOpened24h = {
+          total: Number(row.total ?? 0),
+          quant: Number(row.quant_count ?? 0),
+          pattern: Number(row.pattern_count ?? 0),
+        };
+      }
+      if (Date.now() - dbStart > 1000) {
+        console.warn(`[filter-diagnostics] 24h trade count query took ${Date.now() - dbStart}ms`);
+      }
+    } catch (err) {
+      console.warn('[filter-diagnostics] 24h trade count query failed:', err instanceof Error ? err.message : err);
+    }
+
     res.json({
       ok: true,
       lastScan,
@@ -1595,7 +1634,8 @@ router.get('/filter-diagnostics', requireAuth, async (_req: Request, res: Respon
       lastCycleVtsEval,
       guardDrops,
       trackerStartedAt,
-      schema: 'filter-diagnostics/v1.5',
+      tradesOpened24h,
+      schema: 'filter-diagnostics/v1.6',
     });
   } catch (error) {
     console.error('[19H][API] Filter diagnostics failed:', error);

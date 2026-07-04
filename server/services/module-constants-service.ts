@@ -53,9 +53,32 @@ const CACHE_TTL_MS = 60_000; // 60s, matches MCE
 interface CachedModule {
   rows: ModuleConstant[];
   expiresAt: number;
+  // P19-B8.1 (defect d): timestamp of the last SUCCESSFUL DB refresh, for
+  // stale-serve observability (SWR must not silently mask a wedged refresher).
+  lastRefreshedAt: number;
 }
 
 const cache = new Map<string, CachedModule>();
+
+// P19-B8.1 (defect d): stale-serve observability. The background refresher
+// lands every CACHE_TTL_MS; if a sync read is served >5 intervals past the
+// last successful refresh, the refresher is wedged (DB unreachable / crashed
+// loop) and we must SAY so — serving last-known-good silently forever would
+// hide a dead refresh path. Rate-limited to one warning per module per TTL.
+const STALE_WARN_MS = 5 * 60_000;
+const staleWarnAt = new Map<string, number>();
+function maybeWarnStaleServe(moduleName: string, cached: CachedModule): void {
+  const now = Date.now();
+  const staleForMs = now - cached.lastRefreshedAt;
+  if (staleForMs <= STALE_WARN_MS) return;
+  const lastWarn = staleWarnAt.get(moduleName) ?? 0;
+  if (now - lastWarn < 60_000) return;
+  staleWarnAt.set(moduleName, now);
+  console.warn(
+    `[module-constants][STALE_SERVE] module '${moduleName}' serving values ${Math.round(staleForMs / 1000)}s past last successful refresh — ` +
+    `background refresher may be wedged (DB unreachable?). Serving last-known-good (stale-while-revalidate).`,
+  );
+}
 
 /**
  * Resolution key for a single constant read. All 4 dimension fields are
@@ -105,6 +128,7 @@ async function loadModule(moduleName: string): Promise<ModuleConstant[]> {
   cache.set(moduleName, {
     rows,
     expiresAt: now + CACHE_TTL_MS,
+    lastRefreshedAt: now,
   });
 
   return rows;
@@ -262,9 +286,17 @@ export async function hasExplicitAssetClassRow(
 /**
  * Invalidate cache for a module. Call when a row is inserted/updated via admin
  * API so subsequent reads see the new value without waiting for TTL.
+ *
+ * P19-B8.1 (defect d): EXPIRE, don't delete — deletion re-opened the sync-
+ * reader "not warm" throw window at every admin write. Expiring makes the next
+ * ASYNC read (loadModule) fetch fresh immediately, while SYNC readers keep
+ * serving last-known-good until the refresher re-warms (≤60s). Callers that
+ * need sync readers to see the new value immediately should `await
+ * prefetchModule(moduleName)` instead (the admin write path does).
  */
 export function invalidateModuleCache(moduleName: string): void {
-  cache.delete(moduleName);
+  const cached = cache.get(moduleName);
+  if (cached) cached.expiresAt = 0;
 }
 
 /**
@@ -285,7 +317,7 @@ export function _seedModuleCacheForTests(moduleName: string, rows: ModuleConstan
   if (process.env.NODE_ENV !== 'test' && !process.env.VITEST) {
     throw new Error('_seedModuleCacheForTests is test-only');
   }
-  cache.set(moduleName, { rows, expiresAt: Number.MAX_SAFE_INTEGER });
+  cache.set(moduleName, { rows, expiresAt: Number.MAX_SAFE_INTEGER, lastRefreshedAt: Number.MAX_SAFE_INTEGER });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -309,9 +341,26 @@ export function _seedModuleCacheForTests(moduleName: string, rows: ModuleConstan
  * Returns the number of rows loaded.
  */
 export async function prefetchModule(moduleName: string): Promise<number> {
-  // Bypass TTL — always force a fresh read on prefetch.
-  cache.delete(moduleName);
-  const rows = await loadModule(moduleName);
+  // P19-B8.1 (defect d, root-caused live on staging): SWAP-ON-SUCCESS, never
+  // delete-first. The previous `cache.delete()` opened a window — while the
+  // async DB read was in flight, any sync reader of this module found a cold
+  // cache and threw "is not warm" (observed ~hourly on dbs_calculation AND
+  // amr_friction_sample via the 60s background refresher, widening with DB
+  // latency). Now: read fresh FIRST (bypassing the TTL check by querying the
+  // DB directly), then atomically replace the entry. If the DB read throws,
+  // the previous entry keeps serving (stale-while-revalidate; staleness is
+  // bounded + logged via maybeWarnStaleServe, so a wedged refresher is
+  // visible, never hidden).
+  const rows = await db
+    .select()
+    .from(moduleConstants)
+    .where(eq(moduleConstants.moduleName, moduleName));
+  const now = Date.now();
+  cache.set(moduleName, {
+    rows,
+    expiresAt: now + CACHE_TTL_MS,
+    lastRefreshedAt: now,
+  });
   ensureBackgroundRefresher();
   return rows.length;
 }
@@ -334,6 +383,7 @@ export function getCachedConstant<T = unknown>(
       `module_constants: module '${moduleName}' is not warm. Call prefetchModule('${moduleName}') at server startup before sync reads.`,
     );
   }
+  maybeWarnStaleServe(moduleName, cached);
 
   let best: ModuleConstant | undefined;
   let bestScore = -1;
@@ -519,5 +569,7 @@ export async function setConstant(
       },
     });
 
-  invalidateModuleCache(moduleName);
+  // P19-B8.1 (defect d): re-warm instead of invalidate-only, so SYNC readers
+  // see the new value immediately with no cold window (swap-on-success).
+  await prefetchModule(moduleName);
 }
