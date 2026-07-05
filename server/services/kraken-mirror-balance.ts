@@ -4,13 +4,17 @@
 // USD cash, fetched read-only from the authenticated private Balance endpoint and
 // displayed for confirmation — never a typed-in or invented number.
 //
-// "The balance" (pre-audit §5 pin, Langston-agreed): the FREE USD figure —
-// Kraken's 'ZUSD' (+ a plain 'USD' key if the API ever returns one). Stablecoins
-// (USDT/USDC/DAI…) are NOT deployable on USD-quoted pairs without a conversion,
-// so they appear in the display breakdown but are NEVER summed into the mirror
-// figure. Non-USD holdings (BTC, ETH, …) likewise: displayed, not summed
-// (valuing them needs price marks = failure surface; Phase-21 revisits —
-// RUNNING_ISSUES entry per §13).
+// "The balance" (pre-audit §5 pin, REVISED at Step-7 on LIVE evidence — see
+// RUNNING_ISSUES #435): the deployable figure = free USD (ZUSD/USD) PLUS the
+// USD-PEGGED stablecoins the trading universe itself admits as quote
+// currencies (USDT, USDC — exactly `crypto-universe-filter.json` allowedQuotes;
+// counted 1:1, each labeled by kind in the display). The original ZUSD-only
+// pin assumed stablecoins were an edge case; the first live fetch showed the
+// REAL account's entire balance is USDC (824.11) with ZERO free ZUSD — the
+// strict pin would have refused every start against Kyle's actual buying
+// power. Non-USD-pegged holdings (BTC, ETH, EURT, xStock tokens, …) stay
+// displayed-NOT-summed (valuing them needs price marks = failure surface;
+// Phase-21 revisits per #435).
 //
 // FAIL-HARD: any fetch/parse failure THROWS. The start flow refuses to start —
 // there is no fallback to a persisted balance or a literal (rule 15 / §5 #10).
@@ -22,11 +26,15 @@ import { KrakenService } from '../exchanges/kraken/kraken';
 // the balance fetch is one call per start-new plus the service's own 60s cache).
 const kraken = new KrakenService();
 
-/** Kraken asset codes treated as deployable USD cash for the mirror figure. */
-const DEPLOYABLE_USD_CODES = new Set(['ZUSD', 'USD']);
+/**
+ * Asset codes counted 1:1 into the mirror figure: free USD + the USD-pegged
+ * stablecoins the universe admits as quote currencies (allowedQuotes parity).
+ */
+const DEPLOYABLE_USD_CODES = new Set(['ZUSD', 'USD', 'USDT', 'USDC']);
 
-/** Stablecoins shown distinctly in the breakdown (displayed, never summed). */
-const STABLECOIN_CODES = new Set(['USDT', 'USDC', 'DAI', 'USDG', 'PYUSD', 'TUSD', 'EURT']);
+/** Other stablecoins shown distinctly in the breakdown (displayed, never summed —
+ * either not USD-pegged (EURT) or not an admitted quote currency). */
+const STABLECOIN_CODES = new Set(['DAI', 'USDG', 'PYUSD', 'TUSD', 'EURT']);
 
 export interface KrakenMirrorBalance {
   /** The mirror figure: free USD cash (ZUSD + USD), the paper start balance. */
@@ -72,15 +80,18 @@ export async function getKrakenMirrorBalance(): Promise<KrakenMirrorBalance> {
     }
     if (amount === 0) continue;
 
-    const isUsdCash = DEPLOYABLE_USD_CODES.has(asset);
-    const isStable = STABLECOIN_CODES.has(asset);
-    if (isUsdCash) mirror += amount;
+    const isDeployable = DEPLOYABLE_USD_CODES.has(asset);
+    const isTrueCash = asset === 'ZUSD' || asset === 'USD';
+    const isStable = (isDeployable && !isTrueCash) || STABLECOIN_CODES.has(asset);
+    if (isDeployable) mirror += amount;
 
     breakdown.push({
       asset,
       amount,
-      kind: isUsdCash ? 'usd_cash' : isStable ? 'stablecoin' : 'other',
-      deployable: isUsdCash,
+      // Honest labels: USDT/USDC COUNT into the figure but still display as
+      // stablecoins — the user sees exactly what their balance is made of.
+      kind: isTrueCash ? 'usd_cash' : isStable ? 'stablecoin' : 'other',
+      deployable: isDeployable,
     });
   }
 
