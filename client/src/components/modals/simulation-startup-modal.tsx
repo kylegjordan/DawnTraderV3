@@ -1,3 +1,8 @@
+// P19-B8.2 (OBJ-1): the free-text starting-balance input was DELETED. A new
+// paper session starts at the REAL Kraken account's free-USD balance, fetched
+// read-only from the server and displayed for confirmation — there is no
+// override field, and a failed fetch REFUSES the start (no fallback figure).
+// 'Continue' is untouched: it resumes the persisted balance and never calls Kraken.
 import { useState } from 'react';
 import {
   Dialog,
@@ -8,16 +13,28 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { PlayCircle, RefreshCw } from 'lucide-react';
+import { PlayCircle, RefreshCw, Loader2, AlertTriangle } from 'lucide-react';
+import { apiRequest } from '@/lib/queryClient';
+
+interface MirrorBreakdownRow {
+  asset: string;
+  amount: number;
+  kind: 'usd_cash' | 'stablecoin' | 'other';
+  deployable: boolean;
+}
+
+interface MirrorBalance {
+  mirrorBalanceUsd: number;
+  breakdown: MirrorBreakdownRow[];
+  fetchedAt: string;
+}
 
 interface SimulationStartupModalProps {
   open: boolean;
   onClose: () => void;
   onContinue: () => void;
-  onStartNew: (balance: number) => void;
-  defaultBalance?: number;
+  /** Fires after the user confirms the displayed Kraken-mirror figure. */
+  onStartNew: () => void;
 }
 
 export function SimulationStartupModal({
@@ -25,35 +42,52 @@ export function SimulationStartupModal({
   onClose,
   onContinue,
   onStartNew,
-  defaultBalance = 800
 }: SimulationStartupModalProps) {
-  const [showNewSimForm, setShowNewSimForm] = useState(false);
-  const [newBalance, setNewBalance] = useState(defaultBalance.toString());
+  const [mirror, setMirror] = useState<MirrorBalance | null>(null);
+  const [mirrorError, setMirrorError] = useState<string | null>(null);
+  const [isFetching, setIsFetching] = useState(false);
+
+  const resetLocal = () => {
+    setMirror(null);
+    setMirrorError(null);
+    setIsFetching(false);
+  };
 
   const handleContinue = () => {
+    resetLocal();
     onContinue();
     onClose();
   };
 
-  const handleShowNewForm = () => {
-    setShowNewSimForm(true);
+  const handleShowNewForm = async () => {
+    setIsFetching(true);
+    setMirrorError(null);
+    try {
+      const data = await apiRequest('GET', '/api/active-engine/mirror-balance');
+      setMirror(data as MirrorBalance);
+    } catch (error: any) {
+      setMirror(null);
+      setMirrorError(
+        error?.message ||
+          'Could not fetch your real Kraken balance. The new session cannot start until the connection is restored (Continue is unaffected).'
+      );
+    } finally {
+      setIsFetching(false);
+    }
   };
 
-  const handleStartNew = () => {
-    const balance = parseFloat(newBalance);
-    if (isNaN(balance) || balance <= 0) {
-      return;
-    }
-    onStartNew(balance);
+  const handleConfirmStartNew = () => {
+    resetLocal();
+    onStartNew();
     onClose();
-    setShowNewSimForm(false);
   };
 
   const handleCancel = () => {
-    setShowNewSimForm(false);
-    setNewBalance(defaultBalance.toString());
+    resetLocal();
     onClose();
   };
+
+  const inNewLeg = isFetching || mirror !== null || mirrorError !== null;
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleCancel()}>
@@ -65,7 +99,7 @@ export function SimulationStartupModal({
           </DialogDescription>
         </DialogHeader>
 
-        {!showNewSimForm ? (
+        {!inNewLeg ? (
           <div className="grid gap-4 py-4">
             <Button
               onClick={handleContinue}
@@ -89,44 +123,69 @@ export function SimulationStartupModal({
           </div>
         ) : (
           <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="starting-balance">Starting Portfolio Balance</Label>
-              <div className="flex items-center gap-2">
-                <span className="text-lg font-mono">$</span>
-                <Input
-                  id="starting-balance"
-                  type="number"
-                  step="0.01"
-                  min="1"
-                  value={newBalance}
-                  onChange={(e) => setNewBalance(e.target.value)}
-                  placeholder="800"
-                  className="flex-1 font-mono"
-                  data-testid="input-starting-balance"
-                />
+            {isFetching && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground" data-testid="mirror-balance-loading">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Fetching your real Kraken balance…
               </div>
-              <p className="text-xs text-muted-foreground">
-                This will reset your baseline, metrics, and open positions.
-              </p>
-            </div>
+            )}
+
+            {mirrorError && (
+              <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm" data-testid="mirror-balance-error">
+                <AlertTriangle className="w-4 h-4 mt-0.5 text-destructive shrink-0" />
+                <span>{mirrorError}</span>
+              </div>
+            )}
+
+            {mirror && (
+              <div className="grid gap-3" data-testid="mirror-balance-confirm">
+                <div>
+                  <div className="text-xs text-muted-foreground">New simulation starts at your real Kraken free-USD balance</div>
+                  <div className="text-2xl font-mono font-semibold" data-testid="mirror-balance-figure">
+                    ${mirror.mirrorBalanceUsd.toFixed(2)}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    Read-only — fetched {new Date(mirror.fetchedAt).toLocaleTimeString()} from your Kraken account.
+                  </div>
+                </div>
+
+                {mirror.breakdown.length > 0 && (
+                  <div className="rounded-md border p-2 max-h-40 overflow-y-auto">
+                    <div className="text-xs font-medium mb-1">Account holdings</div>
+                    {mirror.breakdown.map((row) => (
+                      <div key={row.asset} className="flex justify-between text-xs font-mono py-0.5">
+                        <span>
+                          {row.asset}
+                          {!row.deployable && (
+                            <span className="ml-1 text-muted-foreground">
+                              ({row.kind === 'stablecoin' ? 'stablecoin — shown, not counted' : 'shown, not counted'})
+                            </span>
+                          )}
+                        </span>
+                        <span>{row.amount.toFixed(row.kind === 'other' ? 8 : 2)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <p className="text-xs text-muted-foreground">
+                  Starting new will reset your baseline, metrics, and open positions. Learning data is never reset.
+                </p>
+              </div>
+            )}
 
             <DialogFooter className="gap-2 sm:gap-0">
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => setShowNewSimForm(false)}
-                data-testid="button-cancel-new-sim"
-              >
+              <Button type="button" variant="ghost" onClick={resetLocal} data-testid="button-cancel-new-sim">
                 Back
               </Button>
               <Button
                 type="button"
                 variant="default"
-                onClick={handleStartNew}
-                disabled={!newBalance || parseFloat(newBalance) <= 0}
+                onClick={handleConfirmStartNew}
+                disabled={!mirror || !(mirror.mirrorBalanceUsd > 0)}
                 data-testid="button-confirm-new-sim"
               >
-                Confirm & Start
+                Confirm &amp; Start at ${mirror ? mirror.mirrorBalanceUsd.toFixed(2) : '—'}
               </Button>
             </DialogFooter>
           </div>

@@ -1627,6 +1627,10 @@ router.get('/filter-diagnostics', requireAuth, async (_req: Request, res: Respon
 
     res.json({
       ok: true,
+      // P19-B8.2 (#410): xstock-parity top-level timestamp (the two endpoints
+      // now share the common key set; signalRejections stays crypto-only and
+      // xstockScanner xstock-only as DOCUMENTED class-specific extensions).
+      timestamp: new Date().toISOString(),
       lastScan,
       rolling24h,
       signalRejections,
@@ -1635,7 +1639,7 @@ router.get('/filter-diagnostics', requireAuth, async (_req: Request, res: Respon
       guardDrops,
       trackerStartedAt,
       tradesOpened24h,
-      schema: 'filter-diagnostics/v1.6',
+      schema: 'filter-diagnostics/v1.7',
     });
   } catch (error) {
     console.error('[19H][API] Filter diagnostics failed:', error);

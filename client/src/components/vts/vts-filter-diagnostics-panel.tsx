@@ -166,18 +166,17 @@ export function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagno
                     <td className="p-2 text-xs text-muted-foreground">Sum of 4 family rejection counts</td>
                   </tr>
                   {/* Batch 48: Family-Qualified Unique — the true unique pair count after family IMF.
-                      P19-B8.1 (defect b): read BOTH response shapes — crypto's fx5 rolling puts
-                      totalFamilyQualifiedUnique at the top level; the xstock endpoint nests it
-                      under rolling24h.aggregated. The top-level-only read rendered 0 for xStock
-                      against 136k+ real (server verified live). */}
+                      P19-B8.2 (#410): SINGLE-path read — both endpoints now emit
+                      rolling24h.totalFamilyQualifiedUnique at the top level (crypto v1.7 /
+                      xstock v2.2); the B8.1 dual-shape shim is retired. */}
                   <tr className="border-b hover:bg-muted/30">
                     <td className="p-2 font-medium">Family-Qualified (Unique Pairs)</td>
                     <td className="p-2 text-right text-teal-600">
-                      {fmt((rolling24h as any).totalFamilyQualifiedUnique ?? (r24 as any)?.totalFamilyQualifiedUnique ?? 0)}
+                      {fmt((rolling24h as any).totalFamilyQualifiedUnique ?? 0)}
                     </td>
                     <td className="p-2 text-right text-muted-foreground">—</td>
                     <td className="p-2 text-right text-teal-600">
-                      {fmt((rolling24h as any).totalFamilyQualifiedUnique ?? (r24 as any)?.totalFamilyQualifiedUnique ?? 0)}
+                      {fmt((rolling24h as any).totalFamilyQualifiedUnique ?? 0)}
                     </td>
                     <td className="p-2 text-xs text-muted-foreground">Unique pairs passing ≥1 family IMF (before fan-out expansion)</td>
                   </tr>

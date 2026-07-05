@@ -2589,6 +2589,27 @@ export class ActiveExecutionEngine {
       // fallback flips maker→taker, and the record must show the fee actually paid.
       const _b72EntryFeeRate = _b72cEffectiveMode === 'maker' ? _b72Friction.feeRateMaker : _b72Friction.feeRateTaker;
 
+      // ── P19-B8.2 (OBJ-4): the balance-ratio calibration stamp — computed ONCE
+      // here, written to BOTH the closed-trade and open-position rows below.
+      // ratio = current balance / the latest anchor event's balance, stamped
+      // TOGETHER with that anchor's value + version so a later re-anchor can never
+      // reinterpret this row. No anchor event (legacy-continue state) → HONEST
+      // NULLs, never a guessed 1.0. A stamp failure never blocks the open.
+      let _b82RatioStamp: { balanceRatioAtOpen: string; anchorBalanceAtOpen: string; anchorVersionAtOpen: number } | {} = {};
+      try {
+        const { getRatioStampInputs } = await import('./portfolio-anchor-service.js');
+        const stampInputs = await getRatioStampInputs(this.mode as 'paper' | 'live');
+        if (stampInputs) {
+          _b82RatioStamp = {
+            balanceRatioAtOpen: (stampInputs.currentBalance / stampInputs.anchorBalance).toFixed(6),
+            anchorBalanceAtOpen: stampInputs.anchorBalance.toFixed(2),
+            anchorVersionAtOpen: stampInputs.anchorVersion,
+          };
+        }
+      } catch (stampErr: any) {
+        console.error(`[B8.2][ratio-stamp] stamp failed (open proceeds, NULLs recorded): ${stampErr?.message}`);
+      }
+
       const trade = await storage.createClosedTrade(this.mode, {
         symbol: signal.symbol,
         baseCurrency,
@@ -2619,6 +2640,8 @@ export class ActiveExecutionEngine {
         // P19-B7.2b (OBJ-B): the maker/taker entry fee-mode + per-side rate.
         chosenEntryMode: _b72cEffectiveMode,
         entryFeeRate: _b72EntryFeeRate.toString(),
+        // P19-B8.2 (OBJ-4): the balance-ratio calibration stamp (or honest NULLs).
+        ..._b82RatioStamp,
         metadata: signal.metadata || {}
       });
 
@@ -2700,6 +2723,9 @@ export class ActiveExecutionEngine {
         // P19-B7.2b (OBJ-B): the maker/taker entry fee-mode + per-side rate.
         chosenEntryMode: _b72cEffectiveMode,
         entryFeeRate: _b72EntryFeeRate.toString(),
+        // P19-B8.2 (OBJ-4): the same stamp as the closed-trade row (one compute,
+        // two writes — same-vintage by construction).
+        ..._b82RatioStamp,
         // P19-B7.2c: a maker-chosen promotion RESTS as state='pending' at the limit,
         // holding a slot, until the monitor pre-pass fills it (real trade-through) or
         // the hard-drop deadline fires (dropped — never a closed trade). Taker/filled
@@ -2730,6 +2756,26 @@ export class ActiveExecutionEngine {
 
       // AJ10.3: Diagnostic - open position created
       console.log(`[AJ10.3][OPEN_POSITION_OK] positionId=${openPosition.id} | symbol=${signal.symbol} | tradeId=${trade.id}`);
+
+      // P19-B8.2 (OBJ-3): the ONE friction-divergence evaluation seam — compares
+      // THIS open's real notional against the risk-equivalent live-balance order
+      // and executes the auto re-anchor on a bound breach (outside the cooldown).
+      // Fire-and-forget: an evaluation failure NEVER affects the open (B3b).
+      (async () => {
+        try {
+          const { evaluateDivergenceAtOpen } = await import('./friction-divergence-evaluator.js');
+          await evaluateDivergenceAtOpen({
+            mode: this.mode as 'paper' | 'live',
+            assetClass: _tradeClass,
+            paperNotionalUsd: quantity * actualEntryPrice,
+            entryPrice: actualEntryPrice,
+            atr: Number((signal as any)?.metadata?.atr ?? 0),
+            liquidityUsd: volume24h,
+          });
+        } catch (divErr: any) {
+          console.error(`[B8.2][divergence] seam error (open unaffected): ${divErr?.message}`);
+        }
+      })();
 
       // P19-B5a: terminal ADMIT capture — the position ACTUALLY OPENED (survived
       // SQE, RTB confidence-revalidation, and the TCL dedup gate). Distinct from the

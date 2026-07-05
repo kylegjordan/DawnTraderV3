@@ -1142,7 +1142,39 @@ export async function resumeActiveEngines(): Promise<void> {
       
       if (existingSession) {
         console.log(`[R9.3.HF-4.FIX] Found active session: ${existingSession.sessionId}`);
-        
+
+        // P19-B8.2 (OBJ-2, resume-hardening seam 1 of 2): the resume REFUSES —
+        // loudly, with zero writes — when the session row's balance OR the
+        // persisted portfolio balance is absent/NULL/unparseable. The engine
+        // must never wake up believing an invented number (the deleted schema
+        // defaults were exactly that vector). The app layer owns this invariant;
+        // the schema NOT NULL constraint is only the backstop.
+        const sessionBalance = Number.parseFloat(String(existingSession.startingBalance ?? ''));
+        const { getAnchorState } = await import('./portfolio-anchor-service.js');
+        const anchorState = await getAnchorState('paper');
+        if (!Number.isFinite(sessionBalance) || sessionBalance <= 0 || !anchorState || !(anchorState.balance > 0)) {
+          const detail =
+            `session.startingBalance=${existingSession.startingBalance ?? 'ABSENT'}, ` +
+            `portfolio_state=${anchorState ? `$${anchorState.balance}` : 'NO ROW'}`;
+          console.error(`[B8.2][RESUME-REFUSED] Paper resume refused — no trustworthy balance (${detail}). isEngineActive reset to false; start a new session.`);
+          await storage.updateSystemContext('paper', { isEngineActive: false });
+          try {
+            const { addAlert } = await import('./system-alerts.js');
+            await addAlert({
+              triggers_at: new Date(),
+              title: 'Paper engine resume REFUSED — no trustworthy balance',
+              body: `The restart found a running paper session but could not establish a real balance (${detail}). The engine did NOT start and nothing was written. Start a new session (Kraken-mirror) or investigate the session row.`,
+              severity: 'warning',
+              category: 'breakage',
+              metadata: { sessionId: existingSession.sessionId },
+              dedupe_key: 'b8-2-resume-refused-paper',
+            });
+          } catch (alertErr: any) {
+            console.error(`[B8.2][RESUME-REFUSED] alert write failed: ${alertErr?.message}`);
+          }
+          return;
+        }
+
         // Import and start the manager
         const { ActivePortfolioManager } = await import('./active-portfolio-manager.js');
         const manager = new ActivePortfolioManager('paper', existingSession.startedBy || 'system-resume');

@@ -6,6 +6,23 @@
 
 ---
 
+## 2026-07-05 — P19-B8.2: balance-policy legacy set (ghost defaults' dead siblings + a dead parallel open path + a live-data ghost row + an orphaned schema-copy)
+
+**Why:** the B8.2 balance-policy batch (rule 18 on-the-spot dispositions surfaced by the pre-audit + Langston Step-2 conditions). Every code deletion grep-proven zero-caller + tsc-clean; the two DATA deletions carry full pre-delete values for auditability. Archive copies: `1-system-manual/_archive/deleted-code/*.20260705-P19B8.2.removed`.
+
+| Item | Location (pre-removal) | What it was / why removed |
+|---|---|---|
+| confirm-balance NO-OP endpoint | `server/routes.ts` (~:11227, "[41D]") | Disabled since Phase 41D — logged + returned success unconditionally regardless of the posted balance. Replaced by the read-only Kraken-mirror confirm (`GET /api/active-engine/mirror-balance` + the rebuilt SimulationStartupModal). Client callers (paper-trading-controls retry path, ConfirmBalanceModal) removed with it. |
+| `ConfirmBalanceModal` | `client/src/components/trading/confirm-balance-modal.tsx` | Posted to the NO-OP endpoint above; zero users after the controls rebuild (grep-proven; a stale top-bar comment re-pointed). |
+| `storage.getGuardrails` + `getGuardrailsLegacy` | `server/storage.ts` (:729/:737) + the `IStorage` lines | The legacy-guardrails READ accessors: `getGuardrails` was an unconditional-throw deprecation stub; `getGuardrailsLegacy` a debug read. BOTH grep-proven ZERO-caller (every apparent caller is a same-NAMED symbol that already reads guardrails_v2 — see "left intentionally"). Langston independently confirmed zero-caller pre-push. |
+| `compare_guardrails` legacy read (RE-POINTED, not deleted) | `server/services/reasoning-orchestrator.ts:~500` | The reasoning-task diagnostic read of the legacy dollar `guardrails` table → re-pointed at `guardrailsV2` (keeps the diagnostic functional; unblocks B6.10's clean table drop). |
+| `trade-executor.ts` (whole file, 313 lines) | `server/services/trade-executor.ts` | A DEAD parallel trade-open path writing closed_trades + active_open_positions — ZERO callers repo-wide (which is why B7.2b's fee-mode stamps and B8.2's ratio stamps never touched it; a silent divergence trap had anything ever revived it). Found during the ratio-stamp coverage sweep. |
+| Ghost paper portfolio row (DATA) | `public.portfolio_state` | The $25,000 scenario leftover: id `ef9526aa-ef11-4e55-a995-fdd8011bf83c`, mode paper, global_context_id `b8c1599a-8917-4048-9898-84b96bf0cea1`, created 2025-12-05, last touched 2025-12-30. The wrong-row-pickup hazard beside Kyle's genuine $878 row. Deleted by the B8.2 migration with an explicit `WHERE mode+context_key+amount` predicate; full values preserved in the migration §4 comment for paper-reversibility. |
+| Orphaned legacy schema-copy (DATA+DDL) | `dawntrader_v2.portfolio_state` (4 stale rows) | An abandoned schema-copy unreachable by the app (search_path = public). Repo-wide grep: ZERO code references (single hit = a chat-archive filename); no search_path overrides anywhere in `server/`. Dropped by the B8.2 migration §5. |
+| Ghost balance defaults + literals | `shared/schema.ts` (:1170 `"1000.00"`, :1829 `"10000"`), `server/routes.ts` (:11293 `800`, :5408 `10000`, :12274 `'1000'`), client `800`s, `active-portfolio-manager.ts` (:536/:671 hardcoded `$10,000` DENOMINATORS) | The seven enumerated invented-balance literals PLUS two the sweeps missed: hardcoded $10k denominators in the exposure%/drawdown% health math (understated exposure ~11× at a real $878 balance against the heat ceilings). All replaced by the Kraken-mirror flow / real-balance reads / honest refusals — never a substituted default. |
+
+**Left intentionally (so a later grep doesn't read as a missed sweep):** `storage.upsertGuardrails` (throwing stub) + its TWO live callers (`routes.ts:1440`, `intent-executor.ts:418`) — retire together with the legacy `guardrails` table in **B6.10** (RUNNING_ISSUES **#436**); the same-named NON-storage symbols `config-update-service.ts:176 getGuardrails` and `state-awareness.ts:253 getGuardrails` — both already read guardrails_v2 ([9.7] comments), NOT the deleted accessor; the legacy `guardrails` table itself + schema export (B6.10).
+
 ## 2026-07-03 — P19-B-RENAME Wave-1: dead paper-era components (Kyle rulings + Langston-reconciled M5 verdict)
 
 **Why:** #413 — the paper→active naming cleanup's deletion wave (rule 18: nothing lingers). Every item verified dead by consumer-walk + tsc + grep-to-zero (only deliberate tombstone comments remain). Archive copies: `1-system-manual/_archive/deleted-code/*.removed` (git history is the authoritative archive).

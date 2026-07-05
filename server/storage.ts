@@ -209,12 +209,13 @@ export interface IStorage {
 
   // [9.7] Guardrails methods - DEPRECATED
   // Legacy guardrails table is obsolete. Use getGuardrailsV2() instead.
-  /** @deprecated [9.7] Use getGuardrailsV2() instead. This method throws an error. */
-  getGuardrails(params: { mode: 'live' | 'paper' }): Promise<Guardrails | null>;
+  // P19-B8.2: the zero-caller getGuardrails + getGuardrailsLegacy accessors were
+  // DELETED (rule 18; DELETED_COMPONENTS_LOG 2026-07-05). upsertGuardrails is
+  // INTENTIONALLY RETAINED — it still has two live callers (routes.ts legacy
+  // guardrails route + intent-executor executeGuardrailsUpdate) that throw at
+  // runtime today; that trio is B6.10's guardrails-v1 retirement work (RUNNING_ISSUES).
   /** @deprecated [9.7] Use upsertGuardrailsV2() instead. This method throws an error. */
   upsertGuardrails(data: Omit<InsertGuardrails, 'userId'> & { lastUpdatedBy?: string }): Promise<Guardrails>;
-  /** [9.7] Legacy read-only method for debugging/audit purposes only. */
-  getGuardrailsLegacy(params: { mode: 'live' | 'paper' }): Promise<Guardrails | null>;
   
   // Phase 2: Guardrails V2 methods (Core Four - Single Source of Truth)
   getGuardrailsV2(params: { mode: 'live' | 'paper' }): Promise<GuardrailsV2 | null>;
@@ -721,30 +722,18 @@ export class DatabaseStorage implements IStorage {
   // [9.7] Guardrails methods - DEPRECATED
   // Legacy guardrails table is obsolete. Use getGuardrailsV2() instead.
   
-  /**
-   * @deprecated [9.7] Use getGuardrailsV2() instead. Legacy guardrails table is obsolete.
-   * This method now throws an error to prevent accidental usage.
-   */
-  async getGuardrails(params: { mode: 'live' | 'paper' }): Promise<Guardrails | null> {
-    throw new Error('[9.7] Deprecated: guardrails table is obsolete. Use getGuardrailsV2() instead.');
-  }
-
-  /**
-   * [9.7] Legacy read-only method for debugging/audit purposes only.
-   * Do not use in production code paths.
-   */
-  async getGuardrailsLegacy(params: { mode: 'live' | 'paper' }): Promise<Guardrails | null> {
-    console.warn('[9.7][Deprecated] getGuardrailsLegacy called – for read-only debug/audit use only');
-    const [result] = await db
-      .select()
-      .from(guardrails)
-      .where(eq(guardrails.mode, params.mode));
-    return result || null;
-  }
+  // P19-B8.2 (rule 18): getGuardrails (unconditional-throw stub) and
+  // getGuardrailsLegacy (debug read) DELETED — both grep-proven zero-caller
+  // 2026-07-05. NOTE for future sweeps: config-update-service.ts:176 and
+  // state-awareness.ts:253 declare their OWN symbols named getGuardrails —
+  // both already read guardrails_v2 ([9.7] comments) and are NOT this accessor.
 
   /**
    * @deprecated [9.7] Use upsertGuardrailsV2() instead. Legacy guardrails table is obsolete.
    * This method now throws an error to prevent accidental writes.
+   * P19-B8.2: RETAINED (two live callers — routes.ts legacy guardrails route +
+   * intent-executor executeGuardrailsUpdate — both throw at runtime today);
+   * the trio retires together in B6.10 (RUNNING_ISSUES).
    */
   async upsertGuardrails(data: Omit<InsertGuardrails, 'userId'> & { lastUpdatedBy?: string }): Promise<Guardrails> {
     throw new Error('[9.7] Deprecated: Legacy guardrails update blocked – use guardrails_v2 instead.');

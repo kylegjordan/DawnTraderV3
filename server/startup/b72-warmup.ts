@@ -117,6 +117,12 @@ const PREFETCH_MODULES = [
   // decideMakerTaker caller in the signal-gen hot path. MUST be warm; fail-hard
   // on missing rows (START TIGHT seeds live in the B7.2 migration).
   'maker_taker',
+  // P19-B8.2: friction-divergence auto re-anchor knobs (max_divergence_bps,
+  // min_notional_delta_max, min_reanchor_interval_ms, impact_k, ratio band) —
+  // read synchronously at the trade-open seam. Seeds live in the B8.2 migration
+  // (CONSERVATIVE PLACEHOLDERS pending Phase-25 calibration); fail-hard on
+  // missing rows per rule 15.
+  'friction_divergence',
   // Future: more Slice 2/3/4 modules added here as source replacements ship.
 ];
 

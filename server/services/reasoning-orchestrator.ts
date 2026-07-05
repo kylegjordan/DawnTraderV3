@@ -494,10 +494,12 @@ class ReasoningOrchestrator {
         }
         
         case 'compare_guardrails': {
-          // Fetch guardrails from database
-          const { guardrails } = await import('@shared/schema');
+          // P19-B8.2: re-pointed from the legacy dollar-denominated guardrails
+          // table to guardrails_v2 (the live percent-based Core Four) — keeps the
+          // diagnostic functional and unblocks B6.10's clean legacy-table drop.
+          const { guardrailsV2 } = await import('@shared/schema');
           const mode = payload.params?.mode || 'paper';
-          const guardrailData = await db.select().from(guardrails).where(eq(guardrails.mode, mode));
+          const guardrailData = await db.select().from(guardrailsV2).where(eq(guardrailsV2.mode, mode));
           return { status: 'ok', guardrails: guardrailData };
         }
         

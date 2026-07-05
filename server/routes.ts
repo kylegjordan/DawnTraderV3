@@ -5404,8 +5404,14 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       // Get initial balance from portfolio_state
       // [9.6.3] Use mode-only query (mode-based architecture)
+      // P19-B8.2 (OBJ-2): ghost 10000 fallback DELETED — with no portfolio row the
+      // legacy history endpoint returns an honest empty series, never a fabricated base.
       const portfolioState = await storage.getPortfolioState({ mode: 'paper' });
-      const initialBalance = portfolioState?.balance ? parseFloat(portfolioState.balance as any) : 10000;
+      const initialBalanceRaw = portfolioState?.balance ? parseFloat(portfolioState.balance as any) : NaN;
+      if (!Number.isFinite(initialBalanceRaw)) {
+        return res.json({ history: [], initialBalanceUnavailable: true });
+      }
+      const initialBalance = initialBalanceRaw;
       
       // Calculate running balance over time
       const historyByDate = new Map<string, number>();
@@ -7815,6 +7821,11 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         // if scanner lifetime isn't populated yet.
         totalPairsScanned: lt?.pairsEntered ?? rolling24hTickRows,
         uniquePairsScanned: universe24h,
+        // P19-B8.2 (#410): crypto-parity TOP-LEVEL key — the shared panel reads
+        // rolling24h.totalFamilyQualifiedUnique on ONE path for both classes now
+        // (the B8.1 dual-shape client shim is retired; the nested copy under
+        // `aggregated` stays for its other consumers).
+        totalFamilyQualifiedUnique: lt?.familyQualifiedUnique ?? lt?.pairsPassedFamilies ?? 0,
         aggregated: {
           quant: {
             global: buildGlobalFromCounters(lt?.globalFilterCounters),
@@ -8041,13 +8052,37 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         console.warn('[reorg-B2.2][xstocks-filter-diagnostics] Could not get per-class guard-drop stats:', err);
       }
 
+      // P19-B8.2 (#410): crypto-parity tradesOpened24h — MEANINGFUL for xStock
+      // since P19-B7.2d wired the xStock VTS lane (real vts_open_trades rows,
+      // asset_class='xstock_spot'). Same DB-backed query shape as the crypto
+      // endpoint (v1.6); shadow rows excluded by the same predicate.
+      let xsTradesOpened24h: { total: number; quant: number; pattern: number } = { total: 0, quant: 0, pattern: 0 };
+      try {
+        const { db: xsDb } = await import('./db.js');
+        const { sql: xsSql } = await import('drizzle-orm');
+        const { VTS_OPEN_TRADES_EXCLUDE_SHADOW } = await import('./services/vts-trade-persistence.js');
+        const [row] = await xsDb.execute(xsSql`
+          SELECT COUNT(*)::int AS total,
+                 COUNT(*) FILTER (WHERE signal_type = 'QUANT')::int AS quant,
+                 COUNT(*) FILTER (WHERE signal_type = 'PATTERN')::int AS pattern
+          FROM vts_open_trades
+          WHERE asset_class = 'xstock_spot'
+            AND opened_at >= NOW() - INTERVAL '24 hours'
+            AND ${VTS_OPEN_TRADES_EXCLUDE_SHADOW}
+        `) as any;
+        if (row) xsTradesOpened24h = { total: row.total ?? 0, quant: row.quant ?? 0, pattern: row.pattern ?? 0 };
+      } catch (xsTradeErr) {
+        console.warn('[B8.2][xstocks-filter-diagnostics] tradesOpened24h query failed (zeros emitted):', xsTradeErr);
+      }
+
       res.json({
         ok: true,
         timestamp: new Date().toISOString(),
-        schema: 'xstocks-filter-diagnostics/v2.1',
+        schema: 'xstocks-filter-diagnostics/v2.2',
         // FilterDiagnosticsData-compatible fields
         lastScan,
         rolling24h,
+        tradesOpened24h: xsTradesOpened24h,
         // B-DIAG-387 (#387): the always-empty `signalRejections` field was removed
         // with its dead feeder vars (totalRejected/byReason/byRegime). No client
         // reads it for the xStock tab (verified: no `.signalRejections`/`.byRegime`
@@ -11222,15 +11257,18 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
 
   // ==================== End Phase 8.5 ====================
 
-  // Phase 41D: Balance confirmation endpoint disabled (no longer required)
-  // Endpoint kept as no-op for backwards compatibility
-  apiRouter.post('/active-engine/confirm-balance', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  // P19-B8.2 (OBJ-1): the Phase-41D confirm-balance NO-OP endpoint was DELETED
+  // (rule 18; DELETED_COMPONENTS_LOG 2026-07-05) — its modal flow is replaced by
+  // the read-only Kraken-mirror confirm below. The start-new balance is the REAL
+  // Kraken free-USD figure, fetched server-side; there is no client-supplied number.
+  apiRouter.get('/active-engine/mirror-balance', authenticateToken, async (_req: AuthenticatedRequest, res) => {
     try {
-      const { balance } = req.body;
-      console.log('[41D] confirm-balance called (no-op) - balance confirmation system disabled');
-      res.json({ success: true, message: `Balance confirmation no longer required (accepted: $${balance})` });
+      const { getKrakenMirrorBalance } = await import('./services/kraken-mirror-balance.js');
+      const mirror = await getKrakenMirrorBalance();
+      res.json({ ok: true, ...mirror });
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      // Fail-hard surface: the client shows this refusal verbatim — no fallback figure.
+      res.status(502).json({ ok: false, error: error.message });
     }
   });
 
@@ -11290,8 +11328,35 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // Phase 27.F.14.J: Handle "Start New Simulation" mode
       if (mode === 'new') {
         console.log(`[41D-ROUTE-4] Mode is 'new' (t+${Date.now()-t0}ms)`);
-        const balance = initialBalance ? parseFloat(initialBalance) : 800;
-        console.log(`[Phase-27.F.14.J] Starting NEW simulation with balance $${balance}`);
+
+        // P19-B8.2 (OBJ-1): the start-new balance is the Kraken-mirror figure,
+        // fetched server-side — NEVER a client-supplied or invented number.
+        // A supplied initialBalance is refused loudly (no silent ignore); a
+        // failed mirror fetch refuses the start (no fallback; 'continue' is
+        // unaffected — it never calls Kraken).
+        if (initialBalance !== undefined && initialBalance !== null) {
+          return res.status(400).json({
+            error: 'initialBalance is no longer accepted. A new paper session starts at your real Kraken balance (fetched automatically).'
+          });
+        }
+        let balance: number;
+        try {
+          const { getKrakenMirrorBalance } = await import('./services/kraken-mirror-balance.js');
+          const mirror = await getKrakenMirrorBalance();
+          balance = mirror.mirrorBalanceUsd;
+        } catch (mirrorErr: any) {
+          console.error(`[B8.2][START] Kraken-mirror fetch failed — start REFUSED: ${mirrorErr?.message}`);
+          return res.status(502).json({
+            error: 'Could not fetch your real Kraken balance, so the new session was NOT started. Resolve the Kraken connection and try again (Continue is unaffected).',
+            detail: mirrorErr?.message
+          });
+        }
+        if (!(balance > 0)) {
+          return res.status(409).json({
+            error: `Your Kraken account has no free USD cash (mirror figure $${balance.toFixed(2)}), so a new paper session cannot start at the mirrored balance.`
+          });
+        }
+        console.log(`[B8.2][START] Starting NEW simulation at the Kraken-mirror balance $${balance}`);
         
         // Stop paper simulation if running (gracefully handle if already stopped)
         const { stopActiveEngine } = await import('./services/active-engine-service.js');
@@ -11304,9 +11369,13 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         const systemContext = await storage.getSystemContext('paper');
         console.log('[ActiveEngineReset] Retrieved system context for mode: paper');
         
-        // Phase 27.F.14.M: Reset portfolio balance for paper mode using updatePortfolioBalance
-        await storage.updatePortfolioBalance({ mode: 'paper', balance });
-        console.log(`[ActiveEngine] Started simulation (balance=$${balance})`);
+        // P19-B8.2 (OBJ-3/OBJ-4): the start-new balance write is an ANCHOR EVENT
+        // (reason 'start_new') — balance + anchor_version + ledger row, written
+        // atomically BEFORE the engine can open anything, so the first at-open
+        // ratio stamp always has an anchor to reference.
+        const { executeReanchor } = await import('./services/portfolio-anchor-service.js');
+        await executeReanchor({ mode: 'paper', newBalance: balance, reason: 'start_new' });
+        console.log(`[ActiveEngine] Started simulation (Kraken-mirror balance=$${balance})`);
         
         // Phase 27.F.14.M: Broadcast portfolio balance update to all clients
         const { contextBridge } = await import('./services/context-bridge.js');
@@ -12270,8 +12339,19 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const mode = 'paper' as const;
       
       // Get portfolio state
+      // P19-B8.2 (OBJ-2): ghost '1000' fallback DELETED — an absent/unparseable
+      // balance is surfaced as an explicit 409, never fabricated.
       const portfolioState = await storage.getPortfolioState({ mode });
-      const startingBalance = portfolioState ? parseFloat((portfolioState as any).startingBalance?.toString() || portfolioState.balance?.toString() || '1000') : 1000;
+      const startingBalanceRaw = portfolioState
+        ? parseFloat((portfolioState as any).startingBalance?.toString() || portfolioState.balance?.toString() || '')
+        : NaN;
+      if (!Number.isFinite(startingBalanceRaw)) {
+        return res.status(409).json({
+          ok: false,
+          error: 'No portfolio balance exists for paper mode — start a session first (the summary never invents a balance).'
+        });
+      }
+      const startingBalance = startingBalanceRaw;
       
       // Get session start time
       const sessionStart = getEngineSessionStart(mode);
@@ -12473,6 +12553,11 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         closedAt: new Date(),
         closeReason: reason || 'manual_close',
         confidence: position.confidence?.toString(),
+        // P19-B8.2 (OBJ-4): carry the at-open ratio stamp from the position row
+        // (stamped once at open, never recomputed; NULL stays NULL).
+        balanceRatioAtOpen: (position as any).balanceRatioAtOpen ?? null,
+        anchorBalanceAtOpen: (position as any).anchorBalanceAtOpen ?? null,
+        anchorVersionAtOpen: (position as any).anchorVersionAtOpen ?? null,
         metadata: position.metadata
       };
       
@@ -12579,6 +12664,10 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
             closedAt: new Date(),
             closeReason: 'stranded_clear',
             confidence: position.confidence?.toString(),
+            // P19-B8.2 (OBJ-4): carry the at-open ratio stamp (NULL stays NULL).
+            balanceRatioAtOpen: (position as any).balanceRatioAtOpen ?? null,
+            anchorBalanceAtOpen: (position as any).anchorBalanceAtOpen ?? null,
+            anchorVersionAtOpen: (position as any).anchorVersionAtOpen ?? null,
             metadata: position.metadata
           });
           

@@ -371,10 +371,12 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
       )}
 
       {/* P19-B8.1: the trading-control modals moved with the toggle —
-          SimulationStartupModal + ConfirmBalanceModal now mount inside
-          PaperTradingControls on the Paper Trading page; the two live-mode
-          confirm modals are unmounted until the Phase-21 live-controls build
-          re-homes them on the Live Trading page. */}
+          SimulationStartupModal mounts inside PaperTradingControls on the
+          Paper Trading page (P19-B8.2 deleted ConfirmBalanceModal with the
+          retired confirm-balance endpoint — the startup modal now carries the
+          read-only Kraken-mirror confirm); the two live-mode confirm modals
+          are unmounted until the Phase-21 live-controls build re-homes them
+          on the Live Trading page. */}
     </header>
   );
 }

@@ -1167,11 +1167,43 @@ export const portfolioState = pgTable("portfolio_state", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   globalContextId: varchar("global_context_id", { length: 50 }).default("default").notNull(),
   mode: tradingModeEnum("mode").notNull(),
-  balance: decimal("balance", { precision: 20, scale: 2 }).notNull().default("1000.00"),
+  // P19-B8.2: NO default. The balance is set ONLY by the Kraken-mirror start flow
+  // (mode='new'), a resume of persisted state, or a re-anchor event. A row cannot
+  // come into existence with an invented balance — the ghost "1000.00" default was
+  // the wrong-row-pickup hazard (a $25k scenario ghost row was found live 2026-07-05).
+  balance: decimal("balance", { precision: 20, scale: 2 }).notNull(),
+  // P19-B8.2: monotonic anchor version. Incremented by every anchor event
+  // (start_new | auto_divergence | launch_snap); the at-open ratio stamp records
+  // which anchor version it was measured against so a later re-anchor can never
+  // reinterpret history. Rows predating B8.2 carry version 0 (no anchor recorded).
+  anchorVersion: integer("anchor_version").notNull().default(0),
   lastUpdate: timestamp("last_update", { withTimezone: true }).defaultNow(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 }, (table) => ({
   uniqueGlobalContextMode: uniqueIndex("portfolio_state_global_context_mode_idx").on(table.globalContextId, table.mode),
+}));
+
+// P19-B8.2: append-only anchor-event ledger. One row per balance re-anchor:
+// the start-new Kraken-mirror write (reason 'start_new', anchor v1 written BEFORE
+// the engine can open anything), an auto friction-divergence re-anchor
+// ('auto_divergence'), or the Phase-21 go-live snap ('launch_snap').
+// A re-anchor is a BALANCE event only — it never touches learning/calibration data;
+// the at-open ratio stamps reference these versions (OBJ-4 re-anchor trap closure).
+export const portfolioAnchorEvents = pgTable("portfolio_anchor_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  mode: tradingModeEnum("mode").notNull(),
+  anchorVersion: integer("anchor_version").notNull(),
+  oldBalance: decimal("old_balance", { precision: 20, scale: 2 }), // NULL for the first anchor (no prior)
+  newBalance: decimal("new_balance", { precision: 20, scale: 2 }).notNull(),
+  reason: varchar("reason", { length: 24 }).notNull(), // 'start_new' | 'auto_divergence' | 'launch_snap'
+  // The measured divergence that triggered an auto re-anchor (bps + blocked-candidate
+  // count); NULL for start_new / launch_snap.
+  divergenceBps: decimal("divergence_bps", { precision: 12, scale: 4 }),
+  minNotionalDelta: integer("min_notional_delta"),
+  occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  modeVersionIdx: uniqueIndex("portfolio_anchor_events_mode_version_idx").on(table.mode, table.anchorVersion),
+  occurredAtIdx: index("portfolio_anchor_events_occurred_at_idx").on(table.occurredAt),
 }));
 
 // ===== PAPER TRADING TABLES (Isolated from Live) =====
@@ -1731,6 +1763,12 @@ export const closedTradesTable = pgTable("closed_trades", {
   phaseAgeSeconds: integer("phase_age_seconds"),
   strategyPhaseWeight: real("strategy_phase_weight"),
   regimeConfidenceModulated: real("regime_confidence_modulated"),
+  // P19-B8.2 (OBJ-4): the balance-ratio calibration tag carried forward from the
+  // open position at close (stamped once at open, never recomputed — see
+  // activeOpenPositions for full semantics). NULL on pre-B8.2 rows.
+  balanceRatioAtOpen: decimal("balance_ratio_at_open", { precision: 12, scale: 6 }),
+  anchorBalanceAtOpen: decimal("anchor_balance_at_open", { precision: 20, scale: 2 }),
+  anchorVersionAtOpen: integer("anchor_version_at_open"),
   metadata: jsonb("metadata"), // Signal details, market context, etc.
 }, (table) => ({
   symbolIdx: index("closed_trades_symbol_idx").on(table.symbol),
@@ -1781,6 +1819,15 @@ export const activeOpenPositions = pgTable("active_open_positions", {
   state: varchar("state", { length: 16 }).default("open"), // 'open' | 'pending'
   makerLimitPrice: decimal("maker_limit_price", { precision: 20, scale: 10 }),
   makerDeadline: timestamp("maker_deadline"),
+  // P19-B8.2 (OBJ-4): balance-ratio calibration tag, stamped ONCE at open (same-vintage
+  // discipline, the di_at_queue precedent) TOGETHER with the anchor it was measured
+  // against — a later re-anchor can never reinterpret this row. ratio = paperBalance /
+  // anchorBalance at open. NULL on pre-B8.2 rows (honest NULL, never a guessed 1.0).
+  // Readers: calibration-FIT filters in-band via DB-governed band bounds; out-of-band
+  // rows stay fully queryable (excluded-from-fit, NOT excluded-from-learning).
+  balanceRatioAtOpen: decimal("balance_ratio_at_open", { precision: 12, scale: 6 }),
+  anchorBalanceAtOpen: decimal("anchor_balance_at_open", { precision: 20, scale: 2 }),
+  anchorVersionAtOpen: integer("anchor_version_at_open"),
   // Phase 8.8.3-C4: Intended entry price for slippage tracking
   intendedEntryPrice: decimal("intended_entry_price", { precision: 20, scale: 8 }),
   entrySlippage: decimal("entry_slippage", { precision: 20, scale: 8 }).default("0"),
@@ -1826,7 +1873,11 @@ export const activeEngineSessions = pgTable("active_engine_sessions", {
   status: varchar("status", { length: 20 }).notNull(), // 'running', 'stopped', 'crashed'
   startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
   stoppedAt: timestamp("stopped_at", { withTimezone: true }),
-  startingBalance: decimal("starting_balance", { precision: 20, scale: 2 }).default("10000"),
+  // P19-B8.2: NOT NULL, NO default. The session's balance comes ONLY from the
+  // Kraken-mirror start flow or the preserved continue-path value; the ghost
+  // "10000" default was the resume-path silent-inheritance vector (pre-migration
+  // NULL-row precheck 2026-07-05: 0 NULLs / 141 rows — constraint lands clean).
+  startingBalance: decimal("starting_balance", { precision: 20, scale: 2 }).notNull(),
   endingBalance: decimal("ending_balance", { precision: 20, scale: 2 }),
   runForMs: integer("run_for_ms"), // If time-limited simulation
   endsAt: timestamp("ends_at", { withTimezone: true }), // Calculated from runForMs

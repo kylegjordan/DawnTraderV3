@@ -465,8 +465,9 @@ export class ActivePortfolioManager {
     const stats = await storage.getActiveEngineStats(this.mode);
     const trades = await storage.getClosedTrades(this.mode, { limit: 1000, closedOnly: true });
 
-    // Calculate max drawdown
-    const maxDrawdown = this.calculateMaxDrawdown(trades);
+    // Calculate max drawdown (P19-B8.2: against the REAL balance, not $10,000)
+    const startingCapital = await this.getStartingCapitalOrThrow();
+    const maxDrawdown = this.calculateMaxDrawdown(trades, startingCapital);
 
     // Calculate Sharpe ratio (simplified - uses daily returns)
     const sharpeRatio = this.calculateSharpeRatio(trades);
@@ -507,8 +508,16 @@ export class ActivePortfolioManager {
     const issues: string[] = [];
     let status: 'healthy' | 'warning' | 'critical' = 'healthy';
 
+    // P19-B8.2: exposure/drawdown percentages are computed against the REAL
+    // persisted balance. The old hardcoded $10,000 denominator silently
+    // understated exposure ~11x at a real $878 balance — the heat ceilings
+    // (MAX_PORTFOLIO_EXPOSURE_PERCENT / MAX_DRAWDOWN_PERCENT) were comparing
+    // against a fiction. Throws when no trustworthy balance exists (the engine
+    // cannot legitimately be running in that state post-B8.2).
+    const startingCapital = await this.getStartingCapitalOrThrow();
+
     // Check drawdown
-    const maxDrawdown = this.calculateMaxDrawdown(trades);
+    const maxDrawdown = this.calculateMaxDrawdown(trades, startingCapital);
     if (maxDrawdown >= this.MAX_DRAWDOWN_PERCENT) {
       issues.push(`Max drawdown ${maxDrawdown.toFixed(2)}% exceeds limit ${this.MAX_DRAWDOWN_PERCENT}%`);
       status = 'critical';
@@ -532,8 +541,6 @@ export class ActivePortfolioManager {
       return sum + posValue;
     }, 0);
 
-    // Assume $10,000 starting capital for paper trading
-    const startingCapital = 10000;
     const exposurePercent = (totalExposure / startingCapital) * 100;
 
     if (exposurePercent >= this.MAX_PORTFOLIO_EXPOSURE_PERCENT) {
@@ -642,8 +649,27 @@ export class ActivePortfolioManager {
     console.log(`[PaperPortfolio:${this.userId}] Portfolio reset complete`);
   }
 
-  private calculateMaxDrawdown(trades: any[]): number {
+  // P19-B8.2 (OBJ-2, resume-hardening seam 2 of 2): the manager's own balance
+  // read refuses — throws, zero writes — when no trustworthy persisted balance
+  // exists. Post-B8.2 both start paths guarantee one, so this is defense-in-depth
+  // against a legacy/corrupt state row reaching percentage math.
+  private async getStartingCapitalOrThrow(): Promise<number> {
+    const { getAnchorState } = await import('./portfolio-anchor-service.js');
+    const anchorState = await getAnchorState(this.mode as 'paper' | 'live');
+    if (!anchorState || !(anchorState.balance > 0)) {
+      throw new Error(
+        `[B8.2][${this.mode}] No trustworthy portfolio balance exists — refusing to compute ` +
+        `exposure/drawdown percentages against an invented denominator. Start a session (Kraken-mirror) first.`
+      );
+    }
+    return anchorState.balance;
+  }
+
+  private calculateMaxDrawdown(trades: any[], startingCapital: number): number {
     if (trades.length === 0) return 0;
+    if (!(startingCapital > 0)) {
+      throw new Error('[B8.2] calculateMaxDrawdown requires a real startingCapital > 0');
+    }
 
     let peak = 0;
     let maxDrawdown = 0;
@@ -667,8 +693,8 @@ export class ActivePortfolioManager {
       }
     }
 
-    // Convert to percentage (assume $10,000 starting capital)
-    const startingCapital = 10000;
+    // Convert to percentage against the REAL starting capital (P19-B8.2 —
+    // the hardcoded $10,000 denominator is gone; capital is passed in).
     return (maxDrawdown / startingCapital) * 100;
   }
 

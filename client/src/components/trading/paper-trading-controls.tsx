@@ -1,17 +1,13 @@
 /**
- * P19-B8.1 (C4) — Paper Trading start/stop controls.
+ * P19-B8.1 (C4) — Paper Trading start/stop controls (moved from the top bar).
  *
- * MOVED here from the global top bar (Kyle locked design: controls live inside
- * their mode page, not floating over every page). PAPER-scoped on purpose:
- * this block owns the paper toggle + its two modals (SimulationStartupModal,
- * ConfirmBalanceModal). The live-mode confirm modals stay unmounted until the
- * Phase-21 live-controls build re-homes them on the Live Trading page; the
- * global LIVE/PAPER mode selector is retired with the top-bar strip (mode is
- * expressed by which page you're on).
- *
- * Handlers are verbatim ports of the top-bar's paper branches (Phase 27.F.6 /
- * 27.F.14.I / 27.F.14.D-POST lineage) — no behavior change in this batch; the
- * start-flow redesign (Kraken-mirror) is B8.2.
+ * P19-B8.2 (OBJ-1): the start-new flow is the Kraken-mirror confirm — the
+ * SimulationStartupModal fetches and displays the REAL Kraken free-USD balance
+ * read-only; on confirm this component posts {mode:'new'} with NO balance (the
+ * server fetches the figure itself — a client can never supply one). The old
+ * ConfirmBalanceModal + confirm-balance endpoint retry path was DELETED with its
+ * NO-OP endpoint (rule 18); the `requiresConfirmation` branches referenced a
+ * server behavior that no longer exists.
  */
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -20,22 +16,18 @@ import { useTrading } from "@/hooks/use-trading";
 import { useToast } from "@/hooks/use-toast";
 import { useUserRole } from "@/hooks/useUserRole";
 import { apiRequest } from "@/lib/queryClient";
-import { ConfirmBalanceModal } from "@/components/trading/confirm-balance-modal";
 import { SimulationStartupModal } from "@/components/modals/simulation-startup-modal";
 
 export function PaperTradingControls() {
   const {
     isTradingActive,
     stopTrading,
-    startTrading,
     isStarting,
     isStopping,
   } = useTrading();
   const { toast } = useToast();
   const { canEdit, role } = useUserRole();
   const queryClient = useQueryClient();
-  const [showBalanceConfirmation, setShowBalanceConfirmation] = useState(false);
-  const [balanceToConfirm, setBalanceToConfirm] = useState(800);
   const [showSimulationStartup, setShowSimulationStartup] = useState(false);
 
   const isActive = isTradingActive;
@@ -61,33 +53,15 @@ export function PaperTradingControls() {
     try {
       await stopTrading('paper');
     } catch (error: any) {
-      let errorMessage = "Failed to toggle trading status";
-      if (error?.message) {
-        try {
-          const jsonMatch = error.message.match(/\d+:\s*({.*})/);
-          if (jsonMatch) {
-            const errorData = JSON.parse(jsonMatch[1]);
-            if (errorData.requiresConfirmation) {
-              setBalanceToConfirm(errorData.currentBalance || 800);
-              setShowBalanceConfirmation(true);
-              return;
-            }
-            errorMessage = errorData.message || errorData.error || errorMessage;
-          } else {
-            errorMessage = error.message;
-          }
-        } catch {
-          errorMessage = error.message;
-        }
-      }
-      console.error('[P19-B8.1][PaperControls] Trading toggle error:', errorMessage);
+      const errorMessage = error?.message || "Failed to toggle trading status";
+      console.error('[P19-B8.2][PaperControls] Trading toggle error:', errorMessage);
       toast({ title: "Error", description: errorMessage, variant: "destructive" });
       await queryClient.refetchQueries({ queryKey: ['/api/active-engine/status'] });
       await queryClient.refetchQueries({ queryKey: ['/api/trading/status'] });
     }
   };
 
-  // Phase 27.F.14.I: Continue Previous Simulation.
+  // Phase 27.F.14.I: Continue Previous Simulation (never calls Kraken).
   const handleContinueSimulation = async () => {
     queryClient.removeQueries({ queryKey: ['portfolio-overview', 'paper'] });
     toast({
@@ -95,12 +69,7 @@ export function PaperTradingControls() {
       description: "Activating simulation engine and loading market data",
     });
     try {
-      const result = await apiRequest('POST', '/api/active-engine/start', { mode: 'continue' });
-      if (result && typeof result === 'object' && 'requiresConfirmation' in result && result.requiresConfirmation) {
-        setBalanceToConfirm((result as any).currentBalance || 800);
-        setShowBalanceConfirmation(true);
-        return;
-      }
+      await apiRequest('POST', '/api/active-engine/start', { mode: 'continue' });
       await queryClient.invalidateQueries({ queryKey: ['/api/paper/portfolio/state'] });
       await queryClient.invalidateQueries({ queryKey: ['/api/active-engine/status'] });
       await queryClient.invalidateQueries({ queryKey: [`/api/goals/summary?mode=paper`] });
@@ -110,7 +79,7 @@ export function PaperTradingControls() {
         description: "Resumed previous simulation with existing baseline",
       });
     } catch (error: any) {
-      console.error('[P19-B8.1][PaperControls] Continue simulation error:', error);
+      console.error('[P19-B8.2][PaperControls] Continue simulation error:', error);
       toast({
         title: "Error",
         description: error.message || "Failed to continue simulation",
@@ -119,60 +88,32 @@ export function PaperTradingControls() {
     }
   };
 
-  // Phase 27.F.14.I: Start New Simulation.
-  const handleStartNewSimulation = async (balance: number) => {
+  // P19-B8.2: Start New — the balance was already fetched + confirmed read-only
+  // in the modal; the server independently re-fetches the mirror figure.
+  const handleStartNewSimulation = async () => {
     queryClient.removeQueries({ queryKey: ['portfolio-overview', 'paper'] });
     toast({
       title: "Starting Paper Trading...",
-      description: `Activating new simulation with $${balance.toFixed(2)} balance`,
+      description: "Starting a new simulation at your real Kraken balance",
     });
     try {
-      await apiRequest('POST', '/api/active-engine/start', { mode: 'new', initialBalance: balance });
+      const result = await apiRequest('POST', '/api/active-engine/start', { mode: 'new' });
       await queryClient.invalidateQueries({ queryKey: ['/api/paper/portfolio/state'] });
       await queryClient.invalidateQueries({ queryKey: ['/api/active-engine/status'] });
       await queryClient.invalidateQueries({ queryKey: [`/api/goals/summary?mode=paper`] });
       await queryClient.invalidateQueries({ queryKey: ['/api/system/trading-pace'] });
       toast({
         title: "New Simulation Started",
-        description: `Started fresh simulation with $${balance.toFixed(2)} balance`,
+        description: (result as any)?.message || "Started fresh simulation at your Kraken balance",
       });
     } catch (error: any) {
-      console.error('[P19-B8.1][PaperControls] Start new simulation error:', error);
+      console.error('[P19-B8.2][PaperControls] Start new simulation error:', error);
       toast({
-        title: "Error",
-        description: error.message || "Failed to start new simulation",
+        title: "New simulation NOT started",
+        description: error.message || "Could not fetch your real Kraken balance — no fallback figure is ever used.",
         variant: "destructive",
       });
-    }
-  };
-
-  // Phase 27.F.14.D-POST: balance confirmation retry path.
-  const handleConfirmBalance = async (balance: number) => {
-    try {
-      await apiRequest('POST', '/api/active-engine/confirm-balance', { balance, mode: 'paper' });
-      await queryClient.invalidateQueries({ queryKey: ['portfolio-overview', 'paper'] });
-      await queryClient.invalidateQueries({ queryKey: ['/api/active-engine/status'] });
-      setShowBalanceConfirmation(false);
-      await startTrading({ type: 'paper-continue' });
-    } catch (error: any) {
-      let errorMessage = "Failed to confirm balance and start trading";
-      if (error?.message) {
-        try {
-          const jsonMatch = error.message.match(/\d+:\s*({.*})/);
-          if (jsonMatch) {
-            const errorData = JSON.parse(jsonMatch[1]);
-            errorMessage = errorData.message || errorData.error || errorMessage;
-          } else {
-            errorMessage = error.message;
-          }
-        } catch {
-          errorMessage = error.message;
-        }
-      }
-      console.error('[P19-B8.1][PaperControls] Balance confirmation error:', errorMessage);
-      toast({ title: "Error", description: errorMessage, variant: "destructive" });
       await queryClient.refetchQueries({ queryKey: ['/api/active-engine/status'] });
-      await queryClient.refetchQueries({ queryKey: ['/api/trading/status'] });
     }
   };
 
@@ -201,15 +142,6 @@ export function PaperTradingControls() {
         onClose={() => setShowSimulationStartup(false)}
         onContinue={handleContinueSimulation}
         onStartNew={handleStartNewSimulation}
-        defaultBalance={balanceToConfirm}
-      />
-
-      <ConfirmBalanceModal
-        open={showBalanceConfirmation}
-        onOpenChange={setShowBalanceConfirmation}
-        currentBalance={balanceToConfirm}
-        onConfirm={handleConfirmBalance}
-        mode="paper"
       />
     </>
   );
