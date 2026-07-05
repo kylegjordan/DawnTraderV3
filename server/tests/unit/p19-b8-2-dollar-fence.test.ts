@@ -9,11 +9,16 @@
 //
 //   COVERAGE BOUNDARY (Langston Step-2 item 5 — do not read green as more):
 //   a $ threshold arriving via a module_constants row, a variable defined
-//   elsewhere, or a computed value is NOT caught by a literal scanner. The
-//   guards there are: (1) DB-governed knobs go through ADJUSTMENT_FRAMEWORK
-//   review, (2) the module-constants resolver fail-hards on missing rows so no
-//   silent $ default can hide, (3) Langston's Step-4 diff review of any change
-//   to these modules. B8.2 itself introduced NO new gate seam taking a raw
+//   elsewhere, or a computed value is NOT caught by a literal scanner. Two
+//   further KNOWN GAPS (Langston Step-4 C5): (i) single-digit $ literals
+//   (e.g. `< 5`) fall under the ≥10 matcher; (ii) a line carrying BOTH a
+//   $-comparison and a relative-exempt word (pct/bps/ratio/ms/count) is masked
+//   by the same-line exemption. Both harmless today (modules clean, allowlist
+//   empty) — documented so a future reader never over-trusts green. The
+//   guards beyond the scanner: (1) DB-governed knobs go through
+//   ADJUSTMENT_FRAMEWORK review, (2) the module-constants resolver fail-hards
+//   on missing rows so no silent $ default can hide, (3) Langston's Step-4
+//   diff review of any change to these modules. B8.2 itself introduced NO new gate seam taking a raw
 //   dollar threshold (the divergence knobs are bps/count/ms — relative by
 //   construction, unit-tested in p19-b8-2-friction-divergence.test.ts), so the
 //   runtime-assertion leg reduces to the knob resolver's existing fail-hard —
