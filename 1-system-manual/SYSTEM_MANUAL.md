@@ -3950,6 +3950,18 @@ Combines strategy-level metrics into portfolio-level analytics:
 - Paper mode: `getAllPaperTrades()`; Live mode: `getTrades('live')`
 - Strategy metrics from `strategy-analytics` module
 
+### Balance Policy & Anchor Events (P19-B8.2, 2026-07-05) — how the balance comes into existence
+
+The paper/live balance is governed by ANCHOR EVENTS; a balance can never be invented (all schema defaults and route/client fallback literals were deleted — DELETED_COMPONENTS_LOG 2026-07-05).
+
+- **Start-new = Kraken-mirror**: `POST /api/active-engine/start {mode:'new'}` fetches the REAL account balance via `kraken-mirror-balance.getKrakenMirrorBalance()` (authenticated private Balance endpoint, 60s cache). The figure = free USD + the USD-pegged stablecoins the trading universe admits as quote currencies (USDT/USDC — `allowedQuotes` parity; the pin was ZUSD-only until the first live fetch showed the real account is 100% USDC — #435). Client-supplied `initialBalance` is REFUSED (400); a failed fetch REFUSES the start (502, no fallback); a ≤0 mirror refuses (409). The client modal (`SimulationStartupModal`) shows the figure READ-ONLY with a per-asset breakdown (non-counted assets labeled) — there is no input field.
+- **`mode='continue'`**: resumes the persisted balance; NEVER calls Kraken (an outage never blocks resume).
+- **Anchor ledger**: every balance re-base writes `portfolio_anchor_events` (mode, anchor_version monotonic, old/new balance, reason ∈ `start_new` | `auto_divergence` | `launch_snap`) + `portfolio_state.anchor_version` in ONE transaction (`portfolio-anchor-service.executeReanchor`). The start-new anchor (v1) is written BEFORE the engine can open anything.
+- **Auto re-anchor (friction divergence)**: at every paper open, `friction-divergence-evaluator` estimates the execution-cost gap between THIS open's real order and the risk-equivalent order at the LIVE balance — sqrt-impact law `estCostBps = spread_half + k·σ·√(Q/L)` (pure module `core/math/friction-divergence`; the spread term cancels in the divergence subtraction). A bounds breach outside the `min_reanchor_interval_ms` cooldown executes `reanchorToLive('paper','auto_divergence')`. Knobs: `module_constants friction_divergence` (ADJUSTMENT_FRAMEWORK §, placeholders pending Phase-25). A re-anchor is a BALANCE event only — learning/calibration data are structurally untouched (proven byte-identical at the Step-7 synthetic proof).
+- **Launch snap**: `reanchorToLive(mode,'launch_snap')` is the Phase-21 go-live hook — built + synthetically proven on the live-mode row (v0→1, 834.11→824.11) 2026-07-05.
+- **Ratio stamp (calibration tag)**: every active-path open stamps `balance_ratio_at_open` (current ÷ anchor balance) + `anchor_balance_at_open` + `anchor_version_at_open` on the open position, carried to the closed row — stamped ONCE, never recomputed, so a later re-anchor never reinterprets history. Pre-B8.2/no-anchor rows: honest NULL. VTS rows: NULL-by-absence (no columns — balance-independent breadth mission). Calibration READERS fit in-band rows only (`ratio_band_low/high` knobs); out-of-band rows stay queryable (excluded-from-fit, not from-learning).
+- **Resume hardening**: `resumeActiveEngines` refuses (alert, zero writes, isEngineActive=false) on an absent/NULL/unparseable session or portfolio balance; `ActivePortfolioManager.getStartingCapitalOrThrow()` is the second seam. The schema NOT NULL constraints are backstops — the application layer owns the invariant.
+
 ---
 
 ## 18. Kraken Service
@@ -4123,13 +4135,9 @@ All L-Series systems must be removed together in a **coordinated wave**. Before 
 - **Fix**: Delete all goal alignment code from pre-execution-validator.ts. Reduce to a two-gate validator (risk checks + fee-aware profitability).
 - **Timing**: Pre-MCE or during MCE — standalone removal, no MCE dependency
 
-### RISK-029: Paper Portfolio Manager Uses Hardcoded Starting Capital — ACCEPTED
-- **Severity**: LOW-MEDIUM → **LOW** (Kyle accepted, 2026-02-16)
-- **Location**: `server/services/active-portfolio-manager.ts` lines 539-541, 670-672
-- **Problem**: `checkPortfolioHealth()` and `calculateMaxDrawdown()` assume `startingCapital = 10000` (hardcoded) for exposure and drawdown calculations. This does not match the actual portfolio_state.balance which may differ.
-- **Kyle Decision (2026-02-16)**: Hardcoded $10,000 is acceptable for now. Optional future enhancement: throw error if portfolio_state.balance is missing instead of defaulting.
-- **Fix**: No immediate action required. Optional future: throw error on missing balance.
-- **Timing**: Post-MCE (optional)
+### RISK-029: Paper Portfolio Manager Uses Hardcoded Starting Capital — ✅ RESOLVED (P19-B8.2, 2026-07-05)
+- **Severity**: was LOW-MEDIUM → LOW (Kyle accepted 2026-02-16) → **materially worse than assessed** once the real balance was known: at the live $878 balance, the $10,000 denominator understated exposure ~11× against the heat ceilings (MAX_PORTFOLIO_EXPOSURE_PERCENT / MAX_DRAWDOWN_PERCENT) — the health check that can block engine start was comparing against a fiction.
+- **Resolution (P19-B8.2)**: `checkPortfolioHealth()` / `getPortfolioMetrics()` now read the REAL persisted balance via `getStartingCapitalOrThrow()` (refuses — throws, zero writes — when no trustworthy balance exists, exactly the "optional future enhancement" Kyle named in 2026-02-16, now mandatory); `calculateMaxDrawdown(trades, startingCapital)` takes the capital as a parameter and throws on a non-positive value. Both hardcoded literals deleted (DELETED_COMPONENTS_LOG 2026-07-05).
 
 ### RISK-030: Coherency Rules YAML vs Code Mismatch
 - **Severity**: LOW
