@@ -819,7 +819,12 @@ export function FilterDiagnosticsPanel({ data, isLoading, gateDisposition = 'tag
                       Per-lane split for Pre-Eval Skips now reads ve.quantNullReasonDetail /
                       ve.patternNullReasonDetail (previously rendered noPrice in quant col and
                       OHLC in pattern col — semantically wrong). No leading minus signs. */}
-                  {data?.vtsEvaluation && (() => {
+                  {/* P19-B8.3b (OBJ-1, #417): the 24h VTS Evaluation block is the
+                      VTS RUNNER's downstream counters (pair-pool → strategy evals →
+                      nulls → trades opened) — VTS-engine activity, not the shared
+                      scan feed. Gated to the VTS page ('tag'); on Paper/Live the
+                      active pipeline is dormant until B8.4 (placeholder below). */}
+                  {gateDisposition === 'tag' && data?.vtsEvaluation && (() => {
                     const ve = data.vtsEvaluation!;
                     const nr3 = (ve.nullReasons ?? {}) as any;
                     const qDetail = ((ve as any).quantNullReasonDetail ?? {}) as Record<string, number>;
@@ -893,6 +898,14 @@ export function FilterDiagnosticsPanel({ data, isLoading, gateDisposition = 'tag
                       </>
                     );
                   })()}
+                  {/* P19-B8.3b (OBJ-1, #417): honest active-path placeholder on Paper/Live (24h table). */}
+                  {gateDisposition === 'enforce' && (
+                    <tr className="border-b bg-amber-500/5" data-testid="fd-active-eval-dormant-24h">
+                      <td colSpan={4} className="p-3 text-xs text-muted-foreground italic text-center">
+                        Active-path evaluation counters — populate when active trading is switched on (Phase 19 B8.4). The scan-stage totals above are the shared scanner feed.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
