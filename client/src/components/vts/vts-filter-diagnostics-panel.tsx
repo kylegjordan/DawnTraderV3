@@ -1,14 +1,82 @@
 // P19-B8.1 (C1): FilterDiagnosticsPanel extracted verbatim from client/src/pages/machine-learning.tsx
 // (pure extraction, zero behavior change).
 import React from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { RefreshCw, AlertTriangle } from "lucide-react";
+import { apiFetch } from "@/lib/api";
 import type { FilterDiagnosticsData } from "./vts-shared";
+
+/**
+ * P19-B8.3 (OBJ-3c v1) — the mode's REAL active-path tail, from existing
+ * sources only (/api/active-engine/pipeline-tail): pool population, RTB queue
+ * depth, the rtb-metrics gate tallies, real opens. Honest zeros until B8.4;
+ * a failed load renders an ERROR, never a silent blank (OBJ-8).
+ */
+function ActivePipelineTail({ mode }: { mode: 'paper' | 'live' }) {
+  const q = useQuery<any>({
+    queryKey: ['/api/active-engine/pipeline-tail', mode],
+    queryFn: () => apiFetch(`/api/active-engine/pipeline-tail?mode=${mode}`),
+    refetchInterval: 30000,
+  });
+  const d = q.data;
+  return (
+    <Card>
+      <CardHeader className="py-3">
+        <CardTitle className="text-lg flex items-center justify-between">
+          <span>{mode === 'paper' ? 'Paper' : 'Live'}-Mode Pipeline Tail</span>
+          <span className="text-xs font-normal text-muted-foreground">this mode's OWN thresholds & pipeline — zeros are honest until the switch-on (B8.4)</span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {q.isError ? (
+          <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm">
+            <AlertTriangle className="w-4 h-4 text-destructive" />
+            <span>Couldn't load the pipeline tail — a data-feed failure, not zeros.</span>
+            <Button variant="outline" size="sm" className="ml-auto" onClick={() => q.refetch()}>
+              <RefreshCw className="w-3 h-3 mr-1" /> Retry
+            </Button>
+          </div>
+        ) : q.isLoading ? (
+          <div className="text-sm text-muted-foreground">Loading…</div>
+        ) : (
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 text-sm">
+            <div><span className="text-muted-foreground block text-xs">Active Pool ({mode})</span><span className="font-mono font-semibold">{d?.poolSize ?? '—'} pairs</span></div>
+            <div><span className="text-muted-foreground block text-xs">Ready-to-Buy Queue</span><span className="font-mono font-semibold">{d?.rtbQueueDepth ?? '—'} signals</span></div>
+            <div><span className="text-muted-foreground block text-xs">Gate: opened / blocked</span><span className="font-mono font-semibold">{d?.gate ? `${d.gate.openedTotal} / ${d.gate.blockedTotal}` : 'not available'}</span></div>
+            <div><span className="text-muted-foreground block text-xs">Open Positions</span><span className="font-mono font-semibold">{d?.openPositionsCount ?? '—'}</span></div>
+            {d?.gate && Object.keys(d.gate.blockedByReason ?? {}).length > 0 && (
+              <div className="sm:col-span-2 lg:col-span-4 text-xs text-muted-foreground">
+                Blocks by reason: {Object.entries(d.gate.blockedByReason).map(([r, c]) => `${r}: ${c}`).join(' · ')}
+              </div>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 // Batch 19H: Filter Pipeline Diagnostics Panel
 // B79.0i.a: exported so xstocks-tab can re-render same panel with xstock-scoped data
+// P19-B8.3 (OBJ-3c/OBJ-7): the panel is now MODE-AWARE via gateDisposition —
+//   'tag' (default = the VTS page, zero change for un-threaded callers): the
+//     funnel is the VTS funnel; the gate's quality reasons are TAGGED (they
+//     still simulate — the un-strangle), so the gate shows Dropped vs Tagged.
+//   'enforce' (Paper/Live, w/ modeTail set): a shared-scanner banner renders,
+//     the VTS-flavored tail sections are REPLACED by the mode's REAL tail
+//     (pool population, RTB queue, gate tallies, real opens — /pipeline-tail),
+//     and the gate shows a true Rejected total (= Evals − Passed; exhaustive +
+//     mutually exclusive per applyGlobalGuards — Langston-verified).
 export type { FilterDiagnosticsData };
-export function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagnosticsData | undefined; isLoading: boolean }) {
+export type GateDisposition = 'enforce' | 'tag';
+export function FilterDiagnosticsPanel({ data, isLoading, gateDisposition = 'tag', modeTail = null }: {
+  data: FilterDiagnosticsData | undefined;
+  isLoading: boolean;
+  gateDisposition?: GateDisposition;
+  modeTail?: 'paper' | 'live' | null;
+}) {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -45,10 +113,12 @@ export function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagno
       already_active: 'Already Active',
       passed_all_filters: 'Passed All',
       // reorg-B2.2 OBJ-B: the GuardDropReason enum values (no raw enum key leaks to the UI).
-      rr_below_min: 'Reward-vs-Risk',
-      unreachable: 'Unreachable',
-      stop_distance: 'Stop Distance',
-      invalid_atr: 'Invalid ATR',
+      // P19-B8.3 (OBJ-7, Kyle 2026-07-06): plain-language names — the old
+      // "Reward-vs-Risk" header read as a TOTAL when it was one reason.
+      rr_below_min: 'RR Too Low',
+      unreachable: 'Target Unreachable',
+      stop_distance: 'Bad Stop',
+      invalid_atr: 'No ATR Data',
     };
     return names[key] || key;
   };
@@ -70,6 +140,17 @@ export function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagno
 
   return (
     <div className="space-y-4 max-w-4xl">
+      {/* P19-B8.3 (OBJ-3c): the shared-scanner banner on Paper/Live — the scan-feed
+          numbers below are the ONE scanner's diagnostics; per-mode thresholds and
+          funnels differ (Kyle's authoritative model). The mode's OWN pipeline tail
+          renders at the bottom; per-stage active-path funnel counters = B8.3b. */}
+      {gateDisposition === 'enforce' && (
+        <div className="rounded-md border border-blue-400/40 bg-blue-500/10 px-3 py-2 text-xs text-muted-foreground" data-testid="shared-scanner-banner">
+          One scanner feeds all modes — the scan-stage numbers below are the shared feed's diagnostics.
+          {modeTail ? ` ${modeTail === 'paper' ? 'Paper' : 'Live'} mode filters with its OWN thresholds; its real pipeline tail (pool, queue, gate, opens) is at the bottom of this tab.` : ''}
+          {' '}Per-stage active-path funnel counters arrive in B8.3b.
+        </div>
+      )}
       {/* Batch 42: Pipeline Summary Table — 24h aggregated */}
       <Card>
         <CardHeader className="py-3">
@@ -202,7 +283,10 @@ export function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagno
                     <td className="p-2 text-right text-green-700 font-bold">{fmt((r24.quant.survivors - (r24.quant.imf.benchmarkBypassed ?? 0)) + (r24.pattern.survivors - (r24.pattern.imf?.benchmarkBypassed ?? 0)))}</td>
                     <td className="p-2 text-xs text-muted-foreground">Survivors minus benchmarks (cumulative 24h)</td>
                   </tr>
-                  {ve && (
+                  {/* P19-B8.3 (OBJ-3c): the VTS-side evaluation metrics render ONLY on
+                      the VTS page ('tag') — on Paper/Live they implied mode activity
+                      that is actually the VTS's (Kyle's 2026-07-06 catch). */}
+                  {gateDisposition === 'tag' && ve && (
                     <>
                       <tr className="bg-muted/50 border-y">
                         <td colSpan={5} className="p-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">VTS Evaluation Metrics <span className="font-normal">(VTS-side counters — pairs processed after cooldown/skip filters)</span></td>
@@ -827,18 +911,34 @@ export function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagno
             }
             // Most-suppressed first (the #372 calibration read: which strategies the per-class minRR cuts).
             rows.sort((a, b) => b[1].rrSuppressionRate - a[1].rrSuppressionRate);
+            // P19-B8.3 (OBJ-7): per-disposition totals (Langston Step-2 hook —
+            // "Rejected" is only TRUE on the enforce path; on the VTS 'tag' path
+            // the two quality reasons do NOT reject: they are TAGGED and still
+            // simulated (the un-strangle), so the VTS table splits Dropped
+            // (data-validity: Bad Stop + No ATR) from Tagged (RR Too Low +
+            // Target Unreachable). Evals = Passed + the four reasons, always
+            // (exhaustive + mutually exclusive — applyGlobalGuards).
+            const isEnforce = gateDisposition === 'enforce';
             return (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b bg-muted/50">
                       <th className="text-left p-2 font-medium">Strategy</th>
-                      <th className="text-right p-2 font-medium">Evals</th>
+                      <th className="text-right p-2 font-medium" title="Signals this gate evaluated (= Passed + the four reason columns)">Evals</th>
                       <th className="text-right p-2 font-medium">Passed</th>
-                      <th className="text-right p-2 font-medium">{formatFilterName('rr_below_min')}</th>
-                      <th className="text-right p-2 font-medium">{formatFilterName('unreachable')}</th>
-                      <th className="text-right p-2 font-medium">{formatFilterName('stop_distance')}</th>
-                      <th className="text-right p-2 font-medium">{formatFilterName('invalid_atr')}</th>
+                      {isEnforce ? (
+                        <th className="text-right p-2 font-medium" title="Total rejected = Evals − Passed = the four reason columns summed">Rejected</th>
+                      ) : (
+                        <>
+                          <th className="text-right p-2 font-medium" title="Data-validity failures (Bad Stop + No ATR) — dropped on every path">Dropped</th>
+                          <th className="text-right p-2 font-medium" title="Quality flags (RR Too Low + Target Unreachable) — NOT rejected on the VTS learning path: tagged and still simulated">Tagged</th>
+                        </>
+                      )}
+                      <th className="text-right p-2 font-medium" title="Reward-to-risk ratio below this strategy's minimum">{formatFilterName('rr_below_min')}</th>
+                      <th className="text-right p-2 font-medium" title="Target too far for current volatility to plausibly reach">{formatFilterName('unreachable')}</th>
+                      <th className="text-right p-2 font-medium" title="Stop too close to entry — broken trade geometry">{formatFilterName('stop_distance')}</th>
+                      <th className="text-right p-2 font-medium" title="Volatility reading missing/invalid — the check could not run">{formatFilterName('invalid_atr')}</th>
                       <th className="text-right p-2 font-medium">Mean RR</th>
                       <th className="text-right p-2 font-medium">RR Suppression</th>
                     </tr>
@@ -849,6 +949,14 @@ export function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagno
                         <td className="p-2 font-medium">{strategy}</td>
                         <td className="p-2 text-right">{fmt(s.evals)}</td>
                         <td className="p-2 text-right text-green-600">{fmt(s.passes)}</td>
+                        {isEnforce ? (
+                          <td className={`p-2 text-right font-semibold ${getRejectionColor(s.evals - s.passes, s.evals)}`}>{fmt(s.evals - s.passes)}</td>
+                        ) : (
+                          <>
+                            <td className={`p-2 text-right ${getRejectionColor(s.stopDrops + s.atrDrops, s.evals)}`}>{fmt(s.stopDrops + s.atrDrops)}</td>
+                            <td className="p-2 text-right text-blue-600">{fmt(s.rrDrops + s.reachDrops)}</td>
+                          </>
+                        )}
                         <td className={`p-2 text-right ${getRejectionColor(s.rrDrops, s.evals)}`}>{fmt(s.rrDrops)}</td>
                         <td className={`p-2 text-right ${getRejectionColor(s.reachDrops, s.evals)}`}>{fmt(s.reachDrops)}</td>
                         <td className="p-2 text-right text-muted-foreground">{fmt(s.stopDrops)}</td>
@@ -867,7 +975,14 @@ export function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagno
         </CardContent>
       </Card>
 
-      {/* TABLE 4: VTS Evaluation Detail (Batch 19I) — expanded breakdown */}
+      {/* P19-B8.3 (OBJ-3c): the mode's REAL pipeline tail on Paper/Live — from
+          existing sources only (pool population, RTB queue depth, gate tallies,
+          real opens); honest zeros until the B8.4 switch-on. */}
+      {gateDisposition === 'enforce' && modeTail && <ActivePipelineTail mode={modeTail} />}
+
+      {/* TABLE 4: VTS Evaluation Detail (Batch 19I) — expanded breakdown.
+          P19-B8.3 (OBJ-3c): renders ONLY on the VTS page ('tag'). */}
+      {gateDisposition === 'tag' && (
       <Card className="max-w-4xl">
         <CardHeader className="py-3">
           <CardTitle className="text-lg flex items-center justify-between">
@@ -1273,6 +1388,7 @@ export function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagno
           )}
         </CardContent>
       </Card>
+      )}
 
       {/* Batch 50: Removed redundant "Signal Rejection Breakdown (24h)" section.
          Post-signal rejections are now shown in the VTS Evaluation Breakdown above

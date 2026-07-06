@@ -7,8 +7,9 @@
  */
 import ModeTradingPage, { type ModeTradingPageConfig } from "@/pages/mode-trading";
 import { Badge } from "@/components/ui/badge";
-import { Lightbulb, LineChart, BarChart3, History } from "lucide-react";
+import { Lightbulb, LineChart, BarChart3, History, LayoutDashboard } from "lucide-react";
 import { XstocksTab } from "@/components/machine-learning/xstocks-tab";
+import { ModeDashboardTab } from "@/components/dashboard/mode-dashboard-tab";
 import {
   VtsOpenTradesTab,
   VtsClosedTradesTab,
@@ -19,7 +20,8 @@ const config: ModeTradingPageConfig = {
   mode: 'vts',
   title: "Virtual Simulations",
   subtitle: "The VTS — always-on passive learning: broad simulated trading for calibration data",
-  defaultTab: "fd-crypto",
+  // P19-B8.3: the Dashboard is the landing view (Kyle proceeded on the flag).
+  defaultTab: "dashboard",
   controls: (
     <Badge variant="outline" className="flex items-center gap-2 px-3 py-1.5 text-xs border-blue-400 text-blue-600" data-testid="vts-always-on-badge">
       <span className="relative flex h-2 w-2">
@@ -30,6 +32,7 @@ const config: ModeTradingPageConfig = {
     </Badge>
   ),
   tabs: [
+    { key: "dashboard", label: "Dashboard", shortLabel: "Dashboard", icon: LayoutDashboard, render: () => <ModeDashboardTab mode="vts" /> },
     { key: "fd-crypto", label: "Crypto Filter Diagnostics", shortLabel: "Crypto FD", icon: Lightbulb, render: () => <CryptoFilterDiagnosticsTab /> },
     { key: "fd-xstock", label: "xStock Filter Diagnostics", shortLabel: "xStock FD", icon: LineChart, render: () => <XstocksTab /> },
     { key: "open", label: "Open Trades", shortLabel: "Open", icon: BarChart3, render: () => <VtsOpenTradesTab /> },

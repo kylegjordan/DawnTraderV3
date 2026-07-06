@@ -46,7 +46,7 @@ async function downloadCsv(path: string, filename: string): Promise<void> {
 }
 
 export function VtsOpenTradesTab() {
-  const { data, isLoading, refetch } = useQuery<{ success: boolean; count: number; trades: OpenTrade[] }>({
+  const { data, isLoading, isError, refetch } = useQuery<{ success: boolean; count: number; trades: OpenTrade[] }>({
     queryKey: ['/api/vts/ml/open'],
     queryFn: () => apiFetch('/api/vts/ml/open'),
     refetchInterval: 60000,
@@ -81,6 +81,13 @@ export function VtsOpenTradesTab() {
           <div className="flex items-center justify-center py-12">
             <RefreshCw className="w-6 h-6 animate-spin text-muted-foreground" />
           </div>
+        ) : isError ? (
+          /* P19-B8.3 (OBJ-8, the 2026-07-06 zero-trades scare): a failed fetch
+             must never render as an empty table. */
+          <div className="flex items-center gap-2 p-4 text-sm border border-destructive/40 bg-destructive/10 m-3 rounded-md" data-testid="vts-open-error">
+            <span>Couldn't load open trades — a data-feed failure (often an expired session), NOT zero trades.</span>
+            <button className="underline ml-auto" onClick={() => refetch()}>Retry</button>
+          </div>
         ) : (
           <OpenTradesTable trades={data?.trades ?? []} />
         )}
@@ -90,7 +97,7 @@ export function VtsOpenTradesTab() {
 }
 
 export function VtsClosedTradesTab() {
-  const { data, isLoading, refetch } = useQuery<{ success: boolean; days: number; trades: ClosedTrade[] }>({
+  const { data, isLoading, isError, refetch } = useQuery<{ success: boolean; days: number; trades: ClosedTrade[] }>({
     queryKey: ['/api/vts/ml/closed'],
     queryFn: () => apiFetch('/api/vts/ml/closed?days=7'),
     refetchInterval: 300000,
@@ -123,6 +130,12 @@ export function VtsClosedTradesTab() {
           <div className="flex items-center justify-center py-12">
             <RefreshCw className="w-6 h-6 animate-spin text-muted-foreground" />
           </div>
+        ) : isError ? (
+          /* P19-B8.3 (OBJ-8): same visible-failure rule as the open-trades tab. */
+          <div className="flex items-center gap-2 p-4 text-sm border border-destructive/40 bg-destructive/10 m-3 rounded-md" data-testid="vts-closed-error">
+            <span>Couldn't load closed trades — a data-feed failure (often an expired session), NOT zero trades.</span>
+            <button className="underline ml-auto" onClick={() => refetch()}>Retry</button>
+          </div>
         ) : (
           <ClosedTradesTable trades={data?.trades ?? []} />
         )}
@@ -131,12 +144,25 @@ export function VtsClosedTradesTab() {
   );
 }
 
-export function CryptoFilterDiagnosticsTab() {
-  const { data, isLoading } = useQuery<FilterDiagnosticsData>({
+// P19-B8.3 (OBJ-3c/OBJ-8): mode-aware disposition threading + a visible error
+// state — a failed fetch must never render as an empty panel.
+export function CryptoFilterDiagnosticsTab({ gateDisposition = 'tag', modeTail = null }: {
+  gateDisposition?: 'enforce' | 'tag';
+  modeTail?: 'paper' | 'live' | null;
+}) {
+  const { data, isLoading, isError, refetch } = useQuery<FilterDiagnosticsData>({
     queryKey: ['/api/vts/filter-diagnostics'],
     queryFn: () => apiFetch('/api/vts/filter-diagnostics'),
     refetchInterval: 15000,
     staleTime: 10000,
   });
-  return <FilterDiagnosticsPanel data={data} isLoading={isLoading} />;
+  if (isError) {
+    return (
+      <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-4 text-sm" data-testid="fd-crypto-error">
+        <span>Couldn't load the crypto filter diagnostics — a data-feed failure, not an empty pipeline.</span>
+        <button className="underline ml-auto" onClick={() => refetch()}>Retry</button>
+      </div>
+    );
+  }
+  return <FilterDiagnosticsPanel data={data} isLoading={isLoading} gateDisposition={gateDisposition} modeTail={modeTail} />;
 }

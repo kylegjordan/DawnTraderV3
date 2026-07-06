@@ -12336,6 +12336,51 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // P19-B8.3 (OBJ-3c v1) — the mode's ACTIVE-PATH pipeline tail, from the data
+  // that EXISTS (pre-audit determination: the scanner tracks no per-stage
+  // active funnel — those counters are B8.3b): the per-mode active pool
+  // population, the RTB queue depth (DB count — no in-memory counter exists
+  // and none is added here), the rtb-metrics gate tallies, and real opens.
+  apiRouter.get('/active-engine/pipeline-tail', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const mode: 'paper' | 'live' = req.query.mode === 'live' ? 'live' : 'paper';
+      const { activeFilterPool } = await import('./services/active-filter-pool.js');
+      const poolSize = activeFilterPool.getPoolSize(mode);
+
+      const { db: tailDb } = await import('./db.js');
+      const { sql: tailSql } = await import('drizzle-orm');
+      let rtbQueueDepth = 0;
+      try {
+        const qr: any = await tailDb.execute(tailSql`
+          SELECT COUNT(*)::int AS depth FROM rtb_signals
+          WHERE mode = ${mode} AND status IN ('queued', 'active', 'reconfirmed')
+        `);
+        const row: any = (qr as any).rows?.[0] ?? (qr as any)[0];
+        rtbQueueDepth = Number(row?.depth ?? 0);
+      } catch { /* depth stays 0 with the metrics block absent below */ }
+
+      let gate: any = null;
+      try {
+        const { rtbMetricsService } = await import('./services/rtb-metrics-service.js');
+        const s: any = rtbMetricsService.getSummary();
+        gate = {
+          attemptsTotal: s.attemptsTotal ?? 0,
+          openedTotal: s.openedTotal ?? 0,
+          blockedTotal: s.blockedTotal ?? 0,
+          blockedByReason: s.blockedByReason ?? {},
+          openFailedByStage: s.openFailedByStage ?? {},
+        };
+      } catch { /* gate stays null → the client renders "not available" */ }
+
+      const openPositions = await storage.getActiveOpenPositions(mode);
+
+      res.json({ ok: true, mode, poolSize, rtbQueueDepth, gate, openPositionsCount: openPositions.length });
+    } catch (error) {
+      console.error('[P19-B8.3] pipeline-tail failed:', error);
+      res.status(500).json({ ok: false, error: 'Failed to read the pipeline tail' });
+    }
+  });
+
   // P19-B8.3 (OBJ-3b) — the REALIZED balance curve (closed-trade basis; the chart
   // is labeled as such — it deliberately EXCLUDES open-position mark-to-market,
   // which is why its tip can differ from portfolioValue on the card; Langston

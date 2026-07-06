@@ -7,7 +7,7 @@
  * /api/active-engine/* family via the shared active-path tab components.
  */
 import ModeTradingPage, { type ModeTradingPageConfig } from "@/pages/mode-trading";
-import { Lightbulb, LineChart, TrendingUp, BarChart3, History, Ghost } from "lucide-react";
+import { Lightbulb, LineChart, TrendingUp, BarChart3, History, Ghost, LayoutDashboard } from "lucide-react";
 import ActiveTradesV2 from "@/components/trading/active-trades-v2";
 import ReadyToBuyTable from "@/components/trading/ready-to-buy-table";
 import { ExecutionMetricsPanel } from "@/components/trading/execution-metrics";
@@ -16,16 +16,26 @@ import { ShadowTradesTab } from "@/components/trading/shadow-trades-tab";
 import { XstocksTab } from "@/components/machine-learning/xstocks-tab";
 import { CryptoFilterDiagnosticsTab } from "@/components/vts/vts-tabs";
 import { PaperTradingControls } from "@/components/trading/paper-trading-controls";
+import { ModeDashboardTab } from "@/components/dashboard/mode-dashboard-tab";
+import { PortfolioMetricsStrip } from "@/components/trading/portfolio-metrics-strip";
 
 const config: ModeTradingPageConfig = {
   mode: 'paper',
   title: "Paper Trading",
   subtitle: "Active trading in paper mode — full pipeline, Kraken-vetted internal fills, no real money",
-  defaultTab: "fd-crypto",
-  controls: <PaperTradingControls />,
+  // P19-B8.3: the Dashboard is the landing view (Kyle proceeded on the flag).
+  defaultTab: "dashboard",
+  controls: (
+    <div className="flex flex-col items-end gap-2">
+      <PaperTradingControls />
+      {/* P19-B8.3 (OBJ-4): the metrics strip moved here from the top bar. */}
+      <PortfolioMetricsStrip mode="paper" />
+    </div>
+  ),
   tabs: [
-    { key: "fd-crypto", label: "Crypto Filter Diagnostics", shortLabel: "Crypto FD", icon: Lightbulb, render: () => <CryptoFilterDiagnosticsTab /> },
-    { key: "fd-xstock", label: "xStock Filter Diagnostics", shortLabel: "xStock FD", icon: LineChart, render: () => <XstocksTab /> },
+    { key: "dashboard", label: "Dashboard", shortLabel: "Dashboard", icon: LayoutDashboard, render: () => <ModeDashboardTab mode="paper" /> },
+    { key: "fd-crypto", label: "Crypto Filter Diagnostics", shortLabel: "Crypto FD", icon: Lightbulb, render: () => <CryptoFilterDiagnosticsTab gateDisposition="enforce" modeTail="paper" /> },
+    { key: "fd-xstock", label: "xStock Filter Diagnostics", shortLabel: "xStock FD", icon: LineChart, render: () => <XstocksTab gateDisposition="enforce" modeTail="paper" /> },
     {
       key: "ready", label: "Ready to Buy", shortLabel: "Ready", icon: TrendingUp,
       render: () => (

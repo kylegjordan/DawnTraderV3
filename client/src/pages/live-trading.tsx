@@ -8,7 +8,7 @@
  */
 import ModeTradingPage, { type ModeTradingPageConfig } from "@/pages/mode-trading";
 import { Badge } from "@/components/ui/badge";
-import { Lightbulb, LineChart, TrendingUp, BarChart3, History, Ghost } from "lucide-react";
+import { Lightbulb, LineChart, TrendingUp, BarChart3, History, Ghost, LayoutDashboard } from "lucide-react";
 import ActiveTradesV2 from "@/components/trading/active-trades-v2";
 import ReadyToBuyTable from "@/components/trading/ready-to-buy-table";
 import { ExecutionMetricsPanel } from "@/components/trading/execution-metrics";
@@ -16,20 +16,29 @@ import { TradeHistoryTab } from "@/components/trading/trade-history-tab";
 import { ShadowTradesTab } from "@/components/trading/shadow-trades-tab";
 import { XstocksTab } from "@/components/machine-learning/xstocks-tab";
 import { CryptoFilterDiagnosticsTab } from "@/components/vts/vts-tabs";
+import { ModeDashboardTab } from "@/components/dashboard/mode-dashboard-tab";
+import { PortfolioMetricsStrip } from "@/components/trading/portfolio-metrics-strip";
 
 const config: ModeTradingPageConfig = {
   mode: 'live',
   title: "Live Trading",
   subtitle: "Active trading in live mode — real orders on Kraken",
-  defaultTab: "fd-crypto",
+  // P19-B8.3: the Dashboard is the landing view (dormancy-aware honest zeros).
+  defaultTab: "dashboard",
   controls: (
-    <Badge variant="outline" className="px-3 py-1.5 text-xs border-amber-400 text-amber-600" data-testid="live-dormant-badge">
-      DORMANT — LIVE MODE ARRIVES IN PHASE 21
-    </Badge>
+    <div className="flex flex-col items-end gap-2">
+      <Badge variant="outline" className="px-3 py-1.5 text-xs border-amber-400 text-amber-600" data-testid="live-dormant-badge">
+        DORMANT — LIVE MODE ARRIVES IN PHASE 21
+      </Badge>
+      {/* P19-B8.3 (OBJ-4): rendered now, dormancy-aware (the endpoint 409s
+          honestly when no live session exists — shown as such, never zeros). */}
+      <PortfolioMetricsStrip mode="live" />
+    </div>
   ),
   tabs: [
-    { key: "fd-crypto", label: "Crypto Filter Diagnostics", shortLabel: "Crypto FD", icon: Lightbulb, render: () => <CryptoFilterDiagnosticsTab /> },
-    { key: "fd-xstock", label: "xStock Filter Diagnostics", shortLabel: "xStock FD", icon: LineChart, render: () => <XstocksTab /> },
+    { key: "dashboard", label: "Dashboard", shortLabel: "Dashboard", icon: LayoutDashboard, render: () => <ModeDashboardTab mode="live" /> },
+    { key: "fd-crypto", label: "Crypto Filter Diagnostics", shortLabel: "Crypto FD", icon: Lightbulb, render: () => <CryptoFilterDiagnosticsTab gateDisposition="enforce" modeTail="live" /> },
+    { key: "fd-xstock", label: "xStock Filter Diagnostics", shortLabel: "xStock FD", icon: LineChart, render: () => <XstocksTab gateDisposition="enforce" modeTail="live" /> },
     {
       key: "ready", label: "Ready to Buy", shortLabel: "Ready", icon: TrendingUp,
       render: () => (

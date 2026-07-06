@@ -1210,10 +1210,12 @@ export default function ActiveTradesV2() {
             <span>{isConnected ? "Connected" : "Offline"}</span>
           </div>
           
+          {/* P19-B8.3 (OBJ-6): the badge names the ACTUAL mode — the hardcoded
+              "Paper Trading" string read wrong on the Live page (B8.1 carry). */}
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-blue-500/10">
             <Beaker className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-            <span className="text-sm font-medium text-blue-600 dark:text-blue-400">
-              Paper Trading
+            <span className="text-sm font-medium text-blue-600 dark:text-blue-400" data-testid="open-trades-mode-badge">
+              {isPaper ? "Paper Trading" : "Live Trading"}
             </span>
           </div>
         </div>

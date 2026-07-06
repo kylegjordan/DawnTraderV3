@@ -70,31 +70,10 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
 
   const { mode: currentMode, setMode } = useTradingMode();
   
-  // Phase 8.8.3-I9 Part B: Portfolio Summary for TopBar metrics row
-  const { data: portfolioData } = useQuery<{
-    ok: boolean;
-    startingBalance: number;
-    currentBalance: number;
-    netPnl: number;
-    netPnlPercent: number;
-    totalPositionValue: number;
-    openTradesCount: number;
-    slotsAvailable: number;
-  }>({
-    queryKey: ['/api/active-engine/portfolio-summary'],
-    queryFn: async () => {
-      try {
-        const response = await apiRequest('GET', '/api/active-engine/portfolio-summary');
-        return response;
-      } catch (error) {
-        return { ok: false, startingBalance: 0, currentBalance: 0, netPnl: 0, netPnlPercent: 0, totalPositionValue: 0 };
-      }
-    },
-    enabled: currentMode === 'paper',
-    refetchInterval: 10000,
-    staleTime: 5000,
-  });
-  
+  // P19-B8.3 (OBJ-4): the portfolio-summary query MOVED with the metrics strip
+  // into PortfolioMetricsStrip on the Paper Trading page — the top bar renders
+  // clocks only and keeps ZERO strip listeners (Langston hard check).
+
   // Update dual time display (UTC + Local)
   useEffect(() => {
     const updateTime = () => {
@@ -140,29 +119,8 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
     }
   }, [wsMessages, queryClient, setMode]);
 
-  // Phase 8.8.3-I10-FIX: Listen for trade_closed events to immediately refresh portfolio
-  useEffect(() => {
-    const tradeClosedUpdates = wsMessages.filter((msg: any) => msg.type === 'trade_closed');
-    if (tradeClosedUpdates.length > 0 && currentMode === 'paper') {
-      console.log('[TopBar][I10-FIX] Trade closed - refreshing portfolio summary');
-      queryClient.invalidateQueries({ queryKey: ['/api/active-engine/portfolio-summary'] });
-    }
-  }, [wsMessages, queryClient, currentMode]);
-
-  // Phase 8.8.3-I10-FIX: Throttled price update listener for portfolio (every 3 seconds max)
-  const [lastPortfolioRefresh, setLastPortfolioRefresh] = useState<number>(0);
-  useEffect(() => {
-    const priceUpdates = wsMessages.filter((msg: any) => msg.type === 'price_updated');
-    if (priceUpdates.length > 0 && currentMode === 'paper') {
-      const now = Date.now();
-      // Throttle to max once every 3 seconds to avoid UI thrashing
-      if (now - lastPortfolioRefresh > 3000) {
-        console.log('[TopBar][I10-FIX] Price update - refreshing portfolio summary (throttled)');
-        queryClient.invalidateQueries({ queryKey: ['/api/active-engine/portfolio-summary'] });
-        setLastPortfolioRefresh(now);
-      }
-    }
-  }, [wsMessages, queryClient, currentMode, lastPortfolioRefresh]);
+  // P19-B8.3 (OBJ-4): the two I10-FIX portfolio-refresh listeners (trade_closed,
+  // throttled price_updated) MOVED into PortfolioMetricsStrip with the strip.
 
   // Phase 27.F.14.N: Listen for trading_data_updated events to refresh trading tabs
   useEffect(() => {
@@ -328,47 +286,8 @@ export default function TopBar({ onMenuClick, showMenuButton = false }: TopBarPr
         </div>
       </div>
       
-      {/* Phase 8.8.3-I9 Part B: Portfolio Metrics Row (Paper Mode Only) */}
-      {currentMode === 'paper' && portfolioData && (
-        <div className="flex items-center justify-center gap-4 md:gap-8 px-3 sm:px-6 py-2 bg-primary/5 border-t border-primary/10">
-          <div className="flex items-center gap-1 text-xs md:text-sm">
-            <span className="text-muted-foreground">Starting:</span>
-            <span className="font-mono font-semibold">${portfolioData.startingBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-          </div>
-          <div className="flex items-center gap-1 text-xs md:text-sm">
-            <span className="text-muted-foreground">Current:</span>
-            <span className="font-mono font-semibold">
-              ${portfolioData.currentBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </span>
-          </div>
-          <div className="flex items-center gap-1 text-xs md:text-sm">
-            <span className="text-muted-foreground">Net P/L:</span>
-            <span className={cn(
-              "font-mono font-bold",
-              portfolioData.netPnl >= 0 ? "text-green-600" : "text-red-600"
-            )}>
-              {portfolioData.netPnl >= 0 ? '+' : ''}${portfolioData.netPnl.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </span>
-          </div>
-          <div className="hidden sm:flex items-center gap-1 text-xs md:text-sm">
-            <span className="text-muted-foreground">P/L %:</span>
-            <span className={cn(
-              "font-mono font-bold",
-              portfolioData.netPnlPercent >= 0 ? "text-green-600" : "text-red-600"
-            )}>
-              {portfolioData.netPnlPercent >= 0 ? '+' : ''}{portfolioData.netPnlPercent.toFixed(2)}%
-            </span>
-          </div>
-          <div className="hidden md:flex items-center gap-1 text-xs md:text-sm">
-            <span className="text-muted-foreground">Positions:</span>
-            <span className="font-mono font-semibold">${portfolioData.totalPositionValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-          </div>
-          <div className="flex items-center gap-1 text-xs md:text-sm">
-            <span className="text-muted-foreground">Open Trades/Slots Available:</span>
-            <span className="font-mono font-semibold">{portfolioData.openTradesCount ?? 0} / {portfolioData.slotsAvailable ?? 0}</span>
-          </div>
-        </div>
-      )}
+      {/* P19-B8.3 (OBJ-4): the Portfolio Metrics Row MOVED to the Paper Trading
+          page (PortfolioMetricsStrip) — the top bar renders clocks only. */}
 
       {/* P19-B8.1: the trading-control modals moved with the toggle —
           SimulationStartupModal mounts inside PaperTradingControls on the

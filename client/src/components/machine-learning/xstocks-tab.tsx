@@ -260,7 +260,13 @@ function FreshnessPanel({ data, isLoading }: { data: XstocksFreshnessResponse | 
 // not the lighter custom ones)
 // ---------------------------------------------------------------------------
 
-export function XstocksTab() {
+// P19-B8.3 (OBJ-3c): mode-aware disposition threading — the embedded shared
+// panel renders the VTS tail on the VTS page ('tag', default) and the mode's
+// REAL tail on Paper/Live ('enforce' + modeTail).
+export function XstocksTab({ gateDisposition = 'tag', modeTail = null }: {
+  gateDisposition?: 'enforce' | 'tag';
+  modeTail?: 'paper' | 'live' | null;
+} = {}) {
   const { data: filterData, isLoading: filterLoading } = useQuery<XstocksFilterDiagnostics>({
     queryKey: ['/api/xstocks/filter-diagnostics', { asset_class: 'xstock_spot' }],
     queryFn: () => apiFetch('/api/xstocks/filter-diagnostics'),
@@ -319,7 +325,7 @@ export function XstocksTab() {
           </p>
         </CardHeader>
         <CardContent>
-          <FilterDiagnosticsPanel data={filterData} isLoading={filterLoading} />
+          <FilterDiagnosticsPanel data={filterData} isLoading={filterLoading} gateDisposition={gateDisposition} modeTail={modeTail} />
         </CardContent>
       </Card>
 
