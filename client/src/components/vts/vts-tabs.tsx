@@ -56,7 +56,9 @@ export function VtsOpenTradesTab() {
     <Card>
       <CardHeader className="py-3">
         <CardTitle className="text-lg flex items-center justify-between">
-          <span>Open Simulated Trades</span>
+          {/* P19-B8.3c: the open-trade COUNT restored atop the tab (dropped in
+              the B8.1 machine-learning extraction). Reflects the rendered rows. */}
+          <span>Open Simulated Trades{!isError && data?.trades ? <span className="ml-2 text-sm font-normal text-muted-foreground" data-testid="vts-open-count">({data.trades.length})</span> : null}</span>
           <span className="flex items-center gap-2">
             <span className="text-sm font-normal text-muted-foreground">
               Auto-refresh: 60s | Max: 300 trades
@@ -107,7 +109,8 @@ export function VtsClosedTradesTab() {
     <Card>
       <CardHeader className="py-3">
         <CardTitle className="text-lg flex items-center justify-between">
-          <span>Closed Simulated Trades (Last 7 Days)</span>
+          {/* P19-B8.3c: the closed-trade COUNT restored atop the tab. */}
+          <span>Closed Simulated Trades (Last 7 Days){!isError && data?.trades ? <span className="ml-2 text-sm font-normal text-muted-foreground" data-testid="vts-closed-count">({data.trades.length})</span> : null}</span>
           <span className="flex items-center gap-2">
             <span className="text-sm font-normal text-muted-foreground">Auto-refresh: 5 min</span>
             <Button variant="outline" size="sm" onClick={() => refetch()}>

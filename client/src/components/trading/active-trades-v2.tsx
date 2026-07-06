@@ -1200,7 +1200,9 @@ export default function ActiveTradesV2() {
   return (
     <section data-testid="active-trades-v2" data-last-update-at={lastDataRefreshAt || ''}>
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl sm:text-2xl font-bold text-foreground">Active Trades</h2>
+        {/* P19-B8.3c: the open-trade COUNT restored atop the tab (dropped in the
+            B8.1 restructure). `positions` is mode-scoped, so it reflects the active mode. */}
+        <h2 className="text-xl sm:text-2xl font-bold text-foreground">Active Trades <span className="text-base font-normal text-muted-foreground" data-testid="active-trades-count">({positions.length})</span></h2>
         <div className="flex items-center gap-3">
           <div className={cn(
             "flex items-center gap-1.5 px-2 py-1 rounded text-xs",
