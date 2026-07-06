@@ -1118,7 +1118,7 @@ router.get('/ml/closed', requireAuth, async (req: AuthenticatedRequest, res: Res
     const days = parseInt(req.query.days as string) || 7;
     const trades = await getClosedVTSTradesFromLogs(days);
     console.log(`[11.6E][API] GET /ml/closed?days=${days} - ${trades.length} closed trades`);
-    
+
     res.json({
       success: true,
       count: trades.length,
@@ -1128,6 +1128,89 @@ router.get('/ml/closed', requireAuth, async (req: AuthenticatedRequest, res: Res
   } catch (error) {
     console.error('[11.6E][API][ERROR] GET /ml/closed failed:', error);
     res.status(500).json({ error: 'Failed to fetch closed trades' });
+  }
+});
+
+/**
+ * P19-B8.3 (OBJ-2) — VTS dashboard aggregates. Server-side (the read confirmed
+ * NO aggregates endpoint existed; clients would otherwise recompute from raw
+ * rows). ALL dollar figures are VIRTUAL (labeled by the client — the VTS has no
+ * balance semantics). HONESTY RULES (B7.2c disciplines, applied IN the filter,
+ * not asserted): rows with the TYPED `countsInAggregates === false` flag are
+ * EXCLUDED — that one flag already encodes both `never_filled` drops and
+ * maker/taker TWINS (comparison records that must never enter win-rate);
+ * `mtTwin === true` and shadow-tagged rows are belt-and-suspenders re-checked.
+ */
+router.get('/analytics', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const days = Math.max(1, Math.min(365, parseInt(req.query.days as string) || 7));
+    const all = await getClosedVTSTradesFromLogs(days);
+    const trades = all.filter((t: any) =>
+      t.countsInAggregates !== false &&
+      t.mtTwin !== true &&
+      t.shadow !== true &&
+      t.resultType !== 'never_filled'
+    );
+    const excludedCount = all.length - trades.length;
+
+    const num = (v: unknown): number => { const n = parseFloat(String(v ?? '')); return Number.isFinite(n) ? n : 0; };
+    const wins = trades.filter((t: any) => num(t.netProfitValue) > 0);
+    const losses = trades.filter((t: any) => num(t.netProfitValue) <= 0);
+    const netPnl = trades.reduce((s: number, t: any) => s + num(t.netProfitValue), 0);
+    const totalProfit = wins.reduce((s: number, t: any) => s + num(t.netProfitValue), 0);
+    const totalLoss = Math.abs(losses.reduce((s: number, t: any) => s + num(t.netProfitValue), 0));
+    const totalCosts = trades.reduce((s: number, t: any) => s + num(t.costs), 0);
+    const grossSum = trades.reduce((s: number, t: any) => s + num(t.grossProfitValue), 0);
+    const holdMins = trades.map((t: any) => num(t.durationMinutes)).filter((m: number) => m > 0);
+
+    // Opens per day (the VTS's breadth mission — the learning-framed headline).
+    const perDay: Record<string, number> = {};
+    for (const t of trades) {
+      const d = t.entryTime ? String(t.entryTime).slice(0, 10) : 'unknown';
+      perDay[d] = (perDay[d] ?? 0) + 1;
+    }
+
+    const makerCount = trades.filter((t: any) => t.chosenEntryMode === 'maker').length;
+    const takerCount = trades.filter((t: any) => t.chosenEntryMode === 'taker').length;
+
+    const group = (key: (t: any) => string) => {
+      const out: Record<string, { count: number; wins: number; netPnl: number; winRate: number }> = {};
+      for (const t of trades) {
+        const k = key(t) || 'unknown';
+        if (!out[k]) out[k] = { count: 0, wins: 0, netPnl: 0, winRate: 0 };
+        out[k].count++;
+        if (num(t.netProfitValue) > 0) out[k].wins++;
+        out[k].netPnl += num(t.netProfitValue);
+      }
+      Object.values(out).forEach(r => { r.winRate = r.count > 0 ? (r.wins / r.count) * 100 : 0; });
+      return out;
+    };
+
+    res.json({
+      ok: true,
+      days,
+      virtual: true, // every $ figure below is a VIRTUAL simulation figure
+      sampleCount: trades.length,
+      excludedCount, // twins + never_filled + shadow rows honestly excluded
+      closedPerDay: perDay,
+      winRate: trades.length > 0 ? (wins.length / trades.length) * 100 : 0,
+      winCount: wins.length,
+      lossCount: losses.length,
+      netPnl,
+      profitFactor: totalLoss > 0 ? totalProfit / totalLoss : (totalProfit > 0 ? null : 0), // null = undefined-by-no-losses, not fake ∞
+      feeDrag: { totalFees: totalCosts, pctOfGross: grossSum > 0 ? (totalCosts / grossSum) * 100 : null },
+      avgHoldMinutes: holdMins.length > 0 ? holdMins.reduce((a: number, b: number) => a + b, 0) / holdMins.length : null,
+      makerTakerMix: {
+        makerCount, takerCount,
+        unknownCount: trades.length - makerCount - takerCount,
+        makerShare: (makerCount + takerCount) > 0 ? (makerCount / (makerCount + takerCount)) * 100 : null,
+      },
+      byStrategy: group((t: any) => t.strategy),
+      byAssetClass: group((t: any) => t.assetClass),
+    });
+  } catch (error) {
+    console.error('[P19-B8.3][API][ERROR] GET /vts/analytics failed:', error);
+    res.status(500).json({ ok: false, error: 'Failed to compute VTS analytics' });
   }
 });
 

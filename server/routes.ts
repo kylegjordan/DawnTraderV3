@@ -12336,12 +12336,87 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // P19-B8.3 (OBJ-3b) — the REALIZED balance curve (closed-trade basis; the chart
+  // is labeled as such — it deliberately EXCLUDES open-position mark-to-market,
+  // which is why its tip can differ from portfolioValue on the card; Langston
+  // Step-1 reconciliation condition). DERIVED, no snapshot infrastructure:
+  // anchor events RESET the level (a re-anchor/start-new re-bases the balance);
+  // between events, cumulative closed-trade netPnl accrues. Honest empty state
+  // when neither an anchor nor a closed trade exists in the window.
+  apiRouter.get('/active-engine/balance-curve', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const mode: 'paper' | 'live' = req.query.mode === 'live' ? 'live' : 'paper';
+      const days = Math.max(1, Math.min(3650, parseInt(String(req.query.days ?? '30')) || 30));
+      const windowStart = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+      const { db: curveDb } = await import('./db.js');
+      const { portfolioAnchorEvents } = await import('@shared/schema');
+      const { eq: curveEq, asc: curveAsc } = await import('drizzle-orm');
+      const anchors = await curveDb.select()
+        .from(portfolioAnchorEvents)
+        .where(curveEq(portfolioAnchorEvents.mode, mode))
+        .orderBy(curveAsc(portfolioAnchorEvents.occurredAt));
+
+      const allClosed = await storage.getClosedTrades(mode, { closedOnly: true });
+      const num = (v: unknown): number => { const n = parseFloat(String(v ?? '')); return Number.isFinite(n) ? n : 0; };
+      const closes = allClosed
+        .filter(t => t.closedAt && t.closeReason !== 'never_filled')
+        .map(t => ({ at: new Date(t.closedAt!), pnl: num(t.netPnl ?? t.pnl) }))
+        .sort((a, b) => a.at.getTime() - b.at.getTime());
+
+      if (anchors.length === 0 && closes.length === 0) {
+        return res.json({ ok: true, mode, days, basis: 'realized', hasData: false, points: [] });
+      }
+
+      // Merge-walk: anchors RESET the level; trade closes accrue onto it.
+      // Level before the first anchor: the current balance minus everything that
+      // came after would be speculative — instead, when trades PRECEDE any anchor
+      // (legacy history), the pre-anchor segment starts at 0-relative cumulative
+      // P/L and is flagged so the client renders it as a relative segment.
+      type Point = { t: string; balance: number | null; cumPnl: number; kind: 'anchor' | 'trade'; anchorVersion?: number };
+      const points: Point[] = [];
+      let level: number | null = null;
+      let cum = 0;
+      let ai = 0, ci = 0;
+      while (ai < anchors.length || ci < closes.length) {
+        const aT = ai < anchors.length ? new Date(anchors[ai].occurredAt as any).getTime() : Infinity;
+        const cT = ci < closes.length ? closes[ci].at.getTime() : Infinity;
+        if (aT <= cT) {
+          const a = anchors[ai++];
+          level = num(a.newBalance);
+          cum = 0;
+          points.push({ t: new Date(a.occurredAt as any).toISOString(), balance: level, cumPnl: 0, kind: 'anchor', anchorVersion: a.anchorVersion as any });
+        } else {
+          const c = closes[ci++];
+          cum += c.pnl;
+          points.push({ t: c.at.toISOString(), balance: level !== null ? level + cum : null, cumPnl: cum, kind: 'trade' });
+        }
+      }
+
+      const windowed = points.filter(p => new Date(p.t) >= windowStart);
+      // Carry the level INTO the window: the last point at-or-before windowStart.
+      const carrier = points.filter(p => new Date(p.t) < windowStart).pop() ?? null;
+
+      res.json({
+        ok: true, mode, days, basis: 'realized',
+        hasData: windowed.length > 0 || carrier !== null,
+        startLevel: carrier ? { t: carrier.t, balance: carrier.balance, cumPnl: carrier.cumPnl } : null,
+        points: windowed,
+      });
+    } catch (error) {
+      console.error('[P19-B8.3] balance-curve failed:', error);
+      res.status(500).json({ ok: false, error: 'Failed to compute balance curve' });
+    }
+  });
+
   // Phase 8.8.3-B3: Portfolio Summary endpoint - available on all trading tabs
   // Current Balance = starting_balance + SUM(realized P/L from closed trades in current session)
   apiRouter.get('/active-engine/portfolio-summary', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { getEngineSessionStart } = await import('./services/active-execution-engine');
-      const mode = 'paper' as const;
+      // P19-B8.3 (OBJ-1): mode-parameterized — ?mode=paper|live, default 'paper'
+      // (zero behavior change for existing callers).
+      const mode: 'paper' | 'live' = req.query.mode === 'live' ? 'live' : 'paper';
       
       // Get portfolio state
       // P19-B8.2 (OBJ-2): ghost '1000' fallback DELETED — an absent/unparseable
@@ -12425,7 +12500,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       // Phase 8.8.3-I9: Get open trades count and max slots for TopBar metric using dynamic calculation
       const { getDynamicSlots } = await import('./services/dynamic-slots.js');
-      const { slots: maxOpenTrades } = await getDynamicSlots('paper');
+      const { slots: maxOpenTrades } = await getDynamicSlots(mode);
       const openTradesCount = openPositions.length;
       const slotsAvailable = Math.max(0, maxOpenTrades - openTradesCount);
       
@@ -12706,15 +12781,18 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     try {
       const userId = req.user!.id;
       const { range = 'session' } = req.query;
-      
+      // P19-B8.3 (OBJ-1): mode-parameterized — ?mode=paper|live, default 'paper'
+      // (zero behavior change for existing callers; anything else coerces to paper).
+      const mode: 'paper' | 'live' = req.query.mode === 'live' ? 'live' : 'paper';
+
       // Calculate time range
       const now = new Date();
       let startTime: Date;
       let isCurrentSimulation = false;
-      
+
       // Phase 8.8.3-C6: Get actual engine running state for all responses
       const { getEngineSessionStart } = await import('./services/active-execution-engine.js');
-      const engineStartTime = getEngineSessionStart('paper');
+      const engineStartTime = getEngineSessionStart(mode);
       const isEngineRunning = engineStartTime !== null;
       
       // Phase 8.8.3-C6: Handle "session" range - since last engine START (not reset, not session ID)
@@ -12729,6 +12807,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           return res.json({
             ok: true,
             range,
+            mode,
             engineRunning: false,
             analytics: {
               totalOpened: 0,
@@ -12747,7 +12826,17 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
               profitFactor: 0,
               byStrategy: {},
               largestWinner: null,
-              largestLoser: null
+              largestLoser: null,
+              // P19-B8.3: shape-stable additions (null/empty = honest no-data)
+              winCount: 0,
+              lossCount: 0,
+              feeDrag: { totalFees: 0, pctOfGross: null },
+              makerTakerMix: { makerCount: 0, takerCount: 0, unknownCount: 0, makerShare: null },
+              avgNetR: { value: null, sampleCount: 0, excludedCount: 0 },
+              maxDrawdownInWindow: { pct: null, usd: 0 },
+              byAssetClass: {},
+              earnings: { today: 0, thisWeek: 0, thisMonth: 0 },
+              avgAmountInvested: 0
             }
           });
         }
@@ -12765,7 +12854,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       }
       
       // Get trades within range
-      const allTrades = await storage.getClosedTrades('paper', {});
+      const allTrades = await storage.getClosedTrades(mode, {});
       
       // Phase 8.8.3-B3: Filter out ghost trades from analytics
       // Ghost trades = closed trades without proper exit_price or close_reason
@@ -12801,6 +12890,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         return res.json({
           ok: true,
           range,
+          mode,
           engineRunning: isEngineRunning, // true if engine is running, derived from actual engine state
           analytics: {
             totalOpened: 0,
@@ -12819,11 +12909,21 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
             profitFactor: 0,
             byStrategy: {},
             largestWinner: null,
-            largestLoser: null
+            largestLoser: null,
+            // P19-B8.3: shape-stable additions (null/empty = honest no-data)
+            winCount: 0,
+            lossCount: 0,
+            feeDrag: { totalFees: 0, pctOfGross: null },
+            makerTakerMix: { makerCount: 0, takerCount: 0, unknownCount: 0, makerShare: null },
+            avgNetR: { value: null, sampleCount: 0, excludedCount: 0 },
+            maxDrawdownInWindow: { pct: null, usd: 0 },
+            byAssetClass: {},
+            earnings: { today: 0, thisWeek: 0, thisMonth: 0 },
+            avgAmountInvested: 0
           }
         });
       }
-      
+
       // Calculate analytics
       const closedAtTP = trades.filter(t => t.closeReason === 'target_hit');
       const closedAtSL = trades.filter(t => t.closeReason === 'stop_hit');
@@ -12845,7 +12945,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // Phase 8.8.3-C5-4: Analytics Scope Verification - log analytics query scope
       // Phase 8.8.3-C6: Use engine start timestamp for session info
       c5FinancialDiagnostics.logAnalyticsScope({
-        mode: 'paper',
+        mode,
         timeRange: range === 'session' ? 'current_simulation' : range === '1h' ? 'last_hour' : 'last_24h',
         filtersApplied: String(range),
         tradeCount: trades.length,
@@ -12919,11 +13019,103 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         pnl: parseFloat(sortedByPnl[sortedByPnl.length - 1].pnl?.toString() || '0'),
         strategy: sortedByPnl[sortedByPnl.length - 1].strategyName
       } : null;
-      
+
+      // ── P19-B8.3 (OBJ-1): the dashboard metric additions. All computed from
+      // existing closed_trades columns; every denominator null-guarded at the
+      // ENDPOINT (Langston Step-1/2 conditions) — the UI renders null as "—",
+      // never NaN or nonsense.
+      const num = (v: unknown): number => { const n = parseFloat(String(v ?? '')); return Number.isFinite(n) ? n : 0; };
+
+      // The mode's REAL starting balance (B8.2 anchor read) — null when absent
+      // (Live dormant): percentage/drawdown metrics go null, never divide by zero.
+      let startingBalanceForPct: number | null = null;
+      try {
+        const { getAnchorState } = await import('./services/portfolio-anchor-service.js');
+        const anchorState = await getAnchorState(mode);
+        if (anchorState && anchorState.balance > 0) startingBalanceForPct = anchorState.balance;
+      } catch { /* absent balance → null metrics (honest) */ }
+
+      // Fee drag: total fees paid + the share of GROSS profit they consumed.
+      // pctOfGross is null when gross <= 0 (a negative-gross window makes the
+      // ratio meaningless — Langston C-checkpoint).
+      const totalFees = trades.reduce((sum, t) => sum + num(t.totalFee ?? t.fees), 0);
+      const grossPnlSum = trades.reduce((sum, t) => sum + num(t.grossPnl), 0);
+      const feeDrag = {
+        totalFees,
+        pctOfGross: grossPnlSum > 0 ? (totalFees / grossPnlSum) * 100 : null,
+      };
+
+      // Maker/taker entry mix (NULL chosenEntryMode rows excluded honestly + counted).
+      const makerCount = trades.filter(t => t.chosenEntryMode === 'maker').length;
+      const takerCount = trades.filter(t => t.chosenEntryMode === 'taker').length;
+      const makerTakerMix = {
+        makerCount,
+        takerCount,
+        unknownCount: trades.length - makerCount - takerCount,
+        makerShare: (makerCount + takerCount) > 0 ? (makerCount / (makerCount + takerCount)) * 100 : null,
+      };
+
+      // Average net R-multiple: netPnl ÷ (|entry − stop| × qty). Rows with a NULL
+      // stop or non-positive risk are EXCLUDED and surfaced (excludedCount) —
+      // never coerced (pre-audit §5).
+      let rSum = 0, rCount = 0, rExcluded = 0;
+      for (const t of trades) {
+        const entry = num(t.entryPrice), stop = num(t.stopLoss), qty = num(t.quantity);
+        const riskUsd = Math.abs(entry - stop) * qty;
+        if (!t.stopLoss || !(riskUsd > 0)) { rExcluded++; continue; }
+        rSum += num(t.netPnl ?? t.pnl) / riskUsd;
+        rCount++;
+      }
+      const avgNetR = { value: rCount > 0 ? rSum / rCount : null, sampleCount: rCount, excludedCount: rExcluded };
+
+      // In-window max drawdown on the REALIZED basis (same basis as the OBJ-3b
+      // curve — stated in the UI tooltip): running cumulative netPnl over the
+      // window's trades in close order, deepest peak-to-trough ÷ the REAL
+      // starting balance. Null when no trustworthy balance exists.
+      let maxDrawdownInWindow: { pct: number | null; usd: number } = { pct: null, usd: 0 };
+      {
+        const byCloseTime = [...trades].sort((a, b) => new Date(a.closedAt!).getTime() - new Date(b.closedAt!).getTime());
+        let running = 0, peak = 0, maxDdUsd = 0;
+        for (const t of byCloseTime) {
+          running += num(t.netPnl ?? t.pnl);
+          if (running > peak) peak = running;
+          if (peak - running > maxDdUsd) maxDdUsd = peak - running;
+        }
+        maxDrawdownInWindow = {
+          usd: maxDdUsd,
+          pct: startingBalanceForPct !== null ? (maxDdUsd / startingBalanceForPct) * 100 : null,
+        };
+      }
+
+      // By asset class (Kyle 2026-07-06 — the breakdown table): the column exists
+      // on every closed row (B65/B69).
+      const byAssetClass: Record<string, { count: number; wins: number; netPnl: number; fees: number; winRate: number }> = {};
+      for (const t of trades) {
+        const ac = (t as any).assetClass || 'crypto_spot';
+        if (!byAssetClass[ac]) byAssetClass[ac] = { count: 0, wins: 0, netPnl: 0, fees: 0, winRate: 0 };
+        byAssetClass[ac].count++;
+        if (num(t.pnl) > 0) byAssetClass[ac].wins++;
+        byAssetClass[ac].netPnl += num(t.netPnl ?? t.pnl);
+        byAssetClass[ac].fees += num(t.totalFee ?? t.fees);
+      }
+      Object.values(byAssetClass).forEach(r => { r.winRate = r.count > 0 ? (r.wins / r.count) * 100 : 0; });
+
+      // Calendar earnings buckets (the legacy dashboard's Earnings card semantics —
+      // calendar Today/Week/Month, NOT rolling; computed over ALL valid trades so
+      // the card is range-selector-independent).
+      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const startOfWeek = new Date(startOfDay); startOfWeek.setDate(startOfDay.getDate() - startOfDay.getDay());
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const sumSince = (since: Date) => validTrades
+        .filter(t => t.closedAt && new Date(t.closedAt) >= since)
+        .reduce((sum, t) => sum + num(t.netPnl ?? t.pnl), 0);
+      const earnings = { today: sumSince(startOfDay), thisWeek: sumSince(startOfWeek), thisMonth: sumSince(startOfMonth) };
+
       // Phase 8.8.3-C6: Include engineRunning flag for consistency
       res.json({
         ok: true,
         range,
+        mode, // P19-B8.3: echo the resolved mode
         engineRunning: isEngineRunning, // true if engine is running, derived from actual engine state
         analytics: {
           totalOpened: trades.length,
@@ -12931,15 +13123,27 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           closedAtSL: { count: closedAtSL.length, percent: (closedAtSL.length / trades.length) * 100 },
           closedManually: { count: closedManually.length, percent: (closedManually.length / trades.length) * 100 },
           winRate,
+          winCount: wins.length,   // P19-B8.3: raw counts ALWAYS beside the % (Kyle)
+          lossCount: losses.length,
           avgProfit,
           avgLoss,
           netPnl,
-          netPnlPercent: 0, // Would need starting balance to calculate
+          // P19-B8.3: the pre-existing always-0 fixed at the root — real % against
+          // the B8.2 anchor balance; null (not fake 0) when no balance exists.
+          netPnlPercent: startingBalanceForPct !== null ? (netPnl / startingBalanceForPct) * 100 : null,
           avgProfitPercent, // B2: New metric
           avgDailyProfitPercent, // B2: New metric
           avgHoldingTime,
           medianHoldingTime,
           profitFactor: isFinite(profitFactor) ? profitFactor : 0,
+          // P19-B8.3 (OBJ-1) additions:
+          feeDrag,
+          makerTakerMix,
+          avgNetR,
+          maxDrawdownInWindow,
+          byAssetClass,
+          earnings,
+          avgAmountInvested: trades.length > 0 ? trades.reduce((s, t) => s + num(t.entryPrice) * num(t.quantity), 0) / trades.length : 0,
           byStrategy,
           largestWinner,
           largestLoser
