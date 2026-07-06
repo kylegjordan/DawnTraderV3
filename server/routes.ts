@@ -12963,8 +12963,16 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const avgProfit = wins.length > 0 ? totalProfit / wins.length : 0;
       const avgLoss = losses.length > 0 ? totalLoss / losses.length : 0;
       
-      const netPnl = trades.reduce((sum, t) => sum + parseFloat(t.pnl?.toString() || '0'), 0);
-      
+      // P19-B8.3b (OBJ-3, #415): the headline netPnl now sums on the CANONICAL
+      // net-of-friction basis — `num(t.netPnl ?? t.pnl)` — the SAME expression
+      // byAssetClass uses (below), so `Σ byAssetClass.netPnl === headline netPnl`
+      // by construction (previously the headline summed raw `t.pnl` (gross) while
+      // per-class summed net → they diverged by total fees on fee-bearing rows).
+      // net_pnl is `default("0")` non-null (schema:1723) so `?? t.pnl` is a
+      // documented no-op bridge for any pre-net_pnl-column legacy row (there are
+      // none today — closed_trades is empty until the B8.4 switch-on).
+      const netPnl = trades.reduce((sum, t) => sum + num(t.netPnl ?? t.pnl), 0);
+
       // Phase 8.8.3-C5-4: Analytics Scope Verification - log analytics query scope
       // Phase 8.8.3-C6: Use engine start timestamp for session info
       c5FinancialDiagnostics.logAnalyticsScope({

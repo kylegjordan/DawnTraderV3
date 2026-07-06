@@ -214,7 +214,13 @@ export interface ScanDiagnostics {
   // Batch 48: Track unique family-qualified pairs for Pipeline Summary reconciliation
   familyQualifiedUnique: number;
   destination: 'active_pool' | 'vts_batch';
-  destinationCount: number;
+  // P19-B8.3b (OBJ-2): the per-cycle `destinationCount` field was RETIRED —
+  // it was set unconditionally to the VTS survivor count even when
+  // destination='active_pool' (a mislabel), and was serialized-but-unrendered
+  // on the FD client (transported via getLastScanDiagnostics, typed at
+  // vts-shared but never read by the panel). The surfaced FD number is computed
+  // independently at routes.ts (familyFanOutSum+patternFanOut) and is untouched.
+  // See DELETED_COMPONENTS_LOG 2026-07-07.
   // B63: High-DBS routing diagnostics (Kyle 2026-04-20 — dedicated tracking tab)
   b63Dbs?: {
     // B63.4: Pre-global stage — the TRUE "how many high-DBS pairs exist" metric.
@@ -330,7 +336,8 @@ export class Fx5ScannerService {
     uniquePairsScanned: number;
     // Batch 48: Pipeline reconciliation fields
     totalFamilyQualifiedUnique: number;
-    totalDestinationCount: number;
+    // P19-B8.3b (OBJ-2): `totalDestinationCount` RETIRED — dead rollup (zero
+    // readers anywhere; the client rolling24h type never declared it).
     // B63: Rolling 24h high-DBS aggregation (Kyle's DBS tracking tab)
     b63Dbs: {
       totalClassified: number;
@@ -359,7 +366,6 @@ export class Fx5ScannerService {
         totalPairsScanned: 0,
         uniquePairsScanned: 0,
         totalFamilyQualifiedUnique: 0,
-        totalDestinationCount: 0,
         b63Dbs: { totalClassified: 0, strongDbsPairs: 0, strongDbsPct: 0, strongTrendPoolPassed: 0, strongTrendPoolPct: 0, uniqueStrongDbsSymbols: [] },
         aggregated: {
           quant: {
@@ -391,7 +397,6 @@ export class Fx5ScannerService {
     const aggFamilyPaths: Record<string, { imf: { failedLQ: number; failedVN: number; failedDI: number; passed: number; total: number }; survivors: number }> = {};
     // Batch 48: Pipeline reconciliation accumulators
     let aggFamilyQualifiedUnique = 0;
-    let aggDestinationCount = 0;
 
     for (const d of history) {
       totalPairsScanned += d.totalPairsScanned;
@@ -444,7 +449,6 @@ export class Fx5ScannerService {
       }
       // Batch 48: Accumulate pipeline reconciliation fields
       aggFamilyQualifiedUnique += d.familyQualifiedUnique ?? 0;
-      aggDestinationCount += d.destinationCount ?? 0;
     }
 
     // B63: Aggregate high-DBS diagnostics across rolling 24h
@@ -466,7 +470,6 @@ export class Fx5ScannerService {
       totalPairsScanned,
       uniquePairsScanned: uniqueSymbols.size,
       totalFamilyQualifiedUnique: aggFamilyQualifiedUnique,
-      totalDestinationCount: aggDestinationCount,
       b63Dbs: {
         totalClassified: aggTotalClassified,
         strongDbsPairs: aggStrongDbsPairs,
@@ -1472,7 +1475,6 @@ export class Fx5ScannerService {
         // Batch 48: Unique pairs that passed at least one family IMF
         familyQualifiedUnique: familyQualifiedUnion.length,
         destination: isEngineActive ? 'active_pool' : 'vts_batch',
-        destinationCount: 0,
       };
 
       // B63.4: High-DBS routing diagnostics with stage-by-stage decomposition.
@@ -1542,7 +1544,7 @@ export class Fx5ScannerService {
       this.scanDiagnosticsHistory = this.scanDiagnosticsHistory.filter(
         d => new Date(d.timestamp).getTime() > diagCutoff
       );
-      console.log(`[19H][DIAG] Scan diagnostics stored: quant=${scanDiag.quant.survivors} pattern=${scanDiag.pattern.survivors} → ${scanDiag.destination}(${scanDiag.destinationCount})`);
+      console.log(`[19H][DIAG] Scan diagnostics stored: quant=${scanDiag.quant.survivors} pattern=${scanDiag.pattern.survivors} → ${scanDiag.destination}`);
 
       // Directive 8.8.4-L1: Capture FX5 scan data for learning aggregation
       // Directive 9.0.B: Include volume classification stats
@@ -1668,7 +1670,6 @@ export class Fx5ScannerService {
       if (b62BenchmarkCount > 0) {
         console.log(`[B62][BENCHMARK] ${b62BenchmarkCount} benchmark pairs INCLUDED in VTS batch (previously excluded by B52)`);
       }
-      scanDiag.destinationCount = taggedVtsSurvivors.length;
 
       // Directive 11.4C.1: FX5 does NOT write to telemetry (M70)
       // VTS is the sole source of telemetry writes - FX5 outputs raw data only

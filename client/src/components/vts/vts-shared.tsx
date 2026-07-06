@@ -151,7 +151,11 @@ export interface ScanDiagnostics {
     survivors: number;
   };
   destination: string;
-  destinationCount: number;
+  // P19-B8.3b (OBJ-2): `destinationCount` RETIRED from the scan-diagnostic
+  // shape — it was serialized here but never rendered by the panel (a mislabel
+  // set to the VTS survivor count even for active_pool). The FD-response
+  // top-level `destinationCount` (routes.ts, familyFanOutSum+patternFanOut) is
+  // a DIFFERENT field and is unaffected.
 }
 
 export interface FilterDiagnosticsData {

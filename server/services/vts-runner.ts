@@ -4188,7 +4188,7 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
   // when boot_orchestrator calls startAutonomousSimulation() during startup.
   const { fx5Scanner: fx5ScannerForDiag } = await import('./fx5-scanner.js');
   const lastDiagForTrace = fx5ScannerForDiag.getLastScanDiagnostics();
-  console.log(`[52][HANDOFF] VTS loop entry: ${pairs.length} pairs (quant=${quantPairs.length} pattern=${patternPairs.length}) | FX5 destinationCount=${lastDiagForTrace?.destinationCount ?? 'N/A'} | uniqueSymbols=${new Set(pairs.map(p => p.symbol)).size}`);
+  console.log(`[52][HANDOFF] VTS loop entry: ${pairs.length} pairs (quant=${quantPairs.length} pattern=${patternPairs.length}) | FX5 destination=${lastDiagForTrace?.destination ?? 'N/A'} | uniqueSymbols=${new Set(pairs.map(p => p.symbol)).size}`);
 
   if (pairs.length === 0) {
     console.warn(`[11.0E.1][VTS] No pairs available for simulation cycle`);

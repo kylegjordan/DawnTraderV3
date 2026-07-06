@@ -233,25 +233,44 @@ function ActiveModeDashboard({ mode }: { mode: "paper" | "live" }) {
         <CardContent>
           {curve.isError ? <ErrorBanner label="balance history" onRetry={() => curve.refetch()} /> :
             curve.isLoading ? <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">Loading…</div> :
-            !curve.data?.hasData || (curve.data?.points ?? []).length === 0 ? (
-            <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">
-              No realized-balance history in this window yet — the curve begins with the first anchor event or closed trade.
-            </div>
-          ) : (
-            <div className="h-56">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={(curve.data.points as any[]).map(p => ({ ...p, ts: new Date(p.t).getTime() }))}>
-                  <XAxis dataKey="ts" type="number" domain={["dataMin", "dataMax"]} tickFormatter={(v) => new Date(v).toLocaleDateString()} fontSize={11} />
-                  <YAxis dataKey="balance" domain={["auto", "auto"]} tickFormatter={(v) => `$${v}`} fontSize={11} width={70} />
-                  <Tooltip formatter={(v: any) => usd(Number(v))} labelFormatter={(v: any) => new Date(v).toLocaleString()} />
-                  <Line type="stepAfter" dataKey="balance" dot={false} strokeWidth={2} stroke="currentColor" isAnimationActive={false} />
-                  {(curve.data.points as any[]).filter(p => p.kind === "anchor").map(p => (
-                    <ReferenceDot key={p.t} x={new Date(p.t).getTime()} y={p.balance} r={4} label={{ value: `anchor v${p.anchorVersion}`, fontSize: 10, position: "top" }} />
-                  ))}
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          )}
+            (() => {
+              // P19-B8.3b (OBJ-4, #416): consume the `startLevel` carrier the
+              // endpoint already computes. If the balance existed before the
+              // window but nothing closed inside it, seed the carrier as a
+              // synthetic left-edge point (at the window start) so the chart
+              // draws the flat level line — instead of the old "no history"
+              // empty-state that mis-read a quiet window as no data (the
+              // hasData:true / points:[] mismatch). Empty-state now shows ONLY
+              // when there is genuinely neither a carrier NOR any in-window point.
+              const rawPoints = (curve.data?.points ?? []) as any[];
+              const startLevel = curve.data?.startLevel ?? null;
+              const windowStartMs = Date.now() - (chartDays * 24 * 60 * 60 * 1000);
+              const seeded = startLevel
+                ? [{ t: new Date(windowStartMs).toISOString(), balance: startLevel.balance, cumPnl: startLevel.cumPnl, kind: "carry" }, ...rawPoints]
+                : rawPoints;
+              if (!curve.data?.hasData || seeded.length === 0) {
+                return (
+                  <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">
+                    No realized-balance history in this window yet — the curve begins with the first anchor event or closed trade.
+                  </div>
+                );
+              }
+              return (
+                <div className="h-56">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={seeded.map(p => ({ ...p, ts: new Date(p.t).getTime() }))}>
+                      <XAxis dataKey="ts" type="number" domain={["dataMin", "dataMax"]} tickFormatter={(v) => new Date(v).toLocaleDateString()} fontSize={11} />
+                      <YAxis dataKey="balance" domain={["auto", "auto"]} tickFormatter={(v) => `$${v}`} fontSize={11} width={70} />
+                      <Tooltip formatter={(v: any) => usd(Number(v))} labelFormatter={(v: any) => new Date(v).toLocaleString()} />
+                      <Line type="stepAfter" dataKey="balance" dot={false} strokeWidth={2} stroke="currentColor" isAnimationActive={false} />
+                      {seeded.filter(p => p.kind === "anchor").map(p => (
+                        <ReferenceDot key={p.t} x={new Date(p.t).getTime()} y={p.balance} r={4} label={{ value: `anchor v${p.anchorVersion}`, fontSize: 10, position: "top" }} />
+                      ))}
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              );
+            })()}
         </CardContent>
       </Card>
 

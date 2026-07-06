@@ -280,7 +280,7 @@ export function FilterDiagnosticsPanel({ data, isLoading, gateDisposition = 'tag
                     <td className="p-2 text-xs text-muted-foreground">Benchmark pairs excluded before VTS (cumulative 24h)</td>
                   </tr>
                   <tr className="bg-green-500/10 font-semibold border-t-2 border-green-500/30">
-                    <td className="p-2">→ VTS Destination <span className="text-[10px] text-muted-foreground">(post-benchmark)</span></td>
+                    <td className="p-2">{gateDisposition === 'enforce' ? '→ Survivors' : '→ VTS Destination'} <span className="text-[10px] text-muted-foreground">(post-benchmark{gateDisposition === 'enforce' ? '; shared scan feed' : ''})</span></td>
                     <td className="p-2 text-right text-green-700">{fmt(r24.quant.survivors - (r24.quant.imf.benchmarkBypassed ?? 0))}</td>
                     <td className="p-2 text-right text-green-700">{fmt(r24.pattern.survivors - (r24.pattern.imf?.benchmarkBypassed ?? 0))}</td>
                     <td className="p-2 text-right text-green-700 font-bold">{fmt((r24.quant.survivors - (r24.quant.imf.benchmarkBypassed ?? 0)) + (r24.pattern.survivors - (r24.pattern.imf?.benchmarkBypassed ?? 0)))}</td>
@@ -519,7 +519,7 @@ export function FilterDiagnosticsPanel({ data, isLoading, gateDisposition = 'tag
                     <td className="p-2 text-right text-xs text-red-400">{fmt(lastScan.quant.imf.benchmarkBypassed + (lastScan.pattern.imf?.benchmarkBypassed ?? 0))}</td>
                   </tr>
                   <tr className="bg-green-500/10 font-semibold border-t-2 border-green-500/30">
-                    <td className="p-2">→ VTS Destination <span className="text-[10px] text-muted-foreground">(post-benchmark)</span></td>
+                    <td className="p-2">{gateDisposition === 'enforce' ? '→ Survivors' : '→ VTS Destination'} <span className="text-[10px] text-muted-foreground">(post-benchmark{gateDisposition === 'enforce' ? '; shared scan feed' : ''})</span></td>
                     <td className="p-2 text-right text-green-700">{fmt(lastScan.quant.survivors - lastScan.quant.imf.benchmarkBypassed)}</td>
                     <td className="p-2 text-right text-green-700">{fmt(lastScan.pattern.survivors - (lastScan.pattern.imf?.benchmarkBypassed ?? 0))}</td>
                     <td className="p-2 text-right text-green-700 font-bold text-base">{fmt((lastScan.quant.survivors - lastScan.quant.imf.benchmarkBypassed) + (lastScan.pattern.survivors - (lastScan.pattern.imf?.benchmarkBypassed ?? 0)))}</td>
@@ -530,7 +530,14 @@ export function FilterDiagnosticsPanel({ data, isLoading, gateDisposition = 'tag
                       Skip breakdown, then Strategy Evaluations. Per-lane Quant/Pattern split wired
                       using lc.quantNullReasonDetail / patternNullReasonDetail emitted by routes.ts
                       (xstock) and vts-runner snapshot (crypto). No leading minus signs. */}
-                  {data?.lastCycleVtsEval && (() => {
+                  {/* P19-B8.3b (OBJ-1, #417): the VTS Signal Funnel is the VTS
+                      RUNNER's downstream processing (pair-pool → strategy evals →
+                      nulls → signals → trades) — VTS-engine activity, not the
+                      shared scan feed. It renders ONLY on the VTS page ('tag').
+                      On Paper/Live ('enforce') the active pipeline is dormant
+                      until the B8.4 switch-on, so an honest placeholder shows in
+                      its place (the scan-stage rows above ARE the shared feed). */}
+                  {gateDisposition === 'tag' && data?.lastCycleVtsEval && (() => {
                     const lc = data.lastCycleVtsEval;
                     const totalEvals = lc.totalStrategyEvaluations || 0;
                     const totalNulls = (lc.quantStrategyNulls || 0) + (lc.patternStrategyNulls || 0);
@@ -651,6 +658,14 @@ export function FilterDiagnosticsPanel({ data, isLoading, gateDisposition = 'tag
                       </>
                     );
                   })()}
+                  {/* P19-B8.3b (OBJ-1, #417): honest active-path placeholder on Paper/Live. */}
+                  {gateDisposition === 'enforce' && (
+                    <tr className="border-b bg-amber-500/5" data-testid="fd-active-funnel-dormant">
+                      <td colSpan={4} className="p-3 text-xs text-muted-foreground italic text-center">
+                        Active-path signal funnel — populates when active trading is switched on (Phase 19 B8.4). The scan-stage totals above are the shared scanner feed.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -792,7 +807,7 @@ export function FilterDiagnosticsPanel({ data, isLoading, gateDisposition = 'tag
                     <td className="p-2 text-right text-xs text-red-400">{fmt(rolling24h.aggregated.quant.imf.benchmarkBypassed + (rolling24h.aggregated.pattern.imf?.benchmarkBypassed ?? 0))}</td>
                   </tr>
                   <tr className="bg-green-500/10 font-semibold border-t-2 border-green-500/30">
-                    <td className="p-2">→ VTS Destination <span className="text-[10px] text-muted-foreground">(post-benchmark)</span></td>
+                    <td className="p-2">{gateDisposition === 'enforce' ? '→ Survivors' : '→ VTS Destination'} <span className="text-[10px] text-muted-foreground">(post-benchmark{gateDisposition === 'enforce' ? '; shared scan feed' : ''})</span></td>
                     <td className="p-2 text-right text-green-700">{fmt(rolling24h.aggregated.quant.survivors - rolling24h.aggregated.quant.imf.benchmarkBypassed)}</td>
                     <td className="p-2 text-right text-green-700">{fmt(rolling24h.aggregated.pattern.survivors - (rolling24h.aggregated.pattern.imf?.benchmarkBypassed ?? 0))}</td>
                     <td className="p-2 text-right text-green-700 font-bold">{fmt((rolling24h.aggregated.quant.survivors - rolling24h.aggregated.quant.imf.benchmarkBypassed) + (rolling24h.aggregated.pattern.survivors - (rolling24h.aggregated.pattern.imf?.benchmarkBypassed ?? 0)))}</td>
