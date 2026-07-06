@@ -8061,7 +8061,11 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         const { db: xsDb } = await import('./db.js');
         const { sql: xsSql } = await import('drizzle-orm');
         const { VTS_OPEN_TRADES_EXCLUDE_SHADOW } = await import('./services/vts-trade-persistence.js');
-        const [row] = await xsDb.execute(xsSql`
+        // P19-B8.2c: read BOTH driver result shapes ({rows:[...]} for node-postgres,
+        // array for postgres-js) — the same defensive read the crypto endpoint uses.
+        // The original array-destructure silently yielded undefined here → honest data
+        // rendered as a WRONG zero (caught by the Monday 07-06 counter proof).
+        const xsCountResult: any = await xsDb.execute(xsSql`
           SELECT COUNT(*)::int AS total,
                  COUNT(*) FILTER (WHERE signal_type = 'QUANT')::int AS quant,
                  COUNT(*) FILTER (WHERE signal_type = 'PATTERN')::int AS pattern
@@ -8069,8 +8073,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           WHERE asset_class = 'xstock_spot'
             AND opened_at >= NOW() - INTERVAL '24 hours'
             AND ${VTS_OPEN_TRADES_EXCLUDE_SHADOW}
-        `) as any;
-        if (row) xsTradesOpened24h = { total: row.total ?? 0, quant: row.quant ?? 0, pattern: row.pattern ?? 0 };
+        `);
+        const row: any = (xsCountResult as any).rows?.[0] ?? (xsCountResult as any)[0];
+        if (row) xsTradesOpened24h = { total: Number(row.total ?? 0), quant: Number(row.quant ?? 0), pattern: Number(row.pattern ?? 0) };
       } catch (xsTradeErr) {
         console.warn('[B8.2][xstocks-filter-diagnostics] tradesOpened24h query failed (zeros emitted):', xsTradeErr);
       }
