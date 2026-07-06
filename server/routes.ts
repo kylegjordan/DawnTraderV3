@@ -57,6 +57,8 @@ import { contextBridge } from './services/context-bridge.js';
 import { getCache, setCache, coalesce } from './services/cache';
 import { metricsService } from './services/metrics-service';
 import { activeFilterPool } from './services/active-filter-pool.js';
+// P19-B8.3: pure dashboard-metric math (unit-tested — Langston Step-4 conditions).
+import { num, computeCalendarEarnings, computeFeeDrag, computeMakerTakerMix, computeAvgNetR, computeMaxDrawdownUsd, computeByAssetClass, profitFactorOrNull } from './services/dashboard-metrics.js';
 import { marketVolumeCache } from './services/market-volume-cache.js';
 import { b5SizingAudit } from './services/b5-sizing-audit.js';
 import { livePricingAdapter } from './services/live-pricing-adapter.js';
@@ -12847,43 +12849,13 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           isCurrentSimulation = true;
           console.log(`[C6][ANALYTICS] Current Simulation: using engine_start_timestamp=${engineStartTime.toISOString()}`);
         } else {
-          // Phase 8.8.3-C6: Engine not running - explicitly return zero metrics immediately
-          console.log(`[C6][ANALYTICS] Engine not running - returning zero metrics`);
-          return res.json({
-            ok: true,
-            range,
-            mode,
-            engineRunning: false,
-            analytics: {
-              totalOpened: 0,
-              closedAtTP: { count: 0, percent: 0 },
-              closedAtSL: { count: 0, percent: 0 },
-              closedManually: { count: 0, percent: 0 },
-              winRate: 0,
-              avgProfit: 0,
-              avgLoss: 0,
-              netPnl: 0,
-              netPnlPercent: 0,
-              avgProfitPercent: 0,
-              avgDailyProfitPercent: 0,
-              avgHoldingTime: 0,
-              medianHoldingTime: 0,
-              profitFactor: 0,
-              byStrategy: {},
-              largestWinner: null,
-              largestLoser: null,
-              // P19-B8.3: shape-stable additions (null/empty = honest no-data)
-              winCount: 0,
-              lossCount: 0,
-              feeDrag: { totalFees: 0, pctOfGross: null },
-              makerTakerMix: { makerCount: 0, takerCount: 0, unknownCount: 0, makerShare: null },
-              avgNetR: { value: null, sampleCount: 0, excludedCount: 0 },
-              maxDrawdownInWindow: { pct: null, usd: 0 },
-              byAssetClass: {},
-              earnings: { today: 0, thisWeek: 0, thisMonth: 0 },
-              avgAmountInvested: 0
-            }
-          });
+          // Phase 8.8.3-C6: Engine not running — the window is empty by definition.
+          // P19-B8.3 (Langston Step-4 §1.7): do NOT early-return a hardcoded zero
+          // shape here — flow through with an unreachable window floor so the
+          // common empty-window response below still carries the REAL calendar
+          // earnings (they are range-independent by design).
+          console.log(`[C6][ANALYTICS] Engine not running - zero window metrics (calendar earnings still real)`);
+          startTime = new Date(8640000000000000); // max valid Date — no trade can pass the window filter
         }
       } else {
         switch (range) {
@@ -12932,6 +12904,12 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       if (trades.length === 0) {
         // Phase 8.8.3-C6: Include engineRunning flag to distinguish idle-but-running from stopped
+        // P19-B8.3 (Langston Step-4 §1.7): calendar earnings are computed over the
+        // ALL-TIME valid set, so an empty SELECTED window (e.g. "Day" with nothing
+        // closed in 24h) must still report this week's/month's real closes — a
+        // hardcoded zero here is the "looks like no activity when there was
+        // activity" failure OBJ-8 exists to kill. profitFactor is null (no
+        // trades → no denominator), not a fake 0.
         return res.json({
           ok: true,
           range,
@@ -12951,7 +12929,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
             avgDailyProfitPercent: 0,
             avgHoldingTime: 0,
             medianHoldingTime: 0,
-            profitFactor: 0,
+            profitFactor: null,
             byStrategy: {},
             largestWinner: null,
             largestLoser: null,
@@ -12963,7 +12941,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
             avgNetR: { value: null, sampleCount: 0, excludedCount: 0 },
             maxDrawdownInWindow: { pct: null, usd: 0 },
             byAssetClass: {},
-            earnings: { today: 0, thisWeek: 0, thisMonth: 0 },
+            earnings: computeCalendarEarnings(validTrades, now),
             avgAmountInvested: 0
           }
         });
@@ -13015,8 +12993,6 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const medianHoldingTime = sortedHoldingTimes.length > 0 ?
         sortedHoldingTimes[Math.floor(sortedHoldingTimes.length / 2)] : 0;
       
-      const profitFactor = totalLoss > 0 ? totalProfit / totalLoss : totalProfit > 0 ? Infinity : 0;
-      
       // B2: Calculate Avg Profit % per Trade
       const totalPnlPercent = trades.reduce((sum, t) => sum + parseFloat(t.pnlPercent?.toString() || '0'), 0);
       const avgProfitPercent = trades.length > 0 ? totalPnlPercent / trades.length : 0;
@@ -13065,11 +13041,13 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         strategy: sortedByPnl[sortedByPnl.length - 1].strategyName
       } : null;
 
-      // ── P19-B8.3 (OBJ-1): the dashboard metric additions. All computed from
-      // existing closed_trades columns; every denominator null-guarded at the
-      // ENDPOINT (Langston Step-1/2 conditions) — the UI renders null as "—",
-      // never NaN or nonsense.
-      const num = (v: unknown): number => { const n = parseFloat(String(v ?? '')); return Number.isFinite(n) ? n : 0; };
+      // ── P19-B8.3 (OBJ-1): the dashboard metric additions. Pure math lives in
+      // dashboard-metrics.ts (unit-tested — Langston Step-4 test conditions);
+      // this route owns windowing + the anchor-balance read. Every denominator
+      // is null-guarded IN the module — the UI renders null as "—", never NaN
+      // or nonsense. NOTE (completion-report precision): feeDrag/makerTakerMix/
+      // avgNetR/maxDrawdown/byAssetClass are WINDOW-scoped (over `trades`);
+      // only `earnings` is calendar-scoped over the all-time `validTrades`.
 
       // The mode's REAL starting balance (B8.2 anchor read) — null when absent
       // (Live dormant): percentage/drawdown metrics go null, never divide by zero.
@@ -13080,81 +13058,25 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         if (anchorState && anchorState.balance > 0) startingBalanceForPct = anchorState.balance;
       } catch { /* absent balance → null metrics (honest) */ }
 
-      // Fee drag: total fees paid + the share of GROSS profit they consumed.
-      // pctOfGross is null when gross <= 0 (a negative-gross window makes the
-      // ratio meaningless — Langston C-checkpoint).
-      const totalFees = trades.reduce((sum, t) => sum + num(t.totalFee ?? t.fees), 0);
-      const grossPnlSum = trades.reduce((sum, t) => sum + num(t.grossPnl), 0);
-      const feeDrag = {
-        totalFees,
-        pctOfGross: grossPnlSum > 0 ? (totalFees / grossPnlSum) * 100 : null,
-      };
-
-      // Maker/taker entry mix (NULL chosenEntryMode rows excluded honestly + counted).
-      const makerCount = trades.filter(t => t.chosenEntryMode === 'maker').length;
-      const takerCount = trades.filter(t => t.chosenEntryMode === 'taker').length;
-      const makerTakerMix = {
-        makerCount,
-        takerCount,
-        unknownCount: trades.length - makerCount - takerCount,
-        makerShare: (makerCount + takerCount) > 0 ? (makerCount / (makerCount + takerCount)) * 100 : null,
-      };
-
-      // Average net R-multiple: netPnl ÷ (|entry − stop| × qty). Rows with a NULL
-      // stop or non-positive risk are EXCLUDED and surfaced (excludedCount) —
-      // never coerced (pre-audit §5).
-      let rSum = 0, rCount = 0, rExcluded = 0;
-      for (const t of trades) {
-        const entry = num(t.entryPrice), stop = num(t.stopLoss), qty = num(t.quantity);
-        const riskUsd = Math.abs(entry - stop) * qty;
-        if (!t.stopLoss || !(riskUsd > 0)) { rExcluded++; continue; }
-        rSum += num(t.netPnl ?? t.pnl) / riskUsd;
-        rCount++;
-      }
-      const avgNetR = { value: rCount > 0 ? rSum / rCount : null, sampleCount: rCount, excludedCount: rExcluded };
+      const feeDrag = computeFeeDrag(trades);
+      const makerTakerMix = computeMakerTakerMix(trades);
+      const avgNetR = computeAvgNetR(trades);
 
       // In-window max drawdown on the REALIZED basis (same basis as the OBJ-3b
-      // curve — stated in the UI tooltip): running cumulative netPnl over the
-      // window's trades in close order, deepest peak-to-trough ÷ the REAL
-      // starting balance. Null when no trustworthy balance exists.
-      let maxDrawdownInWindow: { pct: number | null; usd: number } = { pct: null, usd: 0 };
-      {
-        const byCloseTime = [...trades].sort((a, b) => new Date(a.closedAt!).getTime() - new Date(b.closedAt!).getTime());
-        let running = 0, peak = 0, maxDdUsd = 0;
-        for (const t of byCloseTime) {
-          running += num(t.netPnl ?? t.pnl);
-          if (running > peak) peak = running;
-          if (peak - running > maxDdUsd) maxDdUsd = peak - running;
-        }
-        maxDrawdownInWindow = {
-          usd: maxDdUsd,
-          pct: startingBalanceForPct !== null ? (maxDdUsd / startingBalanceForPct) * 100 : null,
-        };
-      }
+      // curve — stated in the UI tooltip); % against the anchor balance, null
+      // when no trustworthy balance exists.
+      const maxDdUsd = computeMaxDrawdownUsd(trades);
+      const maxDrawdownInWindow = {
+        usd: maxDdUsd,
+        pct: startingBalanceForPct !== null ? (maxDdUsd / startingBalanceForPct) * 100 : null,
+      };
 
-      // By asset class (Kyle 2026-07-06 — the breakdown table): the column exists
-      // on every closed row (B65/B69).
-      const byAssetClass: Record<string, { count: number; wins: number; netPnl: number; fees: number; winRate: number }> = {};
-      for (const t of trades) {
-        const ac = (t as any).assetClass || 'crypto_spot';
-        if (!byAssetClass[ac]) byAssetClass[ac] = { count: 0, wins: 0, netPnl: 0, fees: 0, winRate: 0 };
-        byAssetClass[ac].count++;
-        if (num(t.pnl) > 0) byAssetClass[ac].wins++;
-        byAssetClass[ac].netPnl += num(t.netPnl ?? t.pnl);
-        byAssetClass[ac].fees += num(t.totalFee ?? t.fees);
-      }
-      Object.values(byAssetClass).forEach(r => { r.winRate = r.count > 0 ? (r.wins / r.count) * 100 : 0; });
+      // By asset class (Kyle 2026-07-06 — the breakdown table). Win basis = pnl,
+      // the SAME basis as the headline winRate above, so the rates reconcile.
+      const byAssetClass = computeByAssetClass(trades);
 
-      // Calendar earnings buckets (the legacy dashboard's Earnings card semantics —
-      // calendar Today/Week/Month, NOT rolling; computed over ALL valid trades so
-      // the card is range-selector-independent).
-      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      const startOfWeek = new Date(startOfDay); startOfWeek.setDate(startOfDay.getDate() - startOfDay.getDay());
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      const sumSince = (since: Date) => validTrades
-        .filter(t => t.closedAt && new Date(t.closedAt) >= since)
-        .reduce((sum, t) => sum + num(t.netPnl ?? t.pnl), 0);
-      const earnings = { today: sumSince(startOfDay), thisWeek: sumSince(startOfWeek), thisMonth: sumSince(startOfMonth) };
+      // Calendar earnings (Today/Week/Month) over ALL valid trades — range-independent.
+      const earnings = computeCalendarEarnings(validTrades, now);
 
       // Phase 8.8.3-C6: Include engineRunning flag for consistency
       res.json({
@@ -13180,7 +13102,10 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           avgDailyProfitPercent, // B2: New metric
           avgHoldingTime,
           medianHoldingTime,
-          profitFactor: isFinite(profitFactor) ? profitFactor : 0,
+          // P19-B8.3 (Langston Step-4 finding A): null on no-losses — the client
+          // renders "∞ (no losses)"; the old isFinite coercion showed "0.00" on
+          // an all-wins window (the worst reading on the best day).
+          profitFactor: profitFactorOrNull(totalProfit, totalLoss),
           // P19-B8.3 (OBJ-1) additions:
           feeDrag,
           makerTakerMix,

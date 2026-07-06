@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { RefreshCw, AlertTriangle } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import type { FilterDiagnosticsData } from "./vts-shared";
+import { gateAggregateColumns, type GateDisposition } from "./gate-columns";
 
 /**
  * P19-B8.3 (OBJ-3c v1) — the mode's REAL active-path tail, from existing
@@ -70,7 +71,9 @@ function ActivePipelineTail({ mode }: { mode: 'paper' | 'live' }) {
 //     and the gate shows a true Rejected total (= Evals − Passed; exhaustive +
 //     mutually exclusive per applyGlobalGuards — Langston-verified).
 export type { FilterDiagnosticsData };
-export type GateDisposition = 'enforce' | 'tag';
+// P19-B8.3: the disposition type + aggregate-column contract live in the pure,
+// unit-tested gate-columns module (re-exported here for existing importers).
+export type { GateDisposition };
 export function FilterDiagnosticsPanel({ data, isLoading, gateDisposition = 'tag', modeTail = null }: {
   data: FilterDiagnosticsData | undefined;
   isLoading: boolean;
@@ -918,7 +921,10 @@ export function FilterDiagnosticsPanel({ data, isLoading, gateDisposition = 'tag
             // (data-validity: Bad Stop + No ATR) from Tagged (RR Too Low +
             // Target Unreachable). Evals = Passed + the four reasons, always
             // (exhaustive + mutually exclusive — applyGlobalGuards).
-            const isEnforce = gateDisposition === 'enforce';
+            // The aggregate columns come from the pure, unit-tested helper —
+            // 'tag' structurally cannot yield a "Rejected" column (Langston
+            // Step-4 HARD check 1).
+            const aggCols = gateAggregateColumns(gateDisposition);
             return (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -927,14 +933,9 @@ export function FilterDiagnosticsPanel({ data, isLoading, gateDisposition = 'tag
                       <th className="text-left p-2 font-medium">Strategy</th>
                       <th className="text-right p-2 font-medium" title="Signals this gate evaluated (= Passed + the four reason columns)">Evals</th>
                       <th className="text-right p-2 font-medium">Passed</th>
-                      {isEnforce ? (
-                        <th className="text-right p-2 font-medium" title="Total rejected = Evals − Passed = the four reason columns summed">Rejected</th>
-                      ) : (
-                        <>
-                          <th className="text-right p-2 font-medium" title="Data-validity failures (Bad Stop + No ATR) — dropped on every path">Dropped</th>
-                          <th className="text-right p-2 font-medium" title="Quality flags (RR Too Low + Target Unreachable) — NOT rejected on the VTS learning path: tagged and still simulated">Tagged</th>
-                        </>
-                      )}
+                      {aggCols.map(c => (
+                        <th key={c.key} className="text-right p-2 font-medium" title={c.title}>{c.label}</th>
+                      ))}
                       <th className="text-right p-2 font-medium" title="Reward-to-risk ratio below this strategy's minimum">{formatFilterName('rr_below_min')}</th>
                       <th className="text-right p-2 font-medium" title="Target too far for current volatility to plausibly reach">{formatFilterName('unreachable')}</th>
                       <th className="text-right p-2 font-medium" title="Stop too close to entry — broken trade geometry">{formatFilterName('stop_distance')}</th>
@@ -949,14 +950,9 @@ export function FilterDiagnosticsPanel({ data, isLoading, gateDisposition = 'tag
                         <td className="p-2 font-medium">{strategy}</td>
                         <td className="p-2 text-right">{fmt(s.evals)}</td>
                         <td className="p-2 text-right text-green-600">{fmt(s.passes)}</td>
-                        {isEnforce ? (
-                          <td className={`p-2 text-right font-semibold ${getRejectionColor(s.evals - s.passes, s.evals)}`}>{fmt(s.evals - s.passes)}</td>
-                        ) : (
-                          <>
-                            <td className={`p-2 text-right ${getRejectionColor(s.stopDrops + s.atrDrops, s.evals)}`}>{fmt(s.stopDrops + s.atrDrops)}</td>
-                            <td className="p-2 text-right text-blue-600">{fmt(s.rrDrops + s.reachDrops)}</td>
-                          </>
-                        )}
+                        {aggCols.map(c => (
+                          <td key={c.key} className={`p-2 text-right ${c.key === 'rejected' ? 'font-semibold ' : ''}${c.tone === 'reject' ? getRejectionColor(c.value(s), s.evals) : 'text-blue-600'}`}>{fmt(c.value(s))}</td>
+                        ))}
                         <td className={`p-2 text-right ${getRejectionColor(s.rrDrops, s.evals)}`}>{fmt(s.rrDrops)}</td>
                         <td className={`p-2 text-right ${getRejectionColor(s.reachDrops, s.evals)}`}>{fmt(s.reachDrops)}</td>
                         <td className="p-2 text-right text-muted-foreground">{fmt(s.stopDrops)}</td>

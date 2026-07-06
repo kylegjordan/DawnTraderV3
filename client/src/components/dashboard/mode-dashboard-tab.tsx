@@ -201,7 +201,10 @@ function ActiveModeDashboard({ mode }: { mode: "paper" | "live" }) {
                 <StatRow label="Avg Earnings / Trade" value={usd(a && a.totalOpened > 0 ? a.netPnl / a.totalOpened : null)} />
                 <StatRow label="Avg Amount Invested" value={usd(a?.avgAmountInvested)} />
                 <StatRow label="Avg Hold Time" value={fmtMs(a?.avgHoldingTime)} />
-                <StatRow label="Profit Factor" value={a?.profitFactor === 0 && !a?.totalOpened ? "—" : (a?.profitFactor ?? null) === null ? "—" : String((a.profitFactor as number).toFixed(2))} hint="Gross wins ÷ gross losses — above 1.0 means wins outweigh losses" />
+                {/* P19-B8.3 (Langston finding A): null PF with trades = NO losses →
+                    "∞ (no losses)" (mirrors the VTS card); null without trades = "—".
+                    A numeric 0 is genuine (zero profit against real losses). */}
+                <StatRow label="Profit Factor" value={typeof a?.profitFactor === "number" ? a.profitFactor.toFixed(2) : (a?.totalOpened ?? 0) > 0 ? "∞ (no losses)" : "—"} hint="Gross wins ÷ gross losses — above 1.0 means wins outweigh losses; ∞ = no losing trades in the window" />
                 <StatRow label="Avg Net R" value={a?.avgNetR?.value === null || a?.avgNetR?.value === undefined ? "—" : `${a.avgNetR.value.toFixed(2)}R (${a.avgNetR.sampleCount} trades${a.avgNetR.excludedCount ? `, ${a.avgNetR.excludedCount} excluded` : ""})`} hint="Net P/L relative to risked amount, after fees" />
                 <StatRow label="Fee Drag" value={a?.feeDrag ? `${usd(a.feeDrag.totalFees)}${a.feeDrag.pctOfGross !== null ? ` (${pct(a.feeDrag.pctOfGross)} of gross)` : ""}` : "—"} hint="Total fees paid; share of gross profit consumed (— when gross ≤ 0)" />
                 <StatRow label="Max Drawdown (window)" value={a?.maxDrawdownInWindow ? `${usd(a.maxDrawdownInWindow.usd)}${a.maxDrawdownInWindow.pct !== null ? ` (${pct(a.maxDrawdownInWindow.pct)})` : ""}` : "—"} hint="Realized basis (closed trades) against the real starting balance" />
