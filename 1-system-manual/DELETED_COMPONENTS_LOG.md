@@ -6,6 +6,21 @@
 
 ---
 
+## 2026-07-07 — P19-B8.3b: the mislabeled `scanDiag.destinationCount` + its dead `totalDestinationCount` rollup (a serialized-but-unrendered scan-diagnostic field)
+
+**Why:** the per-cycle `destinationCount` on the fx5-scanner `ScanDiagnostics` object was set UNCONDITIONALLY to `taggedVtsSurvivors.length` even when `destination === 'active_pool'` — a MISLABEL. It was serialized to the crypto FD client (via `getLastScanDiagnostics()` in `/api/vts/filter-diagnostics`) and typed at `vts-shared.tsx:154`, but the panel NEVER read it (transported-but-unrendered — the displayed "VTS Destination" numbers come from other survivor fields). Its rolling-aggregate sibling `totalDestinationCount` had ZERO readers anywhere. Retired per rule 18 (no lingering mislabel that a future consumer-add could read against a gone field). **This is a RESPONSE-SHAPE narrowing** (safe — proven no reader) of the `/api/vts/filter-diagnostics` `lastScan`/`rolling24h` payloads. Commit `9e91245ab`.
+
+| Item | Location (pre-removal) | What it was / why removed |
+|---|---|---|
+| `ScanDiagnostics.destinationCount` (per-cycle) | `fx5-scanner.ts` (type :217, init :1475, assign `= taggedVtsSurvivors.length` :1671, trace :1545) + client mirror `vts-shared.tsx:154` + trace `vts-runner.ts:4191` | Mislabeled (VTS survivor count even on active_pool); serialized-but-unrendered. Blast-radius PROVEN: two qualified greps (`scanDiag\.destinationCount`, `\btotalDestinationCount\b`) return ZERO code refs repo-wide; tsc-baseline OK (a surviving typed reader would fail). Trace logs kept, retired token dropped (`→ ${scanDiag.destination}`). |
+| `totalDestinationCount` rollup (24h aggregate) | `fx5-scanner.ts` (type :333, init :362, accumulator `aggDestinationCount` :394/:447, return :469) | Dead rollup — ZERO readers anywhere (the client `rolling24h` type never even declared it). |
+
+**Left intentionally (survivor — DO NOT confuse):** the FD-RESPONSE top-level `destinationCount` at `routes.ts:7809/:7853`, computed `(familyFanOutSum ?? 0) + (patternFanOut ?? 0)` — a DIFFERENT field (the displayed number), correctly untouched. Naming-collision flagged by Langston at Step-2 and carved out explicitly.
+
+Archive: git history is authoritative (this is a field-retirement within live files, not a whole-file removal — no `.removed` archive needed; the diff at `9e91245ab` is the record).
+
+---
+
 ## 2026-07-05 — P19-B8.2: balance-policy legacy set (ghost defaults' dead siblings + a dead parallel open path + a live-data ghost row + an orphaned schema-copy)
 
 **Why:** the B8.2 balance-policy batch (rule 18 on-the-spot dispositions surfaced by the pre-audit + Langston Step-2 conditions). Every code deletion grep-proven zero-caller + tsc-clean; the two DATA deletions carry full pre-delete values for auditability. Archive copies: `1-system-manual/_archive/deleted-code/*.20260705-P19B8.2.removed`.
