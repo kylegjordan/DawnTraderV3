@@ -307,72 +307,6 @@ export function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagno
         </CardContent>
       </Card>
 
-      {/* reorg-B2.2 OBJ-B: Reward-vs-Risk / Reachability Gate (per strategy, this asset class).
-          The shared post-signal-build guard (RR + reachability + stop-distance + invalid-ATR) lives at
-          signal generation — its drops aren't part of the IMF/scan-phase filter breakdown above. Surfaced
-          here per class (Kyle's no-hidden-gates). Distinct "no evaluations" state ≠ a misleading 0%. */}
-      <Card>
-        <CardHeader className="py-3">
-          <CardTitle className="text-lg flex items-center justify-between">
-            <span>Reward-vs-Risk / Reachability Gate</span>
-            <span className="text-sm font-normal text-muted-foreground">
-              per strategy{data.trackerStartedAt ? ` · since ${new Date(data.trackerStartedAt).toLocaleString()}` : ''}
-            </span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          {(() => {
-            const gd = data.guardDrops;
-            const rows = gd ? Object.entries(gd) : [];
-            if (rows.length === 0) {
-              return (
-                <div className="p-4 text-muted-foreground text-center">
-                  No guard evaluations recorded for this asset class yet — the reward-vs-risk / reachability gate hasn't evaluated a signal here.
-                </div>
-              );
-            }
-            // Most-suppressed first (the #372 calibration read: which strategies the per-class minRR cuts).
-            rows.sort((a, b) => b[1].rrSuppressionRate - a[1].rrSuppressionRate);
-            return (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b bg-muted/50">
-                      <th className="text-left p-2 font-medium">Strategy</th>
-                      <th className="text-right p-2 font-medium">Evals</th>
-                      <th className="text-right p-2 font-medium">Passed</th>
-                      <th className="text-right p-2 font-medium">{formatFilterName('rr_below_min')}</th>
-                      <th className="text-right p-2 font-medium">{formatFilterName('unreachable')}</th>
-                      <th className="text-right p-2 font-medium">{formatFilterName('stop_distance')}</th>
-                      <th className="text-right p-2 font-medium">{formatFilterName('invalid_atr')}</th>
-                      <th className="text-right p-2 font-medium">Mean RR</th>
-                      <th className="text-right p-2 font-medium">RR Suppression</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map(([strategy, s]) => (
-                      <tr key={strategy} className="border-b hover:bg-muted/30">
-                        <td className="p-2 font-medium">{strategy}</td>
-                        <td className="p-2 text-right">{fmt(s.evals)}</td>
-                        <td className="p-2 text-right text-green-600">{fmt(s.passes)}</td>
-                        <td className={`p-2 text-right ${getRejectionColor(s.rrDrops, s.evals)}`}>{fmt(s.rrDrops)}</td>
-                        <td className={`p-2 text-right ${getRejectionColor(s.reachDrops, s.evals)}`}>{fmt(s.reachDrops)}</td>
-                        <td className="p-2 text-right text-muted-foreground">{fmt(s.stopDrops)}</td>
-                        <td className="p-2 text-right text-muted-foreground">{fmt(s.atrDrops)}</td>
-                        <td className="p-2 text-right">{s.rrEvals > 0 ? s.meanRR.toFixed(2) : '—'}</td>
-                        <td className={`p-2 text-right ${getRejectionColor(s.rrDrops, s.evals)}`}>
-                          {s.evals > 0 ? `${(s.rrSuppressionRate * 100).toFixed(1)}%` : '—'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            );
-          })()}
-        </CardContent>
-      </Card>
-
       {/* TABLE 1: Last Scan Stats */}
       <Card>
         <CardHeader className="py-3">
@@ -863,6 +797,73 @@ export function FilterDiagnosticsPanel({ data, isLoading }: { data: FilterDiagno
           ) : (
             <div className="p-4 text-muted-foreground text-center">No 24h data accumulated yet</div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* reorg-B2.2 OBJ-B: Reward-vs-Risk / Reachability Gate (per strategy, this asset class).
+          P19-B8.2b (Kyle 2026-07-06): MOVED below the 24-Hour Rolling Aggregates (was 2nd from top).
+          The shared post-signal-build guard (RR + reachability + stop-distance + invalid-ATR) lives at
+          signal generation — its drops aren't part of the IMF/scan-phase filter breakdown above. Surfaced
+          here per class (Kyle's no-hidden-gates). Distinct "no evaluations" state ≠ a misleading 0%. */}
+      <Card>
+        <CardHeader className="py-3">
+          <CardTitle className="text-lg flex items-center justify-between">
+            <span>Reward-vs-Risk / Reachability Gate</span>
+            <span className="text-sm font-normal text-muted-foreground">
+              per strategy{data.trackerStartedAt ? ` · since ${new Date(data.trackerStartedAt).toLocaleString()}` : ''}
+            </span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          {(() => {
+            const gd = data.guardDrops;
+            const rows = gd ? Object.entries(gd) : [];
+            if (rows.length === 0) {
+              return (
+                <div className="p-4 text-muted-foreground text-center">
+                  No guard evaluations recorded for this asset class yet — the reward-vs-risk / reachability gate hasn't evaluated a signal here.
+                </div>
+              );
+            }
+            // Most-suppressed first (the #372 calibration read: which strategies the per-class minRR cuts).
+            rows.sort((a, b) => b[1].rrSuppressionRate - a[1].rrSuppressionRate);
+            return (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/50">
+                      <th className="text-left p-2 font-medium">Strategy</th>
+                      <th className="text-right p-2 font-medium">Evals</th>
+                      <th className="text-right p-2 font-medium">Passed</th>
+                      <th className="text-right p-2 font-medium">{formatFilterName('rr_below_min')}</th>
+                      <th className="text-right p-2 font-medium">{formatFilterName('unreachable')}</th>
+                      <th className="text-right p-2 font-medium">{formatFilterName('stop_distance')}</th>
+                      <th className="text-right p-2 font-medium">{formatFilterName('invalid_atr')}</th>
+                      <th className="text-right p-2 font-medium">Mean RR</th>
+                      <th className="text-right p-2 font-medium">RR Suppression</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map(([strategy, s]) => (
+                      <tr key={strategy} className="border-b hover:bg-muted/30">
+                        <td className="p-2 font-medium">{strategy}</td>
+                        <td className="p-2 text-right">{fmt(s.evals)}</td>
+                        <td className="p-2 text-right text-green-600">{fmt(s.passes)}</td>
+                        <td className={`p-2 text-right ${getRejectionColor(s.rrDrops, s.evals)}`}>{fmt(s.rrDrops)}</td>
+                        <td className={`p-2 text-right ${getRejectionColor(s.reachDrops, s.evals)}`}>{fmt(s.reachDrops)}</td>
+                        <td className="p-2 text-right text-muted-foreground">{fmt(s.stopDrops)}</td>
+                        <td className="p-2 text-right text-muted-foreground">{fmt(s.atrDrops)}</td>
+                        <td className="p-2 text-right">{s.rrEvals > 0 ? s.meanRR.toFixed(2) : '—'}</td>
+                        <td className={`p-2 text-right ${getRejectionColor(s.rrDrops, s.evals)}`}>
+                          {s.evals > 0 ? `${(s.rrSuppressionRate * 100).toFixed(1)}%` : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })()}
         </CardContent>
       </Card>
 
