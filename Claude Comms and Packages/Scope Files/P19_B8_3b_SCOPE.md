@@ -1,8 +1,8 @@
 # P19-B8.3b — Scope (Step-1 draft, for Langston consensus)
 
-change-class: architecture
+change-class: non_architecture
 
-> Declared architecture (fail-closed / stricter) because it MAY touch the fx5-scanner core. **Amendment flagged up front:** if Langston concurs with the recommended Option A below (display honesty + retire a dead-labeled field + two rider fixes, NO new scanner computation), this narrows to `non_architecture` and I re-declare. The declaration is deliberately strict until that's settled.
+> **RE-DECLARED non_architecture (2026-07-06, Langston Step-1 consensus — Option A APPROVED, he independently verified the mode-multiplex + destinationCount reader claims on staging before ruling).** No new scanner computation; the diff is display-state + a dead-field retirement + two surgical rider fixes. **Langston Step-1 conditions folded in:** (C1) OBJ-2's blast-radius is the whole justification for RETIRE, so it must be PROVEN at Step-4, not asserted — grep-clean + tsc-zero-dangling in the diff + show the `routes.ts:7809/:7853` independent `familyFanOutSum+patternFanOut` computation so he can confirm the FD number never transited the retired field; if ANY real reader surfaces it flips to FIX-conditional-on-destination. (C2) OBJ-1's active-trading-ON funnel render branch CANNOT be Chrome-walked at B8.3b (active trading is off until B8.4) — the verification criteria walk only the OFF/dormant state, and the ON-state funnel render gets a NAMED §13 verification home at B8.4.
 
 **Batch:** P19-B8.3b (pre-named at B8.3 Step-2; the fast-follow to the per-mode dashboards). CC-B implements; Langston gates.
 **Sequence:** B8.3b → B8.4 (THE SWITCH-ON). B8.3b does NOT gate the switch-on functionally; it finishes the display honesty B8.3 staged.
@@ -28,7 +28,7 @@ The B8.3 pre-audit said "the scanner tracks NO per-path funnel — path-agnostic
   - while active trading is ON: the scanner's own funnel (now `active_*`-thresholded, `destination=active_pool`) is the active funnel — surface it in place.
   The VTS page (`'tag'`) is unchanged — the VTS sub-blocks are correct there.
 
-**OBJ-2 — retire `scanDiag.destinationCount` + `totalDestinationCount` (fix-or-retire → RETIRE, pending Langston concurrence).** Blast radius confirmed above: two trace logs + a dead rollup; the surfaced FD number is computed elsewhere. Retire per rule-18 (DELETED_COMPONENTS_LOG, blast-radius proof, tsc-zero-dangling). If Langston prefers FIX-not-retire (make it conditional on `destination`), that's the fallback — but retire is the honest, no-lingering-legacy answer given zero real readers.
+**OBJ-2 — retire `scanDiag.destinationCount` + `totalDestinationCount` (RETIRE; Langston Step-1 concurred).** ★ NAMING-COLLISION CARVE-OUT (Langston catch): retire ONLY `scanDiag.destinationCount` + `totalDestinationCount`; the **FD-response top-level `destinationCount`** at `routes.ts:7809/:7853` (`familyFanOutSum+patternFanOut`) is an INTENTIONAL SURVIVOR — do not touch. ★ CORRECTED blast radius (Langston catch, deeper trace in pre-audit §3): `scanDiag.destinationCount` is NOT just two trace logs — it's serialized wholesale to the crypto FD client via `getLastScanDiagnostics()` and typed at `vts-shared.tsx:154`, but the panel NEVER renders it (transported-but-dead-on-client). So the retire touches the scanner type/init/assign/aggregate + both getter return shapes + the client type mirror + the two trace tokens, and is a RESPONSE-SHAPE change with ZERO visible UI effect (proven: no panel reader). rule-18 (DELETED_COMPONENTS_LOG, tsc-zero-dangling). Fallback if the panel turns out to read it: FIX-conditional-on-`destination`.
 
 **OBJ-3 — #415: reconcile the two basis splits (B8.3 rider).** (a) confirm `getAnchorState(mode).balance` is the anchor level (not a running cash balance) between anchors so the card's %-vs-starting and the curve's anchor baseline agree; (b) pick ONE basis for headline `netPnl` vs `byAssetClass[].netPnl` (headline sums `t.pnl`, per-class sums `t.netPnl ?? t.pnl`) and state it. Small, surgical.
 
@@ -36,11 +36,11 @@ The B8.3 pre-audit said "the scanner tracks NO per-path funnel — path-agnostic
 
 **OBJ-5 — governance + close.** SIM (scanner destinationCount retirement + the mode-multiplexed-funnel clarification; FD enforce-tab funnel state), SysManual if the funnel semantics change is architectural, catalog/history/plan, RUNNING_ISSUES (#415/#416/#417 → RESOLVED), completion report.
 
-## Verification criteria
+## Verification criteria (OFF/dormant state only — ON-state funnel render → B8.4 §13 per Langston C2)
 - Enforce FD tabs (Paper + Live) render NO VTS-sourced funnel numbers (§9.3 Chrome walk both tabs); VTS tab unchanged.
-- `grep destinationCount server/ client/` after OBJ-2 = only the intentional survivors (if FIX chosen) or zero (if RETIRE); tsc-clean.
-- #415 basis stated + test-pinned; #416 resolved (carrier rendered or dropped, no hasData/empty mismatch).
-- Bench green (tsc baseline + vitest); CI 4-green; deployed; Langston Step-4 + Step-8 PASS.
+- OBJ-2: zero references to `scanDiag.destinationCount` + `totalDestinationCount` (source + both scanner getters + the `vts-shared.tsx:154` client-type mirror + the two trace tokens); the routes-computed FD-response `destinationCount` is an intentional survivor and REMAINS; tsc-clean; DELETED_COMPONENTS_LOG entry.
+- #415 standardized on `netPnl` with the `?? pnl` fallback REASON stated (not silently reconciled) + parity test-pinned; #416 resolved (carrier rendered or dropped, no hasData/empty mismatch).
+- Bench green (tsc baseline + vitest); CI 4-green; deployed; Langston Step-4 (corrected blast-radius shown in-diff) + Step-8 PASS.
 
 ## Open question for Langston (Step-1 decision)
 **Option A (recommended): display-honesty + retire, NO new scanner computation.** The enforce funnel "arrives" via the existing mode-multiplexed scanner at switch-on; B8.3b makes the pre-switch-on state honest and retires the dead-labeled field. → narrows change-class to `non_architecture`.
