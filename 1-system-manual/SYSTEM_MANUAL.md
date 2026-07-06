@@ -8592,6 +8592,7 @@ if (!JWT_SECRET) {
 15. [ADD-5 Endpoint Census](#15-add-5-endpoint-census)
 16. [Production Readiness Concerns](#16-production-readiness-concerns)
 17. [Architectural Patterns & Conventions](#17-architectural-patterns--conventions)
+18. [Per-Mode Dashboards & the FD Disposition Model (P19-B8.3)](#18-per-mode-dashboards--the-fd-disposition-model-p19-b83-2026-07-06)
 
 ---
 
@@ -9485,6 +9486,22 @@ The team communicates via Telegram ("Dawn Trader HQ" forum group) with topic-bas
 | Design (#28) | Feature design discussions |
 
 For detailed rules on 3-way communication protocol, message formatting, and session management, see `CLAUDE.md` §6 at repo root (CCPI retired 2026-04-20).
+
+---
+
+## 18. Per-Mode Dashboards & the FD Disposition Model (P19-B8.3, 2026-07-06)
+
+Every mode page (Live / Paper / Virtual Simulations) lands on a **Dashboard tab** (`components/dashboard/mode-dashboard-tab.tsx`) built on the legacy /dashboard widget template: Portfolio Value · Earnings (calendar) · Activity & Results · Averages & Edge cards, a **Realized Balance Over Time** chart, and By-Asset-Class / By-Strategy breakdowns. The VTS variant reframes to learning throughput (closed simulations, closes/day, virtual disclaimer + `excludedCount`).
+
+**Data contracts (all read-only display endpoints):**
+- `/api/active-engine/trades/analytics?range=&mode=` and `/portfolio-summary?mode=` — mode-parameterized (default paper). New metrics: feeDrag, makerTakerMix, avgNetR (excluded rows counted), maxDrawdownInWindow, byAssetClass, calendar earnings, winCount/lossCount, avgAmountInvested. **Null-honesty contract:** any metric whose denominator doesn't exist is `null`, never a fake 0 — `netPnlPercent`/drawdown-% divide by the B8.2 anchor balance (`getAnchorState(mode).balance`, null when absent); `profitFactor` is null on a no-loss window (client renders "∞ (no losses)"); calendar earnings compute over the ALL-TIME valid set so an empty selected window still reports real Today/Week/Month. Pure math lives in `server/services/dashboard-metrics.ts` (unit-tested).
+- `/api/active-engine/balance-curve?mode=&days=` — the realized-basis curve: `portfolio_anchor_events` rows RESET the level; closed trades (never_filled excluded) accrue cumulative netPnl. Anchor points render as reference dots. Basis is labeled in the UI ("closed-trade basis — excludes open-position value") vs the card's live `portfolioValue`.
+- `/api/active-engine/pipeline-tail?mode=` — the mode's REAL pipeline tail (staged v1): active filter pool size, `rtb_signals` queue depth, rtb-metrics gate tallies, open-positions count. Per-stage scanner funnel counters are B8.3b (the scanner is path-agnostic today).
+- `/api/vts/analytics?days=` — VTS learning outcomes with typed in-filter exclusions (`countsInAggregates === false`, mtTwin, shadow, never_filled; `excludedCount` surfaced; `virtual: true`).
+
+**FD disposition model:** the ONE shared `FilterDiagnosticsPanel` takes `gateDisposition: 'enforce' | 'tag'` (default `'tag'`) + `modeTail`. On **'tag'** (VTS) the RR/reachability gate table shows **Dropped** (data-validity: Bad Stop + No ATR) vs **Tagged** (quality: RR Too Low + Target Unreachable — still simulated, the reorg-B3.3 un-strangle) and the VTS-only sections render. On **'enforce'** (Paper/Live) it shows one true **Rejected** total (= Evals − Passed ≡ the four reasons summed — `applyGlobalGuards` is pass XOR exactly-one-reason, identity test-pinned), a shared-scanner banner (one scan feed, per-mode thresholds via per-filterPath `screener_filters` rows), and the mode's `ActivePipelineTail` replaces the VTS tail. The aggregate-column contract is the pure `components/vts/gate-columns.ts` — a 'tag' context structurally cannot render "Rejected". Known residual #417 (VTS funnel sub-blocks inside the shared scanner tables on enforce tabs) → B8.3b.
+
+**Metrics strip:** `components/trading/portfolio-metrics-strip.tsx` (mode-scoped, three-balance labels: Starting — Paper (simulated) / Live (record), Realized Balance, Open Positions (marked live)) renders on the Paper/Live pages; the top bar no longer fetches portfolio data (both I10-FIX WS listeners moved with the strip).
 
 ---
 
