@@ -28,6 +28,14 @@ The RI-a checksum (harness stop/target vs the PERSISTED decision-time levels, on
 
 ## 4. Forward fix + homes (§9.4 — concrete, named)
 
+### 4.0 The vwap_pullback read surface, stated PRECISELY (Langston Step-8 correction, 2026-07-06 — supersedes the "all scalars" headline in the initial Discord dispatch)
+
+The fire/no-fire + geometry input set is **scalars PLUS one unconditional array dependency**:
+- **Scalars:** `currentPrice`, `vwap`, `atr` (with `(high24h−low24h)` fallback), `high24h`, `low24h` — drive `priceAboveVWAP`, `nearVWAP`, `detectBullishReversal` (strategy-engine.ts:1237 — scalar-only, verified), the geometry (entry/stop/target), and the guard.
+- **Array (unconditional):** the volume-confirmation block — the **length gate at strategy-engine.ts:206** (`priceHistory.length ≥ volume_confirm_min_history` else `insufficient_data` null) fires BEFORE the per-class `volConfirmEnabled` toggle at :229 is read, and lines 214–218 walk `priceHistory.slice(-lookback)` for `avgVolume`. For xStock (toggle OFF) the *comparison* is inert but the length gate + nonzero-total-volume check remain unconditional; for crypto (toggle ON) the `avgVolume` VALUE gates fires.
+- **Active-path feed confirmed (no gap, no new issue):** every detect caller supplies the full bar array — active path `signal-orchestrator.ts:1909`, crypto VTS `vts-runner.ts:1234`, xStock VTS eval-cycle `:541`. No Phase-19 premise claims scalars suffice; the replay harness likewise feeds 240 bars (length gate passes — the v8 parity numbers are unaffected by this correction).
+- **Consequence for the (a)/(b) design:** the five indicator scalars alone are NOT strategy-complete even for vwap_pullback (crypto leg) — which is exactly why the recommendation is **BOTH**: scalars for direct geometry replay + `settled_window_hash` as the universal byte-parity oracle covering every array read (volume walks, patterns, ORB structure) without persisting 240 bars.
+
 - **B-NEW-53.3 (named micro-batch, same instrumentation family; sequence AFTER B8.4 — must not delay the switch-on):** extend the provenance row with a **settled-window integrity leg** — either (a) a `settled_window_hash` (one hash of the exact settled array at decision time; replay verifies byte-parity per row and filters to verified rows), or preferably (b) persist the five decision-time INDICATOR VALUES the geometry consumes (vwap, atr, sma, high24h, low24h — five numerics, cheaper than the hash to consume and directly replayable even when bars drifted). Decision (a)-vs-(b) at that batch's Step-1 with Langston. After deploy, a post-accrual §10.5 alert re-runs this harness (~3 weeks accrual) — the same defined-exit discipline as this alert.
 - **RUNNING_ISSUES #206** carries this dated update; roadmap **25-12 stays data-blocked** with B-NEW-53.3 + re-accrual as the new exit.
 - The harness (`b5-w20c-provenance-replay.ts`) is committed with this report — the next re-run starts from a correct tool.
