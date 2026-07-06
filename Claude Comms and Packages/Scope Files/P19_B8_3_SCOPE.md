@@ -18,8 +18,19 @@ Per mode page, windows **1h / 24h / 7d + lifetime**: wins/losses (raw counts ALW
 ### OBJ-2 — NEW compact VTS analytics endpoint
 `GET /api/vts/analytics?days=` — server-side aggregates over closed VTS trades (today the client would have to compute from raw `/ml/closed` rows; flagged by the read: no VTS aggregates exist). Returns per-window: opens/day, win rate w/ counts, net P/L $ / % (VIRTUAL — labeled as such), profit factor, avg hold, maker/taker mix, per-strategy breakdown. HONESTY RULES carried from B7.2c: twins EXCLUDED from aggregates (`countsInAggregates=false` discipline), `never_filled` excluded, shadows excluded (`VTS_OPEN_TRADES_EXCLUDE_SHADOW`).
 
-### OBJ-3 — The Dashboard tab (shared component, per-mode manifest entry)
-ONE `DashboardTab` component parameterized by mode, added to all three mode pages' manifests as the FIRST tab + the new `defaultTab` (a mode page should open on its dashboard; Kyle can overrule). Paper/Live read OBJ-1; VTS reads OBJ-2 with the learning framing. Live page renders it dormancy-aware (zeros + the existing DORMANT badge, no fake data).
+### OBJ-3 — The Dashboard tab (shared component, per-mode manifest entry) — ★ LAYOUT LOCKED by Kyle 2026-07-06 (screenshot of the legacy /dashboard = the widget template, fed with REAL data)
+ONE `DashboardTab` component parameterized by mode, added to all three mode pages' manifests as the FIRST tab + the new `defaultTab` (flagged to Kyle 07-06; he proceeded). **Widget set per Kyle's screenshot + additions:**
+- **Portfolio Value card** — the mode's balance figures (OBJ-5 labels).
+- **Earnings card** — Today / This Week / This Month net P/L + Avg Daily Earnings ($ and %) + 7-day trend.
+- **Trading Activity & Results card** (window selector Day/Week/Month) — trades opened, active, closed, win rate W/ RAW COUNTS, volume traded.
+- **Averages card** (window selector) — avg daily earnings, avg trades/day, avg earnings/trade, avg amount invested, avg fees/trade, avg daily earnings %, avg completion (hold) time.
+- **The six recommended metrics** (Kyle-approved 07-06): profit factor, avg net R, fee drag, maker/taker mix, in-window max drawdown, win-rate-with-counts — folded into the cards above where natural (fee drag + maker/taker into Averages/Activity; PF + avgNetR + maxDD into a compact "Edge" strip).
+- **★ Portfolio Value Over Time chart** (Kyle 07-06) — range selector 7D/1M/3M/YTD/ALL; see OBJ-3b for the data source.
+- **★ Breakdown tables** (Kyle 07-06): **by asset class** (crypto_spot vs xstock_spot: trades, win rate w/ counts, net P/L, fees) and **by strategy** (the analytics byStrategy map + per-strategy net P/L/win-rate) — per selected window.
+Paper/Live read OBJ-1; VTS reads OBJ-2 with the learning framing (VIRTUAL-labeled dollars). Live renders dormancy-aware (honest zeros + the DORMANT badge, no fake data).
+
+### OBJ-3b — ★ Balance-growth-over-time data (Kyle 07-06)
+The mode's balance curve, DERIVED server-side — NO new snapshot infrastructure: curve = anchor events (the balance re-bases) + cumulative closed-trade netPnl between them, bucketed to the selected range (the legacy `/api/paper/metrics/history` computes a similar running balance from trades — that shape is the precedent, but built mode-scoped + anchor-aware + reading `closed_trades`, NOT the legacy `paper_trades` table). VTS variant: cumulative VIRTUAL net P/L curve (no balance semantics — labeled as such). Honest empty state when a window has no data (never a flat fabricated line). NOTE (flagged, not in scope): once per-mode dashboards land, the legacy mode-less `/dashboard` page becomes redundant — its disposition (retire vs redirect) is a named follow-up decision for Kyle at B8.3 close.
 
 ### OBJ-4 — Metrics-strip move (the B8.1-pinned item)
 The top-bar strip (top-bar.tsx:332-371, 6 fields off portfolio-summary, paper-gated) MOVES into the Paper Trading page (below the controls block); the top bar keeps clocks only. Live gets the same strip dormancy-aware at Phase-21 readiness (rendered now, honest zeros/409-state). VTS gets NO strip (no balance semantics — Kyle's VTS-has-no-controls principle extends).
