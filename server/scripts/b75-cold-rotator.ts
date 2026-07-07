@@ -14,6 +14,14 @@
  * B2_BUCKET) AND `data_lifecycle.cold_rotator_dry_run = false`, this script
  * runs in dry-run mode: enumerates candidates, logs them, performs no I/O.
  *
+ * B-STORAGE-HARDEN OBJ-1 (2026-07-08): two OPTIONAL, additive CLI flags for
+ * bounded/controlled rotation (default behavior unchanged when both absent):
+ *   --limit N                 process at most N candidates (oldest-first)
+ *   --warm-retention-days D   override the config warm-retention for THIS run
+ * These enable a one-time proof rotation of the single oldest warm object
+ * without moving the whole warm tier (see B_STORAGE_HARDEN_PRE_AUDIT.md §3.1),
+ * and controlled batch rotation operationally. They do NOT persist any config.
+ *
  * Reference: BATCH_75_SCOPE.md §C.10 + BATCH_75_PRE_AUDIT.md §F
  * ═════════════════════════════════════════════════════════════════════════════
  */
@@ -128,6 +136,17 @@ async function main(): Promise<void> {
     await ctl.end();
   }
 
+  // B-STORAGE-HARDEN OBJ-1: optional CLI overrides (bounded/controlled rotation).
+  const argv = process.argv.slice(2);
+  const limitOverride = parseIntFlag(argv, '--limit');
+  const warmRetentionOverride = parseIntFlag(argv, '--warm-retention-days');
+  if (warmRetentionOverride !== null) {
+    console.log(
+      `[B75 rotator] warm-retention override (CLI): ${cfg.warmRetentionDays} → ${warmRetentionOverride} days`,
+    );
+    cfg.warmRetentionDays = warmRetentionOverride;
+  }
+
   const storage = getStorageClient();
   const coldConfigured = storage.isColdConfigured();
 
@@ -148,8 +167,24 @@ async function main(): Promise<void> {
     await listClient.end();
   }
 
+  // B-STORAGE-HARDEN OBJ-1: cap to N oldest candidates when --limit is set.
+  if (limitOverride !== null && candidates.length > limitOverride) {
+    console.log(
+      `[B75 rotator] limiting ${candidates.length} candidates → ${limitOverride} (CLI --limit; oldest-first)`,
+    );
+    candidates = candidates.slice(0, limitOverride);
+  }
+
   if (candidates.length === 0) {
     console.log('[B75 rotator] no candidates older than warm retention window');
+    // Always emit ONE terminal completion line (Langston Step-4 r2): the archival-
+    // health watchdog (B-STORAGE-HARDEN OBJ-5) keys off a DONE line to tell "ran
+    // fine, nothing to do" from "never ran / crashed". 0-candidate is the NORMAL
+    // monthly steady state for ~10 months (nothing crosses the 365d warm retention
+    // until ~2027), so the empty path MUST print DONE like every other exit.
+    console.log(
+      `[B75 rotator] DONE candidates=0 rotated=0 failed=0 bytes_moved=0 duration_ms=${Date.now() - startedAt.getTime()}`,
+    );
     return;
   }
 
@@ -165,6 +200,13 @@ async function main(): Promise<void> {
     console.log(
       '[B75 rotator] DRY RUN — no rotations performed. ' +
         'Set data_lifecycle.cold_rotator_dry_run=false AND configure B2 credentials to enable.',
+    );
+    // Terminal completion line on the dry-run path too (Langston Step-4 r2 — the
+    // "always print one terminal DONE" invariant). A dry-run is a completed run
+    // that rotated nothing; the watchdog reads it as healthy. (The creds-missing
+    // dry-run case is independently alerted by the cold-liveness canary.)
+    console.log(
+      `[B75 rotator] DONE candidates=${candidates.length} rotated=0 failed=0 bytes_moved=0 duration_ms=${Date.now() - startedAt.getTime()}`,
     );
     return;
   }
@@ -273,6 +315,20 @@ function parseSupabaseUri(uri: string): { bucket: string; path: string } {
   const m = /^supabase:\/\/([^/]+)\/(.+)$/.exec(uri);
   if (!m) throw new Error(`[B75 rotator] cannot parse supabase URI: ${uri}`);
   return { bucket: m[1], path: m[2] };
+}
+
+/** Parse an optional `--flag N` integer CLI arg. Returns null if absent; exits on
+ *  a present-but-invalid value (positive integers only). */
+function parseIntFlag(argv: string[], name: string): number | null {
+  const i = argv.indexOf(name);
+  if (i < 0) return null;
+  const raw = argv[i + 1];
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n <= 0) {
+    console.error(`[B75 rotator] ${name} requires a positive integer, got: ${raw ?? '(missing)'}`);
+    process.exit(1);
+  }
+  return n;
 }
 
 main().catch((err) => {

@@ -1,6 +1,7 @@
 import { storage } from "../storage";
 import { db } from "../db";
 import { sql } from "drizzle-orm";
+import { addAlert } from "./system-alerts";
 
 /**
  * Database size monitor — daily check + alarm.
@@ -97,10 +98,56 @@ export class DatabaseMonitor {
         );
       }
 
+      // B-STORAGE-HARDEN OBJ-5: surface disk warning/critical to the §10.5 alert
+      // queue (previously this condition ONLY console.warn'd — invisible to the
+      // per-turn CC/Langston check, which is why the disk grew unnoticed). Dedup
+      // per level so the 24h cadence collapses to one alert while the condition
+      // holds, but a warning→critical transition still raises a fresh critical.
+      if (alertLevel !== 'normal') {
+        await this.emitDiskAlert(alertLevel, sizeGb, utilization, planCapGb);
+      }
+
       return { sizeMb, sizeGb, alertLevel };
     } catch (error) {
       console.error("[DatabaseMonitor] Error checking database size:", error);
       throw error;
+    }
+  }
+
+  /**
+   * B-STORAGE-HARDEN OBJ-5: emit a §10.5 system-alert for a disk warning/critical.
+   * Never let an alert-write failure mask the size check — swallow + log.
+   */
+  private async emitDiskAlert(
+    level: 'warning' | 'critical',
+    sizeGb: number,
+    utilization: number,
+    planCapGb: number,
+  ): Promise<void> {
+    try {
+      await addAlert({
+        triggers_at: new Date(), // immediate; dispatcher promotes scheduled→active next tick
+        category: 'health_check',
+        severity: level,
+        title: `Database disk ${level.toUpperCase()}: ${(utilization * 100).toFixed(1)}% of ${planCapGb.toFixed(0)} GB plan cap`,
+        body:
+          `Logical database size is ${sizeGb.toFixed(1)} GB — ${(utilization * 100).toFixed(1)}% of the ` +
+          `${planCapGb.toFixed(0)} GB Supabase plan cap (crossed the ${level} threshold). The hot/warm/cold ` +
+          `tiering must keep moving old data off the hot disk; investigate what is growing (ticker capture, ` +
+          `un-tiered analytics tables). Wired to the §10.5 queue by B-STORAGE-HARDEN OBJ-5 — this condition ` +
+          `previously only logged to the process console.`,
+        metadata: {
+          source: 'database-monitor',
+          batch: 'B-STORAGE-HARDEN',
+          level,
+          size_gb: Number(sizeGb.toFixed(2)),
+          utilization: Number(utilization.toFixed(4)),
+          plan_cap_gb: Number(planCapGb.toFixed(0)),
+        },
+        dedupe_key: `disk-utilization-${level}`,
+      });
+    } catch (err) {
+      console.error('[DatabaseMonitor] failed to emit §10.5 disk alert:', err);
     }
   }
 
