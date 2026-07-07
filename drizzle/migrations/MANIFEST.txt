@@ -163,3 +163,4 @@
 2026-07-03-p19-b-rename-w3-b2-open-positions.sql
 2026-07-03-p19-b-rename-w3-b1-closed-trades.sql
 2026-07-05-p19-b8-2-balance-policy.sql
+2026-07-08-b-storage-harden-wave-c-b70-retention.sql

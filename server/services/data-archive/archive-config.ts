@@ -95,6 +95,12 @@ export async function refreshArchiveConfig(): Promise<void> {
         rows['b70_parquet_export_enabled'],
         DEFAULT.parquetExportEnabled,
       ),
+      // B-STORAGE-HARDEN Wave C (2026-07-08): `b70_postgres_retention_days` is
+      // now INFORMATIONAL ONLY — the DROP that consumed it (b70-retention-sweep.ts)
+      // was retired; the B70 tables are tiered hot→warm→cold by b75-retention-sweep
+      // via per-table `data_lifecycle.<table>.hot_retention_days`. This value is
+      // still surfaced in the Drift Dashboard config panel (drift-dashboard-
+      // aggregator.ts) — kept for that display, NOT a retention driver. (#430)
       retentionDays: asInt(rows['b70_postgres_retention_days'], DEFAULT.retentionDays),
       retentionSweepBatchSize: asInt(
         rows['b70_retention_sweep_batch_size'],

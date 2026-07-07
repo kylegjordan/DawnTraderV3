@@ -6,6 +6,22 @@
 
 ---
 
+## 2026-07-08 — B-STORAGE-HARDEN Wave C (OBJ-2): `b70-retention-sweep.ts` — the DROP-only B70 analytics retention sweep
+
+**Why:** the B70 analytics tables (`signal_eval_archive`, `pair_scan_archive`, `exit_decision_archive`, `macro_feed_archive`, `signal_eval_provenance`) were DROP-only at 90 days via this standalone cron script — it deleted whole monthly partitions with NO warm/cold tiering, violating Kyle's 2026-05-06 "we don't ever drop data" directive (RUNNING_ISSUES #430 V1, an oversight — B70 shipped 2 days before the never-drop/tiered-storage system). Wave C routes these 5 tables through the SAME proven B75 export→warm→cold move-not-delete path (added to `b75-retention-sweep.ts`'s partitioned-archive inventory + per-table `data_lifecycle.<table>.hot_retention_days=90`). With tiering owning them, the DROP-only sweep is retired per rule 18 (a paused/commented DROP script is a re-entry hazard the next person greps and misreads).
+
+**Blast-radius verification (PROVEN safe):** repo-wide grep for `b70-retention-sweep` → only doc files, ZERO in-app `import`/`require` (standalone cron script). ONE cron reference: the root-crontab line, already PAUSED/commented in Wave A — removed at deploy. No systemd timer unit. Its config constant `b70_postgres_retention_days` was read by this script AND `archive-config.ts:98` (→ `retentionDays`), which the Drift Dashboard aggregator (`drift-dashboard-aggregator.ts:836`) surfaces as a display value — so `archive-config.retentionDays` + the constant are KEPT (now INFORMATIONAL-only, drop-driver gone; comment added at the read site). `tsc`-baseline clean post-removal.
+
+| Item | Location (pre-removal) | What it was / why removed |
+|---|---|---|
+| `b70-retention-sweep.ts` (whole file) | `server/scripts/b70-retention-sweep.ts` | DROP-only monthly-partition sweep for the 5 B70 analytics tables (`DROP TABLE IF EXISTS` per partition >90d, no archive). Superseded by the B75 move-not-delete tiering (b75-retention-sweep B70_TABLES inventory). Cron `#0 2 * * *` (paused Wave A) removed. |
+
+**Left intentionally (survivors — DO NOT confuse):** `b70-create-monthly-partitions.ts` (create ≠ drop — the tables still need forward partitions; STAYS scheduled); `archive-config.retentionDays` + the `b70_postgres_retention_days` DB row (now display-only, live Drift Dashboard consumer — see the comment at `archive-config.ts` read site).
+
+**Archive:** `1-system-manual/_archive/deleted-code/b70-retention-sweep.ts.removed`. Commit: (Wave C push).
+
+---
+
 ## 2026-07-07 — P19-B8.3b: the mislabeled `scanDiag.destinationCount` + its dead `totalDestinationCount` rollup (a serialized-but-unrendered scan-diagnostic field)
 
 **Why:** the per-cycle `destinationCount` on the fx5-scanner `ScanDiagnostics` object was set UNCONDITIONALLY to `taggedVtsSurvivors.length` even when `destination === 'active_pool'` — a MISLABEL. It was serialized to the crypto FD client (via `getLastScanDiagnostics()` in `/api/vts/filter-diagnostics`) and typed at `vts-shared.tsx:154`, but the panel NEVER read it (transported-but-unrendered — the displayed "VTS Destination" numbers come from other survivor fields). Its rolling-aggregate sibling `totalDestinationCount` had ZERO readers anywhere. Retired per rule 18 (no lingering mislabel that a future consumer-add could read against a gone field). **This is a RESPONSE-SHAPE narrowing** (safe — proven no reader) of the `/api/vts/filter-diagnostics` `lastScan`/`rolling24h` payloads. Commit `9e91245ab`.

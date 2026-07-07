@@ -78,6 +78,30 @@ const B74_TABLES: B74TableSpec[] = [
 ];
 
 // ───────────────────────────────────────────────────────────────────────────
+// B-STORAGE-HARDEN Wave C (OBJ-2) — B70 analytics archive tables
+// ───────────────────────────────────────────────────────────────────────────
+// Kyle "we don't ever drop data" directive (2026-05-06): the B70 analytics
+// tables were DROP-only via the now-DELETED `b70-retention-sweep.ts` (RUNNING_
+// ISSUES #430 V1). They are monthly RANGE-partitioned by `captured_at` — the
+// IDENTICAL shape as the B74 tables above — so they route through the SAME
+// export→warm→verify→DROP-only-after-verify path (then the table-agnostic
+// cold-rotator moves warm→cold at 365d, preserving them indefinitely).
+// Each entry's `retentionConstantName` is per-table isolated (Langston Step-2):
+// a B70 config gap fails ONLY that table's `reqNum`, never a B74 table.
+const B70_TABLES: B74TableSpec[] = [
+  { parent: 'signal_eval_archive',     timestampColumn: 'captured_at', retentionConstantName: 'signal_eval_archive.hot_retention_days' },
+  { parent: 'pair_scan_archive',       timestampColumn: 'captured_at', retentionConstantName: 'pair_scan_archive.hot_retention_days' },
+  { parent: 'exit_decision_archive',   timestampColumn: 'captured_at', retentionConstantName: 'exit_decision_archive.hot_retention_days' },
+  { parent: 'macro_feed_archive',      timestampColumn: 'captured_at', retentionConstantName: 'macro_feed_archive.hot_retention_days' },
+  { parent: 'signal_eval_provenance',  timestampColumn: 'captured_at', retentionConstantName: 'signal_eval_provenance.hot_retention_days' },
+];
+
+// All monthly-partitioned archive tables processed by the same export→warm→drop
+// loop (B74 market-data + B70 analytics). Handling is identical — only the
+// per-table timestamp column + retention constant differ.
+const PARTITIONED_TABLES: B74TableSpec[] = [...B74_TABLES, ...B70_TABLES];
+
+// ───────────────────────────────────────────────────────────────────────────
 // P19-B5c — PLAIN (non-partitioned) retention tables
 // ───────────────────────────────────────────────────────────────────────────
 // B75's partition machinery (pg_inherits / monthly YYYY_MM children / cold
@@ -135,7 +159,7 @@ async function loadConfig(client: pg.Client): Promise<SweepConfig> {
   }
 
   const retentionByTable = new Map<string, number>();
-  for (const spec of B74_TABLES) {
+  for (const spec of PARTITIONED_TABLES) {
     retentionByTable.set(spec.parent, reqNum(spec.retentionConstantName));
   }
   // P19-B5c: plain (non-partitioned) retention tables share the same map.
@@ -798,6 +822,52 @@ async function sweepPlainTables(cfg: SweepConfig): Promise<{ deleted: number; fa
 }
 
 // ───────────────────────────────────────────────────────────────────────────
+// Run-lock (B-STORAGE-HARDEN Wave C, Langston Step-2 cond B) — overlap guard.
+// Adding the B70 analytics tables (esp. signal_eval_archive ~14.5 GB/mo, per-day
+// sliced) grows a first-tiering pass to ~1-2h once eligible (~Sept). That's well
+// under the 24h daily cadence, but a single O_EXCL lockfile guarantees a slow
+// pass can never overlap the next day's trigger (double-processing). Stale lock
+// (holder crashed) older than SWEEP_LOCK_STALE_MS is force-reclaimed.
+// ───────────────────────────────────────────────────────────────────────────
+const SWEEP_LOCK_FILE = process.env.B75_SWEEP_LOCK_FILE ?? '/tmp/b75-retention-sweep.lock';
+const SWEEP_LOCK_STALE_MS = 6 * 60 * 60 * 1000; // 6h — a real pass is ~1-2h; older = crashed holder
+
+/** Returns true if the lock was acquired; false if a live run already holds it. */
+function acquireSweepLock(): boolean {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const fd = fs.openSync(SWEEP_LOCK_FILE, fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_WRONLY, 0o644);
+      fs.writeSync(fd, `${process.pid}\n${new Date().toISOString()}\n`);
+      fs.closeSync(fd);
+      return true;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err;
+      // Lock exists — reclaim only if stale (crashed holder).
+      try {
+        const ageMs = Date.now() - fs.statSync(SWEEP_LOCK_FILE).mtimeMs;
+        if (ageMs > SWEEP_LOCK_STALE_MS) {
+          console.warn(`[B75 sweep] stale run-lock (age ${(ageMs / 3_600_000).toFixed(1)}h) — force-reclaiming`);
+          fs.unlinkSync(SWEEP_LOCK_FILE);
+          continue; // retry the create
+        }
+      } catch { /* lock vanished between stat and now — retry */ continue; }
+      return false; // fresh lock held by a live run
+    }
+  }
+  return false;
+}
+
+function releaseSweepLock(): void {
+  try {
+    fs.unlinkSync(SWEEP_LOCK_FILE);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+      console.error('[B75 sweep] failed to release run-lock:', err);
+    }
+  }
+}
+
+// ───────────────────────────────────────────────────────────────────────────
 // Main
 // ───────────────────────────────────────────────────────────────────────────
 
@@ -811,6 +881,22 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  if (!acquireSweepLock()) {
+    console.log('[B75 sweep] another run still holds the lock — skipping this tick (overlap guard)');
+    return;
+  }
+  // Release the lock in finally (NOT via process.exit inside runSweep — that would
+  // bypass finally and leave the lock stuck until stale). Exit non-zero AFTER release.
+  let hadFailures = false;
+  try {
+    hadFailures = await runSweep();
+  } finally {
+    releaseSweepLock();
+  }
+  if (hadFailures) process.exit(1);
+}
+
+async function runSweep(): Promise<boolean> {
   const ctl = new Client({ connectionString: process.env.DATABASE_URL });
   await ctl.connect();
   let cfg: SweepConfig;
@@ -831,7 +917,7 @@ async function main(): Promise<void> {
     `[B75 sweep] started at ${startedAt.toISOString()} slice_threshold_hot_bytes=${cfg.sliceThresholdHotBytes}`,
   );
 
-  for (const spec of B74_TABLES) {
+  for (const spec of PARTITIONED_TABLES) {
     const retentionDays = cfg.retentionByTable.get(spec.parent)!;
     const cutoff = new Date(Date.now() - retentionDays * 86_400_000);
     const cutoffMonth = new Date(Date.UTC(cutoff.getUTCFullYear(), cutoff.getUTCMonth(), 1));
@@ -911,9 +997,9 @@ async function main(): Promise<void> {
       `plain_failed=${plainResult.failed} duration_ms=${totalMs}`,
   );
 
-  if (partitionsFailed > 0 || plainResult.failed > 0) {
-    process.exit(1);
-  }
+  // Return the failure flag; main() releases the run-lock (finally) THEN exits
+  // non-zero. A fatal throw propagates through main()'s finally to the catch below.
+  return partitionsFailed > 0 || plainResult.failed > 0;
 }
 
 main().catch(async (err) => {

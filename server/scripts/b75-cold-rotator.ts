@@ -303,7 +303,7 @@ async function main(): Promise<void> {
       await storage.deleteWarm(warmBucket, warmPath);
 
       rotated++;
-      bytesMoved += c.bytes_compressed;
+      bytesMoved += Number(c.bytes_compressed); // #432: pg returns BIGINT as string → coerce, else "0"+"N" concatenates
       console.log(
         `[B75 rotator] ${c.source_table}/${c.partition_label}: rotated bytes=${c.bytes_compressed} duration_ms=${Date.now() - itemStart}`,
       );
