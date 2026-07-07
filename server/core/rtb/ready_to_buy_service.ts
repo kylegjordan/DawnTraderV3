@@ -34,6 +34,10 @@ import { evaluateTradeExpectancy } from '../calculations/expectancy.js';
 const _RTB_GK = { exchange: '*', assetClass: '*', strategy: '*', regime: '*' };
 import { calculateFinalScore, calculateRegimeWeight } from '../utils/score-calculator';
 import { signalQualityEvaluator, type SQEInput } from '../filters/signal_quality_evaluator';
+// P19-B8.4b: active-path funnel — per-signal RTB-refresh outcomes (refreshedAttempted / reconfirmed /
+// rejectedInRefresh) + the SQE-during-refresh tally (phase='refresh', the honest MUST-4 double-count vs
+// SQE-at-generation). cyclesRun is ticked separately in rtb-refresh-service (anchor-a). Dormant until B8.5.
+import { recordActiveRtbRefresh, recordActiveSqeEvaluation, type FunnelAssetClass } from '../observability/active-funnel-tracker';
 // B79.0n.STORAGE (2026-05-21): AssetClass type for SQEInput population.
 // P19-B4a (C4): prefer the row's stamp (asValidAssetClass), safe-resolve+skip as fallback.
 import { safeResolveAssetClass, asValidAssetClass, type AssetClass } from '../../../shared/asset-classes';
@@ -1149,6 +1153,13 @@ class ReadyToBuyService {
                 return;
               }
 
+              // P19-B8.4b: active-path funnel — this signal is about to be re-SQE'd on the refresh path.
+              // Narrow to the funnel grid + count the refresh attempt (per-signal; cyclesRun ticks per bucket
+              // in rtb-refresh-service). Increments are single-threaded-atomic under the Promise.all chunk.
+              const _fCls: FunnelAssetClass | undefined =
+                (sqeAssetClass === 'crypto_spot' || sqeAssetClass === 'xstock_spot') ? sqeAssetClass : undefined;
+              if (_fCls) recordActiveRtbRefresh(mode, _fCls, { refreshedAttempted: 1 });
+
               const sqeInput: SQEInput = {
                 signalId: signal.signalId,
                 symbol: normalizedSymbol,
@@ -1163,13 +1174,18 @@ class ReadyToBuyService {
               };
               
               const sqeResult = await signalQualityEvaluator.evaluate(sqeInput);
-              
+              // P19-B8.4b: SQE-during-refresh tally (phase='refresh') — per-gate breakdown + pass/fail
+              // denominator, kept as TWO labelled numbers vs SQE-at-generation, never summed (MUST-4).
+              if (_fCls) recordActiveSqeEvaluation(mode, _fCls, sqeResult.passed, sqeResult.failures, 'refresh');
+
               if (!sqeResult.passed) {
                 console.log(`[11.0E][SQE_REVALIDATION_FAIL] symbol=${normalizedSymbol} reason=${sqeResult.reason}`);
                 this.logRtbTrace(mode, normalizedSymbol, signal.strategy, oldStatus, 'deleted', 'SQE_failure');
                 this.logSqeRejection(signal, sqeResult.reason || 'unknown', refreshedFinalScore);
                 bulkDeletes.push(signal.id);
                 expiredCount++;
+                // P19-B8.4b: failed re-SQE → dropped from the queue during refresh.
+                if (_fCls) recordActiveRtbRefresh(mode, _fCls, { rejectedInRefresh: 1 });
                 return;
               }
               
@@ -1196,6 +1212,8 @@ class ReadyToBuyService {
               this.logRtbTrace(mode, normalizedSymbol, signal.strategy, oldStatus, 'reconfirmed', 'refresh');
               console.log(`[11.0E][RECONFIRM_COMPLETE] pair=${normalizedSymbol} ${oldStatus}→reconfirmed FinalScore=${refreshedFinalScore.toFixed(4)} decayPenalty=${decayPenalty.toFixed(4)}`);
               reconfirmedCount++;
+              // P19-B8.4b: survived re-SQE → stayed queued (reconfirmed) on the refresh path.
+              if (_fCls) recordActiveRtbRefresh(mode, _fCls, { reconfirmed: 1 });
             } catch (err) {
               console.error(`[T3][SIGNAL_PROCESS_ERROR] signal=${signal.id}:`, err);
               bulkDeletes.push(signal.id);

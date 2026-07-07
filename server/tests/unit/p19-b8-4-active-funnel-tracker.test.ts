@@ -11,6 +11,8 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
   recordActiveSignalsGenerated,
   recordActivePreSqeReject,
+  recordActivePostSqeReject,
+  recordActiveStrategyAttrition,
   recordActiveSqeEvaluation,
   recordActiveRtbRefresh,
   getActiveFunnelStats,
@@ -51,13 +53,41 @@ describe('P19-B8.4 active-funnel-tracker (S21)', () => {
   it('records pre-SQE rejects by reason AND by strategy', () => {
     recordActivePreSqeReject('paper', 'crypto_spot', 'strategy_gate', 'vwap_pullback');
     recordActivePreSqeReject('paper', 'crypto_spot', 'strategy_gate', 'vwap_pullback');
-    recordActivePreSqeReject('paper', 'crypto_spot', 'reachability', 'abcd_long');
+    recordActivePreSqeReject('paper', 'crypto_spot', 'unmappable_symbol', 'abcd_long');
     recordActivePreSqeReject('paper', 'crypto_spot', 'sizing_zero'); // no strategy
     const s = getActiveFunnelStats('paper', 'crypto_spot');
-    expect(s.preSqeRejects).toEqual({ strategy_gate: 2, reachability: 1, sizing_zero: 1 });
+    expect(s.preSqeRejects).toEqual({ strategy_gate: 2, unmappable_symbol: 1, sizing_zero: 1 });
     expect(s.preSqeRejectsByStrategy.vwap_pullback).toEqual({ strategy_gate: 2 });
-    expect(s.preSqeRejectsByStrategy.abcd_long).toEqual({ reachability: 1 });
+    expect(s.preSqeRejectsByStrategy.abcd_long).toEqual({ unmappable_symbol: 1 });
     expect(s.preSqeRejectsByStrategy.sizing_zero).toBeUndefined(); // strategy-less reject not bucketed by strategy
+  });
+
+  it('records POST-SQE rejects separately from pre-SQE (honest funnel order)', () => {
+    recordActivePostSqeReject('paper', 'crypto_spot', 'position_cap');
+    recordActivePostSqeReject('paper', 'crypto_spot', 'unreachable');   // real reorg-B2 target-gate reason
+    recordActivePostSqeReject('paper', 'crypto_spot', 'unreachable');
+    recordActivePreSqeReject('paper', 'crypto_spot', 'strategy_gate', 'vwap_pullback');
+    const s = getActiveFunnelStats('paper', 'crypto_spot');
+    expect(s.postSqeRejects).toEqual({ position_cap: 1, unreachable: 2 });
+    expect(s.preSqeRejects).toEqual({ strategy_gate: 1 });                 // kept distinct
+    expect(s.postSqeRejects.strategy_gate).toBeUndefined();                 // no cross-bleed
+  });
+
+  it('records UPSTREAM strategy attrition separately from preSqeRejects + outside the denominator (Langston B8.4b)', () => {
+    // family filter drops these strategies BEFORE any signal is built for them
+    recordActiveStrategyAttrition('paper', 'crypto_spot', 'orb_breakout');
+    recordActiveStrategyAttrition('paper', 'crypto_spot', 'orb_breakout');
+    recordActiveStrategyAttrition('paper', 'crypto_spot', 'vwap_reversion');
+    // only ONE actual signal was generated + one true pre-SQE reject
+    recordActiveSignalsGenerated('paper', 'crypto_spot', 1);
+    recordActivePreSqeReject('paper', 'crypto_spot', 'strategy_gate', 'range_trade');
+    const s = getActiveFunnelStats('paper', 'crypto_spot');
+    expect(s.strategyAttrition).toEqual({ orb_breakout: 2, vwap_reversion: 1 });
+    // the honest-funnel guarantee: attrition (3) is NOT lumped into preSqeRejects, so preSqeRejects (1)
+    // stays a true subset of signalsGenerated (1) even though attrition exceeds the denominator.
+    expect(s.preSqeRejects).toEqual({ strategy_gate: 1 });
+    expect(s.preSqeRejects.orb_breakout).toBeUndefined();
+    expect(s.signalsGenerated).toBe(1);
   });
 
   it('extractSqeGateId: canonical tokens key stably (delimiter contract), unknown → uncategorized', () => {

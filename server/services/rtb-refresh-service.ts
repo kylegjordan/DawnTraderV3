@@ -22,6 +22,9 @@ import { priceCache } from './price-cache';
 import { readyToBuyService } from '../core/rtb/ready_to_buy_service';
 import { centralClock, type ClockTick } from './central-clock.js';
 import type { TradingMode } from './guardrail-policy';
+// P19-B8.4b: active-path funnel — cyclesRun ticks on the REFRESH path (Langston anchor-a), so the
+// Paper/Live Filter Diagnostics tab flips dormant→active only when a refresh micro-cycle actually runs.
+import { recordActiveRtbRefresh, type FunnelAssetClass } from '../core/observability/active-funnel-tracker.js';
 import {
   ACT_CONFIG,
   getAdaptivePoolSize,
@@ -394,11 +397,15 @@ class RTBRefreshService {
     // Per-class nested structure: signalBuckets.get(class).get(bucketIndex).
     // Refresh-mode iterates all active classes' buckets at this index.
     const bucketKeysAtIndex = new Set<string>();
+    // P19-B8.4b: track which funnel classes (crypto_spot|xstock_spot) had signals in this bucket, so the
+    // cyclesRun tick after refreshAndRank is per-class (anchor-a). Perp classes are not funnel-graded.
+    const _funnelClassesPresent = new Set<FunnelAssetClass>();
     for (const cls of RTB_ACTIVE_CLASSES) {
       const perClassBuckets = this.signalBuckets.get(cls);
       const bucket = perClassBuckets?.get(bucketIndex);
-      if (bucket) {
+      if (bucket && bucket.size > 0) {
         for (const k of bucket) bucketKeysAtIndex.add(k);
+        if (cls === 'crypto_spot' || cls === 'xstock_spot') _funnelClassesPresent.add(cls);
       }
     }
     const bucketSignals = signals.filter(s => {
@@ -437,7 +444,13 @@ class RTBRefreshService {
       // B79.0n.RTB (2026-05-27): pass aggregated per-class bucket keys at
       // this index (computed above as `bucketKeysAtIndex` Set<string>).
       await readyToBuyService.refreshAndRank(mode, bucketKeysAtIndex);
-      
+
+      // P19-B8.4b (Langston anchor-a): tick cyclesRun on the REFRESH path — hasActiveFunnelActivity keys on
+      // it, so the Paper/Live tab flips dormant→active only once a refresh micro-cycle actually runs. One tick
+      // per funnel class present in this bucket. Dormant until paper-active (B8.5). The per-signal refresh
+      // outcomes (reconfirmed / rejectedInRefresh + SQE-refresh) are recorded inside refreshAndRank.
+      for (const cls of _funnelClassesPresent) recordActiveRtbRefresh(mode, cls, { cyclesRun: 1 });
+
       const rankDuration = Date.now() - rankStart;
       
       console.log(`[A4.R10R-3][RTBRefresh] mode=${mode} bucket=${bucketIndex} signals=${bucketSignals.length} priced=${validPrices.size} rankDuration=${rankDuration}ms totalDuration=${Date.now() - refreshStart}ms`);

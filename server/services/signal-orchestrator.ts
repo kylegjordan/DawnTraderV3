@@ -51,6 +51,17 @@ import { c5FinancialDiagnostics } from './c5-financial-diagnostics.js';
 import { signalLifecycleAudit } from '../core/audit/signal_lifecycle_audit.js';
 import { calculateExtendedSignalMetrics, estimateVolatility } from '../core/metrics/quality_index.js';
 import { signalQualityEvaluator, type SQEInput } from '../core/filters/signal_quality_evaluator.js';
+// P19-B8.4b: active-path funnel instrumentation (S21). buildSizedSignalForStrategy + the crypto
+// family-filter loop are the ACTIVE path exclusively (VTS runs via vts-runner and never calls these),
+// so every count here is an active-mode count. DORMANT (zero) until paper-active turns on at B8.5.
+import {
+  recordActiveSignalsGenerated,
+  recordActivePreSqeReject,
+  recordActivePostSqeReject,
+  recordActiveSqeEvaluation,
+  recordActiveStrategyAttrition,
+  type FunnelAssetClass,
+} from '../core/observability/active-funnel-tracker.js';
 import { readyToBuyService, type SQESignalInput } from '../core/rtb/ready_to_buy_service.js';
 import { activeFilterPool } from './active-filter-pool.js';
 import { diagnosticTrace } from '../core/diagnostics/trace_service.js';
@@ -436,11 +447,21 @@ export class SignalOrchestrator {
     marketContext?: { high24h?: number; low24h?: number; atr?: number }
   ): Promise<SizedStrategySignal | null> {
     if (!rawSignal) return null;
-    
+
+    // P19-B8.4b: active-path funnel — narrow the pipe's stamped class to the funnel grid
+    // (crypto_spot|xstock_spot); mode is already 'paper'|'live'. Count this generated signal at the funnel
+    // TOP (the denominator), then the gates below record their own drops (pre-SQE / SQE / post-SQE). A class
+    // outside the grid (a future asset class) is simply not counted. Dormant until paper-active (B8.5).
+    const _fClass: FunnelAssetClass | undefined =
+      (sizingContext.assetClass === 'crypto_spot' || sizingContext.assetClass === 'xstock_spot')
+        ? sizingContext.assetClass : undefined;
+    if (_fClass) recordActiveSignalsGenerated(sizingContext.mode, _fClass, 1);
+
     // Directive 11.4H.1 Task 6: Validate and normalize symbol before event dispatch
     const canonicalSymbol = normalizeToInternalSymbol(rawSignal.symbol);
     if (!canonicalSymbol) {
       console.warn(`[SignalOrchestrator] Dropped unmappable event: ${rawSignal.symbol}`);
+      if (_fClass) recordActivePreSqeReject(sizingContext.mode, _fClass, 'unmappable_symbol', strategyId);
       return null;
     }
     // Ensure normalized symbol is used in signal
@@ -474,6 +495,7 @@ export class SignalOrchestrator {
     const _canonicalStrategy = strategyId === 'range_trading' ? 'range_trade' : (strategyId as string);
     if (!isStrategyEnabledForAssetClass(_canonicalStrategy, _stampedAssetClass)) {
       console.log(`[P19-B4a][C5][STRATEGY_GATE] blocked ${rawSignal.symbol}/${_canonicalStrategy} — disabled for assetClass=${_stampedAssetClass} (strategy_gates DB).`);
+      if (_fClass) recordActivePreSqeReject(sizingContext.mode, _fClass, 'strategy_gate', _canonicalStrategy);
       return null;
     }
 
@@ -549,6 +571,7 @@ export class SignalOrchestrator {
         'ZERO_SIZE'
       );
       console.log(`[B.3][SIZING_SKIP] Zero sizing result for ${rawSignal.symbol}/${strategyId}`);
+      if (_fClass) recordActivePreSqeReject(sizingContext.mode, _fClass, 'sizing_zero', strategyId);
       return null;
     }
 
@@ -762,7 +785,11 @@ export class SignalOrchestrator {
     };
 
     const sqeResult = await signalQualityEvaluator.evaluate(sqeInput);
-    
+    // P19-B8.4b: SQE-at-generation tally — per-gate reject breakdown + the pass/fail denominator. The SAME
+    // signal is re-SQE'd during RTB refresh (phase='refresh' in ready_to_buy_service); those are two labelled
+    // numbers, never summed (MUST-4). Records BOTH pass and fail (a pass feeds the honest denominator).
+    if (_fClass) recordActiveSqeEvaluation(sizingContext.mode, _fClass, sqeResult.passed, sqeResult.failures, 'generation');
+
     if (!sqeResult.passed) {
       console.log(`[11.0E][SQE_REJECT] ${rawSignal.symbol}/${strategyId}: ${sqeResult.reason}`);
       signalLifecycleAudit.recordRejection(
@@ -812,6 +839,9 @@ export class SignalOrchestrator {
       const capDecision = await checkPerUnderlyingCap(rawSignal.symbol, openSymbols);
       console.log(formatDecisionLog(rawSignal.symbol, capDecision));
       if (!capDecision.allowed) {
+        // P19-B8.4b: POST-SQE reject (passed the SQE, dropped before the RTB queue) — kept distinct from the
+        // pre-SQE bucket so the funnel order is honest (this site sits after the :764 SQE).
+        if (_fClass) recordActivePostSqeReject(sizingContext.mode, _fClass, 'position_cap');
         return null; // hard reject; signal does not enter RTB queue
       }
     } catch (err) {
@@ -1322,6 +1352,9 @@ export class SignalOrchestrator {
       } else {
         console.warn(`[reorg-B2][TARGET_GATE][active] drop ${rawSignal.symbol}/${strategyId}: ${_b2.reason} rr=${_b2.rr.toFixed(2)} atrs=${_b2.atrsToTarget.toFixed(2)}`);
       }
+      // P19-B8.4b: POST-SQE reject (the reorg-B2 target gate sits after the :764 SQE) — recorded by the
+      // specific reason (invalid_geometry / rr_below_min / invalid_atr / unreachable) so the drop is honest.
+      if (_fClass) recordActivePostSqeReject(sizingContext.mode, _fClass, _b2.reason ?? 'target_gate_unknown');
       return null;
     }
     const _b2Target = _b2.targetPrice;
@@ -1869,6 +1902,21 @@ export class SignalOrchestrator {
           }
         }
         console.log(`[22][ORCHESTRATOR] ${symbol}: families=${Array.from(pairFamilies).join(',')} strategies=${familyFilteredStrategies.size}/${activeStrategies.size}`);
+        // P19-B8.4b: active-path funnel — the family filter drops STRATEGIES the pair's family tags exclude,
+        // BEFORE any signal is built for them. This is UPSTREAM of the signalsGenerated denominator, so it is
+        // recorded in the dedicated `strategyAttrition` bucket (NOT preSqeRejects — mixing it in would let the
+        // pre-SQE stage exceed the denominator and read as a broken funnel, Langston B8.4b). This is the
+        // crypto pipe (evaluateSymbol) — xStock's external-dispatch pipe has no family-filter stage. Emit
+        // BEFORE the clear() below (activeStrategies still holds the pre-filter set here). Dormant until
+        // paper-active.
+        const _famClass: FunnelAssetClass | undefined =
+          (sizingContext.assetClass === 'crypto_spot' || sizingContext.assetClass === 'xstock_spot')
+            ? sizingContext.assetClass : undefined;
+        if (_famClass) {
+          for (const strat of activeStrategies) {
+            if (!familyFilteredStrategies.has(strat)) recordActiveStrategyAttrition(sizingContext.mode, _famClass, strat);
+          }
+        }
         // Replace activeStrategies with family-filtered set
         activeStrategies.clear();
         for (const s of familyFilteredStrategies) activeStrategies.add(s);

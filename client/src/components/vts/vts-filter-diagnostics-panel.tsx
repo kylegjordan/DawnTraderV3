@@ -250,11 +250,19 @@ function ActiveDownstreamFunnel({ mode, assetClass }: { mode: 'paper' | 'live'; 
           </div>
         ) : (
           <div className="space-y-4" data-testid="fd-downstream-active">
+            {/* Upstream, pre-generation: strategies the family filter excluded BEFORE any signal was built —
+                NOT a subset of "signals generated", so it renders as its own stage above the funnel. */}
+            <StageBlock title="Strategy attrition (family filter — before signal generation, upstream of the funnel)">
+              <KvRows data={cls?.strategyAttrition} empty="No strategies filtered out in this window." />
+            </StageBlock>
             <StageBlock title={`Signal generation + pre-SQE rejections — ${fmt(cls?.signalsGenerated)} signals generated`}>
               <KvRows data={cls?.preSqeRejects} empty="No pre-SQE rejections in this window." />
             </StageBlock>
             <StageBlock title={`SQE quality gates — ${fmt(cls?.sqePassed)} passed / ${fmt(cls?.sqeEvaluated)} evaluated`}>
               <KvRows data={cls?.sqeGateRejects} empty="No SQE gate rejections in this window." />
+            </StageBlock>
+            <StageBlock title="Post-SQE rejections (passed SQE, dropped before Ready-to-Buy)">
+              <KvRows data={cls?.postSqeRejects} empty="No post-SQE rejections in this window." />
             </StageBlock>
             <StageBlock title="Ready-to-Buy refresh">
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5 text-sm">

@@ -1,0 +1,482 @@
+diff --git a/client/src/components/vts/vts-filter-diagnostics-panel.tsx b/client/src/components/vts/vts-filter-diagnostics-panel.tsx
+index 06ca9577e..64445edfc 100644
+--- a/client/src/components/vts/vts-filter-diagnostics-panel.tsx
++++ b/client/src/components/vts/vts-filter-diagnostics-panel.tsx
+@@ -250,12 +250,20 @@ function ActiveDownstreamFunnel({ mode, assetClass }: { mode: 'paper' | 'live';
+           </div>
+         ) : (
+           <div className="space-y-4" data-testid="fd-downstream-active">
++            {/* Upstream, pre-generation: strategies the family filter excluded BEFORE any signal was built —
++                NOT a subset of "signals generated", so it renders as its own stage above the funnel. */}
++            <StageBlock title="Strategy attrition (family filter — before signal generation, upstream of the funnel)">
++              <KvRows data={cls?.strategyAttrition} empty="No strategies filtered out in this window." />
++            </StageBlock>
+             <StageBlock title={`Signal generation + pre-SQE rejections — ${fmt(cls?.signalsGenerated)} signals generated`}>
+               <KvRows data={cls?.preSqeRejects} empty="No pre-SQE rejections in this window." />
+             </StageBlock>
+             <StageBlock title={`SQE quality gates — ${fmt(cls?.sqePassed)} passed / ${fmt(cls?.sqeEvaluated)} evaluated`}>
+               <KvRows data={cls?.sqeGateRejects} empty="No SQE gate rejections in this window." />
+             </StageBlock>
++            <StageBlock title="Post-SQE rejections (passed SQE, dropped before Ready-to-Buy)">
++              <KvRows data={cls?.postSqeRejects} empty="No post-SQE rejections in this window." />
++            </StageBlock>
+             <StageBlock title="Ready-to-Buy refresh">
+               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5 text-sm">
+                 <div><span className="text-muted-foreground block text-xs">Cycles</span><span className="font-mono font-semibold">{fmt(cls?.rtbRefresh.cyclesRun)}</span></div>
+diff --git a/server/core/observability/active-funnel-tracker.ts b/server/core/observability/active-funnel-tracker.ts
+index 787ea4f73..d2f144b1d 100644
+--- a/server/core/observability/active-funnel-tracker.ts
++++ b/server/core/observability/active-funnel-tracker.ts
+@@ -51,15 +51,18 @@ export const SQE_CANONICAL_GATES = [
+ export type SqeGateId = (typeof SQE_CANONICAL_GATES)[number] | 'uncategorized';
+ const _CANON = new Set<string>(SQE_CANONICAL_GATES);
+ 
+-/** Pre-SQE rejection reasons (the 5 orchestrator sites + family IMF). Kept as a string map (not an enum) so
+- *  a caller-side addition surfaces as a new row rather than a compile break; the writers pass these tokens. */
++/** Pre-SQE rejection reasons — the orchestrator sites that drop a BUILT signal BEFORE it reaches the SQE, so
++ *  they are a true subset of `signalsGenerated` (each fires after the denominator increment at the top of
++ *  buildSizedSignalForStrategy). Kept as a string map (not an enum) so a caller-side addition surfaces as a
++ *  new row rather than a compile break. NOTE: family-filter strategy drops are NOT here — they happen in
++ *  evaluateSymbol BEFORE any signal is built (upstream of the denominator), so they live in the separate
++ *  `strategyAttrition` bucket (Langston B8.4b: mixing them into preSqeRejects would let it exceed
++ *  signalsGenerated and read as a broken funnel). position_cap / target-gate reasons are POST-SQE → they go
++ *  through `recordActivePostSqeReject`, not here. */
+ export type PreSqeReason =
+   | 'unmappable_symbol'
+   | 'strategy_gate'
+-  | 'sizing_zero'
+-  | 'position_cap'
+-  | 'reachability'
+-  | 'family_imf';
++  | 'sizing_zero';
+ 
+ export interface RtbRefreshCounters {
+   cyclesRun: number;            // refresh micro-cycles that ran
+@@ -84,6 +87,17 @@ export interface ActiveFunnelRecord {
+   /** by-(strategy → reason) pre-SQE rejects — the strategy dimension lives HERE, not on the SQE gates
+    *  (Langston Q4: per-strategy-per-gate ≈648 buckets; SQE gates are strategy-agnostic). */
+   preSqeRejectsByStrategy: Record<string, Record<string, number>>;
++  /** UPSTREAM strategy attrition (by strategy): strategies excluded by the family filter in evaluateSymbol
++   *  BEFORE any signal is built for them — so they are NOT a subset of `signalsGenerated` and must NOT be
++   *  mixed into `preSqeRejects` (which would let the pre-SQE funnel stage exceed the denominator and read as
++   *  broken — Langston B8.4b). This is its own pre-generation stage; the panel renders it above the signal
++   *  funnel, not as a funnel subset. */
++  strategyAttrition: Record<string, number>;
++  /** POST-SQE, pre-RTB rejects by reason (position_cap + the target-gate reasons) — signals that PASSED the
++   *  SQE but were dropped before the RTB queue. Distinct from preSqeRejects because these sites sit AFTER the
++   *  SQE call in buildSizedSignalForStrategy — lumping them into preSqeRejects would misstate the funnel
++   *  order (Langston anchor-b). Surfaced for no-hidden-gates honesty (Kyle). */
++  postSqeRejects: Record<string, number>;
+   /** per-SQE-gate reject tally (canonical gate id → count) + the `uncategorized` discovery bucket. */
+   sqeGateRejects: Record<string, number>;
+   /** SQE outcomes (the denominator so a gate's share is honest). */
+@@ -100,6 +114,8 @@ function _blank(): ActiveFunnelRecord {
+     signalsGenerated: 0,
+     preSqeRejects: {},
+     preSqeRejectsByStrategy: {},
++    strategyAttrition: {},
++    postSqeRejects: {},
+     sqeGateRejects: {},
+     sqeEvaluated: 0,
+     sqePassed: 0,
+@@ -136,7 +152,7 @@ function _get(mode: FunnelMode, assetClass: FunnelAssetClass): ActiveFunnelRecor
+ const _CKPT_PATH = path.join(process.cwd(), 'logs', 'active-funnel-checkpoint.json');
+ // Bump on ANY key-format OR record-shape change (a stale-shape reload would seed malformed buckets).
+ // Exported so the reload test asserts against the SAME string the module writes/checks (no drift).
+-export const ACTIVE_FUNNEL_KEY_SCHEMA = 'mode::assetClass/funnel-v1';
++export const ACTIVE_FUNNEL_KEY_SCHEMA = 'mode::assetClass/funnel-v3';
+ let _startedAt: string | null = null;
+ 
+ /** Reload the on-disk checkpoint into memory. Runs once at module load (and from the reload test). Guards:
+@@ -164,6 +180,8 @@ export function reloadCheckpointFromDisk(): void {
+           ...b, ...v,
+           preSqeRejects: { ...(v.preSqeRejects ?? {}) },
+           preSqeRejectsByStrategy: { ...(v.preSqeRejectsByStrategy ?? {}) },
++          strategyAttrition: { ...(v.strategyAttrition ?? {}) },
++          postSqeRejects: { ...(v.postSqeRejects ?? {}) },
+           sqeGateRejects: { ...(v.sqeGateRejects ?? {}) },
+           rtbRefresh: { ...b.rtbRefresh, ...(v.rtbRefresh ?? {}) },
+           sqeAttempts: { ...b.sqeAttempts, ...(v.sqeAttempts ?? {}) },
+@@ -194,6 +212,10 @@ if (typeof _ckptTimer.unref === 'function') _ckptTimer.unref();
+ export function getActiveFunnelStartedAt(): string | null { return _startedAt; }
+ 
+ // ── WRITERS (O(1), no I/O — the checkpoint timer is the only I/O) ────────────────────────────────────
++// ⚠️ INVARIANT (Langston B8.4b): every writer does a SYNCHRONOUS Map read-modify-write with NO `await`
++// between the read and the write. That is the entire basis of the race-freedom under the active/RTB
++// `Promise.all` chunks (Node is single-threaded; interleaving only happens at await points, so each
++// increment completes atomically). DO NOT introduce an `await` inside any writer below.
+ 
+ /** Count N signals generated this cycle for (mode, assetClass). */
+ export function recordActiveSignalsGenerated(mode: FunnelMode, assetClass: FunnelAssetClass, n: number): void {
+@@ -210,6 +232,24 @@ export function recordActivePreSqeReject(mode: FunnelMode, assetClass: FunnelAss
+   }
+ }
+ 
++/** Count one POST-SQE, pre-RTB rejection by reason. The signal PASSED the SQE and was dropped before the RTB
++ *  queue — kept separate from preSqeRejects so the funnel order is honest (these sites sit after the SQE).
++ *  Reasons today: `position_cap` (per-underlying cap) and the reorg-B2 target-gate reasons
++ *  (`invalid_geometry` / `rr_below_min` / `invalid_atr` / `unreachable`). */
++export function recordActivePostSqeReject(mode: FunnelMode, assetClass: FunnelAssetClass, reason: string): void {
++  const r = _get(mode, assetClass);
++  r.postSqeRejects[reason] = (r.postSqeRejects[reason] ?? 0) + 1;
++}
++
++/** Count one UPSTREAM strategy attrition (by strategy): a strategy excluded by the family filter in
++ *  evaluateSymbol BEFORE any signal is built for it. Distinct from `preSqeRejects` because it sits upstream
++ *  of the `signalsGenerated` denominator — mixing it in would let the pre-SQE stage exceed the denominator
++ *  (Langston B8.4b). Its own pre-generation stage. */
++export function recordActiveStrategyAttrition(mode: FunnelMode, assetClass: FunnelAssetClass, strategy: string): void {
++  const r = _get(mode, assetClass);
++  r.strategyAttrition[strategy] = (r.strategyAttrition[strategy] ?? 0) + 1;
++}
++
+ let _lastUncatWarnMs = 0;
+ /** Extract the canonical SQE gate id from a `failures[]` reason (delimiter contract: first token up to
+  *  whitespace or ':'), validated against the canonical set (Langston Q3 hybrid). An unknown token → the
+@@ -274,6 +314,8 @@ export function getActiveFunnelStats(mode: FunnelMode, assetClass: FunnelAssetCl
+     ...r,
+     preSqeRejects: { ...r.preSqeRejects },
+     preSqeRejectsByStrategy: Object.fromEntries(Object.entries(r.preSqeRejectsByStrategy).map(([s, m]) => [s, { ...m }])),
++    strategyAttrition: { ...r.strategyAttrition },
++    postSqeRejects: { ...r.postSqeRejects },
+     sqeGateRejects: { ...r.sqeGateRejects },
+     rtbRefresh: { ...r.rtbRefresh },
+     sqeAttempts: { ...r.sqeAttempts },
+diff --git a/server/core/rtb/ready_to_buy_service.ts b/server/core/rtb/ready_to_buy_service.ts
+index c42220e6d..e00564f04 100644
+--- a/server/core/rtb/ready_to_buy_service.ts
++++ b/server/core/rtb/ready_to_buy_service.ts
+@@ -34,6 +34,10 @@ import { evaluateTradeExpectancy } from '../calculations/expectancy.js';
+ const _RTB_GK = { exchange: '*', assetClass: '*', strategy: '*', regime: '*' };
+ import { calculateFinalScore, calculateRegimeWeight } from '../utils/score-calculator';
+ import { signalQualityEvaluator, type SQEInput } from '../filters/signal_quality_evaluator';
++// P19-B8.4b: active-path funnel — per-signal RTB-refresh outcomes (refreshedAttempted / reconfirmed /
++// rejectedInRefresh) + the SQE-during-refresh tally (phase='refresh', the honest MUST-4 double-count vs
++// SQE-at-generation). cyclesRun is ticked separately in rtb-refresh-service (anchor-a). Dormant until B8.5.
++import { recordActiveRtbRefresh, recordActiveSqeEvaluation, type FunnelAssetClass } from '../observability/active-funnel-tracker';
+ // B79.0n.STORAGE (2026-05-21): AssetClass type for SQEInput population.
+ // P19-B4a (C4): prefer the row's stamp (asValidAssetClass), safe-resolve+skip as fallback.
+ import { safeResolveAssetClass, asValidAssetClass, type AssetClass } from '../../../shared/asset-classes';
+@@ -1149,6 +1153,13 @@ class ReadyToBuyService {
+                 return;
+               }
+ 
++              // P19-B8.4b: active-path funnel — this signal is about to be re-SQE'd on the refresh path.
++              // Narrow to the funnel grid + count the refresh attempt (per-signal; cyclesRun ticks per bucket
++              // in rtb-refresh-service). Increments are single-threaded-atomic under the Promise.all chunk.
++              const _fCls: FunnelAssetClass | undefined =
++                (sqeAssetClass === 'crypto_spot' || sqeAssetClass === 'xstock_spot') ? sqeAssetClass : undefined;
++              if (_fCls) recordActiveRtbRefresh(mode, _fCls, { refreshedAttempted: 1 });
++
+               const sqeInput: SQEInput = {
+                 signalId: signal.signalId,
+                 symbol: normalizedSymbol,
+@@ -1163,13 +1174,18 @@ class ReadyToBuyService {
+               };
+               
+               const sqeResult = await signalQualityEvaluator.evaluate(sqeInput);
+-              
++              // P19-B8.4b: SQE-during-refresh tally (phase='refresh') — per-gate breakdown + pass/fail
++              // denominator, kept as TWO labelled numbers vs SQE-at-generation, never summed (MUST-4).
++              if (_fCls) recordActiveSqeEvaluation(mode, _fCls, sqeResult.passed, sqeResult.failures, 'refresh');
++
+               if (!sqeResult.passed) {
+                 console.log(`[11.0E][SQE_REVALIDATION_FAIL] symbol=${normalizedSymbol} reason=${sqeResult.reason}`);
+                 this.logRtbTrace(mode, normalizedSymbol, signal.strategy, oldStatus, 'deleted', 'SQE_failure');
+                 this.logSqeRejection(signal, sqeResult.reason || 'unknown', refreshedFinalScore);
+                 bulkDeletes.push(signal.id);
+                 expiredCount++;
++                // P19-B8.4b: failed re-SQE → dropped from the queue during refresh.
++                if (_fCls) recordActiveRtbRefresh(mode, _fCls, { rejectedInRefresh: 1 });
+                 return;
+               }
+               
+@@ -1196,6 +1212,8 @@ class ReadyToBuyService {
+               this.logRtbTrace(mode, normalizedSymbol, signal.strategy, oldStatus, 'reconfirmed', 'refresh');
+               console.log(`[11.0E][RECONFIRM_COMPLETE] pair=${normalizedSymbol} ${oldStatus}→reconfirmed FinalScore=${refreshedFinalScore.toFixed(4)} decayPenalty=${decayPenalty.toFixed(4)}`);
+               reconfirmedCount++;
++              // P19-B8.4b: survived re-SQE → stayed queued (reconfirmed) on the refresh path.
++              if (_fCls) recordActiveRtbRefresh(mode, _fCls, { reconfirmed: 1 });
+             } catch (err) {
+               console.error(`[T3][SIGNAL_PROCESS_ERROR] signal=${signal.id}:`, err);
+               bulkDeletes.push(signal.id);
+diff --git a/server/services/active-execution-engine.ts b/server/services/active-execution-engine.ts
+index 601970cab..204abffef 100644
+--- a/server/services/active-execution-engine.ts
++++ b/server/services/active-execution-engine.ts
+@@ -60,6 +60,9 @@ import { evaluateTECExit } from './tec-evaluator';
+ // P19-B4a (C4): top-level resolveAssetClass dropped — all sites now prefer the
+ // stamp (asValidAssetClass) then fall through to safeResolveAssetClass (skip on null).
+ import { asValidAssetClass, safeResolveAssetClass, type AssetClass } from '../../shared/asset-classes.js';
++// P19-B8.4b: active-path funnel — the `promoted` counter (signal promoted out of the RTB queue to an open
++// attempt). Single home for `promoted` (the refresh reconfirmed/rejected live in ready_to_buy_service).
++import { recordActiveRtbRefresh } from '../core/observability/active-funnel-tracker.js';
+ import { StrategyEngine, type StrategySignal, type TechnicalIndicators } from './strategy-engine';
+ import { checkGuardrailRisk, type TradeCandidate, type TradeSafetyResultCode } from './trade-safety';
+ import { buildSettingsFromGuardrails, calculateRiskAmount } from './guardrail-settings';
+@@ -1907,6 +1910,13 @@ export class ActiveExecutionEngine {
+           console.log(`[RTB-Promotion:${this.mode}] ✅ Successfully promoted ${signal.symbol}/${signal.strategy} -> Trade ${tradeResult.tradeId}`);
+           promotedCount++;
+           openSlots--;
++          // P19-B8.4b: active-path funnel — signal promoted out of the RTB queue to an open attempt.
++          // Re-derive the funnel class from the signal stamp (the AMR-block _promoClass is scoped above).
++          // Dormant until paper-active (B8.5); this loop only runs when the active engine is promoting.
++          const _fProm = asValidAssetClass(signal.metadata?.assetClass) ?? safeResolveAssetClass(signal.symbol, 'kraken');
++          if (_fProm === 'crypto_spot' || _fProm === 'xstock_spot') {
++            recordActiveRtbRefresh(this.mode, _fProm, { promoted: 1 });
++          }
+         } else {
+           // Trade execution failed - signal already removed from RTB, log warning
+           console.warn(`[RTB-Promotion:${this.mode}] ⚠️ Failed to execute promoted signal: ${tradeResult.error || 'unknown error'}`);
+diff --git a/server/services/rtb-refresh-service.ts b/server/services/rtb-refresh-service.ts
+index cfc9e7c99..da142b0fe 100644
+--- a/server/services/rtb-refresh-service.ts
++++ b/server/services/rtb-refresh-service.ts
+@@ -22,6 +22,9 @@ import { priceCache } from './price-cache';
+ import { readyToBuyService } from '../core/rtb/ready_to_buy_service';
+ import { centralClock, type ClockTick } from './central-clock.js';
+ import type { TradingMode } from './guardrail-policy';
++// P19-B8.4b: active-path funnel — cyclesRun ticks on the REFRESH path (Langston anchor-a), so the
++// Paper/Live Filter Diagnostics tab flips dormant→active only when a refresh micro-cycle actually runs.
++import { recordActiveRtbRefresh, type FunnelAssetClass } from '../core/observability/active-funnel-tracker.js';
+ import {
+   ACT_CONFIG,
+   getAdaptivePoolSize,
+@@ -394,11 +397,15 @@ class RTBRefreshService {
+     // Per-class nested structure: signalBuckets.get(class).get(bucketIndex).
+     // Refresh-mode iterates all active classes' buckets at this index.
+     const bucketKeysAtIndex = new Set<string>();
++    // P19-B8.4b: track which funnel classes (crypto_spot|xstock_spot) had signals in this bucket, so the
++    // cyclesRun tick after refreshAndRank is per-class (anchor-a). Perp classes are not funnel-graded.
++    const _funnelClassesPresent = new Set<FunnelAssetClass>();
+     for (const cls of RTB_ACTIVE_CLASSES) {
+       const perClassBuckets = this.signalBuckets.get(cls);
+       const bucket = perClassBuckets?.get(bucketIndex);
+-      if (bucket) {
++      if (bucket && bucket.size > 0) {
+         for (const k of bucket) bucketKeysAtIndex.add(k);
++        if (cls === 'crypto_spot' || cls === 'xstock_spot') _funnelClassesPresent.add(cls);
+       }
+     }
+     const bucketSignals = signals.filter(s => {
+@@ -437,7 +444,13 @@ class RTBRefreshService {
+       // B79.0n.RTB (2026-05-27): pass aggregated per-class bucket keys at
+       // this index (computed above as `bucketKeysAtIndex` Set<string>).
+       await readyToBuyService.refreshAndRank(mode, bucketKeysAtIndex);
+-      
++
++      // P19-B8.4b (Langston anchor-a): tick cyclesRun on the REFRESH path — hasActiveFunnelActivity keys on
++      // it, so the Paper/Live tab flips dormant→active only once a refresh micro-cycle actually runs. One tick
++      // per funnel class present in this bucket. Dormant until paper-active (B8.5). The per-signal refresh
++      // outcomes (reconfirmed / rejectedInRefresh + SQE-refresh) are recorded inside refreshAndRank.
++      for (const cls of _funnelClassesPresent) recordActiveRtbRefresh(mode, cls, { cyclesRun: 1 });
++
+       const rankDuration = Date.now() - rankStart;
+       
+       console.log(`[A4.R10R-3][RTBRefresh] mode=${mode} bucket=${bucketIndex} signals=${bucketSignals.length} priced=${validPrices.size} rankDuration=${rankDuration}ms totalDuration=${Date.now() - refreshStart}ms`);
+diff --git a/server/services/signal-orchestrator.ts b/server/services/signal-orchestrator.ts
+index ea67912ca..c0e988ca9 100644
+--- a/server/services/signal-orchestrator.ts
++++ b/server/services/signal-orchestrator.ts
+@@ -51,6 +51,17 @@ import { c5FinancialDiagnostics } from './c5-financial-diagnostics.js';
+ import { signalLifecycleAudit } from '../core/audit/signal_lifecycle_audit.js';
+ import { calculateExtendedSignalMetrics, estimateVolatility } from '../core/metrics/quality_index.js';
+ import { signalQualityEvaluator, type SQEInput } from '../core/filters/signal_quality_evaluator.js';
++// P19-B8.4b: active-path funnel instrumentation (S21). buildSizedSignalForStrategy + the crypto
++// family-filter loop are the ACTIVE path exclusively (VTS runs via vts-runner and never calls these),
++// so every count here is an active-mode count. DORMANT (zero) until paper-active turns on at B8.5.
++import {
++  recordActiveSignalsGenerated,
++  recordActivePreSqeReject,
++  recordActivePostSqeReject,
++  recordActiveSqeEvaluation,
++  recordActiveStrategyAttrition,
++  type FunnelAssetClass,
++} from '../core/observability/active-funnel-tracker.js';
+ import { readyToBuyService, type SQESignalInput } from '../core/rtb/ready_to_buy_service.js';
+ import { activeFilterPool } from './active-filter-pool.js';
+ import { diagnosticTrace } from '../core/diagnostics/trace_service.js';
+@@ -436,11 +447,21 @@ export class SignalOrchestrator {
+     marketContext?: { high24h?: number; low24h?: number; atr?: number }
+   ): Promise<SizedStrategySignal | null> {
+     if (!rawSignal) return null;
+-    
++
++    // P19-B8.4b: active-path funnel — narrow the pipe's stamped class to the funnel grid
++    // (crypto_spot|xstock_spot); mode is already 'paper'|'live'. Count this generated signal at the funnel
++    // TOP (the denominator), then the gates below record their own drops (pre-SQE / SQE / post-SQE). A class
++    // outside the grid (a future asset class) is simply not counted. Dormant until paper-active (B8.5).
++    const _fClass: FunnelAssetClass | undefined =
++      (sizingContext.assetClass === 'crypto_spot' || sizingContext.assetClass === 'xstock_spot')
++        ? sizingContext.assetClass : undefined;
++    if (_fClass) recordActiveSignalsGenerated(sizingContext.mode, _fClass, 1);
++
+     // Directive 11.4H.1 Task 6: Validate and normalize symbol before event dispatch
+     const canonicalSymbol = normalizeToInternalSymbol(rawSignal.symbol);
+     if (!canonicalSymbol) {
+       console.warn(`[SignalOrchestrator] Dropped unmappable event: ${rawSignal.symbol}`);
++      if (_fClass) recordActivePreSqeReject(sizingContext.mode, _fClass, 'unmappable_symbol', strategyId);
+       return null;
+     }
+     // Ensure normalized symbol is used in signal
+@@ -474,6 +495,7 @@ export class SignalOrchestrator {
+     const _canonicalStrategy = strategyId === 'range_trading' ? 'range_trade' : (strategyId as string);
+     if (!isStrategyEnabledForAssetClass(_canonicalStrategy, _stampedAssetClass)) {
+       console.log(`[P19-B4a][C5][STRATEGY_GATE] blocked ${rawSignal.symbol}/${_canonicalStrategy} — disabled for assetClass=${_stampedAssetClass} (strategy_gates DB).`);
++      if (_fClass) recordActivePreSqeReject(sizingContext.mode, _fClass, 'strategy_gate', _canonicalStrategy);
+       return null;
+     }
+ 
+@@ -549,6 +571,7 @@ export class SignalOrchestrator {
+         'ZERO_SIZE'
+       );
+       console.log(`[B.3][SIZING_SKIP] Zero sizing result for ${rawSignal.symbol}/${strategyId}`);
++      if (_fClass) recordActivePreSqeReject(sizingContext.mode, _fClass, 'sizing_zero', strategyId);
+       return null;
+     }
+ 
+@@ -762,7 +785,11 @@ export class SignalOrchestrator {
+     };
+ 
+     const sqeResult = await signalQualityEvaluator.evaluate(sqeInput);
+-    
++    // P19-B8.4b: SQE-at-generation tally — per-gate reject breakdown + the pass/fail denominator. The SAME
++    // signal is re-SQE'd during RTB refresh (phase='refresh' in ready_to_buy_service); those are two labelled
++    // numbers, never summed (MUST-4). Records BOTH pass and fail (a pass feeds the honest denominator).
++    if (_fClass) recordActiveSqeEvaluation(sizingContext.mode, _fClass, sqeResult.passed, sqeResult.failures, 'generation');
++
+     if (!sqeResult.passed) {
+       console.log(`[11.0E][SQE_REJECT] ${rawSignal.symbol}/${strategyId}: ${sqeResult.reason}`);
+       signalLifecycleAudit.recordRejection(
+@@ -812,6 +839,9 @@ export class SignalOrchestrator {
+       const capDecision = await checkPerUnderlyingCap(rawSignal.symbol, openSymbols);
+       console.log(formatDecisionLog(rawSignal.symbol, capDecision));
+       if (!capDecision.allowed) {
++        // P19-B8.4b: POST-SQE reject (passed the SQE, dropped before the RTB queue) — kept distinct from the
++        // pre-SQE bucket so the funnel order is honest (this site sits after the :764 SQE).
++        if (_fClass) recordActivePostSqeReject(sizingContext.mode, _fClass, 'position_cap');
+         return null; // hard reject; signal does not enter RTB queue
+       }
+     } catch (err) {
+@@ -1322,6 +1352,9 @@ export class SignalOrchestrator {
+       } else {
+         console.warn(`[reorg-B2][TARGET_GATE][active] drop ${rawSignal.symbol}/${strategyId}: ${_b2.reason} rr=${_b2.rr.toFixed(2)} atrs=${_b2.atrsToTarget.toFixed(2)}`);
+       }
++      // P19-B8.4b: POST-SQE reject (the reorg-B2 target gate sits after the :764 SQE) — recorded by the
++      // specific reason (invalid_geometry / rr_below_min / invalid_atr / unreachable) so the drop is honest.
++      if (_fClass) recordActivePostSqeReject(sizingContext.mode, _fClass, _b2.reason ?? 'target_gate_unknown');
+       return null;
+     }
+     const _b2Target = _b2.targetPrice;
+@@ -1869,6 +1902,21 @@ export class SignalOrchestrator {
+           }
+         }
+         console.log(`[22][ORCHESTRATOR] ${symbol}: families=${Array.from(pairFamilies).join(',')} strategies=${familyFilteredStrategies.size}/${activeStrategies.size}`);
++        // P19-B8.4b: active-path funnel — the family filter drops STRATEGIES the pair's family tags exclude,
++        // BEFORE any signal is built for them. This is UPSTREAM of the signalsGenerated denominator, so it is
++        // recorded in the dedicated `strategyAttrition` bucket (NOT preSqeRejects — mixing it in would let the
++        // pre-SQE stage exceed the denominator and read as a broken funnel, Langston B8.4b). This is the
++        // crypto pipe (evaluateSymbol) — xStock's external-dispatch pipe has no family-filter stage. Emit
++        // BEFORE the clear() below (activeStrategies still holds the pre-filter set here). Dormant until
++        // paper-active.
++        const _famClass: FunnelAssetClass | undefined =
++          (sizingContext.assetClass === 'crypto_spot' || sizingContext.assetClass === 'xstock_spot')
++            ? sizingContext.assetClass : undefined;
++        if (_famClass) {
++          for (const strat of activeStrategies) {
++            if (!familyFilteredStrategies.has(strat)) recordActiveStrategyAttrition(sizingContext.mode, _famClass, strat);
++          }
++        }
+         // Replace activeStrategies with family-filtered set
+         activeStrategies.clear();
+         for (const s of familyFilteredStrategies) activeStrategies.add(s);
+diff --git a/server/tests/unit/p19-b8-4-active-funnel-tracker.test.ts b/server/tests/unit/p19-b8-4-active-funnel-tracker.test.ts
+index 4fb0819dd..3ec578da6 100644
+--- a/server/tests/unit/p19-b8-4-active-funnel-tracker.test.ts
++++ b/server/tests/unit/p19-b8-4-active-funnel-tracker.test.ts
+@@ -11,6 +11,8 @@ import { describe, it, expect, beforeEach } from 'vitest';
+ import {
+   recordActiveSignalsGenerated,
+   recordActivePreSqeReject,
++  recordActivePostSqeReject,
++  recordActiveStrategyAttrition,
+   recordActiveSqeEvaluation,
+   recordActiveRtbRefresh,
+   getActiveFunnelStats,
+@@ -51,15 +53,43 @@ describe('P19-B8.4 active-funnel-tracker (S21)', () => {
+   it('records pre-SQE rejects by reason AND by strategy', () => {
+     recordActivePreSqeReject('paper', 'crypto_spot', 'strategy_gate', 'vwap_pullback');
+     recordActivePreSqeReject('paper', 'crypto_spot', 'strategy_gate', 'vwap_pullback');
+-    recordActivePreSqeReject('paper', 'crypto_spot', 'reachability', 'abcd_long');
++    recordActivePreSqeReject('paper', 'crypto_spot', 'unmappable_symbol', 'abcd_long');
+     recordActivePreSqeReject('paper', 'crypto_spot', 'sizing_zero'); // no strategy
+     const s = getActiveFunnelStats('paper', 'crypto_spot');
+-    expect(s.preSqeRejects).toEqual({ strategy_gate: 2, reachability: 1, sizing_zero: 1 });
++    expect(s.preSqeRejects).toEqual({ strategy_gate: 2, unmappable_symbol: 1, sizing_zero: 1 });
+     expect(s.preSqeRejectsByStrategy.vwap_pullback).toEqual({ strategy_gate: 2 });
+-    expect(s.preSqeRejectsByStrategy.abcd_long).toEqual({ reachability: 1 });
++    expect(s.preSqeRejectsByStrategy.abcd_long).toEqual({ unmappable_symbol: 1 });
+     expect(s.preSqeRejectsByStrategy.sizing_zero).toBeUndefined(); // strategy-less reject not bucketed by strategy
+   });
+ 
++  it('records POST-SQE rejects separately from pre-SQE (honest funnel order)', () => {
++    recordActivePostSqeReject('paper', 'crypto_spot', 'position_cap');
++    recordActivePostSqeReject('paper', 'crypto_spot', 'unreachable');   // real reorg-B2 target-gate reason
++    recordActivePostSqeReject('paper', 'crypto_spot', 'unreachable');
++    recordActivePreSqeReject('paper', 'crypto_spot', 'strategy_gate', 'vwap_pullback');
++    const s = getActiveFunnelStats('paper', 'crypto_spot');
++    expect(s.postSqeRejects).toEqual({ position_cap: 1, unreachable: 2 });
++    expect(s.preSqeRejects).toEqual({ strategy_gate: 1 });                 // kept distinct
++    expect(s.postSqeRejects.strategy_gate).toBeUndefined();                 // no cross-bleed
++  });
++
++  it('records UPSTREAM strategy attrition separately from preSqeRejects + outside the denominator (Langston B8.4b)', () => {
++    // family filter drops these strategies BEFORE any signal is built for them
++    recordActiveStrategyAttrition('paper', 'crypto_spot', 'orb_breakout');
++    recordActiveStrategyAttrition('paper', 'crypto_spot', 'orb_breakout');
++    recordActiveStrategyAttrition('paper', 'crypto_spot', 'vwap_reversion');
++    // only ONE actual signal was generated + one true pre-SQE reject
++    recordActiveSignalsGenerated('paper', 'crypto_spot', 1);
++    recordActivePreSqeReject('paper', 'crypto_spot', 'strategy_gate', 'range_trade');
++    const s = getActiveFunnelStats('paper', 'crypto_spot');
++    expect(s.strategyAttrition).toEqual({ orb_breakout: 2, vwap_reversion: 1 });
++    // the honest-funnel guarantee: attrition (3) is NOT lumped into preSqeRejects, so preSqeRejects (1)
++    // stays a true subset of signalsGenerated (1) even though attrition exceeds the denominator.
++    expect(s.preSqeRejects).toEqual({ strategy_gate: 1 });
++    expect(s.preSqeRejects.orb_breakout).toBeUndefined();
++    expect(s.signalsGenerated).toBe(1);
++  });
++
+   it('extractSqeGateId: canonical tokens key stably (delimiter contract), unknown → uncategorized', () => {
+     expect(extractSqeGateId('FinalScore 0.2500 < 0.35 (quant threshold)')).toBe('FinalScore');
+     expect(extractSqeGateId('RegimeWeight 0.20 < 0.30')).toBe('RegimeWeight');
+diff --git a/shared/active-funnel-envelope.ts b/shared/active-funnel-envelope.ts
+index 0dcd01085..f843ed4fa 100644
+--- a/shared/active-funnel-envelope.ts
++++ b/shared/active-funnel-envelope.ts
+@@ -9,7 +9,7 @@
+  * the active lane has the RTB double-count). The shared *structure* is the tri-state `{status}` container.
+  */
+ 
+-export const ACTIVE_FUNNEL_SCHEMA = 'active-funnel/v1' as const;
++export const ACTIVE_FUNNEL_SCHEMA = 'active-funnel/v3' as const;
+ 
+ export interface ActiveFunnelRtbRefresh {
+   cyclesRun: number;
+@@ -32,8 +32,16 @@ export interface ActiveFunnelClassData {
+    *  accumulated counts. A 0 under `'active'` genuinely means "evaluated, none rejected" — a different claim. */
+   status: 'dormant' | 'active';
+   signalsGenerated: number;
++  /** UPSTREAM strategy attrition (by strategy) — strategies the family filter excluded in evaluateSymbol
++   *  BEFORE any signal was built, so NOT a subset of signalsGenerated. The client renders it as a
++   *  pre-generation stage ABOVE the signal funnel, never as a preSqeRejects subset (else the pre-SQE stage
++   *  could exceed the denominator and read as a broken funnel — Langston B8.4b). */
++  strategyAttrition: Record<string, number>;
+   preSqeRejects: Record<string, number>;
+   preSqeRejectsByStrategy: Record<string, Record<string, number>>;
++  /** POST-SQE, pre-RTB rejects (position_cap, reachability) — signals that passed the SQE but were dropped
++   *  before the RTB queue. Kept distinct from preSqeRejects so the funnel order is honest. */
++  postSqeRejects: Record<string, number>;
+   sqeGateRejects: Record<string, number>;
+   sqeEvaluated: number;
+   sqePassed: number;

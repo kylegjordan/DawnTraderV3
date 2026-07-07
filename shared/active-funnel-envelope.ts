@@ -9,7 +9,7 @@
  * the active lane has the RTB double-count). The shared *structure* is the tri-state `{status}` container.
  */
 
-export const ACTIVE_FUNNEL_SCHEMA = 'active-funnel/v1' as const;
+export const ACTIVE_FUNNEL_SCHEMA = 'active-funnel/v3' as const;
 
 export interface ActiveFunnelRtbRefresh {
   cyclesRun: number;
@@ -32,8 +32,16 @@ export interface ActiveFunnelClassData {
    *  accumulated counts. A 0 under `'active'` genuinely means "evaluated, none rejected" — a different claim. */
   status: 'dormant' | 'active';
   signalsGenerated: number;
+  /** UPSTREAM strategy attrition (by strategy) — strategies the family filter excluded in evaluateSymbol
+   *  BEFORE any signal was built, so NOT a subset of signalsGenerated. The client renders it as a
+   *  pre-generation stage ABOVE the signal funnel, never as a preSqeRejects subset (else the pre-SQE stage
+   *  could exceed the denominator and read as a broken funnel — Langston B8.4b). */
+  strategyAttrition: Record<string, number>;
   preSqeRejects: Record<string, number>;
   preSqeRejectsByStrategy: Record<string, Record<string, number>>;
+  /** POST-SQE, pre-RTB rejects (position_cap, reachability) — signals that passed the SQE but were dropped
+   *  before the RTB queue. Kept distinct from preSqeRejects so the funnel order is honest. */
+  postSqeRejects: Record<string, number>;
   sqeGateRejects: Record<string, number>;
   sqeEvaluated: number;
   sqePassed: number;

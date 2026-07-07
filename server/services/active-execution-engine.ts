@@ -60,6 +60,9 @@ import { evaluateTECExit } from './tec-evaluator';
 // P19-B4a (C4): top-level resolveAssetClass dropped — all sites now prefer the
 // stamp (asValidAssetClass) then fall through to safeResolveAssetClass (skip on null).
 import { asValidAssetClass, safeResolveAssetClass, type AssetClass } from '../../shared/asset-classes.js';
+// P19-B8.4b: active-path funnel — the `promoted` counter (signal promoted out of the RTB queue to an open
+// attempt). Single home for `promoted` (the refresh reconfirmed/rejected live in ready_to_buy_service).
+import { recordActiveRtbRefresh } from '../core/observability/active-funnel-tracker.js';
 import { StrategyEngine, type StrategySignal, type TechnicalIndicators } from './strategy-engine';
 import { checkGuardrailRisk, type TradeCandidate, type TradeSafetyResultCode } from './trade-safety';
 import { buildSettingsFromGuardrails, calculateRiskAmount } from './guardrail-settings';
@@ -1907,6 +1910,13 @@ export class ActiveExecutionEngine {
           console.log(`[RTB-Promotion:${this.mode}] ✅ Successfully promoted ${signal.symbol}/${signal.strategy} -> Trade ${tradeResult.tradeId}`);
           promotedCount++;
           openSlots--;
+          // P19-B8.4b: active-path funnel — signal promoted out of the RTB queue to an open attempt.
+          // Re-derive the funnel class from the signal stamp (the AMR-block _promoClass is scoped above).
+          // Dormant until paper-active (B8.5); this loop only runs when the active engine is promoting.
+          const _fProm = asValidAssetClass(signal.metadata?.assetClass) ?? safeResolveAssetClass(signal.symbol, 'kraken');
+          if (_fProm === 'crypto_spot' || _fProm === 'xstock_spot') {
+            recordActiveRtbRefresh(this.mode, _fProm, { promoted: 1 });
+          }
         } else {
           // Trade execution failed - signal already removed from RTB, log warning
           console.warn(`[RTB-Promotion:${this.mode}] ⚠️ Failed to execute promoted signal: ${tradeResult.error || 'unknown error'}`);

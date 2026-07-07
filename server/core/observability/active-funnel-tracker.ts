@@ -51,15 +51,18 @@ export const SQE_CANONICAL_GATES = [
 export type SqeGateId = (typeof SQE_CANONICAL_GATES)[number] | 'uncategorized';
 const _CANON = new Set<string>(SQE_CANONICAL_GATES);
 
-/** Pre-SQE rejection reasons (the 5 orchestrator sites + family IMF). Kept as a string map (not an enum) so
- *  a caller-side addition surfaces as a new row rather than a compile break; the writers pass these tokens. */
+/** Pre-SQE rejection reasons — the orchestrator sites that drop a BUILT signal BEFORE it reaches the SQE, so
+ *  they are a true subset of `signalsGenerated` (each fires after the denominator increment at the top of
+ *  buildSizedSignalForStrategy). Kept as a string map (not an enum) so a caller-side addition surfaces as a
+ *  new row rather than a compile break. NOTE: family-filter strategy drops are NOT here — they happen in
+ *  evaluateSymbol BEFORE any signal is built (upstream of the denominator), so they live in the separate
+ *  `strategyAttrition` bucket (Langston B8.4b: mixing them into preSqeRejects would let it exceed
+ *  signalsGenerated and read as a broken funnel). position_cap / target-gate reasons are POST-SQE → they go
+ *  through `recordActivePostSqeReject`, not here. */
 export type PreSqeReason =
   | 'unmappable_symbol'
   | 'strategy_gate'
-  | 'sizing_zero'
-  | 'position_cap'
-  | 'reachability'
-  | 'family_imf';
+  | 'sizing_zero';
 
 export interface RtbRefreshCounters {
   cyclesRun: number;            // refresh micro-cycles that ran
@@ -84,6 +87,17 @@ export interface ActiveFunnelRecord {
   /** by-(strategy → reason) pre-SQE rejects — the strategy dimension lives HERE, not on the SQE gates
    *  (Langston Q4: per-strategy-per-gate ≈648 buckets; SQE gates are strategy-agnostic). */
   preSqeRejectsByStrategy: Record<string, Record<string, number>>;
+  /** UPSTREAM strategy attrition (by strategy): strategies excluded by the family filter in evaluateSymbol
+   *  BEFORE any signal is built for them — so they are NOT a subset of `signalsGenerated` and must NOT be
+   *  mixed into `preSqeRejects` (which would let the pre-SQE funnel stage exceed the denominator and read as
+   *  broken — Langston B8.4b). This is its own pre-generation stage; the panel renders it above the signal
+   *  funnel, not as a funnel subset. */
+  strategyAttrition: Record<string, number>;
+  /** POST-SQE, pre-RTB rejects by reason (position_cap + the target-gate reasons) — signals that PASSED the
+   *  SQE but were dropped before the RTB queue. Distinct from preSqeRejects because these sites sit AFTER the
+   *  SQE call in buildSizedSignalForStrategy — lumping them into preSqeRejects would misstate the funnel
+   *  order (Langston anchor-b). Surfaced for no-hidden-gates honesty (Kyle). */
+  postSqeRejects: Record<string, number>;
   /** per-SQE-gate reject tally (canonical gate id → count) + the `uncategorized` discovery bucket. */
   sqeGateRejects: Record<string, number>;
   /** SQE outcomes (the denominator so a gate's share is honest). */
@@ -100,6 +114,8 @@ function _blank(): ActiveFunnelRecord {
     signalsGenerated: 0,
     preSqeRejects: {},
     preSqeRejectsByStrategy: {},
+    strategyAttrition: {},
+    postSqeRejects: {},
     sqeGateRejects: {},
     sqeEvaluated: 0,
     sqePassed: 0,
@@ -136,7 +152,7 @@ function _get(mode: FunnelMode, assetClass: FunnelAssetClass): ActiveFunnelRecor
 const _CKPT_PATH = path.join(process.cwd(), 'logs', 'active-funnel-checkpoint.json');
 // Bump on ANY key-format OR record-shape change (a stale-shape reload would seed malformed buckets).
 // Exported so the reload test asserts against the SAME string the module writes/checks (no drift).
-export const ACTIVE_FUNNEL_KEY_SCHEMA = 'mode::assetClass/funnel-v1';
+export const ACTIVE_FUNNEL_KEY_SCHEMA = 'mode::assetClass/funnel-v3';
 let _startedAt: string | null = null;
 
 /** Reload the on-disk checkpoint into memory. Runs once at module load (and from the reload test). Guards:
@@ -164,6 +180,8 @@ export function reloadCheckpointFromDisk(): void {
           ...b, ...v,
           preSqeRejects: { ...(v.preSqeRejects ?? {}) },
           preSqeRejectsByStrategy: { ...(v.preSqeRejectsByStrategy ?? {}) },
+          strategyAttrition: { ...(v.strategyAttrition ?? {}) },
+          postSqeRejects: { ...(v.postSqeRejects ?? {}) },
           sqeGateRejects: { ...(v.sqeGateRejects ?? {}) },
           rtbRefresh: { ...b.rtbRefresh, ...(v.rtbRefresh ?? {}) },
           sqeAttempts: { ...b.sqeAttempts, ...(v.sqeAttempts ?? {}) },
@@ -194,6 +212,10 @@ if (typeof _ckptTimer.unref === 'function') _ckptTimer.unref();
 export function getActiveFunnelStartedAt(): string | null { return _startedAt; }
 
 // ── WRITERS (O(1), no I/O — the checkpoint timer is the only I/O) ────────────────────────────────────
+// ⚠️ INVARIANT (Langston B8.4b): every writer does a SYNCHRONOUS Map read-modify-write with NO `await`
+// between the read and the write. That is the entire basis of the race-freedom under the active/RTB
+// `Promise.all` chunks (Node is single-threaded; interleaving only happens at await points, so each
+// increment completes atomically). DO NOT introduce an `await` inside any writer below.
 
 /** Count N signals generated this cycle for (mode, assetClass). */
 export function recordActiveSignalsGenerated(mode: FunnelMode, assetClass: FunnelAssetClass, n: number): void {
@@ -208,6 +230,24 @@ export function recordActivePreSqeReject(mode: FunnelMode, assetClass: FunnelAss
   if (strategy) {
     (r.preSqeRejectsByStrategy[strategy] ??= {})[reason] = (r.preSqeRejectsByStrategy[strategy]?.[reason] ?? 0) + 1;
   }
+}
+
+/** Count one POST-SQE, pre-RTB rejection by reason. The signal PASSED the SQE and was dropped before the RTB
+ *  queue — kept separate from preSqeRejects so the funnel order is honest (these sites sit after the SQE).
+ *  Reasons today: `position_cap` (per-underlying cap) and the reorg-B2 target-gate reasons
+ *  (`invalid_geometry` / `rr_below_min` / `invalid_atr` / `unreachable`). */
+export function recordActivePostSqeReject(mode: FunnelMode, assetClass: FunnelAssetClass, reason: string): void {
+  const r = _get(mode, assetClass);
+  r.postSqeRejects[reason] = (r.postSqeRejects[reason] ?? 0) + 1;
+}
+
+/** Count one UPSTREAM strategy attrition (by strategy): a strategy excluded by the family filter in
+ *  evaluateSymbol BEFORE any signal is built for it. Distinct from `preSqeRejects` because it sits upstream
+ *  of the `signalsGenerated` denominator — mixing it in would let the pre-SQE stage exceed the denominator
+ *  (Langston B8.4b). Its own pre-generation stage. */
+export function recordActiveStrategyAttrition(mode: FunnelMode, assetClass: FunnelAssetClass, strategy: string): void {
+  const r = _get(mode, assetClass);
+  r.strategyAttrition[strategy] = (r.strategyAttrition[strategy] ?? 0) + 1;
 }
 
 let _lastUncatWarnMs = 0;
@@ -274,6 +314,8 @@ export function getActiveFunnelStats(mode: FunnelMode, assetClass: FunnelAssetCl
     ...r,
     preSqeRejects: { ...r.preSqeRejects },
     preSqeRejectsByStrategy: Object.fromEntries(Object.entries(r.preSqeRejectsByStrategy).map(([s, m]) => [s, { ...m }])),
+    strategyAttrition: { ...r.strategyAttrition },
+    postSqeRejects: { ...r.postSqeRejects },
     sqeGateRejects: { ...r.sqeGateRejects },
     rtbRefresh: { ...r.rtbRefresh },
     sqeAttempts: { ...r.sqeAttempts },
