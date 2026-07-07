@@ -15,8 +15,8 @@ change-class: architecture
 
 ## 1. Objectives (numbered; proposed as risk-ordered sub-batches)
 
-**OBJ-1 — Activate the COLD tier (low risk, high value; gated on Kyle's Backblaze creds).**
-Provision B2 creds into staging env; flip `data_lifecycle.cold_rotator_dry_run=false`; schedule + verify `b75-cold-rotator.ts` (03:00 UTC monthly, currently unscheduled/dry-run); confirm a real warm→cold rotation + download-verify + manifest `tier=cold state=active`. This makes the existing never-drop design actually preserve indefinitely.
+**OBJ-1 — Activate the COLD tier (low risk, high value; NO external blocker — creds present + verified).**
+★ CORRECTION (2026-07-08): the B2 creds are ALREADY in staging `.env` from the May setup (`B2_KEY_ID=0053ddb685320530000000001` [the `dt-cold-archive` key], `B2_APPLICATION_KEY`, `B2_BUCKET=dt-archive-cold`, `B2_ENDPOINT`, `B2_BUCKET_ID`) and CC-A **live-verified them 2026-07-08** (b2_authorize_account → AUTH OK; bucket readable; already holds the May dev-test object `context_bridge_log/2025-12.jsonl.gz` 99.87 MB). So cold was never blocked on creds — only `cold_rotator_dry_run=true` + the unscheduled cron. OBJ-1 = flip `data_lifecycle.cold_rotator_dry_run=false`; schedule `b75-cold-rotator.ts` (03:00 UTC monthly); confirm a real warm→cold rotation + download-verify + manifest `tier=cold state=active`. No Kyle action required.
 
 **OBJ-2 — Extend warm/cold tiering to the B70 analytics tables (the directive fix — the core of the batch).**
 Stop `b70-retention-sweep.ts` DROP-ing these; route them through the B75 export→warm→cold move-not-delete path (the machinery already exists + is proven). **Per-table decision (Kyle+Langston):** default = PRESERVE per the never-drop directive; explicitly decide if any table is genuinely reproducible/worthless (candidate: `pair_scan_archive` is producer-agnostic raw scan at ~255 k rows/day — big; is it re-derivable, or keep?). `signal_eval_archive` + `exit_decision_archive` + `signal_eval_provenance` = KEEP (calibration/learning data). Set per-table hot/warm retention in `data_lifecycle`. **No data destroyed before this lands** — coordinate so the 90-day drop doesn't delete more in the interim (the oldest at-risk partition age check is a Step-2 item).
@@ -31,7 +31,7 @@ Audit who READS `xstock_spot_ticker_snap` at what granularity BEFORE cutting (ca
 Now that archival is load-bearing against the fixed 202 GB ceiling, add a monitor: a small staging check (cron) that fires a §10.5 system-alert if (a) the b70/b75 sweeps didn't run or logged `failed>0`, or (b) disk usage crosses a threshold (e.g. 80 % of plan cap). Wire it into the existing `system-alerts` + Langston-triage path.
 
 ## 2. What each objective needs from Kyle
-- **OBJ-1:** Backblaze B2 account + 4 env vars (Kyle getting — the only hard blocker).
+- **OBJ-1:** NOTHING — creds present + live-verified 2026-07-08 (no external blocker; earlier "getting creds" is moot).
 - **OBJ-2:** per-table keep-vs-drop confirmation (default keep).
 - **OBJ-3/4:** the retention/cadence dials are Kyle's calls once Step-2 gives the safe ranges.
 
