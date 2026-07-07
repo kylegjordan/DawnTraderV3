@@ -59,6 +59,124 @@ function ActivePipelineTail({ mode }: { mode: 'paper' | 'live' }) {
   );
 }
 
+/**
+ * P19-B8.4 (OBJ-1/2) — the mode's OWN scanner stage, fed by the mode-keyed
+ * active-engine diagnostics (`/api/active-engine/diagnostics/scan?mode=` +
+ * `/scan-24h?mode=`), NOT the VTS feed. The on-demand scan runs a fresh scan with
+ * THIS mode's paper/live thresholds and has no `isEngineActive` guard (verified
+ * B8.4 MUST-1 — live numbers with active trading OFF), so universe / global-filter /
+ * eligible are this mode's REAL current scan. The 24h rolling reads DORMANT until
+ * paper-active runs its own scan cycles (dormant != zero — MUST-2). A failed load
+ * renders an ERROR, never a silent blank (OBJ-8).
+ */
+const SCAN_FILTER_LABELS: Record<string, string> = {
+  failed_min_volume: 'Min volume',
+  failed_spread: 'Max spread',
+  failed_daily_range: 'Daily range',
+  failed_min_price: 'Min price',
+  failed_stablecoin: 'Stablecoin / stablecoin',
+  failed_quote_currency: 'Quote currency',
+  failed_history: 'Min history',
+  failed_market_cap: 'Market cap',
+  failed_guardrail_risk: 'Guardrail risk',
+  failed_correlation: 'Correlation guard',
+  already_active: 'Already active',
+};
+
+function ActiveScannerStage({ mode }: { mode: 'paper' | 'live' }) {
+  const scan = useQuery<any>({
+    queryKey: ['/api/active-engine/diagnostics/scan', mode],
+    queryFn: () => apiFetch(`/api/active-engine/diagnostics/scan?mode=${mode}`),
+    refetchInterval: 30000,
+  });
+  const scan24h = useQuery<any>({
+    queryKey: ['/api/active-engine/diagnostics/scan-24h', mode],
+    queryFn: () => apiFetch(`/api/active-engine/diagnostics/scan-24h?mode=${mode}`),
+    refetchInterval: 60000,
+  });
+  const d = scan.data;
+  const r = scan24h.data?.data;
+  const modeLabel = mode === 'paper' ? 'Paper' : 'Live';
+  const fmt = (n: number | undefined | null): string => (n === undefined || n === null ? '—' : n.toLocaleString());
+  const bd = (d?.breakdown ?? {}) as Record<string, number>;
+
+  return (
+    <Card data-testid="active-scanner-stage">
+      <CardHeader className="py-3">
+        <CardTitle className="text-lg flex items-center justify-between">
+          <span>{modeLabel} Scanner Stage — universe &amp; global filters</span>
+          <span className="text-xs font-normal text-muted-foreground">this mode's OWN scan ({mode} thresholds) — live even before switch-on</span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {scan.isError ? (
+          <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm">
+            <AlertTriangle className="w-4 h-4 text-destructive" />
+            <span>Couldn't load the {modeLabel} scanner — a data-feed failure, not zeros.</span>
+            <Button variant="outline" size="sm" className="ml-auto" onClick={() => scan.refetch()}>
+              <RefreshCw className="w-3 h-3 mr-1" /> Retry
+            </Button>
+          </div>
+        ) : scan.isLoading ? (
+          <div className="text-sm text-muted-foreground">Loading the {modeLabel} scan…</div>
+        ) : (
+          <>
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 text-sm">
+              <div><span className="text-muted-foreground block text-xs">Universe Scanned</span><span className="font-mono font-semibold" data-testid="scanner-universe">{fmt(d?.universe_count)} pairs</span></div>
+              <div><span className="text-muted-foreground block text-xs">Evaluated (this scan)</span><span className="font-mono font-semibold">{fmt(d?.evaluated)}</span></div>
+              <div><span className="text-muted-foreground block text-xs">Eligible (passed all)</span><span className="font-mono font-semibold text-green-600" data-testid="scanner-eligible">{fmt(d?.eligible_count)}</span></div>
+              <div><span className="text-muted-foreground block text-xs">Ineligible (filtered out)</span><span className="font-mono font-semibold">{fmt(d?.ineligible_count)}</span></div>
+            </div>
+            <div>
+              <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-1">Global Filter Breakdown (why pairs were filtered out)</div>
+              <table className="w-full text-sm">
+                <tbody>
+                  {Object.keys(SCAN_FILTER_LABELS).map((k) => (
+                    <tr key={k} className="border-b hover:bg-muted/30">
+                      <td className="p-1.5">{SCAN_FILTER_LABELS[k]}</td>
+                      <td className="p-1.5 text-right font-mono">{fmt(bd[k] ?? 0)}</td>
+                    </tr>
+                  ))}
+                  <tr className="border-t-2 border-green-500/30 bg-green-500/10 font-semibold">
+                    <td className="p-1.5">Passed all filters</td>
+                    <td className="p-1.5 text-right font-mono text-green-700">{fmt(bd['passed_all_filters'] ?? 0)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            {Array.isArray(d?.top_candidates) && d.top_candidates.length > 0 && (
+              <div>
+                <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-1">Eligible Pool (top candidates)</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {d.top_candidates.slice(0, 25).map((c: any, i: number) => (
+                    <span key={`${c.symbol}-${i}`} className="rounded border border-green-500/30 bg-green-500/10 px-1.5 py-0.5 text-xs font-mono">{c.symbol}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div>
+              <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-1">24h Scan Activity</div>
+              {scan24h.isError ? (
+                <div className="text-xs text-destructive">Couldn't load 24h scan activity.</div>
+              ) : !r || r.totalCycles === 0 ? (
+                <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground" data-testid="active-scanner-24h-dormant">
+                  Awaiting activation — the 24-hour scan-cycle history fills once {modeLabel} active trading runs its own scan cycles (B8.5). Reads empty because nothing has run yet, not because a run found nothing.
+                </div>
+              ) : (
+                <div className="grid gap-2 sm:grid-cols-3 text-sm">
+                  <div><span className="text-muted-foreground block text-xs">Cycles (24h)</span><span className="font-mono font-semibold">{fmt(r.totalCycles)}</span></div>
+                  <div><span className="text-muted-foreground block text-xs">Evaluated (24h)</span><span className="font-mono font-semibold">{fmt(r.totalEvaluated)}</span></div>
+                  <div><span className="text-muted-foreground block text-xs">Survived (24h)</span><span className="font-mono font-semibold text-green-600">{fmt(r.totalSurvived)}</span></div>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 // Batch 19H: Filter Pipeline Diagnostics Panel
 // B79.0i.a: exported so xstocks-tab can re-render same panel with xstock-scoped data
 // P19-B8.3 (OBJ-3c/OBJ-7): the panel is now MODE-AWARE via gateDisposition —
@@ -80,6 +198,52 @@ export function FilterDiagnosticsPanel({ data, isLoading, gateDisposition = 'tag
   gateDisposition?: GateDisposition;
   modeTail?: 'paper' | 'live' | null;
 }) {
+  // P19-B8.4 (OBJ-1/2/3): on Paper/Live ('enforce') the tab shows the mode's OWN
+  // active-path funnel, NOT the VTS feed. The scanner stage renders the mode-keyed
+  // active-engine scan (its own paper/live thresholds — live even with active trading
+  // OFF); everything downstream of the scanner (family IMF, signal generation, the SQE
+  // gates, RTB refresh) is WIRED but DORMANT until paper-active turns on (B8.5),
+  // rendered as an explicit "awaiting activation" state — NEVER 0 (dormant != zero,
+  // MUST-2). This EARLY-RETURN is fully independent of the VTS `data`/`isLoading` props
+  // (ActiveScannerStage + ActivePipelineTail self-fetch the active-engine endpoints), and
+  // it SUPERSEDES the interim inline `gateDisposition === 'enforce'` conditionals in the
+  // VTS ('tag') render path below (B8.3b) — those are now unreachable on Paper/Live and
+  // get swept when Part 2 wires the funnel counters into the dormant block here.
+  if (gateDisposition === 'enforce' && modeTail) {
+    const modeLabel = modeTail === 'paper' ? 'Paper' : 'Live';
+    const DOWNSTREAM_STAGES = [
+      'Family strength filters (LQ / VN / DI)',
+      'Signal generation + pre-SQE rejections',
+      'SQE quality gates (per-gate screening)',
+      'Ready-to-Buy refresh (refreshed / promoted / rejected)',
+    ];
+    return (
+      <div className="space-y-4 max-w-4xl" data-testid="fd-enforce-panel">
+        <div className="rounded-md border border-blue-400/40 bg-blue-500/10 px-3 py-2 text-xs text-muted-foreground" data-testid="shared-scanner-banner">
+          {modeLabel} mode: the scanner stage below is this mode's OWN scan (its {modeTail} thresholds), live now even though active trading is off. Everything downstream — family strength filters, signal generation, the SQE quality gates, and Ready-to-Buy refresh — is wired but DORMANT; it fills with real data when {modeTail} trading turns on (B8.5).
+        </div>
+        <ActiveScannerStage mode={modeTail} />
+        {/* Downstream stages — wired, DORMANT until switch-on (MUST-2: dormant != zero) */}
+        <Card>
+          <CardHeader className="py-3">
+            <CardTitle className="text-lg">Downstream Pipeline — awaiting activation</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2 text-sm">
+              {DOWNSTREAM_STAGES.map((label) => (
+                <div key={label} className="flex items-center justify-between rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2" data-testid="fd-downstream-dormant">
+                  <span>{label}</span>
+                  <span className="text-xs text-muted-foreground">awaiting activation — populates at switch-on (B8.5)</span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+        <ActivePipelineTail mode={modeTail} />
+      </div>
+    );
+  }
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">

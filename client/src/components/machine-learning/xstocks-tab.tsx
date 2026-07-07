@@ -329,15 +329,24 @@ export function XstocksTab({ gateDisposition = 'tag', modeTail = null }: {
         </CardContent>
       </Card>
 
-      {/* 4. B73 Exit Strategy Ablation — REUSED rich crypto component, scoped via endpointBase */}
-      <div data-testid="xstocks-exit-ablation-section">
-        <ExitStrategyAblationSection endpointBase="/api/xstocks/exit-strategy-ablation" assetClass="xstock_spot" />
-      </div>
-
-      {/* 5. B67 Factor Calibration — REUSED rich crypto component, scoped via endpointBase */}
-      <div data-testid="xstocks-factor-calibration-section">
-        <FactorCalibrationSection endpointBase="/api/xstocks/factor-calibration" assetClass="xstock_spot" />
-      </div>
+      {/* 4+5. Exit Strategy Ablation (B73) + Factor Calibration (B67) — VTS-ONLY.
+          P19-B8.4 OBJ-4: these are VTS Phase-25 CALIBRATION studies (exit-variant ablation +
+          factor predictive-lift over the VTS learning corpus), NOT active-path scanner/pipeline
+          diagnostics. They render ONLY on the VTS page ('tag'); on Paper/Live ('enforce') the tab
+          shows the active path, not VTS's learning. HIDDEN, not deleted — the components + their
+          /api/xstocks/exit-strategy-ablation + /api/xstocks/factor-calibration endpoints are
+          PRESERVED intact for Phase-25 (rule-18 "left intentionally / VTS-scoped"; delete only if
+          Phase-25 proves them unneeded). Kyle directive 2026-07-07. */}
+      {gateDisposition === 'tag' && (
+        <>
+          <div data-testid="xstocks-exit-ablation-section">
+            <ExitStrategyAblationSection endpointBase="/api/xstocks/exit-strategy-ablation" assetClass="xstock_spot" />
+          </div>
+          <div data-testid="xstocks-factor-calibration-section">
+            <FactorCalibrationSection endpointBase="/api/xstocks/factor-calibration" assetClass="xstock_spot" />
+          </div>
+        </>
+      )}
     </div>
   );
 }
