@@ -265,7 +265,7 @@ async function main(): Promise<void> {
              min_ts, max_ts, date_range_start, date_range_end,
              row_count, bytes_compressed, original_partition_size_bytes,
              checksum, format, compression
-           ) SELECT source_table, partition_label, 'cold', 'active', $3,
+           ) SELECT source_table, partition_label, 'cold', 'active', $2,
                     min_ts, max_ts, date_range_start, date_range_end,
                     row_count, bytes_compressed, original_partition_size_bytes,
                     checksum, format, compression
@@ -273,7 +273,12 @@ async function main(): Promise<void> {
              WHERE id = $1
              ON CONFLICT (source_table, partition_label, tier) DO UPDATE
                SET state = 'active', storage_uri = EXCLUDED.storage_uri`,
-          [c.id, null, coldUri],
+          // B-STORAGE-HARDEN OBJ-1 fix: the never-before-run Phase-2 rotation path
+          // shipped with a stray unreferenced 3rd param (`null` at $2) while the SQL
+          // used $1/$3 → Postgres "could not determine data type of parameter $2".
+          // Surfaced by the first real rotation (cold was dry-run since B75). $2 now
+          // carries the cold URI; the null placeholder is gone.
+          [c.id, coldUri],
         );
 
         // Step 4: UPDATE warm row → migrated
