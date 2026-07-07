@@ -264,20 +264,27 @@ async function main(): Promise<void> {
              source_table, partition_label, tier, state, storage_uri,
              min_ts, max_ts, date_range_start, date_range_end,
              row_count, bytes_compressed, original_partition_size_bytes,
-             checksum, format, compression
+             checksum, format, compression, verified_at
            ) SELECT source_table, partition_label, 'cold', 'active', $2,
                     min_ts, max_ts, date_range_start, date_range_end,
                     row_count, bytes_compressed, original_partition_size_bytes,
-                    checksum, format, compression
+                    checksum, format, compression, NOW()
               FROM data_archive_manifest
              WHERE id = $1
              ON CONFLICT (source_table, partition_label, tier) DO UPDATE
-               SET state = 'active', storage_uri = EXCLUDED.storage_uri`,
-          // B-STORAGE-HARDEN OBJ-1 fix: the never-before-run Phase-2 rotation path
-          // shipped with a stray unreferenced 3rd param (`null` at $2) while the SQL
-          // used $1/$3 → Postgres "could not determine data type of parameter $2".
-          // Surfaced by the first real rotation (cold was dry-run since B75). $2 now
-          // carries the cold URI; the null placeholder is gone.
+               SET state = 'active', storage_uri = EXCLUDED.storage_uri, verified_at = NOW()`,
+          // B-STORAGE-HARDEN OBJ-1 fixes (both surfaced by the first real rotation —
+          // cold was dry-run since B75, so the Phase-2 path had never executed):
+          //  (r3) the SQL used $1/$3 with a stray unreferenced null at $2 → Postgres
+          //       "could not determine data type of parameter $2"; $2 now carries the
+          //       cold URI, the null placeholder is gone.
+          //  (r4) the cold row was inserted state='active' with verified_at NULL — but
+          //       the B2 round-trip WAS verified at Step 2 above (downloadCold +
+          //       checksum match, which is why we reach this INSERT at all). Stamp
+          //       verified_at=NOW() so the manifest's audit trail reflects the
+          //       confirmed cold round-trip (Langston Step-8: verified_at is the ONLY
+          //       DB proof a cold copy landed intact — a last-copy-of-record archive
+          //       must not read 'active' on a local-checksum-only basis).
           [c.id, coldUri],
         );
 
