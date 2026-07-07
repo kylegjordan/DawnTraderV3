@@ -13479,10 +13479,40 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       });
     } catch (error) {
       console.error('[Scan24h] Error:', error);
-      res.status(500).json({ 
-        ok: false, 
-        error: error instanceof Error ? error.message : 'Failed to fetch 24h metrics' 
+      res.status(500).json({
+        ok: false,
+        error: error instanceof Error ? error.message : 'Failed to fetch 24h metrics'
       });
+    }
+  });
+
+  // P19-B8.4 Part-2: active-path FUNNEL diagnostics — the (mode, assetClass)-keyed counters (signals
+  // generated, pre-SQE rejects, SQE per-gate, RTB refresh) for BOTH asset classes, each tri-stated
+  // dormant/active (MUST-2 dormant≠zero — the client renders "awaiting activation", never a bare 0).
+  // Feeds the Paper/Live FD tabs' downstream rows; the counters stay DORMANT until active trading turns on
+  // (B8.5). Read-only telemetry (S21 active-funnel-tracker).
+  apiRouter.get('/active-engine/diagnostics/funnel', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { getActiveFunnelStats, hasActiveFunnelActivity, getActiveFunnelStartedAt } = await import('./core/observability/active-funnel-tracker.js');
+      const { ACTIVE_FUNNEL_SCHEMA } = await import('@shared/active-funnel-envelope');
+      const funnelMode: 'paper' | 'live' = req.query.mode === 'live' ? 'live' : 'paper';
+      const buildClass = (assetClass: 'crypto_spot' | 'xstock_spot') => ({
+        status: (hasActiveFunnelActivity(funnelMode, assetClass) ? 'active' : 'dormant') as 'active' | 'dormant',
+        ...getActiveFunnelStats(funnelMode, assetClass),
+      });
+      const envelope: import('@shared/active-funnel-envelope').ActiveFunnelEnvelope = {
+        schema: ACTIVE_FUNNEL_SCHEMA,
+        mode: funnelMode,
+        startedAt: getActiveFunnelStartedAt(),
+        byAssetClass: {
+          crypto_spot: buildClass('crypto_spot'),
+          xstock_spot: buildClass('xstock_spot'),
+        },
+      };
+      res.json(envelope);
+    } catch (error) {
+      console.error('[active-funnel] Error:', error);
+      res.status(500).json({ ok: false, error: error instanceof Error ? error.message : 'Failed to fetch active funnel diagnostics' });
     }
   });
 

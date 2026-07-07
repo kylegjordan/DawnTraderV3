@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { RefreshCw, AlertTriangle } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import type { FilterDiagnosticsData } from "./vts-shared";
+import type { ActiveFunnelEnvelope } from "@shared/active-funnel-envelope";
 import { gateAggregateColumns, type GateDisposition } from "./gate-columns";
 
 /**
@@ -177,6 +178,105 @@ function ActiveScannerStage({ mode }: { mode: 'paper' | 'live' }) {
   );
 }
 
+/**
+ * P19-B8.4 Part-2 — the mode's active-path DOWNSTREAM funnel (Signal generation + pre-SQE / SQE per-gate /
+ * RTB refresh), from the (mode, assetClass)-keyed `/api/active-engine/diagnostics/funnel`. WIRED but the
+ * counters are DORMANT until active trading turns on (B8.5): while `status === 'dormant'` each stage renders
+ * an explicit "awaiting activation" row — NEVER a bare 0 (MUST-2 dormant≠zero); once `'active'`, the real
+ * per-stage breakdown renders. A failed load shows an ERROR, never a silent blank (OBJ-8).
+ */
+function ActiveDownstreamFunnel({ mode, assetClass }: { mode: 'paper' | 'live'; assetClass: 'crypto_spot' | 'xstock_spot' }) {
+  const q = useQuery<ActiveFunnelEnvelope>({
+    queryKey: ['/api/active-engine/diagnostics/funnel', mode],
+    queryFn: () => apiFetch(`/api/active-engine/diagnostics/funnel?mode=${mode}`),
+    refetchInterval: 30000,
+  });
+  const cls = q.data?.byAssetClass?.[assetClass];
+  const isActive = cls?.status === 'active';
+  const fmt = (n: number | undefined | null): string => (n === undefined || n === null ? '—' : n.toLocaleString());
+  const rows = (o: Record<string, number> | undefined): [string, number][] =>
+    Object.entries(o ?? {}).sort((a, b) => b[1] - a[1]);
+  const DORMANT_STAGES = [
+    'Family strength filters (LQ / VN / DI)',
+    'Signal generation + pre-SQE rejections',
+    'SQE quality gates (per-gate screening)',
+    'Ready-to-Buy refresh (refreshed / promoted / rejected)',
+  ];
+  const StageBlock = ({ title, children }: { title: string; children: React.ReactNode }) => (
+    <div>
+      <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-1">{title}</div>
+      {children}
+    </div>
+  );
+  const KvRows = ({ data, empty }: { data: Record<string, number> | undefined; empty: string }) => {
+    const r = rows(data);
+    if (!r.length) return <div className="text-xs text-muted-foreground">{empty}</div>;
+    return (
+      <table className="w-full text-sm"><tbody>
+        {r.map(([k, v]) => (
+          <tr key={k} className="border-b hover:bg-muted/30"><td className="p-1.5">{k}</td><td className="p-1.5 text-right font-mono">{fmt(v)}</td></tr>
+        ))}
+      </tbody></table>
+    );
+  };
+
+  return (
+    <Card>
+      <CardHeader className="py-3">
+        <CardTitle className="text-lg flex items-center justify-between">
+          <span>Downstream Pipeline{isActive ? '' : ' — awaiting activation'}</span>
+          <span className="text-xs font-normal text-muted-foreground">
+            {isActive ? `live ${mode} active-path counts${q.data?.startedAt ? ` · since ${new Date(q.data.startedAt).toLocaleString()}` : ''}` : 'wired — fills when active trading turns on (B8.5)'}
+          </span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {q.isError ? (
+          <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm">
+            <AlertTriangle className="w-4 h-4 text-destructive" />
+            <span>Couldn't load the active-path funnel — a data-feed failure, not zeros.</span>
+            <Button variant="outline" size="sm" className="ml-auto" onClick={() => q.refetch()}>
+              <RefreshCw className="w-3 h-3 mr-1" /> Retry
+            </Button>
+          </div>
+        ) : !isActive ? (
+          <div className="space-y-2 text-sm">
+            {DORMANT_STAGES.map((label) => (
+              <div key={label} className="flex items-center justify-between rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2" data-testid="fd-downstream-dormant">
+                <span>{label}</span>
+                <span className="text-xs text-muted-foreground">awaiting activation — populates at switch-on (B8.5)</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="space-y-4" data-testid="fd-downstream-active">
+            <StageBlock title={`Signal generation + pre-SQE rejections — ${fmt(cls?.signalsGenerated)} signals generated`}>
+              <KvRows data={cls?.preSqeRejects} empty="No pre-SQE rejections in this window." />
+            </StageBlock>
+            <StageBlock title={`SQE quality gates — ${fmt(cls?.sqePassed)} passed / ${fmt(cls?.sqeEvaluated)} evaluated`}>
+              <KvRows data={cls?.sqeGateRejects} empty="No SQE gate rejections in this window." />
+            </StageBlock>
+            <StageBlock title="Ready-to-Buy refresh">
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5 text-sm">
+                <div><span className="text-muted-foreground block text-xs">Cycles</span><span className="font-mono font-semibold">{fmt(cls?.rtbRefresh.cyclesRun)}</span></div>
+                <div><span className="text-muted-foreground block text-xs">Refreshed</span><span className="font-mono font-semibold">{fmt(cls?.rtbRefresh.refreshedAttempted)}</span></div>
+                <div><span className="text-muted-foreground block text-xs">Reconfirmed</span><span className="font-mono font-semibold text-green-600">{fmt(cls?.rtbRefresh.reconfirmed)}</span></div>
+                <div><span className="text-muted-foreground block text-xs">Rejected (re-SQE)</span><span className="font-mono font-semibold text-red-500">{fmt(cls?.rtbRefresh.rejectedInRefresh)}</span></div>
+                <div><span className="text-muted-foreground block text-xs">Promoted</span><span className="font-mono font-semibold">{fmt(cls?.rtbRefresh.promoted)}</span></div>
+              </div>
+              {/* MUST-4: the two SQE-attempt phases are TWO labelled numbers, never a silent sum. */}
+              <div className="mt-2 text-xs text-muted-foreground">
+                SQE evaluations (honest double-count): <span className="font-mono">{fmt(cls?.sqeAttempts.atGeneration)}</span> at generation ·
+                {' '}<span className="font-mono">{fmt(cls?.sqeAttempts.atRefresh)}</span> during RTB refresh — counted separately, not summed.
+              </div>
+            </StageBlock>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 // Batch 19H: Filter Pipeline Diagnostics Panel
 // B79.0i.a: exported so xstocks-tab can re-render same panel with xstock-scoped data
 // P19-B8.3 (OBJ-3c/OBJ-7): the panel is now MODE-AWARE via gateDisposition —
@@ -221,12 +321,6 @@ export function FilterDiagnosticsPanel({ data, isLoading, gateDisposition = 'tag
     // Crypto's scanner stage is ActiveScannerStage (below). xStock's is the ScannerCycleHeader
     // rendered by xstocks-tab ABOVE this panel — so the banner points "above" for xStock.
     const scannerRef = isXstock ? 'the scanner metrics above are' : 'the scanner stage below is';
-    const DOWNSTREAM_STAGES = [
-      'Family strength filters (LQ / VN / DI)',
-      'Signal generation + pre-SQE rejections',
-      'SQE quality gates (per-gate screening)',
-      'Ready-to-Buy refresh (refreshed / promoted / rejected)',
-    ];
     return (
       <div className="space-y-4 max-w-4xl" data-testid="fd-enforce-panel">
         <div className="rounded-md border border-blue-400/40 bg-blue-500/10 px-3 py-2 text-xs text-muted-foreground" data-testid="shared-scanner-banner">
@@ -235,22 +329,9 @@ export function FilterDiagnosticsPanel({ data, isLoading, gateDisposition = 'tag
         {/* Crypto scanner stage only — xStock's scanner stage is its own ScannerCycleHeader
             above this panel (the active-engine on-demand scan is Kraken-crypto-only). */}
         {!isXstock && <ActiveScannerStage mode={modeTail} />}
-        {/* Downstream stages — wired, DORMANT until switch-on (MUST-2: dormant != zero) */}
-        <Card>
-          <CardHeader className="py-3">
-            <CardTitle className="text-lg">Downstream Pipeline — awaiting activation</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2 text-sm">
-              {DOWNSTREAM_STAGES.map((label) => (
-                <div key={label} className="flex items-center justify-between rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2" data-testid="fd-downstream-dormant">
-                  <span>{label}</span>
-                  <span className="text-xs text-muted-foreground">awaiting activation — populates at switch-on (B8.5)</span>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+        {/* Downstream funnel — WIRED to the active-funnel endpoint; DORMANT ("awaiting activation",
+            never 0 — MUST-2) until the writers land (B8.4b) + active trading turns on (B8.5). */}
+        <ActiveDownstreamFunnel mode={modeTail} assetClass={assetClass} />
         <ActivePipelineTail mode={modeTail} />
       </div>
     );
