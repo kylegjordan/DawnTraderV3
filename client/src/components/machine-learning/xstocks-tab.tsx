@@ -325,7 +325,7 @@ export function XstocksTab({ gateDisposition = 'tag', modeTail = null }: {
           </p>
         </CardHeader>
         <CardContent>
-          <FilterDiagnosticsPanel data={filterData} isLoading={filterLoading} gateDisposition={gateDisposition} modeTail={modeTail} />
+          <FilterDiagnosticsPanel data={filterData} isLoading={filterLoading} gateDisposition={gateDisposition} modeTail={modeTail} assetClass="xstock_spot" />
         </CardContent>
       </Card>
 

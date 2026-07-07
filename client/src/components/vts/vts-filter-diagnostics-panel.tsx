@@ -192,11 +192,17 @@ export type { FilterDiagnosticsData };
 // P19-B8.3: the disposition type + aggregate-column contract live in the pure,
 // unit-tested gate-columns module (re-exported here for existing importers).
 export type { GateDisposition };
-export function FilterDiagnosticsPanel({ data, isLoading, gateDisposition = 'tag', modeTail = null }: {
+export function FilterDiagnosticsPanel({ data, isLoading, gateDisposition = 'tag', modeTail = null, assetClass = 'crypto_spot' }: {
   data: FilterDiagnosticsData | undefined;
   isLoading: boolean;
   gateDisposition?: GateDisposition;
   modeTail?: 'paper' | 'live' | null;
+  // P19-B8.4: which asset class this panel scopes. The active-engine on-demand scan
+  // (ActiveScannerStage) is CRYPTO-ONLY (`performUniverseScan` = Kraken crypto universe,
+  // no xStock equivalent). On the xStock tab the scanner stage is xstocks-tab's OWN
+  // ScannerCycleHeader (rendered above this panel), so we do NOT render the crypto
+  // ActiveScannerStage there — it would show crypto's universe on the xStock tab.
+  assetClass?: 'crypto_spot' | 'xstock_spot';
 }) {
   // P19-B8.4 (OBJ-1/2/3): on Paper/Live ('enforce') the tab shows the mode's OWN
   // active-path funnel, NOT the VTS feed. The scanner stage renders the mode-keyed
@@ -211,6 +217,10 @@ export function FilterDiagnosticsPanel({ data, isLoading, gateDisposition = 'tag
   // get swept when Part 2 wires the funnel counters into the dormant block here.
   if (gateDisposition === 'enforce' && modeTail) {
     const modeLabel = modeTail === 'paper' ? 'Paper' : 'Live';
+    const isXstock = assetClass === 'xstock_spot';
+    // Crypto's scanner stage is ActiveScannerStage (below). xStock's is the ScannerCycleHeader
+    // rendered by xstocks-tab ABOVE this panel — so the banner points "above" for xStock.
+    const scannerRef = isXstock ? 'the scanner metrics above are' : 'the scanner stage below is';
     const DOWNSTREAM_STAGES = [
       'Family strength filters (LQ / VN / DI)',
       'Signal generation + pre-SQE rejections',
@@ -220,9 +230,11 @@ export function FilterDiagnosticsPanel({ data, isLoading, gateDisposition = 'tag
     return (
       <div className="space-y-4 max-w-4xl" data-testid="fd-enforce-panel">
         <div className="rounded-md border border-blue-400/40 bg-blue-500/10 px-3 py-2 text-xs text-muted-foreground" data-testid="shared-scanner-banner">
-          {modeLabel} mode: the scanner stage below is this mode's OWN scan (its {modeTail} thresholds), live now even though active trading is off. Everything downstream — family strength filters, signal generation, the SQE quality gates, and Ready-to-Buy refresh — is wired but DORMANT; it fills with real data when {modeTail} trading turns on (B8.5).
+          {modeLabel} mode: {scannerRef} this mode's OWN scan (its {modeTail} thresholds), live now even though active trading is off. Everything downstream — family strength filters, signal generation, the SQE quality gates, and Ready-to-Buy refresh — is wired but DORMANT; it fills with real data when {modeTail} trading turns on (B8.5).
         </div>
-        <ActiveScannerStage mode={modeTail} />
+        {/* Crypto scanner stage only — xStock's scanner stage is its own ScannerCycleHeader
+            above this panel (the active-engine on-demand scan is Kraken-crypto-only). */}
+        {!isXstock && <ActiveScannerStage mode={modeTail} />}
         {/* Downstream stages — wired, DORMANT until switch-on (MUST-2: dormant != zero) */}
         <Card>
           <CardHeader className="py-3">
