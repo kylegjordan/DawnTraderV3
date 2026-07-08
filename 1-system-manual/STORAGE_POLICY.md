@@ -30,7 +30,8 @@ So a given day's data (for a 90-day-hot table) lives: ~90 days HOT → the follo
 
 | Table(s) | Kind | HOT retention | Then |
 |---|---|---|---|
-| `xstock_spot_ticker_snap`, `xstock_perp_ticker_snap`, `crypto_spot_ticker_snap` | bid/ask quote stream | **30 d** | WARM → COLD |
+| `xstock_spot_ticker_snap` | bid/ask quote stream (**DAILY-partitioned** from 2026-08-01 — true rolling-30 hot window; Wave D OBJ-3) | **30 d** | WARM → COLD |
+| `xstock_perp_ticker_snap`, `crypto_spot_ticker_snap` | bid/ask quote stream (monthly-partitioned) | **30 d** | WARM → COLD |
 | `xstock_spot_ohlc_1m`, `xstock_perp_ohlc_1m`, `crypto_spot_ohlc_1m` | 1-minute price bars | **365 d** | WARM → COLD |
 | `signal_eval_archive`, `pair_scan_archive`, `exit_decision_archive`, `macro_feed_archive`, `signal_eval_provenance` (the 5 B70 analytics tables) | trading-analysis records | **90 d** | WARM → COLD *(B-STORAGE-HARDEN Wave C, 2026-07-08 — previously DROP-only, now preserved)* |
 | `context_bridge_log` | dev/telemetry | 14 d | WARM → COLD |
@@ -45,7 +46,8 @@ So a given day's data (for a 90-day-hot table) lives: ~90 days HOT → the follo
 - **`b75-retention-sweep.ts`** (cron `15 2 * * *`): the single retention owner. Exports each eligible HOT partition → WARM (export → upload → download-verify → DROP-only-after-verify), with adaptive per-day slicing for large partitions + an O_EXCL run-lock so a long pass can't overlap. Covers the B74 market-data tables **and** (since Wave C) the 5 B70 analytics tables.
 - **`b75-cold-rotator.ts`** (cron `0 3 1 * *`): table-agnostic WARM → COLD rotation at 365 d; stamps `verified_at` after a re-download checksum match.
 - **`b75-cold-liveness.ts`** (cron `0 4 * * 1`): weekly cold round-trip canary — a dead-key detector so the cold credentials can't silently rot between real rotations.
-- **`b-storage-archival-health.ts`** (cron `0 5 * * *`): watchdog that fires a §10.5 alert if any sweep goes stale or reports failures.
+- **`b-storage-archival-health.ts`** (cron `0 5 * * *`): watchdog that fires a §10.5 alert if any sweep goes stale or reports failures — and (Wave D) a daily-partition **forward-coverage check** that alerts if the furthest-provisioned daily partition is < 4 days ahead (or none exist at/after cutover). Runs in its own process so a dead daily creator can't vouch for itself.
+- **`b74-create-daily-partitions.ts`** (cron `0 1 * * *`, Wave D): pre-creates `xstock_spot_ticker_snap_YYYY_MM_DD` daily partitions for a 14-day forward window (self-heals the current day; skips pre-cutover days). The monthly creator (`b74-create-monthly-partitions.ts`) EXCLUDES the daily-partitioned table at/after the 2026-08-01 cutover so the two never overlap.
 - **`database-monitor.ts`** (in-app, 24h): fires a §10.5 alert when logical DB size crosses 65% (warning) / 80% (critical) of the 200 GB Supabase plan cap.
 - **`b70-create-monthly-partitions.ts`** (cron `30 2 28 * *`) + `b74-create-monthly-partitions.ts`: pre-create forward partitions.
 
@@ -54,7 +56,7 @@ So a given day's data (for a 90-day-hot table) lives: ~90 days HOT → the follo
 ## 5. Capacity + the disk ceiling
 
 - Supabase Pro disk **auto-expands** at ~90% usage (+50% per step) and **never shrinks**; the practical auto-expand ceiling is **200 GB** (`database_monitor.plan_cap_mb = 204800`). Logical data is measured against this cap; the tiering keeps hot data moving off so logical size stays well under it.
-- The #1 hot consumer is `xstock_spot_ticker_snap` (~63 GB/mo at the pre-Wave-D 1-tick/~1.8s capture) — being reduced ~5–6× in Wave D by slowing the quote-snapshot cadence (NOT the price bars; see §6).
+- The #1 hot consumer is `xstock_spot_ticker_snap` (~63 GB/mo at the pre-Wave-D 1-tick/~1.8s capture) — reduced in Wave D two ways: OBJ-3's rolling-30 daily partitioning (~2× structural) + OBJ-4's slower quote-snapshot cadence (4000 ms ≈ ~3×), ~6× combined. This slows the quote SNAPSHOTS, NOT the price bars (see §6).
 
 ## 6. Important distinctions (avoid these traps)
 
@@ -73,6 +75,6 @@ So a given day's data (for a 90-day-hot table) lives: ~90 days HOT → the follo
 - **2026-05-06 (B75):** tiered hot/warm/cold + the never-drop directive established.
 - **2026-07-08 (B-STORAGE-HARDEN Wave A):** cold tier activated + archival-health/disk alarms wired.
 - **2026-07-08 (Wave C):** the 5 B70 analytics tables moved from DROP-only to hot→warm→cold tiering (#430); `b70-retention-sweep` deleted.
-- **2026-07-08 (Wave D, in progress):** xStock quote-snapshot capture cadence reduced (~5–6×) + rolling-30-day retention via daily partitioning for `xstock_spot_ticker_snap`.
+- **2026-07-08 (Wave D — OBJ-3 LANDED):** `xstock_spot_ticker_snap` transitioned from MONTHLY to DAILY RANGE partitions at a 2026-08-01 month-boundary cutover (transition-forward — the ~63 GB live table is never repartitioned; July + earlier stay monthly and age out) so the hot window is reclaimable one DAY at a time (true rolling ~30 d) instead of whole months. New daily partition creator (`b74-create-daily-partitions.ts`, cron `0 1 * * *`, 14-day look-ahead); the monthly creator excludes the table at/after cutover; the retention sweep parses daily-first; an independent forward-coverage watchdog alerts if the runway thins. Bounded proof: a synthetic daily partition tiered hot→warm→drop-after-verify. Also fixed #438 (the b74 creators' missing `dotenv` — the monthly creator cron had been silently failing). **OBJ-4 (capture cadence, `b74_ticker_snapshot_min_interval_ms`): flipped + live-measured per-symbol during RTH; crew-consensus value = 4000 ms (~1 capture/4.3 s, ~3× cut — 8000 was measured but pushed 61 genuine symbols past the 15 s freshness gate vs 4000's 10, so it was stepped down). Combined with OBJ-3's rolling-30, ~6× total hot reduction. Throttle is bootstrap-cached → a change needs an app restart. Pending Kyle's risk sign-off on the ~10 thin-token freshness regressions.**
 
 > Maintained alongside the B-STORAGE-HARDEN batch + any future storage/retention change. Update this file whenever a retention window, tier boundary, tunable, or the machinery changes.

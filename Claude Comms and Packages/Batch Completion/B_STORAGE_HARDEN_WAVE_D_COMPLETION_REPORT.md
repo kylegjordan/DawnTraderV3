@@ -1,0 +1,46 @@
+# B-STORAGE-HARDEN — Wave D Completion Report (OBJ-3 daily partitioning + OBJ-4 capture-cadence reduction) — THE BATCH-CLOSING WAVE
+
+**Batch:** B-STORAGE-HARDEN (Wave D = OBJ-3 + OBJ-4; the batch fully CLOSES here) · **change-class:** architecture · **Owner:** CC-A · **Reviewer:** Langston
+**Date:** 2026-07-08 · **Commits:** `d66c856e7` (OBJ-3 code + migration) + `e5cf6b8fd` (watchdog connect hardening) + `c9c0ba3d7` (#438 dotenv fix) · **CI:** 4-green ×3 (last `28942185566`) · **Deploy:** staging (migration-first) HTTP 200
+**Scope:** `B_STORAGE_HARDEN_WAVE_D_SCOPE.md` · **Pre-audit:** `B_STORAGE_HARDEN_WAVE_D_PRE_AUDIT.md` · **Step-4 packet:** `Langston Design Asks/B_STORAGE_HARDEN_WAVE_D_STEP4.md` (+ ADDENDUM)
+
+> **Kyle directive 2026-07-08:** build + deploy all Wave D code, but do NOT flip the capture cadence until liquid US market hours. Honored — OBJ-3 (code + schema) deployed on 2026-07-08 morning; OBJ-4 (the DB-config cadence flip) was performed during liquid RTH (~14:30 UTC / 10:30 ET).
+
+## Objectives
+| Obj | Status | Evidence |
+|---|---|---|
+| **OBJ-3 — rolling-30 hot window via DAILY partitioning of `xstock_spot_ticker_snap`** | ✅ **YES** | Monthly→daily transition-forward at the 2026-08-01 cutover; migration dropped 9 empty future monthlies + seeded 16 dailies (Aug 1–16); seam abuts exactly (DB TZ=UTC); daily creator cron installed + idempotent; forward-coverage watchdog live; bounded hot→warm→drop-after-verify proof passed. |
+| **OBJ-4 — reduce xStock quote-capture cadence** | ✅ **YES** — flipped + live-measured during liquid RTH; **crew-consensus value = 4000 ms** (~1 capture/4.3 s, ~3× cut) | Flipped 1000→8000 first: clean-RTH per-symbol measure showed aggregate p90=10.69 s (pass) but **83 symbols newly pushed past the 15 s freshness gate (61 genuine)** — too much coverage loss. Stepped to **4000**: p90=6.35 s, **21 newly-breach (10 genuine, ~4 meaningful: EWN/STRC/DHR/NTAP)**. Unanimous consensus (Langston + CC-B + CC-A) = 4000. Pending Kyle's risk sign-off on the ~10 thin-token regressions (all peripheral xStock tokens; the liquid core stays fresh). |
+
+## What shipped (OBJ-3)
+`xstock_spot_ticker_snap` (the #1 hot consumer, ~63 GB/mo) moves from MONTHLY to **DAILY** RANGE partitions at a **2026-08-01 month-boundary cutover** so the hot window is reclaimable one day at a time (a true rolling ~30 d) rather than only whole months. **Transition-forward — the ~63 GB live table is never repartitioned:** July-2026 + earlier stay monthly and age out under the same B75 sweep; from the cutover, new partitions are daily.
+
+- **`sweep-slicing.ts`** — NEW pure `classifyPartition()` (daily `_YYYY_MM_DD` regex tested BEFORE monthly, both anchored + calendar-validity guard) + `isPartitionEligible()` (daily `rangeEnd<=cutoff` rolling; monthly `rangeStart<cutoffMonthStart` legacy byte-equivalent). `b75-retention-sweep.ts` `listOldPartitions` uses them, threading the day-granular cutoff + a label-equality convergence comment.
+- **`b74-create-daily-partitions.ts` (NEW)** — daily creator, cron `0 1 * * *`, 14-day look-ahead, self-heals current day, skips pre-cutover.
+- **`b74-create-monthly-partitions.ts`** — EXCLUDES daily-partitioned tables at/after cutover (`isDailyPartitionedForMonth`). **`daily-partition-cutover.ts` (NEW)** — single-source cutover registry.
+- **`b75-cold-rotator.ts`** — optional per-table warm-window knob (empty default = byte-identical).
+- **`b-storage-archival-health.ts`** — independent daily-partition forward-coverage watchdog (alerts if runway < 4 days or none at/after cutover; connect-inside-try robustness).
+- **Migration** — DETACH+DROP empty future monthlies at/after cutover (ABORT if any holds rows) + seed 16 dailies. Rollback SQL on disk (out of MANIFEST).
+- **18 golden tests** incl. an adversarial mixed-shape single-pass + a daily↔month-machinery convergence lock (Langston Finding-1).
+
+## Verification (Step-7 — all met)
+- **Seam:** migration dropped the 9 empty future monthlies (2026_08..2027_04, all rows=0); created exactly 16 dailies; July monthly `[…,2026-08-01)` → first daily `[2026-08-01,…)` abut with 0 overlap; DB session TZ = UTC.
+- **App:** HTTP 200 after migrate-first restart.
+- **Daily creator:** cron installed in root crontab (`0 1 * * *`); manual smoke-run clean — `0 new (0 self-healed, 15 pre-cutover skipped)` = idempotent + pre-cutover gate correct.
+- **Watchdog:** `checkDailyPartitionRunway` runs, logs pre-cutover skip, `all_ok=true` (no false-fire in July — the pre-cutover gate).
+- **OBJ-3 bounded tiering proof:** a synthetic daily partition `xstock_spot_ticker_snap_2025_01_15` (uncovered date) tiered hot→warm→drop-after-verify (`mode=whole rows=2 bytes_hot=49152 bytes_warm=298`, manifest `tier=warm state=active verified_at=set`, hot partition dropped), then fully cleaned up (warm object + manifest row deleted, 0 residual). Confirms daily-first parse + daily eligibility + the whole convergence path on the LIVE sweep. (Historical note: a first attempt on `2026-05-15` correctly hit the sweep's idempotency skip — a warm day-slice manifest row from the old May monthly already existed — demonstrating the idempotent-skip guard; retried on the clean 2025 date.)
+- **OBJ-4 (liquid RTH, 2026-07-08 ~14:30 UTC / 10:30 ET):** throttle is bootstrap-cached (`setTickerThrottle`), so the flip = DB constant + app restart. Flipped 1000→8000, measured per-symbol inter-capture gaps over a clean ≥12-min RTH window vs the pre-flip (1000) baseline. **8000:** aggregate p90=10.69 s (< 12 s gate) but per-symbol tail failed — **83/475 symbols newly crossed the 15 s freshness gate (61 with genuine headroom)**. Stepped to **4000:** aggregate p90=6.35 s, **21/475 newly-breach, 10 genuine** (6 of the 10 just tip to 15.0–15.5 s; ~4 meaningful — EWN 11.4→20.7, STRC 11.7→19.2, DHR 12.1→17.5, NTAP 8.8→15.5). All are thin xStock *tokens*; the liquid core (AAPL/NVDA/SPY, native ~1.3 s) stays fresh. **Unanimous crew consensus = 4000** (Langston + CC-B + CC-A): 4000 stacks on OBJ-3's rolling-30 for ~6× total vs 8000's ~12×, and the incremental cut doesn't justify 6× the freshness-coverage loss heading toward live. Kyle's risk sign-off on the ~10 thin-token regressions is the one open decision. (⚠️ A first open-ended query reported 359 "regressions" — a measurement artifact from a 6-hour window that swept in the #439 feed stall + market close; caught + corrected to the clean bounded-window numbers above.)
+- **Q1.5 (aggregation safety — CONFIRMED):** `xstock_spot_ohlc_1m` decision bars held a steady ~400/min THROUGH the entire throttle=8000 window (14:32–14:47) — **throttle-independent**, so the cadence cut lands on raw quote captures, NOT the 1-min bars the strategies decide off. (A SEPARATE xStock equity OHLC-channel silent-stall surfaced ~14:52, unrelated to the throttle — logged as #439, homed to a `B-XSTOCK-OHLC-STALL` batch.)
+- **#438 fix:** the daily creator runs clean post-fix; the b74 creators no longer crash on a missing `DATABASE_URL`.
+- CI 4-green ×3; bench tsc-baseline clean + 31/31 sweep-helper tests.
+
+## Langston review trail
+Step-1 APPROVED (5 Qs) → Step-2 APPROVED to Step-3 (Q1 empirical throttle gate + 4 implement-time adds) → Step-4 APPROVED-for-push ("ship it") + ADDENDUM (Finding-1 must-add convergence test + Finding-2 forward-coverage watchdog, both built + re-confirmed) + July-window edge cases confirmed (pre-cutover gate + idempotent creator) + the MIN_RUNWAY_DAYS=4 vs LOOKAHEAD=14 pairing + connect-inside-try hardening. **Step-8 second-pass: `⟨pending⟩`** — Langston to verify the System Manual + SIM content updates landed (§16-bis) and the OBJ-4 measurement.
+
+## Governance files updated
+`STORAGE_POLICY.md` (§2/§3/§4/§8 daily-partitioning), `SYSTEM_MANUAL.md` (Retention+partition crons chapter + cron table), `SYSTEM_IMPACT_MAP.md` (B75 Wave D component block + daily cron), `CHANGES_AND_FIXES.md` (FIX-2026-07-08-C + -D), `RUNNING_ISSUES.md` (#438 new + resolved; #431/#433 re-homed to next storage-hygiene batch), `BATCH_CATALOG.md`, `PHASE_HISTORY.md`, `PHASE_19_PLAN.md` §5, `MULTI_ASSET_VTS_EXPANSION_PLAN.md` working-list, this report, MEMORY_CC_A (+ repo mirror) + Langston MEMORY. Migration + rollback in `drizzle/migrations/` + MANIFEST (forward only). §13 Aug-1 forward-coverage verification alert scheduled (positive-heartbeat design).
+
+## Follow-ups homed
+#431 (canary deleteCold accumulation) → next storage-hygiene batch; #433 (dup module_constants) → next schema-hygiene batch; #437 (db:migrate ledger drift) → infra/CI-hygiene. The per-table warm-window knob is left at the 365 default (a future dial).
+
+**B-STORAGE-HARDEN FULLY CLOSES at Wave D close** (Waves A + C + D all done): cold tier activated + archival alerting (A), the B70 never-drop tiering fix (C), and the xStock capture-cost reduction + rolling-30 daily partitioning (D).
