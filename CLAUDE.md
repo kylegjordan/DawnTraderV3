@@ -111,6 +111,7 @@ A batch is NOT done until every numbered objective from the scope is verifiably 
 - `1-system-manual/AUTHORITY_BASELINE.md` — constitutional baseline changes
 - `1-system-manual/RUNNING_ISSUES.md` — open issue tracker, update counts
 - `1-system-manual/ASSET_CLASS_ONBOARDING_WORKFLOW.md` — when Phase 24 learnings surface (see §3.3)
+- `1-system-manual/STORAGE_POLICY.md` — **canonical storage & retention policy reference (Kyle directive 2026-07-08).** The single statement of the hot/warm/cold tiers, per-table retention windows, the move-not-delete path + timing, tunable knobs, and the machinery. Update whenever a retention window / tier boundary / capture cadence / storage-machinery item changes (the System Manual + SIM carry the implementation; this file carries the policy).
 - `CLAUDE.md` (this file) — stable workflow/governance/identity changes only, NOT per-batch state
 - `CC/Langston MEMORY.md` — volatile state every batch
 
