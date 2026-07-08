@@ -26,6 +26,11 @@
  * ═════════════════════════════════════════════════════════════════════════════
  */
 
+// MUST precede the ../db.js import: db.ts throws at module-load if DATABASE_URL
+// is unset, and the deploy cron's `su - deploy -c` login shell does NOT export
+// it — so the script loads its own env from .env first (matches b75-cold-rotator
+// / b75-retention-sweep). Without this the cron dies on "DATABASE_URL must be set".
+import 'dotenv/config';
 import { db } from '../db.js';
 import { sql } from 'drizzle-orm';
 import {

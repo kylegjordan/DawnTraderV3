@@ -22,6 +22,13 @@
  * ═════════════════════════════════════════════════════════════════════════════
  */
 
+// MUST precede ../db.js: db.ts throws at module-load if DATABASE_URL is unset,
+// and the deploy cron's `su - deploy -c` login shell does NOT export it — so load
+// .env first (matches b75-cold-rotator / b75-retention-sweep). Discovered during
+// B-STORAGE-HARDEN Wave D deploy: this cron had been silently failing on
+// "DATABASE_URL must be set" every run (partitions were provisioned by another
+// path); adding this makes the cron actually work. See RUNNING_ISSUES #438.
+import 'dotenv/config';
 import { db } from '../db.js';
 import { sql } from 'drizzle-orm';
 import { isDailyPartitionedForMonth } from '../services/data-archive/daily-partition-cutover.js';
