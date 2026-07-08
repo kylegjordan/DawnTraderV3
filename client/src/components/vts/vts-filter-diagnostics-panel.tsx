@@ -214,6 +214,8 @@ function ActiveScannerStage({ mode, data, isLoading }: { mode: 'paper' | 'live';
     queryKey: ['/api/active-engine/diagnostics/scan-latest', mode],
     queryFn: () => apiFetch(`/api/active-engine/diagnostics/scan-latest?mode=${mode}`),
     refetchInterval: 15000,
+    refetchIntervalInBackground: true, // keep the live next-scan countdown re-syncing even off-focus (the old
+                                       // Filter-Insights pattern — else the countdown target drifts to "scanning…")
   });
   const l = latest.data?.data ?? null;         // /scan-latest is wrapped { ok, data }
   const ls = (data as any)?.lastScan ?? null;

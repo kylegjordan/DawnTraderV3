@@ -157,6 +157,7 @@ export function CryptoFilterDiagnosticsTab({ gateDisposition = 'tag', modeTail =
     queryKey: ['/api/vts/filter-diagnostics'],
     queryFn: () => apiFetch('/api/vts/filter-diagnostics'),
     refetchInterval: 15000,
+    refetchIntervalInBackground: true, // B8.4c: keep the crypto scanner card's next-scan countdown live off-focus
     staleTime: 10000,
   });
   if (isError) {

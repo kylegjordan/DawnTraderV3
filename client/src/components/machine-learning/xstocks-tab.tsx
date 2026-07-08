@@ -247,6 +247,7 @@ export function XstocksTab({ gateDisposition = 'tag', modeTail = null }: {
     queryKey: ['/api/xstocks/filter-diagnostics', { asset_class: 'xstock_spot' }],
     queryFn: () => apiFetch('/api/xstocks/filter-diagnostics'),
     refetchInterval: 15000,
+    refetchIntervalInBackground: true, // B8.4c: keep the scanner card's next-scan countdown live off-focus
     staleTime: 10000,
   });
 
