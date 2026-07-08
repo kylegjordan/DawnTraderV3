@@ -22,7 +22,15 @@ Wave D slowed xStock quote capture to ~every 4 s. Clean-RTH measurement: this oc
 - Depth-median sample-floor + OHLC-coverage checks produce sane numbers.
 - CI 4-green; governance (SIM component entry + this scope + pre-audit + completion + RUNNING_ISSUES #441 + BATCH_CATALOG + a weekly-report artifact location). SysManual likely N/A (analysis/observability, not architecture) — judged at pre-audit.
 
-## Open questions for Langston (Step-1)
+## ★ Step-1 APPROVED (Langston 2026-07-08) — locked decisions folded in
+- **Q1 delivery:** §10.5 alert path (reuses infra + ack tracking; no parallel webhook).
+- **Q2 flag:** `module_constants` `xstock_freshness_monitor.enabled` (cold-start default = enabled). **Fail-LOUD (rule 10):** a missing/unreadable flag does NOT silently no-op — the run still fires and the alert states the flag was unreadable.
+- **Q3 report table:** **BUILD the `xstock_freshness_report` table** as the durable week-over-week trend SSOT (file-only would force re-parsing prior artifacts). Keep the dated file as the human-readable artifact. Table written/read ONLY by this job.
+- **Q4 class:** `non_architecture` holds (read-only over live tables + report + alert). The new table is observability-scope → **SIM observability-component entry (NOT System Manual).**
+- **Q5 EXTRA CHECK (folded into OBJ-2):** add a **per-symbol pre-vs-post-Wave-D 1-min bar HIGH-LOW RANGE comparison** — the 4000 ms cadence reduces ticks-per-bar, which can COMPRESS the 1-min bar's high-low range (fewer samples → understated intraday range). That range feeds ATR / volatility-regime inputs = **Net-Expectancy-relevant**, not just data-quality. This covers sample-BIAS; depth-median + OHLC-coverage cover sample-COUNT.
+- **★ OBJ-3 ALERT-FRAMING LOCK:** the Kyle-facing summary MUST say, in plain language, **"this is what COULD have been blocked, not what we actually lost — true loss isn't measurable until active trading is live."** Reading potential-loss as actual-loss would defeat the condition Kyle set.
+
+## Open questions for Langston (Step-1) — RESOLVED above
 1. Delivery: §10.5 info-alert-with-plain-language-body (auto-posts Discord + CC relays) vs a direct staging→Discord webhook post. I lean the alert path (reuses existing infra + a CC turns numbers into Kyle-plain-language). Agree?
 2. "Until satisfied" control: a `module_constants` flag (`xstock_freshness_monitor.enabled`) the cron checks, so we can stop it without touching cron. Agree?
 3. Report artifact home: a dated file under `/var/log/dawntrader/` + optionally a small `xstock_freshness_report` table for trend history. Table worth it for week-over-week, or keep it file-only v1?
