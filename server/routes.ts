@@ -8156,6 +8156,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           cyclesCompleted: diag.cyclesCompleted,
           cyclesSkippedMarketClosed: diag.cyclesSkippedMarketClosed,
           lastUniverseSize: diag.lastUniverseSize,
+          cycleBatchSize: diag.cycleBatchSize, // P19-B8.4c: per-cycle scan target (75)
           lastArcaOpen: diag.lastArcaOpen,
           pairsScannedLastCycle: diag.pairsScannedLastCycle,
           pairsFreshLastCycle: diag.pairsFreshLastCycle,

@@ -160,7 +160,10 @@ export interface ScanDiagnostics {
 
 export interface FilterDiagnosticsData {
   ok: boolean;
-  lastScan: (ScanDiagnostics & { b63Dbs?: B63DbsSnapshot; familyPaths?: Record<string, any> }) | null;
+  // P19-B8.4c REV-3: scanTargetPerCycle (300 per-cycle target) + krakenUniverseSize (live total universe) are
+  // surfaced read-only onto the fx5 ScanDiagnostics and ride the vts route's whole-object lastScan passthrough;
+  // typed here so the VTS crypto ScannerCard reads them without an `as any` cast.
+  lastScan: (ScanDiagnostics & { b63Dbs?: B63DbsSnapshot; familyPaths?: Record<string, any>; scanTargetPerCycle?: number; krakenUniverseSize?: number }) | null;
   rolling24h: {
     totalScans: number;
     totalPairsScanned: number;

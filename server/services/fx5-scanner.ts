@@ -170,6 +170,8 @@ export interface ScanDiagnostics {
   timestamp: string;
   mode: 'paper' | 'live';
   totalPairsScanned: number;
+  scanTargetPerCycle?: number;   // P19-B8.4c: per-cycle scan TARGET (SCANNER_PARAMS.BATCH_SIZE=300 — a guaranteed floor; actual scanned overshoots via benchmarks). Read-only telemetry.
+  krakenUniverseSize?: number;   // P19-B8.4c: live total Kraken tradable-pair universe (~1,500), from batchResult.metrics. Read-only telemetry.
   allSymbolsScanned: string[];
   quant: {
     global: {
@@ -1439,6 +1441,8 @@ export class Fx5ScannerService {
         timestamp: new Date().toISOString(),
         mode,
         totalPairsScanned: evaluatedCount,
+        scanTargetPerCycle: SCANNER_PARAMS.BATCH_SIZE,               // P19-B8.4c: 300 per-cycle target
+        krakenUniverseSize: batchResult.metrics.krakenUniverseSize, // P19-B8.4c: live total universe
         allSymbolsScanned: evaluatedSymbols,
         quant: {
           global: { ...breakdown },

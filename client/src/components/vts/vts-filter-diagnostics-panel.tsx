@@ -7,58 +7,7 @@ import { Button } from "@/components/ui/button";
 import { RefreshCw, AlertTriangle } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import type { FilterDiagnosticsData } from "./vts-shared";
-import type { ActiveFunnelEnvelope } from "@shared/active-funnel-envelope";
 import { gateAggregateColumns, type GateDisposition } from "./gate-columns";
-
-/**
- * P19-B8.3 (OBJ-3c v1) — the mode's REAL active-path tail, from existing
- * sources only (/api/active-engine/pipeline-tail): pool population, RTB queue
- * depth, the rtb-metrics gate tallies, real opens. Honest zeros until B8.4;
- * a failed load renders an ERROR, never a silent blank (OBJ-8).
- */
-function ActivePipelineTail({ mode }: { mode: 'paper' | 'live' }) {
-  const q = useQuery<any>({
-    queryKey: ['/api/active-engine/pipeline-tail', mode],
-    queryFn: () => apiFetch(`/api/active-engine/pipeline-tail?mode=${mode}`),
-    refetchInterval: 30000,
-  });
-  const d = q.data;
-  return (
-    <Card>
-      <CardHeader className="py-3">
-        <CardTitle className="text-lg flex items-center justify-between">
-          <span>{mode === 'paper' ? 'Paper' : 'Live'}-Mode Pipeline Tail</span>
-          <span className="text-xs font-normal text-muted-foreground">this mode's OWN thresholds & pipeline — zeros are honest until the switch-on (B8.4)</span>
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        {q.isError ? (
-          <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm">
-            <AlertTriangle className="w-4 h-4 text-destructive" />
-            <span>Couldn't load the pipeline tail — a data-feed failure, not zeros.</span>
-            <Button variant="outline" size="sm" className="ml-auto" onClick={() => q.refetch()}>
-              <RefreshCw className="w-3 h-3 mr-1" /> Retry
-            </Button>
-          </div>
-        ) : q.isLoading ? (
-          <div className="text-sm text-muted-foreground">Loading…</div>
-        ) : (
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 text-sm">
-            <div><span className="text-muted-foreground block text-xs">Active Pool ({mode})</span><span className="font-mono font-semibold">{d?.poolSize ?? '—'} pairs</span></div>
-            <div><span className="text-muted-foreground block text-xs">Ready-to-Buy Queue</span><span className="font-mono font-semibold">{d?.rtbQueueDepth ?? '—'} signals</span></div>
-            <div><span className="text-muted-foreground block text-xs">Gate: opened / blocked</span><span className="font-mono font-semibold">{d?.gate ? `${d.gate.openedTotal} / ${d.gate.blockedTotal}` : 'not available'}</span></div>
-            <div><span className="text-muted-foreground block text-xs">Open Positions</span><span className="font-mono font-semibold">{d?.openPositionsCount ?? '—'}</span></div>
-            {d?.gate && Object.keys(d.gate.blockedByReason ?? {}).length > 0 && (
-              <div className="sm:col-span-2 lg:col-span-4 text-xs text-muted-foreground">
-                Blocks by reason: {Object.entries(d.gate.blockedByReason).map(([r, c]) => `${r}: ${c}`).join(' · ')}
-              </div>
-            )}
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
 
 /**
  * P19-B8.4 (OBJ-1/2) — the mode's OWN scanner stage, fed by the mode-keyed
@@ -108,15 +57,19 @@ function useSecondTick(active: boolean): number {
  *  (target − now) go negative — show "scanning…" at/below 0, never a negative or wild timer.
  *  Matches the server `nextScanInMs` floor. */
 export function ScannerCard({
-  title, subtitle, statusBadges, pairsLastScan, capacity, capacityNote,
+  title, subtitle, statusBadges, pairsLastScan, perCycleTarget, totalUniverse, totalUniverseNote,
   pairsScanned24h, pairsScanned24hNote, cyclesLabel, cadenceLabel, nextScanAtMs, isError, isLoading, onRetry, testId,
 }: {
   title: string;
   subtitle?: string;
   statusBadges?: React.ReactNode;
   pairsLastScan: number | null | undefined;
-  capacity: number | null | undefined;   // null → render `capacityNote` instead (never a drift-prone constant)
-  capacityNote?: string;
+  // P19-B8.4c REV-3 (Kyle 2026-07-08): the old single "Scanner Capacity" was mislabeled (it showed the
+  // universe). Split into two honest fields: the per-cycle scan TARGET (crypto 300 / xStock 75 — a config
+  // constant surfaced read-only) and the live TOTAL UNIVERSE (crypto Kraken ~1,500 / xStock ~481).
+  perCycleTarget: number | null | undefined; // per-cycle scan target (300 / 75)
+  totalUniverse: number | null | undefined;  // live total universe; null → render `totalUniverseNote`
+  totalUniverseNote?: string;
   pairsScanned24h: number | null | undefined;
   pairsScanned24hNote?: string;            // when the 24h count is null, render this dormant note (never a bare 0)
   cyclesLabel?: string;                    // e.g. "1,266 cycles (24h)"
@@ -155,13 +108,19 @@ export function ScannerCard({
         ) : isLoading ? (
           <div className="text-sm text-muted-foreground">Loading the scanner…</div>
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5 text-sm">
+          <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 text-sm">
             <div><span className="text-muted-foreground block text-xs">Pairs Scanned (last scan)</span><span className="font-mono font-semibold" data-testid="scanner-pairs-last">{_fmtNum(pairsLastScan)}</span></div>
             <div>
-              <span className="text-muted-foreground block text-xs">Scanner Capacity</span>
-              {capacity === null || capacity === undefined || capacity <= 0
-                ? <span className="font-mono text-muted-foreground" title={capacityNote}>{capacityNote ?? '—'}</span>
-                : <span className="font-mono font-semibold" data-testid="scanner-capacity">{_fmtNum(capacity)} max</span>}
+              <span className="text-muted-foreground block text-xs" title="the number of pairs the scanner targets each scan cycle">Per-Cycle Target</span>
+              {perCycleTarget === null || perCycleTarget === undefined || perCycleTarget <= 0
+                ? <span className="font-mono text-muted-foreground">—</span>
+                : <span className="font-mono font-semibold" data-testid="scanner-per-cycle-target">{_fmtNum(perCycleTarget)}</span>}
+            </div>
+            <div>
+              <span className="text-muted-foreground block text-xs" title="the full tradable universe the scanner rotates through (live)">Total Universe</span>
+              {totalUniverse === null || totalUniverse === undefined || totalUniverse <= 0
+                ? <span className="font-mono text-muted-foreground" title={totalUniverseNote}>{totalUniverseNote ?? '—'}</span>
+                : <span className="font-mono font-semibold" data-testid="scanner-total-universe">{_fmtNum(totalUniverse)}</span>}
             </div>
             <div>
               <span className="text-muted-foreground block text-xs">Pairs Scanned (24h)</span>
@@ -178,27 +137,115 @@ export function ScannerCard({
   );
 }
 
-/** P19-B8.4c — the dormant "awaiting activation" filter-breakdown section for the Paper/Live tabs.
- *  Both scanners run in every mode, but NO filters (global or IMF) are applied in Paper/Live (active trading
- *  is off) — so the filter breakdown is genuinely dormant here (Kyle 2026-07-08). Live filter data shows only
- *  on the two VTS tabs. Never a bare 0 (MUST-2). */
-function DormantFilterBreakdown({ modeTail }: { modeTail: 'paper' | 'live' }) {
+// ── P19-B8.4c REV-3 — shared width + themed table wrapper (OBJ-7 / OBJ-9 / OBJ-10) ───────────────────────
+// OBJ-7: every Filter-Diagnostics tab (all six) mounts inside this ONE max-width so the scanner card and the
+// three pipeline tables share a single consistent width, bounded by the scanner card's rightmost column
+// ("Next Scan In"). Crypto used max-w-4xl; xStock ran full-bleed — now both use SHARED_DIAG_WIDTH.
+export const SHARED_DIAG_WIDTH = 'max-w-5xl';
+
+// OBJ-9: each of the three pipeline tables gets a DISTINCT border color, with the header bar filled that same
+// color and a bigger/bolder title. OBJ-10: the table body scrolls horizontally inside its OWN bounded
+// container (the page never scrolls sideways) and the first column is frozen (sticky) on the pipeline tables.
+const DIAG_TABLE_THEMES = {
+  summary:  { border: 'border-blue-500/70',   head: 'bg-blue-500/15' },
+  lastScan: { border: 'border-purple-500/70', head: 'bg-purple-500/15' },
+  rolling:  { border: 'border-teal-500/70',   head: 'bg-teal-500/15' },
+} as const;
+type DiagTableTheme = keyof typeof DIAG_TABLE_THEMES;
+
+/** OBJ-10 frozen-first-column class: sticky the stage/filter label so it stays visible while the numbers
+ *  scroll on a narrow (mobile) viewport. A solid bg occludes the cells scrolling underneath it. */
+export const STICKY_FIRST_COL = 'sticky left-0 z-10 bg-background';
+
+/** OBJ-10 — table-level frozen first column via Tailwind arbitrary variants: freezes every first cell (header
+ *  + body) in ONE class, so a wide live table's stage/filter label stays put while the numbers scroll. Applied
+ *  to the `<table>` element; a solid bg occludes scrolled content underneath the frozen column. */
+export const FROZEN_FIRST_COL_TABLE =
+  '[&_th:first-child]:sticky [&_th:first-child]:left-0 [&_th:first-child]:z-20 [&_th:first-child]:bg-muted ' +
+  '[&_td:first-child]:sticky [&_td:first-child]:left-0 [&_td:first-child]:z-10 [&_td:first-child]:bg-background';
+
+/** P19-B8.4c REV-3 — the shared themed table shell: colored border + filled/bolded header bar (OBJ-9) and an
+ *  own horizontal-scroll container (OBJ-10). `children` is the raw <table>. */
+function DiagTableCard({ theme, title, subtitle, children, testId }: {
+  theme: DiagTableTheme;
+  title: React.ReactNode;
+  subtitle?: React.ReactNode;
+  children: React.ReactNode;
+  testId?: string;
+}) {
+  const t = DIAG_TABLE_THEMES[theme];
   return (
-    <Card data-testid="fd-filter-breakdown-dormant">
-      <CardHeader className="py-3">
-        <CardTitle className="text-lg flex items-center justify-between gap-2">
-          <span>Global &amp; family filter breakdown</span>
-          <span className="text-xs font-normal text-muted-foreground">why pairs were filtered out</span>
+    <Card className={`border-2 ${t.border} overflow-hidden`} data-testid={testId}>
+      <CardHeader className={`py-3 ${t.head} border-b-2 ${t.border}`}>
+        <CardTitle className="text-xl font-bold flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+          <span>{title}</span>
+          {subtitle && <span className="text-xs font-normal text-muted-foreground">{subtitle}</span>}
         </CardTitle>
       </CardHeader>
-      <CardContent>
-        <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-sm text-muted-foreground">
-          Awaiting activation — the {modeTail} pipeline scans continuously, but no filters (global or family/IMF)
-          are applied in {modeTail} mode until active trading turns on (B8.5). Live filter data is on the Virtual
-          Simulations tabs, where the full pipeline runs. This fills with real {modeTail} numbers at switch-on.
-        </div>
+      <CardContent className="p-0">
+        <div className="overflow-x-auto">{children}</div>
       </CardContent>
     </Card>
+  );
+}
+
+/** P19-B8.4c REV-3 (OBJ-8) — the Paper/Live pipeline view: the SAME three tables as the VTS tab (Pipeline
+ *  Summary → Last Scan → 24h Rolling Aggregates), in the same order + structure, but rendered DORMANT. Both
+ *  scanners run in every mode, yet NO filters (global or family/IMF) and NO signal generation happen in
+ *  Paper/Live until active trading turns on (B8.5) — so each table shows its real column skeleton with an
+ *  explicit "awaiting activation" body, NEVER a bare 0 (OBJ-5 honesty; Langston Step-1). This REPLACES the two
+ *  generic placeholders (the old DormantFilterBreakdown + the generic downstream-funnel block). The B8.4b
+ *  active-funnel WRITERS persist server-side; B8.5 wires these tables to the live per-mode counts. */
+function DormantPipelineTables({ modeTail }: { modeTail: 'paper' | 'live' }) {
+  const label = modeTail === 'paper' ? 'Paper' : 'Live';
+  const AwaitingRow = ({ span }: { span: number }) => (
+    <tr>
+      <td colSpan={span} className="p-0">
+        <div className="m-3 rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-sm text-muted-foreground" data-testid="fd-dormant-awaiting">
+          Awaiting activation — the {modeTail} scanner runs continuously, but the {label.toLowerCase()} pipeline
+          applies no filters and generates no signals until active trading turns on (B8.5). Live pipeline data is
+          on the Virtual Simulations tab. This fills with real {label.toLowerCase()} numbers at switch-on.
+        </div>
+      </td>
+    </tr>
+  );
+  return (
+    <div className="space-y-4" data-testid="fd-dormant-pipeline-tables">
+      <DiagTableCard theme="summary" title="Pipeline Summary (24h)" subtitle={`${label} — awaiting activation (B8.5)`} testId="fd-dormant-summary">
+        <table className="w-full text-sm">
+          <thead><tr className={`border-b ${DIAG_TABLE_THEMES.summary.head}`}>
+            <th className={`text-left p-2 font-medium ${STICKY_FIRST_COL} ${DIAG_TABLE_THEMES.summary.head}`}>Stage</th>
+            <th className="text-right p-2 font-medium">Quant</th>
+            <th className="text-right p-2 font-medium">Pattern</th>
+            <th className="text-right p-2 font-medium">Total</th>
+            <th className="text-left p-2 font-medium text-muted-foreground text-xs">Counting Basis</th>
+          </tr></thead>
+          <tbody><AwaitingRow span={5} /></tbody>
+        </table>
+      </DiagTableCard>
+      <DiagTableCard theme="lastScan" title="Last Scan — Filter Breakdown" subtitle={`${label} — awaiting activation (B8.5)`} testId="fd-dormant-lastscan">
+        <table className="w-full text-sm">
+          <thead><tr className={`border-b ${DIAG_TABLE_THEMES.lastScan.head}`}>
+            <th className={`text-left p-2 font-medium ${STICKY_FIRST_COL} ${DIAG_TABLE_THEMES.lastScan.head}`}>Filter</th>
+            <th className="text-right p-2 font-medium">Quant Global</th>
+            <th className="text-right p-2 font-medium">Pattern Global</th>
+            <th className="text-right p-2 font-medium">Total</th>
+          </tr></thead>
+          <tbody><AwaitingRow span={4} /></tbody>
+        </table>
+      </DiagTableCard>
+      <DiagTableCard theme="rolling" title="24-Hour Rolling Aggregates" subtitle={`${label} — awaiting activation (B8.5)`} testId="fd-dormant-rolling">
+        <table className="w-full text-sm">
+          <thead><tr className={`border-b ${DIAG_TABLE_THEMES.rolling.head}`}>
+            <th className={`text-left p-2 font-medium ${STICKY_FIRST_COL} ${DIAG_TABLE_THEMES.rolling.head}`}>Filter</th>
+            <th className="text-right p-2 font-medium">Quant</th>
+            <th className="text-right p-2 font-medium">Pattern</th>
+            <th className="text-right p-2 font-medium">Total</th>
+          </tr></thead>
+          <tbody><AwaitingRow span={4} /></tbody>
+        </table>
+      </DiagTableCard>
+    </div>
   );
 }
 
@@ -226,14 +273,21 @@ function ActiveScannerStage({ mode, data, isLoading }: { mode: 'paper' | 'live';
   const nextScanAtMs = l && typeof l.nextScanInMs === 'number'
     ? (latest.dataUpdatedAt || Date.now()) + l.nextScanInMs : null;
   const cadenceLabel = l?.cycleFrequencyMs ? `every ${Math.round(l.cycleFrequencyMs / 1000)}s` : undefined;
-  const capacity = typeof l?.krakenUniverseSize === 'number' ? l.krakenUniverseSize : null;
+  // P19-B8.4c REV-3: Per-Cycle Target (300) + live Total Universe both now ride the shared vts `data.lastScan`
+  // feed (scanTargetPerCycle + krakenUniverseSize surfaced read-only, same source as the count) — consistent
+  // with the VTS tab, so all three crypto tabs read one place. scan-latest is now ONLY countdown + cadence.
+  const perCycleTarget = typeof ls?.scanTargetPerCycle === 'number' ? ls.scanTargetPerCycle
+    : (typeof l?.scanTargetPerCycle === 'number' ? l.scanTargetPerCycle : null);
+  const totalUniverse = typeof ls?.krakenUniverseSize === 'number' ? ls.krakenUniverseSize
+    : (typeof l?.krakenUniverseSize === 'number' ? l.krakenUniverseSize : null);
   return (
     <ScannerCard
       testId="active-scanner-stage"
       title={`${modeLabel} Scanner`}
       subtitle="the shared FX5 scan — always running"
       pairsLastScan={ls?.totalPairsScanned}
-      capacity={capacity}
+      perCycleTarget={perCycleTarget}
+      totalUniverse={totalUniverse}
       pairsScanned24h={r24?.totalPairsScanned}
       cyclesLabel={r24 && typeof r24.totalScans === 'number' ? `${r24.totalScans.toLocaleString()} cycles (24h)` : undefined}
       cadenceLabel={cadenceLabel}
@@ -241,113 +295,6 @@ function ActiveScannerStage({ mode, data, isLoading }: { mode: 'paper' | 'live';
       isError={false}
       isLoading={isLoading ?? false}
     />
-  );
-}
-
-/**
- * P19-B8.4 Part-2 — the mode's active-path DOWNSTREAM funnel (Signal generation + pre-SQE / SQE per-gate /
- * RTB refresh), from the (mode, assetClass)-keyed `/api/active-engine/diagnostics/funnel`. WIRED but the
- * counters are DORMANT until active trading turns on (B8.5): while `status === 'dormant'` each stage renders
- * an explicit "awaiting activation" row — NEVER a bare 0 (MUST-2 dormant≠zero); once `'active'`, the real
- * per-stage breakdown renders. A failed load shows an ERROR, never a silent blank (OBJ-8).
- */
-function ActiveDownstreamFunnel({ mode, assetClass }: { mode: 'paper' | 'live'; assetClass: 'crypto_spot' | 'xstock_spot' }) {
-  const q = useQuery<ActiveFunnelEnvelope>({
-    queryKey: ['/api/active-engine/diagnostics/funnel', mode],
-    queryFn: () => apiFetch(`/api/active-engine/diagnostics/funnel?mode=${mode}`),
-    refetchInterval: 30000,
-  });
-  const cls = q.data?.byAssetClass?.[assetClass];
-  const isActive = cls?.status === 'active';
-  const fmt = (n: number | undefined | null): string => (n === undefined || n === null ? '—' : n.toLocaleString());
-  const rows = (o: Record<string, number> | undefined): [string, number][] =>
-    Object.entries(o ?? {}).sort((a, b) => b[1] - a[1]);
-  const DORMANT_STAGES = [
-    'Family strength filters (LQ / VN / DI)',
-    'Signal generation + pre-SQE rejections',
-    'SQE quality gates (per-gate screening)',
-    'Ready-to-Buy refresh (refreshed / promoted / rejected)',
-  ];
-  const StageBlock = ({ title, children }: { title: string; children: React.ReactNode }) => (
-    <div>
-      <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-1">{title}</div>
-      {children}
-    </div>
-  );
-  const KvRows = ({ data, empty }: { data: Record<string, number> | undefined; empty: string }) => {
-    const r = rows(data);
-    if (!r.length) return <div className="text-xs text-muted-foreground">{empty}</div>;
-    return (
-      <table className="w-full text-sm"><tbody>
-        {r.map(([k, v]) => (
-          <tr key={k} className="border-b hover:bg-muted/30"><td className="p-1.5">{k}</td><td className="p-1.5 text-right font-mono">{fmt(v)}</td></tr>
-        ))}
-      </tbody></table>
-    );
-  };
-
-  return (
-    <Card>
-      <CardHeader className="py-3">
-        <CardTitle className="text-lg flex items-center justify-between">
-          <span>Downstream Pipeline{isActive ? '' : ' — awaiting activation'}</span>
-          <span className="text-xs font-normal text-muted-foreground">
-            {isActive ? `live ${mode} active-path counts${q.data?.startedAt ? ` · since ${new Date(q.data.startedAt).toLocaleString()}` : ''}` : 'wired — fills when active trading turns on (B8.5)'}
-          </span>
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        {q.isError ? (
-          <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm">
-            <AlertTriangle className="w-4 h-4 text-destructive" />
-            <span>Couldn't load the active-path funnel — a data-feed failure, not zeros.</span>
-            <Button variant="outline" size="sm" className="ml-auto" onClick={() => q.refetch()}>
-              <RefreshCw className="w-3 h-3 mr-1" /> Retry
-            </Button>
-          </div>
-        ) : !isActive ? (
-          <div className="space-y-2 text-sm">
-            {DORMANT_STAGES.map((label) => (
-              <div key={label} className="flex items-center justify-between rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2" data-testid="fd-downstream-dormant">
-                <span>{label}</span>
-                <span className="text-xs text-muted-foreground">awaiting activation — populates at switch-on (B8.5)</span>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="space-y-4" data-testid="fd-downstream-active">
-            {/* Upstream, pre-generation: strategies the family filter excluded BEFORE any signal was built —
-                NOT a subset of "signals generated", so it renders as its own stage above the funnel. */}
-            <StageBlock title="Strategy attrition (family filter — before signal generation, upstream of the funnel)">
-              <KvRows data={cls?.strategyAttrition} empty="No strategies filtered out in this window." />
-            </StageBlock>
-            <StageBlock title={`Signal generation + pre-SQE rejections — ${fmt(cls?.signalsGenerated)} signals generated`}>
-              <KvRows data={cls?.preSqeRejects} empty="No pre-SQE rejections in this window." />
-            </StageBlock>
-            <StageBlock title={`SQE quality gates — ${fmt(cls?.sqePassed)} passed / ${fmt(cls?.sqeEvaluated)} evaluated`}>
-              <KvRows data={cls?.sqeGateRejects} empty="No SQE gate rejections in this window." />
-            </StageBlock>
-            <StageBlock title="Post-SQE rejections (passed SQE, dropped before Ready-to-Buy)">
-              <KvRows data={cls?.postSqeRejects} empty="No post-SQE rejections in this window." />
-            </StageBlock>
-            <StageBlock title="Ready-to-Buy refresh">
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5 text-sm">
-                <div><span className="text-muted-foreground block text-xs">Cycles</span><span className="font-mono font-semibold">{fmt(cls?.rtbRefresh.cyclesRun)}</span></div>
-                <div><span className="text-muted-foreground block text-xs">Refreshed</span><span className="font-mono font-semibold">{fmt(cls?.rtbRefresh.refreshedAttempted)}</span></div>
-                <div><span className="text-muted-foreground block text-xs">Reconfirmed</span><span className="font-mono font-semibold text-green-600">{fmt(cls?.rtbRefresh.reconfirmed)}</span></div>
-                <div><span className="text-muted-foreground block text-xs">Rejected (re-SQE)</span><span className="font-mono font-semibold text-red-500">{fmt(cls?.rtbRefresh.rejectedInRefresh)}</span></div>
-                <div><span className="text-muted-foreground block text-xs">Promoted</span><span className="font-mono font-semibold">{fmt(cls?.rtbRefresh.promoted)}</span></div>
-              </div>
-              {/* MUST-4: the two SQE-attempt phases are TWO labelled numbers, never a silent sum. */}
-              <div className="mt-2 text-xs text-muted-foreground">
-                SQE evaluations (honest double-count): <span className="font-mono">{fmt(cls?.sqeAttempts.atGeneration)}</span> at generation ·
-                {' '}<span className="font-mono">{fmt(cls?.sqeAttempts.atRefresh)}</span> during RTB refresh — counted separately, not summed.
-              </div>
-            </StageBlock>
-          </div>
-        )}
-      </CardContent>
-    </Card>
   );
 }
 
@@ -385,7 +332,7 @@ export function FilterDiagnosticsPanel({ data, isLoading, gateDisposition = 'tag
   // gates, RTB refresh) is WIRED but DORMANT until paper-active turns on (B8.5),
   // rendered as an explicit "awaiting activation" state — NEVER 0 (dormant != zero,
   // MUST-2). This EARLY-RETURN is fully independent of the VTS `data`/`isLoading` props
-  // (ActiveScannerStage + ActivePipelineTail self-fetch the active-engine endpoints), and
+  // (ActiveScannerStage self-fetches the active-engine scan-latest endpoint), and
   // it SUPERSEDES the interim inline `gateDisposition === 'enforce'` conditionals in the
   // VTS ('tag') render path below (B8.3b) — those are now unreachable on Paper/Live and
   // get swept when Part 2 wires the funnel counters into the dormant block here.
@@ -396,21 +343,21 @@ export function FilterDiagnosticsPanel({ data, isLoading, gateDisposition = 'tag
     // rendered by xstocks-tab ABOVE this panel — so the banner points "above" for xStock.
     const scannerRef = isXstock ? 'the scanner metrics above are' : 'the scanner stage below is';
     return (
-      <div className="space-y-4 max-w-4xl" data-testid="fd-enforce-panel">
+      <div className={`space-y-4 ${SHARED_DIAG_WIDTH}`} data-testid="fd-enforce-panel">
         <div className="rounded-md border border-blue-400/40 bg-blue-500/10 px-3 py-2 text-xs text-muted-foreground" data-testid="shared-scanner-banner">
           {modeLabel} mode: {scannerRef} this mode's OWN scan (its {modeTail} thresholds), live now even though active trading is off. Everything downstream — family strength filters, signal generation, the SQE quality gates, and Ready-to-Buy refresh — is wired but DORMANT; it fills with real data when {modeTail} trading turns on (B8.5).
         </div>
         {/* Crypto scanner card only — xStock's scanner card is its own ScannerCycleHeader
-            above this panel. Live throughput from the shared-scanner `data` feed; capacity + countdown from
-            the mode-keyed scan-latest (self-fetched inside the component). */}
+            above this panel. Live throughput from the shared-scanner `data` feed; Per-Cycle Target + Total
+            Universe + countdown from the shared feed (self-fetched inside the component). */}
         {!isXstock && <ActiveScannerStage mode={modeTail} data={data} isLoading={isLoading} />}
-        {/* P19-B8.4c: the filter breakdown is DORMANT on Paper/Live (both classes) — the scan runs but no
-            filters (global or family/IMF) are applied until switch-on; live filter data is on the VTS tabs. */}
-        <DormantFilterBreakdown modeTail={modeTail} />
-        {/* Downstream funnel — WIRED to the active-funnel endpoint; DORMANT ("awaiting activation",
-            never 0 — MUST-2) until the writers land (B8.4b) + active trading turns on (B8.5). */}
-        <ActiveDownstreamFunnel mode={modeTail} assetClass={assetClass} />
-        <ActivePipelineTail mode={modeTail} />
+        {/* P19-B8.4c REV-3 (OBJ-8): Paper/Live MIRROR the VTS three-table structure, rendered dormant — this
+            REPLACES the old generic filter-breakdown + downstream-funnel + pipeline-tail placeholders (those
+            three components are deleted this batch). Both scanners run, but no filters/signals happen in
+            Paper/Live until switch-on (B8.5),
+            so the three tables show their real column skeleton with an explicit "awaiting activation" body
+            (never a bare 0 — OBJ-5). B8.5 wires these to the mode's live per-stage counts. */}
+        <DormantPipelineTables modeTail={modeTail} />
       </div>
     );
   }
@@ -477,21 +424,22 @@ export function FilterDiagnosticsPanel({ data, isLoading, gateDisposition = 'tag
   };
 
   return (
-    <div className="space-y-4 max-w-4xl">
-      {/* P19-B8.4c: the crypto VTS lean scanner card at the top (crypto's scanner card lives in this panel;
-          xStock's is xstocks-tab's ScannerCycleHeader above the panel — so this is crypto-only here). Scan
-          counts come from the vts-diagnostics feed; the universe CAPACITY is not carried by that feed yet, so
-          it renders "not in VTS feed yet" rather than a drift-prone client constant (Langston Step-4 cond-1;
-          RUNNING_ISSUES #421 → home a real universe field in the VTS feed). Next-scan from the fixed 30s FX5
-          cadence + last-scan time, clamped in the card. */}
+    <div className={`space-y-4 ${SHARED_DIAG_WIDTH}`}>
+      {/* P19-B8.4c REV-3: the crypto VTS lean scanner card at the top (crypto's scanner card lives in this
+          panel; xStock's is xstocks-tab's ScannerCycleHeader above the panel — so this is crypto-only here).
+          Scan counts + the Per-Cycle Target (300) + live Total Universe (krakenUniverseSize ~1,500) all come
+          from the vts-diagnostics `lastScan` feed — the universe is now surfaced there (RUNNING_ISSUES #421
+          RESOLVED, homed in B8.4c), replacing the old "not in VTS feed yet" note. Next-scan from the fixed 30s
+          FX5 cadence + last-scan time, clamped in the card. */}
       {assetClass === 'crypto_spot' && (
         <ScannerCard
           testId="vts-crypto-scanner"
           title="Crypto Scanner (VTS)"
           subtitle="the shared FX5 scan — always running"
           pairsLastScan={lastScan?.totalPairsScanned}
-          capacity={null}
-          capacityNote="not in VTS feed yet"
+          perCycleTarget={typeof lastScan?.scanTargetPerCycle === 'number' ? lastScan.scanTargetPerCycle : null}
+          totalUniverse={typeof lastScan?.krakenUniverseSize === 'number' ? lastScan.krakenUniverseSize : null}
+          totalUniverseNote="awaiting first scan"
           pairsScanned24h={rolling24h?.totalPairsScanned}
           cyclesLabel={rolling24h ? `${rolling24h.totalScans.toLocaleString()} cycles (24h)` : undefined}
           cadenceLabel="every 30s"
@@ -509,14 +457,15 @@ export function FilterDiagnosticsPanel({ data, isLoading, gateDisposition = 'tag
           {' '}Per-stage active-path funnel counters arrive in B8.3b.
         </div>
       )}
-      {/* Batch 42: Pipeline Summary Table — 24h aggregated */}
-      <Card>
-        <CardHeader className="py-3">
-          <CardTitle className="text-lg">Pipeline Summary (24h)
+      {/* Batch 42: Pipeline Summary Table — 24h aggregated. P19-B8.4c REV-3: summary theme (blue border +
+          filled header, OBJ-9) + own horizontal-scroll container with frozen first column (OBJ-10). */}
+      <Card className="border-2 border-blue-500/70 overflow-hidden">
+        <CardHeader className="py-3 bg-blue-500/15 border-b-2 border-blue-500/70">
+          <CardTitle className="text-xl font-bold">Pipeline Summary (24h)
             {rolling24h && <span className="text-xs font-normal text-muted-foreground ml-2">{fmt(rolling24h.totalScans)} scans · {fmt(rolling24h.totalPairsScanned)} pair evaluations · {fmt(rolling24h.uniquePairsScanned)} unique</span>}
           </CardTitle>
         </CardHeader>
-        <CardContent className="p-0">
+        <CardContent className="p-0 overflow-x-auto">
           {rolling24h && rolling24h.totalScans > 0 ? (() => {
             const r24 = rolling24h.aggregated;
             const quantGlobalPassed = (r24.quant.global as Record<string, number>)['passed_all_filters'] ?? 0;
@@ -530,7 +479,7 @@ export function FilterDiagnosticsPanel({ data, isLoading, gateDisposition = 'tag
               : 0;
             const ve = data?.vtsEvaluation;
             return (
-              <table className="w-full text-sm">
+              <table className={`w-full text-sm ${FROZEN_FIRST_COL_TABLE}`}>
                 <thead>
                   <tr className="border-b bg-muted/50">
                     <th className="text-left p-2 font-medium">Stage</th>
@@ -749,10 +698,10 @@ export function FilterDiagnosticsPanel({ data, isLoading, gateDisposition = 'tag
         </CardContent>
       </Card>
 
-      {/* TABLE 1: Last Scan Stats */}
-      <Card>
-        <CardHeader className="py-3">
-          <CardTitle className="text-lg flex items-center justify-between">
+      {/* TABLE 1: Last Scan Stats. P19-B8.4c REV-3: lastScan theme (purple, OBJ-9) + frozen first column (OBJ-10). */}
+      <Card className="border-2 border-purple-500/70 overflow-hidden">
+        <CardHeader className="py-3 bg-purple-500/15 border-b-2 border-purple-500/70">
+          <CardTitle className="text-xl font-bold flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
             <span>Last Scan — Filter Breakdown</span>
             <span className="text-sm font-normal text-muted-foreground">
               {lastScan ? `${new Date(lastScan.timestamp).toLocaleTimeString()} · ${lastScan.mode} · ${lastScan.totalPairsScanned} pairs scanned` : 'No scan data'}
@@ -762,7 +711,7 @@ export function FilterDiagnosticsPanel({ data, isLoading, gateDisposition = 'tag
         <CardContent className="p-0">
           {lastScan ? (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className={`w-full text-sm ${FROZEN_FIRST_COL_TABLE}`}>
                 <thead>
                   <tr className="border-b bg-muted/50">
                     <th className="text-left p-2 font-medium">Filter</th>
@@ -1030,10 +979,10 @@ export function FilterDiagnosticsPanel({ data, isLoading, gateDisposition = 'tag
         </CardContent>
       </Card>
 
-      {/* TABLE 2: 24-Hour Rolling Aggregates */}
-      <Card>
-        <CardHeader className="py-3">
-          <CardTitle className="text-lg flex items-center justify-between">
+      {/* TABLE 2: 24-Hour Rolling Aggregates. P19-B8.4c REV-3: rolling theme (teal, OBJ-9) + frozen first column (OBJ-10). */}
+      <Card className="border-2 border-teal-500/70 overflow-hidden">
+        <CardHeader className="py-3 bg-teal-500/15 border-b-2 border-teal-500/70">
+          <CardTitle className="text-xl font-bold flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
             <span>24-Hour Rolling Aggregates</span>
             <span className="text-xs font-normal text-orange-400">(in-memory — resets on restart)</span>
             <span className="text-sm font-normal text-muted-foreground">
@@ -1044,7 +993,7 @@ export function FilterDiagnosticsPanel({ data, isLoading, gateDisposition = 'tag
         <CardContent className="p-0">
           {rolling24h.totalScans > 0 ? (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className={`w-full text-sm ${FROZEN_FIRST_COL_TABLE}`}>
                 <thead>
                   <tr className="border-b bg-muted/50">
                     <th className="text-left p-2 font-medium">Filter</th>
@@ -1354,11 +1303,9 @@ export function FilterDiagnosticsPanel({ data, isLoading, gateDisposition = 'tag
         </CardContent>
       </Card>
 
-      {/* P19-B8.3 (OBJ-3c): the mode's REAL pipeline tail on Paper/Live — from
-          existing sources only (pool population, RTB queue depth, gate tallies,
-          real opens); honest zeros until the B8.4 switch-on. */}
-      {gateDisposition === 'enforce' && modeTail && <ActivePipelineTail mode={modeTail} />}
-
+      {/* P19-B8.4c REV-3: the old enforce-path ActivePipelineTail render was already unreachable here (the
+          enforce path early-returns above), and the component is deleted this batch — the Paper/Live pipeline
+          view is now DormantPipelineTables in that early-return. */}
       {/* TABLE 4: VTS Evaluation Detail (Batch 19I) — expanded breakdown.
           P19-B8.3 (OBJ-3c): renders ONLY on the VTS page ('tag'). */}
       {gateDisposition === 'tag' && (

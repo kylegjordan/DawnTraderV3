@@ -42,7 +42,7 @@ import { Activity, Wifi, WifiOff, AlertCircle } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { format } from "date-fns";
 // P19-B8.1 (C1): panel + type now live in the extracted VTS component (was @/pages/machine-learning).
-import { FilterDiagnosticsPanel, ScannerCard, type FilterDiagnosticsData } from "@/components/vts/vts-filter-diagnostics-panel";
+import { FilterDiagnosticsPanel, ScannerCard, SHARED_DIAG_WIDTH, type FilterDiagnosticsData } from "@/components/vts/vts-filter-diagnostics-panel";
 import { FactorCalibrationSection, ExitStrategyAblationSection } from "@/pages/analytics";
 
 // ---------------------------------------------------------------------------
@@ -58,6 +58,7 @@ interface XstocksFilterDiagnostics extends FilterDiagnosticsData {
     cyclesCompleted: number;
     cyclesSkippedMarketClosed: number;
     lastUniverseSize: number;
+    cycleBatchSize?: number; // P19-B8.4c: per-cycle scan target (75)
     lastArcaOpen: boolean;
     pairsScannedLastCycle: number;
     pairsFreshLastCycle: number;
@@ -137,7 +138,8 @@ function ScannerCycleHeader({ data, isLoading }: { data: XstocksFilterDiagnostic
         subtitle={arcaOpen ? "always running (ARCA open)" : "extended-hours only (ARCA closed)"}
         statusBadges={badges}
         pairsLastScan={s?.pairsScannedLastCycle}
-        capacity={s?.lastUniverseSize}
+        perCycleTarget={s?.cycleBatchSize ?? null}
+        totalUniverse={s?.lastUniverseSize}
         pairsScanned24h={s?.rolling24hApproxPairsScanned}
         cyclesLabel={s ? `${s.rolling24hApproxCycles.toLocaleString()} cycles (24h)` : undefined}
         cadenceLabel="every 30s"
@@ -278,16 +280,21 @@ export function XstocksTab({ gateDisposition = 'tag', modeTail = null }: {
           and quant strategies are not family-routed. The diagnostic panels
           will show this honestly until those land. */}
 
-      {/* 1. Scanner Cycle Header (xstock-specific) */}
-      <ScannerCycleHeader data={filterData} isLoading={filterLoading} />
+      {/* 1. Scanner Cycle Header (xstock-specific). P19-B8.4c REV-3 (OBJ-7): bound to the SAME shared width as
+          the pipeline tables inside the panel, so the xStock scanner card no longer spans full-bleed — it
+          lines up with the tables, consistent with the crypto tabs. */}
+      <div className={SHARED_DIAG_WIDTH}>
+        <ScannerCycleHeader data={filterData} isLoading={filterLoading} />
+      </div>
 
       {/* Per-Pair Fresh-Tick Latency panel REMOVED per Kyle directive 2026-05-12.
           The freshnessData query is still issued for the scanner-cycle header
           tooltip; if removing the query is desired in a future cleanup, drop
           the useQuery call + freshnessData/freshnessLoading variables too. */}
 
-      {/* 2. Filter Diagnostics — REUSED from crypto, scoped to xstock_spot */}
-      <Card data-testid="xstocks-filter-diagnostics-section">
+      {/* 2. Filter Diagnostics — REUSED from crypto, scoped to xstock_spot. P19-B8.4c REV-3 (OBJ-7): bound the
+          section to the shared width so the xStock pipeline tables match the crypto tabs' width. */}
+      <Card data-testid="xstocks-filter-diagnostics-section" className={SHARED_DIAG_WIDTH}>
         <CardHeader>
           <CardTitle className="text-lg">Filter Pipeline Diagnostics (xstock_spot)</CardTitle>
           <p className="text-xs text-muted-foreground mt-1">

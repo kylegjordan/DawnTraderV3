@@ -121,6 +121,7 @@ interface ScannerDiagnostics {
   hostileSimActive: boolean;
   // B79.0c — universe-split telemetry for diagnostics endpoint.
   lastUniverseSize: number;
+  cycleBatchSize: number;   // P19-B8.4c: per-cycle scan TARGET (CYCLE_BATCH_SIZE=75 — rotates the universe). Read-only telemetry.
   lastArcaOpen: boolean;
   // B79.0m.b — per-cycle eval-pipeline counters from xstock eval-cycle.
   // Populated by runCycle after evaluateXstockPairForVTS loop completes;
@@ -202,6 +203,7 @@ class XstockSpotScannerService {
     lastErrorAt: null,
     errorCount: 0,
     lastUniverseSize: 0,
+    cycleBatchSize: XstockSpotScannerService.CYCLE_BATCH_SIZE, // P19-B8.4c: constant per-cycle target (75)
     lastArcaOpen: false,
     hostileSimActive: false,
     lastCycleEvalCounters: null,

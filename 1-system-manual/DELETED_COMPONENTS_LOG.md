@@ -456,3 +456,17 @@ Archive: git history is authoritative (this is a field-retirement within live fi
 **Blast-radius verification:** bench tsc-baseline no regressions + vitest 2004 passed (parity with HEAD); consumer traces in `P19_B8_1_PRE_AUDIT.md` §1/§2.
 **Archive copies:** `_archive/deleted-code/*.20260704-P19B8.1.removed` (6 files); route block in git history (commit `57617c3c9`).
 **Reviewed by:** Langston Step-1 APPROVED ×2 + Step-2 APPROVED (certainty-before-cutting condition discharged); Step-4 diff review pending.
+
+---
+
+## P19-B8.4c REV-3 (2026-07-08) — ActiveDownstreamFunnel + ActivePipelineTail (client display components)
+
+**What:** two React display components in `client/src/components/vts/vts-filter-diagnostics-panel.tsx` — `ActivePipelineTail` (the mode's pipeline-tail card, /api/active-engine/pipeline-tail) and `ActiveDownstreamFunnel` (the per-stage downstream funnel card, /api/active-engine/diagnostics/funnel). Plus the now-doubly-dead guard `{gateDisposition === 'enforce' && modeTail && <ActivePipelineTail/>}` in the tag-path (already unreachable — the enforce path early-returns above it).
+
+**Why:** P19-B8.4c REV-3 OBJ-8 replaced the generic Paper/Live pipeline placeholders with `DormantPipelineTables` (the dormant 3-table mirror of the VTS layout). These two components were superseded, not paused — B8.5 (the switch-on) wires `DormantPipelineTables` to live per-mode counts, NOT these components. Carrying unreferenced defs forward would be lingering dead code (§15). Langston Step-4: delete confirmed (all review passes agreed they're superseded/not-reused).
+
+**Blast-radius verification:** grep confirmed the only render calls were (a) the enforce-block calls removed by the OBJ-8 diff and (b) the already-unreachable tag-path guard. No tests reference them. The `ActiveFunnelEnvelope` import (their only consumer) was removed. tsc-baseline clean after deletion (no dangling reference). 
+
+**Server side (NOT deleted — intentional):** the B8.4b active-funnel WRITERS + the `/api/active-engine/diagnostics/funnel` and `/pipeline-tail` endpoints PERSIST server-side. They are now client-UNCONSUMED until B8.5 wires the dormant tables to them — this is deliberate, not an orphan. Home: B8.5 (the switch-on).
+
+**Archive:** `1-system-manual/_archive/deleted-code/P19-B8.4c_ActivePipelineTail_ActiveDownstreamFunnel.removed.tsx`. Git history is authoritative.
