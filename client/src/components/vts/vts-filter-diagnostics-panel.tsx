@@ -109,7 +109,7 @@ function useSecondTick(active: boolean): number {
  *  Matches the server `nextScanInMs` floor. */
 export function ScannerCard({
   title, subtitle, statusBadges, pairsLastScan, capacity, capacityNote,
-  pairsScanned24h, cyclesLabel, cadenceLabel, nextScanAtMs, isError, isLoading, onRetry, testId,
+  pairsScanned24h, pairsScanned24hNote, cyclesLabel, cadenceLabel, nextScanAtMs, isError, isLoading, onRetry, testId,
 }: {
   title: string;
   subtitle?: string;
@@ -118,6 +118,7 @@ export function ScannerCard({
   capacity: number | null | undefined;   // null → render `capacityNote` instead (never a drift-prone constant)
   capacityNote?: string;
   pairsScanned24h: number | null | undefined;
+  pairsScanned24hNote?: string;            // when the 24h count is null, render this dormant note (never a bare 0)
   cyclesLabel?: string;                    // e.g. "1,266 cycles (24h)"
   cadenceLabel?: string;                   // e.g. "every 30s"
   nextScanAtMs: number | null | undefined; // absolute target timestamp; null → hide the countdown
@@ -158,11 +159,16 @@ export function ScannerCard({
             <div><span className="text-muted-foreground block text-xs">Pairs Scanned (last scan)</span><span className="font-mono font-semibold" data-testid="scanner-pairs-last">{_fmtNum(pairsLastScan)}</span></div>
             <div>
               <span className="text-muted-foreground block text-xs">Scanner Capacity</span>
-              {capacity === null || capacity === undefined
+              {capacity === null || capacity === undefined || capacity <= 0
                 ? <span className="font-mono text-muted-foreground" title={capacityNote}>{capacityNote ?? '—'}</span>
                 : <span className="font-mono font-semibold" data-testid="scanner-capacity">{_fmtNum(capacity)} max</span>}
             </div>
-            <div><span className="text-muted-foreground block text-xs">Pairs Scanned (24h)</span><span className="font-mono font-semibold" data-testid="scanner-pairs-24h">{_fmtNum(pairsScanned24h)}</span></div>
+            <div>
+              <span className="text-muted-foreground block text-xs">Pairs Scanned (24h)</span>
+              {(pairsScanned24h === null || pairsScanned24h === undefined) && pairsScanned24hNote
+                ? <span className="font-mono text-amber-600 dark:text-amber-500" data-testid="scanner-pairs-24h" title="awaiting activation">{pairsScanned24hNote}</span>
+                : <span className="font-mono font-semibold" data-testid="scanner-pairs-24h">{_fmtNum(pairsScanned24h)}</span>}
+            </div>
             <div><span className="text-muted-foreground block text-xs">Next Scan In</span><span className="font-mono font-semibold" data-testid="scanner-next-scan">{countdown ?? '—'}</span></div>
             <div><span className="text-muted-foreground block text-xs">Cadence</span><span className="font-mono font-semibold">{cadenceLabel ?? '—'}</span>{cyclesLabel && <span className="text-muted-foreground block text-xs">{cyclesLabel}</span>}</div>
           </div>
@@ -196,44 +202,42 @@ function DormantFilterBreakdown({ modeTail }: { modeTail: 'paper' | 'live' }) {
   );
 }
 
-// P19-B8.4c: the crypto Paper/Live LEAN scanner card. The crypto FX5 scanner always runs (every mode), so
-// this is live even with active trading off. Uses `scan-latest` (carries the server `nextScanInMs` countdown
-// + `krakenUniverseSize` capacity + `evaluatedCount` pairs-this-scan + `cycleFrequencyMs`) + `scan-24h` for
-// the 24h pairs total. Eligible/ineligible + the global-filter breakdown are NOT here — filters aren't applied
-// in Paper/Live, so they render as `DormantFilterBreakdown` below (Kyle 2026-07-08).
-function ActiveScannerStage({ mode }: { mode: 'paper' | 'live' }) {
-  const scan = useQuery<any>({
+// P19-B8.4c: the crypto Paper/Live LEAN scanner card. ★ B8.4c Step-4 fix (Langston MUST-2): the crypto FX5
+// scanner is ONE shared scanner (mode-multiplexed) that always runs, so its live scan THROUGHPUT (last-scan +
+// 24h pairs) is the shared scanner's — identical on all crypto tabs — read from the vts-diagnostics `data` prop
+// (`lastScan.totalPairsScanned` / `rolling24h.totalPairsScanned`, un-gated + live). The mode-keyed `/scan-latest`
+// is used ONLY for capacity (`krakenUniverseSize`) + the live countdown (`nextScanInMs`) + cadence — NOT for the
+// count, because its `evaluatedCount` is TRADING-gated to 0 (off until B8.5), which was the Step-4 bare-0 bug.
+// Eligible/filtered are dormant on Paper/Live (`DormantFilterBreakdown` below) — filters aren't applied here.
+function ActiveScannerStage({ mode, data, isLoading }: { mode: 'paper' | 'live'; data?: FilterDiagnosticsData; isLoading?: boolean }) {
+  const latest = useQuery<any>({
     queryKey: ['/api/active-engine/diagnostics/scan-latest', mode],
     queryFn: () => apiFetch(`/api/active-engine/diagnostics/scan-latest?mode=${mode}`),
     refetchInterval: 15000,
   });
-  const scan24h = useQuery<any>({
-    queryKey: ['/api/active-engine/diagnostics/scan-24h', mode],
-    queryFn: () => apiFetch(`/api/active-engine/diagnostics/scan-24h?mode=${mode}`),
-    refetchInterval: 60000,
-  });
-  const d = scan.data?.data ?? null;
-  const r = scan24h.data?.data ?? null;
+  const l = latest.data?.data ?? null;         // /scan-latest is wrapped { ok, data }
+  const ls = (data as any)?.lastScan ?? null;
+  const r24 = (data as any)?.rolling24h ?? null;
   const modeLabel = mode === 'paper' ? 'Paper' : 'Live';
-  // Absolute next-scan target = the response's fetch time + the server-computed remaining; the card ticks it
+  // Absolute next-scan target = the scan-latest fetch time + the server-computed remaining; the card ticks it
   // down and clamps at 0 → "scanning…" (Langston cond-2). Re-syncs each 15s refetch.
-  const nextScanAtMs = d && typeof d.nextScanInMs === 'number'
-    ? (scan.dataUpdatedAt || Date.now()) + d.nextScanInMs : null;
-  const cadenceLabel = d?.cycleFrequencyMs ? `every ${Math.round(d.cycleFrequencyMs / 1000)}s` : undefined;
+  const nextScanAtMs = l && typeof l.nextScanInMs === 'number'
+    ? (latest.dataUpdatedAt || Date.now()) + l.nextScanInMs : null;
+  const cadenceLabel = l?.cycleFrequencyMs ? `every ${Math.round(l.cycleFrequencyMs / 1000)}s` : undefined;
+  const capacity = typeof l?.krakenUniverseSize === 'number' ? l.krakenUniverseSize : null;
   return (
     <ScannerCard
       testId="active-scanner-stage"
       title={`${modeLabel} Scanner`}
-      subtitle={`this mode's OWN scan (${mode} thresholds) — always running`}
-      pairsLastScan={d?.evaluatedCount}
-      capacity={d?.krakenUniverseSize}
-      pairsScanned24h={r?.totalEvaluated}
-      cyclesLabel={r && typeof r.totalCycles === 'number' ? `${r.totalCycles.toLocaleString()} cycles (24h)` : undefined}
+      subtitle="the shared FX5 scan — always running"
+      pairsLastScan={ls?.totalPairsScanned}
+      capacity={capacity}
+      pairsScanned24h={r24?.totalPairsScanned}
+      cyclesLabel={r24 && typeof r24.totalScans === 'number' ? `${r24.totalScans.toLocaleString()} cycles (24h)` : undefined}
       cadenceLabel={cadenceLabel}
       nextScanAtMs={nextScanAtMs}
-      isError={scan.isError}
-      isLoading={scan.isLoading}
-      onRetry={() => scan.refetch()}
+      isError={false}
+      isLoading={isLoading ?? false}
     />
   );
 }
@@ -395,8 +399,9 @@ export function FilterDiagnosticsPanel({ data, isLoading, gateDisposition = 'tag
           {modeLabel} mode: {scannerRef} this mode's OWN scan (its {modeTail} thresholds), live now even though active trading is off. Everything downstream — family strength filters, signal generation, the SQE quality gates, and Ready-to-Buy refresh — is wired but DORMANT; it fills with real data when {modeTail} trading turns on (B8.5).
         </div>
         {/* Crypto scanner card only — xStock's scanner card is its own ScannerCycleHeader
-            above this panel (the active-engine scan-latest feed is Kraken-crypto-only). */}
-        {!isXstock && <ActiveScannerStage mode={modeTail} />}
+            above this panel. Live throughput from the shared-scanner `data` feed; capacity + countdown from
+            the mode-keyed scan-latest (self-fetched inside the component). */}
+        {!isXstock && <ActiveScannerStage mode={modeTail} data={data} isLoading={isLoading} />}
         {/* P19-B8.4c: the filter breakdown is DORMANT on Paper/Live (both classes) — the scan runs but no
             filters (global or family/IMF) are applied until switch-on; live filter data is on the VTS tabs. */}
         <DormantFilterBreakdown modeTail={modeTail} />
