@@ -75,7 +75,7 @@ const SCAN_FILTER_LABELS: Record<string, string> = {
   failed_spread: 'Max spread',
   failed_daily_range: 'Daily range',
   failed_min_price: 'Min price',
-  failed_stablecoin: 'Stablecoin / stablecoin',
+  failed_stablecoin: 'Stablecoin',
   failed_quote_currency: 'Quote currency',
   failed_history: 'Min history',
   failed_market_cap: 'Market cap',
@@ -84,97 +84,157 @@ const SCAN_FILTER_LABELS: Record<string, string> = {
   already_active: 'Already active',
 };
 
+// ── P19-B8.4c — the SHARED lean scanner card (scan-activity only) ────────────────────────────────────
+// Kyle 2026-07-08: every one of the six Filter-Diagnostics tabs shows the SAME lean scanner card at top —
+// pairs scanned (last scan + 24h), scanner capacity (the universe max, so a short scan is obvious), a live
+// next-scan countdown, and the cadence. Everything about eligible / survived / filtered leaves the scanner
+// and lives in the (dormant on Paper/Live, live on VTS) pipeline sections. Both scanners always run in every
+// mode, so this card is LIVE on all six tabs.
+
+const _fmtNum = (n: number | null | undefined): string => (n === null || n === undefined ? '—' : n.toLocaleString());
+
+/** Ticks `Date.now()` once a second while `active`, so a countdown re-renders live. */
+function useSecondTick(active: boolean): number {
+  const [now, setNow] = React.useState(() => Date.now());
+  React.useEffect(() => {
+    if (!active) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [active]);
+  return now;
+}
+
+/** Next-scan countdown display, CLAMPED (Langston Step-4 cond-2): a late/skipped tick makes
+ *  (target − now) go negative — show "scanning…" at/below 0, never a negative or wild timer.
+ *  Matches the server `nextScanInMs` floor. */
+export function ScannerCard({
+  title, subtitle, statusBadges, pairsLastScan, capacity, capacityNote,
+  pairsScanned24h, cyclesLabel, cadenceLabel, nextScanAtMs, isError, isLoading, onRetry, testId,
+}: {
+  title: string;
+  subtitle?: string;
+  statusBadges?: React.ReactNode;
+  pairsLastScan: number | null | undefined;
+  capacity: number | null | undefined;   // null → render `capacityNote` instead (never a drift-prone constant)
+  capacityNote?: string;
+  pairsScanned24h: number | null | undefined;
+  cyclesLabel?: string;                    // e.g. "1,266 cycles (24h)"
+  cadenceLabel?: string;                   // e.g. "every 30s"
+  nextScanAtMs: number | null | undefined; // absolute target timestamp; null → hide the countdown
+  isError?: boolean;
+  isLoading?: boolean;
+  onRetry?: () => void;
+  testId?: string;
+}) {
+  const now = useSecondTick(nextScanAtMs !== null && nextScanAtMs !== undefined);
+  const remainingMs = nextScanAtMs === null || nextScanAtMs === undefined ? null : nextScanAtMs - now;
+  const countdown = remainingMs === null ? null : (remainingMs > 0 ? `${Math.ceil(remainingMs / 1000)}s` : 'scanning…');
+  return (
+    <Card data-testid={testId ?? 'scanner-card'}>
+      <CardHeader className="py-3">
+        <CardTitle className="text-lg flex items-center justify-between gap-2">
+          <span>{title}</span>
+          <span className="flex items-center gap-2">
+            {statusBadges}
+            {subtitle && <span className="text-xs font-normal text-muted-foreground">{subtitle}</span>}
+          </span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {isError ? (
+          <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm">
+            <AlertTriangle className="w-4 h-4 text-destructive" />
+            <span>Couldn't load the scanner — a data-feed failure, not zeros.</span>
+            {onRetry && (
+              <Button variant="outline" size="sm" className="ml-auto" onClick={onRetry}>
+                <RefreshCw className="w-3 h-3 mr-1" /> Retry
+              </Button>
+            )}
+          </div>
+        ) : isLoading ? (
+          <div className="text-sm text-muted-foreground">Loading the scanner…</div>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5 text-sm">
+            <div><span className="text-muted-foreground block text-xs">Pairs Scanned (last scan)</span><span className="font-mono font-semibold" data-testid="scanner-pairs-last">{_fmtNum(pairsLastScan)}</span></div>
+            <div>
+              <span className="text-muted-foreground block text-xs">Scanner Capacity</span>
+              {capacity === null || capacity === undefined
+                ? <span className="font-mono text-muted-foreground" title={capacityNote}>{capacityNote ?? '—'}</span>
+                : <span className="font-mono font-semibold" data-testid="scanner-capacity">{_fmtNum(capacity)} max</span>}
+            </div>
+            <div><span className="text-muted-foreground block text-xs">Pairs Scanned (24h)</span><span className="font-mono font-semibold" data-testid="scanner-pairs-24h">{_fmtNum(pairsScanned24h)}</span></div>
+            <div><span className="text-muted-foreground block text-xs">Next Scan In</span><span className="font-mono font-semibold" data-testid="scanner-next-scan">{countdown ?? '—'}</span></div>
+            <div><span className="text-muted-foreground block text-xs">Cadence</span><span className="font-mono font-semibold">{cadenceLabel ?? '—'}</span>{cyclesLabel && <span className="text-muted-foreground block text-xs">{cyclesLabel}</span>}</div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/** P19-B8.4c — the dormant "awaiting activation" filter-breakdown section for the Paper/Live tabs.
+ *  Both scanners run in every mode, but NO filters (global or IMF) are applied in Paper/Live (active trading
+ *  is off) — so the filter breakdown is genuinely dormant here (Kyle 2026-07-08). Live filter data shows only
+ *  on the two VTS tabs. Never a bare 0 (MUST-2). */
+function DormantFilterBreakdown({ modeTail }: { modeTail: 'paper' | 'live' }) {
+  return (
+    <Card data-testid="fd-filter-breakdown-dormant">
+      <CardHeader className="py-3">
+        <CardTitle className="text-lg flex items-center justify-between gap-2">
+          <span>Global &amp; family filter breakdown</span>
+          <span className="text-xs font-normal text-muted-foreground">why pairs were filtered out</span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-sm text-muted-foreground">
+          Awaiting activation — the {modeTail} pipeline scans continuously, but no filters (global or family/IMF)
+          are applied in {modeTail} mode until active trading turns on (B8.5). Live filter data is on the Virtual
+          Simulations tabs, where the full pipeline runs. This fills with real {modeTail} numbers at switch-on.
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// P19-B8.4c: the crypto Paper/Live LEAN scanner card. The crypto FX5 scanner always runs (every mode), so
+// this is live even with active trading off. Uses `scan-latest` (carries the server `nextScanInMs` countdown
+// + `krakenUniverseSize` capacity + `evaluatedCount` pairs-this-scan + `cycleFrequencyMs`) + `scan-24h` for
+// the 24h pairs total. Eligible/ineligible + the global-filter breakdown are NOT here — filters aren't applied
+// in Paper/Live, so they render as `DormantFilterBreakdown` below (Kyle 2026-07-08).
 function ActiveScannerStage({ mode }: { mode: 'paper' | 'live' }) {
   const scan = useQuery<any>({
-    queryKey: ['/api/active-engine/diagnostics/scan', mode],
-    queryFn: () => apiFetch(`/api/active-engine/diagnostics/scan?mode=${mode}`),
-    refetchInterval: 30000,
+    queryKey: ['/api/active-engine/diagnostics/scan-latest', mode],
+    queryFn: () => apiFetch(`/api/active-engine/diagnostics/scan-latest?mode=${mode}`),
+    refetchInterval: 15000,
   });
   const scan24h = useQuery<any>({
     queryKey: ['/api/active-engine/diagnostics/scan-24h', mode],
     queryFn: () => apiFetch(`/api/active-engine/diagnostics/scan-24h?mode=${mode}`),
     refetchInterval: 60000,
   });
-  const d = scan.data;
-  const r = scan24h.data?.data;
+  const d = scan.data?.data ?? null;
+  const r = scan24h.data?.data ?? null;
   const modeLabel = mode === 'paper' ? 'Paper' : 'Live';
-  const fmt = (n: number | undefined | null): string => (n === undefined || n === null ? '—' : n.toLocaleString());
-  const bd = (d?.breakdown ?? {}) as Record<string, number>;
-
+  // Absolute next-scan target = the response's fetch time + the server-computed remaining; the card ticks it
+  // down and clamps at 0 → "scanning…" (Langston cond-2). Re-syncs each 15s refetch.
+  const nextScanAtMs = d && typeof d.nextScanInMs === 'number'
+    ? (scan.dataUpdatedAt || Date.now()) + d.nextScanInMs : null;
+  const cadenceLabel = d?.cycleFrequencyMs ? `every ${Math.round(d.cycleFrequencyMs / 1000)}s` : undefined;
   return (
-    <Card data-testid="active-scanner-stage">
-      <CardHeader className="py-3">
-        <CardTitle className="text-lg flex items-center justify-between">
-          <span>{modeLabel} Scanner Stage — universe &amp; global filters</span>
-          <span className="text-xs font-normal text-muted-foreground">this mode's OWN scan ({mode} thresholds) — live even before switch-on</span>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {scan.isError ? (
-          <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm">
-            <AlertTriangle className="w-4 h-4 text-destructive" />
-            <span>Couldn't load the {modeLabel} scanner — a data-feed failure, not zeros.</span>
-            <Button variant="outline" size="sm" className="ml-auto" onClick={() => scan.refetch()}>
-              <RefreshCw className="w-3 h-3 mr-1" /> Retry
-            </Button>
-          </div>
-        ) : scan.isLoading ? (
-          <div className="text-sm text-muted-foreground">Loading the {modeLabel} scan…</div>
-        ) : (
-          <>
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 text-sm">
-              <div><span className="text-muted-foreground block text-xs">Universe Scanned</span><span className="font-mono font-semibold" data-testid="scanner-universe">{fmt(d?.universe_count)} pairs</span></div>
-              <div><span className="text-muted-foreground block text-xs">Evaluated (this scan)</span><span className="font-mono font-semibold">{fmt(d?.evaluated)}</span></div>
-              <div><span className="text-muted-foreground block text-xs">Eligible (passed all)</span><span className="font-mono font-semibold text-green-600" data-testid="scanner-eligible">{fmt(d?.eligible_count)}</span></div>
-              <div><span className="text-muted-foreground block text-xs">Ineligible (filtered out)</span><span className="font-mono font-semibold">{fmt(d?.ineligible_count)}</span></div>
-            </div>
-            <div>
-              <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-1">Global Filter Breakdown (why pairs were filtered out)</div>
-              <table className="w-full text-sm">
-                <tbody>
-                  {Object.keys(SCAN_FILTER_LABELS).map((k) => (
-                    <tr key={k} className="border-b hover:bg-muted/30">
-                      <td className="p-1.5">{SCAN_FILTER_LABELS[k]}</td>
-                      <td className="p-1.5 text-right font-mono">{fmt(bd[k] ?? 0)}</td>
-                    </tr>
-                  ))}
-                  <tr className="border-t-2 border-green-500/30 bg-green-500/10 font-semibold">
-                    <td className="p-1.5">Passed all filters</td>
-                    <td className="p-1.5 text-right font-mono text-green-700">{fmt(bd['passed_all_filters'] ?? 0)}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-            {Array.isArray(d?.top_candidates) && d.top_candidates.length > 0 && (
-              <div>
-                <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-1">Eligible Pool (top candidates)</div>
-                <div className="flex flex-wrap gap-1.5">
-                  {d.top_candidates.slice(0, 25).map((c: any, i: number) => (
-                    <span key={`${c.symbol}-${i}`} className="rounded border border-green-500/30 bg-green-500/10 px-1.5 py-0.5 text-xs font-mono">{c.symbol}</span>
-                  ))}
-                </div>
-              </div>
-            )}
-            <div>
-              <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-1">24h Scan Activity</div>
-              {scan24h.isError ? (
-                <div className="text-xs text-destructive">Couldn't load 24h scan activity.</div>
-              ) : !r || r.totalCycles === 0 ? (
-                <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-muted-foreground" data-testid="active-scanner-24h-dormant">
-                  Awaiting activation — the 24-hour scan-cycle history fills once {modeLabel} active trading runs its own scan cycles (B8.5). Reads empty because nothing has run yet, not because a run found nothing.
-                </div>
-              ) : (
-                <div className="grid gap-2 sm:grid-cols-3 text-sm">
-                  <div><span className="text-muted-foreground block text-xs">Cycles (24h)</span><span className="font-mono font-semibold">{fmt(r.totalCycles)}</span></div>
-                  <div><span className="text-muted-foreground block text-xs">Evaluated (24h)</span><span className="font-mono font-semibold">{fmt(r.totalEvaluated)}</span></div>
-                  <div><span className="text-muted-foreground block text-xs">Survived (24h)</span><span className="font-mono font-semibold text-green-600">{fmt(r.totalSurvived)}</span></div>
-                </div>
-              )}
-            </div>
-          </>
-        )}
-      </CardContent>
-    </Card>
+    <ScannerCard
+      testId="active-scanner-stage"
+      title={`${modeLabel} Scanner`}
+      subtitle={`this mode's OWN scan (${mode} thresholds) — always running`}
+      pairsLastScan={d?.evaluatedCount}
+      capacity={d?.krakenUniverseSize}
+      pairsScanned24h={r?.totalEvaluated}
+      cyclesLabel={r && typeof r.totalCycles === 'number' ? `${r.totalCycles.toLocaleString()} cycles (24h)` : undefined}
+      cadenceLabel={cadenceLabel}
+      nextScanAtMs={nextScanAtMs}
+      isError={scan.isError}
+      isLoading={scan.isLoading}
+      onRetry={() => scan.refetch()}
+    />
   );
 }
 
@@ -334,9 +394,12 @@ export function FilterDiagnosticsPanel({ data, isLoading, gateDisposition = 'tag
         <div className="rounded-md border border-blue-400/40 bg-blue-500/10 px-3 py-2 text-xs text-muted-foreground" data-testid="shared-scanner-banner">
           {modeLabel} mode: {scannerRef} this mode's OWN scan (its {modeTail} thresholds), live now even though active trading is off. Everything downstream — family strength filters, signal generation, the SQE quality gates, and Ready-to-Buy refresh — is wired but DORMANT; it fills with real data when {modeTail} trading turns on (B8.5).
         </div>
-        {/* Crypto scanner stage only — xStock's scanner stage is its own ScannerCycleHeader
-            above this panel (the active-engine on-demand scan is Kraken-crypto-only). */}
+        {/* Crypto scanner card only — xStock's scanner card is its own ScannerCycleHeader
+            above this panel (the active-engine scan-latest feed is Kraken-crypto-only). */}
         {!isXstock && <ActiveScannerStage mode={modeTail} />}
+        {/* P19-B8.4c: the filter breakdown is DORMANT on Paper/Live (both classes) — the scan runs but no
+            filters (global or family/IMF) are applied until switch-on; live filter data is on the VTS tabs. */}
+        <DormantFilterBreakdown modeTail={modeTail} />
         {/* Downstream funnel — WIRED to the active-funnel endpoint; DORMANT ("awaiting activation",
             never 0 — MUST-2) until the writers land (B8.4b) + active trading turns on (B8.5). */}
         <ActiveDownstreamFunnel mode={modeTail} assetClass={assetClass} />
@@ -408,6 +471,26 @@ export function FilterDiagnosticsPanel({ data, isLoading, gateDisposition = 'tag
 
   return (
     <div className="space-y-4 max-w-4xl">
+      {/* P19-B8.4c: the crypto VTS lean scanner card at the top (crypto's scanner card lives in this panel;
+          xStock's is xstocks-tab's ScannerCycleHeader above the panel — so this is crypto-only here). Scan
+          counts come from the vts-diagnostics feed; the universe CAPACITY is not carried by that feed yet, so
+          it renders "not in VTS feed yet" rather than a drift-prone client constant (Langston Step-4 cond-1;
+          RUNNING_ISSUES #421 → home a real universe field in the VTS feed). Next-scan from the fixed 30s FX5
+          cadence + last-scan time, clamped in the card. */}
+      {assetClass === 'crypto_spot' && (
+        <ScannerCard
+          testId="vts-crypto-scanner"
+          title="Crypto Scanner (VTS)"
+          subtitle="the shared FX5 scan — always running"
+          pairsLastScan={lastScan?.totalPairsScanned}
+          capacity={null}
+          capacityNote="not in VTS feed yet"
+          pairsScanned24h={rolling24h?.totalPairsScanned}
+          cyclesLabel={rolling24h ? `${rolling24h.totalScans.toLocaleString()} cycles (24h)` : undefined}
+          cadenceLabel="every 30s"
+          nextScanAtMs={lastScan?.timestamp ? new Date(lastScan.timestamp).getTime() + 30_000 : null}
+        />
+      )}
       {/* P19-B8.3 (OBJ-3c): the shared-scanner banner on Paper/Live — the scan-feed
           numbers below are the ONE scanner's diagnostics; per-mode thresholds and
           funnels differ (Kyle's authoritative model). The mode's OWN pipeline tail

@@ -42,7 +42,7 @@ import { Activity, Wifi, WifiOff, AlertCircle } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { format } from "date-fns";
 // P19-B8.1 (C1): panel + type now live in the extracted VTS component (was @/pages/machine-learning).
-import { FilterDiagnosticsPanel, type FilterDiagnosticsData } from "@/components/vts/vts-filter-diagnostics-panel";
+import { FilterDiagnosticsPanel, ScannerCard, type FilterDiagnosticsData } from "@/components/vts/vts-filter-diagnostics-panel";
 import { FactorCalibrationSection, ExitStrategyAblationSection } from "@/pages/analytics";
 
 // ---------------------------------------------------------------------------
@@ -112,79 +112,55 @@ function Stat({ label, value, sub }: { label: string; value: string; sub?: strin
 // Panel: Scanner Cycle Header (xstock-specific)
 // ---------------------------------------------------------------------------
 
+// P19-B8.4c: the xStock LEAN scanner card — the shared ScannerCard, same shape as crypto. The xStock scanner
+// always runs when ARCA is open (fixed 30s cadence); when closed it skips cycles, so the next-scan countdown
+// is shown only while running + ARCA-open (a stale last-tick+30s would read wrong; the ARCA badge conveys
+// "closed"). Fresh/stale tick-quality lives in the FreshnessPanel below, not the lean scanner card (Kyle).
 function ScannerCycleHeader({ data, isLoading }: { data: XstocksFilterDiagnostics | undefined; isLoading: boolean }) {
-  if (isLoading) {
-    return (
-      <Card data-testid="xstocks-scanner-panel"><CardHeader><CardTitle className="text-lg">Scanner Cycle Metrics</CardTitle></CardHeader>
-        <CardContent><div className="h-32 flex items-center justify-center text-muted-foreground text-sm">Loading…</div></CardContent>
-      </Card>
-    );
-  }
-  if (!data?.ok || !data.xstockScanner) {
-    return (
-      <Card data-testid="xstocks-scanner-panel"><CardHeader><CardTitle className="text-lg">Scanner Cycle Metrics</CardTitle></CardHeader>
-        <CardContent><EmptyPanelState message="Failed to load scanner diagnostics." secondary="Check server logs." /></CardContent>
-      </Card>
-    );
-  }
-  const s = data.xstockScanner;
-  if (s.cyclesCompleted === 0) {
-    return (
-      <Card data-testid="xstocks-scanner-panel"><CardHeader><CardTitle className="text-lg">Scanner Cycle Metrics</CardTitle></CardHeader>
-        <CardContent><EmptyPanelState message="Scanner has not completed first cycle yet — refresh in ~30s" secondary={`Running=${s.isRunning ? 'yes' : 'no'} · Universe=${s.lastUniverseSize}`} /></CardContent>
-      </Card>
-    );
-  }
-  const lastCycleAt = s.lastTickAt ? new Date(s.lastTickAt) : null;
+  const s = data?.xstockScanner;
+  const isErr = !isLoading && (!data?.ok || !s);
+  const running = s?.isRunning ?? false;
+  const arcaOpen = s?.lastArcaOpen ?? false;
+  const nextScanAtMs = running && arcaOpen && s?.lastTickAt ? s.lastTickAt + 30_000 : null;
+  const badges = s ? (
+    <>
+      <Badge variant={running ? "default" : "destructive"}>{running ? "Running" : "Stopped"}</Badge>
+      <Badge variant={arcaOpen ? "default" : "secondary"}>{arcaOpen ? "ARCA Open" : "ARCA Closed"}</Badge>
+      {s.hostileSimActive && <Badge variant="destructive">Hostile Sim</Badge>}
+    </>
+  ) : undefined;
   return (
-    <Card data-testid="xstocks-scanner-panel">
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-lg flex items-center gap-2"><Activity className="w-5 h-5" />Scanner Cycle Metrics</CardTitle>
-          <div className="flex items-center gap-2 text-xs">
-            <Badge variant={s.isRunning ? "default" : "destructive"}>{s.isRunning ? "Running" : "Stopped"}</Badge>
-            <Badge variant={s.lastArcaOpen ? "default" : "secondary"}>{s.lastArcaOpen ? "ARCA Open" : "ARCA Closed"}</Badge>
-            {s.hostileSimActive && <Badge variant="destructive">Hostile Sim Active</Badge>}
-          </div>
+    <div className="space-y-2">
+      <ScannerCard
+        testId="xstocks-scanner-panel"
+        title="xStock Scanner"
+        subtitle={arcaOpen ? "always running (ARCA open)" : "extended-hours only (ARCA closed)"}
+        statusBadges={badges}
+        pairsLastScan={s?.pairsScannedLastCycle}
+        capacity={s?.lastUniverseSize}
+        pairsScanned24h={s?.rolling24hApproxPairsScanned}
+        cyclesLabel={s ? `${s.rolling24hApproxCycles.toLocaleString()} cycles (24h)` : undefined}
+        cadenceLabel="every 30s"
+        nextScanAtMs={nextScanAtMs}
+        isError={isErr}
+        isLoading={isLoading}
+      />
+      {/* P19-B8.1 (defect d2): lastError is an ACTIVE alarm (cleared server-side on the next healthy cycle);
+          the subdued history line keeps flapping errors visible after they clear. Kept below the lean card. */}
+      {s?.lastError && (
+        <div className="p-3 border border-destructive/50 bg-destructive/5 rounded text-sm">
+          <span className="font-semibold text-destructive">Last Error:</span> {s.lastError}
+          {(s as any).lastErrorAt && (
+            <span className="text-xs text-muted-foreground ml-2">at {new Date((s as any).lastErrorAt).toLocaleString()}</span>
+          )}
         </div>
-      </CardHeader>
-      <CardContent>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 p-4 bg-muted/30 rounded-md">
-          <Stat label="Cycles Completed" value={s.cyclesCompleted.toLocaleString()} />
-          <Stat label="Last Cycle At" value={lastCycleAt ? format(lastCycleAt, "HH:mm:ss") : "—"} />
-          <Stat label="Last Universe" value={s.lastUniverseSize.toString()} sub={s.lastArcaOpen ? "ARCA open" : "Extended-hours only"} />
-          <Stat label="Last Cycle Duration" value={s.lastCycleDurationMs !== null ? `${s.lastCycleDurationMs} ms` : "—"} />
+      )}
+      {s && !s.lastError && ((s as any).errorCount ?? 0) > 0 && (
+        <div className="text-xs text-muted-foreground">
+          No active errors. Last error {(s as any).lastErrorAt ? `at ${new Date((s as any).lastErrorAt).toLocaleString()}` : 'time unknown'} · {(s as any).errorCount} total this process.
         </div>
-        <div className="grid grid-cols-3 gap-4 mb-6">
-          <Stat label="Pairs Scanned (last cycle)" value={s.pairsScannedLastCycle.toString()} />
-          <Stat label="Fresh (last cycle)" value={s.pairsFreshLastCycle.toString()} />
-          <Stat label="Stale (last cycle)" value={s.pairsStaleLastCycle.toString()} />
-        </div>
-        <div className="border-t pt-4">
-          <div className="text-sm font-semibold mb-2">Rolling 24h (approximate, derived from xstock_spot_ticker_snap)</div>
-          <div className="grid grid-cols-2 gap-4">
-            <Stat label="Cycles (~)" value={s.rolling24hApproxCycles.toLocaleString()} />
-            <Stat label="Pairs Scanned (~)" value={s.rolling24hApproxPairsScanned.toLocaleString()} />
-          </div>
-        </div>
-        {/* P19-B8.1 (defect d2): lastError is now an ACTIVE alarm (cleared on
-            the next healthy cycle server-side); the subdued history line keeps
-            flapping errors visible after they clear. */}
-        {s.lastError && (
-          <div className="mt-4 p-3 border border-destructive/50 bg-destructive/5 rounded text-sm">
-            <span className="font-semibold text-destructive">Last Error:</span> {s.lastError}
-            {(s as any).lastErrorAt && (
-              <span className="text-xs text-muted-foreground ml-2">at {new Date((s as any).lastErrorAt).toLocaleString()}</span>
-            )}
-          </div>
-        )}
-        {!s.lastError && ((s as any).errorCount ?? 0) > 0 && (
-          <div className="mt-4 text-xs text-muted-foreground">
-            No active errors. Last error {(s as any).lastErrorAt ? `at ${new Date((s as any).lastErrorAt).toLocaleString()}` : 'time unknown'} · {(s as any).errorCount} total this process.
-          </div>
-        )}
-      </CardContent>
-    </Card>
+      )}
+    </div>
   );
 }
 
