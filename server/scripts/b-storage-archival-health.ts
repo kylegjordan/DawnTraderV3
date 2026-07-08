@@ -227,10 +227,14 @@ async function checkDailyPartitionRunway(nowMs: number): Promise<boolean> {
     console.log('[archival-health] daily-runway: DATABASE_URL unset — skip');
     return true;
   }
-  const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
-  await client.connect();
   let ok = true;
+  const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
   try {
+    // connect INSIDE the try (Langston Step-4 addendum note): a DB-unreachable at
+    // 05:00 must NOT throw uncaught out of this function and kill the whole
+    // watchdog run — the log-file checks already ran, and a DB-down is
+    // independently surfaced by DatabaseMonitor. Treat as inconclusive-OK, log it.
+    await client.connect();
     for (const { table } of DAILY_PARTITION_CUTOVERS) {
       const cutover = cutoverForTable(table)!;
       if (today.getTime() < cutover.getTime()) {
@@ -274,6 +278,8 @@ async function checkDailyPartitionRunway(nowMs: number): Promise<boolean> {
         console.log(`[archival-health] daily-runway ${table}: OK (${daysAhead} days ahead)`);
       }
     }
+  } catch (err) {
+    console.error('[archival-health] daily-runway check errored (DB unreachable?) — inconclusive, not crashing the watchdog:', err);
   } finally {
     await client.end().catch(() => {});
   }
