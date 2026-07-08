@@ -11347,8 +11347,8 @@ Six places where the trading code emits archive rows. Every hook is `try/catch` 
 
 ## Retention + partition crons
 
-- **Retention sweep** (`server/scripts/b70-retention-sweep.ts`, cron `0 2 * * *` UTC): drops whole monthly partitions older than `b70_postgres_retention_days` (default 90). Per-partition `DROP IF EXISTS` is O(1).
-- **Partition creator** (`server/scripts/b70-create-monthly-partitions.ts`, cron `30 2 28 * *` UTC): self-heals current-month partition + creates 12 months ahead.
+- **Retention (B-STORAGE-HARDEN Wave C, 2026-07-08 — REPLACED the DROP sweep):** the 5 B70 analytics tables (`signal_eval_archive`, `pair_scan_archive`, `exit_decision_archive`, `macro_feed_archive`, `signal_eval_provenance`) are **NO LONGER dropped**. The old `b70-retention-sweep.ts` (DROP whole monthly partitions >90d) was DELETED (rule 18 — it violated Kyle's 2026-05-06 never-drop directive, RUNNING_ISSUES #430 V1). They now tier **hot→warm→cold move-not-delete** through the B75 sweep (`b75-retention-sweep.ts`, cron `15 2 * * *`): each is in the sweep's `B70_TABLES` inventory (`captured_at` timestamp, per-table `data_lifecycle.<table>.hot_retention_days=90`), exported→uploaded-to-warm→download-verified→partition-dropped-ONLY-after-verify, then the table-agnostic `b75-cold-rotator.ts` (cron `0 3 1 * *`) rotates warm→cold (Backblaze B2) at 365d — preserved indefinitely. Hot footprint is unchanged (still frees the partition at 90d); the data is preserved instead of vanishing. (The `b70_postgres_retention_days` constant + its `archive-config.retentionDays` reader are now INFORMATIONAL-only — surfaced in the Drift Dashboard config panel — no longer a retention driver.) The B75 sweep runs tables sequentially under an O_EXCL run-lock so a long first-tiering pass (~1-2h once `signal_eval_archive` becomes eligible ~Sept-2026) can't overlap the next day's trigger.
+- **Partition creator** (`server/scripts/b70-create-monthly-partitions.ts`, cron `30 2 28 * *` UTC): self-heals current-month partition + creates 12 months ahead. **STAYS** — create ≠ drop; the B70 tables still need forward partitions.
 - **Tabular exporter** (`server/scripts/b70-table-export.ts`, cron `0 3 * * *` UTC, off by default until `b70_parquet_export_enabled=true`): exports prior-day rows to `/var/lib/dawntrader/exports/<table>/<YYYY-MM-DD>.jsonl.gz`. JSONL chosen over Parquet for v1 to avoid new npm dep; pandas/DuckDB/tsfresh/Qlib all read JSONL natively.
 
 ## B62 retroactive labels runner
@@ -11496,10 +11496,12 @@ Future ML/analytics schedulers query the manifest once instead of needing to kno
 
 | Cron | Script | Action |
 |---|---|---|
-| `0 2 * * *` | `b70-retention-sweep.ts` | B70 archive tables (signal pipeline events) — UNCHANGED |
-| `15 2 * * *` | `b75-retention-sweep.ts` | B74 6 tables export-then-drop fence |
+| ~~`0 2 * * *`~~ | ~~`b70-retention-sweep.ts`~~ | **DELETED B-STORAGE-HARDEN Wave C** — B70 DROP retired; the 5 B70 tables now tier via `b75-retention-sweep` (below) |
+| `15 2 * * *` | `b75-retention-sweep.ts` | B74 6 tables **+ the 5 B70 analytics tables** (Wave C) — export-then-drop-after-verify fence (move-not-delete), O_EXCL run-lock |
 | `30 2 * * *` | `context-bridge-log-ttl.ts` | Month-grouped export + DELETE rounded to month-start + tail VACUUM |
-| `0 3 1 * *` | `b75-cold-rotator.ts` | Monthly warm→cold rotation (objects > `default_warm_retention_days=365`) |
+| `0 3 1 * *` | `b75-cold-rotator.ts` | Monthly warm→cold rotation (objects > `default_warm_retention_days=365`; table-agnostic — covers B74 + B70 + ctx-bridge) |
+| `0 4 * * 1` | `b75-cold-liveness.ts` | Weekly cold round-trip canary (B-STORAGE-HARDEN Wave A) |
+| `0 5 * * *` | `b-storage-archival-health.ts` | Daily cron-silence + failed>0 watchdog → §10.5 (Wave A) |
 
 ## Format + protocol
 

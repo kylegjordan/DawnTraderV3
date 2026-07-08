@@ -1847,7 +1847,7 @@ NEW per-VTS-trade observability field `entryLiquidityValue` (number) + `entryLiq
 | 9 | Migration + rollback | `drizzle/migrations/2026-05-05-b70-data-archive-tables*.sql` | ✅ Applied |
 | 10 | 5 tables + 48 monthly partitions | `pair_scan_archive`, `signal_eval_archive`, `exit_decision_archive`, `macro_feed_archive`, `b62_retroactive_labels` | ✅ LIVE |
 | 11 | 11 module_constants in `data_archive` module | b70_*_capture_enabled × 4 + parquet/partition/retention/queue knobs + signal_eval kill-switch | ✅ Seeded |
-| 12 | Retention sweep cron (02:00 UTC daily) | `server/scripts/b70-retention-sweep.ts` + crontab | ✅ Installed |
+| 12 | ~~Retention sweep cron (02:00 UTC daily)~~ | ~~`server/scripts/b70-retention-sweep.ts`~~ | **🗑 DELETED B-STORAGE-HARDEN Wave C (2026-07-08).** The DROP-only sweep violated the never-drop directive (#430 V1). The 5 B70 tables now tier **hot→warm→cold move-not-delete** via the B75 sweep (`b75-retention-sweep.ts` `B70_TABLES` inventory, cron `15 2 * * *`) + `b75-cold-rotator` — retention ownership consolidated onto ONE sweep. Per-table `data_lifecycle.<table>.hot_retention_days=90`. `b70_postgres_retention_days` now informational-only (Drift Dashboard display). See DELETED_COMPONENTS_LOG + SYSTEM_MANUAL "Retention + partition crons". |
 | 13 | Partition creator cron (28th 02:30 UTC) | `server/scripts/b70-create-monthly-partitions.ts` + crontab | ✅ Installed |
 | 14 | Drift Dashboard data-archive-status aggregator | `drift-dashboard-aggregator.ts:computeDataArchiveStatus` | ✅ LIVE |
 | 15 | API endpoint | `GET /api/analytics/data-archive-status` | ✅ LIVE |
