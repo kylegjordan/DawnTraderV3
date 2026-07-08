@@ -31,11 +31,24 @@
 
 import 'dotenv/config';
 import fs from 'node:fs';
+import pg from 'pg';
 import { addAlert } from '../services/system-alerts.js';
+import {
+  DAILY_PARTITION_CUTOVERS,
+  cutoverForTable,
+} from '../services/data-archive/daily-partition-cutover.js';
 
 const LOG_DIR = '/var/log/dawntrader';
 const HOUR_MS = 3_600_000;
 const DAY_MS = 24 * HOUR_MS;
+
+// B-STORAGE-HARDEN Wave D (OBJ-3, Langston Step-4 Finding-2): a daily-partitioned
+// table needs its forward daily partitions provisioned ahead of the write head or
+// inserts fail the day the pre-created runway runs out. This watchdog runs in a
+// SEPARATE process from the daily creator (a dead creator cannot alert on itself),
+// so it catches a stalled creator BEFORE the insert-failure cliff — fire when the
+// furthest-provisioned daily partition is fewer than this many days ahead.
+const MIN_RUNWAY_DAYS = 4;
 
 interface CheckSpec {
   /** short stable id (used in the dedupe key) */
@@ -174,6 +187,99 @@ async function runCheck(spec: CheckSpec, nowMs: number): Promise<boolean> {
   return true;
 }
 
+/** Fire a §10.5 alert for a short/absent daily-partition runway (deduped per table). */
+async function fireRunway(table: string, detail: string): Promise<void> {
+  try {
+    await addAlert({
+      triggers_at: new Date(),
+      category: 'health_check',
+      severity: 'warning',
+      title: `Daily-partition runway short: ${table}`,
+      body:
+        `The daily-partition creator (b74-create-daily-partitions.ts, cron 0 1 * * *) for "${table}" is not keeping ` +
+        `enough forward daily partitions provisioned. ${detail} When the runway reaches 0, inserts into ${table} FAIL. ` +
+        `Check the daily creator cron on staging and re-run it to self-heal forward coverage.`,
+      metadata: {
+        source: 'b-storage-archival-health',
+        batch: 'B-STORAGE-HARDEN',
+        check: 'daily-runway',
+        table,
+      },
+      dedupe_key: `archival-health-daily-runway-${table}`,
+    });
+    console.log(`[archival-health] ALERT daily-runway/${table}: ${detail}`);
+  } catch (err) {
+    console.error(`[archival-health] failed to raise daily-runway alert for ${table}:`, err);
+  }
+}
+
+/**
+ * Daily-partition forward-coverage check (Langston Step-4 Finding-2). For each
+ * daily-partitioned table that is AT/AFTER its cutover, find the furthest-forward
+ * `…_YYYY_MM_DD` child and alert if it is fewer than MIN_RUNWAY_DAYS ahead of
+ * today (or if NONE exist — creator never ran / migration missing). Pre-cutover
+ * tables are skipped (their days are still monthly).
+ */
+async function checkDailyPartitionRunway(nowMs: number): Promise<boolean> {
+  const now = new Date(nowMs);
+  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  if (!process.env.DATABASE_URL) {
+    console.log('[archival-health] daily-runway: DATABASE_URL unset — skip');
+    return true;
+  }
+  const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
+  await client.connect();
+  let ok = true;
+  try {
+    for (const { table } of DAILY_PARTITION_CUTOVERS) {
+      const cutover = cutoverForTable(table)!;
+      if (today.getTime() < cutover.getTime()) {
+        console.log(
+          `[archival-health] daily-runway ${table}: pre-cutover (${cutover.toISOString().slice(0, 10)}) — skip`,
+        );
+        continue;
+      }
+      const r = await client.query(
+        `SELECT child.relname AS child
+           FROM pg_inherits
+           JOIN pg_class child  ON child.oid  = pg_inherits.inhrelid
+           JOIN pg_class parent ON parent.oid = pg_inherits.inhparent
+          WHERE parent.relname = $1
+            AND child.relname ~ '_[0-9]{4}_[0-9]{2}_[0-9]{2}$'`,
+        [table],
+      );
+      let maxDay: Date | null = null;
+      for (const row of r.rows) {
+        const m = /_(\d{4})_(\d{2})_(\d{2})$/.exec(row.child);
+        if (!m) continue;
+        const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+        if (!maxDay || d.getTime() > maxDay.getTime()) maxDay = d;
+      }
+      if (!maxDay) {
+        await fireRunway(
+          table,
+          `NO daily partitions exist at/after the ${cutover.toISOString().slice(0, 10)} cutover — the creator is not provisioning days.`,
+        );
+        ok = false;
+        continue;
+      }
+      const daysAhead = Math.floor((maxDay.getTime() - today.getTime()) / DAY_MS);
+      if (daysAhead < MIN_RUNWAY_DAYS) {
+        await fireRunway(
+          table,
+          `the furthest-provisioned daily partition is only ${daysAhead} day(s) ahead (min ${MIN_RUNWAY_DAYS}).`,
+        );
+        ok = false;
+      } else {
+        console.log(`[archival-health] daily-runway ${table}: OK (${daysAhead} days ahead)`);
+      }
+    }
+  } finally {
+    await client.end().catch(() => {});
+  }
+  return ok;
+}
+
 async function main(): Promise<void> {
   const nowMs = Date.now();
   console.log(`[archival-health] started at ${new Date(nowMs).toISOString()}`);
@@ -182,7 +288,10 @@ async function main(): Promise<void> {
     const ok = await runCheck(spec, nowMs);
     if (!ok) allOk = false;
   }
-  console.log(`[archival-health] DONE — all_ok=${allOk} checks=${CHECKS.length}`);
+  // Wave D (OBJ-3): daily-partition forward-coverage check.
+  const runwayOk = await checkDailyPartitionRunway(nowMs);
+  if (!runwayOk) allOk = false;
+  console.log(`[archival-health] DONE — all_ok=${allOk} checks=${CHECKS.length + 1}`);
   // Exit 0 regardless (alerts are the signal); non-zero would just noise the cron log.
 }
 

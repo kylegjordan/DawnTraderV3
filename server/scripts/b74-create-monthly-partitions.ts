@@ -24,6 +24,7 @@
 
 import { db } from '../db.js';
 import { sql } from 'drizzle-orm';
+import { isDailyPartitionedForMonth } from '../services/data-archive/daily-partition-cutover.js';
 
 const SIX_TABLES = [
   'xstock_spot_ohlc_1m',
@@ -70,10 +71,21 @@ async function main(): Promise<void> {
   // Ensure partitions for: current month (self-heal), next 12 months (forward window)
   let createdCount = 0;
   let selfHealedCount = 0;
+  let dailyExcludedCount = 0;
 
   for (const table of SIX_TABLES) {
     for (let i = 0; i <= 12; i++) {
       const target = new Date(now.getFullYear(), now.getMonth() + i, 1);
+      // B-STORAGE-HARDEN Wave D (OBJ-3): a daily-partitioned table (e.g.
+      // xstock_spot_ticker_snap) is owned by the DAILY creator from its cutover
+      // month forward. Creating a monthly partition here would overlap the daily
+      // children and break inserts (Langston Wave-D req #2). Skip those months;
+      // months BEFORE the cutover still get a monthly partition (transition-fwd).
+      const monthStartUtc = new Date(Date.UTC(target.getFullYear(), target.getMonth(), 1));
+      if (isDailyPartitionedForMonth(table, monthStartUtc)) {
+        dailyExcludedCount++;
+        continue;
+      }
       const { created, name } = await ensurePartition(table, target.getFullYear(), target.getMonth() + 1);
       if (created) {
         createdCount++;
@@ -88,7 +100,10 @@ async function main(): Promise<void> {
     }
   }
 
-  console.log(`[B74][partitions] done. ${createdCount} new partitions created (${selfHealedCount} self-healed).`);
+  console.log(
+    `[B74][partitions] done. ${createdCount} new partitions created ` +
+      `(${selfHealedCount} self-healed, ${dailyExcludedCount} daily-partitioned months excluded).`,
+  );
 }
 
 main()

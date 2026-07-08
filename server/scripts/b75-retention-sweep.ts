@@ -42,10 +42,12 @@ import pg from 'pg';
 import { exportPartition } from '../services/data-archive/partition-exporter.js';
 import { getStorageClient, type StorageClient } from '../services/data-archive/storage-client.js';
 import {
+  classifyPartition,
   decideSliceMode,
   enumerateUtcDays,
   dayLabel,
   deriveModeFromLabels,
+  isPartitionEligible,
 } from '../services/data-archive/sweep-slicing.js';
 import { addAlert } from '../services/system-alerts.js';
 
@@ -192,6 +194,7 @@ async function listOldPartitions(
   client: pg.Client,
   parent: string,
   cutoffMonthStart: Date,
+  cutoff: Date,
 ): Promise<PartitionRow[]> {
   const r = await client.query(
     `SELECT child.relname AS child_name,
@@ -203,21 +206,25 @@ async function listOldPartitions(
     [parent],
   );
 
+  // B-STORAGE-HARDEN Wave D (OBJ-3): a parent may now hold MONTHLY (`…_YYYY_MM`)
+  // and/or DAILY (`…_YYYY_MM_DD`) children (xstock_spot_ticker_snap transitions
+  // month→day at the cutover). `classifyPartition` tests the daily shape FIRST
+  // (so `_DD` is never mis-read as a month), and `isPartitionEligible` applies
+  // the right cutoff per granularity: a monthly child tiers when its whole month
+  // is in the past (rangeStart < cutoffMonthStart, legacy); a daily child tiers
+  // when its whole day is past the day-granular retention cutoff (rangeEnd <=
+  // cutoff) — a true rolling window.
   const out: PartitionRow[] = [];
   for (const row of r.rows) {
-    const m = /(\d{4})_(\d{2})$/.exec(row.child_name);
-    if (!m) continue;
-    const year = Number(m[1]);
-    const month = Number(m[2]);
-    const rangeStart = new Date(Date.UTC(year, month - 1, 1));
-    const rangeEnd = new Date(Date.UTC(year, month, 1));
-    if (rangeStart >= cutoffMonthStart) continue; // not old enough / not write-sealed
+    const parsed = classifyPartition(row.child_name);
+    if (!parsed) continue;
+    if (!isPartitionEligible(parsed, cutoff, cutoffMonthStart)) continue;
     out.push({
       parent,
       child: row.child_name,
-      partitionLabel: `${year}-${String(month).padStart(2, '0')}`,
-      rangeStart,
-      rangeEnd,
+      partitionLabel: parsed.partitionLabel,
+      rangeStart: parsed.rangeStart,
+      rangeEnd: parsed.rangeEnd,
     });
   }
   return out;
@@ -592,6 +599,21 @@ async function processPartition(
 
     // Decide whole-vs-sliced. The resume invariant guard OVERRIDES the live
     // threshold so a half-swept month never mixes month + day labels.
+    //
+    // ★ Wave D (OBJ-3) label-equality convergence (Langston Step-4 Finding-1):
+    // a DAILY partition (`…_YYYY_MM_DD`) reaches here with `partitionLabel` ==
+    // its single day label (`YYYY-MM-DD`). Every month-oriented helper below
+    // then converges to that one label: `listMonthLabels(… , 'YYYY-MM-DD')`
+    // matches only `= 'YYYY-MM-DD' OR LIKE 'YYYY-MM-DD-%'` (just itself), so
+    // `deriveModeFromLabels` sees at most one label and never trips its
+    // month+day mixing guard; and in the sliced path `enumerateUtcDays(rangeStart,
+    // rangeEnd)` yields exactly ONE day whose `dayLabel` equals `partitionLabel`.
+    // So whole and sliced converge to the identical single object — daily
+    // correctness is emergent from "a daily partition spans one UTC day", not a
+    // dedicated branch. This convergence is regression-locked by the
+    // "Wave D daily-partition through the month-oriented machinery" golden test
+    // (b-new-47-sweep-helpers.test.ts) — keep it green if you refactor
+    // decideSliceMode / deriveModeFromLabels / enumerateUtcDays.
     const existingLabels = await listMonthLabels(ctlClient, spec.parent, partition.partitionLabel);
     const resumeMode = deriveModeFromLabels(partition.partitionLabel, existingLabels);
     mode = resumeMode ?? decideSliceMode(bytesHot, cfg.sliceThresholdHotBytes);
@@ -926,7 +948,7 @@ async function runSweep(): Promise<boolean> {
     await ctlList.connect();
     let oldPartitions: PartitionRow[];
     try {
-      oldPartitions = await listOldPartitions(ctlList, spec.parent, cutoffMonth);
+      oldPartitions = await listOldPartitions(ctlList, spec.parent, cutoffMonth, cutoff);
     } finally {
       await ctlList.end();
     }

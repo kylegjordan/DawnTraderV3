@@ -34,12 +34,23 @@ const { Client } = pg;
 
 interface Cfg {
   warmRetentionDays: number;
+  /** B-STORAGE-HARDEN Wave D: optional per-table warm-window overrides, keyed by
+   *  source_table. Read from `data_lifecycle.<table>.warm_retention_days`. Empty
+   *  by default (all tables use `warmRetentionDays`) — a future one-line dial to
+   *  send a rarely-re-read table to cold sooner without a code change. */
+  perTableWarmRetentionDays: Map<string, number>;
   coldRotatorDryRun: boolean;
   warmBucket: string;
   warmPrefix: string;
   coldBucket: string;
   coldPrefix: string;
   coldProvider: string;
+}
+
+/** The warm-retention window (days) that applies to a given source_table: its
+ *  per-table override if present, else the global default. */
+function warmWindowForTable(cfg: Cfg, sourceTable: string): number {
+  return cfg.perTableWarmRetentionDays.get(sourceTable) ?? cfg.warmRetentionDays;
 }
 
 async function loadConfig(client: pg.Client): Promise<Cfg> {
@@ -71,8 +82,23 @@ async function loadConfig(client: pg.Client): Promise<Cfg> {
     return v;
   }
 
+  // Wave D: harvest any per-table warm-window overrides. Constant names look like
+  // `<table>.warm_retention_days` under module_name='data_lifecycle'. Absent by
+  // default → the map is empty and every table uses the global default (behavior
+  // byte-identical to before this knob existed).
+  const perTableWarmRetentionDays = new Map<string, number>();
+  for (const [name, value] of map.entries()) {
+    const m = /^(.+)\.warm_retention_days$/.exec(name);
+    if (!m) continue;
+    if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+      throw new Error(`[B75 rotator] invalid numeric data_lifecycle.${name}`);
+    }
+    perTableWarmRetentionDays.set(m[1], value);
+  }
+
   return {
     warmRetentionDays: reqNum('default_warm_retention_days'),
+    perTableWarmRetentionDays,
     coldRotatorDryRun: reqBool('cold_rotator_dry_run'),
     warmBucket: reqStr('warm_bucket'),
     warmPrefix: reqStr('warm_prefix'),
@@ -94,7 +120,14 @@ interface Candidate {
 }
 
 async function listCandidates(client: pg.Client, cfg: Cfg): Promise<Candidate[]> {
-  const cutoff = new Date(Date.now() - cfg.warmRetentionDays * 86_400_000);
+  // Wave D per-table windows: prefilter in SQL by the SHORTEST applicable window
+  // (so no eligible row is excluded), then refine per-table in JS. With NO
+  // per-table overrides, minWindow == default → this is exactly the historical
+  // `created_at < now - default` single-cutoff behavior.
+  const nowMs = Date.now();
+  const windows = [cfg.warmRetentionDays, ...cfg.perTableWarmRetentionDays.values()];
+  const minWindowDays = Math.min(...windows);
+  const prefilterCutoff = new Date(nowMs - minWindowDays * 86_400_000);
   const r = await client.query(
     `SELECT id, source_table, partition_label, storage_uri, row_count, bytes_compressed,
             checksum, created_at
@@ -110,9 +143,12 @@ async function listCandidates(client: pg.Client, cfg: Cfg): Promise<Candidate[]>
              AND m2.tier = 'cold'
         )
       ORDER BY created_at ASC`,
-    [cutoff],
+    [prefilterCutoff],
   );
-  return r.rows;
+  // Per-table refine: keep only rows past THEIR own warm window.
+  return (r.rows as Candidate[]).filter(
+    (row) => row.created_at.getTime() < nowMs - warmWindowForTable(cfg, row.source_table) * 86_400_000,
+  );
 }
 
 async function main(): Promise<void> {
@@ -142,9 +178,13 @@ async function main(): Promise<void> {
   const warmRetentionOverride = parseIntFlag(argv, '--warm-retention-days');
   if (warmRetentionOverride !== null) {
     console.log(
-      `[B75 rotator] warm-retention override (CLI): ${cfg.warmRetentionDays} → ${warmRetentionOverride} days`,
+      `[B75 rotator] warm-retention override (CLI): ${cfg.warmRetentionDays} → ${warmRetentionOverride} days ` +
+        `(single global window; per-table overrides ignored for this run)`,
     );
     cfg.warmRetentionDays = warmRetentionOverride;
+    // The CLI override is a deliberate single-window run (bounded proof / manual
+    // batch) — clear per-table overrides so every table uses exactly this value.
+    cfg.perTableWarmRetentionDays.clear();
   }
 
   const storage = getStorageClient();
