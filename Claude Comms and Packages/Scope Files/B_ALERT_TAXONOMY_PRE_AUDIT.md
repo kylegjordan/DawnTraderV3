@@ -20,9 +20,20 @@ change-class: non_architecture
 
 ## Migration plan (one-shot, reversible)
 1. `cp system-alerts.jsonl system-alerts.jsonl.bak-pre-taxonomy-2026-07-10` (backup FIRST).
-2. Backfill: `scheduled_verification`, `weekend_restart_verification`, `b46b_soak_analysis`, `reorg_b2_1_window`, `tec_selfheal_verify` → `verification` · `comms_decommission` → `one_off` · `reminder` stays · `test` → **drop the 1 row**.
+2. Backfill **`category` ONLY** — `scheduled_verification`, `weekend_restart_verification`, `b46b_soak_analysis`, `reorg_b2_1_window`, `tec_selfheal_verify` → `verification` · `comms_decommission` → `one_off` · `reminder` stays · `test` → **drop the 1 row** (`beffed6d`, resolved).
 3. Verify: every row's category ∈ the closed set; row count 254 → 253; `listAlerts` filters still resolve.
 4. Rollback = restore the `.bak`.
+
+### ★ CROSS-BATCH SAFETY (CC-B flag, 2026-07-10) — this migration rewrites the JSONL that #445's evidence rests on
+`#445` + `B_ALERT_LIFECYCLE_FOUR_ALERT_DISPOSITION.md` cite four alerts **by `id` AND by `state`** as the load-bearing proof that four verifications were never performed. A whole-file rewrite that normalized or dropped a state field would make that ledger entry **silently uncitable — and it would still *read* fine.** A row-count check cannot catch that.
+**INVARIANTS — the migration mutates `category` and NOTHING else:**
+- `6f8db90b`, `c2aa2940`, `06532d55` must remain **`acknowledged`** (the three still-open Class-(I) un-run verifications — NOT resolved, NOT swept).
+- `da0c24b8` must remain **`resolved`** with its evidence intact.
+- **Post-migration ASSERT** (not row-count): all four ids still present, with `state` / `acknowledged_at` / `resolved_at` **byte-identical to the `.bak`**. Fail the migration and restore if any differ.
+- Dropping `beffed6d` must not reindex/renumber anything other entries reference (JSONL is id-keyed, no positional refs — **confirm at build**).
+
+### ★ DESIGN CONSTRAINT ON OBJ-6 (falls out of the above — CC-B)
+**Three of those four must stay `acknowledged` INDEFINITELY** until `B-VERIFY-BACKLOG` actually runs the queries. Therefore **the stale-ack detector is a SURFACER, never an auto-closer.** A long-lived `acknowledged` row is *precisely the thing to raise*, not to "tidy." OBJ-6 must never auto-resolve, auto-clear, or suppress on age — it re-surfaces, loudly and escalating, and a human/CC resolves it with evidence. (Auto-resolve is a *separate* leg and belongs to `B-ALERT-LIFECYCLE`, not here.) A comment to this effect goes in both the detector and the migration so a future reader cannot "clean up" the evidence.
 
 ## ★ OBJ-6b — mint-time observability check (Langston RULED 2026-07-10)
 **The blind spot:** a **Class-(II) permanently-unsatisfiable** verification sits *legitimately* `acknowledged` forever — a stale-ack **timer structurally cannot catch it**; it would politely ignore exactly the class we most want caught.
