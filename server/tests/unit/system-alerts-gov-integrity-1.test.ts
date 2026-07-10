@@ -36,7 +36,9 @@ describe('OBJ-1 — resolution_evidence hard gate', () => {
 
   it('REJECTS the texture of an empty close with a word added', async () => {
     const { isValidResolutionEvidence } = await load();
-    for (const bad of ['', '   ', 'looks fine', 'verified', 'done', 'resolved', 'ok']) {
+    // 'done at 3:00' is Langston's Step-4 example — a bare time must NOT satisfy
+    // the path:line rule (which now requires a '.' or '/').
+    for (const bad of ['', '   ', 'looks fine', 'verified', 'done', 'resolved', 'ok', 'done at 3:00', 'fixed by 9:15']) {
       expect(isValidResolutionEvidence(bad)).toBe(false);
     }
   });
@@ -97,9 +99,14 @@ describe('OBJ-3 — class-driven delivery', () => {
 });
 
 describe('Layer-A / Layer-B evidence SEAM (regression guard)', () => {
-  it('the governance-checker graded-ref sha passes the Layer-A gate', async () => {
+  // NOTE (Langston Step-4): this guards SHAPE, not the coupling. It asserts the
+  // Layer-A gate accepts a 40-hex sha + the sentinel — the two things the checker
+  // emits TODAY. It does NOT observe poller.mjs, so it stays green if poller
+  // changes its --evidence format (a separate .mjs boundary). It is a shape
+  // contract, not a live-coupling test.
+  it('the governance-checker graded-ref sha SHAPE passes the Layer-A gate', async () => {
     const { isValidResolutionEvidence } = await load();
-    // Exactly what scripts/governance-checker/poller.mjs emits as --evidence:
+    // Exactly what scripts/governance-checker/poller.mjs emits as --evidence today:
     expect(isValidResolutionEvidence('4b46bec570e1a2b3c4d5e6f7089a1b2c3d4e5f60')).toBe(true);
     // and its honest fetch-fail fallback:
     expect(isValidResolutionEvidence('NO-EVIDENCE-GIVEN')).toBe(true);

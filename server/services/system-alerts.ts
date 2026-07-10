@@ -155,14 +155,21 @@ export type ResolutionEvidenceSentinel = typeof RESOLUTION_EVIDENCE_SENTINELS[nu
  *   - a git sha            (7–40 hex)
  *   - a uuid               (alert id / run id)
  *   - a doc section ref    (§3.2, #440)
+ *
+ * HONEST LIMIT (Langston Step-4): this is a FORCING FUNCTION, not airtight
+ * validation. Any shape gate is defeatable — an English hex-word like "defaced"
+ * matches the sha rule. The real safety is the sanctioned `NO-EVIDENCE-GIVEN`
+ * escape hatch: it lets an honest "I have no reference" through, so nobody needs
+ * to fake one. The gate raises the cost of a lazy close; it does not verify the
+ * reference exists (that is Layer-B, in the checker, at the graded ref).
  */
 export function isValidResolutionEvidence(s: unknown): s is string {
   if (typeof s !== 'string') return false;
   const t = s.trim();
   if ((RESOLUTION_EVIDENCE_SENTINELS as readonly string[]).includes(t)) return true;
   return (
-    /[\w./-]+:\d+/.test(t) ||                                   // path:line
-    /\b[0-9a-f]{7,40}\b/i.test(t) ||                            // git sha (7–40 hex)
+    /[\w.\/-]*[.\/][\w.\/-]*:\d+/.test(t) ||                    // path:line — requires a '.' or '/' so a bare time ("3:00") fails
+    /\b[0-9a-f]{7,40}\b/i.test(t) ||                            // git sha (7–40 hex) — permissive by design (see HONEST LIMIT)
     /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i.test(t) || // uuid
     /[§#]\s*[\w.\-]+/.test(t)                                   // doc section / issue ref
   );
