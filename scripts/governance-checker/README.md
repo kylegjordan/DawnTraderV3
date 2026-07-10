@@ -19,12 +19,19 @@ NOT here  : Helsinki 204.168.141.77   <- no clone, no governance units.
 
 **Why this block exists.** On 2026-07-10 nobody could find where the checker lived. Langston searched Helsinki (wrong box), found nothing, and reported he could not reach it. The crew *confirmed his blindness instead of testing it*, wrote it into two issues and a report to Kyle, and nearly filed a permissions defect that did not exist. **He could read it the whole time.** The entire failure was that its host appeared in exactly one parenthetical in the whole governance record. (`RUNNING_ISSUES.md` #492, #455.)
 
-**Grade the checker by TREE HASH, never by commit count** (#449 addendum-5). Both halves run from anywhere:
+**Grade the checker by the POLLER'S MODULE-CLOSURE hashes — never by commit count, and never by the directory tree** (#449 addendum-5, corrected by addendum-7). Runs from anywhere:
 ```
-git rev-parse <deployed-sha>:scripts/governance-checker
-git rev-parse origin/migration/aws-supabase:scripts/governance-checker
+# the poller's REAL closure, verified from its own import statements:
+#   poller.mjs imports ./config.mjs and ./checker.mjs  (nothing else local)
+for f in poller.mjs config.mjs checker.mjs; do
+  git rev-parse "<deployed-sha>:scripts/governance-checker/$f"
+  git rev-parse "origin/migration/aws-supabase:scripts/governance-checker/$f"
+done
 ```
-Identical hashes ⇒ the enforcer's code is current. A commit count measures doc churn on a live branch and says nothing about the enforcer.
+Three blob hashes, pairwise identical ⇒ the enforcer is running current logic.
+(`heartbeat-check.mjs` is a **separate process** with its own unit — hash it separately when grading the heartbeat.)
+
+**Why not the directory tree?** Because *this very README is inside it.* The block you are reading changed `scripts/governance-checker`'s tree hash within an hour of that hash being adopted as the invariant — while every executable stayed byte-identical. **A directory is not a program.** A commit count measures doc churn on a live branch; a directory hash measures doc churn too, just less obviously.
 
 **⚠️ NOTHING DEPLOYS TO THIS CLONE.** No `ExecStartPre`, no cron pull, no git in the unit. The last update was a human, by hand, on 2026-06-26. **Any fix merged to origin will NOT run until someone deploys it** (#449 addendum-6).
 
