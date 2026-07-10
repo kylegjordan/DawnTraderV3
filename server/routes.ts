@@ -6621,20 +6621,26 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
 
   apiRouter.get('/system-alerts', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const { listAlerts, listSurfaceable } = await import('./services/system-alerts.js');
-      // Narrow query strings to the union types accepted by listAlerts; reject
-      // unknown values (silently → undefined → no filter) rather than casting.
+      const { listAlerts, listSurfaceable, ALERT_CATEGORIES, GRANDFATHERED_ALERT_CATEGORIES } =
+        await import('./services/system-alerts.js');
+      // Narrow query strings to values that can actually appear in stored rows;
+      // reject unknown values (silently → undefined → no filter) rather than
+      // casting. B-GOV-INTEGRITY-1 OBJ-4: the category set is now the SSOT
+      // (creatable ∪ grandfathered) imported from the service — NOT a
+      // hand-maintained literal, which had silently omitted 'governance' (181
+      // rows / 71% of the store were unfilterable).
       const STATES = new Set(['scheduled', 'active', 'acknowledged', 'resolved'] as const);
-      const CATEGORIES = new Set([
-        'soak_verification', 'health_check', 'breakage', 'one_off', 'recurring',
-      ] as const);
+      const FILTERABLE_CATEGORIES = new Set<string>([
+        ...ALERT_CATEGORIES,
+        ...GRANDFATHERED_ALERT_CATEGORIES,
+      ]);
       const stateRaw = typeof req.query.state === 'string' ? req.query.state : undefined;
       const categoryRaw = typeof req.query.category === 'string' ? req.query.category : undefined;
       const state = stateRaw && (STATES as Set<string>).has(stateRaw)
         ? (stateRaw as 'scheduled' | 'active' | 'acknowledged' | 'resolved')
         : undefined;
-      const category = categoryRaw && (CATEGORIES as Set<string>).has(categoryRaw)
-        ? (categoryRaw as 'soak_verification' | 'health_check' | 'breakage' | 'one_off' | 'recurring')
+      const category = categoryRaw && FILTERABLE_CATEGORIES.has(categoryRaw)
+        ? categoryRaw
         : undefined;
 
       // Default response includes BOTH surfaceable-now AND scheduled-future entries

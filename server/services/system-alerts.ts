@@ -43,14 +43,106 @@ const LOCK_RETRY_DELAY_MS = 100;
 const LOCK_STALE_AFTER_MS = 30_000; // 30s — if lock is older than this, assume crashed holder and force-acquire
 
 export type AlertState = 'scheduled' | 'active' | 'acknowledged' | 'resolved';
-export type AlertCategory =
-  | 'soak_verification'
-  | 'health_check'
-  | 'breakage'
-  | 'one_off'
-  | 'recurring'
-  | 'governance'; // B-GOV governance-checker: missing/thin/hollow doc-set gaps
+
+// ─── B-GOV-INTEGRITY-1 (OBJ-4, 2026-07-10): category is a SINGLE SOURCE ───────
+//
+// The runtime SSOT and the compile-time type are now the SAME thing — the type
+// is DERIVED from this const. Before this batch the type declared 6 members
+// while the live data held 13, because a `as AlertCategory` cast in the CLI
+// admitted anything: a validator beside a still-present cast is a second lock on
+// a door whose first lock is broken (Langston). The cast is deleted; every new
+// alert's category is validated against ALERT_CATEGORIES at addAlert().
+//
+// Membership decided by Langston 2026-07-10 (Step-2): categories with a real
+// forward consumer. `health_check` stays (2 live writers at the ref:
+// database-monitor + b-storage-archival-health; a 3rd pending #441). `recurring`
+// dropped (zero writers). Everything else is GRANDFATHERED — accepted on read
+// for historical rows, never creatable anew.
+export const ALERT_CATEGORIES = [
+  'governance',          // B-GOV governance-checker: missing/thin/hollow doc-set gaps
+  'breakage',
+  'soak_verification',
+  'one_off',
+  'verification',
+  'reminder',
+  'health_check',        // disk / archival-cron-silence / freshness system health
+] as const;
+export type AlertCategory = typeof ALERT_CATEGORIES[number];
+
+// Historical categories present in stored rows but NOT creatable going forward.
+// Kept ONLY so validation of existing data does not reject its own history —
+// addAlert() refuses these; readers accept them. (Never rewrite stored rows.)
+export const GRANDFATHERED_ALERT_CATEGORIES = [
+  'test',
+  'reorg_b2_1_window',
+  'b46b_soak_analysis',
+  'comms_decommission',
+  'weekend_restart_verification',
+  'scheduled_verification',
+  'tec_selfheal_verify',
+  'health_check', // also creatable; listed for reader-completeness
+  'recurring',    // dropped from creatable set this batch
+] as const;
+
+/**
+ * OBJ-4 gate: a NEW alert's category must be in the creatable SSOT. Rejects
+ * loudly — a typo or an off-taxonomy string can no longer slip in via a cast and
+ * then vanish from every consumer keyed on the real set. Returns the value
+ * narrowed to AlertCategory so call sites need no cast.
+ */
+export function assertCategoryCreatable(c: string): AlertCategory {
+  if ((ALERT_CATEGORIES as readonly string[]).includes(c)) return c as AlertCategory;
+  throw new Error(
+    `addAlert: category ${JSON.stringify(c)} is not creatable. ` +
+    `Allowed: ${ALERT_CATEGORIES.join(' | ')}. ` +
+    `(Grandfathered-historical categories are accepted on read but cannot be created.)`,
+  );
+}
+
 export type AlertSeverity = 'info' | 'warning' | 'critical';
+
+// ─── B-GOV-INTEGRITY-1 (F3b, 2026-07-10): resolve provenance primitives ──────
+//
+// `resolved_by_transport` is the channel a resolve arrived through. It is the
+// VERIFIABLE half of the who-resolved-this question — stamped by the code path,
+// NEVER passed by the caller (a caller-supplied transport is just a second
+// claim, which collapses the two-field trust distinction). Each call site hands
+// resolveAlert() its own literal; there is no `--transport` flag.
+export type ResolveTransport = 'cli' | 'dispatcher' | 'api' | 'governance-checker';
+
+// Sanctioned sentinels: the ONLY non-reference strings resolution_evidence may
+// hold. `NO-EVIDENCE-GIVEN` forces an HONEST admission (better than a fake
+// reference); `provenance-unknown-pre-F3b` is the audited backfill marker (OBJ-2)
+// — enumerated here so a backfilled row does not fail this very validator on a
+// re-run. Two sanctioned literals in ONE set, not two free strings that happen
+// to differ (a set, not a count).
+export const RESOLUTION_EVIDENCE_SENTINELS = [
+  'NO-EVIDENCE-GIVEN',
+  'provenance-unknown-pre-F3b',
+] as const;
+export type ResolutionEvidenceSentinel = typeof RESOLUTION_EVIDENCE_SENTINELS[number];
+
+/**
+ * Hard gate for `resolution_evidence` (B-GOV-INTEGRITY-1 OBJ-1, Langston Q2).
+ * A non-empty check is NOT enough — it passes "looks fine", which is the exact
+ * texture of the 249 empty closes with a word added. Evidence must EITHER be a
+ * sanctioned sentinel OR carry a re-derivable reference token:
+ *   - a path:line          (server/foo.ts:42)
+ *   - a git sha            (7–40 hex)
+ *   - a uuid               (alert id / run id)
+ *   - a doc section ref    (§3.2, #440)
+ */
+export function isValidResolutionEvidence(s: unknown): s is string {
+  if (typeof s !== 'string') return false;
+  const t = s.trim();
+  if ((RESOLUTION_EVIDENCE_SENTINELS as readonly string[]).includes(t)) return true;
+  return (
+    /[\w./-]+:\d+/.test(t) ||                                   // path:line
+    /\b[0-9a-f]{7,40}\b/i.test(t) ||                            // git sha (7–40 hex)
+    /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i.test(t) || // uuid
+    /[§#]\s*[\w.\-]+/.test(t)                                   // doc section / issue ref
+  );
+}
 
 export interface SystemAlert {
   schema_version: 1;
@@ -60,6 +152,13 @@ export interface SystemAlert {
   fired_at: string | null;                         // ISO-8601 — when dispatcher promoted scheduled → active
   acknowledged_at: string | null;                  // ISO-8601
   acknowledged_by: string | null;                  // 'kyle' | 'cc-session-...' | 'langston' | 'system' | etc.
+  // ─── B-GOV-INTEGRITY-1 (F3b, 2026-07-10): resolve provenance ──────────────
+  // Closure must be a RECORD, not an assertion. Two identity fields at DIFFERENT
+  // trust levels — never merge them, or a claim launders into a fact:
+  resolved_at: string | null;                      // ISO-8601 — when state → resolved
+  resolved_by_claimed: string | null;              // what the CALLER passed (`--by`) — a CLAIM
+  resolved_by_transport: ResolveTransport | null;  // the channel the resolve arrived through — CODE-DERIVED, never caller-supplied
+  resolution_evidence: string | null;              // WHY the close is legitimate: a re-derivable reference token OR a sanctioned sentinel (validated, never free text)
   state: AlertState;
   category: AlertCategory;
   severity: AlertSeverity;
@@ -198,7 +297,11 @@ function writeAllAlertsAtomic(alerts: SystemAlert[]): void {
 
 export interface AddAlertOptions {
   triggers_at: string | Date;
-  category: AlertCategory;
+  // Accepts a raw string so the CLI can pass unvalidated input WITHOUT a cast
+  // (OBJ-4); addAlert() validates it via assertCategoryCreatable and throws on
+  // an off-SSOT value. Internal typed callers passing an AlertCategory literal
+  // remain assignable.
+  category: AlertCategory | string;
   severity: AlertSeverity;
   title: string;
   body: string;
@@ -230,8 +333,13 @@ export async function addAlert(opts: AddAlertOptions): Promise<SystemAlert> {
     fired_at: null,
     acknowledged_at: null,
     acknowledged_by: null,
+    resolved_at: null,
+    resolved_by_claimed: null,
+    resolved_by_transport: null,
+    resolution_evidence: null,
     state: 'scheduled',
-    category: opts.category,
+    category: assertCategoryCreatable(opts.category), // OBJ-4: reject off-SSOT categories at creation
+
     severity: opts.severity,
     title: opts.title,
     body: opts.body,
@@ -319,22 +427,80 @@ export async function ackAlert(id: string, by: string): Promise<SystemAlert | nu
  * Mark an alert as resolved (terminal state — kept for history but won't
  * surface). Use when the underlying condition is fully closed.
  */
-export async function resolveAlert(id: string, by: string): Promise<SystemAlert | null> {
+export async function resolveAlert(
+  id: string,
+  by: string,
+  evidence: string,
+  transport: ResolveTransport,
+): Promise<SystemAlert | null> {
+  // B-GOV-INTEGRITY-1 (F3b): closure is a RECORD, not a state flag. The hard
+  // evidence gate is enforced HERE (not only in the CLI) so EVERY resolve path —
+  // CLI, dispatcher, API, governance-checker — is bound by it. A close with no
+  // legitimate basis is refused, loudly, before any write.
+  if (!isValidResolutionEvidence(evidence)) {
+    throw new Error(
+      `resolveAlert(${id}): resolution_evidence rejected — must be a reference token ` +
+      `(path:line | sha | uuid | §/#ref) or a sanctioned sentinel ` +
+      `(${RESOLUTION_EVIDENCE_SENTINELS.join(' | ')}). Got: ${JSON.stringify(evidence)}`,
+    );
+  }
   ensureFileExists();
   let result: SystemAlert | null = null;
   await withLock(() => {
     const all = readAllAlerts();
     const found = all.find((a) => a.id === id);
     if (!found) return;
+    const now = new Date().toISOString();
     found.state = 'resolved';
+    found.resolved_at = now;
+    found.resolved_by_claimed = by;          // the caller's claim
+    found.resolved_by_transport = transport; // the code-stamped, verifiable channel
+    found.resolution_evidence = evidence.trim();
     if (!found.acknowledged_at) {
-      found.acknowledged_at = new Date().toISOString();
+      found.acknowledged_at = now;
       found.acknowledged_by = by;
     }
     result = { ...found };
     writeAllAlertsAtomic(all);
   });
   return result;
+}
+
+/**
+ * B-GOV-INTEGRITY-1 OBJ-2 — one-shot backfill of resolve provenance onto the
+ * historical resolved rows that predate F3b. Kept HERE (not in the migration
+ * script) so the lock + atomic-write discipline lives in one place. Called only
+ * by `scripts/b-gov-integrity-1-backfill-resolve-provenance.ts`.
+ *
+ * HONEST-ONLY: adds `resolution_evidence` (a sanctioned sentinel) + a
+ * reconstructed `resolved_at` (from acknowledged_at, else null) + the existing
+ * `acknowledged_by` as the claimed identity. Transport stays NULL — the channel
+ * was never recorded and null is the truthful "unknown" (a typed enum has no
+ * honest slot for a backfill marker). Idempotent + no-clobber: any row already
+ * carrying provenance is left untouched.
+ */
+export async function __backfillResolveProvenance__(
+  opts: { evidence: ResolutionEvidenceSentinel },
+): Promise<{ backfilled: number }> {
+  ensureFileExists();
+  let backfilled = 0;
+  await withLock(() => {
+    const all = readAllAlerts();
+    for (const a of all) {
+      if (a.state !== 'resolved') continue;
+      const hasProvenance =
+        a.resolved_at != null || a.resolved_by_claimed != null ||
+        a.resolved_by_transport != null || a.resolution_evidence != null;
+      if (hasProvenance) continue; // no-clobber
+      a.resolved_at = a.acknowledged_at ?? null;      // reconstruction, never minted
+      a.resolved_by_claimed = a.acknowledged_by ?? null; // the only identity we have
+      a.resolved_by_transport = null;                  // honest unknown
+      a.resolution_evidence = opts.evidence;           // sanctioned sentinel
+      backfilled++;
+    }
+    if (backfilled > 0) writeAllAlertsAtomic(all);
+  });
+  return { backfilled };
 }
 
 // ─── B-ALERT-PROTOCOL (#340): no-silent-drop stale-alert re-surface ─────────
@@ -463,7 +629,9 @@ export async function processResurface(
 
 export interface ListAlertsOptions {
   state?: AlertState;
-  category?: AlertCategory;
+  // A filter, not a creation — accepts any category that can appear in stored
+  // rows, INCLUDING grandfathered ones, so historical data is filterable.
+  category?: AlertCategory | string;
 }
 
 export function listAlerts(opts: ListAlertsOptions = {}): SystemAlert[] {

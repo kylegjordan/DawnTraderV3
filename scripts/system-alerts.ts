@@ -166,7 +166,11 @@ function frameResurface(alert: SystemAlert, d: ResurfaceDecision, nowMs: number)
 
 async function cmdAdd(args: string[]): Promise<void> {
   const triggers_at = requireFlag(args, 'triggers-at');
-  const category = requireFlag(args, 'category') as AlertCategory;
+  // B-GOV-INTEGRITY-1 OBJ-4: the `as AlertCategory` cast is DELETED — it was the
+  // hole that let 13 category strings into a 6-member type. Pass the raw string;
+  // addAlert() validates it against the creatable SSOT and throws on an off-set
+  // value, so a typo fails loudly here instead of vanishing from every consumer.
+  const category = requireFlag(args, 'category');
   const severity = requireFlag(args, 'severity') as AlertSeverity;
   const title = requireFlag(args, 'title');
   const body = requireFlag(args, 'body');
@@ -259,11 +263,22 @@ async function cmdAck(args: string[]): Promise<void> {
 async function cmdResolve(args: string[]): Promise<void> {
   const id = args[1];
   if (!id || id.startsWith('--')) {
-    console.error('Usage: resolve <id> --by <user>');
+    console.error('Usage: resolve <id> --by <user> --evidence <reference-or-sentinel>');
     process.exit(1);
   }
   const by = requireFlag(args, 'by');
-  const updated = await resolveAlert(id, by);
+  // B-GOV-INTEGRITY-1 (F3b): closure must record WHY it is legitimate. --evidence
+  // is REQUIRED and hard-gated (a reference token or a sanctioned sentinel); there
+  // is no default and no empty. transport is 'cli' — stamped here, never a flag,
+  // so the caller cannot forge the verifiable half of the provenance.
+  const evidence = requireFlag(args, 'evidence');
+  let updated: Awaited<ReturnType<typeof resolveAlert>>;
+  try {
+    updated = await resolveAlert(id, by, evidence, 'cli');
+  } catch (err) {
+    console.error(String(err instanceof Error ? err.message : err));
+    process.exit(1);
+  }
   if (!updated) {
     console.error(`Alert ${id} not found`);
     process.exit(1);

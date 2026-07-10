@@ -145,7 +145,7 @@ describe('B-ALERT-PROTOCOL processResurface (delivery-gated back-off — the Ste
     const r = await mod.processResurface(NOW, async (alert: any) => {
       delivered.push(alert.id);
       // simulate a CC resolving the OTHER alert while the first one is being delivered
-      if (delivered.length === 1) await mod.resolveAlert(a2.id, 'CC-A');
+      if (delivered.length === 1) await mod.resolveAlert(a2.id, 'CC-A', 'NO-EVIDENCE-GIVEN', 'cli');
       return true;
     });
     expect(delivered).toEqual([a1.id]);                      // a2 never delivered (re-read caught the resolve)
@@ -164,7 +164,7 @@ describe('B-ALERT-PROTOCOL markResurfaced', () => {
     expect(typeof m1?.metadata.last_resurfaced_at).toBe('string');
     const m2 = await markResurfaced(a.id, NOW);
     expect(m2?.metadata.resurface_count).toBe(2);
-    await resolveAlert(a.id, 'CC-A');
+    await resolveAlert(a.id, 'CC-A', 'NO-EVIDENCE-GIVEN', 'cli');
     expect(await markResurfaced(a.id, NOW)).toBeNull(); // resolved → not re-stamped
   });
 });
