@@ -101,6 +101,30 @@ export function assertCategoryCreatable(c: string): AlertCategory {
 
 export type AlertSeverity = 'info' | 'warning' | 'critical';
 
+// ─── B-GOV-INTEGRITY-1 (OBJ-3, 2026-07-10): class-driven delivery ────────────
+//
+// Delivery was severity-only: warning+critical post, info skips — so 117 of 254
+// alerts (info) never reached Discord, INCLUDING info-severity `governance`
+// alerts (a governance gap that pages nobody is the whole problem this program
+// exists to fix). Delivery is now CLASS-driven: a category that must never be
+// silent delivers at ANY severity; everything else keeps the severity gate (a
+// routine info health check still need not page). Categories, not severities,
+// decide whether an alert can be silent.
+export const ALWAYS_DELIVER_CATEGORIES = new Set<string>([
+  'governance', // a doc-set gap must never be silent (Langston, Step-2)
+  'breakage',   // a break must never be silent regardless of how it was filed
+]);
+
+/**
+ * OBJ-3 delivery gate. Returns true iff this alert should be pushed to the
+ * Discord alerts sink. Warning/critical always deliver (unchanged); an info
+ * alert delivers only if its category must-never-be-silent.
+ */
+export function shouldDeliverToDiscord(alert: Pick<SystemAlert, 'severity' | 'category'>): boolean {
+  if (alert.severity === 'warning' || alert.severity === 'critical') return true;
+  return ALWAYS_DELIVER_CATEGORIES.has(alert.category);
+}
+
 // ─── B-GOV-INTEGRITY-1 (F3b, 2026-07-10): resolve provenance primitives ──────
 //
 // `resolved_by_transport` is the channel a resolve arrived through. It is the

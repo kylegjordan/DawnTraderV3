@@ -42,9 +42,9 @@ import {
   ackAlert,
   resolveAlert,
   processResurface,
+  shouldDeliverToDiscord,
   ALERTS_FILE,
   type SystemAlert,
-  type AlertCategory,
   type AlertSeverity,
   type AlertState,
   type ResurfaceDecision,
@@ -132,10 +132,13 @@ async function pushToDiscord(alert: SystemAlert): Promise<boolean> {
     // Inert until Kyle provisions the alerts webhook — no Discord posting yet.
     return false;
   }
-  // Severity gating (carried from the B-NEW-43 #135 routing): warning + critical post; info skips.
-  if (alert.severity === 'warning' || alert.severity === 'critical') {
+  // B-GOV-INTEGRITY-1 OBJ-3: delivery is CLASS-driven, not severity-only. An info
+  // alert whose category must-never-be-silent (governance, breakage) now delivers;
+  // routine info still skips. Replaces the old inline warning/critical-only gate
+  // (B-NEW-43 #135) that silenced 117 info alerts including governance gaps.
+  if (shouldDeliverToDiscord(alert)) {
     const ok = await discordWebhookSend(webhookUrl, formatAlertTextDiscord(alert));
-    if (ok) console.log(`[fire-due] Discord alert posted for ${alert.id}`);
+    if (ok) console.log(`[fire-due] Discord alert posted for ${alert.id} (${alert.severity}/${alert.category})`);
     return ok;
   }
   return false;
@@ -231,7 +234,9 @@ async function cmdFireDue(): Promise<void> {
 
 async function cmdList(args: string[]): Promise<void> {
   const state = getFlag(args, 'state') as AlertState | undefined;
-  const category = getFlag(args, 'category') as AlertCategory | undefined;
+  // OBJ-4: no `as AlertCategory` cast — listAlerts accepts a raw string filter so
+  // grandfathered/historical categories remain filterable.
+  const category = getFlag(args, 'category');
   const entries = listAlerts({ state, category });
   if (entries.length === 0) {
     console.log('(no alerts)');
