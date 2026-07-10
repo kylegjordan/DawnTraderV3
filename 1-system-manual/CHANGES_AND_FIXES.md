@@ -2,6 +2,10 @@
 
 ---
 
+## FIX-2026-07-10 — B-GOV-INTEGRITY-1: alert closure becomes a RECORD, not an assertion
+
+Kyle directive 2026-07-10 (closures could be "acknowledged and just falsely verified and pushed to the side as completed"). resolveAlert wrote only state=resolved — 249/249 historical closes had zero provenance, structurally. Now: four fields (resolved_at, resolved_by_claimed=caller claim, resolved_by_transport=code-stamped channel, resolution_evidence=hard-gated reference-or-sentinel), enforced on every resolve path; 250 historical rows backfilled honestly (no fabrication; id-set conserved; idempotent). Class-driven delivery ({governance,breakage} at any severity — fixes 117 silent info alerts). The as-AlertCategory cast deleted; type derived from a 7-member SSOT; off-taxonomy categories rejected at creation. Seam with the governance-checker (B-GOV-INTEGRITY-0) proven + co-deployed. Files: server/services/system-alerts.ts, scripts/system-alerts.ts, server/routes.ts, scripts/b-gov-integrity-1-backfill-resolve-provenance.ts. Langston Step-1/2/4 APPROVED. Resolves #447; absorbs #38.
+
 ## FIX-2026-07-08-C — B-STORAGE-HARDEN Wave D (OBJ-3): xStock quote-snapshot `xstock_spot_ticker_snap` moves to DAILY partitions for a true rolling-30 hot window
 
 **Batch:** B-STORAGE-HARDEN (Wave D = OBJ-3 + OBJ-4; the batch's LAST wave). **Class: architecture.** Commits `d66c856e7` (OBJ-3 code + migration) + `e5cf6b8fd` (watchdog connect hardening) + `c9c0ba3d7` (#438 dotenv fix). CI 4-green ×3. Deployed staging (migration-first) HTTP 200. Langston Step-1/2/4 + addendum APPROVED ("ship it").

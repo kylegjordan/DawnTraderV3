@@ -1,3 +1,5 @@
+> **★ B-GOV-INTEGRITY-1 SHIPPED + LIVE 2026-07-10** (resolve provenance + class-driven delivery + category SSOT + honest 250-row backfill; commits c24599cfa/ed2ea6a91/19f80d3b8, CI 29112674183, deployed, verified; resolves #447, absorbs #38). **Awaiting Langston Step-8 2nd-pass + Kyle ack to fully close.** **PRE-PUSH ENUMERATION now a hard rule (#460): before every push, git log --oneline origin..HEAD and read every commit — two CCs share one HEAD so a push carries the other session commits. Worktree isolation = B-CC-WORKTREE-ISOLATION.**
+
 # MEMORY — OLD Claude (CC-A) volatile working-state
 
 > OWNED by OLD Claude (CC-A), session `3ce652e6` (comms/roadmap/governance). Read this + shared `MEMORY.md` (protocols) at session-start; write volatile state ONLY here. CC-B owns `MEMORY_CC_B.md`. Detailed fee/strategy scratch: `_scratch_xstock_globals_resume.md`. Mirror to `.claude/memory/`.
