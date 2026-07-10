@@ -48,10 +48,10 @@ Checker `REPO_ROOT` = `/opt/governance-checker/DawnTraderV3` (from `governance-c
 | Fact | Value |
 |---|---|
 | Clone HEAD | `97b56f56c` (the B-GOV-4 deploy) |
-| Clone is behind origin by | **336 commits** |
+| Clone is behind origin by | **339 commits and climbing** (336 -> 338 -> 339 measured within one conversation; drift is a PROCESS, not a state) |
 | `GOVERNANCE_EXCEPTIONS.md` mtime on clone | **Jun 26 21:51** (7,080 bytes) |
-| `na-skip` rows the checker can see | **8** |
-| `na-skip` rows at origin | **11** |
+| `na-skip` rows the checker can see (**parsed**, per `poller.mjs:315-321`) | **1** |
+| `na-skip` rows at origin (**parsed**) | **9** |
 | `P19-B8.4c` rows the checker can see | **0** |
 | `GOV_SHADOW` | **0 — it is ENFORCING, not observing** |
 
@@ -118,3 +118,23 @@ instead of `readFileSync(join(REPO_ROOT, …))`. Same ref as `docPresent`. This 
 **(d)** The generalized invariant I want us to adopt: **any artifact the checker's decisions depend on MUST be read at the ref it grades.** `loadExceptions` is one instance. Is that invariant testable in CI (e.g. a lint that forbids `readFileSync(REPO_ROOT, …)` inside the checker)? If it isn't enforced by a predicate, per §5 it is worth nothing.
 
 **(e)** Deeper: **who checks the checker?** A governance enforcer with no liveness/correctness probe is a single point of silent failure. What is the minimal probe that would have caught this on day one? (My candidate: a canary — file a `na-skip` for a synthetic batch, assert the checker resolves its alert within one tick; alarm if not.)
+
+
+---
+
+# CORRECTION ON-RECORD (2026-07-10) — a number I measured on the wrong machine
+
+**CC-B originally reported "the checker sees 8 na-skip rows vs 11 at origin." That was measured on the WRONG CLONE.** The `8` came from `/home/deploy/dawntrader` — the staging **app** clone, which the checker does not read. Langston caught the discrepancy (his grep on the correct box returned `3`) and refused to let it reach Kyle, on the grounds that *"two of us measuring one file and getting different answers is the disease wearing our own badge."* He was right.
+
+**CANONICAL METHOD** — count what `loadExceptions()` actually admits (`poller.mjs:315-321`): split on `|`, require `cells.length >= 7`, `type === 'na-skip'`, `confirmedBy !== 'pending'`. A raw `grep -c` counts prose, legend and header lines; the parser does not. **The canonical count is the parsed count.**
+
+| measurement | value |
+|---|---|
+| deploy clone, raw grep (**wrong box** — CC-B's original) | 8 |
+| checker clone, raw grep (right box, raw string — Langston) | 3 |
+| **checker clone, PARSED (what enforcement actually honors)** | **1** |
+| **origin, PARSED (what it should honor)** | **9** |
+
+**The checker is not honoring 8-of-11. It is honoring ONE.** Every other Langston-confirmed N/A on the branch is invisible to it. The corrected figure **strengthens** the finding.
+
+**Why this belongs in the record and not in a quiet edit:** this document's thesis is that a system silently read the wrong copy of a file and nobody noticed. While writing it, its author read the wrong copy of a file and did not notice. **The corrective in both cases was identical: someone went and measured.** That is the only control in this entire program that has actually worked today — not review, not documentation, not intent. Measurement.
