@@ -307,12 +307,30 @@ const alertSink = {
 };
 function shq(s) { return `'${String(s).replace(/'/g, `'\\''`)}'`; }
 
-// Read declared exceptions from the in-repo ledger (open/umbrella/na).
+// Read the exceptions ledger from the GRADED REF, never the working tree. This is the #449
+// root-cause fix: reading join(REPO_ROOT, …) let a stale checkout honour 1 na-skip row while
+// origin carried 10, so every exception filed after the box's last redeploy was invisible and
+// the checker manufactured a flood of false doc-gap alerts. checker.mjs:28 already declares the
+// invariant — "all reads go through GOV_REF after a fetch, never a stale copy" — and docPresent
+// honours it; loadExceptions was the one place that violated it. origin is fetched by
+// gitFetchAndLog() earlier this tick, so `git show BRANCH:<path>` sees the pushed state.
+// FAIL-LOUD: an unreadable/empty rulebook must THROW, never fall back to an empty exception set —
+// that silent-{} default is the original defect in a new mask (no suppressions ⇒ false-alarm flood,
+// or, if the grader ever trusted it, silent under-enforcement). tick() catches the throw, raises a
+// critical alert, and refuses to grade rather than grade permissively.
+function readGovernedExceptions() {
+  const relPath = '1-system-manual/GOVERNANCE_EXCEPTIONS.md';
+  const raw = execFileSync('git', ['show', `${BRANCH}:${relPath}`],
+    { cwd: REPO_ROOT, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
+  if (!raw || !raw.trim()) {
+    throw new Error(`governed read of ${relPath} at ${BRANCH} returned empty — refusing to grade with no rulebook (#449 fail-loud)`);
+  }
+  return raw;
+}
+
 function loadExceptions() {
   const open = new Set(), openSince = new Map(), naConfirmed = new Set();
-  const p = join(REPO_ROOT, '1-system-manual', 'GOVERNANCE_EXCEPTIONS.md');
-  if (!existsSync(p)) return { open, openSince, naConfirmed };
-  for (const line of readFileSync(p, 'utf8').split('\n')) {
+  for (const line of readGovernedExceptions().split('\n')) {
     const cells = line.split('|').map((c) => c.trim());
     if (cells.length < 7) continue;
     const [, ts, bid, type, value, confirmedBy] = cells;
@@ -372,7 +390,31 @@ export function tick(nowMs = Date.now()) {
   const enforceable = applyCutoff(batches, ENFORCEMENT_CUTOFF_MS);
   // OBJ-1 (B-GOV-2): read each enforceable batch's declared change-class from its scope header.
   for (const b of enforceable) { const d = readDeclaredClass(b.batchId); b.declaredClass = d.class; b.classDeclared = d.declared; }
-  const exceptions = loadExceptions();
+  // #449 fail-loud: loadExceptions now reads the ledger at the graded ref and THROWS on an empty/
+  // unreadable rulebook. An enforcer that cannot read its suppressions must refuse to grade, not
+  // grade permissively — grading with an empty exception set would re-open every legitimately-
+  // dispositioned batch. Mirror the fetch-fail contract: raise a critical alert, persist, exit the
+  // tick with zero opens/resolves so nothing is mis-graded off a rulebook we could not read.
+  let exceptions;
+  try {
+    exceptions = loadExceptions();
+  } catch (e) {
+    const EXC_KEY = 'gov-exceptions-unreadable';
+    const body = `The governance checker could not read GOVERNANCE_EXCEPTIONS.md at ${BRANCH}: ${String(e.message || e).slice(0, 300)}. ` +
+      `Refusing to grade this tick — grading with no rulebook would re-open every dispositioned batch (#449). No alerts opened or resolved. Investigate the checker's git access to the ref.`;
+    if (!state.openAlerts[EXC_KEY]) {
+      const id = alertSink.add({ dedupeKey: EXC_KEY, severity: 'critical',
+        title: `governance-checker cannot read its rulebook at ${BRANCH} — grading paused`, body }, nowMs);
+      if (id) state.openAlerts[EXC_KEY] = id;
+    }
+    state.lastTick = nowMs; saveState(state);
+    return { opened: 0, resolved: 0, untaggedCode: 0, fetchOk: true, rulebookUnreadable: true };
+  }
+  // rulebook read cleanly — clear any prior unreadable alert.
+  if (state.openAlerts['gov-exceptions-unreadable']) {
+    alertSink.resolve(state.openAlerts['gov-exceptions-unreadable']);
+    delete state.openAlerts['gov-exceptions-unreadable'];
+  }
   const { toOpen, toResolveKeys } = decideAlerts(enforceable, exceptions, nowMs);
   // dedupe via own state (logical key → alert id); only add if not already open.
   for (const a of toOpen) {
