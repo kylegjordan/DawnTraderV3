@@ -470,3 +470,31 @@ Archive: git history is authoritative (this is a field-retirement within live fi
 **Server side (NOT deleted — intentional):** the B8.4b active-funnel WRITERS + the `/api/active-engine/diagnostics/funnel` and `/pipeline-tail` endpoints PERSIST server-side. They are now client-UNCONSUMED until B8.5 wires the dormant tables to them — this is deliberate, not an orphan. Home: B8.5 (the switch-on).
 
 **Archive:** `1-system-manual/_archive/deleted-code/P19-B8.4c_ActivePipelineTail_ActiveDownstreamFunnel.removed.tsx`. Git history is authoritative.
+
+---
+
+## 2026-07-10 — Langston's stale governed-artifact copies (#455, B-GOV-INTEGRITY-0)
+
+**Removed by:** CC-A, during the governance-integrity investigation (Kyle directive 2026-07-10).
+**Why:** we spent the day diagnosing an enforcer that grades fresh commits against a **frozen rulebook** (#449, `poller.mjs:313`). Nobody audited whether the **reviewer** had the identical defect. He did — at two layers.
+
+### (1) `/home/langston/.claude/CLAUDE.md` — the substantive one, auto-loading
+- 3,943 bytes, mtime **2026-05-14 11:50** · Telegram ×3, Discord ×**0**.
+- Sat beside the live `/home/langston/CLAUDE.md` (45,795 bytes, mtime 2026-07-03, Discord ×14).
+- `comms-infra/discord/discord-langston-bridge.py:57` → `WORK_DIR = "/home/langston"` = the `cwd` of every `claude -p` invoke.
+- **Per this repo's own `CLAUDE.md` §4** (the rule Kyle wrote on 2026-06-15 after finding this exact duplicate here), Claude Code auto-loads **BOTH** `./CLAUDE.md` **AND** `./.claude/CLAUDE.md` and **CONCATENATES** them.
+- ⇒ For ~2 months every Langston invoke loaded his current Discord-era persona concatenated with a 2026-05-14 context-loader asserting **Telegram is the comms channel** and that there is **ONE "main CC" running on Kyle's laptop** — predating the Discord cutover (#333), the CC-A/CC-B split (Kyle 2026-06-12), and the `na-skip` discipline.
+- **Not claimed:** that this caused the day's contradictory verdicts. It is a mechanism *fully capable* of producing them, it was present throughout, and none of the three of us checked. (Per #453, an inference is not a measurement.)
+
+### (2) `/home/langston/inbox/b-gov/checker/GOVERNANCE_EXCEPTIONS.md` — latent, not wired
+- mtime **2026-06-17**, containing **zero** of the live `na-skip` rows (no `B-TELEGRAM-DECOMM`, no `B8.4b`, no `B8.4c`).
+- **Langston's correction, accepted on-record:** nothing programmatic reads it, so "live landmine" (CC-A's word) **overstated it — the correct word is *latent***: a stale rulebook that answers a `grep` wrongly and confidently.
+- Replaced in place with `GOVERNANCE_EXCEPTIONS.POINTER.md` naming the single source of truth (`git show origin/migration/aws-supabase:1-system-manual/GOVERNANCE_EXCEPTIONS.md`).
+
+**Blast-radius verification (certainty before cutting):** live `claude -p` one-off invoke on Langston's box **after** removal returned `OK` (his runtime loads these paths, so this was tested, not assumed). `find /home/langston -maxdepth 2 -name CLAUDE.md` → exactly **one** file. Mount health re-verified (an earlier `timeout 8 ls /mnt/gdrive` false-negative was a cold rclone cache; 12s succeeds — CC-A's own near-miss, reported rather than buried, and caught by the #453 rule filed ninety minutes earlier).
+
+**Archive:** `/root/langston-stale-artifacts-archive-2026-07-10/` on Helsinki (`*.removed`, sha256 recorded at copy time). Git history is not authoritative here — these files never lived in the repo.
+
+**Left intentionally:** staged **context** files in `/home/langston/inbox/**` (scopes, diffs, design asks). Langston is stateless per-invoke; staging context is correct and necessary. **Staging a copy of the RULEBOOK, or of his PERSONA, is the bug.** The two look identical in an `ls`.
+
+**Rule earned (→ #453, #455):** *no governed artifact may exist as a second, unmanaged copy anywhere an agent reads* — not an inbox, not a checker worktree, not a home directory. It is read from ONE place, the graded ref, or it is a hazard. This is the human-layer form of `B-GOV-INTEGRITY-0`'s `readGoverned` chokepoint: **one doorway, one ref, one truth.**
