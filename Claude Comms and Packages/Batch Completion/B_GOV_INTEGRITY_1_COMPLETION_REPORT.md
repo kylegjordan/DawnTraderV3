@@ -35,8 +35,8 @@
 ## Governance files changed
 BATCH_CATALOG, PHASE_HISTORY, RUNNING_ISSUES (#447 resolved-by-this, #38 absorbed, #460 filed, #493 cross-ref), SIM (SystemAlert shape + resolve-provenance + delivery routing + category SSOT), CHANGES_AND_FIXES (FIX-2026-07-10), MEMORY_CC_A, this report. SYSTEM_MANUAL judged NOT applicable (alert infrastructure is SIM-scope; this batch changed no strategy/regime/filter/signal/math — the applicability judgment per CLAUDE.md 9).
 
-## Forward item
-- **Live seam end-to-end** (a real checker resolve storing a sha through the new code) confirms on the next checker tick (≤30 min); every component is independently proven, so this is confirmation, not risk. CC-B watching the checker.
+## Forward item - NOW OBSERVED (2026-07-10, CC-B)
+- **Live seam end-to-end CONFIRMED.** CC-B ran the checker's exact resolve shape through the live gate (alert 48166fa3, "--by cc-b-seam-test --evidence 773c987dd4..." the graded-ref sha). Stored row: state=resolved, resolved_by_claimed=cc-b-seam-test, resolved_by_transport=cli, resolution_evidence=773c987dd4e87e805101226d37151e0fc089d1c4, resolved_at==acknowledged_at (no fabricated time). The sha RE-DERIVES ("git show 773c987dd4...:RUNNING_ISSUES.md" returns the real header). Full chain proven: checker EMITS sha --evidence -> live gate ACCEPTS+STORES -> stored sha genuinely re-derivable; the reject leg (no evidence / "looks fine") already proven. CC-B's "resolved_by=None" was a field-name mismatch: there is deliberately no bare resolved_by field (#447 -- we never named a field we cannot authenticate); the identity is in resolved_by_claimed (=cc-b-seam-test, correct). No defect.
 
 ## Scaffolding-vs-functional
 Not scaffolding — the capability is FUNCTIONAL and LIVE: closures now carry an enforced, honest record; 250 historical closures backfilled; off-taxonomy categories rejected; info governance alerts now deliver.
