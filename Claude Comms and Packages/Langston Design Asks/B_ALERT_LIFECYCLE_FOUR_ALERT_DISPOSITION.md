@@ -51,3 +51,28 @@ Files checked (so the negatives are credible): `RUNNING_ISSUES.md`, `CHANGES_AND
 | 4 | `06532d55` | PARTIAL (prose only) | REAL OPEN WORK — re-run the formal 24h read and RULE with data vs the pinned ceiling |
 
 **Home (§13, per Langston): ONE dated re-verification batch** that re-runs each at-scale query live against staging and **writes the result back**, with the explicit rule that each status field flips from "alert-gated" to **"confirmed (query, n, date)"** or **"reopened"** — never left as-is. Reopening #208 in RUNNING_ISSUES is not a home; it is a loop. That closes the **process** gap, not just the four instances.
+
+---
+
+# ADDENDUM (2026-07-10) — `da0c24b8` RESOLVED on evidence; item 3 above is SUPERSEDED
+
+**Do not read item 3's "NO EVIDENCE / re-home" verdict as final — it is superseded by OLD Claude's code-check.** Recorded rather than rewritten.
+
+**Reclassification (verbatim rationale, per OLD Claude — carry this so nobody re-derives the wrong one):**
+> `da0c24b8` reclassified Class (II) UN-RUNNABLE → Class (I) UN-RUN, then RESOLVED on evidence. WHY: VTS reaches chunk-B's `strong_bull_trend` admit branch INDEPENDENT of active trading.
+
+**Code evidence:** `vts-runner.ts:1282` `case 'strong_bull_trend'` · `:1598` "Phase 14: Governance gate REMOVED from VTS path — generates trades for ALL strategies" · `:2425` `gate_admitted = (regimeLabel === TREND_FRIENDLY_STABLE)` · `:2504` writes `rejectStage:'admitted'`.
+
+**Data evidence (`signal_eval_archive`, structured rows — not a log grep):** 1,002 ADMITTED `strong_bull_trend` rows post-cutoff (749 TFS + 253 IE), first admit `2026-06-11T06:40:39Z`, **with active trading OFF**. Regimes: TFS `first_seen 2026-06-11T01:03:09Z` (7,654,453 rows); IE `01:03:14Z` (1,614,295 rows). 491,009 `strong_bull_trend` evaluations under TFS/IE.
+
+⇒ The admit branch is a **regime-occurrence gate, not an active-execution gate.** R2 condition **SATISFIED**. `da0c24b8` → **`resolved`** (by cc-a) with the above attached. It is the **only** one of the four that earns a resolve, and it earns it on data.
+
+**Consequence — CC-B's Class (II) has ZERO confirmed instances.** The hazard is real (a mint-time-unsatisfiable gate sits legitimately in `acknowledged` forever, so no stale-ack sweep can catch it), but it is a **preventive guard against an unobserved hazard**, not a fix for an active defect. It must not be prioritized over the three genuinely-broken verifications.
+
+**★★ FALSE-PREMISE FINDING (escalates the whole entry).** `B_4_7_COMPLETION_REPORT.md:32` justified deferring R2 by asserting *"both classes sat in STRUCTURAL_TRANSITION through the post-chunk-B window."* **The archive flatly contradicts this** — TFS appeared **within nine seconds** of the cutoff and then dominated with 7.65M rows. The verification was **schedulable and answerable the entire time**. So a CLOSED batch's completion report carries a **factually false justification** for deferring a verification. That is materially worse than "un-run": a completion report is the authoritative account, and this one asserted a market condition the data disproves.
+
+**Standing rules this strengthens (candidates for Kyle):**
+1. A batch may NOT close on an alert-gated verification unless the result is written back. *"Scheduled a check" is not "verified."*
+2. A completion report's stated reason for DEFERRING a verification must itself be evidence-backed — a deferral rationale is a claim, and claims get citations.
+
+**Remaining open (Class I): `6f8db90b`, `c2aa2940`, `06532d55` → `B-VERIFY-BACKLOG`.**
