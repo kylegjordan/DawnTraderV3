@@ -273,10 +273,18 @@ function appendShadowLog(entry) {
   catch (e) { console.warn(`[gov-checker] shadow-log write failed: ${String(e.message).slice(0, 150)}`); }
 }
 
-// Alert sink: reuse the existing system-alerts CLI on staging (schema-safe, race-safe).
-// The CLI `add` prints the created alert as JSON (we parse .id); `resolve <id> --by`
-// is ID-based. The logical dedupe_key rides in --metadata for forensics; the poller
-// itself dedupes via state.openAlerts (logical-key → alert-id), so no CLI dedupe needed.
+// B-GOV-INTEGRITY-1 seam (Layer-B, checker side): the resolve CLI now HARD-REQUIRES
+// re-derivable evidence (isValidResolutionEvidence). The checker only ever resolves a
+// doc-gap it has VERIFIED satisfied at the graded ref (docPresent / na-skip / condition-
+// cleared), so it genuinely HAS evidence — it just has to pass it. The honest, universal,
+// re-derivable token is the graded-ref sha: a reader does `git show <sha>:<doc>` (or parses
+// the na-skip row at <sha>) to re-confirm exactly what the checker saw. gradedRefSha is set
+// once per tick after the fetch; if it can't be computed, resolve falls back to the sanctioned
+// `NO-EVIDENCE-GIVEN` sentinel — an HONEST admission, never a fabricated reference (#447).
+let gradedRefSha = null;
+function checkerResolveEvidence() {
+  return (gradedRefSha && /^[0-9a-f]{7,40}$/i.test(gradedRefSha)) ? gradedRefSha : 'NO-EVIDENCE-GIVEN';
+}
 const alertSink = {
   add({ dedupeKey, severity, title, body }, nowMs) {
     // OBJ-2: shadow → log-only, no queue write. Return null so the tick does NOT record it in
@@ -293,7 +301,7 @@ const alertSink = {
   resolve(alertId) {
     // OBJ-2: nothing is queued in shadow, so resolve is a no-op (log-only for symmetry).
     if (SHADOW_MODE) { appendShadowLog({ phase: 'resolve', alertId }); return; }
-    const cmd = `cd ${STAGING_REPO} && npm run -s system-alerts -- resolve ${alertId} --by governance-checker`;
+    const cmd = `cd ${STAGING_REPO} && npm run -s system-alerts -- resolve ${alertId} --by governance-checker --evidence ${checkerResolveEvidence()}`;
     try { runCli(cmd); }
     catch (e) {
       // An already-terminal / not-found resolve is benign; anything else is a REAL failure —
@@ -387,6 +395,13 @@ export function tick(nowMs = Date.now()) {
     return { opened: 0, resolved: 0, untaggedCode: 0, fetchOk: false };
   }
   state.fetchFailStreak = 0; state.fetchFailSev = undefined;
+  // Layer-B evidence seam (#447): capture the exact ref sha this tick grades at, so every resolve
+  // the checker issues carries a re-derivable reference (`git show <sha>:<doc>`) that Layer-A can
+  // shape-validate. Set only after a confirmed fetch; if it can't be computed, checkerResolveEvidence()
+  // falls back to the sanctioned NO-EVIDENCE-GIVEN sentinel rather than fabricate one.
+  try {
+    gradedRefSha = execFileSync('git', ['rev-parse', BRANCH], { cwd: REPO_ROOT, encoding: 'utf8' }).trim();
+  } catch { gradedRefSha = null; }
   if (state.openAlerts[FETCH_KEY]) { alertSink.resolve(state.openAlerts[FETCH_KEY]); delete state.openAlerts[FETCH_KEY]; }
   // #490 recurrence guard: warn if the deployed checker code has drifted from origin, so a silent
   // redeploy gap can never again let the box grade with stale logic the way #449 hid for two weeks.
