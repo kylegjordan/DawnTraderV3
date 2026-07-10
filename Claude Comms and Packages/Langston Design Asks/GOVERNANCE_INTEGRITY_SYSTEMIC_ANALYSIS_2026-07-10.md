@@ -65,7 +65,7 @@ The metaphor is not a metaphor. It is the same bug, at every layer, in the sourc
 
 ### S1 — "The Aug-1 forward-coverage verification" *(real, pending right now)*
 **Today:** minted as `info` + `verification` → **never posts** (E2) → batch closes GREEN → Aug 1 the dispatcher promotes it to `active` → if no session happens to run the §10.5 check that hour, it sits. Nothing ever re-asks. Nine months later a completion report still says "alert-gated."
-**Proposed:** F1 forces the objective row to read `DEFERRED → PV-0007`; F2 puts the batch in `CLOSED-PENDING-VERIFY` and into the obligations register; F4 posts it *despite* being `info`; F3 clocks it the moment it's acked; F10 lists it to Kyle every week until discharged.
+**Proposed:** F1 forces the objective row to read `DEFERRED → PV-0007`; F2 puts the batch in `CLOSED-PENDING-VERIFY` and into the obligations register; F4 posts it *despite* being `info`; F3 clocks it the moment it's acked; F10 posts it to Discord every week, owned and dated, until discharged.
 **Verdict: caught at four independent points.** The redundancy is deliberate — any single mechanism can fail.
 
 ### S2 — "The false verification" *(real: `B_4_7`, E9)* — ⚠ **this scenario broke F1**
@@ -87,6 +87,27 @@ Suppose the governance-checker itself is stale. **This is not hypothetical:** B-
 **But a canary inside the checker is circular, and a canary watching the canary is infinite regress.**
 **⇒ The loop cannot be closed inside the system.** It must terminate at an observer outside the failure domain. That is **F10**: a weekly digest of open obligations and their age, delivered to Kyle, **with no ack button** — it cannot be silenced, only emptied. Kyle is the only component not subject to our failure modes.
 **This is why F10 is load-bearing, not garnish.**
+
+---
+
+## ★★ F10 — REVERSED BY KYLE, 2026-07-10, AFTER THIS DOCUMENT WAS WRITTEN. THE DESIGN ABOVE IS WRONG AND IS KEPT ONLY SO THE REVERSAL IS LEGIBLE.
+
+I argued that the liveness regress *"cannot be closed inside the system"* and must *"terminate at an observer outside the failure domain,"* and I named Kyle as that observer. **He has declined, in writing, and his reason is better than my argument:**
+
+> *"I don't want to be a dependency in this loop. I want you guys to be able to become aware of governance or system issues that arise… and then that those items become actionable or assigned to someone who will action them to completion, to verified correct completion."*
+
+**He is right, and the flaw is elementary once stated: a terminator that only fires if Kyle reads it makes Kyle the single point of failure in a system built to abolish single points of failure.** I proposed making the human the mechanism. That is not a control; it is the absence of one, wearing a person as a costume. **It is the same error as `{}` for a missing rulebook and `0 due-unclaimed` for a stalled dispatcher: something that cannot report its own silence, trusted to report health.**
+
+**AMENDED F10 (binding):**
+1. The digest is **POSTED TO DISCORD** on a fixed cadence, **whether or not it has content** — an empty post is the proof of life; **a missing post is the alarm.** It is not *sent to* anyone.
+2. **Every obligation carries an OWNER and a DATE at the moment it is created.** Nothing may exist as *"someone should look at this."* An unowned, undated item is a defect in the thing that created it, and `F9` flags it.
+3. **`F9` (running elsewhere, failing separately) asserts the digest was emitted within its window.** Two independent things must now fail silently at once, instead of one.
+4. **Kyle is an ESCALATION PATH, not a control.** He is invoked for exactly two things, both of which he named: he reads the channel when he chooses, and he breaks a deadlock the three of us cannot. **When we invoke him we owe him the format he specified — what is being argued, the options, and the cost of each, in language that assumes no knowledge of the system.**
+
+**The honest residual, stated rather than hidden:** nothing inside a system proves that system is working. If the digest stops and none of the three of us notices the silence, we are back at the start. **`F9` does not remove that; it doubles the number of quiet failures required.** That is the whole of what we bought, and claiming more would be the disease we are treating.
+
+**⇒ Every downstream artifact that named Kyle as the terminator is amended: `#456`'s F10 home, the `B-GOV-INTEGRITY-3` row, and `MEMORY_CC_A.md`. The terminator is not a person. It is EVIDENCE A LATER READER CAN RE-DERIVE WITHOUT TRUSTING ANYONE PRESENT** — which is also, independently, where CC-B landed, and where every one of the day's thirty corrections actually ended: in `git show`, in `stat`, in opening the row.
+
 
 ### S5 — "The double verdict" *(happened in the last hour: E8)*
 Langston emitted `APPROVED-WITH-CHANGES` twice and `CHANGES-NEEDED` once on the same pre-audit. Only the strict verdict carried the three real findings. Had the self-advance queue surfaced only an approval — as it easily could have — I would have built on a holed pre-audit, **and the permanent record would read "Langston approved."**
@@ -119,7 +140,7 @@ Langston emitted `APPROVED-WITH-CHANGES` twice and `CHANGES-NEEDED` once on the 
 | **B-GOV-INTEGRITY-2** | **F1 + F1b** re-executable close-gate · **F2** `CLOSED-PENDING-VERIFY` + obligations register |
 | **B-GOV-5** *(live home; also absorbs #341 reorg-id coverage)* | **F6 + F6b** referential homes · **F7** doc predicates |
 | **B-ALERT-LIFECYCLE** *(blocked on the F3 detector contract)* | **F3/OBJ-6 + OBJ-6b** detector · auto-resolve, consuming the detector's queryable signal |
-| **B-GOV-INTEGRITY-3** | **F8** verdict ledger · **F9** checker canary · **F10** weekly un-ackable digest to Kyle |
+| **B-GOV-INTEGRITY-3** | **F8** verdict ledger · **F9** checker canary (also asserts the digest was emitted) · **F10** weekly obligations digest **POSTED TO DISCORD, empty-or-not, every item owned+dated** (REVERSED 2026-07-10 — was *"un-ackable digest to Kyle"*; he declined the role) |
 
 **Sequencing argument — why F3b goes first, ahead of everything, including the detector:**
 > **Until `resolve` has provenance, we cannot measure whether any of the other fixes worked.** You cannot audit a system whose terminal state has no author and no timestamp. Every other fix is evaluated by asking "did the obligation actually get discharged, by whom, on what evidence?" — a question the ledger is **currently incapable of answering, 249 times over.** F3b is ~10 lines and it is the precondition for evaluating everything else.
