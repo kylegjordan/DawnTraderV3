@@ -371,6 +371,13 @@ function checkerCodeDrift() {
 
 export function tick(nowMs = Date.now()) {
   const state = loadState();
+  // OBJ-0 (auto-redeploy auditability, Langston Step-4 add #1): emit a POSITIVE per-tick record of
+  // which deployed code version is running, so correctness doesn't lean solely on F9's canary FIRING
+  // (a negative signal). The ExecStartPre ff-only pull keeps this current; this line makes it auditable.
+  try {
+    const runningSha = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: REPO_ROOT, encoding: 'utf8' }).trim();
+    console.log(`[gov-checker] poller running at deployed HEAD ${runningSha}`);
+  } catch { /* non-fatal: a rev-parse failure must never abort a tick */ }
   const { commits, fetchOk } = gitFetchAndLog();
   // OBJ-5c: if the fetch failed, do NOT evaluate off stale state — flag + exit. A PERSISTENT
   // blind streak escalates info → warning after 3 consecutive (Langston Step-4 c: a checker
