@@ -37,8 +37,22 @@
 - **Tier-1 shared docs — SEQUENCED behind OLD Claude's B-GOV-INTEGRITY-1 close to avoid the shared-HEAD two-writer hazard:** `BATCH_CATALOG.md`, `PHASE_HISTORY.md`, `RUNNING_ISSUES.md` (#449 / #490 / #447 rows). Added on a clean origin after OLD Claude signals his -1 shared-doc edits are pushed.
 - **SIM:** the governance-checker grading logic changed (read-at-ref + drift canary + evidence seam) — if `SYSTEM_IMPACT_MAP.md` documents the governance-checker component, note these; CC-B to take that edit (own code).
 
-## Remaining (non-blocking to the fix's correctness) — needs a §9.4 named home
-- **F9 auto-redeploy trigger** — so a push reaches the checker box automatically instead of a manual pull. The drift canary already makes any lag **visible** (the thing that actually failed for two weeks), so this is convenience-hardening, not a gap. Proposed home: a small follow-up (B-GOV-INTEGRITY-0.1) or a dated RUNNING_ISSUES item — final home to be set with OLD Claude (owns the box deploy path).
+## OBJ-0 — auto-redeploy path — ✅ DONE + FULLY PROVEN (2026-07-11, Kyle "do it now" directive; Langston + OLD Claude Step-4 approved)
+The checker box now self-updates its own code before each tick, so a pushed fix reaches the enforcer with no manual pull. Implemented as a **systemd drop-in** on the box (`/etc/systemd/system/governance-checker.service.d/20-auto-redeploy.conf`, alongside the existing `go-live.conf`; box-side config like go-live, recorded here + in SIM):
+```ini
+[Service]
+ExecStartPre=-/usr/bin/git -C /opt/governance-checker/DawnTraderV3 fetch --quiet origin
+ExecStartPre=-/usr/bin/git -C /opt/governance-checker/DawnTraderV3 merge --ff-only origin/migration/aws-supabase
+```
+**Design (Langston + OLD Claude approved):** `ff-only` so it can NEVER create a merge commit or diverge (a hand-commit in the clone fails loud instead of silently merging); leading **`-` = non-fatal** so a delivery failure NEVER aborts enforcement — the tick runs the prior code and F9's drift canary / gov-fetch-failed flag the lag. Runs as `deploy` (repo is deploy-owned; fetch verified). State survives (`/var/lib/governance-checker/state.json` is outside the repo). Plus Langston add #1: `poller.mjs` tick() now emits `[gov-checker] poller running at deployed HEAD <sha>` every tick (positive auditability, not only the canary's negative signal). Commit `5976a1e65`.
+
+**Acceptance-tested live, all three legs + box left clean:**
+- **Happy path (#454 proof):** box was `ba98f3e57`; one tick auto-advanced it to origin tip `5976a1e65` with NO manual pull; subtree == origin, F9 silent.
+- **Fail-loud:** fault-injected a committed checker-subtree divergence (HEAD `d104236b2`, subtree `85e2ee4c` ≠ origin `d41c3a91`). Next tick: `merge --ff-only` REFUSED it (box not force-updated), `ExecMainStatus=0` (non-fatal — enforcement did not abort), and **F9 raised the drift alert `e0d387dd`** ("code is STALE vs origin"; lands `scheduled` → dispatcher promotes to `active`).
+- **Auto-recovery:** clone force-reset to clean origin tip → next tick ff-succeeded → F9 auto-**resolved** `e0d387dd` with evidence `5976a1e65` (re-derivable; the seam working on F9's own alert). Box final: HEAD==origin, clean, healthy.
+- **Invariant on record (Langston):** F9 watches committed HEAD, which equals the running working-tree file ONLY because the box tree is clean and ff-only never dirties it.
+
+⇒ **#449 is now fully resolved** (F0 read-at-ref + F9 canary + Layer-B seam + OBJ-0 delivery path all done + proven); no residual open objective on B-GOV-INTEGRITY-0.
 
 ## Sign-offs
 - Langston Step-4: **APPROVED** (Layer-B). Step-8 second-pass: pending (paired with B-GOV-INTEGRITY-1 Step-8).
