@@ -80,8 +80,16 @@ function formatAlertTextDiscord(alert: SystemAlert): string {
     Object.keys(alert.metadata).length > 0
       ? `\n_Metadata:_ \`${JSON.stringify(alert.metadata).slice(0, 300)}\``
       : '';
+  // Kyle directive 2026-07-10: a governance-checker alert must NOT read "SYSTEM ALERT" —
+  // it should say GOVERNANCE at a glance so it's distinguishable from an ops/system alert.
+  // Header is keyed on category: governance → "🏛️ GOVERNANCE CHECK ISSUE"; everything else
+  // keeps the "🚨 SYSTEM ALERT" banner.
+  const header =
+    alert.category === 'governance'
+      ? `🏛️ **GOVERNANCE CHECK ISSUE — ${alert.severity.toUpperCase()}**`
+      : `🚨 **SYSTEM ALERT — ${alert.severity.toUpperCase()}**`;
   const text =
-    `🚨 **SYSTEM ALERT — ${alert.severity.toUpperCase()}**\n` +
+    `${header}\n` +
     `**${alert.title}**\n${alert.body}\n` +
     `_Category:_ ${alert.category}  ·  _Alert ID:_ \`${alert.id}\`${meta}`;
   // Discord hard-caps content at 2000 chars; leave headroom.
