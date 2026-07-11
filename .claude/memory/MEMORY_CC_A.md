@@ -1,3 +1,5 @@
+> **★ B-LANGSTON-QUEUE-2 SHIPPED + LIVE 2026-07-11** (Kyle "do it now": all 6 bridge fixes deployed to /opt/discord-bridges/ + verified + Langston box-verified — #496 singleton, #488 no-truncation, #482 unknown-id-loud, #489 move-not-delete, #495 lock, #401 verdict-guard). Governance-alert relabel also live (governance alerts read GOVERNANCE CHECK ISSUE). The whole governance-repair arc (INTEGRITY-0/1 + this) is CLOSED + running. Follow-up: re-send the two truncation-parked reviews (…774019/…762880) now that OBJ-1 is live, per Langston 2 conditions.
+
 > **★ B-GOV-INTEGRITY-1 SHIPPED + LIVE 2026-07-10** (resolve provenance + class-driven delivery + category SSOT + honest 250-row backfill; commits c24599cfa/ed2ea6a91/19f80d3b8, CI 29112674183, deployed, verified; resolves #447, absorbs #38). **Awaiting Langston Step-8 2nd-pass + Kyle ack to fully close.** **PRE-PUSH ENUMERATION now a hard rule (#460): before every push, git log --oneline origin..HEAD and read every commit — two CCs share one HEAD so a push carries the other session commits. Worktree isolation = B-CC-WORKTREE-ISOLATION.**
 
 # MEMORY — OLD Claude (CC-A) volatile working-state

@@ -2,6 +2,17 @@
 
 ---
 
+## FIX-2026-07-11 — B-LANGSTON-QUEUE-2: the Langston review-queue/bridge hardening (Kyle "do it now")
+
+Six fixes to the live Langston bridge (/opt/discord-bridges/), deployed + verified same-session per Kyle 2026-07-11.
+- **#496** ghost-bridge: argparse (--help EXITS) + abstract-socket singleton — a usage query can never again spawn a 2nd root bridge (the 17-day ghost that doubled replies + raced the queue).
+- **#488** the (summary or "")[:500] slice DELETED — Langston reviews arrive whole (truncation had parked real reviews).
+- **#482** apply_marker unknown-id fails LOUD (logged + surfaced) — a verdict for a missing id is never dropped.
+- **#489 (DATA-LOSS)** save_queue MOVE-NOT-DELETE: terminal items beyond keep_done are appended to an append-only archive + fsync'd BEFORE the live file is replaced, every eviction logged; the docstring "oldest" lie corrected. Same discipline B-STORAGE-HARDEN imposes on the DB, applied to the reviewer's verdict file.
+- **#495** save_queue atomic (tmp+fsync+os.replace) + all six mutation callsites hold queue_lock across load→save (TOCTOU closed; a self-deadlock caught + fixed).
+- **#401** apply_marker guards TERMINAL_STATES — a contradictory verdict on a settled item returns dup-terminal without overwriting; only an explicit ready un-park may leave a terminal state.
+Verified LIVE (singleton, one process, end-to-end round-trip, queue intact) + Linux-flock acceptance tests. Langston Step-4 APPROVED + re-verified at the box. Also this session: the governance-alert relabel (Kyle 2026-07-10) — a governance-checker alert now reads "GOVERNANCE CHECK ISSUE", not "SYSTEM ALERT" (scripts/system-alerts.ts, deployed staging).
+
 ## FIX-2026-07-10 — B-GOV-INTEGRITY-1: alert closure becomes a RECORD, not an assertion
 
 Kyle directive 2026-07-10 (closures could be "acknowledged and just falsely verified and pushed to the side as completed"). resolveAlert wrote only state=resolved — 249/249 historical closes had zero provenance, structurally. Now: four fields (resolved_at, resolved_by_claimed=caller claim, resolved_by_transport=code-stamped channel, resolution_evidence=hard-gated reference-or-sentinel), enforced on every resolve path; 250 historical rows backfilled honestly (no fabrication; id-set conserved; idempotent). Class-driven delivery ({governance,breakage} at any severity — fixes 117 silent info alerts). The as-AlertCategory cast deleted; type derived from a 7-member SSOT; off-taxonomy categories rejected at creation. Seam with the governance-checker (B-GOV-INTEGRITY-0) proven + co-deployed. Files: server/services/system-alerts.ts, scripts/system-alerts.ts, server/routes.ts, scripts/b-gov-integrity-1-backfill-resolve-provenance.ts. Langston Step-1/2/4 APPROVED. Resolves #447; absorbs #38.
