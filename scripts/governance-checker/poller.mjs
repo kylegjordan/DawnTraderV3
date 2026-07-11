@@ -351,18 +351,34 @@ function loadExceptions() {
 
 // #490 recurrence guard ("who checks the checker"): detect when the DEPLOYED checker CODE has
 // drifted from origin. #449 recurred once because the box silently fell 388 commits behind and
-// nobody noticed — a manual git pull was a patch, not a fix. Compare the checker's OWN code subtree
-// (HEAD:scripts/governance-checker) against origin's; if they differ, the box is executing logic that
-// no longer matches what was reviewed and pushed. Scoped to the checker subtree (NOT the whole repo)
-// so a routine governance-doc push never trips it — the checker's code changes ~5×/90d, docs push
-// thousands of times (the exact #490 lesson: grade the code by its own tree hash, not the repo count).
-// origin is already fetched this tick. A rev-parse failure is NOT drift — don't manufacture a false alarm.
+// nobody noticed — a manual git pull was a patch, not a fix. Compare the checker's OWN LOADED code
+// (the exact files `node poller.mjs` executes) against origin's; if they differ, the box is running
+// logic that no longer matches what was reviewed and pushed. Scoped to the loaded files ONLY (NOT the
+// whole repo, NOT even the whole checker subtree) so a routine governance-doc push never trips it — the
+// checker's code changes ~5×/90d, docs push thousands of times (#490: grade the code, not the repo
+// count; and grade what the process LOADS, not what sits beside it). origin is already fetched this
+// tick. A rev-parse failure is NOT drift — don't manufacture a false alarm.
+// Narrowed per Langston's drift-guard ruling (2026-07-11): hash ONLY the files the poller process
+// actually LOADS, not the whole subtree. `ExecStart=node poller.mjs`; poller imports `./config.mjs`
+// + `./checker.mjs`; checker imports `./config.mjs`; config imports nothing local — so the complete
+// graded-logic closure is exactly {poller.mjs, checker.mjs, config.mjs}. The other files in the dir
+// (README.md, poller.test.mjs, backtest/heartbeat scripts, the .service/.timer units) are NOT the
+// enforcer, so a docs/test/unit-only push must NOT flip the drift signal (that was the surviving
+// false-positive in the subtree predicate). ★ CONSCIOUSLY ACCEPTED (Langston Step-4, 2026-07-11): a
+// `.service`/`.timer` change (e.g. a changed `ExecStart`, or the auto-redeploy drop-in itself) is now
+// OUT OF SCOPE for THIS check — it is the unit that STARTS poller, not logic poller RUNS. Deploy-config
+// drift is a separate concern (the drop-in is box-side config, not repo-graded); this guard answers
+// only "is the running GRADING LOGIC current?". rev-parse failure → drifted:false (fail-open, never a
+// manufactured false STALE — a git hiccup can't disable the enforcer).
+const DRIFT_LOADED_FILES = ['poller.mjs', 'checker.mjs', 'config.mjs'];
 function checkerCodeDrift() {
   try {
-    const local = execFileSync('git', ['rev-parse', 'HEAD:scripts/governance-checker'],
-      { cwd: REPO_ROOT, encoding: 'utf8' }).trim();
-    const origin = execFileSync('git', ['rev-parse', `${BRANCH}:scripts/governance-checker`],
-      { cwd: REPO_ROOT, encoding: 'utf8' }).trim();
+    const hashAt = (ref) => DRIFT_LOADED_FILES
+      .map(f => execFileSync('git', ['rev-parse', `${ref}:scripts/governance-checker/${f}`],
+        { cwd: REPO_ROOT, encoding: 'utf8' }).trim())
+      .join('|');
+    const local = hashAt('HEAD');
+    const origin = hashAt(BRANCH);
     return { drifted: local !== origin, local, origin };
   } catch (e) {
     return { drifted: false, error: String(e.message || e) };
@@ -418,7 +434,7 @@ export function tick(nowMs = Date.now()) {
     if (!state.openAlerts[DRIFT_KEY]) {
       const id = alertSink.add({ dedupeKey: DRIFT_KEY, severity: 'warning',
         title: 'governance-checker code is STALE vs origin — redeploy the checker box',
-        body: `Deployed checker code subtree ${drift.local} differs from origin ${drift.origin}. The box is ` +
+        body: `Deployed checker loaded-code (poller.mjs|checker.mjs|config.mjs) ${drift.local} differs from origin ${drift.origin}. The box is ` +
           `running governance logic that no longer matches what was reviewed and pushed; grading may be wrong. ` +
           `Redeploy scripts/governance-checker/ (git pull on the checker box) and this clears. (#490 recurrence guard.)` }, nowMs);
       if (id) state.openAlerts[DRIFT_KEY] = id;
