@@ -35,7 +35,9 @@ The kill-test proved the **zombie** case (the actual #462 failure). A follow-up 
 
 ## Langston review
 - Step-1 scope APPROVED; Step-2 pre-audit CLEARED (fsync-ordering + StartLimit reframe folded); Step-4 diff review — one CHANGES-NEEDED (`TimeoutStartSec=infinity`, applied) else clean; Step-8 — deploy-path defect (deploy.sh reverting the units) FIXED + re-verified, precision-note on TimeoutStartSec + the crash-mode finding folded (StartLimit 600→60 APPROVED).
-- **Step-8 final confirmation: _(pending — requested with the crash-mode measurements + StartLimit/OnFailure deploy + #465 home; to be recorded on his PASS)_.**
+- **Step-8 final: ✅ PASS (Langston, 2026-07-13, verified independently at origin `c2989c05d`).** Core batch PASS ("600→60 closes the silent slow-timeout latch this batch existed to kill — ship it"); OnFailure hold discharged after the forced-latch LIVE-FIRE (unit→failed, oneshot ran, page landed with phone push). Addendum re-read at the ref, no overclaim. Root fix #465 acknowledged as the durable follow-on.
+
+**BATCH CLOSED 2026-07-13** — all 5 objectives green + live-verified; Langston Step-1/2/4/8 all passed; deploy-path defect fixed; crash-mode measured + mitigated (StartLimit 600→60 + OnFailure live-fired) with the root fix homed at #465. Residual follow-ups (non-blocking): the OnFailure double-fire cooldown (candidate refinement) + #465 B-DISCORD-CONNECT-RESILIENCE (the retry-wrap root fix, my lane).
 
 ## Governance files changed
 SIM "Discord Comms Fabric" (watchdog entry — new cross-cutting liveness state + `.service` directives), RUNNING_ISSUES (#462 resolve), BATCH_CATALOG (this row), PHASE_HISTORY, CHANGES_AND_FIXES (FIX-2026-07-13), this report, MEMORY_CC_A + Langston MEMORY. SYSTEM_MANUAL N/A (comms infra). Scope + pre_audit in `Claude Comms and Packages/Scope Files/`.
