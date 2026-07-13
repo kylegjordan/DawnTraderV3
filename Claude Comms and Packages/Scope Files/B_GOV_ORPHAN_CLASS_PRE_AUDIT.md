@@ -1,0 +1,43 @@
+# B-GOV-ORPHAN-CLASS — Step-2 Pre-Audit (governance-checker disposition-honesty)
+
+change-class: non_architecture · Owner: NEW Claude (CC-B) · 2026-07-13
+All touchpoints below were READ at the working tree (== origin `4f22f84b`, == box grading ref `2d54b172`); line numbers cited from that read, not memory.
+
+## Touchpoint map (verified by reading)
+
+### OBJ-1 — parse `class-override` rows so a confirmed override declares the class
+- **Where class state is set today:** `poller.mjs:466` — `for (const b of enforceable) { const d = readDeclaredClass(b.batchId); b.declaredClass = d.class; b.classDeclared = d.declared; }`. These two fields are the ONLY inputs to the classundeclared open/resolve (`decideAlerts` poller.mjs:142 opens `gov-classundeclared:` when `classDeclared===false`; :148 resolves when `===true`) and to the graded class (`klass = s.declaredClass || DEFAULT_CLASS`, :138, used for the docset at :215).
+- **Why the override is inert today:** `loadExceptions` (poller.mjs:339-349) parses ONLY `type==='open'` and `type==='na-skip'`. A `type==='class-override'` row is never read → zero effect. (Verified: the loop body has no `class-override` branch.)
+- **Fix:** in `loadExceptions`, add a third branch building `classOverride: Map<batchId, class>` — **same row discipline as the existing sets** (split on `|`, `cells.length >= 7`, enumerate; **reuse the identical confirmed predicate `confirmedBy && confirmedBy !== 'pending'`** already used at :346/:347 — one confirmed-semantics, one place, per Langston Step-1). Only accept a `value` that parses to a `VALID_CLASSES` member (else skip + it stays undeclared, fail-closed). Return it in the exceptions object alongside `open/openSince/naConfirmed`.
+- **Wiring point (ORDER matters — verified):** `readDeclaredClass` runs at :466 but `loadExceptions` at :472-486 (AFTER). So apply the override in a NEW loop placed **after loadExceptions succeeds (:486) and before `decideAlerts` (:492)**: for each enforceable `b`, if `exceptions.classOverride.has(b.batchId)` then set `b.declaredClass = <override>` and `b.classDeclared = true`.
+- **★ PRECEDENCE TIE-BREAK (STATED per Langston Step-1, not emergent):** a **confirmed `class-override` row WINS over an in-header `change-class:`**. Rationale: the override is a Langston-confirmed human disposition gated on `confirmed_by=langston`; the header is a self-authored mechanical declaration. Override > header > default(architecture, fail-closed). If header and a confirmed override DISAGREE, the override wins and the tick logs one line (`[gov-checker] class-override <bid> supersedes header <hdr>→<ovr>`) so the disagreement is visible, not silent. (Open for Langston to ratify or tighten to "flag on disagreement.")
+- **★ Completeness rider (found reading `decideAlerts`):** a confirmed override is ALSO Langston answering the `gov-underdeclared:` question ("is this class right?", :154, fires when `klass!=='architecture' && coreCheck(files)`). So a confirmed override must ALSO resolve `gov-underdeclared:${batchId}`. This is the exact B8.4c case (non_architecture touching engine paths, Langston already judged OK). Add: when a confirmed override exists, push `gov-underdeclared:${batchId}` to `toResolveKeys` (or suppress the open).
+
+### OBJ-2 — orphan-sweep covers `gov-classundeclared:` (not only `gov-docgap:`)
+- **Today:** `decideOrphanSweep` (poller.mjs:108-118) regex `^gov-docgap:(.+):([^:]+)$` (:111) — `continue`s on any non-docgap key, so a `gov-classundeclared:` orphan on an OUT-OF-WINDOW batch (not in `enforceableIds`, so `decideAlerts` never iterates it) can never resolve.
+- **Scope note (in-window vs out-of-window):** for IN-WINDOW batches OBJ-1 alone fixes the re-mint (decideAlerts resolves classundeclared once `classDeclared===true` via the override). OBJ-2 is needed for batches that have AGED OUT of the `-n300` window — resolve a `gov-classundeclared:${bid}` orphan when the batch's class is declared (header via `readDeclaredClass` OR a confirmed `classOverride`). Pass a class-resolver into the sweep (same inputs, no new git reads beyond what the sweep already does).
+
+### OBJ-3 — class-aware `verifyDoc` (#497 core)
+- **Today:** `poller.mjs:510` — `const verifyDoc = (bid, doc) => docPresent(bid, doc) || exceptions.naConfirmed.has(\`${bid}:${doc}\`)`. Never asks whether `doc` is REQUIRED for the batch's class.
+- **Fix:** make it class-aware by reusing `checkBatchDocset(bid, klass, {requiredOnly:true})` (checker.mjs:191). **Critical correctness point (read at checker.mjs:195-198):** the required set is `CLASS_DOCSET[klass].required ∪ REQUIRED_IF predicates` — e.g. `phase_19_plan` is REQUIRED_IF for `P19-*` even on a hotfix. So class-awareness must use `checkBatchDocset`'s `effectiveRequired`, NOT `CLASS_DOCSET[klass].required` alone, or it would wrongly drop a predicate-required doc. `verifyDoc` resolves an out-of-window doc-gap when the doc is present OR na-confirmed OR **not in the effective required set for the batch's resolved class** (class from header/override). Genuinely-missing REQUIRED docs stay surfaced (no cry-silence — Langston's prior Step-2 Finding 2 preserved).
+
+### OBJ-4 — per-tick store-reconcile (#352 permanent)
+- **Where:** `tick()` after `loadState()` (poller.mjs:389) and after a confirmed `fetchOk` (so a network-blind tick doesn't prune off stale reads). ONE `alertSink.list({state:'active'})` (or the CLI equivalent the sink exposes) → for each `state.openAlerts` key whose alert-id is NOT in the active/scheduled set, delete the key. **Fail-OPEN:** any error reading the store → skip reconcile this tick (never blind-prune). The same tick's `decideAlerts`/orphan-sweep re-open anything still genuinely real. This makes the 2026-07-13 one-time reconcile self-maintaining. (Confirms the store is the SSOT; `state.openAlerts` is only a dedup cache.)
+
+### OBJ-5 — `readDeclaredClass` git-path portability
+- **Bug:** checker.mjs:235 `showFile(join(SCOPE_DIR, name))` — `join` is node:path, which emits backslashes on Windows; `showFile` feeds `git show ${GOV_REF}:${relPath}` (checker.mjs:52-56) and git object paths are forward-slash ONLY → backslash path → `null` → :244 `no-marker` → architecture default. Harmless on the Linux box, real bug for any Windows-side run/test. **Fix:** build the git path with a forward-slash join (`\`${SCOPE_DIR}/${name}\`` or a `posixJoin` helper), NOT `path.join`. Grep for other `join(...)`-into-`showFile` sites and fix uniformly.
+
+## Blast radius
+- All five touch PURE functions (`loadExceptions`, `decideAlerts`, `decideOrphanSweep`, `checkBatchDocset` consumer, `readDeclaredClass`) except OBJ-4 which is the `tick()` IO wrapper. No trading-engine / strategy / regime / signal-pipeline / math surface — `non_architecture` holds.
+- Downstream consumers of the exceptions object: `decideAlerts` (:492) + the orphan `verifyDoc` (:510). Adding a `classOverride` key is additive (no existing consumer breaks).
+- **SIM:** the checker's grading SEMANTICS change (a confirmed override now declares class; orphan-sweep now class-aware) → SIM governance-checker component note required at close (Langston Step-1 approved).
+
+## Test plan (`poller.test.mjs`, per objective)
+1. OBJ-1: batch, no scope header, confirmed `class-override=hotfix` → `classDeclared` true, `klass=hotfix`, NO `gov-classundeclared` opened; pending override → still undeclared. Precedence: header=architecture + confirmed override=non_architecture → non_architecture wins. Underdeclared rider: non_architecture + core-path files + confirmed override → `gov-underdeclared` resolved.
+2. OBJ-2: out-of-window batch with a `gov-classundeclared:` orphan + declared class → orphan resolves; undeclared + no override → KEPT.
+3. OBJ-3: out-of-window hotfix with `gov-docgap:<bid>:system_manual` (not required for hotfix) → resolved; `gov-docgap:<P19-bid>:phase_19_plan` (REQUIRED_IF) genuinely missing → KEPT.
+4. OBJ-4: `state.openAlerts` key whose store row is resolved → dropped next tick; store-read throws → no prune (fail-open).
+5. OBJ-5: `readDeclaredClass` resolves the scope + parses the marker under a forward-slash path (regression guard for the backslash bug).
+
+## Process
+Langston reviews THIS pre-audit → I open code → poller.test per above → Langston Step-4 diff → CI 4-green → shadow dry-run on the box → deploy → Langston Step-8 → governance (BATCH_CATALOG / PHASE_HISTORY / RUNNING_ISSUES #497+#352 close / SIM / MEMORY) → completion report → Kyle ack.
