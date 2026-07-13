@@ -498,3 +498,15 @@ Archive: git history is authoritative (this is a field-retirement within live fi
 **Left intentionally:** staged **context** files in `/home/langston/inbox/**` (scopes, diffs, design asks). Langston is stateless per-invoke; staging context is correct and necessary. **Staging a copy of the RULEBOOK, or of his PERSONA, is the bug.** The two look identical in an `ls`.
 
 **Rule earned (→ #453, #455):** *no governed artifact may exist as a second, unmanaged copy anywhere an agent reads* — not an inbox, not a checker worktree, not a home directory. It is read from ONE place, the graded ref, or it is a hazard. This is the human-layer form of `B-GOV-INTEGRITY-0`'s `readGoverned` chokepoint: **one doorway, one ref, one truth.**
+
+---
+
+## 2026-07-13 — the `predictiveConfidence×100` DI proxy bridge, BOTH lanes (#500, P19-B8.5b)
+
+**Removed by:** CC-B, P19-B8.5b OBJ-2/OBJ-3 (Kyle directive + crew-locked rule-18 disposition 2026-07-13: delete, not a fallback).
+**What:** the two inline expressions substituting `Math.min(100, Math.max(0, predictiveConfidence * 100))` for the kernel's `DI` input — `server/services/vts-runner.ts:1673` (crypto VTS lane) + `server/asset_classes/xstock_spot/eval-cycle.ts:705` (xstock lane). Not a file — a code-path removal; exactly two sites repo-wide (Langston-verified at the ref pre-cut).
+**Why:** the bridge predates xStock entirely (commit `e4ce3c55f`, 2026-02-03 — a kernel-unification carry-gap patch that fed a CONFIDENCE-scaled proxy where a price-path integrity measure belongs). It made every VTS kernel evaluation consume a fabricated DI, poisoning the netEV inputs the learning data records and blocking honest replay (#500).
+**Replaced with:** the REAL lane-native DI, carried not recomputed — crypto: scanner `calculateDirectionalIntegrity` (`fx5-scanner.ts:1073/:1202`) carried via `ScanBatchPair.di` → `vts-runner` `propagatedDi` (the B63 dbsScore ride pattern); xstock: `imfResult.metrics.DI` hoisted (`eval-cycle.ts` `laneRealDi`). HONEST-ABSENT: when no real DI exists (IMF didn't run / scanner gap) the kernel input is `undefined` → the kernel's documented `DI = 50` default (`net-expectancy-kernel.ts:91`) — never a fabricated stand-in; capture records `realDiAtOpen: null` + `kernelDiInputAtOpen: 50` honestly.
+**Blast-radius verification:** `predictiveConfidence` appears ONLY on removal lines in the diff (single-diff proof, Langston Step-4 per-point AGREE); bench tsc baseline OK; vitest 2244/0; CI 4-green run 29268986981; deployed commit `3aab09d99`.
+**Known residual (flagged, NOT silently reconciled):** crypto DI and xstock DI are TWO DIFFERENT FORMULAS sharing one name (trend-straightness `|net|/path` vs signed direction `(net/abs)×50+50`) — divergence homed at #502 (Phase-25 calibration arc).
+**Archive:** git history is the authoritative archive (inline expressions; no `.removed` file applicable).

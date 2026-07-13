@@ -782,6 +782,24 @@ DI = (netDistance / totalPath) × 100
 - DI = 100: Perfect straight-line movement
 - DI = 0: Price went nowhere despite large movements (choppy)
 
+**Kernel DI provenance (P19-B8.5b, 2026-07-13, #500):** the net-expectancy kernel's `DI`
+input is now the REAL lane-native DI on BOTH lanes — crypto: the scanner's
+`calculateDirectionalIntegrity` value carried on `ScanBatchPair.di` into `vts-runner`
+(the B63 dbsScore carry pattern; never recomputed downstream); xstock: the IMF
+evaluator's DI (`imfResult.metrics.DI`). The historical `predictiveConfidence×100`
+proxy bridge (commit `e4ce3c55f`, 2026-02-03) is DELETED on both lanes
+(DELETED_COMPONENTS_LOG 2026-07-13). HONEST-ABSENT contract: when no lane DI exists
+(xstock quant-global gate failed / scanner gap) the kernel input is `undefined` and the
+kernel applies its documented `DI = 50` default; capture records `realDiAtOpen: null` +
+`kernelDiInputAtOpen: 50` — a fabricated stand-in is never substituted.
+
+**⚠ TWO FORMULAS SHARE THE NAME (flagged at #502, Phase-25 home — deliberately NOT
+silently reconciled at B8.5b):** the crypto DI above is UNSIGNED trend-straightness
+(`|net|/path`, 0-100, 48-bar window, `analysis-utils.ts`); the xstock IMF DI is SIGNED
+direction (`(net/|path|)×50+50`, `imf-evaluator.ts` — 50 = flat, >50 up, <50 down).
+Same kernel input, different semantics per lane. Unification is a Phase-25 calibration
+decision (it moves measured pWin), not a rename.
+
 ### Volatility Noise (VolNoise, 0-1)
 
 Coefficient of variation of absolute price changes:

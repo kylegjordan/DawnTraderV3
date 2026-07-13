@@ -1,0 +1,44 @@
+# P19-B8.5b — COMPLETION REPORT
+**Batch:** P19-B8.5b — pre-flip capture + gate-feed (change-class: non_architecture)
+**Owner:** CC-B (NEW Claude) · **Date closed:** 2026-07-13
+**Heads:** `3aab09d99` (batch) + `fe5040d47` (Step-9 fix) · **CI:** 4-green both pushes (run 29268986981 + the fix run) · **Deployed:** staging, migration-first, HTTP 200
+**Scope:** `Scope Files/P19_B8_5b_SCOPE.md` (a1ae15530) · **Pre-audit:** `Scope Files/P19_B8_5b_PRE_AUDIT.md` FINAL REV (312d2ce22) · **Step-4 packet:** `Langston Design Asks/P19_B8_5b_STEP4_PACKET.md` + `_FULL.diff` (55033d8f4)
+
+## PREVIOUSLY-STATED-VS-NOW (§9.2)
+- PREVIOUSLY: rollback convention stated as "rollback files stay OUT" (ambiguous). NOW: rollback files ARE git-tracked (74 precedents verified); they stay out of MANIFEST only. REASON: convention verified at the tree, not from memory.
+- PREVIOUSLY (Step-4 packet §8): "bench green = capture verified." NOW: bench green was NOT sufficient — the hash populated 0 of 20,588 live rows despite 4/4 unit tests. REASON: ESM/require defect invisible to vitest (see Iterations).
+
+## Scope objectives — verdicts
+1. **OBJ-1 (#206 / B-NEW-53.3) — six decision-time scalars + settled-window hash: YES.** 7 typed columns on `signal_eval_provenance` (`ind_vwap/ind_atr/ind_sma/ind_high24h/ind_low24h/ind_current_volume` double precision + `settled_window_hash` text, versioned `swh1:`). `buildBarProvenance` +optional `indicators` param (backward-compatible; existing B-NEW-53 tests untouched-green). Feed sites: `server/services/vts-runner.ts` (from `stratDetectIndicators` — the SAME object the strategies read) + `server/asset_classes/xstock_spot/eval-cycle.ts` `_provBase` (from `mceContext.indicators`). avg-volume deliberately NOT persisted (ZERO scalar consumers — enumeration in pre-audit); CURRENT volume substituted (the volume-confirm compares' real input). **Live evidence:** scalars — every wired hook populates 100% (crypto admitted 2/2; xstock admitted 2/2, tcl 10/10; partial on rejects per the documented honest-NULL decision: xstock strategy_internal 6,231/26,816, sqe 201/788; crypto reject hooks 0 — no indicators in scope). Hash — 2,702/5,202 rows in the 8 min post-fix (pre-fix 0/20,588); non-hashed = single-bar windows, honest-absent.
+2. **OBJ-2 (#500 crypto leg) — real DI carry + proxy DELETE: YES.** `ScanBatchPair.di` carries the scanner's `calculateDirectionalIntegrity` (real, `fx5-scanner.ts:1073/:1202`, set on survivors `:1121/:1231` — Langston-verified at ref) → `vts-runner` `propagatedDi` (11th param). Proxy deleted; `predictiveConfidence` appears ONLY on `-` lines (single-diff proof). Honest capture: `realDiAtOpen: propagatedDi ?? null`, `kernelDiInputAtOpen: DI` (post-default, what the kernel saw).
+3. **OBJ-3 (#500 xstock leg) — lane-native DI + proxy DELETE: YES.** `laneRealDi` hoisted from `imfResult.metrics.DI` (undefined-honest when quant-global gate fails → kernel's documented `DI = 50`, `net-expectancy-kernel.ts:91`). Two-formulas divergence flagged in-code + homed at **#502** (Phase-25, rides 25-4) — NOT silently reconciled.
+4. **OBJ-4 (#498 sourcePool leg) — refresh SQE feed: YES.** Both refresh sqeInputs in `server/core/rtb/ready_to_buy_service.ts` feed `sourcePool` (signal ?? metadata, null-safe, honest-absent on legacy rows). regimeStability leg DOCUMENTED-DEFERRED per the crew-ratified disposition (gen-side value is confidence-derived with cold-start defaults — the axis B8.5a severed; feeding it = contaminated default in honest-feed costume — Langston). It moves with the honest-source rewire (25-4 rider).
+
+## Review gates
+- Step-1 scope: Langston reviewed (dispatch on record). Step-2 pre-audit FINAL REV: Langston **PROCEED**, ratified on his own ref-read (312d2ce22) — #206 absence claim, OBJ-3 proxy sites (exactly two repo-wide), :865 frozen-snapshot all independently confirmed.
+- Step-4: Langston **PROCEED, per-point AGREE ×4** (migration additive-safety + #501 queryability; single-diff proof + honest-absent; hash recipe; sourcePool expression). His one required fix (comment-only: the recipe comment implied `swh1:` was hashed input; it labels the OUTPUT) folded pre-push. His two B8.5a Step-4 notes honored (full paths; dedicated migration review section).
+- Step-9 iterate: the ESM fix reviewed + **approved by Langston pre-push** (he re-verified package.json:8 + the one-instance sweep at origin himself).
+- Step-8: **PASS, cleared (Langston, 2026-07-13, independent).** He re-derived at the live ref: (1) the 7 columns on the TRUE partitioned parent (`pg_class.relkind='p'`, 13 attached partitions); (2) the honest-NULL contract by a STRONGER test than my stage tallies — zero rows carry a partial indicator triple (`(vwap?)+(atr?)+(sma?) ∈ {0,3}`, partials = 0: the exact all-or-honest-NULL signature, no fabrication, no partial corruption); (3) the hash leg live — 3,731 `swh1:` rows in a 120-min window vs 0/20,588 pre-fix; (4) deploy HEAD `fe5040d47` riding `3aab09d99`; (5) alert 83afc970 scheduled with the correct pre-fix-exclusion note. Honestly flagged as taken-on-report (not re-derivable post-hoc): CI green + migration-before-code ordering.
+
+## Iterations (Step-9) — the defect the workflow caught
+**Step-7's live-populate check caught what bench + CI could not:** `settled_window_hash` = 0 of 20,588 live rows while its unit tests passed 4/4. Root cause: `require('node:crypto')` inside the hash fn — the server bundles ESM (`esbuild --format=esm`, `"type":"module"`), where `require` throws; the fn's own never-throw catch silently swallowed it on every call. Vitest tolerates `require`, so the safety net and the test harness BOTH hid it. Fix `fe5040d47`: static top-of-file import; repo-wide sweep = the defect line was the only runtime `require('node:…')` in server (Langston re-verified at origin). **Lesson on the record (Langston): a bench pass is NOT sufficient for capture wiring — the live-populate check is the gate, and it stays in every capture batch's Step-8 hand-off.** Full record: CHANGES_AND_FIXES FIX-2026-07-13-B.
+
+## Data-cohort caveats (for Phase-25 calibration)
+- ALL pre-2026-07-13 VTS rows carry proxy-DI-derived pWin/netEV — treat the DI regime change as a cohort boundary.
+- Hash coverage starts at the fix deploy (2026-07-13 ~17:4x UTC) — the post-accrual re-run excludes earlier rows from the hash-verified leg (noted in the alert body).
+- Scalar coverage on REJECT rows is partial by design (honest-NULL where no indicators in scope); replay of scalar-consuming detects on those rows relies on the hash + bar window.
+- **★ Soak watch-item (Langston Step-8, on the record for the 2026-08-03 replay):** crypto's useful capture is THIN — 2 admitted rows/90 min; everything else honest-NULL by design. If Tier-1 CRYPTO parity comes in noisy at the re-run, look at row DENSITY first, not the scalars.
+
+## Defined exit (#206) — REGISTERED
+§10.5 scheduled alert `83afc970-2eef-4c9b-a358-dd3764185d21`, triggers **2026-08-03T12:00Z** (soak_verification): re-run `scripts/b5-w20c-provenance-replay.ts` against the typed columns + hash-verified windows vs the ≥99% Tier-1 gate; on PASS un-block roadmap 25-12 + fully close #206's capture leg.
+
+## Pre-flip gate ledger (crew-locked four)
+- **#500 capture (this batch): SEEN** (this report). **#498 sourcePool leg: SEEN**; regimeStability leg documented-deferred (not a flip blocker — the gen-side gates run; the refresh floor-skip is the ratified lean-first posture).
+- #499 B-OPS-PM2-LOG (CC-A) + #501 backtest-baseline harness (CC-A): still open, still gating the flip.
+
+## Governance files changed (this batch)
+`RUNNING_ISSUES.md` (#498/#500/#206 stamps + NEW #502) · `SYSTEM_MANUAL.md` (DI section: kernel-provenance block + two-formulas flag) · `SYSTEM_IMPACT_MAP.md` (archiver row: B8.5b columns/feeds/consumer) · `DELETED_COMPONENTS_LOG.md` (proxy-bridge entry) · `CHANGES_AND_FIXES.md` (FIX-2026-07-13-B) · `POST_AUDIT_ROADMAP.md` (25-4 sub-item for #502) · `PHASE_19_PLAN.md` (§1 board + §5 decision log) · `BATCH_CATALOG.md` · `PHASE_HISTORY.md` · `MULTI_ASSET_VTS_EXPANSION_PLAN.md` (xStock working-list DI item) · `MEMORY_CC_B.md` + repo mirror · Langston `/home/langston/MEMORY.md` (10.b sync) · this report.
+
+## Code files (9 in the batch commit + 1 in the fix)
+`server/services/fx5-scanner.ts` · `server/services/vts-runner.ts` · `server/asset_classes/xstock_spot/eval-cycle.ts` · `server/core/rtb/ready_to_buy_service.ts` · `server/services/data-archive/signal-eval-archiver.ts` (+fix) · `server/tests/unit/p19-b8-5b-provenance-scalars.test.ts` (new, 4 tests) · `drizzle/migrations/2026-07-13-p19-b8-5b-provenance-scalars.sql` + `.rollback.sql` (code-first-revert caveat) · `drizzle/migrations/MANIFEST.txt` (bare filename, own line only — shared-file diff checked pre-stage).
+Bench: tsc baseline OK ×3 runs; vitest full suite 2,244 passed / 0 failed; targeted provenance+SQE files 24/24.
