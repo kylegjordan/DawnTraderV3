@@ -6,6 +6,8 @@
 
 > **★ PART II SCORING REDESIGN — KYLE-RATIFIED 2026-07-13** (as-folded at 67ea26428, recorded in-doc 6f7fc24c7; 11.8B stays STILL-BLOCKS). Two-layer architecture: equal-weight ensemble = MODEL → 1-D Platt pWin = CALIBRATOR (one Phase-25 deliverable); NOTHING sizes on pWin at switch-on; hierarchical EB fallback for regime tables; §9 DB-migration checklist; backtest-baseline stage before paper calibration. **Prep-then-switch-on GO: structural batch = P19-B8.5a (CC-B owns, LIVE, architecture class). MY NEXT ACTION = Step-4 of its diff — lens: §4b conditions 1-4 + B1 + the §4d hybridScore→confidence propagation.** Numeric recalibration homed 25-4 + #399. Legacy-deletion (FIX-5) = future rule-18 batch, owner TBD.
 
+> **★ LOOSE END (#37 B-XSTOCK-FRESHNESS-MONITOR, in-flight):** its MANIFEST line `2026-07-08-b-xstock-freshness-monitor.sql` was LIFTED from origin in CC-B's B8.5a hotfix dbfb14460 (it referenced a gitignored .sql never force-added → CI drift; got swept into a shared-tree commit). WHEN #37 resumes: re-add that MANIFEST line AND `git add -f` its .sql in the SAME commit. Also B8.5a is CI-green (dbfb14460) — my Step-4 code APPROVED; pending CC-B closing FLAG B (SQE input.confidence floor deferred-to-Phase-25 confirm) + FLAG C, then deploy.
+
 # MEMORY — OLD Claude (CC-A) volatile working-state
 
 > OWNED by OLD Claude (CC-A), session `3ce652e6` (comms/roadmap/governance). Read this + shared `MEMORY.md` (protocols) at session-start; write volatile state ONLY here. CC-B owns `MEMORY_CC_B.md`. Detailed fee/strategy scratch: `_scratch_xstock_globals_resume.md`. Mirror to `.claude/memory/`.
