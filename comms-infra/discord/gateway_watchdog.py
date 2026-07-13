@@ -129,7 +129,7 @@ def sd_notify(state):
 
 
 # ── Inbox scan for backfill dedup ────────────────────────────────────────────
-def inbox_message_ids(inbox_log, tail_bytes=2_000_000, kinds=None):
+def inbox_message_ids(inbox_log, tail_bytes=8_000_000, kinds=None):
     """Set of message_ids already present in the inbox log (tail-scan bounded for speed).
 
     `kinds` (optional set): count an id only if it appears in a row whose `kind` is in the set.
@@ -238,15 +238,19 @@ async def _backfill_missed(client, channel_id, inbox_log, replay_message, log_fn
     async for m in ch.history(limit=limit):
         if m.id not in already:
             pending.append(m)
-    replayed = 0
+    refed = 0
     for m in reversed(pending):                      # oldest → newest
         try:
-            await replay_message(m)
-            replayed += 1
+            await replay_message(m)                   # the bridge's own handler gates (Kyle-only /
+            refed += 1                                # addressed-only) — non-matching replays no-op
         except Exception as e:
             log_fn(f"watchdog: backfill replay of {m.id} failed: {e}")
-    if replayed:
-        log_fn(f"watchdog: backfill replayed {replayed} missed message(s) since downtime")
+    if refed:
+        # "re-fed", not "replayed missed" — most are ids this bridge never logged under its own
+        # kinds (e.g. other-party chatter); the handler ignores those. Only genuinely-missed
+        # matching messages are actually acted on.
+        log_fn(f"watchdog: backfill re-fed {refed} recent channel message(s) through the handler "
+               f"(already-logged ids skipped; handler ignores non-matching)")
 
 
 def install_watchdog(client, *, bridge_name, send_alert_fn, state_path, log_fn,
@@ -265,9 +269,9 @@ def install_watchdog(client, *, bridge_name, send_alert_fn, state_path, log_fn,
     started = {"v": False}
 
     async def _on_socket_raw_receive(_raw):
-        recv["t"] = mono()
-
-    async def _on_message_touch(_message):
+        # Fires on EVERY gateway frame (incl. the ~41s heartbeat ACK) when enable_debug_events=True
+        # → the true receive-liveness signal, decoupled from channel traffic. Sufficient alone; no
+        # need to also touch on on_message.
         recv["t"] = mono()
 
     async def _on_resumed():
@@ -287,7 +291,12 @@ def install_watchdog(client, *, bridge_name, send_alert_fn, state_path, log_fn,
     async def _on_ready():
         recv["t"] = mono()
         sd_notify("READY=1")
-        hb = _normalize_heartbeat(getattr(getattr(client, "ws", None), "heartbeat_interval", None))
+        # discord.py 2.x stores the HELLO heartbeat interval (seconds) at ws._keep_alive.interval
+        # (gateway.py: interval = data['heartbeat_interval']/1000; KeepAliveHandler.interval). There
+        # is no ws.heartbeat_interval attribute. Guard: _keep_alive is None before/after connect.
+        ws = getattr(client, "ws", None)
+        ka = getattr(ws, "_keep_alive", None) if ws is not None else None
+        hb = _normalize_heartbeat(getattr(ka, "interval", None))
         threshold = resolve_threshold(hb)
         log_fn(f"watchdog: gateway ready; heartbeat={hb}s stale-threshold={threshold:.0f}s")
         note_recovery(bridge_name, state_path, send_alert_fn, log_fn)
@@ -301,7 +310,19 @@ def install_watchdog(client, *, bridge_name, send_alert_fn, state_path, log_fn,
             client.loop.create_task(_watchdog_loop(threshold))
             log_fn("watchdog: liveness loop started")
 
-    client.add_listener(_on_socket_raw_receive, "on_socket_raw_receive")
-    client.add_listener(_on_message_touch, "on_message")
-    client.add_listener(_on_resumed, "on_resumed")
-    client.add_listener(_on_ready, "on_ready")
+    # Register handlers. The base discord.Client has NO add_listener (that's ext.commands.Bot) —
+    # events are dispatched by looking up the `on_<event>` attribute, which is exactly what the
+    # @client.event decorator sets. So we assign attributes directly. on_socket_raw_receive and
+    # on_resumed are not defined by the bridges → set them straight. on_ready IS defined by each
+    # bridge → WRAP it so the bridge's handler AND our setup both run (assignment alone would
+    # clobber the bridge's on_ready).
+    client.on_socket_raw_receive = _on_socket_raw_receive
+    client.on_resumed = _on_resumed
+    _bridge_on_ready = getattr(client, "on_ready", None)
+
+    async def _wrapped_on_ready():
+        if _bridge_on_ready is not None:
+            await _bridge_on_ready()
+        await _on_ready()
+
+    client.on_ready = _wrapped_on_ready
