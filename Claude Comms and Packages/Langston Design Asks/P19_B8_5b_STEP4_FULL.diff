@@ -1,0 +1,400 @@
+diff --git a/drizzle/migrations/MANIFEST.txt b/drizzle/migrations/MANIFEST.txt
+index 497f8c5b7..df64c3cdc 100644
+--- a/drizzle/migrations/MANIFEST.txt
++++ b/drizzle/migrations/MANIFEST.txt
+@@ -166,3 +166,4 @@
+ 2026-07-08-b-storage-harden-wave-c-b70-retention.sql
+ 2026-07-08-b-storage-harden-wave-d-xstock-ticker-daily-cutover.sql
+ 2026-07-13-p19-b8-5a-scoring-base.sql
++2026-07-13-p19-b8-5b-provenance-scalars.sql
+diff --git a/server/asset_classes/xstock_spot/eval-cycle.ts b/server/asset_classes/xstock_spot/eval-cycle.ts
+index 7b4eceacc..69cba35ee 100644
+--- a/server/asset_classes/xstock_spot/eval-cycle.ts
++++ b/server/asset_classes/xstock_spot/eval-cycle.ts
+@@ -376,8 +376,13 @@ export async function evaluateXstockPairForVTS(
+ 
+     // ── 3a. Family IMF (5 quant lanes) — only if quant global passed ──
+     let passedFamilies: string[] = [];
++    // P19-B8.5b (#500): hoist the lane-native real DI out of the IMF block so the kernel
++    // consume (downstream, outside this block) can read it. Stays undefined when the IMF
++    // never ran (globalResult failed / DI null) → kernel documented default, honest-absent.
++    let laneRealDi: number | undefined;
+     if (globalResult.passed) {
+       const imfResult = await evaluateXstockFamilyIMF(symbol, ohlc, mode, configs?.families, askDepthUsd);
++      laneRealDi = imfResult.metrics.DI ?? undefined;
+       mergeCounters(counters.imfFilterCounters, imfResult.counters);
+       counters.imfPerMetric.failedLQ += imfResult.perMetric.failedLQ;
+       counters.imfPerMetric.failedVN += imfResult.perMetric.failedVN;
+@@ -556,7 +561,17 @@ export async function evaluateXstockPairForVTS(
+         // detect site, via the shared helper (single source of truth — the crypto
+         // hooks in vts-runner.ts use the same fn). Captured here so even strategy-
+         // null decisions get it; hooks add the resolved stop/target where known.
+-        const _provBase = buildBarProvenance(ohlc);
++        // P19-B8.5b (OBJ-1): + the decision-time indicator scalars BY VALUE — the
++        // EXACT mceContext.indicators object the detect call above consumed — and
++        // the settled-window hash (computed inside the builder).
++        const _provBase = buildBarProvenance(ohlc, undefined, undefined, {
++          vwap: mceContext.indicators.vwap,
++          atr: mceContext.indicators.atr,
++          sma: mceContext.indicators.sma,
++          high24h: mceContext.indicators.high24h,
++          low24h: mceContext.indicators.low24h,
++          currentVolume: mceContext.indicators.volume,
++        });
+ 
+         if (!strategySignal) {
+           counters.strategyNulls++;
+@@ -702,7 +717,17 @@ export async function evaluateXstockPairForVTS(
+         // the file-level ASSET_CLASS constant ('xstock_spot') is passed directly.
+         const costMetrics = getCachedCostMetrics(symbol, ASSET_CLASS);
+         const totalFriction = (costMetrics.fee * 2) + (costMetrics.slippage * 2) + spread;
+-        const DI = Math.min(100, Math.max(0, predictiveConfidence * 100));
++        // P19-B8.5b (OBJ-3, #500): the predictiveConfidence×100 DI proxy is DELETED (rule 18 —
++        // FINDING B's second site; the crypto twin died at vts-runner in the same diff). The
++        // kernel now consumes the LANE-NATIVE real DI: the imf-evaluator's own computed value
++        // (imfResult.metrics.DI, :380 — the number this lane's IMF actually gates on), 0-100,
++        // null→undefined-honest (kernel documented default; NEVER fabricated).
++        // ⚠ FLAGGED (own homed item, not this batch): the two lanes' "real DI" are DIFFERENT
++        // FORMULAS sharing a name — crypto = trend-STRAIGHTNESS (|net|/path, direction-blind,
++        // analysis-utils.ts:107); xstock = SIGNED DIRECTION ((net/abs)×50+50, imf-evaluator.ts:71).
++        // Carrying each lane's native value is the honest cut; unifying the formula is a
++        // Phase-25 scoring question, recorded at this batch's close.
++        const DI = laneRealDi;
+         let kernelResult;
+         try {
+           kernelResult = computeNetExpectancyKernel({
+diff --git a/server/core/rtb/ready_to_buy_service.ts b/server/core/rtb/ready_to_buy_service.ts
+index 41ed53448..3dcc2056f 100644
+--- a/server/core/rtb/ready_to_buy_service.ts
++++ b/server/core/rtb/ready_to_buy_service.ts
+@@ -921,6 +921,16 @@ class ReadyToBuyService {
+       regimeWeight: regimeWeight,
+       trendStrength: metadata.trendStrength ?? 0.5,
+       volatility: currentVol,
++      // P19-B8.5b (OBJ-4, #498): feed the FROZEN at-queue sourcePool (the row's own value,
++      // persisted at queue-write :2251 — same read the maker/taker re-decide uses at :865;
++      // NOT a fresh pool lookup) so the pattern elevated floor + AMR pool-awareness actually
++      // run at refresh. Honest-absent: a legacy row with neither → undefined → behaves as today.
++      // regimeStability is DELIBERATELY NOT fed (documented-deferred, Langston-ratified): the
++      // gen-side value is computeGlobalStability(0.5, 0, confidence||0.5) — a function of the
++      // retired confidence axis with cold-start defaults — feeding it would EXTEND that
++      // contamination to two new gate evaluations. It moves WITH its honest-source dependency
++      // (the getNormalizedRegimeWithDetails wiring follow-up + the 25-4 floor disposition).
++      sourcePool: (signal as any).sourcePool ?? (signal.metadata as any)?.sourcePool,
+       // P19-B8.5a (OBJ-3): net-EV admission at refresh — prefer THIS tick's re-decide
+       // (the decideMakerTaker re-run directly above, geometry-shifted case), else the
+       // stored row snapshot. Absent (legacy row) → the SQE check skips (fail-open,
+@@ -1183,6 +1193,10 @@ class ReadyToBuyService {
+                 regimeWeight: regimeWeight,
+                 trendStrength: metadata.trendStrength ?? 0.5,
+                 volatility: metadata.volatility ?? 0.3,
++                // P19-B8.5b (OBJ-4, #498): frozen at-queue sourcePool — batch-refresh parity with
++                // the single-refresh feed above (same row-read, same honest-absent semantics;
++                // regimeStability deliberately NOT fed — see the single-refresh comment).
++                sourcePool: (signal as any).sourcePool ?? (signal.metadata as any)?.sourcePool,
+                 // P19-B8.5a (OBJ-3): the ★third call site (batch refresh — Step-2 enumeration
+                 // found it; the consensus said two). No re-decide runs on this path, so feed
+                 // the stored row snapshot; absent → fail-open (Langston-ratified).
+diff --git a/server/services/data-archive/signal-eval-archiver.ts b/server/services/data-archive/signal-eval-archiver.ts
+index 3935d6db3..3a63cc239 100644
+--- a/server/services/data-archive/signal-eval-archiver.ts
++++ b/server/services/data-archive/signal-eval-archiver.ts
+@@ -68,6 +68,21 @@ const PROVENANCE_COLUMNS = [
+   'constants_hash',
+   'resolved_stop_price',
+   'resolved_target_price',
++  // P19-B8.5b (OBJ-1, #206/B-NEW-53.3): the five decision-time indicator scalars the
++  // strategies actually READ (per the 19-strategy read-surface enumeration: vwap ×5
++  // consumers, atr universal via the reachability guard, sma ×1, high/low24h ×2) +
++  // CURRENT volume (what the volume-confirm compares read — avg-volume deliberately
++  // NOT persisted: zero scalar consumers, always recomputed from candles) + the
++  // settled-window hash (the byte-parity oracle for every ARRAY read — volume walks,
++  // patterns, ORB structure — per B_NEW_53 findings §4.0: scalars alone are not
++  // strategy-complete). Lifts decision-replay fidelity from the measured 70.73%.
++  'ind_vwap',
++  'ind_atr',
++  'ind_sma',
++  'ind_high24h',
++  'ind_low24h',
++  'ind_current_volume',
++  'settled_window_hash',
+ ];
+ 
+ let registered = false;
+@@ -119,6 +134,20 @@ export interface SignalEvalProvenanceInput {
+   /** RI-a checksum: the resolved stop/target LEVELS the engine produced. */
+   resolvedStopPrice?: number;
+   resolvedTargetPrice?: number;
++  /** P19-B8.5b (OBJ-1): the decision-time indicator scalars the strategies read
++   *  (BY VALUE at the hook — the exact numbers the detect saw). Absent → honest NULL. */
++  indicators?: {
++    vwap?: number;
++    atr?: number;
++    sma?: number;
++    high24h?: number;
++    low24h?: number;
++    /** CURRENT volume (indicators.volume — on the VTS lane this is volume24h). */
++    currentVolume?: number;
++  };
++  /** P19-B8.5b (OBJ-1): versioned deterministic hash of the SETTLED bar window —
++   *  the byte-parity oracle for every array-fed read at replay. See settledWindowHash(). */
++  settledWindowHash?: string;
+ }
+ 
+ /**
+@@ -130,10 +159,33 @@ export interface SignalEvalProvenanceInput {
+  * it stays faithful across asset classes and any future cadence change. Returns
+  * undefined for an empty bar array. Pass the resolved stop/target when known.
+  */
++// P19-B8.5b (OBJ-1): versioned deterministic hash of the SETTLED bar window — the
++// byte-parity oracle for array-fed reads at replay (volume walks, patterns, ORB).
++// RECIPE (v1, the replay harness MUST use the identical recipe): sha256 over
++// `swh1:` + each settled bar as `${ts}|${o}|${h}|${l}|${c}|${v}` (fields via
++// String(Number(x)) — NaN serializes as "NaN", honest), bars joined by `;`.
++// The version prefix makes any future recipe change distinguishable in-data.
++function settledWindowHash(
++  settledBars: ReadonlyArray<{ open: number; high: number; low: number; close: number; volume: number; timestamp: number }>,
++): string | undefined {
++  if (settledBars.length === 0) return undefined;
++  try {
++    const { createHash } = require('node:crypto') as typeof import('node:crypto');
++    const body = settledBars
++      .map((b) => `${String(Number(b.timestamp))}|${String(Number(b.open))}|${String(Number(b.high))}|${String(Number(b.low))}|${String(Number(b.close))}|${String(Number(b.volume))}`)
++      .join(';');
++    return 'swh1:' + createHash('sha256').update(body).digest('hex');
++  } catch { return undefined; } // hashing must never break a telemetry write
++}
++
+ export function buildBarProvenance(
+   bars: ReadonlyArray<{ open: number; high: number; low: number; close: number; volume: number; timestamp: number }> | undefined,
+   stopPrice?: number,
+   targetPrice?: number,
++  // P19-B8.5b (OBJ-1): the decision-time indicator scalars, snapshotted BY VALUE at the
++  // hook (the exact numbers the detect saw). Optional — reject-capture hooks without an
++  // indicators object in scope pass nothing (honest NULL columns).
++  indicators?: { vwap?: number; atr?: number; sma?: number; high24h?: number; low24h?: number; currentVolume?: number },
+ ): SignalEvalProvenanceInput | undefined {
+   const n = Array.isArray(bars) ? bars.length : 0;
+   if (n === 0) return undefined;
+@@ -164,6 +216,10 @@ export function buildBarProvenance(
+     barIntervalSec: intervalSec,
+     resolvedStopPrice: stopPrice,
+     resolvedTargetPrice: targetPrice,
++    // P19-B8.5b (OBJ-1): pass-through scalars + the settled-window byte-parity hash
++    // (over bars[0..n-2] — the settled set, excluding the forming bar).
++    indicators,
++    settledWindowHash: settledWindowHash(bars!.slice(0, n - 1)),
+   };
+ }
+ 
+@@ -341,6 +397,15 @@ export function archiveSignalEval(input: SignalEvalArchiveInput): void {
+       constants_hash: constants?.hash ?? null,
+       resolved_stop_price: p.resolvedStopPrice ?? null,
+       resolved_target_price: p.resolvedTargetPrice ?? null,
++      // P19-B8.5b (OBJ-1): the five read-surface scalars + current volume + the
++      // settled-window hash. Honest NULL where the hook had no indicators in scope.
++      ind_vwap: p.indicators?.vwap ?? null,
++      ind_atr: p.indicators?.atr ?? null,
++      ind_sma: p.indicators?.sma ?? null,
++      ind_high24h: p.indicators?.high24h ?? null,
++      ind_low24h: p.indicators?.low24h ?? null,
++      ind_current_volume: p.indicators?.currentVolume ?? null,
++      settled_window_hash: p.settledWindowHash ?? null,
+     });
+   }
+ }
+diff --git a/server/services/fx5-scanner.ts b/server/services/fx5-scanner.ts
+index ef8b3e190..f61cd2ffa 100644
+--- a/server/services/fx5-scanner.ts
++++ b/server/services/fx5-scanner.ts
+@@ -282,6 +282,12 @@ export interface ScanBatchPair {
+   dbsCategory?: string;     // DBS category (UP_STRONG, UP_MODERATE, NEUTRAL, DOWN_*, etc.)
+   dbsSlope?: number;        // DBS slope (current - prior 3-bar window)
+   atr?: number;             // ATR computed from full OHLC for DBS normalization (also reusable downstream)
++  // P19-B8.5b (OBJ-2, #500): the REAL scanner-computed Directional Integrity (0-100,
++  // calculateDirectionalIntegrity — price-only), carried onto the hand-off exactly like
++  // dbsScore (B63 hard contract). Kills the VTS predictiveConfidence×100 proxy: the VTS
++  // kernel now consumes the IDENTICAL DI the active path does. undefined = honest-absent
++  // (kernel applies its documented default) — NEVER proxy-fabricated.
++  di?: number;
+ }
+ 
+ export class Fx5ScannerService {
+@@ -1861,6 +1867,7 @@ export class Fx5ScannerService {
+     dbsCategory?: string; // B63: DBS propagation
+     dbsSlope?: number;    // B63: DBS propagation
+     atr?: number;         // B63: ATR propagation
++    DI?: number;          // P19-B8.5b (#500): real DI propagation (see ScanBatchPair.di)
+   }>): void {
+     const batch: ScanBatchPair[] = survivors.map(s => ({
+       symbol: s.symbol,
+@@ -1881,6 +1888,9 @@ export class Fx5ScannerService {
+       dbsCategory: s.dbsCategory,
+       dbsSlope: s.dbsSlope,
+       atr: s.atr,
++      // P19-B8.5b (#500): real DI rides the same hard contract (declared on the input type
++      // above; the survivor objects carry the IMF-computed DI). Absent → undefined-honest.
++      di: s.DI,
+     }));
+     this.currentBatch.set(mode, batch);
+     const benchmarkCount = batch.filter(b => b.isBenchmark).length;
+diff --git a/server/services/vts-runner.ts b/server/services/vts-runner.ts
+index 19836e9f0..6af318359 100644
+--- a/server/services/vts-runner.ts
++++ b/server/services/vts-runner.ts
+@@ -1316,7 +1316,11 @@ async function generatePhase10Signal(
+   sourcePool?: string, // Batch 37: Family-qualified source pool
+   counters?: any,
+   preDetectedPatterns?: any[], // Batch 44: Pre-detected patterns from outer loop (avoids duplicate scanPatterns)
+-  propagatedDbs?: { score: number; category: string; slope?: number } // B63: DBS pre-filter propagation (hard contract)
++  propagatedDbs?: { score: number; category: string; slope?: number }, // B63: DBS pre-filter propagation (hard contract)
++  // P19-B8.5b (OBJ-2, #500): the REAL scanner-computed DI, carried from the scan-batch pair
++  // (same B63 hard contract as propagatedDbs). Replaces the predictiveConfidence×100 proxy
++  // (DELETED this batch — rule 18). undefined → the kernel's documented default, never fabricated.
++  propagatedDi?: number
+ ): Promise<{ signal: VirtualSignal; tradeRecord: Phase10TradeRecord } | null> {
+   // B79.0n.PATTERN-DETECT (2026-05-24, post-Step-8 iteration): capture-and-reuse
+   // asset-class resolution at function entry. Replaces the prior pattern of
+@@ -1668,9 +1672,12 @@ async function generatePhase10Signal(
+   // Canonical friction formula: 2 × fee + 2 × slippage + spread (round-trip costs)
+   const totalFriction = (costMetrics.fee * 2) + (estimatedSlippage * 2) + spread;
+   
+-  // Convert predictiveConfidence to DI scale (0-100) for kernel
+-  // predictiveConfidence is typically 0-1, so scale to 0-100
+-  const DI = Math.min(100, Math.max(0, predictiveConfidence * 100));
++  // P19-B8.5b (OBJ-3, #500): the predictiveConfidence×100 DI proxy is DELETED (rule 18 —
++  // it was a 2026-02-03 carry-gap patch, e4ce3c55f, that fed the kernel a confidence-derived
++  // stand-in and made VTS/active EV apples-to-oranges — FINDING B). The kernel now consumes
++  // the REAL scanner-computed DI carried on the scan-batch pair (propagatedDi — the same B63
++  // hard contract DBS rides). undefined → the kernel's documented DI default; NEVER fabricated.
++  const DI = propagatedDi;
+   
+   const kernelResult = computeNetExpectancyKernel({
+     entryPrice,
+@@ -2064,11 +2071,12 @@ async function generatePhase10Signal(
+     atrAtOpen: mceContext.indicators.atr,
+     diAtOpen: 50,
+     volNoiseAtOpen: 0.3,
+-    // P19-B8.5a (OBJ-2, FIX-2): honest calibration snapshot — see the interface note.
+-    realDiAtOpen: (() => {
+-      try { return activeFilterPool.getFX5DataForSymbol(symbol, 'paper')?.di ?? null; } catch { return null; }
+-    })(),
+-    kernelDiInputAtOpen: DI,                       // the proxy the kernel actually consumed
++    // P19-B8.5a (OBJ-2) + P19-B8.5b (#500): honest calibration snapshot. realDiAtOpen now
++    // comes from the SCAN-BATCH CARRY (the direct source — supersedes the B8.5a pool read,
++    // which was empty during pure-passive); kernelDiInputAtOpen records what the kernel
++    // ACTUALLY consumed — post-#500 that IS the real DI (or honest-absent → kernel default).
++    realDiAtOpen: propagatedDi ?? null,
++    kernelDiInputAtOpen: DI,                       // == propagatedDi post-#500 (proxy DELETED)
+     netEvAtOpen: _vtsMtDecision.chosenNetEV,       // the best-of-both EV the VTS gate used
+     predictedPwinAtOpen: _vtsMtDecision.taker.pWin, // kernel taker-leg pWin (exposed, not recomputed)
+     // B65.4.2: capture the original stop at trade-open time so it survives
+@@ -2537,7 +2545,18 @@ async function generatePhase10Signal(
+       // targetPrice, pre mode-overlay), which is what a detect-replay re-derives.
+       // (NOT tradeRecord.* — the Phase10TradeRecord literal never sets those.)
+       // Capture is gated per-asset-class at write time (crypto enabled 2026-06-07).
+-      provenance: buildBarProvenance(ohlcData, stopLoss, takeProfit),
++      // P19-B8.5b (OBJ-1): + the decision-time indicator scalars BY VALUE — the exact
++      // numbers detect() saw (stratDetectIndicators, built :1444 from mceContext) —
++      // and the settled-window hash (computed inside the builder). currentVolume =
++      // indicators.volume (the volume-confirm compare input; volume24h on this lane).
++      provenance: buildBarProvenance(ohlcData, stopLoss, takeProfit, {
++        vwap: stratDetectIndicators.vwap,
++        atr: stratDetectIndicators.atr,
++        sma: stratDetectIndicators.sma,
++        high24h: stratDetectIndicators.high24h,
++        low24h: stratDetectIndicators.low24h,
++        currentVolume: stratDetectIndicators.volume,
++      }),
+       finalScore: typeof finalScore === 'number' ? finalScore : undefined,
+       confidenceModulated:
+         typeof chainModulatedConfidence === 'number' ? chainModulatedConfidence : undefined,
+@@ -4681,7 +4700,9 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
+ 
+         // Batch 31: Reset null reason tracker before each strategy call
+         resetNullReason();
+-        const result = await generatePhase10Signal(pair.symbol, priceData, ohlcData, pair.pool, stratDef, pair.filterTier, pair.sourcePool, vtsEvalCounters, outerLoopDetectedPatterns, pairPropagatedDbs);
++        // P19-B8.5b (OBJ-2, #500): real DI rides the same B63 hard contract as DBS — from the
++        // scan-batch pair, undefined-honest (never the retired predictiveConfidence×100 proxy).
++        const result = await generatePhase10Signal(pair.symbol, priceData, ohlcData, pair.pool, stratDef, pair.filterTier, pair.sourcePool, vtsEvalCounters, outerLoopDetectedPatterns, pairPropagatedDbs, (pair as any).di as number | undefined);
+         // Batch 19I: Track strategy outcomes
+         const stratKey = stratDef.strategyKey;
+         if (!vtsEvalCounters.byStrategy[stratKey]) {
+
+=== NEW FILE: drizzle/migrations/2026-07-13-p19-b8-5b-provenance-scalars.sql ===
+-- P19-B8.5b (OBJ-1, #206/B-NEW-53.3) — the decision-time indicator scalars + the
+-- settled-window hash on signal_eval_provenance.
+--
+-- WHAT: the five scalars the strategies actually READ at decision time (per the
+-- 19-strategy read-surface enumeration, P19_B8_5b_PRE_AUDIT.md: vwap ×5 consumers,
+-- atr universal via the reachability guard, sma ×1, high/low24h ×2) + CURRENT volume
+-- (the volume-confirm compares' real input — avg-volume deliberately NOT persisted:
+-- zero scalar consumers, always recomputed from candles) + settled_window_hash
+-- (versioned 'swh1:' sha256 over the settled bar window — the byte-parity oracle for
+-- array-fed reads: volume walks, patterns, ORB; B_NEW_53 findings §4.0).
+-- WHY: lifts decision-replay fidelity from the measured 70.73% (B-NEW-53 parity)
+-- toward the ≥99% gate; unblocks roadmap 25-12 after post-flip accrual.
+-- SAFETY: purely ADDITIVE nullable columns (honest NULL where a hook had no
+-- indicators in scope); ALTER on the partitioned parent propagates to partitions.
+ALTER TABLE signal_eval_provenance
+  ADD COLUMN IF NOT EXISTS ind_vwap double precision,
+  ADD COLUMN IF NOT EXISTS ind_atr double precision,
+  ADD COLUMN IF NOT EXISTS ind_sma double precision,
+  ADD COLUMN IF NOT EXISTS ind_high24h double precision,
+  ADD COLUMN IF NOT EXISTS ind_low24h double precision,
+  ADD COLUMN IF NOT EXISTS ind_current_volume double precision,
+  ADD COLUMN IF NOT EXISTS settled_window_hash text;
+
+=== NEW FILE: drizzle/migrations/2026-07-13-p19-b8-5b-provenance-scalars.rollback.sql ===
+-- ROLLBACK for 2026-07-13-p19-b8-5b-provenance-scalars.sql
+-- Drops the P19-B8.5b decision-time indicator scalars + settled-window hash from
+-- signal_eval_provenance. Safe: columns are additive/nullable; no reader requires them
+-- (archiver enqueue maps them ?? null; replay harness treats NULL as absent).
+-- NOT registered in MANIFEST.txt (rollback files stay out per convention).
+ALTER TABLE signal_eval_provenance
+  DROP COLUMN IF EXISTS ind_vwap,
+  DROP COLUMN IF EXISTS ind_atr,
+  DROP COLUMN IF EXISTS ind_sma,
+  DROP COLUMN IF EXISTS ind_high24h,
+  DROP COLUMN IF EXISTS ind_low24h,
+  DROP COLUMN IF EXISTS ind_current_volume,
+  DROP COLUMN IF EXISTS settled_window_hash;
+
+=== NEW FILE: server/tests/unit/p19-b8-5b-provenance-scalars.test.ts ===
+// P19-B8.5b (OBJ-1) — decision-time indicator scalars + settled-window hash tests.
+import { describe, it, expect } from 'vitest';
+import { buildBarProvenance } from '../../services/data-archive/signal-eval-archiver';
+
+const bar = (ts: number, o: number) => ({ open: o, high: o + 1, low: o - 1, close: o + 0.5, volume: 100 + o, timestamp: ts });
+const bars = [bar(1000, 10), bar(2000, 11), bar(3000, 12)]; // last = forming; first two = settled
+
+describe('[P19-B8.5b] provenance scalars + settled-window hash', () => {
+  it('passes the indicators through BY VALUE', () => {
+    const p = buildBarProvenance(bars, 9, 15, { vwap: 10.5, atr: 0.8, sma: 10.2, high24h: 13, low24h: 9, currentVolume: 555 });
+    expect(p?.indicators).toEqual({ vwap: 10.5, atr: 0.8, sma: 10.2, high24h: 13, low24h: 9, currentVolume: 555 });
+  });
+
+  it('omitted indicators stay absent (honest NULL downstream, never fabricated)', () => {
+    const p = buildBarProvenance(bars);
+    expect(p?.indicators).toBeUndefined();
+  });
+
+  it('settled-window hash is versioned, deterministic, and covers ONLY the settled bars (forming excluded)', () => {
+    const a = buildBarProvenance(bars)!;
+    const b = buildBarProvenance(bars.map((x) => ({ ...x })))!; // deep-equal copy → same hash
+    expect(a.settledWindowHash).toMatch(/^swh1:[0-9a-f]{64}$/);
+    expect(b.settledWindowHash).toBe(a.settledWindowHash);
+    // Mutating the FORMING bar must NOT change the hash (it hashes the settled set only)…
+    const formingMutated = [...bars.slice(0, 2), bar(3000, 99)];
+    expect(buildBarProvenance(formingMutated)!.settledWindowHash).toBe(a.settledWindowHash);
+    // …but mutating a SETTLED bar must change it (byte-parity oracle).
+    const settledMutated = [bar(1000, 10.0001), bars[1], bars[2]];
+    expect(buildBarProvenance(settledMutated)!.settledWindowHash).not.toBe(a.settledWindowHash);
+  });
+
+  it('single-bar input (no settled set) → no hash, still builds', () => {
+    const p = buildBarProvenance([bar(1000, 10)]);
+    expect(p).toBeDefined();
+    expect(p?.settledWindowHash).toBeUndefined();
+  });
+});
