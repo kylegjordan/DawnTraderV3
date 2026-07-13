@@ -14,6 +14,10 @@ StartLimitBurst=5
 Type=notify
 NotifyAccess=main
 WatchdogSec=300
+# TimeoutStartSec=infinity (Langston Step-4): default 90s Type=notify start-timeout during a
+# gateway-unreachable outage would trip StartLimit → `failed`-latch → silent non-recovery. Let
+# READY=1 arrive whenever discord.py reconnects. Startup-only; inert once active. (See CC unit.)
+TimeoutStartSec=infinity
 User=langston
 Group=langston
 WorkingDirectory=/home/langston

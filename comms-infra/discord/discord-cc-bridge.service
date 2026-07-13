@@ -19,6 +19,13 @@ StartLimitBurst=5
 Type=notify
 NotifyAccess=main
 WatchdogSec=300
+# TimeoutStartSec=infinity (Langston Step-4 CHANGES-NEEDED): with Type=notify the default 90s
+# start-timeout would, during a Discord-SIDE outage where the gateway is unreachable (on_ready →
+# READY=1 never fires), kill the unit at 90s each cycle → ~100s/cycle → 5 kills < StartLimitIntervalSec
+# 600 → StartLimitBurst trips → unit latches `failed` and stops restarting, NOT auto-recovering when
+# Discord returns = the exact silent-comms-death this batch kills. reconnect=True already sits and
+# retries; let READY=1 arrive whenever it connects. Startup-only window — inert once active.
+TimeoutStartSec=infinity
 User=root
 Group=root
 Environment="PATH=/opt/discord-bridges/venv/bin:/usr/local/bin:/usr/bin:/bin"
