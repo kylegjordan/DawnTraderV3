@@ -1,0 +1,45 @@
+# P19-B8.5a — Completion Report (switch-on prep: scoring de-contamination + gate restructure)
+
+**Batch:** P19-B8.5a · **change-class:** architecture · **Owner:** NEW Claude (CC-B) · **Date:** 2026-07-13
+**Kyle authority:** green-light 2026-07-13 ("going with what you guys recommend" — the PART II scoring redesign ratified + prep-then-switch-on sequencing GO; crew defaults applied: the 11.8B open-stage net-EV check stays STILL-BLOCKS). Full 11-step workflow: Langston Step-1 PROCEED · Step-2 PROCEED (2 conditions, both discharged) · Step-4 APPROVED (A/B/C confirmed at code) + OLD Claude Step-4 CODE APPROVED (flags B/C closed) · **Step-8 PASS (every load-bearing claim independently re-derived off DB + bundle + HTTP)**.
+
+## PREVIOUSLY-STATED-VS-NOW (§9.2)
+- signalStrength de-contamination sites: **PREVIOUSLY 3 → NOW 4.** Reason: implementation found the xstock eval-cycle's own `decideMakerTaker` call (`eval-cycle.ts:750`) — same pattern, fixed identically, flagged not folded silently.
+- SQE call sites fed `chosenNetEv`: **PREVIOUSLY 2 → NOW 3.** Reason: the Step-2 enumeration found the batch-refresh site (`ready_to_buy_service.ts:1163-1176`); without it, batch-refreshed rows would skip the new admission gate.
+- OBJ-2 persistence: **PREVIOUSLY typed columns + migration → NOW record→context-jsonb carriage.** Reason: the calibration reader is the closed-trade JSON store (the same store the §4 probe read); zero migration; typed-column promotion deferred to Phase-25 if the calibrator wants SQL. Flagged as an explicit deviation at Step-4; Langston accepted.
+
+## Objectives checklist
+
+| # | Objective | Status | Evidence |
+|---|---|---|---|
+| OBJ-1 (FIX-1) | Ranker de-contamination: `signalStrength` = measured flat pWin base rate (per-class DB knob), replacing the anti-predictive finalScore, at ALL FOUR sites (gen `signal-orchestrator.ts:748-area`, RTB refresh `:870-area`, crypto-VTS `vts-runner.ts:1702-area`, xstock `eval-cycle.ts:750-area`) | ✅ DONE + DEPLOYED + VERIFIED | Seeds live-verified in `module_constants`: crypto_spot **0.295** / xstock_spot **0.317** / `*` **0.307**, `updated_by=p19-b8-5a` (Langston re-queried). PIN: CC-A probe commit `8c5383018`, n=12,140 post-B62 VTS trades, Wilson CIs in the migration comment. `scoring_base` added to the b72-warmup PREFETCH (fail-hard). Behavior-change honesty: some maker/taker picks shift (intended de-tint) — maker-pick-rate is a standing watch item. |
+| OBJ-2 (FIX-2) | Honest VTS calibration snapshot at open, BOTH lanes: `realDiAtOpen` / `kernelDiInputAtOpen` / `netEvAtOpen` / `predictedPwinAtOpen` | ✅ DONE + DEPLOYED | Crypto inline record + `RegisterOpenVtsTradeInput`→`registerOpenVtsTrade` passthrough + xstock caller. pWin EXPOSED from the decision result (`.taker.pWin`), never recomputed; `diAtOpen:50` deliberately untouched (a live trailing-engine input, not telemetry); honest NULLs, never fabricated. Rides the record → `vts_open_trades.context` jsonb + the closed-trade JSON store (the calibration reader). |
+| OBJ-3 | Net-EV → SQE ADMISSION: `chosenNetEv` sign-check gate in the SQE (async + sync variants), fed at all 3 call sites; fail-open-if-absent (Langston-ratified); 11.8B demoted to STILL-BLOCKS drift backstop (Kyle default) with `recordOpenFailed('EV_REJECT')` documented as the GATES-DRIFTED alarm (expected ~0 post-B8.5a) | ✅ DONE + DEPLOYED | Calc-free preserved (Kyle P19-B7.2b lineage): computation stays in `decideMakerTaker` pre-SQE; only the pass/fail check moved. Condition-A on record: 11.8B's NULL-snapshot fallback is the taker-leg recompute (`active-execution-engine.ts:2230`) — no ungated lifecycle exists. Gate tests cover reject-negative/reject-zero/absent-skips. |
+| OBJ-4 (B1) | Sever confidence→position-size: the `signal.confidence` fallback leg deleted from `computeGlobalStability` (`:3120` → `regimeConfidence || 0.5`) | ✅ DONE + DEPLOYED + PREMISE VERIFIED | Load-bearing confirmed at Step-8: `amr_runtime.mode = shadow` on BOTH classes ⇒ the legacy stability→sizing path WAS live. Covers the hybrid propagation (`signal-orchestrator.ts:2299` writes hybridScore into confidence) by the same cut. Base sizer verified clean (FIX-8). |
+| OBJ-5 | finalScore gate RETIRED → shadow-log (async + sync): below-floor finalScore no longer rejects; the would-have-rejected verdict logs through paper for the formal post-paper field-kill ruling; regimeWeight/confidence/AMR/governance floors survive | ✅ DONE + DEPLOYED | Named test: below-0.35-finalScore + positive-netEV ADMITS; finalScore-alone no longer rejects; regimeWeight floor still rejects. ⚠ Shadow-log EVIDENCE surface is blocked by the ops finding below until stdout routing is restored. |
+| OBJ-6 | Flat-pWin switch-on expectations note | ✅ WRITTEN (below + rides into the B8.5 switch-on doc) | — |
+
+## 🚨 §9.1 DISCLAIMER — STRUCTURAL PROOF ONLY UNTIL SWITCH-ON
+**THIS BATCH DOES NOT BEHAVIORALLY PROVE THE NEW GATES ON LIVE ACTIVE-PATH TRAFFIC. The active pipeline is DORMANT until P19-B8.5 — the deploy/seed/boot/config proofs here are structural; OBSERVING the net-EV admission reject, the shadow-log lines, and the maker-pick-rate shift on real cycles is a NAMED SWITCH-ON-TIME OBLIGATION (rides the B8.5 checklist), not this batch's claim** (OLD Claude Step-8 rider; also gated on the pm2-stdout restoration below).
+
+## 🚨 OBJ-6 — FLAT-pWIN SWITCH-ON EXPECTATIONS (pre-written so nobody misreads it)
+At switch-on, pWin is deliberately FLAT (the measured per-class base rate). Early netEV and ranking therefore discriminate on GEOMETRY + FRICTION alone. **That is the intended calibration-collection state, NOT a broken model** — differentiation arrives when the Phase-25 calibrated pWin (#399a) replaces the placeholder on accumulated paper outcomes. Sizing stays fixed-fractional with existing caps; the tight fractional-Kelly cap rides with the Phase-25 sizing design.
+
+## Verification (Step-7 + Step-8)
+Deploy migration-FIRST (INSERT 0 3 verified) → build → pm2 restart #468 → HTTP 200. CI 4-green on head `dbfb14460` (run `29260517300`) after one red iteration (below). Step-7: `active_ranker=r_multiple` live ✓; AMR shadow both classes ✓; MIN_SCORE call-site + maker-pick-rate = standing watch items pending log restoration. Step-8 (Langston): deploy clone reconciled (docs-only commit on top; the running bundle IS the `dbfb14460` build), seeds exact, fail-hard boot re-derived, HTTP re-confirmed — **PASS**.
+
+## Iterations (honest record)
+1. **CI RED on the first push (`84d188804`):** the MANIFEST checker requires BARE filenames (my line carried a description suffix), AND my `git add` of the shared MANIFEST swept CC-A's uncommitted in-flight line (its gitignored `.sql` isn't at origin). Hotfix `dbfb14460`: bare filename + his line lifted (returns with his batch's push). **Lesson (shared-tree corollary): diff a SHARED file before staging it — an uncommitted edit rides ANYONE's `git add`.**
+2. **Ops finding (Step-7/Step-8 confirmed):** staging pm2 stdout routing DEAD — `dawntrader-out.log` frozen 2026-04-03 (1.56GB); nothing from the 15:09 restart landed anywhere. NOT cosmetic: the OBJ-5 shadow evidence + maker-pick watch have no surface until fixed. **Home (§13): fold into CC-A's B-SEC-HARDEN staging work or standalone B-OPS-PM2-LOG; lands BEFORE we lean on shadow-log evidence.**
+
+## New/updated homes recorded at this close (§9.4)
+- **Refresh-omission fix (Condition B):** the RTB-refresh re-SQE must feed `regimeStability` + `sourcePool` (confidence floor + governance gate silently skip at refresh today; AMR runs pool-blind) — numbered pre-switch-on item in RUNNING_ISSUES, closes BEFORE the B8.5 flip.
+- **Capture micro-batch (pre-switch-on, CC-B):** B-NEW-53.3 five decision-time scalars + the REAL-DI carry BOTH lanes (DI is price-only — no volume dependency; the proxy predates xStock, commit `e4ce3c55f` 2026-02-03) + DELETE the `predictiveConfidence×100` bridge at cutover (rule 18, crew-locked).
+- **Backtest-baseline harness (pre-switch-on, CC-A):** replay the ratified §8 gate set over history → seed DB thresholds BEFORE the flip (Kyle sequencing directive 2026-07-13).
+- **pm2 stdout restoration:** see Iterations #2.
+
+## Governance files changed
+`server/core/filters/signal_quality_evaluator.ts` · `server/services/signal-orchestrator.ts` · `server/core/rtb/ready_to_buy_service.ts` · `server/services/vts-runner.ts` · `server/services/active-execution-engine.ts` · `server/asset_classes/xstock_spot/eval-cycle.ts` · `server/startup/b72-warmup.ts` · `server/tests/unit/p19-b8-5a-sqe-gates.test.ts` (7/7) · migration + rollback + MANIFEST · `P19_B8_5a_{SCOPE,PRE_AUDIT}.md` · this report · `SYSTEM_MANUAL.md` (SQE gate stack) · `SYSTEM_IMPACT_MAP.md` (gate-topology supersede) · `RUNNING_ISSUES.md` (new homes) · `BATCH_CATALOG.md` · `PHASE_HISTORY.md` · `PHASE_19_PLAN.md` §1/§5 · `MEMORY_CC_B.md` (+truth) · Langston `/home/langston/MEMORY.md`.
+
+## Sign-offs
+Langston Step-1/2/4/8: ALL PASS (Step-8 independently re-derived). OLD Claude Step-4: CODE APPROVED. Kyle acknowledgment: pending.
