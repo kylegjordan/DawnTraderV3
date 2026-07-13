@@ -18,6 +18,7 @@
  *  - 'strategy_internal'  — strategy detect() returned null
  */
 
+import { createHash } from 'node:crypto'; // P19-B8.5b: STATIC import — the server bundles as ESM (esbuild --format=esm), where require() throws at runtime (caught + silently nulled every hash until fixed 2026-07-13)
 import { enqueueArchiveRow, registerArchiveTable } from './archive-batch-writer.js';
 import { getArchiveConfig, provenanceCaptureEnabled } from './archive-config.js';
 import type { RunMode } from '../run-mode-controller.js'; // ITEM-4 step 2: carried tag — getCurrentMode() write-time lookup DELETED (D1)
@@ -176,7 +177,6 @@ function settledWindowHash(
 ): string | undefined {
   if (settledBars.length === 0) return undefined;
   try {
-    const { createHash } = require('node:crypto') as typeof import('node:crypto');
     const body = settledBars
       .map((b) => `${String(Number(b.timestamp))}|${String(Number(b.open))}|${String(Number(b.high))}|${String(Number(b.low))}|${String(Number(b.close))}|${String(Number(b.volume))}`)
       .join(';');
