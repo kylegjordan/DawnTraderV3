@@ -282,6 +282,12 @@ export interface ScanBatchPair {
   dbsCategory?: string;     // DBS category (UP_STRONG, UP_MODERATE, NEUTRAL, DOWN_*, etc.)
   dbsSlope?: number;        // DBS slope (current - prior 3-bar window)
   atr?: number;             // ATR computed from full OHLC for DBS normalization (also reusable downstream)
+  // P19-B8.5b (OBJ-2, #500): the REAL scanner-computed Directional Integrity (0-100,
+  // calculateDirectionalIntegrity — price-only), carried onto the hand-off exactly like
+  // dbsScore (B63 hard contract). Kills the VTS predictiveConfidence×100 proxy: the VTS
+  // kernel now consumes the IDENTICAL DI the active path does. undefined = honest-absent
+  // (kernel applies its documented default) — NEVER proxy-fabricated.
+  di?: number;
 }
 
 export class Fx5ScannerService {
@@ -1861,6 +1867,7 @@ export class Fx5ScannerService {
     dbsCategory?: string; // B63: DBS propagation
     dbsSlope?: number;    // B63: DBS propagation
     atr?: number;         // B63: ATR propagation
+    DI?: number;          // P19-B8.5b (#500): real DI propagation (see ScanBatchPair.di)
   }>): void {
     const batch: ScanBatchPair[] = survivors.map(s => ({
       symbol: s.symbol,
@@ -1881,6 +1888,9 @@ export class Fx5ScannerService {
       dbsCategory: s.dbsCategory,
       dbsSlope: s.dbsSlope,
       atr: s.atr,
+      // P19-B8.5b (#500): real DI rides the same hard contract (declared on the input type
+      // above; the survivor objects carry the IMF-computed DI). Absent → undefined-honest.
+      di: s.DI,
     }));
     this.currentBatch.set(mode, batch);
     const benchmarkCount = batch.filter(b => b.isBenchmark).length;

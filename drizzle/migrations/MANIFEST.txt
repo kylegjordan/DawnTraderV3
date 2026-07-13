@@ -166,3 +166,4 @@
 2026-07-08-b-storage-harden-wave-c-b70-retention.sql
 2026-07-08-b-storage-harden-wave-d-xstock-ticker-daily-cutover.sql
 2026-07-13-p19-b8-5a-scoring-base.sql
+2026-07-13-p19-b8-5b-provenance-scalars.sql

@@ -1316,7 +1316,11 @@ async function generatePhase10Signal(
   sourcePool?: string, // Batch 37: Family-qualified source pool
   counters?: any,
   preDetectedPatterns?: any[], // Batch 44: Pre-detected patterns from outer loop (avoids duplicate scanPatterns)
-  propagatedDbs?: { score: number; category: string; slope?: number } // B63: DBS pre-filter propagation (hard contract)
+  propagatedDbs?: { score: number; category: string; slope?: number }, // B63: DBS pre-filter propagation (hard contract)
+  // P19-B8.5b (OBJ-2, #500): the REAL scanner-computed DI, carried from the scan-batch pair
+  // (same B63 hard contract as propagatedDbs). Replaces the predictiveConfidence×100 proxy
+  // (DELETED this batch — rule 18). undefined → the kernel's documented default, never fabricated.
+  propagatedDi?: number
 ): Promise<{ signal: VirtualSignal; tradeRecord: Phase10TradeRecord } | null> {
   // B79.0n.PATTERN-DETECT (2026-05-24, post-Step-8 iteration): capture-and-reuse
   // asset-class resolution at function entry. Replaces the prior pattern of
@@ -1668,9 +1672,12 @@ async function generatePhase10Signal(
   // Canonical friction formula: 2 × fee + 2 × slippage + spread (round-trip costs)
   const totalFriction = (costMetrics.fee * 2) + (estimatedSlippage * 2) + spread;
   
-  // Convert predictiveConfidence to DI scale (0-100) for kernel
-  // predictiveConfidence is typically 0-1, so scale to 0-100
-  const DI = Math.min(100, Math.max(0, predictiveConfidence * 100));
+  // P19-B8.5b (OBJ-3, #500): the predictiveConfidence×100 DI proxy is DELETED (rule 18 —
+  // it was a 2026-02-03 carry-gap patch, e4ce3c55f, that fed the kernel a confidence-derived
+  // stand-in and made VTS/active EV apples-to-oranges — FINDING B). The kernel now consumes
+  // the REAL scanner-computed DI carried on the scan-batch pair (propagatedDi — the same B63
+  // hard contract DBS rides). undefined → the kernel's documented DI default; NEVER fabricated.
+  const DI = propagatedDi;
   
   const kernelResult = computeNetExpectancyKernel({
     entryPrice,
@@ -2064,11 +2071,12 @@ async function generatePhase10Signal(
     atrAtOpen: mceContext.indicators.atr,
     diAtOpen: 50,
     volNoiseAtOpen: 0.3,
-    // P19-B8.5a (OBJ-2, FIX-2): honest calibration snapshot — see the interface note.
-    realDiAtOpen: (() => {
-      try { return activeFilterPool.getFX5DataForSymbol(symbol, 'paper')?.di ?? null; } catch { return null; }
-    })(),
-    kernelDiInputAtOpen: DI,                       // the proxy the kernel actually consumed
+    // P19-B8.5a (OBJ-2) + P19-B8.5b (#500): honest calibration snapshot. realDiAtOpen now
+    // comes from the SCAN-BATCH CARRY (the direct source — supersedes the B8.5a pool read,
+    // which was empty during pure-passive); kernelDiInputAtOpen records what the kernel
+    // ACTUALLY consumed — post-#500 that IS the real DI (or honest-absent → kernel default).
+    realDiAtOpen: propagatedDi ?? null,
+    kernelDiInputAtOpen: DI,                       // == propagatedDi post-#500 (proxy DELETED)
     netEvAtOpen: _vtsMtDecision.chosenNetEV,       // the best-of-both EV the VTS gate used
     predictedPwinAtOpen: _vtsMtDecision.taker.pWin, // kernel taker-leg pWin (exposed, not recomputed)
     // B65.4.2: capture the original stop at trade-open time so it survives
@@ -2537,7 +2545,18 @@ async function generatePhase10Signal(
       // targetPrice, pre mode-overlay), which is what a detect-replay re-derives.
       // (NOT tradeRecord.* — the Phase10TradeRecord literal never sets those.)
       // Capture is gated per-asset-class at write time (crypto enabled 2026-06-07).
-      provenance: buildBarProvenance(ohlcData, stopLoss, takeProfit),
+      // P19-B8.5b (OBJ-1): + the decision-time indicator scalars BY VALUE — the exact
+      // numbers detect() saw (stratDetectIndicators, built :1444 from mceContext) —
+      // and the settled-window hash (computed inside the builder). currentVolume =
+      // indicators.volume (the volume-confirm compare input; volume24h on this lane).
+      provenance: buildBarProvenance(ohlcData, stopLoss, takeProfit, {
+        vwap: stratDetectIndicators.vwap,
+        atr: stratDetectIndicators.atr,
+        sma: stratDetectIndicators.sma,
+        high24h: stratDetectIndicators.high24h,
+        low24h: stratDetectIndicators.low24h,
+        currentVolume: stratDetectIndicators.volume,
+      }),
       finalScore: typeof finalScore === 'number' ? finalScore : undefined,
       confidenceModulated:
         typeof chainModulatedConfidence === 'number' ? chainModulatedConfidence : undefined,
@@ -4681,7 +4700,9 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
 
         // Batch 31: Reset null reason tracker before each strategy call
         resetNullReason();
-        const result = await generatePhase10Signal(pair.symbol, priceData, ohlcData, pair.pool, stratDef, pair.filterTier, pair.sourcePool, vtsEvalCounters, outerLoopDetectedPatterns, pairPropagatedDbs);
+        // P19-B8.5b (OBJ-2, #500): real DI rides the same B63 hard contract as DBS — from the
+        // scan-batch pair, undefined-honest (never the retired predictiveConfidence×100 proxy).
+        const result = await generatePhase10Signal(pair.symbol, priceData, ohlcData, pair.pool, stratDef, pair.filterTier, pair.sourcePool, vtsEvalCounters, outerLoopDetectedPatterns, pairPropagatedDbs, (pair as any).di as number | undefined);
         // Batch 19I: Track strategy outcomes
         const stratKey = stratDef.strategyKey;
         if (!vtsEvalCounters.byStrategy[stratKey]) {

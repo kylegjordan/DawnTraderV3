@@ -376,8 +376,13 @@ export async function evaluateXstockPairForVTS(
 
     // ── 3a. Family IMF (5 quant lanes) — only if quant global passed ──
     let passedFamilies: string[] = [];
+    // P19-B8.5b (#500): hoist the lane-native real DI out of the IMF block so the kernel
+    // consume (downstream, outside this block) can read it. Stays undefined when the IMF
+    // never ran (globalResult failed / DI null) → kernel documented default, honest-absent.
+    let laneRealDi: number | undefined;
     if (globalResult.passed) {
       const imfResult = await evaluateXstockFamilyIMF(symbol, ohlc, mode, configs?.families, askDepthUsd);
+      laneRealDi = imfResult.metrics.DI ?? undefined;
       mergeCounters(counters.imfFilterCounters, imfResult.counters);
       counters.imfPerMetric.failedLQ += imfResult.perMetric.failedLQ;
       counters.imfPerMetric.failedVN += imfResult.perMetric.failedVN;
@@ -556,7 +561,17 @@ export async function evaluateXstockPairForVTS(
         // detect site, via the shared helper (single source of truth — the crypto
         // hooks in vts-runner.ts use the same fn). Captured here so even strategy-
         // null decisions get it; hooks add the resolved stop/target where known.
-        const _provBase = buildBarProvenance(ohlc);
+        // P19-B8.5b (OBJ-1): + the decision-time indicator scalars BY VALUE — the
+        // EXACT mceContext.indicators object the detect call above consumed — and
+        // the settled-window hash (computed inside the builder).
+        const _provBase = buildBarProvenance(ohlc, undefined, undefined, {
+          vwap: mceContext.indicators.vwap,
+          atr: mceContext.indicators.atr,
+          sma: mceContext.indicators.sma,
+          high24h: mceContext.indicators.high24h,
+          low24h: mceContext.indicators.low24h,
+          currentVolume: mceContext.indicators.volume,
+        });
 
         if (!strategySignal) {
           counters.strategyNulls++;
@@ -702,7 +717,17 @@ export async function evaluateXstockPairForVTS(
         // the file-level ASSET_CLASS constant ('xstock_spot') is passed directly.
         const costMetrics = getCachedCostMetrics(symbol, ASSET_CLASS);
         const totalFriction = (costMetrics.fee * 2) + (costMetrics.slippage * 2) + spread;
-        const DI = Math.min(100, Math.max(0, predictiveConfidence * 100));
+        // P19-B8.5b (OBJ-3, #500): the predictiveConfidence×100 DI proxy is DELETED (rule 18 —
+        // FINDING B's second site; the crypto twin died at vts-runner in the same diff). The
+        // kernel now consumes the LANE-NATIVE real DI: the imf-evaluator's own computed value
+        // (imfResult.metrics.DI, :380 — the number this lane's IMF actually gates on), 0-100,
+        // null→undefined-honest (kernel documented default; NEVER fabricated).
+        // ⚠ FLAGGED (own homed item, not this batch): the two lanes' "real DI" are DIFFERENT
+        // FORMULAS sharing a name — crypto = trend-STRAIGHTNESS (|net|/path, direction-blind,
+        // analysis-utils.ts:107); xstock = SIGNED DIRECTION ((net/abs)×50+50, imf-evaluator.ts:71).
+        // Carrying each lane's native value is the honest cut; unifying the formula is a
+        // Phase-25 scoring question, recorded at this batch's close.
+        const DI = laneRealDi;
         let kernelResult;
         try {
           kernelResult = computeNetExpectancyKernel({

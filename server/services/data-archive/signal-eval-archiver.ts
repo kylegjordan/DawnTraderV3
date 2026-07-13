@@ -68,6 +68,21 @@ const PROVENANCE_COLUMNS = [
   'constants_hash',
   'resolved_stop_price',
   'resolved_target_price',
+  // P19-B8.5b (OBJ-1, #206/B-NEW-53.3): the five decision-time indicator scalars the
+  // strategies actually READ (per the 19-strategy read-surface enumeration: vwap ×5
+  // consumers, atr universal via the reachability guard, sma ×1, high/low24h ×2) +
+  // CURRENT volume (what the volume-confirm compares read — avg-volume deliberately
+  // NOT persisted: zero scalar consumers, always recomputed from candles) + the
+  // settled-window hash (the byte-parity oracle for every ARRAY read — volume walks,
+  // patterns, ORB structure — per B_NEW_53 findings §4.0: scalars alone are not
+  // strategy-complete). Lifts decision-replay fidelity from the measured 70.73%.
+  'ind_vwap',
+  'ind_atr',
+  'ind_sma',
+  'ind_high24h',
+  'ind_low24h',
+  'ind_current_volume',
+  'settled_window_hash',
 ];
 
 let registered = false;
@@ -119,6 +134,20 @@ export interface SignalEvalProvenanceInput {
   /** RI-a checksum: the resolved stop/target LEVELS the engine produced. */
   resolvedStopPrice?: number;
   resolvedTargetPrice?: number;
+  /** P19-B8.5b (OBJ-1): the decision-time indicator scalars the strategies read
+   *  (BY VALUE at the hook — the exact numbers the detect saw). Absent → honest NULL. */
+  indicators?: {
+    vwap?: number;
+    atr?: number;
+    sma?: number;
+    high24h?: number;
+    low24h?: number;
+    /** CURRENT volume (indicators.volume — on the VTS lane this is volume24h). */
+    currentVolume?: number;
+  };
+  /** P19-B8.5b (OBJ-1): versioned deterministic hash of the SETTLED bar window —
+   *  the byte-parity oracle for every array-fed read at replay. See settledWindowHash(). */
+  settledWindowHash?: string;
 }
 
 /**
@@ -130,10 +159,39 @@ export interface SignalEvalProvenanceInput {
  * it stays faithful across asset classes and any future cadence change. Returns
  * undefined for an empty bar array. Pass the resolved stop/target when known.
  */
+// P19-B8.5b (OBJ-1): versioned deterministic hash of the SETTLED bar window — the
+// byte-parity oracle for array-fed reads at replay (volume walks, patterns, ORB).
+// RECIPE (v1, the replay harness MUST use the identical recipe): the sha256
+// PREIMAGE is the settled bars ONLY — each as `${ts}|${o}|${h}|${l}|${c}|${v}`
+// (fields via String(Number(x)) — NaN serializes as "NaN", honest), bars joined
+// by `;`. `swh1:` is a VERSION LABEL prepended to the hex digest AFTER hashing —
+// it is NOT part of the hashed input (a harness that salts the preimage with it
+// will never match a stored hash). The caller passes an ALREADY-settled window
+// (buildBarProvenance slices off the forming bar); the harness must hash its
+// settled window as-is, NOT re-slice — the byte-parity oracle holds only if
+// capture and replay slice identically. The version prefix makes any future
+// recipe change distinguishable in-data.
+function settledWindowHash(
+  settledBars: ReadonlyArray<{ open: number; high: number; low: number; close: number; volume: number; timestamp: number }>,
+): string | undefined {
+  if (settledBars.length === 0) return undefined;
+  try {
+    const { createHash } = require('node:crypto') as typeof import('node:crypto');
+    const body = settledBars
+      .map((b) => `${String(Number(b.timestamp))}|${String(Number(b.open))}|${String(Number(b.high))}|${String(Number(b.low))}|${String(Number(b.close))}|${String(Number(b.volume))}`)
+      .join(';');
+    return 'swh1:' + createHash('sha256').update(body).digest('hex');
+  } catch { return undefined; } // hashing must never break a telemetry write
+}
+
 export function buildBarProvenance(
   bars: ReadonlyArray<{ open: number; high: number; low: number; close: number; volume: number; timestamp: number }> | undefined,
   stopPrice?: number,
   targetPrice?: number,
+  // P19-B8.5b (OBJ-1): the decision-time indicator scalars, snapshotted BY VALUE at the
+  // hook (the exact numbers the detect saw). Optional — reject-capture hooks without an
+  // indicators object in scope pass nothing (honest NULL columns).
+  indicators?: { vwap?: number; atr?: number; sma?: number; high24h?: number; low24h?: number; currentVolume?: number },
 ): SignalEvalProvenanceInput | undefined {
   const n = Array.isArray(bars) ? bars.length : 0;
   if (n === 0) return undefined;
@@ -164,6 +222,10 @@ export function buildBarProvenance(
     barIntervalSec: intervalSec,
     resolvedStopPrice: stopPrice,
     resolvedTargetPrice: targetPrice,
+    // P19-B8.5b (OBJ-1): pass-through scalars + the settled-window byte-parity hash
+    // (over bars[0..n-2] — the settled set, excluding the forming bar).
+    indicators,
+    settledWindowHash: settledWindowHash(bars!.slice(0, n - 1)),
   };
 }
 
@@ -341,6 +403,15 @@ export function archiveSignalEval(input: SignalEvalArchiveInput): void {
       constants_hash: constants?.hash ?? null,
       resolved_stop_price: p.resolvedStopPrice ?? null,
       resolved_target_price: p.resolvedTargetPrice ?? null,
+      // P19-B8.5b (OBJ-1): the five read-surface scalars + current volume + the
+      // settled-window hash. Honest NULL where the hook had no indicators in scope.
+      ind_vwap: p.indicators?.vwap ?? null,
+      ind_atr: p.indicators?.atr ?? null,
+      ind_sma: p.indicators?.sma ?? null,
+      ind_high24h: p.indicators?.high24h ?? null,
+      ind_low24h: p.indicators?.low24h ?? null,
+      ind_current_volume: p.indicators?.currentVolume ?? null,
+      settled_window_hash: p.settledWindowHash ?? null,
     });
   }
 }

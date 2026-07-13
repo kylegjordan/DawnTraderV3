@@ -921,6 +921,16 @@ class ReadyToBuyService {
       regimeWeight: regimeWeight,
       trendStrength: metadata.trendStrength ?? 0.5,
       volatility: currentVol,
+      // P19-B8.5b (OBJ-4, #498): feed the FROZEN at-queue sourcePool (the row's own value,
+      // persisted at queue-write :2251 — same read the maker/taker re-decide uses at :865;
+      // NOT a fresh pool lookup) so the pattern elevated floor + AMR pool-awareness actually
+      // run at refresh. Honest-absent: a legacy row with neither → undefined → behaves as today.
+      // regimeStability is DELIBERATELY NOT fed (documented-deferred, Langston-ratified): the
+      // gen-side value is computeGlobalStability(0.5, 0, confidence||0.5) — a function of the
+      // retired confidence axis with cold-start defaults — feeding it would EXTEND that
+      // contamination to two new gate evaluations. It moves WITH its honest-source dependency
+      // (the getNormalizedRegimeWithDetails wiring follow-up + the 25-4 floor disposition).
+      sourcePool: (signal as any).sourcePool ?? (signal.metadata as any)?.sourcePool,
       // P19-B8.5a (OBJ-3): net-EV admission at refresh — prefer THIS tick's re-decide
       // (the decideMakerTaker re-run directly above, geometry-shifted case), else the
       // stored row snapshot. Absent (legacy row) → the SQE check skips (fail-open,
@@ -1183,6 +1193,10 @@ class ReadyToBuyService {
                 regimeWeight: regimeWeight,
                 trendStrength: metadata.trendStrength ?? 0.5,
                 volatility: metadata.volatility ?? 0.3,
+                // P19-B8.5b (OBJ-4, #498): frozen at-queue sourcePool — batch-refresh parity with
+                // the single-refresh feed above (same row-read, same honest-absent semantics;
+                // regimeStability deliberately NOT fed — see the single-refresh comment).
+                sourcePool: (signal as any).sourcePool ?? (signal.metadata as any)?.sourcePool,
                 // P19-B8.5a (OBJ-3): the ★third call site (batch refresh — Step-2 enumeration
                 // found it; the consensus said two). No re-decide runs on this path, so feed
                 // the stored row snapshot; absent → fail-open (Langston-ratified).
