@@ -2,12 +2,16 @@
 Description=CC Discord gateway bridge (CC inbound log + send, via discord.py)
 After=network-online.target
 Wants=network-online.target
-# B-DISCORD-INBOUND-LIVENESS (#462): StartLimit guards ONLY a pathological FAST crash-loop
-# (bad config/import exiting <10s → 5 in 600s trips it). It does NOT (and must not) latch on a
-# slow gateway stall — that exits ~every threshold+RestartSec and never reaches the burst, which
-# is correct: Restart=always carries a recoverable Discord-side outage, and the in-process 15-min
-# alert cooldown is the spam control (Langston Step-2 Q2).
-StartLimitIntervalSec=600
+# B-DISCORD-INBOUND-LIVENESS (#462). StartLimit=5-in-60s guards a FAST crash-loop while letting a
+# slow DROP/timeout-mode gateway outage (~73s/cycle — discord.py crashes at client.py:787 on a
+# can't-connect, so the process EXITS rather than sitting in `activating`) restart forever under
+# Restart=always → survives + auto-recovers (Langston Step-8: 600→60 approved). HONEST LIMIT: a
+# REFUSE/DNS-fail outage fails in <1s → ~12s/cycle → still trips 5-in-60 → latches `failed`. That
+# latch is made LOUD by OnFailure below (fail-loud, not the silent latch this batch kills). The
+# durable ROOT fix (wrap the initial connect so the library crash never exits the process) is
+# scheduled — RUNNING_ISSUES #465 / B-DISCORD-CONNECT-RESILIENCE.
+OnFailure=discord-bridge-failed-notify@%n.service
+StartLimitIntervalSec=60
 StartLimitBurst=5
 
 [Service]

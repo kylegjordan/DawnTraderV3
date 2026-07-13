@@ -1,0 +1,10 @@
+[Unit]
+# OnFailure page for the Discord bridges (B-DISCORD-INBOUND-LIVENESS #462). A bridge unit reaches
+# `failed` only after crash-looping past its StartLimit (a sustained gateway outage or a real fault).
+# Without this, that latch is SILENT — nobody watches systemd unit-state cross-network (Langston's
+# own Step-4 point) — which is the fail-quiet this batch exists to kill. This makes the latch LOUD.
+Description=Loud page when a Discord bridge latches failed (%i)
+
+[Service]
+Type=oneshot
+ExecStart=/opt/discord-bridges/bridge-failed-notify.sh %i

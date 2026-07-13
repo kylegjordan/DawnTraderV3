@@ -2,9 +2,12 @@
 Description=Langston Discord gateway bridge (Claude Code via discord.py)
 After=network-online.target
 Wants=network-online.target
-# B-DISCORD-INBOUND-LIVENESS (#462): StartLimit guards ONLY a fast crash-loop, NOT a slow stall
-# (Restart=always carries a recoverable outage; the 15-min alert cooldown is the spam control).
-StartLimitIntervalSec=600
+# B-DISCORD-INBOUND-LIVENESS (#462): StartLimit=5-in-60s guards a fast crash-loop while a slow
+# DROP/timeout gateway outage restarts forever under Restart=always. Honest limit: a REFUSE/DNS
+# outage (~12s/cycle) still latches — made LOUD by OnFailure. Root fix scheduled (#465). See the
+# CC unit for the full rationale.
+OnFailure=discord-bridge-failed-notify@%n.service
+StartLimitIntervalSec=60
 StartLimitBurst=5
 
 [Service]

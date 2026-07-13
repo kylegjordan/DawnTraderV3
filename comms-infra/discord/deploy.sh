@@ -27,7 +27,7 @@ fi
 echo "discord.py: $("$VENV/bin/python3" -c 'import discord; print(discord.__version__)')"
 
 echo "== 3. code (expects files already scp'd to $BRIDGE_DIR) =="
-chmod +x "$BRIDGE_DIR"/discord-cc-bridge.py "$BRIDGE_DIR"/discord-langston-bridge.py 2>/dev/null || true
+chmod +x "$BRIDGE_DIR"/discord-cc-bridge.py "$BRIDGE_DIR"/discord-langston-bridge.py "$BRIDGE_DIR"/bridge-failed-notify.sh 2>/dev/null || true
 # world-readable so the langston-user service can import discord_common + the venv
 chmod -R a+rX "$BRIDGE_DIR"
 
@@ -54,6 +54,9 @@ cp "$BRIDGE_DIR/discord-langston-bridge.service" /etc/systemd/system/discord-lan
 # repo-tracked source, else the next run silently reverts the watchdog to Type=simple).
 mkdir -p /etc/systemd/system/discord-langston-bridge.service.d
 cp "$BRIDGE_DIR/discord-langston-bridge.service.d/self-advance.conf" /etc/systemd/system/discord-langston-bridge.service.d/self-advance.conf
+# OnFailure loud-page template unit (#462): fired when a bridge latches `failed`, so the latch is
+# never silent. Must be installed or the OnFailure= reference in the bridge units dangles.
+cp "$BRIDGE_DIR/discord-bridge-failed-notify@.service" /etc/systemd/system/discord-bridge-failed-notify@.service
 systemctl daemon-reload
 systemctl enable --now discord-cc-bridge.service discord-langston-bridge.service
 
