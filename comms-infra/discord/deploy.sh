@@ -48,12 +48,18 @@ done
 echo "== 6. systemd units =="
 cp "$BRIDGE_DIR/discord-cc-bridge.service" /etc/systemd/system/discord-cc-bridge.service
 cp "$BRIDGE_DIR/discord-langston-bridge.service" /etc/systemd/system/discord-langston-bridge.service
+# self-advance drop-in (B-LANGSTON-QUEUE #345). MUST be reinstalled here or a redeploy drops
+# LANGSTON_SELF_ADVANCE=1 (B-DISCORD-INBOUND-LIVENESS #462 — Langston Step-8 catch: the drop-in +
+# the Type=notify/WatchdogSec/TimeoutStartSec units live only if deploy.sh installs them from the
+# repo-tracked source, else the next run silently reverts the watchdog to Type=simple).
+mkdir -p /etc/systemd/system/discord-langston-bridge.service.d
+cp "$BRIDGE_DIR/discord-langston-bridge.service.d/self-advance.conf" /etc/systemd/system/discord-langston-bridge.service.d/self-advance.conf
 systemctl daemon-reload
 systemctl enable --now discord-cc-bridge.service discord-langston-bridge.service
 
 echo "== 7. status =="
-sleep 3
-systemctl is-active discord-cc-bridge.service discord-langston-bridge.service
-echo "Telegram services (must remain untouched + active):"
-systemctl is-active langston-bridge.service cc-comms-bridge.service
-echo "Done. Discord bridges live in parallel; Telegram untouched."
+# Type=notify: 'active' only after the gateway connects + READY=1, so allow a few seconds.
+sleep 8
+systemctl is-active discord-cc-bridge.service discord-langston-bridge.service || true
+# (Telegram fabric was DECOMMISSIONED 2026-07-02 — B-TELEGRAM-DECOMM #348; no longer checked here.)
+echo "Done. Discord bridges live (Type=notify + receive-liveness watchdog, #462)."
