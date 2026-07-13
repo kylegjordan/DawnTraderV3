@@ -363,9 +363,9 @@ When a CC session's transcript grows too large (context overhead climbs; ~195MB 
 ## 7. Infrastructure Reference
 
 - **GitHub:** `kylegjordan/DawnTraderV3`, branch `migration/aws-supabase`. GitHub CLI `gh` at `"/c/Program Files/GitHub CLI/gh.exe"`, authenticated as `kylegjordan`.
-- **Staging server:** Hetzner CPX22 at `188.245.193.8` (Falkenstein), Ubuntu 24.04. App runs as `dawntrader` under `deploy` user via PM2. Nginx reverse proxy with WS upgrade + rate limiting.
+- **Staging server:** Hetzner CPX22 at `188.245.193.8` (Falkenstein), Ubuntu 24.04. App runs as `dawntrader` under `deploy` user via PM2. **TLS edge (B-SEC-HARDEN #353, 2026-07-13): Caddy on :80/:443 terminates HTTPS (auto Let's Encrypt cert for `188.245.193.8.sslip.io`, auto-renew) and reverse-proxies to nginx on `127.0.0.1:8080`** (nginx keeps WS upgrade + rate limiting + the X-Forwarded-Proto allowlist map → app :5000). SSH is key-only (password auth off); ufw active (deny-in / allow-out / 22,80,443). Rollback: stop caddy + nginx `listen 8080`→`80`.
 - **Database:** Supabase PostgreSQL 17.6 (Frankfurt), project `vqqyisaudwenrdhnmjwt`.
-- **Staging URL:** `http://188.245.193.8`. Credentials: `testuser123 / SecurePass123!` or `kylegjordan`.
+- **Staging URL:** **canonical (HTTPS, clean padlock) = `https://188.245.193.8.sslip.io`** (B-SEC-HARDEN #353). The bare **`http://188.245.193.8` is DELIBERATELY kept working** (no force-redirect) so legacy references (§9.3 Claude-in-Chrome UI verification, login flows) don't break — migrate references to the HTTPS URL one at a time. Credentials: `testuser123 / SecurePass123!` or `kylegjordan`.
 - **CI/CD:** GitHub Actions on migration branch — 4 checks (TypeScript Check, Test Suite, Build, Docker Build). ALL 4 GREEN since B56.
 - **Replit:** FROZEN since 2026-03-30.
 
