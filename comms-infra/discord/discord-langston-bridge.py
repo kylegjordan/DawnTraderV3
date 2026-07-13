@@ -39,6 +39,12 @@ import discord  # provided by /opt/discord-bridges/venv
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import discord_common as dc
+import gateway_watchdog as gw  # B-DISCORD-INBOUND-LIVENESS (#462): gateway receive-liveness watchdog
+
+# Watchdog alert-cooldown marker (persisted across the os._exit→systemd restart cycle).
+# This bridge runs as User=langston, so the marker lives under langston's HOME (not the
+# root-owned /var/lib path the CC bridge uses) — persist_alert_epoch mkdirs the parent.
+WATCHDOG_STATE = "/home/langston/.discord-bridge/langston-gateway-alert-epoch"
 import langston_queue as lq
 
 # ─── B-LANGSTON-QUEUE (review-queue auto-advance) ────────────────────────────
@@ -530,7 +536,8 @@ def task_worker(task_q, state):
 def build_client(task_q):
     intents = discord.Intents.default()
     intents.message_content = True
-    client = discord.Client(intents=intents)
+    # enable_debug_events=True so on_socket_raw_receive fires — the true receive-liveness signal (#462).
+    client = discord.Client(intents=intents, enable_debug_events=True)
     seen = deque(maxlen=512)       # message-id dedup (review: RESUME can redeliver MESSAGE_CREATE)
     seen_set = set()
 
@@ -617,6 +624,25 @@ def build_client(task_q):
         task_q.put({**base, "kind": "text", "content": content})
         log(f"text enqueued: msg {message.id} from {message.author}: {content[:80]}")
 
+    # B-DISCORD-INBOUND-LIVENESS (#462): same receive-liveness watchdog as the CC bridge — this
+    # bridge has the identical zombie failure mode. rest_send is gateway-INDEPENDENT so the loud
+    # alert (+mention Kyle) reaches him while receive is dead. replay_message=on_message re-enqueues
+    # missed review requests (task_q is in-memory → lost on restart; backfill recovers them). Dedup
+    # against langston_inbound — the kind the worker writes once it has actually handled an id.
+    _ssh = os.environ.get("WATCHDOG_SSH_ALERT_CMD") or None
+    gw.install_watchdog(
+        client,
+        bridge_name="discord-langston-bridge",
+        send_alert_fn=lambda m: dc.rest_send(BOT_TOKEN, CFG["channel_id"], m, LOG_FILE,
+                                             mention_user_id=CFG["kyle_id"]),
+        state_path=WATCHDOG_STATE,
+        log_fn=log,
+        inbox_log=dc.INBOX_LOG,
+        channel_id=CFG["channel_id"],
+        replay_message=on_message,
+        ssh_alert_cmd=_ssh,
+        dedup_kinds={"langston_inbound"},
+    )
     return client
 
 

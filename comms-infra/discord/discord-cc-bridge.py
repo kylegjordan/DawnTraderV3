@@ -28,6 +28,11 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import discord_common as dc
+import gateway_watchdog as gw  # B-DISCORD-INBOUND-LIVENESS (#462): gateway receive-liveness watchdog
+
+# Watchdog alert-cooldown marker (persisted across the os._exit→systemd restart cycle so a
+# sustained outage alerts once per cooldown, not once per restart — Langston F2/Q1).
+WATCHDOG_STATE = "/var/lib/discord-bridges/cc-gateway-alert-epoch"
 
 BOT_TOKEN_FILE = "/etc/langston/discord-cc-bot.env"
 LOG_FILE = "/var/log/discord-cc-bridge.log"
@@ -141,7 +146,9 @@ def daemon():
 
     intents = discord.Intents.default()
     intents.message_content = True
-    client = discord.Client(intents=intents)
+    # enable_debug_events=True so on_socket_raw_receive fires — that frame (incl. the ~41s
+    # heartbeat ACK) is the TRUE receive-liveness signal the watchdog tracks (#462).
+    client = discord.Client(intents=intents, enable_debug_events=True)
     from collections import deque
     seen = deque(maxlen=512)
     seen_set = set()
@@ -192,6 +199,25 @@ def daemon():
         # wake watcher wakes CC immediately). Removing it also avoids the on-loop blocking
         # send + a paid Langston turn per message (Langston review 1b/2a).
 
+    # B-DISCORD-INBOUND-LIVENESS (#462): wire the receive-liveness watchdog. Coexists with the
+    # on_ready/on_message above via add_listener. send() uses the gateway-INDEPENDENT REST path,
+    # so the loud alert reaches Kyle even while receive is dead. replay_message=on_message reuses
+    # this bridge's own (Kyle-only) logging for backfill. ssh §10.5 leg optional via env.
+    _ssh = os.environ.get("WATCHDOG_SSH_ALERT_CMD") or None
+    gw.install_watchdog(
+        client,
+        bridge_name="discord-cc-bridge",
+        send_alert_fn=lambda m: send(m, notify=True),
+        state_path=WATCHDOG_STATE,
+        log_fn=log,
+        inbox_log=dc.INBOX_LOG,
+        channel_id=CFG["channel_id"],
+        replay_message=on_message,
+        ssh_alert_cmd=_ssh,
+        # dedup backfill only against the kinds THIS bridge writes for inbound (Kyle text = "",
+        # voice) — never against another bridge's rows for the same id (would false-skip a miss).
+        dedup_kinds={"", "voice_inbound", "voice_inbound_failed"},
+    )
     client.run(BOT_TOKEN, reconnect=True, log_handler=None)
 
 

@@ -2,9 +2,18 @@
 Description=Langston Discord gateway bridge (Claude Code via discord.py)
 After=network-online.target
 Wants=network-online.target
+# B-DISCORD-INBOUND-LIVENESS (#462): StartLimit guards ONLY a fast crash-loop, NOT a slow stall
+# (Restart=always carries a recoverable outage; the 15-min alert cooldown is the spam control).
+StartLimitIntervalSec=600
+StartLimitBurst=5
 
 [Service]
-Type=simple
+# Type=notify + WatchdogSec backstop (see the CC bridge unit for the full rationale): the LOUD
+# in-process watchdog fires first at the stale threshold; systemd SIGABRTs at WatchdogSec only if
+# the whole event loop hangs so the in-process path cannot run (#462).
+Type=notify
+NotifyAccess=main
+WatchdogSec=300
 User=langston
 Group=langston
 WorkingDirectory=/home/langston
