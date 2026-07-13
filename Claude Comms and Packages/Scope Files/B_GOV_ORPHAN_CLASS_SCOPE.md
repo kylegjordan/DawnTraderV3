@@ -1,0 +1,25 @@
+# B-GOV-ORPHAN-CLASS — Scope (governance-checker: stop re-flagging already-dispositioned batches)
+
+change-class: non_architecture
+
+**Batch:** B-GOV-ORPHAN-CLASS — make the governance checker grade HONESTLY against dispositions so it stops re-minting alerts for batches that are already closed/confirmed. Checker/infra tooling only (`scripts/governance-checker/`); NO strategy / regime / signal-pipeline / filter / EV-math / trading-engine change → `non_architecture`. **Owner:** NEW Claude (CC-B). **Kyle directive 2026-07-13:** "fix and repair all the old issues per the governance checker's list … and make sure you don't keep making the same mistake." Root cause of the recurring "old issues": the checker's disposition-matching is keyed to the specific alert-id and is class-blind for out-of-window batches, so an already-confirmed batch re-surfaces whenever its alert-id changes (proven live 2026-07-13 when the #352 reconcile re-minted 5 already-dispositioned alerts).
+
+## Background (live evidence, 2026-07-13)
+The #352 one-time reconcile cleared 102 store-resolved keys from `state.openAlerts`. The next tick re-minted 5 NEW alert-ids for (batch,kind) pairs that were ALREADY dispositioned at the grading ref (`GOVERNANCE_EXCEPTIONS.md` rows for B8.4b class/`:36`, B8.4c underdeclared/`:39`, and B8.2b/B8.2c class-override/`:33`/`:34`). They re-minted because: (a) the exception rows say `Resolves alert <OLD-id>` and the checker matches disposition→alert-id, so a re-minted NEW id isn't recognized; (b) the orphan-sweep is class-blind and only sweeps `gov-docgap:` keys, never `gov-classundeclared:`. This is #497 + Langston's alert-id-rekey framing.
+
+## Objectives
+1. **OBJ-1 — alert-id-independent disposition (Langston's durable case; the load-bearing fix).** Resolution recognition must key on **(batchId, kind[, doc])**, NOT on the specific alert-id embedded in an exception row's `Resolves alert <id>` text. A confirmed class-override / na-skip / OPEN row must suppress AND resolve a re-minted alert for the same (batch,kind) regardless of which alert-id instance is currently open.
+2. **OBJ-2 — orphan-sweep covers `gov-classundeclared:` (not just `gov-docgap:`).** `decideOrphanSweep` (poller.mjs:108) currently regex-matches only `gov-docgap:` keys, so an out-of-window `gov-classundeclared:` orphan can never auto-resolve. Extend it to re-evaluate classundeclared orphans: resolve when the batch's class is DECLARED — via a parseable scope `change-class:` header OR a Langston-confirmed `class-override` exception row.
+3. **OBJ-3 — class-aware `verifyDoc` (#497 core).** The orphan-sweep's injected `verifyDoc` (poller.mjs:510) currently = `docPresent || naConfirmed` — it never asks whether the doc is REQUIRED for the batch's declared class. Make it class-aware: an out-of-window doc-gap resolves when the doc is not in the batch's declared-class required-set (reuse the checker's own `checkBatchDocset` / `CLASS_DOCSET`), not only when the file is present or na-skipped.
+4. **OBJ-4 — per-tick store-reconcile (#352 permanent).** Each tick, ONE `list --state active` read → drop `state.openAlerts` keys whose store-state is not active/scheduled (fail-OPEN on read failure — never prune blind). Same tick re-opens anything still genuinely real + in-window. This makes the 2026-07-13 one-time reconcile self-maintaining so `state.openAlerts` can never re-accumulate stale keys.
+5. **OBJ-5 — `readDeclaredClass` path portability bug.** `showFile(join(SCOPE_DIR,name))` uses `path.join` → backslashes off-Linux → breaks the git read on Windows (returns no-marker → architecture default). Use a forward-slash join for git paths. Harmless on the Linux box but a real correctness bug for any Windows-side checker run/test.
+
+## Verification criteria
+- A batch with a Langston-confirmed class-override at the ref does NOT re-open a `gov-classundeclared:` alert on the next tick even after its alert-id is re-minted (OBJ-1+OBJ-2) — reproduced in `poller.test.mjs`.
+- An out-of-window hotfix batch's non-owed pre_audit/system_manual/sim gaps resolve via class-awareness, not stay "missing" (OBJ-3) — test.
+- `state.openAlerts` self-reconciles against the store each tick; a resolved-in-store key is dropped next tick; fail-open on a store read error (OBJ-4) — test.
+- `readDeclaredClass` returns the correct class on both slash conventions (OBJ-5) — test.
+- All four CI jobs green on each push; Langston Step-4 on the diff BEFORE push; shadow dry-run before the enforcing box runs it; Langston Step-8 second-pass.
+
+## Process (per #497 note — NOT rushed)
+Step-2 pre-audit (read decideAlerts / decideOrphanSweep / verifyDoc / checkBatchDocset / readDeclaredClass / loadExceptions + the exception-row `Resolves alert` parse) → Langston review BEFORE code → implement → poller.test cases → Langston Step-4 diff → CI 4-green → deploy to checker box (shadow dry-run first) → Langston Step-8 → governance (BATCH_CATALOG, PHASE_HISTORY, RUNNING_ISSUES #497/#352 close, SIM if the grading component changes, MEMORY) → completion report → Kyle ack.
