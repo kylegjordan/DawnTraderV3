@@ -2,6 +2,16 @@
 
 ---
 
+## FIX-2026-07-13 — B-DISCORD-INBOUND-LIVENESS: gateway receive-liveness watchdog (#462, Kyle "please fix")
+
+Closes the silent-inbound-death class: discord.py's `client.run(reconnect=True)` can zombie (gateway receive dead, process + worker-heartbeat green) — it blinded both CCs ~95min (07-11) and ~21h (07-12) with only a human noticing. NEW shared `comms-infra/discord/gateway_watchdog.py` (deployed /opt/discord-bridges/, unit-tested 29/29) on BOTH bridges:
+- **True liveness signal:** `last_gateway_recv` advanced by `on_socket_raw_receive` (`enable_debug_events=True`) incl. the ~41s heartbeat ACK — decoupled from channel traffic; replaces the misleading worker-thread heartbeat.
+- **Layered recovery:** PRIMARY loud — on `now−last_recv > max(120, 4×heartbeat)≈165s`, persist+fsync a cooldown epoch (before exit, so a restart honors the cooldown) → loud Discord alert +notify Kyle via the gateway-INDEPENDENT REST path → best-effort time-boxed ssh system-alerts (optional) → os._exit → systemd Restart=always. BACKSTOP — Type=notify + WatchdogSec=300 with sd_notify(WATCHDOG=1) pinged only while fresh (full-loop-hang catch).
+- **TimeoutStartSec=infinity** (Langston Step-4 catch): the default 90s Type=notify start-timeout would, on a gateway-unreachable outage, kill each cycle → trip StartLimit → `failed`-latch → silent non-recovery = the very death this fixes. Now the unit waits for READY=1 whenever it reconnects.
+- **Startup backfill:** replays messages missed during downtime through each bridge's own handler, deduped by message_id SCOPED to that bridge's inbox kinds (cross-bridge false-skip guard, #494).
+- **Restart-storm:** the 15-min alert cooldown is the spam control (one alert per outage); StartLimit guards only a fast crash-loop, never a slow stall.
+**LIVE kill-test PASSED** (block gateway .234, REST .232/.233 alive): block 09:33:49 → watchdog fired 09:36:29 (~165s, DEAF alert to phone via outbound) → os._exit → unit sat `activating` during the block (no failed-latch) → unblock 09:37:24 → reconnect 09:37:32 (~8s) → backfill → recovery alert. Exactly one DEAF + one recovered. 3 runtime bugs caught at deploy (add_listener→attribute-registration, heartbeat attr, backfill honesty). Comms-infra only. Langston Step-1/2/4 approved; Step-8 pending.
+
 ## FIX-2026-07-11 — B-LANGSTON-QUEUE-2: the Langston review-queue/bridge hardening (Kyle "do it now")
 
 Six fixes to the live Langston bridge (/opt/discord-bridges/), deployed + verified same-session per Kyle 2026-07-11.
