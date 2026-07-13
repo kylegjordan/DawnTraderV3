@@ -20,6 +20,11 @@ import {
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 export const REPO_ROOT = resolve(SCRIPT_DIR, '..', '..');
+// OBJ-5 (B-GOV-ORPHAN-CLASS): git object paths are FORWARD-SLASH only. `path.join` emits
+// backslashes off-Linux (Windows-side runs/tests), so a git path built with join() breaks the
+// `git show ${GOV_REF}:${relPath}` read → null → no-marker → wrong architecture default. Use this
+// posix join for anything fed to a git ref read; keep node's `join` only for real filesystem paths.
+const sjoin = (...parts) => parts.join('/');
 
 // ── git ──────────────────────────────────────────────────────────────────────
 // Kyle 2026-06-24 fix: GRADE AGAINST THE PUSHED BRANCH REF, not the working tree. Staging lags origin
@@ -232,16 +237,16 @@ export function readDeclaredClass(batchId) {
   const candidates = lsTreeNames(SCOPE_DIR).filter((n) => re.test(n) && /SCOPE/i.test(n)).sort();
   if (candidates.length === 0) return { class: DEFAULT_CLASS, declared: false, scopePath: null, reason: 'no-scope-file' };
   for (const name of candidates) {
-    const text = showFile(join(SCOPE_DIR, name));
+    const text = showFile(sjoin(SCOPE_DIR,name));
     if (text === null) continue;
     const m = text.match(CHANGE_CLASS_MARKER);
     if (m) {
       const cls = m[1].toLowerCase();
-      if (VALID_CLASSES.includes(cls)) return { class: cls, declared: true, scopePath: join(SCOPE_DIR, name), reason: 'declared' };
-      return { class: DEFAULT_CLASS, declared: false, scopePath: join(SCOPE_DIR, name), reason: `invalid-class:${cls}` };
+      if (VALID_CLASSES.includes(cls)) return { class: cls, declared: true, scopePath: sjoin(SCOPE_DIR,name), reason: 'declared' };
+      return { class: DEFAULT_CLASS, declared: false, scopePath: sjoin(SCOPE_DIR,name), reason: `invalid-class:${cls}` };
     }
   }
-  return { class: DEFAULT_CLASS, declared: false, scopePath: join(SCOPE_DIR, candidates[0]), reason: 'no-marker' };
+  return { class: DEFAULT_CLASS, declared: false, scopePath: sjoin(SCOPE_DIR,candidates[0]), reason: 'no-marker' };
 }
 
 // ── B-GOV-2 OBJ-2: path-heuristic under-declaration guard ──

@@ -20,7 +20,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 import {
   extractLeadingBatchId, DEADLINE_HOURS, OPEN_STATE_BACKSTOP_HOURS, OPEN_STATE_MAX_AGE_HOURS,
-  DEFAULT_CLASS, SHADOW_MODE, ENFORCEMENT_CUTOFF_MS,
+  DEFAULT_CLASS, VALID_CLASSES, SHADOW_MODE, ENFORCEMENT_CUTOFF_MS,
 } from './config.mjs';
 import {
   checkBatchDocset, classifyCommit, diffTouchesCoreEngine, readDeclaredClass,
@@ -105,16 +105,39 @@ export function anchorClosedBatches(batches) {
 // symptom). Resolve such orphans — but RE-VERIFY first via the injected `verify(bid,doc)` (the live
 // tick passes a whole-tree GOV_REF check), NEVER blind-resolve: a genuinely-missing doc on a closed
 // batch that merely aged out must STAY surfaced (Langston Step-2 Finding 2 — no cry-silence). PURE.
-export function decideOrphanSweep(openAlertKeys, enforceableIds, verify) {
+export function decideOrphanSweep(openAlertKeys, enforceableIds, verify, isClassDeclared = () => false) {
   const resolve = [], keep = [];
   for (const key of openAlertKeys) {
-    const m = /^gov-docgap:(.+):([^:]+)$/.exec(key);
-    if (!m) continue;                          // only doc-gap orphans are swept here
-    const bid = m[1], doc = m[2];
-    if (enforceableIds.has(bid)) continue;     // still in-window → handled by decideAlerts
-    (verify(bid, doc) ? resolve : keep).push(key);
+    const docgap = /^gov-docgap:(.+):([^:]+)$/.exec(key);
+    if (docgap) {
+      const bid = docgap[1], doc = docgap[2];
+      if (enforceableIds.has(bid)) continue;   // still in-window → handled by decideAlerts
+      (verify(bid, doc) ? resolve : keep).push(key);
+      continue;
+    }
+    // OBJ-2 (B-GOV-ORPHAN-CLASS): classundeclared orphans (out-of-window) — previously skipped here,
+    // so a reclassified/parent-ride batch re-minted gov-classundeclared forever once it aged past the
+    // window. Resolve when the batch's class IS declared (scope header OR a confirmed class-override);
+    // keep it when genuinely undeclared (no cry-silence).
+    const cls = /^gov-classundeclared:(.+)$/.exec(key);
+    if (cls) {
+      const bid = cls[1];
+      if (enforceableIds.has(bid)) continue;   // still in-window → handled by decideAlerts
+      (isClassDeclared(bid) ? resolve : keep).push(key);
+      continue;
+    }
+    // other orphan key types are not swept here
   }
   return { resolve, keep };
+}
+
+// OBJ-4 (B-GOV-ORPHAN-CLASS) pure core: given the openAlerts dedup cache (dedupeKey→alertId) and the
+// set of alert-ids that are still LIVE in the store (active/scheduled), return the cache keys whose id
+// is no longer live and must be dropped. `liveIds === null` (store unreadable) → drop NOTHING
+// (FAIL-OPEN: a store hiccup must never blind-prune a genuinely-open alert). PURE — the tick wraps it.
+export function decideStaleOpenAlertDrops(openAlerts, liveIds) {
+  if (!liveIds) return [];
+  return Object.entries(openAlerts).filter(([, id]) => !liveIds.has(id)).map(([k]) => k);
 }
 
 // Decide which alerts to OPEN and which to RESOLVE, given batch states + declared
@@ -126,6 +149,7 @@ export function decideAlerts(batchStates, exceptions, nowMs, opts = {}) {
   const maxAgeMs = (opts.maxOpenAgeHours ?? OPEN_STATE_MAX_AGE_HOURS) * HOUR_MS;
   const shadow = opts.shadow ?? SHADOW_MODE;            // OBJ-5d: shadow downgrades to info
   const coreCheck = opts.coreEngineCheck || diffTouchesCoreEngine; // OBJ-2 (injectable for tests)
+  const confirmedOverride = opts.confirmedOverride || (() => false); // B-GOV-ORPHAN-CLASS OBJ-1 (injectable)
   const sev = (level) => (shadow ? 'info' : level);
   const open = exceptions.open || new Set();
   const openSince = exceptions.openSince || new Map();
@@ -151,7 +175,11 @@ export function decideAlerts(batchStates, exceptions, nowMs, opts = {}) {
 
     // (0b) OBJ-2: path-heuristic under-declaration guard.
     const underKey = `gov-underdeclared:${s.batchId}`;
-    if (klass !== 'architecture' && s.files && coreCheck(s.files)) {
+    // OBJ-1 (B-GOV-ORPHAN-CLASS) suppress-at-source: a confirmed class-override IS Langston answering
+    // "is this class right?", so it must NOT re-open underdeclared. Guard the OPEN condition (do NOT
+    // push to toResolveKeys downstream — that add-then-resolves every tick and flaps). The existing
+    // `else` resolves it. (Langston Step-2 correction.)
+    if (klass !== 'architecture' && s.files && coreCheck(s.files) && !confirmedOverride(s.batchId)) {
       toOpen.push({
         dedupeKey: underKey, severity: sev('warning'),
         title: `Possible under-declared class: ${s.batchId} declared '${klass}' but its diff touches core engine paths`,
@@ -312,6 +340,28 @@ const alertSink = {
       }
     }
   },
+  // OBJ-4 (B-GOV-ORPHAN-CLASS): the set of alert-ids that are still LIVE in the store — i.e. every
+  // NON-TERMINAL state. The lifecycle (server/services/system-alerts.ts:45) is scheduled → active →
+  // acknowledged → resolved; only `resolved` is terminal. `acknowledged` is CLAIMED-but-unfixed work
+  // and is STILL LIVE (OLD Claude Step-4 catch) — omitting it would drop the openAlerts key for an
+  // acked alert and re-mint a DUPLICATE of claimed work. Used by tick() to reconcile state.openAlerts
+  // (a dedup cache) against the store (the SSOT). Returns null on ANY read problem so the caller FAILS
+  // OPEN (skips the prune) — a store-read hiccup must never blind-prune a genuinely-open alert.
+  liveAlertIds() {
+    if (SHADOW_MODE) return null;                 // shadow writes nothing → nothing to reconcile
+    try {
+      const ids = new Set();
+      for (const st of ['active', 'acknowledged', 'scheduled']) {  // all non-resolved states
+        const out = runCli(`cd ${STAGING_REPO} && npm run -s system-alerts -- list --state ${st}`);
+        // FORMAT DEPENDENCY (Langston Step-4 watch-item): parses `id=<uuid>` from the system-alerts
+        // `list` line format. The throw-based fail-open above covers a FAILED read; it does NOT cover a
+        // successful exit-0 read whose OUTPUT FORMAT later drifts (that would yield an empty set → mass-
+        // prune). If `system-alerts list` output ever changes, THIS regex is the blast site — keep in sync.
+        for (const m of out.matchAll(/id=([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/g)) ids.add(m[1]);
+      }
+      return ids;
+    } catch { return null; }                      // FAIL-OPEN
+  },
 };
 function shq(s) { return `'${String(s).replace(/'/g, `'\\''`)}'`; }
 
@@ -337,16 +387,27 @@ function readGovernedExceptions() {
 }
 
 function loadExceptions() {
-  const open = new Set(), openSince = new Map(), naConfirmed = new Set();
+  const open = new Set(), openSince = new Map(), naConfirmed = new Set(), classOverride = new Map();
+  // ONE confirmed-semantics predicate, reused by every row type (Langston B-GOV-ORPHAN-CLASS Step-1):
+  // a disposition counts only when a real confirmer signed it (not the literal 'pending' placeholder).
+  const isConfirmed = (by) => Boolean(by) && by !== 'pending';
   for (const line of readGovernedExceptions().split('\n')) {
     const cells = line.split('|').map((c) => c.trim());
     if (cells.length < 7) continue;
     const [, ts, bid, type, value, confirmedBy] = cells;
     if (!bid || bid.startsWith('_')) continue;
-    if (type === 'open' && confirmedBy && confirmedBy !== 'pending') { open.add(bid); const m = value.match(/\d{4}-\d{2}-\d{2}T[\d:]+Z/); if (m) openSince.set(bid, Date.parse(m[0])); }
-    if (type === 'na-skip' && confirmedBy && confirmedBy !== 'pending') naConfirmed.add(`${bid}:${value}`);
+    if (type === 'open' && isConfirmed(confirmedBy)) { open.add(bid); const m = value.match(/\d{4}-\d{2}-\d{2}T[\d:]+Z/); if (m) openSince.set(bid, Date.parse(m[0])); }
+    if (type === 'na-skip' && isConfirmed(confirmedBy)) naConfirmed.add(`${bid}:${value}`);
+    // OBJ-1 (B-GOV-ORPHAN-CLASS): a CONFIRMED class-override row DECLARES the batch's class, so a
+    // parent-ride sub-batch with no scope-header (B8.2b/c, B8.4b) stops re-minting gov-classundeclared.
+    // value shape: `declared:<class> heuristic:<class>`. FAIL-CLOSED: an unconfirmed/pending row, or a
+    // declared value that is not a VALID_CLASSES member, is IGNORED → the batch stays undeclared.
+    if (type === 'class-override' && isConfirmed(confirmedBy)) {
+      const m = value.match(/declared:(\w+)/);
+      if (m && VALID_CLASSES.includes(m[1].toLowerCase())) classOverride.set(bid, m[1].toLowerCase());
+    }
   }
-  return { open, openSince, naConfirmed };
+  return { open, openSince, naConfirmed, classOverride };
 }
 
 // #490 recurrence guard ("who checks the checker"): detect when the DEPLOYED checker CODE has
@@ -426,6 +487,14 @@ export function tick(nowMs = Date.now()) {
     gradedRefSha = execFileSync('git', ['rev-parse', BRANCH], { cwd: REPO_ROOT, encoding: 'utf8' }).trim();
   } catch { gradedRefSha = null; }
   if (state.openAlerts[FETCH_KEY]) { alertSink.resolve(state.openAlerts[FETCH_KEY]); delete state.openAlerts[FETCH_KEY]; }
+  // OBJ-4 (B-GOV-ORPHAN-CLASS): per-tick store-reconcile. state.openAlerts is only a dedup cache; the
+  // alert STORE is the SSOT. Snapshot the live (active+scheduled) id set ONCE here — BEFORE the drift/
+  // exceptions/decideAlerts adds so the prune can't race this tick's own writes (Langston Step-2) — and
+  // drop any cached key whose id is no longer live (resolved out-of-band). Otherwise the stale key
+  // SUPPRESSES a legitimate re-open via the dedup guard and openAlerts silently re-accumulates (#352).
+  // FAIL-OPEN: liveAlertIds() returns null on any read problem → skip the prune this tick.
+  const liveIds = alertSink.liveAlertIds();
+  for (const k of decideStaleOpenAlertDrops(state.openAlerts, liveIds)) delete state.openAlerts[k];
   // #490 recurrence guard: warn if the deployed checker code has drifted from origin, so a silent
   // redeploy gap can never again let the box grade with stale logic the way #449 hid for two weeks.
   const DRIFT_KEY = 'gov-code-drift';
@@ -489,7 +558,22 @@ export function tick(nowMs = Date.now()) {
     alertSink.resolve(state.openAlerts['gov-exceptions-unreadable']);
     delete state.openAlerts['gov-exceptions-unreadable'];
   }
-  const { toOpen, toResolveKeys } = decideAlerts(enforceable, exceptions, nowMs);
+  // OBJ-1 (B-GOV-ORPHAN-CLASS): apply confirmed class-overrides here — AFTER loadExceptions (the
+  // readDeclaredClass loop at :466 ran before the ledger was read) and BEFORE decideAlerts. PRECEDENCE:
+  // a confirmed override WINS over the in-header change-class (the override is the Langston-confirmed
+  // human disposition, gated on confirmed_by; the header is a self-authored mechanical declaration).
+  // The supersede log goes to stdout → journald (durable, not console-scroll — Langston Step-2).
+  for (const b of enforceable) {
+    const ovr = exceptions.classOverride.get(b.batchId);
+    if (!ovr) continue;
+    if (b.classDeclared && b.declaredClass && b.declaredClass !== ovr) {
+      console.log(`[gov-checker] class-override ${b.batchId} supersedes header ${b.declaredClass} -> ${ovr} (confirmed)`);
+    }
+    b.declaredClass = ovr;
+    b.classDeclared = true;
+  }
+  const confirmedOverride = (bid) => exceptions.classOverride.has(bid);
+  const { toOpen, toResolveKeys } = decideAlerts(enforceable, exceptions, nowMs, { confirmedOverride });
   // dedupe via own state (logical key → alert id); only add if not already open.
   for (const a of toOpen) {
     if (!state.openAlerts[a.dedupeKey]) {
@@ -507,9 +591,21 @@ export function tick(nowMs = Date.now()) {
   // docPresent/N-A, not the window), never blind-resolve, so a genuinely-missing aged-out doc
   // stays surfaced (Langston Step-2 Finding 2).
   const enforceableIds = new Set(enforceable.map((b) => b.batchId));
-  const verifyDoc = (bid, doc) => docPresent(bid, doc) || exceptions.naConfirmed.has(`${bid}:${doc}`);
+  // OBJ-1/2/3 (B-GOV-ORPHAN-CLASS): resolve an out-of-window batch's EFFECTIVE class — a confirmed
+  // class-override WINS over the scope header (same precedence as the in-window path at :492).
+  const classFor = (bid) => exceptions.classOverride.get(bid) || readDeclaredClass(bid).class;
+  const isClassDeclared = (bid) => exceptions.classOverride.has(bid) || readDeclaredClass(bid).declared;
+  // OBJ-3: class-aware verifyDoc — an aged-out doc-gap resolves when the doc is present, na-confirmed,
+  // OR NOT REQUIRED for the batch's class. Reuse checkBatchDocset's effectiveRequired (class.required ∪
+  // REQUIRED_IF) so a P19 hotfix STILL requires phase_19_plan and a genuinely-missing required doc stays
+  // surfaced (no cry-silence — Langston's prior Step-2 Finding 2 preserved).
+  const verifyDoc = (bid, doc) => {
+    if (docPresent(bid, doc) || exceptions.naConfirmed.has(`${bid}:${doc}`)) return true;
+    const required = checkBatchDocset(bid, classFor(bid), { requiredOnly: true }).required;
+    return !(doc in required); // doc not in the effective required set for this class → not owed
+  };
   const { resolve: orphanResolve, keep: orphanKeep } =
-    decideOrphanSweep(Object.keys(state.openAlerts), enforceableIds, verifyDoc);
+    decideOrphanSweep(Object.keys(state.openAlerts), enforceableIds, verifyDoc, isClassDeclared);
   for (const key of orphanResolve) {
     const id = state.openAlerts[key];
     if (id) { alertSink.resolve(id); delete state.openAlerts[key]; }

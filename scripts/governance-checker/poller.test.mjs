@@ -1,6 +1,6 @@
 // B-GOV poller — pure decision-logic tests (no git, no ssh, no filesystem).
 // Run: node scripts/governance-checker/poller.test.mjs
-import { computeBatchStates, decideAlerts, applyCutoff, anchorClosedBatches, decideOrphanSweep } from './poller.mjs';
+import { computeBatchStates, decideAlerts, applyCutoff, anchorClosedBatches, decideOrphanSweep, decideStaleOpenAlertDrops } from './poller.mjs';
 import { batchIdToFileRegex, extractBatchId, extractLeadingBatchId } from './config.mjs';
 
 const HOUR = 3600 * 1000;
@@ -247,6 +247,49 @@ const noStaleOpen = { open: new Set(), openSince: new Map(), naConfirmed: new Se
     keep.includes('gov-docgap:OLD-GAP:pre_audit'));
   ok('OBJ-4b: in-window key is NOT swept (handled by decideAlerts)',
     !resolve.includes('gov-docgap:IN-WIN:scope') && !keep.includes('gov-docgap:IN-WIN:scope'));
+}
+
+// ── B-GOV-ORPHAN-CLASS OBJ-1: confirmed class-override suppresses under-declared AT SOURCE (no flap) ──
+{
+  const base = { batchId: 'P19-BOV', classDeclared: true, declaredClass: 'non_architecture', files: ['server/services/strategy-engine.ts'], hasGovernance: true };
+  const noOvr = decideAlerts([base], noStaleOpen, NOW, { shadow: false, coreEngineCheck: () => true });
+  ok('OBJ-1: non_arch + core paths, NO override → under-declared opens', hasKey(noOvr.toOpen, 'gov-underdeclared:P19-BOV'));
+  const ovr = decideAlerts([base], noStaleOpen, NOW, { shadow: false, coreEngineCheck: () => true, confirmedOverride: (b) => b === 'P19-BOV' });
+  ok('OBJ-1: confirmed override → under-declared NOT opened (suppress-at-source)', !hasKey(ovr.toOpen, 'gov-underdeclared:P19-BOV'));
+  ok('OBJ-1: confirmed override → under-declared resolved via else (no flap: not in both lists)',
+    ovr.toResolveKeys.includes('gov-underdeclared:P19-BOV') && !hasKey(ovr.toOpen, 'gov-underdeclared:P19-BOV'));
+}
+
+// ── B-GOV-ORPHAN-CLASS OBJ-2: orphan sweep resolves out-of-window classundeclared when class IS declared ──
+{
+  const openKeys = ['gov-classundeclared:OLD-DECL', 'gov-classundeclared:OLD-UNDECL', 'gov-classundeclared:IN-WIN'];
+  const enforceableIds = new Set(['IN-WIN']);
+  const isClassDeclared = (bid) => bid === 'OLD-DECL';   // OLD-DECL has header/override; OLD-UNDECL doesn't
+  const { resolve, keep } = decideOrphanSweep(openKeys, enforceableIds, () => false, isClassDeclared);
+  ok('OBJ-2: out-of-window classundeclared with declared class → resolved', resolve.includes('gov-classundeclared:OLD-DECL'));
+  ok('OBJ-2: out-of-window classundeclared still undeclared → KEPT (no cry-silence)', keep.includes('gov-classundeclared:OLD-UNDECL'));
+  ok('OBJ-2: in-window classundeclared NOT swept (handled by decideAlerts)',
+    !resolve.includes('gov-classundeclared:IN-WIN') && !keep.includes('gov-classundeclared:IN-WIN'));
+}
+
+// ── B-GOV-ORPHAN-CLASS OBJ-3: class-aware verify resolves a NOT-owed doc, keeps a genuinely-missing required one ──
+{
+  const requiredByClass = { 'OLD-HOTFIX': new Set(['changes_and_fixes']) };  // hotfix owes only changes_and_fixes
+  const present = new Set();                                                  // nothing physically present
+  const verify = (bid, doc) => present.has(`${bid}:${doc}`) || !(requiredByClass[bid]?.has(doc)); // mirrors the real class-aware verifyDoc
+  const openKeys = ['gov-docgap:OLD-HOTFIX:system_manual', 'gov-docgap:OLD-HOTFIX:changes_and_fixes'];
+  const { resolve, keep } = decideOrphanSweep(openKeys, new Set(), verify);
+  ok('OBJ-3: hotfix doc NOT required for class → resolved', resolve.includes('gov-docgap:OLD-HOTFIX:system_manual'));
+  ok('OBJ-3: hotfix REQUIRED doc genuinely missing → KEPT', keep.includes('gov-docgap:OLD-HOTFIX:changes_and_fixes'));
+}
+
+// ── B-GOV-ORPHAN-CLASS OBJ-4: store-reconcile drops resolved-in-store keys, fail-OPEN on unreadable store ──
+{
+  const openAlerts = { 'gov-docgap:A:sim': 'id-live', 'gov-classundeclared:B': 'id-dead' };
+  const drops = decideStaleOpenAlertDrops(openAlerts, new Set(['id-live']));  // id-dead no longer live
+  ok('OBJ-4: key whose id is not live → dropped', drops.includes('gov-classundeclared:B'));
+  ok('OBJ-4: key whose id IS live → kept', !drops.includes('gov-docgap:A:sim'));
+  ok('OBJ-4: store unreadable (liveIds null) → drop NOTHING (fail-open)', decideStaleOpenAlertDrops(openAlerts, null).length === 0);
 }
 
 console.log(`\nPoller logic tests: ${pass} passed, ${fail} failed`);
