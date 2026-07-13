@@ -2162,6 +2162,15 @@ export class ActiveExecutionEngine {
 
     // Directive 11.8B: Net Expectancy Gate
     // Check if trade has positive mathematical expectancy after fees & slippage
+    //
+    // P19-B8.5a (OBJ-3, Kyle-ratified precedence — STILL-BLOCKS backstop): net-EV ADMISSION now
+    // lives in the SQE (the authority — gen + refresh + batch-refresh all sign-check chosenNetEv
+    // before a signal can queue or survive). THIS gate is DEMOTED to the drift BACKSTOP: it still
+    // BLOCKS (Kyle default — real capital moves between final refresh and open), but a reject here
+    // now means the gates DRIFTED (a signal admitted net-EV-positive went non-positive before open)
+    // — expected ~0. The existing recordOpenFailed('EV_REJECT') metric IS the GATES-DRIFTED alarm:
+    // any non-zero rate post-B8.5a triggers investigation, not silent acceptance. Legacy rows with
+    // a NULL chosen_net_ev still get the taker-leg fallback below (no ungated lifecycle).
     // B63: Forward sourcePool + dbsScore so the kernel uses DBS-based pWin for Path D signals.
     //
     // reorg-B3 (#233): DI + dbsScore now come from the TYPED rtb_signals columns (di_at_queue /
@@ -3114,10 +3123,19 @@ export class ActiveExecutionEngine {
       const signalMetadata = signalAny.metadata || {};
 
       // Compute global stability from available metrics (needed by 11.7S mode modulation)
+      // P19-B8.5a (OBJ-4, B1 SEVER — Kyle-ratified crew consensus 2026-07-13): the
+      // `signal.confidence` fallback leg is REMOVED. It let the empirically anti-predictive
+      // confidence axis (14%-vs-83% regime inversion; §4 probe rho<0) drive strategy mode →
+      // positionSizeMultiplier 0.25–1.0× (+ stop/target scaling) — up to 4× bigger positions
+      // on WORSE trades, and a paper-DATA-INTEGRITY hazard (distorted sizing pollutes the
+      // calibration source). regimeConfidence (a REGIME metric, when present) still rides;
+      // absent → the neutral 0.5 default, same as the other two stability inputs. The hybrid
+      // sub-path propagation (hybridScore→confidence, signal-orchestrator.ts:2299) is severed
+      // by the same cut. AMR-active continues to REPLACE this mode per class (unchanged).
       const stabilityResult = computeGlobalStability(
         signalMetadata.driftScore || 0.5,
         signalMetadata.volZ || 0,
-        signalMetadata.regimeConfidence || signal.confidence || 0.5
+        signalMetadata.regimeConfidence || 0.5
       );
       const regimeStability: RegimeStability = stabilityResult.stability;
       // ══════════════════════════════════════════════════════════════════════════════

@@ -115,6 +115,16 @@ export interface SQEInput {
   signalType?: string;
   regimeStability?: RegimeStability;  // Phase 14.1 HF8 (B3): For confidence floor check
   sourcePool?: string;  // Batch 37: Family-qualified source pool
+  // P19-B8.5a (OBJ-3): the best-of-both chosen-mode net expectancy, COMPUTED UPSTREAM by
+  // decideMakerTaker (signal-orchestrator.ts — runs just BEFORE the SQE per Kyle's P19-B7.2b
+  // calc-free placement) and passed in for a pure SIGN CHECK. The SQE performs NO EV math here
+  // (gate-inside, calculation-outside — same pattern as gating on the pre-computed finalScore).
+  // ABSENT (legacy queued rows at deploy / a caller without a snapshot) → the check SKIPS
+  // (fail-open, Langston Step-2 ratified) — the [11.8B] open-gate still nets every lifecycle:
+  // it falls back to the taker-leg recompute when chosen_net_ev is null (active-execution-
+  // engine.ts:2230), so no ungated path exists.
+  chosenNetEv?: number;
+  chosenEntryMode?: 'maker' | 'taker';  // logging/telemetry only — never gated on
 }
 
 export interface SQEOptions {
@@ -313,10 +323,27 @@ export async function evaluateSignalQuality(input: SQEInput, options: SQEOptions
     ? getPatternPoolGuardrailsForAssetClass(input.assetClass).FINAL_SCORE_FLOOR
     : thresholds.finalScoreMin;                    // 0.35 for quant (default)
 
+  // P19-B8.5a (OBJ-5): the finalScore GATE is RETIRED (Kyle-ratified crew consensus 2026-07-13,
+  // P25_SCORING_STACK_PRESTUDY §7: intent REDUNDANT — composites feed EV gates, never replace
+  // them; finalScore measured anti-predictive r=−0.140). finalScore keeps being COMPUTED and its
+  // would-have-rejected verdict is SHADOW-LOGGED through the paper period — the formal field-kill
+  // ruling comes post-paper on this log's evidence. The thresholds stay resolvable as shadow-only
+  // knobs (getSQEThresholdsFromConfig unchanged); NOTHING is pushed to failures here.
   if (finalScore < effectiveMinFinalScore) {
-    failures.push(`FinalScore ${finalScore.toFixed(4)} < ${effectiveMinFinalScore} (${input.sourcePool === 'pattern' ? 'pattern' : 'quant'} threshold)`);
+    console.log(`[P19-B8.5a][SQE][FINALSCORE_SHADOW] ${canonicalSymbol}/${input.strategy}: would-have-rejected — FinalScore ${finalScore.toFixed(4)} < ${effectiveMinFinalScore} (${input.sourcePool === 'pattern' ? 'pattern' : 'quant'} threshold; gate retired, log-only)`);
   }
-  
+
+  // P19-B8.5a (OBJ-3): NET-EXPECTANCY ADMISSION GATE — the number we rank on is the number that
+  // admits (Kyle directive 2026-07-13: the net-EV gate belongs in the SQE). Pure sign check on the
+  // UPSTREAM-computed best-of-both chosenNetEv (calc-free preserved — see SQEInput.chosenNetEv).
+  // SQE = the admission AUTHORITY; the [11.8B] open-gate remains STILL-BLOCKS as the drift
+  // backstop (Kyle default — its reject counter is the GATES-DRIFTED alarm, expected ~0).
+  // ABSENT chosenNetEv → skip (fail-open, Langston-ratified; [11.8B]'s taker-leg fallback still
+  // nets legacy rows — no ungated lifecycle).
+  if (input.chosenNetEv != null && !(input.chosenNetEv > 0)) {
+    failures.push(`NetEV ${input.chosenNetEv.toFixed(6)} <= 0 (chosen ${input.chosenEntryMode ?? 'taker'} mode — non-positive net expectancy after friction)`);
+  }
+
   // Directive 11.0B: RegimeWeight check
   if (regimeWeight < thresholds.regimeWeightMin) {
     failures.push(`RegimeWeight ${regimeWeight.toFixed(4)} < ${thresholds.regimeWeightMin}`);
@@ -476,12 +503,20 @@ export function evaluateSignalQualitySync(input: SQEInput, thresholds?: { finalS
     });
   }
   
+  // P19-B8.5a (OBJ-5): finalScore gate RETIRED in the sync variant too (semantic parity with the
+  // async path) — shadow-log only. See the async block for the full rationale + consensus cite.
   if (finalScore < config.finalScoreMin) {
-    failures.push(`FinalScore ${finalScore.toFixed(4)} < ${config.finalScoreMin}`);
+    console.log(`[P19-B8.5a][SQE][FINALSCORE_SHADOW] ${canonicalSymbol}/${input.strategy}: would-have-rejected — FinalScore ${finalScore.toFixed(4)} < ${config.finalScoreMin} (gate retired, log-only; sync)`);
   }
-  
+
   if (regimeWeight < config.regimeWeightMin) {
     failures.push(`RegimeWeight ${regimeWeight.toFixed(4)} < ${config.regimeWeightMin}`);
+  }
+
+  // P19-B8.5a (OBJ-3): net-expectancy admission gate — sync-variant parity (pure sign check on the
+  // upstream-computed chosenNetEv; absent → skip, fail-open per Langston Step-2).
+  if (input.chosenNetEv != null && !(input.chosenNetEv > 0)) {
+    failures.push(`NetEV ${input.chosenNetEv.toFixed(6)} <= 0 (chosen ${input.chosenEntryMode ?? 'taker'} mode — non-positive net expectancy after friction)`);
   }
   
   // Directive 11.7A Task 3: Regime-Aware ROI Gate (SQE parity with VTS) - Sync version

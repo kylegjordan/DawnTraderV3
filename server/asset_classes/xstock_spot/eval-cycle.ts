@@ -747,7 +747,12 @@ export async function evaluateXstockPairForVTS(
           minPWin: getCachedNumberRequired('expectancy_kernel', 'pwin_floor', _XSTOCK_GK),
           maxPWin: getCachedNumberRequired('expectancy_kernel', 'pwin_ceiling', _XSTOCK_GK),
           diPWinFactor: getCachedNumberRequired('directional_integrity', 'di_pwin_factor', _XSTOCK_GK),
-          signalStrength: finalScore,
+          // P19-B8.5a (OBJ-1, FIX-1): the measured flat pWin base rate (per-class DB knob) —
+          // the FOURTH signalStrength site (found at implementation; the Step-2 enumeration
+          // said three). Same de-tinting as gen/RTB-refresh/crypto-VTS: the anti-predictive
+          // finalScore no longer tints this lane's chosenNetEV either.
+          signalStrength: getCachedNumberRequired('scoring_base', 'flat_pwin_base',
+            { exchange: '*', assetClass: ASSET_CLASS, strategy: '*', regime: '*' }),
           urgencyClass: entryUrgencyClassForFamily(STRATEGY_FAMILY_MAP[normalizeStrategy(strategyKey)]),
           haircut: resolveMakerTakerHaircut(ASSET_CLASS),
         });
@@ -928,6 +933,14 @@ export async function evaluateXstockPairForVTS(
           // pending maker is born state='pending' resting at the limit + deadline.
           chosenEntryMode: _xEffectiveMode,
           entryFeeRate: _xEffectiveMode === 'maker' ? _xFriction.feeRateMaker : _xFriction.feeRateTaker,
+          // P19-B8.5a (OBJ-2, FIX-2): honest calibration snapshot (xstock lane — crypto parity).
+          // realDiAtOpen: the FX5 pool is crypto-only, so xStock has NO real-DI source today —
+          // honest NULL by construction, never fabricated (the xStock EV-input gap is the known
+          // reorg-B3 RUNNING_ISSUES item; a future xStock DI source fills this without a schema change).
+          realDiAtOpen: null,
+          kernelDiInputAtOpen: DI,                        // the proxy the kernel actually consumed
+          netEvAtOpen: _xMtDecision.chosenNetEV,          // the best-of-both EV the floor gated on
+          predictedPwinAtOpen: _xMtDecision.taker.pWin,   // kernel taker-leg pWin (exposed)
           ...(_xPendingMaker ? {
             state: 'pending' as const,
             makerLimitPrice: entryPrice,

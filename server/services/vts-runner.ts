@@ -661,6 +661,22 @@ interface OpenVirtualTrade {
   atrAtOpen?: number;
   diAtOpen?: number;
   volNoiseAtOpen?: number;
+  // P19-B8.5a (OBJ-2, FIX-2): the HONEST calibration snapshot at open — fixes FINDING B
+  // (the kernel's VTS "DI" was predictiveConfidence×100 and diAtOpen a hardcoded 50, so
+  // real DI was never persisted and DI-axis calibration from VTS history is impossible).
+  // realDiAtOpen = the FX5 pool's real DI where the symbol is in the pool (fills once
+  // paper-active runs; honest NULL during pure-passive — never fabricated).
+  // kernelDiInputAtOpen = the value the kernel ACTUALLY consumed as DI (the proxy today),
+  // so the calibrator can distinguish real-DI rows from proxy rows.
+  // netEvAtOpen = the best-of-both chosenNetEV the VTS gate evaluated.
+  // predictedPwinAtOpen = the kernel's taker-leg pWin (exposed, not recomputed).
+  // Persistence: rides the record → vts_open_trades `context` jsonb + the closed-trade
+  // JSON store (the calibration reader — same store the §4 probe read). No migration;
+  // typed-column promotion is Phase-25's call if the calibrator wants SQL.
+  realDiAtOpen?: number | null;
+  kernelDiInputAtOpen?: number;
+  netEvAtOpen?: number;
+  predictedPwinAtOpen?: number;
   // B65.4 (2026-04-25): live ladder rung count, updated by the engine
   // writeback in the exit loop. Propagated to closed-trade record on close.
   ladderRungsHit?: number;
@@ -1699,7 +1715,10 @@ async function generatePhase10Signal(
     minPWin:      getCachedNumberRequired('expectancy_kernel',     'pwin_floor',     _VTS_GK),
     maxPWin:      getCachedNumberRequired('expectancy_kernel',     'pwin_ceiling',   _VTS_GK),
     diPWinFactor: getCachedNumberRequired('directional_integrity', 'di_pwin_factor', _VTS_GK),
-    signalStrength: finalScore,
+    // P19-B8.5a (OBJ-1, FIX-1): the measured flat pWin base rate (per-class DB knob) — path
+    // symmetry with gen + RTB refresh; finalScore no longer tints the VTS chosenNetEV either.
+    signalStrength: getCachedNumberRequired('scoring_base', 'flat_pwin_base',
+      { exchange: '*', assetClass: _assetClass, strategy: '*', regime: '*' }),
     // P19-B7.2b (Langston Step-4 confirm B): canonicalize before the family lookup — the
     // shared decideMakerTaker urgency must key on the canonical strategy name (normalizeStrategy
     // cures the `range_trading`→`range_trade` drift; identity on already-canonical tokens), so a
@@ -2039,9 +2058,19 @@ async function generatePhase10Signal(
     vtsGateVerdict,
     // B65.2: snapshot volatility inputs at open for the trailing engine.
     // Defaults match the engine's own defaults when mceContext doesn't carry them.
+    // (diAtOpen stays 50 UNCHANGED — it is a live TRAILING-ENGINE input (:3649), not
+    // telemetry; changing it would change exit behavior. The honest capture is the
+    // NEW OBJ-2 fields below, which observe without touching any consumer.)
     atrAtOpen: mceContext.indicators.atr,
     diAtOpen: 50,
     volNoiseAtOpen: 0.3,
+    // P19-B8.5a (OBJ-2, FIX-2): honest calibration snapshot — see the interface note.
+    realDiAtOpen: (() => {
+      try { return activeFilterPool.getFX5DataForSymbol(symbol, 'paper')?.di ?? null; } catch { return null; }
+    })(),
+    kernelDiInputAtOpen: DI,                       // the proxy the kernel actually consumed
+    netEvAtOpen: _vtsMtDecision.chosenNetEV,       // the best-of-both EV the VTS gate used
+    predictedPwinAtOpen: _vtsMtDecision.taker.pWin, // kernel taker-leg pWin (exposed, not recomputed)
     // B65.4.2: capture the original stop at trade-open time so it survives
     // ratcheting and is available on closed-trade record + open-trade API.
     originalStopPrice: stopLoss,
@@ -3876,6 +3905,13 @@ export interface RegisterOpenVtsTradeInput {
   state?: 'pending';
   makerLimitPrice?: number;
   makerDeadline?: number;
+  // P19-B8.5a (OBJ-2, FIX-2): honest calibration snapshot — xstock-lane parity with
+  // crypto's inline open (see the OpenVirtualTrade interface note). Absent (legacy
+  // caller) → undefined; NEVER default-fabricated.
+  realDiAtOpen?: number | null;
+  kernelDiInputAtOpen?: number;
+  netEvAtOpen?: number;
+  predictedPwinAtOpen?: number;
 }
 
 /**
@@ -3930,6 +3966,11 @@ export async function registerOpenVtsTrade(input: RegisterOpenVtsTradeInput): Pr
     // opens keep the default 'open'. Absent (pre-B7.2d callers) → fields undefined.
     chosenEntryMode: input.chosenEntryMode,
     entryFeeRate: input.entryFeeRate,
+    // P19-B8.5a (OBJ-2): calibration-snapshot passthrough (xstock-lane parity).
+    realDiAtOpen: input.realDiAtOpen,
+    kernelDiInputAtOpen: input.kernelDiInputAtOpen,
+    netEvAtOpen: input.netEvAtOpen,
+    predictedPwinAtOpen: input.predictedPwinAtOpen,
     ...(input.state === 'pending' ? {
       state: 'pending' as const,
       makerLimitPrice: input.makerLimitPrice,

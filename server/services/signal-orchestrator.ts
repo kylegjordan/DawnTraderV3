@@ -743,9 +743,16 @@ export class SignalOrchestrator {
       minPWin:      getCachedNumberRequired('expectancy_kernel',     'pwin_floor',     _mtGlobalKey),
       maxPWin:      getCachedNumberRequired('expectancy_kernel',     'pwin_ceiling',   _mtGlobalKey),
       diPWinFactor: getCachedNumberRequired('directional_integrity', 'di_pwin_factor', _mtGlobalKey),
-      // Signal strength proxy = the deterministic FinalScore (0..1). Drives the
-      // adverse-selection slope + the hard taker floor.
-      signalStrength: extendedMetrics.finalScore,
+      // P19-B8.5a (OBJ-1, FIX-1): signalStrength = the MEASURED flat pWin base rate
+      // (per-class DB knob; crypto 0.295 / xstock 0.317 / global 0.307 — pinned to the
+      // 12,140-trade post-B62 probe). REPLACES the deterministic FinalScore, which is
+      // anti-predictive (r=−0.140) and was tinting chosenNetEv — the rank key AND the
+      // EV gates' number — with the retired composite. Drives the adverse-selection
+      // slope + the hard taker floor; a shift in some maker/taker picks is EXPECTED
+      // (intended de-tinting) — watched via the maker-pick-rate monitor at Step-7.
+      // PLACEHOLDER until the Phase-25 calibrated pWin (#399a); DB-governed per rule 15.
+      signalStrength: getCachedNumberRequired('scoring_base', 'flat_pwin_base',
+        { exchange: '*', assetClass: sizingContext.assetClass, strategy: '*', regime: '*' }),
       urgencyClass: entryUrgencyClassForFamily(STRATEGY_FAMILY_MAP[_canonicalStrategy]),
       haircut: resolveMakerTakerHaircut(sizingContext.assetClass),
     });
@@ -782,6 +789,11 @@ export class SignalOrchestrator {
       volatility: extendedMetrics.volatility ?? 0.3,
       regimeStability: sqeRegimeStability,  // HF9: For governance gate + confidence floor in SQE
       sourcePool: rawSignal.metadata?.sourcePool || undefined,
+      // P19-B8.5a (OBJ-3): the upstream-computed best-of-both netEV for the SQE's
+      // admission sign-check (gate-inside, calculation-outside — decideMakerTaker
+      // above stays the calc home per Kyle's P19-B7.2b placement).
+      chosenNetEv: _mtDecision.chosenNetEV,
+      chosenEntryMode: _mtDecision.chosenMode,
     };
 
     const sqeResult = await signalQualityEvaluator.evaluate(sqeInput);

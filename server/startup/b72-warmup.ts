@@ -123,6 +123,14 @@ const PREFETCH_MODULES = [
   // (CONSERVATIVE PLACEHOLDERS pending Phase-25 calibration); fail-hard on
   // missing rows per rule 15.
   'friction_divergence',
+  // P19-B8.5a (OBJ-1): the flat measured pWin base rate that replaces finalScore as
+  // decideMakerTaker's signalStrength (de-contamination — finalScore is anti-predictive,
+  // r=−0.140). Per-class rows (crypto 0.295 / xstock 0.317) + wildcard 0.307, pinned to
+  // OLD Claude's 12,140-trade post-B62 probe (P25_SCORING_STACK_PRESTUDY §4; Wilson CIs
+  // in the seed migration). PLACEHOLDER until the Phase-25 calibrated pWin (#399a) — a
+  // DB knob so recalibration is a SQL UPDATE, never a code edit (rule 15). Read
+  // synchronously in the signal-gen + RTB-refresh + VTS hot paths. MUST be warm.
+  'scoring_base',
   // Future: more Slice 2/3/4 modules added here as source replacements ship.
 ];
 

@@ -867,7 +867,11 @@ class ReadyToBuyService {
           minPWin:      getCachedNumberRequired('expectancy_kernel',     'pwin_floor',     _mtGK),
           maxPWin:      getCachedNumberRequired('expectancy_kernel',     'pwin_ceiling',   _mtGK),
           diPWinFactor: getCachedNumberRequired('directional_integrity', 'di_pwin_factor', _mtGK),
-          signalStrength: refreshedFinalScore,
+          // P19-B8.5a (OBJ-1, FIX-1): the measured flat pWin base rate (per-class DB knob),
+          // NOT the decayed finalScore — same de-tinting as gen-time (signal-orchestrator),
+          // keeping the refresh re-decide same-vintage with generation.
+          signalStrength: getCachedNumberRequired('scoring_base', 'flat_pwin_base',
+            { exchange: '*', assetClass: geomClass, strategy: '*', regime: '*' }),
           // P19-B7.2b (Langston Step-4 confirm B): canonicalize the strategy key so the
           // refresh re-decide keys STRATEGY_FAMILY_MAP on the SAME canonical name gen-time
           // used (orchestrator's `_canonicalStrategy`, signal-orchestrator.ts:474). rtb_signals
@@ -917,6 +921,14 @@ class ReadyToBuyService {
       regimeWeight: regimeWeight,
       trendStrength: metadata.trendStrength ?? 0.5,
       volatility: currentVol,
+      // P19-B8.5a (OBJ-3): net-EV admission at refresh — prefer THIS tick's re-decide
+      // (the decideMakerTaker re-run directly above, geometry-shifted case), else the
+      // stored row snapshot. Absent (legacy row) → the SQE check skips (fail-open,
+      // Langston-ratified; the [11.8B] taker-leg fallback still nets it at open).
+      chosenNetEv: _b72bRefreshedMT?.chosenNetEV
+        ?? ((signal as any).chosenNetEv != null ? Number((signal as any).chosenNetEv) : undefined),
+      chosenEntryMode: (_b72bRefreshedMT?.chosenMode
+        ?? ((signal as any).chosenEntryMode as 'maker' | 'taker' | undefined)) ?? undefined,
     };
 
     const sqeResult = await signalQualityEvaluator.evaluate(sqeInput);
@@ -1171,6 +1183,11 @@ class ReadyToBuyService {
                 regimeWeight: regimeWeight,
                 trendStrength: metadata.trendStrength ?? 0.5,
                 volatility: metadata.volatility ?? 0.3,
+                // P19-B8.5a (OBJ-3): the ★third call site (batch refresh — Step-2 enumeration
+                // found it; the consensus said two). No re-decide runs on this path, so feed
+                // the stored row snapshot; absent → fail-open (Langston-ratified).
+                chosenNetEv: (signal as any).chosenNetEv != null ? Number((signal as any).chosenNetEv) : undefined,
+                chosenEntryMode: ((signal as any).chosenEntryMode as 'maker' | 'taker' | undefined) ?? undefined,
               };
               
               const sqeResult = await signalQualityEvaluator.evaluate(sqeInput);
