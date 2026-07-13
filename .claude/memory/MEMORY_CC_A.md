@@ -4,6 +4,8 @@
 
 > **★ 2026-07-13 SCORING-STACK RESEARCH — DELIVERED (Part I §0-§5: verified pipeline, FIX-1..8, dead-code table, pWin probe 12,140 trades = ordering absent-to-inverted, FIX-8 B1 confidence→sizing 4×, consensus §4b, feeder map §4d). Repo doc `P25_SCORING_STACK_PRESTUDY.md` is the authoritative record — do not re-derive from memory.**
 
+> **★ PART II SCORING REDESIGN — KYLE-RATIFIED 2026-07-13** (as-folded at 67ea26428, recorded in-doc 6f7fc24c7; 11.8B stays STILL-BLOCKS). Two-layer architecture: equal-weight ensemble = MODEL → 1-D Platt pWin = CALIBRATOR (one Phase-25 deliverable); NOTHING sizes on pWin at switch-on; hierarchical EB fallback for regime tables; §9 DB-migration checklist; backtest-baseline stage before paper calibration. **Prep-then-switch-on GO: structural batch = P19-B8.5a (CC-B owns, LIVE, architecture class). MY NEXT ACTION = Step-4 of its diff — lens: §4b conditions 1-4 + B1 + the §4d hybridScore→confidence propagation.** Numeric recalibration homed 25-4 + #399. Legacy-deletion (FIX-5) = future rule-18 batch, owner TBD.
+
 # MEMORY — OLD Claude (CC-A) volatile working-state
 
 > OWNED by OLD Claude (CC-A), session `3ce652e6` (comms/roadmap/governance). Read this + shared `MEMORY.md` (protocols) at session-start; write volatile state ONLY here. CC-B owns `MEMORY_CC_B.md`. Detailed fee/strategy scratch: `_scratch_xstock_globals_resume.md`. Mirror to `.claude/memory/`.
