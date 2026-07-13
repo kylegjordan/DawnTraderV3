@@ -510,3 +510,8 @@ Archive: git history is authoritative (this is a field-retirement within live fi
 **Blast-radius verification:** `predictiveConfidence` appears ONLY on removal lines in the diff (single-diff proof, Langston Step-4 per-point AGREE); bench tsc baseline OK; vitest 2244/0; CI 4-green run 29268986981; deployed commit `3aab09d99`.
 **Known residual (flagged, NOT silently reconciled):** crypto DI and xstock DI are TWO DIFFERENT FORMULAS sharing one name (trend-straightness `|net|/path` vs signed direction `(net/abs)×50+50`) — divergence homed at #502 (Phase-25 calibration arc).
 **Archive:** git history is the authoritative archive (inline expressions; no `.removed` file applicable).
+
+## B-OPS-PM2-LOG (#499) — 3 stale log-file artifacts deleted 2026-07-13 (CC-A, Langston-approved)
+- `/home/deploy/.pm2/logs/dawntrader-out.log` (1.5GB, frozen 2026-04-03) — abandoned old default location, orphaned when pm2 log paths moved to `/var/log/dawntrader/`; no open holder (verified). 
+- `/home/deploy/.pm2/logs/ml-service-error.log` (288MB) + `ml-service-out.log` (9.8MB) — the ml predictive microservice was RETIRED in B-NEW-54; the pm2 God daemon still held write fds (fd24/fd3), so `rm` + `pm2 reloadLogs` were both required to release the inodes. 
+- Blast-radius: none — pm2 configured paths point at `/var/log/dawntrader/{out,error}.log`; no live consumer. ~1.86GB reclaimed. git history is not the archive here (runtime log artifacts, not code).
