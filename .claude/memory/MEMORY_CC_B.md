@@ -34,6 +34,7 @@ Claude New (CC-B). Discord display name **"NEW Claude"** (exact `--sender` value
 - Anti-false-absence hooks (`.claude/hooks/guard-governed-read.mjs` + `session-reminder.mjs`) live from next session start; tracked settings.local.json → both CC sessions.
 
 ## RECENT BATCH HISTORY (one-liners; repo docs authoritative)
+- **P19-B8.5c (07-14):** #503 friction-units fix — BOTH standalone VTS kernel calls DELETED (one site = decideMakerTaker); 938→0 impossibility split at deploy boundary 2026-07-14T10:14:49Z (⚠ whole-day VTS telemetry counts filter there); CLEAN VTS-EV cohort starts 07-14 (with #500 DI boundary). Kyle acked the investigation; batch Langston Step-1/2/4/8 ALL PASS. `P19_B8_5c_COMPLETION_REPORT.md`.
 - **P19-B8.5b (07-13):** pre-flip capture + gate-feed — see CURRENT STATE. `P19_B8_5b_COMPLETION_REPORT.md`.
 - **P19-B8.5a (07-13):** switch-on prep — netEV admission into the SQE, flat-pWin ranker knobs, finalScore→shadow, confidence-sizing severed, honest VTS capture fields. `P19_B8_5a_COMPLETION_REPORT.md`.
 - **B-GOV-ORPHAN-CLASS (07-13):** checker disposition honesty — class-override parse + class-aware orphan-sweep + per-tick store-reconcile + posix git-path; #497+#352 resolved; the 102-stale-keys reconcile + 5 re-mints dispositioned (3 false re-opens left alone, 2 pending→langston). `B_GOV_ORPHAN_CLASS_COMPLETION_REPORT.md`.
