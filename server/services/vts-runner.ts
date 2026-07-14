@@ -36,7 +36,6 @@ import { ScanYielder } from './scan-yield.js';
 // B72 (2026-05-05): VTS runner caps + cooldowns from module='vts_runner'.
 import { getCachedNumberRequired } from './module-constants-service.js';
 // Directive 11.8B-A2: Import canonical Net EV kernel for VTS profitability decisions
-import { computeNetExpectancyKernel } from '../core/calculations/net-expectancy-kernel.js';
 // Note: isSignalProfitable is retained as a regime-aware ROI pre-filter (not EV math)
 import { isSignalProfitable, getROIDetails, getDynamicROIThreshold, getPerClassTargetGate } from '../core/calculations/expectancy.js';
 // reorg-B2 (Piece A): shared central target-floor normalizer (applied at the VTS convergence point).
@@ -1664,36 +1663,22 @@ async function generatePhase10Signal(
   const costMetrics = getCachedCostMetrics(symbol, _assetClass);
   const frictionCost = (costMetrics.fee * 2) + (costMetrics.slippage * 2) + costMetrics.spread;
   
-  // ══════════════════════════════════════════════════════════════════════════════
-  // Directive 11.8B-A2: Canonical Net EV Gate using computeNetExpectancyKernel()
-  // VTS must use identical math as DSS and Paper Execution for EV decisions
-  // ══════════════════════════════════════════════════════════════════════════════
   const estimatedSlippage = costMetrics.slippage || 0.001;
-  // Canonical friction formula: 2 × fee + 2 × slippage + spread (round-trip costs)
-  const totalFriction = (costMetrics.fee * 2) + (estimatedSlippage * 2) + spread;
-  
+
   // P19-B8.5b (OBJ-3, #500): the predictiveConfidence×100 DI proxy is DELETED (rule 18 —
   // it was a 2026-02-03 carry-gap patch, e4ce3c55f, that fed the kernel a confidence-derived
   // stand-in and made VTS/active EV apples-to-oranges — FINDING B). The kernel now consumes
   // the REAL scanner-computed DI carried on the scan-batch pair (propagatedDi — the same B63
   // hard contract DBS rides). undefined → the kernel's documented DI default; NEVER fabricated.
   const DI = propagatedDi;
-  
-  const kernelResult = computeNetExpectancyKernel({
-    entryPrice,
-    stopPrice: stopLoss,
-    targetPrice: takeProfit,
-    totalFriction,
-    DI,
-    // B63: Path-aware pWin for Path D. Strong-trend signals use DBS magnitude (not DI) for win probability.
-    sourcePool,
-    dbsScore: propagatedDbs?.score,
-    // B72: caller-injected pWin params (preserves kernel purity).
-    minPWin:      getCachedNumberRequired('expectancy_kernel',     'pwin_floor',     _VTS_GK),
-    maxPWin:      getCachedNumberRequired('expectancy_kernel',     'pwin_ceiling',   _VTS_GK),
-    diPWinFactor: getCachedNumberRequired('directional_integrity', 'di_pwin_factor', _VTS_GK),
-  });
-  
+
+  // P19-B8.5c (#503): the STANDALONE computeNetExpectancyKernel call that lived here is
+  // DELETED (rule 18, DELETED_COMPONENTS_LOG 2026-07-14). It passed `totalFriction` as a
+  // round-trip FRACTION where the kernel contract requires PRICE-UNIT dollars, mis-scaling
+  // friction by ~entryPrice× (direction flips at $1). The ONE computation site is now the
+  // shared decideMakerTaker below, whose taker leg multiplies correctly (×entryPrice) —
+  // every former kernelResult consumer reads `_vtsMtDecision.taker.*` / `.chosenNetEV`.
+
   // ══════════════════════════════════════════════════════════════════════════════
   // P19-B7.2b (OBJ-A): the SHARED maker/taker best-of-both entry decision.
   // The VTS calls the SAME `decideMakerTaker` the active path uses (F6 — one shared
@@ -1702,11 +1687,12 @@ async function generatePhase10Signal(
   // SHARED across active-live, active-paper, AND the VTS). NOTE (Kyle 2026-07-01): the
   // VTS has NO SQE — this decision is standalone and unrelated to the SQE; on the
   // ACTIVE path the shared decision sits just BEFORE the SQE (not inside it — the SQE
-  // stays calculation-free, a pure quality gate). The taker leg passes the SAME inputs
-  // the kernel above just used (identical DI / sourcePool / dbsScore / pWin params /
-  // canonical friction), so `decision.takerNetEV` == `kernelResult.netEV` — only the
-  // maker leg + the haircut are new. Data-fenced: VTS maker fills are model-vs-model
-  // (non-calibration); real adverse selection is Phase-21.
+  // stays calculation-free, a pure quality gate). P19-B8.5c (#503): this decision is
+  // the lane's ONLY kernel-computation site (the former standalone call above is
+  // deleted — it carried the fraction-as-dollars friction units bug); `decision.taker`
+  // is the full taker-leg kernel decomposition every downstream consumer reads.
+  // Data-fenced: VTS maker fills are model-vs-model (non-calibration); real adverse
+  // selection is Phase-21.
   // ══════════════════════════════════════════════════════════════════════════════
   const _vtsFriction = getFrictionForAssetClass(_assetClass);
   const _vtsMtDecision = decideMakerTaker({
@@ -1744,9 +1730,8 @@ async function generatePhase10Signal(
   // Active trading still uses strict netEV > 0 (in signal-orchestrator.ts)
   // VTS allows marginally negative EV for ML boundary learning
   // Signals with slightly negative EV teach the model where the profitability edge is
-  // P19-B7.2b (OBJ-A): gate on the CHOSEN best-of-both netEV (not the taker-only
-  // kernelResult) — a taker-marginal / maker-better signal is evaluated on its best
-  // option, consistent with the active path.
+  // P19-B7.2b (OBJ-A): gate on the CHOSEN best-of-both netEV — a taker-marginal /
+  // maker-better signal is evaluated on its best option, consistent with the active path.
   if (_vtsMtDecision.chosenNetEV <= VTS_NET_EV_FLOOR) {
     logSkippedSignal({
       symbol,
@@ -1756,7 +1741,9 @@ async function generatePhase10Signal(
       strategy,
       source: 'VTS'
     });
-    console.log(`[18L][NetEV] Skipping ${symbol}: chosen ${_vtsMtDecision.chosenMode} Net EV=${_vtsMtDecision.chosenNetEV.toFixed(6)} <= ${VTS_NET_EV_FLOOR} (taker=${kernelResult.netEV.toFixed(6)}, rawEV=${kernelResult.rawEV.toFixed(6)}, friction=${totalFriction.toFixed(6)})`);
+    // P19-B8.5c (#503): taker/rawEV/friction now read from the decision's taker leg —
+    // the single kernel site; friction prints in PRICE-UNIT dollars (was a fraction).
+    console.log(`[18L][NetEV] Skipping ${symbol}: chosen ${_vtsMtDecision.chosenMode} Net EV=${_vtsMtDecision.chosenNetEV.toFixed(6)} <= ${VTS_NET_EV_FLOOR} (taker=${_vtsMtDecision.taker.netEV.toFixed(6)}, rawEV=${_vtsMtDecision.taker.rawEV.toFixed(6)}, friction=${_vtsMtDecision.taker.totalCost.toFixed(6)})`);
     // Batch 50: Mark as post-signal rejection so caller doesn't count as strategy null
     setNullReason('net_ev_rejected');
     return null;
@@ -2180,11 +2167,13 @@ async function generatePhase10Signal(
     pool,
     source: 'vts', // Phase 14: Source tag for fresh VTS data (legacy 'simulation' records flagged by migration)
     // P19-B3b: attach the computed net expected value so the caller-side Net-EV
-    // floor check (Batch 26, ~line 3746) actually works. The kernel computes netEV
-    // here (line ~1267 / 1289) and rejects below-floor inside, but never attached it
-    // to the returned signal — so the caller-side `signal.netEV !== undefined` guard
-    // was permanently false (dead branch). Now it's a real, surfaced value.
-    netEV: kernelResult.netEV,
+    // floor check (Batch 26, ~line 3746) actually works (it was a dead branch before).
+    // P19-B8.5c (#503, Langston-blessed): attach the CHOSEN best-of-both netEV — the
+    // SAME number this lane's primary floor gated above — so the caller-side guard is
+    // a consistent re-check of the identical value, never a second opinion. (In the
+    // maker-chosen case this differs from the taker leg BY DESIGN: the signal carries
+    // what the gate actually used.)
+    netEV: _vtsMtDecision.chosenNetEV,
   };
   
   // Directive 11.6: Trade record marked as pending - exit determined by resolveOpenVirtualTrades()

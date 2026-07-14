@@ -75,7 +75,6 @@ import { evaluateXstockGlobalFilter } from './global-filter.js';
 import { evaluateXstockFamilyIMF } from './imf-evaluator.js';
 import { evaluateXstockPatternFilter } from './pattern-filter.js';
 import { scanPatterns } from '../../services/pattern-recognizer.js';
-import { computeNetExpectancyKernel } from '../../core/calculations/net-expectancy-kernel.js';
 // reorg-B3.3x (2026-06-24): the SHARED VTS gate (reorg-B2 normalizer + reorg-B3.2 tag-don't-drop +
 // reorg-B3.3y target<=entry validity) — the same one crypto vts-runner runs. Unifies xStock VTS gating
 // onto the one SSOT instead of a hand-rolled second copy (Langston Option B).
@@ -728,39 +727,31 @@ export async function evaluateXstockPairForVTS(
         // Carrying each lane's native value is the honest cut; unifying the formula is a
         // Phase-25 scoring question, recorded at this batch's close.
         const DI = laneRealDi;
-        let kernelResult;
-        try {
-          kernelResult = computeNetExpectancyKernel({
-            entryPrice,
-            stopPrice: stopLoss,
-            targetPrice: takeProfit,
-            totalFriction,
-            DI,
-            sourcePool: lane.sourcePool,
-            minPWin: getCachedNumberRequired('expectancy_kernel', 'pwin_floor', _XSTOCK_GK),
-            maxPWin: getCachedNumberRequired('expectancy_kernel', 'pwin_ceiling', _XSTOCK_GK),
-            diPWinFactor: getCachedNumberRequired('directional_integrity', 'di_pwin_factor', _XSTOCK_GK),
-          });
-        } catch (kernelErr) {
-          counters.errors++;
-          console.warn(`[B79.0m.b2][EVAL_KERNEL_FAIL] ${symbol}/${strategyKey} lane=${lane.sourcePool}: ${kernelErr instanceof Error ? kernelErr.message : kernelErr}`);
-          continue;
-        }
+        // P19-B8.5c (#503): the STANDALONE computeNetExpectancyKernel call that lived here
+        // is DELETED (rule 18, DELETED_COMPONENTS_LOG 2026-07-14). It passed `totalFriction`
+        // as a round-trip FRACTION where the kernel contract requires PRICE-UNIT dollars,
+        // under-penalizing every >$1 xStock by ~entryPrice× (the 07-03 admit collapse was
+        // this bug's correction arriving via the B7.2d gate switch, not a regression). The
+        // ONE computation site is the shared decideMakerTaker below (its taker leg
+        // multiplies correctly, ×entryPrice); every former kernelResult consumer reads
+        // `_xMtDecision.taker.*` / `.chosenNetEV`. The fraction `totalFriction` above
+        // SURVIVES for its two RATE consumers only (checkPreOpenGates, which multiplies by
+        // price itself, and the payload rate fields) — never as a kernel input.
 
         // ══════════════════════════════════════════════════════════════════════
         // P19-B7.2d (#434): the SHARED maker/taker best-of-both entry decision —
-        // the SAME `decideMakerTaker` the crypto VTS lane (vts-runner :1688) and
-        // the active path run, placed HERE at parity: after the kernel, BEFORE
-        // the Net-EV floor, so the floor gates on the best-of-both `chosenNetEV`
-        // (a taker-marginal / maker-better signal is evaluated on its best
-        // option). Inputs mirror the kernel call above (identical DI/sourcePool/
-        // pWin params/costs) so `decision.takerNetEV` corresponds to the taker
-        // leg the kernel just priced. Canonical strategy key via normalizeStrategy
-        // (the B7.2b confirm-B discipline: urgency must never collapse to default
-        // off a drifted raw token).
+        // the SAME `decideMakerTaker` the crypto VTS lane and the active path run,
+        // BEFORE the Net-EV floor, so the floor gates on the best-of-both
+        // `chosenNetEV`. P19-B8.5c (#503): this is now the lane's ONLY kernel-
+        // computation site (the former standalone call is deleted — it carried the
+        // fraction-as-dollars friction units bug); `_xMtDecision.taker` is the full
+        // taker-leg kernel decomposition every downstream consumer reads. Canonical
+        // strategy key via normalizeStrategy (the B7.2b confirm-B discipline).
         // ══════════════════════════════════════════════════════════════════════
         const _xFriction = getFrictionForAssetClass(ASSET_CLASS);
-        const _xMtDecision = decideMakerTaker({
+        let _xMtDecision;
+        try {
+          _xMtDecision = decideMakerTaker({
           entryPrice,
           stopPrice: stopLoss,
           targetPrice: takeProfit,
@@ -780,7 +771,14 @@ export async function evaluateXstockPairForVTS(
             { exchange: '*', assetClass: ASSET_CLASS, strategy: '*', regime: '*' }),
           urgencyClass: entryUrgencyClassForFamily(STRATEGY_FAMILY_MAP[normalizeStrategy(strategyKey)]),
           haircut: resolveMakerTakerHaircut(ASSET_CLASS),
-        });
+          });
+        } catch (kernelErr) {
+          // P19-B8.5c: reject-on-throw parity with the deleted standalone kernel call —
+          // a failed EV computation drops the candidate loudly, never opens on a guess.
+          counters.errors++;
+          console.warn(`[B79.0m.b2][EVAL_KERNEL_FAIL] ${symbol}/${strategyKey} lane=${lane.sourcePool}: ${kernelErr instanceof Error ? kernelErr.message : kernelErr}`);
+          continue;
+        }
         console.log(`[P19-B7.2b][VTS][MAKER_TAKER] ${symbol}/${strategyKey}: chose ${_xMtDecision.chosenMode} (taker=${_xMtDecision.takerNetEV.toFixed(6)}, maker-adj=${_xMtDecision.makerNetEVAdjusted.toFixed(6)})`);
 
         if (_xMtDecision.chosenNetEV <= VTS_NET_EV_FLOOR) {
@@ -822,7 +820,7 @@ export async function evaluateXstockPairForVTS(
                 // construction, so both are below the floor on this reject path).
                 netEv: _xMtDecision.chosenNetEV,
                 chosenMode: _xMtDecision.chosenMode,
-                takerNetEv: kernelResult.netEV,
+                takerNetEv: _xMtDecision.taker.netEV, // P19-B8.5c (#503): the single kernel site's taker leg (honest price-unit dollars)
                 netEvFloor: VTS_NET_EV_FLOOR,
               },
               features: { sourcePool: lane.sourcePool, macro: buildMacroSnapshot() }, // P19-B5b #94
@@ -1036,7 +1034,7 @@ export async function evaluateXstockPairForVTS(
               // for row-comparability with pre-B7.2d records.
               netEv: _xMtDecision.chosenNetEV,
               chosenMode: _xMtDecision.chosenMode,
-              takerNetEv: kernelResult.netEV,
+              takerNetEv: _xMtDecision.taker.netEV, // P19-B8.5c (#503): the single kernel site's taker leg (honest price-unit dollars)
             },
             // B-NEW-53.2 (#208): at-entry economics + context, mirroring the crypto
             // B70.2 admitted-features key SET so a Phase-25 cross-class query reads ONE
@@ -1070,8 +1068,8 @@ export async function evaluateXstockPairForVTS(
               hybridScore,
               predictiveConfidence,
               regimeWeight,
-              expectedEdge: kernelResult.netEV, // price-space (see UNITS note above)
-              netRewardToRisk: kernelResult.netRewardToRisk, // kernel-native scale-free
+              expectedEdge: _xMtDecision.taker.netEV, // price-space, honest dollars since P19-B8.5c (#503; pre-fix rows carry the fraction-friction cohort)
+              netRewardToRisk: _xMtDecision.taker.netRewardToRisk, // kernel-native scale-free (single site since P19-B8.5c)
               decayPenalty,
               // Regime + bias (global-market fields are crypto-only, resolved post-hook)
               globalRegime: null,
@@ -1136,7 +1134,7 @@ export async function evaluateXstockPairForVTS(
           if (lane.kind === 'pattern') (counters as any).patternTradesOpened = ((counters as any).patternTradesOpened ?? 0) + 1;
           else (counters as any).quantTradesOpened = ((counters as any).quantTradesOpened ?? 0) + 1;
           counters.byStrategy[strategyKey].trades++;
-          console.log(`[B79.0m.b2][EVAL] ${symbol} (xstock_spot) regime=${regime} strategy=${strategyKey} lane=${lane.sourcePool} netEV=${kernelResult.netEV.toFixed(4)} mode=${_xEffectiveMode}${_xPendingMaker ? ' (pending)' : ''} → trade ${tradeId} opened`);
+          console.log(`[B79.0m.b2][EVAL] ${symbol} (xstock_spot) regime=${regime} strategy=${strategyKey} lane=${lane.sourcePool} netEV=${_xMtDecision.chosenNetEV.toFixed(4)} mode=${_xEffectiveMode}${_xPendingMaker ? ' (pending)' : ''} → trade ${tradeId} opened`);
           // P19-B7.2d (#434): open the NON-chosen leg as a tagged twin through the
           // SHARED maybeOpenTwin seam (the same helper crypto's lane calls — parity by
           // construction; degenerate skips + kill-knob + TWIN_FAIL isolation inside).

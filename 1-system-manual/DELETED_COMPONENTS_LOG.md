@@ -515,3 +515,13 @@ Archive: git history is authoritative (this is a field-retirement within live fi
 - `/home/deploy/.pm2/logs/dawntrader-out.log` (1.5GB, frozen 2026-04-03) — abandoned old default location, orphaned when pm2 log paths moved to `/var/log/dawntrader/`; no open holder (verified). 
 - `/home/deploy/.pm2/logs/ml-service-error.log` (288MB) + `ml-service-out.log` (9.8MB) — the ml predictive microservice was RETIRED in B-NEW-54; the pm2 God daemon still held write fds (fd24/fd3), so `rm` + `pm2 reloadLogs` were both required to release the inodes. 
 - Blast-radius: none — pm2 configured paths point at `/var/log/dawntrader/{out,error}.log`; no live consumer. ~1.86GB reclaimed. git history is not the archive here (runtime log artifacts, not code).
+
+---
+
+## 2026-07-14 — the two standalone VTS `computeNetExpectancyKernel` calls (#503, P19-B8.5c)
+
+**Removed by:** CC-B, P19-B8.5c (Langston Step-2 PROCEED — his design ruling: "deleting both standalone calls and re-pointing to `decision.taker.*` is structurally sound — the drift class dies because there's no second site left to keep in lockstep").
+**What:** the lane-local kernel invocations at `server/services/vts-runner.ts` (~:1682, Directive 11.8B-A2 era) and `server/asset_classes/xstock_spot/eval-cycle.ts` (~:733, B79.0m.b2 era), plus their now-unused imports and the two false comments claiming `decision.takerNetEV == kernelResult.netEV`.
+**Why:** both passed `totalFriction` as a round-trip FRACTION where the kernel contract requires PRICE-UNIT dollars (`netEV = pWin·distTarget − pLoss·distStop − totalFriction`, distances in dollars) — friction mis-scaled by ~entryPrice×, direction flipping at $1. The gates had already been silently corrected by the B7.2b/d switch to `chosenNetEV`; these calls survived only as contaminated telemetry/archive feeders (#503).
+**Replaced with:** reads from the shared `decideMakerTaker` result — `taker: NetExpectancyKernelResult` carries the full decomposition (netEV/rawEV/netRewardToRisk/totalCost/pWin/distances); the crypto attached `signal.netEV` now carries `chosenNetEV` (the number the lane's floor actually gated — Langston-blessed, closes a latent taker-vs-chosen inconsistency). The fraction variables SURVIVE for their two legitimate RATE consumers (`checkPreOpenGates`, which multiplies by price itself, and the payload rate fields).
+**Blast-radius verification:** grep-proven consumer enumeration (pre-audit §2, every `kernelResult` token dispositioned); zero external callers (lane-local consts); reject-on-throw parity preserved (the xstock decision call gained the deleted call's try/catch semantics); admit-rate invariance asserted at Step-7. Archive: git history authoritative (inline call sites).
