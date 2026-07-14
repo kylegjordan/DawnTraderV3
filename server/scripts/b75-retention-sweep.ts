@@ -96,6 +96,7 @@ const B70_TABLES: B74TableSpec[] = [
   { parent: 'exit_decision_archive',   timestampColumn: 'captured_at', retentionConstantName: 'exit_decision_archive.hot_retention_days' },
   { parent: 'macro_feed_archive',      timestampColumn: 'captured_at', retentionConstantName: 'macro_feed_archive.hot_retention_days' },
   { parent: 'signal_eval_provenance',  timestampColumn: 'captured_at', retentionConstantName: 'signal_eval_provenance.hot_retention_days' },
+  { parent: 'switch_on_shadow_evidence', timestampColumn: 'captured_at', retentionConstantName: 'switch_on_shadow_evidence.hot_retention_days' }, // B-EVIDENCE-SINK: tiers hot→warm→cold like the others
 ];
 
 // All monthly-partitioned archive tables processed by the same export→warm→drop

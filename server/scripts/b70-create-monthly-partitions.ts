@@ -28,6 +28,7 @@ const PARTITIONED_TABLES = [
   'exit_decision_archive',
   'macro_feed_archive',
   'signal_eval_provenance', // B-NEW-53
+  'switch_on_shadow_evidence', // B-EVIDENCE-SINK (list now 7 tables)
 ] as const;
 
 const FORWARD_MONTHS = 12;
