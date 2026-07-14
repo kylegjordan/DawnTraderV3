@@ -1,0 +1,472 @@
+diff --git a/drizzle/migrations/MANIFEST.txt b/drizzle/migrations/MANIFEST.txt
+index ecd2d0689..f6a24bc0f 100644
+--- a/drizzle/migrations/MANIFEST.txt
++++ b/drizzle/migrations/MANIFEST.txt
+@@ -168,3 +168,4 @@
+ 2026-07-13-p19-b8-5a-scoring-base.sql
+ 2026-07-13-p19-b8-5b-provenance-scalars.sql
+ 2026-07-14-b-evidence-sink.sql
++2026-07-14-p19-b8-5-strategy-gates-crypto-seed.sql
+diff --git a/server/markets/kraken-asset-pairs-service.ts b/server/markets/kraken-asset-pairs-service.ts
+index 8f90174e0..d46d2a8f5 100644
+--- a/server/markets/kraken-asset-pairs-service.ts
++++ b/server/markets/kraken-asset-pairs-service.ts
+@@ -63,6 +63,12 @@ export interface AutoMappingEntry {
+   isHalted: boolean;
+   tier: MappingTier;          // Confidence tier
+   tierReason: string;         // Why this tier was assigned
++  // P19-B8.5 (OBJ-8): per-pair order-formatting metadata retained from the raw
++  // AssetPairs payload so the venue-validate leg formats price/volume to Kraken's
++  // OWN precision (a false precision rejection must never be manufactured by us).
++  pairDecimals?: number;      // price precision (raw.pair_decimals)
++  lotDecimals?: number;       // volume precision (raw.lot_decimals)
++  ordermin?: string;          // minimum order volume (raw.ordermin)
+ }
+ 
+ /**
+@@ -371,6 +377,10 @@ class KrakenAssetPairsService {
+             isHalted: raw.status !== 'online',
+             tier: 3,
+             tierReason: '',
++            // P19-B8.5 (OBJ-8): retained for venue-validate order formatting.
++            pairDecimals: raw.pair_decimals,
++            lotDecimals: raw.lot_decimals,
++            ordermin: raw.ordermin,
+           };
+ 
+           // Determine tier
+diff --git a/server/services/active-execution-engine.ts b/server/services/active-execution-engine.ts
+index 9edc284a1..4292d39a1 100644
+--- a/server/services/active-execution-engine.ts
++++ b/server/services/active-execution-engine.ts
+@@ -110,6 +110,8 @@ import { dataAggregator } from './data-aggregator.js';
+ // P19-B4b.1: the flat-slippage constant is retired from the fill seam — the active
+ // paper fill now depth-walks the real book (Langston C-Q5: RNG-free, no magic %).
+ import { resolveFillDepthGateConfig } from './execution/depth-gate-config.js';
++// P19-B8.5 (OBJ-8): real-venue well-formedness vetting for paper opens (paper-only leg).
++import { validatePaperOrderWithVenue } from './execution/venue-validate.js';
+ import {
+   getDepthSnapshot,
+   assessWarmth,
+@@ -2421,6 +2423,35 @@ export class ActiveExecutionEngine {
+       }
+     }
+ 
++    // ══════════════════════════════════════════════════════════════════════════════
++    // P19-B8.5 (OBJ-8): real-venue WELL-FORMEDNESS vetting — the recorded rule-20
++    // design, wired. Every paper open (immediate fill AND pending maker alike) is
++    // sent to Kraken AddOrder validate=true (executes NOTHING) BEFORE any internal
++    // fill/rest, so paper never fills an order the venue would refuse.
++    // PAPER-ONLY BY CONSTRUCTION (Kyle 2026-07-14 "same pipes"): in live mode the
++    // REAL order is the venue contact — this block must never run there.
++    // FAIL-MODE (Langston Step-2 ruling): DEFINITIVE parseable rejection → drop
++    // loudly (VALIDATE_REJECTED, counted + archived); EVERY ambiguity (timeout /
++    // outage / rate-limit / unparseable / unknown code / missing pair map) →
++    // VISIBLE skip + proceed — fill honesty is the depth-walk's and never this leg's.
++    // ══════════════════════════════════════════════════════════════════════════════
++    if (this.mode === 'paper') {
++      const _venueCheck = await validatePaperOrderWithVenue({
++        symbol: signal.symbol,
++        quantity,
++        limitPrice: _b72cLimit,
++        addOrder: (p) => this.krakenService.addOrder(p),
++      });
++      if (_venueCheck.outcome === 'rejected') {
++        console.error(`[PaperExecution:${this.mode}][VALIDATE_REJECTED] ${signal.symbol} venue said no: ${_venueCheck.detail} — skipping trade (no pretend fill on an order the venue would refuse)`);
++        rtbMetricsService.recordOpenFailed(signal.symbol, signal.strategy, 'VALIDATE_REJECTED', `venue validate rejected: ${_venueCheck.detail}`);
++        return { opened: false, stage: 'VALIDATE_REJECTED', reason: `venue validate rejected: ${_venueCheck.detail}` };
++      }
++      if (_venueCheck.outcome === 'skipped') {
++        rtbMetricsService.recordValidateSkipped(signal.symbol, _venueCheck.detail);
++      }
++    }
++
+     // P19-B4b.1: entry fill via the DEPTH-WALKED OrderPlacer port — the placer walks the
+     // gate's ask snapshot → VWAP fill (replaces the flat 0.05% slippage). `partial` = the
+     // book thinned between gate and fill (size the position down); `rejected` = no fillable book.
+diff --git a/server/services/rtb-metrics-service.ts b/server/services/rtb-metrics-service.ts
+index fe494836a..44fc5ef55 100644
+--- a/server/services/rtb-metrics-service.ts
++++ b/server/services/rtb-metrics-service.ts
+@@ -44,6 +44,7 @@ export type OpenFailStage =
+   | 'UNCLASSIFIABLE'      // open/trade asset-class could not be resolved
+   | 'DEPTH_GATE'          // 24/5 book-depth-sufficiency gate (no_book/stale/thin/insufficient)
+   | 'LIVENESS_GATE'       // P19-B6.6 (#236): xStock price-discovery-liveness (flat_last/no_data/sparse/timeout)
++  | 'VALIDATE_REJECTED'   // P19-B8.5 (OBJ-8): Kraken validate=true returned a DEFINITIVE order-level rejection — the venue would refuse this order, so paper refuses it too (paper-only leg)
+   | 'FILL_REJECTED'       // depth-walked fill rejected / non-filled / zero qty
+   | 'MAKER_MARKETABLE_DROPPED' // P19-B7.2c: maker limit already marketable at placement + stored taker EV not positive → dropped (non-trade)
+   | 'DUP_POSITION'        // duplicate-position guard
+@@ -59,6 +60,11 @@ export interface RtbStats {
+   // I3 invariant reconcile: attemptsTotal === openedTotal + blockedTotal + openFailedTotal.
+   openFailedTotal: number;
+   openFailedByStage: Record<OpenFailStage, number>;
++  // P19-B8.5 (OBJ-8): venue-validate SKIPS — ambiguities (timeout/outage/rate-limit/
++  // unparseable) that resolved OPEN per the Langston fail-mode ruling. VISIBLE by
++  // design: a chronic skip rate is detectable here, never silent.
++  validateSkippedTotal: number;
++  validateSkippedByReason: Record<string, number>;
+   sessionStart: Date;
+ }
+ 
+@@ -132,6 +138,8 @@ class RtbMetricsService {
+     blockedByReason: {} as Record<RtbBlockReason, number>,
+     openFailedTotal: 0,
+     openFailedByStage: {} as Record<OpenFailStage, number>,
++    validateSkippedTotal: 0,
++    validateSkippedByReason: {},
+     sessionStart: new Date(),
+   };
+ 
+@@ -233,6 +241,14 @@ class RtbMetricsService {
+     console.log(`[8.8.3-I3][OPEN_FAILED] stage=${stage} symbol=${symbol} strategy=${strategy} reason=${reason} timestamp=${Date.now()}`);
+   }
+ 
++  /** P19-B8.5 (OBJ-8): count a venue-validate SKIP (ambiguity resolved OPEN). */
++  recordValidateSkipped(symbol: string, reason: string): void {
++    this.stats.validateSkippedTotal++;
++    const key = reason.slice(0, 60);
++    this.stats.validateSkippedByReason[key] = (this.stats.validateSkippedByReason[key] || 0) + 1;
++    console.warn(`[P19-B8.5][VALIDATE_SKIPPED] symbol=${symbol} reason=${reason} total=${this.stats.validateSkippedTotal}`);
++  }
++
+   /**
+    * Record a blocked RTB attempt with reason
+    * Call this when guardrail blocks a trade
+@@ -526,6 +542,8 @@ class RtbMetricsService {
+       blockedByReason: {} as Record<RtbBlockReason, number>,
+       openFailedTotal: 0,
+       openFailedByStage: {} as Record<OpenFailStage, number>,
++      validateSkippedTotal: 0,
++      validateSkippedByReason: {},
+       sessionStart: new Date(),
+     };
+     this.initializeBlockReasons();
+diff --git a/server/services/trading-state-sync.ts b/server/services/trading-state-sync.ts
+index a4a8c79ab..45d506277 100644
+--- a/server/services/trading-state-sync.ts
++++ b/server/services/trading-state-sync.ts
+@@ -10,6 +10,14 @@ import { clusterBus } from './cluster-bus.js';
+ import { contextBridge } from './context-bridge.js';
+ import type { SystemContext } from '@shared/schema';
+ import type { AssetClass } from '@shared/asset-classes';
++// P19-B8.5 (gate-12): the strategy-gate row count backing the activation refusal.
++import { countModuleRowsByAssetClass } from './module-constants-service.js';
++
++/** P19-B8.5 (gate-12): rows in module_constants `strategy_gates` for a class (0 = default-open hazard). */
++async function countStrategyGateRows(assetClass: AssetClass): Promise<number> {
++  const counts = await countModuleRowsByAssetClass('strategy_gates');
++  return counts[assetClass] ?? 0;
++}
+ 
+ export type TradingMode = 'live' | 'paper';
+ 
+@@ -405,6 +413,23 @@ export class TradingStateSync {
+    * Guarded entry point for the B6.5b dry-run + the eventual B7b flip.
+    */
+   async setAssetClassActive(userId: string, mode: 'live' | 'paper', assetClass: AssetClass, isActive: boolean): Promise<void> {
++    // ══════════════════════════════════════════════════════════════════════════════
++    // P19-B8.5 (gate-12, Langston flip-blocker): ACTIVATING a class requires its
++    // `strategy_gates` rows to be NON-EMPTY in module_constants. An absent row set
++    // means the per-class strategy gate silently runs DEFAULT-OPEN (the full
++    // strategy set) — exactly the silent-failure class the pre-flight exists to
++    // catch. Fail-LOUD refusal here (deactivation is always allowed). Mode-blind by
++    // design like the gate itself (canonical-regime-strategy-map.ts:1203).
++    // ══════════════════════════════════════════════════════════════════════════════
++    if (isActive) {
++      const gateRowCount = await countStrategyGateRows(assetClass);
++      if (gateRowCount === 0) {
++        const msg = `[P19-B8.5][GATE-12-REFUSAL] cannot activate ${mode}/${assetClass}: strategy_gates has ZERO rows for this class — the strategy gate would run default-open (full set, silently). Seed explicit rows first.`;
++        console.error(msg);
++        throw new Error(msg);
++      }
++      console.log(`[P19-B8.5][GATE-12] ${mode}/${assetClass} activation: strategy_gates non-empty (${gateRowCount} rows) — proceeding`);
++    }
+     // Read-merge-write so flipping one class never clobbers another's flag.
+     const context = await storage.getSystemContext(mode);
+     const current = { ...((context?.activeAssetClasses ?? {}) as Record<string, boolean>) };
+diff --git a/server/tests/unit/p19-b6-5a-per-class-active-gate.test.ts b/server/tests/unit/p19-b6-5a-per-class-active-gate.test.ts
+index 726e993c0..291f41228 100644
+--- a/server/tests/unit/p19-b6-5a-per-class-active-gate.test.ts
++++ b/server/tests/unit/p19-b6-5a-per-class-active-gate.test.ts
+@@ -38,6 +38,13 @@ vi.mock('../../services/active-engine-service.js', () => ({
+ vi.mock('../../services/guardrail-settings.js', () => ({ getPortfolioBalanceV2: async () => 1000 }));
+ vi.mock('../../db.js', () => ({ db: { execute: async () => ({ rows: [{ age_ms: 1000 }] }) } }));
+ vi.mock('../../services/system-alerts.js', () => ({ addAlert: async () => ({}) }));
++// P19-B8.5 (gate-12): the activation refusal counts strategy_gates rows — mock
++// non-empty by default so the round-trip tests exercise the flip, and mutable so
++// the refusal test below can drive the ZERO-rows case.
++let __gateRowCounts: Record<string, number> = { crypto_spot: 19, xstock_spot: 19 };
++vi.mock('../../services/module-constants-service.js', () => ({
++  countModuleRowsByAssetClass: async () => ({ ...__gateRowCounts }),
++}));
+ vi.mock('../../asset_classes/xstock_spot/fill-safety-config.js', () => ({
+   resolveXstockFillSafetyConfig: async () => ({ activeFillMaxAgeMs: 15000 }),
+ }));
+@@ -82,6 +89,19 @@ describe('P19-B6.5a accessor + setter round-trip (async, H1 write-then-state)',
+     expect(await tradingStateSync.isAssetClassActive('paper', 'crypto_spot')).toBe(true); // not clobbered
+     expect(await tradingStateSync.isAssetClassActive('paper', 'xstock_spot')).toBe(true);
+   });
++
++  // P19-B8.5 (gate-12, Langston flip-blocker): ACTIVATION with ZERO strategy_gates
++  // rows must REFUSE loudly (default-open would silently run the full strategy set).
++  // Deactivation is always allowed.
++  it('gate-12: activation REFUSES when strategy_gates is empty for the class; deactivation always allowed', async () => {
++    __gateRowCounts = { xstock_spot: 19 }; // crypto_spot absent → 0 rows
++    await expect(
++      tradingStateSync.setAssetClassActive('u1', 'paper', 'crypto_spot', true),
++    ).rejects.toThrow(/GATE-12-REFUSAL/);
++    expect(await tradingStateSync.isAssetClassActive('paper', 'crypto_spot')).toBe(false); // state untouched
++    await tradingStateSync.setAssetClassActive('u1', 'paper', 'crypto_spot', false); // deactivate: no refusal
++    __gateRowCounts = { crypto_spot: 19, xstock_spot: 19 }; // restore for any later cases
++  });
+ });
+ 
+ describe('P19-B6.5a xStock-ISOLATION acceptance (gate 10)', () => {
+
+=== NEW FILE: server/services/execution/venue-validate.ts ===
+/**
+ * P19-B8.5 (OBJ-8) — real-venue WELL-FORMEDNESS vetting for paper opens.
+ *
+ * Every paper open is sent to Kraken `AddOrder validate=true` (executes NOTHING)
+ * BEFORE the internal depth-walk fill, so a paper fill never happens on an order
+ * the venue would refuse (unknown pair, size below `ordermin`, price/volume
+ * precision). This is the recorded rule-20 design (P19-B2), wired here for the
+ * switch-on. It is NOT a fill simulation — Kraken spot has none; fill honesty is
+ * the depth-walk's job and never depends on this leg.
+ *
+ * PAPER-ONLY BY CONSTRUCTION (Kyle 2026-07-14 "same pipes" directive): the caller
+ * gates on mode === 'paper'; in live mode the REAL order is the venue contact and
+ * this module must never add a second API call there.
+ *
+ * FAIL-MODE (Langston Step-2 ruling, 2026-07-14): fail-CLOSED only on a
+ * DEFINITIVE, PARSEABLE venue rejection; EVERY ambiguity — timeout, network
+ * error, 5xx, rate limit, auth trouble, unparseable body, unknown error code —
+ * resolves to a VISIBLE 'skipped' and the open proceeds to the depth-walk.
+ * Rationale (his words): mis-reading a transient as a rejection destroys learning
+ * data on a Kraken hiccup; mis-reading a rejection as a skip merely loses the
+ * well-formedness veto for one order while fill honesty stays intact. The two
+ * errors are not symmetric — ambiguity resolves OPEN.
+ */
+
+import { krakenAssetPairsService } from '../../markets/kraken-asset-pairs-service.js';
+
+export type VenueValidateOutcome =
+  | { outcome: 'ok'; detail: string }
+  | { outcome: 'rejected'; detail: string }   // definitive venue rejection → the caller DROPS the open, loudly
+  | { outcome: 'skipped'; detail: string };   // anything ambiguous → the caller COUNTS it and proceeds
+
+/** Time budget for the validate round-trip. An overrun is an AMBIGUITY → skip. */
+export const VALIDATE_TIMEOUT_MS = 4000;
+
+/**
+ * The conservative classifier (pure, unit-tested). DEFINITIVE = Kraken answered
+ * with a well-formed error naming an ORDER-LEVEL problem. Everything else skips.
+ * The rejection allowlist is deliberately narrow — growing it requires evidence
+ * of a new definitive class, never a guess (Langston: "don't let an ambiguous
+ * response fail closed").
+ */
+export function classifyKrakenValidateError(err: unknown): { kind: 'rejected' | 'skipped'; detail: string } {
+  const msg = err instanceof Error ? err.message : String(err);
+  // makePrivateRequest surfaces venue errors as "Kraken API error: <codes>" —
+  // anything NOT in that shape is transport/parse trouble, never a venue verdict.
+  if (!msg.includes('Kraken API error:')) {
+    return { kind: 'skipped', detail: `non-venue error: ${msg.slice(0, 160)}` };
+  }
+  // Venue-shaped, but ambiguity classes resolve OPEN (availability/limits/auth are
+  // not verdicts ABOUT THE ORDER):
+  const AMBIGUOUS = ['EAPI:Rate limit', 'EService:', 'EGeneral:Temporary lockout', 'EAPI:Invalid key', 'EAPI:Invalid signature', 'EAPI:Invalid nonce'];
+  if (AMBIGUOUS.some((c) => msg.includes(c))) {
+    return { kind: 'skipped', detail: `venue-ambiguous: ${msg.slice(0, 160)}` };
+  }
+  // Definitive ORDER-LEVEL rejection classes:
+  const DEFINITIVE = ['EOrder:', 'EGeneral:Invalid arguments', 'EQuery:Unknown asset pair', 'EAPI:Feature disabled'];
+  if (DEFINITIVE.some((c) => msg.includes(c))) {
+    return { kind: 'rejected', detail: msg.slice(0, 200) };
+  }
+  // Unknown E-code = not parseable as a known verdict = ambiguity → OPEN.
+  return { kind: 'skipped', detail: `unknown venue code: ${msg.slice(0, 160)}` };
+}
+
+/** Format a number to at most `decimals` places without scientific notation (pure, tested). */
+export function formatToDecimals(value: number, decimals: number | undefined, fallbackDecimals: number): string {
+  const d = Number.isInteger(decimals) && (decimals as number) >= 0 ? (decimals as number) : fallbackDecimals;
+  // toFixed then trim trailing zeros — Kraken accepts fewer decimals, never more.
+  return value.toFixed(d).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '');
+}
+
+export interface VenueValidateRequest {
+  /** Internal symbol, e.g. "BTC/USD". */
+  symbol: string;
+  quantity: number;
+  limitPrice: number;
+  /** The venue caller — injected so tests stub it (shape: KrakenService.addOrder). */
+  addOrder: (params: {
+    pair: string; type: 'buy' | 'sell'; ordertype: 'limit'; volume: string; price: string; validate: boolean;
+  }) => Promise<unknown>;
+}
+
+/**
+ * Validate a paper BUY against the real venue. Resolves the Kraken REST pair +
+ * per-pair precision from the asset-pairs service (so OUR formatting never
+ * manufactures a false precision rejection — a genuine `ordermin`/pair problem
+ * still rejects, which is exactly the learning this leg buys). An unresolvable
+ * pair mapping is an AMBIGUITY (our map, not the venue's verdict) → skip.
+ */
+export async function validatePaperOrderWithVenue(req: VenueValidateRequest): Promise<VenueValidateOutcome> {
+  const entry = krakenAssetPairsService.resolveByInternal(req.symbol);
+  if (!entry) {
+    return { outcome: 'skipped', detail: `no pair mapping for ${req.symbol} (asset-pairs service)` };
+  }
+  const price = formatToDecimals(req.limitPrice, entry.pairDecimals, 5);
+  const volume = formatToDecimals(req.quantity, entry.lotDecimals, 8);
+  try {
+    await Promise.race([
+      req.addOrder({ pair: entry.krakenRestPair, type: 'buy', ordertype: 'limit', volume, price, validate: true }),
+      new Promise((_, rej) => setTimeout(() => rej(new Error(`validate timeout ${VALIDATE_TIMEOUT_MS}ms`)), VALIDATE_TIMEOUT_MS)),
+    ]);
+    return { outcome: 'ok', detail: `venue accepted ${entry.krakenRestPair} ${volume}@${price}` };
+  } catch (err) {
+    const c = classifyKrakenValidateError(err);
+    return c.kind === 'rejected'
+      ? { outcome: 'rejected', detail: c.detail }
+      : { outcome: 'skipped', detail: c.detail };
+  }
+}
+
+=== NEW FILE: server/tests/unit/p19-b8-5-venue-validate.test.ts ===
+// P19-B8.5 (OBJ-8) — the venue-validate leg: conservative classifier (Langston
+// Step-2 condition: ONLY a definitive, parseable venue rejection fails closed;
+// every ambiguity resolves OPEN as a visible skip) + precision formatting +
+// the timeout-is-an-ambiguity contract.
+import { describe, it, expect } from 'vitest';
+import {
+  classifyKrakenValidateError,
+  formatToDecimals,
+  validatePaperOrderWithVenue,
+} from '../../services/execution/venue-validate.js';
+import { krakenAssetPairsService } from '../../markets/kraken-asset-pairs-service.js';
+
+describe('[P19-B8.5] classifyKrakenValidateError — the conservative classifier', () => {
+  it('DEFINITIVE order-level venue rejections fail CLOSED', () => {
+    for (const m of [
+      'Kraken API error: EOrder:Order minimum not met',
+      'Kraken API error: EGeneral:Invalid arguments:price',
+      'Kraken API error: EQuery:Unknown asset pair',
+    ]) {
+      expect(classifyKrakenValidateError(new Error(m)).kind).toBe('rejected');
+    }
+  });
+
+  it('venue-shaped AMBIGUITIES resolve OPEN (rate limit, service, lockout, auth)', () => {
+    for (const m of [
+      'Kraken API error: EAPI:Rate limit exceeded',
+      'Kraken API error: EService:Unavailable',
+      'Kraken API error: EService:Busy',
+      'Kraken API error: EGeneral:Temporary lockout',
+      'Kraken API error: EAPI:Invalid key',
+    ]) {
+      expect(classifyKrakenValidateError(new Error(m)).kind).toBe('skipped');
+    }
+  });
+
+  it('transport/parse trouble and UNKNOWN codes resolve OPEN — never a guessed rejection', () => {
+    expect(classifyKrakenValidateError(new Error('fetch failed: ECONNRESET')).kind).toBe('skipped');
+    expect(classifyKrakenValidateError(new Error('validate timeout 4000ms')).kind).toBe('skipped');
+    expect(classifyKrakenValidateError(new Error('Unexpected token < in JSON')).kind).toBe('skipped');
+    expect(classifyKrakenValidateError(new Error('Kraken API error: EFuture:Some new code')).kind).toBe('skipped');
+    expect(classifyKrakenValidateError('not-even-an-error')).toEqual(expect.objectContaining({ kind: 'skipped' }));
+  });
+});
+
+describe('[P19-B8.5] formatToDecimals — venue precision, never OUR false rejection', () => {
+  it('caps to the pair precision and trims trailing zeros', () => {
+    expect(formatToDecimals(65123.123456789, 1, 5)).toBe('65123.1');
+    expect(formatToDecimals(0.5, 8, 8)).toBe('0.5');
+    expect(formatToDecimals(2, 4, 8)).toBe('2');
+  });
+  it('falls back when the pair metadata is absent/invalid', () => {
+    expect(formatToDecimals(1.23456789012, undefined, 5)).toBe('1.23457');
+    expect(formatToDecimals(1.5, -3 as any, 5)).toBe('1.5');
+  });
+});
+
+describe('[P19-B8.5] validatePaperOrderWithVenue — end-to-end outcomes (stubbed venue)', () => {
+  const SYM = 'B85TEST/USD';
+  // Register a synthetic pair mapping so the resolver finds our test symbol.
+  (krakenAssetPairsService as any).autoMap?.set?.(SYM.toUpperCase(), {
+    internalSymbol: SYM, krakenRestPair: 'B85TESTUSD', krakenWsPair: SYM, krakenPairKey: 'B85TESTUSD',
+    base: 'B85TEST', quote: 'USD', rawBase: 'B85TEST', rawQuote: 'ZUSD',
+    isSpot: true, isMargin: false, isHalted: false, tier: 1, tierReason: 'test',
+    pairDecimals: 1, lotDecimals: 4,
+  });
+
+  it('venue accepts → ok, with precision-formatted params sent', async () => {
+    let sent: any;
+    const r = await validatePaperOrderWithVenue({
+      symbol: SYM, quantity: 0.123456789, limitPrice: 65123.987654,
+      addOrder: async (p) => { sent = p; return {}; },
+    });
+    expect(r.outcome).toBe('ok');
+    expect(sent).toMatchObject({ pair: 'B85TESTUSD', validate: true, ordertype: 'limit', type: 'buy' });
+    expect(sent.price).toBe('65124'); // pairDecimals=1 → 65124.0 → trimmed
+    expect(sent.volume).toBe('0.1235'); // lotDecimals=4
+  });
+
+  it('definitive venue rejection → rejected (the caller drops the open loudly)', async () => {
+    const r = await validatePaperOrderWithVenue({
+      symbol: SYM, quantity: 0.0001, limitPrice: 1,
+      addOrder: async () => { throw new Error('Kraken API error: EOrder:Order minimum not met'); },
+    });
+    expect(r.outcome).toBe('rejected');
+  });
+
+  it('network throw → skipped; missing pair mapping → skipped (our map ≠ a venue verdict)', async () => {
+    const r1 = await validatePaperOrderWithVenue({
+      symbol: SYM, quantity: 1, limitPrice: 1,
+      addOrder: async () => { throw new Error('fetch failed: ETIMEDOUT'); },
+    });
+    expect(r1.outcome).toBe('skipped');
+    const r2 = await validatePaperOrderWithVenue({
+      symbol: 'NOSUCHPAIR/USD', quantity: 1, limitPrice: 1,
+      addOrder: async () => ({}),
+    });
+    expect(r2.outcome).toBe('skipped');
+  });
+});
+
+=== NEW FILE: drizzle/migrations/2026-07-14-p19-b8-5-strategy-gates-crypto-seed.sql ===
+-- P19-B8.5 (gate-12, Langston flip-blocker) — seed EXPLICIT strategy_gates rows for
+-- crypto_spot. Today the class has ZERO rows and the per-class strategy gate
+-- (canonical-regime-strategy-map.ts isStrategyEnabledForAssetClass) treats an absent
+-- row as DEFAULT-OPEN — meaning activation would silently run the FULL strategy set.
+-- This seed makes today's implicit default EXPLICIT (all 19 canonical strategies
+-- enabled=true — the sealed exploration posture: the full set trades in paper for
+-- data; the two flagged-for-watch sub-1.0-RR strategies stay ENABLED per roadmap
+-- 25-19, deliberately NOT pre-disabled). ZERO behavior change in either mode
+-- (mode-blind gate by design; live activation gets its own Phase-21 switchboard
+-- review). Companion: the setAssetClassActive gate-12 refusal (fail-loud on an
+-- empty class). Keys = the STRATEGY_DISPLAY_NAMES SSOT, 19 strategies.
+-- ORB note: orb is xstock-scoped by design but the gate row is seeded true for
+-- crypto uniformity — the strategy itself never fires on crypto (its detect is
+-- calendar/class-scoped), so the row is inert; explicit > absent.
+INSERT INTO module_constants (module_name, constant_name, value, exchange, asset_class, strategy, regime, updated_by)
+SELECT 'strategy_gates', 'enabled', 'true'::jsonb, '*', 'crypto_spot', s.name, '*', 'p19-b8-5-gate12-seed'
+FROM (VALUES
+  ('sma_trend_ride'), ('vwap_pullback'), ('morning_star'), ('pivot_shift'),
+  ('mean_reversion'), ('reverse_impulse'), ('defensive_hedge'), ('inside_bar_reversal'),
+  ('range_trade'), ('support_bounce'), ('abcd_long'), ('adaptive_flow'),
+  ('breakout'), ('vwap_bounce'), ('volatility_edge'), ('dhma'),
+  ('liquidity_trap'), ('strong_bull_trend'), ('orb')
+) AS s(name)
+ON CONFLICT DO NOTHING;
+
+=== NEW FILE: drizzle/migrations/2026-07-14-p19-b8-5-strategy-gates-crypto-seed.rollback.sql ===
+-- ROLLBACK for 2026-07-14-p19-b8-5-strategy-gates-crypto-seed.sql
+-- Removes ONLY the rows this seed created (scoped by updated_by). ⚠ NOTE: with the
+-- gate-12 activation refusal deployed, rolling this back while crypto_spot is ACTIVE
+-- leaves an active class with zero rows — deactivate the class first, or the refusal
+-- blocks the NEXT activation (running state is unaffected; the gate itself still
+-- default-opens absent rows at read time, unchanged behavior).
+DELETE FROM module_constants
+WHERE module_name = 'strategy_gates' AND asset_class = 'crypto_spot'
+  AND updated_by = 'p19-b8-5-gate12-seed';
