@@ -20,6 +20,7 @@ import { isSignalProfitable, getMinROIForRegime, getDynamicROIThreshold } from '
 import { getFrictionForAssetClass } from '../math/cost-model.js';
 import { getPredictiveConfidence } from '../utils/score-calculator.js';
 import { logSkippedSignal } from '../logging/skipped-signals-logger.js';
+import { emitSqeShadow } from '../../services/data-archive/switch-on-evidence-sink.js';
 // Phase 14.1 HF8 (B3): Confidence floor imports for centralized mode-based qualification
 import { resolveStrategyMode, getModeOverlay, meetsConfidenceFloor } from '../governance/strategy-modes.js';
 import type { RegimeStability } from '../../config/strategy-governance.js';
@@ -331,6 +332,12 @@ export async function evaluateSignalQuality(input: SQEInput, options: SQEOptions
   // knobs (getSQEThresholdsFromConfig unchanged); NOTHING is pushed to failures here.
   if (finalScore < effectiveMinFinalScore) {
     console.log(`[P19-B8.5a][SQE][FINALSCORE_SHADOW] ${canonicalSymbol}/${input.strategy}: would-have-rejected — FinalScore ${finalScore.toFixed(4)} < ${effectiveMinFinalScore} (${input.sourcePool === 'pattern' ? 'pattern' : 'quant'} threshold; gate retired, log-only)`);
+    // B-EVIDENCE-SINK: durable capture of the would-have-rejected shadow (dual-write; the console.log
+    // above is the evidence-of-last-resort). Fire-and-forget, degrades on failure, never throws here.
+    emitSqeShadow(
+      { symbol: canonicalSymbol, strategy: input.strategy, assetClass: input.assetClass ?? 'unknown', regime: input.regime, sourcePool: input.sourcePool, mode: input.mode },
+      { finalScore, threshold: effectiveMinFinalScore },
+    );
   }
 
   // P19-B8.5a (OBJ-3): NET-EXPECTANCY ADMISSION GATE — the number we rank on is the number that
@@ -507,6 +514,11 @@ export function evaluateSignalQualitySync(input: SQEInput, thresholds?: { finalS
   // async path) — shadow-log only. See the async block for the full rationale + consensus cite.
   if (finalScore < config.finalScoreMin) {
     console.log(`[P19-B8.5a][SQE][FINALSCORE_SHADOW] ${canonicalSymbol}/${input.strategy}: would-have-rejected — FinalScore ${finalScore.toFixed(4)} < ${config.finalScoreMin} (gate retired, log-only; sync)`);
+    // B-EVIDENCE-SINK: durable capture (sync-path parity with the async block above).
+    emitSqeShadow(
+      { symbol: canonicalSymbol, strategy: input.strategy, assetClass: input.assetClass ?? 'unknown', regime: input.regime, sourcePool: input.sourcePool, mode: input.mode },
+      { finalScore, threshold: config.finalScoreMin },
+    );
   }
 
   if (regimeWeight < config.regimeWeightMin) {

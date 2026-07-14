@@ -119,6 +119,7 @@ import {
 import { decideMakerTaker, entryUrgencyClassForFamily } from '../core/math/maker-taker-decision.js';
 import { resolveMakerTakerHaircut } from './maker-taker-config.js';
 import { rtbMetricsService } from './rtb-metrics-service.js';
+import { emitMakerTaker } from './data-archive/switch-on-evidence-sink.js';
 // Directive 11.4H Task 1: Symbol normalization at data ingress
 import { normalizeToInternalSymbol } from '../markets/kraken-symbol-resolver.js';
 // Phase 13: Market Context Engine for centralized indicator + regime computation
@@ -761,6 +762,22 @@ export class SignalOrchestrator {
       `(taker netEV=${_mtDecision.takerNetEV.toFixed(6)}, maker-adj netEV=${_mtDecision.makerNetEVAdjusted.toFixed(6)}, ` +
       `A=${(_mtDecision.adverseSelectionPct * 100).toFixed(3)}% C=${(_mtDecision.nonFillCostPct * 100).toFixed(3)}% ` +
       `floor=${_mtDecision.hardFloorFired})`,
+    );
+    // B-EVIDENCE-SINK: durable capture of the maker/taker pick + the decision-time haircut snapshot
+    // (chosen mode, both leg EVs, pFill/adverse/nonfill AS APPLIED) — the Phase-25 pFill-calibration
+    // substrate (rtb_signals is transient + holds no haircut snapshot). Fire-and-forget, never throws.
+    emitMakerTaker(
+      { symbol: rawSignal.symbol, strategy: strategyId, assetClass: sizingContext.assetClass ?? 'unknown', regime: null, sourcePool: rawSignal.metadata?.sourcePool ?? null, mode: sizingContext.mode },
+      {
+        chosenEntryMode: _mtDecision.chosenMode,
+        takerNetEv: _mtDecision.takerNetEV,
+        makerNetEvAdjusted: _mtDecision.makerNetEVAdjusted,
+        signalStrength: _mtDecision.signalStrength,
+        adverseSelectionPct: _mtDecision.adverseSelectionPct,
+        nonFillCostPct: _mtDecision.nonFillCostPct,
+        makerFillProbability: _mtDecision.makerFillProbability,
+        hardFloorFired: _mtDecision.hardFloorFired,
+      },
     );
     // P19-B7.2 (OBJ-6): record the decision for the maker-PICK-RATE monitor (too-loose-haircut
     // early warning). Bounded buffer; paper maker-fill outcomes stay data-fenced (non-calibration).

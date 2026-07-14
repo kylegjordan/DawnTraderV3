@@ -87,6 +87,7 @@ import { b5SizingAudit } from './b5-sizing-audit.js';
 import { i1RtbDiagnostics } from './i1-rtb-diagnostics-service.js';
 import { i1TradeLifecycleDiagnostics } from './i1-trade-lifecycle-diagnostics.js';
 import { rtbMetricsService, type OpenFailStage } from './rtb-metrics-service.js';
+import { emitEvReject } from './data-archive/switch-on-evidence-sink.js';
 
 /**
  * P19-B6.5e: the typed result of an open attempt. Replaces `executeSimulatedTrade`'s
@@ -2253,6 +2254,19 @@ export class ActiveExecutionEngine {
         : expectancyResult.rejectionReason;
       console.log(`[11.8B][EV_BLOCK] ${signal.symbol} rejected: ${_b72RejReason}`);
       console.log(`[PaperExecution:${this.mode}] Paper trade rejected by Net Expectancy Gate: ${_b72RejReason}`);
+      // B-EVIDENCE-SINK: durable capture of the EV_REJECT occurrence (rate numerator; the offending
+      // netEV). Fire-and-forget, degrades on failure, never throws into the open path.
+      emitEvReject(
+        {
+          symbol: signal.symbol,
+          strategy: signal.strategy,
+          assetClass: asValidAssetClass(signal.metadata?.assetClass) ?? safeResolveAssetClass(signal.symbol, 'kraken') ?? 'unknown',
+          regime: (signal.metadata?.regime as string | undefined) ?? null,
+          sourcePool: (signal.metadata?.sourcePool as string | undefined) ?? null,
+          mode: this.mode,
+        },
+        { chosenNetEv: _b72EffectiveNetEv, rejectReason: _b72RejReason },
+      );
 
       // Log rejection
       await storage.createActiveTradeLog(this.mode, {

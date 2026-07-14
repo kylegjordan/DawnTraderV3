@@ -141,6 +141,12 @@ export interface MakerTakerDecisionResult {
   adverseSelectionPct: number;
   nonFillCostPct: number;
   hardFloorFired: boolean;
+  /** The pFill ASSUMED at decision time (`haircut.makerFillProbability`, clamped) — the Phase-25
+   *  pFill-calibration TARGET. Exposed (B-EVIDENCE-SINK 2026-07-14) so the sink captures the faithful
+   *  decision-time value rather than re-resolving a possibly-recalibrated config later. */
+  makerFillProbability: number;
+  /** The clamped `signalStrength` that drove the adverse-selection slope — echoed for the sink. */
+  signalStrength: number;
   taker: NetExpectancyKernelResult;
   maker: NetExpectancyKernelResult;
 }
@@ -278,6 +284,8 @@ export function decideMakerTaker(
     makerEntryAdvantagePct,
     adverseSelectionPct,
     nonFillCostPct,
+    makerFillProbability: pFill,   // B-EVIDENCE-SINK: the applied pFill (faithful decision-time snapshot)
+    signalStrength: strength,      // B-EVIDENCE-SINK: the clamped strength that set the haircut slope
     hardFloorFired,
     taker,
     maker,
