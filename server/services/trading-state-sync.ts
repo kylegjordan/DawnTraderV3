@@ -10,6 +10,14 @@ import { clusterBus } from './cluster-bus.js';
 import { contextBridge } from './context-bridge.js';
 import type { SystemContext } from '@shared/schema';
 import type { AssetClass } from '@shared/asset-classes';
+// P19-B8.5 (gate-12): the strategy-gate row count backing the activation refusal.
+import { countModuleRowsByAssetClass } from './module-constants-service.js';
+
+/** P19-B8.5 (gate-12): rows in module_constants `strategy_gates` for a class (0 = default-open hazard). */
+async function countStrategyGateRows(assetClass: AssetClass): Promise<number> {
+  const counts = await countModuleRowsByAssetClass('strategy_gates');
+  return counts[assetClass] ?? 0;
+}
 
 export type TradingMode = 'live' | 'paper';
 
@@ -405,6 +413,23 @@ export class TradingStateSync {
    * Guarded entry point for the B6.5b dry-run + the eventual B7b flip.
    */
   async setAssetClassActive(userId: string, mode: 'live' | 'paper', assetClass: AssetClass, isActive: boolean): Promise<void> {
+    // ══════════════════════════════════════════════════════════════════════════════
+    // P19-B8.5 (gate-12, Langston flip-blocker): ACTIVATING a class requires its
+    // `strategy_gates` rows to be NON-EMPTY in module_constants. An absent row set
+    // means the per-class strategy gate silently runs DEFAULT-OPEN (the full
+    // strategy set) — exactly the silent-failure class the pre-flight exists to
+    // catch. Fail-LOUD refusal here (deactivation is always allowed). Mode-blind by
+    // design like the gate itself (canonical-regime-strategy-map.ts:1203).
+    // ══════════════════════════════════════════════════════════════════════════════
+    if (isActive) {
+      const gateRowCount = await countStrategyGateRows(assetClass);
+      if (gateRowCount === 0) {
+        const msg = `[P19-B8.5][GATE-12-REFUSAL] cannot activate ${mode}/${assetClass}: strategy_gates has ZERO rows for this class — the strategy gate would run default-open (full set, silently). Seed explicit rows first.`;
+        console.error(msg);
+        throw new Error(msg);
+      }
+      console.log(`[P19-B8.5][GATE-12] ${mode}/${assetClass} activation: strategy_gates non-empty (${gateRowCount} rows) — proceeding`);
+    }
     // Read-merge-write so flipping one class never clobbers another's flag.
     const context = await storage.getSystemContext(mode);
     const current = { ...((context?.activeAssetClasses ?? {}) as Record<string, boolean>) };

@@ -168,3 +168,4 @@
 2026-07-13-p19-b8-5a-scoring-base.sql
 2026-07-13-p19-b8-5b-provenance-scalars.sql
 2026-07-14-b-evidence-sink.sql
+2026-07-14-p19-b8-5-strategy-gates-crypto-seed.sql

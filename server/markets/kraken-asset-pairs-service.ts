@@ -63,6 +63,12 @@ export interface AutoMappingEntry {
   isHalted: boolean;
   tier: MappingTier;          // Confidence tier
   tierReason: string;         // Why this tier was assigned
+  // P19-B8.5 (OBJ-8): per-pair order-formatting metadata retained from the raw
+  // AssetPairs payload so the venue-validate leg formats price/volume to Kraken's
+  // OWN precision (a false precision rejection must never be manufactured by us).
+  pairDecimals?: number;      // price precision (raw.pair_decimals)
+  lotDecimals?: number;       // volume precision (raw.lot_decimals)
+  ordermin?: string;          // minimum order volume (raw.ordermin)
 }
 
 /**
@@ -371,6 +377,10 @@ class KrakenAssetPairsService {
             isHalted: raw.status !== 'online',
             tier: 3,
             tierReason: '',
+            // P19-B8.5 (OBJ-8): retained for venue-validate order formatting.
+            pairDecimals: raw.pair_decimals,
+            lotDecimals: raw.lot_decimals,
+            ordermin: raw.ordermin,
           };
 
           // Determine tier

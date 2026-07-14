@@ -44,6 +44,7 @@ export type OpenFailStage =
   | 'UNCLASSIFIABLE'      // open/trade asset-class could not be resolved
   | 'DEPTH_GATE'          // 24/5 book-depth-sufficiency gate (no_book/stale/thin/insufficient)
   | 'LIVENESS_GATE'       // P19-B6.6 (#236): xStock price-discovery-liveness (flat_last/no_data/sparse/timeout)
+  | 'VALIDATE_REJECTED'   // P19-B8.5 (OBJ-8): Kraken validate=true returned a DEFINITIVE order-level rejection — the venue would refuse this order, so paper refuses it too (paper-only leg)
   | 'FILL_REJECTED'       // depth-walked fill rejected / non-filled / zero qty
   | 'MAKER_MARKETABLE_DROPPED' // P19-B7.2c: maker limit already marketable at placement + stored taker EV not positive → dropped (non-trade)
   | 'DUP_POSITION'        // duplicate-position guard
@@ -59,6 +60,11 @@ export interface RtbStats {
   // I3 invariant reconcile: attemptsTotal === openedTotal + blockedTotal + openFailedTotal.
   openFailedTotal: number;
   openFailedByStage: Record<OpenFailStage, number>;
+  // P19-B8.5 (OBJ-8): venue-validate SKIPS — ambiguities (timeout/outage/rate-limit/
+  // unparseable) that resolved OPEN per the Langston fail-mode ruling. VISIBLE by
+  // design: a chronic skip rate is detectable here, never silent.
+  validateSkippedTotal: number;
+  validateSkippedByReason: Record<string, number>;
   sessionStart: Date;
 }
 
@@ -132,6 +138,8 @@ class RtbMetricsService {
     blockedByReason: {} as Record<RtbBlockReason, number>,
     openFailedTotal: 0,
     openFailedByStage: {} as Record<OpenFailStage, number>,
+    validateSkippedTotal: 0,
+    validateSkippedByReason: {},
     sessionStart: new Date(),
   };
 
@@ -231,6 +239,14 @@ class RtbMetricsService {
     }
 
     console.log(`[8.8.3-I3][OPEN_FAILED] stage=${stage} symbol=${symbol} strategy=${strategy} reason=${reason} timestamp=${Date.now()}`);
+  }
+
+  /** P19-B8.5 (OBJ-8): count a venue-validate SKIP (ambiguity resolved OPEN). */
+  recordValidateSkipped(symbol: string, reason: string): void {
+    this.stats.validateSkippedTotal++;
+    const key = reason.slice(0, 60);
+    this.stats.validateSkippedByReason[key] = (this.stats.validateSkippedByReason[key] || 0) + 1;
+    console.warn(`[P19-B8.5][VALIDATE_SKIPPED] symbol=${symbol} reason=${reason} total=${this.stats.validateSkippedTotal}`);
   }
 
   /**
@@ -526,6 +542,8 @@ class RtbMetricsService {
       blockedByReason: {} as Record<RtbBlockReason, number>,
       openFailedTotal: 0,
       openFailedByStage: {} as Record<OpenFailStage, number>,
+      validateSkippedTotal: 0,
+      validateSkippedByReason: {},
       sessionStart: new Date(),
     };
     this.initializeBlockReasons();

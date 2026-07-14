@@ -38,6 +38,13 @@ vi.mock('../../services/active-engine-service.js', () => ({
 vi.mock('../../services/guardrail-settings.js', () => ({ getPortfolioBalanceV2: async () => 1000 }));
 vi.mock('../../db.js', () => ({ db: { execute: async () => ({ rows: [{ age_ms: 1000 }] }) } }));
 vi.mock('../../services/system-alerts.js', () => ({ addAlert: async () => ({}) }));
+// P19-B8.5 (gate-12): the activation refusal counts strategy_gates rows — mock
+// non-empty by default so the round-trip tests exercise the flip, and mutable so
+// the refusal test below can drive the ZERO-rows case.
+let __gateRowCounts: Record<string, number> = { crypto_spot: 19, xstock_spot: 19 };
+vi.mock('../../services/module-constants-service.js', () => ({
+  countModuleRowsByAssetClass: async () => ({ ...__gateRowCounts }),
+}));
 vi.mock('../../asset_classes/xstock_spot/fill-safety-config.js', () => ({
   resolveXstockFillSafetyConfig: async () => ({ activeFillMaxAgeMs: 15000 }),
 }));
@@ -81,6 +88,19 @@ describe('P19-B6.5a accessor + setter round-trip (async, H1 write-then-state)', 
     await tradingStateSync.setAssetClassActive('u1', 'paper', 'xstock_spot', true);
     expect(await tradingStateSync.isAssetClassActive('paper', 'crypto_spot')).toBe(true); // not clobbered
     expect(await tradingStateSync.isAssetClassActive('paper', 'xstock_spot')).toBe(true);
+  });
+
+  // P19-B8.5 (gate-12, Langston flip-blocker): ACTIVATION with ZERO strategy_gates
+  // rows must REFUSE loudly (default-open would silently run the full strategy set).
+  // Deactivation is always allowed.
+  it('gate-12: activation REFUSES when strategy_gates is empty for the class; deactivation always allowed', async () => {
+    __gateRowCounts = { xstock_spot: 19 }; // crypto_spot absent → 0 rows
+    await expect(
+      tradingStateSync.setAssetClassActive('u1', 'paper', 'crypto_spot', true),
+    ).rejects.toThrow(/GATE-12-REFUSAL/);
+    expect(await tradingStateSync.isAssetClassActive('paper', 'crypto_spot')).toBe(false); // state untouched
+    await tradingStateSync.setAssetClassActive('u1', 'paper', 'crypto_spot', false); // deactivate: no refusal
+    __gateRowCounts = { crypto_spot: 19, xstock_spot: 19 }; // restore for any later cases
   });
 });
 

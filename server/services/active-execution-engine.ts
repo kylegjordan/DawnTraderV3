@@ -110,6 +110,8 @@ import { dataAggregator } from './data-aggregator.js';
 // P19-B4b.1: the flat-slippage constant is retired from the fill seam — the active
 // paper fill now depth-walks the real book (Langston C-Q5: RNG-free, no magic %).
 import { resolveFillDepthGateConfig } from './execution/depth-gate-config.js';
+// P19-B8.5 (OBJ-8): real-venue well-formedness vetting for paper opens (paper-only leg).
+import { validatePaperOrderWithVenue } from './execution/venue-validate.js';
 import {
   getDepthSnapshot,
   assessWarmth,
@@ -2418,6 +2420,35 @@ export class ActiveExecutionEngine {
         }
       } else {
         _b72cPendingMaker = true;
+      }
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════════
+    // P19-B8.5 (OBJ-8): real-venue WELL-FORMEDNESS vetting — the recorded rule-20
+    // design, wired. Every paper open (immediate fill AND pending maker alike) is
+    // sent to Kraken AddOrder validate=true (executes NOTHING) BEFORE any internal
+    // fill/rest, so paper never fills an order the venue would refuse.
+    // PAPER-ONLY BY CONSTRUCTION (Kyle 2026-07-14 "same pipes"): in live mode the
+    // REAL order is the venue contact — this block must never run there.
+    // FAIL-MODE (Langston Step-2 ruling): DEFINITIVE parseable rejection → drop
+    // loudly (VALIDATE_REJECTED, counted + archived); EVERY ambiguity (timeout /
+    // outage / rate-limit / unparseable / unknown code / missing pair map) →
+    // VISIBLE skip + proceed — fill honesty is the depth-walk's and never this leg's.
+    // ══════════════════════════════════════════════════════════════════════════════
+    if (this.mode === 'paper') {
+      const _venueCheck = await validatePaperOrderWithVenue({
+        symbol: signal.symbol,
+        quantity,
+        limitPrice: _b72cLimit,
+        addOrder: (p) => this.krakenService.addOrder(p),
+      });
+      if (_venueCheck.outcome === 'rejected') {
+        console.error(`[PaperExecution:${this.mode}][VALIDATE_REJECTED] ${signal.symbol} venue said no: ${_venueCheck.detail} — skipping trade (no pretend fill on an order the venue would refuse)`);
+        rtbMetricsService.recordOpenFailed(signal.symbol, signal.strategy, 'VALIDATE_REJECTED', `venue validate rejected: ${_venueCheck.detail}`);
+        return { opened: false, stage: 'VALIDATE_REJECTED', reason: `venue validate rejected: ${_venueCheck.detail}` };
+      }
+      if (_venueCheck.outcome === 'skipped') {
+        rtbMetricsService.recordValidateSkipped(signal.symbol, _venueCheck.detail);
       }
     }
 
