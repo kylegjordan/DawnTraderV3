@@ -1980,18 +1980,26 @@ export class ActiveExecutionEngine {
         // marketable-at-placement stored-taker check: if a maker order can't be rested
         // (market already through the limit), takerNetEv>0 → open as taker now, else drop.
         takerNetEv: signal.takerNetEv != null ? parseFloat(signal.takerNetEv) : null,
+        // P19-B8.5 (SWITCH-ON fix, found live 2026-07-15): carry the rtb row's ENTIRE persisted
+        // metadata through the promotion conversion, promotion fields layered on top. This
+        // conversion previously REBUILT metadata from scratch, silently dropping every stamp the
+        // queue path persisted: metadata.assetClass (→ the [P19-B6.5d][STAMP_MISSING_ACTIVE]
+        // execution_entry warning + safe-resolve fallback on EVERY promoted signal), and the
+        // exploration lane's 4-field cohort stamp (→ the [11.8B] EXPLORATION_OPEN bypass never
+        // saw admissionBasis, so every lane admit died at EV_REJECT — observed on the first
+        // live admit, TRX/USD 05:18Z — AND the open-position/closed-trade rows would have been
+        // stamped organic, breaking the lane's budget-conservation count + anneal driver).
+        // The rtb metadata is small + structured (queueSQESignal enrichedMetadata: the
+        // orchestrator stamp block + sourcePool/signalType/assetClass/rankingScore) — no bulk
+        // arrays. reorg-B3 (#233) sourcePool note preserved: the open-gate Net-Expectancy kernel
+        // reads signal.metadata?.sourcePool for the STRONG-TREND pWin branch — now carried by
+        // the spread along with everything else.
         metadata: {
+          ...((signal.metadata as any) ?? {}),
           source: 'RTB_PROMOTION',
           originalSignalId: signal.signalId,
           rtbQueueId: signal.id,
           queuedAt: signal.queuedAt,
-          // reorg-B3 (#233): carry the rtb row's persisted sourcePool onto the promoted signal so the
-          // open-gate Net-Expectancy kernel can take the STRONG-TREND pWin branch. The conversion
-          // previously dropped sourcePool → the open-gate saw `undefined` → the kernel always used the
-          // standard DI branch, so the dbsScore thread (H2 — the lone EV-relevant fix) could NEVER
-          // fire on a real promoted signal. Read from the rtb row's persisted metadata.sourcePool
-          // (queueSQESignal enrichedMetadata). The open-gate reads it via `signal.metadata?.sourcePool`.
-          sourcePool: (signal.metadata as any)?.sourcePool,
         }
       } as any;
 
