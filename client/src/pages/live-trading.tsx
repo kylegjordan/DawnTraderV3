@@ -48,7 +48,7 @@ const config: ModeTradingPageConfig = {
         </>
       ),
     },
-    { key: "open", label: "Open Trades", shortLabel: "Open", icon: BarChart3, render: () => <ActiveTradesV2 /> },
+    { key: "open", label: "Open Trades", shortLabel: "Open", icon: BarChart3, render: () => <ActiveTradesV2 mode="live" /> },
     { key: "closed", label: "Closed Trades", shortLabel: "Closed", icon: History, render: () => <TradeHistoryTab /> },
     { key: "shadows", label: "Shadows", shortLabel: "Shadow", icon: Ghost, render: () => <ShadowTradesTab /> },
   ],

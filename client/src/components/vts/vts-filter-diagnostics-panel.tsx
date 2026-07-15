@@ -249,6 +249,102 @@ function DormantPipelineTables({ modeTail }: { modeTail: 'paper' | 'live' }) {
   );
 }
 
+// ── P19-B8.5 (switch-on wiring) — the LIVE Paper/Live pipeline tables ────────────────────────────────
+// B8.4c shipped the three-table skeleton dormant with "B8.5 wires these to the mode's live per-stage
+// counts" — this is that wiring. Reads the B8.4b active-funnel endpoint (per mode, per class) and:
+//   status !== 'active'  → the class has recorded nothing → keep the honest DormantPipelineTables
+//   status === 'active'  → render the funnel's REAL counts, honest to the funnel's ACTUAL shape:
+//     the tracker records per-stage totals + per-gate reject reasons since its start — it does NOT
+//     record a quant/pattern split per stage nor a windowed 24h aggregate, so those B8.4c skeleton
+//     columns are NOT fabricated here (dormant≠zero discipline applies to fake splits too). Two
+//     tables: Pipeline Summary (stage counts, cumulative since startedAt) + SQE Gate Rejects (by gate).
+type FunnelClassCounts = {
+  status: 'active' | 'dormant';
+  signalsGenerated: number;
+  sqeEvaluated: number;
+  sqePassed: number;
+  preSqeRejects: Record<string, number>;
+  postSqeRejects: Record<string, number>;
+  sqeGateRejects: Record<string, number>;
+  sqeAttempts?: { atGeneration: number; atRefresh: number };
+  rtbRefresh?: { cyclesRun: number; refreshedAttempted: number; reconfirmed: number; rejectedInRefresh: number; promoted: number };
+};
+
+function ActivePipelineTables({ modeTail, assetClass }: { modeTail: 'paper' | 'live'; assetClass: 'crypto_spot' | 'xstock_spot' }) {
+  const funnel = useQuery<{ schema: string; mode: string; startedAt: string; byAssetClass: Record<string, FunnelClassCounts> }>({
+    queryKey: [`/api/active-engine/diagnostics/funnel?mode=${modeTail}`],
+    refetchInterval: 10000,
+    refetchIntervalInBackground: true,
+    staleTime: 5000,
+  });
+  const cls = funnel.data?.byAssetClass?.[assetClass];
+  if (!cls || cls.status !== 'active') {
+    // Honest dormancy (or endpoint unavailable): the pre-switch-on presentation stands.
+    return <DormantPipelineTables modeTail={modeTail} />;
+  }
+  const label = modeTail === 'paper' ? 'Paper' : 'Live';
+  const since = funnel.data?.startedAt ? new Date(funnel.data.startedAt).toLocaleString() : 'engine start';
+  const preSqeTotal = Object.values(cls.preSqeRejects ?? {}).reduce((a, b) => a + b, 0);
+  const postSqeTotal = Object.values(cls.postSqeRejects ?? {}).reduce((a, b) => a + b, 0);
+  const stageRows: Array<{ stage: string; count: number; basis: string }> = [
+    { stage: 'Signals Generated', count: cls.signalsGenerated, basis: 'per generated signal (pipe top)' },
+    { stage: 'Pre-SQE Rejects', count: preSqeTotal, basis: 'unmappable symbol / strategy gate' },
+    { stage: 'SQE Evaluated', count: cls.sqeEvaluated, basis: cls.sqeAttempts ? `gen ${cls.sqeAttempts.atGeneration.toLocaleString()} + refresh ${cls.sqeAttempts.atRefresh.toLocaleString()}` : 'generation + refresh' },
+    { stage: 'SQE Passed', count: cls.sqePassed, basis: 'organic + exploration-lane admits' },
+    { stage: 'Post-SQE Rejects', count: postSqeTotal, basis: 'after SQE, before queue' },
+    { stage: 'RTB Reconfirmed', count: cls.rtbRefresh?.reconfirmed ?? 0, basis: `${(cls.rtbRefresh?.cyclesRun ?? 0).toLocaleString()} refresh cycles` },
+    { stage: 'RTB Rejected in Refresh', count: cls.rtbRefresh?.rejectedInRefresh ?? 0, basis: 'failed the re-SQE at refresh' },
+    { stage: 'Promoted', count: cls.rtbRefresh?.promoted ?? 0, basis: 'left the queue to an open attempt' },
+  ];
+  const gateRows = Object.entries(cls.sqeGateRejects ?? {}).sort((a, b) => b[1] - a[1]);
+  return (
+    <div className="space-y-4" data-testid="fd-active-pipeline-tables">
+      <DiagTableCard theme="summary" title="Pipeline Summary" subtitle={`${label} — LIVE, cumulative since ${since}`} testId="fd-active-summary">
+        <table className={`w-full text-sm ${FROZEN_FIRST_COL_TABLE}`}>
+          <thead><tr className={`border-b ${DIAG_TABLE_THEMES.summary.head}`}>
+            <th className="text-left p-2 font-medium">Stage</th>
+            <th className="text-right p-2 font-medium">Count</th>
+            <th className="text-left p-2 font-medium text-muted-foreground text-xs">Counting Basis</th>
+          </tr></thead>
+          <tbody>
+            {stageRows.map((r) => (
+              <tr key={r.stage} className="border-b last:border-0">
+                <td className="p-2 font-medium">{r.stage}</td>
+                <td className="p-2 text-right font-mono">{r.count.toLocaleString()}</td>
+                <td className="p-2 text-xs text-muted-foreground">{r.basis}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </DiagTableCard>
+      <DiagTableCard theme="lastScan" title="SQE Gate Rejects (by gate)" subtitle={`${label} — LIVE, cumulative since ${since}`} testId="fd-active-gates">
+        <table className={`w-full text-sm ${FROZEN_FIRST_COL_TABLE}`}>
+          <thead><tr className={`border-b ${DIAG_TABLE_THEMES.lastScan.head}`}>
+            <th className="text-left p-2 font-medium">Gate</th>
+            <th className="text-right p-2 font-medium">Rejects</th>
+          </tr></thead>
+          <tbody>
+            {gateRows.length === 0 ? (
+              <tr><td colSpan={2} className="p-3 text-sm text-muted-foreground">No SQE gate rejects recorded yet.</td></tr>
+            ) : gateRows.map(([gate, n]) => (
+              <tr key={gate} className="border-b last:border-0">
+                <td className="p-2 font-medium">{gate === 'uncategorized' ? 'NetEV / uncategorized' : gate}</td>
+                <td className="p-2 text-right font-mono">{n.toLocaleString()}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </DiagTableCard>
+      <div className="rounded-md border border-muted px-3 py-2 text-xs text-muted-foreground">
+        Counts are cumulative since the funnel started ({since}); a per-scan breakdown and a windowed 24h view are
+        not recorded by the funnel tracker yet (the B8.4c skeleton columns they would fill are withheld rather than
+        fabricated). Gate names come from each reject reason's leading token; "NetEV / uncategorized" is dominated
+        by the net-expectancy admission gate.
+      </div>
+    </div>
+  );
+}
+
 // P19-B8.4c: the crypto Paper/Live LEAN scanner card. ★ B8.4c Step-4 fix (Langston MUST-2): the crypto FX5
 // scanner is ONE shared scanner (mode-multiplexed) that always runs, so its live scan THROUGHPUT (last-scan +
 // 24h pairs) is the shared scanner's — identical on all crypto tabs — read from the vts-diagnostics `data` prop
@@ -351,13 +447,10 @@ export function FilterDiagnosticsPanel({ data, isLoading, gateDisposition = 'tag
             above this panel. Live throughput from the shared-scanner `data` feed; Per-Cycle Target + Total
             Universe + countdown from the shared feed (self-fetched inside the component). */}
         {!isXstock && <ActiveScannerStage mode={modeTail} data={data} isLoading={isLoading} />}
-        {/* P19-B8.4c REV-3 (OBJ-8): Paper/Live MIRROR the VTS three-table structure, rendered dormant — this
-            REPLACES the old generic filter-breakdown + downstream-funnel + pipeline-tail placeholders (those
-            three components are deleted this batch). Both scanners run, but no filters/signals happen in
-            Paper/Live until switch-on (B8.5),
-            so the three tables show their real column skeleton with an explicit "awaiting activation" body
-            (never a bare 0 — OBJ-5). B8.5 wires these to the mode's live per-stage counts. */}
-        <DormantPipelineTables modeTail={modeTail} />
+        {/* P19-B8.5 (switch-on wiring): the B8.4c dormant skeleton is now the FALLBACK inside
+            ActivePipelineTables — it renders the mode's live per-class funnel counts when the
+            class is active, and the honest "awaiting activation" body otherwise. */}
+        <ActivePipelineTables modeTail={modeTail} assetClass={assetClass} />
       </div>
     );
   }

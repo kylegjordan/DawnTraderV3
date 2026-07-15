@@ -8,7 +8,8 @@
  * data-source endpoints (pre-audit §2 contract) — the mode axis lives HERE,
  * not in component-local checks.
  */
-import { useState, Component, type ErrorInfo, type ReactNode } from "react";
+import { useState, useEffect, Component, type ErrorInfo, type ReactNode } from "react";
+import { useTradingMode } from "@/contexts/trading-mode-context";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AlertTriangle, type LucideIcon } from "lucide-react";
@@ -77,6 +78,19 @@ class ModePageErrorBoundary extends Component<{ children: ReactNode; title: stri
 export default function ModeTradingPage({ config }: { config: ModeTradingPageConfig }) {
   const [activeTab, setActiveTab] = useState(config.defaultTab);
   const cols = config.tabs.length;
+
+  // P19-B8.5 (soak fix): a mode-PINNED page syncs the GLOBAL trading-mode context to
+  // its own mode on mount — the page IS the mode (the header comment's own principle:
+  // "the mode axis lives HERE, not in component-local checks"). Without this, legacy
+  // components that still read the global toggle (and the global fetch mode param)
+  // disagree with the page: a fresh browser (global default 'live') on /paper-trading
+  // rendered "only available in Paper Trading mode" in the Open Trades tab and
+  // queried live-mode data. setMode is a no-op when already equal; 'vts' pages have
+  // no live/paper identity and do not sync.
+  const { setMode } = useTradingMode();
+  useEffect(() => {
+    if (config.mode === 'paper' || config.mode === 'live') setMode(config.mode);
+  }, [config.mode, setMode]);
 
   return (
     <ModePageErrorBoundary title={config.title}>

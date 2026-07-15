@@ -410,35 +410,50 @@ function TradeRow({
         </div>
       </td>
       
-      {/* 5. Entry (Signal) - C2A: Signal price only */}
+      {/* 5. Entry (Signal) - C2A: Signal price only.
+          P19-B8.5 (soak fix): every price cell below renders an honest em-dash when the
+          number is absent instead of crashing the page — pending-maker (B7.2c) and
+          just-promoted rows can legitimately lack a fill/mark price for a tick, and one
+          undefined .toFixed() here took down the WHOLE paper page via the tab error
+          boundary ("Cannot read properties of undefined (reading 'toFixed')", Kyle
+          2026-07-15). */}
       <td className="px-3 py-3">
-        <div className="font-mono text-sm">${(trade.intendedEntryPrice || trade.entryPrice).toFixed(6)}</div>
+        <div className="font-mono text-sm">
+          {(trade.intendedEntryPrice ?? trade.entryPrice) != null
+            ? `$${(trade.intendedEntryPrice ?? trade.entryPrice).toFixed(6)}`
+            : <span className="text-muted-foreground">—</span>}
+        </div>
       </td>
-      
+
       {/* 6. Target Exit (TP) - C2A: Restored */}
       <td className="px-3 py-3">
         <div className="flex items-center gap-1">
           <Target className="w-3 h-3 text-green-500" />
-          <span className="font-mono text-sm text-foreground">${trade.takeProfit.toFixed(6)}</span>
+          <span className="font-mono text-sm text-foreground">
+            {trade.takeProfit != null ? `$${trade.takeProfit.toFixed(6)}` : '—'}
+          </span>
         </div>
       </td>
-      
+
       {/* 7. Current Price - C2A: Colored based on entry comparison */}
       <td className="px-3 py-3">
         <div className={cn(
           "font-mono text-sm font-medium",
-          trade.currentPrice > (trade.intendedEntryPrice || trade.entryPrice) ? "text-green-600" :
-          trade.currentPrice < (trade.intendedEntryPrice || trade.entryPrice) ? "text-red-600" : "text-foreground"
+          trade.currentPrice > (trade.intendedEntryPrice ?? trade.entryPrice) ? "text-green-600" :
+          trade.currentPrice < (trade.intendedEntryPrice ?? trade.entryPrice) ? "text-red-600" : "text-foreground"
         )}>
-          ${trade.currentPrice.toFixed(6)}
+          {trade.currentPrice != null ? `$${trade.currentPrice.toFixed(6)}` : <span className="text-muted-foreground">—</span>}
         </div>
       </td>
-      
+
       {/* 8. Distance (stacked: TP on top, SL on bottom) - Per-coin $ difference from Entry */}
       <td className="px-3 py-3">
         <div className="text-xs space-y-0.5">
           {(() => {
-            const entryPrice = trade.intendedEntryPrice || trade.entryPrice;
+            const entryPrice = trade.intendedEntryPrice ?? trade.entryPrice;
+            if (entryPrice == null || trade.takeProfit == null || trade.stopLoss == null) {
+              return <span className="text-muted-foreground">—</span>;
+            }
             const tpDistance = trade.takeProfit - entryPrice;
             const slDistance = entryPrice - trade.stopLoss;
             return (
@@ -788,8 +803,15 @@ function IntegrityBanner({
  */
 const normalizeSymbol = (s: string) => s.replace('/', '').toUpperCase();
 
-export default function ActiveTradesV2() {
-  const { isPaper } = useTradingMode();
+// P19-B8.5 (soak fix): accept a page-pinned mode. The B8.1 three-mode-page design pins
+// each page's mode via its config, but this component alone still read the GLOBAL
+// header toggle — so on the /paper-trading page a browser whose global toggle sat on
+// 'live' (the default for a fresh session) rendered the "only available in Paper
+// Trading mode" card instead of the table. The page passes mode="paper"; the global
+// toggle remains the fallback for any legacy un-pinned usage.
+export default function ActiveTradesV2({ mode }: { mode?: 'paper' | 'live' } = {}) {
+  const { isPaper: globalIsPaper } = useTradingMode();
+  const isPaper = mode ? mode === 'paper' : globalIsPaper;
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { messages, isConnected } = useWebSocket();
