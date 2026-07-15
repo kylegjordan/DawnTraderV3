@@ -173,3 +173,4 @@
 2026-07-15-p19-b8-5-portfolio-state-anchor-correction.sql
 2026-07-15-p19-b8-5-exit-integrity-knobs.sql
 2026-07-15-p19-b8-5-phantom-exit-annotation.sql
+2026-07-15-p19-b8-5-exploration-budget-50.sql
