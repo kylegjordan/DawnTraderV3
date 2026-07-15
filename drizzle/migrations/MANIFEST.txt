@@ -175,3 +175,4 @@
 2026-07-15-p19-b8-5-phantom-exit-annotation.sql
 2026-07-15-p19-b8-5-exploration-budget-50.sql
 2026-07-15-p19-b8-5-venue-only-pricing.sql
+2026-07-15-p19-b8-5-measurement-override-sizing.sql

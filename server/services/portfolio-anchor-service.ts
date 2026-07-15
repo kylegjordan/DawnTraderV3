@@ -19,7 +19,12 @@ import { db } from '../db';
 import { portfolioState, portfolioAnchorEvents } from '@shared/schema';
 import { and, eq, desc } from 'drizzle-orm';
 
-export type AnchorReason = 'start_new' | 'auto_divergence' | 'launch_snap';
+// P19-B8.5: 'measurement_override' — a KYLE-DIRECTED deliberate paper-balance override
+// for a measurement window (e.g. the $150/trade live-parity sizing at inflated breadth).
+// It knowingly suspends the Kraken-mirror equality for paper; the ledger row records
+// the decision (note REQUIRED — a later reader must never misread it as a mirror), and
+// the next start_new re-mirrors Kraken and restores the equality. Never valid for live.
+export type AnchorReason = 'start_new' | 'auto_divergence' | 'launch_snap' | 'measurement_override';
 
 export interface AnchorState {
   balance: number;
@@ -32,6 +37,8 @@ export interface ReanchorInput {
   reason: AnchorReason;
   divergenceBps?: number;
   minNotionalDelta?: number;
+  /** Free-text provenance; REQUIRED for 'measurement_override' (enforced below). */
+  note?: string;
 }
 
 /**
@@ -98,6 +105,15 @@ export async function executeReanchor(input: ReanchorInput): Promise<{ anchorVer
   if (!Number.isFinite(newBalance) || newBalance <= 0) {
     throw new Error(`[B8.2][anchor] Refusing re-anchor (${reason}): invalid newBalance ${newBalance}`);
   }
+  // P19-B8.5: a measurement override is a deliberate, paper-only, provenance-carrying act.
+  if (reason === 'measurement_override') {
+    if (mode !== 'paper') {
+      throw new Error(`[B8.2][anchor] Refusing measurement_override for mode='${mode}' — paper-only by definition (live is always the real Kraken account)`);
+    }
+    if (!input.note || input.note.trim().length < 20) {
+      throw new Error(`[B8.2][anchor] Refusing measurement_override without substantive provenance in 'note' — a later reader must never misread this row as a Kraken mirror`);
+    }
+  }
 
   return await db.transaction(async (tx) => {
     const [current] = await tx
@@ -117,6 +133,7 @@ export async function executeReanchor(input: ReanchorInput): Promise<{ anchorVer
       reason,
       divergenceBps: input.divergenceBps !== undefined ? input.divergenceBps.toFixed(4) : null,
       minNotionalDelta: input.minNotionalDelta ?? null,
+      note: input.note ?? null,
     });
 
     if (current) {

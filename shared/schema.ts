@@ -1195,11 +1195,16 @@ export const portfolioAnchorEvents = pgTable("portfolio_anchor_events", {
   anchorVersion: integer("anchor_version").notNull(),
   oldBalance: decimal("old_balance", { precision: 20, scale: 2 }), // NULL for the first anchor (no prior)
   newBalance: decimal("new_balance", { precision: 20, scale: 2 }).notNull(),
-  reason: varchar("reason", { length: 24 }).notNull(), // 'start_new' | 'auto_divergence' | 'launch_snap'
+  reason: varchar("reason", { length: 24 }).notNull(), // 'start_new' | 'auto_divergence' | 'launch_snap' | 'measurement_override'
   // The measured divergence that triggered an auto re-anchor (bps + blocked-candidate
   // count); NULL for start_new / launch_snap.
   divergenceBps: decimal("divergence_bps", { precision: 12, scale: 4 }),
   minNotionalDelta: integer("min_notional_delta"),
+  // P19-B8.5 (Langston requirement on the measurement_override design): free-text
+  // provenance so a later reader can never misread a deliberate override as a Kraken
+  // mirror. NULL on machine-minted events; REQUIRED (enforced in executeReanchor) for
+  // 'measurement_override'.
+  note: text("note"),
   occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({
   modeVersionIdx: uniqueIndex("portfolio_anchor_events_mode_version_idx").on(table.mode, table.anchorVersion),
