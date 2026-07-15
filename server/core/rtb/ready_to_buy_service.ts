@@ -2344,7 +2344,31 @@ class ReadyToBuyService {
 
     // Phase 8.8.4-C.13.B: Use upsert to prevent duplicate key errors
     const signal = await storage.upsertRtbSignal(insertData);
-    
+
+    // P19-B8.5 (SWITCH-ON fix, found live 2026-07-15): warm the Kraken WS book at
+    // QUEUE time for crypto. The [11.8B→#295] depth gate requires a live two-sided
+    // mini-book BEFORE a position can open, but the only new-symbol subscription was
+    // i8cSubscribeNewTrade AFTER trade creation — a strict ordering inversion: any
+    // symbol not already subscribed (not an open position, not a broadcast staple)
+    // fails DEPTH_GATE no_book on every promotion, forever (observed live: SYN/USD
+    // organic + TRX/USD exploration both died there). The RTB queue IS the candidate
+    // set for opens, and first promotion eligibility is ≥1 refresh (~30s) away — so
+    // subscribing here gives the gate a warm book by the time it asks. Deduped via
+    // the adapter's own live subscription state (getSubscribedSymbols — reconnect
+    // clears it, so a post-reconnect re-queue re-subscribes correctly); xstock_spot
+    // reads depth from the DB ticker snapshots instead (no WS book to warm);
+    // fire-and-forget, never throws into the queue path.
+    if (resolvedAssetClass === 'crypto_spot') {
+      try {
+        const { krakenWebSocketAdapter } = await import('../../exchanges/kraken/kraken-websocket-adapter.js');
+        if (!krakenWebSocketAdapter.getSubscribedSymbols().includes(normalizedSymbol)) {
+          krakenWebSocketAdapter.i8cSubscribeNewTrade(normalizedSymbol, 'rtb_queued');
+        }
+      } catch (subErr) {
+        console.warn(`[P19-B8.5][RTB_BOOK_WARM] queue-time book subscribe failed for ${normalizedSymbol} (open will depth-gate on no_book until subscribed):`, subErr instanceof Error ? subErr.message : subErr);
+      }
+    }
+
     // A3.R9.0: Record queue add for performance metrics
     performanceMonitor.recordQueueAdd(1);
     
