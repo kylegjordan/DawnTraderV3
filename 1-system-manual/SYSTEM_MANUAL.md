@@ -8116,7 +8116,7 @@ MarketDataWebSocket (singleton)
 
 2. **Stateful Mini-Book** (Directive 8.9.4-Patch): Maintains in-memory order book per symbol. Applies delta updates from Kraken book channel. Computes best bid/ask from sorted book entries. Emits midpoint price as `last` in tick data for stable pricing.
 
-3. **Sequence Validation** (Directive 8.9.4-Patch): Tracks checksum per symbol. Detects out-of-order deltas and triggers book resync (delete + rebuild).
+3. **Book maintenance is snapshot+delta with NO sequence validation** (corrected P19-B8.5, 2026-07-15 — the 8.9.4-Patch "Sequence Validation" documented here was DELETED): Kraken v2's book `checksum` is a CRC32 of the top-10 book STATE (uniformly-distributed per update, not monotonic — v2 deltas carry no sequence number; that was v1), so the old block's `next <= prev` check fired on ~half of all updates and deleted the entire mini-book each time (measured live: 32,521 deletions in one log window; the #295 open-depth gate then saw no_book on nearly every promotion). Genuine book-integrity validation — computing the CRC32 per Kraken's documented algorithm and resubscribing on mismatch — is UNBUILT: RUNNING_ISSUES #507, Phase-20 hardening (rides the #506 WS-subscription-lifecycle item).
 
 4. **Auto-Reconnect**: Exponential backoff (1s base, 30s max). Automatic resubscription to all pairs on reconnect.
 

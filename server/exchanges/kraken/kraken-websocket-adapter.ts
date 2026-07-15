@@ -131,7 +131,6 @@ export class KrakenWebSocketAdapter extends EventEmitter {
   // for the depth-walked fill warmth gate (distinct from symbolStats.lastUpdate which
   // can conflate ticker + book channels).
   private bookUpdatedAt = new Map<string, number>();
-  private lastSeq: Record<string, number> = {}; // Track sequence numbers for out-of-order detection
   
   // Phase 8.8.3-I8C: Subscription reliability - open positions provider and audit interval
   private i8cAuditInterval: NodeJS.Timeout | null = null;
@@ -707,18 +706,21 @@ export class KrakenWebSocketAdapter extends EventEmitter {
         continue;
       }
       
-      // 8.9.4-Patch: Sequence validation for out-of-order detection
-      if (update.checksum !== undefined) {
-        // Some v2 book updates include sequence/checksum for validation
-        const seq = update.checksum;
-        if (seq <= (this.lastSeq[internalSymbol] ?? 0)) {
-          console.warn(`[8.9.4-P][SEQ][${internalSymbol}] Out-of-order delta, resyncing.`);
-          this.orderBooks.delete(internalSymbol);
-          // Note: Kraken v2 will resend snapshot on reconnect
-        }
-        this.lastSeq[internalSymbol] = seq;
-      }
-      
+      // P19-B8.5 (SWITCH-ON fix, found live 2026-07-15): the 8.9.4-Patch "sequence
+      // validation" block that lived here was DELETED — Kraken v2's book `checksum`
+      // is a CRC32 of the current top-10 book STATE (docs: book channel, "checksum"),
+      // NOT a monotonic sequence number. Treating it as one deleted the ENTIRE
+      // mini-book whenever the next CRC happened to be <= the previous (~half of all
+      // updates — measured live: 32,521 book deletions in one log window; TAO/USD
+      // wiped 13,839 times in 23,939 updates), and the delete never resubscribed
+      // ("v2 will resend snapshot on reconnect" — no reconnect happens), so books
+      // rebuilt from deltas alone and the #295 depth gate saw no_book/thin_book on
+      // almost every open attempt. Latent since 8.9.4 because nothing consumed
+      // getBookForFill until the depth gate went live at the B8.5 switch-on.
+      // REAL book-integrity validation = compute the CRC32 per Kraken's documented
+      // algorithm and resubscribe on mismatch — a named Phase-20 hardening item
+      // (RUNNING_ISSUES #507), not a hot-path improvisation.
+
       // 8.9.4-Patch: Initialize or get mini-book for this symbol
       if (!this.orderBooks.has(internalSymbol)) {
         this.orderBooks.set(internalSymbol, { bids: new Map(), asks: new Map() });
@@ -3093,7 +3095,6 @@ export class KrakenWebSocketAdapter extends EventEmitter {
     this.symbolStats.delete(symbol);
     this.pendingSubscriptions.delete(symbol);
     this.subscriptionAcks.delete(symbol);
-    delete this.lastSeq[symbol];
     this.firstTickReceived.delete(symbol);
     this.firstTickReceived.delete(symbol + '_book');
     this.tickFrequencyData.delete(symbol);
@@ -3196,7 +3197,6 @@ export class KrakenWebSocketAdapter extends EventEmitter {
     // 2. CLEAR ALL VOLATILE STATE (Critical from Directive 8.9.5)
     this.orderBooks.clear();
     this.symbolStats.clear();
-    this.lastSeq = {};
     this.firstTickReceived.clear();
     this.tickFrequencyData.clear();
     this.lastBroadcastTime.clear();
