@@ -55,3 +55,16 @@ Claude New (CC-B). Discord display name **"NEW Claude"** (exact `--sender` value
 ## ALERTS ARMED / OWED
 - **`83afc970` scheduled → fires 2026-08-03T12Z (MINE):** re-run `b5-w20c-provenance-replay.ts` on the B8.5b typed columns + hash-verified windows vs the ≥99% Tier-1 gate; PASS → un-block 25-12 + close #206's capture leg. Hash coverage starts 2026-07-13 ~17:45Z (exclude earlier); crypto parity noisy → check row DENSITY first (Langston watch-item).
 Store active = 0 at last sweep.
+
+## CHECKPOINT 2026-07-15 ~21:40Z (post-compaction turn)
+- B8.6 rev2 DISPATCHED to Langston (inbox p19-b8-6/P19_B8_6_BUILD_rev2.md). His ① blocker FIXED: exitRest stamps travel via closePosition options (3 sources: fill/drop/stop-during-rest); drop clears ALL DB rest fields. ② comment=structural precedence. ③ D1 confirm. ④ closeOrder pure (types.ts:155 binding rule). ⑤ KEY FACT: B8.5 ENGINE-side work (venue-only chain, C-gate delete, skip rail) is UNCOMMITTED — staging runs HEAD engine; safe interim because HEAD C-gate fail-safe-skips on the deleted knob. Engine co-ships with B8.6 (one commit, P19-B8.6 subject, B8.5 credit in body). Venue-only MIGRATION did ship (347e9534b) + applied.
+- Kyle-blocking Open Trades crash FIXED (client-only): volume-tiers endpoint returns tier STRINGS, client typed {tier,volume24h} objects → .volume24h undefined → formatVolume(undefined).toFixed crash when USD/CHF|USDC/CHF matched (slashless setTier keys). active-trades-v2.tsx: type corrected, dual-key lookup, formatVolume em-dash guard. Benched, in rev2 package.
+- Sizing tune-2 COMMITTED+PUSHED (968cf4b93) + applied: risk 2.70→1.95% (opens measured ~$209, pins ~$150).
+- Bench: baseline OK, 2277 passed. On Langston PASS: commit (schema+engine+test+ui-fix+B8.6 migration), push after CI check, migration-FIRST deploy (B8.6 SQL only), pm2 restart+CONTINUE, verify EXIT_REST_PLACED/FILLED/CONVERT + stamps.
+
+## CHECKPOINT 2026-07-15 ~21:50Z — B8.6 DEPLOYED
+- Langston rev2 CLOSED → commit 06560c299 (B8.6 + co-shipped B8.5 engine leg + b72 comment + UI crash fix) pushed; CI 29452718741 all-4 GREEN (prior red = manifest-drift guard on the sizing-tune commit carrying MANIFEST before the gitignored B8.6 .sql — cured by this push). Migration applied FIRST: 7 ALTERs + INSERT 0 2 knob seed (3600000 both classes == entry rows).
+- Deployed 21:42Z; TRAP LEARNED: `npm run build | tail -3 && pm2 restart` masks build failure (pipe exit code) — turned out fine (dist had new engine) but never pipe the build in a deploy chain again.
+- Engine CONTINUE 21:43:50Z session paper_cO3fPFOjOK; proofs: ANCHOR_ASSERT $2400==$2400 v2 nothing written; [VENUE_ONLY] rejecting binance → direct Kraken REST; Open Trades tab renders 12 positions (crash fix UI-verified via browser, §9.3).
+- ARMED: Monitor bjl4t5qez tails staging out.log for EXIT_REST_PLACED/FILLED/CONVERT/REFUSED + MAKER_EXIT_FILL + PRICE_SKIP_ESCALATION. Wake watcher b7pqcmec1.
+- PENDING: first EXIT_REST evidence → post stamps to Langston+Kyle; Langston Step-8; then Step-10 governance (B8.6 completion report + BATCH_CATALOG + PHASE_HISTORY + PHASE_19_PLAN + RUNNING_ISSUES #505/#508-513 status + SIM/SysManual content updates incl. B8.5 items list from prior checkpoint + Langston MEMORY sync + batch-close sync gate).
