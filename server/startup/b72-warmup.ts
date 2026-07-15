@@ -131,6 +131,14 @@ const PREFETCH_MODULES = [
   // DB knob so recalibration is a SQL UPDATE, never a code edit (rule 15). Read
   // synchronously in the signal-gen + RTB-refresh + VTS hot paths. MUST be warm.
   'scoring_base',
+  // P19-B8.5 (EXPLORATION LANE): paper-only lane knobs (enabled kill-switch,
+  // daily_budget, base_floor_pct, anneal_step_trades/pct, policy_version) — read
+  // synchronously by checkExplorationAdmit on every NetEV-only SQE failure in the
+  // signal-gen hot path. MUST be warm: getCachedConstant THROWS on a cold module,
+  // which fail-closes the lane on EVERY consult (the exact silent-lane defect
+  // found live 2026-07-15 — 282 EXPLORATION_ERR 'module not warm' stderr lines,
+  // zero admits). Seeds live in the B8.5 exploration-lane migration (both classes).
+  'exploration_lane',
   // Future: more Slice 2/3/4 modules added here as source replacements ship.
 ];
 
