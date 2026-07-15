@@ -27,3 +27,10 @@ WHERE mode = 'paper';
 -- the single-writer principle this same batch established. It is minted through
 -- executeReanchor('measurement_override') by the one-off script
 -- server/scripts/b8-5-measurement-override.ts (note REQUIRED, paper-only enforced).
+
+-- 3) (Amendment, found at apply time by the constraint doing its job): the B8.2
+--    migration created a CHECK constraint on reason limited to the original three
+--    values — extend it to admit 'measurement_override'. Idempotent drop-and-recreate.
+ALTER TABLE portfolio_anchor_events DROP CONSTRAINT IF EXISTS portfolio_anchor_events_reason_check;
+ALTER TABLE portfolio_anchor_events ADD CONSTRAINT portfolio_anchor_events_reason_check
+  CHECK (reason IN ('start_new', 'auto_divergence', 'launch_snap', 'measurement_override'));
