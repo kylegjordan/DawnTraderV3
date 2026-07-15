@@ -94,27 +94,11 @@ export async function checkBalanceConfirmationRequired(mode: 'live' | 'paper' = 
   }
 }
 
-/**
- * Phase 27.F.14.D-POST: Confirm portfolio balance
- * Updates the balance and records confirmation timestamp
- */
-export async function confirmPortfolioBalance(mode: 'live' | 'paper', balance: number): Promise<void> {
-  try {
-    // Update portfolio balance
-    await storage.updatePortfolioBalance({ mode, balance });
-    
-    // Record confirmation timestamp in system context
-    await storage.upsertSystemContext({
-      tradingMode: mode,
-      balanceLastConfirmed: new Date()
-    });
-    
-    console.log(`[ActiveEngine] Portfolio balance confirmed: $${balance} for mode=${mode}`);
-  } catch (error) {
-    console.error('[ActiveEngine] Error confirming portfolio balance:', error);
-    throw error;
-  }
-}
+// P19-B8.5 (single-writer balance, rule 18): confirmPortfolioBalance DELETED — the
+// Phase-27-era balance-confirmation system was retired by B8.2 (41D removed the gate),
+// this function had ZERO callers (grep-verified 2026-07-15), and it was one of the
+// enumerated non-anchor writers of portfolio_state.balance. executeReanchor is the
+// sole writer. See DELETED_COMPONENTS_LOG.md.
 
 /**
  * Phase 32.D-Fix.6 Fix #3: Async watchlist population
@@ -562,10 +546,10 @@ export async function startActiveEngine(
         b4Diagnostics.resetSession();
         console.log('[B4] Diagnostic session reset for new simulation');
 
-        // REB 2.8.11: Cache previous portfolio balance for rollback on failure
-        const previousPortfolioState = await storage.getPortfolioState({ mode: 'paper' });
-        const previousBalance = previousPortfolioState ? parseFloat(previousPortfolioState.balance) : null;
-        console.log(`[REB 2.8.11] Cached previous portfolio balance: $${previousBalance} (for rollback if needed)`);
+        // P19-B8.5 (single-writer balance): the REB 2.8.11 previous-balance cache-for-rollback
+        // was DELETED with the write it protected — the engine start no longer writes
+        // portfolio_state at all (executeReanchor is the sole writer), so there is nothing
+        // to roll back.
 
         // Phase 41F-B: Move broadcast-triggering calls OUTSIDE queue job
         // State updates will be done, but broadcasts happen after queue completes (mode already declared above)
@@ -615,98 +599,46 @@ export async function startActiveEngine(
             }
           });
           
-          // REB 2.8.11: Sync portfolioState.balance with new startingBalance AFTER manager starts
-          // This ensures the session is fully live before touching canonical portfolio state
-          // Moved here from before manager.start() to prevent partial initialization on failure
-          // 9.8.D: Guard against missing startingBalance - throw rather than silently using 0
+          // ── P19-B8.5 (SINGLE-WRITER BALANCE — Kyle structural directive 2026-07-15,
+          // Langston-endorsed; supersedes both the REB 2.8.11 write AND the morning's
+          // ANCHOR_GUARD override) ──────────────────────────────────────────────────────
+          // portfolio_state.balance is the WORKING COPY of the anchor ledger, and it is
+          // now writable by executeReanchor ONLY (one writer, period — Kyle: "make the
+          // ledger use ONLY the correct numbers and feed"). The engine start therefore
+          // WRITES NOTHING here: it READS the ledger and VERIFIES the session row agrees,
+          // fixing the SESSION (never the state) on divergence. The $800 incident becomes
+          // structurally impossible — there is no session→state write path left to abuse;
+          // the guard decayed from override-machinery into this assertion. The old
+          // write-failure rollback framework (stop manager / restore previousBalance /
+          // fail session) is deleted with the write it existed to protect.
+          // 9.8.D retained: a session without a startingBalance is still a hard fault.
           if (!sessionData.startingBalance) {
-            throw new Error('[9.8.D] CRITICAL: startingBalance is missing from session data - cannot sync portfolio');
+            throw new Error('[9.8.D] CRITICAL: startingBalance is missing from session data - cannot verify against the anchor ledger');
           }
-          let startBalance = parseFloat(sessionData.startingBalance);
-
-          // P19-B8.5 (soak fix D — ANCHOR-COHERENCE GUARD): portfolio_state.balance is the
-          // WORKING COPY of the anchor ledger (B8.2: the ledger is the truth; only an anchor
-          // event may move the base). This sync previously wrote whatever the session carried,
-          // unchecked — which is exactly how the routes continue-leg $800 fallback clobbered
-          // the anchored $824.11 on 2026-07-15 (the writer this guard would have named on the
-          // spot). If the session balance diverges from the ledger's latest anchored balance,
-          // SYNC THE ANCHOR VALUE instead (Langston D ruling: prefer anchor on divergence),
-          // log loudly with enough call-context to name the writer, and re-align the session
-          // row so session/state stay coherent. No ledger row yet (pre-first-anchor) → no
-          // guard basis → sync as before.
+          const startBalance = parseFloat(sessionData.startingBalance);
           try {
             const { getRatioStampInputs } = await import('./portfolio-anchor-service.js');
             const anchorInputs = await getRatioStampInputs(mode as 'paper' | 'live');
             if (anchorInputs && Math.abs(startBalance - anchorInputs.anchorBalance) > 0.005) {
               console.error(
-                `[P19-B8.5][ANCHOR_GUARD] session startingBalance $${startBalance} diverges from the anchor-ledger truth ` +
+                `[P19-B8.5][ANCHOR_ASSERT] session startingBalance $${startBalance} diverges from the anchor-ledger truth ` +
                 `$${anchorInputs.anchorBalance} (anchorVersion=${anchorInputs.anchorVersion}, mode=${mode}, ` +
                 `sessionId=${sessionData.sessionId}, startedBy=${sessionData.startedBy ?? 'unknown'}) — ` +
-                `SYNCING THE ANCHOR VALUE and re-aligning the session row. Whatever supplied $${startBalance} is the bug; ` +
-                `trace its route from this sessionId.`
+                `re-aligning the SESSION row to the ledger (portfolio_state is single-writer and was not touched). ` +
+                `Whatever supplied $${startBalance} is the bug; trace its route from this sessionId.`
               );
-              startBalance = anchorInputs.anchorBalance;
               try {
                 // updateActiveEngineSession keys by the row UUID (dbSession.id), not the paper_x sessionId.
-                await storage.updateActiveEngineSession(dbSession.id, { startingBalance: startBalance.toString() } as any);
+                await storage.updateActiveEngineSession(dbSession.id, { startingBalance: anchorInputs.anchorBalance.toString() } as any);
               } catch (sessFixErr: any) {
-                console.error('[P19-B8.5][ANCHOR_GUARD] session-row re-align failed (state still syncs the anchor value):', sessFixErr?.message ?? sessFixErr);
+                console.error('[P19-B8.5][ANCHOR_ASSERT] session-row re-align failed (ledger remains authoritative regardless):', sessFixErr?.message ?? sessFixErr);
               }
+            } else if (anchorInputs) {
+              console.log(`[P19-B8.5][ANCHOR_ASSERT] session $${startBalance} == ledger $${anchorInputs.anchorBalance} (anchorVersion=${anchorInputs.anchorVersion}) — coherent, nothing written`);
             }
-          } catch (guardErr: any) {
-            // Guard failure must never block an engine start — sync proceeds un-guarded, loudly.
-            console.error('[P19-B8.5][ANCHOR_GUARD] guard evaluation failed (sync proceeds un-guarded):', guardErr?.message ?? guardErr);
-          }
-
-          console.log(`[REB 2.8.11] Syncing portfolioState.balance = $${startBalance} for paper mode`);
-          
-          try {
-            await storage.updatePortfolioBalance({ 
-              mode: 'paper', 
-              balance: startBalance 
-            });
-            console.log('[REB 2.8.11] Portfolio balance synchronized successfully');
-          } catch (balanceUpdateError: any) {
-            console.error('[REB 2.8.11] Failed to sync portfolio balance:', balanceUpdateError);
-            
-            // Phase 8.8.3-I4 B4: Stop price tick health logging before rollback
-            krakenWebSocketAdapter.stopPriceTickHealthLogging();
-            
-            // Phase 8.8.3-I3: Stop invariant check before rollback
-            rtbMetricsService.stopInvariantCheck();
-            
-            // REB 2.8.11: CRITICAL - Stop manager before rollback to prevent divergent state
-            // The manager is already running; we must stop it atomically before clearing reference
-            console.log('[REB 2.8.11] Stopping manager to prevent divergent state...');
-            try {
-              await manager.stop();
-              console.log('[REB 2.8.11] Manager stopped successfully');
-            } catch (stopError: any) {
-              console.error('[REB 2.8.11] CRITICAL: Failed to stop manager during rollback:', stopError);
-              // Continue with rollback even if stop fails
-            }
-            
-            // Rollback: Restore previous balance to maintain consistency
-            if (previousBalance !== null) {
-              try {
-                await storage.updatePortfolioBalance({ 
-                  mode: 'paper', 
-                  balance: previousBalance 
-                });
-                console.log(`[REB 2.8.11] Rolled back to previous balance: $${previousBalance}`);
-              } catch (rollbackError: any) {
-                console.error('[REB 2.8.11] CRITICAL: Failed to rollback balance:', rollbackError);
-              }
-            }
-            
-            // Clean up manager reference and mark session as failed
-            clearGlobalActiveEngineManager();
-            const failedSession = await storage.getActiveEngineSessionBySessionId(sessionId);
-            if (failedSession) {
-              await storage.updateActiveEngineSession(failedSession.id, { status: 'failed' });
-            }
-            
-            throw new Error(`Failed to sync portfolio balance: ${balanceUpdateError.message}`);
+          } catch (assertErr: any) {
+            // Assertion failure must never block an engine start — loud, not fatal.
+            console.error('[P19-B8.5][ANCHOR_ASSERT] assertion evaluation failed (start proceeds; ledger remains authoritative):', assertErr?.message ?? assertErr);
           }
         } catch (managerError: any) {
           console.error('[ENGINE_ERROR] Manager start failed:', managerError);

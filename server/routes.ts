@@ -11575,28 +11575,34 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         });
       }
       
-      // Phase 8.8.3-I9-RESET-FIX: Soft reset fallback using existing balance
-      // If newBalance is provided, use it (hard reset with new balance)
-      // If newBalance is NOT provided, fetch current balance and do soft reset (clear positions only)
+      // P19-B8.5 (single-writer balance): every reset is now a CLEANUP with the balance
+      // untouched — the ledger governs the balance; executeReanchor is its sole writer.
       let balance: number;
       let isSoftReset = false;
-      
-      if (newBalance !== undefined && !isNaN(parseFloat(newBalance))) {
-        balance = parseFloat(newBalance);
-        console.log(`[ActiveEngine] Hard reset with new balance: $${balance}`);
-      } else {
-        // Soft reset: fetch current balance from portfolio state
+
+      if (newBalance !== undefined) {
+        // A reset can no longer MINT a balance — that was a raw write path into the
+        // ledger-governed working balance (the same class as the $800 clobber).
+        // Refuse loudly, mirroring the B8.2 start-new refusal.
+        return res.status(400).json({
+          error: 'newBalance is no longer accepted on reset. The paper balance is ledger-governed: start a new session (it anchors to your real Kraken balance) or use a recorded anchor override.'
+        });
+      }
+      {
+        // Soft reset: read the current ledger-governed balance for the RESPONSE only.
+        // P19-B8.5 also fixes two latent bugs found here during the single-writer sweep
+        // (both the same wrong-shape class as the $800 bug, #510's audit scope):
+        // (a) the lookup passed systemContext.id (a UUID) as globalContextId — the row's
+        //     global_context_id is 'default', so the read ALWAYS missed; (b) it then read
+        //     `.cash`, a column P19-B3b established does not exist — so the "existing
+        //     balance" echoed a hardcoded $10000 every time. Now reads the real row/field.
         isSoftReset = true;
-        const systemContext = await storage.getSystemContext('paper');
-        if (!systemContext) {
-          return res.status(500).json({ error: 'System context not found for paper mode' });
+        const portfolioState = await storage.getPortfolioState({ globalContextId: 'default', mode: 'paper' });
+        if (!portfolioState?.balance) {
+          return res.status(409).json({ error: 'No stored paper balance found — start a new session (Kraken mirror) before resetting.' });
         }
-        // B-NEW-43 chunk 14: storage.getPortfolioState takes a single params
-        // object (globalContextId?, userId?, mode); caller was passing two
-        // positional args (id, 'paper'). Restructured to the modern shape.
-        const portfolioState = await storage.getPortfolioState({ globalContextId: systemContext.id, mode: 'paper' });
-        balance = portfolioState ? parseFloat(portfolioState.cash || '10000') : 10000;
-        console.log(`[ActiveEngine] Soft reset using existing balance: $${balance}`);
+        balance = parseFloat(portfolioState.balance);
+        console.log(`[ActiveEngine] Soft reset — ledger-governed balance (untouched): $${balance}`);
       }
       
       console.log(`[ActiveEngine] Resetting simulation for user ${userId} with balance $${balance}`);
@@ -11613,46 +11619,38 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       console.log(`[B7.A] Hard reset result:`, resetResult.details);
       
-      // Phase 8.8.3-I9-RESET-FIX: Soft reset preserves trade history
-      // Only clear open positions - trade history remains for review
-      if (isSoftReset) {
-        // Soft reset: only clear open positions, preserve trade history
-        await storage.deleteAllActiveOpenPositions('paper');
-        console.log(`[ActiveEngine] Soft reset: cleared open positions, trade history preserved`);
-      } else {
-        // Hard reset: full cleanup including trade history
-        await storage.deleteAllClosedTrades('paper');
-        await storage.deleteAllActiveOpenPositions('paper');
-        await storage.deleteAllActiveTradeLogs('paper');
-        console.log(`[ActiveEngine] Hard reset: cleared trades, positions, and logs`);
-      }
+      // Phase 8.8.3-I9-RESET-FIX + P19-B8.5 (Langston Step-4 (a)): every reset is the
+      // SOFT cleanup — positions cleared, trade history preserved, balance untouched.
+      // The hard-cleanup branch (history wipe) was provably unreachable once newBalance
+      // 400-refuses (isSoftReset was always true) and was DELETED on the spot per rule 15
+      // — resurrecting a raw destructive history-wipe on the route we just narrowed to
+      // cleanup-only would contradict the cut. A first-class "wipe paper history" op, if
+      // ever wanted, is its own named item (deleteAllClosedTrades survives at its two
+      // other call sites).
+      await storage.deleteAllActiveOpenPositions('paper');
+      console.log(`[ActiveEngine] Soft reset: cleared open positions, trade history preserved`);
       
       // 8.8.4-C.14.C: RTB signals already cleared via hardResetActiveEngine -> clearReadyToBuy
       // Note: Removed duplicate storage.deleteAllTradingSignals call as clearReadyToBuy provides WebSocket broadcast
       
-      // Reset portfolio state for paper mode
-      const systemContext = await storage.getSystemContext('paper');
-      console.log('[ActiveEngineReset] Retrieved system context for mode: paper');
-      await storage.upsertPortfolioState({
-        globalContextId: systemContext!.id,
-        mode: 'paper',
-        totalValue: balance.toString(),
-        unrealizedPnl: '0',
-        realizedPnl: '0',
-        cash: balance.toString(),
-        cryptoValue: '0',
-        lastUpdated: new Date()
-      });
-      
+      // P19-B8.5 (single-writer balance): the reset route's portfolio_state upsert was
+      // DELETED — reset is a CLEANUP operation (positions/trades/logs), not a balance
+      // authority. The balance is ledger-governed: executeReanchor is the sole writer
+      // (start-new mirrors Kraken; deliberate overrides mint recorded anchor events).
+      // This was one of the enumerated non-anchor writers from the $800-clobber audit —
+      // and its old payload wrote columns (totalValue/cash/cryptoValue) that P19-B3b
+      // established do not even exist on the table. The `balance` local above remains
+      // only for the response message; nothing is written.
       // Directive 12.2.3: Bob Core cache invalidation removed (Batch 7B)
 
-      console.log(`[ActiveEngine] Reset complete - new balance: $${balance}`);
+      console.log(`[ActiveEngine] Reset complete - balance untouched (ledger-governed): $${balance}`);
       
+      // P19-B8.5 (Langston Step-4 (a)): the isSoftReset ternary went with the dead hard
+      // branch — every reset is the soft cleanup; isSoftReset kept in the payload for
+      // client compatibility (always true).
       res.json({
         success: true,
-        message: isSoftReset 
-          ? 'Paper simulation soft reset complete. Positions cleared, balance preserved.'
-          : 'Paper simulation hard reset complete.',
+        message: 'Paper simulation soft reset complete. Positions cleared, balance preserved.',
         newBalance: balance,
         isSoftReset,
         hardResetDetails: resetResult.details
@@ -11954,33 +11952,13 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
-  // Phase 8.8.4-C.14: Update paper simulation config (starting_balance)
-  apiRouter.patch('/active-engine/config', authenticateToken, async (req: AuthenticatedRequest, res) => {
-    try {
-      const { starting_balance } = req.body;
-      
-      if (starting_balance !== undefined) {
-        const balance = parseFloat(starting_balance);
-        if (isNaN(balance) || balance <= 0) {
-          return res.status(400).json({ error: 'Invalid starting_balance value' });
-        }
-        
-        const userId = req.user!.id;
-        await storage.updatePortfolioBalance({ userId, mode: 'paper', balance });
-        
-        console.log(`[8.8.4-C.14][CONFIG] Updated starting_balance to $${balance} for user ${userId}`);
-      }
-      
-      res.json({
-        ok: true,
-        message: 'Configuration updated',
-        starting_balance
-      });
-    } catch (error: any) {
-      console.error('[8.8.4-C.14][CONFIG_ERROR]', error);
-      res.status(500).json({ error: error.message || 'Failed to update configuration' });
-    }
-  });
+  // P19-B8.5 (single-writer balance, rule 18; Langston Step-4 (b): full delete over a
+  // 410 tombstone — an authenticated internal API with zero client callers has no
+  // external contract to tombstone, and a permanent 410 is itself mild lingering): the
+  // 8.8.4-C.14 PATCH /active-engine/config route was DELETED. Its only function was a
+  // raw starting_balance write (an enumerated non-anchor writer of
+  // portfolio_state.balance). Balance is ledger-governed: executeReanchor is the sole
+  // writer. See DELETED_COMPONENTS_LOG.md.
 
   // Paper trading status
   apiRouter.get('/active-engine/status', authenticateToken, async (req: AuthenticatedRequest, res) => {

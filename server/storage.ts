@@ -607,8 +607,7 @@ export interface IStorage {
 
   // Portfolio State methods (Phase 8.5 Addendum F)
   getPortfolioState(params: { globalContextId?: string; userId?: string; mode: 'live' | 'paper' }): Promise<PortfolioState | undefined>;
-  upsertPortfolioState(data: InsertPortfolioState & { globalContextId?: string; userId?: string; mode: 'live' | 'paper' }): Promise<PortfolioState>;
-  updatePortfolioBalance(params: { globalContextId?: string; userId?: string; mode: 'live' | 'paper'; balance: number }): Promise<PortfolioState>;
+  // P19-B8.5 (single-writer balance): upsertPortfolioState + updatePortfolioBalance removed — executeReanchor is the sole portfolio_state.balance writer.
 
   // Tuning methods (Phase 26.1)
   getTuningPolicy(params: { userId: string; mode: 'live' | 'paper' }): Promise<any | null>;
@@ -3698,43 +3697,13 @@ export class DatabaseStorage implements IStorage {
     return state || undefined;
   }
   
-  async upsertPortfolioState(data: InsertPortfolioState & { globalContextId?: string; userId?: string; mode: 'live' | 'paper' }): Promise<PortfolioState> {
-    const contextId = data.globalContextId || 'default';
-    const existing = await this.getPortfolioState({ globalContextId: contextId, mode: data.mode });
-    
-    if (existing) {
-      // P19-B3b: portfolio_state has only balance + lastUpdate as mutable columns
-      // (cash, cryptoValue, userId are not columns on this table — single-tenant,
-      // mode-based). The prior .set referenced those dropped/nonexistent columns;
-      // update only the real ones.
-      const [updated] = await db.update(portfolioState)
-        .set({
-          balance: data.balance,
-          lastUpdate: new Date(),
-        })
-        .where(and(
-          eq(portfolioState.globalContextId, contextId),
-          eq(portfolioState.mode, data.mode)
-        ))
-        .returning();
-      return updated;
-    } else {
-      const [created] = await db.insert(portfolioState)
-        .values({ ...data, globalContextId: contextId })
-        .returning();
-      return created;
-    }
-  }
-  
-  async updatePortfolioBalance(params: { globalContextId?: string; userId?: string; mode: 'live' | 'paper'; balance: number }): Promise<PortfolioState> {
-    const balanceDecimal = params.balance.toString();
-    return await this.upsertPortfolioState({ 
-      globalContextId: params.globalContextId || 'default',
-      userId: params.userId,
-      mode: params.mode, 
-      balance: balanceDecimal 
-    });
-  }
+  // P19-B8.5 (single-writer balance, rule 18): upsertPortfolioState + updatePortfolioBalance
+  // DELETED — portfolio_state.balance is writable by executeReanchor (portfolio-anchor-service)
+  // ONLY. Every former caller was dispositioned in the $800-clobber writer audit: the engine
+  // start-sync became read-and-verify, the reset-route write was removed (reset = cleanup, not
+  // a balance authority), the config-PATCH route was deleted, confirmPortfolioBalance was
+  // deleted (zero callers), and the bootstrap initializer now mints genesis balances through
+  // executeReanchor('launch_snap'). See DELETED_COMPONENTS_LOG.md.
 
   // Expert Updates methods (Phase 5.8 - Task 5)
   async getExpertUpdatesByWeek(weekOf: string): Promise<any[]> {
