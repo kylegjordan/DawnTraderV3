@@ -55,6 +55,20 @@ interface CachedPrice {
   cachedAt: number;
 }
 
+/**
+ * P19-B8.5 (soak fix C, prong 1) — the PURE Binance routing decision, exported for tests.
+ * Binance is consulted ONLY for USD-quoted pairs (mapped `${base}USDT`); any other quote
+ * returns null — the source structurally cannot quote that market for us, and asking
+ * anyway returns ghost-market or wrong-market numbers (see fetchFromBinance).
+ */
+export function binanceSymbolFor(symbol: string): string | null {
+  const parts = symbol.split('/');
+  if (parts.length !== 2) return null;
+  const [base, quote] = parts;
+  if (!base || quote !== 'USD') return null;
+  return `${base}USDT`;
+}
+
 export class LivePricingAdapter {
   private priceCache: Map<string, CachedPrice> = new Map();
   private refreshInterval: NodeJS.Timeout | null = null;
@@ -373,12 +387,24 @@ export class LivePricingAdapter {
    */
   private async fetchFromBinance(symbol: string): Promise<number | null> {
     try {
-      // Convert symbol format: BTC/USD -> BTCUSDT
-      const binanceSymbol = symbol.replace('/', '').replace('USD', 'USDT');
-      
+      // P19-B8.5 (soak fix C, prong 1 — ROUTING): only consult Binance for markets it can
+      // structurally quote for us: USD-quoted pairs, mapped base+'USDT'. The old blind
+      // `replace('/','').replace('USD','USDT')` passed non-USD quotes through VERBATIM
+      // (XRP/GBP -> 'XRPGBP'), and Binance's ticker answers for DELISTED ghost markets
+      // with the last price ever traded — a frozen number. Measured live 2026-07-15:
+      // XRPGBP returned a static 0.5257 (vs the real ~0.827) for 37 straight minutes and
+      // phantom-stopped five paper positions. A source that cannot quote the requested
+      // market must return NULL (the chain skips it honestly), never a different market's
+      // number. (It also mangled USD-BASED pairs: 'USDC/CHF' -> 'USDTCCHF' — garbage that
+      // only failed safe by 404.)
+      const binanceSymbol = binanceSymbolFor(symbol);
+      if (binanceSymbol === null) {
+        return null; // Binance cannot quote this market for us — refuse, don't improvise.
+      }
+
       const response = await fetch(
         `https://api.binance.com/api/v3/ticker/price?symbol=${binanceSymbol}`,
-        { 
+        {
           signal: AbortSignal.timeout(5000),
           headers: { 'User-Agent': 'DawnTrader/1.0' }
         }

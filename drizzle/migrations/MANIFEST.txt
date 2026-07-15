@@ -171,3 +171,5 @@
 2026-07-14-p19-b8-5-strategy-gates-crypto-seed.sql
 2026-07-15-p19-b8-5-exploration-lane.sql
 2026-07-15-p19-b8-5-portfolio-state-anchor-correction.sql
+2026-07-15-p19-b8-5-exit-integrity-knobs.sql
+2026-07-15-p19-b8-5-phantom-exit-annotation.sql

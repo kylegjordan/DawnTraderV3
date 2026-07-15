@@ -2275,6 +2275,40 @@ class ReadyToBuyService {
       return null;
     }
 
+    // ── P19-B8.5 (soak fix C / #509) — POST-STOP RE-ENTRY COOLDOWN ────────────────────
+    // A symbol+strategy that just STOPPED OUT is evidence AGAINST the thesis; re-queuing
+    // the same signal shape minutes later is thesis-blind churn (observed live: the
+    // XRP/GBP loop re-entered 5 times in 37 minutes — phantom-priced that day, but the
+    // churn pattern is real with honest prices too). The general symbol-cooldown guardrail
+    // (5 min) is shorter than the gen cadence and close-reason-blind; this guard is
+    // per-(symbol,strategy,class), DB-knobbed per class, keyed to close_reason='stop_hit'
+    // ONLY (a target hit or timeout is not anti-thesis evidence). Fail-open on knob/query
+    // error: the cooldown is churn hygiene, not a safety gate — never block the queue on
+    // its own failure, loudly.
+    try {
+      const { getCachedConstant } = await import('../../services/module-constants-service.js');
+      const _cooldownMin = getCachedConstant<number>('exit_integrity', 'post_stop_reentry_cooldown_minutes',
+        { exchange: '*', assetClass: resolvedAssetClass, strategy: '*', regime: '*' });
+      if (typeof _cooldownMin === 'number' && Number.isFinite(_cooldownMin) && _cooldownMin > 0) {
+        const { db } = await import('../../db.js');
+        const { sql } = await import('drizzle-orm');
+        const r = await db.execute(sql`
+          SELECT closed_at FROM closed_trades
+          WHERE symbol = ${normalizedSymbol}
+            AND strategy_name = ${input.strategy}
+            AND close_reason = 'stop_hit'
+            AND closed_at >= now() - make_interval(mins => ${_cooldownMin})
+          ORDER BY closed_at DESC LIMIT 1`);
+        const _lastStop = (r as any).rows?.[0]?.closed_at;
+        if (_lastStop) {
+          console.log(`[P19-B8.5][REENTRY_COOLDOWN] ${normalizedSymbol}/${input.strategy}: stopped out at ${_lastStop} — re-entry blocked for ${_cooldownMin}min post-stop (#509)`);
+          return null;
+        }
+      }
+    } catch (cooldownErr) {
+      console.warn(`[P19-B8.5][REENTRY_COOLDOWN] guard errored (queue proceeds — churn hygiene, not a safety gate):`, cooldownErr instanceof Error ? cooldownErr.message : cooldownErr);
+    }
+
     // Phase 14.5: Persist routing and ranking metadata for auditability
     const enrichedMetadata = {
       ...(input.metadata || {}),

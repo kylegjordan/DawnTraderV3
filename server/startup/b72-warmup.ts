@@ -139,6 +139,13 @@ const PREFETCH_MODULES = [
   // found live 2026-07-15 — 282 EXPLORATION_ERR 'module not warm' stderr lines,
   // zero admits). Seeds live in the B8.5 exploration-lane migration (both classes).
   'exploration_lane',
+  // P19-B8.5 (soak fix C): exit-integrity knobs — max_fallback_deviation_pct (the
+  // fallback-price sanity gate in the exit monitor, read synchronously every tick
+  // for every fallback-priced position) + post_stop_reentry_cooldown_minutes (the
+  // #509 stop→re-entry guard at the RTB queue seam). MUST be warm — the sanity
+  // gate fail-safes to "fallback prices not actionable" on a cold module, which
+  // is survivable but noisy; the seeds live in the C-batch exit-integrity migration.
+  'exit_integrity',
   // Future: more Slice 2/3/4 modules added here as source replacements ship.
 ];
 

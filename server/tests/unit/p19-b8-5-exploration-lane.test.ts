@@ -17,7 +17,14 @@ vi.mock('../../db.js', () => ({
       // Crude but sufficient: the budget query targets rtb_signals, the anneal query closed_trades.
       const s = JSON.stringify(q);
       if (s.includes('rtb_signals')) return { rows: [{ n: rtbExplorationToday }] };
-      if (s.includes('closed_trades')) return { rows: [{ n: closedExploration }] };
+      if (s.includes('closed_trades')) {
+        // P19-B8.5 (two-denominator split): the anneal driver must count INFORMATIVE
+        // closes only — its SQL must carry the never_filled exclusion. If the code ever
+        // regresses to the unfiltered query, return a poisoned count that breaks the
+        // anneal expectations below (fails the floor math loudly in tests).
+        if (!s.includes('never_filled')) return { rows: [{ n: closedExploration + 100000 }] };
+        return { rows: [{ n: closedExploration }] };
+      }
       return { rows: [{ n: 0 }] };
     },
   },

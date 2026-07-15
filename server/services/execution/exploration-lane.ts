@@ -97,13 +97,24 @@ async function usedBudgetToday(assetClass: string): Promise<number> {
   });
 }
 
-/** Closed exploration trades for a class — the anneal driver. */
+/** INFORMATIVE closed exploration trades for a class — the anneal driver.
+ *
+ *  P19-B8.5 (Langston-approved 2026-07-15, the two-denominator split): never_filled
+ *  rows are EXCLUDED here and ONLY here. The anneal's justification is "the subsidy
+ *  expires as EDGE-evidence accumulates" — a maker admit that expired unfilled carries
+ *  zero information about the trade's outcome, so it must not tighten the floor. The
+ *  same event stays fully VISIBLE to the pFill measurement (filled/attempts), which
+ *  reads the B7.2c pending-outcome records through a separate path — a never-filled
+ *  attempt is precisely what pFill exists to count. Two denominators, two queries; no
+ *  shared flag to misapply. With the step keyed to informative closes the anneal
+ *  calendar becomes an OUTPUT of measured fill reality, not a date target. */
 async function closedExplorationCount(assetClass: string): Promise<number> {
   return cachedCount(`anneal:${assetClass}`, async () => {
     const r = await db.execute(sql`
       SELECT count(*)::int AS n FROM closed_trades
       WHERE metadata->>'admissionBasis' = 'exploration'
-        AND asset_class = ${assetClass}`);
+        AND asset_class = ${assetClass}
+        AND close_reason IS DISTINCT FROM 'never_filled'`);
     return Number((r as any).rows?.[0]?.n ?? 0);
   });
 }

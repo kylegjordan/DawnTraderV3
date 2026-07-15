@@ -933,6 +933,59 @@ export class ActiveExecutionEngine {
           }
         }
         
+        // ── P19-B8.5 (soak fix C, prong 2 — FALLBACK-PRICE SANITY GATE) ─────────────────
+        // A price from a NON-Kraken source is not actionable if it jumps implausibly from
+        // the position's last known mark in one tick. Root incident (2026-07-15): the
+        // Binance fallback served a delisted ghost-market price for XRP/GBP (static
+        // 0.5257 vs real ~0.827, a 36% one-tick "move") and phantom-stopped five
+        // positions in 37 minutes. The gate protects EVERY actionable use downstream —
+        // stops, targets, AND the pending-maker fill detection (a phantom high would
+        // phantom-fill a resting order the same way) — which is why it sits HERE, before
+        // both. Semantics (Langston C-ruling): kraken_ws + kraken_rest are venue truth,
+        // never gated; any other source deviating more than the per-class DB knob from
+        // the reference mark triggers a fresh Kraken REST ARBITER fetch — REST succeeds →
+        // act on the venue price (genuine gaps stay exitable); REST fails → skip this
+        // position this tick, loudly. No reference mark (cold start) → skip, never fire.
+        // Missing/cold knob → fallback prices are NOT actionable (fail-safe), loudly.
+        if (priceSource !== 'kraken_ws' && priceSource !== 'kraken_rest') {
+          let _sanityDevKnob: number | undefined;
+          try {
+            const _sanClass = asValidAssetClass((position as { assetClass?: unknown }).assetClass) ?? safeResolveAssetClass(position.symbol, 'kraken') ?? 'crypto_spot';
+            _sanityDevKnob = getCachedNumberRequired('exit_integrity', 'max_fallback_deviation_pct',
+              { exchange: '*', assetClass: _sanClass, strategy: '*', regime: '*' });
+          } catch (knobErr) {
+            console.error(`[P19-B8.5][PRICE_SANITY] knob unavailable — fallback price NOT actionable for ${position.symbol} (fail-safe skip):`, knobErr instanceof Error ? knobErr.message : knobErr);
+            withoutPrice++;
+            continue;
+          }
+          const _sanityRef = Number.parseFloat(String(position.currentPrice ?? position.avgPrice ?? ''));
+          if (!Number.isFinite(_sanityRef) || _sanityRef <= 0) {
+            console.warn(`[P19-B8.5][PRICE_SANITY] no reference mark for ${position.symbol} (cold start) — fallback source '${priceSource}' not actionable this tick (skip, never fire)`);
+            withoutPrice++;
+            continue;
+          }
+          const _sanityDev = Math.abs(currentPrice - _sanityRef) / _sanityRef;
+          if (_sanityDev > _sanityDevKnob) {
+            console.error(`[P19-B8.5][PRICE_SANITY] ${position.symbol}: fallback source '${priceSource}' price ${currentPrice} deviates ${(100 * _sanityDev).toFixed(1)}% from last mark ${_sanityRef} (limit ${(100 * _sanityDevKnob).toFixed(1)}%) — invoking Kraken REST arbiter`);
+            try {
+              const _arbPair = getKrakenRestPair(position.symbol);
+              const _arbTicker = await this.krakenService.getTicker(_arbPair);
+              const _arbData = Object.values(_arbTicker)[0] as any;
+              const _arbAsk = _arbData ? parseFloat(_arbData.a[0]) : NaN;
+              const _arbBid = _arbData ? parseFloat(_arbData.b[0]) : NaN;
+              const _arbMid = (_arbAsk > 0 && _arbBid > 0) ? (_arbAsk + _arbBid) / 2 : NaN;
+              if (!Number.isFinite(_arbMid) || _arbMid <= 0) throw new Error('arbiter returned no usable mid');
+              console.warn(`[P19-B8.5][PRICE_SANITY] ${position.symbol}: arbiter Kraken REST mid=${_arbMid} REPLACES the fallback ${currentPrice} (source '${priceSource}' rejected)`);
+              currentPrice = _arbMid;
+              priceSource = 'kraken_rest';
+            } catch (arbErr) {
+              console.error(`[P19-B8.5][PRICE_SANITY] ${position.symbol}: arbiter fetch failed — position skipped this tick (no action on an unverifiable price):`, arbErr instanceof Error ? arbErr.message : arbErr);
+              withoutPrice++;
+              continue;
+            }
+          }
+        }
+
         // Phase 8.8.3-B3.5: Log PRICE_TICK for cadence verification
         const now = Date.now();
         const lastTick = this.lastPriceTickTime.get(position.symbol) || now;
@@ -1202,8 +1255,15 @@ export class ActiveExecutionEngine {
             // B65.2-HF3: BE-lock-ratcheted stop was hit before trade reached
             // target. Reuse the existing stop_hit ExitCondition type on the
             // paper side to keep downstream P&L math identical; the reason
-            // string carries the BE-protect semantics and the closed-trade
-            // row records 'break_even_stop' in the closeReason column.
+            // string carries the BE-protect semantics.
+            // P19-B8.5 (Langston Step-4 note, comment corrected): the closed-trade
+            // row records 'stop_hit' in closeReason (closeReason: exitCondition.type
+            // — the literal returned below), NOT 'break_even_stop' as this comment
+            // previously claimed. Consequence: a BE-ratchet scratch (near-neutral,
+            // not thesis-invalidating) is indistinguishable from a real stop-out in
+            // close_reason, and trips the #509 post-stop re-entry cooldown too —
+            // conservative-safe, accepted; distinguishing them = a closeReason
+            // taxonomy question for the Phase-25 learning reads.
             console.log(`[B65.2][EXIT_TRIGGER] symbol=${position.symbol} type=break_even_stop price=${currentPrice} ratcheted_stop=${decision.newStopPrice?.toFixed(4)}`);
             return {
               type: 'stop_hit',
