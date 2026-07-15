@@ -219,6 +219,41 @@ export class ActiveExecutionEngine {
   private priceTickLogs: Array<{ symbol: string; refreshedAt: string; diffMs: number }> = [];
   private lastPriceTickTime: Map<string, number> = new Map();
 
+  // ── P19-B8.5 (venue-only pricing, Langston condition 1 — the SKIP-THIS-TICK safety
+  // rail). Skipping a tick when the venue quotes nothing is correct; a position whose
+  // venue feed stays dark on BOTH WS and REST is genuinely unmanageable for that
+  // window, and that must not fail silently. Per-position consecutive-skip streak;
+  // crossing the DB-knobbed threshold raises a §10.5 system alert (deduped per
+  // symbol), not a buried log line. Streak resets on the first venue price.
+  private _priceSkipStreak: Map<string, number> = new Map();
+
+  private async _recordPriceSkip(position: { id: string; symbol: string; assetClass?: unknown }, reason: string): Promise<void> {
+    const streak = (this._priceSkipStreak.get(position.id) ?? 0) + 1;
+    this._priceSkipStreak.set(position.id, streak);
+    let threshold = 40; // fail-safe default if the knob is cold — ~1 min at the monitor cadence
+    try {
+      const _cls = asValidAssetClass(position.assetClass) ?? safeResolveAssetClass(position.symbol, 'kraken') ?? 'crypto_spot';
+      threshold = getCachedNumberRequired('exit_integrity', 'max_consecutive_price_skips',
+        { exchange: '*', assetClass: _cls, strategy: '*', regime: '*' });
+    } catch { /* knob cold — the default above stands; the alert still fires */ }
+    if (streak === threshold) {
+      console.error(`[P19-B8.5][PRICE_SKIP_ESCALATION] ${position.symbol}: ${streak} consecutive exit-monitor ticks with NO venue price (${reason}) — position unmanageable this window; raising system alert`);
+      try {
+        const { addAlert } = await import('./system-alerts.js');
+        await addAlert({
+          triggers_at: new Date(),
+          category: 'breakage',
+          severity: 'warning',
+          title: `Open position unmanageable — no Kraken price for ${position.symbol}`,
+          body: `The exit monitor has skipped ${streak} consecutive ticks for the open ${this.mode} position on ${position.symbol} because neither the Kraken live feed nor the Kraken direct query returned a usable price (${reason}). The position cannot be exited until the venue quotes again. If this persists, investigate the feed/subscription for this pair.`,
+          dedupe_key: `price-skip-${this.mode}-${position.symbol}`,
+        });
+      } catch (alertErr) {
+        console.error(`[P19-B8.5][PRICE_SKIP_ESCALATION] alert raise failed (the loud log above stands):`, alertErr instanceof Error ? alertErr.message : alertErr);
+      }
+    }
+  }
+
   // I7-ROOT-FIX: minimal engine status diagnostics
   private lastEvaluateAt: number | null = null;
   private lastCycleAt: number | null = null; // Phase 8.8.3-I7-PM-FOCUS: Track monitoring cycle tick
@@ -878,39 +913,46 @@ export class ActiveExecutionEngine {
         let currentPrice: number;
         let priceSource: string;
         
-        // Phase 8.8.3-B9: Strict price source validation - no mock pricing
-        if (priceResult !== null && priceResult.price !== null && priceResult.source !== 'no_reliable_price') {
-          // Phase 8.8.3-B9: Reject mock prices in production mode
-          if (priceResult.source === 'mock') {
-            console.warn(`[B9.PRICING][SKIP_DUE_TO_MOCK] ${position.symbol}: Mock price rejected, skipping position check`);
-            withoutPrice++;
-            continue;
-          }
+        // ── P19-B8.5 (VENUE-ONLY ACTIONABLE PRICING — Kyle structural cut B, Langston-
+        // endorsed 2026-07-15) ─────────────────────────────────────────────────────────
+        // We fill against Kraken's book, so a non-Kraken tick is not actionable
+        // information — it's a number that looks like one (Langston's phrasing; today's
+        // phantom stops were the proof). The actionable chain is now EXACTLY:
+        //   kraken_ws → kraken_rest → SKIP-THIS-TICK.
+        // binance / coingecko / mock / last_known_good / entry_seed are OFF the
+        // actionable path: any of them from the adapter routes into the direct Kraken
+        // REST leg below, and if REST also fails the position is skipped this tick with
+        // the consecutive-skip escalation rail (further down) watching for a feed that
+        // stays dark. This supersedes the same-day C prong-2 sanity gate, which existed
+        // to referee heterogeneous sources — with a homogeneous venue chain there is
+        // nothing left to referee (its observe-only WS-vs-REST divergence log survives
+        // in the REST leg).
+        if (priceResult !== null && priceResult.price !== null && priceResult.source === 'kraken_ws') {
           currentPrice = priceResult.price;
           priceSource = priceResult.source;
-          
-          // Phase 8.8.3-I7-PRICE-FIX: Track price source stats
-          if (priceSource === 'kraken_ws') {
-            withWsPrice++;
-            console.log(`[I7-WS-D][ENGINE_WS_PRICE] symbol=${position.symbol} price=${currentPrice}`);
-          } else if (priceSource === 'kraken_rest' || priceSource === 'binance' || priceSource === 'coingecko') {
-            withRestPrice++;
-          }
+          withWsPrice++;
+          console.log(`[I7-WS-D][ENGINE_WS_PRICE] symbol=${position.symbol} price=${currentPrice}`);
         } else {
-          // Phase 8.8.3-I7: Fallback to Kraken REST if cache unavailable
-          // Use the resolver to get correct REST pair format
+          if (priceResult?.price != null && priceResult.source !== 'no_reliable_price' && priceResult.source !== 'kraken_rest') {
+            console.warn(`[P19-B8.5][VENUE_ONLY] ${position.symbol}: adapter offered non-venue source '${priceResult.source}' (${priceResult.price}) — not actionable, going to Kraken REST directly`);
+          }
+          // Phase 8.8.3-I7: Fallback to Kraken REST if the WS cache is unavailable/stale.
+          // P19-B8.5 (venue-only): this is now the ONLY fallback — REST is the same venue
+          // we fill against. On REST failure the position is SKIPPED this tick and the
+          // consecutive-skip rail below counts toward escalation.
           try {
             const restPair = getKrakenRestPair(position.symbol);
             console.log(`[I7][REST_FALLBACK] symbol=${position.symbol} -> restPair=${restPair}`);
-            
+
             const ticker = await this.krakenService.getTicker(restPair);
             const tickerData = Object.values(ticker)[0];
             if (!tickerData) {
               console.warn(`[B9.PRICING][SKIP_DUE_TO_NO_PRICE] ${position.symbol}: No Kraken REST data, skipping position check`);
               withoutPrice++;
+              await this._recordPriceSkip(position, 'rest_no_data');
               continue;
             }
-            
+
             // 8.9.2: Calculate midpoint from bid/ask, fallback to last trade
             const ask = parseFloat(tickerData.a[0]);
             const bid = parseFloat(tickerData.b[0]);
@@ -918,9 +960,20 @@ export class ActiveExecutionEngine {
             currentPrice = (ask > 0 && bid > 0) ? (ask + bid) / 2 : lastTrade;
             priceSource = 'kraken_rest';
             withRestPrice++;
-            
+
             console.log(`[8.9.2][REST_TICK] ${position.symbol} bid=${bid} ask=${ask} mid=${currentPrice.toFixed(8)}`);
-            
+
+            // P19-B8.5 (Langston condition 3, observe-only): a WS cache that diverges hard
+            // from same-venue REST is a real stale-feed signal worth telemetry — logged,
+            // never gated (REST is the truth in this leg either way).
+            const _wsStale = priceResult?.price != null && priceResult.price > 0 ? priceResult.price : null;
+            if (_wsStale !== null && currentPrice > 0) {
+              const _div = Math.abs(_wsStale - currentPrice) / currentPrice;
+              if (_div > 0.02) {
+                console.warn(`[P19-B8.5][WS_REST_DIVERGENCE] ${position.symbol}: adapter cache ${_wsStale} (source '${priceResult?.source}') vs REST ${currentPrice} = ${(100 * _div).toFixed(1)}% — stale-feed telemetry, observe-only`);
+              }
+            }
+
             // Phase 8.8.3-I7: Broadcast this REST price to frontend
             // Normalize to internal format for consistent cache keys
             const internalSymbol = normalizeToInternalSymbol(position.symbol);
@@ -929,62 +982,21 @@ export class ActiveExecutionEngine {
           } catch (krakenError) {
             console.warn(`[B9.PRICING][SKIP_DUE_TO_NO_PRICE] ${position.symbol}: Kraken REST failed, skipping position check`, krakenError);
             withoutPrice++;
+            await this._recordPriceSkip(position, 'rest_failed');
             continue;
           }
         }
+        // A position that reaches here has a VENUE price — reset its skip streak.
+        this._priceSkipStreak.delete(position.id);
         
-        // ── P19-B8.5 (soak fix C, prong 2 — FALLBACK-PRICE SANITY GATE) ─────────────────
-        // A price from a NON-Kraken source is not actionable if it jumps implausibly from
-        // the position's last known mark in one tick. Root incident (2026-07-15): the
-        // Binance fallback served a delisted ghost-market price for XRP/GBP (static
-        // 0.5257 vs real ~0.827, a 36% one-tick "move") and phantom-stopped five
-        // positions in 37 minutes. The gate protects EVERY actionable use downstream —
-        // stops, targets, AND the pending-maker fill detection (a phantom high would
-        // phantom-fill a resting order the same way) — which is why it sits HERE, before
-        // both. Semantics (Langston C-ruling): kraken_ws + kraken_rest are venue truth,
-        // never gated; any other source deviating more than the per-class DB knob from
-        // the reference mark triggers a fresh Kraken REST ARBITER fetch — REST succeeds →
-        // act on the venue price (genuine gaps stay exitable); REST fails → skip this
-        // position this tick, loudly. No reference mark (cold start) → skip, never fire.
-        // Missing/cold knob → fallback prices are NOT actionable (fail-safe), loudly.
-        if (priceSource !== 'kraken_ws' && priceSource !== 'kraken_rest') {
-          let _sanityDevKnob: number | undefined;
-          try {
-            const _sanClass = asValidAssetClass((position as { assetClass?: unknown }).assetClass) ?? safeResolveAssetClass(position.symbol, 'kraken') ?? 'crypto_spot';
-            _sanityDevKnob = getCachedNumberRequired('exit_integrity', 'max_fallback_deviation_pct',
-              { exchange: '*', assetClass: _sanClass, strategy: '*', regime: '*' });
-          } catch (knobErr) {
-            console.error(`[P19-B8.5][PRICE_SANITY] knob unavailable — fallback price NOT actionable for ${position.symbol} (fail-safe skip):`, knobErr instanceof Error ? knobErr.message : knobErr);
-            withoutPrice++;
-            continue;
-          }
-          const _sanityRef = Number.parseFloat(String(position.currentPrice ?? position.avgPrice ?? ''));
-          if (!Number.isFinite(_sanityRef) || _sanityRef <= 0) {
-            console.warn(`[P19-B8.5][PRICE_SANITY] no reference mark for ${position.symbol} (cold start) — fallback source '${priceSource}' not actionable this tick (skip, never fire)`);
-            withoutPrice++;
-            continue;
-          }
-          const _sanityDev = Math.abs(currentPrice - _sanityRef) / _sanityRef;
-          if (_sanityDev > _sanityDevKnob) {
-            console.error(`[P19-B8.5][PRICE_SANITY] ${position.symbol}: fallback source '${priceSource}' price ${currentPrice} deviates ${(100 * _sanityDev).toFixed(1)}% from last mark ${_sanityRef} (limit ${(100 * _sanityDevKnob).toFixed(1)}%) — invoking Kraken REST arbiter`);
-            try {
-              const _arbPair = getKrakenRestPair(position.symbol);
-              const _arbTicker = await this.krakenService.getTicker(_arbPair);
-              const _arbData = Object.values(_arbTicker)[0] as any;
-              const _arbAsk = _arbData ? parseFloat(_arbData.a[0]) : NaN;
-              const _arbBid = _arbData ? parseFloat(_arbData.b[0]) : NaN;
-              const _arbMid = (_arbAsk > 0 && _arbBid > 0) ? (_arbAsk + _arbBid) / 2 : NaN;
-              if (!Number.isFinite(_arbMid) || _arbMid <= 0) throw new Error('arbiter returned no usable mid');
-              console.warn(`[P19-B8.5][PRICE_SANITY] ${position.symbol}: arbiter Kraken REST mid=${_arbMid} REPLACES the fallback ${currentPrice} (source '${priceSource}' rejected)`);
-              currentPrice = _arbMid;
-              priceSource = 'kraken_rest';
-            } catch (arbErr) {
-              console.error(`[P19-B8.5][PRICE_SANITY] ${position.symbol}: arbiter fetch failed — position skipped this tick (no action on an unverifiable price):`, arbErr instanceof Error ? arbErr.message : arbErr);
-              withoutPrice++;
-              continue;
-            }
-          }
-        }
+        // P19-B8.5 (venue-only): the same-day C prong-2 FALLBACK-PRICE SANITY GATE that
+        // lived here was DELETED — it refereed heterogeneous price sources, and the
+        // venue-only chain above makes non-Kraken sources structurally unreachable at
+        // this point (Kyle: "if Kraken pricing isn't available, that's a trade we cannot
+        // act on"). Its observe-only WS-vs-REST divergence log survives in the REST leg.
+        // Its exit_integrity.max_fallback_deviation_pct knob is retired with it (rows
+        // removed in the venue-only migration; the module keeps its cooldown +
+        // skip-escalation knobs).
 
         // Phase 8.8.3-B3.5: Log PRICE_TICK for cadence verification
         const now = Date.now();
@@ -1070,11 +1082,113 @@ export class ActiveExecutionEngine {
           triggeredExit: exitCondition !== null
         });
 
+        // ── P19-B8.6 — MAKER TARGET-EXIT rest lifecycle (paper only) ────────────────────
+        // A live rest is evaluated FIRST; placement happens when a fresh target_hit fires
+        // with no rest up. STOP PRECEDENCE is absolute: any stop-class condition closes
+        // taker immediately, rest or no rest. The stop-over-target precedence on a tick
+        // that gapped through BOTH is enforced STRUCTURALLY, not by a comparator here:
+        // evaluateTECExit's hard-floor path checks the stop BEFORE the target
+        // (tec-evaluator.ts), and the TARGET-only placement gate (D2 below) excludes the
+        // moonbag stop-above-target state — so a both-breached tick surfaces as a
+        // stop-class condition and never reaches the rest evaluation (OBJ-3).
+        const _exitRestLimit = (position as any).exitLimitPrice != null ? parseFloat(String((position as any).exitLimitPrice)) : null;
+        const _isStopClass = exitCondition !== null && exitCondition.type !== 'target_hit';
+        // Langston Step-4 ①: rest-cohort stamps travel EXPLICITLY via closePosition's
+        // options — closePosition re-fetches the DB row, so stamps must never depend on
+        // which rest fields happen to survive in the DB at close time.
+        const _restPlacedAtMs = (position as any).exitRestPlacedAt ? new Date((position as any).exitRestPlacedAt).getTime() : null;
+        let _exitRestStamp: { restedAtPrice: number; placedAtMs: number | null; outcome: 'fill' | 'convert' } | null = null;
+        if (_isStopClass && _exitRestLimit !== null && Number.isFinite(_exitRestLimit)) {
+          // Stop-during-rest: the rest is cancelled by the stop-class taker close below;
+          // it stamps as a CONVERT — a maker miss for the AC-6 denominator.
+          _exitRestStamp = { restedAtPrice: _exitRestLimit, placedAtMs: _restPlacedAtMs, outcome: 'convert' };
+        }
+
+        if (this.mode === 'paper' && _exitRestLimit !== null && Number.isFinite(_exitRestLimit) && !_isStopClass) {
+          // A rest is LIVE and no stop fired: the rest IS the exit order this tick.
+          // Reuses the B7.2c pure logic with the side flipped — tradedThrough('sell')
+          // = price >= limit, the same honest never-optimistic comparator entries use.
+          // D1 (Langston-approved INTENTIONAL divergence from entry semantics): entries
+          // route a marketable order to the stored-taker check; the exit RESTS the
+          // marketable price and requires a LATER venue tick at/through the limit —
+          // same-tick place-and-fill is prohibited as an optimistic touch-fill. Do not
+          // "fix" this into entry-parity.
+          const _restDeadline = (position as any).exitDeadline ? new Date((position as any).exitDeadline).getTime() : null;
+          const _restOutcome = evaluatePendingMaker({
+            side: 'sell', currentPrice, limit: _exitRestLimit, nowMs: Date.now(), deadlineMs: _restDeadline,
+          });
+          if (_restOutcome === 'fill') {
+            tpHits++;
+            console.log(`[P19-B8.6][EXIT_REST_FILLED] ${position.symbol}: venue price ${currentPrice} traded through the resting exit ${_exitRestLimit} — closing at the limit + MAKER fee`);
+            await this.closePosition(position.id, _exitRestLimit, {
+              type: 'target_hit',
+              price: _exitRestLimit,
+              reason: `Resting maker exit filled at ${_exitRestLimit} (venue traded through)`,
+            }, priceSource, {
+              makerExitFill: { limit: _exitRestLimit },
+              exitRest: { restedAtPrice: _exitRestLimit, placedAtMs: _restPlacedAtMs, outcome: 'fill' },
+            });
+            continue;
+          }
+          if (_restOutcome === 'drop') {
+            // CONVERT (deadline fired): clear the rest; the tick's own evaluation decides —
+            // condition still target_hit → taker close below (books the convert friction,
+            // AC-2/OBJ-5 via the normal path); condition null → position simply continues.
+            console.log(`[P19-B8.6][EXIT_REST_CONVERT] ${position.symbol}: rest at ${_exitRestLimit} hit the deadline unfilled — converting (taker path governs this tick)`);
+            await storage.updateActiveOpenPosition(this.mode, position.id, {
+              exitLimitPrice: null, exitRestPlacedAt: null, exitDeadline: null,
+            } as any);
+            // ALL rest fields are cleared in DB (nothing load-bearing survives for a
+            // future cleanup to break — Langston ①); the same-tick taker close gets its
+            // stamps via the explicit exitRest option below, never from the DB row.
+            _exitRestStamp = { restedAtPrice: _exitRestLimit, placedAtMs: _restPlacedAtMs, outcome: 'convert' };
+            if (!exitCondition) continue;
+            // fall through to the close block with the (taker) target_hit condition
+          } else if (_restOutcome === 'rest') {
+            // Still resting: a concurrent target_hit condition is SWALLOWED — the rest is
+            // the exit order; no taker close while it stands.
+            continue;
+          }
+        } else if (this.mode === 'paper' && exitCondition?.type === 'target_hit' && _exitRestLimit === null) {
+          // PLACEMENT: fresh target_hit, no rest up. D2 (Langston): the TEC guard —
+          // resting is only defined for plain TARGET mode; any other engine state falls
+          // back to the EXISTING immediate taker exit (never a stranded position).
+          const _tecMode = (position as any).tradeMode ?? 'TARGET';
+          if (_tecMode === 'TARGET') {
+            let _restBudgetMs: number | null = null;
+            try {
+              const _restClass = asValidAssetClass((position as { assetClass?: unknown }).assetClass) ?? safeResolveAssetClass(position.symbol, 'kraken') ?? 'crypto_spot';
+              _restBudgetMs = getCachedNumberRequired('maker_taker', 'exit_maker_max_pending_ms',
+                { exchange: '*', assetClass: _restClass, strategy: '*', regime: '*' });
+            } catch (knobErr) {
+              console.warn(`[P19-B8.6][EXIT_REST_SKIP] ${position.symbol}: exit_maker_max_pending_ms knob unavailable — falling back to the immediate taker exit (never strand):`, knobErr instanceof Error ? knobErr.message : knobErr);
+            }
+            const _restTarget = position.takeProfit != null ? parseFloat(String(position.takeProfit)) : NaN;
+            if (_restBudgetMs !== null && Number.isFinite(_restTarget) && _restTarget > 0) {
+              const _placedAt = new Date();
+              await storage.updateActiveOpenPosition(this.mode, position.id, {
+                exitLimitPrice: _restTarget.toString(),
+                exitRestPlacedAt: _placedAt,
+                exitDeadline: new Date(_placedAt.getTime() + _restBudgetMs),
+              } as any);
+              console.log(`[P19-B8.6][EXIT_REST_PLACED] ${position.symbol}: target ${_restTarget} touched at ${currentPrice} — resting the exit as a maker sell (deadline +${Math.round(_restBudgetMs / 60000)}min); fill requires a LATER tick at/through the limit (D1)`);
+              continue; // no close this tick — the rest is the exit order
+            }
+            // knob/target unusable → fall through to the immediate taker exit (D2)
+          } else {
+            console.warn(`[P19-B8.6][EXIT_REST_REFUSED] ${position.symbol}: TEC state '${_tecMode}' is non-TARGET — rest undefined under ratcheting; falling back to the immediate taker exit (D2 fail-closed, never strand)`);
+          }
+        }
+
         if (exitCondition) {
           // Phase 8.8.3-I7-PRICE-FIX: Track exit types
           if (exitCondition.type === 'stop_hit') slHits++;
           if (exitCondition.type === 'target_hit') tpHits++;
-          
+
+          // P19-B8.6 (stop precedence): a stop-class close while a rest was up cancels
+          // the rest implicitly — the position row is consumed by the close; the convert
+          // stamps travel via the explicit exitRest option set above (Langston ①).
+
           // [B8.PNL][EXIT_SOURCE] - Log price source before calling closePosition
           console.log(`[B8.PNL][EXIT_SOURCE]`, JSON.stringify({
             symbol: position.symbol,
@@ -1084,8 +1198,9 @@ export class ActiveExecutionEngine {
             priceSource: priceSource,
             closeReason: exitCondition.type
           }));
-          
-          await this.closePosition(position.id, currentPrice, exitCondition, priceSource);
+
+          await this.closePosition(position.id, currentPrice, exitCondition, priceSource,
+            _exitRestStamp ? { exitRest: _exitRestStamp } : undefined);
         }
       } catch (error) {
         console.error(`[PaperExecution:${this.mode}] Error checking position ${position.symbol}:`, error);
@@ -1329,7 +1444,18 @@ export class ActiveExecutionEngine {
     positionId: string,
     exitPrice: number,
     exitCondition: ExitCondition,
-    priceSource?: string
+    priceSource?: string,
+    // P19-B8.6: makerExitFill — a resting maker TARGET-exit that genuinely traded
+    // through fills AT the limit with the MAKER fee and zero slippage BY CONSTRUCTION
+    // (the same fill=limit semantics as the B7.2c entry rest — no depth walk; the order
+    // was resting, the market came to it). Absent = the normal depth-walked taker close.
+    // exitRest — the rest-cohort stamp payload, passed EXPLICITLY by the caller
+    // (Langston Step-4 ①): this method re-fetches the position row, so stamps must not
+    // be reconstructed from whichever rest fields survive in the DB at close time.
+    options?: {
+      makerExitFill?: { limit: number };
+      exitRest?: { restedAtPrice: number; placedAtMs: number | null; outcome: 'fill' | 'convert' };
+    }
   ): Promise<void> {
     const position = await storage.getActiveOpenPosition(this.mode, positionId);
     if (!position) {
@@ -1370,28 +1496,49 @@ export class ActiveExecutionEngine {
     // requestedPrice worsened by the penalty, loudly. Closes are NOT depth-gated (you
     // must always be able to exit), so there is no skip path here.
     const _closeClass = asValidAssetClass((position as any).assetClass) ?? safeResolveAssetClass(position.symbol, 'kraken');
-    const _closeCfg = _closeClass ? await resolveFillDepthGateConfig(_closeClass) : null;
-    const _closeSnap = _closeClass ? await getDepthSnapshot(position.symbol, _closeClass) : null;
-    const _closeFill = await this.orderPlacer.closeOrder({
-      symbol: position.symbol, side: 'sell', quantity, requestedPrice: exitPrice, mode: this.mode, positionId,
-      assetClass: _closeClass ?? undefined,
-      bookBids: _closeSnap?.bids,
-      beyondDepthPenaltyBps: _closeCfg?.beyondDepthPenaltyBps,
-    });
-    if (_closeFill.status !== 'filled') {
-      // C3 CLOSE-SEAM STATE RULE: a non-filled close leaves the position OPEN (close NOT
-      // recorded), retried next exit-monitor cycle — never half-closed. Nothing above this
-      // point has mutated the position. Paper always fills; this guards live.
-      console.error(`[PaperExecution:${this.mode}][CLOSE_FILL_NONFILLED] ${position.symbol} pos=${positionId} status=${_closeFill.status} — position left OPEN, retry next cycle (paper fills must be atomic)`);
-      return;
+    let actualExitPrice: number;
+    let exitFee: number;
+    let _exitSlippageOverride: number | null = null;
+    let _takerCloseSlippage = 0;
+    if (options?.makerExitFill) {
+      // P19-B8.6 MAKER fill leg: the resting exit filled at its limit — price = the
+      // limit exactly (makerFillPrice semantics, same CI-guarded fill=limit rule as
+      // entries), fee = notional × the per-class MAKER rate, slippage = 0 by
+      // construction. No depth walk — the market traded through a resting order.
+      const _mLimit = options.makerExitFill.limit;
+      const _mNotional = _mLimit * quantity;
+      const _mRate = _closeClass ? getFrictionForAssetClass(_closeClass).feeRateMaker : getFrictionForAssetClass('crypto_spot').feeRateMaker;
+      actualExitPrice = _mLimit;
+      exitFee = _mNotional * _mRate;
+      _exitSlippageOverride = 0;
+      console.log(`[P19-B8.6][MAKER_EXIT_FILL:${this.mode}] ${position.symbol}: filled the resting exit at ${_mLimit} (maker rate ${(100 * _mRate).toFixed(2)}%, fee ${exitFee.toFixed(4)}, slippage 0 by construction)`);
+    } else {
+      const _closeCfg = _closeClass ? await resolveFillDepthGateConfig(_closeClass) : null;
+      const _closeSnap = _closeClass ? await getDepthSnapshot(position.symbol, _closeClass) : null;
+      const _closeFill = await this.orderPlacer.closeOrder({
+        symbol: position.symbol, side: 'sell', quantity, requestedPrice: exitPrice, mode: this.mode, positionId,
+        assetClass: _closeClass ?? undefined,
+        bookBids: _closeSnap?.bids,
+        beyondDepthPenaltyBps: _closeCfg?.beyondDepthPenaltyBps,
+      });
+      if (_closeFill.status !== 'filled') {
+        // C3 CLOSE-SEAM STATE RULE: a non-filled close leaves the position OPEN (close NOT
+        // recorded), retried next exit-monitor cycle — never half-closed. Nothing above this
+        // point has mutated the position. Paper always fills; this guards live.
+        console.error(`[PaperExecution:${this.mode}][CLOSE_FILL_NONFILLED] ${position.symbol} pos=${positionId} status=${_closeFill.status} — position left OPEN, retry next cycle (paper fills must be atomic)`);
+        return;
+      }
+      actualExitPrice = _closeFill.fillPrice;
+      exitFee = _closeFill.feeQuote;
+      _takerCloseSlippage = _closeFill.slippageQuote;
     }
-    const actualExitPrice = _closeFill.fillPrice;
-    const exitFee = _closeFill.feeQuote;
     
     // Get entry costs from position (persisted at entry time)
     const entryFee = position.entryFee ? parseFloat(position.entryFee) : (entryValue * (_b45FeePct / 100));
     const entrySlippage = position.entrySlippage ? parseFloat(position.entrySlippage) : 0;
-    const exitSlippage = _closeFill.slippageQuote; // P19-B3a: from the close FillResult (== exitSlippagePerUnit * quantity)
+    // P19-B3a: from the close FillResult (== exitSlippagePerUnit * quantity); P19-B8.6:
+    // a maker exit-fill overrides to 0 by construction (filled at the resting limit).
+    const exitSlippage = _exitSlippageOverride ?? _takerCloseSlippage;
 
     // Phase 8.8.3-C2: P/L breakdown per directive
     // Gross P/L = Pure market movement (no slippage, no fees)
@@ -1572,6 +1719,18 @@ export class ActiveExecutionEngine {
         targetExitPrice: exitPrice.toString(),
         actualExitPrice: actualExitPrice.toString(),
         exitSlippage: exitSlippage.toString(),
+        // P19-B8.6 exit-side cohort stamps (AC-6/AC-7 — the denominator lives here),
+        // sourced EXCLUSIVELY from the caller's explicit exitRest option (Langston ①):
+        // maker fill → 'maker'/'fill'; any taker close of a position that had a rest
+        // (deadline convert, stop-during-rest) → 'taker'/'convert' with the rested-at
+        // price PRESERVED — the convert cohort is the maker-miss half the denominator
+        // measures; never-rested taker closes → 'taker'/NULL.
+        exitFeeMode: options?.makerExitFill ? 'maker' : 'taker',
+        exitRestOutcome: options?.exitRest?.outcome ?? null,
+        exitRestedAtPrice: options?.exitRest ? options.exitRest.restedAtPrice.toString() : null,
+        exitRestDurationMs: options?.exitRest?.placedAtMs != null
+          ? Math.max(0, Date.now() - options.exitRest.placedAtMs)
+          : null,
         totalCost: totalCost.toString(),
         grossPnl: grossPnl.toString(),
         netPnl: netPnl.toString(),

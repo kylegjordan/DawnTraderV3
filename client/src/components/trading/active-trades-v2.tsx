@@ -257,7 +257,12 @@ function formatNumber(value: number, decimals: number = 2): string {
 }
 
 // Phase 8.8.3-I9 A2: Format volume with units (M/K) - coin count, not dollar amount
-function formatVolume(volume: number): string {
+// P19-B8.5 (soak fix): absent volume renders an honest em-dash — this helper sits on
+// the whole-page render path, so an undefined here must never throw.
+function formatVolume(volume: number | null | undefined): string {
+  if (volume == null || !Number.isFinite(volume)) {
+    return '—';
+  }
   if (volume >= 1000000) {
     return `${(volume / 1000000).toFixed(1)}M`;
   } else if (volume >= 1000) {
@@ -863,9 +868,14 @@ export default function ActiveTradesV2({ mode }: { mode?: 'paper' | 'live' } = {
   });
   
   // Phase 8.8.5-E: 30-second polling for VolumeClassifier tier assignments
+  // P19-B8.5 (soak fix, Kyle 2026-07-15): the server's getAllTiers() returns BARE TIER
+  // STRINGS keyed mostly by slash-form symbol — it retains no per-symbol volume. The
+  // previous {tier, volume24h} object type here never matched the real contract; a
+  // truthy string's .volume24h is undefined, and formatVolume(undefined).toFixed()
+  // crashed the whole paper page the first time a symbol key matched (USD/CHF).
   const { data: volumeTiersData } = useQuery<{
     ok: boolean;
-    tiers: Record<string, { tier: 'HIGH' | 'MID' | 'LOW'; volume24h: number }>;
+    tiers: Record<string, 'HIGH' | 'MID' | 'LOW'>;
   }>({
     queryKey: ['/api/diagnostics/8.8.5/volume-tiers'],
     enabled: isPaper,
@@ -913,12 +923,15 @@ export default function ActiveTradesV2({ mode }: { mode?: 'paper' | 'live' } = {
     fallbackBucket?: 'High' | 'Medium' | 'Low' | 'Very Low'
   ): { tier: string; volume: string } => {
     const normalized = normalizeSymbol(symbol); // Use normalizeSymbol for consistent uppercase + slash removal
-    const tierInfo = volumeTiersData?.tiers?.[normalized];
-    
-    if (tierInfo) {
+    // The classifier map keys are mostly slash-form ('EUR/USD') with some normalized
+    // entries from setTier callers — try both. The value is the tier string itself;
+    // volume always comes from the trade's own data (the classifier retains none).
+    const classifierTier = volumeTiersData?.tiers?.[symbol] ?? volumeTiersData?.tiers?.[normalized];
+
+    if (classifierTier) {
       return {
-        tier: tierInfo.tier,
-        volume: formatVolume(tierInfo.volume24h),
+        tier: classifierTier,
+        volume: formatVolume(fallbackVolume),
       };
     }
     
@@ -932,7 +945,7 @@ export default function ActiveTradesV2({ mode }: { mode?: 'paper' | 'live' } = {
     
     return {
       tier: bucketToTier[fallbackBucket || 'Medium'] || 'MID',
-      volume: formatVolume(fallbackVolume || 0),
+      volume: formatVolume(fallbackVolume),
     };
   }, [volumeTiersData]);
   

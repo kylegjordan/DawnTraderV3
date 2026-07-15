@@ -1754,6 +1754,19 @@ export const closedTradesTable = pgTable("closed_trades", {
   originalStopPrice: decimal("original_stop_price", { precision: 20, scale: 8 }),
   latchTriggerPrice: decimal("latch_trigger_price", { precision: 20, scale: 8 }),
   rungTargetHistory: jsonb("rung_target_history"), // number[] — array of rung target prices crossed in order
+  // P19-B8.6 — maker target-exit cohort stamps (KEEP-AS-DATA, the chosen_entry_mode
+  // pattern applied to the EXIT side). exit_fee_mode: which fee the exit actually
+  // paid ('maker' = resting target-exit filled; 'taker' = market exit — stops,
+  // converts, timeouts). exit_rest_outcome: 'fill' (rested + filled maker) |
+  // 'convert' (rested, deadline fired, exited taker) | NULL (never rested — stops,
+  // pre-B8.6 rows). exit_rested_at_price + exit_rest_duration_ms reconstruct the
+  // rest per row for the Phase-25 maker-exit economics read. AC-6 (Langston): every
+  // maker-savings figure reports fills AND converts from these stamps — the
+  // denominator, not just the wins.
+  exitFeeMode: varchar("exit_fee_mode", { length: 8 }),
+  exitRestOutcome: varchar("exit_rest_outcome", { length: 8 }),
+  exitRestedAtPrice: decimal("exit_rested_at_price", { precision: 20, scale: 10 }),
+  exitRestDurationMs: integer("exit_rest_duration_ms"),
   // B67.3 — A/B universe-split cohort marker. CRC32(symbol) % 2 at trade open.
   // Cohort 0: per-underlying cap ENABLED. Cohort 1: cap DISABLED (control).
   // NULL on trades opened before B67.3 deploy.
@@ -1824,6 +1837,15 @@ export const activeOpenPositions = pgTable("active_open_positions", {
   state: varchar("state", { length: 16 }).default("open"), // 'open' | 'pending'
   makerLimitPrice: decimal("maker_limit_price", { precision: 20, scale: 10 }),
   makerDeadline: timestamp("maker_deadline"),
+  // P19-B8.6: resting maker TARGET-EXIT lifecycle (the B7.2c entry-rest machinery,
+  // side flipped). An OPEN position whose target fires rests its exit as a maker sell
+  // at the target (exit_limit_price) instead of exiting taker immediately; a LATER
+  // venue tick at/through the limit fills it at the maker fee, or the deadline
+  // converts it back to the normal taker exit. NULL = no exit resting (the default;
+  // also all pre-B8.6 rows). Stops NEVER rest — stop precedence cancels a live rest.
+  exitLimitPrice: decimal("exit_limit_price", { precision: 20, scale: 10 }),
+  exitRestPlacedAt: timestamp("exit_rest_placed_at", { withTimezone: true }),
+  exitDeadline: timestamp("exit_deadline", { withTimezone: true }),
   // P19-B8.2 (OBJ-4): balance-ratio calibration tag, stamped ONCE at open (same-vintage
   // discipline, the di_at_queue precedent) TOGETHER with the anchor it was measured
   // against — a later re-anchor can never reinterpret this row. ratio = paperBalance /
