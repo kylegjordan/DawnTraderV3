@@ -1,0 +1,163 @@
+diff --git a/server/core/rtb/ready_to_buy_service.ts b/server/core/rtb/ready_to_buy_service.ts
+index 3dcc2056f..8894b0d7b 100644
+--- a/server/core/rtb/ready_to_buy_service.ts
++++ b/server/core/rtb/ready_to_buy_service.ts
+@@ -942,8 +942,18 @@ class ReadyToBuyService {
+     };
+ 
+     const sqeResult = await signalQualityEvaluator.evaluate(sqeInput);
+-    
+-    if (!sqeResult.passed) {
++
++    // P19-B8.5 exploration lane: an exploration-stamped signal's lane admission was
++    // decided AT GENERATION (budget consumed once, 4-field stamp on the row). The
++    // refresh re-SQE therefore HONORS the stamp when the ONLY failure is the same
++    // NetEV gate the lane overrode — otherwise every lane admit dies here before
++    // promotion (Langston's next-binding-gate prediction). Any OTHER failure
++    // (regime, floors, AMR) still deletes — the lane only ever overrides NetEV.
++    // Paper-only by construction: exploration stamps exist only on paper rows.
++    const _exploStamped = ((signal.metadata as any)?.admissionBasis === 'exploration');
++    if (!sqeResult.passed && _exploStamped && sqeResult.failures.length === 1 && sqeResult.failures[0].startsWith('NetEV ')) {
++      console.log(`[P19-B8.5][EXPLORATION_REFRESH_PASS] ${normalizedSymbol}: NetEV-only refresh failure on an exploration-stamped signal — stamp honored, signal retained`);
++    } else if (!sqeResult.passed) {
+       await storage.deleteRtbSignals({ mode, id: signal.id });
+       performanceMonitor.recordQueueRemove(1);
+       console.log(`[11.0E][REFRESH_COMPLETE] symbol=${normalizedSymbol} DELETED reason=${sqeResult.reason}`);
+@@ -1209,7 +1219,13 @@ class ReadyToBuyService {
+               // denominator, kept as TWO labelled numbers vs SQE-at-generation, never summed (MUST-4).
+               if (_fCls) recordActiveSqeEvaluation(mode, _fCls, sqeResult.passed, sqeResult.failures, 'refresh');
+ 
+-              if (!sqeResult.passed) {
++              // P19-B8.5 exploration lane: honor the gen-time stamp on a NetEV-only
++              // refresh failure (mirror of the single-refresh site above — the lane
++              // admission was decided once at generation; any OTHER failure still deletes).
++              const _exploStampedB = ((signal.metadata as any)?.admissionBasis === 'exploration');
++              if (!sqeResult.passed && _exploStampedB && sqeResult.failures.length === 1 && sqeResult.failures[0].startsWith('NetEV ')) {
++                console.log(`[P19-B8.5][EXPLORATION_REFRESH_PASS] ${normalizedSymbol}: NetEV-only batch-refresh failure on an exploration-stamped signal — stamp honored, signal retained`);
++              } else if (!sqeResult.passed) {
+                 console.log(`[11.0E][SQE_REVALIDATION_FAIL] symbol=${normalizedSymbol} reason=${sqeResult.reason}`);
+                 this.logRtbTrace(mode, normalizedSymbol, signal.strategy, oldStatus, 'deleted', 'SQE_failure');
+                 this.logSqeRejection(signal, sqeResult.reason || 'unknown', refreshedFinalScore);
+diff --git a/server/services/active-execution-engine.ts b/server/services/active-execution-engine.ts
+index 4292d39a1..8fb4ad266 100644
+--- a/server/services/active-execution-engine.ts
++++ b/server/services/active-execution-engine.ts
+@@ -2239,9 +2239,21 @@ export class ActiveExecutionEngine {
+     // same kernel, same friction), so a taker-chosen signal is unaffected.
+     const _b72ChosenNetEv = (signal as any).chosenNetEv != null ? Number((signal as any).chosenNetEv) : null;
+     const _b72ChosenMode: 'taker' | 'maker' = ((signal as any).chosenEntryMode as 'taker' | 'maker') ?? 'taker';
+-    const _b72IsTradeable = _b72ChosenNetEv != null ? (_b72ChosenNetEv > 0) : expectancyResult.isTradeable;
++    let _b72IsTradeable = _b72ChosenNetEv != null ? (_b72ChosenNetEv > 0) : expectancyResult.isTradeable;
+     const _b72EffectiveNetEv = _b72ChosenNetEv != null ? _b72ChosenNetEv : expectancyResult.netEV;
+ 
++    // P19-B8.5 exploration lane: an exploration-stamped PAPER signal is a KNOWN
++    // negative-netEV admit (lane-budgeted at gen, stamp-honored at refresh) — its
++    // non-positive sign here is NOT gates-drifted, so the backstop's EV_REJECT alarm
++    // must not fire on it (that alarm's job is detecting signals admitted positive
++    // that went negative). Paper-mode AND stamp BOTH required — live signals can
++    // never carry the stamp, and the live backstop stays byte-identical.
++    const _exploOpen = this.mode === 'paper' && (signal.metadata as any)?.admissionBasis === 'exploration';
++    if (!_b72IsTradeable && _exploOpen) {
++      console.log(`[P19-B8.5][EXPLORATION_OPEN] ${signal.symbol}: known-negative exploration admit (netEV=${_b72EffectiveNetEv.toFixed(6)}) passing the 11.8B backstop — NOT gates-drifted, stamp honored`);
++      _b72IsTradeable = true;
++    }
++
+     if (!_b72IsTradeable) {
+       // [B4] Log funnel attempt blocked by Net Expectancy Gate
+       b4Diagnostics.logFunnelEvent({
+@@ -2677,6 +2689,11 @@ export class ActiveExecutionEngine {
+       const trade = await storage.createClosedTrade(this.mode, {
+         symbol: signal.symbol,
+         baseCurrency,
++        // P19-B8.5 (Langston Step-4 ②): the honest class — WITHOUT this the column
++        // fell to its schema default 'crypto_spot' for EVERY trade (xStock rows
++        // misclassed; the exploration anneal + any per-class read off this table
++        // was crypto-only by accident). Same _tradeClass the open-position row gets.
++        assetClass: _tradeClass,
+         strategyName: signal.strategy,
+         side: 'buy',
+         quantity: quantity.toString(),
+@@ -2782,6 +2799,9 @@ export class ActiveExecutionEngine {
+         exchange: 'kraken',
+         // P19-B4a (C4): use the class resolved + skip-guarded above (stamp-preferred).
+         assetClass: _tradeClass,
++        // P19-B8.5 note: the exploration 4-field stamp reaches this row via the
++        // EXISTING `metadata: { ...signal.metadata, ... }` spread below — the budget
++        // governor's middle conservation term (open-but-not-yet-closed) reads it.
+         // Batch 19E: Persist sourcePool from signal metadata
+         sourcePool: (signal as any)?.metadata?.sourcePool || (signal as any)?.sourcePool || null,
+         // P19-B7.2b (OBJ-B): the maker/taker entry fee-mode + per-side rate.
+diff --git a/server/services/signal-orchestrator.ts b/server/services/signal-orchestrator.ts
+index 9ed2e92e5..14697268e 100644
+--- a/server/services/signal-orchestrator.ts
++++ b/server/services/signal-orchestrator.ts
+@@ -819,7 +819,42 @@ export class SignalOrchestrator {
+     // numbers, never summed (MUST-4). Records BOTH pass and fail (a pass feeds the honest denominator).
+     if (_fClass) recordActiveSqeEvaluation(sizingContext.mode, _fClass, sqeResult.passed, sqeResult.failures, 'generation');
+ 
+-    if (!sqeResult.passed) {
++    // ══════════════════════════════════════════════════════════════════════════════
++    // P19-B8.5 — THE EXPLORATION LANE (paper-only, additive; 3-way consensus + Kyle
++    // GO 2026-07-15, budget 25-30/day). The organic netEV>0 admission above stays
++    // BYTE-IDENTICAL; this lane may additionally admit a bounded daily budget of
++    // signals whose ONLY SQE failure is the NetEV gate (the fee wall — verified
++    // genuine). STRUCTURAL live-scoping (Langston condition-2): the lane is consulted
++    // ONLY under `this.mode === 'paper'` — the live path never reads the knobs and
++    // its netEV>0 admission stays hardcoded. Every lane admit carries the 4-field
++    // stamp (admissionBasis/netEvAtAdmit/floorInEffect/policyVersion — KEEP-AS-DATA,
++    // the #405 pattern) so Phase-25 separates the cohort and the anneal is
++    // reconstructable per row. A lane ERROR falls through to the normal reject
++    // (fail-closed: never an accidental admit).
++    // ══════════════════════════════════════════════════════════════════════════════
++    let _exploAdmit: import('./execution/exploration-lane.js').ExplorationAdmitDecision | null = null;
++    if (!sqeResult.passed && this.mode === 'paper') {
++      try {
++        const { checkExplorationAdmit, isNetEvOnlyFailure } = await import('./execution/exploration-lane.js');
++        if (isNetEvOnlyFailure(sqeResult.failures)) {
++          const d = await checkExplorationAdmit({
++            assetClass: sizingContext.assetClass,
++            chosenNetEv: _mtDecision.chosenNetEV,
++            entryPrice: rawSignal.entryPrice,
++          });
++          if (d.admit) {
++            _exploAdmit = d;
++            console.log(`[P19-B8.5][EXPLORATION_ADMIT] ${rawSignal.symbol}/${strategyId}: ${d.reason} (netEV=${_mtDecision.chosenNetEV.toFixed(6)}, organic gate UNTOUCHED — lane admit)`);
++          } else {
++            console.log(`[P19-B8.5][EXPLORATION_DECLINE] ${rawSignal.symbol}/${strategyId}: ${d.reason}`);
++          }
++        }
++      } catch (laneErr) {
++        console.warn(`[P19-B8.5][EXPLORATION_ERR] ${rawSignal.symbol}/${strategyId}: lane error — falling through to normal reject (fail-closed):`, laneErr instanceof Error ? laneErr.message : laneErr);
++      }
++    }
++
++    if (!sqeResult.passed && !_exploAdmit) {
+       console.log(`[11.0E][SQE_REJECT] ${rawSignal.symbol}/${strategyId}: ${sqeResult.reason}`);
+       signalLifecycleAudit.recordRejection(
+         signalId,
+@@ -854,7 +889,9 @@ export class SignalOrchestrator {
+       return null;
+     }
+ 
+-    console.log(`[B.3][SQE_PASS] ${rawSignal.symbol}/${strategyId}: passed SQE filter`);
++    console.log(_exploAdmit
++      ? `[B.3][SQE_PASS] ${rawSignal.symbol}/${strategyId}: EXPLORATION-LANE admit (organic SQE gate said no on NetEV only; lane budget consumed)`
++      : `[B.3][SQE_PASS] ${rawSignal.symbol}/${strategyId}: passed SQE filter`);
+ 
+     // B67.3 — Per-underlying position cap check.
+     // Counts currently-open trades sharing the signal's base currency.
+@@ -938,6 +975,14 @@ export class SignalOrchestrator {
+       metadata: {
+         strategyWeight,
+         exposureBias,
++        // P19-B8.5 exploration lane — the 4-field cohort stamp (KEEP-AS-DATA, #405
++        // pattern). 'organic' = passed the untouched netEV>0 admission; 'exploration'
++        // = lane admit (paper-only) with the effective floor + policy version at
++        // admit time, so the anneal's non-stationarity is reconstructable per row.
++        admissionBasis: _exploAdmit ? 'exploration' : 'organic',
++        netEvAtAdmit: _mtDecision.chosenNetEV,
++        ...(_exploAdmit ? { floorInEffect: _exploAdmit.floorInEffect, policyVersion: _exploAdmit.policyVersion } : {}),
++        assetClass: sizingContext.assetClass,
+       },
+     };
+ 
