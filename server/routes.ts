@@ -11477,9 +11477,23 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // Phase 41D: Balance confirmation removed - continue directly
       console.log('[41D] Continuing simulation without balance confirmation gate');
       
-      // REB 2.8.13: Fetch existing portfolio balance for continue mode
-      const portfolioState = await storage.getPortfolioState('paper');
-      const existingBalance = portfolioState?.balance ? parseFloat(portfolioState.balance) : 800;
+      // REB 2.8.13: Fetch existing portfolio balance for continue mode.
+      // P19-B8.5 (soak fix D — the $800 clobber, found live 2026-07-15): this call
+      // passed a bare string where getPortfolioState takes a { mode } params object
+      // (the same positional-args bug B-NEW-43 chunk-14 fixed at the reset route),
+      // so the lookup returned undefined on EVERY continue and fell to a hardcoded
+      // $800 — which the REB 2.8.11 start-sync then wrote back over the anchored
+      // Kraken-mirror balance ($824.11 → $800 at the 02:47Z continue). Fix: correct
+      // call shape + FAIL-HARD on a missing/invalid stored balance (§11 / B8.2: no
+      // silent balance fallbacks — start-new is the only path that mints a balance).
+      const portfolioState = await storage.getPortfolioState({ globalContextId: 'default', mode: 'paper' });
+      const existingBalance = portfolioState?.balance ? parseFloat(portfolioState.balance) : NaN;
+      if (!Number.isFinite(existingBalance) || existingBalance <= 0) {
+        console.error(`[P19-B8.5][CONTINUE_REFUSED] No valid stored paper balance (row=${portfolioState ? `$${portfolioState.balance}` : 'MISSING'}) — continue cannot invent one. Start a NEW session (Kraken-mirror) instead.`);
+        return res.status(409).json({
+          error: 'No valid stored paper balance to continue from. Start a new session (it anchors to your real Kraken balance automatically).'
+        });
+      }
       console.log(`[REB 2.8.13] Continue simulation with existing balance: $${existingBalance}`);
       
       // Continue with existing baseline

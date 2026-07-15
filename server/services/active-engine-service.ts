@@ -622,7 +622,42 @@ export async function startActiveEngine(
           if (!sessionData.startingBalance) {
             throw new Error('[9.8.D] CRITICAL: startingBalance is missing from session data - cannot sync portfolio');
           }
-          const startBalance = parseFloat(sessionData.startingBalance);
+          let startBalance = parseFloat(sessionData.startingBalance);
+
+          // P19-B8.5 (soak fix D — ANCHOR-COHERENCE GUARD): portfolio_state.balance is the
+          // WORKING COPY of the anchor ledger (B8.2: the ledger is the truth; only an anchor
+          // event may move the base). This sync previously wrote whatever the session carried,
+          // unchecked — which is exactly how the routes continue-leg $800 fallback clobbered
+          // the anchored $824.11 on 2026-07-15 (the writer this guard would have named on the
+          // spot). If the session balance diverges from the ledger's latest anchored balance,
+          // SYNC THE ANCHOR VALUE instead (Langston D ruling: prefer anchor on divergence),
+          // log loudly with enough call-context to name the writer, and re-align the session
+          // row so session/state stay coherent. No ledger row yet (pre-first-anchor) → no
+          // guard basis → sync as before.
+          try {
+            const { getRatioStampInputs } = await import('./portfolio-anchor-service.js');
+            const anchorInputs = await getRatioStampInputs(mode as 'paper' | 'live');
+            if (anchorInputs && Math.abs(startBalance - anchorInputs.anchorBalance) > 0.005) {
+              console.error(
+                `[P19-B8.5][ANCHOR_GUARD] session startingBalance $${startBalance} diverges from the anchor-ledger truth ` +
+                `$${anchorInputs.anchorBalance} (anchorVersion=${anchorInputs.anchorVersion}, mode=${mode}, ` +
+                `sessionId=${sessionData.sessionId}, startedBy=${sessionData.startedBy ?? 'unknown'}) — ` +
+                `SYNCING THE ANCHOR VALUE and re-aligning the session row. Whatever supplied $${startBalance} is the bug; ` +
+                `trace its route from this sessionId.`
+              );
+              startBalance = anchorInputs.anchorBalance;
+              try {
+                // updateActiveEngineSession keys by the row UUID (dbSession.id), not the paper_x sessionId.
+                await storage.updateActiveEngineSession(dbSession.id, { startingBalance: startBalance.toString() } as any);
+              } catch (sessFixErr: any) {
+                console.error('[P19-B8.5][ANCHOR_GUARD] session-row re-align failed (state still syncs the anchor value):', sessFixErr?.message ?? sessFixErr);
+              }
+            }
+          } catch (guardErr: any) {
+            // Guard failure must never block an engine start — sync proceeds un-guarded, loudly.
+            console.error('[P19-B8.5][ANCHOR_GUARD] guard evaluation failed (sync proceeds un-guarded):', guardErr?.message ?? guardErr);
+          }
+
           console.log(`[REB 2.8.11] Syncing portfolioState.balance = $${startBalance} for paper mode`);
           
           try {
