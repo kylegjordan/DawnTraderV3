@@ -2239,8 +2239,20 @@ export class ActiveExecutionEngine {
     // same kernel, same friction), so a taker-chosen signal is unaffected.
     const _b72ChosenNetEv = (signal as any).chosenNetEv != null ? Number((signal as any).chosenNetEv) : null;
     const _b72ChosenMode: 'taker' | 'maker' = ((signal as any).chosenEntryMode as 'taker' | 'maker') ?? 'taker';
-    const _b72IsTradeable = _b72ChosenNetEv != null ? (_b72ChosenNetEv > 0) : expectancyResult.isTradeable;
+    let _b72IsTradeable = _b72ChosenNetEv != null ? (_b72ChosenNetEv > 0) : expectancyResult.isTradeable;
     const _b72EffectiveNetEv = _b72ChosenNetEv != null ? _b72ChosenNetEv : expectancyResult.netEV;
+
+    // P19-B8.5 exploration lane: an exploration-stamped PAPER signal is a KNOWN
+    // negative-netEV admit (lane-budgeted at gen, stamp-honored at refresh) — its
+    // non-positive sign here is NOT gates-drifted, so the backstop's EV_REJECT alarm
+    // must not fire on it (that alarm's job is detecting signals admitted positive
+    // that went negative). Paper-mode AND stamp BOTH required — live signals can
+    // never carry the stamp, and the live backstop stays byte-identical.
+    const _exploOpen = this.mode === 'paper' && (signal.metadata as any)?.admissionBasis === 'exploration';
+    if (!_b72IsTradeable && _exploOpen) {
+      console.log(`[P19-B8.5][EXPLORATION_OPEN] ${signal.symbol}: known-negative exploration admit (netEV=${_b72EffectiveNetEv.toFixed(6)}) passing the 11.8B backstop — NOT gates-drifted, stamp honored`);
+      _b72IsTradeable = true;
+    }
 
     if (!_b72IsTradeable) {
       // [B4] Log funnel attempt blocked by Net Expectancy Gate
@@ -2677,6 +2689,11 @@ export class ActiveExecutionEngine {
       const trade = await storage.createClosedTrade(this.mode, {
         symbol: signal.symbol,
         baseCurrency,
+        // P19-B8.5 (Langston Step-4 ②): the honest class — WITHOUT this the column
+        // fell to its schema default 'crypto_spot' for EVERY trade (xStock rows
+        // misclassed; the exploration anneal + any per-class read off this table
+        // was crypto-only by accident). Same _tradeClass the open-position row gets.
+        assetClass: _tradeClass,
         strategyName: signal.strategy,
         side: 'buy',
         quantity: quantity.toString(),
@@ -2782,6 +2799,9 @@ export class ActiveExecutionEngine {
         exchange: 'kraken',
         // P19-B4a (C4): use the class resolved + skip-guarded above (stamp-preferred).
         assetClass: _tradeClass,
+        // P19-B8.5 note: the exploration 4-field stamp reaches this row via the
+        // EXISTING `metadata: { ...signal.metadata, ... }` spread below — the budget
+        // governor's middle conservation term (open-but-not-yet-closed) reads it.
         // Batch 19E: Persist sourcePool from signal metadata
         sourcePool: (signal as any)?.metadata?.sourcePool || (signal as any)?.sourcePool || null,
         // P19-B7.2b (OBJ-B): the maker/taker entry fee-mode + per-side rate.

@@ -942,8 +942,18 @@ class ReadyToBuyService {
     };
 
     const sqeResult = await signalQualityEvaluator.evaluate(sqeInput);
-    
-    if (!sqeResult.passed) {
+
+    // P19-B8.5 exploration lane: an exploration-stamped signal's lane admission was
+    // decided AT GENERATION (budget consumed once, 4-field stamp on the row). The
+    // refresh re-SQE therefore HONORS the stamp when the ONLY failure is the same
+    // NetEV gate the lane overrode — otherwise every lane admit dies here before
+    // promotion (Langston's next-binding-gate prediction). Any OTHER failure
+    // (regime, floors, AMR) still deletes — the lane only ever overrides NetEV.
+    // Paper-only by construction: exploration stamps exist only on paper rows.
+    const _exploStamped = ((signal.metadata as any)?.admissionBasis === 'exploration');
+    if (!sqeResult.passed && _exploStamped && sqeResult.failures.length === 1 && sqeResult.failures[0].startsWith('NetEV ')) {
+      console.log(`[P19-B8.5][EXPLORATION_REFRESH_PASS] ${normalizedSymbol}: NetEV-only refresh failure on an exploration-stamped signal — stamp honored, signal retained`);
+    } else if (!sqeResult.passed) {
       await storage.deleteRtbSignals({ mode, id: signal.id });
       performanceMonitor.recordQueueRemove(1);
       console.log(`[11.0E][REFRESH_COMPLETE] symbol=${normalizedSymbol} DELETED reason=${sqeResult.reason}`);
@@ -1209,7 +1219,13 @@ class ReadyToBuyService {
               // denominator, kept as TWO labelled numbers vs SQE-at-generation, never summed (MUST-4).
               if (_fCls) recordActiveSqeEvaluation(mode, _fCls, sqeResult.passed, sqeResult.failures, 'refresh');
 
-              if (!sqeResult.passed) {
+              // P19-B8.5 exploration lane: honor the gen-time stamp on a NetEV-only
+              // refresh failure (mirror of the single-refresh site above — the lane
+              // admission was decided once at generation; any OTHER failure still deletes).
+              const _exploStampedB = ((signal.metadata as any)?.admissionBasis === 'exploration');
+              if (!sqeResult.passed && _exploStampedB && sqeResult.failures.length === 1 && sqeResult.failures[0].startsWith('NetEV ')) {
+                console.log(`[P19-B8.5][EXPLORATION_REFRESH_PASS] ${normalizedSymbol}: NetEV-only batch-refresh failure on an exploration-stamped signal — stamp honored, signal retained`);
+              } else if (!sqeResult.passed) {
                 console.log(`[11.0E][SQE_REVALIDATION_FAIL] symbol=${normalizedSymbol} reason=${sqeResult.reason}`);
                 this.logRtbTrace(mode, normalizedSymbol, signal.strategy, oldStatus, 'deleted', 'SQE_failure');
                 this.logSqeRejection(signal, sqeResult.reason || 'unknown', refreshedFinalScore);

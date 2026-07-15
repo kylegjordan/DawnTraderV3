@@ -819,7 +819,42 @@ export class SignalOrchestrator {
     // numbers, never summed (MUST-4). Records BOTH pass and fail (a pass feeds the honest denominator).
     if (_fClass) recordActiveSqeEvaluation(sizingContext.mode, _fClass, sqeResult.passed, sqeResult.failures, 'generation');
 
-    if (!sqeResult.passed) {
+    // ══════════════════════════════════════════════════════════════════════════════
+    // P19-B8.5 — THE EXPLORATION LANE (paper-only, additive; 3-way consensus + Kyle
+    // GO 2026-07-15, budget 25-30/day). The organic netEV>0 admission above stays
+    // BYTE-IDENTICAL; this lane may additionally admit a bounded daily budget of
+    // signals whose ONLY SQE failure is the NetEV gate (the fee wall — verified
+    // genuine). STRUCTURAL live-scoping (Langston condition-2): the lane is consulted
+    // ONLY under `this.mode === 'paper'` — the live path never reads the knobs and
+    // its netEV>0 admission stays hardcoded. Every lane admit carries the 4-field
+    // stamp (admissionBasis/netEvAtAdmit/floorInEffect/policyVersion — KEEP-AS-DATA,
+    // the #405 pattern) so Phase-25 separates the cohort and the anneal is
+    // reconstructable per row. A lane ERROR falls through to the normal reject
+    // (fail-closed: never an accidental admit).
+    // ══════════════════════════════════════════════════════════════════════════════
+    let _exploAdmit: import('./execution/exploration-lane.js').ExplorationAdmitDecision | null = null;
+    if (!sqeResult.passed && this.mode === 'paper') {
+      try {
+        const { checkExplorationAdmit, isNetEvOnlyFailure } = await import('./execution/exploration-lane.js');
+        if (isNetEvOnlyFailure(sqeResult.failures)) {
+          const d = await checkExplorationAdmit({
+            assetClass: sizingContext.assetClass,
+            chosenNetEv: _mtDecision.chosenNetEV,
+            entryPrice: rawSignal.entryPrice,
+          });
+          if (d.admit) {
+            _exploAdmit = d;
+            console.log(`[P19-B8.5][EXPLORATION_ADMIT] ${rawSignal.symbol}/${strategyId}: ${d.reason} (netEV=${_mtDecision.chosenNetEV.toFixed(6)}, organic gate UNTOUCHED — lane admit)`);
+          } else {
+            console.log(`[P19-B8.5][EXPLORATION_DECLINE] ${rawSignal.symbol}/${strategyId}: ${d.reason}`);
+          }
+        }
+      } catch (laneErr) {
+        console.warn(`[P19-B8.5][EXPLORATION_ERR] ${rawSignal.symbol}/${strategyId}: lane error — falling through to normal reject (fail-closed):`, laneErr instanceof Error ? laneErr.message : laneErr);
+      }
+    }
+
+    if (!sqeResult.passed && !_exploAdmit) {
       console.log(`[11.0E][SQE_REJECT] ${rawSignal.symbol}/${strategyId}: ${sqeResult.reason}`);
       signalLifecycleAudit.recordRejection(
         signalId,
@@ -854,7 +889,9 @@ export class SignalOrchestrator {
       return null;
     }
 
-    console.log(`[B.3][SQE_PASS] ${rawSignal.symbol}/${strategyId}: passed SQE filter`);
+    console.log(_exploAdmit
+      ? `[B.3][SQE_PASS] ${rawSignal.symbol}/${strategyId}: EXPLORATION-LANE admit (organic SQE gate said no on NetEV only; lane budget consumed)`
+      : `[B.3][SQE_PASS] ${rawSignal.symbol}/${strategyId}: passed SQE filter`);
 
     // B67.3 — Per-underlying position cap check.
     // Counts currently-open trades sharing the signal's base currency.
@@ -938,6 +975,14 @@ export class SignalOrchestrator {
       metadata: {
         strategyWeight,
         exposureBias,
+        // P19-B8.5 exploration lane — the 4-field cohort stamp (KEEP-AS-DATA, #405
+        // pattern). 'organic' = passed the untouched netEV>0 admission; 'exploration'
+        // = lane admit (paper-only) with the effective floor + policy version at
+        // admit time, so the anneal's non-stationarity is reconstructable per row.
+        admissionBasis: _exploAdmit ? 'exploration' : 'organic',
+        netEvAtAdmit: _mtDecision.chosenNetEV,
+        ...(_exploAdmit ? { floorInEffect: _exploAdmit.floorInEffect, policyVersion: _exploAdmit.policyVersion } : {}),
+        assetClass: sizingContext.assetClass,
       },
     };
 
