@@ -62,7 +62,12 @@ the guardrail values themselves are OLD Claude's tune-3). No FD-tab work (the st
 dormancy banners + per-scan/24h funnel views are the next batch). No new capture
 machinery in this batch — capture gaps found at OBJ-4 get named homes.
 
-## Verification (outcomes-based, §9.3 MANDATORY per Kyle 2026-07-16)
-Every objective verified by NAVIGATING the staging UI and reading the rendered tables
-(both Paper and Live pages, open + closed tabs), with the class/strategy/slots cells
-showing real values on real rows — not by API curls. Langston Step-8 independent.
+## Verification (outcomes-based, §9.3 MANDATORY per Kyle 2026-07-16; reworded per
+## Langston scope pin-down 3)
+Every objective verified by NAVIGATING the staging UI and reading the rendered tables —
+not by API curls. **Paper** open + closed = the REAL-ROW check (class/strategy/slots
+cells showing real values on real rows, cross-checked against the VTS reference
+tables). **Live** open + closed = a STRUCTURAL render check only (column headers
+present + honest empty-state; live mode has no rows while the system is in
+paper-active — a real-row bar cannot be met there and is not claimed). Langston
+Step-8 independent.
