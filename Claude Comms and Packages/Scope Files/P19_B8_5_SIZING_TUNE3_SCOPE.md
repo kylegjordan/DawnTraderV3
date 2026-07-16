@@ -1,6 +1,6 @@
 # P19-B8.5 sizing tune-3 — Kyle's exposure/slot spec (CC-A executing; CC-B on the xStock leg)
 
-change-class: non_architecture
+(This is a config-only TUNE within the open P19-B8.5 batch — it deliberately carries NO parseable class marker. The batch's authoritative declaration lives in P19_B8_5_SWITCH_ON_SCOPE.md [architecture]; this file sorting lexicographically first made the checker read the tune's header as the BATCH's class and fire gov-underdeclared:P19-B8.5 — de-collided 2026-07-16. The tune itself is non-architecture in nature: guardrail/constant values + an anchor mint through existing governed machinery.)
 
 **Kyle directive (2026-07-16, verbatim intent):** portfolio exposure = 100% (100% of portfolio value can trade); each individual trade capped at 6.67%; paper anchor balance = $2,250 → 15 slots × ~$150 each.
 
