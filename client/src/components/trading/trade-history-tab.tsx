@@ -111,38 +111,6 @@ const strategyNames: Record<string, string> = {
   liquidity_trap: "Liquidity Trap"
 };
 
-// All 9 strategies that should always be displayed
-const ALL_STRATEGIES = [
-  'vwap_pullback', 'abcd_long', 'sma_trend_ride', 'vwap_bounce', 
-  'dhma', 'breakout', 'mean_reversion', 'range_trading', 'liquidity_trap'
-];
-
-interface Analytics {
-  totalOpened: number;
-  closedAtTP: { count: number; percent: number };
-  closedAtSL: { count: number; percent: number };
-  closedManually: { count: number; percent: number };
-  winRate: number;
-  avgProfit: number;
-  avgLoss: number;
-  netPnl: number;
-  netPnlPercent: number;
-  avgProfitPercent: number; // B2: New - Avg Profit % per Trade
-  avgDailyProfitPercent: number; // B2: New - Avg Daily Profit %
-  avgHoldingTime: number;
-  medianHoldingTime: number;
-  profitFactor: number;
-  byStrategy: Record<string, { count: number; pnl: number; winRate: number }>;
-  largestWinner: { symbol: string; pnl: number; strategy: string } | null;
-  largestLoser: { symbol: string; pnl: number; strategy: string } | null;
-}
-
-interface AnalyticsResponse {
-  ok: boolean;
-  range: string;
-  analytics: Analytics;
-}
-
 function formatDuration(ms: number): string {
   if (ms <= 0) return '-';
   const seconds = Math.floor(ms / 1000);
@@ -156,258 +124,7 @@ function formatDuration(ms: number): string {
   return `${seconds}s`;
 }
 
-function MetricCard({ 
-  title, 
-  value, 
-  subValue, 
-  icon: Icon, 
-  trend 
-}: { 
-  title: string; 
-  value: string | number; 
-  subValue?: string; 
-  icon?: any;
-  trend?: 'up' | 'down' | 'neutral';
-}) {
-  return (
-    <div className="p-4 rounded-lg border bg-card">
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-xs text-muted-foreground uppercase tracking-wider">{title}</span>
-        {Icon && <Icon className="w-4 h-4 text-muted-foreground" />}
-      </div>
-      <div className={cn(
-        "text-xl font-bold",
-        trend === 'up' && "text-green-600",
-        trend === 'down' && "text-red-600"
-      )}>
-        {value}
-      </div>
-      {subValue && (
-        <div className="text-xs text-muted-foreground mt-1">{subValue}</div>
-      )}
-    </div>
-  );
-}
-
-// Default empty analytics to prevent flickering
-const EMPTY_ANALYTICS: Analytics = {
-  totalOpened: 0,
-  closedAtTP: { count: 0, percent: 0 },
-  closedAtSL: { count: 0, percent: 0 },
-  closedManually: { count: 0, percent: 0 },
-  winRate: 0,
-  avgProfit: 0,
-  avgLoss: 0,
-  netPnl: 0,
-  netPnlPercent: 0,
-  avgProfitPercent: 0,
-  avgDailyProfitPercent: 0,
-  avgHoldingTime: 0,
-  medianHoldingTime: 0,
-  profitFactor: 0,
-  byStrategy: {},
-  largestWinner: null,
-  largestLoser: null
-};
-
-function AnalyticsPanel({ range }: { range: string }) {
-  const { isPaper } = useTradingMode();
-  
-  // Point 4: Cache analytics data in a stable React ref - NEVER loses data
-  const analyticsRef = useRef<Analytics>(EMPTY_ANALYTICS);
-  
-  // Point 1: Updated React Query options to prevent data from becoming undefined
-  const { data, isFetching, refetch } = useQuery<AnalyticsResponse>({
-    queryKey: ['/api/active-engine/trades/analytics', range],
-    queryFn: async () => {
-      return await apiFetch(`/api/active-engine/trades/analytics?range=${range}`);
-    },
-    enabled: isPaper,
-    staleTime: Infinity,
-    refetchOnMount: false,
-    refetchOnReconnect: false,
-    refetchInterval: 30000,
-    refetchIntervalInBackground: true,
-  });
-
-  // Point 4: Update ref when we have valid data
-  useEffect(() => {
-    if (data?.analytics) {
-      analyticsRef.current = data.analytics;
-    }
-  }, [data]);
-  
-  // Point 2 & 4: ALWAYS use stableAnalytics, never undefined
-  const stableAnalytics = data?.analytics ?? analyticsRef.current;
-
-  // Point 2 & 5: NO conditional returns that hide analytics - always render the full card
-  // Even for non-paper mode, render a message but never return null or unmount
-  
-  // Use stableAnalytics for all rendering - guaranteed to never be undefined
-  const analytics = stableAnalytics;
-
-  return (
-    <Card className="mb-6">
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center gap-2">
-            <BarChart3 className="w-5 h-5" />
-            {range === 'session' ? 'Current Simulation' : range === '24h' ? '24 Hour' : range === '7d' ? '7 Day' : range === '30d' ? '30 Day' : range} Performance Analytics
-            {isFetching && <RefreshCw className="w-4 h-4 animate-spin text-muted-foreground" />}
-          </CardTitle>
-          <Button size="sm" variant="ghost" onClick={() => refetch()} disabled={isFetching}>
-            <RefreshCw className={cn("w-4 h-4", isFetching && "animate-spin")} />
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent>
-        {!isPaper ? (
-          <div className="p-6 text-center text-muted-foreground">
-            Analytics available for Paper Trading mode only
-          </div>
-        ) : (
-          <>
-            {/* Tier 1: Primary Indicators */}
-            <div className="mb-3">
-              <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Primary Indicators</h4>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-                <MetricCard 
-                  title="Total Trades" 
-                  value={analytics.totalOpened}
-                  icon={BarChart3}
-                />
-                <MetricCard 
-                  title="Win Rate" 
-                  value={`${analytics.winRate.toFixed(1)}%`}
-                  trend={analytics.winRate >= 50 ? 'up' : 'down'}
-                />
-                <MetricCard 
-                  title="Net P/L" 
-                  value={`${analytics.netPnl >= 0 ? '+' : ''}$${analytics.netPnl.toFixed(2)}`}
-                  trend={analytics.netPnl >= 0 ? 'up' : 'down'}
-                />
-                <MetricCard 
-                  title="Avg Profit %" 
-                  value={`${(analytics.avgProfitPercent || 0) >= 0 ? '+' : ''}${(analytics.avgProfitPercent || 0).toFixed(2)}%`}
-                  subValue="per trade"
-                  trend={(analytics.avgProfitPercent || 0) >= 0 ? 'up' : 'down'}
-                />
-                <MetricCard 
-                  title="Avg Daily %" 
-                  value={`${(analytics.avgDailyProfitPercent || 0) >= 0 ? '+' : ''}${(analytics.avgDailyProfitPercent || 0).toFixed(2)}%`}
-                  subValue="daily profit"
-                  trend={(analytics.avgDailyProfitPercent || 0) >= 0 ? 'up' : 'down'}
-                />
-                <MetricCard 
-                  title="Avg Hold" 
-                  value={formatDuration(analytics.avgHoldingTime)}
-                  icon={Clock}
-                />
-              </div>
-            </div>
-
-            {/* Tier 2: Secondary Indicators */}
-            <div className="mb-6">
-              <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Secondary Indicators</h4>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-                <MetricCard 
-                  title="Closed at TP" 
-                  value={analytics.closedAtTP.count}
-                  subValue={`${analytics.closedAtTP.percent.toFixed(1)}%`}
-                  icon={Target}
-                  trend="up"
-                />
-                <MetricCard 
-                  title="Closed at SL" 
-                  value={analytics.closedAtSL.count}
-                  subValue={`${analytics.closedAtSL.percent.toFixed(1)}%`}
-                  icon={Shield}
-                  trend="down"
-                />
-                <MetricCard 
-                  title="Manual Close" 
-                  value={analytics.closedManually.count}
-                  subValue={`${analytics.closedManually.percent.toFixed(1)}%`}
-                />
-                <MetricCard 
-                  title="Avg Profit $" 
-                  value={`+$${analytics.avgProfit.toFixed(2)}`}
-                  icon={TrendingUp}
-                  trend="up"
-                />
-                <MetricCard 
-                  title="Avg Loss $" 
-                  value={`-$${analytics.avgLoss.toFixed(2)}`}
-                  icon={TrendingDown}
-                  trend="down"
-                />
-                <div className="p-4 rounded-lg border bg-card">
-                  <div className="text-xs text-muted-foreground uppercase tracking-wider mb-2">
-                    Best / Worst
-                  </div>
-                  {analytics.largestWinner && (
-                    <div className="flex items-center gap-1 text-green-600 text-xs">
-                      <Award className="w-3 h-3" />
-                      <span className="font-medium truncate">{analytics.largestWinner.symbol}</span>
-                      <span className="font-mono">+${analytics.largestWinner.pnl.toFixed(2)}</span>
-                    </div>
-                  )}
-                  {analytics.largestLoser && (
-                    <div className="flex items-center gap-1 text-red-600 text-xs">
-                      <AlertTriangle className="w-3 h-3" />
-                      <span className="font-medium truncate">{analytics.largestLoser.symbol}</span>
-                      <span className="font-mono">${analytics.largestLoser.pnl.toFixed(2)}</span>
-                    </div>
-                  )}
-                  {!analytics.largestWinner && !analytics.largestLoser && (
-                    <span className="text-xs text-muted-foreground">No trades yet</span>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Strategy Performance - Always show all 9 strategies */}
-            <div>
-              <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-                Performance by Strategy
-              </h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                {ALL_STRATEGIES.map((strategy) => {
-                  const stats = analytics.byStrategy[strategy] || { count: 0, pnl: 0, winRate: 0 };
-                  return (
-                    <div key={strategy} className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
-                      <div className="flex items-center gap-2">
-                        <Badge className={cn("text-xs", strategyColors[strategy] || "bg-gray-500/10")}>
-                          {strategyNames[strategy] || strategy}
-                        </Badge>
-                        <span className="text-sm text-muted-foreground">
-                          {stats.count} trades
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <span className={cn(
-                          "font-mono text-sm font-semibold",
-                          stats.pnl > 0 ? "text-green-600" : stats.pnl < 0 ? "text-red-600" : "text-muted-foreground"
-                        )}>
-                          {stats.pnl >= 0 ? '+' : ''}${stats.pnl.toFixed(2)}
-                        </span>
-                        <span className="text-xs text-muted-foreground">
-                          {stats.winRate.toFixed(0)}% WR
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-// Phase 8.8.3-C5: Sortable column header component
+// P19-B8.7 (OBJ-6): AnalyticsPanel DELETED — see the removal note at the render site.
 function SortableHeader({ 
   column, 
   label, 
@@ -446,7 +163,6 @@ function SortableHeader({
 
 export function TradeHistoryTab() {
   const { isPaper } = useTradingMode();
-  const [analyticsRange, setAnalyticsRange] = useState('session'); // B2: Default to "Since Last Simulation Start"
   
   // Phase 8.8.3-C-FINAL PART 6: Pending filters (user edits these)
   const [pendingFilters, setPendingFilters] = useState({
@@ -569,23 +285,11 @@ export function TradeHistoryTab() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-2 mb-4">
-        <span className="text-sm text-muted-foreground">Time Range:</span>
-        <Select value={analyticsRange} onValueChange={setAnalyticsRange}>
-          <SelectTrigger className="w-48">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="session">Current Simulation</SelectItem>
-            <SelectItem value="1h">Last 1 Hour</SelectItem>
-            <SelectItem value="24h">Last 24 Hours</SelectItem>
-            <SelectItem value="30d">Last 30 Days</SelectItem>
-            <SelectItem value="all">All Time</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      <AnalyticsPanel range={analyticsRange} />
+      {/* P19-B8.7 (OBJ-6, Kyle-approved DELETE 2026-07-16): the "Current Simulation
+          Performance Analytics" panel + its range selector are REMOVED — every metric
+          it showed exists on the per-mode Dashboard tab (B8.3), which is richer (Net R,
+          profit factor, fee drag, drawdown) and per-mode. The /trades/analytics
+          ENDPOINT stays (the Dashboard tab consumes it — traced, rule 18). */}
 
       <Card>
         <CardHeader>
