@@ -285,36 +285,16 @@ export async function initializeQueues(): Promise<void> {
     processing: liveStatus.processing,
   });
   
-  // Phase 41F-B-5: Clean up orphaned database sessions and managers
-  // This ensures database state matches in-memory queue state
+  // Phase 41F-B-5: Clean up orphaned IN-MEMORY manager state.
+  // B-STAGING-LIVENESS-WATCH (#520, 2026-07-16): the DB session sweep that lived here
+  // is DELETED (rule 18, DELETED_COMPONENTS_LOG). It unconditionally marked every
+  // status='running' session stopped ("should have been stopped on previous shutdown"
+  // — a pre-auto-resume-era assumption), and because index.ts runs initializeQueues()
+  // BEFORE resumeActiveEngines(), it deterministically destroyed the very session the
+  // resume needed — every restart silently halted paper-active trading. Boot session
+  // disposition now has ONE owner: resumeActiveEngines (resume, or refuse-loudly and
+  // mark the row stopped). This function touches in-memory state only.
   try {
-    const { storage } = await import('../storage.js');
-    const { db } = await import('../db.js');
-    const { activeEngineSessions } = await import('../../shared/schema.js');
-    const { eq } = await import('drizzle-orm');
-    
-    // Find any running paper sessions (these should have been stopped on previous shutdown)
-    const runningSessions = await db
-      .select()
-      .from(activeEngineSessions)
-      .where(eq(activeEngineSessions.status, 'running'));
-    
-    if (runningSessions.length > 0) {
-      console.warn(`[41F-B][RECOVERY] Found ${runningSessions.length} orphaned paper trading session(s) from previous run`);
-      
-      // Mark them as stopped (graceful recovery)
-      for (const session of runningSessions) {
-        await storage.updateActiveEngineSession(session.id, {
-          status: 'stopped',
-          stoppedAt: new Date(),
-          runForMs: new Date().getTime() - new Date(session.startedAt).getTime(),
-        });
-        console.log(`[41F-B][RECOVERY] Marked orphaned session ${session.sessionId} as stopped`);
-      }
-    } else {
-      console.log('[41F-B][RECOVERY] No orphaned paper trading sessions found');
-    }
-    
     // Clear any global manager state (should already be null on fresh start, but ensure it).
     // P19-B4b D5: per-mode accessor (paper). Dynamic import avoids the active-engine-service ↔
     // operation-queue import cycle.

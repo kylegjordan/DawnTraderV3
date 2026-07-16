@@ -1,0 +1,12 @@
+# B-STAGING-LIVENESS-WATCH — 5-minute cadence for the staging watchdog.
+[Unit]
+Description=Run the DawnTrader staging liveness watchdog every 5 minutes
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=5min
+AccuracySec=30s
+Persistent=false
+
+[Install]
+WantedBy=timers.target

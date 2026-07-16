@@ -1125,6 +1125,19 @@ export async function resumeActiveEngines(): Promise<void> {
             `portfolio_state=${anchorState ? `$${anchorState.balance}` : 'NO ROW'}`;
           console.error(`[B8.2][RESUME-REFUSED] Paper resume refused — no trustworthy balance (${detail}). isEngineActive reset to false; start a new session.`);
           await storage.updateSystemContext('paper', { isEngineActive: false });
+          // B-STAGING-LIVENESS-WATCH (#520): a refused session row must not stay
+          // 'running' — it would re-refuse (and re-alert) on every subsequent boot.
+          // Mark it stopped; the alert below is the durable record of why.
+          try {
+            await storage.updateActiveEngineSession(existingSession.id, {
+              status: 'stopped',
+              stoppedAt: new Date(),
+              runForMs: Date.now() - new Date(existingSession.startedAt).getTime(),
+            });
+            console.error(`[B8.2][RESUME-REFUSED] Session ${existingSession.sessionId} marked stopped (refused rows do not linger).`);
+          } catch (stopErr: any) {
+            console.error(`[B8.2][RESUME-REFUSED] failed to mark refused session stopped: ${stopErr?.message}`);
+          }
           try {
             const { addAlert } = await import('./system-alerts.js');
             await addAlert({
@@ -1169,8 +1182,26 @@ export async function resumeActiveEngines(): Promise<void> {
         
         console.log('[R9.3.HF-4.FIX] ✅ Paper engine resumed successfully');
       } else {
-        console.log('[R9.3.HF-4.FIX] No active session found - resetting isEngineActive to false');
+        // B-STAGING-LIVENESS-WATCH (#520): flag-true-but-no-running-session is the
+        // silent-halt SYMPTOM. With the operation-queue sweep deleted, this state is
+        // unreachable on a healthy boot — so reaching it is a regression alarm, not
+        // housekeeping. Reset the flag (still correct) AND say so durably.
+        console.error('[R9.3.HF-4.FIX][FLAG_NO_SESSION] isEngineActive=true but NO running session row — resetting flag to false and alerting (post-#520 this should be unreachable)');
         await storage.updateSystemContext('paper', { isEngineActive: false });
+        try {
+          const { addAlert } = await import('./system-alerts.js');
+          await addAlert({
+            triggers_at: new Date(),
+            category: 'breakage',
+            severity: 'warning',
+            title: 'Engine expected-state flag set with no running session at boot',
+            body: 'resumeActiveEngines found isEngineActive=true for paper but no running session row. The flag was reset to false and the engine was NOT started. Post-#520 (the orphan-sweep deletion) this state should be unreachable — investigate what stopped the session without clearing the flag.',
+            metadata: { source: 'resumeActiveEngines', mode: 'paper' },
+            dedupe_key: 'resume-flag-no-session-paper',
+          });
+        } catch (alertErr: any) {
+          console.error(`[R9.3.HF-4.FIX][FLAG_NO_SESSION] alert write failed: ${alertErr?.message}`);
+        }
       }
     } else {
       console.log('[R9.3.HF-4.FIX] Paper engine is not active - no resume needed');

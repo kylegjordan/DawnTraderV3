@@ -1,0 +1,12 @@
+# B-STAGING-LIVENESS-WATCH — OnFailure hook: the watchdog reports its own death
+# through the fallback alert path. (If the script itself is unloadable, journald
+# + the weekly heartbeat's ABSENCE are the documented floor.)
+[Unit]
+Description=DawnTrader watchdog self-failure alert
+
+[Service]
+Type=oneshot
+User=deploy
+WorkingDirectory=/home/deploy/dawntrader
+ExecStart=/usr/bin/node /home/deploy/dawntrader/server/scripts/staging-liveness-watchdog.mjs --self-fail
+TimeoutStartSec=120

@@ -17,6 +17,33 @@ import { getDriftDetector, type StrategyDriftStatus } from '../services/drift-de
 export const healthRouter = Router();
 
 /**
+ * GET /api/health/liveness
+ * B-STAGING-LIVENESS-WATCH (#512/#520): the out-of-process watchdog's engine leg.
+ * Unauthenticated by design — two low-sensitivity booleans, no positions/balances:
+ *   engineExpected = system_context.isEngineActive (the resume path's own
+ *                    expected-state flag; DB truth)
+ *   engineRunning  = the in-process paper manager exists and reports running
+ * expected=true + running=false sustained across watchdog ticks = the silent-halt
+ * signature this batch exists to catch.
+ */
+healthRouter.get('/liveness', async (_req, res) => {
+  try {
+    const { storage } = await import('../storage.js');
+    const { getGlobalActiveEngineManager } = await import('../services/active-engine-service.js');
+    const paperContext = await storage.getSystemContext('paper');
+    const manager = getGlobalActiveEngineManager('paper');
+    res.json({
+      engineExpected: paperContext?.isEngineActive === true,
+      engineRunning: !!(manager as any)?.isRunning,
+      ts: new Date().toISOString(),
+    });
+  } catch (error: any) {
+    console.error('[LIVENESS] Error building liveness snapshot:', error.message);
+    res.status(500).json({ error: 'liveness snapshot failed' });
+  }
+});
+
+/**
  * GET /api/health/engine
  * Returns latest heartbeat + ring buffer
  */

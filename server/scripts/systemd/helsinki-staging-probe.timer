@@ -1,0 +1,11 @@
+# B-STAGING-LIVENESS-WATCH OBJ-3 — 5-minute probe cadence.
+[Unit]
+Description=Run the Helsinki staging host probe every 5 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target

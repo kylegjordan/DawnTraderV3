@@ -1,0 +1,9 @@
+# B-STAGING-LIVENESS-WATCH OBJ-3 — Helsinki host-down probe (oneshot, root:
+# cc-send needs the comms env; read-only against staging).
+[Unit]
+Description=Probe the staging host from Helsinki (host-down detection)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/helsinki-staging-probe.sh
+TimeoutStartSec=120

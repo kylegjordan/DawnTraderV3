@@ -1,0 +1,11 @@
+# B-STAGING-LIVENESS-WATCH — weekly liveness proof (info alert; its ABSENCE is
+# the alarm — F10: a liveness loop cannot close inside its own failure domain).
+[Unit]
+Description=DawnTrader watchdog weekly heartbeat
+
+[Service]
+Type=oneshot
+User=deploy
+WorkingDirectory=/home/deploy/dawntrader
+ExecStart=/usr/bin/node /home/deploy/dawntrader/server/scripts/staging-liveness-watchdog.mjs --heartbeat
+TimeoutStartSec=120

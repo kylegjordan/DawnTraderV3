@@ -195,7 +195,14 @@ async function cmdAdd(args: string[]): Promise<void> {
       process.exit(1);
     }
   }
-  const entry = await addAlert({ triggers_at, category, severity, title, body, metadata });
+  // B-STAGING-LIVENESS-WATCH: --dedupe-key exposes addAlert's existing B-NEW-51
+  // dedup to CLI callers (the watchdog's CLI path and its direct-append fallback
+  // converge on ONE alert per outage via the same key).
+  const dedupeKey = getFlag(args, 'dedupe-key');
+  const entry = await addAlert({
+    triggers_at, category, severity, title, body, metadata,
+    ...(dedupeKey ? { dedupe_key: dedupeKey } : {}),
+  });
   console.log(JSON.stringify(entry, null, 2));
 }
 
