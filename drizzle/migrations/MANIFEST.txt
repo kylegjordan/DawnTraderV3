@@ -178,3 +178,4 @@
 2026-07-15-p19-b8-5-measurement-override-sizing.sql
 2026-07-15-p19-b8-6-maker-target-exits.sql
 2026-07-15-p19-b8-5-sizing-tune-2.sql
+2026-07-16-p19-b8-5-equity-tick-age.sql

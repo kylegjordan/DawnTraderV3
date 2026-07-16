@@ -42,6 +42,15 @@ import { getRecognitionQuotes } from '../../../shared/asset-classes.js';
  */
 export const KNOWN_NONEXISTENT_NAMES = [
   {
+    exchange: 'kraken',
+    type: 'REST',
+    failingName: 'BIIBUSD / BIIBxUSD (any tokenized-equity pair on the spot REST Ticker endpoint)',
+    context: "P19-B8.5 xstock open-position marks — the exit monitor's direct REST leg tried compact pairs for xstock positions",
+    correctAlternative: 'the Kraken WS-EQUITIES feed (equity-spot-archiver latest-tick store, getLatestEquityTick) — the ONLY venue price source for tokenized equities',
+    date: '2026-07-16',
+    reason: 'Empirically tested: GET /0/public/Ticker?pair=BIIBUSD AND ?pair=BIIBxUSD both return {"error":["EQuery:Unknown asset pair"]} while XBTUSD serves live data (Langston independently re-derived same-day) — Kraken spot REST carries NO tokenized equities under any spelling.',
+  },
+  {
     exchange: 'Kraken (Spot)',
     type: 'Paper-trading / demo / sandbox fill system',
     badName: 'Kraken spot paper-trading account (hosted demo that fills orders + tracks a virtual balance)',

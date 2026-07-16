@@ -131,6 +131,7 @@ import { resolveMakerMaxPendingMs } from './maker-taker-config.js';
 import { isXstockMarketOpenUTC } from '../asset_classes/xstock_spot/market-hours.js';
 // P19-B7.2c: the shared PURE pending-maker fill/drop decision (paper+VTS parity — R2).
 import { evaluatePendingMaker, makerFillPrice, isMarketableAtPlacement } from '../core/trading/pending-maker-logic.js';
+import { getLatestEquityTick } from './passive-archive/equity-spot-archiver.js'; // P19-B8.5 xstock marks — the equities-feed venue leg
 import { covarianceEngine } from '../utils/covariance-engine.js';
 import { recordPaperTrade, type PaperTradeRecord } from './vts-live-comparison-audit.js';
 import { evaluateTradeExpectancy } from '../core/calculations/expectancy.js';
@@ -914,12 +915,57 @@ export class ActiveExecutionEngine {
 
     for (const position of openPositions) {
       try {
+        let currentPrice: number;
+        let priceSource: string;
+
+        // ── P19-B8.5 xSTOCK MARKS (Langston design-APPROVED 2026-07-16) ────────────────
+        // Kraken spot REST carries NO tokenized equities (empirically proven: Ticker
+        // pair=BIIBUSD AND BIIBxUSD both "EQuery:Unknown asset pair" while XBTUSD serves
+        // — see KNOWN_NONEXISTENT_NAMES), and the crypto adapter has no equities
+        // subscription. For xstock-class positions the VENUE is the Kraken WS-EQUITIES
+        // feed: read the SAME in-memory latest-tick store the B74 archiver/scanner feed
+        // maintains (single consumer, one subscription — the archiver's universe-wide
+        // WS). STALENESS IS BLOCKING (Langston condition 1): a tick older than the
+        // class-explicit max-age yields NO price — never evaluate a stop/target against
+        // a stale mark; the skip rail escalates a feed that stays dark. The crypto
+        // venue chain below is untouched (additive, class-keyed).
+        const _posClass = asValidAssetClass((position as { assetClass?: unknown }).assetClass) ?? safeResolveAssetClass(position.symbol, 'kraken');
+        if (_posClass === 'xstock_spot') {
+          const _eqTick = getLatestEquityTick(position.symbol);
+          let _eqMaxAgeMs: number;
+          try {
+            _eqMaxAgeMs = getCachedNumberRequired('exit_integrity', 'max_equity_tick_age_ms',
+              { exchange: '*', assetClass: 'xstock_spot', strategy: '*', regime: '*' });
+          } catch (knobErr) {
+            console.error(`[P19-B8.5][EQUITY_MARK] max_equity_tick_age_ms knob unavailable — xstock mark NOT actionable for ${position.symbol} (fail-safe skip):`, knobErr instanceof Error ? knobErr.message : knobErr);
+            withoutPrice++;
+            await this._recordPriceSkip(position, 'equity_age_knob_missing');
+            continue;
+          }
+          if (!_eqTick || !Number.isFinite(_eqTick.price) || _eqTick.price <= 0) {
+            withoutPrice++;
+            await this._recordPriceSkip(position, 'equity_tick_missing');
+            continue;
+          }
+          const _eqAge = Date.now() - _eqTick.tsMs;
+          if (_eqAge > _eqMaxAgeMs) {
+            console.warn(`[P19-B8.5][EQUITY_MARK] ${position.symbol}: latest equities tick is ${Math.round(_eqAge / 1000)}s old (max ${Math.round(_eqMaxAgeMs / 1000)}s) — stale, not actionable this tick (market closed/halted?)`);
+            withoutPrice++;
+            await this._recordPriceSkip(position, 'equity_tick_stale');
+            continue;
+          }
+          currentPrice = _eqTick.price;
+          priceSource = 'kraken_equities_ws';
+          withWsPrice++;
+          // Feed the shared cache so UI/summary reads see the same mark, then FALL
+          // THROUGH into the shared evaluation pipeline below — the crypto venue
+          // chain is skipped entirely (spot REST cannot serve this class).
+          livePricingAdapter.updateFromWebSocket(normalizeToInternalSymbol(position.symbol), currentPrice, 'kraken_ws');
+        } else {
+
         // Phase 8.8.3-I7-WS-D (D5): Use WebSocket cache FIRST with 2-second stale threshold
         // Only fall back to REST if WS cache is stale > 2 seconds
         const priceResult = await livePricingAdapter.getPriceWithFallback(position.symbol, 2000);
-        
-        let currentPrice: number;
-        let priceSource: string;
         
         // ── P19-B8.5 (VENUE-ONLY ACTIONABLE PRICING — Kyle structural cut B, Langston-
         // endorsed 2026-07-15) ─────────────────────────────────────────────────────────
@@ -994,6 +1040,7 @@ export class ActiveExecutionEngine {
             continue;
           }
         }
+        } // ← closes the P19-B8.5 xstock/crypto pricing-leg split (else = the crypto chain)
         // A position that reaches here has a VENUE price — reset its skip streak.
         this._priceSkipStreak.delete(position.id);
         

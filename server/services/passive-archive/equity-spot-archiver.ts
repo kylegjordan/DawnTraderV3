@@ -93,8 +93,34 @@ function parseOhlcBar(data: any): void {
   state.cumulativeOhlcRows++;
 }
 
+// ── P19-B8.5 xSTOCK MARKS (Langston design-APPROVED 2026-07-16) ────────────────
+// The exit monitor needs live marks for open xstock positions, and Kraken spot
+// REST carries no tokenized equities (see KNOWN_NONEXISTENT_NAMES) — this feed IS
+// the venue for the class. Per Langston condition 2 (single source of truth), the
+// engine reads THIS archiver's latest-tick view — one WS consumer, one
+// subscription lifecycle (universe-wide via XSTOCK_SPOT_SYMBOLS, so there is no
+// per-position pin/unpin to manage — condition 3 is satisfied by architecture).
+// Staleness judgment belongs to the READER (the engine enforces its blocking
+// max-age knob); this map only reports what the feed last said and when.
+const latestEquityTick = new Map<string, { price: number; tsMs: number }>();
+
+/** Latest equities-feed tick for an internal symbol ('BIIB/USD'), or null. */
+export function getLatestEquityTick(symbol: string): { price: number; tsMs: number } | null {
+  return latestEquityTick.get(symbol.toUpperCase()) ?? null;
+}
+
 function parseTickerSnap(data: any): void {
   if (!data?.symbol) return;
+  // P19-B8.5 xstock marks: mid from bid/ask when both sides exist, else last.
+  {
+    const _bid = data.bid != null ? Number(data.bid) : NaN;
+    const _ask = data.ask != null ? Number(data.ask) : NaN;
+    const _last = data.last != null ? Number(data.last) : NaN;
+    const _mark = (_bid > 0 && _ask > 0) ? (_bid + _ask) / 2 : _last;
+    if (Number.isFinite(_mark) && _mark > 0) {
+      latestEquityTick.set(String(data.symbol).toUpperCase(), { price: _mark, tsMs: Date.now() });
+    }
+  }
   bufferTickerSnap(ASSET_CLASS, {
     symbol: data.symbol,
     assetClass: ASSET_CLASS,
