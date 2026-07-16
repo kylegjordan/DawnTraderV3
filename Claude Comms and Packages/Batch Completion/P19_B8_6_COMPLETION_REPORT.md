@@ -31,10 +31,21 @@ closed_trades stamps: `exit_fee_mode=maker` · `exit_rest_outcome=fill` ·
 `exit_rested_at_price=1.4299142900` == `actual_exit_price` (fill=limit EXACTLY) ·
 `exit_slippage=0.00000000` · `exit_fee=0.83790033` (0.40% maker on ~$209 notional;
 taker would have been ~$1.676 + slippage) · `exit_rest_duration_ms=1551`.
-Langston closure bar: fill=limit ✅ + per-class maker rate ✅ RUNTIME-PROVEN;
-**deadline-convert booking taker friction = still an open watch** (no rest has aged
-out its 60-min deadline yet); the monitor stays armed and the first CONVERT gets
-posted + appended the same way.
+**Langston rulings (his exact wording):** the closed_trades row is **independently
+confirmed, not reported** (he re-queried staging himself). D1: **basic guard VERIFIED
+(DB** — `exit_rest_duration_ms=1551` proves a later-tick fill**), strong form VERIFIED
+(log, re-read at the archive line myself)** — the placement tick printed 1.4301,
+genuinely through the 1.42991429 limit, and the engine still rested (checked as a true
+touch, not rounding). **n=1 stands and must be flagged either way — one placement is a
+working instance, not a soak.**
+Reviewer note (Langston, for the record): the app stdout ROTATED two minutes after the
+event, so a grep of the live out path comes up empty — the evidence lives in the
+rotation archive `out__2026-07-16_01-20-22.log:8233413`, not the live `out` path.
+Closure bar: fill=limit ✅ + per-class maker rate ✅ RUNTIME-PROVEN (independently);
+**deadline-convert booking taker friction = still an open watch** (no rest has aged out
+its 60-min deadline yet); the monitor stays armed against Langston's four discriminants
+(fee_mode→taker, non-zero exit_slippage off the convert tick, outcome=convert, fee at
+the taker rate) and the first CONVERT gets posted + appended the same way.
 
 ## Langston findings + dispositions
 - **① (BLOCKER, fixed):** deadline-convert lost `exit_rested_at_price` because
