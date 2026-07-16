@@ -386,6 +386,38 @@ class RtbMetricsService {
     };
   }
 
+  // ── [11.8B] EV_REJECT_SHADOW drift alarm (Kyle override 2026-07-16) ──
+  // The netEV open-backstop no longer blocks; an ORGANIC signal reaching the open
+  // moment with a negative stored chosen_net_ev means the refresh's SQE eviction
+  // failed to remove it — genuine drift. Expected rate: ZERO. First fire raises ONE
+  // dedupe-keyed alert; the counter keeps the rate visible. In-memory since process
+  // start (retention = process lifetime, NOT history — the durable record is the
+  // evidence sink's ev_reject rows).
+  private evRejectShadowCount = 0;
+  private evRejectShadowAlerted = false;
+
+  recordEvRejectShadow(symbol: string, mode: string, netEv: number): void {
+    this.evRejectShadowCount++;
+    if (!this.evRejectShadowAlerted) {
+      this.evRejectShadowAlerted = true;
+      import('./system-alerts.js')
+        .then(({ addAlert }) => addAlert({
+          triggers_at: new Date(),
+          category: 'breakage',
+          severity: 'warning',
+          title: 'NetEV drift alarm (EV_REJECT_SHADOW) fired — refresh eviction gap',
+          body: `A signal reached the open moment with a NEGATIVE stored chosen_net_ev (${symbol}, mode=${mode}, netEV=${netEv.toFixed(6)}) and was NOT blocked (11.8B is shadow-only per Kyle's 2026-07-16 override). This should be impossible: the RTB refresh's SQE re-check deletes negative-EV rows. Investigate the refresh eviction path; the evidence sink's ev_reject rows carry the occurrences.`,
+          metadata: { source: 'rtb-metrics-service', symbol, mode, netEv },
+          dedupe_key: 'ev-reject-shadow-drift',
+        }))
+        .catch((err) => console.error('[11.8B][EV_REJECT_SHADOW] alert write failed:', err));
+    }
+  }
+
+  getEvRejectShadow(): { count: number; alerted: boolean } {
+    return { count: this.evRejectShadowCount, alerted: this.evRejectShadowAlerted };
+  }
+
   /**
    * P19-B7.2 (OBJ-6, Langston Step-2 item 1): the maker-PICK-RATE — the early-warning monitor for a
    * too-loose adverse-selection haircut. An implausibly high maker-pick rate (before any live

@@ -87,6 +87,8 @@ import { b5SizingAudit } from './b5-sizing-audit.js';
 import { i1RtbDiagnostics } from './i1-rtb-diagnostics-service.js';
 import { i1TradeLifecycleDiagnostics } from './i1-trade-lifecycle-diagnostics.js';
 import { rtbMetricsService, type OpenFailStage } from './rtb-metrics-service.js';
+// [11.8B] shadow conversion: pure disposition routing, unit-fenced label integrity.
+import { resolveEvBlockDisposition } from './ev-block-disposition.js';
 import { emitEvReject } from './data-archive/switch-on-evidence-sink.js';
 
 /**
@@ -2530,67 +2532,91 @@ export class ActiveExecutionEngine {
     let _b72IsTradeable = _b72ChosenNetEv != null ? (_b72ChosenNetEv > 0) : expectancyResult.isTradeable;
     const _b72EffectiveNetEv = _b72ChosenNetEv != null ? _b72ChosenNetEv : expectancyResult.netEV;
 
-    // P19-B8.5 exploration lane: an exploration-stamped PAPER signal is a KNOWN
-    // negative-netEV admit (lane-budgeted at gen, stamp-honored at refresh) — its
-    // non-positive sign here is NOT gates-drifted, so the backstop's EV_REJECT alarm
-    // must not fire on it (that alarm's job is detecting signals admitted positive
-    // that went negative). Paper-mode AND stamp BOTH required — live signals can
-    // never carry the stamp, and the live backstop stays byte-identical.
+    // ── [11.8B] SHADOW CONVERSION (Kyle override 2026-07-16; Langston ruling AMENDED —
+    // "an alarm whose stated job is drift detection has no business blocking") ────────
+    // The blocking backstop is RETIRED on the primary (snapshot) path. Proof of safety
+    // (Langston's GO/NO-GO, cited at code): the RTB refresh re-runs every signal
+    // through the SQE — where the NetEV admission lives since B8.5a — and DELETES the
+    // row on failure (ready_to_buy_service.ts :946 evaluate / :959 deleteRtbSignals);
+    // the only NetEV-negative survivors are exploration-stamped rows, which this gate
+    // already passed by design. And this gate reads the SAME stored chosen_net_ev the
+    // SQE last passed on — same operand, same standard, no fresher data: strictly
+    // redundant as a block. As an ALARM it stays: an organic signal reaching here
+    // negative means SQE-passed-positive-went-negative = refresh-eviction drift —
+    // logged decision-reconstructable, counted, durable-sunk, alerted on first fire.
+    // NEVER blocked — IN PAPER MODE. LIVE keeps the block (Langston risk flag,
+    // Step-4 2026-07-16): converting a real-money fail-safe from block→shadow rests
+    // on "drift is impossible," and the alarm exists because we are not certain it
+    // is; a live drift-open is an unrecoverable negative-EV fill an after-the-fact
+    // alarm cannot undo. Kyle ratifies the live disposition at the #522 pre-live
+    // gate (the documented-exception mechanism of his own fix-on-find rule).
+    // Routing is FENCED by resolveEvBlockDisposition (pure, unit-pinned) — the
+    // shadow leg and both block labels flow from the one function, so a live
+    // snapshot-present negative can never wear the snapshot-missing labels.
+    const _b72Disposition = resolveEvBlockDisposition(_b72ChosenNetEv, this.mode);
     const _exploOpen = this.mode === 'paper' && (signal.metadata as any)?.admissionBasis === 'exploration';
-    if (!_b72IsTradeable && _exploOpen) {
-      console.log(`[P19-B8.5][EXPLORATION_OPEN] ${signal.symbol}: known-negative exploration admit (netEV=${_b72EffectiveNetEv.toFixed(6)}) passing the 11.8B backstop — NOT gates-drifted, stamp honored`);
-      _b72IsTradeable = true;
+    if (!_b72IsTradeable && _b72Disposition === 'SHADOW') {
+      if (_exploOpen) {
+        // Known-negative exploration admit (lane-budgeted at gen, stamp-honored at
+        // refresh) — expected, NOT drift; excluded from the alarm.
+        console.log(`[P19-B8.5][EXPLORATION_OPEN] ${signal.symbol}: known-negative exploration admit (netEV=${_b72EffectiveNetEv.toFixed(6)}) — stamp honored, not gates-drifted`);
+      } else {
+        const _b72ShadowReason = `chosen ${_b72ChosenMode} NetEV=${_b72EffectiveNetEv.toFixed(6)} (best-of-both non-positive after friction + haircut)`;
+        console.warn(`[11.8B][EV_REJECT_SHADOW] ${signal.symbol}: ${_b72ShadowReason} — DRIFT ALARM (SQE passed this signal positive; refresh eviction should have removed it) — shadow-only, NOT blocking (Kyle override 2026-07-16)`);
+        // B-EVIDENCE-SINK: the durable alarm record (rate numerator + the offending netEV).
+        emitEvReject(
+          {
+            symbol: signal.symbol,
+            strategy: signal.strategy,
+            assetClass: asValidAssetClass(signal.metadata?.assetClass) ?? safeResolveAssetClass(signal.symbol, 'kraken') ?? 'unknown',
+            regime: (signal.metadata?.regime as string | undefined) ?? null,
+            sourcePool: (signal.metadata?.sourcePool as string | undefined) ?? null,
+            mode: this.mode,
+          },
+          { chosenNetEv: _b72EffectiveNetEv, rejectReason: `SHADOW ${_b72ShadowReason}` },
+        );
+        rtbMetricsService.recordEvRejectShadow(signal.symbol, this.mode, _b72EffectiveNetEv);
+      }
+      _b72IsTradeable = true; // shadow: observe, never gate
     }
 
     if (!_b72IsTradeable) {
-      // [B4] Log funnel attempt blocked by Net Expectancy Gate
+      // Two distinct blocking cases land here — label integrity fenced by
+      // resolveEvBlockDisposition (Langston delta-GO condition, 2026-07-16):
+      //   BLOCK_SNAPSHOT_MISSING — chosen_net_ev NULL: a DATA-INTEGRITY fault (a
+      //     queued row missing its stored decision), legitimately outside the SQE.
+      //   BLOCK_EV_REJECT — LIVE mode, snapshot present + non-positive: the live
+      //     block retained byte-equivalent pending Kyle's #522 pre-live ratification;
+      //     the reject names the chosen netEV, never the snapshot-missing labels.
+      const _snapshotMissing = _b72Disposition === 'BLOCK_SNAPSHOT_MISSING';
+      const _b72RejReason = _snapshotMissing
+        ? `chosen_net_ev SNAPSHOT MISSING on the queued row; open-time taker recompute non-positive (${expectancyResult.rejectionReason ?? 'negative net expectancy'})`
+        : `chosen ${_b72ChosenMode} NetEV=${_b72EffectiveNetEv.toFixed(6)} (best-of-both non-positive after friction + haircut; LIVE block retained pending #522 ratification)`;
+      const _b72Code = _snapshotMissing ? 'EV_SNAPSHOT_MISSING' : 'EV_REJECT';
       b4Diagnostics.logFunnelEvent({
         symbol: signal.symbol,
         strategy: signal.strategy,
         stage: 'attempt',
-        block_reason: 'EV_REJECT'
+        block_reason: _b72Code
       });
-
-      const _b72RejReason = _b72ChosenNetEv != null
-        ? `chosen ${_b72ChosenMode} NetEV=${_b72EffectiveNetEv.toFixed(6)} (best-of-both non-positive after friction + haircut)`
-        : expectancyResult.rejectionReason;
-      console.log(`[11.8B][EV_BLOCK] ${signal.symbol} rejected: ${_b72RejReason}`);
-      console.log(`[PaperExecution:${this.mode}] Paper trade rejected by Net Expectancy Gate: ${_b72RejReason}`);
-      // B-EVIDENCE-SINK: durable capture of the EV_REJECT occurrence (rate numerator; the offending
-      // netEV). Fire-and-forget, degrades on failure, never throws into the open path.
-      emitEvReject(
-        {
-          symbol: signal.symbol,
-          strategy: signal.strategy,
-          assetClass: asValidAssetClass(signal.metadata?.assetClass) ?? safeResolveAssetClass(signal.symbol, 'kraken') ?? 'unknown',
-          regime: (signal.metadata?.regime as string | undefined) ?? null,
-          sourcePool: (signal.metadata?.sourcePool as string | undefined) ?? null,
-          mode: this.mode,
-        },
-        { chosenNetEv: _b72EffectiveNetEv, rejectReason: _b72RejReason },
-      );
-
-      // Log rejection
+      console.error(`[11.8B][${_b72Code}] ${signal.symbol} refused: ${_b72RejReason}`);
       await storage.createActiveTradeLog(this.mode, {
         tradeId: null,
         positionId: null,
         eventType: 'trade_rejected',
-        message: `Trade rejected by Net Expectancy Gate: ${signal.symbol} - ${_b72RejReason}`,
+        message: `Trade refused (${_b72Code}): ${signal.symbol} - ${_b72RejReason}`,
         metadata: {
           signal: tradeCandidate,
           rejectionReason: _b72RejReason,
-          code: 'EV_REJECT',
-          // P19-B7.2: the effective (chosen-mode best-of-both) EV drove the decision.
+          code: _b72Code,
           ev: _b72EffectiveNetEv,
           chosenEntryMode: _b72ChosenMode,
           takerNetEv: expectancyResult.netEV,
           score: expectancyResult.score
         }
       });
-
-      // P19-B6.5e: Net-Expectancy gate is a POST-guardrail open-stage failure.
-      rtbMetricsService.recordOpenFailed(signal.symbol, signal.strategy, 'EV_REJECT', _b72RejReason || 'negative net expectancy');
-      return { opened: false, stage: 'EV_REJECT', reason: _b72RejReason || 'negative net expectancy' };
+      rtbMetricsService.recordOpenFailed(signal.symbol, signal.strategy, 'EV_REJECT', _b72RejReason);
+      return { opened: false, stage: 'EV_REJECT', reason: _b72RejReason };
     }
 
     // Log expectancy gate pass with score for future analytics
