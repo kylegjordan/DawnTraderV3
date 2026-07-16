@@ -407,6 +407,23 @@ function TradeRow({
         </span>
       </td>
 
+      {/* P19-B8.7 (OBJ-4): B/S · TEC State · Signal/Pattern (VTS-mirror; em-dash when absent) */}
+      <td className="px-3 py-3">
+        <span className={cn("text-xs font-semibold uppercase", trade.side === 'sell' ? "text-red-600" : "text-green-600")}>
+          {trade.side === 'sell' ? 'S' : 'B'}
+        </span>
+      </td>
+      <td className="px-3 py-3">
+        {trade.tradeMode
+          ? <Badge variant="outline" className="text-xs">{trade.tradeMode}</Badge>
+          : <span className="text-muted-foreground text-xs">—</span>}
+      </td>
+      <td className="px-3 py-3 text-xs">
+        {(trade as any).patternType
+          ? <span className="font-medium">{String((trade as any).patternType)}</span>
+          : <span className="text-muted-foreground">—</span>}
+      </td>
+
       {/* 4. Qty / Value (stacked) */}
       <td className="px-3 py-3">
         <div className="text-xs space-y-0.5">
@@ -436,6 +453,16 @@ function TradeRow({
           <Target className="w-3 h-3 text-green-500" />
           <span className="font-mono text-sm text-foreground">
             {trade.takeProfit != null ? `$${trade.takeProfit.toFixed(6)}` : '—'}
+          </span>
+        </div>
+      </td>
+
+      {/* P19-B8.7 (OBJ-4): Stop (SL) — VTS shows Target/Stop as a pair */}
+      <td className="px-3 py-3">
+        <div className="flex items-center gap-1">
+          <Shield className="w-3 h-3 text-red-500" />
+          <span className="font-mono text-sm text-foreground">
+            {trade.stopLoss != null ? `$${trade.stopLoss.toFixed(6)}` : '—'}
           </span>
         </div>
       </td>
@@ -650,12 +677,28 @@ function TradeRow({
         )}
       </td>
       
+      {/* P19-B8.7 (OBJ-4): Edge · Rank · Regime Wt — decision-time metadata; em-dash when absent */}
+      <td className="px-3 py-3 text-xs font-mono">
+        {Number.isFinite(Number(trade.metadata?.netExpectedEdge)) ? Number(trade.metadata.netExpectedEdge).toFixed(4) : <span className="text-muted-foreground">—</span>}
+      </td>
+      <td className="px-3 py-3 text-xs font-mono">
+        {Number.isFinite(Number(trade.metadata?.rankingScore)) ? Number(trade.metadata.rankingScore).toFixed(4) : <span className="text-muted-foreground">—</span>}
+      </td>
+      <td className="px-3 py-3 text-xs font-mono">
+        {Number.isFinite(Number(trade.metadata?.regimeWeight)) ? Number(trade.metadata.regimeWeight).toFixed(2) : <span className="text-muted-foreground">—</span>}
+      </td>
+
       {/* 21. Duration */}
       <td className="px-3 py-3">
         <div className="flex items-center gap-1 text-sm text-muted-foreground">
           <Clock className="w-3 h-3" />
           {formatDuration(trade.holdingDurationMs)}
         </div>
+      </td>
+
+      {/* P19-B8.7 (OBJ-4): Opened (entry time) — VTS-mirror */}
+      <td className="px-3 py-3 text-xs text-muted-foreground whitespace-nowrap">
+        {trade.openedAt ? new Date(trade.openedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
       </td>
       
       {/* 22. Actions */}
@@ -1291,9 +1334,14 @@ export default function ActiveTradesV2({ mode }: { mode?: 'paper' | 'live' } = {
                   <th className="px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Pool</th>
                   {/* P19-B7.2b (OBJ-C): entry fee-mode (maker/taker) column */}
                   <th className="px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Entry Fee Mode</th>
+                  {/* P19-B8.7 (OBJ-4): VTS-mirror columns — B/S, TEC State, Signal/Pattern */}
+                  <th className="px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">B/S</th>
+                  <th className="px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider" title="Trailing-exit engine state: TARGET = aiming at the original target; TRAILING = moonbag.">TEC State</th>
+                  <th className="px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Signal/Pattern</th>
                   <SortableHeader field="quantity" label="Qty / Value" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortableHeader field="intendedEntryPrice" label="Entry" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortableHeader field="takeProfit" label="Target (TP)" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <SortableHeader field="stopLoss" label="Stop (SL)" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortableHeader field="currentPrice" label="Current" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <th className="px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Dist</th>
                   <SortableHeader field="grossPnl" label="Gross P/L" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
@@ -1309,7 +1357,12 @@ export default function ActiveTradesV2({ mode }: { mode?: 'paper' | 'live' } = {
                   <th className="px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Source</th>
                   <SortableHeader field="marketRegime" label="Regime" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortableHeader field="marketFriction" label="Friction" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  {/* P19-B8.7 (OBJ-4): decision-time telemetry mirrored from the VTS set (metadata-sourced; em-dash when absent) */}
+                  <th className="px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Edge</th>
+                  <th className="px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Rank</th>
+                  <th className="px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Regime Wt</th>
                   <SortableHeader field="holdingDurationMs" label="Duration" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <th className="px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Opened</th>
                   <th className="px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>

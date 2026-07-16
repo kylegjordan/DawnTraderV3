@@ -184,9 +184,18 @@ export async function buildSettingsFromGuardrails(
     portfolioValue: portfolioValue.toString(),
     riskPerTradePct: riskPct.toString(),
     killSwitchTripped: guardrails.killSwitchTripped || false,
-    maxOpenTrades: Number(guardrails.maxOpenPositions) || 5,
+    // P19-B8.7 (OBJ-3): the `|| 5` fallback is GONE — it silently substituted a
+    // made-up concurrency cap whenever the DB value was absent/unparseable (and was
+    // the ancestor of the UI's phantom "5"). The raw Number flows through (NaN when
+    // unreadable); every consumer must handle it loudly: the engine promotion loop
+    // HALTS admissions for the tick (safe-degrade, never a fabricated cap), the API
+    // ships it to an honest em-dash. No-hardcoded-fallbacks (CLAUDE.md §11).
+    maxOpenTrades: Number(guardrails.maxOpenPositions),
     dailyLossKillSwitch: guardrails.dailyLossKillSwitchPct ? guardrails.dailyLossKillSwitchPct.toString() : '7.00',
-    maxExposurePercent: '50.00',
+    // P19-B8.7 (OBJ-3): was a hardcoded '50.00' — a fiction that leaked into the AI
+    // briefing text and diagnostics exports. Now the SAME DB-governed exposure cap
+    // the sizer uses (maxTotalExposurePct, read above). Reporting-only consumers.
+    maxExposurePercent: maxTotalExposurePct,
     maxPositionPercent,
     maxTotalExposurePct,
     autoTrade: false,

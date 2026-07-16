@@ -12091,9 +12091,15 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // Get open positions from active_open_positions
       const positions = await storage.getActiveOpenPositions('paper');
       
-      // Get guardrail settings for max open positions using dynamic slot calculation
-      const { getDynamicSlots } = await import('./services/dynamic-slots.js');
-      const { slots: maxOpenTrades } = await getDynamicSlots('paper');
+      // P19-B8.7 (OBJ-3, Kyle 2026-07-16): the display previously computed slots as
+      // floor(exposure ÷ per-trade-cap) via dynamic-slots — a number the engine never
+      // enforces (it produced "11/5" + a false OVER LIMIT banner). ONE authoritative
+      // count: the SAME guardrails_v2.max_open_positions the promotion loop gates on
+      // (active-execution-engine.ts — buildSettingsFromGuardrails.maxOpenTrades).
+      // Unreadable value → NaN flows to the client, which renders an honest em-dash
+      // (never a fabricated cap); the engine side fail-halts admissions separately.
+      const { buildSettingsFromGuardrails } = await import('./services/guardrail-settings.js');
+      const maxOpenTrades = Number((await buildSettingsFromGuardrails('paper')).maxOpenTrades);
       
       // Phase 8.8.3-I6: Enrich positions with LIVE prices from LivePricingAdapter
       const enrichedPositions = await Promise.all(positions.map(async (pos, index) => {
@@ -12227,6 +12233,14 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           id: pos.id,
           symbol: pos.symbol,
           strategy: pos.strategyName,
+          // P19-B8.7 (OBJ-1): the stamped class was never sent — the CLASS column
+          // rendered blank on every row (Kyle 2026-07-16). The stamp is the source;
+          // never re-derive from the symbol (collision tickers mislabel).
+          assetClass: (pos as any).assetClass ?? null,
+          // P19-B8.7 (OBJ-4, VTS-mirror columns): signal/pattern origin — already
+          // stamped on the position row; NULL renders an em-dash. (tradeMode was
+          // already shipped further down this object — Directive 9.2.)
+          patternType: (pos as any).patternType ?? null,
           side: pos.side,
           quantity,
           entryPrice,
@@ -12544,9 +12558,11 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const netPnl = realizedPnl + unrealizedPnl;
       const netPnlPercent = startingBalance > 0 ? (netPnl / startingBalance) * 100 : 0;
       
-      // Phase 8.8.3-I9: Get open trades count and max slots for TopBar metric using dynamic calculation
-      const { getDynamicSlots } = await import('./services/dynamic-slots.js');
-      const { slots: maxOpenTrades } = await getDynamicSlots(mode);
+      // P19-B8.7 (OBJ-3): TopBar slots re-keyed to the SAME guardrails_v2.max_open_positions
+      // the engine enforces (was the dynamic-slots exposure ratio — retired). NaN → honest
+      // display fallback client-side, never a fabricated cap.
+      const { buildSettingsFromGuardrails } = await import('./services/guardrail-settings.js');
+      const maxOpenTrades = Number((await buildSettingsFromGuardrails(mode)).maxOpenTrades);
       const openTradesCount = openPositions.length;
       const slotsAvailable = Math.max(0, maxOpenTrades - openTradesCount);
       

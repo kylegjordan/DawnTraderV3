@@ -346,7 +346,15 @@ export class ActiveExecutionEngine {
 
       const openPositions = await storage.getActiveOpenPositions(this.mode);
       const modeSettings = await buildSettingsFromGuardrails(this.mode);
-      const maxTrades = modeSettings.maxOpenTrades || 15;
+      // P19-B8.7 (OBJ-3, Langston safe-degrade constraint): the `|| 15` fallback is
+      // GONE — a failed guardrails read must never silently substitute a concurrency
+      // cap. Unreadable cap → HALT admissions for this tick, loudly, and the loop
+      // stays alive (skip, not throw).
+      const maxTrades = Number(modeSettings.maxOpenTrades);
+      if (!Number.isFinite(maxTrades) || maxTrades <= 0) {
+        console.error(`[P19-B8.7][GUARDRAIL_READ_FAIL:${this.mode}] max_open_positions unreadable (${maxTrades}) — ADMISSIONS HALTED this tick (safe-degrade, no fabricated cap). Seed/repair guardrails_v2.`);
+        return;
+      }
       const openSlots = maxTrades - openPositions.length;
 
       const rtbCount = await readyToBuyService.getPoolSize(this.mode);
@@ -2033,7 +2041,13 @@ export class ActiveExecutionEngine {
       // Phase 8.8.4-C.14.B: Calculate available slots for multi-signal promotion
       const openPositions = await storage.getActiveOpenPositions(this.mode);
       const modeSettings = await buildSettingsFromGuardrails(this.mode);
-      const maxTrades = modeSettings.maxOpenTrades || 15;
+      // P19-B8.7 (OBJ-3): same safe-degrade as the promotion-interval site — no
+      // fabricated cap; unreadable → halt this promotion pass loudly, loop survives.
+      const maxTrades = Number(modeSettings.maxOpenTrades);
+      if (!Number.isFinite(maxTrades) || maxTrades <= 0) {
+        console.error(`[P19-B8.7][GUARDRAIL_READ_FAIL:${this.mode}] max_open_positions unreadable (${maxTrades}) — promotion pass HALTED (safe-degrade, no fabricated cap). Seed/repair guardrails_v2.`);
+        return;
+      }
       let openSlots = maxTrades - openPositions.length;
 
       if (openSlots <= 0) {

@@ -83,6 +83,10 @@ function DualScrollTable({ children }: { children: React.ReactNode }) {
   );
 }
 
+// P19-B8.7 (OBJ-2): colors are COSMETIC ONLY — cell visibility never depends on this
+// map (the render fallback carries its own text color). Keys fixed to the canonical
+// strategy ids (range_trading was a dead key — canonical is range_trade); unlisted
+// canonical strategies simply render on the neutral fallback.
 const strategyColors: Record<string, string> = {
   vwap_pullback: "bg-primary/10 text-primary",
   abcd_long: "bg-chart-2/10 text-chart-2",
@@ -91,7 +95,7 @@ const strategyColors: Record<string, string> = {
   dhma: "bg-purple-500/10 text-purple-600",
   breakout: "bg-orange-500/10 text-orange-600",
   mean_reversion: "bg-green-500/10 text-green-600",
-  range_trading: "bg-cyan-500/10 text-cyan-600",
+  range_trade: "bg-cyan-500/10 text-cyan-600",
   liquidity_trap: "bg-rose-500/10 text-rose-600"
 };
 
@@ -103,7 +107,7 @@ const strategyNames: Record<string, string> = {
   dhma: "DHMA",
   breakout: "Breakout",
   mean_reversion: "Mean Reversion",
-  range_trading: "Range Trading",
+  range_trade: "Range Trade",
   liquidity_trap: "Liquidity Trap"
 };
 
@@ -717,9 +721,14 @@ export function TradeHistoryTab() {
                       <th className="px-3 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Pool</th>
                       {/* P19-B7.2b (OBJ-C): entry fee-mode (maker/taker) column */}
                       <th className="px-3 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Entry Fee Mode</th>
+                      {/* P19-B8.7 (OBJ-4): VTS-mirror columns */}
+                      <th className="px-3 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">B/S</th>
+                      <th className="px-3 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider" title="Trailing-exit engine state at close.">TEC State</th>
+                      <th className="px-3 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Signal/Pattern</th>
                       <SortableHeader column="quantity" label="Qty" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="right" />
                       <SortableHeader column="entryPrice" label="Entry" currentSort={sortBy} currentOrder={order} onSort={handleSort} />
                       <SortableHeader column="exitPrice" label="Exit" currentSort={sortBy} currentOrder={order} onSort={handleSort} />
+                      <th className="px-3 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider" title="The target and stop this trade was closed against (target = target_exit_price; stop = original_stop_price).">Target/Stop</th>
                       <SortableHeader column="closeReason" label="Reason" currentSort={sortBy} currentOrder={order} onSort={handleSort} />
                       <SortableHeader column="grossPnl" label="Gross P/L" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="right" />
                       <SortableHeader column="entryFee" label="Entry Fee" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="right" />
@@ -733,6 +742,7 @@ export function TradeHistoryTab() {
                       <SortableHeader column="marketFrictionScore" label="Friction" currentSort={sortBy} currentOrder={order} onSort={handleSort} />
                       <SortableHeader column="openedAt" label="Opened" currentSort={sortBy} currentOrder={order} onSort={handleSort} />
                       <SortableHeader column="closedAt" label="Closed" currentSort={sortBy} currentOrder={order} onSort={handleSort} />
+                      <th className="px-3 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Duration</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
@@ -773,10 +783,18 @@ export function TradeHistoryTab() {
                             <AssetClassBadge assetClass={(trade as any).assetClass} />
                           </td>
 
-                          {/* 2. Strategy - C2A */}
+                          {/* 2. Strategy - C2A.
+                              P19-B8.7 (OBJ-2, Kyle 2026-07-16): the column read as BLANK —
+                              the text was rendering WHITE-on-white. Any strategy missing from
+                              the (stale, 9-key) strategyColors map fell to a "bg-muted/10"
+                              override that killed the Badge's default background but kept its
+                              default text-primary-foreground (white). Visibility must NEVER
+                              depend on a hand-maintained color map: the fallback now carries
+                              its own text color, and an unmapped strategy renders its raw
+                              canonical name (the same rule the VTS tables use). */}
                           <td className="p-2">
-                            <Badge className={cn("text-xs", strategyColors[trade.strategyName as keyof typeof strategyColors] || "bg-muted/10")}>
-                              {strategyNames[trade.strategyName as keyof typeof strategyNames] || trade.strategyName}
+                            <Badge className={cn("text-xs", strategyColors[trade.strategyName as keyof typeof strategyColors] || "bg-muted/20 text-foreground")}>
+                              {strategyNames[trade.strategyName as keyof typeof strategyNames] || trade.strategyName || '—'}
                             </Badge>
                           </td>
 
@@ -798,6 +816,23 @@ export function TradeHistoryTab() {
                             {formatEntryFeeMode((trade as any).chosenEntryMode, (trade as any).entryFeeRate)}
                           </td>
 
+                          {/* P19-B8.7 (OBJ-4): B/S · TEC State · Signal/Pattern (VTS-mirror; em-dash when absent) */}
+                          <td className="p-2">
+                            <span className={cn("text-xs font-semibold uppercase", trade.side === 'sell' ? "text-red-600" : "text-green-600")}>
+                              {trade.side === 'sell' ? 'S' : 'B'}
+                            </span>
+                          </td>
+                          <td className="p-2">
+                            {(trade as any).tradeMode
+                              ? <Badge variant="outline" className="text-xs">{(trade as any).tradeMode}</Badge>
+                              : <span className="text-muted-foreground text-xs">—</span>}
+                          </td>
+                          <td className="p-2 text-xs">
+                            {(trade as any).patternType
+                              ? <span className="font-medium">{String((trade as any).patternType)}</span>
+                              : <span className="text-muted-foreground">—</span>}
+                          </td>
+
                           {/* 3. Quantity - C2A */}
                           <td className="p-2 text-right font-mono text-xs">
                             {trade.quantity ? formatNumber(trade.quantity, 4) : '-'}
@@ -811,6 +846,13 @@ export function TradeHistoryTab() {
                           {/* 5. Exit - C2A */}
                           <td className="p-2 font-mono text-xs">
                             {trade.exitPrice ? `$${formatNumber(trade.exitPrice, 4)}` : '-'}
+                          </td>
+
+                          {/* P19-B8.7 (OBJ-4): Target/Stop pair (target_exit_price / original_stop_price) */}
+                          <td className="p-2 font-mono text-xs whitespace-nowrap">
+                            <span className="text-green-600">{(trade as any).targetExitPrice ? `$${formatNumber((trade as any).targetExitPrice, 4)}` : '—'}</span>
+                            {' / '}
+                            <span className="text-red-600">{(trade as any).originalStopPrice ? `$${formatNumber((trade as any).originalStopPrice, 4)}` : '—'}</span>
                           </td>
                           
                           {/* 6. Reason - C2A; B65.2 + HF3: trailing_stop_hit, moonbag_timeout, break_even_stop */}
@@ -956,6 +998,13 @@ export function TradeHistoryTab() {
                           {/* 16. Closed - C2A */}
                           <td className="p-2 text-xs font-mono whitespace-nowrap">
                             {formatTimestamp(trade.closedAt)}
+                          </td>
+
+                          {/* P19-B8.7 (OBJ-4): Duration (VTS-mirror) */}
+                          <td className="p-2 text-xs text-muted-foreground whitespace-nowrap">
+                            {trade.openedAt && trade.closedAt
+                              ? formatDuration(new Date(trade.closedAt).getTime() - new Date(trade.openedAt).getTime())
+                              : '—'}
                           </td>
                         </tr>
                       );
