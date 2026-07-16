@@ -1,7 +1,7 @@
 // B-GOV poller — pure decision-logic tests (no git, no ssh, no filesystem).
 // Run: node scripts/governance-checker/poller.test.mjs
 import { computeBatchStates, decideAlerts, applyCutoff, anchorClosedBatches, decideOrphanSweep, decideStaleOpenAlertDrops } from './poller.mjs';
-import { batchIdToFileRegex, extractBatchId, extractLeadingBatchId } from './config.mjs';
+import { batchIdToFileRegex, extractBatchId, extractLeadingBatchId, parentBatchId } from './config.mjs';
 
 const HOUR = 3600 * 1000;
 const NOW = Date.parse('2026-06-17T12:00:00Z');
@@ -290,6 +290,50 @@ const noStaleOpen = { open: new Set(), openSince: new Map(), naConfirmed: new Se
   ok('OBJ-4: key whose id is not live → dropped', drops.includes('gov-classundeclared:B'));
   ok('OBJ-4: key whose id IS live → kept', !drops.includes('gov-docgap:A:sim'));
   ok('OBJ-4: store unreadable (liveIds null) → drop NOTHING (fail-open)', decideStaleOpenAlertDrops(openAlerts, null).length === 0);
+}
+
+// ── #508: sub-batch governance satisfies the PARENT's deadline (the P19-B8.4 false-overdue) ──
+{
+  const commits = [
+    { date: iso(6), subject: 'P19-B8.4 Part-2a: S21 accumulator', files: ['server/x.ts'] },
+    { date: iso(5), subject: 'P19-B8.4b Step-5: engine emits', files: ['server/y.ts'] },
+    { date: iso(4), subject: 'P19-B8.4b Step-10/11: governance close', files: ['1-system-manual/BATCH_CATALOG.md'] },
+  ];
+  const { batches } = computeBatchStates(commits);
+  const parent = batches.find((b) => b.batchId === 'P19-B8.4');
+  const child = batches.find((b) => b.batchId === 'P19-B8.4b');
+  ok('#508: child governance propagates to parent (deadline satisfied)', parent?.hasGovernance === true);
+  ok('#508: child keeps its own governance', child?.hasGovernance === true);
+}
+{
+  // no propagation when the child has code but NO governance
+  const commits = [
+    { date: iso(6), subject: 'P19-B9 Step-3 code', files: ['server/x.ts'] },
+    { date: iso(5), subject: 'P19-B9.1 Step-3 code only', files: ['server/y.ts'] },
+  ];
+  const { batches } = computeBatchStates(commits);
+  ok('#508: code-only child does NOT satisfy parent', batches.find((b) => b.batchId === 'P19-B9')?.hasGovernance === false);
+}
+{
+  // transitive: letter sub-batch → dotted parent → bare parent (only ids that EXIST get set)
+  const commits = [
+    { date: iso(6), subject: 'P19-B8 umbrella code', files: ['server/a.ts'] },
+    { date: iso(5), subject: 'P19-B8.5 tune code', files: ['server/b.ts'] },
+    { date: iso(4), subject: 'P19-B8.5a governance close', files: ['1-system-manual/PHASE_HISTORY.md'] },
+  ];
+  const { batches } = computeBatchStates(commits);
+  ok('#508: transitive to dotted parent', batches.find((b) => b.batchId === 'P19-B8.5')?.hasGovernance === true);
+  ok('#508: transitive to bare parent', batches.find((b) => b.batchId === 'P19-B8')?.hasGovernance === true);
+}
+{
+  // letter-named ids are NOT parent/child in parentBatchId (P-form family only). NOTE:
+  // extractLeadingBatchId('B-NEW-53.1 …') already yields 'B-NEW-53' (pre-existing pattern —
+  // the .1 never reaches propagation), so the guard here is the pure function's null.
+  ok('#508: parentBatchId(B-NEW-53.1) is null (no letter-named propagation)', parentBatchId('B-NEW-53.1') === null);
+  ok('#508: parentBatchId(B-GOV-4) is null', parentBatchId('B-GOV-4') === null);
+  ok('#508: parentBatchId(P19-B8.4b) → P19-B8.4', parentBatchId('P19-B8.4b') === 'P19-B8.4');
+  ok('#508: parentBatchId(P19-B8.5) → P19-B8', parentBatchId('P19-B8.5') === 'P19-B8');
+  ok('#508: parentBatchId(P19-B8) is null (top of chain)', parentBatchId('P19-B8') === null);
 }
 
 console.log(`\nPoller logic tests: ${pass} passed, ${fail} failed`);

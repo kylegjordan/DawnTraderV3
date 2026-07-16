@@ -38,6 +38,19 @@ export function extractBatchId(subject) {
   return null;
 }
 
+// #508: the PARENT of a phase-scoped sub-batch id, or null if the id has no parent form.
+// P19-B8.4b → P19-B8.4 (letter suffix) ; P19-B8.5 → P19-B8 (dotted numeric suffix).
+// Letter-named batches (B-GOV-4, B-NEW-53.1) deliberately return null — their numeric
+// tails are version-like, not parent/child (B-NEW-53.1 closing must not silence B-NEW-53's
+// own deadline; the P19_B8_4b precedent this fixes is specifically the P-form family).
+export function parentBatchId(bid) {
+  let m = bid.match(/^(P\d+-B\d+(?:\.\d+)*)[a-z]$/);
+  if (m) return m[1];
+  m = bid.match(/^(P\d+-B\d+(?:\.\d+)*)\.\d+$/);
+  if (m) return m[1];
+  return null;
+}
+
 // B-GOV-4 OBJ-1: LEADING-token extraction for the GRADING path. A batch-id is treated as a
 // batch-being-worked only if it is the leading token of the commit subject (the declared
 // own-batch position). A batch-id appearing only MID-subject is a contextual reference and must

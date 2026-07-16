@@ -19,7 +19,7 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 import {
-  extractLeadingBatchId, DEADLINE_HOURS, OPEN_STATE_BACKSTOP_HOURS, OPEN_STATE_MAX_AGE_HOURS,
+  extractLeadingBatchId, parentBatchId, DEADLINE_HOURS, OPEN_STATE_BACKSTOP_HOURS, OPEN_STATE_MAX_AGE_HOURS,
   DEFAULT_CLASS, VALID_CLASSES, SHADOW_MODE, ENFORCEMENT_CUTOFF_MS,
 } from './config.mjs';
 import {
@@ -63,6 +63,19 @@ export function computeBatchStates(commits) {
     }
     if (governance) s.hasGovernance = true;
     for (const f of c.files) s._files.add(f); // B-GOV-2 OBJ-2: accumulate changed files for the path heuristic
+  }
+  // #508: a SUB-batch's governance push satisfies its PARENT's deadline obligation. The
+  // P19-B8.4 false-overdue (twice-fired ad272ec6/ef35af7a): "P19-B8.4 Part-2a" code was
+  // governed under the P19-B8.4b close, a DIFFERENT id here, so the parent's deadline never
+  // cleared. Propagate hasGovernance child→parent (transitively), ONLY when the parent
+  // itself exists as a graded batch. Scope: hasGovernance's sole consumer is the deadline
+  // check — doc-set grading is untouched (each batch still owes its own docs).
+  for (const s of states.values()) {
+    if (!s.hasGovernance) continue;
+    for (let p = parentBatchId(s.batchId); p; p = parentBatchId(p)) {
+      const ps = states.get(p);
+      if (ps) ps.hasGovernance = true;
+    }
   }
   // materialize files (OBJ-2) and drop the Set
   const batches = [...states.values()].map((s) => ({ ...s, files: [...s._files], _files: undefined }));
