@@ -34,6 +34,9 @@ import { getPatternPoolGuardrailsForAssetClass } from '../asset_classes/pattern-
 import type { AssetClass } from '../../shared/asset-classes.js';
 // B72 (2026-05-05): getMaxPositionBufferFactor() moved to module='active_sizing'.
 import { getCachedNumberRequired } from './module-constants-service.js';
+// P19-B8.8: consecutive read-fail rail — in-memory counter increments only (the
+// threshold alert write lives inside rtb-metrics, not here; sizing stays sync).
+import { rtbMetricsService } from './rtb-metrics-service.js';
 
 function getMaxPositionBufferFactor(): number {
   return getCachedNumberRequired('active_sizing', 'max_position_buffer_factor',
@@ -149,18 +152,35 @@ export function sizeActivePositionForSignal(params: ActivePositionSizingParams):
     return invalidResult;
   }
   
-  const riskPerTradePct = parseFloat(String(guardrails?.portfolioRiskPerTradePct || '1.50'));
-  const maxPositionPct = parseFloat(String(guardrails?.maxPositionPercentPct || '10.00'));
-  
+  // P19-B8.8: DB-governed sizing inputs are read RAW — the hardcoded fallbacks
+  // ('1.50'/'10.00'/null→100) and the safe* re-default layer are retired. The schema
+  // makes all three fields notNull-with-default and both live callers pass a full
+  // guardrails_v2 row or null, so a missing/unparseable/non-positive value can only
+  // mean a real fault (missing row, schema drift, out-of-range write). The old
+  // null→100 branch silently UNCAPPED portfolio exposure on exactly that fault.
+  // Contract: refuse the signal loudly (invalidResult → the engine's SIZING_INVALID
+  // path; loop intact, nothing sized on fabricated inputs) + rail the refusal so a
+  // persistently broken row alerts instead of silently starving trading.
   const guardrailsAny = guardrails as any;
-  const maxTotalExposurePctRaw = guardrailsAny?.maxTotalExposurePct;
-  const maxTotalExposurePct = maxTotalExposurePctRaw != null 
-    ? parseFloat(String(maxTotalExposurePctRaw)) 
-    : 100;
-  
-  const safeRiskPct = Number.isFinite(riskPerTradePct) && riskPerTradePct > 0 ? riskPerTradePct : 1.50;
-  const safeMaxPositionPct = Number.isFinite(maxPositionPct) && maxPositionPct > 0 ? maxPositionPct : 10.00;
-  const safeMaxTotalExposurePct = Number.isFinite(maxTotalExposurePct) && maxTotalExposurePct > 0 ? maxTotalExposurePct : 100;
+  const sizingInputs: Array<[string, unknown]> = [
+    ['portfolioRiskPerTradePct', guardrailsAny?.portfolioRiskPerTradePct],
+    ['maxPositionPercentPct', guardrailsAny?.maxPositionPercentPct],
+    ['maxTotalExposurePct', guardrailsAny?.maxTotalExposurePct],
+  ];
+  const parsedInputs: Record<string, number> = {};
+  for (const [field, raw] of sizingInputs) {
+    const value = raw != null ? parseFloat(String(raw)) : NaN;
+    if (!Number.isFinite(value) || value <= 0) {
+      console.error(`[P19-B8.8][SIZING_GUARDRAIL_READ_FAIL field=${field} mode=${mode}] raw=${String(raw)} for ${symbol} — refusing signal, no fallback substitution`);
+      rtbMetricsService.recordSizingGuardrailReadFail(field, mode);
+      return invalidResult;
+    }
+    parsedInputs[field] = value;
+  }
+  rtbMetricsService.recordSizingGuardrailReadOk();
+  const safeRiskPct = parsedInputs.portfolioRiskPerTradePct;
+  const safeMaxPositionPct = parsedInputs.maxPositionPercentPct;
+  const safeMaxTotalExposurePct = parsedInputs.maxTotalExposurePct;
   // Phase 14.5: Pattern pool signals use reduced position sizing (15% vs 25%)
   // B-NEW-43 chunk 3 (2026-05-22): sourcePool now arrives as a typed param —
   // the prior `signal` reference was undeclared (TS2304).

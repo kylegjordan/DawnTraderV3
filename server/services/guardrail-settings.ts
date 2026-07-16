@@ -159,26 +159,17 @@ export async function buildSettingsFromGuardrails(
 
   const guardrailsAny = guardrails as any;
   
-  // REB 8.8.3-G: maxPositionPercent from guardrails_v2.maxPositionPercentPct
-  const maxPositionPercent = guardrailsAny.maxPositionPercentPct 
-    ? String(guardrailsAny.maxPositionPercentPct) 
-    : mode === 'paper' ? '30.00' : '10.00';
-  
-  // REB 8.8.3-H: LPCP values from guardrails_v2
-  const lpcpLowPriceThresholdUsd = guardrailsAny.lowPriceThreshold 
-    ? parseFloat(String(guardrailsAny.lowPriceThreshold)) 
-    : 0.50;
-  const lpcpMinStopAtrMultiple = guardrailsAny.lowPriceMinStopAtrMult 
-    ? parseFloat(String(guardrailsAny.lowPriceMinStopAtrMult)) 
-    : 3.0;
-  const lpcpMinNotionalUsd = guardrailsAny.lowPriceMinPositionNotional 
-    ? parseFloat(String(guardrailsAny.lowPriceMinPositionNotional)) 
-    : 25.00;
-    
-  // Phase 8.8.3-B3: Max Total Portfolio Exposure
-  const maxTotalExposurePct = guardrailsAny.maxTotalExposurePct 
-    ? String(guardrailsAny.maxTotalExposurePct)
-    : '25.00';
+  // P19-B8.8: field-level fallbacks retired. The throw at the top of this function
+  // is the loud gate for a missing row; every column below is notNull-with-default
+  // in the schema, so a falsy field here can only mean schema drift or a projection
+  // change — exactly the fault the old '30.00'/'10.00'/'0.50'/'3.0'/'25.00' ternaries
+  // silently absorbed. Raw values flow (NaN/'undefined' when broken); the blocking
+  // consumers (trade-safety, the sizer) refuse loudly on unreadable input.
+  const maxPositionPercent = String(guardrailsAny.maxPositionPercentPct);
+  const lpcpLowPriceThresholdUsd = parseFloat(String(guardrailsAny.lowPriceThreshold));
+  const lpcpMinStopAtrMultiple = parseFloat(String(guardrailsAny.lowPriceMinStopAtrMult));
+  const lpcpMinNotionalUsd = parseFloat(String(guardrailsAny.lowPriceMinPositionNotional));
+  const maxTotalExposurePct = String(guardrailsAny.maxTotalExposurePct);
   
   return {
     portfolioValue: portfolioValue.toString(),
@@ -191,7 +182,9 @@ export async function buildSettingsFromGuardrails(
     // HALTS admissions for the tick (safe-degrade, never a fabricated cap), the API
     // ships it to an honest em-dash. No-hardcoded-fallbacks (CLAUDE.md §11).
     maxOpenTrades: Number(guardrails.maxOpenPositions),
-    dailyLossKillSwitch: guardrails.dailyLossKillSwitchPct ? guardrails.dailyLossKillSwitchPct.toString() : '7.00',
+    // P19-B8.8: the ': "7.00"' kill-switch default is GONE (same dead-but-dangerous
+    // family as above — a defaulted KILL SWITCH is the worst number to fabricate).
+    dailyLossKillSwitch: String(guardrails.dailyLossKillSwitchPct),
     // P19-B8.7 (OBJ-3): was a hardcoded '50.00' — a fiction that leaked into the AI
     // briefing text and diagnostics exports. Now the SAME DB-governed exposure cap
     // the sizer uses (maxTotalExposurePct, read above). Reporting-only consumers.

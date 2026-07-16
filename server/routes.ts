@@ -1331,33 +1331,17 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // Directive 12.2.3: ConfigBob transparent routing removed (Batch 7B)
 
       // [9.7] Use guardrails_v2 instead of legacy guardrails table
-      let guardrailsData = await storage.getGuardrailsV2({ mode });
+      const guardrailsData = await storage.getGuardrailsV2({ mode });
 
       if (!guardrailsData) {
-        const { nanoid } = await import('nanoid');
-        guardrailsData = {
-          id: nanoid(),
-          mode,
-          portfolioRiskPerTradePct: '1.50',
-          symbolCooldownMinutes: 15,
-          maxOpenPositions: 5,
-          dailyLossKillSwitchPct: '7.00',
-          maxPositionPercentPct: '30.00',
-          maxTotalExposurePct: '25.00',
-          lowPriceMinStopAtrMult: '3.000',
-          lowPriceMinPositionNotional: '25.00',
-          lowPriceThreshold: '0.5000',
-          isManualOverride: false,
-          tunedByLatti: true,
-          lockedByUser: {},
-          managedByLottie: true,
-          manualOverrideEnabled: false,
-          lastUpdatedBy: null,
-          killSwitchTripped: false,
-          killSwitchReason: null,
-          killSwitchTrippedAt: null,
-          lastUpdated: new Date()
-        } as any;
+        // P19-B8.8: the phantom-row fabrication is GONE — this branch used to build
+        // an entire in-memory guardrails row (nanoid id, every risk field hardcoded)
+        // and serve it as if real, masking a missing DB row behind a fictional
+        // config. A missing row is a fault; say so.
+        return res.status(404).json({
+          error: `Guardrails not configured for mode=${mode}`,
+          code: 'GUARDRAILS_NOT_CONFIGURED',
+        });
       }
 
       res.json(guardrailsData);
@@ -14919,8 +14903,13 @@ Provide specific, actionable recommendations.`,
         return res.status(404).json({ error: 'Settings not found for this mode' });
       }
 
-      const killSwitchPercent = parseFloat(settings.dailyLossKillSwitch || '7.00');
-      const warningTriggerPercent = parseFloat(settings.dailyLossWarningTrigger || '75.00');
+      // P19-B8.8: || '7.00' / '75.00' substitutions removed (test-only endpoint,
+      // same hygiene) — unreadable kill-switch settings refuse the simulation.
+      const killSwitchPercent = parseFloat(String(settings.dailyLossKillSwitch));
+      const warningTriggerPercent = parseFloat(String(settings.dailyLossWarningTrigger));
+      if (!Number.isFinite(killSwitchPercent) || !Number.isFinite(warningTriggerPercent)) {
+        return res.status(422).json({ error: 'Kill-switch settings unreadable — cannot simulate loss scenario' });
+      }
       
       let targetLossPercent: number;
       

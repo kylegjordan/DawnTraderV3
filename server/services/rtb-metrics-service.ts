@@ -342,6 +342,50 @@ class RtbMetricsService {
     return [...this.makerTakerSamples];
   }
 
+  // ── P19-B8.8: consecutive SIZING_GUARDRAIL_READ_FAIL rail (alert-only) ──
+  // The sizer refuses signals instead of substituting fabricated guardrail numbers;
+  // a persistently broken guardrails row would starve trading with no trades to
+  // notice. 10 consecutive refusals (≈ one bad tick's worth) raises ONE system
+  // alert (dedupe-keyed); any successful read resets both the counter and the
+  // alert latch. The alert write is off the hot path (fires once per crossing,
+  // fire-and-forget) — counters here stay O(1) in-memory.
+  private sizingReadFailConsecutive = 0;
+  private sizingReadFailAlerted = false;
+  private readonly SIZING_READ_FAIL_ALERT_THRESHOLD = 10;
+
+  recordSizingGuardrailReadFail(field: string, mode: string): void {
+    this.sizingReadFailConsecutive++;
+    if (this.sizingReadFailConsecutive >= this.SIZING_READ_FAIL_ALERT_THRESHOLD && !this.sizingReadFailAlerted) {
+      this.sizingReadFailAlerted = true;
+      const count = this.sizingReadFailConsecutive;
+      import('./system-alerts.js')
+        .then(({ addAlert }) => addAlert({
+          triggers_at: new Date(),
+          category: 'breakage',
+          severity: 'warning',
+          title: 'Sizing guardrail read failures — signals being refused',
+          body: `${count} consecutive sizing refusals (SIZING_GUARDRAIL_READ_FAIL, last field=${field}, mode=${mode}). The sizer is refusing every signal because a DB-governed sizing input is missing/unparseable/non-positive — trading is starving loudly instead of running on fabricated numbers (P19-B8.8). Check the guardrails_v2 row for this mode.`,
+          metadata: { source: 'rtb-metrics-service', field, mode, consecutive: count },
+          dedupe_key: 'sizing-guardrail-read-fail',
+        }))
+        .catch((err) => console.error('[P19-B8.8][SIZING_RAIL] failed to write system alert:', err));
+    }
+  }
+
+  recordSizingGuardrailReadOk(): void {
+    this.sizingReadFailConsecutive = 0;
+    this.sizingReadFailAlerted = false;
+  }
+
+  /** P19-B8.8: test/diagnostic visibility into the rail state. */
+  getSizingReadFailRail(): { consecutive: number; alerted: boolean; threshold: number } {
+    return {
+      consecutive: this.sizingReadFailConsecutive,
+      alerted: this.sizingReadFailAlerted,
+      threshold: this.SIZING_READ_FAIL_ALERT_THRESHOLD,
+    };
+  }
+
   /**
    * P19-B7.2 (OBJ-6, Langston Step-2 item 1): the maker-PICK-RATE — the early-warning monitor for a
    * too-loose adverse-selection haircut. An implausibly high maker-pick rate (before any live

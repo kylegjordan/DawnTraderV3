@@ -51,10 +51,25 @@ export class GoalFeasibilityService {
       };
     }
 
-    // [9.7] Extract percentage-based limits from guardrails_v2
-    const portfolioRiskPerTradePct = parseFloat(String(guardrails.portfolioRiskPerTradePct || '3.00'));
-    const maxPositionPercentPct = parseFloat(String(guardrails.maxPositionPercentPct || '12.00'));
-    const maxTotalExposurePct = parseFloat(String(guardrails.maxTotalExposurePct || '100.00'));
+    // P19-B8.8: the || '3.00' / '12.00' / '100.00' substitutions are GONE — the
+    // exposure one LOOSENED the cap to 100% on a failed read, feeding a BLOCKING
+    // feasibility check. Unreadable limits → refuse the feasibility PASS loudly.
+    const portfolioRiskPerTradePct = parseFloat(String(guardrails.portfolioRiskPerTradePct));
+    const maxPositionPercentPct = parseFloat(String(guardrails.maxPositionPercentPct));
+    const maxTotalExposurePct = parseFloat(String(guardrails.maxTotalExposurePct));
+    const unreadable = [
+      ['portfolioRiskPerTradePct', portfolioRiskPerTradePct],
+      ['maxPositionPercentPct', maxPositionPercentPct],
+      ['maxTotalExposurePct', maxTotalExposurePct],
+    ].filter(([, v]) => !Number.isFinite(v as number) || (v as number) <= 0);
+    if (unreadable.length > 0) {
+      const fields = unreadable.map(([f]) => f).join(', ');
+      console.error(`[P19-B8.8][GUARDRAIL_READ_FAIL check=GOAL_FEASIBILITY mode=${mode}] unreadable: ${fields} — blocking feasibility, no fallback substitution`);
+      return {
+        status: 'BLOCK',
+        reason: `Guardrail limits unreadable (${fields}) — feasibility cannot be evaluated`,
+      };
+    }
 
     console.log(`[GoalFeasibility][9.7] Guardrails loaded: portfolioRiskPerTradePct=${portfolioRiskPerTradePct}%, maxPositionPercentPct=${maxPositionPercentPct}%`);
 

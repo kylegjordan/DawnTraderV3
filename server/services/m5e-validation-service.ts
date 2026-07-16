@@ -111,24 +111,33 @@ function getCacheWindowSize(): number {
   }
 }
 
-async function getDynamicSlots(): Promise<{ slots: number; maxExposure: number; maxPosition: number }> {
+// P19-B8.8 (+#515 rider): the fabricated {8,40,12} defaults and the multi-alias
+// guessing (maxTotalExposurePct || maxExposurePercent || maxExposurePct) are GONE —
+// M5E is a VALIDATION harness; validating against made-up guardrail numbers is
+// worse than not validating. Read failure → null; callers refuse loudly.
+async function getDynamicSlots(): Promise<{ slots: number; maxExposure: number; maxPosition: number } | null> {
   try {
     const guardrails = await storage.getGuardrailsV2({ mode: 'paper' });
     if (!guardrails) {
-      return { slots: 8, maxExposure: 40, maxPosition: 12 };
+      console.error('[P19-B8.8][M5E_GUARDRAIL_READ_FAIL] no guardrails_v2 row for mode=paper — refusing dynamic-slots compute, no fabricated defaults');
+      return null;
     }
-    
+
     const g = guardrails as any;
-    const maxExposure = Number(g.maxTotalExposurePct || g.maxExposurePercent || g.maxExposurePct) || 40;
-    const maxPosition = Number(g.maxPositionPercentPct || g.maxPositionPercent) || 12;
+    const maxExposure = Number(g.maxTotalExposurePct);
+    const maxPosition = Number(g.maxPositionPercentPct);
+    if (!Number.isFinite(maxExposure) || maxExposure <= 0 || !Number.isFinite(maxPosition) || maxPosition <= 0) {
+      console.error(`[P19-B8.8][M5E_GUARDRAIL_READ_FAIL] unreadable guardrail fields (maxTotalExposurePct=${String(g.maxTotalExposurePct)}, maxPositionPercentPct=${String(g.maxPositionPercentPct)}) — refusing dynamic-slots compute`);
+      return null;
+    }
     const dynamicSlots = Math.floor(maxExposure / maxPosition);
-    
+
     console.log(`[M5E][GUARDRAIL] Dynamic slots: maxExposure=${maxExposure}% / maxPosition=${maxPosition}% = ${dynamicSlots} slots`);
-    
+
     return { slots: Math.max(dynamicSlots, 1), maxExposure, maxPosition };
   } catch (err) {
-    console.error('[M5E][GUARDRAIL] Error calculating dynamic slots:', err);
-    return { slots: 8, maxExposure: 40, maxPosition: 12 };
+    console.error('[P19-B8.8][M5E_GUARDRAIL_READ_FAIL] error reading guardrails — refusing dynamic-slots compute:', err);
+    return null;
   }
 }
 
@@ -152,7 +161,14 @@ async function captureMetricsSnapshot(): Promise<M5EMetricsSnapshot | null> {
   const vtsTrades = getM5CSessionTrades();
   const paperTrades = getPaperSessionTrades();
   const openPositions = await getOpenPositionsCount();
-  const { slots: dynamicSlots, maxExposure } = await getDynamicSlots();
+  const dynamicSlotsResult = await getDynamicSlots();
+  if (!dynamicSlotsResult) {
+    // P19-B8.8: guardrails unreadable → skip this snapshot loudly rather than
+    // record metrics computed from fabricated slot/exposure numbers.
+    console.error('[P19-B8.8][M5E_SNAPSHOT_SKIP] guardrails unreadable — skipping metrics snapshot');
+    return null;
+  }
+  const { slots: dynamicSlots, maxExposure } = dynamicSlotsResult;
   
   const diValues = vtsTrades.map(t => t.di).filter(v => v > 0);
   const gsiValues = vtsTrades.map(t => t.gsi).filter(v => v > 0);
@@ -397,7 +413,13 @@ async function generateM5ESummary(comparisonReport: any): Promise<string> {
     ? Math.abs(validDISnapshots[validDISnapshots.length - 1].avgDI - validDISnapshots[0].avgDI) / (validDISnapshots[0].avgDI || 1)
     : 0;
   
-  const { slots: dynamicSlots, maxExposure, maxPosition } = await getDynamicSlots();
+  // P19-B8.8: guardrails unreadable → the validation summary fails loudly rather
+  // than grading criteria against fabricated slot/exposure numbers.
+  const dynamicSlotsResult = await getDynamicSlots();
+  if (!dynamicSlotsResult) {
+    throw new Error('[P19-B8.8][M5E_SUMMARY_FAIL] guardrails unreadable — validation summary cannot be generated');
+  }
+  const { slots: dynamicSlots, maxExposure, maxPosition } = dynamicSlotsResult;
   
   const validationCriteria = {
     feedLatency: { value: avgFeedLatency, threshold: 100, passed: avgFeedLatency < 100 },

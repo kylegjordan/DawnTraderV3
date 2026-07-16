@@ -76,7 +76,8 @@ export type TradeSafetyResultCode =
   | 'MAX_TOTAL_EXPOSURE'
   | 'MAX_TRADES'
   | 'ENGINE_STOPPING' // Phase 8.8.3-I2: Block during hard stop
-  | 'CORRELATION_EXPOSURE'; // Directive 9.4: Covariance Guard
+  | 'CORRELATION_EXPOSURE' // Directive 9.4: Covariance Guard
+  | 'GUARDRAIL_READ_FAIL'; // P19-B8.8: blocking check refused — guardrail input unreadable (fail-closed, no substitution)
 
 export type TradeSafetyResult = 
   | { ok: true }
@@ -353,7 +354,18 @@ async function checkPositionSizeCap(
   }
   
   const portfolioValue = rawPortfolioValue;
-  const maxPositionPercent = parseFloat(String((settings as any).maxPositionPercent || '10.00'));
+  // P19-B8.8: the || '10.00' substitution is GONE — a BLOCKING safety check may
+  // never pass on a swallowed NaN. Unreadable cap → refuse the trade loudly
+  // (fail-closed), never verify against a fabricated limit.
+  const maxPositionPercent = parseFloat(String((settings as any).maxPositionPercent));
+  if (!Number.isFinite(maxPositionPercent) || maxPositionPercent <= 0) {
+    console.error(`[P19-B8.8][GUARDRAIL_READ_FAIL check=POSITION_SIZE_CAP mode=${mode}] maxPositionPercent unreadable (raw=${String((settings as any).maxPositionPercent)}) — refusing trade, no fallback substitution`);
+    return {
+      ok: false,
+      code: 'GUARDRAIL_READ_FAIL',
+      reason: 'maxPositionPercent unreadable — position size cap cannot be verified',
+    };
+  }
   const maxPositionValue = (portfolioValue * maxPositionPercent) / 100;
   
   // AJ10.1: Trust pre-computed notional from P2 sizing if available
@@ -495,6 +507,12 @@ async function checkLowPricedCoinProtection(
   // ===============================================================
   // DORMANT CODE BELOW - Preserved for future re-enablement
   // Do not delete - will be re-enabled in a future phase
+  // P19-B8.8 (RUNNING_ISSUES #518): this block carries the || 0.50/3.0/25.00
+  // guardrail re-fallbacks — the exact silent-substitution family B8.8 retired
+  // from live code. It has a DATED re-enable-or-delete home (#518, rule-18):
+  // if LPCP re-enables, the fallbacks below MUST be replaced with the B8.8
+  // fail-closed refusal pattern first; if it doesn't by the #518 deadline,
+  // the whole block is deleted per rule 18.
   // ===============================================================
   /*
   try {
@@ -612,11 +630,19 @@ async function checkMaxTotalExposure(
 ): Promise<TradeSafetyResult> {
   try {
     const portfolioBalance = await getPortfolioBalanceV2(mode);
-    // B72.1: fallback (settings missing) resolved from guardrail_defaults.default_max_total_exposure_pct (stored as ratio, converted to percentage here)
-    const maxTotalExposurePct = parseFloat(
-      (settings as any).maxTotalExposurePct?.toString()
-      || (getDefaultMaxTotalExposurePct() * 100).toString()
-    );
+    // P19-B8.8: the B72.1 guardrail_defaults fallback leg is retired — post-B8.8
+    // buildSettingsFromGuardrails throws on a missing row and passes the exposure
+    // cap raw, so a missing/unreadable field here is a fault. A BLOCKING exposure
+    // check may never pass against a substituted cap: refuse loudly (fail-closed).
+    const maxTotalExposurePct = parseFloat(String((settings as any).maxTotalExposurePct));
+    if (!Number.isFinite(maxTotalExposurePct) || maxTotalExposurePct <= 0) {
+      console.error(`[P19-B8.8][GUARDRAIL_READ_FAIL check=MAX_TOTAL_EXPOSURE mode=${mode}] maxTotalExposurePct unreadable (raw=${String((settings as any).maxTotalExposurePct)}) — refusing trade, no fallback substitution`);
+      return {
+        ok: false,
+        code: 'GUARDRAIL_READ_FAIL',
+        reason: 'maxTotalExposurePct unreadable — total exposure cap cannot be verified',
+      };
+    }
     const maxTotalExposureUSD = portfolioBalance * (maxTotalExposurePct / 100);
     
     const activePositions = await getActivePositions(mode);
