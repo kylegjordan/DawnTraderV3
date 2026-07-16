@@ -23,12 +23,18 @@
 | OBJ-7 knob per class | YES | `maker_taker.exit_maker_max_pending_ms` seeded by INSERT..SELECT from entry rows; Langston Step-8 verified byte-identical (3600000 ×2) and warm-by-extension (maker_taker in PREFETCH_MODULES) |
 | OBJ-8 pre-pass consumes only the venue-only-gated price | YES | the seam sits after the venue-only chain; null price can never fill (test) |
 
-## 🔶 RUNTIME EVIDENCE — OPEN LIVE-WATCH (owed to Langston + Kyle)
-No position has touched a target since deploy, so zero `EXIT_REST_PLACED/FILLED/CONVERT`
-events exist yet. A persistent log watch is armed; the first PLACED + its FILL or
-CONVERT with all 4 stamps will be posted to Langston (his stated closure bar:
-fill=limit, per-class maker rate applied, a deadline-convert booking taker friction)
-and appended here. Until then the lifecycle is deploy-verified, not runtime-proven.
+## 🔶 RUNTIME EVIDENCE
+**FIRST FILL — RUNTIME-PROVEN (2026-07-16 01:18Z, USDC/AUD):**
+`[EXIT_REST_PLACED]` target 1.42991429 touched at 1.4301 → rested, NOT filled on the
+touch tick (D1 held live); next tick `[EXIT_REST_FILLED]` + `[MAKER_EXIT_FILL]`.
+closed_trades stamps: `exit_fee_mode=maker` · `exit_rest_outcome=fill` ·
+`exit_rested_at_price=1.4299142900` == `actual_exit_price` (fill=limit EXACTLY) ·
+`exit_slippage=0.00000000` · `exit_fee=0.83790033` (0.40% maker on ~$209 notional;
+taker would have been ~$1.676 + slippage) · `exit_rest_duration_ms=1551`.
+Langston closure bar: fill=limit ✅ + per-class maker rate ✅ RUNTIME-PROVEN;
+**deadline-convert booking taker friction = still an open watch** (no rest has aged
+out its 60-min deadline yet); the monitor stays armed and the first CONVERT gets
+posted + appended the same way.
 
 ## Langston findings + dispositions
 - **① (BLOCKER, fixed):** deadline-convert lost `exit_rested_at_price` because
