@@ -3513,9 +3513,17 @@ export class ActiveExecutionEngine {
       // B-5: floor read off the RESOLVED overlay — identical to the legacy
       // meetsConfidenceFloor(conf, stability) when AMR is not applied, and the
       // per-class floor when it is.
+      // P19-B8.5 OBJ-6 (4th site, same Langston-approved design as the SQE HF8/HF9
+      // retirement): this open-seam floor is the SAME contaminated confidence axis
+      // through another door — the mode it reads derives from the fabricated
+      // cold-start stability (#514). It blocked the FIRST promoted xStock signal
+      // (GS/USD 2026-07-16 14:18Z, after SQE pass + queue + promotion + sizing).
+      // SHADOW, never block: decision-reconstructable log; admission stays governed
+      // by netEV>0 + [11.8B] + exploration. The overlay's size/stop/TP MULTIPLIERS
+      // below are untouched (they modulate, not block — outside the #514 ruling).
+      // Bury-or-resurrect rides #514 with the other instances.
       if (!(signalConfidence >= modeOverlay.confidenceFloor)) {
-        console.log(`[11.7S][Paper] SKIP: ${signal.symbol} ${signal.strategy} - confidence ${signalConfidence.toFixed(2)} < floor ${modeOverlay.confidenceFloor} (mode=${strategyMode})`);
-        return { opened: false, stage: 'OTHER', reason: `confidence ${signalConfidence.toFixed(2)} < floor ${modeOverlay.confidenceFloor}` };
+        console.log(`[P19-B8.5][CONF_FLOOR_SHADOW site=execution_entry] ${signal.symbol}/${signal.strategy}: would-SKIP — confidence ${signalConfidence.toFixed(2)} < floor ${modeOverlay.confidenceFloor} (mode=${strategyMode})`);
       }
       
       console.log(`[11.7S][Paper] Mode: ${strategyMode} | Size×${modeOverlay.positionSizeMultiplier} | Stop×${modeOverlay.stopLossDistanceMultiplier} | TP×${modeOverlay.takeProfitDistanceMultiplier}`);
