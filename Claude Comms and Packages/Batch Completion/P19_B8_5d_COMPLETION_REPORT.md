@@ -1,4 +1,4 @@
-# P19-B8.5 sizing tune-3 — completion (CC-A, 2026-07-16)
+# P19-B8.5d (sizing tune-3) — completion (CC-A, 2026-07-16)
 
 **change-class: non_architecture** (config-only through governed machinery; rides the open P19-B8.5 batch). Kyle-specced + ratified ($145.58 buffered); Langston Step-1 PROCEED + rev-2 APPROVED-AS-WRITTEN (independently re-derived; his gap (c) closed by measured read: paper max_open_positions=15) + direct PROCEED on (a)-(d).
 
