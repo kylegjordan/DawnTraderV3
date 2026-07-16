@@ -813,7 +813,10 @@ export class SignalOrchestrator {
       chosenEntryMode: _mtDecision.chosenMode,
     };
 
-    const sqeResult = await signalQualityEvaluator.evaluate(sqeInput);
+    // P19-B8.5 OBJ-6 (Langston-approved): ACTIVE-path gen — the HF8 confidence floor +
+    // HF9 governance gate run in SHADOW (evaluate + log, never block); their stability
+    // input here is the cold-start default above. See SQEOptions.gateShadowMode + #514.
+    const sqeResult = await signalQualityEvaluator.evaluate(sqeInput, { gateShadowMode: true });
     // P19-B8.4b: SQE-at-generation tally — per-gate reject breakdown + the pass/fail denominator. The SAME
     // signal is re-SQE'd during RTB refresh (phase='refresh' in ready_to_buy_service); those are two labelled
     // numbers, never summed (MUST-4). Records BOTH pass and fail (a pass feeds the honest denominator).

@@ -132,6 +132,18 @@ export interface SQEOptions {
   skipDecay?: boolean;
   skipConfidenceFloor?: boolean;  // Phase 14.1 HF8 (B3): VTS cold-start bypass
   skipGovernanceGate?: boolean;   // HF9 Item B: VTS bypass (VTS has own inline governance)
+  // P19-B8.5 OBJ-6 (Langston-approved design): ACTIVE-path callers set this to retire
+  // the HF8 confidence floor + HF9 governance gate from BLOCKING duty — both gates
+  // still EVALUATE and emit a decision-reconstructable shadow log, but never push a
+  // failure. Rationale: on the active path both gates key off a regimeStability that
+  // signal-orchestrator computes from HARDCODED cold-start defaults (driftScore=0.5,
+  // volZ=0 — the real wiring doesn't exist there), so they were confidence wearing a
+  // regime hat — the same contaminated axis B8.5a severed from ranking/sizing/the
+  // finalScore gate. Admission stays governed by the honest gates: netEV>0 in-SQE +
+  // the [11.8B] backstop + exploration-lane evidence admission. Bury-or-resurrect
+  // decision homed at RUNNING_ISSUES #514 (precondition: real active-path drift/volZ
+  // stability wiring). VTS callers keep their skip* flags — semantics unchanged.
+  gateShadowMode?: boolean;
 }
 
 export interface SQEResult {
@@ -390,7 +402,13 @@ export async function evaluateSignalQuality(input: SQEInput, options: SQEOptions
     if (!meetsConfidenceFloor(input.confidence, input.regimeStability)) {
       const mode = resolveStrategyMode(input.regimeStability);
       const overlay = getModeOverlay(mode);
-      failures.push(`Confidence ${input.confidence.toFixed(2)} < floor ${overlay.confidenceFloor} (mode=${mode})`);
+      if (options.gateShadowMode) {
+        // P19-B8.5 OBJ-6: shadow, never block (see SQEOptions.gateShadowMode).
+        // Decision-reconstructable: confidence + would-be mode/floor + stability input.
+        console.log(`[P19-B8.5][CONF_FLOOR_SHADOW] ${canonicalSymbol}/${input.strategy}: would-REJECT — confidence ${input.confidence.toFixed(2)} < floor ${overlay.confidenceFloor} (mode=${mode}, stability=${input.regimeStability}, class=${input.assetClass})`);
+      } else {
+        failures.push(`Confidence ${input.confidence.toFixed(2)} < floor ${overlay.confidenceFloor} (mode=${mode})`);
+      }
     }
   }
 
@@ -426,8 +444,14 @@ export async function evaluateSignalQuality(input: SQEInput, options: SQEOptions
   if (!options.skipGovernanceGate && input.regimeStability) {
     const dependency = getStrategyDependency(input.strategy);
     if (!isStrategyEligible(input.strategy, input.regimeStability, dependency)) {
-      failures.push(`Governance: ${input.strategy} (${dependency} dep) blocked in ${input.regimeStability}`);
-      console.log(`[11.7R-E][SQE] GOVERNANCE BLOCK: ${canonicalSymbol} ${input.strategy} (${dependency} dep) in ${input.regimeStability}`);
+      if (options.gateShadowMode) {
+        // P19-B8.5 OBJ-6: shadow, never block (see SQEOptions.gateShadowMode).
+        // Decision-reconstructable: strategy + dependency + the stability that would block.
+        console.log(`[P19-B8.5][GOV_GATE_SHADOW] ${canonicalSymbol}/${input.strategy}: would-BLOCK — ${dependency} dep in stability=${input.regimeStability} (class=${input.assetClass})`);
+      } else {
+        failures.push(`Governance: ${input.strategy} (${dependency} dep) blocked in ${input.regimeStability}`);
+        console.log(`[11.7R-E][SQE] GOVERNANCE BLOCK: ${canonicalSymbol} ${input.strategy} (${dependency} dep) in ${input.regimeStability}`);
+      }
     }
   }
 

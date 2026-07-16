@@ -941,7 +941,9 @@ class ReadyToBuyService {
         ?? ((signal as any).chosenEntryMode as 'maker' | 'taker' | undefined)) ?? undefined,
     };
 
-    const sqeResult = await signalQualityEvaluator.evaluate(sqeInput);
+    // P19-B8.5 OBJ-6 (Langston-approved): ACTIVE-path refresh — HF8/HF9 in SHADOW
+    // (evaluate + log, never block). See SQEOptions.gateShadowMode + #514.
+    const sqeResult = await signalQualityEvaluator.evaluate(sqeInput, { gateShadowMode: true });
 
     // P19-B8.5 exploration lane: an exploration-stamped signal's lane admission was
     // decided AT GENERATION (budget consumed once, 4-field stamp on the row). The
@@ -1214,7 +1216,8 @@ class ReadyToBuyService {
                 chosenEntryMode: ((signal as any).chosenEntryMode as 'maker' | 'taker' | undefined) ?? undefined,
               };
               
-              const sqeResult = await signalQualityEvaluator.evaluate(sqeInput);
+              // P19-B8.5 OBJ-6: same shadow treatment as the single-refresh site above (#514).
+              const sqeResult = await signalQualityEvaluator.evaluate(sqeInput, { gateShadowMode: true });
               // P19-B8.4b: SQE-during-refresh tally (phase='refresh') — per-gate breakdown + pass/fail
               // denominator, kept as TWO labelled numbers vs SQE-at-generation, never summed (MUST-4).
               if (_fCls) recordActiveSqeEvaluation(mode, _fCls, sqeResult.passed, sqeResult.failures, 'refresh');
