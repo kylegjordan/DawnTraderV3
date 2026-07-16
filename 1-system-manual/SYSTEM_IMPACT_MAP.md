@@ -583,9 +583,10 @@ Kill-switch is **DB-backed per-mode**: `isKillSwitchTripped(mode)` (`guardrail-p
 
 ### 6.3 Dynamic Sizing Engine (DSE) / Paper Position Sizing
 - **Files**: Referenced throughout Phase 5; `server/services/active-position-sizing.ts` (concrete implementation)
-- **What**: Position sizing based on edge, confidence, ATR, volatility. Hard cap: MAX_POSITION_RISK = 0.02 (2%). **Phase 14.5**: Pattern-pool signals capped at 15% max portfolio per trade (PATTERN_POOL_GUARDRAILS.MAX_POSITION_PCT) vs 25% quant default. sourcePool read from signal metadata.
-- **Upstream**: VTS learning repository, Price Cache, volatility metrics, PATTERN_POOL_GUARDRAILS config (Phase 14.5)
-- **Downstream**: Paper Execution Engine (size determination)
+- **What**: Position sizing based on edge, confidence, ATR, volatility. Hard cap: MAX_POSITION_RISK = 0.02 (2%). **Phase 14.5**: Pattern-pool signals capped per class via `getPatternPoolGuardrailsForAssetClass`. sourcePool read from signal metadata.
+- **P19-B8.8 DEGRADE CONTRACT (2026-07-16)**: the three DB-governed sizing inputs (`portfolioRiskPerTradePct`, `maxPositionPercentPct`, `maxTotalExposurePct`) are read RAW — the historical hardcoded fallbacks ('1.50'/'10.00'/null→100, plus a second `safe*` re-default layer) are DELETED. Any missing/unparseable/non-positive input → the sizer logs `[P19-B8.8][SIZING_GUARDRAIL_READ_FAIL field=… mode=…]`, records the refusal on `rtbMetricsService.recordSizingGuardrailReadFail`, and returns `invalidResult` (zero-size) → the engine's `SIZING_INVALID` refusal path. Never a substituted number, never NaN downstream, loop intact. **Rail**: 10 consecutive refusals → ONE `breakage` system alert (dedupe_key `sizing-guardrail-read-fail`, latch + counter reset on any successful read; state visible via `getSizingReadFailRail()`). Same-family sweeps landed with it: `buildSettingsFromGuardrails` field fallbacks retired to raw (throw-on-missing-row remains the loud gate); `trade-safety` `checkPositionSizeCap`/`checkMaxTotalExposure` fail-closed (`GUARDRAIL_READ_FAIL` result code); `goal-feasibility` unreadable limits → loud BLOCK; the legacy `/guardrails` GET phantom-row fabrication → honest 404; m5e `getDynamicSlots` → null-refuse. Dormant LPCP fallbacks → #518; runtime kill-switch trip confirm → #519.
+- **Upstream**: guardrails_v2 (full-row-or-null via `storage.getGuardrailsV2`), VTS learning repository, Price Cache, volatility metrics, per-class pattern-pool guardrails dispatch
+- **Downstream**: Active Execution Engine + signal orchestrator (size determination); rtb-metrics (refusal rail); system-alerts (rail threshold)
 - **Blast Radius**: **HIGH** — determines how much capital is at risk per trade
 
 ### 6.4 Pre-Execution Validator / Trade Safety
