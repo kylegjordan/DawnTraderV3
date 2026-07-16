@@ -44,15 +44,24 @@ interface PriceQuote {
   symbol: string;
   price: number | null;
   timestamp: string;
-  source: 'binance' | 'coingecko' | 'mock' | 'kraken_ws' | 'kraken_rest' | 'entry_seed' | 'last_known_good' | 'no_reliable_price';
+  source: 'binance' | 'coingecko' | 'mock' | 'kraken_ws' | 'kraken_equities_ws' | 'kraken_rest' | 'entry_seed' | 'last_known_good' | 'no_reliable_price';
 }
 
 interface CachedPrice {
   symbol: string;
   price: number;
   timestamp: string;
-  source: 'binance' | 'coingecko' | 'mock' | 'kraken_ws' | 'kraken_rest' | 'entry_seed' | 'last_known_good';
+  source: 'binance' | 'coingecko' | 'mock' | 'kraken_ws' | 'kraken_equities_ws' | 'kraken_rest' | 'entry_seed' | 'last_known_good';
   cachedAt: number;
+}
+
+// P19-B8.9a (Langston amendment 1 — encode the concept once, never a per-site whitelist):
+// Kraken is the venue we fill against, so a FRESH value from ANY of its feeds — crypto WS,
+// equities WS, or REST — is venue data. The engine's actionable gate AND its non-venue warn
+// both reference THIS predicate so they cannot drift apart. Freshness is the CALLER's
+// dimension (getPriceWithFallback's window); this predicate rules only on provenance.
+export function isKrakenVenueSource(source: string): boolean {
+  return source === 'kraken_ws' || source === 'kraken_equities_ws' || source === 'kraken_rest';
 }
 
 /**
@@ -723,7 +732,12 @@ export class LivePricingAdapter {
    * Phase 8.8.3-I7-WS-C: Added traceId parameter for pipeline tracing
    * Phase 8.8.3-I7-WS-D: Now broadcasts EVERY WebSocket tick (D2/D3)
    */
-  updateFromWebSocket(symbol: string, price: number, source: 'kraken_ws' | 'binance_ws' = 'kraken_ws', traceId?: string): void {
+  // P19-B8.9a (Langston amendment 2): the honest generic cache-write. The old name
+  // `updateFromWebSocket` had three callers, two of them stamping non-WS data 'kraken_ws'
+  // (the engine's REST broadcast + the equities-mark feed) — the method name was the third
+  // mislabel. Callers now declare their true source; 'binance_ws' remains representable
+  // only until B8.9 OBJ-1 retires the third-party machinery.
+  updateCache(symbol: string, price: number, source: 'kraken_ws' | 'kraken_equities_ws' | 'kraken_rest' | 'binance_ws' = 'kraken_ws', traceId?: string): void {
     const pipelineStart = Date.now(); // Directive 9.0.C: Track pipeline time
     const normalized = this.normalizeSymbol(symbol);
     const timestamp = new Date().toISOString();
@@ -734,7 +748,10 @@ export class LivePricingAdapter {
       symbol: normalized,
       price,
       timestamp,
-      source: source === 'kraken_ws' ? 'kraken_ws' : 'binance',
+      // P19-B8.9a: the FOURTH mislabel, hiding inside the method — this ternary
+      // discarded the caller's source into 'binance' for everything non-kraken_ws.
+      // Store the true source; only binance_ws maps to the cache's 'binance' member.
+      source: source === 'binance_ws' ? 'binance' : source,
       cachedAt: now
     });
     
@@ -881,7 +898,9 @@ export class LivePricingAdapter {
       const age = now - cached.cachedAt;
       
       // I7-WS-E: Fresh WebSocket cache (≤2s) - use directly
-      if (age <= this.WS_CACHE_FRESH_MS && cached.source === 'kraken_ws') {
+      // P19-B8.9a: venue predicate, not the WS tag — a fresh same-venue REST/equities entry
+      // is servable without wearing a false WS badge (the honest form of the old behavior).
+      if (age <= this.WS_CACHE_FRESH_MS && isKrakenVenueSource(cached.source)) {
         return {
           symbol: cached.symbol,
           price: cached.price,
@@ -931,12 +950,17 @@ export class LivePricingAdapter {
       console.error(`[I7-WS-E][REST_FALLBACK_ERROR] symbol=${normalized}:`, error);
     }
     
-    // Return stale cache as last resort
+    // Return stale cache as last resort — P19-B8.9a: tagged HONESTLY as last_known_good.
+    // Pre-existing hole (found via Langston's Step-4 checklist item): re-serving a STALE
+    // entry with its original venue tag let it satisfy the engine's actionable gate in the
+    // exact dark-venue scenario the skip-rail was built for (WS stale AND REST failed).
+    // A stale re-serve is a MEMORY of a venue read, not a venue read — last_known_good is
+    // its true name; the engine's skip-tick + escalation rail now engage as designed.
     return cached ? {
       symbol: cached.symbol,
       price: cached.price,
       timestamp: cached.timestamp,
-      source: cached.source
+      source: 'last_known_good'
     } : null;
   }
 
@@ -968,7 +992,7 @@ export class LivePricingAdapter {
       summary[metric.lastReason] = (summary[metric.lastReason] || 0) + metric.count;
       
       const cached = this.priceCache.get(symbol);
-      const wsTimestamp = cached?.source === 'kraken_ws' ? cached.timestamp : null;
+      const wsTimestamp = (cached?.source === 'kraken_ws' || cached?.source === 'kraken_equities_ws') ? cached.timestamp : null;
       
       return {
         symbol,
@@ -1035,7 +1059,7 @@ import type { PriceTickEvent } from '../exchanges/kraken/kraken-websocket-adapte
 krakenWebSocketAdapter.removeAllListeners('priceTick');
 krakenWebSocketAdapter.on('priceTick', (evt: PriceTickEvent) => {
   try {
-    livePricingAdapter.updateFromWebSocket(evt.symbol, evt.price, evt.source, evt.traceId);
+    livePricingAdapter.updateCache(evt.symbol, evt.price, evt.source, evt.traceId);
   } catch (err) {
     // Subscriber error must not propagate back to ws-adapter (fire-and-forget invariant)
     console.error('[B78.1][PRICING_TICK_HANDLER] error processing priceTick event:', err);

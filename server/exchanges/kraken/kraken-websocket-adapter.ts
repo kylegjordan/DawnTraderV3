@@ -4,7 +4,7 @@ import { contextBridge } from '../../services/context-bridge.js';
 // B78.1: removed `import { livePricingAdapter } from './live-pricing-adapter.js'`.
 // Cycle break: ws-adapter is now a leaf in the exchange layer. live-pricing-adapter
 // subscribes to ws-adapter's 'priceTick' events at module-load instead of
-// ws-adapter calling livePricingAdapter.updateFromWebSocket(...). For the broadcast
+// ws-adapter calling livePricingAdapter.updateCache(...). For the broadcast
 // payload's `mode` field, ws-adapter exposes bindTradingModeGetter(getter); if no
 // getter is bound it defaults to 'paper' and warns ONCE.
 import { krakenPairMetadataService } from './kraken-pair-metadata-service.js';
@@ -87,7 +87,7 @@ interface PerSymbolTimingStats {
   updateCount: number;
 }
 
-// B78.1: 'priceTick' event payload (matches livePricingAdapter.updateFromWebSocket signature)
+// B78.1: 'priceTick' event payload (matches livePricingAdapter.updateCache signature)
 export interface PriceTickEvent {
   symbol: string;
   price: number;
@@ -933,7 +933,7 @@ export class KrakenWebSocketAdapter extends EventEmitter {
       console.log(`[I6][WS_CACHE_UPDATE] symbol=${internalSymbol} price=${lastPrice} timestamp=${new Date().toISOString()}`);
       
       // Phase 8.8.3-I7-WS-D: REMOVED duplicate throttledBroadcast call
-      // Broadcasts are now handled inside LivePricingAdapter.updateFromWebSocket() to ensure 1:1 parity
+      // Broadcasts are now handled inside LivePricingAdapter.updateCache() to ensure 1:1 parity
       // OLD: this.throttledBroadcast(internalSymbol, lastPrice, bid, ask, traceId);
       
     } catch (error) {

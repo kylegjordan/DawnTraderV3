@@ -17,7 +17,7 @@
  * 1. PRICE SOURCE (Kraken WebSocket)
  *    - KrakenWebSocketAdapter connects to wss://ws.kraken.com
  *    - Subscribes to ticker channel for each active trade symbol
- *    - On tick arrival: calls livePricingAdapter.updateFromWebSocket(symbol, price)
+ *    - On tick arrival: calls livePricingAdapter.updateCache(symbol, price, source)
  *    - Updates priceCache Map in LivePricingAdapter
  * 
  * 2. PRICE CACHING (LivePricingAdapter.priceCache)
@@ -80,7 +80,7 @@ import { aj17DiagnosticRunner } from './aj17-diagnostic-runner';
 import { aj18Diagnostic } from './aj18-rtb-diagnostic';
 import { aj19bDiagnostic } from './aj19b-lifecycle-diagnostic';
 import { aj19Diagnostic } from './aj19-max-position-diagnostic';
-import { livePricingAdapter } from './live-pricing-adapter';
+import { livePricingAdapter, isKrakenVenueSource } from './live-pricing-adapter';
 import { krakenWebSocketAdapter } from '../exchanges/kraken/kraken-websocket-adapter.js';
 import { b4Diagnostics } from './b4-diagnostics.js';
 import { b5SizingAudit } from './b5-sizing-audit.js';
@@ -962,7 +962,7 @@ export class ActiveExecutionEngine {
           // Feed the shared cache so UI/summary reads see the same mark, then FALL
           // THROUGH into the shared evaluation pipeline below — the crypto venue
           // chain is skipped entirely (spot REST cannot serve this class).
-          livePricingAdapter.updateFromWebSocket(normalizeToInternalSymbol(position.symbol), currentPrice, 'kraken_ws');
+          livePricingAdapter.updateCache(normalizeToInternalSymbol(position.symbol), currentPrice, 'kraken_equities_ws');
         } else {
 
         // Phase 8.8.3-I7-WS-D (D5): Use WebSocket cache FIRST with 2-second stale threshold
@@ -983,13 +983,17 @@ export class ActiveExecutionEngine {
         // to referee heterogeneous sources — with a homogeneous venue chain there is
         // nothing left to referee (its observe-only WS-vs-REST divergence log survives
         // in the REST leg).
-        if (priceResult !== null && priceResult.price !== null && priceResult.source === 'kraken_ws') {
+        // P19-B8.9a: venue PREDICATE, not the WS literal — a fresh same-venue REST/equities
+        // entry is actionable without wearing a false WS badge. Provenance ruled here; freshness
+        // is getPriceWithFallback's 2000ms window (stale re-serves now arrive as
+        // last_known_good and are rejected → the skip-rail engages as designed).
+        if (priceResult !== null && priceResult.price !== null && isKrakenVenueSource(priceResult.source)) {
           currentPrice = priceResult.price;
           priceSource = priceResult.source;
           withWsPrice++;
           console.log(`[I7-WS-D][ENGINE_WS_PRICE] symbol=${position.symbol} price=${currentPrice}`);
         } else {
-          if (priceResult?.price != null && priceResult.source !== 'no_reliable_price' && priceResult.source !== 'kraken_rest') {
+          if (priceResult?.price != null && priceResult.source !== 'no_reliable_price' && !isKrakenVenueSource(priceResult.source)) {
             console.warn(`[P19-B8.5][VENUE_ONLY] ${position.symbol}: adapter offered non-venue source '${priceResult.source}' (${priceResult.price}) — not actionable, going to Kraken REST directly`);
           }
           // Phase 8.8.3-I7: Fallback to Kraken REST if the WS cache is unavailable/stale.
@@ -1033,7 +1037,7 @@ export class ActiveExecutionEngine {
             // Phase 8.8.3-I7: Broadcast this REST price to frontend
             // Normalize to internal format for consistent cache keys
             const internalSymbol = normalizeToInternalSymbol(position.symbol);
-            livePricingAdapter.updateFromWebSocket(internalSymbol, currentPrice, 'kraken_ws');
+            livePricingAdapter.updateCache(internalSymbol, currentPrice, 'kraken_rest');
             console.log(`[I7][REST_BROADCAST] symbol=${internalSymbol} price=${currentPrice}`);
           } catch (krakenError) {
             console.warn(`[B9.PRICING][SKIP_DUE_TO_NO_PRICE] ${position.symbol}: Kraken REST failed, skipping position check`, krakenError);
