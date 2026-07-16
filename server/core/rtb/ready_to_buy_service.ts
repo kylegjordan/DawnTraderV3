@@ -1987,10 +1987,27 @@ class ReadyToBuyService {
     // (the floor is the arithmetic guard; the reject is what kills the un-executable trade).
     {
       const beforeGeo = validSignals.length;
-      validSignals = validSignals.filter(s => this.passesGeometryFloor(s));
+      // P19-B8.5 gates-sweep (Langston site-5 rider, "enumerate, don't count"): every
+      // dropped signal is logged individually — symbol/strategy/entry/stop/riskPrice/
+      // floor — so the drop set is auditable, never a bare tally (a silent drop was
+      // the objection; the gate itself stays JUSTIFIED-OUTSIDE per the sweep ruling).
+      const _geoDropped: string[] = [];
+      validSignals = validSignals.filter(s => {
+        if (this.passesGeometryFloor(s)) return true;
+        const _e = parseFloat(s.entryPrice);
+        const _st = parseFloat(s.stopPrice);
+        const _risk = (Number.isFinite(_e) && Number.isFinite(_st)) ? Math.abs(_e - _st) : NaN;
+        const _meta = (s.metadata ?? {}) as Record<string, any>;
+        const _atrRaw = _meta.atr ?? _meta.atrAtOpen;
+        const _atrN = _atrRaw != null ? Number(_atrRaw) : NaN;
+        const _floor = Number.isFinite(_e) ? rankRiskFloorPrice(_e, Number.isFinite(_atrN) ? _atrN : null) : NaN;
+        _geoDropped.push(`${s.symbol}/${s.strategy} entry=${_e} stop=${_st} riskPrice=${Number.isFinite(_risk) ? _risk.toFixed(8) : 'NaN'} floor=${Number.isFinite(_floor) ? _floor.toFixed(8) : 'NaN'}`);
+        return false;
+      });
       const geoRejected = beforeGeo - validSignals.length;
       if (geoRejected > 0) {
-        console.log(`[P19-B7.1][RANK] OBJ-3 rejected ${geoRejected} degenerate-geometry signal(s) (risk_price < microstructure floor) before ranking`);
+        console.log(`[P19-B7.1][RANK] OBJ-3 rejected ${geoRejected} degenerate-geometry signal(s) (risk_price < microstructure floor) before ranking:`);
+        for (const _d of _geoDropped) console.log(`[P19-B7.1][RANK][GEO_DROP] ${_d}`);
       }
     }
     // OBJ-1/2: memoize each survivor's sort key, then sort plain-descending. For the default
