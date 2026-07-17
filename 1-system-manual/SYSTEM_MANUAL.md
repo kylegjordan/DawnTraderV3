@@ -4485,6 +4485,8 @@ For each open position:
 
 **Price source statistics tracked per cycle**: wsPrice, restPrice, withoutPrice, slHits, tpHits
 
+**★ P19-B8.9 (2026-07-17) — VENUE-ONLY at-source (display chain).** The ACTIONABLE price chain (this section) went venue-only earlier (kraken_ws → same-venue REST → skip-tick rail; third-party sources rejected by `isKrakenVenueSource`). B8.9 completed the AT-SOURCE half for the DISPLAY chain (`livePricingAdapter.fetchLivePrice`, consumed by the Open Trades + RTB endpoints and the portfolio valuation fallback): the third-party fetchers (`fetchFromBinance`/`fetchFromCoinGecko`/`binanceSymbolFor`) are **deleted**, so the display fallback is **Kraken-REST-or-nothing** and the `PriceQuote`/`CachedPrice` `source` unions no longer carry `'binance'`/`'coingecko'`. The load-bearing WHY: **post-B8.9 the display fallback venue (Kraken REST) MATCHES the execution venue**, killing the split-brain where the UI could show a Binance number for a position the engine prices and exits via Kraken. For `xstock_spot` symbols the display chain SKIPS the Kraken-REST ask entirely (Kraken spot REST carries no tokenized equities) and renders the honest **venue-quiet** state — last known value + an explicit badge — instead of a bare stale number or a third-party price. Quiet is decided ONCE on the server (`priceVenueQuiet = !isKrakenVenueSource(source) || ageMs > 60s`) and shipped to both display surfaces, so they cannot drift. (B8.9 also folded in the B8.9a source-tag-honesty fixes: `updateCache` stamps the caller's true source; the last-resort stale re-serve is tagged `last_known_good`, not a false venue tag.)
+
 ### 3.6 Exit Conditions
 
 The engine checks four exit conditions in order:
