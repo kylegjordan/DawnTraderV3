@@ -7,6 +7,8 @@ import { RefreshCw, TrendingUp, ArrowUpDown, Clock } from "lucide-react";
 import { cn, formatEntryFeeMode } from "@/lib/utils";
 import { useWebSocket } from "@/hooks/use-websocket";
 import { getFrictionColorClasses, getRegimeBadgeClassName, getFrictionLabel, formatRegimeTitle } from "@/utils/frictionColor";
+// P19-B8.7 Step-9: the same stacked symbol-cell name source the VTS tables use.
+import { getAssetName } from "@shared/asset-names";
 
 interface TradingSignal {
   id: string;
@@ -15,10 +17,15 @@ interface TradingSignal {
   quoteCurrency: string;
   strategy: string;
   confidence: number;
-  finalScore: number | null;
-  mlConfidence: number | null;
-  finalRank: number | null;
   strategyWeight: number | null;
+  // P19-B8.7 Step-9 (Kyle directive): the ATTACHED rank key — whatever the active
+  // ranker arm actually sorted on (server getDisplayRankKey; never recomputed here).
+  rankScore: number | null;
+  rankArm?: string;
+  assetClass?: string | null;
+  // Typed decision-time columns carried on the rtb row (reorg-B3 / B7.2).
+  dbsScoreAtQueue?: number | string | null;
+  chosenNetEv?: number | string | null;
   entryPrice: number;
   currentPrice: number;
   stopPrice: number;
@@ -41,12 +48,14 @@ interface TradingSignalsResponse {
   timestamp: string;
 }
 
-type SortField = 'rank' | 'symbol' | 'finalScore' | 'mlConfidence' | 'finalRank' | 'strategyWeight' | 'volume' | 'price' | 'strategy' | 'entry' | 'target' | 'stop' | 'quantity' | 'status' | 'marketRegime' | 'marketFriction';
+type SortField = 'rank' | 'symbol' | 'rankScore' | 'strategyWeight' | 'volume' | 'price' | 'strategy' | 'entry' | 'target' | 'stop' | 'quantity' | 'status' | 'marketRegime' | 'marketFriction' | 'dbs' | 'netEv';
 type SortDirection = 'asc' | 'desc';
 
 export default function ReadyToBuyTable() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const [sortField, setSortField] = useState<SortField>('finalScore');
+  // P19-B8.7 Step-9: default sort = the attached rank key — what you see first is
+  // what the system promotes first.
+  const [sortField, setSortField] = useState<SortField>('rankScore');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const queryClient = useQueryClient();
   const { messages } = useWebSocket();
@@ -124,17 +133,19 @@ export default function ReadyToBuyTable() {
 
     switch (sortField) {
       case 'rank':
-      case 'finalScore':
-        aValue = a.finalScore ?? a.confidence ?? 0;
-        bValue = b.finalScore ?? b.confidence ?? 0;
+      case 'rankScore':
+        // null (unpriceable) sorts to the bottom under desc — mirrors the ranker's
+        // own -Infinity handling.
+        aValue = a.rankScore ?? -Infinity;
+        bValue = b.rankScore ?? -Infinity;
         break;
-      case 'mlConfidence':
-        aValue = a.mlConfidence ?? 0;
-        bValue = b.mlConfidence ?? 0;
+      case 'dbs':
+        aValue = a.dbsScoreAtQueue != null ? Number(a.dbsScoreAtQueue) : -Infinity;
+        bValue = b.dbsScoreAtQueue != null ? Number(b.dbsScoreAtQueue) : -Infinity;
         break;
-      case 'finalRank':
-        aValue = a.finalRank ?? 0;
-        bValue = b.finalRank ?? 0;
+      case 'netEv':
+        aValue = a.chosenNetEv != null ? Number(a.chosenNetEv) : -Infinity;
+        bValue = b.chosenNetEv != null ? Number(b.chosenNetEv) : -Infinity;
         break;
       case 'strategyWeight':
         aValue = a.strategyWeight ?? 0;
@@ -293,10 +304,12 @@ export default function ReadyToBuyTable() {
             <table className="w-full" data-testid="table-trading-signals">
               <thead>
                 <tr className="border-b">
-                  <SortHeader field="finalRank" label="Rank" />
+                  {/* P19-B8.7 Step-9 (Kyle directive): Rank = position in the true
+                      promotion order; RankingScore = the ATTACHED active rank key;
+                      FinalScore + ML Conf columns REMOVED (inert/fabricated). */}
+                  <SortHeader field="rankScore" label="Rank" />
                   <SortHeader field="symbol" label="Symbol" />
-                  <SortHeader field="score" label="FinalScore" />
-                  <SortHeader field="mlConfidence" label="ML Conf" />
+                  <SortHeader field="rankScore" label="RankingScore" />
                   <SortHeader field="strategyWeight" label="S.Wgt" />
                   <SortHeader field="price" label="Price" />
                   <SortHeader field="entry" label="Entry" />
@@ -307,6 +320,10 @@ export default function ReadyToBuyTable() {
                   <SortHeader field="strategy" label="Strategy" />
                   <SortHeader field="marketRegime" label="Regime" />
                   <SortHeader field="marketFriction" label="Friction" />
+                  {/* P19-B8.7 Step-9: decision-time DBS + the chosen net EV the
+                      admission gate runs on (typed rtb columns, reorg-B3/B7.2). */}
+                  <SortHeader field="dbs" label="DBS" />
+                  <SortHeader field="netEv" label="Net EV" />
                   {/* P19-B7.2b (OBJ-C): entry fee-mode (maker/taker) column — non-sortable */}
                   <th className="text-left py-2 px-3 font-medium" data-testid="header-entry-fee-mode">Entry Fee Mode</th>
                   <SortHeader field="status" label="Status" />
@@ -318,14 +335,19 @@ export default function ReadyToBuyTable() {
                   const targetPrice = Number(signal.targetPrice);
                   const stopPrice = Number(signal.stopPrice);
                   const currentPrice = Number(signal.currentPrice);
-                  const score = signal.finalScore !== null ? Number(signal.finalScore) : (signal.confidence ?? 0);
-                  const mlConfidence = signal.mlConfidence !== null ? Number(signal.mlConfidence) : null;
-                  const finalRank = signal.finalRank !== null ? Number(signal.finalRank) : null;
+                  // P19-B8.7 Step-9: the score/mlConfidence/finalRank locals are GONE
+                  // with their columns (inert finalScore, fabricated mlConfidence,
+                  // display-only finalRank formula — see the route mapper comment).
                   const volume24h = signal.volume24h !== null ? Number(signal.volume24h) : null;
-                  
+
                   const profitPotential = ((targetPrice - entryPrice) / entryPrice) * 100;
                   const riskPercent = ((entryPrice - stopPrice) / entryPrice) * 100;
                   const rank = index + 1;
+                  // P19-B8.7 Step-9: the attached rank key + the typed decision columns.
+                  const rankScore = signal.rankScore != null ? Number(signal.rankScore) : null;
+                  const dbsAtQueue = signal.dbsScoreAtQueue != null ? Number(signal.dbsScoreAtQueue) : null;
+                  const chosenNetEv = signal.chosenNetEv != null ? Number(signal.chosenNetEv) : null;
+                  const assetName = getAssetName(signal.symbol, signal.assetClass ?? undefined);
 
                   return (
                     <tr 
@@ -341,23 +363,31 @@ export default function ReadyToBuyTable() {
                           {rank}
                         </span>
                       </td>
-                      <td className="py-3 px-3 font-semibold" data-testid={`text-symbol-${index}`}>
-                        {signal.symbol}
+                      {/* P19-B8.7 Step-9: stacked symbol cell — symbol + display name +
+                          class badge, the same getAssetName composition the VTS
+                          tables use (Kyle's stacked-name directive). */}
+                      <td className="py-3 px-3" data-testid={`text-symbol-${index}`}>
+                        <div className="flex flex-col">
+                          <span className="font-semibold">{signal.symbol}</span>
+                          {assetName && (
+                            <span className="text-xs text-muted-foreground">{assetName}</span>
+                          )}
+                          {signal.assetClass && (
+                            <Badge variant="outline" className="text-[10px] w-fit mt-0.5">
+                              {signal.assetClass === 'xstock_spot' ? 'xStock' : signal.assetClass === 'crypto_spot' ? 'Crypto' : signal.assetClass}
+                            </Badge>
+                          )}
+                        </div>
                       </td>
-                      <td className="text-right py-3 px-3" data-testid={`text-score-${index}`}>
+                      {/* P19-B8.7 Step-9: the ATTACHED rank key (RankingScore) — the
+                          number that actually orders promotion, any config arm.
+                          FinalScore + ML Conf cells REMOVED (inert / fabricated). */}
+                      <td className="text-right py-3 px-3" data-testid={`text-ranking-score-${index}`}>
                         <span className={cn(
-                          "font-semibold",
-                          score >= 0.8 ? "text-success" : score >= 0.5 ? "text-primary" : "text-muted-foreground"
+                          "font-semibold font-mono",
+                          rankScore !== null && rankScore > 0 ? "text-success" : rankScore !== null ? "text-muted-foreground" : "text-muted-foreground"
                         )}>
-                          {!isNaN(score) ? score.toFixed(4) : '—'}
-                        </span>
-                      </td>
-                      <td className="text-right py-3 px-3" data-testid={`text-ml-confidence-${index}`}>
-                        <span className={cn(
-                          "font-semibold",
-                          (mlConfidence ?? 0) >= 0.8 ? "text-purple-600" : (mlConfidence ?? 0) >= 0.5 ? "text-purple-400" : "text-muted-foreground"
-                        )}>
-                          {mlConfidence !== null && !isNaN(mlConfidence) ? `${(mlConfidence * 100).toFixed(1)}%` : '—'}
+                          {rankScore !== null && !isNaN(rankScore) ? rankScore.toFixed(4) : '—'}
                         </span>
                       </td>
                       <td className="text-right py-3 px-3" data-testid={`text-strategy-weight-${index}`}>
@@ -457,6 +487,20 @@ export default function ReadyToBuyTable() {
                         ) : (
                           <span className="text-muted-foreground text-xs">—</span>
                         )}
+                      </td>
+                      {/* P19-B8.7 Step-9: decision-time DBS + the chosen net EV the
+                          admission gate runs on. Both typed-column-sourced; honest
+                          em-dash on absent, never a substituted number. */}
+                      <td className="text-right py-3 px-3 font-mono" data-testid={`text-dbs-${index}`}>
+                        {dbsAtQueue !== null && !isNaN(dbsAtQueue) ? dbsAtQueue.toFixed(4) : '—'}
+                      </td>
+                      <td className="text-right py-3 px-3" data-testid={`text-net-ev-${index}`}>
+                        <span className={cn(
+                          "font-mono font-semibold",
+                          chosenNetEv !== null && chosenNetEv > 0 ? "text-success" : chosenNetEv !== null ? "text-destructive" : "text-muted-foreground"
+                        )}>
+                          {chosenNetEv !== null && !isNaN(chosenNetEv) ? chosenNetEv.toFixed(6) : '—'}
+                        </span>
                       </td>
                       {/* P19-B7.2b (OBJ-C): entry fee-mode (maker/taker) — NULL renders em-dash */}
                       <td className="py-3 px-3 text-xs" data-testid={`text-entry-fee-mode-${index}`}>
