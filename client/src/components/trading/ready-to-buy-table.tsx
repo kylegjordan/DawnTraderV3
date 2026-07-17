@@ -275,12 +275,15 @@ export default function ReadyToBuyTable() {
         </div>
       </CardHeader>
       <CardContent>
-        {/* Phase 8.8.4-C.7: Unified RTB pool description */}
+        {/* P19-B8.7 Step-9 (Kyle 00:45Z screenshot): the description advertised the
+            retired FinalScore — rewritten to the attached-rank-key truth. */}
         <div className="mb-4 p-3 bg-muted/50 rounded-lg text-sm text-muted-foreground">
           <p>
-            <strong>Ready-to-Buy Signals:</strong> Displays all SQE-qualified signals ranked by FinalScore 
-            (Confidence-Weighted Quality Index). Signals remain in this pool until expiration or 
-            promotion to active trades. FinalScore combines Confidence, Risk, Expected Return, and Profit Rate.
+            <strong>Ready-to-Buy Signals:</strong> All SQE-qualified signals, ordered by RankingScore —
+            the exact value the promotion ranker sorts on (reward per unit of risk under the active
+            ranker configuration). The top-ranked signal is next in line to be promoted to an open
+            trade; signals remain in this pool until promotion, re-evaluation removal, or expiration,
+            and the order adjusts continuously as current and new signals are re-ranked.
           </p>
         </div>
         

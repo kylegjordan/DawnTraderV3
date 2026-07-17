@@ -136,7 +136,7 @@ export function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
               <th className="px-3 py-2 text-right font-medium text-muted-foreground">Costs</th>
               <SortableHeader label="Net P/L" field="netProfitValue" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
 
-              <SortableHeader label="Final/Hybrid" field="finalScore" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
+              {/* P19-B8.7 Step-9 (Kyle 2026-07-17 ruling): FinalScore RETIRED — column removed. */}
               <SortableHeader label="Edge" field="expectedEdge" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
               <SortableHeader label="Regime Wt" field="regimeWeight" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
               <th className="px-3 py-2 text-left font-medium text-muted-foreground">Glbl Regime</th>
@@ -329,12 +329,6 @@ export function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
                       <span className={`text-xs ${getProfitColor(trade.netProfitValue)}`}>
                         {trade.netProfitPercent}
                       </span>
-                    </div>
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    <div className="flex flex-col gap-0.5">
-                      <span className="font-mono text-xs">{(trade.finalScore * 100).toFixed(0)}%</span>
-                      <span className="font-mono text-xs text-muted-foreground">{trade.hybridScore.toFixed(2)}</span>
                     </div>
                   </td>
                   <td className="px-3 py-2 text-right font-mono text-xs">{trade.expectedEdge.toFixed(2)}</td>

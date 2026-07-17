@@ -579,34 +579,10 @@ function TradeRow({
         </div>
       </td>
       
-      {/* 16. FinalScore - CR-001: Added before Confidence */}
-      <td className="px-3 py-3">
-        {(trade.finalScore && trade.finalScore > 0) ? (
-          <div className={cn(
-            "font-mono text-sm font-medium",
-            trade.finalScore >= 0.7 ? "text-green-600" :
-            trade.finalScore >= 0.5 ? "text-blue-600" :
-            trade.finalScore >= 0.3 ? "text-orange-600" : "text-red-600"
-          )}>
-            {(trade.finalScore * 100).toFixed(1)}%
-          </div>
-        ) : (
-          <div className="font-mono text-sm text-muted-foreground">N/A</div>
-        )}
-      </td>
-      
-      {/* 17. Confidence */}
-      <td className="px-3 py-3">
-        <div className={cn(
-          "font-mono text-sm font-medium",
-          trade.confidence >= 80 ? "text-green-600" :
-          trade.confidence >= 60 ? "text-blue-600" :
-          trade.confidence >= 40 ? "text-orange-600" : "text-red-600"
-        )}>
-          {trade.confidence}%
-        </div>
-      </td>
-      
+      {/* P19-B8.7 Step-9 (Kyle 2026-07-17 ruling): FinalScore + Confidence cells
+          REMOVED — FinalScore is retired (no column in any table, any mode); the
+          ML confidence feeds nothing in ranking (severed B8.5a). */}
+
       {/* 17. Volume (24h) - Phase 8.8.5-E: Format as "TIER (volume)" from VolumeClassifier */}
       <td className="px-3 py-3">
         <div className={cn(
@@ -1351,8 +1327,7 @@ export default function ActiveTradesV2({ mode }: { mode?: 'paper' | 'live' } = {
                   <SortableHeader field="estExitSlippage" label="Exit Slip" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortableHeader field="estTotalCost" label="Total Cost" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortableHeader field="netPnl" label="Net P/L" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
-                  <SortableHeader field="finalScore" label="FinalScore" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
-                  <SortableHeader field="confidence" label="Conf" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  {/* P19-B8.7 Step-9 (Kyle ruling): FinalScore + Conf headers REMOVED. */}
                   <SortableHeader field="volume24h" label="Volume" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <th className="px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Source</th>
                   <SortableHeader field="marketRegime" label="Regime" currentSort={sortField} currentDirection={sortDirection} onSort={handleSort} />

@@ -26,6 +26,9 @@ interface PortfolioSummary {
   totalPositionValue: number;
   openTradesCount: number;
   slotsAvailable: number;
+  // P19-B8.7 Step-9: the engine-enforced cap (guardrails max_open_positions),
+  // already serialized by the summary route since the B8.7 re-key.
+  maxOpenTrades?: number;
 }
 
 const money = (v: number | undefined) =>
@@ -110,8 +113,14 @@ export function PortfolioMetricsStrip({ mode }: { mode: "paper" | "live" }) {
         <span className="font-mono font-semibold">{money(p.totalPositionValue)}</span>
       </div>
       <div className="flex items-center gap-1 text-xs">
+        {/* P19-B8.7 Step-9 (Kyle 00:45Z screenshot): this rendered slotsAvailable
+            (slots REMAINING) under a label that reads as the CAP — "11 / 4" looked
+            over-limit. Now count / cap, matching the dashboard card's convention;
+            NaN cap → honest em-dash (B8.7 no-fabricated-cap). */}
         <span className="text-muted-foreground">Open Trades / Slots:</span>
-        <span className="font-mono font-semibold">{p.openTradesCount ?? 0} / {p.slotsAvailable ?? 0}</span>
+        <span className="font-mono font-semibold" data-testid="strip-open-slots">
+          {p.openTradesCount ?? 0} / {Number.isFinite(Number(p.maxOpenTrades)) ? Number(p.maxOpenTrades) : "—"}
+        </span>
       </div>
     </div>
   );
