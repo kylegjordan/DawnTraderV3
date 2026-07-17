@@ -81,3 +81,48 @@ static map); crypto = a base-asset name map (new, small, static, non-behavioral)
 Propose: add the name line to the stacked cell on ALL THREE surfaces (RTB + open +
 closed + VTS reference itself so the mirror stays exact). Langston rules on the
 name-source mechanism at Step-2.
+
+---
+
+## E. STEP-2 PRE-AUDIT FINDINGS (2026-07-17; amends the above — §9.2 corrections included)
+
+**E1. D4 RESOLVED — my map premise was WRONG; Kyle's recollection was RIGHT.** The
+VTS symbol cell ALREADY stacks the asset NAME via `getAssetName`
+(vts-open-trades-table.tsx :173-175) — invisible to the header-only extraction that
+built §A. The complete name system exists: `shared/asset-names.ts` (curated
+CRYPTO_NAMES + xStock names from the universe metadata + overlay endpoints
+`/api/xstocks/asset-names` + `/api/crypto/asset-names`, maintenance home = B-NAMES
+w/ the add-entries-on-onboarding note). Langston's enumerate-first ruling resolves
+with ZERO new data source: RTB + paper cells adopt the SAME `getAssetName` cell
+composition. No new map, no new owner needed.
+
+**E2. THE RANKING TRUTH (discharges Langston's honesty flag — and it caught a trap).**
+The metadata field literally named `rankingScore` is **INERT** — a Phase-14.5
+leftover used only as a shadow-ranking CONTROL (`ready_to_buy_service.ts:209`
+"the inert rankingScore", :1885 "the inert VTS rankingScore"). The TRUE promotion
+order is the B7.1 ranker: `r = chosenNetEv / distStop` computed inside
+`getRankedSignals` (:1936-1940) and consumed at engine :2108. **Kyle's RankingScore
+column must display r, NOT metadata.rankingScore** — a matching NAME is not a
+matching THING. Since r is computed in the sort comparator and discarded, the route
+recomputes it per row (pure: same two stored operands) or the ranker attaches it.
+
+**E3. The RTB route (`GET /api/trading-signals`, routes.ts:5029-5106) — three finds:**
+(a) **Regime/Friction EMPTY cause = ROUTE OMISSION**: the response is `...signal`
+(raw rtb_signals row) + computed extras; `marketRegime`/`marketFriction` are never
+set, so the client sorts/renders fields absent from the payload. Fix = serialize
+them (exact on-row source — typed column vs metadata.regime vs a queue-time capture
+gap — pinned by a live-row inspection at build, enumerated not assumed).
+(b) **Today's "Rank" column is a display-only legacy formula** computed IN THE ROUTE:
+`finalRank = NGC×0.40 + mlConfidence×0.35 + strategyWeight×0.25` (:5078) — NOT the
+promotion order. Same class as the B8.7 phantom slots: a number the engine never
+uses. Dies with this batch: Rank = position in the r-ordering.
+(c) **Two hidden display fabrications die with their columns**: `mlConfidence ?? 
+ngc×0.9` (:5070) and `strategyWeight ?? 0.5` (:5073). The ML Conf column is removed
+(Kyle); S.Wgt keeps its column but the `?? 0.5` becomes an honest em-dash-on-absent.
+
+**E4. Revised B1 target (supersedes §B1 wording):** Rank (= r-order position) ·
+Symbol (getAssetName stacked cell) · **RankingScore = r** (default sort) · S.Wgt
+(honest-absent) · Price · Entry · Target · Stop · Qty · 24h Vol · Strategy · Regime
+(wired) · Friction (wired) · DBS (typed `dbs_score_at_queue`) · Net EV (typed
+`chosen_net_ev`) · Entry Fee Mode · Status. FinalScore + ML Conf columns REMOVED;
+the :5070/:5073/:5078 route fabrications deleted with them.
