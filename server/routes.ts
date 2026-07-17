@@ -61,7 +61,7 @@ import { activeFilterPool } from './services/active-filter-pool.js';
 import { num, computeCalendarEarnings, computeFeeDrag, computeMakerTakerMix, computeAvgNetR, computeMaxDrawdownUsd, computeByAssetClass, profitFactorOrNull } from './services/dashboard-metrics.js';
 import { marketVolumeCache } from './services/market-volume-cache.js';
 import { b5SizingAudit } from './services/b5-sizing-audit.js';
-import { livePricingAdapter, isRestFallbackSource, isKrakenVenueSource } from './services/live-pricing-adapter.js';
+import { livePricingAdapter, isRestFallbackSource, isPriceVenueQuiet } from './services/live-pricing-adapter.js';
 import { krakenWebSocketAdapter } from './exchanges/kraken/kraken-websocket-adapter.js';
 import { slippageFeeModel } from './services/slippage-fee-model.js';
 import { c5FinancialDiagnostics } from './services/c5-financial-diagnostics.js';
@@ -5107,8 +5107,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         // venue-tagged value fresher than the quiet threshold; the row's stored
         // currentPrice keeps rendering, but wearing its honest badge.
         const _peek = livePricingAdapter.peekCachedPrice(signal.symbol);
-        const VENUE_QUIET_MS = 60_000;
-        const priceVenueQuiet = !_peek || _peek.ageMs > VENUE_QUIET_MS || !isKrakenVenueSource(_peek.source);
+        // P19-B8.9 (OBJ-5): the ONE shared predicate; no cache entry = quiet by construction.
+        const priceVenueQuiet = !_peek || isPriceVenueQuiet(_peek.source, _peek.ageMs);
         const priceAgeMs = _peek ? _peek.ageMs : null;
 
         return {
@@ -12302,7 +12302,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           // drift — quiet = the served price is NOT a fresh venue read (non-Kraken-venue
           // source OR older than the quiet threshold). The client renders VenueQuietPrice
           // off this boolean; it does not re-decide quiet itself (Langston Step-4 item 2).
-          priceVenueQuiet: !isKrakenVenueSource(priceSource) || priceAgeMs > 60_000,
+          priceVenueQuiet: isPriceVenueQuiet(priceSource, priceAgeMs),
           // Phase 8.8.3-I9: New columns
           sourceLabel,  // 'WS' or 'REST'
           frequency: frequencyInfo.frequency, // 'High', 'Medium', 'Low', 'Very Low'

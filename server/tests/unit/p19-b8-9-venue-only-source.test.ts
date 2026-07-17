@@ -13,6 +13,8 @@ import {
   livePricingAdapter,
   isRestFallbackSource,
   REST_FALLBACK_SOURCES,
+  isPriceVenueQuiet,
+  VENUE_QUIET_MS,
 } from '../../services/live-pricing-adapter';
 import { _replaceXstockUniverse, type XstockSpotEntry } from '../../../shared/asset-classes';
 import { UNIVERSE_BOOTSTRAP_SET } from '../../asset_classes/xstock_spot/universe-bootstrap';
@@ -44,6 +46,23 @@ describe('P19-B8.9: isRestFallbackSource — one membership, five call sites', (
   it('rejects live-venue and retired third-party tags', () => {
     for (const s of ['kraken_ws', 'kraken_equities_ws', 'binance_rest', 'coingecko', 'binance', 'entry_seed', 'mock', '']) {
       expect(isRestFallbackSource(s)).toBe(false);
+    }
+  });
+});
+
+describe('P19-B8.9 (OBJ-5): isPriceVenueQuiet — ONE notion, both display surfaces (Langston item 2)', () => {
+  it('quiet when the source is not a Kraken venue feed, regardless of age', () => {
+    for (const s of ['last_known_good', 'entry_seed', 'entry_fallback', 'no_reliable_price', 'mock']) {
+      expect(isPriceVenueQuiet(s, 0)).toBe(true);
+      expect(isPriceVenueQuiet(s, null)).toBe(true);
+    }
+  });
+  it('quiet when a venue source is older than the threshold; fresh venue is NOT quiet', () => {
+    for (const s of ['kraken_ws', 'kraken_equities_ws', 'kraken_rest']) {
+      expect(isPriceVenueQuiet(s, VENUE_QUIET_MS + 1)).toBe(true);   // stale venue = quiet
+      expect(isPriceVenueQuiet(s, VENUE_QUIET_MS - 1)).toBe(false);  // fresh venue = live
+      expect(isPriceVenueQuiet(s, 0)).toBe(false);
+      expect(isPriceVenueQuiet(s, null)).toBe(false); // age-unknown fresh venue reads live
     }
   });
 });

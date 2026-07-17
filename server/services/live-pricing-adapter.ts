@@ -68,6 +68,19 @@ export function isKrakenVenueSource(source: string): boolean {
   return source === 'kraken_ws' || source === 'kraken_equities_ws' || source === 'kraken_rest';
 }
 
+/**
+ * P19-B8.9 (OBJ-5) — the SINGLE definition of "venue quiet", so the Open Trades and
+ * Ready-to-Buy display surfaces cannot drift (Langston Step-4 item 2). Quiet = the price
+ * in hand is NOT a fresh venue read: either its source is not a Kraken venue feed, or it
+ * is older than the quiet threshold. Each surface feeds its best-available data (Open
+ * Trades: the served getPriceWithFallback source+age; RTB: a cache peek — no cache entry
+ * at all is quiet by construction, handled by the caller). One predicate, two call sites.
+ */
+export const VENUE_QUIET_MS = 60_000;
+export function isPriceVenueQuiet(source: string, ageMs: number | null | undefined): boolean {
+  return !isKrakenVenueSource(source) || (ageMs != null && ageMs > VENUE_QUIET_MS);
+}
+
 // P19-B8.9 (OBJ-1): binanceSymbolFor + fetchFromBinance + fetchFromCoinGecko are RETIRED
 // (rule 18 — see DELETED_COMPONENTS_LOG.md). The display fallback venue is now Kraken REST
 // only, matching the venue the engine prices and exits against. The B8.5 ghost-market
