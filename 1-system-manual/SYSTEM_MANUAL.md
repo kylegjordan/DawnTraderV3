@@ -6746,6 +6746,7 @@ Kyle's assessment of Claude's Phase 6 audit: "Largely accurate. Correct on simul
 15. [Health Monitor (health-monitor.ts — Phase 41F-C)](#15-health-monitor-41f)
 16. [Feed Integrity Monitor](#16-feed-integrity-monitor)
 17. [Self-Repair Service](#17-self-repair-service)
+17.5 [Engine Boot Disposition & Out-of-Process Liveness (B-STAGING-LIVENESS-WATCH)](#175-engine-boot-disposition--out-of-process-liveness-b-staging-liveness-watch-2026-07-16)
 18. [Operation Queue (operation-queue.ts — Phase 41F-A/B)](#18-operation-queue)
 19. [Task Queue (task-queue.ts)](#19-task-queue)
 20. [Task Router (task-router.ts) — Phase 17.0 Cluster System](#20-task-router)
@@ -7303,6 +7304,57 @@ Automated repair for critical system health issues. Triggered when SystemHealthM
 - Max 3 retry attempts with 1s × attempt delay
 - All actions recorded in repair history (last 100)
 - Manual trigger via `manualRecover()` method
+
+---
+
+## 17.5 Engine Boot Disposition & Out-of-Process Liveness (B-STAGING-LIVENESS-WATCH, 2026-07-16)
+
+**The boot-disposition invariant — ONE owner.** Session disposition at process boot belongs to
+`resumeActiveEngines` (`server/services/active-engine-service.ts`, invoked from `server/index.ts`)
+and to nothing else. The historical `initializeQueues` DB session sweep (Phase 41F-B-5) — which
+unconditionally marked every `status='running'` session stopped on the premise that running rows
+"should have been stopped on previous shutdown" — was DELETED (rule 18, `DELETED_COMPONENTS_LOG`):
+it ran BEFORE the resume in the boot order and therefore deterministically destroyed the session
+the resume needed, silently halting paper-active trading on every restart (#520). Post-fix boot
+semantics:
+- A `running` session with a trustworthy balance (the B8.2 gate, §Ch4) **RESUMES** — the manager
+  re-attaches to the SAME session row (rows are minted only by the start flow); `isEngineActive`
+  stays true; positions and the RTB queue persist in the database throughout (nothing clears on
+  restart — a full reset happens only on an explicit start-new).
+- A `running` session that FAILS the trustworthy-balance gate is **REFUSED loudly** (alert, zero
+  balance writes) and its row is now marked `stopped` (+`runForMs`) so it cannot re-refuse on
+  every subsequent boot.
+- `isEngineActive=true` with NO running session row (post-fix unreachable) resets the flag AND
+  raises a dedupe-keyed `breakage` alert — a regression alarm, not housekeeping.
+Proven in production: five consecutive unattended resumes across the 2026-07-16/17 deploys.
+Display note: `/api/trading/status` derives its `active` from the modern per-mode manager
+(`getGlobalActiveEngineManager('paper').isRunning` — the same source as the liveness endpoint);
+the legacy `getGlobalSession` global it previously read is only populated by manual starts and is
+a rule-18 enumeration item at the #522 runtime audit.
+
+**Out-of-process staging watchdog.** `server/scripts/staging-liveness-watchdog.mjs` — PLAIN node,
+zero app imports, so it runs even when the app build is broken (the #512 outage class it exists to
+catch). Systemd timer (5 min, User=deploy; units shipped in `server/scripts/systemd/`). Three
+checks, each 2-tick debounced with a per-condition latch that re-arms on recovery: HTTP liveness,
+pm2 process state, and the engine-halt signature (`engineExpected && !engineRunning` from the
+liveness endpoint below). Alerting: primary = the system-alerts CLI (which gained `--dedupe-key`);
+fallback = a direct schema-valid append to the alerts JSONL whose template is CI-pinned against a
+real `addAlert` row (shape drift breaks the build) with idempotent dedupe-key file-scan — the
+fallback matters exactly when the app/CLI is down. Self-liveness: systemd `OnFailure` runs
+`--self-fail` through the fallback path; a weekly `--heartbeat` info alert is the liveness proof
+whose ABSENCE is the alarm. Detection-only by design — the watchdog never restarts anything.
+
+**Full-host-down leg.** `helsinki-staging-probe.sh` on the comms box (systemd 5-min timer): curls
+the staging URL; 3 consecutive failures → a Discord `#general` post with phone notify; recovery
+posts once and re-arms. Covers the class the on-box watchdog structurally cannot (the alerts file
+dies with the box). Both alarm paths were drill-proven on 2026-07-16.
+
+**Public liveness endpoint.** `GET /api/health/liveness` (`server/routes/health.ts`) —
+unauthenticated by design, two low-sensitivity booleans: `engineExpected` (the per-mode
+`system_context.isEngineActive` flag, the resume path's own expected-state) and `engineRunning`
+(the in-process per-mode manager). `expected && !running` sustained across watchdog ticks is the
+silent-halt signature. Residual: the engine-leg alarm's end-to-end drill is dated Saturday
+2026-07-19 (#524).
 
 ---
 
