@@ -29,10 +29,16 @@ export interface OpenTrade {
   netProfitValue: number;
   netProfitPercent: string;
   rankingScore?: number; // Batch 47f15: Cross-family desirability score
-  finalScore: number;
-  hybridScore: number;
-  expectedEdge: number;
-  regimeWeight: number;
+  // P19-B8.7 Step-9: OPTIONAL since the Final/Hybrid cells were deleted (Kyle's
+  // FinalScore retirement, piece 2.7); the paper adapter omits them entirely.
+  // Full field death rides #525 (B-FINALSCORE-PURGE).
+  finalScore?: number;
+  hybridScore?: number;
+  // P19-B8.7 Step-9: OPTIONAL — the paper adapter sources these from signal
+  // metadata, which is absent on some rows (em-dash render, never a fabricated
+  // number). The VTS serializer always provides them, so VTS is unaffected.
+  expectedEdge?: number;
+  regimeWeight?: number;
   entryTime: string;
   durationOpenMinutes: number;
   globalRegime: string | null;
@@ -67,6 +73,18 @@ export interface OpenTrade {
   state?: string;
   mtTwin?: boolean;
   mtPairId?: string | null;
+  // P19-B8.7 Step-9: cost 5-col breakdown (entry fee/slip + ESTIMATED exit
+  // fee/slip). Present on paper adapter rows; absent (em-dash) until the VTS
+  // serializer carries a split. `costs` stays the single total either way.
+  costEntryFee?: number | null;
+  costEntrySlippage?: number | null;
+  costExitFee?: number | null;
+  costExitSlippage?: number | null;
+  // P19-B8.7 Step-9 (B8.9 carry, b28cf7074 reconciled): the SERVER's single
+  // age-aware venue-quiet verdict + price age for the Current cell. Paper rows
+  // carry these; VTS rows don't (normal render).
+  priceVenueQuiet?: boolean;
+  priceAgeMs?: number | null;
 }
 
 export interface ClosedTrade {
@@ -92,10 +110,16 @@ export interface ClosedTrade {
   netProfitValue: number;
   netProfitPercent: string;
   rankingScore?: number; // Batch 47f15: Cross-family desirability score
-  finalScore: number;
-  hybridScore: number;
-  expectedEdge: number;
-  regimeWeight: number;
+  // P19-B8.7 Step-9: OPTIONAL since the Final/Hybrid cells were deleted (Kyle's
+  // FinalScore retirement, piece 2.7); the paper adapter omits them entirely.
+  // Full field death rides #525 (B-FINALSCORE-PURGE).
+  finalScore?: number;
+  hybridScore?: number;
+  // P19-B8.7 Step-9: OPTIONAL — the paper adapter sources these from signal
+  // metadata, which is absent on some rows (em-dash render, never a fabricated
+  // number). The VTS serializer always provides them, so VTS is unaffected.
+  expectedEdge?: number;
+  regimeWeight?: number;
   entryTime: string;
   exitTime: string;
   durationMinutes: number;
@@ -132,6 +156,15 @@ export interface ClosedTrade {
   mtTwin?: boolean;
   mtPairId?: string | null;
   countsInAggregates?: boolean;
+  // P19-B8.7 Step-9: realized cost 5-col breakdown + the B8.6 maker target-exit
+  // cohort stamps (exit_fee_mode / exit_rest_outcome). Present on paper adapter
+  // rows; em-dash on VTS rows until their serializers carry them.
+  costEntryFee?: number | null;
+  costEntrySlippage?: number | null;
+  costExitFee?: number | null;
+  costExitSlippage?: number | null;
+  exitFeeMode?: string | null;
+  exitRestOutcome?: string | null;
 }
 
 // Batch 19H: Filter Pipeline Diagnostics types
@@ -345,7 +378,8 @@ export function isBenchmarkSymbol(symbol: string): boolean {
   return BENCHMARK_BASE_COINS.includes(base);
 }
 
-export type OpenSortField = 'symbol' | 'regime' | 'strategy' | 'pool' | 'dollarValue' | 'entryPrice' | 'grossProfitValue' | 'netProfitValue' | 'finalScore' | 'expectedEdge' | 'regimeWeight' | 'entryTime' | 'durationOpenMinutes';
+// P19-B8.7 Step-9: 'finalScore' removed with its column (retired metric, piece 2.7).
+export type OpenSortField = 'symbol' | 'regime' | 'strategy' | 'pool' | 'dollarValue' | 'entryPrice' | 'grossProfitValue' | 'netProfitValue' | 'expectedEdge' | 'regimeWeight' | 'entryTime' | 'durationOpenMinutes';
 export type SortDirection = 'asc' | 'desc';
 
 export function SortableHeader({

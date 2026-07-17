@@ -1,169 +1,37 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
-import { cn, formatEntryFeeMode } from "@/lib/utils";
 import { useTradingMode } from "@/contexts/trading-mode-context";
 import { apiFetch } from "@/lib/api";
-import { getFrictionColorClasses, getRegimeBadgeClassName, getFrictionLabel, formatRegimeTitle } from "@/utils/frictionColor";
-import { AssetClassBadge } from "@/components/ui/asset-class-badge";
-import { 
-  TrendingUp, 
-  TrendingDown, 
-  Target, 
-  Shield, 
-  Clock,
-  BarChart3,
-  Award,
-  AlertTriangle,
+// P19-B8.7 Step-9: the table is the shared VTS-mirror component + pure adapter;
+// the bespoke markup and its helpers (DualScrollTable, SortableHeader, strategy
+// color/name maps, formatters) are deleted with it (rule 18).
+import { ClosedTradesTable } from "@/components/vts/vts-closed-trades-table";
+import { adaptPaperClosedTrade } from "@/lib/paper-trade-adapter";
+import { useAssetNameOverlays } from "@/hooks/use-asset-name-overlays";
+import {
   RefreshCw,
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
-  ArrowUpDown,
-  ArrowUp,
-  ArrowDown
 } from "lucide-react";
 
-function formatNumber(value: number | string, decimals: number = 2): string {
-  const num = typeof value === 'string' ? parseFloat(value) : value;
-  if (isNaN(num)) return '-';
-  return num.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
-}
+// P19-B8.7 Step-9 (rule 18): the bespoke table helpers that lived here —
+// formatNumber, DualScrollTable, the strategyColors/strategyNames maps,
+// formatDuration, SortableHeader — are DELETED with the bespoke markup; the
+// shared vts-closed-trades-table.tsx + vts-shared.tsx now own the rendering.
 
-// Phase 8.8.3-C2: Dual scroll bar component - provides scroll at top and bottom
-function DualScrollTable({ children }: { children: React.ReactNode }) {
-  const topScrollRef = useRef<HTMLDivElement>(null);
-  const bottomScrollRef = useRef<HTMLDivElement>(null);
-  const contentRef = useRef<HTMLDivElement>(null);
-  const [scrollWidth, setScrollWidth] = useState(0);
-  
-  useEffect(() => {
-    if (contentRef.current) {
-      setScrollWidth(contentRef.current.scrollWidth);
-    }
-  }, [children]);
-  
-  const syncScroll = useCallback((source: 'top' | 'bottom') => {
-    if (!topScrollRef.current || !bottomScrollRef.current) return;
-    const scrollLeft = source === 'top' 
-      ? topScrollRef.current.scrollLeft 
-      : bottomScrollRef.current.scrollLeft;
-    topScrollRef.current.scrollLeft = scrollLeft;
-    bottomScrollRef.current.scrollLeft = scrollLeft;
-  }, []);
-  
-  return (
-    <div>
-      {/* Top scroll bar */}
-      <div 
-        ref={topScrollRef}
-        className="overflow-x-auto overflow-y-hidden h-3 border-b border-border/50"
-        onScroll={() => syncScroll('top')}
-      >
-        <div style={{ width: scrollWidth, height: 1 }} />
-      </div>
-      {/* Table container */}
-      <div 
-        ref={(el) => { 
-          (bottomScrollRef as any).current = el; 
-          (contentRef as any).current = el;
-        }}
-        className="overflow-x-auto"
-        onScroll={() => syncScroll('bottom')}
-      >
-        {children}
-      </div>
-    </div>
-  );
-}
-
-// P19-B8.7 (OBJ-2): colors are COSMETIC ONLY — cell visibility never depends on this
-// map (the render fallback carries its own text color). Keys fixed to the canonical
-// strategy ids (range_trading was a dead key — canonical is range_trade); unlisted
-// canonical strategies simply render on the neutral fallback.
-const strategyColors: Record<string, string> = {
-  vwap_pullback: "bg-primary/10 text-primary",
-  abcd_long: "bg-chart-2/10 text-chart-2",
-  sma_trend_ride: "bg-chart-3/10 text-chart-3",
-  vwap_bounce: "bg-blue-500/10 text-blue-600",
-  dhma: "bg-purple-500/10 text-purple-600",
-  breakout: "bg-orange-500/10 text-orange-600",
-  mean_reversion: "bg-green-500/10 text-green-600",
-  range_trade: "bg-cyan-500/10 text-cyan-600",
-  liquidity_trap: "bg-rose-500/10 text-rose-600"
-};
-
-const strategyNames: Record<string, string> = {
-  vwap_pullback: "VWAP Pullback",
-  abcd_long: "ABCD Long",
-  sma_trend_ride: "SMA Trend Ride",
-  vwap_bounce: "VWAP Bounce",
-  dhma: "DHMA",
-  breakout: "Breakout",
-  mean_reversion: "Mean Reversion",
-  range_trade: "Range Trade",
-  liquidity_trap: "Liquidity Trap"
-};
-
-function formatDuration(ms: number): string {
-  if (ms <= 0) return '-';
-  const seconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(seconds / 60);
-  const hours = Math.floor(minutes / 60);
-  const days = Math.floor(hours / 24);
-
-  if (days > 0) return `${days}d ${hours % 24}h`;
-  if (hours > 0) return `${hours}h ${minutes % 60}m`;
-  if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
-  return `${seconds}s`;
-}
-
-// P19-B8.7 (OBJ-6): AnalyticsPanel DELETED — see the removal note at the render site.
-function SortableHeader({ 
-  column, 
-  label, 
-  currentSort, 
-  currentOrder, 
-  onSort,
-  align = 'left'
-}: { 
-  column: string; 
-  label: string; 
-  currentSort: string; 
-  currentOrder: 'asc' | 'desc'; 
-  onSort: (col: string) => void;
-  align?: 'left' | 'right';
-}) {
-  const isActive = currentSort === column;
-  return (
-    <th 
-      className={cn(
-        "p-3 text-sm font-semibold text-muted-foreground cursor-pointer hover:bg-muted/50 select-none",
-        align === 'right' ? 'text-right' : 'text-left'
-      )}
-      onClick={() => onSort(column)}
-    >
-      <div className={cn("flex items-center gap-1", align === 'right' && "justify-end")}>
-        {label}
-        {isActive ? (
-          currentOrder === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
-        ) : (
-          <ArrowUpDown className="w-3 h-3 opacity-40" />
-        )}
-      </div>
-    </th>
-  );
-}
 
 export function TradeHistoryTab() {
   const { isPaper } = useTradingMode();
-  
+
+  // Company/coin name overlays for the shared table's stacked symbol cell.
+  useAssetNameOverlays();
+
   // Phase 8.8.3-C-FINAL PART 6: Pending filters (user edits these)
   const [pendingFilters, setPendingFilters] = useState({
     symbol: '',
@@ -182,11 +50,13 @@ export function TradeHistoryTab() {
     dateTo: ''
   });
   
-  // Phase 8.8.3-C5: Pagination and sorting state
+  // Phase 8.8.3-C5: Pagination state. P19-B8.7 Step-9: the API sort became a
+  // fixed closedAt-desc default when the bespoke sortable headers died — the
+  // shared table sorts the current page client-side.
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(25);
-  const [sortBy, setSortBy] = useState<string>('closedAt');
-  const [order, setOrder] = useState<'asc' | 'desc'>('desc');
+  const sortBy = 'closedAt';
+  const order: 'asc' | 'desc' = 'desc';
   
   // Phase 8.8.3-C-FINAL PART 6: Apply filters handler
   const handleApplyFilters = () => {
@@ -266,22 +136,9 @@ export function TradeHistoryTab() {
   const totalCount = paginatedData?.totalCount || 0;
   const totalPages = Math.ceil(totalCount / pageSize);
   
-  // Phase 8.8.3-C5: Handle column sorting
-  const handleSort = (column: string) => {
-    if (sortBy === column) {
-      setOrder(order === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortBy(column);
-      setOrder('desc');
-    }
-    setPage(0); // Reset to first page on sort change
-  };
-
-  const getSymbolColor = (symbol: string) => {
-    if (symbol.includes('BTC')) return 'text-orange-500';
-    if (symbol.includes('ETH')) return 'text-blue-500';
-    return 'text-primary';
-  };
+  // P19-B8.7 Step-9: the API-level column-sort handler + getSymbolColor died with
+  // the bespoke headers (rule 18) — the shared table sorts the current page
+  // client-side; the query keeps its closedAt-desc default ordering.
 
   return (
     <div className="space-y-6">
@@ -414,308 +271,18 @@ export function TradeHistoryTab() {
             </div>
           ) : (
             <>
-              <DualScrollTable>
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-border">
-                      {/* Phase 8.8.3-C2A: Final column order per directive */}
-                      <SortableHeader column="symbol" label="Symbol" currentSort={sortBy} currentOrder={order} onSort={handleSort} />
-                      <th className="px-3 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Class</th>
-                      <SortableHeader column="strategyName" label="Strategy" currentSort={sortBy} currentOrder={order} onSort={handleSort} />
-                      <th className="px-3 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Pool</th>
-                      {/* P19-B7.2b (OBJ-C): entry fee-mode (maker/taker) column */}
-                      <th className="px-3 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Entry Fee Mode</th>
-                      {/* P19-B8.7 (OBJ-4): VTS-mirror columns */}
-                      <th className="px-3 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">B/S</th>
-                      <th className="px-3 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider" title="Trailing-exit engine state at close.">TEC State</th>
-                      <th className="px-3 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Signal/Pattern</th>
-                      <SortableHeader column="quantity" label="Qty" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="right" />
-                      <SortableHeader column="entryPrice" label="Entry" currentSort={sortBy} currentOrder={order} onSort={handleSort} />
-                      <SortableHeader column="exitPrice" label="Exit" currentSort={sortBy} currentOrder={order} onSort={handleSort} />
-                      <th className="px-3 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider" title="The target and stop this trade was closed against (target = target_exit_price; stop = original_stop_price).">Target/Stop</th>
-                      <SortableHeader column="closeReason" label="Reason" currentSort={sortBy} currentOrder={order} onSort={handleSort} />
-                      <SortableHeader column="grossPnl" label="Gross P/L" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="right" />
-                      <SortableHeader column="entryFee" label="Entry Fee" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="right" />
-                      <SortableHeader column="entrySlippage" label="Entry Slip" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="right" />
-                      <SortableHeader column="exitFee" label="Exit Fee" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="right" />
-                      <SortableHeader column="exitSlippage" label="Exit Slip" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="right" />
-                      <SortableHeader column="totalCost" label="Total Cost" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="right" />
-                      <SortableHeader column="netPnl" label="Net P/L" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="right" />
-                      <SortableHeader column="confidence" label="Conf" currentSort={sortBy} currentOrder={order} onSort={handleSort} align="right" />
-                      <SortableHeader column="marketRegime" label="Regime" currentSort={sortBy} currentOrder={order} onSort={handleSort} />
-                      <SortableHeader column="marketFrictionScore" label="Friction" currentSort={sortBy} currentOrder={order} onSort={handleSort} />
-                      <SortableHeader column="openedAt" label="Opened" currentSort={sortBy} currentOrder={order} onSort={handleSort} />
-                      <SortableHeader column="closedAt" label="Closed" currentSort={sortBy} currentOrder={order} onSort={handleSort} />
-                      <th className="px-3 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Duration</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                    {filteredTrades.map((trade: any) => {
-                      // Phase 8.8.3-C2: Parse P/L and cost fields
-                      const grossPnl = parseFloat(trade.grossPnl || trade.pnl || '0');
-                      const netPnl = parseFloat(trade.netPnl || trade.pnl || '0');
-                      const entryFee = parseFloat(trade.entryFee || '0');
-                      const exitFee = parseFloat(trade.exitFee || '0');
-                      const entrySlippage = parseFloat(trade.entrySlippage || '0');
-                      const exitSlippage = parseFloat(trade.exitSlippage || '0');
-                      const totalCost = parseFloat(trade.totalCost || '0');
-                      const isNetProfit = netPnl >= 0;
-                      const isGrossProfit = grossPnl >= 0;
-                      
-                      const formatTimestamp = (dateStr: string | null) => {
-                        if (!dateStr) return '-';
-                        const d = new Date(dateStr);
-                        return d.toLocaleString('en-US', { 
-                          month: 'short', 
-                          day: 'numeric', 
-                          hour: '2-digit', 
-                          minute: '2-digit'
-                        });
-                      };
-                      
-                      return (
-                        <tr key={trade.id} className="hover:bg-muted/50" data-testid={`trade-history-${trade.id}`}>
-                          {/* 1. Symbol - C2A */}
-                          <td className="p-2">
-                            <span className={cn("text-sm font-semibold", getSymbolColor(trade.symbol))}>
-                              {trade.symbol}
-                            </span>
-                          </td>
-                          
-                          {/* B69: Asset Class */}
-                          <td className="p-2">
-                            <AssetClassBadge assetClass={(trade as any).assetClass} />
-                          </td>
-
-                          {/* 2. Strategy - C2A.
-                              P19-B8.7 (OBJ-2, Kyle 2026-07-16): the column read as BLANK —
-                              the text was rendering WHITE-on-white. Any strategy missing from
-                              the (stale, 9-key) strategyColors map fell to a "bg-muted/10"
-                              override that killed the Badge's default background but kept its
-                              default text-primary-foreground (white). Visibility must NEVER
-                              depend on a hand-maintained color map: the fallback now carries
-                              its own text color, and an unmapped strategy renders its raw
-                              canonical name (the same rule the VTS tables use). */}
-                          <td className="p-2">
-                            <Badge className={cn("text-xs", strategyColors[trade.strategyName as keyof typeof strategyColors] || "bg-muted/20 text-foreground")}>
-                              {strategyNames[trade.strategyName as keyof typeof strategyNames] || trade.strategyName || '—'}
-                            </Badge>
-                          </td>
-
-                          {/* Batch 19E: Source Pool */}
-                          <td className="p-2">
-                            {(trade as any).sourcePool ? (
-                              <Badge className={cn("text-xs",
-                                (trade as any).sourcePool?.startsWith('quant') ? "bg-blue-500/10 text-blue-600" :
-                                (trade as any).sourcePool === 'pattern' ? "bg-purple-500/10 text-purple-600" :
-                                "bg-gray-500/10 text-gray-600"
-                              )}>
-                                {((trade as any).sourcePool as string).toUpperCase()}
-                              </Badge>
-                            ) : <span className="text-muted-foreground text-xs">—</span>}
-                          </td>
-
-                          {/* P19-B7.2b (OBJ-C): Entry Fee Mode (maker/taker) — NULL renders em-dash */}
-                          <td className="p-2 text-xs" data-testid={`text-entry-fee-mode-${trade.id}`}>
-                            {formatEntryFeeMode((trade as any).chosenEntryMode, (trade as any).entryFeeRate)}
-                          </td>
-
-                          {/* P19-B8.7 (OBJ-4): B/S · TEC State · Signal/Pattern (VTS-mirror; em-dash when absent) */}
-                          <td className="p-2">
-                            <span className={cn("text-xs font-semibold uppercase", trade.side === 'sell' ? "text-red-600" : "text-green-600")}>
-                              {trade.side === 'sell' ? 'S' : 'B'}
-                            </span>
-                          </td>
-                          <td className="p-2">
-                            {(trade as any).tradeMode
-                              ? <Badge variant="outline" className="text-xs">{(trade as any).tradeMode}</Badge>
-                              : <span className="text-muted-foreground text-xs">—</span>}
-                          </td>
-                          <td className="p-2 text-xs">
-                            {(trade as any).patternType
-                              ? <span className="font-medium">{String((trade as any).patternType)}</span>
-                              : <span className="text-muted-foreground">—</span>}
-                          </td>
-
-                          {/* 3. Quantity - C2A */}
-                          <td className="p-2 text-right font-mono text-xs">
-                            {trade.quantity ? formatNumber(trade.quantity, 4) : '-'}
-                          </td>
-                          
-                          {/* 4. Entry - C2A */}
-                          <td className="p-2 font-mono text-xs">
-                            {trade.entryPrice ? `$${formatNumber(trade.entryPrice, 4)}` : '-'}
-                          </td>
-                          
-                          {/* 5. Exit - C2A */}
-                          <td className="p-2 font-mono text-xs">
-                            {trade.exitPrice ? `$${formatNumber(trade.exitPrice, 4)}` : '-'}
-                          </td>
-
-                          {/* P19-B8.7 (OBJ-4): Target/Stop pair (target_exit_price / original_stop_price) */}
-                          <td className="p-2 font-mono text-xs whitespace-nowrap">
-                            <span className="text-green-600">{(trade as any).targetExitPrice ? `$${formatNumber((trade as any).targetExitPrice, 4)}` : '—'}</span>
-                            {' / '}
-                            <span className="text-red-600">{(trade as any).originalStopPrice ? `$${formatNumber((trade as any).originalStopPrice, 4)}` : '—'}</span>
-                          </td>
-                          
-                          {/* 6. Reason - C2A; B65.2 + HF3: trailing_stop_hit, moonbag_timeout, break_even_stop */}
-                          <td className="p-2">
-                            <div className="flex items-center gap-1">
-                              <Badge
-                                variant="outline"
-                                className={cn(
-                                  "text-xs",
-                                  trade.closeReason === 'target_hit' && "bg-green-500/20 text-green-600 border-green-500/50",
-                                  trade.closeReason === 'trailing_stop_hit' && "bg-emerald-500/20 text-emerald-600 border-emerald-500/50",
-                                  trade.closeReason === 'moonbag_timeout' && "bg-amber-500/20 text-amber-600 border-amber-500/50",
-                                  trade.closeReason === 'break_even_stop' && "bg-slate-500/20 text-slate-600 border-slate-400/50",
-                                  trade.closeReason === 'stop_hit' && "bg-red-500/20 text-red-600 border-red-500/50",
-                                  // P19-B7.2c: a dropped pending maker (visible, excluded from stats)
-                                  trade.closeReason === 'never_filled' && "bg-slate-500/20 text-slate-400 border-slate-500/40"
-                                )}
-                              >
-                                {!trade.closedAt ? 'Open' :
-                                 trade.closeReason === 'never_filled' ? 'Never filled — dropped' :
-                                 trade.closeReason === 'target_hit' ? 'Target' :
-                                 trade.closeReason === 'trailing_stop_hit' ? 'Trail' :
-                                 trade.closeReason === 'moonbag_timeout' ? 'M.Cap' :
-                                 trade.closeReason === 'break_even_stop' ? 'BE Protect' :
-                                 trade.closeReason === 'stop_hit' ? 'Stop' :
-                                 trade.closeReason === 'manual_close' ? 'Manual' :
-                                 trade.closeReason === 'manual_stop' ? 'M.Stop' :
-                                 trade.closeReason === 'engine_stop_cleanup' ? 'Engine' :
-                                 trade.closeReason === 'hard_reset' ? 'Reset' :
-                                 trade.closeReason === 'hard_stop' ? 'H.Stop' :
-                                 trade.closeReason === 'force_close' ? 'Force' :
-                                 trade.closeReason || '?'}
-                              </Badge>
-                              {/* B65.2: Moonbag badge for trades that entered TRAILING_TAKE mode */}
-                              {/* B65.4: rung count appended (MB×N) when ladder data is present */}
-                              {(trade as any).tradeMode === 'TRAILING_TAKE' && (
-                                <Badge
-                                  variant="outline"
-                                  className="text-[10px] bg-yellow-500/20 text-yellow-700 border-yellow-500/50"
-                                  title={`Trade entered moonbag (trailing) mode after hitting target. Ratcheted through ${(trade as any).ladderRungsHit ?? 1} ladder rung${((trade as any).ladderRungsHit ?? 1) === 1 ? '' : 's'} before exit.`}
-                                >
-                                  🌙 MB×{(trade as any).ladderRungsHit ?? 1}
-                                </Badge>
-                              )}
-                            </div>
-                          </td>
-                          
-                          {/* 7. Gross P/L ($ + %) stacked - C2A */}
-                          <td className="p-2 text-right">
-                            <div className="space-y-0.5">
-                              <div className={cn("font-mono text-xs font-semibold", isGrossProfit ? "text-green-600" : "text-red-600")}>
-                                {isGrossProfit ? '+' : '-'}${formatNumber(Math.abs(grossPnl))}
-                              </div>
-                              <div className={cn("font-mono text-xs", isGrossProfit ? "text-green-600" : "text-red-600")}>
-                                {isGrossProfit ? '+' : ''}{formatNumber((grossPnl / (parseFloat(trade.quantity || '1') * parseFloat(trade.entryPrice || '1'))) * 100)}%
-                              </div>
-                            </div>
-                          </td>
-                          
-                          {/* 8. Entry Fee - C2A */}
-                          <td className="p-2 text-right font-mono text-xs text-muted-foreground">
-                            {entryFee > 0 ? `$${formatNumber(entryFee, 2)}` : '-'}
-                          </td>
-                          
-                          {/* 9. Entry Slippage - C2A */}
-                          <td className="p-2 text-right font-mono text-xs text-orange-600">
-                            {entrySlippage !== 0 ? `$${formatNumber(Math.abs(entrySlippage), 2)}` : '-'}
-                          </td>
-                          
-                          {/* 10. Exit Fee - C2A: Show positive value */}
-                          <td className="p-2 text-right font-mono text-xs text-muted-foreground">
-                            {exitFee !== 0 ? `$${formatNumber(Math.abs(exitFee), 2)}` : '-'}
-                          </td>
-                          
-                          {/* 11. Exit Slippage - C2A: Show positive value */}
-                          <td className="p-2 text-right font-mono text-xs text-orange-600">
-                            {exitSlippage !== 0 ? `$${formatNumber(Math.abs(exitSlippage), 2)}` : '-'}
-                          </td>
-                          
-                          {/* 12. Total Cost - C2A */}
-                          <td className="p-2 text-right font-mono text-xs font-medium text-red-600">
-                            {totalCost > 0 ? `$${formatNumber(totalCost, 2)}` : '-'}
-                          </td>
-                          
-                          {/* 13. Net P/L ($ + %) stacked - C2A */}
-                          <td className="p-2 text-right">
-                            <div className="space-y-0.5">
-                              <div className={cn("font-mono text-xs font-semibold", isNetProfit ? "text-green-600" : "text-red-600")}>
-                                {isNetProfit ? '+' : '-'}${formatNumber(Math.abs(netPnl))}
-                              </div>
-                              <div className={cn("font-mono text-xs", isNetProfit ? "text-green-600" : "text-red-600")}>
-                                {isNetProfit ? '+' : ''}{formatNumber(parseFloat(trade.netPnlPercent || trade.pnlPercent || '0'))}%
-                              </div>
-                            </div>
-                          </td>
-                          
-                          {/* 14. Confidence - C2A */}
-                          <td className="p-2 text-right">
-                            {(() => {
-                              const rawConf = parseFloat(trade.confidence || '0');
-                              const confidence = rawConf > 1 ? rawConf : rawConf * 100;
-                              const confColor = confidence >= 80 ? 'text-green-600' : 
-                                               confidence >= 60 ? 'text-blue-600' : 
-                                               confidence >= 40 ? 'text-orange-500' : 'text-red-600';
-                              return (
-                                <span className={cn("font-mono text-xs font-medium", confColor)}>
-                                  {trade.confidence ? `${formatNumber(confidence, 0)}%` : '-'}
-                                </span>
-                              );
-                            })()}
-                          </td>
-                          
-                          {/* 15. Market Regime - 11.4B */}
-                          <td className="p-2">
-                            {trade.marketRegime ? (
-                              <Badge variant="outline" className={cn("text-xs", getRegimeBadgeClassName(trade.marketRegime))}>
-                                {formatRegimeTitle(trade.marketRegime)}
-                              </Badge>
-                            ) : (
-                              <span className="text-muted-foreground text-xs">—</span>
-                            )}
-                          </td>
-                          
-                          {/* 16. Market Friction - 11.4B */}
-                          <td className="p-2">
-                            {trade.marketFrictionScore !== undefined && trade.marketFrictionScore !== null ? (
-                              <span className={cn(
-                                "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium",
-                                getFrictionColorClasses(trade.marketFrictionScore).badge
-                              )}>
-                                {getFrictionLabel(trade.marketFrictionScore)}
-                              </span>
-                            ) : (
-                              <span className="text-muted-foreground text-xs">—</span>
-                            )}
-                          </td>
-                          
-                          {/* 17. Opened - C2A */}
-                          <td className="p-2 text-xs font-mono whitespace-nowrap">
-                            {formatTimestamp(trade.openedAt)}
-                          </td>
-                          
-                          {/* 16. Closed - C2A */}
-                          <td className="p-2 text-xs font-mono whitespace-nowrap">
-                            {formatTimestamp(trade.closedAt)}
-                          </td>
-
-                          {/* P19-B8.7 (OBJ-4): Duration (VTS-mirror) */}
-                          <td className="p-2 text-xs text-muted-foreground whitespace-nowrap">
-                            {trade.openedAt && trade.closedAt
-                              ? formatDuration(new Date(trade.closedAt).getTime() - new Date(trade.openedAt).getTime())
-                              : '—'}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </DualScrollTable>
+              {/* P19-B8.7 Step-9: the paper history table is now the SHARED
+                  VTS-mirror ClosedTradesTable (vts-closed-trades-table.tsx), fed
+                  through the pure adapter (paper-trade-adapter.ts) — one layout for
+                  VTS and paper (Kyle's layout-identity directive; Langston
+                  shared-component ruling B). Server-side filter/pagination stay on
+                  this shell; the shared table's column sort orders the CURRENT PAGE
+                  client-side. The old ~300-line bespoke table markup is deleted
+                  (rule 18). */}
+              <ClosedTradesTable
+                trades={filteredTrades.map(adaptPaperClosedTrade)}
+                emptyLabel="No trades match your filters"
+              />
               
               {/* Phase 8.8.3-C5: Pagination controls */}
               {totalPages > 1 && (

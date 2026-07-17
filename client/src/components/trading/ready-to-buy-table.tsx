@@ -5,11 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { RefreshCw, TrendingUp, ArrowUpDown, Clock } from "lucide-react";
 import { cn, formatEntryFeeMode } from "@/lib/utils";
+import { VenueQuietPrice } from "./venue-quiet-price-cell";
 import { useWebSocket } from "@/hooks/use-websocket";
 import { getFrictionColorClasses, getRegimeBadgeClassName, getFrictionLabel, formatRegimeTitle } from "@/utils/frictionColor";
 // P19-B8.7 Step-9: the same stacked symbol-cell name source the VTS tables use.
 import { getAssetName } from "@shared/asset-names";
 import { useAssetNameOverlays } from "@/hooks/use-asset-name-overlays";
+// Kyle 2026-07-17: Duration column reuses the VTS minutes formatter (1h 5m / 2d 3h).
+import { formatDuration } from "@/components/vts/vts-shared";
 
 interface TradingSignal {
   id: string;
@@ -34,6 +37,9 @@ interface TradingSignal {
   volume24h: number | null;
   status: 'active' | 'reconfirmed' | 'promoted' | 'expired' | 'executed';
   detectedAt: string;
+  // Kyle 2026-07-17: queue-entry timestamp (rtb_signals.queued_at, rides the
+  // route's row spread) — the Duration column's anchor.
+  queuedAt?: string | null;
   estimatedQuantity?: number;
   estimatedValue?: number;
   marketRegime?: string;
@@ -42,6 +48,11 @@ interface TradingSignal {
   // P19-B7.2b (OBJ-C): the maker/taker entry fee-mode snapshot carried on rtb_signals.
   chosenEntryMode?: string | null;
   entryFeeRate?: number | string | null;
+  // P19-B8.9 (OBJ-5): venue-quiet state for the Current column — server-side cache
+  // peek (never a fetch): true when no venue-tagged price fresher than the quiet
+  // threshold is held for this symbol.
+  priceVenueQuiet?: boolean;
+  priceAgeMs?: number | null;
 }
 
 interface TradingSignalsResponse {
@@ -49,7 +60,9 @@ interface TradingSignalsResponse {
   timestamp: string;
 }
 
-type SortField = 'rank' | 'symbol' | 'rankScore' | 'strategyWeight' | 'volume' | 'price' | 'strategy' | 'entry' | 'target' | 'stop' | 'quantity' | 'status' | 'marketRegime' | 'marketFriction' | 'dbs' | 'netEv';
+// Kyle 2026-07-17: 'strategyWeight' REMOVED with its column (S.Wgt — degenerate
+// display, see the header comment at the removal site); 'queueAge' added (Duration).
+type SortField = 'rank' | 'symbol' | 'rankScore' | 'volume' | 'price' | 'strategy' | 'entry' | 'target' | 'stop' | 'quantity' | 'status' | 'marketRegime' | 'marketFriction' | 'dbs' | 'netEv' | 'queueAge';
 type SortDirection = 'asc' | 'desc';
 
 export default function ReadyToBuyTable() {
@@ -150,9 +163,10 @@ export default function ReadyToBuyTable() {
         aValue = a.chosenNetEv != null ? Number(a.chosenNetEv) : -Infinity;
         bValue = b.chosenNetEv != null ? Number(b.chosenNetEv) : -Infinity;
         break;
-      case 'strategyWeight':
-        aValue = a.strategyWeight ?? 0;
-        bValue = b.strategyWeight ?? 0;
+      case 'queueAge':
+        // Older queue entry = larger age; missing timestamp sorts newest.
+        aValue = a.queuedAt ? Date.now() - new Date(a.queuedAt).getTime() : 0;
+        bValue = b.queuedAt ? Date.now() - new Date(b.queuedAt).getTime() : 0;
         break;
       case 'symbol':
         aValue = a.symbol;
@@ -317,7 +331,13 @@ export default function ReadyToBuyTable() {
                   {/* Kyle 2026-07-17: RankingScore sits NEXT TO Rank. */}
                   <SortHeader field="rankScore" label="RankingScore" />
                   <SortHeader field="symbol" label="Symbol" />
-                  <SortHeader field="strategyWeight" label="S.Wgt" />
+                  {/* Kyle 2026-07-17: S.Wgt column REMOVED — the displayed value was
+                      degenerate (every row at the 0.2 equal-weight/fallback), so it
+                      conveyed nothing. The L9 weight MACHINERY is NOT dead (it feeds
+                      the L10 exposure-bias multipliers) — its functioning-vs-degenerate
+                      investigation is #529 (B-STRATEGY-WEIGHT-INVESTIGATION), its own
+                      batch sequenced immediately BEFORE the #522 runtime audit (Kyle);
+                      full metric retirement only after that trace. */}
                   <SortHeader field="price" label="Price" />
                   <SortHeader field="entry" label="Entry" />
                   <SortHeader field="target" label="Target" />
@@ -333,6 +353,8 @@ export default function ReadyToBuyTable() {
                   <SortHeader field="netEv" label="Net EV" />
                   {/* P19-B7.2b (OBJ-C): entry fee-mode (maker/taker) column — non-sortable */}
                   <th className="text-left py-2 px-3 font-medium" data-testid="header-entry-fee-mode">Entry Fee Mode</th>
+                  {/* Kyle 2026-07-17: time in the ready-to-buy queue (queued_at → now). */}
+                  <SortHeader field="queueAge" label="Duration" />
                   <SortHeader field="status" label="Status" />
                 </tr>
               </thead>
@@ -370,6 +392,19 @@ export default function ReadyToBuyTable() {
                           {rank}
                         </span>
                       </td>
+                      {/* Kyle 2026-07-17 (screenshot): the CELL order now matches the
+                          header order — RankingScore BEFORE Symbol. The rebuild had
+                          reordered only the headers, so scores rendered under "Symbol"
+                          and symbols under "RankingScore". S.Wgt cell REMOVED with its
+                          column (degenerate display; see the header-side comment). */}
+                      <td className="text-right py-3 px-3" data-testid={`text-ranking-score-${index}`}>
+                        <span className={cn(
+                          "font-semibold font-mono",
+                          rankScore !== null && rankScore > 0 ? "text-success" : "text-muted-foreground"
+                        )}>
+                          {rankScore !== null && !isNaN(rankScore) ? rankScore.toFixed(4) : '—'}
+                        </span>
+                      </td>
                       {/* P19-B8.7 Step-9: stacked symbol cell — symbol + display name +
                           class badge, the same getAssetName composition the VTS
                           tables use (Kyle's stacked-name directive). */}
@@ -386,30 +421,23 @@ export default function ReadyToBuyTable() {
                           )}
                         </div>
                       </td>
-                      {/* P19-B8.7 Step-9: the ATTACHED rank key (RankingScore) — the
-                          number that actually orders promotion, any config arm.
-                          FinalScore + ML Conf cells REMOVED (inert / fabricated). */}
-                      <td className="text-right py-3 px-3" data-testid={`text-ranking-score-${index}`}>
-                        <span className={cn(
-                          "font-semibold font-mono",
-                          rankScore !== null && rankScore > 0 ? "text-success" : rankScore !== null ? "text-muted-foreground" : "text-muted-foreground"
-                        )}>
-                          {rankScore !== null && !isNaN(rankScore) ? rankScore.toFixed(4) : '—'}
-                        </span>
-                      </td>
-                      <td className="text-right py-3 px-3" data-testid={`text-strategy-weight-${index}`}>
-                        <span className={cn(
-                          "font-semibold",
-                          (signal.strategyWeight ?? 0) >= 0.5 ? "text-amber-600" : (signal.strategyWeight ?? 0) >= 0.3 ? "text-amber-400" : "text-muted-foreground"
-                        )}>
-                          {signal.strategyWeight !== null && !isNaN(signal.strategyWeight) ? `${(signal.strategyWeight * 100).toFixed(1)}%` : '—'}
-                        </span>
-                      </td>
+                      {/* P19-B8.9 (OBJ-5): the stored row price wears the venue-quiet badge
+                          when we hold no fresh venue-tagged value for the symbol (server-side
+                          cache peek — never a fetch). */}
                       <td className="text-right py-3 px-3 font-mono" data-testid={`text-price-${index}`}>
-                        {!isNaN(currentPrice) 
-                          ? `$${currentPrice.toFixed(currentPrice < 1 ? 4 : 2)}`
-                          : '—'
-                        }
+                        {signal.priceVenueQuiet ? (
+                          <VenueQuietPrice
+                            price={!isNaN(currentPrice) ? currentPrice : null}
+                            ageMs={signal.priceAgeMs}
+                            decimals={currentPrice < 1 ? 4 : 2}
+                            className="text-right"
+                            testId={`cell-current-venue-quiet-${index}`}
+                          />
+                        ) : (
+                          !isNaN(currentPrice)
+                            ? `$${currentPrice.toFixed(currentPrice < 1 ? 4 : 2)}`
+                            : '—'
+                        )}
                       </td>
                       <td className="text-right py-3 px-3 font-mono font-semibold text-success" data-testid={`text-entry-${index}`}>
                         {!isNaN(entryPrice) 
@@ -512,6 +540,16 @@ export default function ReadyToBuyTable() {
                       {/* P19-B7.2b (OBJ-C): entry fee-mode (maker/taker) — NULL renders em-dash */}
                       <td className="py-3 px-3 text-xs" data-testid={`text-entry-fee-mode-${index}`}>
                         {formatEntryFeeMode(signal.chosenEntryMode, signal.entryFeeRate)}
+                      </td>
+                      {/* Kyle 2026-07-17: time in the queue since queued_at; the 30s
+                          auto-refresh keeps it current. Missing timestamp → em-dash. */}
+                      <td className="py-3 px-3 text-xs whitespace-nowrap" data-testid={`text-queue-age-${index}`}>
+                        {signal.queuedAt ? (
+                          <span className="inline-flex items-center gap-1">
+                            <Clock className="w-3 h-3 text-muted-foreground" />
+                            {formatDuration(Math.max(0, Math.floor((Date.now() - new Date(signal.queuedAt).getTime()) / 60000)))}
+                          </span>
+                        ) : '—'}
                       </td>
                       <td className="py-3 px-3" data-testid={`text-status-${index}`}>
                         <span className={cn(

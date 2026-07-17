@@ -6,6 +6,18 @@
 
 ---
 
+## 2026-07-17 — P19-B8.7 Step-9 (#528): `active-trades-v2.tsx` (1,362 lines) — the bespoke paper Open Trades tab, superseded by the shared VTS-mirror table + adapter
+
+**Why:** Kyle's layout-identity directive + Langston's shared-component ruling (B): the paper Open Trades tab now mounts the SHARED `vts-open-trades-table.tsx` through the pure `paper-trade-adapter.ts`, with the paper shell (IntegrityBanner, count header, mutations, WS refresh) preserved verbatim in the NEW `paper-open-trades-tab.tsx`. The bespoke file is retired per rule 18. **The rule-23 FIX-ON-FIND on record (Langston-required verbatim quote):** this file's WS price-overlay recomputed P/L client-side on every tick using hardcoded constants — `const FEE_PERCENT = 0.0010; // 0.10%` and `const SLIPPAGE_PERCENT = 0.0015; // 0.15%` (`:1125-1126`, commented "same as backend", which they were NOT — fees are DB-governed per-mode/per-class) — so displayed net P/L between server refreshes was computed on fantasy friction. The recompute was DELETED (not constant-patched) in the rewire: server-authoritative numbers + 3s-throttled WS invalidation.
+
+**Blast-radius verification (PROVEN safe):** both mount sites (`paper-trading.tsx`, `live-trading.tsx`) swapped to `PaperOpenTradesTab` in the same batch; repo-wide grep for `active-trades-v2|ActiveTradesV2` post-swap → ZERO importers. Nothing survives unaccounted: shell → `paper-open-trades-tab.tsx` (IntegrityBanner moved verbatim); table markup → the shared components (all columns preserved or Kyle-ruled removed); the B8.9 venue-quiet cell edits OLD Claude briefly carried here were reverted by him pre-push (b28cf7074) — the behavior lives in the shared table via the portable `venue-quiet-price-cell.tsx` + the server's `priceVenueQuiet` (the recorded carry obligation, discharged). `tsc`-baseline clean post-removal.
+
+**Deletion sequencing note:** delete deliberately deferred ~½ day after the mounts were swapped — OLD Claude had in-flight B8.9 edits inside the file (wrench protocol); trigger = his b28cf7074 push (which reverted those edits), per the #528 rider.
+
+**Archive:** `1-system-manual/_archive/deleted-code/active-trades-v2.P19-B8.7-Step9.tsx.removed`. Commit: (this batch's push).
+
+---
+
 ## 2026-07-08 — B-STORAGE-HARDEN Wave C (OBJ-2): `b70-retention-sweep.ts` — the DROP-only B70 analytics retention sweep
 
 **Why:** the B70 analytics tables (`signal_eval_archive`, `pair_scan_archive`, `exit_decision_archive`, `macro_feed_archive`, `signal_eval_provenance`) were DROP-only at 90 days via this standalone cron script — it deleted whole monthly partitions with NO warm/cold tiering, violating Kyle's 2026-05-06 "we don't ever drop data" directive (RUNNING_ISSUES #430 V1, an oversight — B70 shipped 2 days before the never-drop/tiered-storage system). Wave C routes these 5 tables through the SAME proven B75 export→warm→cold move-not-delete path (added to `b75-retention-sweep.ts`'s partitioned-archive inventory + per-table `data_lifecycle.<table>.hot_retention_days=90`). With tiering owning them, the DROP-only sweep is retired per rule 18 (a paused/commented DROP script is a re-entry hazard the next person greps and misreads).

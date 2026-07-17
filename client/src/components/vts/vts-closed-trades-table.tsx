@@ -24,9 +24,30 @@ import {
   isBenchmarkSymbol,
 } from "./vts-shared";
 
-type ClosedSortField = 'symbol' | 'regime' | 'strategy' | 'pool' | 'dollarValue' | 'entryPrice' | 'resultType' | 'grossProfitValue' | 'netProfitValue' | 'finalScore' | 'expectedEdge' | 'regimeWeight' | 'exitTime' | 'durationMinutes';
+// P19-B8.7 Step-9: 'finalScore' removed with its column (retired metric, piece 2.7).
+type ClosedSortField = 'symbol' | 'regime' | 'strategy' | 'pool' | 'dollarValue' | 'entryPrice' | 'resultType' | 'grossProfitValue' | 'netProfitValue' | 'expectedEdge' | 'regimeWeight' | 'exitTime' | 'durationMinutes';
 
-export function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
+/**
+ * P19-B8.7 Step-9: this table is now the SHARED closed-trades component — the
+ * VTS tab AND the paper mode page both mount it (paper rows arrive via
+ * client/src/lib/paper-trade-adapter.ts). Paper-only affordances ride the two
+ * OPTIONAL append props, which DEFAULT OFF — the VTS mount passes nothing and
+ * renders exactly as before (Langston shared-component ruling B, condition 1).
+ */
+export function ClosedTradesTable({
+  trades,
+  extraHeaders,
+  renderExtraCells,
+  emptyLabel = "No closed trades in the last 7 days",
+}: {
+  trades: ClosedTrade[];
+  /** Appended <th> nodes rendered AFTER the standard columns. Default OFF. */
+  extraHeaders?: React.ReactNode;
+  /** Appended <td> nodes per row, matching extraHeaders. Default OFF. */
+  renderExtraCells?: (trade: ClosedTrade, index: number) => React.ReactNode;
+  /** Empty-state text; default keeps the VTS wording. */
+  emptyLabel?: string;
+}) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const topScrollRef = useRef<HTMLDivElement>(null);
   const [sortField, setSortField] = useState<ClosedSortField | null>(null);
@@ -54,11 +75,13 @@ export function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
         case 'dollarValue': aVal = a.dollarValue ?? 0; bVal = b.dollarValue ?? 0; break;
         case 'entryPrice': aVal = a.entryPrice; bVal = b.entryPrice; break;
         case 'resultType': aVal = a.resultType; bVal = b.resultType; break;
-        case 'grossProfitValue': aVal = a.grossProfitValue ?? 0; bVal = b.grossProfitValue ?? 0; break;
-        case 'netProfitValue': aVal = a.netProfitValue ?? 0; bVal = b.netProfitValue ?? 0; break;
-        case 'finalScore': aVal = a.finalScore; bVal = b.finalScore; break;
-        case 'expectedEdge': aVal = a.expectedEdge; bVal = b.expectedEdge; break;
-        case 'regimeWeight': aVal = a.regimeWeight; bVal = b.regimeWeight; break;
+        // NaN-safe: adapter rows carry NaN for genuinely-null P/L (em-dash cells).
+        case 'grossProfitValue': aVal = Number.isFinite(a.grossProfitValue) ? a.grossProfitValue : 0; bVal = Number.isFinite(b.grossProfitValue) ? b.grossProfitValue : 0; break;
+        case 'netProfitValue': aVal = Number.isFinite(a.netProfitValue) ? a.netProfitValue : 0; bVal = Number.isFinite(b.netProfitValue) ? b.netProfitValue : 0; break;
+        // P19-B8.7 Step-9: finalScore sort case deleted with its column (retired
+        // metric, piece 2.7); edge/weight coalesce for adapter rows without them.
+        case 'expectedEdge': aVal = a.expectedEdge ?? 0; bVal = b.expectedEdge ?? 0; break;
+        case 'regimeWeight': aVal = a.regimeWeight ?? 0; bVal = b.regimeWeight ?? 0; break;
         case 'exitTime': aVal = new Date(a.exitTime).getTime(); bVal = new Date(b.exitTime).getTime(); break;
         case 'durationMinutes': aVal = a.durationMinutes; bVal = b.durationMinutes; break;
       }
@@ -97,7 +120,8 @@ export function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
         onScroll={handleTopScroll}
         style={{ scrollbarWidth: 'thin' }}
       >
-        <div style={{ width: '2300px', height: '1px' }} />
+        {/* initial spacer width only; the HF7 effect re-syncs it to the real scrollWidth */}
+        <div style={{ width: '2800px', height: '1px' }} />
       </div>
       <div
         ref={scrollRef}
@@ -108,7 +132,7 @@ export function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
         {/* B-NEW-31 (2026-05-14): outer container scrolls both axes with bounded
             max-height so the sticky thead + sticky first-column work correctly.
             Mirrors the OpenTradesTable freeze logic. */}
-        <table className="w-full min-w-[2400px] text-sm">
+        <table className="w-full min-w-[2800px] text-sm">
           <thead className="sticky top-0 bg-card z-20">
             <tr className="border-b border-border">
               {/* B69.1 (2026-05-04): asset class badge stacked below symbol in same cell.
@@ -122,6 +146,10 @@ export function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
               <th className="px-3 py-2 text-left font-medium text-muted-foreground">Source Pool</th>
               {/* P19-B7.2b (OBJ-C): entry fee-mode (maker/taker) column */}
               <th className="px-3 py-2 text-left font-medium text-muted-foreground" title="The maker/taker entry fee-mode this trade opened on (entry-side fee only). '—' for trades opened before this column existed.">Entry Fee Mode</th>
+              {/* P19-B8.7 Step-9: the B8.6 maker target-exit cohort stamps — which fee
+                  the EXIT actually paid, and whether a resting maker exit filled or
+                  converted to taker. '—' on rows without the stamps (VTS, pre-B8.6). */}
+              <th className="px-3 py-2 text-left font-medium text-muted-foreground" title="Which fee mode the EXIT actually paid: maker = resting target-exit filled; taker = market exit (stops, converts, timeouts). 'fill'/'convert' shows the resting-exit outcome. '—' for rows without the stamps.">Exit Fee Mode</th>
               {/* B65.2-HF2c: TEC State column on Closed Simulated Trades for parity with Open table */}
               <th className="px-3 py-2 text-left font-medium text-muted-foreground" title="Trailing-exit mode the trade ended in. TARGET = closed at static target/stop/timeout; MOONBAG = flipped into trailing mode at target and closed via trailing stop or moonbag-duration cap.">TEC State</th>
               {/* B.2.UI (2026-06-02): entry-liquidity captured at trade-open.
@@ -133,7 +161,14 @@ export function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
               <th className="px-3 py-2 text-right font-medium text-muted-foreground">Target/Stop</th>
               <SortableHeader label="Result" field="resultType" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="center" />
               <SortableHeader label="Gross P/L" field="grossProfitValue" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
-              <th className="px-3 py-2 text-right font-medium text-muted-foreground">Costs</th>
+              {/* P19-B8.7 Step-9 (Kyle cost-transparency ruling): Costs is now a
+                  5-col REALIZED split. Rows without a breakdown (VTS today) show
+                  the total + em-dashes. */}
+              <th className="px-3 py-2 text-right font-medium text-muted-foreground" title="Entry-side fee actually charged at open.">Entry Fee</th>
+              <th className="px-3 py-2 text-right font-medium text-muted-foreground" title="Entry-side slippage vs the intended price.">Entry Slip</th>
+              <th className="px-3 py-2 text-right font-medium text-muted-foreground" title="Exit-side fee actually charged at close.">Exit Fee</th>
+              <th className="px-3 py-2 text-right font-medium text-muted-foreground" title="Exit-side slippage vs the target exit price.">Exit Slip</th>
+              <th className="px-3 py-2 text-right font-medium text-muted-foreground" title="Total realized round-trip cost: entry fee + entry slip + exit fee + exit slip.">Total Costs</th>
               <SortableHeader label="Net P/L" field="netProfitValue" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
 
               {/* P19-B8.7 Step-9 (Kyle 2026-07-17 ruling): FinalScore RETIRED — column removed. */}
@@ -146,13 +181,17 @@ export function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
               <th className="px-3 py-2 text-left font-medium text-muted-foreground">Glbl DBS</th>
               <SortableHeader label="Entry/Exit Time" field="exitTime" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
               <SortableHeader label="Duration" field="durationMinutes" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
+              {/* P19-B8.7 Step-9: paper-only appended columns (default OFF) */}
+              {extraHeaders}
             </tr>
           </thead>
           <tbody>
             {sortedTrades.length === 0 ? (
               <tr>
-                <td colSpan={27} className="px-3 py-8 text-center text-muted-foreground">
-                  No closed trades in the last 7 days
+                {/* colSpan 33 = 32 standard columns post cost-split/exit-mode + headroom
+                    for appended paper columns (browsers clamp overshoot). */}
+                <td colSpan={33} className="px-3 py-8 text-center text-muted-foreground">
+                  {emptyLabel}
                 </td>
               </tr>
             ) : (
@@ -243,6 +282,24 @@ export function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
                       ) : null}
                     </div>
                   </td>
+                  {/* P19-B8.7 Step-9: Exit Fee Mode — the B8.6 exit_fee_mode stamp plus
+                      the resting-exit outcome (fill/convert). '—' when unstamped. */}
+                  <td className="px-3 py-2 text-xs whitespace-nowrap">
+                    {trade.exitFeeMode ? (
+                      <div className="flex flex-col gap-0.5">
+                        <span className={trade.exitFeeMode === 'maker' ? 'text-emerald-400' : 'text-muted-foreground'}>
+                          {trade.exitFeeMode.toUpperCase()}
+                        </span>
+                        {trade.exitRestOutcome && (
+                          <span className="text-[10px] text-muted-foreground">
+                            {trade.exitRestOutcome === 'fill' ? 'rested — filled' : trade.exitRestOutcome === 'convert' ? 'rested — converted' : trade.exitRestOutcome}
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </td>
                   {/* B65.2-HF2c: TEC State column on Closed — TARGET vs MOONBAG end-state */}
                   {/* B65.4 (2026-04-25): MOONBAG badge shows ladder rung count (MB×N) when present */}
                   <td className="px-3 py-2">
@@ -309,14 +366,30 @@ export function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
                     )}
                   </td>
                   <td className="px-3 py-2 text-right">
+                    {/* P19-B8.7 Step-9 (Langston note 2): a genuinely-null P/L arrives
+                        as NaN from the adapter — em-dash, never a fabricated $0.00. */}
                     <div className="flex flex-col gap-0.5">
                       <span className={`font-mono text-xs ${getProfitColor(trade.grossProfitValue)}`}>
-                        ${trade.grossProfitValue.toFixed(2)}
+                        {Number.isFinite(trade.grossProfitValue) ? `$${trade.grossProfitValue.toFixed(2)}` : '—'}
                       </span>
                       <span className={`text-xs ${getProfitColor(trade.grossProfitValue)}`}>
                         {trade.grossProfitPercent}
                       </span>
                     </div>
+                  </td>
+                  {/* P19-B8.7 Step-9: realized cost 5-col split. Breakdown absent →
+                      em-dash (never a fabricated 0); the total renders either way. */}
+                  <td className="px-3 py-2 text-right font-mono text-xs text-muted-foreground">
+                    {trade.costEntryFee != null ? `$${trade.costEntryFee.toFixed(4)}` : '—'}
+                  </td>
+                  <td className="px-3 py-2 text-right font-mono text-xs text-muted-foreground">
+                    {trade.costEntrySlippage != null ? `$${trade.costEntrySlippage.toFixed(4)}` : '—'}
+                  </td>
+                  <td className="px-3 py-2 text-right font-mono text-xs text-muted-foreground">
+                    {trade.costExitFee != null ? `$${trade.costExitFee.toFixed(4)}` : '—'}
+                  </td>
+                  <td className="px-3 py-2 text-right font-mono text-xs text-muted-foreground">
+                    {trade.costExitSlippage != null ? `$${trade.costExitSlippage.toFixed(4)}` : '—'}
                   </td>
                   <td className="px-3 py-2 text-right font-mono text-xs text-muted-foreground">
                     ${trade.costs.toFixed(4)}
@@ -324,15 +397,17 @@ export function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
                   <td className="px-3 py-2 text-right">
                     <div className="flex flex-col gap-0.5">
                       <span className={`font-mono text-xs ${getProfitColor(trade.netProfitValue)}`}>
-                        ${trade.netProfitValue.toFixed(2)}
+                        {Number.isFinite(trade.netProfitValue) ? `$${trade.netProfitValue.toFixed(2)}` : '—'}
                       </span>
                       <span className={`text-xs ${getProfitColor(trade.netProfitValue)}`}>
                         {trade.netProfitPercent}
                       </span>
                     </div>
                   </td>
-                  <td className="px-3 py-2 text-right font-mono text-xs">{trade.expectedEdge.toFixed(2)}</td>
-                  <td className="px-3 py-2 text-right font-mono text-xs">{trade.regimeWeight.toFixed(2)}</td>
+                  {/* P19-B8.7 Step-9: absent values render an em-dash, never a
+                      fabricated 0.00 (adapter rows may lack metadata-sourced numbers). */}
+                  <td className="px-3 py-2 text-right font-mono text-xs">{trade.expectedEdge != null ? trade.expectedEdge.toFixed(2) : '—'}</td>
+                  <td className="px-3 py-2 text-right font-mono text-xs">{trade.regimeWeight != null ? trade.regimeWeight.toFixed(2) : '—'}</td>
                   <td className="px-3 py-2 text-xs">{trade.globalRegime || '\u2014'}</td>
                   <td className="px-3 py-2 text-right font-mono text-xs">{trade.pairFriction != null ? getFrictionLabel(Math.round(trade.pairFriction)) : '\u2014'}</td>
                   <td className="px-3 py-2 text-right font-mono text-xs">{trade.globalFriction != null ? getFrictionLabel(Math.round(trade.globalFriction)) : '\u2014'}</td>
@@ -368,6 +443,8 @@ export function ClosedTradesTable({ trades }: { trades: ClosedTrade[] }) {
                       {formatDuration(trade.durationMinutes)}
                     </div>
                   </td>
+                  {/* P19-B8.7 Step-9: paper-only appended cells (default OFF) */}
+                  {renderExtraCells?.(trade, idx)}
                 </tr>
               ))
             )}

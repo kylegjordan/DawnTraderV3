@@ -86,6 +86,14 @@ export async function getClosedVTSTradesFromLogs(days: number = 7): Promise<Arra
   grossProfitValue: number;
   grossProfitPercent: string;
   costs: number;
+  // P19-B8.7 Step-9: cost 5-col split, derived from the friction COMPONENTS
+  // captured at open (costFee/Slippage/SpreadFraction on the record). Spread is
+  // allocated half to each slip leg so the four columns sum exactly to `costs`.
+  // null on records opened before the components were captured (em-dash).
+  costEntryFee: number | null;
+  costEntrySlippage: number | null;
+  costExitFee: number | null;
+  costExitSlippage: number | null;
   netProfitValue: number;
   netProfitPercent: string;
   finalScore: number;
@@ -208,6 +216,7 @@ export async function getClosedVTSTradesFromLogs(days: number = 7): Promise<Arra
               resultType: 'never_filled',
               countsInAggregates: false,
               grossProfitValue: 0, grossProfitPercent: '0.00%', costs: 0,
+              costEntryFee: null, costEntrySlippage: null, costExitFee: null, costExitSlippage: null,
               netProfitValue: 0, netProfitPercent: '0.00%',
               finalScore: 0, hybridScore: 0, expectedEdge: 0, regimeWeight: 0,
               entryTime: new Date(trade.entryTime).toISOString(),
@@ -312,6 +321,21 @@ export async function getClosedVTSTradesFromLogs(days: number = 7): Promise<Arra
             grossProfitValue: parseFloat(grossProfitValue.toFixed(2)),
             grossProfitPercent: (parseFloat(grossProfitPercent) >= 0 ? '+' : '') + grossProfitPercent + '%',
             costs: parseFloat(costsDollar.toFixed(4)),
+            // P19-B8.7 Step-9: cost 5-col split from the captured components
+            // (spread halved into each slip leg — sums exactly to `costs`).
+            ...(() => {
+              const _f = trade.costFeeFraction, _s = trade.costSlippageFraction, _sp = trade.costSpreadFraction;
+              if (typeof _f !== 'number' || typeof _s !== 'number' || typeof _sp !== 'number'
+                  || !isFinite(_f) || !isFinite(_s) || !isFinite(_sp)) {
+                return { costEntryFee: null, costEntrySlippage: null, costExitFee: null, costExitSlippage: null };
+              }
+              return {
+                costEntryFee: parseFloat((tradeDollarValue * _f).toFixed(4)),
+                costEntrySlippage: parseFloat((tradeDollarValue * (_s + _sp / 2)).toFixed(4)),
+                costExitFee: parseFloat((tradeDollarValue * _f).toFixed(4)),
+                costExitSlippage: parseFloat((tradeDollarValue * (_s + _sp / 2)).toFixed(4)),
+              };
+            })(),
             netProfitValue: parseFloat(netProfitValue.toFixed(2)),
             netProfitPercent: (parseFloat(netProfitPercent) >= 0 ? '+' : '') + netProfitPercent + '%',
             finalScore: trade.finalScore || trade.signal?.finalScore || 0,

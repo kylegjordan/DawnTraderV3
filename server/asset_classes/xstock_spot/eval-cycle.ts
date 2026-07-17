@@ -636,7 +636,13 @@ export async function evaluateXstockPairForVTS(
         const entryPrice = strategySignal.entryPrice;
         const takeProfit = strategySignal.targetPrice;
         const stopLoss = strategySignal.stopPrice;
-        const spread = 0.001;
+        // P19-B8.7 Step-9 FIX-ON-FIND (rule 23): `const spread = 0.001` DELETED.
+        // It was CRYPTO's spread constant hardcoded into the xStock lane — below
+        // even this class's own static default (0.0012, friction.ts:37, the
+        // observed 12bps mid-range) — and it silently overrode the per-symbol
+        // MEASURED spread that getCachedCostMetrics already serves for xstock
+        // (B-5 AMR Obj-12: measured-with-fallback + spreadSource provenance).
+        // The friction blend below now consumes costMetrics.spread.
         const hybridScore = computeRealHybridScore(strategyKey, mceContext.indicators, ohlc as any, regime);
         // B79.0n.SCORING (2026-05-26): assetClass threaded for per-class cache-key isolation.
         // xstock_spot file — hardcoded class literal matches file scope.
@@ -715,7 +721,10 @@ export async function evaluateXstockPairForVTS(
         // B79.0n.MCE: assetClass REQUIRED — this is the xStock eval cycle, so
         // the file-level ASSET_CLASS constant ('xstock_spot') is passed directly.
         const costMetrics = getCachedCostMetrics(symbol, ASSET_CLASS);
-        const totalFriction = (costMetrics.fee * 2) + (costMetrics.slippage * 2) + spread;
+        // P19-B8.7 Step-9 (rule 23): costMetrics.spread — per-symbol MEASURED
+        // when the friction-sample store has a fresh sample, the class static
+        // default (0.0012) otherwise. Was a hardcoded 0.001 (crypto's constant).
+        const totalFriction = (costMetrics.fee * 2) + (costMetrics.slippage * 2) + costMetrics.spread;
         // P19-B8.5b (OBJ-3, #500): the predictiveConfidence×100 DI proxy is DELETED (rule 18 —
         // FINDING B's second site; the crypto twin died at vts-runner in the same diff). The
         // kernel now consumes the LANE-NATIVE real DI: the imf-evaluator's own computed value
@@ -976,6 +985,13 @@ export async function evaluateXstockPairForVTS(
           dollarValue,
           quantity,
           frictionCost: totalFriction,
+          // P19-B8.7 Step-9 (#527): the components behind totalFriction, for the
+          // UI cost 5-col split — the SAME three terms summed into the blend
+          // above (post rule-23 fix: costMetrics.spread, measured-with-fallback),
+          // so the split reconciles to frictionCost exactly.
+          costFeeFraction: costMetrics.fee,
+          costSlippageFraction: costMetrics.slippage,
+          costSpreadFraction: costMetrics.spread,
           regime,
           regimeScore: regimeScoreRaw,
           signalType: stratDef.signalType,

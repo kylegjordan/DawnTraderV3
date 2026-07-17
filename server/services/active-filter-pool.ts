@@ -340,6 +340,15 @@ class ActiveFilterPoolService {
       currentPrice: number;
       volume24h: number;
       dailyRange: number;
+      // P19-B8.7 rider (Kyle 2026-07-17, code-confirmed): the pattern intake DROPPED
+      // the B63 DBS/DI the scanner had already computed — this writer had no fields
+      // for them, so pattern-lane signals queued with NULL dbs/di UNLESS the same
+      // symbol happened to sit in the quant pool (lookup order luck). Same optional
+      // shape as addSurvivors; absent stays honest-undefined, never fabricated.
+      dbsScore?: number;
+      dbsCategory?: string;
+      dbsSlope?: number;
+      DI?: number;
     }>
   ): {
     added: number;
@@ -379,6 +388,13 @@ class ActiveFilterPoolService {
         source: mode,
         sourcePool: 'pattern',       // Phase 14.5: pattern pool origin
         assetClass: 'crypto_spot',   // Phase 14.5: default asset class
+        // P19-B8.7 rider: carry the scanner's B63 DBS + DI onto pattern entries
+        // (parity with addSurvivors) so pattern-lane signals queue with a real
+        // dbs_score_at_queue / di_at_queue instead of a coverage-luck NULL.
+        dbsScore: survivor.dbsScore,
+        dbsCategory: survivor.dbsCategory,
+        dbsSlope: survivor.dbsSlope,
+        di: survivor.DI,
         fx5Snapshot: {
           volume24h: survivor.volume24h,
           dailyRange: survivor.dailyRange,

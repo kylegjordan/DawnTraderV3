@@ -8,6 +8,12 @@ import { Clock } from "lucide-react";
 import { format } from "date-fns";
 import { getFrictionLabel } from "@/utils/frictionColor";
 import { formatEntryFeeMode } from "@/lib/utils";
+// P19-B8.7 Step-9 (B8.9 carry, reconciled to OLD Claude's pushed b28cf7074): the
+// venue-quiet Current-price treatment is ONE portable renderer driven by the
+// SERVER's single age-aware priceVenueQuiet boolean (no client-side source
+// classification — the age-blind helper was removed with his push). Paper
+// adapter rows carry priceVenueQuiet/priceAgeMs; VTS rows don't (normal render).
+import { VenueQuietPrice } from "@/components/trading/venue-quiet-price-cell";
 import {
   type OpenTrade,
   type OpenSortField,
@@ -23,7 +29,28 @@ import {
   isBenchmarkSymbol,
 } from "./vts-shared";
 
-export function OpenTradesTable({ trades }: { trades: OpenTrade[] }) {
+/**
+ * P19-B8.7 Step-9: this table is now the SHARED open-trades component — the VTS
+ * tab AND the paper mode page both mount it (paper rows arrive via
+ * client/src/lib/paper-trade-adapter.ts). Paper-only affordances (Slot, Actions,
+ * …) ride the two OPTIONAL append props, which DEFAULT OFF — the VTS mount
+ * passes nothing and renders exactly as before (Langston shared-component
+ * ruling B, condition 1).
+ */
+export function OpenTradesTable({
+  trades,
+  extraHeaders,
+  renderExtraCells,
+  emptyLabel = "No open simulated trades",
+}: {
+  trades: OpenTrade[];
+  /** Appended <th> nodes rendered AFTER the standard columns. Default OFF. */
+  extraHeaders?: React.ReactNode;
+  /** Appended <td> nodes per row, matching extraHeaders. Default OFF. */
+  renderExtraCells?: (trade: OpenTrade, index: number) => React.ReactNode;
+  /** Empty-state text; default keeps the VTS wording. */
+  emptyLabel?: string;
+}) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const topScrollRef = useRef<HTMLDivElement>(null);
   const [sortField, setSortField] = useState<OpenSortField | null>(null);
@@ -52,9 +79,10 @@ export function OpenTradesTable({ trades }: { trades: OpenTrade[] }) {
         case 'entryPrice': aVal = a.entryPrice; bVal = b.entryPrice; break;
         case 'grossProfitValue': aVal = a.grossProfitValue ?? 0; bVal = b.grossProfitValue ?? 0; break;
         case 'netProfitValue': aVal = a.netProfitValue ?? 0; bVal = b.netProfitValue ?? 0; break;
-        case 'finalScore': aVal = a.finalScore; bVal = b.finalScore; break;
-        case 'expectedEdge': aVal = a.expectedEdge; bVal = b.expectedEdge; break;
-        case 'regimeWeight': aVal = a.regimeWeight; bVal = b.regimeWeight; break;
+        // P19-B8.7 Step-9: finalScore sort case deleted with its column (retired
+        // metric, piece 2.7); edge/weight coalesce for adapter rows without them.
+        case 'expectedEdge': aVal = a.expectedEdge ?? 0; bVal = b.expectedEdge ?? 0; break;
+        case 'regimeWeight': aVal = a.regimeWeight ?? 0; bVal = b.regimeWeight ?? 0; break;
         case 'entryTime': aVal = new Date(a.entryTime).getTime(); bVal = new Date(b.entryTime).getTime(); break;
         case 'durationOpenMinutes': aVal = a.durationOpenMinutes; bVal = b.durationOpenMinutes; break;
       }
@@ -93,7 +121,8 @@ export function OpenTradesTable({ trades }: { trades: OpenTrade[] }) {
         onScroll={handleTopScroll}
         style={{ scrollbarWidth: 'thin' }}
       >
-        <div style={{ width: '2300px', height: '1px' }} />
+        {/* initial spacer width only; the HF7 effect re-syncs it to the real scrollWidth */}
+        <div style={{ width: '2700px', height: '1px' }} />
       </div>
       <div
         ref={scrollRef}
@@ -105,7 +134,7 @@ export function OpenTradesTable({ trades }: { trades: OpenTrade[] }) {
             max-height so the sticky thead + sticky first-column work correctly. Header
             stays pinned on vertical scroll; Symbol column stays pinned on horizontal
             scroll. Top-left corner uses z-30 so it sits above both axes. */}
-        <table className="w-full min-w-[2400px] text-sm">
+        <table className="w-full min-w-[2700px] text-sm">
           <thead className="sticky top-0 bg-card z-20">
             <tr className="border-b border-border">
               {/* B69.1 (2026-05-04): asset class badge stacked below symbol in same cell.
@@ -130,7 +159,14 @@ export function OpenTradesTable({ trades }: { trades: OpenTrade[] }) {
               <th className="px-3 py-2 text-right font-medium text-muted-foreground">Target/Stop</th>
               <th className="px-3 py-2 text-right font-medium text-muted-foreground">Dist. T/S</th>
               <SortableHeader label="Gross P/L" field="grossProfitValue" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
-              <th className="px-3 py-2 text-right font-medium text-muted-foreground">Costs</th>
+              {/* P19-B8.7 Step-9 (Kyle cost-transparency ruling): Costs is now a
+                  5-col split — entry fee/slip + estimated exit fee/slip + total.
+                  Rows without a breakdown (VTS today) show the total + em-dashes. */}
+              <th className="px-3 py-2 text-right font-medium text-muted-foreground" title="Entry-side fee actually charged at open.">Entry Fee</th>
+              <th className="px-3 py-2 text-right font-medium text-muted-foreground" title="Entry-side slippage vs the intended price.">Entry Slip</th>
+              <th className="px-3 py-2 text-right font-medium text-muted-foreground" title="ESTIMATED exit-side fee (realized at close).">Est Exit Fee</th>
+              <th className="px-3 py-2 text-right font-medium text-muted-foreground" title="ESTIMATED exit-side slippage (realized at close).">Est Exit Slip</th>
+              <th className="px-3 py-2 text-right font-medium text-muted-foreground" title="Total round-trip cost estimate: entry fee + entry slip + est exit fee + est exit slip.">Total Costs</th>
               <SortableHeader label="Net P/L" field="netProfitValue" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
 
               <th className="px-3 py-2 text-right font-medium text-muted-foreground">Rank</th>
@@ -146,13 +182,18 @@ export function OpenTradesTable({ trades }: { trades: OpenTrade[] }) {
               <th className="px-3 py-2 text-left font-medium text-muted-foreground">Glbl DBS</th>
               <SortableHeader label="Entry Time" field="entryTime" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
               <SortableHeader label="Duration" field="durationOpenMinutes" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
+              {/* P19-B8.7 Step-9: paper-only appended columns (default OFF) */}
+              {extraHeaders}
             </tr>
           </thead>
           <tbody>
             {sortedTrades.length === 0 ? (
               <tr>
-                <td colSpan={28} className="px-3 py-8 text-center text-muted-foreground">
-                  No open simulated trades
+                {/* colSpan 33 = 32 standard columns post cost-split + 1 headroom for
+                    appended paper columns (browsers clamp overshoot to the row width;
+                    matches the closed table's 32+1 pattern — Langston Step-4 note 1). */}
+                <td colSpan={33} className="px-3 py-8 text-center text-muted-foreground">
+                  {emptyLabel}
                 </td>
               </tr>
             ) : (
@@ -286,9 +327,16 @@ export function OpenTradesTable({ trades }: { trades: OpenTrade[] }) {
                   <td className="px-3 py-2 text-right">
                     <div className="flex flex-col gap-0.5">
                       <span className="font-mono text-xs">${trade.entryPrice.toFixed(4)}</span>
-                      <span className={`font-mono text-xs ${trade.currentPrice === null ? 'text-yellow-500' : 'text-muted-foreground'}`}>
-                        {trade.currentPrice !== null ? `$${trade.currentPrice.toFixed(4)}` : 'Stale'}
-                      </span>
+                      {/* P19-B8.7 Step-9 (B8.9 carry): the server's age-aware quiet
+                          verdict drives the treatment — one notion, no per-surface
+                          drift. Rows without the flag (VTS) render exactly as before. */}
+                      {trade.priceVenueQuiet ? (
+                        <VenueQuietPrice price={trade.currentPrice} ageMs={trade.priceAgeMs} decimals={4} className="text-xs" />
+                      ) : (
+                        <span className={`font-mono text-xs ${trade.currentPrice === null ? 'text-yellow-500' : 'text-muted-foreground'}`}>
+                          {trade.currentPrice !== null ? `$${trade.currentPrice.toFixed(4)}` : 'Stale'}
+                        </span>
+                      )}
                     </div>
                   </td>
                   <td className="px-3 py-2 text-right">
@@ -317,6 +365,20 @@ export function OpenTradesTable({ trades }: { trades: OpenTrade[] }) {
                       <span className="text-xs text-muted-foreground">-</span>
                     )}
                   </td>
+                  {/* P19-B8.7 Step-9: cost 5-col split. Breakdown absent → em-dash
+                      (never a fabricated 0); the total renders either way. */}
+                  <td className="px-3 py-2 text-right font-mono text-xs text-muted-foreground">
+                    {trade.costEntryFee != null ? `$${trade.costEntryFee.toFixed(4)}` : '—'}
+                  </td>
+                  <td className="px-3 py-2 text-right font-mono text-xs text-muted-foreground">
+                    {trade.costEntrySlippage != null ? `$${trade.costEntrySlippage.toFixed(4)}` : '—'}
+                  </td>
+                  <td className="px-3 py-2 text-right font-mono text-xs text-muted-foreground">
+                    {trade.costExitFee != null ? `$${trade.costExitFee.toFixed(4)}` : '—'}
+                  </td>
+                  <td className="px-3 py-2 text-right font-mono text-xs text-muted-foreground">
+                    {trade.costExitSlippage != null ? `$${trade.costExitSlippage.toFixed(4)}` : '—'}
+                  </td>
                   <td className="px-3 py-2 text-right font-mono text-xs text-muted-foreground">
                     ${trade.costs.toFixed(4)}
                   </td>
@@ -334,9 +396,11 @@ export function OpenTradesTable({ trades }: { trades: OpenTrade[] }) {
                       <span className="text-xs text-muted-foreground">-</span>
                     )}
                   </td>
-                  <td className="px-3 py-2 text-right font-mono text-xs text-purple-400">{(trade.rankingScore ?? 0).toFixed(2)}</td>
-                  <td className="px-3 py-2 text-right font-mono text-xs">{trade.expectedEdge.toFixed(2)}</td>
-                  <td className="px-3 py-2 text-right font-mono text-xs">{trade.regimeWeight.toFixed(2)}</td>
+                  {/* P19-B8.7 Step-9: absent values render an em-dash, never a
+                      fabricated 0.00 (adapter rows may lack metadata-sourced numbers). */}
+                  <td className="px-3 py-2 text-right font-mono text-xs text-purple-400">{trade.rankingScore != null ? trade.rankingScore.toFixed(2) : '—'}</td>
+                  <td className="px-3 py-2 text-right font-mono text-xs">{trade.expectedEdge != null ? trade.expectedEdge.toFixed(2) : '—'}</td>
+                  <td className="px-3 py-2 text-right font-mono text-xs">{trade.regimeWeight != null ? trade.regimeWeight.toFixed(2) : '—'}</td>
                   <td className="px-3 py-2 text-xs">{trade.globalRegime || '\u2014'}</td>
                   <td className="px-3 py-2 text-right font-mono text-xs">{trade.pairFriction != null ? getFrictionLabel(Math.round(trade.pairFriction)) : '\u2014'}</td>
                   <td className="px-3 py-2 text-right font-mono text-xs">{trade.globalFriction != null ? getFrictionLabel(Math.round(trade.globalFriction)) : '\u2014'}</td>
@@ -369,6 +433,8 @@ export function OpenTradesTable({ trades }: { trades: OpenTrade[] }) {
                       {formatDuration(trade.durationOpenMinutes)}
                     </div>
                   </td>
+                  {/* P19-B8.7 Step-9: paper-only appended cells (default OFF) */}
+                  {renderExtraCells?.(trade, idx)}
                 </tr>
               ))
             )}

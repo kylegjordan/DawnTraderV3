@@ -8,7 +8,9 @@
  */
 import ModeTradingPage, { type ModeTradingPageConfig } from "@/pages/mode-trading";
 import { Lightbulb, LineChart, TrendingUp, BarChart3, History, Ghost, LayoutDashboard } from "lucide-react";
-import ActiveTradesV2 from "@/components/trading/active-trades-v2";
+// P19-B8.7 Step-9: the Open Trades tab is the shared VTS-mirror table behind the
+// paper shell (replaces active-trades-v2, deleted — rule 18).
+import PaperOpenTradesTab from "@/components/trading/paper-open-trades-tab";
 import ReadyToBuyTable from "@/components/trading/ready-to-buy-table";
 import { ExecutionMetricsPanel } from "@/components/trading/execution-metrics";
 import { TradeHistoryTab } from "@/components/trading/trade-history-tab";
@@ -45,7 +47,7 @@ const config: ModeTradingPageConfig = {
         </>
       ),
     },
-    { key: "open", label: "Open Trades", shortLabel: "Open", icon: BarChart3, render: () => <ActiveTradesV2 mode="paper" /> },
+    { key: "open", label: "Open Trades", shortLabel: "Open", icon: BarChart3, render: () => <PaperOpenTradesTab mode="paper" /> },
     { key: "closed", label: "Closed Trades", shortLabel: "Closed", icon: History, render: () => <TradeHistoryTab /> },
     { key: "shadows", label: "Shadows", shortLabel: "Shadow", icon: Ghost, render: () => <ShadowTradesTab /> },
   ],

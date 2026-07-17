@@ -1423,6 +1423,14 @@ export class Fx5ScannerService {
             currentPrice: s.currentPrice ?? 0,
             volume24h: s.volume24h ?? 0,
             dailyRange: s.dailyRange ?? 0,
+            // P19-B8.7 rider (Kyle 2026-07-17): patternPoolSurvivors are built by
+            // merging the B63-CLASSIFIED pair (spread at :1267), so the scanner's
+            // DBS + DI are in hand RIGHT HERE — the old map dropped them at the
+            // pool door, which is why pattern signals queued with NULL dbs/di.
+            dbsScore: (s as any).dbsScore,
+            dbsCategory: (s as any).dbsCategory,
+            dbsSlope: (s as any).dbsSlope,
+            DI: (s as any).DI,
           })));
           console.log(`[14.5][PATTERN_POOL] Pattern pool populated: added=${patternStats.added}, skipped=${patternStats.skipped}`);
         }

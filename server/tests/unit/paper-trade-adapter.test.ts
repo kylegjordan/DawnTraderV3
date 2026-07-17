@@ -1,0 +1,237 @@
+/**
+ * P19-B8.7 Step-9 — paper→VTS-shape adapter tests.
+ *
+ * Pins the three contracts the shared-table mount depends on:
+ *  1. Wire-format parity with the VTS serializer (signed '+X.XX%' strings,
+ *     'N/A' sentinels, decimal precisions) — the shared cells must not be able
+ *     to tell a paper row from a VTS row.
+ *  2. No-fabrication honesty: absent metadata → '—'/undefined/null, NEVER an
+ *     invented number (the deleted mlConfidence ?? ngc×0.9 lesson).
+ *  3. Retired-metric fence: finalScore/hybridScore are NEVER emitted (#525).
+ *
+ * The adapter lives in client/src (imported relatively — vitest has no '@'
+ * alias) but is pure TS with type-only React-side imports, so it runs clean
+ * in the node environment.
+ */
+import { describe, it, expect } from 'vitest';
+import {
+  adaptPaperOpenTrade,
+  adaptPaperClosedTrade,
+  type PaperActiveTradeRow,
+  type PaperClosedTradeRow,
+} from '../../../client/src/lib/paper-trade-adapter';
+
+const baseOpenRow: PaperActiveTradeRow = {
+  id: 't-1',
+  symbol: 'LTC/USD',
+  strategy: 'vwap_pullback',
+  assetClass: 'crypto_spot',
+  patternType: null,
+  quantity: 12.3456789,
+  entryPrice: 100,
+  currentPrice: 102,
+  grossPnl: 24.691,
+  grossPnlPercent: 2.0,
+  netPnl: 20.5,
+  netPnlPercent: 1.66,
+  entryFee: 1.0,
+  entrySlippage: 0.5,
+  estExitFee: 2.0,
+  estExitSlippage: 0.69105,
+  estTotalCost: 4.19105,
+  takeProfit: 105,
+  stopLoss: 98,
+  holdingDurationMs: 185_000, // 3m05s
+  openedAt: '2026-07-17T04:00:00.000Z',
+  metadata: {
+    regime: 'TREND_FRIENDLY_STABLE',
+    signalType: 'QUANT',
+    pool: 'ideal',
+    sourcePool: 'quant',
+    rankingScore: 0.42,
+    expectedEdge: 0.031,
+  },
+  volume24h: 54321,
+  positionValue: 1259.259,
+  tradeMode: 'TARGET',
+  chosenEntryMode: 'maker',
+  entryFeeRate: 0.004,
+  state: 'open',
+};
+
+const baseClosedRow: PaperClosedTradeRow = {
+  id: 'c-1',
+  symbol: 'US/USD',
+  assetClass: 'xstock_spot',
+  strategyName: 'orb_breakout',
+  quantity: '3.5',
+  entryPrice: '200',
+  exitPrice: '206',
+  stopLoss: '196',
+  takeProfit: '206',
+  grossPnl: '21',
+  netPnl: '15.4',
+  netPnlPercent: '2.2',
+  totalCost: '5.6',
+  entryFee: '2.8',
+  exitFee: '2.8',
+  entrySlippage: '0',
+  exitSlippage: '0',
+  exitFeeMode: 'maker',
+  exitRestOutcome: 'fill',
+  openedAt: '2026-07-16T14:00:00.000Z',
+  closedAt: '2026-07-16T15:30:00.000Z',
+  closeReason: 'target_hit',
+  signalType: 'QUANT',
+  patternType: null,
+  sourcePool: 'quant',
+  chosenEntryMode: 'taker',
+  entryFeeRate: '0.008',
+  metadata: { regime: 'IMPULSE_EXPANSION', pool: 'rotational' },
+};
+
+describe('adaptPaperOpenTrade — VTS wire-format parity', () => {
+  it('formats distances exactly like the VTS serializer (signed target, unsigned stop)', () => {
+    const t = adaptPaperOpenTrade(baseOpenRow);
+    // (105-102)/102*100 = 2.9412 → '+2.94%'; (98-102)/102*100 = -3.9216 → '-3.92%'
+    expect(t.distanceToTarget).toBe('+2.94%');
+    expect(t.distanceToStop).toBe('-3.92%');
+  });
+
+  it('emits N/A when target/stop are zero, like VTS', () => {
+    const t = adaptPaperOpenTrade({ ...baseOpenRow, takeProfit: 0, stopLoss: 0 });
+    expect(t.distanceToTarget).toBe('N/A');
+    expect(t.distanceToStop).toBe('N/A');
+  });
+
+  it('signs the percent strings and applies VTS decimal precisions', () => {
+    const t = adaptPaperOpenTrade(baseOpenRow);
+    expect(t.grossProfitPercent).toBe('+2.00%');
+    expect(t.netProfitPercent).toBe('+1.66%');
+    expect(t.dollarValue).toBe(1259.26);   // 2dp
+    expect(t.quantity).toBe(12.345679);    // 6dp
+    // 4dp — (4.19105).toFixed(4) = '4.1910' (the double sits just under the
+    // midpoint), same parseFloat(toFixed(4)) path the VTS serializer runs.
+    expect(t.costs).toBe(4.191);
+  });
+
+  it('maps DIRECT + metadata-sourced fields', () => {
+    const t = adaptPaperOpenTrade(baseOpenRow);
+    expect(t.symbol).toBe('LTC/USD');
+    expect(t.assetClass).toBe('crypto_spot');
+    expect(t.regime).toBe('TREND_FRIENDLY_STABLE');
+    expect(t.pool).toBe('IDEAL'); // uppercased like VTS
+    expect(t.sourcePool).toBe('quant');
+    expect(t.target).toBe(105);
+    expect(t.exitPrice).toBeNull();
+    expect(t.durationOpenMinutes).toBe(3);
+    expect(t.chosenEntryMode).toBe('maker');
+    expect(t.entryFeeRate).toBe(0.004);
+    expect(t.state).toBe('open');
+    expect(t.tradeMode).toBe('TARGET');
+    expect(t.entryLiquidityValue).toBe(54321);
+    expect(t.entryLiquidityKind).toBe('volume_qty');
+  });
+
+  it('passes the cost 5-col breakdown through (split renders only when present)', () => {
+    const t = adaptPaperOpenTrade(baseOpenRow);
+    expect(t.costEntryFee).toBe(1.0);
+    expect(t.costEntrySlippage).toBe(0.5);
+    expect(t.costExitFee).toBe(2.0);
+    expect(t.costExitSlippage).toBe(0.69105);
+    const bare = adaptPaperOpenTrade({ ...baseOpenRow, entryFee: undefined, entrySlippage: undefined, estExitFee: undefined, estExitSlippage: undefined });
+    expect(bare.costEntryFee).toBeNull();
+    expect(bare.costExitSlippage).toBeNull();
+  });
+});
+
+describe('adaptPaperOpenTrade — no-fabrication honesty', () => {
+  it('renders em-dash strings / undefined numbers when metadata is absent — never invents', () => {
+    const t = adaptPaperOpenTrade({ ...baseOpenRow, metadata: null });
+    expect(t.regime).toBe('—');
+    expect(t.signalType).toBe('—');
+    expect(t.pool).toBe('—');
+    expect(t.sourcePool).toBeUndefined();
+    expect(t.rankingScore).toBeUndefined();
+    expect(t.expectedEdge).toBeUndefined();
+    expect(t.regimeWeight).toBeUndefined();
+  });
+
+  it('emits null (not 0) for absent entry-liquidity and #515 global/pair context', () => {
+    const t = adaptPaperOpenTrade({ ...baseOpenRow, volume24h: 0 });
+    expect(t.entryLiquidityValue).toBeNull();
+    expect(t.entryLiquidityKind).toBeNull();
+    expect(t.globalRegime).toBeNull();
+    expect(t.pairFriction).toBeNull();
+    expect(t.globalFriction).toBeNull();
+    expect(t.pairDirectionalBiasScore).toBeNull();
+  });
+
+  it('NEVER emits the retired finalScore/hybridScore (#525 fence)', () => {
+    const t = adaptPaperOpenTrade(baseOpenRow) as Record<string, unknown>;
+    expect('finalScore' in t).toBe(false);
+    expect('hybridScore' in t).toBe(false);
+  });
+});
+
+describe('adaptPaperClosedTrade — decimal-string rows', () => {
+  it('parses drizzle decimal strings and computes derived fields', () => {
+    const t = adaptPaperClosedTrade(baseClosedRow);
+    expect(t.strategy).toBe('orb_breakout');
+    expect(t.quantity).toBe(3.5);
+    expect(t.entryPrice).toBe(200);
+    expect(t.exitPrice).toBe(206);
+    expect(t.dollarValue).toBe(700); // 3.5 × 200
+    // gross% = 21/700*100 = 3.00
+    expect(t.grossProfitPercent).toBe('+3.00%');
+    expect(t.netProfitPercent).toBe('+2.20%');
+    expect(t.costs).toBe(5.6);
+    expect(t.durationMinutes).toBe(90);
+    expect(t.entryTime).toBe('2026-07-16T14:00:00.000Z');
+    expect(t.exitTime).toBe('2026-07-16T15:30:00.000Z');
+    expect(t.entryFeeRate).toBe(0.008);
+  });
+
+  it('uppercases closeReason so the shared result badge/label maps hit directly', () => {
+    expect(adaptPaperClosedTrade(baseClosedRow).resultType).toBe('TARGET_HIT');
+    expect(
+      adaptPaperClosedTrade({ ...baseClosedRow, closeReason: 'trailing_stop_hit' }).resultType,
+    ).toBe('TRAILING_STOP_HIT');
+    expect(adaptPaperClosedTrade({ ...baseClosedRow, closeReason: null }).resultType).toBe('UNKNOWN');
+  });
+
+  it('carries the realized cost breakdown + B8.6 maker-exit cohort stamps', () => {
+    const t = adaptPaperClosedTrade(baseClosedRow);
+    expect(t.costEntryFee).toBe(2.8);
+    expect(t.costExitFee).toBe(2.8);
+    expect(t.costEntrySlippage).toBe(0);
+    expect(t.costExitSlippage).toBe(0);
+    expect(t.exitFeeMode).toBe('maker');
+    expect(t.exitRestOutcome).toBe('fill');
+  });
+
+  it('marks never_filled rows visible-but-excluded, like VTS (B7.2c)', () => {
+    expect(adaptPaperClosedTrade(baseClosedRow).countsInAggregates).toBe(true);
+    expect(
+      adaptPaperClosedTrade({ ...baseClosedRow, closeReason: 'never_filled' }).countsInAggregates,
+    ).toBe(false);
+  });
+
+  it('never coerces missing numerics to fabricated values or emits retired metrics', () => {
+    const t = adaptPaperClosedTrade({
+      ...baseClosedRow,
+      grossPnl: null,
+      netPnl: null,
+      metadata: null,
+    }) as Record<string, unknown>;
+    expect(t.grossProfitPercent).toBe('—');
+    // Null P/L → NaN, which the cells isFinite-guard to an em-dash — never $0.00
+    // beside a '—%' (Langston Step-4 note 2).
+    expect(Number.isNaN(t.grossProfitValue)).toBe(true);
+    expect(Number.isNaN(t.netProfitValue)).toBe(true);
+    expect(t.regime).toBe('—');
+    expect('finalScore' in t).toBe(false);
+    expect('hybridScore' in t).toBe(false);
+    expect(t.rankingScore).toBeUndefined();
+  });
+});

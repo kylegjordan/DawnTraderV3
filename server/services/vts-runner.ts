@@ -553,6 +553,14 @@ interface Phase10TradeRecord {
   // Optional — pre-B7.2b records lack it (UI renders NULL as an em-dash).
   chosenEntryMode?: 'taker' | 'maker';
   entryFeeRate?: number;
+  // P19-B8.7 Step-9: the friction COMPONENTS behind frictionCost (per-leg
+  // fractions from getCachedCostMetrics), captured at open so the UI cost 5-col
+  // split renders honestly. frictionCost stays the blended round-trip scalar
+  // (fee×2 + slippage×2 + spread). Absent on pre-B8.7 records → em-dash, never
+  // a back-derived fabrication.
+  costFeeFraction?: number;
+  costSlippageFraction?: number;
+  costSpreadFraction?: number;
 }
 
 /**
@@ -1995,6 +2003,11 @@ async function generatePhase10Signal(
     dollarValue,      // Directive 11.6H: Fixed USD exposure
     quantity,         // Directive 11.6H: Variable coin units
     frictionCost,
+    // P19-B8.7 Step-9: the components behind frictionCost, persisted (context
+    // jsonb) so the UI cost 5-col split renders honestly. Fractions, per leg.
+    costFeeFraction: costMetrics.fee,
+    costSlippageFraction: costMetrics.slippage,
+    costSpreadFraction: costMetrics.spread,
     regime,
     regimeScore: regimeScoreRaw,
     signalType,
@@ -2195,6 +2208,11 @@ async function generatePhase10Signal(
     regimeWeight,
     decayPenalty,
     frictionCost,
+    // P19-B8.7 Step-9: friction components onto the closed-archive record too,
+    // so the closed-trades cost 5-col split renders honestly.
+    costFeeFraction: costMetrics.fee,
+    costSlippageFraction: costMetrics.slippage,
+    costSpreadFraction: costMetrics.spread,
     entry: entryPrice,
     exit: undefined, // Directive 11.6: Exit determined by real price resolution
     profit: undefined, // Directive 11.6: P&L calculated at exit
@@ -3859,6 +3877,12 @@ export interface RegisterOpenVtsTradeInput {
   dollarValue: number;
   quantity: number;
   frictionCost: number;
+  // P19-B8.7 Step-9: optional friction components behind frictionCost (per-leg
+  // fractions). Callers with cost metrics in hand pass them so the UI cost 5-col
+  // split renders; absent → em-dash (never back-derived from the blend).
+  costFeeFraction?: number;
+  costSlippageFraction?: number;
+  costSpreadFraction?: number;
   regime: MarketRegimeType;
   regimeScore: number;
   signalType: CanonicalSignalType;
@@ -3991,6 +4015,11 @@ export async function registerOpenVtsTrade(input: RegisterOpenVtsTradeInput): Pr
     dollarValue: input.dollarValue,
     quantity: input.quantity,
     frictionCost: input.frictionCost,
+    // P19-B8.7 Step-9: friction-component passthrough (cost 5-col split).
+    // Absent (caller without cost metrics) → undefined → em-dash.
+    costFeeFraction: input.costFeeFraction,
+    costSlippageFraction: input.costSlippageFraction,
+    costSpreadFraction: input.costSpreadFraction,
     regime: input.regime,
     regimeScore: input.regimeScore,
     signalType: input.signalType,
@@ -5555,6 +5584,24 @@ export async function getOpenVirtualTradesForML(): Promise<Array<{
       grossProfitValue: parseFloat(grossProfitValue.toFixed(2)),
       grossProfitPercent: (parseFloat(grossProfitPercent) >= 0 ? '+' : '') + grossProfitPercent + '%',
       costs: parseFloat(costsDollar.toFixed(4)),
+      // P19-B8.7 Step-9: cost 5-col split, derived from the captured friction
+      // COMPONENTS (never back-derived from the blend). Convention: the spread
+      // cost is allocated HALF to each slip leg, so the four columns sum exactly
+      // to `costs` (frictionCost = fee×2 + slippage×2 + spread). Rows opened
+      // before the components were captured render em-dashes.
+      ...(() => {
+        const _f = trade.costFeeFraction, _s = trade.costSlippageFraction, _sp = trade.costSpreadFraction;
+        if (typeof _f !== 'number' || typeof _s !== 'number' || typeof _sp !== 'number'
+            || !isFinite(_f) || !isFinite(_s) || !isFinite(_sp)) {
+          return { costEntryFee: null, costEntrySlippage: null, costExitFee: null, costExitSlippage: null };
+        }
+        return {
+          costEntryFee: parseFloat((tradeDollarValue * _f).toFixed(4)),
+          costEntrySlippage: parseFloat((tradeDollarValue * (_s + _sp / 2)).toFixed(4)),
+          costExitFee: parseFloat((tradeDollarValue * _f).toFixed(4)),
+          costExitSlippage: parseFloat((tradeDollarValue * (_s + _sp / 2)).toFixed(4)),
+        };
+      })(),
       netProfitValue: parseFloat(netProfitValue.toFixed(2)),
       netProfitPercent: (parseFloat(netProfitPercent) >= 0 ? '+' : '') + netProfitPercent + '%',
       // Batch 47f15: Compute ranking score for display (same formula as RTB queue)
