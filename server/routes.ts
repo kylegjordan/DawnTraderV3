@@ -4412,9 +4412,18 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const isEngineActive = systemContext?.isEngineActive || false;
       
       // Check paper simulation engine status (system-wide)
-      // Phase 27.F.13: Check global session for accurate running status
-      const globalSession = (global as any).getGlobalSession?.() as SimulationSession | null;
-      const isActiveEngineRunning = !!(globalSession && globalSession.isRunning);
+      // P19-B8.7 Step-9 (Kyle 00:45Z screenshot — the false STOPPED banner): this
+      // read used the LEGACY `(global as any).getGlobalSession?.()` slot, which the
+      // MANUAL start route populates but the R9.3.HF-4 unattended-resume path never
+      // does (resume registers via setGlobalActiveEngineManager, the modern per-mode
+      // slot) — so after every auto-resume this route reported active:false /
+      // STOPPED while trades opened underneath it, and the client's authoritative-
+      // boolean-first derivation made the stale value win over the live engine
+      // status. Re-pointed to the SAME source /api/health/liveness reads — one
+      // truth. (The legacy getGlobalSession global is a rule-18 enumeration item
+      // for the #522 runtime audit; not drive-by deleted here.)
+      const { getGlobalActiveEngineManager } = await import('./services/active-engine-service.js');
+      const isActiveEngineRunning = !!(getGlobalActiveEngineManager('paper') as any)?.isRunning;
       
       // Phase 27.F.15.B.3: Check global live engine status
       const isLiveEngineRunning = globalLiveEngine.isEngineRunning();
