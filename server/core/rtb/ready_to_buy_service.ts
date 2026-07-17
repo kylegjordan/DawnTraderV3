@@ -1906,9 +1906,13 @@ class ReadyToBuyService {
    * -Infinity (unpriceable) is surfaced as null so the client renders an honest
    * em-dash instead of a serialized "-Infinity"/null-JSON artifact.
    */
-  getDisplayRankKey(signal: RtbSignal): { value: number | null; arm: RankerStrategy } {
+  getDisplayRankKey(signal: RtbSignal, assetClass?: AssetClass): { value: number | null; arm: RankerStrategy } {
+    // Langston Step-4 fold-in (2026-07-17): thread the resolved class exactly as
+    // the promotion sort does — without it a class-degraded row could rank-display
+    // differently than it ranks, a narrow exception the zero-divergence claim
+    // shouldn't carry.
     const arm = getActiveRanker();
-    const key = this.computeRankKey(signal, arm);
+    const key = this.computeRankKey(signal, arm, assetClass);
     return { value: Number.isFinite(key) ? key : null, arm };
   }
 

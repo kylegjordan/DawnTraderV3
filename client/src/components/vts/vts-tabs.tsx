@@ -22,6 +22,10 @@ import {
   type ClosedTrade,
   type FilterDiagnosticsData,
 } from "@/components/vts/vts-shared";
+// P19-B8.7 Step-9 (Kyle name-regression fix): the tables render getAssetName, so
+// the wrappers own the overlay loading — B8.1 moved these tabs off the Machine
+// Learning page, which was the ONLY overlay loader; names silently went blank.
+import { useAssetNameOverlays } from "@/hooks/use-asset-name-overlays";
 
 async function downloadCsv(path: string, filename: string): Promise<void> {
   try {
@@ -46,6 +50,7 @@ async function downloadCsv(path: string, filename: string): Promise<void> {
 }
 
 export function VtsOpenTradesTab() {
+  useAssetNameOverlays();
   const { data, isLoading, isError, refetch } = useQuery<{ success: boolean; count: number; trades: OpenTrade[] }>({
     queryKey: ['/api/vts/ml/open'],
     queryFn: () => apiFetch('/api/vts/ml/open'),
@@ -99,6 +104,7 @@ export function VtsOpenTradesTab() {
 }
 
 export function VtsClosedTradesTab() {
+  useAssetNameOverlays();
   const { data, isLoading, isError, refetch } = useQuery<{ success: boolean; days: number; trades: ClosedTrade[] }>({
     queryKey: ['/api/vts/ml/closed'],
     queryFn: () => apiFetch('/api/vts/ml/closed?days=7'),

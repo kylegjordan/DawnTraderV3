@@ -9,6 +9,7 @@ import { useWebSocket } from "@/hooks/use-websocket";
 import { getFrictionColorClasses, getRegimeBadgeClassName, getFrictionLabel, formatRegimeTitle } from "@/utils/frictionColor";
 // P19-B8.7 Step-9: the same stacked symbol-cell name source the VTS tables use.
 import { getAssetName } from "@shared/asset-names";
+import { useAssetNameOverlays } from "@/hooks/use-asset-name-overlays";
 
 interface TradingSignal {
   id: string;
@@ -52,6 +53,8 @@ type SortField = 'rank' | 'symbol' | 'rankScore' | 'strategyWeight' | 'volume' |
 type SortDirection = 'asc' | 'desc';
 
 export default function ReadyToBuyTable() {
+  // P19-B8.7 Step-9: name overlays loaded where the names render (the B8.1 gap fix).
+  useAssetNameOverlays();
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   // P19-B8.7 Step-9: default sort = the attached rank key — what you see first is
   // what the system promotes first.
@@ -308,8 +311,9 @@ export default function ReadyToBuyTable() {
                       promotion order; RankingScore = the ATTACHED active rank key;
                       FinalScore + ML Conf columns REMOVED (inert/fabricated). */}
                   <SortHeader field="rankScore" label="Rank" />
-                  <SortHeader field="symbol" label="Symbol" />
+                  {/* Kyle 2026-07-17: RankingScore sits NEXT TO Rank. */}
                   <SortHeader field="rankScore" label="RankingScore" />
+                  <SortHeader field="symbol" label="Symbol" />
                   <SortHeader field="strategyWeight" label="S.Wgt" />
                   <SortHeader field="price" label="Price" />
                   <SortHeader field="entry" label="Entry" />

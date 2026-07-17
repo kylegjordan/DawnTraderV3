@@ -5087,9 +5087,10 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         // P19-B8.7 Step-9: the ATTACHED rank key (see the mapper header comment) +
         // honest strategyWeight (metadata value or null — the ?? 0.5 is gone) +
         // per-class regime/friction stamped from the once-per-request resolve.
-        const rank = readyToBuyService.getDisplayRankKey(signal as any);
         const strategyWeight = metadata.strategyWeight ?? null;
         const _cls = (signal as any).assetClass ?? metadata.assetClass ?? null;
+        // Langston Step-4 fold-in: pass the resolved class so display == promotion sort.
+        const rank = readyToBuyService.getDisplayRankKey(signal as any, _cls ?? undefined);
         const _ind = (_cls && _indicatorsByClass[_cls]) || { marketRegime: null, globalFrictionScore: null };
 
         return {
