@@ -1895,6 +1895,24 @@ class ReadyToBuyService {
   }
 
   /**
+   * P19-B8.7 Step-9 (Langston E2 amendment, 2026-07-17): the RANK KEY for a display
+   * surface — THE RANKER ATTACHES, the route never recomputes. This is the same
+   * computeRankKey the promotion sort uses (whichever config arm is active, incl.
+   * the null-snapshot → netRewardToRisk fallback inside signalRMultiple), exposed
+   * per-row because the RTB table lists MORE rows than a promotion cycle touches
+   * (persisted rank-time values would go stale between cycles). The route stays
+   * formula-blind: a ranker-config change changes what this returns, and the
+   * displayed number remains the number that ranks — zero divergence surface.
+   * -Infinity (unpriceable) is surfaced as null so the client renders an honest
+   * em-dash instead of a serialized "-Infinity"/null-JSON artifact.
+   */
+  getDisplayRankKey(signal: RtbSignal): { value: number | null; arm: RankerStrategy } {
+    const arm = getActiveRanker();
+    const key = this.computeRankKey(signal, arm);
+    return { value: Number.isFinite(key) ? key : null, arm };
+  }
+
+  /**
    * P19-B7.1 (OBJ-2/4): the expected R-multiple for a candidate at rank time + the kernel's own
    * floored-pWin flag. Mirrors the open path's tradeMeta build (active-execution-engine.ts:2076-2087)
    * and reads the kernel's own `netRewardToRisk` + `pWinFloored` surfaced on the result — REUSE over

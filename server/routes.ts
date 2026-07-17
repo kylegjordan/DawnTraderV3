@@ -5042,7 +5042,26 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // [8.8.4-C.10] Map RTB signal fields to frontend expected format
       // RtbSignal has: quantity, notional (instead of estimatedValue)
       // Directive 8.8.4-A3.R8.5.A: Add UI status mapping for reconfirmed signals
-      // Directive 8.8.4-L4: Add mlConfidence and finalRank for RTB ranking
+      // P19-B8.7 Step-9 (Kyle directive + Langston E2/E3 rulings, 2026-07-17):
+      //  - rankScore/rankArm ATTACHED by the ranker's own getDisplayRankKey (never
+      //    recomputed here — formula-blind, survives a ranker-config change).
+      //  - regime + global friction resolved ONCE per request per asset class from
+      //    getMarketIndicators (the rtb row carries neither — live-row-verified;
+      //    per-PAIR friction is a queue-time capture gap, #515-adjacent, not faked).
+      //  - The L4/L9 display fabrications are DELETED: mlConfidence (?? ngc×0.9),
+      //    finalRank (NGC×0.40+mlConf×0.35+sWgt×0.25 — a formula the engine never
+      //    used to promote anything), strategyWeight ?? 0.5 (now honest-null).
+      const { readyToBuyService } = await import('./core/rtb/ready_to_buy_service.js');
+      const { getMarketIndicators } = await import('./services/market-indicators.js');
+      const _indicatorsByClass: Record<string, { marketRegime: string | null; globalFrictionScore: number | null }> = {};
+      for (const cls of ['crypto_spot', 'xstock_spot'] as const) {
+        try {
+          const ind = getMarketIndicators(cls);
+          _indicatorsByClass[cls] = { marketRegime: ind.marketRegime ?? null, globalFrictionScore: ind.globalFrictionScore ?? null };
+        } catch {
+          _indicatorsByClass[cls] = { marketRegime: null, globalFrictionScore: null };
+        }
+      }
       const signalsWithQuantity = signals.map(signal => {
         const storedQuantity = signal.quantity ? parseFloat(String(signal.quantity)) : 0;
         const storedNotional = signal.notional ? parseFloat(String(signal.notional)) : 0;
@@ -5065,29 +5084,28 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         const metadata = signal.metadata as Record<string, any> || {};
         const statusUpdatedAt = metadata.statusUpdatedAt || null;
         
-        // L4/L9: Compute mlConfidence and finalRank with strategyWeight
-        // mlConfidence from metadata or estimate from NGC (ML predictions added async in signal orchestrator)
-        const mlConfidence = metadata.mlConfidence ?? (signal.ngc ? parseFloat(String(signal.ngc)) * 0.9 : null);
-        
-        // L9: Strategy weight from metadata (computed via strategyWeights.ts)
-        const strategyWeight = metadata.strategyWeight ?? 0.5;
-        
-        // L9: FinalRank = (NGC × 0.40) + (MLConfidence × 0.35) + (StrategyWeight × 0.25)
-        const ngcValue = signal.ngc ? parseFloat(String(signal.ngc)) : 0;
-        const mlConfValue = mlConfidence ?? 0.5;
-        const finalRank = (ngcValue * 0.40) + (mlConfValue * 0.35) + (strategyWeight * 0.25);
+        // P19-B8.7 Step-9: the ATTACHED rank key (see the mapper header comment) +
+        // honest strategyWeight (metadata value or null — the ?? 0.5 is gone) +
+        // per-class regime/friction stamped from the once-per-request resolve.
+        const rank = readyToBuyService.getDisplayRankKey(signal as any);
+        const strategyWeight = metadata.strategyWeight ?? null;
+        const _cls = (signal as any).assetClass ?? metadata.assetClass ?? null;
+        const _ind = (_cls && _indicatorsByClass[_cls]) || { marketRegime: null, globalFrictionScore: null };
 
-        console.log(`[L9][RTB][FINAL_RANK] ${signal.symbol}: NGC=${ngcValue.toFixed(3)}, ML=${mlConfValue.toFixed(3)}, SW=${strategyWeight.toFixed(3)}, FinalRank=${finalRank.toFixed(4)}`);
-        
         return {
           ...signal,
           estimatedQuantity: quantity,
           estimatedValue: estimatedValue,
           uiStatus,
           statusUpdatedAt,
-          mlConfidence,
           strategyWeight,
-          finalRank
+          rankScore: rank.value,
+          rankArm: rank.arm,
+          marketRegime: _ind.marketRegime,
+          // Named for the client's existing cell/sort plumbing; the VALUE is the
+          // class-level (global) friction score — per-PAIR friction is a queue-time
+          // capture gap (#515-adjacent), surfaced honestly, not faked.
+          marketFrictionScore: _ind.globalFrictionScore,
         };
       });
       
