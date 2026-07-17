@@ -5,6 +5,8 @@ import { priceCache } from './price-cache.js';
 import { restRateLimiter } from './market-data/rest-rate-limiter.js';
 import { krakenWebSocketAdapter } from '../exchanges/kraken/kraken-websocket-adapter.js';
 import { trackPipelineTime } from './system-health-service.js';
+// P19-B8.9 (OBJ-2): class resolution for the xstock REST class-gate (shared module, no cycle).
+import { safeResolveAssetClass } from '../../shared/asset-classes.js';
 
 /**
  * Phase 27.F.15.D: Live Pricing Adapter
@@ -13,7 +15,7 @@ import { trackPipelineTime } from './system-health-service.js';
  * Broadcasts price updates via WebSocket to all connected clients.
  * 
  * Features:
- * - API Integration: Binance, CoinGecko, or test sandbox
+ * - API Integration: Kraken REST only (P19-B8.9 — venue-only at-source)
  * - Auto-refresh: Every 15 seconds
  * - In-memory caching: live_prices:<symbol>
  * - WebSocket broadcasts: price_updated events
@@ -44,14 +46,16 @@ interface PriceQuote {
   symbol: string;
   price: number | null;
   timestamp: string;
-  source: 'binance' | 'coingecko' | 'mock' | 'kraken_ws' | 'kraken_equities_ws' | 'kraken_rest' | 'entry_seed' | 'last_known_good' | 'no_reliable_price';
+  // P19-B8.9 (OBJ-1): 'binance' | 'coingecko' removed — a source that can no longer
+  // occur must not remain representable (typed honesty).
+  source: 'mock' | 'kraken_ws' | 'kraken_equities_ws' | 'kraken_rest' | 'entry_seed' | 'last_known_good' | 'no_reliable_price';
 }
 
 interface CachedPrice {
   symbol: string;
   price: number;
   timestamp: string;
-  source: 'binance' | 'coingecko' | 'mock' | 'kraken_ws' | 'kraken_equities_ws' | 'kraken_rest' | 'entry_seed' | 'last_known_good';
+  source: 'mock' | 'kraken_ws' | 'kraken_equities_ws' | 'kraken_rest' | 'entry_seed' | 'last_known_good';
   cachedAt: number;
 }
 
@@ -64,18 +68,20 @@ export function isKrakenVenueSource(source: string): boolean {
   return source === 'kraken_ws' || source === 'kraken_equities_ws' || source === 'kraken_rest';
 }
 
+// P19-B8.9 (OBJ-1): binanceSymbolFor + fetchFromBinance + fetchFromCoinGecko are RETIRED
+// (rule 18 — see DELETED_COMPONENTS_LOG.md). The display fallback venue is now Kraken REST
+// only, matching the venue the engine prices and exits against. The B8.5 ghost-market
+// routing guard died with the fetcher it guarded.
+
 /**
- * P19-B8.5 (soak fix C, prong 1) — the PURE Binance routing decision, exported for tests.
- * Binance is consulted ONLY for USD-quoted pairs (mapped `${base}USDT`); any other quote
- * returns null — the source structurally cannot quote that market for us, and asking
- * anyway returns ghost-market or wrong-market numbers (see fetchFromBinance).
+ * P19-B8.9 — the shared REST-fallback display membership, extracted from five duplicated
+ * inline lists (4× routes.ts + active-portfolio-manager.ts) that had already drifted
+ * relative to what the adapter can produce. One list, one predicate; the unrepresentable
+ * members (binance_rest, coingecko) are gone with the fetchers.
  */
-export function binanceSymbolFor(symbol: string): string | null {
-  const parts = symbol.split('/');
-  if (parts.length !== 2) return null;
-  const [base, quote] = parts;
-  if (!base || quote !== 'USD') return null;
-  return `${base}USDT`;
+export const REST_FALLBACK_SOURCES = ['rest_fallback', 'kraken_rest', 'last_known_good'] as const;
+export function isRestFallbackSource(source: string): boolean {
+  return REST_FALLBACK_SOURCES.some(s => source.includes(s));
 }
 
 export class LivePricingAdapter {
@@ -215,7 +221,20 @@ export class LivePricingAdapter {
       source: cached.source
     };
   }
-  
+
+  /**
+   * P19-B8.9 (OBJ-5): TTL-free cache peek — read-only, NEVER fetches. Serves the
+   * venue-quiet display state (RTB current column): the caller sees what we hold,
+   * how old it is, and from which source, and renders honesty instead of a bare
+   * number. Distinct from getPrice (1s TTL gate) and getPriceWithFallback (fetches).
+   */
+  peekCachedPrice(symbol: string): { price: number; source: CachedPrice['source']; ageMs: number } | null {
+    const cached = this.priceCache.get(this.normalizeSymbol(symbol));
+    if (!cached || !(cached.price > 0)) {
+      return null;
+    }
+    return { price: cached.price, source: cached.source, ageMs: Date.now() - cached.cachedAt };
+  }
 
   /**
    * Get all cached prices
@@ -292,36 +311,42 @@ export class LivePricingAdapter {
   }
 
   /**
-   * Fetch live price from API (Binance, CoinGecko, or Kraken REST)
+   * Fetch live price from the venue (Kraken REST — P19-B8.9: the only external fetch)
    * Phase 8.8.3-I6: Added Kraken REST API as PRIMARY fallback for Kraken pairs
    * Phase 8.8.3-B9: Mock pricing disabled in production - returns null if no reliable price
    */
   private async fetchLivePrice(symbol: string): Promise<PriceQuote | null> {
     try {
-      // Try Binance first (good for common pairs)
-      const binancePrice = await this.fetchFromBinance(symbol);
-      if (binancePrice !== null) {
+      // P19-B8.9 (OBJ-2): class-gate — Kraken spot REST carries NO tokenized equities
+      // (KNOWN_NONEXISTENT_NAMES, dual-spelling tested), so a REST ask for an
+      // xstock-class symbol is STRUCTURALLY WASTED: guaranteed-failed fetch, then LKG
+      // anyway. Skip the venue ask entirely and go straight to the honest venue-quiet
+      // answer (last_known_good if we hold one, no_reliable_price if not). The xstock
+      // DECISION venue is the equities feed (engine invariant at the :933 region);
+      // this leg only ever served display.
+      if (safeResolveAssetClass(symbol, 'kraken') === 'xstock_spot') {
+        const cachedEq = this.priceCache.get(this.normalizeSymbol(symbol));
+        console.log(`[P19-B8.9][XSTOCK_REST_GATE] symbol=${symbol} rest_ask=skipped serving=${cachedEq && cachedEq.price > 0 ? 'last_known_good' : 'no_reliable_price'}`);
+        if (cachedEq && cachedEq.price > 0) {
+          return {
+            symbol,
+            price: cachedEq.price,
+            timestamp: new Date().toISOString(),
+            source: 'last_known_good'
+          };
+        }
         return {
           symbol,
-          price: binancePrice,
+          price: null,
           timestamp: new Date().toISOString(),
-          source: 'binance'
+          source: 'no_reliable_price'
         };
       }
 
-      // Fallback to CoinGecko (limited to mapped coins)
-      const coinGeckoPrice = await this.fetchFromCoinGecko(symbol);
-      if (coinGeckoPrice !== null) {
-        return {
-          symbol,
-          price: coinGeckoPrice,
-          timestamp: new Date().toISOString(),
-          source: 'coingecko'
-        };
-      }
-
-      // Phase 8.8.3-I6: CRITICAL - Kraken REST API as PRIMARY fallback for Kraken-specific pairs
-      // This ensures we always get fresh prices when WebSocket is stale
+      // P19-B8.9 (OBJ-1): the display fallback chain is Kraken-REST-or-nothing. The old
+      // Binance-first + CoinGecko legs are DELETED — the display venue now matches the
+      // venue the engine prices and exits against (no UI showing a Binance number for a
+      // position Kraken will fill).
       const krakenPrice = await this.fetchFromKrakenRest(symbol);
       if (krakenPrice !== null) {
         return {
@@ -353,7 +378,7 @@ export class LivePricingAdapter {
       }
       
       // Phase 8.8.3-B9: NO mock fallback in production - return null
-      console.warn(`[8.8.3-I6][NO_RELIABLE_PRICE] ${symbol}: All APIs failed (Binance/CoinGecko/Kraken), no cached data`);
+      console.warn(`[8.8.3-I6][NO_RELIABLE_PRICE] ${symbol}: Kraken REST failed, no cached data`);
       return {
         symbol,
         price: null,
@@ -388,85 +413,6 @@ export class LivePricingAdapter {
         timestamp: new Date().toISOString(),
         source: 'no_reliable_price'
       };
-    }
-  }
-
-  /**
-   * Fetch from Binance public API
-   */
-  private async fetchFromBinance(symbol: string): Promise<number | null> {
-    try {
-      // P19-B8.5 (soak fix C, prong 1 — ROUTING): only consult Binance for markets it can
-      // structurally quote for us: USD-quoted pairs, mapped base+'USDT'. The old blind
-      // `replace('/','').replace('USD','USDT')` passed non-USD quotes through VERBATIM
-      // (XRP/GBP -> 'XRPGBP'), and Binance's ticker answers for DELISTED ghost markets
-      // with the last price ever traded — a frozen number. Measured live 2026-07-15:
-      // XRPGBP returned a static 0.5257 (vs the real ~0.827) for 37 straight minutes and
-      // phantom-stopped five paper positions. A source that cannot quote the requested
-      // market must return NULL (the chain skips it honestly), never a different market's
-      // number. (It also mangled USD-BASED pairs: 'USDC/CHF' -> 'USDTCCHF' — garbage that
-      // only failed safe by 404.)
-      const binanceSymbol = binanceSymbolFor(symbol);
-      if (binanceSymbol === null) {
-        return null; // Binance cannot quote this market for us — refuse, don't improvise.
-      }
-
-      const response = await fetch(
-        `https://api.binance.com/api/v3/ticker/price?symbol=${binanceSymbol}`,
-        {
-          signal: AbortSignal.timeout(5000),
-          headers: { 'User-Agent': 'DawnTrader/1.0' }
-        }
-      );
-
-      if (!response.ok) {
-        return null;
-      }
-
-      const data = await response.json() as { price: string };
-      return parseFloat(data.price);
-
-    } catch (error) {
-      return null;
-    }
-  }
-
-  /**
-   * Fetch from CoinGecko public API
-   */
-  private async fetchFromCoinGecko(symbol: string): Promise<number | null> {
-    try {
-      // Map symbols to CoinGecko IDs
-      const coinGeckoMap: Record<string, string> = {
-        'BTC/USD': 'bitcoin',
-        'ETH/USD': 'ethereum',
-        'SOL/USD': 'solana',
-        'XRP/USD': 'ripple',
-        'ADA/USD': 'cardano'
-      };
-
-      const coinId = coinGeckoMap[symbol];
-      if (!coinId) {
-        return null;
-      }
-
-      const response = await fetch(
-        `https://api.coingecko.com/api/v3/simple/price?ids=${coinId}&vs_currencies=usd`,
-        {
-          signal: AbortSignal.timeout(5000),
-          headers: { 'User-Agent': 'DawnTrader/1.0' }
-        }
-      );
-
-      if (!response.ok) {
-        return null;
-      }
-
-      const data = await response.json() as Record<string, { usd: number }>;
-      return data[coinId]?.usd || null;
-
-    } catch (error) {
-      return null;
     }
   }
 
@@ -735,9 +681,9 @@ export class LivePricingAdapter {
   // P19-B8.9a (Langston amendment 2): the honest generic cache-write. The old name
   // `updateFromWebSocket` had three callers, two of them stamping non-WS data 'kraken_ws'
   // (the engine's REST broadcast + the equities-mark feed) — the method name was the third
-  // mislabel. Callers now declare their true source; 'binance_ws' remains representable
-  // only until B8.9 OBJ-1 retires the third-party machinery.
-  updateCache(symbol: string, price: number, source: 'kraken_ws' | 'kraken_equities_ws' | 'kraken_rest' | 'binance_ws' = 'kraken_ws', traceId?: string): void {
+  // mislabel. Callers now declare their true source. P19-B8.9 (OBJ-1): 'binance_ws' is
+  // gone with the third-party machinery — only venue feeds write this cache.
+  updateCache(symbol: string, price: number, source: 'kraken_ws' | 'kraken_equities_ws' | 'kraken_rest' = 'kraken_ws', traceId?: string): void {
     const pipelineStart = Date.now(); // Directive 9.0.C: Track pipeline time
     const normalized = this.normalizeSymbol(symbol);
     const timestamp = new Date().toISOString();
@@ -749,9 +695,9 @@ export class LivePricingAdapter {
       price,
       timestamp,
       // P19-B8.9a: the FOURTH mislabel, hiding inside the method — this ternary
-      // discarded the caller's source into 'binance' for everything non-kraken_ws.
-      // Store the true source; only binance_ws maps to the cache's 'binance' member.
-      source: source === 'binance_ws' ? 'binance' : source,
+      // discarded the caller's source for everything non-kraken_ws. Store the true
+      // source (P19-B8.9: the binance_ws mapping died with the third-party machinery).
+      source,
       cachedAt: now
     });
     
@@ -785,7 +731,10 @@ export class LivePricingAdapter {
       symbol: normalized,
       price,
       timestamp,
-      source: source === 'kraken_ws' ? 'kraken_ws' : 'binance'
+      // P19-B8.9: broadcast the caller's TRUE source (the old ternary collapsed every
+      // non-kraken_ws feed to a 'binance' badge on the frontend stream — a fifth mislabel,
+      // same family as the four found at B8.9a).
+      source
     }, traceId);
     
     // Directive 9.0.C: Track pipeline processing time (WS receive → cache → broadcast complete)

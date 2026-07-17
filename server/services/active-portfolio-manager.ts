@@ -6,7 +6,7 @@ import { registerEngine, registerMicroService } from './mode-registry';
 import { SignalOrchestrator } from './signal-orchestrator';
 import type { StrategySignal } from './strategy-engine';
 import { i1TradeLifecycleDiagnostics } from './i1-trade-lifecycle-diagnostics.js';
-import { livePricingAdapter } from './live-pricing-adapter.js';
+import { livePricingAdapter, isRestFallbackSource } from './live-pricing-adapter.js';
 
 interface PortfolioMetrics {
   totalTrades: number;
@@ -585,8 +585,8 @@ export class ActivePortfolioManager {
           if (liveQuote && liveQuote.price !== null && liveQuote.source !== 'no_reliable_price') {
             currentPrice = liveQuote.price;
             priceSource = liveQuote.source;
-            const restFallbackSources = ['rest_fallback', 'kraken_rest', 'binance_rest', 'coingecko', 'last_known_good'];
-            fallbackType = restFallbackSources.some(s => liveQuote.source.includes(s)) ? 'rest_fallback' : 'none';
+            // P19-B8.9: one shared membership + predicate (was 5 drifted inline copies).
+            fallbackType = isRestFallbackSource(liveQuote.source) ? 'rest_fallback' : 'none';
           } else {
             fallbackType = 'entry_fallback';
             console.log(`[8.8.3-I6][FALLBACK_TO_ENTRY] symbol=${position.symbol} reason=no_reliable_price`);

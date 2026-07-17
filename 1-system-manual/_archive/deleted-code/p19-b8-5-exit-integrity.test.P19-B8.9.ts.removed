@@ -1,3 +1,6 @@
+// ARCHIVED P19-B8.9 (2026-07-17) — test file retired WITH its subject: binanceSymbolFor
+// (the B8.5 Binance routing guard) was deleted in the venue-only at-source batch; the
+// entire file tested only that function (Langston Step-4 Condition 1).
 // P19-B8.5 (soak fix C) — exit-integrity: the Binance routing refusal (prong 1).
 // The phantom-stop incident (2026-07-15): the blind symbol mangle passed XRP/GBP
 // through verbatim and Binance's ticker answered for a DELISTED ghost market with a

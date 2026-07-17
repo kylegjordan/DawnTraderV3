@@ -61,7 +61,7 @@ import { activeFilterPool } from './services/active-filter-pool.js';
 import { num, computeCalendarEarnings, computeFeeDrag, computeMakerTakerMix, computeAvgNetR, computeMaxDrawdownUsd, computeByAssetClass, profitFactorOrNull } from './services/dashboard-metrics.js';
 import { marketVolumeCache } from './services/market-volume-cache.js';
 import { b5SizingAudit } from './services/b5-sizing-audit.js';
-import { livePricingAdapter } from './services/live-pricing-adapter.js';
+import { livePricingAdapter, isRestFallbackSource, isKrakenVenueSource } from './services/live-pricing-adapter.js';
 import { krakenWebSocketAdapter } from './exchanges/kraken/kraken-websocket-adapter.js';
 import { slippageFeeModel } from './services/slippage-fee-model.js';
 import { c5FinancialDiagnostics } from './services/c5-financial-diagnostics.js';
@@ -5102,6 +5102,15 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         const rank = readyToBuyService.getDisplayRankKey(signal as any, _cls ?? undefined);
         const _ind = (_cls && _indicatorsByClass[_cls]) || { marketRegime: null, globalFrictionScore: null };
 
+        // P19-B8.9 (OBJ-5): venue-quiet state for the Current column — a cache PEEK,
+        // never a fetch (the display chain no longer asks REST). Quiet = we hold no
+        // venue-tagged value fresher than the quiet threshold; the row's stored
+        // currentPrice keeps rendering, but wearing its honest badge.
+        const _peek = livePricingAdapter.peekCachedPrice(signal.symbol);
+        const VENUE_QUIET_MS = 60_000;
+        const priceVenueQuiet = !_peek || _peek.ageMs > VENUE_QUIET_MS || !isKrakenVenueSource(_peek.source);
+        const priceAgeMs = _peek ? _peek.ageMs : null;
+
         return {
           ...signal,
           estimatedQuantity: quantity,
@@ -5111,6 +5120,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           strategyWeight,
           rankScore: rank.value,
           rankArm: rank.arm,
+          priceVenueQuiet,
+          priceAgeMs,
           marketRegime: _ind.marketRegime,
           // Named for the client's existing cell/sort plumbing; the VALUE is the
           // class-level (global) friction score — per-PAIR friction is a queue-time
@@ -12133,8 +12144,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           priceSource = liveQuote.source;
           priceAgeMs = Date.now() - new Date(liveQuote.timestamp).getTime();
           // Track REST fallback vs WebSocket primary source
-          const restFallbackSources = ['rest_fallback', 'kraken_rest', 'binance_rest', 'coingecko', 'last_known_good'];
-          fallbackType = restFallbackSources.some(s => liveQuote.source.includes(s)) ? 'rest_fallback' : 'none';
+          // P19-B8.9: one shared membership + predicate (was 5 drifted inline copies).
+          fallbackType = isRestFallbackSource(liveQuote.source) ? 'rest_fallback' : 'none';
         } else {
           // Log that we fell back to entry price due to no reliable live price
           fallbackType = 'entry_fallback';
@@ -12286,6 +12297,12 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           metadata: pos.metadata,
           priceSource, // Phase 8.8.3-I6: Expose price source for debugging
           priceAgeMs,  // Phase 8.8.3-I6: Expose price age for staleness monitoring
+          // P19-B8.9 (OBJ-5): the ONE server-side notion of venue-quiet, shared with the
+          // RTB surface (routes.ts /trading-signals) so the two display surfaces cannot
+          // drift — quiet = the served price is NOT a fresh venue read (non-Kraken-venue
+          // source OR older than the quiet threshold). The client renders VenueQuietPrice
+          // off this boolean; it does not re-decide quiet itself (Langston Step-4 item 2).
+          priceVenueQuiet: !isKrakenVenueSource(priceSource) || priceAgeMs > 60_000,
           // Phase 8.8.3-I9: New columns
           sourceLabel,  // 'WS' or 'REST'
           frequency: frequencyInfo.frequency, // 'High', 'Medium', 'Low', 'Very Low'
@@ -12539,8 +12556,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         if (liveQuote && liveQuote.price !== null && liveQuote.source !== 'no_reliable_price') {
           currentPrice = liveQuote.price;
           priceSource = liveQuote.source;
-          const restFallbackSources = ['rest_fallback', 'kraken_rest', 'binance_rest', 'coingecko', 'last_known_good'];
-          fallbackType = restFallbackSources.some(s => liveQuote.source.includes(s)) ? 'rest_fallback' : 'none';
+          // P19-B8.9: one shared membership + predicate (was 5 drifted inline copies).
+          fallbackType = isRestFallbackSource(liveQuote.source) ? 'rest_fallback' : 'none';
         } else {
           fallbackType = 'entry_fallback';
           console.log(`[8.8.3-I6][FALLBACK_TO_ENTRY] symbol=${pos.symbol} reason=no_reliable_price`);
@@ -12627,8 +12644,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       if (liveQuote && liveQuote.price !== null && liveQuote.source !== 'no_reliable_price') {
         currentPrice = liveQuote.price;
         priceSource = liveQuote.source;
-        const restFallbackSources = ['rest_fallback', 'kraken_rest', 'binance_rest', 'coingecko', 'last_known_good'];
-        fallbackType = restFallbackSources.some(s => liveQuote.source.includes(s)) ? 'rest_fallback' : 'none';
+        // P19-B8.9: one shared membership + predicate (was 5 drifted inline copies).
+        fallbackType = isRestFallbackSource(liveQuote.source) ? 'rest_fallback' : 'none';
       } else {
         fallbackType = 'entry_fallback';
         console.log(`[8.8.3-I6][FALLBACK_TO_ENTRY] symbol=${position.symbol} reason=no_reliable_price`);
@@ -12788,8 +12805,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           if (liveQuote && liveQuote.price !== null && liveQuote.source !== 'no_reliable_price') {
             currentPrice = liveQuote.price;
             priceSource = liveQuote.source;
-            const restFallbackSources = ['rest_fallback', 'kraken_rest', 'binance_rest', 'coingecko', 'last_known_good'];
-            fallbackType = restFallbackSources.some(s => liveQuote.source.includes(s)) ? 'rest_fallback' : 'none';
+            // P19-B8.9: one shared membership + predicate (was 5 drifted inline copies).
+            fallbackType = isRestFallbackSource(liveQuote.source) ? 'rest_fallback' : 'none';
           } else {
             fallbackType = 'entry_fallback';
             console.log(`[8.8.3-I6][FALLBACK_TO_ENTRY] symbol=${position.symbol} reason=no_reliable_price`);
