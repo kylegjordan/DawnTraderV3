@@ -1,6 +1,15 @@
 # P19-B8.7 — TRADE-TABLE PARITY: Paper/Live open+closed tables mirror the VTS reference set
 
-change-class: non_architecture
+change-class: architecture
+<!-- AMENDED 2026-07-18 (B-GOV-2 amendable-class rule; checker alert 62f4f835 was RIGHT in form):
+     declared non_architecture at Step-1 for the original display-parity half (correct then);
+     Step-9 GREW into architecture — paper UI re-keyed onto the shared VTS components, the
+     pattern-pool DBS transit contract restored (#530, a signal-lane revival), VTS friction-
+     component capture + the xstock spread-source change. The architecture doc set WAS
+     delivered with Step-9 (SIM ★ banner + SysManual Ch5 note + the new pattern-lane section,
+     commit 754b0f563) and Langston's closing pass verified the content at the ref — this
+     header amendment closes the declaration/delivery gap the checker correctly flagged. -->
+
 Owner: CC-B · Date: 2026-07-16 · Kyle directive (verbatim intent): "the columns that we
 have in the VTS open trades and in the VTS closed trades should be mirrored by the paper
 mode tabs for open and closed trades. And same for live mode... VTS is the most
