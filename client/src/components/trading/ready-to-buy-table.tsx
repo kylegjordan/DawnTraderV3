@@ -40,6 +40,9 @@ interface TradingSignal {
   // Kyle 2026-07-17: queue-entry timestamp (rtb_signals.queued_at, rides the
   // route's row spread) — the Duration column's anchor.
   queuedAt?: string | null;
+  // Kyle 2026-07-18: the Signal column reads signalType/sourcePool from the row
+  // metadata (where the SQE queue-write stores them; no typed columns exist).
+  metadata?: Record<string, unknown> | null;
   estimatedQuantity?: number;
   estimatedValue?: number;
   marketRegime?: string;
@@ -328,9 +331,9 @@ export default function ReadyToBuyTable() {
                       promotion order; RankingScore = the ATTACHED active rank key;
                       FinalScore + ML Conf columns REMOVED (inert/fabricated). */}
                   <SortHeader field="rankScore" label="Rank" />
-                  {/* Kyle 2026-07-17: RankingScore sits NEXT TO Rank. */}
-                  <SortHeader field="rankScore" label="RankingScore" />
+                  {/* Kyle 2026-07-18 (supersedes 07-17): Symbol BEFORE RankingScore. */}
                   <SortHeader field="symbol" label="Symbol" />
+                  <SortHeader field="rankScore" label="RankingScore" />
                   {/* Kyle 2026-07-17: S.Wgt column REMOVED — the displayed value was
                       degenerate (every row at the 0.2 equal-weight/fallback), so it
                       conveyed nothing. The L9 weight MACHINERY is NOT dead (it feeds
@@ -345,6 +348,8 @@ export default function ReadyToBuyTable() {
                   <SortHeader field="quantity" label="Qty" />
                   <SortHeader field="volume" label="24h Vol" />
                   <SortHeader field="strategy" label="Strategy" />
+                  {/* Kyle 2026-07-18: pattern-vs-quant visibility on the queue. */}
+                  <th className="text-left py-2 px-3 font-medium" data-testid="header-signal-type" title="How this signal was generated: QUANT (regime-driven strategy selection), PATTERN (candlestick-pattern trigger), or HYBRID (quant + pattern confluence).">Signal</th>
                   <SortHeader field="marketRegime" label="Regime" />
                   <SortHeader field="marketFriction" label="Friction" />
                   {/* P19-B8.7 Step-9: decision-time DBS + the chosen net EV the
@@ -392,22 +397,9 @@ export default function ReadyToBuyTable() {
                           {rank}
                         </span>
                       </td>
-                      {/* Kyle 2026-07-17 (screenshot): the CELL order now matches the
-                          header order — RankingScore BEFORE Symbol. The rebuild had
-                          reordered only the headers, so scores rendered under "Symbol"
-                          and symbols under "RankingScore". S.Wgt cell REMOVED with its
-                          column (degenerate display; see the header-side comment). */}
-                      <td className="text-right py-3 px-3" data-testid={`text-ranking-score-${index}`}>
-                        <span className={cn(
-                          "font-semibold font-mono",
-                          rankScore !== null && rankScore > 0 ? "text-success" : "text-muted-foreground"
-                        )}>
-                          {rankScore !== null && !isNaN(rankScore) ? rankScore.toFixed(4) : '—'}
-                        </span>
-                      </td>
-                      {/* P19-B8.7 Step-9: stacked symbol cell — symbol + display name +
-                          class badge, the same getAssetName composition the VTS
-                          tables use (Kyle's stacked-name directive). */}
+                      {/* Kyle 2026-07-18: Symbol cell BEFORE RankingScore (supersedes the
+                          07-17 order). Stacked symbol — pair + display name + class
+                          badge, the same getAssetName composition the VTS tables use. */}
                       <td className="py-3 px-3" data-testid={`text-symbol-${index}`}>
                         <div className="flex flex-col">
                           <span className="font-semibold">{signal.symbol}</span>
@@ -420,6 +412,14 @@ export default function ReadyToBuyTable() {
                             </Badge>
                           )}
                         </div>
+                      </td>
+                      <td className="text-right py-3 px-3" data-testid={`text-ranking-score-${index}`}>
+                        <span className={cn(
+                          "font-semibold font-mono",
+                          rankScore !== null && rankScore > 0 ? "text-success" : "text-muted-foreground"
+                        )}>
+                          {rankScore !== null && !isNaN(rankScore) ? rankScore.toFixed(4) : '—'}
+                        </span>
                       </td>
                       {/* P19-B8.9 (OBJ-5): the stored row price wears the venue-quiet badge
                           when we hold no fresh venue-tagged value for the symbol (server-side
@@ -501,6 +501,20 @@ export default function ReadyToBuyTable() {
                         <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary">
                           {formatStrategy(signal.strategy)}
                         </span>
+                      </td>
+                      {/* Kyle 2026-07-18: QUANT / PATTERN / HYBRID origin, from the
+                          queue-time metadata (honest em-dash when absent). Colors match
+                          the VTS source-pool convention (blue/purple/orange). */}
+                      <td className="py-3 px-3" data-testid={`text-signal-type-${index}`}>
+                        {(() => {
+                          const st = typeof (signal.metadata as any)?.signalType === 'string' ? (signal.metadata as any).signalType as string : null;
+                          if (!st) return <span className="text-muted-foreground">—</span>;
+                          const cls = st === 'QUANT' ? 'bg-blue-500/10 text-blue-500'
+                            : st === 'PATTERN' ? 'bg-purple-500/10 text-purple-500'
+                            : st === 'HYBRID' ? 'bg-orange-500/10 text-orange-500'
+                            : 'bg-muted text-muted-foreground';
+                          return <span className={cn('inline-flex items-center px-2 py-1 rounded-full text-xs font-medium', cls)}>{st}</span>;
+                        })()}
                       </td>
                       <td className="py-3 px-3" data-testid={`text-regime-${index}`}>
                         {signal.marketRegime ? (
