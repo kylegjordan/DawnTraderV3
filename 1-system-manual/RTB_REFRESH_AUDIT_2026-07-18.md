@@ -1,0 +1,156 @@
+# RTB REFRESH AUDIT — 2026-07-18 (CC-A, Kyle-directed)
+
+**Trigger:** Kyle challenged CC-A's shallow read of the RTB refresh (2026-07-18). This document replaces that read with a code-and-runtime-evidenced audit. Every claim below is cited at `path:line` or backed by a live staging log measurement over a 9-hour window (400,005 lines, 2026-07-18 11:52→20:52 UTC).
+
+**Standing rule applied:** GOVERNED-READ (CLAUDE.md rule 22) — no assertion of absence without presence-evidence; every "not called" is a repo-wide grep with tests excluded.
+
+---
+
+## 0. Executive finding
+
+**The active path runs TWO independent RTB refresh mechanisms concurrently over the same queue.** They were built two days apart in December 2025 by the same Replit agent session. Neither knows about the other. There is no mutual-exclusion guard. **Both feed the same SQE, and either can delete a queued signal.** They differ in what data they refresh: one genuinely re-reads market state, the other re-evaluates a frozen queue-time snapshot.
+
+**PROVEN by runtime evidence, not inference:** in the 9-hour window, 13 distinct symbols were processed by Mechanism A and 13 by Mechanism B — a **13/13 overlap**, with the same signals passing through both within ~14 seconds of each other (e.g. `SOL/USD`, `TRX/EUR`, `BNB/USD`, `SOL/EUR` at 20:52:05 via A and 20:52:19 via B).
+
+---
+
+## 1. The two mechanisms — identity, wiring, cadence
+
+### Mechanism A — per-signal, Central-Clock driven ("the rich refresh")
+- **Entry:** `ready_to_buy_service.startRefreshCycle` (`:602`) subscribes a handler to the Central Clock; fires when `tick.tickNumber % RTB_REFRESH_INTERVAL_SECONDS === 0`, `RTB_REFRESH_INTERVAL_SECONDS = 30` (`:361`).
+- **Chain:** tick → `executePerSignalRefresh` (`:689`) → per-signal loop (`:716-745`) → `refreshSingleSignal` (`:762`) → SQE at `:945`.
+- **Started by:** `active-execution-engine.ts:482` (on engine start) and `startup/trading-bootstrap.ts:65`.
+- **Concurrency control:** sets a per-signal `isRefreshing` flag (`:720`), cleared in `finally` (`:738`).
+
+### Mechanism B — standalone bucketed service ("the snapshot refresh")
+- **Entry:** `server/index.ts:348` → `rtbRefreshService.start()`.
+- **Chain:** micro-cycle tick (`MICRO_CYCLE_INTERVAL = 15`s, `rtb-refresh-service.ts:177`) → bucket index over `TOTAL_BUCKETS = 8` (macro cycle 120s, `:178-179`) → `readyToBuyService.refreshAndRank(mode, bucketKeys)` (`:446`) → chunked batch loop → SQE at `ready_to_buy_service.ts:1219`.
+- **Started by:** server boot, unconditionally.
+- **Concurrency control:** none with respect to Mechanism A (see §3).
+
+### Cadence consequence
+A given queued signal is re-evaluated by **A every 30s** and by **B once per 120s macro cycle** — i.e. roughly **5 SQE evaluations per signal per 2 minutes**, from two mechanisms that disagree about what "refresh" means.
+
+---
+
+## 2. What each mechanism actually refreshes — the material difference
+
+Both build an `SQEInput` and call the **same** evaluator (§4). They differ in the freshness of what they put in it.
+
+| Input | Mechanism A (`refreshSingleSignal`) | Mechanism B (`refreshAndRank` batch) |
+|---|---|---|
+| `volatility` | `currentVol` — **re-read** | `metadata.volatility ?? 0.3` — **frozen** (`:1206`) |
+| spread / geometry | current spread; geometry re-fetch w/ `geometryRefreshed` flag | **not refreshed** |
+| maker/taker + `chosenNetEv` | **re-decided this tick** (`_b72bRefreshedMT`), else stored | stored row snapshot — comment: *"No re-decide runs on this path, so feed the stored row snapshot"* (`:1213-1214`) |
+| `netExpectedEdge` | **recomputed**, written back to metadata | not recomputed |
+| `regimeWeight` | `metadata.regimeWeight` (stored) | `metadata.regimeWeight ?? 0.5` (stored) |
+| `trendStrength` | `metadata.trendStrength ?? 0.5` (stored) | same (stored) |
+| `regimeStability` | **deliberately not fed** (`:924-930`) | **deliberately not fed** (`:1210`) |
+| `finalScore` | recomputed with decay | recomputed with decay |
+
+**Mechanism B's only moving part is the decay term on `finalScore`** — and the finalScore gate is retired (§4), so B's re-evaluation is, for admission purposes, **near-deterministically a no-op**: same inputs in, same verdict out. This — not "disabled gates" — is the arithmetic explanation for `RTB Rejected in Refresh = 0` on crypto.
+
+---
+
+## 3. Collision: no mutual exclusion
+
+- Mechanism A sets/clears the per-signal `isRefreshing` flag (`:720`, `:738`); a reader exists at `:594`.
+- `refreshAndRank` (`:1071-1334`) **never reads `isRefreshing`** and never consults `signalRefreshStates` (grep over the function body: zero hits).
+- Both paths delete on SQE failure — A at `:959` (`deleteRtbSignals`), B via `bulkDeletes` at `:1235-1238`.
+
+**Consequence:** the same signal can be in-flight in both mechanisms simultaneously, evaluated against different input freshness, with either permitted to evict it. Whichever runs last wins the stored state.
+
+---
+
+## 4. The SQE — one evaluator, confirmed (corrects an earlier CC-A error)
+
+Repo-wide, tests excluded, there are exactly **three** live SQE call sites, all invoking the same function:
+- `signal-orchestrator.ts:804` — generation
+- `ready_to_buy_service.ts:945` — Mechanism A refresh
+- `ready_to_buy_service.ts:1219` — Mechanism B refresh
+
+All three go through `signalQualityEvaluator.evaluate()` (`signal_quality_evaluator.ts:701`) → `evaluateSignalQuality` (`:241`), the full-gate async evaluator. **Refreshed signals are NOT evaluated by a different SQE than new signals.**
+
+**Dead code found:** `evaluateSignalQualitySync` (`:509`) implements a REDUCED gate set (no xstock-market-closed, no strategy-disabled, no Confidence floor, no AMR, no Governance) and has **zero live callers** (grep: no hits outside the file and tests). Same for `evaluateSignalBatch` (`:607`) / `evaluateBatch` (`:715`). These are rule-18 removal candidates and were the source of CC-A's incorrect "two SQEs" suspicion.
+
+**FinalScore gate is genuinely retired — Kyle's recollection is correct.** At `:345-354` the comparison still runs but **nothing is pushed to `failures`**; it emits a shadow log + evidence-sink row only. The gate does not block. What remains live is the *computation and storage* of finalScore (both refresh mechanisms re-derive it) — already homed as **#525 / batch `B-FINALSCORE-PURGE`**, owner CC-B.
+
+**Two gates never block anywhere.** Both refresh sites AND the generation site pass `{ gateShadowMode: true }`. Under that flag the **Confidence floor** (`:401-413`) and **Governance** (`:444-456`) gates log a would-reject and push nothing to `failures`. These two gates have therefore never rejected a signal at any point in the active path — not merely at refresh. (Prior CC-A statement that this was refresh-specific was wrong.)
+
+---
+
+## 5. Provenance — why this exists
+
+| Date | Commit | Event |
+|---|---|---|
+| 2025-12-17 | `754b9779a`, `ed7d602eb` | `refreshAndRank` first appears in `ready_to_buy_service.ts` |
+| 2025-12-21 | `e0317475b` | *"Refine trading logic by removing outdated TTL and simplifying refresh mechanisms"* — R9.3 Integrity Rebuild adds **per-signal refresh timers** (Mechanism A), removes TTL-based expiry, deletes `server/legacy/rtbQueueRefresher.legacy.ts` |
+| 2025-12-23 | `7a029f390` | *"Introduce a separate service for refreshing and ranking trading signals… decoupling it from the FX5 scan loop"* — extracts the pre-existing `refreshAndRank` into the standalone 15s service (Mechanism B) |
+
+Both commits carry the **same** `Replit-Commit-Session-Id: 4ce4eda7-…` — one continuous Replit-agent session. The Dec-21 commit's stated intent was to *simplify* refresh mechanisms; two days later the same session **promoted the older mechanism into its own service instead of retiring it**. Classic Replit-era accretion — precisely the multi-generation legacy overlay CLAUDE.md rule 23 (FIX-ON-FIND) was written for.
+
+This is **not** a Phase-8-vs-Phase-19 split. Both predate the migration and both survived it untouched.
+
+## 5.1 Why the June 2026 pipeline audit missed it
+
+`ACTIVE_TRADING_PIPELINE_AUDIT_AS_OF_2026-06-18.md` references `refreshAndRank` exactly once (`:192` — noting it recomputes finalScore but not rankingScore). It contains **no reference** to `executePerSignalRefresh`, `refreshSingleSignal`, the Central-Clock subscription, or the existence of a second mechanism. The audit traced the batch path and stopped. That audit also already flagged (`:177`) the placeholder inputs — `regimeStability` from hardcoded `computeGlobalStability(0.5, 0, confidence)`, `trendStrength` hardcoded `0.5`, `volatility` default `0.3` — which remain live.
+
+---
+
+## 6. Runtime measurement (9h window, staging, 2026-07-18 11:52→20:52 UTC)
+
+| Marker | Count | Meaning |
+|---|---|---|
+| `[11.0E][REFRESH_COMPLETE]` | 105 | Mechanism A outcomes |
+| `[11.0E][RECONFIRM_COMPLETE]` | 28 | Mechanism B outcomes |
+| `[A3.R9.3][RTB_REFRESH][TICK]` | 7 | Mechanism A ticks — **anomalously low** vs ~1,080 expected at 30s |
+| rtb-refresh-service markers | 1,036 | Mechanism B service activity |
+| Symbols in A | 13 | — |
+| Symbols in B | 13 | — |
+| **Symbols in BOTH** | **13** | **100% overlap — double-processing confirmed** |
+
+**Open thread (NOT resolved by this audit):** the tick count (7) is irreconcilable with a 30-second timer over 9 hours, and the observed outcome volume (133 in 9h) cannot produce the funnel's cumulative 25,917 reconfirmations since 2026-07-14. Either the counter counts something other than what its label implies, or the cadence changed materially. **This must be resolved before any funnel number is trusted.**
+
+---
+
+## 7. Safety-relevant consequence — the #523 backstop ruling
+
+Issue **#523** (2026-07-16) converted the `[11.8B]` net-expectancy open-gate from **BLOCK → SHADOW**. Langston's hard GO/NO-GO condition was proof that the refresh evicts negative-net-EV signals. The proof recorded in #523 cites `ready_to_buy_service.ts:946` and `:959` — **both inside `refreshSingleSignal`, i.e. Mechanism A only.**
+
+Mechanism B does **not** re-decide net expectancy; it replays the stored snapshot (§2). Since B also runs, and either mechanism can be the last writer of queue state, the redundancy argument that justified removing a live blocking backstop rests on **one of two mechanisms**, not on the system as it actually runs.
+
+**This audit does not conclude the backstop removal was wrong.** It concludes the evidence base for that ruling was incomplete, and Langston — who issued it — must re-examine it with the two-mechanism picture in hand. Flagged as blocking on the pre-live gate (#522 family).
+
+---
+
+## 8. What the RTB refresh SHOULD do — proposed definition (for Kyle/Langston ratification)
+
+Kyle's stated intent, to be adopted as the contract:
+
+> The RTB refresh updates a queued signal to its **current form** — re-reading every input the SQE evaluates — and then re-evaluates it through the **same SQE a new signal would face**. A signal that can no longer supply an input the SQE needs is **rejected loudly**, not passed on stale or absent data.
+
+Derived requirements:
+1. **ONE refresh mechanism.** Parallelism = chunking within it, never a second scheduler.
+2. **Every SQE-consumed input re-read at refresh** — volatility, spread, geometry, regime, regime stability, net expectancy, pool context. Anything deliberately frozen must be named and justified in governance.
+3. **Fail-loud on missing inputs.** The current `chosenNetEv != null` fail-open (`signal_quality_evaluator.ts:362`) and the silent unclassifiable-asset-class drop (`:1183-1188`, `:904-910`) are the opposite of this.
+4. **Every queue exit counted** — promoted, rejected-in-refresh, error, superseded, unclassifiable, dropped. No silent deletes.
+5. **Shadow-mode gates are a decision, not a default.** Confidence + Governance being globally non-blocking must be an explicit ratified state or be un-shadowed.
+
+---
+
+## 9. Homed work (§9.4 — every item gets a named home)
+
+| # | Item | Home |
+|---|---|---|
+| #532 | **RTB refresh dual-mechanism consolidation** (this audit's core) — reconcile to one mechanism against the §8 contract; resolve the §6 telemetry anomaly | **`B-RTB-REFRESH-CONSOLIDATE`** — new batch, pre-Phase-21, Langston-gated |
+| #533 | **SQE dead-code purge** — `evaluateSignalQualitySync`, `evaluateSignalBatch`/`evaluateBatch`, stale TTL header comment (`:16-20`) | **`B-SQE-DEADCODE-PURGE`** — new batch (rule 18: no lingering legacy) |
+| #534 | **Globally non-blocking Confidence + Governance gates** — ratify-or-unshadow | folds into `B-RTB-REFRESH-CONSOLIDATE` scope; Langston rules |
+| #535 | **#523 backstop re-examination** with the two-mechanism picture | Langston, before the #522 pre-live gate |
+| — | FinalScore compute/store purge | already homed: #525 / `B-FINALSCORE-PURGE` (CC-B) |
+| — | Funnel exit-counter completeness | already homed: #419 (B8.5 observability) — **widen to cover the §6 anomaly** |
+
+---
+
+## 10. Method note
+
+Claims in §§1-6 are from direct reads of `ready_to_buy_service.ts`, `signal_quality_evaluator.ts`, `rtb-refresh-service.ts`, `active-execution-engine.ts`, `index.ts`, git history, and the staging log. **Not yet verified and deliberately excluded:** the additional queue-exit paths (superseded-by-re-detection, duplicate purge, confidence sweep, failed-execution-after-removal) reported by an exploratory agent earlier and never independently confirmed by CC-A. They are candidates for the consolidation batch's own pre-audit, not findings of this document.
