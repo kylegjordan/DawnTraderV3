@@ -25,7 +25,6 @@ import { b5SizingAudit } from './b5-sizing-audit.js';
 import { i1RtbDiagnostics } from './i1-rtb-diagnostics-service.js';
 import { rtbMetricsService } from './rtb-metrics-service.js';
 import { getGlobalActiveEngineManager } from './active-engine-service.js';
-import { signalLifecycleAudit, type RejectionReason } from '../core/audit/signal_lifecycle_audit.js';
 import { isCorrelatedExposure, riskConcentrationAnalyzer } from './risk-concentration.js';
 import { getCachedNumberRequired } from './module-constants-service.js';
 
@@ -750,38 +749,8 @@ export async function checkGuardrailRisk(
       
       // Phase 8.8.3-I5: Diagnostic logging for guardrail fire audit
       console.log(`[8.8.3-I5][GUARDRAIL_FIRE] guardrail=${result.code} symbol=${trade.symbol} strategy=${trade.strategy} reason=${(result as any).reason?.slice(0, 100)} timestamp=${Date.now()}`);
-      
-      // Phase 8.8.4-A: Record SLAL VALIDATION failure
-      if (trade.signalId) {
-        const slalReason = mapCodeToSLALReason(result.code);
-        signalLifecycleAudit.recordValidation(
-          trade.signalId,
-          mode,
-          trade.symbol,
-          trade.strategy,
-          false,
-          { guardrailCode: result.code, reason: (result as any).reason },
-          slalReason
-        );
-      }
     }
     return result;
-  };
-  
-  // Phase 8.8.4-A.2: Map TradeSafetyResultCode to SLAL RejectionReason
-  // Updated to use MAX_TRADES instead of MAX_POSITIONS for clarity
-  const mapCodeToSLALReason = (code: TradeSafetyResultCode): RejectionReason => {
-    switch (code) {
-      case 'KILL_SWITCH': return 'DAILY_LOSS_LIMIT';
-      case 'POSITION_LIMIT': return 'MAX_TRADES'; // Max trades per symbol/asset
-      case 'COOLDOWN': return 'SYMBOL_COOLDOWN';
-      case 'MAX_POSITION': return 'POSITION_CAP';
-      case 'MAX_TRADES': return 'MAX_TRADES'; // Max simultaneous open trades
-      case 'MAX_TOTAL_EXPOSURE': return 'POSITION_CAP';
-      case 'ENGINE_STOPPING': return 'OTHER';
-      case 'CORRELATION_EXPOSURE': return 'GUARDRAIL_BLOCKED';
-      default: return 'GUARDRAIL_BLOCKED';
-    }
   };
   
   const killSwitchCheck = checkKillSwitch(settings, mode, trade.symbol);
@@ -859,19 +828,7 @@ export async function checkGuardrailRisk(
   
   // B5: Log successful guardrail pass
   logGuardrailCheck('ALL_PASSED', { ok: true });
-  
-  // Phase 8.8.4-A: Record SLAL VALIDATION success
-  if (trade.signalId) {
-    signalLifecycleAudit.recordValidation(
-      trade.signalId,
-      mode,
-      trade.symbol,
-      trade.strategy,
-      true,
-      { allChecks: 'passed' }
-    );
-  }
-  
+
   console.log(`[8.8.3-H4][GUARDRAIL_PASS] All pre-trade checks passed for ${trade.symbol}`);
   return { ok: true };
 }

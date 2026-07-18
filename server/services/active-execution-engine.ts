@@ -104,7 +104,7 @@ import { normalizeToInternalSymbol, getKrakenRestPair } from '../markets/kraken-
 import { priceTraceService } from './price-trace-service.js';
 import { marketVolumeCache } from './market-volume-cache.js';
 import { c5FinancialDiagnostics } from './c5-financial-diagnostics.js';
-import { signalLifecycleAudit } from '../core/audit/signal_lifecycle_audit.js';
+
 import { readyToBuyService } from '../core/rtb/ready_to_buy_service.js';
 import { tclWatchdog } from '../core/rtb/tcl_watchdog.js';
 import { eventBus, type TCLActivatedEvent, type TradeClosedEvent } from '../lib/event-bus.js';
@@ -2174,6 +2174,22 @@ export class ActiveExecutionEngine {
         // dormant in Phase-19, so a promoted maker-chosen signal opens through the normal
         // path below with its chosen mode carried on the signal for the [11.8B] gate.
 
+        // P19-B8.10 (OBJ-5a): stamp the promote-time R-multiple — the number that
+        // actually won the slot — onto the signal metadata via the SAME
+        // getDisplayRankKey formula the RTB display uses (one formula, two
+        // surfaces). Shown as "Promote R" on the open table. Display telemetry
+        // only: selection is already made; absent stays absent, never fabricated.
+        try {
+          const _rankStampClass = asValidAssetClass(signal.metadata?.assetClass) ?? undefined;
+          const _promoteRank = readyToBuyService.getDisplayRankKey(signal, _rankStampClass);
+          if (_promoteRank.value != null && Number.isFinite(_promoteRank.value)) {
+            (signal as { metadata?: Record<string, unknown> | null }).metadata =
+              { ...((signal.metadata as Record<string, unknown> | null) ?? {}), rankAtPromote: _promoteRank.value };
+          }
+        } catch (rankErr) {
+          console.warn(`[P19-B8.10][RANK_STAMP] rankAtPromote stamp failed for ${signal.symbol} (open proceeds, cell stays absent):`, rankErr instanceof Error ? rankErr.message : rankErr);
+        }
+
         // Directive 8.8.4-A3.R1: RTB removal must precede trade creation to prevent double-activation
         // Step 1: Remove signal from RTB queue BEFORE attempting trade execution
         await readyToBuyService.promoteSignal(signal.id, 'pending');
@@ -2862,19 +2878,6 @@ export class ActiveExecutionEngine {
     if (existingPositionForSymbol) {
       const existingCount = existingPositions.filter(p => p.symbol === signal.symbol).length;
       console.log(`[I7-PM-FOCUS][DUP_GUARD_BLOCK] symbol=${signal.symbol} existingCount=${existingCount} action="skip_new_position"`);
-      
-      // Phase 8.8.4-A: SLAL - Record EXECUTION failure (duplicate position)
-      if (signal.signalId) {
-        signalLifecycleAudit.recordExecution(
-          signal.signalId,
-          this.mode,
-          signal.symbol,
-          signal.strategy,
-          false, // failure
-          { existingCount, reason: 'duplicate_position' },
-          'DUPLICATE_POSITION'
-        );
-      }
       // P19-B5a: TCL duplicate-position reject capture (active path; the paper
       // engine open only runs when paper-active → dormant by construction).
       // This is the ONLY active-path TCL reject: max_open_trades is a cycle-level
@@ -3200,26 +3203,6 @@ export class ActiveExecutionEngine {
         });
       } catch (b70Err) {
         console.warn(`[B70][ARCH] paper-open admit signal-eval archive enqueue failed:`, b70Err instanceof Error ? b70Err.message : b70Err);
-      }
-
-      // Phase 8.8.4-A: SLAL - Record EXECUTION success (trade successfully opened)
-      if (signal.signalId) {
-        signalLifecycleAudit.recordExecution(
-          signal.signalId,
-          this.mode,
-          signal.symbol,
-          signal.strategy,
-          true, // success
-          {
-            tradeId: trade.id,
-            positionId: openPosition.id,
-            quantity,
-            actualEntryPrice,
-            positionValue,
-            entryFee,
-            entrySlippage: totalSlippage,
-          }
-        );
       }
 
       // Phase 8.8.3-B3.6: Subscribe to Kraken WebSocket for real-time price updates

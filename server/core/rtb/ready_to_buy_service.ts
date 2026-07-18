@@ -44,7 +44,7 @@ import { safeResolveAssetClass, asValidAssetClass, type AssetClass } from '../..
 import { isCapacityBlock, type TradingMode, type CapacityGuardrailCode } from '../../services/guardrail-policy';
 // P19-B5a: active-path RTB reject capture (structurally dormant — queue is empty in VTS/passive).
 import { tradingModeToRunMode } from '../../services/run-mode-controller.js';
-import { signalLifecycleAudit } from '../audit/signal_lifecycle_audit';
+
 import type { RtbSignal, InsertRtbSignal } from '@shared/schema';
 import { tclWatchdog } from './tcl_watchdog';
 import { eventBus, type PromotionEvent } from '../../lib/event-bus';
@@ -73,7 +73,6 @@ import { STRATEGY_FAMILY_MAP, normalizeStrategy } from '../../config/canonical-r
 import { getCachedSpread } from '../metrics/cost-metrics.js';
 import { getNormalizedVolatility as getVolatility } from '../metrics/market-metrics.js';
 // Phase 14.5: Ranking weights for cross-family signal comparison
-import { computeRankingScore, normalizeNetReturn, FINAL_SCORE_GAP_OVERRIDE } from '../../config/ranking-weights.js';
 
 // T5: Subscribe to pool size updates from RTB Refresh Service
 let currentPoolSize = getAdaptivePoolSize();
@@ -1417,92 +1416,12 @@ class ReadyToBuyService {
   // zero production + zero test callers. Live admission = queueSQESignal → upsertRtbSignal.
   // Archived: _archive/deleted-code/p19-b6-5b-rtb-deadcode.removed; logged: DELETED_COMPONENTS_LOG.md.
 
-  /**
-   * Directive 11.0E: Get the highest-FinalScore queued signal for a mode
-   * Uses FinalScore as primary ranking metric
-   */
-  async getTopSignal(mode: TradingMode): Promise<RtbSignal | null> {
-    const signals = await storage.getRtbSignals({ mode, status: 'queued' });
-    if (signals.length === 0) return null;
-
-    let bestSignal: RtbSignal | null = null;
-    let bestRankingScore = -1;
-
-    for (const signal of signals) {
-      const signalFinalScore = parseFloat(signal.finalScore || '0');
-
-      // Phase 14.5: Use rankingScore from metadata if available, otherwise fall back to FinalScore
-      const metadata = signal.metadata as Record<string, unknown> | null;
-      let signalRankingScore = (metadata?.rankingScore as number) ?? signalFinalScore;
-
-      // Phase 14.5: FinalScore gap safety rule
-      // If gap > 0.10, FinalScore always wins (prevents return-magnitude gaming)
-      if (bestSignal) {
-        const bestFinalScore = parseFloat(bestSignal.finalScore || '0');
-        const gap = Math.abs(signalFinalScore - bestFinalScore);
-        if (gap > FINAL_SCORE_GAP_OVERRIDE) {
-          // Large quality gap — use FinalScore directly
-          signalRankingScore = signalFinalScore;
-        }
-      }
-
-      if (signalRankingScore > bestRankingScore) {
-        bestRankingScore = signalRankingScore;
-        bestSignal = signal;
-      }
-    }
-
-    if (bestSignal) {
-      const ageMinutes = bestSignal.queuedAt
-        ? ((Date.now() - new Date(bestSignal.queuedAt).getTime()) / 60000).toFixed(1)
-        : 'unknown';
-      console.log(`[RTB] Top signal: ${bestSignal.symbol} ${bestSignal.strategy} rankingScore=${bestRankingScore.toFixed(4)} age=${ageMinutes}min`);
-    }
-
-    // B-5 AMR Obj-10 (#217 wire-at-shadow): compute the CONTEXT_BONUS terms
-    // FOR REAL on this ranked set and stamp the evidence on the AMR ledger.
-    // STRUCTURALLY ABSENT from the selection above — bestSignal is already
-    // chosen; nothing here can change it. Fire-and-forget; never throws into
-    // the selection path. Runs only when the class flag is shadow|active.
-    void (async () => {
-      try {
-        const { safeResolveAssetClass, asValidAssetClass } = await import('../../../shared/asset-classes.js');
-        const { getAmrFlagState, recordRankingShadow } = await import('../../services/amr-weather-report.js');
-        const { computeContextBonusShadow } = await import('../../services/amr-context-bonus-shadow.js');
-        const byClass = new Map<string, typeof signals>();
-        for (const s of signals) {
-          // P19-B6.5d: prefer the carried signal stamp (collision-correct); safe-resolve fallback.
-          const k = asValidAssetClass((s as { assetClass?: unknown }).assetClass)
-            ?? asValidAssetClass((s as { metadata?: { assetClass?: unknown } }).metadata?.assetClass)
-            ?? safeResolveAssetClass(s.symbol, 'kraken');
-          if (k === null) continue;
-          const arr = byClass.get(k) ?? [];
-          arr.push(s);
-          byClass.set(k, arr);
-        }
-        for (const [klass, classSignals] of byClass) {
-          let flag: string;
-          try { flag = getAmrFlagState(klass as never); } catch { continue; }
-          if (flag === 'disabled') continue;
-          const stamp = await computeContextBonusShadow(
-            klass as never,
-            classSignals.map(s => ({ symbol: s.symbol, regime: (s as { regime?: string | null }).regime ?? null, finalScore: s.finalScore, metadata: s.metadata as Record<string, unknown> | null })),
-            bestSignal && (asValidAssetClass((bestSignal as { assetClass?: unknown }).assetClass)
-              ?? asValidAssetClass((bestSignal as { metadata?: { assetClass?: unknown } }).metadata?.assetClass)
-              ?? safeResolveAssetClass(bestSignal.symbol, 'kraken')) === klass ? bestSignal.symbol : null,
-          );
-          recordRankingShadow(klass as never, stamp);
-          if (stamp.rank1Changed) {
-            console.log(`[B-5][#217][SHADOW] ${klass}: CONTEXT_BONUS WOULD change rank-1 (satRate=${stamp.ceilingSaturationRate?.toFixed(2) ?? 'n/a'})`);
-          }
-        }
-      } catch (err) {
-        console.warn(`[B-5][#217] shadow compute failed (selection unaffected): ${err instanceof Error ? err.message : err}`);
-      }
-    })();
-
-    return bestSignal;
-  }
+  // P19-B8.10 (OBJ-5c, rule 18): getTopSignal DELETED with checkForPromotion as a
+  // unit — the dead legacy ranker pair (finalScore-fallback + FINAL_SCORE_GAP_OVERRIDE
+  // ordering). Zero live callers: the engine promotes via getRankedSignals (B7.1
+  // R-multiple). 2026-06-18 dead-ranker coupling RESOLVED: getRankedSignals won;
+  // rankingScore-ordering never adopted; P25 verdict delete. Archived:
+  // _archive/deleted-code/p19-b8-10-dead-ranker-pair.removed; DELETED_COMPONENTS_LOG.md.
 
   /**
    * Get a specific queued signal by symbol+strategy
@@ -1686,19 +1605,6 @@ class ReadyToBuyService {
     }
 
     console.log(`[A3.R9.2][PROMOTION_START] symbol=${normalizedSymbol} tradeId=${tradeId} starting atomic promotion`);
-    
-    // Step 1: Record SLAL PROMOTED event first (audit trail)
-    signalLifecycleAudit.recordPromoted(
-      signal.signalId,
-      mode,
-      normalizedSymbol,
-      signal.strategy,
-      {
-        tradeId,
-        finalScore: parseFloat(signal.finalScore || '0'),
-        queueDurationMs: Date.now() - new Date(signal.queuedAt).getTime(),
-      }
-    );
 
     // Step 2: Log promotion trace
     this.logRtbTrace(mode, normalizedSymbol, signal.strategy, oldStatus, 'promoted', 'TCL_promotion');
@@ -1820,41 +1726,6 @@ class ReadyToBuyService {
     console.log(`[RTB] Re-evaluated queue: ${removed} removed, ${remaining} remaining`);
 
     return { removed, remaining };
-  }
-
-  /**
-   * Check if there's capacity for promotion and get the best candidate
-   * R9.3-C: expiresAt check removed - lifecycle governed by SQE only
-   */
-  async checkForPromotion(mode: TradingMode): Promise<RtbSignal | null> {
-    // Get the top signal (already filtered by SQE revalidation)
-    const topSignal = await this.getTopSignal(mode);
-
-    if (!topSignal) {
-      return null;
-    }
-
-    // R9.3-C: No expiry check - signals are valid until SQE rejects them
-    // R9.3-A: Check if signal is currently refreshing
-    if (this.isSignalRefreshing(mode, topSignal.signalId)) {
-      console.log(`[A3.R9.3][PROMOTION] Signal ${topSignal.symbol}/${topSignal.strategy} is refreshing - skipping`);
-      return null;
-    }
-
-    // Batch 19F: Pair-level promotion guard (prevent overexposure)
-    // Skip promotion if an active trade already exists for this pair (regardless of strategy)
-    try {
-      const activeTrades = await storage.getActiveTrades(mode as 'paper' | 'live');
-      const existingTrade = activeTrades.find(t => t.symbol === topSignal.symbol);
-      if (existingTrade) {
-        console.log(`[19F][RTB] Skipping promotion for ${topSignal.symbol}/${topSignal.strategy} — active trade already exists for this pair`);
-        return null;
-      }
-    } catch (err) {
-      console.warn(`[19F][RTB] Pair-level guard check failed, proceeding with promotion:`, err);
-    }
-
-    return topSignal;
   }
 
   /**
@@ -2357,7 +2228,12 @@ class ReadyToBuyService {
       sourcePool: input.sourcePool || undefined,
       signalType: input.signalType || 'QUANT',
       assetClass: resolvedAssetClass, // P19-B4a (A1.5): resolve-or-throw, no silent default
-      rankingScore: input.rankingScore ?? parseFloat(String(input.finalScore || '0')),
+      // P19-B8.10 (OBJ-5b): the `?? finalScore` fallback is REMOVED — the retired
+      // metric (#525 fence) was silently masquerading as the ranking score on every
+      // row (the orchestrator never passes rankingScore). Absent stays absent; the
+      // RTB display attaches its rank key at read time (getDisplayRankKey), and the
+      // open table shows the promote-frozen rankAtPromote stamp.
+      rankingScore: input.rankingScore,
     };
 
     // Insert new signal with pre-computed metrics from SQE
@@ -2456,20 +2332,6 @@ class ReadyToBuyService {
       { mode: input.mode, signalId: input.signalId }
     );
 
-    // Record SLAL QUEUED event
-    // R9.3-C: expiresAt removed from audit - lifecycle governed by SQE
-    signalLifecycleAudit.recordQueued(
-      input.signalId,
-      input.mode,
-      normalizedSymbol,
-      input.strategy,
-      {
-        finalScore: input.finalScore,
-        ngc: input.confidence, // P19-B3b: NGC retired — audit ngc field fed from confidence
-        profitRate: input.profitRate,
-        blockReason: 'SQE_QUALIFIED',
-      }
-    );
 
     // Get current pool size for warm-up tracking
     const poolSize = await this.getPoolSize(input.mode);

@@ -389,12 +389,25 @@ export default function PaperOpenTradesTab({ mode }: { mode?: 'paper' | 'live' }
       />
 
       <Card className="rounded-xl border shadow-sm overflow-hidden p-2">
+        {/* P19-B8.10 (OBJ-3): Slot sits directly after Symbol (Kyle 2026-07-18). */}
         <OpenTradesTable
           trades={trades}
           emptyLabel="No open trades"
+          rankHeaderLabel="Promote R"
+          rankHeaderTitle="R-multiple at promotion — the ranking score this trade won its slot with (frozen at promote; the RTB tab shows the live value). '—' for trades opened before this stamp existed."
+          afterSymbolHeaders={
+            <th className="px-3 py-2 text-right font-medium text-muted-foreground" title="Engine slot this position occupies, out of the guardrail cap.">Slot</th>
+          }
+          renderAfterSymbolCells={(trade) => {
+            const t = trade as AdaptedOpenTrade;
+            return (
+              <td className="px-3 py-2 text-right font-mono text-xs">
+                {t.slotNumber != null ? `${t.slotNumber}${Number.isFinite(Number(t.maxSlots)) ? ` / ${t.maxSlots}` : ''}` : '—'}
+              </td>
+            );
+          }}
           extraHeaders={
             <>
-              <th className="px-3 py-2 text-right font-medium text-muted-foreground" title="Engine slot this position occupies, out of the guardrail cap.">Slot</th>
               <th className="px-3 py-2 text-left font-medium text-muted-foreground" title="Price feed this row's Current value came from (WS = live Kraken WebSocket; REST = polling fallback).">Source</th>
               <th className="px-3 py-2 text-left font-medium text-muted-foreground">Actions</th>
             </>
@@ -403,9 +416,6 @@ export default function PaperOpenTradesTab({ mode }: { mode?: 'paper' | 'live' }
             const t = trade as AdaptedOpenTrade;
             return (
               <>
-                <td className="px-3 py-2 text-right font-mono text-xs">
-                  {t.slotNumber != null ? `${t.slotNumber}${Number.isFinite(Number(t.maxSlots)) ? ` / ${t.maxSlots}` : ''}` : '—'}
-                </td>
                 <td className="px-3 py-2 text-xs font-mono">{t.sourceLabel ?? '—'}</td>
                 <td className="px-3 py-2">
                   <Button

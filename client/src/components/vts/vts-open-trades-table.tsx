@@ -41,6 +41,10 @@ export function OpenTradesTable({
   trades,
   extraHeaders,
   renderExtraCells,
+  afterSymbolHeaders,
+  renderAfterSymbolCells,
+  rankHeaderLabel = "Rank",
+  rankHeaderTitle,
   emptyLabel = "No open simulated trades",
 }: {
   trades: OpenTrade[];
@@ -48,6 +52,17 @@ export function OpenTradesTable({
   extraHeaders?: React.ReactNode;
   /** Appended <td> nodes per row, matching extraHeaders. Default OFF. */
   renderExtraCells?: (trade: OpenTrade, index: number) => React.ReactNode;
+  /** P19-B8.10 (OBJ-3): <th> nodes inserted directly AFTER the Symbol column
+      (Kyle: Slot second). Default OFF — the VTS mount renders as before. */
+  afterSymbolHeaders?: React.ReactNode;
+  /** P19-B8.10 (OBJ-5): label/tooltip for the ranking column. VTS default "Rank"
+      (its live-computed ranking score); the paper mount passes "Promote R" (the
+      promote-frozen R-multiple) — distinct labels because they are distinct
+      quantities (Langston pin-down 2). */
+  rankHeaderLabel?: string;
+  rankHeaderTitle?: string;
+  /** <td> nodes per row, matching afterSymbolHeaders. Default OFF. */
+  renderAfterSymbolCells?: (trade: OpenTrade, index: number) => React.ReactNode;
   /** Empty-state text; default keeps the VTS wording. */
   emptyLabel?: string;
 }) {
@@ -140,6 +155,7 @@ export function OpenTradesTable({
               {/* B69.1 (2026-05-04): asset class badge stacked below symbol in same cell.
                   B-NEW-31 (2026-05-14): first-column header sticky-left + z-30 (top-left corner). */}
               <SortableHeader label="Symbol" field="symbol" currentSort={sortField} direction={sortDirection} onSort={handleSort} extraClass="sticky left-0 z-30 bg-card text-left" />
+              {afterSymbolHeaders}
               <th className="px-3 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">B/S</th>
               <SortableHeader label="Regime" field="regime" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
               <SortableHeader label="Strategy" field="strategy" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
@@ -169,7 +185,7 @@ export function OpenTradesTable({
               <th className="px-3 py-2 text-right font-medium text-muted-foreground" title="Total round-trip cost estimate: entry fee + entry slip + est exit fee + est exit slip.">Total Costs</th>
               <SortableHeader label="Net P/L" field="netProfitValue" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
 
-              <th className="px-3 py-2 text-right font-medium text-muted-foreground">Rank</th>
+              <th className="px-3 py-2 text-right font-medium text-muted-foreground" title={rankHeaderTitle}>{rankHeaderLabel}</th>
               {/* P19-B8.7 Step-9 (Kyle 2026-07-17 ruling): FinalScore is RETIRED —
                   no column for it in any table in any mode. The full calc/storage
                   purge is its own named batch. */}
@@ -221,6 +237,7 @@ export function OpenTradesTable({
                       <AssetClassBadge assetClass={trade.assetClass} />
                     </div>
                   </td>
+                  {renderAfterSymbolCells?.(trade, idx)}
                   <td className="px-3 py-2">
                     <Badge variant="outline" className={`text-xs ${isBenchmarkSymbol(trade.symbol) ? 'bg-violet-500/20 text-violet-400 border-violet-500/30' : 'bg-slate-500/20 text-slate-400 border-slate-500/30'}`}>
                       {isBenchmarkSymbol(trade.symbol) ? 'Benchmark' : 'Standard'}
@@ -416,7 +433,9 @@ export function OpenTradesTable({
                   </td>
                   <td className="px-3 py-2 text-xs">
                     <div className="flex flex-col gap-0.5">
-                      <span>{trade.globalDirectionalBias || <span className="text-muted-foreground italic">pending</span>}</span>
+                      {/* P19-B8.10 (OBJ-6): absent global DBS renders the shared em-dash —
+                          the old "pending" literal implied a state that does not exist. */}
+                      <span>{trade.globalDirectionalBias || '—'}</span>
                       {trade.globalDirectionalBiasScore != null && (
                         <span className="font-mono text-[10px] text-muted-foreground">
                           {trade.globalDirectionalBiasScore >= 0 ? '+' : ''}{trade.globalDirectionalBiasScore.toFixed(3)}

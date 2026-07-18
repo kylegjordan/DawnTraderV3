@@ -48,8 +48,19 @@ const baseOpenRow: PaperActiveTradeRow = {
     signalType: 'QUANT',
     pool: 'ideal',
     sourcePool: 'quant',
-    rankingScore: 0.42,
-    expectedEdge: 0.031,
+    // P19-B8.10: the honest keys — promote-frozen R-multiple + net expected edge
+    // (the legacy metadata.rankingScore/expectedEdge keys are no longer read).
+    rankAtPromote: -0.42,
+    netExpectedEdge: -0.016,
+    netEvAtAdmit: -0.011,
+    // P19-B8.10 (OBJ-4) genesis-captured context:
+    globalRegime: 'STRONG_TREND',
+    pairFriction: 42.5,
+    globalFriction: 38.1,
+    pairDirectionalBias: 'DOWN_MODERATE',
+    pairDirectionalBiasScore: -21.4,
+    globalDirectionalBias: 'NEUTRAL',
+    globalDirectionalBiasScore: 3.2,
   },
   volume24h: 54321,
   positionValue: 1259.259,
@@ -157,14 +168,45 @@ describe('adaptPaperOpenTrade — no-fabrication honesty', () => {
     expect(t.regimeWeight).toBeUndefined();
   });
 
-  it('emits null (not 0) for absent entry-liquidity and #515 global/pair context', () => {
-    const t = adaptPaperOpenTrade({ ...baseOpenRow, volume24h: 0 });
+  it('emits null (not 0) for absent entry-liquidity and un-captured global/pair context', () => {
+    // P19-B8.10: rows opened BEFORE the genesis capture landed carry none of the
+    // context keys — the cells must stay null (no backfill, no fabrication).
+    const t = adaptPaperOpenTrade({
+      ...baseOpenRow,
+      volume24h: 0,
+      metadata: { regime: 'TREND_FRIENDLY_STABLE', signalType: 'QUANT' },
+    });
     expect(t.entryLiquidityValue).toBeNull();
     expect(t.entryLiquidityKind).toBeNull();
     expect(t.globalRegime).toBeNull();
     expect(t.pairFriction).toBeNull();
     expect(t.globalFriction).toBeNull();
     expect(t.pairDirectionalBiasScore).toBeNull();
+  });
+
+  it('maps the P19-B8.10 honest keys: Promote R, net-edge fallback chain, genesis context', () => {
+    const t = adaptPaperOpenTrade(baseOpenRow);
+    expect(t.rankingScore).toBe(-0.42);           // rankAtPromote, NOT legacy rankingScore
+    expect(t.expectedEdge).toBe(-0.016);          // netExpectedEdge preferred...
+    const atAdmitOnly = adaptPaperOpenTrade({
+      ...baseOpenRow,
+      metadata: { ...(baseOpenRow.metadata as Record<string, unknown>), netExpectedEdge: undefined },
+    });
+    expect(atAdmitOnly.expectedEdge).toBe(-0.011); // ...netEvAtAdmit as the at-genesis fallback
+    expect(t.globalRegime).toBe('STRONG_TREND');
+    expect(t.pairFriction).toBe(42.5);
+    expect(t.globalFriction).toBe(38.1);
+    expect(t.pairDirectionalBias).toBe('DOWN_MODERATE');
+    expect(t.pairDirectionalBiasScore).toBe(-21.4);
+    expect(t.globalDirectionalBias).toBe('NEUTRAL');
+    expect(t.globalDirectionalBiasScore).toBe(3.2);
+    // legacy metadata.rankingScore alone must NOT feed the cell anymore
+    const legacyOnly = adaptPaperOpenTrade({
+      ...baseOpenRow,
+      metadata: { rankingScore: 0.42, expectedEdge: 0.031 },
+    });
+    expect(legacyOnly.rankingScore).toBeUndefined();
+    expect(legacyOnly.expectedEdge).toBeUndefined();
   });
 
   it('NEVER emits the retired finalScore/hybridScore (#525 fence)', () => {

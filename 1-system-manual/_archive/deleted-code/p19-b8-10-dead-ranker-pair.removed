@@ -1,0 +1,167 @@
+// P19-B8.10 (OBJ-5c, rule 18) — DELETED from server/core/rtb/ready_to_buy_service.ts.
+// EXACTLY these blocks (Langston Step-4 finding ①: the first cut of this archive
+// over-scooped five LIVE methods — regenerated to the true deletion set):
+//   1. getTopSignal (the Directive-11.0E legacy ranker: metadata.rankingScore ?? finalScore
+//      + FINAL_SCORE_GAP_OVERRIDE ordering) — sole caller was checkForPromotion.
+//   2. checkForPromotion — zero callers repo-wide (engine promotes via getRankedSignals).
+//   3. The recordPromoted / recordQueued SLAL telemetry blocks (OBJ-2 purge).
+// 2026-06-18 dead-ranker coupling RESOLVED: getRankedSignals/R-multiple won. Git history
+// is the authoritative archive; this copy is for quick browse. Non-compilable by suffix.
+
+// ── 1+2: getTopSignal + checkForPromotion (deleted as a unit) ──
+
+  /**
+   * Directive 11.0E: Get the highest-FinalScore queued signal for a mode
+   * Uses FinalScore as primary ranking metric
+   */
+  async getTopSignal(mode: TradingMode): Promise<RtbSignal | null> {
+    const signals = await storage.getRtbSignals({ mode, status: 'queued' });
+    if (signals.length === 0) return null;
+
+    let bestSignal: RtbSignal | null = null;
+    let bestRankingScore = -1;
+
+    for (const signal of signals) {
+      const signalFinalScore = parseFloat(signal.finalScore || '0');
+
+      // Phase 14.5: Use rankingScore from metadata if available, otherwise fall back to FinalScore
+      const metadata = signal.metadata as Record<string, unknown> | null;
+      let signalRankingScore = (metadata?.rankingScore as number) ?? signalFinalScore;
+
+      // Phase 14.5: FinalScore gap safety rule
+      // If gap > 0.10, FinalScore always wins (prevents return-magnitude gaming)
+      if (bestSignal) {
+        const bestFinalScore = parseFloat(bestSignal.finalScore || '0');
+        const gap = Math.abs(signalFinalScore - bestFinalScore);
+        if (gap > FINAL_SCORE_GAP_OVERRIDE) {
+          // Large quality gap — use FinalScore directly
+          signalRankingScore = signalFinalScore;
+        }
+      }
+
+      if (signalRankingScore > bestRankingScore) {
+        bestRankingScore = signalRankingScore;
+        bestSignal = signal;
+      }
+    }
+
+    if (bestSignal) {
+      const ageMinutes = bestSignal.queuedAt
+        ? ((Date.now() - new Date(bestSignal.queuedAt).getTime()) / 60000).toFixed(1)
+        : 'unknown';
+      console.log(`[RTB] Top signal: ${bestSignal.symbol} ${bestSignal.strategy} rankingScore=${bestRankingScore.toFixed(4)} age=${ageMinutes}min`);
+    }
+
+    // B-5 AMR Obj-10 (#217 wire-at-shadow): compute the CONTEXT_BONUS terms
+    // FOR REAL on this ranked set and stamp the evidence on the AMR ledger.
+    // STRUCTURALLY ABSENT from the selection above — bestSignal is already
+    // chosen; nothing here can change it. Fire-and-forget; never throws into
+    // the selection path. Runs only when the class flag is shadow|active.
+    void (async () => {
+      try {
+        const { safeResolveAssetClass, asValidAssetClass } = await import('../../../shared/asset-classes.js');
+        const { getAmrFlagState, recordRankingShadow } = await import('../../services/amr-weather-report.js');
+        const { computeContextBonusShadow } = await import('../../services/amr-context-bonus-shadow.js');
+        const byClass = new Map<string, typeof signals>();
+        for (const s of signals) {
+          // P19-B6.5d: prefer the carried signal stamp (collision-correct); safe-resolve fallback.
+          const k = asValidAssetClass((s as { assetClass?: unknown }).assetClass)
+            ?? asValidAssetClass((s as { metadata?: { assetClass?: unknown } }).metadata?.assetClass)
+            ?? safeResolveAssetClass(s.symbol, 'kraken');
+          if (k === null) continue;
+          const arr = byClass.get(k) ?? [];
+          arr.push(s);
+          byClass.set(k, arr);
+        }
+        for (const [klass, classSignals] of byClass) {
+          let flag: string;
+          try { flag = getAmrFlagState(klass as never); } catch { continue; }
+          if (flag === 'disabled') continue;
+          const stamp = await computeContextBonusShadow(
+            klass as never,
+            classSignals.map(s => ({ symbol: s.symbol, regime: (s as { regime?: string | null }).regime ?? null, finalScore: s.finalScore, metadata: s.metadata as Record<string, unknown> | null })),
+            bestSignal && (asValidAssetClass((bestSignal as { assetClass?: unknown }).assetClass)
+              ?? asValidAssetClass((bestSignal as { metadata?: { assetClass?: unknown } }).metadata?.assetClass)
+              ?? safeResolveAssetClass(bestSignal.symbol, 'kraken')) === klass ? bestSignal.symbol : null,
+          );
+          recordRankingShadow(klass as never, stamp);
+          if (stamp.rank1Changed) {
+            console.log(`[B-5][#217][SHADOW] ${klass}: CONTEXT_BONUS WOULD change rank-1 (satRate=${stamp.ceilingSaturationRate?.toFixed(2) ?? 'n/a'})`);
+          }
+        }
+      } catch (err) {
+        console.warn(`[B-5][#217] shadow compute failed (selection unaffected): ${err instanceof Error ? err.message : err}`);
+      }
+    })();
+
+    return bestSignal;
+  }
+
+
+  /**
+   * Check if there's capacity for promotion and get the best candidate
+   * R9.3-C: expiresAt check removed - lifecycle governed by SQE only
+   */
+  async checkForPromotion(mode: TradingMode): Promise<RtbSignal | null> {
+    // Get the top signal (already filtered by SQE revalidation)
+    const topSignal = await this.getTopSignal(mode);
+
+    if (!topSignal) {
+      return null;
+    }
+
+    // R9.3-C: No expiry check - signals are valid until SQE rejects them
+    // R9.3-A: Check if signal is currently refreshing
+    if (this.isSignalRefreshing(mode, topSignal.signalId)) {
+      console.log(`[A3.R9.3][PROMOTION] Signal ${topSignal.symbol}/${topSignal.strategy} is refreshing - skipping`);
+      return null;
+    }
+
+    // Batch 19F: Pair-level promotion guard (prevent overexposure)
+    // Skip promotion if an active trade already exists for this pair (regardless of strategy)
+    try {
+      const activeTrades = await storage.getActiveTrades(mode as 'paper' | 'live');
+      const existingTrade = activeTrades.find(t => t.symbol === topSignal.symbol);
+      if (existingTrade) {
+        console.log(`[19F][RTB] Skipping promotion for ${topSignal.symbol}/${topSignal.strategy} — active trade already exists for this pair`);
+        return null;
+      }
+    } catch (err) {
+      console.warn(`[19F][RTB] Pair-level guard check failed, proceeding with promotion:`, err);
+    }
+
+    return topSignal;
+  }
+
+
+// ── 3: SLAL telemetry blocks removed from promoteSignal / queueSQESignal ──
+
+    // Step 1: Record SLAL PROMOTED event first (audit trail)
+    signalLifecycleAudit.recordPromoted(
+      signal.signalId,
+      mode,
+      normalizedSymbol,
+      signal.strategy,
+      {
+        tradeId,
+        finalScore: parseFloat(signal.finalScore || '0'),
+        queueDurationMs: Date.now() - new Date(signal.queuedAt).getTime(),
+      }
+    );
+
+
+    // Record SLAL QUEUED event
+    // R9.3-C: expiresAt removed from audit - lifecycle governed by SQE
+    signalLifecycleAudit.recordQueued(
+      input.signalId,
+      input.mode,
+      normalizedSymbol,
+      input.strategy,
+      {
+        finalScore: input.finalScore,
+        ngc: input.confidence, // P19-B3b: NGC retired — audit ngc field fed from confidence
+        profitRate: input.profitRate,
+        blockReason: 'SQE_QUALIFIED',
+      }
+    );
+

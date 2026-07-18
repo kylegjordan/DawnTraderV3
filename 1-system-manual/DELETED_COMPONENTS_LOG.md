@@ -6,6 +6,34 @@
 
 ---
 
+## 2026-07-18 — P19-B8.10 (OBJ-2): the Phase-8 Ready-tab metrics stack — `ExecutionMetricsPanel` + the SLAL audit layer (service + endpoints)
+
+**Why:** Kyle 2026-07-18 — the tables below the Ready-to-Buy table ("RTB execution metrics", "Signal Lifecycle Audit") are Phase-8.8.3/8.8.4 relics from the November-2025 era, superseded by the Filter Diagnostics tabs; "those tables look to be useless to me now, so you can remove all of them." Rule-18 full purge: screen AND machinery — a write-only audit layer whose sole reader was the deleted panel is lingering legacy.
+
+**What was removed:**
+1. `client/src/components/trading/execution-metrics.tsx` (648 lines — `ExecutionMetricsPanel` + the never-mounted `ExecutionMetricsCompact`), unmounted from both `paper-trading.tsx` and `live-trading.tsx` Ready tabs.
+2. `server/core/audit/signal_lifecycle_audit.ts` (603 lines — the Phase 8.8.4-A SLAL service) + its two routes endpoints (`GET /api/diagnostics/signal-lifecycle`, `POST /api/diagnostics/signal-lifecycle/reset`, tombstone comment left at the splice) + ~15 write-only `record*` telemetry call sites across signal-orchestrator (recordGeneration/recordSizing×2/recordRejection), ready_to_buy_service (recordQueued/recordPromoted), active-execution-engine (recordExecution×2), and trade-safety (recordValidation×2 + the `mapCodeToSLALReason` helper).
+
+**Load-bearing exception (relocated, NOT deleted):** `generateSignalId` — it MINTS the active-path signalId (a stored-data format: rtb_signals.signal_id, position metadata `originalSignalId`, closed-trade joins). Moved VERBATIM to `server/utils/signal-id.ts` BEFORE the service delete, format pinned by `server/tests/unit/signal-id-format.test.ts`.
+
+**Blast-radius verification (PROVEN safe):** repo-wide grep post-purge → zero `signalLifecycleAudit`/`signal_lifecycle_audit` references outside the archive + the relocation-note comment; panel importers were exactly the two mode pages (swapped in-batch); `/api/diagnostics/rtb-metrics` + rtb-metrics-service KEPT (reorg-B3 EV-reject telemetry, consumers independent of the panel); SLAL was memory-backed — no DB tables touched. `tsc`-baseline clean; vitest green (pre-existing env failures proven at clean HEAD).
+
+**Archive:** `_archive/deleted-code/execution-metrics.P19-B8.10.tsx.removed` + `_archive/deleted-code/signal_lifecycle_audit.P19-B8.10.ts.removed`. Commit: (this batch's push).
+
+---
+
+## 2026-07-18 — P19-B8.10 (OBJ-5c): the dead legacy RTB ranker pair — `getTopSignal` + `checkForPromotion`
+
+**Why:** the Directive-11.0E-era promotion ranker: `getTopSignal` ordered the queue by `metadata.rankingScore ?? finalScore` (the RETIRED metric as a silent fallback — the exact leak that made every open-position "Rank" cell show finalScore) + the `FINAL_SCORE_GAP_OVERRIDE` rule; `checkForPromotion` was its only caller and itself had ZERO callers repo-wide — the engine promotes exclusively via `getRankedSignals` (the B7.1 R-multiple ranker, `active-execution-engine.ts:2114`). **2026-06-18 dead-ranker coupling RESOLVED (Langston's June park, discharged not overridden):** getRankedSignals/R-multiple won; rankingScore-ordering was never adopted; the Phase-25 prestudy verdict was delete.
+
+**Blast-radius verification (PROVEN safe):** repo-wide grep (non-test, non-archive) → `checkForPromotion` zero callers; `getTopSignal` exactly one caller = `checkForPromotion` (deleted as a unit — Langston Step-2 precision note). The `ranking-weights.js` import (`computeRankingScore`/`normalizeNetReturn`/`FINAL_SCORE_GAP_OVERRIDE`) went fully unreferenced in the service and was dropped. Companion fence fix: the queue-enrich `rankingScore: input.rankingScore ?? finalScore` fallback removed (only reader was the deleted `getTopSignal`; the RTB display attaches its rank key at READ time via `getDisplayRankKey` — verified unaffected; shadow-pool telemetry columns go honestly null, Langston-confirmed intended). `tsc`-baseline clean.
+
+**Archive note (Langston Step-4 finding ① on record):** the FIRST cut of the archive file over-scooped five LIVE methods (a copy-the-region artifact); regenerated programmatically from git HEAD with a leaked-live-method assertion — the archive now contains EXACTLY `getTopSignal` + `checkForPromotion` + the two removed SLAL blocks.
+
+**Archive:** `_archive/deleted-code/p19-b8-10-dead-ranker-pair.removed`. Commit: (this batch's push).
+
+---
+
 ## 2026-07-17 — P19-B8.7 Step-9 (#528): `active-trades-v2.tsx` (1,362 lines) — the bespoke paper Open Trades tab, superseded by the shared VTS-mirror table + adapter
 
 **Why:** Kyle's layout-identity directive + Langston's shared-component ruling (B): the paper Open Trades tab now mounts the SHARED `vts-open-trades-table.tsx` through the pure `paper-trade-adapter.ts`, with the paper shell (IntegrityBanner, count header, mutations, WS refresh) preserved verbatim in the NEW `paper-open-trades-tab.tsx`. The bespoke file is retired per rule 18. **The rule-23 FIX-ON-FIND on record (Langston-required verbatim quote):** this file's WS price-overlay recomputed P/L client-side on every tick using hardcoded constants — `const FEE_PERCENT = 0.0010; // 0.10%` and `const SLIPPAGE_PERCENT = 0.0015; // 0.15%` (`:1125-1126`, commented "same as backend", which they were NOT — fees are DB-governed per-mode/per-class) — so displayed net P/L between server refreshes was computed on fantasy friction. The recompute was DELETED (not constant-patched) in the rewire: server-authoritative numbers + 3s-throttled WS invalidation.

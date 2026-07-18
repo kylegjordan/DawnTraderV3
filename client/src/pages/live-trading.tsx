@@ -13,7 +13,6 @@ import { Lightbulb, LineChart, TrendingUp, BarChart3, History, Ghost, LayoutDash
 // paper shell (replaces active-trades-v2, deleted — rule 18). Dormant on live.
 import PaperOpenTradesTab from "@/components/trading/paper-open-trades-tab";
 import ReadyToBuyTable from "@/components/trading/ready-to-buy-table";
-import { ExecutionMetricsPanel } from "@/components/trading/execution-metrics";
 import { TradeHistoryTab } from "@/components/trading/trade-history-tab";
 import { ShadowTradesTab } from "@/components/trading/shadow-trades-tab";
 import { XstocksTab } from "@/components/machine-learning/xstocks-tab";
@@ -41,15 +40,9 @@ const config: ModeTradingPageConfig = {
     { key: "dashboard", label: "Dashboard", shortLabel: "Dashboard", icon: LayoutDashboard, render: () => <ModeDashboardTab mode="live" /> },
     { key: "fd-crypto", label: "Crypto Filter Diagnostics", shortLabel: "Crypto FD", icon: Lightbulb, render: () => <CryptoFilterDiagnosticsTab gateDisposition="enforce" modeTail="live" /> },
     { key: "fd-xstock", label: "xStock Filter Diagnostics", shortLabel: "xStock FD", icon: LineChart, render: () => <XstocksTab gateDisposition="enforce" modeTail="live" /> },
-    {
-      key: "ready", label: "Ready to Buy", shortLabel: "Ready", icon: TrendingUp,
-      render: () => (
-        <>
-          <ReadyToBuyTable />
-          <ExecutionMetricsPanel />
-        </>
-      ),
-    },
+    // P19-B8.10 (OBJ-2): ExecutionMetricsPanel (Phase 8.8.3/8.8.4 metrics + SLAL
+    // tables) removed from below the RTB table — Kyle 2026-07-18, rule-18 purge.
+    { key: "ready", label: "Ready to Buy", shortLabel: "Ready", icon: TrendingUp, render: () => <ReadyToBuyTable /> },
     { key: "open", label: "Open Trades", shortLabel: "Open", icon: BarChart3, render: () => <PaperOpenTradesTab mode="live" /> },
     { key: "closed", label: "Closed Trades", shortLabel: "Closed", icon: History, render: () => <TradeHistoryTab /> },
     { key: "shadows", label: "Shadows", shortLabel: "Shadow", icon: Ghost, render: () => <ShadowTradesTab /> },

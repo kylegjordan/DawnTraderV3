@@ -25,7 +25,9 @@ import {
 } from "./vts-shared";
 
 // P19-B8.7 Step-9: 'finalScore' removed with its column (retired metric, piece 2.7).
-type ClosedSortField = 'symbol' | 'regime' | 'strategy' | 'pool' | 'dollarValue' | 'entryPrice' | 'resultType' | 'grossProfitValue' | 'netProfitValue' | 'expectedEdge' | 'regimeWeight' | 'exitTime' | 'durationMinutes';
+// P19-B8.10 (OBJ-7): Regime Wt column removed (Kyle 2026-07-18) — the value was a
+// 0.5 constant on active rows (#529 rider); regimeWeight stays on the row type as data.
+type ClosedSortField = 'symbol' | 'regime' | 'strategy' | 'pool' | 'dollarValue' | 'entryPrice' | 'resultType' | 'grossProfitValue' | 'netProfitValue' | 'expectedEdge' | 'exitTime' | 'durationMinutes';
 
 /**
  * P19-B8.7 Step-9: this table is now the SHARED closed-trades component — the
@@ -81,7 +83,6 @@ export function ClosedTradesTable({
         // P19-B8.7 Step-9: finalScore sort case deleted with its column (retired
         // metric, piece 2.7); edge/weight coalesce for adapter rows without them.
         case 'expectedEdge': aVal = a.expectedEdge ?? 0; bVal = b.expectedEdge ?? 0; break;
-        case 'regimeWeight': aVal = a.regimeWeight ?? 0; bVal = b.regimeWeight ?? 0; break;
         case 'exitTime': aVal = new Date(a.exitTime).getTime(); bVal = new Date(b.exitTime).getTime(); break;
         case 'durationMinutes': aVal = a.durationMinutes; bVal = b.durationMinutes; break;
       }
@@ -173,7 +174,6 @@ export function ClosedTradesTable({
 
               {/* P19-B8.7 Step-9 (Kyle 2026-07-17 ruling): FinalScore RETIRED — column removed. */}
               <SortableHeader label="Edge" field="expectedEdge" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
-              <SortableHeader label="Regime Wt" field="regimeWeight" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
               <th className="px-3 py-2 text-left font-medium text-muted-foreground">Glbl Regime</th>
               <th className="px-3 py-2 text-right font-medium text-muted-foreground">Pair Fric.</th>
               <th className="px-3 py-2 text-right font-medium text-muted-foreground">Glbl Fric.</th>
@@ -190,7 +190,7 @@ export function ClosedTradesTable({
               <tr>
                 {/* colSpan 33 = 32 standard columns post cost-split/exit-mode + headroom
                     for appended paper columns (browsers clamp overshoot). */}
-                <td colSpan={33} className="px-3 py-8 text-center text-muted-foreground">
+                <td colSpan={32} className="px-3 py-8 text-center text-muted-foreground">
                   {emptyLabel}
                 </td>
               </tr>
@@ -407,7 +407,6 @@ export function ClosedTradesTable({
                   {/* P19-B8.7 Step-9: absent values render an em-dash, never a
                       fabricated 0.00 (adapter rows may lack metadata-sourced numbers). */}
                   <td className="px-3 py-2 text-right font-mono text-xs">{trade.expectedEdge != null ? trade.expectedEdge.toFixed(2) : '—'}</td>
-                  <td className="px-3 py-2 text-right font-mono text-xs">{trade.regimeWeight != null ? trade.regimeWeight.toFixed(2) : '—'}</td>
                   <td className="px-3 py-2 text-xs">{trade.globalRegime || '\u2014'}</td>
                   <td className="px-3 py-2 text-right font-mono text-xs">{trade.pairFriction != null ? getFrictionLabel(Math.round(trade.pairFriction)) : '\u2014'}</td>
                   <td className="px-3 py-2 text-right font-mono text-xs">{trade.globalFriction != null ? getFrictionLabel(Math.round(trade.globalFriction)) : '\u2014'}</td>
@@ -423,7 +422,9 @@ export function ClosedTradesTable({
                   </td>
                   <td className="px-3 py-2 text-xs">
                     <div className="flex flex-col gap-0.5">
-                      <span>{trade.globalDirectionalBias || <span className="text-muted-foreground italic">pending</span>}</span>
+                      {/* P19-B8.10 (OBJ-6): absent global DBS renders the shared em-dash —
+                          the old "pending" literal implied a state that does not exist. */}
+                      <span>{trade.globalDirectionalBias || '—'}</span>
                       {trade.globalDirectionalBiasScore != null && (
                         <span className="font-mono text-[10px] text-muted-foreground">
                           {trade.globalDirectionalBiasScore >= 0 ? '+' : ''}{trade.globalDirectionalBiasScore.toFixed(3)}

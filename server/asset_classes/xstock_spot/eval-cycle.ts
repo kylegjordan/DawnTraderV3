@@ -1139,6 +1139,11 @@ export async function evaluateXstockPairForVTS(
           atr: mceContext.indicators?.atr,
           high24h: mceContext.indicators?.high24h,
           low24h: mceContext.indicators?.low24h,
+          // P19-B8.10 (OBJ-4): genesis display-context — this cycle's own regime +
+          // pair DBS (same mceContext the VTS xstock lane captures at open).
+          regime,
+          pairDbsCategory: mceContext.directionalBias?.category,
+          pairDbsScore: mceContext.directionalBias?.score,
         });
 
         if (tradeId) {

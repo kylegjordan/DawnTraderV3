@@ -48,7 +48,14 @@ import { sizeActivePositionForSignal, type StrategyType } from './active-positio
 import { tradingModeToRunMode } from './run-mode-controller.js'; // ITEM-4 step 2: single-site TradingMode->RunMode map
 import { getPortfolioBalanceV2 } from './guardrail-settings.js';
 import { c5FinancialDiagnostics } from './c5-financial-diagnostics.js';
-import { signalLifecycleAudit } from '../core/audit/signal_lifecycle_audit.js';
+// P19-B8.10 (OBJ-2): SLAL purged with its sole reader (the Ready-tab panel);
+// the load-bearing signal-ID mint lives on as a pure util, format unchanged.
+import { generateSignalId } from '../utils/signal-id.js';
+// P19-B8.10 (OBJ-4): genesis-capture sources — the SAME shared helpers the VTS
+// open-trade capture reads (mirror semantics, one formula per value, no drift).
+import { getTelemetryAggregator } from './telemetry-aggregator.js';
+import { getGlobalFriction, getLastGlobalDBSCategory, getLastGlobalDBSScore } from './market-indicators.js';
+import { computePairFrictionIndex } from '../core/math/cost-model.js';
 import { calculateExtendedSignalMetrics, estimateVolatility } from '../core/metrics/quality_index.js';
 import { signalQualityEvaluator, type SQEInput } from '../core/filters/signal_quality_evaluator.js';
 // P19-B8.4b: active-path funnel instrumentation (S21). buildSizedSignalForStrategy + the crypto
@@ -229,6 +236,17 @@ interface SizingContext {
   // (which silently fed atr=0 → reachability would drop 100% of active signals). Loud `invalid_atr`
   // (not silent coerce-to-0) if it's ever genuinely missing.
   atr?: number;
+  // P19-B8.10 (OBJ-4): display-context carriers, same single-point-feed pattern as
+  // `atr` above — set per-symbol at each pipe's stamp site (crypto quant = the MCE
+  // context; crypto pattern pass = the pattern's own context + propagated pool DBS;
+  // xStock = the eval-cycle's regime/DBS threaded through active-dispatch). A pipe
+  // with no honest value leaves them undefined — absent stays absent, never a
+  // default string (the #405/#530 KEEP-AS-DATA discipline). Read ONLY by the
+  // genesis-capture metadata stamp in buildSizedSignalForStrategy; no decision
+  // path consumes them.
+  regime?: string;
+  pairDbsCategory?: string;
+  pairDbsScore?: number;
 }
 
 export class SignalOrchestrator {
@@ -507,23 +525,10 @@ export class SignalOrchestrator {
     // only — active trading is OFF; this changes no live behavior today.
     stampMaxHoldingMs(rawSignal, sizingContext.assetClass);
 
-    // Phase 8.8.4-A: Generate unique signal ID for lifecycle tracking
-    const signalId = signalLifecycleAudit.generateSignalId(rawSignal.symbol, strategyId);
-    
-    // Phase 8.8.4-A: Record GENERATION stage
-    signalLifecycleAudit.recordGeneration(
-      signalId,
-      sizingContext.mode,
-      rawSignal.symbol,
-      strategyId,
-      {
-        entryPrice: rawSignal.entryPrice,
-        stopPrice: rawSignal.stopPrice,
-        targetPrice: rawSignal.targetPrice,
-        confidence: rawSignal.confidence,
-      }
-    );
-    
+    // P19-B8.10 (OBJ-2): signalId mint relocated to the pure util — the SLAL audit
+    // layer (Phase 8.8.4-A) was purged with its sole reader, the Ready-tab panel.
+    const signalId = generateSignalId(rawSignal.symbol, strategyId);
+
     b5SizingAudit.logSignalCreated({
       strategy: strategyId,
       symbol: rawSignal.symbol,
@@ -561,30 +566,10 @@ export class SignalOrchestrator {
     );
 
     if (sizingResult.quantity <= 0 || sizingResult.estimatedValue <= 0) {
-      // Phase 8.8.4-A: Record SIZING failure
-      signalLifecycleAudit.recordSizing(
-        signalId,
-        sizingContext.mode,
-        rawSignal.symbol,
-        strategyId,
-        false,
-        { portfolioValue: sizingContext.portfolioValue, quantity: sizingResult.quantity, estimatedValue: sizingResult.estimatedValue },
-        'ZERO_SIZE'
-      );
       console.log(`[B.3][SIZING_SKIP] Zero sizing result for ${rawSignal.symbol}/${strategyId}`);
       if (_fClass) recordActivePreSqeReject(sizingContext.mode, _fClass, 'sizing_zero', strategyId);
       return null;
     }
-
-    // Phase 8.8.4-A: Record SIZING success
-    signalLifecycleAudit.recordSizing(
-      signalId,
-      sizingContext.mode,
-      rawSignal.symbol,
-      strategyId,
-      true,
-      { quantity: sizingResult.quantity, estimatedValue: sizingResult.estimatedValue }
-    );
 
     console.log(`[B.3][SIZING] ${rawSignal.symbol}/${strategyId}: qty=${sizingResult.quantity.toFixed(8)}, value=$${sizingResult.estimatedValue.toFixed(2)}`);
 
@@ -859,15 +844,6 @@ export class SignalOrchestrator {
 
     if (!sqeResult.passed && !_exploAdmit) {
       console.log(`[11.0E][SQE_REJECT] ${rawSignal.symbol}/${strategyId}: ${sqeResult.reason}`);
-      signalLifecycleAudit.recordRejection(
-        signalId,
-        sizingContext.mode,
-        rawSignal.symbol,
-        strategyId,
-        'VALIDATION',
-        'SQE_QUALITY_REJECT',
-        { sqeReject: true, reason: sqeResult.reason }
-      );
       // P19-B5a: SQE-reject capture (active path; dormant until paper-active —
       // this emit branch only runs when the active orchestrator emits). Langston
       // NO-PATCHES: capture the failing FinalScore (the below-floor score is the
@@ -925,6 +901,48 @@ export class SignalOrchestrator {
     // L10: Fetch exposure bias multiplier for this strategy
     const exposureBias = getExposureMultiplierSync(strategyId);
 
+
+    // P19-B8.10 (OBJ-4): build the genesis display-context stamp. Each value comes
+    // from the SAME source the VTS open-trade capture reads; a value that is not
+    // honestly available HERE, at this signal's genesis, is left absent. The whole
+    // block is defensive — a capture error must never block a qualified signal.
+    let _displayContext: Record<string, unknown> = {};
+    try {
+      const _dcClass = sizingContext.assetClass;
+      const _dc: Record<string, unknown> = {};
+      if (sizingContext.regime) _dc.regime = sizingContext.regime;
+      if (sizingContext.pairDbsCategory) _dc.pairDirectionalBias = sizingContext.pairDbsCategory;
+      if (sizingContext.pairDbsScore != null && Number.isFinite(sizingContext.pairDbsScore)) _dc.pairDirectionalBiasScore = sizingContext.pairDbsScore;
+      try {
+        const _gr = getTelemetryAggregator().getDominantRegimeForClass?.(_dcClass)?.regime;
+        if (_gr) _dc.globalRegime = _gr;
+      } catch { /* class idle/warming → absent */ }
+      try {
+        const _pf = computePairFrictionIndex(rawSignal.symbol, _dcClass);
+        if (Number.isFinite(_pf)) _dc.pairFriction = _pf;
+      } catch { /* no cost cache entry → absent */ }
+      const _gf = getGlobalFriction(_dcClass);
+      if (_gf != null && Number.isFinite(_gf)) _dc.globalFriction = _gf;
+      const _gCat = getLastGlobalDBSCategory(_dcClass);
+      if (_gCat) _dc.globalDirectionalBias = _gCat;
+      const _gScore = getLastGlobalDBSScore(_dcClass);
+      if (_gScore != null && Number.isFinite(_gScore)) _dc.globalDirectionalBiasScore = _gScore;
+      // Pattern name: set at pattern-signal genesis (a signal field; hybrid confluence
+      // carries it in metadata) — the #530-shape transit gap: the engine reads
+      // sigMeta.patternType at open and found nothing until this carry.
+      const _pt = (rawSignal as { patternType?: string }).patternType ?? (rawSignal.metadata as { patternType?: string } | undefined)?.patternType;
+      if (_pt) _dc.patternType = _pt;
+      // Entry-liquidity (crypto convention: 24h volume) — stamped into metadata so
+      // CLOSED rows retain it after the open row is deleted.
+      if ((fx5Data?.volume24h ?? 0) > 0) {
+        _dc.entryLiquidityValue = fx5Data!.volume24h;
+        _dc.entryLiquidityKind = 'volume_qty';
+      }
+      _displayContext = _dc;
+    } catch (dcErr) {
+      console.warn(`[P19-B8.10][GENESIS_CAPTURE] display-context stamp failed for ${rawSignal.symbol}/${strategyId} (queue proceeds, cells stay absent):`, dcErr instanceof Error ? dcErr.message : dcErr);
+      _displayContext = {};
+    }
 
     // Phase 14: FinalScore computed in extended metrics — no duplicate calculation needed
     // Build RTB signal using pre-computed values from extendedMetrics
@@ -986,6 +1004,12 @@ export class SignalOrchestrator {
         netEvAtAdmit: _mtDecision.chosenNetEV,
         ...(_exploAdmit ? { floorInEffect: _exploAdmit.floorInEffect, policyVersion: _exploAdmit.policyVersion } : {}),
         assetClass: sizingContext.assetClass,
+        // P19-B8.10 (OBJ-4): genesis capture of the display-context fields the VTS
+        // records at open (regime / global regime / pair+global friction / pair+
+        // global DBS / pattern name / entry-liquidity). KEEP-AS-DATA transit — read
+        // by NOTHING on the decision path; the engine spreads them onto the position
+        // row for the trade tables. Absent values are simply absent (no fabrication).
+        ..._displayContext,
       },
     };
 
@@ -1813,6 +1837,15 @@ export class SignalOrchestrator {
               },
             };
 
+            // P19-B8.10 (OBJ-4): re-stamp the display-context carriers from THIS
+            // pattern's own context — the shared sizingContext still holds the last
+            // quant symbol's values (stale cross-symbol leak otherwise). The pattern
+            // pass's honest sources: its own MCE context regime + the propagated
+            // pool DBS (the #530 restore).
+            sizingContext.regime = patternRegime || undefined;
+            sizingContext.pairDbsCategory = propagatedDbs?.category ?? undefined;
+            sizingContext.pairDbsScore = propagatedDbs?.score ?? undefined;
+
             const sizedSignal = await this.buildSizedSignalForStrategy(
               rawSignal, consuming.strategy as StrategyType, sizingContext
             );
@@ -2028,6 +2061,13 @@ export class SignalOrchestrator {
       // buildSizedSignalForStrategy call reads it off the universal carrier (the 3-arg callers never
       // pass marketContext). Robust single-point feed, not 20 fragile call-site threads.
       sizingContext.atr = mceContext.indicators.atr;
+      // P19-B8.10 (OBJ-4): the display-context carriers ride the same single-point
+      // stamp — this symbol's MCE regime + pair DBS (the same mceContext values the
+      // VTS captures at open). Re-stamped per symbol; undefined when the MCE has no
+      // value (absent stays absent).
+      sizingContext.regime = mceContext.regime?.regime ?? undefined;
+      sizingContext.pairDbsCategory = orchestratorDbs?.category ?? undefined;
+      sizingContext.pairDbsScore = orchestratorDbs?.score ?? undefined;
 
       // Directive 10.1: Only run strategies allowed for current regime
       if (activeStrategies.has('vwap_pullback')) {

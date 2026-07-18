@@ -115,6 +115,13 @@ export interface XstockActiveDispatchInput {
   atr?: number;
   high24h?: number;
   low24h?: number;
+  // P19-B8.10 (OBJ-4): display-context threading — the eval-cycle's own regime +
+  // pair DBS at signal genesis, stamped onto the SizingContext carriers so the
+  // shared genesis-capture in buildSizedSignalForStrategy records them. Optional:
+  // absent stays absent (never a default).
+  regime?: string;
+  pairDbsCategory?: string;
+  pairDbsScore?: number;
 }
 
 /**
@@ -205,6 +212,11 @@ export async function dispatchXstockActiveSignal(input: XstockActiveDispatchInpu
       guardrails: await storage.getGuardrailsV2({ mode: 'paper' }),
       mode: 'paper' as const,
       assetClass: 'xstock_spot' as AssetClass, // 🔒 one sizingContext = one class = one pipe
+      // P19-B8.10 (OBJ-4): display-context carriers from the eval-cycle's genesis
+      // values (regime + pair DBS); undefined stays undefined — honest absence.
+      regime: input.regime,
+      pairDbsCategory: input.pairDbsCategory,
+      pairDbsScore: input.pairDbsScore,
     };
     const marketContext = { atr: input.atr, high24h: input.high24h, low24h: input.low24h };
 

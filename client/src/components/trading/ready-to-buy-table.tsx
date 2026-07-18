@@ -231,9 +231,11 @@ export default function ReadyToBuyTable() {
       : (bValue as number) - (aValue as number);
   }) : [];
 
-  const SortHeader = ({ field, label }: { field: SortField; label: string }) => (
-    <th 
-      className="text-left py-2 px-3 font-medium cursor-pointer hover:bg-muted/50 transition-colors"
+  // P19-B8.10 (OBJ-1): extraClass lets the frozen Rank/Symbol headers add their
+  // sticky-left positioning (the B-NEW-31 recipe the trade tables use).
+  const SortHeader = ({ field, label, extraClass }: { field: SortField; label: string; extraClass?: string }) => (
+    <th
+      className={cn("text-left py-2 px-3 font-medium cursor-pointer hover:bg-muted/50 transition-colors", extraClass)}
       onClick={() => handleSort(field)}
       data-testid={`header-${field}`}
     >
@@ -319,20 +321,24 @@ export default function ReadyToBuyTable() {
             >
               <div style={{ width: scrollWidth, height: 1 }} />
             </div>
-            <div 
+            <div
               ref={bottomScrollRef}
-              className="overflow-x-auto"
+              className="overflow-auto max-h-[calc(100vh-13rem)]"
               onScroll={() => syncScroll('bottom')}
             >
             <table className="w-full" data-testid="table-trading-signals">
-              <thead>
+              {/* P19-B8.10 (OBJ-1): frozen header row + frozen Rank/Symbol columns
+                  (Kyle 2026-07-18) — the B-NEW-31 sticky recipe: thead z-20, frozen
+                  headers z-30 (corner), frozen body cells z-10. Rank gets a FIXED
+                  width so Symbol's sticky left offset (left-14 = 3.5rem) is stable. */}
+              <thead className="sticky top-0 bg-card z-20">
                 <tr className="border-b">
                   {/* P19-B8.7 Step-9 (Kyle directive): Rank = position in the true
                       promotion order; RankingScore = the ATTACHED active rank key;
                       FinalScore + ML Conf columns REMOVED (inert/fabricated). */}
-                  <SortHeader field="rankScore" label="Rank" />
+                  <SortHeader field="rankScore" label="Rank" extraClass="sticky left-0 z-30 bg-card w-14 min-w-14" />
                   {/* Kyle 2026-07-18 (supersedes 07-17): Symbol BEFORE RankingScore. */}
-                  <SortHeader field="symbol" label="Symbol" />
+                  <SortHeader field="symbol" label="Symbol" extraClass="sticky left-14 z-30 bg-card" />
                   <SortHeader field="rankScore" label="RankingScore" />
                   {/* Kyle 2026-07-17: S.Wgt column REMOVED — the displayed value was
                       degenerate (every row at the 0.2 equal-weight/fallback), so it
@@ -389,7 +395,9 @@ export default function ReadyToBuyTable() {
                       className="border-b hover:bg-muted/50 transition-colors" 
                       data-testid={`row-signal-${index}`}
                     >
-                      <td className="py-3 px-3 text-center font-semibold" data-testid={`text-rank-${index}`}>
+                      {/* P19-B8.10 (OBJ-1): Rank + Symbol body cells frozen (sticky-left,
+                          bg-card so scrolled columns pass underneath). */}
+                      <td className="py-3 px-3 text-center font-semibold sticky left-0 z-10 bg-card w-14 min-w-14" data-testid={`text-rank-${index}`}>
                         <span className={cn(
                           "inline-flex items-center justify-center w-6 h-6 rounded-full text-xs",
                           rank <= 3 ? "bg-success/20 text-success" : "bg-muted text-muted-foreground"
@@ -400,7 +408,7 @@ export default function ReadyToBuyTable() {
                       {/* Kyle 2026-07-18: Symbol cell BEFORE RankingScore (supersedes the
                           07-17 order). Stacked symbol — pair + display name + class
                           badge, the same getAssetName composition the VTS tables use. */}
-                      <td className="py-3 px-3" data-testid={`text-symbol-${index}`}>
+                      <td className="py-3 px-3 sticky left-14 z-10 bg-card" data-testid={`text-symbol-${index}`}>
                         <div className="flex flex-col">
                           <span className="font-semibold">{signal.symbol}</span>
                           {assetName && (

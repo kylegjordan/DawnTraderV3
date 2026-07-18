@@ -9300,57 +9300,10 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
-  // ==================== Phase 8.8.4-A: Signal Lifecycle Audit (SLAL) ====================
-  
-  // GET /api/diagnostics/signal-lifecycle - Get SLAL metrics and recent journeys
-  apiRouter.get('/diagnostics/signal-lifecycle', authenticateToken, async (req: AuthenticatedRequest, res) => {
-    try {
-      const { signalLifecycleAudit } = await import('./core/audit/signal_lifecycle_audit.js');
-      const mode = (req.query.mode as 'live' | 'paper') || 'paper';
-      const limit = parseInt(req.query.limit as string) || 50;
-      
-      const metrics = signalLifecycleAudit.getMetrics(mode);
-      const recentJourneys = signalLifecycleAudit.getRecentJourneys(mode, limit);
-      const recentEvents = signalLifecycleAudit.getRecentEvents(mode, limit);
-      
-      res.json({
-        ok: true,
-        phase: '8.8.4-A',
-        description: 'Signal Lifecycle Audit Layer (SLAL) - Full signal pipeline tracking',
-        mode,
-        metrics: {
-          ...metrics,
-          since: metrics.since.toISOString()
-        },
-        recentJourneys: recentJourneys.map(j => ({
-          ...j,
-          startedAt: j.startedAt.toISOString(),
-          completedAt: j.completedAt?.toISOString(),
-          events: j.events.map(e => ({ ...e, timestamp: e.timestamp.toISOString() }))
-        })),
-        recentEventsCount: recentEvents.length,
-        timestamp: new Date().toISOString()
-      });
-    } catch (error: any) {
-      console.error('[8.8.4-A] Error fetching SLAL metrics:', error);
-      res.status(500).json({
-        ok: false,
-        error: 'Failed to fetch signal lifecycle metrics',
-        message: error.message
-      });
-    }
-  });
-
-  // POST /api/diagnostics/signal-lifecycle/reset - Reset SLAL session
-  apiRouter.post('/diagnostics/signal-lifecycle/reset', authenticateToken, async (req: AuthenticatedRequest, res) => {
-    try {
-      const { signalLifecycleAudit } = await import('./core/audit/signal_lifecycle_audit.js');
-      signalLifecycleAudit.resetSession();
-      res.json({ ok: true, message: 'SLAL session reset', phase: '8.8.4-A' });
-    } catch (error: any) {
-      res.status(500).json({ ok: false, error: error.message });
-    }
-  });
+  // P19-B8.10 (OBJ-2): the SLAL endpoints (GET /diagnostics/signal-lifecycle +
+  // POST .../reset, Phase 8.8.4-A) were DELETED with the SLAL service — sole
+  // consumer was the purged Ready-tab ExecutionMetricsPanel. See
+  // DELETED_COMPONENTS_LOG.md (P19-B8.10).
 
   // ==================== Phase 8.8.4-B: RTB Queue (Capacity-Blocked Signals) ====================
   

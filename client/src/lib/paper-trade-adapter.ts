@@ -218,20 +218,29 @@ export function adaptPaperOpenTrade(row: PaperActiveTradeRow): AdaptedOpenTrade 
     costs: parseFloat((num(row.estTotalCost) ?? 0).toFixed(4)),
     netProfitValue: parseFloat((num(row.netPnl) ?? 0).toFixed(2)),
     netProfitPercent: signedPct(num(row.netPnlPercent)),
-    rankingScore: metaNum(meta, "rankingScore"), // inert shadow value — display only
+    // P19-B8.10 (OBJ-5): the ranking cell reads the promote-frozen B7.1 R-multiple
+    // (rankAtPromote, engine-stamped at the moment this trade won its slot) — shown
+    // under the distinct "Promote R" header. The legacy metadata.rankingScore was the
+    // retired finalScore leaking through a queue-enrich fallback (removed server-side).
+    rankingScore: metaNum(meta, "rankAtPromote"),
     // finalScore/hybridScore OMITTED on purpose (retired metric, piece 2.7 / #525).
-    expectedEdge: metaNum(meta, "expectedEdge"),
+    // P19-B8.10 (OBJ-4): Edge = the HONEST net expected edge (post-friction) — the
+    // refresh-stamped netExpectedEdge, falling back to the at-admit chosen net EV.
+    // Deliberately NOT the VTS finalScore-based formula (retired-metric fence).
+    expectedEdge: metaNum(meta, "netExpectedEdge") ?? metaNum(meta, "netEvAtAdmit"),
     regimeWeight: metaNum(meta, "regimeWeight"),
     entryTime: row.openedAt,
     durationOpenMinutes: Math.floor((num(row.holdingDurationMs) ?? 0) / 60000),
-    // #515 family: global/pair context is not captured on paper rows today.
-    globalRegime: null,
-    pairFriction: null,
-    globalFriction: null,
-    pairDirectionalBias: null,
-    globalDirectionalBias: null,
-    pairDirectionalBiasScore: null,
-    globalDirectionalBiasScore: null,
+    // P19-B8.10 (OBJ-4): global/pair context is now genesis-captured into the
+    // metadata (same shared helpers as the VTS capture); rows opened before the
+    // capture landed stay honestly absent (no backfill).
+    globalRegime: metaStr(meta, "globalRegime") ?? null,
+    pairFriction: metaNum(meta, "pairFriction") ?? null,
+    globalFriction: metaNum(meta, "globalFriction") ?? null,
+    pairDirectionalBias: metaStr(meta, "pairDirectionalBias") ?? null,
+    globalDirectionalBias: metaStr(meta, "globalDirectionalBias") ?? null,
+    pairDirectionalBiasScore: metaNum(meta, "pairDirectionalBiasScore") ?? null,
+    globalDirectionalBiasScore: metaNum(meta, "globalDirectionalBiasScore") ?? null,
     // Entry-liquidity: paper rows carry 24h volume only (crypto convention);
     // 0/absent → null → '—'.
     entryLiquidityValue: (num(row.volume24h) ?? 0) > 0 ? (num(row.volume24h) as number) : null,
@@ -298,20 +307,24 @@ export function adaptPaperClosedTrade(row: PaperClosedTradeRow): AdaptedClosedTr
     costs: parseFloat((num(row.totalCost) ?? 0).toFixed(4)),
     netProfitValue: num(row.netPnl) !== null ? parseFloat((num(row.netPnl) as number).toFixed(2)) : NaN,
     netProfitPercent: signedPct(num(row.netPnlPercent)),
-    rankingScore: metaNum(meta, "rankingScore"),
+    // P19-B8.10 (OBJ-5): promote-frozen R-multiple (see the open adapter note).
+    rankingScore: metaNum(meta, "rankAtPromote"),
     // finalScore/hybridScore OMITTED (retired metric).
-    expectedEdge: metaNum(meta, "expectedEdge"),
+    // P19-B8.10 (OBJ-4): honest net expected edge (see the open adapter note).
+    expectedEdge: metaNum(meta, "netExpectedEdge") ?? metaNum(meta, "netEvAtAdmit"),
     regimeWeight: metaNum(meta, "regimeWeight"),
     entryTime: openedAt.toISOString(),
     exitTime: closedAt ? closedAt.toISOString() : "",
     durationMinutes: closedAt ? Math.max(0, Math.floor((closedAt.getTime() - openedAt.getTime()) / 60000)) : 0,
-    globalRegime: null,
-    pairFriction: null,
-    globalFriction: null,
-    pairDirectionalBias: null,
-    globalDirectionalBias: null,
-    pairDirectionalBiasScore: null,
-    globalDirectionalBiasScore: null,
+    // P19-B8.10 (OBJ-4): genesis-captured context (metadata survives onto the
+    // closed row verbatim); pre-capture rows stay honestly absent.
+    globalRegime: metaStr(meta, "globalRegime") ?? null,
+    pairFriction: metaNum(meta, "pairFriction") ?? null,
+    globalFriction: metaNum(meta, "globalFriction") ?? null,
+    pairDirectionalBias: metaStr(meta, "pairDirectionalBias") ?? null,
+    globalDirectionalBias: metaStr(meta, "globalDirectionalBias") ?? null,
+    pairDirectionalBiasScore: metaNum(meta, "pairDirectionalBiasScore") ?? null,
+    globalDirectionalBiasScore: metaNum(meta, "globalDirectionalBiasScore") ?? null,
     pairIdHash: row.pairIdHash ?? null,
     regimeConfidenceRaw: row.regimeConfidenceRaw ?? null,
     macroModifierValue: row.macroModifierValue ?? null,

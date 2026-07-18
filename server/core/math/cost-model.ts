@@ -164,6 +164,17 @@ export function computeTotalRoundTripCost(fee: number, slippage: number, spread:
   return (fee * 2) + (slippage * 2) + spread;
 }
 
+/**
+ * P19-B8.10 (OBJ-4): the ONE pair-friction DISPLAY index — round-trip friction in
+ * bps ÷ 3, capped at 100. Extracted verbatim from vts-runner's inline closure so
+ * the VTS open-trade capture and the active-path genesis capture cannot drift.
+ * Display telemetry only; the EV kernel reads the raw components, never this index.
+ */
+export function computePairFrictionIndex(symbol: string, assetClass: AssetClass): number {
+  const cm = getCachedCostMetrics(symbol, assetClass);
+  return Math.min(((cm.fee * 2 + cm.slippage * 2 + cm.spread) * 10000) / 3, 100);
+}
+
 export function getCachedCostMetrics(symbol: string, assetClass: AssetClass): CostComponents {
   // B79.0n.MCE: `assetClass` is REQUIRED — the prior crypto_spot silent default
   // is removed. Every caller passes an explicit asset class.

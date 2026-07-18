@@ -64,7 +64,7 @@ import { KrakenService } from '../exchanges/kraken/kraken.js';
 import { ohlcCache } from './ohlc-cache.js';
 import { computeStrategyWeights, getWeightSync } from '../utils/strategyWeights.js';
 import { computeExposureBias, getExposureMultiplierSync } from '../utils/strategyBias.js';
-import { getCachedCostMetrics, computeNetGeometry, getFrictionForAssetClass } from '../core/math/cost-model.js';
+import { getCachedCostMetrics, computeNetGeometry, getFrictionForAssetClass, computePairFrictionIndex } from '../core/math/cost-model.js';
 // P19-B7.2b (OBJ-A): the SHARED maker/taker best-of-both entry decision (same pure
 // function the active path calls — F6) + its per-class DB-governed haircut resolver.
 // The VTS calls it before its Net-EV gate so VTS evaluates on best-of-both too.
@@ -2047,8 +2047,9 @@ async function generatePhase10Signal(
       // B79.0n.MCE: assetClass REQUIRED — resolved from the symbol.
       // P19-B4a (C4 / #230): reuse the captured _assetClass (non-null past the :981 skip)
       // instead of a crypto_spot default — no mislabel-by-construction at the friction read.
-      const cm = getCachedCostMetrics(symbol, _assetClass);
-      return Math.min(((cm.fee * 2 + cm.slippage * 2 + cm.spread) * 10000) / 3, 100);
+      // P19-B8.10 (OBJ-4): formula extracted to the shared computePairFrictionIndex so
+      // the active-path genesis capture uses byte-identical math.
+      return computePairFrictionIndex(symbol, _assetClass);
     })(),
     globalFriction: getGlobalFriction(tradeAssetClass) ?? undefined, // B-4.7: per-class (undefined until same-class sample)
     pairDirectionalBias: mceContext.directionalBias?.category ?? 'NEUTRAL',
