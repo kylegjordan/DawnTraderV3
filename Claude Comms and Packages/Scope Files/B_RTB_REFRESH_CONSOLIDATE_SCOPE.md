@@ -3,7 +3,7 @@
 change-class: architecture
 
 **Owner:** CC-A (Kyle directive 2026-07-19). **Sequenced BEFORE** the shadow-trade work (Kyle: *"our RTB refresh system is not working as it should be… a bigger problem than the shadow capture"*).
-**Audit basis:** `1-system-manual/RTB_REFRESH_AUDIT_2026-07-18.md` (incl. §5.0-CORRECTION). **Issues:** #532 (core), #534 (shadow-mode gates, folded in). Adjacent: #535 (Langston, net-EV backstop), #533 (dead-code purge, sequenced AFTER this).
+**Audit basis:** `1-system-manual/RTB_REFRESH_AUDIT_2026-07-18.md` (incl. §5.0-CORRECTION). **Issues:** #532 (core). #534 WITHDRAWN 2026-07-19 as a duplicate of #514 — see OBJ-5. Coupling recorded on #514 (owner CC-B). Adjacent: #535 (Langston, net-EV backstop), #533 (dead-code purge, sequenced AFTER this).
 
 ---
 
@@ -36,7 +36,16 @@ These feed `regimeWeight` → `finalScore` and the gates. **In scope for this ba
 
 **OBJ-4 — Every queue exit counted.** No silent deletes. Promoted / rejected-in-refresh / error / unclassifiable / superseded — each gets a counter feeding the funnel. Absorbs #419. **Includes resolving the §6 telemetry anomaly** (7 ticks in 9h against a 30s timer; 133 observed outcomes/9h cannot produce the funnel's cumulative 25,917) — **no funnel number is trustworthy until this reconciles**.
 
-**OBJ-5 — Disposition the globally non-blocking gates (#534).** Confidence floor + Governance are `gateShadowMode` at **all three** SQE call sites incl. generation, and both additionally require a `regimeStability` input neither refresh path feeds. Decide per gate: ratify-as-shadow (with written justification) or un-shadow. **Langston rules**; CC-A implements. NOT silently un-shadowed as a drive-by — un-shadowing changes admission.
+**OBJ-5 — ⚠️ REWRITTEN 2026-07-19. NOT a gate decision — DISCHARGE #514's PRECONDITION.**
+
+**Correction on the record:** the v1 scope proposed "decide: ratify-as-shadow or un-shadow." That was wrong. The shadowing is **already decided** — P19-B8.5 OBJ-6 (`573b38f83`, 2026-07-16), **Kyle GO + Langston design APPROVED + Step-4 APPROVED**, homed at **#514**, with all three call sites enumerated by Langston and a §15 dated-removal discipline attached. Kyle recalled it unprompted and directed the batch-record check. CC-A's #534 is **WITHDRAWN as a duplicate**. This batch does **NOT** re-open a governed decision.
+
+**What this batch DOES contribute — the coupling:** #514 is parked awaiting *"real active-path drift/volZ stability wiring."* That is the **same root** as OBJ-2b. Under the OBJ-2 contract, sourcing an honest `regimeStability` **is refresh work**. So:
+
+- **In scope:** wire real drift/volZ stability on the active path and feed it to the SQE from the surviving refresh mechanism — discharging #514's precondition and un-parking its bury-or-resurrect decision from its Phase-19-close / Phase-25 wait.
+- **NOT in scope:** the bury-or-resurrect ruling itself, or touching `gateShadowMode`. That decision is **CC-B's (#514 owner)**, judged on accumulated shadow logs **after** honest inputs exist. Un-shadowing before then is meaningless — the gates would re-evaluate the same fabricated axis that caused the retirement.
+- **Cross-session hand-off required:** CC-B owns #514; CC-A owns this batch. The offer is recorded on #514 for CC-B + Langston to **accept or decline** — not a unilateral claim on another session's item.
+- If declined, OBJ-2b still stands on its own refresh-contract grounds (the placeholder inputs corrupt SQE decisions regardless of the gate question), and the wiring is dispositioned per OBJ-3 (loud governed refusal) instead.
 
 **OBJ-6 — Documentation truth.** Update SIM + System Manual to describe the single surviving mechanism. `bridge/canonical/` is **frozen history — not edited** (§9.5). The completion report records that the canonical corpus documented only one of the two mechanisms.
 
