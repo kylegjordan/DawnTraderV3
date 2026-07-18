@@ -19,7 +19,18 @@ Two independent mechanisms refresh the RTB queue concurrently. **Mechanism B** (
 
 **OBJ-1 — ONE refresh mechanism.** Keep Mechanism B's scheduling + concurrency skeleton (bucket rotation, ACT, backpressure — real engineering Mechanism A entirely lacks). **Transplant Mechanism A's data-refresh semantics into it.** Retire Mechanism A (rule 18: delete + archive + `DELETED_COMPONENTS_LOG`, not stub). Parallelism after this = chunking *within* the one mechanism; never a second scheduler.
 
-**OBJ-2 — The refresh contract (Kyle's definition, ratified here).** The survivor MUST update a queued signal to its **current form** — re-reading **every input the SQE evaluates** — then re-evaluate it through the **same SQE a new signal faces**. Deliverable: an explicit input-by-input table (SQE-consumed input → refreshed / deliberately frozen + written justification). Anything frozen is a named, governed exception, not a default.
+**OBJ-2 — The refresh contract (Kyle's definition, 2026-07-19 — ratified here as the batch's governing purpose).**
+
+> **The refresh exists to represent the signal AS IT CURRENTLY IS, as accurately as possible, so the SQE can make the best possible accept/reject decision.**
+
+The survivor MUST update a queued signal to its current form — re-reading **every input the SQE evaluates** — then re-evaluate it through the **same SQE a new signal faces**. Deliverable: an explicit input-by-input table (SQE-consumed input → refreshed / deliberately frozen + written justification). Anything frozen is a named, governed exception, not a default.
+
+**★ OBJ-2b — PLACEHOLDER INPUTS ARE A CONTRACT VIOLATION, not merely "unrefreshed" (derived from the OBJ-2 purpose).** The measure is **decision accuracy**, not field freshness for its own sake. An input that is *hardcoded or defaulted* actively CORRUPTS the SQE's decision — it is worse than a stale real value, because it is a fabricated one presented as fact. The June-2026 pipeline audit already flagged these on the active path (`ACTIVE_TRADING_PIPELINE_AUDIT_AS_OF_2026-06-18.md:177`) and they are still live:
+- `regimeStability` — built from hardcoded `computeGlobalStability(0.5, 0, confidence)` at generation, and **fed to neither refresh path** (which is *why* the Confidence + Governance gates cannot evaluate — see OBJ-5; the two objectives share this root).
+- `trendStrength` — hardcoded `0.5`.
+- `volatility` — default `0.3` on the batch path.
+
+These feed `regimeWeight` → `finalScore` and the gates. **In scope for this batch:** for each, either source it honestly or make its absence an explicit, loud, governed refusal (OBJ-3) — a refresh that hands the SQE fabricated 0.5s is failing its stated purpose even if every other field is current. Where an honest source does not yet exist, the disposition is a named home, not a silent default.
 
 **OBJ-3 — Fail LOUD on missing inputs (Kyle directive).** A signal that cannot supply an SQE-consumed input is **rejected loudly**, never passed on stale or absent data. Targets: the net-expectancy `chosenNetEv != null` fail-open skip; the silent unclassifiable-asset-class drops on both paths (a queued row was stamped at write — unresolvable at refresh means something upstream is broken and must alarm, not vanish); the refresh `catch` that bulk-deletes with no telemetry (#419).
 
