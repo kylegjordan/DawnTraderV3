@@ -47,7 +47,13 @@ the capture keys today; `pattern_type` NULL on signalType=PATTERN rows; `ranking
    the returned signal (typed field or paired map — NOT a behavior change; the sort
    itself is untouched).
 3. Adapter Rank read: `rankAtPromote` (fallback: none). Open-table header:
-   "RankingScore" to match RTB.
+   **"Promote R"** (reconciled to §F.2 per Langston Step-2 — RTB's header is
+   literally "RankingScore", so reusing it here would be the same-label/two-numbers
+   lie; distinct label + promotion tooltip).
+   Shadow-null posture CONFIRMED (Langston Step-2): the fence removal sends the
+   three residual metadata.rankingScore readers (dead getTopSignal, the :1891
+   control arm, the shadow-pool capture beside predictedRMultiple) to null —
+   retired-metric telemetry going honestly absent is the intended outcome.
 4. Rule-18 deletion: `getTopSignal` (:1424-1466) + `checkForPromotion` (:1829-1866
    region) — zero live callers (engine :2114 is getRankedSignals; verified via
    repo-wide grep excluding tests/_archive). Also delete `FINAL_SCORE_GAP_OVERRIDE`
