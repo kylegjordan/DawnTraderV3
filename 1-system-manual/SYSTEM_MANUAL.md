@@ -1677,6 +1677,35 @@ The canonical map provides `selectContextAwareStrategy()` which considers detect
 
 This selection logic ensures pattern and hybrid strategies are actively chosen when conditions warrant — but **only if the DSS is wired to use it**.
 
+### ★ Genesis Display-Context Capture — the queue-metadata stamp (P19-B8.10, 2026-07-18)
+
+Every active-path signal's queue metadata now carries a **genesis display-context
+stamp**, built in `buildSizedSignalForStrategy` (`_displayContext`) at the moment the
+signal qualifies, from the SAME shared helpers the VTS open-trade capture reads —
+mirror semantics, one formula per value, no drift:
+
+| Key | Source (shared with VTS) |
+|---|---|
+| `regime` | `SizingContext.regime` carrier — single-point-stamped per pipe (crypto quant = the MCE context; crypto pattern pass = the pattern's own context, RE-stamped per pattern to kill stale cross-symbol leakage; xStock = the eval-cycle regime threaded through `XstockActiveDispatchInput`) |
+| `globalRegime` | `getTelemetryAggregator().getDominantRegimeForClass(class)` |
+| `pairFriction` | `computePairFrictionIndex(symbol, class)` — extracted to `core/math/cost-model.ts` from vts-runner's inline closure (byte-identical; both paths now call it) |
+| `globalFriction` | `getGlobalFriction(class)` |
+| `pairDirectionalBias`(+Score) | the `SizingContext.pairDbs*` carriers (MCE directionalBias / propagated pool DBS) |
+| `globalDirectionalBias`(+Score) | `getLastGlobalDBSCategory/Score(class)` |
+| `patternType` | the pattern name set at pattern-signal genesis — previously dropped at the queue transit (the same #530 shape; the engine's open-time `sigMeta.patternType` read now finds it) |
+| `entryLiquidityValue/Kind` | `fx5Data.volume24h` (crypto convention) — stamped into metadata so CLOSED rows retain it |
+| `rankAtPromote` | stamped LATER, at the engine's promote site, via the ranker's own `getDisplayRankKey` — the promote-frozen B7.1 R-multiple that won the slot (shown as "Promote R"; distinct from the RTB tab's LIVE value) |
+
+**Invariants:** KEEP-AS-DATA (#405/#530 discipline) — read by NOTHING on the decision
+path (verified: the engine reads only `patternType`; SQE/gates read typed columns);
+absent-stays-absent (a pipe with no honest value stamps nothing — never a default);
+the whole block is fail-open (a capture error can never block a qualified signal);
+NO backfill (pre-capture rows render honest em-dashes). Companion fence fix: the
+queue-enrich `rankingScore: input.rankingScore ?? finalScore` fallback was REMOVED
+(the retired metric had been silently masquerading as the ranking score on every
+open-position row) and the dead legacy ranker pair `getTopSignal`/`checkForPromotion`
+deleted (see DELETED_COMPONENTS_LOG P19-B8.10).
+
 ### ★ The Active Pattern-Pool Lane: DBS Transit Contract + the Silent-Suppression Postmortem (#530, 2026-07-17)
 
 > **Design (verified in code, Kyle-ordered review):** the pattern lane is a FULL parallel filter path, never a quant piggyback — pattern candidates pass ALL the IMF filters (LQ / VN / DI) against the pattern path's OWN DB thresholds (`screener_filters` `filter_path='active_pattern'`; fail-loud when the row is missing), and the scanner COMPUTES a real DBS/DI for pattern-only pairs in-lane. The MCE's B63 hard contract then requires that DBS at regime-classification time for every crypto pair — no fallback, by directive.
@@ -3492,7 +3521,7 @@ Provides helper functions for building settings from guardrails_v2:
 - **Position Size uses preComputedNotional**: The notional value is computed upstream in P2 stage and passed in via `trade.preComputedNotional`, preventing drift between sizing and execution.
 - **AJ19 dry-run mode**: For MAX_POSITION blocks, logs the block but allows the trade through (development diagnostic mode)
 - **RTB metrics tracking**: Passes/blocks are recorded via `rtbMetricsService` as source of truth
-- **Diagnostic integration**: Heavy logging through AJ16, AJ19, B4, B5, I1, I5 diagnostic tags and SLAL (Signal Lifecycle Audit Log)
+- **Diagnostic integration**: Heavy logging through AJ16, AJ19, B4, B5, I1, I5 diagnostic tags (SLAL retired P19-B8.10)
 
 ---
 
@@ -4291,7 +4320,7 @@ The L-Series autonomy cluster (MCP, ARE, GASP, MOF, MACO, ECS, DCE, etc.) was di
 6. [MicroExecutionService](#6-microexecutionservice)
 7. [ModeRegistry & Engine Instance Management](#7-moderegistry--engine-instance-management)
 8. [Lifecycle Events Service](#8-lifecycle-events-service)
-9. [Signal Lifecycle Audit Layer (SLAL)](#9-signal-lifecycle-audit-layer-slal)
+9. [Signal Lifecycle Audit Layer (SLAL) — RETIRED P19-B8.10](#9-signal-lifecycle-audit-layer-slal--retired-p19-b810-2026-07-18)
 10. [Execution Timing Service](#10-execution-timing-service)
 11. [Trade Flow Types (Directive 11.0B)](#11-trade-flow-types-directive-110b)
 12. [Execution Configuration](#12-execution-configuration)
@@ -4358,7 +4387,7 @@ Signal Source (FX5 → SignalOrchestrator → SQE → RTB → TCL)
 │                                                      │
 │  ModeRegistry — engine instances, telemetry broadcast│
 │  LifecycleEvents — signalValidated/readyToTrade/exec │
-│  SLAL — 7-stage signal lifecycle audit               │
+│  (SLAL retired P19-B8.10 — was: 7-stage audit)       │
 │  ExecutionTimingService — order timing marks          │
 │  TradeBob — trade data cache (1s TTL)                │
 │  UnifiedPriceCache — multi-bucket price management   │
@@ -4879,54 +4908,18 @@ All events:
 
 ---
 
-## 9. Signal Lifecycle Audit Layer (SLAL)
+## 9. Signal Lifecycle Audit Layer (SLAL) — RETIRED (P19-B8.10, 2026-07-18)
 
-**File**: `server/core/audit/signal_lifecycle_audit.ts`
-**Phase**: 8.8.4-A
-
-### 9.1 Seven Lifecycle Stages
-
-```
-GENERATION → SIZING → VALIDATION → QUEUED → PROMOTED → EXECUTION → COMPLETED/REJECTED
-```
-
-### 9.2 Fourteen Rejection Reasons
-
-| Reason | Description |
-|--------|-------------|
-| `INVALID_SIGNAL` | Malformed signal (missing fields) |
-| `ZERO_SIZE` | Sizing returned 0 quantity |
-| `GUARDRAIL_BLOCKED` | Risk guardrail rejected |
-| `MAX_POSITIONS` | Max open positions reached (legacy alias) |
-| `MAX_TRADES` | Max simultaneous open trades limit |
-| `SLOT_CONFLICT` | Post-guardrail slot capacity overflow |
-| `DAILY_LOSS_LIMIT` | Kill switch triggered |
-| `SYMBOL_COOLDOWN` | Symbol on cooldown |
-| `POSITION_CAP` | Position size cap exceeded |
-| `DUPLICATE_POSITION` | Already have position in symbol |
-| `EXECUTION_FAILED` | Trade execution failed |
-| `EXPIRED_SIGNAL` | Signal TTL expired |
-| `NO_PRICE` | Could not get reliable price |
-| `SQE_QUALITY_REJECT` | Failed SQE quality thresholds |
-
-### 9.3 Signal Journey Tracking
-
-Each signal gets a `SignalJourney` with:
-- 30-minute TTL
-- Maximum 5,000 concurrent journeys
-- 10,000 event history ring buffer
-- Strategy-level breakdown metrics
-- Success rate tracking
-
-### 9.4 SLAL Metrics
-
-Exposes comprehensive metrics including:
-- Signals generated/sized/validated/executed/completed/rejected
-- Rejections by reason and by stage
-- Average generation-to-completion time
-- Per-strategy success rates
-
----
+The Phase 8.8.4-A SLAL (`signal_lifecycle_audit.ts`: the 7-stage in-memory journey
+tracker + 14 rejection reasons + `/api/diagnostics/signal-lifecycle` endpoints) was
+DELETED per rule 18 with its SOLE reader, the Ready-tab `ExecutionMetricsPanel`
+(Kyle 2026-07-18 — Phase-8 relics superseded by the Filter Diagnostics tabs). All
+`record*` telemetry call sites across signal-orchestrator / RTB service / the
+active execution engine / trade-safety were removed with it. **One load-bearing
+survivor:** `generateSignalId` — the active-path signal-ID mint — relocated
+VERBATIM to `server/utils/signal-id.ts` (format is a stored-data contract, pinned
+by `signal-id-format.test.ts`). Full record: `DELETED_COMPONENTS_LOG.md`
+(P19-B8.10); archive: `_archive/deleted-code/signal_lifecycle_audit.P19-B8.10.ts.removed`.
 
 ## 10. Execution Timing Service
 
@@ -5443,7 +5436,7 @@ reorg-B4 attaches a **selection-quality telemetry layer** to the promotion bound
 | ActiveExecutionEngine | Phase 4 (Guardrails V2) | Reads guardrails for position limits, kill switch |
 | TrailingExitController | Phase 4 (Cost Model) | Uses `computeNetBreakeven()`, `computeNetTargetFloor()` |
 | TradingEngine Goal Alignment | Phase 4 §7 (Pre-Execution Validator) | SECOND location of deprecated Goal Alignment |
-| SLAL | Phase 3 (Signal Orchestrator) | Instruments GENERATION/SIZING stages |
+| SLAL | RETIRED (P19-B8.10) | was: GENERATION/SIZING instrumentation; signal-ID mint survives in `utils/signal-id.ts` |
 | ModeRegistry | All engines | Central registry for engine instances |
 | Price Cache | Phase 4 (Kraken Service) | Rate-governed price fetching |
 | Execution Config | Phase 4 (RISK-031) | MAX_POSITION_RISK contradiction |
@@ -5540,7 +5533,7 @@ Kyle's directive for ongoing audits: if any subsystem operates in parallel to th
 |------|-------|--------|
 | `trade-flow.ts` | ~127 | ⚠ 9 strategies vs 17 canonical |
 | `execution-config.ts` | ~23 | ✅ TEC config (RISK-031 noted) |
-| `signal_lifecycle_audit.ts` | ~300+ | ✅ SLAL instrumentation |
+| `signal_lifecycle_audit.ts` | — | 🗑 DELETED P19-B8.10 (signal-ID mint → `utils/signal-id.ts`) |
 | `covariance-engine.ts` | ~371 | ✅ Portfolio risk math |
 
 ---
