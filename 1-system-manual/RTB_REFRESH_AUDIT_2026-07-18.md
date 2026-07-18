@@ -91,6 +91,31 @@ Both commits carry the **same** `Replit-Commit-Session-Id: 4ce4eda7-…` — one
 
 This is **not** a Phase-8-vs-Phase-19 split. Both predate the migration and both survived it untouched.
 
+## 5.0 ★ THE ORIGINATING DIRECTIVE — Mechanism A was built to REPLACE Mechanism B
+
+Source: `attached_assets/Pasted--Directive-8-8-4-A3-R9-3-Integrity-Completion-Deprecati_1766328922627.txt`, added BY commit `e0317475b` (2025-12-21). Title: **"Directive 8.8.4-A3.R9.3 — Integrity Completion & Deprecation Sweep (Final)."**
+
+This document resolves the provenance question definitively. The two mechanisms are NOT a coexistence-by-design; **Mechanism B is a resurrection of a model that had just been formally deprecated.**
+
+**The batch model was listed as a DEFECT to remove — problem P1:**
+> "Global refresh barrier blocks TCL — **Batch-with-stagger model** prevents trades during most of each cycle. Impact: TCL appears 'random' or 'stuck.'"
+
+**Directive R9.3-A ordered its REPLACEMENT (not augmentation):**
+> "**Replace batch-with-stagger refresh system** with independent timers per signal. Each signal refreshes itself every 30 s (synced to central clock). • Use `nextRefreshAt` timestamp per signal. • Hook to central clock tick. • **Remove `rtbRefreshComplete` barrier entirely.** • **Add `isRefreshing` flag per signal to prevent TCL promoting signals mid-refresh.**"
+
+That is Mechanism A, verbatim — and it explains why the `isRefreshing` flag exists at all (`:720`/`:738`/`:594`): the directive created it as the replacement's concurrency primitive. Mechanism B never reads it because Mechanism B was supposed to be **gone**.
+
+**The directive also forbade exactly what happened next — §7 Architectural Integrity Notes:**
+> "**No new services or helpers introduced.** All logic confined to existing modules (`ready_to_buy_service`, `tcl_watchdog`, etc.). Central clock remains single source of timing truth."
+
+**Two days later**, commit `7a029f390` (2025-12-23), **same Replit session**, created `server/services/rtb-refresh-service.ts` — a NEW SERVICE on its own 15s interval — reviving `refreshAndRank`, the batch path R9.3-A had just replaced. That single commit violated both halves of the directive it was two days downstream of: it introduced a new service, and it restored the deprecated batch model. Its stated motive ("decoupling refresh from the FX5 scan loop") was a legitimate problem solved with the mechanism that had just been retired, apparently without recognising it as such.
+
+**Net:** the dual-mechanism state is an *un-completed deprecation*, reversed 48 hours after it landed, running unnoticed for ~7 months across the Replit→clone migration. This materially strengthens the §9 disposition: consolidation is not a design choice between two valid options — it is **finishing R9.3-A as originally directed**, with Mechanism A as the intended survivor (subject to §8's requirement that it re-read every SQE-consumed input).
+
+**Corollary — the no-expiry behaviour is DELIBERATE, not an oversight.** R9.3-C ordered TTL removal outright: *"Eliminate time-to-live expiry for signals. Lifecycle now governed solely by SQE results… Delete TTL constants and `signal.expiresAt` assignments."* §5 of the directive confirms the intended end-state: *"Signals live indefinitely while passing SQE; they expire only when failing revalidation."* So the absence of a stale-drop category is a considered 2025 decision, not a forgotten one. Whether it remains correct under active trading is a live question for `B-RTB-REFRESH-CONSOLIDATE` — but it must be re-decided, not "fixed" as a bug.
+
+**Also confirmed by the directive:** the `[A3.R9.3][REFRESH_COMPLETE]` marker this audit measured in §6 is the directive's own prescribed diagnostic (§5: *"Trace logs show `[A3.R9.3][REFRESH_COMPLETE] symbol=XYZ` per signal cycle"*), and its verification protocol expected one per signal **within 30 s** — which is the yardstick the §6 tick anomaly (7 ticks / 9 h) should be measured against.
+
 ## 5.1 Why the June 2026 pipeline audit missed it
 
 `ACTIVE_TRADING_PIPELINE_AUDIT_AS_OF_2026-06-18.md` references `refreshAndRank` exactly once (`:192` — noting it recomputes finalScore but not rankingScore). It contains **no reference** to `executePerSignalRefresh`, `refreshSingleSignal`, the Central-Clock subscription, or the existence of a second mechanism. The audit traced the batch path and stopped. That audit also already flagged (`:177`) the placeholder inputs — `regimeStability` from hardcoded `computeGlobalStability(0.5, 0, confidence)`, `trendStrength` hardcoded `0.5`, `volatility` default `0.3` — which remain live.
