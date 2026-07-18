@@ -13,7 +13,7 @@
 3. **ITERATE TO COMPLETION — don't stop after a status update.** Keep processing the same turn; post progress as you pass milestones; ONLY stop on a genuine Kyle-only block (credential/provisioning/decision/approval) — then state the one blocker. (Full rule below in the protocol.)
 4. **Full 11-step workflow EVERY batch** (CLAUDE.md §2) — scope → pre-audit (SIM read) → implement → Langston diff review → push+CI-green → deploy → verify → Langston 2nd-pass → iterate → governance docs → completion report. Never skip a step; if tempted to skip, tell Kyle.
 5. **Commit hygiene:** test on the `C:\dev` bench (tsc baseline + vitest) BEFORE pushing (§7.1); stage EXPLICIT paths (never `-A`); batch-id at the START of the commit subject; push only from the GoogleDrive folder; verify CI green after.
-6. **★ BUG TAXONOMY (Kyle 2026-07-18, all three Claudes):** "that's a bug" = a HYPOTHESIS lasting seconds. First principles = DIG THROUGH THE CODE (it will stick out whether it's malfunctioning or working as intended), then SIM + audit + INTENT. THREE outcomes, never collapsed: (1) real defect → root-fix; (2) working-as-designed-but-UNADDRESSED → a scope DECISION, not a fix; (3) legacy vs intent → adapt or remove cleanly. Check each other — incl. pushing back on Kyle (he asked). Origins: xStock weekend alerts + the pattern-DBS transit find (detail: MEMORY_CC_B feedback block).
+6. **★ BUG TAXONOMY = CLAUDE.md §5 rule 24 (Kyle 2026-07-18, standing there per his correction — read it there):** code-first verification, three outcomes never collapsed (real defect / working-as-designed-but-UNADDRESSED = scope call / legacy-vs-intent), check each other incl. Kyle.
 
 ---
 
