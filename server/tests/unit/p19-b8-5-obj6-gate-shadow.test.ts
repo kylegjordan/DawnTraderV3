@@ -4,11 +4,20 @@
 // failure; without it (and without the VTS skip flags) they block exactly as before.
 // The stability driving both gates is fabricated on the active path (cold-start
 // defaults in signal-orchestrator) — see SQEOptions.gateShadowMode + RUNNING_ISSUES #514.
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { signalQualityEvaluator, type SQEInput } from '../../core/filters/signal_quality_evaluator';
 import { _seedModuleCacheForTests, invalidateModuleCache } from '../../services/module-constants-service';
 
 beforeAll(() => {
+  // 2026-07-18 fix (found when the suite went red on the first WEEKEND CI run):
+  // the killInput is xstock_spot, and the SQE's B79 weekend-closure gate
+  // EARLY-RETURNS a single 'xstock_weekend_closure' failure on Sat/Sun — the
+  // Confidence/NetEV gates under test are never reached, so all three
+  // composition assertions fail every weekend. Pin the clock to a known
+  // WEEKDAY inside the xStock 24/5 window (Wed 2026-07-15 15:00Z) so the
+  // contract under test is date-deterministic. setSystemTime mocks Date only
+  // (real timers stay live — no async interference).
+  vi.setSystemTime(new Date('2026-07-15T15:00:00Z'));
   // evaluate() sync-reads the strategy_gates module (per-class strategy gate) — warm it
   // with the same explicit-enabled posture the live seeds carry.
   _seedModuleCacheForTests('strategy_gates', [
@@ -35,6 +44,7 @@ afterAll(() => {
   // The seeds above never expire — drop them so same-worker test files that manage
   // their own module-cache state are not poisoned.
   for (const m of ['strategy_gates', 'sqe_config', 'governance_modes']) invalidateModuleCache(m);
+  vi.useRealTimers();
 });
 
 // A DEFENSIVE-mode stability with a sub-floor confidence: fails BOTH gates when they

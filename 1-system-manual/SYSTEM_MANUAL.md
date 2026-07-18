@@ -525,6 +525,8 @@ The EXIT-side mirror of the B7.2c entry rest, deployed `06560c299`. In `active-e
 TotalRoundTripCost = (fee × 2) + (slippage × 2) + spread
 ```
 
+> **★ P19-B8.7 Step-9 (2026-07-17, `a8dc548de`) — spread SOURCE unified + components persisted.** (1) **Rule-23 fix:** the xStock VTS eval lane had a hardcoded `const spread = 0.001` in this blend — CRYPTO's constant, below xStock's own 0.0012 static default — silently overriding the per-symbol MEASURED spread `getCachedCostMetrics` already serves (B-5 AMR measured-with-fallback + `spreadSource` provenance). The constant is DELETED; every lane's blend now consumes `costMetrics.spread`. Behavioral: xStock VTS friction rises ≥2bps (fallback symbols) or by the measured delta → `expectedEdge`/Net-EV admission tightens correspondingly (telemetry-only lane). (2) **Component capture:** the three blend components (`costFee/Slippage/SpreadFraction`) are persisted on VTS trade records at open (context jsonb) so the UI cost 5-col split derives honestly — convention: spread allocated HALF to each slip leg, so the four displayed legs sum EXACTLY to the blended total. A blended scalar is NEVER decomposed retroactively (no backfill — Langston-ratified invariant); pre-capture rows render em-dashes.
+
 ### Default Values (from exchange-defaults.ts)
 
 | Component | Default | Notes |
@@ -1674,6 +1676,14 @@ The canonical map provides `selectContextAwareStrategy()` which considers detect
 5. **Primary**: Default to the first strategy in the regime's list
 
 This selection logic ensures pattern and hybrid strategies are actively chosen when conditions warrant — but **only if the DSS is wired to use it**.
+
+### ★ The Active Pattern-Pool Lane: DBS Transit Contract + the Silent-Suppression Postmortem (#530, 2026-07-17)
+
+> **Design (verified in code, Kyle-ordered review):** the pattern lane is a FULL parallel filter path, never a quant piggyback — pattern candidates pass ALL the IMF filters (LQ / VN / DI) against the pattern path's OWN DB thresholds (`screener_filters` `filter_path='active_pattern'`; fail-loud when the row is missing), and the scanner COMPUTES a real DBS/DI for pattern-only pairs in-lane. The MCE's B63 hard contract then requires that DBS at regime-classification time for every crypto pair — no fallback, by directive.
+>
+> **The defect (dead since the B63 contract landed, revived by `a8dc548de`):** the pattern POOL intake (`addPatternPoolSurvivors`) had no fields for the computed DBS/DI — the values were discarded in transit between scanner and pool. The orchestrator's pattern loop feeds the MCE **from the pool entry**, so every pattern-pool evaluation hit the hard contract empty-handed → threw → was swallowed by the loop's per-symbol catch. Net effect: the pattern-pool signal loop generated ZERO signals for months (592 swallowed contract violations on 2026-07-17 alone; zero after the fix deployed); all PATTERN-labeled signals in that era came from the quant loop's hybrid-confluence route. The fix carries the scanner's computed values onto the pool entry — filtering thresholds, admission gates (SQE Net Expectancy, exploration budget, slot cap, sizing rails) all UNCHANGED; only candidate flow was restored. The VTS lanes were verified clean throughout (their pairs carry DBS on the scan-batch objects directly).
+>
+> **Standing lesson:** a per-symbol catch that can swallow a hard-contract throw converts fail-loud into fail-quiet. The #522 end-of-Phase-19 runtime audit carries the enumeration of every such catch site.
 
 ### Active Crypto Pattern→Strategy Routing — Exact-Match-or-Drop (P19-B6.5c, 2026-06-17)
 
