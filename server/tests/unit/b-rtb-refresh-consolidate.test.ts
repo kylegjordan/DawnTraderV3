@@ -16,6 +16,7 @@
  * since queueing was reconfirmed on the old number.
  */
 import { describe, it, expect } from 'vitest';
+import { calculateRegimeWeight } from '../../core/utils/score-calculator';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
@@ -99,5 +100,42 @@ describe('B-RTB-REFRESH-CONSOLIDATE: score-timing invariant preserved (Langston 
 
   it('sourcePool stays the frozen at-queue value (governed exception — admission lane is history)', () => {
     expect(refreshAndRankBody()).toContain("sourcePool: (signal as any).sourcePool");
+  });
+});
+
+describe('B-RTB-REFRESH-CONSOLIDATE OBJ-2: regimeWeight recompute — honest about what it does NOT fix', () => {
+  it('the recompute tracks LIVE volatility (the honest third)', () => {
+    // calculateRegimeWeight = trendScore×0.70 + (1 − min(1,vol))×0.30
+    const calm = calculateRegimeWeight({ trendStrength: 0.5, volatility: 0.02 });
+    const stormy = calculateRegimeWeight({ trendStrength: 0.5, volatility: 0.90 });
+    // A volatility spike must LOWER the weight — that is the whole point of refreshing it,
+    // and the direction that can evict a signal whose market turned after queueing.
+    expect(stormy).toBeLessThan(calm);
+  });
+
+  it('★ 70% of the output is INERT to the fabricated trendStrength — this is NOT a repair', () => {
+    // trendStrength is hardcoded 0.5 at generation with no honest source in the repo.
+    // Hold volatility fixed and sweep the ONE input that is real vs the one that is fake:
+    const volSwing = Math.abs(
+      calculateRegimeWeight({ trendStrength: 0.5, volatility: 0.0 }) -
+      calculateRegimeWeight({ trendStrength: 0.5, volatility: 1.0 })
+    );
+    const trendSwing = Math.abs(
+      calculateRegimeWeight({ trendStrength: 0.0, volatility: 0.5 }) -
+      calculateRegimeWeight({ trendStrength: 1.0, volatility: 0.5 })
+    );
+    // The fabricated axis owns MORE of the range than the honest one — 0.70 vs 0.30.
+    expect(trendSwing).toBeGreaterThan(volSwing);
+    expect(volSwing).toBeCloseTo(0.30, 5);
+    expect(trendSwing).toBeCloseTo(0.70, 5);
+    // Pinned so nobody can later describe the RegimeWeight gate as "fed honest data" while
+    // trendStrength remains a constant. Fixing that is its own named item.
+  });
+
+  it('with trendStrength pinned at 0.5, the entire live range is 0.35–0.65', () => {
+    const lo = calculateRegimeWeight({ trendStrength: 0.5, volatility: 1.0 });
+    const hi = calculateRegimeWeight({ trendStrength: 0.5, volatility: 0.0 });
+    expect(lo).toBeCloseTo(0.35, 5);
+    expect(hi).toBeCloseTo(0.65, 5);
   });
 });

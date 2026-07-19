@@ -791,6 +791,7 @@ class ReadyToBuyService {
     decayPenalty: number;
     refreshedFinalScore: number;
     refreshedMT: { chosenMode: 'taker' | 'maker'; chosenNetEV: number; takerNetEV: number; makerNetEVAdjusted: number; entryFeeRate: number } | null;
+    refreshedRegimeWeight: number;
   } {
     // Directive 11.3A: conditional geometry refresh (throttled on max-age / vol-shift /
     // spread-shift — an efficiency guard, not a staleness defect).
@@ -868,7 +869,24 @@ class ReadyToBuyService {
       }
     }
 
-    return { currentVol, currentSpread, netExpectedEdge, geometryRefreshed, decayPenalty, refreshedFinalScore, refreshedMT };
+    // ── B-RTB-REFRESH-CONSOLIDATE OBJ-2 (2026-07-19): recompute regimeWeight on the LIVE
+    // volatility this pass just read, instead of replaying the queue-time value.
+    //
+    // ⚠️ THIS IS NOT A REPAIR OF regimeWeight, and must never be billed as one.
+    // calculateRegimeWeight = (trendScore × 0.70) + ((1 − normalizedVolatility) × 0.30), and
+    // `trendStrength` is HARDCODED 0.5 at generation with no honest source anywhere in the repo
+    // (own named item). So ~70% of this number remains fabricated; only the 0.30 volatility
+    // term becomes honest here. What it genuinely fixes: the RegimeWeight gate BLOCKS, and it
+    // was evaluating a queue-time volatility — so a signal whose market turned volatile after
+    // queueing kept its calm-market weight. Now the volatility third tracks reality.
+    // ADMISSION-AFFECTING: a volatility spike now lowers regimeWeight and can evict, which is
+    // the correct direction and the reason this belongs in the refresh at all.
+    const refreshedRegimeWeight = calculateRegimeWeight({
+      trendStrength: metadata.trendStrength ?? 0.5, // fabricated — see above
+      volatility: currentVol,                        // LIVE, the honest third
+    });
+
+    return { currentVol, currentSpread, netExpectedEdge, geometryRefreshed, decayPenalty, refreshedFinalScore, refreshedMT, refreshedRegimeWeight };
   }
 
   private async refreshSingleSignal(signal: RtbSignal, mode: TradingMode): Promise<{ passed: boolean }> {
@@ -897,6 +915,9 @@ class ReadyToBuyService {
     const decayPenalty = _acq.decayPenalty;
     const refreshedFinalScore = _acq.refreshedFinalScore;
     const _b72bRefreshedMT = _acq.refreshedMT;
+    // OBJ-2: both mechanisms consume the SAME recomputed regimeWeight — divergence here would
+    // reintroduce exactly the per-path disagreement this batch exists to remove.
+    const refreshedRegimeWeight = _acq.refreshedRegimeWeight;
 
     // Phase 14: SQE revalidation — pass pre-computed FinalScore/RegimeWeight (no backfill)
     // P19-B4a (C4): assetClass REQUIRED on SQEInput. PREFER the row's stamp
@@ -924,7 +945,7 @@ class ReadyToBuyService {
       assetClass: sqeAssetClass,
       confidence: confidence,
       finalScore: refreshedFinalScore,
-      regimeWeight: regimeWeight,
+      regimeWeight: refreshedRegimeWeight,
       trendStrength: metadata.trendStrength ?? 0.5,
       volatility: currentVol,
       // P19-B8.5b (OBJ-4, #498): feed the FROZEN at-queue sourcePool (the row's own value,
@@ -993,7 +1014,7 @@ class ReadyToBuyService {
         originalFinalScore: originalFinalScore.toString(),
         decayPenalty: decayPenalty,
         hybridScore: hybridScore,
-        regimeWeight: regimeWeight,
+        regimeWeight: refreshedRegimeWeight,
         // Directive 11.3A: Net geometry fields
         netExpectedEdge: netExpectedEdge,
         volatility: currentVol,
@@ -1184,6 +1205,7 @@ class ReadyToBuyService {
               );
               const decayPenalty = _acq.decayPenalty;
               const refreshedFinalScore = _acq.refreshedFinalScore;
+              const refreshedRegimeWeight = _acq.refreshedRegimeWeight;
               
               // Phase 14: SQE revalidation — pass pre-computed FinalScore/RegimeWeight (no backfill)
               // P19-B4a (C4): assetClass REQUIRED on SQEInput. PREFER the row's stamp
@@ -1222,7 +1244,9 @@ class ReadyToBuyService {
                 assetClass: sqeAssetClass,
                 confidence: confidence,
                 finalScore: refreshedFinalScore,
-                regimeWeight: regimeWeight,
+                // OBJ-2: recomputed on live volatility (NOT a repair — ~70% is still the
+                // hardcoded trendStrength term; see acquireRefreshedInputs).
+                regimeWeight: _acq.refreshedRegimeWeight,
                 trendStrength: metadata.trendStrength ?? 0.5,
                 // OBJ-2: LIVE volatility from the shared acquisition (was `metadata ?? 0.3`).
                 volatility: _acq.currentVol,
@@ -1290,7 +1314,9 @@ class ReadyToBuyService {
                     statusUpdatedAt,
                     originalFinalScore: originalFinalScore.toString(),
                     hybridScore: hybridScore,
-                    regimeWeight: regimeWeight,
+                    // OBJ-2: persist the RECOMPUTED weight — writing the stale one back would
+                    // re-freeze the value the next pass reads (the self-perpetuating pattern).
+                    regimeWeight: refreshedRegimeWeight,
                     decayPenalty: decayPenalty,
                     // ★ OBJ-2: the freshness fields this path NEVER wrote — the reason the
                     // frozen snapshot was self-perpetuating. `lastCostRefresh` also re-arms
