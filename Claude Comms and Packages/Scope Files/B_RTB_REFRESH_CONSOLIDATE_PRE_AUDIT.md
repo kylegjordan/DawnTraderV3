@@ -182,3 +182,32 @@ OBJ-2b splits into three distinct dispositions, not one:
 1. `volatility` — **DONE** (step 1 transplant).
 2. `regimeStability` — **wire-or-refuse**, pending the `applyGovernance`-on-active question above.
 3. `trendStrength` — **NOT fixable here**; needs its own named item for a real trend-strength source. The `regimeWeight` recompute rides on this and must not be claimed as a fix.
+
+
+## ★ CRUX RESOLVED — Finding 2 COLLAPSES; the #514 discharge is WITHDRAWN (2026-07-19)
+
+**`applyGovernance` has ZERO callers repo-wide** (tests excluded; live log shows zero stability/drift/volZ activity). The honest producer — `computeGlobalStability(driftScore, volZ, …)` at `governance-engine.ts:83` — lives *inside* that dead function. So the stability cache is never populated on ANY path, `getStabilityState()` would always return `stability: null`, and its only consumer (`governance-engine.ts:187`) is itself unreachable.
+
+**Finding 2's optimistic reading is wrong: there is no consumable honest source. The producer exists as code and is never invoked.**
+
+**§9.5(b-ii) ledger search — BOTH halves already filed; NOTHING new to file (5th catch):**
+- **#219 OPEN** (B-4.7, Langston pre-audit item d, 2026-06-11) — *"`applyGovernance` (regime-stability path) has zero production callers — the flip-rate governance input is dead config. Phase 16 review."*
+- **#233 OPEN** (P19-B3b, 2026-06-14) — the `computeGlobalStability` driftScore/volZ **fabricated-defaults** concern, explicitly flagged as distinct and still open.
+
+### Consequence 1 — the #514 hand-off is WITHDRAWN (CC-A error, owned)
+CC-B accepted the hand-off on the basis that **this batch wires honest drift/volZ**. It cannot. Doing so requires resolving **#219** (call the producer at all) and **#233** (give it real inputs) — Phase-16 / separate work, not refresh work. Withdrawn promptly rather than carried as a promise this batch can't keep. #514 stays parked on its original precondition.
+
+### Consequence 2 — a precision error in CC-A's own coupling claim
+The fabrication that poisons #514's shadow evidence happens at the **GENERATION** site (`computeGlobalStability(0.5, 0, confidence)` in `signal-orchestrator`), which is where the shadow gates actually evaluate. **This batch touches the REFRESH.** At refresh, `regimeStability` is simply *not fed* — so the gates skip rather than evaluate garbage.
+
+**Therefore the refresh was never the right vehicle for the #514 evidence-quality problem, and CC-A's coupling argument was wrong in that specific respect.** The correct home is the generation site + #219/#233, not here.
+
+### Revised OBJ-2b disposition (Langston to ratify)
+| Input | Disposition |
+|---|---|
+| `volatility` | ✅ DONE — live at refresh (step-1 transplant) |
+| `regimeStability` | **NO CHANGE in this batch.** Not fed at refresh today (gates skip, nothing fabricated *here*). Wiring blocked on #219+#233. Documented as a **named governed frozen-exception** — which lands exactly where Langston's original Q2 phrasing pointed, before CC-A argued him off it. He was right first. |
+| `trendStrength` | **NOT fixable here** — hardcoded `0.5` at generation, no honest source exists anywhere. Needs its own named item. |
+| `regimeWeight` | Recompute at refresh with live volatility = 30% honest, 70% still the fabricated `trendStrength` term. **Do NOT claim this as a repair** (see Finding 1). |
+
+**Net:** OBJ-2b's *substantive* content in this batch is what step 1 already delivered. The remainder is blocked on pre-existing filed issues and must be stated as such in the completion report rather than quietly dropped.
