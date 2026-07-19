@@ -2,7 +2,7 @@
  * P19-B8.3 (OBJ-3) — the per-mode Dashboard tab. ONE component, three modes.
  *
  * Layout = Kyle's screenshot-locked legacy-/dashboard widget template, fed with
- * REAL mode-scoped data: Portfolio Value · Earnings (calendar Today/Week/Month)
+ * REAL mode-scoped data: Portfolio Value · Earnings (ROLLING 24h/7d/30d — P19-B8.11)
  * · Trading Activity & Results (window selector) · Averages + Edge strip ·
  * Realized-Balance-Over-Time chart · asset-class + strategy breakdown tables.
  *
@@ -152,16 +152,16 @@ function ActiveModeDashboard({ mode }: { mode: "paper" | "live" }) {
           </CardContent>
         </Card>
 
-        {/* Earnings — calendar buckets (range-independent) */}
+        {/* Earnings — ROLLING windows (range-independent; P19-B8.11, Kyle 2026-07-19) */}
         <Card>
-          <CardHeader className="py-3"><CardTitle className="text-base flex items-center gap-2"><TrendingUp className="w-4 h-4" />Earnings <span className="text-[10px] font-normal text-muted-foreground">(calendar, net)</span></CardTitle></CardHeader>
+          <CardHeader className="py-3"><CardTitle className="text-base flex items-center gap-2"><TrendingUp className="w-4 h-4" />Earnings <span className="text-[10px] font-normal text-muted-foreground">(rolling, net)</span></CardTitle></CardHeader>
           <CardContent className="pt-0">
             {analytics.isError ? <ErrorBanner label="earnings" onRetry={() => analytics.refetch()} /> :
               analytics.isLoading ? <div className="text-sm text-muted-foreground">Loading…</div> : (
               <>
-                <StatRow label="Today" value={usd(a?.earnings?.today)} valueCls={signCls(a?.earnings?.today)} />
-                <StatRow label="This Week" value={usd(a?.earnings?.thisWeek)} valueCls={signCls(a?.earnings?.thisWeek)} />
-                <StatRow label="This Month" value={usd(a?.earnings?.thisMonth)} valueCls={signCls(a?.earnings?.thisMonth)} />
+                <StatRow label="Today (24h)" value={usd(a?.earnings?.last24h)} valueCls={signCls(a?.earnings?.last24h)} />
+                <StatRow label="Past 7 Days" value={usd(a?.earnings?.last7d)} valueCls={signCls(a?.earnings?.last7d)} />
+                <StatRow label="Past 30 Days" value={usd(a?.earnings?.last30d)} valueCls={signCls(a?.earnings?.last30d)} />
                 <StatRow label="Net P/L (window)" value={usd(a?.netPnl)} valueCls={signCls(a?.netPnl)} />
                 <StatRow label="Net P/L % (vs starting balance)" value={pct(a?.netPnlPercent)} valueCls={signCls(a?.netPnlPercent)} />
               </>

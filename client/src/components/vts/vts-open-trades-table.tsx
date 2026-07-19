@@ -45,6 +45,7 @@ export function OpenTradesTable({
   renderAfterSymbolCells,
   rankHeaderLabel = "Rank",
   rankHeaderTitle,
+  hidePoolColumn = false,
   emptyLabel = "No open simulated trades",
 }: {
   trades: OpenTrade[];
@@ -61,6 +62,10 @@ export function OpenTradesTable({
       quantities (Langston pin-down 2). */
   rankHeaderLabel?: string;
   rankHeaderTitle?: string;
+  /** P19-B8.11: hide the VTS-only Pool (I/R) column (ideal/rotational pair-pool
+      axis — no active-path equivalent, permanently blank on paper rows; Kyle
+      2026-07-19). Default OFF — VTS mounts unchanged. */
+  hidePoolColumn?: boolean;
   /** <td> nodes per row, matching afterSymbolHeaders. Default OFF. */
   renderAfterSymbolCells?: (trade: OpenTrade, index: number) => React.ReactNode;
   /** Empty-state text; default keeps the VTS wording. */
@@ -160,7 +165,7 @@ export function OpenTradesTable({
               <SortableHeader label="Regime" field="regime" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
               <SortableHeader label="Strategy" field="strategy" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
               <th className="px-3 py-2 text-left font-medium text-muted-foreground">Signal/Pattern</th>
-              <SortableHeader label="Pool (I/R)" field="pool" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
+              {!hidePoolColumn && <SortableHeader label="Pool (I/R)" field="pool" currentSort={sortField} direction={sortDirection} onSort={handleSort} />}
               <th className="px-3 py-2 text-left font-medium text-muted-foreground">Source Pool</th>
               {/* P19-B7.2b (OBJ-C): entry fee-mode (maker/taker) column */}
               <th className="px-3 py-2 text-left font-medium text-muted-foreground" title="The maker/taker entry fee-mode this trade opened on (entry-side fee only). '—' for trades opened before this column existed.">Entry Fee Mode</th>
@@ -208,7 +213,7 @@ export function OpenTradesTable({
                 {/* colSpan 33 = 32 standard columns post cost-split + 1 headroom for
                     appended paper columns (browsers clamp overshoot to the row width;
                     matches the closed table's 32+1 pattern — Langston Step-4 note 1). */}
-                <td colSpan={33} className="px-3 py-8 text-center text-muted-foreground">
+                <td colSpan={33 - (hidePoolColumn ? 1 : 0)} className="px-3 py-8 text-center text-muted-foreground">
                   {emptyLabel}
                 </td>
               </tr>
@@ -275,11 +280,13 @@ export function OpenTradesTable({
                       <span className="text-xs text-muted-foreground">{trade.patternType || '-'}</span>
                     </div>
                   </td>
-                  <td className="px-3 py-2">
-                    <Badge variant="outline" className={`text-xs ${getPoolBadgeColor(trade.pool)}`}>
-                      {trade.pool}
-                    </Badge>
-                  </td>
+                  {!hidePoolColumn && (
+                    <td className="px-3 py-2">
+                      <Badge variant="outline" className={`text-xs ${getPoolBadgeColor(trade.pool)}`}>
+                        {trade.pool}
+                      </Badge>
+                    </td>
+                  )}
                   <td className="px-3 py-2">
                     <Badge variant="outline" className={`text-xs ${getSourcePoolBadgeColor(trade.sourcePool ?? 'unknown')}`}>
                       {(trade.sourcePool ?? 'unknown').toUpperCase()}

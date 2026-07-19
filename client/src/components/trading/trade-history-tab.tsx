@@ -281,6 +281,7 @@ export function TradeHistoryTab() {
                   (rule 18). */}
               <ClosedTradesTable
                 trades={filteredTrades.map(adaptPaperClosedTrade)}
+          hidePoolColumn
                 emptyLabel="No trades match your filters"
               />
               

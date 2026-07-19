@@ -36,18 +36,24 @@ export const num = (v: unknown): number => {
  * still show this week's/month's real closes (Langston Step-4 §1.7 — the
  * empty-window zero-shape defect this hoist fixes).
  */
-export function computeCalendarEarnings(
+/** P19-B8.11 (Kyle 2026-07-19): ROLLING earnings windows — last 24h / 7d / 30d
+ *  from `now` — replacing the calendar buckets (since-midnight / since-Sunday /
+ *  since-the-1st), whose boundary resets made the numbers read oddly. Matches the
+ *  standing rolling-windows-over-snapshots rule (CLAUDE.md §5.13). Renamed per
+ *  rule 18 (no alias left behind); field names are honest about the semantics. */
+export function computeRollingEarnings(
   validTrades: ClosedTradeLike[],
   now: Date,
-): { today: number; thisWeek: number; thisMonth: number } {
-  const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const startOfWeek = new Date(startOfDay);
-  startOfWeek.setDate(startOfDay.getDate() - startOfDay.getDay());
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+): { last24h: number; last7d: number; last30d: number } {
   const sumSince = (since: Date) => validTrades
     .filter(t => t.closedAt && new Date(t.closedAt) >= since)
     .reduce((sum, t) => sum + num(t.netPnl ?? t.pnl), 0);
-  return { today: sumSince(startOfDay), thisWeek: sumSince(startOfWeek), thisMonth: sumSince(startOfMonth) };
+  const ms = now.getTime();
+  return {
+    last24h: sumSince(new Date(ms - 24 * 60 * 60 * 1000)),
+    last7d: sumSince(new Date(ms - 7 * 24 * 60 * 60 * 1000)),
+    last30d: sumSince(new Date(ms - 30 * 24 * 60 * 60 * 1000)),
+  };
 }
 
 /** Fee drag: total fees + the share of GROSS profit consumed. pctOfGross is

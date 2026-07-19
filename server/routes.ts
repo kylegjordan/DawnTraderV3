@@ -58,7 +58,7 @@ import { getCache, setCache, coalesce } from './services/cache';
 import { metricsService } from './services/metrics-service';
 import { activeFilterPool } from './services/active-filter-pool.js';
 // P19-B8.3: pure dashboard-metric math (unit-tested — Langston Step-4 conditions).
-import { num, computeCalendarEarnings, computeFeeDrag, computeMakerTakerMix, computeAvgNetR, computeMaxDrawdownUsd, computeByAssetClass, profitFactorOrNull } from './services/dashboard-metrics.js';
+import { num, computeRollingEarnings, computeFeeDrag, computeMakerTakerMix, computeAvgNetR, computeMaxDrawdownUsd, computeByAssetClass, profitFactorOrNull } from './services/dashboard-metrics.js';
 import { marketVolumeCache } from './services/market-volume-cache.js';
 import { b5SizingAudit } from './services/b5-sizing-audit.js';
 import { livePricingAdapter, isRestFallbackSource, isPriceVenueQuiet } from './services/live-pricing-adapter.js';
@@ -12938,7 +12938,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
             avgNetR: { value: null, sampleCount: 0, excludedCount: 0 },
             maxDrawdownInWindow: { pct: null, usd: 0 },
             byAssetClass: {},
-            earnings: computeCalendarEarnings(validTrades, now),
+            earnings: computeRollingEarnings(validTrades, now),
             avgAmountInvested: 0
           }
         });
@@ -13081,7 +13081,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const byAssetClass = computeByAssetClass(trades);
 
       // Calendar earnings (Today/Week/Month) over ALL valid trades — range-independent.
-      const earnings = computeCalendarEarnings(validTrades, now);
+      const earnings = computeRollingEarnings(validTrades, now);
 
       // Phase 8.8.3-C6: Include engineRunning flag for consistency
       res.json({

@@ -17,7 +17,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
-  computeCalendarEarnings,
+  computeRollingEarnings,
   computeFeeDrag,
   computeMakerTakerMix,
   computeAvgNetR,
@@ -32,28 +32,33 @@ const NOW = new Date('2026-07-06T18:00:00Z');
 const daysAgo = (d: number) => new Date(NOW.getTime() - d * 24 * 3600 * 1000);
 
 describe('P19-B8.3 dashboard metrics (pure math)', () => {
-  // ── (a) calendar earnings survive an empty selected window ──────────────
-  it('calendar earnings are computed from the ALL-TIME valid set, not the window', () => {
-    // Local-calendar boundaries: NOW is a Monday (2026-07-06). Use hours-ago
-    // (same day), 1 day ago (this week, not today), and 20 days ago (this
-    // month via mid-June? no — 20d ago = June 16, PRIOR month). Choose 3 days
-    // ago = July 3 → this month, not this week (week starts Sunday July 5).
+  // ── (a) ROLLING earnings (P19-B8.11: last 24h / 7d / 30d from `now`, replacing
+  //        the calendar buckets whose boundary resets read oddly — Kyle 2026-07-19) ──
+  it('rolling earnings bucket by exact trailing windows, not calendar boundaries', () => {
     const validTrades = [
-      { netPnl: '10', closedAt: new Date(NOW.getTime() - 2 * 3600 * 1000) },  // today
-      { netPnl: '20', closedAt: daysAgo(1) },                                  // this week (Sunday)
-      { netPnl: '40', closedAt: daysAgo(3) },                                  // this month, prior week
-      { netPnl: '80', closedAt: daysAgo(40) },                                 // prior month — excluded
+      { netPnl: '10', closedAt: new Date(NOW.getTime() - 2 * 3600 * 1000) },  // 2h ago → all three windows
+      { netPnl: '20', closedAt: daysAgo(1.5) },                                // 1.5d ago → 7d + 30d (off the inclusive 24h boundary)
+      { netPnl: '40', closedAt: daysAgo(3) },                                  // 3d ago → 7d + 30d
+      { netPnl: '80', closedAt: daysAgo(40) },                                 // 40d ago — outside all windows
     ];
-    const e = computeCalendarEarnings(validTrades as any, NOW);
-    expect(e.today).toBeCloseTo(10);
-    expect(e.thisWeek).toBeGreaterThanOrEqual(30);   // today + Sunday close
-    expect(e.thisMonth).toBeCloseTo(70);             // all July closes
-    // The empty-window contract: the WINDOW plays no part — the same call the
-    // zero-shape makes returns these same real values.
+    const e = computeRollingEarnings(validTrades as any, NOW);
+    expect(e.last24h).toBeCloseTo(10);
+    expect(e.last7d).toBeCloseTo(70);   // 10 + 20 + 40
+    expect(e.last30d).toBeCloseTo(70);  // the 40d-old close stays excluded
+    // The empty-window contract: the SELECTED display window plays no part —
+    // the same call the zero-shape makes returns these same real values.
   });
 
-  it('calendar earnings are zero only when there are genuinely no closes', () => {
-    expect(computeCalendarEarnings([], NOW)).toEqual({ today: 0, thisWeek: 0, thisMonth: 0 });
+  it('rolling earnings honor the exact 24h boundary (a 25h-old close is not "last24h")', () => {
+    const e = computeRollingEarnings([
+      { netPnl: '5', closedAt: new Date(NOW.getTime() - 25 * 3600 * 1000) },
+    ] as any, NOW);
+    expect(e.last24h).toBe(0);
+    expect(e.last7d).toBeCloseTo(5);
+  });
+
+  it('rolling earnings are zero only when there are genuinely no closes', () => {
+    expect(computeRollingEarnings([], NOW)).toEqual({ last24h: 0, last7d: 0, last30d: 0 });
   });
 
   // ── (b) zero-denominator paths return null, never 0/NaN/Infinity ────────
