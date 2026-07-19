@@ -143,3 +143,42 @@ Langston's condition was `chosen_net_ev` **AND** `regime_weight` observably movi
 
 ## Remaining for step 2
 regimeWeight recompute · regimeStability honest wiring (#514 discharge) · trendStrength (OBJ-2b) · OBJ-3 fail-loud (awaits Langston's #535 netEV ruling so the skip is designed once) · OBJ-4 exit counters (the six silent deleters) · the §6 telemetry anomaly · A's retirement (rule 18) · SIM + System Manual (OBJ-6).
+
+
+---
+
+# STEP-2 DESIGN FINDINGS (CC-A, 2026-07-19) — honest-source investigation
+
+Establishes, per input, whether OBJ-2b resolves to **wire it** or **loud refusal** (OBJ-3). Both findings below are material and change how OBJ-2b must be written.
+
+## ★ FINDING 1 — `regimeWeight` is 70% a FABRICATED CONSTANT
+
+`calculateRegimeWeight` (`server/core/utils/score-calculator.ts:71`) is:
+
+```
+regimeWeight = (trendScore × 0.70) + ((1 − normalizedVolatility) × 0.30)
+```
+
+Its only two inputs are `trendStrength` and `volatility`. And `trendStrength` is **hardcoded `0.5` at generation** (`signal-orchestrator.ts`, confirmed in the contract table above; also flagged by the June audit at `:177`).
+
+**Therefore: `regimeWeight` — an input to one of the only two data-driven BLOCKING gates — is 70% determined by a hardcoded constant.** Substituting: `regimeWeight = 0.35 + 0.30 × (1 − volatility)`. The entire live range of that gate's input is the 0.30 volatility term; the dominant 0.70 term never moves.
+
+**Consequence for OBJ-2b:** recomputing `regimeWeight` at refresh (now possible — the transplant already fetches live volatility) makes the 30% term honest and is a genuine improvement, **but it does NOT fix the gate** — the dominant term stays fabricated until `trendStrength` has a real source. **Recomputing alone would be a cosmetic fix that LOOKS like a repair.** This must be stated plainly in the completion report and must not be presented as "regimeWeight is now honest."
+
+**Disposition (proposed, Langston to rule):** recompute at refresh with live volatility (partial honesty, no downside) **AND** file the `trendStrength` fabrication as its own named item — it is not fixable inside a refresh batch because the honest source does not exist anywhere; a real trend-strength computation is new work. Do NOT let the recompute silently discharge the placeholder violation.
+
+## ★ FINDING 2 — an HONEST `regimeStability` source EXISTS and is exported
+
+The active path fabricates it via `computeGlobalStability(0.5, 0, confidence)`. But the real producer is live:
+- `governance-engine.ts:83` — `computeGlobalStability(driftScore, volZ, regimeConfidence)` with **real** drift/volZ from `GovernanceContext`.
+- **`getStabilityState()` is EXPORTED** (`regime-stability.ts:170`), returning `{ stability: RegimeStability | null, metrics, reason, flipRate, lastComputed }` — the cached, honestly-computed classification.
+
+**So #514's precondition ("real active-path drift/volZ stability wiring") may be dischargeable by CONSUMING an existing producer rather than building one.** Proposed wiring: call `getStabilityState()` at refresh → non-null `stability` → feed it (honest); null → **loud refusal per OBJ-3**, never fabricate.
+
+**⚠️ OPEN — the crux, must be verified before committing to this:** does `applyGovernance` (the thing that populates the cache) actually RUN on the ACTIVE path, or only on VTS? If it never runs on active, `getStabilityState()` returns null there and the disposition collapses to loud-refusal-only — which still satisfies OBJ-3 but does **NOT** discharge #514 (the evidence would stay unavailable rather than fabricated). **This single question decides whether #514's discharge is real.** Next action for step 2.
+
+## Sequencing consequence
+OBJ-2b splits into three distinct dispositions, not one:
+1. `volatility` — **DONE** (step 1 transplant).
+2. `regimeStability` — **wire-or-refuse**, pending the `applyGovernance`-on-active question above.
+3. `trendStrength` — **NOT fixable here**; needs its own named item for a real trend-strength source. The `regimeWeight` recompute rides on this and must not be claimed as a fix.
