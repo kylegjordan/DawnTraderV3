@@ -70,6 +70,40 @@ export interface RtbRefreshCounters {
   reconfirmed: number;          // survived re-SQE (stayed queued)
   rejectedInRefresh: number;    // failed re-SQE (dropped from queue)
   promoted: number;             // promoted out of the queue to an open attempt
+  // ── B-RTB-REFRESH-CONSOLIDATE OBJ-4 (2026-07-19, CORRECTED after Langston CHANGES-NEEDED).
+  //
+  // CC-A's first cut conflated TWO different denominators: queue-LIFECYCLE exits (every way a
+  // row can leave rtb_signals — the §9.5(a) census's eight deleters) and refresh-PASS outcomes
+  // (what happens to a signal that entered THIS pass's re-evaluation). They are not the same
+  // set, and summing them produced an identity that could never hold:
+  //   • `promoted` fires in active-execution-engine.ts:2223 — a DIFFERENT service, not a pass outcome.
+  //   • the unclassifiable drop RETURNS BEFORE `refreshedAttempted` increments — it never enters.
+  //   • expiry lives in cleanupExpiredSignals, outside refreshAndRank entirely.
+  // Only ONE new bucket is a genuine refresh-pass outcome. The others were removed rather than
+  // wired, because wiring them would have made the identity wrong in a way that still "passed".
+  droppedError: number;          // exception mid-pass → row bulk-deleted. This one IS in the
+                                 // denominator: the catch wraps the per-signal body, so the row
+                                 // already ticked refreshedAttempted. #419 exactly — the catch
+                                 // ticked neither outcome, so under errors attempted exceeded
+                                 // reconfirmed + rejectedInRefresh and the sub-stage never balanced.
+}
+
+/** OBJ-4 — the refresh-PASS balance identity (deliberately narrow):
+ *    refreshedAttempted === reconfirmed + rejectedInRefresh + droppedError
+ *
+ *  Scope is every signal that ENTERED a pass, and only exits reachable AFTER the
+ *  `refreshedAttempted` increment. Non-zero residual ⇒ a mid-pass exit is still uncounted.
+ *
+ *  DELIBERATELY EXCLUDED (each leaves the queue, none is a pass outcome — counting them here
+ *  would drive the residual negative and mask the very thing it exists to catch):
+ *    • promoted — recorded by the execution engine, a separate lifecycle stage.
+ *    • unclassifiable-asset-class — returns pre-increment; also unattributable per-class BY
+ *      CONSTRUCTION (the branch is defined by that field being unresolvable), so it is alarmed
+ *      at DATA_INTEGRITY grade rather than tallied into a bucket it cannot be keyed into.
+ *    • expiry / cleanup sweep — outside refreshAndRank.
+ *  Whole-lifecycle accounting for those is a separate stage and a separate identity. */
+export function rtbRefreshPassResidual(r: RtbRefreshCounters): number {
+  return r.refreshedAttempted - (r.reconfirmed + r.rejectedInRefresh + r.droppedError);
 }
 
 /** The honest SQE double-count (Langston MUST-4): the SAME signal is SQE'd at generation AND again during
@@ -119,7 +153,7 @@ function _blank(): ActiveFunnelRecord {
     sqeGateRejects: {},
     sqeEvaluated: 0,
     sqePassed: 0,
-    rtbRefresh: { cyclesRun: 0, refreshedAttempted: 0, reconfirmed: 0, rejectedInRefresh: 0, promoted: 0 },
+    rtbRefresh: { cyclesRun: 0, refreshedAttempted: 0, reconfirmed: 0, rejectedInRefresh: 0, promoted: 0, droppedError: 0 },
     sqeAttempts: { atGeneration: 0, atRefresh: 0 },
   };
 }
@@ -301,6 +335,8 @@ export function recordActiveRtbRefresh(mode: FunnelMode, assetClass: FunnelAsset
   if (delta.reconfirmed) r.reconfirmed += delta.reconfirmed;
   if (delta.rejectedInRefresh) r.rejectedInRefresh += delta.rejectedInRefresh;
   if (delta.promoted) r.promoted += delta.promoted;
+  // OBJ-4: the previously-silent exits.
+  if (delta.droppedError) r.droppedError += delta.droppedError;
 }
 
 // ── READERS ──────────────────────────────────────────────────────────────────────────────────────────

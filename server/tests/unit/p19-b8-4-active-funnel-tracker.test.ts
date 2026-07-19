@@ -24,6 +24,7 @@ import {
   _writeRawCheckpointForTest,
   ACTIVE_FUNNEL_KEY_SCHEMA,
   SQE_CANONICAL_GATES,
+  rtbRefreshPassResidual,
 } from '../../core/observability/active-funnel-tracker.js';
 
 describe('P19-B8.4 active-funnel-tracker (S21)', () => {
@@ -124,8 +125,42 @@ describe('P19-B8.4 active-funnel-tracker (S21)', () => {
     recordActiveRtbRefresh('paper', 'crypto_spot', { cyclesRun: 1, refreshedAttempted: 4, reconfirmed: 3, rejectedInRefresh: 1 });
     recordActiveRtbRefresh('paper', 'crypto_spot', { cyclesRun: 1, promoted: 2 });
     const s = getActiveFunnelStats('paper', 'crypto_spot');
-    expect(s.rtbRefresh).toEqual({ cyclesRun: 2, refreshedAttempted: 4, reconfirmed: 3, rejectedInRefresh: 1, promoted: 2 });
+    // B-RTB-REFRESH-CONSOLIDATE OBJ-4 (2026-07-19): the counter shape gained three exit buckets
+    // (droppedUnclassifiable / droppedError / droppedExpired) so every queue exit is counted —
+    // the §9.5(a) census found EIGHT deleters against rtb_signals of which only two were tallied.
+    // This exact-shape assertion correctly caught the extension; the pin updates deliberately.
+    expect(s.rtbRefresh).toEqual({ cyclesRun: 2, refreshedAttempted: 4, reconfirmed: 3, rejectedInRefresh: 1, promoted: 2, droppedError: 0 });
     expect(hasActiveFunnelActivity('paper', 'crypto_spot')).toBe(true);
+  });
+
+  it('OBJ-4: the refresh PASS balances — every mid-pass exit counted, residual zero', () => {
+    resetActiveFunnelStats();
+    // 10 signals ENTER a pass; each leaves by one of the three exits reachable AFTER the
+    // refreshedAttempted increment. `promoted` is deliberately absent — it is recorded by the
+    // execution engine, a separate lifecycle stage, and including it drove the residual negative
+    // in CC-A's first cut (Langston Step-4).
+    recordActiveRtbRefresh('paper', 'crypto_spot', { refreshedAttempted: 10 });
+    recordActiveRtbRefresh('paper', 'crypto_spot', { reconfirmed: 6 });
+    recordActiveRtbRefresh('paper', 'crypto_spot', { rejectedInRefresh: 3 });
+    recordActiveRtbRefresh('paper', 'crypto_spot', { droppedError: 1 });
+    expect(rtbRefreshPassResidual(getActiveFunnelStats('paper', 'crypto_spot').rtbRefresh)).toBe(0);
+  });
+
+  it('OBJ-4: promoted does NOT enter the pass identity (it is a different stage)', () => {
+    resetActiveFunnelStats();
+    recordActiveRtbRefresh('paper', 'crypto_spot', { refreshedAttempted: 2, reconfirmed: 2 });
+    recordActiveRtbRefresh('paper', 'crypto_spot', { promoted: 5 }); // engine-side, later
+    // Residual stays 0: promotion is not an outcome of this pass, so it must not perturb it.
+    expect(rtbRefreshPassResidual(getActiveFunnelStats('paper', 'crypto_spot').rtbRefresh)).toBe(0);
+  });
+
+  it('OBJ-4: an UNCOUNTED exit shows up as a non-zero residual (the pre-fix condition)', () => {
+    resetActiveFunnelStats();
+    // Before this batch, a signal deleted by the catch block or the unclassifiable drop
+    // ticked NO outcome — refreshedAttempted exceeded the sum and the panel silently
+    // under-reported. The residual is what makes that visible instead of invisible.
+    recordActiveRtbRefresh('paper', 'crypto_spot', { refreshedAttempted: 5, reconfirmed: 2 });
+    expect(rtbRefreshPassResidual(getActiveFunnelStats('paper', 'crypto_spot').rtbRefresh)).toBe(3);
   });
 
   it('getActiveFunnelStats returns a deep copy — callers cannot mutate the singleton', () => {
@@ -154,7 +189,7 @@ describe('P19-B8.4 active-funnel-tracker (S21)', () => {
       expect(s.sqeEvaluated).toBe(10);
       expect(s.sqePassed).toBe(4);
       // absent nested fields fill from blank (no undefined leaks)
-      expect(s.rtbRefresh).toEqual({ cyclesRun: 0, refreshedAttempted: 0, reconfirmed: 0, rejectedInRefresh: 0, promoted: 0 });
+      expect(s.rtbRefresh).toEqual({ cyclesRun: 0, refreshedAttempted: 0, reconfirmed: 0, rejectedInRefresh: 0, promoted: 0, droppedError: 0 });
     });
 
     it('DISCARDS a mismatched-keySchema checkpoint → fresh window (no restore)', () => {

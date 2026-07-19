@@ -906,9 +906,12 @@ class ReadyToBuyService {
     // evaluate SQE against a guessed class (mirrors the SQE-fail removal path below).
     const sqeAssetClass = asValidAssetClass(signal.assetClass) ?? safeResolveAssetClass(normalizedSymbol, 'kraken');
     if (sqeAssetClass === null) {
+      // B-RTB-REFRESH-CONSOLIDATE OBJ-3/OBJ-4 — same treatment as the batch path: a stamped row
+      // that is now unresolvable is upstream breakage, not attrition. Counted + ERROR grade.
       await storage.deleteRtbSignals({ mode, id: signal.id });
       performanceMonitor.recordQueueRemove(1);
-      console.warn(`[11.0E][SQE_SKIP] unclassifiable ${normalizedSymbol} — dropped from queue (no valid stamp, unresolvable)`);
+      // Same as the batch path: unattributable by construction + pre-denominator. Alarm only.
+      console.error(`[11.0E][SQE_SKIP][DATA_INTEGRITY] unclassifiable ${normalizedSymbol} — dropped from queue (row was stamped at write; unresolvable now = upstream breakage)`);
       this.signalRefreshStates.delete(this._refreshKey(mode, signal.signalId));
       return { passed: false };
     }
@@ -1150,6 +1153,11 @@ class ReadyToBuyService {
       for (const group of chunks) {
         await Promise.all(
           group.map(async (signal) => {
+            // OBJ-4: hoisted ABOVE the try so the catch can attribute the droppedError exit with
+            // the SAME class that gated the refreshedAttempted increment. Assigned inside once
+            // the class resolves; undefined here means the row never entered the denominator,
+            // so an error before that point correctly records nothing.
+            let _fCls: FunnelAssetClass | undefined;
             try {
               // Directive 11.0E: Normalize symbol for consistent comparisons
               const normalizedSymbol = normalizePairKey(signal.symbol);
@@ -1185,7 +1193,16 @@ class ReadyToBuyService {
               // bulkDelete below) rather than THROW and reject the whole concurrent chunk.
               const sqeAssetClass = asValidAssetClass(signal.assetClass) ?? safeResolveAssetClass(normalizedSymbol, 'kraken');
               if (sqeAssetClass === null) {
-                console.warn(`[11.0E][SQE_SKIP] unclassifiable ${normalizedSymbol} — dropping from queue (no valid stamp, unresolvable)`);
+                // B-RTB-REFRESH-CONSOLIDATE OBJ-3/OBJ-4: this is NOT routine attrition. A queued
+                // row was STAMPED with its asset class at write, so an unresolvable class here
+                // means something upstream is broken. Counted (was one of the six silent deletes)
+                // and logged at ERROR grade so it cannot vanish quietly.
+                // NOT tallied into a per-class bucket: this branch is DEFINED by the asset class
+                // being unresolvable, so keying a per-class counter off that same field is dead
+                // code by construction (Langston Step-4 ①). It also returns BEFORE
+                // refreshedAttempted increments, so it never enters the pass denominator.
+                // The honest instrument here is the alarm, not a tally.
+                console.error(`[11.0E][SQE_SKIP][DATA_INTEGRITY] unclassifiable ${normalizedSymbol} — dropping from queue (row was stamped at write; unresolvable now = upstream breakage)`);
                 bulkDeletes.push(signal.id);
                 expiredCount++;
                 return;
@@ -1194,8 +1211,7 @@ class ReadyToBuyService {
               // P19-B8.4b: active-path funnel — this signal is about to be re-SQE'd on the refresh path.
               // Narrow to the funnel grid + count the refresh attempt (per-signal; cyclesRun ticks per bucket
               // in rtb-refresh-service). Increments are single-threaded-atomic under the Promise.all chunk.
-              const _fCls: FunnelAssetClass | undefined =
-                (sqeAssetClass === 'crypto_spot' || sqeAssetClass === 'xstock_spot') ? sqeAssetClass : undefined;
+              _fCls = (sqeAssetClass === 'crypto_spot' || sqeAssetClass === 'xstock_spot') ? sqeAssetClass : undefined;
               if (_fCls) recordActiveRtbRefresh(mode, _fCls, { refreshedAttempted: 1 });
 
               const sqeInput: SQEInput = {
@@ -1293,7 +1309,16 @@ class ReadyToBuyService {
               // P19-B8.4b: survived re-SQE → stayed queued (reconfirmed) on the refresh path.
               if (_fCls) recordActiveRtbRefresh(mode, _fCls, { reconfirmed: 1 });
             } catch (err) {
+              // OBJ-4 / #419: this catch bulk-deleted the row while ticking NEITHER outcome, so
+              // under errors refreshedAttempted > reconfirmed + rejectedInRefresh and the refresh
+              // sub-stage never balanced. Now counted as its own honest exit.
               console.error(`[T3][SIGNAL_PROCESS_ERROR] signal=${signal.id}:`, err);
+              // Attribute via the SAME variable that gated the refreshedAttempted increment
+              // (_fCls), NOT a fresh asValidAssetClass call — Langston Step-4 ③: re-deriving
+              // would silently drop any errored row lacking a valid stamp, leaving an exit that
+              // escapes every counter. Reusing _fCls makes entry and exit symmetric BY
+              // CONSTRUCTION: whatever counted into the denominator can always count out of it.
+              if (_fCls) recordActiveRtbRefresh(mode, _fCls, { droppedError: 1 });
               bulkDeletes.push(signal.id);
               expiredCount++;
             }
