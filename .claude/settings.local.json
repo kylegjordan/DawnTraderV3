@@ -1,7 +1,5 @@
 {
-  "defaultMode": "bypassPermissions",
   "permissions": {
-    "defaultMode": "bypassPermissions",
     "allow": [
       "Bash(*)",
       "Bash(git:*)",
@@ -91,7 +89,17 @@
       "mcp__Claude_in_Chrome__navigate",
       "mcp__Claude_in_Chrome__read_page",
       "mcp__Claude_in_Chrome__get_page_text",
-      "mcp__Claude_in_Chrome__form_input"
+      "mcp__Claude_in_Chrome__form_input",
+      "Bash(tail -50 /var/log/dawntrader/system-alerts.jsonl 2>&1 | head -60)",
+      "Bash(ssh root@204.168.141.77 'systemctl is-active discord-cc-bridge.service discord-langston-bridge.service; echo \"---\"; stat -c %y /var/log/cc-discord-inbox.jsonl')",
+      "Bash(ssh root@204.168.141.77 \"systemctl is-active discord-cc-bridge.service discord-langston-bridge.service; stat -c %y /var/log/cc-discord-inbox.jsonl\")",
+      "Bash(ssh root@188.245.193.8 \"tail -20 /var/log/dawntrader/system-alerts.jsonl\")",
+      "Bash(ssh -o ConnectTimeout=15 root@204.168.141.77 'systemctl is-active discord-cc-bridge.service discord-langston-bridge.service; stat -c %y /var/log/cc-discord-inbox.jsonl')",
+      "Bash(ssh root@188.245.193.8 'tail -20 /var/log/dawntrader/system-alerts.jsonl')",
+      "Bash(ssh root@188.245.193.8 \"tail -30 /var/log/dawntrader/system-alerts.jsonl\")",
+      "Bash(ssh root@204.168.141.77 \"sudo -u langston bash -c 'export CLAUDE_CODE_OAUTH_TOKEN=\\\\$\\(cat /etc/langston/oauth.env | cut -d= -f2-\\) && export HOME=/home/langston && /usr/bin/claude -p --model claude-fable-5 --permission-mode bypassPermissions \\\\\"reply with the single word OK\\\\\"'\")",
+      "Bash(ssh root@204.168.141.77 'systemctl is-active discord-cc-bridge.service discord-langston-bridge.service; stat -c %y /var/log/cc-discord-inbox.jsonl')",
+      "Bash(ssh root@204.168.141.77 'systemctl is-active discord-cc-bridge.service discord-langston-bridge.service; stat -c %y /var/log/cc-discord-inbox.jsonl; date -u')"
     ],
     "deny": [
       "Bash(git push --force:*)",
@@ -106,14 +114,22 @@
       "Bash(sudo:*)",
       "Bash(format:*)",
       "Bash(mkfs:*)"
-    ]
+    ],
+    "defaultMode": "bypassPermissions"
   },
   "hooks": {
     "PreToolUse": [
       {
         "matcher": "Bash",
         "hooks": [
-          { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-governed-read.mjs\"" }
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-governed-read.mjs\""
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-bare-commit.mjs\""
+          }
         ]
       }
     ],
@@ -121,9 +137,13 @@
       {
         "matcher": "startup|resume|compact",
         "hooks": [
-          { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/session-reminder.mjs\"" }
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/session-reminder.mjs\""
+          }
         ]
       }
     ]
-  }
+  },
+  "defaultMode": "bypassPermissions"
 }
