@@ -393,7 +393,6 @@ export default function PaperOpenTradesTab({ mode }: { mode?: 'paper' | 'live' }
         <OpenTradesTable
           trades={trades}
           emptyLabel="No open trades"
-          hidePoolColumn
           rankHeaderLabel="Promote R"
           rankHeaderTitle="R-multiple at promotion — the ranking score this trade won its slot with (frozen at promote; the RTB tab shows the live value). '—' for trades opened before this stamp existed."
           afterSymbolHeaders={

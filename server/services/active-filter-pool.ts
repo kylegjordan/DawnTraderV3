@@ -48,6 +48,11 @@ export interface ActiveFilteredPair {
   // dropping it so the open-gate reads the SAME survivor snapshot that drove this entry's routing,
   // not a re-computed value. See the di_at_queue column comment for the at-queue semantics.
   di?: number;                 // Directional Integrity [0-100], routing-time survivor snapshot
+  // P19-B8.12 (Kyle 2026-07-19): the scanner's ideal/rotational pair-pool marking
+  // (collectAdaptiveBatch stamps EVERY pair; ideal = the primary draw pool,
+  // Directive 11.4C.1). Was dropped at this intake — the third transit-drop
+  // instance (DBS, patternType, pool). Carried so the genesis capture stamps it.
+  pool?: 'ideal' | 'rotational';
   fx5Snapshot?: {             // Optional: snapshot of FX5 metrics when added
     volume24h: number;
     dailyRange: number;
@@ -226,6 +231,9 @@ class ActiveFilterPoolService {
       // the pool entry. Carried so the open-gate EV thread reads the routing-time DI snapshot.
       DI?: number;
       sourcePool?: string;
+      // P19-B8.12: the scanner objects already carry poolType via their {...s} spread —
+      // accept + store it (field name matches the caller's objects; zero caller change).
+      poolType?: 'ideal' | 'rotational';
     }>,
     skipPassiveCheck: boolean = false
   ): {
@@ -276,6 +284,7 @@ class ActiveFilterPoolService {
             dbsSlope: survivor.dbsSlope,
             // reorg-B3 (#233): carry the survivor's DI as the at-queue snapshot (see ActiveFilteredPair.di)
             di: survivor.DI,
+            pool: survivor.poolType,  // P19-B8.12: scanner's ideal/rotational marking
             fx5Snapshot: {
               volume24h: survivor.volume24h,
               dailyRange: survivor.dailyRange,
@@ -310,6 +319,7 @@ class ActiveFilterPoolService {
           dbsSlope: survivor.dbsSlope,
           // reorg-B3 (#233): carry the survivor's DI as the at-queue snapshot (see ActiveFilteredPair.di)
           di: survivor.DI,
+          pool: survivor.poolType,  // P19-B8.12: scanner's ideal/rotational marking
           fx5Snapshot: {
             volume24h: survivor.volume24h,
             dailyRange: survivor.dailyRange,
@@ -348,6 +358,7 @@ class ActiveFilterPoolService {
       dbsScore?: number;
       dbsCategory?: string;
       dbsSlope?: number;
+      poolType?: 'ideal' | 'rotational';  // P19-B8.12
       DI?: number;
     }>
   ): {
@@ -395,6 +406,7 @@ class ActiveFilterPoolService {
         dbsCategory: survivor.dbsCategory,
         dbsSlope: survivor.dbsSlope,
         di: survivor.DI,
+        pool: (survivor as { poolType?: 'ideal' | 'rotational' }).poolType,  // P19-B8.12
         fx5Snapshot: {
           volume24h: survivor.volume24h,
           dailyRange: survivor.dailyRange,
@@ -685,7 +697,7 @@ class ActiveFilterPoolService {
    * Returns null if symbol not found (for proper NULL storage)
    * Phase 14.5: Also checks pattern pool
    */
-  getFX5DataForSymbol(symbol: string, mode: 'paper' | 'live'): { price: number; volume24h: number; dbsScore?: number; di?: number } | null {
+  getFX5DataForSymbol(symbol: string, mode: 'paper' | 'live'): { price: number; volume24h: number; dbsScore?: number; di?: number; pool?: 'ideal' | 'rotational' } | null {
     const pool = this.getPool(mode);
 
     // Try direct lookup
@@ -732,7 +744,9 @@ class ActiveFilterPoolService {
       // non-scanner cold-cache path (unified-filter-gateway) lack OHLC-derived DBS/DI and return
       // undefined here → NULL columns → kernel documented defaults (deterministic, no silent coerce).
       dbsScore: entry.dbsScore,
-      di: entry.di
+      di: entry.di,
+      // P19-B8.12: the ideal/rotational marking for the genesis display capture.
+      pool: entry.pool
     };
   }
 }

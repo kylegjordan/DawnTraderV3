@@ -211,3 +211,29 @@ The fabrication that poisons #514's shadow evidence happens at the **GENERATION*
 | `regimeWeight` | Recompute at refresh with live volatility = 30% honest, 70% still the fabricated `trendStrength` term. **Do NOT claim this as a repair** (see Finding 1). |
 
 **Net:** OBJ-2b's *substantive* content in this batch is what step 1 already delivered. The remainder is blocked on pre-existing filed issues and must be stated as such in the completion report rather than quietly dropped.
+
+
+---
+
+# §6 TELEMETRY ANOMALY — the lead (CC-A, 2026-07-19). NOT yet a finding.
+
+The audit flagged that the numbers don't reconcile and that **no funnel figure is trustworthy until they do**. Partial progress; recording the lead with its evidence so it is resumable, explicitly NOT asserted as a conclusion.
+
+## The arithmetic that cracks the first half
+9h staging window: **7** `[A3.R9.3][RTB_REFRESH][TICK]` lines and **105** `REFRESH_COMPLETE`. **105 ÷ 7 = 15** — almost exactly the queued-signal count. So the outcomes are consistent with the ticks: each tick processes the whole queue. **The outcome volume was never the anomaly. The TICK COUNT is.**
+
+Mechanism A fires on `tick.tickNumber % RTB_REFRESH_INTERVAL_SECONDS === 0` with the interval at **30** and the Central Clock at **1s** — so ~**1,080** ticks expected in 9h. Observed: **7**, i.e. one per ~77 minutes. That is not a 30-second cadence at all.
+
+## Candidate mechanism — PLAUSIBLE, NOT PROVEN
+`startRefreshCycle` (`:602`) returns early if `this.clockTickHandlers.has(mode)` — it does **not** re-subscribe. `centralClock.start()` (`central-clock.ts:55`) resets `tickNumber = 0` and is a no-op when `intervalId` already exists; `centralClock.stop()` is called at `index.ts:1549`.
+
+**Hypothesis:** if the clock is ever stopped/restarted (or its subscriber set cleared) while `clockTickHandlers` still holds the mode key, `startRefreshCycle` believes the cycle is running and never re-subscribes — leaving Mechanism A **permanently unsubscribed but believed-live**. Symptom would be exactly what is observed: occasional ticks (from whatever re-subscription does occur, e.g. a full process restart) rather than a steady 30s cadence.
+
+**NOT verified:** whether `stop()` clears subscribers, whether the clock is ever stopped without a full process restart, and whether the handler map is cleared on `stopRefreshCycle`. Those three reads decide it. **Do not report this as the cause until they are done** — the audit already contains one collapsed hypothesis (§5.0-CORRECTION) and one withdrawn discharge; the standard is presence-evidence, not a plausible story.
+
+## Why it matters to the batch — and it strengthens the case
+If confirmed, Mechanism A — **the only mechanism that re-read market state** — was running at roughly **0.6%** of its designed cadence. Nearly all real refresh traffic went through the frozen-snapshot mechanism. That makes the staleness materially **worse** than the audit characterised, not better, and it further justifies consolidating onto one scheduler whose liveness is observable rather than assumed.
+
+**It also changes the retirement calculus:** Langston's observe-gate assumes Mechanism A is a live safety net during the overlap window. If it barely ticks, it is a *weaker* net than either of us assumed — worth knowing before the gate is cleared.
+
+**HOME:** OBJ-4's telemetry-anomaly leg, this batch. Next action = the three unverified reads above.

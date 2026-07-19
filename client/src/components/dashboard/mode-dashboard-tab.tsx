@@ -25,7 +25,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/lib/api";
-import { AlertTriangle, RefreshCw, TrendingUp, DollarSign, Activity, BarChart3 } from "lucide-react";
+import { AlertTriangle, RefreshCw, TrendingUp, DollarSign, Activity, BarChart3, Info } from "lucide-react";
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, ReferenceDot,
 } from "recharts";
@@ -73,9 +73,14 @@ function ErrorBanner({ label, onRetry }: { label: string; onRetry: () => void })
 }
 
 function StatRow({ label, value, valueCls, hint }: { label: string; value: string; valueCls?: string; hint?: string }) {
+  // P19-B8.12 (Kyle 2026-07-19): hints existed but were invisible (bare title
+  // attribute, no cue) — a small visible info icon now signals hoverability.
   return (
     <div className="flex items-baseline justify-between py-0.5 text-sm" title={hint}>
-      <span className="text-muted-foreground">{label}</span>
+      <span className="text-muted-foreground inline-flex items-center gap-1">
+        {label}
+        {hint && <Info className="w-3 h-3 opacity-50 shrink-0" aria-label={hint} />}
+      </span>
       <span className={`font-mono font-medium ${valueCls ?? ""}`}>{value}</span>
     </div>
   );
@@ -193,7 +198,10 @@ function ActiveModeDashboard({ mode }: { mode: "paper" | "live" }) {
 
         {/* Averages + the Edge strip */}
         <Card>
-          <CardHeader className="py-3"><CardTitle className="text-base flex items-center gap-2"><BarChart3 className="w-4 h-4" />Averages & Edge</CardTitle></CardHeader>
+          <CardHeader className="py-3"><CardTitle className="text-base flex items-center gap-2"><BarChart3 className="w-4 h-4" />Averages & Edge
+            {/* P19-B8.12: the window these averages span, synced to the Activity selector. */}
+            <span className="ml-auto text-[10px] font-normal text-muted-foreground border rounded px-1.5 py-0.5">{WINDOWS.find(w => w.key === windowKey)?.label ?? windowKey}</span>
+          </CardTitle></CardHeader>
           <CardContent className="pt-0">
             {analytics.isError ? <ErrorBanner label="averages" onRetry={() => analytics.refetch()} /> :
               analytics.isLoading ? <div className="text-sm text-muted-foreground">Loading…</div> : (

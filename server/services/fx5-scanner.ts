@@ -1431,6 +1431,7 @@ export class Fx5ScannerService {
             dbsCategory: (s as any).dbsCategory,
             dbsSlope: (s as any).dbsSlope,
             DI: (s as any).DI,
+            poolType: (s as any).poolType,  // P19-B8.12: ideal/rotational carry (same rider shape)
           })));
           console.log(`[14.5][PATTERN_POOL] Pattern pool populated: added=${patternStats.added}, skipped=${patternStats.skipped}`);
         }

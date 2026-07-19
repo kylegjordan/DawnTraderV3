@@ -934,6 +934,9 @@ export class SignalOrchestrator {
       if (_pt) _dc.patternType = _pt;
       // Entry-liquidity (crypto convention: 24h volume) — stamped into metadata so
       // CLOSED rows retain it after the open row is deleted.
+      // P19-B8.12: the scanner's ideal/rotational pool marking (carried through the
+      // active pool as of this batch; the adapter already reads metadata.pool).
+      if (fx5Data?.pool) _dc.pool = fx5Data.pool;
       if ((fx5Data?.volume24h ?? 0) > 0) {
         _dc.entryLiquidityValue = fx5Data!.volume24h;
         _dc.entryLiquidityKind = 'volume_qty';
