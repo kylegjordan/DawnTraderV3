@@ -110,3 +110,36 @@ Per scope §4. **Rollback:** re-enable Mechanism A's two starters (one line each
 - **Un-refreshable signal ejected + alarmed, not aged out** (Langston Q3).
 - A live row's stored `chosen_net_ev` + `regime_weight` observably CHANGE across refresh cycles (proves the rewire, not just the wiring).
 - Double-processing test: symbols in two mechanisms = 0 (was 13/13).
+
+
+---
+
+# STEP-1 (TRANSPLANT) — DEPLOYED + VERIFIED, 2026-07-19
+
+**Commit `534d9471a`** · Langston Step-4 **APPROVED** (independently re-read the diff; lifted his REPORTED-FACT qualifier on all three STORED-vs-live claims) · CI 4-green run `29667343987` · deployed, HTTP 200, staging at ref with 4 `acquireRefreshedInputs` occurrences · bench tsc baseline OK, vitest 0 failed / 2332 passed, new suite 11/11.
+
+## The end-to-end proof (better than the planned criterion)
+
+The refresh log **distinguishes the two mechanisms by wording**:
+- `NetEV-only **refresh** failure` → Mechanism A (per-signal)
+- `NetEV-only **batch-refresh** failure` → **Mechanism B, the survivor**
+
+**For the survivor to FAIL a NetEV check, the SQE must have been handed a real re-decided netEV** — precisely what it never received before this change (it replayed the stored snapshot). Those batch-refresh lines are the transplant working end-to-end: B → shared acquisition → maker/taker re-decide on current geometry → live `chosenNetEv` → SQE NetEV gate.
+
+Corroborating: `GEOMETRY_REFRESH` + `RTB_REFRESH][MAKER_TAKER` re-decides now fire where the survivor previously did **neither**. `XRP/USDT` re-decided **twice within one second** = both mechanisms on the shared method — the benign overlap Langston predicted, converging on identical values.
+
+## Zero evictions — CORRECT, not a dead gate
+Every queued signal shows NEGATIVE netEV yet `SQE_REVALIDATION_FAIL = 0`. Cause: **28 `EXPLORATION_REFRESH_PASS` events** — exploration-lane admits whose stamp deliberately overrides NetEV (Kyle-GO 28/day budget). Working as designed. Recorded because it looks alarming and is not.
+
+## Boot-window condition observed — PRE-EXISTING, not this batch
+`TEC_CACHE_MISS_FATAL` (crypto_spot) fires for a few seconds after every restart, breaking exit-checks during the window, then self-clears. **Verified pre-existing: 20 occurrences in the 9h PRE-deploy capture**; zero in the current steady state. Not caused by this change; references its own `BATCH_79_TEC_SCOPE.md §1 #8`. Ledger-check + disposition owed before this batch closes (§9.5(b-ii)) — NOT filed as a finding here.
+
+## ⚠️ Step-2 gate: HALF satisfied — NOT clearance
+Langston's condition was `chosen_net_ev` **AND** `regime_weight` observably moving before A retires.
+- `chosen_net_ev` — **OBSERVED moving** (re-decide log lines with computed values). ✓
+- `regime_weight` — **NOT moving, and cannot be**: its recompute is step-2 work; both paths still read it stored. ✗
+
+**CC-A is NOT treating this as clearance.** Revised step-2 order (dispatched to Langston): land the remaining input work FIRST (regimeWeight recompute, regimeStability honest wiring per ruling (a), trendStrength/OBJ-2b, OBJ-3, OBJ-4) → THEN the observe criterion can be met on BOTH fields → THEN retire A last. Keeps the gate intact rather than reinterpreting it.
+
+## Remaining for step 2
+regimeWeight recompute · regimeStability honest wiring (#514 discharge) · trendStrength (OBJ-2b) · OBJ-3 fail-loud (awaits Langston's #535 netEV ruling so the skip is designed once) · OBJ-4 exit counters (the six silent deleters) · the §6 telemetry anomaly · A's retirement (rule 18) · SIM + System Manual (OBJ-6).
