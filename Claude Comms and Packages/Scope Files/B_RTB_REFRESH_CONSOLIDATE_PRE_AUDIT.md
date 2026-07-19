@@ -40,7 +40,18 @@ Extends the existing enumeration in `P19_B8_5a_PRE_AUDIT.md:21` (not duplicated)
 | `entryPrice`/`targetPrice`/`regime` | ROI | **DORMANT** | n/a | absent | absent | absent | **ALREADY DISPOSITIONED — not a finding.** `P19_B8_5a_PRE_AUDIT.md:17`: absent at all sites by design, redundant with netEV; Phase-25 (25-4) rules retire-vs-keep. Ledger-checked per §9.5(b-ii) before recording |
 
 ### The headline the table produces
-**The only two gates that actually block on the active path — NetEV and RegimeWeight — are both evaluated on stale values by the survivor.** NetEV is the more serious: it is the *binding* admission gate (per #501, the fee wall makes it the constraint), and Mechanism B replays a queue-time snapshot of it. A signal whose net expectancy went negative after queueing is reconfirmed by B on the old number.
+
+**⚠️ PRECISION CORRECTION (2026-07-19, Kyle asked "where is this happening — the SQE?"). CC-A's "only two gates block" was IMPRECISE.** FIVE things can block in the SQE: (1) xStock market-closed early-return `:272`; (2) strategy-disabled-for-class early-return `:295`; (3) **AMR** `:415-437` (pushes failures when `!amr.allowed`; blocks only in `active` mode — `disabled` no-ops, `shadow` dry-runs); (4) NetEV `:362`; (5) RegimeWeight `:367`. Non-blocking: FinalScore (retired, shadow-log), ROI (dormant), Confidence + Governance (`gateShadowMode`).
+
+**Where each thing lives — the answer to Kyle's question:** the GATES are in the SQE; that is where accept/reject happens. The STALENESS originates in the REFRESH, which assembles the SQEInput and hands it over. The SQE evaluates faithfully and cannot detect that a supplied value is stale. **The SQE is not at fault; the refresh is.**
+
+**The corrected — and sharper — claim: of the five blocking gates, only TWO reach their verdict using market data the refresh is responsible for keeping current — NetEV and RegimeWeight — and the survivor feeds both of them stale values.** (1) and (2) are eligibility checks independent of refreshed data. (3) AMR is **structurally immune** — and the reason is the most telling artifact in this audit:
+
+> `signal_quality_evaluator.ts:415-421` — *"per-class AMR admission gates — UNCONDITIONAL (no skip option) and **SELF-SOURCING (the gate resolves flag/mode itself; the RTB refresh path re-runs SQE with partial inputs, so caller-injected context would silently skip gating there)**."*
+
+**The AMR author KNEW the refresh hands the SQE partial inputs, and hardened one gate against it — the systemic cause was never addressed.** A component-level defence around a system-level defect, documented in-line and left standing. This is corroborating evidence for the batch, and it belongs in the completion report as the precedent for why OBJ-2's contract must be enforced at the refresh rather than defended gate-by-gate.
+
+So: **NetEV and RegimeWeight are the entire data-driven admission decision on the active path, and both run on stale inputs under the survivor.** NetEV is the more serious: it is the *binding* admission gate (per #501, the fee wall makes it the constraint), and Mechanism B replays a queue-time snapshot of it. A signal whose net expectancy went negative after queueing is reconfirmed by B on the old number.
 
 That single row is the batch's justification. Everything else is hygiene by comparison.
 
