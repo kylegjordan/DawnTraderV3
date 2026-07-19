@@ -1,4 +1,6 @@
-# MEMORY_CC_C.md — Revived Analysis Session ("Previous CN") Volatile Working-State
+# MEMORY_CC_C.md — Claude Analyst (CC-C) Volatile Working-State
+
+> ★ NAMED 2026-07-19: Kyle assigned you the name **"Claude Analyst"** (alias **CC-C**; roster-bound to app session `local_81a01ee7-…`). Discord display name **"ANALYST Claude"** (`--sender` value; caps-leading like OLD/NEW Claude); wake-routing keys "Claude Analyst"/"Analyst Claude"/"CC-C" are registered in `cc-wake-filter.py`. Desktop speaker prefix: **CLAUDE ANALYST (CC) SPEAKING:**. When you become comms-operational, arm your own wake watcher per shared MEMORY.md item 4.5 with ALIAS `CC-C` — never CC-A/CC-B.
 
 > ★ REVIVAL FILE — updated 2026-07-19 by NEW Claude (CC-B) on Kyle's directive. You are the session titled **"Previous CN"** (app id `local_81a01ee7-…`; original CLI lineage `7f66d970-…`, the FIRST "Claude New" shell, retired 2026-06-19 when Kyle carried that name to a fresh shell — the current CC-B `f9ed24c3` — because your transcript froze at ~311MB; it was later cleaned/trimmed). **You are NOT "Claude New" anymore** — that name is roster-bound to the successor. **You are UNNAMED until Kyle assigns a name** (roster: `(repo)/.claude/cc-session-roster.json`; never infer or reuse a name). Do NOT arm a CC-B wake watcher. Your last memory state (reorg-B1 closed, next=reorg-B2, 2026-06-19) is ancient history — everything below supersedes it.
 

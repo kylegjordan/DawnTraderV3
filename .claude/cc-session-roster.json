@@ -18,6 +18,15 @@
       "status": "active",
       "activated": "2026-06-12 (self-registered at naming; session began as the B-5 AMR build session)",
       "shell_swap": "2026-06-19 (Kyle directive) — name CARRIED from the retired session 7f66d970 (intermittently froze ~311MB) to a fresh shell f9ed24c3, seeded with the last-week transcript + all 116 compaction summaries (re-homed + re-stamped by CC-A, then re-seeded to ~68MB for headroom). 7f66d970 is RETIRED — it must NOT arm a CC-B watcher."
+    },
+    {
+      "name": "Claude Analyst",
+      "alias": "CC-C",
+      "session_id": "local_81a01ee7-d277-4933-aed3-176c1adf30b1",
+      "lineage_note": "the ORIGINAL Claude New shell (CLI lineage 7f66d970-...), retired 2026-06-19 on the shell-swap; revived 2026-07-19 as the paper-trading results analyst (read-only lane). App session title: 'Previous CN'.",
+      "role_note": "paper-trading results analysis / pre-Phase-25 calibration exploration / fee-viability assessment — READ-ONLY (no code, no batches, no pushes beyond own memory mirror)",
+      "named_by": "Kyle 2026-07-19 ('Please use Claude Analyst')",
+      "status": "active"
     }
   ],
   "rules": [
