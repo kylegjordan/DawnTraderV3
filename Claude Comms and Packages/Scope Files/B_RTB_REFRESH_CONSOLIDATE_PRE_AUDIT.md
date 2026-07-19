@@ -55,6 +55,17 @@ So: **NetEV and RegimeWeight are the entire data-driven admission decision on th
 
 That single row is the batch's justification. Everything else is hygiene by comparison.
 
+### ★ Step-3 finding: the frozen-snapshot loop is SELF-PERPETUATING (verified 2026-07-19)
+
+Mechanism B's `bulkUpdates` metadata write (`:1243-1262`) contains **none** of the freshness fields: no `volatility`, no `spread`, no `lastCostRefresh`, no `netExpectedEdge`, no `chosenNetEv`/`chosenEntryMode`. Mechanism A writes all of them (`:966-1000`).
+
+So B does not merely *read* stale values — **it leaves them stale.** Every field the refresh contract cares about is written by A alone. Two consequences:
+
+1. **The transplant is not optional for correctness of the survivor.** Disabling A without it (Langston's original staging step-1) would freeze those fields permanently — this is the precise mechanism behind the "worse than status quo" window he flagged, and it confirms the inversion (§5) on evidence rather than intuition.
+2. **`shouldRecalculateGeometry` is throttled on `metadata.lastCostRefresh`** (`:311-338`; also volatility-shift and spread-shift thresholds — a legitimate efficiency guard, NOT a defect). Under a B-only world that timestamp would never advance, so the age branch would always fire. Moot only because B does no geometry refresh at all.
+
+**Design consequence adopted:** the transplant is implemented as an **EXTRACT-THEN-SHARE**, not a copy — A's live-data acquisition becomes one private method that BOTH mechanisms call. After extraction both paths execute identical code, which makes staging step 1 provably behaviour-preserving for A while making B honest. A's deletion then removes a caller, not logic.
+
 ---
 
 ## 3. OBJ-3 targets (fail-loud), with Langston's Q3 guardrail
