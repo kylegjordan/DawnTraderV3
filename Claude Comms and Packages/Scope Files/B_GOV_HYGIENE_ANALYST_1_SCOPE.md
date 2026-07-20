@@ -82,6 +82,18 @@ Q1 asked: fold into the single §9.5 edit, or land separately? **The dilemma dis
 
 ---
 
+### OBJ-1-CENSUS — Step-2 census question: can a failed query be told apart from an empty result?
+
+**Origin.** Langston, reading CC-B's 404 incident, inferred a specific testable code defect: *a parse path where a non-200 falls through to an empty-collection default.* He was right to demand the read.
+
+**The read (CC-B, 2026-07-20) — HYPOTHESIS FALSIFIED on the shared path.** `client/src/lib/api.ts:103-107` throws on any non-200 (`throw new Error(\`HTTP ${res.status}: ${text}\`)`), and the surrounding `catch` at :111-113 **re-throws** rather than swallowing. The shared client fetch raises; it does not coerce. **The coercion existed only in CC-B's throwaway shell script, which is not shipped code** — rule 24 outcome (3), not (1). ⚠️ Langston was reasoning from a fact CC-B had stated loosely ("my parser", without saying it was a scratch script); the premise correction is recorded because the *shape* of that error is the same one this batch is about.
+
+**What survives, explicitly labelled HYPOTHESIS, not finding.** The throw is correct, but a **component** could still swallow it and render a confident `0` instead of an error state. `data ?? []` is a normal react-query idiom that is only safe if the error state is separately surfaced; there are 31 error-handling occurrences across 12 client components. **Unproven in both directions** — and asserting it from a grep count would be the very "absence dressed as a measurement" this batch exists to stop.
+
+**Step-2 census (§9.5(a) form).** Enumerate every tab that renders a count or a collection; for each, state whether a **failed** query is visually distinguishable from a **genuinely empty** result. If any tab fails, that becomes a real defect **with its own named batch at that moment** — not a rider here. If none fail, the census says so explicitly **with the list enumerated**, per rule 22.
+
+**Why this matters beyond tidiness:** a tab that renders `0 open positions` when the query failed tells Kyle the system is idle when it may be mid-outage — the exact class of silent-zero the B8.5 soak cannot afford.
+
 ## 2. Explicitly OUT of scope
 
 - Any change to the intended-price gross itself (OBJ-2 note).
