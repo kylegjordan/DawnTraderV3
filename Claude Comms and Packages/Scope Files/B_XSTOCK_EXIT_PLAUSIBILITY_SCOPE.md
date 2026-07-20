@@ -9,7 +9,49 @@ change-class: architecture
 
 ---
 
-## 1. The defect, and why it is outcome (1) not (2) or (3)
+## 0. PROBLEM STATEMENT — rewritten 2026-07-20 to Langston's lock (supersedes §1's outcome-(1) framing)
+
+> ⚠️ **§1 below is SUPERSEDED on its rule-24 disposition and retained only for its evidence.** It classified this outcome-(1) REAL DEFECT. **That was wrong** — see §0.3.
+
+### 0.1 The removal rationale, quoted VERBATIM (`server/services/active-execution-engine.ts:970-982`, read at `origin/migration/aws-supabase`)
+
+> *"We fill against Kraken's book, so a non-Kraken tick is not actionable information — it's a number that looks like one (Langston's phrasing; today's phantom stops were the proof). The actionable chain is now EXACTLY: `kraken_ws → kraken_rest → SKIP-THIS-TICK`. binance / coingecko / mock / last_known_good / entry_seed are OFF the actionable path… **This supersedes the same-day C prong-2 sanity gate, which existed to referee heterogeneous sources — with a homogeneous venue chain there is nothing left to referee** (its observe-only WS-vs-REST divergence log survives in the REST leg)."*
+
+### 0.2 Why "nothing left to referee" does NOT reach the within-venue case
+
+**The rationale is entirely about SOURCE DISAGREEMENT, and it is correct about it.** Prong-2 existed to adjudicate *between* sources — when binance, coingecko and Kraken each offered a different number, something had to decide which was real. Collapse the chain to one venue and that adjudication genuinely has no work left: **there is no second opinion to weigh, and — per this batch's negative requirement — none is wanted.**
+
+**But "which source do we believe?" and "is this value believable?" are different questions, and only the first was answered.** A single trusted venue can emit a value its own book never printed — a feed glitch, a bad snapshot, a malformed tick. **That is not a refereeing problem: there is no disagreement, because there is only one voice, and it is wrong.** Prong-2's removal is silent on it — not mistaken about it, *silent*. **Homogeneity eliminates the conflict; it does not confer correctness.**
+
+⇒ So the venue-only cut did not leave a hole where a check used to be. **It correctly removed a between-source referee, and a within-source value check was never specified in the first place** — not by prong-2, not by the freshness guard, not anywhere.
+
+### 0.3 Rule-24 disposition: **OUTCOME (2)**, not (1) — corrected, and it changes what this batch IS
+
+**The freshness guard does precisely what it was specified to do.** `active-execution-engine.ts:933-963` gates on four things — knob-present, tick-present, `Number.isFinite && > 0`, `age ≤ max` — and **a fresh wrong tick satisfies all four.** That is not a malfunction; it is the specification, met.
+
+**What is missing is a DECISION that was never made:** *should the system check that a price is believable, and what should it do when it is not?* **Nobody decided that and got it wrong — nobody decided it.** ⇒ **Working-as-designed-but-UNADDRESSED. This is a SCOPE CALL for Kyle, not a defect fix**, and it must be presented to him as an options decision rather than shipped as a repair.
+
+⚠️ **AND MY OWN OVERREACH IS PART OF THE RECORD.** I classified this outcome-(1) on the strength of the reflog. **The reflog proves the guard was DEPLOYED and did not PREVENT the close — it does not prove the guard EVALUATED AMGN**, and §0.4 now shows that step is **unprovable from surviving evidence**. So the outcome-(1) claim rested on **inference**, which is the exact move I spent 2026-07-20 objecting to in others. Corrected on Langston's reframe, accepted without argument.
+
+### 0.4 The forensic step is CLOSED AS UNPROVABLE — and that is itself a finding
+
+Langston proposed an airtight closer: `priceSource = 'kraken_equities_ws'` is written at `:958` **only**, reachable only after the age gate passes, so the AMGN row's persisted `price_source` would prove the tick was fresh-and-evaluated. **I ran it. The field is never persisted.** Enumerated, not inferred:
+
+| surface | result |
+|---|---|
+| `closed_trades` — every `%source%` column | only `source_pool`. **No `price_source`** |
+| `closed_trades.metadata` | `->>'priceSource'` **and** `->>'price_source'` both EMPTY on the AMGN row |
+| `active_open_positions` — every `%source%`/`%price%` column | `avg_price`, `current_price`, `exit_limit_price`, `intended_entry_price`, `maker_limit_price`, `source_pool`. **No `price_source`** (direct select errors) |
+
+**The row itself is confirmed:** `AMGN/USD · close_reason=stop_hit · exit_price=369.51 · actual_exit_price=369.51 · closed_at=2026-07-17 00:15:01.516+00`.
+
+⇒ `:958`'s value is **in-memory/log-only**, and pm2 logs have rotated past 07-17. **The "was AMGN evaluated" step cannot be closed from any surviving evidence. It is not open — it is unprovable.**
+
+**★ AND THAT IS CR-1'S FAMILY HITTING US IN REAL TIME.** `#547` CR-1 says we keep the reasoning for trades we TOOK and discard it for signals we REFUSED. **This is a third case neither of us named: we discard the reasoning for the trades we TOOK too, whenever it lives only in a log.** The field needed to reconstruct *why* a position closed was computed, used to make the decision, and thrown away. **Six days later the decision is unreconstructable — and that cost us this answer.** Better evidence for CR-1 than anything currently in the entry. **Not widened into this batch; recorded, and cross-referenced from `#547`.**
+
+---
+
+## 1. ~~The defect~~ EVIDENCE (retained; disposition superseded by §0.3)
 
 **A tick can be perfectly fresh and still carry a price the market never printed.** The existing xStock guard (`184c41881`) gates on **AGE**: if the latest equity tick is older than `exit_integrity.max_equity_tick_age_ms` (xstock_spot = 90,000ms) it skips and takes the escalation rail. That guard is correct and stays. **It simply never asks whether the price is believable** — so a fresh-but-wrong tick passes *by construction*, reaches `currentPrice`, and drives the stop/target comparison.
 
