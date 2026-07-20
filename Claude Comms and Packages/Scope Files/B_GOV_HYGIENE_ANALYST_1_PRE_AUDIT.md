@@ -24,7 +24,7 @@
 module_constants (DB row, seeded 2026-06-20-reorg-b2-per-class-roi-target.sql)
   └─ expectancy.ts:208   getCachedNumberRequired('expectancy_gates','target_floor_pct')   ← REQUIRED: THROWS if absent
        └─ getPerClassTargetGate() returns { floorPct, minRR, reachAtrMax }   (expectancy.ts:204)
-            ├─ signal-orchestrator.ts:1508        floorPct: _b2Gate.floorPct     → normalizer
+            ├─ signal-orchestrator.ts:1448        floorPct: _b2Gate.floorPct     → normalizer
             ├─ vts-runner.ts:1536                 floorPct: _b2Gate.floorPct     → normalizer
             └─ xstock_spot/eval-cycle.ts:682      floorPct: _b3xGate.floorPct    → normalizer
                  └─ signal-target-normalizer.ts:40   floorPct: number   (input type — ACCEPTED, then DISCARDED)
@@ -42,7 +42,7 @@ module_constants (DB row, seeded 2026-06-20-reorg-b2-per-class-roi-target.sql)
 ### ✅ REVISED OBJ-3 — an ORDERED five-site removal, DB row LAST
 
 1. `signal-target-normalizer.ts` — drop `floorPct` from the input type (`:40`) + the two doc lines (`:13`, `:18`) + the now-stale retention note (`:91-92`)
-2. the three call sites — `signal-orchestrator.ts:1508`, `vts-runner.ts:1536`, `xstock_spot/eval-cycle.ts:682`
+2. the three call sites — `signal-orchestrator.ts:1448`, `vts-runner.ts:1536`, `xstock_spot/eval-cycle.ts:682`
 3. `expectancy.ts` — drop `floorPct` from the return type (`:204`) and the required read (`:208`)
 4. `b72-warmup.ts:278` — drop `'target_floor_pct'` from the boot-assert list ← **must precede step 5**
 5. **only now** the DB row: forward migration + rollback + `MANIFEST.txt` register
@@ -87,3 +87,33 @@ Carried from scope (`f15e83e25`); **not yet run.** Enumerate every tab rendering
 
 `SYSTEM_MANUAL.md` — **NOT applicable** (no architecture / strategy / regime / filter / signal-pipeline / math change). Stated rather than skipped, per §9 anti-pattern; **re-confirmed after the OBJ-3 finding**, since the removal touches the signal path: it removes a value that is provably *never used in any computation*, so no documented behaviour changes.
 `SYSTEM_IMPACT_MAP.md` — **APPLICABLE** (OBJ-3 removes a component surface across 5 sites). `DELETED_COMPONENTS_LOG.md` — **required** for OBJ-3. `STORAGE_POLICY.md` — only if OBJ-4 lands a retention decision.
+
+---
+
+## ⚠️ COORDINATE CORRECTION 2026-07-20 — I MEASURED THIS PRE-AUDIT AGAINST A DIRTY SHARED WORKING TREE
+
+**Caught by Langston at Step-2 review.** Every `path:line` in the original revision was read from my local working tree, which carried **another session's uncommitted edits** (OLD Claude's in-flight `B-REGIME-INPUTS-LIVE` work on `signal-orchestrator.ts`). Proof:
+
+```
+$ git status --porcelain -- server/services/signal-orchestrator.ts
+ M server/services/signal-orchestrator.ts          <- +60 lines of someone else's uncommitted work
+$ git show origin/migration/aws-supabase:...       ->  1448:  floorPct: _b2Gate.floorPct,   <- THE REF
+$ grep -n ... server/services/signal-orchestrator.ts ->  1508:  floorPct: _b2Gate.floorPct,   <- MY TREE
+```
+
+**REF-VERIFIED COORDINATES** (`origin/migration/aws-supabase`, read with stderr NOT suppressed):
+
+| site | ref line |
+|---|---|
+| `server/services/signal-orchestrator.ts` | **1448** ← was wrongly cited as 1508 |
+| `server/services/vts-runner.ts` | 1536 ✓ |
+| `server/asset_classes/xstock_spot/eval-cycle.ts` | 682 ✓ |
+| `server/core/calculations/expectancy.ts` | 204, 208 ✓ |
+| `server/startup/b72-warmup.ts` | 278 ✓ |
+| `server/core/calculations/signal-target-normalizer.ts` | 13, 18, 40 ✓ |
+
+**★ THE HONEST READING — five of six were right BY LUCK, NOT BY METHOD.** They happened to sit in files no one had dirtied. **The method was wrong for all six**; only one file being dirty is what limited the damage. A method that is correct only when nobody else is working in a shared tree is not a method.
+
+**★ THIS IS `#545` RULE 2 VERBATIM — "VERIFY AT A COMMITTED REF, NOT THE WORKING TREE — a shared tree has no version identity" — which I helped land into governance THE SAME MORNING, cited approvingly, and then broke in the very next document I wrote.** Recorded here rather than silently corrected, because the failure is the useful part: it is the second time in one day I applied a discipline once and did not carry it to the next instrument. **The control you just ran does not immunise the next check.**
+
+**Also relevant:** while re-measuring, the `.claude/hooks/guard-governed-read.mjs` PreToolUse guard **BLOCKED** my re-measurement command for suppressing stderr on a `git show` (rule 22's mechanical enforcement). It was right to. That is the type-level-over-prose argument working on its own author, twice in one session.
