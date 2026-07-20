@@ -32,3 +32,5 @@
 
 ## NEXT STEP
 Draft **GATE-1 boundary one-pager** → Langston rules in isolation → then the full scope (with the GATE-2 freshness-detector spec + the file-set manifest) → Langston refines → catch-up build.
+
+**★ DELIVERY REQUIREMENT (Langston standing note, 2026-07-21):** Langston reviews the one-pager **AT THE GRADED REF (origin HEAD)** and re-derives the boundary claims **from the ref, not the staged/working copy** — the same discipline GATE-2 encodes, applied to his own read. ⇒ **COMMIT + PUSH the one-pager to origin BEFORE dispatching it to him, and point him at the ref** — never hand him an unpushed working-tree draft. His review of GATE-1 is a line-by-line tripwire pass ("any line paste-able into a Manual chapter without loss is a defect"), not a vibe read — write it to survive that. He will NOT sign a GATE-2 version that softens any of the three hard requirements (committed manifest / fail-closed / graded-ref read).
