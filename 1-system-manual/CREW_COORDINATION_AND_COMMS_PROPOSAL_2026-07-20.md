@@ -92,6 +92,24 @@ A named batch, e.g. **B-CREW-COORD**, owner = a CC session, Langston review, aft
 
 ---
 
+## PART 4 — ADOPTION / ROLLOUT (Kyle directive 2026-07-21 — a first-class objective, not an afterthought)
+> **Kyle:** *"What you are now building are tools that need to be used by the other Claudes and Langston too… You have to find a way to get user adoption, including yourself, so that these tools are used."* A tool that isn't adopted is dead weight — the exact "nothing re-reads what we wrote" failure this whole night has been about, applied to our own tooling. **The design principle: minimize reliance on anyone REMEMBERING to use it. A control that depends on memory fails the way the verbal wrench-convention already failed.**
+
+### B-COMMS-CHUNK-FIX — adoption is ~FREE because the fix is TRANSPARENT
+- Fix (B) reassemble-on-receive lives entirely in the **bridge**. Senders keep sending exactly as they do; the receiver simply stops dropping chunks. **Zero behavior change required from any CC or Langston → zero adoption burden.** This is *why* (B) beats (A) on adoption too, not just correctness.
+- The only "adoption" action is **RETIRING the now-obsolete manual workaround** (the "keep Langston dispatches < 2000 / file-first for long ones" habit in CLAUDE.md §6.5 + the per-session MEMORY files). Rollout step: once deployed + verified, edit those docs to say "the bridge now reassembles; the < 2000 workaround is retired," and post the one-liner in-channel so running sessions drop the habit.
+
+### B-CREW-COORD — adoption ENGINE = the hook, backed by docs + a re-read step
+Manual `crew claim` relies on memory and WILL be forgotten. So adoption is engineered, in layers, most-automatic first:
+1. **★ THE HOOK IS THE ADOPTION ENGINE (self-enforcing, memory-free).** The `guard-bare-commit` hook already fires on EVERY commit. Extended to consult the board, the first time a session tries to commit a shared path it didn't claim, the hook **blocks/warns AND its message teaches the `crew` commands inline.** ⇒ a session cannot slip past the tool, and it LEARNS the tool at the exact moment it's needed — even a long-running session that never re-read CLAUDE.md. **This is the answer to "how do you get adoption": the tool inserts itself into the workflow at the point of use; nobody has to remember.**
+2. **CLAUDE.md rule** (the `crew claim/push-begin/release/board` workflow) — auto-loads for every NEW session and for **Langston every `claude -p` invocation** (so Langston, the board's read-only reader, adopts by reload automatically).
+3. **MEMORY.md session-start protocol** gains a "check the crew board / claim before touching a shared file" line — so it's in each session's loaded startup context.
+4. **★ RE-READ FOR CURRENTLY-RUNNING SESSIONS (Kyle's explicit point).** CLAUDE.md/MEMORY auto-reload only at session start / compaction — a session already running won't see the new rule until then. So the rollout **posts in `#general`: "B-CREW-COORD is live — CC-A/CC-B, re-read CLAUDE.md §<X> + MEMORY item <Y> NOW; Langston picks it up on his next invoke."** The hook (layer 1) is the backstop that makes even an un-re-read session comply.
+5. **★ ADOPTION VERIFICATION (don't declare adopted, prove it).** After rollout, the batch is not "adopted" until the board shows **claims/pushes from all three CC sessions**, not just mine — a `crew board` snapshot with ≥1 entry per session, cited in the completion report. Silent non-use reads as adoption; it isn't.
+
+### Sequencing (Kyle go-ahead 2026-07-21)
+CC-C implements both, full 11-step workflow, Langston reviewing the diff. **B-COMMS-CHUNK-FIX first** (urgent — corrupting every long review now, incl. tonight's) → then B-CREW-COORD → then back to the flow doc. Wrench called in `#general` before touching any shared file. Adoption (Part 4) is a Step-11 completion gate for BOTH: a batch isn't closed until its adoption path is executed + (for B-CREW-COORD) verified on the board.
+
 ## SUMMARY FOR THE LEDGER
 - **Part 1:** delivered (running list, `0e038494b`).
 - **Part 3 (truncation):** root-caused at source, live impact proven, interim mitigation stated (file-first), fix options laid out → **B-COMMS-CHUNK-FIX**, urgent.
