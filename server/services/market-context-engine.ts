@@ -1047,6 +1047,94 @@ export class MarketContextEngine {
   }
 
   /**
+   * B-REGIME-REFRESH-PIPE (2026-07-21) — PURE regime-inputs compute for the RTB REFRESH path.
+   *
+   * ═══ WHY THIS EXISTS ═══
+   * The MCE computes regime context ONLY for FX5 survivors + xStock survivors; the scanner
+   * DELIBERATELY excludes queued/traded pairs (market-scanner.ts:773), so a queued pair cycles
+   * out of the survivor set and its 60s context cache goes cold. The 30s RTB refresh then misses
+   * `getCachedContext` and rejects (B-REGIME-INPUTS-LIVE, 6d22a9b63 — live: 54/55 rejecting).
+   * The refresh needs FRESH regime for exactly those pairs, which the survivor-only pipe won't
+   * give it. This method is the refresh's own compute path.
+   *
+   * ═══ WHY IT IS A SEPARATE METHOD, NOT `computeContext` (Langston A1 ruling) ═══
+   * `computeContext` has FIVE side-effects per call — regimePhaseStore.tick, cache.set (split-
+   * brain vs the 60s cycle that owns the cache), directionalBiasStore.updatePair (persistent
+   * store), emitMceTelemetry, archivePairScan (~155k rows/day at 54×2880). Warming via it would
+   * falsely attribute all five to a refresh read. This method calls the PURE `calculatePairRegime`
+   * (market-regime.ts:231) and does NONE of the five. It reuses the MCE's OWN private config
+   * assembly (regimeLookbacksByClass merge + macro resolution) so there is zero config drift.
+   *
+   * ═══ CONTRACTS ═══
+   * - Returns `{ volatility, adx }` (the only two `regimeWeight` inputs — DBS-independent, so the
+   *   caller's carried queue-time DBS cannot move the gated number: SIM "RegimeWeight signal-level
+   *   vol only").
+   * - Returns `null` — the caller MUST REJECT, never substitute — on: insufficient bars (#546:
+   *   absence must NOT collapse to computeATR's `return 0`), config-not-ready, or a non-finite
+   *   result. This method NEVER throws into the refresh (unlike computeContext) — a cold engine
+   *   is a reject, not a crash.
+   * - ZERO side-effects: no tick, no cache write, no DBS-store write, no telemetry, no archive.
+   *
+   * @param propagatedDbs queue-time DBS carried from signal metadata (satisfies the B63
+   *        hard-contract for crypto without a fresh recompute; label-only, gate-safe).
+   */
+  computeRegimeInputsOnly(
+    symbol: string,
+    ohlcData: OHLCData[],
+    propagatedDbs: { score: number; slope?: number } | undefined,
+    assetClass: AssetClass,
+  ): { volatility: number; adx: number } | null {
+    // Config not ready → REJECT (never throw into the refresh; never score on a default).
+    if (this.regimeConfig === null || this.regimeLookbacksByClass === null) return null;
+    const lk = this.regimeLookbacksByClass.get(assetClass);
+    if (lk === undefined) return null;
+
+    // ★ REJECT-ON-SPARSE-BARS (#546 / Finding 3): calculatePairRegime's ATR/ADX degrade to 0 on
+    // too-few bars — an ABSENCE that reads as low-vol and inflates regimeWeight. Refuse instead.
+    // Guard on the widest window the regime math consumes (ATR / ADX / momentum).
+    const minBars = Math.max(this.config.atrPeriod, lk.adxPeriod, lk.momentumLookback);
+    if (!Array.isArray(ohlcData) || ohlcData.length < minBars) return null;
+
+    // Macro modifier — replicate computeContext's asset-class-aware resolution, but default to
+    // neutral (1.0) rather than throw if macro isn't warm yet. (It scales the regime SCORE, not
+    // the raw volatility/adx this method returns, so a neutral default cannot move our output.)
+    let macroModifierValue = 1.0;
+    if (assetClass === 'crypto_spot') {
+      macroModifierValue = this.macroCachedContext?.modifier?.value ?? 1.0;
+    } else {
+      try {
+        const v = getCachedConstant<number>('mce_config', 'macro_modifier', {
+          exchange: '*', assetClass, regime: '*', strategy: '*',
+        });
+        macroModifierValue = typeof v === 'number' && Number.isFinite(v) ? v : 1.0;
+      } catch {
+        macroModifierValue = 1.0;
+      }
+    }
+
+    const dbsSlope = propagatedDbs?.slope ?? 0;
+    const dbsScore = propagatedDbs && Number.isFinite(propagatedDbs.score) ? propagatedDbs.score : 0;
+
+    const regimeConfigForPair = {
+      ...this.regimeConfig,
+      momentumLookback: lk.momentumLookback,
+      adxPeriod: lk.adxPeriod,
+    };
+
+    const r = calculatePairRegime(
+      ohlcData,
+      dbsScore,
+      dbsSlope,
+      macroModifierValue,
+      regimeConfigForPair,
+      assetClass,
+    );
+
+    if (!r || !Number.isFinite(r.volatility) || !Number.isFinite(r.adx)) return null;
+    return { volatility: r.volatility, adx: r.adx };
+  }
+
+  /**
    * B67.2: Public accessor for the strategy-phase weights blob.
    * Returns null only during cold start (before first refresh completes) —
    * after that it's always populated. Consumers (signal-orchestrator + vts-

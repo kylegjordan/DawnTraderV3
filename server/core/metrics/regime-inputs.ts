@@ -38,6 +38,7 @@
  */
 import { getMarketContextEngine } from '../../services/market-context-engine.js';
 import type { AssetClass } from '../../../shared/asset-classes.js';
+import type { OHLCData } from '../../types/market-regime.types.js';
 
 export interface RegimeInputs {
   /** LIVE volatility from the MCE's calculatePairRegime (NOT the orphaned market-metrics cache). */
@@ -111,6 +112,70 @@ export function readRegimeInputs(symbol: string, assetClass: AssetClass): Regime
       volatility,
       trendStrength: Math.min(1, Math.max(0, adx / ADX_TREND_DIVISOR)),
       adx,
+    },
+    miss: null,
+  };
+}
+
+/**
+ * B-REGIME-REFRESH-PIPE (2026-07-21) — FRESH regime inputs for the RTB REFRESH path.
+ *
+ * `readRegimeInputs` (above) is a pure cache-router: it hits the MCE's survivor-populated
+ * context cache. But queued pairs are DELIBERATELY excluded from the FX5 survivor set
+ * (market-scanner.ts:773 — don't re-signal an already-queued/traded pair), so that cache is
+ * cold for them (54/55 miss live post-6d22a9b63). This function is the refresh's OWN compute
+ * path: it fetches fresh 60m bars for the queued pair, carries the queue-time DBS, and computes
+ * vol/adx via the MCE's PURE `computeRegimeInputsOnly` (zero side-effects — no phase-tick, no
+ * cache write, no DBS-store write, no telemetry, no archive; see that method's docstring).
+ *
+ * Returns the SAME `RegimeInputsResult` shape as `readRegimeInputs` so the refresh's downstream
+ * is unchanged. Async because the OHLC fetch is async. Fail-loud preserved: any miss (fetch
+ * fails / sparse bars / cold engine) → `{inputs:null}` and the caller MUST reject — never
+ * substitute (#546).
+ */
+export async function computeRefreshRegimeInputs(
+  symbol: string,
+  assetClass: AssetClass,
+  dbsScoreAtQueue: number | undefined,
+): Promise<RegimeInputsResult> {
+  let ohlc: OHLCData[];
+  try {
+    if (assetClass === 'xstock_spot') {
+      const { xstockOhlcCache } = await import('../../services/xstock-ohlc-cache.js');
+      const res = await xstockOhlcCache.getOHLCData(symbol, 60);
+      ohlc = res.bars;
+    } else {
+      const { ohlcCache } = await import('../../services/ohlc-cache.js');
+      const res = await ohlcCache.getOHLCData(symbol, 60);
+      // OHLCCandle[] (string fields + `time`) → OHLCData[] (number fields + `timestamp`),
+      // mirroring signal-orchestrator.ts:1837 exactly (no divergence).
+      ohlc = res.ohlc.map((d) => ({
+        open: parseFloat(d.open),
+        high: parseFloat(d.high),
+        low: parseFloat(d.low),
+        close: parseFloat(d.close),
+        volume: parseFloat(d.volume || '0'),
+        timestamp: d.time * 1000,
+      }));
+    }
+  } catch {
+    // A fetch failure is a MISS, not a crash — the caller rejects (fail-loud), never scores.
+    return { inputs: null, miss: 'mce_context_absent' };
+  }
+
+  const dbs =
+    typeof dbsScoreAtQueue === 'number' && Number.isFinite(dbsScoreAtQueue)
+      ? { score: dbsScoreAtQueue }
+      : undefined;
+
+  const raw = getMarketContextEngine().computeRegimeInputsOnly(symbol, ohlc, dbs, assetClass);
+  if (!raw) return { inputs: null, miss: 'mce_context_absent' };
+
+  return {
+    inputs: {
+      volatility: raw.volatility,
+      trendStrength: Math.min(1, Math.max(0, raw.adx / ADX_TREND_DIVISOR)),
+      adx: raw.adx,
     },
     miss: null,
   };

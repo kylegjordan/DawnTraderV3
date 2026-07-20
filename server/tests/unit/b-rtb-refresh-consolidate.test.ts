@@ -47,7 +47,9 @@ function refreshAndRankBody(): string {
 
 describe('B-RTB-REFRESH-CONSOLIDATE: one shared acquisition, both mechanisms', () => {
   it('the shared acquisition method exists', () => {
-    expect(SRC).toContain('private acquireRefreshedInputs(');
+    // B-REGIME-REFRESH-PIPE (2026-07-21): now `async` — it awaits a fresh regime compute
+    // (computeRefreshRegimeInputs) for queued pairs the survivor-only MCE cache can't cover.
+    expect(SRC).toContain('private async acquireRefreshedInputs(');
   });
 
   it('BOTH refresh mechanisms call it — identical logic, no copy-paste drift', () => {
@@ -104,7 +106,7 @@ describe('B-RTB-REFRESH-CONSOLIDATE: the self-perpetuating loop is broken (OBJ-2
 
 describe('B-RTB-REFRESH-CONSOLIDATE: score-timing invariant preserved (Langston B7.2b gate)', () => {
   it('decideMakerTaker runs AFTER the decayed score, so signalStrength is same-vintage', () => {
-    const m = SRC.indexOf('private acquireRefreshedInputs(');
+    const m = SRC.indexOf('private async acquireRefreshedInputs('); // B-REGIME-REFRESH-PIPE: now async
     const method = SRC.slice(m, SRC.indexOf('\n  private async refreshSingleSignal(', m));
     const scoreAt = method.indexOf('const refreshedFinalScore');
     const mtAt = method.indexOf('decideMakerTaker({');

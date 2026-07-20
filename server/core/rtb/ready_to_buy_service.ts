@@ -74,7 +74,7 @@ import { getCachedSpread } from '../metrics/cost-metrics.js';
 import { getNormalizedVolatility as getVolatility } from '../metrics/market-metrics.js';
 // B-REGIME-INPUTS-LIVE: the live MCE-backed regime inputs for the refresh path.
 // getVolatility above is now UNUSED by the gate and is OBJ-4's retirement target.
-import { readRegimeInputs, recordRegimeInputsMiss } from '../metrics/regime-inputs.js';
+import { computeRefreshRegimeInputs, recordRegimeInputsMiss } from '../metrics/regime-inputs.js';
 // Phase 14.5: Ranking weights for cross-family signal comparison
 
 // T5: Subscribe to pool size updates from RTB Refresh Service
@@ -779,14 +779,14 @@ class ReadyToBuyService {
    * captured first, `refreshedFinalScore` is computed next, and ONLY THEN is decideMakerTaker
    * run — so `signalStrength` consumes the DECAYED score, never the stale stored one.
    */
-  private acquireRefreshedInputs(
+  private async acquireRefreshedInputs(
     signal: RtbSignal,
     normalizedSymbol: string,
     metadata: Record<string, any>,
     confidence: number,
     hybridScore: number,
     regimeWeight: number,
-  ): {
+  ): Promise<{
     currentVol: number;
     currentSpread: number;
     netExpectedEdge: any;
@@ -800,7 +800,7 @@ class ReadyToBuyService {
      * computed value, because the formula clamps at 0.1 and cannot otherwise yield 0.
      */
     refreshedRegimeWeight: number | null;
-  } {
+  }> {
     // Directive 11.3A: conditional geometry refresh (throttled on max-age / vol-shift /
     // spread-shift — an efficiency guard, not a staleness defect).
     const currentSpread = getCachedSpread(normalizedSymbol);
@@ -826,7 +826,16 @@ class ReadyToBuyService {
     // simply recomputes. Rejecting a signal because a performance heuristic lacked an input
     // would be the wrong disposition for that use.
     const _refreshClass = asValidAssetClass(signal.assetClass) ?? safeResolveAssetClass(normalizedSymbol, 'kraken');
-    const _regime = _refreshClass !== null ? readRegimeInputs(normalizedSymbol, _refreshClass) : { inputs: null, miss: 'mce_context_absent' as const };
+    // ══ B-REGIME-REFRESH-PIPE (2026-07-21) — COMPUTE fresh, don't read a cold cache ══
+    // `readRegimeInputs` (the cache-router) misses 54/55 here: queued pairs are excluded from
+    // the FX5 survivor set (market-scanner.ts:773), so the MCE's survivor-populated cache is
+    // cold for them. `computeRefreshRegimeInputs` fetches fresh 60m bars + carries the queue-time
+    // DBS + computes vol/adx via the MCE's PURE `computeRegimeInputsOnly` (zero side-effects).
+    // Async — hence this method is now async. Fail-loud preserved: a miss → inputs:null → reject.
+    const _dbsAtQueue = signal.dbsScoreAtQueue != null ? Number(signal.dbsScoreAtQueue) : undefined;
+    const _regime = _refreshClass !== null
+      ? await computeRefreshRegimeInputs(normalizedSymbol, _refreshClass, _dbsAtQueue)
+      : { inputs: null, miss: 'mce_context_absent' as const };
     if (!_regime.inputs && _refreshClass !== null) {
       recordRegimeInputsMiss(normalizedSymbol, _refreshClass, _regime.miss!);
     }
@@ -966,7 +975,7 @@ class ReadyToBuyService {
     // here is unchanged by construction. This mechanism is retired in staging step 2 (the
     // starters at active-execution-engine.ts + trading-bootstrap.ts), at which point this
     // caller disappears and the shared method has a single caller.
-    const _acq = this.acquireRefreshedInputs(
+    const _acq = await this.acquireRefreshedInputs(
       signal, normalizedSymbol, metadata, confidence, hybridScore, regimeWeight,
     );
     const currentSpread = _acq.currentSpread;
@@ -1285,7 +1294,7 @@ class ReadyToBuyService {
               // self-perpetuating. It now runs the SAME acquisition the per-signal
               // mechanism runs, so the SQE is handed CURRENT market state.
               // Per Kyle's refresh contract: represent the signal as it currently is.
-              const _acq = this.acquireRefreshedInputs(
+              const _acq = await this.acquireRefreshedInputs(
                 signal, normalizedSymbol, metadata, confidence, hybridScore, regimeWeight,
               );
               const decayPenalty = _acq.decayPenalty;
