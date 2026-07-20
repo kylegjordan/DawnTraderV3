@@ -34,6 +34,22 @@ So this batch has a second purpose beyond its four items: it is the concrete ins
 
 **Sequencing note for Langston:** OBJ-1 is documentation-only and independently landable. Recommend pulling it forward ahead of OBJ-2/3 rather than holding it behind code review.
 
+#### OBJ-1 RESOLUTION — Q1 answered, three-layer placement (CC-B + OLD Claude + ANALYST + Langston, 2026-07-20)
+
+Q1 asked: fold into the single §9.5 edit, or land separately? **The dilemma dissolved — the premise was wrong.** Three placements at three different moments, which is layering, not redundancy:
+
+| # | Placement | Moment it fires | Batch home |
+|---|---|---|---|
+| 1 | `MEMORY_CC_C.md` working memory | analyst session start | ✅ DONE (`c28525222`) |
+| 2 | **Note on the `closed_trades` / analytics surface** | **query time — when the error actually happens** | **THIS BATCH, OBJ-1** |
+| 3 | `CLAUDE.md` §9.5 prose | audit / review time | `B-VERIFY-DISCIPLINE` (#545, owner CC-A) — folds into the single §9.5 edit, no double-edit |
+
+**Placement #2 is load-bearing, not optional (Langston: "if only one lands, it's that one").** ANALYST supplied the decisive evidence, being the person the rule exists to catch: **they made the pooling error in the first ten minutes, before reading any governance.** A control read at session start, divorced from the moment of use, does not fire.
+
+**★ STRONGEST FORM, adopt if not expensive (Langston):** make the pooled number **hard to get without seeing the split** — have the analytics query/endpoint surface the `admissionBasis` breakdown **by default**, rather than a note sitting beside it. **Structure beats prose**, because a note is still the fast-wrong path sitting next to the slow-right one with nothing announcing the difference. Step-3 attempts the structural form first and falls back to the note only if the endpoint shape makes it costly — and says which it did, and why.
+
+⚠️ **Confirming evidence from CC-B, 2026-07-20, minutes after this was agreed:** CC-B queried two active-trading endpoints that returned **HTTP 404**, and a local parser silently rendered both as **"0 open positions / 0 closed trades"** — a false absence that read as a clean finding. Caught only by re-reading the RAW response. **That is the same disease at a different layer and it is the argument for the structural form:** prose asking the reader to be careful would not have caught it; a surface that refuses to emit a bare number would have. Recorded here rather than as a new issue because #545's rules already cover it (`"the command failed" ⇒ the durable record`, and rule 22 asserted-absence-needs-presence-evidence) — this is a confirming instance, not a discovery.
+
 ### OBJ-2 — CR-2: fee-drag metric computed on inconsistent bases
 
 **The finding.** Gross is measured at **intended** entry price by design (`server/services/active-execution-engine.ts:1605-1606`), while fees and net are **actual-fill**. Dividing one by the other mixes two bases and printed **154% / 421% on a Kyle-facing dashboard**.
