@@ -22,14 +22,19 @@
 
 ### 1.2 WHAT IS THE FEE PICTURE — split by lane (the corrected view)
 
-| lane | n | winners | win-rate | net P&L | fees | avg/trade |
-|---|---|---|---|---|---|---|
-| **exploration** | 142 | 25 | **17.6%** | **−$133.41** | $112.29 | −$0.939 |
-| **organic** | 33 | 11 | **33.3%** | **+$1.37** | $32.71 | +$0.042 |
+> ⚠️ **READ THE LANE COLUMN BEFORE THE P&L COLUMN.** These two rows are not a comparison of good trades against bad trades. They are **the cost of data** next to **the return on selection** — two different activities that happen to share a P&L column. The exploration row is *supposed* to be negative; a positive number there would mean the lane was not doing its job.
 
-Organic by class: **crypto 9 trades / 7 winners / +$40.75** (fees $9.99) · **xStock 24 trades / 4 winners / −$39.37** (fees $22.72).
+| lane | what it is FOR | n | winners | win-rate | net P&L | fees | avg/trade |
+|---|---|---|---|---|---|---|---|
+| **exploration** | **buying learning data** — deliberately admits known-negative-EV trades to measure fill rates and per-strategy outcomes. **Losing money is the mechanism, not the failure.** | 142 | 25 | 17.6% | **−$133.41 (the price paid for the data)** | $112.29 | −$0.939 |
+| **organic** | **the actual strategy** — admits only on positive expected value | 33 | 11 | 33.3% | **+$1.37 net, after paying $32.71 in fees** | $32.71 | +$0.042 |
+
+Organic by class: **crypto 9 trades / 7 winners / +$40.75** (fees $9.99) · **xStock 24 trades / 4 winners / −$39.37** (fees $22.72) — ⚠️ **xStock cell is PROVISIONAL-pending-#544** (§3.5: no weekend mechanism + the 07-19 capture outage bind every xStock number).
 
 ⇒ **The trades the system selected on their own merits paid their fees and finished marginally positive.** The losses are concentrated in the lane designed to lose.
+
+> ### ⚠️ MANDATORY FRAMING GUARD (Langston review condition 2) — attach this EVERY time the organic result is stated
+> **+$1.37 on n=33, and crypto-organic +$40.75 on 9 trades / 7 winners, DEFEATS "lost cause". It does NOT establish profitability.** At those sample sizes this is noise. The finish line for a real verdict is **~350–370 pooled trades (≈2 weeks)**, and the clock starts only after the regime gate reads live inputs and the refresh consolidation lands. Quoting the positive number without this guard lets a coin-flip read as an edge.
 
 ### 1.3 WHAT CLEARS THE FEE BAR — **size**, not shape
 Sorting all 126 complete-geometry trades by target distance:
@@ -108,6 +113,26 @@ xStock trades 24/5 (Sun 8pm ET → Fri 8pm ET). There is no rule suspending admi
 
 ---
 
+### 3.6 ★ The exploration spend stayed INSIDE its governed envelope — and the anneal is self-reducing
+*(Added to discharge Langston review condition 1: "show the −$133.41 stayed inside the budget/anneal envelope — otherwise it could be an overrun wearing a by-design costume." **Measured, not assumed.**)*
+
+| date | admits | `floorInEffect` | daily net |
+|---|---|---|---|
+| 07-15 | 39 | −2.000% | −$46.04 |
+| 07-16 | 20 | −2.000% | −$39.16 |
+| 07-17 | 29 | −2.000 → −1.500% | −$34.61 |
+| 07-18 | 22 | −1.500% | **+$1.91** |
+| 07-19 | 30 | −1.500% | −$16.74 |
+| 07-20 | 3 | −1.500% | −$2.40 |
+
+1. **Budget never exhausted** — max 39 admits against a configured `exploration_lane.daily_budget` of 50. **Not an overrun; the hypothesis is falsified.**
+2. **The anneal functions exactly as specified** — `base_floor_pct` −0.02 + `anneal_step_pct` 0.005 × 1 step = −0.015, and the per-trade stamped `floorInEffect` moved −2.000% → −1.500% on 07-17/18 after `anneal_step_trades`=60 informative closes accrued. Visible in persisted data, not inferred.
+3. **The subsidy is SELF-REDUCING** — daily net improves monotonically-ish as the floor tightens (−$46 → −$39 → −$35 → **+$1.91** → −$17). This strengthens the framing from "designed to lose" to **"designed to lose, and designed to stop losing."**
+
+⚠️ **SURFACED, NOT FILED (§9.5 b-ii):** the live `daily_budget` is **50**/class, but `exploration-lane.ts`'s own header documents *"3-way consensus (CC-A + CC-B + Langston, 2026-07-15) + Kyle GO (budget 25-30/day)"* — ~2× the documented approval, and 07-15's 39 admits sit above the documented 25–30 while below the configured 50. **I have NOT searched for a later approved change to 50 and do not assert one is absent.** → **CR-8**.
+
+---
+
 ## 4. CHANGE REQUESTS (I hold no write access — each needs an owner + a named home)
 
 | # | Request | Type | Suggested home / owner |
@@ -118,7 +143,19 @@ xStock trades 24/5 (Sun 8pm ET → Fri 8pm ET). There is no rule suspending admi
 | **CR-4** | **Rule on the xStock weekend posture** (#531) — suspend / flatten / deliberate hold + a calendar admission gate. | **Kyle decision** | Pending Kyle |
 | **CR-5** | **Write the admission-lane split rule (§0) where the next analyst hits it before drawing conclusions** — this is a METHOD rule, not an issue. | Governance/method | Prestudy or an analysis-discipline note |
 | **CR-6** | **Answer: did prestudy §4b item (E) scope pWin neutralization to `signalStrength` only (landed 07-13 as `scoring_base.flat_pwin_base`), or ALSO the kernel pWin** (`expectancy_kernel` 0.40/0.60, untouched since 05-05)? | Question, NOT a finding | Asked of CC-B (P19-B8.5a owner) |
-| **CR-7** | **Do NOT lower the assumed win rate** (§2.4). Recorded so it is not re-litigated. | Decision record | This document |
+| **CR-7** | **Do NOT lower the assumed win rate** (§2.4). Recorded so it is not re-litigated. ⚠️ See §7 — the evidentiary weight sits on #501, NOT on my replay. | Decision record | This document |
+| **CR-8** | **Reconcile `exploration_lane.daily_budget` (live = 50) against the documented Kyle GO of 25–30/day** (§3.6). Deliberate raise → the file header is stale and must say so. Drift → 07-15's 39 admits were outside the approved envelope. | Governance reconciliation | Langston to rule; owner TBD |
+
+---
+
+## 4b. LANGSTON REVIEW — RECEIVED 2026-07-20 (Kyle-directed)
+
+**Verdict: "Nothing blocks."** Both load-bearing claims hold.
+- **§1.4 reframe — CONFIRMED verbatim-accurate.** Langston independently re-read `P25_SCORING_STACK_PRESTUDY.md` §159 at `origin/migration/aws-supabase` (not from memory, not from my gloss) and confirmed the quote exact. *"Kyle's lost-cause answer can rest on this — it's sealed 3-way, not reported."*
+- **§0 admission-lane split — "does NOT overstate. It's the correct lens, and pooling was the error (I made it too, in the EV-gate read)."**
+- **CRs endorsed:** CR-1 (re-confirmed his own earlier ruling), CR-2, CR-3 (Rule 18 §15 — document-then-delete), CR-5, CR-7 (concurs; dial powerless against the bleed, n=5 caveat intact).
+- **Three conditions — ALL DISCHARGED OR ACCEPTED:** (1) budget-envelope check → §3.6, hypothesis falsified; (2) organic-positive framing guard → §1.2 blockquote; (3) xStock PROVISIONAL-pending-#544 → §1.2 + §3.5.
+- **Scope of his ruling, stated honestly:** he independently re-verified ONLY the §1.4 citation. The lane counts (142/33/175) and P&L figures are ruled on **as my reported measurement, not re-queried.** I have asked him to re-query the split directly before it reaches Kyle as load-bearing, since everything now rests on it. **Until he does, treat the split as single-sourced.**
 
 ---
 
