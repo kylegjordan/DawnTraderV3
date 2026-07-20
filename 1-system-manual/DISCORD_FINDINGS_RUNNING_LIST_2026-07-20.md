@@ -21,6 +21,8 @@
 | **#531** | xStock weekend posture — no suspend/flatten/admission rule across the 48h closure | prior + crew | **`B-XSTOCK-WEEKEND-POSTURE`** (3-way consensus locked, Kyle-delegated) | ✅ Consensus locked |
 | — | xStock exit-price plausibility (renamed from "fix D" after a naming collision) | crew | **`B-XSTOCK-EXIT-PLAUSIBILITY`** | ✅ Named |
 | **#539 / #540** | EOL normalization decision · shared-tree commit discipline (3-tier attestation) | crew / Langston | `B-EOL-POLICY` · guard hook (live) | ✅ Standing |
+| **#547** | ★ **MIGRATED FROM SECTION B 2026-07-20** — CC-C's four un-homed findings landed as one entry: **CR-1** retention asymmetry (with the direction correction preserved) · **CR-2** fee-drag inconsistent bases · **CR-3** orphaned `target_floor_pct` · **CR-5** admission-lane method rule | CC-C (surfaced) / **CC-B (filed)** | **`B-GOV-HYGIENE-ANALYST-1`** | ✅ OPEN, batch named — verified at `origin/migration/aws-supabase`, commit `4b75323cf` |
+| **#545 add-1** | The **name-the-falsifying-surface** rule — before asserting X, name the surface that would have falsified X and confirm you looked at it. Generalised by CC-B from CC-C's narrower commit-history rule after the CR-8 failure | CC-C → CC-B (generalised) | `B-VERIFY-DISCIPLINE` (#545) | ✅ Landed, commit `634d7ce6b` |
 
 ---
 
@@ -29,16 +31,14 @@
 
 | Ref | Finding | Source | Langston's position | Batch? |
 |---|---|---|---|---|
-| **CR-1** | **Decision-record retention asymmetry** — we permanently keep the reasoning for every trade we TOOK and discard it for every signal we REFUSED. The rejected population is the counterfactual Phase-25 calibration needs, and it is being destroyed continuously. | CC-C | **"Real and needs a home now, not a flag"** — ruled twice | ❌ **NONE** |
-| **CR-2** | **Fee-drag dashboard metric is computed on inconsistent bases** — gross from intended entry price, net from actual fill; prints an impossible 154% on a Kyle-facing dashboard | CC-C | **Endorsed** — "legit data-quality bug" | ❌ **NONE** |
-| **CR-3** | **Orphaned `target_floor_pct = 0.040`** — its consumer (the floor-LIFT) was deliberately deleted at reorg-B2.1; the row still reads like a live 4% rule and misled me into filing a false defect | CC-C | **Endorsed** — Rule 18 §15, *document-then-delete* | ❌ **NONE** |
-| **CR-5** | **The admission-lane split must be written as a METHOD rule** where the next analyst hits it *before* drawing conclusions — pooling exploration with organic produces a false headline (it produced mine) | CC-C | **Endorsed as governance** | ❌ **NONE** |
+| ~~CR-1 / CR-2 / CR-3 / CR-5~~ | ✅ **MIGRATED TO SECTION A 2026-07-20 — all four landed as #547 / `B-GOV-HYGIENE-ANALYST-1`** (commit `4b75323cf`, verified at origin). Filed by CC-B, who owned that accepting the hand-off without landing it was his. **Elapsed from list-published to filed: ~15 minutes** — the list working exactly as intended. | CC-C | endorsed | ✅ **#547** |
+| ~~NEW-6~~ | ✅ **MIGRATED TO SECTION A** — landed as #545 addendum-1 (`634d7ce6b`), generalised by CC-B into the name-the-falsifying-surface rule | CC-C → CC-B | endorsed | ✅ **#545** |
 | **NEW-1** | **The kernel pWin pin decision** — CC-B and Langston both *reversed* tonight under Kyle's "best for learning" criterion and now favour pinning; I conceded CR-7. **No batch carries this decision.** | CC-B → all | Concurs with the flip | ❌ **NONE** |
 | **NEW-2** | **Organic-cohort collapse warning** — pinning to the measured base rate (~0.31) admits ≈1 organic trade across a five-day soak, extinguishing the organic-vs-exploration contrast that is currently the most informative structure in the data. A *learning* cost, not a money cost. | CC-C | Not yet ruled | ❌ **NONE** |
 | **NEW-3** | **Guard-hook heredoc hang** — a loop that never terminates when command text contains a heredoc marker; hook runs on EVERY Bash call, so it affected all three sessions live | CC-A (self-reported) | — | ❌ **NONE** (hazard active) |
 | **NEW-4** | **Guard-hook substring-match hole** — the guard blocked a message merely for *quoting* the phrase it matches; a control with known silent-bypass holes is live and its fix sits uncommitted | CC-A | — | ❌ **NONE** |
 | **NEW-5** | **`MISS_ALERT_THRESHOLD` mis-wording** — gates on total misses but the alert says "at scale across symbols"; one hot symbol trips a false "at scale" alarm | Langston | Raised as a nit for SEAL | ❌ **NONE** (nit) |
-| **NEW-6** | **Exhaustive-search rule** — an asserted absence must state *which surfaces were searched*, and **commit history is mandatory** for any "was this approved / when did this change" question | CC-C (from the CR-8 failure) | Proposed for #545 / `B-VERIFY-DISCIPLINE` | ❌ **NONE** |
+| **NEW-7** | ★ **CC-A's scope §1 central claim is FALSE and it reached Kyle** — "the SAME computation works correctly on the VTS path, 16,183 trades / 9,041 distinct / 41.11% below floor" is a *different function with different inputs*, so it was never evidence about the path in question. Self-corrected at code after CC-C's measurement (7,285 VTS rows, `trendStrength` on ZERO) showed the premise unsupported. The 41.11% was separately retracted at ~600×. **The defect itself is unaffected** — the 0.6455 pin is measured from live queue data. | CC-C (measurement) → CC-A (code trace + self-correction) | Rewriting scope §1 before Step-4 | ❌ **NONE — this is a CORRECTION, and corrections do not get numbers the way findings do (see §D-2). It reached Kyle; it needs a home.** |
 
 ---
 
@@ -57,7 +57,8 @@
 
 **Section A is healthy — CC-A filed diligently, and did so specifically because Kyle asked.** Section B is the gap, and it has a structural cause rather than a negligent one:
 
-1. **Most un-homed items are MINE, and I cannot file them.** I am read-only. My four change requests were handed to CC-B mid-audit and to Langston in review; both endorsed them; neither has landed them, because both were mid-incident all night. **A hand-off is not a home** — the exact failure §9.4 exists to prevent, reproduced by an access boundary rather than by forgetfulness. This is direct evidence for the §6 write-access proposal in `PAPER_SOAK_ANALYSIS_2026-07-20.md`.
+1. **Most un-homed items were MINE, and I could not file them.** I am read-only. My four change requests were handed to CC-B mid-audit and to Langston in review; both endorsed them; neither landed them, because both were mid-incident all night. **A hand-off is not a home** — the exact failure §9.4 exists to prevent, reproduced by an access boundary rather than by forgetfulness. Direct evidence for the §6 write-access proposal in `PAPER_SOAK_ANALYSIS_2026-07-20.md`.
+   > ✅ **RESOLVED 2026-07-20, ~15 min after this list was published.** CC-B took the wrench and landed all four as **#547 / `B-GOV-HYGIENE-ANALYST-1`**, stating that accepting the hand-off without landing it was his. **The mechanism that closed the gap was Kyle asking whether the findings were actually recorded — not any of us noticing.** That is the finding: the gap was invisible from inside, and the list is the instrument that makes it visible from now on. The access boundary is unchanged, so the *structural* cause remains open — this closed one instance, not the class.
 2. **Decisions taken in-channel have no filing ritual.** The pWin reversal (NEW-1) was a genuine, reasoned, three-party change of position — and it lives nowhere but Discord. Findings get numbers; **decisions do not**, and a reversed recommendation is exactly what a future reader will need and won't find.
 3. **Tooling faults get announced, not filed.** NEW-3/NEW-4 were flagged fast and well in-channel — and a live hazard affecting all three sessions still has no entry.
 
