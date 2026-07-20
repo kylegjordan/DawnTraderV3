@@ -27,9 +27,9 @@ Done. See `1-system-manual/DISCORD_FINDINGS_RUNNING_LIST_2026-07-20.md` (commit 
 **For any long CC→Langston dispatch, use the file-first pattern (CLAUDE.md §6.5): commit the full content to a file, then send Langston a SHORT pointer (< 2000 chars, single chunk, leading with "Langston").** This sidesteps the bug entirely — the workaround is already in our playbook; we simply have not been disciplined about applying it to long inline messages. **This is the standing rule until the code fix lands.**
 
 ### Fix options (crew + Langston to choose; each is a real code change)
-- **(A) Re-prepend the address token to every chunk (send side).** When the CC bridge chunks a message that starts with "Langston", prefix each subsequent chunk with "Langston (cont.) —". Smallest change; keeps the address-gate intact. **Recommended as the minimal durable fix.**
-- **(B) Reassemble on the receive side.** Langston's bridge buffers consecutive same-author posts within a short window and concatenates before applying the address-gate. More robust (also fixes any future multi-post case) but more state to get right.
-- **(C) Raise the effective budget / dedicated long-form path.** e.g. CC→Langston long dispatches always go file-first by convention enforced in tooling, so inline never exceeds one chunk. This is really (interim mitigation) promoted to a hard rule + a lint.
+- **(A) Re-prepend the address token to every chunk (send side).** When the CC bridge chunks a message that starts with "Langston", prefix each subsequent chunk with "Langston (cont.) —". Smallest change; keeps the address-gate intact. **BUT — see Langston's correction below: (A) alone stops the silent DROP but still hands Langston chunk 1 and chunk 2 as TWO DISCONNECTED INVOKES** (he is stateless — he rules on chunk 1, then sees chunk 2 with no memory of chunk 1). So (A) fixes "dropped" but not "coherent."
+- **(B) Reassemble on the receive side — ★ RECOMMENDED (Langston, 2026-07-20; corrects this doc's original (A)-minimal lean).** Langston's bridge groups posts by their shared `first_id` (every chunk of one message already carries the SAME `first_id` — confirmed in `discord-cc-bridge.py:244`) and concatenates before applying the address-gate, delivering the whole message as ONE turn. **This is a deterministic group-by-message_id, NOT the fragile time-window this doc originally worried about** — so (B) is both MORE correct (one coherent turn to a stateless reviewer) AND EASIER than first graded. **Recommend (B), or (A+B) belt-and-suspenders. Not (A) alone.**
+- **(C) Dedicated long-form path.** CC→Langston long dispatches always go file-first (the interim mitigation) promoted to a hard rule + a lint, so inline never exceeds one chunk. Complements (B); is the zero-code floor.
 - **Not recommended:** doing nothing and relying on humans to keep messages short — that is the current state and it silently fails.
 
 ### Proposed home
@@ -77,10 +77,10 @@ A single table, e.g.:
 - It does not auto-merge or auto-resolve — it PREVENTS the collision by making contention visible before the write, and serializes pushes.
 - It does not touch the #542 mount problem — that is a separate infra issue; this tool just stops making it worse by removing concurrent writers.
 
-### Open design questions for the crew
+### Design decisions (Langston review folded in, 2026-07-20)
 1. Advisory (a session CAN override a claim, with a logged reason) vs hard (blocked until release)? — recommend advisory-with-logged-override first, harden if it is abused.
-2. Does Langston participate as a claimant, or is he review-only (never pushes, per the who-holds-the-wrench rule) and therefore only ever READS the board? — likely the latter.
-3. Integration with the existing commit guard hook — should the hook consult the board and warn on an unclaimed shared-path commit?
+2. **Langston is a read-only board READER, never a claimant** (he never pushes, per the who-holds-the-wrench rule) — **SETTLED (Langston agreed).**
+3. **★ The commit-guard hook consulting the board is IN v1, not deferred (Langston, 2026-07-20).** Rationale: the board without the hook consulting it is just a queryable convention with a nicer view — **the hook is the only enforcement that isn't advisory.** So v1 = registry + CLI + the existing `guard-bare-commit` hook extended to consult the board and warn (or block) on an unclaimed shared-path commit. This is what makes the tool a control rather than a courtesy.
 
 ### Proposed home
 A named batch, e.g. **B-CREW-COORD**, owner = a CC session, Langston review, after the comms-chunk fix (Part 3) since that unblocks the review itself. **This document is the Step-1 design input; it is NOT a scope file yet.**
