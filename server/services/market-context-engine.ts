@@ -1089,10 +1089,16 @@ export class MarketContextEngine {
     const lk = this.regimeLookbacksByClass.get(assetClass);
     if (lk === undefined) return null;
 
-    // ★ REJECT-ON-SPARSE-BARS (#546 / Finding 3): calculatePairRegime's ATR/ADX degrade to 0 on
-    // too-few bars — an ABSENCE that reads as low-vol and inflates regimeWeight. Refuse instead.
-    // Guard on the widest window the regime math consumes (ATR / ADX / momentum).
-    const minBars = Math.max(this.config.atrPeriod, lk.adxPeriod, lk.momentumLookback);
+    // ★ REJECT-ON-SPARSE-BARS (#546 / Finding 3): the values degrade to 0 on too-few bars — an
+    // ABSENCE that reads as low-vol and inflates regimeWeight. Refuse instead.
+    // ★ FLOOR = ONLY what the TWO OUTPUTS WE RETURN need (verified in market-regime.ts):
+    //   • volatility = computeVolatility(ohlc) — needs ≥2 bars (`length < 2 → 0`)
+    //   • adx        = computeADX(ohlc, adxPeriod) — needs ≥ adxPeriod+1 (`length < period+1 → 0`)
+    // We do NOT extract momentum (momentumLookback) or ATR (atrPeriod), so requiring THEIR windows
+    // over-rejects. That bug (max incl. momentumLookback=120) blocked EVERY xStock on the live
+    // path (adxPeriod 56 vs momentumLookback 120) while crypto passed — verified on staging deploy
+    // 86d39e00d (crypto spread live, 100% xStock reject). The honest floor is adxPeriod+1.
+    const minBars = lk.adxPeriod + 1;
     if (!Array.isArray(ohlcData) || ohlcData.length < minBars) return null;
 
     // Macro modifier — replicate computeContext's asset-class-aware resolution, but default to
