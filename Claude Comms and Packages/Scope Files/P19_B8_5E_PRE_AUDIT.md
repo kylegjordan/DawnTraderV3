@@ -31,6 +31,12 @@ _eqMaxAgeMs    = getCachedNumberRequired('exit_integrity','max_equity_tick_age_m
 
 **S22 — `active-funnel-tracker`.** Telemetry-only; a skip records via `_recordPriceSkip` which feeds the funnel's skip buckets. B8.5e changes WHICH skips fire (per-symbol vs global) but not the telemetry contract — confirm the new skip reasons get distinct reason-buckets so the #548 mis-calibration remains observable post-fix.
 
+## 2b. Step-2 CONFIRMATIONS (verified at code 2026-07-20)
+
+**★ Langston carry #1 (budget-from-risk-to-stop) is FEASIBLE — confirmed.** `active-execution-engine.ts:~1099` parses `const stopLoss = position.stopLoss ? parseFloat(position.stopLoss) : null` immediately after `currentPrice` is set and BEFORE the SL/TP evaluation — i.e. at the exact seam the staleness ceiling runs. So `budget = f(remaining risk-to-stop = |currentPrice − stopLoss| / currentPrice)` is computable in place; no new data plumbing. ⚠️ **`stopLoss` can be `null`** → the budget derivation MUST fail-closed to a conservative fixed budget for null-stop positions, never fail-open to a wide window.
+
+**★ S21 reconciliation SHARPENED — they share the SOURCE, not the decision.** `gradePerClassFeedLiveness` returns `{ classes: ClassLivenessResult[]; overall: FeedAliveGrade }` — a per-**class** aggregate feed-alive alarm ("freshest-symbol age = min across the set; proportion fresh"), NOT a per-symbol per-position gate. ⇒ The clean boundary: **B8.5e and S21 both consume per-symbol tick-age as INPUT (the adapter / `getLatestEquityTick` age), but the grader grades a class aggregate for the feed alarm while B8.5e gates a single position's exit.** Not a duplication to collapse — a shared *age source* to name once, with two independent decision layers on top. This is a cleaner finding than §2's first-pass "reconcile with the grader."
+
 ## 3. Open Step-2 work (not yet done — resume here)
 
 1. **Budget-from-risk-to-stop (Langston carry #1) + OBJ-4 together.** Trace how the exit branch knows the position's stop distance at mark time (`position.stopLoss` vs `currentPrice`), and design `budget = f(remaining risk-to-stop)` so a tight-stop name gets a tighter staleness window. This is the same tension as OBJ-4 (a stale mark on a near-stop position is the dangerous case) — one decision, not two.
