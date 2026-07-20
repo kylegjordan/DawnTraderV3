@@ -169,7 +169,16 @@ export async function computeRefreshRegimeInputs(
       : undefined;
 
   const raw = getMarketContextEngine().computeRegimeInputsOnly(symbol, ohlc, dbs, assetClass);
-  if (!raw) return { inputs: null, miss: 'mce_context_absent' };
+  if (!raw) {
+    // B-REGIME-REFRESH-PIPE diagnostic: differentiate WHY the refresh compute missed —
+    // insufficient bars (data/#441) vs a healthy-but-empty result — by surfacing the bar count.
+    // Cheap, one line per miss; makes "no live market context" actionable instead of opaque.
+    console.warn(
+      `[B-REGIME-REFRESH-PIPE][COMPUTE_MISS] ${symbol} (${assetClass}): bars=${Array.isArray(ohlc) ? ohlc.length : 'n/a'} ` +
+      `— computeRegimeInputsOnly returned null (insufficient bars for adx, cold config, or non-finite result).`,
+    );
+    return { inputs: null, miss: 'mce_context_absent' };
+  }
 
   return {
     inputs: {
