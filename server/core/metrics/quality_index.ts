@@ -253,7 +253,7 @@ export function calculateExtendedSignalMetrics(signal: {
   volatility: number;
   expectedDuration: number;
   profitRate: number;
-} {
+} | null {
   // Step 1: Compute base metrics FIRST (without NGC dependency)
   const expectedReturn = calculateExpectedReturn(
     signal.entryPrice,
@@ -296,10 +296,26 @@ export function calculateExtendedSignalMetrics(signal: {
   console.log(`[12.3.3][CONFIDENCE] base=${baseConfidence.toFixed(3)} profit=${nProfit.toFixed(3)} risk=${nRisk.toFixed(3)} → confidence=${confidence.toFixed(3)}`);
 
   // Step 3: Compute RegimeWeight and FinalScore
-  const regimeWeight = calculateRegimeWeight({
+  const regimeWeightResult = calculateRegimeWeight({
     trendStrength: signal.trendStrength ?? 0.5,
     volatility,
   });
+  // ── B-REGIME-INPUTS-LIVE / #546 — ABSENCE PROPAGATES, IT DOES NOT GET A VALUE ──
+  // `calculateRegimeWeight` returns null when a gate input is missing. There is no
+  // sensible extended-metrics object without it: `finalScore` is a function OF
+  // regimeWeight, so substituting anything here would manufacture a finalScore that
+  // looks computed and isn't. #546 is binding: "a missing regimeWeight must be NULL or
+  // must REFUSE — NEVER 0." Refusing is the honest option at this layer, so the whole
+  // object is absent and the caller must reject the signal.
+  if (!regimeWeightResult.ok) {
+    console.error(
+      '[B-REGIME-INPUTS-LIVE] calculateExtendedSignalMetrics: regimeWeight unavailable ' +
+        `(${regimeWeightResult.reason}) — returning null. The signal MUST be rejected, not scored.`,
+    );
+    return null;
+  }
+  const regimeWeight = regimeWeightResult.value;
+
   const finalScore = calculateFinalScore({
     confidence,
     hybridScore: signal.hybridScore ?? confidence,

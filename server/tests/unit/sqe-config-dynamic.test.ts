@@ -120,25 +120,45 @@ describe('[11.0D] SQE Dynamic Configuration', () => {
         trendStrength: 0.7,
         volatility: 0.3
       };
-      
-      const regimeWeight = calculateRegimeWeight(metrics);
-      
-      expect(regimeWeight).toBeGreaterThanOrEqual(0.1);
-      expect(regimeWeight).toBeLessThanOrEqual(1);
+
+      const result = calculateRegimeWeight(metrics);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) throw new Error('unreachable');
+      expect(result.value).toBeGreaterThanOrEqual(0.1);
+      expect(result.value).toBeLessThanOrEqual(1);
     });
 
-    it('uses default values when metrics missing', () => {
-      const regimeWeight = calculateRegimeWeight({});
-      
-      expect(regimeWeight).toBeGreaterThanOrEqual(0.1);
-      expect(regimeWeight).toBeLessThanOrEqual(1);
+    // ★ REWRITTEN, NOT REPAIRED (B-REGIME-INPUTS-LIVE, #543/#538/#546).
+    // This test previously read: "uses default values when metrics missing" — it asserted
+    // that `calculateRegimeWeight({})` returns a valid weight in [0.1, 1]. **That test was
+    // asserting the DEFECT.** Those internal defaults (`trendStrength ?? 0.5`,
+    // `volatility ?? 0.5`) are precisely what pinned the RegimeWeight admission gate at a
+    // constant 0.6455 against a 0.3000 floor, so the gate could never reject anything and
+    // structurally never had.
+    //
+    // Making the old assertion pass again would have re-introduced the defect and had a
+    // green test vouching for it. So the test is INVERTED to assert the new contract, and
+    // it now serves as the regression guard: if anyone ever re-adds a default inside
+    // calculateRegimeWeight, this fails.
+    it('REFUSES to compute when inputs are missing — never substitutes a default', () => {
+      const result = calculateRegimeWeight({});
+
+      expect(result.ok).toBe(false);
+      if (result.ok) throw new Error('regression: a default was re-introduced (#543/#546)');
+      expect(result.reason).toBe('missing_inputs');
+      // And the absence must not be expressible as a number — no `value` to read at all.
+      expect((result as { value?: number }).value).toBeUndefined();
     });
 
     it('penalizes high volatility', () => {
       const lowVol = calculateRegimeWeight({ trendStrength: 0.5, volatility: 0.1 });
       const highVol = calculateRegimeWeight({ trendStrength: 0.5, volatility: 0.9 });
-      
-      expect(lowVol).toBeGreaterThan(highVol);
+
+      expect(lowVol.ok).toBe(true);
+      expect(highVol.ok).toBe(true);
+      if (!lowVol.ok || !highVol.ok) throw new Error('unreachable');
+      expect(lowVol.value).toBeGreaterThan(highVol.value);
     });
   });
 });

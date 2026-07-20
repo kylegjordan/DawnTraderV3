@@ -13,6 +13,25 @@
 
 import { describe, it, expect } from 'vitest';
 import { calculateFinalScore, calculateRegimeWeight, type SignalMetrics } from '../../core/utils/score-calculator.js';
+
+/**
+ * B-REGIME-INPUTS-LIVE / #546: `calculateRegimeWeight` now returns a RESULT OBJECT
+ * (`{ok:true,value}` / `{ok:false,reason}`) rather than a bare number, so that an absent
+ * regimeWeight cannot be silently coerced into a score by a `??` anywhere downstream.
+ *
+ * These tests exercise the COMPUTED path, where `ok` must always be true. This helper
+ * unwraps to the number the assertions were written against — and ASSERTS `ok` on the way
+ * through, which is strictly stronger than the original: the old tests could not tell a
+ * computed value from a substituted one, and this one fails loudly if the inputs stop
+ * producing a real result. The expected NUMBERS are unchanged; only the wrapper is new.
+ */
+function rw(metrics: SignalMetrics): number {
+  const result = calculateRegimeWeight(metrics);
+  if (!result.ok) {
+    throw new Error(`expected a computed regimeWeight, got {ok:false, reason:${result.reason}}`);
+  }
+  return result.value;
+}
 import { SCORE_WEIGHTS } from '../../config/score-weights.config.js';
 
 describe('Directive 11.0E — FinalScore Equivalence Tests', () => {
@@ -106,8 +125,8 @@ describe('Directive 11.0E — FinalScore Equivalence Tests', () => {
       const lowMetrics: SignalMetrics = { trendStrength: 0, volatility: 1 };
       const highMetrics: SignalMetrics = { trendStrength: 2, volatility: 0 };
       
-      expect(calculateRegimeWeight(lowMetrics)).toBeGreaterThanOrEqual(0.1);
-      expect(calculateRegimeWeight(highMetrics)).toBeLessThanOrEqual(1);
+      expect(rw(lowMetrics)).toBeGreaterThanOrEqual(0.1);
+      expect(rw(highMetrics)).toBeLessThanOrEqual(1);
     });
   });
   
@@ -144,7 +163,7 @@ describe('Directive 11.0E — FinalScore Equivalence Tests', () => {
         volatility: 0.30,
       };
       
-      const result = calculateRegimeWeight(metrics);
+      const result = rw(metrics);
       expect(result).toBeGreaterThan(0);
       expect(result).toBeLessThanOrEqual(1);
     });
@@ -153,14 +172,14 @@ describe('Directive 11.0E — FinalScore Equivalence Tests', () => {
       const strongTrend: SignalMetrics = { trendStrength: 0.90, volatility: 0.30 };
       const weakTrend: SignalMetrics = { trendStrength: 0.20, volatility: 0.30 };
       
-      expect(calculateRegimeWeight(strongTrend)).toBeGreaterThan(calculateRegimeWeight(weakTrend));
+      expect(rw(strongTrend)).toBeGreaterThan(rw(weakTrend));
     });
     
     it('should penalize high volatility', () => {
       const lowVol: SignalMetrics = { trendStrength: 0.60, volatility: 0.10 };
       const highVol: SignalMetrics = { trendStrength: 0.60, volatility: 0.80 };
       
-      expect(calculateRegimeWeight(lowVol)).toBeGreaterThan(calculateRegimeWeight(highVol));
+      expect(rw(lowVol)).toBeGreaterThan(rw(highVol));
     });
   });
   

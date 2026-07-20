@@ -68,16 +68,102 @@ export function calculateFinalScore(metrics: SignalMetrics): number {
  * Calculate RegimeWeight from signal metrics
  * Based on trend strength and volatility indicators
  */
-export function calculateRegimeWeight(metrics: SignalMetrics): number {
-  const trendStrength = metrics.trendStrength ?? 0.5;
-  const volatility = metrics.volatility ?? 0.5;
-  
-  const normalizedVolatility = Math.min(1, volatility);
-  const trendScore = Math.min(1, trendStrength);
-  
+/*
+ * ⚠️ THERE IS DELIBERATELY NO NUMERIC "UNAVAILABLE" SENTINEL HERE — see #546.
+ *
+ * The first cut of this guard returned `REGIME_WEIGHT_UNAVAILABLE = 0` on a missing input,
+ * reasoning that 0 sits below every gate floor and would therefore reject. That was WRONG,
+ * and it reproduced the exact class of defect this batch exists to remove:
+ *
+ *   • `0` is ALREADY the signature of "never written" in this system (#546) — the formula
+ *     cannot otherwise return 0, because it clamps at 0.1. So a stored 0 would have been
+ *     ambiguous between "never computed" and "computed, but the MCE was missing" — two very
+ *     different facts collapsed into one indistinguishable number.
+ *   • More fundamentally: it makes ABSENCE REPRESENTABLE AS A VALID-LOOKING SCORE. A reader
+ *     (or a downstream average, or a UI cell) treats 0 as an answer, not as an alarm.
+ *     Nobody double-checks a zero.
+ *
+ * ⇒ The return type carries the absence instead: `number | null`. `null` cannot be averaged,
+ * cannot be rendered as a confident figure, and cannot be silently compared against a floor —
+ * every consumer is forced by the type system to decide what to do about it.
+ */
+
+/**
+ * Calculate RegimeWeight from signal metrics.
+ *
+ * ═══ WHY THE `?? 0.5` DEFAULTS ARE GONE (B-REGIME-INPUTS-LIVE, Langston ruling 2026-07-20) ═══
+ * This function previously read `metrics.trendStrength ?? 0.5` and `metrics.volatility ?? 0.5`.
+ * Combined with hardcoded caller-side defaults, its output was PINNED at 0.6455 against a
+ * 0.30 floor — so the RegimeWeight admission gate, one of only two gates that can reject a
+ * signal on the active path, had NO REACHABLE REJECT PATH and never rejected anything (#543).
+ *
+ * ★ A defensive default INSIDE the function whose constant output IS the defect is not a
+ * safety net — it is the defect's last line of retreat. With every caller fixed but these
+ * defaults left in place, any input arriving `undefined` would be SILENTLY re-substituted and
+ * the gate would return to 0.6455 with nothing logged, having passed review. That is the exact
+ * NO-PATCHES failure (CLAUDE.md §5 #15), so removing them is not scope widening — it is what
+ * OBJ-0 always required.
+ *
+ * ★ BLAST RADIUS IS ZERO OUTSIDE THE ACTIVE PATH, verified at code (and independently re-read
+ * by Langston at `origin/migration/aws-supabase`): this function has exactly THREE non-test
+ * callers — `signal_quality_evaluator.ts:531`, `quality_index.ts:299`, `ready_to_buy_service.ts:884`
+ * — all active-path. **VTS never calls it.** `vts-runner.ts` imports exactly one symbol from
+ * this module (`getPredictiveConfidence`, :43); VTS derives its own regime weight from
+ * `calculateRegimeScore(regime,{adx,volatility})/100` (`vts-runner.ts:1659`). Beware: a THIRD,
+ * unrelated `calculateRegimeWeight(candles: Candle[])` exists at `multi-timeframe-scanner.ts:172`
+ * — same name, different body. Do not conflate them.
+ *
+ * ⚠️ Do NOT re-add a default here. Callers must supply live MCE-derived values
+ * (see `server/core/metrics/regime-inputs.ts`) or reject the signal.
+ */
+/**
+ * Result carrier for RegimeWeight. **Deliberately an OBJECT, never `number | null`.**
+ *
+ * ═══ WHY NOT `number | null` — this shape was tried and DEFEATED (#546) ═══
+ * The first rework returned `number | null`, on the theory that a nullable type forces the
+ * caller to handle absence. It does not, because of one language rule:
+ *
+ *     null      ?? 0.5   →   0.5
+ *     undefined ?? 0.5   →   0.5
+ *
+ * `??` collapses null and undefined identically — it was DESIGNED to — so any `?? 0.5`
+ * anywhere downstream silently converts absence into a manufactured score, with no type
+ * error and no diagnostic. Measured at the time: **14 live `??` sites on regimeWeight,
+ * SEVEN of which coalesce to `0`** — the exact never-written signature #546 forbids — and
+ * two of those seven are aggregation paths, where the coerced zeros get AVERAGED into
+ * summary statistics. That is the precise mechanism that produced a ~600×-wrong figure in
+ * this batch's own investigation: zeros counted as real values.
+ *
+ * ⇒ A nullable type RECORDS absence. This object ENFORCES handling it: `result ?? x` is a
+ * no-op because the object is never nullish, so there is no syntax a future author can
+ * write that silently turns absence into a number. They must read `ok`, or the compiler
+ * stops them. The escape hatch does not typecheck.
+ */
+export type RegimeWeightResult =
+  | { ok: true; value: number }
+  | { ok: false; reason: 'missing_inputs' };
+
+export function calculateRegimeWeight(metrics: SignalMetrics): RegimeWeightResult {
+  const { trendStrength, volatility } = metrics;
+
+  // LOUD GUARD, not a substitution. Absence is returned AS absence (#546) — never as a
+  // number a downstream reader, average, or UI cell could mistake for a score.
+  if (!Number.isFinite(trendStrength) || !Number.isFinite(volatility)) {
+    console.error(
+      '[B-REGIME-INPUTS-LIVE] calculateRegimeWeight called WITHOUT live inputs — refusing to pin. ' +
+        `trendStrength=${String(trendStrength)} volatility=${String(volatility)}. ` +
+        'Returning {ok:false} so the caller MUST reject the signal; it is not scored on a ' +
+        'constant. This is a caller bug: supply MCE-derived inputs via readRegimeInputs().',
+    );
+    return { ok: false, reason: 'missing_inputs' };
+  }
+
+  const normalizedVolatility = Math.min(1, volatility as number);
+  const trendScore = Math.min(1, trendStrength as number);
+
   const regimeWeight = (trendScore * 0.7) + ((1 - normalizedVolatility) * 0.3);
-  
-  return Math.max(0.1, Math.min(1, regimeWeight));
+
+  return { ok: true, value: Math.max(0.1, Math.min(1, regimeWeight)) };
 }
 
 /**

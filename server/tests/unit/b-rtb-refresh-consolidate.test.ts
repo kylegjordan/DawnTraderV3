@@ -17,6 +17,20 @@
  */
 import { describe, it, expect } from 'vitest';
 import { calculateRegimeWeight } from '../../core/utils/score-calculator';
+
+/**
+ * B-REGIME-INPUTS-LIVE / #546: calculateRegimeWeight returns a RESULT OBJECT
+ * ({ok:true,value} / {ok:false,reason}) so absence cannot be coerced into a score by a
+ * `??` downstream. These assertions test the COMPUTED math, which is UNCHANGED — the
+ * helper unwraps and asserts ok, so a silent {ok:false} fails loudly instead of
+ * comparing objects and passing by accident.
+ */
+function rw(metrics: { trendStrength?: number; volatility?: number }): number {
+  const r = calculateRegimeWeight(metrics);
+  if (!r.ok) throw new Error(`expected computed regimeWeight, got ok:false (${r.reason})`);
+  return r.value;
+}
+
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
@@ -106,8 +120,8 @@ describe('B-RTB-REFRESH-CONSOLIDATE: score-timing invariant preserved (Langston 
 describe('B-RTB-REFRESH-CONSOLIDATE OBJ-2: regimeWeight recompute — honest about what it does NOT fix', () => {
   it('the recompute tracks LIVE volatility (the honest third)', () => {
     // calculateRegimeWeight = trendScore×0.70 + (1 − min(1,vol))×0.30
-    const calm = calculateRegimeWeight({ trendStrength: 0.5, volatility: 0.02 });
-    const stormy = calculateRegimeWeight({ trendStrength: 0.5, volatility: 0.90 });
+    const calm = rw({ trendStrength: 0.5, volatility: 0.02 });
+    const stormy = rw({ trendStrength: 0.5, volatility: 0.90 });
     // A volatility spike must LOWER the weight — that is the whole point of refreshing it,
     // and the direction that can evict a signal whose market turned after queueing.
     expect(stormy).toBeLessThan(calm);
@@ -117,12 +131,12 @@ describe('B-RTB-REFRESH-CONSOLIDATE OBJ-2: regimeWeight recompute — honest abo
     // trendStrength is hardcoded 0.5 at generation with no honest source in the repo.
     // Hold volatility fixed and sweep the ONE input that is real vs the one that is fake:
     const volSwing = Math.abs(
-      calculateRegimeWeight({ trendStrength: 0.5, volatility: 0.0 }) -
-      calculateRegimeWeight({ trendStrength: 0.5, volatility: 1.0 })
+      rw({ trendStrength: 0.5, volatility: 0.0 }) -
+      rw({ trendStrength: 0.5, volatility: 1.0 })
     );
     const trendSwing = Math.abs(
-      calculateRegimeWeight({ trendStrength: 0.0, volatility: 0.5 }) -
-      calculateRegimeWeight({ trendStrength: 1.0, volatility: 0.5 })
+      rw({ trendStrength: 0.0, volatility: 0.5 }) -
+      rw({ trendStrength: 1.0, volatility: 0.5 })
     );
     // The fabricated axis owns MORE of the range than the honest one — 0.70 vs 0.30.
     expect(trendSwing).toBeGreaterThan(volSwing);
@@ -133,8 +147,8 @@ describe('B-RTB-REFRESH-CONSOLIDATE OBJ-2: regimeWeight recompute — honest abo
   });
 
   it('with trendStrength pinned at 0.5, the entire live range is 0.35–0.65', () => {
-    const lo = calculateRegimeWeight({ trendStrength: 0.5, volatility: 1.0 });
-    const hi = calculateRegimeWeight({ trendStrength: 0.5, volatility: 0.0 });
+    const lo = rw({ trendStrength: 0.5, volatility: 1.0 });
+    const hi = rw({ trendStrength: 0.5, volatility: 0.0 });
     expect(lo).toBeCloseTo(0.35, 5);
     expect(hi).toBeCloseTo(0.65, 5);
   });

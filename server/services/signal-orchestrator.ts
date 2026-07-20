@@ -131,6 +131,11 @@ import { emitMakerTaker } from './data-archive/switch-on-evidence-sink.js';
 import { normalizeToInternalSymbol } from '../markets/kraken-symbol-resolver.js';
 // Phase 13: Market Context Engine for centralized indicator + regime computation
 import { getMarketContextEngine } from './market-context-engine.js';
+// B-REGIME-INPUTS-LIVE (#543 + #538): the single MCE-backed source of the two
+// RegimeWeight inputs. Returns null-with-a-reason on a miss and NEVER substitutes —
+// the caller rejects. See the module header for why a fallback here would re-create
+// the exact defect this batch removes.
+import { readRegimeInputs, recordRegimeInputsMiss } from '../core/metrics/regime-inputs.js';
 // Phase 15b B61: DBS telemetry emitter (observational, feature-flagged, no behavior change)
 import { emitConsumerTelemetry } from './phase15b-dbs-telemetry.js';
 // Phase 14.5: Pattern pool configuration
@@ -573,6 +578,30 @@ export class SignalOrchestrator {
 
     console.log(`[B.3][SIZING] ${rawSignal.symbol}/${strategyId}: qty=${sizingResult.quantity.toFixed(8)}, value=$${sizingResult.estimatedValue.toFixed(2)}`);
 
+    // ── B-REGIME-INPUTS-LIVE (2026-07-19) — #543 + #538 ──────────────────────────
+    // Read BOTH RegimeWeight inputs LIVE from the MCE. Called fresh here rather than
+    // reusing the `mceCtx` local further up: that one is block-scoped inside a 3-line
+    // try and is DEAD by this point (Langston Step-1 flag 1 — the scope claimed
+    // otherwise and was wrong). getCachedContext is a pure map lookup, so a fresh call
+    // costs nothing.
+    const _regime = readRegimeInputs(rawSignal.symbol, sizingContext.assetClass as AssetClass);
+    if (!_regime.inputs) {
+      // ★ FAIL LOUD, NEVER SUBSTITUTE (OBJ-3; Kyle's standing rule, CLAUDE.md §11).
+      // The predecessor defect was precisely a silent substitution: an unfilled cache
+      // returned a hardcoded 0.015 one hundred percent of the time with no log and no
+      // alarm, which is why a dead admission gate survived months. A missing market
+      // context means we CANNOT honestly score this signal, so we drop it and say so.
+      // The per-signal disposition is REJECT; the "is the MCE down?" question is a
+      // SYSTEM-level concern handled by the miss-rate circuit breaker, not by quietly
+      // admitting the signal here (Langston Q4 — explicitly NOT admit-and-alarm).
+      recordRegimeInputsMiss(rawSignal.symbol, sizingContext.assetClass as AssetClass, _regime.miss!);
+      console.warn(
+        `[B-REGIME-INPUTS-LIVE][REJECT] ${rawSignal.symbol}/${strategyId}: no live market context ` +
+        `(${_regime.miss}) — signal DROPPED rather than scored on a substituted constant.`
+      );
+      return null;
+    }
+
     // Phase 8.8.4-B.3: STEP 2 - Compute extended signal metrics AFTER sizing
     const extendedMetrics = calculateExtendedSignalMetrics({
       confidence: rawSignal.confidence,
@@ -584,8 +613,39 @@ export class SignalOrchestrator {
       low24h: marketContext?.low24h,
       // Phase 14: Additional inputs for FinalScore/RegimeWeight computation
       hybridScore: (rawSignal as any).hybridScore,
-      trendStrength: 0.5, // Default for legacy signals
+      // ── B-REGIME-INPUTS-LIVE (2026-07-19) — #543 + #538, fixed TOGETHER per OBJ-0 ──
+      // THIS IS THE ROOT SITE: calculateExtendedSignalMetrics computes `regimeWeight`
+      // here, so a constant fed in HERE pins the gate everywhere downstream. It read
+      // `trendStrength: 0.5 // Default for legacy signals` — never set from anything —
+      // and let volatility fall to estimateVolatility(). With BOTH inputs constant the
+      // output pinned at 0.6455 against a 0.30 floor, so the RegimeWeight gate had no
+      // reachable reject path. Both now come LIVE from the MCE (the same source the VTS
+      // path already reads correctly — 9,041 distinct values across 16,183 trades).
+      // ⚠️ NO FALLBACK ON A MISS, by design (OBJ-3 / CLAUDE.md §11): `_regime` is null
+      // when the MCE has nothing, and the caller REJECTS below. Substituting here is the
+      // exact defect this batch removes — the old 0.015 was never a chosen default, it
+      // was an unfilled cache's failure mode returned silently.
+      trendStrength: _regime.inputs?.trendStrength,
+      volatility: _regime.inputs?.volatility,
     });
+
+    // ── #546 — ABSENCE IS NOT A SCORE. Second gate, deliberately kept. ──
+    // The `_regime.inputs` check above should already have returned, so in principle this
+    // is unreachable today. It stays for two reasons. (1) It is the TYPE-LEVEL contract:
+    // calculateExtendedSignalMetrics returns `… | null`, and the compiler requires the
+    // caller to say what happens on null rather than letting it flow on as a value —
+    // which is exactly the enforcement that would have stopped the `= 0` sentinel from
+    // being written at all. (2) Defence in depth: if a future edit adds another path into
+    // these metrics that does NOT come through the guard above, this refuses instead of
+    // scoring. An unreachable guard that makes absence unrepresentable is worth more than
+    // a reachable one that has to be remembered.
+    if (!extendedMetrics) {
+      console.warn(
+        `[B-REGIME-INPUTS-LIVE][REJECT] ${rawSignal.symbol}/${strategyId}: extended metrics ` +
+        `unavailable (regimeWeight could not be computed) — signal DROPPED, not scored.`
+      );
+      return null;
+    }
 
     // Directive 12.3.3: Deterministic confidence + FinalScore from extended metrics
     console.log(`[12.3.3][METRICS] ${rawSignal.symbol}/${strategyId}: confidence=${extendedMetrics.confidence.toFixed(4)}, finalScore=${extendedMetrics.finalScore.toFixed(4)}, volatility=${(extendedMetrics.volatility ?? 0.3).toFixed(4)}`);

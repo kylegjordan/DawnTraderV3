@@ -528,10 +528,28 @@ export function evaluateSignalQualitySync(input: SQEInput, thresholds?: { finalS
   }
   
   if (regimeWeight === undefined || regimeWeight === null) {
-    regimeWeight = calculateRegimeWeight({
+    // ⚠️ COMPILE-COMPATIBILITY ONLY — NOT a hardening of this function (B-REGIME-INPUTS-LIVE).
+    // `calculateRegimeWeight` now returns `{ok,value,reason}` instead of a bare number, so this
+    // call site must unwrap or it throws (`regimeWeight.toFixed is not a function`).
+    //
+    // ★ THIS FUNCTION IS DEAD ON THE PRODUCTION PATH — `evaluateSignalQualitySync` has ZERO
+    // non-test callers (verified repo-wide: only its own definition + one unit test). The LIVE
+    // active path is the ASYNC `signalQualityEvaluator.evaluate()` (signal-orchestrator.ts:864,
+    // ready_to_buy_service.ts:1005/:1327), which this batch does NOT touch.
+    //
+    // ★ WHY IT IS ONLY PATCHED, NOT FIXED-PROPERLY OR DELETED HERE: an earlier cut of this batch
+    // rewrote this function with the full reject-on-absence treatment. That was MISDIRECTED
+    // EFFORT on dead code (Langston Step-4) and it was reverted — hardening a 0-caller function
+    // makes the corpse look maintained and makes the diff overstate live coverage. Per §15 /
+    // rule 18 a 0-caller function is a DELETION candidate, not an edit target.
+    // ⇒ Deletion is HOMED TO #546's sweep, deliberately kept with that gate's `?? 0` /
+    //   `regimeWeight: 0` findings so a reviewer opening either finds both facts in one place
+    //   (CC-B + Langston concurred, 2026-07-20). Do NOT invest in this body meanwhile.
+    const _rw = calculateRegimeWeight({
       trendStrength: (input as any).trendStrength ?? 0.5,
       volatility: (input as any).volatility ?? 0.3,
     });
+    regimeWeight = _rw.ok ? _rw.value : 0.5;  // preserves the PRE-EXISTING substitute behaviour
   }
   
   // P19-B8.5a (OBJ-5): finalScore gate RETIRED in the sync variant too (semantic parity with the

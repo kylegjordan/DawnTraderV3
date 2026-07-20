@@ -791,7 +791,12 @@ class ReadyToBuyService {
     decayPenalty: number;
     refreshedFinalScore: number;
     refreshedMT: { chosenMode: 'taker' | 'maker'; chosenNetEV: number; takerNetEV: number; makerNetEVAdjusted: number; entryFeeRate: number } | null;
-    refreshedRegimeWeight: number;
+    /**
+     * `null` = NOT COMPUTED (a gate input was unavailable) — #546. Callers MUST reject the
+     * signal rather than score it; never coerce this to a number. Distinct from every
+     * computed value, because the formula clamps at 0.1 and cannot otherwise yield 0.
+     */
+    refreshedRegimeWeight: number | null;
   } {
     // Directive 11.3A: conditional geometry refresh (throttled on max-age / vol-shift /
     // spread-shift — an efficiency guard, not a staleness defect).
@@ -881,10 +886,13 @@ class ReadyToBuyService {
     // queueing kept its calm-market weight. Now the volatility third tracks reality.
     // ADMISSION-AFFECTING: a volatility spike now lowers regimeWeight and can evict, which is
     // the correct direction and the reason this belongs in the refresh at all.
-    const refreshedRegimeWeight = calculateRegimeWeight({
+    const _rwResult = calculateRegimeWeight({
       trendStrength: metadata.trendStrength ?? 0.5, // fabricated — see above
       volatility: currentVol,                        // LIVE, the honest third
     });
+    // #546: absence survives as null rather than becoming a number here. Callers of
+    // acquireRefreshedInputs must reject on null — see the field's doc on the return type.
+    const refreshedRegimeWeight = _rwResult.ok ? _rwResult.value : null;
 
     return { currentVol, currentSpread, netExpectedEdge, geometryRefreshed, decayPenalty, refreshedFinalScore, refreshedMT, refreshedRegimeWeight };
   }
@@ -918,6 +926,30 @@ class ReadyToBuyService {
     // OBJ-2: both mechanisms consume the SAME recomputed regimeWeight — divergence here would
     // reintroduce exactly the per-path disagreement this batch exists to remove.
     const refreshedRegimeWeight = _acq.refreshedRegimeWeight;
+
+    // ── #546 / OBJ-3 — REJECT THIS REFRESH, DO NOT COERCE, DO NOT DELETE ──
+    // ★ THE TRAP THIS AVOIDS: `refreshedRegimeWeight` is `number | null` and SQEInput takes
+    // `regimeWeight?: number`, so the one-character fix is `?? undefined`. IT IS WRONG.
+    // `undefined` does not mean "absent" to the SQE — it means RECOMPUTE, and the SQE's
+    // recompute path rebuilds the value from `trendStrength ?? 0.5` / `volatility ?? 0.3`,
+    // silently re-pinning the gate at the constant this batch exists to remove. `undefined`
+    // is overloaded here: "not supplied, go compute" ≠ "could not be computed".
+    //
+    // ★ AND WHY THIS IS NOT THE `sqeAssetClass === null` TREATMENT ABOVE: that path DELETES
+    // the row, because an unresolvable asset class is upstream breakage — permanent. A
+    // missing market context is the opposite: normally TRANSIENT (a cold symbol, or a cache
+    // entry past its TTL; the MCE refreshes on a timer and retries on failure). Deleting on
+    // a transient miss would drain the queue for a condition that self-heals in seconds. So
+    // this refresh fails and the signal STAYS QUEUED to be re-evaluated when context returns.
+    // Per-signal: reject. "Is the MCE down?" is the circuit breaker's job, not this line's.
+    if (refreshedRegimeWeight === null) {
+      console.warn(
+        `[B-REGIME-INPUTS-LIVE][REFRESH_REJECT] ${normalizedSymbol}: regimeWeight unavailable ` +
+        `(no live market context) — refresh FAILED, signal left queued for retry. Not scored ` +
+        `on a substituted constant, and NOT deleted (the miss is expected to be transient).`,
+      );
+      return { passed: false };
+    }
 
     // Phase 14: SQE revalidation — pass pre-computed FinalScore/RegimeWeight (no backfill)
     // P19-B4a (C4): assetClass REQUIRED on SQEInput. PREFER the row's stamp
@@ -1206,7 +1238,27 @@ class ReadyToBuyService {
               const decayPenalty = _acq.decayPenalty;
               const refreshedFinalScore = _acq.refreshedFinalScore;
               const refreshedRegimeWeight = _acq.refreshedRegimeWeight;
-              
+
+              // ── #546 / OBJ-3 — batch-path parity with the single-refresh guard above ──
+              // Same trap, same disposition. `?? undefined` would NOT mean "absent" to the
+              // SQE; it means RECOMPUTE from `trendStrength ?? 0.5` / `volatility ?? 0.3`,
+              // re-pinning the gate at the constant this batch removes.
+              // NOTE the deliberate asymmetry with the `sqeAssetClass === null` branch just
+              // below: that one pushes to `bulkDeletes` because an unresolvable asset class
+              // is permanent upstream breakage. A missing market context is transient, so
+              // this returns WITHOUT deleting — the signal stays queued and is re-evaluated
+              // once the MCE repopulates. Divergence between the two refresh mechanisms here
+              // is exactly what B-RTB-REFRESH-CONSOLIDATE exists to prevent, so this guard
+              // must stay identical in disposition to the single-refresh one.
+              if (refreshedRegimeWeight === null) {
+                console.warn(
+                  `[B-REGIME-INPUTS-LIVE][REFRESH_REJECT] ${normalizedSymbol}: regimeWeight ` +
+                  `unavailable (no live market context) — refresh FAILED, signal left queued ` +
+                  `for retry. Not scored on a substituted constant, and NOT deleted.`,
+                );
+                return;
+              }
+
               // Phase 14: SQE revalidation — pass pre-computed FinalScore/RegimeWeight (no backfill)
               // P19-B4a (C4): assetClass REQUIRED on SQEInput. PREFER the row's stamp
               // (rtb_signals.asset_class, schema.ts:1885, stamped at queue-write — the
@@ -1246,7 +1298,11 @@ class ReadyToBuyService {
                 finalScore: refreshedFinalScore,
                 // OBJ-2: recomputed on live volatility (NOT a repair — ~70% is still the
                 // hardcoded trendStrength term; see acquireRefreshedInputs).
-                regimeWeight: _acq.refreshedRegimeWeight,
+                // Use the NARROWED local, not `_acq.…` — the null guard above narrows the
+                // local binding, and reading the property again re-widens it to
+                // `number | null`, defeating the guard. Same value, but the type system can
+                // only prove it via the local.
+                regimeWeight: refreshedRegimeWeight,
                 trendStrength: metadata.trendStrength ?? 0.5,
                 // OBJ-2: LIVE volatility from the shared acquisition (was `metadata ?? 0.3`).
                 volatility: _acq.currentVol,
