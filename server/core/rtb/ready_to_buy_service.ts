@@ -72,6 +72,9 @@ import { resolveMakerTakerHaircut } from '../../services/maker-taker-config.js';
 import { STRATEGY_FAMILY_MAP, normalizeStrategy } from '../../config/canonical-regime-strategy-map.js';
 import { getCachedSpread } from '../metrics/cost-metrics.js';
 import { getNormalizedVolatility as getVolatility } from '../metrics/market-metrics.js';
+// B-REGIME-INPUTS-LIVE: the live MCE-backed regime inputs for the refresh path.
+// getVolatility above is now UNUSED by the gate and is OBJ-4's retirement target.
+import { readRegimeInputs, recordRegimeInputsMiss } from '../metrics/regime-inputs.js';
 // Phase 14.5: Ranking weights for cross-family signal comparison
 
 // T5: Subscribe to pool size updates from RTB Refresh Service
@@ -801,7 +804,46 @@ class ReadyToBuyService {
     // Directive 11.3A: conditional geometry refresh (throttled on max-age / vol-shift /
     // spread-shift — an efficiency guard, not a staleness defect).
     const currentSpread = getCachedSpread(normalizedSymbol);
-    const currentVol = getVolatility(normalizedSymbol);
+
+    // ══ B-REGIME-INPUTS-LIVE (2026-07-20) — THE REFRESH PATH READS THE MCE, NOT THE ORPHAN ══
+    // ★ WHAT THIS FIXES, and the arithmetic that identified it: post-deploy 9ee4f1271 the live
+    // logs showed regimeWeight 31× 0.6455 against only 6× varied. 0.6455 is EXACTLY
+    // 0.5×0.70 + (1−0.015)×0.30 — i.e. trendStrength pinned at 0.5 AND volatility pinned at
+    // 0.015. The 0.015 is `market-metrics.ts:33 return 0.015`, an orphaned cache whose only
+    // writer has zero production callers. So the pinned rows were never the genesis path (it
+    // was wired at signal-orchestrator.ts:628); they were THIS refresh path, on both inputs.
+    //
+    // ★ HOIST ORDERING (Langston ruling + NEW Claude's correction): read the MCE ONCE, HERE,
+    // above the geometry throttle. A miss then propagates to refreshedRegimeWeight = null and
+    // the callers reject BEFORE the throttle's degrade path can matter — so the fail-safe
+    // below is only ever exercised for a single cold symbol while the pool is healthy, never
+    // during an MCE outage.
+    //
+    // ★ PER-USE DISPOSITION (the fork Langston ruled): fail-loud is a property of GATE INPUTS,
+    // not of every consumer. The GATE (regimeWeight) gets the live value or REJECTS. The
+    // THROTTLE (shouldRecalculateGeometry, an efficiency guard) degrades FAIL-SAFE: with no
+    // live volatility it uses the queued value so the shift-ratio stays finite and geometry
+    // simply recomputes. Rejecting a signal because a performance heuristic lacked an input
+    // would be the wrong disposition for that use.
+    const _refreshClass = asValidAssetClass(signal.assetClass) ?? safeResolveAssetClass(normalizedSymbol, 'kraken');
+    const _regime = _refreshClass !== null ? readRegimeInputs(normalizedSymbol, _refreshClass) : { inputs: null, miss: 'mce_context_absent' as const };
+    if (!_regime.inputs && _refreshClass !== null) {
+      recordRegimeInputsMiss(normalizedSymbol, _refreshClass, _regime.miss!);
+    }
+    // Throttle-only volatility — NEVER fed to the gate. See the per-use note above.
+    // ★ FAIL-SAFE MEANS "RECOMPUTE ANYWAY", NOT "DECIDE ON A GUESS" (NEW Claude's catch,
+    // 2026-07-20). The first cut of this line fell back to a queued value and, failing that,
+    // a literal 0.3 — and that number was REACHABLE AND DECIDING: it flowed straight into
+    // `shouldRecalculateGeometry`'s shift ratio, so a fabricated volatility silently decided
+    // whether geometry refreshed. That is not what Langston ruled. His ruling was that the
+    // throttle DEGRADES SAFE — i.e. does the expensive, correct thing — while only the GATE
+    // refuses. Deciding a throttle on an invented number is a third disposition neither of us
+    // sanctioned, and it re-imports the substitute-a-plausible-value habit into a second place.
+    // ⇒ No live volatility → FORCE the recompute. The stand-in below is retained only so the
+    //   shift arithmetic stays finite; it can no longer decide the branch.
+    const _liveVol = _regime.inputs?.volatility ?? null;
+    const _forceGeometry = _liveVol === null;
+    const currentVol = _liveVol ?? (typeof metadata.volatility === 'number' ? metadata.volatility : 0.3);
     let netExpectedEdge = metadata.netExpectedEdge;
     let geometryRefreshed = false;
     let refreshedMT: { chosenMode: 'taker' | 'maker'; chosenNetEV: number; takerNetEV: number; makerNetEVAdjusted: number; entryFeeRate: number } | null = null;
@@ -809,7 +851,11 @@ class ReadyToBuyService {
       | { geomClass: AssetClass; costMetrics: ReturnType<typeof getCachedCostMetrics>; entryPrice: number; stopPrice: number; targetPrice: number }
       | null = null;
 
-    if (shouldRecalculateGeometry(signal, currentVol, currentSpread)) {
+    // `_forceGeometry ||` FIRST and deliberately: with no live volatility the throttle has no
+    // honest basis to say "skip", so it does the expensive-but-correct thing instead of
+    // deciding on a stand-in. Short-circuit order matters — it makes the stand-in incapable
+    // of influencing the branch even though it is still passed for the shift arithmetic.
+    if (_forceGeometry || shouldRecalculateGeometry(signal, currentVol, currentSpread)) {
       const geomClass = asValidAssetClass(signal.assetClass) ?? safeResolveAssetClass(normalizedSymbol, 'kraken');
       const entryPrice = parseFloat(signal.entryPrice?.toString() || '0');
       const stopPrice = parseFloat(signal.stopPrice?.toString() || '0');
@@ -886,9 +932,16 @@ class ReadyToBuyService {
     // queueing kept its calm-market weight. Now the volatility third tracks reality.
     // ADMISSION-AFFECTING: a volatility spike now lowers regimeWeight and can evict, which is
     // the correct direction and the reason this belongs in the refresh at all.
+    // ★ BOTH INPUTS NOW LIVE FROM THE MCE (B-REGIME-INPUTS-LIVE). Previously this read
+    // `trendStrength: metadata.trendStrength ?? 0.5` (fabricated — the comment admitted it)
+    // and a `currentVol` that resolved to the hardcoded 0.015 orphan, which is precisely the
+    // pair that produced the pinned 0.6455 on every refreshed signal.
+    // ⚠️ Deliberately NOT `currentVol` — that variable is the THROTTLE's fail-safe value and
+    // may be a queued fallback. The gate must never score on it; on a miss `_regime.inputs`
+    // is null, calculateRegimeWeight returns {ok:false}, and the caller rejects.
     const _rwResult = calculateRegimeWeight({
-      trendStrength: metadata.trendStrength ?? 0.5, // fabricated — see above
-      volatility: currentVol,                        // LIVE, the honest third
+      trendStrength: _regime.inputs?.trendStrength,
+      volatility: _regime.inputs?.volatility,
     });
     // #546: absence survives as null rather than becoming a number here. Callers of
     // acquireRefreshedInputs must reject on null — see the field's doc on the return type.
