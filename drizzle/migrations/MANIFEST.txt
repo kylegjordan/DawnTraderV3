@@ -179,3 +179,4 @@
 2026-07-15-p19-b8-6-maker-target-exits.sql
 2026-07-15-p19-b8-5-sizing-tune-2.sql
 2026-07-16-p19-b8-5-equity-tick-age.sql
+2026-07-21-p19-b8-5e-mark-staleness-knobs.sql
