@@ -77,6 +77,14 @@ Kyle's insight: **the <3h "edge lives early, everything later bleeds" curve was 
 
 **⇒ REVISED Q3 recommendation with this history:** the refresh's EXIT-NOW action is legitimate and audit-flagged, BUT it must be gated on the B73 lesson — **re-run the exit-strategy-replay/ablation calibration (the same B73 framework, `exit_strategy_replay` knobs already exist) on refreshed-signal trades, measuring BOTH P/L AND the learning-data cost, before enabling it.** Do not simply switch it on; the last time we added dynamic early-exit it was measured and rejected for a reason that still applies. This is a Phase-25 calibration, and it should REUSE the B73 replay framework rather than invent a new evaluation.
 
+## ★★ DISCUSSION CAPTURE (2026-07-21, Discord) — two load-bearing additions from the crew
+
+**★ ANALYST (governance grounding) — the learning-cost caveat is REQUIRED by a ratified decision, not just prudent.** The active switch-on was sealed 3-way (#501, 2026-07-13) as **"clean-data-collection, NOT expected-profit at the flip"** — the entire paper soak is a LEARNING exercise by design. ⇒ **a refresh-SELL-NOW that improves a single trade's P/L at the cost of the learning signal is optimizing AGAINST the ratified objective.** The B73 caveat is the ratified posture talking, and it is the frame the whole max-hold/refresh decision must be judged in.
+
+**★ ANALYST (the ORGANIC-vs-EXPLORATION split) — the max-hold is really TWO questions.** Of the soak's admits, ~142/175 were the GOVERNED EXPLORATION lane (deliberately negative-EV, learning-only). **A time-exit or refresh that closes an EXPLORATION trade early truncates exactly the learning spend that lane exists to generate.** So: **ORGANIC (positive-EV, profit-relevant) may want a tight max-hold / active sell-now; EXPLORATION (learning-only) may want to run to natural stop/target so the learning data is complete.** They likely need DIFFERENT answers — do not let the decision blur the lanes. (This is also why the confounded <3h curve must not set the timer: it pools both lanes.)
+
+**★ CADENCE — RESOLVED in discussion (CC-B proposed, Langston + Analyst agreed):** EVENT-DRIVEN, keyed off a MATERIAL change in the MCE-refreshed regime/vol (threshold DB-governed, Phase-25 calibrates "material"), NOT a fixed timer. Piggybacks on OLD Claude's MCE-refresh recompute so detecting the delta is nearly free — strictly better than every-cycle, not just cheaper. And it lands the B73 learning-cost answer cleanly: **acts-on-real-change closes FAR fewer trades than always-on trailing did, so it truncates far less learning signal.**
+
 ## Q4 — When (roadmap)
 
 Run order (POST_AUDIT_ROADMAP §2): **Phase 19 (paper audit/debug, NOW) → Phase 25 (calibration with evidence) → Phase 16+20 (cleanup/hardening) → Phase 21 (live).**
