@@ -57,6 +57,15 @@ The **TEC** (`trailing-exit-controller.ts`) already does PRICE-based dynamic man
 2. **Frequency:** tie it to our horizon + the MCE cadence, not "constantly." Median resolution is ~6-7h and the MCE/regime updates every scan cycle (minutes). Re-evaluating an open trade **every RTB-refresh cycle (the cadence OLD Claude is building) or on a material regime/vol CHANGE event** is the right granularity — frequent enough to catch a 20-minute thesis change (your example), not so continuous it thrashes. Event-driven (on regime/vol change) is cleaner than a fixed timer.
 3. **Reuse, don't rebuild:** OLD Claude is building the MCE-refresh pipe for QUEUED signals (B-REGIME-INPUTS-LIVE). The open-trade refresh is the same computation applied to open positions — extend that substrate, do not stand up a parallel one.
 
+## ★★ KYLE'S REFINEMENT (2026-07-21) — THE REFRESH RESETS THE STALENESS CLOCK; Q2 AND Q3 ARE COUPLED, NOT INDEPENDENT
+
+Kyle's insight: **the <3h "edge lives early, everything later bleeds" curve was measured on a system with NO signal refresh — trades ran on frozen entry-time information.** If we refresh the underlying signal and re-derive stop/target to current reality, an open trade is **fresh by construction** — it is no longer chasing a target set on 3-hour-old truth. So the 3-hour decay may NOT apply to a refreshed trade the way it applies to a frozen one.
+
+**Consequence for the recommendations:** the max-hold (Q2) and the refresh (Q3) are **complementary, not alternatives**:
+- **Without refresh** (today): the max-hold is the PRIMARY staleness control — it caps the frozen-signal decay, and the measured curve says cut the tail.
+- **With refresh** (the target design): the refresh keeps the trade CURRENT, so the time-limit demotes to a **safety backstop** (max exposure / capital-recycling cap), NOT the main staleness mechanism. A refreshed trade that *stays* thesis-valid can legitimately hold LONGER than 3h — the refresh is what earns it the right to.
+- ⚠️ **Empirical test this creates for Phase 25:** once the refresh is live, RE-MEASURE the staleness curve on REFRESHED trades. If the <3h-only-profitable shape flattens (edge persists past 3h on refreshed trades), that is the refresh *working* and the max-hold can widen. If it does NOT flatten, the refresh is not adding value and the tight time-limit stands. **This is the clean calibration experiment — and it can only run after the refresh mechanism exists.** It is the single strongest argument for building the refresh mechanism (Phase 20) and calibrating BOTH together (Phase 25), rather than setting a hard max-hold value now on frozen-signal data.
+
 ## Q4 — When (roadmap)
 
 Run order (POST_AUDIT_ROADMAP §2): **Phase 19 (paper audit/debug, NOW) → Phase 25 (calibration with evidence) → Phase 16+20 (cleanup/hardening) → Phase 21 (live).**
