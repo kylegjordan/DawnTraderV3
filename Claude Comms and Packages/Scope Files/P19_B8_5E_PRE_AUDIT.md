@@ -1,4 +1,4 @@
-# P19-B8.5e — PRE-AUDIT (Step 2, IN PROGRESS)
+# P19-B8.5e — PRE-AUDIT (Step 2, COMPLETE)
 
 **Batch:** `P19-B8.5e` (risk-derived per-symbol mark staleness + LULD plausibility) · **Ledger:** `#548` (+ addenda 1/2) · **Owner:** CC-B
 **Step-1:** APPROVED by Langston (proceed to Step-2) with two carries: **budget must derive from the position's remaining risk-to-stop, decided WITH OBJ-4, not a flat 1% global**; and **OBJ-2's min-observation threshold + class-wide σ percentile land as DB-governed params (ADJUSTMENT_FRAMEWORK), not hardcodes.**
@@ -37,13 +37,15 @@ _eqMaxAgeMs    = getCachedNumberRequired('exit_integrity','max_equity_tick_age_m
 
 **★ S21 reconciliation SHARPENED — they share the SOURCE, not the decision.** `gradePerClassFeedLiveness` returns `{ classes: ClassLivenessResult[]; overall: FeedAliveGrade }` — a per-**class** aggregate feed-alive alarm ("freshest-symbol age = min across the set; proportion fresh"), NOT a per-symbol per-position gate. ⇒ The clean boundary: **B8.5e and S21 both consume per-symbol tick-age as INPUT (the adapter / `getLatestEquityTick` age), but the grader grades a class aggregate for the feed alarm while B8.5e gates a single position's exit.** Not a duplication to collapse — a shared *age source* to name once, with two independent decision layers on top. This is a cleaner finding than §2's first-pass "reconcile with the grader."
 
-## 3. Open Step-2 work (not yet done — resume here)
+## 3. Step-2 RESOLUTIONS (design decisions for Langston's Step-2 review)
 
-1. **Budget-from-risk-to-stop (Langston carry #1) + OBJ-4 together.** Trace how the exit branch knows the position's stop distance at mark time (`position.stopLoss` vs `currentPrice`), and design `budget = f(remaining risk-to-stop)` so a tight-stop name gets a tighter staleness window. This is the same tension as OBJ-4 (a stale mark on a near-stop position is the dangerous case) — one decision, not two.
-2. **The σ source module + the min-observation threshold + class-wide percentile** as named `module_constants` keys (Langston carry #2). Enumerate the exact keys + fail-closed behaviour.
-3. **LULD tier-membership source** (OBJ-3) — the named, scheduled refresh + fail-to-Tier-2. Where does the S&P500/Russell1000 list come from, and how is it refreshed without a hardcode that rots.
-4. **The reconciliation decision on S21** — consume feed-health's per-symbol age, or keep the exit-path ceiling distinct with a named boundary.
-5. System Manual content sites to update at Step-10 (exit-path chapter + the friction/staleness math).
+1. **Budget-from-risk-to-stop + OBJ-4 (Langston carry #1).** Feasibility confirmed (§2b). Design: `budget = k × (remaining risk-to-stop)`, remaining-risk = `|currentPrice − stopLoss| / currentPrice`, `k` a DB-governed fraction (<1). Near-stop ⇒ small budget ⇒ tight window (the dangerous case gets the least tolerance) — OBJ-4 solved in the same knob. Null-stop ⇒ fail-closed to a conservative fixed budget, never fail-open. The escalation-on-failure (OBJ-4's open behavioural question) stays the existing skip-and-continue rail for now; Step-3 decides whether repeated refusal escalates harder — the one genuinely-open choice, NOT designed past.
+2. **σ + knobs as `module_constants` (Langston carry #2).** Proposed module `mark_staleness`, keys: `budget_k`, `null_stop_budget_pct`, `floor_ms` (15000), `cap_ms` (300000), `sigma_min_observations` (earn-your-own-σ threshold), `sigma_classwide_percentile` (conservative inherited σ, ~p90 across class). All fail-closed via `getCachedNumberRequired` (boot-hard-fail on missing rows). Named, not hardcoded.
+3. **★ LULD tier source (OBJ-3) — REUSE the existing universe machinery.** There is already a DB-backed, cron-refreshed `xstock_spot_universe` (`universe-service.ts` + `xstock-universe-cron.ts`, file-cache + bootstrap fallbacks) — columns: symbol/name/sector/crypto_adjacent/adr/source_chain/is_delisted/timestamps, NO tier field yet. **Add a `luld_tier` column** (or sibling mapping table) populated from a **seeded S&P 500 / Russell 1000 membership list refreshed on a schedule aligned to quarterly index reconstitution** (named source = a committed data file or DB table, NOT a TS hardcode). **UNKNOWN/unmapped ⇒ TIER 2 (wider, safer band)** — a stale membership file mis-tiers only toward caution. 
+4. **S21 reconciliation — RESOLVED (§2b):** share the per-symbol tick-age SOURCE (`getLatestEquityTick` age); two independent decision layers (class feed-alarm vs single-position exit gate). No merge; name the shared source.
+5. **System Manual (Step-10):** exit-path chapter (staleness guard + plausibility band) + friction/staleness math. SIM: the new `mark-staleness` component + its touch on S18/S20/S21/S22. ADJUSTMENT_FRAMEWORK: `mark_staleness` module + refresh cadence + `luld_tier` refresh.
+
+**Step-2 STATUS: pre-audit COMPLETE — ready for Langston's Step-2 review before Step-3 implementation.**
 
 ## 4. Governance applicability (Step-2 confirms)
 `SYSTEM_MANUAL` (exit-path behaviour + a new gate) · `SYSTEM_IMPACT_MAP` (new component + it touches S18/S20/S21/S22) · `ADJUSTMENT_FRAMEWORK` (DB-governed per-symbol params) · `CHANGES_AND_FIXES` · `RUNNING_ISSUES` #548 — all APPLICABLE.
