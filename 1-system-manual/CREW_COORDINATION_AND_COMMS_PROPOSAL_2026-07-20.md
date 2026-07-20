@@ -32,6 +32,13 @@ Done. See `1-system-manual/DISCORD_FINDINGS_RUNNING_LIST_2026-07-20.md` (commit 
 - **(C) Dedicated long-form path.** CC→Langston long dispatches always go file-first (the interim mitigation) promoted to a hard rule + a lint, so inline never exceeds one chunk. Complements (B); is the zero-code floor.
 - **Not recommended:** doing nothing and relying on humans to keep messages short — that is the current state and it silently fails.
 
+### ★ PRE-AUDIT FINDING (CC-C, 2026-07-21, Step-2) — (B) as pictured ("group-by shared `first_id`") DOES NOT WORK; the fix is inherently SEND+RECEIVE, not pure-receive
+**VERIFIED in `discord-langston-bridge.py` `on_message`:** the langston-bridge receives Discord message EVENTS and reads only Discord-native fields — `message.id` (**a DIFFERENT id per chunk**), `author`, `content`. **It has NO access to the cc-bridge's `first_id`** — that is a construct that lives ONLY in the SENDER's outbound inbox-log, never on the wire the receiver sees. So the "deterministic group-by-`first_id`" reassembly is not available on the receive side.
+**Also verified:** the address-gate (`ADDRESS_START_RE.match(content)`) runs INSIDE `on_message` **BEFORE the enqueue** → a chunk that doesn't start with "Langston" is **dropped before it is ever a task** (confirms the root cause exactly, and confirms the drop is pre-queue).
+**⇒ Corrected fix shape:**
+- **(A) prepend "Langston" to every chunk (send side) IS a valid ANTI-DROP fix** — every chunk then passes the gate and enqueues. But each is a SEPARATE `claude -p` invoke (the stateless-coherence problem stands).
+- **True reassembly-into-ONE-invoke needs an EXPLICIT group token the SENDER writes into each chunk and the receiver parses** (e.g. `grp=<id> i=k/n`) — deterministic, and NOT the implicit `first_id`, NOT a fragile time-window. So the real fix is **SEND+RECEIVE**: `discord-cc-bridge.py` stamps a machine-parseable group marker on each chunk of a Langston-addressed message AND makes each chunk pass the gate; `discord-langston-bridge.py` buffers by group id in `on_message` and enqueues ONE concatenated task on the last chunk (or a short bounded timeout as the safety net, not the primary key). This corrects the earlier "(B) is pure-receive, trivial" framing — **it touches both bridges.** → goes to Langston in the Step-2 pre-audit.
+
 ### Proposed home
 A named batch, e.g. **B-COMMS-CHUNK-FIX**, owner = whichever CC takes it, Langston review. Small, high-value, and it unblocks reliable CC↔Langston review — arguably should jump the queue because it is silently corrupting every long review right now. **RUNNING_ISSUES entry to be minted by a write-capable session (CC-C is read-only).**
 
