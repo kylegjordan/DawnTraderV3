@@ -53,5 +53,27 @@ Plain language to Kyle every message (no code/paths/jargon; canonical terms: reg
 ## STANDING METHOD NOTE (earned the hard way 2026-07-19/20)
 I was wrong 3× — all from reasoning off code structure; everything that held came from QUERYING. **Measure before asserting; an asserted absence needs presence-evidence (rule 22) — I claimed the at-open verdict was "gone" without reading `closed_trades.metadata`, and it was there on 175/175.** §9.5(b-ii) ledger-search is not optional: the exploration lane is governed, reviewed, and years-visible in RUNNING_ISSUES; reporting it as a defect would have been the #534 error again.
 
+## ★ CORRECTED HEADLINE NUMBERS (2026-07-20 — my first figures were WRONG, these supersede)
+**Open positions are written into `closed_trades` at OPEN time** (row created on open, close fields filled later; `closed_at IS NULL` = still open). My first pass counted them as closed trades. **P&L unaffected** (they contribute 0.00) but **counts and win rates were wrong:**
+| lane | I first said | **CORRECT (closed_at NOT NULL)** |
+|---|---|---|
+| exploration | 142 trades, 17.6% | **131 trades, 19.1% win, −$137.04, fees $114.38** |
+| organic | 33 trades, 33.3% | **29 trades, 37.9% win, +$1.37, fees $32.71** |
+| organic crypto | — | **9 trades, 7 winners, +$40.75** |
+| organic xStock | — | **20 trades, 4 winners, −$39.37** (provisional, #544) |
+⚠️ ALSO: my "126 complete-geometry" figure was a FILTERED subset (`actual_entry_price > 0`) — 44 maker rows have a NULL entry price. State exclusions.
+
+## ★ NEW FINDINGS 2026-07-20
+1. **The 4 weekend xStock positions FILLED and are open+profitable** (BMNR +1.15% · MU +4.20% · TSM +1.76% · VZ −0.42%, ≈+$5.60). NOT unfilled orders — they carry real quantity, real fill prices, and live sub-2s pricing. Kyle's "couldn't fill" hypothesis TESTED and REFUTED.
+2. **Entries into a CLOSING venue get materially worse fills** — the 4 Friday-pre-close entries slipped 5.5% / 1.6% / 1.0% / 0.4%; everything mid-session today <1%; maker fills exactly 0. Real evidence for a pre-close admission cutoff (#531).
+3. **`rtb_signals.missed_refreshes` is DEAD BY DESIGN** — declared, commented "count of failed refresh attempts", written NOWHERE. Reason recorded at `ready_to_buy_service.ts:168`: *"Directive 8.8.4-A3.R8: Immediate expiry on SQE failure (no missed refresh counter)"*. **Governed decision, NOT a defect — do not file it.** Consequence: refresh base-rate / recovery-time / retry-N are UNMEASURABLE from the DB.
+4. **THE ABSENT-AS-VALID CLASS (#546):** an absent result must not be representable as a valid one — absence collapses into `0`, `empty`, `success`, the three values readers consume instead of interrogating. **Measured scale: 557 `?? 0`-family sites in `server/`, 154 on decision/gate identifiers** (crude filter, NOT 154 defects). ⚠️ **`??` collapses `null` and `undefined` IDENTICALLY — a nullable type RECORDS absence without ENFORCING it. Only a non-nullish result carrier (`{ok:false}`) works.** Type-level fixes ALSO cannot reach `(input as any)` sites, which is exactly where the pinned constants live.
+
+## ★ NEW STANDING RULES (CLAUDE.md 25/26/27, at origin `a73b0538c`)
+**27 — PAIRWISE IS THE DEFAULT.** Owning session + Langston ships it. Escalate only for cross-cutting architecture / cross-batch bindings / class-wide findings / live-money-risk / true deadlock. **I hold no batch ⇒ my default is NOT to join one.** Corrections: say once, then move on. *"Does this need me, or am I adding a lap?"* — I was the biggest contributor to the convening problem (~30 posts, zero batches).
+**26 — a Langston alert naming me gets an IMMEDIATE Discord reply**: (a) I've got it (b) what (c) when — AND disposition the alert in the same message. Fast response mandatory, fast fix not.
+**25 — commit procedure:** `git add <path>` → `git diff --cached --name-only` (READ IT) → `CC_COMMIT_ATTESTED=1 git commit -F <msgfile>`. Path-limited commit segfaults deterministically. `git diff HEAD` HIDES untracked files — cross-check `git status --porcelain` for `??`.
+**MY CARVE-OUT (stated + accepted):** I do NOT stay silent about a number that reached Kyle and is wrong. Four occurred 07-19/20.
+
 ## CURRENT STATE (2026-07-20)
 Comms LIVE (Discord verified, wake watcher armed ALIAS CC-C). Langston reviewed the EV-gate brief — verdict: findings sound, "graded-vs-ungraded not yes-vs-no", replay KEEP (bounded not misleading, use REALIZED friction), retention gap needs a §9.4 home. **OPEN:** (1) step-4 replay not yet built; (2) whether the 72 sub-2% trades bound `[11.8B]` — now largely answered by the exploration split, needs final confirmation; (3) BloFin-vs-Kraken exchange research running in background for Kyle; (4) repo mirror of THIS file still pending (held overnight — shared tree, #540, other sessions active).
