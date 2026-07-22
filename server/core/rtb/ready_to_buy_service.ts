@@ -975,6 +975,26 @@ class ReadyToBuyService {
             // the class resolves; undefined here means the row never entered the denominator,
             // so an error before that point correctly records nothing.
             let _fCls: FunnelAssetClass | undefined;
+            // ★ B-RTB-REFRESH-CONSOLIDATE OBJ-1 FOLLOW-UP (#532, 2026-07-22 — Langston-ruled
+            // RESTORE, bucket (1) real defect). The per-signal `isRefreshing` latch is the
+            // documented replacement for the GLOBAL refresh barrier that R9.3-D removed
+            // (see the SignalRefreshState field comment: "Flag to prevent TCL promoting during
+            // refresh" / "replaces global isRefreshing"). Its ONLY writer lived in the retired
+            // per-signal mechanism, so after that retirement NOTHING set it: `isSignalRefreshing`
+            // returned false unconditionally and the promotion filter at getRankedSignals
+            // (`!this.isSignalRefreshing(...)`) passed EVERYTHING — a filter presenting as a
+            // guard while guarding nothing, with no barrier behind it.
+            // ⚠️ Mechanism B NEVER set this latch even while both mechanisms ran, so this is not
+            // merely a restore — it is the FIRST time the surviving refresh honours it. That was
+            // the unfinished half of the R9.3-A migration, not a deliberate omission.
+            // GATE PROVEN BEFORE WIRING (Langston's condition — partial coverage here would
+            // recreate the same bug flipped): `refreshAndRank` is the ONLY path that REFRESHES a
+            // signal — sole caller of `acquireRefreshedInputs` and sole writer of
+            // `lastRefreshedAt`/the refreshed fields. Every other `updateRtbSignal` site
+            // (`removeSignalBySymbol`, the promotion-cleanup fallback, `criteria-limiter`) writes
+            // `status:'promoted'` + `promotedAt` — EXIT writes that touch no decision input.
+            const _refreshState = this.getSignalRefreshState(mode, signal.signalId);
+            _refreshState.isRefreshing = true;
             try {
               // Directive 11.0E: Normalize symbol for consistent comparisons
               const normalizedSymbol = normalizePairKey(signal.symbol);
@@ -1179,6 +1199,12 @@ class ReadyToBuyService {
               if (_fCls) recordActiveRtbRefresh(mode, _fCls, { droppedError: 1 });
               bulkDeletes.push(signal.id);
               expiredCount++;
+            } finally {
+              // Cleared in `finally`, exactly as the retired mechanism did: a throw between the
+              // set and the clear would strand the latch TRUE and make the signal permanently
+              // invisible to promotion — a silent, self-inflicted queue leak. The error path
+              // above deletes the row anyway, but the latch must not depend on that.
+              _refreshState.isRefreshing = false;
             }
           })
         );

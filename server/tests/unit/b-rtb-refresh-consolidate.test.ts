@@ -194,3 +194,34 @@ describe('B-RTB-REFRESH-CONSOLIDATE OBJ-1: Mechanism A RETIRED — the duplicate
     expect(SRC).toContain('async reEvaluateQueue(');
   });
 });
+
+describe('B-RTB-REFRESH-CONSOLIDATE OBJ-1 follow-up: the per-signal refresh latch has a LIVE writer', () => {
+  // WHY THIS FENCE EXISTS — it pins the exact defect class that produced it. Retiring Mechanism A
+  // removed the ONLY writer of `SignalRefreshState.isRefreshing`, while `getRankedSignals` kept
+  // filtering on `!isSignalRefreshing(...)`. Result: a reader pinned to false, a filter that
+  // passed everything, and a promotion guard that presented as protection while guarding nothing
+  // — with the global barrier it replaced (R9.3-D) already gone. NOTHING FAILED: no compile
+  // error, no failing test, because a flag written by deleted code and read elsewhere is invisible
+  // to caller-tracing and to tsc. Langston ruled RESTORE (bucket 1, real defect).
+  it('the survivor SETS the latch — a reader with no writer is the bug this batch created once', () => {
+    expect(SRC).toContain('_refreshState.isRefreshing = true');
+  });
+
+  it('and CLEARS it in a finally — a stranded TRUE latch is a silent queue leak', () => {
+    // If a throw stranded the latch true, that signal becomes permanently invisible to promotion.
+    const setAt = SRC.indexOf('_refreshState.isRefreshing = true');
+    const clearAt = SRC.indexOf('_refreshState.isRefreshing = false');
+    expect(setAt).toBeGreaterThan(-1);
+    expect(clearAt).toBeGreaterThan(setAt);
+    expect(SRC.slice(setAt, clearAt)).toContain('} finally {');
+  });
+
+  it('the consumer side is intact: promotion still filters on the latch', () => {
+    expect(SRC).toContain('!this.isSignalRefreshing(mode, s.signalId)');
+  });
+
+  it('getSignalRefreshState is no longer orphaned — the restore gave it its caller back', () => {
+    const uses = SRC.match(/this\.getSignalRefreshState\(/g) ?? [];
+    expect(uses.length).toBeGreaterThanOrEqual(1);
+  });
+});
