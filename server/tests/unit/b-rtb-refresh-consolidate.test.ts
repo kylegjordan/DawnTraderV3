@@ -52,9 +52,15 @@ describe('B-RTB-REFRESH-CONSOLIDATE: one shared acquisition, both mechanisms', (
     expect(SRC).toContain('private async acquireRefreshedInputs(');
   });
 
-  it('BOTH refresh mechanisms call it — identical logic, no copy-paste drift', () => {
+  it('exactly ONE caller remains — the bucketed survivor (staging step 2 complete)', () => {
+    // ★ OBJ-1 (2026-07-22): was `toBe(2)`, pinning the DELIBERATE transition state — the shared
+    // acquisition was extracted so both mechanisms ran identical logic while they coexisted, with
+    // the per-signal caller due to disappear at "staging step 2". That step is now DONE: Mechanism
+    // A is retired, so 2 -> 1 is the batch SUCCEEDING, not a regression. This assertion now guards
+    // the end state — if it ever reads 2 again, a second scheduler has been reintroduced over the
+    // same queue, which is the exact ~7-month defect this batch exists to close.
     const calls = SRC.match(/this\.acquireRefreshedInputs\(/g) ?? [];
-    expect(calls.length).toBe(2); // per-signal (retired in staging step 2) + batch survivor
+    expect(calls.length).toBe(1);
   });
 
   it('the survivor no longer keeps its own decay/FinalScore recompute', () => {
@@ -107,7 +113,15 @@ describe('B-RTB-REFRESH-CONSOLIDATE: the self-perpetuating loop is broken (OBJ-2
 describe('B-RTB-REFRESH-CONSOLIDATE: score-timing invariant preserved (Langston B7.2b gate)', () => {
   it('decideMakerTaker runs AFTER the decayed score, so signalStrength is same-vintage', () => {
     const m = SRC.indexOf('private async acquireRefreshedInputs('); // B-REGIME-REFRESH-PIPE: now async
-    const method = SRC.slice(m, SRC.indexOf('\n  private async refreshSingleSignal(', m));
+    // OBJ-1 (2026-07-22): the end-delimiter WAS `refreshSingleSignal`, which this batch DELETED.
+    // Left unfixed, indexOf returns -1 and slice(m, -1) silently widens `method` to the whole rest
+    // of the file — the assertions below would still PASS while no longer testing this method at
+    // all. Re-pointed to the next surviving member, and both indices are asserted so a future
+    // rename fails LOUDLY instead of quietly hollowing the test out.
+    const end = SRC.indexOf('\n  async refreshAndRank(', m);
+    expect(m).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(m);
+    const method = SRC.slice(m, end);
     const scoreAt = method.indexOf('const refreshedFinalScore');
     const mtAt = method.indexOf('decideMakerTaker({');
     expect(scoreAt).toBeGreaterThan(-1);
@@ -153,5 +167,30 @@ describe('B-RTB-REFRESH-CONSOLIDATE OBJ-2: regimeWeight recompute — honest abo
     const hi = rw({ trendStrength: 0.5, volatility: 0.0 });
     expect(lo).toBeCloseTo(0.35, 5);
     expect(hi).toBeCloseTo(0.65, 5);
+  });
+});
+
+describe('B-RTB-REFRESH-CONSOLIDATE OBJ-1: Mechanism A RETIRED — the duplicate scheduler cannot return', () => {
+  // WHY THIS FENCE EXISTS (rule 18 + the §9.5 audit finding): two independent schedulers ran over
+  // the SAME queue for ~7 months, double-processing every signal into the SQE, and TWO audits
+  // missed it because each traced forward from ONE entry point. The bucketed RTBRefreshService
+  // (origin 7a029f390, 2025-12-23) was built to REPLACE the per-signal path — decoupled from the
+  // scan loop for load, the longer refresh gap a weighed + ACCEPTED trade at that time
+  // (Kyle, 2026-07-22). Running both was never the plan; A simply never got unplugged.
+  it('the per-signal refresh chain is gone from the service', () => {
+    expect(SRC).not.toContain('private async executePerSignalRefresh(');
+    expect(SRC).not.toContain('private async refreshSingleSignal(');
+    expect(SRC).not.toContain('private async executeRefreshCycle(');
+  });
+  it('the second Central-Clock subscription is gone (ONE scheduler over the queue)', () => {
+    expect(SRC).not.toContain('startRefreshCycle(');
+    expect(SRC).not.toContain('stopRefreshCycle(');
+  });
+  it('the shared acquisition survives, with the bucketed path as its caller', () => {
+    expect(SRC).toContain('private async acquireRefreshedInputs(');
+    expect(SRC).toContain('async refreshAndRank(');
+  });
+  it('the manual re-evaluate endpoint is PRESERVED (operator-triggered, not Mechanism A)', () => {
+    expect(SRC).toContain('async reEvaluateQueue(');
   });
 });

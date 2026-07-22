@@ -9392,7 +9392,14 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const { readyToBuyService } = await import('./core/rtb/ready_to_buy_service.js');
       const mode = (req.query.mode as 'live' | 'paper') || 'paper';
       
-      const isRunning = readyToBuyService.isRefreshCycleRunning(mode);
+      // ★ B-RTB-REFRESH-CONSOLIDATE OBJ-1 (#532, 2026-07-22): was
+      // `readyToBuyService.isRefreshCycleRunning(mode)`, which read a never-populated map and
+      // so returned FALSE unconditionally — this endpoint reported "not running" on a healthy
+      // system. Mechanism A is retired; the bucketed RTBRefreshService is the ONE refresh, and
+      // its own liveness flag is the honest answer. (Asked directly, not via readyToBuyService,
+      // because that module is imported BY rtb-refresh-service — the reverse call would cycle.)
+      const { rtbRefreshService } = await import('./services/rtb-refresh-service.js');
+      const isRunning = rtbRefreshService.isActive();
       const tclStatus = await readyToBuyService.getTCLStatus(mode);
       
       res.json({

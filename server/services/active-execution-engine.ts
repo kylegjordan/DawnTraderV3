@@ -503,9 +503,12 @@ export class ActiveExecutionEngine {
       console.warn(`[A3.R2][PaperExecution:${this.mode}] Expired signal cleanup failed:`, cleanupError);
     }
 
-    // Phase 8.8.4-C.5: Start RTB 30-second refresh cycle
-    readyToBuyService.startRefreshCycle(this.mode);
-    console.log(`[PaperExecution:${this.mode}] RTB refresh cycle started`);
+    // ★ B-RTB-REFRESH-CONSOLIDATE OBJ-1 (#532, 2026-07-22): the 30s per-signal refresh cycle
+    // (Mechanism A) is RETIRED — this starter is removed, not disabled (rule 18).
+    // The RTB refresh is now driven SOLELY by the bucketed RTBRefreshService, which was built
+    // (7a029f390, 2025-12-23) to REPLACE this path — decoupled from the scan loop for load,
+    // with the longer refresh gap a weighed + accepted trade at that time (Kyle, 2026-07-22).
+    // Running both was never the plan; A simply never got unplugged.
 
     // Directive 8.8.4-A3.R2: Set engine start time for TCL 2-minute failsafe (was 5 min)
     readyToBuyService.setEngineStartTime(this.mode);
@@ -599,9 +602,7 @@ export class ActiveExecutionEngine {
       console.error(`[AJ17] Failed to generate diagnostic report:`, err);
     });
     
-    // Phase 8.8.4-C.5: Stop RTB 30-second refresh cycle
-    readyToBuyService.stopRefreshCycle(this.mode);
-    console.log(`[PaperExecution:${this.mode}] RTB refresh cycle stopped`);
+    // B-RTB-REFRESH-CONSOLIDATE OBJ-1: stopRefreshCycle removed with Mechanism A (nothing to stop).
     
     // Phase 8.8.4-C.6: Clear engine start time for TCL failsafe
     readyToBuyService.clearEngineStartTime(this.mode);
@@ -803,9 +804,7 @@ export class ActiveExecutionEngine {
       console.warn(`[B7.A][ENGINE] AJ17 diagnostics warning:`, diagErr);
     }
     
-    // Phase 8.8.4-C.5: Stop RTB refresh cycle during reset
-    readyToBuyService.stopRefreshCycle(this.mode);
-    console.log(`[B7.A][ENGINE] RTB refresh cycle stopped`);
+    // B-RTB-REFRESH-CONSOLIDATE OBJ-1: stopRefreshCycle removed with Mechanism A (nothing to stop).
     
     // Phase 8.8.4-C.6: Clear engine start time for TCL failsafe during reset
     readyToBuyService.clearEngineStartTime(this.mode);

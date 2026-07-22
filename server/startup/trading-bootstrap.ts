@@ -61,9 +61,9 @@ export async function bootstrapTradingServices(): Promise<void> {
           const expiredCount = await readyToBuyService.cleanupExpiredSignals(mode);
           console.log(`[A3.R7][Startup] Cleaned ${expiredCount} expired signals for ${mode} mode`);
           
-          console.log(`[A3.R7][Startup] Step 4: Starting RTB refresh cycle for ${mode}...`);
-          readyToBuyService.startRefreshCycle(mode);
-          console.log(`[A3.R7][Startup] Refresh cycle started for ${mode} mode`);
+          // ★ B-RTB-REFRESH-CONSOLIDATE OBJ-1 (#532, 2026-07-22): Mechanism A's starter removed.
+          // The bucketed RTBRefreshService is the single refresh mechanism and starts on its own
+          // lifecycle; starting a second scheduler here is what produced the duplicate processing.
           
           readyToBuyService.setEngineStartTime(mode);
           console.log(`[A3.R7][Startup] Engine start time set for ${mode} mode`);

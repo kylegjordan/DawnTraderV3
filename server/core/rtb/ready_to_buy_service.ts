@@ -402,9 +402,6 @@ export function normalizePairKey(symbol: string): string {
   return canonical;
 }
 
-// Directive 8.8.4-A3.R7: Central Clock tick interval for RTB refresh
-const RTB_REFRESH_INTERVAL_SECONDS = 30;
-
 /**
  * Directive 8.8.4-A3.R9.0.A (R9-D2): Simple hash function for uniform refresh stagger
  * Uses djb2 algorithm for fast, well-distributed hashing
@@ -469,8 +466,6 @@ interface SignalRefreshState {
 
 class ReadyToBuyService {
   private initialized = false;
-  private refreshIntervals: Map<TradingMode, NodeJS.Timeout> = new Map();
-  private clockTickHandlers: Map<TradingMode, (tick: ClockTick) => void> = new Map(); // Directive A3.R7
   // Directive R9.3-A: Per-signal refresh tracking (replaces global isRefreshing)
   private signalRefreshStates: Map<string, SignalRefreshState> = new Map(); // P19-B4b D5: key = `${mode}:${signalId}`
   private engineStartTimes: Map<TradingMode, number> = new Map(); // Phase 8.8.4-C.6: Track engine start for TCL failsafe
@@ -640,65 +635,6 @@ class ReadyToBuyService {
   }
 
   /**
-   * Phase 8.8.4-C.5: Start the refresh cycle for a mode
-   * Directive 8.8.4-A3.R9.3-A: Per-signal refresh model with Central Clock
-   * Each signal refreshes independently when its timer expires
-   */
-  startRefreshCycle(mode: TradingMode): void {
-    // Prevent duplicate subscriptions
-    if (this.clockTickHandlers.has(mode)) {
-      console.log(`[A3.R9.3][RTB_REFRESH] Refresh cycle already running for ${mode} mode`);
-      return;
-    }
-
-    console.log(`[A3.R9.3][RTB_REFRESH] Starting per-signal refresh cycle with Central Clock for ${mode} mode`);
-
-    // Ensure Central Clock is running
-    if (!centralClock.getIsRunning()) {
-      centralClock.start();
-      console.log(`[A3.R9.3][RTB_REFRESH] Started Central Clock`);
-    }
-
-    // R9.3-A: Subscribe to Central Clock - check each second for signals due for refresh
-    const tickHandler = async (tick: ClockTick) => {
-      // R9.3-A: Every 30 seconds, trigger refresh cycle
-      if (tick.tickNumber <= 0 || tick.tickNumber % RTB_REFRESH_INTERVAL_SECONDS !== 0) return;
-
-      console.log(`[A3.R9.3][RTB_REFRESH][TICK] mode=${mode} tickNumber=${tick.tickNumber} drift=${tick.drift}ms`);
-      
-      // R9.3-A/R9.3-B: Execute refresh with per-signal error handling
-      await this.executePerSignalRefresh(mode);
-    };
-
-    this.clockTickHandlers.set(mode, tickHandler);
-    centralClock.subscribe(`RTB_${mode}`, tickHandler);
-    console.log(`[A3.R9.3][RTB_REFRESH] ✅ Subscribed to Central Clock for ${mode} mode`);
-  }
-
-  /**
-   * Phase 8.8.4-C.5: Stop the refresh cycle for a mode
-   * Directive 8.8.4-A3.R7: Unsubscribe from Central Clock
-   */
-  stopRefreshCycle(mode: TradingMode): void {
-    // Unsubscribe from Central Clock
-    if (this.clockTickHandlers.has(mode)) {
-      centralClock.unsubscribe(`RTB_${mode}`);
-      this.clockTickHandlers.delete(mode);
-      console.log(`[A3.R9.3][RTB_REFRESH] Stopped refresh cycle for ${mode} mode`);
-    }
-
-    // Also clean up legacy intervals if present
-    const interval = this.refreshIntervals.get(mode);
-    if (interval) {
-      clearInterval(interval);
-      this.refreshIntervals.delete(mode);
-    }
-    
-    // R9.3-A: Clear signal refresh states for this mode
-    // Note: In a full implementation, we'd filter by mode, but signalIds are global
-  }
-
-  /**
    * P19-B6.5b (F1b / RUNNING_ISSUES #320 — defense-in-depth re-eval purge): drop any QUEUED signal
    * whose per-asset-class active gate is OFF for this mode. The admission chokepoint (queueSQESignal)
    * blocks NEW entries; this clears STALE ones (e.g. a class deactivated while it held live queued
@@ -729,86 +665,11 @@ class ReadyToBuyService {
   }
 
   /**
-   * Directive 8.8.4-A3.R9.3-A: Per-signal refresh with try/finally error handling (R9.3-B)
-   */
-  private async executePerSignalRefresh(mode: TradingMode): Promise<void> {
-    // Check if engine is active
-    // P19-B6.5b (F1b / RUNNING_ISSUES #320): the B6.5b audit PROVED the crypto entry gate could be
-    // bypassed at the scanMode pool layer (now structurally fixed in F1), so the deferred per-class
-    // RTB enforcement is now IN — the admission chokepoint (queueSQESignal) rejects new inactive-class
-    // entries, and purgeInactiveClassSignals clears any STALE queued signal whose class flipped off
-    // mid-flight, before the per-signal refresh re-ranks/promotes.
-    const systemContext = await storage.getSystemContext(mode);
-    if (!systemContext?.isEngineActive) {
-      return; // Skip refresh when engine is inactive
-    }
-    await this.purgeInactiveClassSignals(mode, systemContext);
-
-    const startTime = Date.now();
-    const signals = await this.getQueuedSignals(mode);
-    
-    if (signals.length === 0) {
-      console.log(`[A3.R9.3][RTB_REFRESH] mode=${mode} no signals to refresh`);
-      // R9.3-D: Check TCL after refresh (no barrier)
-      await tclWatchdog.checkSignalThresholdLive(mode);
-      return;
-    }
-
-    let reconfirmedCount = 0;
-    let expiredCount = 0;
-
-    // R9.3-A: Process each signal individually with try/finally (R9.3-B)
-    for (const signal of signals) {
-      const signalState = this.getSignalRefreshState(mode, signal.signalId);
-      
-      // R9.3-B: Set isRefreshing flag and ensure it's reset in finally
-      signalState.isRefreshing = true;
-      
-      try {
-        const result = await this.refreshSingleSignal(signal, mode);
-        if (result.passed) {
-          reconfirmedCount++;
-        } else {
-          expiredCount++;
-        }
-        
-        // R9.3-A: Update next refresh time
-        signalState.nextRefreshAt = Date.now() + RTB_REFRESH_INTERVAL_MS;
-        
-      } catch (error) {
-        console.error(`[A3.R9.3][REFRESH_ERROR] signal=${signal.signalId}:`, error);
-        // R9.3-B: Error doesn't block other signals
-      } finally {
-        // R9.3-B: Always reset isRefreshing
-        signalState.isRefreshing = false;
-      }
-    }
-
-    const elapsedMs = Date.now() - startTime;
-    console.log(`[A3.R9.3][REFRESH_COMPLETE] mode=${mode} reconfirmed=${reconfirmedCount} expired=${expiredCount} elapsed=${elapsedMs}ms`);
-    
-    // Broadcast update
-    await contextBridge.broadcast({
-      type: 'rtb:updated',
-      payload: { mode, timestamp: new Date().toISOString(), reconfirmedCount, expiredCount },
-      mode
-    });
-
-    // R9.3-D: Check TCL after refresh (no barrier)
-    await tclWatchdog.checkSignalThresholdLive(mode);
-  }
-
-  /**
-   * Directive 11.0E: Refresh a single signal using FinalScore-native logic
-   * Directive 11.3A: Enhanced with conditional geometry refresh
-   * Signals ranked by FinalScore with decayPenalty
-   */
-
-  /**
    * B-RTB-REFRESH-CONSOLIDATE (OBJ-1/OBJ-2, 2026-07-19) — THE SHARED REFRESH ACQUISITION.
    *
-   * Extracted VERBATIM from `refreshSingleSignal`'s inline block so BOTH refresh mechanisms
-   * run IDENTICAL logic. Until this batch, only the Central-Clock per-signal mechanism
+   * Extracted VERBATIM from the retired per-signal mechanism's inline block so BOTH refresh
+   * mechanisms ran IDENTICAL logic during the transition. Mechanism A is now RETIRED
+   * (OBJ-1, 2026-07-22), so this has a SINGLE caller: the bucketed refreshAndRank. Until this batch, only the Central-Clock per-signal mechanism
    * re-read market state; the bucketed service replayed the frozen queue-time snapshot AND
    * never wrote the freshness fields back (self-perpetuating — pre-audit §2). Behaviour for
    * the per-signal caller is unchanged by construction (same code, same order); the bucketed
@@ -1015,247 +876,6 @@ class ReadyToBuyService {
     return { currentVol, currentSpread, netExpectedEdge, geometryRefreshed, decayPenalty, refreshedFinalScore, refreshedMT, refreshedRegimeWeight };
   }
 
-  private async refreshSingleSignal(signal: RtbSignal, mode: TradingMode): Promise<{ passed: boolean }> {
-    const normalizedSymbol = normalizePairKey(signal.symbol);
-    const now = new Date();
-
-    // Directive 11.0E: Extract FinalScore-native metrics from signal
-    const metadata = signal.metadata as Record<string, any> || {};
-    const confidence = parseFloat(signal.confidence || '0.5');
-    const originalFinalScore = metadata.finalScore ?? parseFloat(signal.finalScore || '0.5');
-    // ★ B-RANKING-COMPONENT-CAPTURE follow-up (#555, 2026-07-22): the `?? confidence`
-    // substitution is REMOVED. It wrote CONFIDENCE under the hybridScore NAME, and because
-    // this value is written back into metadata below, the substitution became permanent and
-    // indistinguishable from a real hybrid score — corrupting the calibration record with a
-    // number that looks valid. Absent now stays absent (honest-null).
-    // ⚠️ THIS DOES CHANGE `refreshedFinalScore` — do not read it as behaviour-neutral.
-    // CORRECTED after a Langston Step-4 rejection of my first justification: I originally
-    // claimed equivalence via `calculateFinalScore` (score-calculator.ts:47), which applies
-    // `?? confidence ?? 0.5`. THAT FUNCTION IS NOT ON THIS PATH. The refresh inlines its own
-    // formula below (~:931) using `(hybridScore ?? 0)`. So with hybridScore now honestly
-    // absent, `refreshedFinalScore` drops by `confidence × W.HYBRID` (0.4) — systematically,
-    // because persisted metadata deliberately omits hybridScore (see the carve-out at the
-    // enrichedMetadata block). This is the common path, not an edge case.
-    // WHY IT IS STILL SAFE — the real reason, not the one I first gave:
-    //   • the finalScore SQE gate is RETIRED (signal_quality_evaluator.ts, P19-B8.5a,
-    //     Kyle-ratified) — sub-threshold finalScore is shadow-logged and pushes NOTHING to
-    //     failures, so it cannot evict a signal;
-    //   • the live default ranker is `r_multiple` (computeRankKey → signalRMultiple), which
-    //     does not read finalScore. Only the non-default control rankers do.
-    //   • decideMakerTaker does NOT consume it either: its `signalStrength` argument takes
-    //     the `scoring_base.flat_pwin_base` CONFIG value (~:956), not the decayed score.
-    //     ⚠️ NOTE the invariant comment above acquireRefreshedInputs still claims
-    //     `signalStrength` consumes the decayed score — that is STALE (true pre-B8.5a).
-    // So the lowered score is shadow/telemetry-only. "Safe because the gate that would have
-    // cared is retired" — NOT "safe because equivalent". Those are different claims and only
-    // the second one is false.
-    const hybridScore = metadata.hybridScore;
-    const regimeWeight = metadata.regimeWeight ?? 0.5;
-
-    // ★ B-RTB-REFRESH-CONSOLIDATE (OBJ-1, 2026-07-19): this block was EXTRACTED verbatim
-    // into `acquireRefreshedInputs` so the bucketed service runs identical logic. Behaviour
-    // here is unchanged by construction. This mechanism is retired in staging step 2 (the
-    // starters at active-execution-engine.ts + trading-bootstrap.ts), at which point this
-    // caller disappears and the shared method has a single caller.
-    const _acq = await this.acquireRefreshedInputs(
-      signal, normalizedSymbol, metadata, confidence, hybridScore, regimeWeight,
-    );
-    const currentSpread = _acq.currentSpread;
-    const currentVol = _acq.currentVol;
-    const netExpectedEdge = _acq.netExpectedEdge;
-    const geometryRefreshed = _acq.geometryRefreshed;
-    const decayPenalty = _acq.decayPenalty;
-    const refreshedFinalScore = _acq.refreshedFinalScore;
-    const _b72bRefreshedMT = _acq.refreshedMT;
-    // OBJ-2: both mechanisms consume the SAME recomputed regimeWeight — divergence here would
-    // reintroduce exactly the per-path disagreement this batch exists to remove.
-    const refreshedRegimeWeight = _acq.refreshedRegimeWeight;
-
-    // ── #546 / OBJ-3 — REJECT THIS REFRESH, DO NOT COERCE, DO NOT DELETE ──
-    // ★ THE TRAP THIS AVOIDS: `refreshedRegimeWeight` is `number | null` and SQEInput takes
-    // `regimeWeight?: number`, so the one-character fix is `?? undefined`. IT IS WRONG.
-    // `undefined` does not mean "absent" to the SQE — it means RECOMPUTE, and the SQE's
-    // recompute path rebuilds the value from `trendStrength ?? 0.5` / `volatility ?? 0.3`,
-    // silently re-pinning the gate at the constant this batch exists to remove. `undefined`
-    // is overloaded here: "not supplied, go compute" ≠ "could not be computed".
-    //
-    // ★ AND WHY THIS IS NOT THE `sqeAssetClass === null` TREATMENT ABOVE: that path DELETES
-    // the row, because an unresolvable asset class is upstream breakage — permanent. A
-    // missing market context is the opposite: normally TRANSIENT (a cold symbol, or a cache
-    // entry past its TTL; the MCE refreshes on a timer and retries on failure). Deleting on
-    // a transient miss would drain the queue for a condition that self-heals in seconds. So
-    // this refresh fails and the signal STAYS QUEUED to be re-evaluated when context returns.
-    // Per-signal: reject. "Is the MCE down?" is the circuit breaker's job, not this line's.
-    if (refreshedRegimeWeight === null) {
-      console.warn(
-        `[B-REGIME-INPUTS-LIVE][REFRESH_REJECT] ${normalizedSymbol}: regimeWeight unavailable ` +
-        `(no live market context) — refresh FAILED, signal left queued for retry. Not scored ` +
-        `on a substituted constant, and NOT deleted (the miss is expected to be transient).`,
-      );
-      return { passed: false };
-    }
-
-    // Phase 14: SQE revalidation — pass pre-computed FinalScore/RegimeWeight (no backfill)
-    // P19-B4a (C4): assetClass REQUIRED on SQEInput. PREFER the row's stamp
-    // (rtb_signals.asset_class, schema.ts:1885, stamped at queue-write — the source
-    // of truth post-C1); safe-resolve from the symbol only as a legacy-row fallback.
-    // Unclassifiable (no valid stamp, unresolvable) → drop from the queue rather than
-    // evaluate SQE against a guessed class (mirrors the SQE-fail removal path below).
-    const sqeAssetClass = asValidAssetClass(signal.assetClass) ?? safeResolveAssetClass(normalizedSymbol, 'kraken');
-    if (sqeAssetClass === null) {
-      // B-RTB-REFRESH-CONSOLIDATE OBJ-3/OBJ-4 — same treatment as the batch path: a stamped row
-      // that is now unresolvable is upstream breakage, not attrition. Counted + ERROR grade.
-      await storage.deleteRtbSignals({ mode, id: signal.id });
-      performanceMonitor.recordQueueRemove(1);
-      // Same as the batch path: unattributable by construction + pre-denominator. Alarm only.
-      console.error(`[11.0E][SQE_SKIP][DATA_INTEGRITY] unclassifiable ${normalizedSymbol} — dropped from queue (row was stamped at write; unresolvable now = upstream breakage)`);
-      this.signalRefreshStates.delete(this._refreshKey(mode, signal.signalId));
-      return { passed: false };
-    }
-
-    const sqeInput: SQEInput = {
-      signalId: signal.signalId,
-      symbol: normalizedSymbol,
-      strategy: signal.strategy,
-      mode,
-      assetClass: sqeAssetClass,
-      confidence: confidence,
-      finalScore: refreshedFinalScore,
-      regimeWeight: refreshedRegimeWeight,
-      trendStrength: metadata.trendStrength ?? 0.5,
-      volatility: currentVol,
-      // P19-B8.5b (OBJ-4, #498): feed the FROZEN at-queue sourcePool (the row's own value,
-      // persisted at queue-write :2251 — same read the maker/taker re-decide uses at :865;
-      // NOT a fresh pool lookup) so the pattern elevated floor + AMR pool-awareness actually
-      // run at refresh. Honest-absent: a legacy row with neither → undefined → behaves as today.
-      // regimeStability is DELIBERATELY NOT fed (documented-deferred, Langston-ratified): the
-      // gen-side value is computeGlobalStability(0.5, 0, confidence||0.5) — a function of the
-      // retired confidence axis with cold-start defaults — feeding it would EXTEND that
-      // contamination to two new gate evaluations. It moves WITH its honest-source dependency
-      // (the getNormalizedRegimeWithDetails wiring follow-up + the 25-4 floor disposition).
-      sourcePool: (signal as any).sourcePool ?? (signal.metadata as any)?.sourcePool,
-      // P19-B8.5a (OBJ-3): net-EV admission at refresh — prefer THIS tick's re-decide
-      // (the decideMakerTaker re-run directly above, geometry-shifted case), else the
-      // stored row snapshot. Absent (legacy row) → the SQE check skips (fail-open,
-      // Langston-ratified; the [11.8B] taker-leg fallback still nets it at open).
-      chosenNetEv: _b72bRefreshedMT?.chosenNetEV
-        ?? ((signal as any).chosenNetEv != null ? Number((signal as any).chosenNetEv) : undefined),
-      chosenEntryMode: (_b72bRefreshedMT?.chosenMode
-        ?? ((signal as any).chosenEntryMode as 'maker' | 'taker' | undefined)) ?? undefined,
-    };
-
-    // P19-B8.5 OBJ-6 (Langston-approved): ACTIVE-path refresh — HF8/HF9 in SHADOW
-    // (evaluate + log, never block). See SQEOptions.gateShadowMode + #514.
-    const sqeResult = await signalQualityEvaluator.evaluate(sqeInput, { gateShadowMode: true });
-
-    // P19-B8.5 exploration lane: an exploration-stamped signal's lane admission was
-    // decided AT GENERATION (budget consumed once, 4-field stamp on the row). The
-    // refresh re-SQE therefore HONORS the stamp when the ONLY failure is the same
-    // NetEV gate the lane overrode — otherwise every lane admit dies here before
-    // promotion (Langston's next-binding-gate prediction). Any OTHER failure
-    // (regime, floors, AMR) still deletes — the lane only ever overrides NetEV.
-    // Paper-only by construction: exploration stamps exist only on paper rows.
-    const _exploStamped = ((signal.metadata as any)?.admissionBasis === 'exploration');
-    if (!sqeResult.passed && _exploStamped && sqeResult.failures.length === 1 && sqeResult.failures[0].startsWith('NetEV ')) {
-      console.log(`[P19-B8.5][EXPLORATION_REFRESH_PASS] ${normalizedSymbol}: NetEV-only refresh failure on an exploration-stamped signal — stamp honored, signal retained`);
-    } else if (!sqeResult.passed) {
-      await storage.deleteRtbSignals({ mode, id: signal.id });
-      performanceMonitor.recordQueueRemove(1);
-      console.log(`[11.0E][REFRESH_COMPLETE] symbol=${normalizedSymbol} DELETED reason=${sqeResult.reason}`);
-
-      this.signalRefreshStates.delete(this._refreshKey(mode, signal.signalId));
-      return { passed: false };
-    }
-    
-    // Directive 11.0E + 11.3A: Update signal with FinalScore-native metrics + net geometry
-    await storage.updateRtbSignal(signal.id, {
-      status: 'reconfirmed',
-      confidence: confidence.toString(),
-      finalScore: refreshedFinalScore.toString(),
-      lastRefreshedAt: now,
-      // P19-B7.2b (OBJ-E): refresh the maker/taker decision snapshot on current data
-      // when it was re-run this tick (geometry shifted); otherwise the gen-time snapshot
-      // stands. chosen_net_ev is what the [11.8B] open-gate + the B7.1 ranker read, so
-      // keeping it current means a signal reconfirming in the RTBQ is gated + ranked on
-      // its LIVE best-of-both, not a stale gen-time number.
-      ...(_b72bRefreshedMT ? {
-        chosenEntryMode: _b72bRefreshedMT.chosenMode,
-        chosenNetEv: _b72bRefreshedMT.chosenNetEV.toString(),
-        takerNetEv: _b72bRefreshedMT.takerNetEV.toString(),
-        makerNetEvAdjusted: _b72bRefreshedMT.makerNetEVAdjusted.toString(),
-      } : {}),
-      metadata: {
-        ...metadata,
-        lastReconfirmedAt: now.toISOString(),
-        originalFinalScore: originalFinalScore.toString(),
-        decayPenalty: decayPenalty,
-        hybridScore: hybridScore,
-        regimeWeight: refreshedRegimeWeight,
-        // Directive 11.3A: Net geometry fields
-        netExpectedEdge: netExpectedEdge,
-        volatility: currentVol,
-        spread: currentSpread,
-        lastCostRefresh: geometryRefreshed ? Date.now() : (metadata.lastCostRefresh ?? 0),
-      }
-    });
-    
-    console.log(`[11.0E][REFRESH_COMPLETE] symbol=${normalizedSymbol} RECONFIRMED FinalScore=${refreshedFinalScore.toFixed(4)} decayPenalty=${decayPenalty.toFixed(4)}${geometryRefreshed ? ' (geometry refreshed)' : ''}`);
-    return { passed: true };
-  }
-
-  /**
-   * Phase 8.8.4-C.5: Execute a single refresh cycle
-   * - Cleans up expired signals
-   * - Re-evaluates queue quality
-   * - Logs pool status
-   * 
-   * Directive 8.8.4-A1-Extended: Also triggers refreshAndRank for dynamic re-ranking
-   * Directive 8.8.4-A3.R1: Only runs when engine is active for this mode
-   */
-  private async executeRefreshCycle(mode: TradingMode): Promise<void> {
-    // Directive 8.8.4-A3.R1: Engine-aware refresh control
-    // Only run refresh cycle when trading engine is active for this mode
-    // P19-B6.5b (F1b / RUNNING_ISSUES #320): per-class defense-in-depth is now IN (the audit proved the
-    // crypto entry gate could be bypassed at the pool layer — structurally fixed in F1). Purge any
-    // stale queued signal whose per-class gate is OFF BEFORE the re-eval/re-rank/promotion downstream.
-    const systemContext = await storage.getSystemContext(mode);
-    if (!systemContext?.isEngineActive) {
-      return; // Skip refresh when engine is inactive (passive learning mode)
-    }
-    await this.purgeInactiveClassSignals(mode, systemContext);
-
-    const startTime = Date.now();
-    
-    // Step 1: Clean up expired signals
-    const expiredCount = await this.cleanupExpiredSignals(mode);
-    
-    // Step 2: Re-evaluate remaining signals
-    const { removed, remaining } = await this.reEvaluateQueue(mode);
-    
-    // Step 3: Refresh and re-rank signals by FinalScore
-    await this.refreshAndRank(mode);
-    
-    // Step 4: Get TCL status
-    const tclStatus = await this.getTCLStatus(mode);
-    
-    const elapsedMs = Date.now() - startTime;
-    
-    console.log(
-      `[8.8.4-C.5][RTB_REFRESH] mode=${mode}, expired=${expiredCount}, removed=${removed}, ` +
-      `remaining=${remaining}, poolSize=${tclStatus.poolSize}, TCL=${tclStatus.isActive ? 'ACTIVE' : 'WARMING'} ` +
-      `(${tclStatus.progressPercent.toFixed(1)}%), elapsed=${elapsedMs}ms`
-    );
-    
-    // Directive 8.8.4-A3.R9.0: Synchronize TCL promotion events with live query
-    // Check signal threshold AFTER executeRefreshCycle() and cleanupExpiredSignals()
-    // Uses live database query instead of cached snapshot
-    // Only check if refresh is complete (barrier respected)
-    if (tclStatus.poolSize > 0 && this.isRefreshComplete(mode)) {
-      await tclWatchdog.checkSignalThresholdLive(mode, true);
-      console.log(`[A3.R9.2][TCL_SYNC] TCL threshold check after refresh (live query): poolSize=${tclStatus.poolSize}`);
-    }
-  }
-
   /**
    * Directive 11.0E: Refresh and dynamically re-rank RTB signals using FinalScore
    * 
@@ -1393,7 +1013,9 @@ class ReadyToBuyService {
               const refreshedFinalScore = _acq.refreshedFinalScore;
               const refreshedRegimeWeight = _acq.refreshedRegimeWeight;
 
-              // ── #546 / OBJ-3 — batch-path parity with the single-refresh guard above ──
+              // ── #546 / OBJ-3 — the regimeWeight-absent guard. (OBJ-1 2026-07-22: this used to
+              // read "parity with the single-refresh guard above"; that guard was Mechanism A's
+              // and is now DELETED, so this is THE guard, not a mirror of one.) ──
               // Same trap, same disposition. `?? undefined` would NOT mean "absent" to the
               // SQE; it means RECOMPUTE from `trendStrength ?? 0.5` / `volatility ?? 0.3`,
               // re-pinning the gate at the constant this batch removes.
@@ -1695,12 +1317,19 @@ class ReadyToBuyService {
     }
   }
 
-  /**
-   * Phase 8.8.4-C.5: Check if refresh cycle is running for a mode
-   */
-  isRefreshCycleRunning(mode: TradingMode): boolean {
-    return this.refreshIntervals.has(mode);
-  }
+  // ★ B-RTB-REFRESH-CONSOLIDATE OBJ-1 (#532, 2026-07-22): `isRefreshCycleRunning(mode)` DELETED
+  // (rule 18 — removed, not stubbed; see DELETED_COMPONENTS_LOG).
+  // It returned `this.refreshIntervals.has(mode)` on a map that was declared, read and deleted
+  // from but **never once `.set`** anywhere in the file — so it answered `false` unconditionally,
+  // for every mode, forever, while the refresh WAS running via the Central Clock. Its sole
+  // consumer (`GET /api/diagnostics/rtb-queue/refresher-status`) reported "not running" on a
+  // healthy system for as long as it has existed.
+  // PROVENANCE (rule 24.a): LEGACY, not a fresh defect — the interval-timer model it queried was
+  // superseded by the Central-Clock subscription at Phase 8.8.4-A3.R7 and this accessor was never
+  // re-pointed. Rule-24 class (3): legacy that no longer fits intent.
+  // NOT re-pointed here on purpose: `rtb-refresh-service.ts:22` statically imports THIS module,
+  // so calling back into it would close an import cycle. The endpoint now asks the surviving
+  // mechanism directly (`rtbRefreshService.isActive()`), which is the honest source.
 
   // P19-B6.5b (rule 18 / Langston Q4): `queueSignal` (capacity-block insertion variant) DELETED —
   // zero production + zero test callers. Live admission = queueSQESignal → upsertRtbSignal.
@@ -1932,7 +1561,9 @@ class ReadyToBuyService {
    * 
    * R9.3-C: TTL-based expiry removed. Lifecycle governed by SQE only.
    * This method now only handles legacy 'expired' status signals (immediate delete).
-   * Active signal expiry is handled by SQE revalidation in executePerSignalRefresh().
+   * Active signal expiry is handled by SQE revalidation in the bucketed refresh
+   * (RTBRefreshService → refreshAndRank). [B-RTB-REFRESH-CONSOLIDATE OBJ-1: was
+   * executePerSignalRefresh, retired 2026-07-22.]
    */
   async cleanupExpiredSignals(mode: TradingMode): Promise<number> {
     let cleanedCount = 0;
