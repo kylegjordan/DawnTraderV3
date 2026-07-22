@@ -153,4 +153,26 @@ Zero asset-class references in 321 lines, in the component that watches TCL prom
 
 **Why this belongs in a flow doc rather than only in the issue ledger:** dormancy is a property of an EDGE (what arrives, and whether it is sufficient to trigger the next thing) — not a property of a component. Neither the Manual nor the SIM has a natural place to record "this behaviour is only quiet because its input never arrives."
 
-## 5. THE HOPS — *(in construction; the RTB hop above is the first worked example)*
+## 5. THE HOPS
+
+### HOP E→F — RTB QUEUE → OPEN POSITION (promotion). *Both classes; no divergence found at this edge.*
+
+**Driver:** `active-execution-engine.ts:344` `continuousPromotionInterval`. **Census — writers of `active_open_positions`: EXACTLY ONE** — `storage.ts:3324` (`db.insert(activeOpenPositions)`). Stated explicitly as a single-member list per rule 22; the create-path is not duplicated.
+
+**What is handed over, and in what order — the ordering is the load-bearing part.** Per Directive 8.8.4-A3.R1 the removal from the queue **deliberately precedes** trade creation, to prevent double-activation:
+
+| Step | Site | Action |
+|---|---|---|
+| 1 | `:2197` | `promoteSignal(signal.id, 'pending')` — **removes from the RTB queue FIRST**, with a sentinel where the trade id will go |
+| 2 | `:2200` | `executePromotedSignal(signal)` — creates the trade |
+| 3 | `:2205` | `promoteSignal(signal.id, tradeResult.tradeId)` — writes the REAL id, **only** `if (tradeResult.success && tradeResult.tradeId)` |
+
+> **`'pending'` is a deliberate ordering sentinel, NOT a placeholder defect.** Checked before characterising it (rule 24). The two-call shape exists so the queue-removal cannot lose a race with trade creation.
+
+**★ WHAT CAN SILENTLY DROP THE PAYLOAD HERE — and the honest answer is: nothing silently, but a signal CAN be lost.**
+If step 2 fails, the signal has **already left the queue** and is **deliberately not restored**. The code says so in its own words at `:2228`: *"Signal … was removed from RTB but trade failed - signal not restored."* Two `console.warn`s fire and `failedCount` increments, with a `PROMOTION_SUMMARY` line carrying `promoted=` / `failed=`. **This is fail-loud and working-as-designed** — an explicit trade-off preferring a lost signal over a double-activation. **Recorded as edge semantics, NOT filed as a defect.**
+
+**⭕ OPEN QUESTION for this hop (cross-reference, not a new finding).** The success branch calls `recordActiveRtbRefresh(mode, class, { promoted: 1 })` (`:2233`); **the failure branch calls no funnel recorder at all.** So a signal leaving the queue via a *failed* promotion is visible in logs but may not appear in the funnel counters — and it is neither a "promoted" nor a refresh-pass outcome. **That lands exactly on the counter-semantics distinction already documented in `active-funnel-tracker.ts:76`** (queue-LIFECYCLE exits ≠ refresh-PASS outcomes, the eight deleters). ⇒ Cross-reference to that existing, governed work; **do not file separately** (§9.5(b-ii)). Confirm when the counter set is next touched.
+
+**Dormant-by-decision or dormant-by-defect (§4e):** neither — this edge is live and firing.
+**Absence behaviour (§4d):** on absence of a trade id, it **propagates the failure** (logs + counts) rather than substituting — correct, and the opposite of the `??` class.
