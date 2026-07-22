@@ -4557,6 +4557,7 @@ The engine checks four exit conditions in order:
 | `stop_hit` | `currentPrice <= stopLoss` | 2nd |
 | `trailing_stop_hit` | `currentPrice <= trailingStopPrice` (from metadata HWM) | 3rd |
 | `max_holding_period` | `hoursHeld >= maxHours` (from metadata) | 4th |
+| ↳ **P19-B8.5f (2026-07-22) — this row became TRUE IN FACT for the first time.** The manual documented this exit as live from the start, but `maxHoldingMs` never reached the position: the sized-signal metadata is rebuilt from an explicit field list at `signal-orchestrator.ts:1059-1077` and `rawSignal.metadata` was never spread, so the key died in transit (#550). The branch is gated on the key being present ⇒ **skipped for every position, 0 `max_holding_period` closes in the entire `closed_trades` history, 0 of 15 live positions carrying a limit.** The carry is now enforced by a REQUIRED field on the `SQESignalMetadata` transit contract, so dropping it again is a compile error, not a silent regression. | — |
 
 ### 3.7 Position Close: closePosition()
 
@@ -5284,7 +5285,7 @@ const closeReasonMap = {
   'stop_hit': 'SL',
   'target_hit': 'TP',
   'trailing_stop_hit': 'TRAILING_STOP',
-  'max_holding_period': 'UNKNOWN',  // ← Could be improved
+  'max_holding_period': 'MAX_HOLD',  // P19-B8.5f OBJ-5 (was 'UNKNOWN' — see RISK-035)
   'guardrail': 'KILL_SWITCH',
   'manual_stop': 'MANUAL'
 };
@@ -5482,7 +5483,7 @@ reorg-B4 attaches a **selection-quality telemetry layer** to the promotion bound
 | RISK-032 | **MEDIUM** → ACCEPTED | MicroExecutionService `triggerSymbolCheck()` is a TODO stub. | **Accepted** — experimental/dormant. Leave hidden. |
 | RISK-033 | **LOW** | `trade-flow.ts` StrategyType only lists 9 strategies vs. 17 canonical. | Concurrent with BUG-002/003 fix. |
 | RISK-034 | **LOW** | Failed RTB promotion does not restore signal to queue. | No immediate action. |
-| RISK-035 | **LOW** | `max_holding_period` exit maps to close reason 'UNKNOWN'. | No immediate action. |
+| RISK-035 | ~~LOW~~ → **RESOLVED (P19-B8.5f, 2026-07-22)** | `max_holding_period` exit mapped to close reason `'UNKNOWN'`. ⚠️ **The "LOW" rating was only ever true because the exit had NEVER FIRED** — `maxHoldingMs` was dropped by the sized-signal metadata rebuild before it reached the position (#550), so the branch was skipped for every position and no close was ever mislabelled. **P19-B8.5f OBJ-1 makes the exit fire, which would have promoted this dormant mis-label to live and put a wave of `UNKNOWN` closes into the trade tables** — the exact surface B8.10 existed to make truthful. | **Fixed in the same batch (OBJ-5):** `max_holding_period` → `MAX_HOLD`, added to the close-reason union in both the engine map and the AJ19B event type. Safe to extend: `close_reason` is `varchar(40/50)` (no pg enum, no CHECK constraint) and no consumer switches exhaustively on the union. **★ Lesson worth keeping: a risk rated LOW *because a code path is dormant* is a live risk the moment that path is repaired — re-read dormancy-justified ratings whenever the dormancy ends.** |
 | RISK-036 | **MEDIUM** → INFORMATIONAL | TradingEngine exit slippage uses `Math.random()` in live mode. | **Deferred** — bundled with BUG-010/011. |
 
 ### NLAI Deprecation (Phase 5 Addendum — Kyle, 2026-02-16)
