@@ -13,6 +13,9 @@ import {
   getCachedSigma,
   __resetSigmaCacheForTests,
   __seedSigmaForTests,
+  __seedClasswideForTests,
+  __getClasswideForTests,
+  expireClasswideIfStale,
   type SigmaCacheConfig,
 } from '../../asset_classes/xstock_spot/sigma-rate-cache.js';
 
@@ -69,6 +72,24 @@ describe('P19-B8.5e — σ cache: a stale statistic must FAIL CLOSED, not persis
     __seedSigmaForTests('Cx', RESOLVED, T0);
     expect(getCachedSigma('MUx', CFG, T0)).toBeNull();
     expect(getCachedSigma('Cx', CFG, T0)).not.toBeNull();
+  });
+
+  it('★ the CLASS-WIDE σ expires on the SAME bound — it must not outlive a refresh outage', () => {
+    // Langston's Step-4 find: classwide was refreshed-or-KEPT and never dropped, so a
+    // persistent outage left the last-good value feeding every not-yet-earned symbol
+    // forever — and if class-wide volatility ROSE during that outage, a stale-LOW σ widens
+    // windows. This is the branch that makes "everything ages toward the floor" true
+    // without an asterisk, so it gets pinned rather than assumed.
+    __seedClasswideForTests(9e-5, T0);
+    expireClasswideIfStale(T0 + CFG.maxAgeMs, CFG.maxAgeMs); // exactly at the bound — kept
+    expect(__getClasswideForTests()).toBe(9e-5);
+    expireClasswideIfStale(T0 + CFG.maxAgeMs + 1, CFG.maxAgeMs); // past it — dropped
+    expect(__getClasswideForTests()).toBeNull();
+  });
+
+  it('class-wide expiry is a no-op when nothing is cached (must not throw into a refresh)', () => {
+    expect(() => expireClasswideIfStale(T0, CFG.maxAgeMs)).not.toThrow();
+    expect(__getClasswideForTests()).toBeNull();
   });
 
   it('carries the σ SOURCE through so a log reader can tell earned from inherited', () => {

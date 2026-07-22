@@ -115,16 +115,8 @@ export function ensureSigmaFresh(symbols: string[], cfg: SigmaCacheConfig, nowMs
       .finally(() => { classwideInFlight = false; });
   }
 
-  // ★ EXPIRE the class-wide σ on the SAME maxAge bound as per-symbol entries (Langston
-  // Step-4, 2026-07-22 — he caught that this was refreshed-or-KEPT and never dropped).
-  // Without this the last-good class-wide σ survives a persistent refresh outage forever
-  // and keeps feeding every not-yet-earned symbol's re-resolve. Bounded (upper-percentile,
-  // sub-threshold symbols only) but it bites in exactly the bad direction if class-wide
-  // volatility ROSE during the outage — a stale-LOW σ widening windows. Dropping it makes
-  // the module's "everything ages toward the floor" invariant true WITHOUT an asterisk.
-  if (classwide !== null && nowMs - classwide.computedAtMs > cfg.maxAgeMs) {
-    classwide = null;
-  }
+  // ★ Expire a class-wide σ that has aged out (rationale on the function itself).
+  expireClasswideIfStale(nowMs, cfg.maxAgeMs);
 
   for (const symbol of symbols) {
     if (inFlight.has(symbol)) continue;
@@ -147,6 +139,37 @@ export function ensureSigmaFresh(symbols: string[], cfg: SigmaCacheConfig, nowMs
       })
       .finally(() => { inFlight.delete(symbol); });
   }
+}
+
+/**
+ * Expire the class-wide σ once it passes the SAME `maxAgeMs` bound the per-symbol entries
+ * use.
+ *
+ * ★ WHY THIS EXISTS (Langston, Step-4 2026-07-22): the class-wide σ was refreshed-or-KEPT
+ * and never dropped, so a persistent refresh outage left the last-good value feeding every
+ * not-yet-earned symbol's re-resolve FOREVER. Bounded (upper-percentile, sub-threshold
+ * symbols only) — but it bites in exactly the bad direction if class-wide volatility ROSE
+ * during the outage: a stale-LOW σ widens windows. Same fail-open class as the stale-low-σ
+ * hole in `mark-staleness`, reached from the other end.
+ *
+ * EXTRACTED from `ensureSigmaFresh` so this branch can be pinned WITHOUT a database —
+ * Langston's ask, and his reasoning was that an untested expiry branch IS the asterisk this
+ * fix existed to remove.
+ */
+export function expireClasswideIfStale(nowMs: number, maxAgeMs: number): void {
+  if (classwide !== null && nowMs - classwide.computedAtMs > maxAgeMs) {
+    classwide = null;
+  }
+}
+
+/** Test/diagnostic seam: seed the class-wide σ without a database. */
+export function __seedClasswideForTests(value: number, computedAtMs: number): void {
+  classwide = { value, computedAtMs };
+}
+
+/** Test/diagnostic seam: read the class-wide σ (null once expired). */
+export function __getClasswideForTests(): number | null {
+  return classwide?.value ?? null;
 }
 
 /** Test seam — deterministic state between cases. Not for production use. */
