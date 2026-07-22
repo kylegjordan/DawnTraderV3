@@ -104,7 +104,29 @@ CC-A attacked §1 with the sharpest sentence said about this proposal: ***"'GitH
 - Put a **pre-push hook in the `C:\dev` bench that refuses to push, full stop** — the 06-01 failure becomes structurally impossible rather than forbidden-by-convention.
 - Make the Drive↔GitHub divergence check a **machine gate at batch close**, not a remembered step.
 
-**If Option C holds, Kyle's proposal should be judged only on what remains — the two-trees ergonomics and worktrees for the #557 index race — and those may not require touching §7.1 at all.** **No recommendation between A (relocate) and C (enforce) yet; that is a Step-2 decision and ultimately Kyle's.** Open question for Langston: does Option C genuinely close 06-01, or does it just relocate the trust?
+### ★★ PROVENANCE RE-DERIVED FROM THE REF — this changes the answer, and it retires half of Option C
+
+Langston refused to let either of us assert the cause of 06-01 from memory and required it be re-derived. **It was, and neither of the two candidate causes was right.** *(Citation independently re-read at the ref by Langston, not accepted on report.)*
+
+**Commit `b843d110a` (2026-06-01), "Governance resync: rescue 3 Google-Drive-only items missing from GitHub master" — verbatim from its own body:**
+
+> *"The Google Drive clone's git pointer **froze 2026-05-28 (B-NEW-46)** and governance was committed from the `C:\dev` working copy **thereafter**, so a few items authored directly in the Google Drive folder never reached GitHub."*
+
+**THE ACTUAL CAUSAL CHAIN — the divergence was BIDIRECTIONAL and the bench push was the CONSEQUENCE, not the cause:**
+1. **ROOT: the Drive clone's git pointer FROZE on 2026-05-28.** A git-level failure on the authoritative tree — **not** a discipline failure and not anyone ignoring the rule.
+2. Because Drive's git was unusable, work was committed from the bench **as a workaround** ⇒ GitHub ran ahead of Drive (the 42 commits).
+3. At the same time, items **authored directly in the Drive folder could not be committed from there at all** ⇒ Drive-only content missing from GitHub. **Three were rescued, including a Kyle directive** (`POST_AUDIT_ROADMAP` row 25-11, order-book-aware sizing), stranded outside master for days.
+
+**⇒ CONSEQUENCE 1 — THE PRE-PUSH HOOK IS WITHDRAWN, not demoted.** It would not have prevented 06-01. It would have **blocked the workaround people were using precisely because the authoritative tree's git was broken** — stopping work, or forcing a worse workaround. It targets the symptom and punishes the coping. *(The original "structurally impossible" phrasing was also a false-absence claim in its own right — a pre-push hook is per-clone, absent on fresh clones, and bypassable with `--no-verify`.)*
+
+**⇒ CONSEQUENCE 2 — THE SENTENCE THAT SHOULD LEAD THIS TO KYLE:** **§7.1's own summary describes the bench-push SYMPTOM and never names the frozen pointer — so the rule as written would not have prevented the incident it was written after.**
+
+**⇒ CONSEQUENCE 3 — the central both-directions divergence gate is the only surviving control**, because it works regardless of cause: bench push, deploy-side commit, hookless clone, **or a frozen pointer on the authoritative tree.**
+> ⚠️ **VERB DISCIPLINE (Langston, and it cuts against my own argument):** the gate **CATCHES / SURFACES** divergence — it does **NOT PREVENT** a pointer freeze. It would have *surfaced* 06-01 within one batch instead of 42 commits. Do not let that inflate into "would have prevented."
+
+**⇒ CONSEQUENCE 4 — the gate is worth building whether or not Kyle changes anything.** It protects today's layout exactly as much as any proposed one.
+
+**⇒ NET: relocation now stands or falls on ergonomics + worktrees for #557 alone, and §7.1's DIRECTION may not need to be touched at all.** That is a far smaller decision than reversing a set-in-stone rule. **No recommendation between A (relocate) and C-as-revised (central gate) yet — Step-2, and ultimately Kyle's.**
 
 ---
 
