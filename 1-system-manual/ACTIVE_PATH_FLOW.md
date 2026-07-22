@@ -139,4 +139,18 @@ Zero asset-class references in 321 lines, in the component that watches TCL prom
 
 ⇒ **Every hop written in §5 must state, explicitly: what happens when the payload is ABSENT at this edge.** Three honest answers — it throws · it propagates the absence · **it substitutes** — and if it substitutes, *what with, and does the consumer know*. A hop that does not answer this is not finished. Cross-reference the in-flight item rather than duplicating it.
 
+## 4e. TRACKED EDGE-CLASS — **DORMANT-BY-DEFECT vs DORMANT-BY-DECISION** (CC-B's class, adopted; twice-evidenced 2026-07-22)
+
+**The class:** a behaviour reads as OFF. Everyone assumes someone decided that. **Nobody did — it is off because an upstream defect starves its input.** The trap: *repairing the bug IS the behaviour change*, and nobody reading the fix would expect that. **A bug was doing the job of a config setting.**
+
+**Two instances in one day** (CC-B surfaced both; the second is where I was wrong and he corrected me):
+1. **RISK-035** — a risk scored LOW *because a code path was dormant*, and the dormancy was itself caused by a defect.
+2. **The trailing ladder** — `trailing-exit-controller.ts:1216` gates on `state.targetLatched && state.ATR > 0`. **There is NO operator flag on that path.** `targetLatched` is set purely by price reaching target (`:1153`). ATR is always `0` because of a transit drop ⇒ the ladder has **never run**. Restore ATR and it goes live in the same motion.
+   > ★ **AND THE CONTRAST THAT MAKES THE CLASS PRECISE** — the *break-even* latch at `:1078` gates on `cfg.breakEvenEnabled && … && state.ATR > 0`: a **real** operator flag, verified `false` for all four asset classes in live `module_constants`, xstock_spot set false **2026-05-21 by `kyle-directive-2026-05-21-disable-xstock-be`**. So break-even IS dormant-by-decision and repairing ATR does *not* wake it. **Same file, same input, two different answers — which is exactly why this must be asked PER EDGE and cannot be answered per component.**
+   > ⚠️ **Stale self-description found in passing:** the code comment block at `:117` still records `xstock_spot → true (BE-protect enabled)`. The live DB says `false` since Kyle's directive ten days later. **The code's description of itself is stale; the DB is the truth.** Recorded, not fixed by me (not my file).
+
+⇒ **EVERY HOP MUST ANSWER: is this edge's behaviour OFF by decision, or OFF by defect?** and name the evidence — a config key with its live value, or the starved input. **"It doesn't currently fire" is not an answer.** A hop that cannot distinguish these two has not been audited; it has been glanced at.
+
+**Why this belongs in a flow doc rather than only in the issue ledger:** dormancy is a property of an EDGE (what arrives, and whether it is sufficient to trigger the next thing) — not a property of a component. Neither the Manual nor the SIM has a natural place to record "this behaviour is only quiet because its input never arrives."
+
 ## 5. THE HOPS — *(in construction; the RTB hop above is the first worked example)*
