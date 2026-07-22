@@ -255,7 +255,19 @@ export class ActiveExecutionEngine {
     };
   }
 
-  private async _recordPriceSkip(position: { id: string; symbol: string; assetClass?: unknown }, reason: string): Promise<void> {
+  /**
+   * ★ THE MESSAGE MUST NOT CLAIM MORE THAN IT KNOWS (Analyst + Langston, 2026-07-22).
+   * This alert previously asserted two things that were FALSE for the staleness case:
+   * *"neither the live feed nor the direct query returned a usable price"* and *"the
+   * position cannot be exited until the venue quotes again."* Measured while it was firing
+   * on six symbols: every one had a mark **40-156s old** — the venue WAS quoting, and a
+   * price DID exist. It was REJECTED as too old, which is a different fact with a different
+   * response. **"Cannot be exited" is a claim about CAPABILITY; "the mark is older than the
+   * ceiling" is what is actually known** — and an operator who reads the first one goes
+   * hunting a dead feed that isn't dead. `detail` carries the two numbers (mark age and the
+   * ceiling it crossed) so the reader can judge without re-querying.
+   */
+  private async _recordPriceSkip(position: { id: string; symbol: string; assetClass?: unknown }, reason: string, detail?: string): Promise<void> {
     const streak = (this._priceSkipStreak.get(position.id) ?? 0) + 1;
     this._priceSkipStreak.set(position.id, streak);
     let threshold = 40; // fail-safe default if the knob is cold — ~1 min at the monitor cadence
@@ -265,15 +277,29 @@ export class ActiveExecutionEngine {
         { exchange: '*', assetClass: _cls, strategy: '*', regime: '*' });
     } catch { /* knob cold — the default above stands; the alert still fires */ }
     if (streak === threshold) {
-      console.error(`[P19-B8.5][PRICE_SKIP_ESCALATION] ${position.symbol}: ${streak} consecutive exit-monitor ticks with NO venue price (${reason}) — position unmanageable this window; raising system alert`);
+      // A staleness REJECTION and a genuine ABSENCE are different facts and get different
+      // words. `reason` already discriminates them, so branch on it rather than asserting
+      // the worse of the two for both.
+      const _staleReject = reason.startsWith('equity_tick_stale');
+      const _cause = _staleReject
+        ? `the most recent mark was older than this symbol's freshness ceiling${detail ? ` (${detail})` : ''}, so it was not trusted for a stop/target decision`
+        : `neither the Kraken live feed nor the Kraken direct query returned a usable price (${reason})`;
+      const _consequence = _staleReject
+        // TRUE statement: we declined to act on THIS tick. NOT "cannot be exited" — the
+        // venue may well be quoting, just not recently enough for the ceiling.
+        ? `Exit evaluation resumes automatically on the next tick inside the ceiling. This does NOT mean the venue is down or the position is unexitable — check the mark age against the ceiling before investigating the feed.`
+        : `The position cannot be evaluated against a venue price until the venue quotes again. If this persists, investigate the feed/subscription for this pair.`;
+      console.error(`[P19-B8.5][PRICE_SKIP_ESCALATION] ${position.symbol}: ${streak} consecutive exit-monitor ticks not evaluated (${reason}${detail ? `; ${detail}` : ''}) — raising system alert`);
       try {
         const { addAlert } = await import('./system-alerts.js');
         await addAlert({
           triggers_at: new Date(),
           category: 'breakage',
           severity: 'warning',
-          title: `Open position unmanageable — no Kraken price for ${position.symbol}`,
-          body: `The exit monitor has skipped ${streak} consecutive ticks for the open ${this.mode} position on ${position.symbol} because neither the Kraken live feed nor the Kraken direct query returned a usable price (${reason}). The position cannot be exited until the venue quotes again. If this persists, investigate the feed/subscription for this pair.`,
+          title: _staleReject
+            ? `Exit checks skipped — mark older than ceiling for ${position.symbol}`
+            : `Open position unmanageable — no Kraken price for ${position.symbol}`,
+          body: `The exit monitor has skipped ${streak} consecutive ticks for the open ${this.mode} position on ${position.symbol} because ${_cause}. ${_consequence}`,
           dedupe_key: `price-skip-${this.mode}-${position.symbol}`,
         });
       } catch (alertErr) {
@@ -1041,7 +1067,10 @@ export class ActiveExecutionEngine {
             await this._recordPriceSkip(position,
               _ceiling.floorBoundNearStop
                 ? 'equity_tick_stale_floor_bound_near_stop'
-                : `equity_tick_stale_${_ceiling.basis}`);
+                : `equity_tick_stale_${_ceiling.basis}`,
+              // The two numbers Langston asked for, so the alert reader can judge without
+              // re-querying: how old the mark is, and the ceiling it crossed.
+              `mark ${Math.round(_eqAge / 1000)}s old, ceiling ${Math.round(_ceiling.ceilingMs / 1000)}s`);
             continue;
           }
           currentPrice = _eqTick.price;
