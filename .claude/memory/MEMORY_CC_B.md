@@ -38,7 +38,22 @@ Claude New (CC-B). Discord display name **"NEW Claude"** (exact `--sender` value
 
 ## ★★★ CURRENT STATE (2026-07-22 late) — B8.5e DEPLOYED + VERIFIED; QUEUE-2 (trailing switch) IS NEXT
 
-**⛔ B8.5e IS *NOT* CLOSED — ITS HEADLINE CLAIM IS DISPUTED AND THE DISPUTE IS MINE (2026-07-22 ~21:15). DO NOT MARK IT CLOSED WITHOUT RESOLVING THIS.**
+**✅ B8.5e CLOSED 2026-07-22 ~21:35 — Langston Step-8, ON THE AMENDED TEXT.** Mechanism shipped + correct; **claim corrected TWICE before close.** `#548` = `RESOLVED (mechanism) — CALIBRATION RESIDUAL REOPENED UNDER #566`. **NEXT = QUEUE-2 P19-B8.5i Step-2 pre-audit** (trailing switch, TWO flags, Langston's 2 Step-1 conditions — he will check them against the FILE, not my summary; stage an inbox file).
+
+**★★ THE LESSON THAT COST THE MOST TODAY — READ BEFORE ANY FINDING:** I made **five** confident claims resting on something unmeasured. Three were caught by peers, one by the system, one by me. **The fifth I committed INSIDE the amendment written to correct the fourth.** Pattern, every time: *a coherent story felt like a verified one.*
+- assertion blamed an APPLIED migration (never queried it) → took staging down
+- cited a CI run for commits it did NOT contain (`73346765f`) → Langston
+- claimed fail-closed while σ **divided**, so stale-low σ WIDENED → ANALYST
+- classwide σ never expired → Langston
+- **attributed 5 alerts to my deploy without checking a TIMESTAMP — 3 of 5 (MOS/ARKK/PM 20:35:15Z) PREDATE it (my deploy 20:42:32Z / restart 20:44:33Z); only C+CDNS were mine** → ANALYST, 30-second check
+**⇒ BEFORE asserting a cause: check its ARITHMETIC and its TIMESTAMP (24.a). Knowing this pattern did NOT stop me repeating it — only someone else's cheap check did. Ask for one.**
+
+**★ B8.5e RESIDUALS — homed, do NOT re-litigate:** `#566` owns BOTH tails (stale-low σ WIDENS = danger · inherited-high σ OVER-TIGHTENS = ARKK) — same root, opposite sign, **and one knob does two jobs: `WHERE obs >= minObservations` (`sigma-rate.ts:178-181`) gates BOTH self-eligibility AND the percentile POPULATION**, so moving it moves both tails. **Never re-tune it on the soak.** `#563` venue-resting exits = the only real fix for near-stop staleness. `#567` value-plausibility (a mark can be FRESH and WRONG).
+**★ ARKK RELIEF THIS SOAK = KYLE'S DECISION** (risk posture), surfaced + notified, NOT actioned. **Live `equity_tick_stale` on the low-obs inheritors is the visible face of #566, not a new fire — conservative stands.** The 3 B8.5e docgap alerts are a STALE-CHECKER false positive — **do NOT N/A them**, they self-clear.
+
+---
+
+**⛔ (superseded) B8.5e WAS NOT CLOSED — ITS HEADLINE CLAIM IS DISPUTED AND THE DISPUTE IS MINE (2026-07-22 ~21:15). DO NOT MARK IT CLOSED WITHOUT RESOLVING THIS.**
 Langston gave **Step-8 PASS on the CODE** (six commits ancestry-verified, System Manual substantive, the three "missing governance doc" alerts are a stale-checker false positive — his clone sits 3 behind `a193fd45c`; they self-clear, owner = CC-A's checker advance). **I did NOT bank the pass**, because:
 **`sigma_min_observations = 200` IS MISCALIBRATED AND I SEEDED IT.** Measured obs/30min for our 15 held symbols: only **MU 385 · SKHY 350 · INTC 326 · ORCL 246** clear 200. **11 of 15 inherit the class-wide σ**, and the five alerting symbols are the five lowest — ARKK 21 · MOS 17 · C 17 · PM 26 · CDNS 35. ARKK inherits σ=2.609e-4/s vs its OWN 2.931e-5/s (**~9× too harsh**) ⇒ 55s ceiling.
 **THE ARITHMETIC LANGSTON'S "no regression" READ DOESN'T SURVIVE:** the constant we REMOVED was **90s**. ARKK's mark at **69-79s** was ACCEPTED under the flat 90s rule and is **REFUSED** under my 55s ceiling. ⇒ **for ARKK — the original 49-refusals/24h victim — B8.5e is a REGRESSION in the direction #548 existed to fix.** Venue-quiet supplies the stale mark; MY seed supplies the over-strict refusal; ARKK needs BOTH to alert. Not separable.
