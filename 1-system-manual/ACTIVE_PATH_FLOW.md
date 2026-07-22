@@ -89,4 +89,25 @@ Single-member lists are stated **explicitly as such** — an asserted absence ne
 
 ---
 
-## 5. THE HOPS — *(not yet written; §4 classification precedes it)*
+## 4b. FIRST CLASSIFICATION PASS — and a NEAR-MISS worth recording
+
+**Drivers identified (scheduling primitives that plausibly move the active path):** `signal-orchestrator.ts:342` (evaluation loop) + `:347` (weights refresh) · `active-execution-engine.ts:344` (**continuous promotion**) + `:545` (monitoring) · `trailing-exit-controller.ts:207` · `micro-execution-service.ts:97` · `central-clock.ts:69` (the tick everything else rides). **Observers (not drivers):** `rtb-metrics-service.ts:645` (invariant check) · `active-engine-heartbeat.ts:37`.
+
+**Central-clock subscribers — the enumeration a forward trace cannot produce:** `ready_to_buy_service.ts:674` (`RTB_${mode}`) · `rtb-refresh-service.ts:214` (`RTBRefreshService`) · `tcl_watchdog.ts:126` · `trading_scheduler.ts:66` · `fx5-scanner.ts:611` · `xstock_spot/scanner.ts:251` · `market-events.ts:411`.
+
+### ★ NEAR-MISS — two clock subscribers over the RTB queue is NOT a finding. Cross-reference only.
+
+Seeing `ready_to_buy_service` **and** `rtb-refresh-service` both subscribed to the clock over the same queue is the dual-mechanism shape, and the reflex is to file it. **§9.5(b-ii) says search the ledger first — and the code names its own provenance.** `active-funnel-tracker.ts:76` carries a comment citing **"B-RTB-REFRESH-CONSOLIDATE OBJ-4 (2026-07-19, CORRECTED after Langston CHANGES-NEEDED)"** and **"the §9.5(a) census's eight deleters."** So the census exists, the consolidation is governed and in flight (CC-A), and filing this as a discovery would have been the exact error §9.5(b-ii) exists to prevent — *a deliberate, Kyle-approved, Langston-reviewed decision reported as a defect is worse than no finding.* **Disposition: cross-reference to the in-flight consolidation, not a new issue.**
+
+### ★ THE REAL CONTENT THAT NEAR-MISS EXPOSED — and it validates the spine choice
+
+The same comment documents a trap that is **exactly** what this doc is supposed to own, and that neither the Manual nor the SIM does: **queue-LIFECYCLE exits and refresh-PASS outcomes are DIFFERENT SETS, and summing them produces an identity that can never hold.**
+- `promoted` fires in `active-execution-engine.ts:2223` — **a different service**, not a pass outcome.
+- The unclassifiable drop **returns before `refreshedAttempted` increments** — it never enters the denominator.
+- Expiry lives in `cleanupExpiredSignals`, **outside `refreshAndRank` entirely.**
+
+⇒ **Eight distinct ways a row can leave `rtb_signals`**, only some of which are refresh-pass outcomes. That is an edge-semantics fact about a handoff — precisely the "what silently drops the payload" content Langston ruled should be the spine. It is recorded here as the model for how each hop gets written.
+
+**Method note, generalisable:** the deleter/scheduler census is what surfaced this in one pass. A forward trace would have found *a* refresh, produced a coherent story, and moved on — which is how this class survived two audits.
+
+## 5. THE HOPS — *(in construction; the RTB hop above is the first worked example)*
