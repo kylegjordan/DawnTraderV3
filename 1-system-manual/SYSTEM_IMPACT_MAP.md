@@ -294,6 +294,7 @@ Kill-switch is **DB-backed per-mode**: `isKillSwitchTripped(mode)` (`guardrail-p
 - **Shared State**: WebSocket connection state, subscription list
 - **Execution**: **Persistent connection** — event-driven, always running while server is up
 - **Blast Radius**: **HIGH** — all real-time pricing depends on this
+- **★ CLASS-FILTERED SUBSCRIPTION SOURCE (B-WS-SUBSCRIBE-CLASS-FILTER #559 OBJ-2, 2026-07-23):** this is the **crypto** adapter — it serves ONLY `crypto_spot`. Its I8C open-positions provider (`active-execution-engine.ts:526`, read by `i8cSubscribeAllOpenPositions` startup / `i8cResubscribeAllOpenPositions` reconnect / the 5s `i8cRunSubscriptionAudit`) now filters to crypto by the **AUTHORITATIVE stored `asset_class`** (stamp→resolve→default; null branch = deduped `[CLASSLESS]` WARN). Before this, xStock open positions (which ride the separate `ws-equities` feed and can never map here) were re-subscribed every 5s ⇒ ~133k futile `SUBSCRIBE_SKIPPED`/day. **⚠️ Do NOT class-filter this adapter by SYMBOL** — plain-form xStock (`C/USD`) is indistinguishable from crypto by string alone; trust the stored class. The bare-symbol `subscribeToSymbols` entry gate (all callers) is NOT yet class-sealed — tracked as #571 `B-WS-SUBSCRIBE-BOUNDARY-CLASS`.
 - **Tests**: None specific (external integration)
 
 ### 2.1.1 Feed-Health Monitoring (P19-B6.7 / #301)
