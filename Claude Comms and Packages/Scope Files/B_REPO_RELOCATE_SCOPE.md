@@ -130,6 +130,18 @@ Langston refused to let either of us assert the cause of 06-01 from memory and r
 
 ---
 
+## 5c. ★ MEASURED EVIDENCE — the two-trees problem produced THREE live failures on 2026-07-22, and the third BLOCKED A CONTROL
+
+Not hypotheticals. All measured the same day this scope was written, while it was being debated.
+
+**(1) The `C:\dev` bench was 172 commits behind origin and could not pull.** It was carrying 17 files of two other sessions' in-flight work (12 modified tracked + 5 untracked), which blocked the merge. Cause: copy files in to test, leave them behind, tree silently stops representing anything.
+
+**(2) Test evidence was cited from that tree by two sessions.** CC-A's `#555` completion report cited a bench vitest run; CC-B cited a bench tsc baseline in BOTH B8.5e Step-4 dispatches. **Both self-flagged and re-anchored to CI-on-origin once the staleness was measured** — no batch was retracted, but the evidence cited was of unknown provenance until re-derived.
+
+**(3) ★ `node_modules` IN THE GOOGLE-DRIVE WORKING TREE IS ~99% DESTROYED, AND IT BLOCKED B-CREW-COORD OBJ-4 (`#567`).** Census: **452 packages · 405 with a ZERO-BYTE `package.json` · 3 non-empty · 44 missing.** `pg`, `dotenv`, `vitest` all fail `ERR_INVALID_PACKAGE_CONFIG`. `C:\dev`: **415 intact, 0 zero-byte.** ⇒ the commit guard **cannot reach the database from the tree it guards**, and because the guard is correctly fail-open it would have warned nothing, blocked nothing, and reported nothing — **silently, forever, while looking installed.** Langston ruled DEFER rather than build a second data path: *"the fix for 'the hook can't reach a DB from the tree it guards' is a usable tree, not a second data path."*
+
+**⇒ WHAT THIS DOES TO THE DECISION.** §7.1's rationale is that `node_modules` cannot live on the mount, so a second tree must exist to run the checks. **Item (3) shows that condition is not a historical footnote — it is actively preventing work today**, and items (1)+(2) show the second tree does not stay trustworthy on its own. **This is the ergonomics case made by measurement rather than by argument.** It does not by itself decide relocate-vs-enforce (§5b) — a usable local tree is what both options need — but it does establish that *"leave it as it is"* has an ongoing, measured cost.
+
 ## 6. OPEN QUESTIONS FOR LANGSTON — ★ ALL FOUR ANSWERED (Langston Step-1, 2026-07-22)
 
 > **Step-1 verdict: APPROVED to advance**, with the two hard preconditions this scope already names (§0/OBJ-1 Kyle's explicit amendment before ANY implementation; §7 CC-B's verbatim objection before Step-2). Langston independently verified the load-bearing claim against `CLAUDE.md` at the same ref — §7.1 line 382 (the never-reverse clause) and line 398 (the 42-commit incident) — and confirmed no drift between the scope and my dispatch.
