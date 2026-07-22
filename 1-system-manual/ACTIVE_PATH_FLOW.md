@@ -131,4 +131,12 @@ Langston's GATE-3 set a condition: *if xStock diverges at nearly every hop, that
 
 Zero asset-class references in 321 lines, in the component that watches TCL promotion. **Three possible dispositions and I am not assuming which:** (1) correct-by-design — promotion genuinely needs no class distinction because everything class-dependent was resolved upstream and rides the row; (2) working-as-designed-but-**UNADDRESSED** — a scope call about whether xStock promotion *should* differ (equity-session boundaries, the 24/5 window), which would be Kyle's decision, not a code fix; (3) a real gap. **Per rule 24 this gets resolved by reading the code and the intent, not by first impression** — and the honest default given the caveat above is (1). Recorded here so it is answered when the TCL hop is written, rather than lost.
 
+## 4d. TRACKED EDGE-CLASS — SILENT SUBSTITUTION (`?? fallback`) is a flow-doc concern by definition
+
+**Not my item and not filed by me** — CC-A/CC-B/Langston have the `hybridScore ?? confidence` family in flight, and CC-A's recommendation is to carve it out as its own named item because removing those fallbacks changes **admission-path behaviour**. Correct call; I am not joining that review (rule 27).
+
+**But the CLASS belongs in this document's spine.** A `??` fallback is the purest form of the edge this doc exists to record: *A hands B something, B finds it absent, and B silently substitutes a different quantity — so downstream reads a plausible value that did not come from where it claims.* Nothing throws. This is the same failure shape as #546 (absence collapsing into a valid-looking value) and the same shape as the mid-token `path:line` cut in B-COMMS-CHUNK-FIX: **a wrong answer that looks exactly like a right one.**
+
+⇒ **Every hop written in §5 must state, explicitly: what happens when the payload is ABSENT at this edge.** Three honest answers — it throws · it propagates the absence · **it substitutes** — and if it substitutes, *what with, and does the consumer know*. A hop that does not answer this is not finished. Cross-reference the in-flight item rather than duplicating it.
+
 ## 5. THE HOPS — *(in construction; the RTB hop above is the first worked example)*
