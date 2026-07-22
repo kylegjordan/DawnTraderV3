@@ -6,6 +6,45 @@
 
 ---
 
+## 2026-07-22 — B-RTB-REFRESH-CONSOLIDATE OBJ-1 (#532): Mechanism A, the duplicate RTB refresh scheduler
+
+**What:** the per-signal, Central-Clock-driven RTB refresh path on `server/core/rtb/ready_to_buy_service.ts` —
+`executePerSignalRefresh` · `refreshSingleSignal` · `startRefreshCycle` · `stopRefreshCycle` · the
+`centralClock.subscribe('RTB_${mode}')` subscription · the `clockTickHandlers` and `refreshIntervals` fields ·
+the `RTB_REFRESH_INTERVAL_SECONDS = 30` constant · the orphaned `executeRefreshCycle` (zero callers, swept per §15) ·
+`isRefreshCycleRunning`. Starters removed at `active-execution-engine.ts` (start + both stop sites) and
+`trading-bootstrap.ts`.
+
+**Why:** two independent schedulers ran over ONE ready-to-buy queue for ~7 months, double-processing every queued
+signal into the SQE (audit: `RTB_REFRESH_AUDIT_2026-07-18.md`). **PROVENANCE (CLAUDE.md rule 24.a — this is what
+made it a removal rather than a redesign):** the bucketed `RTBRefreshService` was introduced at **`7a029f390`
+(2025-12-23)** explicitly *"decoupling it from the FX5 scan loop"*, followed by `7b31e8665` (load balancing),
+`5aee5c0f9` (adaptive pool sizing), `3ebb1f3e2` (bucket filtering). **The single-path ~30s refresh was under strain
+and could not keep up; the longer refresh gap between cycles was WEIGHED AND ACCEPTED when the switch was made**
+(Kyle, 2026-07-22). `bridge/canonical/DawnTrader_System_Architecture_Execution_Flow.md:125-127,195` documents
+**ONE** RTB refresh — the bucketed one. **Mechanism A was never meant to coexist; it simply never got unplugged.**
+
+**Blast-radius verification:** A's data semantics were extracted VERBATIM into the shared `acquireRefreshedInputs`
+at `b514fbc73` BEFORE this cut, so the survivor already ran identical logic — nothing was lost but the duplicate
+scheduler. Every cut boundary was asserted in-script before deletion. Internal chain closed (`:670 → :734 → :1018`);
+`refreshSingleSignal` had exactly one caller. `tcl_watchdog.ts` has its OWN fully-wired `clockTickHandlers` map — a
+different class, correctly untouched (noted so a future grep does not confuse them). Langston independently
+re-derived all three asks at the ref and confirmed **zero live code references** to any removed symbol.
+**Liveness proof:** `rtbRefreshService.start()` is called unconditionally at boot (`server/index.ts:348`), NOT via
+the engine lifecycle that started A — so removing A's starters cannot stop refreshing.
+
+**PRESERVED deliberately:** `reEvaluateQueue` — operator-triggered via `routes.ts`, never part of Mechanism A.
+
+**Archive:** `1-system-manual/_archive/deleted-code/ready_to_buy_service.mechanism-a.ts.removed` (non-compilable;
+git history is authoritative). **Commits:** `d2306518e` (the retirement) + `373d73612` (stale canonical-claim fix
+at `server/index.ts:1436-1439`, caught by Langston at Step-4). CI 4-green; deployed 2026-07-22.
+
+**Post-deploy proof:** ZERO `[A3.R9.3][RTB_REFRESH][TICK]` lines after the restart (timestamp-filtered count = 0),
+while `[RTBRefresh][CYCLE_COMPLETE]` continues rotating buckets. Refresh staleness across all 101 queued signals
+moved from **5–20s** (both mechanisms) to **min 11s / p50 73s / max 77s**, converging on the 120s macro design.
+
+---
+
 ## 2026-07-18 — P19-B8.10 (OBJ-2): the Phase-8 Ready-tab metrics stack — `ExecutionMetricsPanel` + the SLAL audit layer (service + endpoints)
 
 **Why:** Kyle 2026-07-18 — the tables below the Ready-to-Buy table ("RTB execution metrics", "Signal Lifecycle Audit") are Phase-8.8.3/8.8.4 relics from the November-2025 era, superseded by the Filter Diagnostics tabs; "those tables look to be useless to me now, so you can remove all of them." Rule-18 full purge: screen AND machinery — a write-only audit layer whose sole reader was the deleted panel is lingering legacy.
