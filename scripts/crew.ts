@@ -43,6 +43,7 @@ import {
   type CrewEntry,
   type CrewKind,
 } from '../server/services/crew-coordination.js';
+import { pathsOverlapEitherWay } from '../server/services/crew-path-overlap.mjs';
 
 function getFlag(args: string[], name: string): string | undefined {
   const i = args.indexOf(`--${name}`);
@@ -129,15 +130,23 @@ async function cmdClaim(args: string[]): Promise<number> {
   }
   // Show what is ALREADY held before claiming — the whole point is seeing the
   // collision before you make it, not being told about it afterwards.
+  //
+  // ★ Uses `pathsOverlapEitherWay`, NOT `overlappingClaims`. The difference is
+  //   deliberate: the commit guard asks the UNIDIRECTIONAL question (does an
+  //   existing claim cover this staged file?), while a claim PREVIEW asks the
+  //   SYMMETRIC one — claiming `server/core` when someone holds
+  //   `server/core/rtb/x.ts` IS a collision even though their claim does not
+  //   cover my path. Both delegate to the same matcher in
+  //   `crew-path-overlap.mjs`, so only the intended semantics differ.
+  //   (Langston Step-4: an earlier inline copy appended '/' unconditionally and
+  //   would have silently matched NOTHING for a trailing-slash claim.)
   const board = await readBoard();
   if (board.reachable) {
     const conflicts = board.entries.filter(
       (e) =>
         e.kind === 'claim' &&
         e.session !== session &&
-        e.paths.some((cp) =>
-          paths.some((p) => p === cp || p.startsWith(cp + '/') || cp.startsWith(p + '/')),
-        ),
+        e.paths.some((cp) => paths.some((p) => pathsOverlapEitherWay(cp, p))),
     );
     if (conflicts.length) {
       console.log('⚠ OVERLAPPING CLAIMS ALREADY HELD:');

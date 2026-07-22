@@ -39,6 +39,10 @@
  */
 
 import pg from 'pg';
+// ★ Path matching lives in ONE place (Langston Step-4). See crew-path-overlap.mjs
+//   for why it is plain JS: the PreToolUse commit guard is `.mjs` with no build
+//   step and must import the SAME matcher rather than fork it a third time.
+import { pathCovers } from './crew-path-overlap.mjs';
 
 const { Pool } = pg;
 
@@ -275,12 +279,20 @@ export async function reapStale(opts: { dryRun?: boolean } = {}): Promise<{
 }
 
 /**
- * Which active claims held by OTHER sessions overlap the given paths.
+ * Which active claims held by OTHER sessions cover the given staged paths.
  *
- * ★ Prefix-aware on purpose: a claim on a directory covers files beneath it, and a
- *   claim on a file is matched by that exact file. Compared on the actual staged
- *   path set by the caller — never on text matched out of a command string, which
- *   is the mistake `guard-bare-commit.mjs` has already made twice (scope §3).
+ * ★ This asks the UNIDIRECTIONAL question — "does an existing claim COVER this
+ *   staged file?" — which is the right question for the commit guard. The claim
+ *   PREVIEW in `scripts/crew.ts` deliberately asks the SYMMETRIC one via
+ *   `pathsOverlapEitherWay`; both delegate to the same matcher in
+ *   `crew-path-overlap.mjs`, so the semantics differ only where intended and
+ *   the matching itself cannot drift. (Langston Step-4: two hand-rolled copies
+ *   with subtly different trailing-slash behaviour is how one silently stops
+ *   matching.)
+ *
+ * ★ Compared on the ACTUAL staged path set supplied by the caller — never on text
+ *   matched out of a command string, which is the mistake `guard-bare-commit.mjs`
+ *   has already made twice (scope §3).
  */
 export function overlappingClaims(
   entries: CrewEntry[],
@@ -291,9 +303,7 @@ export function overlappingClaims(
   for (const e of entries) {
     if (e.kind !== 'claim') continue;
     if (e.session === selfSession) continue;
-    const hits = stagedPaths.filter((sp) =>
-      e.paths.some((cp) => sp === cp || sp.startsWith(cp.endsWith('/') ? cp : cp + '/')),
-    );
+    const hits = stagedPaths.filter((sp) => e.paths.some((cp) => pathCovers(cp, sp)));
     if (hits.length > 0) out.push({ entry: e, paths: hits });
   }
   return out;

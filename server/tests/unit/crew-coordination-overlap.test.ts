@@ -20,6 +20,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { overlappingClaims, type CrewEntry } from '../../services/crew-coordination.js';
+import { pathCovers, pathsOverlapEitherWay } from '../../services/crew-path-overlap.mjs';
 
 function entry(over: Partial<CrewEntry> = {}): CrewEntry {
   return {
@@ -95,5 +96,55 @@ describe('overlappingClaims', () => {
     const b = entry({ id: 2, session: 'OLD Claude', paths: ['server/core/rtb'] });
     const out = overlappingClaims([a, b], ['server/core/rtb/x.ts'], 'ANALYST Claude');
     expect(out.map((o) => o.entry.session).sort()).toEqual(['NEW Claude', 'OLD Claude']);
+  });
+});
+
+/**
+ * The shared matcher itself. Both the commit guard and the claim preview delegate
+ * here, so its edge cases are pinned directly rather than only through callers.
+ */
+describe('pathCovers (shared matcher)', () => {
+  it('covers an exact match', () => {
+    expect(pathCovers('a/b.ts', 'a/b.ts')).toBe(true);
+  });
+
+  it('covers a file beneath a directory', () => {
+    expect(pathCovers('a/b', 'a/b/c/d.ts')).toBe(true);
+  });
+
+  it('★ normalises a trailing slash on the CONTAINER — the Step-4 bug', () => {
+    // An earlier inline copy appended '/' unconditionally, making 'a/b/' into
+    // 'a/b//' — which matched NOTHING. A claim that matches nothing is
+    // indistinguishable from no claim at all.
+    expect(pathCovers('a/b/', 'a/b/c.ts')).toBe(true);
+    expect(pathCovers('a/b/', 'a/b')).toBe(true);
+  });
+
+  it('normalises a trailing slash on the CANDIDATE too', () => {
+    expect(pathCovers('a/b', 'a/b/')).toBe(true);
+  });
+
+  it('★ refuses a sibling sharing a name prefix', () => {
+    expect(pathCovers('a/b', 'a/b-extras/c.ts')).toBe(false);
+    expect(pathCovers('server/core', 'server/core-extras/x.ts')).toBe(false);
+  });
+
+  it('is directional — a child does not cover its parent', () => {
+    expect(pathCovers('a/b/c.ts', 'a/b')).toBe(false);
+  });
+});
+
+describe('pathsOverlapEitherWay (claim preview)', () => {
+  it('★ is symmetric where pathCovers is not — this is the whole reason it exists', () => {
+    // Claiming a directory when someone holds a file inside it IS a collision,
+    // even though their narrower claim does not cover my broader path.
+    expect(pathCovers('server/core/rtb/x.ts', 'server/core')).toBe(false);
+    expect(pathsOverlapEitherWay('server/core/rtb/x.ts', 'server/core')).toBe(true);
+    expect(pathsOverlapEitherWay('server/core', 'server/core/rtb/x.ts')).toBe(true);
+  });
+
+  it('still refuses unrelated siblings in both directions', () => {
+    expect(pathsOverlapEitherWay('server/core', 'server/core-extras/x.ts')).toBe(false);
+    expect(pathsOverlapEitherWay('server/core-extras/x.ts', 'server/core')).toBe(false);
   });
 });
