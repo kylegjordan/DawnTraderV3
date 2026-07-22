@@ -53,14 +53,8 @@ Claude New (CC-B). Discord display name **"NEW Claude"** (exact `--sender` value
 
 ---
 
-**✅ B8.5e CLOSED 2026-07-22 ~21:35 — Langston Step-8, ON THE AMENDED TEXT.** Mechanism shipped + correct; **claim corrected TWICE before close.** `#548` = `RESOLVED (mechanism) — CALIBRATION RESIDUAL REOPENED UNDER #566`. **NEXT = QUEUE-2 P19-B8.5i Step-2 pre-audit** (trailing switch, TWO flags, Langston's 2 Step-1 conditions — he will check them against the FILE, not my summary; stage an inbox file).
+**✅ B8.5e (#548) CLOSED 2026-07-22** — per-symbol mark-staleness ceiling; Langston Step-8 on amended text. Claim corrected 3× (fixed for 4 earn-own-σ names, NOT the 11 inheritors; ARKK regression). Residuals: #566 (σ-estimator two tails + threshold, Phase-25), #563 (venue-resting exits), #567 (value-plausibility). #569 = off-hours slot design QUESTION (my overnight-hold defect claim was RETRACTED — xStocks close overnight, no US-hours gate exists, only weekend). Repo completion report is the record.
 
-**★★ THE LESSON THAT COST THE MOST TODAY — READ BEFORE ANY FINDING:** I made **five** confident claims resting on something unmeasured. Three were caught by peers, one by the system, one by me. **The fifth I committed INSIDE the amendment written to correct the fourth.** Pattern, every time: *a coherent story felt like a verified one.*
-- assertion blamed an APPLIED migration (never queried it) → took staging down
-- cited a CI run for commits it did NOT contain (`73346765f`) → Langston
-- claimed fail-closed while σ **divided**, so stale-low σ WIDENED → ANALYST
-- classwide σ never expired → Langston
-- **attributed 5 alerts to my deploy without checking a TIMESTAMP — 3 of 5 (MOS/ARKK/PM 20:35:15Z) PREDATE it (my deploy 20:42:32Z / restart 20:44:33Z); only C+CDNS were mine** → ANALYST, 30-second check
 **⇒ BEFORE asserting a cause: check its ARITHMETIC and its TIMESTAMP (24.a). Knowing this pattern did NOT stop me repeating it — only someone else's cheap check did. Ask for one.**
 
 **★ B8.5e RESIDUALS — homed, do NOT re-litigate:** `#566` owns BOTH tails (stale-low σ WIDENS = danger · inherited-high σ OVER-TIGHTENS = ARKK) — same root, opposite sign, **and one knob does two jobs: `WHERE obs >= minObservations` (`sigma-rate.ts:178-181`) gates BOTH self-eligibility AND the percentile POPULATION**, so moving it moves both tails. **Never re-tune it on the soak.** `#563` venue-resting exits = the only real fix for near-stop staleness. `#567` value-plausibility (a mark can be FRESH and WRONG).
