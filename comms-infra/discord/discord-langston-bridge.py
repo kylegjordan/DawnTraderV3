@@ -26,6 +26,7 @@ import json
 import os
 import queue
 import re
+import datetime as _dt
 import subprocess
 import sys
 import threading
@@ -546,6 +547,12 @@ def build_client(task_q):
     intents.message_content = True
     # enable_debug_events=True so on_socket_raw_receive fires — the true receive-liveness signal (#462).
     client = discord.Client(intents=intents, enable_debug_events=True)
+    # B-COMMS-CHUNK-FIX follow-up (2026-07-22): the dedup below is MEMORY-ONLY, so a
+    # restart forgets every message it has handled and a gateway RESUME can replay
+    # history into a fresh process. Measured: one restart re-buffered 6 chunk-groups
+    # at 1/2 (5 already COMPLETE pre-restart), which later flushed as spurious
+    # INCOMPLETE notes and made Langston withhold rulings on intact messages.
+    PROC_START = _dt.datetime.now(_dt.timezone.utc)
     seen = deque(maxlen=512)       # message-id dedup (review: RESUME can redeliver MESSAGE_CREATE)
     seen_set = set()
 
@@ -561,6 +568,17 @@ def build_client(task_q):
         is_dm = message.guild is None
         if not is_dm and message.channel.id != CFG["channel_id"]:
             return
+        # Pre-startup replay guard (see PROC_START). FAIL-OPEN: an unreadable
+        # timestamp means PROCESS, never drop - a comms bridge must not discard
+        # real traffic to protect itself from duplicates.
+        try:
+            _created = getattr(message, 'created_at', None)
+            if _created is not None and _created < PROC_START:
+                log(f'skip replay: msg {message.id} predates process start')
+                return
+        except Exception as _e:
+            log(f'replay-guard check failed ({_e}) - processing anyway (fail-open)')
+
         # Dedup
         if message.id in seen_set:
             return
