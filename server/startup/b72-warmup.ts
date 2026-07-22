@@ -148,6 +148,15 @@ const PREFETCH_MODULES = [
   // B8.5 venue-only migration; the module itself stays warm for the two knobs
   // above (seeds: exit-integrity + venue-only migrations).
   'exit_integrity',
+  // P19-B8.5e (`#548`): the risk-derived mark-staleness knobs. Read SYNCHRONOUSLY in the
+  // exit monitor for every xStock position on every evaluation tick, so the module MUST be
+  // warm or the sync read throws and every xStock position fail-safe-skips.
+  // ⚠️ ADDING THE BOOT ASSERTION WITHOUT ADDING THIS LINE TOOK STAGING DOWN (2026-07-22):
+  // the assertion's own message said "migration has not been applied" while the rows were
+  // in fact seeded — the real cause was the module not being prefetched, visible only in the
+  // wrapped error. A knob in `module_constants` is NOT usable from a sync caller until its
+  // module is listed HERE. Seeds: 2026-07-21-p19-b8-5e-mark-staleness-knobs.sql.
+  'mark_staleness',
   // Future: more Slice 2/3/4 modules added here as source replacements ship.
 ];
 
