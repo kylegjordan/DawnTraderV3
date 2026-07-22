@@ -4,7 +4,21 @@
 **Code:** `58d8f8f94` · **Governance:** `33e304763`, `8c58428f1` · **CI:** run `29914908229`, **all 4 GREEN**
 **Deployed:** staging 2026-07-22 11:16Z, HTTP 200 · **Langston:** Step-1 ✅ Step-2 ✅ **Step-4 APPROVED at ref** ✅
 
-> ## 🚨 THIS BATCH IS **SHIPPED, NOT CLOSED.**
+> ## ✅ LIVE-CARRY VERIFICATION — **PASSED 2026-07-22 ~14:1xZ. And my own trigger criterion was WRONG.**
+>
+> **THE FIX WORKS, with direct evidence: 8 of 8 `rtb_signals` BUILT since the deploy (`queued_at > 2026-07-22T11:16Z`) carry `maxHoldingMs`.**
+>
+> **★ BUT THE TRIGGER I ARMED FIRED FALSE, AND THE REASON IS THE TRANSFERABLE PART.** I wrote the criterion as *"a position OPENED after the deploy that lacks the value ⇒ REOPEN"*. On re-check, **`SKHY/USD` opened 12:33Z — 77 minutes post-deploy — with `maxHoldingMs` NULL**, which by my own wording meant reopen the batch. It is not a failure: **the fix applies at signal BUILD time, not position OPEN time**, and the two are separated by an unbounded queue wait. Measured: `rtb_signals` spans **Jul-20 07:29 → Jul-22 14:03**, so a queued signal can be **~2 days old** when promoted. SKHY's signal was built pre-deploy, queued, and promoted after.
+>
+> **Ruled out rather than assumed — the alternative explanation was a SECOND open path bypassing the orchestrator (the #530/RTB-dual-mechanism shape).** Checked: **promoted rows do NOT survive in `rtb_signals`** — all 108 rows are `status=reconfirmed` with `promoted_at` NULL on every one — so SKHY having no queue row is **expected bookkeeping, not evidence of a bypass**. Deployed code separately confirmed present in both the source (`signal-orchestrator.ts:1018-1027` on staging) and the built bundle.
+>
+> **⇒ CORRECTED VERIFICATION CRITERION (the lesson): verify the signals BUILT after a deploy, NOT the positions OPENED after it.** Any fix that acts at build time is invisible to an open-time check for as long as the queue is deep.
+>
+> **⚠️ EXPECTED RESIDUAL, so nobody later reads it as a defect: pre-deploy queued signals will keep producing positions without `maxHoldingMs` until the queue turns over.** Self-limiting, and NOT failures.
+>
+> **Remaining before close:** the §9.3 UI check, which still cannot run until a time-exit actually fires and produces a `MAX_HOLD` row.
+
+> ## 🚨 (SUPERSEDED BY THE BLOCK ABOVE) THIS BATCH WAS **SHIPPED, NOT CLOSED.**
 > **OBJ-1's carry is UNIT-proven and deployed, but NOT yet proven in production.** At deploy time all 15 open positions **predated the deploy**, so `maxHoldingMs` was absent on 0/15 **by expectation, not by failure** — the fix only affects positions opened after 11:16Z. A verification alert is armed (fires 18:00Z) carrying the exact query and an explicit **REOPEN B8.5f** instruction if a post-deploy position still lacks the value. **Do not mark this batch closed until that fires green.**
 
 ---
