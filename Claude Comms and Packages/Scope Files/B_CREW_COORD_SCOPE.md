@@ -26,7 +26,8 @@ A `crew_coordination` table in Supabase Postgres: `id`, `session`, `kind` (`clai
 
 **OBJ-2 — Push serialization.**
 At most one `active` push row at a time, enforced by a **partial unique index** (not by application logic). Others see the queue rather than colliding.
-*Verification:* a second `push-begin` while one is active is refused by the database, demonstrated live.
+> ⚠️ **Langston add (2026-07-22):** *the board only earns "serialized pushes" if the serialization itself is fail-open too* — **if the board is down, pushes fall back to today's behaviour, not a wall.**
+*Verification:* a second `push-begin` while one is active is refused by the database, demonstrated live; and with the board unreachable, a push still proceeds.
 
 **OBJ-3 — A `crew` CLI so the discipline is one line, not a query.**
 `crew claim <paths…>` · `crew push-begin` · `crew release` · `crew board`. Runnable by all three CC sessions; **Langston is a read-only board READER, never a claimant** (settled with Langston 2026-07-20 — he never pushes, per who-holds-the-wrench).
@@ -44,6 +45,19 @@ Per Part 4, most-automatic first: (1) the hook teaches the `crew` commands inlin
 **★ CLOSE GATE — do not declare adoption, prove it:** the batch is NOT closed until `crew board` shows real claims or pushes from **all three CC sessions**, cited in the completion report. Silent non-use reads as adoption; it isn't.
 
 ---
+
+## 1b. ★ WHAT THIS BOARD DOES AND DOES NOT CLAIM — Langston-ruled 2026-07-22, in his words
+
+**The board is: contention-visibility + a queryable safe-to-touch answer + push serialization. It is NOT atomicity.**
+
+**A green board is not a guarantee.** It cannot close #557 — the index race where one session's commit captures another's staged paths — because the guard is a *PreToolUse* hook that fires **before** the command runs, so a board-check inside it is just another read the same race invalidates. And in the case that actually occurred, **no coordination rule was broken by anyone**: I staged my own files legitimately while CC-B was legitimately between his index-read and his commit. There was nothing a board could have shown him.
+
+**What covers #557 instead:** a post-commit `git show --stat` (the only check that catches it *by construction*), and possibly per-session worktrees — see the spike below.
+
+**Why this is stated so bluntly:** over-reading a green board is the same failure shape as reading a passing freshness check as proof of correctness. Both are things that *look* like guarantees and aren't, which is the exact class this project keeps getting hurt by.
+
+### SPIKE (separate, named home — NOT this batch)
+**`B-SPIKE-PER-SESSION-INDEX`** — bounded investigation of `GIT_INDEX_FILE` / per-session worktrees. **Langston ruling: worth running, but NOT on the shared tree** — it goes in a throwaway clone or scratch repo where a stale `index.lock` cannot land on the three running sessions. It answers exactly four questions (FUSE `#542` interaction · HEAD-seeding per invocation · how the hooks and `git status` behave against a non-default index · what `git push` sends) **and nothing else. Adoption is a SEPARATE decision after the spike reports; implementation is explicitly NOT folded into B-CREW-COORD.**
 
 ## 2. SUBSTRATE — RULED, and my original framing CORRECTED
 

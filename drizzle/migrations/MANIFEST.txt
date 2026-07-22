@@ -181,3 +181,4 @@
 2026-07-16-p19-b8-5-equity-tick-age.sql
 2026-07-21-p19-b8-5e-mark-staleness-knobs.sql
 2026-07-22-b-ranking-component-capture-drop-dead-columns.sql
+2026-07-22-b-crew-coord-registry.sql
