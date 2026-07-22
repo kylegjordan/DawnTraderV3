@@ -139,6 +139,39 @@ import { getLatestEquityTick } from './passive-archive/equity-spot-archiver.js';
 // never awaits a DB read to decide whether a mark is trustworthy.
 import { computeStalenessCeiling, type MarkStalenessConfig } from '../asset_classes/xstock_spot/mark-staleness.js';
 import { getCachedSigma, ensureSigmaFresh, type SigmaCacheConfig } from '../asset_classes/xstock_spot/sigma-rate-cache.js';
+
+/**
+ * PURE — chooses the price-skip alert copy. Extracted so the BRANCH is testable without a
+ * database or an engine instance (Analyst's ruling 2026-07-22: *"don't pin the wording, DO
+ * pin the branch"* — a test asserting exact message text fights the next person who
+ * improves it and fails for the RIGHT change; the branch is the part that carries meaning).
+ *
+ * ★ THE DISTINCTION THIS EXISTS TO PRESERVE: a staleness REJECTION (a price exists, it is
+ * older than the ceiling) and a genuine ABSENCE (no price at all) are different facts and
+ * must not share wording. The old copy asserted the absence case for BOTH, claiming *"the
+ * position cannot be exited"* while the venue was quoting at 40-156s — a capability claim
+ * the evidence falsified, which sent readers hunting a feed that was not broken.
+ */
+export function buildPriceSkipAlertCopy(input: {
+  symbol: string; mode: string; streak: number; reason: string; detail?: string;
+}): { title: string; body: string; isStaleReject: boolean } {
+  const isStaleReject = input.reason.startsWith('equity_tick_stale');
+  const cause = isStaleReject
+    ? `the most recent mark was older than this symbol's freshness ceiling${input.detail ? ` (${input.detail})` : ''}, so it was not trusted for a stop/target decision`
+    : `neither the Kraken live feed nor the Kraken direct query returned a usable price (${input.reason})`;
+  const consequence = isStaleReject
+    // TRUE: we declined to act on THIS tick. NOT "cannot be exited" — the venue may well be
+    // quoting, just not recently enough for the ceiling.
+    ? `Exit evaluation resumes automatically on the next tick inside the ceiling. This does NOT mean the venue is down or the position is unexitable — check the mark age against the ceiling before investigating the feed.`
+    : `The position cannot be evaluated against a venue price until the venue quotes again. If this persists, investigate the feed/subscription for this pair.`;
+  return {
+    isStaleReject,
+    title: isStaleReject
+      ? `Exit checks skipped — mark older than ceiling for ${input.symbol}`
+      : `Open position unmanageable — no Kraken price for ${input.symbol}`,
+    body: `The exit monitor has skipped ${input.streak} consecutive ticks for the open ${input.mode} position on ${input.symbol} because ${cause}. ${consequence}`,
+  };
+}
 import { covarianceEngine } from '../utils/covariance-engine.js';
 import { recordPaperTrade, type PaperTradeRecord } from './vts-live-comparison-audit.js';
 import { evaluateTradeExpectancy } from '../core/calculations/expectancy.js';
@@ -280,15 +313,7 @@ export class ActiveExecutionEngine {
       // A staleness REJECTION and a genuine ABSENCE are different facts and get different
       // words. `reason` already discriminates them, so branch on it rather than asserting
       // the worse of the two for both.
-      const _staleReject = reason.startsWith('equity_tick_stale');
-      const _cause = _staleReject
-        ? `the most recent mark was older than this symbol's freshness ceiling${detail ? ` (${detail})` : ''}, so it was not trusted for a stop/target decision`
-        : `neither the Kraken live feed nor the Kraken direct query returned a usable price (${reason})`;
-      const _consequence = _staleReject
-        // TRUE statement: we declined to act on THIS tick. NOT "cannot be exited" — the
-        // venue may well be quoting, just not recently enough for the ceiling.
-        ? `Exit evaluation resumes automatically on the next tick inside the ceiling. This does NOT mean the venue is down or the position is unexitable — check the mark age against the ceiling before investigating the feed.`
-        : `The position cannot be evaluated against a venue price until the venue quotes again. If this persists, investigate the feed/subscription for this pair.`;
+      const _copy = buildPriceSkipAlertCopy({ symbol: position.symbol, mode: this.mode, streak, reason, detail });
       console.error(`[P19-B8.5][PRICE_SKIP_ESCALATION] ${position.symbol}: ${streak} consecutive exit-monitor ticks not evaluated (${reason}${detail ? `; ${detail}` : ''}) — raising system alert`);
       try {
         const { addAlert } = await import('./system-alerts.js');
@@ -296,10 +321,8 @@ export class ActiveExecutionEngine {
           triggers_at: new Date(),
           category: 'breakage',
           severity: 'warning',
-          title: _staleReject
-            ? `Exit checks skipped — mark older than ceiling for ${position.symbol}`
-            : `Open position unmanageable — no Kraken price for ${position.symbol}`,
-          body: `The exit monitor has skipped ${streak} consecutive ticks for the open ${this.mode} position on ${position.symbol} because ${_cause}. ${_consequence}`,
+          title: _copy.title,
+          body: _copy.body,
           dedupe_key: `price-skip-${this.mode}-${position.symbol}`,
         });
       } catch (alertErr) {
