@@ -267,6 +267,53 @@ export async function warmModuleConstantsForSyncCallers(): Promise<void> {
     }
   }
 
+  // ── P19-B8.5e (`#548`, 2026-07-22): mark-staleness knobs must be seeded for xStock ─────
+  // These decide whether a mark is fresh enough to evaluate a stop/target against. A missing
+  // row must be a DEPLOY-time failure, never a silent default: the exit path's fail-safe on a
+  // cold knob is to SKIP the position, so an unseeded deploy would silently stop managing
+  // every xStock position while looking healthy. Fail loud at boot instead.
+  //
+  // ★ xstock_spot ONLY — crypto is DELIBERATELY absent (Langston ruling 2026-07-22). The σ_rate
+  // read-path exists only for xStock; a seeded crypto row would be a live-looking ceiling with
+  // no runtime source. Asserting crypto here would make the server refuse to boot over rows we
+  // intentionally never seed. Do NOT "helpfully" add crypto to this loop — absent beats inert.
+  {
+    const { getCachedNumberRequired } = await import('../services/module-constants-service.js');
+    const k = { exchange: '*', assetClass: 'xstock_spot' as const, strategy: '*', regime: '*' };
+    for (const c of [
+      'budget_k', 'null_stop_budget_pct', 'floor_ms', 'cap_ms',
+      'sigma_min_observations', 'sigma_classwide_percentile',
+      'sigma_window_ms', 'sigma_refresh_after_ms', 'sigma_max_age_ms', 'sigma_query_timeout_ms',
+    ] as const) {
+      try {
+        getCachedNumberRequired('mark_staleness', c, k);
+      } catch (err) {
+        throw new Error(
+          `[P19-B8.5e][warmup] mark_staleness.${c} for asset_class='xstock_spot' missing — ` +
+          `migration drizzle/migrations/2026-07-21-p19-b8-5e-mark-staleness-knobs.sql has not been applied. ` +
+          `Without it every xStock position fail-safe-skips its exit evaluation. (${(err as Error).message})`,
+        );
+      }
+    }
+    // Coherence, not just presence: an inverted floor/cap would make every ceiling collapse
+    // onto one bound, silently disabling the per-symbol behaviour this batch exists to add.
+    const floorMs = getCachedNumberRequired('mark_staleness', 'floor_ms', k);
+    const capMs = getCachedNumberRequired('mark_staleness', 'cap_ms', k);
+    if (!(capMs > floorMs)) {
+      throw new Error(`[P19-B8.5e][warmup] mark_staleness cap_ms=${capMs} must exceed floor_ms=${floorMs} — refusing to start.`);
+    }
+    const budgetK = getCachedNumberRequired('mark_staleness', 'budget_k', k);
+    if (!(budgetK > 0 && budgetK < 1)) {
+      throw new Error(`[P19-B8.5e][warmup] mark_staleness budget_k=${budgetK} outside (0,1) — a budget ≥1 would tolerate being blind to the ENTIRE distance to the stop. Refusing to start.`);
+    }
+    const maxAgeMs = getCachedNumberRequired('mark_staleness', 'sigma_max_age_ms', k);
+    const refreshMs = getCachedNumberRequired('mark_staleness', 'sigma_refresh_after_ms', k);
+    if (!(maxAgeMs > refreshMs)) {
+      throw new Error(`[P19-B8.5e][warmup] mark_staleness sigma_max_age_ms=${maxAgeMs} must exceed sigma_refresh_after_ms=${refreshMs}, or every cached σ expires before its refresh is due and every position floors. Refusing to start.`);
+    }
+    console.log('[P19-B8.5e][warmup] mark_staleness knobs verified for xstock_spot (10 rows + floor<cap, 0<budget_k<1, refresh<maxAge)');
+  }
+
   // reorg-B2 (Piece A/B, 2026-06-20): per-class ROI gate + target-floor/min-RR must be seeded
   // for BOTH active spot classes. A partial seed passes the generic zero-row gate yet hard-fails
   // mid-signal at the first per-class resolve (silent gate-off / wrong-bound) — so assert at boot.

@@ -134,6 +134,11 @@ import { isXstockMarketOpenUTC } from '../asset_classes/xstock_spot/market-hours
 // P19-B7.2c: the shared PURE pending-maker fill/drop decision (paper+VTS parity — R2).
 import { evaluatePendingMaker, makerFillPrice, isMarketableAtPlacement } from '../core/trading/pending-maker-logic.js';
 import { getLatestEquityTick } from './passive-archive/equity-spot-archiver.js'; // P19-B8.5 xstock marks — the equities-feed venue leg
+// P19-B8.5e (`#548`) — risk-derived per-symbol mark-staleness ceiling. The POLICY is pure
+// (`mark-staleness`); the σ MEASUREMENT is cached (`sigma-rate-cache`) so the exit path
+// never awaits a DB read to decide whether a mark is trustworthy.
+import { computeStalenessCeiling, type MarkStalenessConfig } from '../asset_classes/xstock_spot/mark-staleness.js';
+import { getCachedSigma, ensureSigmaFresh, type SigmaCacheConfig } from '../asset_classes/xstock_spot/sigma-rate-cache.js';
 import { covarianceEngine } from '../utils/covariance-engine.js';
 import { recordPaperTrade, type PaperTradeRecord } from './vts-live-comparison-audit.js';
 import { evaluateTradeExpectancy } from '../core/calculations/expectancy.js';
@@ -229,6 +234,26 @@ export class ActiveExecutionEngine {
   // crossing the DB-knobbed threshold raises a §10.5 system alert (deduped per
   // symbol), not a buried log line. Streak resets on the first venue price.
   private _priceSkipStreak: Map<string, number> = new Map();
+
+  /**
+   * P19-B8.5e — σ-cache tuning, DB-governed like the policy knobs it serves.
+   *
+   * These are NOT cosmetic: `sigma_window_ms` materially determines the σ the ceiling is
+   * derived from, and `sigma_max_age_ms` is the fail-closed bound (past it a cached σ is
+   * DROPPED, so the ceiling falls to the floor rather than widening off a stale statistic).
+   * No hardcoded fallbacks — a missing knob throws to the caller's fail-safe skip (§5).
+   */
+  private _sigmaCacheCfg(minObservations: number): SigmaCacheConfig {
+    const at = { exchange: '*', assetClass: 'xstock_spot' as const, strategy: '*', regime: '*' };
+    return {
+      windowMs: getCachedNumberRequired('mark_staleness', 'sigma_window_ms', at),
+      refreshAfterMs: getCachedNumberRequired('mark_staleness', 'sigma_refresh_after_ms', at),
+      maxAgeMs: getCachedNumberRequired('mark_staleness', 'sigma_max_age_ms', at),
+      minObservations,
+      classwidePercentile: getCachedNumberRequired('mark_staleness', 'sigma_classwide_percentile', at),
+      queryTimeoutMs: getCachedNumberRequired('mark_staleness', 'sigma_query_timeout_ms', at),
+    };
+  }
 
   private async _recordPriceSkip(position: { id: string; symbol: string; assetClass?: unknown }, reason: string): Promise<void> {
     const streak = (this._priceSkipStreak.get(position.id) ?? 0) + 1;
@@ -906,7 +931,30 @@ export class ActiveExecutionEngine {
     this.lastExitChecks = [];
     
     const openPositions = await storage.getActiveOpenPositions(this.mode);
-    
+
+    // ── P19-B8.5e (`#548`) — kick the σ refresh for xStock positions, NON-BLOCKING ──────
+    // ★ DELIBERATELY NOT AWAITED. σ is a windowed DB aggregate; awaiting it here would put
+    // a database read in front of every stop/target evaluation — the one path that must
+    // never be late. This returns immediately and refreshes in the background; the loop
+    // below reads whatever is already in memory. A refresh that is slow or failing cannot
+    // delay an exit — it can only let entries age out, which fails CLOSED to the floor.
+    try {
+      const _xstockSymbols = openPositions
+        .filter((p) => (asValidAssetClass((p as { assetClass?: unknown }).assetClass)
+          ?? safeResolveAssetClass(p.symbol, 'kraken')) === 'xstock_spot')
+        .map((p) => p.symbol);
+      if (_xstockSymbols.length > 0) {
+        const _minObs = getCachedNumberRequired('mark_staleness', 'sigma_min_observations',
+          { exchange: '*', assetClass: 'xstock_spot', strategy: '*', regime: '*' });
+        ensureSigmaFresh(_xstockSymbols, this._sigmaCacheCfg(_minObs));
+      }
+    } catch (sigmaKickErr) {
+      // Knobs cold ⇒ no refresh kicked ⇒ cache ages out ⇒ per-position floor. The
+      // per-position knob read below raises the loud, position-attributed refusal.
+      console.warn('[P19-B8.5e][SIGMA_CACHE] refresh kick skipped (knobs cold — positions will floor):',
+        sigmaKickErr instanceof Error ? sigmaKickErr.message : sigmaKickErr);
+    }
+
     // Phase 8.8.3-I7-PRICE-FIX (A3): Aggregate exit evaluation stats
     let positionsEvaluated = 0;
     let withWsPrice = 0;
@@ -934,12 +982,29 @@ export class ActiveExecutionEngine {
         const _posClass = asValidAssetClass((position as { assetClass?: unknown }).assetClass) ?? safeResolveAssetClass(position.symbol, 'kraken');
         if (_posClass === 'xstock_spot') {
           const _eqTick = getLatestEquityTick(position.symbol);
-          let _eqMaxAgeMs: number;
+          // ── P19-B8.5e (`#548`): the max mark age is now RISK-DERIVED PER SYMBOL ──────
+          // WAS: one global `exit_integrity.max_equity_tick_age_ms` = 90s for every xStock
+          // alike. Measured, that single number was simultaneously TOO LOOSE on the fastest
+          // name (blind to ~4% of adverse movement) and TOO TIGHT on the safest (refused to
+          // manage it 49×/24h on ordinary quiet trading). One number cannot serve symbols
+          // whose risk-per-second differs ~11×. The knob is RETIRED (§18) — not left inert.
+          //
+          // NOW: `ceiling = clamp(budget / σ_rate, floor, cap)` where `budget` is a fraction
+          // of THIS position's remaining room to its stop — so tolerance shrinks as danger
+          // rises, and a position near its stop gets the tightest window.
+          let _msCfg: MarkStalenessConfig;
+          let _sigmaMinObs: number;
           try {
-            _eqMaxAgeMs = getCachedNumberRequired('exit_integrity', 'max_equity_tick_age_ms',
-              { exchange: '*', assetClass: 'xstock_spot', strategy: '*', regime: '*' });
+            const _at = { exchange: '*', assetClass: 'xstock_spot' as const, strategy: '*', regime: '*' };
+            _msCfg = {
+              budgetK: getCachedNumberRequired('mark_staleness', 'budget_k', _at),
+              nullStopBudgetPct: getCachedNumberRequired('mark_staleness', 'null_stop_budget_pct', _at),
+              floorMs: getCachedNumberRequired('mark_staleness', 'floor_ms', _at),
+              capMs: getCachedNumberRequired('mark_staleness', 'cap_ms', _at),
+            };
+            _sigmaMinObs = getCachedNumberRequired('mark_staleness', 'sigma_min_observations', _at);
           } catch (knobErr) {
-            console.error(`[P19-B8.5][EQUITY_MARK] max_equity_tick_age_ms knob unavailable — xstock mark NOT actionable for ${position.symbol} (fail-safe skip):`, knobErr instanceof Error ? knobErr.message : knobErr);
+            console.error(`[P19-B8.5e][EQUITY_MARK] mark_staleness knobs unavailable — xstock mark NOT actionable for ${position.symbol} (fail-safe skip):`, knobErr instanceof Error ? knobErr.message : knobErr);
             withoutPrice++;
             await this._recordPriceSkip(position, 'equity_age_knob_missing');
             continue;
@@ -950,10 +1015,23 @@ export class ActiveExecutionEngine {
             continue;
           }
           const _eqAge = Date.now() - _eqTick.tsMs;
-          if (_eqAge > _eqMaxAgeMs) {
-            console.warn(`[P19-B8.5][EQUITY_MARK] ${position.symbol}: latest equities tick is ${Math.round(_eqAge / 1000)}s old (max ${Math.round(_eqMaxAgeMs / 1000)}s) — stale, not actionable this tick (market closed/halted?)`);
+          // σ read is pure-memory here; the refresh was kicked (non-blocking) before the
+          // loop. A cache miss yields `null` ⇒ the policy lands on the FLOOR — fail-closed.
+          const _sigma = getCachedSigma(position.symbol, this._sigmaCacheCfg(_sigmaMinObs));
+          const _ceiling = computeStalenessCeiling(
+            {
+              currentPrice: _eqTick.price,
+              stopPrice: position.stopLoss ? parseFloat(position.stopLoss) : null,
+              sigmaRatePerSec: _sigma?.sigmaRatePerSec ?? null,
+            },
+            _msCfg,
+          );
+          if (_eqAge > _ceiling.ceilingMs) {
+            console.warn(`[P19-B8.5e][EQUITY_MARK] ${position.symbol}: mark is ${Math.round(_eqAge / 1000)}s old, ceiling ${Math.round(_ceiling.ceilingMs / 1000)}s (basis=${_ceiling.basis} σ=${_sigma ? _sigma.sigmaRatePerSec.toExponential(3) + '/s src=' + _sigma.source : 'UNAVAILABLE⇒floor'}${_ceiling.clamped ? ' clamped' : ''}) — not actionable this tick`);
             withoutPrice++;
-            await this._recordPriceSkip(position, 'equity_tick_stale');
+            // Skip reason carries the BASIS so the rail can distinguish "this symbol is
+            // genuinely quiet" from "we never had a σ and are floored on every position".
+            await this._recordPriceSkip(position, `equity_tick_stale_${_ceiling.basis}`);
             continue;
           }
           currentPrice = _eqTick.price;
