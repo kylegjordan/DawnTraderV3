@@ -65,10 +65,16 @@ def split_on_whitespace(text, limit):
     byte-exact scheme would be silently wrong. Seam whitespace may normalise; evidence
     coordinates cannot corrupt.
 
+    Returns (pieces, hard_cuts). `hard_cuts` counts genuinely-unsplittable runs that
+    had to be cut mid-token - report it, never infer it from a piece's length (a clean
+    cut landing exactly ON the limit is indistinguishable by length, and that false
+    positive is what this replaces).
+
     A single non-whitespace RUN longer than `limit` is genuinely unsplittable: we hard-cut
     and the caller LOGS it, rather than silently corrupting a token nobody knows about.
     """
     pieces, i, n = [], 0, len(text)
+    hard_cuts = 0
     while i < n:
         if n - i <= limit:
             pieces.append(text[i:])
@@ -76,12 +82,13 @@ def split_on_whitespace(text, limit):
         window = text[i:i + limit + 1]      # +1 so a boundary AT the limit is visible
         cut = max(window.rfind(chr(10)), window.rfind(' '))
         if cut <= 0:
-            cut = limit                     # unbreakable run - caller logs this
+            cut = limit                     # genuinely unbreakable run
+            hard_cuts += 1                  # <- a FACT, not inferred from length
         pieces.append(text[i:i + cut])
         i += cut
         while i < n and text[i] in (' ' + chr(10)):   # consume seam whitespace once
             i += 1
-    return [p for p in pieces if p != '']
+    return [p for p in pieces if p != ''], hard_cuts
 # A voice message carries this flag (IS_VOICE_MESSAGE = 1 << 13)
 VOICE_MESSAGE_FLAG = 8192
 
@@ -228,10 +235,10 @@ def _send_chunks(url, base_headers, content, log_file, mention_user_id=None, ext
         # split ONLY at whitespace (Finding B) so no file:line / sha / path is ever cut in
         # half across the seam.
         _lim = MSG_LIMIT - GROUP_MARKER_RESERVE
-        chunks = split_on_whitespace(content, _lim)
-        if any(len(_c) >= _lim for _c in chunks):
-            log('send: WARNING unbreakable run >=%d chars - a token may be split' % _lim,
-                log_file)
+        chunks, _hard_cuts = split_on_whitespace(content, _lim)
+        if _hard_cuts:
+            log('send: WARNING %d unbreakable run(s) >%d chars - a token WAS cut mid-word'
+                % (_hard_cuts, _lim), log_file)
     if mention_user_id:
         if addressed_langston:
             # §2 FIX: NEVER prepend to a Langston-addressed dispatch — '<' is not in the
