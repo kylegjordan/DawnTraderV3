@@ -45,20 +45,14 @@ Per Part 4, most-automatic first: (1) the hook teaches the `crew` commands inlin
 
 ---
 
-## 2. ★ OPEN QUESTION THAT COULD INVALIDATE THE SUBSTRATE CHOICE — for Langston at Step-1, before any code
+## 2. SUBSTRATE — RULED, and my original framing CORRECTED
 
-**The proposal says "put the table in Supabase" and stops there. It does not say HOW the table is created, and that gap is load-bearing.**
+**RULING (Langston + CC-A, independently, 2026-07-22): create `crew_coordination` via a REGISTERED MIGRATION.** Path per §7.1: migration files are gitignored `*.sql`, so `git add -f` **and** registration in `drizzle/migrations/MANIFEST.txt`; write the rollback file and keep the rollback **out** of the manifest.
 
-This repo has **schema drift-detection** against a pg_dump'd initial schema. So a `crew_coordination` table created out-of-band — outside the Drizzle migration system — is at risk of being **reported as drift, or dropped by a future schema-sync**, which would silently destroy the coordination state the whole control depends on. That is a worse failure than having no tool: a board everyone trusts and that quietly empties.
-
-Three candidate dispositions, and I do not want to pick unilaterally:
-- **(a) Registered Drizzle migration**, table in the app's schema — versioned, reviewable DDL, drift-safe; cost is coupling crew tooling into the trading app's migration history and CI.
-- **(b) Out-of-band table + an explicit drift-detector exclusion** — keeps crew tooling decoupled; cost is a new exclusion nobody maintains, and it only works if the exclusion mechanism actually exists.
-- **(c) A separate schema (e.g. `crew.`) outside the app's namespace** — cleanest separation; depends on whether the drift tooling is schema-scoped.
-
-**I have NOT yet verified which of these the drift tooling actually permits — that is Step-2 pre-audit work, and I will not assert it from memory** (the governed-read rule: an asserted absence or capability needs presence-evidence). Flagging it at Step-1 because if the answer is (a), the change-class arguably rises and CI becomes a gate — which changes this batch's shape before a line is written.
-
----
+> ### ⚠️ CORRECTION TO MY OWN v1 — I overstated the risk and asserted a mechanism I had not read.
+> v1 said an out-of-band table *"risks being reported as drift or DROPPED by a future schema-sync,"* and I built a "load-bearing open question" on it. **Verified since (`scripts/db-migrate.ts:100-150`): the drift check is MANIFEST-vs-FILESYSTEM only** — a bijection between MANIFEST lines and non-rollback `*.sql` files, hard-failing when one side is missing. **It never compares schema to database and cannot drop an unknown table.**
+> **What IS true, and is the honest reason to use a migration:** `package.json:11` exposes `db:push` = `drizzle-kit push`, which *is* a schema-sync capable of acting on out-of-band objects. It is **not** in the documented deploy path (deploy = `git pull && npm run build && pm2 restart`; migrations via `db:migrate`). So the foot-gun exists but is not routinely fired — a real hazard, not the imminent one I described.
+> **The ruling stands unchanged** — a registered migration is versioned, reviewable, and immune to that foot-gun. **Only my justification was wrong, and it was wrong in the way I keep being wrong today: inferred rather than read.**
 
 ## 3. SECOND DESIGN QUESTION — the hook must not repeat its own history
 
