@@ -4536,7 +4536,25 @@ monitoringCycle() // Every 1.5 seconds
 
 For each open position:
 
-1. **Price acquisition** — WebSocket cache first (2s stale threshold), REST fallback
+1. **Price acquisition** — WebSocket cache first (2s stale threshold), REST fallback.
+   **★ xStock class takes a DIFFERENT leg (P19-B8.5e, `#548`, 2026-07-22):** Kraken spot REST carries no tokenized equities, so an xStock position's mark comes from the equities WS tick store, and **how old that mark may be is derived per symbol and per position** rather than from a shared constant:
+
+   ```
+   ceiling_ms = clamp( budget / σ_effective , floor_ms , cap_ms )
+   budget     = budget_k × |mark − stop| / mark          (fraction of REMAINING room to the stop)
+   σ_effective = σ_rate × ageInflation(age of the σ estimate)
+   σ_rate     = stddev_samp(per-tick fractional return) / mean(inter-tick seconds)
+   ```
+
+   **The design property that matters: tolerance SHRINKS as danger RISES.** Because `budget` is a fraction of the remaining room to the stop, a position sitting near its stop earns the tightest window — which is correct, since that is exactly when acting on a wrong price costs most. This REPLACED a flat 90-second constant that was simultaneously too loose on the fastest symbol (blind to ~4% of adverse movement) and too tight on the safest (49 refusals/24h on ordinary quiet trading); symbols whose risk-per-second differs ~11× cannot share one number.
+
+   **σ must be EARNED.** Below `sigma_min_observations` a symbol does NOT use its own σ — it inherits a conservative class-wide **upper-percentile** (90th) σ. A young/thin/volatile entrant otherwise reads artificially calm and would earn the WIDEST window on the least-known name.
+
+   **★ FAILURE DIRECTION IS THE WHOLE DESIGN, and it is subtler than "handle nulls".** σ is in the DENOMINATOR, so **a low σ WIDENS the window**. Guarding only the *absent*-σ case is insufficient — **a small-but-WRONG σ is the dangerous value**: a symbol measured while quiet, then turning volatile, would buy a full-width window during exactly the volatility that makes an old mark worthless. Therefore σ is **inflated by the age of its own estimate**, so an ageing σ TIGHTENS the ceiling (a ramp toward the floor, never a cliff), and an unknown age is treated as maximally stale. Every degenerate input — absent σ, absent stop, unusable mark, non-finite arithmetic — resolves to `floor_ms`, the tightest window, never the widest.
+
+   **⚠️ The ceiling is an AGE THRESHOLD, not a retry interval.** Evaluation re-runs every cycle; the ceiling only decides whether the mark is trusted on THIS pass, and a fresh tick resets the age to zero.
+
+   **⚠️ LIMITATION, stated in the model rather than left to be rediscovered:** where the budget-derived ceiling falls below `floor_ms` the floor governs, and the symbol can then cover MORE than the remaining room inside the blind window — i.e. **near a stop, on a fast symbol, the stop can be crossed unseen**. This is not fixable by lowering the floor (a sub-second ceiling refuses on every ordinary tick gap) and is not created by the ceiling: near the stop with a stale mark the position is exposed whichever branch is taken. The structural fix is a **venue-resting exit** (`#563`) — our stop is evaluated IN-PROCESS, so it dies with our own liveness, whereas an exchange-held stop executes regardless. Also unaddressed here: **nothing validates a mark's VALUE, only its AGE** (`#567`), and σ lags a genuine volatility spike because the trailing window dilutes it (`#566`).
 2. **Mock price rejection** (Phase B9) — skips if price source is 'mock'
 3. **Price tick logging** — ring buffer of last 100 ticks for cadence verification
 4. **P/L calculation** — updates position with unrealized P/L
