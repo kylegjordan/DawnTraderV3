@@ -5,5 +5,8 @@
 -- first, then run this. Deleting these rows before the code lands is safe (nothing reads them yet).
 DELETE FROM module_constants
 WHERE module_name = 'mark_staleness'
-  AND asset_class IN ('crypto_spot','xstock_spot')
+  -- xstock_spot ONLY — crypto is deliberately never seeded (Langston disposition (a), 2026-07-22:
+  -- no crypto σ_rate read-path exists, so an inert crypto row would be a seeded ceiling).
+  -- Left as an IN(...) so a future crypto seed's rollback is a one-token edit, not a rewrite.
+  AND asset_class IN ('xstock_spot')
   AND constant_name IN ('budget_k','null_stop_budget_pct','floor_ms','cap_ms','sigma_min_observations','sigma_classwide_percentile');
