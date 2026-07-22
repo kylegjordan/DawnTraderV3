@@ -38,7 +38,17 @@ Claude New (CC-B). Discord display name **"NEW Claude"** (exact `--sender` value
 
 ## ★★★ CURRENT STATE (2026-07-22 late) — B8.5e DEPLOYED + VERIFIED; QUEUE-2 (trailing switch) IS NEXT
 
-**B8.5e (`#548`) DONE through Step-10 — deployed, §9.3 UI-verified, CI 4-green on `a4508353b`, Langston APPROVED twice at the ref.** Report `P19_B8_5E_COMPLETION_REPORT.md`. Per-symbol mark-staleness ceiling replaced the flat 90s constant. **Residuals homed, do NOT re-litigate:** #563 (venue-resting exits = the real fix), #566 (σ spike-lag), #567 (value-plausibility, re-homes task #85). **Still owed before "closed": PHASE_HISTORY row + `.claude/memory/` mirror.**
+**⛔ B8.5e IS *NOT* CLOSED — ITS HEADLINE CLAIM IS DISPUTED AND THE DISPUTE IS MINE (2026-07-22 ~21:15). DO NOT MARK IT CLOSED WITHOUT RESOLVING THIS.**
+Langston gave **Step-8 PASS on the CODE** (six commits ancestry-verified, System Manual substantive, the three "missing governance doc" alerts are a stale-checker false positive — his clone sits 3 behind `a193fd45c`; they self-clear, owner = CC-A's checker advance). **I did NOT bank the pass**, because:
+**`sigma_min_observations = 200` IS MISCALIBRATED AND I SEEDED IT.** Measured obs/30min for our 15 held symbols: only **MU 385 · SKHY 350 · INTC 326 · ORCL 246** clear 200. **11 of 15 inherit the class-wide σ**, and the five alerting symbols are the five lowest — ARKK 21 · MOS 17 · C 17 · PM 26 · CDNS 35. ARKK inherits σ=2.609e-4/s vs its OWN 2.931e-5/s (**~9× too harsh**) ⇒ 55s ceiling.
+**THE ARITHMETIC LANGSTON'S "no regression" READ DOESN'T SURVIVE:** the constant we REMOVED was **90s**. ARKK's mark at **69-79s** was ACCEPTED under the flat 90s rule and is **REFUSED** under my 55s ceiling. ⇒ **for ARKK — the original 49-refusals/24h victim — B8.5e is a REGRESSION in the direction #548 existed to fix.** Venue-quiet supplies the stale mark; MY seed supplies the over-strict refusal; ARKK needs BOTH to alert. Not separable.
+**DEEPER FAULT (the real one):** the inherited class-wide σ is a 90th percentile computed over symbols with ≥200 obs — i.e. **only the busiest/most volatile names — then applied to the quietest.** Lowering the threshold treats the symptom; the biased-population estimator is the design fault. Homed in **#566**.
+**AWAITING LANGSTON'S RULING** on: (a) re-seed the threshold now with sign-off, (b) fold into #566 + amend the claim, (c) his alternative. **My lean = (a)+(b).** I explicitly refused to edit a live knob unilaterally at night on the day I already took staging down once.
+**★ THE REPORT + #548's RESOLVED ENTRY CURRENTLY OVERCLAIM** — they say the 49-refusals problem is fixed; it is fixed for 4 symbols and worse for ARKK. **Amend both before closing.** Also cite head `80ed5ca2a`, not `a193fd45c` (Langston's staleness nit).
+
+---
+
+**B8.5e code+governance landed through Step-10 — deployed, §9.3 UI-verified, CI 4-green on `a4508353b`, Langston APPROVED twice at the ref.** Report `P19_B8_5E_COMPLETION_REPORT.md`. Per-symbol mark-staleness ceiling replaced the flat 90s constant. **Residuals homed, do NOT re-litigate:** #563 (venue-resting exits = the real fix), #566 (σ spike-lag), #567 (value-plausibility, re-homes task #85). **Still owed before "closed": PHASE_HISTORY row + `.claude/memory/` mirror.**
 
 **★ FOUR LESSONS FROM B8.5e — these are the transferable ones, keep them:**
 1. **A fail-closed assertion must NOT assert a CAUSE it hasn't checked.** Mine said "migration has not been applied" when it had been; the real cause (module not in `PREFETCH_MODULES`) was only in the wrapped inner error. Took staging down ~2 min. **Always include the inner error in a throw.**
