@@ -80,6 +80,14 @@ ADDRESS_RE = re.compile(r"langston", re.I)  # names Langston anywhere (used for 
 # START of the post — so a passing mid-sentence mention does NOT wake him. Tolerates leading
 # markdown / quote / punctuation chars before the name.
 ADDRESS_START_RE = re.compile(r"^[\s*_~`>#:\".\-]*langston\b", re.I)
+# B-COMMS-CHUNK-FIX (2026-07-22): the sender stamps this on EVERY chunk of a multi-chunk
+# Langston-addressed dispatch (discord_common.GROUP_MARKER_FMT). first_id is sender-log-only
+# and never reaches the wire, so this explicit token is the ONLY deterministic group key.
+GROUP_MARKER_RE = re.compile(r'\u27e8grp=([0-9a-f]{8}) (\d+)/(\d+)\u27e9')
+GROUP_TIMEOUT_S = 10          # seconds of SILENCE (not group age — Finding A) before a
+                              # partial group is flushed WITH an explicit incomplete
+                              # note. Langston ruling: never a silent hold.
+_chunk_groups = {}            # grp -> {parts:{k:text}, n:int, t0:float, base:dict}
 # Name-routing (crossed-wire fix): a Kyle message that names a CC session but NOT Langston is
 # not Langston's to answer — skip it so the CC session handles it (mirrors the wake filter).
 CC_NAME_RE = re.compile(r"claude[\s_-]*(old|new)|(old|new)[\s_-]*claude|\bcc[\s_-]*[ab]\b", re.I)
@@ -587,6 +595,54 @@ def build_client(task_q):
         # "Langston" — from Kyle OR a CC. No name → not his to answer (it's for a CC, a CC↔CC
         # exchange, or general). Everyone can be woken broadly; only Langston's REPLY is gated
         # here so the channel doesn't get chaotic. (Voice gets the same check post-transcription.)
+        # ── B-COMMS-CHUNK-FIX: REASSEMBLE BEFORE THE ADDRESS GATE ──────────────────────
+        # A >2000-char Langston dispatch is posted as N independent Discord messages; only
+        # chunk 0 carries the leading "Langston", so chunks 2..N die at the anchored gate
+        # below (that IS the bug). We buffer marked chunks by group id and only fall through
+        # once the group is COMPLETE — at which point `content` is the full reassembled
+        # dispatch and chunk 0's leading "Langston" gates the whole thing, in ONE invoke.
+        # Alerts are excluded (they bypass the gate anyway); Kyle's messages are never marked.
+        if author_is_cc_bot and not is_alert and not voice:
+            _now = time.time()
+            for _sg in [g for g, e in list(_chunk_groups.items())
+                        if _now - e['t0'] > GROUP_TIMEOUT_S]:
+                _e = _chunk_groups.pop(_sg, None)
+                if not _e:
+                    continue
+                _missing = [i for i in range(1, _e['n'] + 1) if i not in _e['parts']]
+                _partial = "\n".join(_e['parts'][i] for i in sorted(_e['parts']))
+                _partial += (f"\n\n[INCOMPLETE CHUNK GROUP {_sg}: received "
+                             f"{len(_e['parts'])}/{_e['n']}, missing {_missing}. "
+                             f"Content above is PARTIAL — treat conclusions as provisional.]")
+                log(f"chunk-group {_sg}: TIMEOUT flush, missing {_missing}")
+                task_q.put({**_e['base'], 'kind': 'text', 'content': _partial})
+            _gm = GROUP_MARKER_RE.search(content)
+            if _gm:
+                _grp, _k, _n = _gm.group(1), int(_gm.group(2)), int(_gm.group(3))
+                _body = GROUP_MARKER_RE.sub('', content).rstrip()
+                _e = _chunk_groups.setdefault(_grp, {
+                    'parts': {}, 'n': _n, 't0': time.time(),
+                    'base': {'channel_id': message.channel.id, 'message_id': message.id,
+                             'author_id': message.author.id, 'author_name': str(message.author),
+                             'author_display': getattr(message.author, 'display_name', None)
+                                               or getattr(message.author, 'name', None),
+                             'is_alert': False, 'is_dm': is_dm}})
+                _e['parts'][_k] = _body
+                # Finding A (Langston Step-4, 2026-07-22): refresh on EVERY part so the
+                # timeout measures SILENCE since the last chunk, not the group's total age.
+                # Without this, a group stretched past GROUP_TIMEOUT_S by 429 backoff or by
+                # sheer chunk count gets swept as INCOMPLETE while its own chunks are still
+                # arriving — no content is lost, but one dispatch fragments into two
+                # provisional invokes, and the trailing chunks rebuild a partial that can
+                # never complete. Refreshing here makes the sweep an inactivity check.
+                _e['t0'] = time.time()
+                if len(_e['parts']) < _e['n']:
+                    log(f"chunk-group {_grp}: buffered {len(_e['parts'])}/{_e['n']}, waiting")
+                    return
+                content = "\n".join(_e['parts'][i] for i in sorted(_e['parts']))
+                _chunk_groups.pop(_grp, None)
+                log(f"chunk-group {_grp}: COMPLETE {_n}/{_n} -> reassembled {len(content)} chars")
+
         if is_alert:
             pass  # dedicated system-alerts webhook → always engage (OBJ-5), bypass the name gate
         elif voice:

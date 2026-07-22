@@ -20,8 +20,10 @@ fabric is never touched.
 """
 import json
 import os
+import re
 import subprocess
 import sys
+import uuid
 import time
 import urllib.request
 import urllib.error
@@ -34,6 +36,52 @@ SHARED_CONFIG_FILE = "/etc/dawntrader/discord-comms.env"  # CHANNEL_ID + KYLE_DI
 
 # Discord hard limit on message content length
 MSG_LIMIT = 2000
+# B-COMMS-CHUNK-FIX (2026-07-22): mirror of discord-langston-bridge.py ADDRESS_START_RE —
+# the receiver's ANCHORED address gate. Deliberately kept in sync; see
+# 'Claude Comms and Packages/Scope Files/B_COMMS_CHUNK_FIX_PRE_AUDIT.md'.
+ADDRESS_START_RE = re.compile(r'^[\s*_~`>#:\".\-]*langston\b', re.I)
+# Visible + auditable group marker (Langston ruling 2026-07-22: fail-loud beats an
+# invisible sentinel in the one silent-drop path we are closing). Langston-addressed ONLY,
+# so Kyle-facing and §10.5 alert traffic stay byte-identical to before.
+GROUP_MARKER_FMT = '\u27e8grp={grp} {i}/{n}\u27e9'
+GROUP_MARKER_RESERVE = 48  # headroom so chunk+marker can never exceed MSG_LIMIT
+
+
+
+def split_on_whitespace(text, limit):
+    """Split `text` into <=limit-char pieces, breaking ONLY at whitespace.
+
+    Finding B (B-COMMS-CHUNK-FIX, 2026-07-22; CC-A and CC-B escalated this independently).
+    `path:line` refs are the load-bearing evidence format on this channel. A hard cut
+    through `ready_to_buy_service.ts:2440` does NOT throw - it yields a different, still
+    PLAUSIBLE coordinate, so the reader verifies against the wrong line and concludes a
+    TRUE claim is false. Same false-absence class the governed-read rule exists to stop,
+    arriving via the transport instead of via a bad grep.
+
+    Breaking only at whitespace makes that impossible by construction: a token with no
+    whitespace in it (file:line, commit sha, path, URL) can never be split. Full
+    byte-fidelity was considered and REJECTED - it requires slices that begin or end with
+    whitespace, and Discord normalises leading/trailing whitespace on send, so a
+    byte-exact scheme would be silently wrong. Seam whitespace may normalise; evidence
+    coordinates cannot corrupt.
+
+    A single non-whitespace RUN longer than `limit` is genuinely unsplittable: we hard-cut
+    and the caller LOGS it, rather than silently corrupting a token nobody knows about.
+    """
+    pieces, i, n = [], 0, len(text)
+    while i < n:
+        if n - i <= limit:
+            pieces.append(text[i:])
+            break
+        window = text[i:i + limit + 1]      # +1 so a boundary AT the limit is visible
+        cut = max(window.rfind(chr(10)), window.rfind(' '))
+        if cut <= 0:
+            cut = limit                     # unbreakable run - caller logs this
+        pieces.append(text[i:i + cut])
+        i += cut
+        while i < n and text[i] in (' ' + chr(10)):   # consume seam whitespace once
+            i += 1
+    return [p for p in pieces if p != '']
 # A voice message carries this flag (IS_VOICE_MESSAGE = 1 << 13)
 VOICE_MESSAGE_FLAG = 8192
 
@@ -170,9 +218,35 @@ def _send_chunks(url, base_headers, content, log_file, mention_user_id=None, ext
 
     Aborts (returns None) if any chunk fails, so callers never log a truncated delivery.
     """
+    # B-COMMS-CHUNK-FIX: decide Langston-addressing on the ORIGINAL content, before any
+    # mention/marker mutation, so the test is stable.
+    addressed_langston = bool(ADDRESS_START_RE.match(content or ""))
     chunks = chunk_text(content)
+    multi_langston = addressed_langston and len(chunks) > 1
+    if multi_langston:
+        # Reserve headroom so chunk + marker can never exceed the 2000-char hard cap, and
+        # split ONLY at whitespace (Finding B) so no file:line / sha / path is ever cut in
+        # half across the seam.
+        _lim = MSG_LIMIT - GROUP_MARKER_RESERVE
+        chunks = split_on_whitespace(content, _lim)
+        if any(len(_c) >= _lim for _c in chunks):
+            log('send: WARNING unbreakable run >=%d chars - a token may be split' % _lim,
+                log_file)
     if mention_user_id:
-        chunks[0] = f"<@{mention_user_id}> " + chunks[0]
+        if addressed_langston:
+            # §2 FIX: NEVER prepend to a Langston-addressed dispatch — '<' is not in the
+            # gate's allowed leading class, so a prepended mention drops the whole message.
+            _m = ADDRESS_START_RE.match(chunks[0])
+            _cut = _m.end() if _m else 0
+            chunks[0] = chunks[0][:_cut] + f" <@{mention_user_id}>" + chunks[0][_cut:]
+        else:
+            chunks[0] = f"<@{mention_user_id}> " + chunks[0]
+    if multi_langston:
+        _grp = uuid.uuid4().hex[:8]
+        _total = len(chunks)
+        chunks = [f"{_c}\n" + GROUP_MARKER_FMT.format(grp=_grp, i=_i + 1, n=_total)
+                  for _i, _c in enumerate(chunks)]
+        log(f"send: Langston-addressed multi-chunk grp={_grp} n={_total}", log_file)
     first_id = None
     for i, chunk in enumerate(chunks):
         payload = {"content": chunk}

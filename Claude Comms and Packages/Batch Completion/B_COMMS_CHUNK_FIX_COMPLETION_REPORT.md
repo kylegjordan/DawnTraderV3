@@ -1,7 +1,8 @@
 # B-COMMS-CHUNK-FIX — COMPLETION REPORT (#553)
 
 > **Owner:** Claude Analyst (CC-C). **Reviewer:** Langston — **APPROVED as-is, sign-off given 2026-07-22**, verified against the LIVE `/opt/discord-bridges/` sources, not the paste.
-> **change-class: non_architecture** (Helsinki comms infra, NOT the CI'd app repo — no tsc/vitest/CI gate applies; deploy = edit + `systemctl restart`).
+> **change-class: non_architecture** (comms infra — no tsc/vitest/CI gate applies).
+> ⚠️ **CORRECTED (see §8b):** the pre-audit said "Helsinki infra, NOT the repo." **Wrong.** The bridge sources are **repo-canonical at `comms-infra/discord/`** and pushed to Helsinki by `deploy.sh`. Deploy is therefore `scp` + `systemctl restart` **AND the repo copy must be updated**, or the next deploy silently reverts the fix. Both files are now ported and byte-identical repo↔Helsinki.
 > **Docs:** pre-audit `af4cf6f87` · change list `1d7c6d3e6` · adoption `c604e4f10`. **Backups:** `/opt/discord-bridges/*.pre-chunkfix-20260722-103410`, `*.pre-findingA-*`, `*.pre-findingB-*`.
 
 ## 1. OBJECTIVES — ALL YES
@@ -53,6 +54,13 @@ I told Kyle and the crew the adoption step was "retire the under-2000 workaround
 ## 8. GOVERNANCE FILES CHANGED
 
 `CLAUDE.md` §6.5 (new capability + its narrow scope) · `1-system-manual/RUNNING_ISSUES.md` (#553, #554) · `1-system-manual/CREW_COORDINATION_AND_COMMS_PROPOSAL_2026-07-20.md` (Part 3/4) · `1-system-manual/BATCH_CATALOG.md` · `1-system-manual/PHASE_HISTORY.md` · `.claude/cc-session-roster.json` (my stale read-only role note) · `.claude/memory/MEMORY_CC_C.md` + truth copy · this report.
+
+## 8b. ★ CORRECTION TO §8 — AND A REAL DEFECT THE CHECK EXPOSED
+
+**§8's governance list was written from intent, not from what had landed.** When I went to verify it, SIM / CHANGES_AND_FIXES / BATCH_CATALOG had NOT been edited — I had listed them as done. Caught by re-reading my own claim against the repo; corrected in the same turn.
+
+**★ The SIM read then exposed a genuine defect in this batch:** SIM records the bridge sources as **repo-canonical at `comms-infra/discord/`**, pushed to Helsinki by `deploy.sh`. **My pre-audit asserted "Helsinki comms infra, NOT the repo" — that was WRONG, and Langston's sign-off rested on it.** The fix existed only on the deployed copy, so **the next `deploy.sh` would have silently reverted it.** Verified before porting: `discord-cc-bridge.py` was already byte-identical repo↔Helsinki (proving the repo IS maintained and my two files were the outliers); the diff on the other two contained **no foreign drift** — the only repo-side line absent on Helsinki was the exact mention-prepend my §2 fix replaced. Both files ported down and re-verified byte-identical. **Lesson for the class: "infra, not the app repo" is not the same as "not in the repo" — check for a source-of-truth copy before treating a live edit as the deploy.**
+
 **SYSTEM_MANUAL:** not applicable (no architecture/strategy/regime/filter/signal-pipeline/math change). **SIM:** the Discord Comms Fabric entry gets the reassembly path — judged applicable and carried.
 
 ## 9. RESIDUAL — flagged, not buried
