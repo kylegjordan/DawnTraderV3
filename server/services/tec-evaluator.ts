@@ -308,6 +308,7 @@ export async function evaluateTECExit(input: TECExitInput): Promise<TECExitDecis
     // Both calls take an explicit `assetClass` from the context.
     const moonbagQualified = isMoonbagQualifier(
       input.context.assetClass,
+      callerMode, // P19-B8.5i — selects VTS vs active trailing flag ('vts' incl. shadow → VTS; paper/live → active)
       input.context.strategy ?? '',
       input.sourcePool,
       input.context.regime,
