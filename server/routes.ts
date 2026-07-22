@@ -2785,7 +2785,15 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   // (rtb_shadow_pool_members) by promotion cycle, LEFT JOINs each member to its
   // resolving shadow trade (rtb_shadow_pairings) for the realized outcome, and returns
   // the most-recent cycles paginated + the currently-open shadows + a selection-quality
-  // summary computed over the returned cycles. DORMANT today (rtb_total=0 → no rows).
+  // summary computed over the returned cycles.
+  // ★ B-RANKING-COMPONENT-CAPTURE (#555, 2026-07-22) — CORRECTED. This previously read
+  // "DORMANT today (rtb_total=0 → no rows)". That is FALSE and had become actively
+  // misleading: measured 2026-07-22, `rtb_shadow_pairings` holds 14,232 rows and
+  // `rtb_shadow_pool_members` 61,157, both writing continuously. The stale note pointed a
+  // later triager straight at the WRONG disposition (read "unused" → delete a live,
+  // purpose-built capability). Left uncorrected it would have justified deleting the very
+  // sink this batch exists to repair. Comments asserting emptiness age badly — this one is
+  // stated as a dated MEASUREMENT, not a standing claim.
   // pool_size comes from the stamp, never COUNT(*) (a tolerated member-write skip can
   // leave fewer rows than the pool had — Langston Step-2).
   apiRouter.get('/shadow-trades/by-cycle', authenticateToken, async (req: AuthenticatedRequest, res) => {

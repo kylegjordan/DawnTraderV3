@@ -2219,10 +2219,22 @@ class ReadyToBuyService {
       const promoted = i < limit;
       const regime = meta.regime ?? meta.pairRegime ?? null;
       const finalScore = num(s.finalScore);
-      const hybridScore = num(s.hybridScore);
+      // ★ B-RANKING-COMPONENT-CAPTURE (#555, 2026-07-22): these three read METADATA, not the
+      // row columns. `rtb_signals.{hybrid_score,regime_weight,decay_penalty}` are NULL FROM
+      // BIRTH — the queue-insert builder never passed them (storage.ts's upsert mapping is
+      // wired but fed `undefined`), and the refresh writes the recomputed values only into
+      // `metadata`. Reading the columns therefore recorded NULL for 3 of the 4 FinalScore
+      // components on EVERY shadow-pairing row (measured: 14,232 rows, final_score 14,232
+      // non-null, these three 0) — leaving the "did we pick the best?" selection-quality
+      // view structurally unable to answer its own question. Metadata is the SSOT here, which
+      // is already this block's idiom: `meta.atr`/`meta.sourcePool` above and
+      // `num(meta.rankingScore)` immediately below. The three column reads were the anomaly.
+      // `confidence` stays on `s.` — it IS populated at insert (a real column). The now-dead
+      // columns are dropped by this same batch (zero readers after this change).
+      const hybridScore = num(meta.hybridScore);
       const confidence = num(s.confidence);
-      const regimeWeight = num(s.regimeWeight);
-      const decayPenalty = num(s.decayPenalty);
+      const regimeWeight = num(meta.regimeWeight);
+      const decayPenalty = num(meta.decayPenalty);
       const rankingScore = num(meta.rankingScore);
       const diAtQueue = num(s.diAtQueue);
       const dbsScoreAtQueue = num(s.dbsScoreAtQueue);
@@ -2474,6 +2486,26 @@ class ReadyToBuyService {
       // RTB display attaches its rank key at read time (getDisplayRankKey), and the
       // open table shows the promote-frozen rankAtPromote stamp.
       rankingScore: input.rankingScore,
+      // ★ B-RANKING-COMPONENT-CAPTURE (#555, 2026-07-22): born-populated ranking components.
+      // Without these, a row carries them in NEITHER store until its first refresh (~30s),
+      // so `captureShadowPool` running on a pre-first-refresh row recorded NULLs even after
+      // the read was re-pointed to metadata. Written HERE (metadata), never to the columns —
+      // the columns are dropped by this batch, so populating them would resurrect the exact
+      // two-location split-brain we are removing.
+      //   • regimeWeight — honest state-at-admission (same lineage the refresh recomputes).
+      //   • decayPenalty — `0` is the TRUE admission value, not a placeholder: the formula is
+      //     λ × ageMinutes (see calculateDecayPenalty above), and a just-queued signal has
+      //     age 0. The first refresh overwriting it is the value EVOLVING with age, not
+      //     disagreeing with a fabricated seed.
+      // ⚠️ hybridScore is DELIBERATELY ABSENT (Langston-ruled honest-null, carved out): its
+      // admission source substitutes `confidence` via `?? extendedMetrics.confidence`
+      // (signal-orchestrator.ts:1051) and BOTH refresh paths repeat the same fallback and
+      // write it back — so a substituted confidence is indistinguishable from a real hybrid
+      // score at every downstream point, including here. Capturing it would bake that
+      // substitution into the calibration record. Removing the fallback changes ADMISSION
+      // behaviour and is its own scoped item; absent stays absent until then.
+      regimeWeight: input.regimeWeight,
+      decayPenalty: input.decayPenalty,
     };
 
     // Insert new signal with pre-computed metrics from SQE

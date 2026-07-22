@@ -1941,9 +1941,14 @@ export const rtbSignals = pgTable("rtb_signals", {
   expectedReturn: decimal("expected_return", { precision: 5, scale: 4 }).notNull(), // 0.0000 to 1.0000
   // Directive 11.0F: Primary ranking metrics (ONLY source of truth for signal ranking)
   finalScore: decimal("final_score", { precision: 5, scale: 4 }).notNull(), // Unified ranking score (FinalScore)
-  regimeWeight: decimal("regime_weight", { precision: 5, scale: 4 }), // Market regime alignment weight
-  hybridScore: decimal("hybrid_score", { precision: 5, scale: 4 }), // Hybrid strategy score component
-  decayPenalty: decimal("decay_penalty", { precision: 5, scale: 4 }), // Signal age decay factor
+  // ★ B-RANKING-COMPONENT-CAPTURE (#555, 2026-07-22): `regime_weight` / `hybrid_score` /
+  // `decay_penalty` REMOVED (DROP migration in the same batch). They were NULL on every row
+  // for their whole existence — the queue-insert builder never supplied them, so the upsert
+  // mapping was fed `undefined` forever. Their sole reader (the shadow-pairing selection-
+  // quality capture) now reads `metadata`, which is the SSOT for these derived components
+  // and already this codebase's idiom for them. Kept-as-data did NOT apply (unlike the
+  // `paper_sim` precedent, these hold no real data to preserve). §15: removed rather than
+  // left lingering, so nothing here looks wired when it is not. See DELETED_COMPONENTS_LOG.
   // Market data for display (Directive 8.8.4-C.14.A)
   currentPrice: decimal("current_price", { precision: 20, scale: 8 }), // Current market price at queue time
   volume24h: decimal("volume_24h", { precision: 20, scale: 2 }), // 24h USD volume

@@ -3924,9 +3924,13 @@ export class DatabaseStorage implements IStorage {
           riskScore: data.riskScore,
           expectedReturn: data.expectedReturn,
           finalScore: data.finalScore,
-          regimeWeight: data.regimeWeight,
-          hybridScore: data.hybridScore,
-          decayPenalty: data.decayPenalty,
+          // ★ B-RANKING-COMPONENT-CAPTURE (#555, 2026-07-22): `regimeWeight`/`hybridScore`/
+          // `decayPenalty` mappings REMOVED with their columns. They were writer-shaped code
+          // pointing at nothing — the queue-insert builder never supplied them, so this
+          // mapping was fed `undefined` on every upsert and the columns were NULL from birth
+          // on all rows. Their only reader (the shadow-pairing capture) now reads metadata,
+          // which is the SSOT for these derived components. Columns dropped in the same batch
+          // per §15 (no lingering legacy); see DELETED_COMPONENTS_LOG.
           status: data.status,
           queuedAt: new Date(),
           expiresAt: data.expiresAt,
