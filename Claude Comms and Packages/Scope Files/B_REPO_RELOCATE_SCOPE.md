@@ -78,13 +78,49 @@ A **worktree** is a second folder that checks out a *different branch of the sam
 1. **OBJ-1 — Kyle amends §7.1 explicitly**, or declines. No implementation before this. The amendment must preserve §7.1's *history section* (why it was set in stone) — that record must not be deleted, only superseded, per the rule's own terms.
 2. **OBJ-2 — Establish the laptop repository** on local NTFS with three worktrees, one per session, each on its own branch.
 3. **OBJ-3 — Dual push.** One `git push` reaches both GitHub and the Drive mirror (git supports multiple push URLs on a single remote — no wrapper script, no second command to forget).
-4. **OBJ-4 — Re-point Langston at GitHub** for repo reads, with the Drive mount retained as fallback/browse only.
+4. **OBJ-4 — Give Langston a local clone he fetches from GitHub into**, with the Drive mount retained as fallback/browse only.
+
+   > ⚠️ **CORRECTED after Langston's Step-1 review — my original wording ("re-point Langston at GitHub") had no mechanism, and my §4 evidence did not support the claim I hung on it.** I verified `git ls-remote` works from his box and generalised that to "his review path is fine." **`ls-remote` only reads REFS.** The command he actually reviews with — `git show origin/<branch>:<path>` — reads OBJECTS, and objects need a local repository to live in. He has none (§4). *"He can fetch from GitHub without the mount"* is true **only once he has somewhere to fetch INTO.**
+   >
+   > **This is the same error shape as my other misses today: verify one narrow thing, then assert the broad thing it seems to imply.** Recording it here rather than quietly patching the objective.
+   >
+   > **REQUIRED MECHANISM — pick one at Step-2:** **(a)** a bare/mirror clone on his box that he `git fetch --prune`es before each review (preferred: it makes `git show origin/…:<path>` work exactly as it does today, changes nothing about how he reads, and removes his dependency on an 8.5-second filesystem); or **(b)** GitHub raw/API reads, which changes his read idiom and needs a token. **Named before Step-2, per his ruling — otherwise his review path is undefined after the migration.**
 5. **OBJ-5 — Retire `C:\dev`** as a separate test bench once authoring and testing share one local tree — removing the two-trees-with-different-capabilities condition that caused the original inversion. Per rule 18, this is a real deletion with a `DELETED_COMPONENTS_LOG` entry, not a stub left lying around.
 6. **OBJ-6 — Rewrite `CLAUDE.md` §7.1** to the new flow, and update the batch-close sync gate, which currently checks Drive↔GitHub in both directions and would otherwise be checking the wrong pair.
 
 ---
 
-## 6. OPEN QUESTIONS FOR LANGSTON
+## 5b. ★ OPTION C — ENFORCE §7.1's DIRECTION INSTEAD OF REVERSING IT (added after CC-A's Step-1 challenge)
+
+CC-A attacked §1 with the sharpest sentence said about this proposal: ***"'GitHub is the source of truth' is not a new proposal — it is a description of the state the rule exists to prevent."*** He is right that the 2026-06-01 incident **was** GitHub holding truth that Drive did not.
+
+**My counter, for the record:** that harm required **two** things — divergence **and** misplaced belief. People authored against a stale Drive, and a governance item vanished from where they looked for it. Demoting Drive to an explicitly-labelled mirror removes the *belief*, so lag becomes visible-by-definition rather than a trap. **But that puts the entire proposal's weight on the mirror actually being written every time** — which is why Langston's answer to open question 2 (below) is not a nicety.
+
+**★ THE THIRD OPTION HIS CHALLENGE IMPLIES, and it may be the right answer:**
+
+> **§7.1's weakness is not its DIRECTION — it is that its direction is enforced ENTIRELY BY HUMAN DISCIPLINE, and in 2026-06-01 that discipline failed silently for 42 commits. The rule is correct and unenforced.**
+
+- Keep Drive authoritative. **Reverse nothing.** No governance amendment needed at all.
+- Put a **pre-push hook in the `C:\dev` bench that refuses to push, full stop** — the 06-01 failure becomes structurally impossible rather than forbidden-by-convention.
+- Make the Drive↔GitHub divergence check a **machine gate at batch close**, not a remembered step.
+
+**If Option C holds, Kyle's proposal should be judged only on what remains — the two-trees ergonomics and worktrees for the #557 index race — and those may not require touching §7.1 at all.** **No recommendation between A (relocate) and C (enforce) yet; that is a Step-2 decision and ultimately Kyle's.** Open question for Langston: does Option C genuinely close 06-01, or does it just relocate the trust?
+
+---
+
+## 6. OPEN QUESTIONS FOR LANGSTON — ★ ALL FOUR ANSWERED (Langston Step-1, 2026-07-22)
+
+> **Step-1 verdict: APPROVED to advance**, with the two hard preconditions this scope already names (§0/OBJ-1 Kyle's explicit amendment before ANY implementation; §7 CC-B's verbatim objection before Step-2). Langston independently verified the load-bearing claim against `CLAUDE.md` at the same ref — §7.1 line 382 (the never-reverse clause) and line 398 (the 42-commit incident) — and confirmed no drift between the scope and my dispatch.
+
+1. **Source of truth → GitHub. AGREED.** His refinement, which is worth keeping: my counter (Drive is the last-thing-standing copy) is a **durability** property, not an **authority** one. *"GitHub is what everything grades and deploys against, so it's the ref; Drive's survival value is preserved by keeping it a verified mirror, not by naming it truth. Don't conflate the two roles."*
+2. **Verify the mirror — MANDATORY, not optional.** ★ And his reason is stronger than mine: with one remote carrying two push URLs, **git reports success/failure per-URL and non-atomically — GitHub can succeed while Drive fails, which is the 42-commit shape mid-flight. Partial success is the DEFAULT failure mode of a dual-URL push, not an edge case.** ⇒ the batch-close gate must compare both HEADs explicitly (`git ls-remote` each, compare SHAs) and **never trust the push exit code.**
+3. **Per-worktree `node_modules` — keep them ISOLATED, do not share a store.** 3×26s and some disk is nothing; a shared store *"reintroduces a cross-worktree coupling that's the same class of shared-state race #557 you're spending this batch to kill. Isolation is the point."*
+4. **Sequencing vs #554 — PARALLEL, and #554 lands first by default because it is UNBLOCKED.** This batch waits on Kyle's amendment; the board does not. *"#557 raced twice today, so worktrees carry real urgency — but urgency can't jump the amendment gate. Let the board proceed; hold this at the gate."*
+
+### Still open
+
+5. Does **Option C** (§5b) close 2026-06-01, or merely relocate the trust?
+6. Which OBJ-4 mechanism — bare mirror clone (preferred) or GitHub raw/API?
 
 1. **Is GitHub-as-source-of-truth the right answer to Kyle's question, or do you read it differently?** I have argued it above; attack it. The counter-argument I can see: Drive is the only copy that survives a laptop failure *and* a GitHub outage, and "source of truth" sometimes means "last thing standing" rather than "what everything reads."
 2. **Does the Drive mirror need to be verified, or just written?** A push that silently fails to one of two URLs is exactly the silent-divergence shape that produced the 42-commit staleness. I lean toward the batch-close sync gate checking the mirror explicitly rather than trusting the push.
