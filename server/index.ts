@@ -1432,11 +1432,16 @@ app.use((req, res, next) => {
 
     // B79.0n.RTB (2026-05-27): rtb_queue_refresher.ts RETIRED per Kyle directive
     // 2026-05-27 — verified zero production callers across server/ + client/ +
-    // shared/ before delete. File was Phase 8.8.4-C.6 cron-based 30s refresh
-    // already superseded by ReadyToBuyService.startRefreshCycle() (Central-
-    // Clock-synchronized) wired into ActiveExecutionEngine lifecycle. Original
-    // deprecation comment + boot path were never wired post-supersession.
-    console.log('[B79.0n.RTB] rtb_queue_refresher.ts retired (legacy file deleted; ReadyToBuyService.startRefreshCycle is canonical via ActiveExecutionEngine lifecycle)');
+    // shared/ before delete. File was a Phase 8.8.4-C.6 cron-based 30s refresh.
+    // ★ CORRECTED B-RTB-REFRESH-CONSOLIDATE OBJ-1 (#532, 2026-07-22 — Langston caught this
+    // at Step-4): this comment said the refresh was "superseded by
+    // ReadyToBuyService.startRefreshCycle(), wired into the ActiveExecutionEngine lifecycle,
+    // and canonical." That method was DELETED in this batch — Mechanism A, the per-signal
+    // Central-Clock path, is RETIRED. Leaving the claim standing is the §15 lingering-reference
+    // trap: a later reader would take a deleted method for the canonical one and resurrect it.
+    // THE CANONICAL REFRESH IS NOW THE BUCKETED RTBRefreshService, started unconditionally at
+    // boot (see rtbRefreshService.start() in the init sequence above) — NOT engine-gated.
+    console.log('[B79.0n.RTB] rtb_queue_refresher.ts retired (legacy file deleted; the bucketed RTBRefreshService is the single canonical RTB refresh — B-RTB-REFRESH-CONSOLIDATE OBJ-1 retired the per-signal mechanism 2026-07-22)');
 
     // Phase 8.9: Start Autonomy Layer (hourly self-checks, daily optimization)
     try {
