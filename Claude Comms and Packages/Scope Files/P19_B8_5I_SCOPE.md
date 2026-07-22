@@ -17,7 +17,10 @@ change-class: architecture
 
 | site | fact |
 |---|---|
-| `trailing-exit-controller.ts:135` | `moonbagQualifyingStrategies: []` // *"variant-K-aligned per Kyle 2026-05-05"* |
+| `trailing-exit-controller.ts:135` | `moonbagQualifyingStrategies: []` // *"variant-K-aligned per Kyle 2026-05-05"* — **⚠️ CORRECTED AT STEP-2: THIS IS NOT THE LIVE CONTROL.** `TEC_DEFAULTS` is explicitly NOT a runtime fallback (`:125-128`: *"all 11 TEC keys MUST resolve from per-class DB rows (HARD-FAIL on missing)… DO NOT add a runtime fallback path consuming this"*) — it exists for **test-fixture seeding + type inference only**. |
+| `trailing-exit-controller.ts:444` | **★ THE ACTUAL LIVE CONTROL — `moonbagQualifyingStrategies: requireKey('moonbag_qualifying_strategies')`, a DB row that HARD-FAILS if absent.** Step-2 queried it live: **`[]` for ALL FOUR asset classes** (crypto_spot, crypto_perp, xstock_spot, xstock_perp), and `break_even_enabled = false` for all four. **⇒ trailing IS off, now verified at the GOVERNING VALUE rather than inferred from a code default — a stronger verification than the scope originally had.** |
+| ⚠️ **SCOPE SELF-CORRECTION** | The scope (and my reports to Kyle) repeatedly named `:135` as "the control". **It is not.** The real control is a DB row that is invisible to anyone reading the controller source. **This does not weaken the batch's thesis — it strengthens it:** the discoverability defect is worse than described, because the operative value isn't in the code at all. It also means the new flag MUST be a 12th DB-governed key resolved through `requireKey` (which OBJ-1 already specifies), NOT a code constant. |
+| `b65-tec-parity.test.ts:323-324` | asserts the list CONTAINS `strong_bull_trend` + `breakout` — **a FIXTURE expectation, not live config.** Flagged so a future reader doesn't read it as evidence trailing is on. Step-3 must confirm this test seeds its own rows rather than asserting against production values. |
 | `:466-474` | `isMoonbagQualifier` returns **false** when the strategy is not in the list |
 | `:1155` | qualified ⇒ enter ladder (`TRAILING_TAKE`, rung 1, ratchet). **NOT qualified ⇒ `closeNow=true`, `closeReason='target_hit_no_trailing'`, log "moonbag denied: strategy-not-qualified"** |
 | `tec-evaluator.ts:294` | `if (input.useTrailing && input.atr > 0)` — the **OUTER** gate |
