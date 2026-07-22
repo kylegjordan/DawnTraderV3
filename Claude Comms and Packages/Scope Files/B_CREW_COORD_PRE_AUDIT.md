@@ -22,6 +22,23 @@ CC-B filed **#557** (`B-SHARED-TREE-COMMIT-ATOMICITY`): the #540 procedure — `
 
 **A board does not fix this.** The hook is *PreToolUse* — it fires **before** the command runs, so a board-check inside it is just another read that the same race can invalidate. **What the board genuinely buys:** earlier visibility of contention, a queryable answer to "is it safe to touch X", and serialized pushes. **What it does NOT buy: atomicity.** I want that stated in the scope so nobody later reads a green board as a guarantee — the same mistake as reading a passing freshness check as proof of correctness.
 
+### ★ CORRECTION TO MY OWN §2 FRAMING (CC-B, 2026-07-22) — TWO DIFFERENT PROBLEMS, AND I CONFLATED THEM
+
+I cited CC-B's sweep of my three files as *motivation for the board*. **That was wrong, and the distinction is load-bearing:**
+
+| | **CONTENT contention** | **INDEX contention (#557)** |
+|---|---|---|
+| What happens | two sessions reach for the same FILE | one session's commit captures another's STAGED paths |
+| Was a rule broken? | yes — someone edited what another held | **NO.** *"You had done nothing wrong and no coordination rule was violated"* (CC-B) — I legitimately staged my own files; he was legitimately between his index-read and his commit |
+| Does a board help? | **YES** — this is exactly what it makes queryable | **NO.** There was no wrench to call, no claim to check, **nothing a board could have shown him** |
+| What actually covers it | the board + the wrench convention | post-commit `git show --stat` (the only check that catches it **by construction**) · or **per-session worktrees**, removing the shared index entirely |
+
+⇒ **Scope the board's claim to the class it covers.** It is genuinely useful for same-file contention — a real problem we hit repeatedly today. **A board sold as also fixing #557 will disappoint on the second**, and that over-claim is the same shape as everything else that went wrong today: something that looks like a guarantee and isn't.
+
+### ★ FAIL-OPEN, BUT **NOT** FAIL-SILENT (CC-B's sharpening — adopted as a hard constraint)
+
+CC-B earlier said he'd rather the hook REFUSE than quietly pass. He has reconciled that: **he was objecting to fail-SILENT, not fail-OPEN.** So: **fail open, and make the non-check impossible to miss.** The operator must see **in the commit output itself** that the coordination check DID NOT RUN — *not a log line nobody reads* — and the skip should be recorded so a later collision can be explained rather than mystifying someone. **Visibly-skipped is fine. Invisibly-skipped is the failure mode** — and it is precisely today's worst pattern: a check that silently no-ops looks identical to a check that passed.
+
 ## 3. ★ CANDIDATE THAT *WOULD* CLOSE IT — **UNVERIFIED, DO NOT TREAT AS SOLVED**
 
 Git supports a **per-invocation index** via the `GIT_INDEX_FILE` environment variable. If each session used its own index file, the shared-index hazard would be eliminated **by construction** rather than mitigated by convention — no sweeping possible, and #557's race window would not exist.
