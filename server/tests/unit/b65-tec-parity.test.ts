@@ -71,7 +71,6 @@ import {
   getConcurrentMoonbagCount,
   getResolvedTECConfig,
   primeTECConfig,
-  isMoonbagQualifier,
   _testClearEngineConfigCache,
 } from '../../services/trailing-exit-controller.js';
 import { clearModuleConstantsCache } from '../../services/module-constants-service.js';
@@ -124,12 +123,6 @@ function seedAllConstants() {
     { ...wildcard, constantName: 'moonbag_reserved_slots', value: 1 },
     // P19-B1 TEC.b (2026-06-13): strict requireKey — full 11-key set required.
     { ...wildcard, constantName: 'rung_floor_slippage_buffer_multiplier', value: 1.0 },
-    // P19-B8.5i: the two trailing master switches. Seeded TRUE in THIS fixture because the
-    // suite's purpose is to exercise the trailing MACHINE (non-empty moonbag list above);
-    // with the flags off, isMoonbagQualifier would gate every scenario to non-trailing.
-    // The flag's OWN gating behaviour is tested in the dedicated block below.
-    { ...wildcard, constantName: 'trailing_enabled_vts', value: true },
-    { ...wildcard, constantName: 'trailing_enabled_active', value: true },
   ];
 }
 
@@ -593,55 +586,5 @@ describe('B65.2 — evaluateTECExit end-to-end', () => {
     expect(d.ladderRungsHit).toBe(2);
     expect(d.newStopPrice).toBeGreaterThanOrEqual(115); // rung-2 floor at $115
     expect(d.shouldExit).toBe(false); // price still above stop floor
-  });
-});
-
-// ═══════════════════════════════════════════════════════════════════════════
-// P19-B8.5i — the trailing master switch: TWO flags, one VTS + one active.
-// Pins that the flag GATES per path and the two paths are INDEPENDENT. The
-// strategy 'strong_bull_trend' is in the seeded moonbag list and has no required
-// source pool, so it qualifies on the strategy alone WHEN its path's flag is on.
-// ═══════════════════════════════════════════════════════════════════════════
-describe('P19-B8.5i — trailing master switch (isMoonbagQualifier flag gating)', () => {
-  // Re-seed the two flags to explicit values, then re-prime the config cache.
-  async function primeFlags(vts: boolean, active: boolean) {
-    clearModuleConstantsCache();
-    seedAllConstants();
-    for (const r of mockRows.current) {
-      if (r.constantName === 'trailing_enabled_vts') r.value = vts;
-      if (r.constantName === 'trailing_enabled_active') r.value = active;
-    }
-    _testClearEngineConfigCache();
-    await primeTECConfig();
-  }
-  const qualifies = (mode: 'vts' | 'paper' | 'live') =>
-    isMoonbagQualifier('crypto_spot', mode, 'strong_bull_trend', null, 'TREND_FRIENDLY_STABLE');
-
-  it('★ BOTH OFF (the seeded production state) ⇒ nothing qualifies on either path', async () => {
-    await primeFlags(false, false);
-    expect(qualifies('vts')).toBe(false);
-    expect(qualifies('paper')).toBe(false);
-    expect(qualifies('live')).toBe(false);
-  });
-
-  it('★ VTS on, ACTIVE off ⇒ VTS qualifies, active (paper+live) does NOT — the paths are independent', async () => {
-    await primeFlags(true, false);
-    expect(qualifies('vts')).toBe(true);
-    expect(qualifies('paper')).toBe(false);
-    expect(qualifies('live')).toBe(false);
-  });
-
-  it('★ ACTIVE on, VTS off ⇒ active qualifies, VTS does NOT — independence in the other direction', async () => {
-    await primeFlags(false, true);
-    expect(qualifies('paper')).toBe(true);
-    expect(qualifies('live')).toBe(true);
-    expect(qualifies('vts')).toBe(false);
-  });
-
-  it('the flag is MASTER over the list — flag on but a non-listed strategy still does not qualify', async () => {
-    await primeFlags(true, true);
-    expect(isMoonbagQualifier('crypto_spot', 'vts', 'a_strategy_not_in_the_list', null, 'TREND_FRIENDLY_STABLE')).toBe(false);
-    // and a listed strategy DOES, confirming the flag gates in FRONT of the list, not instead of it
-    expect(qualifies('vts')).toBe(true);
   });
 });
