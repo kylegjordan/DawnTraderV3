@@ -819,7 +819,14 @@ class ReadyToBuyService {
    *
    * Score-timing invariant PRESERVED (Langston P19-B7.2b Step-4 gate): geometry inputs are
    * captured first, `refreshedFinalScore` is computed next, and ONLY THEN is decideMakerTaker
-   * run — so `signalStrength` consumes the DECAYED score, never the stale stored one.
+   * run. The ORDERING still holds and is still the gate.
+   * ⚠️ CORRECTED (#555 follow-up, 2026-07-22): the old trailing clause here read "so
+   * `signalStrength` consumes the DECAYED score, never the stale stored one." That is NO
+   * LONGER TRUE and was misrouting the dependency graph — `decideMakerTaker` below takes
+   * `signalStrength: scoring_base.flat_pwin_base` (a CONFIG base rate, ~:956), not the
+   * decayed score. It was true pre-B8.5a, which de-tinted the ranker onto measured per-class
+   * flat pWin base rates. Ordering text kept because it is still correct; the false
+   * consumption claim removed. Verified at origin before editing, not assumed.
    */
   private async acquireRefreshedInputs(
     signal: RtbSignal,
@@ -925,7 +932,14 @@ class ReadyToBuyService {
     }
 
     // Directive 11.0E: decay + FinalScore recompute (the gate is retired — #525 — but the
-    // decayed score is still the ranker's basis and decideMakerTaker's signalStrength vintage).
+    // decayed score is still recorded/telemetry-relevant).
+    // ⚠️ CORRECTED (#555 follow-up, 2026-07-22): this previously read "…is still the ranker's
+    // basis and decideMakerTaker's signalStrength vintage." BOTH halves are now false and
+    // together they described a dependency graph that no longer exists: the live default
+    // ranker is `r_multiple` (computeRankKey → signalRMultiple), which does not read
+    // finalScore; and decideMakerTaker's `signalStrength` takes the `flat_pwin_base` CONFIG
+    // value (~:956). This matters because it is exactly why the #555 hybridScore removal is
+    // safe — nothing behavioural consumes this score anymore.
     const decayPenalty = calculateDecayPenalty(signal.queuedAt, normalizedSymbol);
     const W = SCORE_WEIGHTS.FINAL_SCORE;
     const refreshedFinalScore = Math.max(0, Math.min(1,
@@ -1009,9 +1023,35 @@ class ReadyToBuyService {
     const metadata = signal.metadata as Record<string, any> || {};
     const confidence = parseFloat(signal.confidence || '0.5');
     const originalFinalScore = metadata.finalScore ?? parseFloat(signal.finalScore || '0.5');
-    const hybridScore = metadata.hybridScore ?? confidence;
+    // ★ B-RANKING-COMPONENT-CAPTURE follow-up (#555, 2026-07-22): the `?? confidence`
+    // substitution is REMOVED. It wrote CONFIDENCE under the hybridScore NAME, and because
+    // this value is written back into metadata below, the substitution became permanent and
+    // indistinguishable from a real hybrid score — corrupting the calibration record with a
+    // number that looks valid. Absent now stays absent (honest-null).
+    // ⚠️ THIS DOES CHANGE `refreshedFinalScore` — do not read it as behaviour-neutral.
+    // CORRECTED after a Langston Step-4 rejection of my first justification: I originally
+    // claimed equivalence via `calculateFinalScore` (score-calculator.ts:47), which applies
+    // `?? confidence ?? 0.5`. THAT FUNCTION IS NOT ON THIS PATH. The refresh inlines its own
+    // formula below (~:931) using `(hybridScore ?? 0)`. So with hybridScore now honestly
+    // absent, `refreshedFinalScore` drops by `confidence × W.HYBRID` (0.4) — systematically,
+    // because persisted metadata deliberately omits hybridScore (see the carve-out at the
+    // enrichedMetadata block). This is the common path, not an edge case.
+    // WHY IT IS STILL SAFE — the real reason, not the one I first gave:
+    //   • the finalScore SQE gate is RETIRED (signal_quality_evaluator.ts, P19-B8.5a,
+    //     Kyle-ratified) — sub-threshold finalScore is shadow-logged and pushes NOTHING to
+    //     failures, so it cannot evict a signal;
+    //   • the live default ranker is `r_multiple` (computeRankKey → signalRMultiple), which
+    //     does not read finalScore. Only the non-default control rankers do.
+    //   • decideMakerTaker does NOT consume it either: its `signalStrength` argument takes
+    //     the `scoring_base.flat_pwin_base` CONFIG value (~:956), not the decayed score.
+    //     ⚠️ NOTE the invariant comment above acquireRefreshedInputs still claims
+    //     `signalStrength` consumes the decayed score — that is STALE (true pre-B8.5a).
+    // So the lowered score is shadow/telemetry-only. "Safe because the gate that would have
+    // cared is retired" — NOT "safe because equivalent". Those are different claims and only
+    // the second one is false.
+    const hybridScore = metadata.hybridScore;
     const regimeWeight = metadata.regimeWeight ?? 0.5;
-    
+
     // ★ B-RTB-REFRESH-CONSOLIDATE (OBJ-1, 2026-07-19): this block was EXTRACTED verbatim
     // into `acquireRefreshedInputs` so the bucketed service runs identical logic. Behaviour
     // here is unchanged by construction. This mechanism is retired in staging step 2 (the
@@ -1323,7 +1363,17 @@ class ReadyToBuyService {
               const metadata = signal.metadata as Record<string, any> || {};
               const confidence = parseFloat(signal.confidence || '0.5');
               const originalFinalScore = metadata.finalScore ?? parseFloat(signal.finalScore || '0.5');
-              const hybridScore = metadata.hybridScore ?? confidence;
+              // ★ B-RANKING-COMPONENT-CAPTURE follow-up (#555, 2026-07-22): same removal as
+              // the per-signal path above — this is the BATCH refresh's copy of the identical
+              // substitution. Both had to go together; fixing one would have left the other
+              // writing substituted-confidence into metadata on every batch cycle.
+              // ⚠️ Same caveat as the per-signal site: `refreshedFinalScore` DOES drop by
+              // confidence × W.HYBRID here too. It is safe because the finalScore gate is
+              // retired and neither the live `r_multiple` ranker nor decideMakerTaker reads
+              // it — NOT because the math is equivalent. See the full note at the per-signal
+              // site; my original "equivalent via calculateFinalScore" claim was false (that
+              // function is not on this path).
+              const hybridScore = metadata.hybridScore;
               const regimeWeight = metadata.regimeWeight ?? 0.5;
               
               const queuedAt = signal.queuedAt;
