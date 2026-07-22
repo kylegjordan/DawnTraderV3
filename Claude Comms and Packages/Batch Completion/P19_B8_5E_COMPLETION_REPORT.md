@@ -55,7 +55,11 @@ The planned `luld_tier` column + S&P500/Russell1000 index-membership plumbing wa
 |---|---|
 | MU 385 · SKHY 350 · INTC 326 · ORCL 246 | TSM 181 · QCOM 100 · BMNR 96 · MARA 67 · BABA 64 · NOC 39 · **CDNS 35 · PM 26 · ARKK 21 · MOS 17 · C 17** |
 
-**★ FOR ARKK IT IS A REGRESSION — and ARKK is the original 49-refusals victim that started `#548`.** The constant this batch removed was **90s**. ARKK's mark at **69–79s** was **accepted** under the flat rule and is **refused** under its inherited-σ **55s** ceiling. It re-alerted within the hour. Venue-quiet supplies the stale mark; **my seed supplies the over-strict refusal**; ARKK needs both to alert, so "venue-quiet, not a regression" is not separable here.
+**★ FOR ARKK IT IS A REGRESSION — and ARKK is the original 49-refusals victim that started `#548`.** The constant this batch removed was **90s**. ARKK's mark at **69–79s** was **accepted** under the flat rule and is **refused** under its inherited-σ **55s** ceiling. **⚠️ CORRECTED — see the self-correction note below; ARKK's alert PREDATES this deploy.** Venue-quiet supplies the stale mark; **my seed supplies the over-strict refusal**; ARKK needs both to alert, so "venue-quiet, not a regression" is not separable here.
+
+**⚠️⚠️ SELF-CORRECTION (ANALYST, 30-second timeline check) — I MADE A NEW FALSE CLAIM INSIDE THIS VERY AMENDMENT.** I wrote that ARKK *"re-alerted within the hour"* of deploy. **It did not.** MOS/ARKK/PM fired at **20:35:15Z**, BEFORE my first deploy attempt (20:42:32Z) and the hotfix restart (20:44:33Z) — **raised by the OLD flat-90s rule.** Only C + CDNS (20:50:18Z) fired under B8.5e. **3 of the 5 alerts I cited against my own batch were not my batch's doing.** I inferred causation from co-occurrence without checking a timestamp — **the same unmeasured-confident-claim failure this section exists to document, committed while documenting it.**
+
+**THE OVER-TIGHTENING FINDING STANDS on direct evidence that never depended on the alerts:** the 21:05Z exit-monitor lines show ARKK refused at `basis=risk_to_stop`, `σ=2.609e-4/s src=classwide`, **ceiling 55s vs a mark 69-79s old** — which the removed 90s constant would have accepted. **Retracted: the alert attribution. Not retracted: the regression.**
 
 **TWO COMPOUNDING CAUSES, and the second is the real one:**
 1. `sigma_min_observations = 200` was seeded as a guess at "enough history", never checked against real tick density — 11/15 held symbols cannot reach it.
