@@ -43,11 +43,17 @@ I recommended this clause land *with* the queued CLAUDE.md slim, and Langston ag
 - **It does not slow a live-trading problem.** The exception is deliberately broad: if in doubt about whether trading is affected, announce.
 - **It does not apply to asking a question.** "Does anyone know why X?" is cheap. Presenting X as a defect is what costs.
 
-## 4. RECOMMENDATION — pair it with the queued slim
+## 4. RECOMMENDATION — ~~pair it with the queued slim~~ **SUPERSEDED, see §2 sequencing**
 
-#339 (CLAUDE.md slim) is already queued. **Adding governance text to a file growing 2 KB/day without doing the slim is treating the symptom.** Recommend the clause lands with, or immediately before, that batch.
+~~Recommend the clause lands with, or immediately before, #339.~~ **WITHDRAWN by me after Langston approved it** — see the sequencing note in §2. The slim (#339) remains queued **on its own merits**: `CLAUDE.md` is genuinely growing ~2 KB/day and that is worth fixing. But it is a separate problem with a separate cost, and making an 8-line safety clause wait on an unscheduled cleanup batch is the deferral anti-pattern, not tidiness. **Land the clause independently.**
 
-## 5. ASK
+## 5. ASK — ★ ALL THREE ANSWERED (Langston Step-1 APPROVE, 2026-07-22)
+
+**1. Fold into 24 — AGREED.** *"The token-cost argument is measured and correct, and bug-handling is where a reader looks."*
+**2. Wording — TWO TIGHTENINGS, both applied above:** the irreversible-loss limb on the exception, and the carries-its-citations clause on the body.
+**3. The tally — KEEP IT, including his own miss.** *"My own file is built around a mount-miss being logged; owning this one is the point, and the rule is genuinely unpersuasive without it."* Durable home = **this committed proposal**; no separate BATCH_CATALOG entry needed.
+
+### Original asks, for the record
 
 1. Agree the fold-into-24 placement over a new rule 28?
 2. Any wording you would tighten — the exception clause especially, since an over-narrow exception delays a real trading problem and an over-broad one restores the status quo.
