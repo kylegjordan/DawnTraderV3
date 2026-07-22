@@ -1007,6 +1007,25 @@ export class SignalOrchestrator {
       _displayContext = {};
     }
 
+    // ★ P19-B8.5f (OBJ-2, #550): runtime BACKSTOP for the typed `SQESignalMetadata.maxHoldingMs`
+    // contract. The type is the primary gate — omitting the key below is now a COMPILE error —
+    // and this throw catches only what a type cannot: an `as any` or JSON-boundary bypass that
+    // delivers a rawSignal whose central stamp never ran. Mirrors the B4a `STAMP_MISSING` guard
+    // at :496-509 (typed field = compile error, runtime throw = bypass backstop).
+    // FAIL LOUD, never a silent default: a wrong-but-plausible max-hold silently changes when
+    // every position exits, which is exactly the class of silent defect this batch exists to
+    // close (§5 no-silent-fallback; the B8.8 sizing-fallback fail-loud sweep).
+    const _rawMaxHoldingMs = (rawSignal.metadata as Record<string, unknown> | undefined)?.maxHoldingMs;
+    if (typeof _rawMaxHoldingMs !== 'number' || !Number.isFinite(_rawMaxHoldingMs) || _rawMaxHoldingMs <= 0) {
+      throw new Error(
+        `[P19-B8.5f][MAXHOLD_STAMP_MISSING] rawSignal.metadata.maxHoldingMs absent or invalid on the active ` +
+        `build path — symbol=${rawSignal.symbol} strategy=${strategyId} mode=${sizingContext.mode} ` +
+        `got=${JSON.stringify(_rawMaxHoldingMs)}. stampMaxHoldingMs (:531) must run before this point; ` +
+        `a position without a max-hold never time-exits (#550).`,
+      );
+    }
+    const _maxHoldingMs: number = _rawMaxHoldingMs;
+
     // Phase 14: FinalScore computed in extended metrics — no duplicate calculation needed
     // Build RTB signal using pre-computed values from extendedMetrics
     const sqeSignalInput: SQESignalInput = {
@@ -1067,6 +1086,18 @@ export class SignalOrchestrator {
         netEvAtAdmit: _mtDecision.chosenNetEV,
         ...(_exploAdmit ? { floorInEffect: _exploAdmit.floorInEffect, policyVersion: _exploAdmit.policyVersion } : {}),
         assetClass: sizingContext.assetClass,
+        // ★ P19-B8.5f (OBJ-1, #550): CARRY THE MAX-HOLD. `stampMaxHoldingMs` (:531) stamps this
+        // on the RAW signal and its own comment promises it reaches "the paper-execution
+        // enforcer" — but this rebuild constructs a FRESH object from an explicit field list and
+        // never spreads `rawSignal.metadata`, so the value died here and the exit engine's
+        // `max_holding_period` branch (`active-execution-engine.ts:1482-1494`) was skipped for
+        // EVERY position. Measured: 0 of 15 live positions carried it, and there are 0
+        // max_holding_period closes in the entire closed_trades history. That stamp comment also
+        // says "active trading is OFF — changes no live behavior today" (2026-06-06); it is ON
+        // now, so a dormant forward-prep guarantee had quietly become load-bearing.
+        // No downstream plumbing is needed: `active-execution-engine.ts:3143` spreads
+        // `...signal.metadata` onto the position row.
+        maxHoldingMs: _maxHoldingMs,
         // P19-B8.10 (OBJ-4): genesis capture of the display-context fields the VTS
         // records at open (regime / global regime / pair+global friction / pair+
         // global DBS / pattern name / entry-liquidity). KEEP-AS-DATA transit — read

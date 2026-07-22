@@ -96,6 +96,30 @@ poolBus.on('POOL_UPDATE', (size: number) => {
  * DIRECTIVE 11.0E: Signals ranked by FinalScore
  * Use finalScore, confidence, regimeWeight, decayPenalty instead
  */
+/**
+ * P19-B8.5f (OBJ-2) — the ENFORCED transit contract for the sized-signal metadata blob.
+ *
+ * The blob stays OPEN (index signature) because most of what rides it is genuinely optional
+ * display/genesis context where absent-is-absent is the correct, documented behaviour. What
+ * is NOT optional is the handful of keys a downstream ENGINE depends on to function: those
+ * are declared required here so the compiler — not a human maintaining a list — enforces the
+ * carry, and the next omission fails at build time instead of surfacing as a zero in
+ * production weeks later.
+ *
+ * Add a key here ONLY if an engine's behaviour silently degrades without it. This is not a
+ * schema for "everything useful"; it is the minimum set whose absence is a defect.
+ */
+export interface SQESignalMetadata extends Record<string, unknown> {
+  /**
+   * Max holding period in MILLISECONDS. Stamped centrally for every active-path signal by
+   * `stampMaxHoldingMs` (`signal-orchestrator.ts:531`) and consumed by the exit engine's
+   * `max_holding_period` branch (`active-execution-engine.ts:1482-1494`), which is skipped
+   * entirely when the key is absent — the #550 defect. REQUIRED so the curated rebuild can
+   * never drop it again without failing the build.
+   */
+  maxHoldingMs: number;
+}
+
 export interface SQESignalInput {
   signalId: string;
   mode: TradingMode;
@@ -144,7 +168,25 @@ export interface SQESignalInput {
   chosenNetEv?: number | null;          // the best (chosen-mode) net-EV — what gates + ranks
   takerNetEv?: number | null;           // the taker-leg net-EV (diagnostic + the B7.2c marketable-at-placement stored-taker check)
   makerNetEvAdjusted?: number | null;   // the haircut-adjusted maker net-EV (diagnostic)
-  metadata?: Record<string, unknown>;
+  // P19-B8.5f (OBJ-2): was `Record<string, unknown>`, and THAT WAS THE HOLE. `Record<string,
+  // unknown>` accepts ANY object, so omitting a key the downstream engine depends on is
+  // perfectly legal and perfectly silent — which is how `maxHoldingMs` (#550) and `atr` were
+  // dropped by the curated rebuild at `signal-orchestrator.ts:1059-1077` and nobody found out
+  // until 0/15 live positions carried a time limit.
+  //
+  // ★ WHY A TYPE AND NOT A RUNTIME ASSERTION LIST (CC-A's correction, and it is the point):
+  // an assertion list is ITSELF a hand-maintained allow-list — the same kind of object that
+  // failed here — so it just moves the problem up a level and the next omission still ships.
+  // A REQUIRED FIELD makes the omission a COMPILE error. This is the B4a pattern already in
+  // the orchestrator at `:496-509`: the typed field is the primary gate, the runtime throw is
+  // only the `as any` / JSON-boundary backstop.
+  //
+  // ★ DELIBERATELY NARROW (Langston's Step-1 carry): ONLY enforcement-required keys go here.
+  // `atr` is NOT required — B6.5b's hard-stop/target FLOOR governs its absence and forcing it
+  // would silently re-activate ATR trailing that has never run on the active path (OBJ-3, a
+  // Kyle scope call). The `_displayContext` genesis fields are NOT required either —
+  // absent-is-absent, no fabrication. The index signature keeps the blob open for both.
+  metadata?: SQESignalMetadata;
   skipSelfCheck?: boolean; // Directive 8.8.4-A3.R2: Skip self-dedupe during refreshAndRank
   sourcePool?: string;    // Batch 37: Family-qualified source pool
   signalType?: 'QUANT' | 'PATTERN' | 'HYBRID';  // Phase 14.5: signal family

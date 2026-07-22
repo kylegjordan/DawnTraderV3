@@ -50,7 +50,17 @@ export interface LifecycleCloseEvent {
   tradeId?: string | number;
   positionId: string | number;
   symbol: string;
-  closeReason: 'SL' | 'TP' | 'TRAILING_STOP' | 'MANUAL' | 'KILL_SWITCH' | 'ENGINE_STOP' | 'UNKNOWN';
+  // P19-B8.5f (OBJ-5): MAX_HOLD added. The `max_holding_period` exit previously mapped to
+  // 'UNKNOWN' because it had NEVER fired — the value never reached the position (the #550
+  // carry drop), so SysManual RISK-035 rated the mis-label LOW on those grounds. OBJ-1 makes
+  // the exit fire, which promotes that dormant risk to live: without this member every
+  // time-exit close would land in the trade tables as 'UNKNOWN' — a fresh truthfulness
+  // regression in the exact surface B8.10 existed to fix. Named MAX_HOLD (not TIME_EXIT) to
+  // match the system's own `max_holding_period` / `maxHoldingMs` vocabulary per §1 canonical
+  // terms. Safe to extend: `close_reason` is varchar(40/50) — no pg enum, no CHECK constraint
+  // — and no consumer switches exhaustively on this union (the AJ19B aggregation keys
+  // dynamically at :410/:479).
+  closeReason: 'SL' | 'TP' | 'TRAILING_STOP' | 'MAX_HOLD' | 'MANUAL' | 'KILL_SWITCH' | 'ENGINE_STOP' | 'UNKNOWN';
   closedValue: number;
   pnl: number;
   slotCountBefore: number;

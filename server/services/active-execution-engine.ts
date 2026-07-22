@@ -1947,11 +1947,13 @@ export class ActiveExecutionEngine {
     const slotCountAfter = (await storage.getActiveOpenPositions(this.mode)).length;
     
     // Map exit condition to close reason enum
-    const closeReasonMap: Record<string, 'SL' | 'TP' | 'TRAILING_STOP' | 'MANUAL' | 'KILL_SWITCH' | 'ENGINE_STOP' | 'UNKNOWN'> = {
+    const closeReasonMap: Record<string, 'SL' | 'TP' | 'TRAILING_STOP' | 'MAX_HOLD' | 'MANUAL' | 'KILL_SWITCH' | 'ENGINE_STOP' | 'UNKNOWN'> = {
       'stop_hit': 'SL',
       'target_hit': 'TP',
       'trailing_stop_hit': 'TRAILING_STOP',
-      'max_holding_period': 'UNKNOWN',
+      // P19-B8.5f (OBJ-5): was 'UNKNOWN'. Correct now that OBJ-1 makes this exit actually
+      // fire — see the MAX_HOLD note on AJ19BCloseEvent.closeReason.
+      'max_holding_period': 'MAX_HOLD',
       'guardrail': 'KILL_SWITCH'
     };
     
