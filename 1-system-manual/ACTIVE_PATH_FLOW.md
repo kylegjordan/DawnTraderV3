@@ -176,3 +176,23 @@ If step 2 fails, the signal has **already left the queue** and is **deliberately
 
 **Dormant-by-decision or dormant-by-defect (§4e):** neither — this edge is live and firing.
 **Absence behaviour (§4d):** on absence of a trade id, it **propagates the failure** (logs + counts) rather than substituting — correct, and the opposite of the `??` class.
+
+---
+
+### HOP G — OPEN POSITION → TEC EXIT MANAGEMENT. *★ The §4e class lives here, and the answer DIFFERS PER SUB-EDGE.*
+
+**Driver:** `trailing-exit-controller.ts:207` `resolveAggrTimer`. The payload that matters at this edge is **ATR (the volatility figure)**, carried on the position state (`state.ATR`, set at `:1048`).
+
+**★ THE HEADLINE FOR THIS HOP: `state.ATR` IS ZERO ON EVERY OPEN POSITION** (measured by CC-B against the live DB — 15/15 open trades), because it is dropped upstream in a curated rebuild. **Three sub-edges consume it, and they answer §4e differently — which is exactly why this must be asked per-edge, not per-component.**
+
+| Sub-edge | Gate | Dormant by… | Does repairing ATR wake it? |
+|---|---|---|---|
+| **Break-even latch** `:1078` | `cfg.breakEvenEnabled && !state.breakEvenLatched && state.ATR > 0` | **DECISION** — `break_even_enabled` is `false` for **all four** asset classes in live `module_constants`; `xstock_spot` set false **2026-05-21** by `kyle-directive-2026-05-21-disable-xstock-be` | **NO.** The flag is the binding gate. |
+| **Trailing ladder (target-latched)** `:1216` | `state.targetLatched && state.ATR > 0` — **NO operator flag exists on this path**; `targetLatched` is set purely by price reaching target (`:1153`) | **DEFECT** — nothing decided this; it is quiet only because ATR is starved | **YES — immediately, with nothing standing in the way.** |
+| **Trailing (break-even-latched)** `:1232` | `state.breakEvenLatched && !state.targetLatched && state.ATR > 0` | **DECISION (transitively)** — `breakEvenLatched` can only be set at `:1078`, which the flag gates | **NO** — unreachable while the flag is off. |
+
+⇒ **Repairing the ATR transit drop is NOT a plumbing fix.** For the target-latched ladder it *is* a behaviour change — an exit mechanism that has never run against a live position begins running the moment the input arrives. **This is a SCOPE CALL for Kyle (rule 24 outcome 2), not a defect to fix**, and it has been routed to him as such. Credit: CC-B surfaced the class; my first framing ("fix the plumbing, decide the behaviour separately") was **wrong for the ladder** and I withdrew it after reading the gates and the live DB.
+
+> ⚠️ **STALE SELF-DESCRIPTION AT THIS HOP.** The comment block at `trailing-exit-controller.ts:117` still records `xstock_spot → true (BE-protect enabled)` from 2026-05-11. The live DB says `false` since Kyle's directive **ten days later**. **The code's description of itself is stale; the DB is the truth.** Recorded, not fixed here (not this doc's file to change) — but any reader trusting that comment would conclude break-even is armed for xStock when it is not.
+
+**Absence behaviour (§4d):** ATR absent ⇒ **substitution-adjacent** — it arrives as `0` rather than as a null/failure, so every `state.ATR > 0` gate reads "not applicable" instead of "input missing." **A missing input and a genuinely-zero volatility are indistinguishable at this edge.** That is the #546 absent-as-valid class landing on an exit path.
