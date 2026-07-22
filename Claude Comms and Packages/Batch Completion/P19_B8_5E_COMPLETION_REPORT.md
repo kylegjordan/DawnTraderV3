@@ -63,6 +63,12 @@ The planned `luld_tier` column + S&P500/Russell1000 index-membership plumbing wa
 
 **DISPOSITION (Langston ruling (b), NOT (a)):** both the threshold and the inheritance-population go into **`#566`** through the full workflow. **Lowering the threshold alone is symptom-only** — §8 #11 no-patches — and a night knob-edit on a system already taken down once that day is precisely the "fix correct behaviour, inject a new bug" failure. **Conservative behaviour stands meanwhile:** over-refusal costs opportunity, not capital, and nothing is unexitable. Safe-but-strict beats a rushed partial fix.
 
+**★ TWO TAILS (Langston, on re-read at `80ed5ca2a`):** `#566` originally captured only the **widening** tail — a stale-LOW σ trusting an old mark during volatility (the danger direction). **ARKK is the opposite tail: an inherited-HIGH σ refusing a mark it should have trusted.** Same root (σ used ≠ symbol's true σ), opposite sign, and **a fix for one can worsen the other** — the `WHERE obs >= minObservations` clause gates the inherited-σ POPULATION as well as eligibility, so moving the threshold moves both. Any fix must state its effect on both tails.
+
+**★ ARKK RELIEF THIS SOAK IS KYLE'S DECISION, not Langston's and not mine** — accepting an older mark moves the risk posture, and risk posture is Kyle's. Surfaced to him; not actioned unilaterally.
+
+**★ LANGSTON REVERSED HIS OWN "not a regression" LINE** on re-reading the formula, the inheritance design (`SYSTEM_MANUAL.md:4551`) and the seed — the decisive corroboration being this report's OWN premise at line 20 (*the old constant was too tight on the safest, refused 49×/24h*): a conservative-high inherited σ handed to a thin-but-genuinely-calm ETF **reproduces exactly that failure mode**. Taxonomy: **bucket 2, working-as-designed-but-unaddressed — the CLAIM fails, not the build.** PASS on the code stands.
+
 **HOW THIS WAS FOUND, recorded because it is the transferable part:** not by review — by **alerts firing after I had already reported success**. Every one of this batch's errors was a confident claim resting on something unmeasured. This one I caught only because the system contradicted me.
 
 ## 5. ⚠️ KNOWN LIMITATION — state it plainly, do NOT let "B8.5e fixed staleness" stand unqualified
