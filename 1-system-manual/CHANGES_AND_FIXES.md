@@ -1,5 +1,16 @@
 # DawnTrader: Changes, Fixes & Improvements Registry
 
+## FIX-2026-07-22-A — Discord >2000-char dispatches to Langston were silently half-delivered (B-COMMS-CHUNK-FIX, #553)
+
+**Symptom (Kyle-reported):** long messages to Langston arrived truncated; load-bearing review content was missed, with no error on either side.
+**Root cause:** Discord's 2000-CHAR cap makes `_send_chunks` post each chunk as its own message; the receiving bridge's **anchored** address gate runs **pre-enqueue**, and only chunk 0 carries the leading "Langston" — so chunks 2..N were discarded before becoming tasks. `first_id` could not serve as a group key: it is sender-log-only and never reaches the wire.
+**Adjacent defect fixed same batch:** a `--notify` dispatch to Langston was dropped **entirely** (not truncated) because the `<@id>` prefix is not in the gate's allowed leading class.
+**Fix:** sender stamps a group marker on each chunk of a multi-chunk Langston-addressed dispatch and cuts **only at whitespace** (so a `file:line`, sha or path can never be split — a mangled coordinate does not throw, it points somewhere plausible but wrong); receiver reassembles into ONE task **above** the gate; incomplete groups flush with an explicit note rather than being silently held.
+**Scope is narrow — do not over-read:** only a CC post that STARTS with "Langston" AND exceeds 2000 chars is affected. All other traffic is byte-identical.
+**Files:** `comms-infra/discord/discord_common.py`, `comms-infra/discord/discord-langston-bridge.py` (repo-canonical; deployed to Helsinki).
+**Verified:** 60-offset token-integrity pass; 4 live reassemblies including two unplanned production cases from other sessions; Langston quoted back a proof token placed in the final chunk.
+
+
 ---
 
 ## FIX-2026-07-14-A — P19-B8.5c (#503): the VTS lanes' fraction-as-dollars kernel friction — both standalone calls DELETED, one computation site
