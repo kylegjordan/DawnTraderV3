@@ -53,7 +53,7 @@ Claude New (CC-B). Discord display name **"NEW Claude"** (exact `--sender` value
 
 ---
 
-**✅ B8.5e (#548) CLOSED 2026-07-22** — per-symbol mark-staleness ceiling; Langston Step-8 on amended text. Claim corrected 3× (fixed for 4 earn-own-σ names, NOT the 11 inheritors; ARKK regression). Residuals: #566 (σ-estimator two tails + threshold, Phase-25), #563 (venue-resting exits), #567 (value-plausibility). #569 = off-hours slot design QUESTION (my overnight-hold defect claim was RETRACTED — xStocks close overnight, no US-hours gate exists, only weekend). Repo completion report is the record.
+**✅ B8.5e (#548) CLOSED + KYLE-ACKNOWLEDGED 2026-07-23 — FULLY DONE, governance complete.** — per-symbol mark-staleness ceiling; Langston Step-8 on amended text. Claim corrected 3× (fixed for 4 earn-own-σ names, NOT the 11 inheritors; ARKK regression). Residuals: #566 (σ-estimator two tails + threshold, Phase-25), #563 (venue-resting exits), #567 (value-plausibility). #569 = off-hours slot design QUESTION (my overnight-hold defect claim was RETRACTED — xStocks close overnight, no US-hours gate exists, only weekend). Repo completion report is the record.
 
 **⇒ BEFORE asserting a cause: check its ARITHMETIC and its TIMESTAMP (24.a). Knowing this pattern did NOT stop me repeating it — only someone else's cheap check did. Ask for one.**
 
