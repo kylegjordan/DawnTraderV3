@@ -110,4 +110,25 @@ The same comment documents a trap that is **exactly** what this doc is supposed 
 
 **Method note, generalisable:** the deleter/scheduler census is what surfaced this in one pass. A forward trace would have found *a* refresh, produced a coherent story, and moved on — which is how this class survived two audits.
 
+## 4c. GATE-3 ANSWERED — xStock divergence is CONCENTRATED, not universal
+
+Langston's GATE-3 set a condition: *if xStock diverges at nearly every hop, that is itself the finding* (it would mean reorg-D1's "both in code" is more unified on paper than in code). **Measured — it does not.** Asset-class branch references per active-path file:
+
+| branch-refs | file lines | file |
+|---|---|---|
+| 18 | 2668 | `signal-orchestrator.ts` |
+| 15 | 3778 | `active-execution-engine.ts` |
+| 15 | 1691 | `trailing-exit-controller.ts` |
+| 7 | 2687 | `ready_to_buy_service.ts` |
+| 4 | 495 | `rtb-refresh-service.ts` |
+| **0** | 321 | **`tcl_watchdog.ts`** |
+
+⇒ **Spine + N deltas is the cheap shape, as Langston predicted — not 2×.** Divergence clusters at signal generation, execution and exits; the queue and its refresh are nearly class-agnostic.
+
+> ⚠️ **METHOD CAVEAT, stated so the number is not over-read:** a branch-reference count is a **proxy for divergence, not proof of it.** A low count does NOT establish class-blindness in effect — the class may be resolved upstream and carried on the row, so the component behaves per-class without ever naming a class. These counts say *where to look*, not *what is true*. Each hop's actual divergence gets established when that hop is written.
+
+### ⭕ OPEN QUESTION (rule 24 — NOT filed as a defect) — `tcl_watchdog.ts` names no asset class at all
+
+Zero asset-class references in 321 lines, in the component that watches TCL promotion. **Three possible dispositions and I am not assuming which:** (1) correct-by-design — promotion genuinely needs no class distinction because everything class-dependent was resolved upstream and rides the row; (2) working-as-designed-but-**UNADDRESSED** — a scope call about whether xStock promotion *should* differ (equity-session boundaries, the 24/5 window), which would be Kyle's decision, not a code fix; (3) a real gap. **Per rule 24 this gets resolved by reading the code and the intent, not by first impression** — and the honest default given the caveat above is (1). Recorded here so it is answered when the TCL hop is written, rather than lost.
+
 ## 5. THE HOPS — *(in construction; the RTB hop above is the first worked example)*
