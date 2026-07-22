@@ -60,6 +60,9 @@ import { evaluateTECExit } from './tec-evaluator';
 // P19-B4a (C4): top-level resolveAssetClass dropped — all sites now prefer the
 // stamp (asValidAssetClass) then fall through to safeResolveAssetClass (skip on null).
 import { asValidAssetClass, safeResolveAssetClass, type AssetClass } from '../../shared/asset-classes.js';
+// B-WS-SUBSCRIBE-CLASS-FILTER OBJ-2 (#559): per-process dedup for the class-less-row WARN in the
+// I8C open-positions provider, so a persistently class-less row surfaces once, not every 5s audit.
+const wsSubClasslessWarned = new Set<string>();
 // P19-B8.4b: active-path funnel — the `promoted` counter (signal promoted out of the RTB queue to an open
 // attempt). Single home for `promoted` (the refresh reconfirmed/rejected live in ready_to_buy_service).
 import { recordActiveRtbRefresh } from '../core/observability/active-funnel-tracker.js';
@@ -523,7 +526,30 @@ export class ActiveExecutionEngine {
       const mode = this.mode;
       krakenWebSocketAdapter.setI8COpenPositionsProvider(async () => {
         const positions = await storage.getActiveOpenPositions(mode);
-        return positions.map(p => p.symbol);
+        // ★ B-WS-SUBSCRIBE-CLASS-FILTER OBJ-2 (#559): the CRYPTO Kraken WS feed serves ONLY
+        // crypto_spot. This provider is the ONE confirmed source of the 5s subscription storm —
+        // i8cRunSubscriptionAudit reads it, and before this filter it returned ALL open positions
+        // incl. xStocks, which can never map on the crypto feed, so each was flagged
+        // missing_subscription and re-subscribed every 5s (~133k futile SUBSCRIBE_SKIPPED/day).
+        // Filter here using the AUTHORITATIVE stored asset_class — NOT re-resolved from the bare
+        // symbol, which is ambiguous for plain-form xStock (e.g. `C/USD` carries no x-suffix and is
+        // indistinguishable from crypto by string alone; the trustworthy class is stamped on the row
+        // at insert with the correct exchange context). Idiom matches :308/:1030 (stamp → resolve →
+        // default) EXCEPT the null/unresolvable branch emits a deduped WARN instead of silently
+        // defaulting to crypto: a class-less crypto row must be surfaced, not guessed (Langston OBJ-2).
+        const cryptoSymbols: string[] = [];
+        for (const p of positions) {
+          let cls = asValidAssetClass(p.assetClass) ?? safeResolveAssetClass(p.symbol, 'kraken');
+          if (!cls) {
+            cls = 'crypto_spot';
+            if (!wsSubClasslessWarned.has(p.symbol)) {
+              wsSubClasslessWarned.add(p.symbol);
+              console.warn(`[B-WS-SUBSCRIBE-CLASS-FILTER][CLASSLESS] symbol=${p.symbol} mode=${mode} has no valid asset_class and did not resolve — defaulting to crypto_spot for WS subscription; this row should be class-stamped`);
+            }
+          }
+          if (cls === 'crypto_spot') cryptoSymbols.push(p.symbol);
+        }
+        return cryptoSymbols;
       });
       
       // Phase 8.8.3-I8C: Subscribe ALL open positions on trading START using I8C helper
