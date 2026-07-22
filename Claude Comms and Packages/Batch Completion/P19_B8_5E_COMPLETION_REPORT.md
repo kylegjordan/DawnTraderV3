@@ -1,7 +1,7 @@
 # P19-B8.5e — COMPLETION REPORT: risk-derived per-symbol mark-staleness ceiling (`#548`)
 
 **Phase:** 19 · **Owner:** CC-B · **change-class:** `architecture` · **Closed:** 2026-07-22
-**Head at close:** `1f0ade30e` · **CI:** 4/4 GREEN on **`a4508353b`** — ancestry-verified to contain ALL FOUR B8.5e commits
+**Head at close:** `80ed5ca2a`+ (see §4.5 — batch NOT closed on the original claim; head citation corrected per Langston's staleness nit) · **CI:** 4/4 GREEN on **`a4508353b`** — ancestry-verified to contain ALL FOUR B8.5e commits
 
 > ⚠️ **CITATION CORRECTED — Langston caught this at Step-8, before it hardened into the record.** I originally cited `73346765f` as *"contains all B8.5e commits."* **It does not.** It is a `B-REPO-RELOCATE` commit that landed BETWEEN my round-2 and my seam/hotfix, so it contains `e48a623da` + `56750fef5` and **NOT** `4f67d3d2a` (the test seam) or `1f0ade30e` (the staging-outage hotfix). Its green run said nothing about either. **The lesson is the one this batch kept re-learning: a commit being GREEN and a commit CONTAINING your work are two different facts, and "it was the head when I looked" establishes neither.** Re-verified per commit with `git merge-base --is-ancestor`, not by position in a run list. The wrong citation is recorded here rather than silently swapped.
 **Langston:** Step-4 **APPROVED** (re-read at the ref, twice — round 1 at `e48a623da`, round 2 at `56750fef5`)
@@ -44,6 +44,26 @@ Recorded prominently because in both cases **my own module header claimed a safe
 ## 4. Scope DROPPED on evidence — LULD
 
 The planned `luld_tier` column + S&P500/Russell1000 index-membership plumbing was **removed**. At `cap_ms` = 300,000 (exactly the 5-minute LULD reference window) the σ-derived drift for our fastest symbol is **2.06%** against a Tier-1 band of **5%**. The band binds only above σ > 1.67e-4/s = **2.4× MU**. ⇒ **the σ ceiling is always the tighter constraint at this cap**, so LULD would add an index-membership data dependency for a bound that can never bind. Revisit trigger recorded in the migration: `cap_ms` above ~727s. Langston: *"AGREE, overrule declined"*, independently reproduced.
+
+## 4.5 ⚠️⚠️ AMENDMENT BEFORE CLOSE — THE HEADLINE CLAIM IS NOT TRUE FOR MOST SYMBOLS
+
+**This section exists because §1 of this report claimed the 49-refusals-per-24h problem was fixed, and within an hour of deploy I disproved that with live measurement. Langston's close gate (ruling (b), 2026-07-22) is that this amendment lands BEFORE the batch closes.**
+
+**The mechanism shipped and is correct** — Langston passed Step-8 on the code, and the ceiling behaves exactly as specified. **But it is fixed only for the FOUR symbols that can EARN their own σ, not the ELEVEN that inherit:**
+
+| earn own σ (≥200 obs/30min) | inherit class-wide σ |
+|---|---|
+| MU 385 · SKHY 350 · INTC 326 · ORCL 246 | TSM 181 · QCOM 100 · BMNR 96 · MARA 67 · BABA 64 · NOC 39 · **CDNS 35 · PM 26 · ARKK 21 · MOS 17 · C 17** |
+
+**★ FOR ARKK IT IS A REGRESSION — and ARKK is the original 49-refusals victim that started `#548`.** The constant this batch removed was **90s**. ARKK's mark at **69–79s** was **accepted** under the flat rule and is **refused** under its inherited-σ **55s** ceiling. It re-alerted within the hour. Venue-quiet supplies the stale mark; **my seed supplies the over-strict refusal**; ARKK needs both to alert, so "venue-quiet, not a regression" is not separable here.
+
+**TWO COMPOUNDING CAUSES, and the second is the real one:**
+1. `sigma_min_observations = 200` was seeded as a guess at "enough history", never checked against real tick density — 11/15 held symbols cannot reach it.
+2. **★ THE DESIGN DEFECT: the inherited class-wide σ is a 90th percentile computed ONLY over symbols with ≥200 observations (`sigma-rate.ts:178-181`) — the busiest, most volatile names — and then applied to the thinnest.** The estimator systematically dresses the calmest symbols in the busiest symbols' volatility.
+
+**DISPOSITION (Langston ruling (b), NOT (a)):** both the threshold and the inheritance-population go into **`#566`** through the full workflow. **Lowering the threshold alone is symptom-only** — §8 #11 no-patches — and a night knob-edit on a system already taken down once that day is precisely the "fix correct behaviour, inject a new bug" failure. **Conservative behaviour stands meanwhile:** over-refusal costs opportunity, not capital, and nothing is unexitable. Safe-but-strict beats a rushed partial fix.
+
+**HOW THIS WAS FOUND, recorded because it is the transferable part:** not by review — by **alerts firing after I had already reported success**. Every one of this batch's errors was a confident claim resting on something unmeasured. This one I caught only because the system contradicted me.
 
 ## 5. ⚠️ KNOWN LIMITATION — state it plainly, do NOT let "B8.5e fixed staleness" stand unqualified
 
