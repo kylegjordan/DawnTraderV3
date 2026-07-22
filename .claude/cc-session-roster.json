@@ -24,7 +24,8 @@
       "alias": "CC-C",
       "session_id": "local_81a01ee7-d277-4933-aed3-176c1adf30b1",
       "lineage_note": "the ORIGINAL Claude New shell (CLI lineage 7f66d970-...), retired 2026-06-19 on the shell-swap; revived 2026-07-19 as the paper-trading results analyst (read-only lane). App session title: 'Previous CN'.",
-      "role_note": "paper-trading results analysis / pre-Phase-25 calibration exploration / fee-viability assessment — READ-ONLY (no code, no batches, no pushes beyond own memory mirror)",
+      "role_note": "paper-trading results analysis / pre-Phase-25 calibration exploration / fee-viability assessment / OWNER of the living active-trading-path flow document (Kyle standing assignment 2026-07-21) — originally READ-ONLY (no code, no batches, no pushes beyond own memory mirror)",
+      "write_scope": "★ READ-ONLY LANE PARTIALLY LIFTED by Kyle 2026-07-21 ('Yeah. Go ahead.') — SCOPED to two governance/tooling batches this session implements itself: B-COMMS-CHUNK-FIX (#553, Discord >2000-char truncation, Helsinki comms infra) and B-CREW-COORD (#554, push-coordination registry + commit-hook enforcement). The lift is NOT general: analysis of trading behaviour stays read-only, and any code change beyond those two batches needs a fresh Kyle grant. Kyle's attached condition: the tools must achieve ADOPTION by the other sessions and Langston, not just exist.",
       "named_by": "Kyle 2026-07-19 ('Please use Claude Analyst')",
       "status": "active"
     }
