@@ -20,6 +20,16 @@
 
 **📌 CITATION HAZARD, LIVE INSTANCE (CC-A 2026-07-22):** my three cites (`:2180/:2182/:2183`) are TRUE at `origin/migration/aws-supabase` but read `:2222/:2224/:2225` in the WORKING TREE, because CC-B is mid-edit on the shared file (~42-line shift). Nearly "corrected" valid cites into wrong ones. ⇒ **#545 rule 2 is not pedantry: quote at origin, and when another session is actively pushing to the file, ask Langston to pin Step-4 to a COMMIT SHA, not the branch tip (a moving target).** A TRUE claim refuted by a citation artifact is the same false-evidence class as a mid-token chunk cut.
 
+## ▶ ACTIVE WORK = ITEM 2 (Kyle re-directed me here 2026-07-22; it is the REAL assignment and had been untouched all day)
+**`B-RTB-REFRESH-CONSOLIDATE` — retire Mechanism A. Step-1 dispatched to Langston, awaiting ruling. NO code written.**
+- **GATE IS MET:** his gate was "BOTH `chosen_net_ev` AND `regime_weight` moving on the survivor path." `chosen_net_ev` varied + rewritten each cycle (`status='reconfirmed'`, `last_refreshed_at` 0-1s); `regime_weight` live via metadata (he ruled it evidenceable from `metadata->>'regimeWeight'`; #555 since made the set honest, 184/184).
+- **STRUCTURE VERIFIED at origin (`server/core/rtb/ready_to_buy_service.ts`):** `executePerSignalRefresh` **:734** → `refreshSingleSignal` **:1018** = **Mechanism A**; `refreshAndRank` **:1275** = **Mechanism B**; `executeRefreshCycle` **:1215** calls `reEvaluateQueue` **:1969** then `refreshAndRank` **:1236**; Central-Clock tick handlers registered **:673**. ⇒ **NOT two racing schedulers — both live under ONE cycle**, so retirement should be cleaner than the original framing.
+- ⚠️ **UNRESOLVED, DO NOT ASSUME:** which is Mechanism A's LIVE entry — `executePerSignalRefresh` or `reEvaluateQueue`? Different methods; I did NOT trace which the clock drives, nor whether `executePerSignalRefresh` is still reachable. **This determines what gets cut — asked Langston rather than guess.**
+- **Also open on this batch:** OBJ-3 fail-loud (gated on #535) · completion report unwritten · #532 (7 ticks in 9h) unexplained — asked whether they fold in.
+- **Post-`b514fbc73` both mechanisms call the shared `acquireRefreshedInputs`**, so expect outright deletion of A with the shared path untouched — Langston to confirm.
+
+**📌 KYLE 2026-07-22 (latest):** crypto deliberately uses VOLUME not order-book (his recollection confirmed by my census: crypto 0/28 depth rows, and crypto rows carry `min_volume`); **confirm that decision in Phase 25, don't act now.** The **order-book thresholds are probably TOO LOW → Phase 25 calibration**, along with the stuck-trades question (#561). Do not chase them now.
+
 ## ⛳ STATE SNAPSHOT 2026-07-22 (~93% context — read this block first)
 **DONE + PROVEN:** `B-REGIME-REFRESH-PIPE` (regime data live both classes, 0 rejects) · `B-RANKING-COMPONENT-CAPTURE` #555 (deployed, migration applied, governance backfilled, **ACCEPTANCE OBSERVED: 184 new shadow rows — regime_weight/decay_penalty/final_score 184/184 non-null vs 0/14,232 before; hybrid_score 175/184 and the 9 nulls are the fix WORKING**).
 **OPEN — awaiting Langston:** (a) Step-1 on `B-WS-SUBSCRIBE-CLASS-FILTER` #559; (b) SYSTEM_MANUAL N/A ruling for #555 (alert `aaca157a`) — NOT self-certified.
