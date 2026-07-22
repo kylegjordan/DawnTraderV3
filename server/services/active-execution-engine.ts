@@ -1001,6 +1001,9 @@ export class ActiveExecutionEngine {
               nullStopBudgetPct: getCachedNumberRequired('mark_staleness', 'null_stop_budget_pct', _at),
               floorMs: getCachedNumberRequired('mark_staleness', 'floor_ms', _at),
               capMs: getCachedNumberRequired('mark_staleness', 'cap_ms', _at),
+              // σ younger than one refresh period is as fresh as the design allows; past
+              // that, σ is inflated with age so stale evidence cannot buy a wide window.
+              sigmaFullCreditMs: getCachedNumberRequired('mark_staleness', 'sigma_refresh_after_ms', _at),
             };
             _sigmaMinObs = getCachedNumberRequired('mark_staleness', 'sigma_min_observations', _at);
           } catch (knobErr) {
@@ -1023,15 +1026,23 @@ export class ActiveExecutionEngine {
               currentPrice: _eqTick.price,
               stopPrice: position.stopLoss ? parseFloat(position.stopLoss) : null,
               sigmaRatePerSec: _sigma?.sigmaRatePerSec ?? null,
+              // null age ⇒ maximally stale ⇒ tightest window (fail-closed, matches null σ).
+              sigmaAgeMs: _sigma?.ageMs ?? null,
             },
             _msCfg,
           );
           if (_eqAge > _ceiling.ceilingMs) {
-            console.warn(`[P19-B8.5e][EQUITY_MARK] ${position.symbol}: mark is ${Math.round(_eqAge / 1000)}s old, ceiling ${Math.round(_ceiling.ceilingMs / 1000)}s (basis=${_ceiling.basis} σ=${_sigma ? _sigma.sigmaRatePerSec.toExponential(3) + '/s src=' + _sigma.source : 'UNAVAILABLE⇒floor'}${_ceiling.clamped ? ' clamped' : ''}) — not actionable this tick`);
+            console.warn(`[P19-B8.5e][EQUITY_MARK] ${position.symbol}: mark is ${Math.round(_eqAge / 1000)}s old, ceiling ${Math.round(_ceiling.ceilingMs / 1000)}s (basis=${_ceiling.basis} σ=${_sigma ? _sigma.sigmaRatePerSec.toExponential(3) + '/s src=' + _sigma.source : 'UNAVAILABLE⇒floor'}${_ceiling.clamped ? ' clamped' : ''}${_ceiling.sigmaAgeInflation > 1 ? ` σ-age-inflated x${_ceiling.sigmaAgeInflation.toFixed(2)} (σ is ${Math.round((_sigma?.ageMs ?? 0) / 1000)}s old)` : ''}) — not actionable this tick`);
             withoutPrice++;
             // Skip reason carries the BASIS so the rail can distinguish "this symbol is
             // genuinely quiet" from "we never had a σ and are floored on every position".
-            await this._recordPriceSkip(position, `equity_tick_stale_${_ceiling.basis}`);
+            // A floor-bound near-stop skip gets its OWN countable reason — otherwise it is
+            // indistinguishable from an ordinary calm-symbol floor, and #563's exposure stays
+            // an argument instead of a number.
+            await this._recordPriceSkip(position,
+              _ceiling.floorBoundNearStop
+                ? 'equity_tick_stale_floor_bound_near_stop'
+                : `equity_tick_stale_${_ceiling.basis}`);
             continue;
           }
           currentPrice = _eqTick.price;

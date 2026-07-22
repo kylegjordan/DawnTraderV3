@@ -42,6 +42,9 @@ interface CacheEntry {
   computedAtMs: number;
 }
 
+/** A cached σ plus HOW OLD it is — the age is load-bearing, not diagnostic. */
+export type CachedSigmaRead = ResolvedSigma & { ageMs: number };
+
 /** Per-symbol resolved σ. Bounded by the traded universe — no unbounded growth path. */
 const cache = new Map<string, CacheEntry>();
 
@@ -74,15 +77,19 @@ export interface SigmaCacheConfig {
  * cached too long ago to trust. ★ The caller MUST treat `null` as "use the tightest
  * ceiling (floor)", never as "no constraint".
  */
-export function getCachedSigma(symbol: string, cfg: SigmaCacheConfig, nowMs = Date.now()): ResolvedSigma | null {
+export function getCachedSigma(symbol: string, cfg: SigmaCacheConfig, nowMs = Date.now()): CachedSigmaRead | null {
   const hit = cache.get(symbol);
   if (!hit) return null;
-  if (nowMs - hit.computedAtMs > cfg.maxAgeMs) {
-    // Too old to trust. DROP it — do not hand back a stale σ that would widen a window.
+  const ageMs = nowMs - hit.computedAtMs;
+  if (ageMs > cfg.maxAgeMs) {
+    // Too old to trust at all. DROP it — never hand back a σ this stale.
     cache.delete(symbol);
     return null;
   }
-  return hit.resolved;
+  // ★ `ageMs` is returned, not just used for the drop test. Dropping at max age alone would
+  // still let a σ one millisecond inside the bound buy a FULL-WIDTH window — the stale-low-σ
+  // fail-open hole. The policy inflates σ by this age so credit decays smoothly instead.
+  return { ...hit.resolved, ageMs };
 }
 
 /**
@@ -106,6 +113,17 @@ export function ensureSigmaFresh(symbols: string[], cfg: SigmaCacheConfig, nowMs
           err instanceof Error ? err.message : err);
       })
       .finally(() => { classwideInFlight = false; });
+  }
+
+  // ★ EXPIRE the class-wide σ on the SAME maxAge bound as per-symbol entries (Langston
+  // Step-4, 2026-07-22 — he caught that this was refreshed-or-KEPT and never dropped).
+  // Without this the last-good class-wide σ survives a persistent refresh outage forever
+  // and keeps feeding every not-yet-earned symbol's re-resolve. Bounded (upper-percentile,
+  // sub-threshold symbols only) but it bites in exactly the bad direction if class-wide
+  // volatility ROSE during the outage — a stale-LOW σ widening windows. Dropping it makes
+  // the module's "everything ages toward the floor" invariant true WITHOUT an asterisk.
+  if (classwide !== null && nowMs - classwide.computedAtMs > cfg.maxAgeMs) {
+    classwide = null;
   }
 
   for (const symbol of symbols) {

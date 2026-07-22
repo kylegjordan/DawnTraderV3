@@ -75,5 +75,9 @@ ON CONFLICT (module_name, exchange, asset_class, strategy, regime, constant_name
 -- comment argues against 20 lines above. Blast radius verified by full-repo census
 -- (2026-07-22): 2 code references (both rewritten by this batch) + this migration pair. No
 -- UI, API, or telemetry reader. Removed here rather than scheduled (§18: decide AT the find).
+-- Scoped by asset_class so a future other-class seed can never be collateral-deleted
+-- (Langston Step-4 nit: the forward DELETE was unfiltered while its rollback was scoped —
+-- provably safe today since xstock_spot is the only row ever seeded, but asymmetric).
 DELETE FROM module_constants
-WHERE module_name = 'exit_integrity' AND constant_name = 'max_equity_tick_age_ms';
+WHERE module_name = 'exit_integrity' AND constant_name = 'max_equity_tick_age_ms'
+  AND asset_class = 'xstock_spot';
