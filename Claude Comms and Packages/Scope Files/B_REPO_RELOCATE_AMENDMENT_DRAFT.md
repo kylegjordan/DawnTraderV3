@@ -23,6 +23,13 @@
 > > **Kyle's laptop — one INDEPENDENT CLONE per session, ALL ON THE SHARED REVIEW BRANCH → push → GitHub (`migration/aws-supabase`) → staging deploys the REVIEW branch → verified + approved advances `main`.**
 > > **Backups fan out from there. They are NOT in the push path.**
 >
+> - **★★ THE ONE-DIRECTION RULE (Kyle directive 2026-07-23). FLOW IS ONE WAY; NOTHING EVER FLOWS BACK.**
+>   - **The REVIEW branch accepts input from exactly ONE source: the clones on Kyle's laptop.** It **NEVER** pulls from `main`, **NEVER** from the Helsinki backup, **NEVER** from Google Drive, **NEVER** from staging.
+>   - **From the review branch, everything moves OUTWARD only** — to staging, to `main`, to the backups.
+>   - **`main` only ever advances FROM the review branch.** Nothing else may feed it.
+>   - **Staging and both backups are TERMINAL.** They receive; they never send back. A copy that can write upstream is not a backup, it is a second author.
+>   - **Why this is a rule and not a habit:** the 2026-06-01 incident was a *direction* failure — content existing in one place and not the other, with nobody able to say which way it should have travelled. One declared direction makes "which copy is right?" answerable by construction: the review branch is, always, and everything downstream is a consequence of it.
+>
 > - **★ GITHUB IS THE SOURCE OF TRUTH.** It is what staging deploys from, what CI grades, what Langston reviews at (`origin/migration/aws-supabase`), and what every `file:line` citation resolves against. **The laptop is authoritative for uncommitted work only — if it isn't pushed, it doesn't exist.** Stricter than the old rule, not looser.
 > - **Each session works in its own INDEPENDENT CLONE on local NTFS** (`C:\DawnTraderV3-old` / `-new` / `-analyst`, plus a spare `C:\DawnTraderV3`). **Separate clones, NOT worktrees** — git forbids two worktrees on one branch, which would force per-session branches, whose failure mode is a **silent revert at merge** off a stale edit. Separate `.git` directories preserve the index isolation that kills **#557**.
 > - **★ ALL CLONES SIT ON THE SAME BRANCH, AND GIT ENFORCES THE SYNC.** Pull to receive others' work; push to share yours. **Git REJECTS a push from a clone that is behind** — so staying current is structural, not remembered. A rejected push is the system working, not an error to route around. **PULL BEFORE PUSH is the documented workflow.**
