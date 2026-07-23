@@ -1,10 +1,38 @@
 # P19-B8.5i — COMPLETION REPORT
 ## The trailing master switch: TWO flags (VTS + active), gated at the chokepoint
 
-**Batch:** P19-B8.5i · **Issue:** #562 · **change-class:** non_architecture
+**Batch:** P19-B8.5i · **Issue:** #562 · **change-class:** architecture (per the scope header — see correction below)
 **Owner:** CC-B (Claude New) · **Reviewer:** Langston (Step-1, Step-4, Step-4-delta, Step-8)
 **Head commit:** `4768d6862` · **CI:** 4/4 GREEN on headSha `4768d6862` (run 29970163220)
 **Deployed:** staging 2026-07-23 ~00:53 UTC, migration-FIRST · **Status:** COMPLETE
+
+---
+
+## ⚠️ SELF-CORRECTION — THIS REPORT OVERCLAIMED "GOVERNANCE COMPLETE" (2026-07-23, caught by the checker)
+
+**Two required docs were absent when this batch was first reported closed, and this report asserted one of
+them had landed. It had not.**
+
+1. **`system_manual` — ABSENT.** The original text of this report read: *"the trailing control's
+   two-mechanism structure … is recorded so the overlap is discoverable."* **`SYSTEM_MANUAL.md` was never
+   edited** — a grep for `B8.5i|trailing_enabled` returned **0**. The claim was false. It has since been
+   written properly (the two-mechanism control, its precedence, the shipped-off state, and the unchanged
+   close-label chain).
+2. **`pre_audit` — ABSENT.** No `P19_B8_5I_PRE_AUDIT.md` existed; the pre-audit findings had been recorded
+   *inside the scope doc* instead. Now written, and **explicitly dated at close** rather than presented as
+   foresight — because its absence is causally connected to this batch's one real failure (see below).
+3. **change-class contradiction.** This report declared `non_architecture` while the scope header declares
+   `architecture`. **The scope header governs** — it is what Langston reviewed and what the checker grades.
+   Declaring a *lower* class at close, unreviewed, is backwards. Corrected to `architecture`.
+
+**The lesson, which is the transferable part:** the missing Step-2 pre-audit is *why* CI went red. A
+pre-audit doing the §9.5(a-ii) consumer census would have predicted that a new `requireKey` becomes a
+precondition of `primeTECConfig` and therefore of **every DB-mocking TEC fixture** (8 files). Instead that
+surfaced as a CI failure and a revert. Skipping the artifact did not just skip paperwork — it skipped the
+one check that would have caught the defect before it shipped.
+
+**Nothing about the deployed behaviour changed as a result of this correction.** The code, the migration,
+the verification and the deploy were all as reported; the gap was in the governance record.
 
 ---
 
@@ -113,9 +141,12 @@ no longer fits intent. Filed with a named home; see RUNNING_ISSUES.
 - `1-system-manual/PHASE_19_PLAN.md` — §1 status board + §5 decision log
 - `1-system-manual/RUNNING_ISSUES.md` — #562 resolved; new finding filed with home
 - `1-system-manual/SYSTEM_IMPACT_MAP.md` — TEC governed-key set 11 → 13
+- `1-system-manual/SYSTEM_MANUAL.md` — the trailing master switch: two mechanisms, precedence, shipped-off state, unchanged close-label chain **(added at correction)**
+- `Claude Comms and Packages/Scope Files/P19_B8_5I_PRE_AUDIT.md` — Step-2 pre-audit **(added at correction, dated honestly)**
 - `Claude Comms and Packages/Batch Completion/P19_B8_5I_COMPLETION_REPORT.md` — this file
 - `.claude/memory/MEMORY_CC_B.md` (+ truth file)
 
-**System Manual:** judged **applicable-lite** — the batch adds a governed *control*, not new exit
-math. The trailing control's two-mechanism structure (empty allowlist + per-lane master switch) is
-recorded so the overlap is discoverable.
+**System Manual:** **APPLICABLE and now landed.** My original "applicable-lite" judgement was used to
+justify describing the update instead of making it. The batch changes the exit-control surface — a second
+governing mechanism with a precedence order — which is squarely System-Manual scope, and Langston's Step-1
+Condition-2 (self-documenting overlap) required it explicitly.

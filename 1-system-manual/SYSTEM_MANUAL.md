@@ -4731,7 +4731,7 @@ Hot-reload pub/sub for strategy settings changes. Subscribers can receive mode-b
 
 > **B65.2 (2026-04-23) note:** This module is the canonical TEC. The Phase-11 percentage-based implementation (`server/services/execution-controller.ts`, Directive 11.0C) was deleted outright when this module was wired into production. The "TEC" label has been reassigned to this ATR-based service going forward. See SIM §B65.2 for the deletion + migration trail.
 
-> **★ Per-class config-cache freshness fence (B79.TEC + B-NEW-40 + B-TEC-SELFHEAL).** The exit engine resolves its per-asset-class settings (`break_even_enabled`, trigger/lock/trail params, moonbag knobs — all 11 keys) synchronously from an in-memory cache (`resolveTECConfig(assetClass)`), warmed at boot by `primeTECConfig()` (HARD-FAIL → `process.exit` if a class can't warm) and refreshed lazily on consult after a 60s TTL. **A deliberate FAIL-CLOSED staleness fence** throws `[TEC_STALE_FAIL_CLOSED]` if the cache is older than `CONFIG_MAX_STALENESS_MS` (300s = 5×TTL): the engine refuses to make an exit decision on settings too stale to trust (e.g. an operator just flipped `break_even_enabled`). **The fence is intentional and stays.** **B-TEC-SELFHEAL (2026-06-25, #349) fixed two implementation defects WITHOUT changing the fence's fail-closed behavior:** (1) the staleness throw used to sit BEFORE the lazy-refresh trigger, so a stale consult threw before scheduling its own recovery → the cache LATCHED until a process restart; the refresh trigger now runs FIRST (single-call-site helper `scheduleBackgroundRefresh`, before both throws), so a stale consult schedules a coalesced refresh and self-heals in ~1 cycle while still failing closed for that call (a TRANSIENT fence, not a latch). (2) The VTS exit loop had no per-trade isolation, so one stale-class trade's throw aborted the whole simulation cycle (incl. the later scan/open phase); it is now wrapped in a per-trade try/catch mirroring the paper engine, so one trade's exit-eval failure no longer freezes the cycle. The empirical bug this closed: the 06-22 xStock weekend reopen latched ~17h. (Full trace: SIM "B79.TEC config-cache subsystem" + RUNNING_ISSUES #349.)
+> **★ Per-class config-cache freshness fence (B79.TEC + B-NEW-40 + B-TEC-SELFHEAL).** The exit engine resolves its per-asset-class settings (`break_even_enabled`, trigger/lock/trail params, moonbag knobs, plus the two P19-B8.5i trailing master switches — all 13 keys) synchronously from an in-memory cache (`resolveTECConfig(assetClass)`), warmed at boot by `primeTECConfig()` (HARD-FAIL → `process.exit` if a class can't warm) and refreshed lazily on consult after a 60s TTL. **A deliberate FAIL-CLOSED staleness fence** throws `[TEC_STALE_FAIL_CLOSED]` if the cache is older than `CONFIG_MAX_STALENESS_MS` (300s = 5×TTL): the engine refuses to make an exit decision on settings too stale to trust (e.g. an operator just flipped `break_even_enabled`). **The fence is intentional and stays.** **B-TEC-SELFHEAL (2026-06-25, #349) fixed two implementation defects WITHOUT changing the fence's fail-closed behavior:** (1) the staleness throw used to sit BEFORE the lazy-refresh trigger, so a stale consult threw before scheduling its own recovery → the cache LATCHED until a process restart; the refresh trigger now runs FIRST (single-call-site helper `scheduleBackgroundRefresh`, before both throws), so a stale consult schedules a coalesced refresh and self-heals in ~1 cycle while still failing closed for that call (a TRANSIENT fence, not a latch). (2) The VTS exit loop had no per-trade isolation, so one stale-class trade's throw aborted the whole simulation cycle (incl. the later scan/open phase); it is now wrapped in a per-trade try/catch mirroring the paper engine, so one trade's exit-eval failure no longer freezes the cycle. The empirical bug this closed: the 06-22 xStock weekend reopen latched ~17h. (Full trace: SIM "B79.TEC config-cache subsystem" + RUNNING_ISSUES #349.)
 
 ### 5.1 Two-Stage Latch System
 
@@ -4785,6 +4785,32 @@ Where pure-trail (B65.2) had only a single target-latch event per trade and HWM-
 ### 5.1.1 Moonbag Qualifier (B65.2)
 
 Strategies that qualify for moonbag mode on target hit are stored in `module_constants.trailing_exit.moonbag_qualifying_strategies` (default: `["strong_bull_trend", "sma_trend_ride", "vwap_pullback", "breakout"]`). Some strategies have additional source-pool constraints in `module_constants.trailing_exit.moonbag_qualifying_source_pools` (default: vwap_pullback only qualifies in `quant-strong_trend` source pool).
+
+**★ THE TRAILING MASTER SWITCH — TWO MECHANISMS, ONE DECISION (P19-B8.5i, 2026-07-23, Kyle ruling).**
+Trailing is governed by **two** DB-resolved controls that must be read together, because either one alone
+can hold the ladder shut and only one of them *looks* like a switch:
+
+1. **The eligibility allowlist** — `moonbag_qualifying_strategies` (above). An **EMPTY list disables trailing
+   entirely**: `isMoonbagQualifier` returns false for every strategy, so each target hit takes the
+   close-at-target branch and `TRAILING_TAKE` is unreachable. This was the original off control
+   (Kyle 2026-05-05, B73.3 variant **K = `no_BE_no_trail`**). Its weakness is **discoverability** — an empty
+   allowlist reads as ordinary configuration data, not as an off switch, which is precisely why it was
+   repeatedly misread as "trailing has no switch."
+2. **The per-lane master switches** — `trailing_enabled_vts` and `trailing_enabled_active`, checked at the
+   SAME chokepoint (`isMoonbagQualifier`) **before** the allowlist. The lane is selected by the caller's
+   `mode`: `'vts'` → the VTS flag; `'paper'` / `'live'` → the active flag. Two flags rather than one is a
+   Kyle ruling: the VTS and active paths must be switchable independently, which also puts the VTS call
+   sites in scope rather than exempting them.
+
+**Precedence:** master switch → allowlist → source-pool constraint → concurrency cap. A false master switch
+short-circuits, so the allowlist is *subordinate*, never overridden.
+**Shipped state: both switches seed FALSE for all four asset classes, and the allowlist is empty — trailing
+is OFF, and the two mechanisms agree.** Turning trailing on therefore requires BOTH a true master switch for
+the lane AND a non-empty allowlist; flipping either alone changes nothing, which is deliberate.
+**No new exit math:** the flags gate entry to the existing ladder only. The persisted close label is
+unchanged — a qualifier denial still yields the internal `target_hit_no_trailing`, which
+`tec-evaluator.ts` converts to `exitReason: 'target_hit'`, and the closed-trade writer records
+`closeReason: 'target_hit'`. The internal discriminator never reaches storage or analytics.
 
 ### 5.1.2 Concurrency Cap (B65.2)
 
