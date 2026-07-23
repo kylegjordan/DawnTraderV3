@@ -233,6 +233,31 @@ Stated as open rather than assumed clear (an unfinished trace reported as comple
 
 ---
 
+## 10.0 ★ SECTION-10 ITEM 4 CLOSED — CLIENT-SURFACE TRACE (Langston's stated CONDITION on the Q1 collapse)
+
+**Result: the Q1 collapse is SAFE for the client. The `arm` field is never rendered.**
+
+`getDisplayRankKey` returns `{value, arm}`; `routes.ts:5110` attaches it per-row as `rankScore`/`rankArm`. In `ready-to-buy-table.tsx`:
+
+- **`rankArm`** — declared in the row type at **`:28` (`rankArm?: string`) and referenced NOWHERE else.** Not rendered, not sorted on, not in a header. **Dropping `arm` changes no rendered output.**
+- **`rankScore`** — genuinely load-bearing: the **default sort field** (`:77`), a `SortField` member (`:68`), the sort comparator (`:155-159`), **two column headers** — "Rank" (`:339`) and "RankingScore" (`:342`) — and the rendered cell (`:427-429`). **It survives the collapse unchanged**, since under the live default arm it already *is* the `r_multiple` value.
+
+⇒ **Condition satisfied: collapse `getDisplayRankKey` to return the scalar, drop `arm` from the response, drop `rankArm` from the client row type.** No replacement cell needed — there was never a cell.
+
+**Other client surfaces that DO lose rendered content (Phase-A/B scope, not blockers):**
+
+| Surface | Impact |
+|---|---|
+| `shadow-trades-tab.tsx:26,:226` | renders a `finalScore` column — **column goes** |
+| `analytics.tsx:150,:3146,:3453-3456` | renders `decision.finalScore` conditionally — **block goes** |
+| `vts-shared.tsx:35-36,:116-117` | type fields only; **`:381` already records** *"P19-B8.7 Step-9: 'finalScore' removed with its column (retired metric, piece 2.7)"* — precedent set |
+| `paper-trade-adapter.ts:224-229,:312` | **already fenced** — comments deliberately OMIT finalScore/hybridScore as a *"retired metric… (piece 2.7 / #525)"*. **Nothing to do; and this is the pattern to follow** — the codebase has already removed these from one client path with explicit fences. |
+| `ready-to-buy-table.tsx:379` | comment already calls finalScore **"inert"** |
+
+**⇒ The client side is already half-retired by B8.7/#525, with fences naming the retirement.** That is corroborating provenance for Kyle's decision: the crew has been removing these from display surfaces for weeks; #558 finishes a retirement already in progress rather than starting one.
+
+---
+
 ## 10.1 ★ LANGSTON STEP-2 RULING — **APPROVED TO CONTINUE** (read at `8a237a0f4`, 2026-07-23)
 
 > *"the audit is not yet complete and must not be reported as such, but nothing in it is blocked, and the plan may proceed to close Section 10."*
