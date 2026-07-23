@@ -2,7 +2,7 @@
 
 > **change-class: architecture**
 > **Owner:** Claude Analyst (CC-C). **Reviewer:** Langston. **Decider:** Kyle.
-> **Status:** DRAFT for Langston Step-2 acceptance. **Nothing has moved.**
+> **Status:** ★ **ACCEPTED by Langston 2026-07-23** (= Kyle's acceptance, per his standing authorization). Two implementation-time conditions ride with it — see §12. **Nothing has moved yet.**
 > **★ KYLE'S STANDING AUTHORIZATION (2026-07-23, verbatim):** *"Run the new laptop harddrive work tree to github review branch (and Google Drive) to staging and then to the main branch (when approved) plan. If he accepts, I accept. This is only for you and Langston. No need to get the other sessions' feedback."*
 >
 > **⇒ Langston's acceptance of THIS plan IS Kyle's acceptance.** That includes the §7.1 amendment (the set-in-stone rule): Kyle's "if he accepts, I accept" is his explicit sign-off, conditioned on Langston. Pairwise — CC-C + Langston — by Kyle's instruction; the other sessions are not consulted.
@@ -59,7 +59,7 @@ The Step-1 scope (`B_REPO_RELOCATE_SCOPE.md`, Langston-APPROVED) settled: source
 
 **How main advances — the honest operational nuance.** Three sessions push to the review branch continuously, so the review branch is essentially *never* in an "everything is verified" state — there is always something mid-flight. Therefore main does **not** advance per-individual-batch (you cannot cleanly lift one interleaved batch out). Instead **main fast-forwards to a review-branch commit that is a known-good checkpoint** — a point where the in-flight work up to it is verified/closed. In practice this is a periodic reconciliation at quiet points, not a per-commit merge. (Decision D-3.)
 
-**The one-time reconciliation.** Whatever `main` becomes, its first value is *current review-branch HEAD* — because everything that IS the system already lives on the review branch. `dawntrader-v4` (2,749 behind, frozen) is legacy; it is not a clean base to build main from. Decision D-2 is whether main is a **fresh branch cut from review HEAD** (clean, my lean) or a **revived `dawntrader-v4`** (requires proving it can fast-forward — they may have divergent history; unverified).
+**The one-time reconciliation.** Whatever `main` becomes, its first value is *current review-branch HEAD* — because everything that IS the system already lives on the review branch. **★ Measured (Langston, 2026-07-23): `origin/dawntrader-v4` is a STRICT ANCESTOR of the review branch — 0 commits not on review, review 2,752 ahead — so it *would* fast-forward cleanly.** My earlier "may not fast-forward / divergent history" was an unverified claim and is refuted; recorded so it does not stand as precedent. Decision D-2 therefore prefers a **fresh `main` cut from review HEAD** for the honest reason — a cleanly-named protected trunk — **not** because `dawntrader-v4` is unmergeable. `dawntrader-v4` stays a frozen archive either way.
 
 ---
 
@@ -136,7 +136,7 @@ The replacement wording is already drafted for Kyle in `B_REPO_RELOCATE_AMENDMEN
 ## 10. DECISIONS FOR LANGSTON — each with my recommendation
 
 - **D-1 — Worktrees + per-session branches, or three independent clones?** *Rec: worktrees + per-session branches* (lighter, shared object store, what kills #557; clones only needed if we wanted sessions on the same branch, which the per-session-branch model makes unnecessary).
-- **D-2 — `main` = a fresh branch cut from review HEAD, or revive `dawntrader-v4`?** *Rec: fresh `main` from review HEAD* (clean; `dawntrader-v4` is 2,749 behind and may not fast-forward — divergent history unverified). Leave `dawntrader-v4` as a frozen archive.
+- **D-2 — `main` = a fresh branch cut from review HEAD, or revive `dawntrader-v4`?** *Rec: fresh `main` from review HEAD* (clean protected trunk). Leave `dawntrader-v4` as a frozen archive. **⚠ CORRECTION (§12): the "may not fast-forward — divergent history" reason first written here was UNVERIFIED and is REFUTED — `dawntrader-v4` IS a strict ancestor and would fast-forward; fresh `main` stands only for clean naming.**
 - **D-3 — main advances by periodic known-good fast-forward, not per-batch merge?** *Rec: yes, periodic fast-forward to a verified/closed review checkpoint* (three concurrent sessions make per-batch extraction from an interleaved branch impractical).
 - **D-4 — During-move continuity for the three open sessions: directory junction, or natural-restart rollover?** *Rec: natural-restart rollover after the §6 test passes*, with a junction available as belt-and-suspenders if any session must keep running through the move.
 - **D-5 — Anything you want changed about the both-remotes-HEAD mirror-verification gate** replacing the current Drive↔GitHub bidirectional count check.
@@ -152,3 +152,23 @@ The replacement wording is already drafted for Kyle in `B_REPO_RELOCATE_AMENDMEN
 | **`main` reconciliation corrupts history** | Fresh `main` from review HEAD avoids the divergent-fast-forward question entirely (D-2). |
 | **Branch-model change confuses the deploy path** | It does not change: staging still deploys the review branch (`migration/aws-supabase`) by the same command. Main is never deployed. |
 | Laptop loss before push | "If it isn't pushed, it doesn't exist" is the stated rule; push early, push often; Drive mirror is the durability copy. |
+
+---
+
+## 12. ★ LANGSTON ACCEPTANCE — 2026-07-23 (= Kyle's acceptance, per standing authorization)
+
+**ACCEPTED, no re-review round needed.** Langston independently re-read the plan, the v4 divergence, the behind-count, and the amendment draft at the ref. Per-decision:
+
+- **D-1 — AGREED.** The git one-branch-per-worktree constraint makes per-session branches mechanically forced; structural kill for #557.
+- **D-2 — AGREED (outcome), reason corrected.** Measured: `origin/dawntrader-v4` is a strict ancestor (0 commits not on review; review 2,752 ahead at `88020fe5`) and *would* fast-forward. Fresh `main` is chosen for the honest reason — a cleanly-named protected trunk — not because v4 is dangerous. **My "may not FF / divergent history" was unverified and is refuted — owned, not buried.**
+- **D-3 — AGREED, with a §13 hook.** A "known-good checkpoint" needs a **named owner + concrete trigger** or `main` never advances (three sessions are never all-verified at once). **Home: Langston blesses the checkpoint at a quiet-point governance gate** — this gets its named home before close (implementation-time condition 2).
+- **D-4 — AGREED.** The §6 throwaway-session test is a **HARD GATE** — folder-naming is confirmed, conversation-reopen is not (a transcript may carry the old absolute path). No real session moves until it passes.
+- **D-5 — two hardening asks, both adopted:** (1) compare the SHA of the **explicit pushed ref** (`refs/heads/migration/aws-supabase`) on each remote, **not** symbolic `HEAD` (the Drive mirror's HEAD may point elsewhere); (2) on mismatch the gate **HARD-FAILS the batch close and forces re-push** — it does not warn-and-continue.
+
+**Two implementation-time conditions ride with the acceptance (not another gate):**
+1. **Final §7.1 wording lands in front of Langston at OBJ-6 before commit.** He accepts the amendment in principle (GitHub source of truth, Drive labeled mirror, mandatory verification, 2026-06-01 incident preserved verbatim under SUPERSEDED with corrected root cause) but reads the actual set-in-stone text before it lands.
+2. **D-3's checkpoint owner + trigger gets its named home before close** (Langston at a quiet-point governance gate).
+
+**Ruled on reported fact (not gradeable from Langston's access — receipts kept in the CC-C environment):** the §6 two-folder path-slug evidence, and the 2026-07-22 #557 double-fire.
+
+**Sequencing:** NEW Claude (CC-B) holds board claim [6] with a pending P19-B8.5i re-apply; the cutover is sequenced AFTER that lands (or a clean point he names), and each session is pinged before its own session/dir moves.
