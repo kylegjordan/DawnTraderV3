@@ -258,6 +258,59 @@ Stated as open rather than assumed clear (an unfinished trace reported as comple
 
 ---
 
+## 10.03 ★★★★ THE #568 CENSUS FOUND A **LIVE finalScore DECISION** — THE SCOPE'S CENTRAL PREMISE IS FALSE
+
+**This is the single most consequential finding of the audit, and it was found by the state-write census — nothing else in this batch would have surfaced it.**
+
+The scope §1 asserts: *"Neither score drives a live admission, ranking, or sizing decision today."* **That is FALSE.**
+
+### `ready_to_buy_service.ts:2098-2113`, inside `queueSQESignal` (`:2071`)
+
+```ts
+const existingSignal = input.skipSelfCheck ? null
+  : await this.getQueuedSignal(input.mode, normalizedSymbol, input.strategy);
+if (existingSignal) {
+  // If existing signal has higher FinalScore, keep it
+  const existingScore = parseFloat(existingSignal.finalScore || '0');
+  const newScore = input.finalScore;
+  if (existingScore >= newScore) {
+    …[RTB_SKIP] Keeping existing … FinalScore ${existingScore} >= new ${newScore}
+    return existingSignal;                    // ← the NEW signal is DISCARDED
+  }
+  await this.expireSignal(existingSignal.id, 'Replaced by higher-FinalScore SQE signal');
+}                                              // ← the EXISTING signal is EXPIRED
+```
+
+**⇒ finalScore is the TIEBREAKER deciding which of two competing signals for the same symbol+strategy occupies the ready-to-buy queue slot.** One of them is discarded and the other expired — **on finalScore, today, on the live path.**
+
+### REACHABILITY — verified, not assumed (the `criteria-limiter` lesson applied in the opposite direction)
+
+- **Live caller:** `signal-orchestrator.ts:1118` — `readyToBuyService.queueSQESignal(sqeSignalInput).catch(…)` (fire-and-forget).
+- **The file says so itself:** `:2132` — *"`queueSQESignal` is the **SINGLE live RTB admission chokepoint**"*; `:88` — *"the live path is `queueSQESignal`"*; `:639` — *"The admission chokepoint (`queueSQESignal`)."*
+
+**This is NOT an orphan.** It is the one door every SQE-passed signal walks through to reach the queue.
+
+### WHY EVERY EARLIER CHECK MISSED IT
+
+- It is **not a threshold comparison** (`finalScore < min`) — so the decision-shape sweep (§9.5.4) that scanned for rejection conditionals did not match it. It is a **comparison of two signals against each other.**
+- It is **not a ranking** — so "the live ranker is `r_multiple`" is true and irrelevant here.
+- It is **not the retired gate** — B8.5a retired the *admission threshold*; this duplicate-resolution rule was never part of that ruling and was left untouched.
+- Caller-tracing `calculateFinalScore` never reaches it: this reads the **stored column**, written long before.
+
+**⇒ The premise "neither score drives a live decision" was true of admission thresholds and ranking, and false of duplicate resolution. A narrower claim would have been correct; the broad one was not.** I wrote that premise, and it survived Step-1 review because it is *nearly* true.
+
+### SCOPE CONSEQUENCE — A1 NEEDS A REPLACEMENT RULE, NOT A DELETION
+
+Removing finalScore here **cannot be a deletion**: something must still decide which duplicate survives. Options, for Langston (**Q7**):
+
+1. **Replace with the live rank key (`r_multiple`)** — consistent with Q5's "one truth for rank," and with the ranker being the system's live notion of "better."
+2. **Replace with `netEV`** — the quantity the EV gate already trusts; simpler than a rank-key call at admission time.
+3. **Drop the comparison and keep-first (or replace-always)** — a genuine behaviour change in queue composition; must be argued, not defaulted into.
+
+**⚠️ The silent-failure trap if this is missed:** `parseFloat(signal.finalScore || '0')` on a column that has become NULL/absent yields **`0`** — so *every* incoming signal would beat *every* existing one, the queue would churn its entire contents on every duplicate, and **nothing would error.** That is the **#568 + absent-as-valid** classes compounding at the system's admission chokepoint. **This is exactly the failure Kyle's exhaustive-audit mandate exists to prevent**, and it would have shipped.
+
+---
+
 ## 10.04 ★★★ SECTION-10 ITEM 5 CLOSED — TWO NAME COLLISIONS AND A COLUMN-REUSE LANDMINE
 
 The remaining consumer files produced three finds that **a grep-driven removal would get wrong**, in opposite directions: two false positives it would wrongly delete, and one true dependency it would wrongly ignore.
