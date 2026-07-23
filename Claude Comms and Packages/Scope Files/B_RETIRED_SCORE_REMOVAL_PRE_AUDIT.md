@@ -258,6 +258,45 @@ Stated as open rather than assumed clear (an unfinished trace reported as comple
 
 ---
 
+## 10.04 ★★★ SECTION-10 ITEM 5 CLOSED — TWO NAME COLLISIONS AND A COLUMN-REUSE LANDMINE
+
+The remaining consumer files produced three finds that **a grep-driven removal would get wrong**, in opposite directions: two false positives it would wrongly delete, and one true dependency it would wrongly ignore.
+
+### 10.04.1 ★★ THE LANDMINE — `telemetry_history`'s FOUR SCORING COLUMNS STORE **COST DATA**
+
+`server/core/telemetry/cost-telemetry.ts:109-113` inserts into `telemetryHistory` with the scoring columns **repurposed to carry cost metrics**:
+
+```
+finalScore:           totalCost.toString()
+hybridScore:          stats.avgFee.toString()
+regimeWeight:         stats.avgSlippage.toString()
+predictiveConfidence: stats.avgSpread.toString()
+```
+
+and reads them back out at `:184-213` (`avgFee: parseFloat(r.hybridScore)`, `totalCost: parseFloat(r.finalScore)`). Rows are tagged with a `COST_METRICS_SYMBOL` sentinel and a non-meaningful regime (the `:100-107` comment says so outright: *"cost telemetry is not regime-conditional… but the `regime` field in the telemetry row is required"*).
+
+**⇒ `telemetry_history.final_score` and `.hybrid_score` are NOT scoring columns on this path — they are cost and fee.** A bucket-B action reasoning purely about scoring ("nothing reads finalScore any more, drop the column") would **silently destroy cost telemetry**, a different subsystem entirely, with no compile error and no failing test. **This is the #568 shape at the SCHEMA level: a surviving reader of a column whose nominal owner is being removed.**
+
+**⇒ HARD SCOPE RULE for Phase B: `telemetry_history` scoring columns are NOT in this batch's drop set.** They are a **rule-20 KEEP-AS-DATA case with a live second tenant.** *(Whether overloading four columns this way is itself a defect is a separate, legitimate question — §13 candidate, NOT #558. Do not fix it here.)*
+
+### 10.04.2 FALSE POSITIVE — `unified-core.ts` `finalScore` is a DIFFERENT DOMAIN ENTIRELY
+
+`:443`, `:458`, `:475`, `:499` compute local variables named `finalScore` from **`awarenessScore + autonomyBoost + planningScore`**, oversight/ethical-compliance rates, feedback accuracy, and memory-archive scores. This is **AI self-assessment scoring — nothing to do with trading signals.** Four hits that a symbol sweep would surface as in-scope. **EXCLUDE.** *(Third name collision in this batch, after the two `calculateRegimeWeight`s — the pattern is now established enough that the sweep must be reviewed by hand, not applied mechanically.)*
+
+### 10.04.3 A **SEVENTH** FORMULA — `trading-engine.ts:241`, and it is NOT orphaned
+
+`signal.finalScore = (signal.confidence × 0.7) + (goalAlignmentScore × 0.3)` — a seventh distinct composite, unlike any of the other six, blending confidence with **goal alignment**.
+
+**⚠️ Unlike the three orphans, `TradingEngine` IS imported by live code:** `routes.ts:10` (static) + `:14704` (dynamic), `command-router.ts:3`, `intent-executor.ts:243/:482`, `config-change-handler.ts:53`, `pre-execution-validator.ts:3`. **⇒ Not a delete-on-sight.**
+
+**OPEN — do not assume either way:** whether `TradingEngine` is a legacy engine superseded by `active-execution-engine.ts` (probable, given the active path) or still carries live responsibility. **Import-reachability is not execution-reachability** — that is the `criteria-limiter` lesson in reverse, and I will not repeat the `executeRefreshCycle` error by guessing in the other direction. **This must be resolved before A1 touches it.** *(Note `:428`/`:469` also propagate `signal.finalScore` outward — a state-write to census.)*
+
+### 10.04.4 Benign — telemetry/diagnostic carriers only
+
+`trace_service.ts` (`:25/:170/:192` — nullable raw carriers; `:192` falls back `finalScore ?? regimeWeight`), `skipped-signals-logger.ts` (`:20` a `'FinalScore_Low'` reason label + `:43` an optional field), `telemetry-repository.ts` (record shape + formatting), `active-funnel-tracker.ts:44` (a `'FinalScore'` funnel-stage string label). **No decisions. Cosmetic/record-shape edits at removal time**, plus the reason-label and stage-label strings, which are display strings and need a disposition (retire the label, or keep the historical rows' label meaningful).
+
+---
+
 ## 10.05 ★★★ SECTION-10 ITEM 6 CLOSED — THE PROVENANCE READ (Kyle's explicitly-mandated source)
 
 **§9.5(b) requires reading the ORIGIN INTENT, not just current state.** Kyle named `bridge/canonical/` directly. **The corpus DOES cover finalScore** — 7 of its 14 files mention it — so unlike the RTB-refresh case (where the canonical corpus documented only one of two mechanisms), there is no coverage gap here.
