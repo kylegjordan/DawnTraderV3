@@ -207,7 +207,14 @@ Research against the official docs + issue tracker established: (a) there is **N
 
 ### 13.4 Still open (unchanged by this revision)
 
-The §7.1 amendment wording still goes to Langston at OBJ-6 before it commits, and D-3's checkpoint owner/trigger still needs its named home before close.
+**★ BOTH RESOLVED 2026-07-23 (Langston ruling on the v2 draft at `aeba921d9`):**
+
+1. **§7.1 wording — APPROVED AS WRITTEN.** He re-read the full draft and the CLAUDE.md sections at the same ref, and confirmed all five OBJ-6 conditions are stated as ruled: GitHub-as-source-of-truth (correctly framed as *stricter*, not looser); **reproduction-not-comparison** (his words: *"the strongest line in the doc… the sentence I'd have written the whole amendment to protect"*); backup-never-blocks-work as a separate remote; pull-before-push given its own line **because it is the thing most likely to erode**; and the 2026-06-01 incident preserved verbatim with the frozen-pointer root cause named beneath it. **⚠️ STILL REQUIRES KYLE'S SET-IN-STONE CONFIRMATION BEFORE IT LANDS IN `CLAUDE.md`** — Langston approves the wording; the never-reverse clause is Kyle's to release.
+   - **Non-blocking wording note (his, and it corrects MY framing not the document):** the text says ref-comparison *"certified an empty backup four times"* and names **two** mechanisms (ref-equality, `bundle verify`). That is a **count of false passes, not four distinct named passes.** The document is precise; the cover-framing "four false passes named" must not outrun what is on the page. **No change to the doc.**
+
+2. **★ D-3 CHECKPOINT — NAMED HOME, OWNER ACCEPTED.** **Owner: Langston.** **Trigger: he blesses the checkpoint at a quiet-point governance gate — DEFINED as batch/sub-batch close with no push in flight.** It sits inside his existing Step-8/governance role, so it is a named home per §13, not new authority. This closes the "or `main` never advances" hook he attached to D-3.
+
+3. **★ §2/§6.5 CONTRADICTION — FOLD INTO THE SAME EDIT (his ruling).** `CLAUDE.md` lines 61 and 177 say Langston reviews the diff **"BEFORE push"**; §6.5 line 298 says **"COMMIT AND PUSH before dispatching, or he is reading a file that does not exist yet."** Under the new flow these reconcile cleanly. **Reconciled wording, his:** *"Langston reviews the actual `git diff` at the graded ref (`origin/migration/aws-supabase`) — after push to the review branch, before it advances to `main`."* "Before push" was an artifact of the Drive-source-of-truth era when he read the working copy; **it is obsolete the moment §7.1 lands, so leaving it would be a fresh contradiction, not a deferral.** Fix lines 61 and 177 to match. **This does not weaken the gate — nothing advancing to `main` unreviewed is the entire point.**
 
 ### 13.5 ★★★ D-5 REDEFINED — ref-equality gave a FALSE PASS on an empty backup. **THE FOUR EARLIER PASS RESULTS ARE WITHDRAWN.**
 
