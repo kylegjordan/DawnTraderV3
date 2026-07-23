@@ -351,6 +351,28 @@ Reading the admission metadata construction (`signal-orchestrator.ts:1078-1110`)
 
 ---
 
+### 10.03.2 ★★ A FINDING THAT EXCEEDS #558 — THE LIVE RANKER'S KERNEL RUNS ON A FABRICATED `VolNoise` (#574, its own home)
+
+Langston's precision correction — *"the kernel is **not** bypassed; `evaluateTradeExpectancy` runs unconditionally on every call, the override only discards its `r`"* — is **correct**, and my word "bypasses" was loose. Confirming his RULED-ON-REPORTED-FACT item then turned up something wider than this batch.
+
+**His check 1 — what does `pwinFloored` feed?** **NOT a live trading decision.** It flows `signalRMultiple:1784` → `captureShadowPool:1984/:2016` → the **shadow-pairing calibration sink** (`rtb-shadow-store.ts:130/:161`), plus a `vts-runner` record field. **⇒ the safety concern softens; the DATA-QUALITY one does not** — we write a `pwinFloored` flag into the calibration record computed from undefined inputs. Same family as #555 / #530: *recording a measurement the system never honestly made.*
+
+**His check 2 — does the kernel degrade quietly? CONFIRMED, and worse-shaped than "silently":**
+
+- **`expectancy.ts:616`** — `VolNoise = VolNoise ?? 0.3` (and `:571` destructures `VolNoise = 0.3`). An absent VolNoise is **not floored loudly and does not throw — it is SUBSTITUTED WITH A FABRICATED 0.3.** `DI` takes a `50` default the same way (`:571`).
+- **`:606`** — the branch that would recompute DI/VolNoise from real `prices` requires `prices.length >= 3`; `prices` is absent, so it never runs.
+- **★ `:693-694`** — the ONE log line printing `VolNoise` per call is gated `if (!quiet)` — and **`signalRMultiple` passes `quiet = true`.** ⇒ on this exact path the fabricated `0.3` is **actively log-suppressed**. The absence is not merely silent by default; the only thing that would reveal it is switched off on the path that needs it.
+
+**Same shape as the `0.015` hardcoded volatility orphan and the `?? 0.5` trendStrength that B-REGIME-INPUTS-LIVE spent a whole batch killing — a defensive default whose constant output IS the defect.**
+
+**★ WHY THIS EXCEEDS #558:** it is not confined to the proposed tiebreaker. **The LIVE `r_multiple` ranker calls `signalRMultiple` on every ranked signal TODAY**, and stored rows carry the same metadata that never included `VolNoise`/`prices` — so the kernel has been running on a fabricated `VolNoise=0.3` and default `DI=50` **on the live ranking path, right now.** The ranking *value* is largely protected because `chosenNetEv / distStop` overrides `r` when present, which is why this has not surfaced as visibly wrong. But **`pwinFloored`, and `r` itself wherever `chosenNetEv` is absent, are computed off fabricated inputs.**
+
+**⛔ NOT FILED AS A DEFECT (rule 24 / 24.a).** Three things must be settled first: (a) whether the `0.3`/`50` defaults are a deliberate designed fallback with a rationale I have not yet found; (b) whether anything downstream makes the fabrication consequential; (c) what the intended source of `VolNoise`/`prices` on a stored RTB row was meant to be. **What IS confidently stated is the structural fact:** on this call path an absent input becomes a plausible constant, and the only log that would show it is suppressed.
+
+**§9.4 HOME: `#574` — its own item, NOT folded into A1.** Fixing the live ranker's input fabrication is a different batch from removing a retired score. **Effect on #558: none to the ruling** — recommendation (1) stands, both hard requirements stand, and the `chosenNetEv`-absent counted branch is **doubly** justified, since that is exactly the case where the fabricated inputs reach `r`.
+
+---
+
 ## 10.04 ★★★ SECTION-10 ITEM 5 CLOSED — TWO NAME COLLISIONS AND A COLUMN-REUSE LANDMINE
 
 The remaining consumer files produced three finds that **a grep-driven removal would get wrong**, in opposite directions: two false positives it would wrongly delete, and one true dependency it would wrongly ignore.
