@@ -79,6 +79,24 @@ interface TrailingExitConfig {
   targetLockR: number;
   trailDistanceAtrMultiplier: number;
   persistenceDebounceMs: number;
+  /**
+   * ★ THE TRAILING MASTER SWITCH — TWO flags, one per trading path (P19-B8.5i, `#562`;
+   * Kyle directive 2026-07-22: *"one for VTS and one for active trading"*). DB-governed
+   * per asset class: `trailing_exit.trailing_enabled_vts` (the passive-learning path, and
+   * the shadow pass which is bound to it) and `trailing_exit.trailing_enabled_active` (the
+   * live/paper active-trading path). **Master over `moonbagQualifyingStrategies`:** the
+   * path's flag `false` ⇒ NOTHING trails on that path regardless of the list (the whole
+   * moonbag ladder is unreachable); `true` ⇒ the list selects which strategies qualify.
+   * BOTH seeded `false` on all classes — trailing has been off since the B73.3 variant-K
+   * ablation (Kyle 2026-05-05); these keys give that decision a control in the SAME shape
+   * as `breakEvenEnabled`, replacing the empty-allowlist-as-off-switch that two readers
+   * (CC-B, then Kyle) independently misread. Resolved by `callerMode` at the single
+   * `isMoonbagQualifier` chokepoint (`'vts'` → VTS flag; `'paper'`/`'live'` → active flag),
+   * so behaviour is byte-identical to today (the list is already empty) AND the two paths
+   * are independently controllable — turning on VTS trailing must NOT turn on active.
+   */
+  trailingEnabledVts: boolean;
+  trailingEnabledActive: boolean;
   moonbagQualifyingStrategies: string[];
   moonbagQualifyingSourcePools: Record<string, string[]>;
   moonbagMaxDurationMs: number;
@@ -132,7 +150,14 @@ const TEC_DEFAULTS: TrailingExitConfig = {
   targetLockR: 1.5,
   trailDistanceAtrMultiplier: 1.0,
   persistenceDebounceMs: 5000,
-  moonbagQualifyingStrategies: [],  // variant-K-aligned per Kyle 2026-05-05
+  trailingEnabledVts: false,     // P19-B8.5i VTS-path master switch (fixture default only; live value HARD-FAILS from the DB row)
+  trailingEnabledActive: false,  // P19-B8.5i active-path master switch (fixture default only; live value HARD-FAILS from the DB row)
+  // ★ SUBORDINATE to `trailingEnabled` (P19-B8.5i). This list only SELECTS which
+  // strategies qualify WHEN `trailingEnabled` is true; with the master off (today) it is
+  // never consulted. Was the de-facto off-switch (empty ⇒ nothing trails, variant-K per
+  // Kyle 2026-05-05) — that role now belongs to the flag; this stays as the per-strategy
+  // selector for the eventual turn-on.
+  moonbagQualifyingStrategies: [],
   moonbagQualifyingSourcePools: { vwap_pullback: ['quant-strong_trend'] },
   moonbagMaxDurationMs: 14400000, // 4h
   moonbagCapMode: 'reserved_slots',
@@ -384,6 +409,12 @@ export const ALL_TEC_KEYS: readonly string[] = [
   'moonbag_max_duration_ms',
   'moonbag_cap_mode',
   'moonbag_reserved_slots',
+  // P19-B8.5i — the two trailing master switches. They are `requireKey`d in
+  // refreshTECConfigForClass, so they MUST be registered here: this list is the
+  // canonical TEC key set, and the b79-0n-tec-b strict-hardfail tripwire asserts
+  // the valid-config fixture covers it exactly.
+  'trailing_enabled_vts',
+  'trailing_enabled_active',
 ] as const;
 
 async function refreshTECConfigForClass(assetClass: AssetClass): Promise<void> {
@@ -437,6 +468,8 @@ async function refreshTECConfigForClass(assetClass: AssetClass): Promise<void> {
   // throws via requireKey if absent from per-class AND wildcard rows.
   const snapshot: TrailingExitConfig = {
     breakEvenEnabled: requireKey('break_even_enabled'),
+    trailingEnabledVts: requireKey('trailing_enabled_vts'),       // P19-B8.5i — HARD-FAIL if the row is missing (no runtime default)
+    trailingEnabledActive: requireKey('trailing_enabled_active'), // P19-B8.5i — HARD-FAIL if the row is missing (no runtime default)
     breakEvenTriggerR: requireKey('break_even_trigger_r'),
     targetLockR: requireKey('target_lock_r'),
     trailDistanceAtrMultiplier: requireKey('trail_distance_atr_multiplier'),
@@ -465,11 +498,23 @@ async function refreshTECConfigForClass(assetClass: AssetClass): Promise<void> {
  */
 export function isMoonbagQualifier(
   assetClass: AssetClass,
+  mode: CallerMode, // P19-B8.5i — selects the VTS vs active trailing flag (sibling pattern: canEnterMoonbag already takes CallerMode)
   strategy: string,
   sourcePool: string | null | undefined,
   _regime?: string, // retained for call-site compat; per-strategy/regime moonbag override is a future B79.x scope item.
 ): boolean {
   const cfg = resolveTECConfig(assetClass);
+  // ★ THE TRAILING MASTER SWITCH — TWO flags, resolved by path (P19-B8.5i). Gated HERE, at
+  // the single chokepoint all three consumers route through, so no per-site drift. `'vts'`
+  // (VTS-real AND the shadow pass) reads the VTS flag; `'paper'`/`'live'` read the active
+  // flag — so the two paths are independently controllable (Kyle: one VTS, one active).
+  // The path's flag `false` ⇒ nothing qualifies regardless of the list ⇒ the TRAILING_TAKE
+  // ladder (entered ONLY via `moonbagQualified` at :1155) is unreachable ⇒ trailing fully
+  // off on that path. Byte-identical to today because BOTH flags seed false AND the list is
+  // already empty, so this branch reproduces the exact live code path (the moonbag-reject
+  // close), NOT the non-trailing block — preserving which block runs + its observability fields.
+  const trailingEnabledForPath = mode === 'vts' ? cfg.trailingEnabledVts : cfg.trailingEnabledActive;
+  if (!trailingEnabledForPath) return false;
   if (!cfg.moonbagQualifyingStrategies.includes(strategy)) return false;
   const requiredPools = cfg.moonbagQualifyingSourcePools?.[strategy];
   if (requiredPools && requiredPools.length > 0) {

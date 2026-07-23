@@ -1,6 +1,6 @@
 /**
  * ═════════════════════════════════════════════════════════════════════════════
- * B79.0n.TEC.b (P19-B1, 2026-06-13) — strict 11-key HARD-FAIL regression lock
+ * B79.0n.TEC.b (P19-B1, 2026-06-13) — strict full-key HARD-FAIL regression lock (13 keys as of P19-B8.5i)
  * ═════════════════════════════════════════════════════════════════════════════
  *
  * RUNNING_ISSUES #141: the soft `pick(key, TEC_DEFAULTS.x)` fallback in
@@ -9,7 +9,7 @@
  * measured ZERO fallback fires in production. This suite locks the strict
  * behavior so it can never silently regress to defaults-backfill:
  *
- *   (a) full 11-key rowset → primeTECConfig boots clean
+ *   (a) full key rowset → primeTECConfig boots clean
  *   (b) rung_floor_slippage_buffer_multiplier absent → boot REJECTS, the
  *       aggregate error names TEC_MISSING_KEY + the exact key (this was the
  *       key the soft path silently backfilled for weeks — the park-record bug)
@@ -17,7 +17,7 @@
  *       (strictness is per-key, not special-cased to one key)
  *   (d) the observability scaffolding (getTECPickFallbackStats) is GONE —
  *       its export ceased with the promotion (zero consumers verified)
- *   (e) the FULL_ROWS fixture covers exactly ALL_TEC_KEYS — if a 12th key is
+ *   (e) the FULL_ROWS fixture covers exactly ALL_TEC_KEYS — if a NEW key is
  *       ever added to the snapshot, this fails until the fixture (and every
  *       sibling TEC mock) is updated, which is precisely the B-NEW-40-era
  *       stale-mock failure mode this batch repaired
@@ -43,6 +43,12 @@ const FULL_ROWS: Record<string, unknown> = {
   moonbag_max_duration_ms: 14_400_000,
   moonbag_cap_mode: 'reserved_slots',
   moonbag_reserved_slots: 1,
+  // P19-B8.5i — the two trailing master switches. Seeded here because THIS is the
+  // VALID-config fixture; the deliberate missing-key cases are produced by
+  // `control.omitKey` below, which is left untouched so (b)/(c) still assert the
+  // per-key hard-fail. Seeded FALSE = the shipped default (trailing stays off).
+  trailing_enabled_vts: false,
+  trailing_enabled_active: false,
 };
 const control: { omitKey: string | null } = { omitKey: null };
 
@@ -71,13 +77,13 @@ vi.mock('../../core/math/cost-model.js', () => ({
 
 import * as tec from '../../services/trailing-exit-controller.js';
 
-describe('B79.0n.TEC.b — strict 11-key HARD-FAIL (#141)', () => {
+describe('B79.0n.TEC.b — strict full-key HARD-FAIL (#141)', () => {
   beforeEach(() => {
     control.omitKey = null;
     tec._testClearEngineConfigCache();
   });
 
-  it('(a) full 11-key rowset → primeTECConfig boots clean', async () => {
+  it('(a) full key rowset → primeTECConfig boots clean', async () => {
     await expect(tec.primeTECConfig()).resolves.toBeUndefined();
   });
 
@@ -108,7 +114,7 @@ describe('B79.0n.TEC.b — strict 11-key HARD-FAIL (#141)', () => {
     expect((tec as Record<string, unknown>).getTECPickFallbackStats).toBeUndefined();
   });
 
-  it('(e) FULL_ROWS fixture covers exactly ALL_TEC_KEYS (12th-key tripwire)', () => {
+  it('(e) FULL_ROWS fixture covers exactly ALL_TEC_KEYS (new-key tripwire)', () => {
     expect(Object.keys(FULL_ROWS).sort()).toEqual([...tec.ALL_TEC_KEYS].sort());
   });
 });

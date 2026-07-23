@@ -93,6 +93,10 @@ function seedFullActive(beValue: boolean = false) {
     { ...wildcardBase, constantName: 'moonbag_reserved_slots', value: 1 },
     // P19-B1 TEC.b (2026-06-13): strict requireKey — full 11-key set required.
     { ...wildcardBase, constantName: 'rung_floor_slippage_buffer_multiplier', value: 1.0 },
+    // P19-B8.5i: requireKey'd trailing master switches. TRUE = behaviour-preserving
+    // (pre-flag, qualification was allowlist-only and these rowsets model an enabled config).
+    { ...wildcardBase, constantName: 'trailing_enabled_vts', value: true },
+    { ...wildcardBase, constantName: 'trailing_enabled_active', value: true },
   ];
 }
 
@@ -145,6 +149,10 @@ describe('B79.TEC — per-asset-class TEC config cache', () => {
       { ...wildcardBase, constantName: 'moonbag_reserved_slots', value: 1 },
       // P19-B1 TEC.b (2026-06-13): strict requireKey — full 11-key set required.
       { ...wildcardBase, constantName: 'rung_floor_slippage_buffer_multiplier', value: 1.0 },
+      // P19-B8.5i: requireKey'd trailing master switches. TRUE = behaviour-preserving
+      // (pre-flag, qualification was allowlist-only and these rowsets model an enabled config).
+      { ...wildcardBase, constantName: 'trailing_enabled_vts', value: true },
+      { ...wildcardBase, constantName: 'trailing_enabled_active', value: true },
     ];
     await primeTECConfig();
     expect(resolveTECConfig('crypto_spot').breakEvenEnabled).toBe(false);
@@ -170,6 +178,10 @@ describe('B79.TEC — per-asset-class TEC config cache', () => {
       { ...wildcardBase, constantName: 'moonbag_reserved_slots', value: 1 },
       // P19-B1 TEC.b (2026-06-13): strict requireKey — full 11-key set required.
       { ...wildcardBase, constantName: 'rung_floor_slippage_buffer_multiplier', value: 1.0 },
+      // P19-B8.5i: requireKey'd trailing master switches. TRUE = behaviour-preserving
+      // (pre-flag, qualification was allowlist-only and these rowsets model an enabled config).
+      { ...wildcardBase, constantName: 'trailing_enabled_vts', value: true },
+      { ...wildcardBase, constantName: 'trailing_enabled_active', value: true },
     ];
     await expect(primeTECConfig()).rejects.toThrow(/TEC_BOOTSTRAP_FAIL/);
     // Verify the per-class status reflects the failure.

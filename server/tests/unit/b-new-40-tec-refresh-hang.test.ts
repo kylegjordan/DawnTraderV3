@@ -54,6 +54,11 @@ vi.mock('../../services/module-constants-service.js', async () => {
         moonbag_cap_mode: 'reserved_slots',
         moonbag_reserved_slots: 1,
         rung_floor_slippage_buffer_multiplier: 1.0,
+        // P19-B8.5i — trailing master switches; requireKey'd, so the normal-mode
+        // rowset must carry them or primeTECConfig hard-fails before the hang
+        // scenario under test is ever reached.
+        trailing_enabled_vts: false,
+        trailing_enabled_active: false,
       };
     }),
     hasExplicitAssetClassRow: vi.fn(async () => true),

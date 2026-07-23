@@ -88,6 +88,10 @@ function seedTECRowsForB80() {
     { ...wildcardBase, constantName: 'moonbag_reserved_slots', value: 1 },
     // P19-B1 TEC.b (2026-06-13): strict requireKey — full 11-key set required.
     { ...wildcardBase, constantName: 'rung_floor_slippage_buffer_multiplier', value: 1.0 },
+    // P19-B8.5i: requireKey'd trailing master switches. TRUE = behaviour-preserving
+    // (pre-flag, qualification was allowlist-only and these rowsets model an enabled config).
+    { ...wildcardBase, constantName: 'trailing_enabled_vts', value: true },
+    { ...wildcardBase, constantName: 'trailing_enabled_active', value: true },
   ];
 }
 
