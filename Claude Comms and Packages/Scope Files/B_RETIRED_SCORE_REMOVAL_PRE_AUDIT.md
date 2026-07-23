@@ -277,6 +277,29 @@ He independently re-read at the ref (not on reported fact): fix#1, F1 sites 1-2,
 
 ---
 
+## 10.2 ★★★ THE SETTLED PHASE PLAN (Langston, 2026-07-23 — Q5/Q6/§8.1 ruled)
+
+**Four slices, in this order. The ordering is a correctness constraint, not a preference.**
+
+| Slice | Content | Why here |
+|---|---|---|
+| **A0 — VTS convergence** *(NEW — prerequisite gate)* | At `vts-runner.ts:4947`, use **`confidence` in place of `finalScore`**, mirroring the active path's proven shape at `signal-orchestrator.ts:1798` exactly; resolve the `:4929` `strength` input. | **The removal cannot safely land while `:4947`/`:4929` still read these scores.** Folding it into A1 would make one migration do a mechanical column removal AND a semantic VTS-learning behaviour change — muddying both blast radius and diff. Lands and bakes first. |
+| **A1 — core/crypto logic** | Make `final_score` **NULLABLE** **+** remove the writers at `:1151`/`:2234`, in the same migration. Plus: `calculateFinalScore` + the two callers, the inline site 2, the shadow-gate block, the ranker collapse, the orphan cluster. | Resolves §8.1: once nullable, writers omitting the value insert NULL — **no NOT-NULL break** — and nothing ships a removal that still writes what it removes. |
+| **A2 — xStock** | `eval-cycle.ts:656` + `vts-real-score.ts:43/:209` cluster. | Distinct reachability graph, census, and review surface. Apply the pattern validated by A1. |
+| **B — schema** | **DROP** the `final_score` column (+ the remaining bucket-B contracts). | Drops a column **nobody writes** — internally consistent by construction. |
+
+**Q5 ruled — order `getQueuedSignals` by the LIVE RANK KEY; do not drop the ordering.** Inert on the live path is agreed, but `routes.ts:9324` + c13/c14 are real display consumers, and dropping the ordering hands them **nondeterministic order — a data-quality regression dressed as a cleanup.** Converge display onto `computeRankKey` so pipeline rank and display rank are one truth. If the key is not cheaply SQL-expressible, order by its dominant term and let the consumer re-sort — but **display must reflect live rank, never vanished finalScore.**
+
+**Q6 open sub-question, named so it is not silently dropped:** whether `hybridScore → strength` at `:4929` carried **learning signal that `confidence` does not**. Langston will not wave that through on reported fact. It is a **measured VTS-data-quality question and its own decision** — not a blocker on convergence, but it must be named in the A0 slice. *(Analyst Claude independently flagged the same site from their #568 lane, adding that `?? 0.5` makes it an **absent-as-valid** site: a missing hybridScore becomes a plausible 0.5 and then feeds the derived `hybridConfidence`. So the dependency is not merely "reader survives its writer" but "**and the absence is unobservable**" — which strengthens convergence over deletion.)*
+
+**Orphans — §15 disposition:** `criteria-limiter` (module), `applyGovernance`, `computePerformanceScore` fold into the **#568 census unit** as delete-candidates with full caller-tracing + `tsc` blast-radius proof, **or a dated home. No lingering stubs.**
+
+### ★★ AND THE CONSEQUENCE OF THE `criteria-limiter` ORPHAN — IT CHANGES WHAT "HOW RANKING WORKS" MEANS
+
+Langston's sharpest closing point. `criteria-limiter.ts:18` declares *"Directive 11.0B: Ranking is exclusively by FinalScore"* and promotes from a finalScore-ordered `limit`. **That module is dead.** ⇒ **the scope's central premise was quoting dead code as live architecture.** Anyone reading the repo for "how does ranking work" can land on an authoritative-sounding directive comment in a module that has not executed in months. This is the §9.5 lesson in its purest form: *a complete narrative is not an exhaustive inventory*, and a confident comment is not evidence of reachability. **Recorded here as a finding in its own right, not just a deletion candidate.**
+
+---
+
 ## 11. QUESTIONS FOR LANGSTON (Step-2)
 
 - **Q1 — one-arm plug-point or full collapse?** (§6)
