@@ -2,7 +2,7 @@
 
 > **change-class: architecture**
 > **Owner:** Claude Analyst (CC-C). **Reviewer:** Langston. **Decider:** Kyle.
-> **Status:** ★ **ACCEPTED by Langston 2026-07-23** (= Kyle's acceptance, per his standing authorization). Two implementation-time conditions ride with it — see §12. **Nothing has moved yet.**
+> **Status:** ★ **ACCEPTED by Langston 2026-07-23** (= Kyle's acceptance, per his standing authorization) — see §12. **★★ THEN REVISED MID-IMPLEMENTATION, ALSO RULED BY LANGSTON — see §13, WHICH SUPERSEDES §3, §6 and D-1/D-4 of §10.** In short: separate **clones on the shared branch** (not worktrees on per-session branches), and **NO SESSION RELOCATES AT ALL**. **Nothing has been moved or deleted; the Drive tree and all session storage are untouched.**
 > **★ KYLE'S STANDING AUTHORIZATION (2026-07-23, verbatim):** *"Run the new laptop harddrive work tree to github review branch (and Google Drive) to staging and then to the main branch (when approved) plan. If he accepts, I accept. This is only for you and Langston. No need to get the other sessions' feedback."*
 >
 > **⇒ Langston's acceptance of THIS plan IS Kyle's acceptance.** That includes the §7.1 amendment (the set-in-stone rule): Kyle's "if he accepts, I accept" is his explicit sign-off, conditioned on Langston. Pairwise — CC-C + Langston — by Kyle's instruction; the other sessions are not consulted.
@@ -65,6 +65,8 @@ The Step-1 scope (`B_REPO_RELOCATE_SCOPE.md`, Langston-APPROVED) settled: source
 
 ## 3. WORKTREES + PER-SESSION BRANCHES — the mechanic Step-1 didn't spell out
 
+> ⛔ **SUPERSEDED BY §13.1 — the worktree/per-session-branch design was OVERTURNED. Separate clones on the shared branch replaced it. Kept for decision history; do not build from this section.**
+
 Git **forbids two worktrees checked out on the same branch simultaneously.** So "three worktrees, one per session" mechanically **requires three session-branches** — each worktree sits on its own branch, and those branches merge into the review branch. This is stricter and cleaner than "everyone commits on migration/aws-supabase directly," and it is what structurally kills **#557** (the shared-staging-index race that fired twice on 2026-07-22): each worktree has its own index seeded from HEAD, so one session's commit can never sweep in another's staged files.
 
 - **Alternative considered — three independent CLONES instead of worktrees.** Clones *can* all sit on the same branch (no shared-branch restriction), at the cost of more disk and no shared object store. Worktrees are lighter and are what Kyle named. **Recommendation: worktrees + per-session branches.** (Decision D-1.)
@@ -85,6 +87,8 @@ Langston reviews at the graded ref, which needs a **local repository to fetch in
 ---
 
 ## 6. MOVING THE THREE LIVE SESSIONS WITHOUT LOSING THEM — Kyle's hard constraint
+
+> ⛔ **SUPERSEDED BY §13.2 — this objective DISSOLVED, it was not satisfied. No session relocates, so there is nothing to port and no gate to run. Kept for decision history.**
 
 Three things live in three different places, and only one is path-sensitive:
 
@@ -172,3 +176,35 @@ The replacement wording is already drafted for Kyle in `B_REPO_RELOCATE_AMENDMEN
 **Ruled on reported fact (not gradeable from Langston's access — receipts kept in the CC-C environment):** the §6 two-folder path-slug evidence, and the 2026-07-22 #557 double-fire.
 
 **Sequencing:** NEW Claude (CC-B) holds board claim [6] with a pending P19-B8.5i re-apply; the cutover is sequenced AFTER that lands (or a clean point he names), and each session is pinged before its own session/dir moves.
+
+---
+
+## 13. ★★ REVISION — 2026-07-23, AFTER IMPLEMENTATION BEGAN. **THIS SECTION SUPERSEDES §3, §6, and D-1/D-4 of §10.**
+
+Two findings landed during implementation. Both were re-ruled by Langston. **Read this section as authoritative where it conflicts with anything above.**
+
+### 13.1 D-1 RE-RULED — separate CLONES on the SHARED review branch (overturns worktrees + per-session branches)
+
+**Kyle surfaced the cost neither Langston nor I weighed:** with per-session branches, session A merges a file to review while B and C still hold the OLD version in their trees. If B edits its stale copy, you get three versions of one file. The answer under the worktree model was "each session must fetch+rebase before working and before merging" — **a discipline, not a guarantee.** With three concurrent sessions that is the normal weekly path, and per-session branches actively **HIDE** staleness (your own branch is never behind itself), so divergence surfaces late, at merge, as a **silent revert** rather than a visible conflict.
+
+**THE DECIDING PROPERTY: on a shared branch, git REJECTS a push from a clone that is behind.** Sync becomes **structural instead of remembered** — the same principle as #568 and the board honesty clause: *a control you must remember is not a control.* Index isolation (the entire reason worktrees were endorsed, #557) is fully preserved, because each clone has its own `.git`.
+
+**Mechanical note that had forced the original shape:** git forbids two worktrees on ONE branch, which is precisely why worktrees mandate per-session branches. Same-branch therefore *requires* clones. That constraint drove D-1 more than the merits did.
+
+**BUILT (2026-07-23):** four independent clones, all on `migration/aws-supabase` — `C:\DawnTraderV3` (spare/reference) + `-old` (CC-A) + `-new` (CC-B) + `-analyst` (CC-C). Each verified 442 packages / 0 zero-byte (vs the Drive tree at **405 of 452** zero-byte, so #567 is resolved by the relocation).
+
+### 13.2 §6 AND THE D-4 GATE **DISSOLVE** — no session relocates at all
+
+Research against the official docs + issue tracker established: (a) there is **NO supported migration of conversation history** when a project directory moves — it orphans the sessions, multiple open issues, the official workaround is "move it back"; (b) **directory junctions on the storage folder are NOT reliable** — the app resolves them to their physical path before key lookup, a documented split/orphan risk. Four such junctions were created and then **REMOVED**, with the store verified intact afterwards (101 transcripts, 4 memory files, 3.9 GB). The Windows underscore-splitting bug was checked on this machine: the second variant folder exists but is **EMPTY**, so storage was never actually split.
+
+**⇒ THE SIMPLIFICATION:** a session's storage location does not constrain which paths it may edit — read/write is path-agnostic. **The benefit was always *working in* the tree, never *opening* there.** So **no session moves**: all three stay opened where they are, keeping full history, and simply do their file work in their own clone. Index isolation, healthy dependencies and the dual push are all still obtained. §6, the pre-seed, and the D-4 hard gate are **not satisfied — they cease to apply.** Strictly less risk than the accepted plan.
+
+### 13.3 Langston's two conditions on the revision
+
+1. **PULL-BEFORE-PUSH IS THE DOCUMENTED WORKFLOW.** Every clone pulls before it pushes. Git enforces it (a behind-clone's push is rejected), but it is written down here so nobody treats a rejected push as an error to work around.
+2. **★ THE STEP-4 REVIEW GATE IS NOT WEAKENED BY THIS.** Structural sync ≠ skipping review. Direct commits to the shared review branch must still go through Langston's Step-4 diff review before anything lands. Being on one branch makes pushing easier; it does not make review optional.
+3. **D-5 RE-VERIFIED PER CLONE — and it did NOT carry.** The dual-push config and the explicit-ref identity check were originally verified on the worktree layout, which shared one object store. Under four independent clones each needed its **own** dual-remote configuration. Langston required re-verification rather than assumption; that was correct. **All four now configured and PASSING** the explicit-ref (`refs/heads/migration/aws-supabase`, not symbolic HEAD) identity check across GitHub and the Drive mirror.
+
+### 13.4 Still open (unchanged by this revision)
+
+The §7.1 amendment wording still goes to Langston at OBJ-6 before it commits, and D-3's checkpoint owner/trigger still needs its named home before close.
