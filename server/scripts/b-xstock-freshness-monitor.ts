@@ -9,6 +9,26 @@
  * until satisfied. Read-only over live tables + one self-owned trend table + one
  * §10.5 alert. NO live-pipeline coupling.
  *
+ * ⛔⛔ SUPERSEDED CONTENT — READ THIS BEFORE TRUSTING ANYTHING BELOW (CC-A, 2026-07-23).
+ * This file was written 2026-07-08 and COMMITTED 2026-07-23 (`c65813bcd`) only to rescue it —
+ * it had sat uncommitted in a single folder for a fortnight and was absent at origin. Landing it
+ * preserved it; it did NOT bless its design.
+ *
+ * ★ OBJ-1 BELOW IS RETIRED. The throttle-caused-tail vs natively-slow ATTRIBUTION SPLIT was ruled
+ *   a CATEGORY ERROR on 2026-07-08 (crew-locked, Langston + CC-B): it needs the one-time Wave-D
+ *   pre/post counterfactual, and the ticker capture stores INGEST time only (no venue quote-ts),
+ *   so per-fetch attribution is undefined — a heuristic re-derivation returned 474 against ~10
+ *   ground truth. OBJ-1 is now an honest freshness SLI + regression detector (per-symbol
+ *   median/p95 gap + RTH breach-rate, WoW trend, absolute-band alert, min-sample guard,
+ *   #439 quarantine). See RUNNING_ISSUES #441 and `B_XSTOCK_FRESHNESS_MONITOR_PRE_AUDIT.md`
+ *   §OBJ-1-REFRAMED — those are current; the split described below is NOT.
+ *
+ * ★ AND IT CANNOT RUN AS WRITTEN: it writes INTO `xstock_freshness_report`, and NO migration
+ *   creating that table exists (0 in MANIFEST, absent from the tree). First write would fail.
+ *   Green CI proves the TypeScript COMPILES and nothing more.
+ *
+ * ⇒ Treat everything below as a 2026-07-08 DRAFT pending rework, never as current design.
+ *
  * Reports (over the past LOOKBACK_DAYS of xStock RTH):
  *  OBJ-1  Freshness-breach exposure per symbol vs the live 15 s fill gate, SPLIT
  *         into throttle-caused-tail (fast median, occasional tail — the Wave-D
