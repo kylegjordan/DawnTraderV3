@@ -258,6 +258,51 @@ Stated as open rather than assumed clear (an unfinished trace reported as comple
 
 ---
 
+## 10.05 ★★★ SECTION-10 ITEM 6 CLOSED — THE PROVENANCE READ (Kyle's explicitly-mandated source)
+
+**§9.5(b) requires reading the ORIGIN INTENT, not just current state.** Kyle named `bridge/canonical/` directly. **The corpus DOES cover finalScore** — 7 of its 14 files mention it — so unlike the RTB-refresh case (where the canonical corpus documented only one of two mechanisms), there is no coverage gap here.
+
+### What finalScore was BUILT to be
+
+`DawnTrader_Mathematical_Architecture_v1.5.0.md` is unambiguous, and it is the strongest possible statement of intent:
+
+- **`:238`** — *"[The SQE] uses **FinalScore** and **RegimeWeight** exclusively."*
+- **`:244-247`** — the admission pair: `FinalScore ≥ 0.35 AND RegimeWeight ≥ 0.40`
+- **`:252`** — the formula, under **Directive 11.0E**
+- **`:256-262`** — the coefficients are labelled **"(Immutable)"**
+- **`:322/:327`** — *"The Ready-to-Buy Queue holds all validated signals, **ranked purely by FinalScore**"* → `RTB.sort((a,b) => b.finalScore - a.finalScore)`
+- **`:476-478`** — the component table: SQE *"Validate signals"* ← FinalScore, RegimeWeight; RTB Queue *"Rank signals"* ← FinalScore
+- **`:489`** — the closing summary, at *"full maturity"*: **"Unified metric model: FinalScore + RegimeWeight as sole operational metrics"**
+
+**⇒ ORIGIN INTENT: finalScore was a deliberate CONSOLIDATION — one unified quality number to do two jobs, (1) SQE admission and (2) RTB ranking — and it was presented as the framework's maturity milestone, with immutable coefficients.** This is emphatically *not* accidental legacy. Removing it is removing something the system was once architected around, and it deserves the weight of that.
+
+### ★ THE SYNTHESIS — and it is what makes the removal SAFE rather than merely DECIDED
+
+The question §9.5 actually demands is: **is anything finalScore was designed to do left UNOWNED once it is gone?** Answer, per job:
+
+| finalScore's original job | Owner today | Status |
+|---|---|---|
+| **(1) SQE admission on quality** | the **EV / Net-Expectancy gates** | **OWNED** |
+| **(2) RTB ranking** | **`r_multiple`** (`R = netEV ÷ risk_price`), P19-B7.1 | **OWNED** |
+
+**Nothing is orphaned by the removal.** Both jobs have named, live successors.
+
+**★ And the decisive detail is INSIDE the same canonical document.** Its closing summary lists, as a **separate pillar** alongside the unified metric model:
+
+> *"**Profitability validation:** Net expectancy gate preventing unprofitable trades"* (`:490`)
+
+**⇒ The net-expectancy gate was NOT a later replacement for finalScore — it co-existed with it from the original design.** That is what vindicates B8.5a's retirement rationale (*"intent REDUNDANT — composites feed EV gates, never replace them"*) **on the original architecture's own terms, not on today's preferences.** The composite was never meant to substitute for profitability validation; the framework always had both. So removing finalScore does not dismantle the designed framework — it removes a layer the framework's own other pillar had already subsumed.
+
+**★ A second faithfulness check: RegimeWeight was finalScore's CO-EQUAL in the original pairing (`:238`, `:489`) — and it SURVIVES this batch, live at the 0.30 floor.** So "removing the old scoring system" is not tearing out half of a designed pair and leaving a stump: the pair's *other* member remains exactly where the architecture put it. This is precisely why Finding 2 (the mixed `score-calculator.ts`) is the highest-risk cut in the batch — the two were born together and still live in one file.
+
+### The honest counter-weight, stated rather than buried
+
+The corpus calls these coefficients **"Immutable"** and the metric model the system's **"full maturity."** Read cold, that is a strong argument *against* this batch, and it is exactly the trap Kyle warned about after the refresh-cadence episode — judging old architecture on how it looks today instead of finding out why it was built. **Here the provenance read cuts the other way and I want that on the record as a finding, not an assumption:** reading the intent *supports* the removal, because the same document that calls finalScore immutable also names the net-expectancy gate as an independent pillar. The measured `r=−0.140` (anti-predictive) and the P19-B7.1 structural argument (friction-blind and reward:risk-blind **by construction**) then say the consolidation did not deliver what it promised. **An "immutable" label is a statement of design intent, not of empirical result.**
+
+**Recording rule satisfied (§9.5):** the canonical corpus is a **frozen historical record and is NOT edited** by this batch; the CURRENT docs (SIM / System Manual) carry the change.
+
+---
+
 ## 10.1 ★ LANGSTON STEP-2 RULING — **APPROVED TO CONTINUE** (read at `8a237a0f4`, 2026-07-23)
 
 > *"the audit is not yet complete and must not be reported as such, but nothing in it is blocked, and the plan may proceed to close Section 10."*
