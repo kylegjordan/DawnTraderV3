@@ -144,6 +144,43 @@ Not a code delete. Each needs: readers? history worth keeping? forward+rollback 
 
 ---
 
+## 9.5 ★★★ SECOND PASS — THREE ORPHANS, ONE SIXTH FORMULA, AND A LIVE ORDER-BY THAT TURNS OUT INERT
+
+Added after the first dispatch. **Every claim below was reachability-checked BEFORE being characterized** — last night's most expensive lesson was building a structural conclusion on `executeRefreshCycle`, which has never executed.
+
+### 9.5.1 Three orphaned consumers (zero live callers — presence-evidence given)
+
+| Module / symbol | Evidence | Disposition |
+|---|---|---|
+| **`server/core/criteria-limiter.ts`** — the whole module, incl. `export const criteriaLimiter = new CriteriaLimiter()` (`:178`) | Repo-wide grep for `CriteriaLimiter`/`criteriaLimiter` (non-test, non-archive) returns **only the two definition lines in the file itself**. The single other repo reference is a **comment** at `ready_to_buy_service.ts:994`. **Zero importers.** | **ORPHANED** — rule 18 delete |
+| **`applyGovernance`** — `governance-engine.ts:76` (`adjustedScore = finalScore × multiplier`, `:115`) | Both former importers **explicitly removed it as dead**: `active-execution-engine.ts:181` *"HF9: applyGovernance + getGovernanceStateForUI removed (dead imports — never called in function body)"*; `vts-runner.ts:109` *"HF9: applyGovernance removed (dead import — governance gate moved to SQE)"* | **ORPHANED** |
+| **`computePerformanceScore`** — `ml-calibration.ts:93` | Repo-wide grep returns **only its own definition**. | **ORPHANED** |
+
+**⚠️ I nearly filed the first of these as a contradiction of the scope's central premise.** `criteria-limiter.ts` reads *"Directive 11.0B: Ranking is exclusively by FinalScore"* (`:18`) and requests `orderBy:'finalScore'` + `limit: openSlots` then promotes from the top (`:85-100`) — which, if live, would be a **finalScore-driven promotion decision** and would falsify "neither score drives a live admission, ranking, or sizing decision today." **It is not live.** The TCL is a mainstay component named in CLAUDE.md, but the live TCL is **not this class** — TCL functionality is referenced across ~20 files (`tcl_watchdog.ts`, `trading_scheduler.ts`, `active-engine-service.ts`, …). **Honest limit: I proved this module is orphaned; I did NOT map where the live TCL is implemented.** Not needed for this batch, but the claim stops where the evidence stops.
+
+### 9.5.2 A SIXTH formula (orphaned)
+
+`ml-calibration.ts:93` — `computePerformanceScore = finalScore×0.5 + predictiveConfidence×0.3 + regimeWeight×0.2`. A *different* weighted composite, distinct from all five in §1. **Zero callers.** ⇒ the formula-site count is **six**, five live/script-reachable and one dead.
+
+### 9.5.3 ★ `getQueuedSignals` orders by finalScore — and it is INERT on the live path
+
+`ready_to_buy_service.ts:1390` `getQueuedSignals` issues **three** queries each with `orderBy:'finalScore', orderDir:'desc'` (`:1400/:1408/:1416`) and then **re-sorts the merged list by finalScore descending** (`:1420-1425`). Fourteen call sites. This looked like a live finalScore-driven selection. **It is not — verified at each live consumer:**
+
+- **`getRankedSignals:1799`** (the promotion path) — **re-ranks and re-sorts by `computeRankKey`** (`:1859-1860`), completely overwriting the incoming order. The comment at `:1864` confirms it is *"the SOLE live caller of the promotion path."*
+- **`rtb-refresh-service.ts:326`** — consumes into a `Set` of signal keys. Order-irrelevant.
+- **`rtb-refresh-service.ts:389`** + **`ready_to_buy_service.ts:902`** — filter by hash-assigned bucket membership. Order-irrelevant.
+- **No `LIMIT`** on any of the three queries ⇒ the ordering cannot drop a signal either.
+
+**⇒ Removing the ORDER BY is behaviourally safe on the promotion path.** But it is **not** a free deletion: `routes.ts:9324` and the c13/c14 validation services also consume `getQueuedSignals`, and their **displayed/reported row order will change**. **Langston (Q5): when finalScore goes, does `getQueuedSignals` order by the live rank key (`r_multiple`), or drop the ordering entirely and leave ordering to whoever needs it?** Ordering by the live rank key keeps display order meaningful and matches the "the number that ranks is the number displayed" principle from P19-B8.7 Step-9; dropping it is simpler but makes the RTB API surface return an arbitrary order.
+
+*(Not-yet-checked, stated rather than assumed: the remaining in-file callers `:650`, `:1452`, `:1464`, `:1627`, `:2333`.)*
+
+### 9.5.4 Decision-vs-telemetry sweep — result
+
+Scanned `telemetry-aggregator`, `ml-calibration`, `governance-engine`, `c13`/`c14-validation-service`, `criteria-limiter`, `unified-core`, `trading-engine` for finalScore in a conditional/comparison/sort shape. **Every surviving live hit is aggregation or reporting** — `Math.max`, `reduce`→average, percentile sort for a report table, a markdown row. **No live `if (finalScore < X) → reject` outside the retired-and-shadow-logged SQE block of §7.** This is consistent with the scope's premise, now with evidence behind it rather than assertion.
+
+---
+
 ## 10. OPEN — STILL TO TRACE BEFORE PHASE A CUTS
 
 Stated as open rather than assumed clear (an unfinished trace reported as complete is the failure this document exists to prevent):
