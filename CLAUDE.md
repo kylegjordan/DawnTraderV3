@@ -58,7 +58,7 @@ A batch is NOT done until every numbered objective from the scope is verifiably 
 
 3. **Implementation** — CC edits directly in the clone repo on the migration branch. Surgical edits explicitly documented. No speculative refactoring.
 
-4. **Code Review** — Langston reviews actual `git diff` BEFORE push. Code-level, not high-level gloss. Change list in `Claude Comms and Packages/Change Lists/`.
+4. **Code Review** — Langston reviews the actual `git diff` **AT THE GRADED REF (`origin/migration/aws-supabase`) — i.e. AFTER the push to the REVIEW branch, and BEFORE it advances to `main`.** Code-level, not high-level gloss. Change list in `Claude Comms and Packages/Change Lists/`. **(Corrected 2026-07-23 — Kyle: "Langston reviews the review branch on GitHub, so it's already been pushed." The old "BEFORE push" wording contradicted §6.5's own instruction to commit-and-push before dispatching, and contradicted reality: he reads at a ref, so an unpushed diff is a file that does not exist for him. The review gate is the advance to `main`, not the push to the review branch.)**
 
 5. **GitHub Push + CI** — Push to GitHub. CI runs 4 jobs: TypeScript Check, Test Suite, Build, Docker Build. **All 4 must be GREEN.** Do not push on top of red CI.
 
@@ -174,7 +174,7 @@ When a substantive asset-class-onboarding learning surfaces in ANY batch, fold i
 6. **Never confabulate when context is degraded.** Flag uncertainty. Don't state compacted info confidently.
 7. **Single source of truth per domain.** Each governance doc owns its domain. No duplicates.
 8. **Batch completion reports are mandatory** — every batch, canonical location, governance-files-changed list.
-9. **Langston code-level reviews are mandatory** — scope → pre-audit → code diff (before push) → completion report. Not high-level glosses.
+9. **Langston code-level reviews are mandatory** — scope → pre-audit → code diff (**at the graded ref, after the push to the review branch and before `main` advances** — see §2 step 4) → completion report. Not high-level glosses.
 10. **All governance in the repo.** No parallel copies in Drive root or DT_Clone_Repo root.
 11. **Regime/DBS code FROZEN during Phase 15b audit.** Exception: instrumentation needed to collect evidence. No threshold / formula changes until audit completes.
 12. **Always consult SIM in pre-audit.** Always update SIM + System Manual in governance. Buried details are the enemy.
@@ -393,24 +393,84 @@ ssh root@188.245.193.8 "su - deploy -c 'pm2 list'"
 ssh root@188.245.193.8 'TOKEN=$(curl -s -X POST http://localhost:5000/api/auth/login -H "Content-Type: application/json" -d "{\"username\":\"testuser123\",\"password\":\"SecurePass123!\"}" | python3 -c "import json,sys; print(json.load(sys.stdin)[\"accessToken\"])") && curl -s -H "Authorization: Bearer $TOKEN" http://localhost:5000/api/vts/filter-diagnostics'
 ```
 
-### 7.1 Storage & sync workflow — THE canonical flow (🔒 SET IN STONE — Kyle directive 2026-06-01 — NEVER delete, NEVER edit out, NEVER reverse)
+### 7.1 Storage & sync workflow — THE canonical flow (🔒 SET IN STONE — Kyle directive 2026-07-23, superseding the 2026-06-01 rule; the original incident record is PRESERVED at the end, never deleted)
 
-**THE FLOW IS ONE DIRECTION ONLY:**
+**THE FLOW:**
 
-> **Google Drive folder  →  `C:\dev` test bench (tests only)  →  [tests green]  →  push to GitHub FROM the Google Drive folder  →  GitHub  →  staging deploy.**
+> **Kyle's laptop — one INDEPENDENT CLONE per session, ALL ON THE SHARED REVIEW BRANCH → push → GitHub (`migration/aws-supabase`) → staging deploys the REVIEW branch → verified + approved advances `main`.**
+> **Backups and review copies fan out from there. They are NOT in the push path.**
 
-- **The Google Drive folder `G:\My Drive\Dawn Trader\DT_Clone_Repo\DawnTraderV3` is the SOURCE OF TRUTH.** ALL development — code AND governance — ORIGINATES here. This is where you edit, author, commit, and push. Langston sees it via his FUSE mount.
-- **`C:\dev\DawnTraderV3` is ONLY a throwaway test bench.** Its sole reason to exist: run `npx tsc --noEmit` + `npx vitest run`, which CANNOT run inside the Google Drive folder (Google Drive's FUSE mount triggers `EBADF` on npm's many-small-files `node_modules` write pattern; `node_modules` is permanently incomplete there). **To test: copy the changed files from the Google Drive folder into `C:\dev`, run the checks there.** NEVER author or originate edits in `C:\dev`. NEVER push to GitHub from `C:\dev`.
-- **Push to GitHub ONLY from the Google Drive folder, AFTER the test bench is green.**
-- **🚫 NEVER pull GitHub → Google Drive. NEVER write/commit in the test bench (or in GitHub) and pull it down into the Google Drive folder. EVER.** The ONLY pull that is allowed is GitHub → `C:\dev` test bench (to refresh the bench for testing). GitHub NEVER flows back into the Google Drive folder.
-- **GitHub → staging** is unchanged (staging `git pull`s from GitHub on deploy).
+#### ★★ THE ONE-DIRECTION RULE (Kyle directive 2026-07-23; Langston ruled on it separately from the rest of this section and approved it on its own merits). FLOW IS ONE WAY; NOTHING EVER FLOWS BACK.
 
-**`C:\dev` test bench facts:** `--depth 1 --single-branch --branch migration/aws-supabase` shallow clone on local NTFS; `npm install` ~26s. Refresh the bench for testing via `git pull origin migration/aws-supabase` (GitHub → bench is allowed). Commands: `npx tsc --noEmit` (typecheck), `npx vitest run` (tests). See history doc §7.1 for the FUSE-incompatibility origin.
+- **The REVIEW branch accepts input from exactly ONE source: the clones on Kyle's laptop.** It **NEVER** takes content from `main`, from the Helsinki mirror, from Google Drive, or from staging.
+- **From the review branch, everything moves OUTWARD only** — to staging, to `main`, to the backups, to Langston's review clone.
+- **`main` only ever advances FROM the review branch.** Nothing else may feed it.
+- **Staging, both backups, and Langston's clone are TERMINAL IN NORMAL FLOW.** They receive; they never send back. **A copy that can write upstream is not a backup, it is a second author.**
+- **★ The ONE exception is DISASTER RECOVERY (Langston, 2026-07-23).** If the review branch is CONFIRMED LOST, re-seeding it *from* a backup is the only reason a backup exists at all. That is a **Kyle-authorized EVENT, not a flow** — categorically different from the 2026-06-01 failure (concurrent authorship, nobody able to say which direction was correct). Without this carve-out, an absolute "never send back" would forbid the restore the backup exists to perform.
+- **★ ENFORCED, NOT REMEMBERED (2026-07-23):** every terminal copy has had its **push URL set to a deliberately invalid `DISABLED://…` value** — the Helsinki mirror (`/root/backups/dawntrader.git`, which had a live GitHub push URL it should never have had) and Langston's review clone. A push from either now fails at git, not at somebody's memory.
+- **Why this is a rule and not a habit:** 2026-06-01 was a *direction* failure — content in one place and not the other, with nobody able to say which way it should have travelled. One declared direction makes "which copy is right?" answerable by construction.
 
-**🔒 Batch-close sync gate (HARD — every batch, no exceptions):** before any batch is marked complete, confirm Google Drive ↔ GitHub ↔ staging are all in sync. From the **Google Drive folder**: `git status` clean (only intentional local config such as `.claude/settings.local.json`) AND **BOTH directions zero**: `git rev-list --count HEAD..origin/migration/aws-supabase` = **0** (not behind origin) AND `git rev-list --count origin/migration/aws-supabase..HEAD` = **0** (nothing committed-but-unpushed — Langston catch 2026-06-12 at the B-4.6-B close: the one-directional check cannot detect unpushed local commits, which is exactly the gap it failed to catch). If either is non-zero, the batch is NOT done. (Staging is in sync when its deploy pulled the same commit GitHub holds.)
+#### The working arrangement
 
-**Why this is SET IN STONE:** on 2026-06-01 the direction was found INVERTED in practice — recent work had been edited + committed + pushed from the `C:\dev` test bench, leaving the Google Drive source-of-truth folder **42 commits stale** and one governance item (`POST_AUDIT_ROADMAP` row 25-11, a Kyle 2026-05-29 directive) stranded on GitHub, never reaching Google Drive. This violated the canonical "Google Drive, GitHub, and staging always synced at batch close" rule. It was recovered + resynced. This section exists so it NEVER recurs and must NEVER be deleted or edited out of this document.
+- **★ GITHUB IS THE SOURCE OF TRUTH.** It is what staging deploys from, what CI grades, what Langston reviews at (`origin/migration/aws-supabase`), and what every `file:line` citation resolves against. **The laptop is authoritative for uncommitted work only — if it isn't pushed, it doesn't exist.** Stricter than the old rule, not looser.
+- **Each session works in its own INDEPENDENT CLONE on local NTFS:** `C:\DawnTraderV3-old` (CC-A) · `C:\DawnTraderV3-new` (CC-B) · `C:\DawnTraderV3-analyst` (CC-C) · `C:\DawnTraderV3` (spare/reference, used by the Drive-archive script). **Separate clones, NOT worktrees** — git forbids two worktrees on one branch, which would force per-session branches whose failure mode is a **silent revert at merge** off a stale edit. Separate `.git` directories give each session its own index, which is what structurally kills **#557**.
+- **A session's cwd does NOT have to change and nobody relocates.** Work in the clone by absolute path. Verified in practice: CC-C ran this entire migration from a session whose cwd was still the old Drive folder.
+- **★ ALL CLONES SIT ON THE SAME BRANCH, AND GIT ENFORCES THE SYNC.** Pull to receive others' work; push to share yours. **Git REJECTS a push from a clone that is behind** — so staying current is structural, not remembered. **A rejected push is the system working, not an error to route around: pull, then push.** With three sessions pushing, *being behind is the normal state* — which is precisely why the old never-pull rule became unworkable and had to be replaced.
+- **⚠️ STRUCTURAL SYNC DOES NOT WEAKEN THE REVIEW GATE.** Being on one branch makes pushing easier; it does **not** make Langston's Step-4 review optional. Nothing lands unreviewed because it was easy to push.
+- **Langston reviews from his OWN clone**, `/home/langston/DawnTraderV3` on Helsinki, cloned from GitHub and **hard-reset to `origin/migration/aws-supabase` every 5 minutes by cron** (`/usr/local/bin/dt-langston-sync.sh`, log `/var/log/dt-langston-sync.log`). It is always AT the graded ref. **Not** through `/mnt/gdrive` — that mount is exactly what used to wedge his long reviews (§8.2 item 9).
+- **`C:\dev` is RETIRED.** It existed solely because tests could not run on the Drive mount; every clone now runs `tsc` and `vitest` directly. Its six stashes + one never-committed file are archived at `root@204.168.141.77:/root/backups/dev-bench-stashes-2026-07-23/`. Recorded in `DELETED_COMPONENTS_LOG.md`.
+- **NOTHING CARRIES TO AN INDEPENDENT CLONE.** Verified absent from a fresh clone and required per-clone: **git identity** (`user.name`/`user.email` were set *locally* in the old Drive repo, global is empty — the first commit outright FAILS without it), remotes, **`http.postBuffer` 500 MB**, and untracked files such as `.claude/launch.json`. `node_modules` are per-clone and never shared.
 
+#### ★ GOOGLE DRIVE IS NOT A GIT REMOTE AND MUST NEVER BE ONE
+
+Git's own FAQ forbids putting *any portion* of a repository on cloud-sync storage ("missing objects… broken refs… data loss"). **We proved it:** a bare repo pushed to the `G:` drive reported SUCCESS while holding **2.7 MB with no pack file at all**, `fsck` returning `invalid sha1 pointer`. Same root cause as the `git commit -- <path>` segfault (#542 — which does **NOT** reproduce on local NTFS, measured 2026-07-23) and the ~99%-destroyed `node_modules` (#567).
+
+#### Backups — two, both gated by REPRODUCTION
+
+| Copy | What | Cadence | Trigger |
+|---|---|---|---|
+| **Helsinki bare mirror** | `/root/backups/dawntrader.git` — a real, clonable repository on a POSIX filesystem. The PRIMARY second copy. | every **15 min** | server cron, `/usr/local/bin/dt-backup-sync.sh`; **pulls from GitHub itself** — does not need Kyle's laptop awake |
+| **Google Drive archive** | ONE `git bundle` file, `G:\My Drive\Dawn Trader\DawnTraderV3-backup.bundle`. The off-platform archive that survives losing GitHub **and** the server. | **nightly 03:00** | Windows scheduled task "DawnTrader Drive Backup", `scripts/dt-drive-backup.ps1`; **only runs when the laptop is awake** |
+
+- **The file NEVER moves and is never versioned by us** — same name, same path, overwritten in place. There is no archive location to track. (Kyle 2026-07-23, settling it: cadence stays nightly.)
+- **★★ THE BACKUP GATE IS REPRODUCTION, NOT COMPARISON.** Comparing refs across remotes proves **the pointers agree and nothing more** — a ref is a 41-byte file, and that check **certified an empty backup four times**. `git bundle verify` proves internal consistency, not byte-identity to source. **PASS is earned only by cloning FROM the backup and matching a known path's object hash against source.** Ref-equality and `bundle verify` are cheap pre-checks; neither is ever the gate.
+- **★ A BACKUP IS A SEPARATE REMOTE, NEVER A SECOND PUSH-URL ON `origin`.** A dual-URL push reports per-URL and non-atomically, and a dead backup leg **blocks the normal push outright** — measured, not theorised. **Backups must never be able to stop work.**
+
+#### ★ WHO MOVES WHAT — the conductor map (Kyle's question, 2026-07-23; answered honestly including the gaps)
+
+| Hop | Who / what drives it | Trigger |
+|---|---|---|
+| clone → **review branch** | **the session that did the work** | its own judgment — see the commit/push discipline below |
+| review branch → **Helsinki mirror** | **automatic** | server cron, every 15 min, self-pulling |
+| review branch → **Langston's clone** | **automatic** | server cron, every 5 min, self-pulling |
+| review branch → **Drive archive** | **automatic** | laptop scheduled task, nightly 03:00 |
+| review branch → **staging** | **the session that owns the batch** — deliberately manual | after its 4 CI checks are green; a deploy restarts live trading, so it is never on a timer |
+| review branch → **`main`** | **the session that owns the batch**, as the LAST governance step | only after staging verification + Langston second-pass + Kyle's acknowledgement — i.e. at batch close. `main` is force-push- and delete-protected. |
+| GitHub → **each session's clone** | **the session itself** | pull before push; git *rejects* a stale push, so this is enforced whenever you share work |
+
+**⚠️ THE TWO HONEST GAPS, stated rather than papered over.** *(a)* Nothing tells a session that **someone else has pushed** something it should read — the push rejection catches it only at the moment you try to share your own work. *(b)* Nothing forces a session to **commit at all**; the standing rule against carrying a multi-hour uncommitted diff is discipline, not machinery, **and it failed for a fortnight** — a never-committed file sat in exactly one place from 2026-07-08 to 2026-07-23 (CC-A, `b-xstock-freshness-monitor.ts`).
+
+**★ THE SYNC GATE HAS A MATCHING HOLE, and this is the fix (CC-A's catch, 2026-07-23).** The batch-close gate below checks whether **committed** work is pushed. It says **nothing about work that was never committed** — which is exactly how that file stayed invisible for two weeks. **So the gate now requires an untracked check too, and `git diff HEAD` DOES NOT SHOW UNTRACKED FILES and does not say so (#542 corollary).**
+
+**🔒 Batch-close sync gate (HARD — every batch, no exceptions).** From your OWN clone, all four must hold:
+1. `git rev-list --count HEAD..origin/migration/aws-supabase` = **0** (not behind), AND
+2. `git rev-list --count origin/migration/aws-supabase..HEAD` = **0** (nothing committed-but-unpushed — Langston's 2026-06-12 catch: a one-directional check cannot see unpushed local commits), AND
+3. `git status --porcelain --untracked-files=no` shows only intentional local config, AND
+4. **`git status --porcelain | grep '^??'` reviewed by eye** — every untracked file either committed, deliberately ignored, or explicitly named as disposable. **An untracked file is invisible to checks 1–3.**
+
+#### The crew coordination board — what it is FOR now
+
+Separate clones dissolved the race the board was built for (**#557**, one session's commit sweeping up another's staged paths — now structurally impossible, not merely unlikely), and git's push rejection is a harder guarantee than the board's advisory push lock. **What remains, and it is the reason to keep it: git cannot warn two sessions IN ADVANCE that they are about to work the same file.** Git only discovers that at pull time, and the dangerous version merges cleanly while being semantically wrong. So: **claim shared paths before editing them** (`crew claim <path…> --note "<batch id>"`, release when done), treat the board as a *who-is-touching-what notice board*, and **do not treat it as a lock** — §5 rule 25.b's honesty clause still governs. It runs from any clone or from staging; `CREW_SESSION` has no default and refuses rather than guess.
+
+**🚫 STILL FORBIDDEN, and for the original reason:** never author in a backup, never push from one, and never let any copy silently diverge without a **reproduction** check catching it.
+
+---
+
+**⛔ SUPERSEDED — the original 2026-06-01 incident record, PRESERVED VERBATIM, never deleted.** The rule changed; the memory of why it existed does not.
+
+> **Why this is SET IN STONE:** on 2026-06-01 the direction was found INVERTED in practice — recent work had been edited + committed + pushed from the `C:\dev` test bench, leaving the Google Drive source-of-truth folder **42 commits stale** and one governance item (`POST_AUDIT_ROADMAP` row 25-11, a Kyle 2026-05-29 directive) stranded on GitHub, never reaching Google Drive. This violated the canonical "Google Drive, GitHub, and staging always synced at batch close" rule. It was recovered + resynced. This section exists so it NEVER recurs and must NEVER be deleted or edited out of this document.
+
+**★ THE CORRECTED ROOT CAUSE, re-derived from the ref (commit `b843d110a`, quoted from its own body):** *"The Google Drive clone's git pointer **froze 2026-05-28 (B-NEW-46)** and governance was committed from the `C:\dev` working copy **thereafter**."* ⇒ **the bench-pushing the old rule forbade was the CONSEQUENCE, not the cause.** The authoritative tree's version control broke and people worked around a broken tool. The old rule described the symptom, never named the frozen pointer, and was enforced entirely by human discipline — which failed silently for 42 commits. **The replacement's real safeguard is that git itself rejects a stale push, plus a reproduction-based backup gate.** Stated honestly: those **catch** divergence; they do not **prevent** a pointer freeze. And we now know the deeper fact the old rule never had — **a git repository on that mount is unsafe by construction**, which is why the working tree moved off it entirely.
 ---
 
 ## 8. Langston Operations Reference (post-OpenClaw, 2026-05-06)
