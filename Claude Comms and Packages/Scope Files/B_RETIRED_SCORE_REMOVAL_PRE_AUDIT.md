@@ -311,6 +311,30 @@ Removing finalScore here **cannot be a deletion**: something must still decide w
 
 ---
 
+### 10.03.1 Q7 SETTLED — `r_multiple` IS COMPUTABLE ON BOTH SIDES; OPTION (1) CARRIES
+
+Langston made Q7 turn on one checkable fact: **is the replacement key reliably available on BOTH sides of the comparison** (the *stored* `existingSignal` row AND the *incoming* `input`), the way `finalScore` was — or does using it just relocate the absent-as-valid landmine to a new column? Checked at the ref:
+
+**`SQESignalInput` (`:120-200`) carries every input `signalRMultiple` needs:**
+
+| Input | On `SQESignalInput` | On the stored row |
+|---|---|---|
+| `entryPrice` | **REQUIRED** `number` (`:129`) | in `insertData`; `.notNull()` |
+| `stopPrice` | **REQUIRED** `number` (`:130`) | in `insertData`; `.notNull()` |
+| `targetPrice` | optional (`:131`) — `signalRMultiple` already has a defined fallback (`entry × 1.02`, mirroring `executePromotedSignal`) | in `insertData` |
+| `diAtQueue` / `dbsScoreAtQueue` | optional (`:160/:161`) — already `undefined`-tolerant in the kernel call | in `insertData` |
+| `assetClass` | present; `queueSQESignal` **THROWS if absent** (`:194`) | first-class column |
+
+**⇒ The two load-bearing inputs are REQUIRED on the input type and NOT-NULL on the stored row.** No new absent-as-valid surface is created. **Option (1) `r_multiple` carries**, and Q5's "one truth for rank" consistency is preserved — the same key decides which duplicate survives, which one ranks, and which one displays.
+
+**Two honest implementation notes, neither a correctness objection:**
+1. **A shape adapter is needed.** `signalRMultiple(signal: RtbSignal, …)` takes the **stored** shape (string prices, `metadata` blob); the incoming side is an `SQESignalInput` (number prices). So the new-signal side needs a small adapter or a narrowed helper taking the price quintuple directly. Real work, not a blocker.
+2. **The absent branch is already explicit and observable** — `signalRMultiple` returns **`-Infinity`** on unpriceable input, deliberately, *"so it sorts to the bottom."* That satisfies Langston's hard requirement (**kill the `parseFloat(x || '0')` coerce**) by construction rather than by discipline — but `-Infinity` must NOT be allowed to silently mean "the new signal always loses": the replacement needs an **explicit keep-first branch plus a counter** when either side is unpriceable, exactly as he specified.
+
+*(Noted in passing, supporting the alternative: `chosenNetEv` is documented on the input at `:49` as "the best (chosen-mode) net-EV — **what gates + ranks**". Option (2) would therefore also be well-founded; I am not arguing for it, only recording that it was not dismissed for lack of a basis.)*
+
+---
+
 ## 10.04 ★★★ SECTION-10 ITEM 5 CLOSED — TWO NAME COLLISIONS AND A COLUMN-REUSE LANDMINE
 
 The remaining consumer files produced three finds that **a grep-driven removal would get wrong**, in opposite directions: two false positives it would wrongly delete, and one true dependency it would wrongly ignore.
