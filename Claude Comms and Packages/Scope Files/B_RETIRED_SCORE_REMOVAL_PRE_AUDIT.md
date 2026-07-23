@@ -331,7 +331,23 @@ Langston made Q7 turn on one checkable fact: **is the replacement key reliably a
 1. **A shape adapter is needed.** `signalRMultiple(signal: RtbSignal, …)` takes the **stored** shape (string prices, `metadata` blob); the incoming side is an `SQESignalInput` (number prices). So the new-signal side needs a small adapter or a narrowed helper taking the price quintuple directly. Real work, not a blocker.
 2. **The absent branch is already explicit and observable** — `signalRMultiple` returns **`-Infinity`** on unpriceable input, deliberately, *"so it sorts to the bottom."* That satisfies Langston's hard requirement (**kill the `parseFloat(x || '0')` coerce**) by construction rather than by discipline — but `-Infinity` must NOT be allowed to silently mean "the new signal always loses": the replacement needs an **explicit keep-first branch plus a counter** when either side is unpriceable, exactly as he specified.
 
-*(Noted in passing, supporting the alternative: `chosenNetEv` is documented on the input at `:49` as "the best (chosen-mode) net-EV — **what gates + ranks**". Option (2) would therefore also be well-founded; I am not arguing for it, only recording that it was not dismissed for lack of a basis.)*
+*(Noted in passing, supporting the alternative: `chosenNetEv` is documented on the input as "the best (chosen-mode) net-EV — **what gates + ranks**". Option (2) would therefore also be well-founded; I am not arguing for it, only recording that it was not dismissed for lack of a basis.)*
+
+#### ⛔ QUALIFICATION TO THE ABOVE — MY Q7 ANSWER WAS INCOMPLETE (self-corrected 2026-07-23, prompted by CC-B)
+
+**I verified the TOP-LEVEL inputs and never checked the METADATA-BORNE ones.** `signalRMultiple` also passes **`VolNoise: meta.VolNoise`** and **`prices: meta.prices`** into `evaluateTradeExpectancy`.
+
+Reading the admission metadata construction (`signal-orchestrator.ts:1078-1110`): it carries `strategyWeight`, `exposureBias`, `admissionBasis`, `netEvAtAdmit`, `assetClass`, `maxHoldingMs`, and the `_displayContext` spread — and **NOT `VolNoise`, NOT `prices`.** **This is the same curated rebuild that silently dropped `maxHoldingMs` (#550)**, with that incident's comment still sitting in it. ⇒ **on a freshly-admitted signal both kernel inputs are `undefined`.**
+
+**What saves it — and the precision matters:** `signalRMultiple`'s **preferred** path is `r = chosenNetEv / distStop` whenever `chosenNetEv` is finite, which **bypasses the kernel result entirely**. `chosenNetEv` is on the input and in `insertData`. So wherever `chosenNetEv` is present, the `VolNoise`/`prices` absence does not affect the value.
+
+**⇒ THE SHARPER CONCLUSION: options (1) and (2) CONVERGE in the common case**, because option (1)'s live path *is* chosenNetEv ÷ risk. They diverge **only** where `chosenNetEv` is absent — and there **option (1) falls back to a kernel recompute running on two undefined inputs, degrading SILENTLY inside the kernel**, whereas option (2) degrades at an explicit null check the caller can see.
+
+**⇒ THE HARD REQUIREMENT CHANGES SHAPE.** Killing the `parseFloat(x || '0')` coerce is necessary but **not sufficient**. **`chosenNetEv`-absent must ALSO be an explicit, counted branch** on the tiebreaker — keep-first + counter, same as the unpriceable case — because that is precisely where option (1) drops to a degraded path with nothing observable.
+
+**Recommendation still (1)** for Q5 one-truth-for-rank consistency, but **with that second explicit branch as a condition of it.**
+
+*(CC-B's stated fact — "`r_multiple` is not a column" — is true but answers a narrower question: it is DERIVED, and a derived value cannot go NULL-from-birth the way finalScore's column did, which on its own **strengthens** (1). Their push is nonetheless what made me look further, and the real gap was mine. **The recurring pattern: I check fields visible on an interface and miss the ones arriving through a metadata blob — exactly where #550 and #530 both died.**)*
 
 ---
 
