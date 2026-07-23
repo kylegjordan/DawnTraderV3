@@ -6,6 +6,29 @@
 
 ---
 
+## 2026-07-23 — B-REPO-RELOCATE: the `C:\dev` test bench and the Google Drive working repo
+
+**What:** two working copies retired together, both on Kyle's laptop.
+1. **`C:\dev\DawnTraderV3`** — the throwaway test bench. Renamed to `C:\dev\RETIRED-DELETE-ME-DawnTraderV3` pending Kyle's own final delete (see the honest note below).
+2. **`G:\My Drive\Dawn Trader\DT_Clone_Repo\DawnTraderV3`** — the former source-of-truth working repo. NOT deleted; **neutralized**: its `origin` push URL is set to `DISABLED://this-folder-is-RETIRED-see-CLAUDE.md-7.1`, and a `__RETIRED_DO_NOT_USE_THIS_FOLDER.md` marker sits at its root naming each session's replacement clone.
+
+**Why:** superseded by one independent clone per session on local NTFS (`CLAUDE.md` §7.1, rewritten and landed at `e54c5ff7b`). The bench existed **solely** because `tsc`/`vitest` could not run on the Drive mount; every clone now runs them directly, so its only reason to exist is gone. The Drive repo is retired because **a git repository on a cloud-sync mount is unsafe by construction** — git's own FAQ, and measured here: a bare repo pushed to `G:` reported SUCCESS holding 2.7 MB with no pack file at all. Same root cause as #542 and #567.
+
+**★ KYLE'S REASONING, and it is the point of the neutralization rather than mere deprecation (2026-07-23):** *"I'm worried that those will get utilized if they're left where they are... The second someone accidentally goes looking for it, they will realize that they can't write to either of those."* A folder that still works will be used by habit. So the control is that a push from either **fails at git**, not at somebody's memory.
+
+**BLAST-RADIUS VERIFICATION — what was checked before anything was touched:**
+- **Six stashes in the bench, 2026-06-06 → 2026-07-17**, largest ~1,900 insertions across 60 files. Policy says the bench only ever held *copies*, so these are almost certainly already-landed — **and "almost certainly" is not a basis for destroying data.** A blob comparison against today's origin is **not** a valid test either: those files have moved on in the months since, so "differs from origin" proves nothing either way. All six exported as patches (`git stash show -p --binary`, base commit in each header).
+- **One never-committed file**, `server/scripts/b-xstock-freshness-monitor.ts` (~20 KB), present in the bench and the Drive repo and **absent at origin** — verified, not assumed. Archived alongside the stashes, then **claimed by CC-A and landed properly at `c65813bcd`** (#441).
+- **Archive:** `root@204.168.141.77:/root/backups/dev-bench-stashes-2026-07-23/` — 7 files, **sha256 verified identical on both ends**.
+- **The Drive repo's last local commit `57706ed60`** holds a blob byte-identical (`795fc1b06cd7`) to the one now at `origin/migration/aws-supabase`. **Nothing unique remains in it.**
+- **Langston's file access was the ordering constraint and was fixed FIRST.** He had no clone and read the repo through `/mnt/gdrive`; retiring the Drive folder before building `/home/langston/DawnTraderV3` would have cut off his ability to review. Built, verified by him at the ref, and kept at the graded ref by a 5-minute cron.
+
+**⚠️ HONEST NOTE — the bench is renamed, NOT yet deleted.** `rm -rf` was refused by Claude Code's own catastrophic-pattern guard, and I did not route around a safety block on a destructive action with a different tool. A first rename attempt **also** failed at the OS level (`Access denied`) while a control rename in the same parent succeeded — a live handle, released once the other two sessions moved to their own clones, at which point the rename succeeded. Final deletion is Kyle's click. Everything inside is archived and verified, so nothing is at risk either way.
+
+**Left intentionally:** the Drive folder itself, until the sessions that still have it as their launch directory are restarted — a session's working directory is fixed at launch and cannot be changed mid-session.
+
+---
+
 ## 2026-07-22 — B-RTB-REFRESH-CONSOLIDATE OBJ-1 (#532): Mechanism A, the duplicate RTB refresh scheduler
 
 **What:** the per-signal, Central-Clock-driven RTB refresh path on `server/core/rtb/ready_to_buy_service.ts` —
