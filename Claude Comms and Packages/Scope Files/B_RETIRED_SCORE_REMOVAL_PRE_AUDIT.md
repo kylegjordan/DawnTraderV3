@@ -83,7 +83,8 @@ I told Kyle that keeping finalScore means keeping a four-input formula whose 30%
 
 ## 5. FINDING 5 — TWO DEAD IMPORTS, AND rankingScore's ONLY LIVE PRODUCER IS VTS
 
-- **`ready_to_buy_service.ts:35`** imports `calculateFinalScore` — and **never calls it** (the file's only other match, `:1014`, is a comment). The RTB uses its own inline copy (site 2). *Dead import — and the reason my earlier "equivalent via `calculateFinalScore`" claim was false.*
+- **`ready_to_buy_service.ts:35`** imports `calculateFinalScore` — and **never calls it** (the file's only other match, `:1014`, is a comment). The RTB uses its own inline copy (site 2). *This is why my earlier "equivalent via `calculateFinalScore`" claim was false.*
+  **⚠️ CORRECTION (Langston, Step-2 review — my wording was imprecise and dangerous):** I called this a *"dead import."* It is **a SHARED destructure**, not a dead line: `import { calculateFinalScore, calculateRegimeWeight } …`, and **`calculateRegimeWeight` is LIVE at `:868`** (the RegimeWeight admission gate). **The removal drops the `calculateFinalScore` SYMBOL from the destructure only — deleting line 35 breaks the live gate.** Exactly the class of error this batch exists to avoid, and it came from my own loose label. *(`signal-orchestrator.ts:149` genuinely is a fully-dead import — all three of its symbols are uncalled — so the two cases must not be treated alike.)*
 - **`signal-orchestrator.ts:149`** imports `computeRankingScore`, `normalizeNetReturn`, `CONTEXT_BONUS` — and **calls none of them** (grep over the file returns the import line only). *Three dead imports.*
 - **`computeRankingScore` has exactly one live call site: `vts-runner.ts:5609`.** ⇒ rankingScore is produced by VTS alone; the RTB `ranking_score` control arm merely *reads* `metadata.rankingScore` off a signal.
 
@@ -134,6 +135,22 @@ Not a code delete. Each needs: readers? history worth keeping? forward+rollback 
 | VTS + telemetry tables | `vts-service.ts`, `telemetry-aggregator.ts` (33 hits), `telemetry-repository.ts`, `signal-eval-archiver`, `switch-on-evidence-sink`, `would-admit-cache` |
 | **rule-20 KEEP-AS-DATA precedent** | the persisted `'paper_sim'` discriminator stays as data; **historical rows here are kept as inert data per Kyle — we STOP COMPUTING, we do not erase history** |
 
+### 8.1 ★★★ PHASE A AND PHASE B ARE **COUPLED** ON `rtb_signals.final_score` (Langston, Step-2 — the sharpest correction to my plan)
+
+As I originally drew it, the phases **conflict and would break production either way round.** `final_score` is **NOT NULL**, and its writers are code:
+
+- **`ready_to_buy_service.ts:1151`** — the reconfirm update writes `refreshedFinalScore` (formula site 2) to the column.
+- **`ready_to_buy_service.ts:2234`** — the queue-insert writer.
+
+I filed **the writers in Phase A (code)** and **the NOT-NULL column drop in Phase B (own sub-batch)**. Both orderings fail:
+
+- **Writers dropped first** → every INSERT and every reconfirm hits a **NOT-NULL violation** — i.e. the RTB queue stops accepting signals, on day one.
+- **Column dropped first** → the surviving writers **throw**.
+
+**⇒ RULING: the writer removal and the column change must land TOGETHER** — either `final_score`'s column change moves up into Phase A with its writers, or the writers hold until Phase B. **Do not split them.** (A nullable-then-drop two-step, or an atomic writer-removal-plus-drop in a single deploy, both satisfy this.)
+
+**This is the single most valuable correction in the review** — my own bucket-B note said *"every writer must go in the same migration,"* and then my phase split violated exactly that. Writing a correct principle and then contradicting it in the plan is a failure the phase diagram hid.
+
 ---
 
 ## 9. METHOD ADOPTED FROM B8.10 (both, from the start)
@@ -175,6 +192,28 @@ Added after the first dispatch. **Every claim below was reachability-checked BEF
 
 *(Not-yet-checked, stated rather than assumed: the remaining in-file callers `:650`, `:1452`, `:1464`, `:1627`, `:2333`.)*
 
+### 9.5.35 ★★★ LANGSTON'S STEP-2 GATE 4, RE-DERIVED — "VTS STORES, DOESN'T RANK" HOLDS, **BUT IT IS NOT THE WHOLE TRUTH**
+
+**Gate 4 as stated: CONFIRMED.** Grepping `vts-runner.ts` + `vts-service.ts` for either score in a threshold comparison (`<`, `>`, `<=`, `>=`) returns **exactly one hit, and it is an average** (`vts-runner.ts:5005`, `avgFinalScore`). There is **no VTS gate, filter, or sort on finalScore or hybridScore.** The VTS selects nothing by old scoring — consistent with what I told Kyle about `captureShadowPool` being a selection-quality harness.
+
+**★ BUT "stores-not-ranks" would license a deletion that breaks something.** The VTS does not *rank* on these scores — it **derives a live value from them**, in the hybrid-confluence path:
+
+- **`vts-runner.ts:4929`** — a PATTERN trade is pushed into the hybrid-confluence buffer with **`strength: tradeRecord.hybridScore ?? 0.5`**. hybridScore *is* the buffer's strength.
+- **`vts-runner.ts:4947`** — when a QUANT signal matches a buffered pattern:
+  `hybridConfidence = (tradeRecord.finalScore × 0.4 + patternSig.strength × 0.4 + 0.2) × decayFactor`
+  ⇒ **a hybrid signal's confidence is computed from finalScore and hybridScore.** That is a computational dependency, not storage.
+- **`signal-orchestrator.ts:1924`** — `confidence: tradeSignal.confidence ?? patternSig.strength` ⇒ buffer strength can *become* a signal's confidence.
+
+**⇒ #568 class, exactly: delete the writers and `strength`/`hybridConfidence` keep being read with their inputs gone** — no compile error, no failing test, green CI, and a hybrid signal silently confidence-rated off `?? 0.5` and a vanished `finalScore`.
+
+**Two mitigating facts, both verified, neither of which dissolves the problem:**
+1. The buffer is **namespaced** — VTS writes `sourceMode: 'vts'` (`:4926`, commented *"ITEM-4 step 2 (D1b): own namespace"*), so VTS entries do not leak into the active path's confluence matching.
+2. **The active path does NOT use finalScore here** — `signal-orchestrator.ts:1798` computes the same hybridConfidence as `(signal.confidence × 0.4 + patternSig.strength × 0.4 + 0.2) × decayFactor`, i.e. **`confidence` where VTS uses `finalScore`.** The two paths already diverge, and the live one is already free of finalScore.
+
+**⇒ Scope consequence (Langston Q6):** the VTS hybrid-confluence path needs a **replacement input**, not a deletion. The obvious candidate is to converge VTS onto the orchestrator's existing shape — `confidence` in place of `finalScore` at `:4947`, and a non-hybridScore strength at `:4929` — which makes the two paths consistent and removes the last VTS dependency. That is a **behaviour change inside the VTS**, so it is a decision, not a mechanical edit, and I will not make it unilaterally.
+
+**Method note:** this was found by the #568 state-write census (§9.3 item 3), not by caller-tracing. Caller-tracing `computeRealHybridScore` says "one VTS caller, delete it"; only asking *what does the deleted code WRITE, and who still reads it* surfaces `strength` → `hybridConfidence`.
+
 ### 9.5.4 Decision-vs-telemetry sweep — result
 
 Scanned `telemetry-aggregator`, `ml-calibration`, `governance-engine`, `c13`/`c14-validation-service`, `criteria-limiter`, `unified-core`, `trading-engine` for finalScore in a conditional/comparison/sort shape. **Every surviving live hit is aggregation or reporting** — `Math.max`, `reduce`→average, percentile sort for a report table, a markdown row. **No live `if (finalScore < X) → reject` outside the retired-and-shadow-logged SQE block of §7.** This is consistent with the scope's premise, now with evidence behind it rather than assertion.
@@ -191,6 +230,25 @@ Stated as open rather than assumed clear (an unfinished trace reported as comple
 4. Client surfaces (9 files) — which render finalScore/hybridScore, and what replaces the cell.
 5. `criteria-limiter.ts` (7), `trace_service.ts` (6), `skipped-signals-logger.ts`, `cost-telemetry.ts`, `unified-core.ts` (8), `trading-engine.ts` (5).
 6. The provenance read Kyle enumerated — `bridge/canonical/`, the pre-governance batch reports, the Phase-19 active-trading-path audit, and the original new-governance-era audit — **for the ORIGIN INTENT of finalScore itself** (why a composite gate was built at all), which is what tells us whether anything it was meant to do is left unowned once it is gone. Findings 3 and 7 are the first two answers; this is not yet complete.
+
+---
+
+## 10.1 ★ LANGSTON STEP-2 RULING — **APPROVED TO CONTINUE** (read at `8a237a0f4`, 2026-07-23)
+
+> *"the audit is not yet complete and must not be reported as such, but nothing in it is blocked, and the plan may proceed to close Section 10."*
+
+He independently re-read at the ref (not on reported fact): fix#1, F1 sites 1-2, F2 mixed file + collision, F3 the ROI-gate chain, F5, F7 provenance, and the bucket-C ranker surface. His two additions are folded in above (§5 correction, §8.1 phase coupling).
+
+| Q | Ruling |
+|---|---|
+| **Q1 — ranker** | **COLLAPSE, don't keep the one-arm plug-point.** Kyle's decision is not merely "remove the arms" but "the whole ranking/scoring approach gets redesigned separately" — so a plug-point kept now is **fitted to the retired abstraction** (a scalar rank-key per signal), the very assumption the redesign is free to discard. §15 settles it: a single-member enum, a `getActiveRanker` that can only return one value, and a decorative `active_ranker` row are lingering by definition. **CONDITION: do the §10 item-4 client-surface trace FIRST** — collapsing drops `arm` from `getDisplayRankKey`'s `{value, arm}` UI contract; don't collapse blind into an untraced response shape. |
+| **Q2 — shadow log** | **CONFIRMED, early end intended.** Basis holds (structural replacement + `r=−0.140`); the evidence would only matter if reinstatement were live, and it isn't. **REQUIREMENT: the completion report must CITE AND CLOSE the B8.5a governed plan explicitly** (§9.5(b-ii)) — field-kill ruling arrived early by Kyle's decision on the structural argument — **not a silent block deletion.** **§13 homes:** the confidence inversion (Finding 3, survives this batch) AND the now-unmeasured gate-accuracy number both home to the **Phase-25 scoring redesign**, stated in the report. |
+| **Q3 — `SignalMetrics`** | **KEEP AS-IS this batch; do not narrow.** Narrowing touches every construction site feeding the live RegimeWeight gate for zero behavioural gain — diff surface in the one place a removal batch most wants untouched — and an unused optional field carries no §15 re-entry risk (a type field cannot be accidentally called). **BUT the #568 census must check the flip side:** any construction site populating `hybridScore`/`decayPenalty` **solely** to feed the removed `calculateFinalScore` is genuinely dead (writer-with-no-reader) and goes. Narrowing is a named §13 tidy follow-up if wanted — not smuggled into the removal diff. |
+| **Q4 — xStock** | **OWN SLICE (A2), sequenced AFTER the core/crypto slice (A1).** Distinct reachability graph, distinct #568 census, distinct review + SIM/System-Manual surface. Prove the core removal green and behaviourally clean, then apply the validated pattern to the xStock cluster as a unit. Same batch #558, two slices, each its own diff and Step-4. |
+| **Q5 — `getQueuedSignals` ordering** | *Asked in the second-pass dispatch; pending.* |
+| **Q6 — VTS hybrid-confluence input** | *Raised by §9.5.35; pending.* |
+
+**GATE ON PHASE A (his, explicit):** *no cut lands* until Section 10 is closed — **specifically item 3, the VTS stores-not-ranks re-derivation at code** — and the **#568 state-write census** is run. Bring him the closed Section 10 + census and he clears Phase A to implementation.
 
 ---
 
