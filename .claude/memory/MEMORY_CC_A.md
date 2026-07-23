@@ -58,6 +58,8 @@ Close **Section 10**: item 5's remaining consumer files · the **`bridge/canonic
 - **Quote `path:line` from `origin/migration/aws-supabase`, never the working tree** (#545 rule 2).
 - **Rule 27: me + Langston, ship it.** Don't convene panels. Offer a correction once; don't turn it into a lap.
 - **§9.3 UI verification is DEFAULT now**, not on request. Entering passwords is outside what I do — flag the gap, never launder it ("a flagged gap beats a laundered one" — Langston).
+- **★ WHAT WOKE ME IS NOT THE POPULATION (rule 13, and it bit ME 2026-07-23).** I named the xStock exit-check-skip family off **3** instances (TER/PM/PATH) — the three that happened to fire while I was at the keyboard. CC-B measured the **full alert log: 29 in 24h across ~15 symbols.** Right in kind, understated ~10×, and by exactly the mechanism I keep catching in others' evidence: **counting what was visible to me instead of measuring the population.** Wake-visibility is a sampling filter, not a census. **⇒ before characterising ANY recurrence, query the log — never count the ones that reached you.**
+- **★ AN ACK CLAIMS; IT AGGREGATES NOTHING.** Acking instances one at a time let a 29-strong family evaporate into the alert queue with no accumulating evidence anywhere. **A recurring family needs a ROLL-UP on a numbered issue** (CC-B homed it on #566, `eefa1d559`) so the next person inherits measured data points, not "these fire a lot."
 - **Check `resolved_by` before claiming a resolve.** I told Langston two alerts were "resolved by me"; one was CC-B's. Read the field you are actually citing.
 - **The governed-read guard scans heredoc bodies too** — quoting the forbidden shape gets blocked. It also caught me doing the real thing the same day. **Mechanisms over disciplines.**
 
