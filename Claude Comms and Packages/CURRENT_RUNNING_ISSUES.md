@@ -48,9 +48,24 @@ When you re-activate a dormant path, its numbers need re-approval, not just veri
 
 ---
 
-## 1. The ready-to-buy pool has collapsed from ~100 signals to 1–2 — CAUSE NOT DETERMINED
+## 1. The ready-to-buy pool has collapsed from ~100 signals to 1–2 — ★ RESOLVED 2026-07-25 (diagnosed; NOT a bug)
 
-**Proposed owner: CC-A** (owns `B-RTB-REFRESH-CONSOLIDATE` / #532, where OBJ-2b/3/4/5/6 are still open).
+**Owner: CC-C (Claude Analyst)** — taken over from CC-A per Kyle 2026-07-25. **Bundles #570** (handed to CC-C by Langston/CC-A). The original CAUSE-NOT-DETERMINED investigation below is kept for the record.
+
+**★ VERDICT (rule 24, outcome 2 — WORKING-AS-DESIGNED, a fee-viability scope call, NOT a code defect):**
+
+- **NOT the refresh.** The RTB refresh reconfirms ~everything: 210,271 reconfirmed of 210,289 attempted over 10 days, **18 rejected** (funnel `active-engine/diagnostics/funnel`). A regime-input miss LEAVES the signal queued (`ready_to_buy_service.ts:1049-1055`), it does not delete. Ruled out with data.
+- **The break is admission, at the generation EV gate.** Two-sample funnel delta over 120s: crypto generated **+75**, evaluated **+76**, **passed +0**. Every reject reads `NetEV <= 0 (chosen maker mode — non-positive net expectancy after friction)` — measured in `gate_decision` (SUI/USD `-0.003365`, ONDO/USD `-0.001477`). The pool is empty because the organic gate correctly refuses signals that lose money after Kraken's 0.40%/0.80% fees — **the fee wall.** Reject values cluster just below zero: the fingerprint of marginal signals tipped under by fees, i.e. a CORRECT computation, not a broken one.
+- **NOT a code or config regression.** Git: since 2026-07-21 the ONLY commit to the generation SQE / SQE evaluator / exploration lane / NetEV math (`decideMakerTaker`, `getFrictionForAssetClass`, `computeNetGeometry`) is `58d8f8f94` (max-hold carry — an EXIT change). Config: every `module_constants` change since 07-21 is exit-side (max_hold_switch, trailing_exit, mark_staleness). **Same admission code + same config gave a full pool on 07-22 and an empty one now ⇒ the only thing that changed is the market input.** Market/fee reality, not a regression.
+- **The pool's only inflow is now the exploration lane, and it's a thin, annealing trickle (Kyle's catch — corrected my "budget exhausted" framing).** The 50/day budget is spent GRADUALLY (a few/hour, 50th hit ~21:00 UTC), so it was NOT the early-day constraint — the pool is 2-3 all day because organic=0 and exploration admits ~2/hour of short-lived maker orders (many `never_filled`). The exploration floor ANNEALS toward 0 as informative closes accrue (`exploration-lane.ts:152-154`): base -2%, +0.5% per 60 informative closed trades, **currently -1.0% at 161 informative closes, closes entirely at 240.**
+
+**★ FORWARD RISK worth a home (§9.4 — Kyle scope call):** if the exploration lane finishes annealing shut (~240 informative closes) while the fee wall keeps organic admission at 0, **the pool goes to a permanent zero.** The exploration subsidy is designed to expire as the system learns — but it's expiring into a fee wall blocking the organic flow it was meant to hand off to. Lever = fee viability (venue / maker-only / fee ladder / Phase-25), and/or the exploration budget + anneal schedule. **Kyle's decision, not a code fix.**
+
+---
+
+### Original investigation record (kept; superseded by the verdict above)
+
+**Was proposed owner: CC-A** (owns `B-RTB-REFRESH-CONSOLIDATE` / #532, where OBJ-2b/3/4/5/6 are still open).
 
 **MEASURED — before.** On 2026-07-22/23 the pool held **100–101 signals**, from two independent records in
 `B_RTB_REFRESH_CONSOLIDATE_OBJ1_COMPLETION_REPORT.md`: the freshness measurement ran across *"all 101
