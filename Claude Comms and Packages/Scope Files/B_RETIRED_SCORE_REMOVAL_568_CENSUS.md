@@ -36,7 +36,7 @@
 | 4 | `calculateAdaptiveFinalScore` (`adaptive-goals-weight.ts:146`) | return → `audit_goals_weights.ts` only | **script-only; 0 runtime readers** | **DELETE** cluster (module + script import + `b72-warmup` `goals_weighting` warm entry + its `module_constants` row) |
 | 5 | `computeRankingScore` (`ranking-weights.ts:82`) | return → `vts-runner.ts:5609` (`rankingScore`) | VTS record `rankingScore` field | **DELETE** with the ranker retirement; VTS write goes too |
 | 6 | `computePerformanceScore` (`ml-calibration.ts:93`) | return | **0 callers (grep = definition only)** — orphan | **DELETE** |
-| 7 | `trading-engine.ts:241` finalScore | → trade `metadata` JSONB `:428`/`:469` (live-mode only; paper engine never `.start()`ed) | **no decision reader**; guardrail reads entry/stop/target | **DELETE** the blend + log + 2 metadata keys; keep `goalAlignmentScore`; no migration (metadata inert on historical rows) |
+| 7 | `trading-engine.ts:241` finalScore | → trade `metadata` JSONB `:428`/`:469` | **no decision reader**; guardrail reads entry/stop/target. ⚠️ `TradingEngine` runs in **NEITHER mode today** (paper never `.start()`ed; live start is Phase-21-gated + refuses). The current paper+live pipeline is `active-execution-engine.ts`. | **DELETE** the blend + log + 2 metadata keys; keep `goalAlignmentScore`; no migration. **Do NOT touch the `TradingEngine` module** — its live-vs-legacy status is UNRESOLVED and homed to a §13 follow-up (`B-TRADING-ENGINE-DISPOSITION`), not #558. |
 
 ---
 
