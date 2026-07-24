@@ -39,6 +39,7 @@ try {
   // MEMORY.md from). We locate it from the hook's stdin `transcript_path`, whose dirname IS that
   // project dir. If stdin lacks it, fall back to the in-clone git mirror (always present, synced).
   let memText = '';
+  let fromMirror = false;
   try {
     const input = JSON.parse(readStdin() || '{}');
     if (input && typeof input.transcript_path === 'string' && input.transcript_path) {
@@ -49,11 +50,28 @@ try {
   if (!memText) {
     try {
       memText = readFileSync(join(projectDir, '.claude', 'memory', session.file), 'utf8');
-    } catch { process.exit(0); } // no source available -> inject nothing
+      fromMirror = true;
+    } catch {
+      // MAPPED clone (we KNOW who this session is) but the file is unreadable from BOTH the live
+      // truth-file AND the in-clone mirror. A silent exit here is the absent-as-valid trap
+      // (#546/#568): indistinguishable from "loaded an empty file." SessionStart stderr is NOT
+      // injected into context, so the breadcrumb MUST go to stdout where the model reads it.
+      // Still fail-open — the session runs fine; it is just told loudly that its state is missing.
+      // (Langston Step-4, Q1.)
+      process.stdout.write(
+        `[⚠️ YOUR OWN WORKING MEMORY ${session.file} (${session.name}) COULD NOT BE LOADED — ` +
+        `neither the live truth-file nor the in-clone mirror was readable. Read it manually before ` +
+        `relying on prior state; do NOT treat missing state as empty state.]\n`
+      );
+      process.exit(0);
+    }
   }
 
+  // Q2 (Langston): when the mirror fallback fired, the state may be one commit behind the live file
+  // — tag it so the session knows, rather than presenting mirror and truth identically.
   process.stdout.write(
-    `[AUTO-LOADED — your own working memory: ${session.file} — ${session.name}]\n` +
+    `[AUTO-LOADED — your own working memory: ${session.file} — ${session.name}` +
+    `${fromMirror ? ' (from in-clone MIRROR; may be one commit behind your live file)' : ''}]\n` +
     `This is YOUR per-session state (auto-injected on every start/resume/compaction). Shared rules ` +
     `are in CLAUDE.md; shared project truths are in MEMORY.md. Write working state ONLY to ${session.file}.\n\n` +
     memText + '\n'
