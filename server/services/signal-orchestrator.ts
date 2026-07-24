@@ -1098,6 +1098,18 @@ export class SignalOrchestrator {
         // No downstream plumbing is needed: `active-execution-engine.ts:3143` spreads
         // `...signal.metadata` onto the position row.
         maxHoldingMs: _maxHoldingMs,
+        // P19-B8.5k (B-ATR-RESTORE, #556): carry the entry-time ATR forward. `atr` is
+        // stamped centrally on the SizingContext at the per-symbol single-point (~:2157,
+        // reorg-B2 Piece C — populated by the caller BEFORE this function runs) but was
+        // NOT in this rebuild's field list, so `atr_at_open` persisted '0' on every live
+        // position (#556/#550 curated-rebuild drop). Restoring it feeds the real value to
+        // the Open Trades display, the RTB ranking (ready_to_buy_service.ts:1691/1841/1973),
+        // exit-strategy replay, and VTS-parity. NO fail-loud here (unlike maxHoldingMs
+        // :1018): this rebuild runs BEFORE the in-function reachability gate (:1536) that
+        // drops `invalid_atr`, so a pre-gate signal may legitimately still carry a 0/absent
+        // atr and must not throw — it is simply forwarded (downstream `?? 0` handles absence,
+        // identical to today). See P19_B8_5K_SCOPE.md OBJ-1.
+        atr: sizingContext.atr,
         // P19-B8.10 (OBJ-4): genesis capture of the display-context fields the VTS
         // records at open (regime / global regime / pair+global friction / pair+
         // global DBS / pattern name / entry-liquidity). KEEP-AS-DATA transit — read
