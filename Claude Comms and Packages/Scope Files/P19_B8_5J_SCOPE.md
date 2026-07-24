@@ -32,7 +32,7 @@ every already-open position immediately, including VVV. This is why the batch mo
 ## OBJECTIVES
 
 - **OBJ-1 — THREE DB-governed boolean switches**, in a new `module_constants` module `max_hold_switch`
-  (`asset_class='*'`): `enabled_paper`, `enabled_live`, `enabled_vts`. **All seed FALSE.**
+  (`asset_class='*'`): `enabled_paper`, `enabled_live`, `enabled_vts`. **Seed asymmetric (Langston Step-1/2): paper=FALSE, live=FALSE, VTS=TRUE** — see OBJ-3a.
 - **OBJ-2 — Gate the ACTIVE enforcement** at `active-execution-engine.ts:1652` (`checkExitConditions`,
   a private async method with `this.mode ∈ {paper,live}`): only enter the `max_holding_period` branch when
   the mode-resolved flag is TRUE (`this.mode==='live'` → `enabled_live`, else `enabled_paper`). Seeded
@@ -43,11 +43,14 @@ every already-open position immediately, including VVV. This is why the batch mo
   `maxHoldMs: enabled_vts ? MAX_HOLD_MS : Infinity` (real) / `enabled_vts ? SHADOW_MAX_HOLD_MS : Infinity`
   (shadow). **This reuses the EXACT idiom the active path already uses (`active-execution-engine.ts:1523`
   `maxHoldMs: Infinity`) and leaves `evaluateTECExit` UNCHANGED** — so every tec-evaluator test that calls
-  it with an explicit `maxHoldMs` is unaffected. Blast radius shrinks to two lines. **⚠️ CONSEQUENCE TO SURFACE TO KYLE (OBJ-3a): the VTS "max hold" is a ZOMBIE-CLEANUP /
-  STALE-SIM SAFETY VALVE, not a 24h trade rule. Seeding `enabled_vts=false` also disables that cleanup —
-  VTS sims could then run unbounded.** Kyle asked for a VTS switch and to turn it off; this batch honours
-  that literally (seed false) but the completion path MUST make the zombie-valve consequence explicit so
-  Kyle can choose to seed `enabled_vts=true` instead. This is a Kyle decision, surfaced not assumed.
+  it with an explicit `maxHoldMs` is unaffected. Blast radius shrinks to two lines. **★ OBJ-3a — VTS SEEDS ON, not off (Langston Step-1/2 + the B63→B64 provenance the scope first missed).**
+  The VTS "max hold" is NOT a 24h trade rule; it is the 7-day zombie/stale-sim CLEANUP valve
+  (`tec-evaluator.ts:228` "zombie cleanup", `:242` "safety valve"). `BATCH_64_SCOPE.md:91`: a B63 hotfix set
+  `MAX_HOLD_MS=Infinity`, re-introducing the pre-Batch-18I unbounded-trade-map bug; B64 restored the valve.
+  Seeding `enabled_vts=false` regresses that fix — all downside, no policy upside, and NOT what Kyle's
+  trade-rule directive was aimed at. So VTS ships ON: the switch still EXISTS for the debate, the default
+  ships no regression. **Kyle's explicit seed decision is obtained BEFORE the migration runs, not in the
+  completion report (Langston condition).**
 - **OBJ-4 — FAIL-SAFE semantics, documented.** `enabled = (resolved === true)`. An absent / cold-cache
   read is treated as **OFF** (do not enforce). This is the NON-DESTRUCTIVE direction (a force-close is
   irreversible; not-closing is not), and it is the honest reading of a boolean enable-switch (unset =
@@ -57,11 +60,11 @@ every already-open position immediately, including VVV. This is why the batch mo
 - **OBJ-5 — Warmup.** Add `max_hold_switch` to `b72-warmup.ts PREFETCH_MODULES` (the B8.5e lesson: a
   `module_constants` key is not usable by a sync caller until its module is prefetched). Boot assertion
   is NOT required (fail-safe is off, not refuse-to-boot).
-- **OBJ-6 — Migration** (forward + rollback + MANIFEST): 3 rows `'false'::jsonb`, ON CONFLICT DO UPDATE.
+- **OBJ-6 — Migration** (forward + rollback + MANIFEST): 3 rows ON CONFLICT DO UPDATE — `enabled_paper`/`enabled_live` `'false'::jsonb`, `enabled_vts` `'true'::jsonb` (OBJ-3a).
 
 ## NON-GOALS
 - **NOT** deciding what any max-hold value should be. That is the deferred debate. This batch only makes
-  the enforcement switchable and ships it OFF.
+  the enforcement switchable and ships the TRADE-RULE lanes (paper/live) OFF.
 - **NOT** touching the STAMPING (`stampMaxHoldingMs`) — gating enforcement is what protects already-open
   positions. Stamping stays; it is inert while the switch is off.
 - **NOT** re-tuning the 24h value or adding an xStock row (that is the debate's output, not this batch).

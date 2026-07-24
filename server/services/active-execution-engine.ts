@@ -54,7 +54,7 @@ import type { OrderPlacer } from './execution/types.js'; // P19-B3a: FillResult/
 import { KrakenService } from '../exchanges/kraken/kraken.js';
 // B72 (2026-05-05): MONITOR_INTERVAL_MS + CONTINUOUS_PROMOTION_INTERVAL_MS
 // moved to module='active_execution'.
-import { getCachedNumberRequired } from './module-constants-service.js';
+import { getCachedNumberRequired, getCachedConstant, GLOBAL_KEY } from './module-constants-service.js';
 // B65.2: centralized exit-decision primitive shared with VTS
 import { evaluateTECExit } from './tec-evaluator';
 // P19-B4a (C4): top-level resolveAssetClass dropped — all sites now prefer the
@@ -1438,6 +1438,25 @@ export class ActiveExecutionEngine {
     console.log(`[I7-PRICE-FIX][EVAL_EXIT] cycleId=${this.lastCycleAt} positionsEvaluated=${positionsEvaluated} withWsPrice=${withWsPrice} withRestPrice=${withRestPrice} withoutPrice=${withoutPrice} slHits=${slHits} tpHits=${tpHits}`);
   }
 
+  /**
+   * P19-B8.5j — the max-hold master switch for the ACTIVE lane (paper/live).
+   * Resolves `enabled_paper` / `enabled_live` from `module_constants.max_hold_switch`
+   * by `this.mode`. FAIL-SAFE: a cold module makes `getCachedConstant` THROW and an
+   * absent key returns `undefined`; both resolve to OFF. ★ OFF is fail-safe ONLY BECAUSE
+   * non-enforcement is NON-DESTRUCTIVE for THIS switch (a force-close is irreversible;
+   * not-closing is not). Do NOT copy this default-off pattern to a switch whose OFF is the
+   * destructive direction (Langston caveat, 2026-07-24). Seeded FALSE (paper+live), so the
+   * max_holding_period branch never fires today.
+   */
+  private isMaxHoldEnabled(): boolean {
+    const key = this.mode === 'live' ? 'enabled_live' : 'enabled_paper';
+    try {
+      return getCachedConstant<boolean>('max_hold_switch', key, GLOBAL_KEY) === true;
+    } catch {
+      return false; // module not warm → treat as OFF (fail-safe)
+    }
+  }
+
   private async checkExitConditions(
     position: any,
     currentPrice: number,
@@ -1649,7 +1668,13 @@ export class ActiveExecutionEngine {
       typeof metadata?.maxHoldingMs === 'number' && isFinite(metadata.maxHoldingMs)
         ? metadata.maxHoldingMs
         : undefined;
-    if (maxHoldingMs !== undefined) {
+    // P19-B8.5j (2026-07-24, Kyle directive): the max-hold force-close is GOVERNED
+    // by a per-lane master switch and ships OFF. It stays off until the max-hold
+    // policy is debated. `isMaxHoldEnabled()` resolves `enabled_paper`/`enabled_live`
+    // (by this.mode) FAIL-SAFE: absent/cold-cache → OFF, the non-destructive
+    // direction (a force-close is irreversible; not-closing is not). Gating the
+    // ENFORCEMENT (not the stamp) protects every already-open position immediately.
+    if (maxHoldingMs !== undefined && this.isMaxHoldEnabled()) {
       const openTime = new Date(position.openedAt).getTime();
       const elapsedMs = Date.now() - openTime;
 

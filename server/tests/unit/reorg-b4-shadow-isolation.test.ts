@@ -179,7 +179,14 @@ describe('reorg-B4 exit-math same-service drift guard', () => {
   });
 
   test('only the maxHoldMs PARAM differs (SHADOW_MAX_HOLD_MS), not the math', () => {
-    expect(resolveBody).toContain('maxHoldMs: SHADOW_MAX_HOLD_MS');
+    // P19-B8.5j (2026-07-24): the maxHoldMs is now gated by the VTS max-hold switch —
+    // `maxHoldMs: isVtsMaxHoldEnabled() ? SHADOW_MAX_HOLD_MS : Infinity`. The shadow cap is
+    // STILL SHADOW_MAX_HOLD_MS (6h, not the real pass's 7d), and the exit math is still
+    // delegated to evaluateTECExit; only the injected maxHoldMs param differs from the real
+    // pass, exactly as before — the gate wraps both passes symmetrically.
+    expect(resolveBody).toContain('SHADOW_MAX_HOLD_MS');
+    expect(resolveBody).toContain('isVtsMaxHoldEnabled()'); // the P19-B8.5j gate is present on the shadow pass
+    expect(resolveBody).not.toContain('maxHoldMs: MAX_HOLD_MS'); // shadow must NOT use the real 7-day cap
     // it must NOT re-implement stop/target comparison locally — it delegates.
     expect(resolveBody).not.toContain('exitReason = currentPrice <=');
   });
