@@ -4947,7 +4947,14 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
             symbol: pair.symbol,
             patternType: tradeRecord.patternType,
             strategy: tradeRecord.strategy,
-            strength: tradeRecord.hybridScore ?? 0.5,
+            // B-RETIRED-SCORE-REMOVAL A0 (#558): converge onto the active-path shape. Was
+            // `tradeRecord.hybridScore ?? 0.5`; hybridScore is a retired score. The active path
+            // (signal-orchestrator.ts:1958) uses the pattern's OWN detected strength, and the VTS
+            // trade record carries exactly that as `patternStrength` (:2191, detectedPattern.strength).
+            // Q6 (Langston-flagged, VTS data-quality): patternStrength is the pattern's real detection
+            // strength, not the composite hybridScore — a more honest input, and it removes the last
+            // hybridScore read on this path so A1 can retire the score.
+            strength: tradeRecord.patternStrength ?? 0.5,
             direction: 'BUY',
             timestamp: Date.now(),
           });
@@ -4965,7 +4972,11 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
               if (!hybridDedupeSet.has(hybridKey)) {
                 hybridDedupeSet.add(hybridKey);
                 const decayFactor = hybridConfluenceBuffer.getDecayFactor(patternSig);
-                const hybridConfidence = (tradeRecord.finalScore * 0.4 + patternSig.strength * 0.4 + 0.2) * decayFactor;
+                // B-RETIRED-SCORE-REMOVAL A0 (#558): mirror the active path EXACTLY. The live path
+                // (signal-orchestrator.ts:1798) computes this as `signal.confidence * 0.4 + ...`;
+                // this VTS site read the retired `tradeRecord.finalScore`. Converged to `confidence`
+                // so the two paths are one shape and A1 can retire finalScore with no surviving reader.
+                const hybridConfidence = ((tradeRecord.confidence ?? 0) * 0.4 + patternSig.strength * 0.4 + 0.2) * decayFactor;
 
                 // Create hybrid trade record (independent of the quant trade)
                 const hybridTradeRecord = {
