@@ -90,10 +90,25 @@ going through the RTB refresh may not be getting all the data they need, so they
 and are never added back to the queue**. They may not even reach the SQE — they may be **removed as they exit
 the refresh cycle** and never re-injected.
 
-**This fits evidence I already have and my "stopped accumulating" framing does not explain:** the OBJ-1
-report records that the refresh performs an **SQE re-check that DELETES rows**, and #570 records that
-**bucket 2 fires but does not refresh its members**. A refresh that drops a signal on incomplete input would
-look exactly like this — a pool that empties while the scanner stays healthy.
+**One piece of supporting evidence I can stand behind:** the OBJ-1 report records that the refresh performs
+an **SQE re-check that DELETES rows**. A refresh that drops a signal on incomplete input would look exactly
+like this — a pool that empties while the scanner stays healthy.
+
+**⚠️ A SECOND PIECE I CITED AND SHOULD NOT HAVE — flagged by Kyle, and he is right about the process.** I
+also cited **#570** (bucket 2 fires without refreshing its members) as supporting evidence. **I had not
+verified it; I read it in someone else's report and passed it on.** Having now checked: it is **not**
+speculation — `RUNNING_ISSUES.md:23` carries it as **OPEN, measured on staging, confirmed with Langston**
+(12 of 100 signals frozen ~34 min across two restarts, all twelve computed to bucket 2 from the live hash;
+buckets 0/1/3–7 with zero frozen members; Langston then sharpened the lead at the graded ref). **So the claim
+survives — but my process for repeating it did not, and an inherited claim used to prop up a new hypothesis
+is exactly how noise compounds.**
+
+**★ AND THE THING THAT ACTUALLY MATTERS HERE: Kyle has never been told about #570, and says every report he
+has had says the refresh is functioning.** Those are reconcilable — 7 of 8 buckets do refresh fine, so an
+aggregate health read is "functioning" — **but a measured, Langston-confirmed, open defect that the decider
+has never heard of is its own problem, independent of the pool question.** Whoever takes this item: confirm
+#570's current status FIRST (there were refresh changes this week and it may already be fixed), and tell Kyle
+either way.
 
 **Concrete first cut:** instrument the refresh exit. For one cycle, count signals IN, signals that reached the
 SQE, signals that passed, and signals written back — **the gap between "entered the refresh" and "reached the
