@@ -34,7 +34,7 @@ import { asValidAssetClass, resolveAssetClass, safeResolveAssetClass, type Asset
 import { recordSyncSpan, syncSpanStart } from './scan-stall-instrument.js';
 import { ScanYielder } from './scan-yield.js';
 // B72 (2026-05-05): VTS runner caps + cooldowns from module='vts_runner'.
-import { getCachedNumberRequired } from './module-constants-service.js';
+import { getCachedNumberRequired, getCachedConstant, GLOBAL_KEY } from './module-constants-service.js';
 // Directive 11.8B-A2: Import canonical Net EV kernel for VTS profitability decisions
 // Note: isSignalProfitable is retained as a regime-aware ROI pre-filter (not EV math)
 import { isSignalProfitable, getROIDetails, getDynamicROIThreshold, getPerClassTargetGate } from '../core/calculations/expectancy.js';
@@ -1094,6 +1094,27 @@ function pruneReentryMaps(): void {
 // (2026-04-23 10:43 UTC) — the force-close-stale gate was effectively disabled. 7-day value
 // restores the safety valve.
 const MAX_HOLD_MS = 7 * 24 * 60 * 60 * 1000; // 7 days (safety valve only)
+
+/**
+ * P19-B8.5j — the max-hold master switch for the VTS lane. Gates BOTH the real
+ * 7-day valve and the shadow 6h cap by resolving `enabled_vts` from
+ * `module_constants.max_hold_switch`. FAIL-SAFE: cold module throws / absent key
+ * returns undefined → both resolve to OFF. When OFF, the call sites pass
+ * `maxHoldMs: Infinity`, disabling the evaluator's timeout branch WITHOUT touching
+ * `evaluateTECExit` (mirrors the active path's own `maxHoldMs: Infinity` idiom).
+ * ⚠️ The VTS "max hold" is a zombie/stale-sim CLEANUP valve (7-day / 6h shadow), NOT a
+ * 24h trade rule — so it ships ON (enabled_vts=true). Seeding it OFF (→ Infinity) would
+ * re-introduce the pre-Batch-18I unbounded-trade-map bug (a B63 hotfix set MAX_HOLD_MS=Infinity;
+ * Langston flagged it; B64 restored the valve — BATCH_64_SCOPE.md). The switch still EXISTS so
+ * Kyle can flip it in the max-hold debate; the DEFAULT just does not ship that regression.
+ */
+function isVtsMaxHoldEnabled(): boolean {
+  try {
+    return getCachedConstant<boolean>('max_hold_switch', 'enabled_vts', GLOBAL_KEY) === true;
+  } catch {
+    return false; // module not warm → treat as OFF (fail-safe)
+  }
+}
 
 let phase10SessionTrades: Phase10TradeRecord[] = [];
 let phase10SessionStartTime: number | null = null;
@@ -2966,7 +2987,7 @@ async function resolveOpenVirtualTrades(): Promise<{
         currentPrice,
         atr: trade.atrAtOpen ?? 0,
         holdDurationMs,
-        maxHoldMs: MAX_HOLD_MS,
+        maxHoldMs: isVtsMaxHoldEnabled() ? MAX_HOLD_MS : Infinity, // P19-B8.5j: OFF → Infinity disables the valve
         context: {
           exchange: 'kraken',
           assetClass: trade.assetClass,
@@ -3691,7 +3712,7 @@ async function resolveOpenShadowTrades(): Promise<{ shadowResolved: number }> {
         currentPrice,
         atr: trade.atrAtOpen ?? 0,
         holdDurationMs,
-        maxHoldMs: SHADOW_MAX_HOLD_MS, // ← the ONLY exit-math PARAM that differs from the real pass
+        maxHoldMs: isVtsMaxHoldEnabled() ? SHADOW_MAX_HOLD_MS : Infinity, // P19-B8.5j: OFF → Infinity (still the only exit-math param differing from the real pass)
         context: {
           exchange: 'kraken',
           assetClass: trade.assetClass,

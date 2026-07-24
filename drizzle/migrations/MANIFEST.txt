@@ -183,3 +183,4 @@
 2026-07-22-b-ranking-component-capture-drop-dead-columns.sql
 2026-07-22-b-crew-coord-registry.sql
 2026-07-23-p19-b8-5i-trailing-enabled-flags.sql
+2026-07-24-p19-b8-5j-max-hold-switch.sql

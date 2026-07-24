@@ -311,6 +311,14 @@ Removing finalScore here **cannot be a deletion**: something must still decide w
 
 ---
 
+### 10.03.0 ★★ Q7 RULED BY KYLE (2026-07-25) — the tiebreaker uses the LIVE RANKING KEY (`r_multiple`)
+
+**Kyle's directive:** *"for when a new signal arrives for a symbol and strategy already sitting in the ready-to-buy queue, have the ranking score serve as the deciding score instead of the now-to-be retired score."*
+
+**Term-collision resolved on the record (canonical-terms rule):** "the ranking score" = **the live ranking KEY the queue already orders on — the expected R-multiple (`netEV ÷ risk`), `computeRankKey`/`signalRMultiple`.** It is explicitly **NOT** the separate leftover field `metadata.rankingScore` (the inert VTS rankingScore), which **this batch is itself retiring** as a control arm — wiring the tiebreaker to a value being deleted in the same batch would break it. Confirmed with Kyle in-chat before implementing. This **matches** the option-(1) conclusion §10.03.1 + Langston already reached — Kyle's ruling confirms it rather than changing it.
+
+**Carries the §10.03.1 hard requirements unchanged:** (i) kill the `parseFloat(x || '0')` coerce; (ii) `chosenNetEv`-absent on either side → explicit **counted keep-first** branch, since that is exactly where `r_multiple`'s live path drops to the fabricated-input kernel recompute (#574). Same key decides which duplicate survives, which one ranks, and which one displays.
+
 ### 10.03.1 Q7 SETTLED — `r_multiple` IS COMPUTABLE ON BOTH SIDES; OPTION (1) CARRIES
 
 Langston made Q7 turn on one checkable fact: **is the replacement key reliably available on BOTH sides of the comparison** (the *stored* `existingSignal` row AND the *incoming* `input`), the way `finalScore` was — or does using it just relocate the absent-as-valid landmine to a new column? Checked at the ref:
@@ -404,7 +412,14 @@ and reads them back out at `:184-213` (`avgFee: parseFloat(r.hybridScore)`, `tot
 
 **⚠️ Unlike the three orphans, `TradingEngine` IS imported by live code:** `routes.ts:10` (static) + `:14704` (dynamic), `command-router.ts:3`, `intent-executor.ts:243/:482`, `config-change-handler.ts:53`, `pre-execution-validator.ts:3`. **⇒ Not a delete-on-sight.**
 
-**OPEN — do not assume either way:** whether `TradingEngine` is a legacy engine superseded by `active-execution-engine.ts` (probable, given the active path) or still carries live responsibility. **Import-reachability is not execution-reachability** — that is the `criteria-limiter` lesson in reverse, and I will not repeat the `executeRefreshCycle` error by guessing in the other direction. **This must be resolved before A1 touches it.** *(Note `:428`/`:469` also propagate `signal.finalScore` outward — a state-write to census.)*
+**✅ RESOLVED 2026-07-25 — traced at the ref, and I was wrong TWICE on the way (recorded because both were leans I nearly shipped):**
+
+- **Lean 1 — "probably superseded/dead" — WRONG.** `TradingEngine` IS instantiated (`routes.ts:104-105` `globalLiveEngine`/`globalPaperEngine`) and its LIVE instance is `.start()`-wired at `routes.ts:3961` (behind a live-mode route) + `intent-executor.ts` starts engines for live trading. **It is the LIVE-MODE engine (Phase 21), not dead scaffolding.** So it is NOT deleted by #558.
+- **Lean 2 — "still carries live responsibility [today]" — also WRONG for the paper path.** `globalPaperEngine.start()` is called **NOWHERE** (grep = zero). The paper engine is instantiated but its signal-orchestrator loop (`start()` → `:69-70` forwards to `processSignal`) never runs; the paper engine is only touched at `routes.ts:5002` for a manual `closeTrade`. **The active PAPER path (Phase 19, current) is the SEPARATE `ActiveExecutionEngine.processSignal` (`active-execution-engine.ts:2480`) — a name-collision with `TradingEngine.processSignal`, different class.** So `:241` does not execute on today's active-paper path at all.
+
+**WHAT `:241`'s finalScore ACTUALLY DOES (the #568 state-write trace, completed):** inside `processSignal` (`:221`) it is computed, logged (`:246`), and written into the trade's **`metadata` JSONB** at `:428` (dry-run trade) and `:469` (real trade), beside `signalConfidence` + `goalAlignmentScore`. **NO decision reads it** — the guardrail check (`checkGuardrailRisk`) reads entry/stop/target, and `executeTrade` reads it only for the log line. ⇒ it is a **write-into-a-trade-record**, telemetry not decision, and even that only in LIVE mode.
+
+**⇒ DISPOSITION (bucket A + a bucket-B metadata note; low-risk because it does not run in paper today):** remove the `:241` blend + the `:246` log + the two `finalScore: signal.finalScore` metadata keys (`:428`, `:469`); drop `TradeSignal.finalScore` (`:19`) once no writer/reader remains. **KEEP `goalAlignmentScore`** — it is a distinct quantity (goal alignment), independently stored at `:427`/`:468`, NOT one of the retired scores. **No migration:** the stored `metadata.finalScore` is JSONB on live-mode trade rows; historical rows keep the key as inert data (rule-20 KEEP-AS-DATA). **KEEP the `TradingEngine` module.** Lands in the A1 core slice (it is engine code, not xStock-specific), gated behind the fact that it is Phase-21-only execution.
 
 ### 10.04.4 Benign — telemetry/diagnostic carriers only
 

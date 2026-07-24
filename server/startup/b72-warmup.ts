@@ -97,6 +97,11 @@ const PREFETCH_MODULES = [
   'calibration_epoch',
   // ITEM-4 step 3 (2026-06-10): the live-engine Phase-21 gate (read fail-closed at the route).
   'live_engine_gate',
+  // P19-B8.5j (2026-07-24): the max-hold master switch — enabled_paper / enabled_live /
+  // enabled_vts booleans, read sync at the two force-close enforcement sites
+  // (active-execution-engine.ts checkExitConditions + vts-runner real/shadow passes).
+  // MUST be warm or the sync read throws; the reader treats a throw as OFF (fail-safe).
+  'max_hold_switch',
   // B-4.5 (2026-06-11): DB-governed per-class fees (Kraken cross-platform Tier 1).
   // Merged over the static friction modules at getFrictionForAssetClass — the
   // hot scan path reads this cache synchronously every cycle. MUST be warm.
