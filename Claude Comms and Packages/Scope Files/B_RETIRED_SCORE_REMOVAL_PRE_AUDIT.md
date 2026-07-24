@@ -514,6 +514,25 @@ Langston's sharpest closing point. `criteria-limiter.ts:18` declares *"Directive
 
 ---
 
+## 10.06 ★ A0 DATA-LINEAGE NOTE (Q6, Langston-required before A1) — SHIPPED + MEASURED 2026-07-25
+
+**A0 committed `5c388acbd`, CI green (run 30133530569), Langston-approved live-correct.** A0 converged the VTS hybrid-confluence path off the two retired scores: the `hybridConfidence` first term `tradeRecord.finalScore` → **`signal.predictiveConfidence`**, and the buffer strength `tradeRecord.hybridScore` → **`signal.patternStrength`** (both now sourced off the correct sibling object — the phantom-read bug that read them off `tradeRecord` was caught by Langston and fixed).
+
+**Q6 — the distribution delta of the term-1 swap (`finalScore` → `predictiveConfidence`), measured against what the active path feeds (`confidence`). Staging, `rtb_shadow_pairings`, n = 28,328 (rule-13 decision-grade, a population not a snapshot):**
+
+| quantity | min | p25 | p50 | p75 | max | mean |
+|---|---|---|---|---|---|---|
+| **active-path `confidence`** (what the active hybridConfidence uses) | 0.2901 | 0.6926 | 0.7637 | 0.7973 | 0.8421 | **0.7344** |
+| **OLD VTS term `final_score`** (what A0 removed) | 0.1541 | 0.4994 | 0.6364 | 0.6970 | 0.7823 | **0.5997** |
+
+**READING:** the OLD VTS first term (`finalScore`, mean **0.60**) ran **~0.13 lower** than the active-path `confidence` (mean **0.73**). Switching to a confidence-class scalar therefore moves the VTS first term **UP toward the active-path range** — the intended convergence, not a drift away from it. Net effect on `hybridConfidence`: the first term carries weight 0.4, so the mean shift is ≈ **+0.05** on `hybridConfidence`.
+
+**★ HONEST CAVEAT (the actual data-lineage finding):** I could **not** measure `predictiveConfidence` itself — it is persisted to **no populated sink** (the only column, `telemetry_history.predictive_confidence`, is empty; 0 rows). So `confidence` above is its **measurable active-path analog**, not `predictiveConfidence` directly. The two are both `[0,1]` by construction (`getPredictiveConfidence` is sigmoid-bounded; `confidence` is 0–1) but semantically distinct (ML predictive confidence vs strategy-signal confidence). **The precise `predictiveConfidence` distribution is unmeasurable from current storage — the same un-captured-live-input family as #574 / #575.** Recorded so the seam is documented, not silent.
+
+**★ STAKES: contained to VTS simulation.** `hybridConfidence`'s only consumers are the VTS hybrid trade record's own `finalScore` field (`:4976`) and `totalFinalScore` (`:4994`) — VTS-internal, telemetry-only, and themselves being retired. **No live trading decision reads `hybridConfidence`.** So the +0.05 mean shift is a documented data-quality seam, not a trading-behaviour change. **A0's two gates (CI green + this note) are met; A1 is unblocked pending Langston's go.**
+
+---
+
 ## 11. QUESTIONS FOR LANGSTON (Step-2)
 
 - **Q1 — one-arm plug-point or full collapse?** (§6)
