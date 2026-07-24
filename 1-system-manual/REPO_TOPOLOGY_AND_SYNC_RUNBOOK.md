@@ -76,6 +76,8 @@ Git's own FAQ forbids putting *any portion* of a repository on cloud-sync storag
 **★ THE SYNC GATE HAS A MATCHING HOLE, and this is the fix (CC-A's catch, 2026-07-23).** The batch-close gate below checks whether **committed** work is pushed. It says **nothing about work that was never committed** — which is exactly how that file stayed invisible for two weeks. **So the gate now requires an untracked check too, and `git diff HEAD` DOES NOT SHOW UNTRACKED FILES and does not say so (#542 corollary).**
 
 **🔒 Batch-close sync gate (HARD — every batch, no exceptions).** From your OWN clone, all four must hold:
+**0. ★ `git fetch origin` FIRST — the gate is INVALID without it (added 2026-07-24, measured).** `origin/<branch>` is a **local cached pointer** refreshed only by a fetch, so without this step check 1 compares you against your own stale copy. **Measured on `C:\DawnTraderV3-old`: reported behind 0; after a fetch, behind 3.** The gate built to prove sync could itself report a false in-sync — the absent-as-valid class (#546/#568) turning up inside its own detector.
+
 1. `git rev-list --count HEAD..origin/migration/aws-supabase` = **0** (not behind), AND
 2. `git rev-list --count origin/migration/aws-supabase..HEAD` = **0** (nothing committed-but-unpushed — Langston's 2026-06-12 catch: a one-directional check cannot see unpushed local commits), AND
 3. `git status --porcelain --untracked-files=no` shows only intentional local config, AND

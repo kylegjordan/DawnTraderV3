@@ -434,7 +434,10 @@ ssh root@188.245.193.8 'TOKEN=$(curl -s -X POST http://localhost:5000/api/auth/l
 
 **`C:\dev` is RETIRED** (deleted 2026-07-24; stashes archived at `root@204.168.141.77:/root/backups/dev-bench-stashes-2026-07-23/`). **The old Google Drive working folder is RETIRED** (push URL disabled, marker file at its root, moved by Kyle to `Frozen Jan - July 2026 REPO/`).
 
-**🔒 BATCH-CLOSE SYNC GATE (HARD — every batch).** From your OWN clone, all four must hold:
+**🔒 BATCH-CLOSE SYNC GATE (HARD — every batch).** From your OWN clone:
+
+**0. ★ `git fetch origin` FIRST — the gate is INVALID without it.** `origin/<branch>` is a **local cached pointer**, refreshed only by a fetch. Without step 0, check 1 compares you against your own stale copy and **reports "behind 0" while you are genuinely behind** — measured 2026-07-24 on `C:\DawnTraderV3-old`: reported behind **0**, and after a fetch reported behind **3**. This is the absent-as-valid class (#546/#568) inside the gate meant to catch it. **Then all four must hold:**
+
 1. `git rev-list --count HEAD..origin/migration/aws-supabase` = **0** (not behind), AND
 2. `git rev-list --count origin/migration/aws-supabase..HEAD` = **0** (nothing committed-but-unpushed), AND
 3. `git status --porcelain --untracked-files=no` shows only intentional local config, AND
