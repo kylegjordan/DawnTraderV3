@@ -288,7 +288,36 @@ The TOP-OF-REPORT declaration makes the gap impossible to miss.
 
 **The rule this produced:** when a system is retired, the retirement is not finished when the machinery stops. **Grep the always-loaded files for its name and re-read every hit** — the failure is never the entry that says "X is retired," which is easy to write and easy to find. It is the *other* entry, written earlier for a different purpose, that quietly depends on X still working.
 
-**And the numbering convention:** a retired rule keeps its number and is marked 🗑 in place, with what it used to say and why it went. Renumbering would break every citation of rules 12–28 across the doc set, and a rule that vanishes silently gets reinvented by the next person who hits the problem it was written for.
+**★ KYLE OVERRULED THE FIRST ATTEMPT, AND HE WAS RIGHT.** The sweep initially *retired the rules in place* — leaving each dead rule's text behind under a 🗑 marker saying what it used to say and why it went. **Kyle rejected that outright:** *"This shit needs to be deleted and never seen from again. It saves space in the Claude file, and it takes up less resources when Langston reloads."*
+
+**The reasoning is a cost argument the first version ignored.** `CLAUDE.md` is auto-loaded into every session at every start **and every compaction**, and it is re-read by Langston on **every single invocation** of his. A retirement note is therefore not a free annotation — **it is a recurring tax, charged on every turn of every session forever, to preserve a sentence whose only remaining purpose is to describe something that no longer exists.** The archive costs nothing per turn because nothing loads it. So: **the dead rule is DELETED from `CLAUDE.md`; its story lives here, and only here.** ~3.2 KB came out on the first pass.
+
+**The one thing that survives deletion is the NUMBER.** Rule 11's slot is now simply absent — the list runs 10, 12, 13. Renumbering would silently break every citation of rules 12–28 across the doc set, and those citations are load-bearing. **An absent number is self-evident and costs nothing; a shifted number is a wrong pointer that still resolves.**
+
+---
+
+## §NON-NEGOTIABLES — the block that was itself wrong (2026-07-24)
+
+The shared `MEMORY.md` opens with **OPERATIONAL NON-NEGOTIABLES**, prefaced *"Violating any of these is a process failure, not a judgment call."* The 2026-07-24 review found **two of its six items were false**, which is the sharpest possible version of the staleness problem: **the block claiming zero discretion was the block giving wrong instructions.**
+
+- **Item 5** told every session to test on the `C:\dev` bench and push from the Google Drive folder. `C:\dev` was deleted; the Drive folder's push URL was deliberately invalidated. **Obeying it faithfully would have failed at git.**
+- **Item 2** said *"Langston reads the actual `git diff` BEFORE it is pushed."* Kyle had corrected exactly this on 2026-07-23 — *"Langston reviews the review branch on GitHub, so it's already been pushed"* — and `CLAUDE.md` §2 step 4 was fixed then. **The non-negotiable was not.** A correction applied to one file and not its twin is how two rulebooks drift apart while both look authoritative.
+
+**Kyle's instruction was to review rather than strip:** *"There are probably some nonnegotiables that are true for the process and system that we're running now… Clean up the ones that need cleaning but keeping, and throwing out the ones that aren't necessary, and adding anyone that's not in there that we think should be in there."* Four items were true and kept as-is (CI-never-red, iterate-to-completion, the 11-step workflow, the bug taxonomy). Two were corrected. **Two were added, and the selection rule was: a thing Kyle has had to say twice is not a preference, it is a non-negotiable that was never written down** — **investigate before you announce** (rule 24.a, after eleven defect claims were announced and retracted in a single day) and **stay in your own lane** (rule 28, whose cost is Kyle's own reading time).
+
+---
+
+## §UNLOCK — "we may have unlocked functionality that was switched off" (Kyle, 2026-07-24)
+
+Kyle proposed, against a set of behaviour changes that all appeared within days of each other, that recent batches had **re-activated dormant functionality rather than introduced new defects** — *"all of that functionality was turned off, and now he's probably accidentally reactivated some of it."*
+
+**The code confirmed it verbatim for the max-hold**, in the comment written by the batch that did it (`signal-orchestrator.ts:1089-1097`): the max-hold value *"died here and the exit engine's `max_holding_period` branch was skipped for **EVERY position**. Measured: 0 of 15 live positions carried it, and there are **0 max_holding_period closes in the entire closed_trades history**… that stamp comment also says 'active trading is OFF — changes no live behavior today' (2026-06-06); **it is ON now, so a dormant forward-prep guarantee had quietly become load-bearing.**"*
+
+**The 24-hour value was introduced on 2026-06-06 (`ecf185753`) as a unit-normalisation change — "unify max-hold on explicit milliseconds" — at a time when active trading was OFF and it therefore could not affect anything.** It was plumbing hygiene, never a trading decision, and it was never put to Kyle as one. When the plumbing was repaired on 2026-07-22 it began enforcing, for the first time ever, a holding limit **nobody currently running the system had agreed to.**
+
+**The lesson, and it generalises well beyond this case:** a value written while a system is OFF has never been tested against the question *"do we actually want this?"* — it only ever had to satisfy *"is this the right shape?"* **Turning the system on converts every such value from documentation into policy, silently and all at once.** When a dormant path is re-activated, its constants need re-approval, not just verification that they now flow.
+
+**And the framing error worth remembering:** the sweep's first report called the 24 hours *"the deliberate default"* — true of the *value* (explicit milliseconds, not a unit bug) and badly misleading about its *standing*, which Kyle caught immediately: *"at no point have I approved a twenty four hour limit."* **"Deliberate" describes how something was written. It says nothing about whether it was ever decided.**
 
 
 ---

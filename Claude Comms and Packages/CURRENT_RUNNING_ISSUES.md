@@ -21,6 +21,33 @@ unless I read it in code.
 
 ---
 
+## ★ KYLE'S GOVERNING THEORY (2026-07-24) — read this before working any item below
+
+> *"I think that with the recent batches that we've been running, we've unlocked some bugs and some
+> functionality that we didn't realize was there. It was being blocked by other things in the way, and had
+> now been cleared out."*
+
+**CONFIRMED for item 2, in the implementing batch's own comment** (`signal-orchestrator.ts:1089-1097`): the
+max-hold value *"died here and the exit engine's `max_holding_period` branch was skipped for **EVERY
+position**. Measured: 0 of 15 live positions carried it, and there are **0 max_holding_period closes in the
+entire closed_trades history**… that stamp comment also says 'active trading is OFF — changes no live
+behavior today' (2026-06-06); **it is ON now, so a dormant forward-prep guarantee had quietly become
+load-bearing.**"*
+
+**So the default posture for every item here is NOT "what did we break?" but "what did we switch on?"**
+Several behaviours changed within days of each other; a re-activation explains a cluster like that far better
+than several independent new defects do. **Check whether each behaviour ever worked before you look for what
+broke it** — `SELECT ... GROUP BY close_reason` with a first-seen date answers that in one query, and for
+item 2 it was decisive (4 closes ever, all on one day).
+
+**⚠️ And the corollary that is easy to miss: a re-activated path's CONSTANTS were set while it was dormant,
+so they were never decided — only shaped.** The 24h limit was written 2026-06-06 as a unit-normalisation
+change while active trading was OFF, so it could not affect anything and was never put to Kyle as a trading
+policy. **Kyle has never approved a 24-hour holding limit, and it is now enforcing on live paper positions.**
+When you re-activate a dormant path, its numbers need re-approval, not just verification that they flow.
+
+---
+
 ## 1. The ready-to-buy pool has collapsed from ~100 signals to 1–2 — CAUSE NOT DETERMINED
 
 **Proposed owner: CC-A** (owns `B-RTB-REFRESH-CONSOLIDATE` / #532, where OBJ-2b/3/4/5/6 are still open).
@@ -45,7 +72,7 @@ scanned** against a 1518-pair Kraken universe, target 300/cycle. The funnel, one
 | **quant survivors** | **8** |
 | …reaching the pool | **1–2** |
 
-**★ THE ARITHMETIC THAT KILLS THE EASY ANSWER.** The obvious story is "the pool stopped accumulating across
+**A SECOND, WEAKER FRAMING (mine — kept only because its arithmetic is still valid).** The obvious story is "the pool stopped accumulating across
 cycles" — plausible, because only 300 of 1518 pairs are scanned per cycle and the set rotates, so without
 accumulation the pool can only ever hold the current cycle's output. **But the current cycle yields 8
 survivors and the pool holds 1–2.** So there is real attrition *between* survivor and queued as well.
@@ -58,8 +85,20 @@ this window: `d2306518e` (2026-07-22 23:54) retired Mechanism A, the duplicate r
 eviction path, so I am not calling this the cause.** Note also that retiring a *duplicate deleter* should, on
 its face, leave *more* signals in the pool, not fewer — so the naive version of this story has the sign wrong.
 
-**Suggested first cut:** does the refresh delete-and-reinsert the working set each cycle, or re-validate in
-place? That single answer separates the two contributors.
+**★ KYLE'S HYPOTHESIS — more specific than mine, and it should be tested FIRST.** Paraphrasing him: signals
+going through the RTB refresh may not be getting all the data they need, so they **fail during the refresh
+and are never added back to the queue**. They may not even reach the SQE — they may be **removed as they exit
+the refresh cycle** and never re-injected.
+
+**This fits evidence I already have and my "stopped accumulating" framing does not explain:** the OBJ-1
+report records that the refresh performs an **SQE re-check that DELETES rows**, and #570 records that
+**bucket 2 fires but does not refresh its members**. A refresh that drops a signal on incomplete input would
+look exactly like this — a pool that empties while the scanner stays healthy.
+
+**Concrete first cut:** instrument the refresh exit. For one cycle, count signals IN, signals that reached the
+SQE, signals that passed, and signals written back — **the gap between "entered the refresh" and "reached the
+SQE" is the number that decides this.** Note that #532/OBJ-4 already records that queue exits are not
+counted, so **that instrument may have to be built before the question can be answered.**
 
 **Kyle's own framing, which is the requirement:** signals used to sit in the pool for **longer than a day**
 waiting for a slot. Whatever the fix is, it has to restore that.
@@ -104,11 +143,22 @@ boundary is not chronological**, so something per-strategy or per-path decides w
 `strategy-engine.ts:80-88,189-195,603-609` resolves `max_holding_ms` from `module_constants` for only some
 strategies. **That is the question to answer before writing any fix.**
 
-**Answered, so nobody re-opens it:** the 24.0h is the deliberate default —
-`DEFAULT_MAX_HOLDING_MS = 24*60*60*1000` (`strategy-engine.ts:42`), stored as literal `86400000` ms.
-**It is NOT the old bar-count-read-as-hours bug**; that was fixed 2026-06-06 (W2.1) and the comment at
-`active-execution-engine.ts:1642-1647` records the change to explicit milliseconds. All four
-`max_holding_period` closes came in at exactly 24.00h because that is the constant, not a coincidence.
+**★ THE 24 HOURS IS A SCOPE CALL FOR KYLE, NOT A SETTING TO VERIFY — I got this wrong first time.**
+I called it "the deliberate default." **Kyle: *"at no point have I approved a twenty four hour limit."*** He
+is right, and the two claims are not the same: **"deliberate" describes how the value was written; it says
+nothing about whether it was ever decided.**
+
+What is actually true, from the archaeology: the value entered on **2026-06-06 (`ecf185753`, "unify max-hold
+on explicit milliseconds")** — a **unit-normalisation change made while active trading was OFF**, when it
+could not affect anything and was never put to Kyle as a trading policy. `DEFAULT_MAX_HOLDING_MS` at
+`strategy-engine.ts:42` is the fallback when a strategy resolves no `max_holding_ms` of its own. **It is now
+enforcing on live paper positions.** So the question is not "is 24h implemented correctly" — it is **"do we
+want a 24-hour limit at all, and if so what should it be, per strategy and per asset class?"** That is
+Kyle's, and it should be asked before anything is tuned.
+
+**Settled only on the narrow technical point:** it is **not** the old bar-count-read-as-hours bug. That was
+fixed by the same 2026-06-06 change, and the stored value is literal milliseconds (`86400000`), not a
+24-bar count reinterpreted.
 
 ---
 
@@ -130,9 +180,15 @@ the max-hold branch or beside it; I have not traced that.
 positions**. Decisive: TAO/USD's `closed_trades` row was written at `13:21:03.838` and its position opened at
 `13:21:03.889` — **the same second. A row is written AT OPEN, not at close.**
 
-**MEASURED — this is not a new trigger.** The NULL rows are spread continuously across 07-15, 07-17, 07-18,
-07-22, 07-23, 07-24 — the entire span the table has data for. **Kyle is right that he hasn't seen it before,
-but the behaviour is not new; the display is what surfaced it.**
+**MEASURED — the WRITE is not new.** The NULL rows are spread continuously across 07-15 → 07-24, the entire
+span the table has data for.
+
+**⚠️ BUT THAT IS NOT THE SAME CLAIM AS "the display is not new," and I conflated the two. Kyle disputes the
+display** — his read is that the write may have been happening in the background all along **without
+appearing in the table on screen**, and that what changed is that it started *showing*. **My data cannot
+tell those apart: I measured the rows, not the rendering.** Whoever takes this must check the table's own
+filter — if it recently stopped excluding NULL-close rows, Kyle is right and the write is a separate,
+older question. **He has also said he does not want these rows displayed regardless.**
 
 **★ The part that is defect-shaped regardless of the intent ruling:** 3 of the 14 — MET/USD (07-15),
 AVAX/USD and ETH/USD (both 07-18) — have **no matching open position**. Their trades are gone but `closed_at`
