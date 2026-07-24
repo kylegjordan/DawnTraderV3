@@ -97,3 +97,34 @@ Separate clones dissolved the race the board was built for (**#557**, one sessio
 
 **★ THE CORRECTED ROOT CAUSE, re-derived from the ref (commit `b843d110a`, quoted from its own body):** *"The Google Drive clone's git pointer **froze 2026-05-28 (B-NEW-46)** and governance was committed from the `C:\dev` working copy **thereafter**."* ⇒ **the bench-pushing the old rule forbade was the CONSEQUENCE, not the cause.** The authoritative tree's version control broke and people worked around a broken tool. The old rule described the symptom, never named the frozen pointer, and was enforced entirely by human discipline — which failed silently for 42 commits. **The replacement's real safeguard is that git itself rejects a stale push, plus a reproduction-based backup gate.** Stated honestly: those **catch** divergence; they do not **prevent** a pointer freeze. And we now know the deeper fact the old rule never had — **a git repository on that mount is unsafe by construction**, which is why the working tree moved off it entirely.
 ---
+
+---
+
+## ★ KEEPING THE THREE SESSIONS ON THE SAME RULES (built 2026-07-24, Kyle-directed)
+
+**The problem, measured not theorised:** each session loads `CLAUDE.md` from ITS OWN clone, so a session obeys whatever its folder last pulled. On 2026-07-24 one session sat **8 commits behind, running a pre-slim rulebook** — and nothing told it, or anyone else. A stale-rules session throws **no error at all**; it quietly obeys the wrong instructions. That silence is the whole danger.
+
+**THE FOUR PROTECTED PATHS** (Kyle's set — note the build playbook is deliberately NOT among them; it is a reference read on demand, not something a session must be current on to act correctly):
+
+| # | Path | Why it must never be stale |
+|---|---|---|
+| 1 | `CLAUDE.md` | the instructions — **the only one auto-loaded into context** |
+| 2 | `.claude/hooks/` + `.claude/settings.local.json` | the guards themselves — **EXECUTED from disk, never loaded into context**, so a stale copy means a guard silently does not fire, which is worse than no guard |
+| 3 | `1-system-manual/RUNNING_ISSUES.md` | two sessions on stale copies claim the **same next issue number** — a collision we have actually hit |
+| 4 | `1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md` | the rule narration — a rule without its origin gets argued away |
+
+**MECHANISM 1 — `fresh-rules.mjs`, a session-start hook on `startup|resume|compact`.** It refreshes those paths and then **tells the session what changed**.
+- **★ Why COMPACTION is the event that matters:** the root `CLAUDE.md` is documented to be re-read from disk and re-injected at compaction, not only at a fresh start — and Kyle rarely restarts the app, so compaction is where nearly all reloads actually happen.
+- **★ Why the pull is the half that matters:** telling a session to re-read a STALE file hands back the stale file. The reload is worthless without a current file underneath it. Pulling cannot be replaced by an instruction; the instruction is the cheap second half.
+- **★ Why it ALSO prints:** whether the hook runs BEFORE or AFTER the re-read at compaction is **UNDOCUMENTED**. Rather than bet on an ordering, its output (which IS injected into context) tells the session to re-read — correct under either ordering.
+- **★★ It NEVER overwrites local work — two separate cases, and the second was missed first time round.** (a) *uncommitted* edits are reported and left alone; (b) ★ *committed-but-not-yet-pushed* work is also left alone — **the hook proved this gap by eating its own improvement** (a corrected version was committed locally, unpushed, and the next run reverted it in the working tree from origin). **"Differs from origin" is NOT the same question as "is stale" — a local commit AHEAD of origin is the newest version.** Nothing was lost (the commit was in history), but the logic was wrong.
+- **Logging:** every run appends to `~/.claude/dt-fresh-rules.jsonl` (event, behind-count, refreshed, skipped). **It shipped without this** — a control with no trace makes "is it working?" unanswerable, which is exactly what was then asked. All three sessions write one file, so it doubles as the cross-session record.
+- **Fail-open** on any error; it must never block a session from starting.
+
+**MECHANISM 2 — the push notice now has TWO urgencies, and they must not read the same.**
+- **Any push → one quiet line, the sha and nothing else.** No action required: git itself refuses a push from a clone that is behind, so a normal push cannot hurt anyone who ignores the notice.
+- **★ A push touching the four → an extra LOUD block** naming the files and demanding pull + reload NOW, even mid-task. The asymmetry is the point: *a stale push gets a loud refusal from git; stale rules get silence.*
+- It resolves which files changed via the **GitHub compare API on the public repo** — deliberately NOT the local backup mirror, which is langston-owned while the notice runs as root, tripping git's dubious-ownership guard and returning empty (the same false-empty that made the backup gate look like a reproduction failure).
+
+**What is NOT solved, stated so nobody assumes otherwise:** there is **no documented way to PURGE already-loaded rules** from a running session. Compaction re-injects the new copy but does not delete the old, so a session briefly holds both. Only `/clear` truly purges, and that ends the conversation. And **whether a session actually re-read after being told is not observable from outside** — it happens inside the session's reasoning. Any claim that sessions are "now following the new rules" is a comfortable fiction; the honest proxy is "the file was current and the session was told."
+
