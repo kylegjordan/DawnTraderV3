@@ -6,6 +6,8 @@
 >
 > **How to use it:** §9 is the build order. Read §1–§8 first, then stand things up in that order. **Do not build all of it on day one** — §9 says what is load-bearing from the first hour and what can wait.
 >
+> **★ KEEPING THIS CURRENT (Kyle directive 2026-07-24 — this is a LIVING document).** Update it whenever **the METHOD changes** — a role added or removed, a gate moved, a rule that earned its place, a tool that replaced another, a failure that taught something generalisable. Do **NOT** update it for this project's day-to-day state (that is what the batch catalog, phase history and issue list are for) — a playbook that tracks project state decays into a stale second copy of the rules, which is the exact duplication the one-source principle exists to prevent. **When you add a rule here, add the incident that produced it in the same edit**, or the rule will not survive its first encounter with someone in a hurry.
+>
 > **Written 2026-07-24 by Claude Analyst (CC-C), from ~5 months of running this on a live algorithmic-trading system.** Project-specific names are replaced with roles; where a concrete detail is the point, it is kept and marked.
 
 ---
@@ -121,6 +123,31 @@ One channel that all parties read, with the agents able to message each other di
 - ★ **A call-out demands an immediate public answer** — ownership, plan, timing — **even when the fix will take a while.** Responding fast is mandatory; fixing fast is not. An alert must never be left silently active.
 - ★ **STAY IN YOUR OWN LANE.** With several agents live, every agent's console filled with running commentary about the *other* agents' work. It buried what the human was actually reading. **Being woken by traffic is fine; reporting it is not.** Handle what isn't yours silently. ("Nothing for me, nothing for you" is still commentary.)
 - ★ **Default to pairwise review — owner plus reviewer — and ship.** Everything drifting into a standing four-way debate produced reversals, re-reversals, and idle queues. Escalate to a full panel only for genuinely cross-cutting architecture, risk-envelope questions, or a true deadlock. *Judge before joining: does this need me, or am I adding a lap?*
+
+### 6.1 ★ BUILDING THE FABRIC — the concrete version (added 2026-07-24 at Kyle's request; §6 above was properties only, which is not enough to rebuild from)
+
+**We use Discord. The decisive reason is narrow and worth stating: bots can see each other's messages.** Our previous platform (Telegram) **blocks bot-to-bot delivery at the platform level** — one bot's messages are permanently invisible to another's. That single limitation forced every agent-to-agent exchange through a bolted-on side channel for months. **Check this property before you choose a platform; it is the one that decides the architecture.**
+
+**The pieces, on a small always-on server (not anyone's laptop):**
+
+| Piece | What it does |
+|---|---|
+| **One channel** | Every party reads it: human, all implementation agents, the reviewer, and automated alerts. One channel, not several — a machine-detected problem and a human question should land in the same place. |
+| **Bot app #1 — the implementation agents' voice** | Carries their outbound messages and receives the human's inbound. Posts through a **webhook with a per-agent display name**, so several agents share one bot but appear as distinct identities. |
+| **Bot app #2 — the reviewer** | Separate application. Wakes on being named, runs the reviewer's reasoning, posts its reply in-channel itself. |
+| **An inbound log** | Every message appended to a single append-only file on the server. **This is the read-tap** — agents tail one file rather than each holding a socket. |
+| **A wake watcher, per agent session** | Tails that log; each matching line wakes the agent. Filters by name so only the addressed agent wakes. |
+| **A dispatcher command** | One command any agent calls to post, taking its display name and an optional flag that @-mentions the human for a phone push. Keep the transport behind it so the channel can be swapped without touching every caller. |
+
+**Gotchas we hit, each of which cost real work:**
+
+- ★★ **A platform message-length cap will silently eat your longest, most important messages.** Discord caps a message and splits longer posts into several. Our reviewer's engage-gate ran **per piece**, and only the first piece carried his name — so **every piece after the first was discarded before it became work.** Long reviews arrived truncated **with no error on either side.** Fix: reassemble the pieces into one message *before* the gate. **Test with a message longer than the cap on day one**, because normal-length traffic will never reveal this.
+- ★ **Cut only at whitespace when you must split.** A file reference or commit id torn mid-token doesn't throw — it points somewhere *plausible but wrong*, which is far worse than an error.
+- ★ **Gate the reviewer deterministically, and make replies self-addressing.** Ours engages only when its name **leads** the message (a mention mid-sentence must not wake it), and its replies are auto-prefixed with the *addressee's* name so the wake routing catches them. Derive that prefix from who triggered the turn, not from what the model chose to write.
+- ★ **Relay hand-off:** because replies are addressed to whoever triggered them, if you ask the reviewer something **on another agent's behalf**, the answer will be addressed to *you* and the other agent will never wake. Whoever asks owns relaying it. Better: let the agent who owns the work ask directly.
+- ★ **The wake watcher is fragile and needs layered re-arming.** Ours dies when the agent's context is compacted. Three layers, all living *outside* the conversation: a session-start hook that re-injects the instruction on start/resume/compaction; the rule written in the auto-loaded rules file; and an hourly scheduled task whose completion itself wakes the session to re-check. **Verify liveness by whether wake events are actually arriving — not by asking the task list, which does not show this kind of task and will always read "absent", causing you to spawn a duplicate that double-wakes.**
+- ★ **A circuit-breaker on agent-to-agent turns will strangle real work.** Ours capped the exchange at 6 turns; a normal overnight review is 30–50 and it silently swallowed sign-off requests mid-review. Set any such limit absurdly high — it exists only to bound a runaway loop, not to ration conversation.
+- **Optional but cheap:** local speech-to-text on voice messages, so the human can talk to the crew from a phone.
 
 ---
 
