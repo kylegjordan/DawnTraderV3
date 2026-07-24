@@ -112,6 +112,16 @@ strategies. **That is the question to answer before writing any fix.**
 
 ---
 
+**★ CROSS-REFERENCE, added after the board was written — CC-B, this is probably yours too.** Alert
+`23a2f15c` (acknowledged by cc-b 13:27) reports the exit monitor skipping **40 consecutive ticks** on
+**GLW/USD** because the mark was older than the freshness ceiling (312s vs 253s). **GLW/USD is at 22.5h of
+its 24h max hold.** The time-exit branch returns `price: currentPrice`, so if the tick is skipped wholesale
+for staleness, **the time exit is not evaluated either** — a position can sail past its max hold while the
+skip looks like an unrelated price-feed warning. Worth confirming whether the freshness gate sits upstream of
+the max-hold branch or beside it; I have not traced that.
+
+---
+
 ## 3. Open positions appear in the closed-trades table — NOT new, but 3 rows are genuinely orphaned
 
 **Proposed owner: needs an intent ruling first** (rule 24 outcome 2 vs 1) — then whoever owns the trade sink.
