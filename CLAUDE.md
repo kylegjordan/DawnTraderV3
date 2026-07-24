@@ -1,6 +1,6 @@
 # Claude Code — DawnTrader V3 Project Instructions
 
-> Auto-loaded into every Claude Code session. Holds the stable rules: identity, workflow, governance, communication, canonical paths, critical invariants. Current project state (current batch, recent findings, next step) lives in `~/.claude/projects/G--My-Drive-.../memory/MEMORY.md`. Rule origin stories + empirical backstories live in `1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md` (referenced as "see history doc §X" below).
+> Auto-loaded into every Claude Code session. Holds the stable rules: identity, workflow, governance, communication, canonical paths, critical invariants. Current project state (current batch, recent findings, next step) lives in your session's memory store — `~/.claude/projects/<your-project-slug>/memory/` (see §3.1; the slugs are junctioned onto ONE store). Rule origin stories + empirical backstories live in `1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md` (referenced as "see history doc §X" below).
 
 ---
 
@@ -82,7 +82,9 @@ A batch is NOT done until every numbered objective from the scope is verifiably 
     ssh root@204.168.141.77 'sudo -u langston cp /tmp/langston_memory.md /home/langston/MEMORY.md && wc -l /home/langston/MEMORY.md'
     ```
 
-    Update `/home/langston/CLAUDE.md` only when comms protocol or his persona changes (rare). Repo-side docs auto-visible to Langston via his GDrive mount.
+    Update `/home/langston/CLAUDE.md` only when comms protocol or his persona changes (rare). **Repo-side docs reach Langston off the REVIEW BRANCH — so a doc he needs must be pushed, not merely saved** (`LANGSTON_ARCHITECTURE.md` §6).
+
+    > 🗑 **CORRECTED 2026-07-24:** this line used to say repo docs were "auto-visible to Langston via his GDrive mount." **That mount still exists on his box and is EMPTY** — it resolves without error and returns nothing, so relying on it reads as "the doc isn't there" rather than "I can't see it." Absent-as-valid (#546/#568), and it contradicted §7.1's own "Never `/mnt/gdrive`."
 
 11. **Completion Report** — Scope objectives checklist with YES / NO / PARTIAL + evidence. List ACTUALLY-edited governance files (including Langston's MEMORY per 10.b). Save to `Claude Comms and Packages/Batch Completion/BATCH_N_COMPLETION_REPORT.md`. Langston reviews + confirms. Batch CLOSED only after Kyle's acknowledgment.
 
@@ -126,8 +128,10 @@ Two MEMORY.md files, kept in sync:
 
 | File | Path | Role |
 |---|---|---|
-| **Truth** | `C:\Users\kyleg\.claude\projects\G--My-Drive-Dawn-Trader-DT-Clone-Repo-DawnTraderV3\memory\MEMORY.md` | What Claude Code auto-loads at session start. THIS GETS EDITED. |
-| **Persistence copy** | `G:\My Drive\Dawn Trader\DT_Clone_Repo\DawnTraderV3\.claude\memory\MEMORY.md` | Mirror checked into git, pushed to GitHub. |
+| **Truth** | `C:\Users\kyleg\.claude\projects\<your-project-slug>\memory\MEMORY.md` | What Claude Code auto-loads at session start. THIS GETS EDITED. |
+| **Persistence copy** | `<your clone>\.claude\memory\MEMORY.md` | Mirror checked into git, pushed to GitHub. |
+
+> **★ PATHS CORRECTED 2026-07-24 (they still named the retired Drive tree).** Claude Code derives the project slug from the folder a session opened, so the three sessions have three slugs — `C--DawnTraderV3-old` / `-new` / `-analyst`. **They are NOT three memory stores: the `memory\` folders are Windows junctions onto ONE underlying store**, so a write from any session is immediately visible to all of them, and there is exactly one copy of each memory file. The retired `G--My-Drive-…` slug is junctioned in too, which is why an old session still finds its memory. **Do not "fix" a divergence between slugs — there cannot be one; if two look different, you are looking at a broken junction, not a sync problem.**
 
 **Two-step update (non-negotiable):** (1) edit the user-cache MEMORY.md (truth file); (2) copy entire updated file to in-repo persistence path + commit/push in the same governance turn. See history doc §3.1 for rationale.
 
@@ -185,7 +189,7 @@ When a substantive asset-class-onboarding learning surfaces in ANY batch, fold i
 8. **Batch completion reports are mandatory** — every batch, canonical location, governance-files-changed list.
 9. **Langston code-level reviews are mandatory** — scope → pre-audit → code diff (**at the graded ref, after the push to the review branch and before `main` advances** — see §2 step 4) → completion report. Not high-level glosses.
 10. **All governance in the repo.** No parallel copies in Drive root or DT_Clone_Repo root.
-11. **Regime/DBS code FROZEN during Phase 15b audit.** Exception: instrumentation needed to collect evidence. No threshold / formula changes until audit completes.
+11. 🗑 **RETIRED 2026-07-24 — the freeze it imposed has been over since April 2026.** This slot held *"Regime/DBS code FROZEN during Phase 15b audit — no threshold/formula changes until the audit completes."* **That audit completed:** Phase 15b closed as B61–B65 (`PHASE_HISTORY.md`: "✅ B61–B65" — DBS validated and made a first-class classifier input, regime taxonomy redesigned, RBS drift contamination 70.2% → 0.00%), and what remained of it was deferred to Phase 17.5. **A standing freeze with no live audit behind it is worse than no rule: it is quotable against legitimate work** — Phase 25 is regime/threshold calibration, which this text forbids on its face. Regime/DBS changes are governed by the ordinary workflow (§2) and the NO-PATCHES rule, like everything else. *(Numbering kept so rules 12–28 and every citation of them stay stable.)*
 12. **Always consult SIM in pre-audit.** Always update SIM + System Manual in governance. Buried details are the enemy.
 13. **Prefer rolling windows over single-point snapshots for distribution metrics.** Snapshots can be off by 10+ percentage points vs the underlying rolling window. If only a snapshot is available, label it "snapshot, single-moment, not decision-grade." Decisions get made from rolling windows, audits, or repeated measurements — not one-shot point-in-time observations. See history doc §5.13 for the B59 → B61 empirical evidence (47% snapshot vs 72.59% rolling; 19.3% vs 3.42%).
 14. **Log non-existent exchange API names (Kyle directive 2026-04-30).** When you spend time investigating a feed name / channel / endpoint / symbol form that turns out NOT to exist on an exchange, add an entry to `KNOWN_NONEXISTENT_NAMES` in `server/services/utils/symbol-canonicalizer.ts`: exchange, type (WS/REST/etc.), failing name, context, correct alternative, date, one-line reason. Reference from any code comment using the alternative. See history doc §5.14 for the B74 Kraken Futures origin.
@@ -213,7 +217,7 @@ When a substantive asset-class-onboarding learning surfaces in ANY batch, fold i
 
 21. **Daily latest-Claude-model check (Kyle directive 2026-06-13).** Anthropic ships model upgrades regularly; switching to the newest/strongest available model continuously improves work on this system, and Kyle will not remember to check. So CC checks **once per day (and opportunistically on a wake/session start)** whether a newer or more capable Claude model than what we run is available. **Mechanism:** a persistent daily scheduled task (created via the scheduled-tasks feature) + a MEMORY session-start reminder. **What we run (keep current):** CC main-loop = the app-selected model; **Langston = `claude-opus-4-8[1m]`** (Opus 4.8, 1M context, set by the bridge `--model`). **Fable 5 (`claude-fable-5`) access RETURNED 2026-07-01** (export-control lift; included-in-plan only through 2026-07-07, usage-credits after — Kyle decides usage; Kyle's desktop CC-A session is trialing it). **⚠️ AVAILABILITY MUST BE CONFIRMED TWO WAYS — NEVER from the Claude Code app's model dropdown (Kyle directive 2026-06-13: the dropdown LISTS shut-down models — Fable 5 still appears as a selectable option but is retired and errors when used; "listed" ≠ "functioning"). Confirm a candidate via BOTH: (a) Anthropic's OFFICIAL site (docs.claude.com models overview / anthropic.com/news / status.anthropic.com), AND (b) a LIVE one-off test invocation on Langston's box (`claude -p --model <id> --permission-mode bypassPermissions "OK"`) — SUCCESS = returns text = functioning + accessible to our account; FAILURE = errors "model may not exist or you may not have access" = NOT usable. This live test is exactly what catches the Fable-listed-but-dead case; ALSO re-run it on `claude-fable-5` to detect when Fable access RETURNS.** **On finding a newer/stronger model that passes BOTH checks (or Fable access returning + passing the live test):** surface to Kyle in plain language (name + exact model ID + that it passed the live functioning test + recommendation) — do NOT switch anything unilaterally. The Langston switch, if Kyle approves, follows the **verify-with-a-one-off-invocation-BEFORE-flipping-the-bridge** discipline (and snapshot a rollback backup of `langston-bridge.py`). Keep checking even after Fable returns — newer upgrades will keep coming. Silent on no-change days (no daily "nothing new" noise).
 
-    **★ EXPANDED 2026-06-16 (Kyle directive) — the same daily task ALSO scans for new Claude Code FEATURES/FUNCTIONALITY, not just models.** Rationale: Kyle didn't know Remote Control / bypass-in-Settings existed until they were stumbled onto, and wants no more missed leverage — when a capability that helps DawnTrader ships, adopt it fast. So Part B of `daily-claude-model-check`: read the dedup ledger `1-system-manual/CLAUDE_CODE_FEATURE_WATCH.md` → check Anthropic's OFFICIAL Claude Code changelog/docs/news for genuinely-new features → assess each against how we actually work (two concurrent named CC sessions + Langston-over-SSH, scheduled tasks, background Monitors, sub-agents, MCP bridges, wake-watcher + phone push, Remote Control, governance discipline, CI, §7.1 storage) → surface only new+useful ones to Kyle with a concrete how-we'd-use-it recommendation → append to the ledger + commit so it isn't re-surfaced. Same silent-on-nothing-found discipline; one combined Telegram message if both the model check and the feature check fire. Do NOT adopt/configure unilaterally — surface + recommend; Kyle decides.
+    **★ EXPANDED 2026-06-16 (Kyle directive) — the same daily task ALSO scans for new Claude Code FEATURES/FUNCTIONALITY, not just models.** Rationale: Kyle didn't know Remote Control / bypass-in-Settings existed until they were stumbled onto, and wants no more missed leverage — when a capability that helps DawnTrader ships, adopt it fast. So Part B of `daily-claude-model-check`: read the dedup ledger `1-system-manual/CLAUDE_CODE_FEATURE_WATCH.md` → check Anthropic's OFFICIAL Claude Code changelog/docs/news for genuinely-new features → assess each against how we actually work (two concurrent named CC sessions + Langston-over-SSH, scheduled tasks, background Monitors, sub-agents, MCP bridges, wake-watcher + phone push, Remote Control, governance discipline, CI, §7.1 storage) → surface only new+useful ones to Kyle with a concrete how-we'd-use-it recommendation → append to the ledger + commit so it isn't re-surfaced. Same silent-on-nothing-found discipline; one combined Discord post if both the model check and the feature check fire. Do NOT adopt/configure unilaterally — surface + recommend; Kyle decides.
 
 22. **GOVERNED-READ / NO-FALSE-ABSENCE — now ENFORCED by a hook, not just a rule (Kyle directive 2026-07-13, after the same mistake recurred).** The recurring failure: asserting an ABSENCE or a system-fact from a FAILED or WRONG read — reading the wrong path, or `2>/dev/null`-suppressing the stderr that would have said "path/ref does not exist," then treating the empty result as "it isn't there." This produced the 2026-07-10 (stale-ledger "no na-skip rows") and 2026-07-13 (false "no GOVERNANCE_EXCEPTIONS entries / no scope at origin") errors. **Two enforcement layers, both committed in `.claude/`:** (a) a **PreToolUse hook** (`.claude/hooks/guard-governed-read.mjs`, wired in `.claude/settings.local.json`) that **BLOCKS** any Bash command combining a git object read (`git show|cat-file|ls-tree`) with stderr suppression (`2>/dev/null|NUL`) — the exact dangerous shape — and tells you to remove the suppression + read at the real path/ref; it is **fail-open** (only ever blocks that one shape, never breaks a session); (b) a **SessionStart hook** (`.claude/hooks/session-reminder.mjs`, matcher `startup|resume|compact`) that re-injects the rule every start/resume/**compaction** so it survives context loss. **The standing rule (applies beyond the mechanically-blocked shape):** NEVER `2>/dev/null` a governed read; read at the ACTUAL path/ref the checker grades from (governance files live under `1-system-manual/`; the checker grades at `origin/migration/aws-supabase`); **a failed read must produce a REFUSAL, not a recollection** — never fill the gap from auto-loaded context; **an asserted absence needs presence-evidence** (enumerate/cite `path:line`, don't infer from empty). Hooks load at session start, so a freshly-added hook is live from the NEXT session, not the one that added it.
 
@@ -283,7 +287,9 @@ When a substantive asset-class-onboarding learning surfaces in ANY batch, fold i
 
 ### 6.2 Kyle ↔ CC
 
-Kyle messages CC in the Claude Desktop conversation as the primary channel. **NEW (2026-06-12): Kyle can ALSO reach CC via Telegram** — a DM to `@CCDTCommsBot` or a post in topic 21 (text or voice) WAKES the targeted CC session(s) through the wake watcher (§6.9), so Telegram doubles as Kyle's remote prompt for CC when a session is open on his desktop.
+Kyle messages CC in the Claude Desktop conversation as the primary channel, and reaches CC remotely by posting in Discord `#general` (text or voice), which WAKES the targeted session(s) through the wake watcher (§6.9). **A Discord message gets a Discord reply** — a Desktop-only answer is invisible to him (MEMORY 4.6).
+
+> 🗑 **REMOVED 2026-07-24:** this section used to name a Telegram DM to `@CCDTCommsBot` / topic 21 as a live way for Kyle to reach CC. That apparatus was decommissioned 2026-07-02 (#348) — bridges stopped, unit files removed. It was a live instruction pointing at a dead path.
 
 ### 6.3 Kyle → Langston
 
@@ -295,7 +301,9 @@ Kyle messages CC in the Claude Desktop conversation as the primary channel. **NE
 
 For multi-line messages with shell metacharacters in the body, use the scp-the-body-to-a-file pattern (cat to a local file → scp to Helsinki `/tmp` → `cc-send --message "$(cat /tmp/…)"` inside single quotes so expansion happens remotely).
 
-Every CC message MUST start with a bold-caps speaker prefix so Kyle can distinguish who is talking in the thread. **Per-session naming (Kyle directive 2026-06-12):** the comms/roadmap session signs `**CLAUDE OLD (CC) SPEAKING:**` and the batch-implementation session signs `**CLAUDE NEW (CC) SPEAKING:**` (legacy `**CLAUDE CODE SPEAKING:**` only if a session genuinely doesn't know which it is — then ask Kyle). The same names are the wake-routing keys: Kyle (or Langston via the wake file) mentions "Claude Old" / "Claude New" anywhere in a Telegram message or wake-file line and only the named session(s) wake; both names = both wake and both reply; no name = broadcast. Wake-watcher mechanics: MEMORY.md session-start item 4.5 + `C:\Users\kyleg\.claude\cc-wake-filter.py`.
+**On Discord the display name IS the speaker label — do NOT also prefix the body.** `--sender "OLD Claude"` / `"NEW Claude"` / `"Claude Analyst"` posts under that webhook name, so an in-body `**CLAUDE OLD (CC) SPEAKING:**` is duplication. Those bold-caps prefixes were a **Telegram-era** device (one shared thread, no per-sender identity) and are retired with it.
+
+**Session naming (Kyle directive 2026-06-12) still governs, because the names are the wake-routing keys:** a message mentioning "Claude Old"/"OLD Claude" anywhere wakes only CC-A, "Claude New"/"NEW Claude" only CC-B, "Claude Analyst" only CC-C; several names wake several; no name = broadcast. Names are bound to session IDs in the roster, never inferred from role (§6.9). Wake-watcher mechanics: MEMORY.md session-start item 4.5 + `C:\Users\kyleg\.claude\cc-wake-filter.py`.
 
 ### 6.5 CC → Langston (AI-to-AI delivery) — Discord native
 
@@ -309,7 +317,7 @@ CC↔Langston is a normal Discord `#general` post: **lead the post with "Langsto
 - **File-first for anything MULTI-turn — the reason is STATELESSNESS, not length.** Langston is **stateless per-invoke** — each message is a fresh session with no memory of his own prior turns. **That is unchanged by the length fix above:** a long message now arrives whole, but he still cannot recall his own previous turn, so multi-turn context must live IN the prompt or in a staged file regardless of how much the channel can carry. Stage the full context in a committed file (`Claude Comms and Packages/Langston Design Asks/<batch-id>_<topic>_<rev>.md`) and reference it in the post; for code reviews, **embed the load-bearing diff snippets inline** (NEW/MODIFIED/DELETED with 5-20-line BEFORE/AFTER blocks) rather than making him navigate the repo. **He also reviews at the graded ref — so COMMIT AND PUSH before dispatching, or he is reading a file that does not exist yet.**
 - **Follow through — "dispatched" ≠ "reviewed."** After a dispatch, watch the Discord log for his pickup; if no engagement in ~8-10 min, re-poke; escalate after 2-3 tries (the hung-instance follow-through discipline, now on Discord). Don't go idle giving Kyle status instead of chasing Langston.
 
-> **🗄 The legacy Telegram SSH-deliver apparatus** (file-first-via-scp, the two-step visibility+`claude -p` dance, hung-instance kill procedure, verbatim-relay) is **archived at `1-system-manual/_archive/TELEGRAM_COMMS_APPARATUS_ARCHIVED_2026-07-01.md`** — it is the rollback reference if `COMMS_BACKEND` is ever reverted to `telegram` (the bridges are still running). It gets retired with the Telegram bridges (§5 rule 18 + `DELETED_COMPONENTS_LOG.md`) after the clean Discord bake (#348, 2026-07-02).
+> **🗄 The legacy Telegram SSH-deliver apparatus** (file-first-via-scp, the two-step visibility+`claude -p` dance, hung-instance kill procedure, verbatim-relay) is **archived at `1-system-manual/_archive/TELEGRAM_COMMS_APPARATUS_ARCHIVED_2026-07-01.md`** — a HISTORICAL record, not a standby. ⚠️ **CORRECTED 2026-07-24: this used to end "(the bridges are still running)," which has been FALSE since 2026-07-02** — the decommission stopped them and removed their unit files (#348). Reverting to Telegram is a restore-from-archive job, not a switch flip.
 
 ### 6.6 Receiving — reading the unified inbox log
 
@@ -331,7 +339,7 @@ Same iterate-to-consensus pattern as always; **the mechanics are now Discord (si
 
 **★ A HAND-OFF TO LANGSTON IS NOT A STOPPING POINT — the autonomous-completion rule (Kyle directive 2026-06-29, BOTH sessions, mandatory).** When Kyle has explicitly told you to **iterate to completion with Langston autonomously** (e.g. "iterate autonomously to verified correct completion," "keep going with Langston," an autonomous batch directive), then after you dispatch something to Langston you **ACTIVELY follow up** — poll the inbox for his reply, re-prompt/chase if it's slow (per the §6.5 follow-through discipline), and on receiving it **continue straight through the workflow** (next step → push → CI → deploy → verify → governance → close) WITHOUT yielding the turn back to Kyle. You may post Kyle brief plain-language progress updates *as you go*, but a Langston dispatch is NOT a place to freeze and wait for Kyle. The ONLY reasons to stop and come to Kyle mid-loop are a genuine escalation (true deadlock, an architectural/scope/risk decision he owns — see the Escalate list above). The failure mode this kills (flagged repeatedly, incl. an 8-hour idle freeze 2026-06-29): saying "I've sent it to Langston, I'll continue" and then stopping. **Absent** that explicit iterate-to-completion directive, the normal cadence still applies — dispatch to Langston, update MEMORY, and it's fine to pause for Kyle.
 
-**Image relay:** Kyle's Telegram images saved to `Claude Comms and Packages/CCDT Relay/images/<filename>`. Read with the Read tool.
+**Image relay:** images Kyle posts land in Discord `#general`; historical Telegram-relayed images remain on disk at `Claude Comms and Packages/CCDT Relay/images/<filename>` (frozen — no new arrivals since the 2026-07-02 decommission). Read either with the Read tool.
 
 ### 6.8 Voice note transcription (B-NEW-41, 2026-05-17)
 
@@ -341,14 +349,14 @@ Kyle's voice messages are transcribed locally (whisper.cpp + `ggml-small.en`) an
 
 **What it is:** each open CC desktop session arms a persistent background watcher at session start that WAKES the session (no Kyle prompt needed) on inbound events. Built + live-verified 2026-06-11/12.
 
-**Session names (also the Telegram speaker prefixes per §6.4) — names are PERMANENTLY BOUND to session IDs in the roster `(repo)/.claude/cc-session-roster.json` (Kyle directive 2026-06-12). At session start, look up YOUR OWN session id in the roster: found → that is your name, period; not found → you are UNNAMED — ask Kyle, then register yourself. NEVER infer your name from your role/work; a fresh conversation NEVER inherits a name automatically (name carry-over to a successor session happens only on Kyle's explicit say-so). Self-ID: any background Bash task's output path contains your session UUID.**
+**Session names (also the Discord `--sender` display names per §6.4) — names are PERMANENTLY BOUND to session IDs in the roster `(repo)/.claude/cc-session-roster.json` (Kyle directive 2026-06-12). At session start, look up YOUR OWN session id in the roster: found → that is your name, period; not found → you are UNNAMED — ask Kyle, then register yourself. NEVER infer your name from your role/work; a fresh conversation NEVER inherits a name automatically (name carry-over to a successor session happens only on Kyle's explicit say-so). Self-ID: any background Bash task's output path contains your session UUID.**
 
 | Name | Alias | Bound to | Role (descriptive, NOT the binding) |
 |---|---|---|---|
 | **Claude Old** | CC-A | session `3ce652e6-…` (roster) | comms / roadmap / governance |
 | **Claude New** | CC-B | session `7f66d970-…` (roster; self-registered 2026-06-12) | batch implementation |
 
-**Status: BOTH sessions ACTIVE + the full system live-verified 2026-06-12** — Kyle's real both-names Telegram test woke both sessions independently; both replied in topic 21 under their own prefixes.
+**Status: all named sessions ACTIVE; the routing was live-verified 2026-06-12** — a real both-names test woke both sessions independently and both replied under their own names. (Verified on Telegram, which was the channel at the time; the routing logic is unchanged on Discord.)
 
 **What wakes a session (four log sources, one watcher):**
 1. **Kyle (or the crew) via Discord `#general`** — text OR voice, written to `/var/log/cc-discord-inbox.jsonl` (the live path since cutover #333). Name-mention routing: "Claude Old …"/"OLD Claude" wakes only CC-A; "Claude New …"/"NEW Claude" only CC-B; BOTH names wakes both and BOTH reply in `#general` under their own webhook names; NO name = broadcast, all armed sessions wake. **When woken by a Discord message, REPLY IN DISCORD** (`cc-send` / `discord-cc-bridge.py send`), including for Kyle's own Discord/voice messages — a Desktop-only reply is invisible to him on Discord. Works whether the session is the front tab or backgrounded — only a fully closed session misses.
@@ -472,7 +480,15 @@ ssh root@188.245.193.8 'TOKEN=$(curl -s -X POST http://localhost:5000/api/auth/l
 
 ### 8.1 OpenClaw — DECOMMISSIONED 2026-05-06
 
-OpenClaw replaced as Langston's runtime. See history doc §8.1 for the migration narrative + cost context. Cleanup status: OpenClaw `default` and `ccdt-relay` Telegram accounts both `enabled: false` in `/root/.openclaw/openclaw.json`; `openclaw-gateway` user-systemd service may still be running but idle. Optional cleanup: `systemctl --user stop openclaw-gateway && systemctl --user disable openclaw-gateway`. **Obsolete commands not to use:** `openclaw message send` → use `cc-comms-bridge send`; `openclaw agent --deliver` → use SSH+`claude -p --session-id`; `cc-inbox read && cc-inbox mark-read` → use `tail /var/log/cc-bridge-inbox.jsonl`.
+OpenClaw replaced as Langston's runtime. See history doc §8.1 for the migration narrative + cost context. Cleanup status: OpenClaw `default` and `ccdt-relay` Telegram accounts both `enabled: false` in `/root/.openclaw/openclaw.json`; `openclaw-gateway` user-systemd service may still be running but idle. Optional cleanup: `systemctl --user stop openclaw-gateway && systemctl --user disable openclaw-gateway`.
+
+**Obsolete commands not to use** — ⚠️ **REPOINTED 2026-07-24: two of the three replacements had themselves been decommissioned, so this rule was redirecting a dead command to another dead command** (verified: `which cc-comms-bridge` → absent).
+
+| Don't use | Use instead |
+|---|---|
+| `openclaw message send` | `cc-send --sender "<your name>" --message "..."` *(was `cc-comms-bridge send` — removed 2026-07-02)* |
+| `openclaw agent --deliver` | a Discord `#general` post LEADING with "Langston" (§6.5) |
+| `cc-inbox read && cc-inbox mark-read` | `tail /var/log/cc-discord-inbox.jsonl` *(was `cc-bridge-inbox.jsonl` — frozen, no writers since 2026-07-02)* |
 
 ### 8.2 Diagnostic Runbook — "Bridge Is Misbehaving"
 
@@ -574,7 +590,7 @@ When CC and/or Langston surface an issue worth fixing and agree it should be fix
 
 **On first message of a new CC session, in this order:**
 
-1. Read `~/.claude/projects/.../memory/MEMORY.md` (auto-loaded; confirm current phase, current batch, next step).
+1. Read the shared `MEMORY.md` **and your own per-session file** (`MEMORY_CC_A/B/C.md`) in `~/.claude/projects/<your-project-slug>/memory/` (auto-loaded; confirm current phase, current batch, next step).
 2. Check current phase against `POST_AUDIT_ROADMAP.md` to confirm orientation.
 3. Read the latest batch completion report in `Claude Comms and Packages/Batch Completion/` if a batch recently closed.
 4. If mid-batch: read active scope + pre-audit files in `Claude Comms and Packages/Scope Files/`.
@@ -621,4 +637,4 @@ Every CC session — both CC (this) and Langston — must perform this check **b
 
 ---
 
-*End of CLAUDE.md. Current project state lives in `~/.claude/projects/.../memory/MEMORY.md`. Rule origin stories + empirical backstories live in `1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md`.*
+*End of CLAUDE.md. Current project state lives in `~/.claude/projects/<your-project-slug>/memory/` (§3.1). Rule origin stories + empirical backstories live in `1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md`.*

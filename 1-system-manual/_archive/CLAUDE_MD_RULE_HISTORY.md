@@ -272,4 +272,25 @@ The TOP-OF-REPORT declaration makes the gap impossible to miss.
 
 ---
 
+## §DEAD-RULES — the 2026-07-24 obsolete-rule sweep (Kyle directive, after CC-A's rule-25 find)
+
+**What happened.** CC-A, re-reading `CLAUDE.md` after the repo moved off Google Drive, found rule 25 still asserting that the path-limited commit form *segfaults silently* and therefore telling the reader to reach for the `CC_COMMIT_ATTESTED` override. That premise had only ever been true on the GDrive FUSE mount. Kyle's response was the important part: **their point was not "correct that rule" — it was "that rule should not be in the rulebook at all, because we do not use that system anymore," and go find the others.**
+
+**The sweep found seven more, in three distinct shapes.** The shapes matter more than the count, because they are what to look for next time:
+
+1. **A live instruction pointing at a dead path.** §6.2 named a Telegram DM to `@CCDTCommsBot` / topic 21 as a current way for Kyle to reach CC — three weeks after the bridges were stopped and their unit files removed (#348). Also §8.1, which redirected an obsolete OpenClaw command to `cc-comms-bridge send` — *itself* removed on the same date. **A dead pointer to a dead pointer: the rule had been rewritten once already and still went stale, because only the near end was checked.**
+
+2. **A rule whose premise silently evaporated.** §3 step 10.b said repo docs were "auto-visible to Langston via his GDrive mount." **The mount still exists on his box and is empty** — it resolves without error and returns nothing. That is the absent-as-valid class (#546/#568) sitting inside governance itself: a reader relying on it concludes *the document isn't there*, not *I cannot see it*. It also flatly contradicted §7.1's own "Never `/mnt/gdrive`."
+
+3. **A freeze that outlived its audit.** Rule 11 froze all regime/DBS threshold and formula changes "until the Phase 15b audit completes." **It completed in April 2026** (B61–B65; RBS drift contamination 70.2% → 0.00%). Left standing, it was quotable against Phase 25 — which *is* regime and threshold calibration. **A stale freeze is the most dangerous shape of all, because a dead permission is merely useless while a dead prohibition is enforceable.**
+
+**And the worst one was not in `CLAUDE.md`.** The shared `MEMORY.md` — auto-loaded by every session at every start *and every compaction* — still opened its **operational non-negotiables** with "test on the `C:\dev` bench" and "push only from the GoogleDrive folder." `C:\dev` had been deleted and the Drive folder's push URL deliberately invalidated. A session obeying its own non-negotiables faithfully would have failed at git. **The block asserting that violations are "a process failure, not a judgment call" was the block that was wrong.**
+
+**The rule this produced:** when a system is retired, the retirement is not finished when the machinery stops. **Grep the always-loaded files for its name and re-read every hit** — the failure is never the entry that says "X is retired," which is easy to write and easy to find. It is the *other* entry, written earlier for a different purpose, that quietly depends on X still working.
+
+**And the numbering convention:** a retired rule keeps its number and is marked 🗑 in place, with what it used to say and why it went. Renumbering would break every citation of rules 12–28 across the doc set, and a rule that vanishes silently gets reinvented by the next person who hits the problem it was written for.
+
+
+---
+
 *End of CLAUDE_MD_RULE_HISTORY.md archive companion. Cross-references from CLAUDE.md use the section labels (e.g., "see §1.PL", "see §5.16") to locate the full backstory here.*
