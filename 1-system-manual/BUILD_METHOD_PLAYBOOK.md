@@ -105,6 +105,19 @@ A unit of work ("batch") is not done when the code works. It is done when the ob
 
 **Tier 1 — every batch, no exceptions:** a batch catalog (one row per batch), a phase/status history, the agent's own working memory, the scope, and the completion report.
 
+### 5.1 ★ THE AGENTS' MEMORY AND SESSION STORAGE — how it actually works, and its two traps
+
+Each agent has a **working-memory file it auto-loads at session start**, plus the harness's own per-project store (conversation transcripts). Both matter, and both have a sharp edge.
+
+- ★ **ONE memory file PER AGENT, plus one shared file for consensus truths.** We started with a single shared file and the concurrent agents **clobbered each other's state**. Split it: each agent reads and writes **only its own**, and may read the others' for visibility. The shared file holds only protocols and settled decisions, edited surgically.
+- ★ **Cap each memory file and enforce the cap in bytes, not lines.** Ours hit ~8× its cap by narrating every finished batch in full; dense paragraphs blow a byte budget while looking short. **The discipline: the moment work closes, collapse it to ONE line pointing at the repository record.** Keep only standing rules, identity, the one in-flight item, and things that exist nowhere else.
+- ★ **Mirror the memory into the repository.** The live file sits in the harness's private store — outside the project, unversioned, and easy to lose. Copy it into the repo in the same turn you edit it, so it is backed up and reviewable.
+- ★★ **TRAP 1 — THE PROJECT STORE IS KEYED TO THE WORKING FOLDER'S PATH.** Change the folder an agent runs from and the harness looks under a *new* key: **it creates an empty store and the agent's memory and history appear to be gone** (the files are safe under the old key — they are simply not where it now looks).
+  - **The fix, and it must be done BEFORE the switch:** create a filesystem-level link at the new path pointing at the real store. On Windows a **junction** works and is transparent to every program; the equivalent elsewhere is a symlink. **Do it for every agent you are moving** — we created two of three and only caught the missing one by checking.
+  - **Do not attempt to physically rename the store while a session is live** — the running session's own transcript is inside it.
+  - **Verify a link by writing a marker through one path and reading it back through the other.** Identical directory listings prove nothing; they look the same whether it is one directory or two copies quietly diverging.
+- ★ **TRAP 2 — TRANSCRIPTS GROW WITHOUT BOUND AND DEGRADE THE SESSION.** Ours reached ~300 MB. Past a few hundred megabytes the interface misbehaves and context overhead climbs. Keep a **trim/dedup procedure** as a named runbook; the session must be closed during any file swap.
+
 **Tier 2 — when applicable, judged explicitly:** the architecture/design manual; a **component dependency map** (for each component: what feeds it, what consumes it, what shared state it touches, what runs it in the background, and the blast radius of changing it); a change/fix registry; a roadmap; an open-issues list; a deleted-components log; a settings/parameter registry.
 
 - ★ **The dependency map is the highest-leverage document in the set.** It is what turns "I think this is only called in two places" into a fact. It is also the one most likely to be skipped.
