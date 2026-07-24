@@ -2559,6 +2559,17 @@ These two Python bridges run on the Hetzner Helsinki agent box (`204.168.141.77`
 
 ## Discord Comms Fabric (Hetzner Helsinki) — Added B-DISCORD (2026-06-20)
 
+> **★ CONTENT UPDATE — B-REPO-RELOCATE (2026-07-23): Langston's REVIEW-READ PATH is now part of this fabric and has NO working copy.**
+>
+> | Component | Path | Upstream feeders | Downstream consumers | Blast radius |
+> |---|---|---|---|---|
+> | `resolve_review_ref()` + REVIEW SOURCE stamp | inside `discord-langston-bridge.py` | `git ls-remote` against GitHub `migration/aws-supabase` | every `claude -p` invocation of Langston — the sha is prepended to his prompt | **If it fails, his prompt carries an explicit DO-NOT-ASSERT warning instead of a sha** (fail-loud, never silent). A wrong sha here means every review that turn is graded at the wrong ref. |
+> | `dt-review` | Helsinki `/usr/local/bin/` | GitHub (fetch) → `/srv/dawntrader-backup.git` | Langston's whole-tree searches only (caller census, blast radius) | **PULLS FROM GITHUB BEFORE EVERY READ** and REFUSES on failed fetch. Single-file reads do NOT use it — they go straight to the raw GitHub URL at the stamped sha. |
+> | `/srv/dawntrader-backup.git` | Helsinki, **langston-owned**, push URL `DISABLED://` | `dt-backup-sync.sh` cron `*/15` (runs **as langston** — root tripped git's dubious-ownership guard and silently emptied every field) | the DR backup **and** `dt-review`'s search corpus — one object, two roles | Reproduction-gated (clone from it, match a known blob). Its FAIL message distinguishes **INFRA** (couldn't read) from **REPRODUCE** (genuinely bad) — the two need opposite responses. |
+> | `dt-push-notice.sh` | Helsinki `/usr/local/bin/`, cron `*/2` | `git ls-remote` on the review branch | one line to `#general` when the branch head moves | Read-only w.r.t. the branch; cannot write to it. Deliberately carries **the sha and nothing else** (Kyle directive). |
+>
+> **RETIRED by this batch:** Langston's `/home/langston/DawnTraderV3` working clone (existed for hours on 2026-07-23; over-built and deleted — reads and searches never needed a checkout) and the `/mnt/gdrive` review path (the mount that used to wedge his long reviews, §8.2 item 9).
+
 **The LIVE comms backend (switched at cutover #333, 2026-06-25).** Replaces the Telegram fabric above as the day-to-day channel. **The win:** Discord delivers one bot's messages to another bot (bots receive each other's `MESSAGE_CREATE`), so **CC↔Langston is a native in-channel exchange** — the entire Telegram §6.5 SSH-deliver / file-first / hung-instance apparatus is obsoleted by a normal `on_message` handler. Telegram blocks bot-to-bot at the platform level; Discord does not.
 
 **Status: LIVE / SOLE BACKEND.** `COMMS_BACKEND=discord` (in `/etc/dawntrader/comms-active.env`) since the 2026-06-25 cutover (#333) — all CC outbound (`cc-send` + §10.5 alerts) + the Langston bot-to-bot exchange run on Discord `#general`. **The Telegram bridges were DECOMMISSIONED 2026-07-02 (B-TELEGRAM-DECOMM, #348) after a clean 7-day bake** — stopped, unit files removed, scripts archived (Helsinki `/root/telegram-bridges-archive-2026-07-02/` + repo `_archive/deleted-code/*.removed`; `DELETED_COMPONENTS_LOG.md` entry). `cc-send`'s telegram leg now FAILS LOUDLY. Bridge source lives IN-REPO at `comms-infra/discord/` (unlike the Telegram bridges which are out-of-repo at `/usr/local/bin/`) and is deployed to Helsinki `/opt/discord-bridges/` (venv, discord.py 2.7.1).
