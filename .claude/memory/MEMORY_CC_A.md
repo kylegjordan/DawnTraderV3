@@ -5,24 +5,22 @@
 
 ---
 
-## ▶ ACTIVE BATCH — B-RETIRED-SCORE-REMOVAL (#558). A0 DONE + APPROVED. **A1 UNBLOCKED — next action is to CUT A1 (the core removal).**
+## ▶ ACTIVE BATCH — B-RETIRED-SCORE-REMOVAL (#558). A0 ✅ + A1 ✅ SHIPPED + LANGSTON STEP-4 SIGN-OFF. **NEXT: DEPLOY A1 to staging + verify (UI §9.3), then CUT A2 (xStock).**
+
+### A1 ✅ SHIPPED + SIGNED-OFF (2026-07-25, head `8939105f8`, commit `7512ddf19`; CI `30135581915` green)
+- 6 files (+192/-86): `ready_to_buy_service.ts` (nullable-col writers removed, tiebreaker→r_multiple via new shared `rMultipleCore`, ranker collapse to sole `r_multiple` arm, getQueuedSignals→queuedAt), `schema.ts` (final_score `.notNull()` dropped), migration `2026-07-25-b-retired-score-removal-final-score-nullable.sql`(+rollback out-of-MANIFEST), test, MANIFEST.
+- **Langston Step-4: SIGN-OFF, no code changes.** Verified extraction behavior-equivalent line-by-line; slice boundary correct (defer nothing else); queuedAt+migration ordering approved. **Both §9.4 conditions met:** (1) telemetry-reader slice homed = **#582** (`B-FINALSCORE-TELEMETRY-RETIRE`, Phase-B prerequisite); (2) census doc records the avgFinalScore trace (decision-grade paths source emit-time/per-trade, NOT the nulling column → no calibration shift) + ON CONFLICT cite. Governance commit `92f70d64b`.
+- **DEPLOY = OUTWARD (restarts paper engine + runs migration) → confirmed with Kyle before advancing.** Migration ordering: nullable-migration BEFORE/with the no-writer code (opposite of a DROP).
 
 **Kyle's decision: REMOVE EVERYTHING** (finalScore + hybridScore + control arms). Docs: `Claude Comms and Packages/Scope Files/B_RETIRED_SCORE_REMOVAL_{SCOPE,PRE_AUDIT,568_CENSUS}.md`. The census + pre-audit are the authoritative plan; Langston re-derives every diff at Step-4.
 
-### PHASE ORDER (correctness-forced): A0 ✅ → **A1 (next)** → A2 (xStock) → B (drop column)
-- **A0 ✅ SHIPPED + APPROVED + CI-GREEN (`5c388acbd`).** VTS hybrid-confluence convergence in `vts-runner.ts`: `hybridConfidence` first term `finalScore`→**`signal.predictiveConfidence`** (:4986); buffer strength `hybridScore`→**`signal.patternStrength`** (:4958). **★ LESSON: my first A0 (`6142d6993`) read PHANTOM fields off `tradeRecord` (Phase10TradeRecord has no `confidence`/`patternStrength` — they're on the sibling `signal`/VirtualSignal); both constant-folded. Langston caught it. Fixed to source off `signal`.** Q6 data-lineage note recorded (`PRE_AUDIT §10.06`, #580): staging n=28,328, active `confidence` mean 0.73 vs OLD `finalScore` mean 0.60 → swap moves VTS term UP toward active range (intended). `predictiveConfidence` itself has NO populated sink (measured 0 rows) — documented seam, superseded-by-A1-removal.
-- **★ LANGSTON'S A1 ORDERING CONSTRAINT:** retire `hybridConfidence`'s VTS consumers (`vts-runner.ts:4976` `finalScore` / `:4994` `totalFinalScore`) **before or with** the scalar swap, so the +0.05 never lands in a still-read field.
+### PHASE ORDER (correctness-forced): A0 ✅ → A1 ✅ → **A2 (xStock, next)** → B (drop column)
+- **A0 ✅** (`5c388acbd`) VTS convergence — one-liner; detail in repo reports + #580.
+- **A2 = xStock slice (NEXT after A1 deploy):** the `eval-cycle.ts` finalScore cluster (xStock path). Pull + re-pin at ref before cutting; same nullable-already-done column (A2 is code readers on the xStock side, not another migration).
+- **DEFERRED slices (Langston-APPROVED A1 boundary — do NOT fold into A1):** SQEInput.finalScore `:1094` (crosses into `signal_quality_evaluator.ts` = SQE-contract slice) · avgFinalScore telemetry readers = **#582** (`B-FINALSCORE-TELEMETRY-RETIRE`, Phase-B prereq) · metadata.finalScore/originalFinalScore bookkeeping · `score-calculator.calculateFinalScore` def + non-RTB callers (SQE `:524`, quality_index `:319`) · `trading-engine.ts:241` = **#578** module removal · orphan cluster (criteria-limiter/applyGovernance/computePerformanceScore, 0 live callers).
+- **BUCKET-B LANDMINE (Phase B, NOT before): `telemetry_history` `finalScore/hybridScore/regimeWeight/predictiveConfidence` columns hold COST DATA** (`cost-telemetry.ts:109`) — HARD EXCLUSION from the drop set.
 
-### A1 = THE CORE REMOVAL in `ready_to_buy_service.ts` (sites PINNED at ref, board CLAIMED [34]). Start with nullable-column+writers migration + ranker collapse (Langston's steer).
-- **NOT-NULL column** `rtb_signals.final_score` (`schema.ts:1943`): make **NULLABLE + remove writers in the SAME migration** (§8.1 — split either way breaks prod). Writers: `ready_to_buy_service.ts:1094` + **`:1151`** (`finalScore: refreshedFinalScore.toString()`), and the queue-insert writer in `insertData` (re-pin — grep for it). Migration = gitignored `*.sql` → `git add -f` + register in `drizzle/migrations/MANIFEST.txt` (rollback file stays OUT).
-- **★ TIEBREAKER (Kyle-ruled, the headline): `queueSQESignal` duplicate resolution `:2105-2113`** — `existingScore >= newScore` on `finalScore` → **REPLACE with the live rank key `r_multiple`** (`signalRMultiple`/`computeRankKey`), NOT a delete. **HARD:** kill the `parseFloat(x||'0')` coerce; `chosenNetEv`-absent on either side → **explicit COUNTED keep-first branch** (that's where #574's fabricated-input path bites). Both sides computable (entryPrice/stopPrice required).
-- **RANKER COLLAPSE:** `computeRankKey:1705` control arms (`:1706` confidence→finalScore, `:1707` ranking_score); `RANKER_STRATEGIES:256`; `getActiveRanker:260`; retire the `active_ranker` DB row. Collapse to single-arm `signalRMultiple`. `rankArm` is rendered NOWHERE client-side (safe).
-- **getQueuedSignals ordering** `:1400/:1408/:1416` (`orderBy:'finalScore'`) → re-point to the live rank key (don't drop — display consumers get nondeterministic order).
-- **`calculateFinalScore` import `:35`** is a SHARED destructure — **drop the SYMBOL only, KEEP `calculateRegimeWeight`** (live 0.30 gate). Delete `calculateFinalScore` in `score-calculator.ts:44` + its 2 callers (SQE `:524`, quality_index `:319`) + the inline `refreshedFinalScore` block (`:806`) + the SQE shadow-gate block (`signal_quality_evaluator.ts:338-347`, CITE-AND-CLOSE the B8.5a governed plan) + orphan cluster (criteria-limiter module / applyGovernance / computePerformanceScore — all 0 live callers) + `trading-engine.ts:241` (metadata-only, no reader; keep goalAlignmentScore).
-- **⚠️ CC-B is editing `signal-orchestrator.ts` (board [33], #556/B8.5k, tiny atr line ~:1100).** My A1 finalScore reads in that file collide → **defer signal-orchestrator/SQE-orchestrator slices until CC-B lands; do the ready_to_buy_service.ts-only slice FIRST.** Pull before cutting.
-- **BUCKET-B LANDMINE (Phase B, NOT A1): `telemetry_history` `finalScore/hybridScore/regimeWeight/predictiveConfidence` columns hold COST DATA** (`cost-telemetry.ts:109`) — HARD EXCLUSION from the drop set.
-
-### VERIFY DISCIPLINE (today's hard-won lessons — apply on A1):
+### VERIFY DISCIPLINE (hard-won — apply on A2):
 - **tsc: read the FULL untruncated `npx tsc --noEmit 2>&1 | grep '<file>'`; confirm EDITED line numbers appear in ZERO errors. NEVER `head`-limit** (that hid the A0 phantom errors). **Green CI is NOT proof** — `check-tsc-baseline` dedups new TS2339s into a file's existing baselined ones (#579, CC-B owns).
 - Explicit-paths commit; `git diff --cached --name-only` = only my paths; pull before push; CI green before advancing.
 
@@ -40,7 +38,8 @@
 ---
 
 ## 📌 OPEN THREADS
-- **#558 A1** — the active work (above). Board [34] held.
+- **#558** — A1 shipped+signed-off (above); NEXT = deploy A1 (confirm w/ Kyle — outward) then A2. Board [34] held (release after deploy).
+- **#582** — finalScore telemetry-reader retirement (`B-FINALSCORE-TELEMETRY-RETIRE`, Phase-B prereq). Owner CC-A. Langston Step-4 condition, homed.
 - **#578** — legacy `TradingEngine` (runs in neither mode; paper never `.start()`ed, live Phase-21-gated-refuses; `active-execution-engine` is the real paper+live pipeline). Kyle-ruled legacy → its own removal batch `B-TRADING-ENGINE-REMOVAL`, owner CC-A. Not #558.
 - **#580** — A0 predictiveConfidence-not-persisted seam; superseded-by-A1-removal; owner CC-A.
 - **#570** — RTB bucket-2 refresh gap → **HANDED to CC-C/Analyst** (rides their item 1). Not mine anymore.
@@ -53,5 +52,6 @@
 
 ## ✅ CLOSED — ONE LINE (repo is authoritative)
 - **A0** (2026-07-25, `5c388acbd`) — VTS convergence, approved, CI-green.
+- **A1** (2026-07-25, `7512ddf19`→`8939105f8`) — core finalScore removal in ready_to_buy_service; Langston Step-4 SIGN-OFF; gov `92f70d64b`; #582 homed. Awaiting deploy.
 - **#441 rescue** (`c65813bcd`+`5e2e27449`) — freshness-monitor script committed to save it; SUPERSEDED header; can't run (no migration for its table); OPEN in GOVERNANCE_EXCEPTIONS.
 - **B-RTB-REFRESH-CONSOLIDATE OBJ-1** · **#559 OBJ-2** · **B-REGIME-REFRESH-PIPE** · **#555** — all shipped/verified; see repo reports.
