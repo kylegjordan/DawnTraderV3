@@ -241,6 +241,16 @@ stops opening new xStock positions as the weekend close approaches**. Kyle recal
 the week as standard practice at trading firms. It was either never implemented or booked into a later phase.
 **Working-as-designed-but-unaddressed** — rule 24 outcome (2), so it is a decision for Kyle, not a fix.
 
+**★ ELEVATED 2026-07-25 — this is now the load-bearing piece.** The item-1 slot-jam analysis + Kyle's
+weekend-stickiness hypothesis (both confirmed: the July 18-22 jam was Friday xStocks held through the weekend
+with a broken time-exit) make the pre-weekend throttle the front-line fix. Kyle added a broader insight —
+xStock order-book depth also drops OUTSIDE US trading hours, so xStocks stick overnight too, not just on
+weekends. All three candidate fixes (Friday dampening / a non-time-based stale-activity exit / per-xStock
+time-of-day entry gating) are captured for discussion in
+`Claude Comms and Packages/Langston Design Asks/XSTOCK_TRADING_WINDOW_AND_EXIT_NOTES.md`. A one-time
+`monday-slot-jam-recheck` scheduled task (Mon 2026-07-27 10:00 ET) watches whether the jam is re-forming this
+week and surfaces these solutions if so.
+
 ---
 
 ## 5. Regime column on the paper open-trades table shows one part instead of three
