@@ -168,6 +168,36 @@ Zero asset-class references in 321 lines, in the component that watches TCL prom
 
 ---
 
+### HOP B→D — FILTERED-SURVIVOR POOL → SIGNAL GENERATION (strategy selection + sizing → SQE input). *Spans the generation stage that bridges the survivor pool (B) and the generation SQE (D→E). Crypto and xStock DIVERGE here — the sharpest per-class split in the doc so far. Code-traced 2026-07-25; generation-side counts shared with the item-1 funnel.*
+
+**Driver — TWO, one per class, converging on ONE shared builder.** Crypto: `signal-orchestrator.ts:342` `setInterval(evaluateMarket, …)` (per-instance tick) → `:1626 evaluateMarket` → `:2001 evaluateSymbol` per survivor. xStock: a SEPARATE scanner/cycle builds its own `StrategySignal` upstream and enters through the PUBLIC seam `:449 dispatchExternalSignal` (Langston-approved, `P19_B4a_C2_DISPATCH_DESIGN_rev1.md`). **Both converge on `buildSizedSignalForStrategy` (`:458`)** — the single shared build→size→decide→SQE→enqueue chokepoint. ⇒ **the divergence is entirely UPSTREAM of the builder:** crypto runs regime + family + the strategy dispatch to PRODUCE candidates; xStock arrives with its candidate already built and skips that whole stage (`:2121` "xStock's external-dispatch pipe has no family-filter stage").
+
+**Census — readers of the survivor pool (B):** `getActivePool` (`:1661`), `getPatternPool` (`:1667`), `getFamilyPool` per family (`:1675`), plus the per-symbol `find` for the DBS snapshot (`:2071`) and `getFX5DataForSymbol` for the at-queue DI/DBS (`:746`). **Writers of a candidate INTO the SQE (rule 22):** the per-regime strategy detectors (`strategyEngine.detectX`, dispatched `:2175+`) for crypto + the external xStock builder — both funnel through `buildSizedSignalForStrategy`, which is the SOLE constructor of an `SQEInput` (`:841`). No other path builds a candidate; stated as a single-member producer per rule 22.
+
+**What is handed over — the survivor becomes AT MOST N sized candidates, selected by regime THEN family.** Per crypto survivor: MCE computes the regime (`:2084`) → `regime.allowedStrategies` is the per-symbol selector (`:2093`; the hardcoded allowlist was disposed P19-B4a-C5) → the family filter keeps only strategies whose family the pair actually survived (`:2100-2135`) → each surviving strategy's detector runs; one that FIRES yields a raw signal → sized (`buildSizedSignalForStrategy`) → the maker/taker decision (`decideMakerTaker`, `:776`) computes the `chosenNetEV` that D→E's gate consumes → an `SQEInput`. **A single survivor can thus produce zero, one, or several candidates** — one per firing strategy.
+
+> **★ "ONE best signal per cycle" is a SIMPLIFICATION — do NOT file this loop as a discrepancy (§9.5(b-ii)).** The orchestrator emits ALL SQE-passing candidates; the winnow to one happens at PROMOTION, per free slot (HOP E→F), NOT here. Already reconciled + governed — `ACTIVE_TRADING_PIPELINE_AUDIT_AS_OF_2026-06-18.md:313`: *"orchestrator emits all passing; TCL winnows to one … CLAUDE.md rule-20 'one best signal per cycle' is a simplification; the winnow is at TCL, not emission."* Recorded so the next reader who greps rule-20 against this loop lands on the reconciliation, not a false finding.
+
+**★ WHAT GATES / DROPS THE PAYLOAD HERE — all loud, and in PAPER the operative gate is INSIDE the builder, not the outer loop:**
+- EXTREME_NOISE VN veto (`:2060`) → per-symbol skip, logged.
+- No regime-allowed strategy (`:2137`) → `SKIP: No enabled strategies for regime`, logged.
+- Family-filter attrition (`:2129`) → `recordActiveStrategyAttrition`, the dedicated `strategyAttrition` funnel bucket (kept OUT of `preSqeRejects` so the pre-SQE stage can't exceed its denominator — B8.4b).
+- Detector returns null (no pattern present) → no candidate — **the dominant, entirely-honest "drop": most strategies simply don't fire most cycles.**
+- Sizing returns null (`:2180 if (sizedSignal)`) → no candidate pushed.
+- **★ THE PLACEMENT THAT MATTERS:** in PAPER the RTB enqueue is TERMINAL inside `buildSizedSignalForStrategy` (`:1126 queueSQESignal`), so the **SQE at `:864` is the operative admission gate** (→ HOP D→E). The outer `evaluateMarket` validate-and-forward loop (`:1768-1797`) feeds `onSignalCallback`, which is a **no-op in paper** (`:443`) — so its `Dropped malformed StrategySignal` warn (`:1771`) does NOT gate admission; the candidate was already enqueued (or SQE-rejected) inside the builder. **What looks like the gate isn't; the gate is upstream of the return.**
+
+**Dormant-by-decision or dormant-by-defect (§4e):**
+- The SQE **governance gate (HF9) + confidence floor (HF8) run in SHADOW** at generation (`gateShadowMode:true`, `:864`) — evaluate + log, **never block**. Dormant **by DECISION** (P19-B8.5 OBJ-6, Langston-approved, #514).
+- The active-path funnel recorders (`recordActiveStrategyAttrition`, `recordActiveSqeEvaluation` `:868`) were "dormant until paper-active" (`:2122`) — **now LIVE** since the paper-active switch-on. A dormancy that RESOLVED with the switch, not a config knob.
+
+**Absence behaviour (§4d) — this hop substitutes in three documented places; none is the silent `??` class:**
+- No price / <20 OHLC bars / VN-veto → **honest-empty** (`return signals`, `:2032`/`:2022`/`:2062`) — no fabricated candidate.
+- Absent pair DBS (survivor carries no `dbsScore`) → `orchestratorDbs=undefined` → MCE consumes undefined under the B63 hard contract (MCE no longer computes DBS locally). Cross-ref the `di`/`dbs` const fallback homed at #378 (noted at HOP A→B) — **not re-filed.**
+- Absent at-queue DI/DBS for the maker/taker decision → `fx5Data?.di ?? undefined` → **kernel DOCUMENTED defaults** (`:786`), the same treatment the open-gate gives a null `di_at_queue` (declared substitution, single-basis F2).
+- Regime-stability drift/volZ are unavailable in orchestrator scope → **explicit cold-start defaults** `0.5`/`0` passed by name (`:724-728`) — the P19-B3b fix that REPLACED a silent `undefined` masked by `||`. The honest form of the absent-as-valid class; homed to the VTS/regime-stability wiring follow-up.
+
+---
+
 ### HOP D→E — GENERATION SQE → RTB QUEUE (admission). *Both classes; the fee wall + the exploration lane live here. Mapped 2026-07-25 from the item-1 investigation — live-data grounded, not reasoned.*
 
 **Driver:** `signal-orchestrator.ts:342` (evaluation loop). The orchestrator emits **ONE best signal per cycle** (not one per strategy in a regime family); each candidate is scored by the **generation SQE** (`signal-orchestrator.ts:906` → `[11.0E][SQE_REJECT]`) and, on pass, admitted to `rtb_signals` via **`queueSQESignal`** — the single admission chokepoint. **Census — writers of `rtb_signals` (rule 22):** `queueSQESignal` is the sole write path (organic + exploration admits both land through it); `recordQueueFailure`/`getQueueFailureStats` (`ready_to_buy_service.ts:495`) is the observable DROP counter — a fire-and-forget `.catch` in the orchestrator increments it + logs `[RTB_QUEUE_DROP][CRITICAL]` (the P19-B3b silent-drop landmine surface).
