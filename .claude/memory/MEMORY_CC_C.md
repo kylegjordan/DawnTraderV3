@@ -53,9 +53,9 @@ I was wrong 3× — all from reasoning off code structure; everything that held 
 ## ★ STANDING RULES 25/26/27 — **read them in CLAUDE.md; it auto-loads. Only what is NOT in CLAUDE.md is kept here.**
 **MY CARVE-OUT (stated + accepted):** rule 27 makes pairwise the default, but I do NOT stay silent about a number that reached Kyle and is wrong — offering a correction is not convening a panel.
 
-## ★★★ PRIMARY STANDING ASSIGNMENT — I OWN THE ACTIVE-PATH ARCHITECTURE/FLOW DOC (Kyle 2026-07-21) — **CURRENTLY PARKED, see CURRENT STATE**
-**What:** a LIVING architectural map + documented END-TO-END FLOW of the active trading path, kept current as each Phase-19 batch lands. The Phase-19 audit (`ACTIVE_TRADING_PIPELINE_AUDIT_AS_OF_2026-06-18.md`) was a SNAPSHOT at phase START and nobody keeps the flow current. NOT the end-of-Phase-19 RUNTIME audit (that PROVES it; this DOCUMENTS it — Kyle wants BOTH, separate). Method: reconstruct from ALL Phase-19 completion/progress reports, verifying against live code+DB, then keep current. I author+commit governance docs (read-only = no code/batches).
-**★ ALL SCOPE INPUTS + Langston's GATE rulings live in `Claude Comms and Packages/Scope Files/ACTIVE_PATH_FLOW_DOC_SCOPE_PREP.md` (`b5ec627c2`) — keep appending there, NOT here.** Next concrete step when it resumes: the GATE-1 boundary one-pager → Langston rules it in isolation → then the full scope.
+## ★★★ PRIMARY STANDING ASSIGNMENT — I OWN THE ACTIVE-PATH FLOW DOC (`1-system-manual/ACTIVE_PATH_FLOW.md`; Kyle 2026-07-21) — **ACTIVE, mapping hops**
+**What:** a LIVING end-to-end map of the active trading path, kept current as each Phase-19 batch lands (the 2026-06-18 audit was a phase-START snapshot nobody maintained). NOT the end-of-Phase-19 RUNTIME audit (that PROVES; this DOCUMENTS — Kyle wants BOTH). Method = §9.5 per-hop census, verified vs live code+DB. I author+commit governance docs only (no code/batches).
+**Scope inputs + Langston GATE-1/2/3 rulings** in `…Scope Files/ACTIVE_PATH_FLOW_DOC_SCOPE_PREP.md` (`b5ec627c2`); GATEs RULED, doc shape set. **Hops mapped:** A→B · B→D (new 2026-07-25 `461ee7915`) · D→E · E→F · G · F→closed. **NEXT:** the RTB-refresh self-loop hop (the dual-refresh canonical edge, `RTB_REFRESH_AUDIT_2026-07-18.md`), then the §2 freshness-gate build + a per-hop xStock-delta completeness pass.
 
 ## ⏸ DEFERRED RESEARCH (superseded 2026-07-21 by the flow-doc above — NOT deleted; Kyle may return; full detail in git history of this file)
 
