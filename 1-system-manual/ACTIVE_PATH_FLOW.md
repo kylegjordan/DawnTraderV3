@@ -216,6 +216,19 @@ Zero asset-class references in 321 lines, in the component that watches TCL prom
 
 ---
 
+### HOP E→E — RTB QUEUE REFRESH & RE-RANK (self-loop). *⏳ STUB — this edge is UNDER ACTIVE RECONSTRUCTION as of 2026-07-25; full census deliberately DEFERRED. Both classes.*
+
+**Why a STUB and not a map — the doc's own freshness rule applied to itself.** This is THE edge the document's method exists to catch: the ~7-month **dual-mechanism** refresh (`RTB_REFRESH_AUDIT_2026-07-18.md`, CC-A, Kyle-directed — two independent schedulers over one queue, no mutual exclusion, **13/13 runtime overlap**). Mapping it today would document a moving target — the consolidation is landing AS THIS IS WRITTEN, and a full census would be stale within days (the exact failure §2's freshness principle warns against). Verified against current code, not the 7-day-old audit:
+- **Mechanism A ("the rich refresh," per-signal Central-Clock 30s) was RETIRED 2026-07-22** — `d2306518e` "B-RTB-REFRESH-CONSOLIDATE OBJ-1: retire Mechanism A" (#532); retirement visible in-code at `ready_to_buy_service.ts:1591`, and its `isRefreshing` latch was restored onto the survivor 2026-07-23 (`4760b1077`).
+- **The survivor is Mechanism B** — the bucketed standalone service `rtb-refresh-service.ts` (still `index.ts:348 rtbRefreshService.start()`) → `refreshAndRank` (`ready_to_buy_service.ts:892`), which the canonical corpus always documented as THE refresh architecture (audit §5.0-CORRECTION). Its former FROZEN-snapshot weakness is being fixed in-place — volatility now reads LIVE (`:1100`, comment "was `metadata ?? 0.3`", OBJ-2), the §2 defect the audit named.
+- **The same file is ALSO being rewritten by a concurrent batch TODAY** — `8939105f8` (2026-07-25) `B-RETIRED-SCORE-REMOVAL #558`, collapsing the finalScore ranker (the audit's §4 "finalScore gate retired" becoming full removal, #525-family).
+
+**Deferred, with a named revisit (§9.4).** The full census (writers / readers / **deleters** / schedulers of `rtb_signals` at this self-loop), the `??` substitution class (§4d, which concentrates here and is being actively un-frozen), and the §4e dormancy answers are all booked for **once #532 and #558 have settled**. Mapping before then earns immediate staleness. The audit remains the finding-of-record for WHY two mechanisms existed; it is being superseded, in the code, by #532 — the flow doc records the current single-mechanism direction, not the retired collision.
+
+**What stays OPEN regardless of consolidation (mapped, NOT adjudicated here):** the **#535 backstop re-examination** — the #523 `[11.8B]` open-gate BLOCK→SHADOW ruling rested on eviction proof that cited **Mechanism A only**; with A now retired, Langston must re-confirm the SURVIVING mechanism evicts negative-net-EV signals before the #522 pre-live gate. This hop records the coupling; the ruling is Langston's, not this document's.
+
+---
+
 ### HOP E→F — RTB QUEUE → OPEN POSITION (promotion). *Both classes; no divergence found at this edge.*
 
 **Driver:** `active-execution-engine.ts:344` `continuousPromotionInterval`. **Census — writers of `active_open_positions`: EXACTLY ONE** — `storage.ts:3324` (`db.insert(activeOpenPositions)`). Stated explicitly as a single-member list per rule 22; the create-path is not duplicated.
