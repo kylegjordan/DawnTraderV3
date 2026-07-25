@@ -229,6 +229,17 @@ export function adaptPaperOpenTrade(row: PaperActiveTradeRow): AdaptedOpenTrade 
     // Deliberately NOT the VTS finalScore-based formula (retired-metric fence).
     expectedEdge: metaNum(meta, "netExpectedEdge") ?? metaNum(meta, "netEvAtAdmit"),
     regimeWeight: metaNum(meta, "regimeWeight"),
+    // B-OPEN-TRADES-DISPLAY (item 5, 2026-07-25): the at-entry regime classifier detail
+    // the engine now stamps into the open-position metadata (parity with the closed
+    // adapter, which reads the same values off closed_trades columns). Absent → null
+    // (honest; never fabricated), so the shared OpenTradesTable renders the three-part
+    // regime cell (label + confidence + EARLY/PRIME/LATE phase) only when data is present.
+    regimeConfidenceRaw: metaNum(meta, "regimeConfidenceRaw") ?? null,
+    macroModifierValue: metaNum(meta, "macroModifierValue") ?? null,
+    phase: (metaStr(meta, "phase") as OpenTrade["phase"]) ?? null,
+    phaseAgeSeconds: metaNum(meta, "phaseAgeSeconds") ?? null,
+    strategyPhaseWeight: metaNum(meta, "strategyPhaseWeight") ?? null,
+    regimeConfidenceModulated: metaNum(meta, "regimeConfidenceModulated") ?? null,
     entryTime: row.openedAt,
     durationOpenMinutes: Math.floor((num(row.holdingDurationMs) ?? 0) / 60000),
     // P19-B8.10 (OBJ-4): global/pair context is now genesis-captured into the
