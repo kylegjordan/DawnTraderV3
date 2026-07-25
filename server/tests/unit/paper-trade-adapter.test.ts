@@ -61,6 +61,14 @@ const baseOpenRow: PaperActiveTradeRow = {
     pairDirectionalBiasScore: -21.4,
     globalDirectionalBias: 'NEUTRAL',
     globalDirectionalBiasScore: 3.2,
+    // B-OPEN-TRADES-DISPLAY (item 5): at-entry regime classifier detail, engine-stamped
+    // into open-position metadata so the Open Trades regime cell renders all three parts.
+    regimeConfidenceModulated: 0.712,
+    regimeConfidenceRaw: 0.804,
+    macroModifierValue: 0.95,
+    phase: 'PRIME',
+    phaseAgeSeconds: 420,
+    strategyPhaseWeight: 0.88,
   },
   volume24h: 54321,
   positionValue: 1259.259,
@@ -144,6 +152,16 @@ describe('adaptPaperOpenTrade — VTS wire-format parity', () => {
     expect(t.entryLiquidityKind).toBe('volume_qty');
   });
 
+  it('B-OPEN-TRADES-DISPLAY (item 5): maps the at-entry regime confidence + phase from metadata', () => {
+    const t = adaptPaperOpenTrade(baseOpenRow);
+    expect(t.regimeConfidenceModulated).toBe(0.712);
+    expect(t.regimeConfidenceRaw).toBe(0.804);
+    expect(t.macroModifierValue).toBe(0.95);
+    expect(t.phase).toBe('PRIME');
+    expect(t.phaseAgeSeconds).toBe(420);
+    expect(t.strategyPhaseWeight).toBe(0.88);
+  });
+
   it('passes the cost 5-col breakdown through (split renders only when present)', () => {
     const t = adaptPaperOpenTrade(baseOpenRow);
     expect(t.costEntryFee).toBe(1.0);
@@ -166,6 +184,11 @@ describe('adaptPaperOpenTrade — no-fabrication honesty', () => {
     expect(t.rankingScore).toBeUndefined();
     expect(t.expectedEdge).toBeUndefined();
     expect(t.regimeWeight).toBeUndefined();
+    // B-OPEN-TRADES-DISPLAY (item 5): absent regime detail → null, never fabricated.
+    expect(t.regimeConfidenceModulated).toBeNull();
+    expect(t.phase).toBeNull();
+    expect(t.macroModifierValue).toBeNull();
+    expect(t.strategyPhaseWeight).toBeNull();
   });
 
   it('emits null (not 0) for absent entry-liquidity and un-captured global/pair context', () => {

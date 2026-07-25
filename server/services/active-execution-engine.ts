@@ -3349,6 +3349,19 @@ export class ActiveExecutionEngine {
           // kernel EV input and was deliberately not threaded by reorg-B3.)
           di_at_open: (signal as any)?.diAtQueue ?? (signal as any)?.metadata?.DI ?? 50,
           vol_noise_at_open: (signal as any)?.metadata?.VolNoise ?? 0.3,
+          // B-OPEN-TRADES-DISPLAY (item 5, 2026-07-25): carry the SAME at-entry regime
+          // classifier detail the createClosedTrade write above stamps (3229-3234) so the
+          // Open Trades tab's Regime column can render the three parts (label + confidence
+          // + EARLY/PRIME/LATE phase) the shared OpenTradesTable already supports, instead
+          // of only the label. active_open_positions has no columns for these, so they ride
+          // in metadata (no migration); the open adapter reads them back via metaNum/metaStr.
+          // Honest-absent: the vars are null when the MCE context was unavailable at open.
+          regimeConfidenceRaw: _b67_2_1_rawConf,
+          macroModifierValue: _b67_2_1_modifierValue,
+          phase: _b67_2_1_phase,
+          phaseAgeSeconds: _b67_2_1_ctx?.regime.phaseAgeSeconds ?? null,
+          strategyPhaseWeight: _b67_2_1_phaseWeight,
+          regimeConfidenceModulated: _b67_2_1_modulatedConf,
         }
       });
 
