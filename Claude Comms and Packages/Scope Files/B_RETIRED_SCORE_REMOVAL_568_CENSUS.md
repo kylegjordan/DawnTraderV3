@@ -95,3 +95,21 @@
 **A0** VTS convergence (`vts-runner.ts:4947` → `confidence`, resolve `:4929` strength; prerequisite gate — the removal can't land while these read the scores) → **A1** core/crypto (nullable-`final_score` + writers in one migration; §C/§D/§E/§G/§H; trading-engine §C#7) → **A2** xStock (`eval-cycle.ts` cluster) → **B** DROP column + Phase-B contracts.
 
 **Methods:** clusters deleted as a unit with non-test non-archive word-boundary grep proof; archive generated programmatically from git HEAD with a leaked-live-method assertion (B8.10); this census IS the #568 pass.
+
+---
+
+## A1 — SHIPPED + LANGSTON STEP-4 SIGN-OFF (2026-07-25, head `8939105f8`, CC-A commit `7512ddf19`)
+
+**Slice:** `ready_to_buy_service.ts`-only — nullable `final_score` + writer removal + ranker collapse + the Kyle-ruled r_multiple tiebreaker. 6 files (+192/-86). CI green (run `30135581915`). tsc untruncated: edited files ZERO errors; `check-tsc-baseline` PASS.
+
+**Langston Step-4: SIGN-OFF, no code changes.** Verdict per decision:
+1. **Tiebreaker extraction — verified equivalent line-by-line.** `rMultipleCore` preserves `signalRMultiple`'s prior behaviour exactly (finite-guard→-Infinity, `target` default `entry*1.02`, DI/dbs `finite?:undefined`, `evaluateTradeExpectancy(...quiet)`, `distStop=|entry-stop|`, `chosenNetEv/distStop` override when finite&&distStop>0, `pWinFloored` passthrough). Only reordering (meta/target/ac computed before the finite-check now in `core`) has no side effects. New side safe: `input.entryPrice` numeric (`.toString()` called unconditionally at insert), so the finite-guard won't misfire a well-formed input into UNPRICEABLE. `-Infinity` COUNTED keep-first genuinely closes #574.
+2. **Slice boundary — correct cut, pull nothing else in.** `SQEInput.finalScore` + metadata/score-calculator readers genuinely cross contracts; folding in now would blur the deliberate boundary.
+4. **`queuedAt` ordering — approved** (raw queue read; decision-grade rank downstream via `computeRankKey`/r_multiple; matches storage default).
+5. **Migration ordering — approved** (nullable-before-no-writer is correctly the opposite of a DROP; db-migrate runs pre-restart = safe window).
+
+**Condition-2 evidence — `avgFinalScore` deferral is SAFE (Langston-traced, recorded here per §453 no-asserted-absence):**
+- The nulling `rtb_signals.final_score` column's ONLY live readers are **report/validation surfaces**: `getQueueStats` (`:1479` → `RTBQueueStats.avgFinalScore`) + `c13`/`c14`-validation-service.
+- The **decision-grade** `avgFinalScore` paths do **NOT** read the column: `ml-calibration.ts:180` `performanceScore` ← `stats.totalFinalScore` (per-trade grouped records); `adaptive-ratio-manager.ts:204` `avgEdge` ← `telemetry-aggregator` pool aggregate fed an **emit-time computed `finalScore` arg** (`updatePoolAggregate:331`). ⇒ **no live knob moves**; A1 did not silently shift calibration. Homed as **#582** (`B-FINALSCORE-TELEMETRY-RETIRE`, prerequisite of Phase B).
+
+**Condition on #5 (migration `ON CONFLICT` cite):** rollback's `ON CONFLICT (module_name, exchange, asset_class, strategy, regime, constant_name)` MATCHES the table's unique index `module_constants_pk_idx` (`schema.ts:531-538`: moduleName, exchange, assetClass, strategy, regime, constantName). Verified.
