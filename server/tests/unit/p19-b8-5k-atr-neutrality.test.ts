@@ -145,9 +145,13 @@ describe('P19-B8.5k — source guards (OBJ-1 carry + OBJ-2b write-back)', () => 
   const root = join(__dirname, '..', '..', '..');
   const read = (p: string) => readFileSync(join(root, p), 'utf8');
 
-  it('OBJ-1: signal-orchestrator carries atr forward at the sized-signal metadata rebuild', () => {
+  it('OBJ-1 carry is REVERTED pending #581 (sizingContext.atr proved a shared, not per-symbol, value)', () => {
     const src = read('server/services/signal-orchestrator.ts');
-    expect(src).toMatch(/atr:\s*sizingContext\.atr/);
+    // The active carry line must be GONE (staging proved sizingContext.atr is one shared
+    // value across the cycle → carrying it wrote a wrong ATR into the RTB rank floor + training
+    // data). Only the rollback comment references it. Re-carry after #581 fixes the source.
+    expect(src).toMatch(/CARRY REVERTED 2026-07-24 \(#581\)/);
+    expect(src).not.toMatch(/^\s*atr: sizingContext\.atr,\s*$/m);
   });
 
   it('OBJ-2b: the exit-engine stop write-back is guarded by a strict `> stopLoss` (equal ⇒ no-op)', () => {

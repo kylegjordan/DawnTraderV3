@@ -1098,18 +1098,14 @@ export class SignalOrchestrator {
         // No downstream plumbing is needed: `active-execution-engine.ts:3143` spreads
         // `...signal.metadata` onto the position row.
         maxHoldingMs: _maxHoldingMs,
-        // P19-B8.5k (B-ATR-RESTORE, #556): carry the entry-time ATR forward. `atr` is
-        // stamped centrally on the SizingContext at the per-symbol single-point (~:2157,
-        // reorg-B2 Piece C — populated by the caller BEFORE this function runs) but was
-        // NOT in this rebuild's field list, so `atr_at_open` persisted '0' on every live
-        // position (#556/#550 curated-rebuild drop). Restoring it feeds the real value to
-        // the Open Trades display, the RTB ranking (ready_to_buy_service.ts:1691/1841/1973),
-        // exit-strategy replay, and VTS-parity. NO fail-loud here (unlike maxHoldingMs
-        // :1018): this rebuild runs BEFORE the in-function reachability gate (:1536) that
-        // drops `invalid_atr`, so a pre-gate signal may legitimately still carry a 0/absent
-        // atr and must not throw — it is simply forwarded (downstream `?? 0` handles absence,
-        // identical to today). See P19_B8_5K_SCOPE.md OBJ-1.
-        atr: sizingContext.atr,
+        // P19-B8.5k (B-ATR-RESTORE, #556) — CARRY REVERTED 2026-07-24 (#581). The carry
+        // `atr: sizingContext.atr` was deployed and then rolled back: staging DB proved
+        // `sizingContext.atr` is a SINGLE SHARED value across the whole scan cycle (one
+        // symbol's absolute ATR — ~0.0075 — stamped identically onto ETH/SOL/AAVE/XRP/…,
+        // atr/price spanning 0.000004→0.0196), NOT a per-symbol value. Carrying it wrote a
+        // wrong ATR into signal metadata + the RTB rank risk floor (ready_to_buy_service.ts
+        // :1691) + new-position training data. The carry is correct; the SOURCE is broken.
+        // Re-carry only after the sizingContext.atr sharing is root-caused + fixed (#581).
         // P19-B8.10 (OBJ-4): genesis capture of the display-context fields the VTS
         // records at open (regime / global regime / pair+global friction / pair+
         // global DBS / pattern name / entry-liquidity). KEEP-AS-DATA transit — read
