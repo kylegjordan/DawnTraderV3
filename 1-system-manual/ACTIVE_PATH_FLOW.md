@@ -155,6 +155,24 @@ Zero asset-class references in 321 lines, in the component that watches TCL prom
 
 ## 5. THE HOPS
 
+### HOP D→E — GENERATION SQE → RTB QUEUE (admission). *Both classes; the fee wall + the exploration lane live here. Mapped 2026-07-25 from the item-1 investigation — live-data grounded, not reasoned.*
+
+**Driver:** `signal-orchestrator.ts:342` (evaluation loop). The orchestrator emits **ONE best signal per cycle** (not one per strategy in a regime family); each candidate is scored by the **generation SQE** (`signal-orchestrator.ts:906` → `[11.0E][SQE_REJECT]`) and, on pass, admitted to `rtb_signals` via **`queueSQESignal`** — the single admission chokepoint. **Census — writers of `rtb_signals` (rule 22):** `queueSQESignal` is the sole write path (organic + exploration admits both land through it); `recordQueueFailure`/`getQueueFailureStats` (`ready_to_buy_service.ts:495`) is the observable DROP counter — a fire-and-forget `.catch` in the orchestrator increments it + logs `[RTB_QUEUE_DROP][CRITICAL]` (the P19-B3b silent-drop landmine surface).
+
+**What is handed over — the binding gate is Net Expectancy (NetEV) after friction.** The SQE's binding admission gate is `NetEV > 0` (#501 fee wall). **Measured (2026-07-24, 120s funnel delta): 75 generated / 76 SQE-evaluated / 0 passed** — every reject `NetEV <= 0 (chosen maker mode — non-positive net expectancy after friction)`, values clustered just below zero (`-0.0005` … `-16`): the fingerprint of marginal signals tipped under by Kraken's 0.40%/0.80% fees. So **organic admission ≈ 0 under the current fee wall** — working-as-designed (correctly refusing money-losing trades), NOT a defect: the admission code + NetEV math are git- and config-unchanged since before the pool held ~100 on 07-22, so the changed input is the market, not the code.
+
+**The second admission lane — exploration (paper-only, `exploration-lane.ts:129`).** A signal that fails the SQE **on NetEV ONLY** (`isNetEvOnlyFailure`, `:178`) can be admitted below the profit floor for learning, gated by three live knobs: `enabled=true`, `daily_budget=50/class`, and an **ANNEALING floor** `min(0, -0.02 + 0.005·floor(closed/60))` (`:152-154`) that tightens toward 0 as informative (non-`never_filled`) exploration closes accrue — **currently -1.0% at 161 closes; shuts entirely at 240.** Budget = a per-UTC-day conservation count (rtb + open-today + closed-today; `:80-98`), spent gradually (~2/hr).
+
+**★ WHAT GATES / DROPS THE PAYLOAD HERE — all loud, none silent:**
+- Organic: `NetEV<=0` → `[SQE_REJECT]` + funnel (`uncategorized` bucket = the NetEV rejects).
+- Exploration: below-floor → `EXPLORATION_DECLINE below floor`; budget spent → `EXPLORATION_DECLINE daily budget exhausted (50/50)`; lane error → **fail-CLOSED** to normal reject (`:901`).
+- **★ The pool cannot fill from a full slot table.** Promotion (HOP E→F) removes from the pool only when a slot frees; with slots jammed (the 2026-07-18→22 weekend xStock slot-jam — Friday xStocks suspended over the weekend + a then-broken time-exit) admits **back up** in `rtb_signals`. ⇒ **the ~100 pool of 07-22 was a slot-full BACKLOG, not healthy inflow; pool size is governed by slot availability DOWNSTREAM, not by admission rate.**
+
+**Dormant-by-decision or dormant-by-defect (§4e):** the exploration lane is **dormant-by-design-winding-down** — the anneal is a deliberate subsidy that expires as edge-evidence accrues. ⚠️ **FORWARD RISK (Kyle scope call, #583):** if the anneal shuts (240 closes) while the fee wall holds organic at 0, the pool → **permanent zero** — the subsidy expiring into the wall it was meant to hand off to.
+**Absence behaviour (§4d):** the RTB refresh (`refreshAndRank`) re-decides NetEV on live data and **reconfirms ~everything** (210,271 of 210,289 over 10d; only 18 rejected). A regime-input MISS **leaves the signal queued** (`ready_to_buy_service.ts:1049-1055`, NOT deleted); only an SQE-revalidation FAIL or an unclassifiable asset class deletes. ⇒ **the refresh is NOT a pool drainer** — a common misread (both Kyle and I first suspected it), falsified against the funnel counters.
+
+---
+
 ### HOP E→F — RTB QUEUE → OPEN POSITION (promotion). *Both classes; no divergence found at this edge.*
 
 **Driver:** `active-execution-engine.ts:344` `continuousPromotionInterval`. **Census — writers of `active_open_positions`: EXACTLY ONE** — `storage.ts:3324` (`db.insert(activeOpenPositions)`). Stated explicitly as a single-member list per rule 22; the create-path is not duplicated.
