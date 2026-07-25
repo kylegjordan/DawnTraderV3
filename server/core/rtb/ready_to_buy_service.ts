@@ -27,12 +27,12 @@
 import { storage } from '../../storage';
 // B72 (2026-05-05): MIN_QUEUE_CONFIDENCE migrated to module='queue_admission'.
 // Read via cached sync resolver. Module prefetched in b72-warmup.
-import { getCachedNumberRequired, getCachedStringRequired } from '../../services/module-constants-service.js';
+import { getCachedNumberRequired } from '../../services/module-constants-service.js';
 // P19-B7.1 (OBJ-1/2): rank-time R-multiple = reuse the gate's own friction+kernel via the
 // wrapper (sample-free; the EV-input sample is a SEPARATE open-path call). Reads .netRewardToRisk.
 import { evaluateTradeExpectancy } from '../calculations/expectancy.js';
 const _RTB_GK = { exchange: '*', assetClass: '*', strategy: '*', regime: '*' };
-import { calculateFinalScore, calculateRegimeWeight } from '../utils/score-calculator';
+import { calculateRegimeWeight } from '../utils/score-calculator';
 import { signalQualityEvaluator, type SQEInput } from '../filters/signal_quality_evaluator';
 // P19-B8.4b: active-path funnel — per-signal RTB-refresh outcomes (refreshedAttempted / reconfirmed /
 // rejectedInRefresh) + the SQE-during-refresh tally (phase='refresh', the honest MUST-4 double-count vs
@@ -245,21 +245,18 @@ function getFinalscoreDecayLambda(): number {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// P19-B7.1 — PLUGGABLE RANKER (OBJ-1) + rank-time R-multiple (OBJ-2) + degenerate-
-// geometry reject/floor (OBJ-3). The live picker (getRankedSignals) ranks the
-// ready-to-buy pool by the configured key. DEFAULT = the expected R-multiple
-// (`R = netEV ÷ risk_price`) — risk-normalized, net-of-cost, CROSS-ASSET comparable
-// (Van Tharp R-multiples / Kelly growth-optimal for sequential single-bets). The
-// friction-blind `finalScore` ("rank-by-confidence") + the inert `rankingScore` exist
-// only as shadow-A/B CONTROL arms. DB-configured, NO hidden default (§5 rule 15).
+// P19-B7.1 — RANK-TIME R-multiple (OBJ-2) + degenerate-geometry reject/floor (OBJ-3).
+// The live picker (getRankedSignals) ranks the ready-to-buy pool by the expected
+// R-multiple (`R = netEV ÷ risk_price`) — risk-normalized, net-of-cost, CROSS-ASSET
+// comparable (Van Tharp R-multiples / Kelly growth-optimal for sequential single-bets).
+// ★ B-RETIRED-SCORE-REMOVAL (#558, A1): the two CONTROL arms are GONE. The
+// friction-blind `finalScore` ("rank-by-confidence") arm and the inert `rankingScore`
+// arm — both shadow-A/B controls that measured anti-predictive — are removed, along with
+// the `active_ranker` selector row (retired in this batch's migration). `r_multiple` is
+// now the SOLE ranker; there is no longer anything to configure.
 // ─────────────────────────────────────────────────────────────────────────────
-export const RANKER_STRATEGIES = ['r_multiple', 'confidence', 'ranking_score'] as const;
+export const RANKER_STRATEGIES = ['r_multiple'] as const;
 export type RankerStrategy = (typeof RANKER_STRATEGIES)[number];
-
-/** Active ranker — fail-hard from module_constants (no hidden default; typo/unknown rejected). */
-function getActiveRanker(): RankerStrategy {
-  return getCachedStringRequired('rtb_ranking', 'active_ranker', _RTB_GK, RANKER_STRATEGIES) as RankerStrategy;
-}
 
 /**
  * OBJ-3 microstructure floor (CAPITAL-INDEPENDENT — distinct from OBJ-5's capital/heat
@@ -1148,7 +1145,9 @@ class ReadyToBuyService {
                 updates: {
                   status: 'reconfirmed',
                   confidence: confidence.toString(),
-                  finalScore: refreshedFinalScore.toString(),
+                  // ★ B-RETIRED-SCORE-REMOVAL (#558, A1): finalScore column write REMOVED (column
+                  // is now nullable; dropped in Phase B). `refreshedFinalScore` still flows to the
+                  // SQE input + logs — that consumer is the deferred SQE-contract slice.
                   lastRefreshedAt: now,
                   // ★ OBJ-2: write the re-decided maker/taker snapshot back, mirroring the
                   // per-signal path — chosen_net_ev is read by BOTH the B7.1 ranker (queue
@@ -1397,7 +1396,9 @@ class ReadyToBuyService {
     const activeSignals = await storage.getRtbSignals({
       ...baseFilter,
       status: 'active',
-      orderBy: 'finalScore',
+      // #558 A1: was 'finalScore' (retired). This raw queue read now orders by recency; the
+      // TRUE ranking is applied downstream in getRankedSignals via computeRankKey (r_multiple).
+      orderBy: 'queuedAt',
       orderDir: 'desc',
     });
 
@@ -1405,7 +1406,7 @@ class ReadyToBuyService {
     const reconfirmedSignals = await storage.getRtbSignals({
       ...baseFilter,
       status: 'reconfirmed',
-      orderBy: 'finalScore',
+      orderBy: 'queuedAt', // #558 A1: was 'finalScore' (retired) — true ranking is downstream
       orderDir: 'desc',
     });
 
@@ -1413,16 +1414,14 @@ class ReadyToBuyService {
     const queuedSignals = await storage.getRtbSignals({
       ...baseFilter,
       status: 'queued',
-      orderBy: 'finalScore',
+      orderBy: 'queuedAt', // #558 A1: was 'finalScore' (retired) — true ranking is downstream
       orderDir: 'desc',
     });
 
     const allSignals = [...activeSignals, ...reconfirmedSignals, ...queuedSignals];
-    allSignals.sort((a, b) => {
-      const aFinalScore = parseFloat(a.finalScore || '0');
-      const bFinalScore = parseFloat(b.finalScore || '0');
-      return bFinalScore - aFinalScore;
-    });
+    // #558 A1: was a finalScore sort (retired). Order this raw queue read newest-first;
+    // the decision-grade ranking is applied in getRankedSignals via computeRankKey (r_multiple).
+    allSignals.sort((a, b) => new Date(b.queuedAt).getTime() - new Date(a.queuedAt).getTime());
 
     return allSignals;
   }
@@ -1695,32 +1694,28 @@ class ReadyToBuyService {
   }
 
   /**
-   * P19-B7.1 (OBJ-1/2): the sort key for a signal under the active ranker.
-   * - r_multiple (default): the expected R-multiple = evaluateTradeExpectancy(...).netRewardToRisk —
-   *   REUSE of the gate's own friction+kernel (sample-free, quiet). The number that ranks is the
-   *   number the gate later confirms (zero divergence surface).
-   * - confidence (control): the friction-blind finalScore (≈ confidence − decay).
-   * - ranking_score (control): the inert VTS rankingScore, falling back to finalScore.
+   * P19-B7.1 (OBJ-1/2): the sort key for a signal — the expected R-multiple =
+   * evaluateTradeExpectancy(...).netRewardToRisk — REUSE of the gate's own friction+kernel
+   * (sample-free, quiet). The number that ranks is the number the gate later confirms (zero
+   * divergence surface).
+   * ★ B-RETIRED-SCORE-REMOVAL (#558, A1): the `confidence` (friction-blind finalScore) and
+   * `ranking_score` (inert VTS rankingScore) control arms — the last readers of `finalScore`
+   * in the ranker — are removed. R-multiple is the only sort key now.
    */
-  private computeRankKey(signal: RtbSignal, ranker: RankerStrategy, assetClass?: AssetClass): number {
-    if (ranker === 'confidence') return parseFloat(signal.finalScore || '0');
-    if (ranker === 'ranking_score') {
-      const meta = (signal.metadata ?? {}) as Record<string, any>;
-      const rsNum = meta.rankingScore != null ? Number(meta.rankingScore) : NaN;
-      return Number.isFinite(rsNum) ? rsNum : parseFloat(signal.finalScore || '0');
-    }
-    return this.signalRMultiple(signal, assetClass).r; // r_multiple (default)
+  private computeRankKey(signal: RtbSignal, assetClass?: AssetClass): number {
+    return this.signalRMultiple(signal, assetClass).r;
   }
 
   /**
    * P19-B8.7 Step-9 (Langston E2 amendment, 2026-07-17): the RANK KEY for a display
    * surface — THE RANKER ATTACHES, the route never recomputes. This is the same
-   * computeRankKey the promotion sort uses (whichever config arm is active, incl.
+   * computeRankKey the promotion sort uses (the r_multiple expected-R-multiple, incl.
    * the null-snapshot → netRewardToRisk fallback inside signalRMultiple), exposed
    * per-row because the RTB table lists MORE rows than a promotion cycle touches
    * (persisted rank-time values would go stale between cycles). The route stays
-   * formula-blind: a ranker-config change changes what this returns, and the
-   * displayed number remains the number that ranks — zero divergence surface.
+   * formula-blind: the displayed number remains the number that ranks — zero
+   * divergence surface. (B-RETIRED-SCORE-REMOVAL #558 A1: r_multiple is now the sole
+   * ranker; `arm` is a constant, no longer a config selection.)
    * -Infinity (unpriceable) is surfaced as null so the client renders an honest
    * em-dash instead of a serialized "-Infinity"/null-JSON artifact.
    */
@@ -1729,8 +1724,8 @@ class ReadyToBuyService {
     // the promotion sort does — without it a class-degraded row could rank-display
     // differently than it ranks, a narrow exception the zero-divergence claim
     // shouldn't carry.
-    const arm = getActiveRanker();
-    const key = this.computeRankKey(signal, arm, assetClass);
+    const arm: RankerStrategy = 'r_multiple'; // #558 A1: the sole ranker (control arms removed)
+    const key = this.computeRankKey(signal, assetClass);
     return { value: Number.isFinite(key) ? key : null, arm };
   }
 
@@ -1745,44 +1740,68 @@ class ReadyToBuyService {
    * rejected upstream by passesGeometryFloor).
    */
   private signalRMultiple(signal: RtbSignal, assetClass?: AssetClass): { r: number; pwinFloored: boolean } {
-    const entry = parseFloat(signal.entryPrice);
-    const stop = parseFloat(signal.stopPrice);
-    if (!Number.isFinite(entry) || !Number.isFinite(stop)) return { r: -Infinity, pwinFloored: false };
     const meta = (signal.metadata ?? {}) as Record<string, any>;
     const targetNum = signal.targetPrice != null ? parseFloat(signal.targetPrice) : NaN;
-    const target = Number.isFinite(targetNum) ? targetNum : entry * 1.02; // mirror executePromotedSignal default
-    const di = signal.diAtQueue != null ? Number(signal.diAtQueue) : undefined;
-    const dbs = signal.dbsScoreAtQueue != null ? Number(signal.dbsScoreAtQueue) : undefined;
     const ac = asValidAssetClass(signal.assetClass as unknown as string)
       ?? asValidAssetClass(meta.assetClass)
       ?? assetClass;
-    const result = evaluateTradeExpectancy(signal.symbol, {
-      entryPrice: entry,
-      targetPrice: target,
-      stopPrice: stop,
-      DI: di !== undefined && Number.isFinite(di) ? di : undefined,
+    return this.rMultipleCore({
+      symbol: signal.symbol,
+      entry: parseFloat(signal.entryPrice),
+      stop: parseFloat(signal.stopPrice),
+      target: Number.isFinite(targetNum) ? targetNum : null,
+      di: signal.diAtQueue != null ? Number(signal.diAtQueue) : undefined,
+      dbs: signal.dbsScoreAtQueue != null ? Number(signal.dbsScoreAtQueue) : undefined,
+      chosenNetEv: signal.chosenNetEv != null ? Number(signal.chosenNetEv) : null,
       VolNoise: meta.VolNoise,
       prices: meta.prices,
       sourcePool: (signal as any).sourcePool ?? meta.sourcePool,
-      dbsScore: dbs !== undefined && Number.isFinite(dbs) ? dbs : undefined,
-    }, ac, /* quiet */ true);
-    // P19-B7.2 (OBJ-3): rank on the CHOSEN-mode netEV (the best-of-both snapshot),
-    // consistent with the [11.8B] open-gate — the number that ranks is the number
-    // that gates. R = chosenNetEv / risk_price. For a taker-chosen signal this
-    // equals the taker recompute above (same at-queue inputs, same kernel); for a
-    // maker-chosen opener it reflects the haircut-adjusted maker netEV that will
-    // actually be gated + opened, so the opener ranks on its real planned entry.
-    // NULL snapshot (pre-B7.2 rows / un-snapshotted path) → the taker recompute.
-    const chosenNetEv = signal.chosenNetEv != null ? Number(signal.chosenNetEv) : null;
-    const distStop = Math.abs(entry - stop);
+      assetClass: ac,
+    });
+  }
+
+  /**
+   * P19-B7.1 (OBJ-2) — the expected-R-multiple KERNEL, shared by the rank-time path
+   * (signalRMultiple, off an RtbSignal row) and the queue tiebreaker (off a fresh
+   * SQESignalInput). ONE formula so a duplicate-collision decision uses the exact number
+   * the ranker/open-gate use — zero divergence. Reads the kernel's own `netRewardToRisk` +
+   * `pWinFloored` (REUSE over recompute). Returns `r=-Infinity` on unpriceable geometry so it
+   * sorts to the bottom / trips the tiebreaker's explicit keep-first.
+   * P19-B7.2 (OBJ-3): rank on the CHOSEN-mode netEV (best-of-both snapshot), consistent with
+   * the [11.8B] open-gate — the number that ranks is the number that gates. R = chosenNetEv /
+   * risk_price. NULL snapshot (pre-B7.2 rows / un-snapshotted path) → the taker recompute.
+   */
+  private rMultipleCore(p: {
+    symbol: string;
+    entry: number;
+    stop: number;
+    target: number | null;
+    di?: number;
+    dbs?: number;
+    chosenNetEv?: number | null;
+    VolNoise?: any;
+    prices?: any;
+    sourcePool?: string;
+    assetClass?: AssetClass;
+  }): { r: number; pwinFloored: boolean } {
+    if (!Number.isFinite(p.entry) || !Number.isFinite(p.stop)) return { r: -Infinity, pwinFloored: false };
+    const target = (p.target != null && Number.isFinite(p.target)) ? p.target : p.entry * 1.02; // mirror executePromotedSignal default
+    const result = evaluateTradeExpectancy(p.symbol, {
+      entryPrice: p.entry,
+      targetPrice: target,
+      stopPrice: p.stop,
+      DI: p.di !== undefined && Number.isFinite(p.di) ? p.di : undefined,
+      VolNoise: p.VolNoise,
+      prices: p.prices,
+      sourcePool: p.sourcePool,
+      dbsScore: p.dbs !== undefined && Number.isFinite(p.dbs) ? p.dbs : undefined,
+    }, p.assetClass, /* quiet */ true);
+    const distStop = Math.abs(p.entry - p.stop);
     let r = Number.isFinite(result.netRewardToRisk) ? result.netRewardToRisk : -Infinity;
-    if (chosenNetEv != null && Number.isFinite(chosenNetEv) && distStop > 0) {
-      r = chosenNetEv / distStop;
+    if (p.chosenNetEv != null && Number.isFinite(p.chosenNetEv) && distStop > 0) {
+      r = p.chosenNetEv / distStop;
     }
-    return {
-      r,
-      pwinFloored: result.pWinFloored,
-    };
+    return { r, pwinFloored: result.pWinFloored };
   }
 
   /**
@@ -1854,13 +1873,12 @@ class ReadyToBuyService {
     // r_multiple ranker, computeRankKey reuses the gate's own friction+kernel via the wrapper
     // (sample-free; reads the surfaced netRewardToRisk) — the number that ranks is the number
     // the gate later confirms. Plain DESC: negative-R losers sort to the bottom (no abs/clamp).
-    const ranker = getActiveRanker();
     const rankKey = new Map<string, number>();
-    for (const s of validSignals) rankKey.set(s.signalId, this.computeRankKey(s, ranker, assetClass));
+    for (const s of validSignals) rankKey.set(s.signalId, this.computeRankKey(s, assetClass));
     validSignals.sort((a, b) => (rankKey.get(b.signalId) ?? -Infinity) - (rankKey.get(a.signalId) ?? -Infinity));
 
     const topKey = validSignals.length > 0 ? rankKey.get(validSignals[0].signalId) : undefined;
-    console.log(`[8.8.4-C.14.B][RTB_RANKED] mode=${mode}, ranker=${ranker}, total=${signals.length}, valid=${validSignals.length}, topKey=${topKey != null ? topKey.toFixed(4) : 'n/a'}, returning top ${Math.min(limit, validSignals.length)}`);
+    console.log(`[8.8.4-C.14.B][RTB_RANKED] mode=${mode}, ranker=r_multiple, total=${signals.length}, valid=${validSignals.length}, topKey=${topKey != null ? topKey.toFixed(4) : 'n/a'}, returning top ${Math.min(limit, validSignals.length)}`);
 
     // reorg-B4: shadow-trade capture (telemetry-only selection-quality layer). This
     // method is the SOLE live caller of the promotion path, so this is exactly one
@@ -2101,16 +2119,45 @@ class ReadyToBuyService {
       : await this.getQueuedSignal(input.mode, normalizedSymbol, input.strategy);
     
     if (existingSignal) {
-      // If existing signal has higher FinalScore, keep it
-      const existingScore = parseFloat(existingSignal.finalScore || '0');
-      const newScore = input.finalScore;
-      if (existingScore >= newScore) {
-        console.log(`[8.8.4-C.5][RTB_SKIP] Keeping existing ${normalizedSymbol}/${input.strategy} with FinalScore ${existingScore.toFixed(4)} >= new ${newScore.toFixed(4)}`);
+      // ★ B-RETIRED-SCORE-REMOVAL (#558, A1) — Kyle-ruled tiebreaker (2026-07-24): a duplicate
+      // symbol+strategy collision is decided on the LIVE RANK KEY (expected R-multiple), not the
+      // retired finalScore. Both sides go through the SAME rMultipleCore the ranker + open-gate
+      // use (zero divergence). The old `parseFloat(existingSignal.finalScore || '0')` coerce is
+      // GONE — it fabricated a comparable number out of a nulling column (#574).
+      const _tbClass = asValidAssetClass(existingSignal.assetClass as unknown as string)
+        ?? asValidAssetClass(input.assetClass)
+        ?? undefined;
+      const existingR = this.signalRMultiple(existingSignal, _tbClass).r;
+      const _im = (input.metadata ?? {}) as Record<string, any>;
+      const newR = this.rMultipleCore({
+        symbol: normalizedSymbol,
+        entry: input.entryPrice,
+        stop: input.stopPrice,
+        target: input.targetPrice ?? null,
+        di: input.diAtQueue != null ? Number(input.diAtQueue) : undefined,
+        dbs: input.dbsScoreAtQueue != null ? Number(input.dbsScoreAtQueue) : undefined,
+        chosenNetEv: input.chosenNetEv,
+        VolNoise: _im.VolNoise,
+        prices: _im.prices,
+        sourcePool: input.sourcePool ?? _im.sourcePool,
+        assetClass: asValidAssetClass(input.assetClass) ?? _tbClass,
+      }).r;
+
+      // Explicit COUNTED keep-first when either side is UNPRICEABLE (-Infinity — degenerate
+      // geometry / missing price). We cannot rank honestly, so keep the incumbent — logged, never
+      // a silent coerce-to-0 (the exact fabricated-input path the old finalScore coerce created).
+      if (!Number.isFinite(existingR) || !Number.isFinite(newR)) {
+        console.log(`[8.8.4-C.5][RTB_TIEBREAK][UNPRICEABLE] ${normalizedSymbol}/${input.strategy}: keeping incumbent (existingR=${existingR}, newR=${newR}) — not scored on a fabricated tiebreak`);
+        return existingSignal;
+      }
+      if (existingR >= newR) {
+        console.log(`[8.8.4-C.5][RTB_TIEBREAK][KEEP] ${normalizedSymbol}/${input.strategy}: incumbent R=${existingR.toFixed(4)} >= new R=${newR.toFixed(4)}`);
         return existingSignal;
       }
 
-      // New signal is better - expire the old one
-      await this.expireSignal(existingSignal.id, 'Replaced by higher-FinalScore SQE signal');
+      // New signal ranks higher - expire the old one
+      console.log(`[8.8.4-C.5][RTB_TIEBREAK][REPLACE] ${normalizedSymbol}/${input.strategy}: new R=${newR.toFixed(4)} > incumbent R=${existingR.toFixed(4)} — replacing`);
+      await this.expireSignal(existingSignal.id, 'Replaced by higher-R-multiple SQE signal');
     }
 
     // P19-B4a stamp-at-source (Langston Q4 backstop): the orchestrator stamps assetClass
@@ -2231,7 +2278,8 @@ class ReadyToBuyService {
       confidence: input.confidence.toString(), // P19-B3b: deterministic confidence (NGC retired, Directive 12.3.3)
       riskScore: input.riskScore.toString(),
       expectedReturn: input.profitRate.toString(),
-      finalScore: (input.finalScore).toString(),
+      // ★ B-RETIRED-SCORE-REMOVAL (#558, A1): finalScore column write REMOVED (column is now
+      // nullable; dropped in Phase B). Ranking is the live r_multiple key, not this stored score.
       // P19-B3b: removed dead `ngc:` write — rtb_signals has NO ngc column (NGC
       // retired; the column was dropped). The write targeted a nonexistent column
       // (suppressed TS2353 in baseline). `confidence` captures the metric.

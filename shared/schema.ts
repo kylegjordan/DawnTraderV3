@@ -1939,8 +1939,10 @@ export const rtbSignals = pgTable("rtb_signals", {
   confidence: decimal("confidence", { precision: 5, scale: 4 }).notNull(), // 0.0000 to 1.0000
   riskScore: decimal("risk_score", { precision: 5, scale: 4 }).notNull(), // 0.0000 to 1.0000 (lower is better)
   expectedReturn: decimal("expected_return", { precision: 5, scale: 4 }).notNull(), // 0.0000 to 1.0000
-  // Directive 11.0F: Primary ranking metrics (ONLY source of truth for signal ranking)
-  finalScore: decimal("final_score", { precision: 5, scale: 4 }).notNull(), // Unified ranking score (FinalScore)
+  // ★ B-RETIRED-SCORE-REMOVAL (#558, A1): finalScore is RETIRED. NOT-NULL dropped (migration
+  // 2026-07-25-b-retired-score-removal-final-score-nullable.sql) so the queue-insert + refresh
+  // writers can be removed; the column is DROPPED in Phase B. Ranking is the live r_multiple key.
+  finalScore: decimal("final_score", { precision: 5, scale: 4 }), // NULLABLE (retired) — dropped in Phase B
   // ★ B-RANKING-COMPONENT-CAPTURE (#555, 2026-07-22): `regime_weight` / `hybrid_score` /
   // `decay_penalty` REMOVED (DROP migration in the same batch). They were NULL on every row
   // for their whole existence — the queue-insert builder never supplied them, so the upsert

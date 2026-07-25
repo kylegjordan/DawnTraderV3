@@ -165,7 +165,7 @@ describe('P19-B7.1 OBJ-2 — no-double-EV-sample (structural guarantee, source-l
 });
 
 describe('P19-B7.1 OBJ-1 — the ranker strategy set', () => {
-  it('exposes r_multiple (default) + the two control arms, no others', () => {
-    expect(RANKER_STRATEGIES).toEqual(['r_multiple', 'confidence', 'ranking_score']);
+  it('exposes r_multiple as the sole ranker (control arms removed — B-RETIRED-SCORE-REMOVAL #558 A1)', () => {
+    expect(RANKER_STRATEGIES).toEqual(['r_multiple']);
   });
 });
