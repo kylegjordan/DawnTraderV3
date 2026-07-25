@@ -202,7 +202,20 @@ the max-hold branch or beside it; I have not traced that.
 
 ---
 
-## 3. Open positions appear in the closed-trades table — NOT new, but 3 rows are genuinely orphaned
+## 3. Open positions appear in the closed-trades table — ★ RESOLVED 2026-07-25 (B-OPEN-TRADES-DISPLAY): FINDING, no code fix
+
+**Owner: CC-C. Investigated + §9.3-verified; premise did NOT reproduce (rule 24 — did not fabricate a fix).**
+The closed-trades displays ALREADY exclude not-yet-closed rows: `trade-history-tab` passes `closedOnly=true`
+(since 2025-12-11); `getClosedTradesPaginated` gates on `closed_at IS NOT NULL`; the analytics path filters
+ghosts. §9.3 confirmed on screen: the closed table's "314 total trades" = exactly the `closed_at IS NOT NULL`
+count; the 18 not-yet-closed rows are excluded — open positions do not show. The write-at-open is an
+intentional lifecycle record (created at open, completed at close). Only **2** harmless one-off orphans
+(07-15, 07-18; hidden + ghost-excluded from learning) remain — documented, NOT auto-deleted (Kyle can
+green-light a cleanup). Langston Step-4 re-read the citations + confirmed. Report as above.
+
+_Original investigation record below (the write-at-open finding was correct; the display-showing premise was not)._
+
+### Original note — Open positions appear in the closed-trades table — NOT new, but 3 rows are genuinely orphaned
 
 **Proposed owner: needs an intent ruling first** (rule 24 outcome 2 vs 1) — then whoever owns the trade sink.
 
@@ -253,11 +266,18 @@ week and surfaces these solutions if so.
 
 ---
 
-## 5. Regime column on the paper open-trades table shows one part instead of three
+## 5. Regime column on the paper open-trades table shows one part instead of three — ★ RESOLVED 2026-07-25 (B-OPEN-TRADES-DISPLAY)
 
-**Proposed owner: small display batch.** **READ IN CODE:** the shared cell already supports the
-three-part regime with its phase (EARLY / PRIME / LATE) — the closed-trades table passes it, the **open**
-table does not. Display gap only; no pipeline involvement.
+**Owner: CC-C. Fixed + deployed + §9.3-verified.** Correction to the original note below: it was NOT
+"display gap only, no pipeline involvement" — the open-position row never STORED the confidence/phase
+(`active_open_positions` has only `confidence`; the closed side has 7 regime columns). The engine now stamps
+the six at-entry regime values into the open-position metadata at open (`createActiveOpenPosition`, same
+`_b67_2_1_*` the closed-trade write uses; no migration); `adaptPaperOpenTrade` maps them. Langston Step-4
+APPROVED. §9.3: SUI/USD (fresh open) shows `HIGH_VOLATILITY_UNSTABLE` + `conf 0.893` + `PRIME`; pre-deploy
+positions show label-only (honest-null). Report `B_OPEN_TRADES_DISPLAY_COMPLETION_REPORT.md`.
+
+_Original note (superseded — the "display gap only" read was wrong): the shared cell supports the three-part
+regime; the closed-trades table passes it, the open table did not._
 
 ## 6. Volume / order-book column shows volume for crypto but no order book for xStocks
 
