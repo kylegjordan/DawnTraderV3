@@ -155,6 +155,19 @@ Zero asset-class references in 321 lines, in the component that watches TCL prom
 
 ## 5. THE HOPS
 
+### HOP A→B — SCANNER → FILTERED-SURVIVOR POOL. *Both classes (separate class scanners); the filter funnel + IMF gate. Mapped 2026-07-25 — live-data grounded (item-1 filter-diagnostics, 2026-07-24).*
+
+**Driver:** `fx5-scanner.ts:611` (`centralClock.subscribe('FX5Scanner', …)`) for crypto; `xstock_spot/scanner.ts:251` for xStock — two class-specific scanners, both central-clock-driven. **Census — writers of the survivor pool** (`active-filter-pool.ts` `ActiveFilterPoolService`, via `addSurvivors`): the scanners are the writers; the pool holds per-mode Maps — the main FX5 pool + family-routed sub-pools (pattern / trend / reversal). **Readers (the next hop):** `signal-orchestrator.ts:1661` `getActivePool(mode)` + `:1667` `getPatternPool(mode)` + `:746` `getFX5DataForSymbol` (reads the per-pair `di`/`dbsScore` the reorg-B3 thread carries as typed columns).
+
+**What is handed over — the survivor set, through a two-stage gate.** Stage 1 quantitative filters, then Stage 2 the IMF gate (LQ liquidity / VN volume-noise / DI directional-integrity). **Measured live (one crypto cycle, 2026-07-24):** 325 scanned → **253 failed min-volume (78% — by far the dominant gate)** · 8 stablecoin · 7 min-price · 8 history · 31 already-active → **15 passed all filters** → IMF → **8 quant survivors**; the pattern path ran in parallel to **29 survivors** (37 passed → 29 IMF-passed). So the scanner is HEALTHY and productive — the funnel narrows on real quality gates, min-volume doing most of the work. `benchmarkBypassed` lets designated benchmark symbols skip a gate (a deliberate carve-out, not a leak).
+
+**★ WHAT GATES / DROPS THE PAYLOAD HERE:** the filters + the IMF gate — every count exposed in the `filter-diagnostics` funnel (`fx5-scanner.ts:178-213`), none silent. A pair failing any stage simply never enters `addSurvivors`. **The survivor pool is a live working set** (Maps cleared + rewritten each scan cycle) — no history retained; a pair present one cycle and gone the next left by failing a gate, not a silent drop.
+
+**Dormant-by-decision or dormant-by-defect (§4e):** live and firing (325 scanned/cycle against a 1518-pair Kraken universe; 300/cycle target — the universe rotates).
+**Absence behaviour (§4d):** honest-empty for a pair that fails — no fabricated survivor. ⭕ **Cross-reference (not a new finding):** the `di`/`dbsScore` on `ActiveFilteredPair` is the reorg-B3 typed-column thread (SIM reorg-B3); the downstream `di_at_open` const-50 fallback is homed at #378.
+
+---
+
 ### HOP D→E — GENERATION SQE → RTB QUEUE (admission). *Both classes; the fee wall + the exploration lane live here. Mapped 2026-07-25 from the item-1 investigation — live-data grounded, not reasoned.*
 
 **Driver:** `signal-orchestrator.ts:342` (evaluation loop). The orchestrator emits **ONE best signal per cycle** (not one per strategy in a regime family); each candidate is scored by the **generation SQE** (`signal-orchestrator.ts:906` → `[11.0E][SQE_REJECT]`) and, on pass, admitted to `rtb_signals` via **`queueSQESignal`** — the single admission chokepoint. **Census — writers of `rtb_signals` (rule 22):** `queueSQESignal` is the sole write path (organic + exploration admits both land through it); `recordQueueFailure`/`getQueueFailureStats` (`ready_to_buy_service.ts:495`) is the observable DROP counter — a fire-and-forget `.catch` in the orchestrator increments it + logs `[RTB_QUEUE_DROP][CRITICAL]` (the P19-B3b silent-drop landmine surface).
