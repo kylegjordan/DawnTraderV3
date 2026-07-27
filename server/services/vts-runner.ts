@@ -887,7 +887,10 @@ export async function registerOpenShadowTrade(
     signalType: 'SHADOW',
     strategy: input.strategy,
     patternType: null,
-    finalScore: input.finalScore ?? 0,
+    // #558 A2: finalScore omitted — this shadowTrade is a vts_open_trades row (insertOpenTrade,
+    // shadow:true), the EXACT substrate A2 retires; persisting it here would split vts_open_trades
+    // (shadow rows keep the score, real rows drop it). Same surviving-writer category as :4995.
+    // Coalesced-WRITE trap: my `grep -v '?? 0'` enumeration wrongly excluded it (Langston Step-4 catch).
     hybridScore: input.hybridScore ?? 0,
     predictiveConfidence: input.confidence ?? 0,
     regimeWeight: input.regimeWeight ?? 0,
@@ -931,6 +934,11 @@ export async function registerOpenShadowTrade(
       entryPrice: input.entryPrice,
       stopPrice: input.stopPrice,
       targetPrice: input.targetPrice,
+      // #558 A2: KEPT (deliberate, fenced) — this writes rtb_shadow_pairings, a SEPARATE
+      // selection-quality substrate (its own table + column), NOT the vts_open_trades trade record
+      // A2 retires. It is outside A2's stated fence; its finalScore retirement rides the
+      // selection-quality-capture family (#555/#582 lineage), not this batch. Post-A1 `input.finalScore`
+      // is already null (RTB stopped writing it), so this persists null today regardless.
       finalScore: input.finalScore ?? null,
       hybridScore: input.hybridScore ?? null,
       confidence: input.confidence ?? null,
