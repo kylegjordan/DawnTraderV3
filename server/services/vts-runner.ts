@@ -517,7 +517,7 @@ interface Phase10TradeRecord {
   signalType: CanonicalSignalType;
   strategy: string;
   patternType?: PatternType | null;
-  finalScore: number;
+  finalScore?: number; // #558 A2: optional — VTS-persisted score no longer written (stop-persist); readers coalesce ?? 0; field removed in A3
   hybridScore: number;
   predictiveConfidence: number;
   regimeWeight: number;
@@ -625,7 +625,7 @@ interface OpenVirtualTrade {
   signalType: CanonicalSignalType;
   strategy: string;
   patternType?: PatternType | null;
-  finalScore: number;
+  finalScore?: number; // #558 A2: optional — VTS-persisted score no longer written (stop-persist); readers coalesce ?? 0; field removed in A3
   hybridScore: number;
   predictiveConfidence: number;
   regimeWeight: number;
@@ -2034,7 +2034,8 @@ async function generatePhase10Signal(
     signalType,
     strategy,
     patternType,
-    finalScore,
+    // #558 A2: finalScore omitted — stop persisting the retired score to the vts_open_trades
+    // substrate (this openTrade → openVirtualTrades.set). B79.0m.b hot-path, twin-lock.
     hybridScore,
     predictiveConfidence,
     expectedEdge: finalScore * dynamicTarget - frictionCost, // Batch 45: Store actual computed edge
@@ -2192,7 +2193,7 @@ async function generatePhase10Signal(
     hybridScore,
     predictiveConfidence,
     // Phase-10 canonical fields (M50)
-    finalScore: finalScore, // Directive 11.7R: Governed score
+    // #558 A2: finalScore omitted (stop-persist; retired score no longer written to the VirtualSignal record). B79.0m.b twin-lock.
     regimeWeight,
     decayPenalty,
     expectedEdge: finalScore * dynamicTarget - frictionCost,
@@ -2224,7 +2225,7 @@ async function generatePhase10Signal(
     signalType,
     strategy,
     patternType, // Directive 11.4C.3: Attached pattern for telemetry
-    finalScore: finalScore, // Directive 11.7R: Governed score
+    // #558 A2: finalScore omitted (stop-persist; retired score no longer written to the Phase10TradeRecord). B79.0m.b twin-lock.
     hybridScore,
     predictiveConfidence,
     regimeWeight,
@@ -3188,7 +3189,7 @@ async function resolveOpenVirtualTrades(): Promise<{
       signalType: trade.signalType,
       strategy: trade.strategy,
       patternType: trade.patternType,
-      finalScore: trade.finalScore,
+      finalScore: trade.finalScore ?? 0, // #558 A2: coalesce (field now optional/unwritten)
       hybridScore: trade.hybridScore,
       predictiveConfidence: trade.predictiveConfidence,
       regimeWeight: trade.regimeWeight,
@@ -3228,7 +3229,7 @@ async function resolveOpenVirtualTrades(): Promise<{
     const telemetry = getTelemetryAggregator();
     telemetry.recordPairTelemetry(trade.symbol, {
       assetClass: trade.assetClass, // B-4.7: stamped at write
-      finalScore: trade.finalScore,
+      finalScore: trade.finalScore ?? 0, // #558 A2: coalesce (field now optional/unwritten)
       hybridScore: trade.hybridScore,
       regimeWeight: trade.regimeWeight,
       regimeScore: trade.regimeScore,
@@ -3285,7 +3286,7 @@ async function resolveOpenVirtualTrades(): Promise<{
         originalStopPrice: trade.originalStopPrice,
         latchTriggerPrice: trade.latchTriggerPrice,
         rungTargetHistory: trade.rungTargetHistory,
-        finalScore: trade.finalScore,
+        finalScore: trade.finalScore ?? 0, // #558 A2: coalesce (field now optional/unwritten)
         hybridScore: trade.hybridScore,
         predictiveConfidence: trade.predictiveConfidence,
         regimeWeight: trade.regimeWeight,
@@ -3404,7 +3405,7 @@ async function resolveOpenVirtualTrades(): Promise<{
           sourcePool: trade.sourcePool,
           filterTier: trade.filterTier,
           // Scoring
-          finalScore: trade.finalScore,
+          finalScore: trade.finalScore ?? 0, // #558 A2: coalesce (field now optional/unwritten)
           hybridScore: trade.hybridScore,
           predictiveConfidence: trade.predictiveConfidence,
           expectedEdge: trade.expectedEdge,
@@ -3910,7 +3911,7 @@ export interface RegisterOpenVtsTradeInput {
   signalType: CanonicalSignalType;
   strategy: string;
   patternType?: PatternType | null;
-  finalScore: number;
+  finalScore?: number; // #558 A2: optional — VTS-persisted score no longer written (stop-persist); readers coalesce ?? 0; field removed in A3
   hybridScore: number;
   predictiveConfidence: number;
   regimeWeight: number;
@@ -4920,7 +4921,7 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
         const telemetry = getTelemetryAggregator();
         telemetry.recordPairTelemetry(pair.symbol, {
           assetClass: tradeRecord.assetClass, // B-4.7: stamped at write
-          finalScore: tradeRecord.finalScore,
+          finalScore: tradeRecord.finalScore ?? 0, // #558 A2: coalesce (field optional/unwritten)
           hybridScore: tradeRecord.hybridScore,
           regimeWeight: tradeRecord.regimeWeight,
           regimeScore: tradeRecord.regimeScore,
@@ -4991,7 +4992,11 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
                   strategy: hybridStrategy,
                   signalType: 'HYBRID' as const,
                   sourcePool: 'hybrid' as const,
-                  finalScore: hybridConfidence,
+                  // #558 A2: finalScore omitted — the crypto HYBRID trade record must ALSO stop
+                  // persisting the retired score (else the hybrid lane keeps writing it while the
+                  // quant lane stops = the per-lane split). Surfaced by the full-grep enumeration,
+                  // NOT by tsc (surviving optional-field write compiles clean). hybridConfidence
+                  // still flows to its VTS-internal consumers; only the persisted field is dropped.
                   // P19-B3b: buffered pattern signals carry patternType as a raw string;
                   // Phase10TradeRecord.patternType is PatternType | null. Normalize through
                   // the canonical converter (same convention as canonicalPatternType at
@@ -5020,7 +5025,7 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
         regimeDistribution[tradeRecord.regime]++;
         signalTypeDistribution[tradeRecord.signalType] = (signalTypeDistribution[tradeRecord.signalType] || 0) + 1;
         strategiesExecuted.add(tradeRecord.strategy);
-        totalFinalScore += tradeRecord.finalScore;
+        totalFinalScore += tradeRecord.finalScore ?? 0; // #558 A2: coalesce (field optional/unwritten)
         simulatedCount++;
       }
       
@@ -5646,7 +5651,7 @@ export async function getOpenVirtualTradesForML(): Promise<Array<{
       netProfitPercent: (parseFloat(netProfitPercent) >= 0 ? '+' : '') + netProfitPercent + '%',
       // Batch 47f15: Compute ranking score for display (same formula as RTB queue)
       rankingScore: computeRankingScore(
-        trade.finalScore,
+        trade.finalScore ?? 0, // #558 A2: interim deterministic 0 (A3 re-sources — coupled to the expectedEdge arg below)
         normalizeNetReturn(trade.expectedEdge ?? 0),
         trade.frictionCost ?? 0,
         0, // contextBonus — DECLARED-NEVER-WIRED (B-4.7 C2 finding): the
@@ -5655,7 +5660,7 @@ export async function getOpenVirtualTradesForML(): Promise<Array<{
            // homed to AMR scoping (RUNNING_ISSUES #217).
         trade.signalType ?? 'QUANT'
       ),
-      finalScore: trade.finalScore,
+      finalScore: trade.finalScore ?? 0, // #558 A2: coalesce (field now optional/unwritten)
       hybridScore: trade.hybridScore,
       expectedEdge: trade.expectedEdge ?? trade.predictiveConfidence ?? 0, // Batch 45: Use actual computed edge, not default 0.5
       regimeWeight: trade.regimeWeight,

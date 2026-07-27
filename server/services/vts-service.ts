@@ -54,7 +54,7 @@ export interface VirtualSignal {
   patternStrength?: number;
   
   // Phase-10 Canonical Metrics (M50 compliant)
-  finalScore: number;
+  finalScore?: number; // #558 A2: optional (VTS-persisted score retired; stop-persist, readers ?? 0, removed A3)
   hybridScore: number;
   predictiveConfidence: number;
   regimeWeight: number;
@@ -95,7 +95,7 @@ export interface VirtualTrade {
   calibrated: boolean;
   
   // Phase-10 Denormalized Fields (for efficient querying)
-  finalScore: number;
+  finalScore?: number; // #558 A2: optional (VTS-persisted score retired; stop-persist, readers ?? 0, removed A3)
   hybridScore: number;
   predictiveConfidence: number;
   regimeWeight: number;
@@ -291,7 +291,7 @@ export class VTSService extends EventEmitter {
     
     // Calculate avgFinalScore from closed trades
     if (this.closedTrades.length > 0) {
-      const totalFinalScore = this.closedTrades.reduce((sum, t) => sum + t.finalScore, 0);
+      const totalFinalScore = this.closedTrades.reduce((sum, t) => sum + (t.finalScore ?? 0), 0); // #558 A2: coalesce (field optional/unwritten)
       this.sessionMetrics.avgFinalScore = totalFinalScore / this.closedTrades.length;
     }
   }
@@ -866,7 +866,7 @@ export class VTSService extends EventEmitter {
     originalStopPrice?: number;
     latchTriggerPrice?: number;
     rungTargetHistory?: number[];
-    finalScore: number;
+    finalScore?: number; // #558 A2: optional (VTS-persisted score retired; stop-persist, readers ?? 0, removed A3)
     hybridScore: number;
     predictiveConfidence: number;
     regimeWeight: number;
@@ -952,7 +952,7 @@ export class VTSService extends EventEmitter {
       signalType: normalizedSignalType,
       patternType: tradeData.patternType,
       patternStrength: 0,
-      finalScore: tradeData.finalScore,
+      finalScore: tradeData.finalScore ?? 0, // #558 A2: coalesce (field optional/unwritten)
       hybridScore: tradeData.hybridScore,
       predictiveConfidence: tradeData.predictiveConfidence,
       regimeWeight: tradeData.regimeWeight,
@@ -991,7 +991,7 @@ export class VTSService extends EventEmitter {
       fees: fees,
       positionSize: tradeData.positionSize, // Bug fix: Now persisting positionSize
       calibrated: true,
-      finalScore: tradeData.finalScore,
+      finalScore: tradeData.finalScore ?? 0, // #558 A2: coalesce (field optional/unwritten)
       hybridScore: tradeData.hybridScore,
       predictiveConfidence: tradeData.predictiveConfidence,
       regimeWeight: tradeData.regimeWeight,

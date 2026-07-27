@@ -997,7 +997,7 @@ export async function evaluateXstockPairForVTS(
           signalType: stratDef.signalType,
           strategy: strategyKey,
           patternType: (stratDef.patternType as any) ?? null,
-          finalScore,
+          // #558 A2: finalScore omitted (stop-persist; retired score no longer written to the xStock VTS trade record via registerOpenVtsTrade). computeFinalScore/:668 archiveCommon KEPT (that feeds the #582 signal_eval sink, not this record).
           hybridScore,
           predictiveConfidence,
           regimeWeight,
