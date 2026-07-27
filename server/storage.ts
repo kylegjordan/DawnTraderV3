@@ -542,9 +542,10 @@ export interface IStorage {
   }): Promise<{ trades: ClosedTrade[]; totalCount: number }>;
   getClosedTradesBySymbol(mode: TradingMode, symbol: string): Promise<ClosedTrade[]>;
   getClosedTradesGlobal(mode: TradingMode, filters?: { limit?: number; closedOnly?: boolean; includeNeverFilled?: boolean }): Promise<ClosedTrade[]>; // Phase 27.F.14.B: Global-per-mode query for LATTI
-  
+  deleteClosedTrade(mode: TradingMode, id: string): Promise<void>; // B-PROMOTION-RACE-FIX (#508): single-row delete for the dup-race orphan compensation
+
   // Open positions
-  createActiveOpenPosition(mode: TradingMode, position: InsertActiveOpenPosition): Promise<ActiveOpenPosition>;
+  createActiveOpenPosition(mode: TradingMode, position: InsertActiveOpenPosition): Promise<{ position: ActiveOpenPosition; created: boolean }>; // B-PROMOTION-RACE-FIX (#508): created=false = I8E dedup-return; caller must compensate its orphaned record
   updateActiveOpenPosition(mode: TradingMode, id: string, updates: Partial<ActiveOpenPosition>): Promise<ActiveOpenPosition>;
   getActiveOpenPosition(mode: TradingMode, id: string): Promise<ActiveOpenPosition | undefined>;
   getActiveOpenPositionBySymbol(mode: TradingMode, symbol: string): Promise<ActiveOpenPosition | undefined>;
@@ -3311,30 +3312,41 @@ export class DatabaseStorage implements IStorage {
     return await query;
   }
 
-  async createActiveOpenPosition(mode: TradingMode, position: InsertActiveOpenPosition): Promise<ActiveOpenPosition> {
+  // B-PROMOTION-RACE-FIX (#508): returns { position, created }. `created=false` is the I8E
+  // dedup-return — a concurrent open won this symbol's single position slot, so the caller must
+  // compensate (delete its own orphaned trade record). Previously this swallowed the 23505 and
+  // returned the winner's row as if it were the caller's own, stranding the loser's closed_trades
+  // record with no signal — the second, independent orphan defect.
+  async createActiveOpenPosition(mode: TradingMode, position: InsertActiveOpenPosition): Promise<{ position: ActiveOpenPosition; created: boolean }> {
     // [I8C-SYMBOL-NORM] Normalize symbol to canonical BASE/QUOTE format
     const canonicalSymbol = normalizeToInternalSymbol(position.symbol);
     if (position.symbol !== canonicalSymbol) {
       console.log(`[I8C-SYMBOL-NORM] raw=${position.symbol} canonical=${canonicalSymbol}`);
     }
     const normalizedPosition = { ...position, symbol: canonicalSymbol };
-    
+
     // Phase 8.8.3-I8E: Handle unique constraint violations gracefully
     try {
       const [result] = await db.insert(activeOpenPositions).values(normalizedPosition).returning();
-      return result;
+      return { position: result, created: true };
     } catch (error: any) {
-      // Check for unique constraint violation (code 23505 in PostgreSQL)
-      if (error?.code === '23505' || error?.message?.includes('unique_symbol_side') || error?.message?.includes('duplicate key')) {
+      // The active table's unique index is `active_open_positions_symbol_idx` (symbol ALONE);
+      // 23505 is the reliable signal. (Was 'unique_symbol_side' — the PAPER table's constraint
+      // name; dead/misleading on this path since code===23505 already covers it. Corrected per
+      // B-PROMOTION-RACE-FIX / §15 no-legacy-lingering.)
+      if (error?.code === '23505' || error?.message?.includes('active_open_positions_symbol_idx') || error?.message?.includes('duplicate key')) {
         console.log(`[I8E-DB-DEDUP] Duplicate position blocked: ${canonicalSymbol}/${position.side} - constraint prevented insert`);
-        // Return the existing position instead
+        // A concurrent open won this symbol's single position slot. Return it with created=false
+        // so the caller compensates its own orphaned record (B-PROMOTION-RACE-FIX #508).
         const existing = await db.select()
           .from(activeOpenPositions)
           .where(eq(activeOpenPositions.symbol, canonicalSymbol));
         if (existing.length > 0) {
-          console.log(`[I8E-DB-DEDUP] Returning existing position: ${existing[0].id}`);
-          return existing[0];
+          console.log(`[I8E-DB-DEDUP] Returning winner position ${existing[0].id} with created=false — caller compensates its orphaned trade record`);
+          return { position: existing[0], created: false };
         }
+        // Edge: 23505 fired but no existing row found — do NOT swallow; re-throw (do not fabricate
+        // a created=false with no position). Langston Step-4 refinement 2.
       }
       // Re-throw other errors
       throw error;
@@ -3386,6 +3398,15 @@ export class DatabaseStorage implements IStorage {
 
   async deleteAllClosedTrades(mode: TradingMode): Promise<void> {
     await db.delete(closedTradesTable);
+  }
+
+  // B-PROMOTION-RACE-FIX (#508): delete a single closed_trades row by id. Used by the open-path
+  // dup-race compensation to remove the loser's orphaned record when createActiveOpenPosition
+  // returns created=false. Balance-neutral: the computed balance sums only closed_at-populated
+  // rows + live positions (routes.ts:12306-12323), and an orphan has neither. NOT a general-
+  // purpose delete — callers must own the row (a just-written record that failed to get a position).
+  async deleteClosedTrade(mode: TradingMode, id: string): Promise<void> {
+    await db.delete(closedTradesTable).where(eq(closedTradesTable.id, id));
   }
 
   // Phase 27.F.13.F: Cleanup method for old closed paper sim trades

@@ -2268,13 +2268,28 @@ export class ActiveExecutionEngine {
     });
   }
 
+  // B-PROMOTION-RACE-FIX (#508): single-flight state for checkRtbPromotion (below). Its three
+  // triggers (TCL_ACTIVATED :380 / TRADE_CLOSED :400 / setInterval :444) were unlocked; two firing
+  // near-simultaneously ran two concurrent promotion passes over the same queue that double-opened
+  // the same signal (the orphan race). Per-instance (per-mode) booleans; single event loop.
+  private promotionInProgress = false;
+  private promotionRerunRequested = false;
+
   /**
    * Phase 8.8.4-B + C.5 + C.12 + C.14.B: Check for RTB Queue Promotion
    * Called via event handlers (TCL_ACTIVATED, TRADE_CLOSED) when promotion may be possible
    * Phase C.12: Uses tclWatchdog for event-driven TCL state management
    * Phase C.14.B: Multi-signal promotion - promotes all eligible signals up to openSlots limit
+   * B-PROMOTION-RACE-FIX (#508): single-flight (1b coalescing re-run) — guard below + finally.
    */
   private async checkRtbPromotion(): Promise<void> {
+    // Single-flight: if a pass is already running, request a coalesced re-run and return. The
+    // running pass re-runs once when it finishes (catches a slot freed mid-pass by a TRADE_CLOSED).
+    if (this.promotionInProgress) {
+      this.promotionRerunRequested = true;
+      return;
+    }
+    this.promotionInProgress = true;
     try {
       // Phase 8.8.4-C.12: Check TCL activation state via watchdog
       const tclActive = tclWatchdog.isActive(this.mode);
@@ -2426,6 +2441,15 @@ export class ActiveExecutionEngine {
       console.log(`[8.8.4-C.14.B][PROMOTION_SUMMARY] mode=${this.mode}, promoted=${promotedCount}, failed=${failedCount}, remainingSlots=${openSlots}`);
     } catch (error) {
       console.error(`[RTB-Promotion:${this.mode}] Error during promotion check:`, error);
+    } finally {
+      // B-PROMOTION-RACE-FIX (#508): release the single-flight latch on EVERY exit path (incl. the
+      // early returns above: TCL-warmup, guardrail-read-fail, at-capacity) or promotion wedges
+      // permanently. Then honour ONE coalesced re-run if a trigger arrived mid-pass.
+      this.promotionInProgress = false;
+      if (this.promotionRerunRequested) {
+        this.promotionRerunRequested = false;
+        void this.checkRtbPromotion();
+      }
     }
   }
 
@@ -3285,7 +3309,7 @@ export class ActiveExecutionEngine {
 
       // Create open position - Phase 8.8.3-C-FINAL: Include entryFee
       // Directive 10.3: Include signal type fields
-      const openPosition = await storage.createActiveOpenPosition(this.mode, {
+      const { position: openPosition, created: _posCreated } = await storage.createActiveOpenPosition(this.mode, {
         symbol: signal.symbol,
         strategyName: signal.strategy,
         side: 'buy',
@@ -3364,6 +3388,22 @@ export class ActiveExecutionEngine {
           regimeConfidenceModulated: _b67_2_1_modulatedConf,
         }
       });
+
+      // B-PROMOTION-RACE-FIX (#508): if a concurrent open won this symbol's single position slot,
+      // createActiveOpenPosition returned the WINNER's row with created=false (the I8E dedup-return).
+      // Our closed_trades record (createClosedTrade above) is now orphaned — its "position" is the
+      // winner's row (linked to the winner's tradeId). Delete our record and bail. Balance-neutral:
+      // the computed paper balance sums only closed_at-populated rows + live positions, and this
+      // record has neither. Without this, the un-serialized promotion race strands the record.
+      if (!_posCreated) {
+        console.warn(`[DUP-OPEN-RACE][${this.mode}] ${signal.symbol}: lost the concurrent position race (dedup-return) — deleting orphaned trade record ${trade.id}`);
+        try {
+          await storage.deleteClosedTrade(this.mode, trade.id);
+        } catch (delErr: any) {
+          console.error(`[DUP-OPEN-RACE][${this.mode}] failed to delete orphaned record ${trade.id}: ${delErr?.message}`);
+        }
+        return { opened: false, stage: 'DUP_POSITION', reason: `lost concurrent position race for ${signal.symbol}; orphaned trade record ${trade.id} deleted` };
+      }
 
       // AJ10.3: Diagnostic - open position created
       console.log(`[AJ10.3][OPEN_POSITION_OK] positionId=${openPosition.id} | symbol=${signal.symbol} | tradeId=${trade.id}`);
