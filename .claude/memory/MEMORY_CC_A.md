@@ -5,7 +5,11 @@
 
 ---
 
-## ▶ ACTIVE BATCH — B-RETIRED-SCORE-REMOVAL (#558). A0 ✅ + A1 ✅ SHIPPED + LANGSTON STEP-4 SIGN-OFF. **NEXT: DEPLOY A1 to staging + verify (UI §9.3), then CUT A2 (xStock).**
+## ▶ ACTIVE BATCH — B-RETIRED-SCORE-REMOVAL (#558). A0 ✅ + A1 ✅ SHIPPED+SIGNED-OFF+**DEPLOYED+VERIFIED**. **NEXT: CUT A2 (xStock) — awaiting Kyle's go (asked 2026-07-27).**
+
+### A1 ✅ DEPLOYED + §9.3-VERIFIED on staging (2026-07-27, both CC-B+CC-C cleared the deploy; Kyle-approved)
+- Deploy sequence: pull → **`npm run db:migrate` FIRST** (migration NOT in `build`/`start` — it's a separate step; nullable-before-no-writer order) → build → `pm2 restart`. Migration applied clean (1 pending = mine). DB verified: `final_score` is_nullable=YES, active_ranker rows=0. App online, HTTP 200, no NOT-NULL/final_score/schema errors (only pre-existing Kraken unknown-pair + EACCES health-log noise).
+- **§9.3 UI (Kyle's Chrome, already authed — no creds entered):** Dashboard + Analytics&Diagnostics render clean; Ready-to-Buy widget shows R-Multiple, no finalScore artifacts, honest em-dashes. **HONEST LIMIT: RTB pool EMPTY (crypto weather STORMY, `ev_gap_warming n=0/100` — EV/fee gate correctly refusing; NOT my change) → verified ranking CODE+DISPLAY, did NOT observe a live signal rank via r_multiple (none passing the gate).**
 
 ### A1 ✅ SHIPPED + SIGNED-OFF (2026-07-25, head `8939105f8`, commit `7512ddf19`; CI `30135581915` green)
 - 6 files (+192/-86): `ready_to_buy_service.ts` (nullable-col writers removed, tiebreaker→r_multiple via new shared `rMultipleCore`, ranker collapse to sole `r_multiple` arm, getQueuedSignals→queuedAt), `schema.ts` (final_score `.notNull()` dropped), migration `2026-07-25-b-retired-score-removal-final-score-nullable.sql`(+rollback out-of-MANIFEST), test, MANIFEST.
@@ -39,7 +43,7 @@
 ---
 
 ## 📌 OPEN THREADS
-- **#558** — A1 shipped+signed-off (above); **BLOCKED on Kyle's deploy-vs-fold decision since 2026-07-25 (~2 days, Kyle away)** — did NOT unilaterally start A2 (respecting his decision point). Open row confirmed (langston, fa959de63); gov-staleopen `f4ffaf53` ACKED-and-left (do not resolve — see lesson). Board [34] held. On Kyle's go: pull → deploy A1 (migration runs pre-restart) → §9.3 UI-verify RTB queue/ranking → then A2.
+- **#558** — A1 DEPLOYED+§9.3-VERIFIED on staging 2026-07-27 (above). NEXT = **A2 (xStock eval-cycle.ts), awaiting Kyle's go** (asked 2026-07-27; did NOT start unilaterally). Open row confirmed (langston, fa959de63); gov-staleopen `f4ffaf53` ACKED-and-left (do not resolve — see lesson). Board [34] held (still my file for A2? re-pin at ref). A2 recon: finalScore cluster at `eval-cycle.ts:656` computeFinalScore + `:668/:1000` + pattern-filter/pattern-pool-filters.
 - **#582** — finalScore telemetry-reader retirement (`B-FINALSCORE-TELEMETRY-RETIRE`, Phase-B prereq). Owner CC-A. Langston Step-4 condition, homed.
 - **#578** — legacy `TradingEngine` (runs in neither mode; paper never `.start()`ed, live Phase-21-gated-refuses; `active-execution-engine` is the real paper+live pipeline). Kyle-ruled legacy → its own removal batch `B-TRADING-ENGINE-REMOVAL`, owner CC-A. Not #558.
 - **#580** — A0 predictiveConfidence-not-persisted seam; superseded-by-A1-removal; owner CC-A.
