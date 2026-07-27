@@ -23,6 +23,10 @@ vi.mock('../../db.js', () => ({
         // regresses to the unfiltered query, return a poisoned count that breaks the
         // anneal expectations below (fails the floor math loudly in tests).
         if (!s.includes('never_filled')) return { rows: [{ n: closedExploration + 100000 }] };
+        // A4 (2026-07-27): the anneal must also count only TRULY-closed rows — closed_trades
+        // holds an at-open row (closed_at NULL) per position, so a missing closed_at filter
+        // over-counts still-open + orphaned exploration rows. Poison loudly if it regresses.
+        if (!s.includes('closed_at')) return { rows: [{ n: closedExploration + 100000 }] };
         return { rows: [{ n: closedExploration }] };
       }
       return { rows: [{ n: 0 }] };

@@ -107,13 +107,20 @@ async function usedBudgetToday(assetClass: string): Promise<number> {
  *  reads the B7.2c pending-outcome records through a separate path — a never-filled
  *  attempt is precisely what pFill exists to count. Two denominators, two queries; no
  *  shared flag to misapply. With the step keyed to informative closes the anneal
- *  calendar becomes an OUTPUT of measured fill reality, not a date target. */
+ *  calendar becomes an OUTPUT of measured fill reality, not a date target.
+ *
+ *  A4 (2026-07-27, CC-C): closed_trades holds an AT-OPEN row (closed_at NULL) for every
+ *  position, so the anneal MUST also filter `closed_at IS NOT NULL` — otherwise still-open
+ *  and orphaned exploration rows count as if they carried an outcome, over-tightening the
+ *  floor prematurely (measured: crypto 191 counted vs 187 truly-closed; the 4 extras were
+ *  the 3 known orphans MET/ETH/AVAX + 1 legitimately-open ONDO). */
 async function closedExplorationCount(assetClass: string): Promise<number> {
   return cachedCount(`anneal:${assetClass}`, async () => {
     const r = await db.execute(sql`
       SELECT count(*)::int AS n FROM closed_trades
       WHERE metadata->>'admissionBasis' = 'exploration'
         AND asset_class = ${assetClass}
+        AND closed_at IS NOT NULL
         AND close_reason IS DISTINCT FROM 'never_filled'`);
     return Number((r as any).rows?.[0]?.n ?? 0);
   });
