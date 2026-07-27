@@ -11,9 +11,12 @@
 //   - NO @ts-expect-error / @ts-ignore / `as any` / `!` suppression in source.
 //     The errors stay live in the tsc output — this script only chooses what
 //     to gate on.
-//   - Per-FILE per-CODE comparison (not total-count). Total-count gating
-//     allows trading a fixed error for a new one silently — exactly the
-//     graveyard mechanism we are preventing.
+//   - Per-FILE per-CODE per-MESSAGE comparison (#579, 2026-07-27; was per-(file,
+//     code) count, which allowed a NEW error to hide under a stale (file,code)
+//     ceiling's headroom, AND allowed trading a fixed error for a distinct new one
+//     of the same code silently — exactly the graveyard mechanism we prevent).
+//     The identity is the tsc PRIMARY-line message (property/type name = the
+//     distinguishing detail); a new message fails regardless of count headroom.
 //   - Baseline file is human-readable JSON with per-file phase tags + context.
 //     Diffs are review-worthy governance.
 //   - Batches that grow the baseline must enumerate + justify each addition
@@ -43,6 +46,7 @@
 import { execSync } from 'node:child_process';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { argv, exit, cwd } from 'node:process';
+import { pathToFileURL } from 'node:url';
 
 const BASELINE_PATH = '.tsc-baseline.json';
 
@@ -61,22 +65,99 @@ function runTsc() {
   return output;
 }
 
-// Parse `tsc --noEmit` output into { counts: {file: {code: n}}, total }.
+// #579 (B-TSC-BASELINE-FIX, 2026-07-27): normalize a tsc primary-line MESSAGE into
+// a stable identity. Collapse whitespace + stabilize the volatile `... N more ...`
+// type-expansion count (rare on a primary line, but harmless to normalize). The
+// primary-line message carries the distinguishing detail (property/type name), which
+// is what makes a NEW error distinct from a baselined one even under (file,code)
+// headroom — the whole point of moving from count-identity to message-identity.
+function normalizeMessage(msg) {
+  return msg
+    .trim()
+    .replace(/\s+/g, ' ')
+    .replace(/\.\.\. \d+ more \.\.\./g, '... N more ...');
+}
+
+// Parse `tsc --noEmit` output into { counts: {file: {code: {message: n}}}, total }.
 // Expected line shape: `path/to/file.ts(line,col): error TS####: message`.
+// #579: keyed by (file, code, MESSAGE) — NOT just (file, code) count — so a new
+// error is detected by its distinct message even when a stale (file,code) ceiling
+// leaves headroom (the pre-fix gate only compared per-(file,code) counts, so a new
+// error that fit under the ceiling passed green). The regex still matches only the
+// PRIMARY error line (continuation/type-expansion lines never start with
+// `file(line,col): error`), so the message is the short, stable primary-line text.
 function parseErrors(output) {
   const counts = {};
   let total = 0;
-  const re = /^(.+?)\((\d+),(\d+)\): error (TS\d+):/;
+  const re = /^(.+?)\((\d+),(\d+)\): error (TS\d+): (.*)$/;
   for (const line of output.split(/\r?\n/)) {
     const m = re.exec(line);
     if (!m) continue;
     const file = m[1].replace(/\\/g, '/'); // normalize to forward slashes
     const code = m[4];
+    const message = normalizeMessage(m[5]);
     if (!counts[file]) counts[file] = {};
-    counts[file][code] = (counts[file][code] || 0) + 1;
+    if (!counts[file][code]) counts[file][code] = {};
+    counts[file][code][message] = (counts[file][code][message] || 0) + 1;
     total++;
   }
   return { counts, total };
+}
+
+// #579 helper: total error count within a per-file `errors` object of the new
+// nested shape { code: { message: count } }.
+function sumFileErrors(errorsByCode) {
+  let n = 0;
+  for (const messages of Object.values(errorsByCode)) {
+    for (const c of Object.values(messages)) n += c;
+  }
+  return n;
+}
+
+// #579: PURE comparison (no I/O, no exit) of current tsc counts
+// {file:{code:{message:n}}} against baseline files[] ({path, errors:{code:{message:n}}}).
+// Returns { regressions, newPaths, drops }:
+//   - regressions: (file,code,message) whose CURRENT count exceeds baseline. A NEW
+//     message has baseline 0, so ANY occurrence is a regression — REGARDLESS of the
+//     file's (file,code) count headroom. That is what closes #579 (and the 1-for-1
+//     swap: the new message regresses even though the (file,code) total is flat).
+//   - newPaths: files with errors not in the baseline at all.
+//   - drops: (file,code,message) below baseline (fixed — good news).
+// Exported so the 3-case guarantee is unit-tested.
+function computeDiff(counts, baselineFiles) {
+  const baselineByPath = new Map(baselineFiles.map((f) => [f.path, f.errors]));
+  const regressions = [];
+  const newPaths = [];
+  for (const [path, codes] of Object.entries(counts)) {
+    const baselineCodes = baselineByPath.get(path);
+    if (!baselineCodes) {
+      newPaths.push({ path, codes });
+      continue;
+    }
+    for (const [code, messages] of Object.entries(codes)) {
+      const baselineMessages = baselineCodes[code] || {};
+      for (const [message, count] of Object.entries(messages)) {
+        const baselineCount = baselineMessages[message] || 0;
+        if (count > baselineCount) {
+          regressions.push({ file: path, code, message, baseline: baselineCount, current: count });
+        }
+      }
+    }
+  }
+  const drops = [];
+  for (const f of baselineFiles) {
+    const currentCodes = counts[f.path] || {};
+    for (const [code, messages] of Object.entries(f.errors)) {
+      const currentMessages = currentCodes[code] || {};
+      for (const [message, baselineCount] of Object.entries(messages)) {
+        const currentCount = currentMessages[message] || 0;
+        if (currentCount < baselineCount) {
+          drops.push({ file: f.path, code, message, baseline: baselineCount, current: currentCount });
+        }
+      }
+    }
+  }
+  return { regressions, newPaths, drops };
 }
 
 function gitShortHead() {
@@ -94,16 +175,17 @@ function generateBaseline() {
   const sortedFiles = Object.keys(counts).sort();
   const files = sortedFiles.map((path) => ({
     path,
-    phase_tag: 'TBD (audit pending — B-NEW-43 chunk 6)',
+    phase_tag: 'TBD (audit pending)',
     context:
-      'TBD — to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.',
+      'Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.',
     errors: counts[path],
   }));
   const baseline = {
-    version: 1,
+    version: 2,
+    format: 'per-file per-code per-MESSAGE counts (#579, B-TSC-BASELINE-FIX 2026-07-27; was v1 per-file per-code counts)',
     frozen_at_commit: gitShortHead(),
     frozen_at_iso: new Date().toISOString(),
-    frozen_by_batch: 'B-NEW-43 (chunk 5 — baseline-gate infrastructure)',
+    frozen_by_batch: 'B-TSC-BASELINE-FIX (#579 — message-identity gate)',
     total_errors: total,
     file_count: files.length,
     files,
@@ -122,13 +204,12 @@ function compareBaseline({ regenAcknowledged }) {
     exit(2);
   }
   const baseline = JSON.parse(readFileSync(BASELINE_PATH, 'utf8'));
-  const baselineByPath = new Map(baseline.files.map((f) => [f.path, f.errors]));
 
   // Polish (Langston chunk-5 observation 2): re-derive total_errors / file_count
   // from files[] and warn if the stored metadata disagrees. Prevents a future
   // hand-edit landing inconsistent metadata.
   const derivedTotal = baseline.files.reduce(
-    (sum, f) => sum + Object.values(f.errors).reduce((s, n) => s + n, 0),
+    (sum, f) => sum + sumFileErrors(f.errors),
     0,
   );
   const derivedFileCount = baseline.files.length;
@@ -165,42 +246,21 @@ function compareBaseline({ regenAcknowledged }) {
     exit(1);
   }
 
-  const regressions = []; // (file, code) count above baseline
-  const newPaths = []; // file with errors that is not in baseline at all
-  for (const [path, codes] of Object.entries(counts)) {
-    const baselineCodes = baselineByPath.get(path);
-    if (!baselineCodes) {
-      newPaths.push({ path, codes });
-      continue;
-    }
-    for (const [code, count] of Object.entries(codes)) {
-      const baselineCount = baselineCodes[code] || 0;
-      if (count > baselineCount) {
-        regressions.push({ file: path, code, baseline: baselineCount, current: count });
-      }
-    }
-  }
-
-  // Drops (errors fixed since baseline) — good news, surface for visibility.
-  const drops = [];
-  for (const f of baseline.files) {
-    const currentCodes = counts[f.path] || {};
-    for (const [code, baselineCount] of Object.entries(f.errors)) {
-      const currentCount = currentCodes[code] || 0;
-      if (currentCount < baselineCount) {
-        drops.push({ file: f.path, code, baseline: baselineCount, current: currentCount });
-      }
-    }
-  }
+  // #579: per-(file, code, MESSAGE) diff via the pure, exported computeDiff (so the
+  // 3-case guarantee is unit-tested: new-message-under-ceiling caught; same-message
+  // shifted-line passes; the 1-for-1 swap caught — the case a per-(file,code)-count
+  // gate silently passes).
+  const { regressions, newPaths, drops } = computeDiff(counts, baseline.files);
 
   console.log(`[baseline] Current: ${total} errors. Baseline: ${baseline.total_errors} errors.`);
+  const clip = (s) => (s.length > 90 ? s.slice(0, 87) + '...' : s);
   if (drops.length) {
-    console.log(`[baseline] ${drops.length} (file, code) counts BELOW baseline (errors fixed — good):`);
-    for (const d of drops) console.log(`   - ${d.file} ${d.code}: ${d.baseline} -> ${d.current}`);
+    console.log(`[baseline] ${drops.length} (file, code, message) counts BELOW baseline (errors fixed — good):`);
+    for (const d of drops) console.log(`   - ${d.file} ${d.code}: ${d.baseline} -> ${d.current}  [${clip(d.message)}]`);
   }
   if (regressions.length) {
-    console.log(`[baseline] REGRESSION — ${regressions.length} (file, code) counts ABOVE baseline:`);
-    for (const r of regressions) console.log(`   ! ${r.file} ${r.code}: ${r.baseline} -> ${r.current}`);
+    console.log(`[baseline] REGRESSION — ${regressions.length} (file, code, message) counts ABOVE baseline:`);
+    for (const r of regressions) console.log(`   ! ${r.file} ${r.code}: ${r.baseline} -> ${r.current}  [${clip(r.message)}]`);
   }
   if (newPaths.length) {
     console.log(`[baseline] REGRESSION — ${newPaths.length} files with errors not in baseline:`);
@@ -241,14 +301,14 @@ function syncBaseline() {
         removed++;
         return null; // file has no current errors — drop entry
       }
-      // Update per-code counts; remove codes that hit 0; remove the file if
-      // every code is gone.
+      // #579: per-code value is now a { message: count } map. Record reality
+      // (current messages+counts); the COMPARE gate rejects regressions.
       const newErrors = {};
-      for (const [code, count] of Object.entries(current)) {
-        newErrors[code] = count;
+      for (const [code, messages] of Object.entries(current)) {
+        newErrors[code] = messages;
       }
-      const baselineTotal = Object.values(f.errors).reduce((s, n) => s + n, 0);
-      const currentTotal = Object.values(newErrors).reduce((s, n) => s + n, 0);
+      const baselineTotal = sumFileErrors(f.errors);
+      const currentTotal = sumFileErrors(newErrors);
       if (currentTotal < baselineTotal) cleared += baselineTotal - currentTotal;
       return { ...f, errors: newErrors };
     })
@@ -265,11 +325,14 @@ function syncBaseline() {
     if (!baselineByPath.has(path)) {
       newPathRegressions.push({ path, codes });
     } else {
-      // Check per-code regressions on existing files
+      // #579: per-(code, MESSAGE) regression check on existing files.
       const baselineCodes = baseline.files.find((f) => f.path === path).errors;
-      for (const [code, count] of Object.entries(codes)) {
-        if (count > (baselineCodes[code] || 0)) {
-          newPathRegressions.push({ path, code, baseline: baselineCodes[code] || 0, current: count });
+      for (const [code, messages] of Object.entries(codes)) {
+        const baselineMessages = baselineCodes[code] || {};
+        for (const [message, count] of Object.entries(messages)) {
+          if (count > (baselineMessages[message] || 0)) {
+            newPathRegressions.push({ path, code, message, baseline: baselineMessages[message] || 0, current: count });
+          }
         }
       }
     }
@@ -300,18 +363,28 @@ function syncBaseline() {
   );
 }
 
-const flags = argv.slice(2);
-if (flags.includes('--generate')) {
-  generateBaseline();
-} else if (flags.includes('--sync')) {
-  syncBaseline();
-} else if (flags.includes('--help') || flags.includes('-h')) {
-  console.log(`Usage:
+// #579: pure helpers exported for unit testing (the CLI dispatch below is guarded
+// so an `import` never triggers a tsc run / exit).
+export { parseErrors, normalizeMessage, sumFileErrors, computeDiff };
+
+// Run the CLI dispatch ONLY when executed directly (`node scripts/check-tsc-baseline.mjs`),
+// not when imported by a test. Without this guard, importing the module would fall
+// through to `compareBaseline()` and shell out to tsc.
+const isMain = import.meta.url === pathToFileURL(argv[1] || '').href;
+if (isMain) {
+  const flags = argv.slice(2);
+  if (flags.includes('--generate')) {
+    generateBaseline();
+  } else if (flags.includes('--sync')) {
+    syncBaseline();
+  } else if (flags.includes('--help') || flags.includes('-h')) {
+    console.log(`Usage:
   node scripts/check-tsc-baseline.mjs                       # compare current tsc output to ${BASELINE_PATH} (CI default)
   node scripts/check-tsc-baseline.mjs --generate            # rewrite ${BASELINE_PATH} from current tsc output (governance-only, loses phase_tag/context)
   node scripts/check-tsc-baseline.mjs --sync                # update per-file counts in ${BASELINE_PATH} after clean fixes (preserves phase_tag/context/frozen_*)
   node scripts/check-tsc-baseline.mjs --regen-acknowledged  # compare; skip the silent-tsc-crash sanity check (for genuine big drops)
 `);
-} else {
-  compareBaseline({ regenAcknowledged: flags.includes('--regen-acknowledged') });
+  } else {
+    compareBaseline({ regenAcknowledged: flags.includes('--regen-acknowledged') });
+  }
 }

@@ -1,583 +1,751 @@
 {
- "version": 1,
- "frozen_at_commit": "b0a4292",
- "frozen_at_iso": "2026-05-24T00:45:31.049Z",
- "frozen_by_batch": "B79.0n.STRATEGY Step 3 (regenerated 488\u2192494; +6 net delta from pre-existing post-B-NEW-43-freeze TS2345 in routes.ts/alert-action-handler/intent-executor MINUS B79.0n.STRATEGY drops in paper-execution-engine TS2322 + dynamic-sizing-engine TS2552 + inside-bar-reversal TS2367 SELL dead-code cleanup; verified pre-stash baseline shows routes.ts had 32 TS2345 errors pre-batch identical to post-batch \u2014 see B79_0n_STRATEGY_COMPLETION_REPORT for full justification per anti-graveyard discipline)",
- "total_errors": 490,
- "file_count": 64,
- "files": [
-  {
-   "path": "client/src/components/alerts/alert-banner.tsx",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS2339": 1
-   }
-  },
-  {
-   "path": "client/src/components/goals/copy-to-live-modal.tsx",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS2307": 1
-   }
-  },
-  {
-   "path": "client/src/components/goals/guardrails-tab.tsx",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS2307": 1
-   }
-  },
-  {
-   "path": "client/src/components/system/enhanced-system-monitoring.tsx",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS2339": 8
-   }
-  },
-  {
-   "path": "client/src/components/trading/active-trades-v2.tsx",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS7053": 2
-   }
-  },
-  {
-   "path": "client/src/components/trading/ready-to-buy-table.tsx",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS2322": 1
-   }
-  },
-  {
-   "path": "client/src/components/vts/vts-filter-diagnostics-panel.tsx",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS18046": 23
-   }
-  },
-  {
-   "path": "server/core/logging/vts-telemetry.ts",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS2339": 2
-   }
-  },
-  {
-   "path": "server/core/rtb/ready_to_buy_service.ts",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS2339": 8,
-    "TS2353": 1
-   }
-  },
-  {
-   "path": "server/jobs/feed-integrity-auto-check.ts",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS2503": 1
-   }
-  },
-  {
-   "path": "server/jobs/learning-feedback.ts",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS2339": 3,
-    "TS2352": 1,
-    "TS2353": 1
-   }
-  },
-  {
-   "path": "server/routes.ts",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS2322": 15,
-    "TS2345": 32,
-    "TS7017": 5,
-    "TS2820": 1,
-    "TS2339": 71,
-    "TS2552": 4,
-    "TS2769": 4,
-    "TS2352": 1,
-    "TS2783": 1,
-    "TS2353": 5,
-    "TS2307": 5,
-    "TS2554": 5,
-    "TS7006": 7,
-    "TS2741": 1,
-    "TS2551": 1
-   }
-  },
-  {
-   "path": "server/routes/vts.ts",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS2345": 42
-   }
-  },
-  {
-   "path": "server/scripts/replay-ablation.ts",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS2345": 1
-   }
-  },
-  {
-   "path": "server/services/actuation-policy.ts",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS2353": 1,
-    "TS2561": 2
-   }
-  },
-  {
-   "path": "server/services/adaptive-learning-repository.ts",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS2769": 4,
-    "TS2322": 1
-   }
-  },
-  {
-   "path": "server/services/adaptive-objective-engine.ts",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS2322": 1
-   }
-  },
-  {
-   "path": "server/services/adaptive-scan-manager.ts",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS2345": 1
-   }
-  },
-  {
-   "path": "server/services/ai-summary-task.ts",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS2345": 1
-   }
-  },
-  {
-   "path": "server/services/alert-action-handler.ts",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS2339": 1,
-    "TS2345": 1
-   }
-  },
-  {
-   "path": "server/services/auto_test_harness.ts",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS2339": 1
-   }
-  },
-  {
-   "path": "server/services/autonomy-controller.ts",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS2339": 1,
-    "TS1355": 1,
-    "TS2554": 3,
-    "TS2345": 1
-   }
-  },
-  {
-   "path": "server/services/autonomy-scheduler.ts",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS2322": 1,
-    "TS2339": 14,
-    "TS2345": 1
-   }
-  },
-  {
-   "path": "server/services/c13-validation-service.ts",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS2339": 2
-   }
-  },
-  {
-   "path": "server/services/command-router.ts",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS2339": 2
-   }
-  },
-  {
-   "path": "server/services/commitTradeAndUpdatePortfolio.ts",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS2339": 1,
-    "TS2322": 1
-   }
-  },
-  {
-   "path": "server/services/data-archive/partition-exporter.ts",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS7022": 2
-   }
-  },
-  {
-   "path": "server/services/diagnostic-controller.ts",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS2353": 2,
-    "TS2322": 1
-   }
-  },
-  {
-   "path": "server/services/drift-dashboard-aggregator.ts",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS2440": 1,
-    "TS2339": 1,
-    "TS2322": 1
-   }
-  },
-  {
-   "path": "server/services/drift-detector.ts",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS2345": 1
-   }
-  },
-  {
-   "path": "server/services/ethical-reasoner.ts",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS2393": 2
-   }
-  },
-  {
-   "path": "server/services/ethical-reasoning-engine.ts",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS2352": 2
-   }
-  },
-  {
-   "path": "server/services/ethics-consensus-orchestrator.ts",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS2339": 3,
-    "TS2322": 1
-   }
-  },
-  {
-   "path": "server/services/experience-memory.ts",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS2322": 1
-   }
-  },
-  {
-   "path": "server/services/factor-ablation-emitter.ts",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS2345": 1
-   }
-  },
-  {
-   "path": "server/services/fx5-scanner.ts",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS2322": 1,
-    "TS18047": 3,
-    "TS2353": 1,
-    "TS2339": 1
-   }
-  },
-  {
-   "path": "server/services/gemini-adaptive-profiler.ts",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS2339": 1
-   }
-  },
-  {
-   "path": "server/services/guardrail-policy.ts",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS2339": 3,
-    "TS2307": 1
-   }
-  },
-  {
-   "path": "server/services/intent-executor.ts",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS2345": 6
-   }
-  },
-  {
-   "path": "server/services/knowledge-retrieval.ts",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS2345": 1,
-    "TS2322": 2,
-    "TS2551": 2,
-    "TS2367": 1
-   }
-  },
-  {
-   "path": "server/services/m5d-validation-service.ts",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS2339": 2
-   }
-  },
-  {
-   "path": "server/services/m5e-validation-service.ts",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS2339": 2
-   }
-  },
-  {
-   "path": "server/services/market-context-engine.ts",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS2339": 1
-   }
-  },
-  {
-   "path": "server/services/memory-lifecycle.ts",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS2339": 2
-   }
-  },
-  {
-   "path": "server/services/narrative-feed.ts",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS18048": 1
-   }
-  },
-  {
-   "path": "server/services/active-execution-engine.ts",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing. [P19-B-RENAME W1/W2: path re-keyed from server/services/paper-execution-engine.ts \u2014 name-only, error set unchanged]",
-   "errors": {
-    "TS2339": 3
-   }
-  },
-  {
-   "path": "server/services/active-portfolio-manager.ts",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing. [P19-B-RENAME W1/W2: path re-keyed from server/services/paper-portfolio-manager.ts \u2014 name-only, error set unchanged]",
-   "errors": {
-    "TS2554": 4,
-    "TS2353": 1
-   }
-  },
-  {
-   "path": "server/services/per-underlying-cap.ts",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS2345": 3
-   }
-  },
-  {
-   "path": "server/services/pre-execution-validator.ts",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS2345": 2
-   }
-  },
-  {
-   "path": "server/services/reasoning-orchestrator.ts",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS2339": 2
-   }
-  },
-  {
-   "path": "server/services/run-mode-controller.ts",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS2322": 1
-   }
-  },
-  {
-   "path": "server/services/screener-recalibration-task.ts",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS2554": 1,
-    "TS2345": 1
-   }
-  },
-  {
-   "path": "server/services/signal-orchestrator.ts",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS2353": 3,
-    "TS2307": 1,
-    "TS2339": 8,
-    "TS2322": 1,
-    "TS2345": 4,
-    "TS7053": 1,
-    "TS7006": 1
-   }
-  },
-  {
-   "path": "server/services/stage-b-validator.ts",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS2322": 3
-   }
-  },
-  {
-   "path": "server/services/state-awareness.ts",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS2339": 1
-   }
-  },
-  {
-   "path": "server/services/system-config.ts",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS2322": 1
-   }
-  },
-  {
-   "path": "server/services/system-health-check-task.ts",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS2345": 1
-   }
-  },
-  {
-   "path": "server/services/telemetry-aggregator.ts",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS2322": 2,
-    "TS2339": 1,
-    "TS2345": 3
-   }
-  },
-  {
-   "path": "server/services/trading-engine.ts",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS2345": 2
-   }
-  },
-  {
-   "path": "server/services/trailing-exit-controller.ts",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS2554": 2,
-    "TS2739": 3
-   }
-  },
-  {
-   "path": "server/services/unified-core.ts",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS2345": 5,
-    "TS2339": 10,
-    "TS2551": 3,
-    "TS7006": 3
-   }
-  },
-  {
-   "path": "server/services/vts-runner.ts",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS2561": 2,
-    "TS2551": 6,
-    "TS2353": 3,
-    "TS2322": 3,
-    "TS2339": 25,
-    "TS2739": 3,
-    "TS2345": 1
-   }
-  },
-  {
-   "path": "server/services/vts-service.ts",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS2367": 1,
-    "TS2322": 3
-   }
-  },
-  {
-   "path": "server/storage.ts",
-   "phase_tag": "TBD (audit pending \u2014 B-NEW-43 chunk 6)",
-   "context": "TBD \u2014 to be filled by the B-NEW-43 chunk 6 audit (Phase-19 intake seed). Until then the per-file error counts below are the mechanical comparison baseline; CI fails on any (file, code) count rising above these or any new (file, code) pair appearing.",
-   "errors": {
-    "TS2769": 4,
-    "TS2741": 1,
-    "TS2339": 12,
-    "TS2353": 2
-   }
-  }
- ]
+  "version": 2,
+  "format": "per-file per-code per-MESSAGE counts (#579, B-TSC-BASELINE-FIX 2026-07-27; was v1 per-file per-code counts)",
+  "frozen_at_commit": "ab9bb2e2c",
+  "frozen_at_iso": "2026-07-27T18:51:51.254Z",
+  "frozen_by_batch": "B-TSC-BASELINE-FIX (#579 — message-identity gate)",
+  "total_errors": 394,
+  "file_count": 48,
+  "files": [
+    {
+      "path": "client/src/components/alerts/alert-banner.tsx",
+      "phase_tag": "TBD (audit pending)",
+      "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
+      "errors": {
+        "TS2339": {
+          "Property 'timestamp' does not exist on type 'WebSocketMessage'.": 1
+        }
+      }
+    },
+    {
+      "path": "client/src/components/system/enhanced-system-monitoring.tsx",
+      "phase_tag": "TBD (audit pending)",
+      "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
+      "errors": {
+        "TS2339": {
+          "Property 'reflections' does not exist on type '{}'.": 1,
+          "Property 'audits' does not exist on type '{}'.": 1,
+          "Property 'sessions' does not exist on type '{}'.": 1,
+          "Property 'stats' does not exist on type '{}'.": 1,
+          "Property 'agents' does not exist on type '{}'.": 1,
+          "Property 'summary' does not exist on type '{}'.": 1,
+          "Property 'logs' does not exist on type '{}'.": 1,
+          "Property 'trustRecords' does not exist on type '{}'.": 1
+        }
+      }
+    },
+    {
+      "path": "client/src/components/vts/vts-filter-diagnostics-panel.tsx",
+      "phase_tag": "TBD (audit pending)",
+      "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
+      "errors": {
+        "TS18046": {
+          "'b' is of type 'unknown'.": 1,
+          "'a' is of type 'unknown'.": 1,
+          "'counts' is of type 'unknown'.": 8,
+          "'acc' is of type 'unknown'.": 5,
+          "'totals' is of type 'unknown'.": 8
+        }
+      }
+    },
+    {
+      "path": "server/core/logging/vts-telemetry.ts",
+      "phase_tag": "TBD (audit pending)",
+      "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
+      "errors": {
+        "TS2339": {
+          "Property 'netProfit' does not exist on type 'ExecutedTrade'.": 2
+        }
+      }
+    },
+    {
+      "path": "server/jobs/learning-feedback.ts",
+      "phase_tag": "TBD (audit pending)",
+      "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
+      "errors": {
+        "TS2339": {
+          "Property 'outcome' does not exist on type 'PgTableWithColumns<{ name: \"trades\"; schema: undefined; columns: { id: PgColumn<{ name: \"id\"; tableName: \"trades\"; dataType: \"string\"; columnType: \"PgVarchar\"; data: string; driverParam: string; notNull: true; hasDefault: true; ... N more ...; generated: undefined; }, {}, { ...; }>; ... N more ...; metadata: PgColu...'.": 1,
+          "Property 'reasonSnapshot' does not exist on type 'PgTableWithColumns<{ name: \"trades\"; schema: undefined; columns: { id: PgColumn<{ name: \"id\"; tableName: \"trades\"; dataType: \"string\"; columnType: \"PgVarchar\"; data: string; driverParam: string; notNull: true; hasDefault: true; ... N more ...; generated: undefined; }, {}, { ...; }>; ... N more ...; metadata: PgColu...'.": 1,
+          "Property 'notes' does not exist on type 'PgTableWithColumns<{ name: \"trades\"; schema: undefined; columns: { id: PgColumn<{ name: \"id\"; tableName: \"trades\"; dataType: \"string\"; columnType: \"PgVarchar\"; data: string; driverParam: string; notNull: true; hasDefault: true; ... N more ...; generated: undefined; }, {}, { ...; }>; ... N more ...; metadata: PgColu...'.": 1
+        },
+        "TS2352": {
+          "Conversion of type '{ tradeId: string; symbol: string; strategy: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | \"range_trading\" | \"range_trade\" | \"vwap_bounce\" | ... N more ... | \"orb\"; ... N more ...; exitTime: Date | null; }[]' to type 'TradeInsight[]' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.": 1
+        },
+        "TS2353": {
+          "Object literal may only specify known properties, and 'embedding' does not exist in type '{ mode: \"live\" | \"paper\"; eventType: \"trade\" | \"balance_update\" | \"risk_report\" | \"engine_event\" | \"anomaly\" | \"strategy_signal\"; narrative: string; significance: \"critical\" | \"minor\" | \"significant\"; ... N more ...; analyzedAt?: Date | ... N more ... | undefined; }'.": 1
+        }
+      }
+    },
+    {
+      "path": "server/routes.ts",
+      "phase_tag": "TBD (audit pending)",
+      "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
+      "errors": {
+        "TS2322": {
+          "Type '({ rank: number; symbol: string; score: number; signalType: string; strategy: string; pattern: string; regime: string; source: TelemetrySource; lastUpdated: string; frictionScore: number; } | { ...; })[]' is not assignable to type '{ rank: number; symbol: string; score: number; signalType: string; strategy: string; pattern: string; regime: string; source: TelemetrySource; lastUpdated: string; frictionScore: number; }[]'.": 1,
+          "Type '\"system:killswitch_cleared\"' is not assignable to type '\"health_engine\" | \"state_update\" | \"chat_update\" | \"config_update\" | \"trade_update\" | \"safety_event\" | \"kill_switch_changed\" | \"ethical_event\" | \"ethics_federation_sync_complete\" | ... N more ... | \"policyUpdated\"'.": 1,
+          "Type 'number' is not assignable to type 'string'.": 8,
+          "Type '\"active_engine_reset\"' is not assignable to type '\"health_engine\" | \"state_update\" | \"chat_update\" | \"config_update\" | \"trade_update\" | \"safety_event\" | \"kill_switch_changed\" | \"ethical_event\" | \"ethics_federation_sync_complete\" | ... N more ... | \"policyUpdated\"'.": 1,
+          "Type '\"active_trade_closed\"' is not assignable to type '\"health_engine\" | \"state_update\" | \"chat_update\" | \"config_update\" | \"trade_update\" | \"safety_event\" | \"kill_switch_changed\" | \"ethical_event\" | \"ethics_federation_sync_complete\" | ... N more ... | \"policyUpdated\"'.": 1,
+          "Type 'Date | null' is not assignable to type 'Date'.": 1,
+          "Type 'unknown' is not assignable to type 'Json | undefined'.": 1,
+          "Type '\"stranded_trades_cleared\"' is not assignable to type '\"health_engine\" | \"state_update\" | \"chat_update\" | \"config_update\" | \"trade_update\" | \"safety_event\" | \"kill_switch_changed\" | \"ethical_event\" | \"ethics_federation_sync_complete\" | ... N more ... | \"policyUpdated\"'.": 1
+        },
+        "TS2345": {
+          "Argument of type 'string | null' is not assignable to parameter of type 'string'.": 6,
+          "Argument of type 'string' is not assignable to parameter of type '\"live\" | \"paper\"'.": 3,
+          "Argument of type '\"dryrun_trade\"' is not assignable to parameter of type '\"trade_opened\" | \"trade_closed\" | \"trade_error\"'.": 1,
+          "Argument of type '{ symbol: string; baseCurrency: string; strategyName: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | \"range_trading\" | \"range_trade\" | \"vwap_bounce\" | ... N more ... | \"orb\"; ... N more ...; metadata: unknown; }' is not assignable to parameter of type '{ symbol: string; baseCurrency: string; entryPrice: string; quantity: string; strategyName: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | \"range_trading\" | ... N more ... | \"orb\"; ... N more ...; anchorVersionAtOpen?: number | ... N more ... | undefined; }'.": 1,
+          "Argument of type '{ minVolume: string | null; minDailyRange: any; minPrice: string | null; maxPrice: string | null; maxBidAskSpread: string | null; excludeStablecoins: boolean | null; rsiMin: number | null; rsiMax: number | null; volatilityMin: string | null; volatilityMax: string | null; quoteCurrencies: string[]; }' is not assignable to parameter of type '{ id: string; mode: \"live\" | \"paper\"; createdAt: Date | null; updatedAt: Date | null; minVolume: string | null; minPrice: string | null; maxBidAskSpread: string | null; ... N more ...; diMax: string | null; }'.": 1,
+          "Argument of type '{ status: string; limit: number; }' is not assignable to parameter of type '\"live\" | \"paper\"'.": 2,
+          "Argument of type '{ symbol: string; strategy: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\"; entryPrice: number; stopPrice: number; targetPrice: number; confidence: number; mode: \"live\" | \"paper\"; }' is not assignable to parameter of type '\"live\" | \"paper\"'.": 1,
+          "Argument of type '{ symbol: string; strategy: \"vwap_pullback\"; entryPrice: number; stopPrice: number; targetPrice: number; confidence: number; mode: \"live\" | \"paper\"; }' is not assignable to parameter of type '\"live\" | \"paper\"'.": 1,
+          "Argument of type '{}' is not assignable to parameter of type '\"live\" | \"paper\"'.": 5,
+          "Argument of type '{ strategy: string; }' is not assignable to parameter of type '\"live\" | \"paper\"'.": 1,
+          "Argument of type '{ globalContextId: string; mode: \"live\" | \"paper\"; strategy: string; }' is not assignable to parameter of type '{ globalContextId?: string | undefined; userId?: string | undefined; mode: \"live\" | \"paper\"; strategy: string; assetClass: string; }'.": 2,
+          "Argument of type '{ globalContextId: string; mode: \"live\" | \"paper\"; strategy: any; enabled: boolean; params: { riskPerTrade: number; cooldownMinutes: number; maxConcurrentPositions: number; takeProfitR: number; stopLossR: number; }; }' is not assignable to parameter of type '{ mode: \"live\" | \"paper\"; assetClass: string; strategy: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | \"range_trading\" | \"range_trade\" | \"vwap_bounce\" | ... N more ... | \"orb\"; params: Json; globalContextId?: string | undefined; enabled?: boolean | undefined; version?: number | u...'.": 1,
+          "Argument of type '{ mode: \"live\" | \"paper\"; strategy: any; prevParams: any; nextParams: any; actorType: string; actorId: string; reason: any; }' is not assignable to parameter of type '{ mode: \"live\" | \"paper\"; assetClass: string; strategy: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | \"range_trading\" | \"range_trade\" | \"vwap_bounce\" | ... N more ... | \"orb\"; ... N more ...; reason?: string | ... N more ... | undefined; }'.": 1,
+          "Argument of type '{ mode: any; strategy: any; enabled: true; params: any; }' is not assignable to parameter of type '{ mode: \"live\" | \"paper\"; assetClass: string; strategy: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | \"range_trading\" | \"range_trade\" | \"vwap_bounce\" | ... N more ... | \"orb\"; params: Json; globalContextId?: string | undefined; enabled?: boolean | undefined; version?: number | u...'.": 1,
+          "Argument of type '{ mode: any; strategy: any; prevParams: any; nextParams: any; actorType: string; actorId: string; reason: string; }' is not assignable to parameter of type '{ mode: \"live\" | \"paper\"; assetClass: string; strategy: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | \"range_trading\" | \"range_trade\" | \"vwap_bounce\" | ... N more ... | \"orb\"; ... N more ...; reason?: string | ... N more ... | undefined; }'.": 1,
+          "Argument of type '{ userId: string; mode: \"live\" | \"paper\"; strategy: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | \"range_trading\" | \"vwap_bounce\" | \"liquidity_trap\"; }' is not assignable to parameter of type '{ globalContextId?: string | undefined; userId?: string | undefined; mode: \"live\" | \"paper\"; strategy: string; assetClass: string; }'.": 1,
+          "Argument of type '{ userId: string; mode: \"live\" | \"paper\"; strategy: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | \"range_trading\" | \"vwap_bounce\" | \"liquidity_trap\"; enabled: boolean; params: any; }' is not assignable to parameter of type '{ mode: \"live\" | \"paper\"; assetClass: string; strategy: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | \"range_trading\" | \"range_trade\" | \"vwap_bounce\" | ... N more ... | \"orb\"; params: Json; globalContextId?: string | undefined; enabled?: boolean | undefined; version?: number | u...'.": 1,
+          "Argument of type 'string | undefined' is not assignable to parameter of type '\"instability\" | \"bias\" | \"low_confidence\" | \"conflict\" | \"performance_drop\" | undefined'.": 1
+        },
+        "TS7017": {
+          "Element implicitly has an 'any' type because type 'typeof globalThis' has no index signature.": 5
+        },
+        "TS2820": {
+          "Type '\"config_updated\"' is not assignable to type '\"health_engine\" | \"state_update\" | \"chat_update\" | \"config_update\" | \"trade_update\" | \"safety_event\" | \"kill_switch_changed\" | \"ethical_event\" | \"ethics_federation_sync_complete\" | ... N more ... | \"policyUpdated\"'. Did you mean '\"config_update\"'?": 1
+        },
+        "TS2339": {
+          "Property 'createdAt' does not exist on type '{ symbol: string; id: string; lastUpdated: Date | null; assetClass: string; exchange: string; volume24h: string | null; currentPrice: string | null; confidence: string | null; metadata: unknown; ... N more ...; exitDeadline: Date | null; }'.": 1,
+          "Property 'cryptoValue' does not exist on type '{ id: string; globalContextId: string; mode: \"live\" | \"paper\"; createdAt: Date | null; balance: string; anchorVersion: number; lastUpdate: Date | null; }'.": 2,
+          "Property 'cash' does not exist on type '{ id: string; globalContextId: string; mode: \"live\" | \"paper\"; createdAt: Date | null; balance: string; anchorVersion: number; lastUpdate: Date | null; }'.": 2,
+          "Property 'realizedPL' does not exist on type '{ symbol: string; id: string; mode: \"live\" | \"paper\"; assetClass: string; exchange: string; strategy: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | ... N more ... | \"orb\"; ... N more ...; patternStrength: string | null; } | { ...; }'.": 4,
+          "Property 'exitTime' does not exist on type '{ symbol: string; id: string; mode: \"live\" | \"paper\"; assetClass: string; exchange: string; strategy: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | ... N more ... | \"orb\"; ... N more ...; patternStrength: string | null; } | { ...; }'.": 3,
+          "Property 'unrealizedPnl' does not exist on type '{ id: string; globalContextId: string; mode: \"live\" | \"paper\"; createdAt: Date | null; balance: string; anchorVersion: number; lastUpdate: Date | null; }'.": 1,
+          "Property 'realizedPnl' does not exist on type '{ id: string; globalContextId: string; mode: \"live\" | \"paper\"; createdAt: Date | null; balance: string; anchorVersion: number; lastUpdate: Date | null; }'.": 1,
+          "Property 'buildTrade' does not exist on type 'ActiveExecutionEngine'.": 2,
+          "Property 'executeTrade' does not exist on type 'ActiveExecutionEngine'.": 2,
+          "Property 'modeRegistry' does not exist on type 'typeof import(\"C:/DawnTraderV3-new/server/services/mode-registry\")'.": 2,
+          "Property 'startingBalance' does not exist on type '{ id: string; globalContextId: string; mode: \"live\" | \"paper\"; createdAt: Date | null; balance: string; anchorVersion: number; lastUpdate: Date | null; }'.": 1,
+          "Property 'minDailyRange' does not exist on type '{ id: string; mode: \"live\" | \"paper\"; createdAt: Date | null; updatedAt: Date | null; minVolume: string | null; minPrice: string | null; maxBidAskSpread: string | null; ... N more ...; diMax: string | null; }'.": 2,
+          "Property 'approved' does not exist on type 'TradeSafetyResult'.": 2,
+          "Property 'reason' does not exist on type 'TradeSafetyResult'.": 3,
+          "Property 'dormant' does not exist on type '{}'.": 2,
+          "Property 'getExecutionConfigs' does not exist on type 'DatabaseStorage'.": 1,
+          "Property 'upsertExecutionConfig' does not exist on type 'DatabaseStorage'.": 1,
+          "Property 'deleteExecutionConfig' does not exist on type 'DatabaseStorage'.": 1,
+          "Property 'updateTradingSettings' does not exist on type 'DatabaseStorage'.": 1,
+          "Property 'getPendingApprovals' does not exist on type 'DatabaseStorage'.": 5,
+          "Property 'updateApprovalStatus' does not exist on type 'DatabaseStorage'.": 5,
+          "Property 'systemState' does not exist on type '{ id: string; traceId: string; userId: string; intentAction: string | null; steps: unknown; domainContext: string[] | null; decisionSummary: string | null; status: string; metadata: unknown; createdAt: Date; updatedAt: Date; }'.": 1,
+          "Property 'mode' does not exist on type '{ id: string; traceId: string; userId: string; intentAction: string | null; steps: unknown; domainContext: string[] | null; decisionSummary: string | null; status: string; metadata: unknown; createdAt: Date; updatedAt: Date; }'.": 1,
+          "Property 'outcome' does not exist on type '{ id: string; traceId: string; userId: string; intentAction: string | null; steps: unknown; domainContext: string[] | null; decisionSummary: string | null; status: string; metadata: unknown; createdAt: Date; updatedAt: Date; }'.": 1,
+          "Property 'error' does not exist on type '{ id: string; traceId: string; userId: string; intentAction: string | null; steps: unknown; domainContext: string[] | null; decisionSummary: string | null; status: string; metadata: unknown; createdAt: Date; updatedAt: Date; }'.": 1,
+          "Property 'processingTimeMs' does not exist on type '{ id: string; traceId: string; userId: string; intentAction: string | null; steps: unknown; domainContext: string[] | null; decisionSummary: string | null; status: string; metadata: unknown; createdAt: Date; updatedAt: Date; }'.": 1,
+          "Property 'completedAt' does not exist on type '{ id: string; traceId: string; userId: string; intentAction: string | null; steps: unknown; domainContext: string[] | null; decisionSummary: string | null; status: string; metadata: unknown; createdAt: Date; updatedAt: Date; }'.": 1,
+          "Property 'stepId' does not exist on type '{ id: string; traceId: string; taskType: string; payload: unknown; status: \"in_progress\" | \"pending\" | \"completed\" | \"failed\"; result: unknown; errorMessage: string | null; retryCount: number; retryAt: Date | null; lockedAt: Date | null; lockedBy: string | null; createdAt: Date; completedAt: Date | null; }'.": 1,
+          "Property 'bobDomain' does not exist on type '{ id: string; traceId: string; taskType: string; payload: unknown; status: \"in_progress\" | \"pending\" | \"completed\" | \"failed\"; result: unknown; errorMessage: string | null; retryCount: number; retryAt: Date | null; lockedAt: Date | null; lockedBy: string | null; createdAt: Date; completedAt: Date | null; }'.": 1,
+          "Property 'action' does not exist on type '{ id: string; traceId: string; taskType: string; payload: unknown; status: \"in_progress\" | \"pending\" | \"completed\" | \"failed\"; result: unknown; errorMessage: string | null; retryCount: number; retryAt: Date | null; lockedAt: Date | null; lockedBy: string | null; createdAt: Date; completedAt: Date | null; }'.": 1,
+          "Property 'params' does not exist on type '{ id: string; traceId: string; taskType: string; payload: unknown; status: \"in_progress\" | \"pending\" | \"completed\" | \"failed\"; result: unknown; errorMessage: string | null; retryCount: number; retryAt: Date | null; lockedAt: Date | null; lockedBy: string | null; createdAt: Date; completedAt: Date | null; }'.": 1,
+          "Property 'error' does not exist on type '{ id: string; traceId: string; taskType: string; payload: unknown; status: \"in_progress\" | \"pending\" | \"completed\" | \"failed\"; result: unknown; errorMessage: string | null; retryCount: number; retryAt: Date | null; lockedAt: Date | null; lockedBy: string | null; createdAt: Date; completedAt: Date | null; }'.": 1,
+          "Property 'startedAt' does not exist on type '{ id: string; traceId: string; taskType: string; payload: unknown; status: \"in_progress\" | \"pending\" | \"completed\" | \"failed\"; result: unknown; errorMessage: string | null; retryCount: number; retryAt: Date | null; lockedAt: Date | null; lockedBy: string | null; createdAt: Date; completedAt: Date | null; }'.": 1,
+          "Property 'getDatabaseStatus' does not exist on type 'DatabaseStorage'.": 1,
+          "Property 'getStatus' does not exist on type 'TradingEngine'.": 1,
+          "Property 'getClientCount' does not exist on type 'ContextBridge'.": 2,
+          "Property 'healthScore' does not exist on type '{ id: string; name: string; role: \"coordinator\" | \"trading\" | \"analysis\" | \"research\" | \"compliance\" | \"general\"; createdAt: Date; updatedAt: Date; version: string | null; ... N more ...; queueDepth: number; }'.": 1,
+          "Property 'completedAt' does not exist on type 'PgTableWithColumns<{ name: \"cluster_result_log\"; schema: undefined; columns: { id: PgColumn<{ name: \"id\"; tableName: \"cluster_result_log\"; dataType: \"string\"; columnType: \"PgVarchar\"; data: string; driverParam: string; ... N more ...; generated: undefined; }, {}, { ...; }>; ... N more ...; createdAt: PgColumn<...>; ...'.": 1,
+          "Property 'conflictId' does not exist on type '{ id: string; sessionId: string; conflictingSources: string[]; conflictingVerdicts: unknown; resolutionStatus: \"open\" | \"resolved\" | \"escalated\"; resolutionMethod: string | null; resolutionRationale: string | null; finalVerdict: \"approved\" | ... N more ... | null; createdAt: Date; resolvedAt: Date | null; }'.": 1,
+          "Property 'presetName' does not exist on type '{ id: string; name: \"conservative\" | \"baseline\" | \"optimistic\" | \"maximum\" | \"custom\"; mode: \"live\" | \"paper\"; createdAt: Date | null; updatedAt: Date | null; maxOpenPositions: number; ... N more ...; isActive: boolean; }'.": 1,
+          "Property 'getPortfolioBalance' does not exist on type 'DatabaseStorage'.": 1,
+          "Property 'maxChangesPerDay' does not exist on type '{ mode: LearningMode; changes24h: number; overrides24h: number; maxChanges: number; throttleStatus: string; lastStableSnapshot: number | null; lastSnapshotTime: Date; coherencyThreshold: number; overrideWeight: number; bias: string; }'.": 1
+        },
+        "TS2552": {
+          "Cannot find name 'tradingEngines'. Did you mean 'TradingEngine'?": 2,
+          "Cannot find name 'OpenAI'. Did you mean 'openai'?": 2
+        },
+        "TS2769": {
+          "No overload matches this call.": 4
+        },
+        "TS2352": {
+          "Conversion of type 'PerSymbolTimingStats' to type '{ updateCount: number; lastUpdate: number; }' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.": 1
+        },
+        "TS2783": {
+          "'ok' is specified more than once, so this usage will be overwritten.": 1
+        },
+        "TS2353": {
+          "Object literal may only specify known properties, and 'lattiLastAnchorTime' does not exist in type 'Partial<{ id: string; tradingMode: \"live\" | \"paper\"; createdAt: Date; updatedAt: Date; metadata: unknown; lastHeartbeat: Date | null; lastSafeState: unknown; isEngineActive: boolean; activeAssetClasses: unknown; ... N more ...; minNetProfitThreshold: string | null; }>'.": 2,
+          "Object literal may only specify known properties, and 'userId' does not exist in type '{ symbol: string; mode: \"live\" | \"paper\"; strategy: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | \"range_trading\" | \"range_trade\" | \"vwap_bounce\" | ... N more ... | \"orb\"; ... N more ...; patternStrength?: string | ... N more ... | undefined; }'.": 1,
+          "Object literal may only specify known properties, and 'event' does not exist in type 'Omit<ContextUpdate, \"timestamp\" | \"traceId\">'.": 1
+        },
+        "TS2307": {
+          "Cannot find module './services/conversation-summarization' or its corresponding type declarations.": 1,
+          "Cannot find module './orchestrator/orchestrator' or its corresponding type declarations.": 4
+        },
+        "TS2554": {
+          "Expected 0 arguments, but got 1.": 1,
+          "Expected 1 arguments, but got 3.": 3,
+          "Expected 1 arguments, but got 2.": 1
+        },
+        "TS7006": {
+          "Parameter 'a' implicitly has an 'any' type.": 7
+        },
+        "TS2741": {
+          "Property 'where' is missing in type 'Omit<import(\"C:/DawnTraderV3-new/node_modules/drizzle-orm/pg-core/query-builders/select\").PgSelectBase<\"ethical_violation_log\", { id: import(\"C:/DawnTraderV3-new/node_modules/drizzle-orm/pg-core/columns/common\").PgColumn<{ name: \"id\"; tableName: \"ethical_violation_log\"; dataType: \"string\"; columnType: \"PgVarchar\"; d...' but required in type 'Omit<import(\"C:/DawnTraderV3-new/node_modules/drizzle-orm/pg-core/query-builders/select\").PgSelectBase<\"ethical_violation_log\", { id: import(\"C:/DawnTraderV3-new/node_modules/drizzle-orm/pg-core/columns/common\").PgColumn<{ name: \"id\"; tableName: \"ethical_violation_log\"; dataType: \"string\"; columnType: \"PgVarchar\"; d...'.": 1
+        }
+      }
+    },
+    {
+      "path": "server/routes/vts.ts",
+      "phase_tag": "TBD (audit pending)",
+      "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
+      "errors": {
+        "TS2345": {
+          "Argument of type '{ symbol: string; assetClass: string; regime: string; strategy: string; signalType: string; patternType: string | null; pool: string; sourcePool: string; dollarValue: number; quantity: number; ... N more ...; mtPairId: string | null; }[]' is not assignable to parameter of type 'TradeRecord[]'.": 2,
+          "Argument of type 'string | null' is not assignable to parameter of type 'string'.": 40
+        }
+      }
+    },
+    {
+      "path": "server/scripts/replay-ablation.ts",
+      "phase_tag": "TBD (audit pending)",
+      "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
+      "errors": {
+        "TS2345": {
+          "Argument of type '{}' is not assignable to parameter of type 'ResolutionKey'.": 1
+        }
+      }
+    },
+    {
+      "path": "server/services/active-execution-engine.ts",
+      "phase_tag": "TBD (audit pending)",
+      "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
+      "errors": {
+        "TS2339": {
+          "Property 'assetClass' does not exist on type '{}'.": 3
+        }
+      }
+    },
+    {
+      "path": "server/services/actuation-policy.ts",
+      "phase_tag": "TBD (audit pending)",
+      "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
+      "errors": {
+        "TS2353": {
+          "Object literal may only specify known properties, and 'currentValue' does not exist in type '{ mode: \"live\" | \"paper\"; userId: string; oldValue: string; variableName: string; variableCategory: string; proposedValue: string; confidenceScore: number; reason?: string | null | undefined; status?: string | ... N more ... | undefined; appliedAt?: Date | ... N more ... | undefined; reviewedBy?: string | ... 1 more...'.": 1
+        },
+        "TS2561": {
+          "Object literal may only specify known properties, but 'reviewedAt' does not exist in type 'Partial<{ id: string; mode: \"live\" | \"paper\"; userId: string; reason: string | null; status: string | null; oldValue: string; appliedAt: Date | null; variableName: string; variableCategory: string; proposedValue: string; confidenceScore: number; proposedAt: Date | null; reviewedBy: string | null; }>'. Did you mean to write 'reviewedBy'?": 2
+        }
+      }
+    },
+    {
+      "path": "server/services/adaptive-learning-repository.ts",
+      "phase_tag": "TBD (audit pending)",
+      "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
+      "errors": {
+        "TS2769": {
+          "No overload matches this call.": 4
+        },
+        "TS2322": {
+          "Type 'MarketRegime' is not assignable to type '\"EXTREME_NOISE\" | \"BULL_STABLE\" | \"BULL_VOLATILE\" | \"BEAR_STABLE\" | \"BEAR_VOLATILE\" | \"LOW_VOL_CHOP\" | \"TREND_FRIENDLY_STABLE\" | \"HIGH_VOLATILITY_UNSTABLE\" | \"RANGE_BOUND_STABLE\" | \"IMPULSE_EXPANSION\" | \"STRUCTURAL_TRANSITION\" | \"HIGH_VOL_IMPULSE\"'.": 1
+        }
+      }
+    },
+    {
+      "path": "server/services/adaptive-objective-engine.ts",
+      "phase_tag": "TBD (audit pending)",
+      "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
+      "errors": {
+        "TS2322": {
+          "Type 'null' is not assignable to type 'string | undefined'.": 1
+        }
+      }
+    },
+    {
+      "path": "server/services/ai-summary-task.ts",
+      "phase_tag": "TBD (audit pending)",
+      "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
+      "errors": {
+        "TS2345": {
+          "Argument of type '{ limit: number; }' is not assignable to parameter of type '\"live\" | \"paper\"'.": 1
+        }
+      }
+    },
+    {
+      "path": "server/services/alert-action-handler.ts",
+      "phase_tag": "TBD (audit pending)",
+      "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
+      "errors": {
+        "TS2339": {
+          "Property 'updateTradingSettings' does not exist on type 'DatabaseStorage'.": 1
+        },
+        "TS2345": {
+          "Argument of type '{ mode: any; strategy: any; enabled: true; params: {}; }' is not assignable to parameter of type '{ mode: \"live\" | \"paper\"; assetClass: string; strategy: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | \"range_trading\" | \"range_trade\" | \"vwap_bounce\" | ... N more ... | \"orb\"; params: Json; globalContextId?: string | undefined; enabled?: boolean | undefined; version?: number | u...'.": 1
+        }
+      }
+    },
+    {
+      "path": "server/services/auto_test_harness.ts",
+      "phase_tag": "TBD (audit pending)",
+      "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
+      "errors": {
+        "TS2339": {
+          "Property 'timestamp' does not exist on type 'PgTableWithColumns<{ name: \"cluster_bus_event\"; schema: undefined; columns: { id: PgColumn<{ name: \"id\"; tableName: \"cluster_bus_event\"; dataType: \"string\"; columnType: \"PgVarchar\"; data: string; driverParam: string; ... N more ...; generated: undefined; }, {}, { ...; }>; ... N more ...; createdAt: PgColumn<...>; };...'.": 1
+        }
+      }
+    },
+    {
+      "path": "server/services/autonomy-controller.ts",
+      "phase_tag": "TBD (audit pending)",
+      "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
+      "errors": {
+        "TS2339": {
+          "Property 'balance' does not exist on type '{ cpuUsage: number; memoryUsage: { total: number; used: number; free: number; percentUsed: number; }; uptime: number; }'.": 1
+        },
+        "TS1355": {
+          "A 'const' assertions can only be applied to references to enum members, or string, number, boolean, array, or object literals.": 1
+        },
+        "TS2554": {
+          "Expected 1 arguments, but got 2.": 3
+        },
+        "TS2345": {
+          "Argument of type '\"strategic\"' is not assignable to parameter of type '\"short_term\" | \"medium_term\" | \"long_term\"'.": 1
+        }
+      }
+    },
+    {
+      "path": "server/services/autonomy-scheduler.ts",
+      "phase_tag": "TBD (audit pending)",
+      "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
+      "errors": {
+        "TS2322": {
+          "Type '\"performance_snapshot\"' is not assignable to type '\"health_engine\" | \"state_update\" | \"chat_update\" | \"config_update\" | \"trade_update\" | \"safety_event\" | \"kill_switch_changed\" | \"ethical_event\" | \"ethics_federation_sync_complete\" | ... N more ... | \"policyUpdated\"'.": 1
+        },
+        "TS2339": {
+          "Property 'getDeltaUpdates' does not exist on type 'FederatedEthicsHubService'.": 1,
+          "Property 'consensusHistory' does not exist on type 'FederatedSnapshot'.": 1,
+          "Property 'alignmentScore' does not exist on type 'FederatedSnapshot'.": 1,
+          "Property 'status' does not exist on type '{ id: string; sessionId: string; conflictingSources: string[]; conflictingVerdicts: unknown; resolutionStatus: \"open\" | \"resolved\" | \"escalated\"; resolutionMethod: string | null; resolutionRationale: string | null; finalVerdict: \"approved\" | ... N more ... | null; createdAt: Date; resolvedAt: Date | null; }'.": 2,
+          "Property 'severity' does not exist on type '{ id: string; sessionId: string; conflictingSources: string[]; conflictingVerdicts: unknown; resolutionStatus: \"open\" | \"resolved\" | \"escalated\"; resolutionMethod: string | null; resolutionRationale: string | null; finalVerdict: \"approved\" | ... N more ... | null; createdAt: Date; resolvedAt: Date | null; }'.": 4,
+          "Property 'conflictId' does not exist on type '{ id: string; sessionId: string; conflictingSources: string[]; conflictingVerdicts: unknown; resolutionStatus: \"open\" | \"resolved\" | \"escalated\"; resolutionMethod: string | null; resolutionRationale: string | null; finalVerdict: \"approved\" | ... N more ... | null; createdAt: Date; resolvedAt: Date | null; }'.": 3,
+          "Property 'conflictType' does not exist on type '{ id: string; sessionId: string; conflictingSources: string[]; conflictingVerdicts: unknown; resolutionStatus: \"open\" | \"resolved\" | \"escalated\"; resolutionMethod: string | null; resolutionRationale: string | null; finalVerdict: \"approved\" | ... N more ... | null; createdAt: Date; resolvedAt: Date | null; }'.": 1,
+          "Property 'detectedAt' does not exist on type '{ id: string; sessionId: string; conflictingSources: string[]; conflictingVerdicts: unknown; resolutionStatus: \"open\" | \"resolved\" | \"escalated\"; resolutionMethod: string | null; resolutionRationale: string | null; finalVerdict: \"approved\" | ... N more ... | null; createdAt: Date; resolvedAt: Date | null; }'.": 1
+        },
+        "TS2345": {
+          "Argument of type '\"safety\" | \"global\" | \"trading\" | \"autonomy\" | \"analysis\"' is not assignable to parameter of type '\"global\" | \"trading\" | \"devops\" | \"ux\" | \"fullstack\" | undefined'.": 1
+        }
+      }
+    },
+    {
+      "path": "server/services/c13-validation-service.ts",
+      "phase_tag": "TBD (audit pending)",
+      "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
+      "errors": {
+        "TS2339": {
+          "Property 'finalScore' does not exist on type 'PromotionEvent'.": 2
+        }
+      }
+    },
+    {
+      "path": "server/services/command-router.ts",
+      "phase_tag": "TBD (audit pending)",
+      "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
+      "errors": {
+        "TS2339": {
+          "Property 'updateTradingSettings' does not exist on type 'DatabaseStorage'.": 2
+        }
+      }
+    },
+    {
+      "path": "server/services/commitTradeAndUpdatePortfolio.ts",
+      "phase_tag": "TBD (audit pending)",
+      "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
+      "errors": {
+        "TS2339": {
+          "Property 'userId' does not exist on type '{ symbol: string; mode: \"live\" | \"paper\"; strategy: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | \"range_trading\" | \"range_trade\" | \"vwap_bounce\" | ... N more ... | \"orb\"; ... N more ...; patternStrength?: string | ... N more ... | undefined; }'.": 1
+        },
+        "TS2322": {
+          "Type '\"portfolio_update\"' is not assignable to type '\"health_engine\" | \"state_update\" | \"chat_update\" | \"config_update\" | \"trade_update\" | \"safety_event\" | \"kill_switch_changed\" | \"ethical_event\" | \"ethics_federation_sync_complete\" | ... N more ... | \"policyUpdated\"'.": 1
+        }
+      }
+    },
+    {
+      "path": "server/services/data-archive/partition-exporter.ts",
+      "phase_tag": "TBD (audit pending)",
+      "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
+      "errors": {
+        "TS7022": {
+          "'lastRow' implicitly has type 'any' because it does not have a type annotation and is referenced directly or indirectly in its own initializer.": 1,
+          "'lastRowTs' implicitly has type 'any' because it does not have a type annotation and is referenced directly or indirectly in its own initializer.": 1
+        }
+      }
+    },
+    {
+      "path": "server/services/diagnostic-controller.ts",
+      "phase_tag": "TBD (audit pending)",
+      "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
+      "errors": {
+        "TS2353": {
+          "Object literal may only specify known properties, and 'commandId' does not exist in type 'BobInspectionReport'.": 2
+        },
+        "TS2322": {
+          "Type '\"diagnostics\"' is not assignable to type '\"system\" | \"bob\" | \"controller\"'.": 1
+        }
+      }
+    },
+    {
+      "path": "server/services/drift-dashboard-aggregator.ts",
+      "phase_tag": "TBD (audit pending)",
+      "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
+      "errors": {
+        "TS2440": {
+          "Import declaration conflicts with local declaration of 'REGIMES'.": 1
+        },
+        "TS2339": {
+          "Property 'RANGE_BOUND_STABLE' does not exist on type 'readonly CanonicalRegimeType[]'.": 1
+        },
+        "TS2322": {
+          "Type '\"crypto_spot\" | \"xstock_spot\" | \"xstock_perp\"' is not assignable to type '\"crypto_spot\" | \"equity_spot\" | \"equity_perp\"'.": 1
+        }
+      }
+    },
+    {
+      "path": "server/services/drift-detector.ts",
+      "phase_tag": "TBD (audit pending)",
+      "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
+      "errors": {
+        "TS2345": {
+          "Argument of type '{ type: string; subtype: \"warning\" | \"complete\" | \"recalibrate\"; data: { strategy: string; score: number; status: \"stable\" | \"drifting\" | \"recalibrating\"; deltaAlpha: number; deltaBeta: number; deltaSigma: number; threshold: number; timestamp: string; }; }' is not assignable to parameter of type 'Omit<ContextUpdate, \"timestamp\" | \"traceId\">'.": 1
+        }
+      }
+    },
+    {
+      "path": "server/services/ethical-reasoner.ts",
+      "phase_tag": "TBD (audit pending)",
+      "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
+      "errors": {
+        "TS2393": {
+          "Duplicate function implementation.": 2
+        }
+      }
+    },
+    {
+      "path": "server/services/ethical-reasoning-engine.ts",
+      "phase_tag": "TBD (audit pending)",
+      "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
+      "errors": {
+        "TS2352": {
+          "Conversion of type 'Record<string, unknown>' to type 'EthicalAudit' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.": 1,
+          "Conversion of type 'Record<string, unknown>[]' to type 'EthicalAudit[]' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.": 1
+        }
+      }
+    },
+    {
+      "path": "server/services/ethics-consensus-orchestrator.ts",
+      "phase_tag": "TBD (audit pending)",
+      "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
+      "errors": {
+        "TS2339": {
+          "Property 'detectedAt' does not exist on type 'PgTableWithColumns<{ name: \"ethics_conflict_register\"; schema: undefined; columns: { id: PgColumn<{ name: \"id\"; tableName: \"ethics_conflict_register\"; dataType: \"string\"; columnType: \"PgVarchar\"; data: string; driverParam: string; ... N more ...; generated: undefined; }, {}, { ...; }>; ... N more ...; resolvedAt: Pg...'.": 2,
+          "Property 'conflictId' does not exist on type 'PgTableWithColumns<{ name: \"ethics_conflict_register\"; schema: undefined; columns: { id: PgColumn<{ name: \"id\"; tableName: \"ethics_conflict_register\"; dataType: \"string\"; columnType: \"PgVarchar\"; data: string; driverParam: string; ... N more ...; generated: undefined; }, {}, { ...; }>; ... N more ...; resolvedAt: Pg...'.": 1
+        },
+        "TS2322": {
+          "Type '\"rejected\" | \"resolved\" | \"escalated\"' is not assignable to type '\"open\" | \"resolved\" | \"escalated\" | SQL<unknown> | PgColumn<ColumnBaseConfig<ColumnDataType, string>, {}, {}> | undefined'.": 1
+        }
+      }
+    },
+    {
+      "path": "server/services/experience-memory.ts",
+      "phase_tag": "TBD (audit pending)",
+      "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
+      "errors": {
+        "TS2322": {
+          "Type 'null' is not assignable to type 'string | undefined'.": 1
+        }
+      }
+    },
+    {
+      "path": "server/services/gemini-adaptive-profiler.ts",
+      "phase_tag": "TBD (audit pending)",
+      "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
+      "errors": {
+        "TS2339": {
+          "Property 'record' does not exist on type 'TelemetryCompression'.": 1
+        }
+      }
+    },
+    {
+      "path": "server/services/intent-executor.ts",
+      "phase_tag": "TBD (audit pending)",
+      "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
+      "errors": {
+        "TS2345": {
+          "Argument of type 'string' is not assignable to parameter of type '\"live\" | \"paper\"'.": 3,
+          "Argument of type '{ globalContextId: string; mode: \"live\" | \"paper\"; strategy: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | \"range_trading\" | \"vwap_bounce\" | \"liquidity_trap\"; }' is not assignable to parameter of type '{ globalContextId?: string | undefined; userId?: string | undefined; mode: \"live\" | \"paper\"; strategy: string; assetClass: string; }'.": 1,
+          "Argument of type '{ globalContextId: string; mode: \"live\" | \"paper\"; strategy: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | \"range_trading\" | \"vwap_bounce\" | \"liquidity_trap\"; enabled: boolean; params: Record<...>; }' is not assignable to parameter of type '{ mode: \"live\" | \"paper\"; assetClass: string; strategy: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | \"range_trading\" | \"range_trade\" | \"vwap_bounce\" | ... N more ... | \"orb\"; params: Json; globalContextId?: string | undefined; enabled?: boolean | undefined; version?: number | u...'.": 1,
+          "Argument of type '{ globalContextId: string; mode: \"live\" | \"paper\"; strategy: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | \"range_trading\" | \"vwap_bounce\" | \"liquidity_trap\"; enabled: boolean; params: {}; }' is not assignable to parameter of type '{ mode: \"live\" | \"paper\"; assetClass: string; strategy: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | \"range_trading\" | \"range_trade\" | \"vwap_bounce\" | ... N more ... | \"orb\"; params: Json; globalContextId?: string | undefined; enabled?: boolean | undefined; version?: number | u...'.": 1
+        }
+      }
+    },
+    {
+      "path": "server/services/knowledge-retrieval.ts",
+      "phase_tag": "TBD (audit pending)",
+      "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
+      "errors": {
+        "TS2345": {
+          "Argument of type '\"moderate\"' is not assignable to parameter of type '\"high\" | \"medium\" | \"low\" | \"verified\"'.": 1
+        },
+        "TS2322": {
+          "Type '\"moderate\"' is not assignable to type '\"high\" | \"medium\" | \"low\" | \"verified\"'.": 2
+        },
+        "TS2551": {
+          "Property 'retrievedAt' does not exist on type 'PgTableWithColumns<{ name: \"knowledge_retrieval_log\"; schema: undefined; columns: { id: PgColumn<{ name: \"id\"; tableName: \"knowledge_retrieval_log\"; dataType: \"string\"; columnType: \"PgVarchar\"; data: string; driverParam: string; ... N more ...; generated: undefined; }, {}, { ...; }>; ... N more ...; createdAt: PgCol...'. Did you mean 'retrievedData'?": 2
+        },
+        "TS2367": {
+          "This comparison appears to be unintentional because the types '\"high\" | \"medium\" | \"low\" | \"verified\"' and '\"moderate\"' have no overlap.": 1
+        }
+      }
+    },
+    {
+      "path": "server/services/m5d-validation-service.ts",
+      "phase_tag": "TBD (audit pending)",
+      "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
+      "errors": {
+        "TS2339": {
+          "Property 'di' does not exist on type 'Phase10TradeRecord'.": 1,
+          "Property 'gsi' does not exist on type 'Phase10TradeRecord'.": 1
+        }
+      }
+    },
+    {
+      "path": "server/services/m5e-validation-service.ts",
+      "phase_tag": "TBD (audit pending)",
+      "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
+      "errors": {
+        "TS2339": {
+          "Property 'di' does not exist on type 'Phase10TradeRecord'.": 1,
+          "Property 'gsi' does not exist on type 'Phase10TradeRecord'.": 1
+        }
+      }
+    },
+    {
+      "path": "server/services/memory-lifecycle.ts",
+      "phase_tag": "TBD (audit pending)",
+      "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
+      "errors": {
+        "TS2339": {
+          "Property 'userId' does not exist on type '{ id: string; globalContextId: string; mode: \"live\" | \"paper\"; balance: string; anchorVersion: number; lastUpdate: Date | null; createdAt: Date | null; }'.": 1,
+          "Property 'restoreBackup' does not exist on type 'FilePersistenceService'.": 1
+        }
+      }
+    },
+    {
+      "path": "server/services/narrative-feed.ts",
+      "phase_tag": "TBD (audit pending)",
+      "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
+      "errors": {
+        "TS18048": {
+          "'options.since' is possibly 'undefined'.": 1
+        }
+      }
+    },
+    {
+      "path": "server/services/reasoning-orchestrator.ts",
+      "phase_tag": "TBD (audit pending)",
+      "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
+      "errors": {
+        "TS2339": {
+          "Property 'userGoalsLive' does not exist on type 'typeof import(\"C:/DawnTraderV3-new/shared/schema\")'.": 1,
+          "Property 'userGoalsPaper' does not exist on type 'typeof import(\"C:/DawnTraderV3-new/shared/schema\")'.": 1
+        }
+      }
+    },
+    {
+      "path": "server/services/screener-recalibration-task.ts",
+      "phase_tag": "TBD (audit pending)",
+      "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
+      "errors": {
+        "TS2554": {
+          "Expected 0 arguments, but got 1.": 1
+        },
+        "TS2345": {
+          "Argument of type '{ mode: \"paper\"; }' is not assignable to parameter of type '{ mode: \"live\" | \"paper\"; assetClass: AssetClass; filterPath?: string | undefined; }'.": 1
+        }
+      }
+    },
+    {
+      "path": "server/services/signal-orchestrator.ts",
+      "phase_tag": "TBD (audit pending)",
+      "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
+      "errors": {
+        "TS2322": {
+          "Type 'string' is not assignable to type 'number'.": 1
+        }
+      }
+    },
+    {
+      "path": "server/services/stage-b-validator.ts",
+      "phase_tag": "TBD (audit pending)",
+      "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
+      "errors": {
+        "TS2322": {
+          "Type 'number' is not assignable to type 'string'.": 3
+        }
+      }
+    },
+    {
+      "path": "server/services/state-awareness.ts",
+      "phase_tag": "TBD (audit pending)",
+      "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
+      "errors": {
+        "TS2339": {
+          "Property 'userId' does not exist on type 'PgTableWithColumns<{ name: \"strategy_settings\"; schema: undefined; columns: { id: PgColumn<{ name: \"id\"; tableName: \"strategy_settings\"; dataType: \"string\"; columnType: \"PgVarchar\"; data: string; driverParam: string; ... N more ...; generated: undefined; }, {}, { ...; }>; ... N more ...; updatedAt: PgColumn<...>; };...'.": 1
+        }
+      }
+    },
+    {
+      "path": "server/services/system-config.ts",
+      "phase_tag": "TBD (audit pending)",
+      "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
+      "errors": {
+        "TS2322": {
+          "Type '\"MODE_CHANGE\"' is not assignable to type '\"health_engine\" | \"state_update\" | \"chat_update\" | \"config_update\" | \"trade_update\" | \"safety_event\" | \"kill_switch_changed\" | \"ethical_event\" | \"ethics_federation_sync_complete\" | ... N more ... | \"policyUpdated\"'.": 1
+        }
+      }
+    },
+    {
+      "path": "server/services/system-health-check-task.ts",
+      "phase_tag": "TBD (audit pending)",
+      "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
+      "errors": {
+        "TS2345": {
+          "Argument of type 'string' is not assignable to parameter of type '\"live\" | \"paper\"'.": 1
+        }
+      }
+    },
+    {
+      "path": "server/services/telemetry-aggregator.ts",
+      "phase_tag": "TBD (audit pending)",
+      "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
+      "errors": {
+        "TS2322": {
+          "Type 'string' is not assignable to type 'MarketRegime | undefined'.": 1,
+          "Type '{ fx5Evaluated24h: number; fx5Passed24h: number; passRate24h: number; failedByCategory: Record<string, number>; version: string; pairCount: number; totalSamples: number; weights: { hybrid: 0.4; confidence: 0.3; regime: 0.2; decay: 0.1; }; timestamp: string; systemConfig: { ...; }; schemaSync: { ...; }; tecConfig: { ...' is not assignable to type '{ version: string; pairCount: number; totalSamples: number; weights: { hybrid: number; confidence: number; regime: number; decay: number; }; timestamp: string; systemConfig: { metricEngineVersion: string; schemaVersion: string; directive: string; telemetryHealth: \"green\" | ... N more ... | \"red\"; }; ... N more ...; ...'.": 1
+        },
+        "TS2339": {
+          "Property 'TRANSITION' does not exist on type '{ readonly TREND_FRIENDLY_STABLE: \"TREND_FRIENDLY_STABLE\"; readonly HIGH_VOLATILITY_UNSTABLE: \"HIGH_VOLATILITY_UNSTABLE\"; readonly RANGE_BOUND_STABLE: \"RANGE_BOUND_STABLE\"; readonly IMPULSE_EXPANSION: \"IMPULSE_EXPANSION\"; readonly STRUCTURAL_TRANSITION: \"STRUCTURAL_TRANSITION\"; }'.": 1
+        },
+        "TS2345": {
+          "Argument of type 'string' is not assignable to parameter of type 'MarketRegime'.": 3
+        }
+      }
+    },
+    {
+      "path": "server/services/trading-engine.ts",
+      "phase_tag": "TBD (audit pending)",
+      "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
+      "errors": {
+        "TS2345": {
+          "Argument of type '\"dryrun_trade\"' is not assignable to parameter of type '\"trade_opened\" | \"trade_closed\" | \"trade_error\"'.": 1,
+          "Argument of type '{ mode: \"live\" | \"paper\"; tradeId: string; strategy: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | \"range_trading\" | \"vwap_bounce\" | \"liquidity_trap\" | \"dhma\"; ... N more ...; riskScore: any; }' is not assignable to parameter of type '{ symbol: string; mode: \"live\" | \"paper\"; userId: string; strategy: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | \"range_trading\" | \"range_trade\" | ... N more ... | \"orb\"; ... N more ...; completedAt?: Date | ... N more ... | undefined; }'.": 1
+        }
+      }
+    },
+    {
+      "path": "server/services/unified-core.ts",
+      "phase_tag": "TBD (audit pending)",
+      "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
+      "errors": {
+        "TS2345": {
+          "Argument of type 'PgTableWithColumns<{ name: \"users\"; schema: undefined; columns: { id: PgColumn<{ name: \"id\"; tableName: \"users\"; dataType: \"string\"; columnType: \"PgVarchar\"; data: string; driverParam: string; notNull: true; hasDefault: true; ... N more ...; generated: undefined; }, {}, { ...; }>; ... N more ...; updatedAt: PgColum...' is not assignable to parameter of type 'SQL<unknown> | PgTable<TableConfig> | Subquery<string, Record<string, unknown>> | PgViewBase<string, boolean, ColumnsSelection>'.": 5
+        },
+        "TS2339": {
+          "Property 'id' does not exist on type '{} | { [x: string]: unknown; } | { [x: string]: never; } | { [x: string]: never; }'.": 5,
+          "Property 'createdAt' does not exist on type 'PgTableWithColumns<{ name: \"awareness_state_log\"; schema: undefined; columns: { id: PgColumn<{ name: \"id\"; tableName: \"awareness_state_log\"; dataType: \"string\"; columnType: \"PgVarchar\"; data: string; driverParam: string; ... N more ...; generated: undefined; }, {}, { ...; }>; ... N more ...; metadata: PgColumn<...>...'.": 1,
+          "Property 'ethicalAuditLog' does not exist on type 'typeof import(\"C:/DawnTraderV3-new/shared/schema\")'.": 3,
+          "Property 'consensusRate' does not exist on type '{ activeSessions: number; totalSessions: number; averageConsensusScore: number; completedSessions: number; }'.": 1
+        },
+        "TS2551": {
+          "Property 'adaptiveObjectiveEngine' does not exist on type 'typeof import(\"C:/DawnTraderV3-new/server/services/adaptive-objective-engine\")'. Did you mean 'AdaptiveObjectiveEngine'?": 1,
+          "Property 'simulationEngineService' does not exist on type 'typeof import(\"C:/DawnTraderV3-new/server/services/simulation-engine\")'. Did you mean 'SimulationEngineService'?": 1,
+          "Property 'reflectiveIntelligenceService' does not exist on type 'typeof import(\"C:/DawnTraderV3-new/server/services/reflective-intelligence\")'. Did you mean 'reflectiveIntelligence'?": 1
+        },
+        "TS7006": {
+          "Parameter 'sum' implicitly has an 'any' type.": 1,
+          "Parameter 's' implicitly has an 'any' type.": 1,
+          "Parameter 'r' implicitly has an 'any' type.": 1
+        }
+      }
+    },
+    {
+      "path": "server/services/vts-runner.ts",
+      "phase_tag": "TBD (audit pending)",
+      "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
+      "errors": {
+        "TS2561": {
+          "Object literal may only specify known properties, but 'quantPatternDetected' does not exist in type 'VTSEvalSnapshot'. Did you mean to write 'patternDetected'?": 1,
+          "Object literal may only specify known properties, but 'quantPatternDetected' does not exist in type 'Omit<VTSEvalSnapshot, \"timestamp\">'. Did you mean to write 'patternDetected'?": 1
+        },
+        "TS2551": {
+          "Property 'quantPatternDetected' does not exist on type 'VTSEvalSnapshot'. Did you mean 'patternDetected'?": 3,
+          "Property 'quantPatternNoDetection' does not exist on type 'VTSEvalSnapshot'. Did you mean 'patternNoDetection'?": 3
+        },
+        "TS2353": {
+          "Object literal may only specify known properties, and 'costFeeFraction' does not exist in type 'OpenVirtualTrade'.": 2,
+          "Object literal may only specify known properties, and 'tradesSimulated' does not exist in type 'VTSCycleMetrics'.": 1
+        },
+        "TS2322": {
+          "Type '\"vts\"' is not assignable to type '\"live\" | \"simulation\"'.": 1,
+          "Type 'number | null | undefined' is not assignable to type 'number | undefined'.": 1
+        },
+        "TS2339": {
+          "Property 'filterTier' does not exist on type 'OpenVirtualTrade'.": 2,
+          "Property 'fees' does not exist on type 'OpenVirtualTrade'.": 1,
+          "Property 'costFeeFraction' does not exist on type 'OpenVirtualTrade'.": 1,
+          "Property 'costSlippageFraction' does not exist on type 'OpenVirtualTrade'.": 1,
+          "Property 'costSpreadFraction' does not exist on type 'OpenVirtualTrade'.": 1
+        },
+        "TS2739": {
+          "Type '{ evaluated: number; nulls: number; signals: number; }' is missing the following properties from type '{ evaluated: number; nulls: number; signals: number; preRejectionSignals: number; rejected: number; }': preRejectionSignals, rejected": 3
+        }
+      }
+    },
+    {
+      "path": "server/services/vts-service.ts",
+      "phase_tag": "TBD (audit pending)",
+      "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
+      "errors": {
+        "TS2367": {
+          "This comparison appears to be unintentional because the types '\"live\" | \"simulation\"' and '\"vts\"' have no overlap.": 1
+        },
+        "TS2322": {
+          "Type '\"vts\"' is not assignable to type '\"live\" | \"simulation\"'.": 1,
+          "Type 'string | undefined' is not assignable to type 'AssetClass'.": 1,
+          "Type 'number | undefined' is not assignable to type 'number | null'.": 1
+        }
+      }
+    },
+    {
+      "path": "server/storage.ts",
+      "phase_tag": "TBD (audit pending)",
+      "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
+      "errors": {
+        "TS2769": {
+          "No overload matches this call.": 4
+        },
+        "TS2741": {
+          "Property 'orderBy' is missing in type 'Omit<import(\"C:/DawnTraderV3-new/node_modules/drizzle-orm/pg-core/query-builders/select\").PgSelectBase<\"trades\", { id: import(\"C:/DawnTraderV3-new/node_modules/drizzle-orm/pg-core/columns/common\").PgColumn<{ name: \"id\"; tableName: \"trades\"; dataType: \"string\"; columnType: \"PgVarchar\"; data: string; driverParam: stri...' but required in type 'Omit<import(\"C:/DawnTraderV3-new/node_modules/drizzle-orm/pg-core/query-builders/select\").PgSelectBase<\"trades\", { id: import(\"C:/DawnTraderV3-new/node_modules/drizzle-orm/pg-core/columns/common\").PgColumn<{ name: \"id\"; tableName: \"trades\"; dataType: \"string\"; columnType: \"PgVarchar\"; data: string; driverParam: stri...'.": 1
+        },
+        "TS2339": {
+          "Property 'userId' does not exist on type 'PgTableWithColumns<{ name: \"intraday_adjustments\"; schema: undefined; columns: { id: PgColumn<{ name: \"id\"; tableName: \"intraday_adjustments\"; dataType: \"string\"; columnType: \"PgVarchar\"; data: string; driverParam: string; ... N more ...; generated: undefined; }, {}, { ...; }>; ... N more ...; timestamp: PgColumn<.....'.": 1,
+          "Property 'userId' does not exist on type 'PgTableWithColumns<{ name: \"goal_analysis_history_live\"; schema: undefined; columns: { id: PgColumn<{ name: \"id\"; tableName: \"goal_analysis_history_live\"; dataType: \"string\"; columnType: \"PgVarchar\"; data: string; ... N more ...; generated: undefined; }, {}, { ...; }>; ... N more ...; createdAt: PgColumn<...>; }; di...'.": 1,
+          "Property 'userId' does not exist on type 'PgTableWithColumns<{ name: \"goal_analysis_history_paper\"; schema: undefined; columns: { id: PgColumn<{ name: \"id\"; tableName: \"goal_analysis_history_paper\"; dataType: \"string\"; columnType: \"PgVarchar\"; data: string; ... N more ...; generated: undefined; }, {}, { ...; }>; ... N more ...; createdAt: PgColumn<...>; }; ...'.": 1,
+          "Property 'userId' does not exist on type 'PgTableWithColumns<{ name: \"goal_audit_log\"; schema: undefined; columns: { id: PgColumn<{ name: \"id\"; tableName: \"goal_audit_log\"; dataType: \"string\"; columnType: \"PgVarchar\"; data: string; driverParam: string; notNull: true; ... N more ...; generated: undefined; }, {}, { ...; }>; ... N more ...; timestamp: PgColumn...'.": 2,
+          "Property 'userId' does not exist on type 'PgTableWithColumns<{ name: \"historic_signals\"; schema: undefined; columns: { id: PgColumn<{ name: \"id\"; tableName: \"historic_signals\"; dataType: \"string\"; columnType: \"PgVarchar\"; data: string; driverParam: string; notNull: true; ... N more ...; generated: undefined; }, {}, { ...; }>; ... N more ...; source: PgColu...'.": 4
+        }
+      }
+    }
+  ]
 }
