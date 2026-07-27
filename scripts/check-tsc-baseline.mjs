@@ -77,16 +77,34 @@ function runTsc() {
 }
 
 // #579 (B-TSC-BASELINE-FIX, 2026-07-27): normalize a tsc primary-line MESSAGE into
-// a stable identity. Collapse whitespace + stabilize the volatile `... N more ...`
-// type-expansion count (rare on a primary line, but harmless to normalize). The
-// primary-line message carries the distinguishing detail (property/type name), which
-// is what makes a NEW error distinct from a baselined one even under (file,code)
-// headroom — the whole point of moving from count-identity to message-identity.
+// a stable, PORTABLE identity. Collapse whitespace + stabilize the volatile
+// `... N more ...` type-expansion count, THEN strip host-specific absolute paths.
+//
+// ★ PORTABILITY (CI caught this): tsc embeds ABSOLUTE paths inside messages, e.g.
+// `import("<repo-root>/server/foo")`, and the repo root differs by environment — a dev
+// clone `C:/DawnTraderV3-new`, a CI checkout `/home/runner/work/DawnTraderV3/DawnTraderV3`.
+// Left raw, the SAME error keys to a DIFFERENT message-identity per machine, so a baseline
+// generated on one host throws false regressions on another (CI reported 9 identical errors
+// as 9 drops + 9 regressions, the absolute path the only difference). We canonicalize the
+// repo-root prefix to a stable `<ROOT>` token two ways: (1) strip the actual runtime cwd
+// (precise, forward-slash + case-insensitive since tsc emits `/` and may lowercase a drive);
+// (2) a host-independent anchor pass strips ANY absolute prefix that precedes a known repo
+// top-level dir — covers every dev clone (-old/-new/-analyst), CI, and staging. The
+// normalizer runs IDENTICALLY at generate and compare, so canonicalizing host-varying text
+// can only ever under-normalize into a false regression, never hide a real error (real
+// errors differ in the property/type name, not just the path).
 function normalizeMessage(msg) {
+  const root = cwd().replace(/\\/g, '/');
+  const rootRe = new RegExp(root.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
   return msg
     .trim()
     .replace(/\s+/g, ' ')
-    .replace(/\.\.\. \d+ more \.\.\./g, '... N more ...');
+    .replace(/\.\.\. \d+ more \.\.\./g, '... N more ...')
+    .replace(rootRe, '<ROOT>')
+    .replace(
+      /(?:[A-Za-z]:)?\/[^"'()\s]*?\/(?=(?:server|client|shared|node_modules|scripts|drizzle|migrations)\/)/g,
+      '<ROOT>/',
+    );
 }
 
 // Parse `tsc --noEmit` output into { counts: {file: {code: {message: n}}}, total }.

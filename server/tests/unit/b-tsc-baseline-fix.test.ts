@@ -12,7 +12,7 @@
  *      would silently pass this; message-identity does not.
  */
 import { describe, it, expect } from 'vitest';
-import { parseErrors, computeDiff } from '../../../scripts/check-tsc-baseline.mjs';
+import { parseErrors, computeDiff, normalizeMessage } from '../../../scripts/check-tsc-baseline.mjs';
 
 // helper: build the baseline files[] shape from a nested {file:{code:{msg:n}}} map
 const mkBaseline = (counts: Record<string, any>) =>
@@ -31,6 +31,22 @@ describe('B-TSC-BASELINE-FIX (#579) — message-identity gate', () => {
     // two identical-message TS2339 → count 2 under one message key; one TS2561.
     expect(f['TS2339']["Property 'costFeeFraction' does not exist on type 'OpenVirtualTrade'."]).toBe(2);
     expect(Object.keys(f['TS2561']).length).toBe(1);
+  });
+
+  it('PORTABILITY — a message with an absolute repo path normalizes host-independently (CI ≡ local)', () => {
+    // tsc embeds absolute paths inside messages; the repo root differs by environment.
+    // A dev clone and the CI checkout must produce the SAME identity or the baseline throws
+    // false regressions cross-host (the exact CI failure that surfaced this).
+    const localWin = `Property 'modeRegistry' does not exist on type 'typeof import("C:/DawnTraderV3-new/server/routes")'.`;
+    const ciLinux  = `Property 'modeRegistry' does not exist on type 'typeof import("/home/runner/work/DawnTraderV3/DawnTraderV3/server/routes")'.`;
+    const analystWin = `Property 'modeRegistry' does not exist on type 'typeof import("C:/DawnTraderV3-analyst/server/routes")'.`;
+    const a = normalizeMessage(localWin);
+    const b = normalizeMessage(ciLinux);
+    const c = normalizeMessage(analystWin);
+    expect(a).toBe(b);
+    expect(b).toBe(c);
+    expect(a).not.toMatch(/DawnTraderV3|home\/runner|C:\//); // no host-specific path survives
+    expect(a).toContain('<ROOT>/server/routes');
   });
 
   it('CASE 1 — a NEW distinct message UNDER the (file,code) ceiling is CAUGHT', () => {

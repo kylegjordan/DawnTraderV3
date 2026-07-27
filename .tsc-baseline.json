@@ -1,8 +1,8 @@
 {
   "version": 2,
   "format": "per-file per-code per-MESSAGE counts (#579, B-TSC-BASELINE-FIX 2026-07-27; was v1 per-file per-code counts)",
-  "frozen_at_commit": "b7e34ea91",
-  "frozen_at_iso": "2026-07-27T19:11:21.173Z",
+  "frozen_at_commit": "9103f6402",
+  "frozen_at_iso": "2026-07-27T19:20:33.100Z",
   "frozen_by_batch": "B-TSC-BASELINE-FIX (#579 — message-identity gate)",
   "total_errors": 394,
   "file_count": 48,
@@ -127,7 +127,7 @@
           "Property 'realizedPnl' does not exist on type '{ id: string; mode: \"live\" | \"paper\"; globalContextId: string; createdAt: Date | null; balance: string; anchorVersion: number; lastUpdate: Date | null; }'.": 1,
           "Property 'buildTrade' does not exist on type 'ActiveExecutionEngine'.": 2,
           "Property 'executeTrade' does not exist on type 'ActiveExecutionEngine'.": 2,
-          "Property 'modeRegistry' does not exist on type 'typeof import(\"C:/DawnTraderV3-new/server/services/mode-registry\")'.": 2,
+          "Property 'modeRegistry' does not exist on type 'typeof import(\"<ROOT>/server/services/mode-registry\")'.": 2,
           "Property 'startingBalance' does not exist on type '{ id: string; mode: \"live\" | \"paper\"; globalContextId: string; createdAt: Date | null; balance: string; anchorVersion: number; lastUpdate: Date | null; }'.": 1,
           "Property 'minDailyRange' does not exist on type '{ id: string; mode: \"live\" | \"paper\"; createdAt: Date | null; updatedAt: Date | null; minVolume: string | null; minPrice: string | null; maxBidAskSpread: string | null; ... N more ...; diMax: string | null; }'.": 2,
           "Property 'approved' does not exist on type 'TradeSafetyResult'.": 2,
@@ -192,7 +192,7 @@
           "Parameter 'a' implicitly has an 'any' type.": 7
         },
         "TS2741": {
-          "Property 'where' is missing in type 'Omit<import(\"C:/DawnTraderV3-new/node_modules/drizzle-orm/pg-core/query-builders/select\").PgSelectBase<\"ethical_violation_log\", { id: import(\"C:/DawnTraderV3-new/node_modules/drizzle-orm/pg-core/columns/common\").PgColumn<{ name: \"id\"; tableName: \"ethical_violation_log\"; dataType: \"string\"; columnType: \"PgVarchar\"; d...' but required in type 'Omit<import(\"C:/DawnTraderV3-new/node_modules/drizzle-orm/pg-core/query-builders/select\").PgSelectBase<\"ethical_violation_log\", { id: import(\"C:/DawnTraderV3-new/node_modules/drizzle-orm/pg-core/columns/common\").PgColumn<{ name: \"id\"; tableName: \"ethical_violation_log\"; dataType: \"string\"; columnType: \"PgVarchar\"; d...'.": 1
+          "Property 'where' is missing in type 'Omit<import(\"<ROOT>/node_modules/drizzle-orm/pg-core/query-builders/select\").PgSelectBase<\"ethical_violation_log\", { id: import(\"<ROOT>/node_modules/drizzle-orm/pg-core/columns/common\").PgColumn<{ name: \"id\"; tableName: \"ethical_violation_log\"; dataType: \"string\"; columnType: \"PgVarchar\"; d...' but required in type 'Omit<import(\"<ROOT>/node_modules/drizzle-orm/pg-core/query-builders/select\").PgSelectBase<\"ethical_violation_log\", { id: import(\"<ROOT>/node_modules/drizzle-orm/pg-core/columns/common\").PgColumn<{ name: \"id\"; tableName: \"ethical_violation_log\"; dataType: \"string\"; columnType: \"PgVarchar\"; d...'.": 1
         }
       }
     },
@@ -557,8 +557,8 @@
       "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
       "errors": {
         "TS2339": {
-          "Property 'userGoalsLive' does not exist on type 'typeof import(\"C:/DawnTraderV3-new/shared/schema\")'.": 1,
-          "Property 'userGoalsPaper' does not exist on type 'typeof import(\"C:/DawnTraderV3-new/shared/schema\")'.": 1
+          "Property 'userGoalsLive' does not exist on type 'typeof import(\"<ROOT>/shared/schema\")'.": 1,
+          "Property 'userGoalsPaper' does not exist on type 'typeof import(\"<ROOT>/shared/schema\")'.": 1
         }
       }
     },
@@ -664,13 +664,13 @@
         "TS2339": {
           "Property 'id' does not exist on type '{} | { [x: string]: never; } | { [x: string]: unknown; } | { [x: string]: never; }'.": 5,
           "Property 'createdAt' does not exist on type 'PgTableWithColumns<{ name: \"awareness_state_log\"; schema: undefined; columns: { id: PgColumn<{ name: \"id\"; tableName: \"awareness_state_log\"; dataType: \"string\"; columnType: \"PgVarchar\"; data: string; driverParam: string; ... N more ...; generated: undefined; }, {}, { ...; }>; ... N more ...; metadata: PgColumn<...>...'.": 1,
-          "Property 'ethicalAuditLog' does not exist on type 'typeof import(\"C:/DawnTraderV3-new/shared/schema\")'.": 3,
+          "Property 'ethicalAuditLog' does not exist on type 'typeof import(\"<ROOT>/shared/schema\")'.": 3,
           "Property 'consensusRate' does not exist on type '{ activeSessions: number; totalSessions: number; averageConsensusScore: number; completedSessions: number; }'.": 1
         },
         "TS2551": {
-          "Property 'adaptiveObjectiveEngine' does not exist on type 'typeof import(\"C:/DawnTraderV3-new/server/services/adaptive-objective-engine\")'. Did you mean 'AdaptiveObjectiveEngine'?": 1,
-          "Property 'simulationEngineService' does not exist on type 'typeof import(\"C:/DawnTraderV3-new/server/services/simulation-engine\")'. Did you mean 'SimulationEngineService'?": 1,
-          "Property 'reflectiveIntelligenceService' does not exist on type 'typeof import(\"C:/DawnTraderV3-new/server/services/reflective-intelligence\")'. Did you mean 'reflectiveIntelligence'?": 1
+          "Property 'adaptiveObjectiveEngine' does not exist on type 'typeof import(\"<ROOT>/server/services/adaptive-objective-engine\")'. Did you mean 'AdaptiveObjectiveEngine'?": 1,
+          "Property 'simulationEngineService' does not exist on type 'typeof import(\"<ROOT>/server/services/simulation-engine\")'. Did you mean 'SimulationEngineService'?": 1,
+          "Property 'reflectiveIntelligenceService' does not exist on type 'typeof import(\"<ROOT>/server/services/reflective-intelligence\")'. Did you mean 'reflectiveIntelligence'?": 1
         },
         "TS7006": {
           "Parameter 'sum' implicitly has an 'any' type.": 1,
@@ -736,7 +736,7 @@
           "No overload matches this call.": 4
         },
         "TS2741": {
-          "Property 'orderBy' is missing in type 'Omit<import(\"C:/DawnTraderV3-new/node_modules/drizzle-orm/pg-core/query-builders/select\").PgSelectBase<\"trades\", { id: import(\"C:/DawnTraderV3-new/node_modules/drizzle-orm/pg-core/columns/common\").PgColumn<{ name: \"id\"; tableName: \"trades\"; dataType: \"string\"; columnType: \"PgVarchar\"; data: string; driverParam: stri...' but required in type 'Omit<import(\"C:/DawnTraderV3-new/node_modules/drizzle-orm/pg-core/query-builders/select\").PgSelectBase<\"trades\", { id: import(\"C:/DawnTraderV3-new/node_modules/drizzle-orm/pg-core/columns/common\").PgColumn<{ name: \"id\"; tableName: \"trades\"; dataType: \"string\"; columnType: \"PgVarchar\"; data: string; driverParam: stri...'.": 1
+          "Property 'orderBy' is missing in type 'Omit<import(\"<ROOT>/node_modules/drizzle-orm/pg-core/query-builders/select\").PgSelectBase<\"trades\", { id: import(\"<ROOT>/node_modules/drizzle-orm/pg-core/columns/common\").PgColumn<{ name: \"id\"; tableName: \"trades\"; dataType: \"string\"; columnType: \"PgVarchar\"; data: string; driverParam: stri...' but required in type 'Omit<import(\"<ROOT>/node_modules/drizzle-orm/pg-core/query-builders/select\").PgSelectBase<\"trades\", { id: import(\"<ROOT>/node_modules/drizzle-orm/pg-core/columns/common\").PgColumn<{ name: \"id\"; tableName: \"trades\"; dataType: \"string\"; columnType: \"PgVarchar\"; data: string; driverParam: stri...'.": 1
         },
         "TS2339": {
           "Property 'userId' does not exist on type 'PgTableWithColumns<{ name: \"intraday_adjustments\"; schema: undefined; columns: { id: PgColumn<{ name: \"id\"; tableName: \"intraday_adjustments\"; dataType: \"string\"; columnType: \"PgVarchar\"; data: string; driverParam: string; ... N more ...; generated: undefined; }, {}, { ...; }>; ... N more ...; timestamp: PgColumn<.....'.": 1,
