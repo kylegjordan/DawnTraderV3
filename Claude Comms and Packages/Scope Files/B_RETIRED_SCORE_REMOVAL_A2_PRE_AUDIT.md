@@ -20,12 +20,13 @@ change-class: non_architecture
 | `vts-runner.ts:3913` | `RegisterOpenVtsTradeInput.finalScore` | → optional |
 | `vts-service.ts:57/:98/:869` | `VirtualSignal` + the two Phase-10 record ifaces | → optional (all three) |
 
-### WRITERS → stop persisting (omit the field)
-| Site | Lane | Disposition |
+### WRITERS → stop persisting (omit the field) — ⚠️ CRYPTO surface is **THREE** sites, not two (Langston Step-2 add)
+| Site | Lane / type | Disposition |
 |---|---|---|
-| `eval-cycle.ts:1000` | xStock (→ registerOpenVtsTrade) | omit `finalScore` from the record (KEEP `:656` compute + `:668` archiveCommon + import — those feed #582, not A2) |
-| `vts-runner.ts:2195` | crypto inline `Phase10TradeRecord` literal | omit `finalScore` — ⚠️ **B79.0m.b HOT-PATH-LOCK: twin-lock/both-branches regression discipline (like B7.2d), NOT a free edit** |
-| `vts-runner.ts:2227` | crypto inline `VirtualSignal` literal | omit `finalScore` — same twin-lock discipline |
+| `eval-cycle.ts:1000` | xStock (→ registerOpenVtsTrade) | omit `finalScore` (KEEP `:656` compute + `:668` archiveCommon + import — those feed #582, not A2) |
+| **`vts-runner.ts:2037`** | **crypto `const openTrade: OpenVirtualTrade` (:2003) → `openVirtualTrades.set` (:2146) — THE vts_open_trades substrate** | **omit `finalScore` — ⚠️ MISSED in v1; tsc does NOT catch a surviving writer into an optional field, so it MUST be enumerated. Leaving it = the exact per-lane ML split A2 exists to kill. B79.0m.b HOT-PATH-LOCK, twin-lock** |
+| `vts-runner.ts:2195` | crypto `const signal: VirtualSignal` (:2179) literal | omit `finalScore` — B79.0m.b HOT-PATH-LOCK, twin-lock/both-branches discipline (like B7.2d) |
+| `vts-runner.ts:2227` | crypto `const tradeRecord: Phase10TradeRecord` (:2216) literal | omit `finalScore` — same twin-lock discipline |
 | `vts-runner.ts:4050` | registerOpenVtsTrade builder (`finalScore: input.finalScore`) | input now optional → openTrade optional; leave as-is (optional→optional compiles) |
 
 ### READERS → coalesce deterministic `?? 0` (A2-surface) OR leave (other surface)
@@ -34,6 +35,8 @@ change-class: non_architecture
 | `vts-runner.ts:5023` | `totalFinalScore += tradeRecord.finalScore` | A2 (cycle-avg display) | `?? 0` |
 | `vts-runner.ts:5648` | `computeRankingScore(trade.finalScore, …)` | A2 → **A3 bright line** | `?? 0` interim (A3 re-sources; deterministic 0, not NaN) |
 | `vts-runner.ts:3191/:3231/:3288/:3407/:5658` | `finalScore: trade.finalScore` (copy into downstream records) | A2 | `?? 0` at each copy site (bounds cascade — downstream types unchanged) |
+| `vts-runner.ts:4923` | `recordPairTelemetry({ finalScore: tradeRecord.finalScore })` (M70 VTS telemetry) | A2 | `?? 0` (Langston Step-2 add — missed in v1) |
+| `vts-runner.ts:4876` | `archiveSignalEval({ finalScore: signal.finalScore })` reads VirtualSignal.finalScore | **#582** (archiver sink) | LEAVE — `SignalEvalArchiveInput.finalScore` is OPTIONAL (`signal-eval-archiver.ts:243`), so passing the now-optional field compiles; #582 surface, no coalesce (Langston Step-2 add) |
 | `vts-runner.ts:3808` | `finalScore: t.finalScore ?? 0` (open feed) | A2 | already `?? 0` — no change |
 | `vts-service.ts:263` | `signal.finalScore ?? 0` | A2 | already `?? 0` — no change |
 | `vts-service.ts:294` | `sum + t.finalScore` (session `avgFinalScore`) | A2 (display metric) | `?? 0` |
@@ -42,6 +45,8 @@ change-class: non_architecture
 
 ### NOT touched (proof-of-fence, per Langston "show which surface each sits on")
 - `vts-runner.ts:2040` `expectedEdge: finalScore * dynamicTarget − frictionCost` — reads the LOCAL `finalScore` const from `computeFinalScore(:1687)`, NOT the record field → **untouched by A2** (breaks only on A3's computeFinalScore removal).
+- `vts-runner.ts:2186` `predictedProfit: finalScore * dynamicTarget` — LOCAL const read → **A2-untouched, breaks only at A3** (§15 proof-of-fence, Langston Step-2 add).
+- `vts-runner.ts:2539` `metadata: { finalScore }` (ablation) — LOCAL const read → **A2-untouched, breaks only at A3** (§15 proof-of-fence, Langston Step-2 add).
 - `eval-cycle.ts:656/:668/import` + all `archiveSignalEval` calls — #582 surface.
 - All active-path + pattern-pool sites (fence §3/§4).
 
