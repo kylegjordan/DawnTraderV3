@@ -1,8 +1,8 @@
 {
   "version": 2,
   "format": "per-file per-code per-MESSAGE counts (#579, B-TSC-BASELINE-FIX 2026-07-27; was v1 per-file per-code counts)",
-  "frozen_at_commit": "ab9bb2e2c",
-  "frozen_at_iso": "2026-07-27T18:51:51.254Z",
+  "frozen_at_commit": "b7e34ea91",
+  "frozen_at_iso": "2026-07-27T19:11:21.173Z",
   "frozen_by_batch": "B-TSC-BASELINE-FIX (#579 — message-identity gate)",
   "total_errors": 394,
   "file_count": 48,
@@ -83,19 +83,19 @@
       "errors": {
         "TS2322": {
           "Type '({ rank: number; symbol: string; score: number; signalType: string; strategy: string; pattern: string; regime: string; source: TelemetrySource; lastUpdated: string; frictionScore: number; } | { ...; })[]' is not assignable to type '{ rank: number; symbol: string; score: number; signalType: string; strategy: string; pattern: string; regime: string; source: TelemetrySource; lastUpdated: string; frictionScore: number; }[]'.": 1,
-          "Type '\"system:killswitch_cleared\"' is not assignable to type '\"health_engine\" | \"state_update\" | \"chat_update\" | \"config_update\" | \"trade_update\" | \"safety_event\" | \"kill_switch_changed\" | \"ethical_event\" | \"ethics_federation_sync_complete\" | ... N more ... | \"policyUpdated\"'.": 1,
+          "Type '\"system:killswitch_cleared\"' is not assignable to type '\"trading_state_changed\" | \"background_jobs_complete\" | \"trade_update\" | \"alerts_updated\" | \"trading_data_updated\" | \"price_updated\" | \"scan_tick\" | \"rtb:cleared\" | \"health_engine\" | ... N more ... | \"policyUpdated\"'.": 1,
           "Type 'number' is not assignable to type 'string'.": 8,
-          "Type '\"active_engine_reset\"' is not assignable to type '\"health_engine\" | \"state_update\" | \"chat_update\" | \"config_update\" | \"trade_update\" | \"safety_event\" | \"kill_switch_changed\" | \"ethical_event\" | \"ethics_federation_sync_complete\" | ... N more ... | \"policyUpdated\"'.": 1,
-          "Type '\"active_trade_closed\"' is not assignable to type '\"health_engine\" | \"state_update\" | \"chat_update\" | \"config_update\" | \"trade_update\" | \"safety_event\" | \"kill_switch_changed\" | \"ethical_event\" | \"ethics_federation_sync_complete\" | ... N more ... | \"policyUpdated\"'.": 1,
+          "Type '\"active_engine_reset\"' is not assignable to type '\"trading_state_changed\" | \"background_jobs_complete\" | \"trade_update\" | \"alerts_updated\" | \"trading_data_updated\" | \"price_updated\" | \"scan_tick\" | \"rtb:cleared\" | \"health_engine\" | ... N more ... | \"policyUpdated\"'.": 1,
+          "Type '\"active_trade_closed\"' is not assignable to type '\"trading_state_changed\" | \"background_jobs_complete\" | \"trade_update\" | \"alerts_updated\" | \"trading_data_updated\" | \"price_updated\" | \"scan_tick\" | \"rtb:cleared\" | \"health_engine\" | ... N more ... | \"policyUpdated\"'.": 1,
           "Type 'Date | null' is not assignable to type 'Date'.": 1,
           "Type 'unknown' is not assignable to type 'Json | undefined'.": 1,
-          "Type '\"stranded_trades_cleared\"' is not assignable to type '\"health_engine\" | \"state_update\" | \"chat_update\" | \"config_update\" | \"trade_update\" | \"safety_event\" | \"kill_switch_changed\" | \"ethical_event\" | \"ethics_federation_sync_complete\" | ... N more ... | \"policyUpdated\"'.": 1
+          "Type '\"stranded_trades_cleared\"' is not assignable to type '\"trading_state_changed\" | \"background_jobs_complete\" | \"trade_update\" | \"alerts_updated\" | \"trading_data_updated\" | \"price_updated\" | \"scan_tick\" | \"rtb:cleared\" | \"health_engine\" | ... N more ... | \"policyUpdated\"'.": 1
         },
         "TS2345": {
           "Argument of type 'string | null' is not assignable to parameter of type 'string'.": 6,
           "Argument of type 'string' is not assignable to parameter of type '\"live\" | \"paper\"'.": 3,
           "Argument of type '\"dryrun_trade\"' is not assignable to parameter of type '\"trade_opened\" | \"trade_closed\" | \"trade_error\"'.": 1,
-          "Argument of type '{ symbol: string; baseCurrency: string; strategyName: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | \"range_trading\" | \"range_trade\" | \"vwap_bounce\" | ... N more ... | \"orb\"; ... N more ...; metadata: unknown; }' is not assignable to parameter of type '{ symbol: string; baseCurrency: string; entryPrice: string; quantity: string; strategyName: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | \"range_trading\" | ... N more ... | \"orb\"; ... N more ...; anchorVersionAtOpen?: number | ... N more ... | undefined; }'.": 1,
+          "Argument of type '{ symbol: string; baseCurrency: string; strategyName: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | \"range_trading\" | \"range_trade\" | \"vwap_bounce\" | ... N more ... | \"orb\"; ... N more ...; metadata: unknown; }' is not assignable to parameter of type '{ symbol: string; side: string; baseCurrency: string; entryPrice: string; quantity: string; strategyName: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | ... N more ... | \"orb\"; ... N more ...; anchorVersionAtOpen?: number | ... N more ... | undefined; }'.": 1,
           "Argument of type '{ minVolume: string | null; minDailyRange: any; minPrice: string | null; maxPrice: string | null; maxBidAskSpread: string | null; excludeStablecoins: boolean | null; rsiMin: number | null; rsiMax: number | null; volatilityMin: string | null; volatilityMax: string | null; quoteCurrencies: string[]; }' is not assignable to parameter of type '{ id: string; mode: \"live\" | \"paper\"; createdAt: Date | null; updatedAt: Date | null; minVolume: string | null; minPrice: string | null; maxBidAskSpread: string | null; ... N more ...; diMax: string | null; }'.": 1,
           "Argument of type '{ status: string; limit: number; }' is not assignable to parameter of type '\"live\" | \"paper\"'.": 2,
           "Argument of type '{ symbol: string; strategy: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\"; entryPrice: number; stopPrice: number; targetPrice: number; confidence: number; mode: \"live\" | \"paper\"; }' is not assignable to parameter of type '\"live\" | \"paper\"'.": 1,
@@ -103,32 +103,32 @@
           "Argument of type '{}' is not assignable to parameter of type '\"live\" | \"paper\"'.": 5,
           "Argument of type '{ strategy: string; }' is not assignable to parameter of type '\"live\" | \"paper\"'.": 1,
           "Argument of type '{ globalContextId: string; mode: \"live\" | \"paper\"; strategy: string; }' is not assignable to parameter of type '{ globalContextId?: string | undefined; userId?: string | undefined; mode: \"live\" | \"paper\"; strategy: string; assetClass: string; }'.": 2,
-          "Argument of type '{ globalContextId: string; mode: \"live\" | \"paper\"; strategy: any; enabled: boolean; params: { riskPerTrade: number; cooldownMinutes: number; maxConcurrentPositions: number; takeProfitR: number; stopLossR: number; }; }' is not assignable to parameter of type '{ mode: \"live\" | \"paper\"; assetClass: string; strategy: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | \"range_trading\" | \"range_trade\" | \"vwap_bounce\" | ... N more ... | \"orb\"; params: Json; globalContextId?: string | undefined; enabled?: boolean | undefined; version?: number | u...'.": 1,
+          "Argument of type '{ globalContextId: string; mode: \"live\" | \"paper\"; strategy: any; enabled: boolean; params: { riskPerTrade: number; cooldownMinutes: number; maxConcurrentPositions: number; takeProfitR: number; stopLossR: number; }; }' is not assignable to parameter of type '{ mode: \"live\" | \"paper\"; assetClass: string; strategy: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | \"range_trading\" | \"range_trade\" | \"vwap_bounce\" | ... N more ... | \"orb\"; params: Json; enabled?: boolean | undefined; version?: number | undefined; globalContextId?: string | u...'.": 1,
           "Argument of type '{ mode: \"live\" | \"paper\"; strategy: any; prevParams: any; nextParams: any; actorType: string; actorId: string; reason: any; }' is not assignable to parameter of type '{ mode: \"live\" | \"paper\"; assetClass: string; strategy: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | \"range_trading\" | \"range_trade\" | \"vwap_bounce\" | ... N more ... | \"orb\"; ... N more ...; reason?: string | ... N more ... | undefined; }'.": 1,
-          "Argument of type '{ mode: any; strategy: any; enabled: true; params: any; }' is not assignable to parameter of type '{ mode: \"live\" | \"paper\"; assetClass: string; strategy: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | \"range_trading\" | \"range_trade\" | \"vwap_bounce\" | ... N more ... | \"orb\"; params: Json; globalContextId?: string | undefined; enabled?: boolean | undefined; version?: number | u...'.": 1,
+          "Argument of type '{ mode: any; strategy: any; enabled: true; params: any; }' is not assignable to parameter of type '{ mode: \"live\" | \"paper\"; assetClass: string; strategy: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | \"range_trading\" | \"range_trade\" | \"vwap_bounce\" | ... N more ... | \"orb\"; params: Json; enabled?: boolean | undefined; version?: number | undefined; globalContextId?: string | u...'.": 1,
           "Argument of type '{ mode: any; strategy: any; prevParams: any; nextParams: any; actorType: string; actorId: string; reason: string; }' is not assignable to parameter of type '{ mode: \"live\" | \"paper\"; assetClass: string; strategy: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | \"range_trading\" | \"range_trade\" | \"vwap_bounce\" | ... N more ... | \"orb\"; ... N more ...; reason?: string | ... N more ... | undefined; }'.": 1,
           "Argument of type '{ userId: string; mode: \"live\" | \"paper\"; strategy: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | \"range_trading\" | \"vwap_bounce\" | \"liquidity_trap\"; }' is not assignable to parameter of type '{ globalContextId?: string | undefined; userId?: string | undefined; mode: \"live\" | \"paper\"; strategy: string; assetClass: string; }'.": 1,
-          "Argument of type '{ userId: string; mode: \"live\" | \"paper\"; strategy: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | \"range_trading\" | \"vwap_bounce\" | \"liquidity_trap\"; enabled: boolean; params: any; }' is not assignable to parameter of type '{ mode: \"live\" | \"paper\"; assetClass: string; strategy: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | \"range_trading\" | \"range_trade\" | \"vwap_bounce\" | ... N more ... | \"orb\"; params: Json; globalContextId?: string | undefined; enabled?: boolean | undefined; version?: number | u...'.": 1,
-          "Argument of type 'string | undefined' is not assignable to parameter of type '\"instability\" | \"bias\" | \"low_confidence\" | \"conflict\" | \"performance_drop\" | undefined'.": 1
+          "Argument of type '{ userId: string; mode: \"live\" | \"paper\"; strategy: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | \"range_trading\" | \"vwap_bounce\" | \"liquidity_trap\"; enabled: boolean; params: any; }' is not assignable to parameter of type '{ mode: \"live\" | \"paper\"; assetClass: string; strategy: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | \"range_trading\" | \"range_trade\" | \"vwap_bounce\" | ... N more ... | \"orb\"; params: Json; enabled?: boolean | undefined; version?: number | undefined; globalContextId?: string | u...'.": 1,
+          "Argument of type 'string | undefined' is not assignable to parameter of type '\"bias\" | \"instability\" | \"low_confidence\" | \"conflict\" | \"performance_drop\" | undefined'.": 1
         },
         "TS7017": {
           "Element implicitly has an 'any' type because type 'typeof globalThis' has no index signature.": 5
         },
         "TS2820": {
-          "Type '\"config_updated\"' is not assignable to type '\"health_engine\" | \"state_update\" | \"chat_update\" | \"config_update\" | \"trade_update\" | \"safety_event\" | \"kill_switch_changed\" | \"ethical_event\" | \"ethics_federation_sync_complete\" | ... N more ... | \"policyUpdated\"'. Did you mean '\"config_update\"'?": 1
+          "Type '\"config_updated\"' is not assignable to type '\"trading_state_changed\" | \"background_jobs_complete\" | \"trade_update\" | \"alerts_updated\" | \"trading_data_updated\" | \"price_updated\" | \"scan_tick\" | \"rtb:cleared\" | \"health_engine\" | ... N more ... | \"policyUpdated\"'. Did you mean '\"config_update\"'?": 1
         },
         "TS2339": {
-          "Property 'createdAt' does not exist on type '{ symbol: string; id: string; lastUpdated: Date | null; assetClass: string; exchange: string; volume24h: string | null; currentPrice: string | null; confidence: string | null; metadata: unknown; ... N more ...; exitDeadline: Date | null; }'.": 1,
-          "Property 'cryptoValue' does not exist on type '{ id: string; globalContextId: string; mode: \"live\" | \"paper\"; createdAt: Date | null; balance: string; anchorVersion: number; lastUpdate: Date | null; }'.": 2,
-          "Property 'cash' does not exist on type '{ id: string; globalContextId: string; mode: \"live\" | \"paper\"; createdAt: Date | null; balance: string; anchorVersion: number; lastUpdate: Date | null; }'.": 2,
-          "Property 'realizedPL' does not exist on type '{ symbol: string; id: string; mode: \"live\" | \"paper\"; assetClass: string; exchange: string; strategy: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | ... N more ... | \"orb\"; ... N more ...; patternStrength: string | null; } | { ...; }'.": 4,
-          "Property 'exitTime' does not exist on type '{ symbol: string; id: string; mode: \"live\" | \"paper\"; assetClass: string; exchange: string; strategy: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | ... N more ... | \"orb\"; ... N more ...; patternStrength: string | null; } | { ...; }'.": 3,
-          "Property 'unrealizedPnl' does not exist on type '{ id: string; globalContextId: string; mode: \"live\" | \"paper\"; createdAt: Date | null; balance: string; anchorVersion: number; lastUpdate: Date | null; }'.": 1,
-          "Property 'realizedPnl' does not exist on type '{ id: string; globalContextId: string; mode: \"live\" | \"paper\"; createdAt: Date | null; balance: string; anchorVersion: number; lastUpdate: Date | null; }'.": 1,
+          "Property 'createdAt' does not exist on type '{ symbol: string; metadata: unknown; id: string; state: string | null; side: string; lastUpdated: Date | null; assetClass: string; exchange: string; volume24h: string | null; currentPrice: string | null; ... N more ...; exitDeadline: Date | null; }'.": 1,
+          "Property 'cryptoValue' does not exist on type '{ id: string; mode: \"live\" | \"paper\"; globalContextId: string; createdAt: Date | null; balance: string; anchorVersion: number; lastUpdate: Date | null; }'.": 2,
+          "Property 'cash' does not exist on type '{ id: string; mode: \"live\" | \"paper\"; globalContextId: string; createdAt: Date | null; balance: string; anchorVersion: number; lastUpdate: Date | null; }'.": 2,
+          "Property 'realizedPL' does not exist on type '{ symbol: string; metadata: unknown; id: string; mode: \"live\" | \"paper\"; status: \"open\" | \"closed\" | \"cancelled\" | null; assetClass: string; exchange: string; strategy: \"vwap_pullback\" | \"abcd_long\" | ... N more ... | \"orb\"; ... N more ...; patternStrength: string | null; } | { ...; }'.": 4,
+          "Property 'exitTime' does not exist on type '{ symbol: string; metadata: unknown; id: string; mode: \"live\" | \"paper\"; status: \"open\" | \"closed\" | \"cancelled\" | null; assetClass: string; exchange: string; strategy: \"vwap_pullback\" | \"abcd_long\" | ... N more ... | \"orb\"; ... N more ...; patternStrength: string | null; } | { ...; }'.": 3,
+          "Property 'unrealizedPnl' does not exist on type '{ id: string; mode: \"live\" | \"paper\"; globalContextId: string; createdAt: Date | null; balance: string; anchorVersion: number; lastUpdate: Date | null; }'.": 1,
+          "Property 'realizedPnl' does not exist on type '{ id: string; mode: \"live\" | \"paper\"; globalContextId: string; createdAt: Date | null; balance: string; anchorVersion: number; lastUpdate: Date | null; }'.": 1,
           "Property 'buildTrade' does not exist on type 'ActiveExecutionEngine'.": 2,
           "Property 'executeTrade' does not exist on type 'ActiveExecutionEngine'.": 2,
           "Property 'modeRegistry' does not exist on type 'typeof import(\"C:/DawnTraderV3-new/server/services/mode-registry\")'.": 2,
-          "Property 'startingBalance' does not exist on type '{ id: string; globalContextId: string; mode: \"live\" | \"paper\"; createdAt: Date | null; balance: string; anchorVersion: number; lastUpdate: Date | null; }'.": 1,
+          "Property 'startingBalance' does not exist on type '{ id: string; mode: \"live\" | \"paper\"; globalContextId: string; createdAt: Date | null; balance: string; anchorVersion: number; lastUpdate: Date | null; }'.": 1,
           "Property 'minDailyRange' does not exist on type '{ id: string; mode: \"live\" | \"paper\"; createdAt: Date | null; updatedAt: Date | null; minVolume: string | null; minPrice: string | null; maxBidAskSpread: string | null; ... N more ...; diMax: string | null; }'.": 2,
           "Property 'approved' does not exist on type 'TradeSafetyResult'.": 2,
           "Property 'reason' does not exist on type 'TradeSafetyResult'.": 3,
@@ -145,19 +145,19 @@
           "Property 'error' does not exist on type '{ id: string; traceId: string; userId: string; intentAction: string | null; steps: unknown; domainContext: string[] | null; decisionSummary: string | null; status: string; metadata: unknown; createdAt: Date; updatedAt: Date; }'.": 1,
           "Property 'processingTimeMs' does not exist on type '{ id: string; traceId: string; userId: string; intentAction: string | null; steps: unknown; domainContext: string[] | null; decisionSummary: string | null; status: string; metadata: unknown; createdAt: Date; updatedAt: Date; }'.": 1,
           "Property 'completedAt' does not exist on type '{ id: string; traceId: string; userId: string; intentAction: string | null; steps: unknown; domainContext: string[] | null; decisionSummary: string | null; status: string; metadata: unknown; createdAt: Date; updatedAt: Date; }'.": 1,
-          "Property 'stepId' does not exist on type '{ id: string; traceId: string; taskType: string; payload: unknown; status: \"in_progress\" | \"pending\" | \"completed\" | \"failed\"; result: unknown; errorMessage: string | null; retryCount: number; retryAt: Date | null; lockedAt: Date | null; lockedBy: string | null; createdAt: Date; completedAt: Date | null; }'.": 1,
-          "Property 'bobDomain' does not exist on type '{ id: string; traceId: string; taskType: string; payload: unknown; status: \"in_progress\" | \"pending\" | \"completed\" | \"failed\"; result: unknown; errorMessage: string | null; retryCount: number; retryAt: Date | null; lockedAt: Date | null; lockedBy: string | null; createdAt: Date; completedAt: Date | null; }'.": 1,
-          "Property 'action' does not exist on type '{ id: string; traceId: string; taskType: string; payload: unknown; status: \"in_progress\" | \"pending\" | \"completed\" | \"failed\"; result: unknown; errorMessage: string | null; retryCount: number; retryAt: Date | null; lockedAt: Date | null; lockedBy: string | null; createdAt: Date; completedAt: Date | null; }'.": 1,
-          "Property 'params' does not exist on type '{ id: string; traceId: string; taskType: string; payload: unknown; status: \"in_progress\" | \"pending\" | \"completed\" | \"failed\"; result: unknown; errorMessage: string | null; retryCount: number; retryAt: Date | null; lockedAt: Date | null; lockedBy: string | null; createdAt: Date; completedAt: Date | null; }'.": 1,
-          "Property 'error' does not exist on type '{ id: string; traceId: string; taskType: string; payload: unknown; status: \"in_progress\" | \"pending\" | \"completed\" | \"failed\"; result: unknown; errorMessage: string | null; retryCount: number; retryAt: Date | null; lockedAt: Date | null; lockedBy: string | null; createdAt: Date; completedAt: Date | null; }'.": 1,
-          "Property 'startedAt' does not exist on type '{ id: string; traceId: string; taskType: string; payload: unknown; status: \"in_progress\" | \"pending\" | \"completed\" | \"failed\"; result: unknown; errorMessage: string | null; retryCount: number; retryAt: Date | null; lockedAt: Date | null; lockedBy: string | null; createdAt: Date; completedAt: Date | null; }'.": 1,
+          "Property 'stepId' does not exist on type '{ id: string; traceId: string; taskType: string; payload: unknown; status: \"pending\" | \"in_progress\" | \"completed\" | \"failed\"; result: unknown; errorMessage: string | null; retryCount: number; retryAt: Date | null; lockedAt: Date | null; lockedBy: string | null; createdAt: Date; completedAt: Date | null; }'.": 1,
+          "Property 'bobDomain' does not exist on type '{ id: string; traceId: string; taskType: string; payload: unknown; status: \"pending\" | \"in_progress\" | \"completed\" | \"failed\"; result: unknown; errorMessage: string | null; retryCount: number; retryAt: Date | null; lockedAt: Date | null; lockedBy: string | null; createdAt: Date; completedAt: Date | null; }'.": 1,
+          "Property 'action' does not exist on type '{ id: string; traceId: string; taskType: string; payload: unknown; status: \"pending\" | \"in_progress\" | \"completed\" | \"failed\"; result: unknown; errorMessage: string | null; retryCount: number; retryAt: Date | null; lockedAt: Date | null; lockedBy: string | null; createdAt: Date; completedAt: Date | null; }'.": 1,
+          "Property 'params' does not exist on type '{ id: string; traceId: string; taskType: string; payload: unknown; status: \"pending\" | \"in_progress\" | \"completed\" | \"failed\"; result: unknown; errorMessage: string | null; retryCount: number; retryAt: Date | null; lockedAt: Date | null; lockedBy: string | null; createdAt: Date; completedAt: Date | null; }'.": 1,
+          "Property 'error' does not exist on type '{ id: string; traceId: string; taskType: string; payload: unknown; status: \"pending\" | \"in_progress\" | \"completed\" | \"failed\"; result: unknown; errorMessage: string | null; retryCount: number; retryAt: Date | null; lockedAt: Date | null; lockedBy: string | null; createdAt: Date; completedAt: Date | null; }'.": 1,
+          "Property 'startedAt' does not exist on type '{ id: string; traceId: string; taskType: string; payload: unknown; status: \"pending\" | \"in_progress\" | \"completed\" | \"failed\"; result: unknown; errorMessage: string | null; retryCount: number; retryAt: Date | null; lockedAt: Date | null; lockedBy: string | null; createdAt: Date; completedAt: Date | null; }'.": 1,
           "Property 'getDatabaseStatus' does not exist on type 'DatabaseStorage'.": 1,
           "Property 'getStatus' does not exist on type 'TradingEngine'.": 1,
           "Property 'getClientCount' does not exist on type 'ContextBridge'.": 2,
-          "Property 'healthScore' does not exist on type '{ id: string; name: string; role: \"coordinator\" | \"trading\" | \"analysis\" | \"research\" | \"compliance\" | \"general\"; createdAt: Date; updatedAt: Date; version: string | null; ... N more ...; queueDepth: number; }'.": 1,
+          "Property 'healthScore' does not exist on type '{ metadata: unknown; id: string; role: \"coordinator\" | \"trading\" | \"analysis\" | \"research\" | \"compliance\" | \"general\"; name: string; version: string | null; status: \"offline\" | \"degraded\" | \"healthy\" | \"draining\"; ... N more ...; queueDepth: number; }'.": 1,
           "Property 'completedAt' does not exist on type 'PgTableWithColumns<{ name: \"cluster_result_log\"; schema: undefined; columns: { id: PgColumn<{ name: \"id\"; tableName: \"cluster_result_log\"; dataType: \"string\"; columnType: \"PgVarchar\"; data: string; driverParam: string; ... N more ...; generated: undefined; }, {}, { ...; }>; ... N more ...; createdAt: PgColumn<...>; ...'.": 1,
           "Property 'conflictId' does not exist on type '{ id: string; sessionId: string; conflictingSources: string[]; conflictingVerdicts: unknown; resolutionStatus: \"open\" | \"resolved\" | \"escalated\"; resolutionMethod: string | null; resolutionRationale: string | null; finalVerdict: \"approved\" | ... N more ... | null; createdAt: Date; resolvedAt: Date | null; }'.": 1,
-          "Property 'presetName' does not exist on type '{ id: string; name: \"conservative\" | \"baseline\" | \"optimistic\" | \"maximum\" | \"custom\"; mode: \"live\" | \"paper\"; createdAt: Date | null; updatedAt: Date | null; maxOpenPositions: number; ... N more ...; isActive: boolean; }'.": 1,
+          "Property 'presetName' does not exist on type '{ id: string; name: \"baseline\" | \"conservative\" | \"optimistic\" | \"maximum\" | \"custom\"; mode: \"live\" | \"paper\"; createdAt: Date | null; updatedAt: Date | null; maxOpenPositions: number; ... N more ...; isActive: boolean; }'.": 1,
           "Property 'getPortfolioBalance' does not exist on type 'DatabaseStorage'.": 1,
           "Property 'maxChangesPerDay' does not exist on type '{ mode: LearningMode; changes24h: number; overrides24h: number; maxChanges: number; throttleStatus: string; lastStableSnapshot: number | null; lastSnapshotTime: Date; coherencyThreshold: number; overrideWeight: number; bias: string; }'.": 1
         },
@@ -175,7 +175,7 @@
           "'ok' is specified more than once, so this usage will be overwritten.": 1
         },
         "TS2353": {
-          "Object literal may only specify known properties, and 'lattiLastAnchorTime' does not exist in type 'Partial<{ id: string; tradingMode: \"live\" | \"paper\"; createdAt: Date; updatedAt: Date; metadata: unknown; lastHeartbeat: Date | null; lastSafeState: unknown; isEngineActive: boolean; activeAssetClasses: unknown; ... N more ...; minNetProfitThreshold: string | null; }>'.": 2,
+          "Object literal may only specify known properties, and 'lattiLastAnchorTime' does not exist in type 'Partial<{ metadata: unknown; id: string; tradingMode: \"live\" | \"paper\"; createdAt: Date; updatedAt: Date; lastHeartbeat: Date | null; lastSafeState: unknown; isEngineActive: boolean; activeAssetClasses: unknown; ... N more ...; minNetProfitThreshold: string | null; }>'.": 2,
           "Object literal may only specify known properties, and 'userId' does not exist in type '{ symbol: string; mode: \"live\" | \"paper\"; strategy: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | \"range_trading\" | \"range_trade\" | \"vwap_bounce\" | ... N more ... | \"orb\"; ... N more ...; patternStrength?: string | ... N more ... | undefined; }'.": 1,
           "Object literal may only specify known properties, and 'event' does not exist in type 'Omit<ContextUpdate, \"timestamp\" | \"traceId\">'.": 1
         },
@@ -233,10 +233,10 @@
       "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
       "errors": {
         "TS2353": {
-          "Object literal may only specify known properties, and 'currentValue' does not exist in type '{ mode: \"live\" | \"paper\"; userId: string; oldValue: string; variableName: string; variableCategory: string; proposedValue: string; confidenceScore: number; reason?: string | null | undefined; status?: string | ... N more ... | undefined; appliedAt?: Date | ... N more ... | undefined; reviewedBy?: string | ... 1 more...'.": 1
+          "Object literal may only specify known properties, and 'currentValue' does not exist in type '{ mode: \"live\" | \"paper\"; userId: string; oldValue: string; variableName: string; variableCategory: string; proposedValue: string; confidenceScore: number; status?: string | null | undefined; reason?: string | ... N more ... | undefined; appliedAt?: Date | ... N more ... | undefined; reviewedBy?: string | ... 1 more...'.": 1
         },
         "TS2561": {
-          "Object literal may only specify known properties, but 'reviewedAt' does not exist in type 'Partial<{ id: string; mode: \"live\" | \"paper\"; userId: string; reason: string | null; status: string | null; oldValue: string; appliedAt: Date | null; variableName: string; variableCategory: string; proposedValue: string; confidenceScore: number; proposedAt: Date | null; reviewedBy: string | null; }>'. Did you mean to write 'reviewedBy'?": 2
+          "Object literal may only specify known properties, but 'reviewedAt' does not exist in type 'Partial<{ id: string; mode: \"live\" | \"paper\"; status: string | null; userId: string; reason: string | null; oldValue: string; appliedAt: Date | null; variableName: string; variableCategory: string; proposedValue: string; confidenceScore: number; proposedAt: Date | null; reviewedBy: string | null; }>'. Did you mean to write 'reviewedBy'?": 2
         }
       }
     },
@@ -282,7 +282,7 @@
           "Property 'updateTradingSettings' does not exist on type 'DatabaseStorage'.": 1
         },
         "TS2345": {
-          "Argument of type '{ mode: any; strategy: any; enabled: true; params: {}; }' is not assignable to parameter of type '{ mode: \"live\" | \"paper\"; assetClass: string; strategy: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | \"range_trading\" | \"range_trade\" | \"vwap_bounce\" | ... N more ... | \"orb\"; params: Json; globalContextId?: string | undefined; enabled?: boolean | undefined; version?: number | u...'.": 1
+          "Argument of type '{ mode: any; strategy: any; enabled: true; params: {}; }' is not assignable to parameter of type '{ mode: \"live\" | \"paper\"; assetClass: string; strategy: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | \"range_trading\" | \"range_trade\" | \"vwap_bounce\" | ... N more ... | \"orb\"; params: Json; enabled?: boolean | undefined; version?: number | undefined; globalContextId?: string | u...'.": 1
         }
       }
     },
@@ -321,7 +321,7 @@
       "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
       "errors": {
         "TS2322": {
-          "Type '\"performance_snapshot\"' is not assignable to type '\"health_engine\" | \"state_update\" | \"chat_update\" | \"config_update\" | \"trade_update\" | \"safety_event\" | \"kill_switch_changed\" | \"ethical_event\" | \"ethics_federation_sync_complete\" | ... N more ... | \"policyUpdated\"'.": 1
+          "Type '\"performance_snapshot\"' is not assignable to type '\"trading_state_changed\" | \"background_jobs_complete\" | \"trade_update\" | \"alerts_updated\" | \"trading_data_updated\" | \"price_updated\" | \"scan_tick\" | \"rtb:cleared\" | \"health_engine\" | ... N more ... | \"policyUpdated\"'.": 1
         },
         "TS2339": {
           "Property 'getDeltaUpdates' does not exist on type 'FederatedEthicsHubService'.": 1,
@@ -367,7 +367,7 @@
           "Property 'userId' does not exist on type '{ symbol: string; mode: \"live\" | \"paper\"; strategy: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | \"range_trading\" | \"range_trade\" | \"vwap_bounce\" | ... N more ... | \"orb\"; ... N more ...; patternStrength?: string | ... N more ... | undefined; }'.": 1
         },
         "TS2322": {
-          "Type '\"portfolio_update\"' is not assignable to type '\"health_engine\" | \"state_update\" | \"chat_update\" | \"config_update\" | \"trade_update\" | \"safety_event\" | \"kill_switch_changed\" | \"ethical_event\" | \"ethics_federation_sync_complete\" | ... N more ... | \"policyUpdated\"'.": 1
+          "Type '\"portfolio_update\"' is not assignable to type '\"trading_state_changed\" | \"background_jobs_complete\" | \"trade_update\" | \"alerts_updated\" | \"trading_data_updated\" | \"price_updated\" | \"scan_tick\" | \"rtb:cleared\" | \"health_engine\" | ... N more ... | \"policyUpdated\"'.": 1
         }
       }
     },
@@ -417,7 +417,7 @@
       "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
       "errors": {
         "TS2345": {
-          "Argument of type '{ type: string; subtype: \"warning\" | \"complete\" | \"recalibrate\"; data: { strategy: string; score: number; status: \"stable\" | \"drifting\" | \"recalibrating\"; deltaAlpha: number; deltaBeta: number; deltaSigma: number; threshold: number; timestamp: string; }; }' is not assignable to parameter of type 'Omit<ContextUpdate, \"timestamp\" | \"traceId\">'.": 1
+          "Argument of type '{ type: string; subtype: \"warning\" | \"recalibrate\" | \"complete\"; data: { strategy: string; score: number; status: \"stable\" | \"drifting\" | \"recalibrating\"; deltaAlpha: number; deltaBeta: number; deltaSigma: number; threshold: number; timestamp: string; }; }' is not assignable to parameter of type 'Omit<ContextUpdate, \"timestamp\" | \"traceId\">'.": 1
         }
       }
     },
@@ -484,8 +484,8 @@
         "TS2345": {
           "Argument of type 'string' is not assignable to parameter of type '\"live\" | \"paper\"'.": 3,
           "Argument of type '{ globalContextId: string; mode: \"live\" | \"paper\"; strategy: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | \"range_trading\" | \"vwap_bounce\" | \"liquidity_trap\"; }' is not assignable to parameter of type '{ globalContextId?: string | undefined; userId?: string | undefined; mode: \"live\" | \"paper\"; strategy: string; assetClass: string; }'.": 1,
-          "Argument of type '{ globalContextId: string; mode: \"live\" | \"paper\"; strategy: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | \"range_trading\" | \"vwap_bounce\" | \"liquidity_trap\"; enabled: boolean; params: Record<...>; }' is not assignable to parameter of type '{ mode: \"live\" | \"paper\"; assetClass: string; strategy: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | \"range_trading\" | \"range_trade\" | \"vwap_bounce\" | ... N more ... | \"orb\"; params: Json; globalContextId?: string | undefined; enabled?: boolean | undefined; version?: number | u...'.": 1,
-          "Argument of type '{ globalContextId: string; mode: \"live\" | \"paper\"; strategy: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | \"range_trading\" | \"vwap_bounce\" | \"liquidity_trap\"; enabled: boolean; params: {}; }' is not assignable to parameter of type '{ mode: \"live\" | \"paper\"; assetClass: string; strategy: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | \"range_trading\" | \"range_trade\" | \"vwap_bounce\" | ... N more ... | \"orb\"; params: Json; globalContextId?: string | undefined; enabled?: boolean | undefined; version?: number | u...'.": 1
+          "Argument of type '{ globalContextId: string; mode: \"live\" | \"paper\"; strategy: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | \"range_trading\" | \"vwap_bounce\" | \"liquidity_trap\"; enabled: boolean; params: Record<...>; }' is not assignable to parameter of type '{ mode: \"live\" | \"paper\"; assetClass: string; strategy: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | \"range_trading\" | \"range_trade\" | \"vwap_bounce\" | ... N more ... | \"orb\"; params: Json; enabled?: boolean | undefined; version?: number | undefined; globalContextId?: string | u...'.": 1,
+          "Argument of type '{ globalContextId: string; mode: \"live\" | \"paper\"; strategy: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | \"range_trading\" | \"vwap_bounce\" | \"liquidity_trap\"; enabled: boolean; params: {}; }' is not assignable to parameter of type '{ mode: \"live\" | \"paper\"; assetClass: string; strategy: \"vwap_pullback\" | \"abcd_long\" | \"sma_trend_ride\" | \"breakout\" | \"mean_reversion\" | \"range_trading\" | \"range_trade\" | \"vwap_bounce\" | ... N more ... | \"orb\"; params: Json; enabled?: boolean | undefined; version?: number | undefined; globalContextId?: string | u...'.": 1
         }
       }
     },
@@ -495,16 +495,16 @@
       "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
       "errors": {
         "TS2345": {
-          "Argument of type '\"moderate\"' is not assignable to parameter of type '\"high\" | \"medium\" | \"low\" | \"verified\"'.": 1
+          "Argument of type '\"moderate\"' is not assignable to parameter of type '\"high\" | \"low\" | \"medium\" | \"verified\"'.": 1
         },
         "TS2322": {
-          "Type '\"moderate\"' is not assignable to type '\"high\" | \"medium\" | \"low\" | \"verified\"'.": 2
+          "Type '\"moderate\"' is not assignable to type '\"high\" | \"low\" | \"medium\" | \"verified\"'.": 2
         },
         "TS2551": {
           "Property 'retrievedAt' does not exist on type 'PgTableWithColumns<{ name: \"knowledge_retrieval_log\"; schema: undefined; columns: { id: PgColumn<{ name: \"id\"; tableName: \"knowledge_retrieval_log\"; dataType: \"string\"; columnType: \"PgVarchar\"; data: string; driverParam: string; ... N more ...; generated: undefined; }, {}, { ...; }>; ... N more ...; createdAt: PgCol...'. Did you mean 'retrievedData'?": 2
         },
         "TS2367": {
-          "This comparison appears to be unintentional because the types '\"high\" | \"medium\" | \"low\" | \"verified\"' and '\"moderate\"' have no overlap.": 1
+          "This comparison appears to be unintentional because the types '\"high\" | \"low\" | \"medium\" | \"verified\"' and '\"moderate\"' have no overlap.": 1
         }
       }
     },
@@ -611,7 +611,7 @@
       "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
       "errors": {
         "TS2322": {
-          "Type '\"MODE_CHANGE\"' is not assignable to type '\"health_engine\" | \"state_update\" | \"chat_update\" | \"config_update\" | \"trade_update\" | \"safety_event\" | \"kill_switch_changed\" | \"ethical_event\" | \"ethics_federation_sync_complete\" | ... N more ... | \"policyUpdated\"'.": 1
+          "Type '\"MODE_CHANGE\"' is not assignable to type '\"trading_state_changed\" | \"background_jobs_complete\" | \"trade_update\" | \"alerts_updated\" | \"trading_data_updated\" | \"price_updated\" | \"scan_tick\" | \"rtb:cleared\" | \"health_engine\" | ... N more ... | \"policyUpdated\"'.": 1
         }
       }
     },
@@ -632,7 +632,7 @@
       "errors": {
         "TS2322": {
           "Type 'string' is not assignable to type 'MarketRegime | undefined'.": 1,
-          "Type '{ fx5Evaluated24h: number; fx5Passed24h: number; passRate24h: number; failedByCategory: Record<string, number>; version: string; pairCount: number; totalSamples: number; weights: { hybrid: 0.4; confidence: 0.3; regime: 0.2; decay: 0.1; }; timestamp: string; systemConfig: { ...; }; schemaSync: { ...; }; tecConfig: { ...' is not assignable to type '{ version: string; pairCount: number; totalSamples: number; weights: { hybrid: number; confidence: number; regime: number; decay: number; }; timestamp: string; systemConfig: { metricEngineVersion: string; schemaVersion: string; directive: string; telemetryHealth: \"green\" | ... N more ... | \"red\"; }; ... N more ...; ...'.": 1
+          "Type '{ fx5Evaluated24h: number; fx5Passed24h: number; passRate24h: number; failedByCategory: Record<string, number>; version: string; pairCount: number; totalSamples: number; weights: { hybrid: 0.4; confidence: 0.3; regime: 0.2; decay: 0.1; }; timestamp: string; systemConfig: { ...; }; schemaSync: { ...; }; tecConfig: { ...' is not assignable to type '{ version: string; pairCount: number; totalSamples: number; weights: { hybrid: number; confidence: number; regime: number; decay: number; }; timestamp: string; systemConfig: { metricEngineVersion: string; schemaVersion: string; directive: string; telemetryHealth: \"green\" | ... N more ... | \"yellow\"; }; ... N more .....'.": 1
         },
         "TS2339": {
           "Property 'TRANSITION' does not exist on type '{ readonly TREND_FRIENDLY_STABLE: \"TREND_FRIENDLY_STABLE\"; readonly HIGH_VOLATILITY_UNSTABLE: \"HIGH_VOLATILITY_UNSTABLE\"; readonly RANGE_BOUND_STABLE: \"RANGE_BOUND_STABLE\"; readonly IMPULSE_EXPANSION: \"IMPULSE_EXPANSION\"; readonly STRUCTURAL_TRANSITION: \"STRUCTURAL_TRANSITION\"; }'.": 1
@@ -662,7 +662,7 @@
           "Argument of type 'PgTableWithColumns<{ name: \"users\"; schema: undefined; columns: { id: PgColumn<{ name: \"id\"; tableName: \"users\"; dataType: \"string\"; columnType: \"PgVarchar\"; data: string; driverParam: string; notNull: true; hasDefault: true; ... N more ...; generated: undefined; }, {}, { ...; }>; ... N more ...; updatedAt: PgColum...' is not assignable to parameter of type 'SQL<unknown> | PgTable<TableConfig> | Subquery<string, Record<string, unknown>> | PgViewBase<string, boolean, ColumnsSelection>'.": 5
         },
         "TS2339": {
-          "Property 'id' does not exist on type '{} | { [x: string]: unknown; } | { [x: string]: never; } | { [x: string]: never; }'.": 5,
+          "Property 'id' does not exist on type '{} | { [x: string]: never; } | { [x: string]: unknown; } | { [x: string]: never; }'.": 5,
           "Property 'createdAt' does not exist on type 'PgTableWithColumns<{ name: \"awareness_state_log\"; schema: undefined; columns: { id: PgColumn<{ name: \"id\"; tableName: \"awareness_state_log\"; dataType: \"string\"; columnType: \"PgVarchar\"; data: string; driverParam: string; ... N more ...; generated: undefined; }, {}, { ...; }>; ... N more ...; metadata: PgColumn<...>...'.": 1,
           "Property 'ethicalAuditLog' does not exist on type 'typeof import(\"C:/DawnTraderV3-new/shared/schema\")'.": 3,
           "Property 'consensusRate' does not exist on type '{ activeSessions: number; totalSessions: number; averageConsensusScore: number; completedSessions: number; }'.": 1

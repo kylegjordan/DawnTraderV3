@@ -51,9 +51,20 @@ import { pathToFileURL } from 'node:url';
 const BASELINE_PATH = '.tsc-baseline.json';
 
 function runTsc() {
+  // #579 (B-TSC-BASELINE-FIX): force a NON-INCREMENTAL full check.
+  // tsconfig sets `incremental: true` with a persisted tsBuildInfoFile. That makes
+  // consecutive tsc runs NON-DETERMINISTIC: a run against a STALE buildinfo (e.g. right
+  // after a git pull) reports a partial/incorrect error set (measured: 401 vs the true
+  // 394), and the exact (file, code, MESSAGE) attribution of long anonymous-type errors
+  // shifts with cache depth — so a baseline generated in one cache state produces false
+  // regressions when compared in another. `--incremental false` disables the cache
+  // entirely (no read, no write) → every run is a full check → generate, compare, and CI
+  // are byte-for-byte identical. CI is inherently cold (npm ci wipes node_modules, so no
+  // buildinfo exists), so this is exactly the environment the gate must match. Verified
+  // clean against this tsconfig (no tsBuildInfoFile conflict).
   let output = '';
   try {
-    output = execSync('npx tsc --noEmit', {
+    output = execSync('npx tsc --noEmit --incremental false', {
       encoding: 'utf8',
       maxBuffer: 64 * 1024 * 1024,
       cwd: cwd(),
