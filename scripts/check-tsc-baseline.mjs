@@ -62,9 +62,18 @@ function runTsc() {
   // are byte-for-byte identical. CI is inherently cold (npm ci wipes node_modules, so no
   // buildinfo exists), so this is exactly the environment the gate must match. Verified
   // clean against this tsconfig (no tsBuildInfoFile conflict).
+  // #579 --noErrorTruncation: tsc truncates long type messages ('…columnType: "PgV…')
+  // at a fixed CHARACTER budget that INCLUDES the (host-varying-length) absolute paths —
+  // so on a long-path host (CI: /home/runner/work/DawnTraderV3/DawnTraderV3/…) the budget
+  // is consumed faster and the truncation cuts at a DIFFERENT point, losing different
+  // content. Normalizing paths to <ROOT> AFTER truncation can't recover the lost chars, so
+  // the surviving tail still differs cross-host (CI caught this: 2 drizzle TS2741s keyed
+  // apart even with <ROOT>). Disabling truncation renders the FULL type identically on every
+  // host; combined with the <ROOT> path strip the message is byte-identical + fully
+  // discriminating (no info lost). Messages get long, but correctness beats file size.
   let output = '';
   try {
-    output = execSync('npx tsc --noEmit --incremental false', {
+    output = execSync('npx tsc --noEmit --incremental false --noErrorTruncation', {
       encoding: 'utf8',
       maxBuffer: 64 * 1024 * 1024,
       cwd: cwd(),
@@ -104,7 +113,14 @@ function normalizeMessage(msg) {
     .replace(
       /(?:[A-Za-z]:)?\/[^"'()\s]*?\/(?=(?:server|client|shared|node_modules|scripts|drizzle|migrations)\/)/g,
       '<ROOT>/',
-    );
+    )
+    // #579 size bound: with --noErrorTruncation the full type is rendered (a drizzle
+    // TS2741 hit 53KB), so clip to a fixed length. Safe because it runs AFTER the path
+    // strip on a now host-identical string — both hosts clip the same string at the same
+    // index → still byte-identical. 300 chars keeps full discrimination (the property +
+    // table/type name + type head live in the first ~150); the tail is boilerplate column
+    // types. Keeps the committed baseline diff-able instead of multi-KB single lines.
+    .slice(0, 300);
 }
 
 // Parse `tsc --noEmit` output into { counts: {file: {code: {message: n}}}, total }.
