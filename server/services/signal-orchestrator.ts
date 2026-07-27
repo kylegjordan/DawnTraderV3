@@ -1098,14 +1098,15 @@ export class SignalOrchestrator {
         // No downstream plumbing is needed: `active-execution-engine.ts:3143` spreads
         // `...signal.metadata` onto the position row.
         maxHoldingMs: _maxHoldingMs,
-        // P19-B8.5k (B-ATR-RESTORE, #556) — CARRY REVERTED 2026-07-24 (#581). The carry
-        // `atr: sizingContext.atr` was deployed and then rolled back: staging DB proved
-        // `sizingContext.atr` is a SINGLE SHARED value across the whole scan cycle (one
-        // symbol's absolute ATR — ~0.0075 — stamped identically onto ETH/SOL/AAVE/XRP/…,
-        // atr/price spanning 0.000004→0.0196), NOT a per-symbol value. Carrying it wrote a
-        // wrong ATR into signal metadata + the RTB rank risk floor (ready_to_buy_service.ts
-        // :1691) + new-position training data. The carry is correct; the SOURCE is broken.
-        // Re-carry only after the sizingContext.atr sharing is root-caused + fixed (#581).
+        // P19-B8.5l (#581, unblocks #556): carry the entry-time ATR forward. RE-ENABLED after
+        // the source fix in THIS batch — the B8.5k carry was reverted because `sizingContext.atr`
+        // was a SINGLE SHARED value per scan cycle (the pattern pass at :1846 never re-stamped it,
+        // so it held the last quant symbol's atr). That is fixed at :~1949 (`sizingContext.atr =
+        // context.indicators?.atr` per pattern-symbol), so the value is now per-symbol-correct for
+        // every consumer. Fed to atr_at_open → Open Trades display, RTB ranking, replay, VTS-parity.
+        // Exit-neutral (B8.5k T1/T2; trailing off). Gated by the ≥2-distinct-atr-per-cycle fence
+        // test (p19-b8-5l). No fail-loud here — the rebuild precedes the :1548 invalid_atr gate.
+        atr: sizingContext.atr,
         // P19-B8.10 (OBJ-4): genesis capture of the display-context fields the VTS
         // records at open (regime / global regime / pair+global friction / pair+
         // global DBS / pattern name / entry-liquidity). KEEP-AS-DATA transit — read
@@ -1947,6 +1948,18 @@ export class SignalOrchestrator {
             sizingContext.regime = patternRegime || undefined;
             sizingContext.pairDbsCategory = propagatedDbs?.category ?? undefined;
             sizingContext.pairDbsScore = propagatedDbs?.score ?? undefined;
+            // P19-B8.5l (#581): re-stamp atr per pattern-symbol too. The sibling regime/DBS
+            // re-stamps above fixed the documented "stale cross-symbol leak" (see the comment
+            // block above them) but MISSED atr — so pattern signals read the LAST QUANT
+            // SYMBOL's sizingContext.atr (stamped at :2165 during the earlier eligibleSymbols
+            // pass, which runs before this pattern pass). That fed a wrong shared atr into the
+            // :1548 reachability gate (3-arg pattern callers) live, and into the B8.5k carry.
+            // ★ Re-stamp the RAW `context.indicators?.atr` (undefined-preserving) — NOT the
+            // `:1905` local `atr`, which carries a synthetic `?? (currentPrice*0.02)` fallback;
+            // re-stamping the fallback would feed a fabricated ATR into the gate's `invalid_atr`
+            // LOUD branch and let patterns silently pass a gate the quant path loudly rejects
+            // (quant stamps raw `mceContext.indicators.atr` at :2165, no fallback — gate parity).
+            sizingContext.atr = context.indicators?.atr;
 
             const sizedSignal = await this.buildSizedSignalForStrategy(
               rawSignal, consuming.strategy as StrategyType, sizingContext

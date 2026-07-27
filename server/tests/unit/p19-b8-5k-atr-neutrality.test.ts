@@ -145,13 +145,13 @@ describe('P19-B8.5k — source guards (OBJ-1 carry + OBJ-2b write-back)', () => 
   const root = join(__dirname, '..', '..', '..');
   const read = (p: string) => readFileSync(join(root, p), 'utf8');
 
-  it('OBJ-1 carry is REVERTED pending #581 (sizingContext.atr proved a shared, not per-symbol, value)', () => {
+  it('OBJ-1 carry: reverted at B8.5k, RESTORED at B8.5l after the #581 source fix', () => {
     const src = read('server/services/signal-orchestrator.ts');
-    // The active carry line must be GONE (staging proved sizingContext.atr is one shared
-    // value across the cycle → carrying it wrote a wrong ATR into the RTB rank floor + training
-    // data). Only the rollback comment references it. Re-carry after #581 fixes the source.
-    expect(src).toMatch(/CARRY REVERTED 2026-07-24 \(#581\)/);
-    expect(src).not.toMatch(/^\s*atr: sizingContext\.atr,\s*$/m);
+    // History: B8.5k reverted the carry because sizingContext.atr was a single SHARED value
+    // per cycle (the pattern pass never re-stamped it — #581). B8.5l fixed the source
+    // (pattern-path per-symbol re-stamp of context.indicators?.atr) and RE-ENABLED the carry.
+    // The neutrality guarantees below (T1/T2/T4) still hold regardless; the carry is now present.
+    expect(src).toMatch(/^\s*atr: sizingContext\.atr,\s*$/m);
   });
 
   it('OBJ-2b: the exit-engine stop write-back is guarded by a strict `> stopLoss` (equal ⇒ no-op)', () => {
