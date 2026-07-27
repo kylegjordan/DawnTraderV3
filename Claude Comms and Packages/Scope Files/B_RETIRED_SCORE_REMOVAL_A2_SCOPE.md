@@ -26,3 +26,24 @@ Is **eval-cycle-only** the right cut, OR should A2 also retire the archiver's `w
 
 ## VERIFY PLAN
 tsc untruncated on eval-cycle.ts (edited lines in ZERO errors); check-tsc-baseline PASS; the `b79-0n-*` pattern-pool tests must stay green (proves the EXCLUDED gate untouched). No migration (A1 already made the column nullable; A2 is xStock code-readers). Deploy carries no schema change.
+
+---
+
+## ★ REFRAME v2 (Langston-concurred 2026-07-27, ref `da9ccfdc`) — A2 is SYSTEM-WIDE PERSISTENCE, not xStock-only
+
+**Why the original narrow framing was wrong (Langston re-read, caught 2 defects in my framing):** finalScore now GATES NOTHING (`:778`/`vts-runner:1741` no longer tints chosenNetEV; A1 made RTB rank on r_multiple; SQE gate retired #525). Its only remaining role is PERSISTED VTS telemetry / ML-feed data, written on BOTH lanes — xStock via `registerOpenVtsTrade` (sole caller `eval-cycle.ts:1124`), crypto via the INLINE `openVirtualTrades.set()` path (`vts-runner.ts:2195/2227`, VirtualSignal/Phase10TradeRecord literals — NOT registerOpenVtsTrade). Removing it xStock-only strands crypto still writing it → a per-lane split in the ML training data (a data regression wearing a telemetry label). ⇒ the clean cut is SYSTEM-WIDE, both lanes together.
+
+**★ THE BRIGHT LINE (Langston — this keeps "zero-computation-change" HONEST): `computeFinalScore` STAYS in A2.** It still DERIVES crypto's `expectedEdge` at `vts-runner.ts:2040` (`finalScore * dynamicTarget − frictionCost`); xStock's expectedEdge is already `kernelResult.netEV` (price-space). Removing computeFinalScore would break crypto's expectedEdge telemetry → that's **A3**, not A2.
+
+### A2 (revised) = PERSISTED-finalScore retirement, BOTH lanes — PURE DATA PLUMBING, zero decision/admission/ranking/sizing change
+- xStock: `eval-cycle.ts` — remove finalScore from the persisted VTS record (`:1000`) + the `archiveCommon`/archiveSignalEval use (`:668`) + the `:656` compute + the import (xStock's finalScore is persistence-only; its expectedEdge is netEV, not finalScore).
+- crypto: `vts-runner.ts` — remove the persisted finalScore FIELD from the inline `:2195/:2227` records (⚠️ B79.0m.b HOT-PATH-LOCK surface — both-branches regression discipline, twin-lock like B7.2d, NOT a free edit). **KEEP `computeFinalScore(:1687)`** (derives expectedEdge — A3).
+- type + readers: `OpenVirtualTrade.finalScore` (`:628`) + `RegisterOpenVtsTradeInput.finalScore` (`:3913`) + the `:4050` builder + readers (`:3808` open feed, `:5023` cycle-avg `totalFinalScore`).
+- archiver: the signal-eval-archiver `would_admit`/`final_score` (#582 FOLDS IN now — once BOTH lanes stop feeding it finalScore it goes fully dead; re-audit confirms both lanes' archiver writers).
+- **NO column drop in A2.** `vts_open_trades.final_score` + `signal_eval.final_score` drops are **Phase B**, gated on a zero-remaining-reader BAKE (rollback never hits a missing column).
+
+### A3 (new, separate) = `computeFinalScore` removal + RE-SOURCE crypto `expectedEdge` off a coherent source (mechanical). ★ RETIRING expectedEdge (incoherent cross-lane field) is a SEPARATE §13-homed item — decide its home when scoping A3, do NOT fold into A3 silently.
+
+### Pre-Phase-B verification (Langston): confirm the ML trainer (`scripts/hce` / ML ingest) consumption of `vts_open_trades.finalScore` — sets the column-drop URGENCY (urgent if actively trained on; leisurely if captured-not-consumed). Does NOT block A2 code.
+
+### Re-audit TODO before cut (Step 1/2, both lanes): pin the crypto inline writers + OpenVirtualTrade readers + BOTH lanes' archiveSignalEval writers + confirm crypto expectedEdge is the ONLY computeFinalScore consumer that must survive A2.
