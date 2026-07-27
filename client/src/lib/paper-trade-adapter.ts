@@ -134,6 +134,10 @@ export type AdaptedOpenTrade = OpenTrade & {
   slotNumber?: number;
   maxSlots?: number;
   sourceLabel?: string;
+  // Admission lane marker (exploration-lane display, 2026-07-27). 'exploration'
+  // when the trade was admitted via the exploration lane (learning-data budget),
+  // else null. Display-only; removable when exploration mode ends.
+  admissionBasis?: string | null;
 };
 
 /** ClosedTrade plus the realized cost 5-col breakdown (closed_trades columns
@@ -146,6 +150,8 @@ export type AdaptedClosedTrade = ClosedTrade & {
   // P19-B8.6 maker target-exit cohort stamps for the maker-exit columns.
   exitFeeMode?: string | null;
   exitRestOutcome?: string | null;
+  // Admission lane marker (exploration-lane display, 2026-07-27) — see AdaptedOpenTrade.
+  admissionBasis?: string | null;
 };
 
 // ---------------------------------------------------------------------------
@@ -276,6 +282,8 @@ export function adaptPaperOpenTrade(row: PaperActiveTradeRow): AdaptedOpenTrade 
     slotNumber: row.slotNumber,
     maxSlots: row.maxSlots,
     sourceLabel: row.sourceLabel,
+    // Admission lane marker (exploration-lane display column).
+    admissionBasis: metaStr(meta, "admissionBasis") ?? null,
   };
 }
 
@@ -358,5 +366,7 @@ export function adaptPaperClosedTrade(row: PaperClosedTradeRow): AdaptedClosedTr
     costExitSlippage: num(row.exitSlippage),
     exitFeeMode: row.exitFeeMode ?? null,
     exitRestOutcome: row.exitRestOutcome ?? null,
+    // Admission lane marker (exploration-lane display column).
+    admissionBasis: metaStr(meta, "admissionBasis") ?? null,
   };
 }

@@ -408,6 +408,7 @@ export default function PaperOpenTradesTab({ mode }: { mode?: 'paper' | 'live' }
           }}
           extraHeaders={
             <>
+              <th className="px-3 py-2 text-left font-medium text-muted-foreground" title="Admission lane: EXPL = admitted via the exploration lane (learning-data budget); blank = normal net-EV admission. Display-only while exploration mode is active.">Lane</th>
               <th className="px-3 py-2 text-left font-medium text-muted-foreground" title="Price feed this row's Current value came from (WS = live Kraken WebSocket; REST = polling fallback).">Source</th>
               <th className="px-3 py-2 text-left font-medium text-muted-foreground">Actions</th>
             </>
@@ -416,6 +417,11 @@ export default function PaperOpenTradesTab({ mode }: { mode?: 'paper' | 'live' }
             const t = trade as AdaptedOpenTrade;
             return (
               <>
+                <td className="px-3 py-2">
+                  {t.admissionBasis === 'exploration'
+                    ? <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium bg-amber-500/15 text-amber-600 dark:text-amber-400" title="Admitted via the exploration lane (learning-data budget)">EXPL</span>
+                    : <span className="text-muted-foreground">—</span>}
+                </td>
                 <td className="px-3 py-2 text-xs font-mono">{t.sourceLabel ?? '—'}</td>
                 <td className="px-3 py-2">
                   <Button
