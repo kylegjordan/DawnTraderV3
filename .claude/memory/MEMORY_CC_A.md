@@ -34,11 +34,12 @@
 - **Announce SYMPTOMS freely, CAUSES only after testing reach** (24.a). Provenance-read old architecture before calling it wrong (24).
 - **Langston is STATELESS per-invoke** — carry his prior ruling into the next prompt. **Use his ACTUAL NAME to Kyle, never "the reviewer."** Quote `path:line` from `origin/…`, never the working tree.
 - Rule 27: me + Langston, ship it — don't convene panels. Rule 28: don't narrate other sessions' work to Kyle.
+- **PERSISTENT-CONDITION GOV ALERT (gov-staleopen, "open >48h"): ACK, do NOT resolve.** poller.mjs:238-244 — the confirmed open row suspends the DEADLINE but the 48h backstop deliberately re-pings (config.mjs:201 "OPEN must never be a silent bypass"). RESOLVING frees the dedupe key → checker spawns a fresh twin next cycle (hit this 2026-07-27). Correct: ack-and-leave (dedupe suppresses twins; drops from unacked list); resolve ONLY when the batch actually closes. Contrast the gov-deadline alert, which the confirmed open row DOES suppress.
 
 ---
 
 ## 📌 OPEN THREADS
-- **#558** — A1 shipped+signed-off (above); NEXT = deploy A1 (confirm w/ Kyle — outward) then A2. Board [34] held (release after deploy).
+- **#558** — A1 shipped+signed-off (above); **BLOCKED on Kyle's deploy-vs-fold decision since 2026-07-25 (~2 days, Kyle away)** — did NOT unilaterally start A2 (respecting his decision point). Open row confirmed (langston, fa959de63); gov-staleopen `f4ffaf53` ACKED-and-left (do not resolve — see lesson). Board [34] held. On Kyle's go: pull → deploy A1 (migration runs pre-restart) → §9.3 UI-verify RTB queue/ranking → then A2.
 - **#582** — finalScore telemetry-reader retirement (`B-FINALSCORE-TELEMETRY-RETIRE`, Phase-B prereq). Owner CC-A. Langston Step-4 condition, homed.
 - **#578** — legacy `TradingEngine` (runs in neither mode; paper never `.start()`ed, live Phase-21-gated-refuses; `active-execution-engine` is the real paper+live pipeline). Kyle-ruled legacy → its own removal batch `B-TRADING-ENGINE-REMOVAL`, owner CC-A. Not #558.
 - **#580** — A0 predictiveConfidence-not-persisted seam; superseded-by-A1-removal; owner CC-A.
