@@ -254,6 +254,29 @@ interface SizingContext {
   pairDbsScore?: number;
 }
 
+/**
+ * P19-B8.5h (#560 ≡ #377): class-aware resolve of the DBS-at-queue source.
+ * The FX5 pool (getFX5DataForSymbol) is crypto-only, so an xStock symbol has no
+ * fx5 DBS — its real DBS lives on the class-keyed MCE context instead. Same [-1,1]
+ * scale for both (both from computeDirectionalBias; the MCE passes propagatedDbs.score
+ * through unchanged). Predicate is EXACTLY 'crypto_spot' → crypto is result-invariant
+ * (returns fx5DbsScore, and `getXstockDbsScore` is NEVER invoked for crypto — a thunk,
+ * so the crypto path does zero extra work). RAW return (number | null | undefined) — the
+ * two call sites keep their OWN null sentinels (`?? undefined` for the maker/taker input,
+ * `?? null` for the persisted `dbs_score_at_queue`), so a miss (TTL-cold context or a
+ * thin-pair synthesized-neutral) falls to each kernel default exactly as today's crypto-null
+ * path. Any future non-crypto class routes to the same MCE source (synthesized-neutral 0 is
+ * in-range). See P19_B8_5h_SCOPE / P19_B8_5h_PRE_AUDIT. DI is intentionally NOT class-aware
+ * (EV-inert per #377 H1 + unreconciled xStock basis #502 → di_at_queue stays null for xStock).
+ */
+export function resolveDbsScoreAtQueue(
+  assetClass: string,
+  fx5DbsScore: number | null | undefined,
+  getXstockDbsScore: () => number | null | undefined,
+): number | null | undefined {
+  return assetClass === 'crypto_spot' ? fx5DbsScore : getXstockDbsScore();
+}
+
 export class SignalOrchestrator {
   private mode: 'live' | 'paper';
   private strategyEngine: StrategyEngine;
@@ -745,6 +768,35 @@ export class SignalOrchestrator {
     // once instead of inline). NULL when the symbol is absent from the pool → kernel defaults.
     const fx5Data = activeFilterPool.getFX5DataForSymbol(rawSignal.symbol, sizingContext.mode);
 
+    // P19-B8.5h (#560 ≡ #377): CLASS-AWARE DBS-at-queue source. The FX5 pool
+    // (getFX5DataForSymbol) has crypto-only write surfaces, so an xStock symbol returns
+    // null → its real, already-computed DBS never reached the at-queue carry (measured
+    // 0/28). xStock's DBS is cached under the class-keyed MCE context (`${symbol}:${assetClass}`,
+    // set by the xStock eval-cycle's computeContext just before dispatch — the same context
+    // the regime-label reads at :671/:1207 already consume for xStock). Same [-1,1] scale as
+    // crypto (both from computeDirectionalBias; the MCE passes propagatedDbs.score through
+    // unchanged). Predicate is EXACTLY 'crypto_spot' so the crypto path is byte-unchanged
+    // (still fx5Data?.dbsScore). RAW resolve (number | undefined) — each consumer keeps its
+    // OWN null sentinel below (:788 `?? undefined`, the carry `?? null`) so the maker/taker
+    // input shape is byte-identical on crypto and a TTL-cold / thin-pair (synthesized-neutral)
+    // xStock miss falls to each site's kernel default, exactly as today's crypto-null path.
+    // Feeds BOTH the maker/taker decision AND the at-queue carry — the F2 single-basis contract
+    // (:783-785). DI is deliberately NOT made class-aware here: it is EV-inert (#377 H1, default
+    // DI=50 already caps the standard branch) and xStock DI is an unreconciled basis (#502), so
+    // di_at_queue stays null for xStock (fail-safe kernel default) until Phase-25. See
+    // P19_B8_5h_SCOPE / P19_B8_5h_PRE_AUDIT.
+    // Routed through the pure, unit-tested `resolveDbsScoreAtQueue`. The xStock source
+    // is a THUNK so getCachedContext is invoked ONLY on the non-crypto branch — crypto is
+    // provably invariant (the test's spy proves the thunk is never called for 'crypto_spot').
+    const resolvedDbsScoreAtQueue = resolveDbsScoreAtQueue(
+      sizingContext.assetClass,
+      fx5Data?.dbsScore,
+      () =>
+        getMarketContextEngine()
+          .getCachedContext(rawSignal.symbol, sizingContext.assetClass)
+          ?.directionalBias?.score,
+    );
+
     // ── P19-B7.2: BEST-OF-BOTH maker/taker ENTRY decision (OBJ-1/OBJ-2/OBJ-3) ──
     // Computed ONCE here, at the shared build convergence (covers quant + hybrid +
     // pattern + xStock — all funnel through buildSizedSignalForStrategy), on the
@@ -785,7 +837,7 @@ export class SignalOrchestrator {
       // open-gate treats a null di_at_queue.
       DI: fx5Data?.di ?? undefined,
       sourcePool: rawSignal.metadata?.sourcePool || undefined,
-      dbsScore: fx5Data?.dbsScore ?? undefined,
+      dbsScore: resolvedDbsScoreAtQueue ?? undefined, // P19-B8.5h: class-aware (crypto=fx5Data; xStock=MCE ctx). Keeps the ?? undefined sentinel.
       minPWin:      getCachedNumberRequired('expectancy_kernel',     'pwin_floor',     _mtGlobalKey),
       maxPWin:      getCachedNumberRequired('expectancy_kernel',     'pwin_ceiling',   _mtGlobalKey),
       diPWinFactor: getCachedNumberRequired('directional_integrity', 'di_pwin_factor', _mtGlobalKey),
@@ -1064,7 +1116,7 @@ export class SignalOrchestrator {
       // Persisted to the typed di_at_queue / dbs_score_at_queue columns (NOT metadata). NULL when
       // the symbol is absent from the pool → kernel documented defaults at the open-gate.
       diAtQueue: fx5Data?.di ?? null,
-      dbsScoreAtQueue: fx5Data?.dbsScore ?? null,
+      dbsScoreAtQueue: resolvedDbsScoreAtQueue ?? null, // P19-B8.5h (#560≡#377): class-aware source (xStock now carries its real DBS, was 0/28). Keeps the ?? null sentinel.
       // P19-B7.2: the best-of-both maker/taker snapshot (OBJ-1/OBJ-3). chosenNetEV
       // is the SINGLE-CONSISTENT-NUMBER every downstream EV consumer reads (the
       // [11.8B] open-gate + the B7.1 ranker) — never the raw un-haircut maker EV.

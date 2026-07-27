@@ -1231,7 +1231,7 @@ export class MarketContextEngine {
     // positionally (every call site passes 6-7 args, some with `undefined`),
     // so this is signature-shape-only, no caller change.
     smaPeriod: number | undefined,
-    propagatedDbs: { score: number; category: string; slope?: number } | undefined, // B63: DBS propagated from FX5 scanner pre-filter (REQUIRED for crypto_spot; synthesized neutral for non-crypto per B79.0m.b)
+    propagatedDbs: { score: number; category: string; slope?: number } | undefined, // B63: DBS from the class-native scanner pre-filter (REQUIRED for crypto_spot; real per-class DBS for xstock_spot via B-PHASE-A2; neutral only as the thin-pair fallback — see :1261 block)
     // B79.0n.MCE: REQUIRED — the prior `assetClass: string = 'crypto_spot'`
     // silent default is removed. Every caller passes an explicit asset class.
     assetClass: AssetClass,
@@ -1259,10 +1259,17 @@ export class MarketContextEngine {
     const low24h = this.computeLow24h(ohlcData);
 
     // ── B63: DBS HARD CONTRACT for crypto_spot. ──
-    // ── B79.0m.b: For non-crypto asset classes (xstock_spot etc.), DBS is
-    //    not computed today. Synthesize neutral {score:0, slope:0, category:'NEUTRAL'}
-    //    so the post-filter chain runs Path-A only (conservative; no DBS-based
-    //    routing). Future Layer-3 batch may add per-asset-class DBS computation.
+    // ── B79.0m.b + B-PHASE-A2 (2026-05-17): For non-crypto asset classes
+    //    (xstock_spot etc.), the class-native scanner NOW computes a REAL per-class
+    //    DBS (same computeDirectionalBias, same [-1,1] scale — xstock_spot/scanner.ts)
+    //    and supplies it as propagatedDbs; it is passed through UNCHANGED below
+    //    (the `else` branch). Synthesized neutral {score:0, category:'NEUTRAL',
+    //    sentinelZero:true} is ONLY the thin-pair fallback (propagatedDbs absent:
+    //    insufficient OHLC / ATR=0 / sector missing).
+    //    (★ Corrected P19-B8.5h #560: the prior "DBS is not computed today for
+    //    non-crypto" text predated B-PHASE-A2 and contradicted the live code here —
+    //    xStock's real DBS survives to directionalBias.score, which is what the
+    //    at-queue carry now sources for xStock.)
     //
     //    Crypto's hard-fail PRESERVED — Kyle directive: "Every time we put a
     //    fallback in, it ends up becoming the default." Per Langston Step 2 Q1
@@ -1279,8 +1286,8 @@ export class MarketContextEngine {
         components: { slopeComponent: 0, returnComponent: 0, emaComponent: 0 },
       };
     } else {
-      // Non-crypto: synthesize neutral DBS. Layer-1 starter; per-asset-class
-      // DBS computation deferred to future Layer-3 batch (RUNNING_ISSUES candidate).
+      // Non-crypto: pass through the class-native REAL DBS when supplied (B-PHASE-A2);
+      // synthesize neutral {score:0, sentinelZero:true} ONLY as the thin-pair fallback.
       directionalBias = propagatedDbs && Number.isFinite(propagatedDbs.score)
         ? {
             score: propagatedDbs.score,
