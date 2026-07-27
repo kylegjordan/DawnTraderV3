@@ -23,7 +23,7 @@
 Langston Step-4 APPROVED. Honesty note (his): he took the 191→187 measurement as reported fact (did not re-run the staging query); the fix's correctness does not depend on the exact counts.
 
 ## Governance files changed (this close)
-BATCH_CATALOG.md · PHASE_HISTORY.md · PHASE_19_PLAN.md (§5 row) · SYSTEM_MANUAL.md (one-line: the anneal driver counts only truly-closed exploration outcomes) · SYSTEM_IMPACT_MAP.md (brief: anneal driver `closed_at` requirement) · this report · scope file · MEMORY_CC_C.md (+ mirror). RUNNING_ISSUES: N/A (scratch-list item).
+BATCH_CATALOG.md · PHASE_HISTORY.md · PHASE_19_PLAN.md (§5 row) · SYSTEM_IMPACT_MAP.md (brief banner: anneal driver `closed_at` requirement + the A2 adapter carry) · this report · scope file · MEMORY_CC_C.md (+ mirror). **SYSTEM_MANUAL.md: N/A** — the exploration lane / anneal is not a System-Manual-documented subsystem (its semantics live in the P19-B8.5 completion report + the `exploration-lane.ts` code comment; a query-correctness fix introduces no architecture the manual covers). **Minor surfaced doc-gap (noted, not scoped):** the exploration lane/anneal admission mechanism is undocumented in the System Manual — a pre-existing gap from P19-B8.5, low priority, would be its own doc pass, not this fix's scope. RUNNING_ISSUES: N/A (scratch-list item).
 
 ## Related
 A5 (crypto orphan close-path — the source of 3 of the 4 over-counted rows) — separate batch, next.
