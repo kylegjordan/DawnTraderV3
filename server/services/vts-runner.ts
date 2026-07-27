@@ -4056,7 +4056,12 @@ export async function registerOpenVtsTrade(input: RegisterOpenVtsTradeInput): Pr
     signalType: input.signalType,
     strategy: input.strategy,
     patternType: input.patternType ?? null,
-    finalScore: input.finalScore,
+    // #558 A2: finalScore omitted at the REGISTER (Langston Step-4 catch). registerOpenVtsTrade
+    // persists via insertOpenTrade → splitTradeForPersist → context jsonb, and finalScore is NOT in
+    // the core allow-list, so a supplied value would land in vts_open_trades.context — the exact
+    // split. Inert today (sole caller eval-cycle:1000 omits it → input.finalScore undefined), but
+    // enforcing stop-persist HERE (not at the caller) makes the invariant true at the shared entry
+    // point, so no future caller can re-create the split. computeFinalScore/expectedEdge = A3.
     hybridScore: input.hybridScore,
     predictiveConfidence: input.predictiveConfidence,
     regimeWeight: input.regimeWeight,
