@@ -997,7 +997,13 @@ export class SignalOrchestrator {
       // P19-B8.12: the scanner's ideal/rotational pool marking (carried through the
       // active pool as of this batch; the adapter already reads metadata.pool).
       if (fx5Data?.pool) _dc.pool = fx5Data.pool;
-      if ((fx5Data?.volume24h ?? 0) > 0) {
+      // #561: prefer the xStock carried ask-side order-book depth (it is absent from the
+      // FX5 pool, so fx5Data has nothing for it); else the crypto 24h-volume source.
+      const _xLiq = (rawSignal.metadata as { entryLiquidityValue?: number } | undefined)?.entryLiquidityValue;
+      if (typeof _xLiq === 'number' && Number.isFinite(_xLiq) && _xLiq >= 0) {
+        _dc.entryLiquidityValue = _xLiq;
+        _dc.entryLiquidityKind = (rawSignal.metadata as { entryLiquidityKind?: string } | undefined)?.entryLiquidityKind ?? 'depth_usd';
+      } else if ((fx5Data?.volume24h ?? 0) > 0) {
         _dc.entryLiquidityValue = fx5Data!.volume24h;
         _dc.entryLiquidityKind = 'volume_qty';
       }

@@ -122,6 +122,12 @@ export interface XstockActiveDispatchInput {
   regime?: string;
   pairDbsCategory?: string;
   pairDbsScore?: number;
+  // #561: xStock entry-liquidity (ask-side order-book depth in USD) captured at signal
+  // genesis, carried so the shared genesis-capture stamps the Open/Closed "Volume / Order
+  // Book" cell. Crypto stamps its own (24h volume) off fx5Data; xStock is absent from the
+  // FX5 pool, so its value must ride through here. Optional: absent stays absent.
+  entryLiquidityValue?: number;
+  entryLiquidityKind?: 'depth_usd';
 }
 
 /**
@@ -201,6 +207,11 @@ export async function dispatchXstockActiveSignal(input: XstockActiveDispatchInpu
         assetClass: 'xstock_spot',
         sourcePool: input.sourcePool,
         signalType: input.signalType,
+        // #561: carry the ask-side order-book depth so the shared genesis-capture in
+        // buildSizedSignalForStrategy can stamp the "Volume / Order Book" cell for xStock
+        // (crypto stamps its own off fx5Data; xStock is not in the FX5 pool). Absent stays absent.
+        entryLiquidityValue: input.entryLiquidityValue,
+        entryLiquidityKind: input.entryLiquidityKind,
       },
     };
 

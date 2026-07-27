@@ -1144,6 +1144,10 @@ export async function evaluateXstockPairForVTS(
           regime,
           pairDbsCategory: mceContext.directionalBias?.category,
           pairDbsScore: mceContext.directionalBias?.score,
+          // #561: carry the ask-side order-book depth (same value the VTS open stamps at
+          // :1037) so the active trade's "Volume / Order Book" cell fills for xStock too.
+          entryLiquidityValue: askDepthUsd >= 0 ? askDepthUsd : undefined,
+          entryLiquidityKind: 'depth_usd' as const,
         });
 
         if (tradeId) {
