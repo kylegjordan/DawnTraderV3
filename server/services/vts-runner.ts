@@ -1691,9 +1691,16 @@ async function generatePhase10Signal(
   });
   const regimeWeight = regimeScoreRaw / 100; // Normalize to 0-1 range for finalScore calculation
   const decayPenalty = computeRealDecayPenalty(); // Phase 14: 0 for fresh signals
-  
+
+  // #558 A3: the DERIVED consumers of this finalScore are re-sourced off it — expectedEdge →
+  // taker.netEV/entryPrice, predictedProfit → taker.rawEV/entryPrice, the VTS log → netEV, the
+  // ablation metadata dropped. ⚠️ The call itself is KEPT (not removed as Step-1 planned): the
+  // crypto archiveSignalEval at ~:2623 ALSO reads this const and feeds the #582 signal_eval sink
+  // (active-path co-fed) — a consumer past the Step-1/2 enumeration range, caught by tsc here. So
+  // the crypto computeFinalScore call rides #582 alongside the xStock eval-cycle:656 caller; both
+  // (and the function) become deletable only when #582 retires the archiver's finalScore (#586).
   const finalScore = computeFinalScore(hybridScore, predictiveConfidence, regimeWeight, decayPenalty);
-  
+
   // B79.0n.MCE: assetClass REQUIRED — resolved from the symbol.
   // P19-B4a (C4 / #230): reuse the captured _assetClass (non-null past the :981 skip)
   // rather than re-resolving with a crypto_spot default — no mislabel-by-construction.
@@ -2046,7 +2053,16 @@ async function generatePhase10Signal(
     // substrate (this openTrade → openVirtualTrades.set). B79.0m.b hot-path, twin-lock.
     hybridScore,
     predictiveConfidence,
-    expectedEdge: finalScore * dynamicTarget - frictionCost, // Batch 45: Store actual computed edge
+    // #558 A3: expectedEdge re-sourced off the retired finalScore onto the kernel NET EV, in
+    // RETURN-SPACE (÷entryPrice). Was `finalScore*(|tgt−entry|/entry) − frictionCost` = a net-of-
+    // friction return FRACTION (CHANGES_AND_FIXES:244, "NEVER pool cross-class"). taker.netEV is
+    // net-of-friction PRICE-SPACE dollars/unit (net-expectancy-kernel:115 netEV = rawEV −
+    // totalFriction, ×entryPrice-scaled), so ÷entryPrice restores the same net RETURN — preserving
+    // BOTH the net basis AND the units (Langston: raw price-space would break the calibration
+    // linearFit vs return-space netProfit + the DSE [0,0.2] return clamp). entryPrice>0 guard: a
+    // 0/undefined entry → Inf/NaN the clamp would swallow into a floored size; fall back to 0-edge.
+    // Net-negative is EV-gated upstream (:2657 netEV<=0 skip; active strict netEV>0) → value here ≥0.
+    expectedEdge: entryPrice > 0 ? _vtsMtDecision.taker.netEV / entryPrice : 0,
     regimeWeight,
     decayPenalty,
     pool,
@@ -2192,7 +2208,17 @@ async function generatePhase10Signal(
     takeProfit,
     stopLoss,
     spread,
-    predictedProfit: finalScore * dynamicTarget,
+    // #558 A3: predictedProfit re-sourced off the retired finalScore onto the kernel GROSS EV
+    // (rawEV), in RETURN-SPACE (÷entryPrice). Was `finalScore*(|tgt−entry|/entry)` = a GROSS return
+    // FRACTION. rawEV is gross PRICE-SPACE (kernel:114, pre-friction), so ÷entryPrice restores the
+    // same GROSS RETURN — preserving BOTH the gross basis AND the units. This is load-bearing: the
+    // calibration fit (vts-service:487 → linearFit(predicted, actual=t.netProfit)) compares against
+    // a return-space netProfit fraction; a price-space predictor would give a meaningless slope +
+    // pool BTC-dollar/alt-dollar magnitudes (Landmine A). ⚠️ Same-units but the PREDICTOR FORMULA
+    // changes (finalScore·target → pWin-weighted EV) → historical coefficients no longer describe it
+    // → the calibration store needs an EPOCH-BOUNDARY reset (§13 #590), else pre/post rows blend into
+    // one garbage fit. entryPrice>0 guard as above.
+    predictedProfit: entryPrice > 0 ? _vtsMtDecision.taker.rawEV / entryPrice : 0,
     strategy,
     createdAt: Date.now(),
     signalType, // Directive 11.4C.3: Canonical format 'QUANT' | 'PATTERN' | 'HYBRID'
@@ -2204,7 +2230,9 @@ async function generatePhase10Signal(
     // #558 A2: finalScore omitted (stop-persist; retired score no longer written to the VirtualSignal record). B79.0m.b twin-lock.
     regimeWeight,
     decayPenalty,
-    expectedEdge: finalScore * dynamicTarget - frictionCost,
+    // #558 A3: expectedEdge → kernel NET EV in RETURN-SPACE (÷entryPrice, guarded) — see the
+    // openTrade site above for the full units/basis/guard rationale. B79.0m.b twin-lock.
+    expectedEdge: entryPrice > 0 ? _vtsMtDecision.taker.netEV / entryPrice : 0,
     frictionCost, // M50: Schema parity with VirtualTrade
     regime,
     regimeScore: regimeScoreRaw, // Directive 11.4H.4A: Raw 0-100 score for UI display
@@ -2257,7 +2285,7 @@ async function generatePhase10Signal(
     executionContext: isMultiStrategy ? 'VTS_MULTI' : 'VTS', // 11.8C
   };
   
-  console.log(`[11.0E.1][VTS] Trade: ${symbol} regime=${regime} signalType=${signalType} strategy=${strategy} finalScore=${finalScore.toFixed(3)} pool=${pool} sourcePool=${sourcePool ?? 'quant'} context=${isMultiStrategy ? 'VTS_MULTI' : 'VTS'}`);
+  console.log(`[11.0E.1][VTS] Trade: ${symbol} regime=${regime} signalType=${signalType} strategy=${strategy} netEV=${_vtsMtDecision.taker.netEV.toFixed(6)} pool=${pool} sourcePool=${sourcePool ?? 'quant'} context=${isMultiStrategy ? 'VTS_MULTI' : 'VTS'}`);
 
   // B67.0 — Factor ablation emit hook (VTS path mirror).
   // Today fires with empty alternates and no-ops (no factors deployed). When
@@ -2545,7 +2573,8 @@ async function generatePhase10Signal(
       confidence: _chainFinalConfidence,
       admissionPossible: true,
       metadata: {
-        finalScore,
+        // #558 A3: finalScore dropped from the ablation-replay metadata (retired score; the local
+        // const is removed with the computeFinalScore call). The ablation record's own inputs stay.
         regimeWeight, // pre-B67.5; replaced by regimeConfidence after Consumer #1 ships
         sourcePool,
         // B76: preserve raw classifier output for any downstream that wants raw semantics
@@ -5663,14 +5692,12 @@ export async function getOpenVirtualTradesForML(): Promise<Array<{
       netProfitValue: parseFloat(netProfitValue.toFixed(2)),
       netProfitPercent: (parseFloat(netProfitPercent) >= 0 ? '+' : '') + netProfitPercent + '%',
       // Batch 47f15: Compute ranking score for display (same formula as RTB queue)
+      // #558 A3: computeRankingScore no longer takes the retired finalScore quality arg or the
+      // declared-never-wired contextBonus arg (#217) — both removed from the fn + weights (§15).
+      // Now return − friction on the renormalized per-family weights.
       rankingScore: computeRankingScore(
-        trade.finalScore ?? 0, // #558 A2: interim deterministic 0 (A3 re-sources — coupled to the expectedEdge arg below)
         normalizeNetReturn(trade.expectedEdge ?? 0),
         trade.frictionCost ?? 0,
-        0, // contextBonus — DECLARED-NEVER-WIRED (B-4.7 C2 finding): the
-           // CONTEXT_BONUS pair-vs-global regime agreement rules exist in
-           // ranking-weights.ts but nothing computes them; wire-or-remove is
-           // homed to AMR scoping (RUNNING_ISSUES #217).
         trade.signalType ?? 'QUANT'
       ),
       finalScore: trade.finalScore ?? 0, // #558 A2: coalesce (field now optional/unwritten)

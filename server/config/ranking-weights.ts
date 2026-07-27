@@ -5,47 +5,36 @@
  * rankingScore is used ONLY for RTB queue ordering — it never influences
  * whether a signal passes SQE quality checks (that's FinalScore's job).
  *
- * Formula:
- *   rankingScore = FinalScore * qualityWeight
- *                + netReturn * returnWeight
+ * Formula (#558 A3):
+ *   rankingScore = netReturn * returnWeight
  *                - frictionPenalty * frictionWeight
- *                + contextBonus
+ *   (the retired `FinalScore * qualityWeight` term and the never-wired `contextBonus` term are
+ *    removed; per-family return+friction weights renormalized to sum 1.0 — see RANKING_WEIGHTS.)
  *
- * Design decisions (three-way discussion, 2026-03-17):
- * - FinalScore = signal quality (SQE gate authority, unchanged)
- * - rankingScore = cross-family desirability (RTB ordering)
+ * Design decisions (three-way discussion, 2026-03-17; amended #558 A3):
+ * - rankingScore = cross-family desirability (RTB ordering) on return net of friction
  * - Three weight profiles for QUANT / PATTERN / HYBRID
- * - Simpler than 6-component model — same discriminating power, fewer moving parts
+ * - A validated live quality signal may return later (study-gated #588), not the retired finalScore
  */
 
 export interface RankingWeightProfile {
-  qualityWeight: number;    // Weight for FinalScore (signal quality)
   returnWeight: number;     // Weight for normalized net return
   frictionWeight: number;   // Weight for friction penalty (deducted)
-  contextBonusMax: number;  // Maximum context bonus (regime agreement)
 }
 
 // --- Weight Profiles by Signal Family ---
-
+// #558 A3: `qualityWeight` (the retired finalScore term, r=−0.140) and `contextBonusMax`
+// (declared-never-wired, #217) are REMOVED per §15 — not left as stubs. The remaining
+// return + friction weights are RENORMALIZED per family to sum to 1.0: each family's old
+// (return+friction) summed to exactly 0.45, so ×(1/0.45) preserves the return:friction RATIO
+// while restoring the full [0,1] range (the score was previously compressed by the dropped
+// 0.55 quality+context share). A validated live QUALITY signal may be re-introduced later —
+// STUDY-GATED #588, deliberately NOT grafted here (grafting an unvalidated signal would repeat
+// the finalScore anti-predictive mistake).
 export const RANKING_WEIGHTS: Record<string, RankingWeightProfile> = {
-  QUANT: {
-    qualityWeight: 0.45,     // Quant: heavier on quality + return
-    returnWeight: 0.35,
-    frictionWeight: 0.10,
-    contextBonusMax: 0.10,
-  },
-  PATTERN: {
-    qualityWeight: 0.30,     // Pattern: heavier on regime fit + friction conditions
-    returnWeight: 0.25,
-    frictionWeight: 0.20,    // Friction matters more for pattern-pool pairs (lower liquidity)
-    contextBonusMax: 0.25,   // Context agreement bonus larger (regime fit critical for patterns)
-  },
-  HYBRID: {
-    qualityWeight: 0.35,     // Hybrid: balanced across all components
-    returnWeight: 0.30,
-    frictionWeight: 0.15,
-    contextBonusMax: 0.20,
-  },
+  QUANT:   { returnWeight: 0.78, frictionWeight: 0.22 },  // was quality 0.45 / return 0.35 / friction 0.10 / context 0.10
+  PATTERN: { returnWeight: 0.56, frictionWeight: 0.44 },  // was quality 0.30 / return 0.25 / friction 0.20 / context 0.25
+  HYBRID:  { returnWeight: 0.67, frictionWeight: 0.33 },  // was quality 0.35 / return 0.30 / friction 0.15 / context 0.20
 };
 
 // --- Net Return Normalization ---
@@ -80,19 +69,18 @@ export const FINAL_SCORE_GAP_OVERRIDE = 0.10;
  * @param signalType - 'QUANT' | 'PATTERN' | 'HYBRID'
  */
 export function computeRankingScore(
-  finalScore: number,
   normalizedNetReturn: number,
   frictionPenalty: number,
-  contextBonus: number,
   signalType: string
 ): number {
   const weights = RANKING_WEIGHTS[signalType] || RANKING_WEIGHTS.QUANT;
 
+  // #558 A3: the quality term (retired finalScore, r=−0.140) and the contextBonus term
+  // (declared-never-wired #217) are REMOVED. Score is now return − friction on the renormalized
+  // per-family weights (which sum to 1.0), so the range is [0,1] uncompressed.
   const score =
-    finalScore * weights.qualityWeight +
     normalizedNetReturn * weights.returnWeight -
-    frictionPenalty * weights.frictionWeight +
-    Math.max(-weights.contextBonusMax, Math.min(weights.contextBonusMax, contextBonus));
+    frictionPenalty * weights.frictionWeight;
 
   // Clamp to 0-1 range
   return Math.max(0, Math.min(1, score));
