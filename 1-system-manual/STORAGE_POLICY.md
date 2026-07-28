@@ -119,3 +119,23 @@ So a given day's data (for a 90-day-hot table) lives: ~90 days HOT → the follo
 
 ### E. ⚠️ REGISTERED ≠ EXERCISED — read the manifest before believing coverage
 The `data_archive_manifest` holds **72 objects across only 5 distinct source tables**: `context_bridge_log`, `crypto_spot_ticker_snap`, `exit_decision_archive`, `xstock_perp_ticker_snap`, `xstock_spot_ticker_snap`. **⇒ 8 of the 12 registered tables have never produced an archive object.** **NOT asserted as a defect** — the benign explanation fits (a table only produces an object once a partition ages past its window; the `_ohlc_1m` set is on 365 d and the analytics set on 90 d, and several are younger than that). **But it is the difference between "configured" and "proven", and only the manifest can tell you which you have.** ★ **Anyone claiming a table is safely tiered should cite a manifest row, not a config key.**
+
+### F. NON-TABLE STORES — log directories, file stores and state files (catalogue part 1, remainder, 2026-07-28)
+
+⚠️ **FIRST, A DISTINCTION THAT MUST NOT BE BLURRED: these live on the STAGING BOX filesystem. They have NOTHING to do with the `Database disk CRITICAL: 81.4% of 200 GB plan cap` alert, which is the Supabase DB.** Two different disks, two different risks. **Measured staging disk: 75 G total, 33 G used — 45%, comfortable.**
+
+**F.1 — PROCESS LOGS: `/var/log/dawntrader` = 15 G, and it is BOUNDED.** `pm2-logrotate` is configured `max_size 1G` · `retain 14` · `compress true` · daily rotate ⇒ a ~14 G steady-state ceiling, which is exactly what is observed. **Not a growth risk.** ⚠️ **Operational consequence worth knowing: retention is ~14 rotations, and at current volume the LIVE `out.log` spans only ~45 MINUTES.** ⇒ **any log-based investigation of something more than a few hours old must use the rotated `out__*`/`error__*` files, not `out.log`** — a `grep` of the live file returning nothing is an artifact of the window, not evidence of absence.
+
+**F.2 — APP-LOCAL FILE STORES: `/home/deploy/dawntrader/logs/*` ≈ 6 G, and these are NOT bounded by anything.** Daily files, retained from inception, **no pruning, no tier, and NOT covered by any section of this policy before today:**
+
+| store | size | files | span |
+|---|---|---|---|
+| `phase15b_dbs_telemetry` | **4.9 G** | 105 | 2026-04-15 → |
+| `vts_eval_history` | 594 M | 119 | 2026-03-30 → |
+| `data_aggregates` | 525 M | 121 | → 2026-07-28 |
+| `virtual_trades` | 33 M | 119 | 2026-03-31 → |
+| `predictive_adjustments` | 2.3 M | 120 | 2026-03-30 → |
+| `fx5_state` | 22 M | 1 | rolling `window_24h.json` (self-bounding) |
+
+★ **NOT an emergency and explicitly not filed as a defect** — ~6 G on a disk at 45% with 40 G free buys a long runway. **It is a POLICY GAP: an entire class of store that grows monotonically and that this document did not previously acknowledge.** The honest disposition is that these need a retention decision *before* the runway matters, not after.
+★★ **TWO OF THESE ARE LOAD-BEARING, so do NOT prune them casually:** `virtual_trades` is the population the settings-adjustment routine READS (last 30 files, HYBRID-filtered — see `RUNNING_ISSUES` #174), and `predictive_adjustments` is what it WRITES. **A naive "delete files older than N days" on `virtual_trades` silently changes what that routine computes on.** `phase15b_dbs_telemetry` is the 4.9 G outlier and the obvious first candidate — **Phase 15b is long past, so its consumer set should be established before it is trimmed, not assumed.**
