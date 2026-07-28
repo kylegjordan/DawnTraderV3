@@ -60,13 +60,19 @@ export interface ContextBonusShadowStamp {
     totalBonus: number;
   }>;
   /** Would applying the bonuses have changed the rank-1 selection?
-   *  ★ #595: `null` = COULD NOT BE DETERMINED (no signal carried a live rank basis), which is
-   *  NOT the same as `false`. Previously the basis was coerced from absent to 0, making this a
-   *  comparison of pure bonus that always looked answerable. Same `| null` convention as
-   *  `ceilingSaturationRate` below. **Do not read a `null` here as "the bonus changes nothing."** */
+   *  ★ #595: `null` = COULD NOT BE DETERMINED, which is NOT the same as `false`.
+   *  `null` is emitted whenever ANY of these hold — **not merely when all bases are missing**:
+   *    · no signal carried a live rank basis (`bestAdjustedSymbol === null`);
+   *    · the LIVE rank-1 is unknown (`liveRank1Symbol === null`) — no left-hand side to compare;
+   *    · ★ `rank1BasisMissing > 0`, i.e. a PARTIAL basis — the argmax then covers only the
+   *      surviving subset, so an excluded signal could have been the true WOULD-winner. A
+   *      partial answer here is UNSOUND, not merely weaker.
+   *  Same `| null` convention as `ceilingSaturationRate` below.
+   *  **Never read `null` as "the bonus changes nothing" — that is a finding we did not make.** */
   rank1Changed: boolean | null;
   /** ★ #595: how many signals had NO live rank basis and were therefore excluded from the
-   *  WOULD-rank-1 comparison. `rank1BasisMissing === signalCount` ⇒ the comparison ran on nothing. */
+   *  WOULD-rank-1 comparison. **ANY non-zero value forces `rank1Changed` to `null`** (see above);
+   *  `rank1BasisMissing === signalCount` is the all-missing case, not the only disqualifying one. */
   rank1BasisMissing: number;
   /** #221: fraction of ranked signals whose net-return input saturates the ceiling (null = inputs absent). */
   ceilingSaturationRate: number | null;
@@ -257,12 +263,20 @@ export async function computeContextBonusShadow(
     classVoteStatus: classIdle ? 'IDLE_OR_WARMING' : 'LIVE',
     confirmationState,
     perSignal,
-    // ★ #595: null when NOTHING carried a live rank basis — the comparison did not run.
-    // Reporting `false` there would claim "the bonus would change nothing", which is a
-    // finding we did not make.
-    rank1Changed: bestAdjustedSymbol === null
+    // ★ #595 (Langston Step-4, two defects — the coercion I removed from one operand had
+    // survived on the other, and a PARTIAL basis was still producing a confident boolean):
+    //   (a) `liveRank1Symbol === null` ⇒ the comparison has NO LEFT-HAND SIDE. Emitting `false`
+    //       there would claim "the bonus changes nothing" about a comparison that never ran —
+    //       the `?? 0` failure relocated, not fixed.
+    //   (b) `rank1BasisMissing > 0` ⇒ `bestAdjustedSymbol` is the argmax over the SURVIVING
+    //       SUBSET only, so an EXCLUDED signal could have been the true WOULD-winner. `true`
+    //       would be a possible false positive and `false` a possible false negative. A partial
+    //       answer is not a weaker answer here; it is an unsound one.
+    //   ⚠️ Partial presence is not hypothetical: it is EXACTLY the state #593 rev 2 creates on
+    //   the day it names a real rank key, so this fires at the transition, not in steady state.
+    rank1Changed: (bestAdjustedSymbol === null || liveRank1Symbol === null || rank1BasisMissing > 0)
       ? null
-      : (liveRank1Symbol !== null && bestAdjustedSymbol !== liveRank1Symbol),
+      : (bestAdjustedSymbol !== liveRank1Symbol),
     rank1BasisMissing,
     ceilingSaturationRate: saturationKnown > 0 ? saturated / saturationKnown : null,
   };
