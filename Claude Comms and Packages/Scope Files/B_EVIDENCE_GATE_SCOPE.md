@@ -1,7 +1,7 @@
 # B-EVIDENCE-GATE — Scope (Step 1)
 
 **change-class: non_architecture**
-**Owner:** CC-A · **Date:** 2026-07-28 · **Status:** ★ **REV 2 — Langston Step-1 APPROVED TO PROCEED with three required changes (all folded in below). Kyle's condition met: he delegated the method decision to the crew, and Langston agrees with the direction — confidence/shrinkage over a quality composite, net log-growth over win rate.** ⚠️ His agreement on the LITERATURE half is RULED ON REPORTED FACT (he re-read the code, not the papers); his independent research pass still stands before the reward-metric batch commits.
+**Owner:** CC-A · **Date:** 2026-07-28 · **Status:** ★★ **REV 5 — CURRENT. Langston APPROVED the interval-based shape 2026-07-28 (three conditions + two precision fixes, all discharged in §8).** ⚠️ **THE DOC CARRIED THREE DIFFERENT REV NUMBERS AT ONCE (status said REV 2, §3 said REV 3, §7 said REV 4) and had TWO sections numbered `## 7` — the second retiring the framing the first still asked about. Both defects were Langston's find; fixed here. ONE rev number lives on this line and nowhere else.** Earlier rev history is preserved in place below (nothing deleted) — read §8 as current, §7-superseded as the record of how the shape changed. ★ **Kyle's condition met:** he delegated the method decision to the crew and Langston agrees with the direction. ⚠️ His agreement on the LITERATURE half remains RULED ON REPORTED FACT (he re-read the code, not the papers).
 **Parent finding:** #591 · **Research basis:** `Langston Design Asks/B_CALIBRATION_QUALITY_WEIGHT_RESEARCH_SYNTHESIS_r1.md` (`0d2939c2c`)
 
 > ⚠️ **THIS BATCH DOES NOT FIX THE CALIBRATION WEIGHTING. The pinned multiplier (#591 limb b) and the win-rate reward problem REMAIN until the follow-on design batch.** This batch only stops both consumers acting on evidence that cannot support a decision. It is deliberately the narrow, uncontroversial half.
@@ -14,7 +14,7 @@ Kyle's standing rule 23 is fix-on-find, and Kyle restated it 2026-07-28: *"When 
 
 The research produced one finding that is **correct under every option Kyle might choose** for the wider redesign, and one that is **a live defect by any reading**:
 
-★ **`ml-calibration.ts` HAS NO MINIMUM-SAMPLE GATE AT ALL.** The only guard in `analyzePerformance` is `if (total === 0) continue` (**`:172`** — rev 1 mis-cited this as `:151`; Langston corrected it at the ref, and independently confirmed the OBJ-1 defect: *"analyzePerformance has no minimum-sample gate of any kind."*). A pattern with **one** closed trade that happened to win therefore reports `winRate = 100%`, clears `WIN_RATE_INCREASE_THRESHOLD = 55` (`:190`), and emits an INCREASE recommendation. That is not a tuning disagreement; it is a guard that was never written.
+★ **`ml-calibration.ts` HAS NO ***PER-BUCKET*** EVIDENCE GATE.** ⚠️ **CORRECTED at REV 5 (Langston precision-fix (a)) — the original wording, "no minimum-sample gate AT ALL," was WRONG and is left visible rather than silently edited.** A **window-level** gate exists and always has: `ml-calibration-scheduler.ts:29` `MIN_TRADES_FOR_CALIBRATION = 10`, applied `:68` against `report.analyzedTrades`. **The defect is the LEVEL, not the absence:** 50 trades clears 10 comfortably, then splits three-plus ways and each bucket is judged with no gate of its own. *(Stated this way so a later reader who greps the `10` does not conclude we shipped a duplicate.)* The only guard in `analyzePerformance` is `if (total === 0) continue` (**`:172`** — rev 1 mis-cited this as `:151`; Langston corrected it at the ref, and independently confirmed the OBJ-1 defect: *"analyzePerformance has no minimum-sample gate of any kind."*). A pattern with **one** closed trade that happened to win therefore reports `winRate = 100%`, clears `WIN_RATE_INCREASE_THRESHOLD = 55` (`:190`), and emits an INCREASE recommendation. That is not a tuning disagreement; it is a guard that was never written.
 
 **Everything else in #591 is a genuine scope call and is NOT in this batch.** What replaces the quality term, whether the reward becomes net log-growth, whether we adapt at all — all deferred. **This batch makes no formula change whatsoever.**
 
@@ -102,11 +102,11 @@ Corroborated three independent ways — textbook power analysis; Bacidore (ex-He
 
 **Primary risk: this batch makes both systems adjust LESS, possibly not at all.** That is the intended effect and it must be stated plainly to Kyle rather than discovered later — *"the adaptation stopped"* will otherwise read as a regression. Per §9.1 the completion report will carry that in bold.
 
-**Secondary:** the ratio manager's `score === 0` branch slams the ratio to a bound. Raising `minSamples` returns `null` (not 0) below threshold, which routes to the "no pool data" path — **verify that path holds the current ratio rather than jumping.** ⚠️ This interacts with the win-rate-only cliff recorded in #593's tail note; check it explicitly.
+~~**Secondary:** the ratio manager's `score === 0` branch slams the ratio to a bound…~~ ★★ **STRUCK 2026-07-28 (Langston) — THIS RISK DESCRIBES A FILE THAT NO LONGER EXISTS.** `server/services/adaptive-ratio-manager.ts` is **404 at `795d8c92`**; `B-ARM-REMOVAL` landed and archived it at `1-system-manual/_archive/deleted-code/b-arm-removal-adaptive-ratio-manager.ts.removed` (he verified both the 404 and the 200). **There is no bound-slamming branch left to reach, so there is no `null`-return path to verify.** Struck for the same reason OBJ-2/2b/3/4 were struck — not because the risk was wrong when written, but because its subject was deleted underneath it.
 
 ---
 
-## 7. QUESTIONS FOR LANGSTON
+## 7-SUPERSEDED. QUESTIONS FOR LANGSTON — ⚠️ **ANSWERED AND PARTLY STRUCK; DO NOT ACT ON THIS SECTION.** Q1 answered (§8a), Q2 answered (§8b), **Q3 STRUCK AS MOOT (§8c)**. Retained as record, renumbered because it previously shared the number `7` with the measurement section that RETIRES its framing — a reader hitting this one first got the superseded shape.
 
 1. Agree this splits out and ships ahead of the formula redesign?
 2. Is the DB-tunable-with-loud-failure shape right, or is a constant acceptable for a guard?
@@ -114,7 +114,7 @@ Corroborated three independent ways — textbook power analysis; Bacidore (ex-He
 
 ---
 
-## 7. ★ STEP-2 MEASUREMENT (2026-07-28) — THE GATE SHOULD BE INTERVAL-BASED, NOT COUNT-BASED. REV 4.
+## 7A. ★ STEP-2 MEASUREMENT (2026-07-28) — THE GATE SHOULD BE INTERVAL-BASED, NOT COUNT-BASED. REV 4.
 
 **Read site established first (rule: name the population, cite the read site).** `ml-calibration-scheduler.ts` runs on cron **`0 0,8,16 * * *`** (every 8h) — **it is NOT in the active trading path; not TCL, not TEC, not RTB.** It calls `analyzePerformance(50)` → `vts-service.getRecentTrades` → `loadHistoricalTrades()` (last 30 VTS log files) + in-session `closedTrades`. **The window is 50 trades TOTAL, sliced BEFORE grouping.** Grouping key (`ml-calibration.ts:~128`): **`t.patternType || t.strategy || 'UNKNOWN'`**. Output → `logPredictiveAdjustment` → a dated JSON file, read only by `/api/vts/predictive-adjustments/*` display routes. ★ **Census: NOTHING reads those adjustments back into trading. It is a write-only recommendation record.**
 
@@ -131,3 +131,64 @@ Corroborated three independent ways — textbook power analysis; Bacidore (ex-He
 ⇒ **REVISED OBJ-1: gate on the WILSON SCORE INTERVAL, not on `n`.** Fire `DECREASE` only when the interval's **upper** bound < 45%; fire `INCREASE` only when the **lower** bound > 55%; otherwise `HOLD` with an *insufficient-evidence* reason stamped. **No arbitrary threshold to tune — `n` enters naturally through the interval width.** Blocks n=1 (CI [20.7%,100%] straddles both), n=2 ([34.2%,100%]), 3-of-4 ([30.1%,95.4%]) — every case the count-gate was meant to catch — while permitting large-effect calls on modest samples.
 **Basis:** Brown/Cai/DasGupta (2001) recommend Wilson for small n; the Wald interval's coverage is "chaotic". ⚠️ **Honest limit carried from the research: Wilson-gating of a trading parameter change is a defensible engineering application, NOT documented industry practice** — presented as such, not as precedent.
 **Unchanged:** still no formula change; the pinned multiplier (#591 limb b) and the win-rate-vs-expectancy question remain OUT and stay with the design batch.
+
+---
+
+## 8. REV 5 — LANGSTON APPROVED THE SHAPE (2026-07-28), THREE CONDITIONS + TWO PRECISION FIXES, ALL DISCHARGED BELOW
+
+He re-read `ml-calibration.ts:85-87,114,128,152-156,170-196` + `ml-calibration-scheduler.ts:29-30,66-78,82-95` at `cf0e88cf7` and reproduced all three Wilson intervals to the decimal. **APPROVE, on the structural argument: a count is blind to effect size BY CONSTRUCTION, so the case does not depend on today's window.**
+
+### ★ PRECISION FIX (a) — "NO MINIMUM-SAMPLE GATE AT ALL" WAS WRONG. THERE IS ONE; IT IS AT THE WRONG LEVEL.
+**Verified at the ref:** `ml-calibration-scheduler.ts:29` `MIN_TRADES_FOR_CALIBRATION = 10`, applied `:68` as `if ((report.analyzedTrades || 0) < MIN_TRADES_FOR_CALIBRATION)`. ⇒ **a WINDOW-level gate exists and always has.** The defect is that it is **per-RUN, not per-BUCKET**: 50 trades clears 10 comfortably, then splits 3+ ways and each bucket is judged with **no gate of its own**. **Correct statement, to be used everywhere from now on: "no PER-BUCKET evidence gate; the existing gate is window-level at 10."** *(Left uncorrected, a later reader greps the 10 and concludes we shipped a duplicate.)*
+
+### ★ PRECISION FIX (b) — THE WINDOW IS HYBRID-ONLY.
+**Verified at the ref:** `:114` `getRecentTradesFn(windowSize, 'HYBRID')`. The three buckets are **HYBRID trades only**; "the live window" without that qualifier **overstates coverage**. All figures in §7 carry this qualifier.
+
+### ★★ C1 — z IS THE ARBITRARY CONSTANT I CLAIMED NOT TO HAVE, AND IT IS LOAD-BEARING. HE IS RIGHT.
+I said the interval gate "has no arbitrary constant to tune." **False — I moved the constant from `n` to `z`.** Reproduced on `vwap_pullback` (n=17, w=4):
+
+| z | one-sided level | upper | verdict |
+|---|---|---|---|
+| 1.645 | 95% | **43.3** | **DECREASE FIRES** |
+| **1.96** | **97.5%** | **47.3** | **HOLD** |
+| 2.326 | 99% | 51.7 | HOLD |
+
+**Same data, opposite verdict.** ⇒ **DECISION: z = 1.96, and the rule is ONE-SIDED (`upper < 45`), so this is a 97.5% one-sided test — NOT the 95% the number colloquially implies. Stated explicitly because the colloquial reading is wrong.**
+**JUSTIFICATION (not taste):** ★ Langston verified the consumer is `logRecommendations` + `logPredictiveAdjustment` with **nothing auto-applying** (`scheduler:82,89-95`). **The costs are asymmetric: over-suppression costs LOG LINES; under-suppression puts a parameter recommendation into the record on noise.** Conservative tail is therefore nearly free. **REMEDY for "illegible": `z` becomes a NAMED, COMMENTED constant carrying this table** — the fix for an illegible constant is to make it legible, not to pretend it is absent.
+
+### ★ C2 — THE KNIFE-EDGE CRITIQUE APPLIES TO MY OWN GATE. CLAIM CORRECTED.
+`strong_bull_trend` clears at **44.80 vs 45.00 — a 0.20pp margin.** My rev-4 critique of the count gate ("would flip with one more trade") is **true of the interval gate at that bucket too.** **Honest claim, replacing the overstated one: NOT "no knife-edge" — "knife-edge on EVIDENCE instead of on COUNT."** Still the better quantity, because the edge now sits on the thing we care about. *(Margins: sma_trend_ride +10.36pp, strong_bull_trend +0.20pp, vwap_pullback −2.26pp.)*
+
+### ★★ C3 — DESIGNED BEHAVIOR, STATED UP FRONT SO NOBODY DISCOVERS IT AT STEP-8. **THE INCREASE SIDE IS THE BIGGER FINDING AND HE DID NOT ASK ABOUT IT.**
+The 50-trade window is sliced **before** grouping, so bucket n is **12–21 by construction**. At z=1.96:
+
+| n | DECREASE needs | INCREASE needs |
+|---|---|---|
+| 12 | p ≤ 16.7% | p ≥ **83.3%** |
+| 17 | p ≤ 17.6% | p ≥ **82.4%** |
+| 21 | p ≤ 19.0% | p ≥ **81.0%** |
+| 50 *(unreachable — window splits)* | p ≤ 30.0% | p ≥ 70.0% |
+
+- **DECREASE fires only on EGREGIOUS buckets** (≈≤19% win rate at achievable n). A mediocre 30–40% bucket will **essentially never fire**. Langston's p=0.30/n=50 check reproduces (upper **43.8**, fires) — **but n=50 is not achievable post-split**, so at real n even 30% does not fire. **His point holds and is sharper at real n than at his illustrative one.**
+- ★★ **THE CONSEQUENCE HE DID NOT ASK FOR, WHICH I AM SURFACING BECAUSE IT IS LARGER: at achievable n the INCREASE side is effectively UNREACHABLE — it needs an 81–83% win rate.** ⇒ **the calibration becomes able to recommend REDUCING but essentially never INCREASING.** That is a real directional asymmetry introduced by this gate. It is **acceptable ONLY because nothing auto-applies** (log-only consumer, verified). **It is NOT acceptable to leave undocumented**, and it must be re-examined before anything ever consumes these recommendations. **Filed as a named follow-up rather than buried in this scope.**
+
+### HIS ANSWERS TO MY THREE QUESTIONS, ACCEPTED
+1. **One window suffices for the SHAPE, not for the RATE.** ⇒ shape accepted now; **NO expected-firing-rate figure will be reported** — measuring duration before naming it.
+2. **The pre-grouping slice is my strongest argument, not a weakness:** if bucket n is an artifact of where the 50-slice falls, any threshold expressed in n is calibrated against an artifact and an interval is invariant to it. It also **CAPS achievable n** ⇒ stated as a bound (C3).
+3. **"Fires less often" is an OUTPUT, not a target.** ⇒ **SUCCESS CRITERION: every EMITTED recommendation survives the evidence test, and every SUPPRESSED one carries a stamped reason recording n, w and the interval.**
+
+**Provenance:** my rev-4 dispatch reached him with the commit ref **empty** (shell-quoting fault, re-sent), so **he ruled on the dispatch BODY, not on the file** — recorded because a later reader would otherwise assume he read §7. He also flags the n/w counts and the 3% `patternType` figure as **RULED ON REPORTED FACT** (he verified the arithmetic, not the trade store).
+
+### ★ §8a — Q1 ANSWERED: SHIP AHEAD OF THE REDESIGN — **BUT THIS IS NOT A TRADING FIX, AND MUST NOT BE DESCRIBED AS ONE**
+**Langston: yes, ship it ahead of the redesign.** ★★ **AND THE FRAMING CORRECTION THAT MUST REACH THE COMPLETION REPORT AND KYLE:** he spot-checked the consumer set at head — the only readers of `/api/vts/predictive-adjustments/*` are **display queries in `client/src/pages/machine-learning.tsx:436-1131`**, and he found **no trading-path caller**. ⇒ **this is fix-on-find on a WRITE-ONLY RECOMMENDATION RECORD, not a live trading defect. Correct to fix; WRONG to describe as stopping bad trades.** His words: *say that plainly or Kyle will read it as a trading fix.* **Adopted verbatim as a reporting requirement** — the recommendation this job emits is read by a screen, not by the engine, so a bad recommendation has never moved a position.
+
+### ★ §8b — Q2 ANSWERED: `z` IS A CODE CONSTANT, **NOT** A DB SETTING
+**Do NOT add a DB setting + loud-failure machinery for the confidence level** — that is scaffolding for a number nobody will change. The only tunables that remain are `WIN_RATE_INCREASE_THRESHOLD = 55` / `..._DECREASE_THRESHOLD = 45` (`ml-calibration.ts:85-86`), already constants and explicitly OUT per OBJ-5.
+⚠️ **This SITS BESIDE C1, it does not contradict it** — worth stating, because read alone the two sound opposed. **C1 = NAME and JUSTIFY `z` (it is load-bearing; it flips `vwap_pullback`). §8b = do NOT make it DB-tunable.** Both are satisfied by the same thing: **a named, commented code constant carrying the flip table.**
+★ **FAIL-CLOSED AS A CODE PROPERTY (his requirement):** if the interval cannot be computed for any reason, the bucket returns **HOLD with the reason stamped — never falls through** to an emitted recommendation.
+
+### ★★ §8c — Q3 **STRUCK AS MOOT**: ITS SUBJECT WAS DELETED WHILE THE QUESTION WAS IN FLIGHT
+Q3 asked to trace the ratio manager's `score === 0` bound-slam. **`server/services/adaptive-ratio-manager.ts` is 404 at `795d8c92`** — `B-ARM-REMOVAL` landed; archived at `1-system-manual/_archive/deleted-code/b-arm-removal-adaptive-ratio-manager.ts.removed` (Langston verified the 404 **and** the archive 200). **There is no branch left to trace.** Struck together with §6's "Secondary" risk paragraph, which described the same dead code. **This is the third thing in this scope struck for the same reason** (OBJ-2/2b/3/4 first) — ⚠️ **the pattern is worth naming: a scope written against a file another live batch is deleting will keep rotting under you, and each strike was found by a reader rather than by me.**
+
+### ★ §8d — SUCCESS CRITERION, RESTATED PER HIS Q3-ANSWER
+**NOT "fires less often"** — that is an output, not a target. **The criterion:** every **emitted** recommendation survives the evidence test, and every **suppressed** one carries a stamped reason recording `n`, `w` and the interval bounds. **No expected-firing-rate figure will be reported** until several windows are sampled (his Q1 ruling: one window is enough for the SHAPE, not for the RATE).
