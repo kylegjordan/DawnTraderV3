@@ -91,6 +91,12 @@ Keep a log line as the **convenience** half only, and emit on **stderr (`console
 ⚠⚠ **AND THE COROLLARY THAT MUST BE WRITTEN DOWN OR SOMEONE WILL LATER QUOTE IT (Langston): A ZERO IN BUCKET 3 IS NOT EVIDENCE OF ANYTHING.** It is a gauge with a **permanently-pinned needle** on today's call path. **Only a NON-zero reading carries information.**
 ★ **USEFUL CONSEQUENCE, and it makes the batch STRONGER not weaker: the counter therefore collapses to preconditions 1+2 — i.e. it is a NEAR-BINARY TEST OF `expectedEdge`.** That is a sharper instrument than the three-way split it replaces.
 
+★★ **OBJ-1c — THE COUNTER MUST EXCLUDE MAKER/TAKER TWIN ROWS, OR IT RE-MEASURES AN ARTEFACT WE ALREADY DISMISSED (added 2026-07-28 after #607 closed as NOT-a-defect).**
+`persistTwinClosedRecord` (`vts-service.ts:783-836`) writes a **counterfactual** row whose literal sets `mtTwin: true`, `mtPairId`, **`countsInAggregates: false`**, and **never sets `frictionCost` / `expectedEdge` / `finalScore`** — correctly, because those belong to the DECISION, not to the counterfactual leg.
+⚠ **THIS EXACT SHAPE ALREADY PRODUCED A FALSE DEFECT: a "7.3% non-finite `frictionCost`" reading that was twin rows counted as primary trades — measured INDEPENDENTLY AND WRONGLY BY BOTH CC-B AND LANGSTON, and it got a batch scoped, homed, sequenced FIRST and approved before two read-it-first checks killed it.**
+⇒ **REQUIREMENT: filter on the writer's own declaration — `countsInAggregates: false` (and/or `mtTwin`) — NOT on field-presence.** ★ **The writer already states these rows are not to be aggregated; a counter that ignores that declaration is repeating the mistake with a new number.**
+⇒ **AND STATE THE EXCLUDED COUNT SEPARATELY** — a silently-filtered population is the same failure this batch exists to fix, one level up.
+
 **OBJ-2 — no behaviour change.** The `return` stays. No observation is admitted that is not admitted today. **This batch must be provably inert to trading behaviour** — that is a verification criterion, not an aspiration.
 
 **OBJ-3 — state the taxonomy for THE SILENCE, and for nothing else.** A silent discard on a learning input is a defect **regardless** of how many observations it is losing. Record **bucket 1 on the *visibility* axis**, independent of whatever the magnitude turns out to be.
