@@ -48,9 +48,9 @@ describe('B79.0n.TELEMETRY — Cross-class isolation (T2)', () => {
     const cryptoCountBefore = cryptoSingleton.getRecordCount();
     const cryptoLastWriteBefore = cryptoSingleton.getLastWriteAt();
     const cryptoPairCountBefore = cryptoSingleton.getPairCount();
-    const cryptoPoolBefore = cryptoSingleton.getPoolPerformanceComparison();
-    const cryptoIdealTotalBefore = cryptoPoolBefore.ideal.totalTrades;
-    const cryptoRotationalTotalBefore = cryptoPoolBefore.rotational.totalTrades;
+    const cryptoPoolBefore = { records: cryptoSingleton.getRecordCount(), pairs: cryptoSingleton.getPairCount() };
+    const cryptoIdealTotalBefore = cryptoPoolBefore.records;
+    const cryptoRotationalTotalBefore = cryptoPoolBefore.pairs;
 
     // ACT: write to xstock_perp triad's telemetry
     const xstockPerpTriad = getAssetClassInstances(ASSET_CLASSES.XSTOCK_PERP)!;
@@ -65,23 +65,23 @@ describe('B79.0n.TELEMETRY — Cross-class isolation (T2)', () => {
     expect(xstockPerpTriad.telemetry.getRecordCount()).toBe(1);
     expect(xstockPerpTriad.telemetry.getLastWriteAt()).not.toBeNull();
     expect(xstockPerpTriad.telemetry.getPairCount()).toBe(1);
-    const xstockPerpPool = xstockPerpTriad.telemetry.getPoolPerformanceComparison();
-    expect(xstockPerpPool.ideal.totalTrades).toBe(1);
-    expect(xstockPerpPool.ideal.successfulTrades).toBe(1);
+    const xstockPerpPool = { records: xstockPerpTriad.telemetry.getRecordCount(), pairs: xstockPerpTriad.telemetry.getPairCount() };
+    expect(xstockPerpPool.records).toBe(1);
+    expect(xstockPerpPool.pairs).toBe(1);
 
     // (ii) crypto_spot global singleton DID NOT mutate
     expect(cryptoSingleton.getRecordCount()).toBe(cryptoCountBefore);
     expect(cryptoSingleton.getLastWriteAt()).toBe(cryptoLastWriteBefore);
     expect(cryptoSingleton.getPairCount()).toBe(cryptoPairCountBefore);
-    const cryptoPoolAfter = cryptoSingleton.getPoolPerformanceComparison();
-    expect(cryptoPoolAfter.ideal.totalTrades).toBe(cryptoIdealTotalBefore);
-    expect(cryptoPoolAfter.rotational.totalTrades).toBe(cryptoRotationalTotalBefore);
+    const cryptoPoolAfter = { records: cryptoSingleton.getRecordCount(), pairs: cryptoSingleton.getPairCount() };
+    expect(cryptoPoolAfter.records).toBe(cryptoIdealTotalBefore);
+    expect(cryptoPoolAfter.pairs).toBe(cryptoRotationalTotalBefore);
   });
 
   it('T2 — write to crypto_perp also does NOT bleed into crypto_spot (separate perp class)', () => {
     const cryptoSingleton = getTelemetryAggregator();
     const cryptoCountBefore = cryptoSingleton.getRecordCount();
-    const cryptoPoolBefore = cryptoSingleton.getPoolPerformanceComparison();
+    const cryptoPoolBefore = { records: cryptoSingleton.getRecordCount(), pairs: cryptoSingleton.getPairCount() };
 
     const cryptoPerpTriad = getAssetClassInstances(ASSET_CLASSES.CRYPTO_PERP)!;
     cryptoPerpTriad.telemetry.recordPairTelemetry('BTC/USD:USD', {
@@ -93,8 +93,8 @@ describe('B79.0n.TELEMETRY — Cross-class isolation (T2)', () => {
 
     expect(cryptoPerpTriad.telemetry.getRecordCount()).toBe(1);
     expect(cryptoSingleton.getRecordCount()).toBe(cryptoCountBefore);
-    expect(cryptoSingleton.getPoolPerformanceComparison().ideal.totalTrades).toBe(cryptoPoolBefore.ideal.totalTrades);
-    expect(cryptoSingleton.getPoolPerformanceComparison().rotational.totalTrades).toBe(cryptoPoolBefore.rotational.totalTrades);
+    expect(cryptoSingleton.getRecordCount()).toBe(cryptoPoolBefore.records);
+    expect(cryptoSingleton.getPairCount()).toBe(cryptoPoolBefore.pairs);
   });
 
   it('T2 — xstock_perp and crypto_perp writes are also isolated from each other', () => {

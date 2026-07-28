@@ -20,7 +20,6 @@
 
 import { SCANNER_PARAMS } from '../config/system-guards.js';
 import { getTelemetryAggregator, TelemetryAggregatorService, type PoolType } from './telemetry-aggregator.js';
-import { adaptiveRatioManager, type AdaptiveRatio } from './adaptive-ratio-manager.js';
 import { BENCHMARK_SYMBOLS, isBenchmarkSymbol } from './fx5-scanner.js';
 import { type MarketRegime } from './telemetry-repository.js';
 
@@ -38,7 +37,6 @@ export interface AdaptiveScanBatch {
   excludedPairs: string[];
   totalBatch: string[];
   timestamp: number;
-  ratioUsed?: AdaptiveRatio; // Directive 11.2 R1: Track ratio used for this batch
   retryCount?: number; // Directive 11.4C-R2: Track retry attempts
 }
 
@@ -165,7 +163,6 @@ export class AdaptiveScanManager {
   private telemetry: TelemetryAggregatorService;
   private failureTracker: PairFailureTracker;
   private lastBatch: AdaptiveScanBatch | null = null;
-  private useAdaptiveRatio: boolean = true; // Enable dynamic ratios by default
 
   constructor(telemetry?: TelemetryAggregatorService, failureTracker?: PairFailureTracker) {
     this.telemetry = telemetry || getTelemetryAggregator();
@@ -183,27 +180,17 @@ export class AdaptiveScanManager {
     const batchSize = SCANNER_PARAMS.BATCH_SIZE; // 300 pairs per Batch 18 (M64)
     const MAX_RETRIES = 1; // Directive 11.4C-R2: Maximum retry attempts
     
-    // Directive 11.2 R1: Compute dynamic ratio based on pool performance
-    let idealRatio: number;
-    let rotationalRatio: number;
-    let currentRatio: AdaptiveRatio | undefined;
-    
-    if (this.useAdaptiveRatio) {
-      // P19-B3b: the telemetry getter yields canonical MarketRegime values but is
-      // typed `string`; narrow with the codebase's established convention for this
-      // exact case (cf. telemetry-repository.ts:117/340 `record.regime as MarketRegime`).
-      // A runtime allow-list would hardcode regime string literals, which the
-      // regime-mapping-integrity governance test forbids outside config/tests.
-      const regime = this.telemetry.getCurrentMarketRegime() as MarketRegime;
-      const mode = (process.env.MODE as 'live' | 'paper') || 'paper';
-      currentRatio = await adaptiveRatioManager.computeAdaptiveRatio(regime, mode);
-      idealRatio = currentRatio.idealRatio;
-      rotationalRatio = currentRatio.rotationalRatio;
-    } else {
-      // Fallback to static config
-      idealRatio = SCANNER_PARAMS.DUAL_POOL.IDEAL_RATIO;
-      rotationalRatio = SCANNER_PARAMS.DUAL_POOL.ROTATIONAL_RATIO;
-    }
+    // ★ B-ARM-REMOVAL: the AdaptiveRatioManager branch is DELETED; this is the config-SSOT
+    // fixed split that already existed as the `useAdaptiveRatio === false` path.
+    // WHY (measured, not asserted): the ratio never reached allocation. `actualIdealCount` below
+    // is `min(target, available)`, and `available` never exceeded 16 against a target of 151+ in
+    // any observable history (pre-cut archive max 60) — the clamp bound on EVERY cycle, so the
+    // dynamic ratio and this fixed one resolve to the SAME allocation. Removal is behaviour-
+    // neutral by measurement. The dynamic ratio's inputs (a live-mode-gated SQL source that has
+    // never held a row, and an in-memory counter whose confidence damper saturates at 100
+    // samples) could not support the decision it was making. See B_ARM_REMOVAL_SCOPE.md.
+    const idealRatio = SCANNER_PARAMS.DUAL_POOL.IDEAL_RATIO;
+    const rotationalRatio = SCANNER_PARAMS.DUAL_POOL.ROTATIONAL_RATIO;
     
     // Directive 11.4B.2-R1 (M64): Underflow Protection with guaranteed BATCH_SIZE-pair cycles
     // 1. Check available ideal pool pairs first
@@ -272,7 +259,6 @@ export class AdaptiveScanManager {
       excludedPairs,
       totalBatch: uniqueCombined,
       timestamp: Date.now(),
-      ratioUsed: currentRatio,
       retryCount: retryAttempt, // Directive 11.4C-R2: Track retries
     };
     
@@ -334,21 +320,6 @@ export class AdaptiveScanManager {
   }
 
   /**
-   * Directive 11.2 R1: Enable or disable adaptive ratio computation
-   */
-  setAdaptiveRatioEnabled(enabled: boolean): void {
-    this.useAdaptiveRatio = enabled;
-    console.log(`[11.2R1][AdaptiveScan] Adaptive ratio ${enabled ? 'enabled' : 'disabled'}`);
-  }
-
-  /**
-   * Directive 11.2 R1: Get current adaptive ratio manager state
-   */
-  getAdaptiveRatioState() {
-    return adaptiveRatioManager.getState();
-  }
-
-  /**
    * Get the last scan batch
    */
   getLastBatch(): AdaptiveScanBatch | null {
@@ -378,11 +349,14 @@ export class AdaptiveScanManager {
 
   /**
    * Get scanning params info
-   * Directive 11.2 R1: Now includes adaptive ratio status
+   * ★ B-ARM-REMOVAL: reads the config SSOT directly; the adaptive-ratio status field is gone
+   * because the ratio is no longer dynamic. ⚠️ NOTE FOR READERS OF THIS LINE: the percentages
+   * below are the TARGET split, not the achieved one — `actualIdealCount` is clamped by pool
+   * availability and has been far below target on every observed cycle. Read the
+   * `[11.4B.2-R1]` line for what was actually scanned.
    */
   getParamsInfo(): string {
-    const ratio = adaptiveRatioManager.getCurrentRatio();
-    return `[10.8+11.2R1][CONFIG] AdaptiveScan: enabled=${SCANNER_PARAMS.ADAPTIVE_ENABLED}, adaptiveRatio=${this.useAdaptiveRatio}, ideal=${(ratio.idealRatio * 100).toFixed(0)}%, rotational=${(ratio.rotationalRatio * 100).toFixed(0)}%, batch=${SCANNER_PARAMS.BATCH_SIZE}`;
+    return `[10.8][CONFIG] AdaptiveScan: enabled=${SCANNER_PARAMS.ADAPTIVE_ENABLED}, targetIdeal=${(SCANNER_PARAMS.DUAL_POOL.IDEAL_RATIO * 100).toFixed(0)}%, targetRotational=${(SCANNER_PARAMS.DUAL_POOL.ROTATIONAL_RATIO * 100).toFixed(0)}%, batch=${SCANNER_PARAMS.BATCH_SIZE}`;
   }
 }
 

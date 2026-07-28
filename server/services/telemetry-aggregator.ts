@@ -115,15 +115,6 @@ export interface CascadeEfficiency {
 /**
  * Directive 11.2 R1: Pool-level performance aggregates for dynamic ratio balancing
  */
-export interface PoolPerformanceAggregate {
-  pool: PoolType;
-  winRate: number;
-  sampleCount: number;
-  totalTrades: number;
-  successfulTrades: number;
-  avgFinalScore: number;
-  lastUpdated: number;
-}
 
 /**
  * Directive 11.2 R1: Pair selection result with explicit pool attribution
@@ -147,10 +138,6 @@ export class TelemetryAggregatorService {
   private pairZScoreHistory: Map<string, { volZ: number[]; trendZ: number[] }> = new Map();
 
   // Directive 11.2 R1: Pool-level performance tracking
-  private poolAggregates: Map<PoolType, PoolPerformanceAggregate> = new Map([
-    ['ideal', { pool: 'ideal', winRate: 0.5, sampleCount: 0, totalTrades: 0, successfulTrades: 0, avgFinalScore: 0, lastUpdated: Date.now() }],
-    ['rotational', { pool: 'rotational', winRate: 0.5, sampleCount: 0, totalTrades: 0, successfulTrades: 0, avgFinalScore: 0, lastUpdated: Date.now() }],
-  ]);
 
   // B79.0n.TELEMETRY (2026-05-26): per-instance observability counters
   // for the per-class instance pattern. Read via getRecordCount() /
@@ -284,11 +271,6 @@ export class TelemetryAggregatorService {
     recent.push(entry);
     this.pairTelemetry.set(symbol, recent);
     
-    // Directive 11.2 R1: Update pool-level aggregates
-    if (data.pool) {
-      this.updatePoolAggregate(data.pool, data.finalScore, data.success);
-    }
-    
     // Directive 11.0E.2: Include source in telemetry log
     console.log(`[11.0E.2][Telemetry] ${symbol} (${entry.pool}/${entry.source}) recorded: finalScore=${data.finalScore.toFixed(2)}, samples=${recent.length}`);
     
@@ -323,58 +305,15 @@ export class TelemetryAggregatorService {
     }
   }
 
-  /**
-   * Directive 11.2 R1: Update pool-level performance aggregates
-   * Tracks win rate and average scores per pool for dynamic ratio balancing
-   */
-  private updatePoolAggregate(pool: PoolType, finalScore: number, success?: boolean): void {
-    const aggregate = this.poolAggregates.get(pool);
-    if (!aggregate) return;
 
-    aggregate.sampleCount++;
-    aggregate.avgFinalScore = (
-      (aggregate.avgFinalScore * (aggregate.sampleCount - 1) + finalScore) / aggregate.sampleCount
-    );
-    
-    if (success !== undefined) {
-      aggregate.totalTrades++;
-      if (success) {
-        aggregate.successfulTrades++;
-      }
-      aggregate.winRate = aggregate.totalTrades > 0 
-        ? aggregate.successfulTrades / aggregate.totalTrades 
-        : 0.5;
-    }
-    
-    aggregate.lastUpdated = Date.now();
-    this.poolAggregates.set(pool, aggregate);
-    
-    console.log(`[11.2R1][Telemetry] Pool ${pool} updated: winRate=${(aggregate.winRate * 100).toFixed(1)}%, samples=${aggregate.sampleCount}`);
-  }
+  // ★ B-ARM-REMOVAL: pool-aggregate limb DELETED (poolAggregates / updatePoolAggregate /
+  // getPoolPerformanceComparison / resetPoolAggregates). Its sole consumer was the
+  // AdaptiveRatioManager, deleted in this batch. Not preserved: (a) its input `avgFinalScore`
+  // has been fed `finalScore ?? 0` since #558 A2, so it would have persisted a decaying number
+  // to disk every 60s forever; (b) it measures WIN RATE, the statistic §0 rejects and the reason
+  // the ARM died — keeping it would hand the wrong metric to whoever builds pool quality next.
+  // That work starts from Net Expectancy. `PoolType` SURVIVES (still types `entry.pool`).
 
-  /**
-   * Directive 11.2 R1: Get pool performance comparison for AdaptiveRatioManager
-   * Returns aggregated performance metrics by pool
-   */
-  getPoolPerformanceComparison(): { ideal: PoolPerformanceAggregate; rotational: PoolPerformanceAggregate } {
-    return {
-      ideal: this.poolAggregates.get('ideal') || { 
-        pool: 'ideal', winRate: 0.5, sampleCount: 0, totalTrades: 0, successfulTrades: 0, avgFinalScore: 0, lastUpdated: Date.now() 
-      },
-      rotational: this.poolAggregates.get('rotational') || { 
-        pool: 'rotational', winRate: 0.5, sampleCount: 0, totalTrades: 0, successfulTrades: 0, avgFinalScore: 0, lastUpdated: Date.now() 
-      },
-    };
-  }
-
-  /**
-   * Directive 11.2 R1: Reset pool aggregates (for testing or regime change)
-   */
-  resetPoolAggregates(): void {
-    this.poolAggregates.set('ideal', { pool: 'ideal', winRate: 0.5, sampleCount: 0, totalTrades: 0, successfulTrades: 0, avgFinalScore: 0, lastUpdated: Date.now() });
-    this.poolAggregates.set('rotational', { pool: 'rotational', winRate: 0.5, sampleCount: 0, totalTrades: 0, successfulTrades: 0, avgFinalScore: 0, lastUpdated: Date.now() });
-    console.log('[11.2R1][Telemetry] Pool aggregates reset');
-  }
 
   /**
    * Directive 11.4H Task 4: Regime Entropy Monitoring
@@ -671,7 +610,6 @@ export class TelemetryAggregatorService {
   flushStaleTelemetry(): void {
     const beforeCount = this.pairTelemetry.size;
     this.pairTelemetry.clear();
-    this.resetPoolAggregates();
     // Keep rehydrated=false to allow rehydrateTelemetryState() to run and restore live history
     console.log(`[11.4C.1][FLUSH] Cleared ${beforeCount} in-memory entries on restart (SQL history preserved)`);
     console.log(`[11.4C.1][FLUSH] Ready for rehydration from live telemetry + fresh VTS population`);
@@ -1693,7 +1631,6 @@ function persistTelemetryState(instance: TelemetryAggregatorService): void {
       version: 1,
       savedAt: Date.now(),
       cascadeHistory: (instance as any).cascadeHistory ?? [],
-      poolAggregates: Object.fromEntries((instance as any).poolAggregates ?? new Map()),
     };
     fs.writeFileSync(TELEMETRY_STATE_FILE, JSON.stringify(state));
   } catch (err) {
@@ -1708,14 +1645,10 @@ function rehydrateTelemetryState(instance: TelemetryAggregatorService): void {
     if (data.cascadeHistory && Array.isArray(data.cascadeHistory)) {
       (instance as any).cascadeHistory = data.cascadeHistory;
     }
-    if (data.poolAggregates) {
-      // Batch 46 fix: Restore ALL saved pool aggregate entries, not just existing keys
-      const poolMap = (instance as any).poolAggregates as Map<string, any>;
-      for (const [key, val] of Object.entries(data.poolAggregates)) {
-        poolMap.set(key, val);
-      }
-      console.log(`[46][Telemetry] Rehydrated pool aggregates from disk`);
-    }
+    // ★ B-ARM-REMOVAL: the guarded `if (data.poolAggregates)` restore block is deleted with the
+    // limb. A pre-existing on-disk file's leftover `poolAggregates` key is simply ignored by
+    // JSON.parse — the state file is module-local (`logs/telemetry_state/aggregator_state.json`),
+    // written and read only here, so there is no format contract and no migration.
     (instance as any).rehydrated = true; // Batch 46: Set rehydrated flag
   } catch (err) {
     console.error('[46][Telemetry] Failed to rehydrate state:', err);

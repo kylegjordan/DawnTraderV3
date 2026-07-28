@@ -40,7 +40,6 @@ describe('Directive 11.4C-R2 — Top Batch UI Integration & Diagnostics', () => 
       telemetry = new TelemetryAggregatorService();
       failureTracker = new PairFailureTracker();
       manager = new AdaptiveScanManager(telemetry, failureTracker);
-      manager.setAdaptiveRatioEnabled(false); // Use static ratios in tests (no DB)
     });
 
     it('should include retryCount in batch result', async () => {
@@ -209,18 +208,19 @@ describe('Directive 11.4C-R2 — Top Batch UI Integration & Diagnostics', () => 
         caller: 'vts',
       });
       
-      const pools = telemetry.getPoolPerformanceComparison();
-      
-      expect(pools).toHaveProperty('ideal');
-      expect(pools).toHaveProperty('rotational');
-      expect(Object.keys(pools)).toEqual(['ideal', 'rotational']);
+      // ★ B-ARM-REMOVAL: probe re-pointed — getPoolPerformanceComparison died with the
+      // pool-aggregate limb. The SUBJECT here is the ideal/rotational TERMINOLOGY, which
+      // survives on the telemetry entry itself, so the assertion moves rather than dies.
+      const tagged = telemetry.getTopPairsWithPool(10);
+      for (const p of tagged) {
+        expect(['ideal', 'rotational']).toContain(p.pool);
+      }
     });
     
     it('AdaptiveScanBatch should use idealPairs/rotationalPairs terminology', async () => {
       const telemetry = new TelemetryAggregatorService();
       const failureTracker = new PairFailureTracker();
       const manager = new AdaptiveScanManager(telemetry, failureTracker);
-      manager.setAdaptiveRatioEnabled(false);
 
       const allPairs = Array.from({ length: 400 }, (_, i) => `PAIR${i}USD`);
       const batch = await manager.getNextScanBatch(allPairs);
@@ -239,7 +239,6 @@ describe('Directive 11.4C-R2 — Top Batch UI Integration & Diagnostics', () => 
       const telemetry = new TelemetryAggregatorService();
       const failureTracker = new PairFailureTracker();
       const manager = new AdaptiveScanManager(telemetry, failureTracker);
-      manager.setAdaptiveRatioEnabled(false);
 
       const allPairs = Array.from({ length: 400 }, (_, i) => `PAIR${i}USD`);
       await manager.getNextScanBatch(allPairs);

@@ -114,7 +114,6 @@ describe('Directive 11.4B.2-R1 — Adaptive Scanning Governance', () => {
       telemetry = new TelemetryAggregatorService();
       failureTracker = new PairFailureTracker();
       manager = new AdaptiveScanManager(telemetry, failureTracker);
-      manager.setAdaptiveRatioEnabled(false);
     });
 
     it('batch size is configured to 300', () => {
@@ -216,7 +215,6 @@ describe('Directive 11.4B.2-R1 — Adaptive Scanning Governance', () => {
       telemetry = new TelemetryAggregatorService();
       failureTracker = new PairFailureTracker();
       manager = new AdaptiveScanManager(telemetry, failureTracker);
-      manager.setAdaptiveRatioEnabled(false);
     });
 
     it('pairs with scored telemetry go to ideal pool (M63 + M64)', async () => {

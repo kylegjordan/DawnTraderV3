@@ -1,6 +1,6 @@
 /**
  * ════════════════════════════════════════════════════════════════════════════
- * B79.0a — AdaptiveRatioManager constructor injection back-compat
+ * B79.0a — telemetry instance injection (ARM constructor coverage removed in B-ARM-REMOVAL)
  * ════════════════════════════════════════════════════════════════════════════
  *
  * Verifies:
@@ -26,17 +26,12 @@ vi.mock('../../core/math/cost-model.js', () => ({
   computeTotalRoundTripCost: () => 0,
 }));
 
-import { AdaptiveRatioManager } from '../../services/adaptive-ratio-manager.js';
 import { TelemetryAggregatorService, getTelemetryAggregator } from '../../services/telemetry-aggregator.js';
 
-describe('B79.0a — AdaptiveRatioManager constructor injection', () => {
-  it('default-arg constructor (crypto path back-compat) does not throw', () => {
-    expect(() => new AdaptiveRatioManager()).not.toThrow();
-  });
-
-  it('config-only constructor (legacy back-compat) does not throw', () => {
-    expect(() => new AdaptiveRatioManager({ minSamples: 5 })).not.toThrow();
-  });
+// ★ B-ARM-REMOVAL: the two AdaptiveRatioManager constructor tests are DELETED as units — their
+// SUBJECT was the deleted component. The telemetry-singleton tests below are KEPT: their subject
+// is per-instance vs global telemetry identity (the B79 per-class architecture), which survives.
+describe('B79.0a — telemetry instance injection (ARM constructor coverage removed)', () => {
 
   // B79.0n.ORCHESTRATOR (2026-05-27): test for `new AdaptiveRatioManager({}, customTelemetry)`
   // removed per POOL skip — no production caller injects telemetry into ARM. The

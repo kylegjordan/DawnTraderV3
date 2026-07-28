@@ -368,73 +368,8 @@ export interface PoolPerformance {
   sampleCount: number;
 }
 
-export async function getPerformanceByPool(
-  poolType: PoolType,
-  regime: MarketRegime,
-  mode: 'live' | 'paper' = 'live',
-  hoursBack: number = 24
-): Promise<PoolPerformance | null> {
-  const cutoff = new Date(Date.now() - hoursBack * 60 * 60 * 1000);
-
-  try {
-    const dbRegime = toDBRegime(regime); // Map extended regime to DB-compatible
-    const records = await db
-      .select()
-      .from(telemetryHistory)
-      .where(
-        and(
-          eq(telemetryHistory.pool, poolType),
-          eq(telemetryHistory.regime, dbRegime),
-          eq(telemetryHistory.mode, mode),
-          gte(telemetryHistory.timestamp, cutoff)
-        )
-      );
-
-    if (records.length === 0) {
-      return null;
-    }
-
-    let totalWinRate = 0;
-    let totalEdge = 0;
-
-    for (const record of records) {
-      totalWinRate += parseFloat(record.successRate ?? '0');
-      totalEdge += parseFloat(record.finalScore);
-    }
-
-    const result: PoolPerformance = {
-      winRate: totalWinRate / records.length,
-      avgEdge: totalEdge / records.length,
-      sampleCount: records.length,
-    };
-
-    console.log(`[11.2R1][TelemetryRepo] Pool ${poolType} | regime=${regime} | winRate=${result.winRate.toFixed(3)} | edge=${result.avgEdge.toFixed(3)} | samples=${result.sampleCount}`);
-    return result;
-  } catch (error) {
-    console.error(`[11.2R1][TelemetryRepo] Failed to get pool performance for ${poolType}:`, error);
-    return null;
-  }
-}
-
-/**
- * Directive 11.2 R1: Get comparative pool performance
- * Returns both pool performances for ratio computation
- */
-export interface PoolComparison {
-  ideal: PoolPerformance | null;
-  rotational: PoolPerformance | null;
-  regime: MarketRegime;
-}
-
-export async function getPoolComparison(
-  regime: MarketRegime,
-  mode: 'live' | 'paper' = 'live',
-  hoursBack: number = 24
-): Promise<PoolComparison> {
-  const [ideal, rotational] = await Promise.all([
-    getPerformanceByPool('ideal', regime, mode, hoursBack),
-    getPerformanceByPool('rotational', regime, mode, hoursBack),
-  ]);
-
-  return { ideal, rotational, regime };
-}
+// ★ B-ARM-REMOVAL: `getPerformanceByPool` + `getPoolComparison` DELETED.
+// They were the ARM's SQL evidence path, reading `telemetry_history` per pool/regime over a
+// 24h window. That table holds ZERO rows and always has (verified on the app's own connection,
+// with sibling tables reading 39,258 / 112,582 on the same connection). Their sole production
+// caller was `adaptive-ratio-manager.ts`, deleted in the same batch — see DELETED_COMPONENTS_LOG.md.

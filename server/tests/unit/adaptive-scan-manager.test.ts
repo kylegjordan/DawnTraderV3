@@ -102,7 +102,6 @@ describe('Directive 10.8 — Adaptive Scan Manager', () => {
       telemetry = new TelemetryAggregatorService();
       failureTracker = new PairFailureTracker();
       manager = new AdaptiveScanManager(telemetry, failureTracker);
-      manager.setAdaptiveRatioEnabled(false); // Use static ratios in tests (no DB)
     });
 
     it('returns batch with ideal and rotational pairs', async () => {
@@ -158,8 +157,11 @@ describe('Directive 10.8 — Adaptive Scan Manager', () => {
       
       expect(info).toContain('10.8');
       expect(info).toContain('AdaptiveScan');
-      expect(info).toContain('ideal=');
-      expect(info).toContain('rotational=');
+      // ★ B-ARM-REMOVAL: renamed to targetIdeal=/targetRotational= because the ratio is no
+      // longer dynamic AND the percentages are the TARGET split, not the achieved one (pool
+      // availability clamps it far below target on every observed cycle).
+      expect(info).toContain('targetIdeal=');
+      expect(info).toContain('targetRotational=');
       expect(info).toContain('batch=300');
     });
 
@@ -179,7 +181,6 @@ describe('Directive 10.8 — Adaptive Scan Manager', () => {
       const telemetry = new TelemetryAggregatorService();
       const failureTracker = new PairFailureTracker();
       const manager = new AdaptiveScanManager(telemetry, failureTracker);
-      manager.setAdaptiveRatioEnabled(false);
       
       // Seed telemetry with enough data for reliable ranking
       for (let i = 0; i < 20; i++) {
