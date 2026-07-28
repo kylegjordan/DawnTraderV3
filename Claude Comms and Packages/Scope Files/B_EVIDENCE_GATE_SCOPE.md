@@ -111,3 +111,23 @@ Corroborated three independent ways — textbook power analysis; Bacidore (ex-He
 1. Agree this splits out and ships ahead of the formula redesign?
 2. Is the DB-tunable-with-loud-failure shape right, or is a constant acceptable for a guard?
 3. On the ratio manager, does returning `null` below the raised threshold hold the ratio steady, or does it reach the bound-slamming branch? I have not yet traced it and will not claim either way.
+
+---
+
+## 7. ★ STEP-2 MEASUREMENT (2026-07-28) — THE GATE SHOULD BE INTERVAL-BASED, NOT COUNT-BASED. REV 4.
+
+**Read site established first (rule: name the population, cite the read site).** `ml-calibration-scheduler.ts` runs on cron **`0 0,8,16 * * *`** (every 8h) — **it is NOT in the active trading path; not TCL, not TEC, not RTB.** It calls `analyzePerformance(50)` → `vts-service.getRecentTrades` → `loadHistoricalTrades()` (last 30 VTS log files) + in-session `closedTrades`. **The window is 50 trades TOTAL, sliced BEFORE grouping.** Grouping key (`ml-calibration.ts:~128`): **`t.patternType || t.strategy || 'UNKNOWN'`**. Output → `logPredictiveAdjustment` → a dated JSON file, read only by `/api/vts/predictive-adjustments/*` display routes. ★ **Census: NOTHING reads those adjustments back into trading. It is a write-only recommendation record.**
+
+**Measured on the live corpus (2,423 closed records in the 30-file window):** `patternType` is present on **72 of 2,423 (3%)** — so grouping falls through to `strategy` for ~97%. ⚠️ I nearly reported *"97% lands in one UNKNOWN bucket"*; **the `|| t.strategy` fallback prevents that** — checked before claiming.
+
+**THE LIVE 50-TRADE WINDOW — 3 buckets, all three firing DECREASE:**
+| bucket | n | wins | winRate | 95% Wilson CI | sound? |
+|---|---|---|---|---|---|
+| `sma_trend_ride` | 21 | 3 | 14.3% | **[5.0%, 34.6%]** | ★ **entirely below 45% ⇒ DECREASE IS JUSTIFIED** |
+| `vwap_pullback` | 17 | 4 | 23.5% | [9.6%, **47.3%**] | ⚠️ **straddles 45% ⇒ NOT justified** |
+| `strong_bull_trend` | 12 | 2 | 16.7% | [4.7%, 44.8%] | ★ entirely below ⇒ justified |
+
+★★ **THIS OVERTURNS OBJ-1's SHAPE. A flat minimum-sample gate is the WRONG FIX and would have been actively harmful:** at n=21/3-wins the effect is large enough that the call is statistically sound — a count-based gate set high enough to block the single-trade case (`n=1`, CI **[20.7%, 100%]**) would ALSO have blocked this legitimate one. **Sample size is a proxy; the thing we actually care about is whether the evidence excludes the threshold.**
+⇒ **REVISED OBJ-1: gate on the WILSON SCORE INTERVAL, not on `n`.** Fire `DECREASE` only when the interval's **upper** bound < 45%; fire `INCREASE` only when the **lower** bound > 55%; otherwise `HOLD` with an *insufficient-evidence* reason stamped. **No arbitrary threshold to tune — `n` enters naturally through the interval width.** Blocks n=1 (CI [20.7%,100%] straddles both), n=2 ([34.2%,100%]), 3-of-4 ([30.1%,95.4%]) — every case the count-gate was meant to catch — while permitting large-effect calls on modest samples.
+**Basis:** Brown/Cai/DasGupta (2001) recommend Wilson for small n; the Wald interval's coverage is "chaotic". ⚠️ **Honest limit carried from the research: Wilson-gating of a trading parameter change is a defensible engineering application, NOT documented industry practice** — presented as such, not as precedent.
+**Unchanged:** still no formula change; the pinned multiplier (#591 limb b) and the win-rate-vs-expectancy question remain OUT and stay with the design batch.
