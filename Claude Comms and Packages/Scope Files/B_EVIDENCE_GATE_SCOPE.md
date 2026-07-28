@@ -64,6 +64,24 @@ Corroborated three independent ways — textbook power analysis; Bacidore (ex-He
 
 ---
 
+## 4a. ★ MEASURED VOLUMES (done 2026-07-28, prompted by Kyle's question) — AND ONE UNTESTED OBSERVATION
+
+**Kyle asked whether the trade results must come from the active path, or whether VTS counts. Verified in code: BOTH consumers are ALREADY VTS-fed, and neither has ever read active-path trades.** `ml-calibration` ← `vts-service.getRecentTrades` ← `loadHistoricalTrades` (VTS log JSON, last 30 files) + the in-session `closedTrades`, `source: 'simulation'`. `adaptive-ratio-manager` ← `telemetry.recordPairTelemetry` from `vts-runner.ts:3267/:4964`, which carries the explicit **M70 invariant: "VTS is the only authorized writer."**
+
+★ **This RESOLVES §4's feasibility worry — it was measured against the wrong population.** Live DB, 2026-07-28:
+
+| Population | Closed trades |
+|---|---|
+| **VTS** (`vts_open_trades`) | **39,036 total · 31,558 in 30d · 19,936 in 7d** |
+| Active path (`closed_trades`) | **372 total** (364 in 30d) |
+
+≈**100:1.** On active data alone an honest threshold was hopeless; on VTS it is comfortable. **Per-strategy, last 30d:** support_bounce 10,819 · morning_star 4,619 · pivot_shift 4,125 · inside_bar_reversal 2,611 · reverse_impulse 2,333 · volatility_edge 1,831 · sma_trend_ride 1,302 · vwap_pullback 1,244 · strong_bull_trend 1,152 · vwap_bounce 926 · defensive_hedge 572 · **range_trade 14 · mean_reversion 10**. ⇒ 11 of 13 clear the ~393 (10pp) bar; ~6 clear ~1,570 (5pp); the last two get correctly silenced — **the gate working, not a failure**. Also backtestable: every row carries strategy/pool/asset_class.
+
+★★ **THE BINDING CONSTRAINT IS THE POOL SPLIT, AND IT LIMITS OBJ-2 SPECIFICALLY:** last 30d **rotational 31,101 vs ideal 457** (crypto 29,998 / xstock 1,560). **A two-group comparison is only as strong as its SMALLER side**, so the ratio manager can honestly detect a LARGE pool difference (~10pp) but never a subtle one, no matter how much rotational data accumulates. ⇒ **OBJ-2's threshold must be set against 457, not against the 31k — and if it is set above ~457 the balancer will hold its default indefinitely.** State that consequence explicitly rather than discovering it post-deploy.
+
+⚠️ **UNTESTED OBSERVATION — recorded as an OBSERVATION, NOT a diagnosis (rule 24.a), because I tried to test it and FAILED.** The ideal pool is allocated 30–90% of scanning attention yet accounts for ~1.4% of closed trades. Plausible innocent explanation: `getNextScanBatch` sources ideal from `telemetry.getTopPairs()` ("top performers only") and has explicit **UNDERFLOW PROTECTION** handing any ideal deficit to rotational — so the ratio may be a TARGET that is chronically unmet, making the adaptive ratio largely nominal. **If true it would mean OBJ-2 tunes a knob that does not move anything — which is why it belongs in this scope.**
+★ **WHY IT IS UNTESTED, stated so nobody mistakes silence for a negative result:** two pm2 log windows (2,136 and 20,166 lines) contained **ZERO scanner activity** — the capture is saturated by websocket/cache traffic (`[COLLISION_RESOLVE]`, `[I7-WS-D]`, `[CACHE_UPDATE]`), so the "0 UNDERFLOW hits" result is **uninformative, not negative**. A validity control (does the window contain ANY scanner line?) returned 0 and is what caught it — **the same absence-control failure recorded in #593, avoided this time only because the control was run.** And `getAdaptiveRatioState`/`idealRatio` appear in **no API route** (Grep-verified: services + one test only), so there is no direct read instrument either. **HOME: measure this at Step 2 by a DB/telemetry route or by adding observability — do NOT set OBJ-2's threshold until the allocation side is measured, and do NOT report the hypothesis either way until it is.**
+
 ## 5. VERIFICATION CRITERIA
 
 1. Untruncated `tsc` clean on edited files + `check-tsc-baseline` PASS.
