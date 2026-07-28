@@ -16,13 +16,7 @@ The **Adaptive Ratio Manager (ARM)** — `server/services/adaptive-ratio-manager
 
 ## 2. WHY — THE IMPROVEMENT TEST WAS RUN, AND FAILED ON ARITHMETIC
 
-★★ **REV 2 — MY REV-1 MECHANISM CLAIM WAS WRONG, AND THE CORRECTED MEASUREMENT MAKES THE DELETION PROVABLY NEUTRAL. (Langston caught the mechanism; I then measured the clamp he named.)**
-
-**WHAT REV 1 CLAIMED (WRONG):** *"it moved allocation 20 points on a 0.002 score difference — noise amplification."*
-**WHY IT IS WRONG (`adaptive-ratio-manager.ts:151`):** `targetIdealRatio = idealScore / (idealScore + rotationalScore)` is a **share-of-score normaliser — when the pools tie, its resting point is 0.50 BY CONSTRUCTION.** 0.309/0.616 = 0.5016. ⇒ **the 0.002 bought 0.16 PERCENTAGE POINTS, not 20.** The 20 came from `defaultRatio` having **no representation in the target function at all**; it survives only through the confidence blend at `:242`.
-**AND `computeConfidence` (`:233`) = `min(1, totalSamples/100)` is a PURE VOLUME COUNTER** — no effect size, no variance, no reference to whether 0.309 and 0.307 are separable; monotonic, so it never comes back down. At the measured 28,238 samples it saturates within seconds of boot. ★ **Do NOT write "disabled" — after 100 samples it is BY DESIGN incapable of restraining anything. It is doing exactly what it was written to do.**
-**CORRECTION 3 (owed): it is NOT "pure win rate."** `computePoolScore:215` = `winRate*0.6 + avgEdge*0.4` with `avgEdge ← avgFinalScore` (`:206`) — a rate blended with a FinalScore on a different scale at fixed weights (which is why the two scores sum to 0.616, not 1). The `finalScore` input is now zeroed by #558 A2, but **I have not measured `avgEdge`'s live value, so "pure win rate" is an inference and must not be stated as measured.**
-★ **TAXONOMY (standing rule): this is bucket 2/3, NOT bucket 1. There is NO defect.** Frame it as **the design does not survive its own inputs.** Framed as a bug, the obvious counter is *"then fix `computeConfidence`"* and we relitigate.
+> **Rev history is deliberately NOT narrated here.** Rev 1 asserted a 20-point noise-amplification mechanism and "pure win rate"; both were wrong and are corrected **in the body below, once each**. The error record lives in `RUNNING_ISSUES` and in the commit messages — **not stacked on top of the text the completion report, `DELETED_COMPONENTS_LOG` and the OBJ-6 governance docs get written from.** (Langston: a preamble that repeats the body is the same trap re-armed — the next rev edits one copy and they diverge.)
 
 ★★★ **THE DECIDING MEASUREMENT — THE RATIO IS NON-BINDING AT ANY VALUE, AND HAS BEEN FOR ALL OBSERVABLE HISTORY.** `adaptive-scan-manager.ts:211-214`: `targetIdealCount = ceil(300 * ratio)`, then `actualIdealCount = min(targetIdealCount, availableIdealCount)`. Measured on `/var/log/dawntrader/out.log` (control: 1,155 `[11.4B.2-R1]` lines present):
 ```
@@ -89,7 +83,8 @@ CC-A proposed re-sourcing "best performing" from realised outcomes in `logs/virt
 1. Untruncated `tsc` on edited files + `check-tsc-baseline` PASS.
 2. Named tests green; the ARM-injection test removed/adjusted deliberately, not deleted silently.
 3. All 4 CI jobs green on head (rule 19).
-4. Deploy; confirm `[11.2R1][RatioManager]` lines **cease** and the scan composition holds at 70/30 — read from `/var/log/dawntrader/out.log`, **with a control that the file still contains scanner lines** (an empty grep proved nothing three times tonight).
+4. ★ **REV 5 (Langston BLOCKER-5) — the old criterion was UNSATISFIABLE and cited an abandoned ratio.** It read *"the scan composition holds at 70/30"*: wrong number (OBJ-2 lands on **0.60**) and **impossible by this scope's own clamp measurement** — `actualIdealCount = min(ceil(300*0.60) = 180, Available ≤ 16)` (`adaptive-scan-manager.ts:212-217`), so composition will be roughly **5%/95% with `UNDERFLOW PROTECTION` firing**, exactly as it does today. As written, Step 7 would either fail or be quietly reinterpreted — **the failure mode of a criterion nobody can meet is that it gets re-read until it passes.**
+   **THE CORRECT CRITERION:** (a) `targetIdealCount` reads **180** in the `[11.4B.2-R1]` line; (b) `Available`/`Actual` are **statistically unchanged from the pre-cut baseline** (that is the neutrality claim, and it is the thing actually being verified); (c) `[11.2R1][RatioManager]` lines **cease entirely**. All three read from `/var/log/dawntrader/out.log` **with the file-contains-scanner-lines control** — an empty grep proved nothing three separate times during this batch's investigation.
 5. §9.3 staging UI check of any scanner/pool surface.
 6. **Architecture-class governance (§17): CONTENT updates to `SYSTEM_MANUAL.md:2701,3172,3226`, `SYSTEM_IMPACT_MAP.md:425,433,2202`, `sections/PHASE3_MARKET_SCANNING_AND_PAIR_MANAGEMENT.md:395,866,919`** — not a TOC pass.
 
