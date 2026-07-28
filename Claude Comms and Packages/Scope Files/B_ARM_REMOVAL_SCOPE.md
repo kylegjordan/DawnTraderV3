@@ -93,3 +93,24 @@ CC-A proposed re-sourcing "best performing" from realised outcomes in `logs/virt
 ## 5. RISK
 
 **★ NO SCAN-ALLOCATION CHANGE — PROVEN, NOT ASSUMED (see §2's clamp measurement): `Available` never exceeds 16 against a target of 151, so 0.50, 0.60 and 0.70 all resolve to the same `actual`.** Rev 1's *"shifts 50→70"* risk line was wrong twice over — wrong baseline (§OBJ-2) and wrong premise (the clamp binds every cycle). **The pools and their membership logic are untouched by this batch** — membership remains outcome-blind (§2 item 5), which is a *known, recorded* defect this batch does **not** fix and must not be described as fixing.
+
+
+---
+
+## 6. DEPLOY VERIFICATION — 2026-07-28 (staging, pm2 restart #536 @ 02:49:54Z)
+
+**CI:** all four GREEN on `156470b94`. **Deploy:** pull → `db:migrate` (none) → build → restart. HTTP 200, process online, **zero** errors matching `adaptiveRatioManager` / `getPoolPerformanceComparison` / `is not a function` / `Cannot find module`.
+
+- ★ **(a) PASS — `targetIdealCount` reads 180.** `02:50:28: Target: Ideal=180, Available=0, Actual=0+300=300`, on every 30s tick through 02:53:28. Exactly `ceil(300 × 0.60)` ⇒ the landing took the **config SSOT**, not the deleted file's private `0.7`. Pre-restart the same line read `Ideal=151` (the old 0.503 computed ratio). **Independently re-verified by Langston at staging, not ruled on report.**
+- ★ **(c) PASS — `[11.2R1][RatioManager]` CEASED.** Last line `02:49:40`, i.e. **before** the 02:49:54 restart; none after. Verified by TIMESTAMP, not by an absent grep hit. **Independently re-verified by Langston.**
+- **Batch composition unaffected:** `0+300=300` is underflow protection doing exactly what it did at `16+284=300`.
+
+### ⚠️ (b) — MY MODEL OF THE BASELINE WAS WRONG (Langston, off the rotated logs)
+I planned to judge (b) by waiting for "warm-vs-warm". **There is no warm steady state to converge on.** `Available` is a **MONOTONIC RAMP with no observed ceiling in the retained window**:
+- restart 00:10:00 → `Available=1` @00:42 (32 min) → `16` @01:50 (100 min) → still 16 @02:23 (when I snapshotted the "baseline");
+- an earlier uninterrupted run: 13:10 `4` → 14:13 `16` → 16:19 `33` → **18:12 `39`**, reset 18:40.
+⇒ **My pre-deploy "avg 16.00" was simply where a 100-minute-old process happened to be — a point on a ramp, not a level.** Post-restart `Available=0` is the ramp restarting, not a regression.
+★ **THE COMPARATOR FOR (b) IS THE RAMP, NOT THE LEVEL — matched on uptime AND clock-time.** Falsifiable test (off the 00:10 restart, nearest in clock time and same overnight liquidity): **`Available > 0` by ~03:22Z and `≈16` by ~04:30Z ⇒ PASS. Still 0 at 04:00Z ⇒ real signal, investigate.** ⚠️ **Do NOT use the 13:10 ramp as comparator** — it reached 16 in ~63 min because that is the xStock session and the pool fills faster.
+
+### ★★ LESSON (generalises well past this batch)
+**A COUNTER THAT ONLY GOES UP IS A CLOCK, NOT A GAUGE.** Two instances in this one verification: (1) my first check counted `[11.2R1]` lines across an **append-only log** and got 104 vs a baseline 98 — reading as *"the component is still running"* when those were all pre-restart lines, and only the timestamp answered it; (2) `Available` itself, which I treated as a level to compare when it is an accumulation whose value encodes **uptime**. **Before comparing any two readings, ask whether the number can go down. If it cannot, you are comparing clocks.**
