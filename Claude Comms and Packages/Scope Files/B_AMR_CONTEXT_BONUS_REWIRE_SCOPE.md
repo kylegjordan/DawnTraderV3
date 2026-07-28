@@ -1,5 +1,31 @@
 # B-AMR-CONTEXT-BONUS-REWIRE (#593 limbs A + B) — Scope
 
+> # ⛔ REV 1 IS WITHDRAWN — DO NOT IMPLEMENT THE BODY BELOW AS WRITTEN.
+> **Langston ruled CHANGES-NEEDED** (queue id `1531465412246507571`, rendered against HEAD `4bb516988`) and a follow-up hazard ruling (rendered against `d09d9308`). Everything below §1 stands as the *defect record*; the *plan* is superseded pending rev 2. Rev 2 is deliberately NOT written same-night — the open items require measurement, and Langston concurred: *"measured-and-late beats fast-and-wrong here."*
+>
+> ## Why rev 1 died — the premise is false at the ref
+> The shadow computes `adjusted = liveScore + bonus` and asks WOULD-rank-1-changed. **`liveScore` resolves to 0 for every signal**, so `adjusted = argmax(bonus)` — unrelated to live rank-1 — making `rank1Changed` near-permanently true and **structurally meaningless**. ★ **Langston's framing, adopted: an empty series is honestly empty; a POISONED one LOOKS LIKE EVIDENCE.** Rev 1 would have started the clock on garbage and fed a flip decision from it.
+> **MEASURED on all 4 live `rtb_signals` rows (not a code-read):** `metadata.rankingScore` absent 4/4 · `metadata.finalScore` absent 4/4 · `metadata.expectedEdge` absent 4/4 (⇒ `ceilingSaturationRate` pins `null` forever, so **OBJ-5's joint-read commitment self-nullifies**) · `metadata.netExpectedEdge` **present 4/4** · typed `final_score` non-null on 1/4 only. ⇒ liveScore=0 holds by BOTH resolution paths. **The arm is not merely unwired — it reads RETIRED FIELD NAMES.**
+> ⚠️ The XRP `final_score` 0.4283 is a **pre-A1 leftover artifact — provenance, not evidence.** Do not treat it as an n=1 sample (Langston).
+>
+> ## ★ THE HAZARD NEITHER SHAPE SURVIVES BY DEFAULT (Langston; I had not named it)
+> `r` is **signed**, and `ready_to_buy_service.ts:1877` sorts **plain-DESC deliberately** — *"negative-R losers sort to the bottom (no abs/clamp)"*, which is **load-bearing geometry**.
+> - **ADDITIVE:** a +0.09 bonus can lift a **negative-R** candidate above a **positive-R** one — reordering **across zero**, precisely what the plain-DESC contract exists to prevent.
+> - **MULTIPLIER:** the mirror defect — a factor >1 on a negative R makes it *more* negative, so the "bonus" **penalizes**.
+> ⇒ **Rev 2 MUST state the chosen shape's behavior on the negative side of zero EXPLICITLY.** This must not fall out of the units work as an afterthought.
+>
+> ## Units is a BRANCH-MIX question, not a scale question (Langston)
+> `computeRankKey` (`:1705`) has **two branches** (`:1800-1803`): default `result.netRewardToRisk`, **overridden** by `chosenNetEv / distStop` whenever `chosenNetEv` is finite and `distStop > 0`. Both nominally R-ish, **computed differently, nothing forcing them onto one scale**. ⇒ **measure the BRANCH MIX across the live pool first.** A bonus calibrated against one branch is miscalibrated against the other **and prints as a plain number either way — the miscalibration is invisible.**
+>
+> ## Corrections to carry into rev 2
+> - **PATH + line:** `getRankedSignals` is `server/core/rtb/ready_to_buy_service.ts:1813` — **not** `server/services/…`, and not `active-execution-engine.ts:2114`. Fix **path and number** in all four documents: `DELETED_COMPONENTS_LOG.md:89`, `RUNNING_ISSUES.md:25` (#593), `P19_B8_10_SCOPE.md:30`, and OBJ-3 here.
+> - Sort key memoized into `rankKey`, plain-DESC at `:1876-77`; contract comment `:1874` — *"the number that ranks is the number the gate later confirms."*
+> - The stale DORMANT comment is `:1889` (measured false: total=4/valid=3) — sweep under OBJ-2.
+> - **Precedent to COPY, not invent:** `captureShadowPool` already hangs off the tail of `getRankedSignals`, fire-and-forget off the hot path, own catch, return value unchanged.
+> - **Clock is counted in DISTINCT SELECTIONS**, never elapsed days or stamp count — 135 stamps of the same 4 symbols is 4 observations. *A count is not a set.*
+> - **Rulings upheld:** change-class **architecture** (rationale corrected — it is the new call site in the live promotion path, NOT a live scoring-function change); **SIM yes**; **SYSTEM_MANUAL yes, content not formatting** — it must state plainly which function is the live ranker (r_multiple) and which is VTS display, since that exact confusion produced both #593 and rev 1; **§9.1 banner keep**.
+
+
 **change-class: architecture** (adds a call site into the live ranking path — fire-and-forget — and restores a parameter to the live scoring function `computeRankingScore`. Declared architecture as the fail-safe even though live ranking OUTPUT is unchanged today; Langston to confirm or downgrade.)
 **Owner:** CC-B (NEW Claude) — **Kyle-directed handoff 2026-07-28** ("hand that over to New Claude to fix… scope and audit before applying the fix"), relayed via CC-A with the directive quoted verbatim. Kyle authorisation to proceed received directly on Discord: *"please proceed with your edits as long as they have been reviewed by Langston."*
 **Defect record:** RUNNING_ISSUES #593 (CC-A surfaced + owned both limbs; owner line to be updated to CC-B). Home named by Langston.
