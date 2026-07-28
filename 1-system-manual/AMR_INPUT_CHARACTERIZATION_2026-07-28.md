@@ -52,7 +52,35 @@ Not because conditions are bad. Not because of friction. Not because of the ev-g
 
 **(d) ★ `ev_gap_window_n` IS DUAL-USE — and that is a DEFECT (bucket 1), not a config value.** (Langston, 2026-07-28.)
 The same constant is the ring capacity (`:159`) **and** the emit-minimum (`:167`), so **`capacity == warmup` is structurally forced.** You cannot ask for a 100-deep average that begins speaking at 30 — **the only way to shorten the warmup is to shorten the window you are averaging.**
-⇒ **This — not a tuning mistake — is why crypto lives at 17.7/100.** It is a **two-constant fix** (split capacity from minimum), and it is the one item in leg A that is a genuine defect rather than an undispositioned decision.
+It is a **two-constant fix** (split capacity from minimum), and it is the one item in leg A that is a genuine defect rather than an undispositioned decision.
+
+> ⛔ **CAUSAL CLAIM STRUCK 2026-07-28 — struck, not softened.** This section originally read *"this — not a tuning mistake — is why crypto lives at 17.7/100."* **Leg (c) refuted it.** See §2(e).
+
+**(e) ★★ NEITHER MECHANISM ABOVE ACTUALLY EXPLAINS THE ABSENCE — and the truth is anti-correlated with the obvious guess.**
+
+Langston's discriminator (§13-named, run before leg (a) could claim a magnitude): *if crypto closes ~100 in under a week, 47 days should have produced ~20 window-fills rather than 4 ⇒ restarts binding; if 100 takes ~11 days, four fills is expected ⇒ the constant is binding.*
+
+**Measured:** `vts_open_trades`, crypto, closed — **33,862 closes since 2026-05-11, mean 431/day.** Recent daily: 07-23 **7,773** · 07-24 5,263 · 07-21 5,086 · 07-16 3,303.
+⇒ **100 closes takes ~5.6 hours.** The window should be full essentially permanently. ⇒ **The constant is NOT the binding constraint.**
+
+⇒ ★ **But the restart explanation fails too, in the opposite direction.** It predicts the input appears on **high**-volume days. It does the reverse:
+
+| the four days the input existed | crypto closes that day |
+|---|---|
+| 2026-07-13 | **60** |
+| …while 2026-07-23 | **7,773 — and produced no ev-gap rows at all** |
+| …2026-07-24 | 5,263 — none |
+| …2026-07-21 | 5,086 — none |
+
+**A window that refills in under six hours, on a day with 7,773 closes, that never once emits.** Restart-zeroing does not produce that pattern.
+
+⇒ **AN UNIDENTIFIED MECHANISM GOVERNS THIS INPUT. Both stated explanations are co-occurring, not sufficient.**
+
+> ⚠️ **UNVERIFIED HYPOTHESIS, labelled as one:** the `vts-service.ts:1118-1120` call sits on the `persisted===true` path and may not fire for most closes, or may not fire with the asset class assumed. **A guess, not a finding** — it gets the same code-first treatment as everything else here before it is repeated.
+
+**Standing consequence: name no expected magnitude for what the constant split recovers until this resolves.** The defect is real; its blast radius is unknown.
+
+**★ METHOD NOTE — the same failure three times in one day.** *Double-block* → the cap was redundant, not independent. *The percentiles* → a plateau artefact, not a distribution. *The constant* → neither it nor restarts. **Each time, the first mechanism that fit the evidence was adopted before a competing one was excluded.** That is §9.5(a)'s component census applied to **explanations**: *enumerate the competing mechanism and exclude it, before adopting the one that fits.*
 
 **How full the window actually gets:** mean `n` while warming — **crypto 17.7 / 100 · xstock 6.3 / 30.** The window lives most of its life around a fifth full.
 

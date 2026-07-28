@@ -46,7 +46,18 @@ Claude New (CC-B). Discord display name **"NEW Claude"** (exact `--sender` value
 
 > **★ B8.5e σ LESSON (keep — transferable):** quote CEILINGS **CLAMPED**, never raw `budget/σ`. `cap_ms = 300000` (300s) clamps every symbol; the budget is NOT flat 1% — it is `budget_k(0.5) × remaining-risk-to-stop` (near-stop ⇒ a fraction; on the stop ⇒ the 15s floor). The ceiling is an **AGE THRESHOLD, not a retry interval** — evaluation re-tries every cycle; the ceiling only decides whether the price is trusted THIS cycle. (σ module = `sigma-rate.ts`, sibling of the `price-liveness.ts:145` read-path contract; does NOT overload `getRecentLastMoveStats` = cadence only.)
 
-## ★★★ CURRENT STATE (2026-07-24/25) — B8.5i + B8.5j BOTH FULLY CLOSED (Langston-verified); NEXT = QUEUE-3 B-ATR-RESTORE
+## ★★★ CURRENT STATE (2026-07-28) — B-AMR-INPUT-INTEGRITY **LEG A CLOSED as characterization**; awaiting Langston sequencing call
+**LEG A ARTIFACT AT A REF: `1-system-manual/AMR_INPUT_CHARACTERIZATION_2026-07-28.md`, sha `7d4677528`. `#604` filed (two NON-BLOCKING legs).**
+- **THE FINDING:** AMR *FAVORABLE* is unreachable on **94.6%** of crypto cycles because `evGapRatio` is **absent on 97.8%** → `parts.length<5` → `:280-281` clamps to **0.699** (< the 0.70 boundary). Crypto all-time max **0.6990** IS that constant, not a near-miss.
+- **LEG (a) MINE, bucket 1 defect, ships in leg A, NOT blocked by (b):** `ev_gap_window_n` is dual-use — ring capacity (`:159`) AND emit-minimum (`:167`), same key ⇒ **capacity==warmup structurally forced** ⇒ crypto mean **17.7/100**. Two-constant fix.
+- **LEG (b) = ★ KYLE'S CALL, NOT MINE:** only feeder is `vts-service.ts:1118-1120` (VTS); active/paper close path feeds it nothing. `:150-153` already designates it *"a SEPARATE operator decision"* ⇒ goes to Kyle as an OPEN QUESTION in leg B's paper, never pre-decided.
+- **⚠ QUOTE NO STATISTIC OVER THE EV-GAP INPUT** (mean/median/percentile) until the constants split — the ring emits only while full, sliding one member, so a fill = a day-long plateau. 2,921 rows = **~4 observations**. **UNMEASURABLE, not mis-sampled** (Langston's correction to my retraction).
+- **LEG B SHRANK:** any ev-gap re-threshold reaches **2.17%** of cycles at most — say so in the paper's first paragraph. Leg C still gated.
+- **NEXT:** Langston's sequencing call — ship leg (a) first (my rec, rule 23 fix-on-find) vs hold for one picture. Then leg B options paper (NO CODE).
+- **★ FOUR OF MY OWN CLAIMS RETRACTED 07-28, all in the artifact with reasons:** cohort-max cannot bound another cohort's counterfactual · xstock friction quoted vs crypto's threshold · the ev-gap percentiles · `ev_gap_warming` max 99/29 (**a stamp existing only BELOW threshold has max N−1 — boundary constant, not measurement; 4th of that family after 0.2498/0.6990/359s**).
+- **METHOD NOTE:** my `-S` for the A3 operand came back empty because I searched the FORWARDING file (`vts-service.ts`) not the ASSIGNING one (`vts-runner.ts:2065/:2235`). **An empty search of the wrong file is #568 absent-as-valid.**
+
+## (prior) CURRENT STATE (2026-07-24/25) — B8.5i + B8.5j BOTH FULLY CLOSED (Langston-verified); NEXT = QUEUE-3 B-ATR-RESTORE
 
 **★ THIS SESSION:** watcher armed (Monitor `bjoayq63j`, alias CC-B); on new §7.1 clone `C:\DawnTraderV3-new`.
 **✅ P19-B8.5k (B-ATR-RESTORE) — CLOSED as a ROLLBACK 2026-07-25; superseded by #581. Deliverable = the #581 discovery (shared cycle-wide atr) + neutrality tests + 7-position quarantine. Repo report authoritative.**
