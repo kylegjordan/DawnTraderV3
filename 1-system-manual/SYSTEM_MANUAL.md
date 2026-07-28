@@ -2696,59 +2696,29 @@ interface AdaptiveScanBatch {
 
 ---
 
-## 6. Adaptive Ratio Manager
+## 6. Adaptive Ratio Manager — ★ REMOVED 2026-07-28 (B-ARM-REMOVAL)
 
-**File**: `server/services/adaptive-ratio-manager.ts` (298 lines)
-**Directive**: 11.2 R1
-**Status**: ACTIVE
+**Status**: **REMOVED.** `server/services/adaptive-ratio-manager.ts` deleted (commit `e3a22c15a`; archived at `_archive/deleted-code/b-arm-removal-adaptive-ratio-manager.ts.removed` as a 100%-similarity rename, so `git log --follow` traverses its history). Full rationale: `DELETED_COMPONENTS_LOG.md`.
 
-The Adaptive Ratio Manager dynamically adjusts the Ideal/Rotational split based on which pool is producing better trade outcomes.
+**What it did:** dynamically split scanner attention between the Ideal and Rotational pair pools, targeting whichever pool showed better trade outcomes.
 
-### Ratio Computation Algorithm
+**★ Why it is gone — THE RATIO NEVER REACHED ALLOCATION.** Batch composition is `actualIdealCount = min(ceil(batchSize × ratio), availableIdealCount)` (`adaptive-scan-manager.ts`). Measured across 200 consecutive live cycles: target **151**, `Available` **never above 16** (0 in 52 of them; avg 5.6), `UNDERFLOW PROTECTION` firing every cycle, composition ~**4% ideal / 78% rotational**. The pre-removal archive shows the same shape (avg 31.1, **max ever 60**). **The availability clamp bound on every cycle in all observable history, so a dynamic ratio and a fixed one produce the SAME allocation — the removal is behaviour-neutral BY MEASUREMENT.**
 
-```
-STEP 1: Fetch pool performance from TelemetryAggregator
-        Fallback: SQL-backed telemetry-repository if insufficient in-memory data
+**Why the design could not be repaired:** its SQL evidence source (`telemetry_history`, per pool/regime, 24h) holds **zero rows and always has** — writes are fenced by `shouldPersist()` = `(mode === 'live') || force`, and the system has never run in live mode, so *learn during VTS, apply at launch* never had a data path. Its in-memory source was well-fed, but the damper `min(1, totalSamples/100)` is a **volume counter** that saturates at 100 samples and never returns (measured: 28,238 samples), so it could not restrain anything. Its score blended win rate with `avgFinalScore`, fed `0` since #558 A2.
 
-STEP 2: Compute pool scores
-        score = (winRate × 0.6) + (avgEdge × 0.4)
-        where avgEdge = avgFinalScore
+★ **The decisive argument is the PURPOSE TEST:** this knob allocated **scan attention**, while the binding constraint is the net-EV/fee **qualification** drought (#570). **The funnel is dry at the qualification stage, not the looking stage.**
 
-STEP 3: Calculate target ratio (performance-weighted)
-        IF both scores zero → defaultRatio (0.7)
-        IF rotational zero → maximize ideal (0.9)
-        IF ideal zero → minimize ideal (0.3)
-        ELSE → targetRatio = idealScore / (idealScore + rotationalScore)
+**Taxonomy:** NOT a defect (rule 24, bucket 2/3). Nothing malfunctioned — **the design did not survive its own inputs.**
 
-STEP 4: Apply confidence adjustment
-        confidence = min(1.0, totalSamples / 100)
-        adjustedTarget = (targetRatio × confidence) + (defaultRatio × (1 - confidence))
-        Low confidence biases toward default; high confidence trusts the data.
+### What replaced it
+The **fixed config-SSOT split** that already existed as the non-adaptive path: `SCANNER_PARAMS.DUAL_POOL.IDEAL_RATIO` / `ROTATIONAL_RATIO` (`system-guards.ts:160-163`). ⚠️ **These are a TARGET, not the achieved composition** — the availability clamp above still governs what is actually scanned.
 
-STEP 5: Enforce bounds [0.3, 0.9]
-        Never less than 30% Ideal, never more than 90% Ideal
+### What SURVIVES (so a later sweep does not read this as an incomplete cut)
+The **Ideal/Rotational pools themselves**, `PoolType`, `entry.pool`, `getTopPairs`/`getTopPairsWithPool`. **Only the dynamic split between the pools was removed.**
+⚠️ **Pool MEMBERSHIP remains OUTCOME-BLIND and is a KNOWN OPEN DEFECT (#597):** `getCompositeScore` ranks pairs on `finalScore*0.4 + hybridScore*0.3 + regimeWeight*0.2 + predictiveConfidence*0.1` — **four pre-trade estimates, none of them an outcome** — computed from a **single most-recent observation**, with the 3-sample minimum explicitly removed. **"Best performing" does not measure performance. This batch did not address that.**
 
-STEP 6: Smooth adjustment (max 0.1 per cycle)
-        Prevents oscillation — ratio can only change by ±10% per scan cycle
-```
-
-### Configuration
-
-| Parameter | Value | Meaning |
-|-----------|-------|---------|
-| `minIdealRatio` | 0.3 | Minimum 30% Ideal |
-| `maxIdealRatio` | 0.9 | Maximum 90% Ideal |
-| `defaultRatio` | 0.7 | Starting/fallback (70% Ideal) |
-| `adjustmentRate` | 0.1 | Max change per cycle |
-| `minSamples` | 10 | Minimum before ratio adjustment |
-
-### Why This Matters
-
-Without the ratio manager, the system would always use a fixed 70/30 split regardless of performance. If Ideal pool pairs consistently outperform Rotational pool pairs, the ratio manager shifts allocation toward Ideal — concentrating on what works. Conversely, if Rotational pool discovers high-performing new pairs, their representation increases.
-
-**Cross-reference**: The pool scores (winRate, avgEdge) are computed by TelemetryAggregator (Section 10), which receives data exclusively from VTS (M70).
-
----
+### If this capability is rebuilt
+Scanning better performers more often is sound in principle. The principled implementation is **discounted Thompson Sampling on net log-growth** (Kelly = the ρ=1 manipulation-proof measure; win rate is the most manipulable performance statistic), over a window far wider than 24h-per-regime, and gated on **#596** — the representativeness of the outcome corpus, since a lane-selected sample is biased in a way no amount of statistics repairs. **Rebuild from Net Expectancy; do not resurrect this component.**
 
 ## 7. Active Filter Pool
 
@@ -3169,9 +3139,8 @@ Additionally imported by:
 | `server/services/fx5-scanner.ts` | 887 | ACTIVE (LOCKED) | 30-second scanner, post-processing, pool gate |
 | `server/services/market-scanner.ts` | 726 | ACTIVE | `collectAdaptiveBatch()` + diagnostic buffers only. MarketScanner class REMOVED (Batch 9). |
 | `server/services/adaptive-scan-manager.ts` | 405 | ACTIVE | Batch composition: Ideal/Rotational pools, failure tracker |
-| `server/services/adaptive-ratio-manager.ts` | 298 | ACTIVE | Dynamic pool ratio based on performance telemetry |
 | `server/services/active-filter-pool.ts` | 413 | ACTIVE | In-memory 5-min TTL holding pool |
-| `server/services/telemetry-aggregator.ts` | 200+ | ACTIVE | Per-pair/per-pool performance tracking, VTS-only writes |
+| `server/services/telemetry-aggregator.ts` | 200+ | ACTIVE | Per-pair tracking, VTS-only writes. ★ B-ARM-REMOVAL: the pool-AGGREGATE limb (`poolAggregates`/`updatePoolAggregate`/`getPoolPerformanceComparison`/`resetPoolAggregates`) DELETED; per-pair `entry.pool` tagging survives. |
 | `server/services/fx5-24h-window.ts` | 343 | ACTIVE | 24h rolling scan metrics (active cycles only) |
 | `server/services/market-volume-cache.ts` | 241 | ACTIVE | 5-min volume fallback cache |
 | `server/services/stage3-state-cache.ts` | 151 | ACTIVE | In-memory scan cycle snapshot |
@@ -3221,16 +3190,13 @@ Additionally imported by:
 - **Problem**: File name suggests scanning pool configuration (Ideal/Rotational ratio, batch size). Actual content is ACT (Adaptive Concurrency Tuner) — controls concurrent signal processing slots (3-10), completely unrelated to scanning. A developer looking for scanning pool config will find the wrong file.
 - **Fix**: Rename to `act-concurrency-config.ts` or `signal-processing-pool-config.ts`. The actual scanning pool configuration is in `SCANNER_PARAMS` within `adaptive-scan-manager.ts`.
 
-### RISK-023: Adaptive Scanning Pipeline Depends on VTS Telemetry Integrity
-- **Severity**: MEDIUM
-- **Location**: `adaptive-ratio-manager.ts` → `telemetry-aggregator.ts` → VTS
-- **Problem**: The entire adaptive scanning feedback loop depends on VTS telemetry health. If VTS is paused, misconfigured, or data-lagged:
-  - Ideal pool quality degrades (no fresh performance data to rank pairs)
-  - Ratio manager biases toward `defaultRatio` (0.7) due to low confidence
-  - Batch composition becomes stale — system effectively runs on fixed 70/30 split
-- **Impact**: Adaptive scanning degrades gracefully (falls back to defaults), but the adaptive benefit is silently lost. There is no health check or alert when VTS telemetry stops flowing.
-- **Fix**: Add telemetry freshness check — if `getPoolPerformanceComparison()` returns data older than X cycles, emit a warning. Consider adding VTS telemetry health to the system health endpoint.
-- **Timing**: Pre-MCE or during MCE
+### RISK-023: Adaptive Scanning Pipeline Depends on VTS Telemetry Integrity — ★ SUPERSEDED 2026-07-28 (B-ARM-REMOVAL)
+- **Status**: **SUPERSEDED — the risk as written no longer exists, because the component it described is deleted.** Retained rather than removed so the reasoning stays traceable, and because **its underlying concern moved rather than vanished** (see below).
+- **What it said**: that the adaptive scanning loop depended on VTS telemetry health, and that on stale telemetry the ratio manager would bias toward `defaultRatio` and the system would "effectively run on a fixed 70/30 split", with the adaptive benefit *silently lost* and no alert.
+- ★ **What measurement later showed — the risk had ALREADY MATERIALISED, permanently, and in a stronger form than written.** The ratio never reached allocation at all: `actualIdealCount = min(target, available)` and `Available` never exceeded **16** against a target of **151** in any observable history, so composition ran ~**4%/78%** with `UNDERFLOW PROTECTION` on every cycle. The system was not "degrading gracefully toward 70/30" — it was never achieving any configured split, adaptive or fixed. **The prediction "the adaptive benefit is silently lost" was correct; the mechanism was not the one predicted, and nobody noticed for the component's entire life.**
+- **Its proposed fix is now moot** (`getPoolPerformanceComparison()` is deleted) but **its instinct was right and is recorded elsewhere**: there was no alert when the feedback loop stopped meaning anything.
+- ⚠️ **THE SURVIVING CONCERN, re-homed:** pool MEMBERSHIP still depends on telemetry and is still outcome-blind — **#597** (ideal pool chronically empty; `getCompositeScore` ranks on four pre-trade estimates off a single observation). **Deleting the ratio manager did not fix that; it removed a consumer, not the cause.**
+- **Lesson worth keeping:** a documented MEDIUM risk sat here for months describing a graceful degradation that had in fact already become total. **A risk register entry is a hypothesis until someone measures it.**
 
 ### RISK-024: Cost Cache Synchronization Coupling
 - **Severity**: LOW-MEDIUM
