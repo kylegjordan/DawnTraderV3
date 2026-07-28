@@ -61,7 +61,12 @@ Keep a log line as the **convenience** half only, and emit on **stderr (`console
 
 ⚠ **PRECONDITION, STATED NOT ASSUMED (Langston):** `amr-weather-report.ts:576` **`continue`s a `disabled` class BEFORE any ledger write.** ⇒ the ledger route only records for a class that is shadow-or-active. **Crypto is — the 134,595 rows prove it.** If a class is ever disabled, its drops go unrecorded by this mechanism, and that is a known limit rather than a silent one.
 
-Rate-limit or aggregate the log half so a high-frequency drop cannot flood it — **a fix that makes the log unreadable gets reverted and teaches nothing.**
+⛔ **AND A RATIONALE OF MINE THAT WAS BACKWARDS (Langston) — recorded because the ledger route above supersedes the CONCLUSION but not the LESSON.** I wrote *"the counter is the durable half, the log merely convenient."* **False as stated.** `trackers` is a module-level in-memory `Map` with **no rehydrate path** — my own characterization doc says so at `:47` — so **a counter hung off `ClassTrackers` is zeroed on every deploy and restart, exactly like `evGap`.** The real durability ordering is: `console.log` → `out.log` (rotates 6-8×/day at 1G, **~2 days**); `console.warn` → `error.log` (daily rotation, `retain=14`, **~14 days**). ⇒ **the LOG is the more durable of those two, and only on stderr.** *(The ledger beats both at 90 days, which is why amendment 1 wins — but I had the counter-vs-log ordering inverted, and would have argued it confidently.)*
+
+★ **THREE BINDING CONSTRAINTS ON THE LOG HALF (Langston):**
+1. ★ **THE COUNTER INCREMENTS UNCONDITIONALLY — ONLY THE LOG *LINE* IS RATE-LIMITED.** *The standard trap is suppressing BOTH, which reintroduces the silent drop under exactly the load where it matters most.*
+2. **The suppressed count must appear in the periodic summary** — a rate-limiter that hides its own suppressions is the same defect one layer up.
+3. **Any in-memory read must be ANCHORED TO PROCESS START — state uptime alongside the number.** Otherwise a mid-window deploy silently resets the interval and **a small number reads as a small effect.** *(The ledger route gets this free via `cycleTs`; this constraint binds any counter read that does not go through it.)*
 
 ★★ **AMENDMENT 3 (Langston — the real gap; it would have cost a second batch): OBJ-1 AS ORIGINALLY SCOPED CANNOT SAY *WHICH SOURCE* PRODUCED THE NON-FINITE `predictedNetEv`.**
 `vts-service.ts:1119` is `tradeData.expectedEdge ?? expectedEdge`, where the local (`:928`) is `tpDistance - frictionCost`. **Two different bugs with different fixes collapse into one counter:**
@@ -78,6 +83,8 @@ Rate-limit or aggregate the log half so a high-frequency drop cannot flood it �
 ⇒ ★ **This makes the three-way split MORE valuable, not less: a non-zero `realizedNetPnl` count would not be a diagnostic nicety — it would be PROOF of a second caller or a changed upstream guard.** The earlier draft presented the three buckets as equally live, which understated what one of them would mean.
 *(This is a structural fact derived from an outer guard, **not a predicted outcome** — it says nothing about the disputed magnitude, so it does not violate §4 or #606.)*
 ⇒ **precondition 3 of the table above is dead on today's path; it is retained as a TRIPWIRE, and the scope says so.**
+⚠⚠ **AND THE COROLLARY THAT MUST BE WRITTEN DOWN OR SOMEONE WILL LATER QUOTE IT (Langston): A ZERO IN BUCKET 3 IS NOT EVIDENCE OF ANYTHING.** It is a gauge with a **permanently-pinned needle** on today's call path. **Only a NON-zero reading carries information.**
+★ **USEFUL CONSEQUENCE, and it makes the batch STRONGER not weaker: the counter therefore collapses to preconditions 1+2 — i.e. it is a NEAR-BINARY TEST OF `expectedEdge`.** That is a sharper instrument than the three-way split it replaces.
 
 **OBJ-2 — no behaviour change.** The `return` stays. No observation is admitted that is not admitted today. **This batch must be provably inert to trading behaviour** — that is a verification criterion, not an aspiration.
 
