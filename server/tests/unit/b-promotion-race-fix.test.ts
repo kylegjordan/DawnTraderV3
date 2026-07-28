@@ -39,6 +39,13 @@ describe('[B-PROMOTION-RACE-FIX] (0) source fence — the real files keep their 
     expect(ENGINE_SRC).toMatch(/if\s*\(this\.promotionRerunRequested\s*&&\s*this\.isRunning\)/);
   });
 
+  it('the latch fields are cleared on stop() and on session reset (no lifecycle residue)', () => {
+    // Langston N1: the isRunning guard declines the re-run, but a leftover rerunRequested=true
+    // would survive stop→start and fire one spurious pass. Both lifecycle paths must clear BOTH.
+    const clears = ENGINE_SRC.match(/this\.promotionInProgress\s*=\s*false;\s*\n\s*this\.promotionRerunRequested\s*=\s*false;/g) ?? [];
+    expect(clears.length).toBeGreaterThanOrEqual(2); // stop() + reset
+  });
+
   it('the open path compensates on the dedup-return (created=false → delete its own record)', () => {
     expect(ENGINE_SRC).toMatch(/created:\s*_posCreated/);
     expect(ENGINE_SRC).toMatch(/if\s*\(!_posCreated\)\s*\{[\s\S]{0,900}?storage\.deleteClosedTrade\(/);

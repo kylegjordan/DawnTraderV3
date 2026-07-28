@@ -661,7 +661,15 @@ export class ActiveExecutionEngine {
     });
     
     this.isRunning = false;
-    
+
+    // B-PROMOTION-RACE-FIX (#508, Langston N1): clear the single-flight latch fields on stop.
+    // The isRunning guard already DECLINES a re-run on a stopped engine, but leaving
+    // promotionRerunRequested=true lets the flag survive stop→start and fire one spurious
+    // coalesced pass after the first promotion on the restarted engine. Harmless (idempotent,
+    // every gate re-checked) but exactly the lifecycle residue §11 says not to leave.
+    this.promotionInProgress = false;
+    this.promotionRerunRequested = false;
+
     if (this.monitoringInterval) {
       clearInterval(this.monitoringInterval);
       this.monitoringInterval = null;
@@ -838,7 +846,11 @@ export class ActiveExecutionEngine {
     // Clear running state
     this.isRunning = false;
     this.isCycleRunning = false;
-    
+    // B-PROMOTION-RACE-FIX (#508, Langston N1): the promotion latch is running state too — clear
+    // it here as well as in stop(), so a session reset cannot carry re-run residue forward.
+    this.promotionInProgress = false;
+    this.promotionRerunRequested = false;
+
     // Clear monitoring interval
     if (this.monitoringInterval) {
       clearInterval(this.monitoringInterval);
