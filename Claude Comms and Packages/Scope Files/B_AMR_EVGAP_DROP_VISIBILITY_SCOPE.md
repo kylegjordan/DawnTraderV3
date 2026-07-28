@@ -49,11 +49,40 @@ It **logs nothing, counts nothing, and mutates nothing.** An observation that di
 ★★ **CONSEQUENCE FOR PLACEMENT — this changes the design, not just the payload.** At `:156`, preconditions **1 and 2 are indistinguishable**: both present as "`predictedNetEv` non-finite," because the `??` has already collapsed them into one value. **Telling 1 from 2 requires recording whether `tradeData.expectedEdge` was present/finite at the CALL SITE (`vts-service.ts:1119`), before the `??` resolves.**
 ⇒ **Instrumentation goes in TWO places: the `:156` guard (which argument failed + `assetClass`) AND the `:1119` call site (was `tradeData.expectedEdge` absent / NaN / finite).** A `:156`-only counter answers the smaller question and would send us back for the rest.
 
-Rate-limit or aggregate so a high-frequency drop cannot flood the log — **a fix that makes the log unreadable gets reverted and teaches nothing.**
+★★ **AMENDMENT 1 (Langston, ruled against the file rather than the tradeoff): THE DURABLE HALF GOES IN THE LEDGER — NOT A COUNTER, NOT A LOG.**
+I had asked counter-only vs counter+log. **Both were wrong.** `amr_decision_ledger` already writes **every cycle per class** (134,595 crypto cycles / 47 days) with a **90-day** in-service prune, and **this exact pattern lives 370 lines below the line being changed**: `recordWouldBlock` / `drainWouldBlocks` (`amr-weather-report.ts:525-543`), whose own comment says it *"avoids a second write path."*
+
+**Design:** accumulate per-class drop counts in an in-memory relay; **drain onto the next row's `weather` json.** That buys three things a bare counter cannot:
+1. **90-day durability** instead of out.log's ~2 days;
+2. ★ **a known interval for free** — every row carries `cycleTs`, so it reads as a **RATE, not a bare count.** *(A bare in-memory counter is zeroed by every deploy, and we would be quoting "since last restart" without knowing it — exactly the mistake the 8,334 figure already made once tonight.)*
+3. **zero flood risk by construction.**
+
+Keep a log line as the **convenience** half only, and emit on **stderr (`console.warn`)** — matching `:517`/`:573`/`:585` and `vts-service.ts:1123` — **never `console.log`** (out.log is ~2-day retention; a `console.log` signal evaporates before anyone asks).
+
+⚠ **PRECONDITION, STATED NOT ASSUMED (Langston):** `amr-weather-report.ts:576` **`continue`s a `disabled` class BEFORE any ledger write.** ⇒ the ledger route only records for a class that is shadow-or-active. **Crypto is — the 134,595 rows prove it.** If a class is ever disabled, its drops go unrecorded by this mechanism, and that is a known limit rather than a silent one.
+
+Rate-limit or aggregate the log half so a high-frequency drop cannot flood it — **a fix that makes the log unreadable gets reverted and teaches nothing.**
+
+★★ **AMENDMENT 3 (Langston — the real gap; it would have cost a second batch): OBJ-1 AS ORIGINALLY SCOPED CANNOT SAY *WHICH SOURCE* PRODUCED THE NON-FINITE `predictedNetEv`.**
+`vts-service.ts:1119` is `tradeData.expectedEdge ?? expectedEdge`, where the local (`:928`) is `tpDistance - frictionCost`. **Two different bugs with different fixes collapse into one counter:**
+
+| source | signature | fix lives in |
+|---|---|---|
+| **carried-in value present-but-non-finite** | the H1 / 07-14 re-source signature | the `taker.netEV` producer |
+| **nullish → fell through to a local compute that went NaN** | bad `takeProfit` / `frictionCost`, or `entryPrice === 0` | the VTS cost path (**#607**) |
+
+★ **`:156` only ever sees the PRODUCT — it is structurally incapable of separating them.** My own argument for splitting the operands applies **harder one level up the call**. ⇒ **tag it at the call site (`:1119`); it is a boolean.** Without it, OBJ-1 lands, reports *"N drops on `predictedNetEv`"*, and **the very next question needs another batch and another soak.**
+
+★ **OBJ-1b — AMENDMENT 2 (Langston): `realizedNetPnl` IS UNREACHABLE ON TODAY'S ONLY CALLER PATH — KEEP THE LEG, AND *STATE* THAT.**
+`vts-service.ts:1094` already guarantees `Number.isFinite(tradeData.pnl)`, and `:1105` is `pnl * 100`. ⇒ **on the sole caller repo-wide, that leg of the `:156` guard CANNOT fire.**
+⇒ ★ **This makes the three-way split MORE valuable, not less: a non-zero `realizedNetPnl` count would not be a diagnostic nicety — it would be PROOF of a second caller or a changed upstream guard.** The earlier draft presented the three buckets as equally live, which understated what one of them would mean.
+*(This is a structural fact derived from an outer guard, **not a predicted outcome** — it says nothing about the disputed magnitude, so it does not violate §4 or #606.)*
+⇒ **precondition 3 of the table above is dead on today's path; it is retained as a TRIPWIRE, and the scope says so.**
 
 **OBJ-2 — no behaviour change.** The `return` stays. No observation is admitted that is not admitted today. **This batch must be provably inert to trading behaviour** — that is a verification criterion, not an aspiration.
 
-**OBJ-3 — state the taxonomy for the drop itself.** A silent discard on a learning input is a defect **regardless** of how many observations it is losing. Record it as bucket 1 on the *visibility* axis, independent of whatever (a)'s magnitude turns out to be.
+**OBJ-3 — state the taxonomy for THE SILENCE, and for nothing else.** A silent discard on a learning input is a defect **regardless** of how many observations it is losing. Record **bucket 1 on the *visibility* axis**, independent of whatever the magnitude turns out to be.
+⚠ **EXPLICITLY (Langston): bucket 1 is assigned to THE SILENCE — NOT to the non-finite `predictedNetEv` itself.** The latter is precisely what OBJ-1 exists to bucket, and it may well turn out to be **#607**'s NaN `frictionCost` or correct-behaviour-reported-honestly. **A later reader will conflate the two unless this says otherwise.**
 
 ## 3. Explicitly OUT of scope
 
@@ -70,4 +99,4 @@ Rate-limit or aggregate so a high-frequency drop cannot flood the log — **a fi
 
 ## 5. Governance
 
-Tier 1 per §3. SIM: the AMR component gains an observability surface — judge at close. System Manual: **not applicable** (no architecture, math, or pipeline change). #604 updated with the measured magnitude when it lands; **#606** carries the method note.
+Tier 1 per §3. ★ **SIM: WRITTEN, not judged at close (Langston) — adopting the ledger route makes this non-discretionary: a new observability field on the ledger's `weather` json IS a SIM-scope change.** The earlier "judge at close" wording stopped being a judgement the moment amendment 1 was accepted. System Manual: **not applicable** (no architecture, math, or pipeline change). #604 updated with the measured magnitude when it lands; **#606** carries the method note.
