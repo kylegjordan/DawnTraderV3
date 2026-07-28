@@ -38,6 +38,13 @@ const baseOpenRow: PaperActiveTradeRow = {
   entrySlippage: 0.5,
   estExitFee: 2.0,
   estExitSlippage: 0.69105,
+  // ⚠️ B-COST-ACCOUNTING-HONESTY (2026-07-28), CC-A peer-check refinement 2: this literal is a
+  // FLOATING-POINT ROUNDING PROBE (see the 4dp assertion below), NOT a semantically-current cost.
+  // Since that batch the SERVER's estTotalCost is EXPLICIT FEES ONLY (entryFee + estExitFee = 3.0
+  // for this fixture); it no longer includes slippage. The adapter is a pure pass-through, so the
+  // value here only exercises rounding and is deliberately left as-is — do NOT "correct" it to 3.0
+  // or the rounding-edge case it exists to test is lost. Flagged because a fixture pinned to a
+  // literal is exactly the thing that keeps passing while the meaning underneath it changes.
   estTotalCost: 4.19105,
   takeProfit: 105,
   stopLoss: 98,

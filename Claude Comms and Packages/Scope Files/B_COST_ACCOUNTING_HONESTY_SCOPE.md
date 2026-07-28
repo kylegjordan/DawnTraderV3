@@ -32,7 +32,7 @@ net = (E_req−B_int)q − fees − (B_act−B_int)q − (E_req−E_act)q
 - **Sign convention: NO standard exists** — three mutually contradictory conventions in live use (two crypto TCA vendors directly contradict each other). ⇒ **our convention must be stated explicitly at the point of use.**
 
 ## 3.5 ★ CENSUS FINDING — THE FORMULA LIVES AT **THREE** SITES, NOT ONE (§9.5(a); corrects this scope's own first draft)
-The repo-wide census found the same gross/total-cost/net arithmetic **duplicated at three sites**, each explicitly documented in-code as a deliberate mirror of the engine (*"same formula as active-execution-engine.ts line 787"*, *"same as engine line 766-768"*):
+The repo-wide census found the same gross/total-cost/net arithmetic **duplicated at three sites**, each explicitly documented in-code as a deliberate mirror of the engine. **Citations pinned at sha `b3b44408b`** (CC-A peer-check refinement 1 — quote at a sha, never a bare line number; pointers rot): the surviving mirror comments are `routes.ts:12640` *"same formula as active-execution-engine.ts line 772-780"* and `routes.ts:12651` *"same as engine line 766-768"*. ⚠️ **Two further mirror comments citing engine lines 787 and 791 existed pre-change and were DELETED by this batch's own edit** — which is itself a live demonstration of the rot: the anchors they cited had already moved, and my first draft quoted "787" from a comment that no longer exists at head. **None of those line numbers point at the cost math today.**
 
 | # | Site | Path | Note |
 |---|---|---|---|
