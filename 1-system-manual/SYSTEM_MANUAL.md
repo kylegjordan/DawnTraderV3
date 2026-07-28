@@ -5324,6 +5324,25 @@ RTB promotion is triggered by three mechanisms:
 2. **TRADE_CLOSED event** — when capacity is freed by a closing trade
 3. **Continuous promotion loop** (Directive 8.8.8) — 30-second timer checks
 
+**★ CLOSED-TRADE COST ACCOUNTING — GROSS ON ACTUAL FILLS, EXPLICIT COSTS ONLY (B-COST-ACCOUNTING-HONESTY, Kyle-directed 2026-07-28).** The realized P&L of a closed trade is:
+
+```
+grossPnl  = (actualExitPrice − actualEntryPrice) × quantity     ← prices we ACTUALLY traded at
+totalCost = entryFee + exitFee                                   ← EXPLICIT costs only
+netPnl    = grossPnl − totalCost
+netPnlPct = netPnl / (actualEntryPrice × quantity) × 100         ← capital ACTUALLY deployed
+```
+
+**Slippage is RETAINED on the row as signed execution-quality telemetry (positive = cost) but is NOT deducted** — it is already inside the actual fill prices, so subtracting it again would double-count. This follows the standard explicit/implicit split (Harris, *Trading and Exchanges* Ch.21: explicit costs are accounting entries; implicit costs — spread, impact, slippage — are estimates against a benchmark, not bookable) and the reference backtest implementation (Zipline bakes slippage into the fill price and models commissions separately, never both). **The sign convention is stated explicitly in-code because NO industry standard exists** — Talos, Anboto and retail-FX conventions mutually contradict.
+
+**The PRIOR model and why it changed.** Gross was measured against the INTENDED prices and the cost line deducted slippage: `gross=(E_req−B_int)q`, `cost=fees+(B_act−B_int)q+(E_req−E_act)q`. That is **arithmetically correct** — it telescopes exactly to `(E_act−B_act)q − fees` — and the net was verified right on 293/293 closed trades. It was replaced because it *presented* badly: a profitable trade could display a negative gross, and price improvement drove `total_cost` negative on 16% of trades. **⚠️ The two distortions cancel EXACTLY, so clamping `total_cost ≥ 0` (the intuitive fix) would BREAK a correct net** — never do that. Regulators reached the same middle ground for PRIIPs disclosure (transaction costs floored at explicit costs) while internal TCA keeps the signed measure.
+
+**★ THE SAME ARITHMETIC LIVES AT THREE SITES AND MUST STAY IN LOCKSTEP** — the engine close path, the **manual-close** path, and the **open-positions live display** (the last uses estimated exit fees and has no actual exit yet). They are self-documented mirrors; changing one alone makes an engine-closed and a hand-closed trade disagree for identical economics. Source-fenced by `server/tests/unit/b-cost-accounting-honesty.test.ts`.
+
+**⚠️ NOT TO BE CONFLATED:** `computeTotalRoundTripCost` also produces a value named `totalCost` and **does** include slippage — that is an **ex-ante friction ESTIMATE feeding the EV gate**, not realized accounting of a completed trade. Both are correct; they answer different questions.
+
+**Basis change (§9.2):** `net_pnl_percent` / `pnl_percent` divide by ACTUAL entry value from 2026-07-28 ~11:57Z. Rows are not backfilled — **an aggregate spanning that timestamp mixes two denominators.**
+
 **★ CONCURRENCY MODEL — the three triggers are SERIALIZED (B-PROMOTION-RACE-FIX, `#508`, 2026-07-28).** Those three triggers were **unlocked** until this batch: two firing near-simultaneously ran two concurrent `checkRtbPromotion` passes over the SAME pre-loop queue snapshot and promoted+opened the **same signal twice**. Promotion is now **single-flight**: a pass in flight sets `promotionInProgress`; a trigger arriving mid-pass sets `promotionRerunRequested` and returns, and the running pass performs **at most ONE trailing re-run** in its `finally` (so a slot freed mid-pass by TRADE_CLOSED is still acted on immediately, rather than waiting for the next 30s tick). Two invariants are load-bearing and must not be removed:
 - **The latch is released in a `finally` covering EVERY early return** (TCL-warmup, guardrail-read-fail, at-capacity) — otherwise promotion wedges permanently.
 - **The trailing re-run is `isRunning`-guarded.** It is the only trigger without inherent stop-safety (the interval self-guards; both event handlers are unbound in `stop()`). Un-guarded, a trigger arriving mid-pass while `stop()` lands fires a pass on a **stopped** engine that pulls ranked signals, **removes them from the RTB queue** (Directive A3.R1, Step 1), then fails at `processSignal` — and a failed promotion does **not** restore the signal (§19.3). A coordinated deploy restart is exactly that interleaving.
