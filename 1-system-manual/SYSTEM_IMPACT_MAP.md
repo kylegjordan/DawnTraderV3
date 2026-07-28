@@ -7,6 +7,10 @@
 > **Last Updated**: 2026-06-15 (P19-B4b D1 — **reorganized for navigability**: added a Table of Contents + the "Cross-Cutting Runtime State, Singletons & Liveness Registry" near the top, and moved ALL per-batch history into the "Change History & Per-Batch Additions" archive at the bottom so the stable reference is read top-to-bottom without wading through changelog. No content was removed in the reorg — every prior section is preserved (history sections are at the bottom). The archive holds the per-batch trail current through the B79.0n REQUIRED-assetClass umbrella, B.4 15-minute foundation, and the B70.2 / B-NEW-53 decision-provenance work.)
 > **Purpose**: Component dependency reference for directive authoring. Before writing any directive, consult this map to identify all upstream, downstream, and shared-state impacts of the proposed change.
 > **Usage**: Claude Code looks up every affected component BEFORE writing a directive. The directive's Impact Analysis section must reference this map.
+> **★ CANONICAL COMPANIONS ADDED 2026-07-28 (Kyle directive) — measured at 0 references from this map before today, so a reader doing a pre-audit here could not find them:**
+> - **`STORAGE_POLICY.md`** — **consult it in the pre-audit whenever a change ADDS a table, a writer, or a capture cadence.** This map answers *who reads and writes a component*; that file answers *how long what it writes is KEPT, and where it goes next*. ⚠️ **A retention key alone does NOT tier a table — sweep registration is a SECOND act**, so treat coverage as something to verify, not assume.
+> - **`BUILD_METHOD_PLAYBOOK.md`** — the portable, role-based description of how we build (descriptive; `CLAUDE.md` binds this project).
+> - **`ACTIVE_PATH_FLOW.md`** — the end-to-end active-trading-path walk. ⚠️ **IN CONSTRUCTION, owner CC-C — not settled architecture.** ★ **Its freshness gate forces the doc to be RE-VISITED when the code moves; it does NOT certify the doc CORRECT** (*attention, not truth* — Langston). Do not substitute it for a component lookup here.
 
 ---
 
