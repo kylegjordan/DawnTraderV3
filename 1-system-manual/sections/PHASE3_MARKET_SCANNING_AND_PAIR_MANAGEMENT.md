@@ -392,7 +392,7 @@ interface AdaptiveScanBatch {
 
 ## 6. Adaptive Ratio Manager
 
-**File**: `server/services/adaptive-ratio-manager.ts` (298 lines)
+**File**: ~~`server/services/adaptive-ratio-manager.ts`~~ — ★ **DELETED 2026-07-28 (B-ARM-REMOVAL, `e3a22c15a`).** The dynamic split is gone; the scanner uses the fixed config SSOT `SCANNER_PARAMS.DUAL_POOL.IDEAL_RATIO`. The pools themselves survive. See `SYSTEM_MANUAL.md` §6 and `DELETED_COMPONENTS_LOG.md`.
 **Directive**: 11.2 R1
 **Status**: ACTIVE
 
@@ -863,7 +863,6 @@ Additionally imported by:
 | `server/services/fx5-scanner.ts` | 887 | ACTIVE (LOCKED) | 30-second scanner, post-processing, pool gate |
 | `server/services/market-scanner.ts` | 1,364 | MIXED | `collectAdaptiveBatch()` = ACTIVE; `MarketScanner` class = LEGACY |
 | `server/services/adaptive-scan-manager.ts` | 405 | ACTIVE | Batch composition: Ideal/Rotational pools, failure tracker |
-| `server/services/adaptive-ratio-manager.ts` | 298 | ACTIVE | Dynamic pool ratio based on performance telemetry |
 | `server/services/active-filter-pool.ts` | 413 | ACTIVE | In-memory 5-min TTL holding pool |
 | `server/services/telemetry-aggregator.ts` | 200+ | ACTIVE | Per-pair/per-pool performance tracking, VTS-only writes |
 | `server/services/fx5-24h-window.ts` | 343 | ACTIVE | 24h rolling scan metrics (active cycles only) |
@@ -916,7 +915,8 @@ Additionally imported by:
 
 ### RISK-023: Adaptive Scanning Pipeline Depends on VTS Telemetry Integrity
 - **Severity**: MEDIUM
-- **Location**: `adaptive-ratio-manager.ts` → `telemetry-aggregator.ts` → VTS
+- **Status**: ★ **SUPERSEDED 2026-07-28 (B-ARM-REMOVAL)** — the component is deleted, and measurement showed this risk had ALREADY MATERIALISED permanently by a different mechanism than predicted (the ratio never reached allocation at all). Full record: `SYSTEM_MANUAL.md` RISK-023. The surviving concern — outcome-blind pool membership — is re-homed to **#597**.
+- **Location**: ~~`adaptive-ratio-manager.ts`~~ → `telemetry-aggregator.ts` → VTS
 - **Problem**: The entire adaptive scanning feedback loop depends on VTS telemetry health. If VTS is paused, misconfigured, or data-lagged:
   - Ideal pool quality degrades (no fresh performance data to rank pairs)
   - Ratio manager biases toward `defaultRatio` (0.7) due to low confidence

@@ -421,16 +421,20 @@ Kill-switch is **DB-backed per-mode**: `isKillSwitchTripped(mode)` (`guardrail-p
 - **Execution**: Synchronous — per-pair during scan
 - **Blast Radius**: **MEDIUM** — affects pair eligibility
 
-### 3.5 Adaptive Ratio Manager
-- **File**: `server/services/adaptive-ratio-manager.ts` (~298 lines)
-- **What**: Dual-pool scheduling — ideal pool (top VTS performers) vs rotational pool (exploration). Typically 60/40 split.
+### 3.5 Adaptive Ratio Manager — ★ REMOVED 2026-07-28 (B-ARM-REMOVAL, commit `e3a22c15a`)
+- **File**: ~~`server/services/adaptive-ratio-manager.ts`~~ **DELETED** (archived as a 100%-similarity rename at `_archive/deleted-code/b-arm-removal-adaptive-ratio-manager.ts.removed`). Rationale: `DELETED_COMPONENTS_LOG.md`; architecture record: `SYSTEM_MANUAL.md` §6.
+- **What it did**: dynamically split scan attention between the ideal pool (top VTS performers) and the rotational pool (exploration).
+- ★ **Why removed**: the ratio never reached allocation — `actualIdealCount = min(ceil(batchSize × ratio), availableIdealCount)`, and `Available` never exceeded **16** against a target of **151** across all observable history, so the clamp bound every cycle and a dynamic ratio produced the same allocation as a fixed one. **Behaviour-neutral by measurement.** Its SQL evidence table holds zero rows (live-mode-gated writer) and its confidence damper saturates at 100 samples.
+- **REPLACED BY**: the fixed config SSOT `SCANNER_PARAMS.DUAL_POOL.IDEAL_RATIO`/`ROTATIONAL_RATIO` (`system-guards.ts:160-163`), which the scan manager already used on its non-adaptive path.
+- ⚠️ **NOTE — this entry said "typically 60/40" while the component's own internal default was 0.7** (`DEFAULT_CONFIG.defaultRatio`). The SIM was describing the config SSOT; the component was not using it. That divergence is part of why the landing value is **0.60 (the SSOT)** and not the deleted file's private constant.
+- **SURVIVES**: the pools themselves, `PoolType`, `entry.pool`, `getTopPairs`/`getTopPairsWithPool`. **Membership remains outcome-blind — open defect #597.**
 - **Upstream**: Telemetry Aggregator (VTS performance data)
 - **Downstream**: Active Filter Pool (pool composition)
 - **Execution**: Runs during FX5 scan cycles
 - **Blast Radius**: **MEDIUM** — affects pair selection bias
 
 ### 3.6 Pair Failure Tracker
-- **File**: `server/services/adaptive-ratio-manager.ts`
+- **File**: `server/services/adaptive-scan-manager.ts` (class at `:50`) — ★ **CORRECTED 2026-07-28.** This entry previously cited `adaptive-ratio-manager.ts`, which **never contained this class**. A pre-existing mis-attribution, surfaced only because B-ARM-REMOVAL deleted the wrongly-cited file and the reference would otherwise have dangled. **`PairFailureTracker` is UNAFFECTED by that removal.**
 - **What**: Cooldown blacklist for pairs that failed filters. Normal and extended cooldowns.
 - **Upstream**: FX5 filter failure events
 - **Downstream**: FX5 scan cycle (excluded pairs)
@@ -2199,7 +2203,7 @@ Tiered hot/warm/cold storage architecture per Kyle directive 2026-05-06: "we don
 **Shared state:** `_windowCache: Map<AssetClass, CachedWindow>` (60s TTL).
 **Blast radius:** **LOW** (pure async function with cache).
 
-### `server/services/adaptive-ratio-manager.ts` (MODIFIED, B79.0a)
+### ~~`server/services/adaptive-ratio-manager.ts`~~ — ★ DELETED 2026-07-28 (B-ARM-REMOVAL, `e3a22c15a`); was MODIFIED at B79.0a
 
 **Layer:** 4 (Adaptive)
 **Change:** Constructor extended to `(config?: Partial<RatioConfig>, telemetry?: TelemetryAggregatorService)` — back-compat (default-arg `telemetry=undefined` preserves crypto path). `computeAdaptiveRatio` line 93 prefers `this.telemetry ?? getTelemetryAggregator()`.
