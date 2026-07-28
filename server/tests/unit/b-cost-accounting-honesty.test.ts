@@ -122,7 +122,42 @@ describe('[B-COST-ACCOUNTING-HONESTY] source fence — all three sites stay in l
 
   it('site 2 (manual close): gross on actual fills, cost = fees only', () => {
     expect(ROUTES_SRC).toMatch(/const grossPnl = \(actualExitPrice - entryPrice\) \* quantity/);
+    // Positive assertion — Langston Step-4 edit 2: sites 1 and 3 asserted the cost line both ways,
+    // site 2 only had the negative guard, so a silent drift here would not have been caught.
+    expect(ROUTES_SRC).toMatch(/const totalCost = entryFee \+ exitFee;/);
     expect(ROUTES_SRC).not.toMatch(/const totalCost = entryFee \+ exitFee \+ entrySlippage \+ exitSlippage/);
+  });
+
+  it('site 2 persists the benchmark fields (slippage telemetry must be auditable, not hollow)', () => {
+    // Langston Step-4: the manual-close payload wrote the DERIVED slippage but none of the five
+    // benchmarks the engine writes — signed numbers with nothing to audit them against, and any
+    // actual-fill verification would silently exclude these rows.
+    for (const key of ['intendedEntryPrice:', 'actualEntryPrice:', 'targetExitPrice:', 'actualExitPrice:', 'netPnlPercent:']) {
+      expect(ROUTES_SRC).toContain(key);
+    }
+  });
+
+  it('★ no cost line anywhere adds slippage back under ANY spelling', () => {
+    // Langston Step-4 edit 3: the exact-form negative guards above would sail past a re-introduction
+    // spelled differently (e.g. `entryFee + exitFee + totalSlippage`). This is the shape-independent
+    // guard: no assignment to a *Cost identifier may mention a slippage term on its right-hand side.
+    const costAssignments = [
+      ...ENGINE_SRC.matchAll(/const\s+\w*[Cc]ost\w*\s*=\s*([^;]+);/g),
+      ...ROUTES_SRC.matchAll(/const\s+\w*[Cc]ost\w*\s*=\s*([^;]+);/g),
+    ].map((m) => m[1]);
+    // ★ EXPLICIT CARVE-OUT — `computeTotalRoundTripCost` (routes.ts ~8812) legitimately includes
+    // slippage: it is an EX-ANTE FRICTION ESTIMATE feeding the EV gate — a forward-looking
+    // "what will this round trip cost me?" — NOT realized cost accounting of a completed trade.
+    // Harris-consistent, and Langston named it at Step-4 as a name collision one file away from
+    // the line this batch changed. It is excluded BY NAME, not by assumption: an earlier draft of
+    // this test asserted it "is a function call, not a `const …Cost =` assignment, so it is not
+    // matched" — that reasoning was WRONG (it is exactly such an assignment) and this guard caught
+    // it. Anything else that mentions slippage in a *Cost assignment is a genuine regression.
+    const EX_ANTE_ESTIMATE = /computeTotalRoundTripCost\s*\(/;
+    const offenders = costAssignments
+      .filter((rhs) => /slippage/i.test(rhs))
+      .filter((rhs) => !EX_ANTE_ESTIMATE.test(rhs));
+    expect(offenders).toEqual([]);
   });
 
   it('site 3 (open-positions display): gross on actual entry, estimated cost = fees only', () => {

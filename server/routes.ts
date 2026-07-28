@@ -12145,7 +12145,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         const intendedEntryPrice = pos.intendedEntryPrice 
           ? parseFloat(pos.intendedEntryPrice.toString()) 
           : entryPrice; // Fallback for old positions
-        const intendedEntryValue = intendedEntryPrice * quantity;
+        // B-COST-ACCOUNTING-HONESTY (§15): `intendedEntryValue` deleted — the % denominator is now
+        // actualEntryValue. `intendedEntryPrice` is RETAINED: still shipped in the display payload
+        // below and still the benchmark the slippage telemetry is measured against.
         const currentValue = currentPrice * quantity;
         
         // B-COST-ACCOUNTING-HONESTY (Kyle 2026-07-28) — SITE 3 of 3 (open-positions live display).
@@ -12652,7 +12654,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const intendedEntryPrice = position.intendedEntryPrice 
         ? parseFloat(position.intendedEntryPrice.toString()) 
         : entryPrice; // Fallback for old positions
-      const intendedEntryValue = intendedEntryPrice * quantity;
+      // B-COST-ACCOUNTING-HONESTY (§15): `intendedEntryValue` deleted (the % denominator is now
+      // actualEntryValue). `intendedEntryPrice` is RETAINED — it is now PERSISTED on the row below
+      // as the slippage benchmark, closing the asymmetry Langston found at Step-4.
       
       // B-COST-ACCOUNTING-HONESTY (Kyle 2026-07-28) — SITE 2 of 3 (manual close). MUST stay in
       // lockstep with the engine close path (active-execution-engine.ts) or an operator-closed
@@ -12697,6 +12701,19 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         slippage: totalSlippage.toString(),
         entrySlippage: entrySlippage.toString(),
         exitSlippage: exitSlippage.toString(),
+        // B-COST-ACCOUNTING-HONESTY (Langston Step-4): the manual-close path persisted the DERIVED
+        // slippage but NONE of the five benchmark fields the engine path writes — so the retained
+        // slippage telemetry was hollow here (signed numbers with no persisted benchmark to audit
+        // them against), and any actual-fill verification silently EXCLUDED manual-closed rows.
+        // Latent, not live: measured at this head, 0 rows are manual closes (all 71 rows lacking
+        // benchmarks are `never_filled`, which have no fill price BY CONSTRUCTION). Fixed at the
+        // find (rule 23) so the two close paths are symmetric in what they record, not just in
+        // what they compute.
+        intendedEntryPrice: intendedEntryPrice.toString(),
+        actualEntryPrice: entryPrice.toString(),
+        targetExitPrice: currentPrice.toString(),
+        actualExitPrice: actualExitPrice.toString(),
+        netPnlPercent: netPnlPercent.toString(),
         totalCost: totalCost.toString(),
         grossPnl: grossPnl.toString(),
         netPnl: netPnl.toString(),
