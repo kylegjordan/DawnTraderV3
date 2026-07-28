@@ -47,3 +47,28 @@
 
 ## 5. OUT OF SCOPE
 The `phase15b_dbs_telemetry` 4.9 G file store and the unbounded app-local file-store class (`STORAGE_POLICY.md` §9F) — same policy area, different work, and their consumer sets are unestablished.
+
+---
+
+## 6. ★★ STEP-1 CORRECTION (2026-07-28, prompted by CC-B's join-key challenge) — I NEARLY FILED A LANGSTON-REQUIRED DESIGN AS A BROKEN ARCHIVE
+
+**CC-B's challenge (accepted):** *"a join key is only worth keeping if what it joins TO still exists."* My §2 asserted the join key should be protected without checking the far side. Testing it produced a much bigger surprise than the key itself.
+
+### THE JOIN, PROVEN
+`exit_decision_archive.trade_id` (text) ↔ `vts_open_trades.id` (text). Both present. Far side is in `B70_TABLES` → hot 90 d → warm 365 d → **cold (never dropped)** ⇒ **the join target OUTLIVES anything we would archive here, so protecting the key is sound — now a claim with a verified condition, not an instinct.**
+
+### ⚠️ THE NUMBER THAT LOOKED LIKE A FIRE
+Closed `vts_open_trades` rows **39,377**; `exit_decision_archive` rows **6,770**; **matched 6,472** ⇒ only **16.4%** of closed trades have an outcome row. By week, coverage was **100% through 2026-06-22**, then **95.8 → 91.0 → 5.0 → 1.8 → 10.5%**, breaking in the **week of 2026-07-13** exactly as weekly closed volume jumped **656 → 7,136 → 22,270**. By class in July: **crypto_spot 4.2%** vs **xstock_spot 56.6%**.
+⚠️ **This directly contradicted §2's "the OUTCOME is SAFE" and I was one step from reporting the outcome archive as broken.**
+
+### ★★ THE CAUSE — READ THE CODE, AND IT IS BY DESIGN, IN LANGSTON'S OWN NAME
+`vts-runner.ts:~3574` documents the **`reorg-B4` shadow close ALLOWLIST**: the shadow path writes ONLY `rtb_shadow_pairings` + its own `vts_open_trades` backing row + TEC state, and **"NEVER calls a learning store: ✗ outcomeFeedbackStore.updateEma ✗ telemetry.recordPairTelemetry ✗ vtsService.persistRealPriceTrade ✗ archiveExitDecision ✗ updateRollingAverages ✗ closed_trades"** — *"that allowlist (not denylist) is the by-construction closed-side segregation **Langston required at Step-2**."*
+**CONFIRMED BY DATA:** `rtb_shadow_pairings` holds **29,465 rows spanning 2026-07-14 → 2026-07-28** — the same week the coverage "collapse" begins and very nearly the whole missing volume, and crypto-heavy, which is why crypto's coverage is the worse of the two.
+⇒ **NOT a defect. Rule-24 outcome 2/3: working exactly as designed.** Shadow counterfactuals are DELIBERATELY excluded from learning stores so they cannot contaminate them, and they have **their own sink**.
+
+### ★ WHAT THIS CHANGES IN THIS SCOPE — the blast radius is SMALLER than §2 stated, not larger
+- **§2's "outcome is safe" holds — but it must be qualified BY POPULATION:** it is true for **REAL** closes (100% coverage before the shadow path began; the residual sub-100% weeks are the mixed population, not decay). It was never a claim about shadow rows, and I did not say so.
+- **The ~30 k unarchived July rows are overwhelmingly SHADOW backing rows.** Deleting them at 90 days destroys a *backing row whose real record lives in `rtb_shadow_pairings`* — **materially less serious than "we delete 84% of our trade outcomes,"** which is what the raw 16.4% implies if quoted alone. ⚠️ **Do not quote the 16.4% without this paragraph.**
+- ⏭ **ONE RESIDUAL, genuinely open:** `rtb_shadow_pairings` is itself in **no** sweep registry and has **no** GC that I could find — so it grows unbounded but **loses nothing**. Flagged for the catalogue, **not** for this batch.
+
+**METHOD NOTE — why this is in the scope and not a quiet edit:** the 16.4% was real, measured, and would have been a *plausible, alarming, wrong* headline. What stopped it was reading the code before naming a cause (rule 24.a) and CC-B challenging an assumption I had asserted rather than tested. **A peer challenge to the weakest link in a scope is worth more than another measurement of its strongest.**
