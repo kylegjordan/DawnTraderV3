@@ -74,7 +74,26 @@ Langston's discriminator (§13-named, run before leg (a) could claim a magnitude
 
 **A window that refills in under six hours, on a day with 7,773 closes, that never once emits.** Restart-zeroing does not produce that pattern.
 
-⇒ **AN UNIDENTIFIED MECHANISM GOVERNS THIS INPUT. Both stated explanations are co-occurring, not sufficient.**
+⇒ **Both stated explanations are co-occurring, not sufficient.**
+
+### 2(f) ★★ RESOLVED — THE MECHANISM IS ROUTING, AND IT IS MEASURED EXACTLY
+
+Langston found an **exact** counter rather than another bound: `feedEvGapObservation` (`:1118-1120`) and `updateEma` (`:1126-1136`) sit in the **same** `if (_assetClass !== null)` inside the **same** `:1094` guard — **co-counted, not merely co-gated** — and `updateEma`'s only internal drop paths (`:329`, `:335`) both **log**. The retained window holds **zero** such lines, zero `EV-gap feed failed`, zero `outcome feedback update failed`.
+⇒ **the `[B67.4][feedback]` log-line count IS the block-entry count IS the feed-call count.**
+
+| day | crypto **calls into the block** | crypto closes |
+|---|---|---|
+| 2026-07-27 | **35** | — |
+| 2026-07-28 (→14:00Z) | **18** | 341 |
+
+⇒ ★ **~35 calls a day against thousands of closes. The loss is overwhelmingly UPSTREAM of `:1094` ⇒ candidate (c), routing, essentially by itself** — most closes complete via `persistTwinClosedRecord` / `persistNeverFilledRecord` and never reach `persistRealPriceTrade` at all.
+⇒ **Candidate (a) (`:156` NaN drop) is REAL BUT MINOR** — 07-28 shows 8 pushes against 18 calls, so ~10 fell inside the try. **It cannot explain 99.5%.**
+⇒ **Candidate (d) (`cfg`) is dead as a volume explanation** — an MCE cache, not a per-close quantity. *(Langston leaning; accessor unread.)*
+⇒ **The 07-14 boundary is NOT the cause.** `a8242a3bc` deleted **computation** sites, not feed sites, so the feed fires once per close as before — **H2 refuted at the diff, and H1 demoted to explaining at most the small `:156` residue.** The earlier alarm about that batch is withdrawn.
+
+> ⚠️ **TWO UNRESOLVED MEASUREMENT CAVEATS, kept visible rather than smoothed:**
+> 1. **stdout retention (`retain=14`, size-rotated) buys 07-27 onward only — 2026-07-23, the one airtight day, is GONE.** This enumeration must **not** be retro-applied to it.
+> 2. **07-27 disagrees in an impossible direction: 45 pushes vs 35 calls.** A push cannot exceed a call. The 45 reconstructs exactly (day opens at 46 carried; four drops **all to zero**, confirming clean restarts and no interleaved writer; then +22+1+9+13). **Most likely the retained 07-27 log starts mid-day** — the trailing-silence family, where a truncated window reads as *fewer events* rather than as missing data. Unsettled.
 
 > ⚠️ **UNVERIFIED HYPOTHESIS, labelled as one:** the `vts-service.ts:1118-1120` call sits on the `persisted===true` path and may not fire for most closes, or may not fire with the asset class assumed. **A guess, not a finding** — it gets the same code-first treatment as everything else here before it is repeated.
 
