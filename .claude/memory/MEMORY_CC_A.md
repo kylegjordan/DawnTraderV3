@@ -11,6 +11,11 @@
 2. **NAME THE POPULATION, CITE THE READ SITE** — which table/file/window does the code actually read? *(5 wrong-population errors in one arc.)*
 3. **PROVE THE INSTRUMENT** — an absence needs a control that FAILS if the search is broken; an improving number can mean the tool stopped; a rising counter is a clock, not a gauge.
 4. **MEASURE THE BLAST RADIUS BEFORE NAMING IT** — diff lost-vs-preserved. *("History destroyed" became "sizing fields" after one query.)*
+★★ **5. READ THE HISTORY BEFORE YOU CALL IT A PROBLEM (Kyle 2026-07-28, after the ml-calibration arc). NON-NEGOTIABLE, AND IT COMES *BEFORE* TELLING HIM ANYTHING.**
+When something looks like an error or a thing to fix, **go and understand what it IS first**: the CODE, the **batch records** (BATCH_CATALOG + completion reports), the **`bridge/canonical/` folder** and the docs in it, the commit that introduced it and its attached directive. **Understand what it was built to do, when, and why.**
+**Kyle's diagnosis, verbatim in substance:** *"You're just reacting to first glances and spouting off everything, and you're getting corrected by yourself, by Langston and by the other sessions. It is too much."* ★ **He identified ml-calibration as legacy from ONE fact — that it sits in no part of the active path (not SQE, TCL, TEC, RTB). I had that fact and did not draw the conclusion; he did, instantly, and only then did I go read the history that proved him right.** **A component that belongs to no part of the live pipeline is a HISTORY question, not a defect — check its provenance before it is ever described as broken.**
+**BREAKNECK PACE IS THE ROOT CAUSE, not carelessness in the individual step.** Slow down. One thing at a time, dug properly. **Fewer findings, each actually understood, beats a stream that gets retracted.**
+
 **Then: symptom + evidence only. No cause, magnitude or adjective until measured. Write it SHORT — no self-flagellation, no narrated corrections to Kyle (those go in RUNNING_ISSUES + commits). Give him: what it is, what it means, what I'm doing, what he must decide.**
 ★ **PLAIN NAMES, NOT NUMBERS, when talking to Kyle.** #591 = *the settings-adjustment routine still using the retired score* (batch **B-EVIDENCE-GATE**). #593 = *the AMR context-bonus arm*. #582/Phase-B = *the retired-score cleanup*. #599 = *trade-record retention*.
 
