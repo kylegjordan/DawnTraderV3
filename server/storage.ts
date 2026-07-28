@@ -3400,13 +3400,18 @@ export class DatabaseStorage implements IStorage {
     await db.delete(closedTradesTable);
   }
 
-  // B-PROMOTION-RACE-FIX (#508): delete a single closed_trades row by id. Used by the open-path
-  // dup-race compensation to remove the loser's orphaned record when createActiveOpenPosition
-  // returns created=false. Balance-neutral: the computed balance sums only closed_at-populated
-  // rows + live positions (routes.ts:12306-12323), and an orphan has neither. NOT a general-
-  // purpose delete — callers must own the row (a just-written record that failed to get a position).
+  // B-PROMOTION-RACE-FIX (#508): delete a single UNCLOSED closed_trades row by id. Used by the
+  // open-path dup-race compensation to remove the loser's orphaned record when
+  // createActiveOpenPosition returns created=false.
+  // ★ The `closedAt IS NULL` predicate is part of the CONTRACT, not an optimisation (Langston
+  // Step-4 should-fix 1): it makes the balance-neutrality guarantee STRUCTURAL rather than
+  // conventional — the computed paper balance sums only closed_at-populated rows + live positions
+  // (routes.ts:12306-12323), so a row this method can delete is provably in neither sum. It is
+  // behaviour-identical for the intended caller (the orphan is closed_at-NULL by construction) and
+  // makes misuse as a general-purpose trade delete IMPOSSIBLE rather than merely discouraged (§11).
   async deleteClosedTrade(mode: TradingMode, id: string): Promise<void> {
-    await db.delete(closedTradesTable).where(eq(closedTradesTable.id, id));
+    await db.delete(closedTradesTable)
+      .where(and(eq(closedTradesTable.id, id), isNull(closedTradesTable.closedAt)));
   }
 
   // Phase 27.F.13.F: Cleanup method for old closed paper sim trades

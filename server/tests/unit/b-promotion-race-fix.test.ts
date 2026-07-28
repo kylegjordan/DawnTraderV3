@@ -11,6 +11,56 @@
 // shape implemented in checkRtbPromotion (guard → try → finally release + one coalesced
 // re-run); the compensation test drives the real branch condition against a storage double.
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
+// ── (0) SOURCE FENCE — bound to the REAL files, not a mirror ──────────────────
+// Langston Step-4 should-fix 2: the behavioural tests below exercise harnesses that mirror the
+// implemented logic (the engine class needs DB + WS + timers to instantiate). A mirror stays green
+// if the real code loses its guard, so this batch — which exists to close a SILENT race — pins the
+// load-bearing shapes in the actual source. Same pattern as signal-id-format.test.ts.
+const ENGINE_SRC = readFileSync(
+  resolve(__dirname, '../../services/active-execution-engine.ts'), 'utf8');
+const STORAGE_SRC = readFileSync(resolve(__dirname, '../../storage.ts'), 'utf8');
+
+describe('[B-PROMOTION-RACE-FIX] (0) source fence — the real files keep their guards', () => {
+  it('checkRtbPromotion declares the single-flight latch and guards on it', () => {
+    expect(ENGINE_SRC).toMatch(/private\s+promotionInProgress\s*=\s*false/);
+    expect(ENGINE_SRC).toMatch(/private\s+promotionRerunRequested\s*=\s*false/);
+    // entry guard: set the re-run flag and bail while a pass is in flight
+    expect(ENGINE_SRC).toMatch(/if\s*\(this\.promotionInProgress\)\s*\{[\s\S]{0,120}?this\.promotionRerunRequested\s*=\s*true;[\s\S]{0,40}?return;/);
+  });
+
+  it('the latch is released in a finally (no permanent wedge)', () => {
+    expect(ENGINE_SRC).toMatch(/finally\s*\{[\s\S]{0,600}?this\.promotionInProgress\s*=\s*false/);
+  });
+
+  it('★ the coalesced re-run is isRunning-guarded (Step-4 blocker: never promote on a stopped engine)', () => {
+    expect(ENGINE_SRC).toMatch(/if\s*\(this\.promotionRerunRequested\s*&&\s*this\.isRunning\)/);
+  });
+
+  it('the open path compensates on the dedup-return (created=false → delete its own record)', () => {
+    expect(ENGINE_SRC).toMatch(/created:\s*_posCreated/);
+    expect(ENGINE_SRC).toMatch(/if\s*\(!_posCreated\)\s*\{[\s\S]{0,900}?storage\.deleteClosedTrade\(/);
+    expect(ENGINE_SRC).toMatch(/if\s*\(!_posCreated\)\s*\{[\s\S]{0,1400}?stage:\s*'DUP_POSITION'/);
+  });
+
+  it('the in-pass duplicate guard exists and records promoted symbols', () => {
+    expect(ENGINE_SRC).toMatch(/promotedSymbolsThisPass\s*=\s*new Set<string>\(/);
+    expect(ENGINE_SRC).toMatch(/if\s*\(promotedSymbolsThisPass\.has\(signal\.symbol\)\)/);
+    expect(ENGINE_SRC).toMatch(/promotedSymbolsThisPass\.add\(signal\.symbol\)/);
+  });
+
+  it('createActiveOpenPosition signals the dedup-return instead of swallowing it', () => {
+    expect(STORAGE_SRC).toMatch(/Promise<\{\s*position:\s*ActiveOpenPosition;\s*created:\s*boolean\s*\}>/);
+    expect(STORAGE_SRC).toMatch(/return\s*\{\s*position:\s*existing\[0\],\s*created:\s*false\s*\}/);
+    expect(STORAGE_SRC).toMatch(/return\s*\{\s*position:\s*result,\s*created:\s*true\s*\}/);
+  });
+
+  it('★ deleteClosedTrade is structurally restricted to UNCLOSED rows (balance-neutrality by contract)', () => {
+    expect(STORAGE_SRC).toMatch(/deleteClosedTrade[\s\S]{0,900}?isNull\(closedTradesTable\.closedAt\)/);
+  });
+});
 
 // ── (1) single-flight with one coalesced re-run ────────────────────────────────
 // Mirrors checkRtbPromotion's latch: if a pass is running, set rerunRequested and return;
@@ -79,6 +129,55 @@ describe('[B-PROMOTION-RACE-FIX] (1) promotion single-flight', () => {
     await h.checkRtbPromotion(async () => {});
     expect(h.passes).toBe(1);
     expect(h.promotionRerunRequested).toBe(false);
+  });
+});
+
+// ── (1b) the IN-PASS duplicate guard ──────────────────────────────────────────
+// The pre-loop openPositions snapshot cannot see opens made earlier in the SAME pass
+// (#508's 2026-07-15 MET/USD double-promotion). Mirrors the implemented set-guard.
+function promotePass(
+  rankedSignals: { symbol: string }[],
+  openPositionSymbols: string[],
+  openSlots: number,
+): { promoted: string[]; deferred: string[] } {
+  const promotedSymbolsThisPass = new Set<string>(openPositionSymbols);
+  const promoted: string[] = [];
+  const deferred: string[] = [];
+  let slots = openSlots;
+  for (const signal of rankedSignals) {
+    if (slots <= 0) break;
+    if (promotedSymbolsThisPass.has(signal.symbol)) { deferred.push(signal.symbol); continue; }
+    promoted.push(signal.symbol);
+    promotedSymbolsThisPass.add(signal.symbol); // recorded on success
+    slots--;
+  }
+  return { promoted, deferred };
+}
+
+describe('[B-PROMOTION-RACE-FIX] (1b) in-pass duplicate guard', () => {
+  it('two same-symbol signals in ONE pass → the second is deferred, not promoted', () => {
+    // The exact #508 shape: two MET/USD rows from consecutive gen cycles, same pass.
+    const r = promotePass([{ symbol: 'MET/USD' }, { symbol: 'MET/USD' }], [], 5);
+    expect(r.promoted).toEqual(['MET/USD']);
+    expect(r.deferred).toEqual(['MET/USD']);
+  });
+
+  it('a symbol already holding a position is deferred', () => {
+    const r = promotePass([{ symbol: 'ETH/USD' }, { symbol: 'SOL/USD' }], ['ETH/USD'], 5);
+    expect(r.promoted).toEqual(['SOL/USD']);
+    expect(r.deferred).toEqual(['ETH/USD']);
+  });
+
+  it('distinct symbols all promote (the guard does not over-block)', () => {
+    const r = promotePass([{ symbol: 'A/USD' }, { symbol: 'B/USD' }, { symbol: 'C/USD' }], [], 5);
+    expect(r.promoted).toEqual(['A/USD', 'B/USD', 'C/USD']);
+    expect(r.deferred).toEqual([]);
+  });
+
+  it('a deferred duplicate does NOT consume a slot', () => {
+    // 2 slots, 3 signals where #2 duplicates #1 → both distinct symbols still fit.
+    const r = promotePass([{ symbol: 'A/USD' }, { symbol: 'A/USD' }, { symbol: 'B/USD' }], [], 2);
+    expect(r.promoted).toEqual(['A/USD', 'B/USD']);
   });
 });
 

@@ -2329,11 +2329,28 @@ export class ActiveExecutionEngine {
       let promotedCount = 0;
       let failedCount = 0;
 
+      // B-PROMOTION-RACE-FIX (#508): the SAME-PASS half of the double-promotion. `openPositions`
+      // above is a snapshot taken BEFORE this loop and never refreshed, so the guards that read it
+      // are blind to opens made EARLIER IN THIS SAME PASS — two same-symbol signals (e.g. consecutive
+      // gen cycles) both promote, and the second open hits the unique(symbol) dedup. That is the
+      // 2026-07-15 06:16:46Z MET/USD case recorded in #508. The single-flight latch fixes the
+      // CROSS-pass race; this set fixes the IN-pass one. (The open-path compensation would catch
+      // the survivor either way, but promoting a signal we already know is a duplicate wastes the
+      // slot decision and burns the queue row.)
+      const promotedSymbolsThisPass = new Set<string>(openPositions.map(p => p.symbol));
+
       // Phase 8.8.4-C.14.B: Loop through ranked signals and promote all eligible
       for (const signal of rankedSignals) {
         if (openSlots <= 0) {
           console.log(`[8.8.4-C.14.B][SLOT_LIMIT] No more open slots, stopping promotion loop`);
           break;
+        }
+
+        // B-PROMOTION-RACE-FIX (#508): skip a symbol already open OR already promoted in THIS pass.
+        // Left in the queue (not failed) — it is re-evaluated next pass like any deferred signal.
+        if (promotedSymbolsThisPass.has(signal.symbol)) {
+          console.log(`[DUP-OPEN-RACE][${this.mode}] ${signal.symbol}: already open or promoted earlier in this pass — deferring (in-pass duplicate guard)`);
+          continue;
         }
 
         // Phase 14.1 HF8 (B1): Duplicate FinalScore check REMOVED — SQE already enforces FinalScore >= 0.35
@@ -2407,6 +2424,11 @@ export class ActiveExecutionEngine {
         const tradeResult = await this.executePromotedSignal(signal);
 
         if (tradeResult.success && tradeResult.tradeId) {
+          // B-PROMOTION-RACE-FIX (#508): this symbol now holds a position — record it so a LATER
+          // signal for the same symbol in THIS pass is deferred by the in-pass guard above (the
+          // pre-loop openPositions snapshot cannot know about it).
+          promotedSymbolsThisPass.add(signal.symbol);
+
           // Step 3: Update signal with actual trade ID
           await readyToBuyService.promoteSignal(signal.id, tradeResult.tradeId);
           
@@ -2446,7 +2468,13 @@ export class ActiveExecutionEngine {
       // early returns above: TCL-warmup, guardrail-read-fail, at-capacity) or promotion wedges
       // permanently. Then honour ONE coalesced re-run if a trigger arrived mid-pass.
       this.promotionInProgress = false;
-      if (this.promotionRerunRequested) {
+      // ★ `isRunning` is REQUIRED here (Langston Step-4 blocker): the coalesced re-run is the only
+      // promotion trigger without one — the interval self-guards (`:422`) and the two event handlers
+      // are unbound in stop(). Without it, a trigger arriving mid-pass while stop() lands fires a
+      // fresh pass on a STOPPED engine, which pulls ranked signals, REMOVES them from RTB, then
+      // fails at processSignal ('engine not running') — and a failed promotion leaves the signal
+      // removed and NOT restored. A coordinated deploy restart is exactly that interleaving.
+      if (this.promotionRerunRequested && this.isRunning) {
         this.promotionRerunRequested = false;
         void this.checkRtbPromotion();
       }
