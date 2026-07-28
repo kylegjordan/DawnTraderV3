@@ -59,8 +59,15 @@ export interface ContextBonusShadowStamp {
     confirmationTerm: number;
     totalBonus: number;
   }>;
-  /** Would applying the bonuses have changed the rank-1 selection? */
-  rank1Changed: boolean;
+  /** Would applying the bonuses have changed the rank-1 selection?
+   *  ★ #595: `null` = COULD NOT BE DETERMINED (no signal carried a live rank basis), which is
+   *  NOT the same as `false`. Previously the basis was coerced from absent to 0, making this a
+   *  comparison of pure bonus that always looked answerable. Same `| null` convention as
+   *  `ceilingSaturationRate` below. **Do not read a `null` here as "the bonus changes nothing."** */
+  rank1Changed: boolean | null;
+  /** ★ #595: how many signals had NO live rank basis and were therefore excluded from the
+   *  WOULD-rank-1 comparison. `rank1BasisMissing === signalCount` ⇒ the comparison ran on nothing. */
+  rank1BasisMissing: number;
   /** #221: fraction of ranked signals whose net-return input saturates the ceiling (null = inputs absent). */
   ceilingSaturationRate: number | null;
 }
@@ -184,6 +191,9 @@ export async function computeContextBonusShadow(
   let bestAdjustedSymbol: string | null = null;
   let saturated = 0;
   let saturationKnown = 0;
+  // #595: signals whose LIVE rank basis was absent, so they could not participate
+  // in the WOULD-rank-1 comparison at all. Counted, never silently defaulted.
+  let rank1BasisMissing = 0;
 
   for (const s of signals) {
     const pairRegime = (s.regime ?? (s.metadata?.regime as string | undefined)) ?? null;
@@ -204,16 +214,36 @@ export async function computeContextBonusShadow(
     perSignal.push({ symbol: s.symbol, pairRegime, agreement, regimeTerm, confirmationTerm, totalBonus });
 
     // WOULD-rank-1: live ranking + bonus (the live composition stays untouched).
-    const liveScore = (s.metadata?.rankingScore as number | undefined)
-      ?? parseFloat(String(s.finalScore ?? '0'));
-    const adjusted = liveScore + totalBonus;
-    if (adjusted > bestAdjusted) {
-      bestAdjusted = adjusted;
-      bestAdjustedSymbol = s.symbol;
+    // ★ #595 (#558 residual — Langston census + CC-B live-row measurement, agreeing):
+    // `metadata.rankingScore` AND `finalScore` are BOTH retired keys (#558 A1/A2) and are
+    // ABSENT ON EVERY LIVE ROW (measured 4/4). The previous `?? parseFloat(… ?? '0')`
+    // turned that absence into a plausible ZERO — the #546 failure — which would have made
+    // `adjusted` equal to `totalBonus` for every signal and `rank1Changed` a comparison of
+    // pure bonus, i.e. confident-looking output that answers nothing. ABSENT NOW STAYS ABSENT.
+    // ⚠️ The correct live rank key is NOT substituted here on purpose: the live picker ranks on
+    // `r_multiple` (a reward:risk ratio) while these bonuses are [0,1] score-space, so adding
+    // them is dimensionally incoherent. Naming the real destination is #593 rev 2's decision,
+    // not this fix's — see RUNNING_ISSUES #595/#593.
+    const _liveScoreRaw = s.metadata?.rankingScore as number | undefined;
+    const liveScore = typeof _liveScoreRaw === 'number' && Number.isFinite(_liveScoreRaw)
+      ? _liveScoreRaw
+      : null;
+    if (liveScore === null) {
+      rank1BasisMissing++;
+    } else {
+      const adjusted = liveScore + totalBonus;
+      if (adjusted > bestAdjusted) {
+        bestAdjusted = adjusted;
+        bestAdjustedSymbol = s.symbol;
+      }
     }
 
     // #221 saturation: from the expected net edge when the record carries it.
-    const edge = (s.metadata?.expectedEdge as number | undefined);
+    // ★ #595: was `metadata.expectedEdge` — a retired key, absent 4/4 on live rows. The live
+    // equivalent is `netExpectedEdge` (present 4/4; real reader at `ready_to_buy_service.ts:763`).
+    // Units verified rather than assumed: `cost-model.ts:281` `netExpectedEdge = grossPnlPct −
+    // totalCost`, a RETURN-SPACE FRACTION, which is the same space as `NET_RETURN_CEILING` (0.05).
+    const edge = (s.metadata?.netExpectedEdge as number | undefined);
     if (typeof edge === 'number' && Number.isFinite(edge)) {
       saturationKnown++;
       if (edge >= NET_RETURN_CEILING) saturated++;
@@ -227,7 +257,13 @@ export async function computeContextBonusShadow(
     classVoteStatus: classIdle ? 'IDLE_OR_WARMING' : 'LIVE',
     confirmationState,
     perSignal,
-    rank1Changed: liveRank1Symbol !== null && bestAdjustedSymbol !== null && bestAdjustedSymbol !== liveRank1Symbol,
+    // ★ #595: null when NOTHING carried a live rank basis — the comparison did not run.
+    // Reporting `false` there would claim "the bonus would change nothing", which is a
+    // finding we did not make.
+    rank1Changed: bestAdjustedSymbol === null
+      ? null
+      : (liveRank1Symbol !== null && bestAdjustedSymbol !== liveRank1Symbol),
+    rank1BasisMissing,
     ceilingSaturationRate: saturationKnown > 0 ? saturated / saturationKnown : null,
   };
 }
