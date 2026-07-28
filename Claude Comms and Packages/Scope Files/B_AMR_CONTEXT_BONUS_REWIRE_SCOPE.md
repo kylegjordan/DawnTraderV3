@@ -24,6 +24,10 @@
 > ## Units is a BRANCH-MIX question, not a scale question (Langston)
 > `computeRankKey` (`:1705`) has **two branches** (`:1800-1803`): default `result.netRewardToRisk`, **overridden** by `chosenNetEv / distStop` whenever `chosenNetEv` is finite and `distStop > 0`. Both nominally R-ish, **computed differently, nothing forcing them onto one scale**. ⇒ **measure the BRANCH MIX across the live pool first.** A bonus calibrated against one branch is miscalibrated against the other **and prints as a plain number either way — the miscalibration is invisible.**
 >
+> ## How rev 2 must REPORT its measurements (Langston)
+> - **The branch-mix measurement must carry its DENOMINATOR.** Report how many candidates were in the pool, over what window, and how many landed in each of the two `computeRankKey` branches. ★ *"A ratio without an n is the same shape of claim as the XRP row"* — i.e. the same defect as treating one pre-A1 leftover as evidence. A bare "mostly branch X" is not a measurement.
+> - **Dispatch rev 2 with PATH + reviewed sha, not a description.** (Langston applied my own adopted standard back to me: I told him the WITHDRAWN banner was "in the scope file" without naming the file — an unresolvable pointer, the exact failure the standard exists to prevent. He reads the banner off the ref rather than taking the channel's word.)
+>
 > ## Corrections to carry into rev 2
 > - **PATH + line:** `getRankedSignals` is `server/core/rtb/ready_to_buy_service.ts:1813` — **not** `server/services/…`, and not `active-execution-engine.ts:2114`. Fix **path and number** in all four documents: `DELETED_COMPONENTS_LOG.md:89`, `RUNNING_ISSUES.md:25` (#593), `P19_B8_10_SCOPE.md:30`, and OBJ-3 here.
 > - Sort key memoized into `rankKey`, plain-DESC at `:1876-77`; contract comment `:1874` — *"the number that ranks is the number the gate later confirms."*
