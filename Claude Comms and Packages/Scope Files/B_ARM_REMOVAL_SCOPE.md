@@ -16,7 +16,26 @@ The **Adaptive Ratio Manager (ARM)** — `server/services/adaptive-ratio-manager
 
 ## 2. WHY — THE IMPROVEMENT TEST WAS RUN, AND FAILED ON ARITHMETIC
 
-★ **The ARM is NOT inert. It is actively steering, and that is the case against it.** Measured on staging `/var/log/dawntrader/out.log` (control: 2,334 scanner lines present in the file), **2026-07-28 01:46:37 UTC**:
+★★ **REV 2 — MY REV-1 MECHANISM CLAIM WAS WRONG, AND THE CORRECTED MEASUREMENT MAKES THE DELETION PROVABLY NEUTRAL. (Langston caught the mechanism; I then measured the clamp he named.)**
+
+**WHAT REV 1 CLAIMED (WRONG):** *"it moved allocation 20 points on a 0.002 score difference — noise amplification."*
+**WHY IT IS WRONG (`adaptive-ratio-manager.ts:151`):** `targetIdealRatio = idealScore / (idealScore + rotationalScore)` is a **share-of-score normaliser — when the pools tie, its resting point is 0.50 BY CONSTRUCTION.** 0.309/0.616 = 0.5016. ⇒ **the 0.002 bought 0.16 PERCENTAGE POINTS, not 20.** The 20 came from `defaultRatio` having **no representation in the target function at all**; it survives only through the confidence blend at `:242`.
+**AND `computeConfidence` (`:233`) = `min(1, totalSamples/100)` is a PURE VOLUME COUNTER** — no effect size, no variance, no reference to whether 0.309 and 0.307 are separable; monotonic, so it never comes back down. At the measured 28,238 samples it saturates within seconds of boot. ★ **Do NOT write "disabled" — after 100 samples it is BY DESIGN incapable of restraining anything. It is doing exactly what it was written to do.**
+**CORRECTION 3 (owed): it is NOT "pure win rate."** `computePoolScore:215` = `winRate*0.6 + avgEdge*0.4` with `avgEdge ← avgFinalScore` (`:206`) — a rate blended with a FinalScore on a different scale at fixed weights (which is why the two scores sum to 0.616, not 1). The `finalScore` input is now zeroed by #558 A2, but **I have not measured `avgEdge`'s live value, so "pure win rate" is an inference and must not be stated as measured.**
+★ **TAXONOMY (standing rule): this is bucket 2/3, NOT bucket 1. There is NO defect.** Frame it as **the design does not survive its own inputs.** Framed as a bug, the obvious counter is *"then fix `computeConfidence`"* and we relitigate.
+
+★★★ **THE DECIDING MEASUREMENT — THE RATIO IS NON-BINDING AT ANY VALUE, AND HAS BEEN FOR ALL OBSERVABLE HISTORY.** `adaptive-scan-manager.ts:211-214`: `targetIdealCount = ceil(300 * ratio)`, then `actualIdealCount = min(targetIdealCount, availableIdealCount)`. Measured on `/var/log/dawntrader/out.log` (control: 1,155 `[11.4B.2-R1]` lines present):
+```
+[11.4B.2-R1][AdaptiveScan] Target: Ideal=151, Available=16, Actual=16+284=300 (M64)
+[11.4B.2-R1][AdaptiveScan] UNDERFLOW PROTECTION: Ideal deficit=135, rotational expanded to 284
+[11.4B.2-R1][AdaptiveScan] Cycle composed of 16 ideal + 284 rotational pairs (4%/78%) [UNDERFLOW]
+```
+**`Available` over the last 200 cycles: 0 (52x), 1 (36x), 15 (22x), 13 (16x), 9 (14x), 2 (12x), 16 (12x), 14 (12x) — NEVER above 16, against a target of 151.** Today: 232 cycles, **avg 5.6**. Pre-A2 archive (`out.log.pre-rotation-archive-2026-07-13.gz`, control: 4,265 lines): **n=853, avg 31.1, MAX EVER 60** — still far below 151, and its tail (0–8) already resembles today's.
+⇒ **THE CLAMP BINDS ON EVERY CYCLE, ON BOTH SIDES OF #558 A2.** At ratio 0.50 the target is 151; at 0.70 it is 211; `actual` is `Available` (≤16) either way. **⇒ THE DELETION IS BEHAVIOUR-NEUTRAL, ASSERTED WITH EVIDENCE RATHER THAN HOPE — and §6's separate "is 0.7 the right split" item is MOOT: the knob has been non-binding at ANY value.** That is the headline, not a footnote.
+⇒ **A2 DID NOT CAUSE THE STARVATION** — the pre-A2 tail already shows 0–8. My hypothesis that #558 zeroing `finalScore` starved `getTopPairs` is **NOT SUPPORTED** by this evidence and is withdrawn.
+★ **THE REAL FINDING, WHICH IS BIGGER THAN THE ARM: the ideal pool is chronically empty — ~4–5% of scan slots against a nominal 50–70%, with `UNDERFLOW PROTECTION` firing every cycle. That fully explains the previously-untested "ideal produces 1.4% of closes at 70% attention" observation: it never had 70% attention. It had 4%.** Filed separately — it is not this batch's to fix.
+
+★ **The ARM is not inert — but the case against it is the design, not amplification.** Measured on staging `/var/log/dawntrader/out.log` (control: 2,334 scanner lines present in the file), **2026-07-28 01:46:37 UTC**:
 
 ```
 [11.2R1][RatioManager] Using in-memory pool data: ideal=8412 samples, rotational=19826 samples
