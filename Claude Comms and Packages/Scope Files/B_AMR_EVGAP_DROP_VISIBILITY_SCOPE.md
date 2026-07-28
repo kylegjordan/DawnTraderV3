@@ -43,7 +43,7 @@ It **logs nothing, counts nothing, and mutates nothing.** An observation that di
 | # | precondition | why it matters |
 |---|---|---|
 | 1 | `tradeData.expectedEdge` **present but NaN** | ★ the live H1 — **`??` does NOT catch NaN.** Requires `taker.netEV` to arrive *as NaN*, not missing. |
-| 2 | the `:928` fallback itself NaN (`tpDistance` or `frictionCost` non-finite) | a different bug entirely, in a different computation |
+| 2 | the `:928` fallback itself NaN | ⚠ **TRIPWIRE, NOT A LIVE CANDIDATE (Langston, at the ref).** The `??` at `:1119` can fall through on **exactly one** path — `vts-runner.ts:2658`, `expectedEdge: persistedTrade?.expectedEdge ?? null` (**restart-recovered trades**). ⇒ **a hit here means "a recovered-trade close" — specific, useful, and worth having said IN ADVANCE.** |
 | 3 | `realizedNetPnl` non-finite (`tradeData.pnl * 100`) | independent leg, **nothing to do with `a8242a3bc`** |
 
 ★★ **CONSEQUENCE FOR PLACEMENT — this changes the design, not just the payload.** At `:156`, preconditions **1 and 2 are indistinguishable**: both present as "`predictedNetEv` non-finite," because the `??` has already collapsed them into one value. **Telling 1 from 2 requires recording whether `tradeData.expectedEdge` was present/finite at the CALL SITE (`vts-service.ts:1119`), before the `??` resolves.**
@@ -73,8 +73,13 @@ Keep a log line as the **convenience** half only, and emit on **stderr (`console
 
 | source | signature | fix lives in |
 |---|---|---|
-| **carried-in value present-but-non-finite** | the H1 / 07-14 re-source signature | the `taker.netEV` producer |
+| **carried-in value present-but-non-finite** | a **NaN `taker.netEV`** — ⛔ **NOT a "07-14 re-source signature"; see the misattribution note below** | the `taker.netEV` producer |
 | **nullish → fell through to a local compute that went NaN** | bad `takeProfit` / `frictionCost`, or `entryPrice === 0` | the VTS cost path (**#607**) |
+
+⛔⛔ **MISATTRIBUTION CORRECTED — THE SUSPECT COMMIT IS THE WRONG ONE (Langston, full-patch read at `450efae94`).** `a8242a3bc` touches `expectedEdge` in **exactly one place: `xstock_spot/eval-cycle.ts`**. **ZERO `expectedEdge` hunks in `vts-runner.ts`** (grep-verified across all 5 files of the patch). The **crypto** producer is stamped in-code as **`#558 A3`** (`vts-runner.ts:2056` — *"expectedEdge re-sourced off the retired finalScore onto the kernel NET EV"*), and both `:2065`/`:2235` emit `entryPrice > 0 ? taker.netEV / entryPrice : 0` — **always assigned, and `entryPrice === 0` yields 0, not NaN.**
+⇒ **`a8242a3bc` does not produce the value H2 was about, so every "07-14 `expectedEdge` re-source" attribution for the CRYPTO path is wrong**, and my H2 refutation **cannot bear the weight I put on it. H2 reverts to RULED ON REPORTED FACT.**
+⇒ ★ **THE OUTSTANDING DIFF READ IS `#558 A3`'s, NOT `a8242a3bc`'s.**
+⇒ ★★ **AND THE DATE ORDERING NOW BREAKS THE WHOLE 07-14 STORY: `#558 A3` is `90f6a3f72`, 2026-07-27T23:31:13Z — FOURTEEN DAYS AFTER the last ev-gap day (07-13).** A change that landed on 07-27 **cannot** have caused a discontinuity on 07-14. **The 07-14 boundary is therefore NOT an `expectedEdge` re-source at all, and its cause is unexplained again.** *(H1-re-derived still holds as a MECHANISM — a NaN `taker.netEV` is the only route in — but it is now detached from any dated commit.)*
 
 ★ **`:156` only ever sees the PRODUCT — it is structurally incapable of separating them.** My own argument for splitting the operands applies **harder one level up the call**. ⇒ **tag it at the call site (`:1119`); it is a boolean.** Without it, OBJ-1 lands, reports *"N drops on `predictedNetEv`"*, and **the very next question needs another batch and another soak.**
 
