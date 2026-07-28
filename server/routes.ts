@@ -12148,24 +12148,29 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         const intendedEntryValue = intendedEntryPrice * quantity;
         const currentValue = currentPrice * quantity;
         
-        // Gross P/L = Pure market movement (no slippage, no fees)
-        const grossPnl = (currentPrice - intendedEntryPrice) * quantity;
-        const grossPnlPercent = intendedEntryValue > 0 ? (grossPnl / intendedEntryValue) * 100 : 0;
-        
+        // B-COST-ACCOUNTING-HONESTY (Kyle 2026-07-28) — SITE 3 of 3 (open-positions live display).
+        // MUST stay in lockstep with the two close paths or the Open tab would disagree with the
+        // Closed tab for the same trade. Gross on the ACTUAL entry fill; estimated cost line =
+        // EXPLICIT fees only (entry slippage is already inside the actual entry price; the
+        // estimated exit slippage is a modelled implicit cost, reported not deducted).
+        const actualEntryValue = entryPrice * quantity;
+        const grossPnl = (currentPrice - entryPrice) * quantity;
+        const grossPnlPercent = actualEntryValue > 0 ? (grossPnl / actualEntryValue) * 100 : 0;
+
         // Entry costs (persisted at trade creation)
         const entryFee = pos.entryFee ? parseFloat(pos.entryFee.toString()) : (entryPrice * quantity * FEE_PCT / 100);
         const entrySlippage = pos.entrySlippage ? parseFloat(pos.entrySlippage.toString()) : 0;
-        
+
         // Estimated exit costs (based on current price)
         const estExitFee = currentValue * (FEE_PCT / 100);
         const estExitSlippage = currentPrice * (SLIPPAGE_PCT / 100) * quantity;
-        
-        // Total estimated cost
-        const estTotalCost = entryFee + entrySlippage + estExitFee + estExitSlippage;
-        
-        // Net P/L = Gross P/L minus all costs
+
+        // Total estimated cost = EXPLICIT fees only; never negative.
+        const estTotalCost = entryFee + estExitFee;
+
+        // Net P/L = Gross P/L minus explicit costs
         const netPnl = grossPnl - estTotalCost;
-        const netPnlPercent = intendedEntryValue > 0 ? (netPnl / intendedEntryValue) * 100 : 0;
+        const netPnlPercent = actualEntryValue > 0 ? (netPnl / actualEntryValue) * 100 : 0;
         
         // Phase 8.8.3-I6 E1: Distance to TP/SL using live price (percentages)
         const distanceToTP = takeProfit > 0 ? ((takeProfit - currentPrice) / currentPrice) * 100 : 0;
@@ -12649,18 +12654,25 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         : entryPrice; // Fallback for old positions
       const intendedEntryValue = intendedEntryPrice * quantity;
       
-      // Phase 8.8.3-C2: P/L breakdown per directive
-      // Gross P/L = Pure market movement (no slippage, no fees)
-      const grossPnl = (currentPrice - intendedEntryPrice) * quantity;
-      
-      // Total Cost = All execution costs (same formula as engine line 787)
-      const totalCost = entryFee + exitFee + entrySlippage + exitSlippage;
+      // B-COST-ACCOUNTING-HONESTY (Kyle 2026-07-28) — SITE 2 of 3 (manual close). MUST stay in
+      // lockstep with the engine close path (active-execution-engine.ts) or an operator-closed
+      // trade would report different gross/cost than an engine-closed one for identical economics.
+      // Gross on ACTUAL fills; cost line = EXPLICIT costs only (slippage is already inside the
+      // actual prices — subtracting it too would double-count). Net is algebraically UNCHANGED.
+      const grossPnl = (actualExitPrice - entryPrice) * quantity;
+
+      // Total Cost = EXPLICIT costs only (fees); never negative.
+      const totalCost = entryFee + exitFee;
       const totalFees = entryFee + exitFee;
+      // Retained as signed execution-quality telemetry (positive = cost) — reported, not deducted.
       const totalSlippage = entrySlippage + exitSlippage;
-      
-      // Net P/L = Gross P/L minus all costs (same formula as engine line 791)
+
+      // Net P/L = Gross P/L minus explicit costs
       const netPnl = grossPnl - totalCost;
-      const netPnlPercent = intendedEntryValue > 0 ? (netPnl / intendedEntryValue) * 100 : 0;
+      // B-COST-ACCOUNTING-HONESTY: divide by capital ACTUALLY deployed, matching the actual-fill
+      // gross above (was intendedEntryValue).
+      const actualEntryValue = entryPrice * quantity;
+      const netPnlPercent = actualEntryValue > 0 ? (netPnl / actualEntryValue) * 100 : 0;
       
       console.log(`[8.8.3-C7-FIX][MANUAL_CLOSE_COSTS] symbol=${position.symbol} exitPrice=${currentPrice.toFixed(4)} actualExitPrice=${actualExitPrice.toFixed(4)} entryFee=${entryFee.toFixed(4)} exitFee=${exitFee.toFixed(4)} entrySlip=${entrySlippage.toFixed(4)} exitSlip=${exitSlippage.toFixed(4)} totalCost=${totalCost.toFixed(4)} grossPnl=${grossPnl.toFixed(4)} netPnl=${netPnl.toFixed(4)}`);
       

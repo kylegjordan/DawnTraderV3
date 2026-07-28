@@ -31,6 +31,17 @@ net = (E_req−B_int)q − fees − (B_act−B_int)q − (E_req−E_act)q
 - **Negative cost:** legitimate internally — Harris: *"traders who offer liquidity have negative transaction costs"* (we post maker orders). BUT investor-facing regimes (PRIIPs, from 2023) **floor it at zero** because the measure is noisy and ~averages to zero. ⇒ **keep the signed number as a DIAGNOSTIC; do not let it be the cost line.**
 - **Sign convention: NO standard exists** — three mutually contradictory conventions in live use (two crypto TCA vendors directly contradict each other). ⇒ **our convention must be stated explicitly at the point of use.**
 
+## 3.5 ★ CENSUS FINDING — THE FORMULA LIVES AT **THREE** SITES, NOT ONE (§9.5(a); corrects this scope's own first draft)
+The repo-wide census found the same gross/total-cost/net arithmetic **duplicated at three sites**, each explicitly documented in-code as a deliberate mirror of the engine (*"same formula as active-execution-engine.ts line 787"*, *"same as engine line 766-768"*):
+
+| # | Site | Path | Note |
+|---|---|---|---|
+| 1 | `active-execution-engine.ts:1809-1816` | **engine close** (stop/target/trailing/time) | the primary path |
+| 2 | `routes.ts:~12652-12660` | **manual close** (operator clicks Close) | writes the SAME closed_trades fields |
+| 3 | `routes.ts:~12151-12167` | **open-positions live display** | `estTotalCost` with ESTIMATED exit costs; feeds the Open Trades gross/net |
+
+**⚠️ ALL THREE MUST CHANGE TOGETHER.** Fixing only the engine would make an engine-closed trade and a manually-closed trade report different gross/cost for identical economics, and the Open tab would disagree with the Closed tab. **This is precisely what the census exists to catch — a path trace from the engine would have found site 1 and stopped.** Site 3 has no actual exit yet, so its form is `gross = (currentPrice − ACTUAL entry) × qty`, `estTotalCost = entryFee + estExitFee` (fees only), `net = gross − fees`.
+
 ## 4. OBJECTIVES
 1. **Gross from ACTUAL fills** (Kyle's directive): `grossPnl = (actualExitPrice − actualEntryPrice) × quantity`.
 2. **Cost line = EXPLICIT costs only**: `totalCost = entryFee + exitFee`. Slippage LEAVES the cost line (it is already inside the actual fills — removing it is what PREVENTS double-counting).

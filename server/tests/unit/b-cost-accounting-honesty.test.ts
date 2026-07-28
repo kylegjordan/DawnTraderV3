@@ -1,0 +1,138 @@
+// B-COST-ACCOUNTING-HONESTY (Kyle 2026-07-28) — gross is measured on ACTUAL fills and the cost
+// line carries EXPLICIT costs (fees) only; slippage is retained as signed telemetry, not deducted.
+//
+// THE CENTRAL SAFETY PROPERTY, and the reason this batch is safe to ship against live money data:
+// the NET P&L IS UNCHANGED. The old form computed gross against the INTENDED prices and then
+// subtracted fees + entry-slippage + exit-slippage; that expression telescopes ALGEBRAICALLY to
+// (actualExit - actualEntry)*qty - fees, which is exactly what the new form computes directly.
+// Measured on the live population before the change: net matched true economics on 293/293 closed
+// trades (including all 57 with a negative total_cost). These tests pin that equivalence so a
+// future edit cannot silently break it — e.g. the tempting "clamp total_cost >= 0" fix, which
+// WOULD have broken the net on those 57 rows.
+//
+// Industry basis (see the batch pre-audit for citations): Harris, *Trading and Exchanges* Ch.21
+// (explicit vs implicit costs); Zipline `finance/slippage.py` (slippage baked into the fill price,
+// commissions modelled separately — never both); Perold (1988) implementation shortfall.
+import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
+/** The OLD accounting: gross vs INTENDED prices, slippage deducted as a cost. */
+function oldNet(p: {
+  intendedEntry: number; actualEntry: number;
+  requestedExit: number; actualExit: number;
+  qty: number; entryFee: number; exitFee: number;
+}): number {
+  const entrySlippage = (p.actualEntry - p.intendedEntry) * p.qty;   // order-placer.ts:78
+  const exitSlippage = (p.requestedExit - p.actualExit) * p.qty;     // order-placer.ts:120
+  const gross = (p.requestedExit - p.intendedEntry) * p.qty;
+  const totalCost = p.entryFee + p.exitFee + entrySlippage + exitSlippage;
+  return gross - totalCost;
+}
+
+/** The NEW accounting: gross on ACTUAL fills, explicit costs only. */
+function newNet(p: {
+  actualEntry: number; actualExit: number;
+  qty: number; entryFee: number; exitFee: number;
+}): number {
+  const gross = (p.actualExit - p.actualEntry) * p.qty;
+  const totalCost = p.entryFee + p.exitFee;                          // fees ONLY
+  return gross - totalCost;
+}
+
+/** Ground truth: what the trade actually earned on the prices actually traded, less real fees. */
+function trueEconomics(p: {
+  actualEntry: number; actualExit: number; qty: number; entryFee: number; exitFee: number;
+}): number {
+  return (p.actualExit - p.actualEntry) * p.qty - (p.entryFee + p.exitFee);
+}
+
+describe('[B-COST-ACCOUNTING-HONESTY] net P&L is UNCHANGED by the accounting change', () => {
+  // The real ONDO/USD case that prompted this batch (2026-07-27 05:45, stop_hit, +6.98%).
+  // Filled 8.8% BETTER than the signal price, so the old form produced a NEGATIVE total_cost
+  // (-30.23) and a gross that read as a LOSS (-11.86) on a trade that genuinely made +$18.36.
+  const ONDO = {
+    intendedEntry: 0.40904864, actualEntry: 0.37317,
+    requestedExit: 0.39059500, actualExit: 0.40798840,
+    qty: 642.80097870, entryFee: 1.91899233, exitFee: 2.09804275,
+  };
+
+  it('ONDO (price improvement, negative old total_cost): old net === new net === true economics', () => {
+    expect(oldNet(ONDO)).toBeCloseTo(newNet(ONDO), 6);
+    expect(newNet(ONDO)).toBeCloseTo(trueEconomics(ONDO), 6);
+    // The recorded live value, to 4dp — the number Kyle saw on the tab.
+    expect(newNet(ONDO)).toBeCloseTo(18.3643, 3);
+  });
+
+  it('the OLD gross was misleading and the NEW gross tells the truth', () => {
+    const oldGross = (ONDO.requestedExit - ONDO.intendedEntry) * ONDO.qty;
+    const newGross = (ONDO.actualExit - ONDO.actualEntry) * ONDO.qty;
+    expect(oldGross).toBeLessThan(0);      // read as a LOSS…
+    expect(newGross).toBeGreaterThan(0);   // …on a trade that actually GAINED
+    expect(newGross).toBeCloseTo(22.3813, 3);
+  });
+
+  it('the new cost line is fees only and can NEVER be negative', () => {
+    const oldTotalCost = ONDO.entryFee + ONDO.exitFee
+      + (ONDO.actualEntry - ONDO.intendedEntry) * ONDO.qty
+      + (ONDO.requestedExit - ONDO.actualExit) * ONDO.qty;
+    expect(oldTotalCost).toBeLessThan(0);                       // the nonsense being removed
+    expect(ONDO.entryFee + ONDO.exitFee).toBeGreaterThan(0);    // the replacement
+  });
+
+  it('equivalence holds for adverse slippage, price improvement, and exact fills alike', () => {
+    const cases = [
+      // adverse on both legs (the ordinary case: paid more, sold lower)
+      { intendedEntry: 100, actualEntry: 100.5, requestedExit: 110, actualExit: 109.4, qty: 10, entryFee: 1, exitFee: 1 },
+      // improvement on both legs (the case that produced negative "cost")
+      { intendedEntry: 100, actualEntry: 99.2, requestedExit: 110, actualExit: 110.7, qty: 10, entryFee: 1, exitFee: 1 },
+      // mixed
+      { intendedEntry: 50, actualEntry: 50.4, requestedExit: 47, actualExit: 47.9, qty: 33, entryFee: 0.4, exitFee: 0.4 },
+      // exact fills (no slippage at all — maker fill at the resting limit)
+      { intendedEntry: 8, actualEntry: 8, requestedExit: 8.6, actualExit: 8.6, qty: 125, entryFee: 2, exitFee: 2 },
+      // a LOSING trade — the sign must not flip
+      { intendedEntry: 200, actualEntry: 201, requestedExit: 190, actualExit: 188, qty: 5, entryFee: 1.5, exitFee: 1.5 },
+    ];
+    for (const c of cases) {
+      expect(oldNet(c)).toBeCloseTo(newNet(c), 6);
+      expect(newNet(c)).toBeCloseTo(trueEconomics(c), 6);
+    }
+  });
+
+  it('a losing trade still reports a loss (no green-washing)', () => {
+    const loser = { intendedEntry: 200, actualEntry: 201, requestedExit: 190, actualExit: 188, qty: 5, entryFee: 1.5, exitFee: 1.5 };
+    expect(newNet(loser)).toBeLessThan(0);
+  });
+});
+
+// ── SOURCE FENCE — bound to the REAL files, all THREE sites ───────────────────
+// The census (§9.5) found this arithmetic duplicated at THREE sites, each documented in-code as a
+// deliberate mirror. If any one drifts back, an engine-closed trade and a manually-closed trade
+// report different numbers for identical economics. These assertions fail if a site regresses.
+const ENGINE_SRC = readFileSync(resolve(__dirname, '../../services/active-execution-engine.ts'), 'utf8');
+const ROUTES_SRC = readFileSync(resolve(__dirname, '../../routes.ts'), 'utf8');
+
+describe('[B-COST-ACCOUNTING-HONESTY] source fence — all three sites stay in lockstep', () => {
+  it('site 1 (engine close): gross on actual fills, cost = fees only', () => {
+    expect(ENGINE_SRC).toMatch(/const grossPnl = \(actualExitPrice - avgPrice\) \* quantity/);
+    expect(ENGINE_SRC).toMatch(/const totalCost = entryFee \+ exitFee;/);
+    // the deducted-slippage form must NOT come back
+    expect(ENGINE_SRC).not.toMatch(/const totalCost = entryFee \+ exitFee \+ entrySlippage \+ exitSlippage/);
+  });
+
+  it('site 2 (manual close): gross on actual fills, cost = fees only', () => {
+    expect(ROUTES_SRC).toMatch(/const grossPnl = \(actualExitPrice - entryPrice\) \* quantity/);
+    expect(ROUTES_SRC).not.toMatch(/const totalCost = entryFee \+ exitFee \+ entrySlippage \+ exitSlippage/);
+  });
+
+  it('site 3 (open-positions display): gross on actual entry, estimated cost = fees only', () => {
+    expect(ROUTES_SRC).toMatch(/const grossPnl = \(currentPrice - entryPrice\) \* quantity/);
+    expect(ROUTES_SRC).toMatch(/const estTotalCost = entryFee \+ estExitFee;/);
+    expect(ROUTES_SRC).not.toMatch(/const estTotalCost = entryFee \+ entrySlippage \+ estExitFee \+ estExitSlippage/);
+  });
+
+  it('slippage is RETAINED as telemetry (still computed and persisted, just not deducted)', () => {
+    expect(ENGINE_SRC).toMatch(/entrySlippage: entrySlippage\.toString\(\)/);
+    expect(ENGINE_SRC).toMatch(/exitSlippage: exitSlippage\.toString\(\)/);
+  });
+});

@@ -1749,7 +1749,10 @@ export class ActiveExecutionEngine {
     const intendedEntryPrice = position.intendedEntryPrice 
       ? parseFloat(position.intendedEntryPrice) 
       : avgPrice; // Fallback for old positions
-    const intendedEntryValue = intendedEntryPrice * quantity;
+    // B-COST-ACCOUNTING-HONESTY: `intendedEntryValue` (the old netPnlPercent denominator) was
+    // removed with the actual-fill gross — the percentage now divides by capital ACTUALLY deployed.
+    // `intendedEntryPrice` itself is RETAINED: it is still persisted on the row (:2002) and is the
+    // benchmark the retained slippage telemetry is measured against.
 
     // Apply exit slippage and fees
     const _b45FeePct = this.feePercentFor(position.symbol, asValidAssetClass((position as { assetClass?: unknown }).assetClass) ?? undefined); // P19-B6.5d (OBJ-4): prefer the position stamp; B-4.5 per-class
@@ -1804,17 +1807,39 @@ export class ActiveExecutionEngine {
     // a maker exit-fill overrides to 0 by construction (filled at the resting limit).
     const exitSlippage = _exitSlippageOverride ?? _takerCloseSlippage;
 
-    // Phase 8.8.3-C2: P/L breakdown per directive
-    // Gross P/L = Pure market movement (no slippage, no fees)
-    const grossPnl = (exitPrice - intendedEntryPrice) * quantity;
-    
-    // Total Cost = All execution costs
-    const totalCost = entryFee + exitFee + entrySlippage + exitSlippage;
+    // B-COST-ACCOUNTING-HONESTY (Kyle 2026-07-28): gross is measured on the prices we ACTUALLY
+    // traded at, and the cost line carries EXPLICIT costs only.
+    //
+    // WHY (industry basis, researched): Harris, *Trading and Exchanges* Ch.21 splits EXPLICIT costs
+    // (fees/commissions — real accounting entries) from IMPLICIT costs (spread/impact/slippage —
+    // estimates against a counterfactual benchmark, not bookable entries). Zipline, the reference
+    // backtest engine, bakes slippage INTO the fill price and models commissions separately — never
+    // both. Slippage is already inside actualEntryPrice/actualExitPrice, so ALSO subtracting it
+    // would DOUBLE-COUNT it.
+    //
+    // ★ NET IS UNCHANGED BY THIS EDIT — this is the safety property, and it is algebraic, not luck.
+    // The previous form was gross=(E_req − B_int)q with cost=fees+(B_act−B_int)q+(E_req−E_act)q,
+    // which telescopes to exactly (E_act − B_act)q − fees. The new form computes that directly.
+    // Verified on the live population: net matched true economics on 293/293 closed trades under
+    // the OLD formula, and the new formula IS that expression. No money figure moves.
+    //
+    // Slippage is RETAINED on the row as signed execution-quality telemetry (positive = cost) —
+    // reported, not deducted. Sign convention is stated explicitly because NO industry standard
+    // exists (Talos, Anboto and retail-FX conventions mutually contradict).
+    const grossPnl = (actualExitPrice - avgPrice) * quantity;
+
+    // Total Cost = EXPLICIT costs only (fees). Never negative — the negative-"cost" artifact came
+    // from netting price improvement into this line; internal TCA keeps that signed number (Harris:
+    // liquidity providers genuinely have negative transaction costs) but it does not belong here,
+    // the same conclusion regulators reached for PRIIPs disclosure (floored at explicit costs).
+    const totalCost = entryFee + exitFee;
     const totalFees = entryFee + exitFee;
-    
-    // Net P/L = Gross P/L minus all costs
+
+    // Net P/L = Gross P/L minus explicit costs
     const netPnl = grossPnl - totalCost;
-    const netPnlPercent = intendedEntryValue > 0 ? (netPnl / intendedEntryValue) * 100 : 0;
+    // Denominator is the ACTUAL capital deployed, consistent with the actual-fill gross.
+    const actualEntryValue = avgPrice * quantity;
+    const netPnlPercent = actualEntryValue > 0 ? (netPnl / actualEntryValue) * 100 : 0;
     
     // Legacy fields for backward compatibility
     const totalSlippage = entrySlippage + exitSlippage;
