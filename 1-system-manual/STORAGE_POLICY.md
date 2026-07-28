@@ -87,3 +87,35 @@ So a given day's data (for a 90-day-hot table) lives: ~90 days HOT → the follo
 - **2026-07-08 (Wave D — OBJ-3 LANDED):** `xstock_spot_ticker_snap` transitioned from MONTHLY to DAILY RANGE partitions at a 2026-08-01 month-boundary cutover (transition-forward — the ~63 GB live table is never repartitioned; July + earlier stay monthly and age out) so the hot window is reclaimable one DAY at a time (true rolling ~30 d) instead of whole months. New daily partition creator (`b74-create-daily-partitions.ts`, cron `0 1 * * *`, 14-day look-ahead); the monthly creator excludes the table at/after cutover; the retention sweep parses daily-first; an independent forward-coverage watchdog alerts if the runway thins. Bounded proof: a synthetic daily partition tiered hot→warm→drop-after-verify. Also fixed #438 (the b74 creators' missing `dotenv` — the monthly creator cron had been silently failing). **OBJ-4 (capture cadence, `b74_ticker_snapshot_min_interval_ms`): flipped + live-measured per-symbol during RTH; crew-consensus value = 4000 ms (~1 capture/4.3 s, ~3× cut — 8000 was measured but pushed 61 genuine symbols past the 15 s freshness gate vs 4000's 10, so it was stepped down). Combined with OBJ-3's rolling-30, ~6× total hot reduction. Throttle is bootstrap-cached → a change needs an app restart. ✅ Kyle CONFIRMED 4000 (2026-07-08), conditioned on a weekly opportunity-loss monitor (B-XSTOCK-FRESHNESS-MONITOR). The ~10 freshness-affected names are mid/high-volume tokens with occasional native tail-pauses (fresh on median), NOT thin tokens; new thin listings are gated by native slowness at any cadence (#440), not by this setting.**
 
 > Maintained alongside the B-STORAGE-HARDEN batch + any future storage/retention change. Update this file whenever a retention window, tier boundary, tunable, or the machinery changes.
+
+---
+
+## 9. ★★ THE CATALOGUE — WHAT IS STORED, AND WHETHER IT IS ACTUALLY SWEPT (`B-STORAGE-CATALOG` part 1, 2026-07-28, CC-A)
+
+> **Kyle's directive:** *"we need to catalog everything that we're storing and where it can be found."* **Measured at the read sites, not inherited.** Registries: `server/scripts/b75-retention-sweep.ts` (`B74_TABLES` / `B70_TABLES` / `PLAIN_RETENTION_TABLES`); tiering ground-truth: the `data_archive_manifest` table; windows: `module_constants.data_lifecycle.*` (31 rows, read live).
+
+### ★★ THE RULE THIS CATALOGUE EXISTS TO MAKE UNMISSABLE
+**A RETENTION KEY IS NOT TIERING. THEY ARE TWO SEPARATE ACTS.** A table can hold a perfectly good `hot_retention_days` (or equivalent) **and still be registered in NO sweep** — in which case the key describes an intention nobody executes, or worse, a DELETE that no archive precedes. **⇒ To answer "is X safe?", check BOTH: (a) does it have a window, and (b) is its name in one of the three registries below.** Answering only (a) is the trap that produced the trade-record finding.
+
+### A. ARCHIVED **then** dropped — safe (12 tables)
+**Market data (`B74_TABLES`)** — partitioned, exported to warm, verified, then dropped:
+`xstock_spot_ticker_snap` (30 d) · `xstock_perp_ticker_snap` (30 d) · `crypto_spot_ticker_snap` (30 d) · `xstock_spot_ohlc_1m` (365 d) · `xstock_perp_ohlc_1m` (365 d) · `crypto_spot_ohlc_1m` (365 d)
+**Analytics (`B70_TABLES`)** — same export→warm→verify→drop path (moved off DROP-only at Wave C, #430):
+`signal_eval_archive` (90 d) · `pair_scan_archive` (90 d) · `exit_decision_archive` (90 d) · `macro_feed_archive` (90 d) · `signal_eval_provenance` (90 d) · `switch_on_shadow_evidence` (90 d)
+
+### B. DELETED with **no** archive step (1 table)
+`xstock_qd_probe_history` (90 d) — `PLAIN_RETENTION_TABLES`: a batched age-`DELETE` + `VACUUM`, **no export**. Deliberate (a small derived-telemetry table not worth partitioning) — **recorded here so it is a known, chosen loss rather than a discovered one.**
+
+### C. ★★ DELETED BY A **SEPARATE** MECHANISM THE SWEEP DOES NOT KNOW ABOUT — the live risk
+**`vts_open_trades` — 90 d, HARD DELETE, NO ARCHIVE, and it is in NONE of the three registries above.**
+- Mechanism: `vts-trade-persistence.ts sweepClosedOpenTrades()` — `DELETE FROM vts_open_trades WHERE closed = true AND closed_at < NOW() - retentionDays`, window `data_lifecycle.vts_open_trades.closed_gc_retention_days` = **90** (read live).
+- ★ **It runs at BOOT** (called from `server/index.ts` after rehydrate) — and with **537 process restarts**, boot is frequent, so this is not a once-a-month job.
+- ★★ **NOTHING HAS BEEN LOST YET — measured, not assumed:** every logged run reports **`swept=0`** (`[B79.0g-tx][GC_SWEEP] retention=90d swept=0`, sampled across 2026-07-27→28). Oldest surviving row is **2026-05-11**, and DB persistence itself began at the `2026-05-10-b79-0g-vts-open-trades.sql` migration — **so 05-11 is a START date, not a retention edge.**
+- ⚠️ **FIRST IRREVERSIBLE LOSS ≈ 2026-08-09.** **The OUTCOME survives** (`exit_decision_archive` carries `pnl_pct` + `r_multiple` at 100%, warm **and** cold). **What dies is the ENTRY SIDE + the join key:** `position_size`, `quantity`, `stop_loss`, `take_profit`, `signal_type`, `pool`, `chosen_entry_mode`, `entry_fee_rate`, `maker_limit_price`, `maker_deadline`, `calibration_state`, `opened_at`, raw `context`.
+- **Langston's scoping steer (adopt it — it makes the fix small):** protect the fields with a **NAMED CONSUMER**, not everything that disappears. Named: `chosen_entry_mode` + `entry_fee_rate` + `maker_limit_price` (**the only record of maker-vs-taker entry policy — lose them and entry-mode friction/Net-Expectancy attribution is unrecoverable**) and the `pool` tag. Sizing ranks lower: `netPnl`/`r_multiple`/`dollarValue` survive, so outcomes reconstruct without `position_size`.
+
+### D. Its own TTL, outside the sweep
+`context_bridge_log` (14 d) — `context-bridge-log-ttl.ts`. **Is** tiered (present in the manifest, warm **and** cold).
+
+### E. ⚠️ REGISTERED ≠ EXERCISED — read the manifest before believing coverage
+The `data_archive_manifest` holds **72 objects across only 5 distinct source tables**: `context_bridge_log`, `crypto_spot_ticker_snap`, `exit_decision_archive`, `xstock_perp_ticker_snap`, `xstock_spot_ticker_snap`. **⇒ 8 of the 12 registered tables have never produced an archive object.** **NOT asserted as a defect** — the benign explanation fits (a table only produces an object once a partition ages past its window; the `_ohlc_1m` set is on 365 d and the analytics set on 90 d, and several are younger than that). **But it is the difference between "configured" and "proven", and only the manifest can tell you which you have.** ★ **Anyone claiming a table is safely tiered should cite a manifest row, not a config key.**
