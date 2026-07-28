@@ -42,6 +42,9 @@ Corroborated three independent ways — textbook power analysis; Bacidore (ex-He
 
 ## 3. NUMBERED OBJECTIVES
 
+> ★★ **REV 3 — SCOPE NARROWED TO OBJ-1 ONLY (Langston BLOCKER-1). OBJ-2 / OBJ-2b / OBJ-3 / OBJ-4 ARE STRUCK AS SUPERSEDED BY `B-ARM-REMOVAL`.**
+> **CC-A's error:** those four objectives all land **inside `adaptive-ratio-manager.ts`** — the exact file `B-ARM-REMOVAL` deletes. I wrote two live scopes, same owner, same date, in direct contradiction, and told CC-B *"B-ARM-REMOVAL blocks nobody"* when it in fact **voids half of this one.** ⇒ **OBJ-2b's Step-2 measurement is CANCELLED — do not spend effort measuring a counter we are deleting.** What survives is **OBJ-1 only: the missing minimum-sample gate at `ml-calibration.ts:172`**, which is untouched by the removal and remains the correct fix-on-find. **OBJ-3/OBJ-4 survive ONLY as they apply to `ml-calibration`, not to the ARM.**
+
 **OBJ-1 — `ml-calibration.ts`: add the missing minimum-sample gate.** Below threshold, the pattern produces **no recommendation** — `suggestion = 'HOLD'`, `adjustment = 0` — and the reason is stamped so a reader can tell "insufficient evidence" from "evidence says hold." **Not** a silent skip: the report must say *why*.
 
 **OBJ-2 — ★ RE-SCOPED AT REV 2. IT IS NOT A VALUE CHANGE. IT NEEDS A THIRD STATE, AND REV 1'S VERSION WOULD HAVE MADE THINGS WORSE.**
