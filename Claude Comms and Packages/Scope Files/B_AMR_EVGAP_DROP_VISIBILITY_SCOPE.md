@@ -36,7 +36,20 @@ It **logs nothing, counts nothing, and mutates nothing.** An observation that di
 
 ## 2. Objectives
 
-**OBJ-1 — make the drop countable.** At `:156`, before the `return`, emit a counted/logged record distinguishing **which** operand was non-finite (`predictedNetEv` vs `realizedNetPnl` vs both) and carrying `assetClass`. Rate-limit or aggregate so a high-frequency drop cannot flood the log — **the failure mode to avoid is a fix that makes the log unreadable and gets reverted.**
+**OBJ-1 — make the drop countable, SPLIT BY PRECONDITION.** Langston's condition, and the reason for it: *"a bare counter reproduces the defect one level up — it tells you drops happened, not which precondition fired. **Count is not a set.**"*
+
+**THREE distinct preconditions can produce this drop, and they are not interchangeable:**
+
+| # | precondition | why it matters |
+|---|---|---|
+| 1 | `tradeData.expectedEdge` **present but NaN** | ★ the live H1 — **`??` does NOT catch NaN.** Requires `taker.netEV` to arrive *as NaN*, not missing. |
+| 2 | the `:928` fallback itself NaN (`tpDistance` or `frictionCost` non-finite) | a different bug entirely, in a different computation |
+| 3 | `realizedNetPnl` non-finite (`tradeData.pnl * 100`) | independent leg, **nothing to do with `a8242a3bc`** |
+
+★★ **CONSEQUENCE FOR PLACEMENT — this changes the design, not just the payload.** At `:156`, preconditions **1 and 2 are indistinguishable**: both present as "`predictedNetEv` non-finite," because the `??` has already collapsed them into one value. **Telling 1 from 2 requires recording whether `tradeData.expectedEdge` was present/finite at the CALL SITE (`vts-service.ts:1119`), before the `??` resolves.**
+⇒ **Instrumentation goes in TWO places: the `:156` guard (which argument failed + `assetClass`) AND the `:1119` call site (was `tradeData.expectedEdge` absent / NaN / finite).** A `:156`-only counter answers the smaller question and would send us back for the rest.
+
+Rate-limit or aggregate so a high-frequency drop cannot flood the log — **a fix that makes the log unreadable gets reverted and teaches nothing.**
 
 **OBJ-2 — no behaviour change.** The `return` stays. No observation is admitted that is not admitted today. **This batch must be provably inert to trading behaviour** — that is a verification criterion, not an aspiration.
 
