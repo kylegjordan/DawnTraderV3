@@ -192,3 +192,44 @@ Q3 asked to trace the ratio manager's `score === 0` bound-slam. **`server/servic
 
 ### ★ §8d — SUCCESS CRITERION, RESTATED PER HIS Q3-ANSWER
 **NOT "fires less often"** — that is an output, not a target. **The criterion:** every **emitted** recommendation survives the evidence test, and every **suppressed** one carries a stamped reason recording `n`, `w` and the interval bounds. **No expected-firing-rate figure will be reported** until several windows are sampled (his Q1 ruling: one window is enough for the SHAPE, not for the RATE).
+
+---
+
+## 9. ★★ REV 6 — WRONG-POPULATION ERROR IN §7A/§8. CORRECTED AT THE REAL READ SITE. THE DRIFT ARGUMENT IS WITHDRAWN AND THE OBJ-1 DEFECT IS LIVE.
+
+> ⚠️ **COMMIT-RECORD CORRECTION:** commit `511f1b97b` carries the message *"rev 6: correct a wrong-population measurement"* but contains **REV 5 content only** — a shell `&&` chain broke at a failed `git pull` (unstaged changes), so the rev-6 edit never ran while the commit still fired. **The message describes this section; the commit does not contain it.** Recorded here because a later reader searching the log for the correction would find the right subject at the wrong sha.
+
+**Trigger:** Langston made the `patternType` "3%" figure a condition — *"say what you queried and over what window, or leave the number off."* Producing that citation exposed the error. **This section CORRECTS §7A and §8 in the body; do not read those sections' figures as current.**
+
+### THE ERROR
+I measured `patternType` across **ALL** trades in the 30 log files. **The code does not read all trades.** Read site `vts-service.ts:445-450`: **filter `signalType === 'HYBRID'` FIRST, then `.slice(-50)`.** I measured the unfiltered set — the same wrong-population class corrected twice on 2026-07-27.
+
+### MEASURED AT THE REAL READ SITE
+Staging `logs/virtual_trades`, **last 30 `.json` files** (`loadHistoricalTrades`, `vts-service.ts:543-552`), span **2026-06-29 → 2026-07-28**, replicating the exact filter-then-slice:
+
+| population | n | `patternType` populated |
+|---|---|---|
+| ALL trades in the 30 files | 2,444 | **72 = 2.95%** ← **the old figure, WRONG POPULATION** |
+| **HYBRID-filtered (what the code reads)** | **28** | **28 = 100.0%** |
+
+### ★ CONSEQUENCE 1 — THE DRIFT ARGUMENT IS WITHDRAWN
+**`patternType` is populated on 100% of the trades this component actually reads.** It groups by **candlestick pattern exactly as Directive 10.6 designed.** ⇒ **the claim "it silently falls back to `strategy`" is FALSE and is struck.** ⚠️ **That claim had already been put in front of Kyle.** *(The `|| t.strategy` fallback exists in code but is never exercised on this population.)*
+
+### ★★ CONSEQUENCE 2 — §7A's THREE BUCKETS WERE THE WRONG POPULATION TOO
+§7A reported `sma_trend_ride` n=21 / `vwap_pullback` n=17 / `strong_bull_trend` n=12, summing to 50. **Those are STRATEGY names — they cannot arise from a `patternType`-keyed grouping over a HYBRID-filtered set.** Langston reproduced the Wilson arithmetic and fenced it **RULED ON REPORTED FACT** *(verified the arithmetic, not the trade store)* — **the arithmetic was sound; the inputs were not.** ★ **That fence is what contained the error, and it is the argument for keeping it on every reported figure.**
+
+### ★★★ CONSEQUENCE 3 — THE OBJ-1 DEFECT IS **LIVE RIGHT NOW, TWICE**
+| bucket | n | wins | winRate | emitted |
+|---|---|---|---|---|
+| `PINBAR` | 16 | 3 | 18.8% | DECREASE |
+| `MORNING_STAR` | 10 | 3 | 30.0% | DECREASE |
+| **`ENGULFING`** | **1** | **1** | **100.0%** | ★ **INCREASE — off ONE trade** |
+| **`ABCD`** | **1** | **0** | **0.0%** | ★ **DECREASE — off ONE trade** |
+
+**Window total = 28, NOT 50 — the 50-trade window has NEVER FILLED** (HYBRID supply is 28 over 30 days). §1's opening claim is **`ENGULFING` in the current window, live**; `ABCD` mirrors it on the DECREASE side.
+
+### ★ CONSEQUENCE 4 — THIS WEAKENS THE WILSON CASE *ON THIS WINDOW*
+§7A argued interval-over-count using buckets of n=12–21, where a count gate looked clumsy. **At the REAL n the two offending buckets are n=1 — which a minimum-n of any value ≥2 catches.** ⇒ **on this window a plain minimum-n is defensible and Wilson is over-engineering** — the opposite of what §7A argued, recorded rather than quietly dropped. *(The structural argument that a count is blind to effect size still stands in general; it is simply not what this window needs.)*
+
+### WHAT DOES **NOT** CHANGE
+**The HOLD stands.** #174 remains logically prior. A live `n=1` recommendation on a **write-only record read only by a display page** (Langston §8a: sole readers `client/src/pages/machine-learning.tsx:436-1131`) is **a decorative output being wrong, not a trading defect.** If anything this SHARPENS the ask: the component does **exactly what it was designed to do in January, on exactly the data it was designed for — and that design emits a parameter recommendation off a single trade.**
