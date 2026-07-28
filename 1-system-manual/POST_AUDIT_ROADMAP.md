@@ -525,6 +525,20 @@ The B65.2 functional ship deleted the paper-execution-engine consumption of meta
 
 **Out of scope:** if any failing test reveals a live-system bug, file as a separate dedicated batch — don't bundle into Test Suite Recovery.
 
+### 16.8 Predictive-Learning / ML-Era Teardown REMAINDER (added 2026-07-28, **Kyle decision: REMOVE**)
+
+**Kyle 2026-07-28, on the calibration routine:** *"yes, we remove this old legacy piece from the predictive learning and ML days — that needs to be removed… otherwise it goes into Phase 16 when we're debugging and removing legacy stuff."* **He also set the criterion — remove NOW only if it is causing problems. It is not** (write-only; the only readers of `/api/vts/predictive-adjustments/*` are display queries at `client/src/pages/machine-learning.tsx:436-1131`; no trading-path caller) ⇒ **scheduled, not urgent.**
+
+**Three limbs, all logged to this register by B-NEW-54 (2026-06-08) as `RUNNING_ISSUES` #174 and left undecided for seven weeks — remove them TOGETHER, that being the point of a consolidated register:**
+- **(a) `server/services/ml-calibration.ts`** + its scheduler (`server/core/schedulers/ml-calibration-scheduler.ts`, cron `0 0,8,16 * * *`) + the `logPredictiveAdjustment` sink and its read-only API routes. **ORIGIN: Replit-era commit `b141cbfdf`, 2026-01-04, whose attached directive `attached_assets/Pasted-Directive-10-6-Predictive-Calibration-The-Training-Loop_*.txt` states its purpose as *"connecting simulation output (VTS) back into strategy input (HYBRID_PARAMS)"*. The write-arm was NEVER built — the directive itself defers auto-apply to the Python ML microservice, and B-NEW-54 RETIRED that microservice.** ⇒ the loop it exists to close can never close.
+- **(b) `server/services/retraining-freeze-controller.ts`** — orphaned when the drift-detector's `triggerRecalibration` became a logged no-op.
+- **(c) `GET /api/vts/internal/calibration` (`vts.ts:419`) + `INTERNAL_SERVICE_KEY`** — its only caller was the deleted `ml_service.py`. ⚠️ `INTERNAL_SERVICE_KEY` is still read at `vts.ts:421`, so it stays in `.env`/`.env.example` until (c) goes.
+
+⚠️ **AT REMOVAL — DO NOT INHERIT THE SHIPPED FORMULA AS THOUGH IT WERE DESIGNED.** `bridge/canonical/DawnTrader_System_Architecture_Execution_Flow.md` §11.2.1 specifies `winRate×0.4 + avgNetPL×0.3 + consistency×0.2 + regimeAlignment×0.1`; the code computes `avgFinalScore×0.5 + avgPredictiveConfidence×0.3 + avgRegimeWeight×0.2` — **a different formula from different inputs.** The implementation diverged from its own documented intent. The canonical corpus is a frozen historical record and is **NOT edited**; record the divergence in the removal report so whoever builds real learning (Phase 17/18) starts from the intent, not the drift.
+⚠️ **ALSO DISPOSE OF ITS ORPHANED OUTPUT SINK:** `logs/predictive_adjustments` (2.3 MB, ~120 daily files) — delete, or record as a chosen-loss. It is part of the unmanaged file-store class (#601).
+**What dies with (a), neither built:** `#591` limb (b) (the pinned quality multiplier, `B-CALIBRATION-QUALITY-WEIGHT`) and `B-EVIDENCE-GATE` OBJ-1 (**closed without build 2026-07-28**).
+**Mechanics:** rule 18 — record in `DELETED_COMPONENTS_LOG.md` with blast-radius verification, archive to `_archive/deleted-code/*.removed`. **Closes `RUNNING_ISSUES` #174.**
+
 **Phase 16 expected outcome**: All legacy infrastructure permanently removed. Schema cleaned. ~71 legacy tables dropped. LSP errors resolved. Residual paper percentage-trailing code purged from active codebase. **CI Test Suite restored to green per §16.7.**
 
 ---
