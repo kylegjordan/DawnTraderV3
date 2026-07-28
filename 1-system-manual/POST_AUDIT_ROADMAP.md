@@ -872,6 +872,30 @@ Phase 16.2's "storage.ts must be modularized BEFORE legacy tables are dropped" i
 **Phase 21.4 expected outcome:** monolith decomposed into 8 modules. With B72 lever migration already complete pre-launch, the 5D resolution matrix is populated and the modules just need to be wired against it. Adding a new exchange or asset class in Phase 21.5 becomes a configuration-and-adapter exercise, not a code-rewrite exercise.
 
 ---
+## Phase 21.6: Evidence-Based Pool Ranking — rebuild "scan the proven winners more often" (Post-Live; Kyle-directed 2026-07-28)
+
+**Origin.** `B-ARM-REMOVAL` (2026-07-28) DELETED the Adaptive Ratio Manager — the dynamic ideal/rotational scan split. ⚠️ **DELETED, not disabled** (archived at `_archive/deleted-code/b-arm-removal-adaptive-ratio-manager.ts.removed` as a 100%-similarity rename, so `git log --follow` traverses its full history). **Kyle 2026-07-28: *"eventually I would like to get back to having this, when we have more data and actual live data that it shows who are our proven winners. And I'd like to set it up on xStocks as well… after we launch the live mode active path trading."*** This phase is that rebuild.
+
+**Why the original failed — do not repeat it.** (1) **It never measured performance.** Membership came from `getCompositeScore`: four **pre-trade estimates** off a **single most-recent observation**, minimum-sample rule removed. No profit, no outcome, anywhere (**#597**). (2) Its evidence sources were unusable — a live-mode-gated table that has never held a row, and a confidence damper saturating at 100 samples. (3) The ratio never reached allocation: `actualIdeal = min(target, available)` and available never exceeded 16 against targets of 151–180.
+
+### ★ HARD PREREQUISITES — this phase CANNOT start until these are true
+1. **#599 — RETENTION FIXED FIRST. Closed trades are currently HARD-DELETED at 90 days with no archive** (not in the manifest, not in the b75 sweep, `DELETE FROM vts_open_trades`). ⇒ **the corpus cannot accumulate; at launch we would hold 90 days, permanently.** ★ **Every day this is unfixed destroys another day of the very evidence this phase needs. It is the gating item, and it is gating NOW, not at Phase 21.**
+2. **#596 — REPRESENTATIVENESS.** The only store with outcome fields is the JSONL fallback sink; the DB copy has **no** `netProfit`/`exitPrice` at all. If that sink covers a lane-selected subset, the sample is **biased in a way no statistics repair** — bias outranks volume.
+3. **#597 — MEMBERSHIP.** Fix what "best performing" means before re-introducing anything that acts on it.
+4. **Live-mode outcomes exist** (Kyle's condition: *actual live data*), for **crypto AND xStock**.
+
+### The principled implementation (already researched — do not re-derive)
+- **Reward = mean net log-growth per closed trade**, net of friction — simultaneously the Kelly criterion and the ρ=1 manipulation-proof measure (Goetzmann/Ingersoll/Spiegel/Welch 2007). ⚠️ **NOT win rate** — the most manipulable performance statistic there is (Lo 2001's *Capital Decimation Partners*: near-100% win rate, hidden bomb), and it contradicts §0's *"edge is selection, not frequency."*
+- **Allocation = discounted Thompson Sampling** (Beta-Bernoulli or bounded-Gaussian) — chosen over UCB because our feedback is **delayed and batched** (Chapelle & Li 2011). Geometric decay toward the default split makes *"revert to default when evidence is stale"* a property of the model rather than a bolt-on.
+- **Shrink to a COHORT, not the grand mean** — symbol nested in (asset class × strategy × regime); partial pooling estimates every level off the whole corpus.
+- **Window far wider than the original 24h-per-regime**, which was structurally unfeedable.
+- ⚠️ **If per-group counts still cannot reach the hundreds, the honest answer is a FIXED SPLIT** (DeMiguel/Garlappi/Uppal 2009; Goyal & Wahal 2008 — reallocating toward observed outperformers added nothing). **Do not ship a ranking with an undifferentiated middle dressed up as insight.**
+- **Ship the disconfirming alarm with it (#598):** emit when `available ≥ target` — the one condition under which any of this binds.
+
+**Full record:** `DELETED_COMPONENTS_LOG.md` · `SYSTEM_MANUAL.md` §6 · `B_ARM_REMOVAL_SCOPE.md` · `Langston Design Asks/B_CALIBRATION_QUALITY_WEIGHT_RESEARCH_SYNTHESIS_r1.md` (citations).
+
+---
+
 ## Phase 21.5: Exchange Expansion — Perpetual Futures (Post-Live)
 
 **Status (2026-05-21):** XStocks already integrated pre-launch (Phase 24 closed 2026-05-10; xstock_spot universe expanded to ~450+ tokenized equities including Fortune 500 / NASDAQ / ETFs / index funds after the May discovery of ~220 previously-unrecognized feeds). Phase 21.5 now narrows to PERPETUAL FUTURES only.
