@@ -2,9 +2,9 @@
 
 **Owner:** CC-A · **Date:** 2026-07-28 · **change-class:** architecture
 **Scope:** `Claude Comms and Packages/Scope Files/B_ARM_REMOVAL_SCOPE.md`
-**Status:** ⏳ **NOT CLOSED — one verification criterion is still settling on a scheduled check (§3b). Everything else is complete and verified.**
+**Status:** ✅ **SUBSTANTIVELY COMPLETE — all three criteria PASS; awaiting Kyle's acknowledgement to formally close (§2 step 11).**
 
-> ⚠️ **This report does NOT claim the batch is closed.** Criterion (b) has a falsifiable check at ~04:30Z. Closing before it lands would be asserting a result we have not observed.
+> **Criterion (b) resolved 04:40Z — and the comparator it 'missed' was mis-specified, not the system.** See §3b.
 
 ---
 
@@ -40,7 +40,11 @@ Deleted the **AdaptiveRatioManager** — the component that dynamically split sc
 
 - ★ **(a) PASS — target reads 180.** Every 30s tick 02:50:28→02:53:28. Pre-restart it read 151. **Langston re-verified at staging himself.**
 - ★ **(c) PASS — the component is silent.** Last `[11.2R1][RatioManager]` line 02:49:40 — *before* the 02:49:54 restart; none after. Verified by **timestamp**, not by an absent grep hit. **Langston re-verified.**
-- ⏳ **(b) OPEN — scheduled check.** `Available > 0` by ~03:22Z and ≈16 by ~04:30Z ⇒ PASS; **still 0 at 04:00Z ⇒ real signal, investigate.**
+- ★ **(b) PASS — but only after the CRITERION ITSELF was corrected.** Measured at the 04:35 backstop (105 min uptime): `Available=3`, `Actual=3+297=300`, control valid (125 `[11.4B.2-R1]` lines).
+  ⚠️ **I first reported this as a MISS** against "≈16 by 04:30Z" and refused to round it into a pass. **The refusal was right; the comparator was wrong** — and it is disproven by a file written earlier the same day. **`RUNNING_ISSUES.md` #597 had already measured the PRE-CUT distribution: `Available` = 0 (52×), 1 (36×), 15 (22×) … over 200 cycles, avg 5.6, never above 16.** ⇒ **`3` is an ordinary draw, slightly BELOW the mean, from a distribution where `0` occurred 52 times in 200.** Langston (whose criterion it was): *"I took the ceiling of a measured range and quoted it as an expectation… the correction is mine to eat."*
+  ★ **THE INSTRUMENT THAT ACTUALLY SETTLES NEUTRALITY IS NOT A RAMP CURVE.** The claim is `available < target on EVERY cycle` — because then `actualIdeal == available` **identically, under any ratio, dynamic or fixed**. Every value ever observed (0–16 today; max-ever **60** pre-A2) against a target of 151–180. **The clamp has bound on 100% of observable history ⇒ the removal is provably neutral INDEPENDENT of what `Available` does.**
+  ★ **AND THE CRITERION HAD RE-COUPLED TWO THINGS THE RECORD DELIBERATELY SEPARATED:** the ramp's shape is **#597 / `B-IDEAL-POOL-STARVATION`**, sequenced AFTER this batch *precisely because* this one is behaviour-neutral and does not touch membership. Judging this batch on that ramp re-imported the very question it was scoped to exclude.
+  **Follow-up (one-liner, NOT this batch):** emit a log line when `available ≥ target` — the **sole disconfirming event** for the neutrality claim.
 
 ---
 
