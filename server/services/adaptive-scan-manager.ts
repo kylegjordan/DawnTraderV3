@@ -21,7 +21,6 @@
 import { SCANNER_PARAMS } from '../config/system-guards.js';
 import { getTelemetryAggregator, TelemetryAggregatorService, type PoolType } from './telemetry-aggregator.js';
 import { BENCHMARK_SYMBOLS, isBenchmarkSymbol } from './fx5-scanner.js';
-import { type MarketRegime } from './telemetry-repository.js';
 
 export interface FailedPairEntry {
   symbol: string;

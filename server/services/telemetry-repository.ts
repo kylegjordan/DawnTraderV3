@@ -358,15 +358,11 @@ export async function getTelemetryStatsByRegime(
   }
 }
 
-/**
- * Directive 11.2 R1: Get performance metrics by pool type
- * Used by AdaptiveRatioManager for dynamic ratio balancing
- */
-export interface PoolPerformance {
-  winRate: number;
-  avgEdge: number;
-  sampleCount: number;
-}
+// ★ B-ARM-REMOVAL (Langston C1): `PoolPerformance` DELETED. Both consumers died in this batch
+// and the census finds no other reference. Same disposition as its aggregator twin
+// `PoolPerformanceAggregate`, for the reason recorded there: it is WIN-RATE-shaped, the statistic
+// §0 rejects and the reason the ARM died — leaving it exported and greppable would hand the wrong
+// metric to whoever builds pool quality next. §15.
 
 // ★ B-ARM-REMOVAL: `getPerformanceByPool` + `getPoolComparison` DELETED.
 // They were the ARM's SQL evidence path, reading `telemetry_history` per pool/regime over a

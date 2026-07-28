@@ -199,24 +199,20 @@ describe('Directive 11.4C-R2 — Top Batch UI Integration & Diagnostics', () => 
   });
   
   describe('M67: Legacy Pool Reference Check', () => {
-    it('should use PoolType (ideal/rotational) not legacy tier references', () => {
-      const telemetry = new TelemetryAggregatorService();
-      
-      telemetry.recordPairTelemetry('TESTPAIR', {
-        finalScore: 0.7,
-        pool: 'ideal',
-        caller: 'vts',
-      });
-      
-      // ★ B-ARM-REMOVAL: probe re-pointed — getPoolPerformanceComparison died with the
-      // pool-aggregate limb. The SUBJECT here is the ideal/rotational TERMINOLOGY, which
-      // survives on the telemetry entry itself, so the assertion moves rather than dies.
-      const tagged = telemetry.getTopPairsWithPool(10);
-      for (const p of tagged) {
-        expect(['ideal', 'rotational']).toContain(p.pool);
-      }
-    });
-    
+    // ★ B-ARM-REMOVAL (Langston Step-4, BLOCKING B1): the former
+    // 'should use PoolType (ideal/rotational) not legacy tier references' test is DELETED AS A
+    // UNIT rather than re-pointed. Its original probe, `getPoolPerformanceComparison`, died with
+    // the pool-aggregate limb.
+    // ⚠️ MY FIRST ATTEMPT RE-POINTED IT TO `getTopPairsWithPool` AND THAT WAS WRONG: that method
+    // HARDCODES `pool: 'ideal' as PoolType` (`telemetry-aggregator.ts:946`), so the assertion
+    // compared a compile-time literal against itself and COULD NOT FAIL FOR ANY INPUT — and if the
+    // probe pair's composite score hit the M63 0.5-default filter the array was empty and the loop
+    // body never executed at all. `rotational` could have been renamed everywhere and it stayed
+    // green. **A fence that cannot fail is worse than no fence: it reports coverage it does not
+    // provide.** Same family as a tsc error count that "improves" because the compiler bailed.
+    // ★ SURVIVING M67 COVERAGE: the test immediately below — 'AdaptiveScanBatch should use
+    // idealPairs/rotationalPairs terminology' — asserts the terminology on a live surface.
+
     it('AdaptiveScanBatch should use idealPairs/rotationalPairs terminology', async () => {
       const telemetry = new TelemetryAggregatorService();
       const failureTracker = new PairFailureTracker();
