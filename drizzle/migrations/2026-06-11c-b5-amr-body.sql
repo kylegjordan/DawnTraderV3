@@ -30,7 +30,12 @@
 -- ════════════════════════════════════════════════════════════════════════════
 
 -- ── 1. Decision ledger ──────────────────────────────────────────────────────
--- ~2,880 rows/day both classes (30s MCE cycle). Retention: IN-SERVICE daily
+-- ~5,760 rows/day = 2,880 30s MCE cycles x 2 asset classes (one row PER CLASS
+-- per cycle). CORRECTED 2026-07-28 (#606): this read "~2,880 rows/day both
+-- classes" -- the CYCLE count mislabelled as the ROW count. Measured live:
+-- 268,794 rows / 47 days = 5,719/day = 99.3% of the corrected figure. Trusting
+-- the old comment made the real total read as 2x expectation and would have
+-- confirmed a false two-writer hypothesis. Retention: IN-SERVICE daily
 -- 90-day DELETE (amr-weather-report.ts maybePruneLedger — Langston-ratified
 -- judgment call 2; the B-NEW-47 partition sweep does NOT apply to this small
 -- non-partitioned table and the ledger is deliberately NOT in its registry).
