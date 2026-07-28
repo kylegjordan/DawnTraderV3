@@ -95,6 +95,14 @@ xStock runs **higher** average friction than crypto (60.09 vs 53.20) and yet **x
 
 ⇒ **Never rank the two classes on a raw friction figure.** Compare each against its own bands, or not at all.
 
+### 4.1 ★ The same inversion applies to `ev_gap_window_n` — **30 reads like the safer number and is the opposite**
+
+Seeded asymmetric at `2026-06-11c-b5-amr-body.sql:123,128`: **crypto 100, xstock 30.**
+
+A smaller window looks like a weaker, noisier setting. In this mechanism it is the **less damaged** one: because `capacity == warmup` (§2(d)), xStock's window both **fills** and **starts speaking** three times sooner than crypto's. **Same defect, three times smaller blast radius.**
+
+⇒ crypto's larger number is not extra rigour — it is what keeps the input absent 97.8% of the time.
+
 ---
 
 ## 5. THE EV-GAP RATIO — what it is, on the 2.17% where it exists
@@ -118,14 +126,31 @@ The 2,921 cycles where the input exists do **not** spread across the 47-day wind
 
 Each day is **nearly constant internally**; the four differ wildly. ⇒ **The percentiles were measuring "which of four window-fills you land in," not market conditions.** "41.9% below 1.0" decodes to *"two of the four days sat below 1.0"* (357 + 941 = 1,298, against 1,224 counted).
 
-⇒ ★ **The row count is not the sample size.** 2,921 rows are ~4 independent observations of a rolling window. **Any statistic over this input must be computed per-window-fill, never pooled over rows.**
+⇒ ★ **The row count is not the sample size.** 2,921 rows are ~4 independent observations of a rolling window.
+
+### 5.1a ★★ THIS IS NOT A SAMPLING PROBLEM — IT IS THE SAME DEFECT AS §2(d), AND THE INPUT IS CURRENTLY **UNMEASURABLE**
+
+> **(Langston, 2026-07-28 — a correction to the retraction above, which did not go far enough.)**
+
+Because `capacity == warmup` is structurally forced (§2(d)), **the ring can only ever emit while completely full, sliding forward one observation at a time.** Consecutive emissions therefore differ by at most one of 100 members — they are **near-identical by construction**. A window that fills during one day emits a **day-long plateau**, and the next fill (after the next restart) starts from an unrelated set and plateaus somewhere else entirely.
+
+⇒ **"Nearly constant within a day, wildly different across days" is not a property of market conditions. It is the defect's signature.**
+
+⇒ Therefore the honest statement is **not** *"my percentiles were wrong and better sampling would fix them."* It is:
+
+> ★ **The distribution of this input CANNOT BE MEASURED AT ALL under the current constants, and will stay unmeasurable until capacity and emit-minimum are split.** No amount of additional data helps, because the mechanism that produces the data destroys its independence.
+
+Leaving that question **open** is stronger than replacing the numbers with better ones, and no statistic over this input — mean, median, percentile, or the earlier "41.9% below 1.0" — should be quoted anywhere until the split lands.
 
 ### 5.2 ★ Every crypto ev-gap value on record predates the predictor correction
 
-All four days are early-to-mid July and **precede the #558 work dated 2026-07-28** (`d799c47bd`, `e3a22c15a`). The `#558-A3` change re-sourced the *predicted* operand away from the formula this project retired as anti-predictive.
-⇒ **Every ev-gap ratio crypto has ever produced was computed from the OLD operand. The corrected operand has produced zero crypto observations to date.**
+**A3 IS PINNED** (Langston, at the ref): commit **`90f6a3f72`, 2026-07-27T23:31:13Z**, *"B-RETIRED-SCORE-REMOVAL A3: re-source expectedEdge/predictedProfit off finalScore."* It re-sourced the *predicted* operand away from the formula this project retired as anti-predictive.
 
-> ⚠️ **Claim bounded:** verified that the four days precede the 2026-07-28 `#558` commits; **A3's exact commit was NOT pinned** (a `-S` search on the new operand string in `vts-service.ts` returned no hits — reported as-is, read as evidence neither way). If A3 landed earlier, the ordering needs re-checking before this sentence is load-bearing.
+The last ev-gap day on record is **2026-07-13**; A3 lands **14 days later**, a single clean boundary with nothing touching the operand in between.
+
+⇒ **Stated flat: every crypto ev-gap ratio in existence predates the predictor correction. The corrected operand has produced zero crypto observations to date.**
+
+> **Why my earlier `-S` search came back empty** — reported because the negative result was nearly mistaken for evidence: **the operand is not in `vts-service.ts` at all.** It is set in **`vts-runner.ts:2065` and `:2235`** (`taker.netEV / entryPrice`); `vts-service.ts:1118-1120` only *forwards* it. I searched the forwarding file, not the assigning one. **An empty search of the wrong file is the absent-as-valid trap (#568), and it was one inference away from being read as "the change never happened."**
 
 ### 5.3 Both null paths — discriminated, not assumed
 
@@ -165,11 +190,18 @@ Read from **`module_constants` WHERE `module_name = 'amr_weather_rules'`**. (The
 
 Langston's process item: the `:150-153` *"paper joins in Phase 19 as a SEPARATE operator decision — scope B2"* deferral has sat undispositioned and **must not leave this document without a concrete home.**
 
-**Home:** a RUNNING_ISSUES entry owned by **CC-B**, homed to **leg A's own Step-1 batch** (not a future phase — leg A is already open and the work is two constants plus one feed decision), covering both halves:
-1. **the defect** — split `ev_gap_window_n` into separate capacity and emit-minimum constants (§2(d), bucket 1);
-2. **the decision** — whether the active/paper close path feeds `feedEvGapObservation`, and if so with what source label (§2(c), bucket 2, **Kyle's call, not CC's**).
+**Home: `RUNNING_ISSUES.md` #604, owner CC-B, homed to leg A's own Step-1 batch** (not a future phase — leg A is already open). **Langston-confirmed 2026-07-28, with one split he insisted on:**
 
-*Number pending Langston's confirm-or-redirect on the framing; filed under that number the same turn it returns. **This line is the open loop and is not closed until the number exists.***
+**The entry carries TWO SEPARATELY-TRACKABLE LEGS, and neither blocks the other:**
+
+| leg | what | taxonomy | who closes it |
+|---|---|---|---|
+| **(a)** | split `ev_gap_window_n` into distinct **capacity** and **emit-minimum** constants (§2(d)) | **bucket 1 — a defect** | **CC-B, in leg A.** Does **not** wait on (b). |
+| **(b)** | does the active/paper close path feed `feedEvGapObservation`, and with what source label (§2(c)) | **bucket 2 — undispositioned decision** | ★ **KYLE. Not CC's and not Langston's to close.** |
+
+★ **Why (b) is explicitly not ours** (Langston, verbatim intent): `:150-153` *already* designates this "a SEPARATE operator decision," which makes it **Kyle's** — *"I'm not going to decide it for him or stage a ceremonial re-approval of something he hasn't been asked yet."* ⇒ (b) is presented to Kyle as an open question in leg B's options paper; **it is not pre-decided here, and a CC agreeing with a CC does not constitute its approval.**
+
+★ **The legs must not block each other.** (a) is a two-constant defect fix and ships on its own schedule; parking it behind a decision Kyle has not yet been asked is how a defect becomes permanent.
 
 ## 8. Provenance read (§9.5(b))
 
