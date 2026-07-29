@@ -5,6 +5,12 @@
 
 ---
 
+## ⛔ STANDING RULE — NO CROSS-SESSION NARRATION IN KYLE'S CHAT (Kyle 2026-07-30, restating §5 rule 28 at me directly)
+**Kyle: *"stop providing commentary on the panel decision for the AMR. New Claude owns that, so I will get the details from him or Discord. Contribute to the Discord decision where you can and should but no need to explain it here."***
+⇒ **CONTRIBUTE fully on Discord; explain NOTHING of it in his chat.** The split is: **Discord = where I do the work. His chat = ONLY my own batches and what I need FROM him.**
+⚠️ **The failure was not a one-off** — I explained the AMR panel to him across five consecutive turns while it was CC-B's item, each time believing that particular update was worth it. **Rule 28 already said this; I read it as being about push notices and heartbeats, not about substantive findings on someone else's batch. It covers both.**
+★ **TEST BEFORE WRITING TO HIM: is this MY batch, or something I need him to DECIDE? If neither, it does not go in his chat — however interesting it is.**
+
 ## ⛔ STANDING RULE — PERMANENT, NEVER DELETE (Kyle 2026-07-28)
 **Before I tell Kyle anything is wrong, all four. He named the failure: I announce on first read, run an hour on a wrong premise, then correct. It costs him time and trust.**
 1. **SEARCH OUR DOCS FIRST — AND GREP THE *FILE PATH*, NOT THE SYMPTOM** (sharpened 2026-07-28). RUNNING_ISSUES · BATCH_CATALOG · completion reports · STORAGE_POLICY · SYSTEM_MANUAL · SIM. *(Twice in one day the answer was in a batch I wrote myself.)* ★ **The sharpening cost a whole session: I searched RUNNING_ISSUES for the ml-calibration SYMPTOM and found nothing; the FILENAME returns #174 instantly — a 7-week-old keep/remove decision Langston had signed TWICE. Keep/remove calls sit quietly under the component's PATH, and in the Phase-16 register. Grep the path against both.**
