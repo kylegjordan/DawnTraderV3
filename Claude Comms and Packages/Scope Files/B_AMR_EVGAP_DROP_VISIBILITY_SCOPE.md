@@ -34,6 +34,21 @@ It **logs nothing, counts nothing, and mutates nothing.** An observation that di
 
 ⇒ **The one measurement that would settle it is blind to the thing being looked for.** That is the definition of a visibility defect, and it is why this precedes any fix decision.
 
+## 1b. ★ PROVENANCE READ (§2 MANDATORY 1.b — Kyle directive 2026-07-29; RETROFITTED to this already-approved scope, because the rule does not grandfather)
+
+> ⚠ **This section was ABSENT when Step-1 was approved. Added before Step-2.** ★ **And this batch's own sibling is the case FOR the rule: `#607 B-VTS-FRICTIONCOST-NAN` was scoped, homed, sequenced-first and APPROVED to fix a "7.3% corrupted cost figure" that turned out to be maker/taker TWIN rows correctly carrying no cost of their own. Nobody asked what `persistTwinClosedRecord` was BUILT TO DO. The intent read would have killed it at Step-1 instead of after approval — and would have pre-empted two independent wrong measurements (CC-B's AND Langston's).**
+
+**Archaeology (`git log -S … --reverse`, then the introducing commit's message):** every component this batch touches was introduced **on 2026-06-11 by B-5**, the AMR body batch — `feedEvGapObservation` + the EV-gap window + the ledger writer at **`0e62ad97f`** (chunks 3+3b+5b), and `ev_gap_window_n` at **`ed9be95cd`** (chunk 1).
+
+| component | ORIGINAL INTENT (from the introducing commit) | disposition |
+|---|---|---|
+| `feedEvGapObservation` / the EV-gap window | Introduced as part of the **"M2 score contract w/ caps-not-overrides"** — i.e. a **calibration-honesty input** to the weather score, deliberately expressed as a **CAP** on optimism rather than an override. ★ **"M2" is the machine-learning seam** — this input exists so the eventual ML bolt-on inherits a predicted-vs-realized signal. | **(1) still relevant and correct.** Its purpose is intact; nothing about it is being changed by this batch. |
+| `ev_gap_window_n` (crypto 100 / xstock 30) | Seeded in a migration of **"~140 provenance-commented seeds (friction/DBS distributions captured pre-seed per Pull-in B)"**. ★ **The values were CAPTURED FROM MEASURED DISTRIBUTIONS, not chosen arbitrarily** — which materially raises the bar for changing them. | **(2) relevant, may need updating to today's intent** — but **NOT by this batch**, and #604 leg (a) must argue against the measured-seed provenance, not around it. |
+| the `:156` guard | Present from the same introduction as a **defensive input-validation guard** on a public feed function. **No evidence it was ever intended to be a silent DISCARD of a learning observation** — the silence reads as an unexamined consequence of a standard `!isFinite → return`, not a decision. | **(2) relevant but needs an update to today's intent** — **this batch's whole subject.** The guard stays; its silence does not. |
+| the ledger `weather` json / `recordWouldBlock` relay | Introduced in the same commit as the ledger writer; the drain pattern's own comment says it **"avoids a second write path."** | **(1) still relevant and correct** — which is precisely why amendment 1 REUSES it rather than adding a counter. |
+
+★ **WHAT THE READ CHANGED IN THIS SCOPE (a provenance section that changes nothing is a rubber stamp):** the `ev_gap_window_n` seeds being **measured-distribution-derived** is new information, and it **strengthens the case against #604 leg (a)'s constant split** — lowering 100→30 is not a free knob-turn, it discards a value captured from a real distribution. **Recorded here so leg (a) cannot later be argued as a trivial config change.**
+
 ## 2. Objectives
 
 **OBJ-1 — make the drop countable, SPLIT BY PRECONDITION.** Langston's condition, and the reason for it: *"a bare counter reproduces the defect one level up — it tells you drops happened, not which precondition fired. **Count is not a set.**"*
