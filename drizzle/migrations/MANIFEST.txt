@@ -185,3 +185,4 @@
 2026-07-23-p19-b8-5i-trailing-enabled-flags.sql
 2026-07-24-p19-b8-5j-max-hold-switch.sql
 2026-07-25-b-retired-score-removal-final-score-nullable.sql
+2026-07-30-b-trade-record-retention-leg1-extend-gc-window.sql
