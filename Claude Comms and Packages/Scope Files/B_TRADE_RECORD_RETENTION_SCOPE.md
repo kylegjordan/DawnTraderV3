@@ -72,3 +72,43 @@ Closed `vts_open_trades` rows **39,377**; `exit_decision_archive` rows **6,770**
 - ⏭ **ONE RESIDUAL, genuinely open:** `rtb_shadow_pairings` is itself in **no** sweep registry and has **no** GC that I could find — so it grows unbounded but **loses nothing**. Flagged for the catalogue, **not** for this batch.
 
 **METHOD NOTE — why this is in the scope and not a quiet edit:** the 16.4% was real, measured, and would have been a *plausible, alarming, wrong* headline. What stopped it was reading the code before naming a cause (rule 24.a) and CC-B challenging an assumption I had asserted rather than tested. **A peer challenge to the weakest link in a scope is worth more than another measurement of its strongest.**
+
+---
+
+## 7. ★★ PROVENANCE READ (CLAUDE.md §2 MANDATORY 1.b, as amended at `9e9d427a7`) — AND IT REFRAMES THE BATCH
+
+**CORPORA SEARCHED, named as the rule requires:** `BATCH_CATALOG.md`; `RUNNING_ISSUES.md` (searched by FILE and SYMBOL name, not by symptom); `git log -S "<symbol>" --reverse` **not path-limited**, so it survives the P19-B-RENAME family; the introducing commits' full messages. ⚠️ **`bridge/canonical/` NOT consulted for these two components and deliberately so — both postdate the 2026-01/02 governance change (2026-05-11 and 2026-05-05), so the pre-governance corpus cannot describe them.** Stating that rather than leaving the omission to be inferred.
+
+### ★★ TIER 1 — `sweepClosedOpenTrades` (`vts-trade-persistence.ts`). **THIS BATCH CHANGES ITS BEHAVIOUR, SO IT GETS FULL PROVENANCE — AND THE PROVENANCE INVERTS THE SCOPE'S FRAMING.**
+**ORIGIN: `79774aa51`, B79.0g-tx, 2026-05-11.** Intent **quoted verbatim from the introducing commit, not summarised:**
+> *"Replaces the B79.0g fire-and-log close-time DELETE pattern with a closed-flag soft-delete + boot-time GC sweep. Resolves RUNNING_ISSUES #91."*
+> *"NEW `sweepClosedOpenTrades` — boot-time CTE DELETE…RETURNING, HARD-FAIL with `[B79.0g-tx][CONFIG_MISSING]` log + null-return on missing module_constants row; does NOT halt boot."*
+
+And the purpose stated in its own ledger entry (`RUNNING_ISSUES` #91), verbatim:
+> *"Soft-delete is observability + bounded-history, not atomicity."*
+
+★★ **THE FINDING THAT CHANGES THIS BATCH: BEFORE B79.0g-tx, CLOSED ROWS WERE DELETED AT CLOSE TIME. The sweep did not introduce deletion — it REPLACED AN IMMEDIATE DELETE WITH A 90-DAY-DEFERRED ONE.** ⇒ **this component is not the thing destroying trade history; it is the component that ADDED 90 DAYS OF RETENTION WHERE THERE WAS PREVIOUSLY NONE.**
+⚠️ **§§1–2 of this scope frame the sweep as the destroyer** (*"HARD DELETE, NO ARCHIVE, and it is in NONE of the three registries"* — all true as facts about today) **and that framing is MISLEADING about intent.** The registry absence is not an oversight in the sweep; **the sweep was never an archival mechanism and was never designed to be one.** Corrected here rather than silently, because the wrong framing invites a "fix the sweep" scope when the sweep is doing exactly its job.
+**DISPOSITION: (1) STILL RELEVANT AND CORRECT.** It bounds the history of a WORKING-STATE table, which is what it was built for and what it still does. ⇒ **the batch must NOT "repair" it.**
+★ **THE ACTUAL GAP, restated honestly: no ARCHIVE LEG was ever built for this table.** That is a **missing capability**, not a malfunctioning component — and it is precisely rule 24's outcome **(2): working as designed, but nobody decided what should happen to the data before the bound.** ⇒ **A SCOPE CALL, not a repair.**
+
+### ★ TIER 1 — `archiveExitDecision` / `exit-decision-archiver.ts`. **Behaviour changes only under candidate (B) (adding keys to its `state_snapshot` payload).**
+**ORIGIN: `0dc7c470b`, B70 Step 3.2–3.6, 2026-05-05.** Intent verbatim from the introducing commit:
+> *"Generic per-table buffered writer mirroring B74 pattern… registerArchiveTable + enqueueArchiveRow + getArchiveStats public API"* — i.e. a **capture-for-later-analysis layer**, per-domain archivers over a shared buffered writer, tiered by B75.
+**DISPOSITION: (1) STILL RELEVANT AND CORRECT.** ⇒ **candidate (B) USES it as designed** — adding fields to a payload that already carries ~40 is not an amendment to the component's purpose. **That materially lowers (B)'s risk versus (A), which would add an export leg to the PLAIN retention path that has never had one.**
+
+### TIER 2 — one-line intent notes (read or called, behaviour NOT changed by this batch)
+- **`module_constants.data_lifecycle.*`** — the retention-knob SSOT (B75). Read-only here. **(1) correct.**
+- **`b75-retention-sweep.ts` registries (`B74_TABLES` / `B70_TABLES` / `PLAIN_RETENTION_TABLES`)** — the tiering registrar. `vts_open_trades` is absent by history, not by exclusion decision. **(1) correct; the absence is the gap, not a fault in the registrar.**
+- **`exit_decision_archive` + `state_snapshot`** — the surviving outcome record; already hot→warm→cold via `B70_TABLES`. **(1) correct.**
+- **`logs/virtual_trades` JSON ledger** — ⚠️ **(2) RELEVANT BUT NEEDS UPDATING TO TODAY'S INTENT.** `HIDDEN_CONTEXTUAL_EDGE_STUDY_PLAN.md:39` designates it *"the durable long record"*, yet it has no tier, no manifest row and no backup (#601). **Any argument of the form "that field is safe, it survives in the JSON" is VOID until #601 resolves** — the basis on which Langston restored `chosen_entry_mode` + `entry_fee_rate` to the at-risk set.
+- **`markOpenTradeClosed`** — the soft-delete writer, same B79.0g-tx origin. Untouched. **(1) correct.**
+
+### DISPOSITIONS 3, 4 AND 5 — NOT USED, AND SAYING SO IS PART OF THE RULE
+**(3) disconnected-and-should-reconnect:** none. **(4) connected-but-should-be-removed:** none — ⚠️ **explicitly NOT the sweep, per the Tier-1 finding above.** **(5) genuinely dead, stay disconnected:** none. **Nothing this batch touches is dead code.**
+
+### ⚠️ NOT RECOVERABLE — MARKED `INFERRED-FROM-CODE`, NOT ESTABLISHED
+**Why `vts_open_trades` was never added to a B75 registry.** B79.0g-tx introduced its retention knob 2026-05-11; B75's tiering predates it. **No commit message, scope, pre-audit or ledger entry states a decision either way** — searched by table name across `BATCH_CATALOG`, `RUNNING_ISSUES` and the B75/B-STORAGE-HARDEN scope set. ⇒ **the most likely reading is that the two were built in different batches and never reconciled — the SAME shape Langston found in the AMR friction thresholds (pool-basis fitted, universe-basis fed) hours earlier.** ★ **Marked INFERRED-FROM-CODE. Do not report it as an established decision, and do not report it as negligence: an unreconciled seam between two batches is the recurring failure mode here, not anyone's oversight.**
+
+### ★ SEQUENCING CONSTRAINT (Langston 2026-07-30) — DO NOT SCOPE OFF TODAY'S DISK FIGURE
+Alert `954d20b7` fires **2026-07-31T06:00Z** on the June partition drop. If it lands, the baseline moves from ~166 GB / 83.2% to roughly **110 GB**. ⇒ **scope Step 2's targets off the POST-SWEEP number or off the growth RATE, never off the current peak** — otherwise Step 2 is audited against a figure that expired two days earlier.
