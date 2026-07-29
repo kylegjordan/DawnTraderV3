@@ -396,19 +396,34 @@ export default function PaperOpenTradesTab({ mode }: { mode?: 'paper' | 'live' }
           rankHeaderLabel="Promote R"
           rankHeaderTitle="R-multiple at promotion — the ranking score this trade won its slot with (frozen at promote; the RTB tab shows the live value). '—' for trades opened before this stamp existed."
           afterSymbolHeaders={
-            <th className="px-3 py-2 text-right font-medium text-muted-foreground" title="Engine slot this position occupies, out of the guardrail cap.">Slot</th>
+            <>
+              <th className="px-3 py-2 text-right font-medium text-muted-foreground" title="Engine slot this position occupies, out of the guardrail cap.">Slot</th>
+              {/* Kyle 2026-07-29: MOVED here from the appended-column group. It was column 33 of 35
+                  on a 3,452px-wide table — present and correct, but ~2,500px of horizontal scroll
+                  away, i.e. invisible in practice. Verifying that a column RENDERS is not the same
+                  as verifying a human can SEE it (§9.3). Sits beside Slot so the lane is legible
+                  without scrolling. */}
+              <th className="px-3 py-2 text-left font-medium text-muted-foreground" title="Admission lane: EXPL = admitted via the exploration lane (learning-data budget); blank = normal net-EV admission. Display-only while exploration mode is active.">Lane</th>
+            </>
           }
           renderAfterSymbolCells={(trade) => {
             const t = trade as AdaptedOpenTrade;
             return (
-              <td className="px-3 py-2 text-right font-mono text-xs">
-                {t.slotNumber != null ? `${t.slotNumber}${Number.isFinite(Number(t.maxSlots)) ? ` / ${t.maxSlots}` : ''}` : '—'}
-              </td>
+              <>
+                <td className="px-3 py-2 text-right font-mono text-xs">
+                  {t.slotNumber != null ? `${t.slotNumber}${Number.isFinite(Number(t.maxSlots)) ? ` / ${t.maxSlots}` : ''}` : '—'}
+                </td>
+                <td className="px-3 py-2">
+                  {t.admissionBasis === 'exploration'
+                    ? <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium bg-amber-500/15 text-amber-600 dark:text-amber-400" title="Admitted via the exploration lane (learning-data budget)">EXPL</span>
+                    : <span className="text-muted-foreground">—</span>}
+                </td>
+              </>
             );
           }}
           extraHeaders={
             <>
-              <th className="px-3 py-2 text-left font-medium text-muted-foreground" title="Admission lane: EXPL = admitted via the exploration lane (learning-data budget); blank = normal net-EV admission. Display-only while exploration mode is active.">Lane</th>
+              {/* Lane MOVED to the after-Symbol group (Kyle 2026-07-29) — see the comment there. */}
               <th className="px-3 py-2 text-left font-medium text-muted-foreground" title="Price feed this row's Current value came from (WS = live Kraken WebSocket; REST = polling fallback).">Source</th>
               <th className="px-3 py-2 text-left font-medium text-muted-foreground">Actions</th>
             </>
@@ -417,11 +432,6 @@ export default function PaperOpenTradesTab({ mode }: { mode?: 'paper' | 'live' }
             const t = trade as AdaptedOpenTrade;
             return (
               <>
-                <td className="px-3 py-2">
-                  {t.admissionBasis === 'exploration'
-                    ? <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium bg-amber-500/15 text-amber-600 dark:text-amber-400" title="Admitted via the exploration lane (learning-data budget)">EXPL</span>
-                    : <span className="text-muted-foreground">—</span>}
-                </td>
                 <td className="px-3 py-2 text-xs font-mono">{t.sourceLabel ?? '—'}</td>
                 <td className="px-3 py-2">
                   <Button

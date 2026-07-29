@@ -38,11 +38,20 @@ type ClosedSortField = 'symbol' | 'regime' | 'strategy' | 'pool' | 'dollarValue'
  */
 export function ClosedTradesTable({
   trades,
+  afterSymbolHeaders,
+  renderAfterSymbolCells,
   extraHeaders,
   renderExtraCells,
   emptyLabel = "No closed trades in the last 7 days",
 }: {
   trades: ClosedTrade[];
+  /** <th> nodes rendered immediately AFTER the Symbol column. Default OFF — the VTS mount
+   *  passes nothing and renders exactly as before. Mirrors the open table's prop of the same
+   *  name (P19-B8.10) so a column a human needs at a glance does not have to live at the far
+   *  right of a 35-column table (Kyle 2026-07-29). */
+  afterSymbolHeaders?: React.ReactNode;
+  /** <td> nodes per row, matching afterSymbolHeaders. Default OFF. */
+  renderAfterSymbolCells?: (trade: ClosedTrade, index: number) => React.ReactNode;
   /** Appended <th> nodes rendered AFTER the standard columns. Default OFF. */
   extraHeaders?: React.ReactNode;
   /** Appended <td> nodes per row, matching extraHeaders. Default OFF. */
@@ -139,6 +148,7 @@ export function ClosedTradesTable({
               {/* B69.1 (2026-05-04): asset class badge stacked below symbol in same cell.
                   B-NEW-31 (2026-05-14): first-column header sticky-left + z-30 (top-left corner). */}
               <SortableHeader label="Symbol" field="symbol" currentSort={sortField} direction={sortDirection} onSort={handleSort} extraClass="sticky left-0 z-30 bg-card text-left" />
+              {afterSymbolHeaders}
               <th className="px-3 py-2 text-left font-medium text-muted-foreground whitespace-nowrap">B/S</th>
               <SortableHeader label="Regime" field="regime" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
               <SortableHeader label="Strategy" field="strategy" currentSort={sortField} direction={sortDirection} onSort={handleSort} />
@@ -219,6 +229,7 @@ export function ClosedTradesTable({
                       <AssetClassBadge assetClass={trade.assetClass} />
                     </div>
                   </td>
+                  {renderAfterSymbolCells?.(trade, idx)}
                   <td className="px-3 py-2">
                     <Badge variant="outline" className={`text-xs ${isBenchmarkSymbol(trade.symbol) ? 'bg-violet-500/20 text-violet-400 border-violet-500/30' : 'bg-slate-500/20 text-slate-400 border-slate-500/30'}`}>
                       {isBenchmarkSymbol(trade.symbol) ? 'Benchmark' : 'Standard'}

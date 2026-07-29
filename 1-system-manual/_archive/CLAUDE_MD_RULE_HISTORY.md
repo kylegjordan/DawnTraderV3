@@ -323,3 +323,21 @@ Kyle proposed, against a set of behaviour changes that all appeared within days 
 ---
 
 *End of CLAUDE_MD_RULE_HISTORY.md archive companion. Cross-references from CLAUDE.md use the section labels (e.g., "see §1.PL", "see §5.16") to locate the full backstory here.*
+
+## §2.1b — THE PROVENANCE READ AS A STANDING SCOPE OBLIGATION (Kyle directive 2026-07-29)
+
+**The rule:** every scope must dig into the history of whatever it touches and record the ORIGINAL INTENT, then state which of four dispositions applies (relevant / relevant-but-needs-updating / disconnected-should-be-reconnected / connected-should-be-removed).
+
+**What produced it.** Not one incident — a pattern that ran for two days straight across all three sessions, where the cost was paid in retractions rather than in reading:
+
+- **The orphaned-trade hunt (CC-C, 2026-07-27/28).** THREE separate causes were proposed and announced — an engine-shutdown cleanup path, a restart landing mid-open, and the #532 dual-refresh — and **every one was killed by a data question from Kyle** ("when were they opened?" / "why only 3?"). The actual cause (an unlocked promotion latch plus a silently-swallowed unique-constraint rejection) only surfaced after a census. Each wrong cause had been *plausible from the code as it stands today*; what distinguished them was history and measurement.
+- **The A6 slippage "bug" (CC-C, 2026-07-28).** Reported as losses being flipped green. The net P&L was correct on 293/293 trades; the model was a deliberate, coherent ideal-trade-minus-frictions decomposition. **The intuitive fix (clamp total_cost ≥ 0) would have BROKEN a correct net on 57 rows.** Only reading what the accounting was built to express prevented that.
+- **#534 (WITHDRAWN)** — a governed, Kyle-approved decision reported as a defect; the code comment beside it cited its own batch id and issue number.
+- **#174** — a finding independently re-derived seven weeks after it was already filed, because the ledger was searched for the SYMPTOM rather than the FILENAME.
+- **CC-A's `0.7` default** — a constant lifted out of a component being deleted and adopted as a baseline purely because "the dying file said so," which CC-A itself identified as the same inherited-claim-without-re-derivation failure.
+
+**Why it is framed around the four dispositions.** Rule 24 requires classifying every find as a real defect, working-as-designed-but-unaddressed, or legacy that no longer fits. **That classification is literally unanswerable without knowing what the thing was built to do** — which is why the taxonomy kept getting collapsed into "it's a bug." The dispositions make the provenance read *actionable* rather than merely informative.
+
+**On the token objection, pre-empted by Kyle when he gave the directive.** He raised it himself: this costs more context per batch. His answer, and it matches the measured record: *"we're already eating up a shit ton of tokens and context when we're trying to fix mistakes that have been made, or when we have to correct statements that were made, or when sessions go on wild goose chases for something they think is a bug, which turns out to be okay."* The read does not add cost — it **moves** cost from the expensive end (retraction, re-litigation, broken working code) to the cheap end (reading before writing).
+
+**Scope of the extension.** §9.5(b) already required provenance for AUDITS and disputed behaviour. This directive makes it a **standing obligation for every implementation batch's scope**, and names the pre-governance corpora (`bridge/canonical/` + the old unorganised phase/batch reports) as first-class sources for anything predating the 2026-01/02 governance change — with the standing caveat that the canonical corpus records intent-at-the-time, is not current-state truth, and is never edited.

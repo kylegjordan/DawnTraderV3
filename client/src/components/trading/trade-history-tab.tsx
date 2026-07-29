@@ -282,10 +282,15 @@ export function TradeHistoryTab() {
               <ClosedTradesTable
                 trades={filteredTrades.map(adaptPaperClosedTrade)}
                 emptyLabel="No trades match your filters"
-                extraHeaders={
+                /* Kyle 2026-07-29: Lane MOVED from the appended group to immediately after Symbol.
+                   Appended, it landed at the far right of a 35-column / 3,452px-wide table —
+                   present and correct, but ~2,500px of horizontal scroll away, i.e. invisible in
+                   practice. Verifying that a column RENDERS is not the same as verifying a human
+                   can SEE it (§9.3). Matches the Open tab's placement so the two agree. */
+                afterSymbolHeaders={
                   <th className="px-3 py-2 text-left font-medium text-muted-foreground" title="Admission lane: EXPL = admitted via the exploration lane (learning-data budget); blank = normal net-EV admission. Display-only while exploration mode is active.">Lane</th>
                 }
-                renderExtraCells={(trade) => {
+                renderAfterSymbolCells={(trade) => {
                   const t = trade as AdaptedClosedTrade;
                   return (
                     <td className="px-3 py-2">
