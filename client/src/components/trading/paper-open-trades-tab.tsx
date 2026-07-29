@@ -414,9 +414,18 @@ export default function PaperOpenTradesTab({ mode }: { mode?: 'paper' | 'live' }
                   {t.slotNumber != null ? `${t.slotNumber}${Number.isFinite(Number(t.maxSlots)) ? ` / ${t.maxSlots}` : ''}` : '—'}
                 </td>
                 <td className="px-3 py-2">
+                  {/* Kyle 2026-07-29 (2nd correction): 'organic' MUST render affirmatively, not as an
+                      em-dash. The em-dash convention in this codebase means HONEST ABSENCE ("we do
+                      not have this value") — but organic is a KNOWN value meaning the normal net-EV
+                      lane. Rendering it as '—' threw away real information and read as "no lane
+                      recorded", which is exactly how xStocks looked (measured: 407/407 closed trades
+                      carry a stamp, 131 organic / 276 exploration — ZERO are genuinely absent, so the
+                      dash was ALWAYS wrong). '—' is now reserved for a genuinely missing stamp. */}
                   {t.admissionBasis === 'exploration'
-                    ? <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium bg-amber-500/15 text-amber-600 dark:text-amber-400" title="Admitted via the exploration lane (learning-data budget)">EXPL</span>
-                    : <span className="text-muted-foreground">—</span>}
+                    ? <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium bg-amber-500/15 text-amber-600 dark:text-amber-400" title="Admitted via the EXPLORATION lane (learning-data budget) — admitted on known-negative net EV by design">EXPL</span>
+                    : t.admissionBasis === 'organic'
+                      ? <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium bg-slate-500/15 text-slate-600 dark:text-slate-300" title="Normal admission — admitted on genuine positive net EV">NORMAL</span>
+                      : <span className="text-muted-foreground" title="No admission-lane stamp on this row (pre-stamp trade)">—</span>}
                 </td>
               </>
             );
