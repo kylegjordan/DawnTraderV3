@@ -205,10 +205,13 @@ export function OpenTradesTable({
           <tbody>
             {sortedTrades.length === 0 ? (
               <tr>
-                {/* colSpan 33 = 32 standard columns post cost-split + 1 headroom for
-                    appended paper columns (browsers clamp overshoot to the row width;
-                    matches the closed table's 32+1 pattern — Langston Step-4 note 1). */}
-                <td colSpan={33} className="px-3 py-8 text-center text-muted-foreground">
+                {/* Empty-state span. Langston Step-4 (2026-07-29): the previous comment justified
+                    this number by citing "the closed table's 32+1 pattern", which the closed table
+                    did not implement — the citation was wrong, not just stale. Deliberately NOT
+                    re-encoding a precise count: it only has to be >= the widest mount (browsers
+                    clamp overshoot). Generous by design; the paper mount currently appends Slot +
+                    Lane after Symbol and Source + Actions at the end. */}
+                <td colSpan={40} className="px-3 py-8 text-center text-muted-foreground">
                   {emptyLabel}
                 </td>
               </tr>

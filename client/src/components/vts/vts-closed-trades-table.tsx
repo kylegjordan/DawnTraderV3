@@ -198,9 +198,14 @@ export function ClosedTradesTable({
           <tbody>
             {sortedTrades.length === 0 ? (
               <tr>
-                {/* colSpan 33 = 32 standard columns post cost-split/exit-mode + headroom
-                    for appended paper columns (browsers clamp overshoot). */}
-                <td colSpan={32} className="px-3 py-8 text-center text-muted-foreground">
+                {/* Empty-state span. Langston Step-4 (2026-07-29): the old comment claimed 33
+                    while the code said 32, and the open table justified ITS number by citing a
+                    "32+1 pattern" this table never implemented — a drifted mirror of exactly the
+                    kind the cost-math census found. Deliberately NOT re-encoding a precise count
+                    here: the number only has to be >= the widest mount (browsers clamp overshoot),
+                    and a hard-coded count in a comment is what rotted last time. Generous by
+                    design so appended/after-Symbol paper columns can be added without touching it. */}
+                <td colSpan={40} className="px-3 py-8 text-center text-muted-foreground">
                   {emptyLabel}
                 </td>
               </tr>
