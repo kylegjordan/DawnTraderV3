@@ -1,6 +1,7 @@
 # B-COST-MATH-CONSOLIDATION — PRE-AUDIT (Step 2)
 
-**Owner:** Claude Analyst (CC-C) · **Step-2 GO given by Langston 2026-07-30** · change-class: **architecture**
+**Owner:** Claude Analyst (CC-C) · **Step-2 GO given by Langston 2026-07-29 (UTC)** · **Step-2 APPROVED → Step 3, 2026-07-29 (UTC)** · change-class: **architecture**
+> ⚠️ **DATE CORRECTED, and the cause is worth one line because it will recur.** This file first dated the GO **2026-07-30**; Langston flagged it as the 29th. **Both readings were correct in their own timebase** — the authoring machine is **CEDT (UTC+2)**, so it was `01:54 on 07-30` locally while UTC/Helsinki read `23:54 on 07-29`. **Governance uses UTC**, because every artifact a record is checked against — commits, CI runs, `system-alerts.jsonl`, the inbox log, Langston himself — is UTC-stamped. **Same instant, two names; the local date silently wins for ~2h every night.** Same family as the rest of this batch: *a matching name is not a matching thing.*
 **Scope:** `B_COST_MATH_CONSOLIDATION_SCOPE.md` (rev3, `68009f6a4`) · **Bound: sites 5/6/7/8 — `startingBalance` on `portfolio_state`. One field, one table, one repair shape.**
 **Refs pinned at:** `62051bce2`
 
@@ -20,13 +21,15 @@
 ## 1. SIM CONSULTATION (§2 Step-2 MANDATORY — per component)
 
 ### 1.1 ★ GOVERNANCE GAP FOUND — `c5-financial-diagnostics.ts` IS ABSENT FROM THE SIM
-**Measured: `grep "c5-financial-diagnostics" SYSTEM_IMPACT_MAP.md` → ZERO hits. `SYSTEM_MANUAL.md` → 1 hit.**
+**Measured: `SYSTEM_IMPACT_MAP.md` → ZERO hits. `SYSTEM_MANUAL.md` → 1 hit.**
+**★ LANGSTON SHARPENED THIS AND HIS STATEMENT IS THE STRONGER ONE — adopted:** that single System Manual hit is **`:10148`, a row in a FILE-INVENTORY TABLE reading "Financial metric diagnostics."** That is **a filename in a list, not a description of behavior.** ⇒ the honest claim is not "under-documented" but **"UNDOCUMENTED, with a table row standing in for an entry."** A component can pass a `grep -c` and still have never been described — **a count is not coverage**, which is this batch's own recurring shape pointed at governance instead of code.
 This component runs **three self-checks on the live money path**, is `isEnabled = true` with no caller ever disabling it, and is invoked on **every engine close**. It has **no SIM entry, no upstream/downstream map, and no blast-radius record.** Per §9 (*"If either file is silent on something the batch touches, that itself is a governance gap — flag it"*) this is flagged, and **the batch closes the gap** — a SIM entry is a Tier-2 deliverable here, not optional.
 **Why it matters beyond bookkeeping:** the reason three broken checks survived is precisely that nothing pointed at them. A component absent from the map is a component nobody audits.
 
 ### 1.2 What the SIM DOES establish, and it is the load-bearing invariant (`SYSTEM_IMPACT_MAP.md:129-130`)
 - **`portfolio-anchor-service.executeReanchor` is the SOLE `portfolio_state.balance` writer** — transactional (ledger row + balance + version together); `AnchorReason ∈ start_new | auto_divergence | launch_snap | measurement_override`.
-- ✅ **INDEPENDENTLY GREP-VERIFIED, not taken from the doc:** `update(portfolioState)` appears in **exactly one file repo-wide — `server/services/portfolio-anchor-service.ts`.** ⚠️ **Honest limit: that grep matches ONE shape (the Drizzle update builder). It does not exclude raw SQL.** The fence must assert the invariant, not rely on this grep.
+- ✅ **INDEPENDENTLY GREP-VERIFIED, not taken from the doc:** `update(portfolioState)` appears in **exactly one file repo-wide — `server/services/portfolio-anchor-service.ts`.** ⚠️ **Honest limit stated at the time: that grep matches ONE shape (the Drizzle update builder) and does not exclude raw SQL.**
+- **★ AND THE THING THAT LIMIT WAS HEDGING AGAINST TURNS OUT TO EXIST (Langston searched where I only flagged).** Raw `UPDATE portfolio_state`, repo-wide: **one hit — `drizzle/migrations/2026-07-15-p19-b8-5-portfolio-state-anchor-correction.sql:13`.** Migration-time, not a service ⇒ **`executeReanchor` remains the sole RUNTIME writer, and the fence must carry that qualifier.** "Only writer" unqualified is now a claim someone can produce a counterexample to — **so the fence asserts "sole runtime writer," and the migration is the named, sanctioned exception.** *(Lesson worth keeping: I named the limit of my evidence but did not then go look inside it. Flagging a gap is not the same as searching it.)*
 - **"Ghost defaults are GONE"** — `portfolio_state.balance` and `active_engine_sessions.starting_balance` are NOT NULL with no defaults. ⇒ **the real starting balance lives on `active_engine_sessions`, which is exactly the table sites 5-8 do NOT read.**
 - **`mode='continue'` never calls Kraken** ⇒ a continue-resume never re-anchors. **This is the mechanism behind #618 leg 1, confirmed from the SIM rather than inferred.**
 
@@ -54,7 +57,9 @@ This component runs **three self-checks on the live money path**, is `isEnabled 
 
 ### 2.3 `.tsc-baseline.json` — enumerated BY PARSE, not by count (Langston's condition 2)
 `files[5].path == server/routes.ts` · **42 distinct TS2339 entries / 66 total muted occurrences.**
-On the `portfolio_state` row type: **`cryptoValue` ×2 · `cash` ×2 · `unrealizedPnl` ×1 · `realizedPnl` ×1 · `startingBalance` ×1 (`:131`) = 7.**
+On the `portfolio_state` row type: **`cryptoValue` ×2 · `cash` ×2 · `unrealizedPnl` ×1 · `realizedPnl` ×1 · `startingBalance` ×1 = 7** (42 − 7 = 35 out of scope).
+⚠️ **CITATION CORRECTED (Langston):** an earlier draft wrote `startingBalance` **(`:131`)** as if the baseline carried source locations. **It does not — entries are keyed by FULL MESSAGE TEXT and there is no line-number field.** `:131` was the `grep -n` line **of the JSON file itself**, and I did not say so. **Assert on the MESSAGE KEY** (count = **1**, so removal is unambiguous), never on a line number.
+⚠️ **AND THE "BASELINE SHRINKS BY ONE" ASSERTION HAS A FRAGILITY — state it whenever you assert it:** the key embeds the **entire inline `portfolio_state` row type**, so **any schema change to that table rewrites all 7 keys at once** and the delta stops being readable as "minus one." **The assertion is clean ONLY IF the schema type is untouched this batch** — which it is, and which the completion report must say rather than assume.
 **IN-BATCH: only `startingBalance` (site 8).** The other 6 are triaged and enter **only** if they sit inside a monetary computation; **the remaining 35 TS2339 entries in that file are explicitly NOT this batch's problem** and must not become it.
 
 ---
@@ -70,15 +75,14 @@ On the `portfolio_state` row type: **`cryptoValue` ×2 · `cash` ×2 · `unreali
 
 ---
 
-## 4. ★ THE NAMED CHECK — earned by three wrong numbers in one night (two mine, one Langston's)
+## 4. ★ THE NAMED CHECK — earned by two wrong numbers in one night, both mine
 > **BEFORE QUOTING ANY TWO FINANCIAL QUANTITIES TOGETHER, STATE THE SET EACH IS COMPUTED OVER.**
 
-Instances, recorded because the pattern is invisible until you name it:
-1. **Mine** — subtracted all-time realized against a **non-all-time** anchor ⇒ $1,886.71 (double-counted 37 pre-anchor closes).
-2. **Mine** — paired a **full-table** figure with a **≤100-row display window** ⇒ quoted −$318.34 as a display gap.
-3. **Langston's** — asserted "no `startingBalance` entry at all" from a **partial** read of the baseline, then presented it as a self-correction. His own analysis: *a wrong presence gets challenged; a wrong absence terminates the inquiry.*
+1. Subtracted **all-time** realized against a **non-all-time** anchor ⇒ $1,886.71 (double-counted 37 pre-anchor closes).
+2. Paired a **full-table** figure with a **≤100-row display window** ⇒ quoted −$318.34 as a display gap.
 
 **This goes in as a CHECK, not a lesson** — a lesson is something you remember, a check is something you run.
+**★ SCOPE CORRECTED (Langston, and the correction is the interesting part).** An earlier draft listed his own baseline error as a third instance. **He declined the credit and was right to: his was a PARTIAL READ ASSERTED AS A TOTAL (#453) — a different failure with a different fix.** Folding it in would have made this check *look like it covered ground it does not*, which is how a sharp check degrades into a vague one. **Two instances, one shape, and the check is sharper for the subtraction.** *(#453's own rule — an asserted absence needs presence-evidence — already covers his case and stays where it is.)*
 
 ---
 
