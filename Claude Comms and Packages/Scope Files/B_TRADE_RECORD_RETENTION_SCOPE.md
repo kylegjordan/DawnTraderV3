@@ -146,3 +146,34 @@ This was ranked a *"genuine unknown"* in §2 and given lower priority than the m
 2. **`chosen_entry_mode` + `entry_fee_rate` — IN for VTS, but the justification CHANGES:** not *"the only record"* (the active path has them) but **"the only record FOR THE VTS LEARNING CORPUS"**, and their apparent survival in the JSON ledger is void until #601.
 3. **`maker_limit_price` / `maker_deadline` / raw `context` — UNRESOLVED pending the repo-wide census.** No consumer found; the search was too narrow to conclude.
 ★ **AND THE CANDIDATE CHOICE IS NOW CLEARER: (B) denormalise-at-close targets exactly this** — three-to-six keys onto a `state_snapshot` literal that already writes ~40, in a component whose provenance disposition is *(1) still relevant and correct*. **(A)'s plain-path archive leg remains the right architectural fix for the CLASS and still carries no deadline.**
+
+---
+
+## 9. ★★ THE REPO-WIDE READER CENSUS I SAID WAS OWED (§9.5(a)). IT RESOLVES TWO OF THE THREE UNKNOWNS AND INDEPENDENTLY VINDICATES KYLE'S POOL-COLUMN DECISION.
+
+**METHOD:** every read of `vts_open_trades` across `server/`, then the SELECT list of each — because a whole-row read hides its field consumers, which is exactly what §8's narrow grep would have missed. **Control: 14 files carry references; a zero would have meant a broken search.**
+
+### ★ THE THREE 24-HOUR COUNT QUERIES ARE STRUCTURALLY IMMUNE — and that matters, because they look like consumers and are not
+`routes.ts:7927`, `routes.ts:8111`, `routes/vts.ts:1691` are all `COUNT(*) FILTER (...)` aggregates over `opened_at > NOW() - INTERVAL '24 hours'`, reading only `signal_type` / `asset_class` / `opened_at`. ⇒ **a 90-day deletion cannot reach a 24-hour window. Not consumers of the at-risk data.** *(Worth stating: three of the four reads of the deleted table are irrelevant to the deletion, and a census that stopped at "who reads this table" would have counted them.)*
+
+### ★★ THE FOURTH READ IS THE FINDING — `factor-replay-core.ts:167` CONSUMES RAW `context` **AND** `pool` HISTORICALLY
+```
+SELECT id, symbol, strategy, regime, pool, asset_class, opened_at, closed_at, context
+FROM vts_open_trades WHERE closed = true AND opened_at >= ${sinceIso}
+```
+⇒ **it reads CLOSED rows over a historical window and pulls raw `context` and `pool` by name.** Its own comment states the purpose: it builds the **factor-replay + ablation LEARNING POPULATION**, with a shadow-exclusion filter *"without this filter the … learning population would silently absorb the full RTB-pool shadow set (a different population)."*
+⇒ ★ **RAW `context` IS RESOLVED: IN. It has a named historical consumer — the learning population itself.** That was one of the three fields §8 left unresolved, and the narrow grep missed it precisely because this query names `context` in a whole-row-style SELECT list rather than in a `WHERE`.
+
+### ★★ AND IT INDEPENDENTLY VINDICATES KYLE'S POOL-COLUMN RULING — measured AFTER his decision, not to justify it
+Kyle ruled 2026-07-30 that the `pool` I/R column **STAYS** on all six trade tables, against CC-A's flag that it might be removable. **This query is the named historical consumer that proves the call:** `pool` is read from CLOSED rows into the factor-replay/ablation learning population. **Had the column been dropped, that learning path would have lost a dimension it reads by name — silently, since a dropped column in a named SELECT list is a hard error at the query but the *decision* to drop would have been made on "no consumer found."** ⇒ **his instinct was right and my flag was under-searched.**
+
+### REVISED IN/OUT, with the evidence class for each
+| field | verdict | basis |
+|---|---|---|
+| `calibration_state` | ★★ **IN — first priority** | 2 historical consumers, both silent-failing; one SELECTs it from the deleted table by id |
+| raw `context` | ★ **IN** | `factor-replay-core.ts:167` — the ablation learning population |
+| `chosen_entry_mode`, `entry_fee_rate` | **IN for the VTS corpus only** | no historical consumer found; active path already preserves them in `closed_trades` 408/408; JSON-ledger survival void until #601 |
+| `maker_limit_price`, `maker_deadline` | ⚠️ **STILL NO CONSUMER FOUND** | census complete for `vts_open_trades` reads; **absence now has presence-evidence** (all four reads enumerated + their SELECT lists) — but a consumer reading them from the JSON ledger rather than the table would still be missed |
+| `pool` | **NOT THIS BATCH — column retained by Kyle's ruling** | consumer identified above; recorded so the ruling has its evidence |
+
+⇒ **STEP 3 READY on `calibration_state` + raw `context` + the two VTS-corpus fields, shaped as candidate (B).** ⚠️ **`maker_limit_price` / `maker_deadline` go to Step 3 as EXPLICITLY UNRESOLVED rather than silently included or silently dropped** — including a field with no consumer costs a key; dropping one with an unfound consumer costs the data, and only the second is irreversible. **Default: include them, and say why in the change list.**
