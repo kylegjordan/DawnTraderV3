@@ -3,13 +3,23 @@
 -- while the archive-side fix (leg 2) and the pre-June backfill (leg 3) are designed
 -- on their merits rather than under a clock.
 --
--- WHY A MIGRATION AND NOT A LIVE UPDATE (Langston ruling 2026-07-30, and this is the
--- whole point of the file): the retention value is ALSO carried by
--- 2026-04-22-initial-schema.sql (a pg_dump of staging state), and the original seed
--- 2026-05-10-b79-0g-tx-data-lifecycle-seed.sql uses ON CONFLICT DO NOTHING. So a
--- hand-run UPDATE on staging would be silently reverted to 90 by the next fresh-DB
--- bootstrap, with NO log line and NO error — the clock would restart and nobody
--- would know. A migration is the only form of this change that survives a reseed.
+-- WHY A MIGRATION AND NOT A LIVE UPDATE — CORRECTED at Langston's Step-4 (2026-07-30).
+-- ⚠️ An earlier draft of this comment claimed the value is "also carried by
+-- 2026-04-22-initial-schema.sql" and that a hand-run UPDATE would be "silently reverted
+-- to 90 by the next fresh-DB bootstrap." THAT MECHANISM DOES NOT EXIST and the claim was
+-- invented. Measured: that dump is SCHEMA-ONLY — 20,788 lines, ZERO `COPY` blocks, ZERO
+-- occurrences of `closed_gc_retention_days`. And the original seed
+-- (2026-05-10-b79-0g-tx-data-lifecycle-seed.sql) carries `-- db-migrate:skip`, which
+-- scripts/db-migrate.ts ledger-records WITHOUT running the SQL. So NOTHING on a fresh-DB
+-- path writes 90.
+--
+-- ★ THE REAL REASON IS STRONGER THAN THE ONE I INVENTED: on a fresh database the row does
+-- not exist AT ALL. sweepClosedOpenTrades then hits [CONFIG_MISSING] and skips forever, so
+-- a staging-only UPDATE would leave every fresh bootstrap PERMANENTLY SWEEP-DEAD while
+-- staging alone had the value. THIS MIGRATION IS THE ONLY THING THAT RESTORES THE ROW on a
+-- fresh DB — that is why it must be a migration, and it is also why it uses DO UPDATE
+-- rather than the seed's DO NOTHING (against an existing row, DO NOTHING would no-op and
+-- change nothing).
 --
 -- WHY 365 AND NOT AN ARBITRARY NUMBER: it matches the project's existing warm-tier
 -- window, module_constants data_lifecycle.default_warm_retention_days = 365. Anchoring
@@ -24,6 +34,12 @@
 -- live at every boot and is FAIL-SAFE by construction — a missing or invalid value
 -- SKIPS the DELETE with a [CONFIG_MISSING] log line rather than deleting by default.
 -- So the worst case for this change is that the sweep does nothing.
+--
+-- ★ MAGNITUDE, CORRECTED at Step-4: at 90 days this is a GRADUAL BLEED, NOT A CLIFF —
+-- 804 rows gone by 2026-08-17 and 3,326 by 2026-08-30, out of 41,459 closed. The
+-- ~2026-08-09 first-deletion date is right (oldest closed_at = 2026-05-11 00:06:25), but
+-- nothing large disappears on that date. Stated so nobody reads this migration as an
+-- emergency response; the reason to do it now is that it is free, not that it is urgent.
 --
 -- ⏳ EXPIRY / §13 HOME — THIS IS A TEMPORARY EXTENSION, NOT A NEW POLICY.
 -- It is tied to leg 3 (the pre-June backfill) landing. When leg 3 lands, revisit
