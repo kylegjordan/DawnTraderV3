@@ -75,6 +75,27 @@ Three copies, self-documented as mirrors, **already drifted at the comment level
 **⚠️ WHAT THIS DOES *NOT* ESTABLISH:** it says **nothing about whether the balance is correct** — the check is structurally incapable of testing that. Proving the balance needs its own measurement against the anchor-event ledger, and that is **NOT in this batch**; homed separately.
 **★ Why it belongs here anyway:** same file, same class, same failure shape as site 4 — *an absence that reads as a valid value* (**#568**, my own named recurring error, now found in production). A missing field did not throw; it silently degraded into a plausible wrong number and then reported that number as someone else's defect. **356 total false alarms across the two checks is not noise — it is a live instrument that would mask a real defect** in exactly the subsystem this batch touches.
 
+### ★★ 2.5 STEP-1 rev3 — LANGSTON'S FENCE FOUND SITES 6 AND 7 WITHIN ONE GREP, AND SITE 7 IS THE ONE THAT MATTERS
+
+**★ THE FENCE IS LANGSTON'S AND IT IS BETTER THAN MINE. I proposed the class "absence-reads-as-valid"; that is a CONCEPT and a grep cannot find it. His is `as any` ON A SCHEMA-TYPED ROW — a PATTERN, greppable at any future ref, and it is the thing that let all of these compile against a column that does not exist.** Adopted as OBJ-6's fence. Applied immediately, it returned two more sites.
+
+| # | Site | Fallback when the absent field is read | Polarity | Disposition |
+|---|---|---|---|---|
+| 5 | `c5-financial-diagnostics.ts:88-91` | → `displayedCurrentBalance` | **always RED** (339 false alarms) | real defect |
+| **6** | **`c5-financial-diagnostics.ts:137-140`** (`logGuardrailInput`) | **→ `0`** | **always GREEN** | real defect |
+| **7** | **`routes.ts:12490`** — `/active-engine/portfolio-summary`, a **LIVE API ROUTE** | → `portfolioState.balance` | **silent substitution** | **★ working-as-designed BY ACCIDENT — see below** |
+
+**Site 6 — Langston's falsifiable prediction, TESTED AND CONFIRMED.** He predicted **0** `[C5-GUARDRAIL-CHECK] WARNING` lines since 07-15 and said nonzero would mean his read was wrong. **Measured: 0 on the error stream AND 0 on stdout.** The code shows why: `startingBalance` falls back to `0`, so `usesStartingBalance = |balanceUsedForGuardrails − 0| < 0.01` and the warning at `:166` **can only fire when the sizing balance is itself ~zero** — i.e. it is unreachable in every funded state and would fire only in an unfunded one where it means nothing. **Site 5 and site 6 are the two failure POLARITIES of one bug, nine lines apart, same cast, same absent column, opposite fallbacks.**
+
+**★★ SITE 7 — THE FINDING WITH REAL CONSEQUENCES, AND IT IS *NOT* A DEFECT TODAY.** `/active-engine/portfolio-summary` reads `(portfolioState as any).startingBalance` — **always undefined** — and falls through to `portfolioState.balance`, assigning it to a variable named `startingBalance`, which then drives:
+`cashBalance = startingBalance + realizedPnl` · `currentBalance = cashBalance` · `netPnlPercent = netPnl / startingBalance × 100` — **all returned to the client.**
+**MEASURED, and this is what settles it: `portfolio_state.balance` (paper) = `2250.00`, `anchor_version` 3, `last_update` 2026-07-16 — FOURTEEN DAYS of active trading with no change. It is an ANCHOR; it does NOT track realized P&L.** (⚠️ My #614 "339/339 displayed == starting" is **NOT** evidence for this — that equality was true *by construction* via the fallback. This is independent evidence, and I nearly cited the tautology.) Against 400 closed trades totalling **−$363.29** realized, the route computes `2250 − 363.29 = 1886.71`. **Correct.**
+⇒ **rule-24 outcome 2: the cast is wrong, the substitution is real, and the number it produces is right — because the field it wrongly substitutes happens to hold the value it wanted.**
+
+**⚠️⚠️ THE TRAP, AND IT IS THE WHOLE REASON SITE 7 BELONGS IN THIS BATCH RATHER THAN A LATER ONE.** The obvious response to #614's 339 "balance mismatch" alarms is *"make `portfolio_state.balance` track realized P&L."* **Do that and site 7 SILENTLY starts double-counting: `1886.71 + (−363.29) = 1523.42`, with `netPnlPercent` on the wrong denominator — a wrong balance and a wrong return, on a live user-facing route, with nothing failing.** **This is Kyle's named rule-24 fear exactly, and it is the SECOND time this identical shape has appeared in this batch family** — the first was B-COST-ACCOUNTING-HONESTY, where clamping `total_cost ≥ 0` would have broken a correct net on 57 rows. **Twice is a pattern: in this subsystem, the obvious fix to a loud symptom breaks a quiet correct number.**
+
+**⇒ OBJ-5 SCOPE WIDENS, and OBJ-2's quantity definition with it (Langston): "computes or asserts a relationship among MONETARY quantities" — not gross/cost/net, which does not reach site 6 or 7 (they relate BALANCE quantities). Six sites in the fence, seven counting site 7's disposition-only entry.**
+
 ### 2.4 Undispositioned in that class — to be FENCED BY NAME, not assumed (Langston)
 | Site | Reading | Required action |
 |---|---|---|
@@ -136,7 +157,11 @@ Three copies, self-documented as mirrors, **already drifted at the comment level
 1. **A "pure refactor" that silently changes a number.** Mitigation: the equivalence sweep above is the gate, not the tests.
 2. **Site 3 is not the same shape** (estimated exit costs, no actual exit) — it needs its own entry point, not a forced fit. Forcing one signature is how the next drift starts.
 3. **Consolidation touches a live money path.** Display-identical ≠ engine-identical: the engine's values persist to `closed_trades` and feed the balance. Equivalence must be proven on the ENGINE path, not just the display.
-4. **★ OBJ-5 changes what the system ASSERTS ABOUT ITSELF — the highest-consequence risk in the batch.** Re-anchoring a self-check is not like re-pointing a display: **get it wrong and we do not create a visible error, we SILENCE a real alarm.** A check that always passes is strictly worse than one that always fails, because only the second gets investigated. Mitigation: each repaired check must be shown to **still fire on a deliberately corrupted input** (mutation-prove it, as the source fence was mutation-proved in B-COST-ACCOUNTING-HONESTY) — a green check is not evidence until it has been made to go red on demand.
+4. **★ OBJ-5 changes what the system ASSERTS ABOUT ITSELF — the highest-consequence risk in the batch.** Re-anchoring a self-check is not like re-pointing a display: **get it wrong and we do not create a visible error, we SILENCE a real alarm.**
+   **★ CORRECTED BY LANGSTON — POLARITY, NOT CLASS, DETERMINES THE PROOF. My "mutation-prove every check" was necessary but NOT SUFFICIENT, and for site 5 it proves nothing at all:**
+   - **Site 5 is PERMANENTLY RED** ⇒ making it go red demonstrates nothing. Its load-bearing proof is the opposite: **it must GO GREEN ON HONEST INPUT.**
+   - **Site 6 is PERMANENTLY GREEN** ⇒ there, **mutation-proof IS the entire test.**
+   - ⇒ **REQUIREMENT: both directions for every repaired check — fires on corrupted input AND passes on honest input — and the scope must NAME which direction is load-bearing for each.** A check verified only in its already-stuck direction has not been verified.
 5. **Site 5's fallback is load-bearing in the wrong direction.** Removing it without a real `startingBalance` source turns 339 false alarms into a hard failure on every close. The check must degrade to an explicit *"input unavailable"*, not to an invented number **and not to a crash on the money path.**
 
 ## 6. GOVERNANCE
