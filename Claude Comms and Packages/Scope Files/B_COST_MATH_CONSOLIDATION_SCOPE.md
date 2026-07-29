@@ -68,6 +68,23 @@ Three copies, self-documented as mirrors, **already drifted at the comment level
 3. **Fence it structurally**: extend the existing source fence so a re-introduced inline copy fails the test, and assert the shared function is the ONLY producer of these four values.
 4. **Record F1/F2/F3's inconsistency + F4's supersession in the System Manual** (canonical stays frozen), so the next reader inherits the resolution instead of rediscovering the contradiction.
 
+## 3.5 ⏳ OPTIONAL OBJECTIVE — A "TOTAL FRICTION" FIGURE (KYLE'S CALL, **NOT implemented pending his decision**)
+
+**The gap it fills.** The realized-cost line is now **fees only**, which is correct accounting — but it means the number labelled "cost" no longer shows what execution actually took. The slippage components are still on the row in their own columns; nothing sums them.
+
+**Worked example — DXCM/USD, closed 2026-07-29 (real row):** fees `$1.0560 + $2.1067`; slippage `$0.0000` entry, `−$28.5779` exit.
+| | before B-COST-ACCOUNTING-HONESTY | now (live) | now + this option |
+|---|---|---|---|
+| Gross P/L | −$29.25 (vs intended prices) | **−$0.67** (vs actual fills) | −$0.67 |
+| Total Costs | **−$25.42** ← negative "cost" | **$3.16** (fees) | $3.16 |
+| *Total Friction* | — | — | **−$25.42** (reported, NOT deducted) |
+| Net P/L | −$3.83 | −$3.83 | −$3.83 |
+
+**Proposal:** `totalFriction = entryFee + exitFee + entrySlippage + exitSlippage` — **displayed as a REPORTED figure, never deducted, and labelled FRICTION not COST.** Net is untouched (it stays `gross − fees`). This restores the single all-in view the pre-change `total_cost` accidentally provided, without the double-count that made it negative.
+**★ Naming is the whole safety property:** calling it "cost" is what invited the double-deduction in the first place, and it is the F2/F3 confusion in the canonical doc reappearing in the UI. It must read as *"what execution took"*, not *"money subtracted"*.
+**Argument against, recorded honestly:** it is a 36th column on an already-crowded table; the components are already displayed; and it is **legitimately NEGATIVE on price improvement** (DXCM above) — the exact confusion just removed from the cost line, reintroduced under a different name.
+**CC-C recommendation:** ADD IT, because the fee wall is the central open question and an all-in per-trade figure serves it directly — but **only** under the friction label, and **only** as a reported value. ⏳ **Awaiting Kyle. This scope is complete and reviewable without it; if he declines, delete this section and nothing else changes.**
+
 ## 4. VERIFICATION
 - **Equivalence, not just green tests:** recompute all four outputs for every closed trade under old and new code paths and assert **zero divergences** (the 298/298 method that proved B-COST-ACCOUNTING-HONESTY safe).
 - tsc delta ZERO, measured stash/count/pop — never inferred.
