@@ -13,6 +13,15 @@
 > ## ★★ CC-A RUN ORDER — SET BY KYLE 2026-07-28. Work it top-down; do not re-order without him.
 > **His instruction, verbatim in substance:** *"Book the removal for Phase 16. Put the storage fix behind the batches you were just about to work on and close, but before we raise the questions for debate on fixing our open trades drought problem."*
 >
+> ★★ **KYLE ANSWERED 2026-07-30 — THREE DECISIONS, RECORDED VERBATIM IN SUBSTANCE:**
+> - **"The pool-scanning batch is closed."** ⇒ **`B-ARM-REMOVAL` IS FORMALLY CLOSED** (§2 step 11 satisfied — it was complete and verified, awaiting only his acknowledgement).
+> - **"You can leave the pool columns in."** ⇒ **the `pool` I/R column STAYS on all six trade tables. DECIDED — do not re-raise.** Rationale on the record: the pools themselves survive (only the dynamic split was deleted), so the column still carries genuine provenance; removing it would have destroyed real information for no gain.
+> - **"Fix the learning gap issue just before we run the debates we have scheduled in our quick fix list."** ⇒ **#602 (the active path has never fed the outcome-learning store) is SEQUENCED IMMEDIATELY BEFORE the scheduled quick-fix-list debates.** ⚠️ **This SUPERSEDES my earlier proposal of the Phase-19 runtime pipeline audit — he placed it earlier and more precisely than I did.**
+>
+> ⚠️ **AND A NAMING CORRECTION HE PROMPTED, recorded because the ambiguity was mine: "the storage fix" and "the learning gap" are TWO DIFFERENT ITEMS and I had not distinguished them plainly enough for the distinction to survive.**
+> - **THE STORAGE FIX = `B-TRADE-RECORD-RETENTION`** (`B-STORAGE-CATALOG` part 2). Trade records are HARD-DELETED at 90 days with no archive. **About LOSING data. Date-bound: first irreversible loss ≈ 2026-08-09.**
+> - **THE LEARNING GAP = #602.** The active path's closed trades never reach the outcome-learning store, because the write is gated on a `regime` field an active position cannot carry. **About NOT GAINING something. Nothing is lost or corrupted; not date-bound.**
+
 > **1. CLOSE WHAT IS IN FLIGHT.** `B-ARM-REMOVAL` (shipped + verified; awaits Kyle's acknowledgement to formally close) and the `B-STORAGE-CATALOG` catalogue legs — **part (1) tables + non-table stores DONE** (`e1fc2f9f7`, `74fb7e3e9`) and **part (3) doc cross-referencing DONE** (`09b32f212`).
 > **2. THEN THE STORAGE FIX** — `B-TRADE-RECORD-RETENTION` (= `B-STORAGE-CATALOG` part 2). Langston CHANGES-NEEDED discharged, cleared to Step 2. ⏳ **date-bound: `MIN(closed_at)` 2026-05-11T00:06:25Z ⇒ first irreversible delete 2026-08-09T00:06:25Z.** Residual **six** fields. **May resolve as a STORAGE_POLICY documentation gap + a recorded chosen-loss rather than a batch** — run the bucket-2 taxonomy first (Langston).
 > **3. THEN — AND NOT BEFORE — RAISE THE OPEN-TRADES DROUGHT DEBATE.** Kyle-owned discussion; **not yet booked as an issue** (searched: no entry exists), so it is named here as the gate that item 2 must precede.
