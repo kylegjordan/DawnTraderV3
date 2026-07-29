@@ -112,3 +112,37 @@ And the purpose stated in its own ledger entry (`RUNNING_ISSUES` #91), verbatim:
 
 ### ★ SEQUENCING CONSTRAINT (Langston 2026-07-30) — DO NOT SCOPE OFF TODAY'S DISK FIGURE
 Alert `954d20b7` fires **2026-07-31T06:00Z** on the June partition drop. If it lands, the baseline moves from ~166 GB / 83.2% to roughly **110 GB**. ⇒ **scope Step 2's targets off the POST-SWEEP number or off the growth RATE, never off the current peak** — otherwise Step 2 is audited against a figure that expired two days earlier.
+
+---
+
+## 8. ★★ STEP 2 — PER-FIELD LOSS AGAINST ALL THREE STORES, AND THE HISTORICAL-READER QUESTION. **THE RESULT INVERTS THE PRIORITY RANKING.**
+
+### ★★ FINDING 1 — `calibration_state` HAS TWO PROVEN HISTORICAL CONSUMERS, AND ONE READS THE EXACT TABLE BEING DELETED
+This was ranked a *"genuine unknown"* in §2 and given lower priority than the maker/taker fields. **That ranking was wrong.** Measured at the read sites:
+- **`exit-strategy-replay-service.ts` `resolveCalibrationState()`** — `SELECT calibration_state FROM vts_open_trades WHERE id = ${vtsOpenTradeId} LIMIT 1`. ⇒ **a HISTORICAL read of `vts_open_trades` BY ID.** ★★ **When the row is gone the query returns nothing and `?? null` swallows it — the function cannot distinguish "no calibration state" from "row deleted."** ⇒ **absent-as-valid, in the deletion path itself.**
+- **`exit-strategy-ablation-aggregator.ts` `buildCalibrationClause()`** — `AND calibration_state IS DISTINCT FROM ${PRE_CALIBRATION_XSTOCK_TAG}`, i.e. **aggregates are FILTERED by calibration epoch.** ⇒ once rows are deleted, the rows that would have been EXCLUDED as pre-calibration are simply absent, **so the aggregate's population changes with no error and no signal.**
+★ **BOTH FAIL SILENTLY.** Neither throws, neither logs a distinguishable state. ⇒ **`calibration_state` is the STRONGEST named-consumer case in this batch and should lead the IN list, ahead of the maker/taker fields.**
+
+### ★ FINDING 2 — THE AT-RISK POPULATION IS **VTS-ONLY**. THE ACTIVE PATH ALREADY PRESERVES THREE OF THE SIX.
+`closed_trades` (the active-path sink) carries **`chosen_entry_mode`, `entry_fee_rate` AND `calibration_state` as FIRST-CLASS COLUMNS**, populated **408/408 = 100%**, spanning 2026-07-15 → 07-29.
+⚠️ **But `closed_trades` holds ACTIVE closes only — 408 rows against 39,377 closed `vts_open_trades` rows (~1%).** ⇒ **for VTS trades those three fields do NOT survive there.**
+⇒ ★ **MATERIAL SCOPING REFINEMENT: the loss is VTS-only. The path going live already preserves all three in a columnar sink.** That lowers the stakes and it changes what the fix must target — **this is a LEARNING-CORPUS preservation question, not a live-trading-record question**, and §2 did not distinguish the two.
+⚠️ **`closed_trades` is itself in NO B75 registry** (verified against the 13 catalogued in `STORAGE_POLICY.md` §9) ⇒ it grows unbounded. **Loses nothing, but it is uncatalogued — belongs to #601, not here.**
+
+### THE THREE-STORE MATRIX, per field
+| field | `exit_decision_archive.state_snapshot` | JSON ledger (`logs/virtual_trades`) | `closed_trades` (ACTIVE only) | historical reader? |
+|---|---|---|---|---|
+| `calibration_state` | ✗ 0/6,770 | ✗ absent | ✓ 408/408 (active) | ★★ **YES — 2, both silent-failing** |
+| `chosen_entry_mode` | ✗ 0 | ✓ 214/214 ⚠️ store not durable (#601) | ✓ 408/408 (active) | none found |
+| `entry_fee_rate` | ✗ 0 | ✓ 214/214 ⚠️ same caveat | ✓ 408/408 (active) | none found |
+| `maker_limit_price` | ✗ 0 | ⚠️ 2/214 (0.9%) — never-filled path only | ✗ | none found |
+| `maker_deadline` | ✗ 0 | ✗ absent | ✗ | none found |
+| raw `context` | ✗ 0 | ✗ absent | ✗ | none found |
+
+⚠️ **"NONE FOUND" IS NOT "NONE EXISTS" — the search was narrow and I am marking its limit rather than asserting an absence.** I grepped `server/` for each field name intersected with `select|from|query|readFile|JSON.parse`. **That would MISS a reader that pulls the whole row and destructures it later, and it would miss any reader outside `server/`.** ⇒ **a proper census (§9.5(a): who reads, per field, repo-wide) is still owed before the IN list is final.** Recording this because an under-searched absence is exactly how the wrong five fields get protected and the right one dropped.
+
+### ⇒ REVISED DISPOSITION FOR STEP 3
+1. **`calibration_state` — IN, and FIRST.** Two historical consumers, both silently degrading, one reading the deleted table directly.
+2. **`chosen_entry_mode` + `entry_fee_rate` — IN for VTS, but the justification CHANGES:** not *"the only record"* (the active path has them) but **"the only record FOR THE VTS LEARNING CORPUS"**, and their apparent survival in the JSON ledger is void until #601.
+3. **`maker_limit_price` / `maker_deadline` / raw `context` — UNRESOLVED pending the repo-wide census.** No consumer found; the search was too narrow to conclude.
+★ **AND THE CANDIDATE CHOICE IS NOW CLEARER: (B) denormalise-at-close targets exactly this** — three-to-six keys onto a `state_snapshot` literal that already writes ~40, in a component whose provenance disposition is *(1) still relevant and correct*. **(A)'s plain-path archive leg remains the right architectural fix for the CLASS and still carries no deadline.**
