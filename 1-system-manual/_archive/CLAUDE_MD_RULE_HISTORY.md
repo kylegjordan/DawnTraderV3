@@ -349,3 +349,39 @@ Kyle proposed, against a set of behaviour changes that all appeared within days 
 - **(D) Tier the obligation.** "Every service/module/function/helper/route a batch touches" is unbounded on a 40-file batch, and **unbounded rules get quietly skipped** — which would have cost the rule everything. Tier 1 (full provenance) for anything whose BEHAVIOUR the batch changes; tier 2 (a one-line intent note) for things merely read or called. Kyle's cost argument is strongest on tier 1 anyway.
 
 **A note on how this rule was itself produced.** It was written, reviewed, and amended in one pass — and the amendments were not cosmetic: two of them (A and B) identified ways the rule would have actively caused the failures it was written to prevent. That is the pairwise-review discipline working on governance text rather than on code, and it is worth remembering that a rule is as capable of being wrong as an implementation.
+
+---
+
+## §24.0 — every FOUND BUG gets its own provenance read (Kyle directive 2026-07-30)
+
+**What happened.** Kyle read a session's chat and could not tell whether it was working one batch
+or had been interrupted by an emergency fix. It was one batch throughout — `B-COST-MATH-CONSOLIDATION` —
+whose Step-1 census surfaced four additional sites one after another. The reporting made a single
+coherent investigation look like scatter.
+
+His directive had two halves. The first was about communication (§5 rule 28's territory: report on
+the batch you are working on). **The second created this rule:** *"scope every batch and every found
+bug/error/misfunction by investigating the history and historical intent. Then judge if it is still
+an error or something that needs to be updated."*
+
+**The gap it closes.** §2 1.b already bound a BATCH to a provenance read, and rule 24 already said
+judge on code + intent. But neither explicitly bound a bug **found mid-batch** — surfaced by an alert,
+a reviewer, or in passing — to its OWN history read before disposition. That seam is where finds were
+being judged on current code alone.
+
+**The case that proves the cost is worth paying.** In the same batch, `routes.ts:12490` was found
+reading `(portfolioState as any).startingBalance` — a column that does not exist on `portfolio_state` —
+and silently falling back to `portfolioState.balance`, which then fed `cashBalance`, `currentBalance`
+and `netPnlPercent` on a live user-facing route. **On the code alone this is an obvious defect.**
+The intent read reversed it: `portfolio_state.balance` is an ANCHOR (measured: `2250.00`,
+`anchor_version` 3, unchanged across fourteen days of active trading) that deliberately does not track
+realized P&L — so the substituted field holds exactly the value the variable wanted, and the number
+is **correct**. Rule-24 outcome 2, not outcome 1.
+
+**And the reason it mattered rather than being a curiosity:** the obvious response to the neighbouring
+#614 alarm (339 "balance mismatch" warnings) is *"make `balance` track realized P&L."* Doing that would
+have silently broken this correct route — `1886.71 + (−363.29) = 1523.42` — with nothing failing.
+That is the **second** appearance of this exact shape in one batch family; the first was
+B-COST-ACCOUNTING-HONESTY, where clamping `total_cost ≥ 0` would have broken a correct net on 57 rows.
+**In this subsystem the obvious fix to a loud symptom keeps breaking a quiet correct number, and only
+the intent read distinguishes them.**
