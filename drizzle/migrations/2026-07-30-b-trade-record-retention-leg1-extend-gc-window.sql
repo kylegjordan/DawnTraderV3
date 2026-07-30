@@ -41,6 +41,21 @@
 -- nothing large disappears on that date. Stated so nobody reads this migration as an
 -- emergency response; the reason to do it now is that it is free, not that it is urgent.
 --
+-- ★★ THE TWO ALERTS THAT ENFORCE THIS FILE — named here because a mechanism the artifact
+-- does not point at still reads as a comment (Langston, Step-4 note 2):
+--   dedupe_key `vts-gc-retention-365-expiry-revisit`   fires 2026-09-01T09:00Z — the
+--     forcing function for the expiry below. Decide keep-365-as-stated-policy vs
+--     return-to-a-shorter-window; do NOT leave it unexamined.
+--   dedupe_key `vts-gc-retention-365-runtime-proof`    fires 2026-07-31T12:00Z — confirms
+--     a boot actually READ 365 rather than merely storing it.
+-- ⚠️ METHOD NOTE FOR THE RUNTIME-PROOF CHECK (Langston, Step-4 note 1 — a real gap in the
+-- check as I first wrote it): staging log retention is ASYMMETRIC — stdout rotates roughly
+-- every 2 days (6-8 rotations/day against a 14-FILE cap), stderr ~14 days. The observation
+-- window is only ~36h, which is inside one rotation of the `GC_SWEEP` line disappearing.
+-- ⇒ SO "no GC_SWEEP line found" is NOT evidence of "no boot." ESTABLISH THE BOOT FIRST from
+-- `pm2` uptime / restart_time, and only THEN interpret an absent log line. Otherwise the two
+-- outcomes are indistinguishable — the same absent-as-valid trap this whole batch keeps hitting.
+--
 -- ⏳ EXPIRY / §13 HOME — THIS IS A TEMPORARY EXTENSION, NOT A NEW POLICY.
 -- It is tied to leg 3 (the pre-June backfill) landing. When leg 3 lands, revisit
 -- this window deliberately: either keep 365 as the stated policy in
