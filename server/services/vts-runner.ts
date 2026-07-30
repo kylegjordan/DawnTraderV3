@@ -3467,6 +3467,20 @@ async function resolveOpenVirtualTrades(): Promise<{
           pairIdHash: trade.pairIdHash,
           // ATR at open (B73.1)
           atrAtOpen: trade.atrAtOpen,
+          // ── B-TRADE-RECORD-RETENTION leg 2 (2026-07-30) — entry-mode preservation ──
+          // These four live ONLY as typed columns on vts_open_trades (split out of the
+          // `context` residue by splitTradeForPersist), and that table's closed rows are
+          // hard-DELETEd by the boot GC with no archive leg. Archiving them here is the
+          // forward-protection half: from now on the entry-mode record survives the sweep.
+          // Scoped to exactly these four by measurement — `pool` and every key the
+          // factor-replay consumer reads off `context` are already present above, and
+          // `calibration_state` is preserved independently on the alternates row.
+          // ⚠️ maker* are MAKER-PATH-ONLY by design: null on a taker row is a legitimate
+          // value, not an absence (verified: 0 of 1,822 taker rows carry them).
+          chosenEntryMode: trade.chosenEntryMode,
+          entryFeeRate: trade.entryFeeRate,
+          makerLimitPrice: trade.makerLimitPrice,
+          makerDeadline: trade.makerDeadline,
         },
       });
     } catch (b70Err) {
