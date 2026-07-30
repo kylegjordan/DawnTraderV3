@@ -3488,17 +3488,29 @@ async function resolveOpenVirtualTrades(): Promise<{
           //     entryPrice is never rewritten), and entryPrice is already archived above.
           //     Kept for ONE reason only: it keeps the archived row self-contained and
           //     gives a coherence check if a future writer ever diverges limit from entry.
-          //   makerDeadline — ★ THE ONE THAT EARNS ITS KEY. It is
-          //     openedAt + resolveMakerMaxPendingMs(assetClass), and `maker_max_pending_ms`
-          //     is a TUNABLE. Once that knob moves you cannot recover the patience budget
-          //     an order was actually working under — which is exactly what a
-          //     fill-rate-versus-patience read needs.
+          //   makerDeadline — ★ THE ONE THAT EARNS ITS KEY. Set at placement as
+          //     `Date.now() + resolveMakerMaxPendingMs(assetClass)` (same instant as
+          //     openedAt in practice, but it is NOT an exact derivation from it — do not
+          //     teach it as one), and `maker_max_pending_ms` is a TUNABLE. Once that knob
+          //     moves you cannot recover the patience budget an order was actually working
+          //     under — exactly what a fill-rate-versus-patience read needs.
           //
-          // ⚠️ AND DO NOT CALL THE POPULATED SET A CLEAN SUBSET. Of 186 closed maker-chosen
-          // rows, 150 carry these two. The 36 split MEASURED: 12 opened pre-B7.2c
-          // (2026-07-01, feature-age — explained) and ★ 24 opened AFTER it (07-02 onward)
-          // that still lack them — UNEXPLAINED. Candidate (untested, not asserted): an
-          // effective-maker row that never went pending. Symptom recorded, cause open.
+          // ⚠️ WHY THESE KEY NAMES WERE VERIFIED AGAINST THE INTERFACE — and the mechanism
+          // corrected (Langston, Step-4): the risk is NOT on the read side. There is no
+          // index signature in this file, so `trade.<typo>` would FAIL tsc. The exposure is
+          // entirely on the WRITE side — this snapshot is untyped jsonb, so a mistyped KEY
+          // here archives silently, forever, with nothing failing. Same class as the
+          // B-NEW-53.1 hollow-capture defect. Verify the KEY, not just the field.
+          //
+          // ⚠️ THE 186-vs-150 GAP IS NOT A SYMPTOM — my candidate was REFUTED from the code
+          // (Langston): the marketable fallback sets `_vtsEffectiveMode='taker'` and the
+          // stamp is the EFFECTIVE mode, so an "effective-maker row that never went pending"
+          // CANNOT EXIST; `planTwin` gives taker twins both fields `undefined`. What I
+          // actually did was split on the DATE 2026-07-02 when B7.2c landed MID-DAY, so
+          // maker rows opened that morning are feature-age but fell in my after-bucket.
+          // ⇒ RE-SPLIT ON THE DEPLOY TIMESTAMP before recording anything as unexplained;
+          // if a residue survives, the remaining candidate is the PERSIST SEAM
+          // (splitTradeForPersist / insertOpenTrade), not the decision path.
           chosenEntryMode: trade.chosenEntryMode,
           entryFeeRate: trade.entryFeeRate,
           makerLimitPrice: trade.makerLimitPrice,

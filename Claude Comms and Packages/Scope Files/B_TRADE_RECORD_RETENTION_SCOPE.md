@@ -135,7 +135,7 @@ This was ranked a *"genuine unknown"* in §2 and given lower priority than the m
 | `calibration_state` | ✗ 0/6,770 | ✗ absent | ✓ 408/408 (active) | ★★ **YES — 2, both silent-failing** |
 | `chosen_entry_mode` | ✗ 0 | ✓ 214/214 ⚠️ store not durable (#601) | ✓ 408/408 (active) | none found |
 | `entry_fee_rate` | ✗ 0 | ✓ 214/214 ⚠️ same caveat | ✓ 408/408 (active) | none found |
-| `maker_limit_price` | ✗ 0 | ⚠️ 2/214 (0.9%) | ✗ | none found | ⚠️ **"never-filled path only" WITHDRAWN — Langston verified `markPendingMakerFilled` sets `state='open'` and touches nothing else, so the columns SURVIVE the fill; the populated set is every maker row since B7.2c, filled and unfilled alike.** |
+| `maker_limit_price` | ✗ 0 | ⚠️ 2/214 (0.9%) | ✗ | none found |
 | `maker_deadline` | ✗ 0 | ✗ absent | ✗ | none found |
 | raw `context` | ✗ 0 | ✗ absent | ✗ | none found |
 
@@ -177,3 +177,7 @@ Kyle ruled 2026-07-30 that the `pool` I/R column **STAYS** on all six trade tabl
 | `pool` | **NOT THIS BATCH — column retained by Kyle's ruling** | consumer identified above; recorded so the ruling has its evidence |
 
 ⇒ **STEP 3 READY on `calibration_state` + raw `context` + the two VTS-corpus fields, shaped as candidate (B).** ⚠️ **`maker_limit_price` / `maker_deadline` go to Step 3 as EXPLICITLY UNRESOLVED rather than silently included or silently dropped** — including a field with no consumer costs a key; dropping one with an unfound consumer costs the data, and only the second is irreversible. **Default: include them, and say why in the change list.**
+
+> ⚠️⚠️ **TWO CORRECTIONS THAT WERE INVISIBLE UNTIL NOW — and the failure is instructive.** I first appended these as EXTRA CELLS on rows in the tables above. **GFM silently DROPS cells past the header count, so on GitHub the reader saw the corrected rows WITHOUT the corrections** — it rendered as exactly the silent edit I was trying to avoid (Langston, Step-4). They are prose now, below the table, where they render:
+>
+> - ⚠️ **"never-filled path only" WITHDRAWN — Langston verified `markPendingMakerFilled` sets `state='open'` and touches nothing else, so the columns SURVIVE the fill; the populated set is every maker row since B7.2c, filled and unfilled alike.**
