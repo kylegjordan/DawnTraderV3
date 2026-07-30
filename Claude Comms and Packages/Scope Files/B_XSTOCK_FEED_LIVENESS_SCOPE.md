@@ -30,7 +30,14 @@ At `ce4a7e408` the only occurrences are `:118` (type), `:128` (init), **`:175` (
 ## 2. Objectives
 
 **OBJ-1 — add a SEPARATE data-liveness clock; do NOT move the existing stamp.**
-New monotonic `lastDataMsgAt`, stamped **only** inside `parseOhlcBar` / `parseTickerSnap` — i.e. only where a PRICE actually arrived. `runStallWatchdogTick` (`:334-364`) thresholds on **`lastDataMsgAt`**, exactly as it thresholds `lastMsgAt` today (`:341`).
+New monotonic `lastDataMsgAt`, stamped **only** inside `parseOhlcBar` / `parseTickerSnap` — i.e. only where a PRICE actually arrived, ★ **and placed AFTER `if (!data?.symbol) return;` (Langston): a MALFORMED SNAP MUST NOT COUNT AS DATA LIVENESS.** ⚠ **AND `_setArchiverStateForTest`'s `Partial<Pick<ArchiverState, …>>` must gain the new field, or the fences cannot set it.** `runStallWatchdogTick` (`:334-364`) thresholds on **`lastDataMsgAt`**, exactly as it thresholds `lastMsgAt` today (`:341`).
+⛔⛔ **BLOCKER FIXED (Langston Step-1) — OBJ-1 AS FIRST WRITTEN WOULD HAVE TURNED A QUIET PERIOD INTO A RECONNECT LOOP ON THE LIVE MARKS FEED.**
+`runStallWatchdogTick` reads `const ageMs = state.lastMsgAt > 0 ? Date.now() - state.lastMsgAt : Infinity`. **Today that `Infinity` sentinel is nearly unreachable**, because `handleMessage` stamps on **any** frame and the subscribe-ack lands milliseconds after open. **Repoint the threshold at `lastDataMsgAt` and "never yet had a price" becomes `ageMs = Infinity`, unconditionally `> threshold`.**
+⇒ **boot or reconnect OFF-RTH · socket OPEN · `reconnectPending` false · no tick for one check interval ⇒ CRITICAL alert + forced `ws.close()` + reconnect + repeat.** The off-RTH threshold sits **above a measured p99 of 192s** — gaps that long are EXPECTED — and the forced close drops **the only venue price source for xStock marks**. ⚠ **`dedupe_key` caps the ALERT noise, not the CHURN.**
+★ **THE DEFECT IN ONE LINE (Langston): *"never had data" and "had data, then stopped" are different states, and the scope collapsed them.***
+⇒ **REQUIRED, STATED NOT LEFT TO IMPLEMENTATION INSTINCT: seed `lastDataMsgAt` at CONNECT-OPEN** (mirroring how `lastMsgAt` is de-facto seeded by the ack today), **so an unset field can never read as infinitely stale.**
+⇒ **REQUIRED FENCE: boot-with-no-ticks — socket open, zero data frames, one check interval elapsed ⇒ ASSERT SILENCE (no `[STALL]`, no forced close).** Must FAIL if the seed is removed.
+
 ★ **`lastMsgAt` KEEPS its current stamping site (`:202`, first line of `handleMessage`) and KEEPS feeding the health log (`:273`)** — per §1, that is correct behaviour for its own question, and preserving it is a requirement rather than an oversight.
 
 **OBJ-2 — ❌ do NOT threshold on `rowsPersistedLastMinute` (Langston-ruled; the obvious option is wrong).** That counter (`:43`) is **windowed and zeroed by the 60s health log at `:278`, on a different timer from `STALL_WATCHDOG_CHECK_MS`** ⇒ a watchdog tick landing just after a reset reads 0 on a healthy feed. **That trades a blind detector for a flapping one**, and a flapping detector gets muted, which is strictly worse.
