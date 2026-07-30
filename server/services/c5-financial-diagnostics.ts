@@ -17,16 +17,16 @@ const TAG_GUARDRAIL = '[C5-GUARDRAIL-CHECK]';
 const TAG_PNL = '[C5-PNL-RECON]';
 const TAG_ANALYTICS = '[C5-ANALYTICS-SCOPE]';
 
-interface BalanceReconciliationData {
-  startingBalance: number;
-  realizedNetPnlTotal: number;
-  calculatedCurrentBalance: number;
-  displayedCurrentBalance: number;
-  mismatch: number;
-  trigger: 'session_start' | 'trade_close' | 'manual_close' | 'stop_reset';
-  mode: 'live' | 'paper';
-  timestamp: string;
-}
+/**
+ * B-COST-MATH-CONSOLIDATION Step-4: extracted from the retired `BalanceReconciliationData`.
+ * That interface's other five fields (`startingBalance`, `realizedNetPnlTotal`,
+ * `calculatedCurrentBalance`, `displayedCurrentBalance`, `mismatch`) lost their last writer when
+ * site 5 stopped computing a mismatch from a fabricated input — they existed to carry a
+ * comparison that no longer happens. Keeping a six-field interface alive to host one string
+ * union is precisely the lingering-legacy shape rule 18 forbids, so it is deleted rather than
+ * left "in case". Nothing else referenced it (grep: 2 hits, both in this file).
+ */
+type BalanceReconciliationTrigger = 'session_start' | 'trade_close' | 'manual_close' | 'stop_reset';
 
 interface GuardrailInputData {
   balanceUsedForGuardrails: number;
@@ -73,12 +73,14 @@ class C5FinancialDiagnostics {
   private isEnabled: boolean = true;
 
   /**
-   * C5-1: Balance Reconciliation Diagnostics
-   * Verifies: STARTING_BALANCE + SUM(realized net P/L) = CURRENT_BALANCE
+   * C5-1: Balance OBSERVATION (was "Balance Reconciliation Diagnostics").
+   * ⚠️ It NO LONGER verifies `STARTING_BALANCE + SUM(realized net P/L) = CURRENT_BALANCE` — that
+   * relationship needs a starting balance this table does not carry and a realized sum this query
+   * does not bound. It records what it can see and asserts nothing. See site 5 below and #618.
    */
   async logBalanceReconciliation(
     mode: 'live' | 'paper',
-    trigger: BalanceReconciliationData['trigger']
+    trigger: BalanceReconciliationTrigger
   ): Promise<void> {
     if (!this.isEnabled) return;
 
@@ -119,11 +121,14 @@ class C5FinancialDiagnostics {
         return sum + netPnl;
       }, 0);
 
-      // OBSERVATION ONLY — deliberately no `mismatch`, and deliberately not a warning.
+      // OBSERVATION ONLY — deliberately no `mismatch`. Emitted on `warn` (stderr) rather than
+      // `log`: staging retention is asymmetric (stdout ~2 days, stderr ~14) and these lines are
+      // the evidence #618's pairing decision will be made from. Severity is the wrong reason to
+      // pick a stream when the stream determines how long the evidence survives.
       // ⚠️ `realizedNetPnlTotal` here is bounded by `getClosedTrades`' default limit (100, ordered
       // by opened_at) — that silent cap is #618 leg 2 and is NOT fixed in this batch. Recording it
       // beside the number so nobody reads this line as a full-population total.
-      console.log(`${TAG_BALANCE} OBSERVED`, JSON.stringify({
+      console.warn(`${TAG_BALANCE} OBSERVED`, JSON.stringify({
         anchorBalance,
         realizedNetPnlTotalSampled: realizedNetPnlTotal,
         sampledTradeCount: closedTrades.length,
@@ -203,7 +208,7 @@ class C5FinancialDiagnostics {
       // legitimately use anchor+realized rather than the bare anchor, and which of those is
       // correct is #618's open decision, not something to alarm on today.
       // ⚠️ `realizedNetPnl` is capped by `getClosedTrades`' default limit (100) — #618 leg 2.
-      console.log(`${TAG_GUARDRAIL} OBSERVED`, JSON.stringify({
+      console.warn(`${TAG_GUARDRAIL} OBSERVED`, JSON.stringify({
         ...data,
         sizerMatchesAnchor: Math.abs(balanceUsedForGuardrails - anchorBalance) < 0.01,
         sampledTradeCount: closedTrades.length,
@@ -280,11 +285,25 @@ class C5FinancialDiagnostics {
         timestamp: new Date().toISOString()
       };
 
-      // Phase 8.8.3-C6: Diagnostic Cleanup - only log mismatches, reduce verbose VERIFIED logs
-      if (!allMatched) {
-        console.warn(`${TAG_PNL} MISMATCH DETECTED`, JSON.stringify(data));
-      }
-      // Note: Success verification silently passes - only warnings are logged
+      // ★★ DEMOTED TO OBSERVED AT STEP-4 — because as constructed this check CANNOT FIRE, and
+      // saying so is better than shipping a green light that means nothing (Langston, Step-4).
+      // The caller (`active-execution-engine.ts:2268`) destructures `{ grossPnl, totalCost, netPnl }`
+      // from ONE `computeRealizedPnl` call and passes `grossPnl` and `netPnl` here, with
+      // `dbNetPnl`/`apiNetPnl` OMITTED — so those two comparisons are `undefined ⇒ true`, and
+      // `engineMatch` compares `grossPnl − (entryFee + exitFee)` against a `netPnl` that IS
+      // `grossPnl − totalCost` where `totalCost === entryFee + exitFee`. **Bit-identical by
+      // construction.** Re-anchoring it to the shared model fixed the 17 false MISMATCHes and, in
+      // the same stroke, made it unfalsifiable — an always-RED check became an always-GREEN one,
+      // which is exactly the failure this batch flagged at site 6, on the worse polarity.
+      // ⚠️ THE REAL INVARIANT IS STILL UNCHECKED and is named rather than faked: engine-computed
+      // net vs the net actually PERSISTED (the numeric column round-trip, where drift genuinely
+      // lives). That needs the post-write row, which the caller does not hold at this point —
+      // `trade` here is the pre-close record. Wiring it is a follow-up, not a silent addition.
+      console.warn(`${TAG_PNL} OBSERVED`, JSON.stringify({
+        ...data,
+        matched: null,
+        note: 'observation only — engine-vs-persisted round-trip is NOT checked here; see the follow-up',
+      }));
     } catch (error) {
       console.error(`${TAG_PNL} ERROR`, error);
     }
