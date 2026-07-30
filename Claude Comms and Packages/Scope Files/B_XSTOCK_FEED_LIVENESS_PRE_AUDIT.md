@@ -24,7 +24,7 @@
 
 ⇒ **`lastMsgAt`'s consumers are entirely in-file: the 60s health log, and the watchdog.** Adding a parallel field cannot reach the marks path or the dashboard. **Same shape as #605's census — two internal consumers, zero external surface.**
 
-⚠️ **BUT NOTE WHAT THE FILE DOES CARRY: `getLatestEquityTick` feeds live trading.** This batch does not touch it, and that is a constraint on implementation, not a reassurance — **any change to `handleMessage`'s early lines sits upstream of the mark cache.**
+⛔ **CORRECTED (Langston Step-2 ①) — THIS AUDIT FENCED THE WRONG FUNCTION.** I placed the marks constraint on `handleMessage`'s early lines. **The edit is not there.** `lastDataMsgAt` stamps inside **`parseTickerSnap` — which IS the `latestEquityTick` writer** (verified: `if (!data?.symbol) return;` → mid-from-bid/ask → `latestEquityTick.set(...)`). ⇒ **the change sits INSIDE the mark cache, not upstream of it.** ★ **Adjacent-object shape (rule 29a): I guarded the NEIGHBOUR of the thing I was actually editing** — the same family as citing a line beside the mechanism, and the third time this batch. ⇒ **RESTATED CONSTRAINT: `parseTickerSnap` is a LIVE-TRADING WRITER** — `active-execution-engine.ts:141` consumes `getLatestEquityTick` as the **only venue price source for tokenized equities**. **The stamp must sit AFTER the `!data?.symbol` guard, and must not alter the mark computation or its ordering.** ⚠ **“We only added a field” has to stay literally true inside this function.**
 
 ## 3. ★ The ordering/semantics hazard this audit exists to find
 
