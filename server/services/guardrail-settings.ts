@@ -72,10 +72,26 @@ export async function getPortfolioBalanceV2(
       return 0;
     }
 
-    // Phase 8.8.3-C7-FIX: Get starting balance
-    const startingBalance = Number((state as any).startingBalance || state.balance);
+    // ★★ B-COST-MATH-CONSOLIDATION SITE 9 — PHANTOM READ DELETED (#614). Found by running the
+    // batch's own fence (`as any` on a schema-typed row) across ALL of server/ rather than only the
+    // files already known — the four earlier sites were found by narrower searches that could not
+    // have returned this one.
+    // Was: `Number((state as any).startingBalance || state.balance)`. `portfolio_state` HAS NO
+    // `startingBalance` column, so the first operand was ALWAYS undefined and this ALWAYS resolved
+    // to `state.balance` — which IS the anchor, so the VALUE was and remains correct. Same
+    // no-behaviour-change repair as site 7: read it under its true name, drop the cast.
+    //
+    // ⚠️ WHAT IS *NOT* FIXED HERE, AND WHY IT MATTERS MORE ON THIS PATH THAN ON A DISPLAY:
+    // this function is `getPortfolioBalanceV2` — the GUARDRAIL balance. Below, it pairs this
+    // anchor with a SESSION-SCOPED realized P/L (`getEngineSessionStart`) drawn from
+    // `getClosedTrades(mode, { closedOnly: true })`, which carries a silent default cap of 100 rows
+    // ordered by `opened_at`. That is #618 legs 1 and 2 — filed against the reporting routes —
+    // reaching the RISK-SIZING path. Repairing the pairing is #618's decision, NOT this batch's
+    // bound; it is flagged rather than quietly widened. See #618.
+    const anchorBalance = Number(state.balance);
+    const startingBalance = anchorBalance;
     if (startingBalance <= 0 || isNaN(startingBalance)) {
-      console.warn(`[8.8.3-H4][GuardrailSettings] Invalid startingBalance (${startingBalance}) for mode=${mode}`);
+      console.warn(`[8.8.3-H4][GuardrailSettings] Invalid anchor balance (${startingBalance}) for mode=${mode}`);
       return 0;
     }
 

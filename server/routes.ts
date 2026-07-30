@@ -12316,7 +12316,28 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // Phase 8.8.3-C7-FIX: Use same calculation as portfolio-summary endpoint
       const { getEngineSessionStart } = await import('./services/active-execution-engine.js');
       const portfolioState = await storage.getPortfolioState({ mode: 'paper' });
-      const startingBalance = portfolioState ? parseFloat(portfolioState.startingBalance?.toString() || portfolioState.balance?.toString() || '0') : 0;
+      // ★★ B-COST-MATH-CONSOLIDATION SITE 8 — PHANTOM READ DELETED, AND THIS ONE CARRIES A REAL
+      // BEHAVIOUR CHANGE (#614 / #618). NAMED, not smuggled.
+      // Was: `portfolioState.startingBalance?.toString() || portfolioState.balance?.toString() || '0'`.
+      // Same non-existent column as site 7 but with NO cast — it compiled because the error is
+      // MUTED in `.tsc-baseline.json` (TS2339 on the `portfolio_state` row type, count 1). That is
+      // why an `as any` grep could not find it: it was silenced, not cast.
+      // ⚠️ BEHAVIOUR CHANGE: the `|| '0'` and `: 0` fallbacks FABRICATED a zero balance when the
+      // row was absent or unparseable. This now refuses with an explicit 409, matching the sibling
+      // summary route. A fabricated zero is the same ghost-default class P19-B8.2 already killed
+      // ("an absent/unparseable balance is surfaced as an explicit 409, never fabricated") — this
+      // is that decision applied to the one place it was missed, not a new policy.
+      // ⚠️ NOTE the fetch above is hardcoded `{ mode: 'paper' }` — this endpoint has no mode
+      // parameter at all. Left as-is (out of bound); it is the same family as #618 leg 3, where
+      // `getClosedTrades` accepts a `mode` argument and never uses it. Recorded, not fixed here.
+      const anchorBalanceRaw = portfolioState ? parseFloat(portfolioState.balance?.toString() ?? '') : NaN;
+      if (!Number.isFinite(anchorBalanceRaw)) {
+        return res.status(409).json({
+          ok: false,
+          error: 'No portfolio balance exists for paper mode — start a session first (active trades never invent a balance).'
+        });
+      }
+      const startingBalance = anchorBalanceRaw;
       
       // Phase 8.8.3-C7-FIX: Calculate realized P/L from closed trades (same as portfolio-summary)
       const sessionStart = getEngineSessionStart('paper');
@@ -12496,9 +12517,20 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // P19-B8.2 (OBJ-2): ghost '1000' fallback DELETED — an absent/unparseable
       // balance is surfaced as an explicit 409, never fabricated.
       const portfolioState = await storage.getPortfolioState({ mode });
-      const startingBalanceRaw = portfolioState
-        ? parseFloat((portfolioState as any).startingBalance?.toString() || portfolioState.balance?.toString() || '')
-        : NaN;
+      // ★★ B-COST-MATH-CONSOLIDATION SITE 7 — PHANTOM READ DELETED (#614 / #618).
+      // Was: `(portfolioState as any).startingBalance?.toString() || portfolioState.balance?...`
+      // `portfolio_state` HAS NO `startingBalance` COLUMN (the real one is on
+      // `active_engine_sessions`), so the first operand was ALWAYS undefined and this ALWAYS fell
+      // through to `balance` — silently substituting one quantity for another under a name that
+      // claimed otherwise. The `as any` is what let it compile.
+      // ★ THE NUMBER IT PRODUCED WAS AND IS CORRECT, because `portfolio_state.balance` IS the
+      // anchor (sole runtime writer `portfolio-anchor-service.executeReanchor`) — so this reads
+      // the same value, now under its true name and without the cast. NO behaviour change here.
+      // ⚠️ The response key below stays `startingBalance`: that is a PUBLIC API contract and
+      // renaming it is out of this batch's bound. What the anchor is PAIRED with downstream (a
+      // session-scoped realized P&L) is #618 leg 1 and is NOT addressed here.
+      const anchorBalanceRaw = portfolioState ? parseFloat(portfolioState.balance?.toString() ?? '') : NaN;
+      const startingBalanceRaw = anchorBalanceRaw;
       if (!Number.isFinite(startingBalanceRaw)) {
         return res.status(409).json({
           ok: false,
