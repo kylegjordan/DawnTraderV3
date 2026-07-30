@@ -297,12 +297,17 @@ class C5FinancialDiagnostics {
       // which is exactly the failure this batch flagged at site 6, on the worse polarity.
       // ⚠️ THE REAL INVARIANT IS STILL UNCHECKED and is named rather than faked: engine-computed
       // net vs the net actually PERSISTED (the numeric column round-trip, where drift genuinely
-      // lives). That needs the post-write row, which the caller does not hold at this point —
-      // `trade` here is the pre-close record. Wiring it is a follow-up, not a silent addition.
+      // lives). ★ HOMED AS #620, owner CC-C — an earlier draft said only "a follow-up", which is
+      // the vague deferral §13 forbids and pointed an operator at nothing.
+      // ★ AND THE BLOCKER IS SCOPE, NOT FLAKINESS — correcting a false constraint this comment
+      // previously asserted. `active-execution-engine.ts:1995-2027` writes `pnl` to the row BY
+      // `trade.id` BEFORE `:2268` fires, so a re-fetch would be a DETERMINISTIC primary-key read
+      // of a row just written — not a second live read that can race. Deferring it is a scope
+      // decision, and #620 must not inherit a technical objection that does not exist.
       console.warn(`${TAG_PNL} OBSERVED`, JSON.stringify({
         ...data,
         matched: null,
-        note: 'observation only — engine-vs-persisted round-trip is NOT checked here; see the follow-up',
+        note: 'observation only — engine-vs-persisted round-trip is NOT checked here; see RUNNING_ISSUES #620',
       }));
     } catch (error) {
       console.error(`${TAG_PNL} ERROR`, error);
