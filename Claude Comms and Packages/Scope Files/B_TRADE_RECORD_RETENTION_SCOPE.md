@@ -27,7 +27,7 @@
 
 | field(s) | named consumer | verdict |
 |---|---|---|
-| `chosen_entry_mode`, `entry_fee_rate`, `maker_limit_price` | **the ONLY record of maker-vs-taker entry policy** — lose them and entry-mode friction / Net-Expectancy attribution is **unrecoverable** | ★ **IN** |
+| `chosen_entry_mode`, `entry_fee_rate` | **the ONLY record of maker-vs-taker entry policy** — lose them and entry-mode friction / Net-Expectancy attribution is **unrecoverable** | ★ **IN** | ⚠️ **CORRECTED 2026-07-30 (Langston Step-4) — `maker_limit_price` DOES NOT DO THIS WORK. `chosen_entry_mode` + `entry_fee_rate` are the genuinely unrecoverable pair. `maker_limit_price` is a COPY of `entry_price` (both writers set `makerLimitPrice: entryPrice`; a maker fills AT its limit and `entry_price` is never rewritten) and `entry_price` is already archived ⇒ RECOVERABLE. It is retained only to keep the archived row self-contained and as a coherence check if a future writer diverges limit from entry. ★ `maker_deadline` IS unrecoverable — `openedAt + resolveMakerMaxPendingMs()`, and that knob is TUNABLE, so once it moves the patience budget an order worked under is gone.**
 | `pool` | ideal/rotational membership work (#597 starvation) | ★ **IN** |
 | `opened_at` + trade id | the JOIN KEY to `exit_decision_archive` | ★ **IN** (without it the survivors are unlinkable) |
 | `position_size`, `quantity` | reconstructible from surviving outcome fields | OUT |
@@ -135,7 +135,7 @@ This was ranked a *"genuine unknown"* in §2 and given lower priority than the m
 | `calibration_state` | ✗ 0/6,770 | ✗ absent | ✓ 408/408 (active) | ★★ **YES — 2, both silent-failing** |
 | `chosen_entry_mode` | ✗ 0 | ✓ 214/214 ⚠️ store not durable (#601) | ✓ 408/408 (active) | none found |
 | `entry_fee_rate` | ✗ 0 | ✓ 214/214 ⚠️ same caveat | ✓ 408/408 (active) | none found |
-| `maker_limit_price` | ✗ 0 | ⚠️ 2/214 (0.9%) — never-filled path only | ✗ | none found |
+| `maker_limit_price` | ✗ 0 | ⚠️ 2/214 (0.9%) | ✗ | none found | ⚠️ **"never-filled path only" WITHDRAWN — Langston verified `markPendingMakerFilled` sets `state='open'` and touches nothing else, so the columns SURVIVE the fill; the populated set is every maker row since B7.2c, filled and unfilled alike.** |
 | `maker_deadline` | ✗ 0 | ✗ absent | ✗ | none found |
 | raw `context` | ✗ 0 | ✗ absent | ✗ | none found |
 

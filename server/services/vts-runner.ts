@@ -3477,6 +3477,28 @@ async function resolveOpenVirtualTrades(): Promise<{
           // `calibration_state` is preserved independently on the alternates row.
           // ⚠️ maker* are MAKER-PATH-ONLY by design: null on a taker row is a legitimate
           // value, not an absence (verified: 0 of 1,822 taker rows carry them).
+          //
+          // ★ PER-KEY RATIONALE — they are NOT equally load-bearing, and an earlier draft
+          // of this batch's docs wrongly credited maker_limit_price with the work that
+          // chosen_entry_mode + entry_fee_rate actually do (Langston, Step-4):
+          //   chosenEntryMode + entryFeeRate — THE maker-vs-taker entry-policy record.
+          //     Nothing else preserves them for the VTS corpus. Genuinely unrecoverable.
+          //   makerLimitPrice — ⚠️ NOT unrecoverable. It is a COPY of entryPrice (both
+          //     writers set `makerLimitPrice: entryPrice`; a maker fills AT its limit and
+          //     entryPrice is never rewritten), and entryPrice is already archived above.
+          //     Kept for ONE reason only: it keeps the archived row self-contained and
+          //     gives a coherence check if a future writer ever diverges limit from entry.
+          //   makerDeadline — ★ THE ONE THAT EARNS ITS KEY. It is
+          //     openedAt + resolveMakerMaxPendingMs(assetClass), and `maker_max_pending_ms`
+          //     is a TUNABLE. Once that knob moves you cannot recover the patience budget
+          //     an order was actually working under — which is exactly what a
+          //     fill-rate-versus-patience read needs.
+          //
+          // ⚠️ AND DO NOT CALL THE POPULATED SET A CLEAN SUBSET. Of 186 closed maker-chosen
+          // rows, 150 carry these two. The 36 split MEASURED: 12 opened pre-B7.2c
+          // (2026-07-01, feature-age — explained) and ★ 24 opened AFTER it (07-02 onward)
+          // that still lack them — UNEXPLAINED. Candidate (untested, not asserted): an
+          // effective-maker row that never went pending. Symptom recorded, cause open.
           chosenEntryMode: trade.chosenEntryMode,
           entryFeeRate: trade.entryFeeRate,
           makerLimitPrice: trade.makerLimitPrice,
