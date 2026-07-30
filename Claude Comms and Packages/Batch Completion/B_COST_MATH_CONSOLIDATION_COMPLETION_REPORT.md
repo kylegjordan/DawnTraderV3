@@ -57,7 +57,12 @@ Written after two wrong dollar figures. **Beaten the same day by a third instanc
 - **tsc delta: part 1 = 0, part 2 = −1** (measured stash/count/pop, clean restore both times). **The baseline gate NAMES the removed error:** `server/routes.ts TS2339: 1 -> 0 [Property 'startingBalance' does not exist…]`, `OK — no regressions above baseline`.
 - **`.tsc-baseline.json` deliberately NOT regenerated** (Langston-ruled): on a three-session branch, `--generate` converts another session's regression into accepted state. The gate only fails on rises; a stale zero-count entry is inert.
 - **21/21 tests green.**
-- **★ LIVE POST-DEPLOY:** last false MISMATCH of either family **00:15:09Z**; **zero in the 32 minutes following**, while **60 `OBSERVED` lines fired** ⇒ the path executes and no longer invents failures. **Zero errors naming any changed symbol.**
+- **★ LIVE POST-DEPLOY.** **OBJECT:** `/var/log/dawntrader/error*.log` on staging (the C5 checks write to **stderr**, not stdout — an earlier grep of `out__*.log` returned 0 and nearly refuted a live count). **POPULATION:** the retained log window, all rotations.
+  Last false MISMATCH of either family **00:15:09Z**; **ZERO in the 32 minutes following**, while **60 `OBSERVED` lines fired** ⇒ the path executes and no longer invents failures. **Zero errors naming any changed symbol** (`computeRealizedPnl|computeOpenPnl|trade-pnl|anchorBalance`).
+  **★★ POSITIVE CONTROLS — ADDED UNDER THE NEW CLAUDE.md RULE 29(b), WHICH REQUIRES THEM FOR A ZERO. Both claims were CORRECT and UNCONTROLLED when first published; the rule landed after, and applying it retroactively to my own report is its first use.**
+  · *zero MISMATCH*: the SAME pattern returns **334** hits across the retained window ⇒ **the instrument CAN return MISMATCH; the post-deploy zero is real silence, not a dead pattern.** (The 60 `OBSERVED` lines prove the SERVICE runs — they do **not** prove the MISMATCH pattern matches, which is a different string. That gap is why this control is separate.)
+  · *zero errors naming a changed symbol*: the same file returns **309** lines matching `error` ⇒ **the file is readable and non-empty; the zero is absence, not an unreadable target.**
+  ⚠️ **AND THE CONTROL ITSELF DEMONSTRATED THE RULE:** the historical MISMATCH count read **356** earlier tonight and **334** now — **same instrument, same object, different number, because the retained log WINDOW rotated between the two reads.** Neither is wrong; a count without its window is not a fact. That is rule 29(a) arguing for itself.
 - ⚠️ **CI trap recorded:** two of this batch's runs were **CANCELLED** by superseding pushes from other sessions. **Cancelled ≠ red** — the cited green run is on a settled head.
 
 ## Governance files changed
