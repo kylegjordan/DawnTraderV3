@@ -3508,9 +3508,16 @@ async function resolveOpenVirtualTrades(): Promise<{
           // CANNOT EXIST; `planTwin` gives taker twins both fields `undefined`. What I
           // actually did was split on the DATE 2026-07-02 when B7.2c landed MID-DAY, so
           // maker rows opened that morning are feature-age but fell in my after-bucket.
-          // ⇒ RE-SPLIT ON THE DEPLOY TIMESTAMP before recording anything as unexplained;
-          // if a residue survives, the remaining candidate is the PERSIST SEAM
-          // (splitTradeForPersist / insertOpenTrade), not the decision path.
+          // ★★ RE-SPLIT DONE — THERE IS NO ANOMALY. Boundary = the B7.2c commit
+          // 2026-07-02 18:31:26Z (crypto) / B7.2d 22:45:51Z (xStock), i.e. the EARLIEST
+          // possible deploy, so the test is conservative against my own claim. Result:
+          //   crypto_spot 181 maker rows — 33 pre-commit, 148 post-commit, 0 MISSING
+          //   xstock_spot   5 maker rows —  3 pre-commit,   2 post-commit, 0 MISSING
+          // ⇒ ZERO post-deploy maker rows lack the columns, and 33 + 3 = 36 reconciles
+          // EXACTLY to the gap (186 − 36 = 150). The "24 unexplained" was ENTIRELY an
+          // artifact of splitting on the DATE 2026-07-02 when the feature landed at 18:31Z
+          // that day. The data now agrees with the code: no path produces a maker-chosen
+          // row without these columns. NOTHING TO FILE.
           chosenEntryMode: trade.chosenEntryMode,
           entryFeeRate: trade.entryFeeRate,
           makerLimitPrice: trade.makerLimitPrice,
