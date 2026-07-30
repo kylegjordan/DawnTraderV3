@@ -888,6 +888,14 @@ Kill-switch is **DB-backed per-mode**: `isKillSwitchTripped(mode)` (`guardrail-p
 
 ---
 
+### 9.15 C5 Financial Diagnostics — ⚠️ **ADDED B-COST-MATH-CONSOLIDATION 2026-07-29; IT HAD NO SIM ENTRY AT ALL BEFORE THAT**
+- **File**: `server/services/c5-financial-diagnostics.ts` (Phase 8.8.3-C5). ⚠️ **The gap is recorded, not quietly filled: this component ran THREE self-checks on the live money path, on EVERY engine close, `isEnabled = true` with no caller ever disabling it — and the SIM was silent on it while `SYSTEM_MANUAL.md:10148` carried only a file-inventory row reading "Financial metric diagnostics."** A filename in a list is not a description of behaviour. **Per §9 that silence is itself a governance failure, and it is the most plausible reason three broken checks survived: nothing pointed at them, so nothing audited them.**
+- **What**: Verification-only. Emits observations; **asserts nothing that can act.** Never writes trading state (its own header carries a SCOPE LOCK). Four surfaces: `logBalanceReconciliation` (C5-1), `logGuardrailInput` (C5-2), `logPnlReconciliation` (C5-3), `logAnalyticsScope`.
+- **Upstream (6 call sites / 4 files)**: `active-execution-engine.ts:2268` (`logPnlReconciliation`) + `:2280` (`logBalanceReconciliation`) — **every engine close**; `active-engine-service.ts:686/:941` (`session_start`, `stop_reset`); **`signal-orchestrator.ts:589` (`logGuardrailInput`) — the SIZING path**; `routes.ts:13019` (`logAnalyticsScope`). Reads `storage.getPortfolioState` + `storage.getClosedTrades`.
+- **Downstream**: **stdout/stderr only.** ⚠️ **Stream choice is load-bearing, not cosmetic: staging retention is asymmetric (~2 days stdout vs ~14 stderr), so all `OBSERVED`/`INPUT_UNAVAILABLE` lines are on `console.warn` deliberately — they are the evidence base for #618's pairing decision.**
+- **Blast Radius**: **LOW on execution** (observational, try/caught, never throws onto the money path) — **but HIGH on TRUST**, which is the reason this entry exists. Three of its checks were anchored to inputs that do not exist or invariants since retired: one always RED (**339 false alarms since 2026-07-15**), one always GREEN (**structurally unreachable**), one made unfalsifiable by its own repair. ⇒ **a broken check is not a quiet failure — it either buries a real defect in its own noise, or shows a green light that means nothing. Both were live simultaneously.**
+- **Related**: #614 (the phantom `portfolio_state.startingBalance` read), #618 (the frozen-anchor/capped-session-scope mechanism this observes), #620 (the engine-vs-persisted round-trip, still unchecked).
+
 ## Layer 10: Frontend & Communication
 
 ### 10.1 WebSocket Broadcast Layer
