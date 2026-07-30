@@ -546,6 +546,27 @@ The EXIT-side mirror of the B7.2c entry rest, deployed `06560c299`. In `active-e
 
 ---
 
+**File**: `server/core/math/trade-pnl.ts`
+**Batch**: B-COST-MATH-CONSOLIDATION (2026-07-29) · **Status**: ACTIVE — the SINGLE implementation of realized trade P&L
+
+`computeRealizedPnl({actualEntryPrice, actualExitPrice, quantity, entryFee, exitFee})` → `{grossPnl, totalCost, netPnl, netPnlPercent, entryValue}`; `computeOpenPnl({…currentPrice, estExitFee})` adds `grossPnlPercent`. Pure — no I/O, no clock, no shared state.
+
+- `grossPnl = (actualExit − actualEntry) × quantity` — measured on **ACTUAL fills**, which already contain slippage.
+- `totalCost = entryFee + exitFee` — **EXPLICIT costs only. Structurally cannot be negative.**
+- `netPnl = gross − totalCost`; `netPnlPercent` divides by **actual** capital deployed (`> 0` guard ⇒ 0, never NaN/∞).
+
+**Why one implementation.** This arithmetic previously lived at THREE hand-synchronised copies (engine close · manual close · open-positions display), each documented in-code as a deliberate mirror — site 2 was copied from site 1 a day later (`2807c2360`, 2025-12-12) *specifically* so the two would agree. **The intent was right; hand-synchronisation was the wrong way to hold it, and the copies drifted.**
+
+**★ `computeOpenPnl` is a SEPARATE entry point on purpose.** An open position's exit leg is a **MARK**, not a fill, and its exit fee is **MODELLED**, not incurred. Forcing one signature over both would make the caller's meaning depend on which arguments happened to be passed. **Arithmetic shared; semantics deliberately not.**
+
+**⚠️ NOT `cost-model.computeTotalRoundTripCost` (below), despite the near-identical name.** That is an **EX-ANTE friction ESTIMATE** feeding the EV gate and it legitimately **includes slippage** — it answers *"what will this round trip cost me?"*, not *"what did this trade cost?"*. Harris-consistent, correct, deliberately untouched, and fenced by name in the tests. **Conflating the two is the single most likely way to break this file.**
+
+**★★ THE `bridge/canonical/` DESIGN CONTRADICTION, resolved here because the corpus is frozen and cannot record its own defect (§9.5(b)).** `DawnTrader_System_Invariants_Design_Guarantees.md` §2 states F1 `gross = (actualExit − actualEntry) × qty` *and* F2 slippage-inside-the-actual-prices *and* F3 `totalCost = fees + entrySlippage + exitSlippage`. With `actualEntry = E(1+s)`, `actualExit = X(1−s)`, F1's gross is `(X−E)q − (entrySlip$ + exitSlip$)`, so F3's net is `intendedGross − 2×slippage − fees`. **Slippage twice. The founding document cannot be satisfied as written**, which is *why* the implementation drifted: anyone implementing F1+F3 faithfully produces a double-count, notices, and abandons one silently.
+⚠️ **F2's four-component COMPOSITION of `totalCost` is RETIRED — not merely its old 0.15%/0.10% rates.** State it plainly: the failure mode is a reader opening F2, counting four components, and re-adding slippage.
+⚠️ **Two self-consistent resolutions existed** (the old code's gross-on-intended + fees-plus-slippage also yields a correct net, verified 293/293). **A self-contradictory document cannot arbitrate between them** — Kyle's 2026-07-29 directive picked the one keeping gross and cost *individually* truthful. **F1 corroborates that choice; it does not authorise it.**
+
+---
+
 **File**: `server/core/math/cost-model.ts`
 **Directive**: 11.3A/B
 **Status**: ACTIVE — LOCKED
@@ -1333,7 +1354,8 @@ secondary-metrics.ts ──── Macro-state threshold adjustments
 | adaptive-goals-weight.ts | Volatility-adaptive weights | ACTIVE-LOCKED |
 | net-expectancy-kernel.ts | Pure EV math | ACTIVE |
 | expectancy.ts | Trade expectancy gate + ROI | ACTIVE |
-| cost-model.ts | Round-trip cost math | ACTIVE-LOCKED |
+| cost-model.ts | Round-trip cost math (EX-ANTE estimate) | ACTIVE-LOCKED |
+| **trade-pnl.ts** | **REALIZED trade P&L — the SINGLE source of gross/cost/net/% (B-COST-MATH-CONSOLIDATION)** | **ACTIVE** |
 | cost-metrics.ts | Live spread, friction scoring | ACTIVE |
 | slippage-fee-model.ts | Paper trade realism | ACTIVE |
 | imf-metrics.ts | IMF filters (LQ, VN, Corr) | ACTIVE |

@@ -1,7 +1,7 @@
 # B-COST-MATH-CONSOLIDATION — COMPLETION REPORT
 
 **Owner:** Claude Analyst (CC-C) · **Kyle-directed 2026-07-29** · change-class: **architecture**
-**Head:** `b0a7a7873` · **CI 4-green: run `30503313569`** (Test Suite · Build · TypeScript Check (baseline gate) · Docker Build) · No migration · **Deployed staging 2026-07-29 00:46Z, pm2 restart #541, HTTP 200, 0 unstable restarts.**
+**Head:** `b0a7a7873` · **CI 4-green** (Test Suite · Build · TypeScript Check (baseline gate) · Docker Build): **run `30503313569`, which graded `9f1663ef1` — the head named above is +2.** The intervening `d3ba03b47` is **comment-only** in `vts-runner.ts` (+22/−10, Langston re-read it), so no functional change is uncovered. **Both SHAs are stated deliberately: #621 is filed for exactly this class — the ref that was graded is not the ref that shipped.** · No migration · **Deployed staging 2026-07-29 00:46Z, pm2 restart #541, HTTP 200, 0 unstable restarts.**
 **Scope:** `Scope Files/B_COST_MATH_CONSOLIDATION_SCOPE.md` · **Pre-audit:** `..._PRE_AUDIT.md`
 **Review:** Langston Step-1 CHANGES-NEEDED → rev2 → rev3; Step-2 APPROVED; **Step-4 CHANGES-NEEDED ×2 → both cleared at `9f1663ef1` → SIGNED OFF.**
 
@@ -51,7 +51,7 @@
 ## ★★ The standing check this batch earned — and then failed
 > **BEFORE PAIRING ANY TWO CLAIMS AS IF THEY MEASURE THE SAME POPULATION — NUMBERS *OR* ARGUMENTS — STATE THE SET EACH IS COMPUTED OVER.**
 
-Written after two wrong dollar figures. **Beaten the same day by a third instance** (a tolerance measured 100% xStock, applied to an exposure measured 67% crypto) **because I had scoped it to "quantities" and that one was an argument.** A figure invites *"over what?"*; a claim does not. Detail: pre-audit §4, #621.
+Written after two wrong dollar figures. **Beaten the same day by a third instance** (a tolerance measured 100% xStock, applied to an exposure measured 67% crypto) **because I had scoped it to "quantities" and that one was an argument.** A figure invites *"over what?"*; a claim does not. **HOME: `..._PRE_AUDIT.md` §4** (the check's canonical statement and all three instances). ⚠️ **Citation corrected at Step-11:** an earlier draft cited **#621** as the home — #621 is the *deploy-head gate bypass*. The instance is recorded inside that issue's decision block because it arose there, **but the CHECK lives in the pre-audit, and a rule whose home is a paragraph inside an unrelated issue is a rule nobody will find.**
 
 ## Verification
 - **tsc delta: part 1 = 0, part 2 = −1** (measured stash/count/pop, clean restore both times). **The baseline gate NAMES the removed error:** `server/routes.ts TS2339: 1 -> 0 [Property 'startingBalance' does not exist…]`, `OK — no regressions above baseline`.
@@ -61,8 +61,11 @@ Written after two wrong dollar figures. **Beaten the same day by a third instanc
 - ⚠️ **CI trap recorded:** two of this batch's runs were **CANCELLED** by superseding pushes from other sessions. **Cancelled ≠ red** — the cited green run is on a settled head.
 
 ## Governance files changed
-BATCH_CATALOG · PHASE_HISTORY · PHASE_19_PLAN §5 · **SIM 9.15** · RUNNING_ISSUES (**#614, #616, #618 retitled, #620 new**) · CLAUDE.md **§24.0** + `CLAUDE_MD_RULE_HISTORY.md` · MEMORY_CC_C · scope · pre-audit · this report.
+BATCH_CATALOG · PHASE_HISTORY · PHASE_19_PLAN §5 · **SIM 9.15** · **SYSTEM_MANUAL** (⚠️ *listed here in an earlier draft BEFORE it was true — Langston caught it; the module-inventory row + the `trade-pnl.ts` chapter entry carrying the F1/F2/F3 resolution are now actually in it*) · RUNNING_ISSUES (**#614, #616, #618 retitled + consumers corrected, #620 new, #621 decision block**) · CLAUDE.md **§24.0** + `CLAUDE_MD_RULE_HISTORY.md` · MEMORY_CC_C · scope · pre-audit · this report.
 ⚠️ `bridge/canonical/` **NOT edited** — frozen historical record (§9.5(b)). Its inconsistency is recorded here and in the System Manual, not fixed there.
 
 ## Out of scope, homed (§9.4)
-**#618** (frozen anchor + capped session-scope; **two repair homes — display and risk-sizing must not share a Step-8**) · **#620** (engine-vs-persisted round-trip) · **the client ghost-default leg** (begins with a client-wide census) · the three `|| 50000` fabricated fallbacks at `routes.ts:4759/4845/4924`.
+**#618** (frozen anchor + capped session-scope; **two repair homes — display and risk-sizing must not share a Step-8**) · **#620** (engine-vs-persisted round-trip) · **the client ghost-default leg** (begins with a client-wide census).
+
+**⚠️ CORRECTED AT STEP-11 — I WROTE THREE; THERE ARE SIX, AND HALF ARE ON THE SIZING PATH (Langston).** Set stated, since that is the whole point: `grep -n '|| 50000' server/routes.ts` ⇒ **`4759` · `4845` · `4924` · `14852` · `14885` · `15017`**, all `await getPortfolioBalanceV2(…) || 50000`. (`5669` is `price || 50000`, a different quantity — excluded deliberately.) **★ `14852` and `15017` are NOT display: both flow `portfolioValue → calculateRiskAmount(portfolioValue, pct) → riskAmount → quantity = riskAmount / stopDistance`. A fabricated $50,000 would SIZE POSITIONS.** ⇒ folded into **#618**'s consumers table rather than left as a footnote here.
+**★★ AND THE MISS IS THIS REPORT'S OWN §9.2 TOP ROW, COMMITTED IN THE SAME DOCUMENT.** That row says the census went 3→9 *because it was scoped by PATTERN rather than by QUANTITY* — and then this section asserted a count of three **with no census behind it and no set stated.** Identical shape to my error #4 (an asserted absence), and to the widened check two sections above. **Writing the rule at the top of a document does not make you obey it at the bottom.**

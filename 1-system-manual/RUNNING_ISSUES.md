@@ -1119,7 +1119,7 @@ B.5 W2.0b built a detect-replay harness (`scripts/b5-w20b-entry-replay.ts`) to s
 |---|---|---|
 | **`daily-loss-budget.ts:135`** — `const portfolioValue = await getPortfolioBalanceV2(mode)` (declared `:53`, imported `:111`; the file header records it was *"re-pointed at guardrails_v2 / getPortfolioBalanceV2 / getEngineSessionStart"*) | `getPortfolioBalanceV2` | **⚠️⚠️ THE KILL-SWITCH DENOMINATOR** — `:377` flattens all open positions and halts trading |
 | `xstock_spot/active-dispatch.ts:222` — `portfolioValue:` on `SizingContext` | `getPortfolioBalanceV2` | **⚠️ POSITION SIZING** |
-| `routes.ts:4759 / 4845 / 4924` — `initialBalance = await getPortfolioBalanceV2(mode) \|\| 50000` | direct | ⚠️ **and note the `\|\| 50000` FABRICATED fallback** — same ghost-default class, own disposition needed |
+| **`routes.ts:4759 · 4845 · 4924 · 14852 · 14885 · 15017`** — all `await getPortfolioBalanceV2(…) \|\| 50000` | direct | ⚠️⚠️ **SIX, not three — corrected at Step-11 (Langston). `14852` and `15017` flow `portfolioValue → calculateRiskAmount → riskAmount → quantity = riskAmount / stopDistance` ⇒ a fabricated $50,000 would SIZE POSITIONS, not just display.** Set stated: `grep -n '\|\| 50000' server/routes.ts` (`5669` is `price \|\| 50000`, a different quantity, excluded). CC-C's first count of three had no census behind it — the same asserted-absence shape this batch documents. |
 | `routes.ts:12499` portfolio-summary · `routes.ts:12319` active-trades | direct read | display |
 **★ AND `guardrail-settings.ts:90` PASSES NO LIMIT ⇒ leg 2's silent top-100 cap is on the risk path VERBATIM**, not by analogy.
 
