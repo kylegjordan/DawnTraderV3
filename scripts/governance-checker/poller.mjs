@@ -70,13 +70,7 @@ export function computeBatchStates(commits) {
   // cleared. Propagate hasGovernance child→parent (transitively), ONLY when the parent
   // itself exists as a graded batch. Scope: hasGovernance's sole consumer is the deadline
   // check — doc-set grading is untouched (each batch still owes its own docs).
-  for (const s of states.values()) {
-    if (!s.hasGovernance) continue;
-    for (let p = parentBatchId(s.batchId); p; p = parentBatchId(p)) {
-      const ps = states.get(p);
-      if (ps) ps.hasGovernance = true;
-    }
-  }
+  propagateGovernanceToParents([...states.values()]);
   // materialize files (OBJ-2) and drop the Set
   const batches = [...states.values()].map((s) => ({ ...s, files: [...s._files], _files: undefined }));
   return { batches, untaggedCode };
@@ -107,7 +101,41 @@ export function anchorClosedBatches(batches) {
     const closed = b.completionAddTime != null;
     const reopened = closed && b.scopeAddTime != null && b.scopeAddTime > b.completionAddTime; // strict >
     b.hasCompletionReport = closed;
-    if (closed && !reopened) b.lastCode = b.completionAddTime; // pin to the immutable close event
+    if (closed && !reopened) {
+      b.lastCode = b.completionAddTime; // pin to the immutable close event
+      // #605: ALSO pin the deadline's CLEAR-condition, not just its TRIGGER. `hasGovernance` is
+      // written window-scoped at :64 (the -n300 loop) while `lastCode` is pinned whole-history
+      // here — so once a closed batch's governance commit scrolled out of the window,
+      // hasGovernance flipped false, :207 stopped resolving, :208 re-opened with a freshly
+      // recomputed age, and an operator's out-of-band resolve was then dropped by the :510
+      // store-reconcile (#352's deliberate fail-open) → re-mint every tick, unclearable.
+      // Anchoring it here is SELF-REVOKING by construction: `closed` comes from
+      // completionReportCommitTime → findGlobDoc → `git ls-tree GOV_REF`, i.e. presence AT THE
+      // REF, not history — delete the report and closed goes false, the pin lapses, and window
+      // behaviour returns. A HOLLOWED (not deleted) doc is caught by the docgap path, which
+      // re-grades every tick on "absent or hollow" (:255-267).
+      b.hasGovernance = true;
+    }
+  }
+  // ★ REQUIRED (Langston Step-1): re-propagate AFTER the pin, or this silently regresses #508.
+  // computeBatchStates propagates child→parent at :527; this function runs at :538. Pinning a
+  // closed sub-batch's hasGovernance after that pass would leave the parent unsatisfied, which is
+  // exactly the P19-B8.4 false-overdue #508 was built to kill — and it throws nothing, because a
+  // removed writer with a surviving reader is silent. Kept INSIDE the function that breaks the
+  // invariant so a caller cannot forget it. Idempotent: only ever sets true.
+  return propagateGovernanceToParents(batches);
+}
+
+// #605: extracted from computeBatchStates so it can run a SECOND time after anchorClosedBatches
+// pins hasGovernance. PURE apart from the flags it sets on the passed batches; idempotent.
+export function propagateGovernanceToParents(batches) {
+  const index = new Map(batches.map((b) => [b.batchId, b]));
+  for (const s of index.values()) {
+    if (!s.hasGovernance) continue;
+    for (let p = parentBatchId(s.batchId); p; p = parentBatchId(p)) {
+      const ps = index.get(p);
+      if (ps) ps.hasGovernance = true;
+    }
   }
   return batches;
 }

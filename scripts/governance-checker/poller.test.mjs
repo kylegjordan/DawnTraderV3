@@ -167,6 +167,49 @@ const noStaleOpen = { open: new Set(), openSince: new Map(), naConfirmed: new Se
   ok('OBJ-1: no-code-close (lastCode null) is grandfathered', !kept.includes('B-NULL'));
 }
 
+// ── #605: the deadline's CLEAR-condition is anchored, and re-propagation survives the pin ──
+// Both of these MUST FAIL with the #605 pin reverted (mutation-proof), or they assert nothing.
+{
+  const at = (d) => Date.parse(d);
+  // (1) THE DEFECT ITSELF: a closed batch whose governance commit has scrolled out of the -n300
+  // window arrives with hasGovernance FALSE (that is what the window-scoped :64 write produces).
+  // Pre-fix the deadline gate at :207 would not resolve, and :208 would re-open forever.
+  const agedOut = { batchId: 'B-AGED', lastCode: at('2026-07-25T00:00:00Z'),
+    completionAddTime: at('2026-06-01T00:00:00Z'), scopeAddTime: at('2026-05-31T00:00:00Z'),
+    hasGovernance: false };
+  anchorClosedBatches([agedOut]);
+  ok('#605: closed batch with out-of-window governance is pinned hasGovernance=true (deadline can clear)',
+    agedOut.hasGovernance === true);
+
+  // (2) CRY-SILENCE FENCE: a genuinely ungoverned / never-closed batch must NOT be pinned, so it
+  // keeps alerting. B-REGIME-INPUTS-LIVE is the live case (no completion report on disk at all).
+  const neverClosed = { batchId: 'B-REGIME-INPUTS-LIVE', lastCode: at('2026-07-20T00:00:00Z'),
+    completionAddTime: null, scopeAddTime: at('2026-07-19T00:00:00Z'), hasGovernance: false };
+  anchorClosedBatches([neverClosed]);
+  ok('#605 cry-silence fence: never-closed batch is NOT pinned (stays overdue)',
+    neverClosed.hasGovernance === false && neverClosed.hasCompletionReport === false);
+
+  // (3) ★ LANGSTON-REQUIRED #508 REGRESSION FENCE. The child→parent propagation runs inside
+  // computeBatchStates (:527); anchorClosedBatches runs later (:538). Without re-propagating after
+  // the pin, a closed sub-batch that aged out pins itself and its PARENT's deadline goes unsatisfied
+  // — the exact P19-B8.4 false-overdue #508 killed. Silent: throws nothing, and the :305/:325/:326
+  // tests inject states directly so they cannot catch it.
+  const child = { batchId: 'P19-B8.4b', lastCode: at('2026-07-25T00:00:00Z'),
+    completionAddTime: at('2026-06-01T00:00:00Z'), scopeAddTime: at('2026-05-31T00:00:00Z'),
+    hasGovernance: false };
+  const parent = { batchId: 'P19-B8.4', lastCode: at('2026-07-25T00:00:00Z'),
+    completionAddTime: null, scopeAddTime: at('2026-05-30T00:00:00Z'), hasGovernance: false };
+  const parentBare = { batchId: 'P19-B8', lastCode: at('2026-07-25T00:00:00Z'),
+    completionAddTime: null, scopeAddTime: at('2026-05-30T00:00:00Z'), hasGovernance: false };
+  anchorClosedBatches([child, parent, parentBare]);
+  ok('#605/#508: pinned child re-propagates to dotted parent (parent deadline still satisfied)',
+    parent.hasGovernance === true);
+  ok('#605/#508: pinned child re-propagates transitively to bare parent',
+    parentBare.hasGovernance === true);
+  ok('#605/#508: re-propagation does NOT fabricate a completion report for the parent',
+    parent.hasCompletionReport === false);
+}
+
 // ── B-GOV-4 OBJ-1: leading-token extraction (a mid-subject ref must not establish a batch) ──
 {
   ok('OBJ-1: leading bare batch-id extracts', extractLeadingBatchId('P19-B6.6 Step-1: scope') === 'P19-B6.6');
