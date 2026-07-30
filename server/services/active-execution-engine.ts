@@ -130,6 +130,8 @@ import { evaluateXstockPriceLiveness } from '../asset_classes/xstock_spot/price-
 // B-4.5: fees are DB-governed per asset class — resolved per symbol at the
 // fill sites via the single cost-model merge (no static fee field).
 import { getFrictionForAssetClass } from '../core/math/cost-model.js';
+// B-COST-MATH-CONSOLIDATION: the SINGLE source of trade P&L arithmetic (was inlined here).
+import { computeRealizedPnl } from '../core/math/trade-pnl.js';
 // P19-B7.2c: the pending-maker hard-drop timeout (per-class, fail-hard, load-time invariant).
 import { resolveMakerMaxPendingMs } from './maker-taker-config.js';
 // P19-B7.2c (R3): the xStock hard-drop must not fire inside the weekend-closed window.
@@ -1826,20 +1828,20 @@ export class ActiveExecutionEngine {
     // Slippage is RETAINED on the row as signed execution-quality telemetry (positive = cost) —
     // reported, not deducted. Sign convention is stated explicitly because NO industry standard
     // exists (Talos, Anboto and retail-FX conventions mutually contradict).
-    const grossPnl = (actualExitPrice - avgPrice) * quantity;
-
-    // Total Cost = EXPLICIT costs only (fees). Never negative — the negative-"cost" artifact came
-    // from netting price improvement into this line; internal TCA keeps that signed number (Harris:
-    // liquidity providers genuinely have negative transaction costs) but it does not belong here,
-    // the same conclusion regulators reached for PRIIPs disclosure (floored at explicit costs).
-    const totalCost = entryFee + exitFee;
-    const totalFees = entryFee + exitFee;
-
-    // Net P/L = Gross P/L minus explicit costs
-    const netPnl = grossPnl - totalCost;
-    // Denominator is the ACTUAL capital deployed, consistent with the actual-fill gross.
-    const actualEntryValue = avgPrice * quantity;
-    const netPnlPercent = actualEntryValue > 0 ? (netPnl / actualEntryValue) * 100 : 0;
+    // B-COST-MATH-CONSOLIDATION — SITE 1 of 3, now a CALL rather than a copy.
+    // This arithmetic used to be hand-synchronised across three sites; the comments said "must
+    // stay in lockstep" and the copies drifted anyway. There is now ONE implementation
+    // (core/math/trade-pnl.ts), which carries the F1/F2/F3 provenance resolution and the sign
+    // convention. Verified bit-identical to the retired inline form before the re-point.
+    const { grossPnl, totalCost, netPnl, netPnlPercent } = computeRealizedPnl({
+      actualEntryPrice: avgPrice,
+      actualExitPrice,
+      quantity,
+      entryFee,
+      exitFee,
+    });
+    // Same quantity under its persistence-payload name (the row below writes `fees`/`totalFee`).
+    const totalFees = totalCost;
     
     // Legacy fields for backward compatibility
     const totalSlippage = entrySlippage + exitSlippage;

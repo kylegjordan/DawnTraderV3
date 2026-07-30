@@ -113,18 +113,26 @@ const ENGINE_SRC = readFileSync(resolve(__dirname, '../../services/active-execut
 const ROUTES_SRC = readFileSync(resolve(__dirname, '../../routes.ts'), 'utf8');
 
 describe('[B-COST-ACCOUNTING-HONESTY] source fence — all three sites stay in lockstep', () => {
-  it('site 1 (engine close): gross on actual fills, cost = fees only', () => {
-    expect(ENGINE_SRC).toMatch(/const grossPnl = \(actualExitPrice - avgPrice\) \* quantity/);
-    expect(ENGINE_SRC).toMatch(/const totalCost = entryFee \+ exitFee;/);
-    // the deducted-slippage form must NOT come back
+  // ★★ THESE THREE FENCES CHANGED SHAPE AT B-COST-MATH-CONSOLIDATION, AND THE CHANGE IS RECORDED
+  // RATHER THAN QUIETLY MADE. They originally asserted the INLINE arithmetic existed at each site
+  // — the correct fence while three hand-synchronised copies were the design. The copies are now
+  // ONE implementation (`core/math/trade-pnl.ts`), so asserting the inline form would demand the
+  // very duplication the later batch removed, and these went red on exactly that.
+  // ⚠️ THE INTENT IS UNCHANGED AND MUST NOT BE WEAKENED: "the sites report identical numbers for
+  // identical economics." What changed is HOW it is guaranteed — previously by comparing copies,
+  // now structurally by there being nothing to compare. So each fence asserts the site CALLS the
+  // shared function; re-inlining is caught in `b-cost-math-consolidation.test.ts`, and the
+  // bit-identity of the extraction is proven there too.
+  it('site 1 (engine close): delegates to the shared implementation', () => {
+    expect(ENGINE_SRC).toMatch(/computeRealizedPnl\(\{/);
+    expect(ENGINE_SRC).toMatch(/from '\.\.\/core\/math\/trade-pnl\.js'/);
+    // the deducted-slippage form must NOT come back, at the site OR in the shared module
     expect(ENGINE_SRC).not.toMatch(/const totalCost = entryFee \+ exitFee \+ entrySlippage \+ exitSlippage/);
   });
 
-  it('site 2 (manual close): gross on actual fills, cost = fees only', () => {
-    expect(ROUTES_SRC).toMatch(/const grossPnl = \(actualExitPrice - entryPrice\) \* quantity/);
-    // Positive assertion — Langston Step-4 edit 2: sites 1 and 3 asserted the cost line both ways,
-    // site 2 only had the negative guard, so a silent drift here would not have been caught.
-    expect(ROUTES_SRC).toMatch(/const totalCost = entryFee \+ exitFee;/);
+  it('site 2 (manual close): delegates to the shared implementation', () => {
+    expect(ROUTES_SRC).toMatch(/computeRealizedPnl\(\{/);
+    expect(ROUTES_SRC).toMatch(/from '\.\/core\/math\/trade-pnl\.js'/);
     expect(ROUTES_SRC).not.toMatch(/const totalCost = entryFee \+ exitFee \+ entrySlippage \+ exitSlippage/);
   });
 
@@ -160,9 +168,10 @@ describe('[B-COST-ACCOUNTING-HONESTY] source fence — all three sites stay in l
     expect(offenders).toEqual([]);
   });
 
-  it('site 3 (open-positions display): gross on actual entry, estimated cost = fees only', () => {
-    expect(ROUTES_SRC).toMatch(/const grossPnl = \(currentPrice - entryPrice\) \* quantity/);
-    expect(ROUTES_SRC).toMatch(/const estTotalCost = entryFee \+ estExitFee;/);
+  it('site 3 (open-positions display): delegates to the shared OPEN implementation', () => {
+    // ★ The OPEN entry point specifically — not the realized one. The exit leg here is a MARK and
+    // the exit fee is MODELLED, so the semantics differ even though the arithmetic is shared.
+    expect(ROUTES_SRC).toMatch(/computeOpenPnl\(\{/);
     expect(ROUTES_SRC).not.toMatch(/const estTotalCost = entryFee \+ entrySlippage \+ estExitFee \+ estExitSlippage/);
   });
 
