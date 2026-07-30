@@ -385,3 +385,51 @@ That is the **second** appearance of this exact shape in one batch family; the f
 B-COST-ACCOUNTING-HONESTY, where clamping `total_cost ≥ 0` would have broken a correct net on 57 rows.
 **In this subsystem the obvious fix to a loud symptom keeps breaking a quiet correct number, and only
 the intent read distinguishes them.**
+
+---
+
+## §5.29 — Measurement discipline (Kyle-directed 2026-07-30; Langston-ruled; binds all four parties)
+
+**What happened.** In one session CC-A made **eleven** claims that measurement overturned, and Kyle stopped the
+work to ask why: *"I ask you simple questions and the whole premise of your implementation falls apart… I am
+frustrated because now I can't trust your follow up assertions."* His sharper observation is the one that
+produced the rule: **"This didn't seem to be an issue before, but now it is an every-batch issue."**
+
+**The measured shape.** Ten of the eleven were a single class — *the object adjacent to the claim was measured*:
+`patternType` "2.95% drift" was **28/28 = 100%** once filtered to the HYBRID population · a table hunt filtered
+`LIKE '%trade%' OR '%vts%'` **cannot match `exit_decision_archive`**, producing "there is no trade archive" ·
+`vts_open_trades` (52 MB, a **working** table) was reported as the whole closed-trade corpus · **33,301 shadow
+counterfactual rows were counted against a sink that excludes them BY DESIGN, test-enforced**, producing a false
+"93% of July is lost" · "zero `COMPUTE_MISS` in `out.log`" when `console.warn` goes to **stderr**.
+
+**Langston's two corrections to the proposal, both of which improved it.** (1) **The population of errors was
+itself off by one — the same shape being diagnosed.** #6 (a mechanism invented in a migration comment) is not a
+targeting error: there was no measurement to control, so it is **confabulation**, and a gate governing how a
+number is reported is silent on it — hence clause (c). The self-caught eleventh is *a working control, not a
+defect*, and counting it inflated the denominator the fix was being sized against. (2) **A control on every
+number would be abandoned inside a week**; the affordable, lab-standard form is a **positive control** required
+only for load-bearing numbers, zeros, near-totals and absences.
+
+**Why the rule is a FORMAT, not another reminder — the load-bearing finding.** Every rule needed to catch this
+**already existed and was auto-loaded on every turn**: 25.c (*"a matching name is not a matching thing"*), 22,
+§9.5(a), and the session's own memory line *"a head-N slice is NOT the population — measure the population"*
+— filed under a heading that reads **"STANDING LESSONS (earned; do not re-learn)."** Three of the errors are
+verbatim instances of two of those lines. ⇒ **Restatement was never going to work. The rules are consulted at
+session start and at ANNOUNCE time; the failure occurs at MEASURE time.** Corroboration: the only behavioural
+fixes that durably held in the same period are the two **hooks**, which require nobody to remember anything —
+and Langston noted a third and stronger form we already use, §7.1's `DISABLED://` push URL, which makes the
+wrong action *impossible* rather than intercepted.
+
+**Why NOW and not before (Kyle's question).** The work changed class. Code-edit batches settle a claim by
+reading a file, which is unambiguous. With active trading ON, nearly every claim is about **live data**, and a
+live-data claim forces a choice of table, column, log stream, window, filter and population — **each one an
+opportunity to hit the adjacent object.** Meanwhile the system accreted **lookalike pairs**: working table vs
+archive · shadow vs real · JSON snapshot vs typed columns · `out.log` vs stderr · `vts_trades`-the-file vs
+`vts_trades`-the-table-that-does-not-exist. All ten errors are a lookalike confusion, and the rules predate that
+population existing.
+
+**Self-demonstrating footnote, recorded because it is the best evidence for the rule.** Filing the issue number
+for this very rule, form A (`^### #NNN`) returned max **621** and its positive control — *does this instrument
+find the known-present #622?* — returned **0**. The instrument was right; the **ref was six commits stale**. The
+control caught it, a fetch fixed it, and the correct answer (#623) followed. The rule worked on its own
+authoring turn, and it is also a second witness for §7.1 step 0.

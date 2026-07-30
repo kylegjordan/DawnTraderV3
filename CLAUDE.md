@@ -271,6 +271,20 @@ When a substantive asset-class-onboarding learning surfaces in ANY batch, fold i
 
     **COROLLARY — this binds the WORK, not just the talk:** stay out of another session's batch unless (a)–(c) applies. Offering a single correction is not joining (§27 preserves that); joining uninvited is the §27 "adding a lap" failure with **Kyle's time** as the cost. **Failure mode this rule exists to kill (observed 2026-07-22/23, CC-C): noticing the over-reporting mid-session, saying "I'll stop," and then continuing anyway on every subsequent wake.** Noticing is not complying.
 
+29. **MEASUREMENT DISCIPLINE — NAME THE OBJECT AND THE POPULATION; PROVE THE INSTRUMENT BEFORE SILENCE IS EVIDENCE (Kyle-directed 2026-07-30 after ELEVEN targeting errors by one session in one day; Langston-ruled; binds ALL FOUR parties — CC-A, CC-B, CC-C, and Langston).**
+
+    **(a) EVERY reported number carries its OBJECT and its POPULATION — mandatory, no exceptions.** Name the exact thing measured (table / file / log stream / `path:line`) and the denominator, **plus why that denominator is the right one.** This is a *reporting format*, not an investigation, and it is deliberately cheap so it survives contact.
+
+    **(b) A POSITIVE CONTROL is REQUIRED when the number is LOAD-BEARING ON A DECISION, or is a ZERO, a NEAR-TOTAL, or an ABSENCE** (Langston's amendment, replacing a per-number control that he ruled — correctly — would be abandoned inside a week). **Show the instrument returning a KNOWN-POSITIVE before its silence counts as evidence.** One command. ⇒ *"zero `COMPUTE_MISS` in `out.log`"* is worth nothing until `out.log` is shown able to hold one at all (it cannot — `console.warn` goes to stderr). Same failure: a rate-limited line in rotated logs cannot reach last month; a `LIKE '%trade%'` filter cannot match `exit_decision_archive`.
+
+    **(c) A MECHANISM CLAIM CITES THE LINE THAT IMPLEMENTS IT, OR IT IS LABELLED A HYPOTHESIS.** Langston's addition, and it covers the ONE class (a)+(b) structurally cannot: **confabulation — where there was no measurement to control.** Reading "drop-on-overflow" in a *comment* and reporting it as the cause is this rule's origin case; it was refuted by zero overflow lines against ~1,760 unarchived rows/day.
+
+    **(d) REVIEWER OBLIGATION (Langston, his own words, his own `CLAUDE.md`):** *"A measurement with no stated object and population is not a finding — it is a claim, and I rule it unevidenced. For any number load-bearing on the decision I am being asked to make, I either re-derive it myself or I bounce it. `RULED ON REPORTED FACT` stays as a tag, but it is **disqualifying for a PROCEED on the leg it covers**, not a disclaimer I can attach to one. And for every piece of negative evidence: ask what the instrument's reach is before accepting its silence."*
+
+    **★ WHERE POSSIBLE, PREFER IMPOSSIBLE OVER INTERCEPTED (Langston).** §7.1's backup push URL is a deliberately invalid `DISABLED://…` value — *"a push from it fails at git, not at somebody's memory."* That is **stronger than a hook**: it makes the wrong action impossible rather than caught. Hooks are the fallback, not the first choice.
+
+    **WHY THIS RULE IS A FORMAT AND NOT A REMINDER:** the rules that would have caught all of it **already existed and were auto-loaded on every turn** — 25.c (*"a matching name is not a matching thing"*), 22, §9.5(a), and the session's own memory line *"a head-N slice is NOT the population — measure the population"* sitting under a heading reading **"do not re-learn."** They fire at ANNOUNCE time; **the failure happens at MEASURE time**, in the seconds between wanting to know something and typing one query. Legs 2 (hooks) + 3 (the `CLAUDE.md` conversion sweep) are homed in `RUNNING_ISSUES` #623. See history doc §5.29.
+
 ---
 
 ## 6. Three-Way Communication Protocol (Kyle ↔ Langston ↔ Claude Code)
