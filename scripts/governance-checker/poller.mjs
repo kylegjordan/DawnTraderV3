@@ -114,8 +114,9 @@ export function anchorClosedBatches(batches) {
       //   • this function pins `lastCode` WHOLE-HISTORY: "pin to the immutable close event"
       //   ⇒ the anchor pinned the TRIGGER and left the CLEAR-condition drifting. Once a closed
       //     batch's governance commit scrolled out of the window, `hasGovernance` flipped false,
-      //     `decideAlerts` block (1) — `if (s.hasGovernance) { toResolveKeys.push(deadlineKey); }`
-      //     — stopped resolving, the `Governance overdue:` mint re-opened it with a freshly
+      //     `decideAlerts` block (1) — whose clear is `toResolveKeys.push(deadlineKey)` under an
+      //     `if (s.hasGovernance)` test — stopped resolving, the `Governance overdue:` mint
+      //     re-opened it with a freshly
       //     recomputed age, and an operator's out-of-band resolve was then dropped by the
       //     store-reconcile (`for (const k of decideStaleOpenAlertDrops(...)) delete
       //     state.openAlerts[k]`, #352's deliberate fail-open) ⇒ re-mint every tick, unclearable.

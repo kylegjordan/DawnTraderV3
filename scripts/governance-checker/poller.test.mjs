@@ -172,8 +172,11 @@ const noStaleOpen = { open: new Set(), openSince: new Map(), naConfirmed: new Se
 {
   const at = (d) => Date.parse(d);
   // (1) THE DEFECT ITSELF: a closed batch whose governance commit has scrolled out of the -n300
-  // window arrives with hasGovernance FALSE (that is what the window-scoped :64 write produces).
-  // Pre-fix the deadline gate at :207 would not resolve, and :208 would re-open forever.
+  // window arrives with hasGovernance FALSE (that is what `computeBatchStates`' window-scoped
+  // `if (governance) s.hasGovernance = true;` produces).
+  // Pre-fix `decideAlerts` block (1) — clear is `toResolveKeys.push(deadlineKey)` under an
+  // `if (s.hasGovernance)` test — would not resolve, and the `Governance overdue:` mint would
+  // re-open forever.
   const agedOut = { batchId: 'B-AGED', lastCode: at('2026-07-25T00:00:00Z'),
     completionAddTime: at('2026-06-01T00:00:00Z'), scopeAddTime: at('2026-05-31T00:00:00Z'),
     hasGovernance: false };
@@ -204,10 +207,12 @@ const noStaleOpen = { open: new Set(), openSince: new Map(), naConfirmed: new Se
     reopenedPin.lastCode === at('2026-07-25T00:00:00Z'));
 
   // (3) ★ LANGSTON-REQUIRED #508 REGRESSION FENCE. The child→parent propagation runs inside
-  // computeBatchStates (:527); anchorClosedBatches runs later (:538). Without re-propagating after
+  // `computeBatchStates` (which calls `propagateGovernanceToParents` inline); `anchorClosedBatches`
+  // is called LATER in the same tick. Without re-propagating after
   // the pin, a closed sub-batch that aged out pins itself and its PARENT's deadline goes unsatisfied
-  // — the exact P19-B8.4 false-overdue #508 killed. Silent: throws nothing, and the :305/:325/:326
-  // tests inject states directly so they cannot catch it.
+  // — the exact P19-B8.4 false-overdue #508 killed. Silent: throws nothing, and the pre-existing
+  // #508 propagation assertions inject states directly (never calling `anchorClosedBatches`), so
+  // they cannot catch it.
   const child = { batchId: 'P19-B8.4b', lastCode: at('2026-07-25T00:00:00Z'),
     completionAddTime: at('2026-06-01T00:00:00Z'), scopeAddTime: at('2026-05-31T00:00:00Z'),
     hasGovernance: false };
