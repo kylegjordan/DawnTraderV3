@@ -103,26 +103,38 @@ export function anchorClosedBatches(batches) {
     b.hasCompletionReport = closed;
     if (closed && !reopened) {
       b.lastCode = b.completionAddTime; // pin to the immutable close event
-      // #605: ALSO pin the deadline's CLEAR-condition, not just its TRIGGER. `hasGovernance` is
-      // written window-scoped at :64 (the -n300 loop) while `lastCode` is pinned whole-history
-      // here — so once a closed batch's governance commit scrolled out of the window,
-      // hasGovernance flipped false, :207 stopped resolving, :208 re-opened with a freshly
-      // recomputed age, and an operator's out-of-band resolve was then dropped by the :510
-      // store-reconcile (#352's deliberate fail-open) → re-mint every tick, unclearable.
-      // Anchoring it here is SELF-REVOKING by construction: `closed` comes from
-      // completionReportCommitTime → findGlobDoc → `git ls-tree GOV_REF`, i.e. presence AT THE
-      // REF, not history — delete the report and closed goes false, the pin lapses, and window
-      // behaviour returns. A HOLLOWED (not deleted) doc is caught by the docgap path, which
-      // re-grades every tick on "absent or hollow" (:255-267).
+      // #605: ALSO pin the deadline's CLEAR-condition, not just its TRIGGER.
+      // CITED BY SYMBOL + QUOTE, NOT BY LINE (Langston Step-4 ①): the first version of this
+      // comment carried line numbers taken from the PRE-EDIT file — uniformly 28 short, the exact
+      // net of this commit's own hunks — so a reader following them landed in the wrong guard.
+      // Line numbers in a comment are self-staling: correct when typed, wrong 40 lines later in
+      // the SAME edit. Symbols and quotes cannot rot.
+      //   • `computeBatchStates` writes it WINDOW-SCOPED inside the `-n300` loop:
+      //     `if (governance) s.hasGovernance = true;`
+      //   • this function pins `lastCode` WHOLE-HISTORY: "pin to the immutable close event"
+      //   ⇒ the anchor pinned the TRIGGER and left the CLEAR-condition drifting. Once a closed
+      //     batch's governance commit scrolled out of the window, `hasGovernance` flipped false,
+      //     `decideAlerts` block (1) — `if (s.hasGovernance) { toResolveKeys.push(deadlineKey); }`
+      //     — stopped resolving, the `Governance overdue:` mint re-opened it with a freshly
+      //     recomputed age, and an operator's out-of-band resolve was then dropped by the
+      //     store-reconcile (`for (const k of decideStaleOpenAlertDrops(...)) delete
+      //     state.openAlerts[k]`, #352's deliberate fail-open) ⇒ re-mint every tick, unclearable.
+      // SAFE BECAUSE SELF-REVOKING, by construction rather than by care: `closed` derives from
+      // `completionReportCommitTime` → `findGlobDoc` → `git ls-tree GOV_REF` — presence AT THE
+      // REF, not history ("null if the doc is absent at GOV_REF"). Delete the report and `closed`
+      // goes false, the pin lapses, window behaviour returns. A HOLLOWED (not deleted) doc is
+      // caught by the docgap block, which re-grades every tick on "absent or hollow".
       b.hasGovernance = true;
     }
   }
   // ★ REQUIRED (Langston Step-1): re-propagate AFTER the pin, or this silently regresses #508.
-  // computeBatchStates propagates child→parent at :527; this function runs at :538. Pinning a
-  // closed sub-batch's hasGovernance after that pass would leave the parent unsatisfied, which is
-  // exactly the P19-B8.4 false-overdue #508 was built to kill — and it throws nothing, because a
-  // removed writer with a surviving reader is silent. Kept INSIDE the function that breaks the
-  // invariant so a caller cannot forget it. Idempotent: only ever sets true.
+  // ORDER IS THE WHOLE POINT — `propagateGovernanceToParents` runs INSIDE `computeBatchStates`,
+  // and `anchorClosedBatches` is called LATER in the tick. So pinning a closed sub-batch's
+  // `hasGovernance` after that pass would leave its PARENT unsatisfied — exactly the P19-B8.4
+  // false-overdue #508 was built to kill — and it throws nothing, because a removed writer with a
+  // surviving reader is silent (§9.5(a-ii)). The existing propagation tests inject states directly,
+  // so they cannot catch it. Kept INSIDE the function that breaks the invariant so a caller adding
+  // a second call site cannot forget it. Idempotent: only ever sets true.
   return propagateGovernanceToParents(batches);
 }
 

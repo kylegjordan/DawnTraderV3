@@ -189,6 +189,20 @@ const noStaleOpen = { open: new Set(), openSince: new Map(), naConfirmed: new Se
   ok('#605 cry-silence fence: never-closed batch is NOT pinned (stays overdue)',
     neverClosed.hasGovernance === false && neverClosed.hasCompletionReport === false);
 
+  // (2b) ★ LANGSTON Step-4 ②: the REOPENED case was unfenced for the NEW pin. The existing
+  // re-open test asserts only lastCode + cutoff and never sets hasGovernance at all, so nothing
+  // stopped a reopened batch from being pinned. The pin lives under `closed && !reopened`, so a
+  // genuine post-close scope rev must NOT pin — otherwise re-opening a batch would silence its
+  // deadline forever, which is the cry-silence failure wearing a different hat.
+  const reopenedPin = { batchId: 'B-RE-PIN', lastCode: at('2026-07-25T00:00:00Z'),
+    completionAddTime: at('2026-06-10T00:00:00Z'), scopeAddTime: at('2026-07-24T00:00:00Z'),
+    hasGovernance: false };
+  anchorClosedBatches([reopenedPin]);
+  ok('#605: REOPENED batch is NOT pinned (deadline still enforceable after a post-close scope rev)',
+    reopenedPin.hasGovernance === false);
+  ok('#605: REOPENED batch keeps its recent lastCode (no close-event pin)',
+    reopenedPin.lastCode === at('2026-07-25T00:00:00Z'));
+
   // (3) ★ LANGSTON-REQUIRED #508 REGRESSION FENCE. The child→parent propagation runs inside
   // computeBatchStates (:527); anchorClosedBatches runs later (:538). Without re-propagating after
   // the pin, a closed sub-batch that aged out pins itself and its PARENT's deadline goes unsatisfied
