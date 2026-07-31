@@ -527,6 +527,7 @@ export interface IStorage {
   updateClosedTrade(mode: TradingMode, id: string, updates: Partial<ClosedTrade>): Promise<ClosedTrade>;
   getClosedTrade(mode: TradingMode, id: string): Promise<ClosedTrade | undefined>;
   getClosedTrades(mode: TradingMode, filters?: { limit?: number; closedOnly?: boolean; includeNeverFilled?: boolean }): Promise<ClosedTrade[]>;
+  getRealizedPnlSince(mode: TradingMode, since: Date): Promise<{ realizedPnl: number; tradeCount: number }>;
   // Phase 8.8.3-C5: Paginated trades with sorting support
   getClosedTradesPaginated(mode: TradingMode, filters: {
     limit?: number;
@@ -3172,6 +3173,37 @@ export class DatabaseStorage implements IStorage {
       .from(closedTradesTable)
       .orderBy(desc(closedTradesTable.openedAt))
       .limit(limit);
+  }
+
+  /**
+   * ★ #618 (2026-07-31): the realized-P&L sum for a TIME window, computed IN SQL so it is
+   * UNBOUNDED BY CONSTRUCTION. The daily-loss kill switch previously reached its 24h total
+   * through getClosedTrades(), whose `limit || 100` (:3148) is a 2025-10 LISTING default
+   * ordered by `openedAt` — so a position held across more than 100 subsequent opens was
+   * ABSENT from the kill switch's 24h loss total at the moment it closed, silently and with
+   * no error. MEASURED over all 346 qualifying rows: worst-case rank-at-close 215; 3 rows
+   * invisible at their close, all three losses. Bounding by OPEN time a question asked in
+   * CLOSE time is the defect; this expresses the window the caller actually wants.
+   *
+   * The two predicates below are COPIED FROM getClosedTrades ON PURPOSE (closedAt NOT NULL +
+   * never_filled excluded, the P19-B7.2c typed guard) so the POPULATION is identical and only
+   * the row bound is removed — a reader comparing the two should see one difference, not two.
+   */
+  async getRealizedPnlSince(mode: TradingMode, since: Date): Promise<{ realizedPnl: number; tradeCount: number }> {
+    const [row] = await db.select({
+      realizedPnl: sql<string>`COALESCE(SUM(${closedTradesTable.pnl}), 0)`,
+      tradeCount: sql<string>`COUNT(*)`,
+    })
+      .from(closedTradesTable)
+      .where(and(
+        sql`${closedTradesTable.closedAt} IS NOT NULL` as any,
+        sql`${closedTradesTable.closedAt} >= ${since}` as any,
+        sql`${closedTradesTable.closeReason} IS DISTINCT FROM 'never_filled'` as any,
+      ));
+    return {
+      realizedPnl: parseFloat(String(row?.realizedPnl ?? '0')) || 0,
+      tradeCount: parseInt(String(row?.tradeCount ?? '0'), 10) || 0,
+    };
   }
 
   async getClosedTradesBySymbol(mode: TradingMode, symbol: string): Promise<ClosedTrade[]> {

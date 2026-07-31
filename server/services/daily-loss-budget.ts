@@ -118,19 +118,24 @@ async function compute24hSnapshot(mode: TradingMode): Promise<DailyLossSnapshot>
   // restart rebaselines the budget (circuit-breaker). Reuses the existing getEngineSessionStart.
   const windowStart = sessionStart && sessionStart > twentyFourHoursAgo ? sessionStart : twentyFourHoursAgo;
 
-  // Mode-aware closed-trade query (same sources as getPortfolioBalanceV2).
-  let closed: Array<{ closedAt: Date | string | null; pnl: unknown }>;
+  // Mode-aware realized-P&L over the window (same sources as getPortfolioBalanceV2).
+  // ★ #618 (2026-07-31): the paper leg is a SQL-side SUM over the TIME window. It previously
+  // went through getClosedTrades(), which returns at most `limit || 100` rows ordered by
+  // openedAt DESC — so this function bounded its set by OPEN time while asking a question in
+  // CLOSE time, and a position held across >100 subsequent opens was silently missing from the
+  // kill switch's 24h loss total (measured: 3 occurrences, all losses, worst rank-at-close 215).
+  // The LIVE leg was never affected — getTrades() applies a limit only when one is passed, and
+  // none is passed here — so it keeps its in-memory filter and is left deliberately untouched.
+  let realizedPnl24h: number;
   if (mode === 'paper') {
-    const trades = await storage.getClosedTrades(mode, { closedOnly: true });
-    closed = trades.map((t: any) => ({ closedAt: t.closedAt, pnl: t.pnl }));
+    ({ realizedPnl: realizedPnl24h } = await storage.getRealizedPnlSince(mode, windowStart));
   } else {
-    const trades = await storage.getTrades(mode, { status: 'closed' });
-    closed = trades.map((t: any) => ({ closedAt: t.exitTime, pnl: t.realizedPL }));
+    const trades = await storage.getTrades(mode, { status: 'closed' }); // unbounded: no limit passed
+    realizedPnl24h = trades
+      .map((t: any) => ({ closedAt: t.exitTime, pnl: t.realizedPL }))
+      .filter((t) => t.closedAt && new Date(t.closedAt) >= windowStart)
+      .reduce((sum, t) => sum + (parseFloat(String(t.pnl ?? '0')) || 0), 0);
   }
-
-  const realizedPnl24h = closed
-    .filter((t) => t.closedAt && new Date(t.closedAt) >= windowStart)
-    .reduce((sum, t) => sum + (parseFloat(String(t.pnl ?? '0')) || 0), 0);
 
   const portfolioValue = await getPortfolioBalanceV2(mode);
   const { lossPercent, nonPositiveValue } = computeLossPercent(realizedPnl24h, portfolioValue);
