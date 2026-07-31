@@ -12,7 +12,9 @@ He ruled: *"OBJ-1's mechanism is unnamed — 'the instrument that logs which fil
 
 **★ REACH, MEASURED ON BOTH SIDES — and it answers the open question he explicitly refused to assert:**
 - **LANGSTON SIDE: `/context` WORKS IN HEADLESS `claude -p`. MEASURED, not assumed.** He flagged this UNMEASURED (*"whether `/context` is reachable in a `claude -p` invocation is UNMEASURED… I'm not asserting an absence"*). **Run on his box it returned the full breakdown.** ⇒ **the prescribed instrument is available; no fallback is needed.** **CONTROL: a plain `-p` probe on the same box returned `PROBE-OK`, so the invocation path itself was proven working.**
-- **CC SIDE:** `/context` is a session command, not shell-invocable from a tool call. **CC-side baseline is therefore taken as BYTES OF THE LOADED FILE SET** (§3), stated as bytes, **not converted to tokens** — see the §5 caveat.
+- ⚠️ **AND THE INSTRUMENT HAS A POPULATION I FAILED TO STATE — Langston has the positive control: `/context` REPORTS THE CWD'S LOAD, NOT THE BOX'S.** Run from `cwd=/tmp` the **Memory Files section is ABSENT ENTIRELY** (18.5k total, zero rows); run from `/home/langston`, 25.8k across two rows. ⇒ **EVERY measurement in this programme states its cwd**, or control (2)'s post-fix delta reads **−25.8k instead of +24 KB and gets called a regression.** All figures in §2 are `cwd=/home/langston`.
+
+**CC SIDE:** `/context` is a session command, not shell-invocable from a tool call. **CC-side baseline is therefore taken as BYTES OF THE LOADED FILE SET** (§3), stated as bytes, **not converted to tokens** — see the §5 caveat.
 
 ## 2. MEASUREMENTS — objects and populations named (rule 29a)
 
@@ -30,7 +32,7 @@ He ruled: *"OBJ-1's mechanism is unnamed — 'the instrument that logs which fil
 ⇒ **F-D INDEPENDENTLY CONFIRMED: `/home/langston/MEMORY.md` (23,970 B, the file every session syncs under §2 step 10.b) is ABSENT.** The AutoMem entry is a **different, smaller file at a different path**.
 ⇒ **His +36% estimate for OBJ-2 CONFIRMED:** adding 23,970 B to a ~67 KB load is the stated order of increase.
 
-**OBJ-5 — CC-SIDE BASELINE, in BYTES:** `CLAUDE.md` **138,757 B / 664 lines** · shared `MEMORY.md` **20,081 B** · `MEMORY_CC_A.md` **24,544 B** ⇒ **183,382 B per session start AND per compaction, ×3 sessions.**
+**OBJ-5 — CC-SIDE BASELINE, in BYTES — POPULATION STATED (rule 29a), because Langston caught it missing:** ⚠️ **the figures below are the WINDOWS WORKING COPY (CRLF).** At the **graded ref** `CLAUDE.md` is **138,093 B / 664 lines**; my working copy reads **138,757 B**. **Delta = 664 = exactly the line count, and the ref blob contains ZERO CR bytes** ⇒ one CR per line. **Immaterial to the 2.7× conclusion, but "bytes" without "of which copy" is the working-tree-vs-ref defect this file's own §7.1 exists to stop.**
 ⇒ **THE TWO SIDES ARE NOT COMPARABLE PROBLEMS: CC ≈ 183 KB vs Langston ≈ 67 KB — the CC side is ~2.7× heavier**, which independently supports his ruling that #564's conclusion re-derives on CC-side grounds alone and that the two problems are separate.
 
 ## 3. FINDINGS RE-VERIFIED BY ME (not carried from the scope)
@@ -49,14 +51,15 @@ He ruled: *"OBJ-1's mechanism is unnamed — 'the instrument that logs which fil
 
 1. **(a) ORDER NARROWED as ruled — OBJ-1 gates OBJ-2 ONLY.** **`OBJ-4 → OBJ-1 → OBJ-5 baseline → OBJ-2`, with OBJ-3 running in parallel throughout** (three text corrections verified by `grep` at the ref; the instrument has nothing to say about them). **OBJ-4 is already DONE (§2).**
 2. **(b) THE BROKEN CONTROL IS REPLACED.** ⚠️ **My scope's control FAILED — he ran it PRE-fix and it returned POSITIVE**, because he can `Read` the file with a tool: *"the control cannot distinguish loaded-at-launch from read-on-demand."* **Replacing with TWO of his three, as instructed:**
-   - **(1) NO-TOOLS PROBE** — an invocation instructed to answer **without tool calls**; pre-fix he must say he does not hold it, post-fix he answers cold.
+   - **(1) NO-TOOLS PROBE, HARDENED (Langston: a paraphrasable fact can be passed by CONFABULATION)** — the target is a **SPECIFIC NON-INFERABLE LITERAL** from `MEMORY.md` (a figure, a date, or an id), **chosen and recorded at Step 3 before the probe runs**; an invocation instructed to answer **without tool calls** must fail it pre-fix and return it cold post-fix.
    - **(2) BYTE/TOKEN DELTA off `/context`** — expect his Memory Files total to rise from **25.8k tokens** by the `MEMORY.md` add. **This is now cheap and version-proven, because §1 established `/context` works headless.**
    *(The canary token is held in reserve; two suffice and it requires editing the very files under test.)*
 3. **★ (the unstated cost) OBJ-2 ADDS ~24 KB TO EVERY LANGSTON INVOCATION — RECORDED DELIBERATELY, NOT NETTED.** Baseline **25.8k tokens is captured ABOVE, BEFORE OBJ-2 lands**, exactly as he required, so 1b cannot start from a moved goalpost. **It is the right trade — a reviewer who never reads volatile state is the worse failure — but it is a +36% add inside the programme whose metric is bytes loaded, and it is stated as such.**
 4. **(c) OBJ-3's NEW-CONTRADICTION RISKS — all four accepted:**
    - **★ THE REAL ONE: correcting line 165 must NOT imply Langston has no per-invoke instruction cost.** He has **23.6k tokens of `/home/langston/CLAUDE.md` on EVERY invoke** — the file I appended to on 07-30. **The edit corrects the clause AND states that true figure in the same breath**, or 1b concludes his side is free and skips the second-largest artifact in the programme.
    - **#564 re-derives WITHOUT him:** repo `CLAUDE.md` **138,757 B / 664 lines**, paid at every CC session start **and every compaction, across three sessions**. Stated measured; the conclusion stands with no collateral deletion.
-   - **§4's `bridge/canonical/` entry is a POINTER, not a second description** — its full home is at 596 with the never-edit caveat, and a second description creates the duplicate-source drift §4's own text warns about.
+   - ⛔ **CORRECTED (Langston) — AND IT IS MY OWN HEADLINE FINDING COMMITTED ONE PARAGRAPH LATER.** I wrote *"§4's `bridge/canonical/` entry"* as though one existed there. **It does not. VERIFIED BY ME: §4 = lines 159-186; the three occurrences are at 59 (§2 Canonical Workflow) and 596/603 (§9 SIM & System Manual Discipline) — NONE in §4.** My own F-B says exactly that two paragraphs earlier. ⇒ **I flagged that LINE coordinates drift and then drifted a SECTION coordinate in the risk item built on that finding.**
+   ⇒ **OPERATIVE CONSEQUENCE, which is why this is not cosmetic: OBJ-3 ADDS a NEW pointer INTO §4 (159-186) aimed at the FULL HOME in §9 (596, with the never-edit caveat). It does not edit an existing §4 entry, because there is none.** Had the edit target been picked off my bad label it would have landed in the wrong section.
    - **★ MY PROVENANCE LINE WAS WRONG AND IS CORRECTED: §7.1 forbids zips/staged folders BY IMPLICATION ONLY** (the one-direction rule), **never verbatim.** ⇒ **rule 1 is the SOLE home of that clause** — which strengthens keep-it-verbatim, and §7.1 must **not** be cited as an independent statement of it.
 
 ## 5. WHAT I AM NOT CLAIMING
