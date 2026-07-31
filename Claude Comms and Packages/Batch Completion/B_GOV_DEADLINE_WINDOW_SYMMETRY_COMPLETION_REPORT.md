@@ -10,9 +10,14 @@
 
 ## 0. 🚨 VERIFICATION STATUS — READ THIS BEFORE CITING THIS REPORT
 
-> 🚨 **THE FIX IS APPROVED, LIVE, AND *NOT YET PROVEN ON A LIVE ALERT*. This report closes the implementation, not the verification.**
+> ✅ **VERIFIED ON A LIVE ALERT 2026-07-30 — see RESULT below. The CLEAR-PATH is proven end-to-end; the PIN ITSELF rests on mutation-proved unit fences plus a dated follow-up, and that distinction is deliberate.**
 > The self-clearing falsifier is **this batch's own deadline alert** (`f7eeb547-7028-41f5-9b55-fad88fd723a2`, currently `acknowledged`). **Filing this report is the trigger:** it should make the checker resolve that alert **by itself on the next tick, with nobody touching it.**
-> ⚠️ **AND WHAT THAT WOULD AND WOULD NOT PROVE, stated before the result is known:** it proves the **clear-path is live end-to-end on a checker-minted alert**. It does **NOT** prove the *pin* fired — an in-window batch clears via the ordinary window write anyway. **Proving the pin needs a closed batch whose governance has aged out, which cannot be manufactured on demand.**
+> ✅✅ **RESULT — 2026-07-30T23:39:19Z, tick `ExecMainStatus=0`: THE SUBJECT RESOLVED UNAIDED AND THE CONTROL HELD.**
+> **SUBJECT** `B-GOV-DEADLINE-WINDOW-SYMMETRY` → **`resolved`** — the checker cleared its own alert once the docs landed at `GOV_REF`, with **no human action**.
+> **CONTROL** `B-REGIME-INPUTS-LIVE` (genuinely unclosed, no completion report on disk) → **`acknowledged`, NOT resolved** ⇒ **no cry-silence; the fix did not over-reach.**
+> **INSTRUMENT + POPULATION, stated per rule 29(a):** the **whole** alert store, **467 rows parsed, not a tail** — ⚠️ **the first attempt at this check used an 80-row tail and its control was ABSENT from the window, i.e. unevaluable. The population is the fix.**
+>
+> ⚠️ **AND WHAT THAT PROVES — held to exactly what was written BEFORE the result:** it proves the **clear-path is live end-to-end on a checker-minted alert**. It does **NOT** prove the *pin* fired — **this batch was IN the 300-commit window, so it would have cleared via the ordinary window write regardless of the fix.** **Proving the pin needs a closed batch whose governance has AGED OUT, which cannot be manufactured on demand** (~days at current push rate). ⇒ **the pin's own behaviour rests on the three MUTATION-PROVED unit fences (§2), not on this live pass. Recorded as a dated follow-up rather than claimed.**
 
 ## 1. Objectives vs outcome
 
