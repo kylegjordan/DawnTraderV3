@@ -21,13 +21,20 @@
 
 | | Value |
 |---|---|
-| **Anthropic's recommendation** | **≤ ~200 lines**, remainder split into imports / `.claude/rules/` / skills |
+| **Anthropic's recommendation** | **≤ ~200 lines** — *"target under 200 lines per CLAUDE.md file. Longer files consume more context and reduce adherence"* ([code.claude.com/docs/en/memory](https://code.claude.com/docs/en/memory)); *"Keep CLAUDE.md under 200 lines, give it an owner, and review changes to it like code"* ([claude.com/blog/steering-claude-code…](https://claude.com/blog/steering-claude-code-skills-hooks-rules-subagents-and-more)) |
 | **Ours (`CLAUDE.md` @ 2026-07-31)** | **664 lines · 138,093 bytes (134.9 KiB)** |
 | **Overshoot** | **≈ 3.3× the recommended ceiling** |
 | **Growth (measured, #564)** | **+2,125 bytes/day** over the 9 days to 2026-07-31 |
 | **Langston's file** | 497 lines / 59.9 KiB — **his own separate problem, and see 1.5** |
 
 **What the standard actually says**, and it maps onto Kyle's instruction almost word for word: use **progressive disclosure** — *don't state everything upfront; tell the model how to FIND what it needs when it needs it*; the main file should **point toward directories and skills** rather than contain their content; **exclude long paragraphs and redundant explanation**; and **create a skill for a procedure and reference it from `CLAUDE.md`.**
+
+⛔ **CORRECTION (Langston, ruling on r1) — `@path` IMPORTS DO NOT REDUCE CONTEXT AND ARE STRUCK FROM THE LEVER LIST.** The docs: *"Splitting into `@path` imports helps organization but doesn't reduce context, since imported files load at launch."* ⇒ **an import split yields a 200-line `CLAUDE.md` and changes NOTHING — same bytes, same adherence cost. r1 listed imports as a split target; had that reached a scope, the batch would have hit its number and moved zero.**
+
+★★ **THE SUCCESS METRIC — r1 HAD NONE, AND "≤200 LINES" IS GAMEABLE** (by imports, and by an unscoped `.claude/rules/` file, which the docs say is *"always loaded at session start"*). **THE EXIT TEST IS BYTES ACTUALLY LOADED AT SESSION START**, read off `/context` → Memory files. **Named here so the batch cannot declare victory on a line count.**
+
+★★ **THE MECHANISM r1 MISSED ENTIRELY — PATH-SCOPED RULES.** `.claude/rules/*.md` with `paths:` frontmatter load **only when Claude reads a matching file** ⇒ they fire at **READ time, not INVOKE time**, which is *materially closer to rule 29's own "failures happen at MEASURE time" than any skill can be.* Langston: **"this is the largest gap in §1.3."** Candidates: **§2 1.b provenance scoped to `server/**`; the SIM/System-Manual content-update rule scoped to the governed doc paths; 25.c scoped to `1-system-manual/**`.**
+
 
 ## 1.2 ★ THIS REQUIRES NO REVERSAL OF KYLE'S NO-TRIM DECISION (#339)
 
@@ -61,6 +68,18 @@
 | §5 rule 28 (lanes) | No cross-session narration in Kyle's chat | **STAYS — reworded as ROUTING** | ⚠ **Third statement of this rule. Prose has failed twice, so leg 3 must ask whether it has a tool-event signature at all and say plainly if it does not.** |
 | §0 mission · risk boundary · §1 plain-language · lanes | Must be true *before* you know the task | **STAYS IN `CLAUDE.md`** | This is the genuine always-loaded core. |
 
+★★ **FOUR ROWS ABOVE ARE IN THE WRONG HOME (Langston's ruling on r1) — corrected here rather than silently edited, so the reasoning survives:**
+1. **Rule 20 → "glossary" is WRONG.** *A glossary is a document, not an enforcement home.* Rule 20 is a **definition that prevents a class of targeting error**, it is short, and it **must be true BEFORE you know the task** — the same test used to keep mission and lanes. **STAYS, compressed to the two axes + the trap line.** Moving it produces *findable-but-not-held*, which is the failure being ended.
+2. **Rule 29 → `measure` SKILL is HALF WRONG, by rule 29's own line 286.** A skill loads when INVOKED — **and nobody invokes it in the seconds before mis-measuring, because you do not yet know you are about to.** ⇒ **the HOOK is the home; the skill holds the REPORT FORMAT; `CLAUDE.md` keeps one line.**
+3. **§3 tiers — the CI CHECK is the home, the skill is secondary.** ⚠️ **CONDITION: the skill must READ the checker's doc-set config, NOT restate it.** Two hand-maintained copies of one list is a second rot site — *r1 applied the generation principle to the catalogues in §3.4 and then failed to apply it to its own skills.*
+4. **Rule 28 → "stays, reworded" is WRONG — that IS the loop.** r1 flags it has failed twice and then proposes stating it a third time. Docs: *"CLAUDE.md instructions… are not a hard enforcement layer"* and *"to block an action regardless of what Claude decides, use a PreToolUse hook."* **Cross-session narration DOES have a tool-event signature: it is a BRIDGE SEND.** ⇒ **home = the send path** (reject a post narrating another session's batch-id without that session in-thread). **If that is not buildable, say plainly that rule 28 is UNENFORCEABLE and stop restating it.**
+★ **Best row is rule 21** — prose deleted against a mechanism already proven to fire. **Condition: show the task firing in the last 7 days before the prose comes out.**
+
+★★ **ALSO STAYS, and r1 had it in no row at all: RULE 24's THREE OUTCOMES** — a disposition rule that must be true before you know the task, same test as the lanes.
+★ **THE EIGHT (line 189) ALREADY IS the index this target shape describes — make it the SPINE; do not invent a second one beside it.**
+★ **SHOULD MOVE AND r1 LEFT IT: §1 Identity & Persona (lines 13-42) — thirty lines is 15% of a 200-line budget.** r1 called it a compression candidate and then did not schedule the compression. **Scheduled here.**
+⚠️ **§2 workflow → skill: the pointer must be CONTENTFUL — name the eleven steps (~3 lines). A batch never RECOGNISED as a batch never loads the skill.**
+
 **⇒ TARGET SHAPE:** `CLAUDE.md` = mission · risk boundary · communication contract · lanes · **an index of skills and runbooks with one line each.** Everything procedural is one invocation away.
 
 ## 1.4 Stale content found while reading it (fix in the same pass, no new rules)
@@ -72,7 +91,9 @@
 ## 1.5 Langston's own files — nobody has reviewed them
 
 **Measured:** his `CLAUDE.md` **497 lines / 59.9 KiB** (I appended to it twice on 2026-07-30 **without reading all 497 lines for conflicts**); his `MEMORY.md` **83 lines, last modified 2026-07-28** — **stale by two days across several closed batches, and it auto-loads on every one of his invocations.** He reviewed last night's work against a stale baseline and happened to be right.
-⚠️ **AND ONE PREMISE TO RE-TEST BEFORE THE BATCH LEANS ON IT:** #564 assumes the repo `CLAUDE.md` auto-loads for Langston every invocation. **Langston reports it does NOT — he had to `curl` it.** If that holds, the "every review costs him ~31k tokens of rulebook" claim is wrong and the CC-side and Langston-side problems are **separate**, with separate fixes.
+★★ **MEASURED BY LANGSTON, WITH A POSITIVE CONTROL — AND IT IS WORSE THAN r1 THOUGHT.**
+1. **The repo `CLAUDE.md` does NOT load for him. CONFIRMED.** His context holds exactly two instruction sources: `/home/langston/CLAUDE.md` and a 15-line auto-memory index. His cwd is `/home/langston`; loading walks UP from cwd; the repo is not in that ancestry and he holds no working copy. **Positive control: the loader demonstrably works — his own file DID load.** ⇒ **`CLAUDE.md` line 165's claim that this file auto-loads for Langston on EVERY invocation is FALSE, and #564's *"every review costs him ~31k tokens of rulebook"* is WRONG. Our two problems are SEPARATE with SEPARATE fixes.**
+2. **★★ AND `/home/langston/MEMORY.md` — 83 lines, 24 KB — DOES NOT LOAD EITHER.** No `@import` in his `CLAUDE.md`; not a `CLAUDE.md`/`CLAUDE.local.md` filename; not in settings. **His own §10 startup checklist says *"Read `MEMORY.md` next to this file (auto-loads)"* — that is FALSE, and he has been reviewing without it.** ⇒ r1 worried it was **stale while auto-loading**; it is **stale AND ABSENT**. ⚠️ **And §2 step 10.b has had every session dutifully syncing a file he never reads.** **Goes into 1a.**
 
 ---
 
@@ -147,7 +168,21 @@ I proposed *"pre-audits must cite the catalogue entry."* **Langston rejected it 
 ## 4. ORDER, AND WHAT I NEED RULED
 
 **Kyle's order, which I am not reordering:** **(1) rules file → (2) decision history → (3) catalogues.**
-**Within (1) my proposed sequence:** **1a ORDERING** (free, deletes nothing, no decision needed) → **1b the stale-content fixes** (rule 1, §4, Langston's two files) → **1c the skill extraction**, per-rule, each gated on its enforcement home existing and having been **observed firing plus one clean heartbeat cycle** (Langston's amendment).
-⚠️ **DEPENDENCY: 1c depends on leg 2's hooks, which are approved-with-conditions and NOT started.** So (1) can begin immediately at 1a/1b and **must pause at 1c until leg 2 lands.**
+⛔ **SEQUENCE REORDERED BY LANGSTON — r1's "ORDERING first because it is free" was WRONG ON BOTH COUNTS.** There is **no published ordering effect for an always-loaded file** (he had already made me carry that caveat, and r1 leaned on it anyway), and it is **not free**: it is an in-place rewrite of 664 lines of governance, high transcription risk, churning a file two other sessions pull, **for an unevidenced benefit.** Meanwhile the docs give a **CITED defect with a CITED consequence** — *"if two rules contradict each other, Claude may pick one arbitrarily"* — **which is exactly the rule-1/§7.1 contradiction, so THAT leads.**
+
+**THE APPROVED SEQUENCE:**
+- **1a — STALE + CONTRADICTION FIXES (leads).** Rule 1's singular phrasing ⚠️ *(**STALE, not "WRONG"** — it forbids zips/staged folders, which §7.1 still forbids. **Fix the adjective; the inflation is r1's own rule-29-family error**)* · §4's `bridge/canonical/` omission · **line 165's false auto-loads-for-Langston claim** · **and that his `MEMORY.md` has never loaded at all.**
+- **1b — REMOVALS AGAINST ALREADY-PROVEN MECHANISMS.** Rule 21 (conditioned on showing the task fired in the last 7 days); anything already living in a shipped runbook or hook.
+- **★ 1c — `.claude/rules/` PATH-SCOPED EXTRACTION. NO LEG-2 DEPENDENCY — this is the work available WHILE leg 2 lands, and it breaks r1's stall.**
+- **1d — SKILL EXTRACTION, gated on leg 2**, each rule gated on its home **observed firing + one clean heartbeat cycle**.
+- **1e — ORDERING, LAST**, if it is done at all.
+
+★★ **FOUR ADDITIONS FROM §F THAT r1 MISSED:**
+1. **`InstructionsLoaded` HOOK = OBJ-1 OF LEG 1.** The docs name an instrument that logs exactly which instruction files load, when, and why. **You do not restructure what loads until you can OBSERVE what loads.**
+2. **VERSION GATING — nobody measured it.** Langston is on **2.1.159**; `/doctor`'s trim check needs **2.1.206+**; rules-loading behaviour changed at **2.1.198 / 2.1.207 / 2.1.211 / 2.1.217**. **A plan built on version-dependent mechanisms measures all four first.** One command each.
+3. **★ A REGRESSION TEST PER CONVERTED RULE.** A skill that does not fire fails **silently**. Each conversion **names the OBSERVED INCIDENT it must still catch**, and is verified by **replaying it**. **That is the only test separating "enforced elsewhere" from "gone."**
+4. **★ OWNERSHIP — and this is the growth mechanism itself.** *"give it an owner, and review changes to it like code."* **Three sessions append and nobody owns it.** Proposal: **every `CLAUDE.md` diff is a Step-4 gate through Langston, and no session appends mid-batch.** *(This would have stopped last night's additions, mine included.)*
+
+★ **PART 2 — DURABILITY FIRST, BEFORE THE HARVEST (Langston).** 3,028 rulings, one 19 MB file, one box, outside git **is a data-loss exposure sitting underneath a documentation project. It is cheap. Do it first.**
 
 **FOR LANGSTON:** (a) is the enforcement-home table in §1.3 right, and **which rows have I put in the wrong home**; (b) does the target shape in §1.3 leave anything in `CLAUDE.md` that should move, or move anything that must stay; (c) **is 1a/1b/1c the right split, given the leg-2 dependency**; (d) does the decision-history harvest need its `RECONSTRUCTED` marking enforced mechanically, or is a field enough; (e) **what is missing — the standing question, since you see all three sessions' failures and I see mine.**
