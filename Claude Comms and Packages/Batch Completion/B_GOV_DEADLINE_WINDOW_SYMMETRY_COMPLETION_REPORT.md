@@ -11,7 +11,7 @@
 ## 0. 🚨 VERIFICATION STATUS — READ THIS BEFORE CITING THIS REPORT
 
 > ✅ **VERIFIED ON A LIVE ALERT 2026-07-30 — see RESULT below. The CLEAR-PATH is proven end-to-end; the PIN ITSELF rests on mutation-proved unit fences plus a dated follow-up, and that distinction is deliberate.**
-> The self-clearing falsifier is **this batch's own deadline alert** (`f7eeb547-7028-41f5-9b55-fad88fd723a2`, currently `acknowledged`). **Filing this report is the trigger:** it should make the checker resolve that alert **by itself on the next tick, with nobody touching it.**
+> The self-clearing falsifier was **this batch's own deadline alert** (`f7eeb547-7028-41f5-9b55-fad88fd723a2`). **Filing this report was the trigger** — the prediction, written down BEFORE the tick, was that the checker would resolve it by itself with nobody touching it.
 > ✅✅ **RESULT — 2026-07-30T23:39:19Z, tick `ExecMainStatus=0`: THE SUBJECT RESOLVED UNAIDED AND THE CONTROL HELD.**
 > **SUBJECT** `B-GOV-DEADLINE-WINDOW-SYMMETRY` → **`resolved`** — the checker cleared its own alert once the docs landed at `GOV_REF`, with **no human action**.
 > **CONTROL** `B-REGIME-INPUTS-LIVE` (genuinely unclosed, no completion report on disk) → **`acknowledged`, NOT resolved** ⇒ **no cry-silence; the fix did not over-reach.**
@@ -28,7 +28,7 @@
 | OBJ-2b | ★ Langston-required: re-propagate child→parent **after** the pin | **YES**, and placed **inside** `anchorClosedBatches` so a future second caller cannot forget it. |
 | OBJ-3 | Fences that fail before they pass | **YES — three, all mutation-proved** (see §2). |
 | — | Cry-silence: `B-REGIME-INPUTS-LIVE` still alerts | **YES** (fenced; never-closed ⇒ never pinned). |
-| — | Live verification on a real alert | **NO — OUTSTANDING.** See §0. |
+| — | Live verification on a real alert | **YES — clear-path only.** Subject resolved unaided at the 23:39:19Z tick; control held. ⚠ **The PIN itself is NOT covered by this pass** (in-window batch) — it rests on the mutation-proved fences + a dated follow-up. See §0. |
 
 ## 2. Mutation proofs (a fence that passes with the fix reverted asserts nothing)
 
