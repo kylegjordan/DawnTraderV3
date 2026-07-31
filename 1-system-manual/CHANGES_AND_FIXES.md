@@ -1,5 +1,19 @@
 # DawnTrader: Changes, Fixes & Improvements Registry
 
+## FIX-2026-07-31-A — the engine-vs-persisted P&L check was never wired: a parameter designed for it was passed by NOBODY (B-PNL-ROUNDTRIP-HOTFIX, #620)
+
+**change-class: hotfix** · **Commit `84fb20b8f`** (⚠️ the commit subject leads `A8 / #620`, NOT a batch-id — the checker's `extractBatchId` will not attribute it; recorded here so the link is not lost).
+**Defect (a MISSING check, not a wrong one):** `logPnlReconciliation` has accepted a `dbNetPnl` parameter since Phase 8.8.3-C5 — the persisted net, for comparing what the engine COMPUTED against what the database actually STORED. **Presence-evidence: `grep -rn dbNetPnl server/ --include=*.ts` returns ZERO occurrences outside the diagnostics file. It was never passed by anyone, ever.** ⇒ the **numeric column round-trip — the one hop where drift genuinely lives (decimal precision, string↔numeric) — has never been checked in the system's history.**
+**Why it stayed invisible:** with `dbNetPnl` absent the comparison short-circuits `undefined ⇒ true`, so the check reported success. **A green light that means nothing looks exactly like a green light that means something.**
+**Fix:** `updateClosedTrade` **already** does `.returning()`; the call site was **discarding** the persisted row. Captured it — **no re-fetch, no extra DB read** — and passed the persisted net through.
+**★ THE PART WORTH KEEPING — the first attempt DID NOT COMPILE, and measurement caught it, not review.** The write sits inside `if (trade)` while the reconciliation call sits **outside** that block, so a `const` declared in the block is not in scope at the call. **tsc measured +2 and it was found BEFORE the commit rather than after.** Hoisted to the enclosing scope, with the reason recorded in-code so the next reader does not re-collapse it.
+⚠️ **Two prior claims corrected, both on the record:** Langston's *"the caller does not hold the persisted row"* was right about the code **as written**; CC-C's *"no re-fetch is needed"* was right about the **requirement**. **Neither was the answer — the value is returned and merely out of scope; the fix is a hoist.**
+**Assertion polarity, deliberate:** the check now asserts **engine-computed vs PERSISTED** (can genuinely fail). The `calculatedNetPnl` vs `engineNetPnl` comparison stays **reporting-only** because both descend from ONE `computeRealizedPnl` call — **tautological, unfalsifiable, and a green result there is worthless.** Success is logged as well as failure so a **passing** check is distinguishable from one that is **not running**.
+**Files:** `server/services/active-execution-engine.ts`, `server/services/c5-financial-diagnostics.ts`.
+**Verified:** tsc delta **0** (measured stash/count/pop; +2 on the first attempt, then 0). 21/21 tests green. ⚠️ **Live firing NOT yet observed — it needs a post-deploy close; that is an outstanding verification, not a completed one.**
+
+---
+
 ## FIX-2026-07-22-A — Discord >2000-char dispatches to Langston were silently half-delivered (B-COMMS-CHUNK-FIX, #553)
 
 **Symptom (Kyle-reported):** long messages to Langston arrived truncated; load-bearing review content was missed, with no error on either side.
