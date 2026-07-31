@@ -795,6 +795,20 @@ MSYS2_ARG_CONV_EXCL='*' git show "…:.claude/memory/MEMORY.md"               ->
 
 ## B79.0n.SCORING + B79.0n.TEC closure entries (2026-05-26)
 
+### #628 OPEN 2026-07-31 (CC-C, scratch-list A9; **provenance read per rule 24.0 changed the disposition from "delete six" to "two different answers"**) — ★★  DEFEATS A FAIL-SAFE THAT ALREADY WORKS: THE ZERO IT SWALLOWS IS A DESIGNED SIGNAL, AND TWO OF THE SIX SITES SIZE POSITIONS
+**PROVENANCE — the fallback is NOT arbitrary and that is why it survived.** Introduced **2025-10-03, , *"Add interactive portfolio value graph and update UI theme to light mode"*** ⇒ a **DISPLAY default so a chart would not break on an empty portfolio**, written **before active trading existed**. **Correct for its original purpose.** It has since been copied onto paths that did not exist then.
+**★★ WHY IT IS NOW DANGEROUS:  RETURNS 0 DELIBERATELY.** Its three  paths are a **FAIL-SAFE** —  flags  as  and  returns **** before any threshold comparison (Langston-verified 2026-07-30). ⇒ ** converts a deliberate "I have no balance" SIGNAL into a fabricated 0,000 — roughly 20× the real ~,250 anchor. It turns a fail-safe into a fail-dangerous.**
+**THE SIX, SPLIT BY CONSUMER — the split IS the finding:**
+| site | feeds | disposition |
+|---|---|---|
+|  ·  ·  |  → portfolio stats / graph | **rule-24 outcome 3 — legacy that no longer fits.** Correct in 2025-10; today it HIDES an error state behind a plausible number. Should surface, not fabricate. |
+|  |  → display metrics | same as above |
+| ** · ** | ** →  → ** | **★ rule-24 outcome 1 — REAL DEFECT ON THE RISK PATH. A fabricated balance SIZES POSITIONS.** |
+**★ AND THE FIX NEEDS NOTHING BUILT — the safe behaviour is ALREADY IMPLEMENTED and merely unreachable.**  opens  ⇒ **propagating the zero yields riskAmount 0 → quantity 0 → no position sized off a fiction.** Removing  does not ADD a guard; **it stops preventing the existing one from running.**
+⚠️ **NOT ESTABLISHED, and it is the gate on the sizing fix:** whether a **zero-quantity** signal is cleanly REJECTED downstream or produces a zero-size order/log-noise. ** is computed; what consumes it is untraced.** Verify before removing, per §9.5(a-ii) — a removed guard-defeat with an unprepared consumer is the same class as a removed writer with a surviving reader.
+**★ FOURTH INSTANCE OF ONE PATTERN THIS SESSION: correct behaviour built, then left unreachable** —  (zero callers),  (never passed), 's return (discarded), and now 's zero-guard (defeated upstream). **Worth a deliberate sweep rather than four coincidences.**
+**CLASS: hotfix** for the two sizing sites once the downstream check lands; the four display sites are a separate, non-urgent call. | OPEN — CC-C
+
 ### #85 RESOLVED 2026-05-26 — B79.TEC HARD-FAIL coverage extension (deferred-from-B79.TEC)
 Original: B79.TEC introduced HARD-FAIL coverage for `break_even_enabled` only; explicit comment at `trailing-exit-controller.ts:358-359` noted the deferred follow-up to extend coverage to all 11 TEC keys. **Resolution path:** B79.0n.TEC ships per-class rows for all 11 keys × 4 active classes (Migration 1) + wildcard retirement (Migration 2). Code-side strict `requireKey<T>` throw on all 11 keys was retreated to observable `pick(key, TEC_DEFAULTS.x)` with per-key counter (Langston ACK Option A — 7 test fixtures use mocked-db pattern that broke under strict throw). **B79.0n.TEC.b restores strict throw within 7d of 48h verify-gate close.**
 
