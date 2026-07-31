@@ -33,6 +33,7 @@ import { db } from '../../db.js';
 import { closedTradesTable } from '../../../shared/schema.js';
 import { inArray, sql } from 'drizzle-orm';
 import { storage } from '../../storage.js';
+import { readFileSync } from 'node:fs';
 
 // Same skip discipline as b72-dbs-routing-guards-consistency: this suite exercises a real
 // round-trip and mocking would defeat its purpose. CI provides Postgres + `npm run db:migrate`.
@@ -196,6 +197,23 @@ d('B-KILLSWITCH-WINDOW (#618): the 24h loss total is bounded by TIME, not by row
     // row cannot shrink it (his −200 counter-example).
     const legacyDelta = (await legacyPath(WINDOW_START)) - baseLegacy;
     expect(Math.abs(newDelta - legacyDelta)).toBeGreaterThanOrEqual(499.99);
+  });
+
+  it('1c. CALLER FENCE: the paper leg must call getRealizedPnlSince, not the capped reader', () => {
+    // ★ THE GAP THIS CLOSES, FOUND WHILE BUILDING LANGSTON'S MUTATION PROOF AND WORTH NAMING.
+    // 1a/1b exercise the two READERS directly. They prove `getRealizedPnlSince` is unbounded and
+    // that `getClosedTrades` is capped — but they say NOTHING about which one the kill switch
+    // actually calls. Someone could revert `daily-loss-budget.ts` to the old path and 1a+1b would
+    // both still pass. So "revert the call and 1b fails" — which is what I told Langston the fence
+    // did — was FALSE as written. This assertion is the one that makes it true.
+    // Source-level, matching the existing convention in b-promotion-race-fix.test.ts:68; a runtime
+    // assertion would need guardrails_v2 + portfolio seed rows and would fence less, not more.
+    const SRC = readFileSync(
+      new URL('../../services/daily-loss-budget.ts', import.meta.url), 'utf-8',
+    );
+    const paperLeg = SRC.slice(SRC.indexOf("if (mode === 'paper')"), SRC.indexOf('const portfolioValue'));
+    expect(paperLeg).toContain('getRealizedPnlSince');
+    expect(paperLeg).not.toContain('getClosedTrades');
   });
 
   it('2. POPULATION PARITY: never_filled and still-open rows are excluded by BOTH readers', async (ctx) => {
