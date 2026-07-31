@@ -20,6 +20,13 @@ vi.mock('../../storage', () => ({
       dailyLossKillSwitchPct: '10', dailyLossWarning1Pct: '50', dailyLossWarning2Pct: '75',
     })),
     getClosedTrades: vi.fn(async () => [{ closedAt: new Date(), pnl: '-9999' }]), // ~99% loss
+    // ★ #618 / B-KILLSWITCH-WINDOW (2026-07-31): the PAPER leg of compute24hSnapshot now reads
+    // the 24h realized total through this SQL-side sum instead of getClosedTrades + a JS filter
+    // (the old path was bounded by row count, not by time). Same -9999 quantity as the
+    // getClosedTrades mock above so this suite's crossing-loss scenario is UNCHANGED.
+    // ⚠️ getClosedTrades is deliberately LEFT in this mock: the LIVE leg and other callers
+    // still use it, and removing it would silently change what this suite exercises.
+    getRealizedPnlSince: vi.fn(async () => ({ realizedPnl: -9999, tradeCount: 1 })),
     getTrades: vi.fn(async () => []),
     getAllUsers: vi.fn(async () => [{ id: 'u1', role: 'owner' }]),
   },
