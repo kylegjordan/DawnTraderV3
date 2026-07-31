@@ -55,7 +55,10 @@ import { storage } from '../../storage.js';
 const RAW_DB_URL = process.env.DATABASE_URL ?? '';
 const isTestDb =
   /^postgres(ql)?:\/\/[^@]*@(localhost|127\.0\.0\.1|postgres)(:\d+)?\/test(\?|$)/.test(RAW_DB_URL);
-if (RAW_DB_URL && !isTestDb) {
+// ★ Langston item 4: NO `RAW_DB_URL &&` conjunct. An UNSET DATABASE_URL previously
+// skipped in silence — the exact failure this warning exists to prevent, left open on
+// one branch by my own guard.
+if (!isTestDb) {
   // Loud, because a silent skip here looks identical to a pass.
   console.warn(
     `[B-KILLSWITCH-WINDOW-FENCE] REFUSING TO SEED: DATABASE_URL is not a local test database. ` +
@@ -69,6 +72,17 @@ let dbReachable = true;
 
 const TAG = 'B-KILLSWITCH-WINDOW-FENCE';
 const ids: string[] = [];
+/** ★ Langston item 3: the tagged rows, so assertions test MEMBERSHIP of a known row rather than
+ *  arithmetic on a global aggregate. `getRealizedPnlSince` cannot be tag-scoped, so every absolute
+ *  threshold on its return value silently includes migration seed data and anything a parallel test
+ *  file inserts. His worked example: ONE pre-existing −200 in-window row, displaced out of legacy's
+ *  top-100 by our own 120 fillers, shrinks the delta from 500 to 300 and turns this fence RED
+ *  against a CORRECT fix. Deltas against a pre-seed baseline are immune to both. */
+let victimId = '';
+let neverFilledId = '';
+let stillOpenId = '';
+let baseNew = 0;   // getRealizedPnlSince BEFORE seeding
+let baseLegacy = 0; // the legacy path BEFORE seeding
 const now = Date.now();
 const WINDOW_START = new Date(now - 24 * 60 * 60 * 1000);
 
@@ -110,14 +124,20 @@ d('B-KILLSWITCH-WINDOW (#618): the 24h loss total is bounded by TIME, not by row
       return;
     }
 
+    // Baselines BEFORE any seeding — every assertion below is a DELTA against these.
+    baseNew = (await storage.getRealizedPnlSince('paper', WINDOW_START)).realizedPnl;
+    baseLegacy = await legacyPath(WINDOW_START);
+
     // The victim: opened FIRST (so it sorts LAST under `desc(openedAt)`), closed INSIDE the
     // window. This is the long-held position the cap hides.
-    await db.insert(closedTradesTable).values(row({
+    const victim = row({
       openedAt: new Date(now - 40 * 24 * 3600_000),
       closedAt: new Date(now - 60_000),
       pnl: '-500.00',
       closeReason: 'stop_hit',
-    }) as any);
+    });
+    victimId = victim.id;
+    await db.insert(closedTradesTable).values(victim as any);
 
     // 120 rows opened AFTER the victim (> the 100 cap), each closed inside the window with a
     // known 0 P&L so they cannot themselves change either sum.
@@ -131,18 +151,22 @@ d('B-KILLSWITCH-WINDOW (#618): the 24h loss total is bounded by TIME, not by row
     }
 
     // Population controls, both INSIDE the window: excluded by BOTH readers or parity is false.
-    await db.insert(closedTradesTable).values(row({
+    const nf = row({
       openedAt: new Date(now - 3600_000),
       closedAt: new Date(now - 60_000),
       pnl: '-999.00',
       closeReason: 'never_filled', // excluded by the P19-B7.2c typed guard
-    }) as any);
-    await db.insert(closedTradesTable).values(row({
+    });
+    neverFilledId = nf.id;
+    await db.insert(closedTradesTable).values(nf as any);
+    const so = row({
       openedAt: new Date(now - 3600_000),
       closedAt: null, // still open — excluded by `closedAt IS NOT NULL`
       pnl: '-999.00',
       closeReason: 'target_hit',
-    }) as any);
+    });
+    stillOpenId = so.id;
+    await db.insert(closedTradesTable).values(so as any);
   });
 
   afterAll(async () => {
@@ -150,39 +174,48 @@ d('B-KILLSWITCH-WINDOW (#618): the 24h loss total is bounded by TIME, not by row
     if (ids.length) await db.delete(closedTradesTable).where(inArray(closedTradesTable.id, ids));
   });
 
-  it('1a. the OLD path MISSES the long-held row — this is the defect, reproduced against the real reader', async (ctx) => {
+  it('1a. the OLD path MISSES the victim — membership, not arithmetic on a global sum', async (ctx) => {
     if (!dbReachable) return ctx.skip();
-    const legacy = await legacyPath(WINDOW_START);
-    // The victim is rank ~120 by openedAt DESC, past `limit || 100`, so it never arrives.
-    expect(legacy).toBeGreaterThan(-500);
+    const rows = await storage.getClosedTrades('paper', { closedOnly: true });
+    // ★ THE PRIMARY ASSERTION IS MEMBERSHIP (Langston item 3): the victim is simply NOT among the
+    // rows the capped reader returns. This is true regardless of what else is in the database.
+    expect(rows.some((t: any) => t.id === victimId)).toBe(false);
+    // Secondary: the legacy DELTA is ~0 — it saw the 120 zero-P&L fillers and not the −500.
+    const legacyDelta = (await legacyPath(WINDOW_START)) - baseLegacy;
+    expect(Math.abs(legacyDelta)).toBeLessThan(0.01);
   });
 
-  it('1b. MUTATION FENCE: the NEW path INCLUDES it — reverting to getClosedTrades fails here', async (ctx) => {
+  it('1b. MUTATION FENCE: the NEW path COUNTS the victim — reverting to getClosedTrades fails here', async (ctx) => {
     if (!dbReachable) return ctx.skip();
-    const { realizedPnl } = await storage.getRealizedPnlSince('paper', WINDOW_START);
-    const legacy = await legacyPath(WINDOW_START);
-    expect(realizedPnl).toBeLessThanOrEqual(-500);
-    // The whole point: the two DISAGREE, and the disagreement is exactly the hidden loss.
-    expect(Math.abs(realizedPnl - legacy)).toBeGreaterThanOrEqual(499.99);
+    const newDelta = (await storage.getRealizedPnlSince('paper', WINDOW_START)).realizedPnl - baseNew;
+    // The victim (−500) plus 120 fillers at 0.00 — and NOTHING else, because the two −999 controls
+    // must be excluded. A delta of exactly −500 proves inclusion of the victim AND exclusion of both
+    // controls in one number.
+    expect(newDelta).toBeCloseTo(-500, 2);
+    // And the two readers must DISAGREE by the hidden loss. Delta-based, so a pre-existing in-window
+    // row cannot shrink it (his −200 counter-example).
+    const legacyDelta = (await legacyPath(WINDOW_START)) - baseLegacy;
+    expect(Math.abs(newDelta - legacyDelta)).toBeGreaterThanOrEqual(499.99);
   });
 
   it('2. POPULATION PARITY: never_filled and still-open rows are excluded by BOTH readers', async (ctx) => {
     if (!dbReachable) return ctx.skip();
-    const { realizedPnl } = await storage.getRealizedPnlSince('paper', WINDOW_START);
-    // Both -999 rows sit inside the window. If either reader admitted one, the sum would
-    // move by 999 — far outside any rounding tolerance.
-    expect(realizedPnl).toBeGreaterThan(-999);
-
-    const legacyRows = await storage.getClosedTrades('paper', { closedOnly: true });
-    const fenceRows = legacyRows.filter((t: any) => String(t.id).startsWith(TAG));
-    expect(fenceRows.some((t: any) => t.closeReason === 'never_filled')).toBe(false);
-    expect(fenceRows.some((t: any) => t.closedAt == null)).toBe(false);
+    // NEW reader: proven by the delta above being −500 and not −1,499 or −2,498. Restated here as
+    // its own assertion so the parity claim fails on its own terms rather than as a side effect.
+    const newDelta = (await storage.getRealizedPnlSince('paper', WINDOW_START)).realizedPnl - baseNew;
+    expect(newDelta).toBeGreaterThan(-999); // either control admitted would push it past this
+    // LEGACY reader: membership, by id.
+    const rows = await storage.getClosedTrades('paper', { closedOnly: true });
+    expect(rows.some((t: any) => t.id === neverFilledId)).toBe(false);
+    expect(rows.some((t: any) => t.id === stillOpenId)).toBe(false);
   });
 
   it('3. an empty window returns 0, not NaN (COALESCE is load-bearing)', async (ctx) => {
     if (!dbReachable) return ctx.skip();
     const far = new Date(now + 365 * 24 * 3600_000); // nothing can have closed after this
     const { realizedPnl, tradeCount } = await storage.getRealizedPnlSince('paper', far);
+    // A future `since` genuinely admits NO row, so these absolutes are safe here — unlike the
+    // in-window assertions above, nothing pre-existing can satisfy `closed_at >= now + 1 year`.
     expect(realizedPnl).toBe(0);
     expect(Number.isNaN(realizedPnl)).toBe(false);
     expect(tradeCount).toBe(0);

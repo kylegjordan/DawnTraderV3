@@ -198,6 +198,37 @@ These are the ones I would carry to any project unchanged. Each cost us somethin
 
 ---
 
+### ★ A TEST THAT WRITES TO A FINANCIAL TABLE GUARDS ITSELF, AND SKIPS LOUDLY (2026-07-31)
+
+**THE RULE.** A test that INSERTS into a table a live system reads for money decisions must (a) refuse
+to seed unless the database is demonstrably a throwaway, (b) **warn on every refusal** — never skip in
+silence — and (c) **skip, not pass**, when it cannot run.
+
+**THE INCIDENT.** A fence proving a $12 under-count in the daily-loss kill switch seeded a **−500**
+row stamped as closed seconds earlier. On a live database the evaluator reads that on the next close:
+≈22% of a ~$2,250 portfolio, past the 20% kill threshold ⇒ **it would have tripped the kill switch and
+flattened every open position.** *A test that proves a $12 error is not worth a mechanism that can
+flatten the book.*
+
+**THREE THINGS THAT MADE IT WORSE, each worth inheriting:**
+1. **The author overstated the danger, then had to correct it.** The claim "it could be pointed at
+   staging" was made without checking **reachability** — the test runner pins `DATABASE_URL` to a
+   throwaway database on every run, so it was not reachable by the normal command. **State whether a
+   guard is LOAD-BEARING or DEFENCE-IN-DEPTH, and verify which before you claim either.**
+2. **The first guard skipped in silence when the URL was unset** — the exact failure its own comment
+   warned about, left open on one branch.
+3. **The first skip-fix returned early from each test, so all four reported PASSED while asserting
+   nothing.** ⇒ **a vacuous green is worse than a red**, and it appeared in a fence whose whole
+   subject was instruments that report success without measuring.
+
+**AND THE ASSERTIONS.** Prefer **membership of a row you seeded** over **arithmetic on a global
+aggregate**: a SQL-side `SUM` cannot be scoped to your test's rows, so any absolute threshold silently
+includes seed data and whatever a parallel test file inserted. Capture a **pre-seed baseline** and
+assert **deltas**. (Reviewer's counter-example: one pre-existing −200 row in the window turns a
+correct fix RED.)
+
+**Origin:** `B-KILLSWITCH-WINDOW` / `RUNNING_ISSUES` #618; Langston Step-4 conditions 3, 4 and 7.
+
 ## 8. ANTI-PATTERNS WE PAID FOR
 
 | Anti-pattern | What it actually cost |
