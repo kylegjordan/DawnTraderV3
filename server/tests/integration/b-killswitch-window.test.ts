@@ -31,30 +31,41 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { db } from '../../db.js';
 import { closedTradesTable } from '../../../shared/schema.js';
-import { inArray } from 'drizzle-orm';
+import { inArray, sql } from 'drizzle-orm';
 import { storage } from '../../storage.js';
 
 // Same skip discipline as b72-dbs-routing-guards-consistency: this suite exercises a real
 // round-trip and mocking would defeat its purpose. CI provides Postgres + `npm run db:migrate`.
 //
-// ⚠️⚠️ SAFETY GUARD — THIS SUITE WRITES, AND WHAT IT WRITES IS DANGEROUS OFF A TEST DB.
-// b72 only READS, so its bare `DATABASE_URL` check was sufficient. This one INSERTS a −500
-// row stamped as closed seconds ago. Against staging, the live daily-loss evaluator would
-// read that row on the next close, and −500 against a ~$2,250 portfolio is ~22% — past the
-// 20% paper kill threshold. It would TRIP THE KILL SWITCH AND FLATTEN EVERY OPEN POSITION.
-// So a `DATABASE_URL` that is not demonstrably a local test database does not merely skip
-// the assertions — the suite refuses to seed at all. Opt in explicitly, never by default.
+// ⚠️ THIS SUITE WRITES, AND WHAT IT WRITES WOULD BE DANGEROUS AGAINST A LIVE DB: it INSERTS a
+// −500 row stamped as closed seconds ago. On a live database the daily-loss evaluator would
+// read that on the next close — ~22% of a ~$2,250 portfolio, past the 20% paper kill — and
+// trip the kill switch, flattening every open position. Hence the two guards below.
+// ★ HOW THIS GUARD ACTUALLY BEHAVES — MEASURED, after I twice described it wrongly.
+// `vitest.config.ts:10` INJECTS `DATABASE_URL='postgresql://test:test@localhost:5432/test'`
+// into every run. So under vitest the URL is ALWAYS the test URL and this check ALWAYS
+// passes — it can never be pointed at staging THROUGH vitest, which is the real protection.
+// The URL check below is therefore belt-and-braces for a direct/non-vitest invocation, NOT
+// the load-bearing guard I first claimed it was.
+// The second half is the one that matters locally: a developer machine has the test URL but
+// usually NO Postgres on 5432. A throwing `beforeAll` fails the FILE while vitest reports its
+// unrun tests as "skipped" — a shape that reads exactly like a clean skip and is not one.
+// (That is precisely how I misread this run.) So reachability is PROBED and the suite skips
+// itself when the database is absent, rather than failing the suite for everyone without one.
 const RAW_DB_URL = process.env.DATABASE_URL ?? '';
 const isTestDb =
   /^postgres(ql)?:\/\/[^@]*@(localhost|127\.0\.0\.1|postgres)(:\d+)?\/test(\?|$)/.test(RAW_DB_URL);
-const d = isTestDb ? describe : describe.skip;
 if (RAW_DB_URL && !isTestDb) {
   // Loud, because a silent skip here looks identical to a pass.
   console.warn(
-    `[B-KILLSWITCH-WINDOW-FENCE] REFUSING TO RUN: DATABASE_URL is not a local test database. ` +
-    `This suite seeds a large synthetic loss and would trip a live kill switch. Skipped.`,
+    `[B-KILLSWITCH-WINDOW-FENCE] REFUSING TO SEED: DATABASE_URL is not a local test database. ` +
+    `This suite seeds a large synthetic loss; against a live DB the evaluator could read it ` +
+    `and trip the kill switch. Skipped.`,
   );
 }
+const d = isTestDb ? describe : describe.skip;
+/** Set false by beforeAll when Postgres is not reachable; every `it` then skips itself. */
+let dbReachable = true;
 
 const TAG = 'B-KILLSWITCH-WINDOW-FENCE';
 const ids: string[] = [];
@@ -87,6 +98,18 @@ function row(overrides: Record<string, unknown>) {
 
 d('B-KILLSWITCH-WINDOW (#618): the 24h loss total is bounded by TIME, not by row count', () => {
   beforeAll(async () => {
+    if (!isTestDb) return;
+    // Probe reachability FIRST. If Postgres is absent (the normal developer laptop), skip the
+    // suite instead of throwing — an unhandled throw here fails the file while its tests
+    // report as "skipped", which is indistinguishable from a clean skip at a glance.
+    try {
+      await db.execute(sql`SELECT 1`);
+    } catch {
+      dbReachable = false;
+      console.warn('[B-KILLSWITCH-WINDOW-FENCE] Postgres unreachable — suite skipped (CI provides it).');
+      return;
+    }
+
     // The victim: opened FIRST (so it sorts LAST under `desc(openedAt)`), closed INSIDE the
     // window. This is the long-held position the cap hides.
     await db.insert(closedTradesTable).values(row({
@@ -123,16 +146,19 @@ d('B-KILLSWITCH-WINDOW (#618): the 24h loss total is bounded by TIME, not by row
   });
 
   afterAll(async () => {
+    if (!isTestDb || !dbReachable) return;
     if (ids.length) await db.delete(closedTradesTable).where(inArray(closedTradesTable.id, ids));
   });
 
-  it('1a. the OLD path MISSES the long-held row — this is the defect, reproduced against the real reader', async () => {
+  it('1a. the OLD path MISSES the long-held row — this is the defect, reproduced against the real reader', async (ctx) => {
+    if (!dbReachable) return ctx.skip();
     const legacy = await legacyPath(WINDOW_START);
     // The victim is rank ~120 by openedAt DESC, past `limit || 100`, so it never arrives.
     expect(legacy).toBeGreaterThan(-500);
   });
 
-  it('1b. MUTATION FENCE: the NEW path INCLUDES it — reverting to getClosedTrades fails here', async () => {
+  it('1b. MUTATION FENCE: the NEW path INCLUDES it — reverting to getClosedTrades fails here', async (ctx) => {
+    if (!dbReachable) return ctx.skip();
     const { realizedPnl } = await storage.getRealizedPnlSince('paper', WINDOW_START);
     const legacy = await legacyPath(WINDOW_START);
     expect(realizedPnl).toBeLessThanOrEqual(-500);
@@ -140,7 +166,8 @@ d('B-KILLSWITCH-WINDOW (#618): the 24h loss total is bounded by TIME, not by row
     expect(Math.abs(realizedPnl - legacy)).toBeGreaterThanOrEqual(499.99);
   });
 
-  it('2. POPULATION PARITY: never_filled and still-open rows are excluded by BOTH readers', async () => {
+  it('2. POPULATION PARITY: never_filled and still-open rows are excluded by BOTH readers', async (ctx) => {
+    if (!dbReachable) return ctx.skip();
     const { realizedPnl } = await storage.getRealizedPnlSince('paper', WINDOW_START);
     // Both -999 rows sit inside the window. If either reader admitted one, the sum would
     // move by 999 — far outside any rounding tolerance.
@@ -152,7 +179,8 @@ d('B-KILLSWITCH-WINDOW (#618): the 24h loss total is bounded by TIME, not by row
     expect(fenceRows.some((t: any) => t.closedAt == null)).toBe(false);
   });
 
-  it('3. an empty window returns 0, not NaN (COALESCE is load-bearing)', async () => {
+  it('3. an empty window returns 0, not NaN (COALESCE is load-bearing)', async (ctx) => {
+    if (!dbReachable) return ctx.skip();
     const far = new Date(now + 365 * 24 * 3600_000); // nothing can have closed after this
     const { realizedPnl, tradeCount } = await storage.getRealizedPnlSince('paper', far);
     expect(realizedPnl).toBe(0);
