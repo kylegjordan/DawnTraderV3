@@ -820,6 +820,23 @@ MSYS2_ARG_CONV_EXCL='*' git show "…:.claude/memory/MEMORY.md"               ->
 
 ⚠ **#594's STAMP PLACEMENT IS CORRECT AND MUST NOT MOVE TO “FIX” THIS:** stamping inside the mark branch would make `parseTickerSnap` inconsistent with `parseOhlcBar`, which has no mark at all. ⇒ **the answer is not relocating the stamp; it is deciding whether MARK-freshness needs its own detector.** ★ **NOT MEASURED: I have not established that a finite-symbol/non-finite-mark snap actually occurs in practice** — the mechanism exists in code; its frequency is unknown, and that measurement is the entry's first task. **Related: #594, #635.** **OPEN (homed, owner CC-B).**
 
+### ⛔ #646 (CC-C's) — **REFUTED AT THE ROW BY CC-B, 2026-07-31. `resolved_by` IS NOT AN UNPOPULATED FIELD — IT IS NOT A FIELD. THE ACTOR *IS* RECORDED.** *(Original retained below; its central claim is false. ⚠️ ALSO A NUMBER COLLISION — CC-B filed a DIFFERENT #646 (`B-ALERT-ACK-PROCEDURE-DOCFIX`) earlier the same evening at `e9ccc5ecf`. Two issues, one number; renumber the newer per the standing rule.)*
+
+**MEASUREMENT — the SAME row `b112a58d-bc57-4e53-8b16-dc3ac0bc99f5`, KEYS ENUMERATED rather than accessed by guess:** the resolve-related keys present are **`resolved_at`, `resolved_by_claimed`, `resolved_by_transport`. THERE IS NO `resolved_by`.** Values on that row:
+- `acknowledged_by = 'cc-c'` · `acknowledged_at = 2026-07-31T22:06:28.777Z`
+- **`resolved_by_claimed = 'cc-b'`** · **`resolved_by_transport = 'cli'`** · `resolved_at = 2026-07-31T22:06:49.148Z`
+⇒ ⛔ **`resolved_by: None` was never a null column — `.get('resolved_by')` returns `None` BECAUSE THE KEY DOES NOT EXIST.** ⇒ **there is NO asymmetry between the ack and resolve paths, and NO defect here.** **The manual resolve recorded the actor, the claim AND the transport.**
+⛔ **THE OPERATIONAL CONCLUSION IS WITHDRAWN AND MUST NOT BE SCOPED:** *"the ledger can say who CLAIMED an alert and cannot say who CLOSED it"* is **false** — it says both. ★ **DO NOT COMMISSION WORK TO ADD ACTOR-RECORDING THAT ALREADY EXISTS.** That is the expensive failure mode: not a wrong belief, but effort pointed at nothing.
+
+★★ **AND THE ENTRY'S OWN THESIS IS THE ERROR IT DESCRIBES, ONE LEVEL DOWN.** It reads: *"one absent field produced three wrong mechanism claims."* **The truth: a WRONG FIELD NAME returned `None`, and three sessions then theorised about WHY IT WAS NULL.** ⚠️ **Same shape as Langston's `metadata.dedupe_key` (empty — the key is top-level) and CC-B's `:123-126` gloss that dropped `:124` from inside its own cited range.** ⇒ ★ **THE REUSABLE RULE IS NARROWER AND CHEAPER THAN "an absent field is evidence of nothing": BEFORE THEORISING ABOUT A NULL, ENUMERATE THE KEYS AND CONFIRM THE FIELD EXISTS. One command, and it would have killed all three claims at the source.**
+⚠️ **TALLY CORRECTION (matters because this feeds #623): the headline claims THREE sessions inferred wrongly. The body lists TWO wrong inferences (CC-A: absence read as a present actor; CC-C: absence read as an auto-resolver) and names CC-B as the TRUTH.** **CC-B resolved it manually and reported it as such — no inference was made. An inflated count damages #623 exactly as much as a deflated one.**
+
+✅ **WHAT SURVIVES, AND IT NEVER DEPENDED ON THE NULL — KEEP IT: the crew board claims PATHS; THE ALERT QUEUE HAS NO CLAIM MECHANISM AT ALL.** **`cc-c` acked at `22:06:28.777Z`, `cc-b` resolved at `22:06:49.148Z` — 20.371s apart, neither aware, and because `acknowledged` is non-terminal (`system-alerts.ts:389`) ONE OF THE TWO ACTIONS WAS SILENTLY SUBTRACTIVE.** ★ **Provable from the two timestamps alone. Drop the null-derived scaffolding; keep the coordination finding.**
+
+---
+
+*(original entry retained below — its central claim is refuted above)*
+
 ### #646 OPEN 2026-08-01 (CC-C; CC-A explicitly handed it over — *"yours to file, you found it and you named it"*) — ★★ **`resolved_by` DOES NOT POPULATE ON THE MANUAL RESOLVE PATH — AND THAT ONE ABSENT FIELD PRODUCED THREE DIFFERENT WRONG MECHANISM CLAIMS FROM THREE INDEPENDENT SESSIONS INSIDE ONE HOUR.**
 **THE DEFECT (the citable half).** Alert `b112a58d-bc57-4e53-8b16-dc3ac0bc99f5` (PYPL exit-skip) row, read directly: `acknowledged_by: cc-c`, `acknowledged_at: 2026-07-31T22:06:28.777Z`, `resolved_at: 2026-07-31T22:06:49.148Z`, **`resolved_by: None`.** **CC-B states they resolved it manually at that timestamp.** ⇒ **a MANUAL resolve completed and recorded NO ACTOR.** The `acknowledged_by` field on the same row populated correctly, so this is not a schema gap — **it is asymmetric between the two paths.** ⇒ **the ledger can say who CLAIMED an alert and cannot say who CLOSED it.**
 **★ THE REASON IT IS WORTH A NUMBER RATHER THAN A SHRUG — WHAT THE NULL DID TO THREE READERS:**
