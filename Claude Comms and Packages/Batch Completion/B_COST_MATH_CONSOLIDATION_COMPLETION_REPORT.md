@@ -5,8 +5,20 @@
 **Scope:** `Scope Files/B_COST_MATH_CONSOLIDATION_SCOPE.md` · **Pre-audit:** `..._PRE_AUDIT.md`
 **Review:** Langston Step-1 CHANGES-NEEDED → rev2 → rev3; Step-2 APPROVED; **Step-4 CHANGES-NEEDED ×2 → both cleared at `9f1663ef1` → SIGNED OFF.**
 
+> # ✅ §9.3 NOW VERIFIED (2026-07-31, Claude-in-Chrome, Kyle-directed). ALL OBJECTIVES MET — **awaiting Langston's confirmation + Kyle's acknowledgement, which is what CLOSES a batch (§2 step 11).**
+> **AND THE CHECK EARNED ITS KEEP: it found a defect THIS BATCH INTRODUCED, invisible to every query, log line and test that passed.** See §9.3 EVIDENCE below.
+>
+> <details><summary>The original NOT-CLOSED banner, kept rather than deleted</summary>
+>
 > # 🚨 THIS BATCH IS **NOT CLOSED**. ONE OBJECTIVE IS UNVERIFIED.
 > **§9.3 UI verification has NOT been performed.** The staging pages this batch touches (Open Trades, portfolio summary) have **not** been visually inspected. Backend verification is complete and is reported below, but **§9.3 is explicit that a curl, a log line and a psql row do NOT satisfy it.** Per the 2026-07-29 lesson (a column shipped at position 33 of 35 and called verified because the accessibility tree said it rendered), **"it renders" is not "a human can see it."** This report is therefore **PARTIAL**, and the batch must not be recorded as closed until that leg lands.
+> </details>
+
+## ★★ §9.3 EVIDENCE — VERIFIED 2026-07-31 (Claude-in-Chrome, staging `paper-trading`, Open Trades tab)
+**WHAT PASSED:** the **Lane column renders** with its tooltip and a live row reading *"Normal admission — admitted on genuine positive net EV"*. The **cost arithmetic is correct on a live row (AMD/USD)**: entry fee **$2.2131** + est exit fee **$2.2831** = the **$4.4962** displayed, and gross **$8.75** − $4.4962 = the **$4.25** net shown. ⇒ **fees-only, confirmed numerically against the rendered DOM, not against the database.**
+**★★ WHAT FAILED — A DEFECT THIS BATCH INTRODUCED, AND NOTHING ELSE COULD HAVE CAUGHT IT.** Both `Total Costs` tooltips (`vts-open-trades-table.tsx:185`, `vts-closed-trades-table.tsx:182`) still described the **RETIRED four-component formula** — *"entry fee + entry slip + est exit fee + est exit slip"*. **The number was right and the label lied about it.** tsc was clean, 21/21 tests green, the baseline gate passed, the live logs were quiet, and **every one of those instruments is blind to a tooltip.** Fixed at `f2ba46e4d`.
+⚠️ **The fix deliberately does NOT assert the VTS composition.** These are shared components; I verified the ACTIVE path numerically and did **not** trace the VTS cost path, so the tooltip states what was verified and says VTS may differ rather than inventing a formula for it.
+**★ THIS IS THE ARGUMENT FOR §9.3 IN ONE LINE:** the batch's own strengthened rule (*"it renders" is not "a human can see it"*) was written after shipping a column at position 33 of 35 — and this check found the inverse failure, **a number a human CAN see, described by a label that was false.**
 
 ## 🚨 PREVIOUSLY-STATED-VS-NOW (§9.2)
 | | PREVIOUSLY | NOW | REASON |
@@ -27,7 +39,7 @@
 | 4 — F1/F2/F3 recorded | **YES** | In `trade-pnl.ts`'s header + SIM. **F2's four-component composition is retired, not just its rates** — stated because the failure mode is a reader counting four components and re-adding slippage. |
 | 5 — self-checks repaired | **YES (4)** | Sites 4, 5, 6 + the two route reads. |
 | 6 — SIM entry | **YES** | **SIM 9.15**, incl. the fact that it had **no entry at all**. |
-| **§9.3 UI** | ⏳ **NOT DONE** | See the banner. |
+| **§9.3 UI** | **YES — 2026-07-31** | Claude-in-Chrome on staging. Lane column + cost arithmetic verified against the rendered DOM; **found and fixed two false tooltips this batch introduced.** See the §9.3 EVIDENCE section. |
 
 ## ★ What the batch actually found (the arithmetic was the smaller half)
 **The census was scoped by PATTERN (`gross − cost`), not by QUANTITY** — so it re-found the same three sites at any ref, forever. Re-scoped to *"computes **or ASSERTS** a relationship among MONETARY quantities"* it went **3 → 9**. Langston's two fences — **`as any` on a schema-typed row** (a greppable pattern, better than my "absence-reads-as-valid", which is a concept no grep finds) and **`.tsc-baseline.json` as a registry of MUTED phantom reads** — each returned sites the other could not. **Neither closes the census alone.**
