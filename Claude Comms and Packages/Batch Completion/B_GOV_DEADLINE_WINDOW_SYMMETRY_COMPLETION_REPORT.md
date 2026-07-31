@@ -12,7 +12,10 @@
 
 > ✅ **VERIFIED ON A LIVE ALERT 2026-07-30 — see RESULT below. The CLEAR-PATH is proven end-to-end; the PIN ITSELF rests on mutation-proved unit fences plus a dated follow-up, and that distinction is deliberate.**
 > The self-clearing falsifier was **this batch's own deadline alert** (`f7eeb547-7028-41f5-9b55-fad88fd723a2`). **Filing this report was the trigger** — the prediction, written down BEFORE the tick, was that the checker would resolve it by itself with nobody touching it.
-> ✅✅ **RESULT — 2026-07-30T23:39:19Z, tick `ExecMainStatus=0`: THE SUBJECT RESOLVED UNAIDED AND THE CONTROL HELD.**
+> ✅✅ **RESULT — TWO INDEPENDENT DATA POINTS, NOT ONE. THE SUBJECT RESOLVED UNAIDED **AND STAYED RESOLVED THROUGH A SUBSEQUENT TICK**, AND THE CONTROL HELD.**
+> **① CLEARED — `23:09:27.854Z`** (not 23:39; corrected). Journal: `23:09:18 Updating 3a4ca842e..e476e61bd` (the four doc files) → `23:09:27 tick: opened=1 resolved=104`. `resolved_by_claimed="governance-checker"`, `resolution_evidence=e476e61bd…` ⇒ **the clear is tied by evidence-sha to the doc commit.**
+> **② STAYED CLEARED — the following tick at `23:39:19Z`** pulled `a579c9be9` and **left it resolved.** ★ **THIS IS THE DIRECT REFUTATION OF THE DEFECT** — #605's symptom was *“re-mints every tick, unclearable”*, and a subsequent tick declining to re-mint is exactly the thing that could not happen before.
+> ⚠ **CC-B ORIGINALLY CITED ONLY `23:39:19Z` AND CALLED IT THE RESOLVE TICK — wrong, and it COST the stronger claim: mis-citing the timestamp collapsed two pieces of evidence into one weaker one.** (Langston, re-derived at the store.)
 > **SUBJECT** `B-GOV-DEADLINE-WINDOW-SYMMETRY` → **`resolved`** — the checker cleared its own alert once the docs landed at `GOV_REF`, with **no human action**.
 > **CONTROL** `B-REGIME-INPUTS-LIVE` (genuinely unclosed, no completion report on disk) → **`acknowledged`, NOT resolved** ⇒ **no cry-silence; the fix did not over-reach.**
 > **INSTRUMENT + POPULATION, stated per rule 29(a):** the **whole** alert store, **467 rows parsed, not a tail** — ⚠️ **the first attempt at this check used an 80-row tail and its control was ABSENT from the window, i.e. unevaluable. The population is the fix.**
