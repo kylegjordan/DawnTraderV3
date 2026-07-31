@@ -121,8 +121,11 @@ function parseTickerSnap(data: any): void {
   // #594: DATA-liveness stamp — AFTER the malformed-payload guard (a junk snap must not count as
   // proof of life) and BEFORE the mark branch (which is conditional on a finite positive mark;
   // stamping inside it would make this parser inconsistent with parseOhlcBar, which has no mark).
-  // NOTE (scope §3, homed separately): snap-arrival ≠ mark-freshness — a snap can pass this guard
-  // and write no mark, so this clock can read fresh while `latestEquityTick` ages. Cited, not measured.
+  // NOTE (#636): snap-arrival ≠ mark-freshness — the mark write below is CONDITIONAL while this
+  // guard is not, so a snap can stamp this clock and write NO mark, leaving `latestEquityTick`
+  // (the only venue price source for tokenized equities) ageing while this reads fresh. Mechanism
+  // cited, frequency NOT measured. ⚠ Do NOT 'fix' it by moving this stamp into the mark branch —
+  // that would make this parser inconsistent with parseOhlcBar, which has no mark at all.
   state.lastDataMsgAt = Date.now();
   // P19-B8.5 xstock marks: mid from bid/ask when both sides exist, else last.
   {
@@ -358,10 +361,18 @@ export async function runStallWatchdogTick(now: Date = new Date()): Promise<void
     await raiseStallConfigMissingAlert(); // loud + inert this tick (rule-15: no silent default).
     return;
   }
-  // #594: threshold the DATA clock, not the any-frame clock. The seeded constants were derived
-  // from INTER-TICK percentiles (RTH p99.9 28.7s / off-RTH p99 192s, ~7.9M ticks / 485 symbols)
-  // — i.e. against THIS clock all along, so they need no re-derivation. `lastMsgAt` keeps its own
-  // stamp site and its health-log consumer, untouched.
+  // #594: threshold the DATA clock, not the any-frame clock. `lastMsgAt` keeps its own stamp site
+  // and its health-log consumer, untouched.
+  // ⚠ POPULATION NOTE (Langston Step-4 — an earlier version of this comment claimed the constants
+  // were 'derived against THIS clock all along'. THAT WAS WRONG, and it was the batch's one
+  // load-bearing claim): the seeded thresholds are PER-SYMBOL successive `captured_at` diffs
+  // (freshness doc §3, n=6.00M RTH / 1.15M off-RTH). `lastDataMsgAt` is UNIVERSE-WIDE — stamped
+  // once per symbol-tick across ~485 symbols — so at ~900K-996K ticks/hr its aggregate
+  // inter-arrival is ~4ms against a 75s threshold. DIFFERENT POPULATIONS, ~4 orders apart.
+  // WHAT IS ACTUALLY TRUE AND CHECKABLE: the aggregate clock is STRICTLY DENSER than the
+  // per-symbol clock the numbers came from ⇒ this change CANNOT make the watchdog fire more often
+  // than before. The thresholds are NOT re-derived, and this detects a TOTAL feed stall ONLY.
+  // ⇒ partial-stall blindness + aggregate-clock calibration are homed at #635.
   const ageMs = state.lastDataMsgAt > 0 ? Date.now() - state.lastDataMsgAt : Infinity;
   const inLiquid = isXstockLiquidFillWindowET(
     safety.liquidFillWindowOpenMinEt,
