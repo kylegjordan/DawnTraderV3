@@ -3188,6 +3188,19 @@ export class DatabaseStorage implements IStorage {
    * The two predicates below are COPIED FROM getClosedTrades ON PURPOSE (closedAt NOT NULL +
    * never_filled excluded, the P19-B7.2c typed guard) so the POPULATION is identical and only
    * the row bound is removed — a reader comparing the two should see one difference, not two.
+   * Both properties are fenced in `server/tests/integration/b-killswitch-window.test.ts`.
+   *
+   * ⚠️⚠️ `mode` IS DELIBERATELY INERT — AND IT IS STRUCTURALLY UNUSABLE, NOT MERELY UNUSED
+   * (Langston Step-4, 2026-07-31; registered as a new #618 leg-3 site so the live-switch-on
+   * sweep finds it). `closed_trades` HAS NO paper/live discriminator column at all — the
+   * only mode-ish columns on it are `chosen_entry_mode`, `trade_mode` and `exit_fee_mode`,
+   * none of which partition paper from live. So this function CANNOT filter by mode even if
+   * it wanted to, and the parameter exists ONLY for signature parity with its siblings
+   * (`getClosedTrades`, `getClosedTradesGlobal`), which accept and ignore it identically.
+   * ⇒ SAFE TODAY only because the sole caller gates on `mode === 'paper'`
+   * (`daily-loss-budget.ts`). **A future `getRealizedPnlSince('live', …)` would sum PAPER
+   * rows into a LIVE kill switch.** Do not add a live caller until the table has a real
+   * discriminator; the fix belongs with #618 leg 3, not here.
    */
   async getRealizedPnlSince(mode: TradingMode, since: Date): Promise<{ realizedPnl: number; tradeCount: number }> {
     const [row] = await db.select({
