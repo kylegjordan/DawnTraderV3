@@ -304,11 +304,32 @@ class C5FinancialDiagnostics {
       // `trade.id` BEFORE `:2268` fires, so a re-fetch would be a DETERMINISTIC primary-key read
       // of a row just written — not a second live read that can race. Deferring it is a scope
       // decision, and #620 must not inherit a technical objection that does not exist.
-      console.warn(`${TAG_PNL} OBSERVED`, JSON.stringify({
-        ...data,
-        matched: null,
-        note: 'observation only — engine-vs-persisted round-trip is NOT checked here; see RUNNING_ISSUES #620',
-      }));
+      // ★★ #620 NOW WIRED — this check ASSERTS again, but on the RIGHT comparison.
+      // `dbNetPnl` is supplied by the engine from `updateClosedTrade`'s own `.returning()` row,
+      // so the PERSISTED net is compared against the ENGINE-COMPUTED net at ZERO extra DB cost.
+      // ⚠️ THE OTHER COMPARISON STAYS UNASSERTED AND THAT IS DELIBERATE: `calculatedNetPnl` vs
+      // `engineNetPnl` is TAUTOLOGICAL — both descend from ONE `computeRealizedPnl` call, so it
+      // can never fail and a green result there means nothing. Reported, never asserted.
+      if (dbNetPnl !== undefined) {
+        const roundTripOk = Math.abs(engineNetPnl - dbNetPnl) <= tolerance;
+        if (!roundTripOk) {
+          // THE REAL ALARM: what the engine computed is NOT what the database stored.
+          console.warn(`${TAG_PNL} ROUND_TRIP_MISMATCH`, JSON.stringify({
+            ...data, engineNetPnl, dbNetPnl, delta: engineNetPnl - dbNetPnl, tolerance,
+          }));
+        } else {
+          // Logged on SUCCESS too, on purpose: without this line a silent check and a passing
+          // check are indistinguishable — the exact polarity trap this batch family documents.
+          console.warn(`${TAG_PNL} ROUND_TRIP_OK`, JSON.stringify({
+            ...data, engineNetPnl, dbNetPnl, delta: engineNetPnl - dbNetPnl,
+          }));
+        }
+      } else {
+        console.warn(`${TAG_PNL} OBSERVED`, JSON.stringify({
+          ...data, matched: null,
+          note: 'dbNetPnl not supplied by this caller — round-trip NOT checked (see #620)',
+        }));
+      }
     } catch (error) {
       console.error(`${TAG_PNL} ERROR`, error);
     }

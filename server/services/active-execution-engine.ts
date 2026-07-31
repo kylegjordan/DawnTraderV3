@@ -1971,7 +1971,13 @@ export class ActiveExecutionEngine {
     // Find the corresponding trade record
     const trades = await storage.getClosedTradesBySymbol(this.mode,  position.symbol);
     const trade = trades.find(t => t.openedAt && !t.closedAt);
-    
+
+    // ★ #620: the PERSISTED net, hoisted to this scope on purpose. The write below lives inside
+    // `if (trade)` while the reconciliation call sits OUTSIDE it, so a const declared in the block
+    // is NOT in scope at the call — measured, tsc +2 on the first attempt. Stays `undefined` when
+    // no trade row was found, which the diagnostic reports as "not checked" rather than as a pass.
+    let _persistedNetPnl: number | undefined;
+
     if (trade) {
       // B65.2: read the final trailing-engine state for this symbol so the
       // closed-trade row preserves whether the trade ended in moonbag mode.
@@ -1992,7 +1998,10 @@ export class ActiveExecutionEngine {
       const finalRungHistory: number[] | null = _finalState?.rungTargetHistory ?? null;
 
       // Update trade record - Phase 8.8.3-C2: Include all cost/P&L breakdown fields
-      await storage.updateClosedTrade(this.mode, trade.id, {
+      // ★ #620: the return value is CAPTURED, not discarded. `updateClosedTrade` already does
+      // `.returning()`, so the PERSISTED row is in hand with NO extra read — which is why the
+      // engine-vs-persisted round-trip check (the one P&L invariant never checked) costs nothing.
+      const _persistedTrade = await storage.updateClosedTrade(this.mode, trade.id, {
         exitPrice: actualExitPrice.toString(),
         pnl: netPnl.toString(),
         pnlPercent: pnlPercent.toString(),
@@ -2034,6 +2043,10 @@ export class ActiveExecutionEngine {
         latchTriggerPrice: finalLatchTrigger !== null ? finalLatchTrigger.toString() : null,
         rungTargetHistory: finalRungHistory,
       });
+      // Capture the round-trip value at the OUTER scope (see the hoist above).
+      _persistedNetPnl = _persistedTrade?.netPnl != null
+        ? parseFloat(_persistedTrade.netPnl.toString())
+        : undefined;
 
       // Log the exit event with C2 breakdown
       await storage.createActiveTradeLog(this.mode, {
@@ -2274,7 +2287,12 @@ export class ActiveExecutionEngine {
       entrySlippage,
       exitFee,
       exitSlippage,
-      netPnl
+      netPnl,
+      // ★ #620: the PERSISTED net, straight from the write's own `.returning()` row. This is the
+      // one hop where drift genuinely lives (numeric column round-trip / decimal precision) and
+      // it has never been checked — `dbNetPnl` existed as a parameter and was passed by NOBODY
+      // (presence-evidence: zero occurrences repo-wide outside the diagnostics file).
+      _persistedNetPnl
     );
     
     // Phase 8.8.3-C5-1: Balance Reconciliation after trade close
