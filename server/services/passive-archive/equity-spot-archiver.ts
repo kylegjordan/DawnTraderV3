@@ -294,9 +294,17 @@ setInterval(() => {
   if (!state.enabled) return;
   const now = Date.now();
   const lastMsgAge = state.lastMsgAt > 0 ? now - state.lastMsgAt : -1;
+  // #594 (Langston Step-8 ②): publish the DATA clock too. `last_msg_age_ms` answers
+  // "is the socket talking?" and a heartbeat refreshes it — so it CANNOT observe the clock
+  // the watchdog now thresholds on. Without this field `lastDataMsgAt` is invisible from
+  // outside the process, and no live evidence for this fix (or for #635/#636) can be gathered
+  // at all: the two ages DIVERGING is precisely the chatter-only stall this batch exists to
+  // catch. Both use the same -1 never-seen sentinel so a boot reads as absent, not as fresh.
+  const lastDataMsgAge = state.lastDataMsgAt > 0 ? now - state.lastDataMsgAt : -1;
   console.log(
     `[B74][equity-spot] connected=${state.ws?.readyState === WebSocket.OPEN} ` +
-    `last_msg_age_ms=${lastMsgAge} rows_persisted_60s=${state.rowsPersistedLastMinute}`
+    `last_msg_age_ms=${lastMsgAge} last_data_msg_age_ms=${lastDataMsgAge} ` +
+    `rows_persisted_60s=${state.rowsPersistedLastMinute}`
   );
   state.rowsPersistedLastMinute = 0;
   state.rowsPersistedLastMinuteWindowStart = now;
@@ -416,4 +424,16 @@ export function _setArchiverStateForTest(
   patch: Partial<Pick<ArchiverState, 'enabled' | 'reconnectPending' | 'lastMsgAt' | 'lastDataMsgAt' | 'ws'>>,
 ): void {
   Object.assign(state, patch);
+}
+
+// #594 (Langston Step-8 ①) — EXPORTED SO THE STAMP SITES CAN BE FENCED, NOT JUST THE READER.
+// Every other #594 test injects both clocks via _setArchiverStateForTest and asserts the
+// watchdog thresholds the DATA one. That proves the READER and nothing about the WRITERS —
+// and the defect WAS a writer (`lastDataMsgAt` refreshed by any frame). Re-adding the stamp
+// to handleMessage's first line leaves all six of those tests GREEN, i.e. they do not
+// regression-proof the bug they were written for. Driving real frames through handleMessage
+// is the only way to assert WHICH frames move WHICH clock.
+export { handleMessage as _handleMessageForTests };
+export function _getArchiverClocksForTest(): { lastMsgAt: number; lastDataMsgAt: number } {
+  return { lastMsgAt: state.lastMsgAt, lastDataMsgAt: state.lastDataMsgAt };
 }

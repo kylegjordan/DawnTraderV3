@@ -62,6 +62,8 @@ import {
 import {
   runStallWatchdogTick,
   _setArchiverStateForTest,
+  _handleMessageForTests,
+  _getArchiverClocksForTest,
 } from '../../services/passive-archive/equity-spot-archiver.js';
 
 function input(over: Record<string, any> = {}) {
@@ -275,5 +277,79 @@ describe('P19-B4a C3 — silent-stall watchdog', () => {
     await runStallWatchdogTick(RTH_CLOCK);
     expect(close).not.toHaveBeenCalled();
     expect(alertSpy).toHaveBeenCalled(); // config-missing alert
+  });
+});
+
+/**
+ * #594 STAMP-SITE fences (Langston Step-8 ①).
+ *
+ * ⚠️ WHY THESE EXIST, AND WHY THE OTHER #594 TESTS DO NOT COVER IT.
+ * Every other #594 test injects BOTH clocks via `_setArchiverStateForTest` and asserts the
+ * watchdog thresholds on the DATA one. That fences the READER. But the defect WAS A WRITER —
+ * `lastDataMsgAt` being refreshed by any frame, heartbeats included — and re-adding
+ * `state.lastDataMsgAt = Date.now()` to handleMessage's first line leaves every one of those
+ * tests GREEN. A fence that stays green with the bug restored does not fence the bug.
+ * These drive REAL frames through `handleMessage` and assert WHICH frame moves WHICH clock.
+ */
+describe('#594 stamp sites — which frames move which clock', () => {
+  const frame = (o: unknown) => Buffer.from(JSON.stringify(o));
+
+  beforeEach(() => {
+    // Distinct sentinels, deliberately: a shared value cannot distinguish "advanced"
+    // from "was already equal", which is the whole assertion here.
+    _setArchiverStateForTest({ enabled: true, lastMsgAt: 1_000, lastDataMsgAt: 2_000 });
+  });
+
+  it('heartbeat advances the CONNECTION clock and leaves the DATA clock untouched', () => {
+    _handleMessageForTests(frame({ channel: 'heartbeat' }));
+    const c = _getArchiverClocksForTest();
+    expect(c.lastMsgAt).toBeGreaterThan(1_000);   // the socket IS talking
+    expect(c.lastDataMsgAt).toBe(2_000);          // ...but no PRICE arrived
+  });
+
+  it('subscribe-ack advances the CONNECTION clock only', () => {
+    _handleMessageForTests(frame({
+      method: 'subscribe',
+      result: { channel: 'ohlc', symbol: 'A/USD' },
+      success: true,
+    }));
+    const c = _getArchiverClocksForTest();
+    expect(c.lastMsgAt).toBeGreaterThan(1_000);
+    expect(c.lastDataMsgAt).toBe(2_000);
+  });
+
+  it('a ticker frame advances BOTH clocks', () => {
+    _handleMessageForTests(frame({
+      channel: 'ticker',
+      data: [{ symbol: 'AAPL/USD', bid: 100, ask: 100.5, last: 100.2 }],
+    }));
+    const c = _getArchiverClocksForTest();
+    expect(c.lastMsgAt).toBeGreaterThan(1_000);
+    expect(c.lastDataMsgAt).toBeGreaterThan(2_000);
+  });
+
+  it('an ohlc frame advances BOTH clocks', () => {
+    _handleMessageForTests(frame({
+      channel: 'ohlc',
+      data: [{ symbol: 'AAPL/USD', interval_begin: '2026-07-31T09:00:00Z', open: 1, high: 2, low: 1, close: 2 }],
+    }));
+    const c = _getArchiverClocksForTest();
+    expect(c.lastMsgAt).toBeGreaterThan(1_000);
+    expect(c.lastDataMsgAt).toBeGreaterThan(2_000);
+  });
+
+  it('MALFORMED ticker snap (no symbol) advances the CONNECTION clock but NOT the DATA clock', () => {
+    // The stamp sits AFTER the `!data?.symbol` guard by design: junk is not proof of life.
+    _handleMessageForTests(frame({ channel: 'ticker', data: [{ bid: 100, ask: 100.5 }] }));
+    const c = _getArchiverClocksForTest();
+    expect(c.lastMsgAt).toBeGreaterThan(1_000);
+    expect(c.lastDataMsgAt).toBe(2_000);
+  });
+
+  it('unparseable JSON advances the CONNECTION clock and neither parser runs', () => {
+    _handleMessageForTests(Buffer.from('{not json'));
+    const c = _getArchiverClocksForTest();
+    expect(c.lastMsgAt).toBeGreaterThan(1_000);
+    expect(c.lastDataMsgAt).toBe(2_000);
   });
 });
