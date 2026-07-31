@@ -143,7 +143,8 @@ describe('P19-B4a C3 — silent-stall watchdog', () => {
     _setArchiverStateForTest({
       enabled: true,
       reconnectPending: false,
-      lastMsgAt: Date.now() - 200_000, // 200s silent > 75s RTH threshold
+      lastMsgAt: Date.now() - 200_000,
+      lastDataMsgAt: Date.now() - 200_000, // #594: the watchdog now reads the DATA clock // 200s silent > 75s RTH threshold
       ws: { readyState: 1, close } as any, // 1 = WebSocket.OPEN
     });
     await runStallWatchdogTick(RTH_CLOCK);
@@ -157,6 +158,7 @@ describe('P19-B4a C3 — silent-stall watchdog', () => {
       enabled: true,
       reconnectPending: true,
       lastMsgAt: Date.now() - 200_000,
+      lastDataMsgAt: Date.now() - 200_000, // #594: the watchdog now reads the DATA clock
       ws: { readyState: 1, close } as any,
     });
     await runStallWatchdogTick(RTH_CLOCK);
@@ -170,9 +172,78 @@ describe('P19-B4a C3 — silent-stall watchdog', () => {
       enabled: true,
       reconnectPending: false,
       lastMsgAt: Date.now() - 999_000,
+      lastDataMsgAt: Date.now() - 999_000, // #594: the watchdog now reads the DATA clock
       ws: { readyState: 1, close } as any,
     });
     await runStallWatchdogTick(new Date('2026-06-20T14:30:00Z'));
+    expect(close).not.toHaveBeenCalled();
+    expect(alertSpy).not.toHaveBeenCalled();
+  });
+
+  // ── #594: the watchdog must measure DATA arrival, not socket chatter ──
+  // Each of these MUST FAIL with #594 reverted (watchdog reading `lastMsgAt`), or it asserts nothing.
+
+  it('#594: CHATTER-ONLY socket (frames arriving, NO prices) → STALL fires + forces reconnect', async () => {
+    const close = vi.fn();
+    _setArchiverStateForTest({
+      enabled: true,
+      reconnectPending: false,
+      lastMsgAt: Date.now(),              // acks/heartbeats landing RIGHT NOW — socket looks alive
+      lastDataMsgAt: Date.now() - 200_000, // but no PRICE for 200s > 75s RTH threshold
+      ws: { readyState: 1, close } as any,
+    });
+    await runStallWatchdogTick(RTH_CLOCK);
+    // THE WHOLE POINT: pre-#594 the fresh `lastMsgAt` masked this and the watchdog stayed silent.
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(alertSpy).toHaveBeenCalled();
+  });
+
+  it('#594 BLOCKER FENCE: boot/reconnect with NO ticks yet → SILENT (no close, no alert)', async () => {
+    const close = vi.fn();
+    _setArchiverStateForTest({
+      enabled: true,
+      reconnectPending: false,
+      lastMsgAt: Date.now(),
+      lastDataMsgAt: Date.now(), // seeded at ws-open — "never had a price" must NOT read as infinitely stale
+      ws: { readyState: 1, close } as any,
+    });
+    await runStallWatchdogTick(new Date('2026-06-17T06:00:00Z')); // off-RTH, legitimately quiet
+    // Without the ws-open seed this is `Infinity > threshold` ⇒ CRITICAL + forced close of the ONLY
+    // venue price source for xStock marks, on a loop. "Never had data" ≠ "had data, then stopped".
+    expect(close).not.toHaveBeenCalled();
+    expect(alertSpy).not.toHaveBeenCalled();
+  });
+
+  it('#594: UNSEEDED clock (lastDataMsgAt=0) FIRES on a legitimately quiet off-RTH stretch — this is the danger the ws-open seed exists to prevent', async () => {
+    const close = vi.fn();
+    _setArchiverStateForTest({
+      enabled: true,
+      reconnectPending: false,
+      lastMsgAt: Date.now(),
+      lastDataMsgAt: 0,   // "never yet had a price" — the state at boot IF the ws-open seed is absent
+      ws: { readyState: 1, close } as any,
+    });
+    await runStallWatchdogTick(new Date('2026-06-17T06:00:00Z')); // off-RTH, legitimately quiet
+    // 0 ⇒ `Infinity` ⇒ unconditionally > threshold ⇒ CRITICAL + forced close of the ONLY venue
+    // price source for xStock marks, then repeat. THIS ASSERTION DOCUMENTS THE HAZARD; the ws-open
+    // seed is what guarantees the field is never 0 in production.
+    // ⚠ HONEST LIMIT: this harness sets state directly and never reaches `ws.on('open')`, so it
+    // CANNOT mutation-prove the seed itself — removing the seed leaves every test here passing.
+    // The seed is verified by code inspection + the live check in §4. Stated, not glossed.
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(alertSpy).toHaveBeenCalled();
+  });
+
+  it('#594 REGRESSION FENCE: a data frame refreshes the DATA clock → watchdog silent', async () => {
+    const close = vi.fn();
+    _setArchiverStateForTest({
+      enabled: true,
+      reconnectPending: false,
+      lastMsgAt: Date.now() - 200_000, // socket chatter stale — irrelevant to the watchdog now
+      lastDataMsgAt: Date.now(),        // prices ARE arriving
+      ws: { readyState: 1, close } as any,
+    });
+    await runStallWatchdogTick(RTH_CLOCK);
     expect(close).not.toHaveBeenCalled();
     expect(alertSpy).not.toHaveBeenCalled();
   });
@@ -183,7 +254,8 @@ describe('P19-B4a C3 — silent-stall watchdog', () => {
     _setArchiverStateForTest({
       enabled: true,
       reconnectPending: false,
-      lastMsgAt: Date.now() - 200_000, // 200s < 750s off-RTH threshold
+      lastMsgAt: Date.now() - 200_000,
+      lastDataMsgAt: Date.now() - 200_000, // #594: the watchdog now reads the DATA clock // 200s < 750s off-RTH threshold
       ws: { readyState: 1, close } as any,
     });
     await runStallWatchdogTick(new Date('2026-06-17T06:00:00Z')); // Wed 02:00 ET, feed-live but off-RTH
@@ -197,6 +269,7 @@ describe('P19-B4a C3 — silent-stall watchdog', () => {
       enabled: true,
       reconnectPending: false,
       lastMsgAt: Date.now() - 999_000,
+      lastDataMsgAt: Date.now() - 999_000, // #594: the watchdog now reads the DATA clock
       ws: { readyState: 1, close } as any,
     });
     await runStallWatchdogTick(RTH_CLOCK);

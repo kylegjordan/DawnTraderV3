@@ -40,6 +40,11 @@ interface ArchiverState {
   enabled: boolean;
   reconnectPending: boolean; // P19-B4a (C3): true between scheduleReconnect() and the next open
   lastMsgAt: number;
+  /** #594: DATA-liveness. `lastMsgAt` answers "is the socket talking?" (stamped on ANY frame,
+   *  correct for the health log it was born for at B74 — see the batch scope). This one answers
+   *  "are PRICES arriving?" and is stamped ONLY in the parsers. Seeded at ws-open so "never yet
+   *  had a price" can never read as infinitely stale. */
+  lastDataMsgAt: number;
   rowsPersistedLastMinute: number;
   rowsPersistedLastMinuteWindowStart: number;
   // B74 v2: cumulative counters for monitor panel
@@ -54,6 +59,7 @@ const state: ArchiverState = {
   enabled: true,
   reconnectPending: false,
   lastMsgAt: 0,
+  lastDataMsgAt: 0,
   rowsPersistedLastMinute: 0,
   rowsPersistedLastMinuteWindowStart: Date.now(),
   cumulativeOhlcRows: 0,
@@ -76,6 +82,7 @@ export function getEquitySpotStats(): {
 
 function parseOhlcBar(data: any): void {
   if (!data?.symbol || !data?.interval_begin) return;
+  state.lastDataMsgAt = Date.now(); // #594: DATA-liveness — after the guard, same rule as parseTickerSnap.
   bufferOhlcBar(ASSET_CLASS, {
     symbol: data.symbol,
     assetClass: ASSET_CLASS,
@@ -111,6 +118,12 @@ export function getLatestEquityTick(symbol: string): { price: number; tsMs: numb
 
 function parseTickerSnap(data: any): void {
   if (!data?.symbol) return;
+  // #594: DATA-liveness stamp — AFTER the malformed-payload guard (a junk snap must not count as
+  // proof of life) and BEFORE the mark branch (which is conditional on a finite positive mark;
+  // stamping inside it would make this parser inconsistent with parseOhlcBar, which has no mark).
+  // NOTE (scope §3, homed separately): snap-arrival ≠ mark-freshness — a snap can pass this guard
+  // and write no mark, so this clock can read fresh while `latestEquityTick` ages. Cited, not measured.
+  state.lastDataMsgAt = Date.now();
   // P19-B8.5 xstock marks: mid from bid/ask when both sides exist, else last.
   {
     const _bid = data.bid != null ? Number(data.bid) : NaN;
@@ -243,6 +256,13 @@ async function connect(): Promise<void> {
     console.log(`[B74][equity-spot] connected (attempt ${state.backoff.attempts() + 1})`);
     state.backoff.reset();
     state.reconnectPending = false; // P19-B4a (C3): connection restored.
+    // #594 BLOCKER FIX (Langston Step-1): seed the DATA clock at connect-open. Without this,
+    // an unset `lastDataMsgAt` yields `Infinity` in the watchdog, which is unconditionally
+    // > threshold — so a boot or reconnect during a legitimately quiet off-RTH stretch would
+    // raise CRITICAL and force `ws.close()`, dropping the only venue price source for xStock
+    // marks, then repeat. "Never had data" and "had data, then stopped" are DIFFERENT STATES;
+    // seeding here keeps the watchdog measuring the second one only.
+    state.lastDataMsgAt = Date.now();
     subscribe(ws);
   });
 
@@ -338,7 +358,11 @@ export async function runStallWatchdogTick(now: Date = new Date()): Promise<void
     await raiseStallConfigMissingAlert(); // loud + inert this tick (rule-15: no silent default).
     return;
   }
-  const ageMs = state.lastMsgAt > 0 ? Date.now() - state.lastMsgAt : Infinity;
+  // #594: threshold the DATA clock, not the any-frame clock. The seeded constants were derived
+  // from INTER-TICK percentiles (RTH p99.9 28.7s / off-RTH p99 192s, ~7.9M ticks / 485 symbols)
+  // — i.e. against THIS clock all along, so they need no re-derivation. `lastMsgAt` keeps its own
+  // stamp site and its health-log consumer, untouched.
+  const ageMs = state.lastDataMsgAt > 0 ? Date.now() - state.lastDataMsgAt : Infinity;
   const inLiquid = isXstockLiquidFillWindowET(
     safety.liquidFillWindowOpenMinEt,
     safety.liquidFillWindowCloseMinEt,
@@ -378,7 +402,7 @@ export function stopEquitySpotArchiver(): void {
 // P19-B4a (C3) test-only: patch the watchdog-relevant archiver state so unit
 // tests can exercise runStallWatchdogTick without a live socket.
 export function _setArchiverStateForTest(
-  patch: Partial<Pick<ArchiverState, 'enabled' | 'reconnectPending' | 'lastMsgAt' | 'ws'>>,
+  patch: Partial<Pick<ArchiverState, 'enabled' | 'reconnectPending' | 'lastMsgAt' | 'lastDataMsgAt' | 'ws'>>,
 ): void {
   Object.assign(state, patch);
 }
