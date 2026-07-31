@@ -182,7 +182,7 @@ export function OpenTradesTable({
               <th className="px-3 py-2 text-right font-medium text-muted-foreground" title="Entry-side slippage vs the intended price.">Entry Slip</th>
               <th className="px-3 py-2 text-right font-medium text-muted-foreground" title="ESTIMATED exit-side fee (realized at close).">Est Exit Fee</th>
               <th className="px-3 py-2 text-right font-medium text-muted-foreground" title="ESTIMATED exit-side slippage (realized at close).">Est Exit Slip</th>
-              <th className="px-3 py-2 text-right font-medium text-muted-foreground" title="Total round-trip cost estimate: entry fee + entry slip + est exit fee + est exit slip.">Total Costs</th>
+              <th className="px-3 py-2 text-right font-medium text-muted-foreground" title="Total cost estimate. ACTIVE rows: EXPLICIT costs only — entry fee + est exit fee. Slippage is shown in its own columns and is NOT deducted here (it is already inside the actual fill prices; deducting it again double-counts). VTS rows may use a different composition — this tooltip does not assert one.">Total Costs</th>
               <SortableHeader label="Net P/L" field="netProfitValue" currentSort={sortField} direction={sortDirection} onSort={handleSort} align="right" />
 
               <th className="px-3 py-2 text-right font-medium text-muted-foreground" title={rankHeaderTitle}>{rankHeaderLabel}</th>
