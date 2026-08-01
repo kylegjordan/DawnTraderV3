@@ -3349,3 +3349,15 @@ The B6.5b crypto-only dry-run proved the front half of the active crypto pipelin
 **Edit me if:**
 - **Add/relabel a pattern→strategy route** → it is the canonical map's per-regime `patternType` declaration consumed by `resolvePatternConsumingStrategy`; never introduce a `pattern_<name>` pseudo-strategy and never map a pattern to a "nearest" canonical strategy (drop on no-match instead, so stats stay clean).
 - **The pattern recognizer should NOT name strategies** → `patternToTradeSignal` returns geometry/confidence only; strategy assignment lives in the orchestrator.
+
+### #637 — the governance-checker's CROSS-PROCESS state contract (B-GOV-HEARTBEAT-REPAIR, 2026-08-01)
+
+**COMPONENT:** `scripts/governance-checker/` — **TWO SEPARATE PROCESSES, two systemd units, one shared state file.** `governance-checker.service` (poller, every 30 min) and `governance-checker-heartbeat.service` (dead-man, every 15 min). This entry exists because the seam between them was previously documented **per-FILE**, and the defect lived **per-PROCESS** — which is precisely why the B-GOV-INTEGRITY-1 sweep fixed `poller.mjs` and missed `heartbeat-check.mjs` sitting in the same directory.
+
+**UPSTREAM → the contract:** `poller.mjs` now writes **`gradedRefSha`** into `/var/lib/governance-checker/state.json` alongside `lastTick` and `openAlerts`. ⚠️ **It is written NULL on the fetch-fail early return**, which updates `lastTick` and returns **before** the sha is computed — so a run of fetch-fail ticks would otherwise leave a fresh timestamp beside a silently ageing sha.
+**DOWNSTREAM → the only consumer:** `heartbeat-check.mjs` reads `state.gradedRefSha` to satisfy the alerts CLI's **mandatory** `--evidence`. It cannot import the poller's in-memory helper — separate process, and `checkerResolveEvidence()` is module-private and unexported. **The state file IS the boundary.**
+**SHARED:** `config.mjs` `resolveEvidenceOrSentinel()` — one SSOT for the token shape, since both processes issue resolves and must agree. ⚠️ **It rejects all-decimal strings**: a `lastTick` is 13 chars of accidental hex, and the server-side validator (`system-alerts.ts:172`) is **unanchored**, so without this guard a timestamp would be persisted **as a git sha** — a fabricated provenance record (#447 class).
+
+**BLAST RADIUS: LOW, bounded to the checker family.** Zero occurrences under `server/`; no trading-path surface; no DB schema. ⚠️ **Lookalike cleared and recorded: `server/core/governance/governance-persistence.ts:14` defines a constant with the IDENTICAL NAME `GOV_STATE_FILE` pointing at a DIFFERENT file (`governance_state.json`). Matching name, not a matching thing — verified by reading the path.**
+⚠️ **OPERATIONAL PROPERTY worth knowing before touching either unit: the heartbeat timer's triggers are purely MONOTONIC (`OnBootSec`/`OnUnitActiveSec`) and `Persistent=true` does NOT apply to them.** ⇒ **`systemctl enable --now` yields `enabled` + `active` with NO next elapse if the service has never run.** It requires one `systemctl start` to anchor the chain. **"Enabled" is not "scheduled."**
+
