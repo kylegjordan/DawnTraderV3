@@ -433,3 +433,21 @@ for this very rule, form A (`^### #NNN`) returned max **621** and its positive c
 find the known-present #622?* — returned **0**. The instrument was right; the **ref was six commits stale**. The
 control caught it, a fetch fixed it, and the correct answer (#623) followed. The rule worked on its own
 authoring turn, and it is also a second witness for §7.1 step 0.
+
+
+---
+
+## §5.30 — B-RULES-1a: the three false/self-contradicting statements, and their measurements (2026-08-01)
+
+**Why this is here and not inline:** Langston's #564 placement rule applied to the edit that corrected them — *"this file holds the OPERATIVE statement; diagnostic depth, evidence chains, version histories and repair procedures go to a named runbook."* The operative claims stay in `CLAUDE.md`; the evidence is below.
+
+**F-A — rule 1 was STALE, not wrong.** Original wording: *"**Clone repo is the working copy.** Edit on the migration branch. Push to GitHub. No DT_Staged_Changes folders or zip packages."* The singular *"the clone repo"* predates the per-session split and **contradicted two other sites**: THE EIGHT item (5) (*"own clone"*) and §7.1 (*"OWN INDEPENDENT CLONE"* + the three named clones). The docs state that when two rules conflict the model **may pick one arbitrarily**, which is why this led the batch rather than the trimming.
+★ **The anti-zip clause is untouched and rule 1 is its SOLE home** — verified by Langston: the literal string returns **exactly one** occurrence file-wide. **§7.1 forbids the staged-folder path by ENTAILMENT (its one-direction rule), never by statement**, so citing §7.1 as an independent source for it would be a false citation.
+⚠️ **CC-A originally called rule 1 "WRONG"; Langston corrected it to "STALE" — the surviving clause is still live and correct. Recorded because the inflation was CC-A's and is the rule-29 family.**
+
+**F-B — §4 omitted `bridge/canonical/`.** Measured pre-edit: occurrences at **§2 (59) and §9 (596, 603) only**; §4 (then 159-186) had none — while **§2 1.b and §9.5(b) send every batch there** for original intent. Added as a **pointer only**; the description and never-edit caveat remain in §9, since a second description would be the duplicate-source drift §4 itself warns about. Post-edit occurrences: **59 / 163 / 598 / 605**.
+
+**F-C — the Langston auto-load claim was false.** `CLAUDE.md` asserted it auto-loads *"for every session AND for Langston on EVERY invocation."* **Measured via `/context` on his box (`cwd=/home/langston`, 2026-07-31):** his context carries exactly **`/home/langston/CLAUDE.md` — 497 lines / 61,369 B / ~23.6k tokens** — plus an **auto-memory index at `/home/langston/.claude/projects/-home-langston/memory/MEMORY.md` — 17 lines / 5,842 B / ~2.2k tokens**. **The repo `CLAUDE.md` is ABSENT; he `curl`s it on demand.** Langston confirmed from the object itself.
+⇒ **#564's conclusion stands on the CC-side cost alone and was NOT withdrawn.** ⇒ **But his side is not free: that ~61 KB file loads on every one of his invocations. The two sides are separate problems with separate fixes.**
+★ **CC-side figures, dated 2026-08-01 and deliberately kept OUT of `CLAUDE.md`:** the repo file measured **138,093 B / 664 lines** before this batch and **139,952 B / 666 lines** after it.
+⚠️ **AND THAT IS THE LESSON THIS ENTRY EXISTS FOR (Langston, Step-4): THE FIRST VERSION OF THE F-C FIX STAMPED "664 lines / 138,093 B" INTO THE FILE THAT THE SAME COMMIT MADE 666 / 139,952.** ⇒ **a number that measures the artifact it lives INSIDE goes stale on the next write to that artifact — it cannot be kept current by bumping it, because the bump is itself a write.** **Self-referential measurements belong in a dated record, never inline.** Same family as the stale-gauge alert (#629) and the pre-failure projection baked into a scheduled gate (#642).
