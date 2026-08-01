@@ -1,7 +1,7 @@
 // B-GOV poller — pure decision-logic tests (no git, no ssh, no filesystem).
 // Run: node scripts/governance-checker/poller.test.mjs
 import { computeBatchStates, decideAlerts, applyCutoff, anchorClosedBatches, decideOrphanSweep, decideStaleOpenAlertDrops } from './poller.mjs';
-import { batchIdToFileRegex, extractBatchId, extractLeadingBatchId, parentBatchId } from './config.mjs';
+import { batchIdToFileRegex, extractBatchId, extractLeadingBatchId, parentBatchId, resolveEvidenceOrSentinel } from './config.mjs';
 
 const HOUR = 3600 * 1000;
 const NOW = Date.parse('2026-06-17T12:00:00Z');
@@ -398,5 +398,23 @@ const noStaleOpen = { open: new Set(), openSince: new Map(), naConfirmed: new Se
   ok('#508: parentBatchId(P19-B8) is null (top of chain)', parentBatchId('P19-B8') === null);
 }
 
+// ─── #637: resolve-evidence token shape — ONE SSOT shared by TWO processes ───
+// WARNING ON SCOPE: these fence the PURE helper the poller and the SEPARATE
+// heartbeat process now share. They do NOT exercise heartbeat-check's resolve
+// branch, which shells out via execFileSync with no injection seam - that half
+// is covered by the live staging run. Saying so because #594's lesson was a
+// suite that fenced the READER while the defect lived in the WRITER.
+ok('#637 a real sha passes through unchanged',
+  resolveEvidenceOrSentinel('b7471a28c') === 'b7471a28c'
+  && resolveEvidenceOrSentinel('0464c8219031') === '0464c8219031');
+ok('#637 null/undefined yield the sanctioned sentinel and never throw',
+  resolveEvidenceOrSentinel(null) === 'NO-EVIDENCE-GIVEN'
+  && resolveEvidenceOrSentinel(undefined) === 'NO-EVIDENCE-GIVEN');
+ok('#637 a plausible-but-invalid token is rejected to the sentinel (a lastTick is not a ref)',
+  resolveEvidenceOrSentinel('1785485897377') === 'NO-EVIDENCE-GIVEN'
+  && resolveEvidenceOrSentinel('lastTick=123') === 'NO-EVIDENCE-GIVEN'
+  && resolveEvidenceOrSentinel('') === 'NO-EVIDENCE-GIVEN');
+
 console.log(`\nPoller logic tests: ${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);
+

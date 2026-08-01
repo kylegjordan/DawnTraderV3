@@ -13,7 +13,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { TICK_MINUTES, HEARTBEAT_MISS_LIMIT } from './config.mjs';
+import { TICK_MINUTES, HEARTBEAT_MISS_LIMIT, resolveEvidenceOrSentinel } from './config.mjs';
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const STATE_FILE = process.env.GOV_STATE_FILE || join(SCRIPT_DIR, '.gov-checker-state.json');
@@ -35,8 +35,26 @@ function addAlert(severity, title, body, nowMs) {
   const m = out.match(/"id":\s*"([0-9a-f-]+)"/);
   return m ? m[1] : null;
 }
-function resolveAlert(id) {
-  try { runCli(`cd ${STAGING_REPO} && npm run -s system-alerts -- resolve ${id} --by governance-checker-heartbeat`); } catch { /* terminal = fine */ }
+// #637: was `resolve <id> --by …` with NO `--evidence`. `scripts/system-alerts.ts`
+// made that flag MANDATORY at B-GOV-INTEGRITY-1 (2026-07-10) and exits 1 without
+// it — so this ALREADY throws on every call, the catch swallows it, and the
+// caller then discarded the id unconditionally. Net effect: the dead-man alert
+// could never be cleared and nothing retained the handle to retry.
+// Returns TRUE only on a confirmed clear.
+// ⚠️ The catch is LOAD-BEARING in the good case (CC-A): a genuinely ALREADY-TERMINAL
+// alert must not blow up the heartbeat run. So distinguish the two rather than
+// removing it — terminal is benign, anything else is a real failure and must be loud.
+function resolveAlert(id, evidence) {
+  const ev = resolveEvidenceOrSentinel(evidence);
+  try {
+    runCli(`cd ${STAGING_REPO} && npm run -s system-alerts -- resolve ${id} --by governance-checker-heartbeat --evidence ${ev}`);
+    return true;
+  } catch (err) {
+    const out = `${err?.stdout ?? ''}${err?.stderr ?? ''}${err?.message ?? ''}`;
+    if (/not found|already resolved|terminal/i.test(out)) return true; // benign: nothing left to clear
+    console.error(`[gov-heartbeat] resolve FAILED for ${id} (id RETAINED for retry): ${out.slice(0, 300)}`);
+    return false;
+  }
 }
 
 export function checkHeartbeat(nowMs = Date.now()) {
@@ -54,7 +72,14 @@ export function checkHeartbeat(nowMs = Date.now()) {
       `The governance-checker poller has not written a heartbeat in over ${TICK_MINUTES * HEARTBEAT_MISS_LIMIT}m (last tick: ${ageMin} ago). It may be dead — enforcement is OFF until it resumes. Check the governance-checker.timer on staging.`,
       nowMs);
   } else if (!silent && hb.alertId) {
-    resolveAlert(hb.alertId); hb.alertId = null;
+    // #637: null the handle ONLY on a confirmed clear. Discarding it on failure
+    // was the half that made this unrecoverable — the alert stayed open AND the
+    // only id that could close it was thrown away in the same statement.
+    let gradedRefSha = null;
+    if (existsSync(STATE_FILE)) {
+      try { gradedRefSha = JSON.parse(readFileSync(STATE_FILE, 'utf8')).gradedRefSha; } catch { /* sentinel below */ }
+    }
+    if (resolveAlert(hb.alertId, gradedRefSha)) hb.alertId = null;
   }
   writeFileSync(HB_STATE, JSON.stringify(hb, null, 2));
   return { silent, lastTick };

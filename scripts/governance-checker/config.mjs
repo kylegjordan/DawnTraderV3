@@ -222,3 +222,24 @@ export const SHADOW_MODE = process.env.GOV_SHADOW !== '0';
 // decideAlerts directly, never the tick filter) so it can grade historical fixtures — applying
 // the cutoff there would filter every fixture out and pass vacuously (Langston Catch #1).
 export const ENFORCEMENT_CUTOFF_MS = Date.parse(process.env.GOV_CUTOFF || '2026-06-23T00:00:00Z');
+
+// ─── #637: ONE SSOT FOR THE RESOLVE-EVIDENCE TOKEN SHAPE (Langston-ruled) ────
+// `scripts/system-alerts.ts` REQUIRES `--evidence` and validates it as one of
+// `path:line | sha | uuid | §/#ref` or a sanctioned sentinel. TWO separate
+// processes issue resolves — the poller (which holds the graded sha in memory)
+// and the heartbeat (a SEPARATE process that cannot see that memory). Both must
+// agree on the shape, so the test lives HERE and neither duplicates it.
+// ⚠️ Returns the SANCTIONED SENTINEL rather than throwing: an honest
+// "NO-EVIDENCE-GIVEN" is a valid resolve, whereas a fabricated reference is the
+// provenance-shaped theater #447 exists to prevent.
+export function resolveEvidenceOrSentinel(sha) {
+  if (!sha || !/^[0-9a-f]{7,40}$/i.test(sha)) return 'NO-EVIDENCE-GIVEN';
+  // ⚠️ A DECIMAL TIMESTAMP IS ALL-HEX BY ACCIDENT. `lastTick` = 1785485897377 is
+  // 13 chars, every one of them in [0-9a-f], so the sha regex ALONE accepts it —
+  // which is exactly the trap Langston named: it would pass this shape test and
+  // then fail the CLI's own validation one layer deeper, i.e. the same failure
+  // moved later and made harder to read. A real git sha at 7+ chars being
+  // entirely decimal is a ~1-in-10^7 accident; a timestamp is ALWAYS decimal.
+  if (/^[0-9]+$/.test(sha)) return 'NO-EVIDENCE-GIVEN';
+  return sha;
+}

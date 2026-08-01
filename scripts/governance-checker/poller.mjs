@@ -21,6 +21,7 @@ import { dirname, join, resolve } from 'node:path';
 import {
   extractLeadingBatchId, parentBatchId, DEADLINE_HOURS, OPEN_STATE_BACKSTOP_HOURS, OPEN_STATE_MAX_AGE_HOURS,
   DEFAULT_CLASS, VALID_CLASSES, SHADOW_MODE, ENFORCEMENT_CUTOFF_MS,
+  resolveEvidenceOrSentinel,
 } from './config.mjs';
 import {
   checkBatchDocset, classifyCommit, diffTouchesCoreEngine, readDeclaredClass,
@@ -365,7 +366,9 @@ function appendShadowLog(entry) {
 // `NO-EVIDENCE-GIVEN` sentinel — an HONEST admission, never a fabricated reference (#447).
 let gradedRefSha = null;
 function checkerResolveEvidence() {
-  return (gradedRefSha && /^[0-9a-f]{7,40}$/i.test(gradedRefSha)) ? gradedRefSha : 'NO-EVIDENCE-GIVEN';
+  // #637: shape test delegated to config.mjs — the HEARTBEAT is a separate
+  // process issuing its own resolves and must agree on the shape. One SSOT.
+  return resolveEvidenceOrSentinel(gradedRefSha);
 }
 const alertSink = {
   add({ dedupeKey, severity, title, body }, nowMs) {
@@ -529,6 +532,12 @@ export function tick(nowMs = Date.now()) {
       const id = alertSink.add(payload('warning'), nowMs);
       if (id) { state.openAlerts[FETCH_KEY] = id; state.fetchFailSev = 'warning'; }
     }
+    // #637 (Langston's correction to option (a)): this path updates lastTick and
+    // returns BEFORE gradedRefSha is set from rev-parse. Persisting the LAST GOOD
+    // sha here would let the heartbeat resolve carrying a ref this tick never
+    // graded at — a stale-but-plausible token, which is worse than an honest
+    // sentinel. Write NULL explicitly: this tick graded nothing.
+    state.gradedRefSha = null;
     state.lastTick = nowMs; saveState(state);
     return { opened: 0, resolved: 0, untaggedCode: 0, fetchOk: false };
   }
@@ -604,6 +613,7 @@ export function tick(nowMs = Date.now()) {
         title: `governance-checker cannot read its rulebook at ${BRANCH} — grading paused`, body }, nowMs);
       if (id) state.openAlerts[EXC_KEY] = id;
     }
+    state.gradedRefSha = gradedRefSha; // #637: fetch succeeded, so the sha is real
     state.lastTick = nowMs; saveState(state);
     return { opened: 0, resolved: 0, untaggedCode: 0, fetchOk: true, rulebookUnreadable: true };
   }
@@ -669,6 +679,8 @@ export function tick(nowMs = Date.now()) {
     console.warn(`[gov-checker] orphan-sweep KEPT ${key} (still missing out-of-window — real gap, not silenced)`);
   }
   if (untaggedCode > 0) console.warn(`[gov-checker] ${untaggedCode} untagged CODE commits in window (low-sev; see Obj-9)`);
+  // #637: publish the graded sha so the SEPARATE heartbeat process can cite it.
+  state.gradedRefSha = gradedRefSha;
   state.lastTick = nowMs;
   saveState(state);
   return { opened: toOpen.length, resolved: toResolveKeys.length + orphanResolve.length, untaggedCode };
