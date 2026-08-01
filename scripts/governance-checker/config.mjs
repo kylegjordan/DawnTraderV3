@@ -234,12 +234,16 @@ export const ENFORCEMENT_CUTOFF_MS = Date.parse(process.env.GOV_CUTOFF || '2026-
 // provenance-shaped theater #447 exists to prevent.
 export function resolveEvidenceOrSentinel(sha) {
   if (!sha || !/^[0-9a-f]{7,40}$/i.test(sha)) return 'NO-EVIDENCE-GIVEN';
-  // ⚠️ A DECIMAL TIMESTAMP IS ALL-HEX BY ACCIDENT. `lastTick` = 1785485897377 is
-  // 13 chars, every one of them in [0-9a-f], so the sha regex ALONE accepts it —
-  // which is exactly the trap Langston named: it would pass this shape test and
-  // then fail the CLI's own validation one layer deeper, i.e. the same failure
-  // moved later and made harder to read. A real git sha at 7+ chars being
-  // entirely decimal is a ~1-in-10^7 accident; a timestamp is ALWAYS decimal.
+  // ⚠️⚠️ A DECIMAL TIMESTAMP IS ALL-HEX BY ACCIDENT, AND THIS GUARD IS THE ONLY
+  // THING STOPPING IT. `lastTick` = 1785485897377 is 13 chars, every one in
+  // [0-9a-f]. ⛔ CORRECTED (Langston Step-4): an earlier comment here claimed it
+  // would "fail the CLI's validation one layer deeper". IT WOULD NOT.
+  // `isValidResolutionEvidence` (server/services/system-alerts.ts:172) tests
+  // /[0-9a-f]{7,40}/i — UNANCHORED — so 13 hex chars PASSES. The timestamp
+  // would have been written into `resolution_evidence` AS IF IT WERE A GIT SHA.
+  // ⇒ not a failure moved later: a SILENT FABRICATED PROVENANCE RECORD, which is
+  // the #447 class the sentinel exists to prevent. A real git sha at 7+ chars
+  // being entirely decimal is a ~1-in-10^7 accident; a timestamp is ALWAYS decimal.
   if (/^[0-9]+$/.test(sha)) return 'NO-EVIDENCE-GIVEN';
   return sha;
 }

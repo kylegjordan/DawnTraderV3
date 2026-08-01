@@ -51,7 +51,16 @@ function resolveAlert(id, evidence) {
     return true;
   } catch (err) {
     const out = `${err?.stdout ?? ''}${err?.stderr ?? ''}${err?.message ?? ''}`;
-    if (/not found|already resolved|terminal/i.test(out)) return true; // benign: nothing left to clear
+    // ⛔ ANCHORED TO THE CLI'S ACTUAL MESSAGE SHAPE (Langston Step-4 blocker).
+    // A bare `not found` substring ALSO matches `bash: npm: command not found`
+    // and `node: not found` — the classic non-login-PATH failure under a systemd
+    // timer. That would return true, null hb.alertId, and REINTRODUCE #637
+    // exactly: alert still open, handle discarded, nothing able to retry.
+    // ⚠️ `already resolved` / `terminal` were DEAD alternatives and are removed:
+    // server/services/system-alerts.ts:461-498 has NO terminal-state guard, so
+    // re-resolving a resolved alert SUCCEEDS and re-stamps it — it never errors.
+    // The only benign failure the CLI actually emits is :303 `Alert <id> not found`.
+    if (/Alert \S+ not found/i.test(out)) return true; // benign: the row is genuinely gone
     console.error(`[gov-heartbeat] resolve FAILED for ${id} (id RETAINED for retry): ${out.slice(0, 300)}`);
     return false;
   }
