@@ -1476,6 +1476,13 @@ B.5 W2.0b built a detect-replay harness (`scripts/b5-w20b-entry-replay.ts`) to s
 ★ **SAME FAMILY, EXPLICITLY: `out.log` vs stderr · `LIKE '%trade%'` vs `exit_decision_archive` · `systemctl cat` vs `show` — an instrument that CANNOT REPRESENT the thing, returning a silence that reads as an answer.**
 ★ **MATCHER: a `.get(` (or equivalent) against a parsed JSON row in an ad-hoc reader with no preceding key enumeration in the same command. Warn-only. Clean command-string signature.** **MITIGATION, proven in the origin case: enumerate `sorted(d.keys())` and assert membership before reading — it settled the whole cascade in one call.**
 
+**★★ THIRD HOOKABLE CANDIDATE — CI, NOT A HOOK — ADDED 2026-08-01: A COMPLETION REPORT'S "GOVERNANCE FILES CHANGED" LIST IS AN UNVERIFIED CLAIM, AND IT IS CHECKABLE AGAINST `git log` IN ONE COMMAND.**
+**THE SHAPE:** a completion report lists governance docs as updated; **nothing compares that list against what the batch's commits actually touched.** ⇒ **the list is authored prose asserting a fact about the repo, and the repo can answer it.**
+**EVIDENCE — CC-B, TWICE IN ONE WEEK, both self-caught:** closing **#594**, and again on the following batch, the report's §5 named `SYSTEM_IMPACT_MAP` and `PHASE_19_PLAN` as updated while `git log` on both showed **the PREVIOUS day's batch as the last writer.** ⚠️ **Self-caught both times — which means the only control is the author remembering to check their own claim, and it failed once before it succeeded twice.**
+★ **WHY IT BELONGS TO CI RATHER THAN A `PreToolUse` HOOK: the violation is not a command shape, it is a MISMATCH BETWEEN A DOCUMENT AND THE COMMIT RANGE — invisible at the moment of typing, decidable at the moment of pushing.** ⇒ **it attaches to leg 2's OBJ-3, which Langston already keyed to *the commit that adds a `*COMPLETION_REPORT*` path*; the same trigger can diff the report's claimed-file list against `git log --name-only` over the batch's commits and fail on any file claimed-but-untouched.**
+⚠️ **AND THE DISPOSITION MATTERS: CC-B made the CLAIM TRUE rather than editing the claim — i.e. they did the missing governance work.** **That is the right resolution when the doc SHOULD have been updated, and the wrong one when the claim was padding.** ⇒ **the check must FAIL and hand the choice to the author; it must never auto-correct, because only the author knows which case it is.** *(This is §3's own rule — "every completion report lists which governance files were changed" — currently enforced by nothing.)*
+
+
 
 
 
