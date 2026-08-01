@@ -467,3 +467,13 @@ The B65.2 functional commit (`0fcd19b1`) shipped trailing exits end-to-end. Subs
 ⚠️ **A void measurement, recorded:** `[STALL]` = zero was grepped from `out.log`; `[STALL]` is `console.error` ⇒ `error.log`. **That zero was void either way.** Re-derived on the right stream with a positive control: **0 across ~13 days RETAINED — "retained," not "ever."**
 **Not fixed here, homed:** **#635** (universe-wide clock vs per-symbol-derived thresholds ⇒ TOTAL-stall detection only; partial-stall blindness) · **#636** (snap-arrival ≠ mark-freshness). **Siblings** stamp identically but have no watchdog ⇒ no defect today; any watchdog added later inherits the trap.
 **Governance:** SIM content updated. **System Manual N/A** (judged explicitly — feed-liveness instrumentation, no architecture/strategy/regime/filter/pipeline/math change).
+
+### B-GOV-HEARTBEAT-REPAIR (#637) — the governance checker's dead-man switch could not clear its own alarm (2026-08-01, CC-B)
+
+**change-class:** `non_architecture` · **Code:** `49a41aee4` → `28b029528` · CI 4/4 job-by-job · Langston Step-4 APPROVED at the ref.
+**What was broken:** the heartbeat resolved without `--evidence`, mandatory since B-GOV-INTEGRITY-1; every call exited non-zero, the `catch` swallowed it, and the alert id was discarded **in the same statement** ⇒ the alert could never clear and nothing retained the handle. **Not latent — it fails on first use; it had simply never been used, because the timer had been off for ~6 weeks** (measured off the heartbeat state file's mtime, with the poller's own state file as the positive control).
+**Why it matters:** the checker's healthy output is SILENCE, so a dead checker is indistinguishable from a clean repo without this switch.
+**Shipped:** shared `resolveEvidenceOrSentinel()` SSOT; poller publishes `gradedRefSha` across the process boundary (NULL on the fetch-fail path, which returns before the sha is set); id nulled only on confirmed clear; benign-failure test anchored to the CLI's actual message.
+★ **Two catches worth carrying:** (1) **the fence caught a fabricated-provenance bug in the fix** — an all-hex timestamp would have been persisted as a git sha, and the server's validator is unanchored so it would NOT have been caught downstream; (2) **`systemctl enable` produced `enabled`+`active` with NO next firing** — monotonic triggers with no anchor — so the batch nearly closed on a green that meant nothing.
+**Verified provoked end-to-end** (a clean run exercises neither branch). **System Manual N/A**, judged explicitly.
+
