@@ -64,6 +64,26 @@
 
 ★ **THE OWNER MOVES THE CARD. LANGSTON SETS `Review`.** *(Kyle's decision, 2026-08-03.)* His approval gates the move but is not itself the move — otherwise the board freezes whenever he is mid-review, at four separate points per batch. ⚠️ **He cannot write to GitHub at all today** — no CLI, no token, and the key on his box is a deploy key registered to no account. **Until Kyle issues a scoped token, the OWNER records his verdict in the `Review` field on his behalf, and his actual words remain in Discord and the batch documents — the board is the third place it is written, never the only one.**
 
+## 4b. ★ THE BACKLOG IS ORDERED — top of the column IS the next thing (Kyle directive 2026-08-03)
+
+**`Backlog` is not a bag. Its vertical order IS the queue order, and it must reflect what we would actually pick up next.** ⇒ **when priority changes, MOVE THE CARD** — do not leave the true order living only in a conversation, a memory file, or somebody's head.
+
+★ **WHY IT IS A RULE AND NOT A NICETY:** the whole point of the board is that Kyle should not have to ask what is next. **A backlog in arbitrary order answers "what exists" while silently failing to answer "what is next" — and looks authoritative doing it.** That is the same failure as a stale card: confidently wrong beats absent, in the bad direction.
+**First application:** `B-DEPLOY-LOCK` (#649) was placed at the TOP on Kyle's instruction, ahead of the queued cleanup work, because it protects the correctness of every verification claim we make.
+
+## 4c. ★ RECONCILIATION — roadmap, phase plan and board must agree (Kyle directive 2026-08-03)
+
+**TRIGGER: at the close of every batch, its OWNER reconciles three records and confirms they match** — `POST_AUDIT_ROADMAP.md`, the active phase plan (`PHASE_19_PLAN.md` during Phase 19), and this board.
+
+**The check is three questions, and each has a precise answer — none of them require judgement:**
+1. **Does every OPEN batch in the phase plan have a card?** A batch with no card is invisible to Kyle.
+2. **Does every non-Complete card correspond to something the plan or roadmap still lists?** A card with no plan entry is either stale or work nobody agreed to.
+3. **Does the card's column match where the batch actually is?** In particular, **a card reading `Complete` whose completion report is not at the graded ref is the single most damaging wrong state on the board** — it tells Kyle something is finished when it is not.
+
+⚠️ **THE OWNER CONFIRMS IT EXPLICITLY IN THE COMPLETION REPORT — a line stating the three were reconciled.** *(Kyle's wording: confirmed by the completing batch's owner.)* **An unstated reconciliation did not happen** — this project has twice shipped a completion report claiming governance files were updated when they had not been (#594, #637), and nothing catches that, because nobody re-verifies a list of things someone says they did.
+
+⏸️ **AUTOMATION DELIBERATELY DEFERRED (Kyle, 2026-08-03): the governance checker COULD do the precise parts of this** — it already extracts batch-ids from commit subjects and grades doc-sets, so *"this batch has commits and no card"* and *"this card says Complete and the report is absent"* are exact, non-heuristic checks. ⛔ **But it is NOT being built yet, on purpose: "hold off and see how well it is used first."** ★ **And when it is built, it must check only what is CHECKABLE — never "should this card be in Verification rather than Implementation," which a commit cannot tell you. A nag that is frequently wrong gets ignored, and an ignored alert channel is exactly how the blind spots this project spent a week clearing were created.**
+
 ## 5. Honest limits — stated so nobody trusts this further than it earns
 
 ⚠️ **NOTHING AUTOMATES THIS.** No hook, no check, no CI step moves a card. **If sessions do not update it, it becomes a confidently wrong second record** — and a stale board is more dangerous than no board, because Kyle will believe it. **This is the same failure mode as the four documents that agreed with each other and disagreed with the code (#641).**
