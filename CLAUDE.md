@@ -125,6 +125,8 @@ A batch is NOT done until every numbered objective from the scope is verifiably 
 - `1-system-manual/LANGSTON_ARCHITECTURE.md` — update when the REVIEWER'S BUILD changes (model, runtime, invocation, read path, auth, his files); record what it was BEFORE and why. Not for per-batch review activity.
 - `CC/Langston MEMORY.md` — volatile state every batch
 
+**★ `1-system-manual/DELIVERY_BOARD_PROTOCOL.md` — THE DELIVERY BOARD (Kyle-directed 2026-08-03).** A GitHub Projects board — https://github.com/users/kylegjordan/projects/1 — is now the at-a-glance state of every batch, phase, hotfix and task: **columns = the workflow stage, plus Owner · Type · Issue (`#NNN`) · Review · Blocked-on on each card, and a plain-language description so a card explains itself.** ★ **THE CARD-UPDATE STEPS ARE FOLDED INTO THE 11-STEP WORKFLOW — see the protocol's §4 table; the card moves when the WORK moves, it is never a separate status to remember.** **The OWNER moves the card; LANGSTON sets `Review` (Kyle's decision).** ⛔ **HARD BOUNDARY: the board holds STATUS, OWNER, ORDER and the description — NOTHING ELSE. Every finding, citation and verdict stays in the repo and the card LINKS to it; evidence written into a card rebuilds the two-sources-of-truth failure this project keeps paying for.** ⚠️ **NOTHING AUTOMATES IT — an un-updated board becomes a confidently wrong second record, which is worse than none.** Depth, field values and the honest limits live in the protocol; this pointer is deliberately short (§4 placement rule).
+
 **Rule:** every completion report lists which governance files were changed. If SIM or System Manual were applicable but not updated, batch not complete.
 
 ### 3.1 MEMORY.md two-file pattern (Kyle directive 2026-04-29)
