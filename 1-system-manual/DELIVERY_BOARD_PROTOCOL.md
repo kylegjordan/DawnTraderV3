@@ -42,6 +42,7 @@
 - **What it is** — one or two sentences, ordinary English. **No batch ids, no file paths, no function names, no acronyms Kyle has not used himself.**
 - **Why it matters** — the consequence of *not* doing it. If you cannot state one, question whether the card belongs on the board.
 - **Done when** — the observable condition that ends the work. Not "implemented" — what will be *true*.
+- **The issue** *(only when the card carries an Issue number)* — **the issue's NAME and a one-line plain description, not just the number** (Kyle directive 2026-08-04). The `Issue` field cannot hyperlink and the issues file is too large for reliable deep-links, so **the card body carries enough that Kyle never has to go hunting**: what the issue is, in the same plain language as the rest.
 
 ⚠️ **Write it for someone who has not read the batch documents, because that is exactly who is reading it.**
 
