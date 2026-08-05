@@ -18,14 +18,14 @@ change-class: architecture
 - **Consumer 2 introduced `dd1f53726` 2026-04-23 — subject verbatim: "B65.2: TEC exit-evaluator — centralize VTS + paper exit decisions".** Same era, same assumption that the position object carries `.regime`. Disposition: (2).
 - **The data source that DOES exist today:** signals carry `metadata.regime` (`:2894` reads it for persistence), and `createActiveOpenPosition` spreads `...signal.metadata` into position metadata (`:3445-3446`). **Measured live (object: `active_open_positions`, population: ALL 8 current rows): 8/8 have `metadata->>'regime'`, values canonical (TREND_FRIENDLY_STABLE ×5, IMPULSE_EXPANSION ×3).** Positive control: the same query's GROUP BY returns real labels, not nulls.
 
-## 3. THE FIX (surgical, both sites, one shape)
+## 3. THE FIX (surgical, consumer 1 only — see §1 for consumer 2's disposition routing)
 
 At `:2101` ONLY (consumer 1): read the regime from position METADATA (the SSOT stamped at open), retiring the dead cast:
 `const regimeAtOpen = (position.metadata as Record<string, unknown> | null)?.['regime'] as string | undefined;`
 **Deliberately `undefined`, not `?? null`** (Langston's cosmetic point made explicit): the `:2103` gate is truthiness, and `undefined` is the field's honest absent shape. No fallback to the cast — it never carried data, and a dead fallback is the absent-as-valid shape. **Honest-absent ASYMMETRY, stated:** the WRITE skips on a missing metadata regime (no fake tuple enters the EMA); the READ side (`signal-orchestrator.ts:1264`) keys `'UNKNOWN'` when the MCE context is absent — asymmetric BY the read side's design, unchanged here; a skipped write simply never matches an `UNKNOWN` read key, which is correct (we do not want UNKNOWN-keyed learning).
 
 ## 4. VERIFICATION
-1. Unit fence: position with `metadata.regime` → `updateEma` called with that label; without → skipped (consumer 1); TEC context carries the label (consumer 2).
+1. Unit fence (consumer 1): position with `metadata.regime` → `updateEma` called with that label; without → skipped.
 2. **KEY-SPACE PARITY (Langston BLOCKER-2 — the write must be READABLE, not merely present).** The store keys by raw concatenation (`outcome-feedback-store.ts:134-135`), no normalization; the active read is `signal-orchestrator.ts:1322` with `regimeLabel = symbolCtx?.regime.regime ?? 'UNKNOWN'` (`:1264`) and `strategyKey = rawSignal.strategy ?? 'unknown'` (`:1260`).
    - **Provenance of parity, cited:** write-side regime = the strategy-stamped canonical label (e.g. `adaptive-flow.ts:233` `regime: REGIMES.RANGE_BOUND_STABLE`) riding the `...signal.metadata` spread — same 5-label canonical space as the read's `regime.regime`; strategy dim = the SAME field one hop each side (`strategyName: signal.strategy` at `:3399` vs `rawSignal.strategy`).
    - **Pre-audit MEASURES both dims anyway** (rule 29: provenance is a claim, the measurement is the evidence): distinct write-side `metadata->>'regime'` + `strategy_name` values over live positions AND recent closes, vs distinct read-side label spaces; any value outside the canonical set fails the pre-audit.
