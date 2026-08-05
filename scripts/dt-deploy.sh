@@ -35,7 +35,11 @@ LIVENESS_URL="http://localhost:5000/api/health/liveness"
 
 SHA="${1:-}"
 PRE_RESTART=""
-if [ "${2:-}" = "--pre-restart" ]; then PRE_RESTART="${3:-}"; fi
+if [ $# -ge 2 ]; then
+  if [ "$2" = "--pre-restart" ] && [ $# -eq 3 ]; then PRE_RESTART="$3"
+  else echo "dt-deploy: REFUSED — unrecognised arguments: ${*:2}. Usage: dt-deploy <sha> [--pre-restart '<npm script>']" >&2; exit 1
+  fi
+fi
 
 fail() { echo "dt-deploy: REFUSED — $*" >&2; exit 1; }
 
@@ -67,8 +71,12 @@ Only then: rm -rf $LOCK_DIR — and say so in Discord #general in the same breat
 REFUSAL
   exit 2
 fi
-trap 'rm -rf "$LOCK_DIR"' EXIT
-echo "${DT_DEPLOY_AS:-${SUDO_USER:-$(whoami)}}" > "$LOCK_DIR/holder"
+# C-7: INT/TERM/HUP too — an ssh disconnect mid-deploy must not strand the
+# lock and force the manual tier-3 path this tool exists to make rare.
+trap 'rm -rf "$LOCK_DIR"' EXIT INT TERM HUP
+# holder is CLAIMED, not proven (#447 — no provenance-shaped theater): the
+# unix identity observed, no free-text override.
+echo "$(whoami)@$(hostname) via ${SUDO_USER:-direct}" > "$LOCK_DIR/holder"
 echo "$SHA"        > "$LOCK_DIR/sha"
 date -u +%FT%TZ    > "$LOCK_DIR/since"
 echo "$$"          > "$LOCK_DIR/pid"
@@ -101,7 +109,11 @@ fi
 
 # ── build (stamps the identity the post-condition asserts) ───────────────────
 npm run build
-mkdir -p dist && echo "$SHA" > dist/BUILD_SHA
+# C-4: the stamp is written BY the build script (identity is a property of the
+# artifact, not of the deployer) — here we only ASSERT it matches the sha we
+# reset to. A mismatch means the build did not build this worktree. Fail loud.
+STAMPED=$(cat dist/BUILD_SHA 2>/dev/null || true)
+[ "$STAMPED" = "$SHA" ] || fail "dist/BUILD_SHA is '$STAMPED', expected $SHA — the build did not stamp this worktree's sha"
 
 # ── F1: the SYSTEM_MANUAL:12734 invariant — migrate BETWEEN build and restart ─
 npm run db:migrate
@@ -128,11 +140,18 @@ DEADLINE=$(( $(date +%s) + 240 ))
 ENGINE_OK=""
 while [ "$(date +%s)" -lt "$DEADLINE" ]; do
   J=$(curl -sf --max-time 5 "$LIVENESS_URL" 2>/dev/null || true)
-  BS=$(echo "$J" | grep -o '"buildSha":"[0-9a-f]*"' | cut -d'"' -f4)
-  EXPECTED=$(echo "$J" | grep -o '"engineExpected":[a-z]*' | cut -d: -f2)
-  RUNNING=$(echo "$J" | grep -o '"engineRunning":[a-z]*' | cut -d: -f2)
+  # BLOCKER-1 (Langston Step-4, verified by execution): under pipefail, a
+  # no-match grep exits 1 and a failing substitution trips set -e — and the
+  # app is ALWAYS still booting on the first poll, so without || true this
+  # loop died on iteration one, on every real deploy, ever.
+  BS=$(echo "$J" | grep -o '"buildSha":"[0-9a-f]*"' | cut -d'"' -f4 || true)
+  EXPECTED=$(echo "$J" | grep -o '"engineExpected":[a-z]*' | cut -d: -f2 || true)
+  RUNNING=$(echo "$J" | grep -o '"engineRunning":[a-z]*' | cut -d: -f2 || true)
   if [ "$BS" = "$SHA" ]; then
-    if [ "$EXPECTED" != "true" ] || [ "$RUNNING" = "true" ]; then ENGINE_OK=1; break; fi
+    # BLOCKER-3: FAIL-CLOSED — EXPECTED must be a literal true/false. An absent
+    # or renamed field must fail the assertion, never satisfy it.
+    if [ "$EXPECTED" = "false" ]; then ENGINE_OK=1; break; fi
+    if [ "$EXPECTED" = "true" ] && [ "$RUNNING" = "true" ]; then ENGINE_OK=1; break; fi
   fi
   sleep 5
 done
@@ -141,7 +160,9 @@ WINDOW=$(( WINDOW_END - WINDOW_START ))
 [ -n "$ENGINE_OK" ] || fail "post-condition FAILED after 240s: buildSha=$BS (want $SHA) engineExpected=$EXPECTED engineRunning=$RUNNING. The deploy is NOT finished. NOTHING RECORDED."
 
 # ── the record — written ONLY now, after every assertion passed (OBJ-6) ──────
-RESTART_TIME=$(pm2 jlist 2>/dev/null | grep -o '"restart_time":[0-9]*' | head -1 | cut -d: -f2)
+# C-5: filter by process NAME — jlist carries pm2-logrotate too, and grep|head
+# measured whichever serialised first (correct today by ordering luck only).
+RESTART_TIME=$(pm2 jlist 2>/dev/null | python3 -c "import json,sys;a=json.load(sys.stdin);print([p['pm2_env']['restart_time'] for p in a if p['name']=='dawntrader'][0])" 2>/dev/null || true)
 cat > "$RECORD" <<EOF
 sha=$SHA
 restart_time=${RESTART_TIME:-unknown}
