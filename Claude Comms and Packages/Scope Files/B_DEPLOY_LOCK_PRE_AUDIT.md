@@ -39,7 +39,7 @@
 | F-B: dormant CI deployer wakes later | **Rule-18: recommend DELETE at Step-4** with this audit as the census; if kept, it must at minimum be rewritten to call `dt-deploy` — a dormant doc prescribing the dead chain is OBJ-5's failure in a file OBJ-5 didn't sweep. |
 | CLAUDE.md collision with CC-A | Mitigation in §2 — claim, content-match, he-lands-first default. |
 | Lock file location/ownership | Step-3 detail: `/home/deploy/dawntrader-deploy.lock` (deploy-user-writable, OUTSIDE the repo so a `reset --hard` can never touch the lock protecting it). |
-| Analyst deploy timing | Pending their Discord answer; **Blocked on = Nothing** meanwhile — implementation of the script itself is not gated on it, only the deploy-of-dt-deploy scheduling. |
+| Analyst deploy timing | ✅ **CONSENSUS REACHED 2026-08-05 (direct, Kyle-directed, no third parties): NO Analyst deploy lands inside the implementation window** — all three of their batches are gated behind Kyle decisions not yet taken, and they are at end-of-context besides. Q2 (path fit) raised no objection. **They become a first user of `dt-deploy` when their gates open.** Exchange on Discord; recorded here per the agreement. |
 
 ## 4. Background execution + SIM/SysManual
 
