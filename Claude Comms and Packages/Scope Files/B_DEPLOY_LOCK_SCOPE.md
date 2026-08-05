@@ -1,55 +1,62 @@
-# B-DEPLOY-LOCK — Step-1 scope (#649)
+# B-DEPLOY-LOCK — Step-1 scope (#649) — **rev 2**
 
 **change-class: `non_architecture`**
-**Owner:** CC-B · **Date:** 2026-08-04
-**Sequence:** Kyle-directed, queued at the TOP of the backlog ahead of the cleanup work — it protects the correctness of every verification claim we make.
+**Owner:** CC-B · **Date:** 2026-08-04 (rev 2: 2026-08-05, incorporating Langston Step-1 F1–F4 + CC-A's third-category attack)
+**Sequence:** Kyle-directed, top of the backlog.
+**Rev history:** rev 1 `f75b98eea` → Langston CHANGES-NEEDED (board `Review = SENT BACK TO OWNER`, his first live board write) → this rev.
 
 ---
 
 ## 1. ★ PROVENANCE READ (§2 1.b + rule 24.0) — AND IT CHANGES THE BATCH
 
-**Corpora searched, named:** `CLAUDE.md` §2 step 6 + §7 (the documented deploy command), `CHANGES_AND_FIXES.md`, a repo-wide grep for any existing lock/flock/deploy-guard, and a direct listing of executables on the staging box.
+**Corpora searched, named:** `CLAUDE.md` §2 step 6 + §7, `CHANGES_AND_FIXES.md`, repo-wide grep for any lock/flock/deploy-guard, direct listing of staging executables. **Langston independently re-derived §1 at his review, with a positive control** (his `*deploy*`-on-PATH sweep returned zero while the same loop found `pm2` twice — the instrument reaches).
 
 ★★ **THE FINDING: THERE IS NO DEPLOY PATH TO PUT A LOCK INTO.**
-- **No deploy script exists on staging.** `/home/deploy/` holds `add_alert.sh` and `watch_xstock.sh` and nothing else; there is no `*deploy*` executable anywhere on `PATH`.
-- **Every deploy is an ad-hoc SSH command line** that each session types by hand, copied out of `CLAUDE.md`: `ssh root@188.245.193.8 "su - deploy -c 'cd /home/deploy/dawntrader && git pull … && npm run build && pm2 restart dawntrader'"`.
-- **Repo-wide grep for an existing lock: nothing.** The three hits are unrelated (retention sweep, QD probe, bridge sync).
+- **No deploy SCRIPT exists on staging.** ⛔ *(rev 2 population fix — Langston's nit, rule 29(a) binds true claims too: rev 1 said `/home/deploy/` "holds those two and nothing else," which is false as written — the directory also holds ~30 `.sql`/`.txt` files. The claim is about SCRIPTS: exactly two `.sh` files, `add_alert.sh` and `watch_xstock.sh`, neither deploy-related, and zero `*deploy*` executables anywhere on `$PATH`.)*
+- **Every deploy is an ad-hoc SSH command line** typed by hand, copied out of the docs.
+- **Repo-wide grep for an existing lock: nothing relevant.**
 
-⇒ **The issue as filed says "put a lock in the deploy path." There is no deploy path. So the batch is: CREATE the sanctioned path, then lock it.** ⚠️ **That is a bigger change than #649 implies and it is stated here rather than discovered at implementation.**
+⇒ **The batch is: CREATE the sanctioned path, then lock it.**
+★ **Disposition — rule 24 outcome (2):** nothing is broken; the ad-hoc line was correct when ONE session deployed. Three concurrent sessions is the condition never decided for.
 
-★ **DISPOSITION — rule 24 outcome (2), working-as-designed-but-UNADDRESSED.** Nothing is broken. The ad-hoc command was correct when one session deployed; **three concurrent sessions is the condition that was never decided for.**
+⛔ **F1 FINDING (Langston, rev 2) — THE TWO LIVE DOCS ALREADY DISAGREE, AND REV 1 INHERITED THE WRONG ONE.** `SYSTEM_MANUAL.md:12733` states a deploy-ordering **INVARIANT**: `npm run db:migrate` runs **between `build` and `pm2 restart`**. `CLAUDE.md:72`/`:431` — the line rev 1 modelled `dt-deploy` on — **omits it**. ⇒ rev 1's sequence would have made every migration batch and every batch-specific backfill **unable to use `dt-deploy` at all**, sending exactly those sessions back to hand-typing — **the enforcement failing on the batches that most need it** (a migration deploy is the highest-stakes deploy we have). **`dt-deploy` therefore chains migrate in, plus a `--pre-restart '<npm script>'` hook for batch-specific steps** (e.g. the B79.0n backfill pattern).
+★ **§13 HOME FOLDED IN (Langston-directed): `RUNNING_ISSUES` #140 — deploy-procedure step ordering, Tier-3, open since 2026-05-25 — is HOMED HERE. This batch is its home; nothing else will ever be.**
 
-## 2. The failure being prevented — and why the board cannot prevent it
+## 2. The failure being prevented — and rev 2's sharper statement of who gets hurt
 
-**THE UNCOVERED CASE:** two sessions run the deploy sequence close together. The second `git reset`/`pull` + `build` + `pm2 restart` **silently replaces the first session's running code, mid-verification.**
-⚠️ **Every §9.3 UI check, every log reading and every live-evidence claim made in that window is then about code that is no longer running — AND NOTHING SAYS SO.** ★ **The loser is not told they lost.** That is the same class as the lost-update defect (#647): a concurrent write that destroys another's work while both parties believe they succeeded.
+**THE UNCOVERED CASE:** two sessions deploy close together; the second silently replaces the first's running code **mid-verification**. Every §9.3 check and live-evidence claim in that window is then about code that is no longer running, **and nothing says so**. Same class as #647: **the loser is not told they lost.**
 
-⛔ **WHY THE DELIVERY BOARD CANNOT DO THIS, stated because Kyle hoped it could:** rule 25.b already settles it — the crew board *"REPORTS, it does not BLOCK. A green board is not a guarantee."* **Measured, not theoretical:** on 2026-07-31/08-01 three sessions collided on the same alert rows **four times in one evening WITH a claim convention already in place**, and two collisions **silently destroyed each other's writes**. ⇒ **an advisory mechanism does not stop a concurrent actor.**
+⛔ **F4 FINDING (Langston, rev 2) — REV 1's OBJECTIVES PROTECTED THE WRONG PARTY.** Refusing the *second* invocation protects the second deployer — but §2's harm lands on the **FIRST** (their evidence silently invalidated). And the accepted residual (hand-typed bypass) hits precisely that unprotected first party, making a sha record **worse than absent: authoritative-looking and wrong**. ⇒ **rev 2 adds the detection half:** record the deployed sha **plus the pm2 `restart_time` counter** (free, monotonic — it was 543 at Langston's review), and **Step-7/8 verification MUST compare recorded vs live before making any evidence claim.** Divergence = *the code under you changed*. **The residual stops being silent — which was the actual §2 defect.**
 
-★ **THE GOVERNING PRINCIPLE — "prefer IMPOSSIBLE over INTERCEPTED" (Langston; §7.1's precedent is the backup remote's deliberately invalid push URL: *"a push from it fails at git, not at somebody's memory"*).**
+⛔ **WHY THE DELIVERY BOARD CANNOT DO THIS** (Kyle hoped it could): rule 25.b — the board *"REPORTS, it does not BLOCK."* Measured: four collisions in one evening WITH a claim convention in place, two silently destructive.
 
-## 3. Objectives
+★★ **THE THIRD CATEGORY (CC-A's attack, rev 2 — and it reshapes the design principle).** Rev 1's model was a dichotomy: *unaware collision* vs *deliberate override*. **CC-A evidenced a third from his own week: AWARE, COMPLIANT, AND WRONG** — the session holds the convention, follows it, and the write still lands as a no-op, on the wrong target, or over someone else's state, with a success code either way. **No lock touches that category. A POST-CONDITION does:** *after any write, read the object back and assert it reached the intended state* — not "did the command return 0," not "did I hold the lock." ⇒ **`dt-deploy` ends by ASSERTING its post-conditions at the objects** — running HEAD equals the requested sha (read from the clone, not from the script's belief), service online, HTTP 200 — **and writes its sha/restart_time record ONLY after those assertions pass.** A deploy that cannot prove its post-condition **fails loudly and records nothing**.
+
+★ **Governing principle unchanged: "prefer IMPOSSIBLE over INTERCEPTED" (Langston; §7.1's disabled-push-URL precedent).**
+
+## 3. Objectives (rev 2)
 
 | # | objective |
 |---|---|
-| OBJ-1 | A single sanctioned deploy command on staging (`dt-deploy`) that performs the whole sequence — fetch, reset to a NAMED sha, build, restart, verify HTTP 200 |
-| OBJ-2 | It takes an **exclusive lock** for the duration; a second concurrent invocation is **REFUSED, not queued and not warned** |
-| OBJ-3 | The refusal names **who holds it, which sha they are deploying, and since when** — so nobody has to ask in the channel |
-| OBJ-4 | **A stale lock is never broken automatically** — only via the #540 tier-3 protocol (no live process across several samples + mtime frozen ≥60s), stated in the refusal message itself |
-| OBJ-5 | `CLAUDE.md` §2 step 6 and §7 are rewritten so the raw command **no longer appears anywhere** — sessions copy what the docs show |
-| OBJ-6 | The lock records the deployed sha, so "what is actually running on staging" is answerable without inference |
+| OBJ-1 | One sanctioned `dt-deploy` on staging: fetch → **fail loud on dirty worktree (F3)** → reset to a **NAMED sha** → build → **`db:migrate` (F1 — the SYSTEM_MANUAL:12733 invariant, restored)** → optional `--pre-restart '<npm script>'` (F1) → restart → **post-condition assertions (CC-A): live HEAD == requested sha, process online, HTTP 200** |
+| OBJ-2 | Exclusive lock for the duration; a second concurrent invocation **REFUSED, not queued** |
+| OBJ-3 | Refusal names **holder + sha + since-when** |
+| OBJ-4 | Stale lock broken **only** via the #540 tier-3 protocol, **stated in the refusal text itself** |
+| OBJ-5 | **The FIVE live-prescriptive sites of the raw command are rewritten to point at `dt-deploy` (F2):** `CLAUDE.md:72` · `CLAUDE.md:431` · `SYSTEM_MANUAL.md:12734-12741` · `LEVER_INVENTORY.md:511` · `Claude Comms and Packages/POST_REPLIT_WORKFLOW.md:162` *(rev 1 counted 2 — Langston's whole-tree sweep at `3430238` found 5; the sweep completeness is load-bearing on §4's argument)*. ⛔ **EXPLICIT EXCLUSION: historical records are NOT rewritten** — completion reports, `PHASE_HISTORY`, `CHANGES_AND_FIXES`, past design asks, `_archive/CLAUDE_CODE_PROJECT_INSTRUCTIONS.md:88` are records of what happened; rewriting them falsifies the record. **Live-prescriptive swept; historical untouched; this line is why the survivors are not a missed sweep.** |
+| OBJ-6 | Deployed **sha + pm2 `restart_time`** recorded on success (F4); **Step-7/8 verification compares recorded vs live before any evidence claim** |
+| OBJ-7 | ⛔ **NEVER `git reset --hard` through a dirty worktree (F3).** Measured at review: the deploy clone was dirty **right then** (modified `bridge/canonical/mapping-regime-strategy.json` + 9 untracked files). Today's `git pull` REFUSES on that; rev 1's `reset --hard` would have **silently discarded it**. `dt-deploy` must not introduce a destructive failure mode the ad-hoc line doesn't have. |
 
-## 4. ⚠️ The honest limit — this is enforcement, not prevention
+## 4. ⚠️ The honest limit — enforcement, not prevention (held, with F2 closing its gap)
 
-**A session that types the raw `git pull && npm run build && pm2 restart` by hand STILL BYPASSES THE LOCK.** We cannot make that literally impossible without measures out of proportion to the risk.
-★ **WHY THAT IS ACCEPTABLE, AND THE REASONING SHOULD BE CHALLENGED IF WRONG: the failure mode is ACCIDENTAL, not adversarial.** Every collision this project has had came from two sessions **unaware of each other**, never from one deliberately overriding another. **Removing the raw command from the documentation removes the thing sessions actually copy.**
-⇒ **THEREFORE OBJ-5 IS NOT COSMETIC — it is the enforcement.** A lock in a script nobody is pointed at is precisely the advisory mechanism this batch exists to replace.
-**Considered and rejected as disproportionate:** a `post-merge` hook in the staging clone (catches a raw `git pull` but not `build`/`restart`, and adds a failure mode to every legitimate pull); restricting the `deploy` user's shell.
+**A session hand-typing the raw sequence still bypasses the lock.** Langston accepted the accidental-not-adversarial model and both rejected alternatives (post-merge hook: adds a failure mode to every legitimate pull, misses build/restart; shell restriction: disproportionate) — **conditional on F2's sweep being complete**: rev 1 left the raw command in the System Manual, one grep from a session mid-deploy, which hollowed the argument. Rev 2's OBJ-5 sweeps all five live sites. **And F4/OBJ-6 converts what the lock can't prevent into something detection catches.**
 
 ## 5. Out of scope
-- The delivery-board checker integration (**Kyle deferred it 2026-08-03**: see how the board is used first).
-- `main`-advance locking — different act, already gated by review + Kyle's acknowledgement.
-- Anything touching the trading engine.
+Board-checker integration (Kyle deferred) · `main`-advance locking (already gated) · trading engine (untouched). **#140 is IN scope (F1) — homed here.**
 
-## 6. Verification posture
-⚠️ **Absence of a collision proves nothing** — collisions are rare and we would be reading silence. ⇒ **the PROVOKED case is the evidence: hold the lock, attempt a second deploy, and confirm it is REFUSED with the holder named.** **Same discipline as #594 and #637**, both of which would have closed on a meaningless green had the failing case not been forced.
+## 6. Verification posture — three provoked cases, no silence read as success
+
+1. **Concurrent refusal:** hold the lock, attempt a second deploy → REFUSED, holder + sha + since-when named.
+2. **Dirty worktree (F3):** dirty the clone deliberately → `dt-deploy` refuses loudly, discards nothing.
+3. **Stale lock (OBJ-4):** plant a dead-holder lock → refusal text prints the #540 tier-3 protocol.
+
+Plus the post-condition assertions run on every real deploy by construction (CC-A). **Absence of a collision proves nothing; #594 and #637 both nearly closed on exactly that silence.**
