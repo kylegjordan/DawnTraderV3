@@ -721,3 +721,9 @@ Archive: git history is authoritative (this is a field-retirement within live fi
 **Effect:** frozen-Replit's last standing write path to the repository is severed BY CONSTRUCTION — rule 2 goes from a policy we obey to a fact the outside world enforces (the impossible-over-intercepted principle, same as the mirror's disabled push URL). Worst case: anything obscure still holding it now fails LOUDLY with an auth error naming its cause.
 **Note for future greps:** Replit references in code/docs are historical; as of this date there is NO live credential by which Replit can reach the repository.
 
+## 2026-08-05 — `.github/workflows/deploy-staging.yml` DELETED (B-DEPLOY-LOCK OBJ-8, #649)
+
+**What:** a DORMANT GitHub Actions deployer — EC2-era TEMPLATE, triggered on a `staging` branch that has never existed, secrets unset, **zero runs ever (verified at the runs API, not the file header)**. Surfaced by the #649 pre-audit census as a fourth deployer nobody remembered; **decided DELETE at Step-2 (Langston re-derived it himself).**
+**Why:** it prescribed a `git pull`-based deploy chain contradicting `dt-deploy`, and a future `staging` branch + secrets would have woken it SILENTLY — an automated deployer outside the lock. We are on Hetzner; the EC2 infrastructure it documents will never be provisioned.
+**Blast radius:** zero callers, zero runs, zero secrets; nothing references the workflow by name outside itself. Archive copy: `_archive/deleted-code/deploy-staging.yml.removed` (git history is the authoritative archive).
+

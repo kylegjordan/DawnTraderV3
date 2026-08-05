@@ -1,0 +1,155 @@
+#!/usr/bin/env bash
+# ═════════════════════════════════════════════════════════════════════════════
+# dt-deploy — THE sanctioned staging deploy path (B-DEPLOY-LOCK, #649, #140)
+# ═════════════════════════════════════════════════════════════════════════════
+# Scope: B_DEPLOY_LOCK_SCOPE.md rev 4 (Langston Step-1 APPROVED)
+# Pre-audit: B_DEPLOY_LOCK_PRE_AUDIT.md (Step-2 APPROVED)
+#
+# Usage:  dt-deploy <full-40-char-sha> [--pre-restart '<npm script>']
+#
+# Chain (OBJ-1): lock → fetch → sha-on-branch check → DIRTY-WORKTREE FAIL-LOUD
+#   → reset to the NAMED sha → conditional npm ci (lockfile diff, BEFORE build)
+#   → build (writes dist/BUILD_SHA) → db:migrate → optional --pre-restart
+#   → pm2 restart → POST-CONDITIONS asserted at the objects → record written
+#   ONLY after assertions pass.
+#
+# The lock (OBJ-2/3/4): /home/deploy/dawntrader-deploy.lock — OUTSIDE the repo
+# so no reset can touch the lock protecting it. mkdir is the atomic primitive.
+# A second invocation is REFUSED (never queued) naming holder+sha+since. A
+# stale lock is broken ONLY via the #540 tier-3 protocol, stated in the
+# refusal text — never automatically.
+#
+# What this deliberately does NOT do:
+#   - push anything (staging is TERMINAL — §7.1; this script contains no push
+#     and never will)
+#   - pm2 save (#650 — homed to P19-B12, NOT absorbed here)
+#   - break its own stale lock
+# ═════════════════════════════════════════════════════════════════════════════
+set -euo pipefail
+
+APP_DIR="/home/deploy/dawntrader"
+LOCK_DIR="/home/deploy/dawntrader-deploy.lock"
+RECORD="/home/deploy/dawntrader-deploy.record"
+BRANCH="origin/migration/aws-supabase"
+LIVENESS_URL="http://localhost:5000/api/health/liveness"
+
+SHA="${1:-}"
+PRE_RESTART=""
+if [ "${2:-}" = "--pre-restart" ]; then PRE_RESTART="${3:-}"; fi
+
+fail() { echo "dt-deploy: REFUSED — $*" >&2; exit 1; }
+
+# ── argument: a NAMED full sha, nothing else (OBJ-1; #621's lesson) ──────────
+[ -n "$SHA" ] || fail "no sha given. Usage: dt-deploy <full-40-char-sha> [--pre-restart '<npm script>']"
+echo "$SHA" | grep -qE '^[0-9a-f]{40}$' || fail "'$SHA' is not a full 40-char sha. Deploys name their exact commit — no branches, no short forms, no HEAD."
+
+# ── THE LOCK (OBJ-2/3/4) — atomic mkdir; refuse, never queue ─────────────────
+if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+  HOLDER=$(cat "$LOCK_DIR/holder" 2>/dev/null || echo "unknown")
+  HSHA=$(cat "$LOCK_DIR/sha" 2>/dev/null || echo "unknown")
+  SINCE=$(cat "$LOCK_DIR/since" 2>/dev/null || echo "unknown")
+  HPID=$(cat "$LOCK_DIR/pid" 2>/dev/null || echo "unknown")
+  cat >&2 <<REFUSAL
+dt-deploy: REFUSED — a deploy is already in progress.
+  holder : $HOLDER (pid $HPID)
+  sha    : $HSHA
+  since  : $SINCE
+A second deploy would silently replace theirs mid-verification (#647 class:
+the loser is not told they lost). This refusal IS the system working.
+
+If you believe this lock is STALE, do NOT delete it on that belief. The #540
+tier-3 protocol is the ONLY sanctioned break, ALL THREE conditions:
+  1. reported-blocking (someone is actually refused — you, now), AND
+  2. no live deploy process: 'ps -p $HPID' empty across SEVERAL samples, AND
+  3. lock mtime frozen >= 60s across a re-check:
+     'stat -c %Y $LOCK_DIR' twice, 60s apart, identical.
+Only then: rm -rf $LOCK_DIR — and say so in Discord #general in the same breath.
+REFUSAL
+  exit 2
+fi
+trap 'rm -rf "$LOCK_DIR"' EXIT
+echo "${DT_DEPLOY_AS:-${SUDO_USER:-$(whoami)}}" > "$LOCK_DIR/holder"
+echo "$SHA"        > "$LOCK_DIR/sha"
+date -u +%FT%TZ    > "$LOCK_DIR/since"
+echo "$$"          > "$LOCK_DIR/pid"
+
+cd "$APP_DIR"
+
+# ── fetch, then prove the sha is REAL and ON THE REVIEW BRANCH ───────────────
+git fetch origin
+git cat-file -e "$SHA^{commit}" 2>/dev/null || fail "sha $SHA does not exist at origin"
+git merge-base --is-ancestor "$SHA" "$BRANCH" || fail "sha $SHA is not on $BRANCH — staging deploys only reviewed refs (§7.1)"
+
+# ── OBJ-7: NEVER reset through a dirty worktree — fail loud, discard nothing ─
+DIRTY=$(git status --porcelain)
+if [ -n "$DIRTY" ]; then
+  echo "dt-deploy: REFUSED — the worktree is DIRTY and reset --hard would DESTROY this:" >&2
+  echo "$DIRTY" >&2
+  echo "Disposition is a human call: commit it, stash it, or name it disposable — then rerun." >&2
+  exit 3
+fi
+
+# ── conditional npm ci — F5: BEFORE build, on lockfile diff ──────────────────
+DEPLOYED_SHA=$(git rev-parse HEAD)
+git reset --hard "$SHA"
+if ! git diff --quiet "$DEPLOYED_SHA" "$SHA" -- package-lock.json 2>/dev/null; then
+  echo "dt-deploy: package-lock.json differs ($DEPLOYED_SHA -> $SHA) — npm ci"
+  npm ci
+else
+  echo "dt-deploy: lockfile unchanged — npm ci skipped"
+fi
+
+# ── build (stamps the identity the post-condition asserts) ───────────────────
+npm run build
+mkdir -p dist && echo "$SHA" > dist/BUILD_SHA
+
+# ── F1: the SYSTEM_MANUAL:12734 invariant — migrate BETWEEN build and restart ─
+npm run db:migrate
+
+# ── optional batch-specific step (F1) ────────────────────────────────────────
+if [ -n "$PRE_RESTART" ]; then
+  echo "dt-deploy: --pre-restart: npm run $PRE_RESTART"
+  npm run "$PRE_RESTART"
+fi
+
+# ── restart + THE CONTIGUOUS CHECK-FAILURE WINDOW clock (pre-audit §3) ───────
+WINDOW_START=$(date +%s)
+pm2 restart dawntrader
+
+# ── POST-CONDITIONS (CC-A's rule): asserted AT THE OBJECTS, record only after ─
+# 1. live HEAD == requested sha — read from the clone, not this script's belief
+LIVE_HEAD=$(git -C "$APP_DIR" rev-parse HEAD)
+[ "$LIVE_HEAD" = "$SHA" ] || fail "post-condition FAILED: live HEAD $LIVE_HEAD != requested $SHA. NOTHING RECORDED."
+
+# 2+3+4. process online, BUILD-IDENTITY response (never a bare 200 — a stale
+#        process serves 200 perfectly well), and ENGINE RESUMED (a deploy that
+#        leaves the engine down is not a finished deploy — Step-2).
+DEADLINE=$(( $(date +%s) + 240 ))
+ENGINE_OK=""
+while [ "$(date +%s)" -lt "$DEADLINE" ]; do
+  J=$(curl -sf --max-time 5 "$LIVENESS_URL" 2>/dev/null || true)
+  BS=$(echo "$J" | grep -o '"buildSha":"[0-9a-f]*"' | cut -d'"' -f4)
+  EXPECTED=$(echo "$J" | grep -o '"engineExpected":[a-z]*' | cut -d: -f2)
+  RUNNING=$(echo "$J" | grep -o '"engineRunning":[a-z]*' | cut -d: -f2)
+  if [ "$BS" = "$SHA" ]; then
+    if [ "$EXPECTED" != "true" ] || [ "$RUNNING" = "true" ]; then ENGINE_OK=1; break; fi
+  fi
+  sleep 5
+done
+WINDOW_END=$(date +%s)
+WINDOW=$(( WINDOW_END - WINDOW_START ))
+[ -n "$ENGINE_OK" ] || fail "post-condition FAILED after 240s: buildSha=$BS (want $SHA) engineExpected=$EXPECTED engineRunning=$RUNNING. The deploy is NOT finished. NOTHING RECORDED."
+
+# ── the record — written ONLY now, after every assertion passed (OBJ-6) ──────
+RESTART_TIME=$(pm2 jlist 2>/dev/null | grep -o '"restart_time":[0-9]*' | head -1 | cut -d: -f2)
+cat > "$RECORD" <<EOF
+sha=$SHA
+restart_time=${RESTART_TIME:-unknown}
+deployed_at=$(date -u +%FT%TZ)
+deployed_by=$(cat "$LOCK_DIR/holder")
+check_failure_window_s=$WINDOW
+EOF
+echo "dt-deploy: OK — $SHA live, engine resumed, identity asserted."
+echo "dt-deploy: contiguous check-failure window: ${WINDOW}s (never-fires bound: 300s; 300-600s = INTERMITTENT watchdog critical = unacceptable)"
+[ "$WINDOW" -lt 300 ] || echo "dt-deploy: ⚠ WINDOW AT OR OVER THE 5-MIN BOUND — the staging watchdog may fire on deploys like this one. Surface it." >&2
+cat "$RECORD"

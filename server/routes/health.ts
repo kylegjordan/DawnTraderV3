@@ -35,6 +35,18 @@ healthRouter.get('/liveness', async (_req, res) => {
     res.json({
       engineExpected: paperContext?.isEngineActive === true,
       engineRunning: !!(manager as any)?.isRunning,
+      // #649 (B-DEPLOY-LOCK): the RUNNING build's identity, so a deploy's
+      // post-condition can assert "the process serving this response is the
+      // code I just deployed" — a stale process serves a bare 200 perfectly
+      // well, which is exactly the false-green the assertion exists to kill.
+      // dt-deploy writes dist/BUILD_SHA at build; absent file → null, honest.
+      // Path is CWD-relative, NOT import.meta.url-relative: esbuild flattens
+      // this file into dist/index.js, which would silently repoint a
+      // URL-relative read one directory too high. pm2 pins cwd to the app root.
+      buildSha: await import('node:fs/promises')
+        .then((fs) => fs.readFile('dist/BUILD_SHA', 'utf8'))
+        .then((s) => s.trim())
+        .catch(() => null),
       ts: new Date().toISOString(),
     });
   } catch (error: any) {
