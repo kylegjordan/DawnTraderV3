@@ -144,9 +144,12 @@ while [ "$(date +%s)" -lt "$DEADLINE" ]; do
   # no-match grep exits 1 and a failing substitution trips set -e — and the
   # app is ALWAYS still booting on the first poll, so without || true this
   # loop died on iteration one, on every real deploy, ever.
-  BS=$(echo "$J" | grep -o '"buildSha":"[0-9a-f]*"' | cut -d'"' -f4 || true)
-  EXPECTED=$(echo "$J" | grep -o '"engineExpected":[a-z]*' | cut -d: -f2 || true)
-  RUNNING=$(echo "$J" | grep -o '"engineRunning":[a-z]*' | cut -d: -f2 || true)
+  # patterns tolerate an optional space after the colon (Langston: a serializer
+  # that ever emits `"engineExpected": true` would otherwise fail-closed a
+  # HEALTHY deploy for 240s — right direction, expensive discovery).
+  BS=$(echo "$J" | grep -o '"buildSha": *"[0-9a-f]*"' | cut -d'"' -f4 || true)
+  EXPECTED=$(echo "$J" | grep -o '"engineExpected": *[a-z]*' | cut -d: -f2 | tr -d ' ' || true)
+  RUNNING=$(echo "$J" | grep -o '"engineRunning": *[a-z]*' | cut -d: -f2 | tr -d ' ' || true)
   if [ "$BS" = "$SHA" ]; then
     # BLOCKER-3: FAIL-CLOSED — EXPECTED must be a literal true/false. An absent
     # or renamed field must fail the assertion, never satisfy it.
@@ -157,7 +160,7 @@ while [ "$(date +%s)" -lt "$DEADLINE" ]; do
 done
 WINDOW_END=$(date +%s)
 WINDOW=$(( WINDOW_END - WINDOW_START ))
-[ -n "$ENGINE_OK" ] || fail "post-condition FAILED after 240s: buildSha=$BS (want $SHA) engineExpected=$EXPECTED engineRunning=$RUNNING. The deploy is NOT finished. NOTHING RECORDED."
+[ -n "$ENGINE_OK" ] || fail "post-condition FAILED, check-failure window ${WINDOW}s at abort: buildSha=$BS (want $SHA) engineExpected=$EXPECTED engineRunning=$RUNNING. The deploy is NOT finished. NOTHING RECORDED."
 
 # ── the record — written ONLY now, after every assertion passed (OBJ-6) ──────
 # C-5: filter by process NAME — jlist carries pm2-logrotate too, and grep|head
@@ -171,6 +174,10 @@ deployed_by=$(cat "$LOCK_DIR/holder")
 check_failure_window_s=$WINDOW
 EOF
 echo "dt-deploy: OK — $SHA live, engine resumed, identity asserted."
-echo "dt-deploy: contiguous check-failure window: ${WINDOW}s (never-fires bound: 300s; 300-600s = INTERMITTENT watchdog critical = unacceptable)"
-[ "$WINDOW" -lt 300 ] || echo "dt-deploy: ⚠ WINDOW AT OR OVER THE 5-MIN BOUND — the staging watchdog may fire on deploys like this one. Surface it." >&2
+# Langston (Step-4b): this script BOUNDS the window, it does not measure the
+# bands — the 240s poll deadline is BELOW the watchdog's 300s never-fires
+# bound, so a success here is STRUCTURALLY incapable of reaching the 300-600s
+# intermittent band (a slower deploy fails out above, window printed there).
+# The old ">= 300s" warning was unreachable on every success path and is gone.
+echo "dt-deploy: contiguous check-failure window: ${WINDOW}s — BOUNDED by the 240s poll deadline, structurally below the watchdog's 300s never-fires bound"
 cat "$RECORD"
