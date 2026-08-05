@@ -1,4 +1,6 @@
-# B-OUTCOME-FEEDBACK-WIRE — SCOPE (#602)
+# B-OUTCOME-FEEDBACK-WIRE — SCOPE r2 (#602)
+
+> **r1→r2 (Langston Step-1 CHANGES-NEEDED, both blockers folded):** consumer 2's mechanism REFUTED at its read sites (his derivation, adopted below) — it becomes a §15 DISPOSITION CALL, not a fix, and this batch narrows to consumer 1; consumer 1's verification gains the key-space-parity requirement with a read-side positive control.
 
 change-class: architecture
 **Owner:** CC-A (OLD Claude) · 2026-08-05 · Kyle-sequenced: "fix immediately, before the quick-fix-list debates" — slotted in the break after B-RULES-1a's close, per his 2026-08-05 direction.
@@ -8,7 +10,7 @@ change-class: architecture
 `active-execution-engine.ts` reads `(position as any).regime` at TWO sites. `active_open_positions` declares NO regime column (asserted WITH control at the #602 filing), and the runtime object is the row type — **the cast yields `undefined` on every read, always has.**
 
 - **Consumer 1 — `:2101` (B67.4 outcome-feedback hook):** `regimeAtOpen` undefined → the `:2103` truthiness gate fails → **the active path has NEVER written the outcome-learning store.** Measured (population: last 100 `[B67.4][feedback]` writes): **100/100 `source=vts`, 0 active.** The system's real trading outcomes contribute nothing to calibration.
-- **Consumer 2 — `:1561` (TEC exit-evaluation context, found in this scope's read):** `context.regime` undefined → **regime-scoped exit-knob resolution on the active path degrades to the wildcard tier on every cycle.** Blast-radius NOTE: whether any per-regime exit constant currently differs from its `'*'` row decides whether this consumer's fix CHANGES live exit behavior — measured in the pre-audit (§ pre-audit item 3) BEFORE implementation, per rule 24's don't-inject-bugs fear.
+- **Consumer 2 — `:1561` (TEC exit-evaluation context): MY r1 MECHANISM WAS WRONG — refuted by Langston at the read sites, adopted verbatim.** `input.context.regime` is DISCARDED at all three landings: `trailing-exit-controller.ts:504` and `:536` take `_regime?: string` underscore-unused ("retained for call-site compat; per-strategy/regime moonbag override is a future B79.x scope item"); `:822`'s `PositionUpdate.regime` is declared and never read; and `resolveTECConfig` (`:446`) HARDCODES `regime:'*'` at the query, keyed on assetClass alone. ⇒ **exit-knob resolution is wildcard BY CONSTRUCTION — the dead cast changes nothing, and fixing `:1561` is provably behavior-neutral AND pointless.** The finding is a DISCONNECTED THREE-HOP PARAMETER CHAIN → §15 disposition call, OUT of this batch: **(3) reconnect** = the B79.x per-regime moonbag override the comment names (currently a comment, which is not a §13 home) · **(4) remove** the chain (my RECOMMENDATION — but it crosses the shared TEC input type that VTS callers also construct, so it needs its own batch with the §9.5(a-ii) state-write census) · **(5) stay disconnected** only if (3) gets a real dated home. **`:1561` is NOT touched by this batch; the disposition batch owns the whole chain including it.** Homed: RUNNING_ISSUES entry at this batch's close names the disposition + owner.
 
 ## 2. PROVENANCE (§2 1.b tier 1, both consumers; corpora searched: git -S at the ref, BATCH_CATALOG, RUNNING_ISSUES #602/#210/D9, SIM active-engine section)
 
@@ -18,14 +20,17 @@ change-class: architecture
 
 ## 3. THE FIX (surgical, both sites, one shape)
 
-At both `:2101` and `:1561`: read the regime from position METADATA (the SSOT stamped at open), retiring the dead cast:
-`const regimeAtOpen = (position.metadata as Record<string, unknown> | null)?.['regime'] as string | undefined ?? null;`
-(exact typing to match surrounding idiom; no fallback to the cast — it never carried data, and a dead fallback is the absent-as-valid shape). Honest-absent stays honest: a position opened with no MCE context has no metadata regime → gate still (correctly) skips, and consumer 2 still resolves wildcard — same as today, not worse.
+At `:2101` ONLY (consumer 1): read the regime from position METADATA (the SSOT stamped at open), retiring the dead cast:
+`const regimeAtOpen = (position.metadata as Record<string, unknown> | null)?.['regime'] as string | undefined;`
+**Deliberately `undefined`, not `?? null`** (Langston's cosmetic point made explicit): the `:2103` gate is truthiness, and `undefined` is the field's honest absent shape. No fallback to the cast — it never carried data, and a dead fallback is the absent-as-valid shape. **Honest-absent ASYMMETRY, stated:** the WRITE skips on a missing metadata regime (no fake tuple enters the EMA); the READ side (`signal-orchestrator.ts:1264`) keys `'UNKNOWN'` when the MCE context is absent — asymmetric BY the read side's design, unchanged here; a skipped write simply never matches an `UNKNOWN` read key, which is correct (we do not want UNKNOWN-keyed learning).
 
 ## 4. VERIFICATION
 1. Unit fence: position with `metadata.regime` → `updateEma` called with that label; without → skipped (consumer 1); TEC context carries the label (consumer 2).
-2. Staging, post-deploy: on the next real active close, a `[B67.4][feedback]` write with `source=paper_sim` appears (population check: the store's per-source counts move from 100/0). If no close occurs in the soak window, a §13 self-rescheduling alert carries the verification — zero rows is not a pass.
-3. Consumer 2: log-line evidence that exit-knob resolution received the real regime (and the pre-audit's item-3 delta table says whether behavior changes).
+2. **KEY-SPACE PARITY (Langston BLOCKER-2 — the write must be READABLE, not merely present).** The store keys by raw concatenation (`outcome-feedback-store.ts:134-135`), no normalization; the active read is `signal-orchestrator.ts:1322` with `regimeLabel = symbolCtx?.regime.regime ?? 'UNKNOWN'` (`:1264`) and `strategyKey = rawSignal.strategy ?? 'unknown'` (`:1260`).
+   - **Provenance of parity, cited:** write-side regime = the strategy-stamped canonical label (e.g. `adaptive-flow.ts:233` `regime: REGIMES.RANGE_BOUND_STABLE`) riding the `...signal.metadata` spread — same 5-label canonical space as the read's `regime.regime`; strategy dim = the SAME field one hop each side (`strategyName: signal.strategy` at `:3399` vs `rawSignal.strategy`).
+   - **Pre-audit MEASURES both dims anyway** (rule 29: provenance is a claim, the measurement is the evidence): distinct write-side `metadata->>'regime'` + `strategy_name` values over live positions AND recent closes, vs distinct read-side label spaces; any value outside the canonical set fails the pre-audit.
+   - **POSITIVE CONTROL, required:** after a write (unit fence + first staging close), a peek at the READ-side key — same concatenation the orchestrator builds — returns the tuple just written. A `source=paper_sim` row existing is NOT the pass; the read finding it is.
+3. Staging, post-deploy: next real active close produces the `[B67.4][feedback]` write + the §4.2 read-side peek. If no close in the soak window, a §13 self-rescheduling alert carries it — zero rows is not a pass.
 
 ## 5. OUT OF SCOPE
 The `[0.85,1.05]` clamp, alpha, or any learning-math change; VTS-side anything; backfill of missed learning (the store is an EMA — history is not reconstructible and we do not fake it).
