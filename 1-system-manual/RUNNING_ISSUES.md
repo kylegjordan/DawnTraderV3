@@ -2101,3 +2101,7 @@ During the 33-min sustained paper window (session `paper_cHEmpUkX01`), every `he
 
 **HOME: `B-DEPLOY-LOCK`, owner CC-B. Kyle-directed queue position: NEAR THE TOP of the backlog** — ahead of the queued cleanup work, because it protects the correctness of every verification claim we make. Related: #647, #557, rule 25.a/25.b, §7.1, §9.3. **OPEN (homed, queued high).**
 
+### #650 OPEN 2026-08-05 (Langston, at B-DEPLOY-LOCK Step-2; CC-B filing) — `pm2 save` HAS NOT RUN IN 186 RESTARTS, SO A REBOOT RESURRECTS A STALE PROCESS CONFIG
+
+**MEASURED:** live `restart_time = 543`; `/home/deploy/.pm2/dump.pm2` carries **357** ⇒ the dump `pm2-deploy.service` resurrects from is **186 restarts stale**. A server reboot restores the process list/env AS OF that old save — silently. **29(c) note: resurrect-restores-counter is Langston's stated HYPOTHESIS; the 357-vs-543 divergence is the measurement.** **Deliberately NOT absorbed into B-DEPLOY-LOCK** (his instruction — adjacent, not the same defect). **HOME: P19-B12 (diagnostics + internal-health monitoring)** — a dump-freshness check belongs with the system-is-unwell detectors. Owner: P19-B12's owner at its scoping. Related: #649 F-A, `pm2-deploy.service`. **OPEN (homed).**
+
