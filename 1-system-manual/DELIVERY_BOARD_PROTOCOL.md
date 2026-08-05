@@ -62,7 +62,7 @@
 | **Step 11** (completion report) | **Blocked on = Langston** for his sign-off, then **Blocked on = Kyle** for acknowledgement, then → `Complete`. |
 | **any point** | Waiting on a Kyle decision, credential or approval ⇒ **Blocked on = Kyle**. The card keeps its column. |
 
-★ **THE OWNER MOVES THE CARD. LANGSTON SETS `Review`.** *(Kyle's decision, 2026-08-03.)* His approval gates the move but is not itself the move — otherwise the board freezes whenever he is mid-review, at four separate points per batch. ⚠️ **He cannot write to GitHub at all today** — no CLI, no token, and the key on his box is a deploy key registered to no account. **Until Kyle issues a scoped token, the OWNER records his verdict in the `Review` field on his behalf, and his actual words remain in Discord and the batch documents — the board is the third place it is written, never the only one.**
+★ **THE OWNER MOVES THE CARD. LANGSTON SETS `Review`.** *(Kyle's decision, 2026-08-03.)* His approval gates the move but is not itself the move — otherwise the board freezes whenever he is mid-review, at four separate points per batch. ✅ **He HAS board write access as of 2026-08-04** — Kyle-issued classic token, `project` scope only (board read/write, zero code access — the reviews-never-pushes rule is preserved by construction), installed at `/etc/langston/github-board.env`, **verified live: read, write and delete all exercised as his user.** He sets `Review` himself; the how-to is in his auto-loaded MEMORY.md. His actual words remain in Discord and the batch documents — the board is the third place a verdict is written, never the only one.
 
 ## 4b. ★ THE BACKLOG IS ORDERED — top of the column IS the next thing (Kyle directive 2026-08-03)
 
