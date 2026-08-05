@@ -6,3 +6,7 @@ infra/helsinki/*.sh text eol=lf
 # Comms-infra Discord bridges deploy to Linux (Helsinki). Force LF so a Windows-authored
 # edit can't ship CRLF into a shebang / systemd unit and break execution (B-DISCORD-INBOUND-LIVENESS).
 comms-infra/discord/** text eol=lf
+
+# B-DEPLOY-LOCK (#649): ALL shell scripts ship LF — a CRLF working copy broke
+# dt-deploy.sh's shebang on staging (exit 127). Same class as the helsinki rule.
+*.sh text eol=lf
