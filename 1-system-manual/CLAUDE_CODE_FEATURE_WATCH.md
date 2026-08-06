@@ -1,6 +1,6 @@
 # Claude Code Feature Watch — ledger
 
-> **Purpose:** the daily `daily-claude-model-check` scheduled task (CLAUDE.md rule 21) scans Anthropic's official Claude Code changelog/news for NEW features + functionality, assesses whether they'd help DawnTrader's workflow, and surfaces useful ones to Kyle. **This file is the dedup ledger** — features already surfaced (or already adopted) are listed here so the daily check doesn't repeat them. The task appends a row when it surfaces something new.
+> **Purpose:** the daily `daily-claude-model-check` scheduled task (CLAUDE.md rule 21) scans Anthropic's official Claude Code changelog/news for NEW features + functionality, assesses whether they'd help DawnTrader's workflow, and surfaces useful ones to Kyle. **This file is the dedup ledger** — features already surfaced (or already adopted) are listed here so the daily check doesn't repeat them. The task appends a dedup row when it surfaces something new, AND a RUN LOG row on EVERY run including silent ones (the committed liveness contract below).
 >
 > **How the task uses this:** read this file → compare the official changelog against it → message Kyle ONLY about genuinely-new, relevant features not already below → append what it surfaced.
 
