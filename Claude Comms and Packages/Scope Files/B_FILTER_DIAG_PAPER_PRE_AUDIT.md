@@ -1,4 +1,4 @@
-# B-FILTER-DIAG-PAPER — Pre-Audit (DRAFT — Step-2 in progress 2026-08-06; Langston r2 scope verdict pending)
+# B-FILTER-DIAG-PAPER — Pre-Audit (Step-2 COMPLETE 2026-08-06; scope r2 APPROVED at `9f4472db9`)
 
 **Owner:** CC-B · Scope: `B_FILTER_DIAG_PAPER_SCOPE.md` r2 at `9f4472db9`.
 
@@ -67,4 +67,19 @@ The counters are COUNT-ONLY: `rejectedInRefresh` = "failed re-SQE (dropped from 
 **What already works (don't re-invent at Step-3):** both class tabs DO render Pipeline Summary + SQE Gate Rejects from the live funnel, with an honest withheld-not-fabricated footnote and "NetEV / uncategorized dominated by the net-expectancy admission gate" phrasing; the crypto/xStock scanner cards are live and correct-looking (312/1,430 · 75/483). The missing pieces match the scope: per-strategy × per-stage table, strategyAttrition rendering, refresh-fallout reasons, windowed (24h) views ("B8.4c skeleton columns withheld").
 
 **Walk legs still open:** mobile width; the dormant-branch render (needs a non-active class/mode); the VTS-page tabs (parity reference, OBJ-1); Ready-to-Buy/Open/Closed tabs are outside this batch.
+
+## 11. VTS-page parity walk (OBJ-1 reference — captured in full, 2026-08-06 21:30Z)
+
+**The structural model the Paper tabs mirror** (VTS crypto tab, full text in transcript): Scanner card → **Pipeline Summary (24h)** with a Quant/Pattern/Total column split AND a per-row "Counting Basis" column (the legibility device that prevents the W-7 ambiguity class) → **Last Scan — Filter Breakdown** (per-filter rows) with FAMILY IMF metrics + per-family detail → **VTS Signal Funnel (Last Cycle)** → **24h Rolling Aggregates** (labeled "in-memory — resets on restart") → **Reward-vs-Risk/Reachability Gate per strategy** (Evals/Passed/Dropped/Tagged + reason columns + Mean RR + suppression%) → **VTS Evaluation Detail BY STRATEGY** (evaluated/nulls/null%/rejected/trades — the exact per-strategy table shape OBJ-4 needs on the active side) → **Setup Nulls taxonomy** (categorized A-F) → Pre-Eval Skips → Post-Signal Rejections → **Filter Metric Ranges** (percentile spread vs thresholds). Key adoption notes: (a) every counter states its BASIS and its RESET semantics inline; (b) per-strategy tables are the norm, not the exception; (c) DB-backed vs in-memory scopes are explicitly distinguished per row.
+
+**Discriminators found on this walk:**
+- **W-1 refinement:** the SAME JS-dispatch tab switch that froze the Paper page for 45-90s switched the VTS page INSTANTLY. The freeze is Paper-page-conditioned (first-mount, enforce-branch, or page-level effect), NOT the shared panel per se — narrows the Step-3 mechanism hunt materially. Payload sizes eliminated as cause: `/api/vts/filter-diagnostics` 25,817 B / 66 ms · xstocks 23,825 B / 80 ms · funnel 1,395 B / 34 ms (measured server-side).
+- **W-2 is SITE-WIDE:** doubled tab labels reproduce on the VTS page too — the fix belongs in the shared tab component, once.
+- **W-8 (NEW, shared panel data-quality):** the VTS tab's Setup-Nulls section renders its own "Section Total … **44,950 106%⚠**" (self-flagged over-sum); several Pre-Eval-Skip rows show **Total 0 against nonzero lane values** (e.g. "Price Past Target 438 / 68 / **0**"); "Family Filter Mismatch 24,227 → **0%**" percent column. These live in the SHARED panel and render on every page mounting it — in-bounds where the component is shared (scope non-goal only bars VTS-side BEHAVIOR change).
+
+## 12. Remaining-leg dispositions (declared, not skipped silently)
+- **Mobile-width walk:** deferred to the Step-7 §9.3 fix-pass (OBJ-6 requires the full walk after fixes land anyway; running it twice on the broken build buys nothing). Declared here per no-silent-caps.
+- **Dormant-branch render:** covered by code-read (`DormantPipelineTables` unchanged as fallback; wiring at `vts-filter-diagnostics-panel.tsx:254-283` verified) + B8.4c's prior §9.3 walk of that exact branch. A live render check rides the Step-7 walk via the live-mode page if its funnel still reads non-active then.
+
+**Pre-audit conclusion:** the batch is repair-and-extend on healthy bones. Fix set = W-1 freeze (mechanism hunt Step-3, Paper-page-conditioned), W-2 shared tab labels, W-3/W-4/W-5 stale copy (dormant banner, VTS-era xStock header, US-RTH wording per rule 17), W-6 labeled empty buckets (OBJ-5), W-7 basis-labeling via the VTS "Counting Basis" device, W-8 shared-panel totals math; build set = per-strategy × per-stage cached aggregate endpoint (§9: 38.5s raw → periodic cache, swap-on-success), NetEV gate promotion (OBJ-2 + soak alert), RTB refresh-fallout reasons (§7 telemetry split), VTS-structure mirroring (§11 model).
 
