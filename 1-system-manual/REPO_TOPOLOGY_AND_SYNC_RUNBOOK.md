@@ -41,7 +41,7 @@
 
 #### ★ GOOGLE DRIVE IS NOT A GIT REMOTE AND MUST NEVER BE ONE
 
-Git's own FAQ forbids putting *any portion* of a repository on cloud-sync storage ("missing objects… broken refs… data loss"). **We proved it:** a bare repo pushed to the `G:` drive reported SUCCESS while holding **2.7 MB with no pack file at all**, `fsck` returning `invalid sha1 pointer`. Same root cause as the `git commit -- <path>` segfault (#542 — ONE path-limited commit succeeded on local NTFS 2026-07-23 (n=1; a successful instance, not proof of non-reproduction — history doc §5.25)) and the ~99%-destroyed `node_modules` (#567).
+Git's own FAQ forbids putting *any portion* of a repository on cloud-sync storage ("missing objects… broken refs… data loss"). **We proved it:** a bare repo pushed to the `G:` drive reported SUCCESS while holding **2.7 MB with no pack file at all**, `fsck` returning `invalid sha1 pointer`. Same root cause as the `git commit -- <path>` segfault (#542 — zero #542 recurrences REPORTED by any session since 2026-07-23 — an absence-of-reported-failure record, not per-commit proof of the form’s use (dated measurement + instrument reach: history doc §5.25)) and the ~99%-destroyed `node_modules` (#567).
 
 #### Backups — two, both gated by REPRODUCTION
 
