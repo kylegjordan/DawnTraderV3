@@ -2100,7 +2100,7 @@ export class ActiveExecutionEngine {
     try {
       // B-OUTCOME-FEEDBACK-WIRE (#602, 2026-08-06): read the at-open canonical
       // regime from position metadata (stamped at createActiveOpenPosition beside
-      // the sibling _b67_2_1_* fields). The old `(position as any).regime` cast
+      // the sibling _b67_2_1_* fields). The old any-cast of position.regime
       // read a column that never existed — activeOpenPositions declares none —
       // so this gate failed on EVERY close and the active path never wrote the
       // outcome-learning store (store measured 13/13 entries vts_, zero paper_sim).
@@ -2145,13 +2145,17 @@ export class ActiveExecutionEngine {
             );
           }
         }
-      } else if (!regimeAtOpen) {
+      } else {
         // B-OUTCOME-FEEDBACK-WIRE (#602) fold-2: instrument the skip. A silent
-        // fall-through here is what hid the dead gate for three months — this
-        // line makes a pre-deploy position / cold-MCE null distinguishable from
-        // "the fix did not ship" in staging logs.
+        // fall-through here is what hid the dead gate for three months. Plain
+        // else (Langston Step-4 F): an else-if gated on regimeAtOpen alone left the
+        // non-finite-netPnlPercent leg silent — name WHICH condition failed.
+        // (strategyName is notNull on the row type; that leg is unreachable.)
+        const why = !regimeAtOpen
+          ? 'no regimeAtOpen (pre-deploy position or cold MCE at open)'
+          : 'non-finite netPnlPercent';
         console.log(
-          `[B67.4][feedback] skip: no regimeAtOpen (pre-deploy position or cold MCE at open) symbol=${position.symbol} strategy=${strategyName ?? 'n/a'}`,
+          `[B67.4][feedback] skip: ${why} symbol=${position.symbol} strategy=${strategyName ?? 'n/a'}`,
         );
       }
     } catch (err) {
@@ -3494,6 +3498,13 @@ export class ActiveExecutionEngine {
           // that no read side constructs. This key is canonical-or-null, and the
           // spread sits ABOVE this block so it can never pre-pollute it (ordering
           // is load-bearing — Langston Step-1 r3).
+          // ⚠️ Known asymmetry, written down so it isn't rediscovered as a bug
+          // (Langston Step-4 E): the read side coerces a cold context to
+          // 'UNKNOWN' (signal-orchestrator.ts:1264) while this stamp is null.
+          // Harmless today — nothing writes 'UNKNOWN', so a cold-context signal
+          // peeks a partition that can never exist and gets the cold-start
+          // factor. If a future change ever writes UNKNOWN-keyed tuples,
+          // reconcile the two sides first.
           regimeAtOpen: _b67_2_1_ctx?.regime.regime ?? null,
         }
       });
