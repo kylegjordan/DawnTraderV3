@@ -1746,37 +1746,44 @@ export function FilterDiagnosticsPanel({ data, isLoading, gateDisposition = 'tag
                                     emitted by the endpoint: familyMismatchDenominatorTotal =
                                     strategiesEvaluated (eligibility-pass) + family_filter_mismatch
                                     (eligibility-fail). Was showing 158%/177% before this fix. */}
+                                {/* W-8c: an ABSENT denominator used to render '0%' — a confident
+                                    figure from a missing input (measured live: 24,227 → "0%").
+                                    Absent now renders an honest em-dash. */}
                                 <td className="p-2 text-right">{(() => {
                                   const denom = (ve as any).familyMismatchDenominatorTotal ?? 0;
                                   const num = nr.familyFilterMismatch ?? 0;
-                                  return denom > 0 ? `${Math.round(num / denom * 100)}%` : '0%';
+                                  return denom > 0 ? `${Math.round(num / denom * 100)}%` : <span title="denominator not surfaced by this endpoint">—</span>;
                                 })()}</td>
                               </tr>
                               {/* B-DIAG-387 (#387) OBJ-2 (no-hidden-gates): the three pre-open
                                   gate reasons checkPreOpenGates can emit that previously rendered
                                   nowhere. Guarded `?? 0` so the shared panel renders 0 harmlessly
                                   for any class whose endpoint doesn't (yet) surface them. */}
-                              <tr className="border-b hover:bg-muted/30">
-                                <td className="p-2">Re-entry Cooldown</td>
-                                {hasPoolDetail && <td className="p-2 text-right text-orange-500">{poolCell(quantDetail?.['reentry_cooldown'] ?? 0, quantEvals)}</td>}
-                                {hasPoolDetail && <td className="p-2 text-right text-orange-500">{poolCell(patternDetail?.['reentry_cooldown'] ?? 0, patternEvals)}</td>}
-                                <td className="p-2 text-right text-orange-500">{fmt(nr.reentryCooldown ?? 0)}</td>
-                                <td className="p-2 text-right">{pct(nr.reentryCooldown ?? 0)}%</td>
-                              </tr>
-                              <tr className="border-b hover:bg-muted/30">
-                                <td className="p-2">Price Past Stop (entry no longer viable)</td>
-                                {hasPoolDetail && <td className="p-2 text-right text-orange-500">{poolCell(quantDetail?.['price_past_stop'] ?? 0, quantEvals)}</td>}
-                                {hasPoolDetail && <td className="p-2 text-right text-orange-500">{poolCell(patternDetail?.['price_past_stop'] ?? 0, patternEvals)}</td>}
-                                <td className="p-2 text-right text-orange-500">{fmt(nr.pricePastStop ?? 0)}</td>
-                                <td className="p-2 text-right">{pct(nr.pricePastStop ?? 0)}%</td>
-                              </tr>
-                              <tr className="border-b hover:bg-muted/30">
-                                <td className="p-2">Price Past Target (entry no longer viable)</td>
-                                {hasPoolDetail && <td className="p-2 text-right text-orange-500">{poolCell(quantDetail?.['price_past_target'] ?? 0, quantEvals)}</td>}
-                                {hasPoolDetail && <td className="p-2 text-right text-orange-500">{poolCell(patternDetail?.['price_past_target'] ?? 0, patternEvals)}</td>}
-                                <td className="p-2 text-right text-orange-500">{fmt(nr.pricePastTarget ?? 0)}</td>
-                                <td className="p-2 text-right">{pct(nr.pricePastTarget ?? 0)}%</td>
-                              </tr>
+                              {/* B-FILTER-DIAG-PAPER W-8b: the Total cell used to read `nr.<camel>`
+                                  — a DIFFERENT object than the lane cells' detail maps — and those
+                                  three nr fields never populate, so Total rendered 0 beside nonzero
+                                  lanes (measured live: Price Past Target 438/68/0). Total now falls
+                                  back to the lane sum FROM THE SAME PAYLOAD when nr is absent/zero.
+                                  (The Section-Total 106% ⚠ above is NOT part of this fix — that row
+                                  is the B-NEW-11 drift DETECTOR working as designed; the double-count
+                                  it is flagging is a separate server-side taxonomy finding.) */}
+                              {([
+                                ['Re-entry Cooldown', 'reentry_cooldown', nr.reentryCooldown],
+                                ['Price Past Stop (entry no longer viable)', 'price_past_stop', nr.pricePastStop],
+                                ['Price Past Target (entry no longer viable)', 'price_past_target', nr.pricePastTarget],
+                              ] as const).map(([label, key, nrVal]) => {
+                                const laneSum = (quantDetail?.[key] ?? 0) + (patternDetail?.[key] ?? 0);
+                                const total = (nrVal ?? 0) > 0 ? (nrVal as number) : laneSum;
+                                return (
+                                  <tr key={key} className="border-b hover:bg-muted/30">
+                                    <td className="p-2">{label}</td>
+                                    {hasPoolDetail && <td className="p-2 text-right text-orange-500">{poolCell(quantDetail?.[key] ?? 0, quantEvals)}</td>}
+                                    {hasPoolDetail && <td className="p-2 text-right text-orange-500">{poolCell(patternDetail?.[key] ?? 0, patternEvals)}</td>}
+                                    <td className="p-2 text-right text-orange-500">{fmt(total)}</td>
+                                    <td className="p-2 text-right">{pct(total)}%</td>
+                                  </tr>
+                                );
+                              })}
                             </tbody>
                           </table>
 
