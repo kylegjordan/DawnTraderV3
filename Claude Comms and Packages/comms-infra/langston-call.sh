@@ -35,7 +35,7 @@ OUTPUT_FILE=""
 FIRST_BYTE_TIMEOUT=60
 IDLE_TIMEOUT=120
 MAX_ATTEMPTS=5
-MODEL="claude-opus-4-7"
+MODEL="claude-fable-5[1m]"
 LOG=/var/log/langston-call.log
 STDERR_LOG=/var/log/langston-call.stderr
 STREAM_DIR=/tmp/langston-stream
@@ -101,6 +101,7 @@ while [ $attempt -lt $MAX_ATTEMPTS ]; do
   : > "$STDERR_LOG"
 
   cd /home/langston
+  /usr/local/bin/langston-log-loaded langston-call || true
   cat "$PROMPT_FILE" | /usr/bin/claude -p \
     --session-id "$UUID" \
     --model "$MODEL" \

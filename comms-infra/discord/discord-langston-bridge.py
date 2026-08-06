@@ -66,7 +66,7 @@ STATE_FILE = "/home/langston/.discord-langston-bridge-state.json"
 LOG_FILE = "/var/log/discord-langston-bridge.log"
 VOICE_ARCHIVE_ROOT = "/var/log/cc-bridge-voice-archive/discord-langston"
 CLAUDE_TIMEOUT = 900
-CLAUDE_MODEL = "claude-opus-4-8[1m]"
+CLAUDE_MODEL = "claude-fable-5[1m]"
 # Circuit breaker (Langston review 1b): if this many CC-bot-authored turns occur with no
 # intervening Kyle message, stop auto-replying + post one alert. Hard floor under [SILENT].
 # EFFECTIVELY REMOVED (Kyle directive 2026-06-20): a normal overnight CC↔Langston review run
@@ -141,9 +141,61 @@ def save_state(state):
     Path(STATE_FILE).write_text(json.dumps(state, indent=2))
 
 
+REVIEW_REMOTE = "https://github.com/kylegjordan/DawnTraderV3.git"
+REVIEW_BRANCH = "migration/aws-supabase"
+
+
+def resolve_review_ref():
+    """Return the current review-branch head sha from GitHub, or None.
+
+    Reads GitHub directly (git ls-remote) — no local repo, nothing to drift.
+    """
+    try:
+        r = subprocess.run(
+            ["git", "ls-remote", REVIEW_REMOTE, "refs/heads/" + REVIEW_BRANCH],
+            capture_output=True, text=True, timeout=60)
+        if r.returncode != 0:
+            return None
+        parts = (r.stdout or "").split()
+        return parts[0] if parts else None
+    except Exception:
+        return None
+
+
+REVIEW_SOURCE_NOTE = (
+    "[REVIEW SOURCE — read at the review branch on GitHub, commit %s. This is the "
+    "graded ref. Do NOT read from /mnt/gdrive or any local working copy (retired).\n"
+    " - Single file: read  https://raw.githubusercontent.com/kylegjordan/DawnTraderV3/%s/<path>  "
+    "with the Bash tool (curl -s <url>) or WebFetch.\n"
+    " - Whole-tree search (every caller / appears-nowhere-else / blast-radius census, "
+    "which GitHub will not serve): run  dt-review grep '<pattern>'  |  dt-review show <path>  |  "
+    "dt-review ls  — it pulls from GitHub FIRST, then searches the Hetzner backup at this exact "
+    "head, so it is never stale. If it prints FETCH FAILED, do not assert file contents.]\n\n"
+)
+
+REVIEW_SOURCE_FAIL_NOTE = (
+    "[!! COULD NOT RESOLVE THE REVIEW-BRANCH HEAD from GitHub just now. Before asserting what any "
+    "file contains, verify the exact commit yourself (git ls-remote, or  dt-review ref ) and read "
+    "at it; if you cannot, say so plainly and decline to rule on file contents.]\n\n"
+)
+
+
 def invoke_claude(prompt, session_id, state=None, _retry_count=0):
     """Identical contract to the Telegram bridge: claude -p with a stable session-id,
     Opus 4.8 [1m], acceptEdits; auto-rotate UUID once on 'already in use'."""
+    try:
+        subprocess.run(["/usr/local/bin/langston-log-loaded", "discord-bridge"], timeout=5, check=False)
+    except Exception:
+        pass
+    # --- point Langston at the review branch on GitHub; he reads off it, no checkout ---
+    _ref = resolve_review_ref()
+    if _ref:
+        log("review ref resolved to %s" % _ref[:9])
+        prompt = (REVIEW_SOURCE_NOTE % (_ref, _ref)) + prompt
+    else:
+        log("REVIEW REF RESOLVE FAILED")
+        prompt = REVIEW_SOURCE_FAIL_NOTE + prompt
+
     env = os.environ.copy()
     env["CLAUDE_CODE_OAUTH_TOKEN"] = OAUTH_TOKEN
     env["HOME"] = WORK_DIR
