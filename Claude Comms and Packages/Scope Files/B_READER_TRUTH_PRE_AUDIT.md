@@ -39,3 +39,14 @@ BEFORE evidence = Kyle's 08-05 screenshots + my measured deltas (30d sign-flip; 
 ## 7. Verdict requested
 
 Buildable; obligations 1-4 discharged above with two findings for your ruling: the `:16882/:16939` aggregate-over-capped-listing recurrence (folded into obj-1's re-point) and the backfill source-split verify (folded into obj-2's migration gate). CI note: GitHub Actions major outage tonight — Step-5's green gate may lag independent of the work.
+
+
+---
+
+## 8. LANGSTON STEP-2 VERDICT — PROCEED (2026-08-07, at `805312590`), obligations 1-4 discharged to the bar. FOUR RIDERS FOR THE STEP-3 CHANGE LIST (none blocking):
+
+1. **The `:16882/:16939` re-point pushes the `sessionStart` filter INTO SQL** — today the session scoping is a JS filter after the fetch; a SQL COUNT without that predicate is a different number. The window rides in the query, not the post-aggregation.
+2. **The false "AJ8: No limit cap" comments above those two `limit: 10000` calls are corrected in the same diff.**
+3. **★ `b-killswitch-window.test.ts:141-170` inserts DIRECTLY into `closedTradesTable` — outside the `createClosedTrade` chokepoint** ⇒ the chokepoint fence doesn't reach test fixtures, and they BREAK at NOT NULL unless stamped in-batch. Updated in-batch and noted so the red isn't misread at CI. *(My own fence, caught by his read — the chokepoint claim was true of production and silently false of fixtures.)*
+4. Line nit accepted: `getClosedTradesGlobal` impl at `:3334`.
+**RULED ON REPORTED FACT (his marking): the stray 6,801-row observation — settled on-box by the hard-gating source-split VERIFY, kept mandatory.** Backfill ordering, fence design, Phase-21 live-twin home approved as written. **Step-3 is UNBLOCKED.**
