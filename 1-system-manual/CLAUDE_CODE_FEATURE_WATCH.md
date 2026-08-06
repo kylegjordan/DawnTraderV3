@@ -14,6 +14,10 @@
 
 **What we run (keep current):** CC main-loop = the app-selected model; Langston = `claude-opus-5[1m]` (since 2026-07-27).
 
+## STANDING-WATCH DISCHARGE — Fable 5 back in Max (Kyle, Discord, 2026-08-06 ~20:5xZ)
+
+Kyle confirmed: **Fable 5 is part of the Max plan again, up to 50% of the weekly limit**, and authorized Langston's switch to it (executed by INFRA Claude, both sites, split closed). **The standing daily watch for this exact event (armed 2026-07-07) is DISCHARGED** — the daily check no longer watches for Max-inclusion; it reverts to the normal newer-model/feature scan. Residual watch: the 50%-of-weekly-limit consumption is Kyle's to manage; surface only if an official plan change alters the terms.
+
 ## RUN LOG — the committed liveness artifact (B-RULES-1b C1; newest first)
 
 > **Every run appends ONE dated row here and commits it — including silent no-finding runs.** This is the artifact that proves the mechanism lives, readable by Langston and Kyle at the ref (the local task registry’s `lastRunAt` is visible only on the desktop). A row missing for >48h = the task is dead — that absence is the alarm, and it is readable by anyone.
