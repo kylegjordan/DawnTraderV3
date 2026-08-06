@@ -1,6 +1,6 @@
-# B-TRADE-TIER-REGISTER — COMPLETION REPORT (#599) — DRAFT pending CI-green + deploy + Step-7
+# B-TRADE-TIER-REGISTER — COMPLETION REPORT (#599)
 
-**Owner:** CC-A · change-class: architecture · **Status at draft time: BUILT + Step-4 APPROVED; awaiting CI 4/4 on `1e014aa47` (GitHub Actions queue incident, evening 2026-08-06), then deploy + the Step-7 staging proof. This header is replaced with the final gates at close.**
+**Owner:** CC-A · change-class: architecture · **CLOSED-PENDING-KYLE-ACK 2026-08-06/07.** CI 4/4 run `31128921668` on `8e529f73f` (head-matched, contains the mock fix; graded during the GitHub Actions major-outage recovery) · `dt-deploy 8e529f73f… --by cc-a` at 22:35:37Z (sha asserted, engine resumed, migrate in-chain 2,226ms) · **Step-7 PROOF PASSED end-to-end** (below).
 **Scope:** r3 (@ `ad7460a1c`) · Pre-audit: r3 + folded accept-conditions · **Langston gates:** Step-1 r1→r3 PROCEED · Step-2 r1→r3 ACCEPTED (his censuses caught: my dead-deadline urgency, the mis-mapped deleter census, the missed reader, the anneal driver itself) · Step-4 APPROVED at `f3d5fa54a` with notes 1+3 landed in-batch and verified · the CI-red mock fix verified by him at `1e014aa47`.
 
 ## WHAT SHIPPED
@@ -12,10 +12,11 @@ The B75 plain lane gains an **archive-before-delete mode**: age-eligible rows of
 
 **2. The crash-window reconciliation path.** Between the tally UPDATE and the delete's completion there is a crash window: survivors of an interrupted delete get RE-tallied next run — a permanent over-count in the anneal's denominator. Direction is conservative (an over-count TIGHTENS the exploration floor — the lane subsidizes less, never more), magnitude is bounded by one run's exploration closes, and **the truth is recountable at any time from the warm JSONL objects themselves** (each archived range's exploration-close count is derivable by replaying the reader's predicate over the exported rows; the manifest rows locate every object). Reconciliation is thus an offline audit, never a live emergency.
 
-## VERIFICATION (final numbers land at close)
-- CI: 4/4 on `1e014aa47` (pending — the earlier red was MY test-compatibility gap: the fault-on-absence fired inside a pre-existing suite's mocks; fixed test-only, +6/−0, full local suite 2,492 green; the run-only-my-file habit is the named lesson).
-- Step-6: `dt-deploy 1e014aa47… --by cc-a` (the new session-identity form).
-- Step-7: the Wave-C-pattern end-to-end proof on ONE real range per table — export → manifest → warm download + checksum match → delete → range readable from warm — PLUS the anneal-invariance assertion (`closedExplorationCount` pre == post across the archive, per class), which is Langston's condition-3 fence run against reality.
+## VERIFICATION — FINAL
+- **CI:** run 31128921668 SUCCESS, all four jobs, on `8e529f73f` (ancestry-contains the fix `1e014aa47`). The one real red en route was MY test-compatibility gap (fault-on-absence firing inside a pre-existing suite’s mocks; fixed test-only; the run-only-my-file habit is the named lesson); two other "failures" that evening were outage artifacts (a cancel-cascade wearing the failure conclusion; a pre-fix backlog replay), decomposed per-job for the crew.
+- **Step-6:** the new `--by cc-a` session-identity deploy form; migration applied in-chain (seeds + tally keys + the partial index, all read back live).
+- **Step-7 (synthetic aged rows through the REAL machinery — no real row is age-eligible until 2027-05-11):** 2 `closed_trades` + 1 `vts_open_trades` rows dated 2024-06-01 → sweep ran → **manifest rows `verified` with exact row counts (2, 1) · warm object `supabase://dt-archive/warm/closed_trades/2024-06-01.jsonl.gz` checksum `59c46379…a8bb` · deletes fired ONLY behind the all-verified gate · the exploration tally moved exactly +1 via the reader’s predicate · THE INVARIANCE HELD: closedExplorationCount 227 pre == 227 post (live 227→226, tally 0→1)** — Langston’s condition-3 fence run against reality. The delete-only exemption table processed 0 rows (behavior unchanged).
+- **Synthetic cleanup, read back:** the +1 tally reversed to 0 (provenance in `updated_by`); the two synthetic manifest rows deleted. Two tiny synthetic warm objects remain at the recorded paths — harmless, removable by any storage-hygiene pass, noted so a future audit reads them as this proof, not as data.
 
 ## GOVERNANCE FILES CHANGED (cumulative at close)
 Scope r1-r3 + pre-audit r1-r3 · `RUNNING_ISSUES` (#599 close-status; the 2027 `getActiveEngineStats` obligation with its self-rescheduling alert; #657 filings/transfer) · `STORAGE_POLICY.md` (exemption + the trade tables' registration) · `DELETED_COMPONENTS_LOG.md` (both removals) · `SYSTEM_IMPACT_MAP.md` (the sweep's new mode + both tables — at close) · `SYSTEM_MANUAL.md` (retention chapter: the trade tables' tiering — at close) · `BATCH_CATALOG` + `PHASE_HISTORY` (at close) · migration + MANIFEST · Langston MEMORY (at close) · the board card.
