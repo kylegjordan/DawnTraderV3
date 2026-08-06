@@ -69,7 +69,7 @@ A batch is NOT done until every numbered objective from the scope is verifiably 
 
 5. **GitHub Push + CI** — Push to GitHub. CI runs 4 jobs: TypeScript Check, Test Suite, Build, Docker Build. **All 4 must be GREEN.** Do not push on top of red CI.
 
-6. **Staging Deploy** — `ssh root@188.245.193.8 "su - deploy -c 'cd /home/deploy/dawntrader && git pull origin migration/aws-supabase && npm run build && pm2 restart dawntrader'"`. Verify HTTP 200.
+6. **Staging Deploy** — `ssh root@188.245.193.8 "su - deploy -c 'dt-deploy <full-40-char-sha>'"` (**B-DEPLOY-LOCK #649: `dt-deploy` is THE deploy path — NEVER the raw git-pull/build/restart chain.** It locks against concurrent deploys, refuses a dirty worktree, runs `db:migrate` in-chain per the SYSTEM_MANUAL invariant, conditionally `npm ci`s on a lockfile change, and asserts sha-identity + ENGINE RESUMED before recording. `--pre-restart '<npm script>'` for batch-specific steps. **The sha is the FULL 40-char reviewed commit — #621.**)
 
 7. **First-Pass Verification (CC)** — Check PM2 logs, psql to Supabase, UI via Claude-in-Chrome, CI status, server health. Capture evidence.
 
@@ -428,7 +428,7 @@ When a CC session's transcript grows too large (context overhead climbs; ~195MB 
 ### Staging server commands
 ```bash
 # Deploy:
-ssh root@188.245.193.8 "su - deploy -c 'cd /home/deploy/dawntrader && git pull origin migration/aws-supabase && npm run build && pm2 restart dawntrader'"
+ssh root@188.245.193.8 "su - deploy -c 'dt-deploy <full-40-char-sha>'"   # B-DEPLOY-LOCK #649 — the raw chain is RETIRED; dt-deploy is the only deploy path
 
 # Logs:
 ssh root@188.245.193.8 "su - deploy -c 'pm2 logs dawntrader --lines 50 --nostream'"

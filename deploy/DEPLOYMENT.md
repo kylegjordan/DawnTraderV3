@@ -129,9 +129,9 @@ docker compose up -d --build  # Rebuild and restart
 | Workflow | Trigger | What It Does |
 |----------|---------|--------------|
 | `ci.yml` | PR to any branch, push to dawntrader-v4/main | TypeScript check, test suite, build verification, Docker build |
-| `deploy-staging.yml` | Push to `staging` branch | SSH to EC2, pull, build, restart PM2 (TEMPLATE — requires setup) |
+| ~~`deploy-staging.yml`~~ | **DELETED 2026-08-05 (B-DEPLOY-LOCK #649 OBJ-8, rule 18)** — dormant EC2-era template, zero runs ever; archive at `1-system-manual/_archive/deleted-code/deploy-staging.yml.removed`. **Staging deploys use `dt-deploy` on the box, not CI.** |
 
-### Required GitHub Secrets (for deploy-staging.yml)
+### ~~Required GitHub Secrets (for deploy-staging.yml)~~ — OBSOLETE: the workflow was deleted (B-DEPLOY-LOCK #649); no secrets are required or should be created
 | Secret | Description |
 |--------|-------------|
 | `STAGING_SSH_KEY` | SSH private key for EC2 staging instance |

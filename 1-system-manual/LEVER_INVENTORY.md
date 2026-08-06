@@ -508,7 +508,7 @@ Rows for these are already seeded in `module_constants`; only source-side wiring
 
 4. Langston code-level review of full diff before push (Commit A and B separately).
 5. GitHub push + CI green (Test Suite + Build + Docker Build min).
-6. Staging deploy: `git pull && npm run build && pm2 restart dawntrader`.
+6. Staging deploy: `dt-deploy <full-40-char-sha>` (B-DEPLOY-LOCK #649 — locked, migrate-in-chain, post-conditions asserted; the raw chain is retired).
 7. CC first-pass verification: PM2 logs clean, all rows queryable, source literals removed.
 8. Langston second-pass verification.
 9. Iterate if any objective not met.

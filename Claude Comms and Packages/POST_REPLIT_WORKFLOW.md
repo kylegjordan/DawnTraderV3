@@ -159,7 +159,7 @@ If CI fails, Claude Code fixes and re-pushes. Langston is informed of the fix.
 Claude Code updates the Hetzner staging server via SSH:
 
 ```bash
-ssh deploy@<staging-host> 'cd /home/deploy/dawntrader && git pull && npm ci && npm run build && pm2 restart dawntrader'
+ssh root@188.245.193.8 "su - deploy -c 'dt-deploy <full-40-char-sha>'"   # B-DEPLOY-LOCK #649: dt-deploy replaces this chain — npm ci is now CONDITIONAL on a lockfile diff, in-chain
 ```
 *(Current staging host: 188.245.193.8)*
 
