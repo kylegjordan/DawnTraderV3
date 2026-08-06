@@ -1,4 +1,6 @@
-# B-TRADE-TIER-REGISTER — PRE-AUDIT (Step-2)
+# B-TRADE-TIER-REGISTER — PRE-AUDIT r2 (Step-2)
+
+> **r1→r2 (Langston blocker):** the r1 reader census covered the WRONG table's readers — the table gaining its first-ever age-deleter got the thinner census. r2 enumerates EVERY reader of BOTH tables with its date bound stated per site, and dispositions the two unbounded readers found.
 
 **Against scope r3 (@ `ad7460a1c`, Step-1 PROCEED).** CC-A · 2026-08-06.
 
@@ -17,8 +19,30 @@ The B75 sweep + tier machinery: SIM's storage entries (Wave A/C rows — cold ro
 `vts_open_trades`: `closed boolean NOT NULL DEFAULT false` · `closed_at timestamptz NULL` · `state varchar(32)` (entry-mode axis — NOT the aging predicate, per Step-1 finding 5) · the r3 keys (`chosen_entry_mode`/`entry_fee_rate`/`maker_limit_price`/`maker_deadline`). Indexes: pkey + the B79.0g-tx partial `WHERE closed=false` — **the archive predicate's mirror-complement index `(closed_at) WHERE closed=true` does NOT exist → the scope's item (i) stands.**
 `closed_trades`: `opened_at NOT NULL`, `closed_at NULL` — **and `closed_trades_closed_at_idx` btree(closed_at) ALREADY EXISTS** → the scope's "499 rows needs none" is superseded by better news: the index is already there; no new index needed on either count. NULL `closed_at`: 3/499 (the B7.2c never-filled maker pendings) — excluded from aging + logged, per scope (iii).
 
+## 4b. READER CENSUS, PER SITE, BOUNDS STATED (the r2 blocker fix)
+
+**`closed_trades` (12 read sites):**
+| site | bound | verdict |
+|---|---|---|
+| `ready_to_buy_service.ts:2215` (cooldown check) | `closed_at >= now() - cooldown_min` (minutes) | safe |
+| `exploration-lane.ts:92` (daily cap) | `opened_at >= today` | safe |
+| **`exploration-lane.ts:120` (`closedExplorationCount` — THE ANNEAL DRIVER)** | **NONE — all-time cumulative** | **DISPOSITIONED BELOW** |
+| `storage.ts:3141` `getClosedTrade` (by id) | id lookup | aged rows miss hot — inherent to archiving; warm read-back covers audits (stated, accepted) |
+| `storage.ts:3166/:3173` (by-id family) | id | same |
+| `storage.ts:3210` `getRealizedPnlSince` | caller `since` (current callers pass the #618 anchor dates — recent) | safe; noted as caller-bounded |
+| `storage.ts:3318/:3322/:3349` `getClosedTrades` (UI pagination) | `ORDER BY closed_at DESC` paginated | recent-first; >365d pages miss hot — inherent, accepted |
+| **`storage.ts:3524` (Phase 27.F.15.B.2 global stats)** | **NONE — whole-table select; `totalPnl` sums ALL rows** | **DISPOSITIONED BELOW** |
+
+**`vts_open_trades` (8 read sites):** `routes/vts.ts:1691` + `routes.ts:7929/:8113` — 24h windows, safe · `exit-strategy-replay:256` — by id · `factor-replay-core:167` — caller `since` (replay ranges; pre-window ranges hit the warm read-back, which is the design) · `vts-trade-persistence:339/:399` — `closed = false` (rehydrate; never touches aged rows) · **`asset-name-resolver.ts:316-320` — unbounded `DISTINCT symbol`: NAMED AND CLOSED — benign because resolved names persist in `asset_names`** (a symbol absent from hot still resolves from the persisted store; no correctness dependency on aged rows; the query simply returns fewer already-known symbols).
+
+## 4c. THE TWO UNBOUNDED READERS — DISPOSITIONS WITH REASONING (rule-24 bucket 2; Langston rules)
+
+**(1) The anneal driver (`exploration-lane.ts:113-122`) — PROPOSED: option (b), a PERSISTED ARCHIVED TALLY.** Reasoning: the anneal is a monotone ratchet BY CONSTRUCTION today (all-time count; the floor only tightens) — that is its observable intent. Option (a) (declare 365d-rolling the intended denominator) would CHANGE LIVE TRADING BEHAVIOR (the floor would loosen in slow periods) — a calibration decision belonging to the exploration lane's arc and Kyle, not smuggled inside a storage batch. Option (b) is behavior-preserving AND intent-preserving: **at archive time, before deleting a range, the sweep computes that range's exploration-close count (the reader's EXACT predicate, per `asset_class`) and adds it to persisted `module_constants` tallies (`exploration_lane.closed_count_archived.<class>`); `closedExplorationCount` returns live-count + tally.** The counter stays monotone across archives; if the lane's owner later WANTS a rolling denominator, that is a one-line change made deliberately in their arc.
+
+**(2) The global stats aggregate (`storage.ts:3524`) — PROPOSED: cross-ref obligation on #618, not a fix here.** Its whole-table `totalPnl` would silently shrink as ranges age. #618 (the dashboard-truthfulness arc, decisions taken, build pending) already settled the direction AWAY from whole-table sums (anchor + since-anchor). Proposed: a RUNNING_ISSUES cross-ref REQUIRING #618's build (or a successor) to convert `:3524` to the anchor form BEFORE the first range ages (2027-05-11) — recorded as a dated dependency with an owner, per §13; this batch does not gate on it (9 months of runway), and the sweep's registration note names the dependency so 2027 cannot arrive surprised.
+
 ## 5. BLAST RADIUS
-Files: `b75-retention-sweep.ts` (the `PlainRetentionTableSpec` + `sweepPlainTables` gain the archive mode + `extraPredicate`) · `vts-trade-persistence.ts` (function removal) · `server/index.ts` (call removal) · one migration (2 `data_lifecycle` seeds + 1 partial index) · `STORAGE_POLICY.md` (+ the probe-history exemption line) · SIM/BATCH docs · the dead unit-suite removal. Consumers of archived-then-deleted rows: the VTS learning paths read RECENT rows (well inside 365d) and `exit_decision_archive` carries the per-close outcomes independently (already tiered) — no reader depends on >365d-old `vts_open_trades` rows (asserted from the readers enumerated in §2; the replay services read explicit date ranges and will hit the warm archive for pre-window ranges, which is exactly what the manifest read-back path provides).
+Files: `b75-retention-sweep.ts` (the `PlainRetentionTableSpec` + `sweepPlainTables` gain the archive mode + `extraPredicate`) · `vts-trade-persistence.ts` (function removal) · `server/index.ts` (call removal) · one migration (2 `data_lifecycle` seeds + 1 partial index) · `STORAGE_POLICY.md` (+ the probe-history exemption line) · SIM/BATCH docs · the dead unit-suite removal. Consumers of archived-then-deleted rows: see §4b — EVERY reader of BOTH tables enumerated with its bound per site; the two unbounded readers dispositioned in §4c. (r1's blanket "readers enumerated in §2" phrasing is retracted — it was scoped to the wrong table and let the anneal driver through.)
 
 ## 6. RISK
 Medium-low: the delete arm is gated on verified manifest rows (the `:698-701` pattern by reference); the removal's state-write census is clean; nothing races (first GC bite 2027-05-11); rollback = revert + the archived `.removed` function restorable from git.
