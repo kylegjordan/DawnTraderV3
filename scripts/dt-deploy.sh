@@ -22,7 +22,7 @@
 # What this deliberately does NOT do:
 #   - push anything (staging is TERMINAL — §7.1; this script contains no push
 #     and never will)
-#   - pm2 save (#650 — homed to P19-B12, NOT absorbed here)
+#   - pm2 save (#652 — homed to P19-B12, NOT absorbed here; renumbered from a colliding #650)
 #   - break its own stale lock
 # ═════════════════════════════════════════════════════════════════════════════
 set -euo pipefail
