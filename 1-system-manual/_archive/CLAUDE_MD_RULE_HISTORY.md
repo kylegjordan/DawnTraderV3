@@ -451,3 +451,20 @@ authoring turn, and it is also a second witness for §7.1 step 0.
 ⇒ **#564's conclusion stands on the CC-side cost alone and was NOT withdrawn.** ⇒ **But his side is not free: that ~61 KB file loads on every one of his invocations. The two sides are separate problems with separate fixes.**
 ★ **CC-side figures, dated 2026-08-01 and deliberately kept OUT of `CLAUDE.md`:** the repo file measured **138,093 B / 664 lines** before this batch and **139,952 B / 666 lines** after it.
 ⚠️ **AND THAT IS THE LESSON THIS ENTRY EXISTS FOR (Langston, Step-4): THE FIRST VERSION OF THE F-C FIX STAMPED "664 lines / 138,093 B" INTO THE FILE THAT THE SAME COMMIT MADE 666 / 139,952.** ⇒ **a number that measures the artifact it lives INSIDE goes stale on the next write to that artifact — it cannot be kept current by bumping it, because the bump is itself a write.** **Self-referential measurements belong in a dated record, never inline.** Same family as the stale-gauge alert (#629) and the pre-failure projection baked into a scheduled gate (#642).
+
+
+---
+
+## §5.22 — Rule 22 GOVERNED-READ: the origin incidents + the full two-layer mechanism description (relocated B-RULES-1b C2, 2026-08-06)
+
+**The recurring failure the rule kills:** asserting an ABSENCE or a system-fact from a FAILED or WRONG read — reading the wrong path, or `2>/dev/null`-suppressing the stderr that would have said "path/ref does not exist," then treating the empty result as "it isn't there."
+
+**The two origin incidents (both CC-A):**
+- **2026-07-10:** the stale-ledger "no na-skip rows" error — a suppressed-stderr read of the exceptions ledger at a wrong ref returned empty, reported as absence.
+- **2026-07-13:** the false "no GOVERNANCE_EXCEPTIONS entries / no scope at origin" claims — same shape, which triggered Kyle's directive making the rule hook-enforced.
+
+**The two enforcement layers as originally described in `CLAUDE.md` rule 22 (moved here at the C2 conversion; the operative reach statement stays in the rule):**
+(a) a **PreToolUse hook** (`.claude/hooks/guard-governed-read.mjs`, wired in `.claude/settings.local.json`) that **BLOCKS** any Bash command combining a git object read (`git show|cat-file|ls-tree`) with stderr suppression (`2>/dev/null|NUL`) — the exact dangerous shape — and tells the session to remove the suppression and read at the real path/ref; **fail-open** (only ever blocks that one shape, never breaks a session; any parse problem exits 0).
+(b) a **SessionStart hook** (`.claude/hooks/session-reminder.mjs`, matcher `startup|resume|compact`) that re-injects the rule every start/resume/compaction so it survives context loss.
+
+**Known limitation, measured 2026-08-06 during the C2 conversion itself:** the guard parses the raw command string and cannot distinguish QUOTED DOCUMENT CONTENT from an actual read — it blocked the very edit writing this rule's new text because the heredoc contained the patterns as prose. Mitigation: compose such edits in a file and run the file (the same file-based mitigation as the backtick-eating class, #623).
