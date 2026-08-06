@@ -126,7 +126,11 @@ function ScannerCycleHeader({ data, isLoading }: { data: XstocksFilterDiagnostic
   const badges = s ? (
     <>
       <Badge variant={running ? "default" : "destructive"}>{running ? "Running" : "Stopped"}</Badge>
-      <Badge variant={arcaOpen ? "default" : "secondary"}>{arcaOpen ? "ARCA Open" : "ARCA Closed"}</Badge>
+      {/* B-FILTER-DIAG-PAPER W-5 (rule 17): the gate IS the 24/5 window
+          (scanner.ts isXstockMarketOpenUTC — "weekend close"); only the LABEL said
+          ARCA (legacy name; the wire field lastArcaOpen is a deliberate KEEP —
+          renaming a serialized field is a response-shape change, not copy). */}
+      <Badge variant={arcaOpen ? "default" : "secondary"}>{arcaOpen ? "Trading Window Open (24/5)" : "Weekend Closure"}</Badge>
       {s.hostileSimActive && <Badge variant="destructive">Hostile Sim</Badge>}
     </>
   ) : undefined;
@@ -135,7 +139,7 @@ function ScannerCycleHeader({ data, isLoading }: { data: XstocksFilterDiagnostic
       <ScannerCard
         testId="xstocks-scanner-panel"
         title="xStock Scanner"
-        subtitle={arcaOpen ? "always running (ARCA open)" : "extended-hours only (ARCA closed)"}
+        subtitle={arcaOpen ? "always running (24/5 window open)" : "paused (weekend closure — Fri close → Sun open)"}
         statusBadges={badges}
         pairsLastScan={s?.pairsScannedLastCycle}
         perCycleTarget={s?.cycleBatchSize ?? null}
@@ -264,9 +268,19 @@ export function XstocksTab({ gateDisposition = 'tag', modeTail = null }: {
     <div className="space-y-4" data-testid="xstocks-tab">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-semibold">xStocks (xstock_spot) — VTS Observation</h2>
+          {/* B-FILTER-DIAG-PAPER W-4: disposition-aware header — the VTS-era framing
+              ("VTS Observation · passive learning telemetry") was rendering on the
+              ACTIVE Paper/Live tabs. Enforce = active-trading diagnostics; tag keeps
+              the VTS framing (its provenance line stays, it is that lane's truth). */}
+          <h2 className="text-xl font-semibold">
+            {gateDisposition === 'enforce'
+              ? `xStocks (xstock_spot) — ${modeTail === 'live' ? 'Live' : 'Paper'} Active-Trading Diagnostics`
+              : 'xStocks (xstock_spot) — VTS Observation'}
+          </h2>
           <p className="text-sm text-muted-foreground">
-            Phase 24 closed 2026-05-10 · VTS + passive learning telemetry · 60-minute bar parity with crypto (B-NEW-34, 2026-05-15) · 4-hour pre-warm staged pending B-NEW-35 source dedup · ORB disabled (intraday-bar strategy)
+            {gateDisposition === 'enforce'
+              ? '15-minute bars · 24/5 trading window (weekend closure Fri close → Sun open) · ORB disabled (intraday-bar strategy)'
+              : 'Phase 24 closed 2026-05-10 · VTS + passive learning telemetry · 60-minute bar parity with crypto (B-NEW-34, 2026-05-15) · 4-hour pre-warm staged pending B-NEW-35 source dedup · ORB disabled (intraday-bar strategy)'}
           </p>
         </div>
       </div>
@@ -303,9 +317,10 @@ export function XstocksTab({ gateDisposition = 'tag', modeTail = null }: {
             Rolling Aggregates, VTS Evaluation Detail (by-strategy), Setup Nulls, Pre-Eval Skips, Post-Signal Rejections,
             and Filter Metric Ranges. <strong>xstock pipeline is at functional crypto parity as of B79.0m.b2 (2026-05-11)</strong>
             — parallel pattern-global + pattern-IMF gate runs alongside the 5 family lanes; a pair passing N families plus
-            pattern produces N+1 evaluation entries (lane fan-out). When the xstock market is closed (weekends + US holidays
-            + outside extended hours) the scanner short-circuits at the market-hours gate and all counters read 0 — that is
-            expected behavior. Live data populates during US RTH (14:30 UTC onwards) and extended-hours windows.
+            pattern produces N+1 evaluation entries (lane fan-out). xStocks trade a continuous 24/5 window (Sunday open → Friday
+            close); during the weekend closure and US market holidays the scanner short-circuits at the market-hours gate
+            and all counters read 0 — that is expected behavior. Off-peak hours trade thinner (sparser marks), but they
+            are open trading hours, not downtime.
           </p>
         </CardHeader>
         <CardContent>

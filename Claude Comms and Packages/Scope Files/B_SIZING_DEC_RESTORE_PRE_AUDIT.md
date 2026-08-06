@@ -78,3 +78,15 @@ Pre-audit finds the scope BUILDABLE with **three Step-3 additions**: (a) the two
 ⇒ **BINDING ON STEP-3:** shrinking the tuner's tunable set (§2) is SAFE — it cannot act today. Whether the dormant tuner is itself a rule-18 removal candidate is a SEPARATE scope decision, flagged not smuggled.
 
 **Kyle 2026-08-06 also directed: LIVE-MODE VALUES are deferred — the FIELDS and their plumbing must be correct in both modes (objective 7 unchanged); values come later.** Addition-4's p>e loud-refuse stands regardless (it is field-correctness, not a value choice).
+
+
+---
+
+## 11. r5 EXPANSION — LANGSTON'S STEP-1 RE-RULE: APPROVED IN-BATCH, NO SPLIT. HIS THREE CENSUS ADDITIONS (approval conditioned on their landing here) + TWO INTERIM CONDITIONS:
+
+**CENSUS ADD 1 — `routes.ts:2185-2214` is a MISSING 11.7S APPLICATION SITE:** imports `resolveStrategyMode`/`getModeOverlay`/`getModeStats`/`STRATEGY_MODE_OVERLAYS` and enumerates the legacy trio at `:2212-2214`. Obj-10 named engine/VTS/SQE only. **Disposition required for the endpoint AND any UI panel reading it — prove or sever the UI dependency (rule 18).**
+**CENSUS ADD 2 — the B72 `governance_modes` linkage:** the `confidenceFloor` getter on the overlays reads `governance_modes` (3 rows; `LEVER_INVENTORY.md:548`). Deleting the literals orphans that table + its seed migration + the lever entry ⇒ **obj-10 gets its OWN §9.5(a-ii) state-write census.** **Scope-level statements required, not implementer picks: the interim NORMAL floor's NAMED source (hardcoded vs the `governance_modes` NORMAL row), and the interim `strategyMode` STAMP VALUE** (so the Phase-25 contamination partition reads clean).
+**CENSUS ADD 3 — tests by SUBJECT-vs-PROBE:** `directive-11.7S-strategy-modes.test.ts` dies as a unit (subject = the deleted mechanism); **`b5-amr-body.test.ts:274` uses the dying literal as a PROBE for a surviving B-5 invariant** (no class-less AGGRESSIVE dials) — **disposition each test individually, no blanket delete.**
+**INTERIM CONDITION (i):** the **AMR flip decision gets a §13 home at batch close** — dated or named — so NORMAL-everywhere cannot silently become permanent. **Direction stated honestly: the system is measured pinned-DEFENSIVE today, so the interim means sizes UP ~1.67× and narrower stops until the flip.**
+**INTERIM CONDITION (ii):** the Step-3 values decision to Kyle carries one plain-language line: *until the new per-class mechanism is switched on, there is no defensive damper — sizing and stops run at normal in all weather.*
+**#659 concurrence recorded** (own batch immediately after = the §13 home), with his scope check: if the tuner writes `governance_modes`/overlay values, the one-batch write-into-void ordering is stated explicitly.
