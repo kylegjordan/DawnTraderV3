@@ -2098,7 +2098,13 @@ export class ActiveExecutionEngine {
     // paths feed the same singleton OutcomeFeedbackStore so signal evaluation
     // (active or VTS) reads a unified per-tuple history.
     try {
-      const regimeAtOpen = (position as any).regime;
+      // B-OUTCOME-FEEDBACK-WIRE (#602, 2026-08-06): read the at-open canonical
+      // regime from position metadata (stamped at createActiveOpenPosition beside
+      // the sibling _b67_2_1_* fields). The old `(position as any).regime` cast
+      // read a column that never existed — activeOpenPositions declares none —
+      // so this gate failed on EVERY close and the active path never wrote the
+      // outcome-learning store (store measured 13/13 entries vts_, zero paper_sim).
+      const regimeAtOpen = (position.metadata as Record<string, unknown> | null)?.['regimeAtOpen'] as string | undefined;
       const strategyName = position.strategyName;
       if (regimeAtOpen && strategyName && Number.isFinite(netPnlPercent)) {
         const { outcomeFeedbackStore } = await import('../core/metrics/outcome-feedback-store.js');
@@ -2139,6 +2145,14 @@ export class ActiveExecutionEngine {
             );
           }
         }
+      } else if (!regimeAtOpen) {
+        // B-OUTCOME-FEEDBACK-WIRE (#602) fold-2: instrument the skip. A silent
+        // fall-through here is what hid the dead gate for three months — this
+        // line makes a pre-deploy position / cold-MCE null distinguishable from
+        // "the fix did not ship" in staging logs.
+        console.log(
+          `[B67.4][feedback] skip: no regimeAtOpen (pre-deploy position or cold MCE at open) symbol=${position.symbol} strategy=${strategyName ?? 'n/a'}`,
+        );
       }
     } catch (err) {
       console.warn(
@@ -3471,6 +3485,16 @@ export class ActiveExecutionEngine {
           phaseAgeSeconds: _b67_2_1_ctx?.regime.phaseAgeSeconds ?? null,
           strategyPhaseWeight: _b67_2_1_phaseWeight,
           regimeConfidenceModulated: _b67_2_1_modulatedConf,
+          // B-OUTCOME-FEEDBACK-WIRE (#602, 2026-08-06): the at-open canonical regime
+          // label for the B67.4 close-hook. SAME accessor the orchestrator's read
+          // side uses (signal-orchestrator.ts:1264 symbolCtx?.regime.regime) — key
+          // parity by construction. Deliberately a NEW key: metadata.regime (the
+          // ...signal.metadata spread above) is display-consumed and carries
+          // strategy-stamped pseudo-labels ('decorrelated-hedge', 'counter-trend')
+          // that no read side constructs. This key is canonical-or-null, and the
+          // spread sits ABOVE this block so it can never pre-pollute it (ordering
+          // is load-bearing — Langston Step-1 r3).
+          regimeAtOpen: _b67_2_1_ctx?.regime.regime ?? null,
         }
       });
 
