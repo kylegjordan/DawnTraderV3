@@ -11,8 +11,12 @@
   OPTIONAL fields (`media_paths`, `media_failed`) — READERS census: the wake filter
   (`cc-wake-filter.py`), §10.5 readers, langston-recall's indexer, and the watchdog dedup all
   read `kind`/`text`/ids and tolerate unknown extra fields (json objects, no strict schema).
-- **`discord-langston-bridge.py`** — enqueue: `image_atts` metadata rides the task dict (worker
-  downloads — never the loop). `process_task`: prompt lines appended AFTER `addressed_prompt`
+- **`discord-langston-bridge.py`** — enqueue: `image_atts` metadata set on `base` in
+  on_message (metadata-only on-loop; worker downloads). ⚠ CENSUS CORRECTION (Step-4
+  finding 1): the first diff ASSERTED this writer while not containing it — the reader
+  shipped with no writer and the capability was dead-from-birth. The writer landed in the
+  Step-4 fix commit. Recorded because a census asserting a nonexistent writer is the exact
+  failure the census format exists to catch. `process_task`: prompt lines appended AFTER `addressed_prompt`
   is fully built (all three branches covered); reply path: `extract_attachments` strips/validates
   markers BEFORE the `len<3` ack check and BEFORE the recipient prefix; uploads AFTER the text
   posts. Queue/marker machinery (`lq.*`) reads `response` (the RAW reply) — [[ATTACH]] markers

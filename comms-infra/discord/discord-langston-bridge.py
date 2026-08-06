@@ -304,7 +304,11 @@ def _self_advance(task_q, channel_id, items, prev_task):
 
 # ── B-COMMS-IMAGES: Langston-authored attachments (his invocation-7 condition (d), binding) ──
 ATTACH_RE = re.compile(r"\[\[ATTACH ([^\]\n]+)\]\]")
-ATTACH_ALLOWED_DIRS = ("/home/langston/outbox/", "/opt/langston-memory/exports/")
+# Allowlist entries are realpath'd ONCE at startup (Step-4 note 3): if an allowed dir is
+# itself a symlink, its members realpath elsewhere and every legitimate [[ATTACH]] would
+# refuse — the allowlist must live in the same resolved namespace as the checked paths.
+ATTACH_ALLOWED_DIRS = tuple(os.path.realpath(d) + "/" for d in
+                            ("/home/langston/outbox/", "/opt/langston-memory/exports/"))
 
 
 def extract_attachments(text):
@@ -801,6 +805,13 @@ def build_client(task_q):
             "is_alert": is_alert,
             "is_dm": is_dm,
         }
+        # B-COMMS-IMAGES (Step-4 finding 1 — the reader's WRITER; it was absent from the
+        # first diff and the capability was dead-from-birth): metadata-only capture, on-loop;
+        # the DOWNLOAD stays in the worker (process_task). Set on `base` so text/voice/alert
+        # task kinds all carry it uniformly.
+        _imeta = dc.collect_image_meta(message)
+        if _imeta:
+            base["image_atts"] = _imeta
         if is_alert and not voice:
             task_q.put({**base, "kind": "alert", "content": content})
             log(f"ALERT enqueued: msg {message.id} via alerts webhook")

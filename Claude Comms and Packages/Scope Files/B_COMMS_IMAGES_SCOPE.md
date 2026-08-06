@@ -30,7 +30,15 @@ conditions (d)/(e)/(f), all implemented; his Step-4 on the actual diffs gates th
 
 ## Verification criteria (Step-7/8)
 - Kyle (or a session via `--file`) posts an image → path lands in the inbox jsonl entry;
-  Langston, invoked on that message, describes the image's content correctly (proves native read).
+  Langston, invoked on that message, describes the image's content correctly (proves native
+  read). ★ The test image must ride a message that NAMES Langston — an image-only message
+  never engages his bridge (name gate + empty-content return; by design, Step-4 note 2).
+- At deploy: confirm both allowlist dirs exist as REAL directories (they are realpath'd at
+  bridge startup — a symlinked allowlist dir would refuse everything; Step-4 note 3).
+
+## Known limits (accepted)
+- A voice note that ALSO carries an image loses the image on the CC-inbox side (the voice
+  early-return precedes image capture; Step-4 note 4). Rare; revisit only if it ever bites.
 - Langston emits `[[ATTACH]]` for an allowlisted file → it appears in #general; for a
   NON-allowlisted path → the message posts with the refusal note and no upload.
 - `chmod 000` a saved image → next Langston invocation on it says save/read FAILED, not "no image".
