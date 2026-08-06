@@ -58,3 +58,23 @@ Pre-audit finds the scope BUILDABLE with **three Step-3 additions**: (a) the two
 **His ruling on my (c):** RETIRE the clamp-watch stream **with a tombstone**; do NOT re-point `boundRate` onto a new measurand under the old name (#546 class). **Phase-25 is told its go/no-go criterion needs re-derivation.**
 **His re-derivations of note:** 157 DEFENSIVE×0.6 lines (mine 156 — one landed between reads); **AMR_ACTIVE=0, AGGRESSIVE=0 same files** (negative with a positive control); all 16 dial rows re-read, match seeds; the stability map verified never-AGGRESSIVE **in the map, not the comment**. His own r3 "has been re-tuned" premise recorded as wrong-in-fact.
 **Housekeeping accepted:** next dispatch stages the file per §5.1 or points at repo path + sha explicitly (he read off the ref this time).
+
+
+---
+
+## 10. SUPPLEMENT (Kyle-directed 2026-08-06) — TWO PROVENANCE QUESTIONS, ANSWERED FROM THE BATCH RECORDS
+
+**Q1 — Is Phase 11 (11.7S) referenced in the AMR for COMBINED use? NO — the AMR was designed to SUPERSEDE it, and says so in its own scope. Kyle's supersession read is CONFIRMED.**
+- `SYSTEM_MANUAL:5840`, verbatim: 11.7S *"is the **defensive-only skeleton** of the broader Adaptive Market Response framework."*
+- `B_5_AMR_BODY_SCOPE.md` §Why, verbatim: 11.7S's sensor is deficient three ways (*no offensive mode; per-signal stability whose flip-rate input is FROZEN dead (#219) — it classified the hostile 04-22 window as business-as-usual; no per-class awareness*) and *"**AMR replaces the sensor** with a per-class multi-input weather report… ships behind a shadow flag."*
+- Scope line 137, verbatim: the legacy stability path *"is the legacy behavior **AMR REPLACES**. Shadow keeps it bit-identical deliberately (parity); **its retirement IS the Phase-19 flip decision**."*
+⇒ **Design relationship: the overlay MACHINERY (dials/multipliers) carries forward — promoted per-class by B-5 — but the Phase-11 RESOLVER (the stability sensor) is slated to DIE at flag-flip.** **BINDING ON STEP-3:** the two-writer application point must treat the stability resolver as the deliberately-temporary member — the design must not entrench it (a fence/tombstone marking it retire-at-flip, per B-5's own intent).
+**⚠️ OPEN VERIFY ITEM SURFACED BY THE READ (symptom announced, cause NOT asserted — rule 24.a):** B-5 **Obj-9 pinned VTS dials to NORMAL deliberately** (*"letting AMR throttle/resize VTS trades warps the learning substrate"*) — yet today's runtime shows `[11.7S][VTS] Mode: DEFENSIVE | Size×0.6` ×900 and `SURVIVAL ×0.25` ×741, and the code at `vts-runner.ts:1684` sits under a comment *"The mode overlay (position sizing, stops) still applies."* **Either the pin was never shipped, regressed, or means something narrower than the scope reads — if the overlay is genuinely modulating VTS sizing, the learning substrate is being posture-warped against B-5's design.** Needs its own read; NOT this batch's surface; homed to RUNNING_ISSUES at next entry.
+
+**Q2 — Is the adaptive tuner designed to function with the AMR, or vice versa? NEITHER. They are strangers, and the tuner is DORMANT.**
+- Origin: `5d3e89caf` **2025-10-29** — *"Add system for adaptive guardrails and learning"* — born the same day as `guardrails_v2` itself, Replit-era (the Latti/Lottie learning apparatus; the `tunedByLatti`/`managedByLottie` guardrail fields are its footprint).
+- The AMR corpus **never references it** (grep over the B-5 scope: zero hits for adaptive-guardrails/latti/lottie/tuner). The tuner predates AMR by ~8 months and neither was designed around the other.
+- **DORMANT, verified two ways:** its write path `applyAdaptiveAdjustments` has **ZERO callers repo-wide** (only read-only telemetry routes at `routes.ts:21850-21897` are wired), and **zero** `[AdaptiveGuardrails]`/`[Behavioral]` log lines in today's runtime. *(Instrument note: a first count of 12,041 "adaptive" lines was an over-broad grep matching other modules — disclosed and discarded; the tag-scoped count is the population.)*
+⇒ **BINDING ON STEP-3:** shrinking the tuner's tunable set (§2) is SAFE — it cannot act today. Whether the dormant tuner is itself a rule-18 removal candidate is a SEPARATE scope decision, flagged not smuggled.
+
+**Kyle 2026-08-06 also directed: LIVE-MODE VALUES are deferred — the FIELDS and their plumbing must be correct in both modes (objective 7 unchanged); values come later.** Addition-4's p>e loud-refuse stands regardless (it is field-correctness, not a value choice).
