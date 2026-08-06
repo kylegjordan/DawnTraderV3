@@ -834,8 +834,18 @@ async function sweepPlainTables(cfg: SweepConfig): Promise<{ deleted: number; fa
       // drop gate, same safety property. A missing/failed export means NO delete
       // this run (data is safe; retried next run).
       if (spec.archive) {
-        const present = await listPresentDates(
-          ctl, spec.table, spec.timestampColumn, new Date(0), cutoff, spec.extraPredicate,
+        // Bound the day-scan at the real oldest eligible row (Langston Step-4 note 1:
+        // an epoch-based scan probes ~20k empty days per table per run, forever).
+        const extraAndMin = spec.extraPredicate ? ` AND (${spec.extraPredicate})` : '';
+        const minRes = await ctl.query(
+          `SELECT MIN(${spec.timestampColumn}) AS min_ts FROM ${spec.table}
+            WHERE ${spec.timestampColumn} < $1${extraAndMin}`,
+          [cutoff],
+        );
+        const minTs = minRes.rows[0]?.min_ts ? new Date(minRes.rows[0].min_ts) : null;
+        const scanStart = minTs ? new Date(Date.UTC(minTs.getUTCFullYear(), minTs.getUTCMonth(), minTs.getUTCDate())) : cutoff;
+        const present = minTs === null ? [] : await listPresentDates(
+          ctl, spec.table, spec.timestampColumn, scanStart, cutoff, spec.extraPredicate,
         );
         if (present.length === 0) {
           console.log(`[B75 sweep][plain-archive] ${spec.table}: no age-eligible rows — nothing to archive`);

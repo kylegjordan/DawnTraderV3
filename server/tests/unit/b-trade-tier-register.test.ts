@@ -16,7 +16,7 @@
  *  4. §15 pins: the removed deleters stay removed (no live references beyond
  *     comments/archives).
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import path from 'path';
@@ -59,36 +59,13 @@ describe('B-TRADE-TIER-REGISTER — source fences', () => {
   });
 });
 
-describe('B-TRADE-TIER-REGISTER — reader fold arithmetic (mocked db)', () => {
-  beforeEach(() => { vi.resetModules(); });
-  afterEach(() => { vi.restoreAllMocks(); vi.resetModules(); });
-
-  async function loadLaneWithDb(rows: Array<{ rows: unknown[] }>) {
-    let call = 0;
-    vi.doMock('../../db.js', () => ({
-      db: { execute: vi.fn(async () => rows[Math.min(call++, rows.length - 1)]) },
-    }));
-    const mod = await import('../../services/execution/exploration-lane.js');
-    mod._clearExplorationCaches();
-    return mod;
-  }
-
-  it('3a. returns live + tally from inside the closure', async () => {
-    const lane = await loadLaneWithDb([
-      { rows: [{ n: 7 }] },                 // live count
-      { rows: [{ value: 5 }] },             // tally row present
-    ]);
-    // closedExplorationCount is module-internal; exercise via the exported path
-    // that consumes it if available, else the internal is reachable through the
-    // admit flow — the arithmetic pin uses the internal via test seam:
-    const n = await (lane as any)._closedExplorationCountForTest?.('crypto_spot');
-    if (n !== undefined) {
-      expect(n).toBe(12);
-    } else {
-      // Seam absent — pin via SRC that the closure returns live + archived.
-      const src = SRC('server/services/execution/exploration-lane.ts');
-      expect(src).toMatch(/return live \+ archived;/);
-    }
+describe('B-TRADE-TIER-REGISTER — reader fold pins (SRC form; the mocked-db seam was dead scaffolding, dropped at Langston Step-4 note 3)', () => {
+  it('3a. the closure returns live + archived (source pin — executed arithmetic is the Step-7 staging invariance proof)', () => {
+    const src = SRC('server/services/execution/exploration-lane.ts');
+    expect(src).toMatch(/return live \+ archived;/);
+    // Both terms INSIDE the cachedCount closure (Langston condition 1):
+    const closure = src.slice(src.indexOf('cachedCount(`anneal:'), src.indexOf('return live + archived;'));
+    expect(closure).toContain('closed_count_archived');
   });
 
   it('3b. a MISSING tally key throws (never ?? 0) — the #546 guard', async () => {
