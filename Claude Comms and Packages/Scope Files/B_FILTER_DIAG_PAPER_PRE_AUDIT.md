@@ -50,3 +50,21 @@ The counters are COUNT-ONLY: `rejectedInRefresh` = "failed re-SQE (dropped from 
 
 `EXPLAIN ANALYZE` on the exact OBJ-4 aggregate (24h, GROUP BY strategy/reject_stage/source): **Execution Time 38,507 ms** — parallel seq scans across the partition set. A UI endpoint refreshing on tab-load at ~38s/query would hammer the shared Supabase instance and time out the client. **Design consequence (binding for Step-3): server-side CACHED aggregate** — computed on an interval (start at 5 min; tunable), served from memory with `computedAt` stamped in the response and rendered on the tab ("as of HH:MM") so staleness is honest, guarded so a failed refresh serves the previous tally (the module-constants swap-on-success pattern) rather than an error or a silent zero. Never a per-request scan.
 
+## 10. §9.3 WALK — Paper page, both FD tabs (2026-08-06 ~21:00-21:05Z, desktop width; Kyle's session in his Chrome; screenshots ss_3049cxasq + ss_4741z40ex)
+
+**The reported "tabs broken" symptom REPRODUCED and characterized.** Enumerated fix items (OBJ-6):
+
+| # | Finding | Evidence |
+|---|---|---|
+| W-1 | **Tab-switch to Crypto FD froze the renderer 45-90s** before rendering (a human reads this as "the tab does nothing" and leaves). xStock switch afterwards was prompt — first-mount or data-size dependence, mechanism NOT claimed (code read owed; crypto 24h scan volume 498,024 vs xStock 112,271). Prior CDP-synthesized clicks (element-ref AND coordinate, dead-center per elementFromPoint) never flipped `aria-selected` — only a direct JS pointer/click dispatch did, then froze. | timeline in transcript; `aria-selected` observed false→(freeze)→true |
+| W-2 | **Every tab label renders TWICE** (two spans per tab, `hidden xs:inline` responsive pair BOTH visible) → overlapping strip text at ~960px. | JS census: `textContent` "DashboardDashboard" etc.; screenshot |
+| W-3 | **Stale DORMANT banner on BOTH class tabs:** "…active trading is off. Everything downstream — … — is wired but DORMANT; it fills with real data when paper trading turns on (B8.5)." Rendered directly ABOVE live funnel tables. Active-paper has been ON since 07-14. | page text, both tabs |
+| W-4 | **xStock tab header is VTS-era:** "xStocks (xstock_spot) — VTS Observation · Phase 24 closed 2026-05-10 · VTS + passive learning telemetry…" framing the ACTIVE-mode tab. | page text |
+| W-5 | **xStock market-window copy violates rule 17:** "always running (ARCA open)" + "Live data populates during US RTH (14:30 UTC onwards) and extended-hours windows" — xStocks trade 24/5; US-RTH framing is the prohibited mental model. (Weekend/holiday zero-counters sentence is fine.) | page text |
+| W-6 | **"Pre-SQE Rejects 0" as a bare zero** on both tabs — the structurally-empty bucket the scope's OBJ-5 labels (correct-by-design emptiness must say so). | page text |
+| W-7 | **xStock SQE pass-rate ambiguity:** Evaluated 36,141 (935 gen + 35,206 refresh) vs Passed 35,967 (99.5%) — crypto reads 1.9% (10,500/553,800). Possibly honest (refresh re-admits dominate + high xStock pass), possibly a counting artifact; the PRESENTATION conflates generation-passes with refresh-re-passes either way. SYMPTOM ONLY — code read before disposition. | page text, both tabs |
+
+**What already works (don't re-invent at Step-3):** both class tabs DO render Pipeline Summary + SQE Gate Rejects from the live funnel, with an honest withheld-not-fabricated footnote and "NetEV / uncategorized dominated by the net-expectancy admission gate" phrasing; the crypto/xStock scanner cards are live and correct-looking (312/1,430 · 75/483). The missing pieces match the scope: per-strategy × per-stage table, strategyAttrition rendering, refresh-fallout reasons, windowed (24h) views ("B8.4c skeleton columns withheld").
+
+**Walk legs still open:** mobile width; the dormant-branch render (needs a non-active class/mode); the VTS-page tabs (parity reference, OBJ-1); Ready-to-Buy/Open/Closed tabs are outside this batch.
+
