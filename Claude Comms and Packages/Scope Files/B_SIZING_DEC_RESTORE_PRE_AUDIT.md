@@ -47,3 +47,14 @@ Sizer `portfolioValue` inherits **#618**'s capped session-scoped balance (`guard
 ## 8. VERDICT REQUESTED
 
 Pre-audit finds the scope BUILDABLE with **three Step-3 additions**: (a) the two-writer posture design + invariant-under-both-resolvers test (§1); (b) `adaptive-guardrails` tunable-set removal in the schema-drop commit (§2); (c) the clamp-watch stream's explicit disposition (§4). None contradict the ratified shape; (a) strengthens it. **Langston Step-2 review requested.**
+
+
+---
+
+## 9. LANGSTON STEP-2 VERDICT — APPROVED (2026-08-07), with every load-bearing claim independently re-derived. TWO ADDITIONS OF HIS, binding on Step-3:
+
+**ADDITION 4 — THE LIVE ROW IS INCOHERENT UNDER THE RATIFIED SHAPE, in-batch not deferrable.** Live has **p=30 > e=25** ⇒ `floor(e/p) = 0` slots — and the m5e twin's live body does exactly the hazardous thing (`floor` + `Math.max(slots,1)`, no posture term): one live trade at 30% would **breach the invariant (≤ B×e = 25%) on live's own current values.** **Step-3 defines p > e behavior explicitly — his leaning, adopted: LOUD REFUSE (a row where one trade exceeds the total budget is a config error, not a sizing input) — and the invariant test carries a p > e case.**
+**ADDITION 5 — SIM + SYSTEM MANUAL consultation STATED:** at Step-3 entry, read the SIM cross-cutting registry (engine + AMR shared state) and record it; change-class architecture ⇒ **SYSTEM_MANUAL + SIM CONTENT updates due at Step-10 — on the list now.**
+**His ruling on my (c):** RETIRE the clamp-watch stream **with a tombstone**; do NOT re-point `boundRate` onto a new measurand under the old name (#546 class). **Phase-25 is told its go/no-go criterion needs re-derivation.**
+**His re-derivations of note:** 157 DEFENSIVE×0.6 lines (mine 156 — one landed between reads); **AMR_ACTIVE=0, AGGRESSIVE=0 same files** (negative with a positive control); all 16 dial rows re-read, match seeds; the stability map verified never-AGGRESSIVE **in the map, not the comment**. His own r3 "has been re-tuned" premise recorded as wrong-in-fact.
+**Housekeeping accepted:** next dispatch stages the file per §5.1 or points at repo path + sha explicitly (he read off the ref this time).
