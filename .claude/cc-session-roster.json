@@ -28,6 +28,14 @@
       "write_scope": "★ READ-ONLY LANE PARTIALLY LIFTED by Kyle 2026-07-21 ('Yeah. Go ahead.') — SCOPED to two governance/tooling batches this session implements itself: B-COMMS-CHUNK-FIX (#553, Discord >2000-char truncation, Helsinki comms infra) and B-CREW-COORD (#554, push-coordination registry + commit-hook enforcement). The lift is NOT general: analysis of trading behaviour stays read-only, and any code change beyond those two batches needs a fresh Kyle grant. Kyle's attached condition: the tools must achieve ADOPTION by the other sessions and Langston, not just exist.",
       "named_by": "Kyle 2026-07-19 ('Please use Claude Analyst')",
       "status": "active"
+    },
+    {
+      "name": "Infra Claude",
+      "alias": "CC-INFRA",
+      "session_id": "e6446f21-34af-462a-8b40-0f222866d0ea",
+      "role_note": "Langston-infrastructure control center (Kyle Desktop session; NON-BATCH). Scope: Langston's memory/instruction/tooling systems (/opt/langston-memory, /home/langston files, comms-bridge Langston side), #651 B-RULES-1E-LANGSTON-SLIM by transfer from CC-A 2026-08-05. Does NOT take DawnTrader batch work; repo writes limited to comms-infra/discord, Langston governance docs (LANGSTON_ARCHITECTURE.md, BUILD_METHOD_PLAYBOOK.md SS5.1), RUNNING_ISSUES #651 entries, and this roster.",
+      "named_by": "Kyle 2026-08-05 (Langston-infra program, Desktop directive; announced in #general same day). Registered 2026-08-07 per NEW Claude's registry flag + Langston's condition that registration land with the first push.",
+      "status": "active"
     }
   ],
   "rules": [
