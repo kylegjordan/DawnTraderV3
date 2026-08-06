@@ -468,3 +468,12 @@ authoring turn, and it is also a second witness for §7.1 step 0.
 (b) a **SessionStart hook** (`.claude/hooks/session-reminder.mjs`, matcher `startup|resume|compact`) that re-injects the rule every start/resume/compaction so it survives context loss.
 
 **Known limitation, measured 2026-08-06 during the C2 conversion itself:** the guard parses the raw command string and cannot distinguish QUOTED DOCUMENT CONTENT from an actual read — it blocked the very edit writing this rule's new text because the heredoc contained the patterns as prose. Mitigation: compose such edits in a file and run the file (the same file-based mitigation as the backtick-eating class, #623).
+
+
+---
+
+## §5.25 — Rule 25 COMMIT DISCIPLINE: the measured evidence (relocated B-RULES-1b C3, 2026-08-06)
+
+**The path-limited commit works on local NTFS — measured 2026-07-24:** commit `cb4fa6da7`, exit 0, no stale lock — the exact shape (`git commit -F <msgfile> -- <paths>`) that used to die with the #542 segfault on the Google-Drive-backed working copy. The NTFS clones do not reproduce #542; that measurement is why the attestation token became rare instead of routine.
+
+**Mechanical backstop for the explicit-paths form:** `.claude/hooks/guard-bare-commit.mjs` (wired in `.claude/settings.local.json`) blocks a bare `git commit` lacking explicit paths. REACH: it enforces the FORM only — it cannot check WHOSE CONTENT is staged (that is 25.c, judgment, no hook) and it is fail-open like its siblings.
