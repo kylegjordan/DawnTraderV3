@@ -26,3 +26,10 @@ SIM S22 (funnel tracker: writers, anchor-b invariant, envelope contract, #419 op
 4. **RTB refresh counter granularity:** does `rejectedInRefresh` carry reasons? (#419 error-bucket status.) If too coarse for Kyle's "what falls out and why," spec the telemetry-only extension.
 5. **Endpoint schema deltas:** what the new per-strategy×stage aggregate endpoint needs that `/api/vts/filter-diagnostics` shapes don't already carry.
 6. **Blast radius per SIM** for every touched file (panel, tracker, orchestrator telemetry sites, routes).
+
+## 5. Runtime-log leg — first findings (2026-08-06 ~20:32Z)
+
+- **Instrument reach stated:** `pm2 logs --lines 400` covers ~20 SECONDS at current volume — per-line absence claims are worthless at that reach; log-based counts must use the rotated files with a stated time window.
+- **FINDING RT-1 (rule-24 disposition pending — symptom only, no cause claimed):** the `[34.A][BROADCAST] health_engine` payload reports `paper.engine.isRunning: false` (+ null lastTick/lastSignal/lastTrade ages) and `[41F-C][HEARTBEAT]` reports `overallOk=false`, WHILE the archive proves the active pipeline is evaluating (signal-orchestrator: 424 rows in the last hour, newest seconds old). A health surface reading "not running" against a demonstrably-running pipeline is either (a) a flag with session-scoped semantics being read as pipeline-scoped, or (b) a stale writer — history+intent read owed before disposition (rule 24.0). Candidate fix-item for Kyle's OBJ-6 metrics fix-pass.
+- **FINDING RT-2:** `active-execution-engine` archive rows: exactly 1 in the last hour (19:48Z, the newest) — consistent with 18 opens/24h; not itself anomalous, listed for completeness.
+
