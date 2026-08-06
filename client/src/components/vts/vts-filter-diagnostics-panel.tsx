@@ -288,7 +288,11 @@ function ActivePipelineTables({ modeTail, assetClass }: { modeTail: 'paper' | 'l
   const postSqeTotal = Object.values(cls.postSqeRejects ?? {}).reduce((a, b) => a + b, 0);
   const stageRows: Array<{ stage: string; count: number; basis: string }> = [
     { stage: 'Signals Generated', count: cls.signalsGenerated, basis: 'per generated signal (pipe top)' },
-    { stage: 'Pre-SQE Rejects', count: preSqeTotal, basis: 'unmappable symbol / strategy gate' },
+    // W-6: this bucket is structurally near-empty BY DESIGN (B8.4b anchor-b: family-filter
+    // drops are excluded so preSqeRejects ⊆ signalsGenerated; the three writer conditions
+    // rarely fire). A bare 0 here reads as a broken counter — the basis says where
+    // pre-SQE deaths actually live.
+    { stage: 'Pre-SQE Rejects', count: preSqeTotal, basis: 'unmappable symbol / strategy gate — near-0 by design; family-filter drops are counted upstream in strategy attrition, not here' },
     { stage: 'SQE Evaluated', count: cls.sqeEvaluated, basis: cls.sqeAttempts ? `gen ${cls.sqeAttempts.atGeneration.toLocaleString()} + refresh ${cls.sqeAttempts.atRefresh.toLocaleString()}` : 'generation + refresh' },
     { stage: 'SQE Passed', count: cls.sqePassed, basis: 'organic + exploration-lane admits' },
     { stage: 'Post-SQE Rejects', count: postSqeTotal, basis: 'after SQE, before queue' },
@@ -441,7 +445,10 @@ export function FilterDiagnosticsPanel({ data, isLoading, gateDisposition = 'tag
     return (
       <div className={`space-y-4 ${SHARED_DIAG_WIDTH}`} data-testid="fd-enforce-panel">
         <div className="rounded-md border border-blue-400/40 bg-blue-500/10 px-3 py-2 text-xs text-muted-foreground" data-testid="shared-scanner-banner">
-          {modeLabel} mode: {scannerRef} this mode's OWN scan (its {modeTail} thresholds), live now even though active trading is off. Everything downstream — family strength filters, signal generation, the SQE quality gates, and Ready-to-Buy refresh — is wired but DORMANT; it fills with real data when {modeTail} trading turns on (B8.5).
+          {/* B-FILTER-DIAG-PAPER W-3: state-NEUTRAL wording — the old text asserted
+              "active trading is off … DORMANT … fills when trading turns on", which kept
+              rendering above LIVE funnel tables for 3+ weeks after the B8.5 switch-on. */}
+          {modeLabel} mode: {scannerRef} this mode's OWN scan (its {modeTail} thresholds). Everything downstream — family strength filters, signal generation, the SQE quality gates, and Ready-to-Buy refresh — is the active pipeline: when this mode has recorded activity its live counters render below; before first activity the tables show an explicit awaiting state instead of fabricated zeros.
         </div>
         {/* Crypto scanner card only — xStock's scanner card is its own ScannerCycleHeader
             above this panel. Live throughput from the shared-scanner `data` feed; Per-Cycle Target + Total

@@ -107,8 +107,14 @@ export default function ModeTradingPage({ config }: { config: ModeTradingPageCon
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          {/* B-FILTER-DIAG-PAPER W-2: below xl the equal-cell grid squeezes 7
+              whitespace-nowrap full labels into cells narrower than their text —
+              adjacent tabs pile onto each other from ~480px (the xs full-label
+              cutover) up to ~1400px. Fix is structural, not a breakpoint: the strip
+              SCROLLS with natural-width triggers below xl, and keeps the full-width
+              equal grid only where it genuinely fits. */}
           <TabsList
-            className="grid w-full"
+            className="flex w-full overflow-x-auto justify-start xl:grid"
             style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
             data-testid={`${config.mode}-trading-tabs`}
           >
@@ -116,7 +122,7 @@ export default function ModeTradingPage({ config }: { config: ModeTradingPageCon
               <TabsTrigger
                 key={tab.key}
                 value={tab.key}
-                className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-3"
+                className="flex flex-shrink-0 items-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-3"
                 data-testid={`tab-${config.mode}-${tab.key}`}
               >
                 <tab.icon className="w-3 h-3 sm:w-4 sm:h-4" />
