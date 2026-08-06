@@ -46,3 +46,7 @@ The counters are COUNT-ONLY: `rejectedInRefresh` = "failed re-SQE (dropped from 
 - Funnel envelope `active-funnel/v3` (shared/active-funnel-envelope.ts): OBJ-2 gate promotion adds a member to `SQE_CANONICAL_GATES` — additive; envelope version bump per its contract rules if the shape gains the at-refresh tally (v4) — decide with Langston at Step-4.
 - Blast radius: client panel + tracker (telemetry) + 1-2 read-only routes + orchestrator/rtb telemetry call-site params. Zero trade-state surface. SIM rows to update at governance: S22, the FD panel block, the B8.1 three-pages block if endpoints are added.
 
+## 9. Endpoint cost MEASURED — the aggregate CANNOT run per page-load
+
+`EXPLAIN ANALYZE` on the exact OBJ-4 aggregate (24h, GROUP BY strategy/reject_stage/source): **Execution Time 38,507 ms** — parallel seq scans across the partition set. A UI endpoint refreshing on tab-load at ~38s/query would hammer the shared Supabase instance and time out the client. **Design consequence (binding for Step-3): server-side CACHED aggregate** — computed on an interval (start at 5 min; tunable), served from memory with `computedAt` stamped in the response and rendered on the tab ("as of HH:MM") so staleness is honest, guarded so a failed refresh serves the previous tally (the module-constants swap-on-success pattern) rather than an error or a silent zero. Never a per-request scan.
+
