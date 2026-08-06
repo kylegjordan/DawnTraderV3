@@ -115,6 +115,16 @@ async function usedBudgetToday(assetClass: string): Promise<number> {
  *  floor prematurely (measured: crypto 191 counted vs 187 truly-closed; the 4 extras were
  *  the 3 known orphans MET/ETH/AVAX + 1 legitimately-open ONDO). */
 async function closedExplorationCount(assetClass: string): Promise<number> {
+  // B-TRADE-TIER-REGISTER (#599): closed_trades rows now ARCHIVE out of hot at the
+  // 365d window. The anneal is a MONOTONE RATCHET by construction, so archived
+  // ranges' exploration closes live on in a persisted per-class tally the sweep
+  // writes at archive time (same predicate as the live query). BOTH terms are read
+  // INSIDE this cachedCount closure — read outside it, a stale live count still
+  // containing just-archived rows plus the fresh tally would DOUBLE-COUNT, and
+  // this counter only ratchets, so the error would tighten the floor (Langston
+  // Step-2 accept, condition 1). A MISSING tally key is a FAULT (seeded-0 by the
+  // batch migration; absence routed through the lane's fail-closed branch via
+  // throw) — never a silent ?? 0 (condition 2, the #546 absent-as-valid guard).
   return cachedCount(`anneal:${assetClass}`, async () => {
     const r = await db.execute(sql`
       SELECT count(*)::int AS n FROM closed_trades
@@ -122,7 +132,21 @@ async function closedExplorationCount(assetClass: string): Promise<number> {
         AND asset_class = ${assetClass}
         AND closed_at IS NOT NULL
         AND close_reason IS DISTINCT FROM 'never_filled'`);
-    return Number((r as any).rows?.[0]?.n ?? 0);
+    const live = Number((r as any).rows?.[0]?.n ?? 0);
+    const t = await db.execute(sql`
+      SELECT value FROM module_constants
+      WHERE module_name = 'exploration_lane'
+        AND constant_name = ${'closed_count_archived.' + assetClass}`);
+    const tRow = (t as any).rows?.[0];
+    if (tRow === undefined) {
+      // Fault, not zero: the seed migration guarantees the key exists per class.
+      throw new Error(`exploration_lane.closed_count_archived.${assetClass} missing — seed migration absent (fail-closed; never coerce to 0)`);
+    }
+    const archived = Number(tRow.value);
+    if (!Number.isFinite(archived)) {
+      throw new Error(`exploration_lane.closed_count_archived.${assetClass} non-numeric: ${String(tRow.value)}`);
+    }
+    return live + archived;
   });
 }
 

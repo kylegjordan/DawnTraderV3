@@ -52,6 +52,14 @@ export interface ExportRequest {
   partitionTableName?: string;
   /** Optional: gzip compression level 1-9 (default 6). */
   compressionLevel?: number;
+  /**
+   * B-TRADE-TIER-REGISTER: optional STATIC SQL fragment ANDed into the export
+   * WHERE clause (e.g. `closed = true`). Comes ONLY from the sweep's static
+   * allow-listed table specs — never user input — same interpolation contract
+   * as the identifiers. Lets a plain (unpartitioned) table export a row SUBSET
+   * (vts_open_trades archives closed rows only; open rows are never touched).
+   */
+  extraPredicate?: string;
 }
 
 export interface ExportResult {
@@ -122,6 +130,8 @@ export async function exportPartition(
     // BATCH=1000 (down from 5000) caps single-query payload size given
     // wide JSONB rows that TOAST to 20+ KB raw.
     const BATCH = 1000;
+    // Static fragment from the allow-listed spec (see ExportRequest.extraPredicate).
+    const extraAnd = req.extraPredicate ? ` AND (${req.extraPredicate})` : '';
 
     const out = fs.createWriteStream(localPath);
     const gzip = zlib.createGzip({ level: compressionLevel });
@@ -135,7 +145,7 @@ export async function exportPartition(
       if (firstBatch) {
         r = await client.query(
           `SELECT * FROM ${quoteIdent(target)}
-           WHERE ${quoteIdent(tsCol)} >= $1 AND ${quoteIdent(tsCol)} < $2
+           WHERE ${quoteIdent(tsCol)} >= $1 AND ${quoteIdent(tsCol)} < $2${extraAnd}
            ORDER BY ${quoteIdent(tsCol)} ASC
            LIMIT ${BATCH}`,
           [req.rangeStart, req.rangeEnd],
@@ -144,7 +154,7 @@ export async function exportPartition(
       } else {
         r = await client.query(
           `SELECT * FROM ${quoteIdent(target)}
-           WHERE ${quoteIdent(tsCol)} > $1 AND ${quoteIdent(tsCol)} < $2
+           WHERE ${quoteIdent(tsCol)} > $1 AND ${quoteIdent(tsCol)} < $2${extraAnd}
            ORDER BY ${quoteIdent(tsCol)} ASC
            LIMIT ${BATCH}`,
           [lastTs, req.rangeEnd],

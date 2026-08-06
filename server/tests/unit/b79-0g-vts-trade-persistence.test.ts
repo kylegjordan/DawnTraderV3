@@ -56,7 +56,6 @@ import {
   markOpenTradeClosed,
   rehydrateOpenTrades,
   bootstrapOpenTradesFromMemory,
-  sweepClosedOpenTrades,
   type OpenVirtualTradeRecord,
 } from '../../services/vts-trade-persistence.js';
 
@@ -125,39 +124,9 @@ describe('B79.0g — vts-trade-persistence', () => {
     });
   });
 
-  describe('sweepClosedOpenTrades (B79.0g-tx)', () => {
-    it('returns null + logs CONFIG_MISSING when module_constants row absent', async () => {
-      dbReturnOverrides.push({ rows: [] }); // empty config lookup
-      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-      const result = await sweepClosedOpenTrades();
-      expect(result).toBeNull();
-      expect(errSpy).toHaveBeenCalled();
-      const firstCallArg = String(errSpy.mock.calls[0]?.[0] ?? '');
-      expect(firstCallArg).toMatch(/CONFIG_MISSING/);
-      errSpy.mockRestore();
-    });
-
-    it('issues DELETE WHERE closed=true AND closed_at < cutoff when config present', async () => {
-      // Queue overrides: first call returns config row (90); second returns swept count.
-      dbReturnOverrides.push({ rows: [{ value: 90 }] });
-      dbReturnOverrides.push({ rows: [{ count: '0' }] });
-      const result = await sweepClosedOpenTrades();
-      expect(result).toEqual({ swept: 0 });
-      expect(dbCalls.length).toBe(2);
-      const deleteCall = dbCalls[1];
-      expect(deleteCall.sql).toMatch(/DELETE FROM vts_open_trades/i);
-      expect(deleteCall.sql).toMatch(/WHERE closed = true/i);
-      expect(deleteCall.sql).toMatch(/AND closed_at <\s+NOW\(\)\s+-/i);
-    });
-
-    it('returns null + logs CONFIG_MISSING when retention value is invalid', async () => {
-      dbReturnOverrides.push({ rows: [{ value: 'banana' }] });
-      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-      const result = await sweepClosedOpenTrades();
-      expect(result).toBeNull();
-      errSpy.mockRestore();
-    });
-  });
+  // sweepClosedOpenTrades subject-suite REMOVED with its subject
+  // (B-TRADE-TIER-REGISTER #599, rule 18 + the B-ARM SUBJECT-vs-PROBE rule —
+  // these tests exercised the deleted function itself, not a surviving invariant).
 
   describe('bootstrapOpenTradesFromMemory (B79.0g-tx: open-only count)', () => {
     it('returns null when OPEN-only count is non-zero (live trades present) — COUNT query filters WHERE closed=false', async () => {

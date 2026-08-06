@@ -845,22 +845,14 @@ app.use((req, res, next) => {
     );
   }
 
-  // ─── B79.0g-tx: GC sweep of soft-deleted vts_open_trades rows ───
-  // DELETEs rows whose closed_at is older than
-  // module_constants.data_lifecycle.vts_open_trades.closed_gc_retention_days.
-  // Own try/catch so a sweep failure isn't conflated with a rehydrate
-  // failure in the logs (Langston pre-audit R2). Runs AFTER rehydrate
-  // (which already filters WHERE closed=false, so swept rows are
-  // irrelevant to the live Map anyway). Soft-fail: never halt boot.
-  try {
-    const { sweepClosedOpenTrades } = await import('./services/vts-trade-persistence.js');
-    await sweepClosedOpenTrades();
-  } catch (sweepErr) {
-    console.error(
-      '[B79.0g-tx][SWEEP_FAIL] boot-time vts_open_trades GC sweep failed; continuing boot:',
-      sweepErr instanceof Error ? sweepErr.message : sweepErr,
-    );
-  }
+  // ─── B-TRADE-TIER-REGISTER (#599, 2026-08-06): the B79.0g-tx boot-time GC sweep
+  // of vts_open_trades was REMOVED here (rule 18, disposition 4). Two deleters
+  // raced one predicate: this per-boot lane deleted WITHOUT archiving at nearly
+  // every restart, defeating the cron sweep's new archive-before-delete property.
+  // The cron lane (b75-retention-sweep, plain-archive mode) is now the SOLE
+  // deleter and reads the same closed_gc_retention_days as its hot window — the
+  // constant STAYS (removing it would make nothing fail; see RUNNING_ISSUES #1359
+  // trap note). Function archived: _archive/deleted-code/sweepClosedOpenTrades.ts.removed
 
   // ─── B79.0n.TELEMETRY: Pre-warm per-class AssetClassInstances triads ───
   // Force-bootstrap all 3 factory-managed triads (xstock_spot + xstock_perp

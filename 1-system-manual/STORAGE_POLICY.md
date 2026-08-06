@@ -139,3 +139,7 @@ The `data_archive_manifest` holds **72 objects across only 5 distinct source tab
 
 ★ **NOT an emergency and explicitly not filed as a defect** — ~6 G on a disk at 45% with 40 G free buys a long runway. **It is a POLICY GAP: an entire class of store that grows monotonically and that this document did not previously acknowledge.** The honest disposition is that these need a retention decision *before* the runway matters, not after.
 ★★ **TWO OF THESE ARE LOAD-BEARING, so do NOT prune them casually:** `virtual_trades` is the population the settings-adjustment routine READS (last 30 files, HYBRID-filtered — see `RUNNING_ISSUES` #174), and `predictive_adjustments` is what it WRITES. **A naive "delete files older than N days" on `virtual_trades` silently changes what that routine computes on.** `phase15b_dbs_telemetry` is the 4.9 G outlier and the obvious first candidate — **Phase 15b is long past, so its consumer set should be established before it is trimmed, not assumed.**
+
+## Delete-only exemptions (each carries its predicate, not just its verdict)
+
+- **`xstock_qd_probe_history`** (P19-B5c plain lane, 90d delete-only, no archive) — **exempt from move-not-delete BECAUSE it is derived telemetry reconstructible from the probes’ sources**; deleting it destroys no primary record (Langston-ruled at the B-TRADE-TIER-REGISTER Step-1, 2026-08-06). Any table that is a PRIMARY record does not qualify for this shelf — the trade tables were moved OFF delete-only by that same batch.

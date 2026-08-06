@@ -171,8 +171,9 @@ export async function insertOpenTrade(trade: OpenVirtualTradeRecord): Promise<vo
  *
  * Replaces the B79.0g `deleteOpenTrade` hard-DELETE — soft-deleted rows
  * carry the closed-history forward through the next boot's rehydrate
- * (which filters `WHERE closed=false`) and are GC'd by
- * `sweepClosedOpenTrades` at boot.
+ * (which filters `WHERE closed=false`) and are ARCHIVED-then-removed by the
+ * b75-retention-sweep plain-archive lane (B-TRADE-TIER-REGISTER #599; the
+ * boot-time GC was removed 2026-08-06 — rule 18, see _archive/deleted-code/).
  *
  * B-NEW-36 (2026-05-20) extension: also flip `state` to 'closed' in the
  * same UPDATE. The vts_open_trades_state_consistency CHECK constraint
@@ -433,58 +434,4 @@ export async function bootstrapOpenTradesFromMemory(
   return bootstrapped;
 }
 
-/**
- * B79.0g-tx — boot-time GC sweep. DELETEs soft-deleted rows whose
- * `closed_at` is older than
- * `module_constants.data_lifecycle.vts_open_trades.closed_gc_retention_days`.
- *
- * Bounded volume (typical: a few hundred to a few thousand rows per
- * retention window); single statement; runs once at boot from
- * `server/index.ts` after `rehydrateOpenVtsTrades()`. HARD-FAIL semantics
- * on missing module_constants row: emit a greppable
- * `[B79.0g-tx][CONFIG_MISSING]` line, skip the sweep, return null. Do
- * NOT halt boot — sweep failure is observability, not a correctness
- * invariant.
- *
- * Returns `{ swept: number }` on success, `null` if retention config
- * was missing/invalid.
- */
-export async function sweepClosedOpenTrades(): Promise<{ swept: number } | null> {
-  let retentionDays: number;
-  try {
-    const r = await db.execute<{ value: unknown }>(sql`
-      SELECT value FROM module_constants
-       WHERE module_name='data_lifecycle'
-         AND constant_name='vts_open_trades.closed_gc_retention_days'
-         AND asset_class='*' AND exchange='*' AND regime='*' AND strategy='*'
-       LIMIT 1
-    `);
-    const rows = (r as any).rows ?? (r as unknown as any[]);
-    const v = rows[0]?.value;
-    const n = typeof v === 'number' ? v : Number(v);
-    if (!Number.isFinite(n) || n <= 0) {
-      throw new Error(`invalid retention value: ${JSON.stringify(v)}`);
-    }
-    retentionDays = n;
-  } catch (err) {
-    console.error(
-      `[B79.0g-tx][CONFIG_MISSING] data_lifecycle.vts_open_trades.closed_gc_retention_days unreadable — sweep skipped:`,
-      err instanceof Error ? err.message : err,
-    );
-    return null;
-  }
 
-  const r = await db.execute<{ count: string }>(sql`
-    WITH d AS (
-      DELETE FROM vts_open_trades
-       WHERE closed = true
-         AND closed_at < NOW() - (${retentionDays}::int * INTERVAL '1 day')
-       RETURNING id
-    )
-    SELECT COUNT(*)::text AS count FROM d
-  `);
-  const rows = (r as any).rows ?? (r as unknown as any[]);
-  const swept = parseInt(String(rows[0]?.count ?? '0'), 10);
-  console.log(`[B79.0g-tx][GC_SWEEP] retention=${retentionDays}d swept=${swept} closed-rows from vts_open_trades`);
-  return { swept };
-}

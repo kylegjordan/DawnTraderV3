@@ -119,10 +119,32 @@ interface PlainRetentionTableSpec {
   table: string;
   timestampColumn: string;
   retentionConstantName: string; // key in module_constants under data_lifecycle
+  // B-TRADE-TIER-REGISTER (#599): move-not-delete for PRIMARY-record plain tables.
+  // archive:true = export age-eligible rows per present day (JSONL.gz -> warm TUS ->
+  // checksum -> data_archive_manifest) and DELETE ONLY when every present day's
+  // manifest row is verified/active (the partitioned lane's :698-701 gate, same
+  // safety property). Absent/false = the original P19-B5c delete-only lane
+  // (derived telemetry, STORAGE_POLICY-exempt with the why stated there).
+  archive?: boolean;
+  // STATIC SQL fragment ANDed into export + delete (allow-listed, never user input).
+  extraPredicate?: string;
+  // closed_trades only: before deleting a range, fold its exploration-close count
+  // (the anneal reader's EXACT predicate, per asset_class) into the persisted
+  // module_constants tallies so closedExplorationCount stays MONOTONE (pre-audit 4c(1)).
+  explorationTally?: boolean;
 }
 
 const PLAIN_RETENTION_TABLES: PlainRetentionTableSpec[] = [
   { table: 'xstock_qd_probe_history', timestampColumn: 'bucket_start', retentionConstantName: 'xstock_qd_probe_history.hot_retention_days' },
+  // B-TRADE-TIER-REGISTER: the trade tables enter the move-not-delete path.
+  // vts_open_trades: closed-in-place rows only (OPEN rows never age; the range
+  // predicate on closed_at plus `closed = true` scopes every export AND delete).
+  { table: 'vts_open_trades', timestampColumn: 'closed_at', retentionConstantName: 'vts_open_trades.closed_gc_retention_days', archive: true, extraPredicate: 'closed = true' },
+  // closed_trades: first-ever retention policy — archived-then-removed at the
+  // Kyle-set 365, never bare-deleted. NULL closed_at rows (the B7.2c never-filled
+  // maker pendings, 3 known) are structurally outside every range predicate
+  // (NULL < cutoff is not true) — excluded from aging, and the exclusion is logged.
+  { table: 'closed_trades', timestampColumn: 'closed_at', retentionConstantName: 'closed_trades.hot_retention_days', archive: true, extraPredicate: 'closed_at IS NOT NULL', explorationTally: true },
 ];
 
 const PLAIN_DELETE_BATCH = 5000;
@@ -383,13 +405,15 @@ async function listPresentDates(
   tsCol: string,
   rangeStart: Date,
   rangeEnd: Date,
+  extraPredicate?: string,
 ): Promise<Date[]> {
+  const extraAnd = extraPredicate ? ` AND (${extraPredicate})` : '';
   const present: Date[] = [];
   for (const day of enumerateUtcDays(rangeStart, rangeEnd)) {
     const dayEnd = new Date(day.getTime() + 86_400_000);
     const r = await client.query(
       `SELECT 1 FROM ${quoteIdent(target)}
-        WHERE ${quoteIdent(tsCol)} >= $1 AND ${quoteIdent(tsCol)} < $2
+        WHERE ${quoteIdent(tsCol)} >= $1 AND ${quoteIdent(tsCol)} < $2${extraAnd}
         LIMIT 1`,
       [day, dayEnd],
     );
@@ -456,6 +480,7 @@ async function archiveOneObject(
   rangeEnd: Date,
   partitionTableName: string,
   originalSizeBytes: number,
+  extraPredicate?: string, // B-TRADE-TIER-REGISTER: plain-table subset export
 ): Promise<ArchiveOutcome> {
   const objPath = `${cfg.warmPrefix}/${spec.parent}/${label}.jsonl.gz`;
   const storageUri = `supabase://${cfg.warmBucket}/${objPath}`;
@@ -483,6 +508,7 @@ async function archiveOneObject(
     timestampColumn: spec.timestampColumn,
     partitionTableName,
     compressionLevel: 6,
+    extraPredicate,
   });
 
   let verifyPath: string | null = null;
@@ -799,7 +825,85 @@ async function sweepPlainTables(cfg: SweepConfig): Promise<{ deleted: number; fa
     await ctl.connect();
     try {
       let tableDeleted = 0;
-      // Delete the oldest rows in bounded batches (the bucket_start index serves
+      const extraAnd = spec.extraPredicate ? ` AND (${spec.extraPredicate})` : '';
+
+      // B-TRADE-TIER-REGISTER (#599): ARCHIVE-BEFORE-DELETE for primary-record
+      // plain tables. Every present day in the eligible range is exported to warm
+      // (JSONL.gz + TUS + checksum + manifest) and the DELETE runs ONLY when every
+      // present day's manifest row is verified/active — the partitioned lane's
+      // drop gate, same safety property. A missing/failed export means NO delete
+      // this run (data is safe; retried next run).
+      if (spec.archive) {
+        const present = await listPresentDates(
+          ctl, spec.table, spec.timestampColumn, new Date(0), cutoff, spec.extraPredicate,
+        );
+        if (present.length === 0) {
+          console.log(`[B75 sweep][plain-archive] ${spec.table}: no age-eligible rows — nothing to archive`);
+        } else {
+          const storage = getStorageClient();
+          const exportClient = new Client({ connectionString: process.env.DATABASE_URL });
+          await exportClient.connect();
+          try {
+            for (const day of present) {
+              const label = day.toISOString().slice(0, 10);
+              const dayEnd = new Date(day.getTime() + 86_400_000);
+              await archiveOneObject(
+                storage, exportClient, ctl, cfg,
+                { parent: spec.table, timestampColumn: spec.timestampColumn, retentionConstantName: spec.retentionConstantName },
+                label, day, dayEnd, spec.table, 0, spec.extraPredicate,
+              );
+            }
+          } finally {
+            await exportClient.end();
+          }
+          // The gate: every present label verified/active before ANY delete.
+          const labels = present.map((d) => d.toISOString().slice(0, 10));
+          const stateRows = await ctl.query(
+            `SELECT partition_label, state FROM data_archive_manifest
+              WHERE source_table = $1 AND tier = 'warm' AND partition_label = ANY($2::text[])`,
+            [spec.table, labels],
+          );
+          const okSet = new Set(
+            stateRows.rows.filter((r) => r.state === 'verified' || r.state === 'active').map((r) => r.partition_label as string),
+          );
+          const missing = labels.filter((l) => !okSet.has(l));
+          if (missing.length > 0) {
+            console.error(`[B75 sweep][plain-archive] ${spec.table}: ${missing.length} present day(s) lack a verified manifest row (${missing.slice(0, 3).join(', ')}…) — DELETE SKIPPED this run`);
+            continue; // move to the next spec; rows are safe, retried next run
+          }
+          // Exploration-anneal tally (pre-audit 4c(1)): fold the about-to-be-deleted
+          // ranges' exploration-close counts into the persisted per-class tallies
+          // (the anneal reader's EXACT predicate) so closedExplorationCount stays
+          // monotone. The reader consumes these INSIDE its cachedCount closure.
+          if (spec.explorationTally) {
+            const tallyRes = await ctl.query(
+              `SELECT asset_class, count(*)::int AS n FROM ${spec.table}
+                WHERE metadata->>'admissionBasis' = 'exploration'
+                  AND closed_at IS NOT NULL
+                  AND close_reason IS DISTINCT FROM 'never_filled'
+                  AND ${spec.timestampColumn} < $1${extraAnd}
+                GROUP BY asset_class`,
+              [cutoff],
+            );
+            for (const row of tallyRes.rows) {
+              const upd = await ctl.query(
+                `UPDATE module_constants SET value = (value::int + $1)::text::jsonb
+                  WHERE module_name = 'exploration_lane'
+                    AND constant_name = $2`,
+                [row.n, `closed_count_archived.${row.asset_class}`],
+              );
+              if ((upd.rowCount ?? 0) === 0) {
+                // Seeded-0-or-fault (pre-audit 4c(1) cond 2): a missing tally key is a
+                // FAULT, never a silent ?? 0 — refuse the delete for this table.
+                throw new Error(`[B75 sweep][plain-archive] exploration tally key missing for class ${row.asset_class} — seeded migration absent; DELETE REFUSED (rows safe)`);
+              }
+              console.log(`[B75 sweep][plain-archive] ${spec.table}: exploration tally +${row.n} (${row.asset_class})`);
+            }
+          }
+        }
+      }
+
+      // Delete the oldest rows in bounded batches (the timestamp index serves
       // the predicate; deleting by PK avoids long row-lock windows).
       // Identifiers come from the static PLAIN_RETENTION_TABLES allow-list.
       // eslint-disable-next-line no-constant-condition
@@ -808,7 +912,7 @@ async function sweepPlainTables(cfg: SweepConfig): Promise<{ deleted: number; fa
           `DELETE FROM ${spec.table}
             WHERE id IN (
               SELECT id FROM ${spec.table}
-               WHERE ${spec.timestampColumn} < $1
+               WHERE ${spec.timestampColumn} < $1${extraAnd}
                ORDER BY ${spec.timestampColumn} ASC
                LIMIT $2
             )`,

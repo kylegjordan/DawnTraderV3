@@ -1,0 +1,20 @@
+// ARCHIVED B-TRADE-TIER-REGISTER 2026-08-06 (rule 18, disposition 5) — a dead
+// (zero-caller) but live-callable AGE-based deleter on closed_trades, found by
+// Langston's Step-2 census. Non-archive-gated on the exact table the batch
+// archive-gates; its plausible future use is superseded by the archive lane.
+
+  // Phase 27.F.13.F: Cleanup method for old closed paper sim trades
+  async cleanOldClosedTrades(mode: TradingMode, hoursOld: number): Promise<number> {
+    const cutoffDate = new Date();
+    cutoffDate.setHours(cutoffDate.getHours() - hoursOld);
+    
+    const result = await db
+      .delete(closedTradesTable)
+      .where(and(
+        isNotNull(closedTradesTable.closedAt),
+        lte(closedTradesTable.closedAt, cutoffDate)
+      ))
+      .returning();
+    
+    return result.length;
+  }

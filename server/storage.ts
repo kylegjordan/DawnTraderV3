@@ -559,7 +559,6 @@ export interface IStorage {
   getActiveTradeLogs(mode: TradingMode, filters?: { limit?: number; tradeId?: string }): Promise<ActiveTradeLog[]>;
   deleteAllActiveTradeLogs(mode: TradingMode): Promise<void>; // Phase 27.F.13.C: Reset simulation
   deleteAllClosedTrades(mode: TradingMode): Promise<void>; // Phase 27.F.13.C: Reset simulation
-  cleanOldClosedTrades(mode: TradingMode, hoursOld: number): Promise<number>; // Phase 27.F.13.F: Cleanup old closed trades
   
   // Stats
   getActiveEngineStats(mode: TradingMode): Promise<{
@@ -3459,21 +3458,7 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(closedTradesTable.id, id), isNull(closedTradesTable.closedAt)));
   }
 
-  // Phase 27.F.13.F: Cleanup method for old closed paper sim trades
-  async cleanOldClosedTrades(mode: TradingMode, hoursOld: number): Promise<number> {
-    const cutoffDate = new Date();
-    cutoffDate.setHours(cutoffDate.getHours() - hoursOld);
-    
-    const result = await db
-      .delete(closedTradesTable)
-      .where(and(
-        isNotNull(closedTradesTable.closedAt),
-        lte(closedTradesTable.closedAt, cutoffDate)
-      ))
-      .returning();
-    
-    return result.length;
-  }
+
 
   async createActiveTradeLog(mode: TradingMode, log: InsertActiveTradeLog): Promise<ActiveTradeLog> {
     const [result] = await db.insert(activeTradeLogs).values(log).returning();
