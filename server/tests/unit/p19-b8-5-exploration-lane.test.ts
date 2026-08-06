@@ -6,6 +6,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 let knobs: Record<string, unknown> = {};
 let rtbExplorationToday = 0;
 let closedExploration = 0;
+let archivedTally = 0; // B-TRADE-TIER-REGISTER: the persisted archive tally (seeded 0 in prod)
 
 vi.mock('../../services/module-constants-service.js', () => ({
   getCachedConstant: (_m: string, name: string) => knobs[name],
@@ -17,6 +18,10 @@ vi.mock('../../db.js', () => ({
       // Crude but sufficient: the budget query targets rtb_signals, the anneal query closed_trades.
       const s = JSON.stringify(q);
       if (s.includes('rtb_signals')) return { rows: [{ n: rtbExplorationToday }] };
+      // B-TRADE-TIER-REGISTER: the anneal reader now also reads the persisted archive
+      // tally (module_constants) INSIDE its cache closure; a missing row is a FAULT in
+      // prod (seeded-0 migration), so the mock supplies the seeded row.
+      if (s.includes('module_constants')) return { rows: [{ value: archivedTally }] };
       if (s.includes('closed_trades')) {
         // P19-B8.5 (two-denominator split): the anneal driver must count INFORMATIVE
         // closes only — its SQL must carry the never_filled exclusion. If the code ever
@@ -45,6 +50,7 @@ beforeEach(() => {
   knobs = { ...FULL_KNOBS };
   rtbExplorationToday = 0;
   closedExploration = 0;
+  archivedTally = 0;
   _clearExplorationCaches();
 });
 
