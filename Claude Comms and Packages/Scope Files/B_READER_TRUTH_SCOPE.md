@@ -32,3 +32,14 @@ Cap origin `9944e8013` (2025-10-10, listing default) · consumer enumeration and
 ## 4. OUT
 
 The sizing batch (queued after, fully gated) · the geometry reset (second in order) · #632/#644/#645 items · live-mode VALUES (Kyle-deferred) · any VTS surface.
+
+
+---
+
+## 5. LANGSTON STEP-1 VERDICT — APPROVED (2026-08-07, at graded head `84beb332e`). FOUR OBLIGATIONS GATING STEP-2:
+
+1. **THE CAP HAS FOUR SITES, NOT ONE:** `storage.ts:3147, :3335 (the 1000 "global aggregation" default), :3470, :3655` all carry `filters?.limit || N`. Pre-audit enumerates all four, names each function, rules each — *"a fixed reader with a capped sibling is #618 waiting to recur."*
+2. **WRITER CENSUS for the mode stamp (§9.5 a-ii):** every `closed_trades` WRITER named and stamping the new column, or the notNull column is a deploy-time crash. **Migration ordering stated explicitly: add-nullable → backfill → verify → notNull (or default).**
+3. **OBJ-6 CHANGES THE DENOMINATOR'S WINDOW, not just its bound** — current code is session-scoped (his ref-verified read); the SQL re-point is presumably since-anchor. **The intended window is NAMED as a deliberate semantic change to a risk gate; he rules the P19-B6 un-void at Step-4 AGAINST that statement.**
+4. **The live `getTrades` twin path gets one of the five dispositions even if "deferred with a home."**
+*(Obj-4 `trade_mode`='TARGET' he rules at pre-audit as scoped.)*
