@@ -43,6 +43,13 @@ export interface ActiveFunnelClassData {
    *  before the RTB queue. Kept distinct from preSqeRejects so the funnel order is honest. */
   postSqeRejects: Record<string, number>;
   sqeGateRejects: Record<string, number>;
+  /** B-FILTER-DIAG-PAPER OBJ-3 (2026-08-07): the refresh-phase slice of sqeGateRejects —
+   *  which gate a signal fell OUT of the RTB refresh cycle at. Subset of sqeGateRejects,
+   *  never summed with it. OPTIONAL + ADDITIVE on the v3 shape: a pre-OBJ-3 server emits
+   *  no field, the client renders the section only when present. Whether this warrants a
+   *  v4 stamp is the Step-4 reviewer's call (contract header: "a shape change is a compile
+   *  event on both sides" — an optional add compiles on both without drift). */
+  sqeGateRejectsAtRefresh?: Record<string, number>;
   sqeEvaluated: number;
   sqePassed: number;
   rtbRefresh: ActiveFunnelRtbRefresh;

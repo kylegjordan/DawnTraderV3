@@ -47,6 +47,14 @@ export const SQE_CANONICAL_GATES = [
   'Confidence',
   'AMR',
   'Governance',
+  // B-FILTER-DIAG-PAPER OBJ-2 (2026-08-07): the promotion this discovery bucket was
+  // designed for. MEASURED before promoting: 7,648 of 7,649 active-path sqe-stage
+  // gate_decision reason tokens (24h, signal_eval_archive, source=signal-orchestrator)
+  // are "NetEV" — 99.99% of `uncategorized` was the net-expectancy admission gate
+  // (ACTIVE_PATH_FLOW.md §RTB; consistent with #570). Cumulative counters mean
+  // PRE-promotion NetEV rejects stay in `uncategorized` forever — the client labels
+  // both windows honestly rather than reattributing history.
+  'NetEV',
 ] as const;
 export type SqeGateId = (typeof SQE_CANONICAL_GATES)[number] | 'uncategorized';
 const _CANON = new Set<string>(SQE_CANONICAL_GATES);
@@ -134,6 +142,11 @@ export interface ActiveFunnelRecord {
   postSqeRejects: Record<string, number>;
   /** per-SQE-gate reject tally (canonical gate id → count) + the `uncategorized` discovery bucket. */
   sqeGateRejects: Record<string, number>;
+  /** B-FILTER-DIAG-PAPER OBJ-3: the REFRESH-phase slice of sqeGateRejects (same gate ids,
+   *  incremented only when phase==='refresh') — answers "what fell OUT of the RTB refresh
+   *  cycle, at which gate". A subset of sqeGateRejects by construction, never summed with it.
+   *  Additive field: an old checkpoint without it reloads as {} (absent-honest, no re-stamp). */
+  sqeGateRejectsAtRefresh: Record<string, number>;
   /** SQE outcomes (the denominator so a gate's share is honest). */
   sqeEvaluated: number;
   sqePassed: number;
@@ -151,6 +164,7 @@ function _blank(): ActiveFunnelRecord {
     strategyAttrition: {},
     postSqeRejects: {},
     sqeGateRejects: {},
+    sqeGateRejectsAtRefresh: {},
     sqeEvaluated: 0,
     sqePassed: 0,
     rtbRefresh: { cyclesRun: 0, refreshedAttempted: 0, reconfirmed: 0, rejectedInRefresh: 0, promoted: 0, droppedError: 0 },
@@ -321,6 +335,11 @@ export function recordActiveSqeEvaluation(
     for (const f of failures) {
       const gate = extractSqeGateId(f);
       r.sqeGateRejects[gate] = (r.sqeGateRejects[gate] ?? 0) + 1;
+      // OBJ-3: the refresh-phase slice — same gate id, only on the refresh path.
+      if (phase === 'refresh') {
+        r.sqeGateRejectsAtRefresh ??= {};
+        r.sqeGateRejectsAtRefresh[gate] = (r.sqeGateRejectsAtRefresh[gate] ?? 0) + 1;
+      }
     }
   }
 }
@@ -353,6 +372,8 @@ export function getActiveFunnelStats(mode: FunnelMode, assetClass: FunnelAssetCl
     strategyAttrition: { ...r.strategyAttrition },
     postSqeRejects: { ...r.postSqeRejects },
     sqeGateRejects: { ...r.sqeGateRejects },
+    // reloaded pre-OBJ-3 checkpoints lack the field — snapshot as {} (absent-honest)
+    sqeGateRejectsAtRefresh: { ...(r.sqeGateRejectsAtRefresh ?? {}) },
     rtbRefresh: { ...r.rtbRefresh },
     sqeAttempts: { ...r.sqeAttempts },
   };
