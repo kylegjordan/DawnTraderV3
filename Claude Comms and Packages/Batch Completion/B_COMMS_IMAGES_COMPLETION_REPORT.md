@@ -46,3 +46,11 @@ Comms Fabric" section — one-line pointer update rides the next governance pass
 (letter batch, no phase change). Board: B-COMMS-IMAGES card → Verification pending Kyle ack +
 green-CI addendum. Kyle's human-grade confirmation: repost the Fable-5 screenshot addressed to
 Langston.
+
+## ADDENDUM 2026-08-06 — CI GREEN, BATCH FORMALLY CLOSED (pending Kyle ack)
+Run 3.1129325212e+10: completed success on head `5f2742103` (the commit carrying the full batch +
+governance set) — all 4 jobs green. The prior red was decomposed by CC-A: ONE real failure
+(his tier-register mock gap, fixed) + two cancel-cascade artifacts wearing failure
+conclusions; this batch's files were never implicated. Alert `19a17b2f` (missing
+PHASE_HISTORY) resolved same evening: entry landed at `5f2742103` with provenance note.
+Rule-19 obligation discharged. Board: card in Verification; CLOSED on Kyle's acknowledgment.
