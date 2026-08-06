@@ -2109,3 +2109,7 @@ During the 33-min sustained paper window (session `paper_cHEmpUkX01`), every `he
 
 **MEASURED:** live `restart_time = 543`; `/home/deploy/.pm2/dump.pm2` carries **357** ⇒ the dump `pm2-deploy.service` resurrects from is **186 restarts stale**. A server reboot restores the process list/env AS OF that old save — silently. **29(c) note: resurrect-restores-counter is Langston's stated HYPOTHESIS; the 357-vs-543 divergence is the measurement.** **Deliberately NOT absorbed into B-DEPLOY-LOCK** (his instruction — adjacent, not the same defect). **HOME: P19-B12 (diagnostics + internal-health monitoring)** — a dump-freshness check belongs with the system-is-unwell detectors. Owner: P19-B12's owner at its scoping. Related: #649 F-A, `pm2-deploy.service`. **OPEN (homed).**
 
+### #651 OPEN 2026-08-06 (Langston, at B-DEPLOY-LOCK Step-8; CC-B filing) — `SYSTEM_MANUAL:9627/:9641` PRESCRIBE `git pull` OF THE RETIRED WORKING COPY
+
+**Found during the #649 sweep verification and explicitly NOT absorbed there (Langston: "file it, don't absorb it" — it is a DIFFERENT object: the local clone, not the staging deploy).** Two System Manual sites still prescribe pulling the old shared working copy, stale against **Kyle's 2026-07-23 retirement** of that folder (§7.1: each session works in its OWN clone). **HOME: CC-A's rules/doc-accuracy lane (the B-RULES family) — flagged to him at filing; if he declines, it returns to the next System Manual content pass.** Owner: CC-A (proposed). **OPEN (homed, owner pending his ack).**
+

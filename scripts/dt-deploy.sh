@@ -120,7 +120,9 @@ STAMPED=$(cat dist/BUILD_SHA 2>/dev/null || true)
 [ "$STAMPED" = "$SHA" ] || fail "dist/BUILD_SHA is '$STAMPED', expected $SHA — the build did not stamp this worktree's sha"
 
 # ── F1: the SYSTEM_MANUAL:12734 invariant — migrate BETWEEN build and restart ─
-say "db:migrate begin"; npm run db:migrate; say "db:migrate end"
+say "db:migrate begin"; MIG_T0=$(date +%s%3N); MIG_AT=$(date -u +%FT%TZ)
+npm run db:migrate
+MIG_MS=$(( $(date +%s%3N) - MIG_T0 )); say "db:migrate end (${MIG_MS}ms)"
 
 # ── optional batch-specific step (F1) ────────────────────────────────────────
 if [ -n "$PRE_RESTART" ]; then
@@ -176,6 +178,8 @@ restart_time=${RESTART_TIME:-unknown}
 deployed_at=$(date -u +%FT%TZ)
 deployed_by=$(cat "$LOCK_DIR/holder")
 check_failure_window_s=$WINDOW
+migrate_ran_at=$MIG_AT
+migrate_ms=$MIG_MS
 EOF
 echo "dt-deploy: OK — $SHA live, engine resumed, identity asserted."
 # Langston (Step-4b): this script BOUNDS the window, it does not measure the

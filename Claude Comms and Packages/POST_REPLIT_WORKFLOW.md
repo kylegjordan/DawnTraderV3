@@ -214,7 +214,7 @@ A batch is done only when **every numbered objective from the scope document is 
 2. Fixes the code in the clone
 3. Langston reviews the fix (code-level)
 4. Push to GitHub
-5. Deploy to staging (git pull + build + pm2 restart)
+5. Deploy to staging: `dt-deploy <full-40-char-sha>` (B-DEPLOY-LOCK #649 — the raw chain is retired)
 6. Re-run verification (logs, DB, UI)
 7. Report findings
 8. Langston re-reviews
@@ -292,7 +292,7 @@ Claude Code prepares the batch completion report in `Reports/Batch Completion/`.
 | Pre-audit | Read clone files, guess runtime state | Read clone + SSH to check live logs, DB, UI | Reality-based instead of assumption-based |
 | Implementation | Write to DT_Staged_Changes, create zip + INSTRUCTIONS.md | Write directly to branch in clone | No translation layer, no relay errors |
 | Code review | Langston reviews zip contents and INSTRUCTIONS.md descriptions | Langston reviews actual `git diff` in the clone | Sees every changed line, including surgical edits |
-| Deploy | replit-cmd upload + Agent + push + pull (multi-step relay) | SSH: git pull + build + pm2 restart (direct) | No Agent interpretation, no message fragmentation |
+| Deploy | replit-cmd upload + Agent + push + pull (multi-step relay) | SSH: git pull + build + pm2 restart (direct) *(historical column — since 2026-08-06 the live path is `dt-deploy`, #649)* | No Agent interpretation, no message fragmentation |
 | Verification | Screenshot-based, UI-only, indirect | Logs + DB queries + UI navigation + CI | Multi-surface verification with actual evidence |
 | Debugging | Infer from screenshots, guess from behavior | pm2 logs for stack traces, psql for DB queries | Direct root-cause analysis |
 | Iteration | Fix + re-zip + re-upload + re-Agent (multi-step relay) | Fix + review + push + pull + build + restart (direct) | More direct iteration with code review preserved |

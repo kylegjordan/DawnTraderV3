@@ -70,13 +70,17 @@ sudo certbot --nginx -d staging.dawntrader.com
 ```
 
 ### Deploying Updates
+
+**One path (B-DEPLOY-LOCK #649):**
 ```bash
-cd /home/deploy/dawntrader
-git pull origin staging
-npm ci --production=false
-npm run build
-pm2 restart ecosystem.config.cjs
+ssh root@188.245.193.8 "su - deploy -c 'dt-deploy <full-40-char-sha>'"
 ```
+The raw chain that stood here was the strongest form of the thing #649 kills: it
+named a branch that does not exist (`staging`), so a block-paste FAILED that
+line and then built + restarted whatever state the worktree happened to hold —
+outside the lock, without `db:migrate`, restarting more than the app. `dt-deploy`
+locks, refuses dirt, migrates in-chain, and asserts identity + engine-resume
+before recording.
 
 ### Common Commands
 ```bash
