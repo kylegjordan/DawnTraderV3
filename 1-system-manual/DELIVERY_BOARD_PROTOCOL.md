@@ -85,6 +85,10 @@
 
 ⏸️ **AUTOMATION DELIBERATELY DEFERRED (Kyle, 2026-08-03): the governance checker COULD do the precise parts of this** — it already extracts batch-ids from commit subjects and grades doc-sets, so *"this batch has commits and no card"* and *"this card says Complete and the report is absent"* are exact, non-heuristic checks. ⛔ **But it is NOT being built yet, on purpose: "hold off and see how well it is used first."** ★ **And when it is built, it must check only what is CHECKABLE — never "should this card be in Verification rather than Implementation," which a commit cannot tell you. A nag that is frequently wrong gets ignored, and an ignored alert channel is exactly how the blind spots this project spent a week clearing were created.**
 
+### 5.x ⚠ ADDING A SINGLE-SELECT OPTION IS A CLOBBER EVENT (measured 2026-08-06)
+
+Adding one option to a single-select field (Owner, Type, Status, …) via `updateProjectV2Field` **regenerates EVERY option ID on that field**, which (a) **silently clears the field's value on every existing card** (27 cards lost their Owner the night this was learned), and (b) makes every cached option ID a **silent no-op — the mutation returns success and changes nothing** (caught only by read-back). The trap is the platform mutation itself; executing it "carefully" does not avoid it. **Procedure for ANY options-list change:** (1) snapshot title→value for the whole board FIRST; (2) apply the option change; (3) re-set every card from the snapshot using FRESHLY-FETCHED option IDs; (4) READ BACK the full histogram — a success exit proves nothing; (5) never trust a cached option ID across an options-list change (helper scripts must fetch the field map per run, not from a cache file).
+
 ## 5. Honest limits — stated so nobody trusts this further than it earns
 
 ⚠️ **NOTHING AUTOMATES THIS.** No hook, no check, no CI step moves a card. **If sessions do not update it, it becomes a confidently wrong second record** — and a stale board is more dangerous than no board, because Kyle will believe it. **This is the same failure mode as the four documents that agreed with each other and disagreed with the code (#641).**
