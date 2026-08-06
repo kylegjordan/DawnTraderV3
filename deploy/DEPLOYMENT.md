@@ -73,7 +73,7 @@ sudo certbot --nginx -d staging.dawntrader.com
 
 **One path (B-DEPLOY-LOCK #649):**
 ```bash
-ssh root@188.245.193.8 "su - deploy -c 'dt-deploy <full-40-char-sha>'"
+ssh root@188.245.193.8 "su - deploy -c 'dt-deploy <full-40-char-sha> --by <session>'"
 ```
 The raw chain that stood here was the strongest form of the thing #649 kills: it
 named a branch that does not exist (`staging`), so a block-paste FAILED that

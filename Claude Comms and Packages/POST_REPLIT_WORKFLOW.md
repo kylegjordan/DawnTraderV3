@@ -159,7 +159,7 @@ If CI fails, Claude Code fixes and re-pushes. Langston is informed of the fix.
 Claude Code updates the Hetzner staging server via SSH:
 
 ```bash
-ssh root@188.245.193.8 "su - deploy -c 'dt-deploy <full-40-char-sha>'"   # B-DEPLOY-LOCK #649: dt-deploy replaces this chain — npm ci is now CONDITIONAL on a lockfile diff, in-chain
+ssh root@188.245.193.8 "su - deploy -c 'dt-deploy <full-40-char-sha> --by <session>'"   # B-DEPLOY-LOCK #649: dt-deploy replaces this chain — npm ci is now CONDITIONAL on a lockfile diff, in-chain
 ```
 *(Current staging host: 188.245.193.8)*
 
@@ -214,7 +214,7 @@ A batch is done only when **every numbered objective from the scope document is 
 2. Fixes the code in the clone
 3. Langston reviews the fix (code-level)
 4. Push to GitHub
-5. Deploy to staging: `dt-deploy <full-40-char-sha>` (B-DEPLOY-LOCK #649 — the raw chain is retired)
+5. Deploy to staging: `dt-deploy <full-40-char-sha> --by <session>` (B-DEPLOY-LOCK #649 — the raw chain is retired)
 6. Re-run verification (logs, DB, UI)
 7. Report findings
 8. Langston re-reviews

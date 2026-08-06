@@ -5,7 +5,14 @@
 # Scope: B_DEPLOY_LOCK_SCOPE.md rev 4 (Langston Step-1 APPROVED)
 # Pre-audit: B_DEPLOY_LOCK_PRE_AUDIT.md (Step-2 APPROVED)
 #
-# Usage:  dt-deploy <full-40-char-sha> [--pre-restart '<npm script>']
+# Usage:  dt-deploy <full-40-char-sha> --by <session> [--pre-restart '<npm script>']
+#
+# --by (#656, Kyle-directed hotfix): every session reaches this box as the SAME
+# unix identity (root -> su deploy), so the observed identity cannot attribute
+# a deploy to a session. The flag is REQUIRED — refuse-not-guess, the
+# CREW_SESSION precedent — and is recorded as deployed_by_claimed (a CLAIM,
+# per #447: never dressed as proven; the observed identity stays alongside it
+# as deployed_via).
 #
 # Chain (OBJ-1): lock → fetch → sha-on-branch check → DIRTY-WORKTREE FAIL-LOUD
 #   → reset to the NAMED sha → conditional npm ci (lockfile diff, BEFORE build)
@@ -35,11 +42,16 @@ LIVENESS_URL="http://localhost:5000/api/health/liveness"
 
 SHA="${1:-}"
 PRE_RESTART=""
-if [ $# -ge 2 ]; then
-  if [ "$2" = "--pre-restart" ] && [ $# -eq 3 ]; then PRE_RESTART="$3"
-  else echo "dt-deploy: REFUSED — unrecognised arguments: ${*:2}. Usage: dt-deploy <sha> [--pre-restart '<npm script>']" >&2; exit 1
-  fi
-fi
+BY=""
+USAGE="Usage: dt-deploy <full-40-char-sha> --by <session: CC-A|CC-B|CC-C|kyle-direct|langston> [--pre-restart '<npm script>']"
+shift $(( $# > 0 ? 1 : 0 ))
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --by)          [ $# -ge 2 ] || { echo "dt-deploy: REFUSED — --by needs a value. $USAGE" >&2; exit 1; }; BY="$2"; shift 2 ;;
+    --pre-restart) [ $# -ge 2 ] || { echo "dt-deploy: REFUSED — --pre-restart needs a value. $USAGE" >&2; exit 1; }; PRE_RESTART="$2"; shift 2 ;;
+    *)             echo "dt-deploy: REFUSED — unrecognised argument: $1. $USAGE" >&2; exit 1 ;;
+  esac
+done
 
 fail() { echo "dt-deploy: REFUSED — $*" >&2; exit 1; }
 # Step-8 (Langston): a no-op migrate is structurally unverifiable from outside —
@@ -47,8 +59,14 @@ fail() { echo "dt-deploy: REFUSED — $*" >&2; exit 1; }
 say() { echo "[$(date -u +%FT%T.%3NZ)] dt-deploy: $*"; }
 
 # ── argument: a NAMED full sha, nothing else (OBJ-1; #621's lesson) ──────────
-[ -n "$SHA" ] || fail "no sha given. Usage: dt-deploy <full-40-char-sha> [--pre-restart '<npm script>']"
+[ -n "$SHA" ] || fail "no sha given. $USAGE"
 echo "$SHA" | grep -qE '^[0-9a-f]{40}$' || fail "'$SHA' is not a full 40-char sha. Deploys name their exact commit — no branches, no short forms, no HEAD."
+
+# ── --by is REQUIRED (#656): the record must say WHICH SESSION deployed ──────
+# Refuse-not-guess: an unattributed deploy defeats the record's bypass check.
+# Tight charset keeps the record line parseable (no spaces/newlines injected).
+[ -n "$BY" ] || fail "no --by given. Every deploy names its session — the observed unix identity is the same for all of them, so without the claim the record cannot attribute this deploy. $USAGE"
+echo "$BY" | grep -qE '^[A-Za-z0-9_-]{2,24}$' || fail "'--by $BY' must be 2-24 chars of [A-Za-z0-9_-] (e.g. CC-B, kyle-direct)."
 
 # ── THE LOCK (OBJ-2/3/4) — atomic mkdir; refuse, never queue ─────────────────
 if ! mkdir "$LOCK_DIR" 2>/dev/null; then
@@ -77,9 +95,10 @@ fi
 # C-7: INT/TERM/HUP too — an ssh disconnect mid-deploy must not strand the
 # lock and force the manual tier-3 path this tool exists to make rare.
 trap 'rm -rf "$LOCK_DIR"' EXIT INT TERM HUP
-# holder is CLAIMED, not proven (#447 — no provenance-shaped theater): the
-# unix identity observed, no free-text override.
-echo "$(whoami)@$(hostname) via ${SUDO_USER:-direct}" > "$LOCK_DIR/holder"
+# holder = the SESSION CLAIM plus the observed unix identity (#656 revised
+# #447's wording, not its principle: the claim is labelled a claim, the
+# observed identity rides alongside — nothing claimed is dressed as proven).
+echo "$BY ($(whoami)@$(hostname) via ${SUDO_USER:-direct})" > "$LOCK_DIR/holder"
 echo "$SHA"        > "$LOCK_DIR/sha"
 date -u +%FT%TZ    > "$LOCK_DIR/since"
 echo "$$"          > "$LOCK_DIR/pid"
@@ -176,7 +195,8 @@ cat > "$RECORD" <<EOF
 sha=$SHA
 restart_time=${RESTART_TIME:-unknown}
 deployed_at=$(date -u +%FT%TZ)
-deployed_by=$(cat "$LOCK_DIR/holder")
+deployed_by_claimed=$BY
+deployed_via=$(whoami)@$(hostname) via ${SUDO_USER:-direct}
 check_failure_window_s=$WINDOW
 migrate_ran_at=$MIG_AT
 migrate_ms=$MIG_MS
