@@ -47,8 +47,18 @@ USAGE="Usage: dt-deploy <full-40-char-sha> --by <session: CC-A|CC-B|CC-C|kyle-di
 shift $(( $# > 0 ? 1 : 0 ))
 while [ $# -gt 0 ]; do
   case "$1" in
-    --by)          [ $# -ge 2 ] || { echo "dt-deploy: REFUSED — --by needs a value. $USAGE" >&2; exit 1; }; BY="$2"; shift 2 ;;
-    --pre-restart) [ $# -ge 2 ] || { echo "dt-deploy: REFUSED — --pre-restart needs a value. $USAGE" >&2; exit 1; }; PRE_RESTART="$2"; shift 2 ;;
+    # Step-4 (#656 review): a value matching -* is a swallowed FLAG, not a value
+    # (an unset $SESSION in the documented full form collapses to exactly that —
+    # the deploy would proceed with --pre-restart silently skipped); a repeat is
+    # two claims with one silently discarded (refuse-not-guess, both arms).
+    --by)          [ $# -ge 2 ] || { echo "dt-deploy: REFUSED — --by needs a value. $USAGE" >&2; exit 1; }
+                   case "$2" in -*) echo "dt-deploy: REFUSED — --by value '$2' looks like a flag (an unset variable in a scripted call collapses to this). $USAGE" >&2; exit 1 ;; esac
+                   [ -z "$BY" ] || { echo "dt-deploy: REFUSED — duplicate --by ('$BY' then '$2'): two claims, refusing to pick one." >&2; exit 1; }
+                   BY="$2"; shift 2 ;;
+    --pre-restart) [ $# -ge 2 ] || { echo "dt-deploy: REFUSED — --pre-restart needs a value. $USAGE" >&2; exit 1; }
+                   case "$2" in -*) echo "dt-deploy: REFUSED — --pre-restart value '$2' looks like a flag. $USAGE" >&2; exit 1 ;; esac
+                   [ -z "$PRE_RESTART" ] || { echo "dt-deploy: REFUSED — duplicate --pre-restart." >&2; exit 1; }
+                   PRE_RESTART="$2"; shift 2 ;;
     *)             echo "dt-deploy: REFUSED — unrecognised argument: $1. $USAGE" >&2; exit 1 ;;
   esac
 done
@@ -64,7 +74,9 @@ echo "$SHA" | grep -qE '^[0-9a-f]{40}$' || fail "'$SHA' is not a full 40-char sh
 
 # ── --by is REQUIRED (#656): the record must say WHICH SESSION deployed ──────
 # Refuse-not-guess: an unattributed deploy defeats the record's bypass check.
-# Tight charset keeps the record line parseable (no spaces/newlines injected).
+# Tight charset keeps the CLAIM line parseable (no spaces/newlines injected).
+# The observed deployed_via line DOES carry spaces — the record is read by
+# split-on-first-'=' only, never sourced (Step-4 #656: stated, not implied).
 [ -n "$BY" ] || fail "no --by given. Every deploy names its session — the observed unix identity is the same for all of them, so without the claim the record cannot attribute this deploy. $USAGE"
 echo "$BY" | grep -qE '^[A-Za-z0-9_-]{2,24}$' || fail "'--by $BY' must be 2-24 chars of [A-Za-z0-9_-] (e.g. CC-B, kyle-direct)."
 
