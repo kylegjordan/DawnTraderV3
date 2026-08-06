@@ -4,6 +4,22 @@
 >
 > **How the task uses this:** read this file → compare the official changelog against it → message Kyle ONLY about genuinely-new, relevant features not already below → append what it surfaced.
 
+## PROCEDURE — authoritative (relocated from `CLAUDE.md` rule 21 at B-RULES-1b C1, 2026-08-06; the rule holds the pointer)
+
+**Cadence:** once daily (the scheduled task `daily-claude-model-check`, ~09:22 local) + opportunistically on a wake/session start. **PART A** — newer/stronger Claude model than what we run. **PART B** (Kyle 2026-06-16) — new Claude Code features/functionality useful to DawnTrader (this ledger is the dedup).
+
+**⚠️ AVAILABILITY MUST BE CONFIRMED TWO WAYS — NEVER from the Claude Code app’s model dropdown** (Kyle 2026-06-13: the dropdown LISTS shut-down models — Fable 5 appeared selectable while retired and erroring; “listed” ≠ “functioning”). Confirm a candidate via BOTH: (a) Anthropic’s OFFICIAL site (docs.claude.com models overview / anthropic.com/news / status.anthropic.com), AND (b) a LIVE one-off test invocation on Langston’s box (`claude -p --model <id> --permission-mode bypassPermissions “OK”`) — returns text = functioning + accessible; errors “may not exist or you may not have access” = NOT usable. ALSO re-run the live test on `claude-fable-5` to detect access/billing changes (the live test proves ACCESS not BILLING — confirm subscription-inclusion from official plan/pricing pages).
+
+**On a finding:** surface to Kyle in plain language (name + exact model ID + passed-the-live-test + recommendation) — NEVER switch anything unilaterally; Kyle decides. A Langston switch, if approved: repeat the live test BEFORE flipping, snapshot rollback backups, and switch BOTH his model sites (`discord-langston-bridge.py` + `langston-call` — a single-site switch runs him split). Silent on no-change days — except the RUN LOG row below, which is not a Kyle-facing message.
+
+**What we run (keep current):** CC main-loop = the app-selected model; Langston = `claude-opus-5[1m]` (since 2026-07-27).
+
+## RUN LOG — the committed liveness artifact (B-RULES-1b C1; newest first)
+
+> **Every run appends ONE dated row here and commits it — including silent no-finding runs.** This is the artifact that proves the mechanism lives, readable by Langston and Kyle at the ref (the local task registry’s `lastRunAt` is visible only on the desktop). A row missing for >48h = the task is dead — that absence is the alarm, and it is readable by anyone.
+
+- 2026-08-06 | ran 07:59Z (registry-observed; first COMMITTED row lands at the next scheduled run — this row is the seed, written at C1 build time, and says so honestly) | no findings surfaced today
+
 ## Already adopted / known (baseline as of 2026-06-16 — do NOT re-surface)
 
 | Feature | Status for us | Notes |
