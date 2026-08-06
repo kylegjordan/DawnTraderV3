@@ -40,15 +40,18 @@ FUNCTIONALLY COMPLETE + Step-8-verified but not formally closed until then.**
 
 ## Governance files changed
 `BATCH_CATALOG.md` (entry) · `RUNNING_ISSUES.md` (#657 CLOSED annotation) · this report ·
-scope + pre-audit (committed with the code, census correction recorded). Not applicable:
-SYSTEM_MANUAL/SIM (no engine architecture; comms fabric detail lives with the SIM "Discord
-Comms Fabric" section — one-line pointer update rides the next governance pass), PHASE_HISTORY
-(letter batch, no phase change). Board: B-COMMS-IMAGES card → Verification pending Kyle ack +
+scope + pre-audit (committed with the code, census correction recorded) · **PHASE_HISTORY
+entry at `5f2742103`** — ⚠ corrected in place: this report originally self-declared
+PHASE_HISTORY n/a, which is neither of the two governed paths (entry, or a signed na-skip
+row); the checker caught it (alert `19a17b2f`, resolved with the entry) — see addendum.
+Not applicable: SYSTEM_MANUAL/SIM (no engine architecture; comms fabric detail lives with
+the SIM "Discord Comms Fabric" section — one-line pointer update rides the next
+governance pass). Board: B-COMMS-IMAGES card → Verification pending Kyle ack +
 green-CI addendum. Kyle's human-grade confirmation: repost the Fable-5 screenshot addressed to
 Langston.
 
 ## ADDENDUM 2026-08-06 — CI GREEN, BATCH FORMALLY CLOSED (pending Kyle ack)
-Run 3.1129325212e+10: completed success on head `5f2742103` (the commit carrying the full batch +
+Run 31129325212: completed success on head `5f2742103` (the commit carrying the full batch +
 governance set) — all 4 jobs green. The prior red was decomposed by CC-A: ONE real failure
 (his tier-register mock gap, fixed) + two cancel-cascade artifacts wearing failure
 conclusions; this batch's files were never implicated. Alert `19a17b2f` (missing
