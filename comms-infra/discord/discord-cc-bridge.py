@@ -189,12 +189,27 @@ def daemon():
             log(f"voice enqueued: msg {message.id} from {message.author}")
             return
         content = (message.content or "").strip()
+        # B-COMMS-IMAGES: capture Kyle's image attachments. Metadata on-loop, DOWNLOAD
+        # off-loop (executor) so a slow CDN can't stall the gateway. Save failures are
+        # RECORDED, not swallowed — a failed save must never read as "no image" (#453).
+        _imeta = dc.collect_image_meta(message)
+        _media, _mfail = [], []
+        if _imeta:
+            _media, _mfail = await client.loop.run_in_executor(
+                None, dc.save_image_meta, _imeta, message.id, LOG_FILE)
+        _extra = {}
+        if _media:
+            _extra["media_paths"] = _media
+        if _mfail:
+            _extra["media_failed"] = _mfail
         # Kyle text inbound: empty kind so cc-wake-filter.py treats it as a Kyle message
         # (its Telegram convention) + sender_id present for any field-based filtering.
         append_inbox("", channel_id=message.channel.id, message_id=message.id,
                      author_id=message.author.id, sender_id=message.author.id,
-                     sender_username=str(message.author), is_dm=is_dm, text=content)
-        log(f"inbox: Kyle msg {message.id}: {content[:80]}")
+                     sender_username=str(message.author), is_dm=is_dm, text=content, **_extra)
+        log(f"inbox: Kyle msg {message.id}: {content[:80]}"
+            + (f" [+{len(_media)} image(s)]" if _media else "")
+            + (f" [!{len(_mfail)} save-FAILED]" if _mfail else ""))
         # No auto-ACK: redundant in a shared channel (Kyle sees his own message land; the
         # wake watcher wakes CC immediately). Removing it also avoids the on-loop blocking
         # send + a paid Langston turn per message (Langston review 1b/2a).
@@ -221,16 +236,35 @@ def daemon():
     client.run(BOT_TOKEN, reconnect=True, log_handler=None)
 
 
-def send(message, notify=False, sender=None):
+def send(message, notify=False, sender=None, file=None):
     """Post a message to the configured channel. Mirrors as cc_outbound.
 
     sender ("Claude Old"/"Claude New"): if a webhook is configured, post via it with that
     display name (+ optional avatar) so the two CC sessions show as distinct senders. Falls
     back to a normal bot post (name "DawnTrader CC") when no webhook/sender is set.
     notify (Test 6 / §6.10): @-mention Kyle so Discord pushes a phone notification.
+    file (B-COMMS-IMAGES): path ON THIS BOX to upload with the message (≤ dc.MEDIA_MAX_BYTES,
+    fail-closed). File posts are single-message (no chunking): content caps at 2000 chars.
     """
     channel_id = CFG["channel_id"]
     mention = CFG["kyle_id"] if notify else None
+    if file:
+        if not os.path.isfile(file):
+            print(f"send FAILED: --file not found on this box: {file}", file=sys.stderr)
+            return None
+        body = (f"<@{mention}> " + message) if mention else message
+        if sender and CFG.get("webhook_url"):
+            first_id = dc.send_file("webhook", None, CFG["webhook_url"], body, file, LOG_FILE,
+                                    username=sender)
+        else:
+            first_id = dc.send_file("bot", BOT_TOKEN, channel_id, body, file, LOG_FILE)
+        if first_id is None:
+            print("send FAILED (file upload refused or failed — bridge log has the reason)", file=sys.stderr)
+            return None
+        append_inbox("cc_outbound", channel_id=channel_id, message_id=first_id, text=message,
+                     notify=notify, sender=sender, media_paths=[file])
+        print(f"sent id={first_id}")
+        return first_id
     if sender and CFG.get("webhook_url"):
         avatar = CFG.get("avatars", {}).get(sender)
         first_id = dc.webhook_send(CFG["webhook_url"], sender, message, LOG_FILE,
@@ -255,11 +289,12 @@ def main():
     s.add_argument("--message", required=True)
     s.add_argument("--notify", action="store_true", help="@-mention Kyle so Discord pushes a phone notification")
     s.add_argument("--sender", default=None, help='display name for webhook posts, e.g. "Claude Old" / "Claude New"')
+    s.add_argument("--file", default=None, help="path ON THIS BOX to upload with the message (image etc.; fail-closed size cap)")
     args = parser.parse_args()
     if args.cmd in (None, "daemon"):
         daemon()
     elif args.cmd == "send":
-        send(args.message, notify=args.notify, sender=args.sender)
+        send(args.message, notify=args.notify, sender=args.sender, file=args.file)
 
 
 if __name__ == "__main__":

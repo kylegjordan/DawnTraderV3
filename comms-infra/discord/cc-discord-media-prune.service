@@ -1,0 +1,10 @@
+[Unit]
+Description=Prune the Discord media transit buffer (>60 days; B-COMMS-IMAGES, Langston condition (e))
+
+[Service]
+Type=oneshot
+# The media dir is a TRANSIT BUFFER, not an archive: anything load-bearing as batch
+# evidence must be committed to the repo before it can age out (Langston (e)).
+# find's default -P never follows symlinks, and -type f skips symlink entries entirely.
+# Deletions are COUNTED and logged — never silent.
+ExecStart=/bin/sh -c 'N=$(find /var/log/cc-discord-media -mindepth 1 -type f -mtime +60 -print -delete | wc -l); find /var/log/cc-discord-media -mindepth 1 -type d -empty -delete; echo "$(date -u +%%FT%%TZ) pruned $N file(s)" >> /var/log/cc-discord-media-prune.log'

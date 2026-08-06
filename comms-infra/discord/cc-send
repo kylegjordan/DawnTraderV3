@@ -20,12 +20,14 @@ MESSAGE=""
 THREAD_ID=21
 NOTIFY=0
 SENDER=""
+FILE=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --message) MESSAGE="$2"; shift 2 ;;
     --thread-id) THREAD_ID="$2"; shift 2 ;;
     --notify) NOTIFY=1; shift ;;
     --sender) SENDER="$2"; shift 2 ;;
+    --file) FILE="$2"; shift 2 ;;
     *) echo "cc-send: unknown arg $1" >&2; exit 2 ;;
   esac
 done
@@ -42,9 +44,16 @@ case "$COMMS_BACKEND" in
     EXTRA=()
     [ "$NOTIFY" = "1" ] && EXTRA+=(--notify)
     [ -n "$SENDER" ] && EXTRA+=(--sender "$SENDER")
+    # B-COMMS-IMAGES: --file <path-on-this-box> uploads an image/file with the message.
+    [ -n "$FILE" ] && EXTRA+=(--file "$FILE")
     exec /opt/discord-bridges/venv/bin/python3 /opt/discord-bridges/discord-cc-bridge.py send --message "$MESSAGE" "${EXTRA[@]}"
     ;;
   telegram|*)
+    # Telegram rollback path predates image support: --file is refused rather than dropped.
+    if [ -n "$FILE" ]; then
+      echo "cc-send: --file is not supported on the telegram backend" >&2
+      exit 2
+    fi
     exec cc-comms-bridge send --thread-id "$THREAD_ID" --message "$MESSAGE"
     ;;
 esac

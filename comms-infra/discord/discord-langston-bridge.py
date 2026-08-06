@@ -302,6 +302,44 @@ def _self_advance(task_q, channel_id, items, prev_task):
     log(f"self-advance: re-invoking Langston for queue item {nxt['id']} (gate={nxt['gate_type']})")
 
 
+# ── B-COMMS-IMAGES: Langston-authored attachments (his invocation-7 condition (d), binding) ──
+ATTACH_RE = re.compile(r"\[\[ATTACH ([^\]\n]+)\]\]")
+ATTACH_ALLOWED_DIRS = ("/home/langston/outbox/", "/opt/langston-memory/exports/")
+
+
+def extract_attachments(text):
+    """Parse [[ATTACH /path]] markers from Langston's reply — one path per marker.
+    Markers are stripped ALWAYS, including on refusal. realpath() runs BEFORE the
+    allowlist prefix check: a string-prefix check without resolution is defeated by
+    ../ or a symlink planted in an allowed dir (the difference between an allowlist
+    and a decoration). Refusals are LOUD — appended to the posted message, never
+    silently dropped (a silently-dropped attachment is the absent-as-valid class:
+    Langston would believe he shipped evidence he didn't)."""
+    files, notes = [], []
+
+    def _sub(m):
+        raw = m.group(1).strip().strip('"')
+        base = os.path.basename(raw) or raw
+        try:
+            rp = os.path.realpath(raw)
+            if not any(rp.startswith(d) for d in ATTACH_ALLOWED_DIRS):
+                notes.append(f"(attachment refused: {base}: outside allowlist)")
+            elif not os.path.isfile(rp):
+                notes.append(f"(attachment refused: {base}: not a file)")
+            elif os.path.getsize(rp) > dc.MEDIA_MAX_BYTES:
+                notes.append(f"(attachment refused: {base}: exceeds {dc.MEDIA_MAX_BYTES}B cap)")
+            else:
+                files.append(rp)
+        except Exception as e:
+            notes.append(f"(attachment refused: {base}: {type(e).__name__})")
+        return ""
+
+    text = ATTACH_RE.sub(_sub, text)
+    if notes:
+        text = (text.rstrip() + "\n" + " ".join(notes)).strip()
+    return text, files
+
+
 def process_task(task, state, breaker, task_q=None):
     """Handle one queued task (text or voice): invoke claude, post reply unless [SILENT].
 
@@ -446,6 +484,18 @@ def process_task(task, state, breaker, task_q=None):
         addressed_prompt = ("[Discord: you have been directly addressed by name. Respond substantively in "
                             "one or a few lines. Do NOT reply with [SILENT] — on this channel you only "
                             "receive messages addressed to you." + review_marker_instr + "]\n\n" + prompt)
+    # B-COMMS-IMAGES: worker-thread download (never on the gateway loop). media lines are
+    # appended ONLY for THIS invoking message's attachments (Langston (f1)); a failed save
+    # is stated as a FAILURE, never presented as an empty set (Langston (f3), #453).
+    _media, _mfail = [], []
+    if task.get("image_atts"):
+        _media, _mfail = dc.save_image_meta(task["image_atts"], msg_id, LOG_FILE)
+    if _media:
+        addressed_prompt += ("\n\n[" + str(len(_media)) + " image attachment(s) on THIS message — "
+                             "view them with the Read tool: " + " · ".join(_media) + "]")
+    if _mfail:
+        addressed_prompt += ("\n\n[⚠ attachment(s) present on this message but save FAILED — an "
+                             "instrument failure, NOT an empty set (#453): " + "; ".join(_mfail) + "]")
     log(f"handling msg {msg_id} channel={channel_id} kind={kind}: {prompt[:120]}")
     # FRESH session id per invocation (fix 2026-06-21): a completed `claude -p --session-id X`
     # leaves X locked, so REUSING a stable session across calls fails the FIRST attempt EVERY
@@ -464,6 +514,9 @@ def process_task(task, state, breaker, task_q=None):
         return
     # Strip any reflexive [SILENT] marker and post; brief ack only if nothing substantive remains.
     cleaned = re.sub(r"\[SILENT\]", "", resp_stripped, flags=re.I).strip()
+    # B-COMMS-IMAGES: extract [[ATTACH]] markers BEFORE posting — markers stripped always,
+    # refusals appended loudly to the message itself (Langston (d)).
+    cleaned, _attach_files = extract_attachments(cleaned)
     if len(cleaned) < 3:
         cleaned = "Langston here — acknowledged."
     # Lead with the addressee's name so their wake watcher catches the reply (Kyle 2026-06-20).
@@ -476,6 +529,17 @@ def process_task(task, state, breaker, task_q=None):
             cleaned = f"{recipient} — {cleaned}"
     sent_id = dc.rest_send(BOT_TOKEN, channel_id, cleaned, LOG_FILE)
     mirror_event("langston_outbound", channel_id=channel_id, message_id=sent_id, reply_to=msg_id, text=cleaned)
+    # B-COMMS-IMAGES: upload his approved attachments AFTER the text lands; an upload
+    # failure is announced in-channel, never silently dropped (Langston (d)).
+    for _fp in _attach_files:
+        _fid = dc.send_file("bot", BOT_TOKEN, channel_id, "", _fp, LOG_FILE)
+        if _fid is None:
+            dc.rest_send(BOT_TOKEN, channel_id,
+                         f"(attachment upload FAILED: {os.path.basename(_fp)} — bridge log has the reason)",
+                         LOG_FILE)
+        else:
+            mirror_event("langston_outbound_media", channel_id=channel_id, message_id=_fid,
+                         reply_to=msg_id, text=f"[uploaded {_fp}]")
     log(f"responded to msg {msg_id}")
 
     # ── B-LANGSTON-QUEUE: apply Langston's done/blocked/error marker (PASSIVE, always-on), then

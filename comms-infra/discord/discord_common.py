@@ -308,6 +308,136 @@ def download_attachment(url, dest_path, log_file):
         return False, 0
 
 
+# ── B-COMMS-IMAGES (Langston-approved, private invocation #7; his conditions (d)/(e)/(f) binding) ──
+MEDIA_DIR = "/var/log/cc-discord-media"
+# Discord's platform cap is 25MB per upload (webhook/bot, non-Nitro). That figure is from the
+# docs research pinned in the PROMPT7 record (RULED ON REPORTED FACT per Langston (d)); we stop
+# a full MiB below it and FAIL CLOSED on anything larger.
+MEDIA_MAX_BYTES = 24 * 1024 * 1024
+IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"}
+
+
+def sanitize_filename(name):
+    """The filename half of <msg_id>_<filename> is ATTACKER-CONTROLLED (Langston (f)):
+    strip separators/traversal/control chars, cap length, KEEP the extension (the Read
+    tool wants it for type detection)."""
+    name = os.path.basename(str(name or "attachment"))
+    name = re.sub(r"[^A-Za-z0-9._-]", "_", name)
+    name = name.lstrip(".")  # no dotfiles, no '..' survivors
+    stem, dot, ext = name.rpartition(".")
+    if dot:
+        name = (stem[:60] or "attachment") + "." + ext[:10]
+    else:
+        name = name[:60] or "attachment"
+    return name
+
+
+def is_image_attachment(att):
+    ctype = (getattr(att, "content_type", None) or "").lower()
+    if ctype.startswith("image/"):
+        return True
+    return os.path.splitext(getattr(att, "filename", "") or "")[1].lower() in IMAGE_EXTS
+
+
+def collect_image_meta(message):
+    """Async-loop-safe capture: record url/filename/size only; the DOWNLOAD happens off-loop
+    (executor or worker thread) so a slow CDN can never stall the gateway."""
+    out = []
+    for i, att in enumerate(getattr(message, "attachments", []) or []):
+        if is_image_attachment(att):
+            out.append({"url": att.url, "filename": getattr(att, "filename", "img"),
+                        "size": getattr(att, "size", None), "i": i})
+    return out
+
+
+def save_image_meta(atts, message_id, log_file):
+    """Save image attachments under MEDIA_DIR/YYYY-MM-DD/. Returns (saved_paths, failures).
+    Failures never raise — but they are RETURNED and must be surfaced by the caller
+    (Langston (f): a failed save must be distinguishable from an empty set; #453)."""
+    saved, failures = [], []
+    for att in atts:
+        try:
+            if att.get("size") is not None and att["size"] > MEDIA_MAX_BYTES:
+                failures.append(f"{att['filename']}: {att['size']}B exceeds {MEDIA_MAX_BYTES}B cap")
+                continue
+            day = time.strftime("%Y-%m-%d", time.gmtime())
+            dest = os.path.join(MEDIA_DIR, day, f"{message_id}_{att['i']}_{sanitize_filename(att['filename'])}")
+            ok, nbytes = download_attachment(att["url"], dest, log_file)
+            if ok:
+                saved.append(dest)
+                log(f"media saved: {dest} ({nbytes}B)", log_file)
+            else:
+                failures.append(f"{att['filename']}: download failed (see log)")
+        except Exception as e:
+            failures.append(f"{att.get('filename', '?')}: {type(e).__name__}: {e}")
+    return saved, failures
+
+
+def _post_multipart_file(url, headers, payload_json, file_path, log_file):
+    """One multipart POST: payload_json part + files[0] part. 429-safe like _post_json."""
+    import mimetypes
+    fname = os.path.basename(file_path)
+    ctype = mimetypes.guess_type(fname)[0] or "application/octet-stream"
+    with open(file_path, "rb") as f:
+        fdata = f.read()
+    boundary = "----DTBridge" + uuid.uuid4().hex
+    body = b"".join([
+        (f'--{boundary}\r\nContent-Disposition: form-data; name="payload_json"\r\n'
+         f'Content-Type: application/json\r\n\r\n{json.dumps(payload_json)}\r\n').encode(),
+        (f'--{boundary}\r\nContent-Disposition: form-data; name="files[0]"; filename="{fname}"\r\n'
+         f'Content-Type: {ctype}\r\n\r\n').encode() + fdata + b"\r\n",
+        f"--{boundary}--\r\n".encode(),
+    ])
+    hdrs = dict(headers)
+    hdrs["Content-Type"] = f"multipart/form-data; boundary={boundary}"
+    for attempt in range(MAX_429_RETRIES + 1):
+        req = urllib.request.Request(url, data=body, method="POST", headers=hdrs)
+        try:
+            with urllib.request.urlopen(req, timeout=120) as r:
+                raw = r.read()
+                return True, (json.loads(raw) if raw else None)
+        except urllib.error.HTTPError as e:
+            raw = e.read().decode("utf-8", errors="replace")
+            if e.code == 429 and attempt < MAX_429_RETRIES:
+                try:
+                    wait = float(e.headers.get("Retry-After") or json.loads(raw).get("retry_after", 1.0))
+                except Exception:
+                    wait = 1.0
+                time.sleep(min(wait + 0.1, 10))
+                continue
+            log(f"multipart POST HTTP {e.code}: {raw[:300]}", log_file)
+            return False, None
+        except Exception as e:
+            log(f"multipart POST error: {type(e).__name__}: {e}", log_file)
+            return False, None
+    return False, None
+
+
+def send_file(kind, auth, target, content, file_path, log_file, username=None):
+    """Upload ONE file with an optional message. kind='webhook' (target=webhook_url) or
+    kind='bot' (auth=token, target=channel_id). Size-capped, FAIL CLOSED (refusal returns
+    None; caller must surface it — never a silent drop). Returns message id or None."""
+    try:
+        size = os.path.getsize(file_path)
+    except OSError as e:
+        log(f"send_file: cannot stat {file_path}: {e}", log_file)
+        return None
+    if size > MEDIA_MAX_BYTES:
+        log(f"send_file REFUSED: {file_path} is {size}B > cap {MEDIA_MAX_BYTES}B", log_file)
+        return None
+    payload = {"content": (content or "")[:MSG_LIMIT]}
+    if kind == "webhook":
+        url = target + ("&" if "?" in target else "?") + "wait=true"
+        headers = {"User-Agent": UA}
+        if username:
+            payload["username"] = username
+    else:
+        url = f"{DISCORD_API}/channels/{target}/messages"
+        headers = {"Authorization": f"Bot {auth}", "User-Agent": UA}
+    ok, resp = _post_multipart_file(url, headers, payload, file_path, log_file)
+    return (resp or {}).get("id") if ok else None
+
+
 def transcribe_audio(audio_path, log_file):
     """ffmpeg Ogg/Opus → 16kHz mono WAV → whisper-cli. Identical to the Telegram pipeline.
 
