@@ -42,6 +42,9 @@ if [ $# -ge 2 ]; then
 fi
 
 fail() { echo "dt-deploy: REFUSED — $*" >&2; exit 1; }
+# Step-8 (Langston): a no-op migrate is structurally unverifiable from outside —
+# so the tool TIMESTAMPS its own chain, making every run its own transcript.
+say() { echo "[$(date -u +%FT%T.%3NZ)] dt-deploy: $*"; }
 
 # ── argument: a NAMED full sha, nothing else (OBJ-1; #621's lesson) ──────────
 [ -n "$SHA" ] || fail "no sha given. Usage: dt-deploy <full-40-char-sha> [--pre-restart '<npm script>']"
@@ -84,7 +87,7 @@ echo "$$"          > "$LOCK_DIR/pid"
 cd "$APP_DIR"
 
 # ── fetch, then prove the sha is REAL and ON THE REVIEW BRANCH ───────────────
-git fetch origin
+say "fetch"; git fetch origin
 git cat-file -e "$SHA^{commit}" 2>/dev/null || fail "sha $SHA does not exist at origin"
 git merge-base --is-ancestor "$SHA" "$BRANCH" || fail "sha $SHA is not on $BRANCH — staging deploys only reviewed refs (§7.1)"
 
@@ -108,7 +111,8 @@ else
 fi
 
 # ── build (stamps the identity the post-condition asserts) ───────────────────
-npm run build
+say "build begin"; npm run build
+say "build end"
 # C-4: the stamp is written BY the build script (identity is a property of the
 # artifact, not of the deployer) — here we only ASSERT it matches the sha we
 # reset to. A mismatch means the build did not build this worktree. Fail loud.
@@ -116,7 +120,7 @@ STAMPED=$(cat dist/BUILD_SHA 2>/dev/null || true)
 [ "$STAMPED" = "$SHA" ] || fail "dist/BUILD_SHA is '$STAMPED', expected $SHA — the build did not stamp this worktree's sha"
 
 # ── F1: the SYSTEM_MANUAL:12734 invariant — migrate BETWEEN build and restart ─
-npm run db:migrate
+say "db:migrate begin"; npm run db:migrate; say "db:migrate end"
 
 # ── optional batch-specific step (F1) ────────────────────────────────────────
 if [ -n "$PRE_RESTART" ]; then
@@ -126,7 +130,7 @@ fi
 
 # ── restart + THE CONTIGUOUS CHECK-FAILURE WINDOW clock (pre-audit §3) ───────
 WINDOW_START=$(date +%s)
-pm2 restart dawntrader
+say "pm2 restart"; pm2 restart dawntrader
 
 # ── POST-CONDITIONS (CC-A's rule): asserted AT THE OBJECTS, record only after ─
 # 1. live HEAD == requested sha — read from the clone, not this script's belief
