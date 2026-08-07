@@ -55,6 +55,11 @@ export function ActiveSqeAndRtbSections({
   }
 
   const label = modeTail === 'paper' ? 'Paper' : 'Live';
+  /** #675: the MODE label ('Paper'/'Live') and the ASSET-CLASS label are different claims, and a coverage
+   *  gap belongs to the class, never the mode. Kept as a separate name so the two can't be swapped by
+   *  accident — they already were once, and it produced a card asserting Paper was unmeasured while Paper
+   *  crypto was measured on the neighbouring tab. */
+  const className = assetClass === 'crypto_spot' ? 'crypto' : 'xStock';
   const cls = funnel.data?.byAssetClass?.[assetClass];
   const since = funnel.data?.startedAt ? new Date(funnel.data.startedAt).toLocaleString() : null;
 
@@ -209,20 +214,23 @@ export function ActiveSqeAndRtbSections({
         const snr = cls.strategyNullReasons;
         if (!snr) {
           return (
-            <DiagTableCard theme="rolling" title="Why Each Strategy Declined" subtitle={`${label} — not measured for this asset class yet`} testId="fd-strategy-nulls-absent">
+            {/* ★ #675 — NAME THE ASSET CLASS, NEVER THE MODE. `label` is 'Paper'/'Live', and an earlier
+                revision of this card used it here: it rendered "not recorded for Paper yet", which is FALSE
+                — Paper crypto records them, on this very tab set. That is the same naming-the-wrong-cause
+                failure this card exists to prevent, committed inside the fix for it. Caught on the staging
+                walk, not in review. The uninstrumented thing is the CLASS's evaluation path. */}
+            <DiagTableCard theme="rolling" title="Why Each Strategy Declined" subtitle={`${className} — not measured yet`} testId="fd-strategy-nulls-absent">
               <div className="p-3 text-sm text-muted-foreground">
                 <p>
-                  Decline reasons are not recorded for {label} yet. <strong>These are not zeros.</strong> The
-                  figure is absent, which says something about what is being measured — not about how the
-                  strategies behaved.
+                  Decline reasons are not recorded for <strong>{className}</strong> yet.{' '}
+                  <strong>These are not zeros.</strong> The figure is absent, which says something about what
+                  is being measured — not about how the {className} strategies behaved.
                 </p>
                 <p className="mt-2">
-                  {/* #675: the reason is CLASS-scoped, never build-scoped. Saying "this build does not
-                      record it" would be false here — the same build records it for crypto. Naming the
-                      wrong cause is how an honest placeholder still misleads. */}
-                  Crypto and {label} run through separate evaluation paths, and only the crypto path reports
-                  its decline reasons today. Wiring the {label} path is its own tracked piece of work, so this
-                  table will stay empty until that lands — however long the system runs.
+                  Crypto and xStock run through separate evaluation paths, and only the crypto path reports
+                  its decline reasons today — so this is a gap in {className} coverage, not in {label} mode.
+                  Wiring the xStock path is its own tracked piece of work; until it lands this table stays
+                  empty however long the system runs, so waiting will not fill it.
                 </p>
               </div>
             </DiagTableCard>
