@@ -58,13 +58,26 @@ export function ActiveSqeAndRtbSections({
   const since = funnel.data?.startedAt ? new Date(funnel.data.startedAt).toLocaleString() : null;
 
   if (!cls || cls.status !== 'active') {
+    // ★ Step-4 finding (C): the first version returned the SQE card ALONE here, so the RTB section
+    // silently vanished in the awaiting state — the exact absent-vs-zero conflation this file's own
+    // header forbids, committed in the file that forbids it. BOTH sections must be present in every
+    // state, or a reader cannot tell "no activity yet" from "this tab has no RTB section".
     return (
-      <DiagTableCard theme="summary" title="SQE — Signal Quality Evaluation" subtitle={`${label} — awaiting first recorded activity`} testId="fd-sqe-awaiting">
-        <div className="p-3 text-sm text-muted-foreground">
-          No SQE activity recorded for this asset class yet. Deliberately blank rather than zeros — “not
-          measured” and “measured zero” are different statements, and this tab will not conflate them.
-        </div>
-      </DiagTableCard>
+      <div className="space-y-4" data-testid="fd-sqe-rtb-awaiting">
+        <DiagTableCard theme="summary" title="SQE — Signal Quality Evaluation" subtitle={`${label} — awaiting first recorded activity`} testId="fd-sqe-awaiting">
+          <div className="p-3 text-sm text-muted-foreground">
+            No SQE activity recorded for this asset class yet. Deliberately blank rather than zeros — “not
+            measured” and “measured zero” are different statements, and this tab will not conflate them.
+          </div>
+        </DiagTableCard>
+        <DiagTableCard theme="rolling" title="RTB — Ready-to-Buy Refresh" subtitle={`${label} — awaiting first recorded activity`} testId="fd-rtb-awaiting">
+          <div className="p-3 text-sm text-muted-foreground">
+            No RTB refresh activity recorded for this asset class yet. Present-and-empty on purpose: the
+            section exists on this tab, and it has nothing to report — which is a different statement from
+            the section being absent.
+          </div>
+        </DiagTableCard>
+      </div>
     );
   }
 

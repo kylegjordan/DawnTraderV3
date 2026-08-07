@@ -2235,3 +2235,12 @@ Today the sizer computes `$2,250 × 100% × 20% × 0.97 = $436.50` per trade, an
 **KYLE'S DECISION (2026-08-07, verbatim):** *"let's go with the fifteen at six point six six six seven percent to give us fifteen slots trading at close to one hundred and fifty dollars each."*
 ⇒ **paper: anchor $2,250 · exposure 100% · allocation 6.6667% ⇒ 15 slots × $145.58 buffered.** ★ **6.6667, NOT 6.67** — the rounded value makes `100 ÷ 6.67 = 14.99`, which floors to **14 slots**, one short, silently. (The same off-by-one was already visible on 07-16: that report notes the UI rendered **14** while `max_open_positions` said 15.)
 **HOME:** the value-set rides `B-SIZING-DEC-RESTORE` (it is that batch's owed VALUES decision, which Langston made a close condition). The CAUSE investigation stays here as #665, open, and does **not** block the batch.
+
+### #666 OPEN 2026-08-07 (CC-B; Langston Step-4 finding (B)) — **`p19-b8-5-obj6-gate-shadow.test.ts` HAS 2 FAILING ASSERTIONS, PRE-EXISTING — THE ONLY RED ON THE BRANCH**
+
+**MEASURED (full local suite): `Tests 2 failed | 2,525 passed | 132 skipped (2,659)`.** Both in ONE file: `p19-b8-5-obj6-gate-shadow.test.ts:72` and `:95`. The evaluator emits `reason=NetEV` where the test expects a `Confidence ` failure, on a fixture whose `chosenNetEv` is **+0.001 (positive)** — the honest net-EV admission failing when the fixture says it must not. **Rule-24 disposition NOT made** — real gate-precedence defect vs drifted fixture; provenance read owed first.
+
+**NOT caused by B-FILTER-DIAG-STANDARDIZE — three independent proofs, because "pre-existing" must not rest on assertion:** (1) **structural** — `signal_quality_evaluator.ts` imports nothing from the batch's 13-file change set; (2) **temporal** — the test last changed **2026-07-18**, three weeks before the batch's first commit (08-07T08:47); (3) **empirical** — CI was already `failure` at **06:17-06:34** on `a23b66d0d`/`44adbbf7a`/`a3510b9e3`/`e8ff88b70`/`483b6e85d`, all **DOCUMENTATION-ONLY** commits, 2½ h before any code existed.
+
+⚠️ **CONSEQUENCE: rule 19's "CI 4/4" cannot be satisfied by ANY batch on this branch right now** — cite per-job state and name this issue instead of claiming 4/4. **HOME: own micro-batch. OWNER: CC-B.** OPEN.
+

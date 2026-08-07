@@ -425,7 +425,6 @@ export function FilterDiagnosticsPanel({ data, isLoading, gateDisposition = 'tag
         <div className="rounded-md border border-blue-400/40 bg-blue-500/10 px-3 py-2 text-xs text-muted-foreground" data-testid="shared-scanner-banner">
           One scanner feeds all modes — the scan-stage numbers below are the shared feed's diagnostics.
           {modeTail ? ` ${modeTail === 'paper' ? 'Paper' : 'Live'} mode filters with its OWN thresholds; its real pipeline tail (pool, queue, gate, opens) is at the bottom of this tab.` : ''}
-          {' '}Per-stage active-path funnel counters arrive in B8.3b.
         </div>
       )}
       {/* Batch 42: Pipeline Summary Table — 24h aggregated. P19-B8.4c REV-3: summary theme (blue border +
@@ -815,10 +814,12 @@ export function FilterDiagnosticsPanel({ data, isLoading, gateDisposition = 'tag
                       Skip breakdown, then Strategy Evaluations. Per-lane Quant/Pattern split wired
                       using lc.quantNullReasonDetail / patternNullReasonDetail emitted by routes.ts
                       (xstock) and vts-runner snapshot (crypto). No leading minus signs. */}
-                  {/* P19-B8.3b (OBJ-1, #417): the VTS Signal Funnel is the VTS
-                      RUNNER's downstream processing (pair-pool → strategy evals →
-                      nulls → signals → trades) — VTS-engine activity, not the
-                      shared scan feed. It renders ONLY on the VTS page ('tag').
+                  {/* P19-B8.3b (OBJ-1, #417): the Signal Funnel is the VTS RUNNER's downstream
+                      processing (pair-pool → strategy evals → nulls → signals → trades) — VTS-engine
+                      activity, not the shared scan feed, so it renders on the VTS page only.
+                      ⚠️ B-FILTER-DIAG-STANDARDIZE: any "dormant until B8.4/B8.5" phrasing that used to sit
+                      here EXPIRED at the 2026-07-14 switch-on. The active path is NOT dormant; it does not
+                      emit THIS taxonomy (#662), which the enforce row above states.
                       On Paper/Live ('enforce') the active pipeline is dormant
                       until the B8.4 switch-on, so an honest placeholder shows in
                       its place (the scan-stage rows above ARE the shared feed). */}
@@ -955,14 +956,6 @@ export function FilterDiagnosticsPanel({ data, isLoading, gateDisposition = 'tag
                       </>
                     );
                   })()}
-                  {/* P19-B8.3b (OBJ-1, #417): honest active-path placeholder on Paper/Live. */}
-                  {gateDisposition === 'enforce' && (
-                    <tr className="border-b bg-amber-500/5" data-testid="fd-active-funnel-dormant">
-                      <td colSpan={4} className="p-3 text-xs text-muted-foreground italic text-center">
-                        Active-path signal funnel — populates when active trading is switched on (Phase 19 B8.4). The scan-stage totals above are the shared scanner feed.
-                      </td>
-                    </tr>
-                  )}
                 </tbody>
               </table>
             </div>
