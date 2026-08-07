@@ -2466,3 +2466,19 @@ collision from silent to loud for one session; it does nothing for the other thr
 
 **ALERT `e8e55e1f` STAYS ARMED** (18:00Z). It closes on a non-empty row. If 18:00Z passes with xStock still having had zero active-path evaluations, the finding is no longer about the recorder at all — it becomes *why does the active path evaluate xStock ~600× less often than crypto*, which is a **different question with a different owner** (#648 territory, cadence not instrumentation) and gets filed as such. **STATUS: OPEN, mechanism explained, confirming observation outstanding.**
 
+**#669 UPDATE 2026-08-07 — DIAGNOSED. RULE-24 OUTCOME (3): the TEST is stale, the CODE is correct. NOT a defect.**
+
+**CAUSE:** `59939a0bd` (2026-08-07 **04:54:25 UTC**, *B-SIZING-DEC-RESTORE Step-3 (4/n)*, **owner CC-C**) deleted the **11.7S confidence floor** from `signal_quality_evaluator.ts`. The deletion is **deliberate, Kyle-directed, and justified in an in-place comment**: the floor derived from the deleted class-less stability→posture overlay, and it was **already non-blocking** — VTS bypassed it via `skipConfidenceFloor`, the live path ran it in `gateShadowMode` — so *"removing it changes NO admission decision today."*
+
+**ESTABLISHED ON THREE LEGS, not clock-order:** (1) the deleting commit read at the site; (2) **ancestry** — `git merge-base --is-ancestor 59939a0bd a3510b9e3` ⇒ true, so the deletion is genuinely in the tree of the first-observed red (06:17 UTC); (3) **content control on both sides of the boundary** — the deletion marker is absent in the parent `2f0ebfdbb` (0 matches) and present in `59939a0bd` (1).
+
+**WHY EXACTLY TWO OF FOUR ASSERTIONS FAIL — the two whose premise needs a LIVE `Confidence ` failure to exist:**
+- `:72` asserts the live path produces a `Confidence ` failure. No confidence gate exists on that path now ⇒ `expected false to be true`.
+- `:95` asserts `live.failures.length > 1` (Confidence **plus** NetEV). With the floor gone the live path yields exactly one failure, NetEV ⇒ `expected 1 to be greater than 1`.
+
+★ **The second failure is the OPPOSITE of a bug.** That assertion existed to prove `gateShadowMode` rescued the exploration lane from a **structural zero** (a live Confidence failure made `isNetEvOnlyFailure` false, so exploration could never admit — P19-B8.5 OBJ-6, `573b38f83`, Langston-approved, #514). **With the floor deleted, that structural zero is gone on the LIVE path too** — the condition the test was written to demonstrate a workaround for no longer exists. The live-vs-shadow distinction collapsed because the gate distinguishing them was removed. **The other two assertions (shadow suppresses both gates; a negative netEV still rejects) correctly still PASS** — which is itself the control showing the file is not broadly broken.
+
+**FIX:** retire/rewrite the two assertions **with the reason recorded at the site**, so a later reader does not "restore" a floor that was deliberately cut. ⚠️ **NOT a code change — reinstating a class-less floor here would rebuild exactly what obj-10 deleted** (the deletion comment says so explicitly).
+
+**OWNERSHIP — RAISED, NOT UNILATERALLY TAKEN:** #669 is homed to CC-B, but the cause is **CC-C's in-flight batch**, and a batch that deletes a gate while leaving the test asserting it is incomplete by our own CI rule. Options put to Langston + CC-C: **(a)** CC-C folds the test update into B-SIZING-DEC-RESTORE, where the deletion and its justification already live (CC-B's preference); or **(b)** CC-B takes it as the #669 micro-batch citing obj-10 as provenance. **CC-B will not start either without a call** — editing tests inside another session's live batch is the §28 collision. **STATUS: OPEN, diagnosed, awaiting an ownership call.**
+
