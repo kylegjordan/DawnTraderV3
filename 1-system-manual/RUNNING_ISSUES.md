@@ -2418,3 +2418,22 @@ so correctness stops depending on anyone remembering. Not proposing which; not m
 script that writes the entry, assert the heading does not already exist, write, then re-read the
 file to prove the write landed and is unique — and re-check after any merge. It converts the
 collision from silent to loud for one session; it does nothing for the other three.
+
+### #675 OPEN 2026-08-07 (CC-B, B-FILTER-DIAG-STANDARDIZE residual) — **the paper xStock per-strategy decline table is EMPTY while crypto's populated immediately; TWO dispositions remain live and the current evidence CANNOT separate them**
+
+**MEASURED, with object and population stated.** Instrument: `GET /api/active-engine/diagnostics/funnel?mode=paper`, field `byAssetClass.<class>.strategyNullReasons`. At deploy `cf395a71c` (11:52Z) and again at 12:27Z: **`crypto_spot` = 14 strategies × 13 reason columns; `xstock_spot` = 0 strategies.** Both classes are `status: 'active'`.
+
+**THE TWO DISPOSITIONS:**
+- **(a) CADENCE** — the active path evaluates xStock far less often: **52 `source=signal-orchestrator` rows in 24h vs crypto's 9,978** (~190×), consistent with xStock's 15-minute bars. ⇒ 35 minutes was too short a window. **Predicts: a row appears within hours.**
+- **(b) A REAL PATH DIFFERENCE** not yet located, where active-path xStock declines never reach the 18 instrumented `detect*` sites. **Predicts: a row never appears.**
+
+⚠️ **WHY (a) IS NOT SIMPLY ASSERTED, though it is the comfortable answer:** the evidence to date is consistent with BOTH. "It is rare" is exactly the shape of explanation that ends an investigation one step early — and this batch already produced one near-miss of precisely that kind (4,304 xStock declines read as *my* wiring gap when they were `source=vts-runner`, **a different population**).
+
+⛔ **THE ARCHIVE CANNOT ANSWER THIS — do not reach for it.** `signal_eval_archive` holds **zero** `reject_stage='strategy_internal'` rows for the active path in **either** asset class, yet crypto's counter shows 14 strategies. **So the archive's silence is not evidence about the recorder; the counter is the only instrument with reach here.** (Positive control for that claim: the same query returns 9,372 `sqe` + 609 `admitted` active-path crypto rows, so the query shape works and the absence is real.)
+
+**ARMED, not left to memory:** scheduled alert **`e8e55e1f-3180-4e4a-a812-3093809dd926`**, `triggers_at` 2026-08-07T18:00:00Z, verified present at `state=scheduled` (⚠️ my first verification returned "0 scheduled" — a **parser error of mine**, looking for JSON in a plain-text table; caught only because a known-present row was used as a positive control).
+
+**DISPOSITION RULE, fixed in advance so the answer is not chosen after seeing the data:** non-empty ⇒ **(a)**, close this issue and the batch residual. Still empty ⇒ **(b) becomes the live hypothesis**, file the finding and trace whether xStock evaluation takes a different code path.
+
+**HOME (§9.4): this issue + alert `e8e55e1f`. OWNER: CC-B.** Blocks the B-FILTER-DIAG-STANDARDIZE close (Langston's Review is HOLDING on it, ratified). ↔ #662, #648.
+
