@@ -12958,3 +12958,17 @@ Tracked at RUNNING_ISSUES #129.
 - SIM entries: see "Recent Additions (B79.0n.SCORING + B79.0n.TEC, 2026-05-26)" section of `SYSTEM_IMPACT_MAP.md`
 - Onboarding patterns shipped: `ASSET_CLASS_ONBOARDING_WORKFLOW.md` §4.15 (promote-then-retire two-step) + §4.16 (all-keys HARD-FAIL coverage) + §4.17 (Step 6 deploy-SHA verification) + §4.18 (CI initial-schema pg_dump divergence)
 
+---
+
+## The strategy-decline taxonomy: one shared record, two readers (B-FILTER-DIAG-STANDARDIZE, 2026-08-07)
+
+**What a "decline" is.** Most of what a trading pipeline does is decline. A strategy is offered a symbol and, the great majority of the time, reports no setup — no pattern, an indicator out of range, price not in the required zone, insufficient history. **The count of declines is nearly worthless; the REASON is the diagnostic**, because it distinguishes "this strategy is looking and the market is not offering" from "this strategy is structurally unable to fire" — which is the question behind #648 (six strategies that have never traded).
+
+**How the reason is produced.** Each strategy records its own reason as it declines, into a single shared module (`server/utils/null-reason-tracker.ts`). It is deliberately not a return value: the detectors return `null`, and threading a reason through every signature would have touched every strategy. **The taxonomy is therefore authored by the strategies themselves, not by whoever is counting** — which is why both pipelines can report the same categories without agreeing on anything but the module.
+
+**Who reads it, and the eleven-week gap this batch closed.** The VTS has read it since Batch 31. **The active trading path never did — although it runs the same detection harness, so the reason was being written on every active evaluation and discarded.** The Paper/Live Filter-Diagnostics tabs consequently had no per-strategy decline breakdown while the VTS tab had a rich one. This batch added the read at all 18 active detect sites. **No new taxonomy was invented; the categories are identical by construction because they come from the same place.**
+
+**⚠️ THE INVARIANT, which now binds two callers.** The shared record is a single module-global slot, and its contract is **reset before each detect, read after a null return**. It is safe only while strategy evaluation is **strictly serial** — the value is written and read in one synchronous span with no `await` between. **Violating either half is silent:** skip the reset and a declining strategy inherits the previous strategy's (or previous symbol's, or a VTS cycle's) reason and reports it confidently; parallelise evaluation and the two readers interleave. Neither produces an error — only wrong attributions in a table that still looks authoritative. **A future change that makes strategy evaluation concurrent must replace this global with evaluation-local state on BOTH paths, not one.**
+
+**Why it is not a return value or a per-call parameter.** Both were considered and rejected: the reason is set deep inside detector branches (some of them in shared guard code that no individual strategy owns), so a return-value design would have required every detector and every guard to thread it. The global's cost is the serialization constraint above, stated here so the trade is visible rather than rediscovered.
+

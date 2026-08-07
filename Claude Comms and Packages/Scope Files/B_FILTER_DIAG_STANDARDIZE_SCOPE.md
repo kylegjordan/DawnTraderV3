@@ -1,6 +1,7 @@
 # B-FILTER-DIAG-STANDARDIZE — Scope r1
 
-change-class: non_architecture
+change-class: architecture
+> ⚠️ **RE-DECLARED from `non_architecture` on 2026-08-07 (Langston, judging the governance-checker's flag CORRECT against the tree — not merely relaying it).** The batch as SCOPED was a display change. **Kyle's mid-flight override** (*"this batch isn't complete until we have all the data we need feeding into these tracking metrics"*) brought in `server/core/observability/active-funnel-tracker.ts` **and instrumentation inside `signal-orchestrator.ts` — orchestrator hot-path work, which is EXACTLY the blast radius `#662` was split out to keep OUT of a non-architecture class.** I flagged the drift myself at the Step-4 resubmit and Langston initially allowed the class to stand on three narrow properties; the checker disagreed and he ruled the checker right. **Recording it here rather than in a completion report, because the class governs which doc-set the batch owes — and the honest record must not imply this diff stayed in the UI layer.** Consequence: SYSTEM_MANUAL + SIM content updates are owed BEFORE close.
 **Owner:** CC-B · **Date:** 2026-08-07 · **Supersedes the OBJ-1 leg of B-FILTER-DIAG-PAPER, which I marked YES and had not done.**
 
 ## 0. What went wrong, stated first
