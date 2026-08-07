@@ -52,6 +52,7 @@ When something looks like an error or a thing to fix, **go and understand what i
 ## ★★ RULE 29 — shipped leg 1 (`b43af6c1d`); full text CLAUDE.md rule 29 + history §5.29. Leg 2 hooks = B-MEASURE-GATE (approved, unbuilt — gates the rule-29 CLAUDE.md conversion).
 
 ## ⚑ STANDING LESSONS (earned; do not re-learn)
+⚠ **CI, with THREE sessions pushing minutes apart: runs CANCEL EACH OTHER, and a CANCELLED job reads as not-green.** I nearly reported 3-of-4 as a pass. ⇒ **VERIFY THE PER-JOB `conclusion`, never the run-level summary — `cancelled` ≠ `failure` ≠ `success`, and only the last is a pass.**
 - **VERIFY THE OBJECT/CALL-PATH, not the plausible one.** A0 phantom read; the `calculateFinalScore` false-equivalence; reasoning from dead `executeRefreshCycle`. Grep callers + check the actual type BEFORE concluding.
 - **A removed WRITER with a surviving READER is invisible** to caller-tracing/tsc/CI (#568). Run the state-write census at deletion.
 - **What woke me / a truncated read / a head-N slice is NOT the population** (rule 13). "3 instances" was 29; the `head-20` tsc check hid real errors; the D-5 ref check certified an empty repo. Measure the population.
