@@ -1,7 +1,17 @@
-// P19-B8.5 OBJ-6 — HF8 confidence floor + HF9 governance gate retired to SHADOW on the
-// ACTIVE path (Langston-approved design). These pin the contract: with
-// gateShadowMode=true the two gates still EVALUATE (shadow log) but never push a
-// failure; without it (and without the VTS skip flags) they block exactly as before.
+// P19-B8.5 OBJ-6 — originally: HF8 confidence floor + HF9 governance gate retired to
+// SHADOW on the ACTIVE path (Langston-approved design), pinning the contract that with
+// gateShadowMode=true the gates still EVALUATE but never push a failure, and without it
+// they block as before.
+//
+// ★ AMENDED by B-SIZING-DEC-RESTORE obj-10 (2026-08-07): THE CLASS-LESS CONFIDENCE FLOOR
+// IS DELETED, so "without the flag it blocks" no longer has a subject. Applying Langston's
+// subject-vs-probe rule test by test:
+//   • the LIVE-gates test was a pure SUBJECT of the deleted floor → REMOVED with it;
+//   • the shadow-mode and honest-NetEV tests PROBE surviving invariants → KEPT untouched;
+//   • the exploration-lane test is RE-POINTED, not deleted — see its own comment. Its
+//     invariant did not die, it got STRONGER, and asserting the old form would have
+//     asserted the absence of a gate rather than the presence of the behaviour.
+// Diagnosed by CC-B as #669 (the branch-wide red); the fallout is mine and so is the fix.
 // The stability driving both gates is fabricated on the active path (cold-start
 // defaults in signal-orchestrator) — see SQEOptions.gateShadowMode + RUNNING_ISSUES #514.
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
@@ -67,10 +77,11 @@ function killInput(): SQEInput {
 }
 
 describe('[P19-B8.5 OBJ-6] HF8/HF9 gate shadow mode', () => {
-  it('LIVE gates (no flags): the sub-floor confidence produces a Confidence failure', async () => {
-    const r = await signalQualityEvaluator.evaluate(killInput());
-    expect(r.failures.some(f => f.startsWith('Confidence '))).toBe(true);
-  });
+  // REMOVED by obj-10: this asserted that a sub-floor confidence PRODUCES a Confidence
+  // failure on the live path. The class-less floor that produced it is deleted, so the
+  // test's subject no longer exists. Keeping it as an inverted "no Confidence failure
+  // ever" assertion was rejected deliberately — that would pin the ABSENCE of a gate,
+  // which the deletion fence already does directly and better.
 
   it('SHADOW mode: identical input produces NO Confidence and NO Governance failures', async () => {
     const r = await signalQualityEvaluator.evaluate(killInput(), { gateShadowMode: true });
@@ -85,15 +96,27 @@ describe('[P19-B8.5 OBJ-6] HF8/HF9 gate shadow mode', () => {
     expect(r.failures.some(f => f.startsWith('NetEV '))).toBe(true);
   });
 
-  it('exploration-lane qualification is restored by shadow mode: with the gates shadowed, a NetEV-only failure is possible for a signal that ALSO fails confidence', async () => {
-    // The structural-zero mechanism: a live Confidence failure makes failures.length > 1
-    // → isNetEvOnlyFailure false → exploration can never admit. In shadow mode the same
-    // signal's ONLY failure is NetEV — the exploration lane can now see it.
+  it('exploration-lane qualification: a sub-floor signal whose only real problem is NetEV is NetEV-ONLY on BOTH paths', async () => {
+    // RE-POINTED by obj-10 — and the invariant got STRONGER, which is why the old form
+    // now fails honestly rather than revealing a defect.
+    //
+    // ORIGINALLY: a live Confidence failure made failures.length > 1 → isNetEvOnlyFailure
+    // false → the exploration lane could never admit this signal. Shadow mode RESCUED it,
+    // and the test proved the rescue by asserting live had MORE than one failure.
+    //
+    // NOW: the class-less floor is deleted, so the second failure never appears in the
+    // first place. There is nothing left to rescue — the structural-zero is gone
+    // UNCONDITIONALLY rather than only under a flag. Asserting `live.failures.length > 1`
+    // would now be asserting that the deleted gate still fires.
+    //
+    // What is worth pinning is the BEHAVIOUR the exploration lane depends on: this signal
+    // presents exactly one failure, NetEV, whether or not the shadow flag is set.
     const input = { ...killInput(), chosenNetEv: -0.001 };
     const live = await signalQualityEvaluator.evaluate(input);
     const shadow = await signalQualityEvaluator.evaluate(input, { gateShadowMode: true });
-    expect(live.failures.length).toBeGreaterThan(1);
-    const netEvOnly = shadow.failures.length === 1 && shadow.failures[0].startsWith('NetEV ');
-    expect(netEvOnly).toBe(true);
+    for (const [label, r] of [['live', live], ['shadow', shadow]] as const) {
+      expect(r.failures.length, `${label}: expected exactly one failure, got ${JSON.stringify(r.failures)}`).toBe(1);
+      expect(r.failures[0].startsWith('NetEV '), `${label}: the single failure should be NetEV`).toBe(true);
+    }
   });
 });
