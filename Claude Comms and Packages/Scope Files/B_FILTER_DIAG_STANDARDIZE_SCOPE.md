@@ -65,3 +65,19 @@ Table-for-table diff of all six tabs against §1 (screenshot + DOM enumeration, 
 
 **Process change on the reviewer's side, his words:** *a diff review cannot see a table that was never rendered* — for parity objectives his Step-4 now enumerates the spec's table list and **walks reachability per branch**, not diff coherence. The §5 DOM-enumeration acceptance test is what he will hold me to. **Board: B-FILTER-DIAG-PAPER's Review reset to SENT BACK TO OWNER** (his Approved did not survive Kyle's rejection and the board should not say it did); card moved off Complete by me.
 
+## 7. ⛔ **r2 AMENDMENT RETRACTED — I READ AN ABSENCE AS MISSING DATA WHEN THE CODEBASE DEFINES IT AS A VALUE (2026-08-07, self-caught before building)**
+
+**r2 claimed the quant/pattern lane discriminator "IS NOT RECORDED" because `features->>'sourcePool'` is NULL on 96.4% of active-path rows. THAT CONCLUSION IS WRONG.** The codebase's own helper defines the convention — `vts-runner.ts:271-272`:
+```
+function isQuantPool(sourcePool?: string): boolean {
+  return !sourcePool || sourcePool === 'quant' || sourcePool.startsWith('quant-');
+}
+```
+⇒ **ABSENCE *IS* THE QUANT MARKER.** Pattern-lane signals are explicitly stamped (`signal-orchestrator.ts:1994`, `:2028` set `sourcePool: 'pattern'`); xStock family lanes are stamped `xstock-<family>` (`eval-cycle.ts:423`); everything else is quant by definition. **The lane was recorded all along, in the way this system has always recorded it.**
+
+**THE SPLIT, MEASURED WITH THE CODEBASE'S OWN CONVENTION APPLIED (24h, active-path sources):** `crypto_spot` **QUANT 8,658 · PATTERN 269** · `xstock_spot` **xstock-trend 45 · xstock-strong_trend 2 · QUANT 12**.
+
+⇒ **CONSEQUENCES: (1) Tables 1/5/6's Quant/Pattern/Total columns are POPULATABLE TODAY — no instrumentation, no honest-state placeholder.** (2) **Langston's option-(a) approval is now UNNECESSARY WORK and is not being done** — stamping `sourcePool` on every active-path write would add a field whose absence is already meaningful; writing `'quant'` explicitly would ALSO be a silent semantic change to every existing `isQuantPool` reader. **Recommend: leave the write path alone entirely.** (3) The classification must go through **one shared tested pure function mirroring `isQuantPool`** (rider 3's requirement, now covering the lane as well as the NetEV token) so the UI and the engine cannot drift on what "quant" means.
+
+★ **THE ERROR, NAMED: this is the absent-as-valid family (#546/#568) turned inside out — not "a missing input silently became a default", but "a meaningful default was read as a missing input." I filed a scope amendment, a reviewer ruled on it, and the ruling created work that the data never needed.** The check that would have caught it at measure time, and did catch it before any code: **before calling a field unrecorded, grep for a reader that interprets its absence.** A NULL with a documented reader is a value.
+
