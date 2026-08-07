@@ -1116,11 +1116,23 @@ export function FilterDiagnosticsPanel({ data, isLoading, gateDisposition = 'tag
                       Per-lane split for Pre-Eval Skips now reads ve.quantNullReasonDetail /
                       ve.patternNullReasonDetail (previously rendered noPrice in quant col and
                       OHLC in pattern col — semantically wrong). No leading minus signs. */}
-                  {/* P19-B8.3b (OBJ-1, #417): the 24h VTS Evaluation block is the
-                      VTS RUNNER's downstream counters (pair-pool → strategy evals →
-                      nulls → trades opened) — VTS-engine activity, not the shared
-                      scan feed. Gated to the VTS page ('tag'); on Paper/Live the
-                      active pipeline is dormant until B8.4 (placeholder below). */}
+                  {/* P19-B8.3b (OBJ-1, #417): the 24h Evaluation block is the VTS RUNNER's downstream
+                      counters (pair-pool → strategy evals → nulls → trades opened).
+                      ⚠️ B-FILTER-DIAG-STANDARDIZE 2026-08-07: the trailing "dormant until B8.4" clause of this
+                      comment EXPIRED at the B8.5 switch-on (active-paper live since 2026-07-14) — the same
+                      stale-premise shape that left the early return standing for eleven weeks. The active path
+                      is NOT dormant; it simply does not emit THIS taxonomy (#662). On Paper/Live the block
+                      states that rather than rendering nothing. */}
+                  {isEnforce && (
+                    <tr className="border-b">
+                      <td colSpan={5} className="p-2 text-xs text-muted-foreground">
+                        <strong>24-hour evaluation detail:</strong> the per-strategy evaluation/null breakdown is
+                        emitted by the VTS runner only. This path's stage counts are in the SQE and RTB sections
+                        below; the per-strategy version is tracked as #662. Not shown as zeros — it is not measured
+                        here, which is a different statement from measured-and-zero.
+                      </td>
+                    </tr>
+                  )}
                   {gateDisposition === 'tag' && data?.vtsEvaluation && (() => {
                     const ve = data.vtsEvaluation!;
                     const nr3 = (ve.nullReasons ?? {}) as any;
