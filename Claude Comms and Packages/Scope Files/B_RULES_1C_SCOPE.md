@@ -15,19 +15,22 @@ change-class: non_architecture
 
 ## 3. ⚠️ THE COMPACTION PROPERTY — LOAD-BEARING FOR WHAT MAY MOVE
 Docs, verbatim in substance: **project-root `CLAUDE.md` survives compaction (re-read and re-injected); rules with `paths:` frontmatter are NOT re-injected — they reload only the next time Claude reads a matching file.**
-⇒ **SELECTION RULE FOR THIS LEG: a rule may move to a path-scoped file ONLY IF it is worthless until you touch its files.** Anything a session must hold *before* touching anything — the non-negotiables, comms protocol, the workflow's shape, measurement discipline — **STAYS in `CLAUDE.md`.** Moving those would create a rule that vanishes at compaction and returns only by luck of which file is opened next; **that is strictly worse than the bytes it saves.**
+⇒ **SELECTION RULE — SHARPENED BY ANALYST CLAUDE’S CHALLENGE (2026-08-07, adopted; the second clause does the real work):** a rule may move ONLY IF it is **worthless until you touch its files AND ITS BLAST RADIUS CANNOT EXTEND BEYOND THEM.**
+⚠ **WHY THE FIRST CLAUSE ALONE IS NOT ENOUGH — his evidence, from his own week:** (i) a writer-census concluded every insert flows through one chokepoint — **TRUE of production and silently FALSE of his own test fixtures, which insert directly**; a server-scoped rule would NOT have loaded while he edited the fixtures. (ii) a deletion fence needed to know a server-side namespace sweep would break CLIENT screens — **a server-scoped rule, invisible from the client file that would have been damaged.**
+⇒ **"Worthless until you touch its files" ASSUMES YOU CAN PREDICT WHICH FILES A RULE IS ABOUT — and this project’s actual failures are precisely the ones where that prediction was wrong.** A `paths` glob that mispredicts does not degrade loudly; **the rule simply never loads, which is indistinguishable from a rule with nothing to say — the absent-as-valid class, one layer up.**
+⛔ **CONSEQUENCE, ADOPTED: anything about DELETION, SCHEMA, or a SHARED CONTRACT is DISQUALIFIED** — those are exactly the rules whose whole job is to fire in a file you did NOT think was related. Anything a session must hold *before* touching anything — the non-negotiables, comms protocol, the workflow's shape, measurement discipline — **STAYS in `CLAUDE.md`.** Moving those would create a rule that vanishes at compaction and returns only by luck of which file is opened next; **that is strictly worse than the bytes it saves.**
 
 ## 4. CANDIDATES (each: the files that trigger it, and why it is worthless until then)
 | candidate | `paths:` trigger | why safe to scope |
 |---|---|---|
-| Migration/SQL conventions (`git add -f`, MANIFEST registration, idempotent seeds, ON CONFLICT) | `drizzle/migrations/**` | inert unless writing a migration |
+| Migration MECHANICS only (`git add -f`, MANIFEST registration) | `drizzle/migrations/**` | ⚠ **NARROWED: the mechanics move; anything SCHEMA-shaped (what a migration may do to a shared table) is DISQUALIFIED by the blast-radius clause and stays.** |
 | Test conventions (SUBJECT-vs-PROBE, fence shapes, run-the-FULL-suite) | `server/tests/**` | inert unless writing tests |
-| Storage/tiering rules (hot/warm/cold, move-not-delete, manifest gate) | `server/scripts/b75-*`, `server/services/data-archive/**` | inert unless touching the tier machinery |
+| ~~Storage/tiering rules~~ **DISQUALIFIED at r1 by the blast-radius clause** | — | **move-not-delete IS a deletion rule; its job is to fire where someone did not think deletion was involved. STAYS in `CLAUDE.md`.** |
 | Comms-bridge specifics | `/opt`-mirroring repo paths + `.claude/hooks/**` | inert unless touching the fabric |
 **NOT candidates (compaction rule §3):** THE EIGHT · §1 persona/plain-language · §2 workflow · rules 22/24/25/29 · §6 comms protocol · §7.1 storage flow.
 
 ## 5. VERIFICATION
-Precondition met (version stated with its source) · each moved passage findable at its new home · **the native-hook baseline shows the auto-loaded byte total DROP by the moved bytes** (ground truth, not candidate-set) · a deliberate probe: read a matching file, confirm the rule loads; read a non-matching file, confirm it does not · §339 old→new table.
+Precondition met (version stated with its source) · each moved passage findable at its new home · **the native-hook baseline shows the auto-loaded byte total DROP by the moved bytes** (ground truth, not candidate-set) · ★ **POSITIVE CONTROL ON THE COMPACTION CLAIM ITSELF (Analyst’s second point, adopted — "your evidence is docs-says"): put a KNOWN MARKER in a path-scoped file, COMPACT, then read a matching file and confirm the marker appears.** Cheap, and this crew has been wrong about mechanisms all week that the docs described correctly. **Until that control runs, §3’s compaction property is DOCS-SAYS, not measured** · plus the ordinary probe: read a matching file, confirm the rule loads; read a non-matching file, confirm it does not · §339 old→new table.
 
 ## 6. OUT OF SCOPE
 Skills (1d) · ordering (1e) · Langston's files (INFRA lane) · any rule whose absence-at-compaction would matter.
