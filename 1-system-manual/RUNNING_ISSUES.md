@@ -2236,6 +2236,22 @@ Today the sizer computes `$2,250 × 100% × 20% × 0.97 = $436.50` per trade, an
 ⇒ **paper: anchor $2,250 · exposure 100% · allocation 6.6667% ⇒ 15 slots × $145.58 buffered.** ★ **6.6667, NOT 6.67** — the rounded value makes `100 ÷ 6.67 = 14.99`, which floors to **14 slots**, one short, silently. (The same off-by-one was already visible on 07-16: that report notes the UI rendered **14** while `max_open_positions` said 15.)
 **HOME:** the value-set rides `B-SIZING-DEC-RESTORE` (it is that batch's owed VALUES decision, which Langston made a close condition). The CAUSE investigation stays here as #665, open, and does **not** block the batch.
 
+### #668 OPEN 2026-08-07 (Kyle-directed; CC-A owns) — ★★ THE GOVERNANCE-STANDARDIZATION ARC HAS NO SINGLE TRACKED HOME, WHICH IS WHY IT KEEPS DRIFTING UNNOTICED
+
+**Kyle, verbatim intent 2026-08-07:** *"we’ve gotten off track on a number of things. We had a conversation last week that kicked off all of this, which was we need to standardize our governance system according to industry standards… there were a number of points that we touched on that we’re not doing now… I wanna make sure that each of those have cards as well as… are in the issues file, in the road map, in the phase nineteen plan."*
+⚠ **THE HONEST DIAGNOSIS (mine): every interruption was individually justified** — a dead learning connection, unarchived trade records, Kyle’s own questions — **but collectively they pushed the arc sideways, and NOTHING TRACKED THE ARC AS A WHOLE, so only Kyle noticed.** A programme whose only drift-detector is the person who commissioned it is not tracked.
+
+**THE ARC’S PIECES — each needs card + issue + roadmap/PHASE_19_PLAN placement (the deliverable of this entry):**
+| piece | state today | card |
+|---|---|---|
+| Rules-file slimming to Anthropic standards (1a→1e) | 1a+1b CLOSED; 1c/1d/1e open | yes |
+| **DECISION RECORDS** (Langston’s ~3,000 rulings live on one box outside git) | scoped in `B_GOVERNANCE_REMEDIATION_PLAN_r1.md` Part 2, NOT started | yes (GOV Part 2) — **but no issue entry, no roadmap placement** |
+| Governance-doc TIER LIST incl. **`STORAGE_POLICY.md` CONTENT refresh** | design recorded (`B_RULES_1D_GOVERNANCE_TIER_LIST_r1.md`); ★ **the doc is ALREADY Tier-2-listed — the gap is that its CONTENT has not tracked the hot/warm/cold changes** | rides B-RULES-1d |
+| Catalogue work (table catalogue + lookalike register) | approved to scope, not scoped | yes (B-CATALOG-1) |
+| Measurement-discipline hooks (rule 29 leg 2) | approved w/ 5 conditions, not started | yes |
+
+**DELIVERABLE:** every row above gets (a) a board card, (b) a RUNNING_ISSUES entry or a cross-ref to one, (c) a named placement in `POST_AUDIT_ROADMAP.md` and/or `PHASE_19_PLAN.md`. **THEN this entry becomes the arc’s status home** — one place where drift is visible without Kyle having to notice it. | OPEN (owner CC-A, next action) |
+
 ### #667 OPEN 2026-08-07 (CC-B; Langston Step-4 finding (B)) *(RENUMBERED from #666 2026-08-07 — CC-C filed into the same slot at Langston's direction minutes earlier; newer entry renumbers per the standing rule. Third mint-time collision I have hit: the max-scan is only valid at the instant of the mint, and another session can take the slot between my scan and my commit.)* — **`p19-b8-5-obj6-gate-shadow.test.ts` HAS 2 FAILING ASSERTIONS, PRE-EXISTING — THE ONLY RED ON THE BRANCH**
 
 **MEASURED (full local suite): `Tests 2 failed | 2,525 passed | 132 skipped (2,659)`.** Both in ONE file: `p19-b8-5-obj6-gate-shadow.test.ts:72` and `:95`. The evaluator emits `reason=NetEV` where the test expects a `Confidence ` failure, on a fixture whose `chosenNetEv` is **+0.001 (positive)** — the honest net-EV admission failing when the fixture says it must not. **Rule-24 disposition NOT made** — real gate-precedence defect vs drifted fixture; provenance read owed first.
