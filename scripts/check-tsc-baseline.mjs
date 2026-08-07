@@ -394,6 +394,24 @@ function syncBaseline() {
     console.error(`[baseline] ERROR: ${BASELINE_PATH} not found — cannot sync.`);
     exit(2);
   }
+  // ★ #680: the sync must say WHO it was for. Refused rather than defaulted — a default is how the
+  // hardcoded `B-NEW-43` stamp survived for months looking like real provenance.
+  const batchArgIdx = argv.indexOf('--batch');
+  const syncBatchId =
+    batchArgIdx !== -1 && argv[batchArgIdx + 1] && !argv[batchArgIdx + 1].startsWith('--')
+      ? argv[batchArgIdx + 1]
+      : null;
+  if (!syncBatchId) {
+    console.error(
+      '[baseline] SYNC REFUSED — --batch <id> is required.\n' +
+        'The baseline records WHO last synced it. That field used to be a hardcoded constant, so every\n' +
+        'sync by anyone was attributed to one batch from May 2026 — fresh timestamp, false author,\n' +
+        'which is more misleading than an empty field (#680). Name the batch this sync belongs to:\n' +
+        '  node scripts/check-tsc-baseline.mjs --sync --batch B-YOUR-BATCH',
+    );
+    exit(2);
+  }
+
   const baseline = JSON.parse(readFileSync(BASELINE_PATH, 'utf8'));
   console.log('[baseline] Running tsc and syncing counts into baseline...');
   const output = runTsc();
@@ -483,7 +501,15 @@ function syncBaseline() {
   baseline.total_errors = total;
   baseline.file_count = newFiles.length;
   baseline.last_synced_at_iso = new Date().toISOString();
-  baseline.last_synced_by_batch = 'B-NEW-43 (chunk 7+ — sync after clean-error fixes)';
+  // ★ #680 (Langston's own finding, 2026-08-07) — WAS A HARDCODED CONSTANT, AND THAT IS WORSE THAN
+  // AN EMPTY FIELD. It wrote `'B-NEW-43 (chunk 7+ …)'` on EVERY sync by anyone, forever — so the
+  // 2026-08-07 #680 sync was stamped with a batch from May. The timestamp beside it was fresh and
+  // correct, which is exactly what made it convincing: a field that LOOKS like attribution and
+  // proves nothing, because its value is independent of who ran it. #447-shaped; same trap as the
+  // coalesced actor stamp in #666.
+  // Now supplied by the caller and REFUSED IF ABSENT (see the --batch guard at the top of sync) —
+  // an unattributable sync is not written at all, rather than written under someone else's name.
+  baseline.last_synced_by_batch = syncBatchId;
 
   writeFileSync(BASELINE_PATH, JSON.stringify(baseline, null, 2) + '\n');
   // Note (Langston chunk-7 nit): `cleared` counts errors cleared on files that

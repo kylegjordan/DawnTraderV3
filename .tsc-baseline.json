@@ -748,5 +748,5 @@
     }
   ],
   "last_synced_at_iso": "2026-08-07T13:22:36.010Z",
-  "last_synced_by_batch": "B-NEW-43 (chunk 7+ — sync after clean-error fixes)"
+  "last_synced_by_batch": "B-FILTER-DIAG-STANDARDIZE / #680 (unexplained-drop gate: cleared 2 stale server/routes.ts entries)"
 }
