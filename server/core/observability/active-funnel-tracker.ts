@@ -147,6 +147,14 @@ export interface ActiveFunnelRecord {
    *  cycle, at which gate". A subset of sqeGateRejects by construction, never summed with it.
    *  Additive field: an old checkpoint without it reloads as {} (absent-honest, no re-stamp). */
   sqeGateRejectsAtRefresh: Record<string, number>;
+  /** B-FILTER-DIAG-STANDARDIZE (Kyle 2026-08-07: "this batch isn't complete until we have all the data we
+   *  need feeding into these tracking metrics") — the ACTIVE path's per-strategy NULL taxonomy, the same
+   *  shape the VTS produces in `vtsEvaluation.byStrategyNullReasons`.
+   *  ★ THE DATA WAS ALREADY BEING COMPUTED AND DISCARDED: strategies set their decline reason via the SHARED
+   *  `null-reason-tracker`, and the active orchestrator runs the SAME `strategy-engine` harness that sets it —
+   *  the active path simply never READ it. This is that read, tallied.
+   *  Shape: strategy -> reason -> count. */
+  strategyNullReasons: Record<string, Record<string, number>>;
   /** SQE outcomes (the denominator so a gate's share is honest). */
   sqeEvaluated: number;
   sqePassed: number;
@@ -165,6 +173,7 @@ function _blank(): ActiveFunnelRecord {
     postSqeRejects: {},
     sqeGateRejects: {},
     sqeGateRejectsAtRefresh: {},
+    strategyNullReasons: {},
     sqeEvaluated: 0,
     sqePassed: 0,
     rtbRefresh: { cyclesRun: 0, refreshedAttempted: 0, reconfirmed: 0, rejectedInRefresh: 0, promoted: 0, droppedError: 0 },
@@ -293,6 +302,37 @@ export function recordActivePostSqeReject(mode: FunnelMode, assetClass: FunnelAs
  *  evaluateSymbol BEFORE any signal is built for it. Distinct from `preSqeRejects` because it sits upstream
  *  of the `signalsGenerated` denominator — mixing it in would let the pre-SQE stage exceed the denominator
  *  (Langston B8.4b). Its own pre-generation stage. */
+/** Record ONE active-path strategy evaluation that produced no setup, with the reason the strategy itself
+ *  reported. B-FILTER-DIAG-STANDARDIZE / Kyle 2026-08-07.
+ *
+ *  ⚠️ SERIALIZATION CONSTRAINT — READ BEFORE CHANGING EITHER SIDE. `getNullReason()` reads a MODULE GLOBAL
+ *  in `server/utils/null-reason-tracker.ts`, whose own header states it is safe ONLY while strategy
+ *  evaluation is strictly serial. VERIFIED at wiring time: `signal-orchestrator.ts` contains ZERO
+ *  `Promise.all` and iterates `for (const strat of activeStrategies)`. **If the active evaluation is ever
+ *  parallelised, this read AND the VTS's identical read at `vts-runner.ts:4863` both silently mis-attribute
+ *  one strategy's reason to another — the failure is invisible, not loud.**
+ *
+ *  NON-THROWING BY CONSTRUCTION: this sits in the LIVE signal-generation path. Telemetry must never be able
+ *  to break trading, so every failure is swallowed and logged rather than propagated. */
+export function recordActiveStrategyNull(
+  mode: FunnelMode,
+  assetClass: FunnelAssetClass,
+  strategy: string,
+  reason: string,
+): void {
+  try {
+    const r = _get(mode, assetClass);
+    r.strategyNullReasons ??= {};
+    const byReason = (r.strategyNullReasons[strategy] ??= {});
+    // 'unknown' is the tracker's own reset value — keep it as a DISTINCT bucket rather than dropping it or
+    // folding it into a neighbour: a strategy declining without setting a reason is itself a finding.
+    const key = reason && reason.trim() ? reason : 'unknown';
+    byReason[key] = (byReason[key] ?? 0) + 1;
+  } catch {
+    /* telemetry must never throw into the trading path */
+  }
+}
+
 export function recordActiveStrategyAttrition(mode: FunnelMode, assetClass: FunnelAssetClass, strategy: string): void {
   const r = _get(mode, assetClass);
   r.strategyAttrition[strategy] = (r.strategyAttrition[strategy] ?? 0) + 1;
@@ -374,6 +414,9 @@ export function getActiveFunnelStats(mode: FunnelMode, assetClass: FunnelAssetCl
     sqeGateRejects: { ...r.sqeGateRejects },
     // reloaded pre-OBJ-3 checkpoints lack the field — snapshot as {} (absent-honest)
     sqeGateRejectsAtRefresh: { ...(r.sqeGateRejectsAtRefresh ?? {}) },
+    strategyNullReasons: Object.fromEntries(
+      Object.entries(r.strategyNullReasons ?? {}).map(([k, v]) => [k, { ...v }]),
+    ),
     rtbRefresh: { ...r.rtbRefresh },
     sqeAttempts: { ...r.sqeAttempts },
   };

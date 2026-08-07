@@ -26,6 +26,9 @@
  */
 
 import { StrategyEngine, StrategySignal, stampMaxHoldingMs } from './strategy-engine';
+// B-FILTER-DIAG-STANDARDIZE: read the decline reason the strategies already set (shared module).
+// ⚠️ MODULE GLOBAL — safe only while evaluation is SERIAL; verified zero Promise.all in this file.
+import { getNullReason } from '../utils/null-reason-tracker.js';
 // B72 (2026-05-05): orchestrator timing intervals from module='signal_orchestrator'.
 import { getCachedNumberRequired } from './module-constants-service.js';
 // B79.0n.STORAGE (2026-05-21): AssetClass type for SQEInput.assetClass population.
@@ -64,6 +67,7 @@ import { signalQualityEvaluator, type SQEInput } from '../core/filters/signal_qu
 import {
   recordActiveSignalsGenerated,
   recordActivePreSqeReject,
+  recordActiveStrategyNull,
   recordActivePostSqeReject,
   recordActiveSqeEvaluation,
   recordActiveStrategyAttrition,
@@ -2163,6 +2167,13 @@ export class SignalOrchestrator {
       // 'crypto_spot' by construction in evaluateMarket) — do NOT re-derive from the
       // symbol string (carry-the-stamp invariant; removes the throwing re-derive).
       const assetClass = sizingContext.assetClass;
+      // B-FILTER-DIAG-STANDARDIZE: the funnel-tracker asset key for THIS evaluation, mirroring the guard in
+      // buildSizedSignalForStrategy (`_fClass`) — a class outside the grid is simply not counted, never
+      // coerced into crypto. Named `_fClass` so the 18 strategy-null records below read identically to the
+      // pre-SQE records elsewhere in this file.
+      const _fClass: FunnelAssetClass | undefined =
+        (sizingContext.assetClass === 'crypto_spot' || sizingContext.assetClass === 'xstock_spot')
+          ? sizingContext.assetClass : undefined;
       const mceContext = mce.computeContext(symbol, ohlcForRegime, currentPrice, currentVolume, settings.smaLength || 20, orchestratorDbs, assetClass);
 
       console.log(`[Phase13][MCE] ${symbol}: regime=${mceContext.regime.regime}, weight=${mceContext.regime.regimeWeight.toFixed(2)}, trendSlope=${trendSlope.toFixed(4)}, volNoise=${VolNoise.toFixed(4)}`);
@@ -2256,7 +2267,12 @@ export class SignalOrchestrator {
       // Directive 10.1: Only run strategies allowed for current regime
       if (activeStrategies.has('vwap_pullback')) {
         const rawSignal = this.strategyEngine.detectVWAPPullback(indicators, settings, ohlcAsAny, assetClass);
-        if (rawSignal) {
+        if (!rawSignal) {
+          // B-FILTER-DIAG-STANDARDIZE (Kyle 2026-08-07): the strategy declined — record WHY.
+          // The reason is already set by the strategy via the shared null-reason-tracker; this is
+          // the read the active path never performed. Non-throwing by construction.
+          if (_fClass) recordActiveStrategyNull(sizingContext.mode, _fClass, 'vwap_pullback', getNullReason());
+        } else {
           rawSignal.symbol = symbol;
           const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'vwap_pullback', sizingContext);
           if (sizedSignal) signals.push(sizedSignal);
@@ -2265,7 +2281,12 @@ export class SignalOrchestrator {
 
       if (activeStrategies.has('abcd_long')) {
         const rawSignal = this.strategyEngine.detectABCDLong(ohlcAsAny, settings, assetClass);
-        if (rawSignal) {
+        if (!rawSignal) {
+          // B-FILTER-DIAG-STANDARDIZE (Kyle 2026-08-07): the strategy declined — record WHY.
+          // The reason is already set by the strategy via the shared null-reason-tracker; this is
+          // the read the active path never performed. Non-throwing by construction.
+          if (_fClass) recordActiveStrategyNull(sizingContext.mode, _fClass, 'abcd_long', getNullReason());
+        } else {
           rawSignal.symbol = symbol;
           const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'abcd_long', sizingContext);
           if (sizedSignal) signals.push(sizedSignal);
@@ -2274,7 +2295,12 @@ export class SignalOrchestrator {
 
       if (activeStrategies.has('sma_trend_ride')) {
         const rawSignal = this.strategyEngine.detectSMATrendRide(indicators, ohlcAsAny, settings, assetClass);
-        if (rawSignal) {
+        if (!rawSignal) {
+          // B-FILTER-DIAG-STANDARDIZE (Kyle 2026-08-07): the strategy declined — record WHY.
+          // The reason is already set by the strategy via the shared null-reason-tracker; this is
+          // the read the active path never performed. Non-throwing by construction.
+          if (_fClass) recordActiveStrategyNull(sizingContext.mode, _fClass, 'sma_trend_ride', getNullReason());
+        } else {
           rawSignal.symbol = symbol;
           const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'sma_trend_ride', sizingContext);
           if (sizedSignal) signals.push(sizedSignal);
@@ -2284,7 +2310,12 @@ export class SignalOrchestrator {
       if (activeStrategies.has('breakout')) {
         // B72.2: detector reads params from module_constants 'strategy.breakout'.
         const rawSignal = this.strategyEngine.detectBreakout(ohlcAsAny, {}, assetClass);
-        if (rawSignal) {
+        if (!rawSignal) {
+          // B-FILTER-DIAG-STANDARDIZE (Kyle 2026-08-07): the strategy declined — record WHY.
+          // The reason is already set by the strategy via the shared null-reason-tracker; this is
+          // the read the active path never performed. Non-throwing by construction.
+          if (_fClass) recordActiveStrategyNull(sizingContext.mode, _fClass, 'breakout', getNullReason());
+        } else {
           rawSignal.symbol = symbol;
           const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'breakout', sizingContext);
           if (sizedSignal) signals.push(sizedSignal);
@@ -2294,7 +2325,12 @@ export class SignalOrchestrator {
       if (activeStrategies.has('mean_reversion')) {
         // B72.2: detector reads params from module_constants 'strategy.mean_reversion'.
         const rawSignal = this.strategyEngine.detectMeanReversion(indicators, ohlcAsAny, {}, assetClass);
-        if (rawSignal) {
+        if (!rawSignal) {
+          // B-FILTER-DIAG-STANDARDIZE (Kyle 2026-08-07): the strategy declined — record WHY.
+          // The reason is already set by the strategy via the shared null-reason-tracker; this is
+          // the read the active path never performed. Non-throwing by construction.
+          if (_fClass) recordActiveStrategyNull(sizingContext.mode, _fClass, 'mean_reversion', getNullReason());
+        } else {
           rawSignal.symbol = symbol;
           const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'mean_reversion', sizingContext);
           if (sizedSignal) signals.push(sizedSignal);
@@ -2304,7 +2340,12 @@ export class SignalOrchestrator {
       if (activeStrategies.has('range_trading')) {
         // B72.2: detector reads params from module_constants 'strategy.range_trade'.
         const rawSignal = this.strategyEngine.detectRangeTrading(ohlcAsAny, {}, assetClass);
-        if (rawSignal) {
+        if (!rawSignal) {
+          // B-FILTER-DIAG-STANDARDIZE (Kyle 2026-08-07): the strategy declined — record WHY.
+          // The reason is already set by the strategy via the shared null-reason-tracker; this is
+          // the read the active path never performed. Non-throwing by construction.
+          if (_fClass) recordActiveStrategyNull(sizingContext.mode, _fClass, 'range_trading', getNullReason());
+        } else {
           rawSignal.symbol = symbol;
           const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'range_trading', sizingContext);
           if (sizedSignal) signals.push(sizedSignal);
@@ -2314,7 +2355,12 @@ export class SignalOrchestrator {
       if (activeStrategies.has('vwap_bounce')) {
         // B72.2: detector reads params from module_constants 'strategy.vwap_bounce'.
         const rawSignal = this.strategyEngine.detectVWAPBounce(indicators, ohlcAsAny, {}, assetClass);
-        if (rawSignal) {
+        if (!rawSignal) {
+          // B-FILTER-DIAG-STANDARDIZE (Kyle 2026-08-07): the strategy declined — record WHY.
+          // The reason is already set by the strategy via the shared null-reason-tracker; this is
+          // the read the active path never performed. Non-throwing by construction.
+          if (_fClass) recordActiveStrategyNull(sizingContext.mode, _fClass, 'vwap_bounce', getNullReason());
+        } else {
           rawSignal.symbol = symbol;
           const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'vwap_bounce', sizingContext);
           if (sizedSignal) signals.push(sizedSignal);
@@ -2332,7 +2378,12 @@ export class SignalOrchestrator {
       if (activeStrategies.has('dhma')) {
         // B72.2: detector reads params from module_constants 'strategy.dhma'.
         const rawSignal = this.strategyEngine.detectDHMA(indicators, ohlcAsAny, {}, assetClass);
-        if (rawSignal) {
+        if (!rawSignal) {
+          // B-FILTER-DIAG-STANDARDIZE (Kyle 2026-08-07): the strategy declined — record WHY.
+          // The reason is already set by the strategy via the shared null-reason-tracker; this is
+          // the read the active path never performed. Non-throwing by construction.
+          if (_fClass) recordActiveStrategyNull(sizingContext.mode, _fClass, 'dhma', getNullReason());
+        } else {
           rawSignal.symbol = symbol;
           const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'dhma', sizingContext);
           if (sizedSignal) signals.push(sizedSignal);
@@ -2447,7 +2498,12 @@ export class SignalOrchestrator {
 
       if (activeStrategies.has('morning_star')) {
         const rawSignal = this.strategyEngine.detectMorningStar(indicators, ohlcAsAny, buildPatternInputForStrategy('morning_star'), assetClass);
-        if (rawSignal) {
+        if (!rawSignal) {
+          // B-FILTER-DIAG-STANDARDIZE (Kyle 2026-08-07): the strategy declined — record WHY.
+          // The reason is already set by the strategy via the shared null-reason-tracker; this is
+          // the read the active path never performed. Non-throwing by construction.
+          if (_fClass) recordActiveStrategyNull(sizingContext.mode, _fClass, 'morning_star', getNullReason());
+        } else {
           rawSignal.symbol = symbol;
           const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'morning_star' as any, sizingContext);
           if (sizedSignal) signals.push(sizedSignal);
@@ -2456,7 +2512,12 @@ export class SignalOrchestrator {
 
       if (activeStrategies.has('inside_bar_reversal')) {
         const rawSignal = this.strategyEngine.detectInsideBarReversal(indicators, ohlcAsAny, buildPatternInputForStrategy('inside_bar_reversal'), assetClass);
-        if (rawSignal) {
+        if (!rawSignal) {
+          // B-FILTER-DIAG-STANDARDIZE (Kyle 2026-08-07): the strategy declined — record WHY.
+          // The reason is already set by the strategy via the shared null-reason-tracker; this is
+          // the read the active path never performed. Non-throwing by construction.
+          if (_fClass) recordActiveStrategyNull(sizingContext.mode, _fClass, 'inside_bar_reversal', getNullReason());
+        } else {
           rawSignal.symbol = symbol;
           const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'inside_bar_reversal' as any, sizingContext);
           if (sizedSignal) signals.push(sizedSignal);
@@ -2465,7 +2526,12 @@ export class SignalOrchestrator {
 
       if (activeStrategies.has('support_bounce')) {
         const rawSignal = this.strategyEngine.detectSupportBounce(indicators, ohlcAsAny, buildPatternInputForStrategy('support_bounce'), assetClass);
-        if (rawSignal) {
+        if (!rawSignal) {
+          // B-FILTER-DIAG-STANDARDIZE (Kyle 2026-08-07): the strategy declined — record WHY.
+          // The reason is already set by the strategy via the shared null-reason-tracker; this is
+          // the read the active path never performed. Non-throwing by construction.
+          if (_fClass) recordActiveStrategyNull(sizingContext.mode, _fClass, 'support_bounce', getNullReason());
+        } else {
           rawSignal.symbol = symbol;
           const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'support_bounce' as any, sizingContext);
           if (sizedSignal) signals.push(sizedSignal);
@@ -2474,7 +2540,12 @@ export class SignalOrchestrator {
 
       if (activeStrategies.has('pivot_shift')) {
         const rawSignal = this.strategyEngine.detectPivotShift(indicators, ohlcAsAny, buildPatternInputForStrategy('pivot_shift'), assetClass);
-        if (rawSignal) {
+        if (!rawSignal) {
+          // B-FILTER-DIAG-STANDARDIZE (Kyle 2026-08-07): the strategy declined — record WHY.
+          // The reason is already set by the strategy via the shared null-reason-tracker; this is
+          // the read the active path never performed. Non-throwing by construction.
+          if (_fClass) recordActiveStrategyNull(sizingContext.mode, _fClass, 'pivot_shift', getNullReason());
+        } else {
           rawSignal.symbol = symbol;
           const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'pivot_shift' as any, sizingContext);
           if (sizedSignal) signals.push(sizedSignal);
@@ -2483,7 +2554,12 @@ export class SignalOrchestrator {
 
       if (activeStrategies.has('reverse_impulse')) {
         const rawSignal = this.strategyEngine.detectReverseImpulse(indicators, ohlcAsAny, buildPatternInputForStrategy('reverse_impulse'), assetClass);
-        if (rawSignal) {
+        if (!rawSignal) {
+          // B-FILTER-DIAG-STANDARDIZE (Kyle 2026-08-07): the strategy declined — record WHY.
+          // The reason is already set by the strategy via the shared null-reason-tracker; this is
+          // the read the active path never performed. Non-throwing by construction.
+          if (_fClass) recordActiveStrategyNull(sizingContext.mode, _fClass, 'reverse_impulse', getNullReason());
+        } else {
           rawSignal.symbol = symbol;
           const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'reverse_impulse' as any, sizingContext);
           if (sizedSignal) signals.push(sizedSignal);
@@ -2494,7 +2570,12 @@ export class SignalOrchestrator {
         // Defensive hedge requires BTC candle data for correlation calculation
         // TODO: Pass BTC OHLC from pricing service cache when available
         const rawSignal = this.strategyEngine.detectDefensiveHedge(indicators, ohlcAsAny, buildPatternInputForStrategy('defensive_hedge'), undefined, assetClass);
-        if (rawSignal) {
+        if (!rawSignal) {
+          // B-FILTER-DIAG-STANDARDIZE (Kyle 2026-08-07): the strategy declined — record WHY.
+          // The reason is already set by the strategy via the shared null-reason-tracker; this is
+          // the read the active path never performed. Non-throwing by construction.
+          if (_fClass) recordActiveStrategyNull(sizingContext.mode, _fClass, 'defensive_hedge', getNullReason());
+        } else {
           rawSignal.symbol = symbol;
           const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'defensive_hedge' as any, sizingContext);
           if (sizedSignal) signals.push(sizedSignal);
@@ -2503,7 +2584,12 @@ export class SignalOrchestrator {
 
       if (activeStrategies.has('adaptive_flow')) {
         const rawSignal = this.strategyEngine.detectAdaptiveFlow(indicators, ohlcAsAny, buildPatternInputForStrategy('adaptive_flow'), assetClass);
-        if (rawSignal) {
+        if (!rawSignal) {
+          // B-FILTER-DIAG-STANDARDIZE (Kyle 2026-08-07): the strategy declined — record WHY.
+          // The reason is already set by the strategy via the shared null-reason-tracker; this is
+          // the read the active path never performed. Non-throwing by construction.
+          if (_fClass) recordActiveStrategyNull(sizingContext.mode, _fClass, 'adaptive_flow', getNullReason());
+        } else {
           rawSignal.symbol = symbol;
           const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'adaptive_flow' as any, sizingContext);
           if (sizedSignal) signals.push(sizedSignal);
@@ -2512,7 +2598,12 @@ export class SignalOrchestrator {
 
       if (activeStrategies.has('volatility_edge')) {
         const rawSignal = this.strategyEngine.detectVolatilityEdge(indicators, ohlcAsAny, buildPatternInputForStrategy('volatility_edge'), assetClass);
-        if (rawSignal) {
+        if (!rawSignal) {
+          // B-FILTER-DIAG-STANDARDIZE (Kyle 2026-08-07): the strategy declined — record WHY.
+          // The reason is already set by the strategy via the shared null-reason-tracker; this is
+          // the read the active path never performed. Non-throwing by construction.
+          if (_fClass) recordActiveStrategyNull(sizingContext.mode, _fClass, 'volatility_edge', getNullReason());
+        } else {
           rawSignal.symbol = symbol;
           const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'volatility_edge' as any, sizingContext);
           if (sizedSignal) signals.push(sizedSignal);
@@ -2523,7 +2614,12 @@ export class SignalOrchestrator {
       // Strategy's internal DBS guard provides belt-and-braces if routing leaks.
       if (activeStrategies.has('strong_bull_trend')) {
         const rawSignal = this.strategyEngine.detectStrongBullTrend(indicators, ohlcAsAny, buildPatternInputForStrategy('strong_bull_trend'), assetClass);
-        if (rawSignal) {
+        if (!rawSignal) {
+          // B-FILTER-DIAG-STANDARDIZE (Kyle 2026-08-07): the strategy declined — record WHY.
+          // The reason is already set by the strategy via the shared null-reason-tracker; this is
+          // the read the active path never performed. Non-throwing by construction.
+          if (_fClass) recordActiveStrategyNull(sizingContext.mode, _fClass, 'strong_bull_trend', getNullReason());
+        } else {
           rawSignal.symbol = symbol;
           const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'strong_bull_trend' as any, sizingContext);
           if (sizedSignal) signals.push(sizedSignal);
@@ -2544,7 +2640,12 @@ export class SignalOrchestrator {
             indicators,
             { assetClass: orbAssetClass, symbol },
           );
-          if (rawSignal) {
+          if (!rawSignal) {
+            // B-FILTER-DIAG-STANDARDIZE (Kyle 2026-08-07): the strategy declined — record WHY.
+            // The reason is already set by the strategy via the shared null-reason-tracker; this is
+            // the read the active path never performed. Non-throwing by construction.
+            if (_fClass) recordActiveStrategyNull(sizingContext.mode, _fClass, 'orb', getNullReason());
+          } else {
             rawSignal.symbol = symbol;
             const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'orb' as any, sizingContext);
             if (sizedSignal) signals.push(sizedSignal);
