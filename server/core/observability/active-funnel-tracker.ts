@@ -37,6 +37,30 @@ export type FunnelAssetClass = 'crypto_spot' | 'xstock_spot';
  * that changes the first token lands in `uncategorized` + loud-logs, surfacing it for deliberate promotion
  * rather than silently minting a drift bucket). Keep in sync with `signal_quality_evaluator.ts` gate order.
  */
+/**
+ * ★ WHICH ASSET CLASSES CAN POPULATE `strategyNullReasons` — the honest coverage boundary (#675).
+ *
+ * CRYPTO ONLY, and this is a statement about WIRING, not about market activity. The 18
+ * `recordActiveStrategyNull` call sites all sit in `signal-orchestrator.ts:2279-2743`, inside a
+ * function whose SizingContext is stamped `crypto_spot` BY CONSTRUCTION (`:1801-1809` — *"this is
+ * the CRYPTO pipe — evaluateMarket iterates the FX5 crypto survivor pool"*). xStock's active path is
+ * a separate module (`asset_classes/xstock_spot/eval-cycle.ts` → `dispatchXstockActiveSignal`) with
+ * ZERO instrumented sites — presence-evidenced by whole-tree census, not single-file grep.
+ *
+ * ⛔ WITHOUT THIS SET the envelope emits `{}` for xStock, which the contract defines as
+ * "wired, nothing declined" — asserting an OBSERVED ZERO for a path nothing observes. That is the
+ * absent-wearing-a-valid-value's-clothes failure reproduced INSIDE the field added to remove it.
+ *
+ * ⚠️ HOW THIS WAS FOUND, because the near-miss is the lesson: the empty table was first explained as
+ * a cadence effect (xStock evaluates far less often), an account that was coherent, matched a real
+ * mechanism, and was WRONG — it rested on counting signals that SURVIVED detection to argue about
+ * signals that DECLINED, two complementary populations. Only the code read settled it.
+ *
+ * ★ DELETE THIS SET ENTIRELY when B-FILTER-DIAG-XSTOCK instruments the xStock module — do not add
+ * the class to it and leave the machinery, or the next reader inherits a boundary with no boundary.
+ */
+export const STRATEGY_NULL_INSTRUMENTED_CLASSES: ReadonlySet<string> = new Set(['crypto_spot']);
+
 export const SQE_CANONICAL_GATES = [
   'unclassifiable_asset_class',
   'xstock_weekend_closure',
@@ -153,8 +177,12 @@ export interface ActiveFunnelRecord {
    *  ★ THE DATA WAS ALREADY BEING COMPUTED AND DISCARDED: strategies set their decline reason via the SHARED
    *  `null-reason-tracker`, and the active orchestrator runs the SAME `strategy-engine` harness that sets it —
    *  the active path simply never READ it. This is that read, tallied.
-   *  Shape: strategy -> reason -> count. */
-  strategyNullReasons: Record<string, Record<string, number>>;
+   *  Shape: strategy -> reason -> count.
+   *  ⚠️ OPTIONAL BY DESIGN (#675): `undefined` means NOT INSTRUMENTED FOR THIS ASSET CLASS and is a
+   *  DIFFERENT claim from `{}`, which means wired-and-nothing-declined. The reader MUST keep them
+   *  apart — collapsing them is the absent-as-valid failure (#546/#568) this field exists to remove.
+   *  See `STRATEGY_NULL_INSTRUMENTED_CLASSES` for which classes can populate it, and why. */
+  strategyNullReasons?: Record<string, Record<string, number>>;
   /** SQE outcomes (the denominator so a gate's share is honest). */
   sqeEvaluated: number;
   sqePassed: number;
@@ -414,9 +442,28 @@ export function getActiveFunnelStats(mode: FunnelMode, assetClass: FunnelAssetCl
     sqeGateRejects: { ...r.sqeGateRejects },
     // reloaded pre-OBJ-3 checkpoints lack the field — snapshot as {} (absent-honest)
     sqeGateRejectsAtRefresh: { ...(r.sqeGateRejectsAtRefresh ?? {}) },
-    strategyNullReasons: Object.fromEntries(
-      Object.entries(r.strategyNullReasons ?? {}).map(([k, v]) => [k, { ...v }]),
-    ),
+    // ★ B-FILTER-DIAG-STANDARDIZE / #675: the per-strategy decline taxonomy is instrumented for
+    // crypto ONLY, and the envelope must SAY so rather than emit `{}`.
+    //
+    // WHY the class matters here: the 18 `recordActiveStrategyNull` sites all live in
+    // `signal-orchestrator.ts:2279-2743`, inside a function whose SizingContext is stamped
+    // `crypto_spot` BY CONSTRUCTION (`:1801-1809` — "this is the CRYPTO pipe"). xStock's active path
+    // is a different module entirely (`asset_classes/xstock_spot/eval-cycle.ts` →
+    // `dispatchXstockActiveSignal`) and has ZERO instrumented sites — whole-tree census, Langston.
+    //
+    // ⛔ So for xStock an EMPTY OBJECT WOULD BE A LIE. The envelope's own contract reads
+    // absent = "not instrumented", `{}` = "wired, nothing declined" — and `{}` here would assert an
+    // observed zero for a path nothing observes. That is the absent-wearing-a-valid-value's-clothes
+    // failure (#546/#568) reproduced inside the very field added to remove it.
+    //
+    // Emitting `undefined` routes the client to its honest not-instrumented card. This line is
+    // DELETED — not edited — the moment B-FILTER-DIAG-XSTOCK instruments that module; keeping the
+    // reason here means whoever deletes it can see what they are re-enabling.
+    strategyNullReasons: STRATEGY_NULL_INSTRUMENTED_CLASSES.has(assetClass)
+      ? Object.fromEntries(
+          Object.entries(r.strategyNullReasons ?? {}).map(([k, v]) => [k, { ...v }]),
+        )
+      : undefined,
     rtbRefresh: { ...r.rtbRefresh },
     sqeAttempts: { ...r.sqeAttempts },
   };

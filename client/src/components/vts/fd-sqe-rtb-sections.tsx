@@ -209,10 +209,21 @@ export function ActiveSqeAndRtbSections({
         const snr = cls.strategyNullReasons;
         if (!snr) {
           return (
-            <DiagTableCard theme="rolling" title="Why Each Strategy Declined" subtitle={`${label} — not instrumented on this server yet`} testId="fd-strategy-nulls-absent">
+            <DiagTableCard theme="rolling" title="Why Each Strategy Declined" subtitle={`${label} — not measured for this asset class yet`} testId="fd-strategy-nulls-absent">
               <div className="p-3 text-sm text-muted-foreground">
-                This server build does not yet record per-strategy decline reasons. Not zeros — the field is
-                absent, which is a statement about the build, not about the strategies.
+                <p>
+                  Decline reasons are not recorded for {label} yet. <strong>These are not zeros.</strong> The
+                  figure is absent, which says something about what is being measured — not about how the
+                  strategies behaved.
+                </p>
+                <p className="mt-2">
+                  {/* #675: the reason is CLASS-scoped, never build-scoped. Saying "this build does not
+                      record it" would be false here — the same build records it for crypto. Naming the
+                      wrong cause is how an honest placeholder still misleads. */}
+                  Crypto and {label} run through separate evaluation paths, and only the crypto path reports
+                  its decline reasons today. Wiring the {label} path is its own tracked piece of work, so this
+                  table will stay empty until that lands — however long the system runs.
+                </p>
               </div>
             </DiagTableCard>
           );
