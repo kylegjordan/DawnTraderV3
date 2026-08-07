@@ -1,3 +1,12 @@
+// ARCHIVED-DELETED 2026-08-07 - B-SIZING-DEC-RESTORE obj-11 (#659), Kyle-directed.
+// The legacy adaptive tuner. Disposition (5): dead code, stays gone.
+// Write path had ZERO callers; its six /api/learning/* endpoints had ZERO client consumers
+// and were deleted with it (archived alongside as adaptive-guardrails-routes.ts.removed).
+// It WROTE portfolioRiskPerTradePct + maxOpenPositions on guardrails_v2 stamped LATTI_ADAPTIVE
+// -- the two fields this batch fixes -- but never fired (zero such stamps, positive-controlled).
+// Full record: 1-system-manual/DELETED_COMPONENTS_LOG.md (2026-08-07 entry).
+// NON-COMPILABLE ARCHIVE COPY. Git history is the authoritative archive.
+
 /**
  * Phase 29: Adaptive Guardrails Engine
  * 
