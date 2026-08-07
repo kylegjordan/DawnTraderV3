@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# dt-media-get — copy an image from Helsinki to this laptop so a session can Read it.
+#
+# B-COMMS-IMAGES-2. The bridges save images posted to #general on Helsinki; a desktop
+# session cannot Read a remote path, so this is the fetch half. Paths arrive in your wake
+# line (see cc-wake-filter.py media_suffix).
+#
+# Prints exactly ONE line on success: the local path, ready to hand to the Read tool.
+# On ANY failure it exits non-zero with the reason on stderr and prints NO path — a path
+# that does not exist is worse than an error, because the caller Reads it and gets an
+# absence it may mistake for an empty image.
+#
+# Usage:  bash ~/.claude/dt-media-get /var/log/cc-discord-media/2026-08-07/123_0_shot.png
+set -euo pipefail
+
+HOST=root@204.168.141.77
+REMOTE="${1:-}"
+if [ -z "$REMOTE" ]; then
+  echo "usage: dt-media-get <path-on-helsinki>   (the path is printed in your wake line)" >&2
+  exit 2
+fi
+
+LOCAL_DIR="$HOME/.claude/dt-media"
+mkdir -p "$LOCAL_DIR"
+LOCAL="$LOCAL_DIR/$(basename "$REMOTE")"
+
+ERR=$(mktemp)
+trap 'rm -f "$ERR"' EXIT
+if ! scp -o ConnectTimeout=30 "$HOST:'$REMOTE'" "$LOCAL" >/dev/null 2>"$ERR"; then
+  echo "dt-media-get: FAILED to fetch $REMOTE" >&2
+  sed 's/^/  /' "$ERR" >&2 || true
+  exit 1
+fi
+if [ ! -s "$LOCAL" ]; then
+  echo "dt-media-get: fetched file is EMPTY (not a usable image): $LOCAL" >&2
+  exit 1
+fi
+echo "$LOCAL"

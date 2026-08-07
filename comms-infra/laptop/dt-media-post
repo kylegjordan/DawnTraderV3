@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# dt-media-post — post an image from this laptop to Discord #general.
+#
+# B-COMMS-IMAGES-2. `cc-send --file` uploads a file that is already ON Helsinki; this does
+# both hops. It stages into the SAME durable, prune-governed media folder inbound images
+# use (/var/log/cc-discord-media/<date>/) rather than /tmp, so a session fetching the image
+# hours later still finds it — a /tmp path rots and the fetch fails for no visible reason.
+#
+# Usage:
+#   bash ~/.claude/dt-media-post --file chart.png --sender "NEW Claude" [--message "..."] [--notify]
+set -euo pipefail
+
+HOST=root@204.168.141.77
+FILE=""; SENDER=""; MESSAGE=""; NOTIFY=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --file)    FILE="$2";     shift 2 ;;
+    --sender)  SENDER="$2";   shift 2 ;;
+    --message) MESSAGE="$2";  shift 2 ;;
+    --notify)  NOTIFY="--notify"; shift ;;
+    *) echo "dt-media-post: unknown arg $1" >&2; exit 2 ;;
+  esac
+done
+
+[ -n "$FILE" ] || { echo 'usage: dt-media-post --file <local-image> --sender "<Your Session Name>" [--message "..."] [--notify]' >&2; exit 2; }
+[ -f "$FILE" ] || { echo "dt-media-post: no such file: $FILE" >&2; exit 1; }
+# --sender has NO default, deliberately: it is both your Discord display name and the
+# wake-routing key, and an image attributed to the wrong session is worse than none
+# (same discipline as CREW_SESSION on the coordination board).
+[ -n "$SENDER" ] || { echo 'dt-media-post: --sender is required and will not be guessed (e.g. --sender "OLD Claude")' >&2; exit 2; }
+
+DAY=$(date -u +%F)
+BASE=$(basename "$FILE" | tr -c 'A-Za-z0-9._-' '_')
+REMOTE_DIR="/var/log/cc-discord-media/$DAY"
+REMOTE="$REMOTE_DIR/out_$(date -u +%H%M%S)_$BASE"
+TAG="dt-media-post-$$"
+
+ssh -o ConnectTimeout=30 "$HOST" "mkdir -p '$REMOTE_DIR'"
+scp -o ConnectTimeout=30 "$FILE" "$HOST:'$REMOTE'" >/dev/null
+
+# Message body travels as a FILE, never inline: shell-quoting a body inline has silently
+# mangled ids and coordinates on this channel before (the cc-send write-to-file rule).
+MSG=$(mktemp); trap 'rm -f "$MSG"' EXIT
+printf '%s' "$MESSAGE" > "$MSG"
+scp -o ConnectTimeout=30 "$MSG" "$HOST:/tmp/$TAG" >/dev/null
+
+ssh -o ConnectTimeout=30 "$HOST" \
+  "chown langston:langston '$REMOTE' 2>/dev/null || true; \
+   cc-send --sender \"$SENDER\" --file '$REMOTE' $NOTIFY --message \"\$(cat /tmp/$TAG)\"; \
+   rc=\$?; rm -f /tmp/$TAG; exit \$rc"
+
+echo "posted: $REMOTE"
