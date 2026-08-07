@@ -733,3 +733,24 @@ Archive: git history is authoritative (this is a field-retirement within live fi
 |---|---|---|---|
 | `sweepClosedOpenTrades` (fn, `vts-trade-persistence.ts`) + its boot call (`server/index.ts`) | Disposition (4): the per-boot GC raced the cron sweep’s new archive-before-delete lane on the same predicate and deleted WITHOUT archiving at nearly every restart | State-write census clean (console lines + a return DISCARDED by the only caller); zero surviving readers; subject unit-suite removed per SUBJECT-vs-PROBE; the `closed_gc_retention_days` constant STAYS (the cron lane’s hot window — the #1359 constant-starving trap cited in-scope) | `_archive/deleted-code/sweepClosedOpenTrades.ts.removed` |
 | `cleanOldClosedTrades` (impl + interface line, `storage.ts`) | Disposition (5): dead (ZERO callers, Langston-enumerated) but live-callable AGE-based deleter on the exact table the batch archive-gates — the accidental-re-entry hazard §15 exists to kill; superseded by the archive lane | Caller census: interface + impl only; no state written beyond its deletes; tsc baseline unchanged (393) | `_archive/deleted-code/cleanOldClosedTrades.ts.removed` |
+
+---
+
+## 2026-08-07 — `adaptive-guardrails` (the legacy adaptive tuner) + its six endpoints — B-SIZING-DEC-RESTORE obj-11 (#659)
+
+**WHAT:** `server/services/adaptive-guardrails.ts` (616 lines, `AdaptiveGuardrailsService`) and the SIX `/api/learning/*` routes that were its only live reachability — `GET /learning/telemetry/:mode`, `GET /learning/behavioral-log/:mode`, `GET /learning/history/:mode`, `POST /learning/snapshot/:mode`, `POST /learning/rollback/:mode`, `PUT /learning/mode/:tradingMode` (`routes.ts`, 128 lines removed).
+
+**WHY:** disposition **(5) — dead code that should stay gone.** Kyle ruled it legacy 2026-08-06 and folded the deletion into this batch 2026-08-07 (*"delete the legacy tuner also"*). Its write path `applyAdaptiveAdjustments` had **zero callers**; the six endpoints had **zero client consumers**.
+
+**★ WHY IT MATTERED MORE THAN "DORMANT CODE":** the write path set **`portfolioRiskPerTradePct` and `maxOpenPositions`** on `guardrails_v2` stamped `lastUpdatedBy: 'LATTI_ADAPTIVE'` — **the exact two fields this batch exists to fix.** Wired, it would have silently overwritten Kyle's guardrail values.
+**DID IT EVER FIRE? NO — measured, with a positive control.** Object `guardrails_v2` (staging), population ALL rows (2): stamps `(null)`×1, `p19-b8-5-sizing-tune-2`×1, **zero `LATTI_ADAPTIVE`**. The control is that same query returning the `p19-b8-5` stamp, so the absence is evidence, not a broken read. Corroborated by `behavioral_log` = **0 rows**. **Loaded but never fired — no historical contamination.** (Langston re-derived this himself on the staging DB before approving.)
+
+**BLAST-RADIUS VERIFICATION:**
+- Reach census, both import syntaxes: after the cut, static `from '…adaptive-guardrails'` = 0, dynamic `import('…adaptive-guardrails')` = 0, any mention anywhere = 0.
+- §9.5(a-ii) state-write census — three write targets: `behavioral_log` (no external readers, 0 rows) · `learning_history` (no external readers, 2 rows) · **`guardrails_v2` — LIVE readers at `reasoning-orchestrator.ts:500-502` and `state-awareness.ts:255-256`, so THE TABLE STAYS; only the tuner's write was removed.**
+- CI's own gate run locally: 392 errors vs baseline 394 — **two errors fixed, zero regressions.**
+
+**⚠️ SURGICAL, NOT A SWEEP:** the `/api/learning` **namespace survives** — ~30 other routes there have live client readers (`enhanced-system-monitoring.tsx`, `learning-network-tab.tsx`, `ai-transparency.tsx`). Only the six tuner routes were cut.
+
+**ARCHIVE:** `1-system-manual/_archive/deleted-code/adaptive-guardrails.ts.removed` + `adaptive-guardrails-routes.ts.removed`.
+**RE-ENTRY FENCE:** `server/tests/integration/b-sizing-legacy-deletion-fence.test.ts` — 6 tests, **mutation-proved three ways**: a re-introduced *dynamic* import fails it (the syntax a naive static-import fence misses — measured 0 static vs 6 dynamic before the cut); a re-introduced endpoint fails it; **and a simulated namespace sweep fails it**, so an over-broad "cleanup" breaks CI instead of the UI. Includes a positive control on the file walk so the fence cannot go vacuously green.

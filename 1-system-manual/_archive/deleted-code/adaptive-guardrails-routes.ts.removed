@@ -1,0 +1,137 @@
+// REMOVED by B-SIZING-DEC-RESTORE obj-11 (2026-08-07, Kyle-directed deletion of the legacy adaptive tuner).
+// The six /api/learning/* endpoints that were the tuner module's ONLY live reachability. No client consumer.
+// NOTE: the /api/learning NAMESPACE SURVIVES -- ~30 other routes there have live client readers. This was a surgical six-route cut.
+
+  // Phase 29: Adaptive Guardrails & Learning APIs
+  
+  // Get learning telemetry for a mode
+  apiRouter.get('/learning/telemetry/:mode', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const mode = req.params.mode as 'paper' | 'live';
+      if (mode !== 'paper' && mode !== 'live') {
+        return res.status(400).json({ error: 'Invalid mode. Must be paper or live.' });
+      }
+
+      const { adaptiveGuardrails } = await import('./services/adaptive-guardrails');
+      const telemetry = await adaptiveGuardrails.getTelemetry(mode);
+      
+      // Log telemetry for audit trail
+      console.log(`[Learning] OverrideInfluence | active=${telemetry.overrides24h} | avgWeight=${telemetry.overrideWeight.toFixed(2)} | bias=${telemetry.bias}`);
+      console.log(`[Learning] AdaptiveGuardrails ${telemetry.throttleStatus} | changes<=${telemetry.maxChangesPerDay} | stability=PASS`);
+      console.log(`[Learning] AdaptiveCoherency PASS | deviations<=${telemetry.coherencyThreshold}% | withinLimits=true`);
+      if (telemetry.lastStableSnapshot) {
+        console.log(`[Learning] RollbackAvailable | lastStable=${telemetry.lastSnapshotTime}`);
+      }
+      
+      res.json(telemetry);
+    } catch (error: any) {
+      console.error('[Learning] Telemetry error:', error);
+      res.status(500).json({ error: 'Failed to fetch learning telemetry' });
+    }
+  });
+
+  // Get behavioral log for a mode
+  apiRouter.get('/learning/behavioral-log/:mode', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const mode = req.params.mode as 'paper' | 'live';
+      if (mode !== 'paper' && mode !== 'live') {
+        return res.status(400).json({ error: 'Invalid mode. Must be paper or live.' });
+      }
+
+      const limit = parseInt(req.query.limit as string) || 100;
+      const { adaptiveGuardrails } = await import('./services/adaptive-guardrails');
+      const log = await adaptiveGuardrails.getBehavioralLog(mode, limit);
+      
+      res.json({ ok: true, data: log });
+    } catch (error: any) {
+      console.error('[Learning] Behavioral log error:', error);
+      res.status(500).json({ error: 'Failed to fetch behavioral log' });
+    }
+  });
+
+  // Get learning history snapshots
+  apiRouter.get('/learning/history/:mode', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const mode = req.params.mode as 'paper' | 'live';
+      if (mode !== 'paper' && mode !== 'live') {
+        return res.status(400).json({ error: 'Invalid mode. Must be paper or live.' });
+      }
+
+      const limit = parseInt(req.query.limit as string) || 20;
+      const { adaptiveGuardrails } = await import('./services/adaptive-guardrails');
+      const history = await adaptiveGuardrails.getLearningHistory(mode, limit);
+      
+      res.json({ ok: true, data: history });
+    } catch (error: any) {
+      console.error('[Learning] History error:', error);
+      res.status(500).json({ error: 'Failed to fetch learning history' });
+    }
+  });
+
+  // Create a snapshot manually
+  apiRouter.post('/learning/snapshot/:mode', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const mode = req.params.mode as 'paper' | 'live';
+      if (mode !== 'paper' && mode !== 'live') {
+        return res.status(400).json({ error: 'Invalid mode. Must be paper or live.' });
+      }
+
+      const { adaptiveGuardrails } = await import('./services/adaptive-guardrails');
+      const version = await adaptiveGuardrails.createSnapshot(mode, 0, {
+        manual: true,
+        userId: req.user?.id,
+        timestamp: new Date().toISOString()
+      });
+      
+      res.json({ ok: true, version, message: `Snapshot v${version} created successfully` });
+    } catch (error: any) {
+      console.error('[Learning] Snapshot creation error:', error);
+      res.status(500).json({ error: 'Failed to create snapshot' });
+    }
+  });
+
+  // Rollback to a snapshot
+  apiRouter.post('/learning/rollback/:mode', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const mode = req.params.mode as 'paper' | 'live';
+      if (mode !== 'paper' && mode !== 'live') {
+        return res.status(400).json({ error: 'Invalid mode. Must be paper or live.' });
+      }
+
+      const { version } = req.body;
+      const { adaptiveGuardrails } = await import('./services/adaptive-guardrails');
+      const success = await adaptiveGuardrails.rollbackToSnapshot(mode, version);
+      
+      if (success) {
+        res.json({ ok: true, message: 'Rollback successful' });
+      } else {
+        res.status(404).json({ ok: false, error: 'Snapshot not found' });
+      }
+    } catch (error: any) {
+      console.error('[Learning] Rollback error:', error);
+      res.status(500).json({ error: 'Failed to rollback' });
+    }
+  });
+
+  // Set learning mode
+  apiRouter.put('/learning/mode/:tradingMode', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const tradingMode = req.params.tradingMode as 'paper' | 'live';
+      if (tradingMode !== 'paper' && tradingMode !== 'live') {
+        return res.status(400).json({ error: 'Invalid trading mode. Must be paper or live.' });
+      }
+
+      const { learningMode } = req.body;
+      if (!['slow', 'normal', 'aggressive', 'disabled'].includes(learningMode)) {
+        return res.status(400).json({ error: 'Invalid learning mode. Must be slow, normal, aggressive, or disabled.' });
+      }
+
+      const { adaptiveGuardrails } = await import('./services/adaptive-guardrails');
+      adaptiveGuardrails.setLearningMode(tradingMode, learningMode);
+      
+      res.json({ ok: true, message: `Learning mode set to ${learningMode} for ${tradingMode}` });
+    } catch (error: any) {
+      console.error('[Learning] Mode update error:', error);
+      res.status(500).json({ error: 'Failed to update learning mode' });
+    }
+  });
