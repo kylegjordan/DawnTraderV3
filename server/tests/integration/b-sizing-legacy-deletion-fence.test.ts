@@ -109,33 +109,91 @@ describe('B-SIZING-DEC-RESTORE — deleted legacy mechanisms must not reappear',
     });
   });
 
-  // ⚠️⚠️ UNPROVEN — DO NOT TREAT THESE TWO AS A FENCE YET (CC-C, 2026-08-07).
-  // They PASS, but they also pass when the deleted resolver is re-added, so right now
-  // they prove nothing. Measured: appending `export function resolveStrategyMode(...)`
-  // to strategy-modes.ts leaves this suite fully green. The obj-11 block above IS
-  // mutation-proved three ways; this block is NOT, and the difference matters more than
-  // the green tick does — a fence that cannot fail is worse than no fence, because it
-  // reads as protection. Diagnose (the walk and the regex both check out in isolation —
-  // node replicating sourceFiles() finds strategy-modes.ts, and the regex matches the
-  // mutated content, so the fault is between them) and mutation-prove BOTH directions
-  // before Step-4 review.
-  describe('obj-10 — the class-less 11.7S posture mechanism [UNPROVEN — see note above]', () => {
-    it('its symbols are gone from the tree (comments excluded)', () => {
-      const SYMS = /(resolveStrategyMode|STRATEGY_MODE_OVERLAYS|REGIME_TO_MODE_MAP|getOverlayForStability|applyModeOverlay|recordModeExecution|getModeStopOutRate)/;
-      const offenders = FILES.filter((f) => {
-        const code = read(f)
-          .replace(/\/\*[\s\S]*?\*\//g, '')   // block comments
-          .replace(/^\s*\/\/.*$/gm, '');       // line comments
-        // resolveStrategyModeFromWeather (AMR, surviving) must NOT trip this
-        return SYMS.test(code.replace(/resolveStrategyModeFromWeather/g, ''));
+  describe('obj-10 — the class-less 11.7S posture mechanism', () => {
+    // Deliberately written WITHOUT a closure over a shared regex. The first version of
+    // this block used one and the callback threw ReferenceError inside .filter(), which
+    // vitest surfaced as a passing test rather than a failure — so the fence reported
+    // green while catching nothing. Straight-line code, one regex literal per call site.
+    const DELETED = [
+      'resolveStrategyMode',
+      'STRATEGY_MODE_OVERLAYS',
+      'REGIME_TO_MODE_MAP',
+      'getOverlayForStability',
+      'applyModeOverlay',
+      'recordModeExecution',
+      'recordModeOutcome',
+      'getModeStopOutRate',
+      'getModeOverlay',
+      'meetsConfidenceFloor',
+      'getModeStats',
+    ];
+
+    // ★ SUBSTRING COLLISION — the trap this fence caught on its first honest run.
+    // Several DELETED names are PREFIXES of surviving AMR ones: recordModeExecution ⊂
+    // recordModeExecutionForClass, getModeOverlay ⊂ getModeOverlayForClass,
+    // meetsConfidenceFloor ⊂ meetsConfidenceFloorForClass, getModeStats ⊂
+    // getModeStatsForClass, resolveStrategyMode ⊂ resolveStrategyModeFromWeather.
+    // Scanning for the short name alone reports the SURVIVOR as a reappearance of the
+    // DELETED thing — a false alarm that would train the next reader to ignore this file.
+    // So every survivor is masked out FIRST, and the masking list is itself asserted
+    // against the module below, so it cannot silently drift out of date.
+    const SURVIVORS = [
+      'resolveStrategyModeFromWeather',
+      'recordModeExecutionForClass',
+      'recordModeOutcomeForClass',
+      'getModeStatsForClass',
+      'getModeOverlayForClass',
+      'meetsConfidenceFloorForClass',
+      'getSlotCapForMode',
+    ];
+
+    const stripComments = (src: string) =>
+      src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
+    const codeOf = (f: string) => {
+      let code = stripComments(read(f));
+      for (const s of SURVIVORS) code = code.split(s).join('«AMR»');
+      return code;
+    };
+
+    for (const sym of DELETED) {
+      it(`\`${sym}\` is absent from every source file`, () => {
+        const hits: string[] = [];
+        for (const f of FILES) {
+          if (codeOf(f).includes(sym)) hits.push(f.replace(REPO, ''));
+        }
+        expect(hits).toEqual([]);
       });
-      expect(offenders.map((f) => f.replace(REPO, ''))).toEqual([]);
+    }
+
+    it('POSITIVE CONTROL: this scan CAN see the module it is guarding', () => {
+      const target = FILES.find((f) => f.endsWith('strategy-modes.ts'));
+      expect(target, 'strategy-modes.ts not in the scanned set').toBeDefined();
+      // A token that genuinely exists there AND is not on the SURVIVORS mask — if this
+      // fails, the scan is blind and every "absent" assertion above is worthless.
+      // (The first version used getModeOverlayForClass and failed: the mask had already
+      // replaced it. The control catching its own author is the point of having one.)
+      // ⚠️ BOUNDARY-MATCHED, not substring. `toContain` passed even after the token was
+      // renamed to INTERIM_NO_POSTURE_MODE_X, because the old name is a PREFIX of the new
+      // one. Third time the same trap bit this file — deleted names, the survivor mask,
+      // and now the control itself. Substring checks are why "a matching name is not a
+      // matching thing" keeps costing us.
+      // Anchored on the trailing ':' of its declaration rather than a bare substring or
+      // an escaped regex. Plain string matching with a delimiter cannot lose its escapes
+      // the way a regex built from a string can — which is exactly what happened here:
+      // the emitted '\b' became a BACKSPACE character, so the control silently matched
+      // nothing. A control that cannot fire is the same failure as the fence it guards.
+      expect(codeOf(target!)).toContain('INTERIM_NO_POSTURE_MODE:');
     });
 
-    it('POSITIVE CONTROL: the AMR per-class posture path SURVIVES', () => {
+    it('POSITIVE CONTROL: every masked SURVIVOR really is exported — the mask cannot drift', () => {
       const mod = read(join(REPO, 'server/core/governance/strategy-modes.ts'));
-      for (const keep of ['getModeOverlayForClass', 'getSlotCapForMode', 'meetsConfidenceFloorForClass', 'resolveStrategyModeFromWeather']) {
-        expect(mod.includes(`export function ${keep}`), `AMR path lost: ${keep}`).toBe(true);
+      for (const keep of SURVIVORS) {
+        // boundary-matched for the same reason: `export function getSlotCapForModeX`
+        // CONTAINS `export function getSlotCapForMode`, so a rename slipped through.
+        // Trailing '(' is the delimiter: `export function getSlotCapForModeX(` does NOT
+        // contain `export function getSlotCapForMode(`, so a rename is caught.
+        expect(mod.includes(`export function ${keep}(`), `masked as a survivor but not exported: ${keep}`).toBe(true);
       }
     });
   });
