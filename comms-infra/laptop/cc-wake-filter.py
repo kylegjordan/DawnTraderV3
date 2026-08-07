@@ -56,6 +56,18 @@ def addressed_to_me(text):
 MEDIA_HELPER = "bash ~/.claude/dt-media-get"
 
 
+def _defang(s):
+    """Neutralize the wake-line FRAME token inside CONTENT, so content can never be shaped
+    like an event. Applied to message bodies WITHOUT flattening them — Langston's rider #1
+    asked whether a crafted body could forge a line the same way a crafted filename could.
+    MEASURED before answering (11,799 logged bodies): 62% contain a newline inside the 400
+    chars the filter prints, so multi-line bodies are everyday crew traffic and flattening
+    them would change what all three sessions see; and ZERO have ever contained a WAKE[
+    token, so this defang is a provable no-op on the entire history while still closing the
+    class. Flatten media (one record must be one line); defang bodies (multi-line is real)."""
+    return str(s).replace("WAKE[", "WAKE․[")
+
+
 def _flat(s):
     """One record must never become two wake events. Any newline inside media content
     would do exactly that — and since the failure text carries an ATTACKER-CONTROLLED
@@ -68,8 +80,7 @@ def _flat(s):
     token is defanged as well: after this, media content cannot contain anything shaped
     like a wake line, and 'is this a wake event?' stays a question about the frame rather
     than about the reader's judgement."""
-    return (str(s).replace("\n", " ").replace("\r", " ")
-            .replace("WAKE[", "WAKE․["))  # one-dot leader: visible, inert
+    return _defang(str(s).replace("\n", " ").replace("\r", " "))
 
 
 def _shape(v):
@@ -153,7 +164,8 @@ for raw in sys.stdin:
             except Exception:
                 continue
             kind = d.get("kind") or ""
-            text = (d.get("text") or "")[:400]
+            # Defang once, at the single point every JSON-sourced print path draws from.
+            text = _defang((d.get("text") or "")[:400])
             tp = "Discord" if d.get("transport") == "discord" else "Telegram"
             if kind == "":
                 deliver, body = addressed_to_me(text)
@@ -190,7 +202,8 @@ for raw in sys.stdin:
                 # branch degrades to silence, never to a wrong path.
                 mm = re.match(r"\[uploaded (.+)\]\s*$", text)
                 if mm:
-                    p = mm.group(1)
+                    p = _flat(mm.group(1))   # rider 2: uniform, though the anchored regex
+                                             # already degrades to silence on a newline
                     print(f"WAKE[LANGSTON-IMAGE->{ALIAS}]: he posted an image: {p}  "
                           f"[view: {MEDIA_HELPER} {p}]", flush=True)
             elif kind == "cc_outbound":
