@@ -2285,3 +2285,19 @@ lastUpdated: new Date()
 
 **⚠️ WHY IT IS NOT MERELY COSMETIC, AND WHY IT LANDS NOW:** `B-SIZING-DEC-RESTORE` **changes what these fields MEAN for BOTH modes** (`max_position_percent_pct` becomes THE per-trade sizing authority AND the slot-count source) and **DELETES two of them** (`portfolio_risk_per_trade_pct`, `max_open_positions`) from the schema — live row included. So the batch mutates live's risk configuration while live remains **invisible**. **"We have not chosen live's values yet" (Kyle-deferred 2026-08-06, still deferred) and "live's values cannot be seen at all" are DIFFERENT problems** — the second is the one that stays hidden until launch day, which is exactly when it is most expensive.
 **CC-C RECOMMENDATION (Kyle's call):** add the **Live Guardrails tab in this batch** — read/display of the real live row, mode-pinned exactly as paper is, **no activation surface** — so live's numbers are visible while they are still inert. **Values stay deferred; only visibility changes.** If Kyle prefers, the alternative is its own small batch immediately after — but not "at live launch", which is the deferral this issue exists to prevent.
+
+### #665 OPEN 2026-08-07 (Infra Claude; homed at Langston's insistence — a "named follow-up" without a numbered home is the open loop §13 exists to close) — CREW-STATUS SNAPSHOTS HAVE NO COLD HAND-OFF, SO WARM GROWS UNBOUNDED ON DISK
+
+**What:** `B-CREW-STATUS` archives its snapshots hot→warm on laptop/Helsinki disk
+(`STORAGE_POLICY §7.5`). **There is no COLD hop**, so warm accumulates with no terminus.
+**Why it stopped there:** the cold tier is Backblaze B2 and its credentials live on **staging**,
+not Helsinki — extending crew credential placement is not a unilateral call.
+**What it is NOT:** an invitation to build a second archive. Kyle, 2026-08-07: *"We have an
+archive system outside of Langston where we store all of our data."* The fix ROUTES INTO the
+existing cold tier; the disk tiers are a staging post, not a rival system.
+**Scale, measured not guessed:** ~18 MB/yr gzipped against 54 GB free — this is
+**policy-conformance, not capacity risk**, and it is filed as OPEN precisely so that being
+small does not make it invisible.
+**Gate:** a credential-placement decision (Kyle / crew). **Owner:** Infra Claude.
+**Done when:** warm bundles reach the same cold bucket the rest of the system uses, with the
+`b75` verification discipline (re-download + checksum) applied, and §7.5's "owed" note struck.

@@ -80,7 +80,35 @@ So a given day's data (for a 90-day-hot table) lives: ~90 days HOT → the follo
 - Capture cadence (xStock/crypto ticker): `passive_archive.b74_ticker_snapshot_min_interval_ms`.
 - Disk alarm thresholds: `database_monitor.{plan_cap_mb, warning_threshold_pct, critical_threshold_pct}`.
 
+## 7.5 Crew-status snapshots (B-CREW-STATUS, 2026-08-07) — business data, NON-DB substrate
+
+| Store | Location | Bound | Tier path |
+|---|---|---|---|
+| Crew-status snapshots | laptop `~/.claude/crew-status-archive/` + Helsinki mirror | ~10 KB per CHANGE (not per cycle); measured basis ~50 changes/day ⇒ ~180 MB/yr raw, ~18 MB/yr gzipped | HOT: current month, uncompressed · WARM: monthly `.jsonl.gz`, verified by content-conservation before the source is unlinked · COLD: **owed — routes into the EXISTING archive system, see below** |
+
+**Why this is business data and not an operational log (§5.5).** The obvious reading — "derived,
+so its inputs are the record" — is **false, and was refuted by the batch's own source census**:
+two of its six sources, the **delivery board** and the **system-alerts queue**, mutate in place
+with **no history**. A past board state is unrecoverable from anywhere else. These snapshots are
+therefore the ONLY time-series of those two sources — a primary record, before the written
+summaries even enter the argument. That is §5.5's own predicate ("a structured record you might
+re-analyse from → never-drop, tiered"), independent of Kyle's directive to retain them.
+**Not theoretical:** on 2026-08-06 a single option-list mutation silently cleared the Owner field
+on **27 board cards**, and recovery depended on an ad-hoc listing captured an hour earlier by
+luck. This store is that luck made systematic.
+
+**★ SUBSTRATE DIFFERS FROM §1 ON PURPOSE — do not "fix" this into the database.** Hot and warm
+live on disk, not Supabase, because `#660` projects the plan cap breaching ~2026-09-19; adding
+rows there now works directly against the session fighting that. **COLD is owed and does NOT
+mean inventing a parallel archive** (Kyle, 2026-08-07: *"We have an archive system outside of
+Langston where we store all of our data"*): the disk tiers are a **staging post**, and the
+hand-off routes into the existing B2 cold tier this policy already defines. Gate: the B2
+credentials live on **staging**, not Helsinki. Home: `RUNNING_ISSUES` (below). Owner: Infra
+Claude. **Until that lands, warm-on-disk grows unbounded — acknowledged here rather than
+becoming an unowned monotonic store, which is the F.2 failure class this policy documents.**
+
 ## 8. Change log (policy-level)
+- **2026-08-07 (B-CREW-STATUS):** §7.5 added — crew-status snapshots classified as business data (Langston ruling) on a deliberately non-DB substrate; cold hand-off into the existing archive owed and homed.
 - **2026-05-06 (B75):** tiered hot/warm/cold + the never-drop directive established.
 - **2026-07-08 (B-STORAGE-HARDEN Wave A):** cold tier activated + archival-health/disk alarms wired.
 - **2026-07-08 (Wave C):** the 5 B70 analytics tables moved from DROP-only to hot→warm→cold tiering (#430); `b70-retention-sweep` deleted.
