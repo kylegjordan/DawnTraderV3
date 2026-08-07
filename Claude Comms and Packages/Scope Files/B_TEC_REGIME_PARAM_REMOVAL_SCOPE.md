@@ -1,4 +1,4 @@
-# B-TEC-REGIME-PARAM-REMOVAL — SCOPE r3
+# B-TEC-REGIME-PARAM-REMOVAL — SCOPE r4
 
 > **r1→r2 (Langston Step-1: PROCEED on the `regime` leg, scope back for the fold below). His required fold + two notes + my own count correction are IN BODY.**
 
@@ -50,7 +50,14 @@ change-class: non_architecture
 
 ## 4.5 ✅ REQUIRED FOLD — THE STALE `paper-execution-engine` NAMES IN `SYSTEM_MANUAL.md` (Langston §13-homed this INTO this batch, owner CC-A, 2026-08-06; r1 omitted it — this is what sent r1 back)
 **Post-P19-B-RENAME the file/symbol family is `active-*`; the manual still names the retired `paper-execution-engine`.**
-⚠️ **HIS COORDINATE HAS DRIFTED AND I AM CORRECTING IT RATHER THAN CHASING IT: he cited `:11322`, which at the graded ref is a CONFIDENCE-MODULATOR TABLE with no such reference.** **MEASURED AT `origin/migration/aws-supabase` — the real population is FOUR sites: `:11099` · `:11150` · `:11518` · `:11555`.** *(A fifth hit at `:11480` is `vts-runner`, not this family — excluded deliberately.)* ⇒ **the fold is ADOPTED and WIDENED to its true population; the line number moved because the manual has been edited since 08-06, which is exactly why a coordinate is re-derived at the ref rather than trusted.**
+⚠️ **HIS COORDINATE HAS DRIFTED AND I AM CORRECTING IT RATHER THAN CHASING IT: he cited `:11322`, which at the graded ref is a CONFIDENCE-MODULATOR TABLE with no such reference.** **MEASURED AT `origin/migration/aws-supabase` — the real population is FOUR sites: `:11099` · `:11150` · `:11518` · `:11555`.** ⛔⛔ **CORRECTED AT r4 — MY EXCLUSION OF `:11480` WAS WRONG, AND THE WAY IT WAS WRONG IS THE POINT.** I wrote *"a fifth hit at `:11480` is `vts-runner`, excluded deliberately."* **THE LINE NAMES THE ENGINE:** *"Same pattern applied to **paper-execution-engine** + vts-service close-hooks for `outcomeFeedbackStore.updateEma`"* — **present-tense, describing current code, the SAME SHAPE as `:11099`.** ⇒ **it ENTERS THE CENSUS with its own five-way disposition. The population is FIVE, not four.**
+★ **HOW I GOT IT WRONG (recorded, because the mechanism is reusable): I READ THE LINE THROUGH `cut -c1-120`. The first 120 characters contain "vts-runner"; the `paper-execution-engine` mention sits at the END of a ~600-char line, past my cut.** ⇒ **I DISPOSITIONED A LINE FROM A TRUNCATED VIEW OF IT.** ★★ **This is "a slice is not the population" applied to a LINE rather than a table — and it is the SAME trap this very revision fixed for the rtb-shadow `regime` grep, committed in the same document, hours apart.** *(Langston, ruling on the citation and not my gloss, read the line. That is the whole reason the rule says rule-on-citations.)*
+⚠ **METHOD FIX, binding on the pre-audit: NEVER disposition a grep hit from a truncated line. Print the FULL line, or read it at its coordinate, before excluding it.**
+
+★ **LANGSTON’S THREE RIDERS ON THE PER-SITE PASS (all cheap now, expensive later):**
+1. **`:11518` carries a SECOND staleness on the SAME row** — *"currently dormant; live activates Phase 19"*, when paper-active has been ON since mid-July. **Rule on the dormancy clause in the SAME touch, or it survives as a FRESH anachronism inside a corrected line.**
+2. **`:11150` embeds a coordinate `~L2165`** — **a renamed filename carrying a stale line number is HALF A FIX.** Re-derive against `active-execution-engine.ts` at the ref, or drop the number.
+3. ⛔ **`:11555` sits adjacent to `mode='paper_sim'` — KEEP-AS-DATA (#405, fence-tested, NEVER rename).** ⇒ **anchor the implementer’s regex to the FILENAME, not the `paper` prefix.** ⇒ **the fold is ADOPTED and WIDENED to its true population; the line number moved because the manual has been edited since 08-06, which is exactly why a coordinate is re-derived at the ref rather than trusted.**
 ⛔ **DISPOSITION PER SITE IS NOT ASSUMED:** each of the four gets checked for whether it is a **live-code reference** (rename it) or a **historical/dated statement** (which may be CORRECT as written about its own era — renaming those would falsify the record). **That judgement is the work; a blind find-and-replace is the failure mode.**
 
 ## 5. VERIFICATION
