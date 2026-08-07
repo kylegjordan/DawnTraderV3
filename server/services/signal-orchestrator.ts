@@ -971,7 +971,18 @@ export class SignalOrchestrator {
           strategy: strategyId,
           rejectStage: 'sqe',
           finalScore: extendedMetrics.finalScore,
-          features: { predictiveConfidence: extendedMetrics.confidence },
+          // B-FILTER-DIAG-STANDARDIZE (Kyle 2026-08-07): carry the QUANT/PATTERN lane stamp onto the
+          // reject row. The stamp is set at filter-survival and survives all the way to
+          // active_open_positions.source_pool / closed_trades.source_pool (measured 9/9 on live opens) —
+          // it was simply never copied onto the SQE-REJECT archive row, so the ~8,500 NetEV rejects/day
+          // could not be split by lane on the Filter-Diagnostics tabs. The value is already in scope
+          // here (same expression used at :581). ABSENCE IS MEANINGFUL, NOT MISSING: null/'quant'/
+          // 'quant-*' IS the quant lane (`isQuantPool`, vts-runner.ts:271-272) — do NOT default it to
+          // a string, and do NOT infer the lane from the strategy name.
+          features: {
+            predictiveConfidence: extendedMetrics.confidence,
+            sourcePool: rawSignal.metadata?.sourcePool ?? null,
+          },
           gateDecision: { gate: 'sqe', accepted: false, reason: sqeResult.reason, path: 'active-signal-orchestrator' },
         });
       } catch (b70Err) {
