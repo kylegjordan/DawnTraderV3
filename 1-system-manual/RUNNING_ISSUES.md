@@ -2355,3 +2355,30 @@ small does not make it invisible.
 
 **RELATIONSHIP TO THE BATCHES IN FLIGHT:** this is the same site as `B-READER-TRUTH`'s Langston obligation-4 (the live `getTrades` twin), which I dispositioned **(2)-deferred-with-home** on the belief that live's schema simply differed. **That disposition was too generous and is CORRECTED here: the twin is not a divergent-but-working path, it is a BROKEN one.** `B-SIZING-DEC-RESTORE` obj-7 ("live wired identically") **cannot be honestly claimed while this stands.**
 **HOME (Kyle's own suggestion, adopted): its own batch IMMEDIATELY AFTER `B-SIZING-DEC-RESTORE`, while fresh.** Scope sketch: re-point live's balance reader at the same `closed_trades` SQL aggregate paper gets, on the paper/live discriminator column `B-READER-TRUTH` adds; then dispose of the legacy `trades` table under rule 18 (it has no writer on the active path — likely (5) delete, pending its own census). **Not folded into either in-flight batch** — obj-7's claim gets narrowed to "the guardrail READ path is mode-parametrised and identical", with this exception named.
+
+### #673 OPEN 2026-08-07 (finding is CC-A's, filed by Infra Claude at Langston's direction — see attribution note) — THE DESKTOP SESSIONS AND THE `claude` ON PATH ARE DIFFERENT VERSIONS, AND AT LEAST ONE SCHEDULED JOB DEPENDS ON THE PATH ONE
+
+**ATTRIBUTION:** the finding is **CC-A's** (surfaced 2026-08-07 in `#general`: desktop sessions
+run 2.1.219 while the `claude` on PATH is a stale standalone **2.1.87**). I asked him in-channel
+for the issue number rather than minting one in his lane; he is mid-batch. Langston ruled that a
+completion-report mention is **not** a §13 home and that it must be filed before B-CREW-STATUS
+closes, so it is filed here with the finding attributed to him. **CC-A: take ownership or
+redirect — this is a placeholder for your finding, not a claim on it.**
+
+**Measured on the laptop (Infra Claude, 2026-08-07):** `claude.cmd --version` on PATH → `2.1.87`.
+
+**Why it is not only a version-hygiene item:** `B-CREW-STATUS`'s scheduled job shells out to
+that PATH binary to write its plain-language summaries, and to `python` on PATH the line above
+it. So a shared, unmaintained binary is now a **runtime dependency of a scheduled job**. It
+works today and degrades honestly (an error line per cycle in the task log; the page prints
+"summaries unavailable" while every exact field still renders) — but if that binary is upgraded
+or removed, the failure reads as *"the model is being unhelpful"* rather than *"the runtime
+moved."*
+
+**Deliberately NOT fixed by pinning.** A per-job pin to 2.1.87 forks CC-A's lane and becomes the
+lingering survivor when the shared fix lands (§15 shape) — silently running a different `claude`
+than the sessions do. Langston's ruling, adopted.
+
+**HOME:** here. **OWNER:** CC-A (finding); Infra Claude for the dependency side. **Done when:**
+the crew settles a single PATH version, and `B-CREW-STATUS` either inherits it or pins to it
+explicitly with that decision cited.

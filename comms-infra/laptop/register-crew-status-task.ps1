@@ -36,9 +36,12 @@ $cmd = "/c python `"$Script`" --once >> `"$LogFile`" 2>&1"
 
 $action = New-ScheduledTaskAction -Execute "cmd.exe" -Argument $cmd -WorkingDirectory $WorkDir
 
+# [TimeSpan]::MaxValue serialises to P99999999DT23H59M59S, which Task Scheduler REJECTS as out
+# of range (measured — the registration failed outright). An EMPTY Duration is the schema's way
+# of saying "repeat indefinitely", so the trigger is built and then the field cleared.
 $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) `
-    -RepetitionInterval (New-TimeSpan -Minutes 1) `
-    -RepetitionDuration ([TimeSpan]::MaxValue)
+    -RepetitionInterval (New-TimeSpan -Minutes 1)
+$trigger.Repetition.Duration = ""
 
 $settings = New-ScheduledTaskSettingsSet `
     -MultipleInstances IgnoreNew `
@@ -56,7 +59,12 @@ Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger `
     -Description "Derives crew status from existing artifacts (Discord log, Desktop transcripts, git, board, alerts) and writes the local page + the standing Discord message. No session does anything differently. B-CREW-STATUS." | Out-Null
 
 # Read the registration BACK rather than trusting the exit — a success return is not the row.
-$t = Get-ScheduledTask -TaskName $TaskName
+# ★ And do NOT announce success before the read-back proves it: the first version of this
+# script printed "REGISTERED" unconditionally and then crashed on a null task, which is the
+# same unconditional-success pattern that has already produced three false "landed" claims in
+# this batch. Verify, THEN report.
+$t = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+if (-not $t) { Write-Output "REGISTRATION FAILED: no task named '$TaskName' exists after the call."; exit 1 }
 $i = $t | Get-ScheduledTaskInfo
 Write-Output "REGISTERED: $($t.TaskName)"
 Write-Output "  state              : $($t.State)"
