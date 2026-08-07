@@ -1,4 +1,4 @@
-# B-TEC-REGIME-PARAM-REMOVAL — SCOPE r2
+# B-TEC-REGIME-PARAM-REMOVAL — SCOPE r3
 
 > **r1→r2 (Langston Step-1: PROCEED on the `regime` leg, scope back for the fold below). His required fold + two notes + my own count correction are IN BODY.**
 
@@ -46,7 +46,7 @@ change-class: non_architecture
 
 ## 4. WHAT THIS BATCH WILL AND WILL NOT DO
 ✅ **WILL:** remove the `regime` dead read (the ruled leg) · complete the **§9.5(a-ii) state-write census** the homing required · **complete the provenance read for all three** · disposition `ladderRung`/`originalStopPrice` explicitly against rule 24's three outcomes · record the `position: any` finding.
-⛔ **WILL NOT:** change TEC exit behaviour · touch the redundant-but-live `tradeMode`/`sourcePool` casts · "fix" the two fallbacks unilaterally — **if the provenance read says the seed should be carrying real values, that is a SCOPE CALL to Kyle (options paper), not a quiet wire-up.** ★ **Wiring a cold-start seed to real ladder state would change exit behaviour on every post-restart position — that is emphatically not a `non_architecture` edit and would re-declare.**
+⛔⛔ **WILL NOT — AND ONE ITEM IS NOW STRONGER THAN "out of scope" (Langston r3): THE TWO `??` DEAD READS STAY IN PLACE, DELIBERATELY, AS THE SITE OF THE FUTURE WIRE.** Deleting them would be behaviour-neutral **but would PRE-EMPT KYLE’S SCOPE CALL AND ERASE THE RECONNECT SITE** — disposition **(3) RECONNECT-pending-Kyle**, not (4) REMOVE. ★ **A neutral deletion that destroys where the fix goes is not a cleanup.** Also will not: change TEC exit behaviour · touch the redundant-but-live `tradeMode`/`sourcePool` casts · "fix" the two fallbacks unilaterally — **if the provenance read says the seed should be carrying real values, that is a SCOPE CALL to Kyle (options paper), not a quiet wire-up.** ★ **Wiring a cold-start seed to real ladder state would change exit behaviour on every post-restart position — that is emphatically not a `non_architecture` edit and would re-declare.**
 
 ## 4.5 ✅ REQUIRED FOLD — THE STALE `paper-execution-engine` NAMES IN `SYSTEM_MANUAL.md` (Langston §13-homed this INTO this batch, owner CC-A, 2026-08-06; r1 omitted it — this is what sent r1 back)
 **Post-P19-B-RENAME the file/symbol family is `active-*`; the manual still names the retired `paper-execution-engine`.**
