@@ -2166,3 +2166,23 @@ Kyle posted a screenshot to `#general` addressed to the whole crew ("Please see 
 
 
 **CLOSED 2026-08-07 (B-COMMS-IMAGES, Infra Claude — catalog entry + completion report in the same commit):** deployed 2026-08-06 22:02Z, Step-8 live controls 3/3 PASS (inbound: Langston read a red 64x64 test PNG with dimensions from the header; outbound: his [[ATTACH]] upload mirrored; security: an /etc/passwd probe was stripped and refused loudly in-channel). Scope shipped WIDER than filed: two-way incl. session `cc-send --file` uploads and Langston outbound with a startup-realpath'd allowlist. Kyle's screenshot repost = the human-grade confirmation, pending.
+
+### #660 OPEN 2026-08-07 (CC-B; from the a45683dc disk alert routed by Langston + flagged unowned by Analyst/Infra) — ⚠ PROJECTED CAP BREACH ~2026-09-19 AT THE MEASURED SLOPE: THE TIERING WINDOWS RELEASE **AFTER** THE CAP IS HIT, NOT BEFORE
+
+**FIRST, WHAT IS *NOT* WRONG (rule 24, outcome 2 — working as designed):** zero reclamation observed in a 7.25h A/B of the top-12 table sizes (only `signal_eval_archive_2026_08` moved, 7.0→7.4 GB; every other object byte-identical to 0.1 GB). **That is CORRECT, not a stalled sweep** — no partition's HOT window is due yet (`STORAGE_POLICY.md:33,36`: the 5 B70 analytics tables 90 d, ticker-snap 30 d).
+
+**THE FINDING IS THE SCHEDULE, NOT A DEFECT.** Gauge **132.5 GB = 66.2%**, measured slope **2.32 GB/day** (0.7 GB over 7.25 h, confirming the 2 GB/day projection made 8 h earlier — object: the Supabase *logical size gauge*, the same object the alert reads, NOT a sum of top tables). Modelling the policy's own windows against that slope:
+
+| Release due | Object | Frees | Gauge at that moment |
+|---|---|---|---|
+| ~Aug 29 | `signal_eval_archive_2026_05` (90 d) | 6.5 GB | **183.5 GB = 92%** |
+| ~Aug 30 | `xstock_spot_ticker_snap_2026_07` (30 d) | 25.7 GB | 179.4 GB = 90% |
+| ~Sep 28 | `signal_eval_archive_2026_06` (90 d) | 13.5 GB | **220.9 GB = 110% — PAST THE CAP** |
+| ~Oct 29 | `signal_eval_archive_2026_07` (90 d) | 29.2 GB | 279.4 GB = 140% |
+
+⇒ **first breach ~2026-09-19, about nine days BEFORE the September release is due.** The Aug 29/30 releases (32.2 GB) genuinely help and pull the peak back to ~75%, but they do not clear the September gap: growth outruns the next window.
+
+**ASSUMPTIONS, STATED SO THEY CAN BE ATTACKED:** constant 2.32 GB/day (a single 7.25 h slope — the daily/weekly shape is NOT measured, and this window sits in an off-peak overnight stretch, so it may under- or over-state); each release frees its table-size figure **on the gauge** (unverified — WAL/index/bloat may not track 1:1, the same ~20 GB gauge-vs-table-sum gap Langston flagged); and **Kyle's manually-scheduled end-of-August July migration is NOT modelled** — if it runs and moves July early, it front-loads ~55 GB and the September gap likely closes.
+
+**DISPOSITION: SCOPE CALL FOR KYLE (rule 24 outcome 2), not a unilateral fix.** The options are a plan-tier increase, shortening a HOT window (a calibration/analysis trade-off — the 90 d window is what the replay studies read), moving the July migration earlier, or accepting the risk with a tripwire. **HOME:** successor batch `B-STORAGE-CAP-RUNWAY` (unstarted) + folded into **#592** (mine). **OWNER: CC-B.** ⚠ Alert `a45683dc` was RESOLVED by me on the growth-rate leg BEFORE this tiering-pace leg was answered — **the resolve was premature on that leg and this entry completes it**; the class re-fires on the next threshold check, which is the intended re-arm.
+
