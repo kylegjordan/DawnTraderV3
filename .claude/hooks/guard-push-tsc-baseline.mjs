@@ -50,15 +50,31 @@
 import { execSync, spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 
-const RAW = process.env.CLAUDE_TOOL_INPUT ?? '';
-let command = '';
+// ⚠️ INPUT ARRIVES ON STDIN, NOT IN AN ENV VAR. The first revision of this hook read
+// `process.env.CLAUDE_TOOL_INPUT`, which is never set — so it would have parsed nothing, taken its
+// catch branch, and **exited 0 on every push**. A guard documented as fail-closed would have been
+// silently fail-OPEN, and nothing would have reported it: an inert hook and a satisfied hook look
+// identical from outside. Caught by comparing against `guard-bare-commit.mjs`, which works.
+// Same shape as everything else in #680's origin story: the control was present and measuring
+// nothing. Payload shape (both spellings accepted, mirroring the working guard):
+//   { tool_name | toolName, tool_input | toolInput: { command } }
+let raw = '';
+process.stdin.on('data', (c) => (raw += c));
+process.stdin.on('end', () => main(raw));
+
+function main(rawPayload) {
+let payload;
 try {
-  command = JSON.parse(RAW)?.tool_input?.command ?? '';
+  payload = JSON.parse(rawPayload);
 } catch {
   // Unparseable payload → not a decision we can make. Exit 0 rather than block every tool call:
   // this hook's remit is `git push` only, and a parse failure here says nothing about the push.
   process.exit(0);
 }
+
+const tool = payload?.tool_name ?? payload?.toolName;
+if (tool !== 'Bash') process.exit(0);
+const command = String(payload?.tool_input?.command ?? payload?.toolInput?.command ?? '');
 
 // Only `git push`. Not fetch, not pull, not status.
 if (!/\bgit\s+(-[^\s]+\s+)*push\b/.test(command)) process.exit(0);
@@ -140,3 +156,4 @@ console.error('[push-gate] tsc baseline check PASSED — push allowed.');
 console.error('[push-gate] NOTE: this does not prove CI is green, and does not stop a deploy from');
 console.error('[push-gate] outrunning CI (#681). It proves the error count did not move unexplained.');
 process.exit(0);
+}
