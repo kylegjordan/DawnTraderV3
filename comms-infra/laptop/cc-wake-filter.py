@@ -56,32 +56,68 @@ def addressed_to_me(text):
 MEDIA_HELPER = "bash ~/.claude/dt-media-get"
 
 
+def _flat(s):
+    """One record must never become two wake events. Any newline inside media content
+    would do exactly that — and since the failure text carries an ATTACKER-CONTROLLED
+    filename, an unflattened newline lets a crafted upload FORGE a wake line (Langston's
+    hostile fixture proved it: a filename containing a newline plus a fake WAKE[...] line
+    injected a fetch instruction for an arbitrary path). Flatten everything, always.
+
+    Flattening alone leaves the forged text INSIDE the line, where it still reads like an
+    instruction and the only defence is the reader being careful — too thin. So the frame
+    token is defanged as well: after this, media content cannot contain anything shaped
+    like a wake line, and 'is this a wake event?' stays a question about the frame rather
+    than about the reader's judgement."""
+    return (str(s).replace("\n", " ").replace("\r", " ")
+            .replace("WAKE[", "WAKE․["))  # one-dot leader: visible, inert
+
+
+def _shape(v):
+    """Accept EXACTLY the two shapes the bridges write: a list of paths, or a single path
+    string. Anything else (dict, number, nested) is malformed and is COUNTED, never mined
+    for path-shaped members — a dict KEY that looks like a path is not a path the log
+    asserted, and rendering it as fetchable would show a session something the record
+    never claimed. Returns (items, malformed_container?)."""
+    if v is None:
+        return [], False
+    if isinstance(v, str):
+        return [v], False
+    if isinstance(v, list):
+        return v, False
+    return [], True
+
+
+def _cap(items, n):
+    """Truncate LOUDLY. A silent cap reads as 'that is all there is' — the same
+    silent-truncation failure the recall tool is forbidden to commit."""
+    shown = [_flat(x) for x in items[:n]]
+    more = len(items) - len(shown)
+    return " · ".join(shown) + (f"  (+{more} more not shown)" if more > 0 else "")
+
+
 def media_suffix(d):
     try:
-        raw = d.get("media_paths") or []
-        try:
-            raw = list(raw)
-        except Exception:
-            raw = []
-        # Only absolute paths are offered as fetchable. Every real path is absolute (the
+        items, bad_container = _shape(d.get("media_paths"))
+        # Only absolute paths are offered as fetchable: every real path is absolute (the
         # bridges build them from an absolute media dir; Langston's are realpath'd), so a
-        # non-absolute entry is malformed — and printing malformed entries as though they
-        # were images sends a session to fetch something that was never there.
-        # A newline inside a path would split one wake line into two events, so flatten it.
-        paths = [p.replace("\n", " ").replace("\r", " ")
-                 for p in raw if isinstance(p, str) and p.startswith("/")]
-        unusable = len(raw) - len(paths)
-        failed = [str(f) for f in (d.get("media_failed") or [])]
+        # relative entry is malformed, and sending a session to fetch it wastes its turn.
+        paths = [p for p in items if isinstance(p, str) and p.startswith("/")]
+        unusable = (len(items) - len(paths)) + (1 if bad_container else 0)
+
+        fitems, fbad = _shape(d.get("media_failed"))
+        failed = [f for f in fitems if isinstance(f, (str, int, float))]
+        unusable += (len(fitems) - len(failed)) + (1 if fbad else 0)
+
         if not paths and not failed and not unusable:
             return ""
         bits = []
         if paths:
-            bits.append("IMAGE(S) saved on Helsinki: " + " · ".join(paths[:4]))
+            bits.append("IMAGE(S) saved on Helsinki: " + _cap(paths, 4))
             bits.append(f"view: {MEDIA_HELPER} <path>  (copies it here, prints a local path to Read)")
         if failed:
             # An attachment that failed to save must never look like "no attachment" (#453).
             bits.append("ATTACHMENT PRESENT BUT SAVE FAILED (instrument failure, NOT an empty set): "
-                        + "; ".join(failed[:3]))
+                        + _cap(failed, 3))
         if unusable:
             # Dropped silently, this would be an absence manufactured by the messenger.
             bits.append(f"{unusable} malformed media entr{'y' if unusable == 1 else 'ies'} in the "
