@@ -2582,6 +2582,8 @@ These two Python bridges run on the Hetzner Helsinki agent box (`204.168.141.77`
 
 ## Discord Comms Fabric (Hetzner Helsinki) — Added B-DISCORD (2026-06-20)
 
+> **★ CONTENT UPDATE — B-COMMS-IMAGES-2 (2026-08-07):** `cc-wake-filter.py` — the wake path for all three desktop sessions — is repo-canonical at **`comms-infra/laptop/`** (moved there from `comms-infra/telegram-reference/`, where the only versioned copy sat **three weeks stale**, predating ANALYST Claude; a restore from it would have silently broken CC-C routing). It now appends saved image paths to wake lines (fail-open; a failed save states SAVE FAILED rather than resembling no image), and the helpers `dt-media-get` / `dt-media-post` live beside it. **Hand-deployed to the laptop's `.claude/` directory — there is no automatic deploy, and a RUNNING Monitor holds the OLD code until that session re-arms**, so a change here is inert for any session that has not re-armed.
+
 > **★ CONTENT UPDATE — B-REPO-RELOCATE (2026-07-23): Langston's REVIEW-READ PATH is now part of this fabric and has NO working copy.**
 >
 > | Component | Path | Upstream feeders | Downstream consumers | Blast radius |
