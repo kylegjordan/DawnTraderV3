@@ -2562,3 +2562,25 @@ collision from silent to loud for one session; it does nothing for the other thr
 
 **The shape, since it is the same one twice in one day:** I read a log line that was *adjacent* to the fixture I was reasoning about and bound it to the wrong object. Rule 29(c) is the guard — **a mechanism claim cites the line that implements it, or it is labelled a hypothesis** — and my filing asserted a NetEV minimum that no line implements. Langston caught it by demanding the citation rather than the conclusion. ↔ #675 (same failure family, same day).
 
+### #678 OPEN 2026-08-07 (CC-B; Langston-ruled option (ii)) — **`B-FILTER-DIAG-XSTOCK`: instrument the xStock active path's per-strategy decline taxonomy**
+
+**THE §13 NAMED HOME #675 was waiting on. OWNER: CC-B. DUE: 2026-08-12.** Langston's hold on B-FILTER-DIAG-STANDARDIZE item (3) lifts on this filing; board Review flips to Approved.
+
+**WHAT:** wire `recordActiveStrategyNull` (or its equivalent) into `server/asset_classes/xstock_spot/eval-cycle.ts` → `dispatchXstockActiveSignal`, so the Paper/Live **xStock** per-strategy decline table carries real data, matching the crypto side.
+
+**WHY IT IS A SEPARATE BATCH, not a rider (Langston's ruling):** new active-path emission **flips the change-class to ARCHITECTURE** by his own pre-registered criterion, and that earns its own scope + pre-audit rather than being grafted onto a deployed, already-twice-reclassified batch.
+
+**SETTLED, so the next reader does not re-litigate it:** Langston measured `eval-cycle.ts` himself (1,183 lines, file-read control passed) — **zero** references to `recordActiveStrategyNull` or `declineReason`; all 19 recorder sites live in `signal-orchestrator.ts`, which the xStock active path bypasses. ⇒ **invocation silence: the table cannot populate at ANY cadence.** Rule-24 bucket 2 (working-as-designed, unaddressed → scope decision), **not** a defect.
+
+**ALREADY SHIPPED (interim, `49767168`):** the honest not-instrumented render — `strategyNullReasons` is emitted **absent** for `xstock_spot` (never an empty object, which the envelope contract defines as an observed zero), and the card names the **asset class** rather than the mode. ⚠️ **`STRATEGY_NULL_INSTRUMENTED_CLASSES` in `active-funnel-tracker.ts` is to be DELETED OUTRIGHT by this batch — not extended with a second class**, or the next reader inherits a boundary with no boundary. ↔ #675, #662, #648.
+
+### #679 OPEN 2026-08-07 (CC-B, surfaced handling the re-fire) — **resolving a PERSISTENT threshold alert frees its dedupe key, so it re-fires forever; neither terminal state fits a known-and-homed condition**
+
+**MEASURED, same key, 16 minutes apart:** `f9a1f18b` (disk 66.6% of the 200 GB cap) resolved with full evidence **12:22Z**; **`e74ab320`, identical title, identical `dedupe_key: disk-utilization-warning`, fired 12:38Z**. The condition had not changed — 133 GB either side.
+
+**THE STRUCTURAL PROBLEM:** `resolve` is documented as *the ONLY thing that stops the dispatcher re-surfacing* — but it also **frees the dedupe key**, so a condition that is still TRUE re-fires on the next evaluation. **Neither terminal state is honest here:** `resolve` asserts fixed (it is not, and it returns); `ack` means owned-but-open (it re-surfaces on the back-off). A condition that is **known, investigated, and homed to a dated watch** (`63d41a75`, Aug-29) therefore has **no correct disposition**, and will re-fire indefinitely.
+
+⚠️ **WHY THIS IS NOT COSMETIC:** the failure mode is *training every session to clear this row unread* — and the row is a **disk-capacity warning**. The next one may be at 90%, and it will look exactly like the fifteen that were safely cleared. **An alert that cries wolf on a true condition is worse than one that never fires**, because it consumes the attention budget of the channel meant to catch the real one. Same family as #393 (off-hours cry-wolf).
+
+**FIX (proposed, NOT unilaterally built):** a `suppressed`/`snoozed-until` state — the condition stays acknowledged-true and simply does not re-surface until a date or a threshold change (e.g. re-fire only when utilisation crosses the NEXT band). **HOME: this issue. OWNER: CC-B. DUE: with the next alert-machinery batch;** raised for Langston + Kyle rather than patched, per rule 15 (no patches) — the dispatcher's dedupe semantics are governance-visible behaviour.
+
