@@ -312,6 +312,58 @@ function compareBaseline({ regenAcknowledged }) {
     console.log('[baseline]   a drop can mean errors were fixed OR that tsc did not see the code at all');
     console.log('[baseline]   (partial parse failure, excluded directory, moved file). Check before syncing.');
     for (const d of drops) console.log(`   - ${d.file} ${d.code}: ${d.baseline} -> ${d.current}  [${clip(d.message)}]`);
+
+    // ★ #680 option (b), Langston-ruled 2026-08-07 — MECHANIZE "UNEXPLAINED".
+    //
+    // Failing EVERY drop was rejected: this baseline is REQUIRED to net-shrink as fixes land, so
+    // fail-on-any-drop refuses every legitimate fix and makes `--regen-acknowledged` routine — which
+    // is Finding 2's reflex-escape failure one door over. Warn-only was rejected too: a warning
+    // nobody must read is #546-shaped.
+    //
+    // (b) matches the actual THREAT MODEL: a partial parse failure or a silently-excluded directory
+    // clears errors in files the push NEVER TOUCHED. A genuine fix clears errors in files it edited.
+    // So an untouched-file drop is the unexplained one, and that is what fails.
+    //
+    // ⚠️ ONE HONEST FALSE-POSITIVE CLASS, named rather than hidden (Langston): cross-file type
+    // propagation — fixing an exported type in touched file A legitimately clears errors in untouched
+    // consumer B. Those route through `--regen-acknowledged` with a stated reason, and that is
+    // CORRECT FRICTION, not a defect: the acknowledgement IS the explanation the qualifier demands.
+    // No second hatch.
+    //
+    // The touched set is supplied by the caller (the push hook computes it over the whole push
+    // range). ABSENT ⇒ this check does not run, so CI behaviour is unchanged — the strictness lives
+    // at the enforcement point that was missing, not in a second comparator.
+    const touchedRaw = process.env.TSC_GATE_TOUCHED_FILES;
+    if (!regenAcknowledged && touchedRaw !== undefined) {
+      if (touchedRaw.trim() === '__UNCOMPUTABLE__') {
+        // FAIL CLOSED (Langston's rider): if the caller could not determine what the push touches,
+        // it cannot classify any drop, and an unclassifiable drop must not pass as explained.
+        console.error(
+          '\n[baseline] FAIL — the pushed file set could not be computed, so drops cannot be classified as explained or not. Refusing rather than assuming. (#680)',
+        );
+        exit(1);
+      }
+      const touched = new Set(
+        touchedRaw.split('\n').map((s) => s.trim().replace(/\\/g, '/')).filter(Boolean),
+      );
+      const unexplained = drops.filter((d) => !touched.has(String(d.file).replace(/\\/g, '/')));
+      if (unexplained.length) {
+        console.error(
+          `\n[baseline] FAIL — ${unexplained.length} (file, code, message) counts dropped in files this push DID NOT TOUCH.`,
+        );
+        for (const d of unexplained) {
+          console.error(`   ! ${d.file} ${d.code}: ${d.baseline} -> ${d.current}  [${clip(d.message)}]`);
+        }
+        console.error(
+          '\nErrors vanishing from files you did not edit is the signature of tsc not seeing the code —\n' +
+            'a partial parse failure, an excluded directory, or a moved file — NOT of a fix. On 2026-08-07\n' +
+            'that exact reading ("errors fixed — good") let a broken parse reach staging.\n' +
+            'If this is genuine cross-file type propagation from a file you DID edit, re-run with\n' +
+            '--regen-acknowledged and state the reason: the acknowledgement is the explanation. (#680)',
+        );
+        exit(1);
+      }
+    }
   }
   if (regressions.length) {
     console.log(`[baseline] REGRESSION — ${regressions.length} (file, code, message) counts ABOVE baseline:`);

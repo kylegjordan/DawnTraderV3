@@ -132,9 +132,48 @@ if (!existsSync('scripts/check-tsc-baseline.mjs')) {
   );
 }
 
+// ── The TOUCHED SET, for the comparator's option-(b) unexplained-drop check (#680) ──────────────
+// Langston's build specs, each with the reason it is not the obvious thing:
+//   • THE WHOLE PUSH RANGE, not the tip commit — a push sends every commit since the upstream, and
+//     a drop explained by commit 1 must not be judged against commit 5's file list.
+//   • DELETIONS AND RENAME OLD-PATHS COUNT AS TOUCHED — a deleted file's baseline entries dropping
+//     is explained by the deletion. Without the old path, every legitimate file removal false-fires,
+//     and a gate that cries wolf on routine work is a gate that gets removed.
+//   • FAIL CLOSED — if the set cannot be computed we send the sentinel, and the comparator refuses.
+//     An unclassifiable drop must never pass as an explained one.
+let touchedPayload;
+try {
+  const upstream = execSync('git rev-parse --abbrev-ref --symbolic-full-name @{u}', {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'ignore'],
+  }).trim();
+  const base = execSync(`git merge-base ${upstream} HEAD`, {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'ignore'],
+  }).trim();
+  // -M surfaces renames as `R<score>\told\tnew`; every other status is `X\tpath`.
+  const status = execSync(`git diff --name-status -M ${base} HEAD`, { encoding: 'utf8' });
+  const set = new Set();
+  for (const line of status.split('\n')) {
+    const parts = line.trim().split('\t').filter(Boolean);
+    if (parts.length < 2) continue;
+    const code = parts[0];
+    if (code.startsWith('R') || code.startsWith('C')) {
+      if (parts[1]) set.add(parts[1]); // OLD path — the one whose baseline entries disappear
+      if (parts[2]) set.add(parts[2]);
+    } else {
+      set.add(parts[1]); // includes D (deleted): its baseline entries dropping IS explained
+    }
+  }
+  touchedPayload = [...set].join('\n');
+} catch {
+  touchedPayload = '__UNCOMPUTABLE__';
+}
+
 const res = spawnSync('node', ['scripts/check-tsc-baseline.mjs'], {
   encoding: 'utf8',
   timeout: 5 * 60 * 1000,
+  env: { ...process.env, TSC_GATE_TOUCHED_FILES: touchedPayload },
 });
 
 if (res.error || res.status === null) {

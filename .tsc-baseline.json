@@ -4,7 +4,7 @@
   "frozen_at_commit": "69a355a74",
   "frozen_at_iso": "2026-07-27T19:30:54.569Z",
   "frozen_by_batch": "B-TSC-BASELINE-FIX (#579 — message-identity gate)",
-  "total_errors": 394,
+  "total_errors": 392,
   "file_count": 48,
   "files": [
     {
@@ -128,7 +128,6 @@
           "Property 'buildTrade' does not exist on type 'ActiveExecutionEngine'.": 2,
           "Property 'executeTrade' does not exist on type 'ActiveExecutionEngine'.": 2,
           "Property 'modeRegistry' does not exist on type 'typeof import(\"<ROOT>/server/services/mode-registry\")'.": 2,
-          "Property 'startingBalance' does not exist on type '{ id: string; mode: \"live\" | \"paper\"; globalContextId: string; createdAt: Date | null; balance: string; anchorVersion: number; lastUpdate: Date | null; }'.": 1,
           "Property 'minDailyRange' does not exist on type '{ id: string; mode: \"live\" | \"paper\"; createdAt: Date | null; updatedAt: Date | null; minVolume: string | null; minPrice: string | null; maxBidAskSpread: string | null; excludeStablecoins: boolean | null; lockedByUser: unknown; managedByLottie: boolea": 2,
           "Property 'approved' does not exist on type 'TradeSafetyResult'.": 2,
           "Property 'reason' does not exist on type 'TradeSafetyResult'.": 3,
@@ -158,8 +157,7 @@
           "Property 'completedAt' does not exist on type 'PgTableWithColumns<{ name: \"cluster_result_log\"; schema: undefined; columns: { id: PgColumn<{ name: \"id\"; tableName: \"cluster_result_log\"; dataType: \"string\"; columnType: \"PgVarchar\"; data: string; driverParam: string; notNull: true; hasDefault: true; i": 1,
           "Property 'conflictId' does not exist on type '{ id: string; sessionId: string; conflictingSources: string[]; conflictingVerdicts: unknown; resolutionStatus: \"open\" | \"resolved\" | \"escalated\"; resolutionMethod: string | null; resolutionRationale: string | null; finalVerdict: \"approved\" | \"rejected\" |": 1,
           "Property 'presetName' does not exist on type '{ id: string; name: \"baseline\" | \"conservative\" | \"optimistic\" | \"maximum\" | \"custom\"; mode: \"live\" | \"paper\"; createdAt: Date | null; updatedAt: Date | null; maxOpenPositions: number; portfolioRiskPerTradePct: string; symbolCooldownMinutes: number; dail": 1,
-          "Property 'getPortfolioBalance' does not exist on type 'DatabaseStorage'.": 1,
-          "Property 'maxChangesPerDay' does not exist on type '{ mode: LearningMode; changes24h: number; overrides24h: number; maxChanges: number; throttleStatus: string; lastStableSnapshot: number | null; lastSnapshotTime: Date; coherencyThreshold: number; overrideWeight: number; bias: string; }'.": 1
+          "Property 'getPortfolioBalance' does not exist on type 'DatabaseStorage'.": 1
         },
         "TS2552": {
           "Cannot find name 'tradingEngines'. Did you mean 'TradingEngine'?": 2,
@@ -748,5 +746,7 @@
         }
       }
     }
-  ]
+  ],
+  "last_synced_at_iso": "2026-08-07T13:22:36.010Z",
+  "last_synced_by_batch": "B-NEW-43 (chunk 7+ — sync after clean-error fixes)"
 }
