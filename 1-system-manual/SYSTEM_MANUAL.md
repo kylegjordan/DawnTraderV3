@@ -11096,7 +11096,7 @@ This appendix documents the architectural additions shipped in B63 Items 10-14 +
 
 1. **Geometry override (B63 Item 12)** — `TechnicalIndicators.strongTrendGeometryOverride: { stopAtrMultiplier, targetAsRMultiple }` is attached to indicators by `vts-runner.ts` when a pair routes through this lane. Detectors that consume it apply the override in place of their default geometry. Detectors that don't consume it (like `strong_bull_trend` with locked native 3×ATR/6×ATR) simply ignore the field.
 
-2. **Mode-overlay bypass (B63 Item 14)** — `vts-runner.ts` and `paper-execution-engine.ts` both check `sourcePool === 'quant-strong_trend'` and skip mode-overlay multipliers when true. Reversal/continuation archetypes retain mode-overlay behavior as designed; the bypass is scoped exclusively to the strong-trend lane.
+2. **Mode-overlay bypass (B63 Item 14)** — `vts-runner.ts` and `active-execution-engine.ts` (renamed from `paper-execution-engine.ts` at P19-B-RENAME) both check `sourcePool === 'quant-strong_trend'` and skip mode-overlay multipliers when true. Reversal/continuation archetypes retain mode-overlay behavior as designed; the bypass is scoped exclusively to the strong-trend lane.
 
 **Design rationale:** future strategies promoted into this lane inherit both contracts automatically. Adding a new strategy to `MULTI_FAMILY_ELIGIBILITY[strategyKey] = [...'strong_trend']` and having its detect function read `indicators.strongTrendGeometryOverride` is the ONE thing that needs to happen — routing and mode-overlay bypass are handled at the lane level, not per-strategy.
 
@@ -11147,7 +11147,7 @@ B63 Item 16 replaces this with:
 
 **Where enforced:**
 - `server/services/vts-runner.ts` (~L1086, where mode-overlay is applied to stop/target distances for VTS virtual trades)
-- `server/services/paper-execution-engine.ts` (~L2165, where mode-overlay is applied for paper/active trading signals)
+- `server/services/active-execution-engine.ts` (where `modeOverlay` is resolved via `getModeOverlayForClass` and applied to active-trading signals) — ⚠ the former `~L2165` coordinate was STALE (that logic now sits nearer `:3907-3977`); **a SYMBOL is cited instead of a line, deliberately, because line coordinates in this manual have already drifted once today**
 
 **Why scoped to a lane (not a strategy name list):** promoting a strategy into the strong-trend lane (per B63.1) automatically inherits the bypass. Adding new continuation strategies does not require updating mode-overlay code.
 
@@ -11477,7 +11477,7 @@ Emit hooks live in `server/services/signal-orchestrator.ts` (active path, curren
 
 **MCE atomic Map-replace pattern (R-11 mitigation):** `macroConfigByClass` / `pairCorrelationConfigByClass` / `phaseWeightsByClass` are typed as `ReadonlyMap<AssetClass, T>`. Each refresh cycle builds a NEW map locally + atomically swaps the reference via single assignment. Readers see either the old map's complete state OR the new map's complete state — never a partial state where one class is updated and another isn't. The `ReadonlyMap` type makes accidental in-place mutation a TypeScript error.
 
-**Chain-composition capture-and-reuse (R-10 mitigation):** signal-orchestrator + vts-runner resolve `_pairAssetClass = safeResolveAssetClass(symbol, 'kraken')` once at chain-block entry. If null, skip the entire ablation block + WARN (structurally unreachable defense-in-depth — upstream regime classifier uses STRICT `resolveAssetClass` which would have thrown earlier). All 16 push sites (8 per file × 2 files) thread the captured asset class through the `FactorAlternateInput` discriminated-union arms — TS exhaustiveness check enforces. Same pattern applied to paper-execution-engine + vts-service close-hooks for `outcomeFeedbackStore.updateEma` (resolves from `position.symbol` / `tradeData.symbol`).
+**Chain-composition capture-and-reuse (R-10 mitigation):** signal-orchestrator + vts-runner resolve `_pairAssetClass = safeResolveAssetClass(symbol, 'kraken')` once at chain-block entry. If null, skip the entire ablation block + WARN (structurally unreachable defense-in-depth — upstream regime classifier uses STRICT `resolveAssetClass` which would have thrown earlier). All 16 push sites (8 per file × 2 files) thread the captured asset class through the `FactorAlternateInput` discriminated-union arms — TS exhaustiveness check enforces. Same pattern applied to active-execution-engine (renamed from paper-execution-engine) + vts-service close-hooks for `outcomeFeedbackStore.updateEma` (resolves from `position.symbol` / `tradeData.symbol`).
 
 ---
 
@@ -11515,7 +11515,7 @@ Six places where the trading code emits archive rows. Every hook is `try/catch` 
 | VTS emit-ablation (admitted) | `vts-runner.ts:~L1726` | `signal_eval_archive` `reject_stage='admitted'` | `getCurrentMode()` |
 | VTS evaluator reject paths | `vts-runner.ts:~L2786 + L2851` | `signal_eval_archive` `reject_stage` ∈ {sqe, tcl, strategy_internal} | `getCurrentMode()` |
 | VTS exit loop | `vts-runner.ts:~L2161` | `exit_decision_archive` | `getCurrentMode()` |
-| Paper exit | `paper-execution-engine.ts:closePosition` | `exit_decision_archive` | `getCurrentMode()` (currently dormant; live activates Phase 19) |
+| Paper exit | `active-execution-engine.ts:closePosition` | `exit_decision_archive` | `getCurrentMode()` — ⚠ **the former "currently dormant; live activates Phase 19" clause is REMOVED as FALSIFIED: paper-mode active trading has been ON since mid-July 2026.** LIVE mode remains Phase 21. |
 | Signal-orchestrator emit | `signal-orchestrator.ts:~L975` | `signal_eval_archive` `reject_stage='admitted'` | `getCurrentMode()` (currently dormant; live activates Phase 21) |
 | Macro feed pollCycle | `external-macro-feed.ts:pollCycle end` | `macro_feed_archive` | n/a (global feed) |
 
@@ -11552,7 +11552,7 @@ Drift Dashboard → `DataArchiveSection` panel: per-table row counts in window +
 
 - **Trend Mining Engine** (Phase 17.6 / 18.5, post-launch) — consumes pair_scan + signal_eval + exit_decision joined to B74 OHLC by timestamp.
 - **B67.5 consumer wiring** — when active trading turns on (post-2026-05-15 calibration check), the signal-orchestrator's existing admitted-path archive hook fires automatically with `mode='live'`.
-- **Phase 19 paper-sim activation** — `paper-execution-engine.closePosition` hook fires automatically with `mode='paper_sim'`. No code change required.
+- **Phase 19 paper-sim activation** — `active-execution-engine.closePosition` hook fires automatically with `mode='paper_sim'`. No code change required. ⛔ **`'paper_sim'` is KEEP-AS-DATA (#405, fence-tested) — it is a STORED-DATA DISCRIMINATOR, never renamed; only the FILENAME changed here.**
 
 ## What's not in B70.1 (queued for B70.2 if needed)
 
