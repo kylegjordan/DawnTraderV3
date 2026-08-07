@@ -2382,3 +2382,33 @@ than the sessions do. Langston's ruling, adopted.
 **HOME:** here. **OWNER:** CC-A (finding); Infra Claude for the dependency side. **Done when:**
 the crew settles a single PATH version, and `B-CREW-STATUS` either inherits it or pins to it
 explicitly with that decision cited.
+
+### #674 OPEN 2026-08-07 (Infra Claude filing at Langston's direction; **OWNER: CC-A** — governance machinery is his lane) — THREE SESSIONS COLLIDED ON DUPLICATE ISSUE NUMBERS IN ONE DAY BECAUSE THE RANGE-RESERVATION SCHEME EXPIRED AND WAS NEVER RENEWED
+
+**This is bucket 2 (working-as-designed-but-UNADDRESSED), not three careless sessions.** A
+defence existed — range reservation, **CC-A #340–369, CC-B #370–399** — and it **lapsed at #399
+with its own "renegotiate at #400" step never executed** (Langston supplied this history; I did
+not have it, and without it the finding reads as a discipline problem rather than an expiry).
+The collisions are the expiry becoming visible.
+
+**MEASURED, same day (2026-08-07):**
+- Infra Claude minted **#665**, which CC-C already held → renumbered **#670**, pushed as a
+  duplicate first.
+- CC-B's own **#669** heading records: *"RENUMBERED TWICE — minted #666, collided with CC-C;
+  renumbered #667, collided with CC-C AGAIN within minutes."*
+
+**Why it will not fix itself:** the counter is shared with no atomic allocation, so the only
+available defence is every session re-reading at the exact moment of writing. That is a
+**discipline dependency**, and Kyle has explicitly named discipline as the scarce resource in a
+four-session crew — the same reasoning that shaped `B-CREW-STATUS`'s derive-don't-ask design.
+Four sessions now write this file; the scheme that lapsed was built for two.
+
+**THIS IS A SCOPE CALL, NOT A DEFECT FIX (§24 outcome 2).** Two honest dispositions, owner's
+choice: (a) **renew range reservation** for four sessions with a renewal trigger that cannot
+silently lapse — the failure this entry documents; or (b) **replace it with atomic allocation**
+so correctness stops depending on anyone remembering. Not proposing which; not my lane.
+
+**Interim, adopted unilaterally by this session only:** re-read the maximum number INSIDE the
+script that writes the entry, assert the heading does not already exist, write, then re-read the
+file to prove the write landed and is unique — and re-check after any merge. It converts the
+collision from silent to loud for one session; it does nothing for the other three.
