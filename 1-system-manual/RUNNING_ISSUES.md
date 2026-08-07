@@ -2220,3 +2220,18 @@ The VTS tab's **Setup Nulls (A–F, 20 rows)** and **Pre-Evaluation Skips (7 row
 
 **⇒ REVISED DISPOSITION: there is no scope decision owed on the July migration. What IS owed is a WATCH on the Aug 29-31 window** — the sweep must actually run and actually free ~41.8 GB; at 96% a silent sweep failure is the only path to a breach. **`#663` is CORRECTED to that watch (not a Kyle decision), and alert `68c50a33` is re-purposed accordingly.**
 
+
+### #665 OPEN 2026-08-07 (CC-C; found while digging out the Phase-19 slot/size intent at Kyle's direction) — **THE PAPER PER-TRADE ALLOCATION IS 20%, BUT THE GOVERNED DECISION SET IT TO 6.67% — AND KYLE DID NOT CHANGE IT BACK**
+
+**MEASURED (object `guardrails_v2` on staging, population BOTH rows, not a slice):** paper `max_position_percent_pct` = **20.00**, `last_updated_by` = **`p19-b8-5-sizing-tune-2 (measured iteration)`**. Anchor `portfolio_state.balance` paper = **$2,250.00**, `anchor_version` = 3. `max_total_exposure_pct` = 100, `max_open_positions` = 15.
+**THE GOVERNED DECISION SAYS OTHERWISE:** `P19_B8_5d_COMPLETION_REPORT.md` (2026-07-16, CC-A, **Kyle-specced + Langston-approved**) records change (a) as *"guardrails_v2 paper `max_position_percent_pct` 20→6.67 (exposure already 100, slots 15; `last_updated_by` stamped)"*, verified at the time by a measured read showing sized notional **$144.52**.
+⇒ **Either tune-3's change (a) never persisted, or something later rewrote it.** ★ **THE CAUSE IS NOT ESTABLISHED AND IS DELIBERATELY NOT GUESSED AT HERE (rule 24.a).** What is ruled out so far: `guardrail-policy.ts:228-230` carries a hardcoded read-time fallback (paper 30.00 / live 10.00) — **a §11 "no hard-coded fallbacks for DB-governed settings" violation in its own right, worth its own disposition** — but it is a READ path and cannot have written 20. The schema default is `30.00`, not 20, so a row re-create would not produce this either. **20.00 is precisely the PRE-tune-3 value with the PRE-tune-3 stamp**, which is the strongest single clue and is why "never persisted" is as live a hypothesis as "reverted".
+**KYLE (2026-08-07):** *"I'm not sure how it got switched back to twenty percent. I didn't do it."*
+
+**★ WHY IT MATTERS RIGHT NOW — A SEQUENCING HAZARD ON THE NEXT DEPLOY, NOT A PAPERWORK ITEM:**
+Today the sizer computes `$2,250 × 100% × 20% × 0.97 = $436.50` per trade, and the **still-live 11.7S DEFENSIVE damper (×0.6)** pulls that to ≈**$262** — which matches the open xStock positions to the dollar (RKLB $260.20, MRVL $261.04, ZTS $262.01, MSFT $260.37). **`B-SIZING-DEC-RESTORE` DELETES that damper.** So a deploy of the deletion **while the allocation is still 20% would take live paper sizes from ≈$262 to ≈$436 in one step — a 1.67× increase, unintended, on a live risk envelope.**
+⇒ **ORDERING IS MANDATORY: set the allocation to 6.6667% BEFORE or IN THE SAME STEP AS the deletion deploy. Never deploy the deletion first.**
+
+**KYLE'S DECISION (2026-08-07, verbatim):** *"let's go with the fifteen at six point six six six seven percent to give us fifteen slots trading at close to one hundred and fifty dollars each."*
+⇒ **paper: anchor $2,250 · exposure 100% · allocation 6.6667% ⇒ 15 slots × $145.58 buffered.** ★ **6.6667, NOT 6.67** — the rounded value makes `100 ÷ 6.67 = 14.99`, which floors to **14 slots**, one short, silently. (The same off-by-one was already visible on 07-16: that report notes the UI rendered **14** while `max_open_positions` said 15.)
+**HOME:** the value-set rides `B-SIZING-DEC-RESTORE` (it is that batch's owed VALUES decision, which Langston made a close condition). The CAUSE investigation stays here as #665, open, and does **not** block the batch.
