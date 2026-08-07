@@ -213,12 +213,12 @@ export function ActiveSqeAndRtbSections({
       {(() => {
         const snr = cls.strategyNullReasons;
         if (!snr) {
+          // ★ #675 — NAME THE ASSET CLASS, NEVER THE MODE. `label` is 'Paper'/'Live', and an earlier
+          // revision of this card used it here: it rendered "not recorded for Paper yet", which is FALSE —
+          // Paper crypto records them, on this very tab set. That is the same naming-the-wrong-cause failure
+          // this card exists to prevent, committed inside the fix for it. Caught on the staging walk, not in
+          // review. The uninstrumented thing is the CLASS's evaluation path.
           return (
-            {/* ★ #675 — NAME THE ASSET CLASS, NEVER THE MODE. `label` is 'Paper'/'Live', and an earlier
-                revision of this card used it here: it rendered "not recorded for Paper yet", which is FALSE
-                — Paper crypto records them, on this very tab set. That is the same naming-the-wrong-cause
-                failure this card exists to prevent, committed inside the fix for it. Caught on the staging
-                walk, not in review. The uninstrumented thing is the CLASS's evaluation path. */}
             <DiagTableCard theme="rolling" title="Why Each Strategy Declined" subtitle={`${className} — not measured yet`} testId="fd-strategy-nulls-absent">
               <div className="p-3 text-sm text-muted-foreground">
                 <p>
