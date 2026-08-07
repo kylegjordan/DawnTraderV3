@@ -3,10 +3,17 @@
  *
  * WHY A CACHE, MEASURED (Langston Step-2 rider 2 — "the cache fixes the client, not the database"):
  *   24h GROUP BY over `signal_eval_archive`  → 38,507 ms (EXPLAIN ANALYZE, 2,360,757 rows)
- *   6h  GROUP BY, same shape                 →    494 ms (600,706 rows)
- * The 78× drop is why the window is SIX HOURS, not 24: at 494 ms per 5-minute refresh the duty
- * cycle on the shared instance is ~0.16%, versus ~13% for the 24h version. The window is the
- * cheapening rider 2 asked for — evidence above, re-runnable from the same two statements.
+ *   6h  GROUP BY (this query), WARM          →    467-472 ms (600,706 rows)
+ *   6h  GROUP BY (this query), COLD          →  6,708-6,922 ms  ← first read after an idle gap
+ * The window is the cheapening rider 2 asked for. At a 5-minute refresh the pages stay warm, so
+ * STEADY STATE is ~470 ms ≈ 0.16% duty cycle; the first run after boot pays the ~7 s cold read
+ * once. Versus ~13% duty cycle for the 24h version.
+ *
+ * ⚠ MEASUREMENT NOTE, kept because it nearly shipped as a wrong cause: adding `asset_class` as a
+ * 4th GROUP BY column first timed at 6,708 ms and looked like the column's cost. It is not — an
+ * interleaved A/B (3-col, 4-col, 3-col, 4-col in one session) reads 6,922 / 472 / 420 / 467 ms:
+ * the 4th column costs ~nothing and the first number was COLD CACHE. The instrument's state was
+ * leaking into the reading. Re-run the interleaved form before quoting any figure here.
  *
  * SEMANTICS THE TABS DEPEND ON:
  *  - `source` is the LANE DISCRIMINATOR, never `mode`. Since 2026-07-14 both pipelines stamp
@@ -41,6 +48,10 @@ export interface StageAttritionRow {
   strategy: string;
   rejectStage: string;
   source: string;
+  /** Step-4 BLOCKER-1: the 19 strategies are SHARED across classes, so omitting this blended
+   *  crypto and xStock into one death profile — the exact question #648 asks, answered on the
+   *  wrong population. The client filters on it per class panel. */
+  assetClass: string;
   count: number;
 }
 
@@ -65,16 +76,17 @@ let _inFlight = false;
 async function computeSnapshot(): Promise<StageAttritionSnapshot> {
   const t0 = Date.now();
   const res: any = await db.execute(sql`
-    SELECT strategy, reject_stage, source, count(*)::int AS n
+    SELECT strategy, reject_stage, source, asset_class, count(*)::int AS n
     FROM signal_eval_archive
     WHERE captured_at >= now() - (${STAGE_ATTRITION_WINDOW_HOURS} || ' hours')::interval
-    GROUP BY 1, 2, 3
+    GROUP BY 1, 2, 3, 4
   `);
   const raw = (res?.rows ?? res ?? []) as any[];
   const rows: StageAttritionRow[] = raw.map((r) => ({
     strategy: String(r.strategy ?? 'unknown'),
     rejectStage: String(r.reject_stage ?? 'unknown'),
     source: String(r.source ?? 'unknown'),
+    assetClass: String(r.asset_class ?? 'unknown'),
     count: Number(r.n ?? 0),
   }));
   return {
