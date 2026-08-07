@@ -1558,7 +1558,25 @@ export class ActiveExecutionEngine {
           exchange: 'kraken',
           assetClass: positionAssetClass,
           strategy: position.strategyName,
-          regime: (position as any).regime,
+          // B-TEC-REGIME-PARAM-REMOVAL (2026-08-07): the `regime` key is REMOVED
+          // here, not defaulted. `activeOpenPositions` has no `regime` column
+          // (38-column enumeration) and `getActiveOpenPositions` returns the bare
+          // row type, so `(position as any).regime` could only ever be undefined —
+          // a reader whose writer never existed. The `as any` cast on an already
+          // `any` parameter silenced nothing, which is why tsc/CI/caller-census
+          // all passed over it (see #676 for typing this parameter properly).
+          //
+          // BEHAVIOUR-IDENTICAL, and the evidence is the census, NOT the compiler:
+          // `TECExitInput.context.regime` is OPTIONAL (`tec-evaluator.ts:100`), so
+          // tsc stays green either way. Its three readers (`tec-evaluator.ts:314`
+          // isMoonbagQualifier, `:321` canEnterMoonbag, `:337` PositionUpdate) all
+          // use plain property access — zero `'regime' in` / `hasOwnProperty`
+          // hits — so an ABSENT key is indistinguishable from `undefined` here.
+          //
+          // ⚠️ THIS REMOVES *A* WRITER, NOT *THE* WRITER: `evaluateTECExit` has
+          // three callers; the two VTS ones (`vts-runner.ts:3042`/`:3822`) pass
+          // REAL `trade.regime` values. Do NOT read this deletion as licence to
+          // drop `regime?: string` or its readers — they are live for VTS.
         },
         useTrailing: true,
         DI: diAtOpen,
