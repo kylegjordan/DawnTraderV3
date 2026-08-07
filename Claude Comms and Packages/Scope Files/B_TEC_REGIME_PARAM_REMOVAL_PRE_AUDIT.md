@@ -1,4 +1,6 @@
-# B-TEC-REGIME-PARAM-REMOVAL — STEP-2 PRE-AUDIT r1
+# B-TEC-REGIME-PARAM-REMOVAL — STEP-2 PRE-AUDIT r2
+
+> ⛔⛔ **r1→r2: LANGSTON FOUND A DEFECT IN THE CENSUS — THE ONE THING §4 DECLARES IS THE ENTIRE EVIDENCE BASE. THREE WRITERS, NOT ONE.**
 
 **Owner:** CC-A · 2026-08-07 · Scope r4 @ `2c4ce640d` (Step-1 CLEARED). Read at `origin/migration/aws-supabase`, not the worktree.
 
@@ -23,11 +25,16 @@
 ## 3. §9.5(a) CENSUS AT THE HOP — `context.regime` INTO `evaluateTECExit`
 | census question | answer (repo-wide, tests excluded, **table/type-scoped**) |
 |---|---|
-| who **writes** it | **exactly ONE site**: `active-execution-engine.ts:1561` — the read being removed |
-| who **reads** it | **exactly THREE**, all in `tec-evaluator.ts`: `:314` (→ `canEnterMoonbag` arg), `:321` (→ slot/concurrency arg), `:337` (→ `PositionUpdate.regime`) |
+| who **writes** it | ⛔⛔ **THREE, NOT ONE (r1 SAID ONE — CORRECTED).** Enumerated from the FUNCTION’S CALL SITES (the only correct shape — see below): `evaluateTECExit(` has **exactly three callers repo-wide**: `active-execution-engine.ts:1545` (context writes `regime` at **`:1561`** — THE ONE THIS BATCH REMOVES) · `vts-runner.ts:3027` (writes at **`:3042`**) · `vts-runner.ts:3808` (writes at **`:3822`**). **The two VTS writers pass REAL values (`trade.regime`) and are UNTOUCHED by this batch.** |
+| who **reads** it | **exactly THREE**, all in `tec-evaluator.ts`: `:314` (→ **`isMoonbagQualifier`**), `:321` (→ **`canEnterMoonbag`**, the slot/concurrency gate) — ⚠ *labels were TRANSPOSED in r1; members unchanged*, `:337` (→ `PositionUpdate.regime`) |
 | who **mutates** | none — it is passed by value, never reassigned |
 | who **DELETES** | none |
 | who **schedules** against it | none — it is a per-call argument, not stored state |
+
+⛔⛔ **WHY r1 MISSED THEM, AND IT IS A METHOD ERROR WORTH MORE THAN THE FIX: I USED THE *READER* GREP SHAPE TO FIND *WRITERS*.** A key inside an object literal (`regime: trade.regime`) **does not contain the string `context.regime`** — which is the same reason my own `:1561` does not either. ★★ **THE CORRECT SHAPES ARE DIFFERENT AND MUST BOTH BE RUN: for a parameter’s WRITERS, ENUMERATE THE CALL SITES OF THE FUNCTION; for its READERS, grep the property access.** *(A `regime: trade.regime` grep alone would ALSO have misled — it returns SEVEN hits in `vts-runner.ts`, of which only TWO are on this hop; the other five are unrelated literals. **Neither grep is the census. The call-site enumeration is.**)* ⚠ **The #602 homing pre-warned exactly this: *"crosses VTS callers — caller-tracing alone will not cover it."***
+
+✅ **THE DIFF’S BEHAVIOUR-NEUTRALITY SURVIVES (Langston re-derived independently): removal touches ONLY the active-path literal; absent≡undefined holds; the VTS writers are untouched.**
+⛔ **BUT THE RECORD DOES NOT, AND THAT IS THE REAL CORRECTION — THE BATCH IS REFRAMED: I AM REMOVING *A* DEAD WRITER, NOT *THE* WRITER.** *"Exactly one writer, removed"* would invite a future reader to delete `regime?: string` and the three reads as fully dead — **while VTS still passes real values into that void.** ⇒ **the §6(c) close-restatement inherits this wording: three writers; this batch removes one; two VTS writers remain, discarded at all landings per the #602 refutation.**
 
 ⭐ **THE DECIDING CHECK (absent-vs-undefined), because removing a KEY is not identical to leaving it `undefined` in general:** all three consumers use **plain property access**. **`grep` for `'regime' in`, `hasOwnProperty('regime')`, `in input.context` → ZERO hits.** ⇒ **no consumer discriminates an ABSENT key from an `undefined` value** ⇒ **removal is behaviour-identical at all three sites.**
 
