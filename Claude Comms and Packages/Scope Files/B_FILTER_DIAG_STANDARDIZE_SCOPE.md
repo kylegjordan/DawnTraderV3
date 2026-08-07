@@ -50,3 +50,18 @@ No engine/strategy/SQE/RTB behaviour change. No VTS-side behaviour change (VTS t
 
 ## 5. Verification
 Table-for-table diff of all six tabs against §1 (screenshot + DOM enumeration, not assertion) · the Net-EV row reconciled against a direct archive query · CI 4/4 · Langston Steps 1/2/4/8 · `dt-deploy --by CC-B` · §9.3 walk of all six.
+
+## 6. Langston Step-1 verdict: APPROVED with FOUR RIDERS (2026-08-07) — folded here, binding
+
+**What he re-derived himself rather than taking on report:** the failure mechanism at `vts-filter-diagnostics-panel.tsx:632-656` (the `enforce && modeTail` branch returns at `:653`; ★ **my own comment at `:629-631` says the inline enforce conditionals below are "now unreachable" — the file documented its own defect and I read past it**) · Group A at `fx5-scanner.ts:663 scanMode(mode)` + `:594` + route `vts.ts:1630-1634` (render job, not instrumentation — confirmed) · the Group B vocabulary **re-derived on staging: NetEV 8,529 · admitted 397 · RegimeWeight 1** (my 8,479 was the same structure hours earlier on a rolling window) · the tables-7/8 absence for BOTH classes.
+
+**RIDER 1 — tables 7/8 are their OWN BATCH, ruled now.** Filed as **#662 `B-ACTIVE-NULL-TAXONOMY`, owner CC-B.** Reason: the emission is archive hot-path instrumentation inside the orchestrator's per-symbol loop — a different blast radius that would break this batch's `non_architecture` class. **This batch ships the honest not-instrumented state and NAMES #662 in its completion report.**
+
+**RIDER 2 — label the POPULATION on the shared tables.** `getLastScanDiagnostics()` takes no mode argument: it holds the last scan of **whatever mode ran**, so with paper active the **LIVE tab's** shared tables will show PAPER's scan. `ScanDiagnostics` carries a `mode` field — **surface it in the section header so tab-mode is never silently implied to be scan-mode.** Also: the 24h rolling aggregate **straddles passive↔active transitions** (passive uses the `vts_quant` row, `fx5-scanner.ts:712-716`) — two filter populations in one aggregate; **annotate it**. (Same principle as his deploy-boundary ruling.)
+
+**RIDER 3 — the Net-EV row classifier.** The sub-gate lives in free text (`gate_decision->>'reason'` = `"NetEV -0.011175 <= 0 (chosen maker mode…)"`). **Prefix-match is acceptable for display ONLY if pinned in a TESTED PURE FUNCTION**; the structured sub-gate token belongs on #662 so the UI stops parsing prose. **The query filters `asset_class` AND `mode` per tab.**
+
+**RIDER 4 — tables 1/5/6 split:** cite the orchestrator's actual `archiveSignalEval` call sites at Step-2. **Already measured (§2 r2): `sourcePool` NULL on 8,550/8,866 active rows ⇒ those columns take the same honest-state treatment as 7/8, never an inference.**
+
+**Process change on the reviewer's side, his words:** *a diff review cannot see a table that was never rendered* — for parity objectives his Step-4 now enumerates the spec's table list and **walks reachability per branch**, not diff coherence. The §5 DOM-enumeration acceptance test is what he will hold me to. **Board: B-FILTER-DIAG-PAPER's Review reset to SENT BACK TO OWNER** (his Approved did not survive Kyle's rejection and the board should not say it did); card moved off Complete by me.
+
