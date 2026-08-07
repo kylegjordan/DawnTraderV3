@@ -2677,3 +2677,23 @@ collision from silent to loud for one session; it does nothing for the other thr
 
 **★ RIDER 1 — VERIFIED, and it is a real exposure I created:** `dedupe_key` is **`'xstock-stale-fill-block'` — GLOBAL, not per-symbol** (`active-dispatch.ts:96`). ⇒ **my ack silences stale-fill alerting for the ENTIRE BOOK, not FCEL.** That is tolerable **only** because real-halt detection is deferred to the equity-feed silent-stall watchdog — **which I verified is genuinely live rather than assumed: `equity-spot-archiver.ts:293` `setInterval`, `:336` `addAlert`, its own independent `dedupe_key: 'xstock-equity-feed-stall'`, and a positive control that it is not theoretical — 20 historical fires in the staging alert log.** **FOLLOW-ON: make the stale-fill dedupe key per-symbol so one ack cannot blind the book. OWNER: CC-B. DUE: 2026-08-12** (with #682, same lane).
 
+**#684 UPDATE 2 — 2026-08-07: ⛔ MY "20 HISTORICAL FIRES" WAS WRONG (it is 3), AND THE WAY IT WAS WRONG IS THE SHARPEST INSTANCE OF THE DAY'S PATTERN. Also: my ACK was itself the live exposure, now cleared.**
+
+**★ THE LIVE EXPOSURE, FIRST — I created it and did not know the mechanism.** **`ack` is NON-TERMINAL: `system-alerts.ts:389` suppresses re-raise while `state !== 'resolved'`.** Combined with the **GLOBAL** `dedupe_key` (`xstock-stale-fill-block`), **my ack was suppressing stale-fill alerting for the ENTIRE 480-name xStock book — and because it was ACKED rather than active, it did not surface in the per-turn §10.5 scan either.** ⇒ **the per-symbol key is the durable fix, but it was NOT what stood between us and a blind book; the acked-not-resolved row was.** **RESOLVED** with evidence once the condition cleared (FCEL **1,674 ms** vs the 15,000 ms limit; book-wide **10/480 = 2.1%** over-limit in a **homogeneous 20-minute RTH window**, consistent with Langston's independent 4.8% and confirming my 59.6% was the open-transition artifact). Read back: `state=resolved`.
+
+**★★ THE POSITIVE CONTROL THAT WAS ITSELF UNCONTROLLED — 20 vs 3, and the mechanism is worth more than the correction.** I claimed the silent-stall watchdog had **20 historical fires**, as the evidence that the fallback was *"live, not theoretical."* **The true count is 3** (`a72215c1` 07-07, `1acdb132` 07-07, `fb78a8af` 08-03; the log's earliest row is 05-17, ~82 days, so retention hides nothing).
+
+**WHY IT WAS WRONG — diagnosed, not merely accepted.** My command was a **TEXT grep for the phrase `silent-stall`**, not a filter on the watchdog's `dedupe_key`. Of the 20 matching lines:
+
+| lines | belong to |
+|---|---|
+| **14** | **`xstock-stale-fill-block` — THE ALERT I WAS INVESTIGATING** |
+| 3 | `xstock-equity-feed-stall` (the actual fires) |
+| 3 | other alerts / null |
+
+⇒ **the stale-fill alert's own BODY says *"see the equity-feed silent-stall watchdog"*, so every row of the object under investigation matched my search for its fallback.** **I counted MENTIONS of the thing instead of the thing, and the loudest source of mentions was the very object I was investigating.** ★ **This is the day's adjacent-object failure in its purest form — and it happened INSIDE a positive control, the instrument whose entire job is to prove reach.** ⚠️ **It inflated ~7× in the direction that made the fallback look sturdier, in the same paragraph where I named that exact trap.** **The conclusion survives — 3 real fires still refute "theoretical" — but it survives by luck, not by the evidence I gave for it.** **RULE: a positive control must key on the IDENTIFIER, never on prose that can appear in a neighbour.**
+
+**CITATION CORRECTIONS (Langston, verified):** the watchdog's own interval is **`equity-spot-archiver.ts:401`** (`STALL_WATCHDOG_CHECK_MS`, 30 s), **not `:293`** — `:293` is an unrelated `setInterval` above the C3 section at `:314`. `addAlert :336` and `dedupe_key :342` stand.
+
+**FIX IS CHEAPER THAN SCOPED (Langston):** per-symbol dedupe **already exists in this codebase** — `price-skip-paper-PWR/USD` (16 rows), `-ETN/USD` (12), `-GEV/USD` (11). **CC-B is copying a pattern, not inventing one.** OWNER CC-B, DUE 2026-08-12.
+
