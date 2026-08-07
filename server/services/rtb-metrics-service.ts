@@ -98,7 +98,10 @@ export interface EvInputSample {
 /**
  * P19-B7.1 (OBJ-5): one sized-signal's risk-fraction telemetry — the clamp-bind watch.
  * Recorded once per actually-SIZED signal at the open path (NOT per candidate — denominator
- * trap). `effectiveRiskFractionRatio` = sized dollar-risk ÷ intended riskAmount (≤1); `bound` =
+ * trap). `effectiveRiskFractionRatio` = deployed notional ÷ intended per-trade notional (≤1)
+ * — RE-POINTED by B-SIZING-DEC-RESTORE obj-1: sizing is fixed-notional now, so the old
+ * "dollar-risk ÷ intended riskAmount" denominator no longer exists. Same ROLE (how much
+ * of the intended size actually got deployed), correct basis. `bound` =
  * the ratio fell materially below 1 (a clamp or the covariance scale held the position below its
  * intended risk). The Phase-25 GO/NO-GO reads the bind-RATE: >~15-20% bound → the sizer is
  * piecewise-notional in practice, R-rank overstates the top of the book → switch the honest

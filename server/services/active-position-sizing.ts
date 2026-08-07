@@ -91,19 +91,26 @@ export interface ActivePositionSizingResult {
   estimatedValue: number;
   sizingDetails?: {
     portfolioValue: number;
-    riskPerTradePct: number;
-    riskAmount: number;
     stopDistance: number;
+    // obj-1: dollar risk is an OUTPUT under fixed-notional sizing, not an input. It varies
+    // with stop distance instead of pinning size. Kept because Phase-25's R-rank-vs-$EV
+    // work consumed the old risk figure and needs a real one.
+    dollarRiskAtStop: number;
+    dollarRiskPctOfPortfolio: number;
     maxPositionPct: number;
     maxTotalExposurePct: number;
     exposureBudget: number;
-    maxNotional: number;
+    // obj-1: the intended per-trade size = exposureBudget × maxPositionPct. This IS the
+    // size now; it is no longer a ceiling that a risk-derived number occasionally hit.
+    perTradeNotional: number;
     bufferedMaxNotional: number;
+    // obj-1: retained at false — nothing clamps when the size IS the cap. Kept in the
+    // contract because a live consumer reads it; see rtb-metrics-service.
     wasClamped: boolean;
-    // P19-B7.1 (OBJ-5): sized dollar-risk after ALL reductions (notional clamp + covariance
-    // correlationScale) ÷ intended riskAmount. ≤1; = 1 when the position risks exactly its
-    // intended fraction. Absorbs BOTH reductions — including correlationScale, which never flips
-    // wasClamped (CC-A A.2b) — so this single field is the bind signal a wasClamped-only watch misses.
+    // P19-B7.1 (OBJ-5), RE-POINTED by obj-1: deployed notional ÷ intended per-trade
+    // notional. ≤1; = 1 when the full intended size was deployed. Under fixed-notional the
+    // only thing that can reduce it is the covariance correlationScale — which never flips
+    // wasClamped (CC-A A.2b) — so this remains the bind signal a wasClamped-only watch misses.
     effectiveRiskFractionRatio: number;
   };
 }
@@ -199,28 +206,37 @@ export function sizeActivePositionForSignal(params: ActivePositionSizingParams):
     }
   }
   
-  const riskAmount = (portfolioValue * safeRiskPct) / 100;
-  
-  let quantity = riskAmount / stopDistance;
-  
+  // ══════════════════════════════════════════════════════════════════════════════
+  // obj-1: FIXED-NOTIONAL SIZING — B-SIZING-DEC-RESTORE (Kyle's ruling, 2026-08-06)
+  // ══════════════════════════════════════════════════════════════════════════════
+  // Kyle's words: "$800 balance, portfolio exposure 100%, percent allocated per any
+  // trade 25%, then we would essentially have 4 trading slots at $200 each."
+  //
+  // So the per-trade size is a SHARE OF THE PORTFOLIO, not a function of where the stop
+  // sits. The old form was `riskAmount / stopDistance`, which made position size move
+  // INVERSELY with stop distance — a tight stop bought a huge position and a wide stop a
+  // tiny one, for the same account and the same conviction. That is why the clamp below
+  // was doing the real work on most trades: the risk-derived number was usually larger
+  // than the cap, so the cap WAS the size, and the risk percentage was decorative.
+  //
+  // Now the notional is stated directly and the stop plays no part in sizing it. The
+  // exposure budget still bounds total deployment, and the same buffer keeps a rounding
+  // error from tipping a fill over the venue's limit.
+  const exposureBudget = portfolioValue * (safeMaxTotalExposurePct / 100);
+  const perTradeNotional = exposureBudget * (effectiveMaxPositionPct / 100);
+  const bufferedMaxNotional = perTradeNotional * getMaxPositionBufferFactor();
+
+  let quantity = bufferedMaxNotional / entryPrice;
+
   if (!Number.isFinite(quantity) || quantity <= 0) {
-    console.log(`[B6][SIZING] Invalid risk-based quantity (${quantity}) for ${symbol} - returning 0`);
+    console.log(`[B6][SIZING] Invalid fixed-notional quantity (${quantity}) for ${symbol} - returning 0`);
     return invalidResult;
   }
-  
-  const exposureBudget = portfolioValue * (safeMaxTotalExposurePct / 100);
-  const maxNotional = exposureBudget * (effectiveMaxPositionPct / 100);
-  const bufferedMaxNotional = maxNotional * getMaxPositionBufferFactor();
-  
-  let riskBasedNotional = quantity * entryPrice;
-  let estimatedValue = riskBasedNotional;
-  let wasClamped = false;
-  
-  if (riskBasedNotional > bufferedMaxNotional) {
-    wasClamped = true;
-    quantity = bufferedMaxNotional / entryPrice;
-    estimatedValue = quantity * entryPrice;
-  }
+
+  let estimatedValue = quantity * entryPrice;
+  // Retained for the result contract: nothing is clamped any more because the size IS
+  // the cap. Reporting a clamp that cannot occur would misdescribe the sizing decision.
+  const wasClamped = false;
 
   const correlationScale = getScalingFactor(mode, symbol); // P19-B4b D5: per-mode scaling
   if (correlationScale < 1) {
@@ -236,15 +252,29 @@ export function sizeActivePositionForSignal(params: ActivePositionSizingParams):
   // its intended fraction; < 1 when a clamp or the covariance scale held it below. The open-path /
   // shadow telemetry bins on this to measure how often R-rank decoheres from realized-$EV (Phase-25:
   // >~15-20% bind → switch the honest ranker to realized-$EV at the post-clamp executed size).
-  const effectiveRiskFractionRatio = riskAmount > 0 ? (quantity * stopDistance) / riskAmount : 0;
-  // INVARIANT (OBJ-5, UPPER BOUND not equality — CC-A): fixed-fractional-risk sizing risks AT MOST
-  // riskAmount; clamps + the covariance scale only REDUCE. A ratio materially > 1 means a sizing
-  // path risked MORE than intended → the R-rank↔sizing coherence (R-rank == $EV-rank) silently
-  // breaks (a future notional-sizer regression would trip this). WARN, do not throw — a live sizing
-  // bug must surface loudly, not crash the trading cycle.
-  if (effectiveRiskFractionRatio > 1.01) {
-    console.warn(`[P19-B7.1][OBJ-5][SIZING_INVARIANT] ${symbol} effectiveRiskFractionRatio=${effectiveRiskFractionRatio.toFixed(4)} > 1 — sizing risked MORE than intended (fixed-fractional-risk invariant violated); R-rank↔sizing coherence broken. Investigate (notional-sizer regression?).`);
-  }
+  // ★ obj-1 CHANGES WHAT THIS INVARIANT CAN MEAN — read before "fixing" it.
+  // The OBJ-5 ratio was defined for FIXED-FRACTIONAL-RISK sizing: risk at most
+  // `riskAmount`, where clamps and the covariance scale could only REDUCE it. Under
+  // fixed-notional there IS no riskAmount to be a fraction of — the size is a share of
+  // the portfolio and the stop is not an input — so the old ratio has no denominator and
+  // computing one would invent a number.
+  //
+  // What survives is the DOLLAR RISK ITSELF, which is now an OUTPUT rather than an input:
+  // it varies with stop distance instead of pinning it. Reported for the Phase-25
+  // R-rank-vs-realized-$EV work that consumed the old ratio, so that analysis keeps a
+  // real input; the old warn-on-ratio>1 is gone because it tested an invariant this
+  // sizing model does not claim.
+  const dollarRiskAtStop = quantity * stopDistance;
+  const dollarRiskPctOfPortfolio = portfolioValue > 0 ? (dollarRiskAtStop / portfolioValue) * 100 : 0;
+
+  // ★ THE RATIO IS RE-POINTED, NOT DELETED — it has a LIVE consumer.
+  // `rtb-metrics-service.ts` bins on this to measure how often sizing decoheres from
+  // intent. Deleting the field would leave that reader without a writer, which is the
+  // trap this batch's own pre-audit made a census mandatory for — so the field keeps its
+  // name and its ROLE ("how much of the intended size actually got deployed") and gets
+  // the only denominator that means anything under fixed-notional: the intended
+  // per-trade notional. Still ≤ 1, still reduced only by the covariance scale.
+  const effectiveRiskFractionRatio = perTradeNotional > 0 ? estimatedValue / perTradeNotional : 0;
 
   if (!Number.isFinite(quantity) || !Number.isFinite(estimatedValue)) {
     console.log(`[B6][SIZING] Final validation failed for ${symbol} - returning 0`);
@@ -255,15 +285,14 @@ export function sizeActivePositionForSignal(params: ActivePositionSizingParams):
     symbol,
     strategy,
     portfolioValue: portfolioValue.toFixed(2),
-    riskPct: safeRiskPct.toFixed(2),
-    riskAmount: riskAmount.toFixed(2),
     stopDistance: stopDistance.toFixed(8),
+    dollarRiskAtStop: dollarRiskAtStop.toFixed(2),
+    dollarRiskPctOfPortfolio: dollarRiskPctOfPortfolio.toFixed(2),
     maxTotalExposurePct: safeMaxTotalExposurePct.toFixed(2),
     exposureBudget: exposureBudget.toFixed(2),
     maxPositionPct: safeMaxPositionPct.toFixed(2),
-    maxNotional: maxNotional.toFixed(2),
+    perTradeNotional: perTradeNotional.toFixed(2),
     bufferedMaxNotional: bufferedMaxNotional.toFixed(2),
-    riskBasedNotional: riskBasedNotional.toFixed(2),
     quantity: quantity.toFixed(8),
     estimatedValue: estimatedValue.toFixed(2),
     bufferFactor: getMaxPositionBufferFactor(),
@@ -274,11 +303,11 @@ export function sizeActivePositionForSignal(params: ActivePositionSizingParams):
     strategy: strategy,
     symbol,
     entryPrice,
-    rawNotional: riskBasedNotional,
+    rawNotional: perTradeNotional,
     sizedQuantity: quantity,
     sizedNotional: estimatedValue,
     riskPct: safeRiskPct,
-    maxPositionUsd: maxNotional,
+    maxPositionUsd: perTradeNotional,
     bufferFactor: getMaxPositionBufferFactor(),
   });
   
@@ -287,16 +316,16 @@ export function sizeActivePositionForSignal(params: ActivePositionSizingParams):
     estimatedValue,
     sizingDetails: {
       portfolioValue,
-      riskPerTradePct: safeRiskPct,
-      riskAmount,
       stopDistance,
+      dollarRiskAtStop,
+      dollarRiskPctOfPortfolio,
       maxPositionPct: safeMaxPositionPct,
       maxTotalExposurePct: safeMaxTotalExposurePct,
       exposureBudget,
-      maxNotional,
+      perTradeNotional,
       bufferedMaxNotional,
       wasClamped,
-      effectiveRiskFractionRatio // P19-B7.1 (OBJ-5)
+      effectiveRiskFractionRatio // P19-B7.1 (OBJ-5) — re-pointed to a notional basis by obj-1
     }
   };
 }
