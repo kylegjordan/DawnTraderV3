@@ -129,3 +129,66 @@
 - **The admission-to-open gap** (crypto admits 583/24h yet trades are scarce) is untouched and is a DIFFERENT mechanism from everything above.
 - **`min_rr` 1.0 for `volatility_edge` / `support_bounce`** — at R:R 1.0 the EV ceiling is `0.2×target − friction`, needing a 4.0% target to break even at the pWin cap. Structurally the worst-placed pair; unruled.
 - **I have not yet read** the Phase-19 active-trading-path audit, the SIM, or the System Manual on target geometry. Kyle directed those and they are outstanding — **the options in §5 stay WITHDRAWN until they are read.**
+
+---
+
+# PART 3 — THE THREE HISTORIES, AND WHAT I ACTUALLY RECOMMEND
+
+**Kyle: *"you're explaining a lot to me, but not giving me a lot of recommendations… that's not me. I'm not an expert."* Fair, and taken. Part 3 answers the three history questions he named, then RECOMMENDS rather than tabling neutral options.**
+
+## 3.1 THE BAR-FREQUENCY STUDY — it says "stay", but it answered a DIFFERENT question
+
+**`CRYPTO_BAR_FREQUENCY_EXPLORATORY_STUDY_2026-06-03.md`** — Kyle's memory is correct: **"STAY at 60m for crypto. No B.4-CRYPTO sub-batch."**
+
+**BUT READ WHAT IT TESTED.** It measured **PREDICTIVE POWER** across 5m/15m/30m/60m — AUC of setups, regime-flip rates, pattern present-vs-absent. **It never asked whether the resulting TARGET clears the fee.** Its rejection is of going **FINER**, and on its own evidence: *"if anything, the data favors staying at 60m or **going coarser**, not finer."* (§2.3) ⇒ **the study does NOT contradict a longer-horizon argument — it mildly supports it, and it rules out the direction nobody is proposing.**
+
+**★ IT ALSO PRICES THE LEVER, which is why I now recommend AGAINST pulling it (§3.4):** a frequency change requires (1) crypto regime-threshold recalibration — those rows are 60m-calibrated; (2) per-class **time-anchored lookbacks** — the shared 30-bar momentum / 14-bar ADX / SMA-20 / ATR-14 windows are bar-COUNT based, so *"semantics shift silently"* at another interval; (3) a DBS backfill recompute. **`market-regime.ts:108-119` states the invariant breaks at non-60m.** That is a foundation batch, not a setting.
+
+## 3.2 THE NINE BUFFERS — deliberately KEPT, with a stated reason
+
+**`LEVER_INVENTORY.md:224` (B72, 2026-05-05), verbatim:**
+> *"KEEP rows in this tier are exclusively **structural geometric buffers**: tiny ratio constants (0.002–0.005) defining 'X% above pattern high' / 'Y% below support low' — **geometric definitions, not tunable risk levers**."*
+
+**⇒ NOT an oversight. A classification.** B72's KEEP tier is *"schema/structural literals… canonical math constants"* (`:21`) — things that define what a pattern IS, as opposed to dials you turn. Under that rule the decision was correct **and internally consistent**.
+
+**★ DOES THE INTENT STILL HOLD? NO — and one measurement is why.** The classification assumed these are inert definitional geometry. They are not inert any more: **a flat 0.3% buffer is ~24% of crypto's measured 1.248% risk leg**, and the risk leg is a direct input to `rawEV = pWin×target − pLoss×stop`. **A "geometric definition" is now moving the number that decides whether crypto trades at all.**
+
+Worse, being a flat percentage it is **class-blind in the one way that matters**: 0.3% against crypto's ~1.19% hourly range is a fifth of a bar; against an xStock 15m bar (~0.17%) it is nearly **two whole bars**. **The same constant means opposite things in the two classes.** ⇒ **disposition (2) relevant-but-needs-updating**, not (1) defect and not (5) leave-alone.
+
+## 3.3 THE CLASS-BLIND MULTIPLIERS — capability shipped, values deliberately deferred
+
+**B72 objective 5:** *"Resolution-scope discipline (smallest scope that makes operational sense) — Defaulted GLOBAL `(*,*,*,*)`… **Asset-class-scoped where asset-class-specific** (`pattern_pool_gates` crypto_spot, `trailing_exit` crypto_spot)."* ⇒ global was the DEFAULT and per-class was used where justified; geometry was judged not-class-specific **at that time**.
+
+**`B79_0n_STRATEGY_COMPLETION_REPORT.md:161`, verbatim and decisive:**
+> *"Crypto callers pass `'crypto_spot'`; resolver still finds wildcard row (`scoreRowForKey` returns 0 for wildcard match) → **same value resolved**."*
+
+⇒ **B79.0n.STRATEGY wired the per-class PLUMBING through every strategy and deliberately did NOT seed per-class VALUES — behaviour was intentionally unchanged.** That is correct batch discipline (ship the mechanism, don't move values in the same batch). **⇒ NOT a mistake and NOT an oversight: the capability is finished and the value-seeding follow-up was never scheduled.** **The machinery Kyle paid for is built, reviewed, live, and unused.**
+
+## 3.4 ★ RECOMMENDATIONS — ranked, with what each costs
+
+**R1 — SEED CRYPTO-SPECIFIC TARGET MULTIPLIERS. Do this first.**
+**What:** add `asset_class='crypto_spot'` rows for `target_exit_atr_multiplier`, sized so the target clears the fee with margin (indicatively ~1.7× today's, pending the §3.5 calibration), leaving xStock on the existing wildcard rows.
+**PRO:** **zero code change** — §3.3 proves the resolver already does this; it is a database insert. Reversible in one statement. Uses machinery already built and reviewed. Attacks the actual binding constraint (target size) directly.
+**CON:** bigger targets are reached less often — expect **fewer crypto fills**, and the win rate must be re-measured, not assumed. It is a calibration, so it needs a defined observation window before judging.
+
+**R2 — MIGRATE THE NINE BUFFERS INTO `module_constants`, PER-CLASS. Second, and separately.**
+**What:** move them as-is at today's values, with the class dimension available. **Change no value in the migration.**
+**PRO:** closes the rule violation; makes an EV-moving input visible and tunable; lets crypto and xStock stop sharing a constant that means different things to each.
+**CON:** these define pattern geometry — changing values changes *what the strategies mean*, so migration and re-valuation must be two separate steps with evidence in between. **The migration is safe; the re-valuation is a research question.**
+
+**R3 — DO NOT CHANGE THE CRYPTO BAR HORIZON.** **Reversing my Part-1 lean, on the study's own cost evidence.**
+**PRO of leaving it:** avoids a foundation batch (regime recalibration + time-anchored lookbacks + DBS backfill) whose cost §3.1 documents and whose invariant `market-regime.ts:108-119` says breaks off-60m. **R1 buys the same larger target for a fraction of the cost.**
+**CON:** if R1's larger targets prove unreachable within an hourly bar's range, the horizon becomes the real answer and this returns — so **R1 must measure reachability, not just fills.**
+
+**R4 — REFUSE the pWin ceiling raise.** It makes the numbers positive without anything real changing. Same anti-pattern as the removed floor-lift.
+
+**R5 — THE FEE IS THE ROOT CAUSE AND WE DON'T CONTROL IT SHORT-TERM.** 80bps round-trip against an institutional 3–5bps assumption. Worth a standing volume-tier watch; not a lever for this batch.
+
+## 3.5 WHAT R1 STILL NEEDS BEFORE IT IS A NUMBER
+
+The multiplier is **not yet computable** from what I have measured. It needs:
+- the **reachability** check (`reach_atr_max = 4.0`) — a bigger target must still be traversable within the ATR horizon, or it is dropped as `unreachable` and we trade less for no gain;
+- the **realised** crypto win rate measured against the assumed pWin;
+- the **9 non-ATR strategies**, whose target derivation §2.1 does not cover.
+
+**This is the pre-audit, and it is what goes to Langston.**
