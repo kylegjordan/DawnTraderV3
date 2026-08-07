@@ -81,3 +81,34 @@ function isQuantPool(sourcePool?: string): boolean {
 
 ★ **THE ERROR, NAMED: this is the absent-as-valid family (#546/#568) turned inside out — not "a missing input silently became a default", but "a meaningful default was read as a missing input." I filed a scope amendment, a reviewer ruled on it, and the ruling created work that the data never needed.** The check that would have caught it at measure time, and did catch it before any code: **before calling a field unrecorded, grep for a reader that interprets its absence.** A NULL with a documented reader is a value.
 
+## 8. ★★ KYLE'S CORRECTIONS 2026-08-07 — BINDING, and they change the design in three places
+
+### 8.1 "STANDARDIZED" — his definition, verbatim intent
+*"The same displayed tracking metrics are on each tab for each trading type... I'm looking at the same information. The data may be feeding in from different tables and different scanners, and that's okay. I just still wanna see the same tracked metrics, organized in the same fashion."* ⇒ **the test is METRIC-FOR-METRIC and ORDER-FOR-ORDER, and the SOURCE is explicitly allowed to differ.** The one permitted structural difference: **VTS has no SQE, so the SQE section exists only on Paper/Live.**
+
+### 8.2 ⛔ NET-EV LIVES IN A DIFFERENT PLACE ON EACH PATH — DO NOT MOVE THE VTS ONE
+*"The VTS does its net EV check differently in a different part of the pipeline. The VTS does not have an SQE. So that's not where the net EV gate is... Leave the net EV scoring in the VTS filter diagnostics tabs where it is. But for the paper trading and live trading filter diagnostics tables, this has to go in the SQE section."*
+**VERIFIED AT THE CODE, both sites:** VTS rejects at `vts-runner.ts:4917-4919` — `detailReason === 'net_ev_rejected'` → `vtsEvalCounters.rejectedReasons.netEvBelowFloor++`, a **post-signal rejection inside the VTS evaluation loop, with no SQE anywhere in it**. The ACTIVE path rejects **inside the SQE** (`gate_decision.reason = "NetEV … <= 0"`, `rejectStage:'sqe'`).
+⇒ **VTS tab: Net-EV STAYS in Post-Signal Rejections. Paper/Live tabs: Net-EV appears in the SQE SECTION.** Same metric, same label, **different section per tab** — and that is not a standardisation violation, it is the pipeline's real shape. ⚠️ **My earlier plan to put the Net-EV row in the same place on all six tabs was WRONG and is withdrawn.**
+
+### 8.3 ★ THE QUANT/PATTERN STAMP EXISTS AND SURVIVES — FOUND, as Kyle said it would be
+*"That designation starts after pairs survive the filters… that stamp survives with those pairs even once signals are generated… you can see it in the open trades table, and in the closed trades table. So it's there. You're just not able to find it."* **He was right; I had only queried `signal_eval_archive.features` and concluded from that one table.** Found in three places, measured:
+| Stage | Carrier | Measured |
+|---|---|---|
+| Scan / filter survival | the **shared scanner's own quant/pattern split** (`lastScan.quant` / `.pattern`) | already in the FD payload for every mode |
+| Signal generation (VTS) | `pair.sourcePool` — **the VTS runner already splits its own counters by it** (`vts-runner.ts:4915`) | live |
+| Open positions | `active_open_positions.source_pool` | **9/9 = 100%**: `xstock-trend` 7, `pattern` 2 |
+| Closed trades | `closed_trades.source_pool` | 7 d: `xstock-trend` 59, `pattern` 11, `xstock-strong_trend` 1, null 16 |
+**SIM confirms the design** (`SYSTEM_IMPACT_MAP.md:456-458`): the orchestrator is **dual-path** (quant pool / pattern pool) and *"Passes `sourcePool`, `signalType`, `assetClass` to SQE and RTB"*.
+⇒ **THE ONLY REAL GAP is narrow and precise: the SQE-reject ARCHIVE WRITE does not copy the stamp** — `signal-orchestrator.ts:965` writes `features: { predictiveConfidence }` only, while `rawSignal.metadata?.sourcePool` is in scope right there (used at `:581`). **That one-field add is the whole fix for splitting the 8,529 NetEV rejects by lane.** ⚠️ Note `vts_open_trades.pool` = `rotational`/`ideal` is a **DIFFERENT axis** (the exploration lane), NOT quant/pattern — do not conflate.
+
+### 8.4 THE SCANNERS ARE SHARED ACROSS MODES — so scan-stage metrics need no per-mode work
+*"The scanner for crypto is the same across the VTS, across paper mode, across live mode. And the scanner for xStock is the same… So if we have it for the VTS, then we have it for the other trading modes as well."* Consistent with the mode-multiplex finding. ⇒ **every scan-stage table (Last Scan Filter Breakdown, 24h Rolling, Filter Metric Ranges, family IMF) renders on all six tabs from the same source.** R2's population header still applies — it says WHICH mode's scan, it does not imply a different scanner.
+
+### 8.5 ANSWERING KYLE'S QUESTION — "which two, and is it being fixed?"
+The payload keys carrying **VTS-runner-specific** numbers are **three**, and every one is addressed:
+1. **`vtsEvaluation`** → By Strategy gets an active-path equivalent from `signal_eval_archive`; the **Setup Nulls / Pre-Eval Skips** sub-parts have **no active writer** → honest state + **#662**.
+2. **`lastCycleVtsEval`** → no active per-cycle snapshot → honest state + **#662** (not synthesised from poll deltas).
+3. **`signalRejections`** → the Net-EV carrier; on Paper/Live it is sourced from the archive and rendered **in the SQE section** per §8.2.
+**Everything else in the payload is shared-scanner or mode-invariant and renders unchanged on all six tabs.**
+
