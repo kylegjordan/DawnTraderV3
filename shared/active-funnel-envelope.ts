@@ -52,6 +52,16 @@ export interface ActiveFunnelClassData {
    *  both directions (old client ignores it; new client against an old server renders nothing).
    *  Bumping for a compatible add trains both sides to ignore version bumps. */
   sqeGateRejectsAtRefresh?: Record<string, number>;
+  /** B-FILTER-DIAG-STANDARDIZE (Kyle 2026-08-07) — the ACTIVE path's per-strategy DECLINE reasons:
+   *  `strategy -> reason -> count`, the same taxonomy the VTS surfaces, now that the active path READS the
+   *  reason its strategies were already setting. This is what makes the Paper/Live per-strategy tables real
+   *  data rather than an honest placeholder — Kyle: "this batch isn't complete until we have all the data we
+   *  need feeding into these tracking metrics."
+   *  OPTIONAL + ADDITIVE on v3, same contract reasoning as `sqeGateRejectsAtRefresh` (Langston's ruling:
+   *  optional+additive with presence-gated rendering is compatible in both directions; no version bump).
+   *  ABSENT (not `{}`) from a pre-wiring server ⇒ the client renders the honest not-instrumented state; an
+   *  EMPTY object means wired-and-nothing-declined. The renderer MUST keep those distinct. */
+  strategyNullReasons?: Record<string, Record<string, number>>;
   sqeEvaluated: number;
   sqePassed: number;
   rtbRefresh: ActiveFunnelRtbRefresh;

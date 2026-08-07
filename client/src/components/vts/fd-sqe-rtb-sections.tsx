@@ -29,6 +29,7 @@ type FunnelClass = {
   sqePassed: number;
   sqeGateRejects: Record<string, number>;
   sqeGateRejectsAtRefresh?: Record<string, number>;
+  strategyNullReasons?: Record<string, Record<string, number>>;
   sqeAttempts?: { atGeneration: number; atRefresh: number };
   rtbRefresh?: {
     cyclesRun: number; refreshedAttempted: number; reconfirmed: number;
@@ -186,6 +187,74 @@ export function ActiveSqeAndRtbSections({
           </table>
         )}
       </DiagTableCard>
+
+      {/* ★ THE PER-STRATEGY DECLINE TABLE — Kyle's requirement that the DATA FEED, not that the section
+          be labelled absent. Real numbers now: the active path reads the reason its strategies were already
+          setting (shared null-reason-tracker), which the VTS has always read.
+          PRESENCE vs EMPTY is load-bearing here and the two render differently:
+            field ABSENT  → server predates the wiring → honest not-instrumented state
+            field EMPTY   → wired, and nothing has declined yet → an observed zero
+          Conflating them is the #546 absent-as-valid class this batch exists to remove. */}
+      {(() => {
+        const snr = cls.strategyNullReasons;
+        if (!snr) {
+          return (
+            <DiagTableCard theme="rolling" title="Why Each Strategy Declined" subtitle={`${label} — not instrumented on this server yet`} testId="fd-strategy-nulls-absent">
+              <div className="p-3 text-sm text-muted-foreground">
+                This server build does not yet record per-strategy decline reasons. Not zeros — the field is
+                absent, which is a statement about the build, not about the strategies.
+              </div>
+            </DiagTableCard>
+          );
+        }
+        const rows = Object.entries(snr)
+          .map(([strategy, reasons]) => ({
+            strategy,
+            reasons,
+            total: Object.values(reasons).reduce((a, b) => a + b, 0),
+          }))
+          .sort((a, b) => b.total - a.total);
+        const allReasons = Array.from(new Set(rows.flatMap((r) => Object.keys(r.reasons)))).sort();
+        return (
+          <DiagTableCard theme="rolling" title="Why Each Strategy Declined" subtitle={`${label} — cumulative${since ? ` since ${since}` : ''}`} testId="fd-strategy-nulls">
+            {rows.length === 0 ? (
+              <div className="p-3 text-sm text-muted-foreground">
+                Recording is live and no strategy has declined yet — an observed zero, not a missing feature.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className={`w-full text-sm ${FROZEN_FIRST_COL_TABLE}`}>
+                  <thead>
+                    <tr className={`border-b ${DIAG_TABLE_THEMES.rolling.head}`}>
+                      <th className="text-left p-2 font-medium">Strategy</th>
+                      {allReasons.map((r) => (
+                        <th key={r} className="text-right p-2 font-medium whitespace-nowrap">{r}</th>
+                      ))}
+                      <th className="text-right p-2 font-medium">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((row) => (
+                      <tr key={row.strategy} className="border-b last:border-0 hover:bg-muted/30">
+                        <td className="p-2 font-medium">{row.strategy}</td>
+                        {allReasons.map((r) => (
+                          <td key={r} className="p-2 text-right font-mono">{(row.reasons[r] ?? 0).toLocaleString()}</td>
+                        ))}
+                        <td className="p-2 text-right font-mono font-semibold">{row.total.toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div className="px-3 py-2 text-xs text-muted-foreground">
+                  Counted where the strategy itself declined to produce a setup — the reason is the strategy&apos;s
+                  own, the same taxonomy the VTS tab shows. <strong>unknown</strong> means a strategy declined
+                  without recording a reason, which is kept as its own bucket rather than folded away.
+                </div>
+              </div>
+            )}
+          </DiagTableCard>
+        );
+      })()}
 
       {refreshRows && (
         <DiagTableCard
