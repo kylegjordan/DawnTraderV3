@@ -134,7 +134,17 @@ export function ActiveSqeAndRtbSections({
                 </td>
                 <td className="p-2 text-right font-mono">{n.toLocaleString()}</td>
                 <td className="p-2 text-xs text-muted-foreground">
-                  {gate === 'uncategorized' ? 'reason token the classifier does not recognise' : 'rejected at this SQE gate'}
+                  {gate === 'uncategorized' ? (
+                    <>
+                      A reason label the classifier does not recognise. These counts run from the
+                      start of the window and are never rewritten, so almost all of this bucket is
+                      Net EV recorded before Net EV had its own label — measured at 7,648 of 7,649
+                      (B-FILTER-DIAG-PAPER, 24h sample). Read it as Net EV; a genuinely new gate
+                      would also land here, which is why it is not relabelled outright.
+                    </>
+                  ) : (
+                    'rejected at this SQE gate'
+                  )}
                 </td>
               </tr>
             ))}
