@@ -48,7 +48,7 @@ When something looks like an error or a thing to fix, **go and understand what i
 ★ **#592 (signal_eval, 48.5 GB, ~1.5 GB/day, nothing releases till 08-30) → CC-B after #594.** #621 deploy-head → CC-C. **Leg-2 F1-F6 + five conditions RECOVERED from the channel log — do NOT ask Langston to re-rule them.**
 
 ★★ **B-TRADE-RECORD-RETENTION legs 1+2 SHIPPED+VERIFIED 07-30** (365d + snapshot keys; leg-2 106/106 at `exit_decision_archive.state_snapshot` — my "broken" was wrong-object, RETRACTED, a revert would have deleted working code). ⏭ LEG 3 = pre-June backfill, NOT started, boundary MEASURED not assumed. #630 gate fired?-check · #631 parity scope call. Full record: completion report + RUNNING_ISSUES.
-★★ **SCOPE CORRECTIONS TO CARRY INTO LEGS 2-3 — every one of these was a claim of mine that measurement overturned:**
+★ Leg-2/3 scope corrections: `RUNNING_ISSUES` #599/#630/#631 — re-read there, do NOT re-derive.
 - **Corrections that measurement overturned: full text `RUNNING_ISSUES` #599/#630/#631 — re-read there before touching leg 3; do NOT re-derive.**
 ⚠️ **CI TRAP LEARNED THE HARD WAY: with 3 sessions pushing every few minutes, runs CANCEL each other. A cancelled Docker Build reads as not-green and I nearly reported 3-of-4 as a pass. VERIFY `conclusion=success` on ALL FOUR jobs AND that `head_sha` matches MY commit.**
 
