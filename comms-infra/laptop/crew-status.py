@@ -176,7 +176,10 @@ def src_transcripts():
         found[sess] = {"file": os.path.basename(newest), "mtime": newest_m,
                        "kyle_last": last_user, "kyle_last_ts": last_user_ts,
                        "session_replied_ts": last_assistant_ts}
-    return found, ("; ".join(errs) if errs and not found else None)
+    # Langston observation (2): reporting errors only when NOTHING resolved hides a
+    # per-session failure behind three healthy siblings — and the session most likely to fail
+    # is this one, whose dir can hold a stale summariser transcript. Report always.
+    return found, ("; ".join(errs) if errs else None)
 
 
 def src_git():
@@ -576,8 +579,16 @@ def render_html(state, summ, summ_err):
         sm = (summ or {}).get(s, {})
         th = r.get("thread") or {}
         if th:
-            hold = f" — holding on <b>{esc(th.get('holding_on'))}</b>" if th.get("holding_on") else ""
+            # C4b/C4c RENDERED, not merely stored. The provenance existed in the data and was
+            # consumed nowhere — so a reader saw "holding on Langston" with a precision the
+            # derivation explicitly does NOT have (holding_scope says session-level, trunk or
+            # detour not distinguished). The board field already carried its own caveat at the
+            # render layer; this is the same not-merged discipline, applied where it is read.
+            hold = (f" — holding on <b>{esc(th.get('holding_on'))}</b> "
+                    f'<small>({esc(th.get("holding_scope"))})</small>') if th.get("holding_on") else ""
             thread_row = (f'<dt class="int">Interrupted by</dt><dd class="sum int">'
+                          f'<small class="ev">(inferred from traffic — {esc(th.get("source"))}; '
+                          f'check the excerpt)</small><br>'
                           f'{esc(sm.get("thread")) or esc((th.get("excerpt") or th.get("kind",""))[:180])}'
                           f'{hold}<br><small class="ev"><q>{esc((th.get("excerpt") or "")[:220])}</q></small></dd>')
         else:
@@ -686,8 +697,11 @@ def render_discord(state, summ):
         # thread without reading backwards to reconstruct why the batch stalled.
         detour = ""
         if th:
-            hold = f" — holding on {md_neutral(th.get('holding_on'))}" if th.get("holding_on") else ""
-            detour = (f"\n↳ came up mid-batch ({md_neutral(th.get('ref'))}): "
+            # Same provenance discipline as the page: the tag is rendered where it is READ,
+            # not merely stored where it is convenient.
+            hold = (f" — holding on {md_neutral(th.get('holding_on'))} "
+                    f"(session-level; trunk or detour not distinguished)") if th.get("holding_on") else ""
+            detour = (f"\n↳ came up mid-batch ({md_neutral(th.get('ref'))}) [inferred from traffic]: "
                       f"{md_neutral(sm.get('thread') or (th.get('excerpt') or th.get('kind'))[:150])}{hold}")
         body.append(f"\n**{md_neutral(s)}**{flag}\n"
                     f"now: {md_neutral(sm.get('now') or '—')}\n"
