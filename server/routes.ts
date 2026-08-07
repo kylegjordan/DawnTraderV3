@@ -2182,12 +2182,18 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const { getLearningCooldownState } = await import('./core/governance/learning-cooldown.js');
       const { STRATEGY_GOVERNANCE, STRATEGY_GOVERNANCE_PROFILES, INFLUENCE_RULES } = await import('./config/strategy-governance.js');
       const { getPreScoreExclusionStats } = await import('./core/governance/strategy-eligibility.js');
-      const { getModeStats, INTERIM_NO_POSTURE_MODE: INTERIM_NO_POSTURE_MODE_UI } = await import('./core/governance/strategy-modes.js');
+      const { getModeStatsForClass, INTERIM_NO_POSTURE_MODE: INTERIM_NO_POSTURE_MODE_UI } = await import('./core/governance/strategy-modes.js');
       
       const governanceState = getGovernanceStateForUI();
       const learningState = getLearningCooldownState();
       const preScoreStats = getPreScoreExclusionStats();
-      const modeStats = getModeStats();
+      // obj-10: the class-less aggregate was deleted WITH its writer (see the module
+      // header). Reporting per-class stats instead — these are actually written, and
+      // they are the AMR's own counters, which is the surviving posture path.
+      const modeStats = {
+        crypto_spot: getModeStatsForClass('crypto_spot'),
+        xstock_spot: getModeStatsForClass('xstock_spot'),
+      };
       
       // obj-10: 11.7S DELETED — there is no class-less stability→posture derivation
       // to report any more. The panel now states the truth: no posture is applied

@@ -1,4 +1,25 @@
 /**
+ * ★ obj-10 (B-SIZING-DEC-RESTORE, Kyle-directed 2026-08-07): THE CLASS-LESS 11.7S
+ * POSTURE MECHANISM WAS DELETED FROM THIS FILE — resolveStrategyMode,
+ * REGIME_TO_MODE_MAP, STRATEGY_MODE_OVERLAYS, getModeOverlay, getOverlayForStability,
+ * applyModeOverlay, the class-less meetsConfidenceFloor, and recordModeExecution.
+ *
+ * It is DELETED, not deprecated: there is no shim, no flag, and nothing here multiplies
+ * by a neutral 1.0 "for now". A reappearance fence
+ * (server/tests/integration/b-sizing-legacy-deletion-fence.test.ts) fails CI if any of
+ * it returns. Archive: 1-system-manual/_archive/deleted-code/. Record:
+ * 1-system-manual/DELETED_COMPONENTS_LOG.md.
+ *
+ * WHY: it was damping the VTS trades the system learns from (DEFENSIVE ×0.6 on ~900/day,
+ * SURVIVAL ×0.25 on ~741/day) on a premise that had rotted — it was believed to be
+ * "effectively always NORMAL" and was not.
+ *
+ * WHAT SURVIVES, deliberately: the AMR's PER-CLASS path (getModeOverlayForClass,
+ * getSlotCapForMode, meetsConfidenceFloorForClass, resolveStrategyModeFromWeather) and
+ * the per-class stat recorders. The AMR is now the ONLY posture writer — the two-writer
+ * problem collapses to one. It is currently in shadow, so no posture is applied at all.
+ */
+/**
  * ══════════════════════════════════════════════════════════════════════════════
  * Directive 11.7S — Strategy Mode Modulation
  * ══════════════════════════════════════════════════════════════════════════════
@@ -65,42 +86,6 @@ export interface StrategyModeOverlay {
  */
 // B72.1: confidenceFloor uses getter property so it resolves from module_constants
 // at read time. Other fields remain static literals (not yet promoted).
-export const STRATEGY_MODE_OVERLAYS: Record<StrategyMode, StrategyModeOverlay> = {
-  NORMAL: {
-    positionSizeMultiplier: 1.0,
-    stopLossDistanceMultiplier: 1.0,
-    takeProfitDistanceMultiplier: 1.0,
-    get confidenceFloor() { return getConfidenceFloorForMode('NORMAL'); },
-    entryCooldownMultiplier: 1.0,
-  } as StrategyModeOverlay,
-
-  DEFENSIVE: {
-    positionSizeMultiplier: 0.6,
-    stopLossDistanceMultiplier: 1.2,
-    takeProfitDistanceMultiplier: 0.8,
-    get confidenceFloor() { return getConfidenceFloorForMode('DEFENSIVE'); },
-    entryCooldownMultiplier: 1.5,
-  } as StrategyModeOverlay,
-
-  SURVIVAL: {
-    positionSizeMultiplier: 0.25,
-    stopLossDistanceMultiplier: 1.5,
-    takeProfitDistanceMultiplier: 0.6,
-    get confidenceFloor() { return getConfidenceFloorForMode('SURVIVAL'); },
-    entryCooldownMultiplier: 2.0,
-  } as StrategyModeOverlay,
-
-  // B-5 AMR: AGGRESSIVE has NO class-less overlay — its dials are per-class
-  // by design (amr_response_dials) and it can only be produced by the
-  // per-class weather resolver. Reaching it through the legacy class-less
-  // path is a wiring bug; fail loud rather than serve crypto dials to xstock.
-  get AGGRESSIVE(): StrategyModeOverlay {
-    throw new Error(
-      '[B-5][strategy-modes] AGGRESSIVE has no class-less overlay — ' +
-      'use getModeOverlayForClass(\'AGGRESSIVE\', assetClass).',
-    );
-  },
-};
 
 /**
  * ★ THE NAMED INTERIM POSTURE STAMP — B-SIZING-DEC-RESTORE obj-10 (Kyle, 2026-08-07).
@@ -117,25 +102,6 @@ export const STRATEGY_MODE_OVERLAYS: Record<StrategyMode, StrategyModeOverlay> =
  * interim rows from 11.7S-modulated history.
  */
 export const INTERIM_NO_POSTURE_MODE: StrategyMode = 'NORMAL';
-
-export const REGIME_TO_MODE_MAP: Record<RegimeStability, StrategyMode> = {
-  STABLE: 'NORMAL',
-  TRANSITION: 'DEFENSIVE',
-  UNSTABLE: 'SURVIVAL',
-};
-
-export function resolveStrategyMode(stability: RegimeStability): StrategyMode {
-  return REGIME_TO_MODE_MAP[stability] ?? 'SURVIVAL';
-}
-
-export function getModeOverlay(mode: StrategyMode): StrategyModeOverlay {
-  return STRATEGY_MODE_OVERLAYS[mode];
-}
-
-export function getOverlayForStability(stability: RegimeStability): StrategyModeOverlay {
-  const mode = resolveStrategyMode(stability);
-  return getModeOverlay(mode);
-}
 
 // ════════════════════════════════════════════════════════════════════════════
 // B-5 AMR — per-class mode resolution (Obj-1/2/4)
@@ -230,7 +196,10 @@ export function recordModeExecutionForClass(mode: StrategyMode, assetClass: Asse
   const b = classStatBucket(mode, assetClass);
   b.trades++;
   b.lastHour++;
-  recordModeExecution(mode); // legacy aggregate stays consistent
+  // obj-10: the class-less aggregate went with the mechanism. Deleting the WRITER
+  // while leaving its READER alive is the #568 trap this batch's own pre-audit made a
+  // mandatory census for — so getModeStats() and the aggregate bucket go together, and
+  // the panel reads the per-class stats, which are class-correct and actually written.
 }
 
 export function recordModeOutcomeForClass(
@@ -242,7 +211,6 @@ export function recordModeOutcomeForClass(
   const b = classStatBucket(mode, assetClass);
   b.pnl += pnl;
   if (stoppedOut) b.stopOuts++;
-  recordModeOutcome(mode, pnl, stoppedOut);
 }
 
 export function getModeStatsForClass(assetClass: AssetClass): Record<string, ModeStatBucket> {
@@ -260,92 +228,11 @@ export function _resetClassModeStatsForTests(): void {
   classModeStats.clear();
 }
 
-export interface ModeApplicationResult {
-  originalSize: number;
-  adjustedSize: number;
-  originalStopDistance: number;
-  adjustedStopDistance: number;
-  originalTargetDistance: number;
-  adjustedTargetDistance: number;
-  mode: StrategyMode;
-  overlay: StrategyModeOverlay;
-}
 
-export function applyModeOverlay(
-  positionSize: number,
-  stopDistance: number,
-  targetDistance: number,
-  stability: RegimeStability
-): ModeApplicationResult {
-  const mode = resolveStrategyMode(stability);
-  const overlay = getModeOverlay(mode);
 
-  return {
-    originalSize: positionSize,
-    adjustedSize: positionSize * overlay.positionSizeMultiplier,
-    originalStopDistance: stopDistance,
-    adjustedStopDistance: stopDistance * overlay.stopLossDistanceMultiplier,
-    originalTargetDistance: targetDistance,
-    adjustedTargetDistance: targetDistance * overlay.takeProfitDistanceMultiplier,
-    mode,
-    overlay,
-  };
-}
-
-export function meetsConfidenceFloor(
-  confidence: number,
-  stability: RegimeStability
-): boolean {
-  const mode = resolveStrategyMode(stability);
-  const overlay = getModeOverlay(mode);
-  return confidence >= overlay.confidenceFloor;
-}
-
-let modeStats = {
-  NORMAL: { trades: 0, lastHour: 0, pnl: 0, stopOuts: 0 },
-  AGGRESSIVE: { trades: 0, lastHour: 0, pnl: 0, stopOuts: 0 },
-  DEFENSIVE: { trades: 0, lastHour: 0, pnl: 0, stopOuts: 0 },
-  SURVIVAL: { trades: 0, lastHour: 0, pnl: 0, stopOuts: 0 },
-  since: Date.now(),
-};
-
-export function recordModeExecution(mode: StrategyMode): void {
-  modeStats[mode].trades++;
-  modeStats[mode].lastHour++;
-}
-
-export function recordModeOutcome(mode: StrategyMode, pnl: number, stoppedOut: boolean): void {
-  modeStats[mode].pnl += pnl;
-  if (stoppedOut) {
-    modeStats[mode].stopOuts++;
-  }
-}
-
-export function getModeStats() {
-  return { ...modeStats };
-}
-
-export function resetModeStats(): void {
-  modeStats = {
-    NORMAL: { trades: 0, lastHour: 0, pnl: 0, stopOuts: 0 },
-    AGGRESSIVE: { trades: 0, lastHour: 0, pnl: 0, stopOuts: 0 },
-    DEFENSIVE: { trades: 0, lastHour: 0, pnl: 0, stopOuts: 0 },
-    SURVIVAL: { trades: 0, lastHour: 0, pnl: 0, stopOuts: 0 },
-    since: Date.now(),
-  };
-}
-
-export function getModeStopOutRate(mode: StrategyMode): number {
-  const stats = modeStats[mode];
-  if (stats.trades === 0) return 0;
-  return stats.stopOuts / stats.trades;
-}
-
+// Hourly rollover for the surviving PER-CLASS buckets. The class-less rollover lines
+// went with the class-less aggregate (obj-10).
 setInterval(() => {
-  modeStats.NORMAL.lastHour = 0;
-  modeStats.AGGRESSIVE.lastHour = 0;
-  modeStats.DEFENSIVE.lastHour = 0;
-  modeStats.SURVIVAL.lastHour = 0;
   for (const b of classModeStats.values()) b.lastHour = 0;
 }, 60 * 60 * 1000);
 

@@ -51,8 +51,6 @@ import {
   resolveStrategyModeFromWeather,
   getModeOverlayForClass,
   getSlotCapForMode,
-  getModeOverlay,
-  STRATEGY_MODE_OVERLAYS,
   recordModeExecutionForClass,
   getModeStatsForClass,
   _resetClassModeStatsForTests,
@@ -264,14 +262,22 @@ describe('B-5 Obj-1/2/4 — modes, per-class dials, brain seam', () => {
     expect(getModeOverlayForClass('AGGRESSIVE', 'crypto_spot').confidenceFloor)
       .toBe(getModeOverlayForClass('NORMAL', 'crypto_spot').confidenceFloor);
   });
-  it('legacy defensive trio unchanged on the class-less path (parity)', () => {
-    const d = getModeOverlay('DEFENSIVE');
-    expect(d.positionSizeMultiplier).toBe(0.6);
-    expect(d.stopLossDistanceMultiplier).toBe(1.2);
-    expect(getModeOverlay('SURVIVAL').positionSizeMultiplier).toBe(0.25);
-  });
-  it('AGGRESSIVE has NO class-less overlay — legacy record access fails loud', () => {
-    expect(() => STRATEGY_MODE_OVERLAYS.AGGRESSIVE).toThrow(/no class-less overlay/);
+  // RE-POINTED by B-SIZING-DEC-RESTORE obj-10, not deleted (Langston's subject-vs-probe
+  // rule). The SUBJECT half — asserting the class-less trio's ×0.6/×1.2/×0.25 literals —
+  // went with the mechanism, since those literals no longer exist. The INVARIANT it was
+  // really protecting SURVIVES and is asserted here through the surviving per-class path:
+  // a posture is reachable ONLY per asset class, never class-lessly, so crypto dials can
+  // never be served to xstock. That used to be enforced by a fail-loud getter on the
+  // class-less record; it is now enforced structurally, because no class-less record
+  // exists at all.
+  it('posture is reachable ONLY per asset class — the class-less route is gone entirely', async () => {
+    const mod: Record<string, unknown> = await import('../../core/governance/strategy-modes.js');
+    for (const gone of ['STRATEGY_MODE_OVERLAYS', 'getModeOverlay', 'resolveStrategyMode', 'getOverlayForStability']) {
+      expect(mod[gone], `class-less posture route reappeared: ${gone}`).toBeUndefined();
+    }
+    // and the per-class route still serves genuinely different dials per class
+    expect(getModeOverlayForClass('AGGRESSIVE', 'crypto_spot').positionSizeMultiplier)
+      .not.toBe(getModeOverlayForClass('AGGRESSIVE', 'xstock_spot').positionSizeMultiplier);
   });
   it('per-class mode stats (F2) bump class AND legacy aggregate', () => {
     recordModeExecutionForClass('DEFENSIVE', 'xstock_spot');

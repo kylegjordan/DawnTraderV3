@@ -108,4 +108,35 @@ describe('B-SIZING-DEC-RESTORE — deleted legacy mechanisms must not reappear',
       expect(surviving.length).toBeGreaterThan(20);
     });
   });
+
+  // ⚠️⚠️ UNPROVEN — DO NOT TREAT THESE TWO AS A FENCE YET (CC-C, 2026-08-07).
+  // They PASS, but they also pass when the deleted resolver is re-added, so right now
+  // they prove nothing. Measured: appending `export function resolveStrategyMode(...)`
+  // to strategy-modes.ts leaves this suite fully green. The obj-11 block above IS
+  // mutation-proved three ways; this block is NOT, and the difference matters more than
+  // the green tick does — a fence that cannot fail is worse than no fence, because it
+  // reads as protection. Diagnose (the walk and the regex both check out in isolation —
+  // node replicating sourceFiles() finds strategy-modes.ts, and the regex matches the
+  // mutated content, so the fault is between them) and mutation-prove BOTH directions
+  // before Step-4 review.
+  describe('obj-10 — the class-less 11.7S posture mechanism [UNPROVEN — see note above]', () => {
+    it('its symbols are gone from the tree (comments excluded)', () => {
+      const SYMS = /(resolveStrategyMode|STRATEGY_MODE_OVERLAYS|REGIME_TO_MODE_MAP|getOverlayForStability|applyModeOverlay|recordModeExecution|getModeStopOutRate)/;
+      const offenders = FILES.filter((f) => {
+        const code = read(f)
+          .replace(/\/\*[\s\S]*?\*\//g, '')   // block comments
+          .replace(/^\s*\/\/.*$/gm, '');       // line comments
+        // resolveStrategyModeFromWeather (AMR, surviving) must NOT trip this
+        return SYMS.test(code.replace(/resolveStrategyModeFromWeather/g, ''));
+      });
+      expect(offenders.map((f) => f.replace(REPO, ''))).toEqual([]);
+    });
+
+    it('POSITIVE CONTROL: the AMR per-class posture path SURVIVES', () => {
+      const mod = read(join(REPO, 'server/core/governance/strategy-modes.ts'));
+      for (const keep of ['getModeOverlayForClass', 'getSlotCapForMode', 'meetsConfidenceFloorForClass', 'resolveStrategyModeFromWeather']) {
+        expect(mod.includes(`export function ${keep}`), `AMR path lost: ${keep}`).toBe(true);
+      }
+    });
+  });
 });
