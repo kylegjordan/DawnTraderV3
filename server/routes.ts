@@ -2182,17 +2182,17 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const { getLearningCooldownState } = await import('./core/governance/learning-cooldown.js');
       const { STRATEGY_GOVERNANCE, STRATEGY_GOVERNANCE_PROFILES, INFLUENCE_RULES } = await import('./config/strategy-governance.js');
       const { getPreScoreExclusionStats } = await import('./core/governance/strategy-eligibility.js');
-      const { resolveStrategyMode, getModeOverlay, getModeStats, STRATEGY_MODE_OVERLAYS } = await import('./core/governance/strategy-modes.js');
+      const { getModeStats, INTERIM_NO_POSTURE_MODE: INTERIM_NO_POSTURE_MODE_UI } = await import('./core/governance/strategy-modes.js');
       
       const governanceState = getGovernanceStateForUI();
       const learningState = getLearningCooldownState();
       const preScoreStats = getPreScoreExclusionStats();
       const modeStats = getModeStats();
       
-      // 11.7S: Derive current mode from stability
-      const currentStability = governanceState.stability || 'STABLE';
-      const currentMode = resolveStrategyMode(currentStability);
-      const currentOverlay = getModeOverlay(currentMode);
+      // obj-10: 11.7S DELETED — there is no class-less stability→posture derivation
+      // to report any more. The panel now states the truth: no posture is applied
+      // unless the AMR (per-class, currently observing) supplies one. Reporting a
+      // derived mode here would show Kyle a posture the system does not apply.
       
       res.json({
         ok: true,
@@ -2204,15 +2204,12 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         strategyMultipliers: governanceState.strategyMultipliers,
         preScoreExclusions: preScoreStats,
         strategyMode: {
-          current: currentMode,
-          overlay: currentOverlay,
-          // B-5: enumerate the legacy trio explicitly - serializing the raw
-          // record would hit the AGGRESSIVE class-less fail-hard getter.
-          overlays: {
-            NORMAL: STRATEGY_MODE_OVERLAYS.NORMAL,
-            DEFENSIVE: STRATEGY_MODE_OVERLAYS.DEFENSIVE,
-            SURVIVAL: STRATEGY_MODE_OVERLAYS.SURVIVAL,
-          },
+          // obj-10: the class-less mechanism is deleted. `current` is the interim
+          // STAMP, not a chosen posture, and `overlay: null` says so unambiguously.
+          current: INTERIM_NO_POSTURE_MODE_UI,
+          overlay: null,
+          postureSource: 'amr_only_11_7s_deleted',
+          overlays: {},
           stats: modeStats,
         },
         // B-5 AMR (Obj-8): per-class weather + flag + posture (null until a
