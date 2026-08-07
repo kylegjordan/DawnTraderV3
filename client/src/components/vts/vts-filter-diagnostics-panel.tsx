@@ -902,6 +902,16 @@ export function FilterDiagnosticsPanel({ data, isLoading, gateDisposition = 'tag
                   {/* P19-B8.3 (OBJ-3c): the VTS-side evaluation metrics render ONLY on
                       the VTS page ('tag') — on Paper/Live they implied mode activity
                       that is actually the VTS's (Kyle's 2026-07-06 catch). */}
+                  {/* B-FILTER-DIAG-STANDARDIZE: on the active path these come from the funnel tracker,
+                      not the VTS runner — the section says which rows this path records rather than vanishing. */}
+                  {isEnforce && (
+                    <tr className="bg-muted/50 border-y">
+                      <td colSpan={5} className="p-1 text-[10px] text-muted-foreground">
+                        <strong>Evaluation metrics</strong> — this path records pipeline stage counts (see the SQE
+                        and RTB sections below); the per-strategy null/skip breakdown is not emitted here yet (#662).
+                      </td>
+                    </tr>
+                  )}
                   {gateDisposition === 'tag' && ve && (
                     <>
                       <tr className="bg-muted/50 border-y">
@@ -1150,6 +1160,18 @@ export function FilterDiagnosticsPanel({ data, isLoading, gateDisposition = 'tag
                       On Paper/Live ('enforce') the active pipeline is dormant
                       until the B8.4 switch-on, so an honest placeholder shows in
                       its place (the scan-stage rows above ARE the shared feed). */}
+                  {/* B-FILTER-DIAG-STANDARDIZE: the ACTIVE path has no per-cycle snapshot (SIM S22:
+                      cumulative-since-start by design). A poll-window delta is NOT a scan cycle unless poll
+                      and scan are phase-locked, and nothing guarantees that — so it is NOT synthesised. */}
+                  {isEnforce && (
+                    <tr className="border-b">
+                      <td colSpan={5} className="p-2 text-xs text-muted-foreground">
+                        <strong>Last-cycle funnel:</strong> not instrumented on this path — the active counters are
+                        cumulative since engine start, with no per-cycle snapshot, and are deliberately not derived
+                        from polling deltas (a poll window is not a scan cycle). Tracked as #662.
+                      </td>
+                    </tr>
+                  )}
                   {gateDisposition === 'tag' && data?.lastCycleVtsEval && (() => {
                     const lc = data.lastCycleVtsEval;
                     const totalEvals = lc.totalStrategyEvaluations || 0;
@@ -1615,8 +1637,20 @@ export function FilterDiagnosticsPanel({ data, isLoading, gateDisposition = 'tag
       {/* P19-B8.4c REV-3: the old enforce-path ActivePipelineTail render was already unreachable here (the
           enforce path early-returns above), and the component is deleted this batch — the Paper/Live pipeline
           view is now DormantPipelineTables in that early-return. */}
-      {/* TABLE 4: VTS Evaluation Detail (Batch 19I) — expanded breakdown.
-          P19-B8.3 (OBJ-3c): renders ONLY on the VTS page ('tag'). */}
+      {/* TABLE 4: Evaluation Detail. B-FILTER-DIAG-STANDARDIZE: on Paper/Live this must NOT silently
+          vanish — a tab missing a section the others have fails Kyle's "same tracked metrics" test, and a
+          reader cannot tell absent from zero from broken. Explicit not-instrumented state naming the batch
+          that fills it (#662: the per-strategy null taxonomy has NO active-path writer, verified both classes). */}
+      {isEnforce && (
+        <DiagTableCard theme="rolling" title="Evaluation Detail" subtitle={`${modeTail === 'paper' ? 'Paper' : 'Live'} — not instrumented on this path yet`} testId="fd-eval-detail-not-instrumented">
+          <div className="p-3 text-sm text-muted-foreground">
+            The per-strategy null/skip taxonomy (Setup Nulls A–F, Pre-Evaluation Skips, the by-strategy null
+            breakdown) is <strong>not emitted by the active trading path</strong> — only the VTS runner produces
+            it today. Deliberately blank rather than zeros: a statement about the <em>instrument</em>, not the
+            world. Tracked as <strong>#662 B-ACTIVE-NULL-TAXONOMY</strong>.
+          </div>
+        </DiagTableCard>
+      )}
       {gateDisposition === 'tag' && (
       <Card className="max-w-4xl">
         <CardHeader className="py-3">
