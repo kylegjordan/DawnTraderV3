@@ -71,3 +71,61 @@
 - **Where do the native 2.08% targets come from?** The normalizer is formula-agnostic; 10 strategies use `mult × ATR`, 9 are heterogeneous. **Whether 2.08% is an ATR-horizon artefact (⇒ option B is decisive) or a hard-coded multiple (⇒ option A) is NOT yet established, and it determines which lever is right.**
 - Crypto admits 583/24h vs xStock's 95, yet crypto trades are scarce — **the admission-to-open gap is a separate mechanism** and is not explained by anything above.
 - `min_rr` for `volatility_edge` and `support_bounce` is **1.0** — at R:R 1.0 the EV ceiling is `0.2 × target − friction`, needing a **4.0% target** just to break even at the pWin cap. Those two strategies are structurally the worst-placed and may warrant their own ruling.
+
+---
+
+# PART 2 — THE HORIZON vs HARDCODED QUESTION, ANSWERED (Kyle-directed, same day)
+
+**Kyle pulled the §5 options back as premature until this was settled. He was right — Part 1 named the arithmetic but not the CAUSE of the 2.081% target. Both questions now have measured answers, and one of them is a rule violation.**
+
+## 2.1 THE HORIZON — and my Part-1 assumption was BACKWARDS
+
+**MEASURED bar horizons (code, not inference):** **crypto runs on 60-MINUTE bars** (`fx5-scanner.ts:904,944` + `market-scanner.ts:698`, `getOHLCData(sym, 60)`); **xStock runs on 15-MINUTE bars** (`xstock_spot/scanner.ts:597`, `getOHLCDataBatch(symbolList, 15)`).
+⇒ **CRYPTO'S HORIZON IS FOUR TIMES LONGER THAN xSTOCK'S, NOT SHORTER.** The phrase "short bar horizon" does not describe crypto's problem relative to xStock. I had assumed the opposite in Part 1 and did not check it.
+
+**MEASURED per-bar volatility at each class's LIVE horizon** — object: `crypto_spot_ohlc_1m` aggregated to hourly buckets, and `xstock_spot_ohlc_15m_snapshot`; population: 3 days, 23,951 crypto hours / 69,718 xStock bars:
+
+| series | bars | avg range % | median % |
+|---|---|---|---|
+| crypto @ 60m (live) | 23,951 | **1.194** | 0.545 |
+| xStock @ 15m (live) | 69,718 | 0.170 | 0.088 |
+
+**INSTRUMENT CONTROL (run before believing the above):** `high = low` degenerate bars — xStock 24.4%, crypto 50.2%. These are **real OHLC tables with flat bars on thin symbols**, not ticker snapshots masquerading as bars. The averages are dragged down by flat bars; the hourly crypto aggregation takes `max(high)/min(low)` across the hour, so flat 1m bars do not suppress the hourly range. ⚠️ **The two rows are at DIFFERENT horizons by design — this table does NOT say "crypto is 7× more volatile than xStock"; it says what each class's own bar looks like. Do not quote it as a cross-class volatility ratio.**
+
+**★ THE TARGET IS AN ATR ARTEFACT — CONFIRMED QUANTITATIVELY, not asserted.** Target = `multiplier × ATR`. Crypto's live hourly ATR proxy ≈ **1.194%**; the common multipliers are **2.0–3.0** ⇒ predicted target **2.4–3.6%**, against the **2.081% measured** in `rtb_signals`. **The prediction and the observation agree.** ⇒ **crypto's small target is not a hard-coded number — it is the arithmetic consequence of an hourly volatility of ~1% times a class-blind multiple.**
+
+**Horizon required to reach a fee-clearing 4% target** (volatility scales ≈ √time — **stated as the standard approximation it is, not a measurement**): mult 2.0 → **~2.8-hour bars** · mult 2.5 → **~1.8-hour** · mult 3.0 → **~1.2-hour**. ⇒ **the horizon lever is real but modest — this is a 1.2–2.8× stretch, not a move to daily bars.**
+
+## 2.2 THE MULTIPLIERS — in the database, but CLASS-BLIND
+
+**Every ATR multiplier IS DB-governed** (`module_constants`, read via `getCachedNumbersForModule`, which **THROWS on a cold module rather than fabricating a default** — `module-constants-service.ts:420-424`; no silent fallback). **Not hardcoded. ✓**
+
+**⚠️ BUT EVERY ROW IS `asset_class = '*'`:**
+`adaptive_flow` 3.0 · `pivot_shift` 3.0 · `strong_bull_trend` 6.0 · `morning_star` 2.5 · `volatility_edge` 2.5 · `inside_bar_reversal` 2.0 · `reverse_impulse` 2.0 · `support_bounce` 2.0 · `defensive_hedge` 1.8 — **all `*`, so crypto and xStock share one multiplier despite different horizons, different volatility, and the SAME absolute fee.**
+⇒ **A crypto-specific multiplier is available TODAY with ZERO code change** — the resolver already scores `asset_class` (the per-class dimension exists and is simply unpopulated for these constants). **This is the cheapest lever in the entire investigation.**
+
+## 2.3 ★ THE RULE VIOLATION — NINE HARDCODED BUFFERS THAT WIDEN THE RISK LEG
+
+**Kyle: *"we are not supposed to hardcode anything in the system."* These are hardcoded, class-blind, and NOT in `module_constants`:**
+
+| file | constant | value |
+|---|---|---|
+| `adaptive-flow.ts:44` | `AF_STOP_BUFFER` | 0.003 (0.3%) |
+| `defensive-hedge.ts:46` | `DH_STOP_BUFFER` | 0.005 (0.5%) |
+| `inside-bar-reversal.ts:47` | `IB_BREAKOUT_BUFFER` | 0.002 |
+| `inside-bar-reversal.ts:48` | `IB_STOP_BUFFER` | 0.003 |
+| `morning-star.ts:51` | `MS_STOP_BUFFER` | 0.003 |
+| `reverse-impulse.ts:45` | `RI_STOP_BUFFER` | 0.005 |
+| `support-bounce.ts:55` | `SB_STOP_BELOW_SUPPORT` | 0.005 |
+| `volatility-edge.ts:45` | `VE_BREAKOUT_BUFFER` | 0.002 |
+| `volatility-edge.ts:46` | `VE_STOP_BUFFER` | 0.003 |
+
+**WHY THIS IS NOT COSMETIC:** these are **percentage-of-price** buffers on the ENTRY and STOP legs. Unlike the ATR multipliers they **do NOT scale with volatility or asset class** — a flat 0.3% is added regardless. Against crypto's measured **1.248% stop**, a 0.3% buffer is **~24% of the entire risk leg**, and the stop distance is the denominator of reward:risk and a direct input to net EV (`rawEV = pWin×target − pLoss×stop`). **A wider stop lowers EV directly.** ⇒ they are not merely a governance breach; **they are a measurable drag on the number this investigation is about.**
+**DISPOSITION: (3) legacy that no longer fits intent** — migrate to `module_constants` with a per-class dimension, same pattern as every other lever. **NOT folded into this investigation's options** — it is its own small batch, and it should be measured (not assumed) how much EV each buffer costs before any value is changed.
+
+## 2.4 WHAT IS STILL NOT ESTABLISHED — stated so nobody treats this as complete
+
+- **The 9 "heterogeneous" strategies** (R-multiple / measured-move / percent) are NOT ATR-driven; §2.1's artefact finding covers the 10 ATR ones. Their target derivation is unread.
+- **The admission-to-open gap** (crypto admits 583/24h yet trades are scarce) is untouched and is a DIFFERENT mechanism from everything above.
+- **`min_rr` 1.0 for `volatility_edge` / `support_bounce`** — at R:R 1.0 the EV ceiling is `0.2×target − friction`, needing a 4.0% target to break even at the pWin cap. Structurally the worst-placed pair; unruled.
+- **I have not yet read** the Phase-19 active-trading-path audit, the SIM, or the System Manual on target geometry. Kyle directed those and they are outstanding — **the options in §5 stay WITHDRAWN until they are read.**
