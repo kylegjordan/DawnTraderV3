@@ -148,7 +148,7 @@ import {
 } from '../core/metrics/multi-tf-agreement.js';
 // B67.3 — Per-underlying position cap (VTS-mirror admission gate)
 import { checkPerUnderlyingCap, formatDecisionLog, assignCohortHash } from './per-underlying-cap.js';
-import { resolveStrategyMode, getModeOverlay, meetsConfidenceFloor, recordModeExecution, type StrategyMode, type StrategyModeOverlay } from '../core/governance/strategy-modes.js';
+import { INTERIM_NO_POSTURE_MODE, type StrategyMode } from '../core/governance/strategy-modes.js';
 import fs from 'fs/promises';
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
 import path from 'path';
@@ -638,8 +638,7 @@ interface OpenVirtualTrade {
   expectedEdge?: number;
   pool: 'ideal' | 'rotational';
   openedAt: number;
-  strategyMode?: StrategyMode;         // 11.7S: Mode for observability
-  modeOverlay?: StrategyModeOverlay;   // 11.7S: Overlay values for observability
+  strategyMode?: StrategyMode;         // interim posture stamp (11.7S deleted, obj-10)
   regimeStability?: RegimeStability;   // 11.7S: Regime stability for observability
   executionContext?: 'VTS' | 'VTS_MULTI'; // 11.8C: Identifies multi-strategy trades
   sourcePool?: string;        // Batch 37: Family-qualified source pool
@@ -1664,11 +1663,20 @@ async function generatePhase10Signal(
   // ══════════════════════════════════════════════════════════════════════════════
   
   // ══════════════════════════════════════════════════════════════════════════════
-  // Directive 11.7S — Strategy Mode Modulation
+  // 11.7S DELETED — B-SIZING-DEC-RESTORE obj-10 (Kyle-directed, 2026-08-07)
   // ══════════════════════════════════════════════════════════════════════════════
-  // Assign mode based on global regime stability (after governance, before scoring)
-  const strategyMode: StrategyMode = resolveStrategyMode(regimeStability);
-  const modeOverlay: StrategyModeOverlay = getModeOverlay(strategyMode);
+  // The class-less stability→posture damper is GONE, not disabled. It was modulating
+  // the VTS trades we LEARN from (DEFENSIVE ×0.6 on ~900/day, SURVIVAL ×0.25 on ~741/day),
+  // which is exactly the contamination Kyle called out: "we are learning from trades
+  // affected by a mechanism we plan to replace."
+  //
+  // INTERIM STATE until the AMR flag flips to active: NO POSTURE MODULATION IN VTS AT ALL.
+  // Not a 1.0 multiply left in place — the multiplications are removed. Posture returns
+  // only through the AMR's per-class dials, which will be the single posture writer.
+  //
+  // The trade STAMP is kept for observability + the Phase-25 contamination partition,
+  // and its interim value is NAMED (not inferred) so a reader can tell interim rows apart.
+  const strategyMode: StrategyMode = INTERIM_NO_POSTURE_MODE;
   
   // 11.7S: Confidence floor check — VTS COLD-START BYPASS
   // VTS is a simulation system that generates virtual trades for ML calibration.
@@ -1677,11 +1685,16 @@ async function generatePhase10Signal(
   // The bypass lets VTS generate trades so the ML calibration service can compute
   // real confidence values. The mode overlay (position sizing, stops) still applies.
   // Downstream gates (Net EV kernel, ROI gate, strategy guardrails) remain active.
-  if (!meetsConfidenceFloor(predictiveConfidence, regimeStability)) {
-    console.log(`[11.7S][VTS] BELOW_FLOOR (bypassed): ${symbol} ${strategy} - confidence ${predictiveConfidence.toFixed(2)} < floor ${modeOverlay.confidenceFloor} (mode=${strategyMode})`);
-  }
-  
-  console.log(`[11.7S][VTS] Mode: ${strategyMode} | Size×${modeOverlay.positionSizeMultiplier} | Stop×${modeOverlay.stopLossDistanceMultiplier} | TP×${modeOverlay.takeProfitDistanceMultiplier}`);
+  // The 11.7S confidence-floor check is deleted with the mechanism. VTS bypassed it
+  // anyway (the cold-start paradox documented below), so removing it changes no VTS
+  // behaviour — it only stops logging a floor derived from a deleted overlay.
+  //
+  // VTS COLD-START context, preserved because the reasoning still holds: VTS is a
+  // simulation system generating virtual trades for ML calibration. Blocking at a
+  // confidence floor creates a cold-start paradox — no trades → no data → confidence
+  // stuck at 0.50 → no trades, forever. Downstream gates (Net EV kernel, ROI gate,
+  // strategy guardrails) remain active and are the real filters here.
+  console.log(`[VTS][POSTURE] none (11.7S deleted; AMR inactive) — stamp=${strategyMode}`);
   // ══════════════════════════════════════════════════════════════════════════════
   
   // Directive 11.4H.4A Task 1: Use dynamic regime scoring based on ADX + volatility
@@ -1832,8 +1845,8 @@ async function generatePhase10Signal(
   const riskPerTrade = await getRiskPerTrade();
   const basePositionSize = computePositionSize(portfolioValue, riskPerTrade, entryPrice, stopLoss, riskMultiplier);
   
-  // Directive 11.7S: Apply mode overlay to position size
-  const positionSize = basePositionSize * modeOverlay.positionSizeMultiplier;
+  // 11.7S size multiplier DELETED (obj-10) — no posture damper on the learning substrate.
+  const positionSize = basePositionSize;
   
   // Directive 11.6H: Compute capital allocation - fixed USD exposure capped at 25% of portfolio
   const maxPositionSize = portfolioValue * 0.25;
@@ -1852,17 +1865,14 @@ async function generatePhase10Signal(
   const useNativeGeometry = sourcePool === 'quant-strong_trend';
   const stopDistance = entryPrice - stopLoss;
   const targetDistance = takeProfit - entryPrice;
-  const adjustedStopDistance = useNativeGeometry
-    ? stopDistance
-    : stopDistance * modeOverlay.stopLossDistanceMultiplier;
-  const adjustedTargetDistance = useNativeGeometry
-    ? targetDistance
-    : targetDistance * modeOverlay.takeProfitDistanceMultiplier;
+  // 11.7S stop/TP multipliers DELETED (obj-10). Native geometry was already exempt;
+  // now every path uses the unmodulated distances.
+  const adjustedStopDistance = stopDistance;
+  const adjustedTargetDistance = targetDistance;
   const adjustedStopLoss = entryPrice - adjustedStopDistance;
   const adjustedTakeProfit = entryPrice + adjustedTargetDistance;
   
   console.log(`[VTS][11.6H][Sizing] ${symbol}: $${dollarValue.toFixed(2)} exposure → ${quantity.toFixed(6)} units @ $${entryPrice.toFixed(4)}`);
-  console.log(`[11.7S][VTS] ${symbol}: Stop ${stopLoss.toFixed(4)}→${adjustedStopLoss.toFixed(4)} | TP ${takeProfit.toFixed(4)}→${adjustedTakeProfit.toFixed(4)} (mode=${strategyMode})`);
   
   // Batch 45: Post-close re-entry cooldown (B72: from module_constants)
   const cooldownKey = `${symbol}:${strategy}`;
@@ -2067,8 +2077,7 @@ async function generatePhase10Signal(
     decayPenalty,
     pool,
     openedAt: Date.now(),
-    strategyMode,         // 11.7S: Mode for observability
-    modeOverlay,          // 11.7S: Overlay values for observability
+    strategyMode,         // interim stamp (11.7S deleted, obj-10) — NAMED, see INTERIM_NO_POSTURE_MODE
     regimeStability,      // 11.7S: Regime stability for observability
     executionContext: isMultiStrategy ? 'VTS_MULTI' : 'VTS', // 11.8C: Multi-strategy identification
     // B.2.UI (2026-06-02): crypto entry-liquidity = native 24h volume (COIN UNITS, not USD).

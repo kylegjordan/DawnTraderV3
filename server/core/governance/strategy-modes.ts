@@ -102,6 +102,22 @@ export const STRATEGY_MODE_OVERLAYS: Record<StrategyMode, StrategyModeOverlay> =
   },
 };
 
+/**
+ * ★ THE NAMED INTERIM POSTURE STAMP — B-SIZING-DEC-RESTORE obj-10 (Kyle, 2026-08-07).
+ *
+ * The class-less 11.7S stability→posture damper is DELETED. Until the AMR flag flips
+ * from "shadow" to active, there is NO posture modulation anywhere: no size multiplier,
+ * no stop/TP multiplier, no posture-derived confidence floor. Nothing multiplies by 1.0
+ * "for now" — the multiplications are gone.
+ *
+ * This constant exists ONLY so the trade STAMP has a NAMED value rather than an inferred
+ * one (Langston's condition). It is a label on the row, never an input to a calculation.
+ * Reading it as "the system chose NORMAL posture" would be wrong: the system currently
+ * chooses NO posture. Phase-25's contamination partition uses this value to separate
+ * interim rows from 11.7S-modulated history.
+ */
+export const INTERIM_NO_POSTURE_MODE: StrategyMode = 'NORMAL';
+
 export const REGIME_TO_MODE_MAP: Record<RegimeStability, StrategyMode> = {
   STABLE: 'NORMAL',
   TRANSITION: 'DEFENSIVE',
