@@ -2584,3 +2584,29 @@ collision from silent to loud for one session; it does nothing for the other thr
 
 **FIX (proposed, NOT unilaterally built):** a `suppressed`/`snoozed-until` state — the condition stays acknowledged-true and simply does not re-surface until a date or a threshold change (e.g. re-fire only when utilisation crosses the NEXT band). **HOME: this issue. OWNER: CC-B. DUE: with the next alert-machinery batch;** raised for Langston + Kyle rather than patched, per rule 15 (no patches) — the dispatcher's dedupe semantics are governance-visible behaviour.
 
+### #680 OPEN 2026-08-07 (CC-B; Langston PROCEED) — **`B-TSC-PUSH-GATE`: run the EXISTING baseline comparator at push time, fail on any unexplained drop**
+
+**OWNER: CC-B. DUE: 2026-08-09.** Filed BEFORE build per Langston's §13 rider.
+
+**ORIGIN (my own failure, 12:35Z):** I typechecked, saw **13 against a baseline of 392**, and pushed and deployed anyway — the check was chained after the commit with `&&` and never gated on. ⇒ **the failure was not the missing control; it was a control whose result gated nothing.**
+
+**★ THE REAL DISCOVERY, which shrank the build to a third:** `package.json` declares **`"check": "tsc"`** — raw tsc, **no comparator** — and **no script in the file invokes `check-tsc-baseline.mjs`** (Langston re-verified at the ref). Its only caller is CI. ⇒ **the command I used all day and quoted in commit messages as evidence is structurally incapable of detecting the failure it stood in for.** The detection already existed; **the delta is the ENFORCEMENT POINT, not the detection** (CC-C's framing).
+
+**SCOPE:** wire the existing `check-tsc-baseline.mjs` at push time. **No new comparator** — one invariant, two call sites (the anti-#449 shape).
+
+**STRICTNESS — any unexplained DROP fails, not the existing >50% threshold (CC-C's hole, Langston-confirmed at the ref):** today `drops` print *"(errors fixed — good)"* and the run **exits 0**; only regressions and new paths fail. **392→390 passes cheerfully**, and a small drop is exactly what a partial parse failure or a silently-excluded directory produces.
+
+**★ FINDING 1 (Langston) — THE TRIGGER SET MUST INCLUDE MORE THAN `.ts`:** the silently-excluded-directory case comes from **tsconfig, not a `.ts` file**, so a push touching only `tsconfig.json` would move the count and be waved through by a `.ts`-only filter — **excluding the very case that motivated the strictness change.** Trigger on `.ts`/`.tsx` **plus `tsconfig*.json`, `package.json`/lockfile, and `.tsc-baseline.json` itself.** Markdown-only pushes still skip, so CC-C's cost objection (~60-90s × many daily pushes = how gates die) survives intact.
+
+**★ FINDING 2 (Langston) — `syncBaseline()` HAS NO DROP GUARD, AND ANY-DROP-FAILS MAKES THAT HOLE LOAD-BEARING:** sync refuses regressions without `--include-regressions` but **silently absorbs ANY drop**. Once any-drop-fails trains everyone to reach for sync as the routine escape, **a parse-failure run followed by a reflexive `--sync` bakes the collapsed baseline in permanently and everything reads green afterwards.** ⇒ the drop guard **must bind sync mode too**; a large drop in sync needs the same explicit acknowledgement it needs in compare. **This is the strictness change creating its own bypass — fix both or neither.**
+
+**RIDERS:** **fail closed** (hook cannot run the check or read the baseline ⇒ push REFUSES, with a visible logged bypass); **no second escape hatch** — `--regen-acknowledged` already exists.
+
+### #681 OPEN 2026-08-07 (CC-B; Langston §13 — the root cause the push gate does NOT address) — **a deploy can outrun CI: `dt-deploy` accepts a sha whose CI has not completed green**
+
+**OWNER: CC-B. DUE: 2026-08-12.** Filed because an honestly-stated limit is still an open loop (Langston: *"that honesty doesn't discharge §13"*).
+
+**MEASURED, my own incident:** the broken parse was pushed and deployed at **12:35:14Z**; CI's *"TypeScript baseline-comparison gate"* (`node scripts/check-tsc-baseline.mjs`, **no `continue-on-error` — the gate gates**) **would have caught it**. ⇒ **the gate existed, works, and I outran it.** The push gate in #680 **narrows this window; it does not close it** — a push that passes the local check can still be deployed before CI finishes, and nothing refuses it.
+
+**THE DESIGN QUESTION (open, mine to answer, not to assume):** either `dt-deploy` refuses a sha whose CI has not completed green (strong, but it blocks a genuinely-urgent hotfix while a queue drains, and CI runs on this branch are **cancelled constantly** by concurrent pushes — a naive "must be green" would refuse most shas most of the time), **or** it warns loudly and records the CI state in the deploy record, **or** the window is accepted as a documented residual. **Not a patch decision — rule 15 applies.** ↔ #680.
+
