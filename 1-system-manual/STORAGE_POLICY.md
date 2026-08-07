@@ -103,7 +103,7 @@ rows there now works directly against the session fighting that. **COLD is owed 
 mean inventing a parallel archive** (Kyle, 2026-08-07: *"We have an archive system outside of
 Langston where we store all of our data"*): the disk tiers are a **staging post**, and the
 hand-off routes into the existing B2 cold tier this policy already defines. Gate: the B2
-credentials live on **staging**, not Helsinki. Home: `RUNNING_ISSUES` (below). Owner: Infra
+credentials live on **staging**, not Helsinki. Home: `RUNNING_ISSUES` **#670**. Owner: Infra
 Claude. **Until that lands, warm-on-disk grows unbounded — acknowledged here rather than
 becoming an unowned monotonic store, which is the F.2 failure class this policy documents.**
 
