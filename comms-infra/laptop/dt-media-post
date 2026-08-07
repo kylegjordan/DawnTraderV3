@@ -30,13 +30,19 @@ done
 [ -n "$SENDER" ] || { echo 'dt-media-post: --sender is required and will not be guessed (e.g. --sender "OLD Claude")' >&2; exit 2; }
 
 DAY=$(date -u +%F)
-BASE=$(basename "$FILE" | tr -c 'A-Za-z0-9._-' '_')
+# printf, NOT a bare pipe: `basename | tr -c ...` also translates the trailing NEWLINE
+# into an underscore, so every uploaded name gained a phantom "_" suffix (caught on the
+# first live run, not in review).
+BASE=$(printf '%s' "$(basename "$FILE")" | tr -c 'A-Za-z0-9._-' '_')
 REMOTE_DIR="/var/log/cc-discord-media/$DAY"
 REMOTE="$REMOTE_DIR/out_$(date -u +%H%M%S)_$BASE"
 TAG="dt-media-post-$$"
 
-ssh -o ConnectTimeout=30 "$HOST" "mkdir -p '$REMOTE_DIR'"
-scp -o ConnectTimeout=30 "$FILE" "$HOST:'$REMOTE'" >/dev/null
+ssh -o ConnectTimeout=30 "$HOST" "mkdir -p '$REMOTE_DIR'"   # ssh DOES run a remote shell: quotes correct here
+# scp does NOT (OpenSSH 9+ speaks SFTP and performs no remote-shell expansion), so inner
+# quotes become part of the literal filename and the upload fails on a path starting with
+# a quote character. Names are sanitized above, so the bare form is the correct one.
+scp -o ConnectTimeout=30 "$FILE" "$HOST:$REMOTE" >/dev/null
 
 # Message body travels as a FILE, never inline: shell-quoting a body inline has silently
 # mangled ids and coordinates on this channel before (the cc-send write-to-file rule).

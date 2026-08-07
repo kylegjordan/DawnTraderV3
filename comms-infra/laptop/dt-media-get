@@ -26,7 +26,10 @@ LOCAL="$LOCAL_DIR/$(basename "$REMOTE")"
 
 ERR=$(mktemp)
 trap 'rm -f "$ERR"' EXIT
-if ! scp -o ConnectTimeout=30 "$HOST:'$REMOTE'" "$LOCAL" >/dev/null 2>"$ERR"; then
+# No inner quotes on the remote path: OpenSSH 9+ scp speaks SFTP and does no remote-shell
+# expansion, so quotes would be taken as literal filename characters (proven on the first
+# live run of the sibling helper).
+if ! scp -o ConnectTimeout=30 "$HOST:$REMOTE" "$LOCAL" >/dev/null 2>"$ERR"; then
   echo "dt-media-get: FAILED to fetch $REMOTE" >&2
   sed 's/^/  /' "$ERR" >&2 || true
   exit 1
