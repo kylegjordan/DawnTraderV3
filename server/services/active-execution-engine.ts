@@ -184,7 +184,7 @@ import { evaluateTradeExpectancy } from '../core/calculations/expectancy.js';
 import { getCachedStability, computeGlobalStability } from '../core/governance/regime-stability.js';
 import { isStrategyEligible, logGovernanceBlock } from '../core/governance/strategy-eligibility.js';
 import { getStrategyDependency, type RegimeStability } from '../config/strategy-governance.js';
-import { resolveStrategyMode, getModeOverlay, meetsConfidenceFloor, recordModeExecution, type StrategyMode, type StrategyModeOverlay } from '../core/governance/strategy-modes.js';
+import { INTERIM_NO_POSTURE_MODE, type StrategyMode, type StrategyModeOverlay } from '../core/governance/strategy-modes.js';
 
 interface ExitCondition {
   type: 'target_hit' | 'stop_hit' | 'trailing_stop_hit' | 'max_holding_period' | 'guardrail' | 'manual_stop';
@@ -3881,8 +3881,16 @@ export class ActiveExecutionEngine {
       // signals (pre-audit §1) — the shadow ledger's would-vs-actual
       // divergence from this is expected, not a bug. disabled/shadow: the
       // legacy path below is bit-identical (parity gate A2).
-      let strategyMode: StrategyMode = resolveStrategyMode(regimeStability);
-      let modeOverlay: StrategyModeOverlay = getModeOverlay(strategyMode);
+      // ══════════════════════════════════════════════════════════════════════
+      // 11.7S DELETED — B-SIZING-DEC-RESTORE obj-10 (Kyle-directed, 2026-08-07)
+      // ══════════════════════════════════════════════════════════════════════
+      // The class-less stability→posture seed is GONE, not disabled. INTERIM STATE
+      // until the AMR flag flips: NO posture overlay unless the AMR supplies one.
+      // `modeOverlay` is therefore NULLABLE by design — a null overlay means
+      // "no posture modulation", and every consumer below branches on it rather
+      // than multiplying by a neutral 1.0 left lying around.
+      let strategyMode: StrategyMode = INTERIM_NO_POSTURE_MODE;
+      let modeOverlay: StrategyModeOverlay | null = null;
       // P19-B6.5d: prefer the carried signal stamp (collision-correct); safe-resolve
       // fallback + flag a missing stamp (Langston §B stamp-missing-active).
       const _amrStamp = asValidAssetClass(signal.metadata?.assetClass);
@@ -3898,7 +3906,7 @@ export class ActiveExecutionEngine {
           if (amrMode !== null) {
             strategyMode = amrMode;
             modeOverlay = getModeOverlayForClass(amrMode, _amrClass);
-            console.log(`[B-5][Paper][AMR_ACTIVE] ${signal.symbol}: class posture ${amrMode} (${_amrClass}) replaces stability mode`);
+            console.log(`[B-5][Paper][AMR_ACTIVE] ${signal.symbol}: class posture ${amrMode} (${_amrClass}) — the ONLY posture source now that 11.7S is deleted`);
           }
         } catch (amrErr) {
           console.warn(`[B-5][Paper] AMR posture read failed (legacy path): ${amrErr instanceof Error ? amrErr.message : amrErr}`);
@@ -3948,11 +3956,13 @@ export class ActiveExecutionEngine {
       // by netEV>0 + [11.8B] + exploration. The overlay's size/stop/TP MULTIPLIERS
       // below are untouched (they modulate, not block — outside the #514 ruling).
       // Bury-or-resurrect rides #514 with the other instances.
-      if (!(signalConfidence >= modeOverlay.confidenceFloor)) {
+      if (modeOverlay !== null && !(signalConfidence >= modeOverlay.confidenceFloor)) {
         console.log(`[P19-B8.5][CONF_FLOOR_SHADOW site=execution_entry] ${signal.symbol}/${signal.strategy}: would-SKIP — confidence ${signalConfidence.toFixed(2)} < floor ${modeOverlay.confidenceFloor} (mode=${strategyMode})`);
       }
       
-      console.log(`[11.7S][Paper] Mode: ${strategyMode} | Size×${modeOverlay.positionSizeMultiplier} | Stop×${modeOverlay.stopLossDistanceMultiplier} | TP×${modeOverlay.takeProfitDistanceMultiplier}`);
+      console.log(modeOverlay === null
+        ? `[POSTURE][Paper] none (11.7S deleted; AMR inactive) — stamp=${strategyMode}`
+        : `[POSTURE][Paper] AMR ${strategyMode} | Size×${modeOverlay.positionSizeMultiplier} | Stop×${modeOverlay.stopLossDistanceMultiplier} | TP×${modeOverlay.takeProfitDistanceMultiplier}`);
       
       // 11.7S: Apply mode overlay to stop/target distances
       // B63 Item 14: Strong-trend lane mode-overlay BYPASS (mirrored from vts-runner).
@@ -3965,10 +3975,10 @@ export class ActiveExecutionEngine {
         const targetDistance = signal.targetPrice - signal.entryPrice;
         const adjustedStopDistance = useNativeGeometry
           ? stopDistance
-          : stopDistance * modeOverlay.stopLossDistanceMultiplier;
+          : stopDistance * (modeOverlay?.stopLossDistanceMultiplier ?? 1);
         const adjustedTargetDistance = useNativeGeometry
           ? targetDistance
-          : targetDistance * modeOverlay.takeProfitDistanceMultiplier;
+          : targetDistance * (modeOverlay?.takeProfitDistanceMultiplier ?? 1);
         signalAny.stopPrice = signal.entryPrice - adjustedStopDistance;
         signalAny.targetPrice = signal.entryPrice + adjustedTargetDistance;
         const geomNote = useNativeGeometry ? ' [B63 Item 14 bypass]' : '';
@@ -3988,10 +3998,10 @@ export class ActiveExecutionEngine {
         // 11.7S: Apply mode overlay to pre-sized signals as well
         const originalQty = signalAny.quantity;
         const originalValue = signalAny.estimatedValue;
-        signalAny.quantity = originalQty * modeOverlay.positionSizeMultiplier;
-        signalAny.estimatedValue = originalValue * modeOverlay.positionSizeMultiplier;
+        signalAny.quantity = originalQty * (modeOverlay?.positionSizeMultiplier ?? 1);
+        signalAny.estimatedValue = originalValue * (modeOverlay?.positionSizeMultiplier ?? 1);
         signalAny.preComputedNotional = signalAny.estimatedValue;
-        console.log(`[B6][TRUST_SIZED] ${signal.symbol}: qty=${signalAny.quantity.toFixed(8)}, value=$${signalAny.estimatedValue.toFixed(2)} (mode=${strategyMode}, ×${modeOverlay.positionSizeMultiplier})`);
+        console.log(`[B6][TRUST_SIZED] ${signal.symbol}: qty=${signalAny.quantity.toFixed(8)}, value=$${signalAny.estimatedValue.toFixed(2)} (mode=${strategyMode}, ×${modeOverlay?.positionSizeMultiplier ?? 1})`);
       } else {
         console.log(`[B6][FALLBACK_SIZING] Signal missing sizing fields for ${signal.symbol}, will size in executeSimulatedTrade`);
         const guardrails = await storage.getGuardrailsV2({ mode: this.mode });
@@ -4042,12 +4052,12 @@ export class ActiveExecutionEngine {
               });
             }
             // 11.7S: Apply mode overlay to position size
-            const adjustedQuantity = sizingResult.quantity * modeOverlay.positionSizeMultiplier;
-            const adjustedValue = sizingResult.estimatedValue * modeOverlay.positionSizeMultiplier;
+            const adjustedQuantity = sizingResult.quantity * (modeOverlay?.positionSizeMultiplier ?? 1);
+            const adjustedValue = sizingResult.estimatedValue * (modeOverlay?.positionSizeMultiplier ?? 1);
             signalAny.quantity = adjustedQuantity;
             signalAny.estimatedValue = adjustedValue;
             signalAny.preComputedNotional = adjustedValue;
-            console.log(`[B6][FALLBACK_SIZED] ${signal.symbol}: qty=${adjustedQuantity.toFixed(8)}, value=$${adjustedValue.toFixed(2)} (mode=${strategyMode}, ×${modeOverlay.positionSizeMultiplier})`);
+            console.log(`[B6][FALLBACK_SIZED] ${signal.symbol}: qty=${adjustedQuantity.toFixed(8)}, value=$${adjustedValue.toFixed(2)} (mode=${strategyMode}, ×${modeOverlay?.positionSizeMultiplier ?? 1})`);
           } else {
             console.log(`[B6][SIZING_FAILED] Zero sizing result for ${signal.symbol} - skipping`);
             return { opened: false, stage: 'SIZING_INVALID', reason: 'zero sizing result (fallback)' };
@@ -4065,11 +4075,13 @@ export class ActiveExecutionEngine {
       // 11.7S: Record mode execution for analytics
       // B-5 (F2): per-class counters when the class resolves; the class-aware
       // call also bumps the legacy aggregate.
+      // obj-10: the class-less aggregate counter went with 11.7S. Per-class counters
+      // survive (they feed the AMR, the surviving posture path). When the class does
+      // not resolve there is nothing class-less left to count — and that is correct,
+      // not a gap: a posture counter with no posture mechanism counts nothing.
       if (_amrClass !== null) {
         const { recordModeExecutionForClass } = await import('../core/governance/strategy-modes.js');
         recordModeExecutionForClass(strategyMode, _amrClass);
-      } else {
-        recordModeExecution(strategyMode);
       }
       
       console.log(`[8.8.3-F][PROCESS] Processing signal for ${signal.symbol} via guardrails_v2 path`);
