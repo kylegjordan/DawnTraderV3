@@ -22,7 +22,7 @@ import { getPredictiveConfidence } from '../utils/score-calculator.js';
 import { logSkippedSignal } from '../logging/skipped-signals-logger.js';
 import { emitSqeShadow } from '../../services/data-archive/switch-on-evidence-sink.js';
 // Phase 14.1 HF8 (B3): Confidence floor imports for centralized mode-based qualification
-import { resolveStrategyMode, getModeOverlay, meetsConfidenceFloor } from '../governance/strategy-modes.js';
+
 import type { RegimeStability } from '../../config/strategy-governance.js';
 // HF9 Item B: Governance gate imports (migrated from active-execution-engine)
 import { isStrategyEligible } from '../governance/strategy-eligibility.js';
@@ -398,19 +398,18 @@ export async function evaluateSignalQuality(input: SQEInput, options: SQEOptions
   // Phase 14.1 HF8 (B3): Confidence floor check (Directive 11.7S)
   // Centralized here so both VTS and active trading use the same qualification gate.
   // VTS signals pass skipConfidenceFloor=true for cold-start bypass (no data -> no confidence -> no trades loop).
-  if (!options.skipConfidenceFloor && input.regimeStability && input.confidence !== undefined) {
-    if (!meetsConfidenceFloor(input.confidence, input.regimeStability)) {
-      const mode = resolveStrategyMode(input.regimeStability);
-      const overlay = getModeOverlay(mode);
-      if (options.gateShadowMode) {
-        // P19-B8.5 OBJ-6: shadow, never block (see SQEOptions.gateShadowMode).
-        // Decision-reconstructable: confidence + would-be mode/floor + stability input.
-        console.log(`[P19-B8.5][CONF_FLOOR_SHADOW] ${canonicalSymbol}/${input.strategy}: would-REJECT — confidence ${input.confidence.toFixed(2)} < floor ${overlay.confidenceFloor} (mode=${mode}, stability=${input.regimeStability}, class=${input.assetClass})`);
-      } else {
-        failures.push(`Confidence ${input.confidence.toFixed(2)} < floor ${overlay.confidenceFloor} (mode=${mode})`);
-      }
-    }
-  }
+  // ══════════════════════════════════════════════════════════════════════════
+  // 11.7S CONFIDENCE FLOOR DELETED — B-SIZING-DEC-RESTORE obj-10 (Kyle, 2026-08-07)
+  // ══════════════════════════════════════════════════════════════════════════
+  // This gate derived its floor from the class-less stability→posture overlay, which
+  // is deleted. It was ALREADY non-blocking in practice: VTS bypassed it via
+  // skipConfidenceFloor (the cold-start paradox), and the live path ran it in
+  // gateShadowMode — logging "would-REJECT" and never rejecting (P19-B8.5 OBJ-6,
+  // Langston-approved, #514). So removing it changes NO admission decision today.
+  //
+  // Posture-derived floors return only with the AMR's per-class dials, through
+  // meetsConfidenceFloorForClass — which survives and is class-correct. Reinstating
+  // a class-less floor here would rebuild exactly what obj-10 deleted.
 
   // B-5 AMR (Obj-5, F1): per-class AMR admission gates — UNCONDITIONAL (no
   // skip option) and SELF-SOURCING (the gate resolves flag/mode itself; the
