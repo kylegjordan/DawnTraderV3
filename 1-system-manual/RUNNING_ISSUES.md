@@ -2244,3 +2244,19 @@ Today the sizer computes `$2,250 × 100% × 20% × 0.97 = $436.50` per trade, an
 
 ⚠️ **CONSEQUENCE: rule 19's "CI 4/4" cannot be satisfied by ANY batch on this branch right now** — cite per-job state and name this issue instead of claiming 4/4. **HOME: own micro-batch. OWNER: CC-B.** OPEN.
 
+
+### #666 OPEN 2026-08-07 (CC-C, filed at Langston's direction; the forensics in #665 are the argument for it) — **`guardrails_v2` HAS NO WRITE AUDIT TRAIL, AND ITS `last_updated_by` STAMP IS UNRELIABLE BY CONSTRUCTION — IT SILENTLY INHERITS THE PREVIOUS WRITER'S NAME**
+
+**★ THE MECHANISM, CITED (`server/storage.ts:779-780`, the UPDATE branch):**
+```
+lastUpdatedBy: data.lastUpdatedBy ?? existing.lastUpdatedBy,
+lastUpdated: new Date()
+```
+⇒ **any writer that does not SUPPLY a `lastUpdatedBy` refreshes the TIMESTAMP while INHERITING the PREVIOUS writer's NAME.** The row then reads as "written by X at time T" when X never ran at T. **A stamp that cannot be wrong-in-an-obvious-way is worse than no stamp: it reads as attribution and is not.**
+
+**★ THIS DISSOLVES THE #665 PUZZLE — and corrects BOTH earlier readings, mine and Langston's.** We had `last_updated` = 2026-07-22 21:09:55Z sitting on pre-tune-3 CONTENT with the pre-tune-3 STAMP, and read that as **snapshot-restore-shaped** (a later write reproducing an earlier row wholesale). **It is not restore-shaped at all — it is exactly what this `??` produces for ANY anonymous writer.** ⇒ **the stamp is NOT evidence of who wrote, and the "tune-2 wrote it" reading must be withdrawn from the hypothesis space.** What survives: something wrote the paper row at 07-22 21:09:55Z **without identifying itself**, and the row's values are the pre-tune-3 set. **WHO is now genuinely unknown — and unknowable from this table**, which is the whole point of this issue. (The INSERT branch at `:790-794` stamps its own `lastUpdated` too, so an insert is equally undatable-by-author.)
+**Constraint that still holds:** `live.last_updated` = 2025-10-29, untouched — whatever ran touched the paper row only.
+
+**WHY IT MATTERS BEYOND FORENSICS:** `B-SIZING-DEC-RESTORE` makes `max_position_percent_pct` **THE** sizing authority — it alone sets both per-trade size AND slot count. A single-row snapshot table with **no history and no trustworthy attribution** is then the sole record of a live risk parameter. A silent rewrite (this incident) is invisible until someone measures position sizes and notices. **Same class as #647** (snapshot store, last-writer-wins, no history).
+**PROPOSED (not built — needs its own scope):** append-only `guardrails_v2_history` on every write (mode, full row before/after, actor, ts), and **make `lastUpdatedBy` REQUIRED at the write site** — a writer that will not name itself should be refused, not silently attributed to its predecessor. **Loud-refuse, per the same contract this batch applies to the sizing reads.**
+**HOME:** its own batch, scoped after `B-SIZING-DEC-RESTORE` closes (Langston's instruction: a real home, not a hypothetical one — filed by CC-C, not parked on his census batch).
