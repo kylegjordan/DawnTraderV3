@@ -131,6 +131,15 @@
             "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-bare-commit.mjs\""
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/probe-warn-delivery.mjs\""
+          }
+        ]
       }
     ],
     "SessionStart": [
