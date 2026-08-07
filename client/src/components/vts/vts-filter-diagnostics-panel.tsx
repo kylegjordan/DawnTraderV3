@@ -1204,7 +1204,13 @@ export function FilterDiagnosticsPanel({ data, isLoading, gateDisposition = 'tag
                   {gateDisposition === 'enforce' && (
                     <tr className="border-b bg-amber-500/5" data-testid="fd-active-eval-dormant-24h">
                       <td colSpan={4} className="p-3 text-xs text-muted-foreground italic text-center">
-                        Active-path evaluation counters — populate when active trading is switched on (Phase 19 B8.4). The scan-stage totals above are the shared scanner feed.
+                        {/* Step-4 (Langston, 3rd of this class): the old text claimed these "populate when
+                            active trading is switched on (B8.4)" — switched on 2026-07-14, so the causal claim
+                            was expired and sat next to real numbers. Replaced with the ACTUAL residual reason. */}
+                        Active-path evaluation counters are not persisted for a 24-hour window — the active
+                        funnel is cumulative since engine start, so this DB-backed rolling table has no
+                        active-path source. Live cumulative equivalents are in the SQE and RTB sections below.
+                        The scan-stage totals above are the shared scanner feed.
                       </td>
                     </tr>
                   )}

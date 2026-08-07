@@ -28,7 +28,7 @@
 import { StrategyEngine, StrategySignal, stampMaxHoldingMs } from './strategy-engine';
 // B-FILTER-DIAG-STANDARDIZE: read the decline reason the strategies already set (shared module).
 // ⚠️ MODULE GLOBAL — safe only while evaluation is SERIAL; verified zero Promise.all in this file.
-import { getNullReason } from '../utils/null-reason-tracker.js';
+import { getNullReason, resetNullReason } from '../utils/null-reason-tracker.js';
 // B72 (2026-05-05): orchestrator timing intervals from module='signal_orchestrator'.
 import { getCachedNumberRequired } from './module-constants-service.js';
 // B79.0n.STORAGE (2026-05-21): AssetClass type for SQEInput.assetClass population.
@@ -2266,6 +2266,11 @@ export class SignalOrchestrator {
 
       // Directive 10.1: Only run strategies allowed for current regime
       if (activeStrategies.has('vwap_pullback')) {
+        // B-FILTER-DIAG-STANDARDIZE Step-4 (Langston): RESET BEFORE DETECT — the other half of the
+        // null-reason-tracker contract ("reset before each detect call, read after null return").
+        // WITHOUT THIS the read below inherits the LAST value set by ANY strategy, symbol, or even a
+        // VTS cycle in this process, and records it confidently — silent mis-attribution, no error.
+        resetNullReason();
         const rawSignal = this.strategyEngine.detectVWAPPullback(indicators, settings, ohlcAsAny, assetClass);
         if (!rawSignal) {
           // B-FILTER-DIAG-STANDARDIZE (Kyle 2026-08-07): the strategy declined — record WHY.
@@ -2280,6 +2285,11 @@ export class SignalOrchestrator {
       }
 
       if (activeStrategies.has('abcd_long')) {
+        // B-FILTER-DIAG-STANDARDIZE Step-4 (Langston): RESET BEFORE DETECT — the other half of the
+        // null-reason-tracker contract ("reset before each detect call, read after null return").
+        // WITHOUT THIS the read below inherits the LAST value set by ANY strategy, symbol, or even a
+        // VTS cycle in this process, and records it confidently — silent mis-attribution, no error.
+        resetNullReason();
         const rawSignal = this.strategyEngine.detectABCDLong(ohlcAsAny, settings, assetClass);
         if (!rawSignal) {
           // B-FILTER-DIAG-STANDARDIZE (Kyle 2026-08-07): the strategy declined — record WHY.
@@ -2294,6 +2304,11 @@ export class SignalOrchestrator {
       }
 
       if (activeStrategies.has('sma_trend_ride')) {
+        // B-FILTER-DIAG-STANDARDIZE Step-4 (Langston): RESET BEFORE DETECT — the other half of the
+        // null-reason-tracker contract ("reset before each detect call, read after null return").
+        // WITHOUT THIS the read below inherits the LAST value set by ANY strategy, symbol, or even a
+        // VTS cycle in this process, and records it confidently — silent mis-attribution, no error.
+        resetNullReason();
         const rawSignal = this.strategyEngine.detectSMATrendRide(indicators, ohlcAsAny, settings, assetClass);
         if (!rawSignal) {
           // B-FILTER-DIAG-STANDARDIZE (Kyle 2026-08-07): the strategy declined — record WHY.
@@ -2309,6 +2324,11 @@ export class SignalOrchestrator {
 
       if (activeStrategies.has('breakout')) {
         // B72.2: detector reads params from module_constants 'strategy.breakout'.
+        // B-FILTER-DIAG-STANDARDIZE Step-4 (Langston): RESET BEFORE DETECT — the other half of the
+        // null-reason-tracker contract ("reset before each detect call, read after null return").
+        // WITHOUT THIS the read below inherits the LAST value set by ANY strategy, symbol, or even a
+        // VTS cycle in this process, and records it confidently — silent mis-attribution, no error.
+        resetNullReason();
         const rawSignal = this.strategyEngine.detectBreakout(ohlcAsAny, {}, assetClass);
         if (!rawSignal) {
           // B-FILTER-DIAG-STANDARDIZE (Kyle 2026-08-07): the strategy declined — record WHY.
@@ -2324,6 +2344,11 @@ export class SignalOrchestrator {
 
       if (activeStrategies.has('mean_reversion')) {
         // B72.2: detector reads params from module_constants 'strategy.mean_reversion'.
+        // B-FILTER-DIAG-STANDARDIZE Step-4 (Langston): RESET BEFORE DETECT — the other half of the
+        // null-reason-tracker contract ("reset before each detect call, read after null return").
+        // WITHOUT THIS the read below inherits the LAST value set by ANY strategy, symbol, or even a
+        // VTS cycle in this process, and records it confidently — silent mis-attribution, no error.
+        resetNullReason();
         const rawSignal = this.strategyEngine.detectMeanReversion(indicators, ohlcAsAny, {}, assetClass);
         if (!rawSignal) {
           // B-FILTER-DIAG-STANDARDIZE (Kyle 2026-08-07): the strategy declined — record WHY.
@@ -2339,12 +2364,23 @@ export class SignalOrchestrator {
 
       if (activeStrategies.has('range_trading')) {
         // B72.2: detector reads params from module_constants 'strategy.range_trade'.
+        // B-FILTER-DIAG-STANDARDIZE Step-4 (Langston): RESET BEFORE DETECT — the other half of the
+        // null-reason-tracker contract ("reset before each detect call, read after null return").
+        // WITHOUT THIS the read below inherits the LAST value set by ANY strategy, symbol, or even a
+        // VTS cycle in this process, and records it confidently — silent mis-attribution, no error.
+        resetNullReason();
         const rawSignal = this.strategyEngine.detectRangeTrading(ohlcAsAny, {}, assetClass);
         if (!rawSignal) {
           // B-FILTER-DIAG-STANDARDIZE (Kyle 2026-08-07): the strategy declined — record WHY.
           // The reason is already set by the strategy via the shared null-reason-tracker; this is
           // the read the active path never performed. Non-throwing by construction.
-          if (_fClass) recordActiveStrategyNull(sizingContext.mode, _fClass, 'range_trading', getNullReason());
+          // ★ CANONICAL NAME, not the local StrategyType id. `strategyId` here is 'range_trading' (the
+          // 9-wide union) while STRATEGY_DISPLAY_NAMES, the gate rows and every other table use
+          // 'range_trade' — the split this file already bridges at :546. Recording the union name would
+          // have produced a per-strategy row that lines up with NOTHING else, including the VTS tab's
+          // row for the same strategy — a standardisation break of exactly the kind this batch exists to
+          // remove. Caught by the wiring fence on its first run, not by review.
+          if (_fClass) recordActiveStrategyNull(sizingContext.mode, _fClass, 'range_trade', getNullReason());
         } else {
           rawSignal.symbol = symbol;
           const sizedSignal = await this.buildSizedSignalForStrategy(rawSignal, 'range_trading', sizingContext);
@@ -2354,6 +2390,11 @@ export class SignalOrchestrator {
 
       if (activeStrategies.has('vwap_bounce')) {
         // B72.2: detector reads params from module_constants 'strategy.vwap_bounce'.
+        // B-FILTER-DIAG-STANDARDIZE Step-4 (Langston): RESET BEFORE DETECT — the other half of the
+        // null-reason-tracker contract ("reset before each detect call, read after null return").
+        // WITHOUT THIS the read below inherits the LAST value set by ANY strategy, symbol, or even a
+        // VTS cycle in this process, and records it confidently — silent mis-attribution, no error.
+        resetNullReason();
         const rawSignal = this.strategyEngine.detectVWAPBounce(indicators, ohlcAsAny, {}, assetClass);
         if (!rawSignal) {
           // B-FILTER-DIAG-STANDARDIZE (Kyle 2026-08-07): the strategy declined — record WHY.
@@ -2377,6 +2418,11 @@ export class SignalOrchestrator {
 
       if (activeStrategies.has('dhma')) {
         // B72.2: detector reads params from module_constants 'strategy.dhma'.
+        // B-FILTER-DIAG-STANDARDIZE Step-4 (Langston): RESET BEFORE DETECT — the other half of the
+        // null-reason-tracker contract ("reset before each detect call, read after null return").
+        // WITHOUT THIS the read below inherits the LAST value set by ANY strategy, symbol, or even a
+        // VTS cycle in this process, and records it confidently — silent mis-attribution, no error.
+        resetNullReason();
         const rawSignal = this.strategyEngine.detectDHMA(indicators, ohlcAsAny, {}, assetClass);
         if (!rawSignal) {
           // B-FILTER-DIAG-STANDARDIZE (Kyle 2026-08-07): the strategy declined — record WHY.
@@ -2497,6 +2543,11 @@ export class SignalOrchestrator {
       const bestPattern = patternSignals.length > 0 ? patternSignals[0] : null; // kept for log line below
 
       if (activeStrategies.has('morning_star')) {
+        // B-FILTER-DIAG-STANDARDIZE Step-4 (Langston): RESET BEFORE DETECT — the other half of the
+        // null-reason-tracker contract ("reset before each detect call, read after null return").
+        // WITHOUT THIS the read below inherits the LAST value set by ANY strategy, symbol, or even a
+        // VTS cycle in this process, and records it confidently — silent mis-attribution, no error.
+        resetNullReason();
         const rawSignal = this.strategyEngine.detectMorningStar(indicators, ohlcAsAny, buildPatternInputForStrategy('morning_star'), assetClass);
         if (!rawSignal) {
           // B-FILTER-DIAG-STANDARDIZE (Kyle 2026-08-07): the strategy declined — record WHY.
@@ -2511,6 +2562,11 @@ export class SignalOrchestrator {
       }
 
       if (activeStrategies.has('inside_bar_reversal')) {
+        // B-FILTER-DIAG-STANDARDIZE Step-4 (Langston): RESET BEFORE DETECT — the other half of the
+        // null-reason-tracker contract ("reset before each detect call, read after null return").
+        // WITHOUT THIS the read below inherits the LAST value set by ANY strategy, symbol, or even a
+        // VTS cycle in this process, and records it confidently — silent mis-attribution, no error.
+        resetNullReason();
         const rawSignal = this.strategyEngine.detectInsideBarReversal(indicators, ohlcAsAny, buildPatternInputForStrategy('inside_bar_reversal'), assetClass);
         if (!rawSignal) {
           // B-FILTER-DIAG-STANDARDIZE (Kyle 2026-08-07): the strategy declined — record WHY.
@@ -2525,6 +2581,11 @@ export class SignalOrchestrator {
       }
 
       if (activeStrategies.has('support_bounce')) {
+        // B-FILTER-DIAG-STANDARDIZE Step-4 (Langston): RESET BEFORE DETECT — the other half of the
+        // null-reason-tracker contract ("reset before each detect call, read after null return").
+        // WITHOUT THIS the read below inherits the LAST value set by ANY strategy, symbol, or even a
+        // VTS cycle in this process, and records it confidently — silent mis-attribution, no error.
+        resetNullReason();
         const rawSignal = this.strategyEngine.detectSupportBounce(indicators, ohlcAsAny, buildPatternInputForStrategy('support_bounce'), assetClass);
         if (!rawSignal) {
           // B-FILTER-DIAG-STANDARDIZE (Kyle 2026-08-07): the strategy declined — record WHY.
@@ -2539,6 +2600,11 @@ export class SignalOrchestrator {
       }
 
       if (activeStrategies.has('pivot_shift')) {
+        // B-FILTER-DIAG-STANDARDIZE Step-4 (Langston): RESET BEFORE DETECT — the other half of the
+        // null-reason-tracker contract ("reset before each detect call, read after null return").
+        // WITHOUT THIS the read below inherits the LAST value set by ANY strategy, symbol, or even a
+        // VTS cycle in this process, and records it confidently — silent mis-attribution, no error.
+        resetNullReason();
         const rawSignal = this.strategyEngine.detectPivotShift(indicators, ohlcAsAny, buildPatternInputForStrategy('pivot_shift'), assetClass);
         if (!rawSignal) {
           // B-FILTER-DIAG-STANDARDIZE (Kyle 2026-08-07): the strategy declined — record WHY.
@@ -2553,6 +2619,11 @@ export class SignalOrchestrator {
       }
 
       if (activeStrategies.has('reverse_impulse')) {
+        // B-FILTER-DIAG-STANDARDIZE Step-4 (Langston): RESET BEFORE DETECT — the other half of the
+        // null-reason-tracker contract ("reset before each detect call, read after null return").
+        // WITHOUT THIS the read below inherits the LAST value set by ANY strategy, symbol, or even a
+        // VTS cycle in this process, and records it confidently — silent mis-attribution, no error.
+        resetNullReason();
         const rawSignal = this.strategyEngine.detectReverseImpulse(indicators, ohlcAsAny, buildPatternInputForStrategy('reverse_impulse'), assetClass);
         if (!rawSignal) {
           // B-FILTER-DIAG-STANDARDIZE (Kyle 2026-08-07): the strategy declined — record WHY.
@@ -2569,6 +2640,11 @@ export class SignalOrchestrator {
       if (activeStrategies.has('defensive_hedge')) {
         // Defensive hedge requires BTC candle data for correlation calculation
         // TODO: Pass BTC OHLC from pricing service cache when available
+        // B-FILTER-DIAG-STANDARDIZE Step-4 (Langston): RESET BEFORE DETECT — the other half of the
+        // null-reason-tracker contract ("reset before each detect call, read after null return").
+        // WITHOUT THIS the read below inherits the LAST value set by ANY strategy, symbol, or even a
+        // VTS cycle in this process, and records it confidently — silent mis-attribution, no error.
+        resetNullReason();
         const rawSignal = this.strategyEngine.detectDefensiveHedge(indicators, ohlcAsAny, buildPatternInputForStrategy('defensive_hedge'), undefined, assetClass);
         if (!rawSignal) {
           // B-FILTER-DIAG-STANDARDIZE (Kyle 2026-08-07): the strategy declined — record WHY.
@@ -2583,6 +2659,11 @@ export class SignalOrchestrator {
       }
 
       if (activeStrategies.has('adaptive_flow')) {
+        // B-FILTER-DIAG-STANDARDIZE Step-4 (Langston): RESET BEFORE DETECT — the other half of the
+        // null-reason-tracker contract ("reset before each detect call, read after null return").
+        // WITHOUT THIS the read below inherits the LAST value set by ANY strategy, symbol, or even a
+        // VTS cycle in this process, and records it confidently — silent mis-attribution, no error.
+        resetNullReason();
         const rawSignal = this.strategyEngine.detectAdaptiveFlow(indicators, ohlcAsAny, buildPatternInputForStrategy('adaptive_flow'), assetClass);
         if (!rawSignal) {
           // B-FILTER-DIAG-STANDARDIZE (Kyle 2026-08-07): the strategy declined — record WHY.
@@ -2597,6 +2678,11 @@ export class SignalOrchestrator {
       }
 
       if (activeStrategies.has('volatility_edge')) {
+        // B-FILTER-DIAG-STANDARDIZE Step-4 (Langston): RESET BEFORE DETECT — the other half of the
+        // null-reason-tracker contract ("reset before each detect call, read after null return").
+        // WITHOUT THIS the read below inherits the LAST value set by ANY strategy, symbol, or even a
+        // VTS cycle in this process, and records it confidently — silent mis-attribution, no error.
+        resetNullReason();
         const rawSignal = this.strategyEngine.detectVolatilityEdge(indicators, ohlcAsAny, buildPatternInputForStrategy('volatility_edge'), assetClass);
         if (!rawSignal) {
           // B-FILTER-DIAG-STANDARDIZE (Kyle 2026-08-07): the strategy declined — record WHY.
@@ -2613,6 +2699,11 @@ export class SignalOrchestrator {
       // B63: Strong Bull Trend (Path D) — QUANT, LONG-only, evaluates only on quant-strong_trend sourcePool pairs.
       // Strategy's internal DBS guard provides belt-and-braces if routing leaks.
       if (activeStrategies.has('strong_bull_trend')) {
+        // B-FILTER-DIAG-STANDARDIZE Step-4 (Langston): RESET BEFORE DETECT — the other half of the
+        // null-reason-tracker contract ("reset before each detect call, read after null return").
+        // WITHOUT THIS the read below inherits the LAST value set by ANY strategy, symbol, or even a
+        // VTS cycle in this process, and records it confidently — silent mis-attribution, no error.
+        resetNullReason();
         const rawSignal = this.strategyEngine.detectStrongBullTrend(indicators, ohlcAsAny, buildPatternInputForStrategy('strong_bull_trend'), assetClass);
         if (!rawSignal) {
           // B-FILTER-DIAG-STANDARDIZE (Kyle 2026-08-07): the strategy declined — record WHY.
@@ -2634,6 +2725,11 @@ export class SignalOrchestrator {
       if (activeStrategies.has('orb')) {
         const orbAssetClass = assetClass; // P19-B6.5d: reuse the carried stamp (was a throwing re-derive)
         if (orbAssetClass === 'xstock_spot') {
+          // B-FILTER-DIAG-STANDARDIZE Step-4 (Langston): RESET BEFORE DETECT — the other half of the
+          // null-reason-tracker contract ("reset before each detect call, read after null return").
+          // WITHOUT THIS the read below inherits the LAST value set by ANY strategy, symbol, or even a
+          // VTS cycle in this process, and records it confidently — silent mis-attribution, no error.
+          resetNullReason();
           const rawSignal = this.strategyEngine.detectORB(
             symbol,
             ohlcAsAny,
