@@ -1533,6 +1533,12 @@ Combined three-sub-batch ship: sub-batches (a) + (c) at commit `4dfe1deb6` (gove
 - `currentRungTarget: number` — the active target being aimed at; advances on each rung event
 - `currentRungFloor: number` — locked-in stop floor (cost-aware) from previous rung's target
 
+★★ **STATE PERSISTENCE — ADDED 2026-08-07 (B-TEC-REGIME-PARAM-REMOVAL Step-10). THIS WAS A REAL SIM GAP AND IT COST TWO WRONG PUBLIC CLAIMS.** The three fields above are **FILE-PERSISTED AND RESTORED ACROSS RESTARTS**, which this map documented only as a boot-ORDERING step (`:2241`, `:2349` name `loadTrailingStates` in sequence) and **never as a durability fact.**
+- **WHERE:** `trade-safety.ts:891` → **`TRAILING_STATE_FILE = '/tmp/trailing-states.json'`** — saved on write, read at boot by `loadTrailingStates()` → `importStates()` (`trailing-exit-controller.ts:1632`).
+- **MEASURED 2026-08-07 (staging, population): 279–283 states in one file; ALL carry `tradeId` ⇒ zero dropped by the B80 legacy-drop path; by `callerMode` vts 277 / paper 2.** ✅ **Verified surviving four separate restarts, including a `dt-deploy` restart at 13:25:37Z (283 restored).**
+- ⛔⛔ **THE OPERATIONAL FACT A READER NEEDS AND COULD NOT GET HERE: A PM2 RESTART DOES *NOT* LOSE THIS STATE. `/tmp` DOES — it is EPHEMERAL (reboot / `tmpfiles`).** ⇒ **"restart" and "state loss" are DIFFERENT EVENTS with different costs, and conflating them is exactly the error this gap produced** (#677 was announced twice as a per-restart defect before the Step-2 read corrected it to state-loss-only). **Durability tracked at #678; class membership at #601.**
+- ⚠ **B65.4 BACK-COMPAT NOTE, so nobody cites it as a safety clamp: `importStates()` migrates pre-B65.4 states via `targetLatched=true → ladderRung=1`. That is a LEGACY-ERA MIGRATION** — it happens to floor a missing rung at 1 rather than 0, **but it was not designed as a guard for that case.**
+
 **Engine semantic change:** `updatePosition()` now ratchets BOTH stop AND target on each rung event (was: only stop ratcheted via HWM dynamic trail in pure-trail design). Loop processes any further rung crossings within the same cycle for multi-rung price gaps. After ladder advances, dynamic HWM trail is preserved as a SECONDARY floor: `newStopPrice = max(currentRungFloor, dynamic_HWM_trail)`.
 
 **Engine return extension:** `TrailingUpdateResult.ladderRungsHit: number` — propagated to all downstream consumers so the closed-trade record can capture how far up the ladder the trade climbed.
