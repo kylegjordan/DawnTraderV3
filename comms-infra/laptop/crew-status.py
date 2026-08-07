@@ -699,8 +699,13 @@ def render_discord(state, summ):
         if th:
             # Same provenance discipline as the page: the tag is rendered where it is READ,
             # not merely stored where it is convenient.
+            # Reads the STORED field rather than restating it in English. Langston flagged the
+            # hardcoded gloss as the same stored-vs-restated class this batch exists to close:
+            # equivalent today (one writer, one value), silently divergent the moment a second
+            # scope value exists. One line to remove the class entirely — cheaper than
+            # documenting it as a known asymmetry and hoping the next reader checks.
             hold = (f" — holding on {md_neutral(th.get('holding_on'))} "
-                    f"(session-level; trunk or detour not distinguished)") if th.get("holding_on") else ""
+                    f"({md_neutral(th.get('holding_scope'))})") if th.get("holding_on") else ""
             detour = (f"\n↳ came up mid-batch ({md_neutral(th.get('ref'))}) [inferred from traffic]: "
                       f"{md_neutral(sm.get('thread') or (th.get('excerpt') or th.get('kind'))[:150])}{hold}")
         body.append(f"\n**{md_neutral(s)}**{flag}\n"
