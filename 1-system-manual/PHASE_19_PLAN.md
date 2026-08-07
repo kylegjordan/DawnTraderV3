@@ -361,3 +361,8 @@ ALL must be ✅ before the flip commit. Verify each at the **B8 switch-on** Step
 ---
 
 *Maintained by the implementing CC session. Update §1 status + §5 decisions every batch/sub-batch close; re-sequence only with Kyle's sign-off recorded here.*
+
+---
+
+**B-FILTER-DIAG-STANDARDIZE — deployed `cf395a71c` 2026-08-07 (CC-B).** All six Filter Diagnostics tabs standardized to one set of tracked metrics; the VTS keeps its no-SQE shape by design. The active path now reads the per-strategy decline taxonomy it was already computing and discarding, so the Paper tables carry real data. change-class re-declared to **architecture** mid-batch after Kyle's override brought orchestrator hot-path instrumentation into scope; SYSTEM_MANUAL + SIM updated accordingly. **Residual: Paper xStock per-strategy still unpopulated (15-minute-bar cadence, ~190× rarer than crypto on the active path) — held open until observed, not assumed.** Decision recorded: #669's pre-existing red makes rule 19's "CI 4/4" unsatisfiable branch-wide, so advance is gated on an IDENTITY-matched failure set rather than a literal green.
+
