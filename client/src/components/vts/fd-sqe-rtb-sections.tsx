@@ -1,0 +1,214 @@
+/**
+ * B-FILTER-DIAG-STANDARDIZE — the SQE and RTB sections. **PAPER / LIVE ONLY.**
+ *
+ * Kyle 2026-08-07: *"The only difference is that paper and live mode will have added sections for the
+ * SQE and the RTB."* These are absent from the VTS tab not by a flag but because **the VTS pipeline has
+ * no SQE stage at all**.
+ *
+ * ★ AND THIS IS WHERE NET-EV LIVES ON THE ACTIVE PATH. Kyle: *"the VTS does its net EV check differently
+ * in a different part of the pipeline… Leave the net EV scoring in the VTS filter diagnostics tabs where
+ * it is. But for the paper trading and live trading filter diagnostics tables, this has to go in the SQE
+ * section."* Verified at both sites: the VTS rejects on net-EV inside its own evaluation loop, with no
+ * SQE anywhere in it (`vts-runner.ts:4917-4919`, `detailReason === 'net_ev_rejected'`); the active path
+ * rejects **inside the SQE** (`gate_decision.reason = "NetEV … <= 0"`, `rejectStage:'sqe'`).
+ * ⇒ Same metric, same label, DIFFERENT SECTION per tab — that is the pipeline's real shape, not a
+ * display inconsistency, and it is the one place "standardised" deliberately does not mean "identical".
+ *
+ * Gate ids and display labels come from the SHARED classifier (`shared/sqe-gate-classifier`), so this
+ * table and the engine cannot drift about what a gate means.
+ * Sentinel discipline (`shared/filter-diagnostics-lane.ts`): absent instrumentation renders an honest
+ * state — NEVER `?? 0`. "Not measured" and "measured zero" are different statements.
+ */
+import { useQuery } from '@tanstack/react-query';
+import { sqeGateLabel } from '@shared/sqe-gate-classifier';
+import { DiagTableCard, DIAG_TABLE_THEMES, FROZEN_FIRST_COL_TABLE } from './vts-filter-diagnostics-panel';
+
+type FunnelClass = {
+  status: 'active' | 'dormant';
+  sqeEvaluated: number;
+  sqePassed: number;
+  sqeGateRejects: Record<string, number>;
+  sqeGateRejectsAtRefresh?: Record<string, number>;
+  sqeAttempts?: { atGeneration: number; atRefresh: number };
+  rtbRefresh?: {
+    cyclesRun: number; refreshedAttempted: number; reconfirmed: number;
+    rejectedInRefresh: number; promoted: number; droppedError?: number;
+  };
+};
+
+export function ActiveSqeAndRtbSections({
+  modeTail, assetClass,
+}: { modeTail: 'paper' | 'live'; assetClass: 'crypto_spot' | 'xstock_spot' }) {
+  const funnel = useQuery<{ startedAt: string; byAssetClass: Record<string, FunnelClass> }>({
+    queryKey: [`/api/active-engine/diagnostics/funnel?mode=${modeTail}`],
+    refetchInterval: 10000,
+    staleTime: 5000,
+  });
+
+  if (funnel.isError) {
+    return (
+      <div className="rounded-md border border-red-300 px-3 py-2 text-sm text-red-600" data-testid="fd-sqe-error">
+        SQE / RTB sections unavailable — the diagnostics fetch FAILED. That is a failure, not an empty result.
+      </div>
+    );
+  }
+
+  const label = modeTail === 'paper' ? 'Paper' : 'Live';
+  const cls = funnel.data?.byAssetClass?.[assetClass];
+  const since = funnel.data?.startedAt ? new Date(funnel.data.startedAt).toLocaleString() : null;
+
+  if (!cls || cls.status !== 'active') {
+    return (
+      <DiagTableCard theme="summary" title="SQE — Signal Quality Evaluation" subtitle={`${label} — awaiting first recorded activity`} testId="fd-sqe-awaiting">
+        <div className="p-3 text-sm text-muted-foreground">
+          No SQE activity recorded for this asset class yet. Deliberately blank rather than zeros — “not
+          measured” and “measured zero” are different statements, and this tab will not conflate them.
+        </div>
+      </DiagTableCard>
+    );
+  }
+
+  const gateRows = Object.entries(cls.sqeGateRejects ?? {}).sort((a, b) => b[1] - a[1]);
+  const refreshRows = cls.sqeGateRejectsAtRefresh
+    ? Object.entries(cls.sqeGateRejectsAtRefresh).sort((a, b) => b[1] - a[1])
+    : null;
+  const rtb = cls.rtbRefresh;
+
+  return (
+    <div className="space-y-4" data-testid="fd-sqe-rtb-sections">
+      <DiagTableCard
+        theme="summary"
+        title="SQE — Signal Quality Evaluation"
+        subtitle={`${label} — cumulative${since ? ` since ${since}` : ''}`}
+        testId="fd-sqe-section"
+      >
+        <table className={`w-full text-sm ${FROZEN_FIRST_COL_TABLE}`}>
+          <thead>
+            <tr className={`border-b ${DIAG_TABLE_THEMES.summary.head}`}>
+              <th className="text-left p-2 font-medium">SQE Gate</th>
+              <th className="text-right p-2 font-medium">Count</th>
+              <th className="text-left p-2 font-medium text-muted-foreground text-xs">Counting Basis</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr className="border-b bg-muted/30">
+              <td className="p-2 font-medium">Evaluated</td>
+              <td className="p-2 text-right font-mono">{cls.sqeEvaluated.toLocaleString()}</td>
+              <td className="p-2 text-xs text-muted-foreground">
+                {cls.sqeAttempts
+                  ? `at generation ${cls.sqeAttempts.atGeneration.toLocaleString()} + at RTB refresh ${cls.sqeAttempts.atRefresh.toLocaleString()}`
+                  : 'generation + refresh'}
+              </td>
+            </tr>
+            <tr className="border-b bg-muted/30">
+              <td className="p-2 font-medium">Passed</td>
+              <td className="p-2 text-right font-mono">{cls.sqePassed.toLocaleString()}</td>
+              <td className="p-2 text-xs text-muted-foreground">organic + exploration-lane admits</td>
+            </tr>
+            {gateRows.length === 0 ? (
+              <tr><td colSpan={3} className="p-3 text-sm text-muted-foreground">No SQE gate rejects recorded yet — an observed zero.</td></tr>
+            ) : gateRows.map(([gate, n]) => (
+              <tr key={gate} className="border-b last:border-0">
+                <td className="p-2 font-medium">
+                  {sqeGateLabel(gate)}
+                  {gate === 'NetEV' && (
+                    <span className="ml-2 text-[10px] text-muted-foreground">
+                      net expectancy ≤ 0 after friction — the VTS applies this same gate elsewhere in its
+                      pipeline, so on the VTS tab it appears under Post-Signal Rejections
+                    </span>
+                  )}
+                </td>
+                <td className="p-2 text-right font-mono">{n.toLocaleString()}</td>
+                <td className="p-2 text-xs text-muted-foreground">
+                  {gate === 'uncategorized' ? 'reason token the classifier does not recognise' : 'rejected at this SQE gate'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </DiagTableCard>
+
+      <DiagTableCard
+        theme="rolling"
+        title="RTB — Ready-to-Buy Refresh"
+        subtitle={`${label} — cumulative${since ? ` since ${since}` : ''}`}
+        testId="fd-rtb-section"
+      >
+        {!rtb ? (
+          <div className="p-3 text-sm text-muted-foreground">
+            RTB refresh counters not recorded for this class yet — blank rather than zeros.
+          </div>
+        ) : (
+          <table className={`w-full text-sm ${FROZEN_FIRST_COL_TABLE}`}>
+            <thead>
+              <tr className={`border-b ${DIAG_TABLE_THEMES.rolling.head}`}>
+                <th className="text-left p-2 font-medium">Stage</th>
+                <th className="text-right p-2 font-medium">Count</th>
+                <th className="text-left p-2 font-medium text-muted-foreground text-xs">Counting Basis</th>
+              </tr>
+            </thead>
+            <tbody>
+              {([
+                ['Refresh Cycles Run', rtb.cyclesRun, 'refresh passes over the queue'],
+                ['Re-evaluated', rtb.refreshedAttempted, 'queued signals put back through the SQE'],
+                ['Reconfirmed', rtb.reconfirmed, 'still qualified — stayed in the queue'],
+                ['Fell Out at Refresh', rtb.rejectedInRefresh, 'failed re-evaluation and left the queue'],
+                ['Dropped on Error', rtb.droppedError ?? 0, 'removed because the refresh pass errored'],
+                ['Promoted', rtb.promoted, 'left the queue to an open attempt'],
+              ] as const).map(([name, n, basis]) => (
+                <tr key={name} className="border-b last:border-0">
+                  <td className="p-2 font-medium">{name}</td>
+                  <td className="p-2 text-right font-mono">{Number(n).toLocaleString()}</td>
+                  <td className="p-2 text-xs text-muted-foreground">{basis}</td>
+                </tr>
+              ))}
+              <tr className="border-t-2 border-blue-500/30 bg-blue-50/20 dark:bg-blue-950/10 text-xs">
+                <td className="p-2 text-muted-foreground" colSpan={3}>
+                  Cycle identity: re-evaluated = reconfirmed + fell-out + dropped-on-error (
+                  {rtb.refreshedAttempted.toLocaleString()} = {rtb.reconfirmed.toLocaleString()} +{' '}
+                  {rtb.rejectedInRefresh.toLocaleString()} + {(rtb.droppedError ?? 0).toLocaleString()}).
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        )}
+      </DiagTableCard>
+
+      {refreshRows && (
+        <DiagTableCard
+          theme="lastScan"
+          title="RTB — What Fell Out, by SQE Gate"
+          subtitle={`${label} — the refresh-phase slice of the SQE table above`}
+          testId="fd-rtb-fallout"
+        >
+          <table className={`w-full text-sm ${FROZEN_FIRST_COL_TABLE}`}>
+            <thead>
+              <tr className={`border-b ${DIAG_TABLE_THEMES.lastScan.head}`}>
+                <th className="text-left p-2 font-medium">SQE Gate</th>
+                <th className="text-right p-2 font-medium">Fell out at refresh</th>
+              </tr>
+            </thead>
+            <tbody>
+              {refreshRows.length === 0 ? (
+                <tr><td colSpan={2} className="p-3 text-sm text-muted-foreground">
+                  Nothing has fallen out of the refresh cycle since this counter started — an observed zero,
+                  not a missing feature. (Why it is zero is not asserted here.)
+                </td></tr>
+              ) : refreshRows.map(([gate, n]) => (
+                <tr key={gate} className="border-b last:border-0">
+                  <td className="p-2 font-medium">{sqeGateLabel(gate)}</td>
+                  <td className="p-2 text-right font-mono">{n.toLocaleString()}</td>
+                </tr>
+              ))}
+              <tr className="border-t-2 border-blue-500/30 bg-blue-50/20 dark:bg-blue-950/10 text-xs">
+                <td className="p-2 text-muted-foreground" colSpan={2}>
+                  A SUBSET of the SQE gate table above — <strong>never add the two together</strong>.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </DiagTableCard>
+      )}
+    </div>
+  );
+}

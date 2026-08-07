@@ -8,6 +8,7 @@ import { RefreshCw, AlertTriangle } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import type { FilterDiagnosticsData } from "./vts-shared";
 import { gateAggregateColumns, type GateDisposition } from "./gate-columns";
+import { ActiveSqeAndRtbSections } from './fd-sqe-rtb-sections';
 
 /**
  * P19-B8.4 (OBJ-1/2) — the mode's OWN scanner stage, fed by the mode-keyed
@@ -146,7 +147,7 @@ export const SHARED_DIAG_WIDTH = 'max-w-5xl';
 // OBJ-9: each of the three pipeline tables gets a DISTINCT border color, with the header bar filled that same
 // color and a bigger/bolder title. OBJ-10: the table body scrolls horizontally inside its OWN bounded
 // container (the page never scrolls sideways) and the first column is frozen (sticky) on the pipeline tables.
-const DIAG_TABLE_THEMES = {
+export const DIAG_TABLE_THEMES = {
   summary:  { border: 'border-blue-500/70',   head: 'bg-blue-500/15' },
   lastScan: { border: 'border-purple-500/70', head: 'bg-purple-500/15' },
   rolling:  { border: 'border-teal-500/70',   head: 'bg-teal-500/15' },
@@ -166,7 +167,7 @@ export const FROZEN_FIRST_COL_TABLE =
 
 /** P19-B8.4c REV-3 — the shared themed table shell: colored border + filled/bolded header bar (OBJ-9) and an
  *  own horizontal-scroll container (OBJ-10). `children` is the raw <table>. */
-function DiagTableCard({ theme, title, subtitle, children, testId }: {
+export function DiagTableCard({ theme, title, subtitle, children, testId }: {
   theme: DiagTableTheme;
   title: React.ReactNode;
   subtitle?: React.ReactNode;
@@ -629,31 +630,31 @@ export function FilterDiagnosticsPanel({ data, isLoading, gateDisposition = 'tag
   // it SUPERSEDES the interim inline `gateDisposition === 'enforce'` conditionals in the
   // VTS ('tag') render path below (B8.3b) — those are now unreachable on Paper/Live and
   // get swept when Part 2 wires the funnel counters into the dormant block here.
-  if (gateDisposition === 'enforce' && modeTail) {
-    const modeLabel = modeTail === 'paper' ? 'Paper' : 'Live';
-    const isXstock = assetClass === 'xstock_spot';
-    // Crypto's scanner stage is ActiveScannerStage (below). xStock's is the ScannerCycleHeader
-    // rendered by xstocks-tab ABOVE this panel — so the banner points "above" for xStock.
-    const scannerRef = isXstock ? 'the scanner metrics above are' : 'the scanner stage below is';
-    return (
-      <div className={`space-y-4 ${SHARED_DIAG_WIDTH}`} data-testid="fd-enforce-panel">
-        <div className="rounded-md border border-blue-400/40 bg-blue-500/10 px-3 py-2 text-xs text-muted-foreground" data-testid="shared-scanner-banner">
-          {/* B-FILTER-DIAG-PAPER W-3: state-NEUTRAL wording — the old text asserted
-              "active trading is off … DORMANT … fills when trading turns on", which kept
-              rendering above LIVE funnel tables for 3+ weeks after the B8.5 switch-on. */}
-          {modeLabel} mode: {scannerRef} this mode's OWN scan (its {modeTail} thresholds). Everything downstream — family strength filters, signal generation, the SQE quality gates, and Ready-to-Buy refresh — is the active pipeline: when this mode has recorded activity its live counters render below; before first activity the tables show an explicit awaiting state instead of fabricated zeros.
-        </div>
-        {/* Crypto scanner card only — xStock's scanner card is its own ScannerCycleHeader
-            above this panel. Live throughput from the shared-scanner `data` feed; Per-Cycle Target + Total
-            Universe + countdown from the shared feed (self-fetched inside the component). */}
-        {!isXstock && <ActiveScannerStage mode={modeTail} data={data} isLoading={isLoading} />}
-        {/* P19-B8.5 (switch-on wiring): the B8.4c dormant skeleton is now the FALLBACK inside
-            ActivePipelineTables — it renders the mode's live per-class funnel counts when the
-            class is active, and the honest "awaiting activation" body otherwise. */}
-        <ActivePipelineTables modeTail={modeTail} assetClass={assetClass} />
-      </div>
-    );
-  }
+  // ⛔ THE EARLY RETURN IS GONE (B-FILTER-DIAG-STANDARDIZE, Kyle 2026-08-07).
+  //
+  // WHAT WAS HERE: an `enforce && modeTail` early-return that rendered a SEPARATE, much smaller
+  // Paper/Live view and never reached the shared tables below. B8.4c introduced it deliberately and
+  // correctly — the active path was DORMANT then, so falling through would have shown VTS-runner
+  // numbers under a Paper heading. Its own comment said the conditionals below "get swept when Part 2
+  // wires the funnel counters." Part 2 (the B8.5 switch-on) happened 2026-07-14. The sweep did not.
+  //
+  // WHY IT HAD TO GO: Kyle's requirement is that all six tabs show THE SAME tracked metrics, organised
+  // the same way — "the data may be feeding in from different tables and different scanners, and that's
+  // okay… I still wanna see the same tracked metrics." An early return that skips the shared structure
+  // cannot satisfy that, so keeping it was not an option (rule 24 outcome 3: legacy that no longer fits).
+  //
+  // WHAT REPLACES IT: both dispositions now fall through to ONE render path. Per-lane differences are
+  // expressed as DATA (the `FilterDiagnosticsLane` contract) and as the two genuinely-different
+  // sections, NOT as a different page:
+  //   • Scan-stage tables are IDENTICAL on all six tabs — the crypto scanner and the xStock scanner are
+  //     each ONE scanner shared across VTS/paper/live (Kyle), so these need no per-mode sourcing.
+  //   • ⚠️ NET-EV IS DELIBERATELY IN A DIFFERENT SECTION PER PATH, and that is not a standardisation
+  //     violation: the VTS has NO SQE and rejects on net-EV inside its own evaluation loop
+  //     (`vts-runner.ts:4917`), so VTS keeps it under Post-Signal Rejections; the active path rejects
+  //     INSIDE the SQE, so Paper/Live show it in the SQE section. Same metric, same label, real
+  //     difference in where the pipeline actually applies it.
+  //   • SQE + RTB sections exist ONLY on Paper/Live — the one structural difference Kyle specified.
+  const isEnforce = gateDisposition === 'enforce' && !!modeTail;
 
   if (isLoading) {
     return (
@@ -717,7 +718,22 @@ export function FilterDiagnosticsPanel({ data, isLoading, gateDisposition = 'tag
   };
 
   return (
-    <div className={`space-y-4 ${SHARED_DIAG_WIDTH}`}>
+    <div className={`space-y-4 ${SHARED_DIAG_WIDTH}`} data-testid={isEnforce ? 'fd-enforce-panel' : 'fd-tag-panel'}>
+      {/* B-FILTER-DIAG-STANDARDIZE: the population header (Langston R2 — LOAD-BEARING, not cosmetic).
+          `getLastScanDiagnostics()` takes NO mode argument: it holds the last scan of WHATEVER MODE RAN.
+          With paper active, the LIVE tab's scan-stage tables therefore show PAPER's scan. Saying so is what
+          keeps six identical-looking tabs from being a lookalike — the same labels will sit over populations
+          orders of magnitude apart. The SCANNER ITSELF is shared across VTS/paper/live (Kyle), so identical
+          scan numbers across tabs are CORRECT, not a bug. */}
+      {isEnforce && (
+        <div className="rounded-md border border-blue-400/40 bg-blue-500/10 px-3 py-2 text-xs text-muted-foreground" data-testid="fd-population-header">
+          <strong>{modeTail === 'paper' ? 'Paper' : 'Live'} mode.</strong> The scan-stage tables below come from the
+          {assetClass === 'xstock_spot' ? ' xStock' : ' crypto'} scanner, which is <strong>one shared scanner across VTS, paper and live</strong> —
+          so those figures are identical on every tab by design.{' '}
+          {lastScan?.mode ? <>Last scan was run by <strong>{String(lastScan.mode)}</strong> mode.</> : null}{' '}
+          Downstream sections below are this mode's own active pipeline.
+        </div>
+      )}
       {/* P19-B8.4c REV-3: the crypto VTS lean scanner card at the top (crypto's scanner card lives in this
           panel; xStock's is xstocks-tab's ScannerCycleHeader above the panel — so this is crypto-only here).
           Scan counts + the Per-Cycle Target (300) + live Total Universe (krakenUniverseSize ~1,500) all come
@@ -2090,6 +2106,16 @@ export function FilterDiagnosticsPanel({ data, isLoading, gateDisposition = 'tag
           </CardContent>
         </Card>
       )}
+
+      {/* ══ THE ONE STRUCTURAL DIFFERENCE (Kyle 2026-08-07) ══
+          "The only difference is that paper and live mode will have added sections for the SQE and the
+          RTB." The VTS has NO SQE, so these render on Paper/Live ONLY — not gated by a flag on a shared
+          section, but genuinely absent from the VTS lane because the VTS pipeline has no such stage.
+          ★ AND THIS IS WHERE NET-EV LIVES ON THIS PATH: the active path rejects on net expectancy INSIDE
+          the SQE, so its Net-EV row belongs here — while the VTS tab keeps its Net-EV under Post-Signal
+          Rejections above, because that is where the VTS actually applies it (`vts-runner.ts:4917`).
+          Same metric, same label, different section — the pipeline's real shape, not a display choice. */}
+      {isEnforce && modeTail && <ActiveSqeAndRtbSections modeTail={modeTail} assetClass={assetClass} />}
 
     </div>
   );
