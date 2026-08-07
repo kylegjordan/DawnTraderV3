@@ -66,7 +66,7 @@ STATE_FILE = "/home/langston/.discord-langston-bridge-state.json"
 LOG_FILE = "/var/log/discord-langston-bridge.log"
 VOICE_ARCHIVE_ROOT = "/var/log/cc-bridge-voice-archive/discord-langston"
 CLAUDE_TIMEOUT = 900
-CLAUDE_MODEL = "claude-fable-5[1m]"
+CLAUDE_MODEL = "claude-opus-5[1m]"
 # Circuit breaker (Langston review 1b): if this many CC-bot-authored turns occur with no
 # intervening Kyle message, stop auto-replying + post one alert. Hard floor under [SILENT].
 # EFFECTIVELY REMOVED (Kyle directive 2026-06-20): a normal overnight CC↔Langston review run

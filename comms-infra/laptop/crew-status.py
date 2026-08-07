@@ -13,6 +13,14 @@ Usage:
   python crew-status.py --once            # derive + summarise + render + archive, one cycle
 """
 import argparse, glob, gzip, hashlib, html, json, os, re, subprocess, sys, time
+
+# ★ NO CONSOLE WINDOWS. The task runs under pythonw.exe, which has no console of its own,
+# and a console-less parent gives every child process a BRAND NEW console window. That
+# turned one window per minute into five-to-ten in a couple of seconds, each stealing
+# keyboard focus while Kyle was typing. CREATE_NO_WINDOW suppresses it at the CreateProcess
+# level. It must be passed on EVERY subprocess call in this file -- one bare call is one
+# window per cycle, and this is the one defect in this batch that the user feels directly.
+NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
 from datetime import datetime, timezone, timedelta
 
 # Windows pipes default to cp1252, which cannot encode the em-dashes and stars this project's
@@ -115,7 +123,7 @@ def run(args, timeout=60):
     Filtering now happens in Python, where it is portable and testable."""
     try:
         r = subprocess.run(args, capture_output=True, text=True, timeout=timeout,
-                           encoding="utf-8", errors="replace")
+                           encoding="utf-8", errors="replace", creationflags=NO_WINDOW)
         if r.returncode != 0:
             return None, f"exit {r.returncode}: {(r.stderr or '')[:200]}"
         return r.stdout, None
@@ -126,7 +134,8 @@ def run(args, timeout=60):
 def sh(cmd, timeout=60):
     try:
         r = subprocess.run(cmd, shell=True, capture_output=True, text=True,
-                           timeout=timeout, encoding="utf-8", errors="replace")
+                           timeout=timeout, encoding="utf-8", errors="replace",
+                           creationflags=NO_WINDOW)
         if r.returncode != 0:
             return None, f"exit {r.returncode}: {(r.stderr or '')[:200]}"
         return r.stdout, None
@@ -255,7 +264,7 @@ def src_board():
                             "-d", json.dumps({"query": BOARD_Q}),
                             "https://api.github.com/graphql"],
                            capture_output=True, text=True, timeout=60,
-                           encoding="utf-8", errors="replace")
+                           encoding="utf-8", errors="replace", creationflags=NO_WINDOW)
         data = json.loads(r.stdout)
     except Exception as e:
         return None, f"{type(e).__name__}: {e}"
@@ -571,7 +580,8 @@ def summarise(state):
         os.makedirs(SUMMARISER_CWD, exist_ok=True)
         r = subprocess.run(["cmd", "/c", cli, "-p", "--model", "haiku"],
                            input=prompt, capture_output=True, text=True, timeout=240,
-                           encoding="utf-8", errors="replace", cwd=SUMMARISER_CWD)
+                           encoding="utf-8", errors="replace", cwd=SUMMARISER_CWD,
+                           creationflags=NO_WINDOW)
         out = r.stdout if r.returncode == 0 else None
         err = None if r.returncode == 0 else f"exit {r.returncode}: {(r.stderr or '')[:200]}"
     except Exception as e:
@@ -861,7 +871,8 @@ if __name__ == "__main__":
                 r = subprocess.run(["ssh", "-o", "ConnectTimeout=25", HELSINKI,
                                     "python3 /opt/discord-bridges/crew-status-post.py"],
                                    stdin=bf, capture_output=True, text=True, timeout=90,
-                                   encoding="utf-8", errors="replace")
+                                   encoding="utf-8", errors="replace",
+                                   creationflags=NO_WINDOW)
             out, err = (r.stdout, None) if r.returncode == 0 else (None, f"exit {r.returncode}: {(r.stderr or '')[:160]}")
         except Exception as e:
             err = f"{type(e).__name__}: {e}"
@@ -895,7 +906,8 @@ if __name__ == "__main__":
                     subprocess.run(["ssh", "-o", "ConnectTimeout=25", HELSINKI,
                                     "python3 /opt/discord-bridges/crew-status-post.py --new"],
                                    stdin=pbf, capture_output=True, text=True, timeout=90,
-                                   encoding="utf-8", errors="replace")
+                                   encoding="utf-8", errors="replace",
+                                   creationflags=NO_WINDOW)
                 os.unlink(ptmp)
                 print(f"needs-you ping: {len(fresh)} new item(s)")
             json.dump(sorted(keys), open(seen_p, "w"))
