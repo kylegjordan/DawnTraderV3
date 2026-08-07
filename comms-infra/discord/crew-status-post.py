@@ -43,6 +43,10 @@ def req(method, url, token, payload=None):
 
 
 def main():
+    # --new posts a FRESH message (the needs-you ping) instead of editing the
+    # standing status message. Pinning is not used: neither bot holds Manage Messages, and a
+    # tool that depends on Kyle remembering a manual step is a tool he will not use.
+    fresh_post = "--new" in sys.argv[1:]
     body = sys.stdin.read().strip()
     if not body:
         print("crew-status-post: empty body, refusing", file=sys.stderr)
@@ -64,7 +68,7 @@ def main():
 
     os.makedirs(os.path.dirname(STATE), exist_ok=True)
     mid = None
-    if os.path.exists(STATE):
+    if os.path.exists(STATE) and not fresh_post:
         try:
             mid = json.load(open(STATE)).get("message_id")
         except Exception:
@@ -85,15 +89,19 @@ def main():
 
     created = req("POST", f"{API}/channels/{chan}/messages", token, payload)
     mid = created.get("id")
+    if fresh_post:
+        print(f"posted needs-you ping {mid}")
+        return 0
     if not mid:
         print("crew-status-post: create returned no id", file=sys.stderr)
         return 1
     json.dump({"message_id": mid}, open(STATE, "w"))
-    try:
-        req("PUT", f"{API}/channels/{chan}/messages/{mid}/pin", token)   # bot-only capability
-        print(f"created {mid} (pinned)")
-    except Exception as e:
-        print(f"created {mid} (pin failed: {type(e).__name__} — message still live)")
+    # Pinning is DELIBERATELY not attempted. Measured 2026-08-07: neither the CC bot nor the
+    # Langston bot holds MANAGE_MESSAGES, and pinning is the only capability here that needs it.
+    # (The first implementation also used the wrong endpoint — v10 is /channels/{id}/pins/{msg},
+    # not /messages/{id}/pin — so the original 404 hid a real 403 behind a bug of mine.)
+    # The message is edited in place, so its URL is permanent and can simply be bookmarked.
+    print(f"created {mid} (not pinned by design — permanent URL, see the needs-you ping)")
     return 0
 
 
