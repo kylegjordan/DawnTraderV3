@@ -2658,3 +2658,19 @@ collision from silent to loud for one session; it does nothing for the other thr
 
 **OWNER: CC-B. HOME: this issue; folds into the #682 (`B-FILTER-DIAG-XSTOCK`) pre-audit for the decision.** ↔ #682, #393 (sibling off-hours cry-wolf, same feed family), #635 (one symbol dark while the aggregate reads healthy — the same alone-vs-book blind spot), #679 (why the alert stays ACKED not resolved: resolving frees the dedupe key and re-fires it as noise).
 
+**#684 UPDATE 2026-08-07 — ⛔ MY "~60% AT ANY GIVEN MOMENT" IS WITHDRAWN. Langston re-derived it and it does NOT replicate. The rule-24 (2) disposition STANDS; the headline number does not.**
+
+**HIS REPLICATION, same object, same 480-symbol population, 13:47Z:** **min 2,192 · median 5,019 · p95 14,039 · over-limit 23/480 = 4.8%** — against my **17,331 / 59.6%**.
+
+**★ THE RECONCILIATION IS THE CLOCK, NOT THE INSTRUMENT — and the error is mine.** The alert fired **13:30:36Z — 36 seconds after the US open.** I measured at ~13:42 over a **"last 2 hours"** window, so my population was **almost entirely pre-market plus the open transition**. Seventeen minutes later the book is awake and the median sits **exactly on the 5 s flush floor**. **BOTH SNAPSHOTS ARE TRUE. NEITHER IS "at any given moment."**
+
+⚠️ **A WINDOW THAT STRADDLES THE OPEN IS TWO POPULATIONS** (Langston's deploy-boundary ruling, generalised). I stated object, population and a positive control — and the positive control was sound — **but I never asked whether the window was homogeneous.** ⇒ **rule 29(a)'s "why that denominator is the right one" is not answered by "it is the whole population"; a population spanning a regime boundary is the wrong denominator even when it is complete.** **Sixth instance of this class today, and the first where the flaw was the WINDOW rather than the object.**
+
+**WHAT SURVIVES, unchanged:** the mechanism (write-time vs exchange-time, floored at the 5 s flush — Langston verified both citations at the ref); FCEL at 19,293 ms being **unremarkable for its moment**; and the **rule-24 (2)** disposition — *"the guard blocking FCEL at 19.3 s stale, 36 s after the open, on a thin name, looks like exactly correct behaviour. No defect anywhere in this."* **RATIFIED.**
+
+**WHAT CHANGES:** the blocked fraction is **strongly time-of-day dependent — 59.6% at the open → 4.8% in RTH proper** — so **the Kyle decision MUST carry a time-of-day profile (off-hours / open transition / RTH), or option (a) gets calibrated to whichever hour someone happened to measure.** ★ **And option (c) gets STRONGER from this: write-time vs exchange-time diverges MOST at exactly the boundary where this fired.**
+
+**THE #682 THREAD WEAKENS BUT SURVIVES:** at 4.8% RTH blocking, the fill-block contribution to active-row scarcity is far smaller than 60% implied. Keep it in #682's pre-audit, **time-matched**.
+
+**★ RIDER 1 — VERIFIED, and it is a real exposure I created:** `dedupe_key` is **`'xstock-stale-fill-block'` — GLOBAL, not per-symbol** (`active-dispatch.ts:96`). ⇒ **my ack silences stale-fill alerting for the ENTIRE BOOK, not FCEL.** That is tolerable **only** because real-halt detection is deferred to the equity-feed silent-stall watchdog — **which I verified is genuinely live rather than assumed: `equity-spot-archiver.ts:293` `setInterval`, `:336` `addAlert`, its own independent `dedupe_key: 'xstock-equity-feed-stall'`, and a positive control that it is not theoretical — 20 historical fires in the staging alert log.** **FOLLOW-ON: make the stale-fill dedupe key per-symbol so one ack cannot blind the book. OWNER: CC-B. DUE: 2026-08-12** (with #682, same lane).
+
