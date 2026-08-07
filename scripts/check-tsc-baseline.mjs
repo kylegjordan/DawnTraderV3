@@ -300,7 +300,17 @@ function compareBaseline({ regenAcknowledged }) {
   console.log(`[baseline] Current: ${total} errors. Baseline: ${baseline.total_errors} errors.`);
   const clip = (s) => (s.length > 90 ? s.slice(0, 87) + '...' : s);
   if (drops.length) {
-    console.log(`[baseline] ${drops.length} (file, code, message) counts BELOW baseline (errors fixed — good):`);
+    // ★ #680 (CC-C's hole, Langston-confirmed at the ref): a drop is NOT automatically good news.
+    // The >50% guard above catches a total collapse; it cannot see 392→390, which is exactly what a
+    // PARTIAL parse failure or a silently-excluded directory produces — and which prints here as
+    // "errors fixed — good" and exits 0. That is an absent-as-valid reading of the friendliest kind.
+    // The gate does not fail on a drop by itself (the baseline is REQUIRED to net-shrink as fixes
+    // land — the anti-graveyard discipline), so failing every drop would fight the file's purpose.
+    // What it does is stop calling an unexamined drop good, and give the push gate a machine-readable
+    // signal to require acknowledgement for. `--regen-acknowledged` is the existing, single hatch.
+    console.log(`[baseline] ${drops.length} (file, code, message) counts BELOW baseline — VERIFY, do not assume fixed:`);
+    console.log('[baseline]   a drop can mean errors were fixed OR that tsc did not see the code at all');
+    console.log('[baseline]   (partial parse failure, excluded directory, moved file). Check before syncing.');
     for (const d of drops) console.log(`   - ${d.file} ${d.code}: ${d.baseline} -> ${d.current}  [${clip(d.message)}]`);
   }
   if (regressions.length) {
@@ -336,6 +346,33 @@ function syncBaseline() {
   console.log('[baseline] Running tsc and syncing counts into baseline...');
   const output = runTsc();
   const { counts, total } = parseErrors(output);
+
+  // ★ #680 Finding 2 (Langston, 2026-08-07): THE SAME SILENT-CRASH GUARD MUST BIND SYNC.
+  //
+  // Compare mode has refused a >50% drop since chunk 5. Sync did NOT — it absorbed ANY drop
+  // silently (`!current → removed++`, entry dropped). That asymmetry was survivable only while
+  // compare tolerated small drops too. It stops being survivable the moment the push gate makes
+  // ANY unexplained drop fail, because that change hands everyone a reason to reach for `--sync`
+  // as the routine way past a red gate.
+  //
+  // ⛔ THE FAILURE THAT CREATES: a parse-failure run reports 13 errors instead of 392; the gate
+  // refuses the push; the reflex is `--sync`; sync writes 13 as the new truth — and from then on
+  // EVERYTHING IS GREEN, permanently, against a baseline built from a crash. The bypass would be
+  // created BY the strictness change that was supposed to close the hole. Fix both or neither.
+  //
+  // Same threshold and same escape hatch as compare, deliberately: one invariant, two call sites
+  // (#449 — a second comparator with its own number is how the two drift apart).
+  const syncDerivedTotal = baseline.files.reduce((sum, f) => sum + sumFileErrors(f.errors), 0);
+  if (!argv.includes('--regen-acknowledged') && total < syncDerivedTotal * 0.5) {
+    console.error(
+      `[baseline] SYNC REFUSED — tsc reported ${total} errors against a baseline of ${syncDerivedTotal}. ` +
+        `A drop >50% in one run almost certainly means tsc did not actually run (toolchain breakage, ` +
+        `stack trace instead of errors, missing dependencies) — and syncing it would BAKE THAT CRASH IN ` +
+        `as the new baseline, turning every later run green against a number that was never real. ` +
+        `If you genuinely cleared >50% of errors in one batch, re-run with --regen-acknowledged.`,
+    );
+    exit(1);
+  }
 
   let cleared = 0;
   let removed = 0;

@@ -2562,7 +2562,7 @@ collision from silent to loud for one session; it does nothing for the other thr
 
 **The shape, since it is the same one twice in one day:** I read a log line that was *adjacent* to the fixture I was reasoning about and bound it to the wrong object. Rule 29(c) is the guard — **a mechanism claim cites the line that implements it, or it is labelled a hypothesis** — and my filing asserted a NetEV minimum that no line implements. Langston caught it by demanding the citation rather than the conclusion. ↔ #675 (same failure family, same day).
 
-### #678 OPEN 2026-08-07 (CC-B; Langston-ruled option (ii)) — **`B-FILTER-DIAG-XSTOCK`: instrument the xStock active path's per-strategy decline taxonomy**
+### #682 OPEN 2026-08-07 (CC-B; Langston-ruled option (ii)) — **`B-FILTER-DIAG-XSTOCK`: instrument the xStock active path's per-strategy decline taxonomy** *(RENUMBERED from #678 2026-08-07 — collided with CC-A's TEC `/tmp` trailing-state item at `:2273`, filed minutes earlier. Newer entry renumbers, per the standing rule. ★ This is the FOURTH mint-time collision in one day and the SECOND since #674 was filed about exactly this — which is the argument for #674's durable fix: a max-scan is valid only at the instant it runs, and with three sessions filing concurrently the slot is routinely taken between the scan and the commit. Until #674 lands, a bare number is an AMBIGUOUS OBJECT — cite this one as `#682 (B-FILTER-DIAG-XSTOCK)` with the batch name attached.)*
 
 **THE §13 NAMED HOME #675 was waiting on. OWNER: CC-B. DUE: 2026-08-12.** Langston's hold on B-FILTER-DIAG-STANDARDIZE item (3) lifts on this filing; board Review flips to Approved.
 
