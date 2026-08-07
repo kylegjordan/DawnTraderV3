@@ -32,10 +32,23 @@ Removing it un-hides four `gateDisposition === 'tag'` blocks that have been **un
 ## 4. Blast radius
 Client panel + the read-only endpoints already fetched + one shared classifier module + tests. **Zero engine/trade-path surface. No migration.** ⚠️ **REGRESSION RISK, the one that matters:** the same component now serves all six tabs, so **the two VTS tabs must render byte-identically** — an explicit verification objective, checked by DOM enumeration against the §1 spec table list, not by assertion.
 
-## 5. OPEN legs before Step-3
+## 5. Legs before Step-3 — ALL SETTLED
 1. ~~Per-cycle granularity on the ACTIVE path~~ — **MEASURED AND SETTLED 2026-08-07.** The two stages differ and the tabs must say so:
    - **SCAN stage: per-scan granularity EXISTS and is already mode-correct.** `fx5-scanner.ts:336 getLastScanDiagnostics()` returns the last scan, and the scanner is mode-multiplexed ⇒ **Last Scan Filter Breakdown and Filter Metric Ranges render for enforce with no new work** (Group A confirmed a second way).
    - ⛔ **FUNNEL stage: NO per-cycle snapshot exists.** `active-funnel-tracker.ts` is **cumulative-since-`_startedAt` ONLY** — a whole-tree grep for `lastCycle|perCycle|cycleSnapshot|resetCycle` returns **nothing** (asserted absence carrying its search, rule 22). ⇒ **`:1137` (Last-Cycle Funnel) takes the HONEST NOT-INSTRUMENTED state on Paper/Live**, alongside tables 7/8, and the per-cycle emission joins **#662**'s scope rather than being faked from a cumulative delta.
    ★ **Why not synthesise it from successive polls:** two reads of a cumulative counter give a POLL-WINDOW delta, not a SCAN CYCLE — they coincide only if the poll and the scan are phase-locked, which nothing guarantees. Labelling a poll delta "Last Cycle" would be a lookalike, the same substitution class as the lane inference already rejected in scope r4.
-2. Confirm the `admitted`-by-source split does not disturb the VTS tabs' own row semantics when the shared component renders both lanes.
-3. Enumerate the exact prop/data shape each un-hidden block needs, so the enforce branch feeds it rather than the block reaching for VTS-only fields.
+2-3. ~~Data-shape enumeration~~ — **DONE. THE COMPLETE PAYLOAD MAP, measured against the live endpoint** (`/api/vts/filter-diagnostics`, 11 top-level keys). **Only TWO keys carry VTS-runner data**; everything else is shared or mode-invariant, which makes the enforce boundary small and explicit:
+
+| Payload key | Feeds | Source | Enforce treatment |
+|---|---|---|---|
+| `lastScan` | Last Scan Filter Breakdown, Metric Ranges | shared scanner, **mode-multiplexed** | **render as-is** (label the scan's own `mode`, R2) |
+| `rolling24h` | 24-Hour Rolling Aggregates | shared scanner | **render as-is** + straddle annotation (R2) |
+| `guardDrops` | Reward-vs-Risk / Reachability Gate | guard-eval tracker, **mode-invariant** | **render as-is** |
+| `signalRejections` | **Post-Signal Rejections → the Net-EV row** | vts-runner (`{"total":4,"byReason":{"Net_EV_Negative":4}}`) | ★ **active equivalent = the archive: NetEV 8,529/24h.** Same display label **"Net EV Below Floor"** verbatim. **This is Kyle's answer.** |
+| `tradesOpened24h` | Trades Opened rows | DB-backed, already `{total, quant, pattern}` | active equivalent from the active-path opens |
+| `vtsEvaluation.byStrategy` | By Strategy table | vts-runner | active equivalent from `signal_eval_archive` (class+mode filtered) |
+| `vtsEvaluation.nullReasons` / `nullReasonDetail` / `patternNullReasonDetail` | Setup Nulls A–F, Pre-Eval Skips | vts-runner taxonomy | ⛔ **honest not-instrumented → #662** |
+| `lastCycleVtsEval` | Last-Cycle Funnel | vts-runner per-cycle | ⛔ **honest not-instrumented → #662** (leg 1) |
+
+⇒ **The enforce branch supplies an ACTIVE-LANE object of the same shape rather than letting a block reach for a VTS-only field** — so the shared blocks stay source-agnostic and the VTS tabs are untouched by construction (the regression risk in §4 is contained by this, not merely watched).
+**Note on the VTS label vocabulary:** VTS keys the reason `Net_EV_Negative` and DISPLAYS "Net EV Below Floor". The active row uses the **display label verbatim**; only the underlying count differs. Kyle's standardisation is satisfied at the label, not just the layout.
