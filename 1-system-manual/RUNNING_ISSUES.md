@@ -2437,3 +2437,19 @@ collision from silent to loud for one session; it does nothing for the other thr
 
 **HOME (§9.4): this issue + alert `e8e55e1f`. OWNER: CC-B.** Blocks the B-FILTER-DIAG-STANDARDIZE close (Langston's Review is HOLDING on it, ratified). ↔ #662, #648.
 
+**#675 UPDATE 2026-08-07 12:15Z — DISPOSITION (a) CONFIRMED ON DIRECT EVIDENCE; (b) STRONGLY DISFAVOURED. ⚠️ But my pre-registered rule was UNDER-SPECIFIED, and I am recording that rather than quietly reinterpreting it.**
+
+**THE MEASUREMENT.** Object: `[11.0B][SQE_EVAL]` lines in `/var/log/dawntrader/out.log`. Population: the whole file, window **08:10:27 → 12:11:40Z**. Positive control: **1,858 SQE_EVAL lines total**, and the term `xstock` appears **22,485** times in the same file — so this instrument can see both the event class and the asset class; a zero would mean absent, not unmatched.
+
+- **crypto_spot: 1,855 active-path SQE evaluations. xstock_spot: 3.**
+- **The 3 xStock evaluations: 08:47:19 (RKLB/USD), 08:57:49 (WDC/USD), 11:48:13 (DEO/USD) — ALL THREE PRE-DATE the deploy at 11:52:52Z.** All three `PASS`, all `sma_trend_ride`.
+- Control that the path is live post-deploy: crypto SQE_EVAL lines continue through **12:12:18**.
+
+⇒ **SINCE THE COUNTERS STARTED AT THE 11:52:52 RESTART, THE ACTIVE PATH HAS EVALUATED xSTOCK ZERO TIMES.** No evaluation ⇒ no strategy declined ⇒ nothing to record. **The empty table is not the recorder failing to write; it is there being nothing to write.** That is a stronger claim than "xStock is rare" — it is the specific absence, measured.
+
+**(b) — a path difference where xStock declines never reach the 18 instrumented sites — is strongly disfavoured**, because xStock demonstrably DOES reach the active path (3 evaluations in 4h) and is fully alive upstream (regime computed, 410 pairs, tickers flushing at 12:11:50).
+
+⚠️ **WHAT I WILL NOT DO: claim the pre-registered rule was satisfied.** It said *non-empty ⇒ (a), close; still empty ⇒ (b) live*. **Reality produced a third outcome it did not contemplate — still empty, WITH direct evidence that nothing was evaluable.** The rule assumed evaluations were occurring and only their RECORDING was in question. **Rewriting a disposition rule after seeing the data is exactly what committing to it in advance was meant to prevent**, so: the rule is marked under-specified, (a) is recorded as confirmed-by-mechanism, and **the confirming observation — an actually non-empty xStock row — has still NOT been made.**
+
+**ALERT `e8e55e1f` STAYS ARMED** (18:00Z). It closes on a non-empty row. If 18:00Z passes with xStock still having had zero active-path evaluations, the finding is no longer about the recorder at all — it becomes *why does the active path evaluate xStock ~600× less often than crypto*, which is a **different question with a different owner** (#648 territory, cadence not instrumentation) and gets filed as such. **STATUS: OPEN, mechanism explained, confirming observation outstanding.**
+
