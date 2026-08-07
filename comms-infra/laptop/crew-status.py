@@ -23,6 +23,24 @@ try:
 except Exception:
     pass
 
+# ★ THE SCRIPT WRITES ITS OWN LOG. Kyle, 2026-08-07: a console window flashed up every single
+# minute and sat there — because the task launched through `cmd.exe` purely so the SHELL could
+# redirect output to a file. Removing that need lets the task run `pythonw.exe`, which has no
+# console at all. Under pythonw there is no stdout to inherit, so print() must not be the only
+# record: everything printed is also appended here.
+LOGFILE = os.path.expanduser("~/.claude/crew-status-task.log")
+_real_print = print
+
+
+def print(*a, **k):                                   # noqa: A001 — deliberate shadow
+    _real_print(*a, **k)
+    try:
+        with open(LOGFILE, "a", encoding="utf-8") as _lf:
+            _lf.write(f"{datetime.now(timezone.utc):%Y-%m-%dT%H:%M:%SZ} "
+                      + " ".join(str(x) for x in a) + "\n")
+    except Exception:
+        pass
+
 HELSINKI = "root@204.168.141.77"
 STAGING = "root@188.245.193.8"
 REPO = r"C:\DawnTraderV3-infra"
@@ -87,6 +105,24 @@ def ago(ts_str):
 
 # ── sources: every reader returns (value, error). A source that FAILS must render FAILED, ──
 # ── never empty — an absence and an unread source must never look alike (#453).            ──
+def run(args, timeout=60):
+    """No shell. ★ THE SCHEDULED-CONTEXT BUG THIS EXISTS TO KILL: the first build piped its
+    sources through `grep`, `head`, `awk` and shell quoting. Those live in Git Bash — they do
+    NOT exist in the cmd.exe a Windows Scheduled Task runs under, so `discord` and `alerts`
+    failed every cycle in production while passing every interactive test I ran. Measured:
+    grep/head/tail/awk all "not recognized" in that context. Same root cause as three earlier
+    defects in this session — never hand structured text, or a Unix pipeline, to a shell.
+    Filtering now happens in Python, where it is portable and testable."""
+    try:
+        r = subprocess.run(args, capture_output=True, text=True, timeout=timeout,
+                           encoding="utf-8", errors="replace")
+        if r.returncode != 0:
+            return None, f"exit {r.returncode}: {(r.stderr or '')[:200]}"
+        return r.stdout, None
+    except Exception as e:
+        return None, f"{type(e).__name__}: {e}"
+
+
 def sh(cmd, timeout=60):
     try:
         r = subprocess.run(cmd, shell=True, capture_output=True, text=True,
@@ -100,9 +136,9 @@ def sh(cmd, timeout=60):
 
 def src_discord():
     cut = (utc_now() - timedelta(hours=LOOKBACK_H)).strftime("%Y-%m-%dT%H")
-    out, err = sh(f'ssh -o ConnectTimeout=25 {HELSINKI} '
-                  f'"awk -v c={cut} \'$0 ~ /\\"ts\\": \\"/ {{ print }}\' '
-                  f'/var/log/cc-discord-inbox.jsonl | tail -n 4000"', timeout=90)
+    # `tail` runs on the REMOTE box (always POSIX); nothing here relies on a local Unix tool.
+    out, err = run(["ssh", "-o", "ConnectTimeout=25", HELSINKI,
+                    "tail -n 4000 /var/log/cc-discord-inbox.jsonl"], timeout=90)
     if err:
         return None, err
     rows = []
@@ -183,8 +219,8 @@ def src_transcripts():
 
 
 def src_git():
-    out, err = sh(f'git -C "{REPO}" log origin/migration/aws-supabase '
-                  f'--since="{LOOKBACK_H} hours ago" --format="%h|%an|%cI|%s"', timeout=60)
+    out, err = run(["git", "-C", REPO, "log", "origin/migration/aws-supabase",
+                    f"--since={LOOKBACK_H} hours ago", "--format=%h|%an|%cI|%s"], timeout=60)
     return ((out or "").splitlines(), None) if not err else (None, err)
 
 
@@ -242,12 +278,14 @@ def src_board():
 
 
 def src_alerts():
-    out, err = sh(f'ssh -o ConnectTimeout=25 {STAGING} '
-                  f'"su - deploy -c \'cd /home/deploy/dawntrader && npm run system-alerts -- list 2>/dev/null\'" '
-                  f'| grep -E "^(active|resolved)" | head -40', timeout=90)
+    # The remote half stays a POSIX command (it runs on staging); the FILTERING moved into
+    # Python, because `grep`/`head` do not exist in the scheduled task's shell.
+    out, err = run(["ssh", "-o", "ConnectTimeout=25", STAGING,
+                    "su - deploy -c 'cd /home/deploy/dawntrader && "
+                    "npm run system-alerts -- list 2>/dev/null'"], timeout=120)
     if err:
         return None, err
-    return [l for l in (out or "").splitlines() if l.strip().startswith("active")], None
+    return [l for l in (out or "").splitlines() if l.strip().startswith("active")][:40], None
 
 
 # ── derivation: EXACT facts only. None of this passes through a model. ────────────────────
@@ -815,8 +853,18 @@ if __name__ == "__main__":
                                          encoding="utf-8") as tf:
             tf.write(body)
             tmp = tf.name
-        out, err = sh(f'ssh -o ConnectTimeout=25 {HELSINKI} '
-                      f'"python3 /opt/discord-bridges/crew-status-post.py" < "{tmp}"', timeout=90)
+        # `< file` is SHELL redirection — it would need cmd.exe, which the scheduled context
+        # handles differently. Feed the body on stdin instead: no shell anywhere in the path.
+        out, err = None, None
+        try:
+            with open(tmp, encoding="utf-8") as bf:
+                r = subprocess.run(["ssh", "-o", "ConnectTimeout=25", HELSINKI,
+                                    "python3 /opt/discord-bridges/crew-status-post.py"],
+                                   stdin=bf, capture_output=True, text=True, timeout=90,
+                                   encoding="utf-8", errors="replace")
+            out, err = (r.stdout, None) if r.returncode == 0 else (None, f"exit {r.returncode}: {(r.stderr or '')[:160]}")
+        except Exception as e:
+            err = f"{type(e).__name__}: {e}"
         try:
             os.unlink(tmp)
         except Exception:
@@ -843,8 +891,11 @@ if __name__ == "__main__":
                                                  encoding="utf-8") as pf:
                     pf.write("\n".join(lines))
                     ptmp = pf.name
-                sh(f'ssh -o ConnectTimeout=25 {HELSINKI} '
-                   f'"python3 /opt/discord-bridges/crew-status-post.py --new" < "{ptmp}"', timeout=90)
+                with open(ptmp, encoding="utf-8") as pbf:          # stdin, not shell redirection
+                    subprocess.run(["ssh", "-o", "ConnectTimeout=25", HELSINKI,
+                                    "python3 /opt/discord-bridges/crew-status-post.py --new"],
+                                   stdin=pbf, capture_output=True, text=True, timeout=90,
+                                   encoding="utf-8", errors="replace")
                 os.unlink(ptmp)
                 print(f"needs-you ping: {len(fresh)} new item(s)")
             json.dump(sorted(keys), open(seen_p, "w"))
