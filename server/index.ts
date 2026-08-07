@@ -1469,6 +1469,18 @@ app.use((req, res, next) => {
       console.error('[B-NEW-49] ⚠️ Cron observability startup failed:', error);
     }
 
+    // B-FILTER-DIAG-PAPER (OBJ-4): the per-strategy × per-stage attrition cache. Read-only
+    // telemetry; 6h window recomputed every 5 min (494ms measured — see the service header for
+    // the 78×-cheaper-than-24h evidence). Its own failure can never affect trading: a failed
+    // refresh serves the previous snapshot and the tab labels the staleness.
+    try {
+      const { startStageAttritionRefresher } = await import('./services/stage-attrition-cache.js');
+      startStageAttritionRefresher();
+      console.log('[B-FILTER-DIAG-PAPER] ✅ Stage-attrition cache refresher started (6h window, 5-min interval)');
+    } catch (error) {
+      console.error('[B-FILTER-DIAG-PAPER] ⚠️ Stage-attrition refresher startup failed (tabs will show not-ready):', error);
+    }
+
     // Phase 41F-C: Start Unified Engine Health Monitor (5s heartbeat, auto-recovery)
     try {
       const { healthMonitor } = await import('./services/health-monitor.js');

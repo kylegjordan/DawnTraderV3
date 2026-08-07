@@ -13600,6 +13600,39 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // B-FILTER-DIAG-PAPER (OBJ-4): per-strategy × per-stage attrition, served from the cached
+  // snapshot — NEVER a per-request scan (the raw 24h aggregate measured 38.5s; the cache's 6h
+  // window measures 494ms, see stage-attrition-cache.ts header). Read-only; no mode param,
+  // because `source` — not `mode` — is the lane discriminator (both pipelines stamp mode=paper
+  // since 2026-07-14), and the client splits the lanes from the source column.
+  apiRouter.get('/active-engine/diagnostics/stage-attrition', authenticateToken, async (_req: AuthenticatedRequest, res) => {
+    try {
+      const { getStageAttrition, ACTIVE_PATH_SOURCES, VTS_PATH_SOURCES, SHARED_SCAN_SOURCES, STAGE_ATTRITION_SCHEMA, STAGE_ATTRITION_WINDOW_HOURS } =
+        await import('./services/stage-attrition-cache.js');
+      const snap = getStageAttrition();
+      if (!snap) {
+        // Honest-absent: the first compute has not succeeded yet. NOT an empty tally, which
+        // would render as "measured, found nothing".
+        return res.json({
+          schema: STAGE_ATTRITION_SCHEMA,
+          windowHours: STAGE_ATTRITION_WINDOW_HOURS,
+          computedAt: null,
+          ready: false,
+          lanes: { activePath: ACTIVE_PATH_SOURCES, vtsPath: VTS_PATH_SOURCES, sharedScan: SHARED_SCAN_SOURCES },
+          rows: [],
+        });
+      }
+      res.json({
+        ...snap,
+        ready: true,
+        lanes: { activePath: ACTIVE_PATH_SOURCES, vtsPath: VTS_PATH_SOURCES, sharedScan: SHARED_SCAN_SOURCES },
+      });
+    } catch (error) {
+      console.error('[stage-attrition] Error:', error);
+      res.status(500).json({ ok: false, error: error instanceof Error ? error.message : 'Failed to fetch stage attrition' });
+    }
+  });
+
   // REB 2.8.3: Latest FX5 scan data from Stage-3 cache (REST endpoint for Filter Insights)
   apiRouter.get('/active-engine/diagnostics/scan-latest', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
