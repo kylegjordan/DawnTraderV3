@@ -38,7 +38,14 @@ REMOTE_DIR="/var/log/cc-discord-media/$DAY"
 REMOTE="$REMOTE_DIR/out_$(date -u +%H%M%S)_$BASE"
 TAG="dt-media-post-$$"
 
-ssh -o ConnectTimeout=30 "$HOST" "mkdir -p '$REMOTE_DIR'"   # ssh DOES run a remote shell: quotes correct here
+# ★ The date dir MUST be created langston-owned, not root-owned. This helper runs as root
+# over ssh, so a plain `mkdir -p` produced root:root 755 — and Langston's bridge runs as
+# uid 999 (langston), so on any day this stager won the mkdir race his bridge could not
+# save its own copy of an inbound image and his wake line read "download failed" instead
+# of naming a path. He caught it minutes after I announced the batch as working: the
+# batch's own success criterion was FALSE for his session while I was calling it true.
+# `install -d` sets mode+owner atomically at creation, so the race cannot re-open it.
+ssh -o ConnectTimeout=30 "$HOST" "install -d -m 775 -o langston -g langston '$REMOTE_DIR'"
 # scp does NOT (OpenSSH 9+ speaks SFTP and performs no remote-shell expansion), so inner
 # quotes become part of the literal filename and the upload fails on a path starting with
 # a quote character. Names are sanitized above, so the bare form is the correct one.
