@@ -87,3 +87,14 @@ failure string. Both need a bridge change + announced restart → ride the next 
 session.
 **Crew action required:** RE-ARM the wake watcher (a running Monitor holds the OLD filter code).
 OLD Claude done; NEW Claude and ANALYST Claude outstanding at time of writing.
+
+## CI — rule 19 discharged
+Run **31148009374**, completed **success** on `19e942265` — the commit carrying the batch's
+governance set. All four jobs green, verified **per job** rather than from the run's summary
+conclusion: Test Suite · Build · TypeScript Check (baseline gate) · Docker Build.
+*(Per-job, deliberately: CC-A demonstrated on 2026-08-06 that a run's overall "failure" can be
+a cancel-cascade artifact wearing the wrong label — a conclusion field is not a job result.
+The run id is quoted in integer form for the same reason the last report needed correcting:
+an id rendered in scientific notation is a citation that points nowhere.)*
+
+**Batch status: COMPLETE.** Board card in Verification; closes on Kyle's acknowledgment.
