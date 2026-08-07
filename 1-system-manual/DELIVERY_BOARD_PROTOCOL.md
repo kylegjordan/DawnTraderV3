@@ -94,3 +94,12 @@ Adding one option to a single-select field (Owner, Type, Status, …) via `updat
 ⚠️ **NOTHING AUTOMATES THIS.** No hook, no check, no CI step moves a card. **If sessions do not update it, it becomes a confidently wrong second record** — and a stale board is more dangerous than no board, because Kyle will believe it. **This is the same failure mode as the four documents that agreed with each other and disagreed with the code (#641).**
 ⚠️ **THE BOARD IS NOT THE ISSUE LIST.** `RUNNING_ISSUES.md` remains the record of findings, with its own numbering. **Existing numbers are NOT migrated** — they are threaded through commit messages, scope files and live alert `resolution_evidence` tokens that cannot be rewritten. **A card POINTS AT `#NNN`; it does not replace it.**
 ⚠️ **A browsable copy of the issue list, reachable from the board, is wanted but is explicitly NOT a priority** (Kyle, 2026-08-03).
+
+### ⚠️ `gh project item-list` is NOT a trustworthy read-back for every field (CC-B, 2026-08-07)
+
+Setting **Blocked on** on a card succeeded, and `gh project item-list --format json` reported `blockedOn = None` for the same card in the same minute. Querying the item's `fieldValues` through the GraphQL API showed `Blocked on = Langston`, correctly set. **The write was fine; the READ-BACK was wrong.**
+
+**Why this is dangerous rather than merely annoying:** §5.x already tells you a success exit proves nothing and to read back. Follow that with `item-list` and you get a **false negative** — you conclude the write silently no-opped, and the documented response to a silent no-op is to re-apply, escalate, or start suspecting the options-list clobber. **An instrument that under-reports sends you hunting a bug that is not there**, which is the mirror image of the clobber it was added to catch.
+
+**RULE: verify card fields against the item's `fieldValues` via the API, not `item-list`.** The convenience command is fine for "does a card exist" and for the fields it does report; it is not authoritative for absence. Same family as every other lesson here — **a silent zero is a claim about the instrument before it is a claim about the data.**
+
