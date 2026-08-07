@@ -532,7 +532,7 @@ function StageAttritionTable({ assetClass }: { assetClass: 'crypto_spot' | 'xsto
         pipelines stamp "paper", so only the writing service distinguishes them. <strong>strategy_internal has no
         active-path writer at all</strong>, so a blank there in the active table is correct, not missing data. The
         pre-filter scan stages belong to the shared scan feed that precedes both lanes and are excluded from both
-        tables. <strong>A stage written by more than one service gets one column per writer</strong> — so
+        tables. <strong>A stage written by more than one service gets one column per writer</strong> — so{' '}
         <em>admitted (queued)</em> and <em>admitted (opened)</em> are never added together. The final column counts
         decision <strong>records</strong>, not signals: one signal can legitimately produce two admit records.
         Scoped to {assetClass === 'xstock_spot' ? 'xStock' : 'crypto'} only — the strategies are shared across
