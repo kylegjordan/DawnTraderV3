@@ -368,12 +368,16 @@ function ActivePipelineTables({ modeTail, assetClass }: { modeTail: 'paper' | 'l
               {Object.keys(cls.sqeGateRejectsAtRefresh).length === 0 && (
                 <tr><td colSpan={3} className="p-3 text-sm text-muted-foreground">
                   Nothing has fallen out of the refresh cycle since this counter started — an observed zero, not a
-                  missing feature (the counter is live; queued signals are re-clearing their gates).
+                  missing feature. (Why it is zero is not asserted here: nothing queued and everything re-clearing
+                  its gates produce the same number.)
                 </td></tr>
               )}
               {Object.entries(cls.sqeGateRejectsAtRefresh).sort((a, b) => b[1] - a[1]).map(([gate, n]) => (
                 <tr key={gate} className="border-b last:border-0">
-                  <td className="p-2 font-medium">{gate === 'uncategorized' ? 'Pre-promotion bucket (mostly NetEV)' : gate}</td>
+                  {/* Step-4 re-review: parity with the gate table at the other render site —
+                      "mostly NetEV" is an unmeasured attribution gloss, and extractSqeGateId
+                      routes any FUTURE unknown token here too. */}
+                  <td className="p-2 font-medium">{gate === 'uncategorized' ? 'Pre-promotion + unrecognized tokens' : gate}</td>
                   <td className="p-2 text-right font-mono">{n.toLocaleString()}</td>
                   <td className="p-2 text-xs text-muted-foreground">a queued signal re-evaluated at refresh and dropped here</td>
                 </tr>
