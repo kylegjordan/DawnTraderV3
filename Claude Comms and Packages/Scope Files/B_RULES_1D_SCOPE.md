@@ -1,4 +1,6 @@
-# B-RULES-1d — SCOPE r2: skills extraction (Kyle's list as design input)
+# B-RULES-1d — SCOPE r3: skills extraction (Kyle's list as design input)
+
+> **✅ STEP-1 APPROVED (Langston, 2026-08-07, at `96cfa5416`) — FOUR BINDING RIDERS FOLDED BELOW (§2.5). He re-read the live docs page himself: every §2(B) quotation verbatim-correct; NOTHING ruled on reported fact. 1d remains gated on 1c’s order — nothing ships before 1c’s two gates clear.**
 
 > **r1→r2 (ANALYST Claude, adopted whole — he attacked finding (B) on SEVERITY ORDERING and on MEASURABILITY, and he is right on both). I had the two failure modes the right way round in the DOCS and the WRONG way round in RISK.**
 
@@ -42,6 +44,20 @@ I searched the skills documentation for skill-to-skill composition — *invoke a
 
 ---
 
+## 2.5 ✅ LANGSTON’S FOUR BINDING RIDERS (Step-1 approval)
+
+⛔⛔ **RIDER 4 — THE BUDGET CHECK IS A HARD GATE, and its COMPOSITION is specified: (b)+(e) JOINTLY, DETERMINISTIC. (f) STAYS A PROBE, NOT A GATE.** His decision rests on my own backstop argument: **a failure that can ONLY be caught at ship time must be GATED at ship time** — a shorn description presents as bad model judgment, is unfalsifiable from the chat, and never routes anyone to the config. **Two reasons for the exact split:**
+★ **(i) THE 1,536-CHAR PER-ENTRY CLIP APPLIES “REGARDLESS OF BUDGET” (his re-read) ⇒ (b) CAN SHOW NO OVERFLOW WHILE AN ENTRY IS STILL CLIPPED.** **So (e)’s per-entry diff of on-disk text vs delivered text is LOAD-BEARING EVEN ON A GREEN (b)** — the two checks are not redundant and neither substitutes for the other.
+★ **(ii) (f) IS BEHAVIOURAL AND PROBABILISTIC** — a one-shot auto-invoke pass proves little, a fail does not localise cause, and **a flaky gate is a gate that gets waived.** Keep it as EVIDENCE.
+
+★★ **RIDER 1 — SPEND THE BUDGET, AND ALLOCATE IT DELIBERATELY WITH `skillOverrides` RATHER THAN LETTING THE DROP HEURISTIC DECIDE.** My finding says least-invoked-first is precisely the wrong order for us ⇒ **INVERT IT BY CONFIGURATION: the workflow CHILDREN are invoked BY NAME off the parent map, so they can afford `"name-only"`; the rare-by-design skills (provenance-read, mistake-and-correction, alert-assignment) are NOTHING BUT THEIR DESCRIPTION and keep FULL TEXT.** ⇒ **that converts a SILENT DEGRADATION into a CHOSEN, RECORDED ALLOCATION.** ⚠ **`skillListingBudgetFraction: 0.02` is HEADROOM, NOT THE MECHANISM.**
+
+✅ **RIDER 2 — MAP-PLUS-CANARY AS SCOPED; DO NOT REFUSE THE PARENT.** The design already contains the risk (children stand alone · the tree degrades to a flat set · §5(a) blocks any real dependence until the canary passes). **“Refusing the parent would discard Kyle’s stated structure to re-buy insurance you already hold.”**
+
+⛔ **RIDER 3 — NOTHING MOVES OFF THE STAYS LIST.** ★ **Finding (B) STRENGTHENS the criterion rather than bending it: a rule that must fire UNPROMPTED now has TWO disqualifiers as a skill — the INVOCATION GAP and a BUDGET-TRUNCATABLE DESCRIPTION.**
+
+★ **HIS CLOSING RULING ON THE PATTERN:** three instances of graceful-degradation-as-hazard in one leg **is not coincidence — it is the class §19 and #546 already name: ABSENCE WEARING A VALID VALUE’S CLOTHES.**
+
 ## 3. THE CANDIDATE SET — KYLE'S LIST, WITH THE BUDGET APPLIED
 **Kyle's list (his intent, verbatim in substance):** a **workflow** parent referencing per-step children — **scope · pre-implementation-audit · implementation · deployment · verification · governance-batch**; plus **push-queue/deploy · error-investigation · alert-processing · DB/table search · provenance-read · when-to-comment-on-another-session's-work · Langston's alert-assignment · mistake-and-correction (WITH ITS OWN TRACKED FILE)**.
 
@@ -66,11 +82,11 @@ I searched the skills documentation for skill-to-skill composition — *invoke a
 
 ## 5. VERIFICATION
 **(a)** ⛔ **PRECONDITION — the parent/child LIVE CANARY** of §2(A): a throwaway parent + one child, exercised on the real binary, observing whether the reference actually resolves. **No real procedure depends on the reference until this passes.**
-**(b)** ⛔ **THE BUDGET MEASUREMENT IS A GATE, NOT A REPORT:** `/doctor` + `/context` Skills row BEFORE and AFTER, plus a `--debug` run confirming **no overflow warning**. **A truncated description is a silent capability loss ⇒ if the set overflows, the set is too big — reduce it or spend `skillListingBudgetFraction`, deliberately and recorded.**
+**(b)** ⛔⛔ **HARD GATE, JOINTLY WITH (e) — deterministic, per rider 4:** `/doctor` + `/context` Skills row BEFORE and AFTER, plus a `--debug` run confirming **no overflow warning**. **A truncated description is a silent capability loss ⇒ if the set overflows, the set is too big — reduce it or spend `skillListingBudgetFraction`, deliberately and recorded.**
 **(c)** the auto-loaded byte total drops by the moved bytes, read from the **native `InstructionsLoaded` sink** (ground truth) — ⚠️ **which inherits 1c's GATE 1: that hook must be PROVEN TO FIRE first, or this check passes by measuring nothing.**
 **(d)** each moved procedure is findable at its new home; §339 old→new table; **nothing deleted.**
 **(e)** ⛔ **DESCRIPTION-TEXT FIDELITY, MEASURED FROM OUTSIDE (Analyst, r2 — supersedes a name-set check):** diff the ON-DISK `description`/`when_to_use` text against what the listing actually delivered; **an equality check on the NAME SET is explicitly NOT sufficient and would pass green through the whole failure.** Use the external instruments (`/doctor` contributors, the `--debug` overflow warning) rather than anything the session reports about itself.
-**(f)** ★ **the rare-skill probe: after the move, confirm a rare skill (provenance-read) still AUTO-invokes on a natural request — not merely that `/provenance-read` works.** **The by-name test passes even in the exact failure mode (B) describes, so it proves nothing on its own.**
+**(f)** ⚠ **EVIDENCE, EXPLICITLY NOT A GATE (rider 4(ii): behavioural + probabilistic; a flaky gate gets waived) — the rare-skill probe: after the move, confirm a rare skill (provenance-read) still AUTO-invokes on a natural request — not merely that `/provenance-read` works.** **The by-name test passes even in the exact failure mode (B) describes, so it proves nothing on its own.**
 
 ## 6. OUT OF SCOPE
 Ordering (1e) · Langston's files (INFRA lane) · rule-29 conversion (its hooks are #623 leg 2) · any rule that must fire unprompted.
