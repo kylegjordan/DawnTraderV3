@@ -1,4 +1,4 @@
-# B-RULES-1c — SCOPE r4: path-scoped rules extraction (`.claude/rules/`)
+# B-RULES-1c — SCOPE r5: path-scoped rules extraction (`.claude/rules/`)
 
 > **⛔⛔ r3→r4 IS A CORRECTION TO MY OWN LOAD-BEARING PREMISE, NOT A REFINEMENT. The version precondition is DISCHARGED and it came back the OPPOSITE way: the desktop sessions run 2.1.219, which is ABOVE ALL THREE GATES. Every version-risk paragraph in r2/r3 was measured against the WRONG BINARY — `claude --version` on PATH (2.1.87) is a stale standalone CLI that does NOT run these sessions. Langston PROCEEDed on the premise "both binaries are below every gate"; that premise is false and he needs to see this before 1c builds anything.**
 
@@ -33,6 +33,17 @@ Docs, verbatim in substance: **project-root `CLAUDE.md` survives compaction (re-
 ⇒ **"Worthless until you touch its files" ASSUMES YOU CAN PREDICT WHICH FILES A RULE IS ABOUT — and this project’s actual failures are precisely the ones where that prediction was wrong.** A `paths` glob that mispredicts does not degrade loudly; **the rule simply never loads, which is indistinguishable from a rule with nothing to say — the absent-as-valid class, one layer up.**
 ⛔ **CONSEQUENCE, ADOPTED: anything about DELETION, SCHEMA, or a SHARED CONTRACT is DISQUALIFIED** — those are exactly the rules whose whole job is to fire in a file you did NOT think was related. Anything a session must hold *before* touching anything — the non-negotiables, comms protocol, the workflow's shape, measurement discipline — **STAYS in `CLAUDE.md`.** Moving those would create a rule that vanishes at compaction and returns only by luck of which file is opened next; **that is strictly worse than the bytes it saves.**
 
+## 3.5 ⛔ THE ORDERING IS BINDING — TWO MEASUREMENTS GATE THE FIRST MOVE (Langston r4 ruling, residuals 2+3; **PROCEED stands, nothing relaxed**)
+
+**His reasoning for why the version news changed nothing:** all three of his revisions were derived from feature **PROPERTIES**, not version **DEFECTS**. **"The version news clears the 2.1.198/2.1.207/2.1.217 defect gates — it does not touch the silent-non-load CLASS, because a mispredicting `paths` glob still loads nothing, indistinguishably, on 2.1.219. That is the absent-as-valid failure one layer up, and it is why the criterion was never negotiable on version grounds."**
+
+⛔ **GATE 1 — NO RULE MOVES UNTIL THE NATIVE HOOK SHOWS ITS FIRST NO-MANUAL-INPUT ROW.** §5's ground-truth verification (*the auto-loaded byte total DROPS by the moved bytes*) is read **FROM THAT HOOK'S SINK**. ★ **If the harness never fires it, the baseline is EMPTY and the drop check is VACUOUSLY GREEN** — it would 'pass' by measuring nothing. Binding the moves to the control here so the dependency cannot be skipped by momentum.
+
+⛔⛔ **GATE 2 — THE §5 COMPACTION POSITIVE CONTROL IS NOW THE MOST LOAD-BEARING UNDISCHARGED MEASUREMENT IN THE LEG, AND RUNS BEFORE THE FIRST REAL MOVE, NOT AFTER.** With the outage risk gone, **§3's compaction property is the LAST 'docs-says' holding up the entire selection criterion.** ★★ **His consequence, stated exactly: if the marker FAILS to reload on a matching post-compaction read, backstop-gated-ness is not RELAXED — it is INSUFFICIENT, and EVERY MOVER COMES BACK.**
+
+⚠️ **RESIDUAL 1 — MY OWN CORRECTION OVERREACHED, ONE LAYER DOWN.** r4 said the install-set measurement *"covers CC-B and CC-C without asking them."* **That is an INFERENCE, not a measurement: my population was BINARIES THE APP CAN RUN; the claim is about SESSIONS THAT LOAD REPO RULES.** The stale 2.1.87 is still on PATH ⇒ **any session entering via bare CLI (headless, cron, an ssh dispatch) runs it.** ⇒ **DISCHARGE, free: each session echoes its own `CLAUDE_CODE_ENTRYPOINT` + `CLAUDE_CODE_EXECPATH` at next wake — four measurements replacing one inference.** Asked on Discord 2026-08-07 (Infra Claude especially — *"mostly off-Discord" says nothing about an entrypoint*). **Not blocking; the ruling is version-independent by construction.**
+ℹ **His version-fact ruling: RULED ON REPORTED FACT** — he cannot reach my Windows env or install dir. **Nothing load-bearing on his verdict rests on them.**
+
 ## 4. CANDIDATES (each: the files that trigger it, and why it is worthless until then)
 | candidate | `paths:` trigger | ★ NAMED BACKSTOP (r3 — no backstop, no move) | blast-radius check |
 |---|---|---|---|
@@ -45,6 +56,7 @@ Docs, verbatim in substance: **project-root `CLAUDE.md` survives compaction (re-
 **NOT candidates (compaction rule §3):** THE EIGHT · §1 persona/plain-language · §2 workflow · rules 22/24/25/29 · §6 comms protocol · §7.1 storage flow.
 
 ## 5. VERIFICATION
+⛔ **§3.5 GATES 1+2 MUST BE GREEN BEFORE THE FIRST MOVE — the two checks below are read from instruments that must first be PROVEN TO FIRE.**
 Precondition met (version stated with its source) · each moved passage findable at its new home · **the native-hook baseline shows the auto-loaded byte total DROP by the moved bytes** (ground truth, not candidate-set) · ★ **POSITIVE CONTROL ON THE COMPACTION CLAIM ITSELF (Analyst’s second point, adopted — "your evidence is docs-says"): put a KNOWN MARKER in a path-scoped file, COMPACT, then read a matching file and confirm the marker appears.** Cheap, and this crew has been wrong about mechanisms all week that the docs described correctly. **Until that control runs, §3’s compaction property is DOCS-SAYS, not measured** · plus the ordinary probe: read a matching file, confirm the rule loads; read a non-matching file, confirm it does not · §339 old→new table.
 
 ## 6. OUT OF SCOPE
