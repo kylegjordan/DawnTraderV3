@@ -61,3 +61,17 @@ Client panel + the read-only endpoints already fetched + one shared classifier m
 - **(b) label-verbatim RATIFIED as the reading of "standardized"** — *"Kyle compares tabs by what he reads; same fields, same display is satisfied at the label or not at all."* Two riders: the shared label comes from the **R3 classifier** so UI and engine cannot drift; and because the same label will sit over populations **three orders of magnitude apart (4 vs 8,529)**, the **R2 mode/population header is LOAD-BEARING, not cosmetic** — it is what stops this standardisation from itself becoming a lookalike.
 - **(c)** nothing further to measure. **Step-4 gate:** the shared-type pinning + sentinel discipline are verified at review, not asserted.
 
+## 7. ★★ KYLE RULING 2026-08-07 — "NOT INSTRUMENTED" IS NOT THE ANSWER; THE DATA MUST FEED. And it turns out it is ALREADY COMPUTED.
+
+**The ruling** (overrides Langston's rider 1, which sent the taxonomy to its own batch on blast-radius grounds — Kyle is the decider): *"Instead of just having the table vanish, but that's not the answer. The answer is making sure we have a way of getting the data feeding into the system… this batch isn't complete until we have all the data we need feeding into these tracking metrics."*
+
+**★ THE FINDING THAT MAKES THIS SMALL: the active path ALREADY COMPUTES the null taxonomy and THROWS IT AWAY.**
+- The reason is set by the **strategies themselves**, via a SHARED module — `server/utils/null-reason-tracker.ts` (`setNullReason` / `getNullReason` / `resetNullReason`), called from **10 strategy files** plus the shared detect harness `strategy-engine.ts` (`:180 b63b_counter_trend_long_exclusion`, `:208/:222 insufficient_data`, `:265 target_validation`, …).
+- **The ACTIVE orchestrator runs through that same harness** — `signal-orchestrator.ts:28` imports `StrategyEngine`, `:282/:312` instantiates it. ⇒ **every active-path evaluation is already setting a null reason right now.**
+- The VTS simply READS it: `vts-runner.ts:4863` `const detailReason = getNullReason();` then tallies into `nullReasonDetail` / `patternNullReasonDetail` / `byStrategy[...].nulls` (`:4922`, `:4938-4950`).
+⇒ **The active path's gap is a MISSING READ, not a missing taxonomy.** Wiring = call `getNullReason()` after an active detect returns null and tally it into the funnel tracker in the same shape.
+
+⚠️ **THE SAFETY CONDITION, checked BEFORE proposing it — the tracker is a MODULE GLOBAL and its own header says so:** *"safe ONLY because the VTS evaluation pipeline is strictly serial… If strategy evaluation ever becomes concurrent (Promise.all, worker threads), this MUST be replaced with evaluation-local state to prevent cross-talk."* **Verified for the active path: `Promise.all` count in `signal-orchestrator.ts` = 0** (positive control on the same grep: 14 `for (const` matches, so the instrument works), and its strategy iteration is `for (const strat of activeStrategies)` at `:2185`/`:2210`. **Serial ⇒ safe to read.** ★ If the active evaluation is ever parallelised, this read and the VTS's BOTH break — that constraint must be recorded at the read site, not just here.
+
+**REMAINING TRUE GAPS after this (to be scoped, not assumed):** the **per-cycle snapshot** (the S22 tracker is cumulative by design; `aj18-rtb-diagnostic` has per-cycle but carries the `* 9` defect — **#664**, disposition owed first) and the **By Strategy** active rows, which fall out of the same read.
+
