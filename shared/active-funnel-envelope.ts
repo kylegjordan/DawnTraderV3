@@ -46,9 +46,11 @@ export interface ActiveFunnelClassData {
   /** B-FILTER-DIAG-PAPER OBJ-3 (2026-08-07): the refresh-phase slice of sqeGateRejects —
    *  which gate a signal fell OUT of the RTB refresh cycle at. Subset of sqeGateRejects,
    *  never summed with it. OPTIONAL + ADDITIVE on the v3 shape: a pre-OBJ-3 server emits
-   *  no field, the client renders the section only when present. Whether this warrants a
-   *  v4 stamp is the Step-4 reviewer's call (contract header: "a shape change is a compile
-   *  event on both sides" — an optional add compiles on both without drift). */
+   *  no field, the client renders the section only when present. ★ STEP-4 RULING (Langston,
+   *  2026-08-07): STAYS v3, no bump. The stamp exists to catch shapes that can MISREAD or break
+   *  compile; optional+additive with presence-gated rendering is compatible by construction in
+   *  both directions (old client ignores it; new client against an old server renders nothing).
+   *  Bumping for a compatible add trains both sides to ignore version bumps. */
   sqeGateRejectsAtRefresh?: Record<string, number>;
   sqeEvaluated: number;
   sqePassed: number;

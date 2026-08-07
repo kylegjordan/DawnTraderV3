@@ -90,3 +90,31 @@ Pre-audit finds the scope BUILDABLE with **three Step-3 additions**: (a) the two
 **INTERIM CONDITION (i):** the **AMR flip decision gets a §13 home at batch close** — dated or named — so NORMAL-everywhere cannot silently become permanent. **Direction stated honestly: the system is measured pinned-DEFENSIVE today, so the interim means sizes UP ~1.67× and narrower stops until the flip.**
 **INTERIM CONDITION (ii):** the Step-3 values decision to Kyle carries one plain-language line: *until the new per-class mechanism is switched on, there is no defensive damper — sizing and stops run at normal in all weather.*
 **#659 concurrence recorded** (own batch immediately after = the §13 home), with his scope check: if the tuner writes `governance_modes`/overlay values, the one-batch write-into-void ordering is stated explicitly.
+
+---
+
+## 12. r6 AMENDMENT (2026-08-07) — obj-10 DELETE-hardening + obj-11 tuner deletion. §11's binding conditions carry forward UNWEAKENED (Langston, r6).
+
+**12.1 SUBJECT-vs-PROBE still binds under "delete, don't retire" (his condition, restated because the harder verb invites the error):** the DELETION applies to the MECHANISM. A test that PROBES a surviving invariant through the deleted symbol is RE-POINTED, never deleted — deleting a probe destroys the evidence that the invariant still holds.
+
+**12.2 OBJ-11 REACHABILITY (re-derived; Langston independently confirmed all six endpoints + sole-importer status at the ref).** Method-level external call sites, tuner module excluded, tests excluded:
+`logBehavior` 0 · `applyAdaptiveAdjustments` 0 · `createSnapshot` 1 · `rollbackToSnapshot` 1 · `getTelemetry` 1 · `getLearningMode` 0 · `setLearningMode` 1 · `getBehavioralLog` 1 · `getLearningHistory` 1 — **every non-zero site is one of the six routes.** ⇒ the module's ENTIRE live reachability is the six endpoints; delete them together.
+
+**12.3 §9.5(a-ii) STATE-WRITE CENSUS — three write targets, each with its reader-grep:**
+
+| the tuner WRITES | readers OUTSIDE the tuner | consequence of deleting the writer |
+|---|---|---|
+| `behavioral_log` (`:107`) | **none** (server + client grep) | table becomes fully orphaned — **0 rows, never written** |
+| `learning_history` (`:422`) | **none** outside the tuner's own reader | orphaned — 2 rows exist |
+| **`guardrails_v2` (`:333`, `:345`)** | ★ **LIVE READERS: `active-position-sizing.ts:11`, `reasoning-orchestrator.ts:500-502`, `state-awareness.ts:255-256`** | ⚠️ **the table STAYS — it is the live guardrail store this whole batch is about. Only the tuner's WRITE is removed.** |
+
+**★ 12.4 THE FINDING THAT STRENGTHENS THE DELETION — measured, with a positive control.** The tuner's write path sets **`portfolioRiskPerTradePct` and `maxOpenPositions`** on `guardrails_v2`, stamped `lastUpdatedBy: 'LATTI_ADAPTIVE'` — **the exact two fields this batch exists to fix.** Had it ever been wired, it would have silently overwritten Kyle's guardrail values.
+**DID IT EVER RUN? NO — and the instrument is controlled.** Object: `guardrails_v2` on staging; population: ALL rows (2), not a slice. Stamp histogram: `(null)` ×1, `p19-b8-5-sizing-tune-2 (measured iteration)` ×1. **Zero `LATTI_ADAPTIVE`.** The positive control is the p19-b8-5 stamp — the same query demonstrably returns a non-null stamp when one exists, so this absence is evidence, not a broken read. Corroborating: `behavioral_log` = **0 rows** (its writer never fired). ⇒ **no historical contamination of Kyle's values; the deletion removes a loaded-but-unfired path, and the completion report says exactly that — no stronger.**
+
+**12.5 NAMESPACE-SURGICAL CONDITION (Langston's load-bearing correction, accepted and folded into the scope):** `/api/learning` is a SHARED namespace with live client consumers on OTHER paths. The cut is the six routes surgically; **the reappearance fence asserts absence of the six paths/symbols, never a prefix.**
+
+**12.6 ORDER-INVERSION RIDER (his, recorded):** the P19-B6 approval-void leg — the kill-switch DENOMINATOR — **stays open until `B-READER-TRUTH` ships third.** Accepted, and it is Kyle's call to make.
+
+**12.7 TWO LANGSTON CORRECTIONS AT r6 APPROVAL (both verified by me before recording):**
+1. **CITATION FIXED — `active-position-sizing.ts:11` is a COMMENT** (`* - Uses guardrailsV2 configuration`), **not a `guardrails_v2` read site.** The §12.3 conclusion (the table STAYS) is secured by the two genuine readers — `reasoning-orchestrator.ts:500-502` and `state-awareness.ts:255-256` — and the bad citation is corrected here so it cannot propagate into the completion report. *(The sizer is a pure helper: it RECEIVES guardrail values from its caller.)*
+2. **★ STEP-4-BINDING — THE SIX ROUTES REACH THE TUNER BY DYNAMIC `await import(...)`, WHICH A STATIC-IMPORT GREP CANNOT SEE.** Measured both ways just now: `from '…adaptive-guardrails'` → **0 hits**; `import('…adaptive-guardrails')` → **6 hits**. ⇒ **the reappearance fence AND the post-deletion "no importers remain" verification MUST match dynamic-import syntax, or the check passes while proving nothing** — the absent-as-valid class (#546/#568) aimed straight at the instrument meant to catch it.

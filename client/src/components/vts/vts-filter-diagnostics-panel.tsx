@@ -266,8 +266,11 @@ type FunnelClassCounts = {
   preSqeRejects: Record<string, number>;
   postSqeRejects: Record<string, number>;
   sqeGateRejects: Record<string, number>;
+  /** OBJ-3 refresh-phase slice — OPTIONAL: a pre-OBJ-3 server omits it and the section
+   *  simply does not render (never an empty table implying "nothing fell out"). */
+  sqeGateRejectsAtRefresh?: Record<string, number>;
   sqeAttempts?: { atGeneration: number; atRefresh: number };
-  rtbRefresh?: { cyclesRun: number; refreshedAttempted: number; reconfirmed: number; rejectedInRefresh: number; promoted: number };
+  rtbRefresh?: { cyclesRun: number; refreshedAttempted: number; reconfirmed: number; rejectedInRefresh: number; promoted: number; droppedError?: number };
 };
 
 function ActivePipelineTables({ modeTail, assetClass }: { modeTail: 'paper' | 'live'; assetClass: 'crypto_spot' | 'xstock_spot' }) {
@@ -332,18 +335,208 @@ function ActivePipelineTables({ modeTail, assetClass }: { modeTail: 'paper' | 'l
               <tr><td colSpan={2} className="p-3 text-sm text-muted-foreground">No SQE gate rejects recorded yet.</td></tr>
             ) : gateRows.map(([gate, n]) => (
               <tr key={gate} className="border-b last:border-0">
-                <td className="p-2 font-medium">{gate === 'uncategorized' ? 'NetEV / uncategorized' : gate}</td>
+                {/* OBJ-2: NetEV is now a CANONICAL gate, so new rejects land under its own
+                    name. Counters are cumulative, so pre-promotion NetEV rejects remain in
+                    `uncategorized` forever — labelled as the historical bucket rather than
+                    silently reattributed to NetEV (which would fabricate attribution we
+                    never measured per-row). */}
+                <td className="p-2 font-medium">
+                  {gate === 'uncategorized' ? 'Pre-promotion + unrecognized tokens' : gate}
+                  {gate === 'NetEV' && <span className="ml-2 text-[10px] text-muted-foreground">net expectancy ≤ 0 after friction</span>}
+                </td>
                 <td className="p-2 text-right font-mono">{n.toLocaleString()}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </DiagTableCard>
+      {/* OBJ-3: what fell OUT of the RTB refresh cycle, and at which gate. Renders ONLY when the
+          server surfaces the field (optional on the envelope) — a pre-OBJ-3 server shows nothing
+          here rather than an empty table implying "nothing fell out". */}
+      {/* Step-4 (b): gate on field PRESENCE only. Presence already discriminates server version,
+          and under the #570 drought an empty tally is the expected LIVE state — hiding on
+          present-but-empty would make shipped-and-zero indistinguishable from not-shipped. */}
+      {cls.sqeGateRejectsAtRefresh && (
+        <DiagTableCard theme="rolling" title="Fell Out of the RTB Refresh (by gate)" subtitle={`${label} — LIVE, cumulative since ${since}`} testId="fd-active-refresh-fallout">
+          <table className={`w-full text-sm ${FROZEN_FIRST_COL_TABLE}`}>
+            <thead><tr className={`border-b ${DIAG_TABLE_THEMES.rolling.head}`}>
+              <th className="text-left p-2 font-medium">Gate</th>
+              <th className="text-right p-2 font-medium">Fell out at refresh</th>
+              <th className="text-left p-2 font-medium text-muted-foreground text-xs">Counting Basis</th>
+            </tr></thead>
+            <tbody>
+              {Object.keys(cls.sqeGateRejectsAtRefresh).length === 0 && (
+                <tr><td colSpan={3} className="p-3 text-sm text-muted-foreground">
+                  Nothing has fallen out of the refresh cycle since this counter started — an observed zero, not a
+                  missing feature. (Why it is zero is not asserted here: nothing queued and everything re-clearing
+                  its gates produce the same number.)
+                </td></tr>
+              )}
+              {Object.entries(cls.sqeGateRejectsAtRefresh).sort((a, b) => b[1] - a[1]).map(([gate, n]) => (
+                <tr key={gate} className="border-b last:border-0">
+                  {/* Step-4 re-review: parity with the gate table at the other render site —
+                      "mostly NetEV" is an unmeasured attribution gloss, and extractSqeGateId
+                      routes any FUTURE unknown token here too. */}
+                  <td className="p-2 font-medium">{gate === 'uncategorized' ? 'Pre-promotion + unrecognized tokens' : gate}</td>
+                  <td className="p-2 text-right font-mono">{n.toLocaleString()}</td>
+                  <td className="p-2 text-xs text-muted-foreground">a queued signal re-evaluated at refresh and dropped here</td>
+                </tr>
+              ))}
+              <tr className="border-t-2 border-blue-500/30 bg-blue-50/20 dark:bg-blue-950/10 text-xs">
+                <td className="p-2 text-muted-foreground" colSpan={3}>
+                  Subset of the gate table above (refresh-phase slice) — <strong>never add the two together</strong>.
+                  Cycle identity: attempted = reconfirmed + fell-out + dropped-on-error
+                  ({(cls.rtbRefresh?.refreshedAttempted ?? 0).toLocaleString()} = {(cls.rtbRefresh?.reconfirmed ?? 0).toLocaleString()} + {(cls.rtbRefresh?.rejectedInRefresh ?? 0).toLocaleString()} + {(cls.rtbRefresh?.droppedError ?? 0).toLocaleString()}).
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </DiagTableCard>
+      )}
+      <StageAttritionTable assetClass={assetClass} />
       <div className="rounded-md border border-muted px-3 py-2 text-xs text-muted-foreground">
         Counts are cumulative since the funnel started ({since}); a per-scan breakdown and a windowed 24h view are
         not recorded by the funnel tracker yet (the B8.4c skeleton columns they would fill are withheld rather than
-        fabricated). Gate names come from each reject reason's leading token; "NetEV / uncategorized" is dominated
-        by the net-expectancy admission gate.
+        fabricated). Gate names come from each reject reason's leading token. <strong>NetEV</strong> is now its own
+        canonical gate; the <em>pre-promotion bucket</em> holds rejects recorded before that promotion (overwhelmingly
+        NetEV, but not reattributed after the fact).
+      </div>
+    </div>
+  );
+}
+
+/** B-FILTER-DIAG-PAPER (OBJ-4): where each strategy's signals die, per pipeline stage.
+ *  THE #648 INSTRUMENT — the six never-traded strategies' death-point should be readable here.
+ *  Lane discipline: `source` is the discriminator, never `mode` (both pipelines stamp mode=paper
+ *  since 2026-07-14). The ACTIVE-path table is the one that answers active-trading questions; the
+ *  VTS lane is shown separately and clearly labelled, never blended. `admitted` is not summed
+ *  across sources (orchestrator=queued vs engine=opened are different events). */
+function StageAttritionTable({ assetClass }: { assetClass: 'crypto_spot' | 'xstock_spot' }) {
+  const q = useQuery<{
+    ready: boolean; computedAt: string | null; windowHours: number; computeMs?: number; lastError?: string | null;
+    rows: Array<{ strategy: string; rejectStage: string; source: string; assetClass: string; count: number }>;
+    lanes: { activePath: string[]; vtsPath: string[]; sharedScan: string[] };
+  }>({
+    queryKey: ['/api/active-engine/diagnostics/stage-attrition'],
+    refetchInterval: 60000,
+    staleTime: 30000,
+  });
+  if (q.isLoading) return <div className="rounded-md border px-3 py-2 text-sm text-muted-foreground">Loading per-strategy attrition…</div>;
+  if (q.isError) return <div className="rounded-md border border-red-300 px-3 py-2 text-sm text-red-600">Per-strategy attrition unavailable (fetch failed) — this is a failure, not an empty result.</div>;
+  const d = q.data;
+  if (!d?.ready) {
+    return (
+      <DiagTableCard theme="summary" title="Where Each Strategy Dies (by stage)" subtitle="warming up" testId="fd-stage-attrition-warming">
+        <div className="p-3 text-sm text-muted-foreground">
+          The first aggregate has not completed yet (it recomputes every 5 minutes over a {d?.windowHours ?? 6}-hour window).
+          Deliberately blank rather than showing zeros that would read as "measured, found nothing".
+        </div>
+      </DiagTableCard>
+    );
+  }
+  const active = new Set(d.lanes.activePath);
+  const vts = new Set(d.lanes.vtsPath);
+  // Step-4 BLOCKER-1: filter to THIS panel's class. Without it one blended crypto+xStock table
+  // renders inside both class panels under class-specific framing.
+  const classRows = d.rows.filter((r) => r.assetClass === assetClass);
+  const laneRows = (want: Set<string>) => classRows.filter((r) => want.has(r.source));
+  /** Step-4 BLOCKER-2: columns are keyed (stage, source), NOT bare stage. A bare-stage cell in the
+   *  active lane silently summed orchestrator-`admitted` (queued) with engine-`admitted` (opened) —
+   *  the exact double-count P19-B5a forbids, while the footer copy claimed the opposite. A stage
+   *  with multiple writers now gets one labelled column per writer. `total` is the sum of those
+   *  per-writer cells and is labelled RECORDS, because each archive row IS one decision record
+   *  (two admit events on one signal are two genuine rows — honest as a record count, which is
+   *  why the column says records and not signals). */
+  const build = (rows: typeof d.rows) => {
+    const writersByStage = new Map<string, Set<string>>();
+    for (const r of rows) {
+      if (!writersByStage.has(r.rejectStage)) writersByStage.set(r.rejectStage, new Set());
+      writersByStage.get(r.rejectStage)!.add(r.source);
+    }
+    const cols = Array.from(writersByStage.entries())
+      .flatMap(([stage, srcs]) => Array.from(srcs).sort().map((src) => ({
+        key: `${stage}::${src}`,
+        stage,
+        source: src,
+        multi: srcs.size > 1,
+      })))
+      .sort((a, b) => (a.stage === b.stage ? a.source.localeCompare(b.source) : a.stage.localeCompare(b.stage)));
+    const byStrategy = new Map<string, Record<string, number>>();
+    for (const r of rows) {
+      const m = byStrategy.get(r.strategy) ?? {};
+      m[`${r.rejectStage}::${r.source}`] = (m[`${r.rejectStage}::${r.source}`] ?? 0) + r.count;
+      byStrategy.set(r.strategy, m);
+    }
+    const ordered = Array.from(byStrategy.entries())
+      .map(([s, m]) => ({ strategy: s, cells: m, total: Object.values(m).reduce((a, v) => a + v, 0) }))
+      .sort((a, b) => b.total - a.total);
+    return { cols, ordered };
+  };
+  const shortSource = (s: string) =>
+    s === 'signal-orchestrator' ? 'queued' : s === 'active-execution-engine' ? 'opened' : s.replace(/^(vts-|active-)/, '');
+  const renderLane = (title: string, subtitle: string, rows: typeof d.rows, testId: string, theme: 'summary' | 'rolling') => {
+    const { cols, ordered } = build(rows);
+    return (
+      <DiagTableCard theme={theme} title={title} subtitle={subtitle} testId={testId}>
+        {ordered.length === 0 ? (
+          <div className="p-3 text-sm text-muted-foreground">
+            No {assetClass === 'xstock_spot' ? 'xStock' : 'crypto'} rows for this lane in the window — that is an
+            observed absence over the window, not a failed read.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className={`w-full text-sm ${FROZEN_FIRST_COL_TABLE}`}>
+              <thead><tr className={`border-b ${DIAG_TABLE_THEMES[theme].head}`}>
+                <th className="text-left p-2 font-medium">Strategy</th>
+                {cols.map((c) => (
+                  <th key={c.key} className="text-right p-2 font-medium whitespace-nowrap">
+                    {c.stage}{c.multi && <span className="ml-1 text-[10px] font-normal text-muted-foreground">({shortSource(c.source)})</span>}
+                  </th>
+                ))}
+                <th className="text-right p-2 font-medium">Records</th>
+              </tr></thead>
+              <tbody>
+                {ordered.map((row) => (
+                  <tr key={row.strategy} className="border-b last:border-0 hover:bg-muted/30">
+                    <td className="p-2 font-medium">{row.strategy}</td>
+                    {cols.map((c) => (
+                      <td key={c.key} className="p-2 text-right font-mono">{(row.cells[c.key] ?? 0).toLocaleString()}</td>
+                    ))}
+                    <td className="p-2 text-right font-mono font-semibold">{row.total.toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </DiagTableCard>
+    );
+  };
+  const asOf = d.computedAt ? new Date(d.computedAt).toLocaleTimeString() : 'unknown';
+  const stale = d.lastError ? ' — last refresh FAILED, showing the previous snapshot' : '';
+  return (
+    <div className="space-y-4">
+      {renderLane(
+        'Where Each Strategy Dies — ACTIVE TRADING PATH',
+        `last ${d.windowHours}h · as of ${asOf}${stale}`,
+        laneRows(active), 'fd-stage-attrition-active', 'summary',
+      )}
+      {renderLane(
+        'Where Each Strategy Dies — VTS (passive learning lane)',
+        `last ${d.windowHours}h · as of ${asOf} · shown for contrast, NOT the active-trading population`,
+        laneRows(vts), 'fd-stage-attrition-vts', 'rolling',
+      )}
+      <div className="rounded-md border border-muted px-3 py-2 text-xs text-muted-foreground">
+        Rolling {d.windowHours}-hour window, recomputed every 5 minutes (a full 24-hour scan costs ~38s against the
+        shared database; this window costs ~0.5s). <strong>The lane split is by writer, not by mode</strong> — both
+        pipelines stamp "paper", so only the writing service distinguishes them. <strong>strategy_internal has no
+        active-path writer at all</strong>, so a blank there in the active table is correct, not missing data. The
+        pre-filter scan stages belong to the shared scan feed that precedes both lanes and are excluded from both
+        tables. <strong>A stage written by more than one service gets one column per writer</strong> — so
+        <em>admitted (queued)</em> and <em>admitted (opened)</em> are never added together. The final column counts
+        decision <strong>records</strong>, not signals: one signal can legitimately produce two admit records.
+        Scoped to {assetClass === 'xstock_spot' ? 'xStock' : 'crypto'} only — the strategies are shared across
+        classes, so a blended table would merge two different death profiles.
       </div>
     </div>
   );
