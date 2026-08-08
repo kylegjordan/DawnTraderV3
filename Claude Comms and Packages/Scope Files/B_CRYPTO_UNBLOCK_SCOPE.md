@@ -132,3 +132,25 @@ Five of the nine sites carry an explicit *"remains hardcoded — KEEP per LEVER_
 **⇒ PROPOSED REPLACEMENT FOR OBJ-3, for Langston's ruling:** drop the 2.5–4% arm and instead **measure the TARGET DISTRIBUTION of organically-admitted vs rejected crypto signals.** If organic admission is simply "native target ≥ the fee wall," then the batch's real question becomes **why so few signals carry large native targets** — which points back at the ATR × multiplier derivation and the 60m horizon, and is answerable from data we hold.
 
 **THE KNOB, NAMED (his second requirement):** `module_constants` · module `strategy.<name>` · key **`target_exit_atr_multiplier`** · read at `getCachedNumbersForModule` in each strategy file (e.g. `strong-bull-trend.ts:90`, `adaptive-flow.ts:84`) · **all rows currently `asset_class='*'`** (values: 6.0 SBT · 3.0 adaptive_flow/pivot_shift · 2.5 morning_star/volatility_edge · 2.0 inside_bar/reverse_impulse/support_bounce · 1.8 defensive_hedge). **Provenance: B72 migrated these from hardcode; B79.0n.STRATEGY wired the per-class scope and deliberately did not seed values.**
+
+
+---
+
+# r4 — OBJ-5 REWRITTEN (Langston bounced it; Kyle then ruled on the outcome). **AND A FALSE ALARM I RAISED, RETRACTED.**
+
+**★ MY ERROR, OWNED: I presented the minute-bar tables as "never tiered, piling up since April" — implying an overdue backlog. THEY ARE NOT OVERDUE.** They are on a **365-day** retention and the data is **~3.5 months old**. `STORAGE_POLICY.md:149` anticipated exactly this inference and warns against it verbatim: *"8 of the 12 registered tables have never produced an archive object. **NOT asserted as a defect** — a table only produces an object once a partition ages past its window; the `_ohlc_1m` set is on 365 d."* **I read an absence as a failure without consulting the governance document that explains it — the same absent-as-valid error this project keeps paying for, made by me while auditing for it.**
+
+**KYLE'S RULING (2026-08-08):** *"don't move them… no need to fix that, but fix the two faults that you've discovered."*
+
+## OBJ-5 (rewritten) — FIX TWO LATENT FAULTS. NO DATA MOVES.
+
+**FAULT 1 — WRONG TIMESTAMP COLUMN, three tables.** `b75-retention-sweep.ts:77-79` specifies `timestampColumn: 'ts'` for `xstock_spot_ohlc_1m`, `xstock_perp_ohlc_1m`, `crypto_spot_ohlc_1m`. **MEASURED:** all three carry **`interval_begin`** (+ `captured_at`); **there is no `ts` column on any of them.**
+**FAULT 2 — MISSING RETENTION CONSTANT.** The sweep reads `crypto_spot_ohlc_1m.hot_retention_days`. **MEASURED: it does not exist in `module_constants`**, while every sibling does (`xstock_spot_ohlc_1m` 365 · `xstock_perp_ohlc_1m` 365 · the three `*_ticker_snap` 30). ⚠️ **`STORAGE_POLICY.md:35,130` DOCUMENTS crypto at 365 d — so the POLICY states a value the CONFIGURATION does not hold.** That is a policy-vs-reality gap, not merely a missing row.
+
+**SEVERITY, STATED HONESTLY: LATENT, NOT ACTIVE.** Neither fault bites until a partition ages past 365 d (≈ 2027-04). **Nothing is failing today.** They are worth fixing now precisely *because* they are quiet — a sweep that cannot see its own timestamp column will fail at the moment it is first needed, and the missing constant means crypto has **no configured retention at all** if the policy is ever read as authoritative.
+
+**ALSO IN SCOPE (same audit):** `equity_spot_ohlc_1m` / `equity_perp_ohlc_1m` retention constants match **no table in the sweep** — likely orphans from P19-B-RENAME. Disposition per rule 18.
+
+**EXPLICITLY OUT (Kyle's ruling):** any data movement; any change to the 365-day window. **The 21.2 GB across the three families is ~10% of the 200 GB cap against a database currently FALLING ~44 GB/week — there is no pressure, and the window was chosen because these are the DECISION bars the 15m/60m/240m rollups are built from (`STORAGE_POLICY.md:72`).**
+
+**⇒ OBJ-5 IS NO LONGER THE PREREQUISITE IT WAS WRITTEN AS.** It was scoped as "accelerate hot→warm so a perp feed does not eat headroom." **There is no headroom problem.** It is now a **two-line correctness fix with no sequencing claim over obj-4** — and obj-4's storage arithmetic must be re-argued on its own merits rather than on a migration that was never needed.
