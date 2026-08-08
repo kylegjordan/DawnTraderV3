@@ -54,3 +54,56 @@ Changing any buffer VALUE (migration only) · raising the pWin ceiling (**refuse
 - **n=12 organic is very small**; one outsized winner may carry the +6.87% average. **Not yet decomposed.**
 - **The anneal floor tightened across the measurement window**, so the two cohorts are not drawn from identical conditions.
 - **Four self-corrections in the investigation behind this scope** (fee-not-binding, bigger-targets-refuted, pWin-retraction-restored, and Langston's population bounce). **Every figure above is post-correction.**
+
+---
+
+# STEP-1 REVISION r2 — Langston CHANGES-NEEDED, 2026-08-08 (verdict at `1b065a0f2`)
+
+**Obj 1 approved as written · obj 2 approved with two additions · obj 4 clear · obj 3 and obj 5 BOUNCED · §2.5 ruled. Every change below is his, not a re-argument.**
+
+## r2.1 — §2.5 RE-FRAMED. My attribution was wrong, and the honest framing is much bigger than what I asked.
+
+**CORRECTION:** the fence *"model-vs-model and data-fenced; real pFill = Phase-21"* is **NOT in `exploration-lane.ts`** — it is **`server/core/math/maker-taker-decision.ts:75`**. A different object: the decision kernel's static `maker_taker.maker_fill_probability`, **homed at #410** and restated in **`ADJUSTMENT_FRAMEWORK.md:52`** and **`SYSTEM_MANUAL.md:521`**. ⇒ **the lane's header does not contradict itself; I merged two files.**
+
+⇒ **RESTATED: option (a) is NOT "one measurement." It is a PROPOSAL TO REOPEN A HOMED PHASE-21 GATE carrying three governance surfaces.** That is a Kyle-level scope call, not a CC-C measurement.
+
+**★ THE TWO NUMBERS ARE DIFFERENT OBJECTS (his catch, and it dissolves my ~1.5× claim):** **0.50 is an EX-ANTE DECISION PARAMETER; 75.4% is an EX-POST SIMULATOR OUTPUT.** Their disagreement measures **our config against our own simulator** — not against the venue. **The "maker EV is discounted ~1.5× more than reality" line is WITHDRAWN: it compared a knob to its own downstream model.**
+
+**RULING ADOPTED — depth RIDES BESIDE obj-3 as a ONE-SHOT FALSIFICATION TEST:**
+- **Depth can only REFUTE, never certify** — queue position and adverse selection are exactly what an unplaced order never reveals. If price never traded through the limit, a fill was impossible; that is the only inference available.
+- **The falsifier is declared BEFORE the test runs. It moves no knob.**
+- ⚠️ **CIRCULARITY CHECK, mandatory and prior: confirm the fill simulator does not itself consume depth.** If it does, the test is circular and does not run.
+- **🔒 FENCE: NO `pFill` CHANGE LANDS INSIDE OBJ-3's PRE-REGISTERED WINDOW, whatever the depth study says.** A measurement must not confound an experiment; a mid-window parameter change would.
+
+## r2.2 — OBJ 3 BOUNCED: my headline was POOLED, which this scope forbids elsewhere.
+
+**His arithmetic:** (12 × 83.3% + 229 × 45.0%) ÷ 241 = **46.9%**. ⇒ **"crypto sits AT 46.9% vs a 46.2% break-even, on the line" is the mean of a lane that WORKS (83.3%) and a lane ADMITTED ON KNOWN-NEGATIVE netEV AND DESIGNED TO LOSE (45.0%, n=229 = 95% of the pool).** **"On the line" is an artifact of averaging the learning subsidy into the organic lane.** ⇒ **the pre-registration was registered against the wrong number.**
+
+**REQUIRED BEFORE OBJ-3 RETURNS:**
+- (a) **re-derive break-even and win rate PER COHORT** — organic and exploration separately — and pre-register against the **ORGANIC** cohort, the only one the experiment is about;
+- (b) **NAME THE KNOB** — table, key and `file:line` for what actually moves (`strategy_geometry` / `TARGET_ATR_MULT`?). The scope omitted it entirely, so there is **no history, no intent and no disposition** on the thing being changed.
+
+## r2.3 — OBJ 5 BOUNCED: it is the declared prerequisite and was the thinnest objective.
+
+**His standing ruling: a retention key alone does not tier a table — it must ALSO be in the sweep's hardcoded list.** Name the tables against the sweep + census at **`SIM:3242`**, with code site and disposition per table.
+
+**★ AND THE HEADROOM ARGUMENT FAILS 29(b):** *"~44 GB/week as tiering releases"* carries **no object, no population, no positive control** — and it is the ENTIRE basis for obj-4's storage headroom. **Re-measure it properly or obj-4 has no foundation.**
+
+## r2.4 — OBJ 2 approved, TWO ADDITIONS (both real defects the carry-through alone does not fix)
+
+- (a) **Provenance is thinner than the code:** `active-execution-engine.ts:3492-3494` names **reorg-B3** and the reason verbatim — **quote it, and delete that comment in the same diff.**
+- (b) **THREE DISTINGUISHABLE STATES REQUIRED, per #546 — not one number wearing a real value's clothes:** `:1507` guards on **TRUTHINESS**, so a genuine VolNoise of **0** still falls through to 0.3; and `fx5-scanner.ts:1074` substitutes **0.6** on out-of-range/non-finite. ⇒ the record must distinguish **computed / clamped / absent**.
+
+## r2.5 — OBJ 1 approved, with one addition
+
+Five of the nine sites carry an explicit *"remains hardcoded — KEEP per LEVER_INVENTORY"* comment. **Those comments die with the change (§15)** — a surviving KEEP comment beside a migrated lever is a false instruction to the next reader.
+
+## r2.6 — §13 HOMES (his: owner + due at the moment of agreement, not later)
+
+| item | owner | home |
+|---|---|---|
+| The crypto-perp COLLECTION proposal (obj-4's output) | CC-C | its own scope, opened only if obj-4's arithmetic justifies it |
+| §2.5 option-(b) branch — if depth cannot refute and the gate stays closed, **the lane's −$144.52 needs a new justification** | CC-C | raised to Kyle as a scope call; NOT resolved by us |
+| Board card for THIS batch | CC-C | **filed with this revision** — the existing "Recalibrate crypto target sizes" card is objective 3 ALONE, not the batch |
+
+**Langston sets `Review` when the two bounced objectives return.**
