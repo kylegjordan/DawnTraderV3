@@ -1016,3 +1016,26 @@ These items are deferred and not currently sequenced. Listed for reference:
 ## Future-roadmap note — daily reports return on our own ML (Kyle ruling 2026-07-03, P19-B-RENAME W1)
 
 The Walter-era `paper_daily_briefs` + `paper_ai_reports` tables (the early OpenAI-via-API embed that never worked) were DELETED at P19-B-RENAME Wave-1 (both live-verified empty). **Kyle: the daily-reports CONCEPT returns later, rebuilt on our own machine learning / injected AI — not the preserved tables.** When the ML build reaches report-generation (post-Phase-25 calibration era), home the rebuilt daily-report design as its own scoped batch.
+
+
+---
+
+## §3.3-PULL — ★ WHICH PHASE-25 ITEMS CAN MOVE UP TO PHASE 19 NOW (Kyle directive 2026-08-08)
+
+**KYLE'S TEST, and it is a genuinely clean one:** *"if we're looking at how price moved afterwards and geometry, that can be derived from data that we have from the VTS and not required from trades that have gone through the SQE and have had to sit in the RTB queue."*
+
+**⇒ THE CLASSIFYING PRINCIPLE: does the question ask about the MARKET, or about our SELECTION?**
+- **MARKET question** — *given this entry, did price reach X before Y?* **Admission bias changes WHICH entries you sample; it does NOT change how price moved afterwards.** ⇒ answerable on **VTS + 1m bars, TODAY** (43,523 crypto rows with full geometry; minute bars back to 2026-04-28).
+- **SELECTION question** — *should this signal have traded / was it ranked correctly?* ⇒ needs the **SQE-gated, RTB-ranked** population, which is small (n=241 crypto, 12 organic) and accrues slowly. **Stays in Phase 25.**
+
+| item | question type | verdict |
+|---|---|---|
+| **25-17 target-geometry calibration** | **MARKET** — did price traverse k×ATR before the stop? | **★ PULL FORWARD.** The replay method is built and was run 2026-08-07/08. Covers both target mechanisms (9 ATR-multiplier + 10 R-multiple/measured-move/percent). |
+| **25-13 faithful geometry reconstruction (xStock)** | **MARKET** — but ⛔ **blocked on the #206 anchor gap, NOT on admission.** B-NEW-53 now captures anchors forward. | **PARTIAL** — the crypto equivalent is unblocked TODAY (1m bars exist); xStock still waits on accrual. **Split it.** |
+| **25-11 order-book / liquidity-aware sizing** | **MARKET** — depth-vs-fill is a venue property | **★ PULL THE MEASUREMENT** (not the sizing change): the depth study §2.5 already needs is the same instrument. |
+| 25-2 regime confidence-chain · 25-4 SQE recalibration · 25-10 crypto confidence-modifier | **SELECTION** — all calibrate what gets ADMITTED | **STAY.** These are exactly the apples-to-apples-population items; VTS cannot answer them. |
+| 25-3 TFS sustainability gate · 25-5 observational decision gate · 25-15 HCE rejected-arm | **SELECTION** | **STAY.** |
+| 25-16 trade-size / concurrency / balance sensitivity | **MIXED** — fill quality is MARKET (depth-walk is size-dependent in code); win-rate-vs-size is SELECTION | **SPLIT** — the fill-quality half is measurable now. |
+| 25-7 / 25-8 / 25-9 xStock macro, pattern cap, pair correlation | **SELECTION** | **STAY.** |
+
+**⚠️ THE LIMIT OF THE PRINCIPLE, STATED SO IT IS NOT OVER-APPLIED:** a market-question replay tells you **what the geometry would have done on the entries you sampled**. If the sampled entries are unrepresentative of what the live gate admits, the replay's ABSOLUTE numbers do not transfer — **only the SHAPE does** (e.g. "hit rate falls ~10 points per 0.5× of target" held across three differently-biased populations on 2026-08-07, while every LEVEL differed). ⇒ **pull-forward items may set RANGES and DIRECTIONS now; final VALUES still want gated data.** That is the honest version of Kyle's *"start to work with sharper ranges and thresholds"* — sharper, not final.
