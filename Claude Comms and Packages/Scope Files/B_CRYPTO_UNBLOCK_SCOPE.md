@@ -107,3 +107,28 @@ Five of the nine sites carry an explicit *"remains hardcoded — KEEP per LEVER_
 | Board card for THIS batch | CC-C | **filed with this revision** — the existing "Recalibrate crypto target sizes" card is objective 3 ALONE, not the batch |
 
 **Langston sets `Review` when the two bounced objectives return.**
+
+
+---
+
+# r3 — OBJ-3 RE-DERIVED PER COHORT (Langston's requirement). **THE RESULT INVALIDATES THE EXPERIMENT'S PREMISE.**
+
+**MEASURED** — `closed_trades`, canonical predicate, split by `admissionBasis`:
+
+| cohort | n | win% | target% | stop% | break-even needs | EV | margin |
+|---|---|---|---|---|---|---|---|
+| **organic** | 12 | **83.3** | **7.85** | 7.96 | 55.4% | **+4.41%** | **+27.9 pts** |
+| exploration | 230 | 45.2 | 2.38 | 2.00 | 63.9% | −0.82% | −18.7 pts |
+| *(pooled — what I wrongly pre-registered against)* | 241 | *46.9* | — | — | — | — | *artifact* |
+
+**★★ THE ORGANIC LANE'S TARGETS ARE 7.85% — MORE THAN THREE TIMES THE EXPLORATION LANE'S 2.38%.**
+
+⇒ **OBJ-3 AS WRITTEN IS BACKWARDS. Kyle's 2.5–4% band sits BELOW the geometry of the lane that already works, and ABOVE the lane that fails. Running it would move the successful cohort's target DOWN toward the failing one.**
+
+**★ AND IT REFRAMES THE WHOLE BATCH: THE TARGET IS NOT A KNOB, IT IS A SELECTOR.** The organic lane does not succeed because someone set a good target — it succeeds because **only signals whose NATIVE target is already large enough to clear the fee wall get through the gate.** A 7.85% target clears the ~1.6% maker rawEV bar easily; a 2.38% one cannot. **Raising a multiplier would not manufacture more organic-quality signals — it would re-label the same distribution and move the same signals across the same bar.** The live question is whether **more signals with naturally large targets exist**, which is a supply question, not a threshold question.
+
+**⚠️ THE CAVEAT THAT BOUNDS ALL OF IT, STATED BEFORE LANGSTON HAS TO: ORGANIC STOP COVERAGE IS n=1.** The 7.96% stop — and therefore the 55.4% break-even and the +27.9-point margin — rests on **a single trade**. The 7.85% target is n=12. **Neither is decision-grade.** The direction is stark enough to act on as a HYPOTHESIS; the magnitudes are not quotable.
+
+**⇒ PROPOSED REPLACEMENT FOR OBJ-3, for Langston's ruling:** drop the 2.5–4% arm and instead **measure the TARGET DISTRIBUTION of organically-admitted vs rejected crypto signals.** If organic admission is simply "native target ≥ the fee wall," then the batch's real question becomes **why so few signals carry large native targets** — which points back at the ATR × multiplier derivation and the 60m horizon, and is answerable from data we hold.
+
+**THE KNOB, NAMED (his second requirement):** `module_constants` · module `strategy.<name>` · key **`target_exit_atr_multiplier`** · read at `getCachedNumbersForModule` in each strategy file (e.g. `strong-bull-trend.ts:90`, `adaptive-flow.ts:84`) · **all rows currently `asset_class='*'`** (values: 6.0 SBT · 3.0 adaptive_flow/pivot_shift · 2.5 morning_star/volatility_edge · 2.0 inside_bar/reverse_impulse/support_bounce · 1.8 defensive_hedge). **Provenance: B72 migrated these from hardcode; B79.0n.STRATEGY wired the per-class scope and deliberately did not seed values.**
