@@ -2697,3 +2697,20 @@ collision from silent to loud for one session; it does nothing for the other thr
 
 **FIX IS CHEAPER THAN SCOPED (Langston):** per-symbol dedupe **already exists in this codebase** — `price-skip-paper-PWR/USD` (16 rows), `-ETN/USD` (12), `-GEV/USD` (11). **CC-B is copying a pattern, not inventing one.** OWNER CC-B, DUE 2026-08-12.
 
+
+
+### #685 OPEN 2026-08-08 (CC-C; found doing B-CRYPTO-UNBLOCK obj-5, the storage prerequisite Langston bounced as "the thin one") — **★ `crypto_spot_ohlc_1m` CANNOT BE TIERED: THE SWEEP'S TIMESTAMP COLUMN DOES NOT EXIST ON IT, AND ITS RETENTION CONSTANT DOES NOT EXIST AT ALL**
+
+**Langston's standing ruling is what surfaced it:** *a retention key alone does not tier a table — it must ALSO be in the sweep's hardcoded list.* Auditing that list against reality found the inverse failure on the largest crypto data stream.
+
+**DEFECT 1 — WRONG TIMESTAMP COLUMN (3 tables).** `b75-retention-sweep.ts:77-79` specifies `timestampColumn: 'ts'` for `xstock_spot_ohlc_1m`, `xstock_perp_ohlc_1m` and `crypto_spot_ohlc_1m`. **MEASURED (`information_schema.columns`, all three tables): the column is `interval_begin`. There is no `ts` column on any of them** (they carry `interval_begin` + `captured_at`).
+
+**DEFECT 2 — MISSING RETENTION CONSTANT (crypto only).** The sweep references `crypto_spot_ohlc_1m.hot_retention_days`. **MEASURED (`module_constants`, all `%hot_retention%` rows): that constant DOES NOT EXIST.** Present: `xstock_spot_ohlc_1m` 365 · `xstock_perp_ohlc_1m` 365 · `equity_spot_ohlc_1m` 365 · `equity_perp_ohlc_1m` 365 · the three `*_ticker_snap` at 30. **`crypto_spot_ohlc_1m` is absent from the list.**
+
+⇒ **crypto's minute-bar table fails BOTH gates — no valid timestamp column AND no retention value.** **Corroborating evidence it has never been tiered: it holds data back to 2026-04-28 (3+ months) while the ticker-snap tables retain 30 days.** It is also the largest crypto stream — **~105,000 rows/day, 415 symbols.**
+
+**★ WHY THIS IS LOAD-BEARING RIGHT NOW, NOT MERELY UNTIDY:** obj-4 proposes a crypto-perpetuals feed whose entire justification is storage headroom, and obj-5 (the retention acceleration) is its declared PREREQUISITE. **A prerequisite that cannot tier the biggest crypto table is not a prerequisite — it is a hole.** Any headroom projection that assumes this table tiers is wrong in the unsafe direction.
+
+**⚠️ NOT YET ESTABLISHED, and I am not guessing:** whether the sweep **errors loudly** on the missing column (someone would likely have noticed) or **skips silently** (in which case it has been failing unobserved since B74). **That distinction decides whether this is a config gap or a silent-failure class, and it is the first thing the fix must determine.**
+**ALSO SURFACED:** `equity_spot_ohlc_1m` / `equity_perp_ohlc_1m` retention constants match **no table in the sweep** (which uses the `xstock_*` names) — **likely orphans from the P19-B-RENAME**, i.e. retention values configured for tables that no longer carry those names. Separate disposition, same audit.
+**HOME:** B-CRYPTO-UNBLOCK obj-5 — it IS the objective, not an aside.
