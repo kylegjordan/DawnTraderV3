@@ -226,3 +226,55 @@ P1a showed `volatility_edge` and `morning_star` share the **identical 2.50** mul
 He refuted the P1a lever as I first drew it, and the correction binds (d) too. **An ATR floor does not give a strategy bigger targets on the signals it has — it DISCARDS its low-ATR ones.** Whether that is a net gain is answerable **only from the ATR distribution of each strategy's own signals**: *no right tail ⇒ no pairs to select ⇒ the lever is empty.* And **`volatility_edge` is NOT evidence the lever works — its detector selects on volatility BY CONSTRUCTION, so its 2.87% ATR is ENDOGENOUS.** It proves a volatility-selecting strategy sees high ATR; it does **not** prove an ATR floor preserves a *pattern* strategy's edge.
 ⇒ **(d) is a UNIVERSE-level fact and survives that critique** (it counts admitted pairs, not one strategy's selection). **But the remedy does not follow from it.** Before any floor is proposed: **per strategy, measure the ATR distribution of its OWN signals and the surviving count at each candidate floor.** A floor that leaves `morning_star` with no signals has not fixed `morning_star`.
 **⚠️ ALSO OWED (his (d)): the fee-as-%-of-target ranking has NO TIME AXIS** — it ranks `vwap_pullback` first at a **~10-ATR excursion**. **EV per unit capital per unit TIME is the comparator**, and §3 already lists time-to-target as something VTS can answer. **Add it before anyone acts on that ranking.**
+
+---
+
+## P1c — WHERE THE HIGH-VOLATILITY PAIRS WENT (Kyle-directed 2026-08-09). THEY ARE NEVER SCANNED.
+
+**Kyle's question:** *"where are the larger volatility pairs? What's happening to them, and why aren't they showing up more frequently?"*
+
+**ANSWER: they are excluded at step ZERO, before any filter, strategy or netEV gate runs — by a volume ranking that is an inverse proxy for volatility.**
+
+### (a) THE MECHANISM — `server/exchanges/kraken/kraken.ts:895-900`, verbatim:
+```ts
+if (universeSize && eligiblePairs.length > universeSize) {
+  finalPairs = eligiblePairs
+    .sort((a, b) => b.volume24h - a.volume24h)
+    .slice(0, universeSize);
+```
+**`universe_size = 100` on EVERY crypto filter path** (`screener_filters`, all 14 rows). ⇒ **we scan the top 100 pairs BY 24-HOUR VOLUME.**
+
+### (b) AND VOLUME IS INVERSELY RELATED TO VOLATILITY IN OUR OWN UNIVERSE — measured
+**OBJECT:** hourly bars from `crypto_spot_ohlc_1m_2026_08`. **POPULATION:** the 164 pairs with ≥48 hourly bars in the trailing 20 days. Quintiled by ATR%:
+
+| ATR quintile | avg ATR% | median 20d USD volume | median trades |
+|---|---|---|---|
+| 1 (quietest) | 0.337 | **6,189,684** | 19,183 |
+| 2 | 0.703 | 2,680,214 | 10,206 |
+| 3 | 1.099 | 1,557,103 | 10,865 |
+| 4 | 2.152 | **691,925** | 6,880 |
+| 5 (liveliest) | 5.177 | 1,078,259 | 11,385 |
+
+⇒ **the quietest quintile carries ~9× the dollar volume of the fourth.** Monotone Q1→Q4, partial recovery at Q5 (extreme moves attract volume). **Sorting by volume therefore sorts, approximately, by INVERSE volatility.**
+
+### (c) ★★ WHAT THE TOP-100 CUT COSTS — the same population, split at volume rank 100
+
+| | pairs | avg ATR% | **median ATR%** | cannot clear fee | workable | **% workable** |
+|---|---|---|---|---|---|---|
+| **SCANNED** (rank ≤ 100) | 100 | 1.721 | **0.847** | **37** | 45 | **45.0%** |
+| **NEVER SCANNED** (rank > 100) | 64 | 2.112 | **1.633** | **5** | 45 | **70.3%** |
+
+⇒ **The unscanned pairs carry 1.9× the median movement, and only 7.8% of them are fee-hopeless versus 37% of the ones we do scan.** ★ **And the ABSOLUTE count of workable pairs is identical — 45 inside the scanned universe, 45 outside it. We are leaving exactly as many usable pairs on the table as we are using.**
+
+### (d) THIS IS NOT "THE CAP IS STUPID" — IT IS AN UNPRICED TRADE-OFF
+**A volume floor exists for real reasons** — slippage, fill quality, depth, and the risk of an order that cannot be worked at all. Those costs are **invisible to an ATR measurement**, so nothing here says "raise the cap." **What it says is narrower and firmer: the cap is currently enforced by a RANK on a proxy that is inversely correlated with the property we need, and that trade-off has never been priced.**
+⚠️ **And note `min_depth_usd` is NULL on every crypto row** — depth is not separately gated. ⇒ **the constructive shape is to gate the thing we actually care about (depth / expected slippage) and add a volatility FLOOR, letting universe SIZE become a consequence rather than a fixed 100.** That is a proposal, not a finding.
+
+### (e) LIMITS, STATED
+- **Population is 164 coverage-qualified pairs, not the production eligible set** — so these ranks approximate, not reproduce, the live top-100 boundary.
+- **Volume basis differs:** 20-day summed dollar volume from stored bars vs production's `volume24h` ticker field. Similar ordering expected; not identical.
+- **Slippage is unmeasured here** and is precisely the cost the cap exists to avoid. (c) is an upper bound on the opportunity, not a net gain.
+
+### (f) ★ AND IT ANSWERS KYLE'S OTHER QUESTION — "are there strategies where LOW volatility is better?"
+**Yes in trading theory — mean-reversion and range strategies are built for quiet, range-bound conditions. But that does not rescue the quiet pairs here, because THE FEE IS STRATEGY-INDEPENDENT.** A pair whose mean hourly range is 0.337% (quintile 1) must still yield **1.60% round-trip**; at a 2.5× multiplier it offers **0.84%** — a guaranteed loss no matter which strategy fires. Clearing the fee there needs a ~5× multiplier, i.e. holding many bars — **which is the opposite of what a mean-reversion strategy is for.**
+⇒ **★ THE REAL CONCLUSION: an 80bps round-trip does not merely shrink our edge, it structurally eliminates an entire STYLE — the frequent, small-target, mean-reversion style. Those strategies are not mis-tuned or mis-matched; they are economically impossible at this fee tier.** That is a scope call for Kyle (rule 24 outcome 2 — working-as-designed but UNADDRESSED), not a code fix: either those strategies are retired for crypto, or they are restricted to maker-only entries where the round-trip is 0.80%, or they are held for xStock. **Not a decision CC-C makes.**
