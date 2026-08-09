@@ -145,3 +145,27 @@ Industry logic not industry numbers · the multiplier is not a free dial (hit-ra
 **It is doing what the others cannot: selecting volatile pairs, then applying an ordinary 2.5×.** **It is the existing proof that the pair-eligibility lever works.**
 
 ⚠️ **LIMITS: VTS population (no SQE/RTB), so these are GEOMETRY facts, not admission or win-rate facts. Per Langston's (2) the next cut is stratified by ATR% × regime — this table is per-strategy and therefore still averages across strata. `vwap_bounce` n=28 and `defensive_hedge` n=38 are too small to rule on.**
+
+
+---
+
+# REGIME PROVENANCE READ (Kyle-directed, BEFORE the stratified cut). **VERDICT: THE INTENT IS CORRECT AND THE METHOD WAS PRINCIPLED. Do not treat crypto's regime thresholds as wrong.**
+
+**SOURCE: `B_4_REGIME_RECALIB_STUDY_RESULTS.md`** — B.4 foundation, Phase-II, read-only replay (`scripts/b4-regime-recalib-study.ts`). **Scale: 3.69M 1m rows, 485 symbols, ~34 days (2026-04-30 → 2026-06-03); 101,838 60m bars vs 300,951 15m bars.** Production compute functions reused **verbatim**; bars rebuilt **uncapped** from `xstock_spot_ohlc_1m` (deliberately NOT the 240-cap cache aggregator).
+
+## What the intent actually was — and it is a good one
+
+**METHOD: PERCENTILE PRESERVATION.** Each 60m threshold's **rank** is carried to 15m, not its value ⇒ **every cutoff keeps its FRACTION OF BARS.** That is the principled way to move a threshold across bar sizes, and they did it for all 14.
+
+**★ AND THEY KNEW IT WAS INSUFFICIENT ON ITS OWN — the exit gate proves the care taken:** *"Per-threshold percentile preservation preserves each cutoff's FRACTION of bars, but NOT the joint regime MIX (AND/OR branch structure). The parity report must apply ALL 14 finalized thresholds TOGETHER… and report the resulting joint mix vs the chosen 60m baseline — that joint assessment + **'shift understood AND intended'** is the exit gate."* ⇒ **they required the JOINT distribution to be checked, not just the marginals. That is the exact discipline I have been failing on all week (stratify, don't pool).**
+
+## ★★ THE FACT THAT BINDS MY STRATIFICATION — INPUTS DO NOT SCALE UNIFORMLY WITH BAR SIZE
+
+Measured 60m → 15m: **volatility ≈0.61×** · **ADX/trend-strength COLLAPSES ≈0.48×** · **momentum ≈bar-size-INVARIANT** (same wall-clock lookback) · **|DBS| ≈scale-INVARIANT**.
+⇒ **a regime threshold is meaningless without its bar size.** **Crypto runs 60m and holds the ORIGINAL 60m-calibrated thresholds; xStock runs 15m and holds the recalibrated set.** **⇒ THE TWO CLASSES HAVING DIFFERENT REGIME NUMBERS IS CORRECT BY DESIGN, NOT DRIFT — and it is the one place where per-class separation was actually completed.**
+
+**⇒ CONSEQUENCE FOR THE STRATIFIED CUT: crypto regime labels are 60m-native and internally consistent. I must NOT compare a crypto regime label against an xStock one as though they mean the same thing, and I must not read crypto's thresholds as "un-recalibrated" — they are the baseline the xStock set was DERIVED FROM.**
+
+## Rule-24 disposition: **(1) NOT a defect. Intent correct, execution careful, still current.**
+
+**The one thing I would flag for a future look — and I am flagging it as a QUESTION, not a finding:** my own memory records **`regimeWeight` ~98% EXACT ZERO on the VTS path since ~07-14** (0% on 07-12/13 → 48%+ after). **That is a step change three weeks AFTER this calibration, so it cannot be explained by it, and it is not evidence against this study.** Whether it is a genuine regime read or a plumbing change is **unverified** and belongs to its own investigation — **not folded into the geometry work, and not asserted as a defect here.**
