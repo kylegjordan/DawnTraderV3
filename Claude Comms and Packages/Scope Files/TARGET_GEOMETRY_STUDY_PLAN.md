@@ -64,3 +64,48 @@ Industry logic not industry numbers · the multiplier is not a free dial (hit-ra
 1. **Is the config stamp (§2) sufficient**, or does a mid-window geometry change corrupt Phase-25's population in a way stamping cannot repair?
 2. **Is P3's derivation circular?** It uses each strategy's *current* hit rate to justify a *changed* target — but the change moves the hit rate. **I think it is a first-order estimate that must be labelled as such, not a solution. Rule on it.**
 3. **Does P1 belong in this batch or its own?** It is analysis with no code change, but it is not small.
+
+---
+
+# r2 — LANGSTON APPROVED WITH REVISIONS (2026-08-09, verdict at `cecabbe37`). All four adopted; one of them breaks my own precondition.
+
+**He independently re-derived:** the 19-strategy SSOT (`canonical-regime-strategy-map.ts:511-533` — and confirmed my 9-with-multiplier **∪** my named ten reconciles to it **exactly, no gaps, no double-count**); `ADJUSTMENT_FRAMEWORK.md:415-421` (4 ATR-target rows, "4 of 9" correct); `signal-orchestrator.ts:1055-1110`; the exploration stamp. **RULED ON REPORTED FACT (still mine to stand behind): the 1,128-signal quartile decomposition and the ~10pt/0.5× decay.**
+
+## r2.1 — §2 STAMP: NECESSARY, NOT SUFFICIENT. Three fixes + one thing stamping cannot repair.
+
+**(a) IT MUST LAND IN THE CURATED FIELD LIST — `signal-orchestrator.ts:~1085-1110` — NOT on `rawSignal.metadata`.** That rebuild is an explicit field list with `_displayContext` as the only spread: **the exact line that already killed `maxHoldingMs` (#550) and `atr`.** ⇒ **a geometry stamp on the raw signal is invisible BY CONSTRUCTION.** Give it #550's ending: **typed-required + runtime backstop** (`:1084-1099` is the pattern) so **absence is a COMPILE ERROR, not a null.**
+
+**(b) STAMP THE CONFIG *VERSION*, NOT THE VALUE.** Version is the partition key. **The value alone cannot partition the ten strategies whose geometry is not one number** — which is precisely the half of the system P4 covers.
+
+**(c) ★★ A STAMP ONLY SURVIVES WHERE THE ROW SURVIVES — AND THIS BREAKS MY PRECONDITION AS WRITTEN.** He cites **my own `MEMORY_CC_C.md:36` at this ref**: promoted signals keep their verdict in `closed_trades.metadata`, while **DECLINED signals lose theirs when the transient `rtb_signals` row is deleted** *(and I once stated that backwards — which is why he checked rather than took it)*. ⇒ **the stamp would preserve ONLY the winners of admission, while THIS STUDY'S CORE QUESTION IS ABOUT THE DECLINED POPULATION.** **MANDATORY BEFORE THE PRECONDITION COUNTS AS MET: verify where a declined signal's geometry record actually lands.**
+
+**★★★ AND THE CORRUPTION STAMPING CANNOT REPAIR — FEEDBACK THROUGH ADMISSION.** A bigger target changes netEV, which changes **which signals clear the floor**. ⇒ pre- and post-change **paper** cohorts are **non-comparable on ANY admission-conditioned metric, stamped or not.** VTS is ungated and stays comparable across the boundary.
+⇒ **THE RULING, and it re-shapes the study's mechanics: change geometry on the VTS side mid-window FREELY; a mid-window change on the PAPER/ACTIVE path leaves Phase-25 two halves that are LABELLED BUT NOT POOLABLE.**
+
+## r2.2 — §3 VTS: "shape transfers, levels do not" is DEFENSIBLE FOR RANGES, but NARROWER than I wrote it.
+
+**It holds when the bias is on ADMISSION and the measured quantity is a property of the POST-ENTRY PRICE PATH.**
+**★ THE BREAK CASE — and we are in it: when the gate selects on the SAME AXIS you are sweeping. netEV gates on target-vs-friction, and target is exactly what the sweep moves.**
+⇒ **REQUIRED: stratify by ATR% bucket and regime, then read the optimum's LOCATION per stratum.**
+- stable across strata → **set ranges on it**;
+- moves with the stratum → **you have a PER-STRATUM answer, not a per-strategy one — and that IS the finding.**
+**★ My own Q1/Q3-vs-Q4 decomposition is direct evidence the population is already stratified on this exact axis. DO NOT AVERAGE ACROSS IT.** *(That is the pooling error I made twice before, arriving a third time by a new route.)*
+
+## r2.3 — §4 P2: ENDORSED, one sentence replaced.
+
+**"Targets must sit ABOVE the published range" is directionally true but reads as *borrow their number and add margin*.** The operative rule is stronger and I already own it:
+**★ A SOURCE'S NUMBER IS ADMISSIBLE ONLY IF WE CAN RE-DERIVE IT FROM ITS STATED COST BASIS, AND RE-DERIVE IT AGAIN AT 80bps. Non-re-derivable ⇒ REASONING ONLY.**
+**⚠️ AND CLASS 3 (crypto, 10-80bps) IS HELD TO THE SAME TEST — similar friction buys NO exemption.** A 60bps number on another venue with different fill behaviour **is not ours.**
+
+## r2.4 — P3 IS CIRCULAR, and "label it first-order" was the weak answer. Make it SELF-CORRECTING.
+
+**I have the decay term, so use it.** Solve **`p(m)·target(m) > friction`** with **`p(m) = p₀ − k(m − m₀)`**; publish **the clearing `m` AND the `m` at which the linearisation breaks.**
+⇒ **OUTPUT IS A BOUND WITH A STATED VALIDITY RANGE**, not a point estimate.
+**⚠️ BUT `k` IS THE LEAST-VERIFIED NUMBER IN THE PLAN** — directional across three differently-biased populations, levels differed. ⇒ **P1 must RE-DERIVE `k` — and per r2.2, per STRATUM, not pooled.**
+
+## r2.5 — WHAT THIS CHANGES ABOUT THE STUDY'S SHAPE
+
+1. **The stamp is no longer a simple precondition** — it needs a curated-list landing, a version key, and a verified answer on where declined-signal geometry lands.
+2. **Geometry changes are now ASYMMETRIC by path:** free on VTS mid-window; on paper/active they create a hard analysis boundary Phase-25 cannot pool across.
+3. **Every P1 output is per-stratum** (ATR% bucket × regime), never a per-strategy average.
+4. **P3 emits a bound + validity range**, and its key coefficient is re-derived by P1 rather than carried in.
