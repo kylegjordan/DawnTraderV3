@@ -278,3 +278,37 @@ if (universeSize && eligiblePairs.length > universeSize) {
 ### (f) ★ AND IT ANSWERS KYLE'S OTHER QUESTION — "are there strategies where LOW volatility is better?"
 **Yes in trading theory — mean-reversion and range strategies are built for quiet, range-bound conditions. But that does not rescue the quiet pairs here, because THE FEE IS STRATEGY-INDEPENDENT.** A pair whose mean hourly range is 0.337% (quintile 1) must still yield **1.60% round-trip**; at a 2.5× multiplier it offers **0.84%** — a guaranteed loss no matter which strategy fires. Clearing the fee there needs a ~5× multiplier, i.e. holding many bars — **which is the opposite of what a mean-reversion strategy is for.**
 ⇒ **★ THE REAL CONCLUSION: an 80bps round-trip does not merely shrink our edge, it structurally eliminates an entire STYLE — the frequent, small-target, mean-reversion style. Those strategies are not mis-tuned or mis-matched; they are economically impossible at this fee tier.** That is a scope call for Kyle (rule 24 outcome 2 — working-as-designed but UNADDRESSED), not a code fix: either those strategies are retired for crypto, or they are restricted to maker-only entries where the round-trip is 0.80%, or they are held for xStock. **Not a decision CC-C makes.**
+
+---
+
+## ★★ P1c IS RETRACTED — ITS MECHANISM WAS WRONG. Kyle caught it; here is the corrected funnel. (2026-08-10)
+
+**WHAT I CLAIMED (P1c(a)):** the crypto universe is cut to the top 100 pairs by 24h volume at `kraken.ts:895-900`, so high-volatility pairs are never scanned. **THAT IS FALSE, and it is a rule-24.a failure: I read a truncation, confirmed the constant, and never established the call path was live.**
+
+**WHY IT IS FALSE — three findings, each sufficient on its own:**
+1. **`universeSize` is NEVER PASSED on the path I cited.** `active-engine-service.ts:142` calls `getEligiblePairs({...})` with no `universeSize` key ⇒ `if (universeSize && …)` is skipped. The slice does not execute.
+2. **That path is not the scanner anyway.** It is the empty-watchlist auto-populate, and it caps at **`MAX_AUTO_PAIRS = 10`** (`:164-166`).
+3. **The real scanner takes the FULL universe.** `market-scanner.ts:555-593` fetches **all** Kraken tickers, joins `getTradablePairs`, and passes **every** symbol as `allSymbols` into `getNextScanBatch` — no sort, no slice. Selection is `SCANNER_PARAMS.BATCH_SIZE = 300` per cycle (`system-guards.ts:179`, *"Batch 18: increased from 100"*) on a 60/40 ideal/rotational split, **rotating through the universe** rather than ranking it.
+⇒ **Kyle's account was correct and mine was not: ~300 pairs per cycle, rotating, not a fixed volume-ranked 100.**
+
+### ★ THE MEASURED FUNNEL — `signal_eval_archive`, `asset_class='crypto_spot'`, trailing 24h
+| stage | **distinct pairs** | rows |
+|---|---|---|
+| `pre_filter` | **1,404** | 1,734,353 |
+| `strategy_internal` | **110** | 21,633 |
+| `sqe` | **47** | 6,458 |
+| `admitted` | **29** | 296 |
+
+⇒ **We touch 1,404 distinct crypto pairs a day** — consistent with Kyle's ~1,500-tradable recollection and with rotation covering the universe. **Neither 100 nor 470 was the operative number; 470 was an artifact of MY coverage filter on one month's 1m bars, never a system limit.**
+
+### ★★ AND THE REAL COLLAPSE IS AT `pre_filter`: 1,404 → 110 = **92.2% of pairs eliminated at the FIRST gate**
+That is where `passesCoreMetricFilters(LQ, VolNoise, dbLqMin, dbVnMax)` runs (`fx5-scanner.ts:1070`). **P1b already showed the VolNoise ceiling rejects only ~3.7%** ⇒ **the LIQUIDITY FLOOR (`lq_min = 43`) is the leading suspect for the 92% cut.**
+⚠️ **STATED AS A HYPOTHESIS, NOT A FINDING — this is exactly the step I skipped in P1c.** It is consistent with P1c(b) (volatility runs inverse to volume; the quietest ATR quintile carries ~9× the dollar volume of the fourth), but **consistency is not evidence.** **REQUIRED NEXT: instrument the pre_filter rejection reason per pair — LQ-fail vs VN-fail vs other — and read the ATR distribution of the LQ-failures.** Until that runs, no claim about where the lively pairs die.
+
+### ★ WHAT SURVIVES P1c UNCHANGED
+- **(b) the volatility↔volume inverse relationship** — measured on bars, independent of any call path. **Stands.**
+- **(f) the fee eliminates a STYLE** — arithmetic on ATR and fees, no call path involved. **Stands.**
+- **(c)'s top-100 split table is WITHDRAWN** — its cut line was a mechanism that does not exist.
+
+### ★ AND IT MAKES KYLE'S ORDER-BOOK PROPOSAL THE RIGHT INSTRUMENT
+His question: xStock already screens on **order-book value** because 24h volume is unavailable there — should crypto do the same, so a low-volume pair with a deep enough book is still admitted? **If the 92.2% cut is indeed liquidity, then it is being made by a VOLUME proxy when the property we actually need is DEPTH — can this order be filled without moving the price.** ⇒ a low-volume/deep-book pair is exactly the case a volume proxy rejects and a depth gate would keep. **Note `min_depth_usd` is NULL on every crypto row** — the column exists and is unused. **This is now the most promising lever in the study, and it is gated behind the pre_filter instrumentation above.**
