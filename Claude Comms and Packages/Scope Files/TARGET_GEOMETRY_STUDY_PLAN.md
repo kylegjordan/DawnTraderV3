@@ -109,3 +109,39 @@ Industry logic not industry numbers · the multiplier is not a free dial (hit-ra
 2. **Geometry changes are now ASYMMETRIC by path:** free on VTS mid-window; on paper/active they create a hard analysis boundary Phase-25 cannot pool across.
 3. **Every P1 output is per-stratum** (ATR% bucket × regime), never a per-strategy average.
 4. **P3 emits a bound + validity range**, and its key coefficient is re-derived by P1 rather than carried in.
+
+
+---
+
+# P1a RESULT — per-strategy geometry on held VTS data (14d, crypto, n≥20 per strategy)
+
+**The decisive column is FEE AS A SHARE OF TARGET.** At 0.80% round-trip, a strategy whose target the fee eats a quarter of cannot clear the gate however good its signals are.
+
+| strategy | n | target% | stop% | ATR% | implied mult | R:R | **fee as % of target** |
+|---|---|---|---|---|---|---|---|
+| `vwap_pullback` | 66 | **16.65** | 6.48 | 1.67 | **10.65** | 2.61 | **5%** |
+| `strong_bull_trend` | 264 | **13.25** | 6.62 | 2.21 | 6.00 | 2.00 | **6%** |
+| `volatility_edge` | **6,902** | **7.16** | 4.30 | **2.87** | 2.50 | 1.67 | **11%** |
+| `sma_trend_ride` | 638 | 4.61 | 2.31 | **2.91** | 2.05 | 2.00 | 17% |
+| `defensive_hedge` | 38 | 3.46 | 2.29 | 1.59 | 2.43 | 1.62 | 23% |
+| `vwap_bounce` | 28 | 3.38 | 1.69 | 3.29 | 1.33 | 2.00 | 24% |
+| `support_bounce` | 423 | 3.04 | 0.92 | 1.52 | 2.00 | 3.32 | 26% |
+| `reverse_impulse` | 496 | 2.91 | 1.44 | 1.27 | 2.32 | 2.23 | 28% |
+| `inside_bar_reversal` | 378 | 2.91 | 1.74 | 1.16 | 2.50 | 1.67 | 28% |
+| `pivot_shift` | 203 | 2.83 | 1.54 | 1.08 | 2.58 | 1.82 | 28% |
+| `morning_star` | 965 | 2.75 | 1.44 | 1.10 | 2.50 | 2.07 | **29%** |
+
+## ★ THE FINDING — IT IS NOT THE MULTIPLIER, IT IS WHICH PAIRS EACH STRATEGY FIRES ON
+
+**`volatility_edge` and `morning_star` carry the IDENTICAL configured multiplier — 2.50.** `volatility_edge` produces a **7.16%** target; `morning_star` produces **2.75%**. **The whole difference is ATR: 2.87% vs 1.10%.**
+⇒ **the failing strategies are not mis-multiplied — they are firing on QUIET PAIRS.** `morning_star`, `pivot_shift`, `inside_bar_reversal`, `reverse_impulse` all sit at **ATR 1.1–1.3%**, where even a 2.5× multiplier cannot reach 3%.
+**★ ⇒ A THIRD LEVER, not previously in the plan: WHICH PAIRS A STRATEGY IS ELIGIBLE TO FIRE ON.** Raising `morning_star`'s multiplier to reach 4% would need **3.6×** — pushing its target far past its own pattern's structural logic. **Restricting it to pairs above an ATR floor achieves the same target with the multiplier untouched.**
+
+## SECOND FINDING — the top two are NOT ATR-multiplier strategies at all
+
+**`vwap_pullback`'s implied multiplier is 10.65 — and it is one of the TEN strategies with NO configured `target_exit_atr_multiplier`.** It reaches a 16.65% target by R-multiple/measured-move. **⇒ the two best fee-ratios in the book come from the mechanism family P4 was written to investigate, and which the multiplier study would have skipped entirely.** *(n=66 — small; directional only.)*
+
+## THIRD — `volatility_edge` is the volume leader AND viable: 6,902 signals, 7.16% target, 11% fee drag.
+**It is doing what the others cannot: selecting volatile pairs, then applying an ordinary 2.5×.** **It is the existing proof that the pair-eligibility lever works.**
+
+⚠️ **LIMITS: VTS population (no SQE/RTB), so these are GEOMETRY facts, not admission or win-rate facts. Per Langston's (2) the next cut is stratified by ATR% × regime — this table is per-strategy and therefore still averages across strata. `vwap_bounce` n=28 and `defensive_hedge` n=38 are too small to rule on.**
