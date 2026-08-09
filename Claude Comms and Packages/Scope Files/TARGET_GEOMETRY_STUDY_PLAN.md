@@ -1,0 +1,58 @@
+# TARGET-GEOMETRY STUDY — plan for Langston's review
+
+**CC-C, 2026-08-08. Kyle-directed, after four rounds of pushback in both directions.** Feeds Phase-25 item **25-17**; the question is what can run **now, in Phase 19**, without corrupting the data Phase 25 will consume.
+
+## 0. THE QUESTION
+
+Why do so few crypto signals carry targets large enough to clear an 0.80% round-trip fee — and what should each strategy's target geometry actually be, per asset class?
+
+## 1. WHAT IS ALREADY MEASURED (not assumptions — these are the study's starting facts)
+
+- **Target decomposes into two factors:** `target% = implied_multiplier × ATR%`. Measured across 1,128 recent crypto signals by target quartile: Q1 2.54% (ATR 1.11, mult 2.46) · Q2 3.12% (1.27, 2.48) · Q3 3.74% (**2.87**, **1.98**) · Q4 **11.25%** (**2.95**, **4.46**).
+  ⇒ **In the bottom three quartiles the driver is PAIR VOLATILITY (multiplier actually FALLS 2.46→1.98 while ATR triples). In the top quartile it is the MULTIPLIER — same volatility as Q3, 3× the target.** Both levers are real; they dominate in different places.
+- **The multiplier is per-STRATEGY, not universal:** 6.0 `strong_bull_trend` · 3.0 `adaptive_flow`/`pivot_shift` · 2.5 `morning_star`/`volatility_edge` · 2.0 `inside_bar_reversal`/`reverse_impulse`/`support_bounce` · 1.8 `defensive_hedge`. **All rows `asset_class='*'`.**
+- **⚠️ ONLY 9 OF 19 STRATEGIES HAVE ONE.** The other ten — `abcd_long`, `breakout`, `dhma`, `liquidity_trap`, `mean_reversion`, `orb`, `range_trade`, `sma_trend_ride`, `vwap_bounce`, `vwap_pullback` — set targets by **R-multiple / measured-move / percent**, with **no bounds, no cadence, no inventory row**.
+- **Nothing has ever calibrated these.** B72 migrated them off hardcode at unchanged Replit-era values; `ADJUSTMENT_FRAMEWORK.md:415-421` defines Tier-1 bounds + 0.25 step + 7-day cadence **for only 4 of the 9**, and that cadence **has never run** — the mechanism that would have run it was the adaptive tuner, dormant with zero callers, deleted 2026-08-07.
+- **The cost of moving it, measured:** ~10 points of hit rate lost per +0.5× of target (held directionally across three differently-biased populations; levels differed).
+
+## 2. ★ KYLE'S QUESTION: WOULD TESTING NOW POLLUTE THE DATA PHASE 25 NEEDS?
+
+**Answer: only if the change is unstamped. Stamped, it is a PARTITION, not damage.**
+
+The failure mode is real and we have already lived it: the 11.7S damper silently modulated VTS rows for weeks, and the only reason that history is still usable is that a `strategyMode` stamp exists to partition on. The exploration lane already does this correctly — every admit carries `netEvAtAdmit` + `floorInEffect` + `admissionBasis`, so its cohort is separable after the fact.
+
+**⇒ HARD PRECONDITION ON ANY GEOMETRY CHANGE: every VTS and paper row must record the multiplier (or geometry-config version) in effect at signal time.** With that stamp, a mid-window change costs an analysis *boundary*; without it, it costs the *window*. **This is cheap, it is the same pattern already proven twice in this codebase, and it must land BEFORE any value moves.**
+
+## 3. WHAT VTS CAN AND CANNOT ANSWER (Kyle's own principle, applied)
+
+**Kyle's test:** *admission bias changes WHICH entries you sample; it does not change how price moved afterwards.*
+
+| question | VTS? | why |
+|---|---|---|
+| If the multiplier rises, **how much longer is the hold?** | **YES** | time-to-target is a market property; 43.5k crypto rows + 1m bars back to 2026-04-28 |
+| **Do larger targets get hit less, and by how much?** | **YES** | the replay already runs; shape transfers even where levels do not |
+| **Is there a multiplier where hit-rate decay stops outrunning the bigger payoff?** | **YES, as SHAPE** | the optimum's LOCATION is informative; its absolute EV is not |
+| **Would this signal have been admitted / ranked top?** | **NO** | no SQE, no RTB — selection question, needs the gated population |
+| **What win rate will live trading see?** | **NO** | VTS levels are biased low (unfiltered); paper survivors biased high. **Neither number transfers.** |
+
+⇒ **Use VTS for the SHAPE of the target/hit-rate/hold-time curve per strategy — which is exactly Kyle's "if we move the multiplier up, what are the implications for trading time" — and never for the absolute success rate.**
+
+## 4. THE STUDY, IN FOUR PARTS
+
+**P1 — OUR OWN EVIDENCE FIRST (runs now, no external source, no setting changes).** Per strategy × per asset class, from held data: implied-multiplier distribution, ATR% distribution, time-to-target, and the hit-rate-vs-target curve. **Output: which strategies are mis-set on our own evidence, before anyone reads an industry paper.**
+
+**P2 — INDUSTRY RESEARCH FOR THE *WHY*, NOT THE NUMBER (Kyle's framing, adopted).** What governs the choice — holding period, volatility regime, strategy archetype, trend-vs-mean-reversion? **Published multiples assume 3-5bps friction against our 80bps, so their VALUES are not transferable and adopting them points the wrong way (our fee argues for LARGER targets).** Take the reasoning; derive the number.
+
+**P3 — DERIVE BASELINES FROM ARITHMETIC, per strategy × per class.** For each: what multiplier makes the target clear 0.80% at the hit rate that strategy actually achieves? **This is computable today and needs no external source.** Publish bounds for **all 19**, not the 4 that have them.
+
+**P4 — THE TEN NON-MULTIPLIER STRATEGIES.** Enumerate what each actually uses (R-multiple / measured-move / percent), find its lever, and give it bounds. **Kyle's open question — this batch, its own batch, or Phase 25 — is answered by P4's findings, not before them.**
+
+## 5. PUSHBACK KYLE ACCEPTED, RECORDED SO IT IS NOT RE-ARGUED
+
+Industry logic not industry numbers · the multiplier is not a free dial (hit-rate cost measured) · the plan must cover 19 strategies not 9 · VTS and paper answer different questions and must not be pooled.
+
+## 6. WHAT I STILL WANT LANGSTON TO ATTACK
+
+1. **Is the config stamp (§2) sufficient**, or does a mid-window geometry change corrupt Phase-25's population in a way stamping cannot repair?
+2. **Is P3's derivation circular?** It uses each strategy's *current* hit rate to justify a *changed* target — but the change moves the hit rate. **I think it is a first-order estimate that must be labelled as such, not a solution. Rule on it.**
+3. **Does P1 belong in this batch or its own?** It is analysis with no code change, but it is not small.
