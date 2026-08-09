@@ -169,3 +169,53 @@ Measured 60m → 15m: **volatility ≈0.61×** · **ADX/trend-strength COLLAPSES
 ## Rule-24 disposition: **(1) NOT a defect. Intent correct, execution careful, still current.**
 
 **The one thing I would flag for a future look — and I am flagging it as a QUESTION, not a finding:** my own memory records **`regimeWeight` ~98% EXACT ZERO on the VTS path since ~07-14** (0% on 07-12/13 → 48%+ after). **That is a step change three weeks AFTER this calibration, so it cannot be explained by it, and it is not evidence against this study.** Whether it is a genuine regime read or a plumbing change is **unverified** and belongs to its own investigation — **not folded into the geometry work, and not asserted as a defect here.**
+
+---
+
+## P1b — THE VOLNOISE FILTER TEST (Kyle-directed 2026-08-09). HYPOTHESIS REFUTED TWICE, AND THE REAL GAP IS THE OPPOSITE ONE.
+
+**Kyle's question:** *"Are we filtering out pairs with the right volatility, and that's why a lot of these strategies aren't producing signals with a high enough net EV?"*
+
+**ANSWER: No. We are not filtering on volatility LEVEL at all — and that is the actual defect.**
+
+### (a) THE SCREENER IS TWO GATES, AND NEITHER IS A VOLATILITY FLOOR — `analysis-utils.ts:249`, verbatim:
+```ts
+return LQ >= lqMin && VolNoise <= vnMax;
+```
+A liquidity FLOOR and a noise CEILING. **There is no ATR minimum anywhere in the screener.** The reachability gate that does involve ATR moved into the normalizer at reorg-B2 and is explicitly *"a feasibility check, not a quality bar"* (`analysis-utils.ts:251-255`) — it bounds targets from ABOVE (traversable), never from below.
+
+### (b) VOLNOISE CANNOT SELECT ON VOLATILITY LEVEL — IT IS SCALE-INVARIANT BY CONSTRUCTION
+`VN = MAD(|ln returns|) / max(median(|ln returns|), 0.0001)`, clamped to [0,1] (`analysis-utils.ts:139-176`, 19G formula, landed **3dd80e499 2026-03-20** — i.e. BEFORE the 2026-04-06 threshold set, so the ceilings are NOT calibrated against a dead distribution; that hypothesis is dead).
+**Scale both numerator and denominator by any c>0 and VN is unchanged.** ⇒ VN measures how UNEVEN the moves are, never how BIG. A `vn_max` ceiling is structurally incapable of screening out lively pairs.
+
+### (c) AND THE DATA AGREES — measured, not reasoned
+**OBJECT:** hourly bars aggregated from `crypto_spot_ohlc_1m_2026_08`. **POPULATION:** the 163 crypto pairs with ≥48 hourly bars in the trailing 20 days (of 472 symbols present; the rest lacked coverage). **POSITIVE CONTROL:** a first cut at `n>=200` returned 9 pairs / 0 rejects — a near-total that proved to be over-filtering, not evidence; relaxing the coverage bar produced both buckets, one at the 1.0 clamp.
+
+| bucket | pairs | avg ATR% | **median ATR%** | avg VN |
+|---|---|---|---|---|
+| PASS `vn ≤ 0.85` | 157 | 1.882 | **1.138** | 0.623 |
+| REJECT `vn > 0.85` | 6 | 1.794 | **0.822** | 0.939 |
+
+⇒ **The ceiling rejects 6 of 163 = 3.7% of the universe, and those it rejects are if anything QUIETER (median 0.822% vs 1.138%), not livelier.** Refuted on the data as well as on the formula.
+
+### (d) ★★ THE REAL FINDING — A QUARTER OF THE ADMITTED UNIVERSE CANNOT CLEAR THE FEE UNDER ANY OUTCOME
+Same population, pairs passing `vn ≤ 0.85`. Illustrative cut at the **2.50× ATR multiplier** (the one `volatility_edge` and `morning_star` share) against **1.60% round-trip taker** (0.80%×2 — the pure fee, so a FLOOR; real friction is higher):
+
+| | pairs | share |
+|---|---|---|
+| target ≤ 1.60% ⇒ **cannot clear the fee at all** | **40** | **25.5%** |
+| target 1.60–2.40% ⇒ thin | 28 | 17.8% |
+| target > 2.40% ⇒ workable | 89 | 56.7% |
+
+ATR% quartiles of the passing set: **p25 0.639 · p50 1.138 · p75 2.443.**
+
+⇒ **25.5% of what the screener admits is structurally unprofitable before a strategy has an opinion**, and nothing upstream removes it. **The netEV gate is doing a job the screener should have done first** — which is why it reads as "strategies can't produce a high enough netEV."
+
+### (e) THIS IS THE UNIVERSE-LEVEL MECHANISM BEHIND P1a
+P1a showed `volatility_edge` and `morning_star` share the **identical 2.50** multiplier yet produce **7.16% vs 2.75%** targets purely from **ATR 2.87% vs 1.10%**. (d) explains why that is available to happen: **the quiet pairs are in the admitted universe by design, because no gate excludes them.** ⇒ the deliverable shape shifts — a per-strategy multiplier table cannot fix a universe that admits unprofitable pairs.
+
+### (f) LIMITS, STATED
+- **One multiplier.** 2.50× is illustrative; multipliers differ per strategy and **ten of the 19 carry no ATR multiplier at all** — those are not covered by (d).
+- **ATR proxy.** Mean hourly `(high−low)/close`, not the system's ATR-14. Directionally sound, not the production estimator.
+- **Coverage bias, and it likely UNDERSTATES (d).** 163 of 472 symbols cleared the coverage bar; thinly-captured pairs are plausibly the quieter/less liquid ones, so the true hopeless share is probably higher, not lower.
+- **Rejections are not recorded.** Only one write site exists for VolNoise (`active-execution-engine.ts:3496`) and it is on the trade-OPEN path, so screener rejects leave no trace. (c) was measurable only because it was recomputed from raw bars. **Same gap family as the declined-signal geometry (0 of 8,767).**
