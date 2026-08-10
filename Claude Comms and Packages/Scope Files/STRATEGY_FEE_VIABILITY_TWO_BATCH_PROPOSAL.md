@@ -83,3 +83,38 @@
 
 Five, **every one caught by Kyle rather than by self-check**: (1) the top-100-by-volume universe cut — the code exists but **never executes** (`universeSize` never passed on the live path; live universe is **1,430** pairs, ~294/cycle rotating); (2) "xStock pays zero fees" — an artifact of a window spanning the **2026-07-28** accounting change (xStock actually pays **more**); (3) "crypto admits reversals, xStock admits trend" — **pooled the two admission lanes**; (4) "hundreds of positive-EV signals destroyed downstream" — **counted re-evaluations as distinct signals** (the 376 resolve to **three symbols**); (5) "only the live path can answer the ranking question" — **`rtb_shadow_pairings` already does** (§2).
 **Langston's diagnosis, sharper than CC-C's own and adopted:** these are not "reported too early" — they are the **wrong-object/wrong-population** class, and three are specifically **a population straddling a boundary** (fallback vs live path; a window spanning an accounting change; two lanes pooled; re-evaluations pooled with distinct signals). *A count that straddles a boundary always looks clean, because it IS a clean number — of something else.* **Operational rule: name the population and justify the denominator BEFORE looking at the value.**
+
+---
+
+## 7. r1 — LANGSTON REVIEW + KYLE DESIGN CHANGES (2026-08-10). Three of Langston's objections dissolved by design; one CONFIRMED and worse than priced.
+
+### 7.1 ★ SHADOW TRUNCATION — Langston's flag CONFIRMED BY MEASUREMENT, and it is severe
+**OBJECT:** `closed_trades`, real closed positions. **POPULATION:** all of them post-**2026-07-28 12:00Z** (the accounting boundary), not a sample.
+
+| class | n | median hold | p75 | p90 | max | **> 6h** |
+|---|---|---|---|---|---|---|
+| crypto | 46 | 5.06h | 12.01 | 19.39 | 38.47 | **22 / 46 = 48%** |
+| xStock | 95 | 7.70h | 12.52 | 44.48 | 266.71 | **60 / 95 = 63%** |
+
+⇒ **`SHADOW_MAX_HOLD_MS = 6h` (`vts-runner.ts:734`) truncates ~HALF of crypto and ~TWO-THIRDS of xStock counterfactuals** — and cuts off exactly the slower winners the survey needs. The header at `:728-733` already concedes it, citing a **~28.7h VTS average hold** against its own 6h TTL.
+**FIX: RAISE to ~48h. Do NOT remove.** Removal re-introduces the pre-Batch-18I unbounded-trade-map bug (B63 hotfix set `Infinity` → Langston flagged → B64 restored the valve). The switch is DB-backed (`max_hold_switch.enabled_vts`, `vts-runner.ts:1118-1124`); the 6h value itself is a hardcoded constant.
+**⚠️ OPEN INTERACTION — BLOCKING, not resolved:** the same comment sizes the open-shadow population at **~2.9k–6.5k for a 6h TTL** against `SHADOW_CAP = 10000`. An 8× TTL naively implies **23k–52k**, which would **breach the cap and begin reject-new — silently rebiasing the very selection-quality sample this protects.** The comment claims the per-signal dedupe makes pool-size the primary bound (pool is 0–3, so the cap should never bind) — **but that is a CODE COMMENT, not a measurement. Do not raise the TTL until the open-shadow population is measured at the new value.**
+
+### 7.2 ★ KYLE: READ ONLY POST-MARK SHADOW DATA — dissolves three objections without arguing them
+Langston: 39,645 rows is not yet a population — **two grains mixed** (per-signal shadow TRADE vs per-cycle member ROW); **three of four FinalScore components NULL from birth** until #555 (2026-07-22, its own measurement: 14,232 rows with those three at 0); **pattern-lane rows before B-ATR-SOURCE-FIX (07-27, #581) carry a STALE `atr` from the previous quant symbol.**
+**KYLE'S ANSWER: we read NO shadow data from before the change date — only post-mark.** ⇒ all three are **pre-change artifacts that never enter the analysis.**
+**REQUIRED, PRE-REGISTERED (not assumed):** confirm at the ref that **#555 and #581 both landed BEFORE the mark**, so post-mark rows carry all four FinalScore components and a correctly-sourced `atr` from day one. **If either did not, the mark moves.**
+
+### 7.3 ★ THE CONTROL ARM IS WITHDRAWN — Kyle's argument beat CC-C's
+Langston upgraded slot contention from watch-item to threat, with two **global** channels: Gate 7 `MAX_TRADES` against the global `maxOpenPositions` (`SYSTEM_MANUAL.md:3533`, knob `:3386`) and exposure enforced separately at execution (`RUNNING_ISSUES.md:1608`). He proposed leaving untouched strategies as a contention instrument.
+**KYLE REFUTED IT; CC-C ACCEPTS:**
+1. **THE PRIMARY METRIC IS UPSTREAM OF SLOTS ENTIRELY** — how many signals clear the SQE into the RTB pool is decided **before** any ranking or slot contention exists. Crowding cannot contaminate it.
+2. **FOR OUTCOMES, THE SHADOWS ALREADY COVER IT** — Langston confirmed himself that shadows **resolve outcomes through the same `evaluateTECExit`**, so a strategy that LOSES the ranking still has its counterfactual outcome recorded. **That is precisely the blind spot the control arm was invented for.**
+⇒ **Control arm removed from the design.** Langston's `maxConcurrentPositions` exclusion is KEPT (a per-strategy knob that reallocates the shared budget is not an independent change).
+⚠️ **Both this and §7.2 now ride on the shadow instrument being sound — which is why §7.1's open interaction is blocking.**
+
+### 7.4 LANGSTON'S SURVEY CORRECTIONS — adopted
+- **Bucket 3 renamed `NOT-EXCLUDED`, not `WORKING`.** `net-expectancy-kernel.ts:105-112`: pWin is **not learned from outcomes** — it is `clamp(minPWin, maxPWin, minPWin + DI/diPWinFactor)`, or `minPWin + |DBS|/2` on the `quant-strong_trend` path. **Good news: the survey needs no outcome corpus, so Step 1 really is free.** But the verdicts are **asymmetric**: fail at `maxPWin` ⇒ **IMPOSSIBLE is sound and permanent**; clear at `maxPWin` ⇒ only *not arithmetically excluded*. **Six of nineteen strategies have never traded (#594)** — none can be called WORKING off this method.
+- **ADD the column that separates NOT-EXCLUDED from BORDERLINE:** each combination's **observed DI/|DBS| distribution** from stored VTS rows → **the pWin it actually receives, not the one it is permitted.** Still free, still Step 1. *"The difference between a finding and a permission slip."*
+- **A flat 1.6% across all cells is a crypto-taker constant applied to an xStock population.** Survey each cell **at the friction `maker-taker-decision.ts` would SELECT**, or at minimum at both bounds (maker-both-legs = 0.8%).
+- ⚠️ **KYLE'S FRAMING, which bounds all of the above:** we are **not calibrating pWin now** — that is Phase 25. We are measuring **what actually happens**: how many signals clear the SQE, how many become trades, and what those trades **and their shadows** returned.
