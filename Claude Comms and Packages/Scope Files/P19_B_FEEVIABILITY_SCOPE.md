@@ -60,14 +60,15 @@ A **PUMP/EUR** signal sat in the Ready-to-Buy pool for **18 minutes**, `pivot_sh
 
 ## 2. OBJECTIVES
 
-> **Sequenced. OBJ-0 runs FIRST; OBJ-1 and OBJ-2 are PRECONDITIONS — nothing else deploys before them.**
+> **Sequenced. OBJ-1 and OBJ-2 are PRECONDITIONS — nothing else deploys before them. OBJ-0 runs CONCURRENT with them and gates OBJ-4/OBJ-5 (Langston 2026-08-11).**
 
 **★ OBJ-0 — RUN THE OBSERVATIONAL DECISION GATE, ROADMAP ITEM 25-5. Runs BEFORE OBJ-1. (Kyle-flagged 2026-08-11; CC-C had wrongly filed this to batch two with NO DATE — the §9.4 vague-deferral failure, on an item whose triggers are ALREADY MET.)**
 
 **⚠️ NAMING CORRECTED — Kyle was right and CC-C was using a dead label.** It is **roadmap item `25-5`**, **Phase-25-homed**. `POST_AUDIT_ROADMAP:310` catalogues it as `| 25-5 | §19.4.5 Observational Decision Gate |`, and `:291` states the four calibration sections *"keep their original anchor numbers but are Phase-25-homed."* ⇒ **`19.4.5` is a preserved SECTION ANCHOR, not its phase.** This makes OBJ-0 **the same kind of phase-move as OBJ-3 (25-17), not a special case** — both pull a Phase-25 item forward because paper-active data now exists and the item gates work in front of it. *(⚠️ `:245` still positions the gate in the Phase-19 run order — an internal inconsistency in the roadmap; flagging, not fixing, in this batch.)*
 
 **WHAT IT IS:** created 2026-04-26 after B65.6 closed via SKIP; nine items to decide once 1–2 weeks of clean active-paper data exist. Reference: `Claude Comms and Packages/Scope Files/B65_6_FINDINGS_PAPER.md`.
-**STATE: NEVER RUN.** No `PHASE_19_OBSERVATIONAL_DECISIONS` document exists anywhere in the repo, and `19.4.5` returns **zero hits in `PHASE_19_PLAN.md`** — it fell out of the live plan.
+**STATE: NEVER RUN.** No `PHASE_19_OBSERVATIONAL_DECISIONS.md` exists anywhere in the repo — **Langston-verified at the ref with a passing positive control.**
+⚠️ **CC-C CORRECTION (Langston, 2026-08-11): my claim that `19.4.5` returns "zero hits in `PHASE_19_PLAN.md`" was FALSE at `3561ed94d`.** `PHASE_19_PLAN.md:18` carries it — **and the hit is MY OWN batch-two line, written the previous day.** I measured a document against a line I had just put in it, and the line additionally still filed the gate to batch two, contradicting this §2. **Fixed in the same commit** per §14.
 
 **TWO OF ITS NINE TRIGGERS ARE ALREADY MET:**
 - **Item 2 — fewer than 5 signals/day** ⇒ trigger is to **widen the pair universe**. **Crypto is at 3 organic trades in 21 days.** Met by a wide margin.
@@ -79,7 +80,9 @@ A **PUMP/EUR** signal sat in the Ready-to-Buy pool for **18 minutes**, `pivot_sh
 ⇒ **BOTH triggered items DECIDE WHAT BATCH ONE CONTAINS. Running the gate afterwards means either contaminating the window or delaying its answers by the full window length.**
 
 **SCOPE OF OBJ-0 (deliberately narrow — this is not the whole nine-item gate):** evaluate and produce a written decision for **items 2 and 3 only**, the two whose triggers have fired. The remaining seven stay in Phase 19.4.5 and are re-evaluated at its normal time.
-**OWNER:** CC-C. **DUE: before OBJ-1 begins** — it gates the batch.
+**★ PLACEMENT — RE-HOMED BY LANGSTON 2026-08-11, and he is right: my argument did not reach OBJ-1.** Both legs establish precedence over **OBJ-4 and OBJ-5 only** — OBJ-1 is instrumentation and OBJ-2 is retention; **neither touches admission, and the mark has not been laid.** Gating two declared blocking preconditions behind an analysis task that contains a Kyle escalation is **a stall with no sequencing justification** — and **OBJ-1 IMPROVES the record the gate reads.**
+⇒ **OBJ-0 GATES OBJ-4 AND OBJ-5; RUNS CONCURRENT WITH OBJ-1 AND OBJ-2.**
+**OWNER:** CC-C. **DUE: before OBJ-4 begins.**
 **OUTPUT:** `1-system-manual/PHASE_19_OBSERVATIONAL_DECISIONS.md`, stating per item what was observed, whether the threshold for moving work pre-launch was met, the decision, and the justification (the format the gate itself specifies).
 **VERIFY:** the document exists at the graded ref; `PHASE_19_PLAN.md` carries 19.4.5 with its status; `RUNNING_ISSUES` #336 and the B65.6 record cross-reference it.
 **⚠️ ESCALATION:** if item 3 says reopen B65.6 pre-launch, that is a **Kyle scope call**, not CC-C's — it re-orders Phase 19 itself.
