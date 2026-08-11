@@ -76,6 +76,35 @@ The crypto VTS lane runs `gateDisposition='tag'` (SIM:241 — *"ONLY the crypto 
 
 ---
 
+## A.6 — **THE CORRECTED FIGURE HAS THE SAME FLAW. Retracted a second time, and the honest position is that the live reachability rate is UNMEASURED BY DESIGN.** (Kyle-directed re-check #2)
+
+**The tracker records the guard's VERDICT, not an enforced drop.** Verified at `strategies/morning-star.ts:179-180`:
+```ts
+recordGuardEval('morning_star', _gr.rr, _gr.pass, _gr.dropReason, assetClass);   // ← records FIRST
+if (guardForcesDrop(_gr, gateDisposition)) { … }                                  // ← decides SECOND
+```
+And `guardForcesDrop` (`strategy-helpers.ts:454-458`) returns **false** under `disposition='tag'` for taggable reasons — **VTS does not drop, but the counter has already scored it as a drop.** ⇒ **`reachDrops` = "times the guard said unreachable, across BOTH lanes", and VTS supplies most of the volume.**
+⛔ **So §A.5's 81.9% / 53.7% are NOT active-path drop rates either. Retracted.** *(Second instance of the same error in one hour, on the instrument I introduced to fix the first.)*
+
+### ★ AND THERE IS NO ACTIVE-PATH SOURCE — IT IS INTENTIONAL, NOT A GAP
+`signal_eval_archive` `strategy_internal` rows, crypto, 24h: **every source is `vts-runner`** (`breakout_fail` 9,161 · `indicator_filter` 4,129 · … · `guard_fail` 654). And `stage-attrition-cache.ts:25` states the design verbatim:
+> *"`strategy_internal` has **no active-path writer at all — it is a VTS-only stage. A blank active cell there is correct**, and the client says so rather than rendering a bare 0."*
+⇒ **Working-as-designed (rule 24 outcome 2), NOT a defect and NOT a recording gap to fix.** My "second recording gap" hypothesis is **refuted before it was filed** — §9.5(b-ii) doing its job.
+
+### ★★ THE USABLE CONSEQUENCE — OBJ-3 does not need the drop count
+We cannot count what the ceiling rejects on the live path. **We do not need to.** The stage *after* it **is** recorded: `signal_eval_archive`, `source='signal-orchestrator'`, `reject_stage IN ('sqe','admitted')`. **A ceiling change shows up as PASS-THROUGH VOLUME arriving at the SQE.**
+⇒ **OBJ-3's verification criterion is rewritten: measure the change in signals REACHING the SQE (per strategy, `source='signal-orchestrator'`), not the change in drops.** Same effect, a recorded object, no new instrumentation.
+⚠️ **AND THIS WEAKENS THE #371 ARGUMENT AT §A.3** — the divergence capture is still worth having for the normalizer retirement, but **OBJ-3 no longer depends on it**, so it should not gate this batch. **Downgrade from blocker to recommendation.**
+
+## A.7 — **`morning_star`: "BROKEN" WITHDRAWN. It is a COST MISMATCH, and it may be fine on xStock.**
+
+Its target is volatility-scaled (`entry + 2.5×ATR`), but **its stop is STRUCTURAL** — `morning-star.ts:173`: `stopPrice = Math.min(c2Low, c1Low) * (1 − 0.003)`, i.e. **the low of the two prior candles**, minus a hardcoded 0.3% buffer *(one of the nine B72 "KEEP — geometric buffer" constants)*.
+⇒ **On crypto those pattern lows sit far below entry, so reward-to-risk lands near 1:1 (measured meanRR 1.05).** At 1:1 you need >50% wins to break even **before** costs; after 0.80% round-trip, far more.
+**⇒ NOT a malfunction — a mismatch between a pattern-defined stop and our cost base.** And **not dial-fixable**: the stop is the pattern. Moving it changes what the strategy *is*.
+**⇒ CORRECT DISPOSITION: not "retire", but "does not fit crypto's cost structure — test whether it fits xStock's",** where the same patterns are tighter. Scope §4.2 amended.
+
+---
+
 ## B. CORROBORATION FOUND IN THE LEDGER FOR SCOPE FINDINGS (§9.5(b-ii) — search before filing)
 
 - **`morning_star` independently confirmed broken.** `RUNNING_ISSUES:1935` records the persisted tracker at **272,758 evals / 186,096 `rrDrops` — a 68% reward-to-risk drop rate.** That is an *entirely different instrument* from the scope's hit-rate replay (2.0% hit rate over 553 trades) and it points the same way. **Two independent measurements; the retire-or-rebuild question at scope §4.2 is well-founded.**

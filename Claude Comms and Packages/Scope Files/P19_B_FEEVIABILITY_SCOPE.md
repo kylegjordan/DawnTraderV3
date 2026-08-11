@@ -47,7 +47,9 @@
 | **`vwap_pullback`** | 241,263 | 13,254 | **129,628** | **53.7%** | 88,043 (36.5%) | 2.21 |
 | **`morning_star`** | 503,233 | 168,779 | **0** | **0%** | **333,566 (66.3%)** | **1.05** |
 
-⇒ **The corrected finding is STRONGER: the reachability ceiling suppresses 82% of `sma_trend_ride` and 54% of `vwap_pullback`** — the two largest-target strategies — on the instrument built to measure it.
+⛔ **RETRACTED A SECOND TIME (pre-audit §A.6).** `recordGuardEval` fires **BEFORE** `guardForcesDrop`, and VTS (`disposition='tag'`) does **not** drop — so `reachDrops` counts the guard's **verdict across BOTH lanes**, not enforced active-path drops. **81.9%/53.7% are not the live drop rate.**
+**★ AND THERE IS NO LIVE SOURCE — BY DESIGN.** `stage-attrition-cache.ts:25`: *"`strategy_internal` has no active-path writer at all — it is a VTS-only stage. A blank active cell there is correct."* Working-as-designed, not a gap.
+**⇒ WHAT SURVIVES:** the ceiling demonstrably suppresses these two strategies **heavily in the population we can see**, and `morning_star` takes **zero** reachability drops while dying on RR at meanRR **1.05** — that contrast is lane-independent and stands.
 ⇒ **`morning_star` has ZERO reachability drops; it dies ENTIRELY on the RR floor at meanRR 1.05 against 2.5.** A **third** independent instrument agreeing with the 2.0% hit rate — the retire-or-rebuild call at §4.2 is now firmly evidenced.
 ⚠️ **STILL UNMEASURED:** whether those `reachDrops` come from GUARD-5, the normalizer, or both — the tracker records the **guard's** verdict only. **That is #371, and pre-audit §A.4 re-sequences OBJ-3 behind it.**
 
@@ -128,12 +130,13 @@ Write geometry + **config VERSION** (not value — Langston r2.1(b)) at the **SQ
 **OBJ-3 — RECALIBRATE `reach_atr_max` FOR CRYPTO (the phase-move; needs Kyle + Langston sign-off).**
 Move roadmap item **25-17** into this batch **for `reach_atr_max` only**. Set from crypto's own realized distribution, per class.
 **WHY IT CANNOT WAIT:** it drops **926 `sma_trend_ride` signals in 5.2h**, and it **structurally excludes `pivot_shift`** — the strategy with the flattest decay curve we measured (69.6% at +50%). **A placeholder is blocking the strategy best able to absorb a bigger target.**
-**VERIFY:** `unreachable` drop rate falls; no strategy whose geometry clears is dropped for reachability at the new value.
+**VERIFY — REWRITTEN (pre-audit §A.6): measure PASS-THROUGH, not drops.** The live drop count is unrecorded by design, but the stage *after* it is: **the change in signals REACHING the SQE per strategy (`signal_eval_archive`, `source='signal-orchestrator'`)**. Same effect, a recorded object, no new instrumentation.
+**⚠️ AND #371 IS DOWNGRADED FROM BLOCKER TO RECOMMENDATION** — the divergence capture is still worth having for the normalizer retirement, but **OBJ-3 no longer depends on it**, so it must not gate this batch.
 **⛔ `min_rr` IS EXPLICITLY NOT IN SCOPE — see §3.**
 
 **OBJ-4 — THE PER-STRATEGY GEOMETRY CHANGE SET, chosen on benefit AND cost.**
 **Candidates: `pivot_shift`, `volatility_edge`, `sma_trend_ride`** — the three flattest decay curves.
-**WITHDRAWN from the earlier proposal, each with its reason:** `morning_star` (**2.0% hit rate at its CURRENT target — broken, not mis-set;** rule-24 outcome-3 candidate, 553 trades of evidence); `inside_bar_reversal` (**+25% costs 46 points**, 52.2→6.4); `support_bounce`, `reverse_impulse`, `vwap_bounce`, `defensive_hedge` (decay too steep or unmeasured).
+**WITHDRAWN from the earlier proposal, each with its reason:** `morning_star` (**2.0% hit rate at its current target — but "BROKEN" IS WITHDRAWN, pre-audit §A.7.** Its target is volatility-scaled while its **stop is STRUCTURAL** — `morning-star.ts:173`, the low of the two prior candles — so on crypto reward-to-risk lands near **1:1** (meanRR 1.05). **A cost mismatch, not a malfunction, and NOT dial-fixable: the stop IS the pattern.** ⇒ disposition is *"does not fit crypto's cost structure — test whether it fits xStock's"*, not retire); `inside_bar_reversal` (**+25% costs 46 points**, 52.2→6.4); `support_bounce`, `reverse_impulse`, `vwap_bounce`, `defensive_hedge` (decay too steep or unmeasured).
 **Per-class rows only** — the mechanism is proven live (`strategy.vwap_pullback/volume_confirmation_enabled` is `*`=1 **and** `xstock_spot`=0). **A DB row, not a code change.**
 **VERIFY:** each changed strategy's post-mark signal count and fill count read separately by `strategy_name`; slot utilisation tracked as a first-class metric.
 
