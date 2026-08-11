@@ -50,11 +50,17 @@
 ### 1.6 Pair-exclusivity — a real exit, recorded NOWHERE
 **122 blocks in 5.2h** (`hasActivePair`, strategy-agnostic) on VVV 56 / ICNT 46 / XMR 20 — **all three genuinely held; the block is CORRECT behaviour.** Ten of fifteen slots were free ⇒ **not capacity, exclusivity.** **POSITIVE CONTROL:** `signal_eval_archive` over all **369,409** crypto rows in the same window returns **4,010** rows matching `netev` and **ZERO** matching `duplicate`/`pair`. ⇒ the funnel is blind to it, and **shadows cannot recover it** (no pool entry ⇒ no shadow row).
 
-**★ LIVE WORKED EXAMPLE — Kyle screenshotted it 2026-08-11 08:05 UTC, and the evidence was gone 25 minutes later.**
+**★ WORKED EXAMPLE — ⛔ RETRACTED 2026-08-11 (Langston). IT DOES NOT SHOW WHAT CC-C CLAIMED. Kept visible because the retraction is the useful part.**
 A **PUMP/EUR** signal sat in the Ready-to-Buy pool for **18 minutes**, `pivot_shift`, netEV **0.000003**, **Maker** mode, **10 of 15 slots free** — and was never promoted.
 **CAUSE, verified in `closed_trades`: PUMP/EUR was ALREADY AN OPEN POSITION at that instant** — opened `07:46:49Z`, closed `08:10:43Z` on `stop_hit`, lane **`organic`**. ⇒ **capacity was never the constraint; pair exclusivity was.**
-**WHY IT IS THE ARGUMENT FOR OBJ-1:** the block wrote **nothing** to the archive, the position has since closed, and the pooled signal is gone. **Without the screenshot there would be no trace at all.** A rejection class that erases itself inside half an hour cannot be measured across a marked window.
-*Three incidental facts worth keeping: the trade was **organic** (so the organic lane is not fully dead — it produces occasionally and this one stopped out); it was **`pivot_shift`**, an OBJ-4 candidate, confirming it does reach the pool; and netEV `0.000003` is the survey's knife-edge arithmetic appearing in a single live row.*
+**⛔ WHY IT IS RETRACTED — Langston pulled the closed trade's own `metadata`:** `source: RTB_PROMOTION`, `queuedAt 07:46:19.322Z`, `netEvAtAdmit 0.0000033017`, `admissionBasis organic`, `rtbQueueId e6739c0a…`. Queued 07:46:19 → screenshot 08:05 = **18m41s**; netEV rounds to **0.000003**; strategy `pivot_shift`; lane organic. ⇒ **every number CC-C attributed to a "blocked signal" is a property of the row that BECAME the position. It is the same queue row seen twice, not an independent witness.**
+**AND THE MECHANISM CANNOT DO IT:** `ready_to_buy_service.ts:2104-2109` — `hasActivePair(...)` → log → **`return null`**, at **admission** inside `queueSQESignal`. **A signal blocked there never enters the pool, so it cannot sit in the pool for 18 minutes.** What was screenshotted was **admitted at 07:46:19, thirty seconds BEFORE the position existed.**
+**⇒ HONEST READING: a pool-eviction or UI-staleness defect at the PROMOTION stage — a different site, which OBJ-1 does NOT address.** Homed as its own item (§5 Q5).
+
+**★ OBJ-1 SURVIVES ON THE MECHANISM, NOT THE ANECDOTE — and Langston made it stronger AND cheaper:**
+- `:2107` is a **bare `console.log`** — no row, no archive — and `out.log` rotates in **~2 days** on this box. *"Erases itself"* is true and now has a citing line rather than a story.
+- ⚠️ **AND THE SINK ALREADY EXISTS:** `rtb_signals` carries a purpose-built **`block_reason`** column with a **live writer at `ready_to_buy_service.ts:2325`** — and Langston's query returned **`count(*) = 0`**. *(A snapshot, not history — he explicitly declines to claim zero-rows-ever.)*
+- ⇒ **OBJ-1 IS PROBABLY NOT "BUILD CAPTURE." IT IS "FIND OUT WHY THE DESIGNED SINK IS EMPTY"** — a rule-24 three-way question (real defect / working-as-designed-unaddressed / legacy), not a fix. **Re-scoped accordingly; it gets cheaper, not bigger.**
 
 ---
 
@@ -72,20 +78,30 @@ A **PUMP/EUR** signal sat in the Ready-to-Buy pool for **18 minutes**, `pivot_sh
 
 **TWO OF ITS NINE TRIGGERS ARE ALREADY MET:**
 - **Item 2 — fewer than 5 signals/day** ⇒ trigger is to **widen the pair universe**. **Crypto is at 3 organic trades in 21 days.** Met by a wide margin.
-- **Item 3 — outcome-vs-confidence inversion** comparable to the 04-22 VTS pattern (**TFS 13.8% WR vs STR 83.3%**) ⇒ trigger is to **reopen B65.6 as a PRE-LAUNCH fix**.
+- **Item 3 — outcome-vs-confidence inversion** ⇒ trigger is to **reopen B65.6 as a PRE-LAUNCH fix**.
+  ⚠️ **CC-C CORRECTION (Langston):** the **TFS 13.8% / STR 83.3%** figures are **the roadmap's own 04-22 COMPARATOR** (`:421`) — **CC-C quoted the yardstick and glossed it as the measurement.** No object, population or window of its own.
+  **★ AND IT IS LIKELY NOT EVALUABLE:** a per-regime win-rate inversion is not estimable at **3 organic trades**, and ruling it from VTS is **circular** (the trigger exists *because* active filters are stricter than VTS). ⇒ **expected honest output: `NOT EVALUABLE — insufficient active-paper population`.** That is decision-grade. **Item 2's condition is precisely what destroys item 3's evidence base.**
 
 **★ WHY IT CANNOT SIT IN BATCH TWO — this is a SEQUENCING constraint, not a priority preference:**
 1. **Item 3's remedy changes the confidence inputs → changes pWin → changes what clears the netEV gate — which is exactly what OBJ-4 measures.** Landing it *during* the marked window is a second, undeclared change inside a controlled experiment. It must land **before the mark or after the window closes; never during.**
 2. **Item 2's remedy — widen the pair universe — is the SAME PROBLEM as §1.6 pair-exclusivity.** Only ~7 crypto pairs qualify; holding one blocks every strategy on it. Deciding OBJ-4's change set without first deciding whether the universe widens risks measuring strategy changes against a pair ceiling we were about to lift.
 ⇒ **BOTH triggered items DECIDE WHAT BATCH ONE CONTAINS. Running the gate afterwards means either contaminating the window or delaying its answers by the full window length.**
 
-**SCOPE OF OBJ-0 (deliberately narrow — this is not the whole nine-item gate):** evaluate and produce a written decision for **items 2 and 3 only**, the two whose triggers have fired. The remaining seven stay in Phase 19.4.5 and are re-evaluated at its normal time.
+**⚠️ THE GATE'S OWN PRECONDITION IS UNMET — DECLARED, NOT SKIPPED (Langston).** `:412` requires it run *"after… SQE recalibration is complete (19.4)"* — **19.4 is Phase-25-homed and NOT complete** — on *"1–2 weeks of clean active-paper data."* **3 organic trades in 21 days is not that.** Running it anyway is defensible **because** the data is starved, which is item 2's own answer — **but it is written down here rather than passed over.**
+
+**SCOPE OF OBJ-0 — narrow, with Langston's three conditions ADOPTED:**
+- **(a) NOT named `PHASE_19_OBSERVATIONAL_DECISIONS.md`** — that is the gate's **terminal** artifact, and a two-item file under it reads as *"the gate ran"* to the next reader (the #546 shape, and the same invisibility that left this sitting since April). **Output: `PHASE_25_5_PARTIAL_DECISIONS_2026-08.md`.**
+- **(b) CARRY A STATUS TABLE OF ALL NINE**, one line each. Cheap, and it permanently kills the *"did it ever run?"* ambiguity. **Items 1, 7 and 8 are blocked by the SAME starvation** (item 7 needs ≥30 laddered trades, `:426`) — *"not evaluable, population n=X"* is decision-grade.
+- **(c) ENUMERATE, DO NOT COUNT — ★ item 9 is ALREADY CLOSED** (P19-B6 restored the kill-switch auto-trip, `SYSTEM_IMPACT_MAP.md:1710`; `:430` re-homed it to 19.0.B). **Nine minus two is NOT seven live ones.**
 **★ PLACEMENT — RE-HOMED BY LANGSTON 2026-08-11, and he is right: my argument did not reach OBJ-1.** Both legs establish precedence over **OBJ-4 and OBJ-5 only** — OBJ-1 is instrumentation and OBJ-2 is retention; **neither touches admission, and the mark has not been laid.** Gating two declared blocking preconditions behind an analysis task that contains a Kyle escalation is **a stall with no sequencing justification** — and **OBJ-1 IMPROVES the record the gate reads.**
 ⇒ **OBJ-0 GATES OBJ-4 AND OBJ-5; RUNS CONCURRENT WITH OBJ-1 AND OBJ-2.**
 **OWNER:** CC-C. **DUE: before OBJ-4 begins.**
 **OUTPUT:** `1-system-manual/PHASE_19_OBSERVATIONAL_DECISIONS.md`, stating per item what was observed, whether the threshold for moving work pre-launch was met, the decision, and the justification (the format the gate itself specifies).
 **VERIFY:** the document exists at the graded ref; `PHASE_19_PLAN.md` carries 19.4.5 with its status; `RUNNING_ISSUES` #336 and the B65.6 record cross-reference it.
-**⚠️ ESCALATION:** if item 3 says reopen B65.6 pre-launch, that is a **Kyle scope call**, not CC-C's — it re-orders Phase 19 itself.
+**⚠️ ESCALATION — ★ KYLE RULED 2026-08-11. BOTH ANSWERED; OBJ-0 no longer carries an open escalation.**
+- **Item 2 → widening to PERP FUTURES: NO. Deferred, explicitly.** Kyle: not until after go-live, or possibly late Phase 25 / Phase 19; a **VTS-only data-collection** turn-on is a *maybe*, undecided. **The decision itself is deferred — that IS the decision, and it is his.** *(Langston flagged this as the larger of the two escalations and he was right to; it is now closed by ruling, not by silence.)*
+- **★ BUT SEPARATE THE FEED FROM THE TRADING — they are not the same question.** Ingesting the **Kraken crypto-perpetuals FEED** (data capture only, no trading) is a live question Kyle wants evaluated. **HOMED: batch two** (`P19-B-DROUGHT-2`), alongside the order-book-depth and volume-floor items it naturally groups with. **Nothing about perps enters batch one.**
+- **Item 3 → reopening B65.6 pre-launch** remains a Kyle call **if** item 3 proves evaluable — which per §2 OBJ-0 it likely is not (see below).
 
 **OBJ-1 — PERSIST THE DECLINED-SIGNAL RECORD (blocking).**
 Write geometry + **config VERSION** (not value — Langston r2.1(b)) at the **SQE reject hook**, by **write-site parity with the `vts-runner` writer** (which already writes `target`/`atrAtOpen` at 32/32 while `signal-orchestrator` writes 0 of 6,077).
@@ -138,3 +154,16 @@ A **commit + UTC timestamp**, not a date. **PRE-REGISTERED BAN on cross-half com
 2. **OBJ-1 scope:** does pair-exclusivity persistence belong here, or as its own issue?
 3. **`vwap_pullback` returns 0.0% hit rate at every level (n=40).** I do not trust it and have not explained it. Does it block OBJ-4?
 4. **The 24h replay window** counts slower winners as misses. Does that bias the decay curves enough to change the candidate set?
+5. **★ NEW — the promotion-stage defect the retracted example actually exposed.** A signal was **admitted at 07:46:19** and was still shown in the pool at **08:05** while its pair held an open position from **07:46:49**. The pair-block sits at *admission*, so it cannot explain this. **Either the pool is not evicting on promotion, or the UI is stale.** Different site, not OBJ-1. **Does it belong in this batch or its own issue?** CC-C's read: **its own issue** — it is a correctness question about the pool, not about fee viability.
+
+---
+
+## 6. ITEMS HOMED TO CC-C BEFORE BATCH CLOSE (§9.4 — named now, not deferred)
+
+| item | owner | due | note |
+|---|---|---|---|
+| **The sha-pinned-URL instrument trap** | CC-C | batch-one close | Langston supplies the account, CC-C files (he has no repo write). **State the OBSERVATION ONLY — a sha-pinned raw URL returned a different file's body; refetch correct; API `contents` endpoint correct. DO NOT NAME A MECHANISM** — neither of us has one, and an asserted absence needs presence-evidence (#453). **Label it unexplained.** |
+| **`POST_AUDIT_ROADMAP:245` inconsistency** | CC-C | batch-one close | `:245` positions the gate in the **Phase-19** run order while `:80/:291/:310` home it to **Phase 25**. Out of scope to fix here; **gets a home now, not later.** |
+| **The promotion-stage pool defect** (§5 Q5) | CC-C | batch-one close | Filed on Langston's ruling. |
+
+**Langston's standing evidence request on §1.6, still owed:** the `rtbQueueId` of the screenshotted row shown **≠ `e6739c0a`**; the `duplicate_pair_active` log line for PUMP/EUR **between 07:46:49 and 08:10:43** (with a positive control from the same window on any symbol if PUMP produces none).
