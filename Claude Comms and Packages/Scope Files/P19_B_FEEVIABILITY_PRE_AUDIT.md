@@ -245,3 +245,51 @@ The gate makes an **empirical, physical claim**: *a target beyond `reachAtrMax` 
 5. **The pre-governance batch folders** (`Archived Reports - Pre-Phase 12 Governance Implementation/`).
 6. **§9.5(a) COMPONENT CENSUS at every hop** — writers / readers / mutators / **deleters** / schedulers, per component. **Not a path trace**: the scope's funnel was redrawn three times precisely because forward-tracing stops at the first sufficient explanation.
 7. **§9.5(a-ii) DELETION-TIME STATE-WRITE CENSUS** — OBJ-1 may re-scope toward *why `rtb_signals.block_reason` is empty*; if anything is removed, enumerate the state it writes and grep for surviving readers.
+
+---
+
+# PART 3 — IMPLEMENTATION PLAN (Kyle-directed 2026-08-11: the audit must include one)
+
+> Sequenced build order with files, gates, and verification per step. **Steps marked ⏸ are Langston-gated and do not start until his ruling lands.** All DB changes are per-class rows; all code changes list their files.
+
+## STEP 0 — OBJ-0: the 25-5 gate, two triggered items *(no code; runs first, concurrent with steps 1–2)*
+- **Build:** `1-system-manual/PHASE_25_5_PARTIAL_DECISIONS_2026-08.md` — item 2 (signal volume) + item 3 (confidence inversion, expected verdict `NOT EVALUABLE — insufficient active-paper population, n=3`), plus the nine-row status table (item 9 already closed by P19-B6; items 1/7/8 blocked by the same starvation).
+- **Verify:** doc at the graded ref; `PHASE_19_PLAN.md` + `POST_AUDIT_ROADMAP.md` 25-5 row cross-referenced; #336 annotated.
+- **Escalation:** item-2 output feeds Kyle's already-made ruling (perps NO; feed-ingest = batch two). Item 3 → if evaluable and met, B65.6 reopen is Kyle's call.
+
+## STEP 1 — OBJ-1: the empty `block_reason` sink + the declined-geometry stamp
+- **First a rule-24 question, then code:** why is `rtb_signals.block_reason` (writer `ready_to_buy_service.ts:2325`) empty — dead writer, unreachable branch, or working-and-rows-expired? Disposition BEFORE any new capture is built.
+- **Build (after disposition):** (a) geometry + config-VERSION stamp at the SQE reject hook in `signal-orchestrator.ts`, copying the `vts-runner` writer shape (write-site parity, Langston-measured); (b) persist the admission-stage pair-exclusivity rejection (`ready_to_buy_service.ts:2104-2109` — today a bare `console.log`) into `signal_eval_archive` with blocking symbol + holding strategy.
+- **Files:** `signal-orchestrator.ts`, `ready_to_buy_service.ts`, `signal-eval-archiver.ts` (new gate labels only — no schema change; `gate_decision` is jsonb).
+- **Verify:** ≥99% of new SQE-reject rows carry geometry+version; pair-block archive count reconciles with the `duplicate_pair_active` log line over the same window; **positive control** — one known-blocked signal traced end to end.
+
+## STEP 2 — OBJ-2: shadow TTL 6h → 48h
+- **Build:** `vts-runner.ts:734` `SHADOW_MAX_HOLD_MS = 48h`. **The constant, NOT the switch** (`isVtsMaxHoldEnabled` gates the real VTS 7-day valve too — flipping it is the B63 regression).
+- **Verify:** TTL-cut share of shadow closes falls from the measured 27.3%; `shadowDropCount` stays 0 (Langston's replay predicts peak 3,284 vs cap 10,000); the `shadow_max_hold`-vs-`timeout` label split (his stale-close finding) excluded-or-flagged in any consumer.
+
+## STEP 3 ⏸ — OBJ-3 in its A.14/A.15 form: measure where reach dies, then set or drop
+- **Gated on Langston's ruling.** If ruled in: re-cut the §1.2 replay in **ATR units** (pure analysis, no deploy) → reach-vs-atrsToTarget curve per class → **if reach is material past 4.0**, one `module_constants` UPDATE per class with the measured value; **if reach collapses before 4.0, OBJ-3 IS DROPPED** and the constant is confirmed with evidence. Either way `25-17`/#336 get the crypto answer recorded.
+- **Files (if set):** DB row only. No code.
+
+## STEP 4 ⏸ — OBJ-4: the per-strategy geometry change set *(after steps 1–3; the mark cannot precede the stamp)*
+- **Gated on:** Langston's candidate-set ruling + step 3's outcome (a `pivot_shift` change may need no ceiling move at all if step 3 resets it).
+- **Build:** per-class `module_constants` INSERTs only (`strategy.<name>` rows, `asset_class='crypto_spot'`) — the resolver already honours them (`_SE_KEY`, proven live by `volume_confirmation_enabled`). Values chosen from the survey × decay curves; `sma_trend_ride` handled last (it sits on an exact floor equality — A.11).
+- **Verify:** per-strategy pass-through at the SQE (`signal_eval_archive`, `source='signal-orchestrator'`) — the A.6 criterion; slot utilisation watched as first-class.
+
+## STEP 5 ⏸ — OBJ-5: the mark
+- One dated deploy = the mark (commit + UTC). Pre-registered in the completion doc BEFORE the cut: the banned cross-half comparisons (win rate, avg R, fill rate, hit rate), the #581 code-correct-not-live-verified caveat, the read-path rule (`rtb_shadow_pairings`, never the dead `rtb_signals` score columns), and the post-mark row-count check before anything is called a population.
+
+## GOVERNANCE UPDATES OWED AT CLOSE (Kyle 2026-08-11 — named now so none is deferred)
+| doc | what changes |
+|---|---|
+| `SYSTEM_MANUAL.md` | reachability section: the measured curve + the recalibrated (or confirmed) constant, replacing "placeholder"; the OBJ-1 capture architecture |
+| `SYSTEM_IMPACT_MAP.md` | new writers (SQE-reject stamp, pair-block persist); shadow TTL change; any `expectancy_gates` value change |
+| `POST_AUDIT_ROADMAP.md` | 25-17 crypto leg resolved-or-confirmed; 25-5 partial run recorded; `:245` inconsistency fixed (homed item) |
+| `RUNNING_ISSUES.md` | #336 annotate · #371/#373 status (downgraded, still owned) · new: pool-eviction/UI-staleness, sha-URL trap, `:245` |
+| `STORAGE_POLICY.md` | only if OBJ-1 changes archive volume materially (measure first) |
+| Tier-1 set | BATCH_CATALOG · PHASE_HISTORY · PHASE_19_PLAN §1/§5 · completion report · both MEMORYs · Langston MEMORY sync |
+
+## WHAT I NEED BEFORE STEP 1 STARTS
+1. **Langston's Step-1/pre-audit ruling** (scope r3 + A.1–A.15 are with him).
+2. **Kyle's ack on this plan** — particularly that steps 3–5 are gated and may shrink the batch rather than grow it.
+3. **A write-scope note:** my standing grant covers governance/tooling; **OBJ-1/2 touch trading-path code** — confirming this batch constitutes the fresh grant, or the implementation belongs to CC-B with me as analyst/verifier. **Kyle's call, flagged not assumed.**
