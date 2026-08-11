@@ -131,6 +131,40 @@ He established the position was **created from the pooled row itself** (`rtbQueu
 
 ---
 
+## ⛔⛔ A.11 — **`min_rr = 2.5` IS STALE. It was recalibrated to per-strategy floors in June, and the scope has been arguing against a value that no longer exists.**
+
+**PROVENANCE, corrected.** `reach_atr_max` does **NOT** appear in the reorg-B2 completion report at all. The "4%/2.5/4.0" trio at `BATCH_CATALOG:378` is `target_floor_pct=4%` / `min_rr=2.5` / **`roi_absolute_max=4%`** (`P19_REORG_B2_COMPLETION_REPORT:30`, verbatim: *"a CONSERVATIVE starting placeholder; Phase-25 calibrates per-class"*). **`reach_atr_max` arrives at reorg-B2.1 OBJ-3**, whose entry also records a prior live **split-brain**: *"kill the live 1.5-vs-2.5 split-brain… the old `MIN_RR_RATIO=1.5` demoted to a seed; the normalizer's 2.5 no longer a second source."* ⇒ **2.5 was the winner of a two-value conflict, not a calibrated number.** *(`POST_AUDIT_ROADMAP:326` attributes `reach_atr_max` to reorg-B2; the completion reports place it at B2.1. Minor doc discrepancy, flagged not fixed.)*
+
+**★ AND THEN reorg-B2.3 CALIBRATED IT FROM DATA.** Its report: *"13 per-strategy floors + 2 class-default (**2.0, lowered from 2.5**) live in DB"*, 18 rows, set off the persisted guard-eval window.
+
+**LIVE VALUES — `module_constants.expectancy_gates`, queried 2026-08-11:**
+
+| asset_class | strategy | `min_rr` |
+|---|---|---|
+| crypto_spot | `*` | **2.0** |
+| crypto_spot | `support_bounce` | **1.0** |
+| crypto_spot | `volatility_edge` | **1.0** |
+| crypto_spot | `morning_star` | **1.39** |
+| crypto_spot | `range_trade` | 1.71 |
+| crypto_spot | `strong_bull_trend` | 1.95 |
+| crypto_spot | `reverse_impulse` | 2.40 |
+| crypto_spot | `vwap_pullback` | 2.44 |
+| crypto_spot | `mean_reversion` | 2.88 |
+| **crypto_spot** | **`sma_trend_ride`** | **ABSENT → falls back to `*` = 2.0** |
+
+`reach_atr_max` = **4.0** both classes (confirmed); `target_floor_pct` = **0.040** both classes (confirmed — though the LIFT that consumed it is dead, `signal-target-normalizer.ts:93`).
+
+### ★★ THE NEW FINDING — `sma_trend_ride` SITS EXACTLY ON ITS FLOOR
+Its measured reward-to-risk is **`rrMin = rrMax = meanRR = 2.00`** — invariant, because it is the 2R-off-a-structural-stop construction. **Its floor is exactly 2.0** (no crypto per-strategy row; it inherits the class default). ⇒ **RR 2.00 against a floor of 2.00.** The 4,869 `rrDrops` (5.0%) are the ones landing a floating-point hair below.
+**⇒ A KNIFE-EDGE OF A SECOND KIND, and it matters for OBJ-4:** any change touching either its target or its stop moves an equality. **And note `sma_trend_ride` is the ONLY crypto strategy in the candidate set with no per-strategy floor** — reorg-B2.3 set 13 and skipped it. Whether that was deliberate (an invariant RR needs no distribution-derived floor) or an omission **is a question for the B2.3 record and Langston, not an assumption for me.**
+
+### ⛔ WHAT THIS RETRACTS IN THE SCOPE
+- **"`min_rr` 2.5" is WRONG throughout §3.** The live class default is **2.0** with 13 per-strategy floors.
+- **"`morning_star` … meanRR 1.05 against a floor of 2.5" is WRONG.** Its floor is **1.39**. It still fails — but **by 0.34, not 1.45** — and **34% of its evaluations DO clear the RR gate.** ⇒ **it is materially closer to viable than I reported, which strengthens A.7's "test it on xStock" over any retire framing.**
+- ✅ **THE OUT-OF-SCOPE RULING ON `min_rr` STANDS — and is now much better evidenced.** It is the one knob of the three that has genuinely had a **data-driven, per-strategy** pass. **Nothing in this batch should touch it.**
+
+---
+
 ## B. CORROBORATION FOUND IN THE LEDGER FOR SCOPE FINDINGS (§9.5(b-ii) — search before filing)
 
 - **`morning_star` independently confirmed broken.** `RUNNING_ISSUES:1935` records the persisted tracker at **272,758 evals / 186,096 `rrDrops` — a 68% reward-to-risk drop rate.** That is an *entirely different instrument* from the scope's hit-rate replay (2.0% hit rate over 553 trades) and it points the same way. **Two independent measurements; the retire-or-rebuild question at scope §4.2 is well-founded.**
