@@ -35,6 +35,7 @@
 | vwap_pullback | 40 | 0.0 | 0.0 | 0.0 | 0.0 |
 
 ⚠️ **CC-C's pooled "~10 points per half-multiple" is WITHDRAWN — it was meaningless.** Decay is wildly strategy-specific.
+⚠️ **READ THESE COLUMNS AS A LOWER BOUND ON HIT RATE, NOT AN ESTIMATE (Langston Q4):** the 24h truncation and both-hit-as-loss both cut the same direction, the cut GROWS with target size, and its magnitude is strategy-specific (time-to-target differs) — so the bias can REORDER the candidates, not just shift them.
 
 ### 1.3 Two gates upstream of netEV that the earlier funnels MISSED
 **⛔ THE ORIGINAL LOG-GREP FIGURES HERE ARE RETRACTED (pre-audit §A.5, 2026-08-11).** *"`unreachable` 1,452 in 5.2h, `sma_trend_ride` 926"* counted **`[reorg-B3.3x][VTS][TAG_NO_DROP]` lines — VTS TAGS, not drops.** The crypto VTS lane runs `gateDisposition='tag'` and **simulates anyway**; its own log text says so. **I measured a lane that by construction does not drop.**
@@ -54,7 +55,7 @@
 ⚠️ **STILL UNMEASURED:** whether those `reachDrops` come from GUARD-5, the normalizer, or both — the tracker records the **guard's** verdict only. **That is #371, and pre-audit §A.4 re-sequences OBJ-3 behind it.**
 
 ### 1.4 Provenance of the blocking constants — **they were never calibrated**
-`BATCH_CATALOG:378` (reorg-B2, 2026-06-20) verbatim: **"Seeds 4%/2.5/4.0 both classes (placeholder; Phase-25 calibrates)."** Homed at roadmap **25-17** (*"calibrate the floor and reach_atr_max DOWN on its own realized paper-active data"*) + `RUNNING_ISSUES` **#336**.
+⚠️ **PROVENANCE CORRECTED (pre-audit A.11; Langston ground 2):** the `BATCH_CATALOG:378` trio "4%/2.5/4.0" is `target_floor_pct` / `min_rr` / **`roi_absolute_max`** — **NOT `reach_atr_max`, which arrives at reorg-B2.1 OBJ-3**, where its 2.5-sibling was *"the winner of a two-value conflict, not a calibrated number."* Homed at roadmap **25-17** (*"calibrate the floor and reach_atr_max DOWN on its own realized paper-active data"*) + `RUNNING_ISSUES` **#336**.
 **★ The placeholder's stated rationale no longer holds:** it was justified by the **taker** fee wall. **MEASURED, `closed_trades` post-2026-07-28 cutover: crypto fills MAKER 44 of 46 = 96%** at 0.40%/side; xStock fills **TAKER 82 of 96 = 85%**. Crypto pays **half** xStock's friction and still cannot clear.
 **★ INDUSTRY RE-DERIVATION (Kyle-directed):** practitioner literature uses **1.5–2× ATR as a target SETTING** and 3–4× for position trading — **nowhere as a maximum-reachable CEILING.** We appear to have borrowed a number from a context where it means close to the opposite. *Reasoning only; no source states a cost basis.*
 
@@ -127,9 +128,11 @@ Write geometry + **config VERSION** (not value — Langston r2.1(b)) at the **SQ
 **Cap interaction CLOSED by Langston's own event-replay:** peak concurrent shadows 1,405 @6h → **3,284 @48h** against `SHADOW_CAP=10000` = **3.0× headroom at the historical maximum**. CC-C's 23k–52k estimate **withdrawn** (it scaled a wrong code comment).
 **VERIFY:** TTL-cut share of shadow closes falls materially below the measured 27.3%; `shadowDropCount` stays 0.
 
-**OBJ-3 — RECALIBRATE `reach_atr_max` FOR CRYPTO (the phase-move; needs Kyle + Langston sign-off).**
+**OBJ-3 — ⛔ HELD OUT OF THE APPROVED SCOPE (Langston ruling 2026-08-11). Not started; conditions to re-enter below.**
+**His four grounds, accepted in full:** (1) this objective's stated justification cited the **926/5.2h figure this same document retracts at §1.3** — a withdrawn measurement resurrected 90 lines downstream as the load-bearing rationale (fixed in this revision; the sentence is gone); (2) §1.4's provenance was misattributed — the `BATCH_CATALOG:378` "4.0" is `roi_absolute_max`; **`reach_atr_max` arrives at reorg-B2.1**, where the value was the winner of a two-value conflict (per pre-audit A.11; §1.4 corrected in this revision); (3) **this is not a pull-forward of 25-17 — it INVERTS it** (25-17 says calibrate DOWN, written for xStock; crypto wants the other direction, and the sign is untested) ⇒ **if it proceeds it is a NEW item, not a phase-move**; (4) **the #371 downgrade is REJECTED** — one constant read by two gates on two different ATR inputs with an unmeasured one-directional bias means a new value is a second guess on the first; **the divergence measurement is a precondition for the value to mean anything.**
+**RE-ENTRY CONDITIONS (all, before OBJ-3 exists again in any form):** (a) the `pivot_shift` **measured target-in-ATRs distribution against 4.0** — the structural-exclusion claim is currently asserted and uncited (no `pivot_shift` row exists in the §1.3 table); (b) the #371 divergence capture landed and read; (c) the A.14 reach-curve measurement (replay re-cut in ATR units); (d) re-filed as a **new item** with its own §9.4 home, not as 25-17.**
 Move roadmap item **25-17** into this batch **for `reach_atr_max` only**. Set from crypto's own realized distribution, per class.
-**WHY IT CANNOT WAIT:** it drops **926 `sma_trend_ride` signals in 5.2h**, and it **structurally excludes `pivot_shift`** — the strategy with the flattest decay curve we measured (69.6% at +50%). **A placeholder is blocking the strategy best able to absorb a bigger target.**
+*(The prior justification cited the retracted §1.3 figure and an uncited `pivot_shift` exclusion — both removed per Langston ground 1 and his answer Q1.)*
 **VERIFY — REWRITTEN (pre-audit §A.6): measure PASS-THROUGH, not drops.** The live drop count is unrecorded by design, but the stage *after* it is: **the change in signals REACHING the SQE per strategy (`signal_eval_archive`, `source='signal-orchestrator'`)**. Same effect, a recorded object, no new instrumentation.
 **⚠️ AND #371 IS DOWNGRADED FROM BLOCKER TO RECOMMENDATION** — the divergence capture is still worth having for the normalizer retirement, but **OBJ-3 no longer depends on it**, so it must not gate this batch.
 **⛔ `min_rr` IS EXPLICITLY NOT IN SCOPE — see §3.**

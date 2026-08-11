@@ -727,11 +727,19 @@ const openShadowTrades: Map<string, OpenVirtualTrade> = new Map();
 
 // reorg-B4 shadow-population bound (Langston Step-2). The TTL is the real governor:
 // shadows resolve at first-of {stop, target, SHADOW_MAX_HOLD_MS}. The CAP is a true
-// backstop sized ABOVE steady-state (~2.9k–6.5k at the active picker's ~30s cadence
-// × 6h TTL vs the ~28.7h VTS avg hold), so it fires ONLY on a runaway anomaly — at
-// which point we reject-new + increment a drop counter + ALERT, never silently
-// rebiasing the selection-quality sample.
-const SHADOW_MAX_HOLD_MS = 6 * 60 * 60 * 1000; // 6h
+// backstop: reject-new + drop counter + ALERT on breach, never silently rebiasing
+// the selection-quality sample.
+// P19-B-FEEVIABILITY OBJ-2 (2026-08-11, Langston-approved): 6h → 48h. The 6h TTL
+// truncated 27.3% of shadow closes (10,804/39,641 measured) and force-closed
+// counterfactuals far short of real holds (crypto p90 19.4h, xStock p90 44.5h post-cutover)
+// — systematically cutting the slow winners the selection-quality layer exists to see.
+// Cap interaction CLOSED by Langston's event-replay over all 39,645 rows: worst-case peak
+// concurrent shadows at 48h = 3,284 vs SHADOW_CAP 10,000 (3.0× headroom at the historical
+// max, 2026-07-23); curve nearly flat 12h→48h. Ceiling scales ~linearly with promotion
+// volume ⇒ 48h binds the cap only above ~3× the July-23 burst rate. Change the CONSTANT,
+// never isVtsMaxHoldEnabled — that ONE switch also gates the real-VTS 7-day zombie valve
+// (:3037), and flipping it re-creates the B63 unbounded-trade-map regression in one move.
+const SHADOW_MAX_HOLD_MS = 48 * 60 * 60 * 1000; // 48h (was 6h pre-OBJ-2)
 const SHADOW_CAP = 10000;
 let shadowDropCount = 0; // count of reject-new-at-cap events (surfaced + alerted; never silent)
 // reorg-B4: per-signal dedupe — a pool member that already has a LIVE shadow is
