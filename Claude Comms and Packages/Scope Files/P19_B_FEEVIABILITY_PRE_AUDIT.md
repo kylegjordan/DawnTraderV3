@@ -165,6 +165,31 @@ Its measured reward-to-risk is **`rrMin = rrMax = meanRR = 2.00`** — invariant
 
 ---
 
+## A.12 — **THE REACHABILITY GATE'S ORIGINAL INTENT: A SANITY VALIDATION, NOT A VOLUME DIAL.** (§2 1.b provenance — the answer to "why 4.0")
+
+`P19_REORG_B2_1_COMPLETION_REPORT:30`, verbatim — **and it is a response to Kyle's own question at the time:**
+> *"**Kyle asked why the floor-lift / RR / reachability lived in a post-hoc normalizer rather than in the strategy modules where the signal is generated** — a strategy *'would never have produced a signal with a target like that.'* Investigation across all **19** canonical strategies confirmed the gates belonged at signal-gen: the floor-lift was a **mutation** of the target (redundant with the Net-Expectancy gate that already judges cost-coverage), and **the RR/reachability checks are *validations* that every strategy should answer for its own geometry.** Consensus (CC-B + Langston): drop the lift, move the two validations into the shared guard each strategy already calls, keep ONE per-class SSOT for the thresholds, and surface every drop by-reason (no hidden gates)."*
+
+**⇒ INTENT ESTABLISHED: reachability is a SANITY CHECK on a strategy's own geometry — "is this target absurd relative to volatility?" — explicitly NOT a profitability filter and NOT a trade-volume knob.** The cost-coverage job was deliberately left to the Net-Expectancy gate.
+
+**★ THE HONEST TENSION THIS CREATES FOR OBJ-3 — stated, not resolved:**
+- **Against the change:** recalibrating `reach_atr_max` to admit more trades **repurposes a sanity validation as a volume dial**, which is contrary to its stated intent and is the "turning dials until something squeezes out" posture Kyle has ruled against.
+- **For the change:** if the validation rejects a large share of a strategy whose geometry is *legitimate by construction* (`sma_trend_ride` = 2R off a structural stop, RR invariant at exactly 2.00), then **the validation is mis-calibrated for that geometry** — which is not repurposing it, it is fixing it.
+⇒ **This is a rule-24 three-way question and it belongs to Langston + Kyle, not to me.** **No value should be proposed until it is answered.**
+*(Also from B2.1: Langston's Step-4 already caught "active reachability fed `atr=0`" — fixed in-batch by carrying ATR on `SizingContext` + a loud `invalid_atr`. The gate has been reviewed once and hardened once.)*
+
+## ⛔ A.13 — **THE `rrDrops` RATIOS STRADDLE A DEPLOY BOUNDARY. Suppression rates retracted; the DISTRIBUTIONS survive.**
+
+**MEASURED:** the tracker window starts **2026-06-23T19:51:53Z**. **reorg-B2.3 — which replaced the floors — deployed `47286ccfd` / `7b5512ec4` on 2026-06-27** (report: *"Closed: 2026-06-27"*).
+⇒ **The floors changed FOUR DAYS INTO a 49-day window**, and the tracker is a **cumulative counter with no time dimension**, so the pre- and post-change populations **cannot be separated**. **Same boundary-straddling class Langston diagnosed; I did it again on the instrument I introduced to fix the previous error.**
+**DIRECTION IS KNOWN:** B2.3's own report — *"most lower than 2.5 → **less suppression**"* ⇒ the ~8% pre-change slice was judged against **stricter** floors, so **every suppression RATE I quoted OVERSTATES the current one.**
+
+**⛔ RETRACTED:** `morning_star` *"66.3% rrSuppressionRate"*, `vwap_pullback` *"36.5%"*, `sma_trend_ride` *"5.0%"* — all ratio figures.
+**✅ SURVIVES UNAFFECTED — and it is the load-bearing half:** `meanRR`, `rrMin`, `rrMax` are **properties of the signals themselves, independent of any floor.** So **`morning_star` meanRR 1.05**, **`vwap_pullback` 2.21**, and **`sma_trend_ride` invariant at exactly 2.00** all stand. **The distributions are clean; only the pass/fail ratios are contaminated.**
+**⇒ EVERY CONCLUSION IN THIS AUDIT RESTS ON THE DISTRIBUTIONS, NOT THE RATIOS** — `morning_star`'s 1.05-vs-1.39 miss, and `sma_trend_ride` sitting exactly on its floor, are both untouched.
+
+---
+
 ## B. CORROBORATION FOUND IN THE LEDGER FOR SCOPE FINDINGS (§9.5(b-ii) — search before filing)
 
 - **`morning_star` independently confirmed broken.** `RUNNING_ISSUES:1935` records the persisted tracker at **272,758 evals / 186,096 `rrDrops` — a 68% reward-to-risk drop rate.** That is an *entirely different instrument* from the scope's hit-rate replay (2.0% hit rate over 553 trades) and it points the same way. **Two independent measurements; the retire-or-rebuild question at scope §4.2 is well-founded.**
