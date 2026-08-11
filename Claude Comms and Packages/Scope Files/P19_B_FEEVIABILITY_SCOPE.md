@@ -37,7 +37,19 @@
 ⚠️ **CC-C's pooled "~10 points per half-multiple" is WITHDRAWN — it was meaningless.** Decay is wildly strategy-specific.
 
 ### 1.3 Two gates upstream of netEV that the earlier funnels MISSED
-**OBJECT** `/var/log/dawntrader/out.log`, **SPAN** 06:34:32→11:44:02 = 5.2h, **positive control** 3,279 hits: **`unreachable` 1,452 · `rr_below_min` 1,827** — together ≈ the volume reaching the netEV gate. **Unreachable drops fall on `sma_trend_ride` 926, `vwap_pullback` 512, `strong_bull_trend` 14** — i.e. on strategies whose geometry CLEARS.
+**⛔ THE ORIGINAL LOG-GREP FIGURES HERE ARE RETRACTED (pre-audit §A.5, 2026-08-11).** *"`unreachable` 1,452 in 5.2h, `sma_trend_ride` 926"* counted **`[reorg-B3.3x][VTS][TAG_NO_DROP]` lines — VTS TAGS, not drops.** The crypto VTS lane runs `gateDisposition='tag'` and **simulates anyway**; its own log text says so. **I measured a lane that by construction does not drop.**
+
+**★ REPLACED BY THE PURPOSE-BUILT INSTRUMENT.** **OBJECT:** the persisted `guard-eval-tracker`, `GET /api/diagnostics/guard-eval-stats` (`guard-eval-stats/v3`). **POPULATION:** every guard evaluation since `trackerStartedAt 2026-06-23T19:51:53Z` — **a seven-week window persisted across restarts**, not a 5-hour slice.
+
+| strategy | evals | passes | **reachDrops** | **reach %** | rrDrops | meanRR |
+|---|---|---|---|---|---|---|
+| **`sma_trend_ride`** | 97,975 | 12,002 | **80,233** | **81.9%** | 4,869 (5.0%) | **2.00** (rrMin=rrMax) |
+| **`vwap_pullback`** | 241,263 | 13,254 | **129,628** | **53.7%** | 88,043 (36.5%) | 2.21 |
+| **`morning_star`** | 503,233 | 168,779 | **0** | **0%** | **333,566 (66.3%)** | **1.05** |
+
+⇒ **The corrected finding is STRONGER: the reachability ceiling suppresses 82% of `sma_trend_ride` and 54% of `vwap_pullback`** — the two largest-target strategies — on the instrument built to measure it.
+⇒ **`morning_star` has ZERO reachability drops; it dies ENTIRELY on the RR floor at meanRR 1.05 against 2.5.** A **third** independent instrument agreeing with the 2.0% hit rate — the retire-or-rebuild call at §4.2 is now firmly evidenced.
+⚠️ **STILL UNMEASURED:** whether those `reachDrops` come from GUARD-5, the normalizer, or both — the tracker records the **guard's** verdict only. **That is #371, and pre-audit §A.4 re-sequences OBJ-3 behind it.**
 
 ### 1.4 Provenance of the blocking constants — **they were never calibrated**
 `BATCH_CATALOG:378` (reorg-B2, 2026-06-20) verbatim: **"Seeds 4%/2.5/4.0 both classes (placeholder; Phase-25 calibrates)."** Homed at roadmap **25-17** (*"calibrate the floor and reach_atr_max DOWN on its own realized paper-active data"*) + `RUNNING_ISSUES` **#336**.

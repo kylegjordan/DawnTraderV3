@@ -45,6 +45,37 @@ recordGuardEval('morning_star', _gr.rr, _gr.pass, _gr.dropReason, assetClass);
 
 ---
 
+## ⛔⛔ A.5 — **THE SCOPE'S §1.3 REACHABILITY MEASUREMENT IS RETRACTED. I COUNTED THE WRONG LANE.** (Kyle-directed re-check, 2026-08-11)
+
+**WHAT I CLAIMED (scope §1.3, and part 1 of this audit built on it):** *"`unreachable` 1,452 drops in 5.2h — falling on `sma_trend_ride` 926, `vwap_pullback` 512."*
+
+**⛔ FALSE. Every one of those lines is a VTS TAG, not a drop.** Verified: **100% of `unreachable` occurrences in the log carry the marker `[reorg-B3.3x][VTS][TAG_NO_DROP]`**, whose own text reads:
+> *"`VIA/USD/sma_trend_ride would-gate=unreachable rr=2.00 — simulating anyway for learning data (active path still suppresses)`."*
+
+The crypto VTS lane runs `gateDisposition='tag'` (SIM:241 — *"ONLY the crypto VTS path passes `'tag'`"*), so it **marks and simulates anyway**. **Active-path drops surface as `Global guards failed` and carry no reason on that line.** ⇒ **I measured a lane that by construction does not drop, and reported it as the drop rate.** Same wrong-population class as the four earlier corrections; the log-grep was never the right instrument.
+
+### ★ THE RIGHT INSTRUMENT EXISTS AND IS PURPOSE-BUILT — `GET /api/diagnostics/guard-eval-stats` (schema `guard-eval-stats/v3`)
+**OBJECT:** the persisted `guard-eval-tracker`. **POPULATION:** every guard evaluation since `trackerStartedAt = 2026-06-23T19:51:53Z` — **a seven-week window, persisted across restarts** (#374 OBJ-A), **not a 5-hour log slice.**
+
+| strategy | evals | passes | **reachDrops** | **reach %** | rrDrops | meanRR |
+|---|---|---|---|---|---|---|
+| **`sma_trend_ride`** | 97,975 | 12,002 | **80,233** | **81.9%** | 4,869 (5.0%) | **2.00** (rrMin=rrMax=2.00) |
+| **`vwap_pullback`** | 241,263 | 13,254 | **129,628** | **53.7%** | 88,043 (36.5%) | 2.21 |
+| **`morning_star`** | 503,233 | 168,779 | **0** | **0%** | **333,566 (66.3%)** | **1.05** |
+
+### ★★ THE CORRECTED FINDING IS **STRONGER** THAN THE ONE IT REPLACES — and it re-points the batch again
+1. **The reachability ceiling drops 82% of `sma_trend_ride` and 54% of `vwap_pullback`** — the two strategies carrying the largest targets — measured over seven weeks on the instrument built for it. **My retracted figure understated this by orders of magnitude while attributing it to the wrong lane.**
+2. **`morning_star` has ZERO reachability drops.** It is killed **entirely by the RR floor** — 333,566 drops, and its **meanRR is 1.05** against a floor of 2.5. ⇒ **it is not remotely near viable on reward-to-risk**, a *third* independent instrument agreeing with the 2.0% hit rate and the 68% suppression rate. **The retire-or-rebuild question is now firmly evidenced.**
+3. **`sma_trend_ride`'s RR is invariant at exactly 2.00** (`rrMin == rrMax == 2.0`) — it is the 2R-off-structural-stop construction, confirmed empirically. Its rrDrops are only 5%, so **its per-`(strategy×class)` minRR was already recalibrated below 2.0 at reorg-B2.3** — consistent with §B and further reason not to touch `min_rr`.
+
+### WHAT SURVIVES OF §A.1–A.4, AND WHAT DOES NOT
+- **SURVIVES:** the double-gate itself (`strategy-helpers.ts:386` vs the normalizer, two ATR sources, one constant), the #371 divergence, and the finding that **#371's capture is a two-argument change, not a build** (§A.3). Those are code reads, not log counts.
+- **SURVIVES AND STRENGTHENS:** the OBJ-3 re-sequencing argument. The ceiling is now shown to suppress **82%/54%** of our two best-target strategies on a seven-week instrument — so recalibrating it matters *more*, and doing it on an unreconciled ATR pair matters more too.
+- **DOES NOT SURVIVE:** any figure sourced from the `unreachable` log grep, in the scope or in this document. **`reachDrops` from the tracker is the only admissible number.**
+- ⚠️ **STILL UNKNOWN:** whether these `reachDrops` are attributable to GUARD-5, to the normalizer, or to both. The tracker records the **guard's** verdict. **The normalizer-side count remains unmeasured — which is exactly #371.**
+
+---
+
 ## B. CORROBORATION FOUND IN THE LEDGER FOR SCOPE FINDINGS (§9.5(b-ii) — search before filing)
 
 - **`morning_star` independently confirmed broken.** `RUNNING_ISSUES:1935` records the persisted tracker at **272,758 evals / 186,096 `rrDrops` — a 68% reward-to-risk drop rate.** That is an *entirely different instrument* from the scope's hit-rate replay (2.0% hit rate over 553 trades) and it points the same way. **Two independent measurements; the retire-or-rebuild question at scope §4.2 is well-founded.**
