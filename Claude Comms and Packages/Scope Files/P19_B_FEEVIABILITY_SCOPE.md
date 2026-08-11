@@ -54,7 +54,27 @@
 
 ## 2. OBJECTIVES
 
-> **Sequenced. OBJ-1 and OBJ-2 are PRECONDITIONS — nothing else deploys before them.**
+> **Sequenced. OBJ-0 runs FIRST; OBJ-1 and OBJ-2 are PRECONDITIONS — nothing else deploys before them.**
+
+**★ OBJ-0 — RUN THE PHASE 19.4.5 OBSERVATIONAL DECISION GATE. Runs BEFORE OBJ-1. (Kyle-flagged 2026-08-11; CC-C had wrongly filed this to batch two with NO DATE — the §9.4 vague-deferral failure, on an item whose triggers are ALREADY MET.)**
+
+**WHAT IT IS:** created 2026-04-26 after B65.6 closed via SKIP; nine items to decide once 1–2 weeks of clean active-paper data exist. Reference: `Claude Comms and Packages/Scope Files/B65_6_FINDINGS_PAPER.md`.
+**STATE: NEVER RUN.** No `PHASE_19_OBSERVATIONAL_DECISIONS` document exists anywhere in the repo, and `19.4.5` returns **zero hits in `PHASE_19_PLAN.md`** — it fell out of the live plan.
+
+**TWO OF ITS NINE TRIGGERS ARE ALREADY MET:**
+- **Item 2 — fewer than 5 signals/day** ⇒ trigger is to **widen the pair universe**. **Crypto is at 3 organic trades in 21 days.** Met by a wide margin.
+- **Item 3 — outcome-vs-confidence inversion** comparable to the 04-22 VTS pattern (**TFS 13.8% WR vs STR 83.3%**) ⇒ trigger is to **reopen B65.6 as a PRE-LAUNCH fix**.
+
+**★ WHY IT CANNOT SIT IN BATCH TWO — this is a SEQUENCING constraint, not a priority preference:**
+1. **Item 3's remedy changes the confidence inputs → changes pWin → changes what clears the netEV gate — which is exactly what OBJ-4 measures.** Landing it *during* the marked window is a second, undeclared change inside a controlled experiment. It must land **before the mark or after the window closes; never during.**
+2. **Item 2's remedy — widen the pair universe — is the SAME PROBLEM as §1.6 pair-exclusivity.** Only ~7 crypto pairs qualify; holding one blocks every strategy on it. Deciding OBJ-4's change set without first deciding whether the universe widens risks measuring strategy changes against a pair ceiling we were about to lift.
+⇒ **BOTH triggered items DECIDE WHAT BATCH ONE CONTAINS. Running the gate afterwards means either contaminating the window or delaying its answers by the full window length.**
+
+**SCOPE OF OBJ-0 (deliberately narrow — this is not the whole nine-item gate):** evaluate and produce a written decision for **items 2 and 3 only**, the two whose triggers have fired. The remaining seven stay in Phase 19.4.5 and are re-evaluated at its normal time.
+**OWNER:** CC-C. **DUE: before OBJ-1 begins** — it gates the batch.
+**OUTPUT:** `1-system-manual/PHASE_19_OBSERVATIONAL_DECISIONS.md`, stating per item what was observed, whether the threshold for moving work pre-launch was met, the decision, and the justification (the format the gate itself specifies).
+**VERIFY:** the document exists at the graded ref; `PHASE_19_PLAN.md` carries 19.4.5 with its status; `RUNNING_ISSUES` #336 and the B65.6 record cross-reference it.
+**⚠️ ESCALATION:** if item 3 says reopen B65.6 pre-launch, that is a **Kyle scope call**, not CC-C's — it re-orders Phase 19 itself.
 
 **OBJ-1 — PERSIST THE DECLINED-SIGNAL RECORD (blocking).**
 Write geometry + **config VERSION** (not value — Langston r2.1(b)) at the **SQE reject hook**, by **write-site parity with the `vts-runner` writer** (which already writes `target`/`atrAtOpen` at 32/32 while `signal-orchestrator` writes 0 of 6,077).
@@ -89,7 +109,7 @@ A **commit + UTC timestamp**, not a date. **PRE-REGISTERED BAN on cross-half com
 - **`min_rr` 2.5.** Industry band is 1:2–1:3, so 2.5 sits **inside** the recommended range; the literature says that an algo rejecting most signals at 2.5 has a **geometry** problem, not a threshold problem — and our measured crypto R:R is 1.67–2.00. **★ Kyle's correction, which sharpens rather than softens it: their band EXCLUDES fees, so it does not transfer — at our friction we would need MORE than 2.5, not less.** Our strategies are industry-*normal* and industry-normal does not survive our costs. **Lowering it is moving away from the standard. CC-C's earlier argument for lowering is withdrawn.**
 - **The Kraken+ subscription.** **RETRACTED IN FULL.** Kraken's own documentation: *"Kraken+ applies only to the Kraken platform (app and website). It does not apply to other Kraken products, such as Kraken Pro."* **API and Kraken Pro spot trades are explicitly excluded**, and spread applies regardless. We trade entirely by API. *(Error class: verified what the benefit DOES without verifying it applies to us.)*
 - **The regime→strategy mapping.** **The provenance vindicates it:** RBS is documented as where *"mean-reversion and range-bound strategies have their strongest historical performance"*, with trades *"smaller and shorter, focusing on quick gains."* **Nothing is mis-assigned.** The conflict is that **RBS is the most common crypto regime and its designed trade style cannot survive 0.80% round-trip.** That is a Kyle scope call (§4), not a repair.
-- **Changing venue**, the combinations study, confidence calibration, the 19.4.5 gate → **batch two.**
+- **Changing venue**, the combinations study, and the SEVEN untriggered items of the 19.4.5 gate → **batch two.** ⚠️ **The TWO TRIGGERED 19.4.5 items are NOT deferred — they are OBJ-0 of THIS batch (§2), because both decide what this batch contains.**
 
 ---
 
