@@ -50,13 +50,21 @@
 ### 1.6 Pair-exclusivity — a real exit, recorded NOWHERE
 **122 blocks in 5.2h** (`hasActivePair`, strategy-agnostic) on VVV 56 / ICNT 46 / XMR 20 — **all three genuinely held; the block is CORRECT behaviour.** Ten of fifteen slots were free ⇒ **not capacity, exclusivity.** **POSITIVE CONTROL:** `signal_eval_archive` over all **369,409** crypto rows in the same window returns **4,010** rows matching `netev` and **ZERO** matching `duplicate`/`pair`. ⇒ the funnel is blind to it, and **shadows cannot recover it** (no pool entry ⇒ no shadow row).
 
+**★ LIVE WORKED EXAMPLE — Kyle screenshotted it 2026-08-11 08:05 UTC, and the evidence was gone 25 minutes later.**
+A **PUMP/EUR** signal sat in the Ready-to-Buy pool for **18 minutes**, `pivot_shift`, netEV **0.000003**, **Maker** mode, **10 of 15 slots free** — and was never promoted.
+**CAUSE, verified in `closed_trades`: PUMP/EUR was ALREADY AN OPEN POSITION at that instant** — opened `07:46:49Z`, closed `08:10:43Z` on `stop_hit`, lane **`organic`**. ⇒ **capacity was never the constraint; pair exclusivity was.**
+**WHY IT IS THE ARGUMENT FOR OBJ-1:** the block wrote **nothing** to the archive, the position has since closed, and the pooled signal is gone. **Without the screenshot there would be no trace at all.** A rejection class that erases itself inside half an hour cannot be measured across a marked window.
+*Three incidental facts worth keeping: the trade was **organic** (so the organic lane is not fully dead — it produces occasionally and this one stopped out); it was **`pivot_shift`**, an OBJ-4 candidate, confirming it does reach the pool; and netEV `0.000003` is the survey's knife-edge arithmetic appearing in a single live row.*
+
 ---
 
 ## 2. OBJECTIVES
 
 > **Sequenced. OBJ-0 runs FIRST; OBJ-1 and OBJ-2 are PRECONDITIONS — nothing else deploys before them.**
 
-**★ OBJ-0 — RUN THE PHASE 19.4.5 OBSERVATIONAL DECISION GATE. Runs BEFORE OBJ-1. (Kyle-flagged 2026-08-11; CC-C had wrongly filed this to batch two with NO DATE — the §9.4 vague-deferral failure, on an item whose triggers are ALREADY MET.)**
+**★ OBJ-0 — RUN THE OBSERVATIONAL DECISION GATE, ROADMAP ITEM 25-5. Runs BEFORE OBJ-1. (Kyle-flagged 2026-08-11; CC-C had wrongly filed this to batch two with NO DATE — the §9.4 vague-deferral failure, on an item whose triggers are ALREADY MET.)**
+
+**⚠️ NAMING CORRECTED — Kyle was right and CC-C was using a dead label.** It is **roadmap item `25-5`**, **Phase-25-homed**. `POST_AUDIT_ROADMAP:310` catalogues it as `| 25-5 | §19.4.5 Observational Decision Gate |`, and `:291` states the four calibration sections *"keep their original anchor numbers but are Phase-25-homed."* ⇒ **`19.4.5` is a preserved SECTION ANCHOR, not its phase.** This makes OBJ-0 **the same kind of phase-move as OBJ-3 (25-17), not a special case** — both pull a Phase-25 item forward because paper-active data now exists and the item gates work in front of it. *(⚠️ `:245` still positions the gate in the Phase-19 run order — an internal inconsistency in the roadmap; flagging, not fixing, in this batch.)*
 
 **WHAT IT IS:** created 2026-04-26 after B65.6 closed via SKIP; nine items to decide once 1–2 weeks of clean active-paper data exist. Reference: `Claude Comms and Packages/Scope Files/B65_6_FINDINGS_PAPER.md`.
 **STATE: NEVER RUN.** No `PHASE_19_OBSERVATIONAL_DECISIONS` document exists anywhere in the repo, and `19.4.5` returns **zero hits in `PHASE_19_PLAN.md`** — it fell out of the live plan.
