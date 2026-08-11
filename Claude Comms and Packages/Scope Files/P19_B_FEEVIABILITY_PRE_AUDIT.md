@@ -105,6 +105,32 @@ Its target is volatility-scaled (`entry + 2.5×ATR`), but **its stop is STRUCTUR
 
 ---
 
+## A.8 — **THERE IS A SECOND PAIR GUARD, AT THE OPEN STAGE, AND IT ARCHIVES. It has NEVER FIRED on the active path.**
+
+Found via the Phase-19 audit Kyle named (`ACTIVE_TRADING_PIPELINE_AUDIT:208` — *"E8 | Dup-position guard | :2225-2240 | existing position same symbol"*). Verified in code at `active-execution-engine.ts:3214-3251`: it reads `getActiveOpenPositions`, and unlike the admission-stage block it **DOES archive** — `rejectStage:'tcl'`, `gateDecision:{gate:'tcl',accepted:false,reason:'duplicate_position',existingCount}` (P19-B5a reject capture) plus `recordOpenFailed(…,'DUP_POSITION',…)`.
+
+**⇒ SO "PAIR-EXCLUSIVITY IS RECORDED NOWHERE" (scope §1.6) IS TOO BROAD.** It is true of the **admission** block (`hasActivePair` → bare `console.log`) and **false** of the **open-stage** one.
+
+**MEASURED — and it never fires here.** `DUP_GUARD_BLOCK` in `out.log`: **0**, against a **positive control of 38,982** hits on the same `[I7-PM-FOCUS]` marker family ⇒ the family logs heavily; this branch does not. And `reject_stage='tcl'` over 7 days, **all classes**: **every row is `xstock_spot` + `vts-runner`** (`duplicate_position` 7,221 · `maker_marketable_dropped` 733 · `price_past_target` 415 · `reentry_cooldown` 15). **Zero from `active-execution-engine`. Zero crypto.**
+**WHY — and it is by construction:** for the open-stage guard to fire, a promotion must reach the engine for a symbol **already held**. The **admission** guard stops such a signal entering the pool at all. ⇒ **the open-stage guard is largely unreachable on the active path** — defence-in-depth, not a live gate.
+
+### ★ AND THIS CLOSES THE PUMP/EUR QUESTION — LANGSTON'S READ IS CONFIRMED, MINE IS NOT
+He established the position was **created from the pooled row itself** (`rtbQueueId e6739c0a`, `queuedAt 07:46:19`, `source RTB_PROMOTION`). I have now eliminated the remaining candidate: **the open-stage guard never fired**, so the pooled row Kyle saw at 08:05 was **the same row that had already become the position**.
+⇒ **The pool row was not evicted on promotion, or the UI served a stale snapshot.** Exactly Langston's *"pool-eviction or UI-staleness defect at the promotion stage."* **Neither pair guard explains it; both are eliminated.** ⇒ §5 Q5 stands as **its own issue**, and it is now better evidenced.
+
+## A.9 — `bridge/canonical/` PROVENANCE READ (§9.5(b) recording rule — result stated even though it is a negative)
+
+**CONSULTED. POSITIVE CONTROL PASSED:** 14 files present; **7 contain `expectancy`**, so the corpus is readable and topically adjacent.
+**RESULT: NO COVERAGE of the reachability gate, `atrsToTarget`, or target-ATR-multiplier geometry.**
+**EXPECTED, and the reason is dated:** the reachability gate and the per-class target gates were introduced by **reorg-B2 on 2026-06-20** — long after the 2026-01/02 governance change the canonical corpus predates. ⇒ **there is no pre-governance intent to recover for these constants; their entire provenance is `BATCH_CATALOG:378` + the reorg-B2 family.** *(Recorded per §9.5's rule that an absence is itself a finding.)*
+
+## A.10 — WHAT THE PHASE-19 AUDIT ALREADY SAID, IN JUNE
+- **`:111` — `F2 ★[11.8B] Net-Expectancy gate (defaulted DI)` ← labelled "THE BLOCKER".** The audit identified the netEV gate as the binding constraint **two months before this batch rediscovered it**. Independent corroboration; also a §9.5(b-ii) reminder that the ledger knew.
+- **`:70` — the two netEV gates use DIFFERENT DI:** the inline `[HF9]` filter uses **real** DI, `[11.8B]` uses **defaulted** DI. *"Because real DI ≥ 40 caps at the same 0.60, the two are mathematically near-identical (the inline one is only stricter when real DI < 40)."* ⇒ **the DI-default concern raised at scope §5 batch-two item 3 is REAL and already characterised** — including the direction of the discrepancy.
+- **`:203` — the "15" slots** is `guardrails_v2.max_open_positions` with **15 as the ENGINE FALLBACK**, not the configured value. Relevant to OBJ-4's slot-utilisation watch.
+
+---
+
 ## B. CORROBORATION FOUND IN THE LEDGER FOR SCOPE FINDINGS (§9.5(b-ii) — search before filing)
 
 - **`morning_star` independently confirmed broken.** `RUNNING_ISSUES:1935` records the persisted tracker at **272,758 evals / 186,096 `rrDrops` — a 68% reward-to-risk drop rate.** That is an *entirely different instrument* from the scope's hit-rate replay (2.0% hit rate over 553 trades) and it points the same way. **Two independent measurements; the retire-or-rebuild question at scope §4.2 is well-founded.**
