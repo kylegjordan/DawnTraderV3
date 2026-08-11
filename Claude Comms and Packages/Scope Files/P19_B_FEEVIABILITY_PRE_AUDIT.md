@@ -190,6 +190,27 @@ Its measured reward-to-risk is **`rrMin = rrMax = meanRR = 2.00`** — invariant
 
 ---
 
+## ★★ A.14 — **THE SYSTEM MANUAL SETTLES THE A.12 TENSION, AND IT CUTS AGAINST MY OWN ARGUMENT. But it also hands OBJ-3 a legitimate, intent-respecting form.**
+
+`SYSTEM_MANUAL.md:443`, verbatim:
+> *"**Reachability is a path-invariant PAIR property** — the 3 non-ATR-geometry strategies (`sma_trend_ride`, `vwap_bounce`, `dhma`) feed it a `computeATR(priceHistory)` pair-ATR; **the gate asks only whether the pair can physically traverse to target given ATR, INDEPENDENT OF HOW THE STRATEGY SET ITS GEOMETRY.**"*
+
+**⛔ THIS REFUTES THE "FOR THE CHANGE" LEG I WROTE AT A.12.** I argued the validation is *mis-calibrated for `sma_trend_ride`'s construction*. **The gate is INTENTIONALLY geometry-agnostic** — it does not care that the target came from a structural stop. ⇒ if `sma_trend_ride`'s targets are rejected, **the design's answer is that those targets ARE too far for that pair's volatility**, and the gate is working as built. **My argument was reasoning from a premise the design explicitly disclaims.**
+
+### ★ BUT THE INTENT ALSO TELLS US THE RIGHT QUESTION — and we already have the data
+The gate makes an **empirical, physical claim**: *a target beyond `reachAtrMax` ATRs cannot be traversed in the horizon.* **That claim is testable, and `4.0` is the only part that was never tested.**
+⇒ **OBJ-3's LEGITIMATE FORM is NOT "loosen the ceiling to admit more trades" (which A.12 rules out as repurposing a validation). It is: MEASURE THE `atrsToTarget` AT WHICH TARGETS STOP BEING REACHED, AND SET THE CONSTANT TO THAT.**
+**★ AND THE INSTRUMENT ALREADY EXISTS — the §1.2 counterfactual replay measures exactly this**: at 1.00×/1.25×/1.50×/2.00× of each strategy's current target, what fraction were actually reached before the stop. **Re-expressed in ATR units rather than target-multiples, that IS the reachability curve.** No new instrumentation; a re-cut of data already gathered.
+⇒ **If reach is still material at 5–6 ATRs, `4.0` is too tight ON ITS OWN TERMS and the change is intent-respecting. If reach collapses before 4, the constant is right and OBJ-3 should be DROPPED.** Either outcome is decision-grade; **neither requires arguing about trade volume.**
+⚠️ **NOTE THE DIRECTION IN THE LEDGER RUNS THE OTHER WAY:** roadmap **25-17** says calibrate *"the floor + `reach_atr_max` **DOWN**"* — but that is written **for xStock** (equities move less intraday). **For crypto the sign is untested, which is precisely the gap.**
+
+### ALSO ESTABLISHED FROM THE MANUAL — and it validates the batch's direction
+`SYSTEM_MANUAL.md:408`, verbatim: **"The opener is the target-SETTING, not the ROI threshold. The ROI gate above checks an ALREADY-SET target, so raising a floor alone only REJECTS more — it never opens a trade."**
+⇒ **Architectural confirmation that OBJ-4 (per-strategy target geometry) is the correct lever and that gate-tuning alone cannot open a trade.** The batch is pointed at the right object.
+*(Also: `:419` records the #581 pattern-path stale-ATR leak — fixed 2026-07-27 by re-stamping the RAW per-symbol ATR so an absent ATR still fires the LOUD `invalid_atr` rather than passing on a fabricated value. Relevant because the scope's mark inherits it as **code-correct but never live-verified.**)*
+
+---
+
 ## B. CORROBORATION FOUND IN THE LEDGER FOR SCOPE FINDINGS (§9.5(b-ii) — search before filing)
 
 - **`morning_star` independently confirmed broken.** `RUNNING_ISSUES:1935` records the persisted tracker at **272,758 evals / 186,096 `rrDrops` — a 68% reward-to-risk drop rate.** That is an *entirely different instrument* from the scope's hit-rate replay (2.0% hit rate over 553 trades) and it points the same way. **Two independent measurements; the retire-or-rebuild question at scope §4.2 is well-founded.**
