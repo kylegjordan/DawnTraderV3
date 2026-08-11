@@ -293,3 +293,20 @@ The gate makes an **empirical, physical claim**: *a target beyond `reachAtrMax` 
 1. **Langston's Step-1/pre-audit ruling** (scope r3 + A.1–A.15 are with him).
 2. **Kyle's ack on this plan** — particularly that steps 3–5 are gated and may shrink the batch rather than grow it.
 3. **A write-scope note:** my standing grant covers governance/tooling; **OBJ-1/2 touch trading-path code** — confirming this batch constitutes the fresh grant, or the implementation belongs to CC-B with me as analyst/verifier. **Kyle's call, flagged not assumed.**
+
+---
+
+# PART 4 — OBJ-1 DISPOSITION: why `rtb_signals.block_reason` is empty (rule-24, answered before code)
+
+**PROVENANCE (git archaeology, Replit era):**
+- **2025-12-14 `a6984bb28`** — *"Improve trading guardrails by **separating capacity and quality constraints**… introduce Ready-to-Buy queue with CWQI ranking."* **The RTB queue was born as a CAPACITY-BLOCK PARKING LOT:** a signal that passed quality but hit a capacity limit would wait in the queue with the reason recorded — hence the schema comment *"Original capacity block: MAX_TRADES, MAX_TOTAL_EXPOSURE, etc."*
+- **2025-12-15 `3b1691366`** (ONE day later) — *"Integrate SQE signals into RTB pool"*: the queue became the general home for ALL SQE-qualified signals, and the only writer became the constant stamp **`blockReason: 'SQE_QUALIFIED'` (`ready_to_buy_service.ts:2297` — "Mark as SQE-qualified, not capacity-blocked")**.
+
+**WHY THE COLUMN IS STRUCTURALLY EMPTY OF REAL REASONS — two architecture moves, both later and both deliberate:**
+1. **Capacity blocking became a promotion-cycle DEFER** — blocked signals STAY QUEUED, they are not per-signal rejects (`active-execution-engine.ts:3222-3224`, P19-B5a: *"max_open_trades is a cycle-level promotion DEFER… NOT captured (would be semantically-false telemetry)"*).
+2. **Pair-exclusivity blocking happens at ADMISSION** (`:2104-2109` `return null`) — **BEFORE `upsertRtbSignal`**, so a blocked signal never gets a row at all.
+⇒ **The population the column was designed for can no longer reach it.** Every row that exists carries the one constant value. **And Langston's `count(*) = 0` is simply an empty pool at that instant — the table is a transient queue (rows deleted at promotion/expiry), not a ledger. Not a defect.**
+
+**DISPOSITION (rule-24): OUTCOME 3 — legacy that no longer fits intent.** Two consequences for the build:
+- **The "designed sink" is NOT the right home for the pair-block capture.** Writing blocked signals into `rtb_signals` would mean inserting rows for signals that were never queued — contaminating the live pool the promotion cycle reads. **The durable ledger (`signal_eval_archive`) is the correct sink, exactly as scoped.** The "find out why the sink is empty" framing is answered: it was never going to hold this data.
+- **`block_reason` itself needs a rule-18 disposition at batch close:** a column that can only ever hold one constant value. Reader census before touching: `:1475-1476` aggregates `byBlockReason` (which today can only return `{SQE_QUALIFIED: n}`). Options: delete (schema migration + reader) or document-as-vestigial. **Langston's call at Step-4; flagged, not decided here.**
