@@ -211,6 +211,24 @@ The gate makes an **empirical, physical claim**: *a target beyond `reachAtrMax` 
 
 ---
 
+## ★★ A.15 — **OUTSIDE RESEARCH ON THE REACHABILITY DECISION (Kyle-directed 2026-08-11). THE DECISION IS NOT CORROBORATED BY INDUSTRY PRACTICE.**
+
+**KYLE'S CHALLENGE, and it is the one A.14 failed to make:** *"where did that decision come from… let's not be dogmatic and stick to something just because we said it a few months ago. If we now have additional evidence that a decision we made is blocking something that may be common sense… then we need to look at whether the decision we made two months ago is the correct decision."*
+⇒ **A.14 treated `SYSTEM_MANUAL:443` as settling the question. It does not. It records WHAT was decided, not that the decision was CORRECT.** The manual is downstream of the choice, not evidence for it.
+
+**FINDING 1 — the industry does the OPPOSITE of geometry-agnostic.** Verbatim from the research: *"professional traders generally **customize their profit targets based on their specific strategy, win rates, and market conditions rather than applying a universal maximum ATR-unit cap across all setups**"* and *"rather than capping maximum profit targets uniformly across all strategies, professional traders typically **set target limits per setup**."* ⇒ **our gate — one constant, every strategy, deliberately blind to how the target was built — is the inverse of the documented norm.**
+
+**FINDING 2 — ATR multiples are a target-SETTING convention, not a REJECTION threshold.** Both this search and the earlier one (pre-audit §A.14 note / scope §1.4) return the same: standard targets sit at **1.5–2× ATR**, with **3–4× appropriate for position trading and high-volatility conditions**. **No source in either search treats those figures as a ceiling beyond which a target is discarded as implausible.** ⇒ **we are using a target-setting convention to do a rejection job.**
+
+**FINDING 3 — flagged as a QUESTION, not a claim.** The only hard ceiling either search surfaced is the Turtle system's *"4-unit maximum"* — **a limit on POSITION SIZE (units held), not on target distance.** It resembles our `4.0` only superficially. **I assert no connection; the provenance trail says only "conservative placeholder."** But since **no other external anchor for 4.0 was found**, the resemblance is worth someone checking rather than assuming away.
+
+**★ WHERE I WOULD NOT GO FURTHER — "not industry-standard" ≠ "wrong."** We carry a cost structure most retail practice does not (0.80% round-trip), and a feasibility check could be defensible **for us specifically** even if unusual elsewhere. **But that justification would have to be OURS, argued from OUR costs — and no such argument exists in the record.** What exists is *"a CONSERVATIVE starting placeholder; Phase-25 calibrates."*
+**RE-DERIVABILITY TEST (scope §4 P2): FAILS — no source states a cost basis, so none of these numbers is importable. REASONING ONLY.**
+
+**⇒ NET EFFECT ON OBJ-3.** Five facts now stand together: the constant was **explicitly labelled temporary by the people who set it**; it has **never been tested**; it is **not corroborated by outside practice**; the roadmap's own instruction (**25-17**) is to calibrate it, though written for xStock; and it demonstrably suppresses our two largest-target strategies. **That is not a rule to defend on seniority — it is one to measure.** **The reframed OBJ-3 at A.14 (measure the `atrsToTarget` at which targets stop being reached; set the constant there; drop OBJ-3 if reach collapses before 4) survives this research and is now the only form I would defend.**
+
+---
+
 ## B. CORROBORATION FOUND IN THE LEDGER FOR SCOPE FINDINGS (§9.5(b-ii) — search before filing)
 
 - **`morning_star` independently confirmed broken.** `RUNNING_ISSUES:1935` records the persisted tracker at **272,758 evals / 186,096 `rrDrops` — a 68% reward-to-risk drop rate.** That is an *entirely different instrument* from the scope's hit-rate replay (2.0% hit rate over 553 trades) and it points the same way. **Two independent measurements; the retire-or-rebuild question at scope §4.2 is well-founded.**
