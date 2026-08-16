@@ -185,3 +185,22 @@ A **commit + UTC timestamp**, not a date. **PRE-REGISTERED BAN on cross-half com
 | **The promotion-stage pool defect** (§5 Q5) | CC-C | batch-one close | Filed on Langston's ruling. |
 
 **Langston's standing evidence request on §1.6, still owed:** the `rtbQueueId` of the screenshotted row shown **≠ `e6739c0a`**; the `duplicate_pair_active` log line for PUMP/EUR **between 07:46:49 and 08:10:43** (with a positive control from the same window on any symbol if PUMP produces none).
+
+---
+
+## 8. THE pivot_shift DISTRIBUTION ARTIFACT (Langston ruling 4 — "closes on the file, not on the word")
+
+**Measured 2026-08-16/17. OBJECT:** `vts_open_trades`, `context->>'atrAtOpen'`. **POPULATION:** `strategy='pivot_shift'`, `asset_class='crypto_spot'`, opened in the trailing 21 days, `entry_price>0 AND take_profit>entry_price AND atrAtOpen>0`: **n_rows 687, 22 null/zero ATR excluded, n=665 evaluable → wait, that is `sma_trend_ride`'s n. pivot_shift: n=224 rows, 206 with ATR.**
+
+| measure | pivot_shift (n=206) | sma_trend_ride (n=665) |
+|---|---|---|
+| `atrsToTarget` median NOW | **2.500** | 2.088 |
+| p90 NOW | **3.000** | 3.134 |
+| max NOW | 3.061 | 3.943 |
+| over 4.0 NOW | **0** | 0 |
+| p90 at fee-clearing raise | **4.74** (×1.58, PROJECTED) | 3.918 (×1.25) |
+| over 4.0 post-raise | **p90 crosses the ceiling** | 60/665 = **9.0%** (tail only) |
+| floor-binding share | — | 12.5% (inert) |
+
+**Langston's independent reproduction (2026-08-16):** sma leg exact (n=665, median 2.0883, p90 3.1344, max 3.9428, 60 rows); pivot_shift p90-now **3.000** confirmed; the 4.74 reconciled as **projected-post-raise** (×4.74/3.0), not measured-now — his own item (3).
+**⇒ THE EXCLUSION CRITERION, now cited not asserted: the ceiling bites the TAIL for `sma_trend_ride` (9%, the gate working) and goes THROUGH THE BODY for `pivot_shift` (p90 itself crosses).** `pivot_shift` re-enters only with the 25-17b ceiling decision.
