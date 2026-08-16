@@ -189,7 +189,7 @@ import {
 import { checkPerUnderlyingCap, formatDecisionLog } from './per-underlying-cap.js';
 // P19-B-FEEVIABILITY OBJ-1a: geometry-config VERSION stamp on SQE-reject archive rows
 // (the B-NEW-53 per-strategy resolved-constants hash — version-not-value, Langston r2.1(b)).
-import { resolveConstantsProvenance, recordConstantsVersion } from './data-archive/decision-provenance.js';
+import { resolveConstantsProvenance, recordConstantsVersion, hashResolvedSet } from './data-archive/decision-provenance.js';
 
 export interface SignalOrchestratorConfig {
   mode: 'live' | 'paper';
@@ -1005,12 +1005,30 @@ export class SignalOrchestrator {
             entryPrice: rawSignal.entryPrice ?? null,
             targetPrice: rawSignal.targetPrice ?? null,
             stopPrice: rawSignal.stopPrice ?? null,
-            atrAtOpen: sizingContext.atr ?? null,
-            geometryConfigVersion: (() => {
+            // Step-4 BLOCKER-2 fix: the canonical ATR resolution on this path is
+            // marketContext?.atr ?? sizingContext.atr (:1644 parity) — sizingContext alone
+            // is structurally null for 100% of xStock rejects (active-dispatch builds no
+            // sizingContext.atr). This is the ATR IN EFFECT at the reject (no ATR gate ran
+            // on this path); the #581 parity claim covers the crypto quant/pattern stamps only.
+            atrAtOpen: marketContext?.atr ?? sizingContext.atr ?? null,
+            // Step-4 BLOCKER-1 fix: strategy.* constants contain NO geometry — the gate
+            // constants live in expectancy_gates (target_floor_pct/reach_atr_max at '*',
+            // min_rr per-(strategy×class)). Hash the resolved triple ACTUALLY APPLIED via
+            // getPerClassTargetGate (most-specific-wins already done), so a reach_atr_max
+            // recalibration CHANGES the hash instead of silently merging pre/post declines.
+            // Both versions carried; field names say what each covers (29(c)).
+            strategyConstantsVersion: (() => {
               try {
                 const prov = resolveConstantsProvenance(strategyId, sqeAssetClass);
                 if (prov) { recordConstantsVersion(prov, sqeAssetClass, strategyId); return prov.hash; }
-              } catch { /* fire-and-forget — a version miss must never block the reject record */ }
+              } catch { /* fire-and-forget */ }
+              return null;
+            })(),
+            gateConstantsVersion: (() => {
+              try {
+                const g = getPerClassTargetGate(sqeAssetClass, strategyId);
+                return hashResolvedSet('expectancy_gates', { target_floor_pct: g.floorPct, min_rr: g.minRR, reach_atr_max: g.reachAtrMax });
+              } catch { /* fire-and-forget */ }
               return null;
             })(),
           },

@@ -2125,6 +2125,14 @@ class ReadyToBuyService {
             const _open = await storage.getActiveOpenPositions(input.mode);
             _holdingStrategy = _open.find(p => p.symbol === normalizedSymbol)?.strategyName ?? null;
           } catch { /* holder lookup is best-effort — the block record matters more than the attribution */ }
+          // Step-4 CHANGE-3: hasActivePair returned TRUE one line above, so a holder exists
+          // by construction — a null here means .find() missed (symbol-form drift or the
+          // non-activeOpenPositions fall-through) and must be LOUD, not a silent null
+          // indistinguishable from the catch branch. (Note: getActiveOpenPositions ignores
+          // its mode arg today — bare global select; harmless paper-only, do not build on it.)
+          if (_holdingStrategy === null) {
+            console.warn(`[OBJ-1b][HOLDER_MISS] pair=${normalizedSymbol} blocked as duplicate but holder lookup found no position — symbol-form drift or store fall-through`);
+          }
           archiveSignalEval({
             mode: tradingModeToRunMode(input.mode),
             symbol: normalizedSymbol,
