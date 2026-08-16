@@ -187,6 +187,9 @@ import {
 } from '../core/metrics/multi-tf-agreement.js';
 // B67.3 — Per-underlying position cap (admission gate for active path)
 import { checkPerUnderlyingCap, formatDecisionLog } from './per-underlying-cap.js';
+// P19-B-FEEVIABILITY OBJ-1a: geometry-config VERSION stamp on SQE-reject archive rows
+// (the B-NEW-53 per-strategy resolved-constants hash — version-not-value, Langston r2.1(b)).
+import { resolveConstantsProvenance, recordConstantsVersion } from './data-archive/decision-provenance.js';
 
 export interface SignalOrchestratorConfig {
   mode: 'live' | 'paper';
@@ -987,7 +990,30 @@ export class SignalOrchestrator {
             predictiveConfidence: extendedMetrics.confidence,
             sourcePool: rawSignal.metadata?.sourcePool ?? null,
           },
-          gateDecision: { gate: 'sqe', accepted: false, reason: sqeResult.reason, path: 'active-signal-orchestrator' },
+          // P19-B-FEEVIABILITY OBJ-1a (2026-08-11, Langston (1c)): the DECLINED population
+          // carried no geometry — vts-runner wrote target/atrAtOpen at 32/32 while this
+          // writer wrote 0 of 6,077 SQE rejects — so a post-mark rejection could never be
+          // attributed to the geometry that caused it. Write-site parity with the vts-runner
+          // shape: the signal's own levels (pre any downstream mutation) + the ATR the gates
+          // read (sizingContext.atr — the per-symbol stamp, #581 parity) + the geometry-config
+          // VERSION, never the value (Langston r2.1(b): the version is the partition key; a
+          // value cannot partition the ten strategies whose geometry is not one number).
+          // Version = the B-NEW-53 per-strategy resolved-constants hash; recordConstantsVersion
+          // persists novel sets deduped, so the hash is always dereferenceable.
+          gateDecision: {
+            gate: 'sqe', accepted: false, reason: sqeResult.reason, path: 'active-signal-orchestrator',
+            entryPrice: rawSignal.entryPrice ?? null,
+            targetPrice: rawSignal.targetPrice ?? null,
+            stopPrice: rawSignal.stopPrice ?? null,
+            atrAtOpen: sizingContext.atr ?? null,
+            geometryConfigVersion: (() => {
+              try {
+                const prov = resolveConstantsProvenance(strategyId, sqeAssetClass);
+                if (prov) { recordConstantsVersion(prov, sqeAssetClass, strategyId); return prov.hash; }
+              } catch { /* fire-and-forget — a version miss must never block the reject record */ }
+              return null;
+            })(),
+          },
         });
       } catch (b70Err) {
         console.warn(`[B70][ARCH] SQE-reject signal-eval archive enqueue failed:`, b70Err instanceof Error ? b70Err.message : b70Err);

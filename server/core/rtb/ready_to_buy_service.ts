@@ -2104,6 +2104,45 @@ class ReadyToBuyService {
     const hasActivePosition = await storage.hasActivePair(normalizedSymbol, input.mode);
     if (hasActivePosition) {
       console.log(`[8.8.4-A3][SQE][Validation] pair=${normalizedSymbol} status=duplicate_pair_active`);
+      // P19-B-FEEVIABILITY OBJ-1b (2026-08-11): persist the pair-exclusivity rejection.
+      // This block was a bare console.log — 122 blocks in 5.2h existed ONLY in a stdout
+      // line that rotates out in ~2 days, invisible to the archive (0 rows against a
+      // 4,010-row positive control) AND to the shadow layer (no pool entry ⇒ no shadow
+      // row ⇒ the counterfactual is unobtainable retrospectively). The marked window
+      // cannot distinguish "did not qualify" from "could not enter" without this.
+      // Sink = signal_eval_archive (the durable ledger), NOT rtb_signals.block_reason —
+      // that column's designed population structurally cannot reach it (pre-audit part 4:
+      // blocked signals return null BEFORE upsert; rule-24 outcome 3). Includes the
+      // HOLDING strategy so contention is attributable per strategy (Langston's two
+      // global channels). Fire-and-forget: the archive write must never block admission.
+      try {
+        const { archiveSignalEval } = await import('../../services/data-archive/signal-eval-archiver.js');
+        const { asValidAssetClass, safeResolveAssetClass } = await import('../../../shared/asset-classes.js');
+        const _blkClass = asValidAssetClass((input as any).assetClass) ?? safeResolveAssetClass(normalizedSymbol, 'kraken');
+        if (_blkClass !== null) {
+          let _holdingStrategy: string | null = null;
+          try {
+            const _open = await storage.getActiveOpenPositions(input.mode);
+            _holdingStrategy = _open.find(p => p.symbol === normalizedSymbol)?.strategyName ?? null;
+          } catch { /* holder lookup is best-effort — the block record matters more than the attribution */ }
+          archiveSignalEval({
+            mode: tradingModeToRunMode(input.mode),
+            symbol: normalizedSymbol,
+            exchange: 'kraken',
+            assetClass: _blkClass,
+            source: 'signal-orchestrator',
+            strategy: input.strategy,
+            rejectStage: 'sqe',
+            finalScore: input.finalScore,
+            gateDecision: {
+              gate: 'pair_exclusivity', accepted: false, reason: 'duplicate_pair_active',
+              path: 'rtb-queue-admission', holdingStrategy: _holdingStrategy,
+            },
+          });
+        }
+      } catch (b70Err) {
+        console.warn(`[OBJ-1b][ARCH] pair-exclusivity archive enqueue failed:`, b70Err instanceof Error ? b70Err.message : b70Err);
+      }
       return null;
     }
 
