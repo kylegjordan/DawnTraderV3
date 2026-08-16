@@ -575,6 +575,32 @@ def stamp_changed(state):
     return state
 
 
+REMOTE_EXPLAINER = (
+    'TOKFILE=/etc/crew-status/oauth.env; '
+    '[ -f "$TOKFILE" ] || TOKFILE=/etc/langston/oauth.env; '
+    "TOK=$(grep -oP '(?<=CLAUDE_CODE_OAUTH_TOKEN=).*' \"$TOKFILE\"); "
+    'H=/var/lib/crew-status-explainer; mkdir -p "$H"; '
+    'exec env CLAUDE_CODE_OAUTH_TOKEN="$TOK" HOME="$H" /usr/bin/claude -p --model haiku'
+)
+
+
+def _model_call(prompt, timeout=300):
+    """Run the explaining model on the SERVER. Returns (stdout, error).
+
+    The prompt travels on stdin, never as a shell argument -- it is several KB of JSON built
+    from real Discord text containing & | > % and quotes, every one an operator to some shell
+    along the way."""
+    try:
+        r = subprocess.run(["ssh", "-o", "ConnectTimeout=25", HELSINKI, REMOTE_EXPLAINER],
+                           input=prompt, capture_output=True, text=True, timeout=timeout,
+                           encoding="utf-8", errors="replace", creationflags=NO_WINDOW)
+    except Exception as e:
+        return None, f"{type(e).__name__}: {e}"
+    if r.returncode != 0:
+        return None, _cli_error(r)
+    return r.stdout, None
+
+
 def _cli_error(r):
     """Turn a failed CLI run into something ACTIONABLE on the page.
 
@@ -627,27 +653,12 @@ def summarise(state):
     #  2. this prompt is ~6 KB of JSON, and passing it as a SHELL STRING lets Windows quoting
     #     mangle it. Same failure family as building a Discord message inline: never hand
     #     structured text to a shell. Args go as a LIST; the shell never sees the prompt.
-    cli = os.path.expanduser("~/AppData/Roaming/npm/claude.cmd")
-    cli = cli if os.path.exists(cli) else "claude"
+    # (The local CLI path is gone: the model now runs on the server. See _model_call.)
     # ★ THE PROMPT GOES VIA STDIN, never as an argument. Proven necessary: the evidence is real
     # Discord text containing & | > % — every one an operator to cmd.exe, which silently mangled
     # the payload and returned no JSON. Third instance tonight of the same root cause (a Discord
     # message, a Python heredoc, now a CLI prompt): NEVER hand structured text to a shell.
-    try:
-        os.makedirs(SUMMARISER_CWD, exist_ok=True)
-        r = subprocess.run(["cmd", "/c", cli, "-p", "--model", "haiku"],
-                           input=prompt, capture_output=True, text=True, timeout=240,
-                           encoding="utf-8", errors="replace", cwd=SUMMARISER_CWD,
-                           creationflags=NO_WINDOW)
-        out = r.stdout if r.returncode == 0 else None
-        # ★ READ BOTH STREAMS. The CLI prints auth/quota failures to STDOUT with a non-zero
-        # exit and an EMPTY stderr, so a stderr-only error string renders "exit 1:" with the
-        # reason blank -- which is exactly what Kyle was shown while the real message
-        # ("OAuth access token has expired. Re-authenticate to continue.") sat unused in
-        # memory. A failure that hides its own cause costs more than the failure.
-        err = None if r.returncode == 0 else _cli_error(r)
-    except Exception as e:
-        out, err = None, f"{type(e).__name__}: {e}"
+    out, err = _model_call(prompt)
     if err or not out:
         return {}, f"summariser unavailable: {err or 'empty'}"
     m = re.search(r"\{.*\}", out, re.S)
