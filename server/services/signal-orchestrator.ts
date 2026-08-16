@@ -1006,7 +1006,7 @@ export class SignalOrchestrator {
             targetPrice: rawSignal.targetPrice ?? null,
             stopPrice: rawSignal.stopPrice ?? null,
             // Step-4 BLOCKER-2 fix: the canonical ATR resolution on this path is
-            // marketContext?.atr ?? sizingContext.atr (:1644 parity) — sizingContext alone
+            // marketContext?.atr ?? sizingContext.atr (:1662 parity) — sizingContext alone
             // is structurally null for 100% of xStock rejects (active-dispatch builds no
             // sizingContext.atr). This is the ATR IN EFFECT at the reject (no ATR gate ran
             // on this path); the #581 parity claim covers the crypto quant/pattern stamps only.
@@ -1027,7 +1027,12 @@ export class SignalOrchestrator {
             gateConstantsVersion: (() => {
               try {
                 const g = getPerClassTargetGate(sqeAssetClass, strategyId);
-                return hashResolvedSet('expectancy_gates', { target_floor_pct: g.floorPct, min_rr: g.minRR, reach_atr_max: g.reachAtrMax });
+                const resolvedSet = { target_floor_pct: g.floorPct, min_rr: g.minRR, reach_atr_max: g.reachAtrMax };
+                const hash = hashResolvedSet('expectancy_gates', resolvedSet);
+                // Step-4 NEW-1: record the set so the hash is DEREFERENCEABLE (parity with the
+                // strategy hash; dedup keys on hash, module name is inside the canonical JSON).
+                recordConstantsVersion({ hash, moduleName: 'expectancy_gates', resolvedSet }, sqeAssetClass, strategyId);
+                return hash;
               } catch { /* fire-and-forget */ }
               return null;
             })(),
