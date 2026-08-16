@@ -14,11 +14,11 @@
 
 | population | trades | per day |
 |---|---|---|
-| **crypto organic** | **15** | **0.60** |
+| **crypto organic** | **15** | **0.54** (~28d divisor) |
 | crypto all lanes | 255 | 9.42 |
 | xStock organic | 192 | 7.46 |
 
-**THRESHOLD MET?** ⚠️ **AMENDED per Langston's Step-8 label correction (2026-08-17): the trigger AS WRITTEN does NOT fire — it fires on the crypto-organic SUB-POPULATION.** The trigger's own object is *signals generated* and its population is *"across the whole pair universe"* (`POST_AUDIT_ROADMAP:421`); this doc measures closed trades on one class. Universe-wide organic closes are **214 → 6.5–8.6/day**, above the 5/day bar. **The honest sentence — and the stronger one: the bar is missed by the crypto-organic sub-population (15 trades / ~28 days = 0.54/day, divisor stated), and narrowing to it is justified because the remedy's universe-expansion leg already executed.** *(Also recorded: `rtb_signals` holds 0 rows all-time — positive control run — so it is NOT the signal-count instrument; any re-measurement on the trigger's original terms must come from `signal_eval_archive`.)* (xStock at 7.46/day does NOT trigger. Crypto-all-lanes at 9.42/day is dominated by the exploration lane, which is the learning subsidy, not organic capture — pooling them would mask exactly the condition this item watches for. Population argument per rule 29(a).)
+**THRESHOLD MET?** ⚠️ **AMENDED per Langston's Step-8 label correction (2026-08-16): the trigger AS WRITTEN does NOT fire — it fires on the crypto-organic SUB-POPULATION.** The trigger's own object is *signals generated* and its population is *"across the whole pair universe"* (`POST_AUDIT_ROADMAP:421`); this doc measures closed trades on one class. Universe-wide organic closes are **214 → 6.5–8.6/day**, above the 5/day bar. **The honest sentence — and the stronger one: the bar is missed by the crypto-organic sub-population (15 trades / ~28 days = 0.54/day, divisor stated), and narrowing to it is justified because the remedy's universe-expansion leg already executed.** *(Also recorded: `rtb_signals` holds 0 rows all-time — positive control run — so it is NOT the signal-count instrument; any re-measurement on the trigger's original terms must come from `signal_eval_archive`.)* (xStock at 7.46/day does NOT trigger. Crypto-all-lanes at 9.42/day is dominated by the exploration lane, which is the learning subsidy, not organic capture — pooling them would mask exactly the condition this item watches for. Population argument per rule 29(a).)
 
 **THE GATE'S PRESCRIBED REMEDY:** *"move XStocks + Perp Futures (currently Phase 21.5) forward into pre-launch so the pair universe expands."*
 
