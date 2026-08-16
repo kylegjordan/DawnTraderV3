@@ -67,12 +67,16 @@ LOOKBACK_H = 36
 # lost this way, on the very field the page exists for.
 SESSIONS = {
     "OLD Claude":     {"alias": "CC-A", "transcripts": "C--DawnTraderV3-old",
+                       "clone": r"C:\DawnTraderV3-old",
                        "aliases": {"claude old", "cc-a"}},
     "NEW Claude":     {"alias": "CC-B", "transcripts": "C--DawnTraderV3-new",
+                       "clone": r"C:\DawnTraderV3-new",
                        "aliases": {"claude new", "cc-b"}},
     "ANALYST Claude": {"alias": "CC-C", "transcripts": "C--DawnTraderV3-analyst",
+                       "clone": r"C:\DawnTraderV3-analyst",
                        "aliases": {"claude analyst", "cc-c"}},
     "Infra Claude":   {"alias": "CC-INFRA", "transcripts": "G--My-Drive",
+                       "clone": r"C:\DawnTraderV3-infra",
                        "aliases": {"claude infra", "cc-infra", "infra"}},
 }
 # Langston R1 (belt-and-braces): this job's own output must never become its own input.
@@ -228,9 +232,34 @@ def src_transcripts():
 
 
 def src_git():
-    out, err = run(["git", "-C", REPO, "log", "origin/migration/aws-supabase",
-                    f"--since={LOOKBACK_H} hours ago", "--format=%h|%an|%cI|%s"], timeout=60)
-    return ((out or "").splitlines(), None) if not err else (None, err)
+    """Per-CLONE, because per-AUTHOR provably cannot work.
+
+    Measured 2026-08-16: all four recent commits carry the author `kylegjordan` -- every
+    session commits under one git identity, so authorship carries no session signal at all.
+    The WORKING COPY does: each session has its own clone and commits only from it, which
+    makes the clone path direct evidence of who did the work.
+
+    Also note what is NOT here any more: a `--since` window and a read of a shared `origin/*`
+    ref. The old code read `origin/migration/aws-supabase` from this one clone and nothing ever
+    fetched it, so it had been frozen for 9 days -- 0 commits in a 48h window that actually
+    contained 4. Reading each clone's own HEAD needs no fetch to be current, because a session
+    commits locally before it pushes. No window either: a session whose last commit is 9 days
+    old should REPORT that, not disappear. Age is the answer to Kyle's question, not a reason
+    to withhold the row."""
+    out, errs = {}, []
+    for sess, cfg in SESSIONS.items():
+        clone = cfg.get("clone")
+        if not clone or not os.path.isdir(os.path.join(clone, ".git")):
+            errs.append(f"{sess}: no clone at {clone}")
+            continue
+        o, e = run(["git", "-C", clone, "log", "HEAD", "-40",
+                    "--format=%h|%an|%cI|%s"], timeout=60)
+        if e:
+            errs.append(f"{sess}: {e}")
+            continue
+        out[sess] = [ln for ln in (o or "").splitlines() if "|" in ln]
+    # A partial read is reported, never silently treated as an absence (#453).
+    return (out or None), ("; ".join(errs) if errs else None)
 
 
 BOARD_TOKEN = os.path.expanduser("~/.claude/.gh-board-token")
@@ -341,7 +370,8 @@ def derive():
         "sources": {
             "discord":     {"ok": disc_err is None, "error": disc_err, "rows": len(disc or [])},
             "transcripts": {"ok": tr_err is None,   "error": tr_err,   "sessions": len(tr or {})},
-            "git":         {"ok": git_err is None,  "error": git_err,  "commits": len(git or [])},
+            "git":         {"ok": bool(git), "error": git_err,
+                            "commits": sum(len(v) for v in (git or {}).values())},
             "alerts":      {"ok": alert_err is None, "error": alert_err, "active": len(alerts or [])},
             # Board deliberately optional in v1: it needs a token in a scheduled context
             # (Langston e2). Absent, it renders UNAVAILABLE — never silently blank.
@@ -411,28 +441,34 @@ def derive():
                 if k_last_any < str(mine[-1].get("ts") or ""):
                     row["unanswered_ask"] = {"ts": mine[-1].get("ts"), "excerpt": lt[:300]}
 
-        # --- current batch + workflow step (exact, from commit subjects) ---
-        cs = [c for c in (git or []) if "|" in c]
+        # --- current batch + workflow step, from THIS SESSION'S OWN CLONE ---
+        # The commits below were made in this session's working copy, so they are its work by
+        # construction. The previous version scanned one shared ref and then required the batch
+        # id to ALSO appear in the session's Discord traffic, because author names are identical
+        # across sessions -- a session that simply had not mentioned its batch id in chat showed
+        # no batch at all. Clone identity replaces that coincidence with direct evidence.
+        cs = [c for c in ((git or {}).get(sess) or []) if "|" in c]
         bid = re.compile(r"\b(B-[A-Z][A-Z0-9\-]{2,}|P\d+-B[\dA-Za-z.\-]+)")
         step = re.compile(r"\bStep-(\d+)", re.I)
-        # git log is NEWEST-first; iterating reversed() and breaking on the first match
-        # returned the OLDEST matching commit — so a session mid-batch showed a batch it had
-        # finished a day earlier. Caught by READING the output, not by it running clean.
+        # git log is NEWEST-first, so the FIRST match is the current batch. An earlier version
+        # iterated reversed() and broke on the first hit, which returned the OLDEST match and
+        # showed a session a batch it had finished a day before. Caught by reading the output.
+        if cs:
+            p0 = cs[0].split("|", 3)
+            if len(p0) == 4:
+                row["last_commit"] = {"commit": p0[0], "ts": p0[2], "subject": p0[3][:200]}
         for c in cs:
             parts = c.split("|", 3)
             if len(parts) < 4:
                 continue
             subj = parts[3]
             m = bid.search(subj)
-            if m and (row.get("last_said") or t):
-                # attribute by proximity of authorship is unreliable (all commits share one
-                # git identity), so a commit is only attached when its batch id also appears
-                # in that session's own channel traffic — evidence, not assumption.
-                if any(m.group(1) in (e.get("text") or "") for e in mine):
-                    sm = step.search(subj)
-                    row["current_batch"] = {"id": m.group(1), "step": sm.group(1) if sm else None,
-                                            "commit": parts[0], "ts": parts[2], "subject": subj[:200]}
-                    break
+            if m:
+                sm = step.search(subj)
+                row["current_batch"] = {"id": m.group(1), "step": sm.group(1) if sm else None,
+                                        "commit": parts[0], "ts": parts[2], "subject": subj[:200],
+                                        "source": "own clone"}
+                break
 
         # --- THE INTERRUPTION THREAD (Kyle 2026-08-07) ---------------------------------
         # Evidence, in order of strength: (1) an alert routed to this session by name and not
@@ -539,6 +575,27 @@ def stamp_changed(state):
     return state
 
 
+def _cli_error(r):
+    """Turn a failed CLI run into something ACTIONABLE on the page.
+
+    Two jobs. First, look in both streams -- the CLI puts auth and quota errors on stdout.
+    Second, translate the common ones into the actual remedy, because the person reading this
+    board is Kyle, not a developer: "exit 1" tells him nothing he can act on, "your login
+    expired, run this" tells him everything."""
+    blob = ((r.stderr or "") + " " + (r.stdout or "")).strip()
+    low = blob.lower()
+    if "oauth" in low and "expired" in low or "authentication_error" in low or "401" in low:
+        return ("LOGIN EXPIRED - the summariser cannot call the model. Fix: run `claude` in a "
+                "terminal and sign in again (or `claude setup-token`). Everything below is "
+                "still exact; only the plain-language summaries are missing.")
+    if "rate" in low and "limit" in low or "429" in low or "usage limit" in low:
+        return ("PLAN LIMIT REACHED - the summariser cannot call the model until the quota "
+                "resets. Everything below is still exact; only the summaries are missing.")
+    if not blob:
+        return f"exit {r.returncode}, and the CLI printed nothing on either stream"
+    return f"exit {r.returncode}: {blob[:300]}"
+
+
 def summarise(state):
     """One cheap model call, only when the exact facts changed. Returns {session: {field: str}}."""
     ev = {}
@@ -583,7 +640,12 @@ def summarise(state):
                            encoding="utf-8", errors="replace", cwd=SUMMARISER_CWD,
                            creationflags=NO_WINDOW)
         out = r.stdout if r.returncode == 0 else None
-        err = None if r.returncode == 0 else f"exit {r.returncode}: {(r.stderr or '')[:200]}"
+        # ★ READ BOTH STREAMS. The CLI prints auth/quota failures to STDOUT with a non-zero
+        # exit and an EMPTY stderr, so a stderr-only error string renders "exit 1:" with the
+        # reason blank -- which is exactly what Kyle was shown while the real message
+        # ("OAuth access token has expired. Re-authenticate to continue.") sat unused in
+        # memory. A failure that hides its own cause costs more than the failure.
+        err = None if r.returncode == 0 else _cli_error(r)
     except Exception as e:
         out, err = None, f"{type(e).__name__}: {e}"
     if err or not out:
