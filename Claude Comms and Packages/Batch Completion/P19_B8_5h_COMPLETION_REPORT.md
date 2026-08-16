@@ -47,3 +47,24 @@ SIM (reorg-B3 EV-input-provenance blocks updated: xStock DBS now carried, DI def
 **Boundary arithmetic checked before claiming causation (rule 24.a).** Within 2026-07-27 the xStock rows split cleanly: last NULL row `20:26:35Z`, first carried row `20:51:07Z` — the flip **brackets** the 20:44:12Z commit with nothing straddling it. No xStock rows exist for 07-25/07-26 (weekend shutdown, rule 17 — crypto ran through those days, confirming the gap is the trading window and not a feed outage).
 
 **Method note (recorded against interest):** the first query — the one the scheduled task specified — returned only a crypto row and would have produced a third "still drought-dry, re-check next run". The proof existed the whole time in a table the task did not name. *A dry transient queue is not evidence of absence when a durable transcript of that queue exists* — the same absent-as-valid trap as #546/#568, avoided only by asking which other table carries the column.
+
+---
+
+## ★ SUSTAINED RE-VERIFICATION + RECORD CORRECTION — 2026-08-16, CC-B — **PASS (18-day window)**
+
+**Why there is a second entry at all: the scheduled task was still running.** The 07-29 addendum above (and the governance-files list) states that `verify-p19-b8-5h-dbs-carry` was *"retired — it did its job"* / *"DELETED (job done)"*. **It was not.** It stayed `enabled: true` on the weekday cron and has fired every weekday since; the scheduler listing on 2026-08-16 shows it live with `lastRunAt` 2026-08-16T19:29Z. **Stopped for real this run: `enabled: false`, no `nextRunAt` — and read back off the scheduler listing, not asserted.** ⚠️ **It is DISABLED, not deleted:** the scheduler refuses to let a task delete itself (*"Refusing to delete the scheduled task that launched this session"*), so the file removal is a one-line cleanup from any other session — **HOME (§9.4): next CC-B session, tracked in `MEMORY_CC_B.md`.** Disabled is sufficient to stop it firing; the distinction is recorded rather than glossed because glossing it is precisely what produced this paragraph. *A claimed retirement nobody read back off the instrument is the same absent-as-valid class as #546/#568* — the 07-29 claim was true as an intention and false as a fact.
+
+**The re-run makes the original result stronger, on the same instrument and the same evidence chain** (`rtb_shadow_pool_members` transcribes the `rtb_signals.dbs_score_at_queue` column — chain re-confirmed in code this run at `ready_to_buy_service.ts:1965` → `getRankedSignals:1819` → `getQueuedSignals:1389` → `storage.getRtbSignals`):
+
+| asset_class | window | rows | dbs_carried | % | di_carried |
+|---|---|---|---|---|---|
+| **xstock_spot** | pre-cutoff (≤ 2026-07-27 20:26:35Z) | **2,429** | **0** | **0.0** | 0 |
+| **xstock_spot** | post-cutoff (≥ 2026-07-27 20:51:07Z) | **699** | **699** | **100.0** | **0** |
+| crypto_spot | post-cutoff, same window | 53,925 | 53,920 | 100.0 | 53,920 |
+
+- **OBJ-1 — YES, sustained.** 699/699 (100.0%) across **18 days** (2026-07-27 20:51Z → 2026-08-14 20:57Z), values in [−1,1] (min −0.7553, max +0.7704). The 07-29 pass rested on 64 rows over ~2 days; this is the same rate over an order of magnitude more evidence.
+- **Boundary still clean.** All 62 remaining post-07-27 NULLs are strictly **pre**-cutoff (newest NULL `20:26:35Z`; first carried `20:51:07Z`) — nothing straddles the 20:44:12Z deploy after 18 days of further data.
+- **OBJ-2 — YES, with a positive control this time (rule 29b).** xStock `di_at_queue` is 0/699. That silence is only evidence because the **same column in the same table over the same window carries 53,920 crypto values** — the column demonstrably *can* hold a value, so the xStock null is the ratified #377-H1/#502 decision, not an instrument gap. The 07-29 entry asserted the non-carry without stating that control.
+- **Crypto unchanged — YES.** 53,920/53,925 on both columns post-cutoff.
+- **Live `rtb_signals` was empty at check time** — 18 samples over 3 minutes, zero rows in every sample. Expected and not a finding: 2026-08-16 is a Sunday (rule 17 — xStocks are off Fri close → Sun open) and crypto remains in the #570 net-EV drought. Stated because a reader should not have to guess whether the dry queue was checked.
+- **Deployed head this run:** `8bf25630e` — confirmed to contain `8345718fd` by ancestry check, so the verified behavior is the behavior currently running.
