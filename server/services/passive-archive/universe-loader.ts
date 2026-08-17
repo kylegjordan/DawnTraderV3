@@ -501,6 +501,17 @@ export async function recomputeCryptoPerpUniverse(updatedBy: string, opts?: { ac
     assertClassifiedPlausible(Array.isArray(prevClassified) ? prevClassified.length : null, candidates.length);
   }
 
+  // Langston's OBJ-1 ratification condition (i) + his r12 ordering ruling: the
+  // EXPLOSION guard sits beside its implosion twin, ABOVE every registration and
+  // setConstant — the classified sets are the classification AUTHORITY, and
+  // F/G/H exist precisely to stop that object persisting from a payload we have
+  // just declared untrustworthy. The cap is a SANITY BOUND (Kyle set scope =
+  // ALL candidates; 400 is above any plausible universe): hitting it means the
+  // universe grew past plausibility — REFUSE AND LOG, never silently truncate.
+  if (candidates.length > cap) {
+    throw new Error(`[perpfeed][universe] ${candidates.length} classified candidates EXCEEDS the sanity bound ${PERP_CAP_KEY}=${cap} — REFUSING the recompute; investigate the venue listing surge (or raise the bound deliberately) before anything persists`);
+  }
+
   // OBJ-4 + Step-4 BLOCKER-B: refresh BOTH membership registries from the FULL
   // classified payload (never the capped capture set), persist the classified
   // sets so the restart path registers the same authority, and mark both sides
@@ -526,14 +537,6 @@ export async function recomputeCryptoPerpUniverse(updatedBy: string, opts?: { ac
     console.warn('[perpfeed][universe] tickers fetch failed — ranking by symbol name as a stable fallback:', err instanceof Error ? err.message : err);
   }
   candidates.sort((a, b) => (oiBySymbol.get(b.symbol) ?? 0) - (oiBySymbol.get(a.symbol) ?? 0) || a.symbol.localeCompare(b.symbol));
-  // Langston's OBJ-1 ratification condition (i), 2026-08-17: the cap is a SANITY
-  // BOUND (Kyle set scope = ALL candidates; 400 is above any plausible universe).
-  // Hitting it means the universe grew past plausibility — REFUSE AND LOG, never
-  // silently truncate: a truncated universe wearing a complete universe's
-  // clothes is the same #546 failure OBJ-4 guards in classification.
-  if (candidates.length > cap) {
-    throw new Error(`[perpfeed][universe] ${candidates.length} classified candidates EXCEEDS the sanity bound ${PERP_CAP_KEY}=${cap} — REFUSING the recompute; investigate the venue listing surge (or raise the bound deliberately) before any capture-set change persists`);
-  }
   const members = candidates.map(c => c.symbol).sort();
 
   // Diff vs the persisted set; log every add/drop (Langston condition (d)).
@@ -551,12 +554,20 @@ export async function recomputeCryptoPerpUniverse(updatedBy: string, opts?: { ac
   // derived GB/month ON THE RECORD before the writer starts — this line is
   // that record's instrument (340 B/row ticker measured on xstock_perp July;
   // ~18 MB/sym/month OHLC; the per-class throttle constant sets the pacing).
-  const est10s = Math.round(members.length * (8640 * 340 * 30 + 18_000_000) / 1e9 * 10) / 10;
+  // Langston r12 note 1: derive the pacing from the RESOLVED throttle constants
+  // (class override, else global, else the writer's code default) — these knobs
+  // get retuned (the global went 1000→4000), and the §4 record must not keep
+  // printing a birth-day pacing. Soft fallbacks are fine HERE: this is a
+  // reporting estimate, not behavior.
+  const classThrottle = await getConstant<number>(PERP_UNIVERSE_MODULE, 'ticker_snapshot_min_interval_ms', { exchange: '*', assetClass: 'crypto_perp', strategy: '*', regime: '*' });
+  const globalThrottle = await getConstant<number>(PERP_UNIVERSE_MODULE, 'b74_ticker_snapshot_min_interval_ms', WILDCARD_KEY);
+  const throttleMs = (classThrottle != null && classThrottle > 0) ? classThrottle : (globalThrottle != null && globalThrottle > 0) ? globalThrottle : 1000;
+  const estGb = Math.round(members.length * ((86_400_000 / throttleMs) * 340 * 30 + 18_000_000) / 1e9 * 10) / 10;
   console.log(
     `[perpfeed][universe] recomputed: members=${members.length} (sanity bound ${cap}; ` +
     `candidates=${candidates.length}, equity=${counts.equity_perp}, dated=${counts.dated}, ` +
     `inverse=${counts.inverse}, unclassified=${counts.unclassified}) — ` +
-    `standing-cost estimate at 10s pacing ≈ ${est10s} GB/month resident (§4 record-before-switch-on)`
+    `standing-cost estimate at ${throttleMs}ms pacing ≈ ${estGb} GB/month resident (§4 record-before-switch-on)`
   );
   return members;
 }

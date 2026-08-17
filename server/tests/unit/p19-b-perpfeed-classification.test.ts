@@ -259,10 +259,14 @@ describe('P19-B-PERPFEED Step-4 ordering pin: both refuse-on-degraded fetches pr
     // BLOCKER-H's call-site guard + the §13 floor also precede every write
     const idxEmptyGuard = body.indexOf('cryptoSpotBases.size === 0');
     const idxFloor = body.indexOf('assertClassifiedPlausible(');
+    // Langston r12: the EXPLOSION guard sits beside its implosion twin, above persistence
+    const idxCapGuard = body.indexOf('candidates.length > cap');
     expect(idxEmptyGuard).toBeGreaterThan(-1);
     expect(idxFloor).toBeGreaterThan(-1);
+    expect(idxCapGuard).toBeGreaterThan(-1);
     expect(idxEmptyGuard).toBeLessThan(idxFirstPersist);
     expect(idxFloor).toBeLessThan(idxFirstPersist);
+    expect(idxCapGuard).toBeLessThan(idxFirstPersist);
   });
 });
 
