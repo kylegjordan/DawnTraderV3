@@ -38,6 +38,20 @@ export interface GuardEvalRecord {
                         //   See RUNNING_ISSUES (reorg-B2.3 CF-2) — Phase-25 25-20 is the named gate.
   rrMin: number;
   rrMax: number;
+  // ★ #371 (P19-B-FEEVIABILITY r5, 2026-08-17, owner Analyst due 08-23) — the two-sided ATR-magnitude
+  // capture that makes the guard-vs-normalizer reachability divergence MEASURABLE (condition (1) of
+  // #373, both sides). NEW fields ⇒ a pre-#371 checkpoint restores them to 0 while evals carries the
+  // legacy backlog — the SAME restore seam rrSumSqEvals documents. ⇒ EVERY divergence rate MUST be
+  // derived over its own paired n (atrPairedN / normPairedN), NEVER over evals (Langston pre-registered
+  // Step-4 condition — "ship the paired counter, not just the sums").
+  atrPairedN: number;   // n paired to guardAtrSum/attSum — the ONLY valid divergence denominator (guard side)
+  guardAtrSum: number;  // Σ effectiveATR (the CLAMPED per-strategy ATR the guard gates on)
+  guardAtrSumSq: number;
+  attSum: number;       // Σ atrsToTarget as the GUARD computed it (target distance / effectiveATR)
+  attSumSq: number;
+  normPairedN: number;  // n paired to normAtrSum — the normalizer-side denominator
+  normAtrSum: number;   // Σ mceContext.atr (the RAW ATR the normalizer's reachability gate reads)
+  normAtrSumSq: number;
 }
 
 // reorg-B2.2 OBJ-B: keyed by the COMPOSITE `${strategy}::${assetClass}` (was strategy-only in reorg-B2.1).
@@ -47,7 +61,7 @@ export interface GuardEvalRecord {
 const _stats = new Map<string, GuardEvalRecord>();
 
 function _blank(): GuardEvalRecord {
-  return { evals: 0, passes: 0, atrDrops: 0, stopDrops: 0, rrDrops: 0, reachDrops: 0, rrEvals: 0, rrSum: 0, rrSumSq: 0, rrSumSqEvals: 0, rrMin: Infinity, rrMax: -Infinity };
+  return { evals: 0, passes: 0, atrDrops: 0, stopDrops: 0, rrDrops: 0, reachDrops: 0, rrEvals: 0, rrSum: 0, rrSumSq: 0, rrSumSqEvals: 0, rrMin: Infinity, rrMax: -Infinity, atrPairedN: 0, guardAtrSum: 0, guardAtrSumSq: 0, attSum: 0, attSumSq: 0, normPairedN: 0, normAtrSum: 0, normAtrSumSq: 0 };
 }
 
 // Composite-key helpers. `::` separates strategy from assetClass; strategy keys are simple snake_case and
@@ -59,14 +73,14 @@ function _parseKey(key: string): { strategy: string; assetClass: string } {
 }
 
 /** A read-snapshot record: the raw counters plus the two derived ratios. */
-type DerivedRecord = GuardEvalRecord & { meanRR: number; rrSuppressionRate: number };
+type DerivedRecord = GuardEvalRecord & { meanRR: number; rrSuppressionRate: number; guardAtrMean: number | null; attMean: number | null; normAtrMean: number | null };
 
 /** Derive the two ratios from RAW fields — the ONE place the #372 numbers are computed, so any caller
  *  (aggregate, per-class, per-(strategy,assetClass)) is byte-consistent. meanRR over rrEvals (RR-reached
  *  only — unskewed); rrSuppressionRate over TOTAL evals (Langston: "how much does minRR suppress total
  *  output", denominator = all generated signals). NEVER average pre-derived ratios (FLAG-2). */
 function _derive(r: GuardEvalRecord): DerivedRecord {
-  return { ...r, meanRR: r.rrEvals > 0 ? r.rrSum / r.rrEvals : 0, rrSuppressionRate: r.evals > 0 ? r.rrDrops / r.evals : 0 };
+  return { ...r, meanRR: r.rrEvals > 0 ? r.rrSum / r.rrEvals : 0, rrSuppressionRate: r.evals > 0 ? r.rrDrops / r.evals : 0, guardAtrMean: r.atrPairedN > 0 ? r.guardAtrSum / r.atrPairedN : null, attMean: r.atrPairedN > 0 ? r.attSum / r.atrPairedN : null, normAtrMean: r.normPairedN > 0 ? r.normAtrSum / r.normPairedN : null };
 }
 
 /** Sum the RAW counters of `from` into `into` (min/max via Math.min/max). Used to fold per-class buckets
@@ -76,6 +90,9 @@ function _accumulate(into: GuardEvalRecord, from: GuardEvalRecord): void {
   into.stopDrops += from.stopDrops; into.rrDrops += from.rrDrops; into.reachDrops += from.reachDrops;
   into.rrEvals += from.rrEvals; into.rrSum += from.rrSum; into.rrSumSq += from.rrSumSq; into.rrSumSqEvals += from.rrSumSqEvals;
   into.rrMin = Math.min(into.rrMin, from.rrMin); into.rrMax = Math.max(into.rrMax, from.rrMax);
+  into.atrPairedN += from.atrPairedN; into.guardAtrSum += from.guardAtrSum; into.guardAtrSumSq += from.guardAtrSumSq;
+  into.attSum += from.attSum; into.attSumSq += from.attSumSq;
+  into.normPairedN += from.normPairedN; into.normAtrSum += from.normAtrSum; into.normAtrSumSq += from.normAtrSumSq;
 }
 
 // ── reorg-B2.2 OBJ-A: PERSISTENCE ──────────────────────────────────────────────────────────────────
@@ -150,7 +167,7 @@ export function getGuardEvalStartedAt(): string | null { return _startedAt; }
 
 /** Record one guard evaluation for a strategy. `rr` is the computed reward-to-risk (for the suppression
  *  distribution); `pass` + `dropReason` capture the verdict. Cheap O(1), no I/O. */
-export function recordGuardEval(strategy: string, rr: number, pass: boolean, dropReason: GuardDropReason, assetClass: AssetClass): void {
+export function recordGuardEval(strategy: string, rr: number, pass: boolean, dropReason: GuardDropReason, assetClass: AssetClass, effectiveATR?: number | null, atrsToTarget?: number | null): void {
   if (_startedAt === null) _startedAt = new Date().toISOString(); // window start (restored across restarts)
   const key = _key(strategy, assetClass); // reorg-B2.2 OBJ-B: per-class composite bucket
   let r = _stats.get(key);
@@ -168,11 +185,37 @@ export function recordGuardEval(strategy: string, rr: number, pass: boolean, dro
     if (rr < r.rrMin) r.rrMin = rr;
     if (rr > r.rrMax) r.rrMax = rr;
   }
+  // ★ #371 guard-side magnitudes (pass AND fail — before the early return)
+  if (effectiveATR != null && atrsToTarget != null && Number.isFinite(effectiveATR) && effectiveATR > 0 && Number.isFinite(atrsToTarget)) {
+    r.atrPairedN++;
+    r.guardAtrSum += effectiveATR; r.guardAtrSumSq += effectiveATR * effectiveATR;
+    r.attSum += atrsToTarget;      r.attSumSq += atrsToTarget * atrsToTarget;
+  }
   if (pass) { r.passes++; return; }
   if (dropReason === 'invalid_atr') r.atrDrops++;
   else if (dropReason === 'stop_distance') r.stopDrops++;
   else if (dropReason === 'rr_below_min') r.rrDrops++;
   else if (dropReason === 'unreachable') r.reachDrops++;
+}
+
+// ★ #371: the guard-side magnitude capture rides INSIDE recordGuardEval via the optional trailing
+// params (18 call sites thread the values already computed and previously dropped at this boundary —
+// pre-audit A.3). Recorded for pass AND fail alike so the divergence read has an intact population.
+// NOTE: mutation happens in recordGuardEval before the early `return` on pass — see the block above the
+// pass-branch. (Implemented as a separate statement injected before the pass check.)
+
+/** ★ #371 normalizer-side capture: the RAW mceContext-style ATR the normalizer's reachability gate reads
+ *  (`normalizeAndGateTarget`'s `atr` param). Called at the normalizer call sites with the SAME
+ *  strategy/class key so the two distributions land in the SAME bucket and the divergence is a
+ *  per-(strategy,class) within-bucket comparison. Paired n discipline identical to the guard side. */
+export function recordNormalizerAtr(strategy: string, assetClass: AssetClass, atr: number): void {
+  if (!Number.isFinite(atr) || atr <= 0) return; // invalid_atr is the guard's taxonomy; here it is simply not a sample
+  const key = _key(strategy, assetClass);
+  let r = _stats.get(key);
+  if (!r) { r = _blank(); _stats.set(key, r); }
+  r.normPairedN++;
+  r.normAtrSum += atr;
+  r.normAtrSumSq += atr * atr;
 }
 
 /** Snapshot the STRATEGY-LEVEL aggregate (the #372 calibration surface) — SUMS the per-class buckets back

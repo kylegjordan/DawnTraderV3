@@ -266,7 +266,7 @@ export function detectSupportBounce(
   // ── Global guards (ATR, stop distance, R:R) ──────────────────────────────
   const gate = getPerClassTargetGate(assetClass, 'support_bounce');
   const _gr = applyGlobalGuards(entryPrice, stopPrice, targetPrice, effectiveATR, gate);
-  recordGuardEval('support_bounce', _gr.rr, _gr.pass, _gr.dropReason, assetClass);
+  recordGuardEval('support_bounce', _gr.rr, _gr.pass, _gr.dropReason, assetClass, effectiveATR, _gr.atrsToTarget);
   if (guardForcesDrop(_gr, gateDisposition)) {
     console.log(`${LOG_PREFIX} Global guards failed. Skipping.`);
     setNullReason('guard_fail');

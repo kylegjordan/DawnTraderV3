@@ -298,7 +298,7 @@ export function detectORB(
     const _gate = getPerClassTargetGate(assetClass, STRATEGY_KEY);
     const _effATR = clampEffectiveATR(atr, entryPrice);
     const _gr = applyGlobalGuards(entryPrice, stopPrice, targetPrice, _effATR, _gate);
-    recordGuardEval('orb', _gr.rr, _gr.pass, _gr.dropReason, assetClass);
+    recordGuardEval('orb', _gr.rr, _gr.pass, _gr.dropReason, assetClass, _effATR, _gr.atrsToTarget);
     if (guardForcesDrop(_gr, gateDisposition)) { setNullReason('guard_fail'); return null; }
   }
 

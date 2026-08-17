@@ -178,7 +178,7 @@ export function detectReverseImpulse(
   // ── Global guards ──────────────────────────────────────────
   const gate = getPerClassTargetGate(assetClass, 'reverse_impulse');
   const _gr = applyGlobalGuards(entryPrice, stopPrice, targetPrice, effectiveATR, gate);
-  recordGuardEval('reverse_impulse', _gr.rr, _gr.pass, _gr.dropReason, assetClass);
+  recordGuardEval('reverse_impulse', _gr.rr, _gr.pass, _gr.dropReason, assetClass, effectiveATR, _gr.atrsToTarget);
   if (guardForcesDrop(_gr, gateDisposition)) {
     console.log(`${LOG_PREFIX} Global guards rejected signal`);
     setNullReason('guard_fail');

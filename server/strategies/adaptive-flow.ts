@@ -179,7 +179,7 @@ export function detectAdaptiveFlow(
   // ── Global guards ──────────────────────────────────────────
   const gate = getPerClassTargetGate(assetClass, 'adaptive_flow');
   const _gr = applyGlobalGuards(entryPrice, stopPrice, targetPrice, effectiveATR, gate);
-  recordGuardEval('adaptive_flow', _gr.rr, _gr.pass, _gr.dropReason, assetClass);
+  recordGuardEval('adaptive_flow', _gr.rr, _gr.pass, _gr.dropReason, assetClass, effectiveATR, _gr.atrsToTarget);
   if (guardForcesDrop(_gr, gateDisposition)) {
     console.log(`${LOG_PREFIX} Global guards rejected signal`);
     setNullReason('guard_fail');

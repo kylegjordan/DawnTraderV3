@@ -80,6 +80,7 @@ import { getMarketContextEngine } from './market-context-engine.js';
 // Phase 14 HF6: StrategyEngine for strategy-specific detect functions
 import { StrategyEngine, type StrategySignal, stampMaxHoldingMs } from './strategy-engine.js';
 import type { PatternInput, GateDisposition } from '../strategies/strategy-helpers.js';
+import { recordNormalizerAtr } from '../strategies/guard-eval-tracker.js'; // #371
 // Phase 14 HF6: Global friction/DBS getters for trade context dimensions
 import { getGlobalFriction, getLastGlobalDBSCategory, getLastGlobalDBSScore } from './market-indicators.js';
 // Phase 14: Real score calculator replaces simulation stubs
@@ -1572,6 +1573,8 @@ async function generatePhase10Signal(
     floorPct: _b2Gate.floorPct, minRR: _b2Gate.minRR,
     atr: mceContext.indicators.atr, reachAtrMax: _b2Gate.reachAtrMax,
   });
+  // ★ #371 normalizer-side ATR capture (VTS path — same bucket key as the guard side).
+  try { if (strategyOverride?.strategyKey) recordNormalizerAtr(strategyOverride.strategyKey, vtsResolveClassOrLoggedDefault(symbol), mceContext.indicators.atr); } catch { /* never blocks */ }
   // reorg-B3.2 (2026-06-24, CC-B + Langston + Kyle consensus): VTS = TAG-DON'T-DROP for the QUALITY/EV
   // gates. The reorg-B2 gate, wired here for sim-to-live target parity, collapsed VTS volume 95-97%
   // (opens ~150/day → 3-5/day, staging-confirmed) by hard-dropping every gated signal — strangling the

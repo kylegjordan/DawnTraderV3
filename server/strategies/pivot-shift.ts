@@ -184,7 +184,7 @@ export function detectPivotShift(
   // ── Global guards (ATR, stop distance, R:R) ──────────────────────────────
   const gate = getPerClassTargetGate(assetClass, 'pivot_shift');
   const _gr = applyGlobalGuards(entryPrice, stopPrice, targetPrice, effectiveATR, gate);
-  recordGuardEval('pivot_shift', _gr.rr, _gr.pass, _gr.dropReason, assetClass);
+  recordGuardEval('pivot_shift', _gr.rr, _gr.pass, _gr.dropReason, assetClass, effectiveATR, _gr.atrsToTarget);
   if (guardForcesDrop(_gr, gateDisposition)) {
     console.log(`${LOG_PREFIX} Global guards failed. Skipping.`);
     setNullReason('guard_fail');

@@ -192,7 +192,7 @@ export function detectInsideBarReversal(
   // ── Global guards (ATR, stop distance, R:R) ──────────────────────────────
   const gate = getPerClassTargetGate(assetClass, 'inside_bar_reversal');
   const _gr = applyGlobalGuards(entryPrice, stopPrice, targetPrice, effectiveATR, gate);
-  recordGuardEval('inside_bar_reversal', _gr.rr, _gr.pass, _gr.dropReason, assetClass);
+  recordGuardEval('inside_bar_reversal', _gr.rr, _gr.pass, _gr.dropReason, assetClass, effectiveATR, _gr.atrsToTarget);
   if (guardForcesDrop(_gr, gateDisposition)) {
     console.log(`${LOG_PREFIX} Global guards failed for ${direction}. Skipping.`);
     setNullReason('guard_fail');

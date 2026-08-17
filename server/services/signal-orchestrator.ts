@@ -190,6 +190,7 @@ import { checkPerUnderlyingCap, formatDecisionLog } from './per-underlying-cap.j
 // P19-B-FEEVIABILITY OBJ-1a: geometry-config VERSION stamp on SQE-reject archive rows
 // (the B-NEW-53 per-strategy resolved-constants hash — version-not-value, Langston r2.1(b)).
 import { resolveConstantsProvenance, recordConstantsVersion, hashResolvedSet } from './data-archive/decision-provenance.js';
+import { recordNormalizerAtr } from '../strategies/guard-eval-tracker.js'; // #371 normalizer-side capture
 
 export interface SignalOrchestratorConfig {
   mode: 'live' | 'paper';
@@ -1670,6 +1671,9 @@ export class SignalOrchestrator {
       floorPct: _b2Gate.floorPct, minRR: _b2Gate.minRR,
       atr: _b2Atr ?? NaN, reachAtrMax: _b2Gate.reachAtrMax,
     });
+    // ★ #371 normalizer-side ATR capture (active path): the RAW atr this gate read, same
+    // (strategy,class) bucket as the guard side so the divergence is within-bucket.
+    try { recordNormalizerAtr(strategyId, sizingContext.assetClass, _b2Atr ?? NaN); } catch { /* never blocks the gate */ }
     if (!_b2.ok) {
       if (_b2.reason === 'invalid_atr') {
         // LOUD: a wiring/data bug (ATR absent on both the SizingContext carrier AND marketContext),

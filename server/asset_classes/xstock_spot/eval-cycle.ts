@@ -38,6 +38,7 @@
  */
 
 import { getMarketContextEngine } from '../../services/market-context-engine.js';
+import { recordNormalizerAtr } from '../../strategies/guard-eval-tracker.js'; // #371
 // B-XSTOCK-GLOBALS (Kyle-raised 2026-06-18): the per-class GLOBAL market-structure
 // cache getters. getMarketIndicators('xstock_spot') populates these every cycle; the
 // xStock VTS open-path reads them here to stamp the at-open global snapshot (the crypto
@@ -682,6 +683,8 @@ export async function evaluateXstockPairForVTS(
           floorPct: _b3xGate.floorPct, minRR: _b3xGate.minRR,
           atr: mceContext.indicators.atr, reachAtrMax: _b3xGate.reachAtrMax,
         });
+        // ★ #371 normalizer-side ATR capture (xStock VTS lane).
+        try { recordNormalizerAtr(strategyKey, ASSET_CLASS, mceContext.indicators.atr); } catch { /* never blocks */ }
         let vtsGateVerdict: 'passed' | 'rr_below_min' | 'unreachable' = 'passed';
         if (!_b3x.ok) {
           if (_b3x.reason === 'rr_below_min' || _b3x.reason === 'unreachable') {

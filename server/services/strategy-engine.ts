@@ -299,7 +299,7 @@ export class StrategyEngine {
         const _gate = getPerClassTargetGate(assetClass, 'vwap_pullback');
         const _effATR = clampEffectiveATR(atr, entryPrice);
         const _gr = applyGlobalGuards(entryPrice, stopPrice, finalTarget, _effATR, _gate);
-        recordGuardEval('vwap_pullback', _gr.rr, _gr.pass, _gr.dropReason, assetClass);
+        recordGuardEval('vwap_pullback', _gr.rr, _gr.pass, _gr.dropReason, assetClass, _effATR, _gr.atrsToTarget);
         if (guardForcesDrop(_gr, gateDisposition)) { setNullReason('guard_fail'); return null; }
       }
 
@@ -434,7 +434,7 @@ export class StrategyEngine {
         const _gate = getPerClassTargetGate(assetClass, 'abcd_long');
         const _effATR = clampEffectiveATR(abcdAtr, entryPrice);
         const _gr = applyGlobalGuards(entryPrice, stopPrice, targetPrice, _effATR, _gate);
-        recordGuardEval('abcd_long', _gr.rr, _gr.pass, _gr.dropReason, assetClass);
+        recordGuardEval('abcd_long', _gr.rr, _gr.pass, _gr.dropReason, assetClass, _effATR, _gr.atrsToTarget);
         if (guardForcesDrop(_gr, gateDisposition)) { setNullReason('guard_fail'); return null; }
       }
 
@@ -568,7 +568,7 @@ export class StrategyEngine {
         const _gate = getPerClassTargetGate(assetClass, 'sma_trend_ride');
         const _effATR = clampEffectiveATR(computeATR(priceHistory), entryPrice);
         const _gr = applyGlobalGuards(entryPrice, stopPrice, targetPrice, _effATR, _gate);
-        recordGuardEval('sma_trend_ride', _gr.rr, _gr.pass, _gr.dropReason, assetClass);
+        recordGuardEval('sma_trend_ride', _gr.rr, _gr.pass, _gr.dropReason, assetClass, _effATR, _gr.atrsToTarget);
         if (guardForcesDrop(_gr, gateDisposition)) { setNullReason('guard_fail'); return null; }
       }
 
@@ -680,7 +680,7 @@ export class StrategyEngine {
         const _gate = getPerClassTargetGate(assetClass, 'breakout');
         const _effATR = clampEffectiveATR(atr, entryPrice);
         const _gr = applyGlobalGuards(entryPrice, stopPrice, targetPrice, _effATR, _gate);
-        recordGuardEval('breakout', _gr.rr, _gr.pass, _gr.dropReason, assetClass);
+        recordGuardEval('breakout', _gr.rr, _gr.pass, _gr.dropReason, assetClass, _effATR, _gr.atrsToTarget);
         if (guardForcesDrop(_gr, gateDisposition)) { setNullReason('guard_fail'); return null; }
       }
 
@@ -781,7 +781,7 @@ export class StrategyEngine {
         const _gate = getPerClassTargetGate(assetClass, 'mean_reversion');
         const _effATR = clampEffectiveATR(atr, entryPrice);
         const _gr = applyGlobalGuards(entryPrice, stopPrice, targetPrice, _effATR, _gate);
-        recordGuardEval('mean_reversion', _gr.rr, _gr.pass, _gr.dropReason, assetClass);
+        recordGuardEval('mean_reversion', _gr.rr, _gr.pass, _gr.dropReason, assetClass, _effATR, _gr.atrsToTarget);
         if (guardForcesDrop(_gr, gateDisposition)) { setNullReason('guard_fail'); return null; }
       }
 
@@ -890,7 +890,7 @@ export class StrategyEngine {
         const _gate = getPerClassTargetGate(assetClass, 'range_trade');
         const _effATR = clampEffectiveATR(atr, entryPrice);
         const _gr = applyGlobalGuards(entryPrice, stopPrice, targetPrice, _effATR, _gate);
-        recordGuardEval('range_trade', _gr.rr, _gr.pass, _gr.dropReason, assetClass);
+        recordGuardEval('range_trade', _gr.rr, _gr.pass, _gr.dropReason, assetClass, _effATR, _gr.atrsToTarget);
         if (guardForcesDrop(_gr, gateDisposition)) { setNullReason('guard_fail'); return null; }
       }
 
@@ -993,7 +993,7 @@ export class StrategyEngine {
         const _gate = getPerClassTargetGate(assetClass, 'vwap_bounce');
         const _effATR = clampEffectiveATR(computeATR(priceHistory), entryPrice);
         const _gr = applyGlobalGuards(entryPrice, stopPrice, targetPrice, _effATR, _gate);
-        recordGuardEval('vwap_bounce', _gr.rr, _gr.pass, _gr.dropReason, assetClass);
+        recordGuardEval('vwap_bounce', _gr.rr, _gr.pass, _gr.dropReason, assetClass, _effATR, _gr.atrsToTarget);
         if (guardForcesDrop(_gr, gateDisposition)) { setNullReason('guard_fail'); return null; }
       }
 
@@ -1615,7 +1615,7 @@ export class StrategyEngine {
       const _gate = getPerClassTargetGate(assetClass, 'dhma');
       const _effATR = clampEffectiveATR(computeATR(priceHistory), entryPrice);
       const _gr = applyGlobalGuards(entryPrice, stopPrice, targetPrice, _effATR, _gate);
-      recordGuardEval('dhma', _gr.rr, _gr.pass, _gr.dropReason, assetClass);
+      recordGuardEval('dhma', _gr.rr, _gr.pass, _gr.dropReason, assetClass, _effATR, _gr.atrsToTarget);
       if (!_gr.pass) { setNullReason('guard_fail'); return null; }
     }
 
