@@ -526,7 +526,15 @@ export async function recomputeCryptoPerpUniverse(updatedBy: string, opts?: { ac
     console.warn('[perpfeed][universe] tickers fetch failed — ranking by symbol name as a stable fallback:', err instanceof Error ? err.message : err);
   }
   candidates.sort((a, b) => (oiBySymbol.get(b.symbol) ?? 0) - (oiBySymbol.get(a.symbol) ?? 0) || a.symbol.localeCompare(b.symbol));
-  const members = candidates.slice(0, cap).map(c => c.symbol).sort();
+  // Langston's OBJ-1 ratification condition (i), 2026-08-17: the cap is a SANITY
+  // BOUND (Kyle set scope = ALL candidates; 400 is above any plausible universe).
+  // Hitting it means the universe grew past plausibility — REFUSE AND LOG, never
+  // silently truncate: a truncated universe wearing a complete universe's
+  // clothes is the same #546 failure OBJ-4 guards in classification.
+  if (candidates.length > cap) {
+    throw new Error(`[perpfeed][universe] ${candidates.length} classified candidates EXCEEDS the sanity bound ${PERP_CAP_KEY}=${cap} — REFUSING the recompute; investigate the venue listing surge (or raise the bound deliberately) before any capture-set change persists`);
+  }
+  const members = candidates.map(c => c.symbol).sort();
 
   // Diff vs the persisted set; log every add/drop (Langston condition (d)).
   const prev = (await getConstant<string[]>(PERP_UNIVERSE_MODULE, PERP_MEMBERS_KEY, WILDCARD_KEY)) ?? [];
@@ -538,10 +546,17 @@ export async function recomputeCryptoPerpUniverse(updatedBy: string, opts?: { ac
   await setConstant(PERP_UNIVERSE_MODULE, PERP_MEMBERS_KEY, WILDCARD_KEY, members, updatedBy);
   await setConstant(PERP_UNIVERSE_MODULE, PERP_LAST_RECOMPUTE_KEY, WILDCARD_KEY, new Date().toISOString(), updatedBy);
 
+  // §4 gate condition (Langston OBJ-1 ratification (ii)): with N no longer
+  // budget-bounded, the FIRST live recompute must put the measured N and the
+  // derived GB/month ON THE RECORD before the writer starts — this line is
+  // that record's instrument (340 B/row ticker measured on xstock_perp July;
+  // ~18 MB/sym/month OHLC; the per-class throttle constant sets the pacing).
+  const est10s = Math.round(members.length * (8640 * 340 * 30 + 18_000_000) / 1e9 * 10) / 10;
   console.log(
-    `[perpfeed][universe] recomputed: members=${members.length}/cap=${cap} ` +
-    `(candidates=${candidates.length}, equity=${counts.equity_perp}, dated=${counts.dated}, ` +
-    `inverse=${counts.inverse}, unclassified=${counts.unclassified})`
+    `[perpfeed][universe] recomputed: members=${members.length} (sanity bound ${cap}; ` +
+    `candidates=${candidates.length}, equity=${counts.equity_perp}, dated=${counts.dated}, ` +
+    `inverse=${counts.inverse}, unclassified=${counts.unclassified}) — ` +
+    `standing-cost estimate at 10s pacing ≈ ${est10s} GB/month resident (§4 record-before-switch-on)`
   );
   return members;
 }
