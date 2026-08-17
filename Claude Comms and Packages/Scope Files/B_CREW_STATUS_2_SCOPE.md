@@ -1,9 +1,10 @@
-# B-CREW-STATUS-2 — SCOPE r2: status capture that matches where Kyle left the session
+# B-CREW-STATUS-2 — SCOPE r3: status capture that matches where Kyle left the session
 
 **change-class:** `non_architecture` · **Owner:** CC-INFRA (Infra Claude) · 2026-08-17
 **Revises:** B-CREW-STATUS (closed 2026-08-07, Langston Step-8 PROCEED)
-**Gates:** Langston Step-1 **PROCEED w/ 7 conditions** → Step-2 **CHANGES-NEEDED, 3 blockers** → this r2.
-**r1→r2 summary:** all three blockers discharged by measurement. **§2's headline was WRONG and is retracted in place** (§2.0). The audit is now a committed script, not a table. §11 maps every condition and blocker to where it landed.
+**Gates:** Step-1 **PROCEED w/ 7 conditions** → Step-2 **CHANGES-NEEDED, 3 blockers** → r2 → Step-2 **PROCEED TO STEP 3 w/ 4 conditions** → **this r3, which lands all four in the text.**
+**r1→r2:** all three blockers discharged by measurement; **§2's headline was WRONG and is retracted in place** (§2.0).
+**r2→r3:** the four Step-2 conditions. **R2-1** §8.1 was a verification that could not fail — re-stated as a regression guard with a pre-fix column so it has a demonstrable failing case. **R2-2** the audit always exited 0 and now exits non-zero on contamination or divergence. **R2-3** the audit did not reproduce the shipped reader (it skipped where shipped drops the session) — both semantics now run side by side and the advantage is declared. **R2-4** line citations had rotted under the compaction fix; corrected and now printed by the audit on every run. Plus §2.2's mechanism claim **narrowed and moved from inferred to measured**, and §2's "all numbers from the script" made true rather than aspirational.
 
 ---
 
@@ -25,25 +26,29 @@ Classification is *also* genuinely broken (§2.1) — but as a **latent corrupti
 
 ## 2. MEASUREMENT — RE-DONE AGAINST THE SHIPPED PREDICATE
 
-**All numbers below are produced by `comms-infra/laptop/crew-status-audit.py`, committed at `81636ce56`.** Langston could not reach the corpus (it lives on Kyle's laptop, not Helsinki) and correctly refused to rule on reported numbers: *"a number that only exists as a table in a scope doc is an assertion."* Re-derivable by anyone with the corpus, Kyle included.
+**All numbers below are produced by `comms-infra/laptop/crew-status-audit.py`.** *(r2→r3: this sentence was FALSE when first written — the script produced §2.1 and §2.4 only, while §2.2's distribution and §2.3's observations came from throwaway scripts. Langston, R2/B3: "two thirds of §2 is still an assertion." Sections C and D now produce them, so the claim is true rather than aspirational. Counts are **as of the run that produced them** and drift upward as the corpus grows; re-run rather than trust these.)*
+
+**Line citations in this document are the CURRENT ones**, printed by the audit's ANCHORS block on every run and anchored by content rather than by number. r2 cited `:212` and `:623`, which had rotted when the compaction fix shifted the file — the #655 shape, the artifact moving under the citation (Langston R2-4). Current: shipped predicate **`:223`**, compaction guard **`:221`**, model line **`:633`**. Langston could not reach the corpus (it lives on Kyle's laptop, not Helsinki) and correctly refused to rule on reported numbers: *"a number that only exists as a table in a scope doc is an assertion."* Re-derivable by anyone with the corpus, Kyle included.
 
 ### 2.0 ★ RETRACTION — r1's §2 HEADLINE WAS WRONG
 
 r1 claimed *"~7 of every 8 `user` turns is a machine"* and that **13** `origin.kind=="human"` scheduled-task records *"are precisely the timer-driven runs that made NEW Claude look busy."*
 
-**Both claims are withdrawn.** The 7:8 ratio is a **raw-record** ratio, not the population the shipped filter admits — rule 29(a), right object, wrong denominator. And `crew-status.py:212` already excludes every turn whose extracted text begins with `<`. **Measured: ZERO scheduled-task and ZERO task-notification records evade it.** Langston's challenge was correct. Recorded here rather than silently corrected, because the retracted claim was the sole support for r1's §4.1 argument.
+**Both claims are withdrawn.** The 7:8 ratio is a **raw-record** ratio, not the population the shipped filter admits — rule 29(a), right object, wrong denominator. And `crew-status.py:223` already excludes every turn whose extracted text begins with `<`. **Measured: ZERO scheduled-task and ZERO task-notification records evade it.** Langston's challenge was correct. Recorded here rather than silently corrected, because the retracted claim was the sole support for r1's §4.1 argument.
 
 ### 2.1 WHAT IS ACTUALLY TRUE — and it is a real defect I had missed
 
-**Object:** records where `message.role=="user"`, non-sidechain, that the shipped predicate at `:212` **admits**. **Population:** all such records in the four session transcript dirs.
+**Object:** records where `message.role=="user"`, non-sidechain, that the shipped predicate at `:223` **admits**. **Population:** all such records in the four session transcript dirs.
 
-| session | admitted | NOT Kyle | rate |
-|---|---|---|---|
-| OLD Claude | 480 | 164 | 34.2% |
-| NEW Claude | 628 | 301 | **47.9%** |
-| ANALYST Claude | 645 | 226 | 35.0% |
-| Infra Claude | 39 | 3 | 7.7% |
-| **TOTAL** | **1,792** | **694** | **38.7%** |
+Both columns are printed side by side by the audit, because the post-fix column alone cannot fail (§8.1) and would pass vacuously:
+
+| session | PRE-FIX admitted | PRE-FIX not-Kyle | POST-FIX admitted | POST-FIX not-Kyle |
+|---|---|---|---|---|
+| OLD Claude | 480 | 164 (34.2%) | 316 | **0** |
+| NEW Claude | 628 | 301 (**47.9%**) | 327 | **0** |
+| ANALYST Claude | 645 | 226 (35.0%) | 419 | **0** |
+| Infra Claude | 40 | 3 (7.7%) | 37 | **0** |
+| **TOTAL** | **1,793** | **694 (38.7%)** | **1,099** | **0** |
 
 **How every one of the 694 evaded:** 681 **compaction summaries**, 13 `isMeta`. **None is a scheduled task.**
 
@@ -53,11 +58,21 @@ Compaction summaries evade the tag test because they open with plain prose (*"Th
 
 ### 2.2 The structural discriminator — restated as MECHANISM, not count
 
-`origin.kind` exists (**object:** `type=="user"`, string content, non-sidechain; **population:** 7,085 records): `task-notification` 5,343 · `human` 965 · absent 777.
+`origin.kind` exists (**object:** `type=="user"`, **string content**, non-sidechain; **population:** 7,092 records): `task-notification` 5,349 (75.4%) · `human` 966 (13.6%) · absent 777 (11.0%).
 
-Langston: *"not over-fitted — **mis-argued**."* The conjunction in §4.1 does **not** rest on a rate. It rests on a structural property: **the scheduler submits through the same code path as a typed prompt, so `origin.kind` cannot discriminate scheduler-from-Kyle by construction.** One instance suffices; sample size is irrelevant. *(Labelled **inferred from the 13 observations** — I have not read the harness source that implements it, per rule 29(c).)*
+**Why §2.1 and §2.2 do not reconcile by subtraction** (Langston, minor — a reader cross-subtracting gets an impossible number): they are **different populations**. §2.2 counts only records whose `content` is a **string**; §2.1 also admits records whose content is a **block list** containing text, which the shipped extraction concatenates. The audit prints both populations explicitly for this reason.
 
-This survives §2.0: even though those 13 are already excluded by the tag test, the structural point stands. What it is no longer is evidence for r1's root-cause claim.
+Langston: *"not over-fitted — **mis-argued**."* The conjunction in §4.1 does **not** rest on a rate.
+
+**★ NARROWED IN r3, because "by construction" was too strong and Langston disproved it.** r2 argued the harness *cannot* tag machine submissions distinguishably. It demonstrably can: **all 5,349 `<task-notification>` records carry `origin.kind == "task-notification"`.** The construction plainly supports tagging.
+
+**The defensible claim is narrower, and is now MEASURED rather than inferred** (audit Section D, with the positive control rule 29(b) requires):
+
+> **The SCHEDULER path specifically appears untagged: 13 of 13 `<scheduled-task>` submissions carry `origin.kind == "human"`, in a corpus where 5,349 task-notifications are tagged distinguishably.**
+
+The positive control is what makes the 13 readable — it proves the field is populated and the parse works, so `human` on a scheduler submission is a real value and not a null read. Langston ran the same question against his own corpus and got **zero** `<scheduled-task>` records in 2,940 files; he reported it as a **non-result** (leg 2/3 failure — the population lacks the phenomenon, so his zero is unreadable for this question) rather than as support, and he is right to.
+
+⇒ §4.1's conjunction stands, on a measured and re-derivable basis. What it is no longer is evidence for r1's root-cause claim.
 
 ### 2.3 The fallback path is NOT small — Langston's own measurement
 
@@ -67,7 +82,11 @@ r1 called the no-`origin` path *"real but small"* (9 records). **Object:** `type
 
 ### 2.4 Blocker 2 — MEASURED, DOES NOT REPRODUCE
 
-The shipped reader takes newest-by-mtime and parses **that file only** (`:183-198`), while trailheads are 8–9 days old. Section B of the audit tests it directly: **for all four sessions the one-file read reaches the same trailhead as an all-files read.** Reported as **measured-not-reproduced**, not dismissed — it holds by luck, not design (OLD Claude has 2 transcript files and the newest happens to span far enough). §4.2 fixes it anyway, because the next session with more file churn breaks it silently.
+The shipped reader takes newest-by-mtime and parses **that file only** (`:183-198`), while trailheads are 8–9 days old. Section B of the audit tests it directly: **for all four sessions the one-file read reaches the same trailhead as an all-files read.**
+
+**★ INSTRUMENT DIVERGENCE, DECLARED (Langston R2-3).** r2's audit did **not** faithfully reproduce the shipped reader: on a summariser transcript the shipped reader `break`s and **drops the whole session** (`:232-235`), whereas the audit merely skipped the record — making the audit **strictly more capable** and biasing this result toward "does not reproduce". The audit now runs **both semantics side by side** and prints them, so the advantage is visible rather than silently flattering the finding. **Re-measured under true shipped semantics: still no divergence** for any of the four sessions. What keeps the difference from having bitten is §4.2's finding that the C6 branch is now unreachable.
+
+Reported as **measured-not-reproduced**, not dismissed — it holds by luck, not design (OLD Claude has 2 transcript files and the newest happens to span far enough). §4.2 fixes it anyway, because the next session with more file churn breaks it silently.
 
 ---
 
@@ -87,7 +106,7 @@ A `user` record is **KYLE** only if all hold:
 
 **Canaries (all required):** unknown-tag reporter (denylist + complement = closed set) · rate anomaly against each session's historical human-turn band.
 
-**★ VERSION PINNING IS PER-SOURCE.** Three CLI versions are live in this tool's runtime, measured by Langston: Desktop **2.1.219** writes the transcripts being classified · laptop PATH **2.1.87** runs the job · Helsinki **2.1.159** runs the model (`crew-status.py:623`). **The version governing §4.1 is the one that WROTE each transcript**, on a different machine from the one classifying. So: record the **writer's** version in each persisted fact (§4.7 provides the slot), and **fire the canary on writer-version change, not runner-version change.** Interacts with **#673** (§5).
+**★ VERSION PINNING IS PER-SOURCE.** Three CLI versions are live in this tool's runtime, measured by Langston: Desktop **2.1.219** writes the transcripts being classified · laptop PATH **2.1.87** runs the job · Helsinki **2.1.159** runs the model (`crew-status.py:633`). **The version governing §4.1 is the one that WROTE each transcript**, on a different machine from the one classifying. So: record the **writer's** version in each persisted fact (§4.7 provides the slot), and **fire the canary on writer-version change, not runner-version change.** Interacts with **#673** (§5).
 
 ### 4.2 Layer 1 — TRAILHEAD (a span, not a turn)
 **Never skip, always extend.** Take the last KYLE turn unconditionally; if it does not restore the thread on its own, extend **backward** — to the assistant narration it responds to, then to prior Kyle turns — until self-sufficient. Failure mode becomes *too much context* (recoverable in seconds) rather than *wrong trailhead*. "Please continue." is **retained as a state signal**: Kyle was babysitting, not directing.
@@ -113,7 +132,7 @@ Walk forward from the trailhead; for each record walk **up** to its root `user` 
 
 **Degenerate case is first-class:** if Kyle spoke last and nothing ran after, the window is the response chain to that turn, possibly empty — and *"you spoke last here; nothing has run since"* is probably the single most useful line the board can print.
 
-**★ MODEL, NAMED (Langston §7 — r1 never stated it).** Layer 2 currently runs on **haiku** (`crew-status.py:623`). On a task that is *recover a lost thread in the register the reader needs it back in*, model choice plausibly dominates every other decision here, and the cost argument is thin (~50 changes/day, one call per session). **Declared: layer 2 runs on `haiku` for r2's first build. If §7's acceptance test fails, MODEL TIER IS THE FIRST VARIABLE TO MOVE — not the prompt.**
+**★ MODEL, NAMED (Langston §7 — r1 never stated it).** Layer 2 currently runs on **haiku** (`crew-status.py:633`). On a task that is *recover a lost thread in the register the reader needs it back in*, model choice plausibly dominates every other decision here, and the cost argument is thin (~50 changes/day, one call per session). **Declared: layer 2 runs on `haiku` for r2's first build. If §7's acceptance test fails, MODEL TIER IS THE FIRST VARIABLE TO MOVE — not the prompt.**
 
 **Cached per session, keyed on the trailhead anchor.** No new Kyle instruction ⇒ byte-identical output. For a memory aid, a summary that changes on every refresh actively degrades the recall it exists to support.
 
@@ -177,7 +196,7 @@ The defect was measured by Kyle's memory, so the fix is verified by Kyle's memor
 
 ## 8. VERIFICATION
 
-1. **Classification:** re-run `crew-status-audit.py`; admitted-but-not-Kyle must be **0**, down from 694/1,792.
+1. **Classification — a REGRESSION GUARD, not a proof of purity (Langston R2-1, and he is right).** r2 wrote this as *"admitted-but-not-Kyle must be 0"* and called it verification. It cannot fail: the audit's ground truth returns Kyle for any record with no `origin`, so after the fix the only paths to not-Kyle are two record flags the shipped predicate now excludes plus three tag tests already measured at zero. **A verification with no falsifying condition is the exact defect Langston bounced §8.7 for in r1**, and I reproduced it one item earlier in the same list. Re-stated honestly: this is a guard against **re-admission** of the known contamination classes, and the audit retains a **pre-fix column** (694/1,793, 38.7%) so the guard has a demonstrable failing case rather than passing vacuously. **The real verification of the headline fix is what it honestly is:** a two-line structural read (`:221`) plus the rendering check — zero compaction recaps on the page. The audit **exits non-zero** on any contamination or divergence (R2-2; it previously returned `None`, i.e. always exit 0, so it could not gate anything).
 2. **Trailhead:** matches the four independently measured anchors; the three §4.2 states render distinctly. Positive control: a session with a deliberately split transcript set still resolves.
 3. **Layer-2 window:** for a dormant session, contains **no** post-trailhead chore narration.
 4. **Stability:** two consecutive runs with no new Kyle turn produce **byte-identical** layer-2 output.
@@ -191,7 +210,10 @@ The defect was measured by Kyle's memory, so the fix is verified by Kyle's memor
 Plain-language rewriting (§3) · alert triage (other lanes) · any change to what the four sessions do.
 
 ## 10. OPEN — FOR THE REVIEWER
-None withheld. The judgement I remain least sure of is §2.2's mechanism claim, which is **inferred, not source-read**; if the harness in fact tags scheduler submissions distinguishably, §4.1's conjunction is unnecessary and rule 1 alone suffices.
+
+**r2's open item is CLOSED.** It asked whether §2.2's mechanism claim survived, given it was inferred rather than source-read. Langston pushed on it, could not settle it from his own corpus (zero `<scheduled-task>` records in 2,940 files — a **non-result**, not support), but produced the fact that narrows it: the harness **does** tag some machine submissions distinguishably. §2.2 is rewritten accordingly and the 13 observations are now in the committed script (Section D) with a positive control, so the claim is **measured and re-derivable** rather than inferred. It remains **behavioural, not source-read** — I have still not read the harness implementation, and if that source shows the scheduler tagged distinguishably on some other build, §4.1's rule 1 alone would suffice.
+
+**Still open, and named rather than buried:** §4.2's three-state distinction (older-file / compacted / absent) is specified but **untested against a real compaction boundary** — no session in the corpus currently has a trailhead beyond its retained transcript, so the *"older than what the transcript still keeps"* branch has never fired. §8.2's positive control exists to force it. Until that runs, that branch is designed, not demonstrated.
 
 ## 11. CONDITION & BLOCKER MAP
 
@@ -215,3 +237,9 @@ None withheld. The judgement I remain least sure of is §2.2's mechanism claim, 
 | Name the model | Step-2 | §4.3 |
 | Verification item 7 predicate | Step-2 | §8.7 |
 | C6 retire-or-retain stated | Step-2 | §4.2 |
+| **R2-1** §8.1 is a tautology → regression guard | Step-2 r2 | **§8.1** |
+| **R2-2** audit must exit non-zero | Step-2 r2 | **audit `main()` returns 1 on failure** |
+| **R2-3** declare the shipped-vs-audit divergence | Step-2 r2 | **§2.4**, audit Section B runs both |
+| **R2-4** line citations rotted | Step-2 r2 | **§2 header**; audit ANCHORS block prints current |
+| *(minor)* §2.1/§2.2 don't reconcile | Step-2 r2 | **§2.2** — different populations |
+| *(§10)* mechanism claim inferred → measured | Step-2 r2 | **§2.2**, audit Section D + control |
