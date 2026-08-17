@@ -1,10 +1,10 @@
 {
   "version": 2,
   "format": "per-file per-code per-MESSAGE counts (#579, B-TSC-BASELINE-FIX 2026-07-27; was v1 per-file per-code counts)",
-  "frozen_at_commit": "69a355a74",
-  "frozen_at_iso": "2026-07-27T19:30:54.569Z",
+  "frozen_at_commit": "35be745ac",
+  "frozen_at_iso": "2026-08-17T09:29:08.456Z",
   "frozen_by_batch": "B-TSC-BASELINE-FIX (#579 — message-identity gate)",
-  "total_errors": 392,
+  "total_errors": 391,
   "file_count": 48,
   "files": [
     {
@@ -404,9 +404,6 @@
         },
         "TS2339": {
           "Property 'RANGE_BOUND_STABLE' does not exist on type 'readonly CanonicalRegimeType[]'.": 1
-        },
-        "TS2322": {
-          "Type '\"crypto_spot\" | \"xstock_spot\" | \"xstock_perp\"' is not assignable to type '\"crypto_spot\" | \"equity_spot\" | \"equity_perp\"'.": 1
         }
       }
     },
@@ -746,7 +743,5 @@
         }
       }
     }
-  ],
-  "last_synced_at_iso": "2026-08-07T13:22:36.010Z",
-  "last_synced_by_batch": "B-FILTER-DIAG-STANDARDIZE / #680 (unexplained-drop gate: cleared 2 stale server/routes.ts entries)"
+  ]
 }
