@@ -204,3 +204,22 @@ A **commit + UTC timestamp**, not a date. **PRE-REGISTERED BAN on cross-half com
 
 **Langston's independent reproduction (2026-08-16):** sma leg exact (n=665, median 2.0883, p90 3.1344, max 3.9428, 60 rows); pivot_shift p90-now **3.000** confirmed; the 4.74 reconciled as **projected-post-raise** (×4.74/3.0), not measured-now — his own item (3).
 **⇒ THE EXCLUSION CRITERION, now cited not asserted: the ceiling bites the TAIL for `sma_trend_ride` (9%, the gate working) and goes THROUGH THE BODY for `pivot_shift` (p90 itself crosses).** `pivot_shift` re-enters only with the 25-17b ceiling decision.
+
+## 9. THE 25-17b REACH CURVE (measured 2026-08-17 — the pre-agreed decision method, run)
+
+**OBJECT:** `vts_open_trades` (context ATR) joined to `crypto_spot_ohlc_1m_2026_08` forward bars. **POPULATION:** all crypto VTS trades, trailing 21d, valid geometry+ATR; 48h forward window; **REACHED = target touched AND stop never touched in the window** (strict both-touch convention — a LOWER BOUND, same as §1.2).
+
+| atrsToTarget | n | reached |
+|---|---|---|
+| 0.5–0.85 | 32 | 0.0% |
+| 1.0–1.5 | 137 | 0.0% |
+| 1.5–2.0 | 76 | 30.3% |
+| 2.0–2.5 | 3,828 | 33.8% |
+| 2.5–3.0 | 5,182 | 35.7% |
+| 3.0–3.5 | 109 | 4.6% |
+| **6.0–6.1** | **239** | **15.2–21.5%** |
+| 9.1–16.5 | 52 | 7.7% |
+
+**⇒ REACH DOES NOT DIE AT 4.0.** At 6 ATRs (the `strong_bull_trend` 6× population) **one in five to one in seven targets is still reached**; past 9 ATRs, ~8%. By the 25-17b pre-agreed method — *"if reach is material past 4.0, the constant moves"* — **the curve says MOVE.**
+**⚠️ Caveats, stated:** the 3.0–3.5 bucket's 4.6% (n=109) against the 6-ATR cohort's 15–21% is a **composition confound** (different strategies occupy different buckets) — Langston's r2.2 per-stratum rule applies to the final value choice; the convention is a lower bound; August partition; VTS lane (tag-not-drop is what makes the >4 buckets observable at all).
+**Remaining before the decision package: the #371 divergence read over its paired-n window (instrument deployed 2026-08-17T00:15Z, counting), and `pivot_shift`'s own days-to-readable per Langston ruling 3.**
