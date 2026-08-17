@@ -41,7 +41,9 @@ Operationally: **30-day rolling hot is the DEFAULT for every table.** A hot wind
 | `xstock_spot_ticker_snap` | bid/ask quote stream (**DAILY-partitioned** from 2026-08-01 — true rolling-30 hot window; Wave D OBJ-3) | **30 d** | WARM → COLD |
 | `xstock_perp_ticker_snap`, `crypto_spot_ticker_snap` | bid/ask quote stream (monthly-partitioned) | **30 d** | WARM → COLD |
 | `xstock_spot_ohlc_1m`, `xstock_perp_ohlc_1m`, `crypto_spot_ohlc_1m` | 1-minute price bars | **365 d** | WARM → COLD |
-| `signal_eval_archive`, `pair_scan_archive`, `exit_decision_archive`, `macro_feed_archive`, `signal_eval_provenance` (the 5 B70 analytics tables) | trading-analysis records | **90 d** | WARM → COLD *(B-STORAGE-HARDEN Wave C, 2026-07-08 — previously DROP-only, now preserved)* |
+| `signal_eval_archive` | trading-analysis records | **LIVE: 75 d — a dated STAGED step, not the policy** (P19-B-PERPFEED OBJ-7a: 90→75 written 2026-08-17T08:57Z so May sweeps alone on the control night; **→ 30 permanent** after the observed run, expected 2026-08-18) | WARM → COLD |
+| `pair_scan_archive`, `signal_eval_provenance` | trading-analysis records | **30 d DECIDED (Kyle 2026-08-17, §2.5 rule); LIVE still 90 until execution** — staged ≤17-day step then permanent 30, expected 2026-08-18; the §3 row updates again in the same action as each flip | WARM → COLD |
+| `exit_decision_archive`, `macro_feed_archive` | trading-analysis records | **90 d — UNDER §2.5 REVIEW (OBJ-10)**: documented specific-reason or cut to 30 | WARM → COLD *(B-STORAGE-HARDEN Wave C, 2026-07-08 — previously DROP-only, now preserved)* |
 | `switch_on_shadow_evidence` (B-EVIDENCE-SINK, 2026-07-14) | the 3 switch-on behavioral proofs extracted from rotating stdout (FINALSCORE_SHADOW verdict / EV_REJECT rate-numerator / maker-taker pick+haircut snapshot; §5.5) — proof_type-discriminated | **90 d** | WARM → COLD *(registered in the b75 sweep + b70 partition self-heal like its B70 siblings)* |
 | `context_bridge_log` | dev/telemetry | 14 d | WARM → COLD |
 | `warm objects (all)` | — | (n/a) | **365 d in WARM** → COLD |
