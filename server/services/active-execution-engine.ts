@@ -3303,11 +3303,21 @@ export class ActiveExecutionEngine {
       // P19-B4a (C4): authoritative position class — prefer the signal stamp, cold-resolve
       // only if absent/invalid. Computed BEFORE any DB write so an unclassifiable symbol
       // skips the trade entirely rather than opening a position with no/blank class.
-      const _tradeClass = asValidAssetClass(signal.metadata?.assetClass) ?? safeResolveAssetClass(signal.symbol, 'kraken');
+      const _stampedClass = asValidAssetClass(signal.metadata?.assetClass);
+      const _tradeClass = _stampedClass ?? safeResolveAssetClass(signal.symbol, 'kraken');
       if (_tradeClass === null) {
         console.warn('[B79.TEC][TRADE_SKIP] unclassifiable ' + signal.symbol + ' — refusing to open a position without a class');
         rtbMetricsService.recordOpenFailed(signal.symbol, signal.strategy, 'UNCLASSIFIABLE', 'unclassifiable symbol at trade-create');
         return { opened: false, stage: 'UNCLASSIFIABLE', reason: 'unclassifiable symbol at trade-create' };
+      }
+      // ★ mark-2 fence (P19-B-FEEVIABILITY, Langston-spec 2026-08-17): fire ONLY on the SILENT hazard —
+      // the fallback re-resolution returning a VALID-but-possibly-WRONG class on a collision ticker.
+      // The null branch above is already loud and refuses the open; a fence keyed on it would measure
+      // the path that cannot hurt us. The venue pin 'kraken' is a second input to the re-resolution
+      // and is inside this fence's scope. This row will carry a gateConstantsVersion hash (:~3590)
+      // whose partition key came from re-resolution, not the stamp — that is what makes it loud-worthy.
+      if (_stampedClass === null) {
+        console.warn(`[P19-FEEV][CLASS_FALLBACK_NONNULL] ${signal.symbol}/${signal.strategy}: carried class stamp absent/invalid; venue-pinned fallback returned '${_tradeClass}' — gate-hash partition key derived from re-resolution, not the stamp`);
       }
 
       // ── P19-B7.2b (OBJ-B): the maker/taker entry fee-mode + its per-side fee RATE for

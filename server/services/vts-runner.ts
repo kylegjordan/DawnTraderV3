@@ -1574,7 +1574,13 @@ async function generatePhase10Signal(
     atr: mceContext.indicators.atr, reachAtrMax: _b2Gate.reachAtrMax,
   });
   // ★ #371 normalizer-side ATR capture (VTS path — same bucket key as the guard side).
-  try { if (strategyOverride?.strategyKey) recordNormalizerAtr(strategyOverride.strategyKey, vtsResolveClassOrLoggedDefault(symbol), mceContext.indicators.atr); } catch { /* never blocks */ }
+  // mark-2 fix (Langston-confirmed 2026-08-17): the old `strategyOverride?.strategyKey` gate meant the
+  // DSS single-strategy path (no override) recorded NO normalizer sample — crypto paired-n accrued 0/day
+  // while xStock's unconditional eval-cycle call paired ~1:1. The local `strategy` is the canonical key
+  // on BOTH paths (:1441 override / :1456 DSS selection), and `_assetClass` is the entry-resolved class
+  // (non-null here per the :1546 P19-B4a rule — never re-resolve). Pre-fix crypto windows are a
+  // known-blind population on this path; never merge them with post-fix samples in one bucket.
+  try { recordNormalizerAtr(strategy, _assetClass, mceContext.indicators.atr); } catch { /* never blocks */ }
   // reorg-B3.2 (2026-06-24, CC-B + Langston + Kyle consensus): VTS = TAG-DON'T-DROP for the QUALITY/EV
   // gates. The reorg-B2 gate, wired here for sim-to-live target parity, collapsed VTS volume 95-97%
   // (opens ~150/day → 3-5/day, staging-confirmed) by hard-dropping every gated signal — strangling the
