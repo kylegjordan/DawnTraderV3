@@ -79,8 +79,8 @@ export const ASSET_CLASS_REGISTRY: Record<AssetClass, AssetClassMeta> = {
     displayName: 'Crypto Perp',
     defaultExchange: 'kraken-futures',
     active: true,
-    archiveOhlcTable: null, // not currently archived; B74 covers xstock_perp via PF_*X
-    archiveTickerTable: null,
+    archiveOhlcTable: 'crypto_perp_ohlc_1m',     // P19-B-PERPFEED OBJ-2 (capture-only leg)
+    archiveTickerTable: 'crypto_perp_ticker_snap',
     badgeColor: 'bg-amber-100 text-amber-800',
     description: 'Native cryptocurrency perpetual swap contract',
   },
@@ -211,10 +211,31 @@ export const QUOTE_LEN_MIN = 3;
 export const QUOTE_LEN_MAX = 5;
 
 /** xStock perp on Kraken Futures: `PF_<TICKER>XUSD` raw form.
- *  Tighter anchor: ticker is TICKER_BASE_MIN_LEN-6 capital letters; quote USD/EUR/GBP. */
+ *  Tighter anchor: ticker is TICKER_BASE_MIN_LEN-6 capital letters; quote USD/EUR/GBP.
+ *  ⚠️ P19-B-PERPFEED §3: this SHAPE test is NOT a classification authority — 14
+ *  live crypto perp bases ending in X (PF_TRXUSD, PF_AVAXUSD, PF_DYDXUSD, …)
+ *  match it and would be silently truncated/misclassified. It survives ONLY as
+ *  the boot-window fallback below, before the membership registries load. */
 const XSTOCK_PERP_RAW = new RegExp(
   `^PF_[A-Z]{${TICKER_BASE_MIN_LEN},6}X(USD|EUR|GBP)$`,
 );
+
+// ── P19-B-PERPFEED OBJ-4: Kraken Futures MEMBERSHIP registries ──────────────
+// Positive membership on BOTH sides + UNCLASSIFIED-refuse (no default-else) —
+// the class of a venue symbol is a FIELD-DRIVEN fact from the instruments
+// payload (base/category/lastTradingTime), never a symbol-shape inference
+// (PF_SPXUSD is a memecoin; 20 dated FF_/FI_ futures share the PF_ price shape).
+// Same registered-set pattern as XSTOCK_SPOT_SYMBOLS: populated by the server
+// at leg start / universe recompute; empty pre-registration (boot window).
+export const XSTOCK_PERP_VENUE_SYMBOLS: Set<string> = new Set();
+export const CRYPTO_PERP_VENUE_SYMBOLS: Set<string> = new Set();
+
+export function registerXstockPerpVenueSymbols(symbols: readonly string[]): void {
+  for (const s of symbols) XSTOCK_PERP_VENUE_SYMBOLS.add(s);
+}
+export function registerCryptoPerpVenueSymbols(symbols: readonly string[]): void {
+  for (const s of symbols) CRYPTO_PERP_VENUE_SYMBOLS.add(s);
+}
 
 /** xStock spot display form (Kraken Pro): `<TICKER>x/<QUOTE>`. This form
  *  appears in Kraken Pro UI only — the WS feed at ws-equities.kraken.com uses
@@ -621,9 +642,29 @@ export function resolveAssetClass(symbol: string, exchange: string): AssetClass 
 
   // Branch on exchange first — spot vs futures is the strongest signal.
   if (exchange === 'kraken-futures') {
-    // xstock_perp: PF_<TICKER>XUSD raw form (X-marker before quote = tokenized).
+    // P19-B-PERPFEED OBJ-4: MEMBERSHIP-DRIVEN, both sides positive. The old
+    // shape test (XSTOCK_PERP_RAW → xstock_perp, ELSE → crypto_perp) had two
+    // defects: 14 live crypto bases ending in X matched the equity shape (a
+    // crypto perp archived as a tokenized equity — the silent-wrong-answer
+    // class), and the default-else stamped DATED futures (FF_/FI_), inverse
+    // perps (PI_) and FX perps as crypto_perp. This function's contract is
+    // throws-on-unknown, no silent defaults — membership makes that real.
+    if (XSTOCK_PERP_VENUE_SYMBOLS.has(symbol)) return ASSET_CLASSES.XSTOCK_PERP;
+    if (CRYPTO_PERP_VENUE_SYMBOLS.has(symbol)) return ASSET_CLASSES.CRYPTO_PERP;
+    if (XSTOCK_PERP_VENUE_SYMBOLS.size > 0 || CRYPTO_PERP_VENUE_SYMBOLS.size > 0) {
+      // Registries are live and this symbol is in neither → UNCLASSIFIED.
+      // Refuse loudly rather than wear a plausible answer's clothes (#546).
+      throw new Error(
+        `[perpfeed][resolver][UNCLASSIFIED] ${symbol} on kraken-futures is in neither perp membership registry ` +
+        `(xstock=${XSTOCK_PERP_VENUE_SYMBOLS.size}, crypto=${CRYPTO_PERP_VENUE_SYMBOLS.size} registered) — ` +
+        `dated/inverse/FX contracts and unknown listings are refused by design`,
+      );
+    }
+    // BOOT WINDOW (both registries empty — before any leg registered): keep the
+    // pre-P19-B-PERPFEED behavior verbatim. Provably equity-only traffic today
+    // (only the 10 static-JSON equity perps reach this resolver before the legs
+    // start); the registries load at equity-leg start / crypto recompute.
     if (XSTOCK_PERP_RAW.test(symbol)) return ASSET_CLASSES.XSTOCK_PERP;
-    // crypto_perp: any other futures symbol (PF_XBTUSD, PF_ETHUSD, FI_*, PI_*, etc.)
     return ASSET_CLASSES.CRYPTO_PERP;
   }
 

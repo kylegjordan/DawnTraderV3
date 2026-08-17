@@ -17,6 +17,7 @@ import {
   xstockSpotTickerSnap,
   xstockPerpTickerSnap,
   cryptoSpotTickerSnap,
+  cryptoPerpTickerSnap,
   type InsertEquitySpotTickerSnap,
 } from '../../../shared/schema.js';
 import type { ArchiveAssetClass } from './ohlc-batch-writer.js';
@@ -32,12 +33,14 @@ const tickerTableForAssetClass = {
   xstock_spot: xstockSpotTickerSnap,
   xstock_perp: xstockPerpTickerSnap,
   crypto_spot: cryptoSpotTickerSnap,
+  crypto_perp: cryptoPerpTickerSnap,
 } as const;
 
 const tickerBuffers: Record<ArchiveAssetClass, InsertEquitySpotTickerSnap[]> = {
   xstock_spot: [],
   xstock_perp: [],
   crypto_spot: [],
+  crypto_perp: [],
 };
 
 // Throttle: track last-captured timestamp per (assetClass:symbol)
@@ -46,6 +49,18 @@ const lastCaptured: Map<string, number> = new Map();
 let throttleMs = DEFAULT_THROTTLE_MS;
 export function setTickerThrottle(ms: number): void {
   throttleMs = ms > 0 ? ms : DEFAULT_THROTTLE_MS;
+}
+
+// P19-B-PERPFEED OBJ-8 (#440 takeover): per-asset-class throttle override.
+// #440 (2026-07-08) mandated the wildcard-scoped throttle take an explicit
+// per-class value when a second asset class starts writing ticker snapshots —
+// this batch's crypto_perp leg is that second class. A class with NO override
+// resolves to the global value: the default path is byte-identical to the
+// pre-override behavior (Langston condition on the shared-writer change).
+const throttleOverrides: Partial<Record<ArchiveAssetClass, number>> = {};
+export function setTickerThrottleForClass(assetClass: ArchiveAssetClass, ms: number | null): void {
+  if (ms == null || ms <= 0) { delete throttleOverrides[assetClass]; return; }
+  throttleOverrides[assetClass] = ms;
 }
 
 // Counting semaphore (separate from OHLC writer's so the two universes don't
@@ -91,7 +106,7 @@ export function bufferTickerSnap(assetClass: ArchiveAssetClass, row: InsertEquit
   const key = `${assetClass}:${row.symbol}`;
   const now = Date.now();
   const lastTs = lastCaptured.get(key) ?? 0;
-  if (now - lastTs < throttleMs) {
+  if (now - lastTs < (throttleOverrides[assetClass] ?? throttleMs)) {
     return false; // throttled — skip
   }
   lastCaptured.set(key, now);
@@ -138,6 +153,7 @@ export function startTickerWriter(): void {
       flushTickerAssetClass('xstock_spot'),
       flushTickerAssetClass('xstock_perp'),
       flushTickerAssetClass('crypto_spot'),
+      flushTickerAssetClass('crypto_perp'),
     ]);
   }, BATCH_FLUSH_INTERVAL_MS);
   console.log(`[B74][ticker-writer] started (flush every ${BATCH_FLUSH_INTERVAL_MS / 1000}s, throttle=${throttleMs}ms)`);
@@ -152,5 +168,6 @@ export async function stopTickerWriter(): Promise<void> {
     flushTickerAssetClass('xstock_spot'),
     flushTickerAssetClass('xstock_perp'),
     flushTickerAssetClass('crypto_spot'),
+    flushTickerAssetClass('crypto_perp'),
   ]);
 }

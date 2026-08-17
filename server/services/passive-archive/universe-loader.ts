@@ -76,6 +76,10 @@ export const loadEquitySpotUniverse = loadXstockSpotUniverse;
 // B69: renamed for consistency with asset class taxonomy (equity_perp → xstock_perp)
 export async function loadXstockPerpUniverse(): Promise<string[]> {
   const cfg = await loadStaticUniverse('equity-perp-universe.json');
+  // P19-B-PERPFEED OBJ-4: feed the membership registry that resolveAssetClass's
+  // kraken-futures branch now consults (closes the boot window for this leg).
+  const { registerXstockPerpVenueSymbols } = await import('../../../shared/asset-classes.js');
+  registerXstockPerpVenueSymbols(cfg.symbols);
   console.log(`[B74][universe] xstock_perp loaded: ${cfg.symbols.length} symbols from ${cfg._endpoint}`);
   return cfg.symbols;
 }
@@ -231,4 +235,191 @@ export async function loadCryptoSpotUniverse(opts?: {
     totalCandidates: Object.keys(allPairs).length,
     filterReasons: reasons,
   };
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// P19-B-PERPFEED — Dynamic crypto-perp universe (Kraken Futures)
+// ───────────────────────────────────────────────────────────────────────────
+//
+// Field-driven classification from the instruments payload — NEVER symbol-shape
+// parsing (pre-audit 2026-08-17: `PF_SPXUSD` is a MEMECOIN, base SPX; 14 crypto
+// bases ending in X are silently truncated by the equity regex; `base`/`category`/
+// `lastTradingTime` are all in the payload, so classification is a field read).
+//
+// THE RULES (scope §3 + OBJ-1/OBJ-4, Langston-approved):
+//   1. PERPETUALITY TEST: an instrument carrying `lastTradingTime` is a DATED
+//      future (FF_/FI_, 20 live) → refused. Perp candidacy requires its absence.
+//   2. PI_ inverse perps (coin-margined, inverted PnL) → refused, explicitly.
+//   3. EQUITY marker: `base` ending lowercase 'x' (AAPLx — 16 live, complete;
+//      category ∈ {xStocks, Pre-IPO} corroborates) → the xstock_perp side.
+//   4. CRYPTO positive test: tradeable PF_ perpetual whose BASE is a base asset
+//      of the current crypto_spot dynamic universe (the relevance filter IS the
+//      classification filter — Phase-26 basis/funding work wants pairs we trade).
+//   5. Anything failing BOTH positive tests → UNCLASSIFIED: refused AND logged
+//      loudly (no default-to-crypto else branch — the FX perps EUR/GBP/CHF land
+//      here by construction). An unknown must not wear a plausible answer's clothes.
+//
+// MEMBERSHIP CADENCE (Langston reconciliation ruling 2026-08-17):
+//   - ADDS: monthly only, budget-first — membership is PERSISTED in
+//     module_constants so a restart cannot add symbols off-cycle.
+//   - DROPS: the daily probe may SUSPEND (reversible, logged, slot retained,
+//     never adds) — suspensions persisted alongside membership.
+//   - The cap (max symbols, N) is a module_constants key derived from the
+//     GB/month budget — FAIL-HARD if absent (no hard-coded fallback for a
+//     DB-governed setting; the migration seeds it).
+
+const KF_INSTRUMENTS_URL = 'https://futures.kraken.com/derivatives/api/v3/instruments';
+const KF_TICKERS_URL = 'https://futures.kraken.com/derivatives/api/v3/tickers';
+
+export interface KrakenFuturesInstrument {
+  symbol: string;
+  base?: string;
+  quote?: string;
+  category?: string;
+  tradeable?: boolean;
+  tradfi?: boolean;
+  lastTradingTime?: string;
+  type?: string;
+}
+
+export type PerpClassification =
+  | 'equity_perp'           // lowercase-x base — the xstock_perp side
+  | 'crypto_perp_candidate' // passes perpetuality + crypto positive test
+  | 'dated'                 // carries lastTradingTime (FF_/FI_) — refused
+  | 'inverse'               // PI_ — refused
+  | 'not_tradeable'
+  | 'unclassified';         // fails both positive tests — REFUSED + LOGGED
+
+/**
+ * Classify ONE Kraken Futures instrument. Pure + exported so the canonicalizer
+ * membership and the pinned tests (14 collision names, 16 equity, 20 dated,
+ * 4 inverse, 3 FX) exercise exactly the shipping logic.
+ */
+export function classifyKrakenFuturesInstrument(
+  inst: KrakenFuturesInstrument,
+  cryptoSpotBases: ReadonlySet<string>,
+): PerpClassification {
+  if (!inst.tradeable) return 'not_tradeable';
+  if (inst.symbol.startsWith('PI_')) return 'inverse';
+  // Perpetuality test FIRST: presence of a last-trading date marks a dated
+  // future regardless of prefix (verified 2026-08-17: 20/20 FF_/FI_ carry it,
+  // 0/276 PF_ do).
+  if (inst.lastTradingTime) return 'dated';
+  if (!inst.symbol.startsWith('PF_')) return 'unclassified';
+  const base = inst.base ?? '';
+  if (base.endsWith('x')) return 'equity_perp';
+  if (cryptoSpotBases.has(base)) return 'crypto_perp_candidate';
+  return 'unclassified';
+}
+
+const PERP_UNIVERSE_MODULE = 'passive_archive';
+const PERP_MEMBERS_KEY = 'crypto_perp_universe.members';
+const PERP_SUSPENDED_KEY = 'crypto_perp_universe.suspended';
+const PERP_CAP_KEY = 'crypto_perp_universe.max_symbols';
+const PERP_LAST_RECOMPUTE_KEY = 'crypto_perp_universe.last_recompute_at';
+const WILDCARD_KEY = { exchange: '*', assetClass: '*', strategy: '*', regime: '*' } as const;
+
+/**
+ * MONTHLY membership recompute (also the first-birth compute). Classifies the
+ * full live instrument list, ranks crypto candidates by open interest, caps at
+ * the budget-derived N, persists membership, and logs every add/drop.
+ * Suspensions are PRESERVED across recomputes (a recompute is not an un-suspend).
+ */
+export async function recomputeCryptoPerpUniverse(updatedBy: string): Promise<string[]> {
+  const { getConstant, setConstant } = await import('../module-constants-service.js');
+
+  const cap = await getConstant<number>(PERP_UNIVERSE_MODULE, PERP_CAP_KEY, WILDCARD_KEY);
+  if (cap == null || cap <= 0) {
+    // Fail-hard: the cap is a DB-governed budget derivation — no code default.
+    throw new Error(`[perpfeed][universe] ${PERP_CAP_KEY} missing/invalid in module_constants — the migration seeds it; refusing to compute a universe without a budget cap`);
+  }
+
+  // The crypto positive set: base assets of the current crypto_spot universe.
+  const spot = await loadCryptoSpotUniverse();
+  const cryptoSpotBases = new Set(spot.symbols.map(s => s.split('/')[0]));
+
+  const resp = await fetch(KF_INSTRUMENTS_URL);
+  const json = await resp.json() as { instruments?: KrakenFuturesInstrument[] };
+  const instruments = json.instruments ?? [];
+
+  const counts: Record<PerpClassification, number> = {
+    equity_perp: 0, crypto_perp_candidate: 0, dated: 0, inverse: 0, not_tradeable: 0, unclassified: 0,
+  };
+  const candidates: string[] = [];
+  const equityNames: string[] = [];
+  for (const inst of instruments) {
+    const cls = classifyKrakenFuturesInstrument(inst, cryptoSpotBases);
+    counts[cls]++;
+    if (cls === 'crypto_perp_candidate') candidates.push(inst.symbol);
+    if (cls === 'equity_perp') equityNames.push(inst.symbol);
+    if (cls === 'unclassified' && inst.tradeable) {
+      // Rule 5: loud, named, never silently binned as crypto.
+      console.warn(`[perpfeed][universe][UNCLASSIFIED] ${inst.symbol} (base=${inst.base ?? '?'}, category=${inst.category ?? '?'}, tradfi=${inst.tradfi ?? false}) — fails both positive tests; refused`);
+    }
+  }
+
+  // OBJ-4: refresh BOTH membership registries from the live payload — the
+  // equity side gets the COMPLETE live set (16 today, vs the static capture
+  // JSON's 10 — #687), so resolveAssetClass classifies correctly even for
+  // equity perps we don't capture.
+  {
+    const { registerXstockPerpVenueSymbols, registerCryptoPerpVenueSymbols } = await import('../../../shared/asset-classes.js');
+    registerXstockPerpVenueSymbols(equityNames);
+    registerCryptoPerpVenueSymbols(candidates);
+  }
+
+  // Rank by open interest (tickers endpoint), descending; cap at N.
+  const oiBySymbol = new Map<string, number>();
+  try {
+    const tResp = await fetch(KF_TICKERS_URL);
+    const tJson = await tResp.json() as { tickers?: Array<{ symbol?: string; openInterest?: number }> };
+    for (const t of tJson.tickers ?? []) {
+      if (t.symbol) oiBySymbol.set(t.symbol, t.openInterest ?? 0);
+    }
+  } catch (err) {
+    console.warn('[perpfeed][universe] tickers fetch failed — ranking by symbol name as a stable fallback:', err instanceof Error ? err.message : err);
+  }
+  candidates.sort((a, b) => (oiBySymbol.get(b) ?? 0) - (oiBySymbol.get(a) ?? 0) || a.localeCompare(b));
+  const members = candidates.slice(0, cap).sort();
+
+  // Diff vs the persisted set; log every add/drop (Langston condition (d)).
+  const prev = (await getConstant<string[]>(PERP_UNIVERSE_MODULE, PERP_MEMBERS_KEY, WILDCARD_KEY)) ?? [];
+  const prevSet = new Set(prev);
+  const nextSet = new Set(members);
+  for (const s of members) if (!prevSet.has(s)) console.log(`[perpfeed][universe][ADD] ${s} (oi=${oiBySymbol.get(s) ?? 'n/a'})`);
+  for (const s of prev) if (!nextSet.has(s)) console.log(`[perpfeed][universe][DROP] ${s} — rows already captured RETAIN and age out under the retention window (scope OBJ-1c)`);
+
+  await setConstant(PERP_UNIVERSE_MODULE, PERP_MEMBERS_KEY, WILDCARD_KEY, members, updatedBy);
+  await setConstant(PERP_UNIVERSE_MODULE, PERP_LAST_RECOMPUTE_KEY, WILDCARD_KEY, new Date().toISOString(), updatedBy);
+
+  console.log(
+    `[perpfeed][universe] recomputed: members=${members.length}/cap=${cap} ` +
+    `(candidates=${candidates.length}, equity=${counts.equity_perp}, dated=${counts.dated}, ` +
+    `inverse=${counts.inverse}, unclassified=${counts.unclassified})`
+  );
+  return members;
+}
+
+/**
+ * The crypto-perp ARCHIVER universe: persisted members minus suspensions.
+ * Membership changes ONLY at the monthly recompute (adds) or via suspension
+ * (drops) — a restart re-reads the persisted set, it never recomputes
+ * (adds-monthly survives restarts by construction). First-ever start (no
+ * persisted set) performs the birth recompute.
+ */
+export async function loadCryptoPerpUniverse(): Promise<string[]> {
+  const { getConstant } = await import('../module-constants-service.js');
+  let members = await getConstant<string[]>(PERP_UNIVERSE_MODULE, PERP_MEMBERS_KEY, WILDCARD_KEY);
+  if (!Array.isArray(members)) {
+    console.log('[perpfeed][universe] no persisted membership — performing birth recompute');
+    members = await recomputeCryptoPerpUniverse('perpfeed-birth-recompute');
+  }
+  const suspended = new Set((await getConstant<string[]>(PERP_UNIVERSE_MODULE, PERP_SUSPENDED_KEY, WILDCARD_KEY)) ?? []);
+  const active = members.filter(s => !suspended.has(s));
+  // OBJ-4: persisted-path registration (the recompute path registers inside
+  // recomputeCryptoPerpUniverse; this covers the restart-reads-persisted path).
+  const { registerCryptoPerpVenueSymbols } = await import('../../../shared/asset-classes.js');
+  registerCryptoPerpVenueSymbols(members);
+  console.log(`[perpfeed][universe] crypto_perp loaded: ${active.length} active (${members.length} members, ${suspended.size} suspended)`);
+  return active;
 }

@@ -70,13 +70,22 @@ interface B74TableSpec {
   retentionConstantName: string; // key in module_constants under data_lifecycle
 }
 
+// P19-B-PERPFEED (#685 DEFECT-1 fix): the three OHLC entries named a `ts` column
+// that DOES NOT EXIST on those tables — all three build from the shared
+// `ohlcColumns` const (shared/schema.ts) whose timestamp is `interval_begin`.
+// The wrong column made the sweep structurally unable to tier the OHLC family
+// (zero manifest rows for any *_ohlc_1m table, ever — measured 2026-08-17).
+// The crypto_perp pair joins the family born daily-partitioned at 30-day hot
+// (P19-B-PERPFEED OBJ-2; the departure from 365 is deliberate — warm preserves).
 const B74_TABLES: B74TableSpec[] = [
   { parent: 'xstock_spot_ticker_snap', timestampColumn: 'captured_at', retentionConstantName: 'xstock_spot_ticker_snap.hot_retention_days' },
   { parent: 'xstock_perp_ticker_snap', timestampColumn: 'captured_at', retentionConstantName: 'xstock_perp_ticker_snap.hot_retention_days' },
   { parent: 'crypto_spot_ticker_snap', timestampColumn: 'captured_at', retentionConstantName: 'crypto_spot_ticker_snap.hot_retention_days' },
-  { parent: 'xstock_spot_ohlc_1m',     timestampColumn: 'ts',          retentionConstantName: 'xstock_spot_ohlc_1m.hot_retention_days' },
-  { parent: 'xstock_perp_ohlc_1m',     timestampColumn: 'ts',          retentionConstantName: 'xstock_perp_ohlc_1m.hot_retention_days' },
-  { parent: 'crypto_spot_ohlc_1m',     timestampColumn: 'ts',          retentionConstantName: 'crypto_spot_ohlc_1m.hot_retention_days' },
+  { parent: 'crypto_perp_ticker_snap', timestampColumn: 'captured_at', retentionConstantName: 'crypto_perp_ticker_snap.hot_retention_days' },
+  { parent: 'xstock_spot_ohlc_1m',     timestampColumn: 'interval_begin', retentionConstantName: 'xstock_spot_ohlc_1m.hot_retention_days' },
+  { parent: 'xstock_perp_ohlc_1m',     timestampColumn: 'interval_begin', retentionConstantName: 'xstock_perp_ohlc_1m.hot_retention_days' },
+  { parent: 'crypto_spot_ohlc_1m',     timestampColumn: 'interval_begin', retentionConstantName: 'crypto_spot_ohlc_1m.hot_retention_days' },
+  { parent: 'crypto_perp_ohlc_1m',     timestampColumn: 'interval_begin', retentionConstantName: 'crypto_perp_ohlc_1m.hot_retention_days' },
 ];
 
 // ───────────────────────────────────────────────────────────────────────────

@@ -671,7 +671,9 @@ function formatBytes(bytes: number): string {
 }
 
 export interface PassiveArchiveUniverseStats {
-  universe: 'equity_spot' | 'equity_perp' | 'crypto_spot';
+  // P19-B-PERPFEED OBJ-5: aligned to the RUNTIME values (`cfg.name` at :967 —
+  // the old equity_* literals were stale doc; runtime emitted xstock_* since B69).
+  universe: 'xstock_spot' | 'xstock_perp' | 'crypto_spot' | 'crypto_perp';
   // Universe sizing
   configuredSymbols: number;          // from archiver in-memory config
   activeSymbolsInWindow: number;      // count(DISTINCT symbol) in window
@@ -848,18 +850,22 @@ export async function computePassiveArchiveStatus(
   const { getEquitySpotStats } = await import('./passive-archive/equity-spot-archiver.js');
   const { getEquityPerpStats } = await import('./passive-archive/equity-perp-archiver.js');
   const { getCryptoSpotStats } = await import('./passive-archive/crypto-spot-archiver.js');
+  const { getCryptoPerpStats } = await import('./passive-archive/crypto-perp-archiver.js');
 
   const now = Date.now();
   const windowMs = WINDOW_TO_MS[window];
   const windowStart = new Date(now - windowMs);
   const windowEnd = new Date(now);
 
-  // Per-universe DB queries via raw SQL (3 OHLC + 3 ticker tables share
-  // identical column shape; query each pair).
+  // Per-universe DB queries via raw SQL (the OHLC + ticker tables share
+  // identical column shape; query each pair). P19-B-PERPFEED OBJ-5: the
+  // crypto_perp leg renders even while gated OFF (connected=false, 0 symbols)
+  // so its switch-on is UI-visible.
   const universeConfigs = [
     { name: 'xstock_spot' as const, ohlcTable: 'xstock_spot_ohlc_1m', tickerTable: 'xstock_spot_ticker_snap', stats: getEquitySpotStats() },
     { name: 'xstock_perp' as const, ohlcTable: 'xstock_perp_ohlc_1m', tickerTable: 'xstock_perp_ticker_snap', stats: getEquityPerpStats() },
     { name: 'crypto_spot' as const, ohlcTable: 'crypto_spot_ohlc_1m', tickerTable: 'crypto_spot_ticker_snap', stats: getCryptoSpotStats() },
+    { name: 'crypto_perp' as const, ohlcTable: 'crypto_perp_ohlc_1m', tickerTable: 'crypto_perp_ticker_snap', stats: getCryptoPerpStats() },
   ];
 
   // 2026-05-01: count + COUNT(DISTINCT) on ~400k-row partitioned crypto_spot_*

@@ -188,3 +188,4 @@
 2026-07-30-b-trade-record-retention-leg1-extend-gc-window.sql
 2026-08-06-b-trade-tier-register.sql
 2026-08-17-p19-b-feeviability-obj4-crypto-target-rows.sql
+2026-08-17-p19-b-perpfeed-tables-and-retention.sql

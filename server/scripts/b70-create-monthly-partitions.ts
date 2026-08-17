@@ -20,6 +20,15 @@
 
 import 'dotenv/config';
 import pg from 'pg';
+// P19-B-PERPFEED OBJ-7(b-ii): daily-cutover awareness — without this, the first
+// 28th-of-month run after a table's daily cutover recreates its monthly partition
+// on top of the daily children, throws on RANGE OVERLAP, and (no per-table catch)
+// abandons the forward window for every table in the list. NOTE the to_regclass
+// probe below does NOT protect against this: post-cutover the monthly NAME is
+// genuinely absent (the cutover migration dropped it), so a name probe — and
+// IF NOT EXISTS — both pass and the CREATE still throws. A name probe is not a
+// range guard (Langston, P19-B-PERPFEED Step-2).
+import { isDailyPartitionedForMonth } from '../services/data-archive/daily-partition-cutover.js';
 const { Client } = pg;
 
 const PARTITIONED_TABLES = [
@@ -28,7 +37,7 @@ const PARTITIONED_TABLES = [
   'exit_decision_archive',
   'macro_feed_archive',
   'signal_eval_provenance', // B-NEW-53
-  'switch_on_shadow_evidence', // B-EVIDENCE-SINK (list now 7 tables)
+  'switch_on_shadow_evidence', // B-EVIDENCE-SINK (list: 6 tables)
 ] as const;
 
 const FORWARD_MONTHS = 12;
@@ -73,11 +82,17 @@ async function main(): Promise<void> {
   try {
     const today = new Date();
     let totalCreated = 0;
+    let dailyExcluded = 0;
     // Self-heal: ensure current month exists
     {
       const y = today.getUTCFullYear();
       const m = today.getUTCMonth() + 1;
+      const monthStartUtc = new Date(Date.UTC(y, m - 1, 1));
       for (const tbl of PARTITIONED_TABLES) {
+        // OBJ-7(b-ii): a daily-partitioned table is owned by the DAILY creator
+        // from its cutover month forward — a monthly child here would overlap
+        // the daily children's ranges (same guard as b74-create-monthly-partitions.ts:91-95).
+        if (isDailyPartitionedForMonth(tbl, monthStartUtc)) { dailyExcluded++; continue; }
         const created = await ensurePartition(client, tbl, y, m);
         if (created) {
           console.warn(
@@ -95,9 +110,13 @@ async function main(): Promise<void> {
       const y = d.getUTCFullYear();
       const m = d.getUTCMonth() + 1;
       for (const tbl of PARTITIONED_TABLES) {
+        if (isDailyPartitionedForMonth(tbl, d)) { dailyExcluded++; continue; }
         const created = await ensurePartition(client, tbl, y, m);
         if (created) totalCreated++;
       }
+    }
+    if (dailyExcluded > 0) {
+      console.log(`[B70][partitions] skipped ${dailyExcluded} table-month(s) owned by the daily creator (post-cutover)`);
     }
     console.log(`[B70][partitions] done; created ${totalCreated} partition(s)`);
   } finally {

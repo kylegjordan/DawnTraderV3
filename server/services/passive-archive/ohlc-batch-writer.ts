@@ -23,6 +23,7 @@ import {
   xstockSpotOhlc1m,
   xstockPerpOhlc1m,
   cryptoSpotOhlc1m,
+  cryptoPerpOhlc1m,
   type InsertEquitySpotOhlc1m,
 } from '../../../shared/schema.js';
 
@@ -30,9 +31,10 @@ const BATCH_FLUSH_INTERVAL_MS = 5_000;
 const POOL_SLOT_TIMEOUT_MS = 5_000;
 const MAX_CONCURRENT_INSERTS = 2;
 
-// B69: "Universe" → "AssetClass" rename. The 3 actively-archived asset classes
+// B69: "Universe" → "AssetClass" rename. The actively-archived asset classes
 // map to their respective Drizzle table objects for routing inserts.
-export type ArchiveAssetClass = 'xstock_spot' | 'xstock_perp' | 'crypto_spot';
+// P19-B-PERPFEED OBJ-2: crypto_perp joins the family (capture-only leg).
+export type ArchiveAssetClass = 'xstock_spot' | 'xstock_perp' | 'crypto_spot' | 'crypto_perp';
 
 /** @deprecated Use ArchiveAssetClass. Kept for transition period. */
 export type Universe = ArchiveAssetClass;
@@ -41,6 +43,7 @@ const tableForAssetClass = {
   xstock_spot: xstockSpotOhlc1m,
   xstock_perp: xstockPerpOhlc1m,
   crypto_spot: cryptoSpotOhlc1m,
+  crypto_perp: cryptoPerpOhlc1m,
 } as const;
 
 // Buffers keyed by asset class so each archiver has independent flush behavior.
@@ -48,6 +51,7 @@ const buffers: Record<ArchiveAssetClass, InsertEquitySpotOhlc1m[]> = {
   xstock_spot: [],
   xstock_perp: [],
   crypto_spot: [],
+  crypto_perp: [],
 };
 
 // Counting semaphore (max 2 concurrent inserts across all 3 archivers)
@@ -184,6 +188,7 @@ export function startBatchWriter(): void {
       flushAssetClass('xstock_spot'),
       flushAssetClass('xstock_perp'),
       flushAssetClass('crypto_spot'),
+      flushAssetClass('crypto_perp'),
     ]);
   }, BATCH_FLUSH_INTERVAL_MS);
   console.log(`[B74][batch-writer] started (flush every ${BATCH_FLUSH_INTERVAL_MS / 1000}s, max ${MAX_CONCURRENT_INSERTS} concurrent inserts)`);
@@ -199,5 +204,6 @@ export async function stopBatchWriter(): Promise<void> {
     flushAssetClass('xstock_spot'),
     flushAssetClass('xstock_perp'),
     flushAssetClass('crypto_spot'),
+    flushAssetClass('crypto_perp'),
   ]);
 }

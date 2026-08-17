@@ -29,7 +29,7 @@
 // P19-B6.5f (reorg-B1): the compact-form (no-slash) quote split below draws from the SSOT
 // recognition quote set (live-discovered or the complete curated fallback) instead of a
 // hardcoded narrow list — so a newer Kraken stablecoin quote isn't silently dropped.
-import { getRecognitionQuotes } from '../../../shared/asset-classes.js';
+import { getRecognitionQuotes, CRYPTO_PERP_VENUE_SYMBOLS, XSTOCK_PERP_VENUE_SYMBOLS } from '../../../shared/asset-classes.js';
 
 /**
  * Registry of exchange API names we've verified DO NOT EXIST. Each entry
@@ -137,6 +137,30 @@ export function toCanonical(exchangeIdOrPair: string): string {
   // Per pre-audit §A.2: blast radius LOW — additive branch, ordered before
   // the looser crypto patterns so PF_AAPLXUSD doesn't get parsed as bare
   // {base: PF_AAPLX, quote: USD} by Pattern 2 below.
+  // ── P19-B-PERPFEED OBJ-4: MEMBERSHIP FIRST, shape second. The bare X-separator
+  // regex below silently EATS the last letter of any crypto base ending in X —
+  // 14 live victims (PF_TRXUSD → TR/USD:PERP, PF_AVAXUSD → AVA/USD:PERP, …).
+  // A symbol certified as a CRYPTO perp by the membership registry (fed from the
+  // instruments payload's own `base` field) maps by the venue grammar
+  // PF_<BASE><QUOTE> — all 276 live crypto perps are USD-quoted (verified
+  // 2026-08-17). Membership certifies the grammar; the regex never sees members.
+  if (exchangeIdOrPair.startsWith('PF_') || exchangeIdOrPair.startsWith('PI_') || exchangeIdOrPair.startsWith('FF_') || exchangeIdOrPair.startsWith('FI_')) {
+    if (CRYPTO_PERP_VENUE_SYMBOLS.has(exchangeIdOrPair) && exchangeIdOrPair.endsWith('USD')) {
+      const base = exchangeIdOrPair.slice(3, -3); // PF_<BASE>USD → BASE
+      return `${base}/USD:PERP`;
+    }
+    // Equity members take the X-separator grammar below (correct for genuine
+    // xStock names — the X there IS the tokenized-equity suffix). A PF_ symbol
+    // in NEITHER registry falls through to the shape test only while the
+    // registries are empty (boot window, provably equity-only traffic today).
+    if (XSTOCK_PERP_VENUE_SYMBOLS.size > 0 || CRYPTO_PERP_VENUE_SYMBOLS.size > 0) {
+      if (!XSTOCK_PERP_VENUE_SYMBOLS.has(exchangeIdOrPair)) {
+        // Registries live + not a member of either side → dated/inverse/FX/unknown.
+        // Refuse with the reason rather than emit a plausible-wrong canonical pair.
+        throw new Error(`[perpfeed][canonicalizer][UNCLASSIFIED] ${exchangeIdOrPair} is in neither perp membership registry — dated (FF_/FI_), inverse (PI_), FX and unknown listings are refused by design`);
+      }
+    }
+  }
   const perpMatch = exchangeIdOrPair.match(/^PF_([A-Z]+)X(USD|EUR|GBP)$/);
   if (perpMatch) {
     return `${perpMatch[1]}/${perpMatch[2]}:PERP`;

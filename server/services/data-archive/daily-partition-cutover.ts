@@ -37,6 +37,17 @@ export const DAILY_PARTITION_CUTOVERS: DailyPartitionCutover[] = [
   // Cutover = the first clean month-start after the Wave-D deploy (deploy
   // 2026-07-08 → cutover 2026-08-01). July-2026 + earlier stay monthly.
   { table: 'xstock_spot_ticker_snap', cutoverDate: '2026-08-01' },
+  // P19-B-PERPFEED OBJ-7b (Kyle directive 2026-08-17): signal_eval_archive has a
+  // LIVE monthly era (Aug-2026 holds ~20 GB of rows), so it cuts at the first
+  // clean FUTURE month boundary after the batch's deploy. Its cutover migration
+  // drops the ELEVEN empty pre-created future monthlies (_2026_09.._2027_07);
+  // the b70 monthly creator gained the cutover guard in the same batch.
+  { table: 'signal_eval_archive', cutoverDate: '2026-09-01' },
+  // P19-B-PERPFEED OBJ-2: the crypto_perp pair is BORN daily-partitioned — no
+  // monthly era at all. Back-dating to the deploy month's start is safe because
+  // the daily creator's loop starts at today and never back-creates dead days.
+  { table: 'crypto_perp_ohlc_1m', cutoverDate: '2026-08-01' },
+  { table: 'crypto_perp_ticker_snap', cutoverDate: '2026-08-01' },
 ];
 
 /** The cutover Date (UTC midnight) for a table, or null if it is not daily-partitioned. */

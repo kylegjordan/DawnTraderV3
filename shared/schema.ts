@@ -4882,6 +4882,14 @@ export const cryptoSpotOhlc1m = pgTable("crypto_spot_ohlc_1m", ohlcColumns, (tab
   symTimeIdx: index("crypto_spot_ohlc_1m_sym_time").on(table.symbol, table.intervalBegin),
 }));
 
+// P19-B-PERPFEED OBJ-2: crypto perpetuals capture — BORN daily-partitioned
+// (DAILY_PARTITION_CUTOVERS, no monthly era) at a 30-day hot window (warm-365
+// preserves; the 30 is hot-tier residency, not total retention). Capture only —
+// nothing reads these until Phase 26.
+export const cryptoPerpOhlc1m = pgTable("crypto_perp_ohlc_1m", ohlcColumns, (table) => ({
+  symTimeIdx: index("crypto_perp_ohlc_1m_sym_time").on(table.symbol, table.intervalBegin),
+}));
+
 // ── Ticker snapshots ───────────────────────────────────────────────────────
 // Up to 1 snapshot/symbol/second per Langston cc-inbox #867 Q2. Equity-
 // specific fields (prev_day_*, is_extended_hours) populated for equity
@@ -4928,6 +4936,11 @@ export const xstockPerpTickerSnap = pgTable("xstock_perp_ticker_snap", tickerSna
 
 export const cryptoSpotTickerSnap = pgTable("crypto_spot_ticker_snap", tickerSnapColumns, (table) => ({
   symTimeIdx: index("crypto_spot_ticker_snap_sym_time").on(table.symbol, table.capturedAt),
+}));
+
+// P19-B-PERPFEED OBJ-2 (see cryptoPerpOhlc1m above — same born-daily/30-hot terms).
+export const cryptoPerpTickerSnap = pgTable("crypto_perp_ticker_snap", tickerSnapColumns, (table) => ({
+  symTimeIdx: index("crypto_perp_ticker_snap_sym_time").on(table.symbol, table.capturedAt),
 }));
 
 // ── P19-B5c (#86): continuous Q-D friction-evidence probe history ────────────
