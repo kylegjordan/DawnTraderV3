@@ -227,14 +227,52 @@ const XSTOCK_PERP_RAW = new RegExp(
 // (PF_SPXUSD is a memecoin; 20 dated FF_/FI_ futures share the PF_ price shape).
 // Same registered-set pattern as XSTOCK_SPOT_SYMBOLS: populated by the server
 // at leg start / universe recompute; empty pre-registration (boot window).
+//
+// Step-4 BLOCKER-C redesign (Langston 2026-08-17): readiness is PER-SIDE and
+// EXPLICIT — a side is "complete" only when its registration came from the
+// full classified live payload (the recompute), never merely from being
+// non-empty. The static equity JSON registers 10 of 16 live names (#687), so
+// it must NOT arm the refuse path. The resolver throws UNCLASSIFIED only when
+// BOTH sides are complete; otherwise membership-first-then-shape-fallback —
+// which means a shipped-but-gated-OFF deploy behaves exactly as pre-batch
+// (fail-closed batches must not ARM latent throws that switch-on disarms).
+//
+// Step-4 FINDING-D: the crypto side carries the payload's own `base`/`quote`
+// per symbol (a Map, not a bare Set) so the canonical form is field-driven —
+// PF_XBTUSD maps via base "BTC", never a string slice (slice(3,-3) gave XBT,
+// the one venue symbol where slicing and the payload disagree — the highest-OI
+// perp on the venue).
 export const XSTOCK_PERP_VENUE_SYMBOLS: Set<string> = new Set();
 export const CRYPTO_PERP_VENUE_SYMBOLS: Set<string> = new Set();
+/** venue symbol → { base, quote } from the instruments payload (crypto side). */
+export const CRYPTO_PERP_VENUE_INFO: Map<string, { base: string; quote: string }> = new Map();
 
-export function registerXstockPerpVenueSymbols(symbols: readonly string[]): void {
+let xstockPerpRegistryComplete = false;
+let cryptoPerpRegistryComplete = false;
+export function isXstockPerpRegistryComplete(): boolean { return xstockPerpRegistryComplete; }
+export function isCryptoPerpRegistryComplete(): boolean { return cryptoPerpRegistryComplete; }
+
+export function registerXstockPerpVenueSymbols(symbols: readonly string[], opts?: { complete?: boolean }): void {
   for (const s of symbols) XSTOCK_PERP_VENUE_SYMBOLS.add(s);
+  if (opts?.complete) xstockPerpRegistryComplete = true;
 }
-export function registerCryptoPerpVenueSymbols(symbols: readonly string[]): void {
-  for (const s of symbols) CRYPTO_PERP_VENUE_SYMBOLS.add(s);
+export interface CryptoPerpVenueEntry { symbol: string; base: string; quote: string }
+export function registerCryptoPerpVenueSymbols(entries: readonly CryptoPerpVenueEntry[], opts?: { complete?: boolean }): void {
+  for (const e of entries) {
+    CRYPTO_PERP_VENUE_SYMBOLS.add(e.symbol);
+    CRYPTO_PERP_VENUE_INFO.set(e.symbol, { base: e.base, quote: e.quote });
+  }
+  if (opts?.complete) cryptoPerpRegistryComplete = true;
+}
+/** Test-only: reset registries + readiness (vitest per-file isolation makes
+ *  cross-file leakage invisible — see the Step-4 note cross-referencing
+ *  b74-symbol-canonicalizer-perp.test.ts vs the perpfeed tests). */
+export function __resetPerpRegistriesForTest(): void {
+  XSTOCK_PERP_VENUE_SYMBOLS.clear();
+  CRYPTO_PERP_VENUE_SYMBOLS.clear();
+  CRYPTO_PERP_VENUE_INFO.clear();
+  xstockPerpRegistryComplete = false;
+  cryptoPerpRegistryComplete = false;
 }
 
 /** xStock spot display form (Kraken Pro): `<TICKER>x/<QUOTE>`. This form
@@ -649,21 +687,27 @@ export function resolveAssetClass(symbol: string, exchange: string): AssetClass 
     // class), and the default-else stamped DATED futures (FF_/FI_), inverse
     // perps (PI_) and FX perps as crypto_perp. This function's contract is
     // throws-on-unknown, no silent defaults — membership makes that real.
+    // Membership first — a positive answer from either side is authoritative.
     if (XSTOCK_PERP_VENUE_SYMBOLS.has(symbol)) return ASSET_CLASSES.XSTOCK_PERP;
     if (CRYPTO_PERP_VENUE_SYMBOLS.has(symbol)) return ASSET_CLASSES.CRYPTO_PERP;
-    if (XSTOCK_PERP_VENUE_SYMBOLS.size > 0 || CRYPTO_PERP_VENUE_SYMBOLS.size > 0) {
-      // Registries are live and this symbol is in neither → UNCLASSIFIED.
+    // Step-4 BLOCKER-C: the refuse path arms ONLY when BOTH sides are COMPLETE
+    // (registered from the full classified live payload). An OR-on-nonempty
+    // guard armed the throw on a gated-OFF deploy: the equity leg registered
+    // its 10 static names, the crypto leg never started, and every crypto perp
+    // (plus the 6 live equity names missing from the static JSON — #687) would
+    // have thrown — latent, armed by deploy, disarmed only by switch-on. Backwards.
+    if (isXstockPerpRegistryComplete() && isCryptoPerpRegistryComplete()) {
+      // Both sides complete and this symbol is in neither → UNCLASSIFIED.
       // Refuse loudly rather than wear a plausible answer's clothes (#546).
       throw new Error(
-        `[perpfeed][resolver][UNCLASSIFIED] ${symbol} on kraken-futures is in neither perp membership registry ` +
+        `[perpfeed][resolver][UNCLASSIFIED] ${symbol} on kraken-futures is in neither COMPLETE perp membership registry ` +
         `(xstock=${XSTOCK_PERP_VENUE_SYMBOLS.size}, crypto=${CRYPTO_PERP_VENUE_SYMBOLS.size} registered) — ` +
         `dated/inverse/FX contracts and unknown listings are refused by design`,
       );
     }
-    // BOOT WINDOW (both registries empty — before any leg registered): keep the
-    // pre-P19-B-PERPFEED behavior verbatim. Provably equity-only traffic today
-    // (only the 10 static-JSON equity perps reach this resolver before the legs
-    // start); the registries load at equity-leg start / crypto recompute.
+    // FALLBACK (either side incomplete — boot window, or a gated-OFF crypto
+    // leg): pre-P19-B-PERPFEED behavior verbatim, so a deploy without
+    // switch-on is behaviorally identical to pre-batch for this resolver.
     if (XSTOCK_PERP_RAW.test(symbol)) return ASSET_CLASSES.XSTOCK_PERP;
     return ASSET_CLASSES.CRYPTO_PERP;
   }

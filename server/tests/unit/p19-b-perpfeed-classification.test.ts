@@ -18,12 +18,14 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import {
   classifyKrakenFuturesInstrument,
+  normalizeSpotBaseForJoin,
   type KrakenFuturesInstrument,
 } from '../../services/passive-archive/universe-loader.js';
 import {
   registerCryptoPerpVenueSymbols,
   registerXstockPerpVenueSymbols,
   resolveAssetClass,
+  __resetPerpRegistriesForTest,
 } from '../../../shared/asset-classes.js';
 import { toCanonical } from '../../services/utils/symbol-canonicalizer.js';
 import { bufferTickerSnap, setTickerThrottle, setTickerThrottleForClass } from '../../services/passive-archive/ticker-batch-writer.js';
@@ -110,17 +112,41 @@ describe('P19-B-PERPFEED classification (field-driven, both-sides-positive)', ()
   });
 });
 
-describe('P19-B-PERPFEED membership-driven mapping (registries live)', () => {
+describe('P19-B-PERPFEED Step-4 BLOCKER-A: the join normalizer', () => {
+  const altnames = new Map([['XLTC', 'LTC'], ['XETC', 'ETC'], ['XXBT', 'XBT']]);
+  it('legacy X-named spot bases join as plain names — Litecoin classifies crypto, never UNCLASSIFIED', () => {
+    expect(normalizeSpotBaseForJoin('XLTC', altnames)).toBe('LTC');
+    expect(normalizeSpotBaseForJoin('XETC', altnames)).toBe('ETC');
+    // XXBT hits XBASE_TO_PLAIN first (→ BTC), never the altname (XBT).
+    expect(normalizeSpotBaseForJoin('XXBT', altnames)).toBe('BTC');
+    // plain names pass through untouched
+    expect(normalizeSpotBaseForJoin('SOL', altnames)).toBe('SOL');
+    // the end-to-end pin: an XLTC-normalized spot set classifies PF_LTCUSD crypto
+    const bases = new Set([normalizeSpotBaseForJoin('XLTC', altnames)]);
+    expect(classifyKrakenFuturesInstrument(inst('PF_LTCUSD', 'LTC'), bases)).toBe('crypto_perp_candidate');
+  });
+});
+
+describe('P19-B-PERPFEED membership-driven mapping (BOTH registries COMPLETE — the refuse path armed)', () => {
   beforeAll(() => {
-    registerCryptoPerpVenueSymbols(COLLISION_CRYPTO.map(([s]) => s));
-    registerXstockPerpVenueSymbols(EQUITY_16.map(([s]) => s));
+    __resetPerpRegistriesForTest();
+    registerCryptoPerpVenueSymbols(
+      [...COLLISION_CRYPTO.map(([symbol, base]) => ({ symbol, base, quote: 'USD' })),
+       { symbol: 'PF_XBTUSD', base: 'BTC', quote: 'USD' }],
+      { complete: true },
+    );
+    registerXstockPerpVenueSymbols(EQUITY_16.map(([s]) => s), { complete: true });
   });
 
-  it('canonicalizer: crypto members map by venue grammar — PF_TRXUSD → TRX/USD:PERP, never TR/USD:PERP', () => {
+  it('canonicalizer: crypto members map from the PAYLOAD base — PF_TRXUSD → TRX/USD:PERP, never TR/USD:PERP', () => {
     expect(toCanonical('PF_TRXUSD')).toBe('TRX/USD:PERP');
     expect(toCanonical('PF_AVAXUSD')).toBe('AVAX/USD:PERP');
     expect(toCanonical('PF_DYDXUSD')).toBe('DYDX/USD:PERP');
     expect(toCanonical('PF_STXUSD')).toBe('STX/USD:PERP');
+  });
+
+  it('FINDING-D pin: PF_XBTUSD maps via the payload base to BTC/USD:PERP — never the XBT string slice', () => {
+    expect(toCanonical('PF_XBTUSD')).toBe('BTC/USD:PERP');
   });
 
   it('canonicalizer: equity members keep the X-separator grammar unchanged', () => {
@@ -128,7 +154,7 @@ describe('P19-B-PERPFEED membership-driven mapping (registries live)', () => {
     expect(toCanonical('PF_TSLAXUSD')).toBe('TSLA/USD:PERP');
   });
 
-  it('canonicalizer: a futures-shaped symbol in NEITHER registry throws (dated/inverse/unknown refused)', () => {
+  it('canonicalizer: a futures-shaped symbol in NEITHER complete registry throws (dated/inverse/FX refused)', () => {
     expect(() => toCanonical('FF_XBTUSD_260925')).toThrow(/UNCLASSIFIED/);
     expect(() => toCanonical('PI_XBTUSD')).toThrow(/UNCLASSIFIED/);
     expect(() => toCanonical('PF_EURUSD')).toThrow(/UNCLASSIFIED/);
@@ -139,6 +165,26 @@ describe('P19-B-PERPFEED membership-driven mapping (registries live)', () => {
     expect(resolveAssetClass('PF_AAPLXUSD', 'kraken-futures')).toBe('xstock_perp');
     expect(() => resolveAssetClass('FF_XBTUSD_260925', 'kraken-futures')).toThrow(/UNCLASSIFIED/);
     expect(() => resolveAssetClass('PI_XBTUSD', 'kraken-futures')).toThrow(/UNCLASSIFIED/);
+  });
+});
+
+describe('P19-B-PERPFEED Step-4 BLOCKER-C: incomplete registries NEVER arm the refuse path', () => {
+  // Cross-reference: b74-symbol-canonicalizer-perp.test.ts:131,:137 assert
+  // PI_XBTUSD/PF_XBTUSD → crypto_perp with EMPTY registries — that is this
+  // fallback branch, and both files pass under vitest per-file isolation.
+  // This block pins the gated-OFF-deploy state: equity side registered but
+  // INCOMPLETE (the 10-name static JSON, #687), crypto side never started.
+  it('equity-registered-but-incomplete + crypto-empty = pre-batch behavior verbatim, no throws', () => {
+    __resetPerpRegistriesForTest();
+    registerXstockPerpVenueSymbols(['PF_AAPLXUSD'] /* static JSON, NO complete flag */);
+    // crypto perps fall to the shape fallback → crypto_perp (pre-batch behavior)
+    expect(resolveAssetClass('PF_XBTUSD', 'kraken-futures')).toBe('crypto_perp');
+    // the 6 live equity names missing from the static JSON (#687) fall to the
+    // shape fallback → xstock_perp — NOT a throw
+    expect(resolveAssetClass('PF_AMZNXUSD', 'kraken-futures')).toBe('xstock_perp');
+    // dated futures unfortunately also fall through pre-switch-on (pre-batch
+    // behavior preserved by design — the refuse path arms at first recompute)
+    expect(resolveAssetClass('FF_XBTUSD_260925', 'kraken-futures')).toBe('crypto_perp');
   });
 });
 

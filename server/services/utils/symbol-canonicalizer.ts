@@ -29,7 +29,7 @@
 // P19-B6.5f (reorg-B1): the compact-form (no-slash) quote split below draws from the SSOT
 // recognition quote set (live-discovered or the complete curated fallback) instead of a
 // hardcoded narrow list — so a newer Kraken stablecoin quote isn't silently dropped.
-import { getRecognitionQuotes, CRYPTO_PERP_VENUE_SYMBOLS, XSTOCK_PERP_VENUE_SYMBOLS } from '../../../shared/asset-classes.js';
+import { getRecognitionQuotes, CRYPTO_PERP_VENUE_INFO, XSTOCK_PERP_VENUE_SYMBOLS, isXstockPerpRegistryComplete, isCryptoPerpRegistryComplete } from '../../../shared/asset-classes.js';
 
 /**
  * Registry of exchange API names we've verified DO NOT EXIST. Each entry
@@ -145,19 +145,26 @@ export function toCanonical(exchangeIdOrPair: string): string {
   // PF_<BASE><QUOTE> — all 276 live crypto perps are USD-quoted (verified
   // 2026-08-17). Membership certifies the grammar; the regex never sees members.
   if (exchangeIdOrPair.startsWith('PF_') || exchangeIdOrPair.startsWith('PI_') || exchangeIdOrPair.startsWith('FF_') || exchangeIdOrPair.startsWith('FI_')) {
-    if (CRYPTO_PERP_VENUE_SYMBOLS.has(exchangeIdOrPair) && exchangeIdOrPair.endsWith('USD')) {
-      const base = exchangeIdOrPair.slice(3, -3); // PF_<BASE>USD → BASE
-      return `${base}/USD:PERP`;
+    // Step-4 FINDING-D: crypto members map from the PAYLOAD's own base/quote
+    // (CRYPTO_PERP_VENUE_INFO), never a string slice. slice(3,-3) on PF_XBTUSD
+    // gave XBT while the payload says BTC — the ONE venue symbol (of 276,
+    // measured) where slicing and the field disagree, and it is the highest-OI
+    // perp on the venue. Field-driven is the batch's own principle.
+    const info = CRYPTO_PERP_VENUE_INFO.get(exchangeIdOrPair);
+    if (info) {
+      const base = krakenToStandard[info.base] || info.base;
+      return `${base}/${info.quote}:PERP`;
     }
     // Equity members take the X-separator grammar below (correct for genuine
-    // xStock names — the X there IS the tokenized-equity suffix). A PF_ symbol
-    // in NEITHER registry falls through to the shape test only while the
-    // registries are empty (boot window, provably equity-only traffic today).
-    if (XSTOCK_PERP_VENUE_SYMBOLS.size > 0 || CRYPTO_PERP_VENUE_SYMBOLS.size > 0) {
+    // xStock names — the X there IS the tokenized-equity suffix). The refuse
+    // path arms only when BOTH sides are COMPLETE (Step-4 BLOCKER-C — an
+    // OR-on-nonempty guard armed a latent throw on a gated-OFF deploy);
+    // otherwise fall through to the pre-batch shape behavior verbatim.
+    if (isXstockPerpRegistryComplete() && isCryptoPerpRegistryComplete()) {
       if (!XSTOCK_PERP_VENUE_SYMBOLS.has(exchangeIdOrPair)) {
-        // Registries live + not a member of either side → dated/inverse/FX/unknown.
+        // Both registries complete + member of neither → dated/inverse/FX/unknown.
         // Refuse with the reason rather than emit a plausible-wrong canonical pair.
-        throw new Error(`[perpfeed][canonicalizer][UNCLASSIFIED] ${exchangeIdOrPair} is in neither perp membership registry — dated (FF_/FI_), inverse (PI_), FX and unknown listings are refused by design`);
+        throw new Error(`[perpfeed][canonicalizer][UNCLASSIFIED] ${exchangeIdOrPair} is in neither COMPLETE perp membership registry — dated (FF_/FI_), inverse (PI_), FX and unknown listings are refused by design`);
       }
     }
   }

@@ -35,6 +35,11 @@
 
 BEGIN;
 
+-- Step-4 note (Langston): pin the session timezone so the born-daily children's
+-- bare-date bounds are UTC-interpreted exactly like the daily creator's
+-- (Date.UTC) — otherwise a non-UTC session TZ shifts the seam day.
+SET LOCAL TimeZone = 'UTC';
+
 -- ───────────────────────────────────────────────────────────────────────────
 -- 1a. crypto_perp_ohlc_1m — parent (daily-partitioned from birth)
 -- ───────────────────────────────────────────────────────────────────────────

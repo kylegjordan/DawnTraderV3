@@ -1,9 +1,12 @@
 {
   "version": 2,
   "format": "per-file per-code per-MESSAGE counts (#579, B-TSC-BASELINE-FIX 2026-07-27; was v1 per-file per-code counts)",
-  "frozen_at_commit": "35be745ac",
-  "frozen_at_iso": "2026-08-17T09:29:08.456Z",
+  "frozen_at_commit": "69a355a74",
+  "frozen_at_iso": "2026-07-27T19:30:54.569Z",
   "frozen_by_batch": "B-TSC-BASELINE-FIX (#579 — message-identity gate)",
+  "last_synced_at_iso": "2026-08-17T09:29:08.456Z",
+  "last_synced_by_batch": "P19-B-PERPFEED (one entry removed: drift-dashboard-aggregator TS2322:967, fixed at 35be745ac)",
+  "last_synced_at_commit": "35be745ac",
   "total_errors": 391,
   "file_count": 48,
   "files": [
@@ -413,7 +416,7 @@
       "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
       "errors": {
         "TS2345": {
-          "Argument of type '{ type: string; subtype: \"warning\" | \"recalibrate\" | \"complete\"; data: { strategy: string; score: number; status: \"stable\" | \"drifting\" | \"recalibrating\"; deltaAlpha: number; deltaBeta: number; deltaSigma: number; threshold: number; timestamp: string; }; }' is not assignable to par": 1
+          "Argument of type '{ type: string; subtype: \"warning\" | \"complete\" | \"recalibrate\"; data: { strategy: string; score: number; status: \"stable\" | \"drifting\" | \"recalibrating\"; deltaAlpha: number; deltaBeta: number; deltaSigma: number; threshold: number; timestamp: string; }; }' is not assignable to par": 1
         }
       }
     },

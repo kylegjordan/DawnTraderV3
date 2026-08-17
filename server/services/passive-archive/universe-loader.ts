@@ -308,7 +308,10 @@ export function classifyKrakenFuturesInstrument(
   if (!inst.symbol.startsWith('PF_')) return 'unclassified';
   const base = inst.base ?? '';
   if (base.endsWith('x')) return 'equity_perp';
-  if (cryptoSpotBases.has(base)) return 'crypto_perp_candidate';
+  // Both-sides join normalization (Step-4 BLOCKER-A): the futures payload
+  // reports plain names today (BTC, LTC), but map through XBASE_TO_PLAIN for
+  // symmetry with the spot side so neither side's naming era can break the join.
+  if (cryptoSpotBases.has(XBASE_TO_PLAIN[base] ?? base)) return 'crypto_perp_candidate';
   return 'unclassified';
 }
 
@@ -317,7 +320,45 @@ const PERP_MEMBERS_KEY = 'crypto_perp_universe.members';
 const PERP_SUSPENDED_KEY = 'crypto_perp_universe.suspended';
 const PERP_CAP_KEY = 'crypto_perp_universe.max_symbols';
 const PERP_LAST_RECOMPUTE_KEY = 'crypto_perp_universe.last_recompute_at';
+// Step-4 BLOCKER-B: the CLASSIFIED sets are persisted SEPARATELY from the
+// capped capture membership — classification authority must not depend on
+// process history (recompute registered ~213, a restart registered only the
+// capped 20: same symbol, two answers). Both code paths register from these.
+const PERP_CLASSIFIED_CRYPTO_KEY = 'crypto_perp_universe.classified';
+const PERP_CLASSIFIED_EQUITY_KEY = 'xstock_perp_universe.classified';
 const WILDCARD_KEY = { exchange: '*', assetClass: '*', strategy: '*', regime: '*' } as const;
+
+/**
+ * Step-4 BLOCKER-A: the classification join key, normalized on BOTH sides.
+ * The spot canonicals carry Kraken's legacy X-prefixed names wherever
+ * XBASE_TO_PLAIN has no entry (XLTC/USD, XETC/USD — 47 of 260 live crypto
+ * perp bases missed the join, Litecoin included), while the futures payload
+ * reports plain names (LTC). Normalize via XBASE_TO_PLAIN first, then the
+ * venue's OWN /0/public/Assets altname map (field-driven — XLTC's altname is
+ * LTC by Kraken's own word, not by prefix-stripping), then identity.
+ */
+export function normalizeSpotBaseForJoin(base: string, assetAltnames: ReadonlyMap<string, string>): string {
+  const viaPlain = XBASE_TO_PLAIN[base];
+  if (viaPlain) return viaPlain;
+  const alt = assetAltnames.get(base);
+  if (alt) return XBASE_TO_PLAIN[alt] ?? alt;
+  return base;
+}
+
+/** Fetch Kraken spot /0/public/Assets → asset name → altname map. */
+async function fetchSpotAssetAltnames(): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  try {
+    const resp = await fetch('https://api.kraken.com/0/public/Assets');
+    const json = await resp.json() as { result?: Record<string, { altname?: string }> };
+    for (const [name, info] of Object.entries(json.result ?? {})) {
+      if (info?.altname) map.set(name, info.altname);
+    }
+  } catch (err) {
+    console.warn('[perpfeed][universe] Assets altname fetch failed — join falls back to XBASE_TO_PLAIN only (legacy X-named bases may misclassify UNCLASSIFIED this cycle):', err instanceof Error ? err.message : err);
+  }
+  return map;
+}
 
 /**
  * MONTHLY membership recompute (also the first-birth compute). Classifies the
@@ -334,9 +375,13 @@ export async function recomputeCryptoPerpUniverse(updatedBy: string): Promise<st
     throw new Error(`[perpfeed][universe] ${PERP_CAP_KEY} missing/invalid in module_constants — the migration seeds it; refusing to compute a universe without a budget cap`);
   }
 
-  // The crypto positive set: base assets of the current crypto_spot universe.
+  // The crypto positive set: base assets of the current crypto_spot universe,
+  // JOIN-NORMALIZED on both sides (Step-4 BLOCKER-A — 47 of 260 live crypto
+  // perp bases, Litecoin included, missed the un-normalized join because the
+  // spot canonicals keep legacy X-prefixed names outside XBASE_TO_PLAIN).
   const spot = await loadCryptoSpotUniverse();
-  const cryptoSpotBases = new Set(spot.symbols.map(s => s.split('/')[0]));
+  const assetAltnames = await fetchSpotAssetAltnames();
+  const cryptoSpotBases = new Set(spot.symbols.map(s => normalizeSpotBaseForJoin(s.split('/')[0], assetAltnames)));
 
   const resp = await fetch(KF_INSTRUMENTS_URL);
   const json = await resp.json() as { instruments?: KrakenFuturesInstrument[] };
@@ -345,12 +390,12 @@ export async function recomputeCryptoPerpUniverse(updatedBy: string): Promise<st
   const counts: Record<PerpClassification, number> = {
     equity_perp: 0, crypto_perp_candidate: 0, dated: 0, inverse: 0, not_tradeable: 0, unclassified: 0,
   };
-  const candidates: string[] = [];
+  const candidates: Array<{ symbol: string; base: string; quote: string }> = [];
   const equityNames: string[] = [];
   for (const inst of instruments) {
     const cls = classifyKrakenFuturesInstrument(inst, cryptoSpotBases);
     counts[cls]++;
-    if (cls === 'crypto_perp_candidate') candidates.push(inst.symbol);
+    if (cls === 'crypto_perp_candidate') candidates.push({ symbol: inst.symbol, base: inst.base ?? '', quote: inst.quote ?? 'USD' });
     if (cls === 'equity_perp') equityNames.push(inst.symbol);
     if (cls === 'unclassified' && inst.tradeable) {
       // Rule 5: loud, named, never silently binned as crypto.
@@ -358,15 +403,18 @@ export async function recomputeCryptoPerpUniverse(updatedBy: string): Promise<st
     }
   }
 
-  // OBJ-4: refresh BOTH membership registries from the live payload — the
-  // equity side gets the COMPLETE live set (16 today, vs the static capture
-  // JSON's 10 — #687), so resolveAssetClass classifies correctly even for
-  // equity perps we don't capture.
+  // OBJ-4 + Step-4 BLOCKER-B: refresh BOTH membership registries from the FULL
+  // classified payload (never the capped capture set), persist the classified
+  // sets so the restart path registers the same authority, and mark both sides
+  // COMPLETE (arming the refuse path — BLOCKER-C). The equity side gets the
+  // complete live set (16 today, vs the static capture JSON's 10 — #687).
   {
     const { registerXstockPerpVenueSymbols, registerCryptoPerpVenueSymbols } = await import('../../../shared/asset-classes.js');
-    registerXstockPerpVenueSymbols(equityNames);
-    registerCryptoPerpVenueSymbols(candidates);
+    registerXstockPerpVenueSymbols(equityNames, { complete: true });
+    registerCryptoPerpVenueSymbols(candidates, { complete: true });
   }
+  await setConstant(PERP_UNIVERSE_MODULE, PERP_CLASSIFIED_CRYPTO_KEY, WILDCARD_KEY, candidates, updatedBy);
+  await setConstant(PERP_UNIVERSE_MODULE, PERP_CLASSIFIED_EQUITY_KEY, WILDCARD_KEY, equityNames, updatedBy);
 
   // Rank by open interest (tickers endpoint), descending; cap at N.
   const oiBySymbol = new Map<string, number>();
@@ -379,8 +427,8 @@ export async function recomputeCryptoPerpUniverse(updatedBy: string): Promise<st
   } catch (err) {
     console.warn('[perpfeed][universe] tickers fetch failed — ranking by symbol name as a stable fallback:', err instanceof Error ? err.message : err);
   }
-  candidates.sort((a, b) => (oiBySymbol.get(b) ?? 0) - (oiBySymbol.get(a) ?? 0) || a.localeCompare(b));
-  const members = candidates.slice(0, cap).sort();
+  candidates.sort((a, b) => (oiBySymbol.get(b.symbol) ?? 0) - (oiBySymbol.get(a.symbol) ?? 0) || a.symbol.localeCompare(b.symbol));
+  const members = candidates.slice(0, cap).map(c => c.symbol).sort();
 
   // Diff vs the persisted set; log every add/drop (Langston condition (d)).
   const prev = (await getConstant<string[]>(PERP_UNIVERSE_MODULE, PERP_MEMBERS_KEY, WILDCARD_KEY)) ?? [];
@@ -416,10 +464,20 @@ export async function loadCryptoPerpUniverse(): Promise<string[]> {
   }
   const suspended = new Set((await getConstant<string[]>(PERP_UNIVERSE_MODULE, PERP_SUSPENDED_KEY, WILDCARD_KEY)) ?? []);
   const active = members.filter(s => !suspended.has(s));
-  // OBJ-4: persisted-path registration (the recompute path registers inside
-  // recomputeCryptoPerpUniverse; this covers the restart-reads-persisted path).
-  const { registerCryptoPerpVenueSymbols } = await import('../../../shared/asset-classes.js');
-  registerCryptoPerpVenueSymbols(members);
+  // Step-4 BLOCKER-B: the restart path registers from the persisted CLASSIFIED
+  // sets — the SAME authority the recompute registered — never the capped
+  // capture membership (recompute registered ~213 while a restart registered
+  // 20: same symbol, two answers, decided by process history). Completeness is
+  // marked only when the persisted classified sets actually exist.
+  const { registerCryptoPerpVenueSymbols, registerXstockPerpVenueSymbols } = await import('../../../shared/asset-classes.js');
+  const classifiedCrypto = await getConstant<Array<{ symbol: string; base: string; quote: string }>>(PERP_UNIVERSE_MODULE, PERP_CLASSIFIED_CRYPTO_KEY, WILDCARD_KEY);
+  const classifiedEquity = await getConstant<string[]>(PERP_UNIVERSE_MODULE, PERP_CLASSIFIED_EQUITY_KEY, WILDCARD_KEY);
+  if (Array.isArray(classifiedCrypto) && Array.isArray(classifiedEquity)) {
+    registerCryptoPerpVenueSymbols(classifiedCrypto, { complete: true });
+    registerXstockPerpVenueSymbols(classifiedEquity, { complete: true });
+  } else {
+    console.warn('[perpfeed][universe] persisted classified sets absent — registries stay INCOMPLETE (refuse path unarmed) until the next recompute persists them');
+  }
   console.log(`[perpfeed][universe] crypto_perp loaded: ${active.length} active (${members.length} members, ${suspended.size} suspended)`);
   return active;
 }
