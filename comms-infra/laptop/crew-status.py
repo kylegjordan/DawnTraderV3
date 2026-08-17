@@ -231,6 +231,30 @@ def src_transcripts():
     return found, ("; ".join(errs) if errs else None)
 
 
+def _local_shas(clone):
+    """SHAs of commits actually CREATED in this working copy, or None if unknowable.
+
+    git records HEAD movements in the reflog with the action that caused them. A commit made
+    here is logged as `commit:` (or `commit (amend):`); anything that arrived by pull, merge,
+    reset or checkout is logged as that instead. That distinction is the only local evidence of
+    who authored what, because all four sessions share one git identity.
+
+    Returns None rather than an empty set when the reflog cannot be read -- an empty set would
+    silently blank every session's work, which is the failure mode this file exists to avoid
+    (#453: an absence and an unread source must never look alike)."""
+    o, e = run(["git", "-C", clone, "reflog", "--format=%gs%x09%H", "-400"], timeout=90)
+    if e or not o:
+        return None
+    s = set()
+    for ln in o.splitlines():
+        if "\t" not in ln:
+            continue
+        act, sha = ln.split("\t", 1)
+        if act.startswith("commit"):
+            s.add(sha.strip())
+    return s or None
+
+
 def src_git():
     """Per-CLONE, because per-AUTHOR provably cannot work.
 
@@ -252,12 +276,27 @@ def src_git():
         if not clone or not os.path.isdir(os.path.join(clone, ".git")):
             errs.append(f"{sess}: no clone at {clone}")
             continue
-        o, e = run(["git", "-C", clone, "log", "HEAD", "-40",
-                    "--format=%h|%an|%cI|%s"], timeout=60)
+        # Which commits were MADE here? A clone also holds everything pulled from the other
+        # sessions -- measured: 11 of NEW Claude's 12 most recent HEAD commits arrived by pull
+        # and were ANALYST's batch, which the board then reported as NEW's current work.
+        local = _local_shas(clone)
+        o, e = run(["git", "-C", clone, "log", "HEAD", "-200",
+                    "--format=%H|%h|%an|%cI|%s"], timeout=60)
         if e:
             errs.append(f"{sess}: {e}")
             continue
-        out[sess] = [ln for ln in (o or "").splitlines() if "|" in ln]
+        rows = []
+        for ln in (o or "").splitlines():
+            if "|" not in ln:
+                continue
+            full, rest = ln.split("|", 1)
+            # local is None only when the reflog could not be read; in that case fall back to
+            # the unfiltered log and SAY SO rather than silently reporting other sessions' work.
+            if local is None or full in local:
+                rows.append(rest)
+        if local is None:
+            errs.append(f"{sess}: reflog unreadable, commits NOT filtered to local")
+        out[sess] = rows
     # A partial read is reported, never silently treated as an absence (#453).
     return (out or None), ("; ".join(errs) if errs else None)
 
