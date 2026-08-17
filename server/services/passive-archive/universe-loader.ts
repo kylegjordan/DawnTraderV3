@@ -345,17 +345,40 @@ export function normalizeSpotBaseForJoin(base: string, assetAltnames: ReadonlyMa
   return base;
 }
 
-/** Fetch Kraken spot /0/public/Assets → asset name → altname map. */
-async function fetchSpotAssetAltnames(): Promise<Map<string, string>> {
+/**
+ * Fetch Kraken spot /0/public/Assets → asset name → altname map.
+ *
+ * Step-4 BLOCKER-F (Langston): a DEGRADED fetch must FAIL THE RECOMPUTE, never
+ * degrade the classification silently. The r2 version caught errors and
+ * returned an empty map — one transient Assets outage during a monthly
+ * recompute would have dropped the 47 X-named bases from the join, classified
+ * 47 live crypto perps UNCLASSIFIED, marked both registries COMPLETE anyway,
+ * and PERSISTED the degraded set (surviving restarts until the next monthly
+ * recompute): BLOCKER-C's latent-armed-throw through a different door, armed
+ * by an event no operator controls. `complete` must mean "the classification
+ * INPUTS were complete," not "the recompute ran." So: resp.ok checked, the
+ * venue's own error field checked, empty result refused — any failure THROWS,
+ * the recompute aborts BEFORE any setConstant/registration (ordering matters:
+ * this fetch precedes all persistence in recomputeCryptoPerpUniverse), flags
+ * stay false, the resolver stays in fallback. A monthly recompute is
+ * retryable; a persisted degraded classified set is not self-healing.
+ * Exported with fetchImpl injection for the negative-leg test.
+ */
+export async function fetchSpotAssetAltnames(fetchImpl: typeof fetch = fetch): Promise<Map<string, string>> {
+  const resp = await fetchImpl('https://api.kraken.com/0/public/Assets');
+  if (!resp.ok) {
+    throw new Error(`[perpfeed][universe] Assets altname fetch degraded (HTTP ${resp.status}) — REFUSING the recompute; a degraded classification input must never persist (#546)`);
+  }
+  const json = await resp.json() as { error?: unknown[]; result?: Record<string, { altname?: string }> };
+  if (Array.isArray(json.error) && json.error.length > 0) {
+    throw new Error(`[perpfeed][universe] Assets altname fetch degraded (venue error: ${JSON.stringify(json.error)}) — REFUSING the recompute`);
+  }
   const map = new Map<string, string>();
-  try {
-    const resp = await fetch('https://api.kraken.com/0/public/Assets');
-    const json = await resp.json() as { result?: Record<string, { altname?: string }> };
-    for (const [name, info] of Object.entries(json.result ?? {})) {
-      if (info?.altname) map.set(name, info.altname);
-    }
-  } catch (err) {
-    console.warn('[perpfeed][universe] Assets altname fetch failed — join falls back to XBASE_TO_PLAIN only (legacy X-named bases may misclassify UNCLASSIFIED this cycle):', err instanceof Error ? err.message : err);
+  for (const [name, info] of Object.entries(json.result ?? {})) {
+    if (info?.altname) map.set(name, info.altname);
+  }
+  if (map.size === 0) {
+    throw new Error('[perpfeed][universe] Assets altname fetch degraded (empty result) — REFUSING the recompute');
   }
   return map;
 }

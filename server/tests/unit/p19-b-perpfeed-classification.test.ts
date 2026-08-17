@@ -19,6 +19,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import {
   classifyKrakenFuturesInstrument,
   normalizeSpotBaseForJoin,
+  fetchSpotAssetAltnames,
   type KrakenFuturesInstrument,
 } from '../../services/passive-archive/universe-loader.js';
 import {
@@ -165,6 +166,30 @@ describe('P19-B-PERPFEED membership-driven mapping (BOTH registries COMPLETE —
     expect(resolveAssetClass('PF_AAPLXUSD', 'kraken-futures')).toBe('xstock_perp');
     expect(() => resolveAssetClass('FF_XBTUSD_260925', 'kraken-futures')).toThrow(/UNCLASSIFIED/);
     expect(() => resolveAssetClass('PI_XBTUSD', 'kraken-futures')).toThrow(/UNCLASSIFIED/);
+  });
+});
+
+describe('P19-B-PERPFEED Step-4 BLOCKER-F: a degraded altname fetch REFUSES the recompute (negative leg)', () => {
+  // The throw happens in fetchSpotAssetAltnames, which recomputeCryptoPerpUniverse
+  // calls BEFORE any setConstant/registration — so "refused" structurally means
+  // nothing persisted and both completeness flags stay false (the resolver
+  // stays in fallback). These pin every degradation shape:
+  const mkResp = (ok: boolean, status: number, body: unknown) =>
+    ({ ok, status, json: async () => body }) as unknown as Response;
+
+  it('HTTP failure → throws, never an empty map', async () => {
+    await expect(fetchSpotAssetAltnames(async () => mkResp(false, 503, {}))).rejects.toThrow(/REFUSING the recompute/);
+  });
+  it('venue error payload on a 200 → throws', async () => {
+    await expect(fetchSpotAssetAltnames(async () => mkResp(true, 200, { error: ['EService:Unavailable'], result: {} }))).rejects.toThrow(/REFUSING the recompute/);
+  });
+  it('empty result on a clean 200 → throws (an empty altname map cannot be a complete input)', async () => {
+    await expect(fetchSpotAssetAltnames(async () => mkResp(true, 200, { error: [], result: {} }))).rejects.toThrow(/REFUSING the recompute/);
+  });
+  it('healthy payload → the map, with altnames intact', async () => {
+    const map = await fetchSpotAssetAltnames(async () => mkResp(true, 200, { error: [], result: { XLTC: { altname: 'LTC' }, XETC: { altname: 'ETC' } } }));
+    expect(map.get('XLTC')).toBe('LTC');
+    expect(map.get('XETC')).toBe('ETC');
   });
 });
 
