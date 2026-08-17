@@ -315,6 +315,37 @@ export function classifyKrakenFuturesInstrument(
   return 'unclassified';
 }
 
+/**
+ * Step-4 BLOCKER-G (Langston): the PRIMARY classification input gets the SAME
+ * refuse-on-degraded posture as the altnames map (BLOCKER-F) — r3 guarded the
+ * secondary input and left this one bare. Walk a degraded payload through the
+ * unguarded version: instruments=[] → both registries registered COMPLETE on
+ * empty sets (the flag is sticky and never inspects the array) → empty
+ * classified sets PERSISTED → last_recompute_at STAMPED → every kraken-futures
+ * symbol throws UNCLASSIFIED, a restart re-registers the empty sets, and the
+ * monthly self-gate refuses a retry for 28 days. One transient futures-API
+ * blip → four weeks of a persisted, complete, empty universe. So: resp.ok,
+ * the venue's own result field, and an empty instrument list all THROW —
+ * before any persistence (this call sits above every write in the recompute).
+ * (The RANKING fetch stays catch-and-degrade by design — ranking degrades
+ * gracefully; classification does not.) Exported with fetchImpl injection for
+ * the negative-leg tests.
+ */
+export async function fetchKrakenFuturesInstruments(fetchImpl: typeof fetch = fetch): Promise<KrakenFuturesInstrument[]> {
+  const resp = await fetchImpl(KF_INSTRUMENTS_URL);
+  if (!resp.ok) {
+    throw new Error(`[perpfeed][universe] instruments fetch degraded (HTTP ${resp.status}) — REFUSING the recompute; a degraded classification input must never persist (#546)`);
+  }
+  const json = await resp.json() as { result?: string; error?: unknown; instruments?: KrakenFuturesInstrument[] };
+  if (json.result != null && json.result !== 'success') {
+    throw new Error(`[perpfeed][universe] instruments fetch degraded (venue result=${JSON.stringify(json.result)}, error=${JSON.stringify(json.error ?? null)}) — REFUSING the recompute`);
+  }
+  if (!Array.isArray(json.instruments) || json.instruments.length === 0) {
+    throw new Error('[perpfeed][universe] instruments fetch degraded (missing/empty instrument list) — REFUSING the recompute');
+  }
+  return json.instruments;
+}
+
 const PERP_UNIVERSE_MODULE = 'passive_archive';
 const PERP_MEMBERS_KEY = 'crypto_perp_universe.members';
 const PERP_SUSPENDED_KEY = 'crypto_perp_universe.suspended';
@@ -406,9 +437,7 @@ export async function recomputeCryptoPerpUniverse(updatedBy: string): Promise<st
   const assetAltnames = await fetchSpotAssetAltnames();
   const cryptoSpotBases = new Set(spot.symbols.map(s => normalizeSpotBaseForJoin(s.split('/')[0], assetAltnames)));
 
-  const resp = await fetch(KF_INSTRUMENTS_URL);
-  const json = await resp.json() as { instruments?: KrakenFuturesInstrument[] };
-  const instruments = json.instruments ?? [];
+  const instruments = await fetchKrakenFuturesInstruments();
 
   const counts: Record<PerpClassification, number> = {
     equity_perp: 0, crypto_perp_candidate: 0, dated: 0, inverse: 0, not_tradeable: 0, unclassified: 0,

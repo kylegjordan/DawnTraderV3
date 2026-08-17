@@ -16,10 +16,14 @@
  *    (byte-identical default path).
  */
 import { describe, it, expect, beforeAll } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
 import {
   classifyKrakenFuturesInstrument,
   normalizeSpotBaseForJoin,
   fetchSpotAssetAltnames,
+  fetchKrakenFuturesInstruments,
   type KrakenFuturesInstrument,
 } from '../../services/passive-archive/universe-loader.js';
 import {
@@ -190,6 +194,57 @@ describe('P19-B-PERPFEED Step-4 BLOCKER-F: a degraded altname fetch REFUSES the 
     const map = await fetchSpotAssetAltnames(async () => mkResp(true, 200, { error: [], result: { XLTC: { altname: 'LTC' }, XETC: { altname: 'ETC' } } }));
     expect(map.get('XLTC')).toBe('LTC');
     expect(map.get('XETC')).toBe('ETC');
+  });
+});
+
+describe('P19-B-PERPFEED Step-4 BLOCKER-G: a degraded INSTRUMENTS fetch refuses the recompute (the primary input)', () => {
+  const mkResp = (ok: boolean, status: number, body: unknown) =>
+    ({ ok, status, json: async () => body }) as unknown as Response;
+
+  it('HTTP failure → throws', async () => {
+    await expect(fetchKrakenFuturesInstruments(async () => mkResp(false, 502, {}))).rejects.toThrow(/REFUSING the recompute/);
+  });
+  it('venue result != success on a 200 → throws', async () => {
+    await expect(fetchKrakenFuturesInstruments(async () => mkResp(true, 200, { result: 'error', error: 'apiLimitExceeded' }))).rejects.toThrow(/REFUSING the recompute/);
+  });
+  it('missing/empty instrument list on a clean 200 → throws (an empty universe cannot be a complete input)', async () => {
+    await expect(fetchKrakenFuturesInstruments(async () => mkResp(true, 200, { result: 'success', instruments: [] }))).rejects.toThrow(/REFUSING the recompute/);
+    await expect(fetchKrakenFuturesInstruments(async () => mkResp(true, 200, { result: 'success' }))).rejects.toThrow(/REFUSING the recompute/);
+  });
+  it('healthy payload → the instrument list intact', async () => {
+    const list = await fetchKrakenFuturesInstruments(async () => mkResp(true, 200, {
+      result: 'success',
+      instruments: [{ symbol: 'PF_XBTUSD', base: 'BTC', quote: 'USD', tradeable: true }],
+    }));
+    expect(list).toHaveLength(1);
+    expect(list[0].base).toBe('BTC');
+  });
+});
+
+describe('P19-B-PERPFEED Step-4 ordering pin: both refuse-on-degraded fetches precede ALL persistence', () => {
+  // Langston's non-blocking note on r3, converted from a filed hope into an
+  // enforced pin: BLOCKER-F/G are STRUCTURAL only while the guarded fetches sit
+  // above every write in recomputeCryptoPerpUniverse — a future edit moving a
+  // setConstant above them would un-do both silently. This test reads the
+  // SOURCE and asserts the ordering inside the recompute function body.
+  it('in recomputeCryptoPerpUniverse: instruments + altnames fetches come before every setConstant/register call', () => {
+    const src = readFileSync(
+      path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../services/passive-archive/universe-loader.ts'),
+      'utf-8',
+    );
+    const fnStart = src.indexOf('export async function recomputeCryptoPerpUniverse');
+    expect(fnStart).toBeGreaterThan(-1);
+    const body = src.slice(fnStart);
+    const idxInstruments = body.indexOf('fetchKrakenFuturesInstruments(');
+    const idxAltnames = body.indexOf('fetchSpotAssetAltnames(');
+    const idxFirstPersist = Math.min(
+      ...['setConstant(', 'registerXstockPerpVenueSymbols(', 'registerCryptoPerpVenueSymbols(']
+        .map(s => body.indexOf(s)).filter(i => i > -1),
+    );
+    expect(idxInstruments).toBeGreaterThan(-1);
+    expect(idxAltnames).toBeGreaterThan(-1);
+    expect(idxInstruments).toBeLessThan(idxFirstPersist);
+    expect(idxAltnames).toBeLessThan(idxFirstPersist);
   });
 });
 
