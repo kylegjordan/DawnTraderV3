@@ -190,7 +190,7 @@ A **commit + UTC timestamp**, not a date. **PRE-REGISTERED BAN on cross-half com
 
 ## 8. THE pivot_shift DISTRIBUTION ARTIFACT (Langston ruling 4 — "closes on the file, not on the word")
 
-**Measured 2026-08-16/17. OBJECT:** `vts_open_trades`, `context->>'atrAtOpen'`. **POPULATION:** `strategy='pivot_shift'`, `asset_class='crypto_spot'`, opened in the trailing 21 days, `entry_price>0 AND take_profit>entry_price AND atrAtOpen>0`: **n_rows 687, 22 null/zero ATR excluded, n=665 evaluable → wait, that is `sma_trend_ride`'s n. pivot_shift: n=224 rows, 206 with ATR.**
+**Measured 2026-08-16/17. OBJECT:** `vts_open_trades`, `context->>'atrAtOpen'`. **POPULATION:** `strategy='pivot_shift'`, `asset_class='crypto_spot'`, opened in the trailing 21 days, `entry_price>0 AND take_profit>entry_price AND atrAtOpen>0`. **pivot_shift: 224 rows, 206 with valid ATR. sma_trend_ride (same instrument, for the paired column): 687 rows, 22 null/zero ATR excluded, n=665.**
 
 | measure | pivot_shift (n=206) | sma_trend_ride (n=665) |
 |---|---|---|
