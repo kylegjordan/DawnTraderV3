@@ -346,6 +346,28 @@ export async function fetchKrakenFuturesInstruments(fetchImpl: typeof fetch = fe
   return json.instruments;
 }
 
+/**
+ * Step-4 §13 item (Langston, r4 pass) — the PARTIAL-degradation floor, homed IN
+ * THIS BATCH rather than filed: the empty-input guards (F/G/H) catch only the
+ * all-or-nothing shape; half the spot ticker batches failing would silently
+ * drop those bases and persist the result as complete. This is an OUTPUT
+ * plausibility check, so it catches partial degradation of ANY of the three
+ * classification inputs at once: if a previous non-empty classified crypto set
+ * exists and this recompute produced fewer than HALF as many candidates, the
+ * universe is presumed degraded and the recompute REFUSES. A genuine halving
+ * of Kraken's crypto perp listings inside one month is announced venue news —
+ * the operator reruns with the monthly script's --force after confirming it.
+ */
+export function assertClassifiedPlausible(prevCount: number | null, currentCount: number): void {
+  if (prevCount != null && prevCount > 0 && currentCount < Math.ceil(prevCount / 2)) {
+    throw new Error(
+      `[perpfeed][universe] classified crypto set imploded: ${currentCount} candidates vs ${prevCount} at the previous recompute ` +
+      `(floor = ${Math.ceil(prevCount / 2)}) — REFUSING the recompute; partial input degradation must never persist as complete (#546). ` +
+      `If Kraken genuinely delisted this many perps, confirm at the venue and rerun with --force.`,
+    );
+  }
+}
+
 const PERP_UNIVERSE_MODULE = 'passive_archive';
 const PERP_MEMBERS_KEY = 'crypto_perp_universe.members';
 const PERP_SUSPENDED_KEY = 'crypto_perp_universe.suspended';
@@ -420,7 +442,7 @@ export async function fetchSpotAssetAltnames(fetchImpl: typeof fetch = fetch): P
  * the budget-derived N, persists membership, and logs every add/drop.
  * Suspensions are PRESERVED across recomputes (a recompute is not an un-suspend).
  */
-export async function recomputeCryptoPerpUniverse(updatedBy: string): Promise<string[]> {
+export async function recomputeCryptoPerpUniverse(updatedBy: string, opts?: { acceptImplosion?: boolean }): Promise<string[]> {
   const { getConstant, setConstant } = await import('../module-constants-service.js');
 
   const cap = await getConstant<number>(PERP_UNIVERSE_MODULE, PERP_CAP_KEY, WILDCARD_KEY);
@@ -436,6 +458,16 @@ export async function recomputeCryptoPerpUniverse(updatedBy: string): Promise<st
   const spot = await loadCryptoSpotUniverse();
   const assetAltnames = await fetchSpotAssetAltnames();
   const cryptoSpotBases = new Set(spot.symbols.map(s => normalizeSpotBaseForJoin(s.split('/')[0], assetAltnames)));
+  // Step-4 BLOCKER-H (Langston): the THIRD classification input, guarded AT THE
+  // CALL SITE — loadCryptoSpotUniverse is B74-era shared machinery whose posture
+  // this batch does not change (a rate-limited 200 returns {error:[...]} with an
+  // empty result, which it converts to symbols:[] cleanly, no throw). An empty
+  // spot base set fails rule 4 for EVERY instrument → an authoritatively empty
+  // crypto side persisted complete for 28 days — the same walk as F/G through
+  // the spot venue's rate limiter. Same posture, same wording, zero blast radius.
+  if (cryptoSpotBases.size === 0) {
+    throw new Error('[perpfeed][universe] crypto_spot universe came back EMPTY — REFUSING the recompute; a degraded classification input must never persist (#546)');
+  }
 
   const instruments = await fetchKrakenFuturesInstruments();
 
@@ -453,6 +485,17 @@ export async function recomputeCryptoPerpUniverse(updatedBy: string): Promise<st
       // Rule 5: loud, named, never silently binned as crypto.
       console.warn(`[perpfeed][universe][UNCLASSIFIED] ${inst.symbol} (base=${inst.base ?? '?'}, category=${inst.category ?? '?'}, tradfi=${inst.tradfi ?? false}) — fails both positive tests; refused`);
     }
+  }
+
+  // Step-4 §13 partial-degradation floor — checked against the PREVIOUS
+  // classified set BEFORE any registration/persistence (inherits the ordering
+  // pin). `acceptImplosion` is the deliberate operator override threaded from
+  // the monthly script's --force, for a confirmed genuine venue delisting.
+  const prevClassified = await getConstant<Array<{ symbol: string }>>(PERP_UNIVERSE_MODULE, PERP_CLASSIFIED_CRYPTO_KEY, WILDCARD_KEY);
+  if (opts?.acceptImplosion) {
+    console.warn('[perpfeed][universe] --force: plausibility floor BYPASSED by deliberate operator action');
+  } else {
+    assertClassifiedPlausible(Array.isArray(prevClassified) ? prevClassified.length : null, candidates.length);
   }
 
   // OBJ-4 + Step-4 BLOCKER-B: refresh BOTH membership registries from the FULL

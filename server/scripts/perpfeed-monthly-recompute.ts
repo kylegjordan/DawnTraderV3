@@ -38,7 +38,9 @@ async function main(): Promise<void> {
   }
   if (force) console.warn('[perpfeed-recompute] --force: deliberate off-cycle recompute (operator action)');
   const { recomputeCryptoPerpUniverse } = await import('../services/passive-archive/universe-loader.js');
-  const members = await recomputeCryptoPerpUniverse(force ? 'perpfeed-recompute-forced' : 'perpfeed-monthly-recompute');
+  // --force also bypasses the partial-degradation plausibility floor (a
+  // confirmed genuine venue delisting is the only sanctioned reason).
+  const members = await recomputeCryptoPerpUniverse(force ? 'perpfeed-recompute-forced' : 'perpfeed-monthly-recompute', { acceptImplosion: force });
   console.log(`[perpfeed-recompute] done — ${members.length} members persisted`);
 }
 

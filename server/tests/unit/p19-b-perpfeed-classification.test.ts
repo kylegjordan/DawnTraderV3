@@ -24,6 +24,7 @@ import {
   normalizeSpotBaseForJoin,
   fetchSpotAssetAltnames,
   fetchKrakenFuturesInstruments,
+  assertClassifiedPlausible,
   type KrakenFuturesInstrument,
 } from '../../services/passive-archive/universe-loader.js';
 import {
@@ -221,6 +222,16 @@ describe('P19-B-PERPFEED Step-4 BLOCKER-G: a degraded INSTRUMENTS fetch refuses 
   });
 });
 
+describe('P19-B-PERPFEED Step-4 BLOCKER-H + §13 floor: the third input and partial degradation', () => {
+  it('plausibility floor: a halved classified set REFUSES; above half passes; first-ever run has no floor', () => {
+    // partial degradation of ANY input shows up as an imploded output
+    expect(() => assertClassifiedPlausible(200, 99)).toThrow(/REFUSING the recompute/);
+    expect(() => assertClassifiedPlausible(200, 100)).not.toThrow();
+    expect(() => assertClassifiedPlausible(null, 5)).not.toThrow();  // birth recompute
+    expect(() => assertClassifiedPlausible(0, 0)).not.toThrow();     // empty prior is no floor
+  });
+});
+
 describe('P19-B-PERPFEED Step-4 ordering pin: both refuse-on-degraded fetches precede ALL persistence', () => {
   // Langston's non-blocking note on r3, converted from a filed hope into an
   // enforced pin: BLOCKER-F/G are STRUCTURAL only while the guarded fetches sit
@@ -245,6 +256,13 @@ describe('P19-B-PERPFEED Step-4 ordering pin: both refuse-on-degraded fetches pr
     expect(idxAltnames).toBeGreaterThan(-1);
     expect(idxInstruments).toBeLessThan(idxFirstPersist);
     expect(idxAltnames).toBeLessThan(idxFirstPersist);
+    // BLOCKER-H's call-site guard + the §13 floor also precede every write
+    const idxEmptyGuard = body.indexOf('cryptoSpotBases.size === 0');
+    const idxFloor = body.indexOf('assertClassifiedPlausible(');
+    expect(idxEmptyGuard).toBeGreaterThan(-1);
+    expect(idxFloor).toBeGreaterThan(-1);
+    expect(idxEmptyGuard).toBeLessThan(idxFirstPersist);
+    expect(idxFloor).toBeLessThan(idxFirstPersist);
   });
 });
 
