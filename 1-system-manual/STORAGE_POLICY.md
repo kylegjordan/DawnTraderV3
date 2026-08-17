@@ -26,6 +26,14 @@ So a given day's data (for a 90-day-hot table) lives: ~90 days HOT → the follo
 
 **Rehydration:** any archived data is retrievable via `b75-rehydrate.ts` (warm = fast, cold = slightly slower). The manifest tells the rehydrator where each partition lives.
 
+## 2.5 ★ THE 30-DAY DEFAULT RULE (Kyle directive 2026-08-17 — the standing retention policy)
+
+**"Unless there is a specific reason why we need more than thirty days of data, we will only maintain a rolling thirty days of data in the hot tier. Everything else will be migrated on a daily basis into warm storage."** (Kyle, verbatim.)
+
+Operationally: **30-day rolling hot is the DEFAULT for every table.** A hot window above 30 days is an EXCEPTION that must carry its **specific documented reason in the §3 table** — a reader that genuinely queries hot history beyond 30 days, named with its lookback (rule 29: object + population). An exception without a documented reason is a policy violation: cut it to 30. Daily partitioning (the Wave-D cutover pattern) is the enabling mechanism — monthly-era tables convert (#688) so the rolling window actually moves daily instead of in month chunks. Move-not-delete is unchanged: warm→cold preserves everything indefinitely.
+
+**Status at the rule's adoption (2026-08-17):** `signal_eval_archive` mid-cut (90→75 staged→30, P19-B-PERPFEED OBJ-7a); `pair_scan_archive` + `signal_eval_provenance` **Kyle-decided 90→30 same day** (executing via a temporary ≤17-day step so July-and-older tiers immediately, then the permanent 30); `exit_decision_archive`, `macro_feed_archive`, `switch_on_shadow_evidence` (90 d) and the four `*_ohlc_1m` tables (365 d) are **UNDER REVIEW by the P19-B-PERPFEED storage-machinery audit (OBJ-10)** — each either gets its documented specific-reason recorded here or cuts to 30. `closed_trades` (365) + `context_bridge_log` (14) reviewed in the same pass.
+
 ## 3. Per-table retention (`module_constants.data_lifecycle`)
 
 | Table(s) | Kind | HOT retention | Then |
