@@ -1616,7 +1616,11 @@ export class StrategyEngine {
       const _effATR = clampEffectiveATR(computeATR(priceHistory), entryPrice);
       const _gr = applyGlobalGuards(entryPrice, stopPrice, targetPrice, _effATR, _gate);
       recordGuardEval('dhma', _gr.rr, _gr.pass, _gr.dropReason, assetClass, _effATR, _gr.atrsToTarget);
-      if (!_gr.pass) { setNullReason('guard_fail'); return null; }
+      // Langston 2026-08-17 (rule-24 bucket 1, missed reorg-B3.3 sweep site — the ONLY one of 18):
+      // the bare `if (!_gr.pass)` hard-dropped rr_below_min/unreachable under 'tag' disposition
+      // while the other 17 pass them through for VTS learning. strategy-helpers.ts:451 states the
+      // migration verbatim; the disposition test pins the SSOT fn, not call sites, so it passed.
+      if (guardForcesDrop(_gr, gateDisposition)) { setNullReason('guard_fail'); return null; }
     }
 
     return signal;
