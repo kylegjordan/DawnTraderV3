@@ -99,3 +99,19 @@ export function recordConstantsVersion(
 export function _resetSeenHashesForTests(): void {
   seenHashes.clear();
 }
+
+// ★ P19-B-FEEVIABILITY mark-2 precondition (Langston, 2026-08-17): the expectancy_gates
+// resolved-triple hash — ONE helper so the reject row, the orchestrator admit row and the
+// engine open row stamp IDENTICAL versions (a partition key differing by construction across
+// rows would silently break the very partition it exists for). Resolve+hash+record, deduped;
+// null on any failure — a version miss must never block a trading-path write.
+import { getPerClassTargetGate } from '../../core/calculations/expectancy.js';
+export function gateConstantsVersionFor(assetClass: string, strategy: string): string | null {
+  try {
+    const g = getPerClassTargetGate(assetClass, strategy);
+    const resolvedSet = { target_floor_pct: g.floorPct, min_rr: g.minRR, reach_atr_max: g.reachAtrMax };
+    const hash = hashResolvedSet('expectancy_gates', resolvedSet);
+    recordConstantsVersion({ hash, moduleName: 'expectancy_gates', resolvedSet }, assetClass, strategy);
+    return hash;
+  } catch { return null; }
+}

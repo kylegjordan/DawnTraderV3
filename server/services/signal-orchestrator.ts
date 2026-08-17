@@ -189,7 +189,7 @@ import {
 import { checkPerUnderlyingCap, formatDecisionLog } from './per-underlying-cap.js';
 // P19-B-FEEVIABILITY OBJ-1a: geometry-config VERSION stamp on SQE-reject archive rows
 // (the B-NEW-53 per-strategy resolved-constants hash — version-not-value, Langston r2.1(b)).
-import { resolveConstantsProvenance, recordConstantsVersion, hashResolvedSet } from './data-archive/decision-provenance.js';
+import { resolveConstantsProvenance, recordConstantsVersion, gateConstantsVersionFor } from './data-archive/decision-provenance.js';
 import { recordNormalizerAtr } from '../strategies/guard-eval-tracker.js'; // #371 normalizer-side capture
 
 export interface SignalOrchestratorConfig {
@@ -1025,18 +1025,7 @@ export class SignalOrchestrator {
               } catch { /* fire-and-forget */ }
               return null;
             })(),
-            gateConstantsVersion: (() => {
-              try {
-                const g = getPerClassTargetGate(sqeAssetClass, strategyId);
-                const resolvedSet = { target_floor_pct: g.floorPct, min_rr: g.minRR, reach_atr_max: g.reachAtrMax };
-                const hash = hashResolvedSet('expectancy_gates', resolvedSet);
-                // Step-4 NEW-1: record the set so the hash is DEREFERENCEABLE (parity with the
-                // strategy hash; dedup keys on hash, module name is inside the canonical JSON).
-                recordConstantsVersion({ hash, moduleName: 'expectancy_gates', resolvedSet }, sqeAssetClass, strategyId);
-                return hash;
-              } catch { /* fire-and-forget */ }
-              return null;
-            })(),
+            gateConstantsVersion: gateConstantsVersionFor(sqeAssetClass, strategyId), // Step-4 NEW-1 + mark-2: the shared helper (identical stamp on reject/admit/open rows)
           },
         });
       } catch (b70Err) {
@@ -1644,6 +1633,10 @@ export class SignalOrchestrator {
           gate: 'admitted',
           accepted: true,
           path: 'active-signal-orchestrator',
+          // ★ mark-2 precondition (Langston 2026-08-17): the ADMIT row now carries the same
+          // expectancy_gates version as the reject row — without it the population that carries
+          // the outcome evidence partitioned only by deploy timestamp, the weaker instrument.
+          gateConstantsVersion: gateConstantsVersionFor(sizingContext.assetClass, strategyId),
         },
       });
     } catch (b70Err) {

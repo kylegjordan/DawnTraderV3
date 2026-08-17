@@ -3582,7 +3582,9 @@ export class ActiveExecutionEngine {
           strategy: signal.strategy,
           rejectStage: 'admitted',
           confidenceModulated: signal.confidence,
-          gateDecision: { gate: 'admitted', accepted: true, path: 'paper-execution-open', entryPrice: actualEntryPrice, stopPrice: signal.stopPrice, targetPrice: signal.targetPrice },
+          gateDecision: { gate: 'admitted', accepted: true, path: 'paper-execution-open', entryPrice: actualEntryPrice, stopPrice: signal.stopPrice, targetPrice: signal.targetPrice,
+            // ★ mark-2 precondition (Langston 2026-08-17): same expectancy_gates version stamp as the SQE reject row.
+            gateConstantsVersion: (await import('./data-archive/decision-provenance.js')).gateConstantsVersionFor(_tradeClass, signal.strategy) },
           features: { entrySlippage: totalSlippage, entryFee },
         });
       } catch (b70Err) {
