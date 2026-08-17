@@ -2,8 +2,10 @@
 
 change-class: architecture
 
-**Author:** CC-C (Claude Analyst), 2026-08-17. **Status:** DRAFT r1 — awaiting Langston Step-1 review.
+**Author:** CC-C (Claude Analyst), 2026-08-17. **Status:** r2 — Langston Step-1 CHANGES NEEDED (08:08Z) incorporated; awaiting his r2 pass.
 **Kyle authorization:** 2026-08-17 directive — during the P19-B-FEEVIABILITY quiet window, "research and activate the feed for the crypto perpetuals."
+
+> **r2 changes (all from Langston's Step-1 review, his own live measurements):** §4 restated as a HARD PRECONDITION (live disk 77.3%, not the stale 67.8% alert snapshot); §3 collision set enumerated (14 truncation victims), PF_XBTUSD example corrected (exists, mis-parses LOUDLY), PI_ inverse perps explicitly OUT; membership design upgraded to positive-both-sides + UNCLASSIFIED refuse-and-log (no default-else); OBJ-1 eviction-logging/daily-refresh/constant-cap conditions; OBJ-3 behaviour-preservation proof strengthened; §5 deploy NEVER rides mark-2 (own labelled deploy). Stale equity-universe finding filed as #687.
 
 ---
 
@@ -34,13 +36,13 @@ change-class: architecture
 
 ## 2. Objectives
 
-**OBJ-1 — Universe selection (design decision for Step-1 review).** Recommend: **dynamic** loader leg querying `https://futures.kraken.com/derivatives/api/v3/instruments` (the endpoint B74 used to verify the equity-perp universe), filtered to `tradeable=true` crypto perpetuals whose BASE asset is present in the current **crypto_spot dynamic universe** (maximizes join value with our spot data — basis/funding vs. our own traded pairs), refreshed at startup + daily alongside the crypto-spot refresh. **Sizing cap mandatory** (see §4 disk pressure): propose a hard cap (e.g. top ~40 by open interest) so the universe cannot silently balloon. Alternative if Langston prefers B74's equity precedent: a static seed JSON of majors. Exact instrument count + field shapes verified by live probe in pre-audit (Step 2), not assumed.
+**OBJ-1 — Universe selection (Langston Step-1: AGREED with conditions).** **Dynamic** loader leg querying `https://futures.kraken.com/derivatives/api/v3/instruments` (Langston's live probe 2026-08-17: **276 tradeable `PF_` perps, all USD-quoted** — EUR/GBP quote handling is out of the design), filtered to `tradeable=true` crypto perpetuals whose BASE asset is present in the current **crypto_spot dynamic universe**, with a hard cap ranked by open interest. **Langston's three binding conditions on the cap being a MOVING ranking:** (a) **eviction is LOGGED with a last-captured timestamp** — a later reader must be able to distinguish "no activity" from "not captured"; (b) refresh on the **daily cadence only**, never per-cycle; (c) the cap is a **`module_constants` key, not a literal**. Field shapes + the authoritative class-discriminator field verified by live probe in pre-audit.
 
 **OBJ-2 — Tables + partitions.** `crypto_perp_ohlc_1m` + `crypto_perp_ticker_snap`, monthly-partitioned, same shape as the `xstock_perp_*` twins. Migration (gitignored `*.sql` → `git add -f` + MANIFEST.txt registration) pre-creates partitions INCLUDING the deploy month (the B74 v1 off-by-one — inserts failed until UTC midnight — is documented in the bootstrap's self-heal comment; do not repeat it). `SIX_TABLES` → eight, in both the bootstrap headroom check and the partition cron.
 
-**OBJ-3 — The archiver leg.** Recommend: **generalize** `equity-perp-archiver.ts` into one parameterized Kraken-Futures archiver (params: universe loader, asset-class stamp, table pair) instantiated twice — venue, protocol, dual-path capture, backoff, and stats shape are byte-identical needs; a copied sibling is the duct-tape rule 15 forbids. The generalization is behaviour-preserving for the running xstock_perp leg (verification: xstock_perp rows keep landing post-deploy at the same cadence). Kill-switch: new module-constants key in the existing `passive_archive` family so the crypto-perp leg can be disabled independently. If Langston judges the refactor risk to the running leg unwarranted, the fallback is a sibling file — but the recommendation is generalize.
+**OBJ-3 — The archiver leg (Langston Step-1: generalize AGREED, rule 15; proof strengthened per his ruling).** **Generalize** `equity-perp-archiver.ts` into one parameterized Kraken-Futures archiver (params: universe loader, asset-class stamp, table pair) instantiated twice. **Behaviour-preservation proof — the strengthened form, not a level check:** (a) baseline measured **BEFORE the change** over a stated window, object + population named (rule 29a); (b) **matched-window rows-per-unit-time comparison** post-deploy; (c) a **byte-level assertion** that the current static equity set round-trips through the new code path to IDENTICAL canonical output; (d) the equity leg's existing kill-switch key (`b74_perp_capture_enabled`) is asserted **UNCHANGED** — a renamed constant silently disarms a live capture leg and nothing would tell you. New crypto-perp leg gets its OWN module-constants kill-switch key in the `passive_archive` family. This objective is **disk-neutral** (no new writer starts) and proceeds regardless of the §4 precondition.
 
-**OBJ-4 — Canonicalizer crypto-perp mapping.** See §3 THE TRAP. Mapping must be membership-driven or shape-disambiguated, never the bare X-separator regex. Any probing dead-ends land in `KNOWN_NONEXISTENT_NAMES` (rule 14).
+**OBJ-4 — Canonicalizer crypto-perp mapping (Langston Step-1 design amendment folded in).** See §3 THE TRAP. **The mandated design: positive membership on BOTH sides plus an explicit UNCLASSIFIED bucket that REFUSES and LOGS — no default-to-crypto `else` branch** (an unknown must not wear a plausible answer's clothes, #546 applied to classification). The naive "crypto = all `PF_` minus equity-membership" is REJECTED because the equity authority (`equity-perp-universe.json`, `_lastUpdated: 2026-04-30`, 10 symbols) is **6 symbols stale against Kraken's live 16** (`AMZNX, ANTHROPICX, COINX, METAX, OPENAIX, SPCXX` missing) — subtraction would misclassify six real equity perps as crypto. Filed as **RUNNING_ISSUES #687**, homed to this objective. Pre-audit identifies the instruments payload's authoritative class-discriminator field (live probe); failing that, curated membership lists maintained under the daily refresh. **Classification membership is a SEPARATE concern from the capture universe** — whether the equity CAPTURE leg also expands 10 → 16 is decided inside this objective but gated by the same §4 disk precondition (it adds writers). Tests: pin all 14 truncation victims (§3) + a negative control asserting the 16 equity names still map unchanged. Any probing dead-ends land in `KNOWN_NONEXISTENT_NAMES` (rule 14). This objective's mapping code is **disk-neutral** and proceeds regardless of §4.
 
 **OBJ-5 — Monitor visibility.** The drift-dashboard monitor panel gains the crypto-perp leg's stats (connected / symbols / cumulative rows), same shape as `getEquityPerpStats`. §9.3 UI verification: the panel renders the new leg on staging.
 
@@ -48,26 +50,39 @@ change-class: architecture
 
 ---
 
-## 3. THE TRAP — crypto perp symbols that end in X (found in this scope's provenance read)
+## 3. THE TRAP — crypto perp symbols that end in X (found in this scope's provenance read; ENUMERATED LIVE by Langston at Step-1, 2026-08-17)
 
-The live perp regex `^PF_([A-Z]+)X(USD|EUR|GBP)$` treats the trailing `X` of the ticker as a separator. Kraken Futures CRYPTO perps use `PF_<BASE><QUOTE>` with NO separator (`PF_XBTUSD`, `PF_SOLUSD`). Consequences if crypto perps were fed through the existing mapping unchanged:
+The live perp regex `^PF_([A-Z]+)X(USD|EUR|GBP)$` treats the trailing `X` of the ticker as a separator. Kraken Futures CRYPTO perps use `PF_<BASE><QUOTE>` with NO separator. **Langston's live probe of `/derivatives/api/v3/instruments`: 276 tradeable `PF_` perps, all USD-quoted; 30 hit the equity regex — 16 are genuine xStock perps, 14 are crypto bases getting the last letter eaten:**
 
-- **Most crypto perps don't match at all** (`PF_XBTUSD`: char before `USD` is `T`) → fall through to looser crypto patterns → mis-parse hazard.
-- **Worse — the silent-wrong-answer class:** any crypto base ENDING in X matches the equity shape and gets its last letter eaten: `PF_TRXUSD` → `TR/USD:PERP`, `PF_AVAXUSD` → `AVA/USD:PERP`, `PF_STXUSD` → `ST/USD:PERP`, `PF_DYDXUSD` → `DYD/USD:PERP`. Same failure family as the 17 collision tickers on the spot side: a matching shape is not a matching thing.
+`AVAX→AVA, CFX→CF, CVX→CV, DYDX→DYD, FLUX→FLU, GMX→GM, ICX→IC, IMX→IM, IOTX→IOT, SNX→SN, SPX→SP, STX→ST, TRX→TR, ZRX→ZR`
 
-**Required design:** disambiguate by UNIVERSE MEMBERSHIP (the loader knows which PF_ names are crypto perps vs xStock perps), not by regex shape. The equity regex stays for equity perps; crypto perps map via an explicit membership set or an equivalent structural discriminator agreed at review. Pre-audit enumerates the actual X-ending bases in the live instruments list so the collision set is named, not estimated.
+Two failure classes, corrected per Langston (r1's `PF_XBTUSD` example was wrong — that symbol EXISTS and mis-parses **loudly** to `PF_XBT/USD`, not silently):
+- **The loud class:** most crypto perps miss the equity regex and fall through to looser patterns → visible mis-parse.
+- **The silent class — the one that matters:** the 14 X-ending bases above match the equity shape and produce a *plausible wrong* canonical pair. Same failure family as the 17 spot collision tickers: a matching shape is not a matching thing.
+
+**Tests required (Langston):** pin all 14 in a test, PLUS a negative control asserting the 16 equity names still map unchanged.
+
+**`PI_` inverse perps — explicitly OUT for v1 (Langston recommendation, adopted):** Kraken lists 4 tradeable coin-margined inverse perps (`PI_XBTUSD`, `PI_ETHUSD`, `PI_LTCUSD`, `PI_XRPUSD`) with inverted PnL math. Excluded from capture AND from the canonicalizer mapping, with this exclusion written down here and in the universe loader — because an inverse contract silently entering a Phase-26 consumer is a worse failure than a missing one.
+
+**Required design:** membership-driven disambiguation per OBJ-4 (positive membership both sides + UNCLASSIFIED refuse-and-log). The equity regex stays for equity perps.
 
 ---
 
-## 4. Sizing + disk pressure (must be settled at review, not discovered in production)
+## 4. ⛔ HARD PRECONDITION — no new continuous writer until the disk retention/tiering decision lands (Langston Step-1 gate, 2026-08-17)
 
-Staging DB is at **67.8% of 200GB** (03fad8a4 alert, 2026-08-17). The xstock_perp leg is only 10 symbols; Kraken Futures lists a much larger crypto-perp set (exact count from the pre-audit probe). Per-symbol steady-state: 1,440 OHLC rows/day + ticker snaps at the 1s throttle (the dominant term). The universe cap (OBJ-1) is therefore a DISK decision, not just a relevance decision. Pre-audit must produce: measured xstock_perp table sizes after ~3.5 months live → projected GB/month per symbol → the cap that keeps the leg within an agreed budget, plus the STORAGE_POLICY retention window that bounds it long-term.
+**r1 quoted 67.8% — that was alert `03fad8a4`'s MINT-TIME SNAPSHOT (2026-08-08), not the gauge.** The rule-29 lesson applies to this scope's own text: read the instrument, never a stored figure. **Live `[DatabaseMonitor]` on staging (Langston's own measurement): 77.3% = 154.6 GB of the 200 GB cap at 2026-08-17T00:15Z**, ramping **+1.23 pp/day ≈ 2.5 GB/day** (69.3% on 08-10 → 77.3% on 08-16), straight-line to the cap around **2026-09-04**. The nightly sweep has freed **0 bytes for 16 consecutive nights** (retention windows never sized against current write rates) while archival-health greens on job *age*, not bytes freed.
+
+**THE GATE:** the crypto-perp capture leg (a new continuous writer) does **NOT deploy/switch on** until the retention/tiering decision lands. **Named owners (§9.4):** the lever decision — shorten retention vs. raise the disk cap — is **Kyle's**, put to him by Langston on alert `03fad8a4` (2026-08-17 08:01Z triage); the implementing retention batch is **CC-B-owned** per that triage. Neither is this batch's work.
+
+**What proceeds regardless:** OBJ-3 (archiver generalization — no new writer starts) and OBJ-4 (canonicalizer mapping) are **disk-neutral**; scope/pre-audit/implementation/review all proceed. Only the switch-on waits.
+
+**What pre-audit still produces:** measured xstock_perp table actuals after ~3.5 months live → projected GB/month per symbol → the OBJ-1 cap value proposed against POST-DECISION headroom, plus the STORAGE_POLICY retention rows for both new tables sized against the write rate from day one — this leg must never join the "windows never sized against write rates" failure class it is being gated behind.
 
 ---
 
-## 5. Deploy sequencing (the marked window binds this)
+## 5. Deploy sequencing (the marked window binds this — Langston Step-1 ruling REPLACES r1's recommendation)
 
-P19-B-FEEVIABILITY's marked window is live; mark-2 deploys after the 2026-08-18T23:45Z mark verification. **This batch does NOT deploy before mark-2.** Recommendation: if Langston's code review completes in time, ride the mark-2 deploy (one restart, and a passive-archive leg cannot touch admission-conditioned metrics — it is outside the trading path); otherwise its own deploy immediately after, labelled in the study record either way. Either path is recorded in the FEEVIABILITY study log at deploy time (window labelled at mint).
+P19-B-FEEVIABILITY's marked window is live; mark-2 deploys after the 2026-08-18T23:45Z mark verification. **This batch does NOT deploy before mark-2, and does NOT ride the mark-2 deploy either (Langston's ruling, adopted):** the archiver shares B74's counting semaphore, and the disk is at 77.3% — the value of a marked window is a clean attribution surface, and introducing a new continuous writer inside it buys one saved restart at the cost of a confounder we don't have to accept. **This batch takes its OWN labelled deploy after mark-2**, recorded in the FEEVIABILITY study log at deploy time (window labelled at mint) — and only once the §4 precondition has cleared.
 
 ---
 
