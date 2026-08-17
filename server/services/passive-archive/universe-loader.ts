@@ -351,8 +351,11 @@ export async function fetchKrakenFuturesInstruments(fetchImpl: typeof fetch = fe
  * THIS BATCH rather than filed: the empty-input guards (F/G/H) catch only the
  * all-or-nothing shape; half the spot ticker batches failing would silently
  * drop those bases and persist the result as complete. This is an OUTPUT
- * plausibility check, so it catches partial degradation of ANY of the three
- * classification inputs at once: if a previous non-empty classified crypto set
+ * plausibility check on the CRYPTO side: it catches any degradation that
+ * SHRINKS the crypto candidate count, whichever input caused it. (Known limit,
+ * Langston r5: the EQUITY side has no floor — a payload whose fields degrade
+ * only the equity classification is uncaught here; homed at governance.)
+ * If a previous non-empty classified crypto set
  * exists and this recompute produced fewer than HALF as many candidates, the
  * universe is presumed degraded and the recompute REFUSES. A genuine halving
  * of Kraken's crypto perp listings inside one month is announced venue news —
@@ -363,7 +366,7 @@ export function assertClassifiedPlausible(prevCount: number | null, currentCount
     throw new Error(
       `[perpfeed][universe] classified crypto set imploded: ${currentCount} candidates vs ${prevCount} at the previous recompute ` +
       `(floor = ${Math.ceil(prevCount / 2)}) — REFUSING the recompute; partial input degradation must never persist as complete (#546). ` +
-      `If Kraken genuinely delisted this many perps, confirm at the venue and rerun with --force.`,
+      `If Kraken genuinely delisted this many perps, confirm at the venue and rerun with --confirm-delisting.`,
     );
   }
 }
@@ -493,7 +496,7 @@ export async function recomputeCryptoPerpUniverse(updatedBy: string, opts?: { ac
   // the monthly script's --force, for a confirmed genuine venue delisting.
   const prevClassified = await getConstant<Array<{ symbol: string }>>(PERP_UNIVERSE_MODULE, PERP_CLASSIFIED_CRYPTO_KEY, WILDCARD_KEY);
   if (opts?.acceptImplosion) {
-    console.warn('[perpfeed][universe] --force: plausibility floor BYPASSED by deliberate operator action');
+    console.warn('[perpfeed][universe] --confirm-delisting: plausibility floor BYPASSED — operator asserts a venue-confirmed delisting');
   } else {
     assertClassifiedPlausible(Array.isArray(prevClassified) ? prevClassified.length : null, candidates.length);
   }
