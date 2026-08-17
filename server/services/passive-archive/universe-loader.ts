@@ -493,7 +493,7 @@ export async function recomputeCryptoPerpUniverse(updatedBy: string, opts?: { ac
   // Step-4 §13 partial-degradation floor — checked against the PREVIOUS
   // classified set BEFORE any registration/persistence (inherits the ordering
   // pin). `acceptImplosion` is the deliberate operator override threaded from
-  // the monthly script's --force, for a confirmed genuine venue delisting.
+  // the monthly script's --confirm-delisting flag (venue-confirmed delisting).
   const prevClassified = await getConstant<Array<{ symbol: string }>>(PERP_UNIVERSE_MODULE, PERP_CLASSIFIED_CRYPTO_KEY, WILDCARD_KEY);
   if (opts?.acceptImplosion) {
     console.warn('[perpfeed][universe] --confirm-delisting: plausibility floor BYPASSED — operator asserts a venue-confirmed delisting');

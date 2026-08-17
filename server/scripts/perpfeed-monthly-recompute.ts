@@ -46,10 +46,14 @@ async function main(): Promise<void> {
   if (force) console.warn('[perpfeed-recompute] --force: deliberate off-cycle recompute (cadence override only — the degradation floor stays ARMED)');
   if (confirmDelisting) console.warn('[perpfeed-recompute] --confirm-delisting: the #546 plausibility floor is BYPASSED — the operator asserts a VENUE-CONFIRMED delisting of this scale');
   const { recomputeCryptoPerpUniverse } = await import('../services/passive-archive/universe-loader.js');
-  const members = await recomputeCryptoPerpUniverse(
-    force || confirmDelisting ? 'perpfeed-recompute-forced' : 'perpfeed-monthly-recompute',
-    { acceptImplosion: confirmDelisting },
-  );
+  // Distinct durable attribution (Langston r6 obs. 2): a floor bypass must be
+  // self-evident in the persisted module_constants row, not only in console
+  // output that ages out — a safety event and an ordinary off-cycle rerun get
+  // different updated_by strings.
+  const updatedBy = confirmDelisting ? 'perpfeed-recompute-delisting-confirmed'
+    : force ? 'perpfeed-recompute-forced'
+    : 'perpfeed-monthly-recompute';
+  const members = await recomputeCryptoPerpUniverse(updatedBy, { acceptImplosion: confirmDelisting });
   console.log(`[perpfeed-recompute] done — ${members.length} members persisted`);
 }
 
