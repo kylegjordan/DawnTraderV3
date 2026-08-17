@@ -15,9 +15,12 @@
 --   2. hot_retention_days seeds for both new tables: 30 (HOT residency only —
 --      data_lifecycle.default_warm_retention_days = 365 preserves in warm,
 --      then cold rotation; "30" is NOT total retention).
---   3. The crypto-perp universe governance constants: budget-derived cap
---      (N=20 @ the 5 GB/month proposed budget, pre-audit r3 arithmetic at the
---      live 4s throttle), the per-class throttle override (5000ms, OBJ-8/#440),
+--   3. The crypto-perp universe governance constants: the cap is a SANITY
+--      BOUND (400, above any plausible universe) — Kyle's mid-Step-4 directive
+--      2026-08-17 set the SCOPE to ALL classified crypto perps (~257 on the
+--      venue), superseding the earlier N=20 budget instantiation; the honest
+--      standing cost (~27 GB/month resident at 10s pacing) is in scope OBJ-1.
+--      Per-class throttle seeded 10000ms (Kyle space-first; one UPDATE to change),
 --      and the fail-closed capture kill-switch (EXPLICIT false row — deploying
 --      this migration must not start the writer; scope §4 gate).
 --   4. signal_eval_archive daily cutover (2026-09-01): DROP the ELEVEN empty
@@ -132,16 +135,16 @@ DO UPDATE SET value = EXCLUDED.value, updated_by = EXCLUDED.updated_by, updated_
 
 -- ───────────────────────────────────────────────────────────────────────────
 -- 3. Universe governance constants (passive_archive).
---    max_symbols = 20: the PROPOSED 5 GB/month budget instantiated at the
---    pre-audit r3 rate model (~254 MB/sym/month at the 5s per-class throttle);
---    re-derived MONTHLY against the resident set (scope OBJ-1a).
+--    max_symbols = 400: a SANITY BOUND above any plausible universe — Kyle
+--    2026-08-17: scan ALL classified crypto perps. The monthly re-derivation
+--    (scope OBJ-1a) now REPORTS budget consumed rather than capping scope.
 --    The kill-switch row is EXPLICIT false — fail-closed until the §4 gate
 --    discharges; switch-on is a deliberate flip of this row, never a deploy.
 -- ───────────────────────────────────────────────────────────────────────────
 INSERT INTO module_constants (module_name, exchange, asset_class, strategy, regime, constant_name, value, updated_by)
 VALUES
-  ('passive_archive', '*', '*',           '*', '*', 'crypto_perp_universe.max_symbols',    '20'::jsonb,    'p19-b-perpfeed-obj1'),
-  ('passive_archive', '*', 'crypto_perp', '*', '*', 'ticker_snapshot_min_interval_ms',     '5000'::jsonb,  'p19-b-perpfeed-obj8-440-takeover'),
+  ('passive_archive', '*', '*',           '*', '*', 'crypto_perp_universe.max_symbols',    '400'::jsonb,   'p19-b-perpfeed-obj1-kyle-all-in'),
+  ('passive_archive', '*', 'crypto_perp', '*', '*', 'ticker_snapshot_min_interval_ms',     '10000'::jsonb, 'p19-b-perpfeed-obj8-440-takeover'),
   ('passive_archive', '*', '*',           '*', '*', 'crypto_perp_capture_enabled',         'false'::jsonb, 'p19-b-perpfeed-gate-fail-closed')
 ON CONFLICT (module_name, exchange, asset_class, strategy, regime, constant_name)
 DO UPDATE SET value = EXCLUDED.value, updated_by = EXCLUDED.updated_by, updated_at = now();
