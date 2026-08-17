@@ -209,6 +209,17 @@ def src_transcripts():
                     text = c if isinstance(c, str) else " ".join(
                         b.get("text", "") for b in c if isinstance(b, dict) and b.get("type") == "text"
                     ) if isinstance(c, list) else ""
+                    # ★ COMPACTION SUMMARIES ARE NOT KYLE. Measured 2026-08-17 by
+                    # crew-status-audit.py: of the 1,792 turns this predicate admits, 694
+                    # (38.7%) are not Kyle -- 681 compaction summaries plus 13 isMeta. They
+                    # evade the "<" test because they open with plain prose ("This session is
+                    # being continued from a previous conversation..."), so the tool could read
+                    # a machine-written recap as the last thing Kyle said. Both flags live on
+                    # the RECORD, not in the text -- structural, so no heuristic is involved.
+                    # (The tag test alone was measured CORRECT for scheduled-task and
+                    # task-notification turns: zero of those evaded it.)
+                    if ev.get("isCompactSummary") or ev.get("isMeta"):
+                        continue
                     if role == "user" and text and not text.lstrip().startswith("<"):
                         if SUMMARY_PREAMBLE in text:      # this job's own summariser transcript
                             is_summariser = True
