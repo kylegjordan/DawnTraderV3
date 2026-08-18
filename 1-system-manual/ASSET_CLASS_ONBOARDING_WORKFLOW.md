@@ -592,6 +592,15 @@ Three-layer calibration discipline: **Layer 1** = domain-knowledge baseline (TS 
 
 **Observation-period sizing is per-class** (no universal "X days"): equities trade 24/5 (~80 hr/wk) vs crypto 24/7 (168 hr/wk), so equivalent sample volume takes longer wall-clock. Declare it at scope-lock from sample-rate-per-day evidence; minimum ≥150 samples/regime/factor-bucket; wall-clock minimum ≥ one full weekly cycle (Mon/Fri intraday variation); maximum: don't observe past the point where regime conditions have shifted enough that early data is no longer comparable. Exit-side metrics calibrated in Layer 3 for a different-volatility class: time-to-target by regime, MAE-before-profit, MFE-at-exit, ATR-vs-%-stop, partial-take P&L impact, hold-time by regime — these feed position-management trigger calibration (BE-stop arming, trailing activation, partial-take fractions). Cold-start verification of a market-hours class goes through a scheduled system-alert ~5 min post-open (`Step 8.5`).
 
+### R-VENUEFIELDS — Field-driven venue classification over shape inference (P19-B-PERPFEED, 2026-08; used at any capture-substrate onboarding)
+
+When onboarding a class whose venue serves MIXED instrument types (Kraken Futures serves perpetuals + dated futures + inverse contracts + equity perps in one instrument list), **classify by the VENUE'S OWN FIELDS, never by symbol-shape regex**: PERPFEED's perpetuality test is `lastTradingTime` PRESENT ⇒ dated ⇒ refused (0/276 live perpetuals carry the field — a discriminator the symbol string does not encode). Four learnings that generalize:
+1. **A membership positive requires a JOIN to an existing universe, normalized through the venue's own alias table** (`/0/public/Assets` altnames: `XLTC`→`LTC`) — raw-name equality silently fails on legacy-prefixed names and the failure reads as "not a member," the dangerous direction.
+2. **UNCLASSIFIED → refuse-and-log, never guess.** Every classification function should have an explicit "none of the above" outcome that refuses; a classifier without one silently defaults its edge cases into whichever class is listed last.
+3. **Registries carry per-side COMPLETENESS flags, and unknown-symbol THROW arms only when BOTH sides are complete** — fail-closed exactly when the registries can vouch for the whole venue, graceful before that (a gated-off deploy behaves pre-batch).
+4. **Degraded-feed refusal sits ABOVE persistence** (fetches throw before any write; the plausibility floor refuses a below-half universe collapse unless `--confirm-delisting`) — a truncated venue response must never shrink a persisted registry as a side effect.
+Companion pattern: **one venue = one capture ENGINE, one facade per class** (`kraken-futures-archiver.ts` + thin facades) — zero caller churn on the existing class, per-class kill-switches, and the new class ships default-OFF until the first live recompute reports symbol-count + GB/mo. Born-daily partitioning at the standing 30-day hot rule (STORAGE_POLICY §2.5) — a class born AFTER the retention rule needs no monthly-era transition machinery.
+
 ---
 
 ## Part 3 — Worked example: `xstock_spot` (B79, Phase 24)
