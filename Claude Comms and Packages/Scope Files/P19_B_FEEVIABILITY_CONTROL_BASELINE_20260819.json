@@ -1,0 +1,127 @@
+{
+ "captured_at": "2026-08-19T00:02Z (post-deploy f245ac3a7)",
+ "trackerStartedAt": "2026-06-23T19:51:53.122Z",
+ "purpose": "#696 forward-window control baseline (Langston discriminator 1)",
+ "crypto_spot": {
+  "mean_reversion": {
+   "evals": 566,
+   "reachDrops": 0,
+   "rrDrops": 121,
+   "atrPairedN": 0,
+   "attSum": 0,
+   "attSumSq": 0
+  },
+  "vwap_pullback": {
+   "evals": 112641,
+   "reachDrops": 19705,
+   "rrDrops": 91508,
+   "atrPairedN": 1329,
+   "attSum": 15120.728599624143,
+   "attSumSq": 184111.81699619393
+  },
+  "strong_bull_trend": {
+   "evals": 120116,
+   "reachDrops": 115949,
+   "rrDrops": 2580,
+   "atrPairedN": 5215,
+   "attSum": 31290,
+   "attSumSq": 187740
+  },
+  "range_trade": {
+   "evals": 68718,
+   "reachDrops": 1800,
+   "rrDrops": 35664,
+   "atrPairedN": 727,
+   "attSum": 1628.7881610783863,
+   "attSumSq": 3991.1840061810194
+  },
+  "morning_star": {
+   "evals": 159314,
+   "reachDrops": 0,
+   "rrDrops": 101528,
+   "atrPairedN": 4632,
+   "attSum": 11580,
+   "attSumSq": 28950.000000000007
+  },
+  "volatility_edge": {
+   "evals": 5275,
+   "reachDrops": 0,
+   "rrDrops": 3713,
+   "atrPairedN": 91,
+   "attSum": 84.50953614442189,
+   "attSumSq": 144.83384529790018
+  },
+  "reverse_impulse": {
+   "evals": 13006,
+   "reachDrops": 0,
+   "rrDrops": 10020,
+   "atrPairedN": 120,
+   "attSum": 240.00000000000026,
+   "attSumSq": 480.00000000000153
+  },
+  "support_bounce": {
+   "evals": 300482,
+   "reachDrops": 0,
+   "rrDrops": 200181,
+   "atrPairedN": 24905,
+   "attSum": 49810,
+   "attSumSq": 99619.99999999999
+  },
+  "defensive_hedge": {
+   "evals": 572,
+   "reachDrops": 0,
+   "rrDrops": 548,
+   "atrPairedN": 9,
+   "attSum": 16.199999999999964,
+   "attSumSq": 29.15999999999987
+  },
+  "vwap_bounce": {
+   "evals": 2425,
+   "reachDrops": 0,
+   "rrDrops": 48,
+   "atrPairedN": 37,
+   "attSum": 27.28112444861063,
+   "attSumSq": 22.342077498530504
+  },
+  "inside_bar_reversal": {
+   "evals": 643,
+   "reachDrops": 0,
+   "rrDrops": 620,
+   "atrPairedN": 1,
+   "attSum": 1.9999999999999805,
+   "attSumSq": 3.999999999999922
+  },
+  "pivot_shift": {
+   "evals": 1909,
+   "reachDrops": 0,
+   "rrDrops": 362,
+   "atrPairedN": 100,
+   "attSum": 300.00000000000045,
+   "attSumSq": 900.0000000000034
+  },
+  "sma_trend_ride": {
+   "evals": 7399,
+   "reachDrops": 2101,
+   "rrDrops": 144,
+   "atrPairedN": 565,
+   "attSum": 2187.9052955301217,
+   "attSumSq": 10586.473057237508
+  },
+  "dhma": {
+   "evals": 2129,
+   "reachDrops": 0,
+   "rrDrops": 1830,
+   "atrPairedN": 376,
+   "attSum": 5183.3019649637745,
+   "attSumSq": 202684.7317651698
+  },
+  "adaptive_flow": {
+   "evals": 373,
+   "reachDrops": 0,
+   "rrDrops": 313,
+   "atrPairedN": 115,
+   "attSum": 344.9999999999999,
+   "attSumSq": 1034.9999999999993
+  }
+ }
+}
