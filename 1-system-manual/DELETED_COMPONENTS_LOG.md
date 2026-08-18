@@ -761,3 +761,12 @@ Archive: git history is authoritative (this is a field-retirement within live fi
 **WHY:** zero callers anywhere in the tree (repo-wide grep, both call syntaxes) — it could never execute.
 **BLAST RADIUS:** §9.5(a-ii) state-write census: it wrote `feature_snapshots` via `storage.createFeatureSnapshot`; because the method was never called, the table already received nothing from this path, so no reader loses a live writer. `storage.getLatestFeatureSnapshot`/`createFeatureSnapshot` remain untouched (other users exist). tsc after the cut = 391 errors = the frozen baseline, zero regressions.
 **ARCHIVE:** git history at the removing commit (single-method cut; no `.removed` file — the file itself survives).
+
+## 2026-08-18 — `data-normalization.ts` (dead Replit-era service, same defect class as #690) — P19-B-PERPFEED rule-18(a) deletion
+
+**WHAT:** `server/services/data-normalization.ts` (`DataNormalizationService` — z-score/min-max normalization + volatility/liquidity scoring), whole file.
+**WHY:** surfaced by Langston at the #690 Step-4 review — the defect class was "consumers of `getPriceData`," not "consumers of feature-enrichment," and this file carried the same head-slice defect (`slice(0, window)` on the ASC source, normalizing against the OLDEST window). It is DEAD: zero importers tree-wide (server/shared/client, both class and instance names — verified independently by BOTH Langston and CC-C). Rule-24 bucket 3 → rule-18(a) delete-on-the-spot.
+**BLAST RADIUS:** §9.5(a-ii) state-write census: its `storage.createFeatureSnapshot` call sat in a never-imported file — wrote nothing at runtime, no reader loses a live writer; the storage methods survive. tsc after the cut = 391 = frozen baseline.
+**LEFT INTENTIONALLY (so a later grep isn't read as a missed sweep):** `docs/current_state/screeners_export/backend/routes.ts:9863` still references `enrichFeatures` — a FROZEN export snapshot, not a runtime path; not edited.
+**ARCHIVE:** `1-system-manual/_archive/deleted-code/data-normalization.ts.removed` + git history at the removing commit.
+**COMPANION HARDENING (same commit, Langston's non-blocking notes):** `getPriceData` now carries its ASC ordering contract AT THE SOURCE (`storage.ts`); the two rebuilt audit tests use hardcoded expected literals (0.043668 / 0.5) independent of the implementation's slices, and the SMA sample got margin (30 rows vs the 25 boundary).

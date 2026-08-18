@@ -1940,6 +1940,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Price data methods
+  // CONTRACT: rows are returned in timestamp ASC order (oldest→newest) — consumers
+  // must take recent windows from the TAIL (slice(-n)), never the head (#690).
   async getPriceData(symbol: string, from?: Date, to?: Date): Promise<PriceData[]> {
     const conditions = [eq(priceData.symbol, symbol)];
     
