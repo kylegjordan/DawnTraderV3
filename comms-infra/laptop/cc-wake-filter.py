@@ -27,6 +27,27 @@ NAMES = {
 }
 ALIAS_NAME = {"CC-A": "OLD Claude", "CC-B": "NEW Claude", "CC-C": "ANALYST Claude"}  # display names (Kyle 2026-06-20; CC-C added 2026-07-19) + CC<->CC wake attribution
 MY_NAME = ALIAS_NAME.get(ALIAS, "")
+# 2026-08-18 #694 / Langston BLOCKER-1: suppression is CONTENT-keyed and FAIL-SAFE,
+# never sender-keyed. `dt-push-notice.sh` emits TWO variants under the SAME
+# `--sender "Push notice"`: the routine sha-only line, and an ESCALATED one carrying
+# "THE RULES CHANGED IN THIS PUSH -- PULL AND RELOAD NOW, even if you are mid-task"
+# plus the changed paths. MEASURED in the last 400 notices: 262 routine / 138 escalated
+# (35%). A sender-keyed drop killed the escalated variant too -- and the §7.1 fetch gate
+# does NOT cover it, because that gate fires at a session's NEXT PUSH (possibly hours
+# out) while the whole point of the escalated line is to reach a session MID-TASK.
+# FAILS SAFE BY CONSTRUCTION: we suppress ONLY a body that reduces to the known routine
+# sentence. Anything with content beyond it -- including a reworded future escalation --
+# is DELIVERED. An unrecognised variant wakes you; it is never silently dropped.
+_ROUTINE_PUSH = re.compile(
+    r"^\s*(?:[\w\s/]*?—\s*)?review branch moved to\s+\S+\.?\s*"
+    r"(?:pull before you push\.?)?\s*(?:\(if this is your own push,? ignore it\.?\))?\s*$",
+    re.I)
+
+def is_routine_push_notice(sender, text):
+    """True ONLY for the sha-only notice. Unknown shapes -> False -> delivered."""
+    if sender != "Push notice":
+        return False
+    return bool(_ROUTINE_PUSH.match((text or "").strip()))
 MY_RE = re.compile(r"@?\b(" + "|".join(NAMES.get(ALIAS, [])) + r")\b", re.I)
 OTHERS_RE = re.compile(
     r"@?\b(" + "|".join([p for k, v in NAMES.items() if k != ALIAS for p in v] + ["langston"]) + r")\b", re.I)
@@ -211,6 +232,19 @@ for raw in sys.stdin:
                 # field (set on Discord --sender posts) attributes it; sender==MY_NAME is my own
                 # post → never self-wake. No sender (e.g. Telegram) → not a CC<->CC trigger.
                 sender = d.get("sender")
+                # 2026-08-18 (Kyle-directed, noise reduction): automated notices that name
+                # ALL THREE sessions wake ALL THREE by name, so every push by anyone cost
+                # three session-turns. MEASURED over the whole log (13,357 rows since
+                # 2026-06-19): 771 "Push notice" rows = ~2,313 session-wakes, against 55
+                # messages from Kyle himself — automated notices outnumbered him ~14:1.
+                # ZERO information loss: the §7.1 batch-close sync gate REQUIRES a
+                # `git fetch` before any push, so a session already learns the branch moved
+                # at the only moment the fact can change what it does.
+                # NOT suppressed: "Heartbeat" — it is the dead-man proof that this watcher
+                # is alive, and a session cannot verify that from a channel it stopped
+                # receiving. Its cost is commentary, not the wake; that is a rules fix.
+                if is_routine_push_notice(sender, text):
+                    continue
                 if sender and sender != MY_NAME:
                     deliver, body = addressed_to_me(text)
                     if deliver:
