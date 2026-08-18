@@ -664,17 +664,21 @@ export class FormulaAuditService {
     const location = locations.find(l => l.name === name)!;
     const expectedInfo = expected.get(name)!;
     
-    // Sample data
-    const sampleData = {
-      sma1: 105,
-      sma2: 100
-    };
-    
-    // Expected: (sma1 - sma2) / sma2
-    const expectedResult = (sampleData.sma1 - sampleData.sma2) / sampleData.sma2;
-    
-    // Actual: same calculation
-    const actualResult = (sampleData.sma1 - sampleData.sma2) / sampleData.sma2;
+    // Sample data: 25 chronological closes (oldest→newest), steadily rising —
+    // enough for the service's period(20)+5 window requirement.
+    const samplePrices = Array.from({ length: 25 }, (_, i) => 100 + i);
+    const period = 20;
+
+    // Expected: SMA of the most recent 20 vs the SMA of the 20 ending 5 bars earlier
+    const mean = (xs: number[]) => xs.reduce((s, x) => s + x, 0) / xs.length;
+    const sma1 = mean(samplePrices.slice(-period));
+    const sma2 = mean(samplePrices.slice(-(period + 5), -5));
+    const expectedResult = Number(((sma1 - sma2) / sma2).toFixed(6));
+
+    // Actual: the service's own calculation on the same chronological series
+    const featureService = new FeatureEnrichmentService();
+    const actualResult = (featureService as any).calculateSMASlope(samplePrices, period);
+    const sampleData = { samplePrices, sma1, sma2 };
     
     const deviation = Math.abs(expectedResult - actualResult);
     const deviationPercent = this.calculateDeviationPercent(expectedResult, actualResult);
@@ -708,17 +712,23 @@ export class FormulaAuditService {
     const location = locations.find(l => l.name === name)!;
     const expectedInfo = expected.get(name)!;
     
-    // Sample data
-    const sampleData = {
-      recentAvg: 15000000,
-      olderAvg: 10000000
-    };
-    
-    // Expected: (recentAvg - olderAvg) / olderAvg
-    const expectedResult = (sampleData.recentAvg - sampleData.olderAvg) / sampleData.olderAvg;
-    
-    // Actual: same calculation
-    const actualResult = (sampleData.recentAvg - sampleData.olderAvg) / sampleData.olderAvg;
+    // Sample data: 10 chronological volumes (oldest→newest) — older window 10M avg,
+    // recent window 15M avg, so the true delta is +0.5.
+    const sampleVolumes = [
+      10000000, 10000000, 10000000, 10000000, 10000000,
+      15000000, 15000000, 15000000, 15000000, 15000000,
+    ];
+
+    // Expected: (recentAvg - olderAvg) / olderAvg on the chronological series
+    const mean = (xs: number[]) => xs.reduce((s, x) => s + x, 0) / xs.length;
+    const recentAvg = mean(sampleVolumes.slice(-5));
+    const olderAvg = mean(sampleVolumes.slice(-10, -5));
+    const expectedResult = Number(((recentAvg - olderAvg) / olderAvg).toFixed(4));
+
+    // Actual: the service's own calculation on the same chronological series
+    const featureService = new FeatureEnrichmentService();
+    const actualResult = (featureService as any).calculateVolumeDelta(sampleVolumes);
+    const sampleData = { sampleVolumes, recentAvg, olderAvg };
     
     const deviation = Math.abs(expectedResult - actualResult);
     const deviationPercent = this.calculateDeviationPercent(expectedResult, actualResult);

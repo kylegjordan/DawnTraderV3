@@ -754,3 +754,10 @@ Archive: git history is authoritative (this is a field-retirement within live fi
 
 **ARCHIVE:** `1-system-manual/_archive/deleted-code/adaptive-guardrails.ts.removed` + `adaptive-guardrails-routes.ts.removed`.
 **RE-ENTRY FENCE:** `server/tests/integration/b-sizing-legacy-deletion-fence.test.ts` — 6 tests, **mutation-proved three ways**: a re-introduced *dynamic* import fails it (the syntax a naive static-import fence misses — measured 0 static vs 6 dynamic before the cut); a re-introduced endpoint fails it; **and a simulated namespace sweep fails it**, so an over-broad "cleanup" breaks CI instead of the UI. Includes a positive control on the file walk so the fence cannot go vacuously green.
+
+## 2026-08-18 — `FeatureEnrichmentService.saveEnrichedFeatures()` (dead method) — P19-B-PERPFEED fix-on-find (#690)
+
+**WHAT:** the `saveEnrichedFeatures` method in `server/services/feature-enrichment.ts` (a `feature_snapshots` writer), removed during the #690 chronology fix. Method only — the file stays live (its enrichment path serves `/api/learning/features/:symbol` + the formula audit).
+**WHY:** zero callers anywhere in the tree (repo-wide grep, both call syntaxes) — it could never execute.
+**BLAST RADIUS:** §9.5(a-ii) state-write census: it wrote `feature_snapshots` via `storage.createFeatureSnapshot`; because the method was never called, the table already received nothing from this path, so no reader loses a live writer. `storage.getLatestFeatureSnapshot`/`createFeatureSnapshot` remain untouched (other users exist). tsc after the cut = 391 errors = the frozen baseline, zero regressions.
+**ARCHIVE:** git history at the removing commit (single-method cut; no `.removed` file — the file itself survives).

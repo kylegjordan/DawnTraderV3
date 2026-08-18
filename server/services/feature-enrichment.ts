@@ -28,7 +28,9 @@ export class FeatureEnrichmentService {
       return this.getDefaultFeatures(symbol);
     }
 
-    const recentData = priceData.slice(0, 30);
+    // storage.getPriceData returns rows ordered by timestamp ASC (oldest→newest);
+    // every window in this service takes the TAIL of a chronological series (#690).
+    const recentData = priceData.slice(-30);
     const prices = recentData.map(d => parseFloat(d.close));
     const volumes = recentData.map(d => parseFloat(d.volume));
 
@@ -69,11 +71,15 @@ export class FeatureEnrichmentService {
   private calculateRSI(prices: number[], period: number): number {
     if (prices.length < period + 1) return 50;
 
+    const changes: number[] = [];
+    for (let i = 1; i < prices.length; i++) {
+      changes.push(prices[i] - prices[i - 1]);
+    }
+    const recent = changes.slice(-period);
+
     let gains = 0;
     let losses = 0;
-
-    for (let i = 1; i <= period; i++) {
-      const change = prices[i - 1] - prices[i];
+    for (const change of recent) {
       if (change > 0) {
         gains += change;
       } else {
@@ -95,8 +101,8 @@ export class FeatureEnrichmentService {
   private calculateSMASlope(prices: number[], period: number): number {
     if (prices.length < period + 5) return 0;
 
-    const sma1 = this.calculateSMA(prices.slice(0, period));
-    const sma2 = this.calculateSMA(prices.slice(5, period + 5));
+    const sma1 = this.calculateSMA(prices.slice(-period));
+    const sma2 = this.calculateSMA(prices.slice(-(period + 5), -5));
 
     const slope = (sma1 - sma2) / sma2;
     return Number(slope.toFixed(6));
@@ -110,8 +116,8 @@ export class FeatureEnrichmentService {
   private calculateVolumeDelta(volumes: number[]): number {
     if (volumes.length < 2) return 0;
 
-    const recentAvg = this.calculateSMA(volumes.slice(0, 5));
-    const olderAvg = this.calculateSMA(volumes.slice(5, 10));
+    const recentAvg = this.calculateSMA(volumes.slice(-5));
+    const olderAvg = this.calculateSMA(volumes.slice(-10, -5));
 
     if (olderAvg === 0) return 0;
 
@@ -154,10 +160,10 @@ export class FeatureEnrichmentService {
       }
 
       const symbolReturns = this.calculateReturns(
-        symbolData.slice(0, 20).map(d => parseFloat(d.close))
+        symbolData.slice(-20).map(d => parseFloat(d.close))
       );
       const btcReturns = this.calculateReturns(
-        btcData.slice(0, 20).map(d => parseFloat(d.close))
+        btcData.slice(-20).map(d => parseFloat(d.close))
       );
 
       const correlation = this.calculateCorrelation(symbolReturns, btcReturns);
@@ -171,7 +177,7 @@ export class FeatureEnrichmentService {
   private calculateReturns(prices: number[]): number[] {
     const returns: number[] = [];
     for (let i = 1; i < prices.length; i++) {
-      returns.push((prices[i - 1] - prices[i]) / prices[i]);
+      returns.push((prices[i] - prices[i - 1]) / prices[i - 1]);
     }
     return returns;
   }
@@ -204,24 +210,6 @@ export class FeatureEnrichmentService {
     return numerator / denominator;
   }
 
-  async saveEnrichedFeatures(features: EnrichedFeatures): Promise<void> {
-    const latestSnapshot = await storage.getLatestFeatureSnapshot(features.symbol);
-    
-    await storage.createFeatureSnapshot({
-      symbol: features.symbol,
-      priceNormalized: latestSnapshot?.priceNormalized || "0",
-      volumeNormalized: latestSnapshot?.volumeNormalized || "0",
-      momentumIndex: features.momentumIndex.toString(),
-      rsi: features.rsi.toString(),
-      smaSlope: features.smaSlope.toString(),
-      volumeDelta: features.volumeDelta.toString(),
-      volatilityScore: latestSnapshot?.volatilityScore || "0",
-      liquidityScore: latestSnapshot?.liquidityScore || "0",
-      sentimentScore: features.sentimentScore.toString(),
-      sectorCorrelation: features.sectorCorrelation.toString(),
-      rawFeatures: latestSnapshot?.rawFeatures || {},
-    });
-  }
 }
 
 export const featureEnrichmentService = new FeatureEnrichmentService();
