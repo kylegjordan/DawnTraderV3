@@ -823,9 +823,15 @@ def render_html(state, summ, summ_err):
             narr = mem.get("narration") or []
             if not narr:
                 parts.append('<div class="abst">you spoke last here; nothing has run since</div>')
-            for nrec in narr[-2:]:
-                parts.append(f'<div class="nq"><small>{esc(ago(nrec.get("ts")))}</small> '
-                             f'{esc(plain(nrec.get('text') or '')[:420])}</div>')
+            for nrec in narr[-3:]:
+                # Label WHICH side of Kyle's message this report sits on. Without it the two
+                # quotes read as one stream and he cannot tell what he was replying TO from
+                # what happened AFTER he replied.
+                lbl = ('what it had just told you' if nrec.get('when') == 'before'
+                       else 'what it did next')
+                parts.append(f'<div class="nq"><small>{esc(lbl)} · '
+                             f'{esc(ago(nrec.get("ts")))}</small><br>'
+                             f'{esc(plain(nrec.get("text") or ""))}</div>')
 
             since = mem.get("since") or {}
             parts.append('<b>What has happened since</b>')

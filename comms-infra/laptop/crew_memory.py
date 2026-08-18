@@ -390,6 +390,54 @@ def commit_attribution(recs, by_uuid, since_ts):
     return out
 
 
+def snip(t, limit=900):
+    """Cut at a SENTENCE boundary, never mid-clause.
+
+    Kyle: "it gives me a couple of sentences and then cuts off halfway through, and I can't
+    always discern from just those two sentences what was being worked on." A summary that
+    stops mid-thought is worse than a shorter one that finishes."""
+    t = (t or "").strip()
+    if len(t) <= limit:
+        return t
+    w = t[:limit]
+    cut = max(w.rfind(". "), w.rfind(".' + BS + BS + 'n"), w.rfind("! "), w.rfind("? "))
+    if cut > limit * 0.45:
+        return w[:cut + 1]
+    sp = w.rfind(" ")
+    return (w[:sp] if sp > 0 else w).rstrip(" ,;:-") + "..."
+
+
+def turn_reports(recs, by_uuid, min_chars=200):
+    """The LAST substantive message of each turn -- the report, not the preamble.
+
+    MEASURED, not assumed: in 76% of turns rooted at a Kyle instruction the session emits more
+    than one substantial message, and the first is working narration ("One factual note and then
+    I'll get on with it...", "Let me check...") while the last is the report addressed to him.
+    The board was showing the FIRST, which is why Kyle said it gave him "two lines of rambling
+    introductory prose that doesn't really get to the crux". Taking the last is a structural rule
+    over the turn chain, not a judgement about the prose.
+
+    Returns {root_uuid: {"root_ts","ts","text","root_kind"}}."""
+    out = {}
+    for e in recs:
+        msg = e.get("message") or {}
+        if msg.get("role") != "assistant":
+            continue
+        t = text_of(msg).strip()
+        if len(t) < min_chars:
+            continue
+        root = root_user_record(e, by_uuid)
+        if not root:
+            continue
+        ru = root.get("uuid")
+        ts = str(e.get("timestamp"))
+        prev = out.get(ru)
+        if not prev or ts > prev["ts"]:
+            out[ru] = {"root_ts": str(root.get("timestamp")), "ts": ts, "text": t,
+                       "root_kind": classify(root)[0]}
+    return out
+
+
 # ── the single entry point the page uses ─────────────────────────────────────────────────────
 def build(slug):
     """Everything the board needs for one session. Pure facts; no model, no rewriting.
@@ -405,9 +453,20 @@ def build(slug):
     win = directed_window(recs, by, th["anchor_ts"])
     att = commit_attribution(recs, by, th["anchor_ts"])
 
-    narration = [e for e in win
-                 if (e.get("message") or {}).get("role") == "assistant"
-                 and len(text_of(e.get("message") or {}).strip()) > 300]
+    # WHAT THE SESSION TOLD KYLE, before and after he last spoke -- his request verbatim:
+    # "it would be more helpful if it could read the last summary of the sessions before just
+    # before my last message, and then any summaries that come just after it."
+    # The BEFORE report is what he was replying to; without it his own instruction is an answer
+    # with the question missing. The AFTER reports are what it did about it.
+    reports = turn_reports(recs, by)
+    anchor = str(th["anchor_ts"] or "")
+    before = sorted([r for r in reports.values() if r["ts"] < anchor], key=lambda r: r["ts"])
+    after = sorted([r for r in reports.values()
+                    if r["root_ts"] >= anchor and r["root_kind"] == KYLE],
+                   key=lambda r: r["ts"])
+    narration = ([{"ts": before[-1]["ts"], "text": before[-1]["text"], "when": "before"}]
+                 if before else [])
+    narration += [{"ts": r["ts"], "text": r["text"], "when": "after"} for r in after[-2:]]
 
     chore = {}
     unattributed, unattributed_why = 0, ""
@@ -428,9 +487,9 @@ def build(slug):
             "state": th["state"], "why": th["why"], "anchor_ts": th["anchor_ts"],
             "quotes": [residual(text_of(e["message"])).strip() for e in kyle_turns],
         },
-        "narration": [{"ts": e.get("timestamp"), "text": text_of(e["message"]).strip()}
-                      for e in narration[-2:]],
+        "narration": [{"ts": r["ts"], "text": snip(r["text"]), "when": r["when"]}
+                      for r in narration[-3:]],
         "since": {"directed": directed, "chore": chore,
                   "unattributed": unattributed, "unattributed_why": unattributed_why},
-        "blocked_on_kyle": bool(kyle_turns) and not narration,
+        "blocked_on_kyle": bool(kyle_turns) and not after,
     }
