@@ -16,6 +16,7 @@ import argparse, glob, gzip, hashlib, html, json, os, re, subprocess, sys, time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import crew_memory as CM          # B-CREW-STATUS-2 capture engine (facts only, no model)
+import crew_context as CX         # B-CREW-STATUS-2 synthesis: what were they ACTUALLY doing
 
 # ★ NO CONSOLE WINDOWS. The task runs under pythonw.exe, which has no console of its own,
 # and a console-less parent gives every child process a BRAND NEW console window. That
@@ -435,6 +436,7 @@ def derive():
     }
 
     disc = disc or []
+    state["_disc"] = disc          # transient; contextualise() pops it before anything renders
     for sess in SESSIONS:
         row = {"session": sess, "alias": SESSIONS[sess]["alias"]}
 
@@ -620,6 +622,38 @@ def load_changed():
         return {}
 
 
+def contextualise(state):
+    """Kyle's ask: the quoted messages "don't necessarily tell me what they were doing".
+
+    Pairs each session's before/after reports with the document that says what the work is FOR,
+    the open-issue entries naming it, the changes it actually made, and the team chat about it —
+    then has a model write one plain briefing. ONE CALL PER SESSION (never batched: transcripts
+    quote other transcripts, and cross-assignment must stay traceable), cached on a digest of
+    the evidence so identical facts produce a byte-identical briefing and no model call at all."""
+    disc_rows = state.pop("_disc", [])
+    fresh = 0
+    for sess, r in state["sessions"].items():
+        cb = r.get("current_batch") or {}
+        try:
+            bundle, digest = CX.build_bundle(sess, r.get("memory"), cb.get("id"),
+                                             SESSIONS[sess].get("clone"), disc_rows)
+            text, err, cached = CX.synthesise(
+                sess, bundle, digest,
+                lambda p: _model_call(p, timeout=420, model=CX.MODEL))
+            r["context"] = {"text": text, "error": err, "cached": cached}
+            if text and not cached:
+                fresh += 1
+        except Exception as e:
+            # Never let the briefing take the page down: the exact facts below it stand alone.
+            r["context"] = {"text": "", "error": "%s: %s" % (type(e).__name__, e),
+                            "cached": False}
+    errs = [s for s, r in state["sessions"].items() if (r.get("context") or {}).get("error")]
+    print("context: %d briefing(s) rebuilt, %d reused%s"
+          % (fresh, len(state["sessions"]) - fresh - len(errs),
+             (" — FAILED for " + ", ".join(errs)) if errs else ""))
+    return state
+
+
 def stamp_changed(state):
     """Per-session last-CHANGED time. Kyle: 'only updated based on the actual status being
     updated as opposed to every sixty second cycle'. A poll is not an event."""
@@ -638,23 +672,28 @@ def stamp_changed(state):
     return state
 
 
-REMOTE_EXPLAINER = (
-    'TOKFILE=/etc/crew-status/oauth.env; '
-    '[ -f "$TOKFILE" ] || TOKFILE=/etc/langston/oauth.env; '
-    "TOK=$(grep -oP '(?<=CLAUDE_CODE_OAUTH_TOKEN=).*' \"$TOKFILE\"); "
-    'H=/var/lib/crew-status-explainer; mkdir -p "$H"; '
-    'exec env CLAUDE_CODE_OAUTH_TOKEN="$TOK" HOME="$H" /usr/bin/claude -p --model haiku'
-)
+def _remote_explainer(model):
+    return (
+        'TOKFILE=/etc/crew-status/oauth.env; '
+        '[ -f "$TOKFILE" ] || TOKFILE=/etc/langston/oauth.env; '
+        "TOK=$(grep -oP '(?<=CLAUDE_CODE_OAUTH_TOKEN=).*' \"$TOKFILE\"); "
+        'H=/var/lib/crew-status-explainer; mkdir -p "$H"; '
+        'exec env CLAUDE_CODE_OAUTH_TOKEN="$TOK" HOME="$H" /usr/bin/claude -p --model ' + model
+    )
 
 
-def _model_call(prompt, timeout=300):
+REMOTE_EXPLAINER = _remote_explainer("haiku")
+
+
+def _model_call(prompt, timeout=300, model=None):
     """Run the explaining model on the SERVER. Returns (stdout, error).
 
     The prompt travels on stdin, never as a shell argument -- it is several KB of JSON built
     from real Discord text containing & | > % and quotes, every one an operator to some shell
     along the way."""
     try:
-        r = subprocess.run(["ssh", "-o", "ConnectTimeout=25", HELSINKI, REMOTE_EXPLAINER],
+        cmd = _remote_explainer(model) if model else REMOTE_EXPLAINER
+        r = subprocess.run(["ssh", "-o", "ConnectTimeout=25", HELSINKI, cmd],
                            input=prompt, capture_output=True, text=True, timeout=timeout,
                            encoding="utf-8", errors="replace", creationflags=NO_WINDOW)
     except Exception as e:
@@ -790,6 +829,27 @@ def render_html(state, summ, summ_err):
             chips.append('<span class="chip wait">waiting on Langston</span>')
         if r.get("unanswered_ask"):
             chips.append('<span class="chip need">unanswered ask to Kyle</span>')
+        # ---- the briefing: what were they ACTUALLY doing ----
+        ctx = r.get("context") or {}
+        if ctx.get("text"):
+            paras = []
+            for chunk in [c.strip() for c in ctx["text"].split("\n") if c.strip()]:
+                if chunk.isupper() and len(chunk) < 60:
+                    # .title() mangles apostrophes ("Kyle'S"); capitalise words only.
+                    hdr = " ".join(w[:1].upper() + w[1:].lower() for w in chunk.split())
+                    paras.append(f'<b>{esc(hdr)}</b>')
+                else:
+                    paras.append(f'<p>{esc(chunk)}</p>')
+            stale = (' <small class="warn">briefing could not be refreshed — '
+                     + esc(str(ctx.get("error"))[:90]) + '</small>') if ctx.get("error") else ""
+            ctx_block = '<div class="ctx">' + "".join(paras) + stale + "</div>"
+        elif ctx.get("error"):
+            ctx_block = ('<div class="ctx"><div class="abst">briefing unavailable — '
+                         + esc(str(ctx["error"])[:160]) + '. The exact facts below are '
+                         'unaffected.</div></div>')
+        else:
+            ctx_block = ""
+
         # ---- memory block: every cell is a value or a stated reason, never blank ----
         def plain(t):
             """Strip the markdown the sessions write in. They are writing for a terminal that
@@ -855,6 +915,7 @@ def render_html(state, summ, summ_err):
             <dt>Just finished</dt><dd class="sum">{esc(sm.get('just_finished')) or '<span class=blank>—</span>'}</dd>
             {thread_row}
           </dl>
+          {ctx_block}
           {mem_block}
           <div class="ev"><b>Evidence (exact, not summarised)</b>
             <div>status last CHANGED {esc(ago(r.get('changed_at')))} <small>(not a poll — only when something moved)</small></div>
@@ -901,6 +962,12 @@ def render_html(state, summ, summ_err):
  .ev{{border-top:1px solid #232937;padding-top:9px;font-size:13px;color:#a9b2c6}}
  /* B-CREW-STATUS-2 memory block. Deliberately plainer than the summary fields above: this is
     Kyle's own words and the session's own words, quoted, not a gloss. */
+ .ctx{{background:#141a26;border:1px solid #26304a;border-radius:6px;padding:12px 14px;
+       margin-bottom:12px;font-size:14.5px;line-height:1.55;color:#dbe3f0}}
+ .ctx b{{display:block;color:#7fa4d8;font-weight:600;font-size:11.5px;letter-spacing:.05em;
+         text-transform:uppercase;margin:12px 0 3px}}
+ .ctx b:first-child{{margin-top:0}} .ctx p{{margin:0 0 4px}}
+ .warn{{color:#d8a657}}
  .mem{{border-top:1px solid #232937;padding-top:10px;margin-bottom:10px;font-size:14px}}
  .mem b{{display:block;color:#7f8aa3;font-weight:600;font-size:12px;letter-spacing:.04em;
          text-transform:uppercase;margin:10px 0 4px}}
@@ -1048,6 +1115,7 @@ if __name__ == "__main__":
                           open(cache_p, "w", encoding="utf-8"))
             except Exception:
                 pass
+    st = contextualise(st)
     with open(OUT_HTML, "w", encoding="utf-8") as f:
         f.write(render_html(st, summ, serr))
     try:
