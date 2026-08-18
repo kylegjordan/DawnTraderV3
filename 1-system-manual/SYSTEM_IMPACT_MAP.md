@@ -2002,7 +2002,7 @@ Continuous 1-min OHLC + per-update ticker snapshots captured to month-partitione
 | # | Component | Path | Status |
 |---|---|---|---|
 | 1 | Equity-spot archiver (xStocks via WS v2) | `server/services/passive-archive/equity-spot-archiver.ts` | ✅ LIVE — 38 syms, 161 OHLC + 1,418 ticker rows in first 6min |
-| 2 | Equity-perp archiver (PF_*XUSD via Kraken Futures WS) | `server/services/passive-archive/equity-perp-archiver.ts` | ✅ LIVE — 10 syms, 1,478 ticker; **OHLC at 0 rows pending RUNNING_ISSUES #41 (feed name)** |
+| 2 | Equity-perp archiver (PF_*XUSD via Kraken Futures WS) | `server/services/passive-archive/equity-perp-archiver.ts` | ✅ LIVE — 10 syms, 1,478 ticker; **OHLC at 0 rows pending RUNNING_ISSUES #41 (feed name)**. **→ P19-B-PERPFEED (2026-08): now a FACADE over the shared `kraken-futures-archiver.ts` engine — see the P19-B-PERPFEED section below** |
 | 3 | Crypto-spot archiver (USD/USDT/USDC ≥ $10k vol via WS v2, hash-mod sharding) | `server/services/passive-archive/crypto-spot-archiver.ts` | ✅ LIVE — 380 pairs in 2 shards (180/201 post-Murmur3 fix) |
 | 4 | OHLC batch writer (5s flush, 2-slot semaphore) | `server/services/passive-archive/ohlc-batch-writer.ts` | ✅ LIVE |
 | 5 | Ticker batch writer (5s flush, 1s/sym throttle) | `server/services/passive-archive/ticker-batch-writer.ts` | ✅ LIVE |
@@ -2034,13 +2034,31 @@ Continuous 1-min OHLC + per-update ticker snapshots captured to month-partitione
 
 | # | Component | Path | Status |
 |---|---|---|---|
-| 17 | Equity-perp REST polling | `equity-perp-archiver.ts` (rewritten) | ✅ LIVE — 20,030 OHLC rows / 10 syms post-deploy |
+| 17 | Equity-perp REST polling | `equity-perp-archiver.ts` (rewritten) | ✅ LIVE — 20,030 OHLC rows / 10 syms post-deploy. **→ P19-B-PERPFEED: polling logic moved into `kraken-futures-archiver.ts`; this file is a facade** |
 | 18 | Stats getters per archiver | `getEquitySpotStats()` / `getEquityPerpStats()` / `getCryptoSpotStats()` exports | ✅ LIVE |
 | 19 | Passive archive aggregator | `drift-dashboard-aggregator.ts:computePassiveArchiveStatus` | ✅ LIVE |
 | 20 | API endpoint | `GET /api/analytics/passive-archive-status` | ✅ LIVE |
 | 21 | UI panel | `client/src/pages/analytics.tsx:PassiveArchiveSection` | ✅ LIVE |
 | 22 | Chunked batch insert (1000 rows) | `ohlc-batch-writer.ts` + `ticker-batch-writer.ts` | ✅ LIVE — fixes Postgres 65,535-param bind limit |
 | 23 | Expanded xStocks universe (245 syms) | `server/config/xstocks-universe.json` | ✅ LIVE |
+
+### P19-B-PERPFEED — Crypto-Perp Feed Capture (2026-08-17/18; Steps 1-4 CLOSED at Langston review; deploy 2026-08-18; capture GATED OFF at deploy)
+
+Extends the B74/B74.1 feed-capture family to the **crypto_perp** asset class (~257 PF_ perpetuals — Kyle-directed "scan ALL of it in," not a subset). **CAPTURE ONLY — perp TRADING is Phase 26, post-launch.** Kill-switch `crypto_perp_capture_enabled=false` seeded EXPLICITLY so the deploy cannot start the writer; switch-on requires the first live recompute to report symbol-count + GB/mo first.
+
+| # | Component | Path | Notes |
+|---|---|---|---|
+| P1 | **Kraken-Futures archiver ENGINE** (NEW) | `server/services/passive-archive/kraken-futures-archiver.ts` | The generalized class both perp classes run on: REST OHLC polling (`/api/charts/v1/trade/<sym>/1m`, per-symbol dedup) + WS ticker, per-class config (symbol set, target tables, ticker throttle, kill-switch key). UPSTREAM: bootstrap leg per class. DOWNSTREAM: the batch writers → `<class>_ohlc_1m` / `<class>_ticker_snap`. Blast radius: MEDIUM (shared engine — a defect hits BOTH perp classes; mitigated by the facade pattern keeping per-class config isolated). |
+| P2 | Equity-perp facade | `equity-perp-archiver.ts` (REDUCED) | Facade over P1 with xstock_perp config — **zero caller churn** (all existing imports/stats getters unchanged). |
+| P3 | Crypto-perp facade (NEW) | `crypto-perp-archiver.ts` | Facade over P1 with crypto_perp config; default-OFF via the kill-switch. |
+| P4 | **Field-driven classification core** | `universe-loader.ts` (`classifyKrakenFuturesInstrument`, `normalizeSpotBaseForJoin`, `fetchSpotAssetAltnames`, `fetchKrakenFuturesInstruments`, `assertClassifiedPlausible`, `recomputeCryptoPerpUniverse`, `loadCryptoPerpUniverse`) | Perpetuality test = `lastTradingTime` PRESENT ⇒ dated FF_/FI_ → refused (0/276 PF_ carry it); PI_ inverse refused; lowercase-x base ⇒ equity (16 live); crypto positive = base ∈ crypto_spot universe with the join normalized via `/0/public/Assets` altnames (XLTC→LTC etc.); UNCLASSIFIED → refuse-and-log. Both fetches THROW on degraded responses BEFORE any persistence; `assertClassifiedPlausible` refuses a <½ collapse (bypass: `--confirm-delisting`); cap=400 REFUSES-on-hit ABOVE persistence. |
+| P5 | Membership registries + resolver branch | `shared/asset-classes.ts` (`CRYPTO_PERP_VENUE_SYMBOLS`/`_INFO`, `XSTOCK_PERP_VENUE_SYMBOLS`, per-side COMPLETE flags) + `symbol-canonicalizer.ts` members map (`PF_XBTUSD`→`BTC/USD:PERP` via payload base) | `resolveAssetClass` kraken-futures branch: membership first → both-sides-complete THROW (refuse unknowns only when both registries are complete) → shape fallback. Gated-off deploy = pre-batch behavior preserved. |
+| P6 | Born-daily tables + retention | `crypto_perp_ohlc_1m` + `crypto_perp_ticker_snap` (daily-partitioned parents, 14d children seeded) via `drizzle/migrations/2026-08-17-p19-b-perpfeed-tables-and-retention.sql` | Born at 30d hot retention (STORAGE_POLICY §2.5 rule — born-30, no legacy monthly era); constants: cap 400, ticker throttle 10000ms crypto_perp-scoped, kill-switch false. Migration also: 11 monthly drops (abort-if-nonempty), Sep 1-7 dailies, `SET LOCAL TimeZone='UTC'`. |
+| P7 | Partition/bootstrap/sweep integration | `b70-create-monthly-partitions.ts` (BLOCKER-1: `isDailyPartitionedForMonth` guard BOTH loops — "a name probe is not a range guard") + `passive-archive-bootstrap.ts` (BLOCKER-2: cutover-aware self-heal, 7d/2mo thresholds, ARCHIVE_TABLES ×8, crypto-perp leg default-OFF) + `b75-retention-sweep.ts` (OHLC entries `'ts'`→`interval_begin` per #685 + crypto_perp pair) + `daily-partition-cutover.ts` (crypto_perp '2026-08-01'; signal_eval '2026-09-01') | The sweep-column fix (#685) is load-bearing for the whole OHLC family — proven by the two-leg gate test (P8). |
+| P8 | Gate test + ops scripts | `server/scripts/perpfeed-gate-test.ts` (seed/verify/clean synthetic 2025-01-15 partition; negative leg CAPTURED LIVE pre-fix — sweep FAILED on `'ts'`, per-table-isolated; positive leg = first post-deploy sweep) + `perpfeed-daily-probe.ts` (suspend-only) + `perpfeed-monthly-recompute.ts` (`--force` cadence-only, `--confirm-delisting` floor-bypass, distinct updatedBy per path) | Langston's ruled gate exit: the tier path proven positively on real bytes, discriminating (both legs), no 2027 wait. |
+| P9 | Tests | `server/tests/unit/p19-b-perpfeed-classification.test.ts` (24 tests: 14 collision pins, 16-symbol equity negative control, 20 dated, 4 inverse, 3 FX, gated-OFF pin, F/G negative legs, floor cases, source-order pin) | CI green at batch HEAD. |
+
+**Fix-on-find riders shipped inside this batch (fb4acdf8a + 37a294867, Langston PROCEED):** #690 feature-enrichment chronology fix (service assumed newest-first; `getPriceData` is ASC — all windows → tail slices; ASC contract now stated AT `storage.ts:getPriceData`; trading path verified clean — strategies use `strategy-helpers.ts` RSI) + formula-audit tautology tests rebuilt to probe real methods + dead `saveEnrichedFeatures` and dead `data-normalization.ts` DELETED (rule 18(a), DELETED_COMPONENTS_LOG; **`feature_snapshots` + its 3 storage methods now fully orphaned → dispositioned in the close-out sweep**).
 
 ---
 
