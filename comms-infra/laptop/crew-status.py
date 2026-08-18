@@ -14,6 +14,9 @@ Usage:
 """
 import argparse, glob, gzip, hashlib, html, json, os, re, subprocess, sys, time
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import crew_memory as CM          # B-CREW-STATUS-2 capture engine (facts only, no model)
+
 # ★ NO CONSOLE WINDOWS. The task runs under pythonw.exe, which has no console of its own,
 # and a console-less parent gives every child process a BRAND NEW console window. That
 # turned one window per minute into five-to-ten in a couple of seconds, each stealing
@@ -575,6 +578,16 @@ def derive():
             row["next_batch_card"] = nxt[0].get("title")
 
         row["digest"] = state_digest(row)
+        # --- B-CREW-STATUS-2: memory restoration (trailhead / mid-flight / since) ------
+        # Facts only. This is what answers "what was I doing and why"; the four summary fields
+        # above answer "what is happening", which Kyle measured as not the question he has.
+        try:
+            row["memory"] = CM.build(SESSIONS[sess]["transcripts"])
+        except Exception as e:
+            row["memory"] = {"ok": False, "why": f"could not be read ({type(e).__name__})",
+                             "trailhead": None, "narration": [],
+                             "since": {"directed": [], "chore": {}, "unattributed": 0,
+                                       "unattributed_why": ""}}
         state["sessions"][sess] = row
         if row.get("unanswered_ask"):
             state["unanswered"].append({"session": sess, "who": "Kyle", **row["unanswered_ask"]})
@@ -777,6 +790,55 @@ def render_html(state, summ, summ_err):
             chips.append('<span class="chip wait">waiting on Langston</span>')
         if r.get("unanswered_ask"):
             chips.append('<span class="chip need">unanswered ask to Kyle</span>')
+        # ---- memory block: every cell is a value or a stated reason, never blank ----
+        def plain(t):
+            """Strip the markdown the sessions write in. They are writing for a terminal that
+            renders it; this page is not that terminal, so ** and tables arrive as literal
+            noise in the middle of the sentence Kyle is trying to read."""
+            t = re.sub(r"\*\*(.+?)\*\*", r"\1", t or "")
+            t = re.sub(r"(?<!\w)[*_](\S(?:.*?\S)?)[*_](?!\w)", r"\1", t)
+            t = re.sub(r"`([^`]+)`", r"\1", t)
+            t = re.sub(r"^#{1,6}\s*", "", t, flags=re.M)
+            t = re.sub(r"\|", " ", t)          # tables do not survive a one-line quote
+            t = re.sub(r"^[-\s]{3,}$", " ", t, flags=re.M)
+            return re.sub(r"\s+", " ", t).strip()
+
+        mem = r.get("memory") or {}
+        if not mem.get("ok"):
+            mem_block = ('<div class="mem"><b>Where you left it</b>'
+                         f'<div class="abst">{esc(mem.get("why") or "not available")}</div></div>')
+        else:
+            th_ = mem.get("trailhead") or {}
+            parts = ['<div class="mem">']
+            parts.append(f'<b>Where you left it</b> <small>{esc(ago(th_.get("anchor_ts")))}</small>')
+            if th_.get("why"):
+                parts.append(f'<div class="abst">{esc(th_["why"])}</div>')
+            for q in (th_.get("quotes") or [])[:3]:
+                parts.append(f'<div class="tq"><q>{esc(plain(q)[:420])}</q></div>')
+            if not th_.get("quotes"):
+                parts.append('<div class="abst">no message you typed appears in what this '
+                             'session still keeps</div>')
+
+            parts.append('<b>What it was in the middle of</b>')
+            narr = mem.get("narration") or []
+            if not narr:
+                parts.append('<div class="abst">you spoke last here; nothing has run since</div>')
+            for nrec in narr[-2:]:
+                parts.append(f'<div class="nq"><small>{esc(ago(nrec.get("ts")))}</small> '
+                             f'{esc(plain(nrec.get('text') or '')[:420])}</div>')
+
+            since = mem.get("since") or {}
+            parts.append('<b>What has happened since</b>')
+            d_ = since.get("directed") or []
+            parts.append(f'<div>{len(d_)} change(s) you asked for</div>')
+            for task, cnt in sorted((since.get("chore") or {}).items(), key=lambda x: -x[1])[:3]:
+                parts.append(f'<div>{cnt} change(s) from automation — {esc(task)}</div>')
+            if since.get("unattributed"):
+                parts.append(f'<div class="abst">{since["unattributed"]} change(s) unattributed '
+                             f'— {esc(since.get("unattributed_why") or "")}</div>')
+            parts.append('</div>')
+            mem_block = "".join(parts)
+
         rows.append(f"""
         <section class="card">
           <h2>{esc(s)} <span class="alias">{esc(r.get('alias',''))}</span> {''.join(chips)}</h2>
@@ -787,6 +849,7 @@ def render_html(state, summ, summ_err):
             <dt>Just finished</dt><dd class="sum">{esc(sm.get('just_finished')) or '<span class=blank>—</span>'}</dd>
             {thread_row}
           </dl>
+          {mem_block}
           <div class="ev"><b>Evidence (exact, not summarised)</b>
             <div>status last CHANGED {esc(ago(r.get('changed_at')))} <small>(not a poll — only when something moved)</small></div>
             <div>batch <code>{esc(cb.get('id'))}</code>{' step ' + esc(cb.get('step')) if cb.get('step') else ''}
@@ -830,6 +893,19 @@ def render_html(state, summ, summ_err):
  dt{{color:#8b93a7;font-size:13px}} dd{{margin:0}}
  .sum{{color:#dfe6f5}} .blank{{color:#5b6478}}
  .ev{{border-top:1px solid #232937;padding-top:9px;font-size:13px;color:#a9b2c6}}
+ /* B-CREW-STATUS-2 memory block. Deliberately plainer than the summary fields above: this is
+    Kyle's own words and the session's own words, quoted, not a gloss. */
+ .mem{{border-top:1px solid #232937;padding-top:10px;margin-bottom:10px;font-size:14px}}
+ .mem b{{display:block;color:#7f8aa3;font-weight:600;font-size:12px;letter-spacing:.04em;
+         text-transform:uppercase;margin:10px 0 4px}}
+ .mem b:first-child{{margin-top:0}}
+ .tq{{border-left:3px solid #3b4a6b;padding-left:10px;margin:4px 0}}
+ .tq q{{color:#dfe6f2;font-style:normal}}
+ .nq{{color:#b9c2d4;margin:4px 0;line-height:1.45}}
+ /* An abstention is a SENTENCE, never a blank field: a blank reads as breakage, a stated
+    reason reads as the tool working. Styled as information, not as an error. */
+ .abst{{color:#93a4c4;background:#161d2b;border-left:3px solid #46577a;
+        padding:6px 10px;margin:4px 0;border-radius:3px;font-size:13px}}
  .ev b{{color:#8b93a7;font-weight:600}} q{{color:#c8d0e0;font-style:italic}}
  code{{background:#0d1017;padding:1px 5px;border-radius:3px}}
  .chip{{font-size:11px;padding:2px 8px;border-radius:10px;margin-left:6px;vertical-align:middle}}

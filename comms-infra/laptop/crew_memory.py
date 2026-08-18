@@ -388,3 +388,49 @@ def commit_attribution(recs, by_uuid, since_ts):
                              "detail": (f"scheduled task '{m.group(1)}'" if m
                                         else f"automated ({classify(root)[1]})")}
     return out
+
+
+# ── the single entry point the page uses ─────────────────────────────────────────────────────
+def build(slug):
+    """Everything the board needs for one session. Pure facts; no model, no rewriting.
+
+    Returns a dict whose every field is either a value or an ABSTENTION SENTENCE -- never an
+    empty string. A blank cell reads as breakage; a stated reason reads as the tool working."""
+    recs, err = load_records(slug)
+    if err:
+        return {"ok": False, "why": err, "trailhead": None, "narration": [],
+                "since": {"directed": [], "chore": {}, "unattributed": 0, "unattributed_why": ""}}
+    by = index_by_uuid(recs)
+    th = trailhead(recs, by)
+    win = directed_window(recs, by, th["anchor_ts"])
+    att = commit_attribution(recs, by, th["anchor_ts"])
+
+    narration = [e for e in win
+                 if (e.get("message") or {}).get("role") == "assistant"
+                 and len(text_of(e.get("message") or {}).strip()) > 300]
+
+    chore = {}
+    unattributed, unattributed_why = 0, ""
+    directed = []
+    for sha, v in att.items():
+        if v["kind"] == "directed":
+            directed.append((sha, v["detail"]))
+        elif v["kind"] == "chore":
+            chore[v["detail"]] = chore.get(v["detail"], 0) + 1
+        else:
+            unattributed += 1
+            unattributed_why = v["detail"]
+
+    kyle_turns = [e for e in th["span"] if classify(e)[0] == KYLE]
+    return {
+        "ok": True, "why": "",
+        "trailhead": {
+            "state": th["state"], "why": th["why"], "anchor_ts": th["anchor_ts"],
+            "quotes": [residual(text_of(e["message"])).strip() for e in kyle_turns],
+        },
+        "narration": [{"ts": e.get("timestamp"), "text": text_of(e["message"]).strip()}
+                      for e in narration[-2:]],
+        "since": {"directed": directed, "chore": chore,
+                  "unattributed": unattributed, "unattributed_why": unattributed_why},
+        "blocked_on_kyle": bool(kyle_turns) and not narration,
+    }
