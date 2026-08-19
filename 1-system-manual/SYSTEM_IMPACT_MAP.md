@@ -921,11 +921,11 @@ Kill-switch is **DB-backed per-mode**: `isKillSwitchTripped(mode)` (`guardrail-p
 
 **Failure modes, both announced rather than silent.** Unreadable `CONDUCT.md` → a loud stdout breadcrumb naming the path and telling the session it is running **without** its behavioural rules, then `exit 0`. **Breadcrumbs go to STDOUT, never stderr — SessionStart stderr is not injected into context**, so a stderr warning is invisible to the model that needs it.
 
-⛔ **KNOWN REACH LIMIT — `#700`: a session whose working folder is NOT a repo copy fires NO SessionStart hooks at all**, so it loads no conduct, no memory, no rules-freshness and no guards, while looking like a normal session. The retired Google-Drive folder is such a place and hourly sessions demonstrably run there. **This entry does not fix that; it bounds what "the conduct file loads everywhere" means.**
+⛔ **KNOWN REACH LIMIT — `#700 (scheduled tasks run from a non-repo folder)`: a session whose working folder is NOT a repo copy fires NO SessionStart hooks at all**, so it loads no conduct, no memory, no rules-freshness and no guards, while looking like a normal session. The retired Google-Drive folder is such a place and hourly sessions demonstrably run there. **This entry does not fix that; it bounds what "the conduct file loads everywhere" means.**
 
 **Upstream:** `.claude/settings.local.json` (committed — the registration travels with the repo) · `CONDUCT.md` (repo root) · `CLAUDE_PROJECT_DIR`.
 **Downstream:** every CC session's behaviour. **Shared state:** none — the hook is read-only and stateless.
-**If you change this, check:** `CLAUDE.md` §5 "THE EIGHT" (items 6-8 now cite `CONDUCT.md`) · the per-rule pointers left in `CLAUDE.md` §1, rules 5/6/20/22/24/26/27/28/29 and §11 · `1-system-manual/_pending-skills/bug-investigation-SOURCE.md` (staged rule-24 text B-RULES-1d consumes) · `RUNNING_ISSUES.md` #700.
+**If you change this, check:** `CLAUDE.md` §5 "THE EIGHT" (items 6-8 now cite `CONDUCT.md`) · the per-rule pointers left in `CLAUDE.md` §1, rules 5/6/20/22/24/26/27/28/29 and §11 · `1-system-manual/_pending-skills/bug-investigation-SOURCE.md` (staged rule-24 text B-RULES-1d consumes) · `RUNNING_ISSUES.md` **#700 (scheduled tasks run from a non-repo folder)** — ⚠️ **the number alone is an AMBIGUOUS OBJECT right now: CC-C independently minted a #700 (commodity_perp capture) 2m28s after mine, and both are live at `:2703` and `:2778`. Per the #682 convention, cite this one WITH its batch name. The disambiguator is not a renumber and needs nobody’s assent; the renumber itself waits on the #702 range split.**
 
 ---
 
