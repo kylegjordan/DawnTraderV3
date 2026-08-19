@@ -30,6 +30,7 @@
 - [Layer 7: Learning & Calibration](#layer-7-learning-calibration)
 - [Layer 8: Predictive Learning Stack](#layer-8-predictive-learning-stack)
 - [Layer 9: Infrastructure & Monitoring](#layer-9-infrastructure-monitoring)
+  - [Session-Instruction Loading Estate (`.claude/hooks/*` SessionStart)](#session-instruction-loading-estate-claudehooks-sessionstart--added-b-conduct-file-2026-08-20)
 - [Layer 10: Frontend & Communication](#layer-10-frontend-communication)
 - [Layer 11: Legacy (Active but Pending Removal)](#layer-11-legacy-active-but-pending-removal)
 - [Quick Lookup: "If I Change X, Check Y"](#quick-lookup-if-i-change-x-check-y)
@@ -896,6 +897,37 @@ Kill-switch is **DB-backed per-mode**: `isKillSwitchTripped(mode)` (`guardrail-p
 - **Downstream**: **stdout/stderr only.** ⚠️ **Stream choice is load-bearing, not cosmetic: staging retention is asymmetric (~2 days stdout vs ~14 stderr), so all `OBSERVED`/`INPUT_UNAVAILABLE` lines are on `console.warn` deliberately — they are the evidence base for #618's pairing decision.**
 - **Blast Radius**: **LOW on execution** (observational, try/caught, never throws onto the money path) — **but HIGH on TRUST**, which is the reason this entry exists. Three of its checks were anchored to inputs that do not exist or invariants since retired: one always RED (**339 false alarms since 2026-07-15**), one always GREEN (**structurally unreachable**), one made unfalsifiable by its own repair. ⇒ **a broken check is not a quiet failure — it either buries a real defect in its own noise, or shows a green light that means nothing. Both were live simultaneously.**
 - **Related**: #614 (the phantom `portfolio_state.startingBalance` read), #618 (the frozen-anchor/capped-session-scope mechanism this observes), #620 (the engine-vs-persisted round-trip, still unchecked).
+
+### Session-Instruction Loading Estate (`.claude/hooks/*` SessionStart) — added B-CONDUCT-FILE 2026-08-20
+
+> ⚠️ **THIS ESTATE HAD NO SIM ENTRY AT ALL BEFORE THIS BATCH — flagged as a governance gap per §9 rule 1, not merely added.** Four hooks decide what every session loads on every start, resume and compaction, and the map was silent on all of them. **A component that determines what the operators read is squarely SIM-scope.**
+
+**What runs, in registration order** (`.claude/settings.local.json` → `hooks.SessionStart`, matcher `startup|resume|compact`):
+
+| # | hook | what it does | blast radius |
+|---|---|---|---|
+| 1 | `fresh-rules.mjs` | re-stages `CLAUDE.md` / `.claude/*` when the branch has moved; warns instead when local edits exist | **MEDIUM** — can restage files into a session's index |
+| 2 | `session-reminder.mjs` | re-injects the governed-read rule + wake-watcher check | LOW |
+| 3 | `load-own-memory.mjs` | injects **this session's own** `MEMORY_CC_<X>.md` | LOW |
+| 4 | **`load-conduct.mjs`** *(NEW)* | injects **`CONDUCT.md`** — the behavioural rules | **MEDIUM** — every session's conduct depends on it |
+| 5 | `log-instructions-loaded.mjs` | appends the loaded-set to `~/.claude/instructions-loaded.jsonl` | LOW — **registered LAST deliberately, so it observes the full set** |
+
+**★ `load-conduct.mjs` HAS NO CLONE GATE, AND THAT IS THE ONE PLACE IT DIVERGES FROM ITS SIBLING — RECORD IT, BECAUSE THE DIVERGENCE LOOKS LIKE AN OMISSION.**
+`load-own-memory.mjs` carries a **three-entry `CLONE_TO_SESSION` map** (`DawnTraderV3-old|-new|-analyst`) and **must** `exit(0)` on an unmapped folder: it maps a clone to a **per-session private** file and cannot guess *which* session's state to load. **Conduct has no per-session variant — it is the same file for everyone**, so there is nothing to guess. Copying the sibling's gate would mean the spare clone, a fresh clone, a worktree, or any future session **silently loads no conduct rules while presenting as a normal session** — the absent-as-valid failure (#546/#568). ⇒ **any repo copy carrying `CONDUCT.md` gets the rules.**
+
+**PROVEN, not asserted** (Step-3 verification, scope §7): with `CLAUDE_PROJECT_DIR` pointed at an **unmapped** folder, `load-own-memory.mjs` emits **0 bytes** (correct — it cannot guess) while `load-conduct.mjs` emits **12,538 bytes** (correct — nothing to guess).
+
+**Cap, and where it is enforced.** `CONDUCT.md` is capped at **16,384 B (~4k tokens), in BYTES not lines** — the 200-line MEMORY cap is routinely breached because dense paragraphs stay under the line count. **Enforcement lives in the loader, not in a rule**: over-cap **still loads in full** (a cap that can silently drop rules is worse than no cap) and prints a loud over-cap line every session start. **Proven by deliberately padding the file to 17,200 B and observing the warning fire while the content still loaded** — a warning never fired is not a warning.
+
+**Failure modes, both announced rather than silent.** Unreadable `CONDUCT.md` → a loud stdout breadcrumb naming the path and telling the session it is running **without** its behavioural rules, then `exit 0`. **Breadcrumbs go to STDOUT, never stderr — SessionStart stderr is not injected into context**, so a stderr warning is invisible to the model that needs it.
+
+⛔ **KNOWN REACH LIMIT — `#700`: a session whose working folder is NOT a repo copy fires NO SessionStart hooks at all**, so it loads no conduct, no memory, no rules-freshness and no guards, while looking like a normal session. The retired Google-Drive folder is such a place and hourly sessions demonstrably run there. **This entry does not fix that; it bounds what "the conduct file loads everywhere" means.**
+
+**Upstream:** `.claude/settings.local.json` (committed — the registration travels with the repo) · `CONDUCT.md` (repo root) · `CLAUDE_PROJECT_DIR`.
+**Downstream:** every CC session's behaviour. **Shared state:** none — the hook is read-only and stateless.
+**If you change this, check:** `CLAUDE.md` §5 "THE EIGHT" (items 6-8 now cite `CONDUCT.md`) · the per-rule pointers left in `CLAUDE.md` §1, rules 5/6/20/22/24/26/27/28/29 and §11 · `1-system-manual/_pending-skills/bug-investigation-SOURCE.md` (staged rule-24 text B-RULES-1d consumes) · `RUNNING_ISSUES.md` #700.
+
+---
 
 ## Layer 10: Frontend & Communication
 
