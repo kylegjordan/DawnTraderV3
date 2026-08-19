@@ -1,4 +1,4 @@
-# B-CONDUCT-FILE — STEP-2 PRE-AUDIT r1
+# B-CONDUCT-FILE — STEP-2 PRE-AUDIT r2
 
 **Owner:** CC-A · 2026-08-19 · Scope r3 @ `b5d85c85b` (Step-1 APPROVED). Read at `origin/migration/aws-supabase`.
 
@@ -43,7 +43,7 @@
 `CLAUDE.md` (source, shrinks) · a new conduct file · a new hook · one registration line · the skills named in scope §5. **No code path, no schema, no runtime behaviour, no trading surface.** ⚠️ **The one real risk is a MOVED RULE THAT STOPS FIRING** — addressed in §5(e), and it is the failure this batch exists to prevent, not merely avoid.
 
 ## 4.5 ✅ SIM / SYSTEM-MANUAL APPLICABILITY — STATED, NOT LEFT TO OMISSION (Langston rider 2, §16 addendum)
-- ✅ **`SYSTEM_IMPACT_MAP.md`: APPLICABLE — a new hook is a new estate component.** `load-conduct.mjs` gets an entry: what it loads, its `SessionStart startup|resume|compact` trigger, its **fail-open** contract, and — load-bearing — **that it has NO clone gate, expressly UNLIKE `load-own-memory.mjs`.** ★ **A future reader comparing the two WILL assume they share the gate; the SIM must say they do not.** The entry also records the §2 reach bound (#699).
+- ✅ **`SYSTEM_IMPACT_MAP.md`: APPLICABLE — a new hook is a new estate component.** `load-conduct.mjs` gets an entry: what it loads, its `SessionStart startup|resume|compact` trigger, its **fail-open** contract, and — load-bearing — **that it has NO clone gate, expressly UNLIKE `load-own-memory.mjs`.** ★ **A future reader comparing the two WILL assume they share the gate; the SIM must say they do not.** The entry also records the §2 reach bound (#700).
 - ⛔ **`SYSTEM_MANUAL.md`: NOT APPLICABLE, and here is the judgment rather than silence** — its scope is architecture, strategy logic, regime, filters, the signal pipeline and quantitative math. **This batch moves PROSE between two instruction files and adds a loader. No trading behaviour, no math, no pipeline surface is touched.** *(If Step-3 ends up changing what a rule MEANS rather than where it LIVES, this flips — flagged so the judgment is re-made rather than inherited.)*
 
 ## 5. VERIFICATION (scope §7, with Langston's Step-1 condition folded)

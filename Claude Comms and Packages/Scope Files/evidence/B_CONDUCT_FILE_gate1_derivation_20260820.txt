@@ -1,0 +1,29 @@
+SINK          : C:\Users\kyleg\.claude\instructions-loaded.jsonl
+total lines   : 111
+native rows   : 57 (source=native-InstructionsLoaded)
+  of which canary (hand-fed): 1
+UNPROMPTED    : 56 <- the population
+window        : 2026-08-07T11:38:12 -> 2026-08-19T20:49:58
+distinct sessions: 27
+    4dfcc10e 18
+    66dbb030 9
+    0fe1c46a 4
+    27a5ffa6 2
+    a4b26375 1
+    1f42fdcd 1
+
+--- HOW THIS WAS PRODUCED (so a second party can re-run or refute the arithmetic) ---
+Script: read every line of the sink as JSON; keep rows where source == 'native-InstructionsLoaded';
+the POPULATION excludes rows whose session_id == 'canary' (the single hand-fed row written at build
+time, which evidences only that the script writes when piped input -- NOT that the harness fires it).
+GATE 1's requirement is literally "a first NO-MANUAL-INPUT row", so that exclusion is the point.
+
+WHY THIS FILE EXISTS (Langston, 2026-08-20): section 2.5 was RULED ON REPORTED FACT because the sink
+lives on the CC-A workstation and is unreachable from Hetzner -- so the standing invitation to
+"re-check it if you doubt it" was open to exactly one party, which is me. Committing the raw output
+makes the arithmetic checkable by anyone, even though the underlying file still is not.
+
+HONEST LIMIT, unchanged by this file: this evidences that the hook FIRES, across 27 sessions over 12
+days. It says NOTHING about the Drive-folder class (#700), which has no .claude/ directory and
+therefore fires no hooks at all -- and no count from this sink could ever show that, because a
+session that loads nothing writes nothing here.
