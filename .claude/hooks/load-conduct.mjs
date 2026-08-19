@@ -45,7 +45,7 @@ try {
     // ANNOUNCED, NOT SILENT. SessionStart stderr is not injected into context, so the breadcrumb
     // must go to stdout where the model actually reads it (the same finding as the sibling's Q1).
     process.stdout.write(
-      `[⚠️ CONDUCT.md COULD NOT BE LOADED from ${conductPath || '(CLAUDE_PROJECT_DIR unset — path resolved against cwd)'} — this session is running WITHOUT its ` +
+      `[⚠️ CONDUCT.md COULD NOT BE LOADED from ${conductPath}${projectDir ? '' : ' (CLAUDE_PROJECT_DIR unset — resolved against cwd)'} — this session is running WITHOUT its ` +
       `behavioural rules (how to report, when to stay silent, how to correct a mistake). Read ` +
       `CONDUCT.md manually before reporting anything to Kyle; do NOT treat its absence as "no rules".]\n`
     );
