@@ -264,6 +264,26 @@ for raw in sys.stdin:
                     deliver, body = addressed_to_me(text)
                     if deliver:
                         print(f"WAKE[{sender} via {tp}->{ALIAS}]: {body}{media_suffix(d)}", flush=True)
+        else:
+            # ── THE HARNESS THAT IMPERSONATED A CLEAN PASS (Langston rider, 2026-08-20) ──
+            # `cur` is set ONLY by tail's "==> file <==" header. A line arriving without one
+            # matches none of the branches above and, before this `else`, was dropped in TOTAL
+            # SILENCE. That is not a hypothetical: it is what made THREE hand-fed tests of the
+            # push-notice suppression read as PASS — including one reported to Kyle as proof —
+            # when in truth nothing had been processed at all. Silence from a filter is
+            # indistinguishable from silence from a suppressor, and only a POSITIVE CONTROL
+            # (a line known to wake, fed through the same harness, also emitting nothing)
+            # separated them.
+            # A procedure caught it; a procedure is exactly what gets skipped under time
+            # pressure, which is #623 leg 2 — convert the control into a MECHANISM. So the
+            # harness now announces itself instead of impersonating a clean result.
+            # STDERR, deliberately: the Monitor treats stdout as the event stream, so a stdout
+            # line here would forge a wake. stderr lands in the task's output file — visible to
+            # anyone testing, invisible to the wake channel.
+            print(f"[cc-wake-filter] UNROUTED LINE (cur={cur!r}) — no '==> file <==' header seen, "
+                  f"so this line matched no branch and was DROPPED. If you are testing by piping "
+                  f"lines in, prepend: ==> /var/log/cc-discord-inbox.jsonl <==  — otherwise a "
+                  f"silent run is NOT evidence of suppression.", file=sys.stderr, flush=True)
     except Exception:
         # never die on a malformed line
         continue
