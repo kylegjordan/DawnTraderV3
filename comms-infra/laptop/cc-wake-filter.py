@@ -39,7 +39,7 @@ MY_NAME = ALIAS_NAME.get(ALIAS, "")
 # sentence. Anything with content beyond it -- including a reworded future escalation --
 # is DELIVERED. An unrecognised variant wakes you; it is never silently dropped.
 _ROUTINE_PUSH = re.compile(
-    r"^\s*(?:[\w\s/]*?—\s*)?review branch moved to\s+\S+\.?\s*"
+    r"^\s*(?:.{0,80}?\s[—–-]\s*)?review branch moved to\s+\S+\.?\s*"
     r"(?:pull before you push\.?)?\s*(?:\(if this is your own push,? ignore it\.?\))?\s*$",
     re.I)
 
@@ -157,6 +157,21 @@ def media_suffix(d):
         return "  [" + " | ".join(bits) + "]"
     except Exception:
         return ""
+
+# ── STDIN IS UTF-8. SAY SO, OR WINDOWS GUESSES cp1252 AND EVERY NON-ASCII CHAR ARRIVES MANGLED.
+# (2026-08-20, found while proving the push-notice suppression. The OUTPUT side of exactly this
+# bug was fixed 2026-06-11 -- see CLAUDE.md 6.9, "Windows cp1252 pipe encoding silently killed
+# non-ASCII events". The INPUT side was never fixed, and nothing announced it: the bridges write
+# UTF-8, Python decoded it as cp1252, so an em-dash reached this filter as three characters.
+# MEASURED at the moment of the fix: sys.stdin.encoding == 'cp1252'; the live push notice arrived
+# holding mojibake, not U+2014, so is_routine_push_notice() returned False on every real notice
+# while returning True in every hand-fed test -- the suppression had NEVER fired in production.
+# It is a whole CLASS, not one regex: every accented character, quote and dash in every Discord
+# message these sessions have been woken with was mangled on the way in.
+try:
+    sys.stdin.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass  # fail-open: a filter that cannot set its encoding must still deliver wakes
 
 cur = ""
 for raw in sys.stdin:
