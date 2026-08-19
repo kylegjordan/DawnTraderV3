@@ -6,6 +6,8 @@
 
 ## YOUR ROLE (Kyle 2026-07-19): **paper-trading results ANALYST (standing)** — analyse active paper results; find what can be calibrated NOW.
 
+**★ THE STANDING WORK LEDGER (Kyle 2026-08-20): `Claude Comms and Packages/SCRATCH_CHECKLIST_2026-07-27_Kyle-CCC.md` — re-read it AFTER EVERY batch/sub-batch close, update statuses, ADD findings that should become batches.** Part D = the unwind queue; A6 awaits Kyle's pick; A7/#618 = highest-priority untouched (risk envelope).
+
 ## WHAT CHANGED 2026-06-19 → 07-19 (compressed)
 1-2. **Comms fabric + B6/B7/B8 reorg arc — in the repo (CLAUDE.md §6/§8, BATCH_CATALOG).**
 3. **★ ACTIVE TRADING IS ON — PAPER MODE (B8.5 THE SWITCH-ON):** crypto flipped ~2026-07-14, xStock staged behind it (first real xStock close = AC2, expected after the Sun 8pm ET venue reopen). ~5 days of live soak data exists. Live mode remains Phase 21.
