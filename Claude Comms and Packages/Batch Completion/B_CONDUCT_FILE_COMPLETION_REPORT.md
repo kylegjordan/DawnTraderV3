@@ -80,5 +80,19 @@ The rules governing that behaviour **already existed**. They sat inside a ~140 K
 ## SPAWNED, ALL WITH OWNERS AND HOMES
 **#700** scheduled tasks run from a non-repo folder ⇒ **no SessionStart hook fires at all** (CC-A, due with this batch's follow-up) · **#701** Langston invoke fails and the bridge suppresses the error in channel (CC-A) · **#702** issue-number minting race — **SETTLED: CC-C 704-729 · CC-A 730-759 · CC-B 760-789**, with **four legacy doubles (#642 #646 #660 #668) deliberately NOT renumbered blind** · **#730** the wake-filter encoding class, **FIXED**.
 
+## ⚠️ DISCHARGE CRITERION FOR ALERT `441abe49` — READ THIS BEFORE CLOSING §7(a)
+
+**Langston's Step-11 rider, and he is right: the alert body says *"zero rows after SEVERAL session starts is a defect"* — and `several` is not a number.** ⇒ **that is exactly the wording that lets an alert re-surface forever without ever concluding.** The alert CLI has no update path (`add`/`ack`/`resolve`/`list`/`fire-due` only) and `resolve` is terminal, so the criterion is homed HERE rather than by re-minting a row — **I have already destroyed one gating alert by resolving it to "fix" it.**
+
+**AT DISCHARGE, DO ALL THREE:**
+1. **State the OBSERVED SESSION-START COUNT read from the sink** (`~/.claude/instructions-loaded.jsonl`, rows newer than `2026-08-19T23:15Z`). **It supplies its own denominator** — "zero CONDUCT rows out of N starts" concludes; "zero after several" does not.
+2. **Name #700 as the COVERAGE caveat:** a session whose folder is not a repo copy fires no hooks at all and is **dark to that sink**, so ⇒ **a LOW count may be coverage, not failure.** Do not read a small denominator as a defect.
+3. **Do NOT close on a direct-invocation test.** That is the thing already proven.
+
 ## HONEST RESIDUAL
 **§7(a) is open and armed** (`441abe49`) — the batch is closed on everything else. **Rule 21's removal stays GATED** behind alert `9c3037f0` and did **not** ride this batch. **CC-B and CC-C are still running the pre-fix wake filter until they re-arm** — the file being fixed is not their process being fixed. **The four legacy issue-number doubles remain live** and need a decision on which entry keeps each number plus inbound-citation re-pointing; **renumbering them blind is worse than the duplicate.**
+
+## ⚠️ ONE THING THIS CLOSE MUST NOT BE READ AS SAYING (Langston, Step-11)
+
+**"THIS BATCH needs no deploy" is NOT "THIS BRANCH needs no deploy."** He verified my N/A basis properly rather than accepting it: the compare range `e4d4a525c...0acb762d8` does contain three runtime files (`server/storage.ts`, `guard-eval-tracker.ts`, `shared/schema.ts`) **plus a DROP migration** — but all of them trace to `94f3869f6`, the **P19-B-PERPFEED close-out**, interleaved on the shared branch. **My batch's own commits touch nothing runtime, so the N/A holds.**
+⛔ **BUT staging is at `f245ac3a7` (2026-08-19 01:50Z), so that DROP migration is sitting UNDEPLOYED on the branch.** Whoever owns the PERPFEED close-out owes it a Step-6. **Relayed to CC-C directly** rather than narrated to Kyle. *(He also stated he could NOT check whether `feature_snapshots` is still live — no DB reach from his account — rather than implying he had looked.)*
