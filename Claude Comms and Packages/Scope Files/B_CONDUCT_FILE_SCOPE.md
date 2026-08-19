@@ -1,4 +1,6 @@
-# B-CONDUCT-FILE — SCOPE r1
+# B-CONDUCT-FILE — SCOPE r2
+
+> **⛔ r1→r2: Langston ruled REVISIONS REQUIRED and he was right on all five. My boundary TEST was half wrong, and BOTH weak points I flagged failed on the same half — while the real weak point (§1 moved as one undifferentiated 9 KB unit) I did not name at all.**
 
 change-class: non_architecture
 **Owner:** CC-A · 2026-08-18 · **Home: #694** (Kyle-directed, top priority) · **Related legs:** B-RULES-1c (path-scoped rules) · 1d (skills) · 1e (ordering)
@@ -22,14 +24,36 @@ Native `InstructionsLoaded` hook, 49 unprompted events: **the harness natively a
 
 ⛔⛔ **AGAINST KYLE'S OBSERVED ~144.7k-TOKEN POST-COMPACTION FLOOR, THAT IS 31%.** The remaining ~100k is system prompt + tool schemas + skills listing + MCP instructions + the compaction summary — **not ours.** ⇒ **emptying every file we own moves the floor ~145k → ~100k, NOT to zero. Stated up front so this batch is not sold as fixing more than it can.**
 
-## 3. THE BOUNDARY — the whole batch, and the thing to attack
-**CONDUCT = fires UNPROMPTED, before or while you act, with NO downstream backstop.** (A skill cannot do this: it loads on invocation, and the failure happens in the seconds before you would think to invoke one.)
-**MOVES (≈26 KB today):** §1 Identity/Persona 9.1 · r24 bug taxonomy + 24.a 5.3 · r29 measurement discipline 3.2 · r28 + 28.a 2.1 · r27 when-to-join 1.2 · r26 alert call-outs 1.2 · r22 governed-read 1.2 · §11 Kyle preferences 1.6 · r5, r6.
-**STAYS / → SKILLS:** r25/25.a/25.c commit mechanics (hook-backstopped) · r18 legacy removal · r23 fix-on-find · r16 permission runbook · r21 (removed, see §5).
-⚠️ **WEAKEST POINTS IN MY OWN LINE, named for attack: r20** (trading-mode taxonomy — a FACT, not conduct, but needed loaded to avoid mis-speaking; Langston previously ruled it stays) **and r22** (governed-read — conduct, but it HAS a hook backstop, which is my own criterion for *not* moving).
+## 3. THE BOUNDARY — TEST CORRECTED AT r2
+⛔ **r1's test was "conduct = no downstream backstop." Langston: that measures the COST OF A MISS, not whether the rule is BEHAVIOURAL — and it carries a perverse incentive: BUILD A HOOK AND THE RULE GETS DEMOTED OUT OF THE LOADED FILE, LEAVING THE HOOK AS SOLE CUSTODIAN.**
+✅ **CORRECTED TEST: *can the failure be detected mechanically AT THE MOMENT IT HAPPENS?*** **YES → hook + one line. NO or PARTIAL → conduct.**
 
-## 4. ⛔ THE FINDING THAT CHANGES THE JOB
-**26 KB is not a slim conduct file — it is the same problem relocated.** ⇒ **MOVE-AND-COMPRESS, ~70% off, target ≈6 KB.** **The compressible mass is NARRATED HISTORY carried inside the rules themselves.**
+**r22 governed-read — MOVES. Right call in r1, WRONG REASON.** A hook can catch *reading a governed file from a worktree*. ⛔ **It cannot catch *never reading it and asserting the contents anyway* — false-absence, which is r22's actual origin incident, HAS NO MECHANICAL SIGNATURE.** Partial detectability ⇒ conduct.
+**r20 trading-mode taxonomy — MOVES, BUT STRIPPED.** Its failure mode is conduct-shaped: mis-speaking, unprompted, with no moment at which you would think to check. ⚠ **CONDITION: NO COUNTS, NO ENUMERATIONS. ★ Langston's own always-loaded copy of that taxonomy WENT STALE — B-RULES-1a caught "18 strategies" against the SSOT's 19, with `orb` missing entirely.** ★★ **RULES DO NOT DRIFT; FACTS DO.** Distinctions + forbidden paraphrases only — **~600 B, not 4,484.**
+
+### 3.1 ★ §1 ITEMISED — THE WEAK POINT I DID NOT NAME
+**Langston: §1 is 9,085 B = 36% of the move set, and r1 moved it as ONE undifferentiated unit while every numbered rule got a per-item disposition.** Corrected:
+| # | part | B | disposition (corrected test) |
+|---|---|---|---|
+| 1 | Role | 65 | **CONDUCT** — trivial |
+| 2 | Expertise blurb | 548 | ⛔ **CUT / STRIP** — it is a FACT list and it ENUMERATES ("19 canonical strategies"); exactly the r20 drift shape |
+| 3 | Communication style | 471 | **CONDUCT** |
+| 4 | Plain-language mandatory | 930 | **CONDUCT** — jargon is not mechanically detectable at write time |
+| 5 | "The recurring failure mode" | 800 | **CONDUCT, COMPRESS HARD** — this is origin narration for [4] |
+| 6 | Where technical detail IS welcome | 324 | **CONDUCT** |
+| 7 | Two-paragraph default | 394 | **CONDUCT** |
+| 8 | WHEN TO SPEAK (the 2026-08-18 block) | 2,801 | ★ **SPLIT — his catch.** The *no-running-narration* PRINCIPLE is continuous ⇒ **CONDUCT (~400 B)**. The detailed step-report FORMAT fires at a KNOWN moment (step completion) ⇒ **TEMPLATE/SKILL (~2,400 B OUT)** |
+| 9 | Canonical terminology | 1,640 | **CONDUCT, STRIPPED** — keep the forbidden-paraphrase PAIRS (conduct); the surrounding list is reference. Same no-enumeration condition as r20 |
+| 10 | Always post BOTH channels | 464 | ⛔ **PROCEDURE — known trigger (posting a summary), and mechanically checkable** ⇒ hook/skill, not conduct |
+| 11 | Problem-solving disposition | 596 | **CONDUCT** |
+⇒ **§1 contributes ~3.0 KB of conduct, not 9.1 KB. Roughly 6 KB leaves as template, procedure, or cut.**
+
+## 4. ⛔ WHAT ACTUALLY COMPRESSES — AND WHAT DOES NOT (Langston re-derived every line item)
+**His measurement, replacing my rounded 26 KB: 25,221 B total** — §1 9,085 · r24 5,277 · r29 3,244 · r28 2,135 · r27 1,237 · r26 1,240 · r22 1,205 · §11 1,591 · r5/r6 207.
+- **r24 → skill is RELOCATION, NOT COMPRESSION:** 5,277 → ~150 B. **Free, and already banked.**
+- ✅ **r22–r29 (14.3 KB) ALL POST-DATE the 2026-05-25 narration strip ⇒ genuinely 60–70% compressible.** My "the mass is narrated history" was right about THIS band.
+- ⛔ **§1 DOES NOT COMPRESS — and this is the correction that matters: it was ALREADY STRIPPED ONCE (731→519 lines, ~8k tokens) and has regrown as CONTENT, not narration. YOU CANNOT BANK THE SAME PASS TWICE.** ⇒ §1 shrinks by SPLITTING (§3.1), not by trimming prose.
+⇒ **REALISTIC DELIVERY ≈ 2.5–3k tokens.**
 
 ## 5. THREE KYLE DECISIONS, ADOPTED
 - **Bug taxonomy → SKILL.** Conduct keeps ONE trigger line: *"when you think you have found a bug, load the bug-investigation skill; do not judge it from the code alone."* **5.3 KB out for one sentence.**
