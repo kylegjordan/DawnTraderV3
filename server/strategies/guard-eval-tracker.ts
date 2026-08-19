@@ -49,6 +49,14 @@ export interface GuardEvalRecord {
   guardAtrSumSq: number;
   attSum: number;       // Σ atrsToTarget as the GUARD computed it (target distance / effectiveATR)
   attSumSq: number;
+  // #696 tail counters (P19-B-PERPFEED close-out sweep, Langston-homed): EMPIRICAL att tail mass at
+  // fixed telemetry bins — the moments alone force a normal approximation whose right-skew bias the
+  // #696 apportionment had to carry as a ±3-point range. Bins are FIXED measurement bins, not behavior:
+  // >4 = the live reach_atr_max, >5 = the 2.0R-counterfactual threshold (4.0/0.8), >6 = skew probe.
+  // Same restore seam as the #371 fields: paired to atrPairedN's window, zero on older checkpoints.
+  attGt4: number;
+  attGt5: number;
+  attGt6: number;
   normPairedN: number;  // n paired to normAtrSum — the normalizer-side denominator
   normAtrSum: number;   // Σ mceContext.atr (the RAW ATR the normalizer's reachability gate reads)
   normAtrSumSq: number;
@@ -61,7 +69,7 @@ export interface GuardEvalRecord {
 const _stats = new Map<string, GuardEvalRecord>();
 
 function _blank(): GuardEvalRecord {
-  return { evals: 0, passes: 0, atrDrops: 0, stopDrops: 0, rrDrops: 0, reachDrops: 0, rrEvals: 0, rrSum: 0, rrSumSq: 0, rrSumSqEvals: 0, rrMin: Infinity, rrMax: -Infinity, atrPairedN: 0, guardAtrSum: 0, guardAtrSumSq: 0, attSum: 0, attSumSq: 0, normPairedN: 0, normAtrSum: 0, normAtrSumSq: 0 };
+  return { evals: 0, passes: 0, atrDrops: 0, stopDrops: 0, rrDrops: 0, reachDrops: 0, rrEvals: 0, rrSum: 0, rrSumSq: 0, rrSumSqEvals: 0, rrMin: Infinity, rrMax: -Infinity, atrPairedN: 0, guardAtrSum: 0, guardAtrSumSq: 0, attSum: 0, attSumSq: 0, attGt4: 0, attGt5: 0, attGt6: 0, normPairedN: 0, normAtrSum: 0, normAtrSumSq: 0 };
 }
 
 // Composite-key helpers. `::` separates strategy from assetClass; strategy keys are simple snake_case and
@@ -92,6 +100,7 @@ function _accumulate(into: GuardEvalRecord, from: GuardEvalRecord): void {
   into.rrMin = Math.min(into.rrMin, from.rrMin); into.rrMax = Math.max(into.rrMax, from.rrMax);
   into.atrPairedN += from.atrPairedN; into.guardAtrSum += from.guardAtrSum; into.guardAtrSumSq += from.guardAtrSumSq;
   into.attSum += from.attSum; into.attSumSq += from.attSumSq;
+  into.attGt4 += from.attGt4 ?? 0; into.attGt5 += from.attGt5 ?? 0; into.attGt6 += from.attGt6 ?? 0;
   into.normPairedN += from.normPairedN; into.normAtrSum += from.normAtrSum; into.normAtrSumSq += from.normAtrSumSq;
 }
 
@@ -190,6 +199,9 @@ export function recordGuardEval(strategy: string, rr: number, pass: boolean, dro
     r.atrPairedN++;
     r.guardAtrSum += effectiveATR; r.guardAtrSumSq += effectiveATR * effectiveATR;
     r.attSum += atrsToTarget;      r.attSumSq += atrsToTarget * atrsToTarget;
+    if (atrsToTarget > 4) r.attGt4++;
+    if (atrsToTarget > 5) r.attGt5++;
+    if (atrsToTarget > 6) r.attGt6++;
   }
   if (pass) { r.passes++; return; }
   if (dropReason === 'invalid_atr') r.atrDrops++;

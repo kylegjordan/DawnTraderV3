@@ -38,7 +38,6 @@ import {
   paperTrades,
   signalWeights,
   predictionOutcomes,
-  featureSnapshots,
   intradayAdjustments,
   aiLessons,
   portfolioAdjustments,
@@ -123,8 +122,6 @@ import {
   type InsertSignalWeight,
   type PredictionOutcome,
   type InsertPredictionOutcome,
-  type FeatureSnapshot,
-  type InsertFeatureSnapshot,
   type IntradayAdjustment,
   type InsertIntradayAdjustment,
   type AILesson,
@@ -440,9 +437,6 @@ export interface IStorage {
   getPortfolioAdjustments(filters?: { mode?: string; hours?: number; limit?: number }): Promise<PortfolioAdjustment[]>;
 
   // Feature snapshot methods
-  createFeatureSnapshot(snapshot: InsertFeatureSnapshot): Promise<FeatureSnapshot>;
-  getFeatureSnapshots(symbol: string, fromDate?: Date, toDate?: Date, limit?: number): Promise<FeatureSnapshot[]>;
-  getLatestFeatureSnapshot(symbol: string): Promise<FeatureSnapshot | undefined>;
 
   // Goals Engine methods - Live mode
   getGoalsLive(): Promise<GoalLive[]>;
@@ -2661,45 +2655,6 @@ export class DatabaseStorage implements IStorage {
     }
     
     return await query;
-  }
-
-  // Feature snapshot methods
-  async createFeatureSnapshot(snapshot: InsertFeatureSnapshot): Promise<FeatureSnapshot> {
-    const [result] = await db.insert(featureSnapshots).values(snapshot).returning();
-    return result;
-  }
-
-  async getFeatureSnapshots(symbol: string, fromDate?: Date, toDate?: Date, limit?: number): Promise<FeatureSnapshot[]> {
-    const conditions = [eq(featureSnapshots.symbol, symbol)];
-    
-    if (fromDate) {
-      conditions.push(gte(featureSnapshots.timestamp, fromDate));
-    }
-    if (toDate) {
-      conditions.push(lte(featureSnapshots.timestamp, toDate));
-    }
-    
-    const query = db
-      .select()
-      .from(featureSnapshots)
-      .where(and(...conditions))
-      .orderBy(desc(featureSnapshots.timestamp));
-    
-    if (limit) {
-      query.limit(limit);
-    }
-    
-    return await query;
-  }
-
-  async getLatestFeatureSnapshot(symbol: string): Promise<FeatureSnapshot | undefined> {
-    const [result] = await db
-      .select()
-      .from(featureSnapshots)
-      .where(eq(featureSnapshots.symbol, symbol))
-      .orderBy(desc(featureSnapshots.timestamp))
-      .limit(1);
-    return result || undefined;
   }
 
   // Goals Engine methods - Live mode (Phase 27.F.15.A - GLOBAL)

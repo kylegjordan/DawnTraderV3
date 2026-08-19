@@ -1309,24 +1309,6 @@ export const predictionOutcomes = pgTable("prediction_outcomes", {
 });
 
 // Feature snapshots (normalized and enriched market features)
-export const featureSnapshots = pgTable("feature_snapshots", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  symbol: varchar("symbol", { length: 20 }).notNull(),
-  timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow(),
-  priceNormalized: decimal("price_normalized", { precision: 10, scale: 4 }),
-  volumeNormalized: decimal("volume_normalized", { precision: 10, scale: 4 }),
-  momentumIndex: decimal("momentum_index", { precision: 10, scale: 4 }),
-  rsi: decimal("rsi", { precision: 5, scale: 2 }),
-  smaSlope: decimal("sma_slope", { precision: 10, scale: 6 }),
-  volumeDelta: decimal("volume_delta", { precision: 10, scale: 4 }),
-  volatilityScore: decimal("volatility_score", { precision: 10, scale: 4 }),
-  liquidityScore: decimal("liquidity_score", { precision: 10, scale: 4 }),
-  sentimentScore: decimal("sentiment_score", { precision: 5, scale: 4 }),
-  sectorCorrelation: decimal("sector_correlation", { precision: 5, scale: 4 }),
-  rawFeatures: jsonb("raw_features"),
-  normalizationWindow: integer("normalization_window").default(30),
-});
-
 // Goals Engine - Live Mode - GLOBAL
 export const goalsLive = pgTable("goals_live", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -2514,11 +2496,6 @@ export const insertPredictionOutcomeSchema = createInsertSchema(predictionOutcom
   predictionTimestamp: true,
 });
 
-export const insertFeatureSnapshotSchema = createInsertSchema(featureSnapshots).omit({
-  id: true,
-  timestamp: true,
-});
-
 // Goals Engine insert schemas
 // Phase 27.F: Make metric_key optional since it's auto-generated from metric_name
 // Phase 27.F.15.A: Renamed tables userGoalsLive→goalsLive, userGoalsPaper→goalsPaper
@@ -2782,8 +2759,6 @@ export type SignalWeight = typeof signalWeights.$inferSelect;
 export type InsertPredictionOutcome = z.infer<typeof insertPredictionOutcomeSchema>;
 export type PredictionOutcome = typeof predictionOutcomes.$inferSelect;
 
-export type InsertFeatureSnapshot = z.infer<typeof insertFeatureSnapshotSchema>;
-export type FeatureSnapshot = typeof featureSnapshots.$inferSelect;
 
 export type InsertGoalLive = z.infer<typeof insertGoalLiveSchema>;
 export type GoalLive = typeof goalsLive.$inferSelect;
