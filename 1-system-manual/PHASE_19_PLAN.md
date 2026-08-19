@@ -374,3 +374,13 @@ ALL must be ✅ before the flip commit. Verify each at the **B8 switch-on** Step
 ---
 
 *Maintained by the implementing CC session. Update §1 status + §5 decisions every batch/sub-batch close; re-sequence only with Kyle's sign-off recorded here.*
+
+---
+
+### B-CONDUCT-FILE — closed 2026-08-20 (CC-A) · §5 decision-log entry
+
+**DECISION 1 — conduct rules get a SEPARATE auto-loaded file rather than a better position inside `CLAUDE.md`.** The boundary test (Langston-corrected at r2) is ***"can the failure be detected mechanically AT THE MOMENT IT HAPPENS?"*** — YES → a hook plus one line; NO or PARTIAL → conduct. r1's test ("no downstream backstop") measured the COST OF A MISS and carried a perverse incentive: build a hook and the rule gets demoted out of the loaded file, leaving the hook as sole custodian.
+**DECISION 2 — the cap is in BYTES (16,384 ≈ 4k tokens), enforced IN THE LOADER, and never drops rules.** Lines were rejected because the 200-line MEMORY cap is routinely breached by dense paragraphs while formally compliant. Headroom is deliberate: *"a cap equal to the delivered size means the first new rule breaches it"* — the 200-line cap died from being met in form.
+**DECISION 3 — rule 24 is STAGED, not deleted, until B-RULES-1d builds its skill.** Langston: *"APPROVED as sequencing, not hedging."*
+**DECISION 4 — the loader has NO clone gate, deliberately unlike its sibling**, and the SIM records the divergence because it otherwise reads as an omission.
+**OPEN:** §7(a) native-load observation, alert `441abe49`. **Rule 21's removal remains GATED** behind alert `9c3037f0` and did not ride this batch.
