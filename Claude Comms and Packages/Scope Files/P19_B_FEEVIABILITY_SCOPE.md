@@ -242,3 +242,7 @@ A **commit + UTC timestamp**, not a date. **PRE-REGISTERED BAN on cross-half com
 
 **Disposition:** revisit dispatched to Langston same-turn (keep 2.5R / soften / hold ruling until the drought lifts); tonight's deploys are UNAFFECTED (mark-2 = DSS normalizer + class-fallback fence; PERPFEED = capture — neither touches the geometry row).
 
+## VERIFICATION LEDGER — OBJ-2 shadow TTL check (2026-08-19T14:0xZ, CC-C; alert c7457b75)
+
+**PASS.** Object: `rtb_shadow_pairings` closes since the 48h-TTL deploy (2026-08-16T22:07Z; ~63h window), population 37. Close reasons: stop_hit 31 + target_hit 5 = **36/37 (97.3%) resolved on MERIT**; timeout **1/37 = 2.7% TTL-cut vs the 27.3% pre-change baseline** (10,804/39,641). Zero `shadow_max_hold` rows in the window, so Langston's label-split exclusion is moot (stated, not skipped). n is small — the same #693 drought that suppresses admissions suppresses shadow volume — but the direction and magnitude are unambiguous: the 6h→48h TTL removed the clock as the dominant close reason, which is exactly what OBJ-2 shipped for.
+
