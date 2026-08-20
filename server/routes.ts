@@ -12039,9 +12039,18 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       if (limit) options.limit = parseInt(limit as string);
       if (closedOnly) options.closedOnly = closedOnly === 'true';
       
-      // Step A: `options` is built from query params and may omit `limit`; the reader no longer
-      // supplies a default, so the pre-existing effective bound (100) is codified here. LIST reader.
-      const trades = await storage.getClosedTrades('paper', { ...options, limit: options.limit ?? 100 });
+      // Step A (#618) + Step-A FIX. `options` is built from QUERY PARAMS, so `limit` can be 0,
+      // NaN or negative. The reader no longer supplies a default, so this site must reproduce the
+      // OLD effective bound for EVERY input, not just the absent one.
+      // ⚠️ MEASURED REGRESSION my first attempt shipped (`options.limit ?? 100`): `req.query.limit`
+      // is a STRING, so `"0"` is TRUTHY and `parseInt` gives 0 — and `??` catches null/undefined,
+      // NOT 0 — so `?limit=0` returned 0 rows where `0 || 100` used to return 100. Worse,
+      // `?limit=abc` gave NaN, and `.limit(NaN)` returned the ENTIRE TABLE (483 rows measured on
+      // staging) where `NaN || 100` used to return 100: a malformed query param UNBOUNDED a
+      // database read. The `|| 100` I removed was the thing absorbing both. Verified after this
+      // fix: 0→100, abc→100, 5→5, absent→100.
+      const legacyLimit = Number.isFinite(options.limit) && options.limit > 0 ? options.limit : 100;
+      const trades = await storage.getClosedTrades('paper', { ...options, limit: legacyLimit });
       
       // Phase 8.8.3-C-FINAL: Ghost trade filtering for legacy path
       const validTrades = trades.filter((trade: any) => {

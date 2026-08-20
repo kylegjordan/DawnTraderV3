@@ -3107,6 +3107,11 @@ export class DatabaseStorage implements IStorage {
     // 100 rows ordered by opened_at DESC. Requiring the bound makes tsc enumerate every
     // caller, so no future consumer can inherit a page size by accident: it must type a
     // number, and typing a number is the moment someone thinks.
+    // ⚠️ HONEST LIMIT ON THAT CLAIM (Langston, 2026-08-20): the compiler enumerates callers whose
+    // options object is TYPED. A caller passing an `any`-typed options bag satisfies the required
+    // property and is flagged by NOTHING — `routes.ts` has exactly such a site (`const options: any`),
+    // which the 24-site census found and tsc did not. So this contract is strong against accident,
+    // not airtight: `any` is a hole in it.
     const limit = filters.limit;
     const closedOnly = filters.closedOnly ?? false;
 
