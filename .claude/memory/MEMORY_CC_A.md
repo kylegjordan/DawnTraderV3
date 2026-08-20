@@ -11,10 +11,10 @@
 > **If BLOCKED-ON says Kyle, say NOTHING and do not work the item.** Otherwise continue to the next step and report only at the step boundary, in the `CONDUCT.md` §6 format.
 > ⚠️ **UPDATE THESE FOUR LINES AT EVERY STEP BOUNDARY.** They were left stale for weeks and Kyle found it before I did.
 
-- **BATCH:** B-MISTAKES-FILE (#694 pieces 4+5, issue #731) — pattern index + the merged scope/pre-audit format
-- **STEP:** Step-3 BUILT + pushed `490ca7a66`. Index `1-system-manual/MISTAKE_PATTERNS.md`, `CONDUCT.md` §13 (one pattern: `wrong-object`), the `MISTAKE: <slug> [<batch-id>]` trailer, weekly pass armed as alert `8a07c40b` (2026-08-27T09:00Z, dedupe_key null — MINT NEXT ROW FIRST, then resolve). Verification (a) grep + both controls PASS · (b) both byte objects stated · (c) retirement path exercised for real (`bare-commit` promoted `a69c480ca` → retired `490ca7a66`) · (d) pointer RESOLVES.
-- **BLOCKED-ON:** nobody — CI running, then Step-4 dispatch to Langston.
-- **NEXT:** CI 4/4 per-job → Step-4 diff to Langston → governance + completion report → then the rules-file slim and the skills build (`.claude/skills/` still does not exist).
+- **BATCH:** B-MISTAKES-FILE (#694 pieces 4+5, issue #731) — CLOSING. Governance written; awaiting Langston Step-4 clearance at `7fe30b683`.
+- **STEP:** Step-10 governance DONE (catalog/history/plan/completion report). Step-11 pending his clearance.
+- **BLOCKED-ON:** Langston — Step-4 clearance. I applied his 4 displacement conditions at `7fe30b683` and had NOT told him; dispatched 21:28Z. Outstanding for his ruling: the one-in-one-out cut of 3 bullets from `CONDUCT.md` §11.
+- **NEXT:** his clearance → close → **then the `CLAUDE.md` SLIM + the SKILLS BUILD** (`.claude/skills/` still does not exist; `_pending-skills/bug-investigation-SOURCE.md` is staged and waiting). #732 DEPRIORITISED by Kyle with a tripwire on the weekly pass.
 
 ---
 

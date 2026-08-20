@@ -386,3 +386,14 @@ ALL must be ✅ before the flip commit. Verify each at the **B8 switch-on** Step
 **DECISION 3 — rule 24 is STAGED, not deleted, until B-RULES-1d builds its skill.** Langston: *"APPROVED as sequencing, not hedging."*
 **DECISION 4 — the loader has NO clone gate, deliberately unlike its sibling**, and the SIM records the divergence because it otherwise reads as an omission.
 **OPEN:** §7(a) native-load observation, alert `441abe49`. **Rule 21's removal remains GATED** behind alert `9c3037f0` and did not ride this batch.
+
+---
+
+### B-MISTAKES-FILE — closed 2026-08-20 (CC-A) · §5 decision-log entry
+
+**DECISION 1 — DO NOT BUILD THE APPEND-ONLY LOG.** The record exists in git at 36% density with 98.6% marker recall; a second store is the #641 two-copies shape. **git = instance layer · `MISTAKE_PATTERNS.md` = pattern layer · `CONDUCT.md` §13 = the short auto-loaded list.**
+**DECISION 2 — PROMOTION THRESHOLD: 3+ instances across 2+ distinct batches, as a FLOOR** (Langston). A predicate, not a judgment — the trailer carries the batch id so it is one grep. **No severity override:** a single severe mistake gets a **mechanism**, not a rule slot.
+**DECISION 3 — A LIVE RULE IS NEVER DISPLACED BY NEWNESS** (Kyle's defect). Cap pressure means **mechanise the oldest**, or raise the cap. **The cost is that mechanism-building becomes mandatory.**
+**DECISION 4 — CONDUCT CAP RAISED 4,096 → 6,144 TOKENS (Kyle), EXPLICITLY TEMPORARY.** The whole four-file auto-load allocation is revisited once `CLAUDE.md` is slimmed.
+**DECISION 5 — PIECE (5) ADOPTED (Langston):** pre-audit + implementation plan = ONE document, audit before plan, every plan item back-referencing its finding.
+**OPEN:** the weekly pass has never run (first firing 2026-08-27; until a dated row exists its liveness is unproven — the batch's own standard applied to itself). `wrong-object` sits in §13 with **no mechanism**, its home *approved-and-unbuilt* — the first real test of Decision 3.

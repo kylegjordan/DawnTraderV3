@@ -587,3 +587,23 @@ The B65.2 functional commit (`0fcd19b1`) shipped trailing exits end-to-end. Subs
 **DEPLOY + UI VERIFICATION: N/A, JUDGED EXPLICITLY** (§9 anti-pattern) — every changed file is laptop-side or governance and the staging app reads none of them; no staging-visible surface exists.
 
 **GOVERNANCE:** SIM (**the session-instruction hook estate had NO entry at all — flagged as a governance gap per §9 rule 1, not quietly added**), CLAUDE.md, RUNNING_ISSUES (#700, #701, #702, #730), BATCH_CATALOG, PHASE_HISTORY, PHASE_19_PLAN, MEMORY_CC_A + Langston MEMORY, scope + pre-audit + evidence + completion report.
+
+---
+
+## B-MISTAKES-FILE — the mistakes system, and the merged scope/pre-audit format (CC-A, closed 2026-08-20)
+
+**change-class:** `non_architecture` · **Home:** #694 pieces (4)+(5) · **Issue:** #731 · **Reviewed ref** `7fe30b683` · **CI 4/4 GREEN per-job** (run `32376805264`) · **Langston:** merged doc r1→r4, four threshold conditions
+
+⛔ **THE AUDIT OVERTURNED KYLE'S OWN DESIGN, AND THAT IS THE HEADLINE.** He asked for an append-only mistakes log. **MEASURED (object `28c007163..216d57f8b`, population 200 commits, instrument controlled): 72 (36%) already carry a genuine self-correction, and only ONE escapes the marker vocabulary ⇒ 98.6% recall.** Rule 28.a already forces the reasoning into the commit ⇒ **a second store duplicates a record nothing keeps honest with it (#641 shape).** What was missing was a **consistent marker** and the **pattern layer** — not the log.
+
+**SHIPPED:** `MISTAKE_PATTERNS.md` (pattern index; instances stay in git) · `CONDUCT.md` §13 (the short auto-loaded list, 3-5 slots) · the trailer `MISTAKE: <slug> [<batch-id>] — <line>` · the weekly pass as alert `8a07c40b`, which **writes a dated row even when it finds nothing, so a MISSING ROW IS THE ALARM.**
+
+★★ **THE GATE REFUSED ITS OWN AUTHOR'S FAVOURITE EXAMPLE** (Langston condition 4, *"a gate whose initial population bypassed it is a gate on paper"*): `silence-not-evidence` — the pattern this whole week produced — has 3 instances **all inside one batch**, fails the 2+-batches leg, and does **NOT** enter §13. Only `wrong-object` qualified.
+
+⛔ **KYLE FOUND A DESIGN DEFECT BEFORE THE FIRST PASS RAN:** *a rule that has been PREVENTING the mistake, pushed out, means the mistake resumes* — **and the loop is perverse, because a rule that WORKS goes quiet and quiet sinks it in the ordering.** ⇒ **ROOT: you cannot distinguish "quiet because solved" from "quiet because the rule is holding it down."** ✅ **REPLACED BY: cap pressure BUILDS A MECHANISM, it does not drop protection.** Cost stated: mechanism-building becomes mandatory.
+
+⚠️ **ONE-IN-ONE-OUT FIRED, THEN THE FILE RAN OUT OF CUTS.** Three §11 bullets left (already `CLAUDE.md` r15/r18/§9.4, and each fires at a known trigger ⇒ procedure, not conduct). Then nothing remained to cut without losing a rule ⇒ **KYLE RAISED THE CAP 4,096 → 6,144 tokens, explicitly as a DEFERRAL of the four-file allocation question until `CLAUDE.md` is slimmed.**
+
+✅ **PIECE (5) ADOPTED — pre-audit + plan is now ONE document.** Langston's evidence beat my argument: under two documents *the plan comes FIRST*, so an audit that overturns the design arrives after the Step-1 approval is spent. **This audit killed Kyle's design BEFORE a plan was built on it.** Requirement he attached, now binding: **every plan item back-references the audit finding it falls out of; anything unaudited is flagged `UNAUDITED` in-document** — because the hole leaked on first use, on the weekly pass.
+
+**GOVERNANCE:** MISTAKE_PATTERNS (new) · CONDUCT.md · CLAUDE.md r28.a · load-conduct.mjs · RUNNING_ISSUES (#731, #732) · PHASE_HISTORY · PHASE_19_PLAN · MEMORY_CC_A + Langston MEMORY · merged scope doc + completion report. **SIM + System Manual judged NOT APPLICABLE explicitly** (no new component — §3.3 recommended against a fifth hook, and none shipped).
