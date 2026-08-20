@@ -12047,8 +12047,14 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // NOT 0 — so `?limit=0` returned 0 rows where `0 || 100` used to return 100. Worse,
       // `?limit=abc` gave NaN, and `.limit(NaN)` returned the ENTIRE TABLE (483 rows measured on
       // staging) where `NaN || 100` used to return 100: a malformed query param UNBOUNDED a
-      // database read. The `|| 100` I removed was the thing absorbing both. Verified after this
-      // fix: 0→100, abc→100, 5→5, absent→100.
+      // database read. The `|| 100` I removed was the thing absorbing both.
+      // ★ ONE DECLARED DEVIATION, NOT PARITY (Langston, 2026-08-20 — the sentence that used to
+      // sit here claimed this reproduced the old bound for EVERY input, which is an overclaim of
+      // exactly the kind this batch exists to remove): `?limit=-5` is TRUTHY, so `|| 100` passed
+      // it straight to `.limit(-5)`; this guard swallows it to the default instead. Whatever the
+      // old path did with a negative LIMIT, it was not 100 — UNMEASURED, and deliberately not
+      // asserted. The swallow is plainly the better behaviour; it is simply a CHANGE, named as one.
+      // Verified: 0→100, abc→100, -5→100, 5→5, absent→100.
       const legacyLimit = Number.isFinite(options.limit) && options.limit > 0 ? options.limit : 100;
       const trades = await storage.getClosedTrades('paper', { ...options, limit: legacyLimit });
       
