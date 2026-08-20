@@ -16,7 +16,11 @@ interface PortfolioSummaryData {
   netPnl: number;
   netPnlPercent: number;
   sessionStart: string | null;
-  closedTradesCount: number;
+  // B-BALANCE-TRUTH Step C (#618): NULLABLE. The server ships null when the engine session
+  // start is unknown (#585) rather than a plausible-looking 0 — "zero trades closed" is not
+  // true on a running engine that is closing positions. This field is currently declared and
+  // not rendered; whoever renders it must branch on null rather than print it.
+  closedTradesCount: number | null;
 }
 
 export function PortfolioSummaryStrip() {

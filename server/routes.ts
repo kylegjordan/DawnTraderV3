@@ -12649,7 +12649,14 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // report, so the honest value is the anchor itself, and the absence is logged LOUDLY
       // rather than papered over with a number that looks plausible and is wrong.
       let realizedPnl = 0;
-      let closedTradesCount = 0;
+      // Langston CHANGES-NEEDED, 2026-08-21: this must NOT default to 0. `realizedPnl = 0` is
+      // defensible on the null branch because the anchor genuinely IS the answer, so
+      // `startingBalance + 0` is arithmetically correct. A COUNT of 0 is not: there is no sense
+      // in which "zero trades closed" is true here, and under #585 this branch renders on a
+      // RUNNING engine with positions actually closing. The honest value is UNKNOWN, so it ships
+      // as null and the client renders it as such. A loud stderr line does not reach the page --
+      // #546 is exactly an absent value wearing a plausible number's clothes.
+      let closedTradesCount: number | null = null;
       if (sessionStart) {
         const agg = await storage.getRealizedPnlSince(mode, sessionStart);
         realizedPnl = agg.realizedPnl;
