@@ -2811,7 +2811,33 @@ if (!state.targetLatched && !targetLockDiscontinuity.active) {
 **§9.5(b-ii) — SEARCHED BEFORE FILING, and this is NOT #640.** #640 (WITHDRAWN 2026-07-31, not-a-defect) asked *why the ladder COLUMNS are empty on these rows* and correctly answered that a trailing exit does not require a prior latch-capture. ⇒ **it never asked why the rows EXIST AT ALL with the master switch off** — and at the time it ran the switch had already been false for 8 days. **Different question, opposite direction.** Related but distinct: **#562** (Kyle's on/off-switch directive — the switch it asked for WAS built and works) · **#640** · **#556**.
 
 **DISPOSITION (rule 24): outcome (1) on the LABEL — a real defect with a one-line-placement root cause.** The fix is to branch the exit reason on **ladder entry** (`tradeMode === 'TRAILING_TAKE'` / `ladderRung > 0`) rather than on `targetLatched`, so the label reports what actually happened. ⚠️ **Consequence 2 must be resolved BEFORE the label fix, not after** — if the hold-past-target is unintended, relabelling would hide the symptom that surfaced it.
-**HOME (§9.4): needs a named batch + owner. Proposed CC-A, sequenced after B-MISTAKES-FILE closes. NOT self-assigned — Kyle's call, since it touches live paper exit behaviour.**
+### ⛔⛔ ADDENDUM 2026-08-20, SAME DAY — **THE MECHANISM ABOVE IS *NOT* ESTABLISHED. THE DATA REFUTES PART OF IT.** (CC-A, self-caught while tracing the "post-target exposure" question the entry itself said must be settled first.)
+
+**I traced `tecShouldClose` (`trailing-exit-controller.ts:1550-1582`) to answer what stop is checked once latched with no ladder. Its entire close test is one line:**
+```js
+return currentPrice <= state.currentStopPrice;
+```
+⛔ **THAT CONTRADICTS THE OBSERVED EXITS.** `VVV/USD` closed at **14.792** with `currentStopPrice` = its never-ratcheted original stop **13.34785714**. `14.792 > 13.348` ⇒ **`tecShouldClose` returned FALSE** ⇒ **the `if (update.targetLatched) exitReason = 'trailing_stop_hit'` branch — which sits INSIDE that `if` — never ran for this trade.** Same arithmetic for `CRV/USD`.
+⇒ ★ **THE `targetLatched`-mislabel path I described is REAL IN THE CODE but is NOT DEMONSTRATED to be the path these seven rows took.** Something else closed them.
+
+**A SECOND EMIT SITE EXISTS and it collapses two meanings** — `active-execution-engine.ts:1673-1682`: `moonbag_timeout` **deliberately returns `type: 'trailing_stop_hit'`**, commented *"Reuse the existing trailing_stop_hit exit bucket on the DB side so we don't need a new enum."* ⇒ **`trailing_stop_hit` in `closed_trades` already means EITHER a trailing stop OR a moonbag duration timeout.** But that path also nominally requires moonbag state, which the switch blocks — **so it does not resolve the contradiction either; it widens it.**
+
+⛔ **THE DECISIVE INSTRUMENT DOES NOT REACH THE EVENT.** The `[B65.2][EXIT_TRIGGER]` line names the exact branch taken. **MEASURED: `/var/log/dawntrader/out.log` spans `2026-08-20 17:48:20Z → 19:52:42Z` — about TWO HOURS** (1.07 GB, single file, no daily rotation; only one archive, from 2026-07-13). `VVV/USD` closed `2026-08-19 21:06Z`, **outside the window.** ⇒ **zero `EXIT_TRIGGER` matches proves NOTHING here — the instrument cannot see that far back.** *(Log-routing/retention is already **#499**, OPEN since 2026-07-13 — not re-filed.)*
+
+⚠️ **MY OWN `wrong-object` INSTANCE, LOGGED: I first searched `~/.pm2/logs/`, found no application log, and was one step from reporting "the trading app retains no diagnostic output at all."** The configured path is `/var/log/dawntrader/out.log` (`pm_out_log_path`), which holds 1.07 GB written minutes earlier. **I looked in the default location instead of the CONFIGURED one.** Another session hit the identical trap — see `RUNNING_ISSUES.md:176`, *"My first search used `out.log`…"*.
+
+**⇒ WHAT THIS ENTRY NOW CLAIMS, AND WHAT IT DOES NOT:**
+| claim | status |
+|---|---|
+| All 8 trailing/BE switches false; master switch correctly wired at a single chokepoint | ✅ **MEASURED** |
+| 7 `trailing_stop_hit` rows, all post-switch-off, all `TARGET` mode, 0 rungs, stop never ratcheted | ✅ **MEASURED** |
+| `targetLatched` is set OUTSIDE the moonbag gate, and the label branches on it | ✅ **READ IN CODE** |
+| **that this is the path those 7 rows took** | ⛔ **REFUTED for 2 of them by the stop arithmetic; UNKNOWN for the other 5** |
+| post-target exposure | ⛔ **STILL UNANSWERED — and now harder, because the closing path itself is unidentified** |
+
+★ **NEXT STEP IS AN INSTRUMENT, NOT MORE CODE-READING:** the code has ≥2 emit sites and the runtime record is gone, so tracing further only produces more plausible stories. **Capture `EXIT_TRIGGER` (and the branch taken) into a durable sink with a retention window longer than two hours, then wait for the next `trailing_stop_hit` and read what actually fired.** Until then this stays OPEN with the mechanism explicitly unproven.
+
+**HOME (§9.4): needs a named batch + owner. Proposed CC-A, sequenced after B-MISTAKES-FILE closes. **ASSIGNED TO CC-A BY KYLE 2026-08-20.** ⚠️ Sequenced after the instrument exists — see the addendum: without a durable `EXIT_TRIGGER` record there is nothing to fix against.**
 **OPEN.**
 
 ### #730 FIXED 2026-08-20 (CC-A; found proving the push-notice suppression, blast radius corrected by Langston) — ★★ A RIGHT CURLY QUOTE KILLED THE WAKE WATCHER OUTRIGHT. THE SUPPRESSION ALSO NEVER FIRED. ONE CAUSE: **stdin WAS DECODED AS cp1252.**
