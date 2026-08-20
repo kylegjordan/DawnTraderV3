@@ -31,14 +31,28 @@ const isTestDb =
   /^postgres(ql)?:\/\/[^@]*@(localhost|127\.0\.0\.1|postgres)(:\d+)?\/test(\?|$)/.test(RAW_DB_URL);
 
 const TAG = 'P19-PERPFEED-OHLC-CONSTRAINT-FENCE';
+// ★ CI vs local, and the distinction is load-bearing (Langston blocker, 2026-08-20).
+// CI PROVISIONS Postgres and runs `db:migrate` before this suite, so an unreachable DB THERE is
+// a real failure and must fail the run — never an excuse. Locally a developer box usually has no
+// Postgres, so the DB legs self-skip. And they SKIP: an `if (!x) return` inside an `it` reports
+// PASS, which is #704's exact shape — an invisible failure on a happy-looking stream. The
+// reporter must show these as skipped, so the gating is done with `it.skipIf`, not an early return.
+const IS_CI = !!process.env.CI;
 let dbReachable = true;
 
 beforeAll(async () => {
   try {
     await db.execute(sql`SELECT 1`);
-  } catch {
+  } catch (err) {
+    if (IS_CI) {
+      // Hard-fail the file: CI guarantees the database, so absence here is a genuine regression.
+      throw new Error(
+        `[${TAG}] Postgres unreachable in CI — this fence cannot assert anything without it, and a ` +
+        `green suite would be a false all-clear (#704's failure class). Original: ${err instanceof Error ? err.message : err}`,
+      );
+    }
     dbReachable = false;
-    console.warn(`[${TAG}] Postgres unreachable — skipping (a silent skip reads like a pass, so this is loud).`);
+    console.warn(`[${TAG}] Postgres unreachable — DB legs will report as SKIPPED (not passed).`);
   }
 });
 
@@ -48,8 +62,11 @@ describe(TAG, () => {
     expect(classes.length).toBeGreaterThanOrEqual(4);
   });
 
-  it('every OHLC table in the writer map carries a UNIQUE matching the ON CONFLICT target', async () => {
-    if (!dbReachable) return;
+  // ctx.skip() and NOT it.skipIf(): skipIf is evaluated at COLLECTION time, before `beforeAll`
+  // has probed the database, so it would read the initial `true` and run the test anyway. ctx.skip()
+  // is evaluated at RUN time and marks the case SKIPPED in the reporter — never PASSED (#704 shape).
+  it('every OHLC table in the writer map carries a UNIQUE matching the ON CONFLICT target', async (ctx) => {
+    if (!dbReachable) ctx.skip();
     const classes = Object.keys(tableForAssetClass);
     const missing: string[] = [];
     const checked: string[] = [];
@@ -93,8 +110,8 @@ describe(TAG, () => {
   // same SQL runs against two synthetic tables, one WITH the constraint and one WITHOUT, and must
   // discriminate. Without this, a typo in the probe would make every table read 0 (or 1) and the
   // suite would still be green. Gated to the test database: it creates and drops real tables.
-  it('the probe DISCRIMINATES — same SQL reports 1 for a table with the constraint and 0 for one without', async () => {
-    if (!dbReachable || !isTestDb) return;
+  it('the probe DISCRIMINATES — same SQL reports 1 for a table with the constraint and 0 for one without', async (ctx) => {
+    if (!dbReachable || !(isTestDb || IS_CI)) ctx.skip();
     const withU = `_fence704_with_${Date.now()}`;
     const noU = `_fence704_without_${Date.now()}`;
     const probe = async (name: string) => {

@@ -46,7 +46,13 @@ export const tableForAssetClass = {
   xstock_perp: xstockPerpOhlc1m,
   crypto_spot: cryptoSpotOhlc1m,
   crypto_perp: cryptoPerpOhlc1m,
-} as const;
+} as const satisfies Record<ArchiveAssetClass, unknown>;
+
+/** The flush subject, DERIVED from the table map so it can never drift from it (#704 rider).
+ *  A new asset class is TS-forced into the map above (and into `buffers`), so it is buffered
+ *  and constraint-fenced automatically — a hardcoded flush list would leave it NEVER FLUSHED
+ *  with the fence still green: the #704 defect one layer up. */
+const ALL_ARCHIVE_CLASSES = Object.keys(tableForAssetClass) as ArchiveAssetClass[];
 
 // Buffers keyed by asset class so each archiver has independent flush behavior.
 const buffers: Record<ArchiveAssetClass, InsertEquitySpotOhlc1m[]> = {
@@ -189,12 +195,7 @@ let flushTimer: NodeJS.Timeout | null = null;
 export function startBatchWriter(): void {
   if (flushTimer) return; // already started
   flushTimer = setInterval(async () => {
-    await Promise.all([
-      flushAssetClass('xstock_spot'),
-      flushAssetClass('xstock_perp'),
-      flushAssetClass('crypto_spot'),
-      flushAssetClass('crypto_perp'),
-    ]);
+    await Promise.all(ALL_ARCHIVE_CLASSES.map(flushAssetClass));
   }, BATCH_FLUSH_INTERVAL_MS);
   console.log(`[B74][batch-writer] started (flush every ${BATCH_FLUSH_INTERVAL_MS / 1000}s, max ${MAX_CONCURRENT_INSERTS} concurrent inserts)`);
 }
@@ -205,10 +206,5 @@ export async function stopBatchWriter(): Promise<void> {
     clearInterval(flushTimer);
     flushTimer = null;
   }
-  await Promise.all([
-    flushAssetClass('xstock_spot'),
-    flushAssetClass('xstock_perp'),
-    flushAssetClass('crypto_spot'),
-    flushAssetClass('crypto_perp'),
-  ]);
+  await Promise.all(ALL_ARCHIVE_CLASSES.map(flushAssetClass)); // derived, see the timer above
 }
