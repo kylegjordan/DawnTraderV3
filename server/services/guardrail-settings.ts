@@ -100,31 +100,65 @@ export async function getPortfolioBalanceV2(
     const { getEngineSessionStart } = await import('./active-execution-engine.js');
     const sessionStart = getEngineSessionStart(mode);
     
-    // [9.6.3] Mode-aware trade query: paper uses getClosedTrades, live uses getTrades
-    let allTrades: any[];
+    // ═══ B-BALANCE-TRUTH Step B (#618): THE RISK LEG ═══════════════════════════════════════
+    // This is the daily-loss kill switch's DENOMINATOR. It used to sum `pnl` in JS over
+    // `getClosedTrades(mode, { closedOnly: true })` -- at most 100 rows ordered by `opened_at DESC`
+    // -- and THEN filter those rows by `closed_at >= sessionStart`. It bounded its set by OPEN time
+    // while asking a question in CLOSE time, so a position held across >100 subsequent opens was
+    // silently absent from the balance. Direction is the unsafe one: the denominator reads HIGH, so
+    // the loss PERCENTAGE reads low and the switch trips LATE -- compounding with the numerator
+    // error that B-KILLSWITCH-WINDOW (FIX-2026-07-31-B) already repaired on the other side.
+    //
+    // The fix is Kyle's DECISION 1 (2026-08-01, "compute the totals in the database"): reuse
+    // `getRealizedPnlSince` -- the SAME aggregate the numerator uses. Its predicates are IDENTICAL
+    // to what this path applied (`closed_at IS NOT NULL` + `never_filled` excluded + `closed_at >=
+    // since`), so the POPULATION is unchanged and ONLY the row bound is removed.
+    // ⚠️ The BASIS stays `pnl` deliberately: B-COST-MATH-CONSOLIDATION made `netPnl` canonical, but
+    // the numerator also sums `pnl`, and moving one side alone makes the ratio incoherent
+    // (Langston's standing condition 2). If it ever moves, BOTH sides move in ONE batch.
+    let realizedPnl: number;
     if (mode === 'paper') {
-      // Step A (#618): the DEFECT IS DELIBERATELY CODIFIED here for one deploy -- this is the
-      // kill-switch denominator and its conversion is Step B, kept out of the mechanical step so
-      // Step A stays behaviour-free and trivially revertible (Langston's Step-2 condition).
-      allTrades = await storage.getClosedTrades(mode, { limit: 100, closedOnly: true });
+      if (sessionStart) {
+        ({ realizedPnl } = await storage.getRealizedPnlSince(mode, sessionStart));
+      } else {
+        // ═══ THE NULL-SESSION BRANCH -- previously unnamed, and it was the worst leg ═══
+        // With no session start this path applied NO TIME FILTER AT ALL (`sessionStart ? filter :
+        // allTrades`), so the balance became anchor + a TRUNCATED ALL-TIME realized sum wearing a
+        // session balance's clothes, while the numerator fell back to a real 24h window -- the two
+        // sides of the ratio measuring different things entirely.
+        // ⚠️ REACHABLE AND DOCUMENTED: #585 -- auto-resume SKIPS a stale malformed `running`
+        // session row, leaving `isRunning: true` with no session (owner CC-B, open). The evaluator
+        // is gated on engine-active, NOT on session presence, so the verdict IS computed here.
+        // ⛔ WHY NOT "REFUSE" (return 0): MEASURED -- `computeLossPercent` treats `portfolioValue
+        // <= 0` as `nonPositiveValue` and `classifyTier` maps that STRAIGHT to tier `kill`. A
+        // refusal would TRIP THE KILL SWITCH AND FLATTEN EVERY OPEN POSITION every time the session
+        // record is missing after a restart. Refusing is not the safe option here; it is the
+        // catastrophic one.
+        // ⇒ ANCHOR-ONLY, LOUD: the anchor is a real known number; the session's realized P&L is
+        // genuinely unknown, so add nothing rather than a figure we cannot define.
+        realizedPnl = 0;
+        console.warn(
+          `[8.8.3-C7][GuardrailSettings][NULL_SESSION] mode=${mode} — no engine session start; ` +
+          `balance falls back to the ANCHOR ALONE (${startingBalance.toFixed(2)}) with no realized ` +
+          `adjustment. Kill-switch denominator is degraded-but-defined. See #585.`,
+        );
+      }
     } else {
-      // Live mode: use getTrades with closed status filter
+      // LIVE leg UNCHANGED, deliberately: `getTrades` applies a limit only when one is passed and
+      // none is passed here, so the live path never carried the cap this batch removes.
       const liveTrades = await storage.getTrades(mode, { status: 'closed' });
-      allTrades = liveTrades.map(t => ({
+      const allTrades = liveTrades.map(t => ({
         ...t,
         closedAt: t.exitTime,
         pnl: t.realizedPL
       }));
+      const sessionTrades = sessionStart
+        ? allTrades.filter(t => t.closedAt && new Date(t.closedAt) >= sessionStart)
+        : allTrades;
+      realizedPnl = sessionTrades.reduce((sum, trade) => {
+        return sum + parseFloat(trade.pnl?.toString() || '0');
+      }, 0);
     }
-    
-    const sessionTrades = sessionStart 
-      ? allTrades.filter(t => t.closedAt && new Date(t.closedAt) >= sessionStart)
-      : allTrades;
-    
-    // Sum realized P/L (net P/L from closed trades)
-    const realizedPnl = sessionTrades.reduce((sum, trade) => {
-      return sum + parseFloat(trade.pnl?.toString() || '0');
-    }, 0);
     
     // Current Balance = Starting Balance + Realized P/L
     const currentBalance = startingBalance + realizedPnl;
