@@ -81,13 +81,20 @@ export async function getPortfolioBalanceV2(
     // to `state.balance` — which IS the anchor, so the VALUE was and remains correct. Same
     // no-behaviour-change repair as site 7: read it under its true name, drop the cast.
     //
-    // ⚠️ WHAT IS *NOT* FIXED HERE, AND WHY IT MATTERS MORE ON THIS PATH THAN ON A DISPLAY:
-    // this function is `getPortfolioBalanceV2` — the GUARDRAIL balance. Below, it pairs this
-    // anchor with a SESSION-SCOPED realized P/L (`getEngineSessionStart`) drawn from
-    // `getClosedTrades(mode, { closedOnly: true })`, which carries a silent default cap of 100 rows
-    // ordered by `opened_at`. That is #618 legs 1 and 2 — filed against the reporting routes —
-    // reaching the RISK-SIZING path. Repairing the pairing is #618's decision, NOT this batch's
-    // bound; it is flagged rather than quietly widened. See #618.
+    // ✅ HISTORY, NOT CURRENT STATE (rewritten 2026-08-20 at Langston's Step-B review — the block
+    // that stood here asserted, in the PRESENT TENSE, that this function still drew its realized
+    // P&L from `getClosedTrades(mode, { closedOnly: true })` with its silent 100-row cap, and then
+    // explicitly disclaimed the repair: *"Repairing the pairing is #618's decision, NOT this
+    // batch's bound; it is flagged rather than quietly widened."* B-BALANCE-TRUTH STEP B REPAIRED
+    // IT, so that text became a flat contradiction of the code nineteen lines below it — the same
+    // defect class this batch exists to remove, in its third instance, which is why it is struck
+    // rather than annotated.)
+    //
+    // WHAT IT USED TO DO: this function — `getPortfolioBalanceV2`, the GUARDRAIL balance — paired
+    // the anchor below with a SESSION-SCOPED realized P&L drawn from a reader capped at 100 rows
+    // ordered by `opened_at DESC`, i.e. #618 legs 1 and 2 reaching the RISK-SIZING path.
+    // WHAT IT DOES NOW: see the Step-B block below — a SQL aggregate over every qualifying row.
+    // `getClosedTrades` is no longer called anywhere in this file.
     const anchorBalance = Number(state.balance);
     const startingBalance = anchorBalance;
     if (startingBalance <= 0 || isNaN(startingBalance)) {
