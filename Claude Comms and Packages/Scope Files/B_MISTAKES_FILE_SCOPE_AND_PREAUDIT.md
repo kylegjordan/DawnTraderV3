@@ -1,4 +1,4 @@
-# B-MISTAKES-FILE — SCOPE **+** PRE-AUDIT, ONE DOCUMENT (r2)
+# B-MISTAKES-FILE — SCOPE **+** PRE-AUDIT, ONE DOCUMENT (r3)
 
 change-class: `non_architecture`
 **Owner:** CC-A · 2026-08-20 · **Home:** #694 pieces (4) + (5) · **Issue:** #731 (CC-A block 730-759)
@@ -34,7 +34,11 @@ change-class: `non_architecture`
 | ★ **RECORD-SENSE UNION** (correction·corrected·retract·withdraw·mistake·overturn·vacate·"I was wrong") | **72** | **36%** |
 | union members **missed** by my four-word marker set | **1** | ⇒ **RECALL 98.6%** |
 
-⚠️ **ONE FIGURE STILL DISAGREES AND I AM NOT PAPERING OVER IT: he reports 58/200 for `correct` in the record sense; my `\b(correction|corrected)\b` returns 48.** Different regex, different number — **not load-bearing** (the union and the recall, which carry the argument, agree exactly), but **an undisclosed 10-commit gap is how a reconciled-looking row hides two methods.** Whichever boundary we standardise on goes in the pattern index.
+✅ **SETTLED — AND IT WAS A FALSE-NEGATIVE SET, NOT A SECOND METHOD (Langston r2).** He did not pick a boundary by preference; **he enumerated the delta and hand-read all ten.** My `\b(correction|corrected)\b` misses `corrections` (plural), `corrects`, `correcting` — **10/10 of the delta are genuine record-sense** (`4c283c834` *"fix both of Langston's blockers"* · `f456cf8e9` *"OBJ-3 cannot be done as scoped"* · `129954f25` *"control arm withdrawn"*). **His four adjectival counter-examples are all still excluded by it.**
+
+★ **THE STANDARD, taken verbatim into the index: `\bcorrect(s|ed|ing|ion|ions)\b`.** Under it the union rises **72 → 74 (37%), loses nothing, and recall is unchanged at 73/74 = 98.6%** — the same single miss, `a66eab10c`.
+
+⚠️ **MY RE-DERIVATION RETURNS EACH ROW +1** (201 commits · 49 · 59 · union 75 · recall 98.7%). **That is a RANGE difference, not a method difference: he read before my r2 push landed, so his endpoint is one commit earlier.** ⇒ **the population must be pinned by REF, not by description** — `28c007163..<stated ref>` — or the same query returns a different denominator to two readers on the same day. **Disclosed rather than reconciled to whichever number looked tidier; the conclusion is identical either way.**
 
 ★★ **AND THE RECALL FIGURE — NOT 36% — IS WHAT ACTUALLY SUPPORTS THE REFUSAL** (Langston's correction, and he is right): **72 genuine correction records already exist, and only ONE escapes the marker vocabulary.** ⇒ **the existing record is both DENSE and NEARLY-COMPLETELY ADDRESSABLE. A second store would duplicate it with nothing forcing the two to agree — the #641 shape.** What is missing is **a consistent MARKER** (four wordings, none mandated) and **the PATTERN layer.**
 
@@ -62,6 +66,18 @@ change-class: `non_architecture`
 ⇒ **AUDITED CONCLUSION: the pass needs an OWNER, a CADENCE, a FIRING MECHANISM, and it MUST WRITE ITS RESULT BACK — including when it finds nothing.**
 ⛔ **AND ONE LEVEL UP: the TRAILER IS ITSELF A PROCEDURE, so by §3.2's own rule it must name the mechanism that would enforce it.** Candidates: a `commit-msg` hook, or a CI grep over the batch's own commits. **Named now, built later** — but **not left unnamed**, which is how §3.2's rule would be violated by the file that defines it.
 
+### 2.7 ★ THE SEEDS, AND THE RETIREMENT CRITERION — THE §2 TREATMENT r2 NEVER GAVE THEM (CHANGE-2)
+
+⛔⛔ **THE PIECE-(5) REQUIREMENT LEAKED A SECOND TIME, ONE SECTION BELOW WHERE I MADE IT BINDING** — and Langston caught it. r2's §3.5 was not inert content: it **asserted a disposition** (*seed 1, mechanism SHIPPED, retires at the first pass*) and **§4(c) hung the entire retirement rehearsal on it.**
+
+⛔ **AND THE DISPOSITION WAS A CATEGORY ERROR.** The wake filter's `else` prevents **one instance, in one watcher.** §3.5 itself says the pattern has **THREE** instances — the other two (a grep shape never controlled for; a guard whose condition could not be true) are **untouched by that hook.** ⇒ **retiring `silence-not-evidence` at the first pass would retire a LIVE pattern** — and *"the list SHRINKS"* is an incentive pointing **exactly** that way.
+
+★★ **THEREFORE THE RETIREMENT CRITERION, which the design was missing and which is the thing that keeps "the list shrinks" from becoming "the list lies":**
+> **A mechanism retires a pattern only when it covers the pattern's INSTANCE CLASS — not the instance that surfaced it.**
+> **Partial coverage is recorded as `mechanism: PARTIAL` and the entry STAYS LIVE.**
+
+⇒ **§4(c) must rehearse retirement on a seed whose mechanism genuinely closes its class**, or on a deliberately-constructed throwaway. **It may NOT rehearse on seed 1.** *(Langston offered both fixes; taking BOTH — the criterion is the general repair, the rehearsal change is what unblocks §4(c) now.)*
+
 ## 3. THE PLAN (each item back-references its §2 finding — the piece-(5) requirement)
 
 ### 3.1 MAKE THE EXISTING RECORD GREPPABLE — *from §2.1, §2.3*
@@ -80,17 +96,22 @@ Top **3-5 LIVE** patterns only (~1 KB into 3,858 B headroom), pointing at the fu
 
 ### 3.4 THE WEEKLY PASS — OWNED, FIRED, AND IT WRITES BACK — *from §2.6*
 **Command:** `git log --grep='^MISTAKE:' --since=1.week` → group by slug → update counts.
-**OWNER: CC-A. CADENCE: weekly. FIRING: a self-rescheduling `verification` alert** that re-arms on discharge (**not** a `resolve`, which is terminal — I have already destroyed one gating alert that way).
+**OWNER: CC-A. CADENCE: weekly. FIRING: a self-chaining `verification` alert.**
+⛔⛔ **CHANGE-1 (Langston r2) — r2 NAMED THE WRONG VERB, AND THE VERB *IS* THE ARMING MECHANISM.** r2 said *"re-arms on discharge, not a `resolve`, which is terminal"* — which **reads as *avoid resolve*, and doing that makes the pass never fire again, silently.** That is **BLOCKER-2 reappearing disguised as its own fix.**
+**MEASURED: `system-alerts.ts:389` blocks a fresh mint while `a.state !== 'resolved'` ⇒ `resolve` is the ONLY verb that frees a `dedupe_key`; an `ack` silences the row permanently AND drops it out of the §10.5 sweep.**
+✅ **CORRECT PATTERN, and it has a working precedent — the dt-deploy chain carries `dedupe_key: null` and mints the next row while resolving the current one (`f2c92489` resolved → `65bb4388` minted):**
+> **NO `dedupe_key`. MINT THE NEXT SCHEDULED ROW *FIRST*, THEN RESOLVE THE CURRENT ONE WITH EVIDENCE.**
+*(My earlier "resolve is terminal, avoid it" came from destroying a gating alert by resolving it. The lesson was real; the generalisation was wrong — the fix is ordering, not avoidance.)*
 ★ **THE PASS WRITES A DATED ROW TO `MISTAKE_PATTERNS.md` EVERY TIME, INCLUDING "no new instances"** — so **liveness is readable at the ref by anyone, and a missing row IS the alarm.** *(Same instrument design as `CLAUDE_CODE_FEATURE_WATCH.md`'s run log, which exists for exactly this reason.)*
 **ENFORCEMENT MECHANISM FOR THE TRAILER (§2.6), named now, built in a follow-up: `commit-msg` hook or CI grep. `UNBUILT` until it ships, and the index says so.**
 
-### 3.5 SEED CONTENT — three, all evidenced today
-1. **`silence-not-evidence`** — a check that CANNOT FAIL mistaken for one that passed (3 instances 2026-08-19/20). **Mechanism: SHIPPED** (the wake filter's `else` announces unrouted lines) ⇒ **retires at the first pass, which is the design working.**
+### 3.5 SEED CONTENT — *from §2.7* ⚠️ **(r2 shipped this section with NO §2 treatment and NO `UNAUDITED` flag — the piece-(5) requirement leaking again, one section below where I made it binding. §2.7 now exists.)**
+1. **`silence-not-evidence`** — a check that CANNOT FAIL mistaken for one that passed. **3 instances, 2026-08-19/20.** **Mechanism: PARTIAL — the wake filter's `else` covers ONE instance in ONE watcher.** ⛔ **DOES NOT RETIRE.** *(r2 asserted "SHIPPED ⇒ retires at first pass". **That was a category error and §4(c) hung the whole retirement rehearsal on it** — see §2.7.)*
 2. **`wrong-object`** — right name, wrong thing. Instances: worktree-not-ref · a stale `origin/…` baseline · `-200` as a denominator · ⛔ **and §2.1 of this document.** **Mechanism: NONE YET.**
 3. **`process-not-file`** — a file test supporting a claim about a running process. **Mechanism: NONE YET.**
 
 ## 4. VERIFICATION
-**(a)** the trailer is greppable — **POSITIVE CONTROL FIRST**: the grep returns a known-seeded commit before its silence counts · **(b)** **state BOTH byte objects (§2.4)** — `CONDUCT.md` FILE bytes vs loader-EMITTED bytes, at a named ref · **(c)** ⭐ **the retirement path is exercised FOR REAL once**, retiring `silence-not-evidence` from **both** §13 and the index in one commit — **an untested retirement path is how a list silently only grows** · **(d)** the weekly alert **fires once and its dated row is present in the file** — *the row, not the alert's existence, is the proof* · **(e)** `CLAUDE.md` r28.a references the index and **the reference RESOLVES** · **(f)** CI 4/4 per-job.
+**(a)** the trailer is greppable — **POSITIVE CONTROL FIRST**: the grep returns a known-seeded commit before its silence counts · **(b)** **state BOTH byte objects (§2.4)** — `CONDUCT.md` FILE bytes vs loader-EMITTED bytes, at a named ref · **(c)** ⭐ **the retirement path is exercised FOR REAL once** — ⚠️ **NOT on `silence-not-evidence` (§2.7: partial coverage, stays live).** Rehearse on a **deliberately-constructed throwaway pattern whose mechanism demonstrably closes its whole class**, retired from **both** §13 and the index in one commit — **an untested retirement path is how a list silently only grows** · **(d)** the weekly alert **fires once and its dated row is present in the file** — *the row, not the alert's existence, is the proof* · **(e)** `CLAUDE.md` r28.a references the index and **the reference RESOLVES** · **(f)** CI 4/4 per-job.
 
 ## 5. FOR LANGSTON — r2
 Both blockers fixed; all three riders taken. **I re-derived your numbers rather than accepting them** — 200 commits ✅, union 72 (36%) ✅, recall 98.6% ✅ (your ~99%). **One row still disagrees and is disclosed at §2.1**: your 58 vs my 48 for `correct` in record sense, a regex-boundary difference, not load-bearing. **Nothing else outstanding; board card being created.**
