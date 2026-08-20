@@ -132,6 +132,7 @@ When Langston or an alert names your session, **reply publicly right away** — 
 
 ## 13. THE MISTAKES THAT KEEP RECURRING — the short list (auto-loaded; full index `1-system-manual/MISTAKE_PATTERNS.md`)
 **Ordered most-recent-instance first. 3-5 slots. Promotion = 3+ instances across 2+ distinct batches, as a FLOOR.**
+⛔ **A LIVE RULE LEAVES THIS LIST ONLY WHEN A MECHANISM COVERS ITS CLASS — NEVER BY NEWNESS.** A working rule goes quiet, and quiet sinks it in the ordering — evicting it there restarts the mistake it was preventing. **Cap pressure = MECHANISE the oldest, or raise the cap.** Detail: `1-system-manual/MISTAKE_PATTERNS.md`.
 ⛔ **AN ABSENCE FROM THIS LIST IS NOT A RETIREMENT** — a live pattern displaced by the slot limit is held in the index flagged `LIVE — NOT IN §13`. **Read the index before concluding a pattern is dead.**
 
 1. ★ **`wrong-object` — RIGHT NAME, WRONG THING.** The path is right, the file is right, the command runs — and it measures something other than what your claim is about. **Before reporting any number: name the OBJECT, name the POPULATION, pin it BY REF.** *(5 attributed instances across 2 batches — worktree-not-ref, a baseline that had moved, `-200` misread as a denominator, substring-not-thing, size-not-growth. Detail in the index.)* **No mechanism yet — this one is on you.**
