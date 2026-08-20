@@ -39,7 +39,9 @@ export type ArchiveAssetClass = 'xstock_spot' | 'xstock_perp' | 'crypto_spot' | 
 /** @deprecated Use ArchiveAssetClass. Kept for transition period. */
 export type Universe = ArchiveAssetClass;
 
-const tableForAssetClass = {
+// EXPORTED for the #704 fence (p19-perpfeed-ohlc-upsert-constraint-fence.test.ts): the fence
+// derives its subject from THIS map so a newly added asset class is carried automatically.
+export const tableForAssetClass = {
   xstock_spot: xstockSpotOhlc1m,
   xstock_perp: xstockPerpOhlc1m,
   crypto_spot: cryptoSpotOhlc1m,
@@ -123,8 +125,11 @@ async function flushAssetClass(assetClass: ArchiveAssetClass): Promise<void> {
       // Drizzle insert; PK includes auto-generated `id` so no realistic
       // conflict on the primary key. Partition routing is automatic via
       // PARTITION BY RANGE.
-      // Cast to `any` per Langston cc-inbox #870 Q1: safe because all 3 OHLC
-      // tables share IDENTICAL column shapes by design.
+      // Cast to `any` per Langston cc-inbox #870 Q1: safe because all FOUR OHLC
+      // tables share identical COLUMN shapes by design.
+      // WARNING (#704): 'identical shape' means COLUMNS ONLY -- it does NOT cover
+      // CONSTRAINTS, and this very sentence is the premise that let crypto_perp ship
+      // without the UNIQUE (symbol, interval_begin) the ON CONFLICT below targets.
       //
       // CHUNKING: Postgres has a hard limit of 65,535 parameters per query.
       // OHLC row has ~12 columns → max 5,461 rows per single INSERT before
