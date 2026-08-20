@@ -143,9 +143,21 @@ async function getDynamicSlots(): Promise<{ slots: number; maxExposure: number; 
 
 async function getOpenPositionsCount(): Promise<number> {
   try {
-    const trades = await storage.getClosedTrades('paper', { limit: 100, closedOnly: false }); // Step A (#618): codified pre-existing default (100); no behaviour change
-    const openTrades = trades?.filter(t => !t.closedAt) || [];
-    return openTrades.length;
+    // ═══ B-BALANCE-TRUTH Step D (#618): WRONG OBJECT, RE-POINTED ════════════════════════════
+    // This counted OPEN positions by reading the CLOSED-trades table and filtering for rows with
+    // no close timestamp — through a reader capped at 100 rows ordered by `opened_at DESC`.
+    // Langston's ruling, and why it is a RE-POINT rather than an aggregate: giving it a SQL
+    // aggregate would have enshrined the WRONG OBJECT with better plumbing. The canonical reader
+    // already exists and is what the rest of the system uses (`routes.ts` open-positions path).
+    // ⚠️ IT WAS CORRECT TODAY, AND THAT IS THE HAZARD, NOT THE REASSURANCE: measured before the
+    // change, the old path returned exactly the same five positions as the canonical reader —
+    // because the oldest of them ranked 13th against a cap of 100. A wrong object returning a
+    // PLAUSIBLE number is worse than a visible miscount: nothing surfaces it until the margin
+    // closes, and the margin closes silently as trade volume grows.
+    // PARITY PROVEN BY SET EQUALITY, NOT COUNTS (his condition — 5 == 5 is not the same five):
+    // measured 2026-08-20, old ∖ new = ∅ and new ∖ old = ∅ on symbol identity.
+    const openPositions = await storage.getActiveOpenPositions('paper');
+    return openPositions.length;
   } catch {
     return 0;
   }

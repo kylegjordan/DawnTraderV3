@@ -4672,7 +4672,14 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           realizedPLTotal = total.realizedPnl;
           recentPnls = recent;
         } else {
-          // LIVE leg unchanged in substance: `getTrades` was never row-bounded here.
+          // LIVE leg: the TOTAL is unchanged (`getTrades` was never row-bounded here), but the
+          // WIN-RATE WINDOW IS A REAL CHANGE and is named rather than claimed away (Langston's
+          // Step-C condition 2 — "unchanged in substance" was inaccurate here and is the same
+          // defect class as a comment overstating its code). It was `slice(-30)` on whatever order
+          // `getTrades` returns; it is now an explicit sort by `exitTime` DESC then the first 30.
+          // Unless that reader happens to return exit-time ASCENDING, those are different sets.
+          // It is almost certainly a fix — "the 30 most recent by close" is what the field means —
+          // but it is a CHANGE, and live mode is Phase 21 so nothing rides on it today.
           const liveClosed = await storage.getTrades(mode, { status: 'closed' });
           realizedPLTotal = liveClosed.reduce((sum, t) => sum + parseFloat((t as any).pnl || t.realizedPL || '0'), 0);
           recentPnls = liveClosed

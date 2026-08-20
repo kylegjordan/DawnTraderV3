@@ -3197,7 +3197,11 @@ export class DatabaseStorage implements IStorage {
    *
    * Every one of these answers a WHOLE-HISTORY or WHOLE-WINDOW question that was previously asked
    * through `getClosedTrades` — a LIST reader capped at 100 rows ordered by `opened_at DESC`. The
-   * measured consequence on the live API: `/portfolio/earnings` reported −$71.74 over a
+   * measured consequence on the live API — ⚠️ ALL FIGURES BELOW ARE POINT-IN-TIME OBSERVATIONS
+   * TAKEN 2026-08-20T14:2xZ AT REF `3c3bda57c`, NOT invariants (Langston's Step-C condition 1:
+   * a durable comment stating a number the running code does not produce is the exact defect this
+   * batch exists to remove — the windows slide and the row count grows, so these WILL diverge;
+   * dated rather than struck so the evidence survives): `/portfolio/earnings` reported −$71.74 over a
    * `tradeCount` of exactly 100 while the truth was −$197.29 over 475 trades, and
    * `earnings-chart?days=30` returned a 17-day span because the truncated window could not reach
    * further back. `?days=7` was correct only by luck — 23 rows fit under the cap.
@@ -3230,6 +3234,13 @@ export class DatabaseStorage implements IStorage {
 
   /**
    * Daily realized P&L grouped BY CLOSE DATE, in SQL.
+   * ★ EXPLICIT UTC, not the session default (Langston's Step-C condition 3). `closed_at` is
+   * `timestamptz`, so a bare `to_char` renders in the PG SESSION TimeZone while the JS this
+   * replaced used `toISOString()` — i.e. UTC. Measured on the app's own connection 2026-08-20:
+   * `show timezone` = UTC, so the buckets agree TODAY. But that is a config default which can
+   * move under us, and an endpoint-vs-SQL check written over the SAME `to_char` expression is a
+   * same-expression control that structurally cannot return the failing answer. Pinned to UTC so
+   * the boundary is a property of the CODE rather than of the connection.
    * ★ The grouping key is `closed_at`, NOT `opened_at` (Langston's Step-1 rider). The old chart
    * bounded its set by OPEN time and then filtered by CLOSE time in JS — the identical
    * open-time/close-time error `getRealizedPnlSince` was created to fix. A re-plumbed JS filter
@@ -3237,7 +3248,7 @@ export class DatabaseStorage implements IStorage {
    */
   async getDailyRealizedPnlSince(mode: TradingMode, since: Date): Promise<Array<{ date: string; pl: number }>> {
     const rows = await db.select({
-      date: sql<string>`to_char(${closedTradesTable.closedAt}, 'YYYY-MM-DD')`,
+      date: sql<string>`to_char(${closedTradesTable.closedAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD')`,
       pl: sql<string>`COALESCE(SUM(${closedTradesTable.pnl}), 0)`,
     })
       .from(closedTradesTable)
@@ -3246,8 +3257,8 @@ export class DatabaseStorage implements IStorage {
         sql`${closedTradesTable.closedAt} >= ${since}` as any,
         sql`${closedTradesTable.closeReason} IS DISTINCT FROM 'never_filled'` as any,
       ))
-      .groupBy(sql`to_char(${closedTradesTable.closedAt}, 'YYYY-MM-DD')`)
-      .orderBy(sql`to_char(${closedTradesTable.closedAt}, 'YYYY-MM-DD')`);
+      .groupBy(sql`to_char(${closedTradesTable.closedAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD')`)
+      .orderBy(sql`to_char(${closedTradesTable.closedAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD')`);
     return rows.map(r => ({ date: String(r.date), pl: parseFloat(String(r.pl ?? '0')) || 0 }));
   }
 
