@@ -11,10 +11,10 @@
 > **If BLOCKED-ON says Kyle, say NOTHING and do not work the item.** Otherwise continue to the next step and report only at the step boundary, in the `CONDUCT.md` §6 format.
 > ⚠️ **UPDATE THESE FOUR LINES AT EVERY STEP BOUNDARY.** They were left stale for weeks and Kyle found it before I did.
 
-- **BATCH:** B-MISTAKES-FILE (#694 pieces 4+5, issue #731) — the mistakes/pattern index and the merged scope+pre-audit format
-- **STEP:** Step-1+2 (merged, one document) — r3 pushed at `a65d0cbcf`
-- **BLOCKED-ON:** Langston — awaiting his r3 read. He returned 2 blockers + 3 riders on r1, 2 changes on r2; all taken.
-- **NEXT:** on his approval → Step-3 build: the pattern index, the commit trailer, `CONDUCT.md` §13, and the owned+fired weekly pass. Then the rules-file slim and the actual skills build (**no skills exist yet — `.claude/skills/` does not exist**).
+- **BATCH:** B-MISTAKES-FILE (#694 pieces 4+5, issue #731) — pattern index + the merged scope/pre-audit format
+- **STEP:** Step-3 BUILT + pushed `490ca7a66`. Index `1-system-manual/MISTAKE_PATTERNS.md`, `CONDUCT.md` §13 (one pattern: `wrong-object`), the `MISTAKE: <slug> [<batch-id>]` trailer, weekly pass armed as alert `8a07c40b` (2026-08-27T09:00Z, dedupe_key null — MINT NEXT ROW FIRST, then resolve). Verification (a) grep + both controls PASS · (b) both byte objects stated · (c) retirement path exercised for real (`bare-commit` promoted `a69c480ca` → retired `490ca7a66`) · (d) pointer RESOLVES.
+- **BLOCKED-ON:** nobody — CI running, then Step-4 dispatch to Langston.
+- **NEXT:** CI 4/4 per-job → Step-4 diff to Langston → governance + completion report → then the rules-file slim and the skills build (`.claude/skills/` still does not exist).
 
 ---
 
