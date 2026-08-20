@@ -135,3 +135,23 @@
 5. **r1 did not state which of the 24 sites Step A NUMBERS versus CONVERTS** (Langston's Part-5 addition) — and that omission is precisely what let four `routes.ts` sites go undispositioned. The per-site map now lands with the Step-3 change list, and Step A converts nothing at all.
 6. **The magnitude of the denominator error is NOT SETTLED** — my measurement and Langston's disagree by ~$57 on the true-sum leg (table in Part 3). Reconciling it is a Step-B precondition, not a footnote: this batch does not get to publish a number whose instrument two readers cannot reproduce.
 7. **Whether the daily-loss verdict is consulted while `sessionStart === null` is NOT established.** Step B establishes it before choosing the null branch's disposition.
+---
+
+## PART 6 — THE −$52.79 TRACED (2026-08-21, at Kyle's direction to verify on staging). **IT IS NOT JUST THE CAP, AND CONVERTING THIS SITE MECHANICALLY WOULD HAVE CHANGED A SECOND THING SILENTLY.**
+
+**The surface:** the PAPER-TRADING page's Earnings card (`mode-dashboard-tab.tsx:169`), fed by `/api/active-engine/trades/analytics` → `routes.ts:13023` `getClosedTrades(mode, { limit: 100 })` → `computeRollingEarnings`. ⚠️ **NOT the main home Dashboard — Kyle 2026-08-21: that page is NOT this batch's and is to be left alone.**
+
+**Five hypotheses were eliminated first** (measured, so nobody re-runs them): true-30d `−16.79/310` · capped-100 `−35.47/100` · including `never_filled` `−16.79/358` · the `net_pnl` column alone `−16.79/310` · since-the-08-12-re-anchor `+203.43/29`. **None is −52.79.**
+
+**REPRODUCED EXACTLY** by composing what the code actually does — cap, THEN a ghost filter, THEN the rolling window, on the `netPnl ?? pnl` basis:
+| window | reproduced | UI shows |
+|---|---|---|
+| 30d | **−52.79 over 95 rows** | **−$52.79** ✓ |
+| 7d | **+153.50 over 25 rows** | **$153.50** ✓ |
+| 24h | +2.50 over 7 rows | (card reads −$4.17 — a later window; the derivation is settled by the other two) |
+
+**★ THE FINDING THAT MATTERS FOR THE CONVERSION — a THIRD population predicate nobody has named:** `routes.ts:13031` filters the capped rows again, keeping only trades with **`exit_price > 0` AND a non-empty `close_reason`** (the "ghost trade" exclusion, Phase 8.8.3-B3). That is **NOT** one of the three predicates every aggregate in this batch shares. **Measured effect: it drops 5 of the 100 rows in the 30-day window and moves the figure from −35.47 to −52.79 — i.e. the ghost filter contributes MORE of the error than the cap does at this window.**
+
+⇒ **CONSEQUENCE FOR STEP C's REMAINING SITES:** using `getRealizedPnlTotal` here would have removed the cap **and silently changed the population**, and the resulting number would have looked like "the fix working" while two things moved at once. **This site needs its own aggregate carrying the ghost predicate**, or an explicit ruling that the ghost filter is redundant against `exit_price`/`close_reason` at the SQL level — **not assumed either way.**
+⚠️ **AND IT IS ALSO A `netPnl ?? pnl` READER** — the basis Langston's condition 2 says must not move alone. So this site carries BOTH open questions and is the last one to convert, not the first.
+
