@@ -102,6 +102,17 @@ select symbol, net_pnl, exit_price, take_profit, closed_at from closed_trades
 ⛔ **ALL THREE SIT IN ONE BATCH ⇒ the 2+-distinct-batches leg is NOT met ⇒ NOT promoted.** ★ **This is the gate refusing its own author's favourite example, which is the point of dogfooding it** (Langston condition 4: *"a gate whose initial population bypassed it is a gate on paper"*).
 **Mechanism:** the wake filter's `else` now announces an unrouted line on stderr — **covers ONE instance in ONE watcher, not the class.** Per the retirement criterion, **partial coverage does not retire.**
 
+### `hook-blind-compound` — **LIVE — NOT IN §13** · mechanism: **NONE YET**
+**A COMPOUND SHELL COMMAND DEFEATS A HOOK THAT REASONS ABOUT STATE THE COMMAND ITSELF WOULD CREATE.** A `PreToolUse` guard fires on the whole call, BEFORE any of its parts run — so `add && commit && push` is judged in a world where the commit does not exist yet, and any guard that asks *"which files did this push touch?"* gets the empty set.
+**INSTANCES (attributed):**
+| # | instance | batch | ref |
+|---|---|---|---|
+| 1 | `guard-push-tsc-baseline` REFUSED a legitimate push, reporting the 7-error drop as *"in files this push DID NOT TOUCH"* — `server/routes.ts` **was** in the commit, but the commit had not been made when the hook evaluated | B-BALANCE-TRUTH | `e67deebef`, Step C |
+| 2 | same shape, twice more on the next step — and the second-order cost is the sharper half: the blocked call also never wrote its own heredoc, so `git commit -F /tmp/msg.txt` then failed with *"could not read log file"*, which reads like a filesystem fault rather than a hook refusal | B-BALANCE-TRUTH | `c7c374732`, Step D |
+⛔ **ONE BATCH ⇒ the 2+-distinct-batches leg is NOT met ⇒ NOT promoted.**
+★ **THE TRANSFERABLE HALF IS THE GUARD'S, NOT MINE: it refused CORRECTLY on a cause it had wrong.** The refusal was right (an unverified error-count drop should not reach staging), the stated reason was false (the files *were* touched), and acting on the stated reason would have sent me hunting a parse failure that did not exist. **A guard can be right about the verdict and wrong about the evidence, and the verdict is the part to trust.**
+**Mechanism that would retire it:** the guard resolving its touched-file set from the *working tree + index* rather than from committed range alone — or, cheaper and available today, never chaining a state-creating command with a state-reading guard. **Discipline until then: commit in its own call; push in its own call.**
+
 ### `process-not-file` — **LIVE — NOT IN §13** · mechanism: **NONE YET**
 **A file test used to support a claim about a RUNNING PROCESS.** A running process holds the code it loaded at start; fixing the file does not fix the process.
 **INSTANCES:** 1 — told Kyle a wake event *"confirms the filter fix works in production"* when the running watcher still held the pre-fix code (B-CONDUCT-FILE, `5c2896938`). **Below threshold.**
