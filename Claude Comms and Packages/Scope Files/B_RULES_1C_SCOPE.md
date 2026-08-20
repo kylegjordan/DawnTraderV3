@@ -67,10 +67,13 @@ Precondition met (version stated with its source) · each moved passage findable
 |---|---|
 | **NEGATIVE — read a NON-matching file** (`MISTAKE_PATTERNS.md`) | ✅ **marker ABSENT** — scoping is real, not "everything loads" |
 | **POSITIVE — read the MATCHING file** | ✅ **marker PRESENT**, rule body injected in full |
-| ⛔ **GATE 2 — read a matching file AFTER a COMPACTION** | ⏳ **PENDING — awaits a compaction. NOT CLAIMED.** |
+| ✅ **read a matching file after a SESSION RESUME** (2026-08-21) | ✅ **marker PRESENT** — the rule survives a context reload and re-injects on the next matching read |
+| ⛔ **GATE 2 — read a matching file after a COMPACTION** | ⏳ **STILL PENDING. NOT CLAIMED.** |
 
 ★ **BONUS FINDING, MEASURED NOT ASSUMED: `.claude/rules/*.md` IS PICKED UP WITHOUT A RESTART.** The rule file was created **during this session** and loaded on the very next matching read. ⇒ **the "hooks load at session start, so a fresh hook is live from the NEXT session" property (`CLAUDE.md` r22) does NOT generalise to `rules/`.** Two different mechanisms; do not reason from one to the other.
 ⚠️ **THE NEGATIVE LEG HAD A CONFOUND AND IT IS NAMED: an absent marker could equally have meant "rules are not loaded at all yet" rather than "scoping excluded it."** The positive leg is what disambiguates — it fired in the same session on the same freshly-created file. **Run in that order or the negative proves nothing.**
+
+⚠️ **A RESUME IS NOT A COMPACTION, AND I AM NOT TREATING IT AS ONE.** The 2026-08-21 boundary logged `SessionStart:resume`, and this session has separately logged `SessionStart:compact` on other boundaries — **the harness distinguishes them, so I will too.** A resume reloads the session; a compaction REWRITES the context, which is the case GATE 2 was written about. ⇒ **resume-survival is real evidence and the closest analogue yet, but it does NOT discharge GATE 2.**
 
 ⇒ **WHAT IS NOW DISCHARGED: the mechanism EXISTS and SCOPES on this binary (desktop 2.1.219).** ⛔ **WHAT IS NOT: that a path-scoped rule RELOADS after a compaction — which is the whole of GATE 2, and Langston's consequence stands unchanged: if it fails, backstop-gated-ness is INSUFFICIENT and EVERY MOVER COMES BACK.** **NO RULE MOVES UNTIL THAT LEG IS GREEN.**
 

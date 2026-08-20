@@ -91,6 +91,18 @@ I searched the skills documentation for skill-to-skill composition — *invoke a
 ★★ **BUT THE CONTRAST IS THE EVIDENCE: `.claude/rules/*.md` created in THIS SAME SESSION loaded on the very next matching read** (1c §5.1, marker `XQ7-…` present positive / absent negative). **Same session, same clone, same binary — rules live, skills unknown.** ⇒ **the two mechanisms have DIFFERENT discovery timing, measured rather than assumed.**
 ⏳ **WHAT IS NOT ESTABLISHED: that a session RESTART fixes it.** That is an inference and it is not claimed. **It discharges at the next session start — same shape as 1c GATE 2.**
 
+### ✅⛔ **§5(a) PRECONDITION DISCHARGED 2026-08-21 — AND THE ANSWER IS NO. THE REFERENCE DOES NOT RESOLVE.**
+
+**Run live on the real binary after a session boundary, with the control.**
+| step | result |
+|---|---|
+| `Skill(canary-parent)` | parent body delivered · `PARENT-K3M8` **PRESENT** · ⛔ **`CHILD-Z9Q4` ABSENT** |
+| **CONTROL — `Skill(canary-child)` directly** | ✅ **`CHILD-Z9Q4` PRESENT** ⇒ the marker is real and loadable, so the absence above is a **genuine negative, not a broken fixture** |
+
+⇒ ★★ **A PARENT'S TEXTUAL REFERENCE TO A CHILD SKILL IS *TEXT ADDRESSED TO THE READER*, NOT A LOADING MECHANISM.** *"Now follow the canary-child skill"* instructs the session to go and invoke it; **it pulls in nothing.** The documentary absence (Finding 2) is now confirmed empirically.
+
+⛔⛔ **THE DESIGN CONSEQUENCE IS BINDING ON §3, AND THE DANGEROUS SHAPE IS THE POINT:** a parent-as-index **can** work — but only because a session *reads the instruction and acts on it*. **That is a PROCEDURE, not a mechanism.** ⇒ **the "workflow parent referencing per-step children" becomes: ONE FLAT skill, or N INDEPENDENTLY-INVOKED skills whose parent is an index that NAMES them and is honest that invoking them is a manual act.** ⚠️ **A parent written as though the reference loads is the failure this programme keeps meeting — it reads as a working index while delivering nothing**, and every procedure here that relied on someone remembering has been skipped at least once.
+
 ### ⛔⛔ FINDING 2 — THE PARENT→CHILD REFERENCE HAS **NO DOCUMENTED MECHANISM**, AND THIS IS NOW DOCUMENTARY EVIDENCE, NOT INFERENCE.
 **§2(A) suspected it; the live docs page confirms it.** Searched the full page for `another skill` · `other skills` · `reference a skill` · `child skill` · `sub-skill` · `compose` · `chain`: **exactly ONE match, and it is about NAME COLLISIONS** (*"If a nested skill shares a name with another skill, both stay available"*), **not composition.** ⇒ **the docs describe no way for one skill to pull another's body in.**
 ⇒ ★ **DESIGN CONSEQUENCE, AND IT LANDS ON KYLE'S LIST DIRECTLY:** the *"**workflow** parent referencing per-step children"* shape at §3 **cannot be assumed to work.** It must become **either ONE FLAT skill, or N INDEPENDENTLY-INVOKED skills with the parent as a pure index that NAMES them for a human to invoke.** ⚠️ **A parent whose reference silently does not resolve is the worst of the three — it reads as a working index while delivering nothing**, which is this programme's signature failure.
