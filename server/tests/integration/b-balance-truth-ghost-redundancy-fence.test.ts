@@ -23,9 +23,14 @@
  *
  * ★ THE POSITIVE CONTROL IS THE POINT (rule 29(b) — prove the instrument before its silence is
  * evidence). The main assertion is an expected ZERO, and a zero from a broken query is
- * indistinguishable from a zero from clean data. So the same ghost clause is run a second time
- * WITHOUT the `never_filled` exclusion, where it MUST return rows. If the control returns 0 the
- * instrument is wrong, not the data, and the fence says so instead of passing.
+ * indistinguishable from a zero from clean data. So the clause is ALSO run over a synthetic
+ * rowset built to contain exactly three ghosts; if it does not find three, the predicate is
+ * wrong and the fence says so instead of passing.
+ * ⚠️ The control deliberately does NOT source its rows from `closed_trades`. The first version
+ * did, which made it a claim about the database's POPULATION rather than about the predicate —
+ * it passed on staging (86 matching rows) and failed in CI, whose freshly-migrated table is
+ * empty. An empty table is not a broken instrument, and conflating the two makes the fence
+ * unrunnable exactly where it is supposed to run.
  *
  * READ-ONLY: two SELECTs, no seeding.
  */
@@ -61,36 +66,64 @@ const GHOST = sql`(exit_price IS NULL OR exit_price::numeric <= 0
 describe(TAG, () => {
   // ctx.skip() and NOT it.skipIf(): skipIf evaluates at COLLECTION time, before beforeAll has
   // probed the database, so it would read the initial `true` and run anyway.
-  it('POSITIVE CONTROL: the ghost clause fires on rows that exist (else the zero below is meaningless)', async (ctx) => {
+  // ★ THE POSITIVE CONTROL RUNS AGAINST A SYNTHETIC ROWSET, NOT AGAINST AMBIENT TABLE DATA,
+  // and the first version of this fence got that wrong and CI caught it (run 32427686111).
+  // Sourcing the control from `closed_trades` made it a claim about THIS DATABASE'S POPULATION:
+  // it passed against staging's 86 matching rows and FAILED against CI's freshly-migrated empty
+  // table, where the clause can match nothing because there is nothing to match. An empty table
+  // is not a broken instrument. Proving the clause on rows constructed HERE separates the two
+  // questions cleanly -- "does the predicate classify correctly?" (asked of synthetic rows, true
+  // on every database) from "does any real row trip it?" (asked of the table, below).
+  it('POSITIVE CONTROL: the ghost clause classifies known rows correctly (proves the instrument, no writes)', async (ctx) => {
     if (!dbReachable) ctx.skip();
+    // Four rows built to exercise each limb: a clean trade, a null exit price, a zero exit
+    // price, and a blank close reason. Exactly three are ghosts.
     const res: any = await db.execute(sql`
-      SELECT count(*)::int AS n FROM closed_trades
-       WHERE closed_at IS NOT NULL AND ${GHOST}`);
+      SELECT count(*)::int AS n FROM (VALUES
+        ('100.5'::numeric, 'take_profit'),
+        (NULL::numeric,    'take_profit'),
+        ('0'::numeric,     'stop_loss'),
+        ('100.5'::numeric, '   ')
+      ) AS t(exit_price, close_reason)
+      WHERE (t.exit_price IS NULL OR t.exit_price <= 0
+             OR t.close_reason IS NULL OR btrim(t.close_reason) = '')`);
     const n = Number((res.rows ?? res)[0]?.n ?? 0);
     expect(
       n,
-      `[${TAG}] the ghost clause matched NOTHING anywhere in closed_trades. That makes the ` +
-      `redundancy assertion vacuous — it would pass against a broken query just as happily as ` +
-      `against clean data. Fix the instrument before trusting its silence.`,
-    ).toBeGreaterThan(0);
+      `[${TAG}] the ghost clause misclassified a synthetic rowset built to contain exactly 3 ` +
+      `ghosts and 1 clean trade. The predicate itself is wrong, so nothing below can be trusted.`,
+    ).toBe(3);
   });
 
-  it('is REDUNDANT: no row survives the never_filled exclusion and still looks like a ghost', async (ctx) => {
+  it('is REDUNDANT: no real row survives the never_filled exclusion and still looks like a ghost', async (ctx) => {
     if (!dbReachable) ctx.skip();
+    // Population is NAMED, not implied (rule 29): the total row count is reported alongside the
+    // ghost count, so a zero read against an empty table is legible as "nothing to examine"
+    // rather than as "examined everything and found nothing wrong". CI's test database is
+    // legitimately empty; staging's is not. The predicate's correctness does not depend on
+    // either -- the synthetic control above establishes that independently.
     const res: any = await db.execute(sql`
-      SELECT count(*)::int AS n FROM closed_trades
-       WHERE closed_at IS NOT NULL
-         AND close_reason IS DISTINCT FROM 'never_filled'
-         AND ${GHOST}`);
-    const n = Number((res.rows ?? res)[0]?.n ?? 0);
+      SELECT
+        count(*) FILTER (
+          WHERE closed_at IS NOT NULL
+            AND close_reason IS DISTINCT FROM 'never_filled'
+            AND (exit_price IS NULL OR exit_price::numeric <= 0
+                 OR close_reason IS NULL OR btrim(close_reason) = '')
+        )::int AS ghosts,
+        count(*)::int AS total
+      FROM closed_trades`);
+    const row = (res.rows ?? res)[0] ?? {};
+    const ghosts = Number(row.ghosts ?? 0);
+    const total = Number(row.total ?? 0);
     expect(
-      n,
-      `[${TAG}] ${n} closed trade(s) are NOT never_filled, DO have a close time, and yet carry no ` +
-      `usable exit price or close reason. The ghost guard is no longer redundant: the Step-C SQL ` +
-      `aggregates now COUNT these rows while the surviving JS filters in routes.ts DROP them, so ` +
-      `two figures on the same page disagree with no error raised. Either fold the ghost clause ` +
-      `into the shared predicate family-wide and re-measure every converted site, or fix the close ` +
-      `path that produced a closed row with no exit price. Do NOT relax this fence.`,
+      ghosts,
+      `[${TAG}] ${ghosts} of ${total} closed trade(s) are NOT never_filled, DO have a close time, ` +
+      `and yet carry no usable exit price or close reason. The ghost guard is no longer redundant: ` +
+      `the Step-C SQL aggregates now COUNT these rows while the surviving JS filters in routes.ts ` +
+      `DROP them, so two figures on the same page disagree with no error raised. Either fold the ` +
+      `ghost clause into the shared predicate family-wide and re-measure every converted site, or ` +
+      `fix the close path that produced a closed row with no exit price. Do NOT relax this fence.`,
     ).toBe(0);
+    console.log(`[${TAG}] examined ${total} row(s) in closed_trades; ${ghosts} genuine ghost(s).`);
   });
 });
