@@ -56,6 +56,11 @@ MISTAKE: <pattern-slug> [<batch-id>] — <one line: what was wrong, what is true
 ⇒ **4+ instances across 2 distinct batches ⇒ THRESHOLD MET ⇒ IN §13.**
 **Mechanism that would retire it:** a measure-time gate that refuses a reported number lacking a stated object + population + ref. **Candidate home: B-MEASURE-GATE (approved, unbuilt).**
 
+### `bare-commit` — **PROMOTED TO §13** · mechanism: **SHIPPED (class coverage)**
+**A commit without explicit paths sweeps whatever is staged — including another session's held work.**
+**INSTANCES:** #542 / #540 sweeps, both directions (`d090178d6`, `5f291a17e`) — 2 batches.
+**Mechanism:** `.claude/hooks/guard-bare-commit.mjs` **REFUSES every bare `git commit`.** ⇒ **covers the CLASS, not the instance that surfaced it.**
+
 ### `silence-not-evidence` — **LIVE — NOT IN §13** · mechanism: **PARTIAL**
 **A check that CANNOT FAIL, mistaken for a check that passed.** Silence from a broken instrument is indistinguishable from silence from a healthy one.
 **INSTANCES (attributed):**
