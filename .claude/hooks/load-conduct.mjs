@@ -39,7 +39,10 @@ import { join } from 'node:path';
 // of a trade-off (rules that help vs rules nobody reads vs token cost), not a new budget.
 const CAP_TOKENS = 6144;
 const BYTES_PER_TOKEN = 4;
-const CAP_BYTES = CAP_TOKENS * BYTES_PER_TOKEN; // 16384
+const CAP_BYTES = CAP_TOKENS * BYTES_PER_TOKEN; // 24576 — ⚠️ KEEP THIS IN STEP WITH CAP_TOKENS.
+// It read `// 16384` after the 4096→6144 raise: a durable comment asserting a retired ceiling.
+// Same family as the two Langston caught elsewhere the same day — a comment claiming more than
+// the code delivers. A stale constant in a comment is read by humans as the live value.
 
 try {
   const projectDir = process.env.CLAUDE_PROJECT_DIR || '';
