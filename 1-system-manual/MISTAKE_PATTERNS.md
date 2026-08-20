@@ -56,10 +56,10 @@ MISTAKE: <pattern-slug> [<batch-id>] — <one line: what was wrong, what is true
 ⇒ **4+ instances across 2 distinct batches ⇒ THRESHOLD MET ⇒ IN §13.**
 **Mechanism that would retire it:** a measure-time gate that refuses a reported number lacking a stated object + population + ref. **Candidate home: B-MEASURE-GATE (approved, unbuilt).**
 
-### `bare-commit` — **PROMOTED TO §13** · mechanism: **SHIPPED (class coverage)**
-**A commit without explicit paths sweeps whatever is staged — including another session's held work.**
-**INSTANCES:** #542 / #540 sweeps, both directions (`d090178d6`, `5f291a17e`) — 2 batches.
-**Mechanism:** `.claude/hooks/guard-bare-commit.mjs` **REFUSES every bare `git commit`.** ⇒ **covers the CLASS, not the instance that surfaced it.**
+### `bare-commit` — ✅ **RETIRED 2026-08-20** (mechanism shipped, class covered)
+**Was:** a commit without explicit paths sweeps whatever is staged, including another session's held work (#542/#540, `d090178d6`, `5f291a17e`).
+**Retired because `.claude/hooks/guard-bare-commit.mjs` REFUSES every bare `git commit` — CLASS coverage, not the instance that surfaced it.** Removed from `CONDUCT.md` §13 in the same commit.
+⚠️ **Kept here, not deleted:** a retired entry is the RECORD that the pattern was real and is now mechanised. **Deleting it would let the pattern be re-discovered from scratch.**
 
 ### `silence-not-evidence` — **LIVE — NOT IN §13** · mechanism: **PARTIAL**
 **A check that CANNOT FAIL, mistaken for a check that passed.** Silence from a broken instrument is indistinguishable from silence from a healthy one.
@@ -84,3 +84,4 @@ MISTAKE: <pattern-slug> [<batch-id>] — <one line: what was wrong, what is true
 | date | window | new instances | promotions / displacements / retirements | by |
 |---|---|---|---|---|
 | 2026-08-20 | seed | 3 patterns seeded, 9 instances attributed | `wrong-object` → §13. `silence-not-evidence` and `process-not-file` below threshold, held here. | CC-A |
+| 2026-08-20 | rehearsal | 0 new | `bare-commit` PROMOTED then RETIRED — the retirement path exercised end to end, both files in one commit | CC-A |
