@@ -1,4 +1,4 @@
-# B-MISTAKES-FILE — SCOPE **+** PRE-AUDIT, ONE DOCUMENT (r3)
+# B-MISTAKES-FILE — SCOPE **+** PRE-AUDIT, ONE DOCUMENT (r4)
 
 change-class: `non_architecture`
 **Owner:** CC-A · 2026-08-20 · **Home:** #694 pieces (4) + (5) · **Issue:** #731 (CC-A block 730-759)
@@ -83,7 +83,7 @@ change-class: `non_architecture`
 ### 3.1 MAKE THE EXISTING RECORD GREPPABLE — *from §2.1, §2.3*
 Commit trailer, one line, on any commit recording a self-correction — **including the commit that carries an ISSUE ENTRY, so 28.a's second branch is covered (§2.3):**
 ```
-MISTAKE: <pattern-slug> — <one line: what was wrong, what is true>
+MISTAKE: <pattern-slug> [<batch-id>] — <one line: what was wrong, what is true>
 ```
 **This replaces four inconsistent wordings with one token. It changes NOTHING about what 28.a already requires** — only whether it can be found. **The index states its own population limit: commits-only; the never-committed retraction is knowingly out of reach.**
 
@@ -92,12 +92,24 @@ MISTAKE: <pattern-slug> — <one line: what was wrong, what is true>
 ⛔ **RIDER-3, and it is a boundary not a preference: Langston's MEMORY ledger is a THIRD, separate thing — his own ruling stream. NOBODY "syncs" this index against it.** Two of the three seeds are his shapes (`wrong-object` = his crypto-OBJ-6 and #675). **A sync would rebuild #641 in the one place he cannot audit.**
 
 ### 3.3 THE SHORT LIST LIVES IN `CONDUCT.md` §13 — *from §2.4*
-Top **3-5 LIVE** patterns only (~1 KB into 3,858 B headroom), pointing at the full index. **Retirement edits §13 and the index IN ONE COMMIT (§2.4).** One-in-one-out still binds; over cap, the loader says so loudly.
+Top **3-5 LIVE** patterns, **ordered MOST-RECENT-INSTANCE FIRST** (Langston condition 3 — §13 prevents the next one, it does not score history), pointing at the full index. ⛔ **A live pattern displaced out of §13 by the slot limit STAYS in the index flagged `LIVE — NOT IN §13`; an absence from §13 must NEVER read as retirement.** ⚠️ **Headroom is now 937 B, not 3,858 — the format spec landed in §6 on 2026-08-20. §13 must fit that, or something moves out.** **Retirement edits §13 and the index IN ONE COMMIT (§2.4).** One-in-one-out still binds; over cap, the loader says so loudly.
 
 ### 3.4 THE WEEKLY PASS — OWNED, FIRED, AND IT WRITES BACK — *from §2.6*
 ★★ **WHAT THE PASS PRODUCES, per Kyle 2026-08-20 — it does not just count, it PROMOTES.** His words: it *"reads through, looks for common mistakes, and creates that as a rule."*
 ⇒ **A pattern that RECURS gets promoted into the short live list in `CONDUCT.md` §13 — i.e. it becomes a rule that auto-loads.** The entry still names the MECHANISM that would prevent it, because a rule is words and words get skipped (rule 29(b) was auto-loaded and skipped twice in one day), while a mechanism enforces. **So the lifecycle is: instance → pattern → RULE (promoted into §13) → MECHANISM shipped → entry RETIRES from both.** The rule is the interim state, not the destination.
-⚠️ **Promotion needs a threshold, and an unstated one is how everything or nothing gets promoted.** Proposed: **3+ instances across 2+ distinct batches** — recurring, and not an artefact of one bad day. **Langston to confirm or set his own.**
+✅ **THRESHOLD RULED (Langston, 2026-08-20): 3+ instances across 2+ distinct batches, CONFIRMED AS A FLOOR — with four conditions, all taken.**
+
+**(1) IT IS A PREDICATE, NOT A JUDGMENT.** *"2+ distinct batches"* was unmeasurable as written — the trailer carried a slug and a line, nothing attributing a batch. **The trailer now carries the batch id** (§3.1), so the whole threshold is **one grep**. *An eyeballed "distinct batches" is a habit, not a gate.*
+
+**(2) THE COUNT IS A FLOOR, NOT A MEASURE — and that is stated AT the threshold, not only at §2.3.** The grep population is **commits-only**, and the never-committed retraction *"is most of my own ledger"* (Langston). ⇒ **a pattern sitting at 2 grep-instances may really be at six.** **Therefore the threshold may ALSO be met by cited NON-COMMIT instances — provided each carries a RESOLVABLE REF (issue entry, ruling, alert id). NEVER on recollection.** Without this the highest-value class is **structurally unpromotable** and the index quietly reads as complete.
+
+**(3) ⛔ THE BINDING CONSTRAINT IS THE 3-5 SLOTS, NOT THE THRESHOLD — and that rule was missing.** §3.3 said *"top 3-5 LIVE"* without saying **top by what**; when six clear the bar, something has to decide and nothing did.
+- **ORDERING: MOST-RECENT-INSTANCE FIRST.** §13's job is preventing the NEXT one, not scoring history.
+- ★★ **A LIVE PATTERN DISPLACED OUT OF §13 STAYS IN THE INDEX WITH AN EXPLICIT `LIVE — NOT IN §13` STATUS. A §13 ABSENCE MUST NEVER BE READABLE AS RETIREMENT.** Same absent-as-valid shape as #546 and as §2.7's own catch.
+
+**(4) DOGFOOD IT ON THE SEEDS — NO GRANDFATHERING.** §3.5's three seeds have not been through this gate. **Each seed states its instances WITH batch attribution and the predicate decides** which enter §13 at ship; the rest live in the index only. ⚠️ **`silence-not-evidence` at 3 instances over 2026-08-19/20 is exactly the case the threshold exists to REFUSE unless those instances genuinely span two batches — attribute it, do not assert it.** *A gate whose initial population bypassed it is a gate on paper.*
+
+⛔ **RULED OUT EXPLICITLY so it is not left open: NO SEVERITY OVERRIDE.** A single severe mistake **does not** promote to a rule — **it gets a mechanism.** §13 is for RECURRENCE; severity is what rule 24's three outcomes are for.
 **Command:** `git log --grep='^MISTAKE:' --since=1.week` → group by slug → update counts.
 **OWNER: CC-A. CADENCE: weekly. FIRING: a self-chaining `verification` alert.**
 ⛔⛔ **CHANGE-1 (Langston r2) — r2 NAMED THE WRONG VERB, AND THE VERB *IS* THE ARMING MECHANISM.** r2 said *"re-arms on discharge, not a `resolve`, which is terminal"* — which **reads as *avoid resolve*, and doing that makes the pass never fire again, silently.** That is **BLOCKER-2 reappearing disguised as its own fix.**
@@ -109,7 +121,7 @@ Top **3-5 LIVE** patterns only (~1 KB into 3,858 B headroom), pointing at the fu
 **ENFORCEMENT MECHANISM FOR THE TRAILER (§2.6), named now, built in a follow-up: `commit-msg` hook or CI grep. `UNBUILT` until it ships, and the index says so.**
 
 ### 3.5 SEED CONTENT — *from §2.7* ⚠️ **(r2 shipped this section with NO §2 treatment and NO `UNAUDITED` flag — the piece-(5) requirement leaking again, one section below where I made it binding. §2.7 now exists.)**
-1. **`silence-not-evidence`** — a check that CANNOT FAIL mistaken for one that passed. **3 instances, 2026-08-19/20.** **Mechanism: PARTIAL — the wake filter's `else` covers ONE instance in ONE watcher.** ⛔ **DOES NOT RETIRE.** *(r2 asserted "SHIPPED ⇒ retires at first pass". **That was a category error and §4(c) hung the whole retirement rehearsal on it** — see §2.7.)*
+1. **`silence-not-evidence`** — a check that CANNOT FAIL mistaken for one that passed. **INSTANCES, ATTRIBUTED (condition 4 — no grandfathering):** (a) the wake-filter suppression never firing + three hand-fed tests that processed nothing — **B-CONDUCT-FILE / #730**; (b) the unset-path guard that read as applied and did nothing — **B-CONDUCT-FILE**; (c) ★ **§7(a)'s own verification specified against the `InstructionsLoaded` sink, which records HARNESS auto-loads only and therefore could never observe a HOOK-injected file** — **B-CONDUCT-FILE, alert `441abe49`, resolved 2026-08-20 on the correct object (7 loader injections observed in the transcript record, CC-A 6 / CC-C 1)**. ⚠️ **ALL THREE SIT IN ONE BATCH ⇒ the 2+-distinct-batches leg is NOT met ⇒ by the predicate this seed does NOT enter §13 at ship.** It lives in the index as `LIVE — NOT IN §13`. **That is the gate refusing its own author's favourite example, which is the point of dogfooding it.** **Mechanism: PARTIAL — the wake filter's `else` covers ONE instance in ONE watcher.** ⛔ **DOES NOT RETIRE.** *(r2 asserted "SHIPPED ⇒ retires at first pass". **That was a category error and §4(c) hung the whole retirement rehearsal on it** — see §2.7.)*
 2. **`wrong-object`** — right name, wrong thing. Instances: worktree-not-ref · a stale `origin/…` baseline · `-200` as a denominator · ⛔ **and §2.1 of this document.** **Mechanism: NONE YET.**
 3. **`process-not-file`** — a file test supporting a claim about a running process. **Mechanism: NONE YET.**
 
