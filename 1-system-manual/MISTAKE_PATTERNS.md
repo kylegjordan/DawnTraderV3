@@ -32,6 +32,24 @@ MISTAKE: <pattern-slug> [<batch-id>] — <one line: what was wrong, what is true
 - **§13 holds 3-5 slots, ordered MOST-RECENT-INSTANCE FIRST** — its job is preventing the *next* one, not scoring history.
 - ⛔⛔ **A LIVE PATTERN DISPLACED OUT OF §13 BY THE SLOT LIMIT STAYS HERE, FLAGGED `LIVE — NOT IN §13`. AN ABSENCE FROM §13 MUST NEVER BE READABLE AS RETIREMENT.**
 
+### ⛔⛔ DISPLACEMENT-BY-NEWNESS IS A DEFECT IN THIS DESIGN — KYLE FOUND IT 2026-08-20, BEFORE THE FIRST PASS RAN
+
+**His reasoning, and it is correct:** *if a rule on the board has been PREVENTING the mistake, and it is then pushed out, the mistake logically resumes.*
+
+★★ **AND THE FEEDBACK LOOP IS PERVERSE: a rule that WORKS produces FEWER new instances → its most-recent-instance date recedes → most-recent-first ordering sinks it → it is DISPLACED → the mistake resumes → it is re-promoted.** The system would oscillate, **paying real mistakes each lap, and it would punish exactly the rules that were doing their job.**
+
+⇒ **THE ROOT IS THIS FILE'S OWN FAILURE MODE: you cannot distinguish "quiet because SOLVED" from "quiet because the rule is HOLDING IT DOWN."** Silence from a pattern under an active rule **is not evidence the pattern is gone** — `silence-not-evidence`, built into the instrument designed to catch it.
+
+## ✅ THE RULE THAT REPLACES IT — CAP PRESSURE BUILDS A MECHANISM, IT DOES NOT DROP PROTECTION
+
+> **When a 6th pattern qualifies and only 5 slots exist, that is NOT a signal to drop the oldest. It is the signal that the oldest must be MECHANISED.**
+> **A live rule is NEVER displaced by newness alone. It leaves §13 only when a mechanism covers its instance class.**
+
+**Why this is the right shape:** the cap becomes a **forcing function that produces guards**, instead of a reason to withdraw protection. Pressure converts into mechanisms rather than regressions. ⚠️ **AND THE COST, STATED: mechanism-building stops being aspirational and becomes MANDATORY — the board cannot take a new rule until an old one has been engineered away.** That is a real constraint on throughput and it is the price of the loop not eating itself.
+
+**FALLBACK, for the case where a drop genuinely cannot be avoided:** it is recorded as a **DELIBERATE EXPERIMENT, never a silent removal** — flagged `DISPLACED — WATCHING FOR RECURRENCE (from <date>)`. ★ **If it recurs, that recurrence is PROOF the rule was load-bearing, and the pattern goes STRAIGHT to a mechanism — it does not go back on the board to be dropped again.** The oscillation becomes a diagnostic instead of a treadmill.
+
+
 ## THE WEEKLY PASS
 
 `git log --grep='^MISTAKE:' --since=1.week` → group by slug → update counts → promote/displace/retire.
