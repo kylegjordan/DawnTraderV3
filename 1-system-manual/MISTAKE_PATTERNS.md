@@ -47,7 +47,10 @@ MISTAKE: <pattern-slug> [<batch-id>] — <one line: what was wrong, what is true
 
 **Why this is the right shape:** the cap becomes a **forcing function that produces guards**, instead of a reason to withdraw protection. Pressure converts into mechanisms rather than regressions. ⚠️ **AND THE COST, STATED: mechanism-building stops being aspirational and becomes MANDATORY — the board cannot take a new rule until an old one has been engineered away.** That is a real constraint on throughput and it is the price of the loop not eating itself.
 
-**FALLBACK, for the case where a drop genuinely cannot be avoided:** it is recorded as a **DELIBERATE EXPERIMENT, never a silent removal** — flagged `DISPLACED — WATCHING FOR RECURRENCE (from <date>)`. ★ **If it recurs, that recurrence is PROOF the rule was load-bearing, and the pattern goes STRAIGHT to a mechanism — it does not go back on the board to be dropped again.** The oscillation becomes a diagnostic instead of a treadmill.
+⛔ **FALLBACK — AND IT IS GATED, BECAUSE *"where a drop genuinely cannot be avoided"* IS THE DROPPER'S OWN JUDGEMENT (Langston 3a — the exact thing the condition excluded).** Under throughput pressure every drop feels unavoidable, so an ungated fallback is the old rule wearing a flag.
+> **A DROP REQUIRES EITHER (i) KYLE'S EXPLICIT CALL, OR (ii) A NAMED, RECORDED BLOCKER ON THE MECHANISM. NEVER THE DROPPER'S OWN ASSESSMENT THAT IT WAS UNAVOIDABLE.**
+
+When one of those two holds: it is recorded as a **DELIBERATE EXPERIMENT, never a silent removal** — flagged **`DISPLACED — WATCHING FOR RECURRENCE (from <date>) — COMMIT-VISIBLE ONLY; THIS WATCH'S SILENCE DISCHARGES NOTHING`**. ⛔⛔ **Langston 3b, and it is this file's own bug one layer down inside its own remedy: the watch watches WITH THE GREP, and the grep is commits-only and structurally cannot hold the no-commit class** — *"most of my own ledger."* ⇒ **silence from this watch is NOT evidence the rule was dispensable**, so it can never by itself justify leaving a pattern dropped. ★ **If it recurs, that recurrence is PROOF the rule was load-bearing, and the pattern goes STRAIGHT to a mechanism — it does not go back on the board to be dropped again.** The oscillation becomes a diagnostic instead of a treadmill.
 
 
 ## THE WEEKLY PASS
@@ -80,7 +83,8 @@ select symbol, net_pnl, exit_price, take_profit, closed_at from closed_trades
 | 4 | counted substring `correct` and reported it as **the presence of a correction**; ~18% adjectival | B-MISTAKES-FILE | `249875947` |
 | 5 | reported transcript **file size** as overnight **growth** | — (conversational) | this file's §-above |
 ⇒ **4+ instances across 2 distinct batches ⇒ THRESHOLD MET ⇒ IN §13.**
-**Mechanism that would retire it:** a measure-time gate that refuses a reported number lacking a stated object + population + ref. **Candidate home: B-MEASURE-GATE (approved, unbuilt).**
+**Mechanism that would retire it:** a measure-time gate that refuses a reported number lacking a stated object + population + ref.
+⛔⛔ **HOME: `B-MEASURE-GATE` — OWNER CC-A — DUE 2026-09-03.** ⚠️ **It was carried as *"approved, unbuilt"*, and Langston is right that this is the single most important gap in the file: THAT IS EXACTLY THE STATE §13 EXISTS TO FORBID.** §13's only entry has `mechanism: NONE YET`, its forcing function points here, and **a forcing function aimed at an unowned, undated batch forces nothing.** ⇒ **an owner and a date are now mandatory AT THE MOMENT OF PRESSURE, not afterwards** — a mechanism obligation with neither is an intention wearing a deadline's clothes.
 
 ### `bare-commit` — ✅ **RETIRED 2026-08-20** (mechanism shipped, class covered)
 **Was:** a commit without explicit paths sweeps whatever is staged, including another session's held work (#542/#540, `d090178d6`, `5f291a17e`).
