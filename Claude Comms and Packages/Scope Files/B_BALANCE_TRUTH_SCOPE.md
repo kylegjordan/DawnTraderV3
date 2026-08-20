@@ -27,26 +27,33 @@ Both recorded verbatim-in-substance in RUNNING_ISSUES #618, 2026-08-01:
 
 ---
 
-## 3. THE CENSUS — AND IT IS BIGGER THAN THE ISSUE'S THREE NAMED SITES
+## 3. THE CENSUS — REDONE AT LANGSTON'S STEP-1 BLOCKER (r2)
 
-`getClosedTrades` has **12 call sites** (repo-wide grep, tests excluded), not the 3 #618 names. They split into two populations, and the split IS the scope boundary:
+⛔ **r1's census said 12 call sites. THE REAL NUMBER IS 24, and the cause was mine: I piped the grep through `head -12` and reported the truncation as the population.** That is the same instrument failure as #704 (a bounded read presented as a complete one), committed inside the batch whose whole subject is bounded reads presented as complete ones. Langston caught it and named the sharpest omission himself: `c5-financial-diagnostics.ts:118` **carries a comment at `:129-131` that already annotates it as "#618 leg 2"** — my own issue family had flagged that site and my census dropped it.
 
-**(A) AGGREGATE consumers — the defect population. Every one of these asks a whole-history question through a paged reader:**
+**Instrument stated (rule 29):** `grep -rn "getClosedTrades(" server/ --include="*.ts"`, excluding the interface declaration, two explanatory comments and `getClosedTradesGlobal`, tests excluded, **NO `head`** ⇒ 28 lines, **24 call sites**.
 
-| Site | Consumer | Cap in force |
-|---|---|---|
-| `guardrail-settings.ts:106` | **`getPortfolioBalanceV2` → the daily-loss KILL-SWITCH DENOMINATOR** | 100 |
-| `routes.ts:12961` | displayed **BALANCE** (`{}` — not even `closedOnly`) | 100 |
-| `routes.ts:12347` · `:12458` · `:12549` | **EARNINGS / P&L windows** (7d, 30d, all-time) | 100 |
-| `routes.ts:4659` · `:4709` · `:4727` | AI-briefing / analytics totals | 100 |
-| `active-engine-service.ts:303` | session metrics | 1,000 |
-| `active-portfolio-manager.ts:370` | trade COUNT only | 1,000 |
+**REACHABILITY (Langston's explicit condition — a call site's existence is not its liveness).** ⚠️ My first reachability pass grepped only `from '…'` and reported c13/c14/validation-session as ZERO-importer. **That was wrong and is retracted: they are reached by dynamic `import()` and `require()`.** Corrected instrument = all three syntaxes. Result: **all five services are LIVE — none is dead code, so "unwired" is not available as a disposition for any of them.**
 
-**(B) LIST consumers — correct as they are, NOT in scope:** `routes.ts:12042` (the paginated UI list — the reader's original purpose) and `active-execution-engine.ts:3775` / `routes.ts:13449` (explicitly bounded "recent N" reads, where a limit is the intent).
+| # | Site | Filter passed | Cap in force | Population | Disposition |
+|---|---|---|---|---|---|
+| 1 | `guardrail-settings.ts:106` | `{closedOnly}` | **100** | **A — RISK** | SQL aggregate (OBJ-1). The kill-switch DENOMINATOR. |
+| 2 | `routes.ts:12961` | `{}` | **100** | **A — display** | SQL aggregate (OBJ-2). Displayed BALANCE; not even `closedOnly`. |
+| 3-5 | `routes.ts:12347` · `:12458` · `:12549` | `{closedOnly}` | **100** | **A — display** | SQL aggregate (OBJ-2). The earnings/P&L windows; the 7d==30d identity is the acceptance test. |
+| 6-8 | `routes.ts:4659` · `:4709` · `:4727` | `{closedOnly}` | **100** | **A — display** | SQL aggregate (OBJ-2) per §7 Q1. |
+| 9-10 | **`c5-financial-diagnostics.ts:118` · `:190`** | **bare `(mode)`** | **100 AND `closedOnly=false`** | **A — INSTRUMENT** | **SQL aggregate (OBJ-2), and it is the highest-priority display site**: `:118` reduces `realizedNetPnlTotal` over whole history, and this is the OBSERVATION INSTRUMENT the #618 pairing decision is read from. **Fixing the balance while leaving the gauge truncated fixes the thing and not the measurement.** LIVE: reached from `routes.ts`, `active-engine-service.ts`, `active-execution-engine.ts`, `signal-orchestrator.ts`. |
+| 11-12 | `c13-validation-service.ts:138` · `:230` | bare `(mode)` | **100 + `closedOnly=false`** | **A** | Aggregate or annotate — `:138` reduces to `avgPnl`. LIVE via `routes.ts` (3 refs, dynamic). **Binds today.** |
+| 13-14 | `c14-validation-service.ts:201` · `:360` | bare `(mode)` | **100 + `closedOnly=false`** | **A** | Same. LIVE via `routes.ts` + `kraken.ts:795` (`require`). **Binds today.** |
+| 15 | `m5e-validation-service.ts:146` | `{closedOnly:false}` | **100** | **A — miscounts** | ⚠️ Counts OPEN positions by JS-filtering `!closedAt` **through the closed-trades reader** — a wrong-object read on top of a capped one. Needs its own disposition, not a shared aggregate. LIVE via `routes/vts.ts`. |
+| 16-17 | `active-portfolio-manager.ts:466` · `:505` | `{limit:1000, closedOnly}` | 1,000 | A (non-binding) | §7 Q2 — annotate + fence. |
+| 18 | `active-portfolio-manager.ts:370` | `{limit:1000}` | 1,000 | A (non-binding) | §7 Q2 — count only. |
+| 19 | `active-engine-service.ts:303` | `{limit:1000}` | 1,000 | A (non-binding) | §7 Q2. |
+| 20-21 | `validation-session-service.ts:80` · `:130` | `{limit:1000, closedOnly}` | 1,000 | A (non-binding) | §7 Q2. LIVE via `routes.ts` + `startup/lazy-loader.ts`. |
+| 22 | `routes.ts:12042` | caller-supplied | caller's | **B — LIST** | Out of scope: the paginated UI list, the reader's ORIGINAL purpose. |
+| 23 | `routes.ts:13449` | `{limit:500}` | 500 | **B — LIST** | Out of scope: an explicit "recent N". |
+| 24 | `active-execution-engine.ts:3775` | `{limit, closedOnly}` | caller's | **B — LIST** | Out of scope: explicit bounded read. |
 
-⚠️ **This census is the reason the batch is `architecture` and not a two-line fix.** #618 named three consumers; there are nine in population (A). **Each one gets a purpose-built SQL aggregate or an explicit ruling that its cap is intended — no site is left implicitly capped.**
-
----
+**⇒ 10 sites BIND TODAY at 100 rows (1-15 minus the four already listed at 1,000), 6 are non-binding at 1,000, 3 are legitimate list readers.** Every site now has a disposition; none is left implicitly capped.
 
 ## 4. OBJECTIVES
 
