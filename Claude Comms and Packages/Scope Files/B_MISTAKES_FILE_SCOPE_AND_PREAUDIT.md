@@ -95,6 +95,9 @@ MISTAKE: <pattern-slug> — <one line: what was wrong, what is true>
 Top **3-5 LIVE** patterns only (~1 KB into 3,858 B headroom), pointing at the full index. **Retirement edits §13 and the index IN ONE COMMIT (§2.4).** One-in-one-out still binds; over cap, the loader says so loudly.
 
 ### 3.4 THE WEEKLY PASS — OWNED, FIRED, AND IT WRITES BACK — *from §2.6*
+★★ **WHAT THE PASS PRODUCES, per Kyle 2026-08-20 — it does not just count, it PROMOTES.** His words: it *"reads through, looks for common mistakes, and creates that as a rule."*
+⇒ **A pattern that RECURS gets promoted into the short live list in `CONDUCT.md` §13 — i.e. it becomes a rule that auto-loads.** The entry still names the MECHANISM that would prevent it, because a rule is words and words get skipped (rule 29(b) was auto-loaded and skipped twice in one day), while a mechanism enforces. **So the lifecycle is: instance → pattern → RULE (promoted into §13) → MECHANISM shipped → entry RETIRES from both.** The rule is the interim state, not the destination.
+⚠️ **Promotion needs a threshold, and an unstated one is how everything or nothing gets promoted.** Proposed: **3+ instances across 2+ distinct batches** — recurring, and not an artefact of one bad day. **Langston to confirm or set his own.**
 **Command:** `git log --grep='^MISTAKE:' --since=1.week` → group by slug → update counts.
 **OWNER: CC-A. CADENCE: weekly. FIRING: a self-chaining `verification` alert.**
 ⛔⛔ **CHANGE-1 (Langston r2) — r2 NAMED THE WRONG VERB, AND THE VERB *IS* THE ARMING MECHANISM.** r2 said *"re-arms on discharge, not a `resolve`, which is terminal"* — which **reads as *avoid resolve*, and doing that makes the pass never fire again, silently.** That is **BLOCKER-2 reappearing disguised as its own fix.**

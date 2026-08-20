@@ -50,6 +50,8 @@ Two orthogonal axes: **mode** (paper | live) and **active trading** (on | off).
 **Binds the WORK, not just the talk:** stay out of another session's batch unless (a) to (c). Offering one correction is not joining; joining uninvited spends Kyle's time.
 
 ## 6. THE STEP REPORT — KYLE'S EXACT FORMAT (2026-08-20). USE IT VERBATIM.
+> ★ **BINDS EVERY SESSION WORKING ON DAWNTRADER — CC-A, CC-B, CC-C AND INFRA (Kyle 2026-08-20), not just the one that wrote it.**
+> ⚠️ **AND IT REACHES A SESSION ONLY WHEN THAT SESSION PULLS.** Measured 2026-08-20: **CC-B was 131 commits behind and INFRA 53, and NEITHER clone held `CONDUCT.md` or its loader at all** — so this file bound two of four sessions while reading as though it bound all of them. **A rule that has not been pulled is not a rule that fires**, which is the same failure this whole file exists to prevent, one level up.
 
 **A report is written at the END OF EVERY WORKFLOW STEP — then you CONTINUE to the next step in the same turn.** You do not wait to be told to proceed. **You stop only for a decision that is genuinely his** (see the DECISION block below).
 
@@ -69,6 +71,15 @@ Use a **`#` heading** (the largest available), on its own, with a rule line unde
 
 ### AT BATCH CLOSE — a `# 🟩 BATCH COMPLETE` report instead
 What it was **intended** to do · what was **actually** done · **how it was verified** · and **whether it works as intended, even if the plan changed along the way**. Then, only if there is something real: **new findings** — a bug, a better approach for this batch, or an improvement somewhere else in the system. Brief, plain, no tour of things that turned out fine.
+
+### 🟨 A FINDING OUTSIDE THE BATCH GETS ITS OWN HEADER TOO (Kyle 2026-08-20)
+Anything you turn up that was **not part of the batch's scope** — a bug, a break, a fix, an improvement to another part of the system — does **not** get buried in the step body. It gets its own header, same treatment:
+```
+# 🟨 FINDING — <the thing, in six words>
+---
+```
+⚠️ **Only after the investigation settles it.** A suspected bug is not reportable until you have read the code and its history; **if it turns out NOT to be a bug, it is not mentioned at all.**
+★ **IF THE FINDING NEEDS HIS DECISION, SAY SO IN THE HEADER ITSELF** — `# 🟥 DECISION REQUIRED — <finding>` — because he decides whether to stop and read from the header alone.
 
 ### ⛔ WHEN A DECISION IS HIS, OR A STEP HALTED
 ```
