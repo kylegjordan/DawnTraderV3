@@ -45,16 +45,43 @@ Two orthogonal axes: **mode** (paper | live) and **active trading** (on | off).
 
 **Three narrow exceptions:** (a) it genuinely touches your own batch; (b) you were explicitly called in by name, or by an alert; (c) you hold information the other session demonstrably lacks — and then you say it **to them**, never as narration to Kyle.
 
+⛔ **A HEARTBEAT OR TIMER WAKE MEANS *RESUME*, NOT *REPORT*.** Read the CURRENT POSITION block at the top of your own memory file, then **carry on from where it says you are.** If it says you are waiting on Kyle, **say nothing at all.** A wake is a nudge to work, never a cue to speak.
+
 **Binds the WORK, not just the talk:** stay out of another session's batch unless (a) to (c). Offering one correction is not joining; joining uninvited spends Kyle's time.
 
-## 6. THE STEP REPORT — THE SHAPE HE ASKED FOR
-**A bold headline, `Step N completed — <what it was>`** — then **three to four plain sentences**: which batch, what we're fixing, and **what this step actually BUYS us**. For a governance batch: *"I updated these documents"* plus the list. **When Langston REJECTS something:** what you proposed, what he ruled, why.
+## 6. THE STEP REPORT — KYLE'S EXACT FORMAT (2026-08-20). USE IT VERBATIM.
 
-**Then, in this order:**
-**(a) ANYTHING UNEXPECTED THE STEP TURNED UP** — bugs, breaks, or fixes you were not looking for — **and the investigation that settled it.** A suspected bug is not reportable until you have read the code AND its history and original intent, to establish whether the behaviour was deliberate. **If the investigation shows it is NOT a bug, do not mention it at all** — he does not want the tour of things that turned out fine. If it IS one: what you found, how you proved it, the issue number, where it sits in the plan. **If it was your own mistake: one line.**
-**(b) THE NEXT STEP — always, and it closes the message.**
+**A report is written at the END OF EVERY WORKFLOW STEP — then you CONTINUE to the next step in the same turn.** You do not wait to be told to proceed. **You stop only for a decision that is genuinely his** (see the DECISION block below).
 
-**Length is not the rule — clarity is.** Three to four sentences is the default, not a cap. **What is not allowed is length spent on COMPLETENESS** — jargon, paths he cannot picture, math he has not been walked through. **The test: "It needs to explain for ME, not for the other sessions or for Langston."** Longer only where it buys simplicity, never where it buys completeness.
+### THE HEADER IS THE POINT — HE SCROLLS PAST EVERYTHING ELSE
+Use a **`#` heading** (the largest available), on its own, with a rule line under it. **NOT `##`, NOT bold text.** He needs to find these while scrolling.
+⚠️ **HONEST LIMIT: markdown in his terminal has NO underline and NO colour — I cannot set either.** A `#` heading plus a rule plus the emoji marker is the strongest differentiation available. Do not claim otherwise.
+
+```
+# 🟦 STEP 4 COMPLETED — Langston's code review
+---
+```
+
+### THE BODY — THREE PARTS, IN THIS ORDER, ALL PLAIN LANGUAGE
+1. **THE BATCH LINE (2-3 sentences).** What this batch is for, what it is meant to do, what the finished outcome will be. ★ **This is the ONLY thing that repeats step to step.** Everything else must be new.
+2. **WHAT THIS STEP DID** — and *what it buys the batch*. Not what you typed; what changed.
+3. **WHAT THE NEXT STEP IS** — one line, and it closes the report.
+
+### AT BATCH CLOSE — a `# 🟩 BATCH COMPLETE` report instead
+What it was **intended** to do · what was **actually** done · **how it was verified** · and **whether it works as intended, even if the plan changed along the way**. Then, only if there is something real: **new findings** — a bug, a better approach for this batch, or an improvement somewhere else in the system. Brief, plain, no tour of things that turned out fine.
+
+### ⛔ WHEN A DECISION IS HIS, OR A STEP HALTED
+```
+# 🟥 DECISION REQUIRED — <the decision, in six words>
+---
+```
+Say what is blocked, the options in plain terms, your recommendation, and what happens either way. **A halted step gets the same treatment so he knows to stop and read.**
+
+### WHAT IS AND IS NOT ALLOWED BETWEEN REPORTS
+✅ **The working stream is FINE and he wants it** — the running "checking this, reading that" of actual tool work.
+⛔ **What is NOT: fat technical paragraphs written to yourself.** If a paragraph is you thinking aloud, reasoning through a mechanism, or restating what you already said, it does not go in his chat — it goes in the commit message or the issue entry.
+⛔ **NEVER REPEAT A FINDING HE HAS ALREADY BEEN TOLD.** Repetition is what makes the real content unfindable.
+**Plain language, analogies and examples where they help. No jargon, no paths he cannot picture, no maths he has not been walked through.** The test: *"It needs to explain for ME, not for the other sessions or for Langston."*
 
 ## 7. SELF-CORRECTION IS ONE LINE
 *"I was mistaken when I said X; it is actually Y."* **Stop there.**

@@ -5,6 +5,19 @@
 
 ---
 
+# ▶▶ CURRENT POSITION — READ THIS FIRST, BEFORE ANYTHING ELSE
+
+> **A HEARTBEAT OR TIMER WAKE MEANS *RESUME*, NOT *REPORT*.** Read this block, then carry on from it.
+> **If BLOCKED-ON says Kyle, say NOTHING and do not work the item.** Otherwise continue to the next step and report only at the step boundary, in the `CONDUCT.md` §6 format.
+> ⚠️ **UPDATE THESE FOUR LINES AT EVERY STEP BOUNDARY.** They were left stale for weeks and Kyle found it before I did.
+
+- **BATCH:** B-MISTAKES-FILE (#694 pieces 4+5, issue #731) — the mistakes/pattern index and the merged scope+pre-audit format
+- **STEP:** Step-1+2 (merged, one document) — r3 pushed at `a65d0cbcf`
+- **BLOCKED-ON:** Langston — awaiting his r3 read. He returned 2 blockers + 3 riders on r1, 2 changes on r2; all taken.
+- **NEXT:** on his approval → Step-3 build: the pattern index, the commit trailer, `CONDUCT.md` §13, and the owned+fired weekly pass. Then the rules-file slim and the actual skills build (**no skills exist yet — `.claude/skills/` does not exist**).
+
+---
+
 ## ⛔ STANDING RULE — NO CROSS-SESSION NARRATION IN KYLE'S CHAT (Kyle 2026-07-30, restating §5 rule 28 at me directly)
 **Kyle: *"stop providing commentary on the panel decision for the AMR. New Claude owns that, so I will get the details from him or Discord. Contribute to the Discord decision where you can and should but no need to explain it here."***
 ⇒ **CONTRIBUTE fully on Discord; explain NOTHING of it in his chat.** The split is: **Discord = where I do the work. His chat = ONLY my own batches and what I need FROM him.**
@@ -48,8 +61,9 @@ When something looks like an error or a thing to fix, **go and understand what i
 ✅ **CLOSED, pointer only:** Langston’s `MEMORY.md`-never-loaded (fixed, #651) · #602 · B-ARM-REMOVAL · B-TRADE-RECORD-RETENTION legs 1+2 · B-EVIDENCE-GATE (no build; `ml-calibration.ts` removal → Kyle booked **Phase 16**, roadmap 16.8).
 ▶ **STILL OPEN, not mine to progress alone:** #592 signal_eval growth → **CC-B** · #621 deploy-head → **CC-C** · AMR panel = **CC-B’s arc** (Kyle: contribute on Discord, explain NONE of it in his chat) · pool I/R column removal — **I flagged the POOLS SURVIVE so the column still carries provenance ⇒ awaiting Kyle’s decision** · leg-3 corrections live in `RUNNING_ISSUES` #599/#630/#631 — **re-read there, do NOT re-derive.**
 
-## ▶ ACTIVE BATCH — B-RETIRED-SCORE-REMOVAL (#558). A0-A3 ALL DEPLOYED + §9.3-VERIFIED. **PHASE B HALTED BEFORE ANY DROP** — awaiting Kyle scope call + Langston read. Detail in #558/#582.
-### ★ PHASE-B PRE-DROP CENSUS — **authoritative: `RUNNING_ISSUES` #582/#591/#592.** Nothing droppable yet; `rtb_signals.final_score` is writer-dead BUT the fatal coupling is the **SCHEMA DECLARATION** (`storage.ts` bare `.select().from(rtbSignals)` projects every declared column ⇒ **all six callers break identically whether or not they touch finalScore — TOUCH-COUNT IS THE WRONG INSTRUMENT**). Gated on #582.
+## ▶ PARKED — B-RETIRED-SCORE-REMOVAL (#558)
+A0-A3 deployed + §9.3-verified; **Phase B HALTED before any drop**, awaiting a Kyle scope call. Pre-drop census authoritative in `RUNNING_ISSUES` #582/#591/#592 — nothing droppable yet. ⚠️ **This sat under a heading reading "ACTIVE BATCH" for weeks while I ran two other batches. Kyle caught it 2026-08-20. A stale position marker is worse than none: it reads as current.**
+
 ## ★★ RULE 29 — shipped leg 1 (`b43af6c1d`); full text CLAUDE.md rule 29 + history §5.29. Leg 2 hooks = B-MEASURE-GATE (approved, unbuilt — gates the rule-29 CLAUDE.md conversion).
 
 ## ⚑ STANDING LESSONS (earned; do not re-learn)
