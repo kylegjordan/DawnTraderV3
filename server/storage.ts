@@ -525,6 +525,7 @@ export interface IStorage {
   // total, count, chart or rolling-N question -- `getClosedTrades` is a LIST reader and its bound
   // is a page size, not an answer.
   getRealizedPnlTotal(mode: TradingMode): Promise<{ realizedPnl: number; tradeCount: number }>;
+  getClosedTradesCount(mode: TradingMode, opts?: { closedOnly?: boolean }): Promise<number>;
   getDailyRealizedPnlSince(mode: TradingMode, since: Date): Promise<Array<{ date: string; pl: number }>>;
   getRecentClosedPnls(mode: TradingMode, n: number): Promise<number[]>;
   getRealizedPnlSince(mode: TradingMode, since: Date): Promise<{ realizedPnl: number; tradeCount: number }>;
@@ -3216,6 +3217,36 @@ export class DatabaseStorage implements IStorage {
    */
 
   /** Whole-history realized total + the REAL trade count (not a page size). */
+  /**
+   * B-BALANCE-TRUTH Step E (#618): a COUNT, computed in SQL.
+   *
+   * The caller this replaces did `(await getClosedTrades(mode, { limit: 1000 })).length` — it
+   * fetched up to a thousand full rows across the wire and then discarded every column to read
+   * one integer off the array. Two things were wrong with that and only one of them is speed.
+   *
+   * The bound made the count SILENTLY WRONG ABOVE 1,000. It is not wrong today — 483 qualifying
+   * rows as of 2026-08-21 — so this is a LATENT defect, not a live one, and the honest framing is
+   * preventive. But the crossing is months rather than years: growth is 3.6-6.7 rows/day recently
+   * against a 15.8/day historical mean, and the paper-slot increase to 15 is DESIGNED to raise it.
+   * A count that silently stops counting when the table outgrows a number nobody remembers
+   * choosing is exactly the #618 failure, and it fails in the direction that looks healthy.
+   *
+   * Predicate parity with the reader it replaces: never_filled excluded always; `closedOnly`
+   * optional and matching the reader's own default of false.
+   */
+  async getClosedTradesCount(mode: TradingMode, opts?: { closedOnly?: boolean }): Promise<number> {
+    const conditions = [
+      sql`${closedTradesTable.closeReason} IS DISTINCT FROM 'never_filled'` as any,
+    ];
+    if (opts?.closedOnly) {
+      conditions.push(sql`${closedTradesTable.closedAt} IS NOT NULL` as any);
+    }
+    const [row] = await db.select({ n: sql<string>`COUNT(*)` })
+      .from(closedTradesTable)
+      .where(and(...conditions));
+    return parseInt(String(row?.n ?? '0'), 10) || 0;
+  }
+
   async getRealizedPnlTotal(mode: TradingMode): Promise<{ realizedPnl: number; tradeCount: number }> {
     const [row] = await db.select({
       realizedPnl: sql<string>`COALESCE(SUM(${closedTradesTable.pnl}), 0)`,

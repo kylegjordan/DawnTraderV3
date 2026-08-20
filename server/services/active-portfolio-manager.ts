@@ -367,7 +367,12 @@ export class ActivePortfolioManager {
 
     // [8.8.3-I1] Log hard stop summary for diagnostics
     const openPositionsRemaining = await storage.getActiveOpenPositions(this.mode);
-    const tradesCount = (await storage.getClosedTrades(this.mode, { limit: 1000 })).length;
+    // B-BALANCE-TRUTH Step E (#618): counted in SQL. This previously fetched up to 1,000 full
+    // rows and read `.length` off the array, so the count would have silently stopped counting
+    // once the table outgrew that bound — and it fails in the direction that looks healthy.
+    // Latent rather than live today (483 qualifying rows), but the crossing is months away, not
+    // years, and Kyle's 15-slot paper directive is designed to shorten it.
+    const tradesCount = await storage.getClosedTradesCount(this.mode);
     const session = await storage.getRunningEngineSession(this.mode);
     
     i1TradeLifecycleDiagnostics.logHardStopSummary({
