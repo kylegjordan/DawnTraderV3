@@ -4656,7 +4656,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           ? await storage.getActiveOpenPositions(mode)
           : await storage.getActiveTrades(mode);
         const closedTrades = mode === 'paper'
-          ? await storage.getClosedTrades(mode, { closedOnly: true })
+          ? await storage.getClosedTrades(mode, { limit: 100, closedOnly: true }) // Step A: codified pre-existing default (100); Step C converts to a SQL aggregate
           : await storage.getTrades(mode, { status: 'closed' });
         
         const metrics = {
@@ -4706,7 +4706,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     try {
       const mode = (req.query.mode as 'live' | 'paper') || 'paper';
       const closedTrades = mode === 'paper'
-        ? await storage.getClosedTrades(mode, { closedOnly: true })
+        ? await storage.getClosedTrades(mode, { limit: 100, closedOnly: true }) // Step A: codified pre-existing default (100); Step C converts to a SQL aggregate
         : await storage.getTrades(mode, { status: 'closed' });
       
       const totalEarnings = closedTrades.reduce((sum, t) => sum + parseFloat((t as any).pnl || t.realizedPL || '0'), 0);
@@ -4724,7 +4724,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const days = parseInt(req.query.days as string) || 30;
       
       const closedTrades = mode === 'paper'
-        ? await storage.getClosedTrades(mode, { closedOnly: true })
+        ? await storage.getClosedTrades(mode, { limit: 100, closedOnly: true }) // Step A: codified pre-existing default (100); Step C converts to a SQL aggregate
         : await storage.getTrades(mode, { status: 'closed' });
       
       // Group by date and calculate daily P/L
@@ -12039,7 +12039,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       if (limit) options.limit = parseInt(limit as string);
       if (closedOnly) options.closedOnly = closedOnly === 'true';
       
-      const trades = await storage.getClosedTrades('paper', options);
+      // Step A: `options` is built from query params and may omit `limit`; the reader no longer
+      // supplies a default, so the pre-existing effective bound (100) is codified here. LIST reader.
+      const trades = await storage.getClosedTrades('paper', { ...options, limit: options.limit ?? 100 });
       
       // Phase 8.8.3-C-FINAL: Ghost trade filtering for legacy path
       const validTrades = trades.filter((trade: any) => {
@@ -12344,7 +12346,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       // Phase 8.8.3-C7-FIX: Calculate realized P/L from closed trades (same as portfolio-summary)
       const sessionStart = getEngineSessionStart('paper');
-      const allTrades = await storage.getClosedTrades('paper', { closedOnly: true });
+      const allTrades = await storage.getClosedTrades('paper', { limit: 100, closedOnly: true }); // Step A: codified pre-existing default (100); Step C converts
       const sessionTrades = sessionStart 
         ? allTrades.filter(t => t.closedAt && new Date(t.closedAt) >= sessionStart)
         : allTrades;
@@ -12455,7 +12457,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         .where(curveEq(portfolioAnchorEvents.mode, mode))
         .orderBy(curveAsc(portfolioAnchorEvents.occurredAt));
 
-      const allClosed = await storage.getClosedTrades(mode, { closedOnly: true });
+      const allClosed = await storage.getClosedTrades(mode, { limit: 100, closedOnly: true }); // Step A: codified pre-existing default (100); Step C converts
       const num = (v: unknown): number => { const n = parseFloat(String(v ?? '')); return Number.isFinite(n) ? n : 0; };
       const closes = allClosed
         .filter(t => t.closedAt && t.closeReason !== 'never_filled')
@@ -12546,7 +12548,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const sessionStart = getEngineSessionStart(mode);
       
       // Get all closed trades in current session
-      const allTrades = await storage.getClosedTrades(mode, { closedOnly: true });
+      const allTrades = await storage.getClosedTrades(mode, { limit: 100, closedOnly: true }); // Step A: codified pre-existing default (100); Step C converts
       
       // Filter to only trades closed in current session
       const sessionTrades = sessionStart 
@@ -12958,7 +12960,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       }
       
       // Get trades within range
-      const allTrades = await storage.getClosedTrades(mode, {});
+      const allTrades = await storage.getClosedTrades(mode, { limit: 100 }); // Step A: codified pre-existing default (100); Step C converts (#618 leg 2's own proven site)
       
       // Phase 8.8.3-B3: Filter out ghost trades from analytics
       // Ghost trades = closed trades without proper exit_price or close_reason

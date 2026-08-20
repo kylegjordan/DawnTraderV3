@@ -520,7 +520,7 @@ export interface IStorage {
   createClosedTrade(mode: TradingMode, trade: InsertClosedTrade): Promise<ClosedTrade>;
   updateClosedTrade(mode: TradingMode, id: string, updates: Partial<ClosedTrade>): Promise<ClosedTrade>;
   getClosedTrade(mode: TradingMode, id: string): Promise<ClosedTrade | undefined>;
-  getClosedTrades(mode: TradingMode, filters?: { limit?: number; closedOnly?: boolean; includeNeverFilled?: boolean }): Promise<ClosedTrade[]>;
+  getClosedTrades(mode: TradingMode, filters: { limit: number; closedOnly?: boolean; includeNeverFilled?: boolean }): Promise<ClosedTrade[]>;
   getRealizedPnlSince(mode: TradingMode, since: Date): Promise<{ realizedPnl: number; tradeCount: number }>;
   // Phase 8.8.3-C5: Paginated trades with sorting support
   getClosedTradesPaginated(mode: TradingMode, filters: {
@@ -3099,10 +3099,16 @@ export class DatabaseStorage implements IStorage {
     return trade || undefined;
   }
 
-  async getClosedTrades(mode: TradingMode, filters?: { limit?: number; closedOnly?: boolean; includeNeverFilled?: boolean }): Promise<ClosedTrade[]> {
+  async getClosedTrades(mode: TradingMode, filters: { limit: number; closedOnly?: boolean; includeNeverFilled?: boolean }): Promise<ClosedTrade[]> {
     // Phase 27.F.15.B.2: Global query, mode-based only
-    const limit = filters?.limit || 100;
-    const closedOnly = filters?.closedOnly ?? false;
+    // B-BALANCE-TRUTH Step A (#618): `limit` is REQUIRED -- the `|| 100` default is GONE.
+    // It was a 2025-10 LISTING default (a UI page size for the paper-sim engine) that
+    // AGGREGATE consumers later inherited silently, bounding whole-history questions at
+    // 100 rows ordered by opened_at DESC. Requiring the bound makes tsc enumerate every
+    // caller, so no future consumer can inherit a page size by accident: it must type a
+    // number, and typing a number is the moment someone thinks.
+    const limit = filters.limit;
+    const closedOnly = filters.closedOnly ?? false;
 
     const conditions = [];
     if (closedOnly) {
@@ -3113,7 +3119,7 @@ export class DatabaseStorage implements IStorage {
     // so no aggregate/ML/session-metrics reader can accidentally count a phantom flat.
     // Visibility is opt-in: the paginated UI list passes them explicitly; a fill-rate
     // reader sets includeNeverFilled: true.
-    if (!filters?.includeNeverFilled) {
+    if (!filters.includeNeverFilled) {
       conditions.push(sql`${closedTradesTable.closeReason} IS DISTINCT FROM 'never_filled'` as any);
     }
 

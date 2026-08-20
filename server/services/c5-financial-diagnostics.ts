@@ -115,7 +115,7 @@ class C5FinancialDiagnostics {
         return;
       }
 
-      const closedTrades = await storage.getClosedTrades(mode);
+      const closedTrades = await storage.getClosedTrades(mode, { limit: 100 }); // Step A (#618): codified pre-existing default (100); no behaviour change
       const realizedNetPnlTotal = closedTrades.reduce((sum, trade) => {
         const netPnl = trade.netPnl ? parseFloat(trade.netPnl) : (trade.pnl ? parseFloat(trade.pnl) : 0);
         return sum + netPnl;
@@ -187,7 +187,7 @@ class C5FinancialDiagnostics {
         return;
       }
 
-      const closedTrades = await storage.getClosedTrades(mode);
+      const closedTrades = await storage.getClosedTrades(mode, { limit: 100 }); // Step A (#618): codified pre-existing default (100); no behaviour change
       const realizedNetPnl = closedTrades.reduce((sum, trade) => {
         const netPnl = trade.netPnl ? parseFloat(trade.netPnl) : (trade.pnl ? parseFloat(trade.pnl) : 0);
         return sum + netPnl;

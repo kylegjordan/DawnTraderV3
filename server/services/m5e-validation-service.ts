@@ -143,7 +143,7 @@ async function getDynamicSlots(): Promise<{ slots: number; maxExposure: number; 
 
 async function getOpenPositionsCount(): Promise<number> {
   try {
-    const trades = await storage.getClosedTrades('paper', { closedOnly: false });
+    const trades = await storage.getClosedTrades('paper', { limit: 100, closedOnly: false }); // Step A (#618): codified pre-existing default (100); no behaviour change
     const openTrades = trades?.filter(t => !t.closedAt) || [];
     return openTrades.length;
   } catch {

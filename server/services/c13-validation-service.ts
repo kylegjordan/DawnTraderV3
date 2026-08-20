@@ -135,7 +135,7 @@ class C13ValidationService {
     const tclStatus = tclWatchdog.getStatus(mode);
     const rtbQueue = await readyToBuyService.getQueuedSignals(mode);
     const openPositions = await storage.getActiveOpenPositions(mode);
-    const trades = await storage.getClosedTrades(mode);
+    const trades = await storage.getClosedTrades(mode, { limit: 100 }); // Step A (#618): codified pre-existing default (100); no behaviour change
     const closedTrades = trades.filter(t => t.closeReason !== null);
 
     const rtbWithMetrics = rtbQueue.filter(s => s.finalScore && s.confidence);
@@ -227,7 +227,7 @@ class C13ValidationService {
     const resultsPath = path.join(process.cwd(), 'logs', 'validation', `results_8.8.4-C.13_${this.session.sessionId}.md`);
     const mode = this.session.mode;
 
-    const trades = await storage.getClosedTrades(mode);
+    const trades = await storage.getClosedTrades(mode, { limit: 100 }); // Step A (#618): codified pre-existing default (100); no behaviour change
     const closedTrades = trades.filter(t => t.closeReason !== null);
     
     const profitableTrades = closedTrades.filter(t => parseFloat(String(t.netPnl || t.pnl || 0)) > 0);

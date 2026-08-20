@@ -103,7 +103,10 @@ export async function getPortfolioBalanceV2(
     // [9.6.3] Mode-aware trade query: paper uses getClosedTrades, live uses getTrades
     let allTrades: any[];
     if (mode === 'paper') {
-      allTrades = await storage.getClosedTrades(mode, { closedOnly: true });
+      // Step A (#618): the DEFECT IS DELIBERATELY CODIFIED here for one deploy -- this is the
+      // kill-switch denominator and its conversion is Step B, kept out of the mechanical step so
+      // Step A stays behaviour-free and trivially revertible (Langston's Step-2 condition).
+      allTrades = await storage.getClosedTrades(mode, { limit: 100, closedOnly: true });
     } else {
       // Live mode: use getTrades with closed status filter
       const liveTrades = await storage.getTrades(mode, { status: 'closed' });
