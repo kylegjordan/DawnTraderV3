@@ -87,9 +87,13 @@ let baseLegacy = 0; // the legacy path BEFORE seeding
 const now = Date.now();
 const WINDOW_START = new Date(now - 24 * 60 * 60 * 1000);
 
-/** The pre-fix code path, reproduced EXACTLY as it stood, calling the REAL reader. */
+/** The pre-fix code path, reproduced EXACTLY as it stood, calling the REAL reader.
+ *  ★ B-BALANCE-TRUTH Step A (#618): `limit` is now REQUIRED at the reader, so the bound the
+ *  old path inherited SILENTLY (100) is now stated explicitly at every call below. That is not
+ *  a change of behaviour — it is what this simulation always did, and stating it is what keeps
+ *  the fence reproducing the defect it exists to fence. */
 async function legacyPath(windowStart: Date): Promise<number> {
-  const trades = await storage.getClosedTrades('paper', { closedOnly: true });
+  const trades = await storage.getClosedTrades('paper', { limit: 100, closedOnly: true });
   return trades
     .map((t: any) => ({ closedAt: t.closedAt, pnl: t.pnl }))
     .filter((t) => t.closedAt && new Date(t.closedAt) >= windowStart)
@@ -177,7 +181,7 @@ d('B-KILLSWITCH-WINDOW (#618): the 24h loss total is bounded by TIME, not by row
 
   it('1a. the OLD path MISSES the victim — membership, not arithmetic on a global sum', async (ctx) => {
     if (!dbReachable) return ctx.skip();
-    const rows = await storage.getClosedTrades('paper', { closedOnly: true });
+    const rows = await storage.getClosedTrades('paper', { limit: 100, closedOnly: true });
     // ★ THE PRIMARY ASSERTION IS MEMBERSHIP (Langston item 3): the victim is simply NOT among the
     // rows the capped reader returns. This is true regardless of what else is in the database.
     expect(rows.some((t: any) => t.id === victimId)).toBe(false);
@@ -223,7 +227,7 @@ d('B-KILLSWITCH-WINDOW (#618): the 24h loss total is bounded by TIME, not by row
     const newDelta = (await storage.getRealizedPnlSince('paper', WINDOW_START)).realizedPnl - baseNew;
     expect(newDelta).toBeGreaterThan(-999); // either control admitted would push it past this
     // LEGACY reader: membership, by id.
-    const rows = await storage.getClosedTrades('paper', { closedOnly: true });
+    const rows = await storage.getClosedTrades('paper', { limit: 100, closedOnly: true });
     expect(rows.some((t: any) => t.id === neverFilledId)).toBe(false);
     expect(rows.some((t: any) => t.id === stillOpenId)).toBe(false);
   });
