@@ -12406,13 +12406,33 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       // Phase 8.8.3-C7-FIX: Calculate realized P/L from closed trades (same as portfolio-summary)
       const sessionStart = getEngineSessionStart('paper');
-      const allTrades = await storage.getClosedTrades('paper', { limit: 100, closedOnly: true }); // Step A: codified pre-existing default (100); Step C converts
-      const sessionTrades = sessionStart 
-        ? allTrades.filter(t => t.closedAt && new Date(t.closedAt) >= sessionStart)
-        : allTrades;
-      const realizedPnl = sessionTrades.reduce((sum, trade) => {
-        return sum + parseFloat(trade.pnl?.toString() || '0');
-      }, 0);
+      // B-BALANCE-TRUTH Step C (#618): the 100-row cap is GONE. The sum is computed IN SQL
+      // over the WHOLE window instead of over the most recent 100 rows by OPEN time.
+      // Predicate and basis are UNCHANGED: closedAt IS NOT NULL + closedAt >= sessionStart
+      // + never_filled excluded, summing `pnl` (Langston condition 2 -- the basis does NOT
+      // move in this batch, so no site changes population and basis on one displayed number).
+      // 
+      // MEASURED 2026-08-21, whole `closed_trades` table: the JS-side "ghost trade" guard
+      // (exitPrice > 0 AND non-empty closeReason) that some sibling call sites apply is
+      // REDUNDANT against this predicate -- all 86 rows it would drop ARE the never_filled
+      // rows the SQL already excludes, and 0 survive that exclusion. The clause has proven
+      // reach (it fires on those 86), so the 0 is a measurement, not a blind instrument.
+      //
+      // *** THE NULL-SESSION BRANCH IS A DELIBERATE BEHAVIOUR CHANGE, NOT A MECHANICAL ONE. ***
+      // It previously summed EVERY trade and added the result to `startingBalance` -- which is
+      // the CURRENT ANCHOR. Adding whole-history realized P&L onto a re-anchored balance
+      // double-counts every trade predating the anchor. That is the same defect already fixed
+      // in guardrail-settings.ts in this batch, and it is not hypothetical: #585 (OPEN) is
+      // exactly the state where auto-resume leaves the session row malformed and this reads
+      // null on a running engine. With no session there is no realized-since-anchor figure to
+      // report, so the honest value is the anchor itself, and the absence is logged LOUDLY
+      // rather than papered over with a number that looks plausible and is wrong.
+      let realizedPnl = 0;
+      if (sessionStart) {
+        ({ realizedPnl } = await storage.getRealizedPnlSince('paper', sessionStart));
+      } else {
+        console.warn('[NULL_SESSION][ACTIVE_POSITIONS] no engine session start -- reporting anchor-only realized P&L (0). Pre-#618 this summed WHOLE HISTORY onto the anchor. See RUNNING_ISSUES #585.');
+      }
       
       // Phase 8.8.4: Realized Balance = Starting Balance + Realized P/L (renamed from cashBalance)
       const realizedBalance = startingBalance + realizedPnl;
@@ -12607,18 +12627,36 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // Get session start time
       const sessionStart = getEngineSessionStart(mode);
       
-      // Get all closed trades in current session
-      const allTrades = await storage.getClosedTrades(mode, { limit: 100, closedOnly: true }); // Step A: codified pre-existing default (100); Step C converts
-      
-      // Filter to only trades closed in current session
-      const sessionTrades = sessionStart 
-        ? allTrades.filter(t => t.closedAt && new Date(t.closedAt) >= sessionStart)
-        : allTrades;
-      
-      // Sum realized P/L from closed trades (this is the correct calculation per directive)
-      const realizedPnl = sessionTrades.reduce((sum, trade) => {
-        return sum + parseFloat(trade.pnl?.toString() || '0');
-      }, 0);
+      // B-BALANCE-TRUTH Step C (#618): the 100-row cap is GONE. The sum is computed IN SQL
+      // over the WHOLE window instead of over the most recent 100 rows by OPEN time.
+      // Predicate and basis are UNCHANGED: closedAt IS NOT NULL + closedAt >= sessionStart
+      // + never_filled excluded, summing `pnl` (Langston condition 2 -- the basis does NOT
+      // move in this batch, so no site changes population and basis on one displayed number).
+      // 
+      // MEASURED 2026-08-21, whole `closed_trades` table: the JS-side "ghost trade" guard
+      // (exitPrice > 0 AND non-empty closeReason) that some sibling call sites apply is
+      // REDUNDANT against this predicate -- all 86 rows it would drop ARE the never_filled
+      // rows the SQL already excludes, and 0 survive that exclusion. The clause has proven
+      // reach (it fires on those 86), so the 0 is a measurement, not a blind instrument.
+      //
+      // *** THE NULL-SESSION BRANCH IS A DELIBERATE BEHAVIOUR CHANGE, NOT A MECHANICAL ONE. ***
+      // It previously summed EVERY trade and added the result to `startingBalance` -- which is
+      // the CURRENT ANCHOR. Adding whole-history realized P&L onto a re-anchored balance
+      // double-counts every trade predating the anchor. That is the same defect already fixed
+      // in guardrail-settings.ts in this batch, and it is not hypothetical: #585 (OPEN) is
+      // exactly the state where auto-resume leaves the session row malformed and this reads
+      // null on a running engine. With no session there is no realized-since-anchor figure to
+      // report, so the honest value is the anchor itself, and the absence is logged LOUDLY
+      // rather than papered over with a number that looks plausible and is wrong.
+      let realizedPnl = 0;
+      let closedTradesCount = 0;
+      if (sessionStart) {
+        const agg = await storage.getRealizedPnlSince(mode, sessionStart);
+        realizedPnl = agg.realizedPnl;
+        closedTradesCount = agg.tradeCount;
+      } else {
+        console.warn('[NULL_SESSION][PORTFOLIO_SUMMARY] no engine session start -- reporting anchor-only realized P&L (0). Pre-#618 this summed WHOLE HISTORY onto the anchor. See RUNNING_ISSUES #585.');
+      }
       
       // Phase 8.8.3-I6: Get open positions for "Open Position Value" using LIVE prices
       // Phase 8.8.3-I10-FIX: Also calculate unrealized P/L from open positions
@@ -12689,7 +12727,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         netPnl,
         netPnlPercent,
         sessionStart: sessionStart?.toISOString() || null,
-        closedTradesCount: sessionTrades.length,
+        closedTradesCount, // Step C (#618): from the SQL aggregate; was sessionTrades.length off the capped-100 list
         openTradesCount,
         maxOpenTrades,
         slotsAvailable
