@@ -2828,7 +2828,21 @@ drawdownPercent: 47.1507695441143   exposurePercent: 70.80   openPositionCount: 
 
 **THE DEFECT.** `active-portfolio-manager.ts:520` computes `calculateMaxDrawdown(trades, startingCapital)` where the trade series runs from **2026-07-15** — i.e. it accumulates P&L earned under the **~$2,250** balance — while `startingCapital` is the **CURRENT $824.11 anchor** (v4, set 08-12). **A numerator drawn from one balance era over a denominator drawn from another answers no coherent question.** The identical trade history is `critical` or `healthy` depending only on which denominator it happens to meet, and nothing in the code or the output says which era the numerator came from.
 
-⚠️ **SEVERITY IS BOUNDED AND I AM STATING THE BOUND RATHER THAN LEAVING IT TO READ AS WORSE THAN IT IS: `checkPortfolioHealth` GATES NOTHING.** Repo-wide census of its callers: **exactly one** — `routes.ts:13380`, a reporting endpoint. It does not block an entry, size a position, or halt the engine. So this is a **persistently false CRITICAL on a health surface**, not a live risk-control failure. (Asserted absence with presence-evidence per rule 22: the same census returns three real callers for its sibling `getPortfolioMetrics` — `routes.ts:5350`, `:5380`, `:13358` — so the instrument does find callers when they exist.)
+⛔⛔ **SEVERITY — CORRECTED 2026-08-21, UPGRADED. LANGSTON BLOCKED MY ORIGINAL BOUND AND HE WAS RIGHT.** I wrote *"`checkPortfolioHealth` GATES NOTHING — repo-wide census returns exactly one caller"*. **That census was WRONG, and wrong in the direction that made this look safe.** There are **THREE** callers: `routes.ts:13380` (reporting) **plus `active-portfolio-manager.ts:157` and `:165` — self-calls inside `start()`**. Verified at the ref, not taken on report:
+```
+if (this.mode === 'paper') { … informational only, does NOT block start … }
+else {                       // Live mode retains the legacy check for safety
+  const health = await this.checkPortfolioHealth();
+  if (health.status === 'critical') { … throw new Error(`Portfolio in critical state: …`); }
+}
+```
+⇒ **THE HONEST BOUND IS "GATES NOTHING *IN PAPER*". IN LIVE IT IS A HARD ENGINE-START GATE THAT THROWS.** A persistent false CRITICAL there is a **Phase-21 go-live blocker**, not a reporting cosmetic. **Nothing about the paper system changes; the whole delta is what happens the first time the engine is started in live mode.**
+
+**★ AND `MAX_OPEN_POSITIONS = 10` IS A SECOND, INDEPENDENT TRIP ON THE SAME GATE (Langston).** At Kyle's 15 slots, `stats.openPositions >= 10` sets `critical` **on its own**, at every start, forever — so even a fully fixed drawdown measure leaves the live gate blocked. Two causes, one gate; fixing either alone is insufficient.
+
+**★★ WHY MY CENSUS MISSED IT, RECORDED BECAUSE THE LESSON GENERALISES (Langston's framing).** My grep excluded the defining file — which is exactly where `this.`-qualified calls live. **And my positive control passed anyway:** the three `getPortfolioMetrics` hits I cited as proof the instrument works are ALL **receiver-qualified** (`manager.`, `riskManager.`), while the misses are **`this.`-qualified**. ⇒ **the control exercised a call shape that could not fail.** It proved the instrument could see receiver-qualified calls and licensed an absence about a shape it never tested. That is #704's own rule one turn later in a new dimension: **a positive control must match the SHAPE of the absence it licenses, not merely the stream.** ⇒ **standing: a caller census supporting an asserted absence must search `this.<name>` explicitly and must NOT exclude the defining file.**
+
+**★ CONTAMINATION LINK TO #735 (Langston drew it; I had not).** `calculateMaxDrawdown:684` sums **`trade.pnl`** — precisely the column that #735's 184 broken-era rows inflate by **$424 in aggregate**. So the 47.15% is **not merely measured against the wrong denominator; its numerator is drawn from the contaminated column too.** ⇒ **#734 and #735 must be fixed in a known order — the fee era first, or the drawdown "fix" gets verified against a number that is still wrong.**
 
 **★ IT RECURS ON EVERY DOWNWARD RE-ANCHOR, which is what makes it worth a batch rather than a one-off correction.** #692 established that the 08-12 re-anchor's interaction with legacy-notional positions recurs on every downward re-anchor; this is the same trigger reaching a different consumer. Any future re-anchor to a smaller balance re-inflates this percentage by exactly the ratio of the two anchors.
 
