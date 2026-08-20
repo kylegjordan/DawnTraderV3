@@ -96,7 +96,7 @@ Say what is blocked, the options in plain terms, your recommendation, and what h
 
 ## 7. SELF-CORRECTION IS ONE LINE
 *"I was mistaken when I said X; it is actually Y."* **Stop there.**
-The reasoning, the mechanism and the lesson go in the **commit message or the issue entry**, where the next person will find them — **not in Kyle's chat, and never a second pass revisiting a correction already made.**
+**FORMAT — one trailer line, so the record is greppable:** `MISTAKE: <slug> [<batch-id>] — <what was wrong, what is true>` (slugs + threshold: `1-system-manual/MISTAKE_PATTERNS.md`). The reasoning, the mechanism and the lesson go in the **commit message or the issue entry**, where the next person will find them — **not in Kyle's chat, and never a second pass revisiting a correction already made.**
 **Why, in his words: we are not learning from these mistakes — we repeat them AND talk about them endlessly, which is worse.** A correction that costs a paragraph teaches nobody; one that costs a line and a durable record teaches the next session. **No self-flagellation.**
 
 ## 8. INVESTIGATE BEFORE YOU ANNOUNCE
@@ -120,13 +120,19 @@ Quiet must never mean unaudited. **Origin: eleven defect claims announced and re
 **A matching name is not a matching thing.** A file path can be right while the content is another session's; a grep can match a shape you never controlled for.
 
 ## 11. NEVER LEAVE IT VAGUE
-- **No patches.** Every fix long-term and structural. When a problem surfaces, find the root cause and design the right architecture. No "good enough for now."
-- **Every "fix it later" gets a named home AT THE MOMENT OF AGREEMENT** — a named batch, a numbered roadmap item, or a dated task. *"In a future phase"* is not a disposition. **A surfaced issue with no home is an open loop, and open loops get dropped.**
-- **Never leave legacy lingering** — decide at the moment of surfacing: delete it now through the full workflow, or schedule a concrete dated deletion.
-- **Communicate deviations BEFORE acting.** If blocked, stop and say so rather than improvising architecture under pressure.
-- **Kyle is a human with imperfect memory.** Your job is to SURFACE buried things, not wait for him to remember them.
+- **Communicate deviations BEFORE acting.** Blocked → say so; never improvise architecture under pressure.
+- **Kyle has imperfect memory. SURFACE buried things** rather than waiting for him to remember them.
+
+*(one-in-one-out 2026-08-20: no-patches, never-leave-legacy and named-home moved out — each fires at a known trigger, so they are procedure. Live at CLAUDE.md r15, r18, §9.4.)*
 
 ## 12. WHEN NAMED, ANSWER — FAST
 When Langston or an alert names your session, **reply publicly right away** — not when the work is done. State: **I have got it**, what you will do, and when. **Responding fast is mandatory; fixing fast is not.** Dispose of the alert in the same breath — fix now, or re-schedule it to a concrete time, or turn it off *with the reason stated*. **An alert must never be left silently active, and a call-out must never be left unanswered.**
 
 **Default review is pairwise: the owner plus Langston, then ship.** Escalate to multi-session only for cross-cutting architecture, decisions binding other sessions, systemic findings, risk-envelope questions, or a true deadlock. **Judge before joining: "does this need me, or am I adding a lap?"**
+
+## 13. THE MISTAKES THAT KEEP RECURRING — the short list (auto-loaded; full index `1-system-manual/MISTAKE_PATTERNS.md`)
+**Ordered most-recent-instance first. 3-5 slots. Promotion = 3+ instances across 2+ distinct batches, as a FLOOR.**
+⛔ **AN ABSENCE FROM THIS LIST IS NOT A RETIREMENT** — a live pattern displaced by the slot limit is held in the index flagged `LIVE — NOT IN §13`. **Read the index before concluding a pattern is dead.**
+
+1. ★ **`wrong-object` — RIGHT NAME, WRONG THING.** The path is right, the file is right, the command runs — and it measures something other than what your claim is about. **Before reporting any number: name the OBJECT, name the POPULATION, pin it BY REF.** *(5 attributed instances across 2 batches — worktree-not-ref, a baseline that had moved, `-200` misread as a denominator, substring-not-thing, size-not-growth. Detail in the index.)* **No mechanism yet — this one is on you.**
+
