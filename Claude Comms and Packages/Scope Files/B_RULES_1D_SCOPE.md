@@ -91,6 +91,24 @@ I searched the skills documentation for skill-to-skill composition — *invoke a
 ★★ **BUT THE CONTRAST IS THE EVIDENCE: `.claude/rules/*.md` created in THIS SAME SESSION loaded on the very next matching read** (1c §5.1, marker `XQ7-…` present positive / absent negative). **Same session, same clone, same binary — rules live, skills unknown.** ⇒ **the two mechanisms have DIFFERENT discovery timing, measured rather than assumed.**
 ⏳ **WHAT IS NOT ESTABLISHED: that a session RESTART fixes it.** That is an inference and it is not claimed. **It discharges at the next session start — same shape as 1c GATE 2.**
 
+### ✅★★ KYLE'S SHAPE, 2026-08-21 — **AND IT IS THE DOCUMENTED PATTERN, NOT A WORKAROUND.** THIS IS THE DESIGN.
+
+**His question:** can the whole workflow be ONE skill, each step fully detailed in its own section, **but triggered so a session reads only the applicable section** — so the file can be large without every step being loaded?
+✅ **YES, and the docs prescribe exactly this**, verbatim: *"**Reference supporting files from `SKILL.md` so Claude knows what each file contains and when to load it**."* A skill is a **directory**, not a single file.
+
+**THE SHAPE:**
+```
+.claude/skills/workflow/
+  SKILL.md                       <- SHORT index: names the 11 steps + what each file holds + WHEN to load it
+  steps/01-planning-and-scope.md
+  steps/02-pre-audit-and-plan.md <- full detail, length is NOT a concern here
+  steps/…
+```
+⇒ **`SKILL.md` is cheap and always loads; a step file costs ONE Read, on demand, only when that step is the one being done.** ★ **Kyle's stated priority applies inside the step files: do NOT keep them short — make them followed and done correctly.** Brevity is the INDEX's job, not the step's.
+
+★★ **AND THIS IS WHY IT WORKS WHERE THE PARENT/CHILD SHAPE FAILED: it is skill → FILE, not skill → SKILL.** The refuted mechanism (§5(a)) was one skill's reference pulling another skill's body in. **Reading a file the index NAMES is an ordinary tool action that certainly works** — no undocumented resolution is being relied on.
+⚠️ **THE HONEST RESIDUAL, because it is the same class this programme keeps meeting: the index still DEPENDS ON THE SESSION ACTUALLY READING the named file.** That is a procedure. **The mitigation is that `SKILL.md` states, per step, WHICH file and WHEN — so the instruction arrives at the moment of use rather than being remembered** — but it is not a mechanism, and the scope should not claim it is.
+
 ### ✅⛔ **§5(a) PRECONDITION DISCHARGED 2026-08-21 — AND THE ANSWER IS NO. THE REFERENCE DOES NOT RESOLVE.**
 
 **Run live on the real binary after a session boundary, with the control.**
