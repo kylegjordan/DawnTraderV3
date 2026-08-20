@@ -60,6 +60,14 @@ beforeAll(async () => {
 });
 
 // The ghost clause exactly as the surviving routes.ts call sites express it in JS.
+// ★ THE SINGLE EXPRESSION OF THE CLAUSE, and it is INTERPOLATED INTO BOTH QUERIES BELOW --
+// Langston Step-4 condition, 2026-08-21. The first version declared this const and then inlined
+// a copy of the predicate into each test, so the file held THREE expressions of one clause and
+// the one that read as the source of truth was dead. Editing it would have changed nothing while
+// looking like it changed everything, and both assertions would have gone on testing the old
+// clause silently. That is the exact divergence class this fence exists to catch, reproduced
+// inside the fence. Unqualified column names resolve against the synthetic VALUES alias and
+// against closed_trades alike, so one expression genuinely serves both.
 const GHOST = sql`(exit_price IS NULL OR exit_price::numeric <= 0
                    OR close_reason IS NULL OR btrim(close_reason) = '')`;
 
@@ -85,8 +93,7 @@ describe(TAG, () => {
         ('0'::numeric,     'stop_loss'),
         ('100.5'::numeric, '   ')
       ) AS t(exit_price, close_reason)
-      WHERE (t.exit_price IS NULL OR t.exit_price <= 0
-             OR t.close_reason IS NULL OR btrim(t.close_reason) = '')`);
+      WHERE ${GHOST}`);
     const n = Number((res.rows ?? res)[0]?.n ?? 0);
     expect(
       n,
@@ -107,8 +114,7 @@ describe(TAG, () => {
         count(*) FILTER (
           WHERE closed_at IS NOT NULL
             AND close_reason IS DISTINCT FROM 'never_filled'
-            AND (exit_price IS NULL OR exit_price::numeric <= 0
-                 OR close_reason IS NULL OR btrim(close_reason) = '')
+            AND ${GHOST}
         )::int AS ghosts,
         count(*)::int AS total
       FROM closed_trades`);
