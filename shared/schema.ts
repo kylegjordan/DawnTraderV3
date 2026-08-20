@@ -4861,6 +4861,12 @@ export const cryptoSpotOhlc1m = pgTable("crypto_spot_ohlc_1m", ohlcColumns, (tab
 // (DAILY_PARTITION_CUTOVERS, no monthly era) at a 30-day hot window (warm-365
 // preserves; the 30 is hot-tier residency, not total retention). Capture only —
 // nothing reads these until Phase 26.
+// FAMILY INVARIANT (learned the hard way, #704): every *_ohlc_1m table needs a
+// UNIQUE (symbol, interval_begin) constraint in SQL -- the B74 batch writer upserts
+// with ON CONFLICT on that pair, and without it EVERY flush throws and drops the
+// batch (silent on stdout; the error reaches stderr only). It is NOT declared in
+// Drizzle for any of the four tables -- B-NEW-35 added it by raw migration -- so a
+// NEW table must carry its own.
 export const cryptoPerpOhlc1m = pgTable("crypto_perp_ohlc_1m", ohlcColumns, (table) => ({
   symTimeIdx: index("crypto_perp_ohlc_1m_sym_time").on(table.symbol, table.intervalBegin),
 }));
