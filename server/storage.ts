@@ -521,6 +521,12 @@ export interface IStorage {
   updateClosedTrade(mode: TradingMode, id: string, updates: Partial<ClosedTrade>): Promise<ClosedTrade>;
   getClosedTrade(mode: TradingMode, id: string): Promise<ClosedTrade | undefined>;
   getClosedTrades(mode: TradingMode, filters: { limit: number; closedOnly?: boolean; includeNeverFilled?: boolean }): Promise<ClosedTrade[]>;
+  // B-BALANCE-TRUTH Step C (#618): whole-history / whole-window aggregates. Use THESE for any
+  // total, count, chart or rolling-N question -- `getClosedTrades` is a LIST reader and its bound
+  // is a page size, not an answer.
+  getRealizedPnlTotal(mode: TradingMode): Promise<{ realizedPnl: number; tradeCount: number }>;
+  getDailyRealizedPnlSince(mode: TradingMode, since: Date): Promise<Array<{ date: string; pl: number }>>;
+  getRecentClosedPnls(mode: TradingMode, n: number): Promise<number[]>;
   getRealizedPnlSince(mode: TradingMode, since: Date): Promise<{ realizedPnl: number; tradeCount: number }>;
   // Phase 8.8.3-C5: Paginated trades with sorting support
   getClosedTradesPaginated(mode: TradingMode, filters: {
@@ -3184,6 +3190,83 @@ export class DatabaseStorage implements IStorage {
       realizedPnl: parseFloat(String(row?.realizedPnl ?? '0')) || 0,
       tradeCount: parseInt(String(row?.tradeCount ?? '0'), 10) || 0,
     };
+  }
+
+  /**
+   * B-BALANCE-TRUTH Step C (#618): the DISPLAY-side aggregates.
+   *
+   * Every one of these answers a WHOLE-HISTORY or WHOLE-WINDOW question that was previously asked
+   * through `getClosedTrades` — a LIST reader capped at 100 rows ordered by `opened_at DESC`. The
+   * measured consequence on the live API: `/portfolio/earnings` reported −$71.74 over a
+   * `tradeCount` of exactly 100 while the truth was −$197.29 over 475 trades, and
+   * `earnings-chart?days=30` returned a 17-day span because the truncated window could not reach
+   * further back. `?days=7` was correct only by luck — 23 rows fit under the cap.
+   *
+   * PREDICATE PARITY IS DELIBERATE AND LOAD-BEARING: every method below uses the SAME three
+   * predicates as `getRealizedPnlSince` (`closed_at IS NOT NULL` + the window + `close_reason IS
+   * DISTINCT FROM 'never_filled'`), so a reader comparing any two of them sees ONE difference —
+   * the question asked — and never a population difference. Basis stays `pnl` throughout: the
+   * kill-switch numerator and denominator both sum `pnl`, and B-COST-MATH-CONSOLIDATION's `netPnl`
+   * migration must move EVERY site in ONE batch or the ratio becomes incoherent (Langston's
+   * standing condition 2). `netPnl` is NOT introduced here.
+   */
+
+  /** Whole-history realized total + the REAL trade count (not a page size). */
+  async getRealizedPnlTotal(mode: TradingMode): Promise<{ realizedPnl: number; tradeCount: number }> {
+    const [row] = await db.select({
+      realizedPnl: sql<string>`COALESCE(SUM(${closedTradesTable.pnl}), 0)`,
+      tradeCount: sql<string>`COUNT(*)`,
+    })
+      .from(closedTradesTable)
+      .where(and(
+        sql`${closedTradesTable.closedAt} IS NOT NULL` as any,
+        sql`${closedTradesTable.closeReason} IS DISTINCT FROM 'never_filled'` as any,
+      ));
+    return {
+      realizedPnl: parseFloat(String(row?.realizedPnl ?? '0')) || 0,
+      tradeCount: parseInt(String(row?.tradeCount ?? '0'), 10) || 0,
+    };
+  }
+
+  /**
+   * Daily realized P&L grouped BY CLOSE DATE, in SQL.
+   * ★ The grouping key is `closed_at`, NOT `opened_at` (Langston's Step-1 rider). The old chart
+   * bounded its set by OPEN time and then filtered by CLOSE time in JS — the identical
+   * open-time/close-time error `getRealizedPnlSince` was created to fix. A re-plumbed JS filter
+   * would have carried that error forward with better plumbing.
+   */
+  async getDailyRealizedPnlSince(mode: TradingMode, since: Date): Promise<Array<{ date: string; pl: number }>> {
+    const rows = await db.select({
+      date: sql<string>`to_char(${closedTradesTable.closedAt}, 'YYYY-MM-DD')`,
+      pl: sql<string>`COALESCE(SUM(${closedTradesTable.pnl}), 0)`,
+    })
+      .from(closedTradesTable)
+      .where(and(
+        sql`${closedTradesTable.closedAt} IS NOT NULL` as any,
+        sql`${closedTradesTable.closedAt} >= ${since}` as any,
+        sql`${closedTradesTable.closeReason} IS DISTINCT FROM 'never_filled'` as any,
+      ))
+      .groupBy(sql`to_char(${closedTradesTable.closedAt}, 'YYYY-MM-DD')`)
+      .orderBy(sql`to_char(${closedTradesTable.closedAt}, 'YYYY-MM-DD')`);
+    return rows.map(r => ({ date: String(r.date), pl: parseFloat(String(r.pl ?? '0')) || 0 }));
+  }
+
+  /**
+   * The N most recently CLOSED trades' P&L, for win-rate style windows.
+   * ★ Ordered by `closed_at DESC` — the old site took `slice(-30)` off an array ordered
+   * `opened_at DESC`, which returns the 30 OLDEST rows of the truncated window, not the most
+   * recent 30. Measured: 43.33% displayed against a true 50.00%.
+   */
+  async getRecentClosedPnls(mode: TradingMode, n: number): Promise<number[]> {
+    const rows = await db.select({ pnl: closedTradesTable.pnl })
+      .from(closedTradesTable)
+      .where(and(
+        sql`${closedTradesTable.closedAt} IS NOT NULL` as any,
+        sql`${closedTradesTable.closeReason} IS DISTINCT FROM 'never_filled'` as any,
+      ))
+      .orderBy(desc(closedTradesTable.closedAt))
+      .limit(n);
+    return rows.map(r => parseFloat(String(r.pnl ?? '0')) || 0);
   }
 
   async getClosedTradesBySymbol(mode: TradingMode, symbol: string): Promise<ClosedTrade[]> {

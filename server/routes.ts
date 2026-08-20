@@ -4655,23 +4655,44 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         const openPositions = mode === 'paper' 
           ? await storage.getActiveOpenPositions(mode)
           : await storage.getActiveTrades(mode);
-        const closedTrades = mode === 'paper'
-          ? await storage.getClosedTrades(mode, { limit: 100, closedOnly: true }) // Step A: codified pre-existing default (100); Step C converts to a SQL aggregate
-          : await storage.getTrades(mode, { status: 'closed' });
-        
+        // ═══ B-BALANCE-TRUTH Step C (#618) — BOTH CHANGES ARE ONE ATOMIC EDIT ═══════════════
+        // Uncapping the total and fixing the win-rate window MUST ship together (Langston's
+        // Step-1 rider). The old win rate took `closedTrades.slice(-30)` off an array ordered
+        // `opened_at DESC` — the 30 OLDEST rows of a 100-row window. Removing the cap ALONE would
+        // have turned "the 30 oldest of 100" into "the 30 oldest EVER", converting a small wrong
+        // number into a large one. Measured before: realizedPL −$71.74 (true −$197.29); win rate
+        // 43.33% (true 50.00% over the real most-recent 30 by close).
+        let realizedPLTotal: number;
+        let recentPnls: number[];
+        if (mode === 'paper') {
+          const [total, recent] = await Promise.all([
+            storage.getRealizedPnlTotal(mode),
+            storage.getRecentClosedPnls(mode, 30),
+          ]);
+          realizedPLTotal = total.realizedPnl;
+          recentPnls = recent;
+        } else {
+          // LIVE leg unchanged in substance: `getTrades` was never row-bounded here.
+          const liveClosed = await storage.getTrades(mode, { status: 'closed' });
+          realizedPLTotal = liveClosed.reduce((sum, t) => sum + parseFloat((t as any).pnl || t.realizedPL || '0'), 0);
+          recentPnls = liveClosed
+            .slice()
+            .sort((a: any, b: any) => new Date(b.exitTime ?? 0).getTime() - new Date(a.exitTime ?? 0).getTime())
+            .slice(0, 30)
+            .map((t: any) => parseFloat(t.pnl || t.realizedPL || '0'));
+        }
+
         const metrics = {
           unrealizedPL: 0,
-          realizedPL: closedTrades.reduce((sum, t) => sum + parseFloat((t as any).pnl || t.realizedPL || '0'), 0),
+          realizedPL: realizedPLTotal,
           currentExposure: 0,
           openTradesCount: openPositions.length
         };
-        
-        // [9.6.3] Calculate win rate from closed trades
-        const recentTrades = closedTrades.slice(-30);
-        const wins = recentTrades.filter(t => parseFloat((t as any).pnl || t.realizedPL || '0') > 0).length;
+
+        const wins = recentPnls.filter(v => v > 0).length;
         const winRateData = {
-          winRate: recentTrades.length > 0 ? (wins / recentTrades.length) * 100 : 0,
-          totalTrades: recentTrades.length,
+          winRate: recentPnls.length > 0 ? (wins / recentPnls.length) * 100 : 0,
+          totalTrades: recentPnls.length,
           winningTrades: wins
         };
         
@@ -4705,12 +4726,19 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   apiRouter.get('/portfolio/earnings', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const mode = (req.query.mode as 'live' | 'paper') || 'paper';
-      const closedTrades = mode === 'paper'
-        ? await storage.getClosedTrades(mode, { limit: 100, closedOnly: true }) // Step A: codified pre-existing default (100); Step C converts to a SQL aggregate
-        : await storage.getTrades(mode, { status: 'closed' });
-      
-      const totalEarnings = closedTrades.reduce((sum, t) => sum + parseFloat((t as any).pnl || t.realizedPL || '0'), 0);
-      res.json({ totalEarnings, tradeCount: closedTrades.length, mode });
+      // B-BALANCE-TRUTH Step C (#618). This endpoint PUBLISHED THE CAP AS THE TRADE COUNT:
+      // `tradeCount` read exactly 100 while the true count was 475, and the total read −$71.74
+      // against a true −$197.29. `tradeCount` becoming the REAL count is this site's acceptance.
+      let totalEarnings: number;
+      let tradeCount: number;
+      if (mode === 'paper') {
+        ({ realizedPnl: totalEarnings, tradeCount } = await storage.getRealizedPnlTotal(mode));
+      } else {
+        const liveClosed = await storage.getTrades(mode, { status: 'closed' });
+        totalEarnings = liveClosed.reduce((sum, t) => sum + parseFloat((t as any).pnl || t.realizedPL || '0'), 0);
+        tradeCount = liveClosed.length;
+      }
+      res.json({ totalEarnings, tradeCount, mode });
     } catch (error) {
       console.error('Error fetching earnings:', error);
       res.status(500).json({ error: 'Failed to fetch earnings data' });
@@ -4723,27 +4751,37 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const mode = (req.query.mode as 'live' | 'paper') || (req.headers['x-app-mode'] as 'live' | 'paper') || 'paper';
       const days = parseInt(req.query.days as string) || 30;
       
-      const closedTrades = mode === 'paper'
-        ? await storage.getClosedTrades(mode, { limit: 100, closedOnly: true }) // Step A: codified pre-existing default (100); Step C converts to a SQL aggregate
-        : await storage.getTrades(mode, { status: 'closed' });
-      
-      // Group by date and calculate daily P/L
-      const dailyPL: Record<string, number> = {};
+      // ═══ B-BALANCE-TRUTH Step C (#618): SQL GROUP BY ON CLOSE DATE ═════════════════════════
+      // Langston's Step-1 rider, and the reason it is not a re-plumbed JS filter: the old code
+      // bounded its set by OPEN time (`getClosedTrades`, `opened_at DESC`, 100 rows) and then
+      // filtered by CLOSE time in JS — the identical open-time/close-time error that
+      // `getRealizedPnlSince` was created to fix. Widening the row bound while keeping the JS
+      // filter would have carried that error forward with better plumbing.
+      // MEASURED BEFORE: `?days=30` returned −$71.74 across only 17 DAYS (the truncated window
+      // could not reach further back than 2026-08-03) against a true −$40.76 across 310 trades.
+      // `?days=7` was correct — by luck, because 23 rows fit under the cap.
       const cutoffDate = new Date();
       cutoffDate.setDate(cutoffDate.getDate() - days);
-      
-      closedTrades
-        .filter(t => (t as any).closedAt || t.exitTime)
-        .filter(t => new Date((t as any).closedAt || t.exitTime!) >= cutoffDate)
-        .forEach(t => {
-          const date = new Date((t as any).closedAt || t.exitTime!).toISOString().split('T')[0];
-          dailyPL[date] = (dailyPL[date] || 0) + parseFloat((t as any).pnl || t.realizedPL || '0');
-        });
-      
-      const chartData = Object.entries(dailyPL)
-        .map(([date, pl]) => ({ date, pl }))
-        .sort((a, b) => a.date.localeCompare(b.date));
-      
+
+      let chartData: Array<{ date: string; pl: number }>;
+      if (mode === 'paper') {
+        chartData = await storage.getDailyRealizedPnlSince(mode, cutoffDate);
+      } else {
+        // LIVE leg unchanged in substance: `getTrades` was never row-bounded here.
+        const liveClosed = await storage.getTrades(mode, { status: 'closed' });
+        const dailyPL: Record<string, number> = {};
+        liveClosed
+          .filter(t => t.exitTime)
+          .filter(t => new Date(t.exitTime!) >= cutoffDate)
+          .forEach(t => {
+            const date = new Date(t.exitTime!).toISOString().split('T')[0];
+            dailyPL[date] = (dailyPL[date] || 0) + parseFloat((t as any).pnl || t.realizedPL || '0');
+          });
+        chartData = Object.entries(dailyPL)
+          .map(([date, pl]) => ({ date, pl }))
+          .sort((a, b) => a.date.localeCompare(b.date));
+      }
+
       res.json({ chartData, days, mode });
     } catch (error) {
       console.error('Error fetching earnings chart data:', error);
