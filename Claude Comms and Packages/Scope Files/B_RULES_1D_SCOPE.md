@@ -80,6 +80,22 @@ I searched the skills documentation for skill-to-skill composition — *invoke a
 
 ---
 
+## 4.5 ✅ PRECONDITION CANARY — RUN 2026-08-21. **TWO FINDINGS, AND THE FIRST CHANGES THE DESIGN.**
+
+**INSTRUMENT:** throwaway `canary-parent` + `canary-child` at `.claude/skills/<name>/SKILL.md`, parent carrying `PARENT-K3M8-DAWNTRADER-1D` and instructing *"now follow the canary-child skill"*, child carrying `CHILD-Z9Q4-DAWNTRADER-1D`.
+
+### ⛔ FINDING 1 — SKILLS ARE **NOT** DISCOVERED LIVE. RULES ARE. **DO NOT REASON FROM ONE TO THE OTHER.**
+`Skill(canary-parent)` → **`Unknown skill: canary-parent`**, with the files present at the correct path.
+✅ **PATH CONFIRMED FROM THE OFFICIAL DOCS, not assumed** — `.claude/skills/<skill-name>/SKILL.md` is the project location (*"Project skills: Commit `.claude/skills/` to version control"*). **So this is not a location error.**
+⚠️ **NO POSITIVE CONTROL EXISTS AND THAT IS STATED, NOT PAPERED OVER:** there is no working project or personal skill anywhere on this machine (`~/.claude/skills` does not exist; the only `SKILL.md` files are `scheduled-tasks/`, a **different mechanism** invoked by the scheduler, not by the Skill tool). ⇒ **"unknown" cannot by itself separate *not-yet-discovered* from *never-discoverable*.**
+★★ **BUT THE CONTRAST IS THE EVIDENCE: `.claude/rules/*.md` created in THIS SAME SESSION loaded on the very next matching read** (1c §5.1, marker `XQ7-…` present positive / absent negative). **Same session, same clone, same binary — rules live, skills unknown.** ⇒ **the two mechanisms have DIFFERENT discovery timing, measured rather than assumed.**
+⏳ **WHAT IS NOT ESTABLISHED: that a session RESTART fixes it.** That is an inference and it is not claimed. **It discharges at the next session start — same shape as 1c GATE 2.**
+
+### ⛔⛔ FINDING 2 — THE PARENT→CHILD REFERENCE HAS **NO DOCUMENTED MECHANISM**, AND THIS IS NOW DOCUMENTARY EVIDENCE, NOT INFERENCE.
+**§2(A) suspected it; the live docs page confirms it.** Searched the full page for `another skill` · `other skills` · `reference a skill` · `child skill` · `sub-skill` · `compose` · `chain`: **exactly ONE match, and it is about NAME COLLISIONS** (*"If a nested skill shares a name with another skill, both stay available"*), **not composition.** ⇒ **the docs describe no way for one skill to pull another's body in.**
+⇒ ★ **DESIGN CONSEQUENCE, AND IT LANDS ON KYLE'S LIST DIRECTLY:** the *"**workflow** parent referencing per-step children"* shape at §3 **cannot be assumed to work.** It must become **either ONE FLAT skill, or N INDEPENDENTLY-INVOKED skills with the parent as a pure index that NAMES them for a human to invoke.** ⚠️ **A parent whose reference silently does not resolve is the worst of the three — it reads as a working index while delivering nothing**, which is this programme's signature failure.
+⛔ **§5(a) STANDS UNDISCHARGED: "no real procedure depends on the reference until this passes."** The canary files are committed and labelled for deletion; **the live leg runs at the next session start.**
+
 ## 5. VERIFICATION
 **(a)** ⛔ **PRECONDITION — the parent/child LIVE CANARY** of §2(A): a throwaway parent + one child, exercised on the real binary, observing whether the reference actually resolves. **No real procedure depends on the reference until this passes.**
 **(b)** ⛔⛔ **HARD GATE, JOINTLY WITH (e) — deterministic, per rider 4:** `/doctor` + `/context` Skills row BEFORE and AFTER, plus a `--debug` run confirming **no overflow warning**. **A truncated description is a silent capability loss ⇒ if the set overflows, the set is too big — reduce it or spend `skillListingBudgetFraction`, deliberately and recorded.**

@@ -59,5 +59,20 @@ Docs, verbatim in substance: **project-root `CLAUDE.md` survives compaction (re-
 ⛔ **§3.5 GATES 1+2 MUST BE GREEN BEFORE THE FIRST MOVE — the two checks below are read from instruments that must first be PROVEN TO FIRE.**
 Precondition met (version stated with its source) · each moved passage findable at its new home · **the native-hook baseline shows the auto-loaded byte total DROP by the moved bytes** (ground truth, not candidate-set) · ★ **POSITIVE CONTROL ON THE COMPACTION CLAIM ITSELF (Analyst’s second point, adopted — "your evidence is docs-says"): put a KNOWN MARKER in a path-scoped file, COMPACT, then read a matching file and confirm the marker appears.** Cheap, and this crew has been wrong about mechanisms all week that the docs described correctly. **Until that control runs, §3’s compaction property is DOCS-SAYS, not measured** · plus the ordinary probe: read a matching file, confirm the rule loads; read a non-matching file, confirm it does not · §339 old→new table.
 
+## 5.1 ✅ GATE-2 PROBE — RUN 2026-08-21. **ORDINARY PROBE PASSES. THE COMPACTION LEG IS STILL PENDING AND IS NOT CLAIMED.**
+
+**INSTRUMENT:** `.claude/rules/probe-1c-compaction.md`, scoped `paths: ["**/B_RULES_1C_PROBE_TARGET.md"]`, carrying marker `XQ7-COMPACTION-CONTROL-9F42-DAWNTRADER`, against the target file of the same name.
+
+| leg | result |
+|---|---|
+| **NEGATIVE — read a NON-matching file** (`MISTAKE_PATTERNS.md`) | ✅ **marker ABSENT** — scoping is real, not "everything loads" |
+| **POSITIVE — read the MATCHING file** | ✅ **marker PRESENT**, rule body injected in full |
+| ⛔ **GATE 2 — read a matching file AFTER a COMPACTION** | ⏳ **PENDING — awaits a compaction. NOT CLAIMED.** |
+
+★ **BONUS FINDING, MEASURED NOT ASSUMED: `.claude/rules/*.md` IS PICKED UP WITHOUT A RESTART.** The rule file was created **during this session** and loaded on the very next matching read. ⇒ **the "hooks load at session start, so a fresh hook is live from the NEXT session" property (`CLAUDE.md` r22) does NOT generalise to `rules/`.** Two different mechanisms; do not reason from one to the other.
+⚠️ **THE NEGATIVE LEG HAD A CONFOUND AND IT IS NAMED: an absent marker could equally have meant "rules are not loaded at all yet" rather than "scoping excluded it."** The positive leg is what disambiguates — it fired in the same session on the same freshly-created file. **Run in that order or the negative proves nothing.**
+
+⇒ **WHAT IS NOW DISCHARGED: the mechanism EXISTS and SCOPES on this binary (desktop 2.1.219).** ⛔ **WHAT IS NOT: that a path-scoped rule RELOADS after a compaction — which is the whole of GATE 2, and Langston's consequence stands unchanged: if it fails, backstop-gated-ness is INSUFFICIENT and EVERY MOVER COMES BACK.** **NO RULE MOVES UNTIL THAT LEG IS GREEN.**
+
 ## 6. OUT OF SCOPE
 Skills (1d) · ordering (1e) · Langston's files (INFRA lane) · any rule whose absence-at-compaction would matter.
