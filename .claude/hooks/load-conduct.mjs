@@ -30,7 +30,14 @@ import { join } from 'node:path';
 // routinely breached because dense paragraphs stay under the line count (CC-A breached it 3x in one
 // day while formally "under 200 lines"). 4k tokens is the budgeted allocation; 4 bytes/token is the
 // standard English-prose approximation, so the cap is stated in the unit that is actually checkable.
-const CAP_TOKENS = 4096;
+// ★ RAISED 4096 → 6144 on 2026-08-20, KYLE'S DECISION, and it is EXPLICITLY TEMPORARY.
+// The 4k cap was hit within a day of the file existing: §6 (his report format) + §13 (the
+// mistake short list) pushed it 101 B over, and by the §13 rule a live rule may NOT be
+// dropped to make room. His call: pay the tokens now, and REVISIT THE WHOLE ALLOCATION
+// across all four auto-loaded files ONCE `CLAUDE.md` HAS BEEN SLIMMED and we can see how
+// small it actually gets. ⚠️ DO NOT treat 6144 as settled — it is a deliberate deferral
+// of a trade-off (rules that help vs rules nobody reads vs token cost), not a new budget.
+const CAP_TOKENS = 6144;
 const BYTES_PER_TOKEN = 4;
 const CAP_BYTES = CAP_TOKENS * BYTES_PER_TOKEN; // 16384
 
