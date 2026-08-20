@@ -55,6 +55,14 @@ MISTAKE: <pattern-slug> [<batch-id>] — <one line: what was wrong, what is true
 `git log --grep='^MISTAKE:' --since=1.week` → group by slug → update counts → promote/displace/retire.
 **Owner CC-A · weekly · fired by a self-chaining `verification` alert.**
 ⛔ **DISCHARGE ORDER MATTERS AND THE VERB IS THE MECHANISM: no `dedupe_key`; MINT THE NEXT ROW FIRST, THEN `resolve` the current one with evidence.** `resolve` is the ONLY verb that frees a dedupe key (`system-alerts.ts:389`); an `ack` silences the row permanently **and** drops it out of the §10.5 sweep. *"Avoid resolve"* would make the pass fire once and stop, silently.
+### ⚠️ THE PASS ALSO CARRIES ONE TRIPWIRE THAT IS NOT ABOUT MISTAKES (#732, added 2026-08-20)
+**#732 was DEPRIORITISED on a measured 7-for-7 record: all seven `trailing_stop_hit` rows are winners that exited at or above target.** The deferral rests entirely on that pattern holding. **So the pass checks it, because a deferral with no tripwire is an intention:**
+```sql
+select symbol, net_pnl, exit_price, take_profit, closed_at from closed_trades
+ where close_reason = 'trailing_stop_hit' and (net_pnl < 0 or exit_price < take_profit);
+```
+**ANY row ⇒ #732 returns to priority and is reported to Kyle that week.** **Zero rows ⇒ record "tripwire clear" in the run-log row.** *It rides this pass deliberately — no second scheduled job and no additional token cost.*
+
 ★ **THE PASS WRITES A DATED ROW BELOW ON EVERY RUN, INCLUDING "no new instances" — so a MISSING ROW IS THE ALARM.** A pass that runs and records nothing is indistinguishable from one that was skipped, which is the failure this whole file exists to catch.
 
 ---

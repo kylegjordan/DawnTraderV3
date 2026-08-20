@@ -2811,6 +2811,32 @@ if (!state.targetLatched && !targetLockDiscontinuity.active) {
 **§9.5(b-ii) — SEARCHED BEFORE FILING, and this is NOT #640.** #640 (WITHDRAWN 2026-07-31, not-a-defect) asked *why the ladder COLUMNS are empty on these rows* and correctly answered that a trailing exit does not require a prior latch-capture. ⇒ **it never asked why the rows EXIST AT ALL with the master switch off** — and at the time it ran the switch had already been false for 8 days. **Different question, opposite direction.** Related but distinct: **#562** (Kyle's on/off-switch directive — the switch it asked for WAS built and works) · **#640** · **#556**.
 
 **DISPOSITION (rule 24): outcome (1) on the LABEL — a real defect with a one-line-placement root cause.** The fix is to branch the exit reason on **ladder entry** (`tradeMode === 'TRAILING_TAKE'` / `ladderRung > 0`) rather than on `targetLatched`, so the label reports what actually happened. ⚠️ **Consequence 2 must be resolved BEFORE the label fix, not after** — if the hold-past-target is unintended, relabelling would hide the symptom that surfaced it.
+### ✅ SEVERITY MEASURED → **DEPRIORITISED, NOT DROPPED** (Kyle 2026-08-20: *"if it is a big problem, then please proceed, otherwise, reschedule it"*)
+
+**MEASURED — object `closed_trades`, WHOLE TABLE, n=569:**
+| | |
+|---|---|
+| `trailing_stop_hit` rows | **7 of 569 = 1.2%** |
+| winners | ⭐ **7 of 7. ZERO losers.** |
+| exited **at or above** their own target | ⭐ **7 of 7. ZERO below.** |
+| net across all seven | **+$94.21** (worst **+$0.59**, best **+$71.76**) |
+| mode | **paper — no capital at risk** |
+| rate | 7 in 22 days ≈ **one per 3 days** |
+
+⇒ **NOT A BIG PROBLEM. It is a DATA-QUALITY defect with ZERO demonstrated financial downside.**
+★ **AND IT PARTLY ANSWERS THE OPEN "post-target exposure" QUESTION — in the FAVOURABLE direction.** Every one of the seven was held past target and every one closed **at or above** it. ⚠️ **That is not proof the reverse cannot happen** (the closing path is still unidentified, see the addendum below) — **but there is no instance of harm anywhere in the population.**
+
+⛔ **AND PRIORITISING IT WOULD NOT HAVE FIXED IT SOONER ANYWAY** — the decisive record (`EXIT_TRIGGER`) is gone and cannot be recovered, so ANY version of this work starts by capturing evidence going forward and then WAITING for the next occurrence (~3 days). **Urgency buys nothing here; an instrument does.**
+
+**RESCHEDULED: after B-MISTAKES-FILE closes and after the `CLAUDE.md` slim + skills build. Owner CC-A.**
+★★ **THE TRIPWIRE — SO THE DEFERRAL IS A MECHANISM, NOT AN INTENTION (§9.4, and the lesson of this very batch):** the check rides the **already-scheduled weekly mistake-pattern pass** (alert `8a07c40b`) — **no new scheduled job, no new token cost.** The pass runs:
+```sql
+select symbol, net_pnl, exit_price, take_profit, closed_at from closed_trades
+ where close_reason = 'trailing_stop_hit'
+   and (net_pnl < 0 or exit_price < take_profit);
+```
+⇒ **ANY ROW IT RETURNS FLIPS THIS BACK TO PRIORITY** — a `trailing_stop_hit` that LOSES money, or that exits BELOW its target, is the first evidence of harm and breaks the 7-for-7 pattern the deprioritisation rests on. **Zero rows = the deferral still holds, and the pass records that it checked.**
+
 ### ⛔⛔ ADDENDUM 2026-08-20, SAME DAY — **THE MECHANISM ABOVE IS *NOT* ESTABLISHED. THE DATA REFUTES PART OF IT.** (CC-A, self-caught while tracing the "post-target exposure" question the entry itself said must be settled first.)
 
 **I traced `tecShouldClose` (`trailing-exit-controller.ts:1550-1582`) to answer what stop is checked once latched with no ladder. Its entire close test is one line:**
