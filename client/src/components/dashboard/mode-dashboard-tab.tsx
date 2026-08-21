@@ -167,8 +167,24 @@ function ActiveModeDashboard({ mode }: { mode: "paper" | "live" }) {
                 <StatRow label="Today (24h)" value={usd(a?.earnings?.last24h)} valueCls={signCls(a?.earnings?.last24h)} />
                 <StatRow label="Past 7 Days" value={usd(a?.earnings?.last7d)} valueCls={signCls(a?.earnings?.last7d)} />
                 <StatRow label="Past 30 Days" value={usd(a?.earnings?.last30d)} valueCls={signCls(a?.earnings?.last30d)} />
-                <StatRow label="Net P/L (window)" value={usd(a?.netPnl)} valueCls={signCls(a?.netPnl)} />
-                <StatRow label="Net P/L % (vs starting balance)" value={pct(a?.netPnlPercent)} valueCls={signCls(a?.netPnlPercent)} />
+                {/* ★ OBJ-4 (Kyle 2026-08-21): the bottom line is the LIFETIME SCOREBOARD, not the
+                    selected window. Kyle: "a running scoreboard for since we started trading --
+                    here's what you've done." The date is shown because a scoreboard without its
+                    start date is not a scoreboard. The percentage is a TIME-WEIGHTED return: three
+                    different capital bases exist in the history, so dividing by any single balance
+                    is wrong for two of the three eras (measured: -19.49% vs today's balance,
+                    -7.14% vs the original, -7.08% time-weighted). Neither figure moves when the
+                    balance is re-anchored -- only when trades close. */}
+                <StatRow
+                  label={`Lifetime Net P/L${a?.lifetime?.epochStartedAt ? ` (since ${new Date(a.lifetime.epochStartedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })})` : ''}`}
+                  value={usd(a?.lifetime?.netPnl)}
+                  valueCls={signCls(a?.lifetime?.netPnl)}
+                />
+                <StatRow
+                  label="Lifetime return (time-weighted)"
+                  value={pct(a?.lifetime?.timeWeightedReturnPct)}
+                  valueCls={signCls(a?.lifetime?.timeWeightedReturnPct)}
+                />
               </>
             )}
           </CardContent>

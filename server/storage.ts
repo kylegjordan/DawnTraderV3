@@ -528,6 +528,10 @@ export interface IStorage {
   // is a page size, not an answer.
   getRealizedPnlTotal(mode: TradingMode): Promise<{ realizedPnl: number; tradeCount: number }>;
   getClosedTradesCount(mode: TradingMode, opts?: { closedOnly?: boolean }): Promise<number>;
+  getLifetimeScoreboard(mode: TradingMode): Promise<{
+    epochStartedAt: string | null; epochIsExplicit: boolean;
+    netPnl: number; timeWeightedReturnPct: number | null; tradeCount: number;
+  }>;
   getPortfolioMetricComponents(mode: TradingMode): Promise<{
     rowCount: number; maxDrawdownAbs: number; grossProfit: number; grossLoss: number;
     avgReturn: number; stdDevPop: number; returnsCount: number; capitalDeployed: number;
@@ -3350,6 +3354,84 @@ export class DatabaseStorage implements IStorage {
    * and there the SQL is RIGHT: a 0% return is a real observation, and silently dropping it is
    * the defect, not the feature. Recorded rather than left for someone to rediscover.
    */
+  /**
+   * B-BALANCE-TRUTH OBJ-4 (Kyle-directed 2026-08-21): THE LIFETIME SCOREBOARD.
+   *
+   * Kyle's ask: the Earnings card's bottom line should stop following the window selector and
+   * become "a running scoreboard for since we started trading."
+   *
+   * ★ THE PERCENTAGE IS A TIME-WEIGHTED RETURN, AND THAT IS AN INSTRUMENT CHOICE, NOT A TASTE.
+   * Kyle asked whether to measure against the original $2,250 or the current $824.11 and could
+   * not decide. NEITHER IS RIGHT, and the data made that answerable: every qualifying trade
+   * carries `anchor_balance_at_open` (measured 2026-08-21: 492 rows, ZERO nulls), so the capital
+   * actually behind each trade is known per-trade and no arbitrary denominator is needed.
+   *   ÷ current 824.11 -> -19.49%   WRONG BY ~3x: most trades were taken with 2250/2400 behind them
+   *   ÷ original 2250  ->  -7.14%   close TODAY only because most history sits in that era
+   *   TIME-WEIGHTED    ->  -7.08%   <- this
+   * TWR is the standard measure for a capital base that changed for NON-TRADING reasons, which is
+   * exactly what a re-anchor is (a deposit/withdrawal, in performance terms). It answers "how did
+   * the TRADING perform" independent of money moving in or out. Three distinct bases exist in the
+   * history -- 2250.00, 2400.00, 824.11 -- so a single-denominator answer is wrong for two of the
+   * three eras. Not academic.
+   *
+   * ★ THE EPOCH IS DELIBERATE AND IS **NOT** TIED TO THE ANCHOR EVENTS. Kyle ruled the two acts
+   * decoupled: changing the balance and resetting the score are each intentional, and either can
+   * happen without the other. Binding the scoreboard to anchor changes would have silently erased
+   * the July record he is asking to see -- the 08-12 re-anchor was him mirroring his real Kraken
+   * balance, not starting a fresh experiment. So the epoch is an explicit `module_constants` row
+   * (`scoreboard` / `epoch_started_at`), whose `updated_by` column is the audit trail for the
+   * deliberate act.
+   * ⚠️ With no explicit row the epoch is the FIRST TRADE. That is NOT a hard-coded fallback of the
+   * kind rule 15 forbids -- it is the correct semantic (score-keeping began when trading began),
+   * `epochIsExplicit` reports which of the two is in force, and the card states the date either way.
+   */
+  async getLifetimeScoreboard(mode: TradingMode): Promise<{
+    epochStartedAt: string | null; epochIsExplicit: boolean;
+    netPnl: number; timeWeightedReturnPct: number | null; tradeCount: number;
+  }> {
+    const res: any = await db.execute(sql`
+      WITH epoch AS (
+        SELECT (value #>> '{}')::timestamptz AS ts
+          FROM module_constants
+         WHERE module_name = 'scoreboard' AND constant_name = 'epoch_started_at'
+         LIMIT 1
+      ),
+      q AS (
+        SELECT closed_at,
+               COALESCE(net_pnl, pnl)::numeric        AS p,
+               anchor_balance_at_open::numeric        AS base
+          FROM closed_trades
+         WHERE closed_at IS NOT NULL
+           AND close_reason IS DISTINCT FROM 'never_filled'
+           AND mode = ${mode}
+           AND closed_at >= COALESCE((SELECT ts FROM epoch), '-infinity'::timestamptz)
+      )
+      SELECT
+        (SELECT ts FROM epoch)                                        AS explicit_epoch,
+        (SELECT min(closed_at) FROM q)                                AS first_trade,
+        (SELECT count(*) FROM q)::int                                 AS trade_count,
+        (SELECT COALESCE(sum(p), 0) FROM q)                           AS net_pnl,
+        -- Compounded: PROD(1 + p/base) - 1, via exp(sum(ln(...))). The GREATEST guard keeps a
+        -- pathological row (a single trade losing more than the entire capital base) from making
+        -- ln() undefined and blanking the whole card -- it cannot occur with real fills, but a
+        -- metric that dies on one bad row is a metric that eventually dies.
+        (SELECT exp(sum(ln(GREATEST(1 + p / base, 0.000001)))) - 1
+           FROM q WHERE base IS NOT NULL AND base > 0)                AS twr
+    `);
+    const row = (res.rows ?? res)[0] ?? {};
+    const num = (v: unknown) => { const n = parseFloat(String(v ?? '')); return Number.isFinite(n) ? n : 0; };
+    const explicit = row.explicit_epoch ?? null;
+    const twrRaw = row.twr === null || row.twr === undefined ? null : parseFloat(String(row.twr));
+    return {
+      epochStartedAt: explicit ? new Date(explicit).toISOString()
+                     : (row.first_trade ? new Date(row.first_trade).toISOString() : null),
+      epochIsExplicit: !!explicit,
+      netPnl: num(row.net_pnl),
+      timeWeightedReturnPct: twrRaw === null || !Number.isFinite(twrRaw) ? null : twrRaw * 100,
+      tradeCount: Math.trunc(num(row.trade_count)),
+    };
+  }
+
   async getPortfolioMetricComponents(mode: TradingMode): Promise<{
     rowCount: number; maxDrawdownAbs: number; grossProfit: number; grossLoss: number;
     avgReturn: number; stdDevPop: number; returnsCount: number; capitalDeployed: number;

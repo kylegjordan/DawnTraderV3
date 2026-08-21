@@ -13268,6 +13268,10 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
 
       // The mode's REAL starting balance (B8.2 anchor read) — null when absent
       // (Live dormant): percentage/drawdown metrics go null, never divide by zero.
+      // OBJ-4: lifetime scoreboard -- epoch-scoped, anchor-independent, and unaffected by a
+      // re-anchor. Read once here rather than derived from `trades`, which is window-scoped.
+      const lifetime = await storage.getLifetimeScoreboard(mode);
+
       let startingBalanceForPct: number | null = null;
       try {
         const { getAnchorState } = await import('./services/portfolio-anchor-service.js');
@@ -13315,6 +13319,13 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           // P19-B8.3: the pre-existing always-0 fixed at the root — real % against
           // the B8.2 anchor balance; null (not fake 0) when no balance exists.
           netPnlPercent: startingBalanceForPct !== null ? (netPnl / startingBalanceForPct) * 100 : null,
+          // ★ OBJ-4 (Kyle 2026-08-21): THE LIFETIME SCOREBOARD, beside the window figures rather
+          // than replacing them -- `netPnl`/`netPnlPercent` above stay window-scoped because the
+          // C5 diagnostics logger legitimately wants the window. The CARD renders `lifetime`.
+          // The percentage is a TIME-WEIGHTED return, not a division by any single balance:
+          // three different capital bases exist in the history, so one denominator is wrong for
+          // two of the three eras. See storage.getLifetimeScoreboard for the measured comparison.
+          lifetime,
           avgProfitPercent, // B2: New metric
           avgDailyProfitPercent, // B2: New metric
           avgHoldingTime,
