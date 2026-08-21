@@ -12537,7 +12537,12 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         .where(curveEq(portfolioAnchorEvents.mode, mode))
         .orderBy(curveAsc(portfolioAnchorEvents.occurredAt));
 
-      const allClosed = await storage.getClosedTrades(mode, { limit: 100, closedOnly: true }); // Step A: codified pre-existing default (100); Step C converts
+      // B-BALANCE-TRUTH Step C (#618): the 100-row cap is GONE. This curve accumulates a running
+      // total across the whole closed history and carries the last point from BEFORE the requested
+      // window, so it cannot be bounded by time either -- a `days` bound would silently start the
+      // running level from the wrong place and the chart would render a plausible wrong shape.
+      // Capped at 100 by open time, the curve simply omitted older closes from the accumulation.
+      const allClosed = await storage.getClosedTrades(mode, { limit: 'all', closedOnly: true });
       const num = (v: unknown): number => { const n = parseFloat(String(v ?? '')); return Number.isFinite(n) ? n : 0; };
       const closes = allClosed
         .filter(t => t.closedAt && t.closeReason !== 'never_filled')
@@ -13065,7 +13070,17 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       }
       
       // Get trades within range
-      const allTrades = await storage.getClosedTrades(mode, { limit: 100 }); // Step A: codified pre-existing default (100); Step C converts (#618 leg 2's own proven site)
+      // B-BALANCE-TRUTH Step C (#618): the 100-row cap is GONE -- this is the site whose current
+      // value was traced to the cent before conversion (30d -52.79 over 95 rows, 7d +153.50 over
+      // 25), so the change is measured rather than assumed. It cannot be bounded by time either:
+      // the windowed figures below filter by OPEN time for the current-simulation range and by
+      // CLOSE time for every other range, while the rolling earnings need 30 days of CLOSES -- no
+      // single time bound is correct for all three, so the honest bound is none.
+      // The ghost-trade filter below is KEPT even though it is provably redundant today (measured:
+      // zero non-never_filled closed rows lack an exit price). It costs nothing, and the fence in
+      // b-balance-truth-ghost-redundancy-fence.test.ts asserts the redundancy -- so if that ever
+      // stops holding, this site is still protected and the fence tells us the assumption broke.
+      const allTrades = await storage.getClosedTrades(mode, { limit: 'all' });
       
       // Phase 8.8.3-B3: Filter out ghost trades from analytics
       // Ghost trades = closed trades without proper exit_price or close_reason

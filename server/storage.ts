@@ -520,7 +520,7 @@ export interface IStorage {
   createClosedTrade(mode: TradingMode, trade: InsertClosedTrade): Promise<ClosedTrade>;
   updateClosedTrade(mode: TradingMode, id: string, updates: Partial<ClosedTrade>): Promise<ClosedTrade>;
   getClosedTrade(mode: TradingMode, id: string): Promise<ClosedTrade | undefined>;
-  getClosedTrades(mode: TradingMode, filters: { limit: number; closedOnly?: boolean; includeNeverFilled?: boolean }): Promise<ClosedTrade[]>;
+  getClosedTrades(mode: TradingMode, filters: { limit: number | 'all'; closedOnly?: boolean; includeNeverFilled?: boolean }): Promise<ClosedTrade[]>;
   // B-BALANCE-TRUTH Step C (#618): whole-history / whole-window aggregates. Use THESE for any
   // total, count, chart or rolling-N question -- `getClosedTrades` is a LIST reader and its bound
   // is a page size, not an answer.
@@ -3110,7 +3110,7 @@ export class DatabaseStorage implements IStorage {
     return trade || undefined;
   }
 
-  async getClosedTrades(mode: TradingMode, filters: { limit: number; closedOnly?: boolean; includeNeverFilled?: boolean }): Promise<ClosedTrade[]> {
+  async getClosedTrades(mode: TradingMode, filters: { limit: number | 'all'; closedOnly?: boolean; includeNeverFilled?: boolean }): Promise<ClosedTrade[]> {
     // Phase 27.F.15.B.2: Global query, mode-based only
     // B-BALANCE-TRUTH Step A (#618): `limit` is REQUIRED -- the `|| 100` default is GONE.
     // It was a 2025-10 LISTING default (a UI page size for the paper-sim engine) that
@@ -3123,7 +3123,26 @@ export class DatabaseStorage implements IStorage {
     // property and is flagged by NOTHING — `routes.ts` has exactly such a site (`const options: any`),
     // which the 24-site census found and tsc did not. So this contract is strong against accident,
     // not airtight: `any` is a hole in it.
+    // B-BALANCE-TRUTH Step C (#618): `'all'` is an EXPLICIT, TYPED unbounded read.
+    //
+    // The two remaining call sites genuinely need the whole closed set and CANNOT be bounded by
+    // time instead. The balance curve accumulates a running total and carries the last point from
+    // BEFORE the requested window, so a time bound breaks the level it renders. The analytics
+    // route windows one figure by OPEN time and another by CLOSE time, so no single time bound
+    // is correct for both. For those two, "everything" is the honest answer.
+    //
+    // *** WHY A SENTINEL AND NOT A BIG NUMBER: passing 100000 would be the SAME defect with a
+    // larger constant -- an arbitrary bound nobody chose, failing silently once the table
+    // outgrows it, in the direction that looks healthy. `'all'` cannot go stale. And it does not
+    // weaken Step A's contract: `limit` stays REQUIRED, so tsc still enumerates every caller and
+    // each must still type something deliberate. What changed is that "all of it" became
+    // something a caller can SAY, rather than something it had to approximate.
+    // COST, STATED: an unbounded read grows with the table (569 rows at 2026-08-21). Both sites
+    // are authenticated dashboard reads, not hot-path loops. If either becomes heavy the fix is
+    // a per-key `since` bound on the READER -- separate bounds for open-time and close-time
+    // questions -- not a cap.
     const limit = filters.limit;
+    const unbounded = limit === 'all';
     const closedOnly = filters.closedOnly ?? false;
 
     const conditions = [];
@@ -3140,17 +3159,17 @@ export class DatabaseStorage implements IStorage {
     }
 
     if (conditions.length > 0) {
-      return await db.select()
+      const q = db.select()
         .from(closedTradesTable)
         .where(and(...conditions))
-        .orderBy(desc(closedTradesTable.openedAt))
-        .limit(limit);
+        .orderBy(desc(closedTradesTable.openedAt));
+      return unbounded ? await q : await q.limit(limit as number);
     }
 
-    return await db.select()
+    const q2 = db.select()
       .from(closedTradesTable)
-      .orderBy(desc(closedTradesTable.openedAt))
-      .limit(limit);
+      .orderBy(desc(closedTradesTable.openedAt));
+    return unbounded ? await q2 : await q2.limit(limit as number);
   }
 
   /**
