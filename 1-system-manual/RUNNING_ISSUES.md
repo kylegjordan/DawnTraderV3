@@ -2831,7 +2831,9 @@ The COMMITTED copy carries the five **pre-Phase-14 regime keys** (`BULL_STABLE`/
 
 ### #734 OPEN 2026-08-21 (CC-C; found reading the 1,000-row caps for B-BALANCE-TRUTH Step E) — ★★ **THE PORTFOLIO-HEALTH DRAWDOWN GATE HAS READ `critical` SINCE THE 08-12 RE-ANCHOR, BECAUSE ITS NUMERATOR SPANS THE PRE-ANCHOR ERA AND ITS DENOMINATOR DOES NOT**
 
-**HOME: `B-DRAWDOWN-ANCHOR-COHERENCE` — OWNER CC-C — DUE 2026-09-04.** Sibling of #692 (the re-anchor's downstream effects) and the same defect family as B-BALANCE-TRUTH's anchor fix, on the RISK-REPORTING surface rather than the balance surface.
+**⛔ HOME — RE-RULED BY KYLE 2026-08-21: TABLED TO PHASE 21, as roadmap item `21-3c` under §3.5 "Live Mode Guardrails", to be fixed BEFORE live is enabled.** Owner CC-C. **NOT a September batch — Kyle's reasoning: this cannot bite until live mode is switched on, there is a large pre-launch fix block at the start of Phase 21 anyway, and it belongs in that block rather than interrupting paper-mode work.**
+**★ HIS CONDITION WAS "unless this is causing issues with the paper trading mode and dashboard", AND I VERIFIED IT RATHER THAN ASSUMING IT: it is not.** The paper branch at `active-portfolio-manager.ts:153` only logs and does not block start; **no client code consumes `/api/active-engine/health`** (repo-wide grep over `client/src/`, zero hits); **nothing else in `server/` reads it** either — the endpoint's only definition site is `routes.ts:13369` and it has no other reader. ⇒ **nothing on the paper-trading dashboard shows this, and nothing in paper mode is gated by it.** Tabling is correct on the evidence.
+⚠️ **The `21-3c` roadmap entry is the authoritative home and carries the full detail — including that `:505`'s held 1,000-row cap converts inside that same diff.** Sibling of #692 (the re-anchor's downstream effects) and the same defect family as B-BALANCE-TRUTH's anchor fix, on the RISK-REPORTING surface rather than the balance surface.
 
 **MEASURED, live, `/api/active-engine/health` on staging 2026-08-21:**
 ```

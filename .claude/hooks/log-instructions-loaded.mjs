@@ -66,6 +66,13 @@ try {
     { path: join(projectDir, 'CLAUDE.md'), why: 'harness auto-load (project rules)', population: 'single file, repo-root CLAUDE.md' },
     { path: join(memDir, 'MEMORY.md'), why: 'harness auto-load (shared auto-memory)', population: 'single file, shared MEMORY.md (NOT the memory directory)' },
     session ? { path: join(memDir, session.file), why: 'load-own-memory.mjs SessionStart hook', population: `single file, ${session.file} only` } : null,
+    // ADDED 2026-08-21 (Kyle asked, at a resume, whether CONDUCT.md had auto-loaded -- and this
+    // instrument could not answer, because it did not track the file. CONDUCT.md became an
+    // auto-loaded artifact on 2026-08-20 (B-CONDUCT-FILE) and the logger was never extended, so
+    // for a day the log read as a complete account of the loaded set while silently omitting a
+    // quarter of it. An instrument with an unstated blind spot is worse than no instrument: its
+    // silence gets read as evidence. Same class as the #704 shape this file exists to measure.
+    { path: join(projectDir, 'CONDUCT.md'), why: 'load-conduct.mjs SessionStart hook', population: 'single file, repo-root CONDUCT.md' },
   ].filter(Boolean);
 
   const files = candidates.map((c) => {
