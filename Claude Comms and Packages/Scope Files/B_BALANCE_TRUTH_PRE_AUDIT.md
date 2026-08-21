@@ -235,3 +235,33 @@ Repo-wide over `server/` and `shared/`, tests excluded:
 **FIFTH — WHY "mode-based only" SITS ON QUERIES THAT FILTER BY NOTHING.** `SYSTEM_MANUAL.md:5170`: *"Global scope — Phase 27.F.15.A: **no userId filtering** for trades (mode-based only)."* It meant *scoped by MODE rather than by USER* — recording the removal of the multi-user model. **The user half shipped; the mode half never did, because only paper existed to scope.** The comment has described an intention as a mechanism ever since — the same shape as the `net_pnl` schema comment I was caught on earlier today.
 
 **IS THE RETROACTIVE FIX EASY? YES.** One INSERT site per table, a backfill constant proven by *"live has never been enabled"*, and a writer that **already receives the mode and discards it**. **No historical reconstruction is needed: every existing row is paper by necessity, not by inference.**
+
+---
+
+## PART 8 — **STEP G (NEW, KYLE-DIRECTED 2026-08-21): THE MODE-BLIND DELETE FAMILY.** Kyle asked whether the reset finding had actually been added to F. **It had not — it was a scope note in PART 7c and never entered the plan Langston gated.** Recording it as its own step, with his choice of "F or G" answered and argued.
+
+**⛔ THE DEFECT — and unlike the rest of this batch it DESTROYS rather than MISREPORTS.** Three storage functions accept a `mode` and delete **every row regardless of it**:
+`deleteAllClosedTrades(mode)` · `deleteAllActiveOpenPositions(mode)` · `deleteAllActiveTradeLogs(mode)`
+
+**REACHABLE — this is not theoretical plumbing. Live, authenticated endpoints:**
+| entry point | what it clears |
+|---|---|
+| `POST /api/active-engine/reset` (`routes.ts:11605`) | positions |
+| `POST /api/active-engine/clear-data` (`routes.ts:11709`) | trades + positions + trade logs |
+| `DELETE /api/active-engine/clear-trades` (`routes.ts:11979`) | trades + positions |
+| `c14-validation-service.ts:153` `private async sanitizeEnvironment(mode: 'paper' \| 'live')` | trades + positions |
+
+**★★ TWO FACTS THAT SETTLE THE SEVERITY:**
+1. **THE UI EXPOSES IT.** `client/src/components/trading/paper-open-trades-tab.tsx:297` posts `{ mode: 'paper' }` to `/active-engine/reset` — **a reset control on the PAPER page.** In Phase 21 that button deletes **live** open positions.
+2. **`sanitizeEnvironment` IS TYPED `mode: 'paper' | 'live'`.** The code was **written anticipating both modes** and the storage layer silently discards the distinction. This is not an oversight nobody foresaw; it is a parameter threaded correctly all the way to a function that ignores it.
+
+⚠️ **NOT AFFECTED, stated so the finding is not overstated:** `deleteActiveOpenPosition(mode, id)` also ignores `mode` — but it deletes **by unique id**, so the mode is redundant there and no cross-mode deletion is possible. **One of the four is harmless; three are not.**
+
+**★ RULED: THIS IS STEP G, NOT PART OF STEP F — and the reason is a hard dependency, not tidiness.**
+1. **G REQUIRES F.** You cannot make a delete filter by mode until F's column exists. The ordering is forced by the schema, not chosen.
+2. **DIFFERENT RISK CLASS.** F is **additive** — add a column, backfill a constant, filter reads; its acceptance test is *"no displayed number moves."* G changes **what a DELETE destroys**; its acceptance test is *"a delete scoped to one mode leaves the other's rows intact."* **Blending an additive migration with a change to destruction semantics in one diff makes a regression unattributable** — the same reasoning Langston used to hold `:505` out of this batch.
+3. **G's VERIFICATION IS ONLY POSSIBLE AFTER F.** Proving mode-scoped deletion requires a seeded `mode='live'` row to survive a paper reset — which requires the column F creates.
+
+**SCOPE OF G:** add the mode predicate to the three bulk deletes; extend the discriminator to `active_open_positions` (F covers `closed_trades`); fence it by **seeding a live row, running each reset with `mode='paper'`, and asserting the live row SURVIVES** — a delete fence must prove what it does NOT delete, since a delete that removes too much passes any test that only checks the target is gone.
+
+**⏰ MUST LAND BEFORE LIVE IS ENABLED.** Today it is inert — live has never run, so there is nothing of the other mode to destroy. **It stops being inert the moment Phase 21 opens its first live position, and the failure mode is data loss, not a wrong number.** Named home so it cannot drift: **Step G of this batch if F lands cleanly; otherwise `B-MODE-DELETE-SCOPE`, owner CC-C, DUE BEFORE any Phase-21 live enablement** — cross-referenced from roadmap item `21-3c`.
