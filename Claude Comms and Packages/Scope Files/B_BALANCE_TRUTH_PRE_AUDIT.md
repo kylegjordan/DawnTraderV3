@@ -211,3 +211,27 @@ Repo-wide over `server/` and `shared/`, tests excluded:
 **(v) `'all'` APPROVED, with the rider implemented.** Langston: the cost is unbounded in the *future* and nothing would tell us the day it stops being cheap. ⇒ `logUnboundedRead()` reports the returned row count on **every** unbounded read, warning past a named 5,000-row review point. **It lives in the READER, not at the two call sites** — a future third `'all'` caller inherits the instrument instead of having to remember it, the same derived-not-listed reasoning as the #704 fence subject.
 
 **(vi) NEW FINDING, bucket 2, filed rather than fixed here:** the 4 `close_reason IS NULL` rows are shaped `pnl = NULL` vs `net_pnl = '0.00000000'`. `NULL IS DISTINCT FROM 'never_filled'` is TRUE, so **they pass every existing analytics guard**, where a `netPnl ?? pnl` reader scores them `0.00` and a `SUM(pnl)` reader scores them NULL. **Money impact ≈ 0 either way — not a blocker.** It is `.default("0")` on a nullable sibling: an absent value wearing a plausible number's clothes (#546). Homed below.
+
+### PART 7c — KYLE-DIRECTED INVESTIGATION (2026-08-21): "we DID separate paper and live — dig in." **HE IS RIGHT THAT A SEPARATION BATCH EXISTS. IT IS A DIFFERENT COLUMN. And the gap is WIDER than Step F's scope.**
+
+**★ FIRST — THIS IS NOT A NEW FINDING, AND I PRESENTED IT AS ONE. §9.5(b-ii) VIOLATION.** `RUNNING_ISSUES #618` **leg 3** has documented it since **2026-07-31** (Langston-found, CC-C-verified), and `RUNNING_ISSUES.md:1695` records the three-way inconsistency verbatim. **More: KYLE HIMSELF DECIDED THE FIX ON 2026-08-01** — *"add the column, backfill it, and make the argument actually do its job."* **Step F is the implementation of his own three-week-old decision.** The ledger search §9.5(b-ii) mandates would have returned it on the first grep.
+
+**★ SECOND — THE BATCH HE REMEMBERS IS REAL: `Batch 65.2`, 2026-04-23.** Catalog: *"`trade_mode` populated across all 4 trade-row tables (new column migration + backfill)."* **A mode column, four trade tables, a backfill — exactly as he recalled.**
+⇒ **BUT IT IS NOT THE PAPER/LIVE COLUMN.** `shared/schema.ts:738` states it at the source: `// Directive 9.2: TARGET or TRAILING_TAKE`. **`trade_mode` is the TRAILING-EXIT STATE.** Confirmed in code (`trailing-exit-controller.ts:918`, `active-execution-engine.ts:1627`) and in data (`'TARGET'` on all 581 closed trades and all 4 open positions). **His memory is accurate; the column is about something else.**
+
+**THIRD — THE CODE *IS* SEPARATED; ONLY THE STORED DATA IS NOT.** `P19-B2` (2026-06-13) records the engine as **already mode-parametric** — *"`mode:'live'|'paper'` threaded throughout"* — live **409-gated until Phase 21**. A proper enum exists: `trading_mode` = `live | paper | passive | learning`, used by `trades.mode`. ⚠️ **But `trades` is EMPTY (0 rows), as is `paper_trades`** — legacy. The **active** pipeline writes to `closed_trades` (581) and `active_open_positions` (4), neither carrying a discriminator. ⇒ **nothing is wrong today and never has been: live has never been enabled, so no live row exists to mix.** Latent, Phase-21-triggered, exactly as #618 says.
+
+**★★ FOURTH — NEW MATERIAL, AND IT WIDENS STEP F. `closed_trades` IS NOT THE ONLY TABLE.**
+| site | mode-aware? |
+|---|---|
+| `active_open_positions` (4 rows) | **NO discriminator** — `trade_mode` is `'TARGET'` here too |
+| `getActiveOpenPositions(mode)` | **accepts `mode`, applies NO predicate** |
+| `deleteActiveOpenPosition(mode, id)` | ignores `mode` |
+| **`deleteAllActiveOpenPositions(mode)`** | ⚠️ **deletes EVERY row regardless of mode** |
+| **`deleteAllClosedTrades(mode)`** | ⚠️ **deletes EVERY row regardless of mode** |
+| `deleteAllActiveTradeLogs(mode)` | ⚠️ same |
+★ **The reset family is the sharper half and I had not looked at it.** A "reset paper" in Phase 21 would **wipe live history**, and vice versa. **Destructive rather than mis-reported — the only part of this that could LOSE data instead of misstating it.** ⇒ **Step F must cover `active_open_positions` and the reset family, not just `closed_trades`.**
+
+**FIFTH — WHY "mode-based only" SITS ON QUERIES THAT FILTER BY NOTHING.** `SYSTEM_MANUAL.md:5170`: *"Global scope — Phase 27.F.15.A: **no userId filtering** for trades (mode-based only)."* It meant *scoped by MODE rather than by USER* — recording the removal of the multi-user model. **The user half shipped; the mode half never did, because only paper existed to scope.** The comment has described an intention as a mechanism ever since — the same shape as the `net_pnl` schema comment I was caught on earlier today.
+
+**IS THE RETROACTIVE FIX EASY? YES.** One INSERT site per table, a backfill constant proven by *"live has never been enabled"*, and a writer that **already receives the mode and discards it**. **No historical reconstruction is needed: every existing row is paper by necessity, not by inference.**
