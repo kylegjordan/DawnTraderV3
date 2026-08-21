@@ -11,24 +11,12 @@
 > **If BLOCKED-ON says Kyle, say NOTHING and do not work the item.** Otherwise continue to the next step and report only at the step boundary, in the `CONDUCT.md` §6 format.
 > ⚠️ **UPDATE THESE FOUR LINES AT EVERY STEP BOUNDARY.** They were left stale for weeks and Kyle found it before I did.
 
-- **BATCH:** B-RULES-1c (rules extraction) + **B-RULES-1d** (skills) — the `CLAUDE.md` SLIM. B-MISTAKES-FILE CLOSED (`40abd41a5`).
-- **STEP:** preconditions. **1d §5(a) DISCHARGED NEGATIVE** (`69d79ea47`): a parent skill's reference to a child **DOES NOT RESOLVE** — parent body only, child marker absent, control passed. **1c GATE 2 still PENDING.**
-- **BLOCKED-ON:** nobody. **★★ RUN THE COMPACTION TEST FIRST — see the block immediately below.**
-- **NEXT:** compaction test → then build the workflow skill in the **flat-or-indexed** shape (parent/child is refuted), starting from `1-system-manual/_pending-skills/bug-investigation-SOURCE.md`.
-
-# ⛔⛔ FIRST ACTION AFTER THIS COMPACTION — B-RULES-1c GATE 2. DO THIS BEFORE ANYTHING ELSE.
-
-**Kyle flagged the imminent auto-compact as the chance to run it. The whole `CLAUDE.md` slim is gated on it.**
-
-**THE TEST — one Read, nothing else:**
-> **Read `Claude Comms and Packages/Scope Files/B_RULES_1C_PROBE_TARGET.md`.**
-> **PASS** = the marker **`XQ7-COMPACTION-CONTROL-9F42-DAWNTRADER`** appears in context (injected from `.claude/rules/probe-1c-compaction.md`, scoped `paths: ["**/B_RULES_1C_PROBE_TARGET.md"]`).
-> **FAIL** = it does not.
-
-⛔ **LANGSTON'S CONSEQUENCE, VERBATIM, AND IT IS WHY THIS GATE EXISTS:** *"if the marker FAILS to reload on a matching post-compaction read, backstop-gated-ness is not RELAXED — it is INSUFFICIENT, and EVERY MOVER COMES BACK."* ⇒ **on FAIL, `.claude/rules/` is not a viable home for any rule and 1c is refuted, not adjusted.**
-
-⚠️ **ALREADY BANKED, DO NOT RE-RUN AND DO NOT CONFLATE:** ordinary probe PASSED (marker present on a matching read, absent on a non-matching one) and **RESUME-survival PASSED**. ★ **A RESUME IS NOT A COMPACTION** — the harness logs `SessionStart:resume` and `SessionStart:compact` separately. **Only a `compact` boundary discharges GATE 2.**
-**On PASS:** record in `B_RULES_1C_SCOPE.md` §5.1 (the table has the row waiting), delete the probe pair (`.claude/rules/probe-1c-compaction.md` + the target file — both are labelled for deletion), and the slim is unblocked.
+- **BATCH:** B-RULES-1c + **B-RULES-1d** — the `CLAUDE.md` SLIM.
+- **STEP:** **1c GATE 2 DISCHARGED PASS** (`7bbb2d1c0` / pushed `0b61e6a39`) — real `SessionStart:compact` 2026-08-21T11:28, marker re-injected on the matching read. Langston's every-mover-comes-back consequence does NOT fire; the slim is UNBLOCKED. Probe pair deleted. **1d §5(a) DISCHARGED NEGATIVE** (`69d79ea47`): parent skill -> child skill does NOT resolve; the shape is skill -> FILE.
+- **BUILT AND PUSHED:** `CLAUDE.md` **§0.a** (Kyle's loud behavioural pointer, 0.5% into the file, step NAMES only, -> `/workflow`) + **`.claude/skills/workflow/`** — `SKILL.md` index 3,505 B + **11 step files, 16,384 B**, all 11 pointers verified resolving.
+- **BLOCKED-ON:** nobody. **NEXT: dispatch the §0.a + workflow-skill shape to Langston** (it materially changes what he approved in 1d), then the actual CLAUDE.md slim, then 1c/1d governance + completion reports.
+- ⛔ **LANGSTON'S BINDING CONDITION ON THE SLIM:** r15 / r18 / §9.4 are now **SINGLE-HOMED**. The slim MAY convert them to a mechanism or a skill; it may **NOT drop or demote them without a named replacement landing in the SAME commit.**
+- **MINE AND UNDISCHARGED:** alert `9c3037f0` (run-log liveness) — rule-21 removal is gated behind it. #732 deprioritised by Kyle with a tripwire on the weekly pass (`8a07c40b`, fires 2026-08-27T09:00Z).
 
 # ★ KYLE 2026-08-21 — TWO STANDING ITEMS
 1. **THE WORKFLOW STEP IS RENAMED: "PRE-IMPLEMENTATION AUDIT" → "PRE-IMPLEMENTATION AUDIT AND IMPLEMENTATION PLAN".** Piece (5) merged the two into ONE step/ONE document and Langston ADOPTED it; **the STEP NAME in `CLAUDE.md` §2 must follow.** Check it is renamed everywhere, not just in the piece-(5) record.
