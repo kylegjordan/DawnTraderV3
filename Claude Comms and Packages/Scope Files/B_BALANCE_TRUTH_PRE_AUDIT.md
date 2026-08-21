@@ -155,3 +155,32 @@
 ⇒ **CONSEQUENCE FOR STEP C's REMAINING SITES:** using `getRealizedPnlTotal` here would have removed the cap **and silently changed the population**, and the resulting number would have looked like "the fix working" while two things moved at once. **This site needs its own aggregate carrying the ghost predicate**, or an explicit ruling that the ghost filter is redundant against `exit_price`/`close_reason` at the SQL level — **not assumed either way.**
 ⚠️ **AND IT IS ALSO A `netPnl ?? pnl` READER** — the basis Langston's condition 2 says must not move alone. So this site carries BOTH open questions and is the last one to convert, not the first.
 
+
+---
+
+## PART 7 — STEP F PLAN (2026-08-21): the `closed_trades` paper/live column. **DISPATCHED FOR LANGSTON SIGN-OFF BEFORE IMPLEMENTATION — this is a schema change on a live table with a backfill, and it is the one step in this batch where getting it wrong writes something permanent.**
+
+**KYLE'S SETTLED DECISION (2026-08-01), leg 2:** add a paper/live column to `closed_trades`, backfill it, and make the `mode` argument real.
+
+**WHY IT IS NEEDED — the defect, stated precisely.** `getClosedTrades(mode, …)` **accepts a `mode` argument and never uses it.** No mode predicate reaches the SQL. The same is true of `getRealizedPnlTotal`, `getRealizedPnlSince`, `getDailyRealizedPnlSince`, `getRecentClosedPnls`, `getPortfolioMetricComponents` and `getClosedTradesCount` — every one of them takes `mode` and every one of them ignores it. ⚠️ **It is not merely unused, it is STRUCTURALLY UNUSABLE: `closed_trades` has no paper/live discriminator column at all.** Safe today only because live has never run; **the moment live mode opens one trade, every paper figure on the dashboard silently starts including live trades, and every live figure includes paper ones.** That is a Phase-21 correctness precondition, not a tidy-up.
+
+**★ THE BACKFILL CONSTANT — VERIFIED ON THE DAY, WITH PRESENCE-EVIDENCE (rule 22), because a backfill onto an unverified constant writes a permanent error:**
+| measurement | result |
+|---|---|
+| `active_engine_sessions` grouped by mode | **`paper` ONLY — 161 sessions, 2025-12-08 → 2026-07-16. ZERO `live` rows, ever.** |
+| instrument reach (does it find sessions when they exist?) | **yes — it returned 161** |
+| `trade_mode` distinct values over all 581 rows | **`TARGET` on all 581** — an exit-type field, NOT a mode discriminator |
+| `chosen_entry_mode` / `exit_fee_mode` | maker/taker/null — order-side fields, not modes |
+⇒ **every existing row is a paper trade. The backfill value is `'paper'` for all 581, and that is measured rather than assumed.**
+
+**THE THREE DESIGN CALLS I WANT RULED BEFORE I WRITE ANYTHING:**
+
+**(1) `NOT NULL` with a DEFAULT, or without?** A `DEFAULT 'paper'` makes the migration trivially safe today — and lays a trap for Phase 21, because a live writer that forgets to set the column silently records a live trade as paper. **That is the fail-open shape this project keeps paying for.** No default forces every writer to say which mode it is, and makes a missed writer a loud insert failure rather than a silent mislabel. **My recommendation: `NOT NULL`, NO default** — but it requires every writer updated in the same batch, so the census below has to be exhaustive first.
+
+**(2) One migration or two?** Adding a column, backfilling, and applying `NOT NULL` in one migration is atomic but fails hard if any writer was missed. Splitting (nullable → backfill → writers → `NOT NULL`) is safer but leaves a window where a NULL can be written and nothing complains. **My recommendation: one migration, gated on the writer census being complete and a fence proving zero NULLs.**
+
+**(3) Do the readers start filtering in the SAME step?** Adding the predicate changes NOTHING today — all rows are paper and every caller asks for paper. **So it is verifiable as a no-op now and becomes load-bearing later, which is the ideal time to ship it.** The alternative — column now, predicate at Phase 21 — means the predicate lands when it *does* change numbers and nobody can tell a correct change from a regression. **My recommendation: filter in this step, precisely because it is provably inert today.**
+
+**WHAT MUST BE DONE BEFORE ANY OF IT — the §9.5(a) writer census.** Enumerate every site that INSERTs into `closed_trades`, repo-wide, tests excluded, and state the list. A missed writer is the failure mode for all three calls above. **Not yet done — it gates the implementation, and I will not write the migration until it is.**
+
+**FENCES this step must ship:** (a) zero NULL modes in `closed_trades`; (b) the reader's mode predicate actually reaches SQL — asserted by querying with each mode and proving the populations differ once a live row exists, or, while none does, by asserting the generated SQL carries the predicate. **(b) is the one that matters: a `mode` argument that silently does nothing is exactly what this step exists to delete, and shipping a new one that also does nothing would be the same defect wearing a fix's clothes.**
