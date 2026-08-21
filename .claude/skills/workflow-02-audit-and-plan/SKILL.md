@@ -22,6 +22,33 @@ description: STEP 2 ONLY of the DawnTrader batch workflow - the Pre-Implementati
 4. Write the plan, each item pointing back at its finding.
 5. End with the **plain-language summary**: here is what the audit turned up, here is the plan.
 
+## ⛔⛔ THE SIX SOURCES — YOU READ ALL SIX THAT APPLY, AND YOU NAME WHICH YOU READ
+> ★ **Kyle, 2026-08-21, on why this is written out as a list instead of "be thorough": these are the things he finds himself repeating every time.** A rule he has to repeat is a rule that is not written down where it fires. **Now it is.**
+> ⛔ **THE STANDARD IS NOT "I LOOKED." It is: you understand what the thing DOES, what FLOWS INTO IT, what FLOWS OUT OF IT, and WHAT IT WAS BUILT TO DO — before you propose changing, adding to, or removing anything from it.** A plan written without that is a guess wearing a plan's formatting.
+
+| # | source | what it answers | ⛔ |
+|---|---|---|---|
+| 1 | **The actual CODE**, read at `origin/migration/aws-supabase` | what it really does *now* | **Read the file. Not grep, not inference, not memory.** Quote `path:line` from the ref, never from your working tree. |
+| 2 | **The RUNTIME LOGS** (`/var/log/dawntrader/out.log`, PM2) + the **DATABASE** | what it does when it *runs* — which is regularly not what the code appears to say | A behaviour you have not observed is a hypothesis. |
+| 3 | **`SYSTEM_IMPACT_MAP.md`** — per component | upstream feeders, downstream consumers, shared state, background execution, blast radius | **Non-negotiable. Skipping the SIM review is how cascade bugs get through.** |
+| 4 | **`SYSTEM_MANUAL.md`** | the architectural + mathematical truth it is *supposed* to implement | Scope contradicts it ⇒ one of them is wrong, **flag it**. Silent on something you touch ⇒ **that silence is itself a governance gap, flag it.** |
+| 5 | **THE BATCH REPORTS + THE LEDGER** — `BATCH_CATALOG.md`, `RUNNING_ISSUES.md`, the completion reports | whether this was already decided, already known, or already fixed | **§9.5(b-ii). See the block below — this one is not optional and it was missing from this step.** |
+| 6 | **`bridge/canonical/`** — the pre-governance corpus | **what it was BUILT to do, and why** | **§9.5(b). Required for anything disputed, surprising, or predating the 2026-01/02 governance change.** NOT current-state truth — the architecture has changed completely; its value is the INTENT. |
+
+## ⛔ 5 — SEARCH THE LEDGER BEFORE YOU FILE ANYTHING AS A FINDING (§9.5(b-ii))
+Grep `RUNNING_ISSUES.md` + `BATCH_CATALOG.md` + the completion reports **for the component AND for the symbol** before recording any behaviour as a defect.
+**A deliberate, Kyle-approved, Langston-reviewed decision reported as a defect is WORSE than no finding** — it burns review cycles and impugns work that was done correctly.
+★ **AND WHEN THE CODE COMMENT NAMES ITS OWN PROVENANCE — a batch id, an issue number, "Langston-approved" — FOLLOW IT. Do not read it and move on.** *(Origin: an audit reported shadowed gates as a discovery; the comment beside them cited a three-day-old Langston-approved decision. Kyle caught it from memory.)*
+A finding that survives this check is real. One that does not becomes a **cross-reference**, and any new insight is recorded **ON the existing issue**, not as a fresh one.
+
+## ⛔ 6 — THE PROVENANCE READ (§9.5(b)) — ORIGINAL INTENT, NOT JUST CURRENT STATE
+⚠️ **THIS OBLIGATION LIVED ONLY IN STEP 1 UNTIL 2026-08-21 — which meant that by the time a session was actually DECIDING HOW TO CHANGE something, it was no longer in front of them.** That is the moment it matters most.
+For any component whose behaviour is **disputed, surprising, or older than the 2026-01/02 governance change**, do both:
+- **`bridge/canonical/`** — the architecture/execution-flow, current-state-reference, project-history, invariants and phase-history documents. **Kyle's framing: these record the system we INTENDED to build then. The purpose is unchanged; the architecture has completely changed — so they are NEVER cited as current truth. Their value is WHY something was built the way it was.**
+- **Git archaeology of the origin** — `git log -S "<symbol>" --reverse`, then **READ the introducing commit's message**, its attached directive or spec (Replit-era commits often attach it under `attached_assets/`), and **what it deleted.**
+
+**RECORDING RULE:** state what the provenance read found — **including "consulted `bridge/canonical/`, no coverage of this component", which is itself a finding.** *(The canonical corpus documented only ONE of the two RTB refresh mechanisms — which is exactly how a seven-month dual-execution bug survived two audits.)*
+
 ## ⛔ §9.5(a) — COMPONENT CENSUS AT EVERY HOP, NOT A PATH TRACE
 An end-to-end trace is **satisfied by the first sufficient explanation at each hop** — it never asks "is there a SECOND thing doing this?" That is how a dual mechanism ran for seven months through two audits. At each component ask, repo-wide grep, tests excluded:
 | question | why |
