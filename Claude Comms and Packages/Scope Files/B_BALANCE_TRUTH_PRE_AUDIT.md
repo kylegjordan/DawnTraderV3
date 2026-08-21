@@ -184,3 +184,16 @@
 **WHAT MUST BE DONE BEFORE ANY OF IT — the §9.5(a) writer census.** Enumerate every site that INSERTs into `closed_trades`, repo-wide, tests excluded, and state the list. A missed writer is the failure mode for all three calls above. **Not yet done — it gates the implementation, and I will not write the migration until it is.**
 
 **FENCES this step must ship:** (a) zero NULL modes in `closed_trades`; (b) the reader's mode predicate actually reaches SQL — asserted by querying with each mode and proving the populations differ once a live row exists, or, while none does, by asserting the generated SQL carries the predicate. **(b) is the one that matters: a `mode` argument that silently does nothing is exactly what this step exists to delete, and shipping a new one that also does nothing would be the same defect wearing a fix's clothes.**
+
+### PART 7a — THE §9.5(a) WRITER CENSUS: DONE, and it strengthens the recommendations above
+
+Repo-wide over `server/` and `shared/`, tests excluded:
+| finding | detail |
+|---|---|
+| **physical INSERT sites** | **EXACTLY ONE — `storage.ts:3094`**, inside `createClosedTrade(mode, trade)` |
+| **callers of that wrapper** | **THREE, all already passing a correct mode** — `routes.ts:12894` (`'paper'`), `routes.ts:12975` (`'paper'`), `active-execution-engine.ts:3358` (`this.mode`) |
+| ★ **the shape of the bug** | **`createClosedTrade` ALREADY RECEIVES `mode` AND THROWS IT AWAY.** `:3093` builds `normalizedTrade = { ...trade, symbol: canonicalSymbol }` and never stamps the parameter it was handed. |
+
+⇒ **the write side is a ONE-LINE fix at a single choke point, and every caller already supplies the right value.** That materially strengthens design call (1): *"every writer must state its mode"* costs one line rather than a sweep, so **the safe-by-construction option (`NOT NULL`, no default) is also the cheap one** — the usual tension between the two does not arise here.
+
+⚠️ **Asserted absence, with the instrument named (rule 22):** the INSERT census matched on `insert(closedTradesTable)`, `insert(closedTrades)` and raw `INSERT INTO closed_trades`, and separately on the wrapper names `createClosedTrade` / `addClosedTrade` / `recordClosedTrade`. The wrapper search returned the three real callers, so **the instrument demonstrably finds callers when they exist** — the single-INSERT result is a measurement, not a blind read. ★ **And it searched `this.`-qualified forms too**, which is the correction #734's blocker forced on me the same day.
