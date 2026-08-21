@@ -1669,6 +1669,15 @@ export const historicSignals = pgTable("historic_signals", {
 
 // Paper Trades - Historical record of closed simulated trades - GLOBAL
 export const closedTradesTable = pgTable("closed_trades", {
+  // B-BALANCE-TRUTH Step F (#618), Kyle 2026-08-01: "add the column, backfill it, and
+  // make the argument actually do its job." RESTORES a house convention rather than
+  // inventing one -- 44 of the 159 tables here already carry this exact column and type;
+  // closed_trades, active_open_positions and active_trade_logs were the only three
+  // without it, all three being active-trading tables built after the convention settled.
+  // NOT NULL with NO DEFAULT, deliberately: a default would let a live writer that forgot
+  // the column silently record a live trade as paper. There is exactly one INSERT site and
+  // it already receives the mode, so a missed writer fails loudly instead of mislabelling.
+  mode: tradingModeEnum("mode").notNull(),
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   symbol: varchar("symbol", { length: 20 }).notNull(),
   // B65 (2026-04-23): baseCurrency + exchange + assetClass for per-underlying

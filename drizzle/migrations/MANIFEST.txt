@@ -191,3 +191,4 @@
 2026-08-17-p19-b-perpfeed-tables-and-retention.sql
 2026-08-20-perpfeed-closeout-drop-feature-snapshots.sql
 2026-08-20-perpfeed-crypto-perp-unique-constraint.sql
+2026-08-21-b-balance-truth-closed-trades-mode.sql

@@ -517,7 +517,9 @@ export interface IStorage {
 
   // Paper simulation methods (Milestone 18) - Phase 27.F.15.B.2: Global per mode with explicit mode parameter
   // Paper trades
-  createClosedTrade(mode: TradingMode, trade: InsertClosedTrade): Promise<ClosedTrade>;
+  // Step F (#618): the payload OMITS `mode` -- it comes from the explicit first argument,
+  // so the mode is stated exactly once and no caller can pass one that contradicts it.
+  createClosedTrade(mode: TradingMode, trade: Omit<InsertClosedTrade, 'mode'>): Promise<ClosedTrade>;
   updateClosedTrade(mode: TradingMode, id: string, updates: Partial<ClosedTrade>): Promise<ClosedTrade>;
   getClosedTrade(mode: TradingMode, id: string): Promise<ClosedTrade | undefined>;
   getClosedTrades(mode: TradingMode, filters: { limit: number | 'all'; closedOnly?: boolean; includeNeverFilled?: boolean }): Promise<ClosedTrade[]>;
@@ -3102,13 +3104,18 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Paper simulation methods (Milestone 18)
-  async createClosedTrade(mode: TradingMode, trade: InsertClosedTrade): Promise<ClosedTrade> {
+  async createClosedTrade(mode: TradingMode, trade: Omit<InsertClosedTrade, 'mode'>): Promise<ClosedTrade> {
     // [I8C-SYMBOL-NORM] Normalize symbol to canonical BASE/QUOTE format
     const canonicalSymbol = normalizeToInternalSymbol(trade.symbol);
     if (trade.symbol !== canonicalSymbol) {
       console.log(`[I8C-SYMBOL-NORM] raw=${trade.symbol} canonical=${canonicalSymbol}`);
     }
-    const normalizedTrade = { ...trade, symbol: canonicalSymbol };
+    // B-BALANCE-TRUTH Step F (#618): STAMP THE MODE. This function has always RECEIVED
+    // `mode` and thrown it away -- threaded correctly all the way here, then dropped on the
+    // floor, which is why seven readers could accept a mode and none could filter on one.
+    // This is the SINGLE physical INSERT into closed_trades (census 2026-08-21: one site,
+    // three callers, all already passing a correct mode).
+    const normalizedTrade = { ...trade, symbol: canonicalSymbol, mode };
     const [result] = await db.insert(closedTradesTable).values(normalizedTrade).returning();
     return result;
   }
@@ -3180,7 +3187,12 @@ export class DatabaseStorage implements IStorage {
     const unbounded = limit === 'all';
     const closedOnly = filters.closedOnly ?? false;
 
-    const conditions = [];
+    // Step F (#618): the mode predicate is REAL now, and it SEEDS the list rather than being
+    // appended conditionally -- so no future flag can skip it. Verifiable as a NO-OP today
+    // (every row is paper, every caller asks for paper), which is exactly why it lands now
+    // rather than at Phase 21, when it would start moving numbers and nobody could tell a
+    // correct change from a regression.
+    const conditions: any[] = [eq(closedTradesTable.mode, mode)];
     if (closedOnly) {
       conditions.push(sql`${closedTradesTable.closedAt} IS NOT NULL` as any);
     }
@@ -3205,6 +3217,9 @@ export class DatabaseStorage implements IStorage {
 
     const q2 = db.select()
       .from(closedTradesTable)
+      // Carries the predicate too: `conditions` always holds the mode now, so this branch is
+      // unreachable -- but an UNFILTERED fallback is exactly how a mode-blind read creeps back.
+      .where(eq(closedTradesTable.mode, mode))
       .orderBy(desc(closedTradesTable.openedAt));
     const rows2 = unbounded ? await q2 : await q2.limit(limit as number);
     if (unbounded) logUnboundedRead(rows2.length);
@@ -3248,6 +3263,7 @@ export class DatabaseStorage implements IStorage {
         sql`${closedTradesTable.closedAt} IS NOT NULL` as any,
         sql`${closedTradesTable.closedAt} >= ${since}` as any,
         sql`${closedTradesTable.closeReason} IS DISTINCT FROM 'never_filled'` as any,
+        eq(closedTradesTable.mode, mode), // Step F (#618): the mode argument is real now
       ));
     return {
       realizedPnl: parseFloat(String(row?.realizedPnl ?? '0')) || 0,
@@ -3298,6 +3314,7 @@ export class DatabaseStorage implements IStorage {
    */
   async getClosedTradesCount(mode: TradingMode, opts?: { closedOnly?: boolean }): Promise<number> {
     const conditions = [
+      eq(closedTradesTable.mode, mode), // Step F (#618): the mode argument is real now
       sql`${closedTradesTable.closeReason} IS DISTINCT FROM 'never_filled'` as any,
     ];
     if (opts?.closedOnly) {
@@ -3341,6 +3358,7 @@ export class DatabaseStorage implements IStorage {
       WITH q AS (
         SELECT * FROM closed_trades
          WHERE closed_at IS NOT NULL AND close_reason IS DISTINCT FROM 'never_filled'
+           AND mode = ${mode}
       ),
       r AS (SELECT closed_at, SUM(pnl::numeric) OVER (ORDER BY closed_at) AS run FROM q),
       p AS (SELECT run, GREATEST(MAX(run) OVER (ORDER BY closed_at), 0) AS peak FROM r)
@@ -3377,6 +3395,7 @@ export class DatabaseStorage implements IStorage {
       .where(and(
         sql`${closedTradesTable.closedAt} IS NOT NULL` as any,
         sql`${closedTradesTable.closeReason} IS DISTINCT FROM 'never_filled'` as any,
+        eq(closedTradesTable.mode, mode), // Step F (#618): the mode argument is real now
       ));
     return {
       realizedPnl: parseFloat(String(row?.realizedPnl ?? '0')) || 0,
@@ -3408,6 +3427,7 @@ export class DatabaseStorage implements IStorage {
         sql`${closedTradesTable.closedAt} IS NOT NULL` as any,
         sql`${closedTradesTable.closedAt} >= ${since}` as any,
         sql`${closedTradesTable.closeReason} IS DISTINCT FROM 'never_filled'` as any,
+        eq(closedTradesTable.mode, mode), // Step F (#618): the mode argument is real now
       ))
       .groupBy(sql`to_char(${closedTradesTable.closedAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD')`)
       .orderBy(sql`to_char(${closedTradesTable.closedAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD')`);
@@ -3426,6 +3446,7 @@ export class DatabaseStorage implements IStorage {
       .where(and(
         sql`${closedTradesTable.closedAt} IS NOT NULL` as any,
         sql`${closedTradesTable.closeReason} IS DISTINCT FROM 'never_filled'` as any,
+        eq(closedTradesTable.mode, mode), // Step F (#618): the mode argument is real now
       ))
       .orderBy(desc(closedTradesTable.closedAt))
       .limit(n);
