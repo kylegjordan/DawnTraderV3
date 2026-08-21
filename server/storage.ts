@@ -3739,9 +3739,18 @@ export class DatabaseStorage implements IStorage {
       totalPnl: number;
     }>;
   }> {
-    // Phase 27.F.15.B.2: Global query, mode-based only
+    // Step F (#618): the 27.F.15.B.2 comment above USED to say "mode-based only" over a query
+    // with no mode filter at all -- it recorded the removal of userId scoping and described the
+    // mode half as though it had been built. It had not, because only paper existed to scope.
+    // ★ THIS READER WAS FOUND BY THE PARTITION FENCE, NOT BY MY CENSUS -- the tenth of ten, and
+    // the third the fence caught after I had reported the census complete at seven.
     const trades = await db.select()
-      .from(closedTradesTable);
+      .from(closedTradesTable)
+      .where(eq(closedTradesTable.mode, mode));
+
+    // ⚠️ THE OPEN-POSITIONS HALF CANNOT BE SCOPED YET: active_open_positions has no mode column.
+    // That is Step G, and it is the dependency that forced G to follow F rather than merge with
+    // it -- a delete or a filter cannot reference a column that does not exist.
 
     const openPositions = await db.select()
       .from(activeOpenPositions);
