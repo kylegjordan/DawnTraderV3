@@ -68,10 +68,17 @@ Precondition met (version stated with its source) · each moved passage findable
 | **NEGATIVE — read a NON-matching file** (`MISTAKE_PATTERNS.md`) | ✅ **marker ABSENT** — scoping is real, not "everything loads" |
 | **POSITIVE — read the MATCHING file** | ✅ **marker PRESENT**, rule body injected in full |
 | ✅ **read a matching file after a SESSION RESUME** (2026-08-21) | ✅ **marker PRESENT** — the rule survives a context reload and re-injects on the next matching read |
-| ⛔ **GATE 2 — read a matching file after a COMPACTION** | ⏳ **STILL PENDING. NOT CLAIMED.** |
+| ✅✅ **GATE 2 — read a matching file after a REAL COMPACTION** (2026-08-21T11:28Z) | ✅ **MARKER PRESENT. GATE 2 DISCHARGED.** |
 
 ★ **BONUS FINDING, MEASURED NOT ASSUMED: `.claude/rules/*.md` IS PICKED UP WITHOUT A RESTART.** The rule file was created **during this session** and loaded on the very next matching read. ⇒ **the "hooks load at session start, so a fresh hook is live from the NEXT session" property (`CLAUDE.md` r22) does NOT generalise to `rules/`.** Two different mechanisms; do not reason from one to the other.
 ⚠️ **THE NEGATIVE LEG HAD A CONFOUND AND IT IS NAMED: an absent marker could equally have meant "rules are not loaded at all yet" rather than "scoping excluded it."** The positive leg is what disambiguates — it fired in the same session on the same freshly-created file. **Run in that order or the negative proves nothing.**
+
+## ✅✅ GATE 2 DISCHARGED 2026-08-21 — **PATH-SCOPED RULES SURVIVE A COMPACTION. THE SLIM IS UNBLOCKED.**
+
+**THE BOUNDARY WAS A REAL COMPACTION, VERIFIED IN THE TRANSCRIPT RECORD, NOT ASSUMED:** my session log carries `SessionStart:compact` at **2026-08-21T11:28** (and this session has logged `resume` boundaries separately, so the two are distinguishable and were distinguished). **Reading the matching target after it re-injected `XQ7-COMPACTION-CONTROL-9F42-DAWNTRADER` in full.**
+⇒ ★★ **LANGSTON'S CONSEQUENCE DOES NOT FIRE.** His condition was *"if the marker FAILS to reload on a matching post-compaction read, backstop-gated-ness is INSUFFICIENT and EVERY MOVER COMES BACK."* **It did not fail. The compaction-reload property is now MEASURED, not docs-says, and §3.5's ordering gate is satisfied.**
+⚠️ **SCOPE OF THE CLAIM, STATED:** this proves the rule re-injects **on a matching read after a compaction**. It does NOT prove anything about rules whose trigger never fires — **an unread path means an unloaded rule, which is the mechanism working as designed, not a defect.**
+⛔ **AND KYLE'S OWN OBJECTION STILL STANDS AND IS NOT ANSWERED BY THIS PASS:** a path-scoped rule fires on ANY read of a matching file, including investigative reading. **⇒ path-scoping is proven RELIABLE but is the WRONG TRIGGER for workflow steps.** The gate is discharged; the design question it was blocking is decided separately.
 
 ⚠️ **A RESUME IS NOT A COMPACTION, AND I AM NOT TREATING IT AS ONE.** The 2026-08-21 boundary logged `SessionStart:resume`, and this session has separately logged `SessionStart:compact` on other boundaries — **the harness distinguishes them, so I will too.** A resume reloads the session; a compaction REWRITES the context, which is the case GATE 2 was written about. ⇒ **resume-survival is real evidence and the closest analogue yet, but it does NOT discharge GATE 2.**
 

@@ -4,6 +4,18 @@
 
 ---
 
+## 0.a ⛔⛔ THE WORKFLOW — **READ THE SKILL BEFORE YOU DO THE STEP. EVERY TIME.**
+
+> ★★ **IF YOU ARE ABOUT TO WORK ANY STEP BELOW, LOAD `/workflow` FIRST AND READ THAT STEP'S SECTION.** Not from memory. Not from this list — **this list is only the NAMES.**
+
+**1** Planning + Scope · **2** Pre-Implementation Audit AND Implementation Plan · **3** Implementation · **4** Code Review (Langston, at the graded ref) · **5** GitHub Push + CI · **6** Staging Deploy · **7** First-Pass Verification · **8** Second-Pass Verification (Langston) · **9** Iterate · **10** Governance Updates · **11** Completion Report
+
+⚠️ **WHY THIS IS SHOUTED RATHER THAN AUTOMATED, stated honestly so nobody mistakes it for a mechanism (Kyle 2026-08-21):** auto-invocation of skills is **measured-unreliable** — Anthropic has **five-plus open issues** on it (#30387, #20986, #12679, #15136, community #182117), and the reported failure rate is worst **precisely** for skills that overlap trained behaviour, which is every step above. **So this pointer is BEHAVIOURAL, and it is deliberately the loudest thing in the file after the mission.** Kyle's instruction verbatim: *"make it short, brief, but very loud… I know that's not automatic, but it's behavioral."*
+**Two layers, neither sufficient alone:** ⑴ **this pointer** — you read it every session, and it names the trigger; ⑵ **the `/workflow` skill's own description**, so the model may also self-invoke. **Belt and braces, because each leg is known to leak.**
+⛔ **Full step detail lives ONLY in the skill.** Do not re-state a step here — two copies is the #641 shape, and the copy that loads always wins.
+
+---
+
 ## 0. Mission (read first, every session)
 
 Grow the portfolio as much and as fast as possible, trading fully autonomously, **without ever compromising the risk tolerance Kyle has set.** The risk limits — kill-switch, daily-loss budget, position sizing, concurrency caps, EV/Net-Expectancy gating — are HARD boundaries that bound growth, never dials to loosen; **if growth and risk tolerance conflict, risk tolerance wins.** The edge is **selection, not frequency**: pick and size the single best signal from the ready-to-buy pool each cycle (honest ranking + EV gating + evidence-based calibration). **Pick right, size right, stay inside the risk envelope, compound.** (Full original framing: history doc §0.)
