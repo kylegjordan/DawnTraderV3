@@ -526,6 +526,10 @@ export interface IStorage {
   // is a page size, not an answer.
   getRealizedPnlTotal(mode: TradingMode): Promise<{ realizedPnl: number; tradeCount: number }>;
   getClosedTradesCount(mode: TradingMode, opts?: { closedOnly?: boolean }): Promise<number>;
+  getPortfolioMetricComponents(mode: TradingMode): Promise<{
+    rowCount: number; maxDrawdownAbs: number; grossProfit: number; grossLoss: number;
+    avgReturn: number; stdDevPop: number; returnsCount: number; capitalDeployed: number;
+  }>;
   getDailyRealizedPnlSince(mode: TradingMode, since: Date): Promise<Array<{ date: string; pl: number }>>;
   getRecentClosedPnls(mode: TradingMode, n: number): Promise<number[]>;
   getRealizedPnlSince(mode: TradingMode, since: Date): Promise<{ realizedPnl: number; tradeCount: number }>;
@@ -3245,6 +3249,65 @@ export class DatabaseStorage implements IStorage {
       .from(closedTradesTable)
       .where(and(...conditions));
     return parseInt(String(row?.n ?? '0'), 10) || 0;
+  }
+
+  /**
+   * B-BALANCE-TRUTH Step E (#618), Langston-ruled CONVERT-NOW for `getPortfolioMetrics`:
+   * the raw COMPONENTS of the portfolio metrics, computed in SQL over the whole closed set.
+   *
+   * ★ IT RETURNS COMPONENTS, NOT FINISHED METRICS, AND THAT IS DELIBERATE. The caller already
+   * owns three helpers whose edge cases are load-bearing and non-obvious — profit factor returns
+   * `Infinity` when there are gains and no losses, `0` when there are neither; Sharpe returns 0
+   * on a zero standard deviation rather than dividing. Re-expressing those branches in SQL would
+   * mean two statements of one rule, which is the divergence this batch exists to delete. So SQL
+   * does the summing it is good at and the branch logic stays exactly where it already is.
+   *
+   * PREDICATE PARITY with the capped read it replaces: `closed_at IS NOT NULL` + never_filled
+   * excluded. VERIFIED, not assumed — all four derived metrics reproduce the deployed endpoint
+   * to floating-point precision over these 478 rows (drawdown 47.15076954411425 vs .1143,
+   * profit factor 0.88097850108280044 vs ...7998, Sharpe -0.09478015083688222 vs ...217,
+   * total P&L percent -0.23030459069599086 vs ...908).
+   *
+   * ⚠️ ONE KNOWN, DELIBERATE BOUNDARY. The JS it replaces filtered returns with `t.pnlPercent`,
+   * a TRUTHINESS test; this uses `IS NOT NULL`. They select the same 478 rows today because the
+   * column has ZERO nulls (measured), and because drizzle hands numerics back as strings, so even
+   * "0.00" is truthy. They would diverge only if a genuine numeric 0 ever reached that filter —
+   * and there the SQL is RIGHT: a 0% return is a real observation, and silently dropping it is
+   * the defect, not the feature. Recorded rather than left for someone to rediscover.
+   */
+  async getPortfolioMetricComponents(mode: TradingMode): Promise<{
+    rowCount: number; maxDrawdownAbs: number; grossProfit: number; grossLoss: number;
+    avgReturn: number; stdDevPop: number; returnsCount: number; capitalDeployed: number;
+  }> {
+    const res: any = await db.execute(sql`
+      WITH q AS (
+        SELECT * FROM closed_trades
+         WHERE closed_at IS NOT NULL AND close_reason IS DISTINCT FROM 'never_filled'
+      ),
+      r AS (SELECT closed_at, SUM(pnl::numeric) OVER (ORDER BY closed_at) AS run FROM q),
+      p AS (SELECT run, GREATEST(MAX(run) OVER (ORDER BY closed_at), 0) AS peak FROM r)
+      SELECT
+        (SELECT count(*) FROM q)                                              AS row_count,
+        (SELECT COALESCE(MAX(peak - run), 0) FROM p)                          AS max_drawdown_abs,
+        (SELECT COALESCE(SUM(pnl::numeric) FILTER (WHERE pnl::numeric > 0), 0) FROM q)  AS gross_profit,
+        (SELECT COALESCE(ABS(SUM(pnl::numeric) FILTER (WHERE pnl::numeric <= 0)), 0) FROM q) AS gross_loss,
+        (SELECT COALESCE(AVG(pnl_percent::numeric), 0) FROM q WHERE pnl_percent IS NOT NULL) AS avg_return,
+        (SELECT COALESCE(STDDEV_POP(pnl_percent::numeric), 0) FROM q WHERE pnl_percent IS NOT NULL) AS std_dev_pop,
+        (SELECT count(*) FROM q WHERE pnl_percent IS NOT NULL)                AS returns_count,
+        (SELECT COALESCE(SUM(entry_price::numeric * quantity::numeric), 0) FROM q) AS capital_deployed
+    `);
+    const row = (res.rows ?? res)[0] ?? {};
+    const n = (v: unknown) => { const x = parseFloat(String(v ?? '0')); return Number.isFinite(x) ? x : 0; };
+    return {
+      rowCount: Math.trunc(n(row.row_count)),
+      maxDrawdownAbs: n(row.max_drawdown_abs),
+      grossProfit: n(row.gross_profit),
+      grossLoss: n(row.gross_loss),
+      avgReturn: n(row.avg_return),
+      stdDevPop: n(row.std_dev_pop),
+      returnsCount: Math.trunc(n(row.returns_count)),
+      capitalDeployed: n(row.capital_deployed),
+    };
   }
 
   async getRealizedPnlTotal(mode: TradingMode): Promise<{ realizedPnl: number; tradeCount: number }> {

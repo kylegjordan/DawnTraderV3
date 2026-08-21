@@ -468,23 +468,40 @@ export class ActivePortfolioManager {
 
   async getPortfolioMetrics(): Promise<PortfolioMetrics> {
     const stats = await storage.getActiveEngineStats(this.mode);
-    const trades = await storage.getClosedTrades(this.mode, { limit: 1000, closedOnly: true });
-
-    // Calculate max drawdown (P19-B8.2: against the REAL balance, not $10,000)
+    // B-BALANCE-TRUTH Step E (#618), Langston-ruled CONVERT-NOW: the 1,000-row cap is gone and
+    // these four are summed in SQL over the whole closed set. The cap was LATENT here, not
+    // biting (483 qualifying rows) -- so no displayed number moves today, and all four were
+    // verified against the deployed endpoint to floating-point precision before the change.
+    //
+    // ★ THE BRANCH LOGIC BELOW IS THE THREE HELPERS' OWN, MOVED RATHER THAN REWRITTEN. Their
+    // edge cases are load-bearing and easy to get subtly wrong -- profit factor is Infinity on
+    // gains-with-no-losses but 0 on neither, Sharpe returns 0 on a zero deviation instead of
+    // dividing, drawdown throws rather than accept a fictional denominator (B8.2). Re-deriving
+    // them in SQL would have meant two statements of one rule, which is the divergence class
+    // this batch exists to delete, so SQL does the summing and the branches stay in TypeScript.
+    const c = await storage.getPortfolioMetricComponents(this.mode);
     const startingCapital = await this.getStartingCapitalOrThrow();
-    const maxDrawdown = this.calculateMaxDrawdown(trades, startingCapital);
 
-    // Calculate Sharpe ratio (simplified - uses daily returns)
-    const sharpeRatio = this.calculateSharpeRatio(trades);
+    // was calculateMaxDrawdown() -- same guard: a real denominator or nothing (P19-B8.2).
+    let maxDrawdown = 0;
+    if (c.rowCount > 0) {
+      if (!(startingCapital > 0)) {
+        throw new Error('[B8.2] portfolio metrics require a real startingCapital > 0');
+      }
+      maxDrawdown = (c.maxDrawdownAbs / startingCapital) * 100;
+    }
 
-    // Calculate profit factor (gross profit / gross loss)
-    const profitFactor = this.calculateProfitFactor(trades);
+    // was calculateSharpeRatio() -- 0 when there is nothing to measure or no dispersion.
+    const sharpeRatio = (c.rowCount === 0 || c.returnsCount === 0 || !(c.stdDevPop > 0))
+      ? 0
+      : c.avgReturn / c.stdDevPop;
 
-    // Calculate total P/L percentage (relative to total capital deployed)
-    const totalCapitalDeployed = trades.reduce((sum, t) => {
-      const posValue = parseFloat(t.entryPrice) * parseFloat(t.quantity);
-      return sum + posValue;
-    }, 0);
+    // was calculateProfitFactor() -- Infinity is MEANINGFUL here (gains, zero losses), not a bug.
+    const profitFactor = c.rowCount === 0
+      ? 0
+      : (c.grossLoss > 0 ? c.grossProfit / c.grossLoss : (c.grossProfit > 0 ? Infinity : 0));
+
+    const totalCapitalDeployed = c.capitalDeployed;
     const totalPnlPercent = totalCapitalDeployed > 0 
       ? (stats.totalPnl / totalCapitalDeployed) * 100 
       : 0;
@@ -701,44 +718,6 @@ export class ActivePortfolioManager {
     // Convert to percentage against the REAL starting capital (P19-B8.2 —
     // the hardcoded $10,000 denominator is gone; capital is passed in).
     return (maxDrawdown / startingCapital) * 100;
-  }
-
-  private calculateSharpeRatio(trades: any[]): number {
-    if (trades.length === 0) return 0;
-
-    const returns = trades
-      .filter(t => t.pnlPercent)
-      .map(t => parseFloat(t.pnlPercent));
-
-    if (returns.length === 0) return 0;
-
-    const avgReturn = returns.reduce((a, b) => a + b, 0) / returns.length;
-    const variance = returns.reduce((sum, r) => sum + Math.pow(r - avgReturn, 2), 0) / returns.length;
-    const stdDev = Math.sqrt(variance);
-
-    // Simplified Sharpe: (mean return - risk-free rate) / std dev
-    // Assuming 0% risk-free rate for simplicity
-    return stdDev > 0 ? avgReturn / stdDev : 0;
-  }
-
-  private calculateProfitFactor(trades: any[]): number {
-    if (trades.length === 0) return 0;
-
-    let grossProfit = 0;
-    let grossLoss = 0;
-
-    for (const trade of trades) {
-      if (trade.pnl) {
-        const pnl = parseFloat(trade.pnl);
-        if (pnl > 0) {
-          grossProfit += pnl;
-        } else {
-          grossLoss += Math.abs(pnl);
-        }
-      }
-    }
-
-    return grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? Infinity : 0;
   }
 
   // Public getters for external access

@@ -6,6 +6,24 @@
 
 ---
 
+## 2026-08-21 — B-BALANCE-TRUTH Step E (#618): two orphaned metric helpers in `active-portfolio-manager.ts`
+
+**What:** `private calculateSharpeRatio(trades)` and `private calculateProfitFactor(trades)` deleted from `server/services/active-portfolio-manager.ts`. Archived to `1-system-manual/_archive/deleted-code/active-portfolio-manager-metric-helpers-2026-08-21.ts.removed`.
+
+**Why:** orphaned by this batch's own change, not by age. Their sole caller was `getPortfolioMetrics` at `:466`, which converted off the 1,000-row capped read onto `storage.getPortfolioMetricComponents()` — SQL sums the components, and **the helpers' branch logic was MOVED to that call site verbatim rather than dropped** (profit factor `Infinity` on gains-with-no-losses but `0` on neither; Sharpe `0` on zero dispersion). Rule 18(a): deleted on the spot rather than left stubbed, because a private method with no callers is precisely the dead path that accidentally re-enters later.
+
+**BLAST-RADIUS VERIFICATION — before cutting:**
+- **Zero `this.`-qualified callers remaining** in the class (`grep -c "this\.<name>("` → 0 for both). ★ **Searched `this.`-qualified explicitly**, which is the correction forced by Langston's #734 blocker the same day: a caller census that misses self-calls licenses a false absence.
+- **Zero references anywhere** in `server/`, `client/`, `shared/`. **Zero test callers** (`server/tests/`, `server/__tests__/`).
+- ⚠️ **`strategy-analytics.ts` carries methods of the SAME NAMES at `:140`/`:143` — a DIFFERENT class with its own implementations, untouched and unaffected.** Recorded because a future grep on either name will return them, and a matching name is not a matching thing.
+- **`calculateMaxDrawdown` was NOT deleted** — it retains one caller at `:525`, inside `checkPortfolioHealth`, which Langston ruled HOLDS out of this batch (rides `#734`).
+- **§9.5(a-ii) deletion-time state-write census: EMPTY BY CONSTRUCTION.** Both are pure functions taking an array and returning a number — they wrote no instance field, flag, cache, module-level var or DB column, so there is no surviving reader of state they used to write. **Stated explicitly rather than skipped: the census is the check that caller-tracing cannot substitute for, and "pure function" is the answer to it, not an excuse to omit it.**
+- **tsc 384 = baseline exactly**, before and after.
+
+**Left intentionally:** nothing. The three-helper set is now one helper with one live caller.
+
+---
+
 ## 2026-07-23 — B-REPO-RELOCATE: the `C:\dev` test bench and the Google Drive working repo
 
 **What:** two working copies retired together, both on Kyle's laptop.

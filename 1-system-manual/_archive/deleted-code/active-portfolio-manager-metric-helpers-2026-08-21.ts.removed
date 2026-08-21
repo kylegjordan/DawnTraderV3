@@ -1,0 +1,53 @@
+// REMOVED 2026-08-21 -- B-BALANCE-TRUTH Step E (#618), rule 18(a) delete-on-the-spot.
+// Orphaned by the SQL-side conversion of getPortfolioMetrics: their sole caller was
+// active-portfolio-manager.ts:466, which now reads components from
+// storage.getPortfolioMetricComponents() and applies THESE SAME BRANCHES inline.
+// The logic was MOVED, not dropped -- see the comments at that call site.
+// Blast radius verified before cutting: zero `this.`-qualified callers remaining in the
+// class, zero references anywhere in server/ client/ shared/, zero test callers. The
+// identically-named methods in strategy-analytics.ts are a DIFFERENT class and untouched.
+// §9.5(a-ii) state-write census: EMPTY BY CONSTRUCTION -- both are pure functions taking
+// an array and returning a number; they wrote no field, flag, cache or column, so there
+// is no surviving reader of state they used to write.
+// git history is the authoritative archive; this copy is for quick browse.
+
+  private calculateSharpeRatio(trades: any[]): number {
+    if (trades.length === 0) return 0;
+
+    const returns = trades
+      .filter(t => t.pnlPercent)
+      .map(t => parseFloat(t.pnlPercent));
+
+    if (returns.length === 0) return 0;
+
+    const avgReturn = returns.reduce((a, b) => a + b, 0) / returns.length;
+    const variance = returns.reduce((sum, r) => sum + Math.pow(r - avgReturn, 2), 0) / returns.length;
+    const stdDev = Math.sqrt(variance);
+
+    // Simplified Sharpe: (mean return - risk-free rate) / std dev
+    // Assuming 0% risk-free rate for simplicity
+    return stdDev > 0 ? avgReturn / stdDev : 0;
+  }
+
+
+
+  private calculateProfitFactor(trades: any[]): number {
+    if (trades.length === 0) return 0;
+
+    let grossProfit = 0;
+    let grossLoss = 0;
+
+    for (const trade of trades) {
+      if (trade.pnl) {
+        const pnl = parseFloat(trade.pnl);
+        if (pnl > 0) {
+          grossProfit += pnl;
+        } else {
+          grossLoss += Math.abs(pnl);
+        }
+      }
+    }
+
+    return grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? Infinity : 0;
+  }
+
