@@ -69,27 +69,43 @@ afterAll(async () => {
   }
 });
 
+/**
+ * Derived subject — but READ-ONLY BY CONSTRUCTION, and that guard is not cosmetic.
+ *
+ * ⚠️ THE FIRST VERSION OF THIS FENCE SWEPT EVERY METHOD TOUCHING closed_trades AND CALLED THEM.
+ * That included `deleteAllClosedTrades` and `deleteClosedTrade` — so a test written to prove data
+ * is partitioned was itself DELETING data while it ran. CI caught it only because those calls
+ * surfaced in the "did not return the live row" list. A fence that mutates the thing it measures
+ * is worse than no fence: it can destroy the very evidence its assertion depends on.
+ *
+ * The `get`-prefix filter keeps the subject DERIVED (a new reader is picked up automatically, which
+ * is the whole point — this fence already caught two readers a hand-written census had missed)
+ * while making a mutator structurally unreachable rather than remembered-against.
+ */
+function discoverReaders(): string[] {
+  const proto = Object.getPrototypeOf(storage);
+  return Object.getOwnPropertyNames(proto).filter((n) => {
+    if (n === 'constructor' || EXEMPT.has(n)) return false;
+    if (!/^get/.test(n)) return false; // read-only by construction — never a mutator
+    const fn = (proto as any)[n];
+    if (typeof fn !== 'function') return false;
+    const src = Function.prototype.toString.call(fn);
+    return /closedTradesTable|closed_trades/.test(src) && /^\s*async/.test(src);
+  });
+}
+
 describe(TAG, () => {
   it('POSITIVE CONTROL: the discovery finds the readers (an empty subject would pass vacuously)', () => {
-    const proto = Object.getPrototypeOf(storage);
-    const found = Object.getOwnPropertyNames(proto).filter((n) => {
-      if (n === 'constructor') return false;
-      const fn = (proto as any)[n];
-      if (typeof fn !== 'function') return false;
-      const src = Function.prototype.toString.call(fn);
-      return /closedTradesTable|closed_trades/.test(src) && /^\s*async/.test(src);
-    });
+    const found = discoverReaders();
     expect(
       found.length,
-      `[${TAG}] reflection discovered ${found.length} closed-trade accessors. If this is 0 the ` +
-      `discovery is broken — the partition assertions below would then pass over an empty set, ` +
-      `which is the vacuous-fence failure this suite exists to avoid.`,
+      `[${TAG}] reflection discovered ${found.length} closed-trade READ accessors. If this is 0 the ` +
+      `discovery is broken — the partition assertion below would then pass over an empty set, which ` +
+      `is the vacuous-fence failure this suite exists to avoid.`,
     ).toBeGreaterThanOrEqual(5);
-    console.log(`[${TAG}] discovered accessors: ${found.join(', ')}`);
+    console.log(`[${TAG}] discovered readers: ${found.join(', ')}`);
   });
 
-  // ctx.skip() and NOT it.skipIf(): skipIf evaluates at COLLECTION time, before beforeAll has
-  // probed the database, so it would read the initial `true` and run anyway.
   it('every discovered reader PARTITIONS: a live row is invisible to paper and visible to live', async (ctx) => {
     if (!dbReachable) ctx.skip();
     if (!isTestDb) {
@@ -106,28 +122,26 @@ describe(TAG, () => {
               ${MARKER_PNL}, ${MARKER_PNL}, 'take_profit', now() - interval '1 hour', now())`);
     seeded = true;
 
-    const proto = Object.getPrototypeOf(storage);
-    const accessors = Object.getOwnPropertyNames(proto).filter((n) => {
-      if (n === 'constructor' || EXEMPT.has(n)) return false;
-      const fn = (proto as any)[n];
-      if (typeof fn !== 'function') return false;
-      const src = Function.prototype.toString.call(fn);
-      return /closedTradesTable|closed_trades/.test(src) && /^\s*async/.test(src);
-    });
+    const accessors = discoverReaders();
 
     const leaked: string[] = [];
     const blind: string[] = [];
     for (const name of accessors) {
       let paperOut: string, liveOut: string;
       try {
-        // Second argument covers the readers that require one; extras are ignored by the rest.
-        paperOut = JSON.stringify(await (storage as any)[name]('paper', { limit: 'all' }) ?? null);
-        liveOut = JSON.stringify(await (storage as any)[name]('live', { limit: 'all' }) ?? null);
+        paperOut = JSON.stringify((await (storage as any)[name]('paper', { limit: 'all' })) ?? null);
+        liveOut = JSON.stringify((await (storage as any)[name]('live', { limit: 'all' })) ?? null);
       } catch {
         continue; // a reader needing a different signature is not evidence either way
       }
-      if (paperOut?.includes(MARKER_PNL) || paperOut?.includes(MARKER_SYMBOL)) leaked.push(name);
-      else if (!(liveOut?.includes(MARKER_PNL) || liveOut?.includes(MARKER_SYMBOL))) blind.push(name);
+      const sees = (out: string) => !!out && (out.includes(MARKER_PNL) || out.includes(MARKER_SYMBOL));
+      if (sees(paperOut)) { leaked.push(name); continue; }
+      // The BLIND check only applies where the marker WOULD be visible: a reader that returns a
+      // non-empty array of rows. A count returns a number and an id-lookup returns undefined for
+      // our probe args — neither can contain the marker, so their silence proves nothing and
+      // asserting on it would be reading absence from an instrument with no reach.
+      const rowShaped = paperOut?.startsWith('[') && paperOut !== '[]';
+      if (rowShaped && !sees(liveOut)) blind.push(name);
     }
 
     expect(
