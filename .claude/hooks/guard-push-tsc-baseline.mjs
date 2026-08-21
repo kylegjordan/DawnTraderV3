@@ -49,6 +49,17 @@
  */
 import { execSync, spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+
+// ⛔ RESOLVE THE COMPARATOR FROM THE REPO ROOT, NOT FROM cwd. It was `existsSync('scripts/…')`
+// — a RELATIVE path inside a FAIL-CLOSED gate. A hook process whose cwd is not the repo root
+// therefore refused EVERY push with 'the comparator is missing' while the file was present
+// both locally and at origin (measured 2026-08-21). Refusing on a false absence is the same
+// absent-as-valid error this gate exists to refuse, aimed at itself: the gate cried wolf, and
+// a gate that blocks correct work teaches people to route around it — which is how a real
+// baseline regression eventually gets waved through. CLAUDE_PROJECT_DIR is the app-supplied
+// repo root; the cwd fallback preserves the old behaviour when it is unset.
+const COMPARATOR = join(process.env.CLAUDE_PROJECT_DIR || process.cwd(), 'scripts', 'check-tsc-baseline.mjs');
 
 // ⚠️ INPUT ARRIVES ON STDIN, NOT IN AN ENV VAR. The first revision of this hook read
 // `process.env.CLAUDE_TOOL_INPUT`, which is never set — so it would have parsed nothing, taken its
@@ -124,7 +135,7 @@ if (changed !== null) {
 }
 
 // ── Run the ONE comparator ───────────────────────────────────────────────────────────────────────
-if (!existsSync('scripts/check-tsc-baseline.mjs')) {
+if (!existsSync(COMPARATOR)) {
   refuse(
     'the tsc baseline comparator is missing',
     'Expected scripts/check-tsc-baseline.mjs. Its absence cannot be read as "nothing to check" —\n' +
@@ -170,7 +181,7 @@ try {
   touchedPayload = '__UNCOMPUTABLE__';
 }
 
-const res = spawnSync('node', ['scripts/check-tsc-baseline.mjs'], {
+const res = spawnSync('node', [COMPARATOR], {
   encoding: 'utf8',
   timeout: 5 * 60 * 1000,
   env: { ...process.env, TSC_GATE_TOUCHED_FILES: touchedPayload },

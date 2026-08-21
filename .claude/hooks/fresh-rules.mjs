@@ -110,7 +110,21 @@ try {
     try { unpushed = run(['rev-list', `${REMOTE_REF}..HEAD`, '--', path]); } catch { unpushed = ''; }
     if (unpushed) { skippedUnpushed.push([path, why]); continue; }
 
-    try { run(['checkout', REMOTE_REF, '--', path]); changed.push([path, why]); } catch { }
+    // ⛔ `git checkout <ref> -- <path>` WRITES THE INDEX AS WELL AS THE WORKING TREE. That is
+    // documented git behaviour, not a bug in git — but it made THIS hook silently stage every file
+    // it refreshed, holding ORIGIN's content (i.e. OTHER SESSIONS' work) in MY index under a path
+    // I recognised as mine. MEASURED TWICE: 2026-08-09 (stash `CC-C-685-not-mine`) and 2026-08-21
+    // (CC-C's #736/#737 sitting staged in CC-A's index, one `git commit` away from being published
+    // under the wrong author). Rule 25.c is EXACTLY this shape — the path is right, so the
+    // explicit-path habit that protects against the wrong FILE cannot see the wrong CONTENT — and
+    // both incidents were misread as another session writing into this clone. It was never that.
+    // THE RESET IS THE FIX: the refresh still lands in the working tree, but the index is left
+    // untouched, so a later `git add <my paths>` can no longer sweep in a refreshed governance file.
+    try {
+      run(['checkout', REMOTE_REF, '--', path]);
+      try { run(['reset', '--quiet', '--', path]); } catch { /* nothing staged to clear */ }
+      changed.push([path, why]);
+    } catch { }
   }
 
   record({

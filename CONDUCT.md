@@ -53,6 +53,16 @@ Two orthogonal axes: **mode** (paper | live) and **active trading** (on | off).
 > ★ **BINDS EVERY SESSION WORKING ON DAWNTRADER — CC-A, CC-B, CC-C AND INFRA (Kyle 2026-08-20), not just the one that wrote it.**
 > ⚠️ **AND IT REACHES A SESSION ONLY WHEN THAT SESSION PULLS.** Measured 2026-08-20: **CC-B was 131 commits behind and INFRA 53, and NEITHER clone held `CONDUCT.md` or its loader at all** — so this file bound two of four sessions while reading as though it bound all of them. **A rule that has not been pulled is not a rule that fires**, which is the same failure this whole file exists to prevent, one level up.
 
+⛔⛔ **EVERY TIME. NOT MOSTLY. NOT WHEN IT FEELS LIKE A MILESTONE. (Kyle 2026-08-21, and he is angry about it — read why.)**
+**HE IS BEING TRAINED TO SCROLL FOR THE COLOURED BLOCK. That is the whole mechanism: he stops reading prose and looks for the marker.** So a step that ends WITHOUT one does not read as "a small step" — **it reads as work that never finished**, and he goes looking for a report that is not there. **An inconsistent marker is WORSE THAN NO MARKER, because it destroys the thing that makes the marker work.** ⚠️ **MEASURED, and it is why this paragraph exists:** CC-C posted a correctly-formatted report at the end of one step, moved to the next step, and **posted no header at the end of that one.** Kyle went looking and could not find it.
+
+**THE THREE TRIGGERS — ALL of them, every occurrence, no judgement call about whether this one "counts":**
+1. **The end of any WORKFLOW STEP** (the eleven in `CLAUDE.md` §0.a).
+2. ★ **The end of any INVESTIGATION, AUDIT, DIAGNOSIS OR PIECE OF WORK THAT IS NOT A FORMAL STEP.** Most of what a session actually does is this. **It gets the same treatment** — same header, same block, same three-part body.
+3. **A finding or a decision**, per the 🟨 / 🟥 blocks below.
+
+★★ **THIS BINDS MID-ITERATION, AND THAT IS THE CASE THAT KEEPS BEING MISSED.** When you are iterating with Langston and running steps back-to-back without Kyle in the loop: **finish a step → POST THE BLOCK → continue to the next step in the SAME TURN → finish it → POST THE BLOCK AGAIN.** ⛔ **The block is NOT a stopping point and it is NOT permission to yield the turn** — it is a marker you drop as you pass, so a long autonomous run reads as a series of findable checkpoints instead of one wall of prose. **Do not batch several steps into one report at the end. Do not skip the marker because you are "still going."** Going straight on is exactly what he wants; going straight on *silently* is what he does not.
+
 **A report is written at the END OF EVERY WORKFLOW STEP — then you CONTINUE to the next step in the same turn.** You do not wait to be told to proceed. **You stop only for a decision that is genuinely his** (see the DECISION block below).
 
 ### THE HEADER IS THE POINT — HE SCROLLS PAST EVERYTHING ELSE
