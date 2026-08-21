@@ -8,10 +8,27 @@
 
 > ★★ **IF YOU ARE ABOUT TO WORK ANY STEP BELOW, LOAD `/workflow` FIRST AND READ THAT STEP'S SECTION.** Not from memory. Not from this list — **this list is only the NAMES.**
 
-**1** Planning + Scope · **2** Pre-Implementation Audit AND Implementation Plan · **3** Implementation · **4** Code Review (Langston, at the graded ref) · **5** GitHub Push + CI · **6** Staging Deploy · **7** First-Pass Verification · **8** Second-Pass Verification (Langston) · **9** Iterate · **10** Governance Updates · **11** Completion Report
+**⛔ THE ELEVEN STEPS — AND THE FILE THAT HOLDS EACH ONE. GO STRAIGHT TO THE FILE.**
+
+| # | step | ⛔ READ THIS FILE BEFORE WORKING THE STEP |
+|---|---|---|
+| **1** | Planning + Scope | `.claude/skills/workflow/steps/01-scope.md` |
+| **2** | Pre-Implementation Audit AND Implementation Plan | `.claude/skills/workflow/steps/02-audit-and-plan.md` |
+| **3** | Implementation | `.claude/skills/workflow/steps/03-implementation.md` |
+| **4** | Code Review (Langston, at the graded ref) | `.claude/skills/workflow/steps/04-code-review.md` |
+| **5** | GitHub Push + CI | `.claude/skills/workflow/steps/05-ci.md` |
+| **6** | Staging Deploy | `.claude/skills/workflow/steps/06-deploy.md` |
+| **7** | First-Pass Verification (CC) | `.claude/skills/workflow/steps/07-verify-cc.md` |
+| **8** | Second-Pass Verification (Langston) | `.claude/skills/workflow/steps/08-verify-langston.md` |
+| **9** | Iterate | `.claude/skills/workflow/steps/09-iterate.md` |
+| **10** | Governance Updates | `.claude/skills/workflow/steps/10-governance.md` |
+| **11** | Completion Report | `.claude/skills/workflow/steps/11-completion.md` |
+
+★★ **THIS TABLE *IS* THE INDEX — Kyle's design, 2026-08-21, and it is better than the one it replaced.** The first build put the index inside `SKILL.md`, so reaching step 4 meant rules file → invoke `/workflow` → read `SKILL.md` → read the step. **Kyle cut the middle hop: the index belongs where you are already reading.** ⇒ **rules file → READ THE STEP FILE. Two hops, and the first one costs nothing because you are already here.**
+★ **AND THE PATH ABOVE NEEDS NO SKILL MACHINERY AT ALL.** A step file is a plain markdown file; reading it is an ordinary Read. **So the primary leg does NOT depend on skill auto-invocation** — the thing that is measured-unreliable — it depends only on you reading the path in the row.
 
 ⚠️ **WHY THIS IS SHOUTED RATHER THAN AUTOMATED, stated honestly so nobody mistakes it for a mechanism (Kyle 2026-08-21):** auto-invocation of skills is **measured-unreliable** — Anthropic has **five-plus open issues** on it (#30387, #20986, #12679, #15136, community #182117), and the reported failure rate is worst **precisely** for skills that overlap trained behaviour, which is every step above. **So this pointer is BEHAVIOURAL, and it is deliberately the loudest thing in the file after the mission.** Kyle's instruction verbatim: *"make it short, brief, but very loud… I know that's not automatic, but it's behavioral."*
-**Two layers, neither sufficient alone:** ⑴ **this pointer** — you read it every session, and it names the trigger; ⑵ **the `/workflow` skill's own description**, so the model may also self-invoke. **Belt and braces, because each leg is known to leak.**
+**TWO LEGS, and they are NOT equal — say which is which:** ⑴ **PRIMARY — the table above.** A path and a Read; no auto-invocation involved, so the known-unreliable mechanism is NOT on the critical path. ⑵ **BACKUP — `/workflow`**, ONE registered skill whose `SKILL.md` is the same index, for a session that starts working a step without having come through here. ⚠️ **Leg 2 is the one that leaks; leg 1 is the one to rely on.** **Deliberately ONE skill, not eleven** — eleven near-identical descriptions ("review", "verify", "audit") would compete with each other for the same trigger and every one of them would load into EVERY session's skill listing, paying an always-on cost to make the unreliable leg *less* accurate.
 ⛔ **Full step detail lives ONLY in the skill.** Do not re-state a step here — two copies is the #641 shape, and the copy that loads always wins.
 
 ---
