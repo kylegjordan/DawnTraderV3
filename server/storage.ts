@@ -666,6 +666,24 @@ export function canonicalizeMetricName(metricName: string): string {
     .trim();
 }
 
+// #618: one place that reports the size of every unbounded closed-trade read (Langston rider).
+// The row count past which an unbounded read stops being obviously cheap. Stated ONCE, here.
+// Not a cap and must never become one -- it changes nothing about what is returned; it only
+// decides whether the line is a log or a warning.
+const UNBOUNDED_READ_REVIEW_ROWS = 5000;
+function logUnboundedRead(rowCount: number): void {
+  if (rowCount >= UNBOUNDED_READ_REVIEW_ROWS) {
+    console.warn(
+      `[#618][UNBOUNDED_READ] getClosedTrades returned ${rowCount} rows on an unbounded read -- ` +
+      `past the ${UNBOUNDED_READ_REVIEW_ROWS}-row review point. The fix is a per-key "since" ` +
+      `bound on the READER, with open-time and close-time bounded separately -- NOT a cap. ` +
+      `A cap is the #618 defect this batch exists to delete.`,
+    );
+  } else {
+    console.log(`[#618][UNBOUNDED_READ] getClosedTrades returned ${rowCount} rows (unbounded).`);
+  }
+}
+
 export class DatabaseStorage implements IStorage {
   // User methods
   async getUser(id: string): Promise<User | undefined> {
@@ -3110,6 +3128,20 @@ export class DatabaseStorage implements IStorage {
     return trade || undefined;
   }
 
+  /**
+   * B-BALANCE-TRUTH Step C (#618), Langston rider 2026-08-21: report what an unbounded read
+   * ACTUALLY returned.
+   *
+   * His point, and it is the right one: the cost of `'all'` is unbounded in the FUTURE, and
+   * nothing would tell us the day it stops being cheap -- we would notice it as a slow page,
+   * which is a feeling rather than a measurement. This makes the trigger for the per-key
+   * `since` bound observable before it hurts.
+   *
+   * It lives in the READER, not at the two call sites, on purpose: a future third `'all'`
+   * caller inherits the instrument instead of having to remember it. Same reasoning as the
+   * derived-not-listed fence subject in #704 -- an instrument that must be re-added by hand is
+   * one that eventually is not.
+   */
   async getClosedTrades(mode: TradingMode, filters: { limit: number | 'all'; closedOnly?: boolean; includeNeverFilled?: boolean }): Promise<ClosedTrade[]> {
     // Phase 27.F.15.B.2: Global query, mode-based only
     // B-BALANCE-TRUTH Step A (#618): `limit` is REQUIRED -- the `|| 100` default is GONE.
@@ -3137,7 +3169,10 @@ export class DatabaseStorage implements IStorage {
     // weaken Step A's contract: `limit` stays REQUIRED, so tsc still enumerates every caller and
     // each must still type something deliberate. What changed is that "all of it" became
     // something a caller can SAY, rather than something it had to approximate.
-    // COST, STATED: an unbounded read grows with the table (569 rows at 2026-08-21). Both sites
+    // COST, STATED: an unbounded read grows with the table. (An earlier draft of this comment
+    // carried a live row count; it was stale within hours -- 569 became 581 the same day. A
+    // rules-and-reasoning comment must not carry a drifting fact: the INSTRUMENT below reports
+    // the real number every time it runs.) Both sites
     // are authenticated dashboard reads, not hot-path loops. If either becomes heavy the fix is
     // a per-key `since` bound on the READER -- separate bounds for open-time and close-time
     // questions -- not a cap.
@@ -3163,13 +3198,17 @@ export class DatabaseStorage implements IStorage {
         .from(closedTradesTable)
         .where(and(...conditions))
         .orderBy(desc(closedTradesTable.openedAt));
-      return unbounded ? await q : await q.limit(limit as number);
+      const rows = unbounded ? await q : await q.limit(limit as number);
+      if (unbounded) logUnboundedRead(rows.length);
+      return rows;
     }
 
     const q2 = db.select()
       .from(closedTradesTable)
       .orderBy(desc(closedTradesTable.openedAt));
-    return unbounded ? await q2 : await q2.limit(limit as number);
+    const rows2 = unbounded ? await q2 : await q2.limit(limit as number);
+    if (unbounded) logUnboundedRead(rows2.length);
+    return rows2;
   }
 
   /**

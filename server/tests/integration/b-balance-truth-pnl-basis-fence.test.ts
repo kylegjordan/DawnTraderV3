@@ -2,27 +2,35 @@
  * B-BALANCE-TRUTH / #618 — fence: `pnl` and `net_pnl` must keep agreeing, because six readers
  * express the profit basis as `netPnl ?? pnl` and the rest of the system sums `pnl`.
  *
- * WHY THIS EXISTS. Langston's Step-4 condition 2 held that the basis must not move on some sites
- * and not others, or the kill-switch ratio becomes incoherent. Settling that question turned out
- * to need the schema, not the data: `net_pnl` is DECLARED (shared/schema.ts) as
- * `gross_pnl − total_cost`, and `total_cost` as `entry_fee + exit_fee + entry_slippage +
- * exit_slippage`. `pnl` carries the same value. So the two are equal BY CONSTRUCTION rather than
- * by coincidence — both are the after-all-costs figure — and `netPnl ?? pnl` is a distinction
- * with no difference.
+ * WHY THIS EXISTS. Langston's Step-4 condition 2 held that the profit basis must not move on
+ * some sites and not others, or the kill-switch ratio becomes incoherent. Six readers express it
+ * as `netPnl ?? pnl`; everything else sums `pnl`. While the two columns agree, that split is
+ * harmless. This fence is what makes "while" checkable.
  *
- * ★ BUT A CONSTRUCTION CAN CHANGE, AND THAT IS THE WHOLE POINT OF FENCING IT. If a future close
- * path writes one column and not the other, or starts deriving them differently, the six
- * `netPnl ?? pnl` readers silently diverge from every `pnl` reader — including the kill-switch
- * denominator. Nothing would throw. Two figures on one page would simply disagree. "Equal today"
- * with no assertion is exactly how the redundant ghost-trade guard got into four call sites and
- * stayed there unexamined.
+ * *** RETRACTED, AND THE RETRACTION IS THE MOST USEFUL THING IN THIS FILE. An earlier version of
+ * this comment claimed the two columns are equal "BY CONSTRUCTION", citing the schema line
+ * `netPnl: decimal("net_pnl", ...).default("0"), // gross_pnl - total_cost`. THAT IS A COMMENT,
+ * NOT A MECHANISM. `generatedAlwaysAs` appears nowhere in the tree; nothing computes one column
+ * from the other. `createClosedTrade` (storage.ts:3087) normalizes the symbol and passes
+ * everything else straight through. Equality is a PROPERTY OF THE WRITERS, and they are not
+ * symmetric: the engine's open-insert writes NEITHER column and equality is established later by
+ * the close update, while the stranded-clear writer (routes.ts:12975) writes `pnl` only and lets
+ * `net_pnl` fall to its '0' default. The honest citation is routes.ts:12854 --
+ * `pnl: netPnl.toString()` -- the SAME variable, so THAT writer cannot diverge. Cite the writer,
+ * never the schema comment. (Langston, 2026-08-21.)
  *
- * ⚠️ THIS FENCE EXISTS BECAUSE I GOT THE COLUMN WRONG ONCE ALREADY. I first tested the cost
- * identity against `total_fee` — fees only, no slippage — and reported a 184-row "broken fee era"
- * that does not exist (#735, WITHDRAWN same day). Against `total_cost`, the column the value is
- * actually derived from, all rows reconcile exactly. The lesson is in the assertion below: it
- * names the columns it compares and the population it compares them over, so a future reader can
- * see WHICH identity is being asserted rather than inferring it.
+ * *** AND THE FIRST VERSION OF THIS FENCE ASSERTED AN UNREADABLE ZERO. It counted disagreements
+ * over `closed_at IS NOT NULL AND close_reason IS DISTINCT FROM 'never_filled'` and got 0 -- but
+ * MEASURED over the whole table, 90 of 581 rows disagree, and EVERY ONE of them is excluded by
+ * that very predicate: 86 are `never_filled`, and the other 4 have `close_reason IS NULL` with
+ * `closed_at` also NULL. The population could not contain a disagreeing row, so the zero was
+ * STRUCTURALLY GUARANTEED rather than measured clean. A zero from a population that cannot hold a
+ * one is not evidence. Both fixes below follow from that:
+ *   (a) the control now exercises the FULL query -- population predicate AND comparison -- so it
+ *       proves the population would ADMIT an in-scope disagreement, not merely that `IS DISTINCT
+ *       FROM` works; and
+ *   (b) the assertion reports the excluded rows alongside the included ones, so a reader can see
+ *       what the zero is a zero OVER.
  *
  * READ-ONLY: two SELECTs, no seeding.
  */
@@ -52,56 +60,66 @@ beforeAll(async () => {
 });
 
 // The single expression of "these two disagree", interpolated into BOTH queries below.
-// Declared once and USED — a const that reads as the source of truth while each test inlines its
-// own copy is the divergence this batch exists to delete (Langston, on this fence's sibling).
 const DISAGREE = sql`(pnl IS DISTINCT FROM net_pnl)`;
+// The population any real reader actually sums. Stated ONCE and shared, so the control below
+// exercises the SAME filter the assertion does -- a control that skips the population predicate
+// is what made the previous version vacuous.
+const IN_SCOPE = sql`(closed_at IS NOT NULL AND close_reason IS DISTINCT FROM 'never_filled')`;
 
 describe(TAG, () => {
   // ctx.skip() and NOT it.skipIf(): skipIf evaluates at COLLECTION time, before beforeAll has
   // probed the database, so it would read the initial `true` and run anyway.
-  it('POSITIVE CONTROL: the comparison detects a known disagreement (proves the instrument, no writes)', async (ctx) => {
+  it('POSITIVE CONTROL: the FULL query (population + comparison) catches an in-scope disagreement', async (ctx) => {
     if (!dbReachable) ctx.skip();
-    // Four synthetic rows: two agreeing, one differing by a cent, one where net is absent.
-    // Exactly two disagree. Sourced HERE and not from closed_trades on purpose — a control drawn
-    // from the table is a claim about THIS DATABASE'S POPULATION, not about the comparison, and
-    // that mistake made this fence's sibling pass on staging and fail on CI's empty table.
+    // Five synthetic rows. Only ONE is both in-scope and disagreeing, and the other four are the
+    // shapes that must NOT be counted: an in-scope agreement, a never_filled disagreement, a
+    // null-close_reason disagreement with no close time, and an out-of-scope agreement. If the
+    // query returns anything other than exactly 1, either the comparison or the population filter
+    // is wrong -- and the previous version of this fence could not have told the difference.
     const res: any = await db.execute(sql`
       SELECT count(*)::int AS n FROM (VALUES
-        ('10.00'::numeric, '10.00'::numeric),
-        ('-4.25'::numeric, '-4.25'::numeric),
-        ('10.00'::numeric, '9.99'::numeric),
-        ('10.00'::numeric, NULL::numeric)
-      ) AS t(pnl, net_pnl)
-      WHERE ${DISAGREE}`);
+        (now(),      'take_profit',   '10.00'::numeric, '9.99'::numeric),   -- in scope, DISAGREES  <- the only hit
+        (now(),      'take_profit',   '10.00'::numeric, '10.00'::numeric),  -- in scope, agrees
+        (now(),      'never_filled',  NULL::numeric,    '0.00'::numeric),   -- disagrees, excluded by close_reason
+        (NULL::timestamptz, NULL,     NULL::numeric,    '0.00'::numeric),   -- disagrees, excluded by closed_at
+        (NULL::timestamptz, 'manual', '5.00'::numeric,  '5.00'::numeric)    -- out of scope, agrees
+      ) AS t(closed_at, close_reason, pnl, net_pnl)
+      WHERE ${IN_SCOPE} AND ${DISAGREE}`);
     const n = Number((res.rows ?? res)[0]?.n ?? 0);
     expect(
       n,
-      `[${TAG}] the comparison misclassified a synthetic rowset built to contain exactly 2 ` +
-      `disagreements. The predicate itself is wrong, so the zero below means nothing.`,
-    ).toBe(2);
+      `[${TAG}] the full query returned ${n} over a synthetic set built to contain EXACTLY ONE ` +
+      `in-scope disagreement. Either the comparison or the population filter is wrong, and the ` +
+      `zero asserted below would be meaningless.`,
+    ).toBe(1);
   });
 
-  it('the two profit columns agree on every closed trade', async (ctx) => {
+  it('no row that any reader sums has pnl <> net_pnl (zero reported against what it excludes)', async (ctx) => {
     if (!dbReachable) ctx.skip();
-    // Population NAMED alongside the count (rule 29): a zero against an empty table is legible as
-    // "nothing to examine" rather than "examined everything and found nothing wrong".
     const res: any = await db.execute(sql`
-      SELECT count(*) FILTER (WHERE ${DISAGREE})::int AS disagreeing,
-             count(*)::int AS total
-        FROM closed_trades
-       WHERE closed_at IS NOT NULL AND close_reason IS DISTINCT FROM 'never_filled'`);
-    const row = (res.rows ?? res)[0] ?? {};
-    const disagreeing = Number(row.disagreeing ?? 0);
-    const total = Number(row.total ?? 0);
+      SELECT count(*) FILTER (WHERE ${IN_SCOPE} AND ${DISAGREE})::int AS in_scope_disagreeing,
+             count(*) FILTER (WHERE ${IN_SCOPE})::int                 AS in_scope_total,
+             count(*) FILTER (WHERE ${DISAGREE})::int                 AS disagreeing_anywhere,
+             count(*)::int                                            AS table_total
+        FROM closed_trades`);
+    const r = (res.rows ?? res)[0] ?? {};
+    const bad = Number(r.in_scope_disagreeing ?? 0);
+    const scope = Number(r.in_scope_total ?? 0);
+    const anywhere = Number(r.disagreeing_anywhere ?? 0);
+    const total = Number(r.table_total ?? 0);
+    // The zero is reported WITH what it excludes, so nobody has to re-derive whether it is
+    // readable. `disagreeing_anywhere` is expected to be non-zero and is NOT a failure: those
+    // rows are never_filled or have no close time, and no reader sums them.
+    console.log(`[${TAG}] in-scope ${scope}/${total} rows; ${bad} in-scope disagreement(s); ` +
+                `${anywhere} disagreement(s) anywhere in the table (excluded by design).`);
     expect(
-      disagreeing,
-      `[${TAG}] ${disagreeing} of ${total} closed trade(s) have pnl <> net_pnl. The six readers ` +
-      `expressing the basis as \`netPnl ?? pnl\` (routes.ts balance-curve + analytics, and four in ` +
-      `dashboard-metrics.ts) have now DIVERGED from every reader that sums \`pnl\` — including the ` +
-      `kill-switch denominator. Nothing throws; two figures on the same page simply disagree. ` +
-      `Either move the basis on ALL sites in ONE batch (Langston's condition 2) or fix the close ` +
-      `path that wrote the two columns differently. Do NOT relax this fence.`,
+      bad,
+      `[${TAG}] ${bad} of ${scope} in-scope closed trade(s) have pnl <> net_pnl (${anywhere} of ` +
+      `${total} disagree table-wide, most of which are excluded by design). The six readers ` +
+      `expressing the basis as \`netPnl ?? pnl\` have now DIVERGED from every reader that sums ` +
+      `\`pnl\` -- including the kill-switch denominator. Nothing throws; two figures on one page ` +
+      `simply disagree. Either move the basis on ALL sites in ONE batch (Langston's condition 2) ` +
+      `or fix the writer that let the two columns drift. Do NOT relax this fence.`,
     ).toBe(0);
-    console.log(`[${TAG}] examined ${total} closed trade(s); ${disagreeing} disagreement(s).`);
   });
 });
