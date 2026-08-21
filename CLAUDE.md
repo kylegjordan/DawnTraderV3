@@ -4,32 +4,28 @@
 
 ---
 
-## 0.a ⛔⛔ THE WORKFLOW — **READ THE SKILL BEFORE YOU DO THE STEP. EVERY TIME.**
+## 0.a ⛔⛔ THE WORKFLOW — **ELEVEN STEPS. READ THE STEP'S FILE BEFORE YOU DO THE STEP. EVERY TIME.**
 
-> ★★ **IF YOU ARE ABOUT TO WORK ANY STEP BELOW, LOAD `/workflow` FIRST AND READ THAT STEP'S SECTION.** Not from memory. Not from this list — **this list is only the NAMES.**
+> ★★ **ANY TIME YOU ARE WORKING A BATCH OR A PHASE, OR ITERATING WITH LANGSTON, THESE ARE THE ELEVEN STEPS YOU MUST FOLLOW — AND YOU READ THE STEP'S FILE BEFORE WORKING IT.** Not from memory. Not from this table — **this table is only the NAMES AND THE ADDRESSES.**
 
-**⛔ THE ELEVEN STEPS — AND THE FILE THAT HOLDS EACH ONE. GO STRAIGHT TO THE FILE.**
-
-| # | step | ⛔ READ THIS FILE BEFORE WORKING THE STEP |
+| # | step | ⛔ READ THIS BEFORE WORKING THE STEP |
 |---|---|---|
-| **1** | Planning + Scope | `.claude/skills/workflow/steps/01-scope.md` |
-| **2** | Pre-Implementation Audit AND Implementation Plan | `.claude/skills/workflow/steps/02-audit-and-plan.md` |
-| **3** | Implementation | `.claude/skills/workflow/steps/03-implementation.md` |
-| **4** | Code Review (Langston, at the graded ref) | `.claude/skills/workflow/steps/04-code-review.md` |
-| **5** | GitHub Push + CI | `.claude/skills/workflow/steps/05-ci.md` |
-| **6** | Staging Deploy | `.claude/skills/workflow/steps/06-deploy.md` |
-| **7** | First-Pass Verification (CC) | `.claude/skills/workflow/steps/07-verify-cc.md` |
-| **8** | Second-Pass Verification (Langston) | `.claude/skills/workflow/steps/08-verify-langston.md` |
-| **9** | Iterate | `.claude/skills/workflow/steps/09-iterate.md` |
-| **10** | Governance Updates | `.claude/skills/workflow/steps/10-governance.md` |
-| **11** | Completion Report | `.claude/skills/workflow/steps/11-completion.md` |
+| **1** | Planning + Scope | `.claude/skills/workflow-01-scope/SKILL.md` |
+| **2** | Pre-Implementation Audit AND Implementation Plan | `.claude/skills/workflow-02-audit-and-plan/SKILL.md` |
+| **3** | Implementation | `.claude/skills/workflow-03-implementation/SKILL.md` |
+| **4** | Code Review — Langston, at the graded ref | `.claude/skills/workflow-04-code-review/SKILL.md` |
+| **5** | GitHub Push + CI — 4/4 green | `.claude/skills/workflow-05-ci/SKILL.md` |
+| **6** | Staging Deploy — `dt-deploy` | `.claude/skills/workflow-06-deploy/SKILL.md` |
+| **7** | First-Pass Verification — CC, UI navigated | `.claude/skills/workflow-07-verify-cc/SKILL.md` |
+| **8** | Second-Pass Verification — Langston | `.claude/skills/workflow-08-verify-langston/SKILL.md` |
+| **9** | Iterate until every objective is green | `.claude/skills/workflow-09-iterate/SKILL.md` |
+| **10** | Governance Updates | `.claude/skills/workflow-10-governance/SKILL.md` |
+| **11** | Completion Report | `.claude/skills/workflow-11-completion/SKILL.md` |
 
-★★ **THIS TABLE *IS* THE INDEX — Kyle's design, 2026-08-21, and it is better than the one it replaced.** The first build put the index inside `SKILL.md`, so reaching step 4 meant rules file → invoke `/workflow` → read `SKILL.md` → read the step. **Kyle cut the middle hop: the index belongs where you are already reading.** ⇒ **rules file → READ THE STEP FILE. Two hops, and the first one costs nothing because you are already here.**
-★ **AND THE PATH ABOVE NEEDS NO SKILL MACHINERY AT ALL.** A step file is a plain markdown file; reading it is an ordinary Read. **So the primary leg does NOT depend on skill auto-invocation** — the thing that is measured-unreliable — it depends only on you reading the path in the row.
-
-⚠️ **WHY THIS IS SHOUTED RATHER THAN AUTOMATED, stated honestly so nobody mistakes it for a mechanism (Kyle 2026-08-21):** auto-invocation of skills is **measured-unreliable** — Anthropic has **five-plus open issues** on it (#30387, #20986, #12679, #15136, community #182117), and the reported failure rate is worst **precisely** for skills that overlap trained behaviour, which is every step above. **So this pointer is BEHAVIOURAL, and it is deliberately the loudest thing in the file after the mission.** Kyle's instruction verbatim: *"make it short, brief, but very loud… I know that's not automatic, but it's behavioral."*
-**TWO LEGS, and they are NOT equal — say which is which:** ⑴ **PRIMARY — the table above.** A path and a Read; no auto-invocation involved, so the known-unreliable mechanism is NOT on the critical path. ⑵ **BACKUP — `/workflow`**, ONE registered skill whose `SKILL.md` is the same index, for a session that starts working a step without having come through here. ⚠️ **Leg 2 is the one that leaks; leg 1 is the one to rely on.** **Deliberately ONE skill, not eleven** — eleven near-identical descriptions ("review", "verify", "audit") would compete with each other for the same trigger and every one of them would load into EVERY session's skill listing, paying an always-on cost to make the unreliable leg *less* accurate.
-⛔ **Full step detail lives ONLY in the skill.** Do not re-state a step here — two copies is the #641 shape, and the copy that loads always wins.
+★★ **THIS TABLE IS THE INDEX, AND IT IS THE *PRIMARY* TRIGGER (Kyle's design, 2026-08-21).** It auto-loads with this file on every start and every compaction, so a session always knows the eleven steps exist and where each one is written down. ⇒ **rules file → READ THE STEP FILE.** ★ **That route is an ordinary file read and needs NO skill machinery at all**, so the primary leg does NOT depend on skill auto-invocation — the mechanism that is measured-unreliable.
+★ **THE BACKUP TRIGGER: each step file is ALSO A SKILL** (its own folder, its own `SKILL.md`), so the model may pull the right step in on its own. **Eleven independent triggers, not one** — that is the whole reason they are skills rather than plain documents. ⚠️ **The backup leg is a COIN FLIP and is never relied on** (five-plus open Anthropic issues; worst for skills overlapping trained behaviour, which is every step here). ⚠️ **A new skill registers only at a session START** — the backup leg is not live in a session that began before it was built.
+⛔ **DESCRIPTION RULE, and it exists because the failure mode is CONFIDENT WRONGNESS:** eleven near-neighbour descriptions can fire the WRONG step, which is worse than firing none. **So every step's description leads with `STEP N ONLY`, names its own step in distinct words, and states explicitly what it is NOT for.** Keep it that way when editing one.
+⛔ **NO STEP DETAIL IN THIS FILE.** `§2` — which held the long version — was REMOVED on 2026-08-21, deliberately and completely. **Two copies is the #641 shape and the copy that loads always wins.** Do not reintroduce one.
 
 ---
 
@@ -50,7 +46,17 @@ Role, communication style, the plain-language mandate, the two-paragraph default
 
 ---
 
-## 2. Canonical Workflow (Post-Replit, 11 steps, outcomes-based)
+## 2. *(REMOVED 2026-08-21 — the workflow lives in §0.a + the eleven step skills)*
+
+⛔ **§2 held the long-form eleven-step workflow. Kyle removed it COMPLETELY: "there shouldn't be a second set of references to it."** Every step's full text moved, VERBATIM, into that step's own skill — see the §0.a table for the addresses. **Do NOT restate a step here.**
+⚠️ **THIS HEADING IS A FORWARDING ADDRESS, NOT A SECOND COPY. It is kept because `§2` is cited 136 times across 107 files** — mostly frozen batch completion reports, which are historical records and are NOT rewritten. Deleting the heading outright would silently break every one of those pointers, which is the same absent-as-valid failure the citation was meant to prevent. **A citation to "§2 step 7" now means the step-7 skill.**
+★ **The two governance rules that lived in §2's preamble were NOT step detail and did NOT move to a step** — batch/phase NAMING and the CHANGE-CLASS declaration bind every commit and every scope, not one step, so demoting them to a file that loads only at step 1 would be a real demotion. **They are relocated intact to §3 below** (Langston's standing condition: a single-homed rule may not be dropped or demoted without a named replacement landing in the same commit).
+
+---
+
+## 3. Governance Tiers & Mandatory Documents
+
+### 3.0 BATCH IDENTITY — NAMING + CHANGE-CLASS *(relocated intact from the removed §2 preamble, 2026-08-21)*
 
 A batch is NOT done until every numbered objective from the scope is verifiably achieved in the staging UI and confirmed by both Claude Code and Langston.
 
@@ -60,52 +66,7 @@ A batch is NOT done until every numbered objective from the scope is verifiably 
 
 > **Change-class declaration in the scope header (Kyle directive 2026-06-18 — B-GOV-2; the governance-checker reads this):** every batch's scope file declares its change-class on a header line — `change-class: architecture | non_architecture | sub_batch | hotfix` — written at Step-1 so Langston reviews it before code exists. The checker grades the batch's doc-set against the declared class; an **undeclared (or unparseable) class defaults to the strictest set (architecture) + raises a flag** (fail-closed), and a declared class whose diff touches core engine paths is cross-checked (possible under-declaration → Langston). The class is amendable (a sub-batch that grows re-declares).
 
-1. **Planning + Scope** — Kyle directive → CC drafts `BATCH_N_SCOPE.md` in `Claude Comms and Packages/Scope Files/` with numbered objectives + verification criteria → Langston reviews + approves.
-
-    **MANDATORY 1.a — Architectural read BEFORE drafting (Kyle directive 2026-05-24):** read relevant sections of `1-system-manual/SYSTEM_IMPACT_MAP.md` AND `1-system-manual/SYSTEM_MANUAL.md` for every component the batch touches. The scope's architectural claims (caller-site counts, dependencies, blast-radius, surface-API enumeration) MUST come from direct SIM + System Manual reads (and/or compile-driven probes), NOT from grep or memory. See history doc §2.1a for the discipline origin (B79.0n.STRATEGY scope v1 underestimated caller surface 2 → 7 files; v2 fixed via compile-driven probe; reading upfront would have saved an iteration).
-
-    **★ MANDATORY 1.b — PROVENANCE READ BEFORE DRAFTING: LEARN WHAT THE THING WAS BUILT TO DO (Kyle directive 2026-07-29 — REQUIRED IN EVERY SCOPE, not just audits).** For **every** service / module / function / helper / route the batch touches, **dig into its history and record its ORIGINAL INTENT in the scope** before proposing any change. This EXTENDS §9.5(b), which required a provenance read only for audits and disputed behaviour; it is now a **standing scope obligation for all implementation batches**.
-    **★ SCOPE OF THE OBLIGATION — TIERED, because an unbounded rule gets quietly skipped (Langston amendment D):** **TIER 1 — full provenance** for anything whose **BEHAVIOUR this batch changes**. **TIER 2 — a one-line intent note** for things merely read or called. Kyle's cost argument is strongest on tier 1, and a 40-file batch cannot do tier 1 on everything.
-    **Where to look, in order:** (a) **`BATCH_CATALOG.md` + the batch's completion report + `RUNNING_ISSUES.md`** — search by FILE/SYMBOL name, not only by symptom (#174 was missed for seven weeks because the search was for the symptom; the filename would have returned it instantly); **★ and search FORMER filenames too (Langston amendment C)** — P19-B-RENAME (2026-07-03) renamed the whole `active-*` family plus three tables, so searching `active-execution-engine.ts` returns NOTHING written while it was `paper-execution-engine.ts`; (b) **git archaeology** — `git log -S "<symbol>" --reverse`, **NOT path-limited, so it survives renames**, then READ the introducing commit's message and any attached directive; (c) **if it predates the 2026-01/02 governance change → `bridge/canonical/`** (the pre-governance corpus) **plus the old unorganised phase/batch reports** in the archived folders. ⚠️ The canonical corpus documents **what we INTENDED to build then** — it is **NOT current-state truth** and is **NEVER edited** (frozen historical record).
-    **★ EVIDENCE STANDARD (Langston amendment B):** **NAME the corpora actually searched**, and **QUOTE the introducing commit/directive verbatim with a ref — do not summarise it** (#452: a reviewer ruling on your gloss is ruling on the wrong thing). **Where intent is NOT recoverable, say so and mark the disposition `INFERRED-FROM-CODE`, not established** — #453: an asserted absence of provenance needs presence-evidence. Without this box, a scope under pressure picks the most plausible disposition and asserts it, which is exactly the `0.7`-default failure this rule cites.
-    **What the read must ANSWER — the FIVE dispositions, stated explicitly in the scope:** is this thing **(1) still relevant and correct**, **(2) relevant but needing an update to today's intent**, **(3) disconnected and it should be RECONNECTED**, **(4) connected but should be REMOVED**, or **★ (5) disconnected and should STAY disconnected / be removed** — genuinely dead code (Langston amendment A; route to rule 18/§15: delete on the spot or a dated deletion, `DELETED_COMPONENTS_LOG` + `_archive`). **(5) exists because without it dead code hits no box and the nearest are (3) "reconnect" — wrong, and precisely the accidental-re-entry risk §15 exists to prevent — or (4), which falsely asserts it is connected.** An implementation that cannot say which of the five it is has not finished its scope.
-    **★ WHY THIS EARNS ITS TOKEN COST (Kyle's own reasoning, recorded because a future reader will want to trim it):** it is not free — it adds reading to every batch. But we **already** spend far more context on the alternative: re-litigating "fixes" to things that were working, retracting announced causes, and wild-goose chases into behaviour that turns out to be correct-by-design. Rule 24's three outcomes (**real defect / working-as-designed-but-unaddressed / legacy that no longer fits**) are **unanswerable without the intent**, so skipping this read does not save the cost — it defers it into a more expensive form.
-
-2. **Pre-Implementation Audit AND Implementation Plan** — ⚠️ **RENAMED 2026-08-21 (Kyle). The step was merged with the plan by #694 piece (5) and Langston ADOPTED it, but THE NAME NEVER FOLLOWED** — the concept was recorded and the label was not, so the workflow still read as two steps. **ONE step, ONE document, Langston signs off once, and the AUDIT comes BEFORE the plan inside it** (that ordering is the whole gain: under two documents the plan is approved first, so an audit that overturns the design arrives after the approval is already spent). **Every plan item back-references the audit finding it falls out of; anything unaudited is flagged `UNAUDITED` in-document.** — Read actual files, check PM2 logs, query Supabase, screenshot UI. **MANDATORY: consult `SYSTEM_IMPACT_MAP.md` for every affected component** (deeper than Step 1.a — per-component upstream + downstream + shared-state + background-execution + blast-radius enumeration). Document in `BATCH_N_PRE_AUDIT.md`. Langston reviews. Skipping the SIM review is how cascade bugs get prevented — non-negotiable.
-
-3. **Implementation** — CC edits directly in the clone repo on the migration branch. Surgical edits explicitly documented. No speculative refactoring.
-
-4. **Code Review** — Langston reviews the actual `git diff` **AT THE GRADED REF (`origin/migration/aws-supabase`) — i.e. AFTER the push to the REVIEW branch, and BEFORE it advances to `main`.** Code-level, not high-level gloss. Change list in `Claude Comms and Packages/Change Lists/`. **(Corrected 2026-07-23 — Kyle: "Langston reviews the review branch on GitHub, so it's already been pushed." The old "BEFORE push" wording contradicted §6.5's own instruction to commit-and-push before dispatching, and contradicted reality: he reads at a ref, so an unpushed diff is a file that does not exist for him. The review gate is the advance to `main`, not the push to the review branch.)**
-
-5. **GitHub Push + CI** — Push to GitHub. CI runs 4 jobs: TypeScript Check, Test Suite, Build, Docker Build. **All 4 must be GREEN.** Do not push on top of red CI.
-
-6. **Staging Deploy** — `ssh root@188.245.193.8 "su - deploy -c 'dt-deploy <full-40-char-sha> --by <session>'"` (**B-DEPLOY-LOCK #649: `dt-deploy` is THE deploy path — NEVER the raw git-pull/build/restart chain.** It locks against concurrent deploys, refuses a dirty worktree, runs `db:migrate` in-chain per the SYSTEM_MANUAL invariant, conditionally `npm ci`s on a lockfile change, and asserts sha-identity + ENGINE RESUMED before recording. `--pre-restart '<npm script>'` for batch-specific steps. **The sha is the FULL 40-char reviewed commit — #621.**)
-
-7. **First-Pass Verification (CC)** — Check PM2 logs, psql to Supabase, UI via Claude-in-Chrome, CI status, server health. Capture evidence.
-
-8. **Second-Pass Verification (Langston)** — Independent UI + evidence verification. Mandatory.
-
-9. **Iterate** — If any scope objective not met: fix → Langston reviews → push → deploy → verify. Repeat until all green.
-
-10. **Governance Updates** — Update ALL applicable Tier 1 + Tier 2 docs (see §3). If batch touched architecture/math → update SYSTEM_MANUAL.md. If batch touched components → update SYSTEM_IMPACT_MAP.md. Failing to update either when applicable = incomplete batch.
-
-    **MANDATORY 10.b — Langston memory sync (Kyle directive 2026-05-07):** at the same time you update your own MEMORY.md, also update Langston's `/home/langston/MEMORY.md` on Hetzner with the batch closure block + sequencing changes + operational invariants. Langston's MEMORY auto-loads every `claude -p` invocation; stale MEMORY → wrong baseline at next review. Mirror your MEMORY structure (state block, recent-batch row, sequencing update, open-issue diff). Keep ≤200 lines. Sync via:
-
-    ```bash
-    cat > /tmp/langston_memory.md <<'EOF'
-    [paste new MEMORY content]
-    EOF
-    scp /tmp/langston_memory.md root@204.168.141.77:/tmp/langston_memory.md
-    ssh root@204.168.141.77 'sudo -u langston cp /tmp/langston_memory.md /home/langston/MEMORY.md && wc -l /home/langston/MEMORY.md'
-    ```
-
-    Update `/home/langston/CLAUDE.md` only when comms protocol or his persona changes (rare). **Repo-side docs reach Langston off the REVIEW BRANCH — so a doc he needs must be pushed, not merely saved** (`LANGSTON_ARCHITECTURE.md` §6).
-
-11. **Completion Report** — Scope objectives checklist with YES / NO / PARTIAL + evidence. List ACTUALLY-edited governance files (including Langston's MEMORY per 10.b). Save to `Claude Comms and Packages/Batch Completion/BATCH_N_COMPLETION_REPORT.md`. Langston reviews + confirms. Batch CLOSED only after Kyle's acknowledgment.
-
 ---
-
-## 3. Governance Tiers & Mandatory Documents
 
 **Tier 1 — EVERY batch (no exceptions):**
 - `1-system-manual/BATCH_CATALOG.md` — add the new batch entry

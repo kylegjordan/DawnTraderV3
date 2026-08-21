@@ -1,3 +1,8 @@
+---
+name: workflow-11-completion
+description: STEP 11 ONLY of the DawnTrader batch workflow - the Completion Report that closes a batch. Use when writing BATCH_N_COMPLETION_REPORT.md with the objectives checklist, the evidence and the list of governance files actually changed. NOT for updating those governance documents, which is step 10.
+---
+
 # STEP 11 — COMPLETION REPORT
 
 **Ends when:** Langston confirms and **Kyle acknowledges**. Only then is the batch CLOSED.
@@ -20,3 +25,12 @@ Any change to a previously-stated number gets surfaced as **PREVIOUSLY STATED: X
 
 ## THEN
 Report to Kyle in the `CONDUCT.md` §6 format, move the board card, and **update your CURRENT POSITION block.**
+
+---
+
+## THE ORIGINAL RULES-FILE TEXT, PRESERVED VERBATIM
+> This is exactly what `CLAUDE.md` §2 held for this step before §2 was removed on 2026-08-21. It is kept word-for-word so the move loses nothing: the summary above is a derivation, and a derivation is not the rule. Where the two differ, **this block is authoritative.**
+
+11. **Completion Report** — Scope objectives checklist with YES / NO / PARTIAL + evidence. List ACTUALLY-edited governance files (including Langston's MEMORY per 10.b). Save to `Claude Comms and Packages/Batch Completion/BATCH_N_COMPLETION_REPORT.md`. Langston reviews + confirms. Batch CLOSED only after Kyle's acknowledgment.
+
+---

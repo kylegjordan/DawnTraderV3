@@ -1,3 +1,8 @@
+---
+name: workflow-02-audit-and-plan
+description: STEP 2 ONLY of the DawnTrader batch workflow - the Pre-Implementation Audit AND Implementation Plan, one merged document. Use after the scope is approved and before any code is written, to read real files, consult SYSTEM_IMPACT_MAP.md per component and write BATCH_N_PRE_AUDIT.md. NOT for drafting the scope, NOT for editing code.
+---
+
 # STEP 2 — PRE-IMPLEMENTATION AUDIT **AND** IMPLEMENTATION PLAN
 
 **ONE step. ONE document. Langston signs off ONCE, on both.** (Renamed 2026-08-21; the merge was #694 piece 5, adopted by Langston.)
@@ -31,3 +36,10 @@ An end-to-end trace is **satisfied by the first sufficient explanation at each h
 ## ⛔ §9.5(a-ii) — DELETION-TIME STATE-WRITE CENSUS
 Before cutting ANY code, **enumerate the state it WRITES and grep for READERS of each.** A removed WRITER whose READER survives produces **no compile error and no failing test** — caller-tracing, green CI and clean `tsc` all pass while the deletion silently breaks a live dependency.
 ⇒ **A deletion is verified by "zero callers AND every state it wrote has no surviving reader" — not by zero callers alone.**
+
+---
+
+## THE ORIGINAL RULES-FILE TEXT, PRESERVED VERBATIM
+> This is exactly what `CLAUDE.md` §2 held for this step before §2 was removed on 2026-08-21. It is kept word-for-word so the move loses nothing: the summary above is a derivation, and a derivation is not the rule. Where the two differ, **this block is authoritative.**
+
+2. **Pre-Implementation Audit AND Implementation Plan** — ⚠️ **RENAMED 2026-08-21 (Kyle). The step was merged with the plan by #694 piece (5) and Langston ADOPTED it, but THE NAME NEVER FOLLOWED** — the concept was recorded and the label was not, so the workflow still read as two steps. **ONE step, ONE document, Langston signs off once, and the AUDIT comes BEFORE the plan inside it** (that ordering is the whole gain: under two documents the plan is approved first, so an audit that overturns the design arrives after the approval is already spent). **Every plan item back-references the audit finding it falls out of; anything unaudited is flagged `UNAUDITED` in-document.** — Read actual files, check PM2 logs, query Supabase, screenshot UI. **MANDATORY: consult `SYSTEM_IMPACT_MAP.md` for every affected component** (deeper than Step 1.a — per-component upstream + downstream + shared-state + background-execution + blast-radius enumeration). Document in `BATCH_N_PRE_AUDIT.md`. Langston reviews. Skipping the SIM review is how cascade bugs get prevented — non-negotiable.

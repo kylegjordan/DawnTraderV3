@@ -1,3 +1,8 @@
+---
+name: workflow-07-verify-cc
+description: STEP 7 ONLY of the DawnTrader batch workflow - first-pass verification by the implementing Claude session. Use when gathering evidence that a deployed change works: PM2 logs, Supabase queries, and mandatory navigation of the staging UI in a browser. NOT for Langston's independent second pass, which is step 8.
+---
+
 # STEP 7 — FIRST-PASS VERIFICATION (CC)
 
 **Ends when:** evidence is captured **and the UI has been navigated**.
@@ -14,3 +19,10 @@ With active trading on, **most changes have a staging-visible surface.** For any
 - PM2 logs, psql, CI status, server health — **as well as**, not instead of.
 - ⚠️ **The application log retains only a couple of hours.** An empty grep over an older window proves nothing; **state the window the instrument actually covers.**
 - **Every issue Kyle raises gets reproduced, located in code, and quoted from real data** — never dismissed, never marked N/A without evidence.
+
+---
+
+## THE ORIGINAL RULES-FILE TEXT, PRESERVED VERBATIM
+> This is exactly what `CLAUDE.md` §2 held for this step before §2 was removed on 2026-08-21. It is kept word-for-word so the move loses nothing: the summary above is a derivation, and a derivation is not the rule. Where the two differ, **this block is authoritative.**
+
+7. **First-Pass Verification (CC)** — Check PM2 logs, psql to Supabase, UI via Claude-in-Chrome, CI status, server health. Capture evidence.
