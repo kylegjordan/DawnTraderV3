@@ -95,3 +95,27 @@ Recorded in #618 and re-affirmed here: **the SQL-aggregate work does NOT depend 
 4. **`m5e:146` — RE-POINT, not aggregate**, with id-level set-equality as the proof obligation.
 
 **His evidence standard on this review, recorded:** he independently re-read `storage.ts:3102-3131`, `routes.ts:4565-4750` and `m5e-validation-service.ts:144-152`, and ran the four staging counts himself; the two provenance commits he marks **RULED ON REPORTED FACT**. Board `Review` stays unset until r3 lands these.
+
+---
+
+## OBJ-4 — **THE LIFETIME SCOREBOARD (KYLE-DIRECTED 2026-08-21, scope ADDITION recorded rather than slipped in)**
+
+**Kyle's ask, in his words:** the Earnings card's bottom line should stop reflecting the window selector and become *"a running scoreboard for since we started trading — here's what you've done."* Labelled **Lifetime** with the date score-keeping began. And: *"anytime we're going to reset the score, it has to be intentional."*
+
+**★ HE RULED BOTH DIRECTIONS INTENTIONAL, and the two are DECOUPLED (2026-08-21):** changing the balance by non-trading means is one deliberate act; resetting the score is a separate deliberate act. Either can happen without the other. **A server restart must never do either** — measured: 4 anchor events in 5 weeks against ~600 process restarts, so anchor changes are already restart-immune.
+
+**⛔ THE DENOMINATOR QUESTION KYLE COULD NOT RESOLVE — ANSWERED FROM THE DATA, NOT BY PICKING A SIDE.** He asked whether the percentage should be against the original $2,250 or the current $824.11. **Neither: every one of the 492 qualifying trades records `anchor_balance_at_open`, with ZERO nulls**, so the capital actually behind each trade is known per-trade and no arbitrary denominator is needed.
+| method | result | verdict |
+|---|---|---|
+| ÷ current $824.11 | **−19.49%** | ⛔ wrong by ~3× — most trades were taken with $2,250/$2,400 behind them |
+| ÷ original $2,250 | −7.14% | ⚠️ close TODAY, but only because most history sits in that era; drifts as trading continues under the new balance |
+| **COMPOUNDED TIME-WEIGHTED RETURN** | **−7.08%** | ✅ **CHOSEN** |
+| (simple sum of per-trade returns) | −6.67% | not chosen — ignores compounding |
+
+**WHY TIME-WEIGHTED IS THE RIGHT INSTRUMENT AND NOT A PREFERENCE:** TWR is the standard measure for a capital base that changed for **non-trading** reasons — which is exactly what a re-anchor is (a deposit/withdrawal in performance-measurement terms). It answers *"how did the TRADING perform"* independent of money moving in or out. Computed as `∏(1 + pnlᵢ / anchor_balance_at_openᵢ) − 1` over the epoch. **Three distinct capital bases are in the history — 2250.00, 2400.00, 824.11 — so this is not academic: any single-denominator answer is wrong for two of the three eras.**
+
+**THE SCOREBOARD EPOCH.** An explicit, deliberately-set marker. **NOT the anchor events** — those change for balance-mirroring reasons (the 08-12 change was Kyle matching the paper balance to his real Kraken balance), and binding the scoreboard to them would have silently erased the July record he is asking to see. **Absent an explicit marker the epoch is the FIRST TRADE (2026-07-15)** — which is not a fallback default but the correct semantic: score-keeping began when trading began. Both are honest and both are stated on the card.
+
+**DELIVERABLE:** `Net P/L (window)` → `Lifetime (since <date>)` in dollars; `Net P/L % (vs starting balance)` → the time-weighted return. Both move ONLY when trades close, and neither moves when the balance is re-anchored.
+
+**CHANGE-CLASS: non_architecture** (a display figure and one new read aggregate; no pipeline, no risk path).
