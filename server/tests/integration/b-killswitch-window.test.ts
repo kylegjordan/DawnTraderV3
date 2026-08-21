@@ -105,6 +105,9 @@ function row(overrides: Record<string, unknown>) {
   ids.push(id);
   return {
     id,
+    // Step F (#618): closed_trades.mode is NOT NULL with NO DEFAULT, so every insert must
+    // state its mode. This builder feeds all four inserts in this suite.
+    mode: 'paper' as const,
     symbol: 'FENCE/USD',
     baseCurrency: 'FENCE',
     strategyName: 'strong_bull_trend' as const,

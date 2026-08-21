@@ -3484,7 +3484,7 @@ export class DatabaseStorage implements IStorage {
     const sortBy = filters.sortBy || 'closedAt';
     const order = filters.order || 'desc';
     
-    const conditions: any[] = [];
+    const conditions: any[] = [eq(closedTradesTable.mode, mode)]; // Step F (#618)
     
     // Phase 8.8.3-C-FINAL PART 1: Ghost filter in SQL - only return valid trades
     // Valid trade = closed_at IS NOT NULL AND exit_price > 0 AND close_reason IS NOT NULL AND close_reason != ''
@@ -3570,7 +3570,7 @@ export class DatabaseStorage implements IStorage {
     const limit = filters?.limit || 1000; // Higher default for global aggregation
     const closedOnly = filters?.closedOnly ?? false;
 
-    const conditions = [];
+    const conditions: any[] = [eq(closedTradesTable.mode, mode)]; // Step F (#618)
     if (closedOnly) {
       conditions.push(sql`${closedTradesTable.closedAt} IS NOT NULL` as any);
     }
