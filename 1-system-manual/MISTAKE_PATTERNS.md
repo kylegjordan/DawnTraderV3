@@ -72,6 +72,21 @@ select symbol, net_pnl, exit_price, take_profit, closed_at from closed_trades
 
 # THE PATTERNS
 
+### `read-the-field` — **THE INSTRUMENT WAS NEVER AMBIGUOUS; THE READER DID NOT LOOK AT THE FIELD** (opened 2026-08-23, CC-A, Langston-named)
+
+**TWO INSTANCES IN ONE DAY, BOTH MINE, BOTH IN `B-RULES-1c/1d`.** Below the §13 promotion floor (3+ instances across 2+ batches) — **filed now precisely so the third is a grep and not somebody’s memory.**
+
+| # | instance | the field that was right there |
+|---|---|---|
+| 1 | Cited a **resume** as the discharging **compaction** for GATE 2 — in the same message that argued the two could not be confused because the harness logs them separately. | `source=compact` vs `source=resume`, distinct values in every row of `instructions-loaded.jsonl`. |
+| 2 | Read a **candidate-set** logger as proof of **loading**, then reported CONDUCT.md ABSENT on every boundary. | The row’s own `measures` field says, verbatim, that it records path existence and is *NOT* proof the harness loaded them. |
+
+★ **THE SHAPE, stated so it is recognisable in a third instance that looks nothing like these two: THE DATA WAS COMPLETE AND CORRECT. No instrument failed. In both cases a field that would have settled it was present in the object I was already looking at, and I formed the conclusion before reading it.** That makes it invisible to every "verify your instrument" rule we have — those catch instruments that lie, and this instrument told the truth.
+**THE COUNTER-HABIT: before drawing a conclusion from a record, read what the record says ABOUT ITSELF** — its type field, its source field, its own stated scope.
+**REFS:** `d0fc181c7` (the GATE-2 correction, with both legs and why the weaker one was weak) · `#740` (the sibling class, where the value really was absent).
+
+
+
 ### `wrong-object` — **PROMOTED TO §13** · mechanism: **NONE YET**
 **Right name, wrong thing.** The path is correct, the file is correct, the command runs — and it measures something other than what the claim is about.
 **INSTANCES (attributed, condition 4 — no grandfathering):**
