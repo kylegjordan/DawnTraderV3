@@ -3257,9 +3257,21 @@ export class DatabaseStorage implements IStorage {
    * rows into a LIVE kill switch.** Do not add a live caller until the table has a real
    * discriminator; the fix belongs with #618 leg 3, not here.
    */
+  /**
+   * B-PHANTOM-FILL-RECONSTRUCT: THE honest realized-P&L expression. Defined ONCE and used by
+   * every aggregate below, because the failure this whole arc documents is the same number being
+   * computed two ways in two places.
+   *
+   * Prefers the RECONSTRUCTED figure where one exists -- a measurement from retained market data,
+   * not a formula -- and falls back to what was recorded. The originals are never mutated, so
+   * `pnl` still answers "what did we record" while this answers "what actually happened".
+   * MEASURED at backfill: 21 of 521 lifetime trades affected; lifetime -74.11 -> -132.74.
+   */
+  private static readonly HONEST_PNL = sql`COALESCE(${closedTradesTable.reconstructedNetPnl}, ${closedTradesTable.pnl})`;
+
   async getRealizedPnlSince(mode: TradingMode, since: Date): Promise<{ realizedPnl: number; tradeCount: number }> {
     const [row] = await db.select({
-      realizedPnl: sql<string>`COALESCE(SUM(${closedTradesTable.pnl}), 0)`,
+      realizedPnl: sql<string>`COALESCE(SUM(${DatabaseStorage.HONEST_PNL}), 0)`,
       tradeCount: sql<string>`COUNT(*)`,
     })
       .from(closedTradesTable)
@@ -3470,7 +3482,7 @@ export class DatabaseStorage implements IStorage {
 
   async getRealizedPnlTotal(mode: TradingMode): Promise<{ realizedPnl: number; tradeCount: number }> {
     const [row] = await db.select({
-      realizedPnl: sql<string>`COALESCE(SUM(${closedTradesTable.pnl}), 0)`,
+      realizedPnl: sql<string>`COALESCE(SUM(${DatabaseStorage.HONEST_PNL}), 0)`,
       tradeCount: sql<string>`COUNT(*)`,
     })
       .from(closedTradesTable)
@@ -3502,7 +3514,7 @@ export class DatabaseStorage implements IStorage {
   async getDailyRealizedPnlSince(mode: TradingMode, since: Date): Promise<Array<{ date: string; pl: number }>> {
     const rows = await db.select({
       date: sql<string>`to_char(${closedTradesTable.closedAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD')`,
-      pl: sql<string>`COALESCE(SUM(${closedTradesTable.pnl}), 0)`,
+      pl: sql<string>`COALESCE(SUM(${DatabaseStorage.HONEST_PNL}), 0)`,
     })
       .from(closedTradesTable)
       .where(and(
@@ -3523,7 +3535,7 @@ export class DatabaseStorage implements IStorage {
    * recent 30. Measured: 43.33% displayed against a true 50.00%.
    */
   async getRecentClosedPnls(mode: TradingMode, n: number): Promise<number[]> {
-    const rows = await db.select({ pnl: closedTradesTable.pnl })
+    const rows = await db.select({ pnl: DatabaseStorage.HONEST_PNL })
       .from(closedTradesTable)
       .where(and(
         sql`${closedTradesTable.closedAt} IS NOT NULL` as any,

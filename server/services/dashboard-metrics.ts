@@ -10,9 +10,39 @@
  * null as "—" (or an explained label like "∞ (no losses)").
  */
 
+/**
+ * B-PHANTOM-FILL-RECONSTRUCT (#507 follow-on): THE honest realized P&L for one closed trade.
+ *
+ * Defined ONCE and imported everywhere, because "the same number computed two ways in two
+ * places" is the failure this entire arc documents. The SQL side carries the matching expression
+ * at `DatabaseStorage.HONEST_PNL`; a fence asserts the two agree on the same rows.
+ *
+ * Prefers `reconstructedNetPnl` -- what the exit WOULD have been at the real market bid, measured
+ * from retained ticker data, for trades whose recorded exit came from a ghost book level. Falls
+ * back to the recorded values, which are NEVER mutated (Kyle: flag and remove from the accounts,
+ * but do not delete the trades). A flagged row with no reconstruction keeps its recorded figure
+ * and stays flagged -- the truthful answer when the market data simply does not exist.
+ *
+ * Lives HERE because this module is the pure metric maths and imports nothing; putting it in a
+ * heavier module would have forced this one to take a dependency it does not need.
+ */
+export function honestNetPnl(t: {
+  reconstructedNetPnl?: unknown;
+  netPnl?: unknown;
+  pnl?: unknown;
+}): number {
+  const pick = t.reconstructedNetPnl ?? t.netPnl ?? t.pnl;
+  const n = parseFloat(String(pick ?? ''));
+  return Number.isFinite(n) ? n : 0;
+}
+
 export interface ClosedTradeLike {
   pnl?: unknown;
   netPnl?: unknown;
+  // #507 follow-on: the honest exit reconstructed from retained market data, for trades whose
+  // recorded exit came from a ghost book level. Preferred by honestNetPnl(); the originals
+  // above are never mutated.
+  reconstructedNetPnl?: unknown;
   grossPnl?: unknown;
   totalFee?: unknown;
   fees?: unknown;
@@ -47,7 +77,7 @@ export function computeRollingEarnings(
 ): { last24h: number; last7d: number; last30d: number } {
   const sumSince = (since: Date) => validTrades
     .filter(t => t.closedAt && new Date(t.closedAt) >= since)
-    .reduce((sum, t) => sum + num(t.netPnl ?? t.pnl), 0);
+    .reduce((sum, t) => sum + honestNetPnl(t), 0);
   const ms = now.getTime();
   return {
     last24h: sumSince(new Date(ms - 24 * 60 * 60 * 1000)),
@@ -89,7 +119,7 @@ export function computeAvgNetR(trades: ClosedTradeLike[]): {
     const entry = num(t.entryPrice), stop = num(t.stopLoss), qty = num(t.quantity);
     const riskUsd = Math.abs(entry - stop) * qty;
     if (!t.stopLoss || !(riskUsd > 0)) { rExcluded++; continue; }
-    rSum += num(t.netPnl ?? t.pnl) / riskUsd;
+    rSum += honestNetPnl(t) / riskUsd;
     rCount++;
   }
   return { value: rCount > 0 ? rSum / rCount : null, sampleCount: rCount, excludedCount: rExcluded };
@@ -105,7 +135,7 @@ export function computeMaxDrawdownUsd(trades: ClosedTradeLike[]): number {
   );
   let running = 0, peak = 0, maxDdUsd = 0;
   for (const t of byCloseTime) {
-    running += num(t.netPnl ?? t.pnl);
+    running += honestNetPnl(t);
     if (running > peak) peak = running;
     if (peak - running > maxDdUsd) maxDdUsd = peak - running;
   }
@@ -124,7 +154,7 @@ export function computeByAssetClass(trades: ClosedTradeLike[]): Record<string, {
     if (!byAssetClass[ac]) byAssetClass[ac] = { count: 0, wins: 0, netPnl: 0, fees: 0, winRate: 0 };
     byAssetClass[ac].count++;
     if (num(t.pnl) > 0) byAssetClass[ac].wins++;
-    byAssetClass[ac].netPnl += num(t.netPnl ?? t.pnl);
+    byAssetClass[ac].netPnl += honestNetPnl(t);
     byAssetClass[ac].fees += num(t.totalFee ?? t.fees);
   }
   Object.values(byAssetClass).forEach(r => { r.winRate = r.count > 0 ? (r.wins / r.count) * 100 : 0; });

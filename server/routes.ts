@@ -58,7 +58,7 @@ import { getCache, setCache, coalesce } from './services/cache';
 import { metricsService } from './services/metrics-service';
 import { activeFilterPool } from './services/active-filter-pool.js';
 // P19-B8.3: pure dashboard-metric math (unit-tested — Langston Step-4 conditions).
-import { num, computeRollingEarnings, computeFeeDrag, computeMakerTakerMix, computeAvgNetR, computeMaxDrawdownUsd, computeByAssetClass, profitFactorOrNull } from './services/dashboard-metrics.js';
+import { num, honestNetPnl, computeRollingEarnings, computeFeeDrag, computeMakerTakerMix, computeAvgNetR, computeMaxDrawdownUsd, computeByAssetClass, profitFactorOrNull } from './services/dashboard-metrics.js';
 import { marketVolumeCache } from './services/market-volume-cache.js';
 import { b5SizingAudit } from './services/b5-sizing-audit.js';
 import { livePricingAdapter, isRestFallbackSource, isPriceVenueQuiet } from './services/live-pricing-adapter.js';
@@ -12546,7 +12546,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const num = (v: unknown): number => { const n = parseFloat(String(v ?? '')); return Number.isFinite(n) ? n : 0; };
       const closes = allClosed
         .filter(t => t.closedAt && t.closeReason !== 'never_filled')
-        .map(t => ({ at: new Date(t.closedAt!), pnl: num(t.netPnl ?? t.pnl) }))
+        .map(t => ({ at: new Date(t.closedAt!), pnl: honestNetPnl(t) }))
         .sort((a, b) => a.at.getTime() - b.at.getTime());
 
       if (anchors.length === 0 && closes.length === 0) {
@@ -13161,26 +13161,32 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const closedAtSL = trades.filter(t => t.closeReason === 'stop_hit');
       const closedManually = trades.filter(t => t.closeReason === 'manual_close' || t.closeReason === 'timeout');
       
-      const wins = trades.filter(t => parseFloat(t.pnl?.toString() || '0') > 0);
-      const losses = trades.filter(t => parseFloat(t.pnl?.toString() || '0') <= 0);
+      // B-PHANTOM-FILL-RECONSTRUCT: classify on the HONEST figure, not the recorded one.
+      // MEASURED on the live table: of the 21 phantom-fill rows, 11 were recorded as wins and
+      // 4 of those are losses once the exit is reconstructed at the real bid (0 flip the other
+      // way). Leaving this on `t.pnl` would have shown an honest headline P&L beside a win rate,
+      // profit factor and per-strategy table still computed from the fiction -- the same number
+      // derived two ways in one response, which is the failure this whole arc documents.
+      const wins = trades.filter(t => honestNetPnl(t) > 0);
+      const losses = trades.filter(t => honestNetPnl(t) <= 0);
       
       const winRate = trades.length > 0 ? (wins.length / trades.length) * 100 : 0;
       
-      const totalProfit = wins.reduce((sum, t) => sum + parseFloat(t.pnl?.toString() || '0'), 0);
-      const totalLoss = Math.abs(losses.reduce((sum, t) => sum + parseFloat(t.pnl?.toString() || '0'), 0));
+      const totalProfit = wins.reduce((sum, t) => sum + honestNetPnl(t), 0);
+      const totalLoss = Math.abs(losses.reduce((sum, t) => sum + honestNetPnl(t), 0));
       
       const avgProfit = wins.length > 0 ? totalProfit / wins.length : 0;
       const avgLoss = losses.length > 0 ? totalLoss / losses.length : 0;
       
       // P19-B8.3b (OBJ-3, #415): the headline netPnl now sums on the CANONICAL
-      // net-of-friction basis — `num(t.netPnl ?? t.pnl)` — the SAME expression
+      // net-of-friction basis — `honestNetPnl(t)` — the SAME expression
       // byAssetClass uses (below), so `Σ byAssetClass.netPnl === headline netPnl`
       // by construction (previously the headline summed raw `t.pnl` (gross) while
       // per-class summed net → they diverged by total fees on fee-bearing rows).
       // net_pnl is `default("0")` non-null (schema:1723) so `?? t.pnl` is a
       // documented no-op bridge for any pre-net_pnl-column legacy row (there are
       // none today — closed_trades is empty until the B8.4 switch-on).
-      const netPnl = trades.reduce((sum, t) => sum + num(t.netPnl ?? t.pnl), 0);
+      const netPnl = trades.reduce((sum, t) => sum + honestNetPnl(t), 0);
 
       // Phase 8.8.3-C5-4: Analytics Scope Verification - log analytics query scope
       // Phase 8.8.3-C6: Use engine start timestamp for session info
@@ -13211,7 +13217,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         sortedHoldingTimes[Math.floor(sortedHoldingTimes.length / 2)] : 0;
       
       // B2: Calculate Avg Profit % per Trade
-      const totalPnlPercent = trades.reduce((sum, t) => sum + parseFloat(t.pnlPercent?.toString() || '0'), 0);
+      // Same preference as the dollar figures. Left on the recorded column, this average would
+      // have been the one contaminated number sitting beside eight corrected ones.
+      const totalPnlPercent = trades.reduce((sum, t) => sum + parseFloat(String(t.reconstructedPnlPercent ?? t.pnlPercent ?? '0')), 0);
       const avgProfitPercent = trades.length > 0 ? totalPnlPercent / trades.length : 0;
       
       // B2: Calculate Avg Daily Profit %
@@ -13231,30 +13239,30 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           byStrategy[strategy] = { count: 0, pnl: 0, winRate: 0 };
         }
         byStrategy[strategy].count++;
-        byStrategy[strategy].pnl += parseFloat(t.pnl?.toString() || '0');
+        byStrategy[strategy].pnl += honestNetPnl(t);
       });
       
       // Calculate win rate per strategy
       Object.keys(byStrategy).forEach(strategy => {
         const stratTrades = trades.filter(t => (t.strategyName || 'unknown') === strategy);
-        const stratWins = stratTrades.filter(t => parseFloat(t.pnl?.toString() || '0') > 0);
+        const stratWins = stratTrades.filter(t => honestNetPnl(t) > 0);
         byStrategy[strategy].winRate = stratTrades.length > 0 ? (stratWins.length / stratTrades.length) * 100 : 0;
       });
       
       // Largest winner/loser
       const sortedByPnl = [...trades].sort((a, b) => 
-        parseFloat(b.pnl?.toString() || '0') - parseFloat(a.pnl?.toString() || '0')
+        honestNetPnl(b) - honestNetPnl(a)
       );
       
       const largestWinner = sortedByPnl[0] ? {
         symbol: sortedByPnl[0].symbol,
-        pnl: parseFloat(sortedByPnl[0].pnl?.toString() || '0'),
+        pnl: honestNetPnl(sortedByPnl[0]),
         strategy: sortedByPnl[0].strategyName
       } : null;
       
       const largestLoser = sortedByPnl[sortedByPnl.length - 1] ? {
         symbol: sortedByPnl[sortedByPnl.length - 1].symbol,
-        pnl: parseFloat(sortedByPnl[sortedByPnl.length - 1].pnl?.toString() || '0'),
+        pnl: honestNetPnl(sortedByPnl[sortedByPnl.length - 1]),
         strategy: sortedByPnl[sortedByPnl.length - 1].strategyName
       } : null;
 

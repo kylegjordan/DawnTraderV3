@@ -1699,6 +1699,18 @@ export const closedTradesTable = pgTable("closed_trades", {
   stopLoss: decimal("stop_loss", { precision: 20, scale: 8 }),
   takeProfit: decimal("take_profit", { precision: 20, scale: 8 }),
   pnl: decimal("pnl", { precision: 20, scale: 8 }),
+  // B-PHANTOM-FILL-RECONSTRUCT (#507 follow-on, Kyle 2026-08-23). The recorded exit came from a
+  // GHOST order-book level; these carry what the honest exit WOULD have been, reconstructed from
+  // retained market data. ⛔ THE ORIGINALS ABOVE ARE NEVER OVERWRITTEN -- Kyle: "flag and remove
+  // from our accounts, but we don't delete these trades"; Langston: rewriting in place buries the
+  // distinction between recorded and reconstructed, and a better reconstruction later would then
+  // need un-rewriting. `reconstructedNetPnl` is NULL when no contemporaneous market data exists --
+  // that row stays flagged and uncorrected, which is the truthful answer.
+  phantomFillSuspect: boolean("phantom_fill_suspect").notNull().default(false),
+  reconstructedExitPrice: decimal("reconstructed_exit_price", { precision: 20, scale: 8 }),
+  reconstructedNetPnl: decimal("reconstructed_net_pnl", { precision: 20, scale: 8 }),
+  reconstructedPnlPercent: decimal("reconstructed_pnl_percent", { precision: 20, scale: 8 }),
+  reconstructionBasis: varchar("reconstruction_basis", { length: 64 }),
   pnlPercent: decimal("pnl_percent", { precision: 10, scale: 4 }),
   fees: decimal("fees", { precision: 20, scale: 8 }).default("0"),
   slippage: decimal("slippage", { precision: 20, scale: 8 }).default("0"),
