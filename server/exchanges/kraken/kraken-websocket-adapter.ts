@@ -136,7 +136,12 @@ export class KrakenWebSocketAdapter extends EventEmitter {
   // resubscribes at 1. Truncation must use the symbol's own depth or it is wrong for one of them.
   private bookDepth = new Map<string, number>();
   private bookChecksumMismatches = new Map<string, number>();
-  private bookChecksumMatches = new Map<string, number>(); // observe-only until precision-correct formatting lands
+  private bookChecksumMatches = new Map<string, number>();
+  private bookChecksumAttempts = new Map<string, number>();
+  private bookChecksumSkippedNoPrecision = new Map<string, number>(); // wired for when the instrument feed lands
+  private bookCrossedDetections = new Map<string, number>();          // bestBid >= bestAsk AFTER truncation
+  private bookUpdatesApplied = new Map<string, number>();             // the DENOMINATOR every rate above needs
+  private readonly bookCountersSince = Date.now();                    // so the denominator travels with the number
   // P19-B4b.1: per-symbol last book-update wall-clock (ms) — book-specific freshness
   // for the depth-walked fill warmth gate (distinct from symbolStats.lastUpdate which
   // can conflate ticker + book channels).
@@ -793,13 +798,21 @@ export class KrakenWebSocketAdapter extends EventEmitter {
       // `instrument` channel (not yet subscribed) and must FAIL OPEN on unknown precision. That
       // is the follow-up (#507 remainder). Until then this branch only counts -- so the day the
       // formatting is fixed, the instrument is already wired and its silence is measurable.
+      const bump = (m: Map<string, number>) => m.set(internalSymbol, (m.get(internalSymbol) ?? 0) + 1);
+      bump(this.bookUpdatesApplied);
       if (typeof update.checksum === 'number') {
+        bump(this.bookChecksumAttempts);
         const ours = this.computeBookChecksum(raw);
-        if (ours !== update.checksum) {
-          this.bookChecksumMismatches.set(internalSymbol, (this.bookChecksumMismatches.get(internalSymbol) ?? 0) + 1);
-        } else {
-          this.bookChecksumMatches.set(internalSymbol, (this.bookChecksumMatches.get(internalSymbol) ?? 0) + 1);
-        }
+        bump(ours === update.checksum ? this.bookChecksumMatches : this.bookChecksumMismatches);
+      }
+      // CROSSED-BOOK DETECTOR -- the property the fix exists to guarantee, counted rather than
+      // grepped for. Langston at the gate: an absence needs an instrument and a denominator.
+      // MEASURED pre-fix on the live venue by replicating the old handler: 8,358 of 26,093
+      // book states crossed (32.03%) across 6 of 8 pairs including BTC/USD. With truncation +
+      // snapshot-replace: 0 of 31,059. Post-deploy this counter must stay at 0.
+      if (book.bids.size > 0 && book.asks.size > 0
+          && Math.max(...book.bids.keys()) >= Math.min(...book.asks.keys())) {
+        bump(this.bookCrossedDetections);
       }
 
       // P19-B4b.1: stamp book-specific freshness on every applied delta (before the
@@ -3142,6 +3155,57 @@ export class KrakenWebSocketAdapter extends EventEmitter {
    * Directive 8.9.5: Soft resubscribe for integrity monitor
    * Clears all per-symbol state and resubscribes without disconnecting WebSocket
    */
+  /**
+   * #507 (Langston, hotfix gate): the observe-only checksum and crossed-book counters, readable
+   * on demand rather than inferred from a rotated log. Cumulative since process start, with the
+   * start stamp and uptime attached SO THE DENOMINATOR TRAVELS WITH THE NUMBER.
+   *
+   * ⚠️ PRE-REGISTERED READING, so a high mismatch rate is not misread as the fix failing:
+   * MISMATCH IS THE EXPECTED RESULT TODAY. Kraken sends price/qty as JSON numbers, so
+   * `String(qty)` cannot reconstruct the CRC input (measured: 0/40 match live, 40/40 once
+   * formatted at instrument precision). Until the v2 `instrument` precision feed is subscribed
+   * -- it is NOT today, measured: zero instrument messages in a 3,000-line window -- this
+   * counter is A GAUGE OF THE PRECISION GAP, NOT OF BOOK INTEGRITY.
+   * ★ The INTEGRITY signal is `crossedDetections`, which must be 0. Pre-fix comparator,
+   *   measured live by replicating the old handler: 32.03% of book states crossed.
+   * ★ `matches` is the POSITIVE CONTROL for `mismatches`: a zero mismatch count is unreadable
+   *   without evidence the branch executed at all. `attempts` proves invocation either way.
+   */
+  getBookIntegrityCounters(): {
+    since: string; uptimeMs: number;
+    totals: { updatesApplied: number; checksumAttempts: number; matches: number; mismatches: number; skippedNoPrecision: number; crossedDetections: number };
+    bySymbol: Array<{ symbol: string; updatesApplied: number; attempts: number; matches: number; mismatches: number; skippedNoPrecision: number; crossedDetections: number }>;
+    note: string;
+  } {
+    const syms = new Set<string>([
+      ...this.bookUpdatesApplied.keys(), ...this.bookChecksumAttempts.keys(),
+      ...this.bookChecksumMatches.keys(), ...this.bookChecksumMismatches.keys(),
+      ...this.bookCrossedDetections.keys(),
+    ]);
+    const g = (m: Map<string, number>, k: string) => m.get(k) ?? 0;
+    const bySymbol = [...syms].sort().map((symbol) => ({
+      symbol,
+      updatesApplied: g(this.bookUpdatesApplied, symbol),
+      attempts: g(this.bookChecksumAttempts, symbol),
+      matches: g(this.bookChecksumMatches, symbol),
+      mismatches: g(this.bookChecksumMismatches, symbol),
+      skippedNoPrecision: g(this.bookChecksumSkippedNoPrecision, symbol),
+      crossedDetections: g(this.bookCrossedDetections, symbol),
+    }));
+    const sum = (f: (r: typeof bySymbol[number]) => number) => bySymbol.reduce((a, r) => a + f(r), 0);
+    return {
+      since: new Date(this.bookCountersSince).toISOString(),
+      uptimeMs: Date.now() - this.bookCountersSince,
+      totals: {
+        updatesApplied: sum(r => r.updatesApplied), checksumAttempts: sum(r => r.attempts),
+        matches: sum(r => r.matches), mismatches: sum(r => r.mismatches),
+        skippedNoPrecision: sum(r => r.skippedNoPrecision), crossedDetections: sum(r => r.crossedDetections),
+      },
+      bySymbol,
+      note: 'MISMATCH IS EXPECTED until the v2 instrument precision feed lands (#507 remainder): Kraken sends price/qty as JSON numbers and String() cannot reconstruct the CRC input. The INTEGRITY signal here is crossedDetections, which must be 0 (pre-fix comparator, measured live: 32.03% of book states crossed).',
+    };
+  }
+
   /** #507: keep only the best `depth` levels per side. Kraken never sends deletes for levels that
    *  fall out of the subscribed window, so the client MUST do this after every update. */
   private truncateBook(

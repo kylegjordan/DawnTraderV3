@@ -13392,6 +13392,34 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  /**
+   * #507 / B-BOOK-TRUNCATE-HOTFIX (Langston condition at the hotfix gate): the book-integrity
+   * counters, readable on demand. He required this rather than log-grep because staging stdout
+   * retention is ~2 days and out.log rotates several times a day -- an absence in a rotated file
+   * is not evidence, and a counter you can read is.
+   *
+   * READ IT LIKE THIS, and the ordering matters:
+   *  - `crossedDetections` MUST be 0. That is the integrity signal and the thing the fix
+   *    guarantees. Pre-fix comparator, measured on the live venue by replicating the old
+   *    handler: 8,358 of 26,093 book states crossed = 32.03%, across 6 of 8 pairs incl BTC/USD.
+   *    With truncation + snapshot-replace: 0 of 31,059.
+   *  - `mismatches` HIGH IS EXPECTED and is NOT the fix failing. Kraken sends price/qty as JSON
+   *    numbers, so String() cannot reconstruct the CRC input until the v2 instrument precision
+   *    feed is subscribed (#507 remainder; measured: zero instrument messages in a 3,000-line
+   *    window today). Verification is OBSERVE-ONLY and never resubscribes.
+   *  - `matches` is the positive control for `mismatches`, and `attempts` proves the branch ran
+   *    at all -- a zero mismatch count is unreadable without them.
+   */
+  apiRouter.get('/active-engine/book-integrity', authenticateToken, async (_req: AuthenticatedRequest, res) => {
+    try {
+      const { krakenWebSocketAdapter } = await import('./exchanges/kraken/kraken-websocket-adapter.js');
+      res.json(krakenWebSocketAdapter.getBookIntegrityCounters());
+    } catch (error) {
+      console.error('[#507] book-integrity counters failed:', error);
+      res.status(500).json({ error: 'Failed to read book integrity counters' });
+    }
+  });
+
   apiRouter.get('/active-engine/health', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
