@@ -1,5 +1,6 @@
 import WebSocket from 'ws';
 import { EventEmitter } from 'events';
+import { crc32 as zlibCrc32 } from 'zlib'; // #507: Node 22 built-in, used for Kraken's book checksum
 import { contextBridge } from '../../services/context-bridge.js';
 // B78.1: removed `import { livePricingAdapter } from './live-pricing-adapter.js'`.
 // Cycle break: ws-adapter is now a leaf in the exchange layer. live-pricing-adapter
@@ -127,6 +128,14 @@ export class KrakenWebSocketAdapter extends EventEmitter {
   
   // 8.9.4-Patch: Stateful mini-book tracking for stable mid-price computation
   private orderBooks = new Map<string, { bids: Map<number, number>; asks: Map<number, number> }>();
+  // B-BOOK-TRUNCATE-HOTFIX (#507): the RAW price/qty strings per level, kept beside the numeric
+  // book because Kraken computes its checksum over the STRING representations (decimal point
+  // removed, leading zeros stripped) -- a float round-trip would silently change the input.
+  private bookRaw = new Map<string, { bids: Map<number, [string, string]>; asks: Map<number, [string, string]> }>();
+  // Subscribed depth PER SYMBOL: the main subscribe uses 10, the B78.2 channel-switch path
+  // resubscribes at 1. Truncation must use the symbol's own depth or it is wrong for one of them.
+  private bookDepth = new Map<string, number>();
+  private bookChecksumMismatches = new Map<string, number>();
   // P19-B4b.1: per-symbol last book-update wall-clock (ms) — book-specific freshness
   // for the depth-walked fill warmth gate (distinct from symbolStats.lastUpdate which
   // can conflate ticker + book channels).
@@ -721,38 +730,63 @@ export class KrakenWebSocketAdapter extends EventEmitter {
       // algorithm and resubscribe on mismatch — a named Phase-20 hardening item
       // (RUNNING_ISSUES #507), not a hot-path improvisation.
 
-      // 8.9.4-Patch: Initialize or get mini-book for this symbol
-      if (!this.orderBooks.has(internalSymbol)) {
+      // B-BOOK-TRUNCATE-HOTFIX (#507, 2026-08-22) -- THE PHANTOM-BID DEFECT.
+      // Kraken v2 book contract (docs: Book (Level 2) + the v2 checksum guide), verbatim:
+      //   'After each update, truncate your book to the subscribed depth -- you will not
+      //    receive qty: 0 for levels that fall out of scope. If you are subscribed with
+      //    depth: 10 and an insert ... results in you having 11 bids, you must remove the
+      //    11th worst bid.'
+      // This handler NEVER truncated. Every level that fell out of the top-10 was orphaned in
+      // the Map forever, and a SNAPSHOT was merged into the stale Map like a delta instead of
+      // replacing it. Over hours the book grew a tail of dead levels, and a dead BID from an
+      // earlier, higher price sat ABOVE the current real ask -- a crossed book. MEASURED LIVE
+      // 2026-08-22: ONDO/USD bid=0.40349 ask=0.36411 (+10.8%), XRP/USD +24.9%, ZEC/USD +33%,
+      // a dozen pairs. The paper CLOSE fill walks the bid side, so a stop-triggered SELL filled
+      // against a bid that did not exist: ONDO stop_hit exited at 0.4033 against a 0.3696 stop,
+      // +8.8% above entry. 26 such exits lifetime = +$187.78 of phantom profit; the real crypto
+      // book is -$6.08. The mid (bestBid+bestAsk)/2 was poisoned the same way.
+      // Root: the 8.9.4-Patch handler predates anything consuming the book; #507 (07-15) deleted
+      // a bogus sequence check and named real validation as unbuilt. Truncation is the half of
+      // the contract nobody had read.
+      const isSnapshot = message.type === 'snapshot';
+      if (isSnapshot || !this.orderBooks.has(internalSymbol)) {
+        // A snapshot is the AUTHORITATIVE state: replace, never merge.
         this.orderBooks.set(internalSymbol, { bids: new Map(), asks: new Map() });
+        this.bookRaw.set(internalSymbol, { bids: new Map(), asks: new Map() });
       }
       const book = this.orderBooks.get(internalSymbol)!;
-      
-      // 8.9.4-Patch: Apply delta updates to mini-book
-      // v2 book format uses 'bids' and 'asks' arrays with objects like {price: "123.45", qty: "1.0"}
-      if (update.bids) {
-        for (const item of update.bids) {
-          const price = parseFloat(item.price);
-          const qty = parseFloat(item.qty);
-          if (qty === 0) {
-            book.bids.delete(price); // Remove level when qty is zero
-          } else {
-            book.bids.set(price, qty);
-          }
+      const raw = this.bookRaw.get(internalSymbol)!;
+      const depth = this.bookDepth.get(internalSymbol) ?? 10;
+
+      // Apply levels. qty=0 deletes; otherwise set. Raw strings kept for the checksum.
+      for (const side of ['bids', 'asks'] as const) {
+        const items = update[side];
+        if (!items) continue;
+        for (const item of items) {
+          const priceStr = String(item.price), qtyStr = String(item.qty);
+          const price = parseFloat(priceStr), qty = parseFloat(qtyStr);
+          if (qty === 0) { book[side].delete(price); raw[side].delete(price); }
+          else { book[side].set(price, qty); raw[side].set(price, [priceStr, qtyStr]); }
         }
       }
-      
-      if (update.asks) {
-        for (const item of update.asks) {
-          const price = parseFloat(item.price);
-          const qty = parseFloat(item.qty);
-          if (qty === 0) {
-            book.asks.delete(price); // Remove level when qty is zero
-          } else {
-            book.asks.set(price, qty);
-          }
+
+      // TRUNCATE to the subscribed depth -- the documented, mandatory step this handler lacked.
+      this.truncateBook(book, raw, depth);
+
+      // VERIFY against Kraken's checksum when present. On mismatch the book is desynced and
+      // the only honest recovery is a resubscribe for a fresh snapshot. Logged every time --
+      // a silent resync is the same absent-as-valid shape as the original bug.
+      if (typeof update.checksum === 'number') {
+        const ours = this.computeBookChecksum(raw);
+        if (ours !== update.checksum) {
+          const n = (this.bookChecksumMismatches.get(internalSymbol) ?? 0) + 1;
+          this.bookChecksumMismatches.set(internalSymbol, n);
+          console.warn(`[#507][BOOK_CHECKSUM_MISMATCH] symbol=${internalSymbol} ours=${ours} theirs=${update.checksum} depth=${depth} count=${n} -- resubscribing for a fresh snapshot`);
+          void this.softResubscribe(internalSymbol);
+          continue;
         }
       }
-      
+
       // P19-B4b.1: stamp book-specific freshness on every applied delta (before the
       // BBO-validity continue below, so a transiently one-sided book still records its age).
       this.bookUpdatedAt.set(internalSymbol, Date.now());
@@ -1125,6 +1159,8 @@ export class KrakenWebSocketAdapter extends EventEmitter {
         snapshot: true
       }
     };
+    // #507: record the subscribed depth per symbol so truncation uses the right window.
+    for (const ks of krakenSymbols) { const sym = this.mapKrakenPairToInternalSymbol(ks); if (sym) this.bookDepth.set(sym, 10); }
     
     // I7-WS-SUBSCRIBE: Log exact payloads being sent
     console.log("[I7-WS-SEND][ticker]", JSON.stringify(tickerSubscribe));
@@ -2293,6 +2329,7 @@ export class KrakenWebSocketAdapter extends EventEmitter {
     if (!data) return;
     
     console.log(`[I7-WS-G][CHANNEL_SWITCH] symbol=${symbol} use=book depth=1`);
+    this.bookDepth.set(symbol, 1); // #507: this path subscribes at depth 1; truncate to 1 here.
     
     // Get Kraken pair
     const krakenPair = this.normalToKrakenSymbol(symbol);
@@ -3087,11 +3124,46 @@ export class KrakenWebSocketAdapter extends EventEmitter {
    * Directive 8.9.5: Soft resubscribe for integrity monitor
    * Clears all per-symbol state and resubscribes without disconnecting WebSocket
    */
+  /** #507: keep only the best `depth` levels per side. Kraken never sends deletes for levels that
+   *  fall out of the subscribed window, so the client MUST do this after every update. */
+  private truncateBook(
+    book: { bids: Map<number, number>; asks: Map<number, number> },
+    raw: { bids: Map<number, [string, string]>; asks: Map<number, [string, string]> },
+    depth: number,
+  ): void {
+    if (book.bids.size > depth) {
+      const keep = new Set([...book.bids.keys()].sort((x, y) => y - x).slice(0, depth));
+      for (const p of [...book.bids.keys()]) if (!keep.has(p)) { book.bids.delete(p); raw.bids.delete(p); }
+    }
+    if (book.asks.size > depth) {
+      const keep = new Set([...book.asks.keys()].sort((x, y) => x - y).slice(0, depth));
+      for (const p of [...book.asks.keys()]) if (!keep.has(p)) { book.asks.delete(p); raw.asks.delete(p); }
+    }
+  }
+
+  /** #507: Kraken's documented v2 book checksum. Top-10 asks (price ascending) then top-10 bids
+   *  (price descending); per level, price then qty with the decimal point removed and leading
+   *  zeros stripped; concatenate; CRC32 as unsigned 32-bit. Verified against the official worked
+   *  example (expected 3310070434) in the unit test. Static so the test can reach it. */
+  static computeBookChecksumFromRaw(raw: { bids: Map<number, [string, string]>; asks: Map<number, [string, string]> }): number {
+    const fmt = (v: string) => v.replace('.', '').replace(/^0+/, '');
+    const asks = [...raw.asks.entries()].sort((x, y) => x[0] - y[0]).slice(0, 10);
+    const bids = [...raw.bids.entries()].sort((x, y) => y[0] - x[0]).slice(0, 10);
+    let str = '';
+    for (const [, [p, q]] of asks) str += fmt(p) + fmt(q);
+    for (const [, [p, q]] of bids) str += fmt(p) + fmt(q);
+    return zlibCrc32(str) >>> 0;
+  }
+  private computeBookChecksum(raw: { bids: Map<number, [string, string]>; asks: Map<number, [string, string]> }): number {
+    return KrakenWebSocketAdapter.computeBookChecksumFromRaw(raw);
+  }
+
   async softResubscribe(symbol: string): Promise<void> {
     console.log(`[8.9.5][SOFT_RESUB] Starting soft resubscribe for ${symbol}`);
     
     // Clear ALL per-symbol state to ensure clean resync
     this.orderBooks.delete(symbol);
+    this.bookRaw.delete(symbol); // #507: the raw mirror must go with it
     this.symbolStats.delete(symbol);
     this.pendingSubscriptions.delete(symbol);
     this.subscriptionAcks.delete(symbol);
