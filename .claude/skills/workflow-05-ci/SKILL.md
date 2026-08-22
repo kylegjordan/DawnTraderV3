@@ -23,6 +23,11 @@ gh run watch <run-id> --exit-status      # if queued or in_progress
 Errors **vanishing** from files your push did **not** touch is the signature of **tsc not seeing the code** — a partial parse failure, an excluded directory, a moved file — **not of a fix**. That exact misreading put a broken parse on staging.
 **The discriminator:** if other errors in that file are still reported, tsc IS reading it and the drop is genuine. **Check before regenerating**, and if the cause is another session's work, **it is theirs to acknowledge, not yours** — the acknowledgement IS the explanation.
 
+## ⛔ A GATE THAT REFUSES IS NOT AUTOMATICALLY RIGHT — AND YOU STILL DO NOT ROUTE AROUND IT
+**Measured 2026-08-21:** the push guard refused every push with *the tsc baseline comparator is missing* while that file was present **both locally and at origin**. It resolved the path relative to its own working directory, so a hook process started elsewhere could never find it. **A fail-closed gate refusing on a FALSE absence is the exact error the gate exists to prevent, aimed at itself.**
+**SO, IN ORDER:** (1) **verify the refusal is real** — go and look for the thing it says is missing, at the path AND at the ref; (2) if the gate is wrong, **FIX THE GATE**, and say so; (3) **never work around it, never disable it, never re-run until it happens to pass.**
+⚠️ **A gate that blocks correct work teaches people to route around gates — and that is how a real regression eventually gets waved through.**
+
 ---
 
 ## THE ORIGINAL RULES-FILE TEXT, PRESERVED VERBATIM

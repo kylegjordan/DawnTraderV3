@@ -11,6 +11,10 @@ description: STEP 8 ONLY of the DawnTrader batch workflow - Langston's independe
 **Give him what he needs to re-derive rather than accept:** the ref, the object and population for every number, and the commands you ran. **Anything he cannot reach, he will tag `RULED ON REPORTED FACT` — and that is disqualifying for a PROCEED on the leg it covers.**
 ⇒ **If a measurement rests on something only you can see, commit the derivation so it is second-party checkable.**
 
+## ⛔ WHAT MAKES HIS PASS WORTH ANYTHING IS THAT HE CAN RE-DERIVE IT
+Give him the ref, the object, the population, and the exact commands you ran. **A number he cannot re-derive he will tag `RULED ON REPORTED FACT` — and that is DISQUALIFYING for a PROCEED on the leg it covers, not a caveat he can attach to one.**
+⚠️ **He is STATELESS per-invoke and may be mid-review with another session.** **Do not read a slow reply as agreement**, and never carry a conclusion from his prior turn into a new dispatch without restating it in full.
+
 ---
 
 ## THE ORIGINAL RULES-FILE TEXT, PRESERVED VERBATIM

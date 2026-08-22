@@ -26,6 +26,12 @@ For every service/module/function/route the batch touches, **record its ORIGINAL
 
 **Answer one of the FIVE dispositions, explicitly:** (1) still relevant and correct · (2) relevant but needs updating to today's intent · (3) disconnected, should be RECONNECTED · (4) connected, should be REMOVED · (5) disconnected and should stay disconnected / be deleted. **A scope that cannot say which is unfinished.**
 
+## ⛔ BEFORE YOU SCOPE IT: DOES IT ALREADY EXIST, AND WAS IT ALREADY DECIDED?
+**Two failures, opposite directions, both expensive, both measured on this project:**
+- **BUILDING WHAT ALREADY EXISTS.** `CONDUCT.md`: *use what already exists before proposing new code.* Grep the repo for the CAPABILITY, not just for the name you would give it.
+- **★ ASSUMING A RULE EXISTS BECAUSE THE WORD DOES.** Measured 2026-08-21: **"hotfix" appeared 256 times across the governance corpus and every single occurrence was a USAGE.** There was no definition, no qualifying test and no steps — for months, while every session cited it. ⇒ **A term in constant use is NOT evidence that it is governed. Search for the RULE, not the WORD — and a search returning only usages IS a finding.**
+- **AND THE LEDGER (§9.5(b-ii)):** grep `RUNNING_ISSUES.md` + `BATCH_CATALOG.md` + the completion reports before scoping a fix. **A deliberate, Kyle-approved, Langston-reviewed decision re-scoped as a defect is worse than no scope at all.**
+
 ---
 
 ## THE ORIGINAL RULES-FILE TEXT, PRESERVED VERBATIM

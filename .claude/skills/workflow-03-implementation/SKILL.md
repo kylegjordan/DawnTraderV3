@@ -24,6 +24,12 @@ git commit -F <msgfile> -- <the same explicit paths>
 ⚠️ **`git diff HEAD` DOES NOT SHOW UNTRACKED FILES** and says nothing about the omission. **Cross-check `git status --porcelain` for `??` before calling any diff "the change set."**
 ⚠️ **Never carry a multi-hour uncommitted diff** — it breaks Langston's ability to verify at a ref. **Quote `path:line` from the ref, never from your worktree.**
 
+## ⛔⛔ WHY ANOTHER SESSION'S CONTENT APPEARS IN YOUR INDEX — SOLVED 2026-08-21, DO NOT RE-DIAGNOSE IT
+**It is NOT another session writing into your clone. It never was.** `.claude/hooks/fresh-rules.mjs` refreshes stale shared documents with `git checkout <ref> -- <path>`, and **that command writes the INDEX as well as the working tree.** So the hook silently STAGED every file it refreshed, holding **origin's content — i.e. other sessions' work — under a path you recognise as your own.**
+**MEASURED TWICE AND MISATTRIBUTED BOTH TIMES:** 2026-08-09, and 2026-08-21 (CC-C's #736/#737 found staged in CC-A's index, one `git commit` away from being published under the wrong name).
+**FIXED** — the hook now runs `git reset -- <path>` immediately after the checkout. ⇒ **If you still find content you did not stage: STASH it (do not commit, do not discard), pull, and confirm it arrived from origin. KEEP THE STASH until the CAUSE is established** — the 08-09 stash was dropped once the work was proven safe, which destroyed the only artifact showing how it got there. **Recovering the work and diagnosing the incident are two different jobs.**
+★ **THE GENERAL LESSON, which outlives this hook: A MATCHING NAME IS NOT A MATCHING THING.** Explicit paths protect you from the wrong FILE and are structurally blind to the wrong CONTENT.
+
 ---
 
 ## THE ORIGINAL RULES-FILE TEXT, PRESERVED VERBATIM

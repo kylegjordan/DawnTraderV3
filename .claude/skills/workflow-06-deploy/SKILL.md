@@ -18,6 +18,12 @@ ssh root@188.245.193.8 "su - deploy -c 'dt-deploy <FULL-40-CHAR-SHA> --by <sessi
 - **A deploy restarts live trading.** It is deliberate and manual, owned by the session that owns the batch.
 - **"This batch needs no deploy" is NOT "this branch needs no deploy."** Another session's runtime change may be sitting on the branch undeployed. Check the compare range, and if it is theirs, **tell them** rather than deploying their work.
 
+## ⛔⛔ A DEPLOY WIPES EVERY IN-MEMORY ROLLING WINDOW — PLAN THE VERIFICATION AROUND IT
+**A restart is not neutral.** Anything held in a plain in-process structure — rolling windows, warm-up counters, ring buffers, caches, latches — **is emptied, and the component then reports its COLD behaviour while presenting as normal.**
+**MEASURED 2026-08-21, after being invisible for days:** the AMR's EV-gap window is an in-memory `Map` with **no persistence**, against **571 recorded restarts**. From 17–21 August it held **ZERO observations across ~2,878 cycles per day**, so the input-completeness clamp fired on 99.9% of them and the AMR was input-blind through the strongest trading days of the month. **Nothing announced it.** *(Contrast: the macro feed's rolling baseline was DELIBERATELY made restart-durable. Same class of state, opposite treatment — that asymmetry is what made it findable at all.)*
+⇒ **BEFORE deploying, ask what warm state this restart destroys and how long it takes to return.**
+⇒ **AFTER deploying, a warm-up-dependent reading is NOT verifiable until it re-warms** — and *it reads cold* is not *it is broken*. **State the warm-up window in the verification instead of measuring through it.**
+
 ---
 
 ## THE ORIGINAL RULES-FILE TEXT, PRESERVED VERBATIM

@@ -24,6 +24,11 @@ Each message spins a fresh session with **no memory of his own prior turns.** An
 Watch for his pickup. **No engagement in ~8-10 min → re-poke. Escalate after 2-3 tries.** Do not go idle reporting status to Kyle instead of chasing the review.
 **Iterate to consensus.** Read his feedback, decide per point (agree / partially agree / disagree), respond with reasoning. **Escalate to Kyle only on true deadlock (2-3 rounds, not converging), an architectural call he owns, or a risk/authority boundary.**
 
+## ⛔ CONFIRM THE DISPATCH ARRIVED WHOLE — AND SILENCE IS NOT CONSENT
+- **He may be mid-review with ANOTHER session.** His queue is not yours. **No reply does not mean no objection**, and it certainly does not mean approval.
+- **A review that returns with NO questions at all is a signal to check DELIVERY, not a compliment.** A long dispatch is reassembled before his gate — but **only** for a post that LEADS with his name, and only above the size threshold; everything else splits and the pieces after the first are discarded. **If his reply engages only your opening section, he probably received only that.**
+- ⛔ **THE CHANGE SET MUST INCLUDE UNTRACKED FILES.** `git diff HEAD` omits them and says nothing about the omission. A dispatch built that way once shipped a review missing the batch's single most load-bearing file. **Cross-check `git status --porcelain` for `??` before calling any diff the change set.**
+
 ---
 
 ## THE ORIGINAL RULES-FILE TEXT, PRESERVED VERBATIM
