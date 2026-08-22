@@ -177,13 +177,56 @@ describe('#507 Kraken v2 book truncation — the phantom-bid defect', () => {
     expect([...book.bids.keys()]).toEqual([0.39]);
   });
 
-  it('the checksum branch NEVER resubscribes — observe-only until precision-correct formatting lands', () => {
+  it('FAILS OPEN: with precision UNKNOWN the checksum is SKIPPED, never resubscribed', () => {
+    // Langston's condition, and it is the difference between a fix and an outage: an unmapped
+    // symbol must skip verification. Before the precision feed, EVERY symbol was unmapped and
+    // EVERY message mismatched -- arming this without the fail-open would have resubscribed on
+    // every update for every pair, replacing phantom fills with a book outage and a subscribe storm.
     const adapter = makeAdapter({ truncate: true });
-    // A checksum that cannot match (the live condition today, per Langston's 0/40 measurement).
     adapter.handleV2BookUpdate({ type: 'snapshot', data: [{ symbol: 'ONDO/USD',
-      bids: [lvl(0.40), lvl(0.39), lvl(0.38)], asks: [lvl(0.41), lvl(0.42), lvl(0.43)], checksum: 1 }] });
-    expect(adapter.resubscribed).toEqual([]);                      // the storm cannot happen
-    expect(adapter.bookChecksumMismatches.get('ONDO/USD')).toBe(1); // but it IS counted
+      bids: [lvl(0.40), lvl(0.39), lvl(0.38)], asks: [lvl(0.41), lvl(0.42), lvl(0.43)],
+      checksum: 1 }] });                                   // a checksum that cannot match
+    expect(adapter.resubscribed).toEqual([]);              // no storm
+    expect(adapter.bookChecksumSkippedNoPrecision.get('ONDO/USD')).toBe(1); // counted, not silent
+    expect(adapter.bookChecksumAttempts.get('ONDO/USD') ?? 0).toBe(0);      // not even attempted
+  });
+
+  it('ARMED: with precision KNOWN, a desynced book fails verification and triggers a resubscribe', () => {
+    const adapter = makeAdapter({ truncate: true });
+    adapter.handleInstrumentMessage({ type: 'snapshot', data: { pairs: [
+      { symbol: 'ONDO/USD', price_precision: 5, qty_precision: 5 } ] } });
+    adapter.handleV2BookUpdate({ type: 'snapshot', data: [{ symbol: 'ONDO/USD',
+      bids: [lvl(0.40), lvl(0.39), lvl(0.38)], asks: [lvl(0.41), lvl(0.42), lvl(0.43)],
+      checksum: 1 }] });                                   // wrong on purpose
+    expect(adapter.resubscribed).toEqual(['ONDO/USD']);    // desync DETECTED, recovery fired
+    expect(adapter.bookChecksumMismatches.get('ONDO/USD')).toBe(1);
+  });
+
+  it('the instrument channel supplies precision, and a CLEAN book then passes', () => {
+    const adapter = makeAdapter({ truncate: true });
+    adapter.handleInstrumentMessage({ type: 'snapshot', data: { pairs: [
+      { symbol: 'ONDO/USD', price_precision: 5, qty_precision: 5 } ] } });
+    expect(adapter.symbolPrecision.get('ONDO/USD')).toEqual({ price: 5, qty: 5 });
+    // Compute the checksum the way the venue would, at that precision, and feed it back.
+    const raw = { bids: new Map<number,[string,string]>(), asks: new Map<number,[string,string]>() };
+    raw.bids.set(0.40, ['0.40','100']); raw.asks.set(0.41, ['0.41','100']);
+    const theirs = KrakenWebSocketAdapter.computeBookChecksumFromRaw(raw, { price: 5, qty: 5 });
+    adapter.handleV2BookUpdate({ type: 'snapshot', data: [{ symbol: 'ONDO/USD',
+      bids: [lvl(0.40)], asks: [lvl(0.41)], checksum: theirs }] });
+    expect(adapter.resubscribed).toEqual([]);              // healthy book, no action
+    expect(adapter.bookChecksumMatches.get('ONDO/USD')).toBe(1);
+  });
+
+  it('PRECISION FORMATTING is what the venue actually needs: JSON numbers lose their trailing zeros', () => {
+    // The whole reason verification was inert. Kraken's CRC input for qty 2993.00000 is
+    // '299300000'; JSON.parse gives the number 2993, whose String() is '2993'. Only formatting
+    // at the instrument's qty precision reconstructs it.
+    const raw = { bids: new Map<number,[string,string]>(), asks: new Map<number,[string,string]>() };
+    raw.asks.set(1, ['1', '2993']);   // as it arrives off the wire, zeros already gone
+    raw.bids.set(0.5, ['0.5', '1']);
+    const withPrec = KrakenWebSocketAdapter.computeBookChecksumFromRaw(raw, { price: 5, qty: 5 });
+    const without  = KrakenWebSocketAdapter.computeBookChecksumFromRaw(raw);
+    expect(withPrec).not.toBe(without);  // they are different inputs -- this is the entire defect
   });
 
   it('depth is taken from the subscribe ACK, never the request (a rejected depth:1 must not shrink the book)', () => {

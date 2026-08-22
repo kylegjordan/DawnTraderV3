@@ -142,6 +142,12 @@ export class KrakenWebSocketAdapter extends EventEmitter {
   private bookDepth = new Map<string, number>();
   private bookChecksumMismatches = new Map<string, number>();
   private bookChecksumMatches = new Map<string, number>();
+  // #507 remainder: per-symbol price/qty precision from the v2 `instrument` channel. Kraken's
+  // checksum is computed over the STRING form at the instrument's own precision -- it sends
+  // price/qty as JSON NUMBERS, so `String(2993)` gives '2993' where the CRC input is '299300000'.
+  // Measured on the live venue before building this: 0/40 messages matched without it, 40/40 with.
+  private symbolPrecision = new Map<string, { price: number; qty: number }>();
+  private instrumentSnapshotAt: number | null = null;
   private bookChecksumAttempts = new Map<string, number>();
   // #546 / Langston: a counter DECLARED but never WRITTEN publishes a confident wrong answer --
   // a Step-8 reader sees 'nothing skipped for precision' for a bucket that is not implemented.
@@ -473,6 +479,17 @@ export class KrakenWebSocketAdapter extends EventEmitter {
       }
       
       // 8.9.4: Handle v2 Book Updates for continuous midpoint pricing
+      // #507: the instrument channel carries per-pair precision. ONE snapshot of every pair, then
+      // effectively silent (measured 2026-08-23: 1 snapshot / 1,432 pairs / ~566 KB, then ZERO
+      // updates in 60s). Public, unauthenticated, and it rides THIS existing connection -- no new
+      // socket, and REST rate limits are untouched.
+      if (message && typeof message === 'object' && message.channel === 'instrument') {
+        if (message.type === 'snapshot' || message.type === 'update') {
+          this.handleInstrumentMessage(message);
+        }
+        return;
+      }
+
       // v2 format: { channel: "book", type: "update"|"snapshot", data: [{symbol, bids, asks, ...}] }
       if (message && typeof message === 'object' && message.channel === 'book') {
         if (message.type === 'update' || message.type === 'snapshot') {
@@ -724,6 +741,26 @@ export class KrakenWebSocketAdapter extends EventEmitter {
    * - Properly handles delta updates (qty=0 means deletion)
    * - Ensures stable mid-price computation without "flash-crash" artifacts
    */
+  /**
+   * #507 remainder: absorb per-pair precision so the book checksum can be computed in Kraken's
+   * own string format. Snapshot carries `data.pairs[]`; updates carry the same shape.
+   */
+  private handleInstrumentMessage(message: any): void {
+    const pairs = message?.data?.pairs;
+    if (!Array.isArray(pairs)) return;
+    let learned = 0;
+    for (const pr of pairs) {
+      const sym = this.mapKrakenPairToInternalSymbol(pr?.symbol);
+      const price = Number(pr?.price_precision);
+      const qty = Number(pr?.qty_precision);
+      if (!sym || !Number.isInteger(price) || !Number.isInteger(qty)) continue;
+      this.symbolPrecision.set(sym, { price, qty });
+      learned++;
+    }
+    this.instrumentSnapshotAt = Date.now();
+    console.log(`[#507][INSTRUMENT] absorbed precision for ${learned} pairs (type=${message.type})`);
+  }
+
   private handleV2BookUpdate(message: any): void {
     const updates = message.data || [];
     
@@ -808,10 +845,26 @@ export class KrakenWebSocketAdapter extends EventEmitter {
       // formatting is fixed, the instrument is already wired and its silence is measurable.
       const bump = (m: Map<string, number>) => m.set(internalSymbol, (m.get(internalSymbol) ?? 0) + 1);
       bump(this.bookUpdatesApplied);
+      // #507 remainder: verification is ARMED, but ONLY where precision is known. Langston's
+      // condition, and it is the difference between a fix and a subscribe storm: an unmapped
+      // symbol must SKIP verification, never resubscribe. Fail OPEN.
       if (typeof update.checksum === 'number') {
-        bump(this.bookChecksumAttempts);
-        const ours = this.computeBookChecksum(raw);
-        bump(ours === update.checksum ? this.bookChecksumMatches : this.bookChecksumMismatches);
+        const prec = this.symbolPrecision.get(internalSymbol);
+        if (!prec) {
+          bump(this.bookChecksumSkippedNoPrecision);
+        } else {
+          bump(this.bookChecksumAttempts);
+          const ours = this.computeBookChecksum(raw, prec);
+          if (ours === update.checksum) {
+            bump(this.bookChecksumMatches);
+          } else {
+            bump(this.bookChecksumMismatches);
+            const n = this.bookChecksumMismatches.get(internalSymbol) ?? 0;
+            console.warn(`[#507][BOOK_CHECKSUM_MISMATCH] ${internalSymbol} ours=${ours} theirs=${update.checksum} depth=${depth} count=${n} — book desynced, resubscribing for a fresh snapshot`);
+            void this.softResubscribe(internalSymbol);
+            continue;
+          }
+        }
       }
       // CROSSED-BOOK DETECTOR -- the property the fix exists to guarantee, counted rather than
       // grepped for. Langston at the gate: an absence needs an instrument and a denominator.
@@ -1186,6 +1239,13 @@ export class KrakenWebSocketAdapter extends EventEmitter {
       }
     };
     
+    // #507 remainder: one subscription, no symbol list, covers every pair. Sent alongside the
+    // existing ticker/book subscribes on the SAME socket.
+    const instrumentSubscribe = {
+      method: 'subscribe',
+      params: { channel: 'instrument', snapshot: true }
+    };
+
     const bookSubscribe = {
       method: 'subscribe',
       params: {
@@ -1205,6 +1265,8 @@ export class KrakenWebSocketAdapter extends EventEmitter {
       // 8.9.4: Send both ticker and book subscriptions
       this.ws?.send(JSON.stringify(tickerSubscribe));
       this.ws?.send(JSON.stringify(bookSubscribe));
+      // #507 remainder: precision feed, same socket. One snapshot then silence.
+      this.ws?.send(JSON.stringify(instrumentSubscribe));
       console.log(`[${this.MODULE_NAME}] Subscribing to ${krakenSymbols.length} symbols (ticker+book): ${krakenSymbols.slice(0, 5).join(', ')}${krakenSymbols.length > 5 ? '...' : ''}`);
       
       // Phase 8.8.3-I6-FIX: Enhanced diagnostic log after subscription update
@@ -3237,17 +3299,31 @@ export class KrakenWebSocketAdapter extends EventEmitter {
    *  (price descending); per level, price then qty with the decimal point removed and leading
    *  zeros stripped; concatenate; CRC32 as unsigned 32-bit. Verified against the official worked
    *  example (expected 3310070434) in the unit test. Static so the test can reach it. */
-  static computeBookChecksumFromRaw(raw: { bids: Map<number, [string, string]>; asks: Map<number, [string, string]> }): number {
-    const fmt = (v: string) => v.replace('.', '').replace(/^0+/, '');
+  static computeBookChecksumFromRaw(
+    raw: { bids: Map<number, [string, string]>; asks: Map<number, [string, string]> },
+    prec?: { price: number; qty: number },
+  ): number {
+    // Kraken computes the CRC over the STRING form at the instrument's own precision. The wire
+    // sends JSON numbers, so the trailing zeros are already gone by the time we see them --
+    // `2993` must become `2993.00000` before the decimal point is stripped, or the input differs
+    // from Kraken's by exactly the zeros JSON.parse discarded. When `prec` is absent we fall back
+    // to the raw string, which is what the official worked example supplies (already formatted).
+    const fmtWith = (v: string, dp: number | undefined) =>
+      (dp === undefined ? v : Number(v).toFixed(dp)).replace('.', '').replace(/^0+/, '');
+    const fmtP = (v: string) => fmtWith(v, prec?.price);
+    const fmtQ = (v: string) => fmtWith(v, prec?.qty);
     const asks = [...raw.asks.entries()].sort((x, y) => x[0] - y[0]).slice(0, 10);
     const bids = [...raw.bids.entries()].sort((x, y) => y[0] - x[0]).slice(0, 10);
     let str = '';
-    for (const [, [p, q]] of asks) str += fmt(p) + fmt(q);
-    for (const [, [p, q]] of bids) str += fmt(p) + fmt(q);
+    for (const [, [p, q]] of asks) str += fmtP(p) + fmtQ(q);
+    for (const [, [p, q]] of bids) str += fmtP(p) + fmtQ(q);
     return zlibCrc32(str) >>> 0;
   }
-  private computeBookChecksum(raw: { bids: Map<number, [string, string]>; asks: Map<number, [string, string]> }): number {
-    return KrakenWebSocketAdapter.computeBookChecksumFromRaw(raw);
+  private computeBookChecksum(
+    raw: { bids: Map<number, [string, string]>; asks: Map<number, [string, string]> },
+    prec?: { price: number; qty: number },
+  ): number {
+    return KrakenWebSocketAdapter.computeBookChecksumFromRaw(raw, prec);
   }
 
   async softResubscribe(symbol: string): Promise<void> {
