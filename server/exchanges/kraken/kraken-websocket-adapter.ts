@@ -1,6 +1,6 @@
 import WebSocket from 'ws';
 import { EventEmitter } from 'events';
-import { crc32 as zlibCrc32 } from 'zlib'; // #507: Node 22 built-in, used for Kraken's book checksum
+import { crc32 as zlibCrc32 } from 'zlib'; // #507: zlib.crc32 -- present from Node 20.15 (staging runs 20.20.0); no new dependency
 import { contextBridge } from '../../services/context-bridge.js';
 // B78.1: removed `import { livePricingAdapter } from './live-pricing-adapter.js'`.
 // Cycle break: ws-adapter is now a leaf in the exchange layer. live-pricing-adapter
@@ -136,6 +136,7 @@ export class KrakenWebSocketAdapter extends EventEmitter {
   // resubscribes at 1. Truncation must use the symbol's own depth or it is wrong for one of them.
   private bookDepth = new Map<string, number>();
   private bookChecksumMismatches = new Map<string, number>();
+  private bookChecksumMatches = new Map<string, number>(); // observe-only until precision-correct formatting lands
   // P19-B4b.1: per-symbol last book-update wall-clock (ms) — book-specific freshness
   // for the depth-walked fill warmth gate (distinct from symbolStats.lastUpdate which
   // can conflate ticker + book channels).
@@ -568,6 +569,12 @@ export class KrakenWebSocketAdapter extends EventEmitter {
         
         if (internalSymbol) {
           console.log(`[8.9.0-B][WS] Sub OK: ${symbol} -> ${internalSymbol}`);
+          // #507 / Langston BLOCKER-2: record the depth Kraken GRANTED, from the ack, never the
+          // depth we asked for. A rejected request (depth:1 is 'not supported') never reaches here,
+          // so the previous granted depth stands and truncation stays correct for that symbol.
+          if (result.channel === 'book' && Number.isInteger(result.depth) && result.depth > 0) {
+            this.bookDepth.set(internalSymbol, result.depth);
+          }
           this.subscribedSymbols.add(internalSymbol);
           this.pendingSubscriptions.delete(internalSymbol);
           this.subscriptionRequests.delete(internalSymbol);
@@ -773,17 +780,25 @@ export class KrakenWebSocketAdapter extends EventEmitter {
       // TRUNCATE to the subscribed depth -- the documented, mandatory step this handler lacked.
       this.truncateBook(book, raw, depth);
 
-      // VERIFY against Kraken's checksum when present. On mismatch the book is desynced and
-      // the only honest recovery is a resubscribe for a fresh snapshot. Logged every time --
-      // a silent resync is the same absent-as-valid shape as the original bug.
+      // CHECKSUM -- OBSERVE ONLY, NEVER ACT (Langston BLOCKER-1 at the hotfix gate, 2026-08-22).
+      // The first version of this hotfix verified the checksum and resubscribed on mismatch. It
+      // could never match: Kraken sends price/qty as JSON NUMBERS, JSON.parse drops the trailing
+      // zeros, so String(qty) gives "2993" where Kraken's CRC input is "299300000". Measured
+      // against wss://ws.kraken.com/v2 by Langston: 40/40 messages carried a checksum, 0/40
+      // matched as written; 40/40 matched once formatted at the instrument's precision. Deployed,
+      // that would have resubscribed on EVERY update for EVERY pair -- a book outage and a
+      // subscribe storm in place of phantom fills. The unit suite could not see it because it
+      // fed strings with the exact formatting the wire does not send.
+      // Correct verification needs per-symbol price_precision/qty_precision from the v2
+      // `instrument` channel (not yet subscribed) and must FAIL OPEN on unknown precision. That
+      // is the follow-up (#507 remainder). Until then this branch only counts -- so the day the
+      // formatting is fixed, the instrument is already wired and its silence is measurable.
       if (typeof update.checksum === 'number') {
         const ours = this.computeBookChecksum(raw);
         if (ours !== update.checksum) {
-          const n = (this.bookChecksumMismatches.get(internalSymbol) ?? 0) + 1;
-          this.bookChecksumMismatches.set(internalSymbol, n);
-          console.warn(`[#507][BOOK_CHECKSUM_MISMATCH] symbol=${internalSymbol} ours=${ours} theirs=${update.checksum} depth=${depth} count=${n} -- resubscribing for a fresh snapshot`);
-          void this.softResubscribe(internalSymbol);
-          continue;
+          this.bookChecksumMismatches.set(internalSymbol, (this.bookChecksumMismatches.get(internalSymbol) ?? 0) + 1);
+        } else {
+          this.bookChecksumMatches.set(internalSymbol, (this.bookChecksumMatches.get(internalSymbol) ?? 0) + 1);
         }
       }
 
@@ -1159,8 +1174,7 @@ export class KrakenWebSocketAdapter extends EventEmitter {
         snapshot: true
       }
     };
-    // #507: record the subscribed depth per symbol so truncation uses the right window.
-    for (const ks of krakenSymbols) { const sym = this.mapKrakenPairToInternalSymbol(ks); if (sym) this.bookDepth.set(sym, 10); }
+    // #507: subscribed depth is recorded from the subscribe ACK (granted depth), not here.
     
     // I7-WS-SUBSCRIBE: Log exact payloads being sent
     console.log("[I7-WS-SEND][ticker]", JSON.stringify(tickerSubscribe));
@@ -2329,7 +2343,11 @@ export class KrakenWebSocketAdapter extends EventEmitter {
     if (!data) return;
     
     console.log(`[I7-WS-G][CHANNEL_SWITCH] symbol=${symbol} use=book depth=1`);
-    this.bookDepth.set(symbol, 1); // #507: this path subscribes at depth 1; truncate to 1 here.
+    // #507 / Langston BLOCKER-2: do NOT record depth from the REQUEST. Kraken REJECTS depth:1
+    // ('Subscription depth not supported'), so the depth-10 stream keeps flowing; recording 1 here
+    // would crush this symbol's book to one level per side indefinitely and starve the depth gate
+    // and the close walk for exactly the illiquid pairs this path targets. Depth is recorded from
+    // the subscribe ACK (result.depth) in handleSubscribeAck -- the depth Kraken GRANTED.
     
     // Get Kraken pair
     const krakenPair = this.normalToKrakenSymbol(symbol);

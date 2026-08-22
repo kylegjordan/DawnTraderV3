@@ -59,90 +59,119 @@ describe('#507 Kraken v2 book checksum', () => {
   });
 });
 
-describe('#507 Kraken v2 book truncation + checksum — the phantom-bid defect', () => {
-  // ★ WHAT THE FIRST VERSION OF THIS TEST TAUGHT, recorded because it changed the fix's design:
-  // truncation ALONE cannot remove a ghost bid. Truncation keeps the BEST `depth` levels, and
-  // "best" for a bid means HIGHEST — so a stale 0.4034 from an hour ago outranks the real 0.3737
-  // and SURVIVES truncation while the real level is cut. Truncation handles the documented case
-  // (a level that falls out of the window from the BOTTOM); it is structurally blind to a ghost at
-  // the TOP. Only Kraken's checksum can see that, because the checksum is computed over Kraken's
-  // real book, and a book carrying a ghost will never match it. ⇒ the fix is truncation AND
-  // checksum-verify-then-resubscribe, and this suite proves each half catches its own case.
+describe('#507 Kraken v2 book truncation — the phantom-bid defect', () => {
+  // ★ WHAT LANGSTON'S GATE CORRECTED, and it changed both the fix and this suite.
+  //
+  // (1) MY INTERDEPENDENCE CLAIM WAS WRONG. I argued truncation could not prevent a top-of-book
+  //     ghost and that only the checksum could catch it. He showed the ghost is MINTED at the
+  //     moment a level exits the window from the BOTTOM (market rises, the old top-10 level drops
+  //     out, Kraken sends no delete; the market later falls and that orphan is now the highest
+  //     bid). Truncating AT THAT MOMENT prevents the mint. My control only showed truncation
+  //     cannot EVICT a ghost that already exists — true, and not the same claim. With truncation
+  //     running from process start, one cannot form. The tests below now model the mint, which is
+  //     the actual mechanism, instead of a pre-existing ghost the real system would never have.
+  //
+  // (2) THE CHECKSUM COULD NEVER HAVE MATCHED, and this suite could not see it. Kraken sends
+  //     price/qty as JSON NUMBERS; JSON.parse drops trailing zeros, so String(qty) yields "2993"
+  //     where Kraken's CRC input is "299300000". He measured 0/40 matches on the live venue with
+  //     my algorithm, 40/40 once formatted at instrument precision. My tests fed hand-written
+  //     STRINGS with the exact formatting the wire does not send — a positive control on the
+  //     adjacent object. Verification is now OBSERVE-ONLY (count, never resubscribe) until the
+  //     precision feed lands, and the tests below feed NUMBERS, as the wire does.
 
-  const lvl = (p: string, q = '100') => ({ price: p, qty: q });
-  const checksumOf = (bids: [string, string][], asks: [string, string][]) =>
-    KrakenWebSocketAdapter.computeBookChecksumFromRaw({
-      bids: new Map(bids.map(([p, q]) => [parseFloat(p), [p, q] as [string, string]])),
-      asks: new Map(asks.map(([p, q]) => [parseFloat(p), [p, q] as [string, string]])),
-    });
-
-  function makeAdapter(opts: { truncate: boolean }) {
+  const lvl = (p: number, q = 100) => ({ price: p, qty: q }); // NUMBERS — what Kraken actually sends
+  function makeAdapter(opts: { truncate: boolean; depth?: number }) {
     const adapter: any = new (KrakenWebSocketAdapter as any)();
     adapter.mapKrakenPairToInternalSymbol = (p: string) => p;
-    adapter.bookDepth.set('ONDO/USD', 3);
+    adapter.bookDepth.set('ONDO/USD', opts.depth ?? 3);
     if (!opts.truncate) adapter.truncateBook = () => {};
     adapter.resubscribed = [] as string[];
     adapter.softResubscribe = async (sym: string) => { adapter.resubscribed.push(sym); };
     return adapter;
   }
 
-  it('TRUNCATION handles the DOCUMENTED case: a level pushed out of the window from the bottom is removed', () => {
-    const adapter = makeAdapter({ truncate: true });
+  // ★ THE REAL MECHANISM — and my FIRST version of this scenario was wrong in a way that
+  // matters, so the correction is recorded here rather than quietly fixed.
+  //
+  // I modelled the crash by sending only the NEW low bids and no deletes, which left the old
+  // HIGH bids alive and made truncation look powerless (it keeps the highest bids, which were
+  // the stale ones). That is not what the venue does. A level INSIDE the window that gets
+  // consumed IS deleted — Kraken sends qty:0 for it. The levels that vanish SILENTLY are the
+  // ones pushed out of the BOTTOM of the window when the market RISES and better bids arrive.
+  //
+  // So the ghost is minted in three beats:
+  //   1. book at 0.40 / 0.39 / 0.38 (depth 3)
+  //   2. market RISES: 0.42 and 0.41 arrive. 0.39 and 0.38 fall out of the bottom of the
+  //      window. NO delete is sent for them — this is the moment the orphan is created.
+  //   3. market CRASHES: 0.42 / 0.41 / 0.40 are consumed, so Kraken DOES delete them, and the
+  //      new real bids arrive at ~0.37.
+  // Without truncation the orphaned 0.39 survives beat 2 and is the highest bid after beat 3 —
+  // above the real ask. With truncation it is cut at beat 2 and can never form.
+  // ⇒ Langston's reading is correct and mine was not: (a)+(b) prevent the mint on their own.
+  function mintGhost(adapter: any) {
+    // beat 1 — snapshot, depth 3
     adapter.handleV2BookUpdate({ type: 'snapshot', data: [{ symbol: 'ONDO/USD',
-      bids: [lvl('0.40'), lvl('0.39'), lvl('0.38')], asks: [lvl('0.41'), lvl('0.42'), lvl('0.43')] }] });
-    // A NEW better bid arrives. Kraken sends no delete for 0.38, which has fallen out of depth 3.
-    adapter.handleV2BookUpdate({ type: 'update', data: [{ symbol: 'ONDO/USD', bids: [lvl('0.405')], asks: [] }] });
-    const book = adapter.orderBooks.get('ONDO/USD');
-    expect(book.bids.size).toBe(3);
-    expect([...book.bids.keys()].sort()).toEqual([0.39, 0.40, 0.405]); // 0.38 gone, as the doc requires
-  });
-
-  it('CONTROL: the LIVE ghost-bid shape — without the checksum a stale high bid survives and crosses the book', () => {
-    const adapter = makeAdapter({ truncate: true });
-    adapter.handleV2BookUpdate({ type: 'snapshot', data: [{ symbol: 'ONDO/USD',
-      bids: [lvl('0.4034'), lvl('0.4030'), lvl('0.4025')], asks: [lvl('0.4040'), lvl('0.4045'), lvl('0.4050')] }] });
-    // Market falls to ~0.37; Kraken sends NO deletes for the old top (the message carried no checksum).
+      bids: [lvl(0.40), lvl(0.39), lvl(0.38)], asks: [lvl(0.41), lvl(0.42), lvl(0.43)] }] });
+    // beat 2 — market RISES. New better bids; 0.39/0.38 leave the window with NO delete.
     adapter.handleV2BookUpdate({ type: 'update', data: [{ symbol: 'ONDO/USD',
-      bids: [lvl('0.3737'), lvl('0.3736'), lvl('0.3735')], asks: [lvl('0.3641'), lvl('0.3645'), lvl('0.3650')] }] });
-    const book = adapter.orderBooks.get('ONDO/USD');
-    // Truncation kept the three HIGHEST bids — the ghosts — exactly the measured live state.
-    expect(Math.max(...book.bids.keys())).toBeCloseTo(0.4034, 6);
-    expect(Math.max(...book.bids.keys())).toBeGreaterThan(Math.min(...book.asks.keys()));
-    expect(adapter.resubscribed).toEqual([]); // nothing caught it — this is the defect
-  });
-
-  it("THE FIX: with Kraken's checksum on the update, the ghost book FAILS verification and triggers a resubscribe", () => {
-    const adapter = makeAdapter({ truncate: true });
-    adapter.handleV2BookUpdate({ type: 'snapshot', data: [{ symbol: 'ONDO/USD',
-      bids: [lvl('0.4034'), lvl('0.4030'), lvl('0.4025')], asks: [lvl('0.4040'), lvl('0.4045'), lvl('0.4050')] }] });
-    // Kraken's checksum is over KRAKEN's real book — the new levels only. Ours still carries ghosts.
-    const krakenReal = checksumOf(
-      [['0.3737','100'],['0.3736','100'],['0.3735','100']],
-      [['0.3641','100'],['0.3645','100'],['0.3650','100']]);
+      bids: [lvl(0.42), lvl(0.41)], asks: [lvl(0.44), lvl(0.45)] }] });
+    // beat 3 — market CRASHES. The in-window top levels ARE deleted (qty 0), new lows arrive.
     adapter.handleV2BookUpdate({ type: 'update', data: [{ symbol: 'ONDO/USD',
-      bids: [lvl('0.3737'), lvl('0.3736'), lvl('0.3735')], asks: [lvl('0.3641'), lvl('0.3645'), lvl('0.3650')],
-      checksum: krakenReal }] });
-    expect(adapter.resubscribed).toEqual(['ONDO/USD']);        // desync DETECTED and recovery fired
-    expect(adapter.bookChecksumMismatches.get('ONDO/USD')).toBe(1);
+      bids: [lvl(0.42, 0), lvl(0.41, 0), lvl(0.40, 0), lvl(0.37), lvl(0.369), lvl(0.368)],
+      asks: [lvl(0.43, 0), lvl(0.44, 0), lvl(0.45, 0), lvl(0.371), lvl(0.372), lvl(0.373)] }] });
+    const book = adapter.orderBooks.get('ONDO/USD');
+    return { bestBid: Math.max(...book.bids.keys()), bestAsk: Math.min(...book.asks.keys()),
+             bidDepth: book.bids.size, askDepth: book.asks.size };
+  }
+
+  it('CONTROL: WITHOUT truncation the ghost is MINTED and the book crosses — the live ONDO shape', () => {
+    const r = mintGhost(makeAdapter({ truncate: false }));
+    expect(r.bestBid).toBeGreaterThan(r.bestAsk);  // a dead bid above the real ask
+    expect(r.bidDepth).toBeGreaterThan(3);         // and the book has grown past its depth
   });
 
-  it('and a CLEAN book passes the checksum — verification does not fire on healthy data', () => {
-    const adapter = makeAdapter({ truncate: true });
-    const bids: [string, string][] = [['0.40','100'],['0.39','100'],['0.38','100']];
-    const asks: [string, string][] = [['0.41','100'],['0.42','100'],['0.43','100']];
-    adapter.handleV2BookUpdate({ type: 'snapshot', data: [{ symbol: 'ONDO/USD',
-      bids: bids.map(([p,q]) => lvl(p,q)), asks: asks.map(([p,q]) => lvl(p,q)), checksum: checksumOf(bids, asks) }] });
-    expect(adapter.resubscribed).toEqual([]);
-    expect(adapter.bookChecksumMismatches.get('ONDO/USD') ?? 0).toBe(0);
+  it('WITH truncation the ghost never forms: book stays at depth, never crosses, best bid is REAL', () => {
+    const r = mintGhost(makeAdapter({ truncate: true }));
+    expect(r.bidDepth).toBeLessThanOrEqual(3);
+    expect(r.askDepth).toBeLessThanOrEqual(3);
+    expect(r.bestBid).toBeLessThan(r.bestAsk);
+    expect(r.bestBid).toBeCloseTo(0.37, 6);        // the real best bid, not an orphan
   });
 
   it('a SNAPSHOT replaces the book outright instead of merging into stale state', () => {
-    const adapter = makeAdapter({ truncate: true });
-    adapter.bookDepth.set('X/USD', 10);
-    adapter.handleV2BookUpdate({ type: 'snapshot', data: [{ symbol: 'X/USD', bids: [lvl('9','1')], asks: [lvl('11','1')] }] });
-    adapter.handleV2BookUpdate({ type: 'snapshot', data: [{ symbol: 'X/USD', bids: [lvl('5','1')], asks: [lvl('6','1')] }] });
-    const book = adapter.orderBooks.get('X/USD');
+    const adapter = makeAdapter({ truncate: true, depth: 10 });
+    adapter.handleV2BookUpdate({ type: 'snapshot', data: [{ symbol: 'ONDO/USD', bids: [lvl(9, 1)], asks: [lvl(11, 1)] }] });
+    adapter.handleV2BookUpdate({ type: 'snapshot', data: [{ symbol: 'ONDO/USD', bids: [lvl(5, 1)], asks: [lvl(6, 1)] }] });
+    const book = adapter.orderBooks.get('ONDO/USD');
     expect([...book.bids.keys()]).toEqual([5]);
     expect([...book.asks.keys()]).toEqual([6]);
+  });
+
+  it('qty 0 deletes a level (the one delete Kraken DOES send)', () => {
+    const adapter = makeAdapter({ truncate: true, depth: 10 });
+    adapter.handleV2BookUpdate({ type: 'snapshot', data: [{ symbol: 'ONDO/USD',
+      bids: [lvl(0.40), lvl(0.39)], asks: [lvl(0.41)] }] });
+    adapter.handleV2BookUpdate({ type: 'update', data: [{ symbol: 'ONDO/USD', bids: [lvl(0.40, 0)], asks: [] }] });
+    const book = adapter.orderBooks.get('ONDO/USD');
+    expect([...book.bids.keys()]).toEqual([0.39]);
+  });
+
+  it('the checksum branch NEVER resubscribes — observe-only until precision-correct formatting lands', () => {
+    const adapter = makeAdapter({ truncate: true });
+    // A checksum that cannot match (the live condition today, per Langston's 0/40 measurement).
+    adapter.handleV2BookUpdate({ type: 'snapshot', data: [{ symbol: 'ONDO/USD',
+      bids: [lvl(0.40), lvl(0.39), lvl(0.38)], asks: [lvl(0.41), lvl(0.42), lvl(0.43)], checksum: 1 }] });
+    expect(adapter.resubscribed).toEqual([]);                      // the storm cannot happen
+    expect(adapter.bookChecksumMismatches.get('ONDO/USD')).toBe(1); // but it IS counted
+  });
+
+  it('depth is taken from the subscribe ACK, never the request (a rejected depth:1 must not shrink the book)', () => {
+    const adapter = makeAdapter({ truncate: true, depth: 10 });
+    adapter.handleV2SystemMessage({ method: 'subscribe', success: true,
+      result: { channel: 'book', symbol: 'ONDO/USD', depth: 10 } });
+    expect(adapter.bookDepth.get('ONDO/USD')).toBe(10);
+    // A REJECTED subscribe never reaches the ack path, so the granted depth stands.
+    adapter.handleV2SystemMessage({ method: 'subscribe', success: false, error: 'Subscription depth not supported' });
+    expect(adapter.bookDepth.get('ONDO/USD')).toBe(10);
   });
 });
