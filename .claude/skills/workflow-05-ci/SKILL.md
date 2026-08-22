@@ -1,6 +1,6 @@
 ---
 name: workflow-05-ci
-description: STEP 5 ONLY of the DawnTrader batch workflow - GitHub Push and CI. Use when confirming all four GitHub Actions jobs are green on the branch head: TypeScript Check, Test Suite, Build, Docker Build. NOT for deploying to staging, NOT for any verification of behaviour.
+description: STEP 5 ONLY of the DawnTrader batch workflow - GitHub Push and CI. Use when confirming all four GitHub Actions jobs are green on the branch head - TypeScript Check, Test Suite, Build, and Docker Build. NOT for deploying to staging, NOT for any verification of behaviour.
 ---
 
 # STEP 5 — GITHUB PUSH + CI

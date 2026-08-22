@@ -46,9 +46,20 @@
 import { execSync } from 'node:child_process';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { argv, exit, cwd } from 'node:process';
-import { pathToFileURL } from 'node:url';
+import { pathToFileURL, fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 
-const BASELINE_PATH = '.tsc-baseline.json';
+// RESOLVE THE BASELINE FROM THE REPO ROOT, NOT FROM cwd. It was the bare relative
+// '.tsc-baseline.json', so ANY caller whose working directory is not the repo root got
+// 'not found' for a file that was present and tracked. MEASURED 2026-08-21: the push guard
+// refused every push with that message while the file sat at 64,306 bytes locally and at
+// origin. That is the SECOND instance of the same false-absence in this one gate -- the
+// guard's own path to THIS script had it too and was fixed the same day; the defect simply
+// moved one layer down, which is why fixing only the symptom would have hidden it again.
+// Derived from this file's own location, so it is correct for CI (cwd = repo root) and for a
+// hook process started anywhere else, WITHOUT depending on an env var CI does not set.
+const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+const BASELINE_PATH = join(REPO_ROOT, '.tsc-baseline.json');
 
 function runTsc() {
   // #579 (B-TSC-BASELINE-FIX): force a NON-INCREMENTAL full check.

@@ -1,6 +1,6 @@
 ---
 name: workflow-07-verify-cc
-description: STEP 7 ONLY of the DawnTrader batch workflow - first-pass verification by the implementing Claude session. Use when gathering evidence that a deployed change works: PM2 logs, Supabase queries, and mandatory navigation of the staging UI in a browser. NOT for Langston's independent second pass, which is step 8.
+description: STEP 7 ONLY of the DawnTrader batch workflow - first-pass verification by the implementing Claude session. Use when gathering evidence that a deployed change works - PM2 logs, Supabase queries, and mandatory navigation of the staging UI in a browser. NOT for Langston second-pass verification, which is step 8.
 ---
 
 # STEP 7 — FIRST-PASS VERIFICATION (CC)
