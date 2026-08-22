@@ -49,6 +49,13 @@ Answer these explicitly, **in writing**, before proposing any fix:
 ### 2.3 — SEARCH THE LEDGER BEFORE CALLING IT A DEFECT (§9.5(b-ii))
 Grep `RUNNING_ISSUES.md`, `BATCH_CATALOG.md` and the completion reports for the component and the symbol. **A deliberate, Kyle-approved, Langston-reviewed decision reported as a defect is worse than no finding** — it burns review cycles and impugns work that was done correctly. ★ **If the code comment names its own provenance — a batch id, an issue number, "Langston-approved" — FOLLOW IT.**
 
+### ⛔ 2.35 — THE AUDIT IS FILED AS A SCOPE FILE, AND IT DECLARES `change-class: hotfix`
+**Write §2's output to `Claude Comms and Packages/Scope Files/<BATCH-ID>_SCOPE.md`, with `change-class: hotfix` on its own header line.** It is short — the qualifying answers, the blast-radius audit, the fix — but it is a FILE, with that name, before the dispatch.
+
+⚠️ **THIS IS NOT BUREAUCRACY, AND IT WAS MISSING FROM THIS SKILL FOR ITS FIRST DAY.** The governance checker resolves a batch's declared class by looking for a file in `Scope Files/` whose **name contains the batch-id AND the word SCOPE** (`checker.mjs:readDeclaredClass`). No such file ⇒ `no-scope-file` ⇒ it **fails closed to the STRICTEST class and raises a flag.**
+**MEASURED 2026-08-22:** `B-BOOK-TRUNCATE-HOTFIX (#507)` shipped with a scope filed under a name the checker could not resolve, and the undeclared-class alert fired. ★ **The alert was RIGHT and the hotfix path as first written GUARANTEED it** — a fast path that produces no scope-named file makes every hotfix trip this alarm forever, and an alarm that always fires is an alarm nobody reads.
+⇒ **The document you already have to write for §3 IS this file. Name it correctly and give it the header line.** No extra work, one filename.
+
 ### 2.4 — THEN WRITE THE FIX, AND PUSH IT
 Implement, commit with explicit paths, push to `migration/aws-supabase`. ⚠️ **PUSHING IS NOT DEPLOYING. Nothing reaches staging until §3 clears** — and Langston reads at a ref, never a working tree, so the code must exist at `origin/…` before he can review it at all.
 
@@ -80,7 +87,7 @@ Implement, commit with explicit paths, push to `migration/aws-supabase`. ⚠️ 
 ## ⛔ 5. IT STILL GETS A RECORD — a fast path is not a silent one
 - **`CHANGES_AND_FIXES.md`** — symptom, mechanism, fix, blast-radius result, Langston's approval, the deployed sha.
 - **`RUNNING_ISSUES.md`** — open an entry if anything was deferred; **close the entry if this closed it**. If §2 path B turned up other sites or a larger fault, **each gets a named, dated home NOW** (§9.4) — "we'll get to it" is not a disposition.
-- **`BATCH_CATALOG.md`** — one row. Commit subject carries the batch id; `change-class: hotfix`.
+- **`BATCH_CATALOG.md`** — one row. **The commit subject leads with the batch-id** (the checker’s `extractBatchId` matches a batch-id ANYWHERE in the subject, so never put a CLOSED or not-yet-existent id in a subject you are only REFERENCING — it grades as a fresh batch needing docs and floods missing-doc alerts). **The change-class lives in the SCOPE FILE header (§2.35), not in the commit subject** — the checker does not read it from there.
 - **A short completion note**, not a full report: what broke, what was done, how it was verified, what Langston said.
 
 ⚠️ **The lighter doc-set is the ONLY governance concession the hotfix path makes. The audit, the Langston gate and the verification are NOT concessions and are never traded away for speed.**
