@@ -10,6 +10,35 @@
 **PROVENANCE (§2 1.b).** The `|| 100` default enters at **`9944e8013` (2025-10-10, "Add paper trading simulation engine to test strategies")** — a pre-governance **listing** default. The consuming service is **`a2112069d` (2026-06-17, P19-B6 daily-loss-budget restore)**. ⇒ **a 2026 risk boundary inherited a 2025 display default; neither author was wrong in their own frame.** (`-S` on the call site returns the 07-03 `paper_sim_trades`→`closed_trades` rename `1c5c8839f` — renamed-through, not the origin.)
 **VERIFICATION.** `tsc` baseline **393 → 393, delta 0**; no error names either edited file. ⚠️ **NOT YET DONE: the regression fence, and Langston's Step-4.** Tracked on **#618**; **#632** (the session re-anchor in the same function) is a **Kyle decision, NOT part of this fix.**
 
+## FIX-2026-08-22-A — the Kraken mini-book NEVER truncated, so dead price levels accumulated and paper stop-exits filled against buyers that no longer existed (B-BOOK-TRUNCATE-HOTFIX, #507)
+
+**SYMPTOM.** Paper stop-triggered sells filled far ABOVE the market. `ONDO/USD`: stop 0.36958, filled **0.40334**, +8.8% above entry, labelled `stop_hit`. **14 of 20 crypto stop closes in 48h finished above entry.** Kyle saw positive stop-losses on the dashboard and asked how that is possible.
+
+**MECHANISM.** `handleV2BookUpdate` (`kraken-websocket-adapter.ts`) applied every book message as a delta into a persistent map and **never truncated**; it also initialised the map only when absent, so a `snapshot` MERGED into stale state instead of replacing it. Kraken's v2 contract: *"After each update, truncate your book to the subscribed depth — you will not receive `qty: 0` for levels that fall out of scope."* Every level pushed out of the window was orphaned **forever**. Over hours a dead bid from an earlier, higher price sat ABOVE the current real ask — a crossed book, impossible at a venue. The paper CLOSE fill walks the bid side, so the stop sold into the ghost. The `priceTick` mid `(bestBid+bestAsk)/2` was poisoned identically.
+
+**★ OWNERSHIP PROVEN BY MEASUREMENT, not by citing the docs** (Langston's probe, which neither of us had run): of **1,428** levels truncation evicts, only **840** are ever explicitly deleted by the venue — **588 (41%) never receive a delete.** They vanish only if the client discards them. **Latent since 8.9.4**; nothing consumed `getBookForFill` until the depth gate went live at the B8.5 switch-on.
+
+**FIX.** (1) a `snapshot` REPLACES the book; (2) TRUNCATE to the subscribed depth after every update, using the depth Kraken **GRANTED** (from the subscribe ACK) never the depth requested; (3) compute Kraken's checksum and COUNT match/mismatch — **OBSERVE ONLY, never resubscribe**; (4) `GET /api/active-engine/book-integrity` exposes the counters with a process-start stamp so post-deploy proof is a number on demand rather than an absence in a rotated log.
+
+**BLAST RADIUS.** One writer; `getBookForFill` the sole external reader (`depth-source.ts:43`, behind `assetClass === 'crypto_spot'`); two engine call sites. **Only crypto STOP exits are exposed** — all 141 crypto taker exits are `stop_hit`/`trailing_stop_hit`, zero `target_hit`; targets rest as maker and fill at their own limit. **Zero maker exits affected in either class.** **xStock is structurally immune** — its writer stores each message's own bid/ask as one row and keeps no running book. **VTS is NOT affected** (claimed, then REFUTED on a name collision: `livePricingAdapter.priceCache` is private and poisoned; the exported `priceCache` singleton VTS imports is Kraken-REST-fed).
+
+**VERIFIED — the same instrument that showed the defect present, run again after deploy:**
+| | before | after |
+|---|---|---|
+| crossed book states | **8,452 of 27,190 = 31.08%** | **0 of 8,774** |
+| max levels held (depth 10) | **228** | **10** |
+| our price vs Kraken, worst pair | **AAVE −5.272%** | **ZEC/EUR 0.129%** (AAVE 0.060%; BCH/INJ/STRK exact) |
+⚠️ **Checksum mismatch is 8,774/8,774 and that is EXPECTED, pre-registered, and NOT the fix failing** — Kraken sends price/qty as JSON numbers, so `String()` cannot reconstruct the CRC input until the `instrument` precision feed is subscribed (#507 remainder). The integrity signal is `crossedDetections`.
+⚠️ **The trade-level leg is INSUFFICIENT so far, deliberately reported as such**: pre-registered PASS is ≥20 NEW crypto stop closes with 0 above entry (0/20 against a 70% base rate ⇒ p≈2×10⁻⁴). Deploy cutline `2026-08-22 22:01Z`; no new closes yet.
+
+**DAMAGE — ~$55 net measurable, <$150 bounded, all paper mode.** ⛔ **Three earlier figures are WITHDRAWN and none is reproducible: $187.78 · 111 rows · ~$111.** They came from instruments that cannot distinguish an affected trade from an unaffected one; the control that proves this — maker exits, which never read the book — sat in the same table one `GROUP BY` away. Every candidate instrument fires at near-equal rates on both arms (42.05%/30.38%; 45.63%/41.30%; 35.59%/32.50%); **only the excursion MAGNITUDE discriminates (382.2 bps vs 58.6 bps).** ★ **General form: a negative control is not a nicety added when a number looks suspicious — it is what converts a number into a measurement.**
+
+**PROCESS.** Kyle directed the hotfix → halted it pending an independent investigation after losing confidence in the analysis → Langston independently confirmed the defect, refuted the VTS claim, and bounded the damage → Kyle released it. **Langston's two blockers were both real:** the checksum could never match and resubscribed on mismatch (a book outage and subscribe storm in place of phantom fills), and depth was recorded from the REQUEST when Kraken rejects `depth:1`. **My test scenario was wrong three times** — each caught by a failing test, each time because I modelled the venue doing something it does not do.
+
+**Commits:** `b95407a81` (truncation) · `c37e51a40` (BLOCKER-1/2) · `592a555e2` (counters) · `e6f7c70b3` (CHANGES-NEEDED + scope file). **Deployed** `e6f7c70b3` 2026-08-22T22:01Z. **Homed:** `#737` depth-1 watch item; `#507` remainder (precision feed, CC-B/Phase 20); the hotfix-class rule defect (CC-A); contaminated-record disposition (Kyle's ruling pending).
+
+---
+
 ## FIX-2026-07-31-A — the engine-vs-persisted P&L check was never wired: a parameter designed for it was passed by NOBODY (B-PNL-ROUNDTRIP-HOTFIX, #620)
 
 **change-class: hotfix** · **Commit `84fb20b8f`** (⚠️ the commit subject leads `A8 / #620`, NOT a batch-id — the checker's `extractBatchId` will not attribute it; recorded here so the link is not lost).
