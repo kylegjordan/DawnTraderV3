@@ -108,16 +108,28 @@ describe('#507 Kraken v2 book truncation — the phantom-bid defect', () => {
   // Without truncation the orphaned 0.39 survives beat 2 and is the highest bid after beat 3 —
   // above the real ask. With truncation it is cut at beat 2 and can never form.
   // ⇒ Langston's reading is correct and mine was not: (a)+(b) prevent the mint on their own.
+  // ⚠️ THIRD CORRECTION TO THIS SCENARIO, recorded because the pattern is the point: each time,
+  // I modelled the venue doing something it does not do, and each time a failing test caught it.
+  //   1st: crash with no deletes at all -> stale HIGH bids survived and truncation looked useless.
+  //   2nd: fixed the crash, but the RISE still left the consumed asks alive -> the fix's own
+  //        crossed-detector fired, because bids climbed past asks that should have been taken out.
+  //   3rd (this): when the market moves, the levels it EATS are inside the window and Kraken
+  //        DELETES them. Only the levels pushed out of the far END of the window vanish silently.
+  // That silent drop-out is the whole defect, and it is the only thing this scenario should model
+  // as silent. Everything else gets an explicit qty:0, exactly as the venue sends it.
   function mintGhost(adapter: any) {
-    // beat 1 — snapshot, depth 3
+    // beat 1 — snapshot at ~0.40, depth 3, uncrossed
     adapter.handleV2BookUpdate({ type: 'snapshot', data: [{ symbol: 'ONDO/USD',
       bids: [lvl(0.40), lvl(0.39), lvl(0.38)], asks: [lvl(0.41), lvl(0.42), lvl(0.43)] }] });
-    // beat 2 — market RISES. New better bids; 0.39/0.38 leave the window with NO delete.
+    // beat 2 — market RISES to ~0.425. The asks it eats (0.41, 0.42) are deleted explicitly.
+    // New bids arrive above the old ones. 0.39 and 0.38 are pushed out of the bottom of the
+    // window and get NO delete — this is the moment the orphan is minted.
     adapter.handleV2BookUpdate({ type: 'update', data: [{ symbol: 'ONDO/USD',
-      bids: [lvl(0.42), lvl(0.41)], asks: [lvl(0.44), lvl(0.45)] }] });
-    // beat 3 — market CRASHES. The in-window top levels ARE deleted (qty 0), new lows arrive.
+      bids: [lvl(0.425), lvl(0.42)],
+      asks: [lvl(0.41, 0), lvl(0.42, 0), lvl(0.44), lvl(0.45)] }] });
+    // beat 3 — market CRASHES to ~0.37. Everything it eats is in-window and deleted explicitly.
     adapter.handleV2BookUpdate({ type: 'update', data: [{ symbol: 'ONDO/USD',
-      bids: [lvl(0.42, 0), lvl(0.41, 0), lvl(0.40, 0), lvl(0.37), lvl(0.369), lvl(0.368)],
+      bids: [lvl(0.425, 0), lvl(0.42, 0), lvl(0.40, 0), lvl(0.37), lvl(0.369), lvl(0.368)],
       asks: [lvl(0.43, 0), lvl(0.44, 0), lvl(0.45, 0), lvl(0.371), lvl(0.372), lvl(0.373)] }] });
     const book = adapter.orderBooks.get('ONDO/USD');
     return { bestBid: Math.max(...book.bids.keys()), bestAsk: Math.min(...book.asks.keys()),
@@ -125,13 +137,22 @@ describe('#507 Kraken v2 book truncation — the phantom-bid defect', () => {
   }
 
   it('CONTROL: WITHOUT truncation the ghost is MINTED and the book crosses — the live ONDO shape', () => {
-    const r = mintGhost(makeAdapter({ truncate: false }));
+    const adapter = makeAdapter({ truncate: false });
+    const r = mintGhost(adapter);
     expect(r.bestBid).toBeGreaterThan(r.bestAsk);  // a dead bid above the real ask
     expect(r.bidDepth).toBeGreaterThan(3);         // and the book has grown past its depth
+    // ★ THE POSITIVE CONTROL FOR THE POST-DEPLOY INTEGRITY SIGNAL (Langston, hotfix gate).
+    // `crossedDetections` is the ONLY thing that proves the fix works in production, and my
+    // 0-of-31,059 was measured on a REPLICA of the fix's logic, not on this handler -- that zero
+    // does not transfer to shipped code. Asserting the counter HERE, on the real handler, with
+    // the paired 0 below, is what makes a post-deploy zero readable instead of vacuous.
+    expect(adapter.bookCrossedDetections.get('ONDO/USD') ?? 0).toBeGreaterThan(0);
   });
 
   it('WITH truncation the ghost never forms: book stays at depth, never crosses, best bid is REAL', () => {
-    const r = mintGhost(makeAdapter({ truncate: true }));
+    const adapter = makeAdapter({ truncate: true });
+    const r = mintGhost(adapter);
+    expect(adapter.bookCrossedDetections.get('ONDO/USD') ?? 0).toBe(0); // the paired zero
     expect(r.bidDepth).toBeLessThanOrEqual(3);
     expect(r.askDepth).toBeLessThanOrEqual(3);
     expect(r.bestBid).toBeLessThan(r.bestAsk);

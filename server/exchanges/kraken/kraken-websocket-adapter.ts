@@ -132,13 +132,21 @@ export class KrakenWebSocketAdapter extends EventEmitter {
   // book because Kraken computes its checksum over the STRING representations (decimal point
   // removed, leading zeros stripped) -- a float round-trip would silently change the input.
   private bookRaw = new Map<string, { bids: Map<number, [string, string]>; asks: Map<number, [string, string]> }>();
-  // Subscribed depth PER SYMBOL: the main subscribe uses 10, the B78.2 channel-switch path
-  // resubscribes at 1. Truncation must use the symbol's own depth or it is wrong for one of them.
+  // Subscribed depth PER SYMBOL, recorded from the subscribe ACK -- the depth Kraken GRANTED,
+  // never the depth requested. The main subscribe asks 10 and is granted it. The B78.2
+  // channel-switch path asks depth 1 and Kraken REJECTS it ('Subscription depth not supported'),
+  // so no ack arrives and the previous granted depth stands. ⚠️ WATCH ITEM (Langston, #737): if
+  // that request ever DID ack, truncating to a single level would starve the depth gate and
+  // silently suppress opens for that symbol -- it fails CLOSED, so no bad fills, but it is the
+  // kind of quiet suppression noticed weeks later.
   private bookDepth = new Map<string, number>();
   private bookChecksumMismatches = new Map<string, number>();
   private bookChecksumMatches = new Map<string, number>();
   private bookChecksumAttempts = new Map<string, number>();
-  private bookChecksumSkippedNoPrecision = new Map<string, number>(); // wired for when the instrument feed lands
+  // #546 / Langston: a counter DECLARED but never WRITTEN publishes a confident wrong answer --
+  // a Step-8 reader sees 'nothing skipped for precision' for a bucket that is not implemented.
+  // Kept as state for when the precision feed arms it, but NOT published until then.
+  private bookChecksumSkippedNoPrecision = new Map<string, number>();
   private bookCrossedDetections = new Map<string, number>();          // bestBid >= bestAsk AFTER truncation
   private bookUpdatesApplied = new Map<string, number>();             // the DENOMINATOR every rate above needs
   private readonly bookCountersSince = Date.now();                    // so the denominator travels with the number
@@ -3163,9 +3171,12 @@ export class KrakenWebSocketAdapter extends EventEmitter {
    * ⚠️ PRE-REGISTERED READING, so a high mismatch rate is not misread as the fix failing:
    * MISMATCH IS THE EXPECTED RESULT TODAY. Kraken sends price/qty as JSON numbers, so
    * `String(qty)` cannot reconstruct the CRC input (measured: 0/40 match live, 40/40 once
-   * formatted at instrument precision). Until the v2 `instrument` precision feed is subscribed
-   * -- it is NOT today, measured: zero instrument messages in a 3,000-line window -- this
-   * counter is A GAUGE OF THE PRECISION GAP, NOT OF BOOK INTEGRITY.
+   * formatted at instrument precision). The v2 `instrument` channel is NOT subscribed -- see the
+   * subscribe payloads in this file: `ticker` and `book` only. (An earlier version cited 'zero
+   * instrument messages in a 3,000-line log window'. Langston: a tautology in a measurement's
+   * clothes -- a log window cannot separate NOT SUBSCRIBED from SUBSCRIBED-BUT-SILENT, so that
+   * zero was structurally guaranteed. A presence-check on the subscribe payload reads one way.)
+   * ⇒ this counter GAUGES THE PRECISION GAP, NOT BOOK INTEGRITY.
    * ★ The INTEGRITY signal is `crossedDetections`, which must be 0. Pre-fix comparator,
    *   measured live by replicating the old handler: 32.03% of book states crossed.
    * ★ `matches` is the POSITIVE CONTROL for `mismatches`: a zero mismatch count is unreadable
@@ -3173,8 +3184,8 @@ export class KrakenWebSocketAdapter extends EventEmitter {
    */
   getBookIntegrityCounters(): {
     since: string; uptimeMs: number;
-    totals: { updatesApplied: number; checksumAttempts: number; matches: number; mismatches: number; skippedNoPrecision: number; crossedDetections: number };
-    bySymbol: Array<{ symbol: string; updatesApplied: number; attempts: number; matches: number; mismatches: number; skippedNoPrecision: number; crossedDetections: number }>;
+    totals: { updatesApplied: number; checksumAttempts: number; matches: number; mismatches: number; crossedDetections: number };
+    bySymbol: Array<{ symbol: string; updatesApplied: number; attempts: number; matches: number; mismatches: number; crossedDetections: number }>;
     note: string;
   } {
     const syms = new Set<string>([
@@ -3189,7 +3200,6 @@ export class KrakenWebSocketAdapter extends EventEmitter {
       attempts: g(this.bookChecksumAttempts, symbol),
       matches: g(this.bookChecksumMatches, symbol),
       mismatches: g(this.bookChecksumMismatches, symbol),
-      skippedNoPrecision: g(this.bookChecksumSkippedNoPrecision, symbol),
       crossedDetections: g(this.bookCrossedDetections, symbol),
     }));
     const sum = (f: (r: typeof bySymbol[number]) => number) => bySymbol.reduce((a, r) => a + f(r), 0);
@@ -3199,7 +3209,7 @@ export class KrakenWebSocketAdapter extends EventEmitter {
       totals: {
         updatesApplied: sum(r => r.updatesApplied), checksumAttempts: sum(r => r.attempts),
         matches: sum(r => r.matches), mismatches: sum(r => r.mismatches),
-        skippedNoPrecision: sum(r => r.skippedNoPrecision), crossedDetections: sum(r => r.crossedDetections),
+        crossedDetections: sum(r => r.crossedDetections),
       },
       bySymbol,
       note: 'MISMATCH IS EXPECTED until the v2 instrument precision feed lands (#507 remainder): Kraken sends price/qty as JSON numbers and String() cannot reconstruct the CRC input. The INTEGRITY signal here is crossedDetections, which must be 0 (pre-fix comparator, measured live: 32.03% of book states crossed).',
