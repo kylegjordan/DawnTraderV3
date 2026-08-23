@@ -788,3 +788,18 @@ Archive: git history is authoritative (this is a field-retirement within live fi
 **RESIDUE:** zero surviving references outside the archive copy and the frozen backup zips/chat-archives (Langston-verified at 37a294867). *(An earlier draft of this line pointed at the frozen export's `enrichFeatures` reference — wrong symbol: that is a surviving live method of feature-enrichment.ts, not residue of this deletion; corrected 2026-08-18.)*
 **ARCHIVE:** `1-system-manual/_archive/deleted-code/data-normalization.ts.removed` + git history at the removing commit.
 **COMPANION HARDENING (same commit, Langston's non-blocking notes):** `getPriceData` now carries its ASC ordering contract AT THE SOURCE (`storage.ts`); the two rebuilt audit tests use hardcoded expected literals (0.043668 / 0.5) independent of the implementation's slices, and the SMA sample got margin (30 rows vs the 25 boundary).
+
+## CREW COORDINATION BOARD — rules 25.a / 25.b retired from `CLAUDE.md` (2026-08-23, B-RULES-1c/1d)
+
+**WHAT WAS REMOVED HERE:** the two always-loaded rules only (1,613 B). **THE CODE IS NOT YET REMOVED** — see the scheduled home below. Recording that split explicitly, because "retired" applied to a rule while the tool still runs is exactly the half-state rule 18 forbids leaving unnamed.
+
+**WHY (Langston ruling 2026-08-23, delegated to CC-A + Langston by Kyle):** **three claims made, zero ever released**, aged 26d/26d/18d. A protocol nobody completes — so its empty state was never earned, and a *narrowed* board showing clear would be a stronger false all-clear than the broad one. Lifetime usage 2 commits / 3 Discord mentions across four sessions and two months. The race it was built for (#557, shared-index collision) became **structurally impossible** when each session got its own clone; the one real collision (`RUNNING_ISSUES.md`) was fixed **structurally** by the #702 per-session number blocks.
+
+**BLAST-RADIUS AT THIS STEP:** rules-file text only. No code, no npm script, no service, no table touched. `crew board` still runs today.
+
+**RESIDUAL, named per Langston condition 1 rather than conceded:** `CLAUDE.md`, `CONDUCT.md`, shared `MEMORY.md` — four sessions edit the same prose regions, number-blocks cannot apply, and a semantic collision merges cleanly. Detection-after-the-fact exists (`fresh-rules.mjs` + the Monday freshness review); prevention does not.
+
+**SCHEDULED HOME FOR THE CODE REMOVAL — `B-CREW-BOARD-REMOVAL`, OWNER CC-A, DUE 2026-09-05:** `scripts/crew.ts` (10,850 B) · `comms-infra/discord/crew-status-post.py` (4,878 B) · `comms-infra/laptop/crew-status-audit.py` (16,141 B) · the `crew` script in `package.json:20` · any backing table, under a full §9.5(a-ii) state-write census.
+
+**RESTORE PATH:** git history is authoritative — the rules text is recoverable at any commit before this one, and the tooling is untouched at `HEAD` today. **Nothing here is unrecoverable.**
+
