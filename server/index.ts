@@ -1,4 +1,5 @@
 import express, { type Request, Response, NextFunction } from "express";
+import { miniBookIntegrityMonitor } from './services/monitoring/mini-book-integrity-monitor.js';
 import cors from "cors";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -312,6 +313,19 @@ app.use((req, res, next) => {
    */
   const { systemHealth } = await import('./services/system-health.js');
   systemHealth.start();
+
+  // ── B-MBIM-SWITCH-ON (#741/#743, 2026-08-23) ────────────────────────────────────────────────
+  // The Mini-Book Integrity Monitor was written 2025-12-30 under Directive 8.9.5 — ninety minutes
+  // after the mini-book itself — to audit the book's midpoint against an independent REST midpoint
+  // and flag drift over 0.2%. IT HAS NEVER RUN: `start()` was reachable only from a manual API
+  // route (routes.ts), never from boot, and there is not one `[8.9.5][MBIM]` line in any retained
+  // log. It is the guard this system's own designer specified for exactly the #507/#741 defect —
+  // a ghost bid above the real ask throws the book mid far past 0.2%, so at the measured 31.08%
+  // crossed-book rate it would have fired continuously for months.
+  // ⇒ this line is the whole of F-A: not a new instrument, a switch-on. Idempotent (isRunning
+  //   guard), self-scheduling, and bounded to a rotating 30-symbol slice per pass so it cannot
+  //   spend the Kraken budget the locked price-cache module exists to protect.
+  miniBookIntegrityMonitor.start();
 
   /**
    * A4.R10R-1: Initialize Unified Price Cache

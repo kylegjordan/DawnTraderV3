@@ -42,6 +42,10 @@ class MiniBookIntegrityMonitor {
   
   private krakenService: KrakenService;
   private isRunning: boolean = false;
+  /** B-MBIM-SWITCH-ON: rotating audit cursor — see runAudit for why the universe is sliced. */
+  private rotationCursor: number = 0;
+  /** Symbols per pass. 30 × 5-min passes ⇒ full 291-symbol coverage in ~50 minutes. */
+  private readonly AUDIT_SLICE = 30;
   private metrics: MBIMMetrics = {
     totalChecks: 0,
     passCount: 0,
@@ -100,14 +104,32 @@ class MiniBookIntegrityMonitor {
   }
 
   async runAudit(): Promise<IntegrityResult[]> {
-    const subscribedSymbols = krakenWebSocketAdapter.getSubscribedSymbols();
+    const allSubscribed = krakenWebSocketAdapter.getSubscribedSymbols();
     
-    if (subscribedSymbols.length === 0) {
+    if (allSubscribed.length === 0) {
       console.log('[8.9.5][MBIM] No active symbols to audit');
       return [];
     }
 
-    console.log(`[8.9.5][MBIM] Starting integrity audit for ${subscribedSymbols.length} symbols`);
+    // ── B-MBIM-SWITCH-ON (#741/#743, 2026-08-23) — ROTATING SLICE, NOT THE WHOLE UNIVERSE ─────────
+    // This monitor was written 2025-12-30 (Directive 8.9.5) and has never run: `start()` is reachable
+    // only from a manual API route, never from boot. Wiring it up as-written would have audited EVERY
+    // subscribed symbol each pass — MEASURED 291 on staging — one sequential REST call each.
+    //
+    // ⛔ THAT IS NOT A NEUTRAL COST. `price-cache.ts` is a LOCKED module whose entire purpose is
+    // holding Kraken under 10 weighted requests/second, and a REST failure pushes `fetchLivePrice`
+    // into its `last_known_good` legs (#743) — so a naive switch-on would have AGGRAVATED THE VERY
+    // STALENESS DEFECT THIS MONITOR EXISTS TO DETECT. The fix is a bounded rotating slice: full
+    // coverage on a ~1h cycle instead of a 291-call pass every 5 minutes.
+    const startIdx = this.rotationCursor % allSubscribed.length;
+    const subscribedSymbols = allSubscribed
+      .slice(startIdx, startIdx + this.AUDIT_SLICE)
+      .concat(startIdx + this.AUDIT_SLICE > allSubscribed.length
+        ? allSubscribed.slice(0, (startIdx + this.AUDIT_SLICE) - allSubscribed.length)
+        : []);
+    this.rotationCursor = (startIdx + this.AUDIT_SLICE) % allSubscribed.length;
+
+    console.log(`[8.9.5][MBIM] Starting integrity audit for ${subscribedSymbols.length} of ${allSubscribed.length} symbols (rotating slice, cursor→${this.rotationCursor})`);
     
     const results: IntegrityResult[] = [];
     const timestamp = new Date().toISOString();
