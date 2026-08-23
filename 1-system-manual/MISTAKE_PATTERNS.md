@@ -72,20 +72,27 @@ select symbol, net_pnl, exit_price, take_profit, closed_at from closed_trades
 
 # THE PATTERNS
 
-### `read-the-field` — **THE INSTRUMENT WAS NEVER AMBIGUOUS; THE READER DID NOT LOOK AT THE FIELD** (opened 2026-08-23, CC-A, Langston-named)
+### `read-the-field` — **THE OBJECT DESCRIBED ITSELF AND THE READER DID NOT LOOK** — **LIVE — NOT IN §13** · mechanism: **NONE YET** (opened 2026-08-23, CC-A; Langston-named, and **Langston corrected the tally down from three instances to two**)
 
-**TWO INSTANCES IN ONE DAY, BOTH MINE, BOTH IN `B-RULES-1c/1d`.** Below the §13 promotion floor (3+ instances across 2+ batches) — **filed now precisely so the third is a grep and not somebody’s memory.**
+**TWO instances, both CC-A, both inside `B-RULES-1c/1d`.** ⛔ **FAILS BOTH §13 LEGS** — under the 3+ floor, and 1c/1d is **ONE context, not two batches** (Langston: *"two id strings, one context: same session, same day, same subject, same state. The leg tests whether a pattern survives a CHANGE OF CONTEXT, not whether two strings differ. If a literal id test clears it, the gate is satisfiable by sub-batch numbering"* — the same "gate on paper" ground `silence-not-evidence` was refused on). **Recorded now so the next instance promotes it by GREP rather than by another judgement call.**
 
-| # | instance | the field that was right there |
-|---|---|---|
-| 1 | Cited a **resume** as the discharging **compaction** for GATE 2 — in the same message that argued the two could not be confused because the harness logs them separately. | `source=compact` vs `source=resume`, distinct values in every row of `instructions-loaded.jsonl`. |
-| 2 | Read a **candidate-set** logger as proof of **loading**, then reported CONDUCT.md ABSENT on every boundary. | The row’s own `measures` field says, verbatim, that it records path existence and is *NOT* proof the harness loaded them. |
+| # | instance | the self-describing field that was right there | ref |
+|---|---|---|---|
+| 1 | Cited a **resume** as the discharging **compaction** for GATE 2 — in the same message that argued the two could not be confused because the harness logs them separately. | `source=compact` vs `source=resume`, distinct values on every row of `instructions-loaded.jsonl`. | `d0fc181c7` |
+| 2 | Read a **candidate-set** logger as proof of **loading**, and reported `CONDUCT.md` ABSENT on every boundary. | The row’s own `measures` field states verbatim that it records path existence and is **NOT** proof the harness loaded anything. | `d0fc181c7` |
 
-★ **THE SHAPE, stated so it is recognisable in a third instance that looks nothing like these two: THE DATA WAS COMPLETE AND CORRECT. No instrument failed. In both cases a field that would have settled it was present in the object I was already looking at, and I formed the conclusion before reading it.** That makes it invisible to every "verify your instrument" rule we have — those catch instruments that lie, and this instrument told the truth.
-**THE COUNTER-HABIT: before drawing a conclusion from a record, read what the record says ABOUT ITSELF** — its type field, its source field, its own stated scope.
-**REFS:** `d0fc181c7` (the GATE-2 correction, with both legs and why the weaker one was weak) · `#740` (the sibling class, where the value really was absent).
+★ **THE SHAPE, and the framing Langston asked be preserved verbatim: THE DATA WAS COMPLETE AND CORRECT AND NO INSTRUMENT FAILED.** A field that would have settled it sat in the object already being looked at, and the conclusion was formed before reading it. ⇒ **THESE INSTRUMENTS TOLD THE TRUTH, so every "verify your instrument" rule we have is STRUCTURALLY BLIND to this** — those catch instruments that LIE. *(That is the argument for RECORDING it. It is not yet the argument for a §13 slot.)*
+**THE COUNTER-HABIT, one line:** before drawing a conclusion from a record, read what the record says **about itself** — its type field, its source field, its own stated scope.
 
+### `fragment-not-whole` — **TESTED A FRAGMENT, ASSERTED ABOUT THE WHOLE** — **LIVE — NOT IN §13** · mechanism: **NONE YET** (opened 2026-08-23, CC-A, at Langston’s direction)
 
+⚠️ **SPLIT OUT OF `read-the-field` BY LANGSTON, AND THE DISTINCTION IS REAL RATHER THAN PEDANTIC.** I had filed this as a third instance of that pattern. His correction: *"a regex doesn’t describe itself, and the twelve lines below it aren’t metadata, they’re the rest of the control flow."* ⇒ **there is no self-describing field here to have missed** — the failure is asserting whole-system behaviour from a component tested in isolation. Same family as **#675**.
+
+| # | instance | what was tested vs what was claimed | ref |
+|---|---|---|---|
+| 1 | Told Kyle that alerts routed to CC-C **"never route"**. | Tested `ALERT_OWNER_RE` **in isolation**; never read the twelve lines below, where a NON-match falls THROUGH to the name check and the literal `CC-C` satisfies CC-C’s own alias. **The owner woke all along.** The real defect was the SUPPRESSION half — the opposite end of the same function. | `4b8220a27` |
+
+★ **WHY IT IS WORTH ITS OWN SLUG:** the counter-habit is different. `read-the-field` says *read what the record says about itself*. This one says **exercise the WHOLE path, not the piece you suspect** — a unit that behaves correctly in isolation says nothing about the branch taken when it does not fire.
 
 ### `wrong-object` — **PROMOTED TO §13** · mechanism: **NONE YET**
 **Right name, wrong thing.** The path is correct, the file is correct, the command runs — and it measures something other than what the claim is about.
