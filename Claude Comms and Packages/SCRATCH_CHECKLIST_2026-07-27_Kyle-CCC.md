@@ -104,6 +104,31 @@
 | **F5** | **Per-strategy reach structure**, seeded at today's `reach_atr_max=4.0` so it ships **behaviour-neutral**. **BUILD yes, FIT no** until the sample exists. | CC-C | **2026-09-10** | fit gated |
 | **F6** | **THE RESET** — re-anchor, mark the window, restart the clock. | CC-C | gated | F3+F1+F2 |
 
+### ⛔ PART F RESTRUCTURED 2026-08-23 ON KYLE'S DIRECTION — *"when we finish with this set of batches we wanna be confident that the prices that we enter and exit at are reliable and are correct."*
+
+**He was right and my framing was wrong.** I had homed the staleness fix as a PARALLEL batch on the reasoning that a behaviour change does not belong inside a batch whose safety case is *"no decision path changes"*. **That reasoning is still correct about F3 and irrelevant to the plan** — "not in that batch" is not "not in the plan", and a plan that ends with a known unbounded staleness path still open does not deliver the confidence it exists to deliver.
+
+**★★ AND HIS WORD "ENTER" EXPOSED A GAP I HAD NOT LOOKED AT.** Every measurement I took all night tested EXIT prices. **The ENTRY fill walks the book too** — `order-placer.ts:72` takes `fillPrice` from `walkBook`, sourced from `depth-source.ts:43` `getBookForFill`, **the same mini-book that carried the `#507` truncation defect.** Exits walk the BID side; entries walk the ASK side, where a stale low ask makes an entry look CHEAPER than reality. **Same defect, opposite side of the book, same optimistic direction.**
+
+**MEASURED (entry price vs the venue's lowest PRINTED price, ±10 min, the mirror of the exit test):**
+
+| class | trades | assessable | **entry below printed low** | recorded P&L | median |
+|---|---:|---:|---:|---:|---:|
+| crypto | 309 | 232 | **22** | **+$211.47** | **216 bps** |
+| xStock | 225 | 219 | 23 | −$72.22 | 9.8 bps |
+
+**Crypto entries sit 2.2% below anything the venue traded — the same magnitude class as the exit contamination (289.7 bps median), carrying MORE recorded profit than the exit side.** xStock's 23 at 9.8 bps are noise-scale and consistent with xStock having no order book to walk. ⚠️ **Overlap with the 109 exit-contaminated rows is NOT yet measured** — some trades are likely bad on both legs, so these do not simply add.
+
+**THE RESTRUCTURE — three changes, all widening toward the stated goal:**
+
+| # | change | why |
+|---|---|---|
+| **F3 WIDENS** | stamp **entry** provenance as well as exit — the fill's book age, producer and `observedAt` at the moment the entry was priced | the entry leg walks the same book; a plan about price confidence cannot instrument one side |
+| **F3.5 — NEW, folded in** | **the staleness bound** (was the parallel `B-PRICE-STALENESS-BOUND`), sequenced **after** F3 so its threshold is set from measured data | Kyle's direction. Sequenced after, not merged into F3, because a hurried band on the exit path **fails toward BLOCKING REAL EXITS** — the more expensive failure (Langston, `#531`) |
+| **F1+F2 WIDEN** | the detector tests **entry vs printed low AND exit vs printed high**; disposition covers both legs | otherwise we correct half of each trade |
+
+**AND THE RESET GATE TIGHTENS: zero contaminated on BOTH legs**, not just exits. Old wording said "zero contaminated" while every measurement behind it was exit-only.
+
 **★ THE RESET GATE, WITH A NUMBER, because Langston ruled that "verified on post-fix closes" is unfalsifiable without one:** provenance stamp present on **100%** of closes in the window · **≥50 ASSESSABLE closes across ≥5 consecutive days** · **ZERO contaminated among them.** *Why 50:* at the measured pre-fix contamination rate (~20%), fifty consecutive clean assessable closes has probability ~1.4e-5 if nothing changed — so the gate can actually FAIL, which is the whole point.
 
 **⛔ SUPERSEDED, DO NOT SHIP: the "≥21 rows / ≥58.63" floor Langston approved earlier the same night.** 21 of ~40 is a **52.5%-reach detector on ONE class**; remediating on it produces a "cleaned" set that is a subset of an unreliable partition and writes a basis marker we would then have to re-stamp. **Two bases in one column is the #641 shape.** Nothing gets written under the old basis; anything already carrying it is re-stamped, never left dual.
