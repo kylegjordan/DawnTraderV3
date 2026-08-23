@@ -1,6 +1,6 @@
 # B-EXIT-PROVENANCE — SCOPE
 
-change-class: non_architecture
+change-class: architecture
 
 > **Batch id:** `B-EXIT-PROVENANCE` · **Owner:** Claude Analyst (CC-C) · **Opened:** 2026-08-23 · **Due:** 2026-08-27
 > **Ledger home:** `SCRATCH_CHECKLIST_2026-07-27_Kyle-CCC.md` Part F, piece **F3**
@@ -116,3 +116,41 @@ stored value rather than a null in F1+F2.
 - **The mid-vs-ticker divergence detector** → F4. This batch *records* the inputs; it raises no alarm.
 - **Per-strategy reach structure** → F5.
 - **The reset** → F6, gated on this batch plus F1+F2 plus a stated post-fix clean window.
+
+---
+
+# REV 2 — 2026-08-23, after Langston's Step-1 bounce (`95bb77f09`)
+
+His verdict: *"SENT BACK FOR ONE REVISION (r2), then proceed to Step 2… The bounce is a design defect I found, not a completeness failure."*
+
+## R2-1 — C1 ACCEPTED. THE FIELD I PROPOSED TO PERSIST CANNOT DISCRIMINATE THE CASE THAT MOTIVATES THE BATCH
+
+His finding, and it is correct: `handleV2BookUpdate` emits a book **midpoint** stamped `source:'kraken_ws'` (`:916`), and the ticker handler emits a **last-trade** stamped `source:'kraken_ws'` (`:692`). Both write the same cache key, last-writer-wins. **So a ghost-contaminated book-mid and a clean ticker print arrive at `:1758` carrying the IDENTICAL string.** Persisting it as-is stores a label already measured unable to separate the defect from the clean case — and worse, a later reader takes `kraken_ws` as evidence of a ticker print. ⇒ **discrimination must happen AT THE PRODUCER**, with a closed enumerated vocabulary and a fence rejecting any value outside it.
+
+## ★ R2-2 — AND THAT REQUIREMENT HAS A BLAST RADIUS HIS RULING DID NOT NAME, WHICH I FOUND BY READING THE GATE
+
+⛔ **`isKrakenVenueSource` (`live-pricing-adapter.ts:67`) IS A HARD GATE ON THE LIVE TRADING PATH, AND IT WHITELISTS THE SOURCE STRING BY VALUE:** `source === 'kraken_ws' || 'kraken_equities_ws' || 'kraken_rest'`. **Four consumers:** the engine's ACTIONABLE-PRICE GATE (`active-execution-engine.ts:1170`), its non-venue warn (`:1176`), the venue-quiet predicate (`:81`), and the cache freshness read (`:865`).
+
+⇒ **if the vocabulary is widened at the producer and a new value is not added to this predicate, the actionable gate REJECTS the price → `_recordPriceSkip` → the position is SKIPPED that tick → the consecutive-skip escalation rail fires.** A batch scoped as forward-only telemetry would stop evaluating open positions. **That is the single largest risk in this batch and it did not exist in r1.**
+
+## R2-3 — TWO DESIGNS. I RECOMMEND (B) AND THE REASON IS GATE SAFETY
+
+**(A) WIDEN THE EXISTING `source` VOCABULARY** — `kraken_ws` splits into `kraken_ws_book` / `kraken_ws_ticker`. Satisfies C1 directly. **Cost: the type union at `:51`/`:58`/`:699`, the predicate at `:67`, and every literal comparison must widen together, and a miss is a trading outage rather than a wrong label.**
+
+**(B) LEAVE `source` UNTOUCHED; ADD A SEPARATE `producer` FIELD ON THE TICK** — carried from the emitting handler, persisted at close, fenced against a closed vocabulary. **The gate's input does not change, so the gate CANNOT break.** This is the *impossible-rather-than-caught* preference Langston himself states in rule 29 — the failure mode is made unreachable instead of guarded.
+
+**Pre-empting his #641 objection (two fields that can disagree), because it is the right objection and I do not think it lands here:** these are not the same fact stored twice. **`source` answers a POLICY question — *may I act on this price?* `producer` answers a PROVENANCE question — *which handler produced this number?*** Merging them is what created the defect in the first place: a policy label was read as provenance evidence. Keeping them separate means a future policy change cannot silently rewrite the historical provenance vocabulary. **If he still rules (A), I will take it — but then the predicate widening is a NAMED objective with its own fence, not an implementation detail.**
+
+## R2-4 — CORRECTIONS ACCEPTED WITHOUT ARGUMENT
+
+- **change-class `non_architecture` → `architecture`.** He pre-registered the criterion before the diff existed: the moment this widens the `priceTick` / live-pricing-adapter payload — cross-cutting, read by **entry as well as exit** — it is architecture. Both designs above do. **SIM §17 cross-cutting registry gets a content update.**
+- **OBJ-1's population was wrong.** `closed_trades` rows are CREATED AT OPEN with `closed_at` NULL and UPDATED at close, so *"every new closed row"* would fail the fence on every open position. Correct population: **`closed_at IS NOT NULL AND closed_at > <deploy ts>`.**
+- **OBJ-5 stays fenced, not schema-enforced — and his reason is stronger than mine.** I argued a NOT NULL could strand a position. He added the decisive one: **rows are INSERTed at open, so NOT NULL is unsatisfiable without a DEFAULT, and a DEFAULT reintroduces exactly the indistinguishability OBJ-5 exists to kill.**
+- **Q3 sentinel, no boolean.** "No book exists for this class" folds into the single enumerated vocabulary. A `book_available` flag is a second field that can disagree with the first.
+- **`priceAgeMs` renamed.** `diffMs` (`:1244`) is **tick-to-tick cadence for that symbol**, NOT the age of the price acted on. It ships as `tickCadenceMs`, or it is misread by the first person to use it.
+- **The `exitPriceSource` population, named properly:** ONE occurrence in `server/`; it also appears in `attached_assets/` and two `bridge/reference/` archives. Does not move the finding — but an unstated population is the rule-29(a) failure I have already been bounced on tonight.
+- **bid/ask/bookMid are NOT in scope at any call site** — they are block-locals in the REST leg (`:1198-1200`) and otherwise live only inside the adapter. So r1's *"facts already in hand"* was true of `priceSource` and **false of these three**. They must be **carried on the tick from the producer**. ⛔ **Do NOT re-read the book at close time — that measures a different instant than the decision and manufactures a new defect.**
+
+## R2-5 — WHY F3 STILL GOES FIRST, with the argument I failed to make
+
+Langston's, and it is decisive: **the post-fix era holds ZERO maker closes.** If the instrument is not in before the next maker close, **the clean-era measurement is lost the same way the dirty-era one was** — and that is unrecoverable, exactly like the 127 unassessable rows. Kyle waits longer for his dashboard correction and gets a number that can be audited afterwards instead of re-litigated.
