@@ -65,7 +65,8 @@ directly and sit **outside** it. ⇒ **the census is the protection for four of 
 | `kraken_equities_ws` | `aee:1145` | |
 | `kraken_rest_engine_fallback` | `aee:1220` | split from the poller |
 | `kraken_rest_poller` | `lpa:369` in `fetchLivePrice` → W3 | split from the engine leg |
-| `last_known_good_restamp` | `lpa:348` / `:389` / `:418` → W3 | **names the laundering; see the addendum — naming is NOT recovering** |
+| `last_known_good_restamp` | `lpa:348` / `:389` / `:418` → W3 | refreshes `timestamp`; feeds the launderer |
+| `last_known_good_reserve` | **`lpa:921` inside `getPriceWithFallback`** | ★ **the exit path's own leg — see below** |
 | `entry_seed` | `lpa:784` (W2) | sole caller `aee:3617` |
 | `mock` | `fetchMockPrice`, **defined `lpa:527`** (called `lpa:300`) | enumerated, not excluded |
 
@@ -76,6 +77,38 @@ with a ticker print in the first place.
 unproducible member is #546 wearing the fix's clothes — and it was wrong because it **conflated two
 facts**: the producer vocabulary answers *where the PRICE came from*; *"this class has no order
 book"* is a property of the **`bookMid` field**.
+
+**★ `last_known_good_reserve` — THE MEMBER MY CENSUS MISSED, AND IT IS THE ONE ON THE EXIT PATH.**
+`lpa:921` constructs a fourth `last_known_good` **inside `getPriceWithFallback` itself** — the
+function the close path calls (§4's `active-portfolio-manager.ts:335` calls exactly it). I listed the
+three inside `fetchLivePrice` and stopped. **A closed union missing the most exit-relevant member is a
+runtime value outside the fence on day one** — the same `manual_stop_kraken_ws` failure I caught one
+file over, reproduced by me in the very section that fixes it.
+
+**It gets its OWN token because it is a different shape, and on one axis it is the HONEST leg:** it
+**writes nothing to the cache** and returns **`timestamp: cached.timestamp` UNREFRESHED**. Its own
+comment names it correctly — *"A stale re-serve is a MEMORY of a venue read, not a venue read."*
+⇒ **`observedAt` behaviour: carried from the cache entry, and it CANNOT corrupt anything because this
+leg performs no write.** Folding it into `last_known_good_restamp` would label an honest leg with a
+laundering token.
+
+### THE FENCE — REWRITTEN, because my threshold false-failed correct behaviour
+
+⛔ **My first version asserted a gap "greater than one poll interval". That is wrong:**
+`getPriceWithFallback` calls `fetchPrice` **ON DEMAND** (`lpa:900`), off the 15 s clock — so a re-serve
+can occur milliseconds after a genuine venue write, and a **correct** carry-through then yields a
+sub-15 s gap and **my fence would have failed green behaviour.** The threshold bought no
+discrimination and added a false-failure mode.
+
+**The property that actually separates carry-through from refresh, and which a refresh cannot satisfy:**
+1. `observedAt` **strictly less than** the write time (gap > 0), **and**
+2. `observedAt` **INVARIANT across ≥2 successive re-stamps of the same symbol while `cachedAt` advances.**
+
+**Fence conditions, per the PERPFEED standard:** subject **DERIVED** (every producer token resolved
+from the union at runtime, never a hand-maintained name list); **proved able to fail** by a
+with/without discrimination pair (a simulated refresh must make it red); and it **RUNS in CI**, not
+skipped.
+
 
 **`mock` is ENUMERATED with evidence, not assumed unreachable:** gate is
 `process.env.ENABLE_MOCK_PRICING === 'true'` (`index.ts:952`); staging's **process env does not set
