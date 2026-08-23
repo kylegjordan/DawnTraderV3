@@ -11,12 +11,13 @@
 > **If BLOCKED-ON says Kyle, say NOTHING and do not work the item.** Otherwise continue to the next step and report only at the step boundary, in the `CONDUCT.md` §6 format.
 > ⚠️ **UPDATE THESE FOUR LINES AT EVERY STEP BOUNDARY.** They were left stale for weeks and Kyle found it before I did.
 
-- **BATCH:** B-RULES-1c + **B-RULES-1d** — the `CLAUDE.md` SLIM.
-- **STEP:** **1c GATE 2 DISCHARGED PASS** (`7bbb2d1c0` / pushed `0b61e6a39`) — real `SessionStart:compact` 2026-08-21T11:28, marker re-injected on the matching read. Langston's every-mover-comes-back consequence does NOT fire; the slim is UNBLOCKED. Probe pair deleted. **1d §5(a) DISCHARGED NEGATIVE** (`69d79ea47`): parent skill -> child skill does NOT resolve; the shape is skill -> FILE.
-- **BUILT AND PUSHED:** `CLAUDE.md` **§0.a** (Kyle's loud behavioural pointer, 0.5% into the file, step NAMES only, -> `/workflow`) + **`.claude/skills/workflow/`** — `SKILL.md` index 3,505 B + **11 step files, 16,384 B**, all 11 pointers verified resolving.
-- **BLOCKED-ON:** nobody. **NEXT: dispatch the §0.a + workflow-skill shape to Langston** (it materially changes what he approved in 1d), then the actual CLAUDE.md slim, then 1c/1d governance + completion reports.
-- ⛔ **LANGSTON'S BINDING CONDITION ON THE SLIM:** r15 / r18 / §9.4 are now **SINGLE-HOMED**. The slim MAY convert them to a mechanism or a skill; it may **NOT drop or demote them without a named replacement landing in the SAME commit.**
-- **MINE AND UNDISCHARGED:** alert `9c3037f0` (run-log liveness) — rule-21 removal is gated behind it. #732 deprioritised by Kyle with a tripwire on the weekly pass (`8a07c40b`, fires 2026-08-27T09:00Z).
+- **BATCH:** **B-RULES-1c / 1d** — the `CLAUDE.md` slim. **IN FLIGHT.**
+- **STEP:** **7 DONE.** Step 3 complete · Step 4 DISPATCHED at `8442eb4d7`, **not yet ruled** · Step 5 **CI 4/4 GREEN per-job** (run `32636232272`; my sha is an ancestor of the tested head — verified with `merge-base --is-ancestor`) · **Step 6 = NO DEPLOY, judged explicitly: ZERO runtime files in this batch** · Step 7 verification suite PASSED (the single reported failure was my own probe matching an instruction, not a claim) · **Step 10 governance LANDED** (BATCH_CATALOG + PHASE_HISTORY + PHASE_19_PLAN, all marked in-flight, not closed).
+- **BLOCKED-ON:** Langston’s Step-4 verdict. He is mid-batch with CC-C — **his queue is not mine; do NOT re-poke on a cadence, poll and keep working.**
+- **NEXT:** on his verdict → iterate if needed → Step 8 → Step 11 completion report. **Do NOT claim closed until he rules AND Kyle acknowledges.**
+- ⛔ **THREE THINGS OWED TO LANGSTON, all in the Step-4 dispatch:** (1) the verdict; (2) **the CREW BOARD decision Kyle delegated to us** — measured: alive, 3 claims aged 26d/26d/18d all stale and never released, 2 commits + 3 mentions lifetime; my weak position is narrow-to-shared-governance-docs, his call; (3) the **`read-the-field` promotion argument** — 3 instances today, all mine, all in this batch.
+- ★ **FLAGGED TO CC-C AND NOT FOLLOWED UP (say-it-once):** 9 runtime files undeployed on the branch including a MIGRATION, all his, range `e6f7c70b3`→`739d43833`.
+- **DEFERRED WITH NAMES, not dropped:** Infra Claude’s onboarding (Kyle, ~1-2 weeks, date open — he is deliberately outside crew comms) · #739 + #740 → `B-RULES-1e` due 2026-09-05 · #732 tripwired on the weekly pass.
 
 # ★ KYLE 2026-08-21 — TWO STANDING ITEMS
 1. **THE WORKFLOW STEP IS RENAMED: "PRE-IMPLEMENTATION AUDIT" → "PRE-IMPLEMENTATION AUDIT AND IMPLEMENTATION PLAN".** Piece (5) merged the two into ONE step/ONE document and Langston ADOPTED it; **the STEP NAME in `CLAUDE.md` §2 must follow.** Check it is renamed everywhere, not just in the piece-(5) record.

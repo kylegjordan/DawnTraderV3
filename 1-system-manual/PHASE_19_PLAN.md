@@ -389,6 +389,15 @@ ALL must be ✅ before the flip commit. Verify each at the **B8 switch-on** Step
 
 ---
 
+### B-RULES-1c / 1d — in flight 2026-08-21→23 (CC-A) · §5 decision-log entry
+
+**DECISION 1 — the workflow is ELEVEN SKILLS, not one, and the INDEX LIVES IN THE RULES FILE.** Kyle’s call, against my first build. Two triggers, explicitly unequal: the `§0.a` table is an ordinary file read and does NOT depend on skill auto-invocation (measured-unreliable); each step being its own skill gives ELEVEN independent backup triggers instead of one. Cost measured before deciding: ~512 extra tokens always-on, 0.5% of the context floor. The umbrella skill was DELETED — nothing makes an umbrella fire first, so it could not route.
+**DECISION 2 — `§2` REMOVED COMPLETELY, with a forwarding heading.** Kyle: *"there shouldn’t be a second set of references to it."* The forwarder survives on measurement, not preference: 136 citations across 107 files, mostly frozen completion reports that are not rewritten.
+**DECISION 3 — the HOTFIX path is quicker but NOT unreviewed.** Kyle: Langston reviews it BEFORE staging. If in doubt it is a batch.
+**DECISION 4 — depth goes to runbooks, but the runbook strategy is now MEASURED AND WEAK.** Across five runbooks: 3 commits and 9 mentions ever (control: RUNNING_ISSUES has 370). **So §6 was NOT gutted** — Kyle’s point stands that the comms rules got followed BECAUSE they were in the always-loaded file.
+**DECISION 5 — an always-loaded file must not assert a live config value.** Name where to read it. Adopted after the shared MEMORY carried the wrong Langston model for 17 days.
+**DEFERRED WITH A NAME, not dropped:** Infra Claude’s onboarding into the crew comms (Kyle, ~1-2 weeks, date open) · the crew-board keep-narrow-or-kill decision (delegated to CC-A + Langston) · the `read-the-field` promotion argument · #739 and #740 to `B-RULES-1e`, due 2026-09-05.
+
 ### B-MISTAKES-FILE — closed 2026-08-20 (CC-A) · §5 decision-log entry
 
 **DECISION 1 — DO NOT BUILD THE APPEND-ONLY LOG.** The record exists in git at 36% density with 98.6% marker recall; a second store is the #641 two-copies shape. **git = instance layer · `MISTAKE_PATTERNS.md` = pattern layer · `CONDUCT.md` §13 = the short auto-loaded list.**
