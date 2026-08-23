@@ -65,8 +65,10 @@ directly and sit **outside** it. ⇒ **the census is the protection for four of 
 | `kraken_equities_ws` | `aee:1145` | |
 | `kraken_rest_engine_fallback` | `aee:1220` | split from the poller |
 | `kraken_rest_poller` | `lpa:369` in `fetchLivePrice` → W3 | split from the engine leg |
-| `last_known_good_restamp` | `lpa:348` / `:389` / `:418` → W3 | refreshes `timestamp`; feeds the launderer |
-| `last_known_good_reserve` | **`lpa:921` inside `getPriceWithFallback`** | ★ **the exit path's own leg — see below** |
+| `xstock_rest_gate_reserve` | `lpa:348` → W3 | ★ **BY DESIGN, not a failure** — the B8.9 xStock REST class-gate; no venue ask was made, nothing failed, fires every poll |
+| `last_known_good_all_apis_failed` | `lpa:389` → W3 | genuine outage leg |
+| `last_known_good_fetch_exception` | `lpa:418` → W3 | genuine outage leg |
+| `last_known_good_reserve` | **`lpa:925` inside `getPriceWithFallback` (`:851`)** | ★ **the exit path's own leg — see below** |
 | `entry_seed` | `lpa:784` (W2) | sole caller `aee:3617` |
 | `mock` | `fetchMockPrice`, **defined `lpa:527`** (called `lpa:300`) | enumerated, not excluded |
 
@@ -78,8 +80,20 @@ unproducible member is #546 wearing the fix's clothes — and it was wrong becau
 facts**: the producer vocabulary answers *where the PRICE came from*; *"this class has no order
 book"* is a property of the **`bookMid` field**.
 
+**★ `no_price_produced` — THE MEMBER THE NULL-PRICE ARM NEEDS, AND WHY IT IS NOT AN OPTIONAL FIELD.**
+`producer` is required on `PriceQuote` (C-B1), and `PriceQuote.price` is **nullable** — the
+`no_reliable_price` returns (`lpa:353-359`, and the `fetchLivePrice` no-price leg) construct a quote
+with **no number in it**. A required closed union with a constructible site outside it is a runtime
+value outside the fence on day one — **the same shape as the member I just caught, one paragraph up.**
+
+⇒ the union carries **`no_price_produced`**, matching this file's own `no_reliable_price` convention
+(*typed honesty* — a state that can occur must remain representable). **Not an optional field:**
+optionality would re-open the absence-vs-omission hole C-B1 exists to close.
+**FENCE: `producer === 'no_price_produced'` ⟺ `price === null`** — a biconditional, so neither a
+priced quote wearing the null token nor a null quote wearing a producer token can pass.
+
 **★ `last_known_good_reserve` — THE MEMBER MY CENSUS MISSED, AND IT IS THE ONE ON THE EXIT PATH.**
-`lpa:921` constructs a fourth `last_known_good` **inside `getPriceWithFallback` itself** — the
+`lpa:925` constructs a fourth `last_known_good` **inside `getPriceWithFallback` itself** — the
 function the close path calls (§4's `active-portfolio-manager.ts:335` calls exactly it). I listed the
 three inside `fetchLivePrice` and stopped. **A closed union missing the most exit-relevant member is a
 runtime value outside the fence on day one** — the same `manual_stop_kraken_ws` failure I caught one
@@ -95,7 +109,7 @@ laundering token.
 ### THE FENCE — REWRITTEN, because my threshold false-failed correct behaviour
 
 ⛔ **My first version asserted a gap "greater than one poll interval". That is wrong:**
-`getPriceWithFallback` calls `fetchPrice` **ON DEMAND** (`lpa:900`), off the 15 s clock — so a re-serve
+`getPriceWithFallback` calls `fetchPrice` **ON DEMAND** (`lpa:901`), off the 15 s clock — so a re-serve
 can occur milliseconds after a genuine venue write, and a **correct** carry-through then yields a
 sub-15 s gap and **my fence would have failed green behaviour.** The threshold bought no
 discrimination and added a false-failure mode.
@@ -108,6 +122,12 @@ discrimination and added a false-failure mode.
 from the union at runtime, never a hand-maintained name list); **proved able to fail** by a
 with/without discrimination pair (a simulated refresh must make it red); and it **RUNS in CI**, not
 skipped.
+
+⛔ **AND THE DRIVER MUST BE THE PRODUCTION WRITE SITE (Langston's Step-3 condition).** Drive the fence
+through `fetchPrice` → `lpa:307`, **never a hand-built `CachedPrice`.** A fixture-constructed entry
+asserts a property of the fixture; only the real write site can prove `:307` **propagates**
+`observedAt` from the quote rather than stamping it. **That one line is what the whole mechanism rests
+on.**
 
 
 **`mock` is ENUMERATED with evidence, not assumed unreachable:** gate is
@@ -160,7 +180,7 @@ fail OBJ-1's fence on day one.**
 | | |
 |---|---|
 | **Decision paths** | **none.** `source` is untouched, so `isKrakenVenueSource` and all five by-value sites are untouched **by construction** — the reason (B) was chosen. |
-| **Type surface** | `PriceTickEvent` (`:95`), `CachedPrice` (`:51`), `PriceQuote` (`:58`), `updateCache` (`:699`), `getPriceWithFallback`. `producer` **required + closed union** (C-B1) ⇒ a future producer #4 is a **compile error**, not a silent absence. |
+| **Type surface** | `PriceTickEvent` (`kraken-websocket-adapter.ts:95`), **`PriceQuote` (`lpa:45-52`)**, **`CachedPrice` (`lpa:54-60`)**, `updateCache` (`:699`), `getPriceWithFallback`. ⚠️ **These two were cited SWAPPED in the first version** — it is `PriceQuote` that carries `no_reliable_price` and a nullable `price`, not `CachedPrice`. `producer` **required + closed union** (C-B1) ⇒ producer #4 is a **compile error**, not a silent absence. |
 | **Cross-cutting** | `PriceTickEvent` / `CachedPrice` are read by **entry as well as exit** ⇒ change-class **architecture**; SIM cross-cutting registry takes a content update. |
 | **Write path** | `closePosition` + its three call sites, symmetric per the B8.6 rule. |
 | **Rollback** | drop the columns + revert the type widening; nothing reads them yet. |
@@ -216,11 +236,10 @@ recoverable, and that a producer token on a number still lying about its age is 
 recoverable from the row alone.** Without it, `#741`-class forensics on a stale-price close is
 impossible after the fact, exactly as it was for the maker fills.
 
-**FENCE (falsifiable, not decorative):** for any post-deploy close with
-`exit_price_producer = 'last_known_good_restamp'`, assert `exit_price_observed_at < cachedAt-equivalent`
-— i.e. the origin time must be **strictly older** than the write time by more than one poll interval.
-**If a re-stamp ever refreshes `observedAt`, the two collapse and the fence fails.** That is the
-property under test, and it can actually fail — which is the point.
+**FENCE — the operative statement lives in §2 and is not restated here.** An earlier version of this
+paragraph carried a *"more than one poll interval"* threshold. **It is deleted, not annotated:** it
+false-failed correct behaviour (`fetchPrice` is called on demand at `lpa:901`, off the 15 s clock), and
+leaving a withdrawn number downstream of its replacement is how a document comes to hold two answers.
 
 ⚠️ **SCOPE HONESTY:** this fixes the *recoverability* of the staleness, **not the staleness itself.**
 The age-unbounded re-serve is a live defect in its own right and this batch does **not** close it —
