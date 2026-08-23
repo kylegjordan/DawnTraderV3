@@ -52,8 +52,19 @@ MY_RE = re.compile(r"@?\b(" + "|".join(NAMES.get(ALIAS, [])) + r")\b", re.I)
 OTHERS_RE = re.compile(
     r"@?\b(" + "|".join([p for k, v in NAMES.items() if k != ALIAS for p in v] + ["langston"]) + r")\b", re.I)
 # B-ALERT-PROTOCOL (#340): a system-alert triage reply ends with an owner marker
-# [[ALERT id=.. owner=<CC-A|CC-B|Kyle> action=".."]] — authoritative wake routing.
-ALERT_OWNER_RE = re.compile(r"\[\[ALERT\b[^\]]*\bowner=(CC-A|CC-B|Kyle)\b", re.I)
+# [[ALERT id=.. owner=<CC-A|CC-B|CC-C|CC-INFRA|Kyle> action=".."]] — authoritative wake routing.
+# ⛔ CC-C AND CC-INFRA ADDED 2026-08-23 (Kyle-directed). The pattern listed only CC-A/CC-B/Kyle,
+# so a marker naming CC-C did NOT match — and the miss was SUBTLE, not total: on no-match the code
+# falls THROUGH to the name check below, where the literal string "CC-C" happens to satisfy CC-C's
+# own alias pattern (cc[\s_-]*c). So the OWNER still woke, by accident, via a different route.
+# THE REAL DEFECT WAS THE SUPPRESSION HALF: a matching marker `continue`s for everyone, which is
+# what silences the sessions who do NOT own the alert. With CC-C unmatched, an alert owned by CC-C
+# ALSO woke CC-A and CC-B — measured on Langston's live 2026-08-23 triage, which routed a DB-disk
+# alert to CC-C and woke CC-A too. Exactly the cross-session noise Kyle is trying to cut.
+# ★ CC-INFRA is included for SUPPRESSION ONLY. It does NOT onboard Infra Claude (deliberately
+# deferred by Kyle) — he has no entry in NAMES, so nothing here can wake him. It means an alert
+# owned by him will not wake the other three the day he IS onboarded, instead of re-earning this bug.
+ALERT_OWNER_RE = re.compile(r"\[\[ALERT\b[^\]]*\bowner=(CC-A|CC-B|CC-C|CC-INFRA|Kyle)\b", re.I)
 
 def addressed_to_me(text):
     """Return (deliver?, text)."""
