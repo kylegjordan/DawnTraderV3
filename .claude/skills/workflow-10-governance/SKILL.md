@@ -7,11 +7,44 @@ description: STEP 10 ONLY of the DawnTrader batch workflow - Governance Updates.
 
 **Ends when:** every applicable Tier-1 and Tier-2 document has landed its CONTENT update.
 
-## TIER 1 — EVERY BATCH, NO EXCEPTIONS
-`BATCH_CATALOG.md` · `PHASE_HISTORY.md` · `PHASE_19_PLAN.md` (while Phase 19 runs — §1 board + §5 decision log) · your `MEMORY_CC_<X>.md` · the scope document · the completion report.
+## ⛔ THE DOCUMENT SET — FULL TEXT, RELOCATED FROM `CLAUDE.md` §3 ON 2026-08-23
+> **This is the authoritative list, moved here VERBATIM rather than summarised.** It lived in the always-loaded rules file and was paid for on every start and every compaction by every session — but it is consulted at exactly ONE moment, the governance turn, which is the textbook case for a skill. **`CLAUDE.md` §3 keeps only what fires OUTSIDE this step:** batch NAMING and the CHANGE-CLASS declaration (they fire when a batch is created, at Step 1) and the MEMORY-file rules (they fire at session start).
 
-## TIER 2 — WHEN APPLICABLE, JUDGED EXPLICITLY
-`SYSTEM_MANUAL.md` (architecture, strategy logic, regime, filters, signal pipeline, math) · `SYSTEM_IMPACT_MAP.md` (any component added/removed/re-keyed, or cross-cutting state) · `CHANGES_AND_FIXES.md` · `POST_AUDIT_ROADMAP.md` · `RUNNING_ISSUES.md` · `STORAGE_POLICY.md` · `ADJUSTMENT_FRAMEWORK.md` · `AUTHORITY_BASELINE.md` · `ASSET_CLASS_ONBOARDING_WORKFLOW.md`.
+**Tier 1 — EVERY batch (no exceptions):**
+- `1-system-manual/BATCH_CATALOG.md` — add the new batch entry
+- `1-system-manual/PHASE_HISTORY.md` — update phase status
+- `1-system-manual/PHASE_19_PLAN.md` — **⏳ TEMPORARY RULE — DURING PHASE 19 ONLY (Kyle directive 2026-06-12, reaffirmed 2026-06-13):** the running Phase-19 plan MUST be updated after EVERY Phase-19 batch AND sub-batch — update §1 status board + §5 decision log, no exceptions. Owns sequencing + live status + phase-scoped decisions (item detail stays homed in `POST_AUDIT_ROADMAP.md` §3.2). **🗑 SELF-REMOVING: delete this Tier-1 line (and Langston CLAUDE.md §14, the matching rule) at Phase-19 close — this is a temporary rule, not permanent governance.**
+- `.claude/memory/MEMORY.md` — volatile state block (phase / batch / next-step) every batch
+- `Claude Comms and Packages/Scope Files/BATCH_N_SCOPE.md` — written in Step 1
+- `Claude Comms and Packages/Batch Completion/BATCH_N_COMPLETION_REPORT.md` — written in Step 11, includes list of governance files changed
+
+> **Note:** `CLAUDE_CODE_PROJECT_INSTRUCTIONS.md` (CCPI) was RETIRED 2026-04-20. Role absorbed by this file + MEMORY.md + BATCH_CATALOG + PHASE_HISTORY. Historical copy preserved at `1-system-manual/_archive/CLAUDE_CODE_PROJECT_INSTRUCTIONS.md` — do not edit, do not cite as live governance.
+
+**Tier 2 — When applicable:**
+- `1-system-manual/MULTI_ASSET_VTS_EXPANSION_PLAN.md` — living plan for B78-B81 stretch (created 2026-05-07). Update BEFORE each batch (sanity-check assumptions) + AFTER (record what landed + deltas vs plan + threshold table populations).
+  - **⏳ TEMPORARY (Kyle directive 2026-06-03 — while xStock calibration is in progress; REMOVE this note when calibration completes):** the bottom of `MULTI_ASSET_VTS_EXPANSION_PLAN.md` carries the **"WORKING LIST — items to reset/recalibrate for the xStock 15-MINUTE BAR switch."** REVIEW + UPDATE that tracker (status ☐/◐/☑, add newly-surfaced items) as part of **every governance batch** during the xStock calibration arc. Stop maintaining it (and delete this note + retire the list) once the calibration is done.
+- `1-system-manual/SYSTEM_MANUAL.md` — architecture + math. Any change to system architecture, strategy logic, regime detection, filter design, signal pipeline, or quantitative math MUST be reflected.
+- `1-system-manual/SYSTEM_IMPACT_MAP.md` — file-level dependency map. Any change adding/removing/modifying a component MUST be reflected. Consulted in Step 2 pre-audit.
+- `1-system-manual/CHANGES_AND_FIXES.md` — bug/risk registry
+- `1-system-manual/POST_AUDIT_ROADMAP.md` — phase-level roadmap updates
+- `1-system-manual/ADJUSTMENT_FRAMEWORK.md` — parameter-adjustment governance changes
+- `1-system-manual/AUTHORITY_BASELINE.md` — constitutional baseline changes
+- `1-system-manual/RUNNING_ISSUES.md` — open issue tracker, update counts
+- `1-system-manual/ASSET_CLASS_ONBOARDING_WORKFLOW.md` — when Phase 24 learnings surface (see §3.3)
+- `1-system-manual/STORAGE_POLICY.md` — **canonical storage & retention policy reference (Kyle directive 2026-07-08).** The single statement of the hot/warm/cold tiers, per-table retention windows, the move-not-delete path + timing, tunable knobs, and the machinery. Update whenever a retention window / tier boundary / capture cadence / storage-machinery item changes (the System Manual + SIM carry the implementation; this file carries the policy).
+- `CLAUDE.md` (this file) — stable workflow/governance/identity changes only, NOT per-batch state
+- `1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md` — **the rule-narration companion. When you ADD or MATERIALLY CHANGE a rule in this file, append its backstory here in the SAME turn** (what happened, the measurement, why the rule is shaped that way). A rule without its origin gets optimised away by the next person who finds it inconvenient.
+- `1-system-manual/BUILD_METHOD_PLAYBOOK.md` — **★ UPDATE WHEN THE *METHOD* CHANGES (Kyle directive 2026-07-24), NOT for project state.** Trigger: a role added/removed, a gate moved, a tool that replaced another, a rule that earned its place, or a failure that taught something generalisable to any project. **NOT a Tier-1 per-batch doc** — a playbook that tracks batch state decays into a stale second copy of the rules. **When you add a rule there, add the incident that produced it in the same edit.** It is DESCRIPTIVE (portable, role-based, for reuse elsewhere); this file stays authoritative for THIS project.
+- `1-system-manual/LANGSTON_ARCHITECTURE.md` — update when the REVIEWER'S BUILD changes (model, runtime, invocation, read path, auth, his files); record what it was BEFORE and why. Not for per-batch review activity.
+- `CC/Langston MEMORY.md` — volatile state every batch
+
+**Rule:** every completion report lists which governance files were changed. If SIM or System Manual were applicable but not updated, batch not complete.
+
+### 3.3 Asset-class onboarding learning-capture rule (ad-hoc since 2026-06-08)
+
+When a substantive asset-class-onboarding learning surfaces in ANY batch, fold it into `ASSET_CLASS_ONBOARDING_WORKFLOW.md` (the SSOT playbook: Part 1 step sequence, Part 2 the `R-*` reference library, Part 3 worked example) in the same governance turn, and note it in that batch's completion report. No mandatory per-batch section — add a learning only when one genuinely emerged. Four lenses frame a good capture: (a) what worked well, (b) what surprised us, (c) recurring structural patterns, (d) the concrete doc edit applied. (Was a time-bounded Phase-24 mandatory rule 2026-05-20 → 2026-06-08; see history doc §3.3.)
+
+---
 
 ## ⛔ THE ANTI-PATTERNS
 - **"I'll update governance after the deploy."** No. Deferred governance becomes forgotten governance.
@@ -25,6 +58,12 @@ Sync `/home/langston/MEMORY.md` in the same turn you update your own: batch clos
 **A governance document that asserts a constant, a threshold, a window size or a count is making a CLAIM ABOUT THE RUNNING SYSTEM — and it goes stale SILENTLY, because nothing compares the two.**
 **MEASURED 2026-08-21:** `SYSTEM_MANUAL.md` ch.12 **and** `POST_AUDIT_ROADMAP.md` both state that the AMR's EV-gap window warms at **"30 obs/class."** The live value for crypto is **100**. Consequence: the AMR activation checklist item requiring *EV-gap window warm (30 obs/class)* is **UNSATISFIABLE AS WRITTEN** — and nobody noticed, because the document reads perfectly plausibly.
 ⇒ **When your batch touches a component, re-read every NUMBER the governance docs state about it and confirm each against the live value.** On divergence: **fix the doc, or fix the value, and say which** — never leave both standing. **A rule that a document and a database disagree about is not a rule.**
+
+
+## ☑ THE DELIVERY BOARD — MOVE THE CARD WHEN THE WORK MOVES
+Move the card to **`Governance`**.
+★ **YOU move the card; LANGSTON sets `Review`.** *(Kyle 2026-08-03 — his approval gates the move but is not the move, or the board freezes every time he is mid-review.)*
+⚠️ **NOTHING AUTOMATES THIS.** An un-updated board is a **confidently wrong second record, which is worse than no board** — and the whole point is that Kyle can see who is doing what without asking. ⛔ **The card holds STATUS, OWNER, ORDER and the description — NOTHING ELSE.** Every finding, citation and verdict stays in the repo and the card LINKS to it. Board: https://github.com/users/kylegjordan/projects/1 · full protocol: `1-system-manual/DELIVERY_BOARD_PROTOCOL.md`.
 
 ---
 

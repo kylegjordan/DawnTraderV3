@@ -64,6 +64,12 @@ An end-to-end trace is **satisfied by the first sufficient explanation at each h
 Before cutting ANY code, **enumerate the state it WRITES and grep for READERS of each.** A removed WRITER whose READER survives produces **no compile error and no failing test** — caller-tracing, green CI and clean `tsc` all pass while the deletion silently breaks a live dependency.
 ⇒ **A deletion is verified by "zero callers AND every state it wrote has no surviving reader" — not by zero callers alone.**
 
+
+## ☑ THE DELIVERY BOARD — MOVE THE CARD WHEN THE WORK MOVES
+Move the card to **`Pre-Audit`**. On dispatch set **Blocked on = Langston**.
+★ **YOU move the card; LANGSTON sets `Review`.** *(Kyle 2026-08-03 — his approval gates the move but is not the move, or the board freezes every time he is mid-review.)*
+⚠️ **NOTHING AUTOMATES THIS.** An un-updated board is a **confidently wrong second record, which is worse than no board** — and the whole point is that Kyle can see who is doing what without asking. ⛔ **The card holds STATUS, OWNER, ORDER and the description — NOTHING ELSE.** Every finding, citation and verdict stays in the repo and the card LINKS to it. Board: https://github.com/users/kylegjordan/projects/1 · full protocol: `1-system-manual/DELIVERY_BOARD_PROTOCOL.md`.
+
 ---
 
 ## THE ORIGINAL RULES-FILE TEXT, PRESERVED VERBATIM

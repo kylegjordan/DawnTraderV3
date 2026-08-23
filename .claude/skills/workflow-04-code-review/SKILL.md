@@ -29,6 +29,12 @@ Watch for his pickup. **No engagement in ~8-10 min → re-poke. Escalate after 2
 - **A review that returns with NO questions at all is a signal to check DELIVERY, not a compliment.** A long dispatch is reassembled before his gate — but **only** for a post that LEADS with his name, and only above the size threshold; everything else splits and the pieces after the first are discarded. **If his reply engages only your opening section, he probably received only that.**
 - ⛔ **THE CHANGE SET MUST INCLUDE UNTRACKED FILES.** `git diff HEAD` omits them and says nothing about the omission. A dispatch built that way once shipped a review missing the batch's single most load-bearing file. **Cross-check `git status --porcelain` for `??` before calling any diff the change set.**
 
+
+## ☑ THE DELIVERY BOARD — MOVE THE CARD WHEN THE WORK MOVES
+The card **STAYS in `Implementation`**; set **Blocked on = Langston**. ⚠️ **On a SENT-BACK verdict the card does NOT move** — only the `Review` field changes, and **LANGSTON sets `Review` himself**, not you.
+★ **YOU move the card; LANGSTON sets `Review`.** *(Kyle 2026-08-03 — his approval gates the move but is not the move, or the board freezes every time he is mid-review.)*
+⚠️ **NOTHING AUTOMATES THIS.** An un-updated board is a **confidently wrong second record, which is worse than no board** — and the whole point is that Kyle can see who is doing what without asking. ⛔ **The card holds STATUS, OWNER, ORDER and the description — NOTHING ELSE.** Every finding, citation and verdict stays in the repo and the card LINKS to it. Board: https://github.com/users/kylegjordan/projects/1 · full protocol: `1-system-manual/DELIVERY_BOARD_PROTOCOL.md`.
+
 ---
 
 ## THE ORIGINAL RULES-FILE TEXT, PRESERVED VERBATIM

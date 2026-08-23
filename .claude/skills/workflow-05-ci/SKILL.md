@@ -28,6 +28,12 @@ Errors **vanishing** from files your push did **not** touch is the signature of 
 **SO, IN ORDER:** (1) **verify the refusal is real** — go and look for the thing it says is missing, at the path AND at the ref; (2) if the gate is wrong, **FIX THE GATE**, and say so; (3) **never work around it, never disable it, never re-run until it happens to pass.**
 ⚠️ **A gate that blocks correct work teaches people to route around gates — and that is how a real regression eventually gets waved through.**
 
+
+## ☑ THE DELIVERY BOARD — MOVE THE CARD WHEN THE WORK MOVES
+Move the card to **`CI + Deploy`**. While CI runs, **Blocked on = External**.
+★ **YOU move the card; LANGSTON sets `Review`.** *(Kyle 2026-08-03 — his approval gates the move but is not the move, or the board freezes every time he is mid-review.)*
+⚠️ **NOTHING AUTOMATES THIS.** An un-updated board is a **confidently wrong second record, which is worse than no board** — and the whole point is that Kyle can see who is doing what without asking. ⛔ **The card holds STATUS, OWNER, ORDER and the description — NOTHING ELSE.** Every finding, citation and verdict stays in the repo and the card LINKS to it. Board: https://github.com/users/kylegjordan/projects/1 · full protocol: `1-system-manual/DELIVERY_BOARD_PROTOCOL.md`.
+
 ---
 
 ## THE ORIGINAL RULES-FILE TEXT, PRESERVED VERBATIM

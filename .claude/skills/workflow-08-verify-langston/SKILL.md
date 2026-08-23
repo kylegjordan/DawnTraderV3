@@ -15,6 +15,12 @@ description: STEP 8 ONLY of the DawnTrader batch workflow - Langston's independe
 Give him the ref, the object, the population, and the exact commands you ran. **A number he cannot re-derive he will tag `RULED ON REPORTED FACT` — and that is DISQUALIFYING for a PROCEED on the leg it covers, not a caveat he can attach to one.**
 ⚠️ **He is STATELESS per-invoke and may be mid-review with another session.** **Do not read a slow reply as agreement**, and never carry a conclusion from his prior turn into a new dispatch without restating it in full.
 
+
+## ☑ THE DELIVERY BOARD — MOVE THE CARD WHEN THE WORK MOVES
+Card stays in **`Verification`**; set **Blocked on = Langston** for his second pass.
+★ **YOU move the card; LANGSTON sets `Review`.** *(Kyle 2026-08-03 — his approval gates the move but is not the move, or the board freezes every time he is mid-review.)*
+⚠️ **NOTHING AUTOMATES THIS.** An un-updated board is a **confidently wrong second record, which is worse than no board** — and the whole point is that Kyle can see who is doing what without asking. ⛔ **The card holds STATUS, OWNER, ORDER and the description — NOTHING ELSE.** Every finding, citation and verdict stays in the repo and the card LINKS to it. Board: https://github.com/users/kylegjordan/projects/1 · full protocol: `1-system-manual/DELIVERY_BOARD_PROTOCOL.md`.
+
 ---
 
 ## THE ORIGINAL RULES-FILE TEXT, PRESERVED VERBATIM

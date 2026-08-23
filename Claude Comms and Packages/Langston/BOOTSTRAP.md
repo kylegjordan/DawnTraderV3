@@ -233,7 +233,7 @@ Completion reports must list which governance files were changed. If SIM or Syst
 
 ---
 
-## System Impact Map & System Manual Discipline
+## Investigation, Findings & Reporting Discipline *(CLAUDE.md §9 — renamed 2026-08-23; section NUMBER unchanged, so every §9.x citation still resolves)*
 
 **The framing rule — buried implemented logic is a governance failure, not just a documentation miss.** DBS existed, was wired, was computing every MCE cycle, and was doing nothing — because no governance doc surfaced it and no review caught that it had been orphaned. That is not a docs problem. That is the governance system failing to do its job. Treat every instance of burial this way.
 

@@ -30,6 +30,12 @@ git commit -F <msgfile> -- <the same explicit paths>
 **FIXED** — the hook now runs `git reset -- <path>` immediately after the checkout. ⇒ **If you still find content you did not stage: STASH it (do not commit, do not discard), pull, and confirm it arrived from origin. KEEP THE STASH until the CAUSE is established** — the 08-09 stash was dropped once the work was proven safe, which destroyed the only artifact showing how it got there. **Recovering the work and diagnosing the incident are two different jobs.**
 ★ **THE GENERAL LESSON, which outlives this hook: A MATCHING NAME IS NOT A MATCHING THING.** Explicit paths protect you from the wrong FILE and are structurally blind to the wrong CONTENT.
 
+
+## ☑ THE DELIVERY BOARD — MOVE THE CARD WHEN THE WORK MOVES
+Move the card to **`Implementation`**, **Blocked on = Nothing**.
+★ **YOU move the card; LANGSTON sets `Review`.** *(Kyle 2026-08-03 — his approval gates the move but is not the move, or the board freezes every time he is mid-review.)*
+⚠️ **NOTHING AUTOMATES THIS.** An un-updated board is a **confidently wrong second record, which is worse than no board** — and the whole point is that Kyle can see who is doing what without asking. ⛔ **The card holds STATUS, OWNER, ORDER and the description — NOTHING ELSE.** Every finding, citation and verdict stays in the repo and the card LINKS to it. Board: https://github.com/users/kylegjordan/projects/1 · full protocol: `1-system-manual/DELIVERY_BOARD_PROTOCOL.md`.
+
 ---
 
 ## THE ORIGINAL RULES-FILE TEXT, PRESERVED VERBATIM
