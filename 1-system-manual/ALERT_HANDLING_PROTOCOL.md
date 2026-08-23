@@ -16,7 +16,9 @@
 
 3. **Assign the owner.** Langston ends his triage with a single machine-parseable last line:
    ```
-   [[ALERT id=<id> owner=<CC-A|CC-B|Kyle> action="<one line>"]]
+   [[ALERT id=<id> owner=<CC-A|CC-B|CC-C|CC-INFRA|Kyle> action="<one line>"]]
+   ⛔ **THE OWNER TOKEN SET IS AUTHORITATIVE HERE AND IS MIRRORED BY `ALERT_OWNERS` IN `cc-wake-filter.py`.** CC-C and CC-INFRA added 2026-08-23. **THIS SPEC GOVERNS THE EMITTER (Langston); the filter governs the reader.** They drifted apart until 2026-08-23, when the filter accepted values this document forbade him to write — so a correctly-emitted `owner=CC-C` was never matched, **nobody was suppressed, and an alert owned by one session woke others.** ★ **If you change the set, change it in BOTH or the emitter and the reader disagree silently.**
+   ⚠️ **AN OWNER ALIAS WITH NO `NAMES` ENTRY IS SILENTLY UNROUTABLE** — it suppresses every other session and wakes nobody, which is **indistinguishable from `owner=Kyle`** (a deliberate no-wake). `CC-INFRA` is in exactly that state today, ON PURPOSE: Kyle has deferred Infra Claude’s onboarding, and the triage still lands in `#general` where he reads it. **HOME: `B-CREW-BOARD-REMOVAL` carries it alongside Infra onboarding — owner CC-A, due 2026-09-05.** **The invariant to restore then: every token in the owner set has a `NAMES` entry, or it is not in the set.**
    ```
    The owner is **who must carry the fix to closure.** The per-class table below is the default; **Langston's domain read overrides it** (e.g. an alert whose *category* is `governance` but whose *cause* is a breakage symptom → he can route it to CC-B). No-action alerts still get a marker: `owner=Kyle action="FYI — no action needed"`.
 

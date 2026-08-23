@@ -64,7 +64,14 @@ OTHERS_RE = re.compile(
 # ★ CC-INFRA is included for SUPPRESSION ONLY. It does NOT onboard Infra Claude (deliberately
 # deferred by Kyle) — he has no entry in NAMES, so nothing here can wake him. It means an alert
 # owned by him will not wake the other three the day he IS onboarded, instead of re-earning this bug.
-ALERT_OWNER_RE = re.compile(r"\[\[ALERT\b[^\]]*\bowner=(CC-A|CC-B|CC-C|CC-INFRA|Kyle)\b", re.I)
+# ⛔ ONE LIST, BUILT ONCE. Langston, Step-4 2026-08-23: the first fix updated the regex and left
+# THREE other copies of the same enumeration drifting — the stale comment at the call site below,
+# ALERT_HANDLING_PROTOCOL.md:19 (which governs the EMITTER, so the filter accepted values the spec
+# forbade him to write), and his own CLAUDE.md §10.5. Fixing a drift bug while leaving three copies
+# drifting is the #641 shape aimed at itself. The tuple is now the single source: derive, never restate.
+ALERT_OWNERS = ("CC-A", "CC-B", "CC-C", "CC-INFRA", "Kyle")
+ALERT_OWNER_RE = re.compile(
+    r"\[\[ALERT\b[^\]]*\bowner=(" + "|".join(re.escape(o) for o in ALERT_OWNERS) + r")\b", re.I)
 
 def addressed_to_me(text):
     """Return (deliver?, text)."""
@@ -224,7 +231,7 @@ for raw in sys.stdin:
                     print(f"WAKE[KYLE-VOICE->{ALIAS}]: {body}{media_suffix(d)}", flush=True)
             elif kind == "langston_outbound":
                 # B-ALERT-PROTOCOL (#340): an alert-triage reply ends with an owner marker
-                # [[ALERT .. owner=<CC-A|CC-B|Kyle> ..]] — authoritative routing: owner==me
+                # [[ALERT .. owner=<one of ALERT_OWNERS, defined above> ..]] — authoritative routing: owner==me
                 # wakes me; the other CC's marker suppresses (theirs); owner=Kyle wakes no CC
                 # (he sees it in-channel). The marker decides, so we stop here either way.
                 mo = ALERT_OWNER_RE.search(text)
