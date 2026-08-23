@@ -2,6 +2,7 @@ import WebSocket from 'ws';
 import { EventEmitter } from 'events';
 import { crc32 as zlibCrc32 } from 'zlib'; // #507: zlib.crc32 -- present from Node 20.15 (staging runs 20.20.0); no new dependency
 import { contextBridge } from '../../services/context-bridge.js';
+import type { PriceProducer } from '../../services/live-pricing-adapter.js';
 // B78.1: removed `import { livePricingAdapter } from './live-pricing-adapter.js'`.
 // Cycle break: ws-adapter is now a leaf in the exchange layer. live-pricing-adapter
 // subscribes to ws-adapter's 'priceTick' events at module-load instead of
@@ -93,6 +94,13 @@ export interface PriceTickEvent {
   symbol: string;
   price: number;
   source: 'kraken_ws';
+  /**
+   * B-EXIT-PROVENANCE (#741) — REQUIRED, never optional. `source` is 'kraken_ws' for BOTH the
+   * ticker print and the book midpoint, which is precisely how a ghost-contaminated mid reached the
+   * exit monitor wearing a clean feed's badge. This says which HANDLER emitted it. Required + closed
+   * means a fourth producer is a COMPILE ERROR rather than a silent absence (#546).
+   */
+  producer: PriceProducer;
   traceId?: string;
 }
 
@@ -689,7 +697,7 @@ export class KrakenWebSocketAdapter extends EventEmitter {
       
       // B78.1: emit priceTick event instead of direct call to livePricingAdapter.
       // live-pricing-adapter subscribes via .on('priceTick', ...) at module-load.
-      this.emit('priceTick', { symbol: internalSymbol, price: lastPrice, source: 'kraken_ws' } as PriceTickEvent);
+      this.emit('priceTick', { symbol: internalSymbol, price: lastPrice, source: 'kraken_ws', producer: 'kraken_ws_ticker' } as PriceTickEvent);
       this.priceTickCount++;
 
       // priceCache is updated by live-pricing-adapter's priceTick handler (cycle-broken)
@@ -913,7 +921,10 @@ export class KrakenWebSocketAdapter extends EventEmitter {
       }
       
       // B78.1: emit priceTick event instead of direct call to livePricingAdapter.
-      this.emit('priceTick', { symbol: internalSymbol, price: midpoint, source: 'kraken_ws' } as PriceTickEvent);
+      // ★ #741: THE CONTAMINATED PATH. This midpoint comes from the mini-book whose truncation
+      // defect let ghost bids sit above the real ask, and it is emitted with the SAME `source`
+      // as a ticker print — which is exactly why the exit monitor could not tell them apart.
+      this.emit('priceTick', { symbol: internalSymbol, price: midpoint, source: 'kraken_ws', producer: 'kraken_ws_book_mid' } as PriceTickEvent);
       this.priceTickCount++;
       
       // Broadcast to connected clients (throttled - using separate throttle key for book updates)
@@ -1046,7 +1057,10 @@ export class KrakenWebSocketAdapter extends EventEmitter {
       // Phase 8.8.4: live-pricing-adapter cache update + Stage-3→Stage-4 broadcast handled
       // by live-pricing-adapter's priceTick subscriber (post-B78.1 cycle break).
       // Phase 8.8.3-I7-WS-C: traceId passed in event payload for Stage 3 logging.
-      this.emit('priceTick', { symbol: internalSymbol, price: lastPrice, source: 'kraken_ws', traceId } as PriceTickEvent);
+      // #742: producer #3 is UNREACHABLE — handleTickerUpdate has no caller and handleMessage
+      // routes only v2 by `message.channel`. Stamped anyway so a later reader sees three of
+      // three producers labelled, not two-of-three plus a suspected missed stamp.
+      this.emit('priceTick', { symbol: internalSymbol, price: lastPrice, source: 'kraken_ws', producer: 'kraken_ws_ticker_v1', traceId } as PriceTickEvent);
       this.priceTickCount++;
       
       // Phase 8.8.4-IA-PRICE-CACHE: Update centralized price cache for active trades

@@ -1142,7 +1142,7 @@ export class ActiveExecutionEngine {
           // Feed the shared cache so UI/summary reads see the same mark, then FALL
           // THROUGH into the shared evaluation pipeline below — the crypto venue
           // chain is skipped entirely (spot REST cannot serve this class).
-          livePricingAdapter.updateCache(normalizeToInternalSymbol(position.symbol), currentPrice, 'kraken_equities_ws');
+          livePricingAdapter.updateCache(normalizeToInternalSymbol(position.symbol), currentPrice, 'kraken_equities_ws', 'kraken_equities_ws');
         } else {
 
         // Phase 8.8.3-I7-WS-D (D5): Use WebSocket cache FIRST with 2-second stale threshold
@@ -1217,7 +1217,7 @@ export class ActiveExecutionEngine {
             // Phase 8.8.3-I7: Broadcast this REST price to frontend
             // Normalize to internal format for consistent cache keys
             const internalSymbol = normalizeToInternalSymbol(position.symbol);
-            livePricingAdapter.updateCache(internalSymbol, currentPrice, 'kraken_rest');
+            livePricingAdapter.updateCache(internalSymbol, currentPrice, 'kraken_rest', 'kraken_rest_engine_fallback');
             console.log(`[I7][REST_BROADCAST] symbol=${internalSymbol} price=${currentPrice}`);
           } catch (krakenError) {
             console.warn(`[B9.PRICING][SKIP_DUE_TO_NO_PRICE] ${position.symbol}: Kraken REST failed, skipping position check`, krakenError);

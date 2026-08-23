@@ -42,6 +42,77 @@ interface RestFallbackMetric {
   lastTimestamp: number;
 }
 
+/**
+ * B-EXIT-PROVENANCE (#741/#743) — WHICH HANDLER PRODUCED A PRICE, as distinct from which FEED it
+ * came from. `source` answers a POLICY question (may the engine act on this?); `producer` answers a
+ * PROVENANCE question (where did this number actually come from?). Conflating those two is what let
+ * a ghost-contaminated book MIDPOINT and a clean ticker PRINT both arrive stamped `kraken_ws` — the
+ * `#741` defect. Named for the producing HANDLER, never the feed.
+ *
+ * ⛔ CLOSED UNION, and `producer` is REQUIRED wherever it appears: an optional field would let a
+ * future producer omit it, and that absence is indistinguishable from a missed stamp (#546).
+ */
+export type PriceProducer =
+  | 'kraken_ws_ticker'                 // kraken-websocket-adapter.ts:692 handleV2TickerUpdate
+  | 'kraken_ws_book_mid'               // :916 handleV2BookUpdate — THE #741 PATH (book midpoint)
+  | 'kraken_ws_ticker_v1'              // :1049 handleTickerUpdate — UNREACHABLE, see #742
+  | 'kraken_equities_ws'               // active-execution-engine.ts:1145
+  | 'kraken_rest_engine_fallback'      // active-execution-engine.ts:1220
+  | 'kraken_rest_poller'               // this file :369, inside fetchLivePrice
+  | 'xstock_rest_gate_reserve'         // :348 — BY DESIGN, not a failure: the B8.9 xStock REST
+                                       //        class-gate makes no venue ask, so nothing failed.
+                                       //        Splitting it from the outage legs is what lets a row
+                                       //        answer "outage, or gate?" (#743).
+  | 'last_known_good_all_apis_failed'  // :389 — genuine outage leg
+  | 'last_known_good_fetch_exception'  // :418 — genuine outage leg
+  | 'last_known_good_reserve'          // :925 — the last-resort re-serve INSIDE getPriceWithFallback,
+                                       //        i.e. the leg the CLOSE PATH hits. Writes nothing to
+                                       //        the cache and passes `timestamp` through unrefreshed:
+                                       //        on that axis it is the honest leg.
+  | 'entry_seed'                       // :784 seedLastKnownGoodPrice
+  | 'mock'                             // :556 (fetchMockPrice defined :527)
+  | 'no_price_produced';               // the null-price arm (:355 / :399 / :427) — no number was
+                                       //        produced, so no handler produced it.
+
+/**
+ * ★ THE TYPE-LEVEL HALF OF THE BICONDITIONAL. `CachedPrice.price` is NON-nullable, so
+ * `no_price_produced` can never legitimately occur there. Sharing one union across both types would
+ * plant an UNPRODUCIBLE member in `CachedPrice` — the same shape as the `no_book_for_class` token
+ * deleted from this batch's own vocabulary, one type over. `Exclude` is free and compile-time.
+ */
+export type CachedProducer = Exclude<PriceProducer, 'no_price_produced'>;
+
+/**
+ * ⛔ NARROWING, NEVER A CAST. `:311` already carries `quote.source as CachedPrice['source']`, and that
+ * cast is exactly why the runtime guard at `:306` is the only thing holding. Propagating `producer`
+ * the same way would make "required + closed ⇒ a new producer is a compile error" FALSE at the one
+ * writer this batch calls the launderer. The `never` arm below is what turns a future member into a
+ * build failure instead of a silent runtime value (#448's literal-assertion shape).
+ */
+export function toCachedProducer(p: PriceProducer): CachedProducer | null {
+  switch (p) {
+    case 'no_price_produced':
+      return null;
+    case 'kraken_ws_ticker':
+    case 'kraken_ws_book_mid':
+    case 'kraken_ws_ticker_v1':
+    case 'kraken_equities_ws':
+    case 'kraken_rest_engine_fallback':
+    case 'kraken_rest_poller':
+    case 'xstock_rest_gate_reserve':
+    case 'last_known_good_all_apis_failed':
+    case 'last_known_good_fetch_exception':
+    case 'last_known_good_reserve':
+    case 'entry_seed':
+    case 'mock':
+      return p;
+    default: {
+      const _exhaustive: never = p;
+      return _exhaustive;
+    }
+  }
+}
+
 interface PriceQuote {
   symbol: string;
   price: number | null;
@@ -49,6 +120,15 @@ interface PriceQuote {
   // P19-B8.9 (OBJ-1): 'binance' | 'coingecko' removed — a source that can no longer
   // occur must not remain representable (typed honesty).
   source: 'mock' | 'kraken_ws' | 'kraken_equities_ws' | 'kraken_rest' | 'entry_seed' | 'last_known_good' | 'no_reliable_price';
+  /** B-EXIT-PROVENANCE: which HANDLER produced this number. See PriceProducer. */
+  producer: PriceProducer;
+  /**
+   * ★ #743: the ORIGINAL venue observation time — NOT the time this object was built.
+   * A last-known-good leg CARRIES THIS THROUGH unrefreshed; only a genuine venue read sets it anew.
+   * Without it the re-serve loop refreshes `timestamp` AND `cachedAt` every poll and a two-hour-old
+   * price reads as seconds old for ever. `null` only on the no-price arm.
+   */
+  observedAt: number | null;
 }
 
 interface CachedPrice {
@@ -56,6 +136,10 @@ interface CachedPrice {
   price: number;
   timestamp: string;
   source: 'mock' | 'kraken_ws' | 'kraken_equities_ws' | 'kraken_rest' | 'entry_seed' | 'last_known_good';
+  /** B-EXIT-PROVENANCE: `no_price_produced` excluded at the TYPE level — `price` here is non-null. */
+  producer: CachedProducer;
+  /** ★ #743: original venue observation time. `cachedAt` may advance; THIS MUST NOT. */
+  observedAt: number;
   cachedAt: number;
 }
 
@@ -231,7 +315,9 @@ export class LivePricingAdapter {
       symbol: cached.symbol,
       price: cached.price,
       timestamp: cached.timestamp,
-      source: cached.source
+      source: cached.source,
+      producer: cached.producer,
+      observedAt: cached.observedAt,
     };
   }
 
@@ -263,7 +349,9 @@ export class LivePricingAdapter {
           symbol: cached.symbol,
           price: cached.price,
           timestamp: cached.timestamp,
-          source: cached.source
+          source: cached.source,
+          producer: cached.producer,
+          observedAt: cached.observedAt,
         });
       }
     });
@@ -304,13 +392,25 @@ export class LivePricingAdapter {
 
       // Phase 8.8.3-B9: Only cache if we got a valid price
       if (quote && quote.price !== null && quote.source !== 'no_reliable_price') {
-        this.priceCache.set(symbol, {
-          symbol: quote.symbol,
-          price: quote.price,
-          timestamp: quote.timestamp,
-          source: quote.source as CachedPrice['source'],
-          cachedAt: Date.now()
-        });
+        // B-EXIT-PROVENANCE: NARROW, never `as`. The pre-existing `source` cast below is exactly
+        // why the runtime guard above is the only thing holding; propagating `producer` the same way
+        // would make "required + closed ⇒ a new producer is a compile error" FALSE at this writer —
+        // the one #743 calls the launderer.
+        const _cachedProducer = toCachedProducer(quote.producer);
+        if (_cachedProducer !== null) {
+          this.priceCache.set(symbol, {
+            symbol: quote.symbol,
+            price: quote.price,
+            timestamp: quote.timestamp,
+            source: quote.source as CachedPrice['source'],
+            producer: _cachedProducer,
+            // ★ #743: PROPAGATED, never stamped. A last-known-good leg carries the ORIGINAL
+            // observation time through, so `cachedAt` advancing on a re-serve no longer erases how
+            // old the price really is.
+            observedAt: quote.observedAt ?? Date.now(),
+            cachedAt: Date.now()
+          });
+        }
 
         // Broadcast update
         await this.broadcastPriceUpdate(quote);
@@ -345,14 +445,18 @@ export class LivePricingAdapter {
             symbol,
             price: cachedEq.price,
             timestamp: new Date().toISOString(),
-            source: 'last_known_good'
+            source: 'last_known_good',
+            producer: 'xstock_rest_gate_reserve',
+            observedAt: cachedEq.observedAt,   // #743: carried through, NOT refreshed
           };
         }
         return {
           symbol,
           price: null,
           timestamp: new Date().toISOString(),
-          source: 'no_reliable_price'
+          source: 'no_reliable_price',
+          producer: 'no_price_produced',
+          observedAt: null,
         };
       }
 
@@ -366,7 +470,9 @@ export class LivePricingAdapter {
           symbol,
           price: krakenPrice,
           timestamp: new Date().toISOString(),
-          source: 'kraken_rest'
+          source: 'kraken_rest',
+          producer: 'kraken_rest_poller',
+          observedAt: Date.now(),            // a genuine venue read: observed now
         };
       }
 
@@ -386,7 +492,9 @@ export class LivePricingAdapter {
           symbol,
           price: cached.price,
           timestamp: new Date().toISOString(),
-          source: 'last_known_good'
+          source: 'last_known_good',
+          producer: 'last_known_good_all_apis_failed',
+          observedAt: cached.observedAt,      // #743: carried through, NOT refreshed
         };
       }
       
@@ -396,7 +504,9 @@ export class LivePricingAdapter {
         symbol,
         price: null,
         timestamp: new Date().toISOString(),
-        source: 'no_reliable_price'
+        source: 'no_reliable_price',
+        producer: 'no_price_produced',
+        observedAt: null,
       };
 
     } catch (error) {
@@ -415,7 +525,9 @@ export class LivePricingAdapter {
           symbol,
           price: cached.price,
           timestamp: new Date().toISOString(),
-          source: 'last_known_good'
+          source: 'last_known_good',
+          producer: 'last_known_good_fetch_exception',
+          observedAt: cached.observedAt,      // #743: carried through, NOT refreshed
         };
       }
       
@@ -424,7 +536,9 @@ export class LivePricingAdapter {
         symbol,
         price: null,
         timestamp: new Date().toISOString(),
-        source: 'no_reliable_price'
+        source: 'no_reliable_price',
+        producer: 'no_price_produced',
+        observedAt: null,
       };
     }
   }
@@ -553,7 +667,9 @@ export class LivePricingAdapter {
       symbol,
       price: basePrice,
       timestamp: new Date().toISOString(),
-      source: 'mock'
+      source: 'mock',
+      producer: 'mock',
+      observedAt: Date.now(),
     };
   }
 
@@ -696,7 +812,16 @@ export class LivePricingAdapter {
   // (the engine's REST broadcast + the equities-mark feed) — the method name was the third
   // mislabel. Callers now declare their true source. P19-B8.9 (OBJ-1): 'binance_ws' is
   // gone with the third-party machinery — only venue feeds write this cache.
-  updateCache(symbol: string, price: number, source: 'kraken_ws' | 'kraken_equities_ws' | 'kraken_rest' = 'kraken_ws', traceId?: string): void {
+  updateCache(
+    symbol: string,
+    price: number,
+    source: 'kraken_ws' | 'kraken_equities_ws' | 'kraken_rest' = 'kraken_ws',
+    // B-EXIT-PROVENANCE: REQUIRED, no default. A default here would silently mislabel a future
+    // caller as whichever producer happened to be most common — the conflation this batch exists
+    // to end. Every call site states its own.
+    producer: CachedProducer,
+    traceId?: string,
+  ): void {
     const pipelineStart = Date.now(); // Directive 9.0.C: Track pipeline time
     const normalized = this.normalizeSymbol(symbol);
     const timestamp = new Date().toISOString();
@@ -711,6 +836,10 @@ export class LivePricingAdapter {
       // discarded the caller's source for everything non-kraken_ws. Store the true
       // source (P19-B8.9: the binance_ws mapping died with the third-party machinery).
       source,
+      producer,
+      // A genuine tick from a live feed: observed now. This is the one writer where
+      // "observed" and "cached" legitimately coincide.
+      observedAt: now,
       cachedAt: now
     });
     
@@ -786,6 +915,8 @@ export class LivePricingAdapter {
       price,
       timestamp,
       source: 'entry_seed',
+      producer: 'entry_seed',
+      observedAt: Date.now(),
       cachedAt: Date.now()
     });
     
@@ -867,7 +998,9 @@ export class LivePricingAdapter {
           symbol: cached.symbol,
           price: cached.price,
           timestamp: cached.timestamp,
-          source: cached.source
+          source: cached.source,
+          producer: cached.producer,
+          observedAt: cached.observedAt,
         };
       }
       
@@ -881,7 +1014,9 @@ export class LivePricingAdapter {
           symbol: cached.symbol,
           price: cached.price,
           timestamp: cached.timestamp,
-          source: cached.source
+          source: cached.source,
+          producer: cached.producer,
+          observedAt: cached.observedAt,
         };
       }
       
@@ -905,7 +1040,9 @@ export class LivePricingAdapter {
           symbol: updated.symbol,
           price: updated.price,
           timestamp: updated.timestamp,
-          source: updated.source
+          source: updated.source,
+          producer: updated.producer,
+          observedAt: updated.observedAt,
         };
       }
     } catch (error) {
@@ -922,7 +1059,13 @@ export class LivePricingAdapter {
       symbol: cached.symbol,
       price: cached.price,
       timestamp: cached.timestamp,
-      source: 'last_known_good'
+      source: 'last_known_good',
+      // ★ #743: THE LEG THE CLOSE PATH HITS, and the one that had no log line at all — so its
+      // firing rate was unmeasured, not zero. It writes NOTHING to the cache and passes
+      // `timestamp` through unrefreshed, which is why it gets its own token rather than a
+      // laundering one.
+      producer: 'last_known_good_reserve',
+      observedAt: cached.observedAt,
     } : null;
   }
 
@@ -1021,7 +1164,12 @@ import type { PriceTickEvent } from '../exchanges/kraken/kraken-websocket-adapte
 krakenWebSocketAdapter.removeAllListeners('priceTick');
 krakenWebSocketAdapter.on('priceTick', (evt: PriceTickEvent) => {
   try {
-    livePricingAdapter.updateCache(evt.symbol, evt.price, evt.source, evt.traceId);
+    // NARROW, never cast — the same rule as the writer at :307. A priceTick always carries a
+    // price, so `no_price_produced` cannot occur here; but the type permits it, and asserting that
+    // away is how the #448 literal-assertion drift starts. If it is ever null, there is nothing to
+    // cache and we skip rather than invent a producer.
+    const _p = toCachedProducer(evt.producer);
+    if (_p !== null) livePricingAdapter.updateCache(evt.symbol, evt.price, evt.source, _p, evt.traceId);
   } catch (err) {
     // Subscriber error must not propagate back to ws-adapter (fire-and-forget invariant)
     console.error('[B78.1][PRICING_TICK_HANDLER] error processing priceTick event:', err);
