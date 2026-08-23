@@ -115,3 +115,71 @@ fail OBJ-1's fence on day one.**
 3. **Storage:** nine nullable columns. ⚠️ The disk gauge is at a warning level; **the completion
    report reads the LIVE gauge, never the alert body** — Langston's note, and the alert's figure is a
    mint from 2026-08-22 rather than a current reading.
+
+---
+
+# B-EXIT-PROVENANCE — §2 ADDENDUM (origin-time) + cite fix
+
+## 1. YOUR NEW FINDING — CONFIRMED, AND THERE IS A DETAIL THAT SHARPENS IT
+
+Re-derived at `1d85c51f0`. Both `last_known_good` legs (`:381-390` all-APIs-failed, `:410-419`
+catch) read the cache under **`if (cached && cached.price > 0)` and nothing else** — no age test —
+then return `timestamp: new Date().toISOString()`, and `:307` writes `cachedAt: Date.now()`. So each
+15 s poll during an outage refreshes **both** freshness fields on a price that never moved. Your
+statement holds exactly: a two-hour-old price reads as ≤15 s old indefinitely.
+
+**★ AND THE SHARPENING DETAIL: `cacheAge` IS COMPUTED ON BOTH LEGS AND ONLY LOGGED.**
+
+```
+const cacheAge = Date.now() - cached.cachedAt;
+console.log(`[8.8.3-I6][LAST_KNOWN_GOOD_FALLBACK] … age=${cacheAge}ms reason=all_apis_failed`);
+```
+
+It is never compared to anything. **The one number that would catch this is measured, printed to a
+rotating log, and discarded** — which is the *same shape as this batch's founding finding*, where
+`exitPriceSource` is computed at close and thrown into `[B8.PNL][CLOSE_ATTEMPT]`. Twice in one
+subsystem, the fact needed to detect a defect is produced and dropped.
+
+## 2. THE §2 ADDITION — AN ORIGIN TIME CARRIED *THROUGH* THE RE-STAMP
+
+You are right that `last_known_good_restamp` names the path without making the staleness
+recoverable, and that a producer token on a number still lying about its age is a label, not a fence.
+
+**`CachedPrice` and `PriceQuote` gain `observedAt: number` — the ORIGINAL venue observation time.**
+
+- a genuine venue write sets `observedAt = Date.now()` (same instant as `cachedAt`);
+- **a `last_known_good` re-stamp CARRIES `observedAt` THROUGH from the cached entry, unrefreshed** —
+  that is the whole mechanism; `cachedAt` may move, `observedAt` must not;
+- `getPriceWithFallback` returns it, so the close path can read it without new plumbing;
+- the exit stamp persists `exit_price_observed_at` beside `exit_price_producer`.
+
+⇒ **true age at the moment of the exit decision becomes `closed_at − exit_price_observed_at`,
+recoverable from the row alone.** Without it, `#741`-class forensics on a stale-price close is
+impossible after the fact, exactly as it was for the maker fills.
+
+**FENCE (falsifiable, not decorative):** for any post-deploy close with
+`exit_price_producer = 'last_known_good_restamp'`, assert `exit_price_observed_at < cachedAt-equivalent`
+— i.e. the origin time must be **strictly older** than the write time by more than one poll interval.
+**If a re-stamp ever refreshes `observedAt`, the two collapse and the fence fails.** That is the
+property under test, and it can actually fail — which is the point.
+
+⚠️ **SCOPE HONESTY:** this fixes the *recoverability* of the staleness, **not the staleness itself.**
+The age-unbounded re-serve is a live defect in its own right and this batch does **not** close it —
+it makes it visible and measurable. It needs its own §13 home; I am not folding a behaviour change
+into a batch whose entire safety case is "no decision path changes."
+
+## 3. CITE FIX
+
+`mock`: the emit site is **`fetchMockPrice`, DEFINED at `lpa:527`**; `lpa:300` is the CALL inside
+`fetchPrice`. Same define-vs-emit ambiguity I fixed for `handleTickerUpdate` one section earlier and
+then reproduced immediately — noted rather than quietly corrected.
+
+## 4. ALERT READ-BACK, per your instruction
+
+`563d32cd` → `resolved`, `resolved_at 2026-08-23T11:37:49.527Z`
+`c59186da` → `resolved`, `resolved_at 2026-08-23T11:37:50.659Z`
+
+Both landed. **But your discipline point stands and the outcome does not excuse the method:** I
+reported the discharge without reading either back, and a short id would have no-opped with `exit 1`
+while I reported a discharge that never happened. Same class as filing the ledger row and calling it
+effective.
