@@ -32,30 +32,56 @@ verbatim:
 
 ## 1. C-B2 — EVERY WRITER INTO THE PRICE CACHE, WITH ITS HONEST PRODUCER
 
-Repo-wide, tests excluded. **Four writers, and #4 is one neither of us had counted:**
+⚠️ **THIS SECTION WAS REWRITTEN, NOT ANNOTATED.** Its first version censused the *callers* of the
+cache and reported "four writers". That was wrong in method, not just in count — censusing callers
+**counts a multi-caller writer once and misses a caller-less one entirely**, which is exactly what
+happened. Langston's correction; the body is edited so the file never holds two answers.
 
-| # | writer | honest `producer` |
-|---|---|---|
-| 1 | `live-pricing-adapter.ts:1024` — the `priceTick` subscriber | **fans in from 3 adapter producers** (below) |
-| 2 | `active-execution-engine.ts:1145` — equities tick | `kraken_equities_ws` |
-| 3 | `active-execution-engine.ts:1220` — REST fallback | `kraken_rest` |
-| 4 | **`active-execution-engine.ts:3617` — `seedLastKnownGoodPrice`** | `entry_seed` |
+**Census the `priceCache.set` SITES. THREE writers, one of which fans in:**
 
-Writer #1's three upstream producers:
-
-| adapter site | handler | what it emits | producer |
+| # | `priceCache.set` | function | how it gets its source |
 |---|---|---|---|
-| `:692` | `handleV2TickerUpdate` | last trade | `kraken_ws_ticker` |
-| `:916` | `handleV2BookUpdate` | **book midpoint** | `kraken_ws_book_mid` ← the `#741` path |
-| `:1049` | `handleTickerUpdate` (v1) | last trade | `kraken_ws_ticker_v1` — **unreachable, see §3** |
+| **W1** | `live-pricing-adapter.ts:706` | `updateCache` | **fan-in — 3 callers**: priceTick subscriber `:1024`, `aee:1145`, `aee:1220` |
+| **W2** | `live-pricing-adapter.ts:784` | `seedLastKnownGoodPrice` | sole caller `aee:3617` |
+| **W3** | `live-pricing-adapter.ts:307` | `fetchPrice` | **writes `quote.source` VERBATIM with `cachedAt: Date.now()`** |
 
-## 2. C-B3 — THE CLOSED VOCABULARY
+**★ W3 IS THE LAUNDERER.** `fetchLivePrice` can return `last_known_good` (`:348`, `:389`, `:418`);
+`:307` re-stamps it `cachedAt: Date.now()`; `getPriceWithFallback` then serves it **as fresh**. It is
+live — `start()` (`:151-161`) fires `fetchAllPrices()` immediately then every 15 s, armed
+unconditionally from `index.ts:954`. **It also stamps `kraken_rest` (`:369`), the same token as the
+engine's REST fallback (`aee:1220`)** — one token, two producing handlers.
 
-`kraken_ws_ticker` · `kraken_ws_book_mid` · `kraken_ws_ticker_v1` · `kraken_equities_ws` ·
-`kraken_rest` · `entry_seed` · `last_known_good` · `entry_price_fallback` · `no_book_for_class`
+**COMPILE-TIME NET, honestly:** C-B1's required `producer` on `PriceTickEvent` reaches **only W1's
+priceTick caller**. `aee:1145`, `aee:1220`, W2 and W3 all construct or pass `CachedPrice` shapes
+directly and sit **outside** it. ⇒ **the census is the protection for four of the six paths.**
 
-Named for the **producing handler, not the feed** — his condition, and the whole point: the feed name
-is what conflated a ghost midpoint with a ticker print in the first place.
+## 2. C-B3 — THE CLOSED VOCABULARY, EVERY TOKEN WITH ITS EMIT SITE
+
+| token | emit site | note |
+|---|---|---|
+| `kraken_ws_ticker` | adapter `:692` `handleV2TickerUpdate` | |
+| `kraken_ws_book_mid` | adapter `:916` `handleV2BookUpdate` | **the `#741` path** |
+| `kraken_ws_ticker_v1` | adapter `:1049` (defined `:938`) | **UNREACHABLE — `#742`** |
+| `kraken_equities_ws` | `aee:1145` | |
+| `kraken_rest_engine_fallback` | `aee:1220` | split from the poller |
+| `kraken_rest_poller` | `lpa:369` in `fetchLivePrice` → W3 | split from the engine leg |
+| `last_known_good_restamp` | `lpa:348` / `:389` / `:418` → W3 | **names the laundering; see the addendum — naming is NOT recovering** |
+| `entry_seed` | `lpa:784` (W2) | sole caller `aee:3617` |
+| `mock` | `fetchMockPrice`, **defined `lpa:527`** (called `lpa:300`) | enumerated, not excluded |
+
+Named for the **producing handler, not the feed** — the feed name is what conflated a ghost midpoint
+with a ticker print in the first place.
+
+**★ `no_book_for_class` WAS DROPPED.** It existed nowhere but this document — a closed fence with an
+unproducible member is #546 wearing the fix's clothes — and it was wrong because it **conflated two
+facts**: the producer vocabulary answers *where the PRICE came from*; *"this class has no order
+book"* is a property of the **`bookMid` field**.
+
+**`mock` is ENUMERATED with evidence, not assumed unreachable:** gate is
+`process.env.ENABLE_MOCK_PRICING === 'true'` (`index.ts:952`); staging's **process env does not set
+it** (read from `pm2 jlist`, not `.env`); `NODE_ENV=production`; and the running process's own boot
+line reads **`2026-08-22 22:01:00Z [B9.PRICING] Mock mode: DISABLED (production mode)`**. Unreachable
+in this deployment, producible by one env var ⇒ it must exist in the fence.
 
 ## 3. THE DEAD PRODUCER — FINDING KEPT, DELETION REFUSED, AND HIS REASONING IS BETTER THAN MINE
 
