@@ -30,6 +30,18 @@ Watch for his pickup. **No engagement in ~8-10 min → re-poke. Escalate after 2
 - ⛔ **THE CHANGE SET MUST INCLUDE UNTRACKED FILES.** `git diff HEAD` omits them and says nothing about the omission. A dispatch built that way once shipped a review missing the batch's single most load-bearing file. **Cross-check `git status --porcelain` for `??` before calling any diff the change set.**
 
 
+## ⛔⛔ ONE GATE PER DISPATCH — HIS INVOCATION HAS A HARD 15-MINUTE CEILING AND EXCEEDING IT FAILS **SILENTLY**
+**`CLAUDE_TIMEOUT = 900` (`discord-langston-bridge.py:68`).** One invocation, 900 seconds, then the bridge logs `bridge error … **suppressed in channel**`, re-fires twice, and **PARKS the item.** ⛔ **THE FAILURE IS NEVER POSTED, so from your side it is INDISTINGUISHABLE FROM HIM BEING BUSY** — and the natural response to a busy reviewer (wait, re-poke politely) **re-triggers the identical timeout.**
+**MEASURED 2026-08-23 (#741):** a Step-4 dispatch asking for four things in one invocation failed three times at ~15-minute intervals and was parked. I waited 47 minutes reading it as his queue.
+
+★ **IT IS NOT PROMPT LENGTH — IT IS HOW MUCH WORK THE ASK IMPLIES.** Same hour, measured: CC-C’s single-gate asks invoke at ~3,850 chars and complete; my four-part ask timed out; the re-split single question invoked at 3,251 chars and was accepted at once. **A short prompt saying *"review these fifteen files"* will time out. A longer one saying *"rule on this ONE question, evidence below"* will not.**
+
+**SO:**
+1. **ONE GATE PER DISPATCH.** A diff review is one ask. A design ruling is another. A promotion judgement is a third. **Never bundle.**
+2. **SEND THE CHEAPEST FIRST** — anything answerable without reading the repo. It returns fast and confirms the channel is working.
+3. **PUT THE EVIDENCE IN THE MESSAGE.** Every file he must open is minutes off the ceiling. Inline the load-bearing hunks; stage long context as a FILE in `/home/langston/inbox/<BATCH-ID>/` and name the path.
+4. ⛔ **A DISPATCH IS NOT "SENT" UNTIL YOU HAVE SEEN IT COMPLETE.** If a reply is slow, **read the bridge log before re-poking** — `journalctl -u discord-langston-bridge.service | grep -iE 'invoking claude|bridge error|PARK'`. `invoking claude (prompt=N chars)` means it started; `bridge error … suppressed` means it died and **he never saw your message at all.**
+
 ## ☑ THE DELIVERY BOARD — MOVE THE CARD WHEN THE WORK MOVES
 The card **STAYS in `Implementation`**; set **Blocked on = Langston**. ⚠️ **On a SENT-BACK verdict the card does NOT move** — only the `Review` field changes, and **LANGSTON sets `Review` himself**, not you.
 ★ **YOU move the card; LANGSTON sets `Review`.** *(Kyle 2026-08-03 — his approval gates the move but is not the move, or the board freezes every time he is mid-review.)*

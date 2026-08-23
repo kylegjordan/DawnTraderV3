@@ -2828,6 +2828,28 @@ The COMMITTED copy carries the five **pre-Phase-14 regime keys** (`BULL_STABLE`/
 
 **HOME (§9.4):** disposition and batch-split are **with Langston now** (dispatched 2026-08-23 00:30Z, four explicit questions: is the 1-hour counterfactual sound enough to ship; how to bound the trailing-stop gap; does the bounded-midpoint mechanism replace the broken floor basis; one batch or two). **Owner CC-C.** ↔ `#507` (parent defect), `#738` (maker fill RATE — different question, same subsystem), `B-PHANTOM-FILL-RECONSTRUCT`. **OPEN (homed).**
 
+### #741 OPEN 2026-08-23 (CC-A; found by diagnosing my own 47-minute silence from Langston rather than re-poking a third time) — ★★ **A REVIEW DISPATCH THAT EXCEEDS LANGSTON’S 900s INVOCATION CEILING FAILS **SILENTLY** — IT LOOKS EXACTLY LIKE HIM BEING BUSY, AND AFTER TWO REFIRES IT IS PARKED AND NEVER SEEN.**
+
+**HOME: `B-RULES-1e` — OWNER CC-A — DUE 2026-09-05**, with the sender-side rule landing NOW in the step-4 skill (below) because it costs nothing and the ceiling is live today.
+
+**MEASURED, from `journalctl -u discord-langston-bridge.service`:**
+- `CLAUDE_TIMEOUT = 900` — `discord-langston-bridge.py:68`. A hard 15-minute ceiling on ONE invocation.
+- My Step-4 dispatch: enqueued 10:57:06, handled 10:57:17, **PARKED 11:37:00 (`refires>=2`)**.
+- My re-poke: enqueued 11:46:10, handled 11:52:13 → **`bridge error … suppressed in channel` 12:07:14** (14m 61s) → re-invoked 12:09:36 → **error 12:24:37** → re-invoked 12:27:59 → **error 12:42:59** → **PARKED 12:45:22**.
+- **Three consecutive failures at almost exactly 15-minute intervals.** That is the ceiling, not a coincidence.
+
+⛔ **THE DANGEROUS PART IS `suppressed in channel`.** The failure is **never posted**. From the sender’s side a timed-out review is INDISTINGUISHABLE FROM A BUSY REVIEWER — and the correct-looking response to a busy reviewer (wait, then re-poke politely) **re-triggers the identical failure**. I waited 47 minutes and then re-poked in a way that failed three more times. ★ **Same family as #739/#740 and the two push-guard false absences: an instrument whose silence means something other than what it appears to mean.** Fourth of the day.
+
+**THE CAUSE WAS MINE, AND IT IS THE GENERALISABLE PART.** I asked for FOUR things in ONE invocation: a 15-file diff review at a ref, a governance-philosophy ruling, a research-and-decide question, and a promotion judgement. **Each needs reading at the ref; together they exceed 15 minutes of work.**
+**CONTRAST, measured the same hour:** CC-C’s asks invoke at **prompt=3,852 chars** and complete — they are narrow and single-gate (*"rule on X at ref Y"*). My re-split ask invoked at **3,251 chars** and was accepted immediately.
+⇒ **IT IS NOT PROMPT LENGTH. IT IS HOW MUCH WORK THE ASK IMPLIES.** A short prompt that says *"review these fifteen files"* will time out; a longer one that says *"rule on this single question, evidence supplied"* will not.
+
+**THE RULE (landed in `workflow-04-code-review` in this same commit): ONE GATE PER DISPATCH.** Split multi-part reviews into separately-answerable asks, cheapest first, and put the evidence IN the message so he does not have to go and derive it. **A dispatch is not "sent" until you have seen it complete.**
+
+**REMAINING GAP, honestly stated — the sender-side rule does NOT fix the silence.** The bridge still suppresses the error, so a future over-large dispatch still fails invisibly. **1e owes a mechanism:** post the timeout into the channel, or notify the sender, so absence is announced rather than inferred. *(That is the same conclusion #739 reached: a report that depends on the failing thing to report itself is a request, not an instrument.)*
+
+---
+
 ### #740 OPEN 2026-08-23 (CC-A; Langston directed the filing after re-deriving the frontmatter himself at `d0fc181c7` — 12/12 descriptions present, 0 colon-space) — ★★ **A `": "` IN A SKILL DESCRIPTION SILENTLY DISARMS THAT SKILL’S AUTO-INVOKE TRIGGER. VALID FILE, NO ERROR, PLAUSIBLE FALLBACK — THE #546 SHAPE.**
 
 **HOME: `B-RULES-1e` — OWNER CC-A — DUE 2026-09-05**, as a mechanical check (a pre-commit or CI assertion over `.claude/skills/*/SKILL.md`). Filed as a DEFECT CLASS, not as the two files, because both instances are already fixed and the class is what recurs.
