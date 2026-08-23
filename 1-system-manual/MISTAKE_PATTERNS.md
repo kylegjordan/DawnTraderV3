@@ -91,8 +91,10 @@ select symbol, net_pnl, exit_price, take_profit, closed_at from closed_trades
 | # | instance | what was tested vs what was claimed | ref |
 |---|---|---|---|
 | 1 | Told Kyle that alerts routed to CC-C **"never route"**. | Tested `ALERT_OWNER_RE` **in isolation**; never read the twelve lines below, where a NON-match falls THROUGH to the name check and the literal `CC-C` satisfies CC-C’s own alias. **The owner woke all along.** The real defect was the SUPPRESSION half — the opposite end of the same function. | `4b8220a27` |
+| 2 | Argued to Langston that including `CC-INFRA` in the alert-owner set was a **"silent black hole"** and should be dropped. | Reasoned about the REGEX without following the **fall-through**. Dropping it restores a wake to **nobody** — `MY_RE` then scans the whole triage body and `CC-INFRA` satisfies no alias (`cc[\s_-]*a` wants cc→seps→a and gets `CC-I`). **The real choice was deterministic-nobody vs non-deterministic-WRONG-CC, and I had the sign backwards.** Langston traced it rather than weighing it. | `cb01111eb` |
 
 ★ **WHY IT IS WORTH ITS OWN SLUG:** the counter-habit is different. `read-the-field` says *read what the record says about itself*. This one says **exercise the WHOLE path, not the piece you suspect** — a unit that behaves correctly in isolation says nothing about the branch taken when it does not fire.
+⚠️ **SECOND INSTANCE THE SAME DAY, HOURS AFTER THE PATTERN WAS OPENED — and the second one was an argument I took INTO a review, where it cost the reviewer a trace to refute. Both instances are still ONE context (`B-RULES-1c/1d`), so this does NOT clear the §13 distinct-batches leg either; recorded so the next one promotes by grep.**
 
 ### `wrong-object` — **PROMOTED TO §13** · mechanism: **NONE YET**
 **Right name, wrong thing.** The path is correct, the file is correct, the command runs — and it measures something other than what the claim is about.
