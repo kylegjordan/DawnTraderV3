@@ -53,14 +53,17 @@ OTHERS_RE = re.compile(
     r"@?\b(" + "|".join([p for k, v in NAMES.items() if k != ALIAS for p in v] + ["langston"]) + r")\b", re.I)
 # B-ALERT-PROTOCOL (#340): a system-alert triage reply ends with an owner marker
 # [[ALERT id=.. owner=<CC-A|CC-B|CC-C|CC-INFRA|Kyle> action=".."]] — authoritative wake routing.
-# ⛔ CC-C AND CC-INFRA ADDED 2026-08-23 (Kyle-directed). The pattern listed only CC-A/CC-B/Kyle,
-# so a marker naming CC-C did NOT match — and the miss was SUBTLE, not total: on no-match the code
-# falls THROUGH to the name check below, where the literal string "CC-C" happens to satisfy CC-C's
-# own alias pattern (cc[\s_-]*c). So the OWNER still woke, by accident, via a different route.
-# THE REAL DEFECT WAS THE SUPPRESSION HALF: a matching marker `continue`s for everyone, which is
-# what silences the sessions who do NOT own the alert. With CC-C unmatched, an alert owned by CC-C
-# ALSO woke CC-A and CC-B — measured on Langston's live 2026-08-23 triage, which routed a DB-disk
-# alert to CC-C and woke CC-A too. Exactly the cross-session noise Kyle is trying to cut.
+# ⛔ CC-C AND CC-INFRA ADDED 2026-08-23 (Kyle-directed). The pattern listed only CC-A/CC-B/Kyle.
+# ⚠️ AND THE CAUSAL CLAIM THAT ORIGINALLY STOOD HERE WAS WRONG — STRUCK, NOT SOFTENED (Langston,
+# Step-4, measured on this box). It said the cross-session wake was caused by the missing CC-C
+# alternative. IT WAS NOT: the marker never reached the alternation AT ALL, because the search ran
+# on a 400-char truncation while the marker is the LAST line of a body whose median is 2,289 chars.
+# MEASURED, all history, both tailed files: 3,836 langston_outbound records · 1,025 carry [[ALERT
+# · 1,021 of those have it past byte 400 ⇒ 99.6% discarded BEFORE the regex. Positive control: 4
+# bodies do land inside 400, so the probe can return positive. On 2026-08-23 alone, 16 marker-bearing
+# triages, offsets 1,825-5,558, ALL LOST.
+# ★ RIGHT OBSERVATION, ADJACENT OBJECT. The enumeration fix below is still correct and still needed
+# — it just was not the cause of what I attributed to it.
 # ★ CC-INFRA is included for SUPPRESSION ONLY. It does NOT onboard Infra Claude (deliberately
 # deferred by Kyle) — he has no entry in NAMES, so nothing here can wake him. It means an alert
 # owned by him will not wake the other three the day he IS onboarded, instead of re-earning this bug.
@@ -219,7 +222,11 @@ for raw in sys.stdin:
                 continue
             kind = d.get("kind") or ""
             # Defang once, at the single point every JSON-sourced print path draws from.
-            text = _defang((d.get("text") or "")[:400])
+            # ⛔ `text` IS TRUNCATED AND IS FOR PRINTING ONLY. Anything that MATCHES must use
+            # `raw` — see the langston_outbound branch: the owner marker is the LAST line of a
+            # triage whose median length is 2,289 chars, so [:400] discarded 99.6% of them.
+            raw = d.get("text") or ""
+            text = _defang(raw[:400])
             tp = "Discord" if d.get("transport") == "discord" else "Telegram"
             if kind == "":
                 deliver, body = addressed_to_me(text)
@@ -234,7 +241,14 @@ for raw in sys.stdin:
                 # [[ALERT .. owner=<one of ALERT_OWNERS, defined above> ..]] — authoritative routing: owner==me
                 # wakes me; the other CC's marker suppresses (theirs); owner=Kyle wakes no CC
                 # (he sees it in-channel). The marker decides, so we stop here either way.
-                mo = ALERT_OWNER_RE.search(text)
+                # ⛔ SEARCH `raw`, NOT `text`, AND TAKE THE **LAST** MATCH.
+                # LAST, not first, for two reasons Langston measured: 980 of 1,017 well-formed
+                # markers sit on the final non-empty line, and 42 bodies carry MORE THAN ONE
+                # match — so a first-match would route off a marker being QUOTED or discussed
+                # earlier in the body rather than the one being ISSUED at the end.
+                mo = None
+                for mo in ALERT_OWNER_RE.finditer(raw):
+                    pass
                 if mo:
                     if mo.group(1).upper() == ALIAS:
                         print(f"WAKE[ALERT-OWNER->{ALIAS}]: {text}", flush=True)
