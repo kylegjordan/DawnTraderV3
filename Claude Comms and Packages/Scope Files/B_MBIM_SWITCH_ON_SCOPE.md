@@ -110,10 +110,35 @@ bid poisons the midpoint and never crosses, so the crossed-detector is structura
 **That case is currently uninstrumented, and MBIM is the only thing that would see it.**
 
 ⚠️ **`mismatches` 60.6 M vs `matches` 3,352 is NOT an integrity signal** — the checksum is inert
-without per-symbol precision (`#507` remainder), and the docblock on that counter says so. ⚠️ But it
-does **not** match the 34,549/34,549 I recorded when the precision feed landed, so **either that
-measurement was scoped to a few symbols or precision coverage has regressed. Unresolved, flagged, and
-NOT load-bearing here** — `crossedDetections` is the signal this batch pre-registers against.
+without per-symbol precision (`#507` remainder). I flagged it as *"unresolved — either that
+measurement was scoped to a few symbols or precision coverage has REGRESSED."*
+
+✅ **RESOLVED BY LANGSTON, and leaving it "unresolved" would have been its own false claim** — it
+implies a regression that is not there. **The two figures measure DIFFERENT CODE.** Staging
+`e6f7c70b3` has **0** occurrences of `symbolPrecision` (positive control: **3** at `481bda9e3`) and
+computes `computeBookChecksum(raw)` with **no precision argument**, so essentially every attempt
+mismatches **by construction** — hence 60.6 M. My 34,549/34,549 was measured at `3bd9f4022` with the
+feed live. **Adjacent objects, not a before/after. `#507`'s remainder is NOT bigger than recorded.**
+
+## 4.b ⛔ THE COMPARATOR LOSES REACH ACROSS THE DEPLOY BOUNDARY — Langston, and it is not my diff
+
+The checksum chain **is armed in the adapter at this ref and is NOT on staging today.** Its mismatch
+arm `continue`s, and that `continue` sits **ABOVE** the crossed-book detector — so **post-deploy a
+resubscribing update never reaches `crossedDetections`.**
+
+⇒ **`crossedDetections = 0` at `e6f7c70b3` and at `481bda9e3` ARE NOT THE SAME MEASUREMENT.** §4.a's
+pre-registration is still worth having, but **the zero must not be read across the boundary as a
+continuity it has not earned.** Stated here and repeated in the Step-8 note.
+
+**★ TRIP CONDITION, NAMED BEFORE THE PULL (Langston's condition — a threshold set afterwards is a
+rationalisation).** First-hour read of `matches` / `mismatches` / `skippedNoPrecision` off
+`/api/active-engine/book-integrity`. **DISARM** — revert the deploy — if **`skippedNoPrecision`
+exceeds 20% of book updates after the first 10 minutes** (the instrument feed has gone partially
+unmapped, so verification is failing open across a fifth of the book), **or** if
+`mismatches / attempts` exceeds **5%** once precision is mapped (a real desync storm, not a
+formatting artefact). ⚠️ **34,549/34,549 was a HARNESS; production is 291 symbols with an instrument
+feed that can go partially unmapped** — do not expect the harness number.
+**HOME: `B-BOOK-TRUNCATE-HOTFIX` (open in the ledger), owner CC-C, same deploy window.**
 
 ## 5. OUT OF SCOPE
 

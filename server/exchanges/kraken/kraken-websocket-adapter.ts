@@ -838,7 +838,11 @@ export class KrakenWebSocketAdapter extends EventEmitter {
       // TRUNCATE to the subscribed depth -- the documented, mandatory step this handler lacked.
       this.truncateBook(book, raw, depth);
 
-      // CHECKSUM -- OBSERVE ONLY, NEVER ACT (Langston BLOCKER-1 at the hotfix gate, 2026-08-22).
+      // CHECKSUM -- ARMED AND ACTING WHERE PRECISION IS KNOWN. ⚠️ THIS HEADER SAID "OBSERVE ONLY,
+      // NEVER ACT" AND "this branch only counts" LONG AFTER THAT STOPPED BEING TRUE -- the mismatch
+      // arm below resubscribes and `continue`s. Corrected 2026-08-24 (Langston, at the
+      // B-MBIM-SWITCH-ON deploy gate): a comment describing code that is not there, on the trading
+      // path, is worse than no comment. The history below is why the observe-only era existed.
       // The first version of this hotfix verified the checksum and resubscribed on mismatch. It
       // could never match: Kraken sends price/qty as JSON NUMBERS, JSON.parse drops the trailing
       // zeros, so String(qty) gives "2993" where Kraken's CRC input is "299300000". Measured
@@ -849,8 +853,13 @@ export class KrakenWebSocketAdapter extends EventEmitter {
       // fed strings with the exact formatting the wire does not send.
       // Correct verification needs per-symbol price_precision/qty_precision from the v2
       // `instrument` channel (not yet subscribed) and must FAIL OPEN on unknown precision. That
-      // is the follow-up (#507 remainder). Until then this branch only counts -- so the day the
-      // formatting is fixed, the instrument is already wired and its silence is measurable.
+      // was the follow-up (#507 remainder) and IT HAS SINCE LANDED: `symbolPrecision` is populated
+      // from the v2 `instrument` channel, so verification is now ARMED -- it FAILS OPEN on an
+      // unmapped symbol (skip, never resubscribe) and ACTS on a genuine mismatch.
+      // ⛔ CONSEQUENCE THAT MUST NOT BE LOST: the `continue` in the mismatch arm sits ABOVE the
+      // crossed-book detector, so a resubscribing update never reaches that counter. Once this is
+      // deployed, `crossedDetections` is NOT the same measurement it was before -- do not read a
+      // zero across that boundary as continuity (Langston, 2026-08-24).
       const bump = (m: Map<string, number>) => m.set(internalSymbol, (m.get(internalSymbol) ?? 0) + 1);
       bump(this.bookUpdatesApplied);
       // #507 remainder: verification is ARMED, but ONLY where precision is known. Langston's

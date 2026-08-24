@@ -116,11 +116,18 @@ class MiniBookIntegrityMonitor {
     // only from a manual API route, never from boot. Wiring it up as-written would have audited EVERY
     // subscribed symbol each pass — MEASURED 291 on staging — one sequential REST call each.
     //
-    // ⛔ THAT IS NOT A NEUTRAL COST. `price-cache.ts` is a LOCKED module whose entire purpose is
-    // holding Kraken under 10 weighted requests/second, and a REST failure pushes `fetchLivePrice`
-    // into its `last_known_good` legs (#743) — so a naive switch-on would have AGGRAVATED THE VERY
-    // STALENESS DEFECT THIS MONITOR EXISTS TO DETECT. The fix is a bounded rotating slice: full
-    // coverage on a ~1h cycle instead of a 291-call pass every 5 minutes.
+    // ⛔ THAT IS NOT A NEUTRAL COST — AND THE FIRST STATEMENT OF *WHY*, WHICH STOOD HERE, WAS WRONG
+    // IN THE DANGEROUS DIRECTION. It argued the cost mattered because `price-cache.ts` is a LOCKED
+    // module holding Kraken under 10 weighted req/s. FALSE FOR THIS PATH (Langston, verified at
+    // source): `getTicker` → `makePublicRequest` (kraken.ts:187) is a bare `fetch` with NO limiter.
+    // These calls NEVER ENTER that budget — THEY COMPETE WITH IT FROM OUTSIDE. The old wording made
+    // the load look SAFER than it is, which is why it is rewritten here rather than annotated below.
+    // What remains true and is the real cost: `makePublicRequest` THROWS on any Kraken `data.error`
+    // — a rate-limit response included — and a REST failure pushes `fetchLivePrice` into its
+    // `last_known_good` legs (#743), so an unbounded pass would have AGGRAVATED THE VERY STALENESS
+    // DEFECT THIS MONITOR EXISTS TO DETECT. The fix is a bounded rotating slice plus the
+    // `finally`-guaranteed 100 ms floor below: full coverage on a ~1h cycle for a STABLE universe,
+    // instead of a 291-call pass every 5 minutes.
     // ⛔ BLOCKER-2 (Langston): `take` must be clamped to the universe size. Unclamped, at N=10 and
     // startIdx=0 the wrap condition is true and `slice(0,20)` re-appends the same 10 — every symbol
     // audited TWICE, doubled REST calls, `totalChecks` double-counted, and a drifted symbol

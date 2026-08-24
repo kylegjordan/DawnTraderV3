@@ -320,11 +320,20 @@ app.use((req, res, next) => {
   // and flag drift over 0.2%. IT HAS NEVER RUN: `start()` was reachable only from a manual API
   // route (routes.ts), never from boot, and there is not one `[8.9.5][MBIM]` line in any retained
   // log. It is the guard this system's own designer specified for exactly the #507/#741 defect —
-  // a ghost bid above the real ask throws the book mid far past 0.2%, so at the measured 31.08%
-  // crossed-book rate it would have fired continuously for months.
+  // a ghost bid above the real ask throws the book mid far past 0.2% drift from the REST mid.
+  // ⚠️ DO NOT SIZE THAT OFF THE PRE-FIX CROSSED RATE. An earlier version of this comment cited it
+  //   as though it were the forward drift rate. It is the PRE-FIX comparator; post-hotfix
+  //   `crossedDetections` reads 0. FORWARD DRIFT IS UNMEASURED — which is the actual argument for
+  //   switching this on, not an argument against it.
   // ⇒ this line is the whole of F-A: not a new instrument, a switch-on. Idempotent (isRunning
-  //   guard), self-scheduling, and bounded to a rotating 30-symbol slice per pass so it cannot
-  //   spend the Kraken budget the locked price-cache module exists to protect.
+  //   guard), self-scheduling, and bounded to a rotating 30-symbol slice per pass.
+  // ⚠️ THE BOUND IS NOT ABOUT THE PRICE-CACHE BUDGET. This comment used to say the slice stops the
+  //   monitor spending "the Kraken budget the locked price-cache module exists to protect." FALSE,
+  //   and false in the dangerous direction — it made the load look safer than it is. `getTicker` →
+  //   `makePublicRequest` (kraken.ts:187) is a bare `fetch` with NO limiter, so these calls never
+  //   enter that budget: THEY COMPETE WITH IT FROM OUTSIDE. The slice plus the `finally`-guaranteed
+  //   100 ms floor is the whole bound, and 100 ms is a FLOOR (ceiling 10 req/s; actual is
+  //   1/(100ms + RTT) and RTT is unmeasured).
   miniBookIntegrityMonitor.start();
 
   /**
