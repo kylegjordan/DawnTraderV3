@@ -13150,7 +13150,10 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
             avgNetR: { value: null, sampleCount: 0, excludedCount: 0 },
             maxDrawdownInWindow: { pct: null, usd: 0 },
             byAssetClass: {},
-            earnings: computeRollingEarnings(validTrades, now),
+            // Empty-state branch: `validTrades` is empty here, so every window is 0 by
+            // construction and no epoch scoping can change that. Passing null is not a default
+            // standing in for a value we failed to read — there is nothing to scope.
+            earnings: computeRollingEarnings(validTrades, now, null),
             avgAmountInvested: 0
           }
         });
@@ -13305,7 +13308,12 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const byAssetClass = computeByAssetClass(trades);
 
       // Calendar earnings (Today/Week/Month) over ALL valid trades — range-independent.
-      const earnings = computeRollingEarnings(validTrades, now);
+      // B-OBSERVATION-EPOCH: the SAME epoch the lifetime scoreboard resolved above — one read,
+      // one value, so the card's four figures cannot disagree about when the window started.
+      const earnings = computeRollingEarnings(
+        validTrades, now,
+        lifetime.epochStartedAt ? new Date(lifetime.epochStartedAt) : null,
+      );
 
       // Phase 8.8.3-C6: Include engineRunning flag for consistency
       res.json({

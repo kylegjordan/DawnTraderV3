@@ -28,6 +28,8 @@
  */
 export function honestNetPnl(t: {
   reconstructedNetPnl?: unknown;
+  /** B-OBSERVATION-EPOCH: needed for both-leg epoch keying. */
+  openedAt?: Date | string | null;
   netPnl?: unknown;
   pnl?: unknown;
 }): number {
@@ -43,6 +45,8 @@ export interface ClosedTradeLike {
   // recorded exit came from a ghost book level. Preferred by honestNetPnl(); the originals
   // above are never mutated.
   reconstructedNetPnl?: unknown;
+  /** B-OBSERVATION-EPOCH: needed for both-leg epoch keying. */
+  openedAt?: Date | string | null;
   grossPnl?: unknown;
   totalFee?: unknown;
   fees?: unknown;
@@ -71,13 +75,47 @@ export const num = (v: unknown): number => {
  *  since-the-1st), whose boundary resets made the numbers read oddly. Matches the
  *  standing rolling-windows-over-snapshots rule (CLAUDE.md §5.13). Renamed per
  *  rule 18 (no alias left behind); field names are honest about the semantics. */
+/**
+ * ★ B-OBSERVATION-EPOCH (Kyle 2026-08-24) — THE ROLLING WINDOWS ARE CLAMPED TO THE OBSERVATION EPOCH.
+ *
+ * Kyle: *"day one of trading is today… the seven day metric should probably match the twenty four
+ * hour. Same with the thirty day, same with the lifetime. It all starts today."*
+ *
+ * ⛔ WHY THIS WAS A REAL DEFECT AND NOT A COSMETIC ONE. These windows were plain `now − N days` with
+ * no epoch term, while `getLifetimeScoreboard` IS epoch-scoped. So the moment an epoch was set the
+ * dashboard would have shown a clean lifetime figure beside a 30-day figure silently summing the
+ * ENTIRE pre-fix era — two numbers on one card, disagreeing, each looking authoritative.
+ *
+ * ★ AND THE WINDOW IS KEYED ON **BOTH LEGS**, WHICH IS A DECISION, NOT A FALL-OUT (Langston's
+ * condition). A trade OPENED before the epoch and CLOSED after it carries an entry price taken
+ * through the contaminated mini-book, so it is not "properly traded with the right pricing data" —
+ * which is the entire point of the reset. MEASURED at the reset: 11 closes after the fix line, but
+ * only **4** with both legs after it; and **3 of 7 still-open positions opened pre-fix**, so
+ * close-time keying would keep admitting contaminated entries for days.
+ */
 export function computeRollingEarnings(
   validTrades: ClosedTradeLike[],
   now: Date,
+  /** Observation epoch. Trades are counted only when BOTH legs fall at or after it. */
+  epochStartedAt: Date | null,
 ): { last24h: number; last7d: number; last30d: number } {
-  const sumSince = (since: Date) => validTrades
-    .filter(t => t.closedAt && new Date(t.closedAt) >= since)
-    .reduce((sum, t) => sum + honestNetPnl(t), 0);
+  const inEpoch = (t: ClosedTradeLike) => {
+    if (!epochStartedAt) return true;                 // no epoch set ⇒ all history, the prior behaviour
+    if (!t.closedAt || new Date(t.closedAt) < epochStartedAt) return false;
+    // BOTH legs. An absent open time cannot be shown to satisfy this, so it does NOT count —
+    // failing closed, because a trade we cannot place relative to the epoch is exactly the
+    // "absent wearing a value's clothes" case the epoch exists to remove.
+    const opened = (t as any).openedAt;
+    return !!opened && new Date(opened) >= epochStartedAt;
+  };
+  const scoped = validTrades.filter(inEpoch);
+  const sumSince = (since: Date) => {
+    // Clamp: a window can never reach back past the epoch.
+    const from = epochStartedAt && epochStartedAt > since ? epochStartedAt : since;
+    return scoped
+      .filter(t => t.closedAt && new Date(t.closedAt) >= from)
+      .reduce((sum, t) => sum + honestNetPnl(t), 0);
+  };
   const ms = now.getTime();
   return {
     last24h: sumSince(new Date(ms - 24 * 60 * 60 * 1000)),

@@ -181,3 +181,50 @@ describe('P19-B8.3 gate disposition contract (Langston HARD check 1 + identity)'
     expect(enforceCols[0].value(s)).toBe(60);
   });
 });
+
+describe('B-OBSERVATION-EPOCH — rolling windows clamp to the epoch and key on BOTH legs', () => {
+  const EPOCH = new Date('2026-08-22T22:01:00Z');   // the #507 book-truncation fix line
+  const NOW   = new Date('2026-08-24T06:30:00Z');
+  const t = (opened: string, closed: string, pnl: string) =>
+    ({ openedAt: opened, closedAt: closed, pnl, netPnl: pnl });
+
+  it('a STRADDLER — opened pre-epoch, closed post-epoch — is EXCLUDED', () => {
+    // This is the decision, not a fall-out (Langston's condition). A trade that opened before the
+    // fix carries an entry price taken through the contaminated mini-book, so it is not 'properly
+    // traded with the right pricing data' — which is the whole point of the reset. MEASURED at the
+    // reset: 11 closes after the fix line but only 4 with BOTH legs after it.
+    const straddler = t('2026-08-20T10:00:00Z', '2026-08-23T10:00:00Z', '100');
+    const clean     = t('2026-08-23T09:00:00Z', '2026-08-23T10:00:00Z', '7');
+    const r = computeRollingEarnings([straddler, clean] as any, NOW, EPOCH);
+    expect(r.last24h).toBe(7);   // straddler's 100 must not appear in ANY window
+    expect(r.last7d).toBe(7);
+    expect(r.last30d).toBe(7);
+  });
+
+  it('the 7d and 30d windows CANNOT reach back past the epoch', () => {
+    // Without the clamp the dashboard shows an epoch-scoped lifetime beside a 30-day figure that
+    // silently sums the entire pre-fix era — two numbers on one card, disagreeing, both looking
+    // authoritative. That is the defect this clamp removes.
+    const preFix = t('2026-08-01T10:00:00Z', '2026-08-02T10:00:00Z', '500');
+    const inside = t('2026-08-23T09:00:00Z', '2026-08-23T10:00:00Z', '3');
+    const r = computeRollingEarnings([preFix, inside] as any, NOW, EPOCH);
+    expect(r.last30d).toBe(3);   // NOT 503
+    expect(r.last7d).toBe(3);
+  });
+
+  it('a trade with NO open time FAILS CLOSED rather than being assumed in-window', () => {
+    // A trade we cannot place relative to the epoch is exactly the absent-wearing-a-value's-clothes
+    // case (#546) the epoch exists to remove. It must not be counted by default.
+    const noOpen = { closedAt: '2026-08-23T10:00:00Z', pnl: '42', netPnl: '42' };
+    const r = computeRollingEarnings([noOpen] as any, NOW, EPOCH);
+    expect(r.last24h).toBe(0);
+  });
+
+  it('with NO epoch set, behaviour is unchanged — all history counts', () => {
+    // Not a hard-coded fallback: 'no explicit epoch' is the correct prior semantic (score-keeping
+    // began when trading began), matching getLifetimeScoreboard's own documented default.
+    const old = t('2026-08-01T10:00:00Z', '2026-08-02T10:00:00Z', '11');
+    const r = computeRollingEarnings([old] as any, NOW, null);
+    expect(r.last30d).toBe(11);
+  });
+});
