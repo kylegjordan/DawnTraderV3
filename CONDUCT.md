@@ -13,16 +13,16 @@
 ## 2. PLAIN LANGUAGE — EVERY MESSAGE TO KYLE, NOT JUST THE FINAL ONE
 Status updates, mid-batch progress, troubleshooting, loop reports, "where are we" replies — **all of it.**
 
-★★ **THE LINE IS AT DEPTH, NOT AT VOCABULARY (Kyle, 2026-08-24 — this is the whole rule).**
-✅ **OUR COMPONENT NAMES ARE FINE. He uses them daily:** FX5 scanner · SQE · MCE · AMR · TCL · TEC · signal orchestrator · RTB pool/queue · VTS · DBS · paper mode / live mode.
-⛔ **WHAT LOSES HIM IS GRANULARITY — file names, function calls, line numbers, table or column names, config keys, process / transport / daemon detail — named as though he already knows what they are. HE DOES NOT, and saying so is not a criticism of him: it is the job.**
+★★ **THE LINE IS AT DEPTH, NOT AT VOCABULARY (Kyle, 2026-08-24).**
+✅ **USE OUR REAL COMPONENT NAMES — he uses them daily, and §3 is the ONE list. Do not restate it here.**
+⛔ **STILL BANNED, unchanged:** function names, file paths, line numbers, code, SQL, table or column names, config keys, **acronyms Kyle has not used himself**, and **infrastructure jargon** (process names, transport, scheduling, daemons, SSH) — named as though he already knows them. **HE DOES NOT, and saying so is not a criticism of him: it is the job.** He is the decider, not the implementer, and the burden of being understood sits with the session.
 
-**SO: say WHAT changed and WHY IT MATTERS, at the highest level that is still TRUE, in context.** Reach for an **example or an analogy** before reaching for detail. **He will ask a follow-up if he wants more** — and a follow-up is cheap, while a paragraph he cannot read costs him the entire message.
+**SAY WHAT CHANGED AND WHY IT MATTERS, at the highest level that is still TRUE, in context.** Reach for an **example or an analogy** before reaching for detail. **He will ask a follow-up if he wants more** — a follow-up is cheap; a paragraph he cannot read costs the whole message.
 
-**LENGTH: TWO OR THREE SENTENCES.** ⚠️ **PREVIOUSLY STATED: "default shape, two paragraphs." NOW: two to three sentences. REASON: Kyle, 2026-08-24 — the old default invited padding.** Go longer **only when more words make it SIMPLER**, never when they make it more complete.
+**LENGTH: TWO OR THREE SENTENCES.** ⚠️ **PREVIOUSLY STATED: "default shape, two paragraphs." NOW: two to three sentences. REASON: Kyle 2026-08-24 — the old default invited padding.** Go longer **only when more words make it SIMPLER**, never when they make it more complete.
 
 **Technical depth IS welcome in:** your own reasoning, peer exchanges with Langston (both directions), commit messages, and governance documents. **Anything Kyle reads in chat is plain language.**
-⚠️ **The recurring failure is drift into mechanism during progress reports.** If a sentence describes HOW something works at a level he would not naturally know, rewrite it to say WHAT happened and what changed for him. **When unsure whether a term is in his model, assume it is not.**
+⚠️ **The recurring failure is drift into MECHANISM during progress reports.** If a sentence describes HOW something works at a level he would not naturally know, rewrite it to say WHAT happened and what changed for him. **When unsure whether a term is in his model, assume it is not.**
 
 ## 3. CANONICAL TERMS — NAME THE THING, NEVER A PARAPHRASE
 Inconsistent terminology makes it ambiguous which system object is meant. **Forbidden substitutions:**
@@ -31,7 +31,8 @@ Inconsistent terminology makes it ambiguous which system object is meant. **Forb
 - **"live mode"** — never "real money mode", "real-money trading", or any paraphrase
 - **"paper mode"** — as-is
 
-Use the real names for mainstay components (MCE, SQE, TCL, TEC, VTS, RTB, the signal orchestrator, the pattern detector, IMF, DBS, regimes, Net Expectancy, the EV gate). **Smaller items — individual functions, helpers, internal sub-steps — leave OUT of the message entirely** rather than renaming them. Plain language governs the EXPLANATION, not the NOUN. If Kyle may not know a term, **define it once** rather than substituting a vaguer word.
+⛔⛔ **AND NEVER INVENT A SHORTHAND OR A NICKNAME FOR A COMPONENT THAT ALREADY HAS A NAME (Kyle, 2026-08-24 — his example: DO NOT call the SQE "the evaluator").** Renaming a thing to sound friendlier does not simplify it — it breaks the one vocabulary all four sessions, Langston and Kyle share, and it makes a message that reads smoothly and refers to nothing checkable. **The plain-language rule NEVER licenses a substitute noun.**
+Use the real names for mainstay components — **MCE, SQE, TCL, TEC, VTS, AMR, the FX5 scanner, the signal orchestrator, the pattern detector, the RTB pool/queue, IMF, DBS, DI, the liquidity and volatility filters, regimes, Net Expectancy, the EV gate, paper mode / live mode.** ★ **The list is NOT exhaustive and is not meant to be: if it is a core part of the trading system we discuss regularly, KEEP CALLING IT WHAT WE HAVE ALWAYS CALLED IT.** When in doubt, use the name that appears in the System Manual and the SIM. **Smaller items — individual functions, helpers, internal sub-steps — leave OUT of the message entirely** rather than renaming them. Plain language governs the EXPLANATION, not the NOUN. If Kyle may not know a term, **define it once** rather than substituting a vaguer word.
 
 ## 4. TRADING-MODE DISTINCTIONS — DO NOT COLLAPSE THESE
 Two orthogonal axes: **mode** (paper | live) and **active trading** (on | off).
