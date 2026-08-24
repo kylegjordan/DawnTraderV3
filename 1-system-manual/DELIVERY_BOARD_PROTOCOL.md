@@ -46,6 +46,14 @@
 
 ⚠️ **Write it for someone who has not read the batch documents, because that is exactly who is reading it.**
 
+## 2b. ★ `Complete` IS A PHASE LEDGER, NOT AN OUTBOX — IT CLEARS AT THE PHASE CHANGE (Kyle directive 2026-08-24)
+
+⛔ **A CARD THAT REACHES `Complete` STAYS THERE. It is NOT archived, hidden or removed when the batch closes.** `Complete` accumulates every batch of the CURRENT PHASE and is meant to — **it is the at-a-glance record of what this phase has actually delivered**, which is exactly the view Kyle loses if cards vanish the moment they finish.
+
+**IT IS CLEARED ONLY AT A PHASE TRANSITION**, as part of opening the next phase — the same session with Langston that splits the new phase into batches and assigns them (§3b trigger 2). **Clearing `Complete` and creating the next phase’s `Backlog` are two halves of ONE event**, so the board never sits half-way between two phases.
+
+⚠️ **DO NOT TIDY `Complete` BETWEEN PHASES.** A card removed early takes its delivery out of the phase record, and the completion report is the only place that survives — which is a worse record for the one question the board is best at answering: *what has this phase actually shipped?*
+
 ## 3b. ★ WHO CREATES A CARD, AND WHAT TRIGGERS IT (Kyle directive 2026-08-24 — previously UNWRITTEN)
 
 ⚠️ **THIS WAS A REAL GAP.** §4 said a card must exist before Step 1 and that a batch without one is invisible — but **nothing said who puts it there or when.** So "when does a card get created" was answered by whoever happened to be looking, which means work with no card was both invisible AND nobody’s fault.
@@ -76,7 +84,7 @@
 | **Step 11** (completion report) | **Blocked on = Langston** for his sign-off, then **Blocked on = Kyle** for acknowledgement, then → `Complete`. |
 | **any point** | Waiting on a Kyle decision, credential or approval ⇒ **Blocked on = Kyle**. The card keeps its column. |
 
-★ **THE OWNER MOVES THE CARD. LANGSTON SETS `Review`.** ⛔ **AND THAT INCLUDES AFTER HE APPROVES — HIS APPROVAL IS NOT THE MOVE.** He sets `Review = Approved`; **the OWNER then moves the card to the next column and updates `Blocked on`.** *(Kyle asked directly, 2026-08-24. If his approval also moved the card, the board would freeze every time he is mid-review — at FOUR gates per batch.)* *(Kyle's decision, 2026-08-03.)* His approval gates the move but is not itself the move — otherwise the board freezes whenever he is mid-review, at four separate points per batch. ✅ **He HAS board write access as of 2026-08-04** — Kyle-issued classic token, `project` scope only (board read/write, zero code access — the reviews-never-pushes rule is preserved by construction), installed at `/etc/langston/github-board.env`, **verified live: read, write and delete all exercised as his user.** He sets `Review` himself; the how-to is in his auto-loaded MEMORY.md. His actual words remain in Discord and the batch documents — the board is the third place a verdict is written, never the only one.
+★ **LANGSTON SETS THE `Review` FIELD; THE SESSION MOVES THE CARD.** *(Kyle’s wording, 2026-08-24.)* ⛔ **AND THAT INCLUDES AFTER HE APPROVES — HIS APPROVAL IS NOT THE MOVE.** He sets `Review = Approved`; **the SESSION then moves the card to the next column and updates `Blocked on`.** *(Kyle asked directly, 2026-08-24. If his approval also moved the card, the board would freeze every time he is mid-review — at FOUR gates per batch.)* *(Kyle's decision, 2026-08-03.)* His approval gates the move but is not itself the move — otherwise the board freezes whenever he is mid-review, at four separate points per batch. ✅ **He HAS board write access as of 2026-08-04** — Kyle-issued classic token, `project` scope only (board read/write, zero code access — the reviews-never-pushes rule is preserved by construction), installed at `/etc/langston/github-board.env`, **verified live: read, write and delete all exercised as his user.** He sets `Review` himself; the how-to is in his auto-loaded MEMORY.md. His actual words remain in Discord and the batch documents — the board is the third place a verdict is written, never the only one.
 
 ## 4b. ★ THE BACKLOG IS ORDERED — top of the column IS the next thing (Kyle directive 2026-08-03)
 

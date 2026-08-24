@@ -39,7 +39,7 @@ For every service/module/function/route the batch touches, **record its ORIGINAL
 
 ## ☑ THE DELIVERY BOARD — MOVE THE CARD WHEN THE WORK MOVES
 **CREATE THE CARD IF IT DOES NOT EXIST — YOU create it, nobody else** (protocol §3b): a card is created the moment a finding turns into a batch or sub-batch, or when phase planning assigns you one. Default entry `Backlog`, **placed in priority order**; straight to `Scope` only if you are starting now. Then move the card to **`Scope`**. On dispatch to Langston set **Blocked on = Langston**. ⚠️ **A batch that starts without a card is INVISIBLE** — the card must already exist in `Backlog` with Owner, Type, Issue and a plain-language description before Step 1 begins.
-★ **YOU move the card; LANGSTON sets `Review`.** *(Kyle 2026-08-03 — his approval gates the move but is not the move, or the board freezes every time he is mid-review.)*
+★ **LANGSTON SETS THE `Review` FIELD; THE SESSION MOVES THE CARD.** *(Kyle’s wording, 2026-08-24.)* ⛔ **His approval is NOT the move** — he sets `Review = Approved`, then YOU move it and update `Blocked on`. If approval also moved the card the board would freeze every time he is mid-review, at FOUR gates per batch.
 ⚠️ **NOTHING AUTOMATES THIS.** An un-updated board is a **confidently wrong second record, which is worse than no board** — and the whole point is that Kyle can see who is doing what without asking. ⛔ **The card holds STATUS, OWNER, ORDER and the description — NOTHING ELSE.** Every finding, citation and verdict stays in the repo and the card LINKS to it. Board: https://github.com/users/kylegjordan/projects/1 · full protocol: `1-system-manual/DELIVERY_BOARD_PROTOCOL.md`.
 
 ---
