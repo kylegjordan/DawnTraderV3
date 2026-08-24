@@ -41,15 +41,18 @@ import { join } from 'node:path';
 // ═══════════════════════════════════════════════════════════════════════════════════════════════
 // ⛔⛔ CHUNKED DELIVERY — THE WHOLE REASON THIS FILE IS NOT ONE WRITE (B-CONDUCT-DELIVERY, 2026-08-24)
 //
-// A SessionStart hook whose stdout exceeds ~12.8 KB IS NOT DELIVERED. The harness persists the
+// A SessionStart hook whose stdout exceeds ~10 KB IS NOT DELIVERED. The harness persists the
 // output to a file on disk and injects only a ~2 KB PREVIEW plus the path. It logs
 // "SessionStart:compact hook success" either way — SO THE FAILURE IS COMPLETELY SILENT, and the
 // success line reports the hook's EXIT CODE, not whether anything arrived.
 //
 // MEASURED 2026-08-24, binary-searched with real outputs rather than assumed:
-//   11,000 B -> delivered whole      12,500 B -> delivered whole
-//   13,002 B -> PERSISTED (the smallest persisted output in 140 recorded instances)
-//   => the ceiling sits between 12,500 and 13,002 B. CHUNK_LIMIT below is set well under it.
+//   ⚠️ FIRST MEASUREMENT WAS WRONG AND IS CORRECTED HERE. I binary-searched with BASH TOOL
+//   output (11,000 and 12,500 B delivered whole) and applied that number to HOOKS. THEY ARE
+//   DIFFERENT LIMITS. The very next session start proved it: chunks of 11.0/10.7/10.4 KB were
+//   STILL persisted, while 9,986 B and 1,627 B arrived whole.
+//   => THE HOOK CEILING SITS BETWEEN 9,986 AND 10,400 B. CHUNK_LIMIT is 7,000 for real margin
+//   (headers add ~400 B, and the limit may be TOKEN-based, so bytes are a proxy, not the unit).
 //
 // CONSEQUENCE, and it is the reason this was worth a batch: CONDUCT.md is ~23 KB and
 // MEMORY_CC_*.md ~21 KB. BOTH FILES ENGINEERED SPECIFICALLY TO ARRIVE FIRST HAVE BEEN ARRIVING AT
@@ -65,7 +68,7 @@ import { join } from 'node:path';
 // ⚠️ DO NOT "SIMPLIFY" THIS BACK TO ONE WRITE. It will appear to work — the hook exits 0 and the
 // log says success — while silently delivering 8% of the rules.
 // ═══════════════════════════════════════════════════════════════════════════════════════════════
-const CHUNK_LIMIT = 11000;                       // bytes of BODY per chunk; proven-deliverable
+const CHUNK_LIMIT = 7000;                       // bytes of BODY per chunk; proven-deliverable
 const CHUNK_INDEX = Number(process.argv[2] || 0); // which slice this invocation emits
 const CHUNK_COUNT = Number(process.argv[3] || 1); // how many slices are registered in settings
 
@@ -137,7 +140,7 @@ try {
       `These are the behavioural rules — how to report to Kyle, when to say nothing, how to correct a ` +
       `mistake. They sit here rather than in CLAUDE.md because they must arrive BEFORE you act, not be ` +
       `findable after. CLAUDE.md remains authoritative for workflow, architecture and governance.\n` +
-      `[delivered in ${slices.length} chunk(s) — a single write over ~12.8 KB is silently truncated to a preview]\n` +
+      `[delivered in ${slices.length} chunk(s) — a single write over ~10 KB is silently truncated to a preview]\n` +
       sizeNote + shortfall
     : `[AUTO-LOADED — CONDUCT.md continued, chunk ${CHUNK_INDEX + 1} of ${slices.length}.]${shortfall}\n`;
 

@@ -18,7 +18,7 @@ import { readFileSync } from 'node:fs';
 import { basename, join, dirname } from 'node:path';
 
 // ⛔⛔ CHUNKED DELIVERY — see load-conduct.mjs for the full measurement (B-CONDUCT-DELIVERY 2026-08-24).
-// Short version: a SessionStart hook whose stdout exceeds ~12.8 KB IS NOT DELIVERED — the harness
+// Short version: a SessionStart hook whose stdout exceeds ~10 KB IS NOT DELIVERED — the harness
 // persists it to disk and injects a ~2 KB preview, while still logging "hook success". The failure
 // is SILENT. Measured: 11,000 B and 12,500 B deliver whole; 13,002 B was the smallest of 140
 // persisted outputs, and ALL 140 were this file or CONDUCT.md.
@@ -26,7 +26,7 @@ import { basename, join, dirname } from 'node:path';
 // THIS FIRST" block a session is supposed to resume from, which sits past the cutoff.
 // The limit is PER HOOK OUTPUT, so N registered slices each under the ceiling all arrive.
 // ⚠️ DO NOT collapse this back to one write: it exits 0 and logs success while delivering 10%.
-const CHUNK_LIMIT = 11000;
+const CHUNK_LIMIT = 7000;
 const CHUNK_INDEX = Number(process.argv[2] || 0);
 const CHUNK_COUNT = Number(process.argv[3] || 1);
 
@@ -107,7 +107,7 @@ try {
       `${fromMirror ? ' (from in-clone MIRROR; may be one commit behind your live file)' : ''}]\n` +
       `This is YOUR per-session state (auto-injected on every start/resume/compaction). Shared rules ` +
       `are in CLAUDE.md; shared project truths are in MEMORY.md. Write working state ONLY to ${session.file}.\n` +
-      `[delivered in ${_slices.length} chunk(s) — a single write over ~12.8 KB is silently truncated]\n` + _short
+      `[delivered in ${_slices.length} chunk(s) — a single write over ~10 KB is silently truncated]\n` + _short
     : `[AUTO-LOADED — ${session.file} continued, chunk ${CHUNK_INDEX + 1} of ${_slices.length}.]${_short}\n`;
 
   process.stdout.write(_hdr + '\n' + _body + '\n');
