@@ -3350,3 +3350,19 @@ The 4 are trades **open at the moment of the first close**. ⚠️ **INERT TODAY
 **NOT an authorization defect:** the route uses the **same `authenticateToken` middleware** as `/earnings/summary` (`routes.ts:4565` vs `:18012`), and server-side with a token it returns **200 with `totalValue: 824.11`** — the correct anchor. Without a token, 401. ⇒ **the browser sent it without a usable token**, i.e. the first authenticated request fires before the token is attached.
 **CONSEQUENCE, and it is the part that matters:** the component **does not retry**, so the Portfolio Value card sits in **skeleton-load forever** — grey placeholder bars, no number, on the card showing Kyle's balance. Every other card renders. ⚠️ **It also MASKS #902.**
 **HOME: `B-DASHBOARD-AUTH-RACE`, owner CC-C, due 2026-09-05.** ↔ #902.
+
+### #904 OPEN 2026-08-24 (CC-C, found while discharging the checker's own alerts for `B-OBSERVATION-EPOCH`) — ★ THE GOVERNANCE CHECKER'S `kind: 'entry'` TEST IS SATISFIED BY *ANOTHER BATCH MENTIONING YOURS*
+
+**MEASURED.** `B-OBSERVATION-EPOCH` had **no entry** in `BATCH_CATALOG.md` and **no paragraph** in `PHASE_HISTORY.md`. A `grep -c` for the batch-id returned **1 in each** — and both matches were **the string appearing inside `B-EPOCH-KEYING-PARITY`'s entry**, which cites the earlier batch as its own root cause.
+
+`config.mjs` defines these as `kind: 'entry'` with the rule stated in its own comment: *"an append-style shared doc; **presence = batch-id appears inside it**."* ⇒ **a substring match anywhere in the file counts as the batch being documented.**
+
+⛔ **SO A BATCH CAN BE GRADED AS CATALOGUED BECAUSE A LATER BATCH BLAMED IT.** The more a batch is referenced by its successors — which is exactly what happens to a batch that caused a follow-on — **the more likely the checker reads it as documented when it is not.** The failure is silent and biased toward the cases that matter most.
+
+★ **SAME FAMILY AS `#350`, ALREADY RECORDED IN `CLAUDE.md` §3.0:** `extractBatchId` matches a batch-id **anywhere** in a commit subject, not just the leading token, and a mid-subject reference fired 8 false missing-doc alerts. **Both are the same defect — an identifier matched as a SUBSTRING rather than as a STRUCTURED POSITION** — and `#350` already has a parser fix homed at `B-GOV-4`. This is the read side of it.
+
+⚠️ **WHY IT MATTERS BEYOND TIDINESS:** `CLAUDE.md` §3 names this checker as **the INDEPENDENT detector** — the thing that catches a skipping session, precisely because the completion report is written by that same session. **A detector that a passing mention can satisfy is weaker than its stated role**, and nothing else covers the gap.
+
+**PROPOSED FIX (not ruled on):** for `kind: 'entry'`, match a **structured anchor** rather than a bare substring — a heading (`^### <batch-id>`) for `BATCH_CATALOG`, a paragraph-initial bold token (`^\*\*<batch-id> \(`) for `PHASE_HISTORY` — falling back to the current behaviour with a **low-severity flag** rather than a pass, so the change cannot silently create new RED alerts on historical batches.
+**HOME: `B-GOV-4` (with `#350` — same parser, same defect class), owner CC-A.** ↔ #350.
+**⇒ Discharged in the meantime by writing the real entries: `B-OBSERVATION-EPOCH` now has a genuine `### ` heading and its own `PHASE_HISTORY` paragraph.**

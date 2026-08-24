@@ -673,3 +673,21 @@ The B65.2 functional commit (`0fcd19b1`) shipped trailing exits end-to-end. Subs
 **ALSO FOUND, and it was MASKING one of these:** `/api/portfolio/overview` is the **one endpoint of 25** returning 401 on page load, so the main Dashboard's Portfolio Value card sits in skeleton-load forever (`#903`). It hides `#902` — a bug concealed by another bug.
 
 **GOVERNANCE FILES CHANGED:** `BATCH_CATALOG.md` · `PHASE_HISTORY.md` · `PHASE_19_PLAN.md` §5 · `RUNNING_ISSUES.md` (#900–#903) · scope · completion report · `MEMORY_CC_C.md` · `/home/langston/MEMORY.md` · board card. **SYSTEM_MANUAL and SIM judged NOT applicable, and the judgement is stated:** display-reader keying, no component added/removed/re-keyed, no architecture or math change.
+
+### B-OBSERVATION-EPOCH — day one is today, and the mechanism already existed (2026-08-24, CC-C)
+
+**change-class: non_architecture.** Code `8088b49be`, live on staging inside `afb7d326c`. **Part F: the F-F reset, brought forward at Kyle's direction.** ⛔ **Catalogued LATE** — the checker's `Governance overdue` alert was correct.
+
+**WHY:** Kyle: *"day one of trading is today… the seven day metric should probably match the twenty four hour. Same with the thirty day, same with the lifetime."* A new paper observation window opening at the `#507` book-truncation fix line, because entry and exit prices before it were taken through a mini-book that never truncated to its subscribed depth (`#741`/`#743`).
+
+★ **THE MECHANISM ALREADY EXISTED AND KYLE'S OWN EARLIER RULING HAD SHAPED IT.** I began designing an epoch COLUMN; `getLifetimeScoreboard`'s own comment stopped me — *"THE EPOCH IS DELIBERATE AND IS NOT TIED TO THE ANCHOR EVENTS. Kyle ruled the two acts decoupled."* ⇒ the reset is ONE explicit `module_constants` row (`scoreboard`/`epoch_started_at`) whose `updated_by` **is** the audit trail. **Second "use what already exists" catch in two days.** Epoch set to `2026-08-22T22:01:00Z`; **anchor untouched at 824.11 / v4** — no balance write was needed or wanted, which is the decoupling ruling doing its job.
+
+**THE STRADDLER RULE IS A DECISION, NOT A FALL-OUT (Langston's condition).** A trade opened before the epoch and closed after it carries a contaminated entry price. **MEASURED at the reset:** 11 closes since the fix line, only **4** with both legs after it, **7 straddlers**, and **3 of 7 open positions opened pre-fix** — so close-time keying would have kept admitting contaminated entries for days. In-window P&L **$19.14 close-keyed vs $8.47 both-leg**.
+
+⛔ **WHAT IT GOT WRONG, AND IT COST A SECOND BATCH: the decision shipped into ONE READER OF FOUR.** The predicate lived **inline** in `computeRollingEarnings`, so `getLifetimeScoreboard`, the analytics window filter and that route's empty-window branch never had the rule. **The four tests written to pin the decision tested the FUNCTION, not the PARITY** — all four passed while the Paper Trading card showed **three answers to one question, disagreeing in sign.** Root cause, recorded in this batch's pre-audit: **no consumer census was run** (§9.5(a)); a grep for the epoch constant would have returned all four in a minute. Remediated by **`B-EPOCH-KEYING-PARITY`** (`30808c6c0`). ⇒ **standing lesson: a batch introducing a NEW SHARED VALUE must census its CONSUMERS before writing the first one.**
+
+⛔ **RISK THAT IS KYLE'S TO RATIFY, NOT TO INHERIT:** the epoch also **resets the kill-switch numerator** — the drawdown memory starts empty, so the daily-loss budget is fresh (Langston). Surfaced to him in those words.
+
+⚠️ **TWO ANCHOR-RECORD DEFECTS SURFACED, NOT FIXED HERE:** three governed docs still assert paper **2250.00/v3** against a live **v4/824.11**, and **`portfolio_anchor_events` has NO v4 row at all** (UNIQUE `(mode, anchor_version)` ⇒ genuinely absent) — **the anchor audit trail has a hole at its most recent change.**
+
+**GOVERNANCE FILES CHANGED:** `BATCH_CATALOG.md` · `PHASE_HISTORY.md` · `PHASE_19_PLAN.md` · `RUNNING_ISSUES.md` · scope · pre-audit · completion report. **SYSTEM_MANUAL and SIM judged NOT applicable, out loud:** a `module_constants` row read by existing services adds no component and changes no architecture or math.
