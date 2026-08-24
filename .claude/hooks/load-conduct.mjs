@@ -37,6 +37,38 @@ import { join } from 'node:path';
 // across all four auto-loaded files ONCE `CLAUDE.md` HAS BEEN SLIMMED and we can see how
 // small it actually gets. ⚠️ DO NOT treat 6144 as settled — it is a deliberate deferral
 // of a trade-off (rules that help vs rules nobody reads vs token cost), not a new budget.
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+// ⛔⛔ CHUNKED DELIVERY — THE WHOLE REASON THIS FILE IS NOT ONE WRITE (B-CONDUCT-DELIVERY, 2026-08-24)
+//
+// A SessionStart hook whose stdout exceeds ~12.8 KB IS NOT DELIVERED. The harness persists the
+// output to a file on disk and injects only a ~2 KB PREVIEW plus the path. It logs
+// "SessionStart:compact hook success" either way — SO THE FAILURE IS COMPLETELY SILENT, and the
+// success line reports the hook's EXIT CODE, not whether anything arrived.
+//
+// MEASURED 2026-08-24, binary-searched with real outputs rather than assumed:
+//   11,000 B -> delivered whole      12,500 B -> delivered whole
+//   13,002 B -> PERSISTED (the smallest persisted output in 140 recorded instances)
+//   => the ceiling sits between 12,500 and 13,002 B. CHUNK_LIMIT below is set well under it.
+//
+// CONSEQUENCE, and it is the reason this was worth a batch: CONDUCT.md is ~23 KB and
+// MEMORY_CC_*.md ~21 KB. BOTH FILES ENGINEERED SPECIFICALLY TO ARRIVE FIRST HAVE BEEN ARRIVING AT
+// ROUGHLY ONE-TENTH OF THEMSELVES ON EVERY START, RESUME AND COMPACTION. Of 140 persisted hook
+// outputs on this machine, EVERY SINGLE ONE is CONDUCT (57) or a memory file (83). The report
+// format lives in §6, which begins ~4x past the cutoff — so the rule Kyle kept asking for had
+// never once reached a session.
+//
+// ★ THE LIMIT IS PER HOOK OUTPUT, NOT PER TURN — proven: the 804 B session-reminder arrives whole
+// in the same turn a 23 KB conduct file is truncated. THAT is why chunking works: N hooks, each
+// under the ceiling, all delivered.
+//
+// ⚠️ DO NOT "SIMPLIFY" THIS BACK TO ONE WRITE. It will appear to work — the hook exits 0 and the
+// log says success — while silently delivering 8% of the rules.
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+const CHUNK_LIMIT = 11000;                       // bytes of BODY per chunk; proven-deliverable
+const CHUNK_INDEX = Number(process.argv[2] || 0); // which slice this invocation emits
+const CHUNK_COUNT = Number(process.argv[3] || 1); // how many slices are registered in settings
+
 const CAP_TOKENS = 6144;
 const BYTES_PER_TOKEN = 4;
 const CAP_BYTES = CAP_TOKENS * BYTES_PER_TOKEN; // 24576 — ⚠️ KEEP THIS IN STEP WITH CAP_TOKENS.
@@ -77,13 +109,39 @@ try {
     }
   } catch { /* size unreadable -> skip the warning, still load the content */ }
 
-  process.stdout.write(
-    `[AUTO-LOADED — CONDUCT.md: how this session BEHAVES. Injected on every start/resume/compaction.]\n` +
-    `These are the behavioural rules — how to report to Kyle, when to say nothing, how to correct a ` +
-    `mistake. They sit here rather than in CLAUDE.md because they must arrive BEFORE you act, not be ` +
-    `findable after. CLAUDE.md remains authoritative for workflow, architecture and governance.\n` +
-    sizeNote + '\n' + text + '\n'
-  );
+  // Slice on a LINE boundary so no rule is cut mid-sentence.
+  const lines = text.split('\n');
+  const slices = [];
+  let cur = [], curLen = 0;
+  for (const ln of lines) {
+    const b = Buffer.byteLength(ln, 'utf8') + 1;
+    if (curLen + b > CHUNK_LIMIT && cur.length) { slices.push(cur.join('\n')); cur = []; curLen = 0; }
+    cur.push(ln); curLen += b;
+  }
+  if (cur.length) slices.push(cur.join('\n'));
+
+  // ⛔ ANNOUNCED, NEVER SILENT: if the file needs more slices than are registered, say so LOUDLY
+  // in every slice. The whole defect this fixes was a silent shortfall.
+  const shortfall = slices.length > CHUNK_COUNT
+    ? `\n[⚠️⚠️ CONDUCT.md NEEDS ${slices.length} CHUNKS BUT ONLY ${CHUNK_COUNT} ARE REGISTERED IN ` +
+      `.claude/settings.local.json — SECTIONS AFTER CHUNK ${CHUNK_COUNT} ARE NOT REACHING YOU. ` +
+      `Register another load-conduct entry (args "${CHUNK_COUNT}" "${CHUNK_COUNT + 1}") or trim the file. ` +
+      `READ CONDUCT.md IN FULL before reporting anything.]\n`
+    : '';
+
+  const body = slices[CHUNK_INDEX];
+  if (body === undefined) process.exit(0);   // nothing for this slice — stay silent
+
+  const header = CHUNK_INDEX === 0
+    ? `[AUTO-LOADED — CONDUCT.md: how this session BEHAVES. Injected on every start/resume/compaction.]\n` +
+      `These are the behavioural rules — how to report to Kyle, when to say nothing, how to correct a ` +
+      `mistake. They sit here rather than in CLAUDE.md because they must arrive BEFORE you act, not be ` +
+      `findable after. CLAUDE.md remains authoritative for workflow, architecture and governance.\n` +
+      `[delivered in ${slices.length} chunk(s) — a single write over ~12.8 KB is silently truncated to a preview]\n` +
+      sizeNote + shortfall
+    : `[AUTO-LOADED — CONDUCT.md continued, chunk ${CHUNK_INDEX + 1} of ${slices.length}.]${shortfall}\n`;
+
+  process.stdout.write(header + '\n' + body + '\n');
 } catch {
   // absolute backstop — never break a session over a conduct-load
 }

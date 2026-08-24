@@ -160,11 +160,27 @@
           },
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/load-own-memory.mjs\""
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/load-own-memory.mjs\" 0 3"
           },
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/load-conduct.mjs\""
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/load-own-memory.mjs\" 1 3"
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/load-own-memory.mjs\" 2 3"
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/load-conduct.mjs\" 0 3"
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/load-conduct.mjs\" 1 3"
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/load-conduct.mjs\" 2 3"
           },
           {
             "type": "command",

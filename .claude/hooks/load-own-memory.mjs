@@ -17,6 +17,19 @@
 import { readFileSync } from 'node:fs';
 import { basename, join, dirname } from 'node:path';
 
+// ⛔⛔ CHUNKED DELIVERY — see load-conduct.mjs for the full measurement (B-CONDUCT-DELIVERY 2026-08-24).
+// Short version: a SessionStart hook whose stdout exceeds ~12.8 KB IS NOT DELIVERED — the harness
+// persists it to disk and injects a ~2 KB preview, while still logging "hook success". The failure
+// is SILENT. Measured: 11,000 B and 12,500 B deliver whole; 13,002 B was the smallest of 140
+// persisted outputs, and ALL 140 were this file or CONDUCT.md.
+// ⇒ MEMORY_CC_*.md at ~21 KB has been arriving at ~2 KB — INCLUDING the "CURRENT POSITION — READ
+// THIS FIRST" block a session is supposed to resume from, which sits past the cutoff.
+// The limit is PER HOOK OUTPUT, so N registered slices each under the ceiling all arrive.
+// ⚠️ DO NOT collapse this back to one write: it exits 0 and logs success while delivering 10%.
+const CHUNK_LIMIT = 11000;
+const CHUNK_INDEX = Number(process.argv[2] || 0);
+const CHUNK_COUNT = Number(process.argv[3] || 1);
+
 // Map a clone folder -> (session name, per-session memory filename). The clone basename is the
 // stable discriminator: old=Claude Old (CC-A), new=Claude New (CC-B), analyst=Claude Analyst (CC-C).
 const CLONE_TO_SESSION = {
@@ -69,13 +82,35 @@ try {
 
   // Q2 (Langston): when the mirror fallback fired, the state may be one commit behind the live file
   // — tag it so the session knows, rather than presenting mirror and truth identically.
-  process.stdout.write(
-    `[AUTO-LOADED — your own working memory: ${session.file} — ${session.name}` +
-    `${fromMirror ? ' (from in-clone MIRROR; may be one commit behind your live file)' : ''}]\n` +
-    `This is YOUR per-session state (auto-injected on every start/resume/compaction). Shared rules ` +
-    `are in CLAUDE.md; shared project truths are in MEMORY.md. Write working state ONLY to ${session.file}.\n\n` +
-    memText + '\n'
-  );
+  // Slice on a LINE boundary so no block is cut mid-sentence.
+  const _lines = memText.split('\n');
+  const _slices = [];
+  let _cur = [], _len = 0;
+  for (const ln of _lines) {
+    const b = Buffer.byteLength(ln, 'utf8') + 1;
+    if (_len + b > CHUNK_LIMIT && _cur.length) { _slices.push(_cur.join('\n')); _cur = []; _len = 0; }
+    _cur.push(ln); _len += b;
+  }
+  if (_cur.length) _slices.push(_cur.join('\n'));
+
+  const _short = _slices.length > CHUNK_COUNT
+    ? `\n[⚠️⚠️ ${session.file} NEEDS ${_slices.length} CHUNKS BUT ONLY ${CHUNK_COUNT} ARE REGISTERED — ` +
+      `everything after chunk ${CHUNK_COUNT} IS NOT REACHING YOU. Register another load-own-memory ` +
+      `entry, or prune the file to its 24,576 B cap. READ IT IN FULL before relying on your state.]\n`
+    : '';
+
+  const _body = _slices[CHUNK_INDEX];
+  if (_body === undefined) process.exit(0);
+
+  const _hdr = CHUNK_INDEX === 0
+    ? `[AUTO-LOADED — your own working memory: ${session.file} — ${session.name}` +
+      `${fromMirror ? ' (from in-clone MIRROR; may be one commit behind your live file)' : ''}]\n` +
+      `This is YOUR per-session state (auto-injected on every start/resume/compaction). Shared rules ` +
+      `are in CLAUDE.md; shared project truths are in MEMORY.md. Write working state ONLY to ${session.file}.\n` +
+      `[delivered in ${_slices.length} chunk(s) — a single write over ~12.8 KB is silently truncated]\n` + _short
+    : `[AUTO-LOADED — ${session.file} continued, chunk ${CHUNK_INDEX + 1} of ${_slices.length}.]${_short}\n`;
+
+  process.stdout.write(_hdr + '\n' + _body + '\n');
 } catch {
   // absolute backstop — never break a session over a memory-load
 }
