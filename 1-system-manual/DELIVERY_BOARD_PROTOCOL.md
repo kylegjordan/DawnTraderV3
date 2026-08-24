@@ -30,10 +30,40 @@
 | **Issue** | free text, e.g. `#637 #642` | the `RUNNING_ISSUES` number(s), **blank if none** |
 | **Review** | Not required · **Approved** (green) · **SENT BACK TO OWNER** (red) | Langston's verdict at the last gate |
 | **Blocked on** | Nothing · **Kyle** (orange) · Langston · External | who we are waiting for |
+| **Phase** | Earlier · Phase 16 · Phase 19 · Phase 20 · Phase 21 · Phase 25 | **which phase this batch belongs to — added 2026-08-24 so the ARCHIVE stays answerable** (§2b). Set when the card is CREATED. |
 
 ★ **REVIEW AND BLOCKED-ON ARE FIELDS, NOT COLUMNS, AND THAT IS DELIBERATE (Kyle's catch, 2026-08-03).** Langston reviews at **four** gates — scope, pre-audit, code diff, completion report — so a "Langston Review" column would have to be visited four times and would tell you nothing about *which* review. Blocking is the same: it can happen at any stage. **Both are orthogonal to position, so both are fields; the card keeps its real workflow position while showing that it is waiting and on whom.**
 
 **VIEWS:** `View 1` (all work, board) · `Needs Kyle` · `Needs Langston` · `Claude Old` · `Claude New` · `Analyst`.
+
+## 3. What goes on a card
+
+**EVERY card carries a plain-language description. Kyle's requirement, verbatim intent: the batch headers are not always intuitive, so opening a card must explain what it is.** Three short parts:
+
+- **What it is** — one or two sentences, ordinary English. **No batch ids, no file paths, no function names, no acronyms Kyle has not used himself.**
+- **Why it matters** — the consequence of *not* doing it. If you cannot state one, question whether the card belongs on the board.
+- **Done when** — the observable condition that ends the work. Not "implemented" — what will be *true*.
+- **The issue** *(only when the card carries an Issue number)* — **the issue's NAME and a one-line plain description, not just the number** (Kyle directive 2026-08-04). The `Issue` field cannot hyperlink and the issues file is too large for reliable deep-links, so **the card body carries enough that Kyle never has to go hunting**: what the issue is, in the same plain language as the rest.
+
+⚠️ **Write it for someone who has not read the batch documents, because that is exactly who is reading it.**
+
+## 2b. ★ `Complete` IS A PHASE LEDGER — IT FILLS ALL PHASE, THEN ARCHIVES AT THE TRANSITION (Kyle directive 2026-08-24)
+
+⛔ **A CARD THAT REACHES `Complete` STAYS THERE FOR THE REST OF THE PHASE. It is NOT archived, hidden or tidied when the batch closes.** `Complete` accumulates every batch of the CURRENT phase and is meant to — **it is the at-a-glance record of what this phase has actually delivered**, which is exactly the view Kyle loses if finished cards vanish one by one.
+⚠️ **DO NOT TIDY `Complete` BETWEEN PHASES.** A card removed early takes its delivery out of the phase record and leaves the completion report as the only survivor — a worse answer to the single question the board is best at: *what has this phase actually shipped?*
+
+### ★ AT THE PHASE TRANSITION — STAMP, ARCHIVE, THEN OPEN THE NEXT PHASE. ONE EVENT, THREE PARTS.
+Done in the SAME session with Langston that splits the new phase into batches (§3b trigger 2), so the board never sits half-way between two phases.
+1. **STAMP** — every card still in `Complete` gets its **`Phase`** value if it does not already have one. ⛔ **This is what makes the archive answerable later; skip it and the archive becomes one undated pile.**
+2. **ARCHIVE** — archive those cards (`gh project item-archive --owner kylegjordan --id <PVTI_…>`, or the card’s own … menu). **Archiving is NOT deletion:** the card leaves the board and stays fully readable in the project’s **Archived items** view — open the project, `…` menu → **Archived items** — and can be restored to the board at any time.
+3. **OPEN THE NEXT PHASE** — create the next phase’s cards into `Backlog`, in priority order (§3b, §4b).
+
+★ **THEN "WHAT DID PHASE 19 DELIVER?" IS A FILTER, NOT AN EXCAVATION** — the Archived items view filtered to `Phase = Phase 19`.
+
+### ⚠️ THE `Phase` FIELD WAS CREATED CAREFULLY, AND THE CARE IS THE REUSABLE PART (2026-08-24)
+§5.x records that **adding an OPTION to an EXISTING single-select field is a clobber event** — it regenerates every option ID, silently clears that field on every card, and turns cached IDs into successful no-ops. **Creating a NEW field is a different mutation and does not carry that risk** — but that was PROVEN, not assumed: a 53-card snapshot was taken first, the field created, and the full board re-read and compared field-by-field. **0 values disturbed.**
+⛔ **AND THIS IS WHY `Phase` SHIPPED WITH EVERY OPTION IT WILL NEED (`Earlier` → `Phase 25`) RATHER THAN ONE:** adding `Phase 26` later IS the clobber-prone operation. **Front-loading the options means we never have to perform it.** If a phase beyond this list is ever needed, follow §5.x in full — snapshot, change, re-set from the snapshot with FRESHLY-FETCHED option IDs, read back the histogram.
+⚠️ **AND THE SNAPSHOT HAS A KNOWN HOLE:** `gh project item-list` reported `Blocked on` as empty on all 53 cards while it was demonstrably set on two. **That field cannot be snapshotted with this tool** (§5 records the same class). Re-set it by hand after any options-list change rather than trusting a restore.
 
 ## 3. What goes on a card
 
@@ -63,6 +93,8 @@
 **THE TWO TRIGGERS — these are the moments, and there is no third:**
 1. **A FINDING DURING A BATCH CREATES A NEW BATCH OR SUB-BATCH.** ⇒ **the session that surfaced it creates the card THEN AND THERE**, in the same turn it decides the work is real. ★ **This is the same instant §9.4 requires a named owner and a dated home — the card IS that home made visible.** Do not defer it to "when I start it".
 2. **PHASE PLANNING.** When a phase closes and the next is opened with Langston, the phase is split into batches and each is assigned to a session. ⇒ **each session then creates cards for ITS OWN assigned batches**, all into `Backlog`, and moves the one it is starting to `Scope`.
+
+**SET `Phase` WHEN YOU CREATE THE CARD** — the phase the batch belongs to. It costs one click at creation and it is what makes the archive answerable at the transition (§2b); back-filling 30 cards later is the alternative.
 
 **PLACEMENT: `Backlog` is the default and the normal entry point.** A card goes straight to `Scope` only when work begins immediately — something urgent enough to jump the queue.
 ⛔ **AND CREATING A CARD INCLUDES PLACING IT IN THE ORDER (§4b): `Backlog` is not a bag — its vertical order IS the queue.** Adding to the bottom without asking whether it belongs there leaves the true priority living only in a conversation.
