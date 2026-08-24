@@ -92,6 +92,24 @@
 
 ## PART F — ADDED 2026-08-23 (the order-book fallout. Kyle: *"once we have it finalized, then I want this added to the scratch list so that we can stay on path."* Langston ruled the five pieces 2026-08-23T09:53Z; **owner + due on every one, at his insistence, before it was allowed in here.**)
 
+### ⏱ PART F — LIVE STATUS, updated 2026-08-24 after three closes (re-read owed after EVERY close)
+
+| piece | status | evidence |
+|---|---|---|
+| **F-A / MBIM switch-on** | ✅ **CLOSED + DEPLOYED `afb7d326c`** | Runs at boot; 6 symbols, drift 0.000–0.028% vs the 0.2% line, 0 drifted. **LOG-ONLY** (Langston BLOCKER-3 — the drift branch reached `orderBooks.delete` behind the FAIL-CLOSED #295 depth gate). Checksum now **18,758/18,758**. |
+| **F-F / observation epoch** | ✅ **CLOSED + LIVE** (`8088b49be` inside `afb7d326c`) | Epoch `2026-08-22T22:01:00Z`; anchor untouched at **824.11/v4**. ⚠️ **Shipped the both-leg rule into ONE READER OF FOUR** — see next row. |
+| **B-EPOCH-KEYING-PARITY** *(unplanned; the F-F remainder)* | ✅ **CLOSED + DEPLOYED `30808c6c0`** | All four dashboard figures now **−$4.91 over 6**. ★ **The honest picture is WORSE than the contaminated one** — win rate 66.7%→50.0%, PF 2.51→0.78. |
+| **F3 / F-B — entry+exit provenance stamp** | ⏳ **NEXT. Stage 1 BUILT + DEPLOYED; Stage 2 NOT STARTED.** | **Deployed:** the closed `PriceProducer` union with `producer` REQUIRED, `toCachedProducer()`'s exhaustive switch, `observedAt` carried through the `last_known_good` legs, and the three emit sites stamped. ⛔ **MISSING and it is the whole point: NOTHING WRITES PROVENANCE ONTO A TRADE ROW.** Verified by grep — no `exit_price_producer` / `entry_price_producer` column or writer exists. |
+| **F3.5 / F-C — staleness bound (#743)** | ⛔ gated on F3's measured data | threshold must come from the stamp, not from feel |
+| **F1+F2 / F-E — detector + disposition, BOTH legs** | ⛔ gated on F3 live | so the tiers are **provable**, not inferred |
+| **F4 — mid-vs-ticker divergence instrument** | ✅ **SUPERSEDED by F-A** | MBIM is that instrument, specified 2025-12-30 and now running. **Do not build a second one.** |
+| **F5 — per-strategy reach structure** | ⏳ due 2026-09-10, **BUILD yes / FIT no** | p70=1.57R still **BOUNCED under 29(a)** — rests on tier-A fills unprovable until F-E |
+| **F6 — the reset** | ⛔ gated | the epoch is SET, but the **gate** (stamp on 100% of closes · ≥50 assessable · zero contaminated on BOTH legs) is not met |
+
+**★ NEW WORK BORN 2026-08-24, all mine, all dated:** **#900** SQL↔TS parity fence · **#901** the epoch VALUE still resolves two ways (measured 4/534) · **#902** the last two unscoped epoch readers · **#903** the `/api/portfolio/overview` 401 that leaves the Dashboard balance card in skeleton-load *(and was MASKING #902)* — all `2026-09-05`. Plus **#904** (checker `kind:'entry'` satisfied by another batch's mention — **CC-A**, homed with #350 at `B-GOV-4`).
+
+⛔ **THE LESSON THAT SHOULD SHAPE F3's SCOPE, learned twice in two days at real cost:** **a batch introducing a NEW SHARED VALUE must CENSUS ITS CONSUMERS before writing the first one**, and a decided rule needs **ONE HOME plus a PARITY test** — *"we tested it"* is not evidence when the rule has copies. F3 introduces provenance fields that several readers will consume; **run the census in its pre-audit, and write the parity fence with the code, not after it.**
+
 **★★ THE STANDING FACT THAT REFRAMES EVERY NUMBER BELOW — `#741`.** The mini-book that carried the `#507` truncation defect ALSO fed a **midpoint** into the price cache (`kraken-websocket-adapter.ts:891` → `:916` `priceTick source:'kraken_ws'` → `live-pricing-adapter.ts:1022` → `getPriceWithFallback` → `currentPrice`), so it reached **every exit DECISION**, not just the taker fill PRICE. Both CC-C and Langston had accepted "a maker exit never reads the book" and both were wrong on the same one-word distinction: it does not read the book for its PRICE, but the system reads the book to decide **whether it filled**. **MEASURED across all 525 closes: 289 verified clean (55.0%) · 398 verifiable (75.8%) · 109 contaminated (20.8%) · 127 unassessable.**
 
 ⚠️ **AND THE UNASSESSABLE BUCKET IS *ENRICHED* FOR CONTAMINATION, NOT NEUTRAL (Langston, and it is the sharpest point in his ruling).** Kraken generates an OHLC bar **on trade events** ⇒ **no trades, no bar** ⇒ the 127 are the QUIET windows and the THIN symbols — *precisely where a fill at an unfilled offer is most likely.* **So 20.8% is a FLOOR, and the ±10-minute max-over-window makes it a floor twice over** (a superset window can only hide contamination, never manufacture it — the forgery-safe direction; keep it).
