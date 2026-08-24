@@ -58,7 +58,7 @@ import { getCache, setCache, coalesce } from './services/cache';
 import { metricsService } from './services/metrics-service';
 import { activeFilterPool } from './services/active-filter-pool.js';
 // P19-B8.3: pure dashboard-metric math (unit-tested — Langston Step-4 conditions).
-import { num, honestNetPnl, computeRollingEarnings, computeFeeDrag, computeMakerTakerMix, computeAvgNetR, computeMaxDrawdownUsd, computeByAssetClass, profitFactorOrNull } from './services/dashboard-metrics.js';
+import { num, honestNetPnl, computeRollingEarnings, computeFeeDrag, computeMakerTakerMix, computeAvgNetR, computeMaxDrawdownUsd, computeByAssetClass, profitFactorOrNull, isInObservationEpoch, clampWindowToEpoch } from './services/dashboard-metrics.js';
 import { marketVolumeCache } from './services/market-volume-cache.js';
 import { b5SizingAudit } from './services/b5-sizing-audit.js';
 import { livePricingAdapter, isRestFallbackSource, isPriceVenueQuiet } from './services/live-pricing-adapter.js';
@@ -13097,18 +13097,32 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         return hasExitPrice && hasCloseReason;
       });
       
-      // Phase 8.8.3-C6: Current Simulation uses openedAt >= engine_start_timestamp
-      // Other ranges use closedAt for backward compatibility
+      // ═══ B-OBSERVATION-EPOCH PARITY (2026-08-24) — THE EPOCH IS READ *HERE*, ABOVE THE WINDOW ═══
+      // It used to be read ~180 lines below, next to the lifetime block, which is WHY this window
+      // never got scoped: the value simply did not exist yet at this line. MEASURED on staging
+      // before the fix, all on ONE card at ONE moment: rolling -$4.91 over 6 trades (both-leg)
+      // beside Lifetime +$5.76 over 13 (close-keyed) beside a 66.7% win rate over 9 (24h,
+      // unscoped). Three answers to one question, each looking authoritative.
+      const _lifetime = await storage.getLifetimeScoreboard(mode);
+      const _epoch = _lifetime.epochStartedAt ? new Date(_lifetime.epochStartedAt) : null;
+
+      // ⛔ AND THE WINDOW FLOOR IS CLAMPED TOO, not just the membership test. Without this a "30d"
+      // range still *starts* 30 days back; the epoch predicate would carry it, but the clamp makes
+      // the intent explicit and keeps the two rules in one place.
+      const windowFloor = clampWindowToEpoch(startTime, _epoch);
+
+      // Phase 8.8.3-C6: Current Simulation uses openedAt >= engine_start_timestamp;
+      // other ranges use closedAt. BOTH now additionally require epoch membership on BOTH LEGS —
+      // a trade opened before the epoch carries an entry price taken through the contaminated
+      // mini-book (#741), so it is not "properly traded with the right pricing data".
       const trades = validTrades.filter(t => {
+        if (!isInObservationEpoch(t, _epoch)) return false;
         if (isCurrentSimulation) {
-          // Current Simulation: filter by when trade was OPENED
           const openedTime = t.openedAt ? new Date(t.openedAt) : null;
-          return openedTime && openedTime >= startTime;
-        } else {
-          // Other ranges: filter by when trade was CLOSED
-          const closedTime = t.closedAt ? new Date(t.closedAt) : null;
-          return closedTime && closedTime >= startTime;
+          return !!openedTime && openedTime >= windowFloor;
         }
+        const closedTime = t.closedAt ? new Date(t.closedAt) : null;
+        return !!closedTime && closedTime >= windowFloor;
       });
       
       if (trades.length === 0) {
@@ -13150,10 +13164,15 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
             avgNetR: { value: null, sampleCount: 0, excludedCount: 0 },
             maxDrawdownInWindow: { pct: null, usd: 0 },
             byAssetClass: {},
-            // Empty-state branch: `validTrades` is empty here, so every window is 0 by
-            // construction and no epoch scoping can change that. Passing null is not a default
-            // standing in for a value we failed to read — there is nothing to scope.
-            earnings: computeRollingEarnings(validTrades, now, null),
+            // ⛔ THIS COMMENT USED TO SAY "`validTrades` is empty here, so every window is 0 by
+            // construction and no epoch scoping can change that." THAT WAS FALSE, and it argued
+            // FOR the bug it was describing. Only `trades` (the WINDOWED subset) is empty on this
+            // branch; `validTrades` is the FULL valid set — 534 rows on staging. So passing `null`
+            // reported UNSCOPED all-time rolling earnings on any range whose window happened to be
+            // empty (pick "1h" on a quiet hour and the Earnings card silently leaves the epoch).
+            // Same class as the two stale comments corrected earlier today: a comment describing
+            // code that is not there, defending the very thing it got wrong.
+            earnings: computeRollingEarnings(validTrades, now, _epoch),
             avgAmountInvested: 0
           }
         });
@@ -13280,8 +13299,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // The mode's REAL starting balance (B8.2 anchor read) — null when absent
       // (Live dormant): percentage/drawdown metrics go null, never divide by zero.
       // OBJ-4: lifetime scoreboard -- epoch-scoped, anchor-independent, and unaffected by a
-      // re-anchor. Read once here rather than derived from `trades`, which is window-scoped.
-      const lifetime = await storage.getLifetimeScoreboard(mode);
+      // re-anchor. ★ Resolved ABOVE the window filter now (one read, one value) — re-reading it
+      // here would be a second call that could disagree with the one the window was built from.
+      const lifetime = _lifetime;
 
       let startingBalanceForPct: number | null = null;
       try {
@@ -13310,10 +13330,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // Calendar earnings (Today/Week/Month) over ALL valid trades — range-independent.
       // B-OBSERVATION-EPOCH: the SAME epoch the lifetime scoreboard resolved above — one read,
       // one value, so the card's four figures cannot disagree about when the window started.
-      const earnings = computeRollingEarnings(
-        validTrades, now,
-        lifetime.epochStartedAt ? new Date(lifetime.epochStartedAt) : null,
-      );
+      const earnings = computeRollingEarnings(validTrades, now, _epoch);
 
       // Phase 8.8.3-C6: Include engineRunning flag for consistency
       res.json({

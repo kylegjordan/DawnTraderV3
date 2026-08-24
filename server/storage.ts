@@ -3417,6 +3417,18 @@ export class DatabaseStorage implements IStorage {
            AND close_reason IS DISTINCT FROM 'never_filled'
            AND mode = ${mode}
            AND closed_at >= COALESCE((SELECT ts FROM epoch), '-infinity'::timestamptz)
+           -- * BOTH-LEG KEYING (added 2026-08-24). This clause was MISSING, so the lifetime
+           -- figure counted every trade that CLOSED after the epoch including those OPENED
+           -- before it -- whose entry price came through the contaminated mini-book (#741).
+           -- MEASURED on staging the moment it was found: this card showed +$5.76 over 13
+           -- trades directly beside a rolling -$4.91 over 6, because computeRollingEarnings
+           -- had the both-leg rule and this query did not. B-OBSERVATION-EPOCH DECIDED
+           -- both-leg and pinned it with four tests; it reached one reader out of four.
+           -- GUARDED so OBJ-5 holds EXACTLY: with no explicit epoch row this adds nothing.
+           -- A bare opened_at >= -infinity would NOT be equivalent -- it would drop rows
+           -- with a NULL opened_at, silently changing the no-epoch behaviour that batch
+           -- promised to leave alone.
+           AND ((SELECT ts FROM epoch) IS NULL OR opened_at >= (SELECT ts FROM epoch))
       )
       SELECT
         (SELECT ts FROM epoch)                                        AS explicit_epoch,

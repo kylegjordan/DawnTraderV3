@@ -3297,7 +3297,7 @@ export class KrakenWebSocketAdapter extends EventEmitter {
         crossedDetections: sum(r => r.crossedDetections),
       },
       bySymbol,
-      note: 'MISMATCH IS EXPECTED until the v2 instrument precision feed lands (#507 remainder): Kraken sends price/qty as JSON numbers and String() cannot reconstruct the CRC input. The INTEGRITY signal here is crossedDetections, which must be 0 (pre-fix comparator, measured live: 32.03% of book states crossed).',
+      note: 'crossedDetections must be 0 - that is the property the #507 truncation fix guarantees (pre-fix comparator, measured live: 32.03% of book states crossed). checksum matches/attempts is now a REAL signal: the v2 instrument precision feed HAS landed, so a mismatch means a genuine desync and the mismatch arm resubscribes. An earlier version of this note said MISMATCH IS EXPECTED - that was true only while the checksum was computed without per-symbol precision, and it survived past the landing of the feed it was waiting for. Corrected 2026-08-24 at the B-MBIM-SWITCH-ON Step-7 read, where it was contradicting the 100%-match figure printed beside it. NOTE the mismatch arm continues ABOVE the crossed-book detector, so a resubscribing update never reaches crossedDetections - a zero here is not comparable across that boundary.',
     };
   }
 

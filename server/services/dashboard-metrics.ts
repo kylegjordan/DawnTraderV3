@@ -93,25 +93,47 @@ export const num = (v: unknown): number => {
  * only **4** with both legs after it; and **3 of 7 still-open positions opened pre-fix**, so
  * close-time keying would keep admitting contaminated entries for days.
  */
+/**
+ * ★ THE OBSERVATION-EPOCH MEMBERSHIP TEST — **ONE HOME, because a keying rule with two homes is
+ * how this batch shipped a bug.** B-OBSERVATION-EPOCH decided BOTH-LEG keying and pinned it with
+ * four tests, but the predicate lived INLINE inside `computeRollingEarnings` — so the rolling
+ * windows honoured it while `/active-engine/trades/analytics` and `getLifetimeScoreboard` kept
+ * close-only keying. MEASURED on staging 2026-08-24, all three on ONE card at ONE moment:
+ * rolling **-$4.91 over 6 trades** (both-leg) beside Lifetime **+$5.76 over 13** (close-keyed)
+ * beside a **66.7% win rate over 9** (24h close-keyed). Three answers, one question, each
+ * looking authoritative — the exact failure §3 of that scope says the batch exists to prevent.
+ * ⇒ EXTRACTED AND EXPORTED. Every epoch-aware reader calls THIS. Do not re-inline it.
+ *
+ * A trade counts only when BOTH legs fall at or after the epoch: a trade OPENED before it carries
+ * an entry price taken through the contaminated mini-book (#741), so it is not "properly traded
+ * with the right pricing data", which is the whole purpose of the reset.
+ *
+ * FAIL-CLOSED on an unplaceable trade: an absent open time cannot be SHOWN to satisfy the test, so
+ * it does not count — the "absent wearing a value's clothes" case (#546) the epoch exists to remove.
+ * NO epoch ⇒ `true` for everything, i.e. the pre-epoch behaviour, unchanged.
+ */
+export function isInObservationEpoch(t: ClosedTradeLike, epochStartedAt: Date | null): boolean {
+  if (!epochStartedAt) return true;
+  if (!t.closedAt || new Date(t.closedAt) < epochStartedAt) return false;
+  // `openedAt` is a declared field on ClosedTradeLike — NOT cast through `any`. The cast that used
+  // to sit here would have let a renamed field compile silently and exclude every row.
+  return !!t.openedAt && new Date(t.openedAt) >= epochStartedAt;
+}
+
+/** A rolling window can never reach back past the epoch. Returns the later of the two bounds. */
+export function clampWindowToEpoch(since: Date, epochStartedAt: Date | null): Date {
+  return epochStartedAt && epochStartedAt > since ? epochStartedAt : since;
+}
+
 export function computeRollingEarnings(
   validTrades: ClosedTradeLike[],
   now: Date,
   /** Observation epoch. Trades are counted only when BOTH legs fall at or after it. */
   epochStartedAt: Date | null,
 ): { last24h: number; last7d: number; last30d: number } {
-  const inEpoch = (t: ClosedTradeLike) => {
-    if (!epochStartedAt) return true;                 // no epoch set ⇒ all history, the prior behaviour
-    if (!t.closedAt || new Date(t.closedAt) < epochStartedAt) return false;
-    // BOTH legs. An absent open time cannot be shown to satisfy this, so it does NOT count —
-    // failing closed, because a trade we cannot place relative to the epoch is exactly the
-    // "absent wearing a value's clothes" case the epoch exists to remove.
-    const opened = (t as any).openedAt;
-    return !!opened && new Date(opened) >= epochStartedAt;
-  };
-  const scoped = validTrades.filter(inEpoch);
+  const scoped = validTrades.filter(t => isInObservationEpoch(t, epochStartedAt));
   const sumSince = (since: Date) => {
-    // Clamp: a window can never reach back past the epoch.
-    const from = epochStartedAt && epochStartedAt > since ? epochStartedAt : since;
+    const from = clampWindowToEpoch(since, epochStartedAt);
     return scoped
       .filter(t => t.closedAt && new Date(t.closedAt) >= from)
       .reduce((sum, t) => sum + honestNetPnl(t), 0);
