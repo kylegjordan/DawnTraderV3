@@ -832,11 +832,43 @@ MSYS2_ARG_CONV_EXCL='*' git show "…:.claude/memory/MEMORY.md"               ->
 
 **THE SCOPE DECISION FOR KYLE/LANGSTON:** should the watchdog detect **per-symbol** staleness (one dark name among many), and if so at what threshold? ⚠ **This bears on xStock ACTIVE-FILL enablement** — the fill path is freshness-gated per symbol, so a per-symbol stall is exactly the case a total-stall detector misses. **Related: #594, #636, #583.** **OPEN (homed, owner CC-B).**
 
+★★ **MEASURED 2026-08-24 (CC-C, discharging alert `3543742c` — the per-symbol threshold question this entry has carried OPEN and UNMEASURED since 07-31).** Object: `xstock_spot_ticker_snap`, successive `captured_at` diffs **per symbol**, 24 h to 2026-08-24T10:05Z. Population: **436,350 gaps across 476 symbols.**
+
+| | |
+|---|---:|
+| p50 gap | **5.5 s** |
+| p90 | 35.7 s |
+| p99 | **681.4 s** |
+| max | 26,769 s (7.4 h) |
+| gaps > 300 s (the exit ceiling `floor_ms`) | 8,833 = **2.02%** |
+| **DISTINCT symbols with ≥1 gap > 300 s** | **476 of 476 — every single one** |
+
+★ **THE ANSWER IS NOT "THE BOOK IS SLOW" — IT IS THAT THE TAIL IS UNIVERSAL.** The typical xStock quotes every **5.5 s**, comfortably inside any sane ceiling. But **every symbol in the book goes silent for more than 5 minutes at some point in a 24-hour day**, and 1% of intervals exceed **11 minutes**. ⇒ a per-symbol staleness detector thresholded anywhere near the p50 would fire on all 476 names; thresholded past the p99 it would miss the windows that matter. **That is the shape of the scope decision this entry asks for, now stated in numbers rather than intuition.**
+
+⚠️ **THIS MEASUREMENT UNDERSTATES, BY CONSTRUCTION — #594's OWN LESSON APPLIED TO ITSELF.** A `lag`-based gap analysis **cannot see a TRAILING silence**: a symbol that went dark and STAYED dark has no subsequent row to close the interval, so it contributes **no gap at all** rather than a large one. The live `/api/xstocks/freshness` snapshot taken in the same minute shows **136 of 483 symbols in state `dead` and 169 `stale`** against the endpoint's own 90 s/600 s thresholds — a heavy standing tail that the gap distribution above is structurally blind to. **Treat 2.02% as a FLOOR on the exposure, never as the exposure.**
+
+⚠️ **AND TWO STALENESS STANDARDS ARE LIVE ON ONE OBJECT (the #641 shape, flagged not fixed):** `/api/xstocks/freshness` calls a mark fresh up to **90 s**; the exit ceiling floors at **300 s**. Neither is wrong for its own purpose, but nothing reconciles them and a reader moving between the two surfaces gets different answers about the same symbol.
+
+★ **WHAT THIS DOES *NOT* SHOW, stated so it is not read across:** the marks we DO act on are sound. The policy is fail-closed and refused every mark it could not trust — **no position was mispriced.** This is an availability-of-evaluation exposure (↔ **#563**), **not** a price-integrity one, and it does **not** belong to the `B-EXIT-PROVENANCE` price-correctness series.
+
 ### #636 OPEN 2026-07-31 (CC-B; Langston Step-4 required home, #594) — SNAP-ARRIVAL ≠ MARK-FRESHNESS: `lastDataMsgAt` CAN READ FRESH WHILE `latestEquityTick` AGES
 
 ★ **MECHANISM, CITED NOT MEASURED (rule 29c).** In `parseTickerSnap` the `!data?.symbol` guard is **unconditional**, but the mark write is **conditional** — `Number.isFinite(_mark) && _mark > 0`. ⇒ **a snap can pass the guard, be archived, stamp `lastDataMsgAt`, and write NO mark** ⇒ the DATA-liveness clock reads fresh while `latestEquityTick` — **the only venue price source for tokenized equities, consumed by `active-execution-engine.ts:141`** — goes stale.
 
 ⚠ **#594's STAMP PLACEMENT IS CORRECT AND MUST NOT MOVE TO “FIX” THIS:** stamping inside the mark branch would make `parseTickerSnap` inconsistent with `parseOhlcBar`, which has no mark at all. ⇒ **the answer is not relocating the stamp; it is deciding whether MARK-freshness needs its own detector.** ★ **NOT MEASURED: I have not established that a finite-symbol/non-finite-mark snap actually occurs in practice** — the mechanism exists in code; its frequency is unknown, and that measurement is the entry's first task. **Related: #594, #635.** **OPEN (homed, owner CC-B).**
+
+★★ **MEASURED 2026-08-24 (CC-C, discharging alert `3543742c`) — THIS ENTRY'S "FIRST TASK" IS NOW DONE, AND THE ANSWER IS *ESSENTIALLY NEVER*.** Object: `xstock_spot_ticker_snap`, 24 h to 2026-08-24T10:05Z, `NULL`-safe bucketing (`COALESCE(...,0)` so a NULL cannot silently vanish from every bucket — a first pass without it left 2 rows in no bucket at all).
+
+| bucket | rows |
+|---|---:|
+| snaps archived | **436,826** |
+| mark from a live **bid/ask mid** | **436,824** |
+| mark fell back to `last` | **2** |
+| **wrote NO mark (the #636 case)** | **0** |
+
+⇒ **the mechanism is REAL IN CODE and did not occur ONCE in 24 hours at 437 k snaps.** `parseTickerSnap`'s conditional mark write is reachable in principle; in practice the equities feed supplies a two-sided quote on **99.9995%** of snaps. **Do not spend a batch on it, and do NOT relocate the stamp** (this entry and #594 both already say why). ★ **A bonus this measurement settles:** the `last` fallback — a *carried-forward* print rather than a live quote — fired **twice**, so the mark is a live two-sided mid essentially always. That closes a fail-open worry I raised separately about `last` being economically stale while reading fresh: **not a live exposure on this path.**
+
+⚠️ **POPULATION LIMIT, NAMED:** this counts snaps that WERE archived. `bufferTickerSnap` **throttles** per `assetClass:symbol`, so it is a throttled sample of arrivals, not every arrival — and a frame rejected by the `!data?.symbol` guard upstream never reaches the table. Neither can manufacture the `no_mark_written` case this bucket counts, so the **zero holds**; but the 437 k is a sample size, not a frame count.
 
 ### #660 OPEN 2026-08-07 (Kyle challenge on the B-TRADE-TIER-REGISTER summary; CC-A) — THE TRADE TABLES’ 365d HOT WINDOW WAS INHERITED FROM A DELETE-ERA DECISION AND WAS NEVER RE-ASKED NOW THAT AGING MEANS ARCHIVING
 
