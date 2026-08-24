@@ -7,7 +7,7 @@
 | **Owner** | CC-A (Claude Old) |
 | **Dates** | 2026-08-21 → 2026-08-23 |
 | **change-class** | `non_architecture` |
-| **Reviewed ref** | `cb01111eb` (Step-4 CHANGES-NEEDED at `40b84932c` → applied → returned) |
+| **Reviewed ref** | **Step-4 APPROVED at `44b165e0b`** (two CHANGES-NEEDED rounds first: `40b84932c` enumeration drift → `cb01111eb` truncation blocker → approved). Two riders applied after approval. |
 | **CI** | **4/4 GREEN, verified PER-JOB** — run `32636232272` |
 | **Deploy** | **NONE — judged explicitly, see §4** |
 | **Issues** | #739, #740, #741 opened · #732 tripwired · alert `fe7c2385` acked |
@@ -77,6 +77,11 @@
 
 **#741 — a review dispatch that exceeds Langston's 900s ceiling fails SILENTLY.** Measured: three consecutive failures at ~15-minute intervals, then parked. **From the sender's side it is indistinguishable from a busy reviewer**, and the polite response re-triggers it. **The cause was mine** — four asks in one invocation. The rule (*one gate per dispatch, cheapest first, evidence in the message*) is now in the step-4 skill. **Honest residual: this fixes the sender's side only.**
 
+**THE ALERT-ROUTING TRUNCATION (Langston Step-4 blocker).** The owner marker was matched against a **400-character truncation** while it sits on the **last line** of a triage whose median length is ~2,300 characters. **Measured, both tailed files, all history: 1,026 of 1,031 markers past byte 400 - 99.5% discarded before the regex ran.** Old code routed **4**; the fix routes **1,031 - 100% of well-formed markers.**
+⚠️ **AND THE CAUSE I HAD COMMITTED WAS WRONG - STRUCK, NOT SOFTENED.** I attributed the cross-session wake to a missing `CC-C` alternative and wrote that into a code comment AND the alert protocol, where it read as established. **The marker never reached the alternation at all.** Right observation, adjacent object. Both defects were real; only the attribution was wrong.
+★ **MY RESIDUAL OF "8 FAILING" WAS WRONG IN MY OWN DISFAVOUR AND LANGSTON CORRECTED IT UPWARD.** I reported 8 markers failing as malformed. He enumerated all 8: **every one is his own PROSE discussing the format in backticks. ZERO genuine markers fail to route.** They are also the multiplicity hazard, which makes **last-match** load-bearing rather than stylistic.
+★★ **THE LESSON THAT LET IT PAST ME, now a rule in `workflow-07-verify-cc`: A POSITIVE CONTROL MUST MATCH THE POPULATION'S *SIZE*, NOT ONLY ITS *STREAM*.** Six controls - right stream, right field, right kind, all passing - all a few hundred characters against a median of 2,300. **The controls were correct and the conclusion was false, because they were the wrong SHAPE.**
+
 **The alert-marker suppression fix.** A marker naming CC-C matched nothing, so **no session was silenced** and an alert owned by one woke others.
 
 ---
@@ -104,6 +109,8 @@
 - **The crew-board CODE is not removed** — only the two rules. Homed to `B-CREW-BOARD-REMOVAL`, CC-A, due 2026-09-05.
 - **Infra Claude's onboarding is deferred by Kyle**, deliberately, date open — named so it is not lost.
 - **Langston's clearance covers the repo artifact, NOT the laptop deployment.** The wake filter's live twin is off his filesystem.
+- **A KNOWN, HOMED GAP IN THE SAME FILE:** the marker path now reads the untruncated body, but the **other** match sites still read the 400-char string. Langston measured **~118 of 2,820 of his non-marker replies name a CC only past byte 400** (~4%) - they wake nobody, **failing toward SILENCE, not noise.** The comment asserting a global invariant was narrowed to the marker path rather than left overclaiming. **Sweep homed: `B-CREW-BOARD-REMOVAL`, CC-A, due 2026-09-05.**
+- **BOARD, and I got this wrong:** I told Langston I had "found no card" **without having looked.** Both cards exist - `B-RULES-1c` (`PVTI_lAHODmulEM4BfQP4zg1qnO4`) and `B-RULES-1d` (`PVTI_lAHODmulEM4BfQP4zg1X8Ig`). **An asserted absence with no check behind it is the exact class this batch spent the day fixing.** Both moved to `Governance`, `Blocked on = Kyle`, read back to confirm.
 
 ---
 

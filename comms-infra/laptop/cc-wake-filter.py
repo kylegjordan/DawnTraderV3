@@ -222,11 +222,20 @@ for raw in sys.stdin:
                 continue
             kind = d.get("kind") or ""
             # Defang once, at the single point every JSON-sourced print path draws from.
-            # ⛔ `text` IS TRUNCATED AND IS FOR PRINTING ONLY. Anything that MATCHES must use
-            # `raw` — see the langston_outbound branch: the owner marker is the LAST line of a
-            # triage whose median length is 2,289 chars, so [:400] discarded 99.6% of them.
-            raw = d.get("text") or ""
-            text = _defang(raw[:400])
+            # ⛔ `text` IS TRUNCATED (400 chars) AND IS FOR PRINTING. The OWNER-MARKER match below
+            # uses `body_raw` instead: the marker is the LAST line of a triage whose median length
+            # is ~2,300 chars, so [:400] discarded 99.5% of them before the regex ever ran.
+            # ⚠️ SCOPE OF THAT CLAIM, NARROWED DELIBERATELY (Langston rider 1, 2026-08-24): this comment
+            # once asserted "anything that MATCHES must use raw" — a GLOBAL invariant this file does
+            # NOT hold. The other match sites in this branch still read truncated `text`, and that is
+            # a KNOWN, HOMED gap, not an oversight: ~118 of 2,820 of his non-marker replies name a CC
+            # only past byte 400 and wake nobody (~4%, his measurement, order-of-magnitude). It fails
+            # toward SILENCE, not noise. Sweep homed to `B-CREW-BOARD-REMOVAL`, owner CC-A, due
+            # 2026-09-05. DO NOT re-broaden this comment without doing that sweep.
+            # ★ `body_raw`, not `raw`: `raw` is the stdin loop variable ~30 lines up (Langston rider 2)
+            # — safe today because the loop rebinds each iteration, but a live trap for the next edit.
+            body_raw = d.get("text") or ""
+            text = _defang(body_raw[:400])
             tp = "Discord" if d.get("transport") == "discord" else "Telegram"
             if kind == "":
                 deliver, body = addressed_to_me(text)
@@ -247,7 +256,7 @@ for raw in sys.stdin:
                 # match — so a first-match would route off a marker being QUOTED or discussed
                 # earlier in the body rather than the one being ISSUED at the end.
                 mo = None
-                for mo in ALERT_OWNER_RE.finditer(raw):
+                for mo in ALERT_OWNER_RE.finditer(body_raw):
                     pass
                 if mo:
                     if mo.group(1).upper() == ALIAS:
