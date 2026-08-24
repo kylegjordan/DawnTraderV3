@@ -11,7 +11,7 @@
 
 import { krakenWebSocketAdapter } from '../../exchanges/kraken/kraken-websocket-adapter.js';
 import { KrakenService } from '../../exchanges/kraken/kraken.js';
-import { normalizeToInternalSymbol, toKrakenRest } from '../../markets/kraken-symbol-resolver.js';
+import { toKrakenRest } from '../../markets/kraken-symbol-resolver.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -121,13 +121,19 @@ class MiniBookIntegrityMonitor {
     // into its `last_known_good` legs (#743) — so a naive switch-on would have AGGRAVATED THE VERY
     // STALENESS DEFECT THIS MONITOR EXISTS TO DETECT. The fix is a bounded rotating slice: full
     // coverage on a ~1h cycle instead of a 291-call pass every 5 minutes.
+    // ⛔ BLOCKER-2 (Langston): `take` must be clamped to the universe size. Unclamped, at N=10 and
+    // startIdx=0 the wrap condition is true and `slice(0,20)` re-appends the same 10 — every symbol
+    // audited TWICE, doubled REST calls, `totalChecks` double-counted, and a drifted symbol
+    // soft-resubscribed twice in one pass. REACHABLE AT BOOT: the first audit fires 30s after
+    // `start()`, before subscriptions have ramped to full size.
+    const take = Math.min(this.AUDIT_SLICE, allSubscribed.length);
     const startIdx = this.rotationCursor % allSubscribed.length;
     const subscribedSymbols = allSubscribed
-      .slice(startIdx, startIdx + this.AUDIT_SLICE)
-      .concat(startIdx + this.AUDIT_SLICE > allSubscribed.length
-        ? allSubscribed.slice(0, (startIdx + this.AUDIT_SLICE) - allSubscribed.length)
+      .slice(startIdx, startIdx + take)
+      .concat(startIdx + take > allSubscribed.length
+        ? allSubscribed.slice(0, (startIdx + take) - allSubscribed.length)
         : []);
-    this.rotationCursor = (startIdx + this.AUDIT_SLICE) % allSubscribed.length;
+    this.rotationCursor = (startIdx + take) % allSubscribed.length;
 
     console.log(`[8.9.5][MBIM] Starting integrity audit for ${subscribedSymbols.length} of ${allSubscribed.length} symbols (rotating slice, cursor→${this.rotationCursor})`);
     
@@ -152,8 +158,6 @@ class MiniBookIntegrityMonitor {
           // Fallback to simple concatenation (ADA/USD → ADAUSD)
           krakenPair = symbol.replace('/', '');
         }
-        console.log(`[8.9.5-P][MBIM] Auditing ${symbol} as ${krakenPair} for REST cross-check`);
-        
         const restTickers = await this.krakenService.getTicker(krakenPair);
         
         if (!restTickers || Object.keys(restTickers).length === 0) {
@@ -194,10 +198,19 @@ class MiniBookIntegrityMonitor {
           await this.triggerSoftResubscribe(symbol, driftPct);
         }
 
-        await this.delay(100);
-
       } catch (err: any) {
         console.error(`[8.9.5][MBIM][ERROR] ${symbol}:`, err?.message || err);
+      } finally {
+        // ⛔ B-MBIM-SWITCH-ON BLOCKER-1 (Langston): this spacing MUST be in a `finally`.
+        // It used to sit at the bottom of the try, below the drift branch — so all four `continue`s
+        // above AND the catch skipped it. And `KrakenService.getTicker` → `makePublicRequest`
+        // (`kraken.ts:177-195`) is a BARE `fetch` with no limiter that THROWS on any Kraken
+        // `data.error` — which is exactly what a rate-limit response is.
+        // ⇒ the backoff disarmed itself precisely on the failure it exists to back off from.
+        // ⚠️ AND MY RATE PREMISE WAS WRONG IN THE DANGEROUS DIRECTION: these REST calls do NOT pass
+        // through `price-cache.ts` and do NOT consume its 10-weighted-req/s budget — they COMPETE
+        // with it from outside. So the slice and this delay are the ONLY bound that exists.
+        await this.delay(100);
       }
     }
 

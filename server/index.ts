@@ -1572,6 +1572,9 @@ app.use((req, res, next) => {
       centralClock.stop();
       priceCache.shutdown();
       systemHealth.stop();
+    // B-MBIM-SWITCH-ON: paired with the start() above. Langston caught that systemHealth had a
+    // stop() here and MBIM did not — an interval that outlives shutdown keeps hitting Kraken.
+    miniBookIntegrityMonitor.stop();
 
       // B65.2 (2026-04-23): Synchronously persist trailing-exit states so an
       // in-flight break-even lock or moonbag trailing stop survives a restart.
