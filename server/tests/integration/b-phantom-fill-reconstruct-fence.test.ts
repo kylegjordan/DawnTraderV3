@@ -20,14 +20,20 @@
  * before-snapshot to diff against, so "was `pnl` overwritten?" is not directly observable after
  * the fact. What IS observable is a relation the recorded columns satisfy and a rewritten one
  * would not: `gross_pnl - total_cost = pnl`, which held on 478/478 rows when measured against
- * the correct column. The reconstruction is computed from the BID and is a DIFFERENT number, so
+ * the correct column. Any reconstruction F-E writes is a DIFFERENT number from the recorded one, so
  * if it were ever written into `pnl`, the relation would break on exactly the flagged rows. The
  * fence therefore tests the relation, not the intent — and says so, because a reader who thinks
  * this directly proves "no overwrite" would over-trust it.
  *
- * NEGATIVE CONTROL, kept because it is what made the original detector a measurement rather than
- * a number: a maker exit fills at its own resting limit and NEVER reads the order book, so no
- * maker row may ever be flagged. If one ever is, the detector has stopped measuring the book.
+ * ⛔ THE MAKER NEGATIVE CONTROL THAT USED TO BE DESCRIBED HERE IS WITHDRAWN, NOT WEAKENED.
+ * It read: "a maker exit fills at its own resting limit and NEVER reads the order book, so no maker
+ * row may ever be flagged." #741 falsified it — the maker exit does not read the book for its
+ * PRICE, but the system reads the book to decide WHETHER IT FILLED, and 37 maker exits closed at
+ * prices the venue never printed. Langston withdrew the premise and the floor built on it.
+ * ★ I removed it from the assertion below and left it standing HERE for one edit — the same
+ * two-answers-in-one-document failure I have been corrected for three times. Recorded rather than
+ * quietly fixed. F-E re-warrants a control on MAGNITUDE (the two populations separate by ~23× in
+ * median bps — a measurement) rather than on the fill-type premise.
  *
  * READ-ONLY: SELECTs and one static file read. No seeding, no writes.
  */
@@ -160,12 +166,25 @@ describe(TAG, () => {
       `[${TAG}] ${r.broken} of ${r.flagged} flagged rows no longer satisfy gross - cost = pnl. ` +
       `Something wrote a reconstructed value over a recorded one.`,
     ).toBe(0);
-    // NEGATIVE CONTROL — the leg that makes the flag a measurement rather than a number.
+    // ⛔ THE MAKER NEGATIVE CONTROL IS REMOVED, NOT WEAKENED — its warrant was WITHDRAWN.
+    // It asserted `maker_flagged === 0` on the reasoning that "a maker fill happens at its own
+    // resting limit and never touches the order book, so it cannot carry a ghost-level price."
+    // #741 FALSIFIED exactly that: the maker exit does not read the book for its PRICE, but the
+    // system reads the book to decide WHETHER IT FILLED — 37 maker exits closed at prices the venue
+    // never printed. Langston withdrew the premise and the 164.8 bps floor built on it.
+    //
+    // ★ AND IT WOULD HAVE SHIPPED AS A GREEN CI GATE. Under the columns-only migration nothing is
+    // ever flagged, so `maker_flagged` is 0 over an EMPTY population and the assertion passes —
+    // publishing a withdrawn claim as a passing test. The two legs above print their denominators
+    // precisely so a zero cannot be read as evidence; this one did not. Caught by Langston as a
+    // blocking condition on the ALTER-only ruling.
+    //
+    // F-E re-warrants a control on MAGNITUDE (the maker and taker populations separate by ~23× in
+    // median bps, which is a measurement rather than a premise) — not on the fill-type premise.
     expect(
-      Number(r.maker_flagged ?? 0),
-      `[${TAG}] ${r.maker_flagged} MAKER exits are flagged. A maker fill happens at its own resting ` +
-      `limit and never touches the order book, so it cannot carry a ghost-level price. If this is ` +
-      `non-zero the detector has stopped measuring the book.`,
+      Number(r.flagged ?? 0),
+      `[${TAG}] ${r.flagged} rows are flagged, but only F-E may set phantom_fill_suspect. Anything ` +
+      `flagged before it lands was written by the WITHDRAWN detector and must be re-stamped.`,
     ).toBe(0);
     console.log(`[${TAG}] flagged=${r.flagged} reconstructed=${r.reconstructed} maker_flagged=${r.maker_flagged}`);
   });
