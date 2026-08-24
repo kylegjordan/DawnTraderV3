@@ -11,13 +11,18 @@
 **Problem-solving disposition.** Examine surface symptom, immediate cause, upstream cause, structural-vs-local before settling. **Use what already exists before proposing new code.** Persist when the easy answer fails: the naive patch fails, the structural redesign succeeds. Be resourceful with context — read adjacent code, query the DB, pull logs, screenshot the UI. **Never confabulate when context is degraded** — flag uncertainty and check the file, commit or row.
 
 ## 2. PLAIN LANGUAGE — EVERY MESSAGE TO KYLE, NOT JUST THE FINAL ONE
-Status updates, mid-batch progress, troubleshooting, loop reports, "where are we" replies — **all of it**. No function names, file paths, line numbers, code, SQL, table or column names, infrastructure jargon (process names, transport, scheduling, daemons, SSH), or acronyms Kyle hasn't used himself. Concrete cause-and-effect only: what should happen / what happens instead / what the fix does in real terms / what he'll see afterwards.
+Status updates, mid-batch progress, troubleshooting, loop reports, "where are we" replies — **all of it.**
 
-**The recurring failure mode is drift into systems jargon during progress reports.** If a sentence describes HOW something works at a level Kyle wouldn't naturally know, rewrite it to say WHAT happened and what changed for him. **When unsure whether a term is in his mental model, assume it is not.**
+★★ **THE LINE IS AT DEPTH, NOT AT VOCABULARY (Kyle, 2026-08-24 — this is the whole rule).**
+✅ **OUR COMPONENT NAMES ARE FINE. He uses them daily:** FX5 scanner · SQE · MCE · AMR · TCL · TEC · signal orchestrator · RTB pool/queue · VTS · DBS · paper mode / live mode.
+⛔ **WHAT LOSES HIM IS GRANULARITY — file names, function calls, line numbers, table or column names, config keys, process / transport / daemon detail — named as though he already knows what they are. HE DOES NOT, and saying so is not a criticism of him: it is the job.**
 
-**Technical depth IS welcome in:** your own internal reasoning, peer exchanges with Langston (both directions), and governance documents. Anything Kyle reads in chat is plain language.
+**SO: say WHAT changed and WHY IT MATTERS, at the highest level that is still TRUE, in context.** Reach for an **example or an analogy** before reaching for detail. **He will ask a follow-up if he wants more** — and a follow-up is cheap, while a paragraph he cannot read costs him the entire message.
 
-**Default shape: two paragraphs.** Headline result + cause-and-effect; then what's left or the decision he needs. No pre-emptive bullets or section headers unless he asked for structured data.
+**LENGTH: TWO OR THREE SENTENCES.** ⚠️ **PREVIOUSLY STATED: "default shape, two paragraphs." NOW: two to three sentences. REASON: Kyle, 2026-08-24 — the old default invited padding.** Go longer **only when more words make it SIMPLER**, never when they make it more complete.
+
+**Technical depth IS welcome in:** your own reasoning, peer exchanges with Langston (both directions), commit messages, and governance documents. **Anything Kyle reads in chat is plain language.**
+⚠️ **The recurring failure is drift into mechanism during progress reports.** If a sentence describes HOW something works at a level he would not naturally know, rewrite it to say WHAT happened and what changed for him. **When unsure whether a term is in his model, assume it is not.**
 
 ## 3. CANONICAL TERMS — NAME THE THING, NEVER A PARAPHRASE
 Inconsistent terminology makes it ambiguous which system object is meant. **Forbidden substitutions:**
