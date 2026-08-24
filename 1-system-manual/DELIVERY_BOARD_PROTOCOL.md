@@ -46,6 +46,19 @@
 
 ⚠️ **Write it for someone who has not read the batch documents, because that is exactly who is reading it.**
 
+## 3b. ★ WHO CREATES A CARD, AND WHAT TRIGGERS IT (Kyle directive 2026-08-24 — previously UNWRITTEN)
+
+⚠️ **THIS WAS A REAL GAP.** §4 said a card must exist before Step 1 and that a batch without one is invisible — but **nothing said who puts it there or when.** So "when does a card get created" was answered by whoever happened to be looking, which means work with no card was both invisible AND nobody’s fault.
+
+**WHO: the session that will OWN the work creates its own card.** Not Kyle, not Langston, not whoever noticed.
+
+**THE TWO TRIGGERS — these are the moments, and there is no third:**
+1. **A FINDING DURING A BATCH CREATES A NEW BATCH OR SUB-BATCH.** ⇒ **the session that surfaced it creates the card THEN AND THERE**, in the same turn it decides the work is real. ★ **This is the same instant §9.4 requires a named owner and a dated home — the card IS that home made visible.** Do not defer it to "when I start it".
+2. **PHASE PLANNING.** When a phase closes and the next is opened with Langston, the phase is split into batches and each is assigned to a session. ⇒ **each session then creates cards for ITS OWN assigned batches**, all into `Backlog`, and moves the one it is starting to `Scope`.
+
+**PLACEMENT: `Backlog` is the default and the normal entry point.** A card goes straight to `Scope` only when work begins immediately — something urgent enough to jump the queue.
+⛔ **AND CREATING A CARD INCLUDES PLACING IT IN THE ORDER (§4b): `Backlog` is not a bag — its vertical order IS the queue.** Adding to the bottom without asking whether it belongs there leaves the true priority living only in a conversation.
+
 ## 4. ★ Card-update steps — folded into the 11-step workflow
 
 **These are additions to the existing workflow, not a parallel process.** The card moves when the work moves; it is never a separate status to remember.
@@ -63,7 +76,7 @@
 | **Step 11** (completion report) | **Blocked on = Langston** for his sign-off, then **Blocked on = Kyle** for acknowledgement, then → `Complete`. |
 | **any point** | Waiting on a Kyle decision, credential or approval ⇒ **Blocked on = Kyle**. The card keeps its column. |
 
-★ **THE OWNER MOVES THE CARD. LANGSTON SETS `Review`.** *(Kyle's decision, 2026-08-03.)* His approval gates the move but is not itself the move — otherwise the board freezes whenever he is mid-review, at four separate points per batch. ✅ **He HAS board write access as of 2026-08-04** — Kyle-issued classic token, `project` scope only (board read/write, zero code access — the reviews-never-pushes rule is preserved by construction), installed at `/etc/langston/github-board.env`, **verified live: read, write and delete all exercised as his user.** He sets `Review` himself; the how-to is in his auto-loaded MEMORY.md. His actual words remain in Discord and the batch documents — the board is the third place a verdict is written, never the only one.
+★ **THE OWNER MOVES THE CARD. LANGSTON SETS `Review`.** ⛔ **AND THAT INCLUDES AFTER HE APPROVES — HIS APPROVAL IS NOT THE MOVE.** He sets `Review = Approved`; **the OWNER then moves the card to the next column and updates `Blocked on`.** *(Kyle asked directly, 2026-08-24. If his approval also moved the card, the board would freeze every time he is mid-review — at FOUR gates per batch.)* *(Kyle's decision, 2026-08-03.)* His approval gates the move but is not itself the move — otherwise the board freezes whenever he is mid-review, at four separate points per batch. ✅ **He HAS board write access as of 2026-08-04** — Kyle-issued classic token, `project` scope only (board read/write, zero code access — the reviews-never-pushes rule is preserved by construction), installed at `/etc/langston/github-board.env`, **verified live: read, write and delete all exercised as his user.** He sets `Review` himself; the how-to is in his auto-loaded MEMORY.md. His actual words remain in Discord and the batch documents — the board is the third place a verdict is written, never the only one.
 
 ## 4b. ★ THE BACKLOG IS ORDERED — top of the column IS the next thing (Kyle directive 2026-08-03)
 

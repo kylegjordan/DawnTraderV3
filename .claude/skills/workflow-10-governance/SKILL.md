@@ -60,6 +60,10 @@ Sync `/home/langston/MEMORY.md` in the same turn you update your own: batch clos
 ⇒ **When your batch touches a component, re-read every NUMBER the governance docs state about it and confirm each against the live value.** On divergence: **fix the doc, or fix the value, and say which** — never leave both standing. **A rule that a document and a database disagree about is not a rule.**
 
 
+## ⛔ BEFORE THIS STEP LEAVES YOUR HANDS — REVIEW IT THE WAY LANGSTON WOULD
+**Against the OBJECT, not your memory** (`CONDUCT.md` §6b — the full mechanism and why it is positional rather than clever). Before claiming a document updated: **re-open it and confirm the CONTENT changed** — not that you opened it, not that you meant to. And re-check any NUMBER it states against the live value.
+✅ **Fix what you find and move on.** In-task corrections belong in the commit message, **never in a report to Kyle.**
+
 ## ☑ THE DELIVERY BOARD — MOVE THE CARD WHEN THE WORK MOVES
 Move the card to **`Governance`**.
 ★ **YOU move the card; LANGSTON sets `Review`.** *(Kyle 2026-08-03 — his approval gates the move but is not the move, or the board freezes every time he is mid-review.)*

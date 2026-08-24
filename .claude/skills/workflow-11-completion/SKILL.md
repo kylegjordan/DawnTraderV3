@@ -31,6 +31,10 @@ Report to Kyle in the `CONDUCT.md` §6 format, move the board card, and **update
 ⇒ **A deferral written only into a CODE COMMENT is invisible to every process we have.** It needs a `RUNNING_ISSUES.md` entry with **a named owner and a DATE**, and the completion report must name it. **"In Phase 19", "post-launch" and "later" are not homes.**
 
 
+## ⛔ BEFORE THIS STEP LEAVES YOUR HANDS — REVIEW IT THE WAY LANGSTON WOULD
+**Against the OBJECT, not your memory** (`CONDUCT.md` §6b — the full mechanism and why it is positional rather than clever). Before the report leaves: **re-verify every objective marked YES against its evidence**, and re-read every claim asking what would have to be true for it to be wrong.
+✅ **Fix what you find and move on.** In-task corrections belong in the commit message, **never in a report to Kyle.**
+
 ## ☑ THE DELIVERY BOARD — MOVE THE CARD WHEN THE WORK MOVES
 **Blocked on = Langston** for his sign-off → then **Blocked on = Kyle** for acknowledgement → then move to **`Complete`**. **Not before Kyle acknowledges.**
 ★ **YOU move the card; LANGSTON sets `Review`.** *(Kyle 2026-08-03 — his approval gates the move but is not the move, or the board freezes every time he is mid-review.)*

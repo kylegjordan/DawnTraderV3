@@ -42,6 +42,10 @@ Watch for his pickup. **No engagement in ~8-10 min → re-poke. Escalate after 2
 3. **PUT THE EVIDENCE IN THE MESSAGE.** Every file he must open is minutes off the ceiling. Inline the load-bearing hunks; stage long context as a FILE in `/home/langston/inbox/<BATCH-ID>/` and name the path.
 4. ⛔ **A DISPATCH IS NOT "SENT" UNTIL YOU HAVE SEEN IT COMPLETE.** If a reply is slow, **read the bridge log before re-poking** — `journalctl -u discord-langston-bridge.service | grep -iE 'invoking claude|bridge error|PARK'`. `invoking claude (prompt=N chars)` means it started; `bridge error … suppressed` means it died and **he never saw your message at all.**
 
+## ⛔ BEFORE THIS STEP LEAVES YOUR HANDS — REVIEW IT THE WAY LANGSTON WOULD
+**Against the OBJECT, not your memory** (`CONDUCT.md` §6b — the full mechanism and why it is positional rather than clever). Before dispatching: **re-derive every figure in the change list at the ref.** Langston will, and a number he refutes costs him a trace and you a round.
+✅ **Fix what you find and move on.** In-task corrections belong in the commit message, **never in a report to Kyle.**
+
 ## ☑ THE DELIVERY BOARD — MOVE THE CARD WHEN THE WORK MOVES
 The card **STAYS in `Implementation`**; set **Blocked on = Langston**. ⚠️ **On a SENT-BACK verdict the card does NOT move** — only the `Review` field changes, and **LANGSTON sets `Review` himself**, not you.
 ★ **YOU move the card; LANGSTON sets `Review`.** *(Kyle 2026-08-03 — his approval gates the move but is not the move, or the board freezes every time he is mid-review.)*

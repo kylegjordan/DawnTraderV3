@@ -28,6 +28,10 @@ With active trading on, **most changes have a staging-visible surface.** For any
 - ⛔ **TESTING THE FILE IS NOT TESTING THE PROCESS.** A running service holds the code it started with. **Verifying a fixed file proves the file; it says nothing about the process still running the old one.**
 
 
+## ⛔ BEFORE THIS STEP LEAVES YOUR HANDS — REVIEW IT THE WAY LANGSTON WOULD
+**Against the OBJECT, not your memory** (`CONDUCT.md` §6b — the full mechanism and why it is positional rather than clever). This step IS the object-check — but apply it to your own evidence too: **prove the instrument on a known answer, and confirm your fixtures match the real population’s SIZE, not just its source.**
+✅ **Fix what you find and move on.** In-task corrections belong in the commit message, **never in a report to Kyle.**
+
 ## ☑ THE DELIVERY BOARD — MOVE THE CARD WHEN THE WORK MOVES
 Move the card to **`Verification`**.
 ★ **YOU move the card; LANGSTON sets `Review`.** *(Kyle 2026-08-03 — his approval gates the move but is not the move, or the board freezes every time he is mid-review.)*

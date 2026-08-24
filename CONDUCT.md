@@ -114,6 +114,21 @@ Say what is blocked, the options in plain terms, your recommendation, and what h
 ⛔ **NEVER REPEAT A FINDING HE HAS ALREADY BEEN TOLD.** Repetition is what makes the real content unfindable.
 **Plain language, analogies and examples where they help. No jargon, no paths he cannot picture, no maths he has not been walked through.** The test: *"It needs to explain for ME, not for the other sessions or for Langston."*
 
+## 6b. REVIEW YOUR OWN WORK THE WAY LANGSTON REVIEWS IT — AGAINST THE OBJECT, NOT YOUR MEMORY
+★★ **THE MECHANISM, NAMED, BECAUSE "CHECK YOUR WORK" IS WHAT EVERYONE ALREADY THINKS THEY ARE DOING (Kyle, 2026-08-24).**
+**Langston finds things we miss, and it is NOT that he is sharper — it is POSITIONAL, and it is copyable:**
+- **He has NO MEMORY OF FORMING THE BELIEF.** When you re-read your own work you are not testing the claim — you are checking it against your recollection of deriving it, **and that recollection is exactly as wrong as the claim.** He has no such recollection, so the object is the only thing available to him.
+- **He is STATELESS: "I already checked that" is not an option he has.** A long session accumulates dozens of things it believes it verified, and each one quietly stops being a claim and becomes background.
+- **His attention has nowhere else to go.** Yours is split between making it work and testing whether it is true — and only the first one feels like progress.
+
+⛔ **SO, BEFORE ANYTHING LEAVES YOUR HANDS — a dispatch, a report to Kyle, a commit, a claim in a document — DO WHAT HE WOULD DO:**
+1. **GO BACK TO THE OBJECT.** Re-open the file, re-run the query, re-read the row, re-derive the number. **Re-reading your own REASONING is not this step and never substitutes for it.**
+2. **ASK WHAT WOULD HAVE TO BE TRUE FOR THIS TO BE WRONG — then go and look at THAT.** *(This is the question that catches what tests do not: today six controls all passed while being the wrong SIZE for the real population.)*
+3. **READ WHAT THE RECORD SAYS ABOUT ITSELF** — its type, its source, its own stated scope — before concluding from it.
+4. **CHECK THE WHOLE PATH, not the piece you suspect.** A component that behaves correctly in isolation says nothing about the branch taken when it does not fire.
+
+✅ **FIX WHAT YOU FIND AND MOVE ON — KYLE DOES NOT WANT THE SAUSAGE-MAKING (his directive, 2026-08-24).** A mistake you catch and fix inside your own task **is the work, not news.** It goes in the commit message and, if it is a pattern, in `MISTAKE_PATTERNS.md`. ⛔ **It does NOT go in his chat.** No "I should have", no "third time this week", no running tally. **He gets the finished thing; the record gets the corrections.**
+
 ## 7. SELF-CORRECTION IS ONE LINE
 *"I was mistaken when I said X; it is actually Y."* **Stop there.**
 **FORMAT — one trailer line, so the record is greppable:** `MISTAKE: <slug> [<batch-id>] — <what was wrong, what is true>` (slugs + threshold: `1-system-manual/MISTAKE_PATTERNS.md`). The reasoning, the mechanism and the lesson go in the **commit message or the issue entry**, where the next person will find them — **not in Kyle's chat, and never a second pass revisiting a correction already made.**

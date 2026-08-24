@@ -31,6 +31,10 @@ git commit -F <msgfile> -- <the same explicit paths>
 ★ **THE GENERAL LESSON, which outlives this hook: A MATCHING NAME IS NOT A MATCHING THING.** Explicit paths protect you from the wrong FILE and are structurally blind to the wrong CONTENT.
 
 
+## ⛔ BEFORE THIS STEP LEAVES YOUR HANDS — REVIEW IT THE WAY LANGSTON WOULD
+**Against the OBJECT, not your memory** (`CONDUCT.md` §6b — the full mechanism and why it is positional rather than clever). Before committing: **read the staged hunk, not the filename**, and re-check that what you changed does what you say it does — at the code, not from the plan you wrote earlier.
+✅ **Fix what you find and move on.** In-task corrections belong in the commit message, **never in a report to Kyle.**
+
 ## ☑ THE DELIVERY BOARD — MOVE THE CARD WHEN THE WORK MOVES
 Move the card to **`Implementation`**, **Blocked on = Nothing**.
 ★ **YOU move the card; LANGSTON sets `Review`.** *(Kyle 2026-08-03 — his approval gates the move but is not the move, or the board freezes every time he is mid-review.)*

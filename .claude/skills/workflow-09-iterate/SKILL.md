@@ -15,6 +15,10 @@ If any objective is not met: **fix → Langston reviews → push → CI → depl
 **And apply §9.5(a-ii) to every removal:** a deletion is verified by *zero callers AND every state it wrote has no surviving reader* — never by zero callers alone. **A removed writer whose reader survives produces no compile error and no failing test**, so caller-tracing, green CI and a clean `tsc` all pass while the deletion silently breaks a live dependency.
 
 
+## ⛔ BEFORE THIS STEP LEAVES YOUR HANDS — REVIEW IT THE WAY LANGSTON WOULD
+**Against the OBJECT, not your memory** (`CONDUCT.md` §6b — the full mechanism and why it is positional rather than clever). Before calling an objective green: **re-run the measurement that showed it red.** A different instrument showing a different number proves nothing.
+✅ **Fix what you find and move on.** In-task corrections belong in the commit message, **never in a report to Kyle.**
+
 ## ☑ THE DELIVERY BOARD — MOVE THE CARD WHEN THE WORK MOVES
 Card stays in **`Verification`** while you iterate. **Do not move it backwards** — the column reflects the furthest point reached, not the current activity.
 ★ **YOU move the card; LANGSTON sets `Review`.** *(Kyle 2026-08-03 — his approval gates the move but is not the move, or the board freezes every time he is mid-review.)*
