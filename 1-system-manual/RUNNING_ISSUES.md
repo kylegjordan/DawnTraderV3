@@ -3315,3 +3315,38 @@ return currentPrice <= state.currentStopPrice;
 **⚠️ NOT YET ESTABLISHED, and I am not guessing:** whether the sweep **errors loudly** on the missing column (someone would likely have noticed) or **skips silently** (in which case it has been failing unobserved since B74). **That distinction decides whether this is a config gap or a silent-failure class, and it is the first thing the fix must determine.**
 **ALSO SURFACED:** `equity_spot_ohlc_1m` / `equity_perp_ohlc_1m` retention constants match **no table in the sweep** (which uses the `xstock_*` names) — **likely orphans from the P19-B-RENAME**, i.e. retention values configured for tables that no longer carry those names. Separate disposition, same audit.
 **HOME:** B-CRYPTO-UNBLOCK obj-5 — it IS the objective, not an aside.
+
+### #900 OPEN 2026-08-24 (CC-C; **Langston Step-4 condition 1**, `B-EPOCH-KEYING-PARITY`) — ★ THE EPOCH *RULE* NOW HAS ONE HOME; THE PARITY FENCE ONLY PROVES **TS↔TS**, AND THE READER THAT WAS WRONG BY THE LARGEST MARGIN IS THE **SQL** ONE
+
+**LANGSTON'S CATCH, and he is right — it is the same class I had just corrected one site earlier.** `B-EPOCH-KEYING-PARITY` extracted `isInObservationEpoch` and pinned it with a fence whose *"★ THE PARITY ITSELF"* block asserts agreement between **`isInObservationEpoch` and `computeRollingEarnings` — a function and its own caller, both in TypeScript.**
+⛔ **`getLifetimeScoreboard` is a SECOND IMPLEMENTATION OF THE SAME RULE IN A SECOND LANGUAGE, and it has NO TEST AT ALL.** It is also the reader that was wrong by the largest margin (+$5.76/13 against the true −$4.91/6). **My fence header claims *"the production readers all call it."* The SQL does not.** ⇒ **a comment describing code that is not there — the third instance of that class in one day.**
+
+★ **THE SHAPE ALREADY EXISTS IN THIS REPO AND WAS BUILT YESTERDAY:** `server/tests/integration/b-phantom-fill-reconstruct-fence.test.ts:15` states the risk in the same terms — *"THE TWO EXPRESSIONS DRIFT. `DatabaseStorage.HONEST_PNL` (SQL) and `honestNetPnl()` (JS)"* — and `:147` asserts them **row-by-row over the same rows.** ⇒ **the extraction is NECESSARY; a row-level SQL↔TS parity fence is what is SUFFICIENT.**
+
+**WHAT TO BUILD:** an integration fence that runs the SQL predicate and the TS predicate over the **same** `closed_trades` rows and asserts identical membership row-by-row, including the straddler and null-`openedAt` cases. **HOME: `B-EPOCH-PARITY-FENCE`, owner CC-C, due 2026-09-05.** ↔ #901, #635.
+
+### #901 OPEN 2026-08-24 (CC-C; **Langston Step-4 condition 2**, measured by him at the ref) — ★ THE EPOCH **VALUE** STILL HAS TWO HOMES EVEN THOUGH THE **RULE** NOW HAS ONE
+
+**MEASURED (Langston, on staging, 2026-08-24):** the SQL in `getLifetimeScoreboard` keys on the **explicit `module_constants` row ONLY**. Every TS reader keys on `epochStartedAt`, which `storage.ts:3455` resolves as **`explicit ?? first_trade`**.
+
+| | |
+|---|---|
+| explicit row present | `2026-08-22T22:01:00Z` |
+| valid paper rows | 534 |
+| `min(closed_at)` | 2026-07-15 |
+| **if the explicit row were REMOVED** | **SQL admits 534, the TS predicate admits 530 — a 4-row, 0.75% divergence** |
+
+The 4 are trades **open at the moment of the first close**. ⚠️ **INERT TODAY** (the explicit row exists) and it **pre-dates `B-EPOCH-KEYING-PARITY`** — `computeRollingEarnings` already took the resolved value at `afb7d326c:13315`. ⛔ **BUT THAT BATCH PROPAGATED IT from ONE reader to THREE** (the window filter and the empty-window branch now take the same resolved value), so a latent one-reader disagreement became a three-reader one.
+⇒ **The fix is to make BOTH sides resolve the epoch the same way** — either both `explicit ?? first_trade` or both explicit-only — **and say which, rather than leaving two resolutions standing.** **HOME: `B-EPOCH-PARITY-FENCE` (with #900), owner CC-C, due 2026-09-05.**
+
+### #902 OPEN 2026-08-24 (CC-C; **Langston Step-4 boundary tightening**) — THE LAST TWO UNSCOPED EPOCH READERS, ON THE MAIN DASHBOARD TAB
+
+`storage.getRealizedPnlTotal` and `storage.getRecentClosedPnls` carry **no epoch term at all** and feed `/api/portfolio/overview`, which returns `realizedPL: −68.35` (all-time, 534 rows) and a win rate over the 30 most recent closes regardless of the epoch. **Langston: these are now the ONLY remaining unscoped epoch readers — put them in the same follow-on with owner + due, not in prose.**
+⚠️ **Currently MASKED by a separate defect:** the card that displays them is stuck in skeleton-load because `/api/portfolio/overview` is the ONE endpoint of 25 that returns **401** on page load (see #903) — **a bug hidden by another bug**, which is why it did not show up beside the Paper Trading card. **HOME: `B-EPOCH-PARITY-FENCE`, owner CC-C, due 2026-09-05.**
+
+### #903 OPEN 2026-08-24 (CC-C) — `/api/portfolio/overview` 401s ON PAGE LOAD: THE FIRST AUTHENTICATED REQUEST LOSES A RACE, AND THE PORTFOLIO CARD NEVER RECOVERS
+
+**MEASURED on the staging UI 2026-08-24:** of **25** `/api/` calls on load, **23 return 200**, three return 503 (cold-start warmup, self-clearing) and exactly **one returns 401** — `/api/portfolio/overview?mode=paper`, request **#2**, immediately after the unauthenticated `/api/settings`.
+**NOT an authorization defect:** the route uses the **same `authenticateToken` middleware** as `/earnings/summary` (`routes.ts:4565` vs `:18012`), and server-side with a token it returns **200 with `totalValue: 824.11`** — the correct anchor. Without a token, 401. ⇒ **the browser sent it without a usable token**, i.e. the first authenticated request fires before the token is attached.
+**CONSEQUENCE, and it is the part that matters:** the component **does not retry**, so the Portfolio Value card sits in **skeleton-load forever** — grey placeholder bars, no number, on the card showing Kyle's balance. Every other card renders. ⚠️ **It also MASKS #902.**
+**HOME: `B-DASHBOARD-AUTH-RACE`, owner CC-C, due 2026-09-05.** ↔ #902.

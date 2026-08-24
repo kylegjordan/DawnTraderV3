@@ -48,7 +48,7 @@ cannot see the others.** Same family as the `#641` two-sources shape this projec
 | **OBJ-2** | Lifetime is both-leg | `getLifetimeScoreboard` SQL carries the `opened_at` leg; Lifetime reads −$4.91 / 6, matching the rolling windows |
 | **OBJ-3** | The analytics window is epoch-scoped | `trades/analytics` win rate + averages computed over in-epoch trades only |
 | **OBJ-4** | The empty-window branch scopes too | `range=1h` on a quiet hour reports epoch-scoped earnings, not all-time |
-| **OBJ-5** | No-epoch behaviour EXACTLY unchanged | fence asserts a null-`openedAt` row still counts when no epoch is set |
+| **OBJ-5** | *(REWORDED at Langston's Step-4 condition 3 — it was OVERCLAIMED)* The **`epochStartedAt === null`** branch is unchanged | ⚠️ **What is PROVEN:** the fence asserts that with `epoch === null` a null-`openedAt` row still counts. **What was CLAIMED and is NOT proven: "no-epoch behaviour exactly unchanged."** The production caller reaches `null` **only when there are zero trades** (`storage.ts:3455` resolves `explicit ?? first_trade`), so the fence exercises a state production effectively never sees. **The SQL guard is still correct and still necessary** — a bare `opened_at >= '-infinity'` would drop null-`openedAt` rows — but the objective now says what the test shows rather than what I wanted it to show. See **#901** |
 | **OBJ-6** | Kyle's requirement | 24h === 7d === 30d === Lifetime on day one |
 
 ## 4. THE FOUR SITES
@@ -81,3 +81,19 @@ tsc **384 = baseline**.
   different page. Kyle scoped me to the Paper Trading page; recorded rather than silently widened.
 - ⚠️ **I rate-limited the staging login myself** (5 per 900 s) with repeated `curl` logins, so the
   runtime re-verify of OBJ-4 is pending the window reset. **Named as my own doing, not a finding.**
+
+## 7. TWO THINGS LANGSTON REQUIRED BE NAMED RATHER THAN LEFT IMPLICIT
+
+**(a) A FIFTH TOUCHED FILE, and it belongs to the OTHER batch.** `kraken-websocket-adapter.ts:3300` — the
+`/api/active-engine/book-integrity` `note` string — was corrected in this batch's commit. **It is
+comment-only but it REACHES A RESPONSE BODY**, and by its own text it belongs to **`B-MBIM-SWITCH-ON`'s
+Step-7 read**: it said *"MISMATCH IS EXPECTED until the v2 instrument precision feed lands"* while
+printing **18,758/18,758 matches** beside it. Named here **and** in `B-MBIM-SWITCH-ON`'s completion
+report, so that batch's record contains a correction made under its name.
+
+**(b) THE EMPTY-WINDOW BRANCH NOW PAYS A ROUND-TRIP IT DID NOT BEFORE.** Resolving the epoch above the
+window filter means `getLifetimeScoreboard` is called on **every** request, including those that take the
+zero-trades early return. **Necessary** — the branch cannot scope without the value, which is exactly the
+bug — but it is a real added query on a hot endpoint and is stated rather than discovered later.
+⚠️ **Known shape, pre-existing, NOT introduced here:** that early-return branch omits the `lifetime` key
+entirely, so a range with an empty window renders no Lifetime figure. Recorded in the completion report.
