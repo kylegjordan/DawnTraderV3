@@ -96,9 +96,12 @@ Two MEMORY.md files, kept in sync:
 
 **★ EACH SESSION'S OWN FILE IS AUTO-LOADED — `.claude/hooks/load-own-memory.mjs` (SessionStart, `startup|resume|compact`).** The harness natively auto-loads only `MEMORY.md`; this hook fills the gap. It identifies the session by its clone folder (`DawnTraderV3-old|-new|-analyst` → CC-A|B|C), reads that session's `MEMORY_CC_<X>.md` (live truth-file via the hook's `transcript_path`, falling back to the in-clone `.claude/memory/` mirror), and injects its contents — on every start, resume, AND compaction. **Fail-open by construction:** unmapped folder or missing file → inject nothing, exit 0 (never worse than the old manual-read world; never blocks a session). So the three things that auto-load every start/compaction are: **CLAUDE.md (rules) + shared MEMORY.md (ops + truths) + your own MEMORY_CC_<X>.md (state).** Each session still **WRITES ONLY its own** file. The §3.2 200-line cap applies per file.
 
-### 3.2 MEMORY.md hard cap: 200 lines (Kyle directive 2026-04-29)
+### 3.2 MEMORY HARD CAP — 200 LINES **AND** 24,576 BYTES, **PER FILE** (Kyle directive 2026-04-29; scope made explicit 2026-08-24)
 
-MEMORY.md MUST NEVER EXCEED 200 lines (and stay ~24KB — watch BYTES, not just lines: dense mega-paragraph lines can blow past 24KB while under 200 lines). Every update: check size after edit; if over, prune before commit.
+⛔ **THE CAP IS PER FILE AND APPLIES TO EVERY MEMORY FILE — the shared `MEMORY.md` AND each session’s own `MEMORY_CC_A/B/C.md`.** ⚠️ **Stated at the top because the heading used to read "MEMORY.md hard cap", and the per-file clause sat at the end of §3.1 where a reader checking the cap would not see it (Kyle, 2026-08-24).**
+
+**NO FILE MAY EXCEED 200 LINES *OR* 24,576 BYTES — whichever binds first, and it is usually the BYTES.** **WATCH BYTES, NOT LINES:** dense mega-paragraph lines blow past 24,576 B while comfortably under 200 lines, which is exactly how the breaches have happened. **Every update: check the size AFTER the edit; if over, prune BEFORE the commit.**
+⚠️ **NOTHING ENFORCES THIS — it is checked by whoever is writing, which is why it has been breached repeatedly.** A session writing its own memory is the only thing standing between the file and the cap.
 
 **★ How to keep a MEMORY file lean (Kyle directive 2026-07-01 — the discipline, short + simple):** the moment a batch CLOSES, collapse its whole blow-by-blow (scope → dispatch → review → deploy → verify) to ONE line in a "recent history" list — the repo completion report + scope files are the authoritative record, so memory only needs a pointer. Keep in full only: standing behavioral rules, identity/wake-arm, the ONE current/in-flight batch, and armed alerts. If it's already recorded in the repo, it does NOT belong in memory in longform. (Origin: CC-B's file hit 189KB — ~8× the cap — by retaining full narration of dozens of closed batches; collapsing them to one-liners cut it to 13KB with zero loss.)
 
