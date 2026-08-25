@@ -3625,3 +3625,27 @@ The 4 are trades **open at the moment of the first close**. ⚠️ **INERT TODAY
 ⚠️ **KYLE'S "OTHER SYMBOLS" QUESTION — MEASURED: ONLY BITCOIN.** Every pair throwing `[REB2.9D][History][Error]` is `XBT/*` (11 of them). **`XBT` is the only base in Kraken's universe whose wsname their OHLC endpoint refuses.** ⚠️ **INSTRUMENT REACH, stated:** that log rate-limits to once per pair per TTL, so the list is *"pairs that errored at least once in the retained window"* — good coverage (a full day of scanning across ~300 pairs/cycle) but **NOT** proof of universe-wide absence. **A definitive sweep of every wsname against the OHLC endpoint is task 2 of the batch.**
 
 ⛔ **AND ONE THING I CANNOT EXPLAIN, STATED RATHER THAN GUESSED:** the VTS Bitcoin trades stop at **2026-07-02**, with none in the 54 days since, against a prior rate of roughly one per 10 days. **The bypass means admission is NOT the constraint in that lane, so the stop is about signal generation, not filtering — and I have NOT established why.** It is definitively **not** the history filter (that lane never reaches it). **Recorded as an open question on this issue so the fix cannot close it silently.**
+
+**★★ #909 — KYLE HOLED MY EXPLANATION AND THE DIG KILLED MY OWN MECHANISM AGAIN. THE PICTURE THAT SURVIVES IS SIMPLER AND EXPLAINS THE 07-02 STOP (2026-08-26).**
+
+**HIS OBJECTION:** *"If there's a name matching problem in the filters, there's gonna be a name matching problem when it goes through the MCE or the signal orchestrator, anywhere else in the system where data has to be matched to the symbol."*
+
+★ **ANSWERED STRUCTURALLY, AND IT HOLDS — the confinement is not luck:**
+1. `fx5-scanner.ts:30` **imports `collectAdaptiveBatch` from `market-scanner.js`** ⇒ **market-scanner runs FIRST, on RAW Kraken wsnames**; `fx5-scanner` normalises afterwards (`:990`, `:1191`, `:1197`, `:1607`…).
+2. `market-scanner.ts:854` — a survivor carries **`symbol: pair.symbol`, the RAW wsname**, un-normalised.
+3. ⇒ **EVERY external Kraken call inside market-scanner, enumerated:** `:378` `getPairHistoryDays(pair, mode)` — **per-symbol** · `:557` `getTicker()` — **no argument, fetches all** · `:558` `getTradablePairs()` — **no argument**.
+⇒ **`getPairHistoryDays` is the ONLY per-symbol external call made before normalisation.** The MCE and the signal orchestrator run downstream of `fx5-scanner`, on `BTC/USD`. **The mismatch cannot reach them — not by luck, but because the raw name exists in exactly one place that talks to Kraken.**
+
+⛔⛔ **AND THE DIG KILLED MY VTS EXPLANATION — I HAD CLAIMED THE VTS "BYPASSES ALL FILTERS FOR BENCHMARKS". IT DOES NOT, BECAUSE THE BYPASS NEVER FIRES.**
+**MEASURED, live, every 30 s:** `[AdaptiveScan][11.4C.1] Starting adaptive batch scan (mode=paper, **passiveLearning=false**, …)` — **every cycle, without exception.** The bypass at `:769` requires `isPassiveLearning && isBenchmarkPair`. **`isPassiveLearning` is never true, so the branch is unreachable in practice** — `[11.4H.4][BENCHMARK]` appears **0 times** in either log stream. ⇒ **Directive 11.4H.4 Task 5 is effectively dead code**, and my previous entry's explanation of the 5 VTS trades is **WITHDRAWN**.
+
+★★ **WHAT SURVIVES IS SIMPLER, AND IT FINALLY EXPLAINS THE 2026-07-02 STOP KYLE SAID WAS NOT COINCIDENTAL — HE WAS RIGHT.**
+The VTS is fed by the **same** filtered scan (confirmed live: it is simulating `BIDU/USD` right now off `mode=paper` cycles). ⇒ **one filter chain feeds BOTH lanes**, so a history-filter rejection blocks Bitcoin in **both**. That reunifies the two facts my earlier account needed two mechanisms for:
+- Bitcoin traded in the VTS **5 times, 05-11 → 07-02** ⇒ **the history lookup was WORKING then.**
+- **Nothing since 07-02, in either lane** ⇒ **the lookup broke on or about that date.**
+- Paper mode began ~07-15, **after the break** ⇒ **Bitcoin has never traded in paper, and never could have.**
+
+⚠️ **BEST-SUPPORTED HYPOTHESIS, LABELLED AS ONE — NOT PROVEN:** **our code did not change.** `git log -S` on `wsname` (`market-scanner.ts`) returns nothing after **2026-01-09**, and nothing on `passesHistoryFilter` near 07-02; the only commits 06-30→07-05 are the P19-B8.1 UI batch. **The behaviour changed while the code did not** ⇒ **the most likely cause is that Kraken stopped accepting `XBT/USD` on the OHLC endpoint around 2026-07-02.** ⛔ **I cannot prove an external vendor change and am not asserting it** — Kraken publishes no changelog we retain. **What IS proven: the form fails today, three other forms work today, and our side is unchanged since January.**
+
+★ **THIS STRENGTHENS THE FIX RATHER THAN CHANGING IT.** Depending on a venue continuing to accept a non-canonical alias is the fragility that bit us. **Resolve to our internal form (`BTC/USD`, which the resolver already produces) or to the canonical `restKey`** — and the class of failure disappears rather than moving.
+**STILL OPEN:** whether any OTHER pair silently lost its alias the same way. **The 11 `XBT/*` pairs are what errored in the retained window; a definitive sweep of every wsname against the OHLC endpoint remains task 2.**
