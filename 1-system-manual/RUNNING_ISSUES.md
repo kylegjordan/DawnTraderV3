@@ -3569,3 +3569,34 @@ The 4 are trades **open at the moment of the first close**. ⚠️ **INERT TODAY
 ⛔ **DO NOT "fix" it by loosening the null-fails rule:** fail-closed on unknown history is correct; the defect is that history is unknowable for a pair that has fifteen years of it.
 **BLAST RADIUS TO MEASURE FIRST:** every pair whose wsname Kraken's OHLC endpoint rejects — **BTC is the one we found, it is unlikely to be the only one.**
 **HOME: `B-BTC-HISTORY-SYMBOL-FIX`, owner CC-C, due 2026-09-05.**
+
+**★★ #909 COMPLETED AND CORRECTED 2026-08-26 — KYLE'S CHALLENGE WAS RIGHT AGAIN: THE RESOLVER IS NOT DEFICIENT, IT IS BYPASSED.** He said: *"I am seriously doubting that the name resolver has been deficient on Bitcoin, when Bitcoin is the biggest fish in the crypto market."* **Correct. The resolver handles Bitcoin perfectly and would produce a working symbol. It is simply never called on this path.**
+
+**THE COMPLETE CHAIN, every link measured rather than inferred:**
+
+**1. The scanner supplies Kraken's OWN `wsname`.** `market-scanner.ts:565` — `symbol: pairsObj[pairName]?.wsname || pairName`. Kraken's `AssetPairs` for Bitcoin, read live: **`restKey=XXBTZUSD · altname=XBTUSD · wsname=XBT/USD`.** ⇒ the scanner carries **`XBT/USD`**.
+
+**2. `getOHLCData` passes it STRAIGHT THROUGH — no resolution.** `kraken.ts:296`: `const params: any = { pair, interval };` **There is no resolver call anywhere on this path.**
+
+**3. ⛔ AND KRAKEN'S OWN OHLC ENDPOINT REJECTS KRAKEN'S OWN `wsname` FOR BITCOIN.** Measured live:**
+
+| form sent | candles | response key | result |
+|---|---:|---|---|
+| **`XBT/USD`** *(the wsname the scanner sends)* | **0** | — | ⛔ **`EQuery:Unknown asset pair`** |
+| **`BTC/USD`** *(what the resolver would return)* | **721** | `BTC/USD` | ✅ **ok** |
+| `XBTUSD` (altname) | 721 | `XXBTZUSD` | ✅ ok |
+| `XXBTZUSD` (restKey) | 721 | `XXBTZUSD` | ✅ ok |
+| `ETH/USD` (wsname) | 721 | `ETH/USD` | ✅ ok |
+| `SOL/USD` (wsname) | 721 | `SOL/USD` | ✅ ok |
+
+★★ **THAT IS THE WHOLE ASYMMETRY, AND IT IS A KRAKEN INCONSISTENCY, NOT OURS:** the OHLC endpoint accepts the **wsname** for ETH and SOL, and **rejects it for Bitcoin** — while accepting three other Bitcoin forms including the one our resolver produces.
+
+**4. THE RESOLVER WOULD FIX IT, AND IT ALREADY KNOWS HOW.** `kraken-symbol-resolver.ts:47` — `REVERSE_ASSET_TRANSLATIONS = { 'XBT': 'BTC' }` — and the dynamic fallback at `:199-203` splits on `/`, translates the base, and returns **`BTC/USD`**: precisely the form Kraken accepts. ⇒ **one resolver call on this path closes it.**
+
+**5. THE BLAST RADIUS IS EXACTLY BITCOIN — MEASURED, NOT ASSUMED.** Every pair throwing `[REB2.9D][History][Error]` in `error.log`: **`XBT/USDT · XBT/USDC · XBT/USD · XBT/JPY · XBT/GBP · XBT/FIDD · XBT/EURC · XBT/EUR · XBT/CHF · XBT/CAD · XBT/AUD`** — **eleven pairs, all Bitcoin, no other asset.** `XBT` is the only base in Kraken's universe whose wsname the OHLC endpoint refuses.
+
+⚠️ **THE ERRORS WERE IN `error.log`, NOT `out.log` — 5,546 of them, and I had searched only stdout.** That is `#594`'s lesson repeated: **a positive control must match the STREAM as well as the severity class.** My earlier claim that BTC was *"never evaluated"* came from an empty `signal_eval_archive`, and it is now fully explained: the history branch (`market-scanner.ts:999-1001`) has **no `capturePreFilterReject`** while the volume and spread branches beside it both do.
+
+**REVISED FIX — smaller than I first wrote, and it uses what exists:** call `normalizeToInternalSymbol` before the OHLC request (or at `getOHLCData`'s entry). **Do NOT hand-map to `XXBTZUSD`** — that hard-codes a second symbol vocabulary beside the resolver, which is the two-sources shape. **AND wire the missing `capturePreFilterReject` on the history branch in the same commit.**
+⚠️ **HONEST LIMIT ON THE OUTCOME:** this gets Bitcoin **past the history gate**. Whether it then trades depends on the IMF filters, the SQE and the EV gate like any other pair — **which is exactly the behaviour Kyle specified.** No claim is made that Bitcoin will trade, only that it will finally be allowed to compete.
+**HOME unchanged: `B-BTC-HISTORY-SYMBOL-FIX`, owner CC-C, due 2026-09-05.**
