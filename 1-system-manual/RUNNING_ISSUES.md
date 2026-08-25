@@ -2902,7 +2902,22 @@ The COMMITTED copy carries the five **pre-Phase-14 regime keys** (`BULL_STABLE`/
 ★ **THAT LAST CLAUSE IS THE WHOLE FIX AND IT IS NOT AN EXTRA:** the guard removes the reason `max+1` is reached for. A refusal that says *"use #745"* costs less than the lookup it replaces — **the compliant path becomes the CHEAP path**, which is the only version of this that survives a session under time pressure.
 ⚠️ **HONEST LIMITS, stated now so the build does not oversell itself:** (a) it cannot catch a number minted into a file that is never pushed; (b) it is blind to a heading whose shape it does not parse — **the exact failure this entry's own first measurement made**, so the guard must **fail LOUD on an unparseable `### #` heading rather than skipping it**; (c) it does not settle CC-C's `#900` range — that needs a decision, not a check.
 
-**DECISION STILL OPEN, and it is not mine:** ratify `#900+` as CC-C's block, or return him to 704-729. Langston declined to rule and took a precaution instead — **until settled he cites by NUMBER + SUBJECT, because `#741` alone resolves to two things.** Adopt that citation form crew-wide in the interim.
+★★ **DECISION — KYLE RULED 2026-08-25: BUILD THE CHECK, AND CC-C RETURNS TO HIS DESIGNATED RANGE (704-729). `#900+` IS NOT RATIFIED.** He gave the reason, and it is better than mine: **"that will show whether or not the check is working."** ⇒ **the ratify-the-900s option I recommended would have made the guard UNTESTABLE — a check nobody can trip proves nothing, and its silence would have read as compliance.** I optimised for not breaking citations; he optimised for the instrument being provable. **The standing lesson applied to my own recommendation: silence is not evidence until the instrument is shown able to speak.**
+⚠️ **CC-C’s five existing `#900-#904` entries are NOT renumbered** — the ruling binds FUTURE minting. Renumbering live issues re-points their inbound citations at the wrong problem (standing rule), and that cost is not what Kyle bought.
+
+⛔ **AND IT IS A BATCH, NOT A HOTFIX — the qualifying test was RUN, not assumed, and it fails 3 of 3 plus two NOT-list entries.** Kyle wrote *"this should be a hotfix (if it qualifies)"* and explicitly delegated the judgement:
+
+| test | verdict |
+|---|---|
+| 1 — broken NOW | **NO.** The doubled `#741` is a real wrong state, but it is **already contained** by the number+subject citation form. Nothing is losing money, corrupting trading data, blocking the pipeline or showing false information in the UI. |
+| 2 — waiting causes real harm the fix prevents | **NO.** The harm already happened. Waiting adds at most a few more mis-numbered entries, each individually trivial and individually fixable. |
+| 3 — blast radius small AND PROVEN small | **NO, AND THIS IS DECISIVE.** The fix is a **fail-closed guard on the push path of all four sessions** — a guard that refuses wrongly blocks every session’s governance push. ⚠️ **We shipped exactly that failure TWICE in one week:** `guard-push-tsc-baseline` refusing on a present file, at two layers, from a relative path. **A hotfix whose failure mode is "nobody can push" is the opposite of small.** |
+
+**NOT-list, two direct hits:** *"New functionality. Ever. However small."* — the check does not exist, and building it is new functionality. *"A governance or documentation change — there is no such thing as an urgent doc edit."* — returning CC-C to his range is exactly that.
+★ **THE ASYMMETRY THAT DECIDES IT, from the skill’s own text: "declaring a batch when a hotfix would have done costs a day; declaring a hotfix when a batch was needed is how an unreviewed change reaches live trading."** Here the unreviewed change would be a hook able to refuse every push in the crew.
+
+**HOME — REVISED: its own batch `B-ISSUE-BLOCK-GUARD`, OWNER CC-A, DUE 2026-09-05, still folded into the `B-GATE-GUARD` hook** (one hook, two checks — same trigger, same staged-diff read).
+**SUPERSEDED, kept for the record:** *"ratify `#900+`, or return him to 704-729"* — Langston declined to rule and took a precaution instead: **until settled he cites by NUMBER + SUBJECT, because `#741` alone resolves to two things.** That citation form stays in force until the guard ships.
 
 ---
 
