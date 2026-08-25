@@ -3600,3 +3600,28 @@ The 4 are trades **open at the moment of the first close**. ⚠️ **INERT TODAY
 **REVISED FIX — smaller than I first wrote, and it uses what exists:** call `normalizeToInternalSymbol` before the OHLC request (or at `getOHLCData`'s entry). **Do NOT hand-map to `XXBTZUSD`** — that hard-codes a second symbol vocabulary beside the resolver, which is the two-sources shape. **AND wire the missing `capturePreFilterReject` on the history branch in the same commit.**
 ⚠️ **HONEST LIMIT ON THE OUTCOME:** this gets Bitcoin **past the history gate**. Whether it then trades depends on the IMF filters, the SQE and the EV gate like any other pair — **which is exactly the behaviour Kyle specified.** No claim is made that Bitcoin will trade, only that it will finally be allowed to compete.
 **HOME unchanged: `B-BTC-HISTORY-SYMBOL-FIX`, owner CC-C, due 2026-09-05.**
+
+**★★ #909 — THE LAST PIECE, AND IT RECONCILES EVERY OBSERVATION (2026-08-26).** Kyle asked the question that closed it: *"does this mean Bitcoin has never traded, or are you saying this particular pair XBT/USD is the one not trading, yet we have Bitcoin trading with these other symbol currency pairs?"*
+
+⛔ **FRAMING CORRECTION FIRST — THERE IS ONLY ONE BITCOIN/USD MARKET.** `XXBTZUSD`, `XBTUSD`, `XBT/USD` and `BTC/USD` are **four SPELLINGS of ONE pair**, not four pairs. Kraken's own `AssetPairs` entry proves it: a single record carrying `restKey=XXBTZUSD · altname=XBTUSD · wsname=XBT/USD`. My earlier *"three of four work"* phrasing invited exactly the wrong reading and is withdrawn.
+
+**THE ANSWER, MEASURED PER LANE:**
+
+| lane | Bitcoin trades | why |
+|---|---:|---|
+| **paper (active)** | **0, ever** | the history filter runs; the OHLC lookup for `XBT/USD` fails; history unknown; **fails closed every cycle** |
+| `trades` (all modes) | **0** | same |
+| open positions | **0** | same |
+| **VTS (passive)** | **5** | ★ **the VTS BYPASSES the filter entirely for benchmarks** |
+
+★★ **THE RECONCILING MECHANISM, verbatim at `market-scanner.ts:766-778`:**
+> *"Directive 11.4H.4 Task 5: Benchmark pairs bypass ALL filters **ONLY in passive learning mode**. This ensures BTC/ETH/SOL are always included in passive learning for correlation tracking. **In live/paper mode, all pairs (including benchmarks) must pass filters normally**."*
+
+⇒ **In the VTS, Bitcoin never meets the broken lookup — it is waved past every filter.** All 5 VTS rows are stamped `BTC/USD` (the internal normalised form), opened 2026-05-11 / 05-26 / 06-08 / 06-15 / **07-02**, all closed.
+⇒ **In paper mode the exemption does NOT apply, the history filter runs, and Bitcoin dies there on every single cycle.**
+
+**CONSISTENT WITH EVERY OBSERVATION:** 0 paper trades · 5 VTS trades · ETH and SOL trading normally in paper (Kraken accepts *their* wsname) · exactly 11 `XBT/*` pairs erroring and no other base · the resolver knowing `XBT->BTC` but not being called on the OHLC path.
+
+⚠️ **KYLE'S "OTHER SYMBOLS" QUESTION — MEASURED: ONLY BITCOIN.** Every pair throwing `[REB2.9D][History][Error]` is `XBT/*` (11 of them). **`XBT` is the only base in Kraken's universe whose wsname their OHLC endpoint refuses.** ⚠️ **INSTRUMENT REACH, stated:** that log rate-limits to once per pair per TTL, so the list is *"pairs that errored at least once in the retained window"* — good coverage (a full day of scanning across ~300 pairs/cycle) but **NOT** proof of universe-wide absence. **A definitive sweep of every wsname against the OHLC endpoint is task 2 of the batch.**
+
+⛔ **AND ONE THING I CANNOT EXPLAIN, STATED RATHER THAN GUESSED:** the VTS Bitcoin trades stop at **2026-07-02**, with none in the 54 days since, against a prior rate of roughly one per 10 days. **The bypass means admission is NOT the constraint in that lane, so the stop is about signal generation, not filtering — and I have NOT established why.** It is definitively **not** the history filter (that lane never reaches it). **Recorded as an open question on this issue so the fix cannot close it silently.**
