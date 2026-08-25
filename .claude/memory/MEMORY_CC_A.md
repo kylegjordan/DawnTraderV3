@@ -11,13 +11,17 @@
 > **If BLOCKED-ON says Kyle, say NOTHING and do not work the item.** Otherwise continue to the next step and report only at the step boundary, in the `CONDUCT.md` §6 format.
 > ⚠️ **UPDATE THESE FOUR LINES AT EVERY STEP BOUNDARY.** They were left stale for weeks and Kyle found it before I did.
 
-- **BATCH:** **B-RULES-1c / 1d** — the `CLAUDE.md` slim. **IN FLIGHT.**
-- **STEP:** **7 DONE.** Step 3 complete · Step 4 DISPATCHED at `8442eb4d7`, **not yet ruled** · Step 5 **CI 4/4 GREEN per-job** (run `32636232272`; my sha is an ancestor of the tested head — verified with `merge-base --is-ancestor`) · **Step 6 = NO DEPLOY, judged explicitly: ZERO runtime files in this batch** · Step 7 verification suite PASSED (the single reported failure was my own probe matching an instruction, not a claim) · **Step 10 governance LANDED** (BATCH_CATALOG + PHASE_HISTORY + PHASE_19_PLAN, all marked in-flight, not closed).
-- **BLOCKED-ON:** Langston’s Step-4 verdict. He is mid-batch with CC-C — **his queue is not mine; do NOT re-poke on a cadence, poll and keep working.**
-- **NEXT:** on his verdict → iterate if needed → Step 8 → Step 11 completion report. **Do NOT claim closed until he rules AND Kyle acknowledges.**
-- ⛔ **THREE THINGS OWED TO LANGSTON, all in the Step-4 dispatch:** (1) the verdict; (2) **the CREW BOARD decision Kyle delegated to us** — measured: alive, 3 claims aged 26d/26d/18d all stale and never released, 2 commits + 3 mentions lifetime; my weak position is narrow-to-shared-governance-docs, his call; (3) the **`read-the-field` promotion argument** — 3 instances today, all mine, all in this batch.
-- ★ **FLAGGED TO CC-C AND NOT FOLLOWED UP (say-it-once):** 9 runtime files undeployed on the branch including a MIGRATION, all his, range `e6f7c70b3`→`739d43833`.
-- **DEFERRED WITH NAMES, not dropped:** Infra Claude’s onboarding (Kyle, ~1-2 weeks, date open — he is deliberately outside crew comms) · #739 + #740 → `B-RULES-1e` due 2026-09-05 · #732 tripwired on the weekly pass.
+- **BATCH:** **B-CONDUCT-DELIVERY-HOTFIX** — **CLOSED 2026-08-25, Langston APPROVED at `32d2f0f44`**, `Review = Approved` set by him on `PVTI_...zg3zVQI` (read back via the item’s `fieldValues` — **`item-list` is the false-negative instrument, his words**). Two non-blocking notes applied anyway at `a917353d1`.
+- **STEP:** done. The chunked delivery is **PROVEN at a real session start** — 8/8 chunks inline, nothing persisted, last persisted output `16:09:10` = the old build. ★ **He re-derived rather than trusting me, and added a check I had not run: `slices.join('
+') === text`** — lossless, not merely not-mid-sentence. **Adopt that check.**
+  ★ **WHY THE MANIFEST WORKS, his framing, do NOT "simplify" it away: it prints `slices.length` (the TRUE total), NOT `CHUNK_COUNT` (the registered one).** A manifest keyed to the registered count reads `4/4` while a fifth chunk goes nowhere — the original defect wearing the fix’s clothes.
+  ⚠️ **`CONDUCT.md` IS NOW 24,043 B AGAINST A 24,576 CAP — 533 B OF HEADROOM.** The next addition is a real one-in-one-out.
+  ⚠️ **`RULED ON REPORTED FACT` on one leg, his declaration: the head-shaped-preview claim.** He has no persisted hook outputs and cannot re-derive it. Not disqualifying — the manifest’s COUNTING value stands either way; only the survives-its-own-truncation bonus rides on it.
+- **BLOCKED-ON:** nothing.
+- **NEXT:** **B-RULES-1c/1d Step-11** — add the delivery finding to the completion report; **Langston still owes `Review` on the 1c and 1d cards.** Then `B-GATE-GUARD` (#744) and `B-RULES-1e` (#739/#740/#741), both due 2026-09-05.
+- ★ **NUMBERING COLLISION — HE DECLINED TO RULE AND TOOK A PRECAUTION INSTEAD: until settled he cites by NUMBER + SUBJECT, because #741 resolves to two things.** He endorsed not renumbering CC-C’s, and named where the fix sits: **“CC-C minting from 704-729, not anyone renumbering — #702’s split only holds if every session mints from its own block, and it has now failed EIGHT TIMES IN ONE DIRECTION, which makes it a MECHANISM question, not a reminder question.”** Flagged to him once; do NOT follow up.
+- ★ **FLAGGED TO CC-C AND NOT FOLLOWED UP (say-it-once):** 9 runtime files undeployed on the branch including a MIGRATION, range `e6f7c70b3`→`739d43833`.
+- **DEFERRED WITH NAMES, not dropped:** Infra Claude’s onboarding (Kyle, ~1-2 weeks) · #744 → `B-GATE-GUARD` due 2026-09-05 · #739/#740/#741 → `B-RULES-1e` due 2026-09-05 · crew-board code removal → `B-CREW-BOARD-REMOVAL` due 2026-09-05 · #732 tripwired on the weekly pass.
 
 # ★ KYLE 2026-08-21 — TWO STANDING ITEMS
 1. **THE WORKFLOW STEP IS RENAMED: "PRE-IMPLEMENTATION AUDIT" → "PRE-IMPLEMENTATION AUDIT AND IMPLEMENTATION PLAN".** Piece (5) merged the two into ONE step/ONE document and Langston ADOPTED it; **the STEP NAME in `CLAUDE.md` §2 must follow.** Check it is renamed everywhere, not just in the piece-(5) record.
