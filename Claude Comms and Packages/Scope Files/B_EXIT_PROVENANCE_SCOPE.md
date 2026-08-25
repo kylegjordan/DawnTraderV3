@@ -154,3 +154,127 @@ His finding, and it is correct: `handleV2BookUpdate` emits a book **midpoint** s
 ## R2-5 — WHY F3 STILL GOES FIRST, with the argument I failed to make
 
 Langston's, and it is decisive: **the post-fix era holds ZERO maker closes.** If the instrument is not in before the next maker close, **the clean-era measurement is lost the same way the dirty-era one was** — and that is unrecoverable, exactly like the 127 unassessable rows. Kyle waits longer for his dashboard correction and gets a number that can be audited afterwards instead of re-litigated.
+
+---
+
+# REV 3 — 2026-08-24: WIDENED TO **BOTH LEGS**, per Kyle's Part F restructure
+
+> **change-class: architecture** (unchanged from REV 2 — Langston's pre-registered criterion: the moment this widens the `priceTick` / live-pricing-adapter surface it is architecture).
+> **Batch id:** `B-EXIT-PROVENANCE` · **Owner:** CC-C · **Part F piece F3 / F-B**
+
+## R3-0 — WHY THIS REVISION EXISTS, AND IT IS A GAP I WOULD HAVE SHIPPED
+
+Kyle restructured Part F on 2026-08-23: *"when we finish with this set of batches we wanna be confident
+that the prices that we ENTER and exit at are reliable and are correct."* **His word "enter" widened
+F3 — and REV 2's five objectives are ALL exit-only.** OBJ-1 through OBJ-5 name `exit_price_source`,
+`exit_decision_price`, `exit_price_*`. **Nothing in this scope stamps an entry.**
+
+- **Shipping REV 2 as written would have satisfied the scope and missed half the batch** — and the reset
+gate has already been tightened to **"zero contaminated on BOTH legs"**, so a half-stamped record could
+never satisfy it. **MEASURED, and the entry side is not the smaller half:**
+
+| class | trades | assessable | **entry below the venue's printed low** | recorded P&L on those | median |
+|---|---:|---:|---:|---:|---:|
+| crypto | 309 | 232 | **22** | **+$211.47** | **216 bps** |
+| xStock | 225 | 219 | 23 | -$72.22 | 9.8 bps |
+
+**Crypto entries sit ~2.2% below anything the venue actually traded — the same magnitude class as the
+exit contamination (289.7 bps median), and carrying MORE recorded profit than the exit side.**
+
+## R3-1 MANDATORY 1.a — ARCHITECTURAL READ. **THE ENTRY PROVENANCE IS ALREADY COMPUTED AND THROWN AWAY.**
+
+Read: `SYSTEM_IMPACT_MAP.md` (the P19-B4b.1 fill-fidelity state block at `:77`, and the
+`execution/types.ts` + `order-placer.ts` component entry at `:896-903`), plus the sources.
+
+**THE CHAIN, verified at source rather than from the map alone:**
+
+| site | what it holds |
+|---|---|
+| `kraken-websocket-adapter.ts:170` | `bookUpdatedAt: Map<symbol, ms>` — per-symbol book-update stamp |
+| `:3225-3245` `getBookForFill` | returns `{ asks, bids, ageMs }`, null on an empty/one-sided book |
+| `execution/depth-source.ts:43` | wraps it into **`DepthSnapshot { asks, bids, ageMs, source }`** — `source: 'crypto_ws_book'`; the xStock branch returns `source: 'xstock_ticker_snap'` with `ageMs` from `captured_at` |
+| `active-execution-engine.ts:241` `_evaluateOpenDepthGate` | returns **`{ pass, reason, snapshot: DepthSnapshot or null }`** |
+| `:3051` the open seam | holds **`_gate.snapshot`** in a local, guards on it at `:3052`, then **passes only `asks` to the fill and DISCARDS the rest** |
+
+**=> `ageMs` AND `source` ARE IN SCOPE, IN A LOCAL VARIABLE, AT THE EXACT MOMENT OF THE ENTRY FILL —
+FOR BOTH ASSET CLASSES — AND ARE DROPPED.** The entry leg of this batch is therefore a **PERSISTENCE
+change, not a computation change.** Same shape as F-A being a switch-on rather than a build, and the same
+shape as `#550`/`#549`: *a value computed upstream and dropped in transit before it reaches the
+persisted record.*
+
+- **The placer cannot be the stamp point.** `PaperOrderPlacer.openOrder(req)` receives `req.bookAsks` and
+is **stateless** (SIM: *"the placer is stateless"*) — it never sees the age or the source. **The stamp
+belongs at the open seam, where the snapshot lives.**
+
+## R3-2 MANDATORY 1.b — PROVENANCE READ. **DISPOSITION (2): RELEVANT, NEEDS UPDATING TO TODAY'S INTENT.**
+
+**Corpora searched:** `BATCH_CATALOG.md`, `RUNNING_ISSUES.md`, completion reports, and
+`git log -S` (not path-limited, so it survives the 2026-07-03 `active-*` rename).
+
+**TIER 1 — behaviour this batch changes.** `getBookForFill` + `bookUpdatedAt` + `DepthSnapshot` all
+enter at ONE commit, **`b74526dc3`, 2026-06-16**. Quoted verbatim, not summarised:
+
+> *"P19-B4b.1 Step-3: depth-walked paper fill + partial-open + #295 24/5 book-depth-sufficiency gate
+> (DORMANT til B7b)"* ... *"depth-source.ts (per-class fill-time depth: crypto WS book / xStock ticker
+> top-of-book + warmth/sufficiency assessors + observable block counter)"* ... *"kraken-websocket-adapter:
+> getBookForFill accessor + book-update freshness stamp."*
+
+=> **ORIGINAL INTENT: the freshness stamp was built to DECIDE — to gate a fill on book warmth.** It was
+never intended as a record of what a fill was priced against. **DISPOSITION (2), explicitly: still
+relevant and correct for its own purpose, and needing extension to a second consumer.** It is not
+disconnected (3), not to be removed (4/5), and not merely unchanged (1), because this batch adds a
+reader to a value that has only ever had one.
+
+**TIER 2 — read or called, one line each.** `order-placer.ts` / `depth-walk.ts`: same commit; pure,
+RNG-free book-walk replacing a flat 0.05% slippage constant. `depth-gate-config.ts`: same commit,
+fail-closed per-class config. **None have their behaviour changed here.**
+
+## R3-3 DOES IT ALREADY EXIST — AND HAS IT ALREADY BEEN DECIDED? **TWO LEDGER HITS THAT CHANGE THE DESIGN.**
+
+**(a) `#536` — RESOLVED 2026-07-19, and it is PRECEDENT, not duplication.** It proved the open path can
+carry metadata onto a persisted position **end-to-end**, verified by a Supabase row read AND a §9.3
+screenshot, with Langston independently pulling both rows from the live ref. **It covers signal-context
+fields (regime, pattern, friction, DBS, entry liquidity, Promote R) — NOT price provenance.** => adjacent,
+not overlapping; and it establishes the transit mechanism this batch reuses. Not re-scoped as new.
+
+**(b) `#550` / `#549` — THE CONSTRAINT THAT DECIDES WHERE THE STAMP GOES.** `signal-orchestrator.ts:1059-1077`
+**rebuilds the sized signal's `metadata` as a FRESH object from an explicit field list**, and
+`_displayContext` is the **only** spread — `rawSignal.metadata` is never spread. => **anything stamped
+onto the signal's metadata upstream is SILENTLY DROPPED before the open path.** That is the measured
+root cause of `maxHoldingMs` being live-0/15 and `atr` being '0' on 15/15.
+=> **DESIGN CONSEQUENCE, load-bearing: the provenance stamp MUST be written at the FILL SEAM onto the
+persisted row, NEVER onto signal metadata.** A scope that stamped the signal would have passed review,
+compiled, tested green, and produced null columns in production.
+
+## R3-4 THE CONSUMER CENSUS — RUN *BEFORE* WRITING THE FIRST FIELD (the lesson that cost two batches)
+
+**`B-OBSERVATION-EPOCH` introduced a shared value without censusing its consumers, shipped the rule into
+one reader of four, and cost a whole follow-on batch.** This scope will not repeat it. **Who will READ
+these fields?**
+
+| consumer | reads what | obligation on this batch |
+|---|---|---|
+| **F1+F2 / F-E detector** | both legs' source + age + the venue print | the field names and semantics are its input contract — fix them here |
+| **F3.5 / F-C staleness bound** | the age distribution at fill | **the threshold is DERIVED from this data**, so the age must be the age *at fill*, not at snapshot-read |
+| **the reset gate (F6)** | *"stamp present on 100% of closes"* | => **null must be impossible, not merely unusual** (already OBJ-5; now binds both legs) |
+| **the dashboard / Closed Trades tab** | may surface a provenance badge | out of scope here, named so it is not discovered later |
+| **`honestNetPnl` / `HONEST_PNL`** | **the SQL and the TS copy** | **if any reader of these fields is implemented twice, it gets a ROW-LEVEL PARITY FENCE IN THIS BATCH, not a follow-on** — `#900` is the standing debt from getting this wrong once |
+
+## R3-5 — OBJECTIVES ADDED FOR THE ENTRY LEG (REV 2's OBJ-1...5 stand, exit-side)
+
+| # | Objective | Verified when |
+|---|---|---|
+| **OBJ-6** | Persist the **entry price source** and the **book age at fill** | every new open row carries non-null `entry_price_source` + `entry_book_age_ms`; a fence asserts 100% coverage post-deploy |
+| **OBJ-7** | Persist the **entry decision price** vs the **achieved fill price** | `entry_decision_price` (the signal's intended price) and the walked `fillPrice` are both retained, so slippage is reconstructable from the row alone |
+| **OBJ-8** | **Both classes, one code path** | crypto carries `crypto_ws_book`, xStock `xstock_ticker_snap` — **the class difference is in the VALUE, not in a second code path** |
+| **OBJ-9** | The entry stamp **cannot silently stop** | a fence fails if any post-deploy open has a null `entry_price_source`; **absence must be impossible, not merely unusual** (`#546`) |
+| **OBJ-10** | **The stamp survives the metadata rebuild** | a fence proves the value is written at the **fill seam**, not carried on signal metadata — the `#550` drop is structurally impossible for these fields |
+
+## R3-6 — OUT OF SCOPE, each with a home
+
+- **Back-filling provenance onto historical rows** — impossible by construction (the book snapshot is
+  gone). The history is tiered instead, by **F-E**, from the venue print.
+- **Acting on the stamp** (blocking a stale fill) — that is **F-C `#743`**, whose threshold this batch's
+  data supplies. **Deliberately not folded in:** a behaviour change inside a batch whose safety case is
+  *"records only, decides nothing"* would forfeit that safety case.
+- **A UI surface for provenance** — after F-E, when there is something to display.
