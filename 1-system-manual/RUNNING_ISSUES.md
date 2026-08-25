@@ -3488,3 +3488,34 @@ The 4 are trades **open at the moment of the first close**. ⚠️ **INERT TODAY
 **THE PROPOSED FIX — one denominator change, and it corrects in BOTH directions.** Gate on **quote-currency (dollar) volume**: `volume_24h × price` against a dollar threshold, instead of raw units. It **admits** BTC/ETH/ZEC/TAO/AAVE/LINK/XMR/HYPE on their real liquidity, and it **tightens** on sub-cent coins that clear a unit bar on trillions of worthless units. ⚠️ **The threshold value is a Phase-25 calibration question and is NOT proposed here** — only the denominator is the defect.
 
 **REVISED HOME: `B-LIQUIDITY-UNIT-AUDIT`, owner CC-C, due 2026-09-05 — TWO objectives, not one:** (1) the unit→quote denominator change; (2) **the BTC-specific non-evaluation trace**, which is a different bug and may survive (1). ↔ #561 (`entryLiquidityKind='volume_qty'` inherits the same unit), Phase-25.
+
+### #907 OPEN 2026-08-26 (CC-C; found in the Kyle-directed benchmark provenance dig) — ★★ `volumeUSD` IS NOT IN USD. THE VARIABLE NAME IS WHY THE UNIT ERROR SURVIVED, AND IT POISONS FOUR DOWNSTREAM CONSUMERS
+
+**`fx5-scanner.ts:991`, verbatim:**
+`const volumeUSD = typeof s.volume24h === 'number' && !isNaN(s.volume24h) ? s.volume24h : 0;`
+
+**`s.volume24h` is `parseFloat(ticker.v[1])` (`market-scanner.ts:564`) — Kraken's BASE-CURRENCY turnover. COIN UNITS.** ⇒ **the variable is named `volumeUSD` and holds coins.** Every reader reasonably assumes dollars; none of them get dollars. **This is `wrong-object` at the naming layer, and it is why the unit error in #906 was invisible for so long: the code READS as if it were already correct.**
+
+**FOUR CONSUMERS, all silently wrong:**
+
+| site | what it computes | what it actually means |
+|---|---|---|
+| `:997` | `isBlueChip = volumeUSD > 50_000_000` | **"more than 50 million COINS"** — so **BTC (3,862 coins) is never blue-chip and PEPE (1.09 trillion units) always is.** The designation is INVERTED for exactly the assets it exists to name. |
+| `:1015` | `classifyVolume(volumeUSD)` | volume class on the wrong unit |
+| `:1064`, `:1205` | `log10(volumeUSD + 1) * 10` — a liquidity SCORE | a score that rises with cheapness, not liquidity |
+| `:1125`, `:1237` | returned in the scanner payload as `volumeUSD` | the wrong unit under a dollar name, exported to every downstream reader |
+
+⇒ **#906's gate is one symptom; this is the root.** ★ **AND THE FIX IS ALREADY IN HAND: Kraken's ticker carries `c[0]` (last trade price) in the SAME response** already parsed at `market-scanner.ts:561-566`. **Dollar volume is `v[1] × c[0]` — one line, no new feed, no new call.**
+
+**HOME: `B-LIQUIDITY-UNIT-AUDIT` (with #906), owner CC-C, due 2026-09-05.** ⚠️ **Rename the variable in the same commit** — leaving a correct value under a misleading name re-arms the trap.
+
+### #908 OPEN 2026-08-26 (CC-C; same dig) — `trades24h` IS DECLARED, NEVER ASSIGNED, AND DEFAULTS TO A HARDCODED 100
+
+**`fx5-scanner.ts:1024`:** `const tradeCount = s.trades24h || s.tradeCount || 100; // Default trade count if unavailable`
+**MEASURED:** `trades24h` is **declared** at `market-scanner.ts:424` as optional and is **assigned NOWHERE** in the scanner path (the only other `trades24h*` symbols are unrelated locals in `routes.ts:7965-7985` counting OUR OWN opened trades). `tradeCount` is likewise unassigned. ⇒ **the `|| 100` fallback fires for EVERY symbol, on EVERY cycle. Every pair in the universe is treated as having exactly 100 trades.**
+
+⛔ **`#546` in its purest form: an absent value wearing a plausible number's clothes.** A hardcoded 100 is indistinguishable from a real measurement to every downstream consumer, and it can never look wrong.
+
+★ **THIS IS THE ANSWER TO KYLE'S OBJECTION, AND THE DATA IS ALREADY ON THE WIRE.** He asked whether switching the gate to dollars would lose *"smaller coins above the twenty five cent threshold that trade a lot but whose dollar value doesn't add up."* **A direct measure of "trades a lot" is Kraken's ticker `t` array (`t[1]` = 24 h trade count) — present in the SAME response we already parse and currently DISCARDED.**
+⇒ **RECOMMENDED GATE SHAPE (not a threshold proposal): admit on `dollar_volume >= X` **OR** `trade_count >= Y`** — real money **or** genuine activity, so a busy cheap coin qualifies on its activity and BTC qualifies on its money. **Both inputs are one line each from a response already in hand.**
+**HOME: `B-LIQUIDITY-UNIT-AUDIT`, owner CC-C, due 2026-09-05.** ↔ #906, #907.
