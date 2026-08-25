@@ -3519,3 +3519,53 @@ The 4 are trades **open at the moment of the first close**. ⚠️ **INERT TODAY
 ★ **THIS IS THE ANSWER TO KYLE'S OBJECTION, AND THE DATA IS ALREADY ON THE WIRE.** He asked whether switching the gate to dollars would lose *"smaller coins above the twenty five cent threshold that trade a lot but whose dollar value doesn't add up."* **A direct measure of "trades a lot" is Kraken's ticker `t` array (`t[1]` = 24 h trade count) — present in the SAME response we already parse and currently DISCARDED.**
 ⇒ **RECOMMENDED GATE SHAPE (not a threshold proposal): admit on `dollar_volume >= X` **OR** `trade_count >= Y`** — real money **or** genuine activity, so a busy cheap coin qualifies on its activity and BTC qualifies on its money. **Both inputs are one line each from a response already in hand.**
 **HOME: `B-LIQUIDITY-UNIT-AUDIT`, owner CC-C, due 2026-09-05.** ↔ #906, #907.
+
+### ⛔⛔ #906 and #907 WITHDRAWN 2026-08-26 (CC-C). #909 REPLACES THEM WITH THE PROVEN CAUSE.
+
+**KYLE STOPPED ME:** *"We've gone back and forth on what volume is being measured... That question has been asked and answered so many times throughout the history of this system... make sure you understand what that is before you start just reading headlines and assuming. I think that's what you're doing here."* **He was right on every count.**
+
+**#906 WITHDRAWN — the volume gate is NOT unit-denominated and does NOT block Bitcoin.**
+**#907 WITHDRAWN — `volumeUSD` is correctly named and correctly valued.**
+
+**THE PROOF, from the LIVE LOG rather than from reading code paths:**
+`[DIAG_PATTERN] Evaluating pair XBT/USD: price=78844.3, volume24hCoins=3871.49, volume24hUSD=305244973.72, spread=0.000127%`
+`[DIAG_PATTERN] REJECTED XBT/USD: history failed`
+
+⇒ **Bitcoin PASSES the volume gate at $305 M.** The rejections I cited (*"volume 83.98 < 250000"*) quote the **USD** figure, not units — `market-scanner.ts:751-752` converts explicitly, and `kraken.ts:837` records the decision by name: **"Directive 8.8.4-C.13.D: volume24h is now USD-denominated."**
+
+★ **AND THE HISTORY OF THE QUESTION, which is what Kyle asked for:** canonical `DawnTrader_Mathematical_Architecture_v1.5.0.md:60` specifies **`Vol >= 100K units`** — so the filter WAS unit-denominated by original design. **Directive 8.8.4-C.13.D changed it to USD**, and USD is what runs today. **Both Kyle's recollection and the canonical doc describe the PRE-directive state; the directive superseded them and nothing propagated the change back into the canonical record.** ⇒ **the question keeps being re-opened because the canonical corpus still states the old answer, and the corpus is (correctly) never edited.**
+
+**MY FAILURE, named precisely:** I read `market-scanner.ts:564` (`volume24h: parseFloat(ticker.v[1])`, in the adaptive-scan universe build) and assumed it fed `fx5-scanner.ts:991`. **The actual feeder is `market-scanner.ts:752`, which converts.** `wrong-object` — right file, wrong function — and I never opened the log that would have shown me both figures side by side on one line.
+
+⚠️ **ONE RESIDUAL QUESTION, EXPLICITLY NOT A CLAIM:** `market-scanner.ts:564` and `:752` both assign a field named **`volume24h`** — `:564` in **coins**, `:752` in **USD**. Whether `:564`'s consumers are correct for a coin-denominated value is **unverified**, and given the errors above I am not asserting it either way. Tracked on **#909** as a question to answer, not a defect to fix.
+**#908 (`trades24h` never assigned) is NOT withdrawn but is DOWNGRADED to UNVERIFIED pending the same re-check.**
+
+### #909 OPEN 2026-08-26 (CC-C; **PROVEN, and it replaces #906/#907**) — ★★ BITCOIN IS EXCLUDED BY A SYMBOL-FORM MISMATCH IN ONE API CALL, AND EVERY INSTRUMENT THAT COULD HAVE SHOWN IT WAS BLIND
+
+**THE CHAIN, each link measured:**
+1. The scanner passes `pair.symbol` — the Kraken **wsname**, `XBT/USD` — to `passesHistoryFilter` (`market-scanner.ts:993-997`).
+2. That calls `krakenService.getPairHistoryDays(pair, mode)` -> `getOHLCData(pair, 1440)` (`kraken.ts:635`).
+3. ⛔ **MEASURED AGAINST THE LIVE KRAKEN API:**
+
+| symbol form | daily candles returned | Kraken's answer |
+|---|---:|---|
+| **`XBT/USD`** | **0** | ⛔ **`EQuery:Unknown asset pair`** |
+| `XXBTZUSD` | 721 | ok |
+| `XBTUSD` | 721 | ok |
+| **`ETH/USD`** | **721** | **ok** |
+| **`SOL/USD`** | **721** | **ok** |
+
+4. The throw is caught (`kraken.ts:648-653`) -> cached as `null` -> `passesHistoryFilter` applies *"REB 2.10: If we cannot determine history (null), be conservative & fail"* (`market-scanner.ts:380-381`) ⇒ **REJECTED, every cycle, for the life of the system.**
+
+★ **THIS EXPLAINS THE BENCHMARK ASYMMETRY EXACTLY.** ETH/USD and SOL/USD are accepted by Kraken in slash form and trade normally (**ETH 9 closed paper trades, SOL 19**). **Bitcoin's canonical Kraken name is `XXBTZUSD`/`XBTUSD`, and the slash alias is not registered** — so Bitcoin alone fails. **Nothing to do with benchmarks, force-inclusion, or volume.**
+
+⛔ **AND IT WAS SILENT BY CONSTRUCTION — THREE INSTRUMENTS, ALL BLIND:**
+- The history-reject branch has **NO `capturePreFilterReject`** (`market-scanner.ts:999-1001`), while the volume and spread branches beside it both have one ⇒ **history rejections never reach `signal_eval_archive`.** *(This is why I wrongly concluded BTC was "never evaluated" — the archive genuinely holds no BTC row, because the instrument does not record this rejection class.)*
+- `[REB2.10][HistoryCheck]` is **rate-limited** by `REB_2_10_HISTORY_LOG_LIMIT` ⇒ exhausted early in process life, absent from any live log window.
+- `[REB2.9D][History][Error]` logs **once per pair per TTL** ⇒ also absent.
+⇒ **A permanent exclusion of the largest asset in crypto, invisible to every diagnostic surface.**
+
+**FIX (small, and it is a normalisation job, not a policy change):** resolve the symbol to Kraken's REST pair id before the OHLC call — the resolver already exists (`markets/kraken-symbol-resolver`). ⚠️ **AND WIRE THE MISSING `capturePreFilterReject` ON THE HISTORY BRANCH IN THE SAME COMMIT** — otherwise the next symbol that fails this way is equally invisible.
+⛔ **DO NOT "fix" it by loosening the null-fails rule:** fail-closed on unknown history is correct; the defect is that history is unknowable for a pair that has fifteen years of it.
+**BLAST RADIUS TO MEASURE FIRST:** every pair whose wsname Kraken's OHLC endpoint rejects — **BTC is the one we found, it is unlikely to be the only one.**
+**HOME: `B-BTC-HISTORY-SYMBOL-FIX`, owner CC-C, due 2026-09-05.**
