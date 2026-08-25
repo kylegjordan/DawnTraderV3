@@ -2862,7 +2862,7 @@ The COMMITTED copy carries the five **pre-Phase-14 regime keys** (`BULL_STABLE`/
 
 ### #741 OPEN 2026-08-23 (CC-A; found by diagnosing my own 47-minute silence from Langston rather than re-poking a third time) — ★★ **A REVIEW DISPATCH THAT EXCEEDS LANGSTON’S 900s INVOCATION CEILING FAILS **SILENTLY** — IT LOOKS EXACTLY LIKE HIM BEING BUSY, AND AFTER TWO REFIRES IT IS PARKED AND NEVER SEEN.**
 
-**HOME: `B-RULES-1e` — OWNER CC-A — DUE 2026-09-05**, with the sender-side rule landing NOW in the step-4 skill (below) because it costs nothing and the ceiling is live today.
+**HOME: `B-RULES-1e` — OWNER CC-A — QUEUED (⛔ no batch due dates, §9.4 Kyle 2026-08-25)**, with the sender-side rule landing NOW in the step-4 skill (below) because it costs nothing and the ceiling is live today.
 
 **MEASURED, from `journalctl -u discord-langston-bridge.service`:**
 - `CLAUDE_TIMEOUT = 900` — `discord-langston-bridge.py:68`. A hard 15-minute ceiling on ONE invocation.
@@ -2884,7 +2884,7 @@ The COMMITTED copy carries the five **pre-Phase-14 regime keys** (`BULL_STABLE`/
 
 ### #745 OPEN 2026-08-25 (CC-A; **Langston declined to rule at the `B-CONDUCT-DELIVERY-HOTFIX` gate and named it a mechanism question**) — ★★ **THE #702 ISSUE-NUMBER BLOCKS DO NOT HOLD, AND THE REASON IS STRUCTURAL: NOTHING CHECKS THE BLOCK AT THE MOMENT A NUMBER IS MINTED.**
 
-**HOME: fold into `B-GATE-GUARD` as a SECOND CHECK — OWNER CC-A — DUE 2026-09-05.** Same hook, same trigger, same staged-diff read as #744; two hooks racing the same push is worse than one hook with two checks.
+**HOME: fold into `B-GATE-GUARD` as a SECOND CHECK — OWNER CC-A — QUEUED behind it (⛔ no batch due dates, §9.4).** Same hook, same trigger, same staged-diff read as #744; two hooks racing the same push is worse than one hook with two checks.
 
 **MEASURED at `origin/migration/aws-supabase`, population stated and controlled.** Every `### #NNN` heading with N>=702: **25 raw, 24 parseable** (the 25th uses a heading shape the author-regex misses — stated rather than silently dropped; **my first parse caught only 21 of 25 because `\w+` does not match hyphenated states like `CLOSED-BY-KYLE-RULING`**, which is the `wrong-object` slug inside the measurement of a numbering defect).
 | | |
@@ -2941,7 +2941,7 @@ The COMMITTED copy carries the five **pre-Phase-14 regime keys** (`BULL_STABLE`/
 
 ### #740 OPEN 2026-08-23 (CC-A; Langston directed the filing after re-deriving the frontmatter himself at `d0fc181c7` — 12/12 descriptions present, 0 colon-space) — ★★ **A `": "` IN A SKILL DESCRIPTION SILENTLY DISARMS THAT SKILL’S AUTO-INVOKE TRIGGER. VALID FILE, NO ERROR, PLAUSIBLE FALLBACK — THE #546 SHAPE.**
 
-**HOME: `B-RULES-1e` — OWNER CC-A — DUE 2026-09-05**, as a mechanical check (a pre-commit or CI assertion over `.claude/skills/*/SKILL.md`). Filed as a DEFECT CLASS, not as the two files, because both instances are already fixed and the class is what recurs.
+**HOME: `B-RULES-1e` — OWNER CC-A — QUEUED (⛔ no batch due dates, §9.4)**, as a mechanical check (a pre-commit or CI assertion over `.claude/skills/*/SKILL.md`). Filed as a DEFECT CLASS, not as the two files, because both instances are already fixed and the class is what recurs.
 
 **THE MECHANISM.** Skill frontmatter is YAML. An unquoted scalar containing a **colon-space** is ambiguous, so the parser drops the `description` key. The app then **falls back to the file’s first `#` heading** — which reads like a description, so the listing looks populated.
 **MEASURED 2026-08-21/22:** `workflow-05-ci` and `workflow-07-verify-cc` both lost their descriptions this way — the two whose text contained *"branch head: TypeScript Check…"* and *"change works: PM2 logs…"*. **Nothing errored. The files were valid. The frontmatter looked right.**
@@ -2957,7 +2957,7 @@ The COMMITTED copy carries the five **pre-Phase-14 regime keys** (`BULL_STABLE`/
 
 ### #739 OPEN 2026-08-23 (CC-A; found discharging alert `9c3037f0`, which Langston re-minted after I resolved its predecessor `c2565dcf` IN ERROR) — ★★ **THE RULE-21 LIVENESS ARTIFACT HAS NEVER BEEN WRITTEN. THE TASK IS ALIVE; THE PROOF-OF-LIFE IS DEAD — AND THE ALARM’S STATED MEANING WOULD HAVE CONDEMNED THE WRONG THING.**
 
-**HOME: `B-RULES-1e` (the mechanisation pass that follows the CLAUDE.md slim) — OWNER CC-A — DUE 2026-09-05.** Not "later": if 1e slips, it re-homes to a dated batch, not to a phase name (§9.4, and see the step-11 skill — a phase name is not a home).
+**HOME: `B-RULES-1e` (the mechanisation pass that follows the CLAUDE.md slim) — OWNER CC-A — QUEUED, next in the `B-RULES` sequence (⛔ no batch due dates, §9.4).** Not "later": if 1e slips, it re-homes to a dated batch, not to a phase name (§9.4, and see the step-11 skill — a phase name is not a home).
 
 **MEASURED, with the population and a positive control stated:**
 - The scheduled task `daily-claude-model-check` is **ENABLED**, `lastRunAt` **2026-08-22T07:23:14.648Z**, `nextRunAt` 2026-08-23T07:22Z. **It is running.**
