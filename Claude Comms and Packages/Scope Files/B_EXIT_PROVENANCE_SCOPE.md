@@ -278,3 +278,72 @@ these fields?**
   data supplies. **Deliberately not folded in:** a behaviour change inside a batch whose safety case is
   *"records only, decides nothing"* would forfeit that safety case.
 - **A UI surface for provenance** — after F-E, when there is something to display.
+
+---
+
+# REV 4 — 2026-08-25, after Langston's r3 bounce. **BOTH BLOCKERS ACCEPTED.**
+
+## R4-1 BLOCKER-1 ACCEPTED — **THE MAKER ENTRY NEVER TOUCHES A BOOK AT FILL. VERIFIED AT SOURCE.**
+
+| site | what it does |
+|---|---|
+| `active-execution-engine.ts:3147-3151` | `if (_b72cPendingMaker) { actualEntryPrice = _b72cLimit; ... }` — **the placer call and `_gate.snapshot.asks` are in the `else`.** The book is never consulted. |
+| `_processPendingMaker:985` | the fill decision is `evaluatePendingMaker({ side, currentPrice, limit, nowMs, deadlineMs })` — **`currentPrice`, not a book.** No source, no age. |
+| `:990-994` | writes `state:'open'` — this is the actual fill instant |
+
+★ **AND THE CODEBASE ALREADY KNEW.** `:986-989`, verbatim: *"NOTE: openedAt stays stamped at PLACEMENT, not at this fill — resting time is included in any holding-duration analytic ... A true in-market duration needs a `filledAt` stamp."* ⇒ **placement is not fill, it is a DOCUMENTED property of this path, and my scope would have stamped a placement-time book age as `entry_book_age_ms` anyway.** `#546` in its worst form: a wrong-instant value in the fill's clothes, passing OBJ-9's non-null fence green.
+
+### ★ THE MEASUREMENT YOU REQUIRED — AND IT CUTS BOTH WAYS
+
+**OBJECT:** `closed_trades`, `mode='paper'`, `asset_class='crypto_spot'`, `never_filled` EXCLUDED, entry price below the lowest price the venue **PRINTED** in a plus/minus 10 min window around `opened_at` (`crypto_spot_ohlc_1m.low`, keyed on `interval_begin`).
+
+| entry mode | trades | assessable | **below printed low** | P&L on those | median |
+|---|---:|---:|---:|---:|---:|
+| **taker** | 58 | 51 | **19** | **+$204.43** | **294.5 bps** |
+| **maker** | 263 | 189 | **5** | +$17.40 | **51.2 bps** |
+
+**=> ANSWER TO YOUR QUESTION: THE DEPTH SNAPSHOT IS THE RIGHT INSTRUMENT FOR THE CONTAMINATED COHORT.** 19 of 24 contaminations (79%) and **$204.43 of $221.83 (92%) are TAKER** — the cohort that does walk the book — at a median **294.5 bps**, 5.75x the maker median.
+
+⛔ **BUT THAT DOES NOT RESCUE THE STAMP, AND YOUR BLOCKER STANDS IN FULL.** Makers are **263 of 321 fills (82%) by count.** Stamping placement-time book age on them would put a wrong-instant value on the **majority of all entry rows**, to serve a cohort that is 2.6% contaminated. **The measurement vindicates the INSTRUMENT CHOICE and refutes the STAMP DESIGN — those were two claims and I had merged them.**
+
+### R4-1a THE DESIGN, per your ruling: **TWO FILLS, TWO STAMP POINTS, ONE VOCABULARY**
+
+- **Taker fill — the open seam** (`:3153-3156`), stamping `_gate.snapshot.source` + `ageMs`. Your stronger reason adopted: the value is *already structurally coupled* to the fill, so a future edit that drops `_gate.snapshot` breaks loudly at the placer call rather than silently nulling a column.
+- **Maker fill — `_processPendingMaker:990`**, at the `state:'open'` write. **The decision instrument there is the price tick, so the stamp names the tick, not a book** — and `entry_book_age_ms` is **NULL BY CONSTRUCTION on a maker row, with a column comment saying so**, exactly as OBJ-8 already does for xStock's null book mid.
+- ⛔ **NO SECOND COLUMN FAMILY** (your constraint): the **`entry_price_producer` enum absorbs the cohort**, the same way it absorbs the class. A maker row carries a tick-producer value; a taker row carries a book-producer value; one column, one vocabulary, one fence.
+
+⚠️ **AND YOU ARE RIGHT THAT THE MAKER LEG DRAGS THE r2 C1 AMBIGUITY ONTO THE ENTRY SIDE** — the tick's `source` cannot discriminate book-mid from ticker-last. **That is exactly what `producer` exists for, and R4-4 records that it already shipped.**
+
+## R4-2 BLOCKER-2 ACCEPTED — THE FENCE POPULATION IS WRONG ON BOTH LEGS
+
+`_processPendingMaker:1004-1009` writes `closedAt` + `closeReason:'never_filled'` on a dropped rest — **a row that never opened and never exited: no entry fill, no exit price, no source, by construction.** A `closed_at IS NOT NULL AND closed_at > <deploy ts>` population admits every one of them, so **OBJ-1/OBJ-5 would fail on rows that are CORRECT.**
+
+**FIX — a named clause carrying its reason, never a silent filter:** the fence adds `AND close_reason IS DISTINCT FROM 'never_filled'`, commented *"a dropped maker rest never opened and never exited; it has no fill to have provenance FOR — excluding it is a statement about the population, not a convenience."*
+
+**AND OBJ-9 GETS ITS OWN POPULATION:** *"post-deploy OPEN"* is not *"post-deploy INSERT"* once resting orders exist — a maker row is **INSERTED at placement and OPENS later**, so the entry fence keys on the **`state:'open'` transition**, not on row creation.
+
+## R4-3 OBJ-10 RESTATED — **you are right that it could not be proven as written**
+
+**OBJ-10 (was):** *a fence proves the value is written at the fill seam and NOT carried on signal metadata.* ⛔ Unbounded over every future field list — unprovable, and it would have read stronger than it was.
+
+**OBJ-10 (now) — THE DISCRIMINATION PAIR:** place a **decoy** provenance value on `rawSignal.metadata`, run the rebuild, and assert **the decoy is ABSENT from the sized signal WHILE the seam stamp is PRESENT on the persisted row.** Fails if anyone adds a spread; fails if the seam stamp stops.
+⚠️ **STATED LIMIT, inside the objective itself:** this fences **the one measured drop site**, not *"all metadata paths"*. An unmeasured future path is not covered, and the objective says so rather than implying otherwise.
+
+## R4-4 THE R2-3 DISPOSITION YOU ASKED FOR — **RECOVERED FROM THE CODE, WHICH BEATS A CHAT LOG**
+
+You are right that REV 3 never recorded it, and right that your `langston-recall` miss is **not** an absence. **REV 2 records only my recommendation** — *"I RECOMMEND (B) ... If he still rules (A), I will take it."* **Your ruling was never written into the scope. That is my miss.**
+
+**But the disposition is recoverable from the artifact rather than from either of our memories: (B) SHIPPED, and is deployed.** At `34d5f89a9`, `live-pricing-adapter.ts`:
+
+- `:122` — **`source` is the UNTOUCHED original vocabulary:** `'mock' | 'kraken_ws' | 'kraken_equities_ws' | 'kraken_rest' | 'entry_seed' | 'last_known_good' | 'no_reliable_price'`. **`kraken_ws` was NOT split** — that is design (B)'s defining claim, and (A)'s defining change is absent.
+- `:151` — **`isKrakenVenueSource(source: string)` is unchanged**, so the gate's input never widened. Your *impossible-rather-than-caught* preference held.
+- `:124` — `producer: PriceProducer`, **required**, on a closed union whose docblock states the (B) argument verbatim: *"`source` answers a POLICY question (may the engine act on this?); `producer` answers a PROVENANCE question."*
+
+⇒ **BOTH the exit leg and the new maker entry leg hang off `producer`, and it exists.**
+
+## R4-5 REF CORRECTIONS ACCEPTED — **AND ONE IS A LEDGER DEFECT, NOT ONLY MINE**
+
+**The metadata rebuild is `signal-orchestrator.ts:1190-1212`, NOT `:1059-1077`.** Verified: my cited lines are B67.3 cap-check and RTB pool queueing — unrelated code. The real site rebuilds `metadata:` field-by-field with `_displayContext` the only spread, and **its own comment at `:1204-1211` already documents this drop** and records that `active-execution-engine.ts:3143` spreads `...signal.metadata` onto the position row — the transit this batch reuses.
+
+⚠️ **I DID NOT INVENT `:1059-1077` — I TOOK IT FROM `#550`'s ADDENDUM-2, WHICH STILL CARRIES IT.** The file has moved since that entry was written. ⇒ **the ledger will send the next reader to the wrong lines**, which is the `wrong-object` class with a governance-document blast radius. **Corrected in `#550` in this same commit, not only in my scope** — a stale ref in the ledger is worse than one in a scope, because the ledger is what the next session greps.
+**My own failure stands regardless: I cited a ledger entry instead of verifying at the ref.**
