@@ -2882,6 +2882,30 @@ The COMMITTED copy carries the five **pre-Phase-14 regime keys** (`BULL_STABLE`/
 
 ---
 
+### #745 OPEN 2026-08-25 (CC-A; **Langston declined to rule at the `B-CONDUCT-DELIVERY-HOTFIX` gate and named it a mechanism question**) — ★★ **THE #702 ISSUE-NUMBER BLOCKS DO NOT HOLD, AND THE REASON IS STRUCTURAL: NOTHING CHECKS THE BLOCK AT THE MOMENT A NUMBER IS MINTED.**
+
+**HOME: fold into `B-GATE-GUARD` as a SECOND CHECK — OWNER CC-A — DUE 2026-09-05.** Same hook, same trigger, same staged-diff read as #744; two hooks racing the same push is worse than one hook with two checks.
+
+**MEASURED at `origin/migration/aws-supabase`, population stated and controlled.** Every `### #NNN` heading with N>=702: **25 raw, 24 parseable** (the 25th uses a heading shape the author-regex misses — stated rather than silently dropped; **my first parse caught only 21 of 25 because `\w+` does not match hyphenated states like `CLOSED-BY-KYLE-RULING`**, which is the `wrong-object` slug inside the measurement of a numbering defect).
+| | |
+|---|---|
+| out-of-block entries | **14** |
+| of those, CC-C | **13** |
+| of those, CC-A | **1 — `#702` ITSELF**, filed before the blocks it created existed. Not a violation in substance; recorded so the count is honest |
+| duplicated numbers | **1 — `#741`**, CC-C and CC-A, same day, unrelated subjects |
+
+★★ **AND THE PICTURE CHANGED ON 2026-08-24, WHICH IS THE PART THAT MATTERS: CC-C HAS MOVED TO `#900-#904`.** Five issues minted from a range **belonging to nobody**, outside the #702 scheme entirely. **Read it as what it is — a session that hit the collision and routed around it unilaterally.** It DOES stop collisions (no one else is near 900) and it is **not recorded anywhere**, so the next session to mint by `max+1` now lands at **#905** and the scheme is dead by drift rather than by decision. ⚠️ **DO NOT "correct" him back into 704-729 without a ruling** — renumbering another session's issues re-points their inbound citations at the wrong problem (the standing rule), and his range is at least unambiguous.
+
+**WHY THE BLOCKS FAILED, and it is not carelessness.** A block is a **convention held in each session's own memory file**. The minting session is the only thing enforcing it, at the exact moment it is busy doing something else — the identical shape as `skipped-the-gate` (#744): the rule is known, one-day-old, and skipped under load. **`max+1` is not laziness, it is the only method that requires no lookup.** ⇒ **The scheme asks every session to do a thing no session is instrumented to do.**
+
+**THE MECHANISM.** Inside `B-GATE-GUARD`, on a push touching `RUNNING_ISSUES.md`: parse `### #NNN` headings **added in the staged diff**, resolve the session from its clone folder (`load-own-memory.mjs` already does exactly this — reuse it, do not re-derive), and **REFUSE if a minted number falls outside that session's block**, naming the block and **printing the NEXT FREE NUMBER IN IT.**
+★ **THAT LAST CLAUSE IS THE WHOLE FIX AND IT IS NOT AN EXTRA:** the guard removes the reason `max+1` is reached for. A refusal that says *"use #745"* costs less than the lookup it replaces — **the compliant path becomes the CHEAP path**, which is the only version of this that survives a session under time pressure.
+⚠️ **HONEST LIMITS, stated now so the build does not oversell itself:** (a) it cannot catch a number minted into a file that is never pushed; (b) it is blind to a heading whose shape it does not parse — **the exact failure this entry's own first measurement made**, so the guard must **fail LOUD on an unparseable `### #` heading rather than skipping it**; (c) it does not settle CC-C's `#900` range — that needs a decision, not a check.
+
+**DECISION STILL OPEN, and it is not mine:** ratify `#900+` as CC-C's block, or return him to 704-729. Langston declined to rule and took a precaution instead — **until settled he cites by NUMBER + SUBJECT, because `#741` alone resolves to two things.** Adopt that citation form crew-wide in the interim.
+
+---
+
 ### #744 OPEN 2026-08-24 (CC-A; **Langston required a MECHANISM rather than another rule at the `B-CONDUCT-DELIVERY-HOTFIX` gate**) — ★★ **A RULE THAT PREDICTED ITS OWN BYPASS AND WAS BYPASSED ANYWAY HAS BEEN TESTED AND FAILED. ANOTHER SENTENCE IS THE SAME INSTRUMENT.**
 
 **HOME: `B-GATE-GUARD` — OWNER CC-A — DUE 2026-09-05.** Explicitly NOT built inside the hotfix it came from (his instruction).
