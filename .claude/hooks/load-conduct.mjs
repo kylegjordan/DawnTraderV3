@@ -128,7 +128,9 @@ try {
   const shortfall = slices.length > CHUNK_COUNT
     ? `\n[⚠️⚠️ CONDUCT.md NEEDS ${slices.length} CHUNKS BUT ONLY ${CHUNK_COUNT} ARE REGISTERED IN ` +
       `.claude/settings.local.json — SECTIONS AFTER CHUNK ${CHUNK_COUNT} ARE NOT REACHING YOU. ` +
-      `Register another load-conduct entry (args "${CHUNK_COUNT}" "${CHUNK_COUNT + 1}") or trim the file. ` +
+      `FIX: add a load-conduct entry with args "${CHUNK_COUNT}" "${slices.length}" AND change the SECOND arg on ` +
+      `every existing entry to "${slices.length}" — bumping only the new one leaves the others still ` +
+      `reporting a shortfall that no longer exists (Langston, hotfix gate). Or trim the file. ` +
       `READ CONDUCT.md IN FULL before reporting anything.]\n`
     : '';
 
