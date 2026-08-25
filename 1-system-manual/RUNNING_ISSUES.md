@@ -3455,3 +3455,36 @@ The 4 are trades **open at the moment of the first close**. ⚠️ **INERT TODAY
 **CONSEQUENCE, and it is not only about Bitcoin:** the universe is **systematically biased toward low-priced, high-unit-count assets** and against high-priced ones, **independently of real liquidity.** Every trade in the post-epoch window is consistent with that shape. ⚠️ **This also means the liquidity gate is not doing the job its name implies** — it is not measuring tradeable depth, and `entryLiquidityKind='volume_qty'` inherits the same unit.
 
 **RULE 24 — I am NOT calling this outcome (1).** It may be a deliberate Replit-era choice with a rationale I have not recovered; the provenance read of Directive 11.4H.4/11.4H.5 covered the BENCHMARK sites, **not the volume-threshold origin.** That read is this item's first task. **HOME: `B-LIQUIDITY-UNIT-AUDIT`, owner CC-C, due 2026-09-05.** ↔ #561 (`entryLiquidityKind` shares the unit), Phase-25 calibration.
+
+**★★ #906 SHARPENED 2026-08-25 — KYLE'S CHALLENGE WAS RIGHT TWICE, AND THE FIRST EVIDENCE I CITED WAS THE WRONG PAIRS.** My first pass cited `observed` values of 26.42 / 0.97 / 161.89. **Those are XBT/USDQ, XBT/EUROP and XBT/USD1 — exotic stablecoin pairs, not the main market.** The conclusion held but the evidence did not, so it is replaced rather than annotated.
+
+**★ KYLE'S HYPOTHESIS, CONFIRMED:** *"I imagine there are lots of trades involving Bitcoin, just not a full coin. People are probably doing a lot of partial coins that add up to twenty six full coins."* **Exactly right.** The figure is aggregate 24 h base-currency turnover — the sum of thousands of fractional fills — not a trade count. Comparing it to a fixed unit threshold treats "how many coins moved" as if it were "how much liquidity exists."
+
+**THE CONTROL THAT SETTLES THE UNIT QUESTION** (`crypto_spot_ticker_snap`, live):
+
+| symbol | unit volume | price | **dollar volume** | unit gate (500,000) |
+|---|---:|---:|---:|---|
+| **BTC/USD** | 3,862 | $78,600 | **$303.6 M** | ⛔ **BLOCKED** |
+| ETH/USD | 22,412 | $2,442 | **$54.7 M** | ⛔ BLOCKED |
+| HYPE/USD | 404,437 | $79.50 | $32.2 M | ⛔ BLOCKED |
+| ZEC/USD | 32,059 | $777 | $24.9 M | ⛔ BLOCKED |
+| TAO/USD | 44,138 | $230 | $10.1 M | ⛔ BLOCKED |
+| AAVE/USD | 36,230 | $127 | $4.6 M | ⛔ BLOCKED |
+| LINK/USD | 401,346 | $11.33 | $4.5 M | ⛔ BLOCKED |
+| XMR/USD | 9,790 | $437 | $4.3 M | ⛔ BLOCKED |
+| SOL/USD | 566,103 | $97 | $55.0 M | ✅ passes |
+| PUMP/USD | 1,270,602,465 | ~$0.005 | $5.8 M | ✅ passes |
+| **PEPE/USD** | **1,092,669,346,405** | ~$0.000004 | **$4.2 M** | ✅ **passes** |
+
+⇒ **BTC/USD CARRIES 72× THE DOLLAR LIQUIDITY OF PEPE/USD AND IS BLOCKED WHILE PEPE PASSES.** The single most liquid asset in crypto fails a gate named "minimum volume". **The gate does not measure liquidity; it measures unit count, and unit count is a function of the coin's PRICE.**
+
+## ⛔ AND THERE IS A SECOND, SEPARATE DEFECT — BTC NEVER REACHES EVALUATION AT ALL
+
+**MEASURED, `signal_eval_archive`, 2 days:** `XBT/USD` and `BTC/USD` produce **ZERO rows**. Not rejected — **never evaluated.** Meanwhile the exotic `XBT/EUROP`, `XBT/USDR`, `XBT/USDQ`, `XBT/EURC`, `XBT/JPY`, `XBT/FIDD` pairs are evaluated **thousands of times each**, and `ETH/USD` (3,074) and `SOL/USD` (2,052) are evaluated normally.
+
+⚠️ **SO THE UNIT GATE ALONE DOES NOT EXPLAIN BTC.** ETH/USD also fails the unit bar (22,412 < 500,000) yet is evaluated and has **9 closed paper trades** — it gets in via benchmark force-inclusion. **BTC does not, and that asymmetry between two benchmarks is unexplained.**
+★ **STRONGEST LEAD, NOT YET PROVEN: a symbol-form mismatch.** The ticker feed carries **`BTC/USD`**; every evaluated Bitcoin pair carries the **`XBT/`** form; and **neither `XBT/USD` nor `BTC/USD` appears in the evaluated set.** `isBenchmarkSymbol` accepts both forms, so the predicate is not the suspect — the suspect is what `allAvailablePairs` contains at the moment force-inclusion filters it. **That trace is task 1.**
+
+**THE PROPOSED FIX — one denominator change, and it corrects in BOTH directions.** Gate on **quote-currency (dollar) volume**: `volume_24h × price` against a dollar threshold, instead of raw units. It **admits** BTC/ETH/ZEC/TAO/AAVE/LINK/XMR/HYPE on their real liquidity, and it **tightens** on sub-cent coins that clear a unit bar on trillions of worthless units. ⚠️ **The threshold value is a Phase-25 calibration question and is NOT proposed here** — only the denominator is the defect.
+
+**REVISED HOME: `B-LIQUIDITY-UNIT-AUDIT`, owner CC-C, due 2026-09-05 — TWO objectives, not one:** (1) the unit→quote denominator change; (2) **the BTC-specific non-evaluation trace**, which is a different bug and may survive (1). ↔ #561 (`entryLiquidityKind='volume_qty'` inherits the same unit), Phase-25.
