@@ -72,7 +72,7 @@ select symbol, net_pnl, exit_price, take_profit, closed_at from closed_trades
 
 # THE PATTERNS
 
-### `skipped-the-gate` — **DID THE WORK, SKIPPED THE REVIEW** — **LIVE — NOT IN §13** · mechanism: **#744, due 2026-09-05** (opened 2026-08-24, CC-A; Langston required it at the hotfix gate)
+### `skipped-the-gate` — **DID THE WORK, SKIPPED THE REVIEW** — **LIVE — NOT IN §13** · mechanism: **#744, `B-GATE-GUARD`, queued** (opened 2026-08-24, CC-A; Langston required it at the hotfix gate)
 
 **DISTINCT FROM EVERYTHING ELSE IN THIS INDEX**, and that is why it gets its own slug: every other pattern here is *a wrong belief*. **This one is a correct belief and a skipped step.** No measurement was wrong; no instrument misled. The audit, the census, the controls and the announcement requirement were all genuinely done — **written into commit messages instead of a scope file, and never paused for review.**
 
