@@ -608,7 +608,7 @@ The B65.2 functional commit (`0fcd19b1`) shipped trailing exits end-to-end. Subs
 
 **GOVERNANCE:** MISTAKE_PATTERNS (new) · CONDUCT.md · CLAUDE.md r28.a · load-conduct.mjs · RUNNING_ISSUES (#731, #732) · PHASE_HISTORY · PHASE_19_PLAN · MEMORY_CC_A + Langston MEMORY · merged scope doc + completion report. **SIM + System Manual judged NOT APPLICABLE explicitly** (no new component — §3.3 recommended against a fifth hook, and none shipped).
 
-## B-RULES-1c / 1d — the `CLAUDE.md` slim: the workflow becomes twelve skills (CC-A, in flight 2026-08-21→23)
+## B-RULES-1c / 1d — the `CLAUDE.md` slim: the workflow becomes twelve skills (CC-A, **CLOSED 2026-08-25**; 2026-08-21→25)
 
 **change-class:** `non_architecture` · **Home:** the governance programme, Part 1 legs 3+4 · **Issues:** #739, #740 opened; #732 tripwired · **Reviewed ref** `8442eb4d7` · **CI 4/4 GREEN per-job** (run `32636232272`, verified at the job level — the run-level `conclusion` is not the check) · **Langston:** GATE-2 cleared, two conditions cleared at the ref, Step-4 pending
 

@@ -395,7 +395,7 @@ ALL must be ✅ before the flip commit. Verify each at the **B8 switch-on** Step
 
 ---
 
-### B-RULES-1c / 1d — in flight 2026-08-21→23 (CC-A) · §5 decision-log entry
+### B-RULES-1c / 1d — **CLOSED 2026-08-25** (CC-A) · §5 decision-log entry
 
 **DECISION 1 — the workflow is ELEVEN SKILLS, not one, and the INDEX LIVES IN THE RULES FILE.** Kyle’s call, against my first build. Two triggers, explicitly unequal: the `§0.a` table is an ordinary file read and does NOT depend on skill auto-invocation (measured-unreliable); each step being its own skill gives ELEVEN independent backup triggers instead of one. Cost measured before deciding: ~512 extra tokens always-on, 0.5% of the context floor. The umbrella skill was DELETED — nothing makes an umbrella fire first, so it could not route.
 **DECISION 2 — `§2` REMOVED COMPLETELY, with a forwarding heading.** Kyle: *"there shouldn’t be a second set of references to it."* The forwarder survives on measurement, not preference: 136 citations across 107 files, mostly frozen completion reports that are not rewritten.

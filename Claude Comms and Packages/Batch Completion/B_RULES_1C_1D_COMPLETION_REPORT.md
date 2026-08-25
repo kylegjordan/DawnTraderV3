@@ -5,10 +5,11 @@
 | | |
 |---|---|
 | **Owner** | CC-A (Claude Old) |
-| **Dates** | 2026-08-21 → 2026-08-23 |
+| **Dates** | 2026-08-21 → **CLOSED 2026-08-25** |
+| **Board** | `B-RULES-1c` `PVTI_...zg1qnO4` + `B-RULES-1d` `PVTI_...zg1X8Ig` — both **`Review = Approved`** (set by Langston), both moved to **Complete**, `Blocked on = Nothing`. **Read back from each item’s `fieldValues`, not `item-list`** — the latter is the false-negative instrument (his measurement). |
 | **change-class** | `non_architecture` |
 | **Reviewed ref** | **Step-4 APPROVED at `44b165e0b`** (two CHANGES-NEEDED rounds first: `40b84932c` enumeration drift → `cb01111eb` truncation blocker → approved). Two riders applied after approval. |
-| **CI** | **4/4 GREEN, verified PER-JOB** — run `32636232272` |
+| **CI** | **4/4 GREEN, verified PER-JOB** — run `32636232272`; re-verified at close on run `32903457198` (Build, Test Suite, TypeScript Check, Docker Build all `success`). ⚠️ **The run is on a DESCENDANT of my head** — containment confirmed with `merge-base --is-ancestor`, never assumed. ★ **And a sibling run on the same branch reads `cancelled`** — three sessions pushing minutes apart cancel each other, and `cancelled` ≠ `failure` ≠ `success`. Only the per-job `conclusion` is a pass. |
 | **Deploy** | **NONE — judged explicitly, see §4** |
 | **Issues** | #739, #740, #741 opened · #732 tripwired · alert `fe7c2385` acked |
 
@@ -86,6 +87,21 @@
 
 ---
 
+### ★★ THE FIFTH, AND THE LARGEST: BOTH ALWAYS-LOADED FILES WERE ARRIVING AT ~10% OF THEMSELVES
+**Found by CC-C, not by me, and not by any check in this batch — he noticed he had closed two batches without the report-format header and traced it back rather than assuming he had forgotten.**
+
+**THE MECHANISM.** A `SessionStart` hook whose stdout exceeds **~10 KB is not delivered**. The harness persists it to disk and injects a **~2 KB preview**, **while still logging `hook success`** — that line reports the hook’s **exit code**, not delivery. `CONDUCT.md` (~23 KB) and every `MEMORY_CC_*.md` (~21 KB) had therefore been arriving truncated **on every start, resume and compaction.** Of 140 persisted hook outputs on this machine, **every single one** was one of those two files.
+⛔ **WHICH MEANS THIS BATCH’S OWN PREMISE WAS PARTLY FALSE WHILE IT RAN.** `B-CONDUCT-FILE` closed five days earlier claiming the behavioural rules now *"arrive BEFORE you act."* **They did not.** §6 (the report format Kyle had asked for repeatedly), §6b (self-review), §13 (recurring mistakes) all sit past the cutoff and **had never once reached a session.** ★ **That also retires a mystery this project kept re-explaining as a discipline problem** — sessions were not ignoring the report format; **they were never given it.**
+
+**FIXED under `B-CONDUCT-DELIVERY-HOTFIX`** (separate batch, Langston-approved at `32d2f0f44`): both loaders slice on line boundaries into registered chunks, each under the ceiling.
+⚠️ **AND MY FIRST CEILING WAS WRONG, from the wrong instrument** — I binary-searched using **Bash tool** output and applied that number to **hooks**. Different limits. The next session start showed 11 KB chunks still persisting. **`wrong-object` again: right method, wrong channel.**
+★ **THE PROPERTY THAT MAKES IT SELF-REPORTING, and it is Langston’s design, not mine:** every chunk’s first line is a manifest — `[CONDUCT 1/4 · 6992 B · 6992/6919/6885/2903]` — printing **`slices.length`, the TRUE total, never the registered count.** A manifest keyed to the registered count would read `4/4` while a fifth chunk went nowhere: *the original defect wearing the fix’s clothes.*
+**PROVEN AT A REAL SESSION START:** 8 of 8 chunks inline, nothing persisted, 0 source lines missing from either file.
+
+★ **THE GENERALISABLE RULE, recorded because this is the THIRD instance of the class in one week** (Langston’s 900-second invocation ceiling — #741; the 400-character alert-marker truncation): **AN ALWAYS-LOADED FILE MUST NOT EXCEED ITS CHANNEL’S DELIVERY CEILING, AND THE CEILING MUST BE MEASURED ON THE CHANNEL, NOT A LOOKALIKE.** All three share one shape — **a silent ceiling on a delivery path, where the sender’s success signal reports something other than arrival.**
+
+---
+
 ## 6. LANGSTON
 
 **GATE 2 — PASS, tagged `RULED ON REPORTED FACT`, permanently.** He reached neither instrument. It stands only because the finding is **decision-inert**. ⛔ **His condition: this may never be cited as measured precedent that a path-scoped mechanism is reliable.**
@@ -105,11 +121,11 @@
 
 - **Three times I made `CLAUDE.md` BIGGER while slimming it** — writing justification into the file I was trimming. All three caught and relocated, but it is a real tendency.
 - **Runbooks are measured-weak:** 3 commits and 9 mentions across five runbooks, against 370 for `RUNNING_ISSUES.md`. **So `§6` was NOT gutted** — Kyle's point stands that the comms rules got followed *because* they were always-loaded.
-- **#739/#740/#741 all need mechanisms, not procedures** — homed to `B-RULES-1e`, CC-A, due 2026-09-05.
-- **The crew-board CODE is not removed** — only the two rules. Homed to `B-CREW-BOARD-REMOVAL`, CC-A, due 2026-09-05.
-- **Infra Claude's onboarding is deferred by Kyle**, deliberately, date open — named so it is not lost.
+- **#739/#740/#741 all need mechanisms, not procedures** — homed to `B-RULES-1e`, CC-A, **queued** — ⛔ no batch due dates (§9.4, Kyle 2026-08-25).
+- **The crew-board CODE is not removed** — only the two rules. Homed to `B-CREW-BOARD-REMOVAL`, CC-A, **queued behind Infra Claude’s onboarding — gated on KYLE, not on a date.**
+- **Infra Claude’s onboarding is deferred by Kyle**, deliberately — named so it is not lost. ★ **His “1-2 weeks” was an ESTIMATE, not a commitment, and is recorded as one.**
 - **Langston's clearance covers the repo artifact, NOT the laptop deployment.** The wake filter's live twin is off his filesystem.
-- **A KNOWN, HOMED GAP IN THE SAME FILE:** the marker path now reads the untruncated body, but the **other** match sites still read the 400-char string. Langston measured **~118 of 2,820 of his non-marker replies name a CC only past byte 400** (~4%) - they wake nobody, **failing toward SILENCE, not noise.** The comment asserting a global invariant was narrowed to the marker path rather than left overclaiming. **Sweep homed: `B-CREW-BOARD-REMOVAL`, CC-A, due 2026-09-05.**
+- **A KNOWN, HOMED GAP IN THE SAME FILE:** the marker path now reads the untruncated body, but the **other** match sites still read the 400-char string. Langston measured **~118 of 2,820 of his non-marker replies name a CC only past byte 400** (~4%) - they wake nobody, **failing toward SILENCE, not noise.** The comment asserting a global invariant was narrowed to the marker path rather than left overclaiming. **Sweep homed: `B-CREW-BOARD-REMOVAL`, CC-A, queued.**
 - **BOARD, and I got this wrong:** I told Langston I had "found no card" **without having looked.** Both cards exist - `B-RULES-1c` (`PVTI_lAHODmulEM4BfQP4zg1qnO4`) and `B-RULES-1d` (`PVTI_lAHODmulEM4BfQP4zg1X8Ig`). **An asserted absence with no check behind it is the exact class this batch spent the day fixing.** Both moved to `Governance`, `Blocked on = Kyle`, read back to confirm.
 
 ---
