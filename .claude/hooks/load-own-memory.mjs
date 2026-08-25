@@ -102,13 +102,19 @@ try {
   const _body = _slices[CHUNK_INDEX];
   if (_body === undefined) process.exit(0);
 
+  // ⛔ MANIFEST FIRST — see load-conduct.mjs for the full rationale (Langston, hotfix gate 2026-08-24).
+  // The truncation preview is HEAD-shaped, so a first-line manifest survives its own truncation and a
+  // reader can count arrivals against a declared total.
+  const _sizes = _slices.map((x) => Buffer.byteLength(x, 'utf8'));
+  const _mf = `[MEMORY ${CHUNK_INDEX + 1}/${_slices.length} · ${_sizes[CHUNK_INDEX]} B · ${_sizes.join('/')}]\n`;
+
   const _hdr = CHUNK_INDEX === 0
-    ? `[AUTO-LOADED — your own working memory: ${session.file} — ${session.name}` +
+    ? _mf +
+      `[AUTO-LOADED — your own working memory: ${session.file} — ${session.name}` +
       `${fromMirror ? ' (from in-clone MIRROR; may be one commit behind your live file)' : ''}]\n` +
       `This is YOUR per-session state (auto-injected on every start/resume/compaction). Shared rules ` +
-      `are in CLAUDE.md; shared project truths are in MEMORY.md. Write working state ONLY to ${session.file}.\n` +
-      `[delivered in ${_slices.length} chunk(s) — a single write over ~10 KB is silently truncated]\n` + _short
-    : `[AUTO-LOADED — ${session.file} continued, chunk ${CHUNK_INDEX + 1} of ${_slices.length}.]${_short}\n`;
+      `are in CLAUDE.md; shared project truths are in MEMORY.md. Write working state ONLY to ${session.file}.\n` + _short
+    : _mf + `[AUTO-LOADED — ${session.file} continued.]${_short}\n`;
 
   process.stdout.write(_hdr + '\n' + _body + '\n');
 } catch {

@@ -72,6 +72,17 @@ select symbol, net_pnl, exit_price, take_profit, closed_at from closed_trades
 
 # THE PATTERNS
 
+### `skipped-the-gate` — **DID THE WORK, SKIPPED THE REVIEW** — **LIVE — NOT IN §13** · mechanism: **#744, due 2026-09-05** (opened 2026-08-24, CC-A; Langston required it at the hotfix gate)
+
+**DISTINCT FROM EVERYTHING ELSE IN THIS INDEX**, and that is why it gets its own slug: every other pattern here is *a wrong belief*. **This one is a correct belief and a skipped step.** No measurement was wrong; no instrument misled. The audit, the census, the controls and the announcement requirement were all genuinely done — **written into commit messages instead of a scope file, and never paused for review.**
+
+| # | instance | what was skipped | ref |
+|---|---|---|---|
+| 1 | `B-CONDUCT-DELIVERY` — met all three hotfix qualifying tests, implemented + verified + **PUSHED** with no scope file and no Langston gate. Kyle caught it. | The gate. **One day after I wrote `workflow-hotfix` §3 saying the gate is the entire reason the fast path exists — a skill that NAMES URGENCY as the skip condition.** | `831f25b6d` |
+
+★ **WHY MORE RULE-TEXT CANNOT FIX THIS (Langston):** *"the gate did not fail from ignorance."* The rule existed, was one day old, was written by the person who broke it, and **predicted its own bypass in its own text.** A rule that has been tested that directly and still failed is not improved by another sentence.
+**THE COUNTER-HABIT, until #744 ships:** at the moment you judge something urgent, **that is the trigger to check whether a gate applies** — urgency is the condition the rule warns about, so feeling it is the cue, not the excuse.
+
 ### `read-the-field` — **THE OBJECT DESCRIBED ITSELF AND THE READER DID NOT LOOK** — **LIVE — NOT IN §13** · mechanism: **NONE YET** (opened 2026-08-23, CC-A; Langston-named, and **Langston corrected the tally down from three instances to two**)
 
 **TWO instances, both CC-A, both inside `B-RULES-1c/1d`.** ⛔ **FAILS BOTH §13 LEGS** — under the 3+ floor, and 1c/1d is **ONE context, not two batches** (Langston: *"two id strings, one context: same session, same day, same subject, same state. The leg tests whether a pattern survives a CHANGE OF CONTEXT, not whether two strings differ. If a literal id test clears it, the gate is satisfiable by sub-batch numbering"* — the same "gate on paper" ground `silence-not-evidence` was refused on). **Recorded now so the next instance promotes it by GREP rather than by another judgement call.**

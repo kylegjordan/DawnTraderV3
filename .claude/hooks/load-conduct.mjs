@@ -135,14 +135,26 @@ try {
   const body = slices[CHUNK_INDEX];
   if (body === undefined) process.exit(0);   // nothing for this slice — stay silent
 
+  // ⛔ MANIFEST FIRST — Langston's condition, hotfix gate 2026-08-24. The FIRST LINE of EVERY chunk
+  // declares which chunk this is, how many there are, and the byte size of each. WHY IT IS THE FIRST
+  // LINE: when a chunk IS truncated the harness injects a HEAD-SHAPED preview (verified 2026-08-24 —
+  // a persisted output begins with the emitted text), so the manifest survives its own truncation.
+  // ⇒ A READER CAN COUNT ARRIVALS AGAINST A DECLARED TOTAL AND KNOW WHAT IT DID NOT RECEIVE.
+  // That is the instrument this fix was missing: CHUNK_LIMIT stops being a bet on which unit the
+  // harness counts and becomes a tuning parameter you can observe.
+  const sizes = slices.map((x) => Buffer.byteLength(x, 'utf8'));
+  const manifest = `[CONDUCT ${CHUNK_INDEX + 1}/${slices.length} · ${sizes[CHUNK_INDEX]} B · ${sizes.join('/')}]\n`;
+
+  // ⛔ sizeNote AND shortfall ride EVERY chunk (Langston condition 2): chunk 0 is the LARGEST and so
+  // the likeliest to be lost — putting the over-cap warning only there loses it exactly when it matters.
   const header = CHUNK_INDEX === 0
-    ? `[AUTO-LOADED — CONDUCT.md: how this session BEHAVES. Injected on every start/resume/compaction.]\n` +
+    ? manifest +
+      `[AUTO-LOADED — CONDUCT.md: how this session BEHAVES. Injected on every start/resume/compaction.]\n` +
       `These are the behavioural rules — how to report to Kyle, when to say nothing, how to correct a ` +
       `mistake. They sit here rather than in CLAUDE.md because they must arrive BEFORE you act, not be ` +
       `findable after. CLAUDE.md remains authoritative for workflow, architecture and governance.\n` +
-      `[delivered in ${slices.length} chunk(s) — a single write over ~10 KB is silently truncated to a preview]\n` +
       sizeNote + shortfall
-    : `[AUTO-LOADED — CONDUCT.md continued, chunk ${CHUNK_INDEX + 1} of ${slices.length}.]${shortfall}\n`;
+    : manifest + `[AUTO-LOADED — CONDUCT.md continued.]\n` + sizeNote + shortfall;
 
   process.stdout.write(header + '\n' + body + '\n');
 } catch {
