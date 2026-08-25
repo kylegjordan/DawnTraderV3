@@ -87,3 +87,28 @@ order book exists for it, and VTS xStock reads the equities archiver directly.
 **⚠️ `price-cache.ts` IS A LOCKED MODULE** (*"DO NOT MODIFY — changes require a formal directive"*,
 Directive 8.8.4-A4.R10R-4). F-D touches its **consumers**, not the module. **If any piece needs to
 change it, that is a formal-directive path and Kyle's call, not ours.**
+
+---
+
+## ★★ F-G — **TRIGGER THE EXIT ON THE SIDE WE WILL TRANSACT ON** (ADDED 2026-08-25, KYLE DIRECTIVE)
+
+**Kyle's words, and they settle the scope question I had put to Langston:** *"Everything we are doing now is to ensure that we are entering and exiting trades in a way that is as close to what will happen when we go live with real money through Kraken. So if what you are proposing for the exits brings us closer to that realistic simulation, because we are not using leveraged trades, we're only doing spot, then that needs to be done within this series of batches and tasks. I don't want to be learning off of paper trades that are not simulating as best I possibly can."*
+
+⛔ **HE FOUND THIS BY ASKING A QUESTION I COULD NOT ANSWER.** He asked where in Part F the fix lived for *"the exit decision still reads a midpoint."* **Nowhere.** F-A monitors · F-B **persists** the decision price · F-C bounds **age** (`#743` is the last-known-good re-serve, not mid-vs-bid) · F-D is VTS wiring · F-E tiers history · F-F resets. **Every piece records or watches. None changes the price we act on.** The arc measured the gap and never closed it, while its stated goal is confidence that entry and exit prices are correct.
+
+**THE DEFECT.** A midpoint is the average of the best bid and the best ask — **a price nobody transacts at.** Selling gets the bid. So a stop or target evaluated on the midpoint fires at a level that cannot be obtained, and the fill lands worse.
+**MEASURED, every stop-out since the epoch (`2026-08-22T22:01Z`):** **all nine filled BELOW their stop** — median **0.17%**, worst **1.1%** (TRUMP/USD). That gap is the mid-to-bid distance, paid on every exit.
+★ **The fill side is ALREADY CORRECT** — `PaperOrderPlacer.closeOrder` walks the **bid** ladder (`b74526dc3`). **It is the TRIGGER that reads a mid**, so the two halves of one exit disagree about which price is real.
+
+**WHY THE INDUSTRY'S MARK-PRICE ADVICE DOES NOT RESCUE THE CURRENT DESIGN.** Kraken, Bybit and others do recommend triggering on a mark rather than the last trade — **but explicitly for LEVERAGED products, because forced liquidation is computed off the mark, so a last-price trigger risks liquidation firing before your own stop.** **We are spot, unleveraged, with no liquidation engine.** That rationale is absent here, and Kyle's directive turns on exactly this point.
+⚠️ **AND THE THIN-PAIR ARGUMENT INVERTS.** The midpoint was introduced 2025-12-30 *"to improve pricing accuracy for low-volume pairs."* The standard view is the opposite: **for illiquid instruments the last trade is preferred BECAUSE a distorted bid corrupts the mid** — which is precisely the `#741` mechanism. **The remedy became the disease.**
+
+| # | Objective | Verified when |
+|---|---|---|
+| **G-1** | The **exit trigger** reads the side the exit will transact on (bid for a long exit), not the mid | a fence pins trigger-side = fill-side; the two halves of an exit can no longer disagree |
+| **G-2** | Same for the **entry** trigger (ask for a long entry) | symmetry — an entry decided on a mid has the identical defect, unmeasured only because entries are not stop-triggered |
+| **G-3** | **Measured before/after** on the same population | post-deploy stop-outs no longer fill systematically below their stop; the 0.17% median gap closes or is explained |
+| **G-4** | xStock uses its own top-of-book equivalent | `depth-source.ts` already returns `bid`/`ask` for `xstock_spot` — **the value exists**, same as F-B's entry stamp |
+
+⛔ **SEQUENCING — THIS IS A BEHAVIOUR CHANGE AND MUST NOT BE PRETENDED OTHERWISE.** Part F's safety case has been *"records only, decides nothing,"* and that is the argument used to keep F-C separate. **F-G forfeits it deliberately, on Kyle's explicit direction**, because a simulation that decides on an unobtainable price is not the realistic simulation the arc exists to produce. ⇒ **F-G runs AFTER F-B is live**, so the before/after in G-3 is measured on stamped rows rather than argued.
+**OWNER: CC-C. DUE: within this series, before F-F's reset gate is assessed** — the gate asks for *"zero contaminated on BOTH legs,"* and a mid-triggered exit is a contaminated leg by the arc's own definition.

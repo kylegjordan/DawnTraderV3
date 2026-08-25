@@ -3423,3 +3423,35 @@ The 4 are trades **open at the moment of the first close**. ⚠️ **INERT TODAY
 **PROPOSED FIX (not ruled on):** for `kind: 'entry'`, match a **structured anchor** rather than a bare substring — a heading (`^### <batch-id>`) for `BATCH_CATALOG`, a paragraph-initial bold token (`^\*\*<batch-id> \(`) for `PHASE_HISTORY` — falling back to the current behaviour with a **low-severity flag** rather than a pass, so the change cannot silently create new RED alerts on historical batches.
 **HOME: `B-GOV-4` (with `#350` — same parser, same defect class), owner CC-A.** ↔ #350.
 **⇒ Discharged in the meantime by writing the real entries: `B-OBSERVATION-EPOCH` now has a genuine `### ` heading and its own `PHASE_HISTORY` paragraph.**
+
+### #906 OPEN 2026-08-25 (CC-C; **found because Kyle challenged a claim I made without research** — he was right and the research found something bigger) — ★★ THE LIQUIDITY FILTER IS DENOMINATED IN **COIN UNITS**, SO IT STRUCTURALLY EXCLUDES EVERY HIGH-PRICED ASSET INCLUDING BITCOIN
+
+**HOW IT SURFACED, recorded because the process matters more than the finding.** I told Kyle *"we don't trade Bitcoin"* as an offhand explanation for a losing run — inferred from seeing no BTC in a 13-trade sample. **He rejected it and directed a proper provenance read.** ⇒ **there is NO benchmark block, and the code is emphatic in the opposite direction.**
+
+**WHAT THE RESEARCH ACTUALLY FOUND — both benchmark call sites are INCLUSION mechanisms:**
+
+| site | verbatim |
+|---|---|
+| `adaptive-scan-manager.ts:227-229` | *"Directive 11.4H.5 Task 1: **Benchmark Force-Inclusion** — Always inject benchmark pairs regardless of telemetry scores"* |
+| `market-scanner.ts:656-658` | *"Directive 11.4H.4 Task 5: Benchmark symbols for passive mode **filter exemption** — These pairs **bypass ALL filters** for correlation tracking"* |
+
+**EMPIRICAL CONFIRMATION (paper, all-time):** benchmarks DO trade — **SOL 19 closed trades** (07-16→07-25), **ETH 9 closed trades** (07-17→08-20, net +$5.95). ⇒ **my claim was false and is withdrawn.**
+
+## ⛔ BUT BTC/XBT HAS **ZERO** PAPER CLOSES, AND THE REASON IS A REAL DEFECT
+
+**MEASURED, `signal_eval_archive`, 2 days, BTC/XBT only:** BTC is evaluated **thousands of times per day** and rejected on **`low_volume`**, with `observed` values of **26.42**, **0.97** and **161.89** against a **threshold of 500,000**.
+
+**THE MECHANISM:** `market-scanner.ts:564` sets `volume24h = parseFloat(ticker.v[1])` — Kraken's ticker `v` array is volume in **BASE CURRENCY (coin units)**, not quote value. The threshold (`minVolume`, default `1000000.00` at `:543`; 500,000 in the observed gate) is compared directly against it.
+
+⇒ **THE FILTER MEASURES HOW MANY COINS CHANGED HANDS, NOT HOW MUCH MONEY DID.**
+
+| asset | coin-unit volume | passes a 500,000 unit bar? | actual money traded |
+|---|---:|---|---|
+| **BTC** (high unit price) | **26.42** | ⛔ **NO** | substantial |
+| a sub-cent memecoin | **313,176,043** *(DOG/USD, observed live)* | ✅ trivially | small |
+
+★ **THE THRESHOLD CANNOT BE DOLLAR-DENOMINATED — that is the positive control.** No BTC pair on Kraken trades under $500k/day, so a dollar reading would pass every one of them. The observed 0.97–161.89 range is only coherent as coin units.
+
+**CONSEQUENCE, and it is not only about Bitcoin:** the universe is **systematically biased toward low-priced, high-unit-count assets** and against high-priced ones, **independently of real liquidity.** Every trade in the post-epoch window is consistent with that shape. ⚠️ **This also means the liquidity gate is not doing the job its name implies** — it is not measuring tradeable depth, and `entryLiquidityKind='volume_qty'` inherits the same unit.
+
+**RULE 24 — I am NOT calling this outcome (1).** It may be a deliberate Replit-era choice with a rationale I have not recovered; the provenance read of Directive 11.4H.4/11.4H.5 covered the BENCHMARK sites, **not the volume-threshold origin.** That read is this item's first task. **HOME: `B-LIQUIDITY-UNIT-AUDIT`, owner CC-C, due 2026-09-05.** ↔ #561 (`entryLiquidityKind` shares the unit), Phase-25 calibration.
