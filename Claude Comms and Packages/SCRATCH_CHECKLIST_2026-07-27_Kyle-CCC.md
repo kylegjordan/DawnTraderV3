@@ -179,12 +179,13 @@
 
 | # | piece | state |
 |---|---|---|
-| 5 | **F-B / F3 `B-EXIT-PROVENANCE`** — stamp the price source + age on **BOTH legs, both paths** | ⛔ **BLOCKED at Step 1** — r4 with Langston at `d613ea775` since 05:48, chased 00:11. Stage-1 plumbing (closed `producer` union, `observedAt` carry-through) is **built and deployed**; **nothing writes provenance to a trade row yet** |
+| 5 | **F-B / F3 `B-EXIT-PROVENANCE`** — stamp the price source + age on **BOTH legs, both paths** | ★ **THROUGH STEP 7, DEPLOYED `4c2c7e88c`.** Step-1 cleared at r8, Step-2 at r2, Step-4 CHANGES-NEEDED cleared (2 blockers + 3 riders, no re-review). **14 provenance columns live on `closed_trades`; the migration applied.** ⛔⛔ **DOES NOT CLOSE — HELD OPEN BY `#911`** (see the row directly below). Awaiting first post-deploy close to verify the stamp populates |
 
 **📋 QUEUED — dependency order**
 
 | # | piece | why here | owner · due |
 |---|---|---|---|
+| **5a** | ⛔ **`B-EXIT-PROVENANCE-TICKER-RETENTION`** ★ **NEW — THE CLOSE GATE ON #5, NOT A FOLLOW-ON** (`RUNNING_ISSUES #911`, Langston Step-4 ruling 2026-08-26) | **OBJ-3 wants a SECOND, INDEPENDENT price feed on each row. `#741` is an ORDER-BOOK defect, so a row carrying only the book's own numbers is checking the suspect against itself — the ticker is the only independent witness.** The ticker handler COMPUTES bid/ask and DISCARDS them; nothing retains them for a close to read. The two columns ship NULL and are documented "not instrumented" in the schema, the migration and `#911`. ⛔ **They were deliberately NOT filled from the order book: top-of-book is a DIFFERENT feed, and writing it there would store one feed under another's name — the exact substitution this batch exists to prevent.** ⇒ **#5 CANNOT BE MARKED COMPLETE UNTIL THIS LANDS.** | CC-C · **no date, by rule** — §9.4 (Kyle 2026-08-25): a home is a name + a place in the queue, never a calendar date. **The gate is stronger than a date: no date can enforce what a close gate enforces** |
 | 6 | **`B-SCANNER-EGRESS-NORMALISE`** ★ **NEW — the BTC + DOGE fix** | ★ **RECOMMEND STARTING NOW, IN PARALLEL** — it touches the scanner egress, not the fill seam, so it is independent of the blocked #5. **And every piece below fits a model to the trade population**, which today is missing two major assets entirely | CC-C · **2026-09-05** |
 | 7 | **F-C / F3.5 — staleness bound** (`#743`) | threshold must be **derived from F-B's stamped data**, not chosen | CC-C · after #5 |
 | 8 | **F-G — trigger the exit on the side we transact on** ★ **NEW, Kyle directive** | the plan measured the mid-vs-bid gap and never closed it; **all nine stop-outs filled BELOW their stop**, median 0.17%. Sequenced **after F-B** so before/after is measured on stamped rows | CC-C · after #5 |
