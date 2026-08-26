@@ -1,0 +1,53 @@
+# MEMORY — CC-INFRA ("Infra Claude")
+
+> Per-session volatile state. Shared protocols in `MEMORY.md`; stable governance in `CLAUDE.md`; behaviour in `CONDUCT.md`. Cap 200 lines / ~24KB — watch BYTES; collapse closed batches to one-liners.
+> **★ I WORK IN MY CLONE: `C:\DawnTraderV3-infra`** on `migration/aws-supabase`. GitHub is source of truth; `git fetch` → pull → push; a rejected push = the system working. Tier-1 path-limited commit is mandated (`git commit -F <msg> -- <paths>`); the `guard-bare-commit` hook blocks a bare commit.
+
+---
+
+# ▶▶ CURRENT POSITION — READ THIS FIRST, BEFORE ANYTHING ELSE
+
+> **A HEARTBEAT OR TIMER WAKE MEANS *RESUME*, NOT *REPORT*.** Read this block, then carry on from it.
+> **If BLOCKED-ON says Kyle, say NOTHING and do not work the item.**
+> ⚠️ **UPDATE THESE FOUR LINES AT EVERY STEP BOUNDARY.**
+
+- **BATCH:** B-CREW-STATUS-2 — crew status board rebuilt as memory restoration (where Kyle left each session, what it was mid-way through, what happened since).
+- **STEP:** Step-3 build largely landed; Langston Step-2 ruled PROCEED with four conditions, all folded into scope r3 (`c19594ece` → `535458f46`).
+- **BLOCKED-ON:** Kyle — he has directed that the crew status board be **DISABLED** now that CONDUCT.md step-summaries give him the same visibility inside each session's workflow. Do not continue building it without his word.
+- **NEXT:** confirm the board is disabled; the unbuilt remainder (persist-on-observation, blocked-on-Kyle sort, the two canaries, SIM entry, Langston Step-4) is PARKED, not forgotten — see OPEN THREADS.
+
+---
+
+## ★ WHO I AM AND WHAT I OWN
+
+Registered in `.claude/cc-session-roster.json` as **CC-INFRA**. Stood up 2026-07-22 to improve Langston; by 2026-08-07 it had **organically become a fourth working session** — Kyle: *"you've just organically evolved into another work session… so we need to make sure that the same rules are applied."*
+
+**Lane:** Langston's memory/instruction/tooling architecture, `comms-infra/*`, the crew status tooling, and the personal-assistant programme. **NOT DawnTrader batch work.** Shipped: langston-recall (Phase B), B-COMMS-IMAGES, B-COMMS-IMAGES-2, B-CREW-STATUS, B-CREW-STATUS-2. Owns RUNNING_ISSUES **#651** (Langston instruction-file slim, unstarted) and **#657**; **#670** (crew-status cold hand-off) is mine and open.
+
+## ⛔ STANDING — INSTRUCTION SOURCES (Kyle 2026-08-26)
+
+I previously ran on my **own** rules file at `G:\My Drive\CLAUDE.md` and loaded none of the crew's. Kyle ended that: I now run from my clone and load exactly what the others load — `CLAUDE.md`, shared `MEMORY.md`, `CONDUCT.md`, and this file (via the `load-own-memory.mjs` SessionStart hook). **The repo rulebook GOVERNS; where anything conflicts, the repo wins.**
+
+## ⚑ STANDING LESSONS (earned; do not re-learn)
+
+- **THE INVOKE TO LANGSTON MUST `cd /home/langston` FIRST.** `sudo -u langston …` does not change directory, so the process inherits `cwd=/root`, which langston cannot read — **every Bash call dies with a bare `Exit code 1` and no output.** I did this across a whole session of consults without noticing; he disclosed it each time and reviewed anyway. Canary: demand `echo LANGSTON_SHELL_OK` back. Full form: `cd /home/langston && sudo -u langston env CLAUDE_CODE_OAUTH_TOKEN=$TOK HOME=/home/langston /usr/bin/claude -p --model 'claude-opus-5[1m]' --permission-mode bypassPermissions < PROMPT.md` — prompt on **stdin**, never `-p "$(cat …)"`.
+- **NEVER hand structured text to a shell.** It has mangled a Discord post, a Python heredoc, a CLI prompt, a git commit message and a review dispatch. Write to a file → pass the path or pipe on stdin.
+- **VERIFY THE ARTIFACT, NOT THE SOURCE.** Two in one hour: a text-cleanup regex whose backreference became a literal control character and silently **deleted** every bolded sentence; and a patch script that printed four success lines then died before writing, so three "landed" edits never existed. Both caught only by reading the rendered output.
+- **MEASURE THE RIGHT POPULATION.** Twice now I have reported a ratio over the wrong denominator — most recently claiming "7 of 8 user turns are machine" when that was a raw-record count, not what the shipped filter admits. Langston caught it by reading my own code against my claim.
+- **A VERIFICATION THAT CANNOT FAIL IS NOT A VERIFICATION.** I wrote a test asserting contamination must be zero, in a design where every route to non-zero was already closed. Langston had bounced me for that exact shape one item earlier in the same list.
+- **Desktop app login ≠ CLI login** — separate credential stores; an app sign-in does not revive an expired CLI token. Anything that must survive a restart should not depend on an interactive login: use the long-lived token pattern (`/etc/langston/oauth.env`), proven since 2026-05-06.
+- **`git checkout origin/<ref> -- <path>` STAGES the file.** Prefer `git show origin/<ref>:<path> > <path>` — writes the worktree, touches the index not at all.
+- **Re-read issue numbers IMMEDIATELY BEFORE writing one.** Three sessions share one counter with no atomic allocation; I pushed a duplicate `#665` once (→ `#670`).
+
+## 📌 OPEN THREADS
+
+- **B-CREW-STATUS-2 remainder — PARKED at Kyle's direction (2026-08-26).** Built and live: turn classification (structural, `origin.kind` + tag-shape + compaction flags), trailhead spans, containment-based attribution, the synthesis briefing on `sonnet` with evidence caching + a 15-minute floor. **Unbuilt:** persist-derived-facts-at-observation (the one with real consequences — compaction and reflog expiry destroy provenance that cannot be rebuilt later), blocked-on-Kyle sort key, the unknown-tag and rate-anomaly canaries, the SIM entry, Langston Step-4 review and Step-8 close.
+- **#651 B-RULES-1E-LANGSTON-SLIM** — Langston's instruction-file restructure (lean core + on-demand modules + ledger split). Transferred to me by CC-A. **NOT STARTED**; Kyle has not given the go.
+- **#670** — crew-status snapshots have no cold hand-off; warm tier grows unbounded (~18 MB/yr gz, policy-conformance not capacity).
+- **Langston runs `claude-opus-5[1m]`** at two sites — read them live, never assert the value here (`discord-langston-bridge.py:69`, `langston-call:38`). Change BOTH or he runs split.
+
+## ✅ CLOSED — repo is authoritative
+
+- **B-CREW-STATUS** (2026-08-07) — the first board. Superseded in substance by B-CREW-STATUS-2 and by CONDUCT.md's per-step summaries.
+- **B-COMMS-IMAGES / -2** — two-way Discord images for all sessions including Langston.
+- **Langston Phase B** — `langston-recall` over `/opt/langston-memory/`, nightly index 04:10Z, refuses on degraded corpus.

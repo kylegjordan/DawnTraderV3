@@ -36,6 +36,10 @@ const CLONE_TO_SESSION = {
   'DawnTraderV3-old':     { name: 'Claude Old (CC-A)',      file: 'MEMORY_CC_A.md' },
   'DawnTraderV3-new':     { name: 'Claude New (CC-B)',      file: 'MEMORY_CC_B.md' },
   'DawnTraderV3-analyst': { name: 'Claude Analyst (CC-C)',  file: 'MEMORY_CC_C.md' },
+  // Added 2026-08-26 at Kyle's direction: Infra Claude was running on its OWN rules file
+  // out of G:\My Drive and loading none of this. Additive and keyed on clone basename, so
+  // it cannot affect the other three sessions' lookups.
+  'DawnTraderV3-infra':   { name: 'Infra Claude (CC-INFRA)', file: 'MEMORY_CC_INFRA.md' },
 };
 
 function readStdin() {
