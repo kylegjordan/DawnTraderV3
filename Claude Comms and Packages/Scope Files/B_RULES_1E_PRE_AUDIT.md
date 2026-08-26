@@ -55,6 +55,23 @@
 ⇒ **The writer is a sentence in a prompt asking a session to remember; the reader is a human.** That is A3 stated structurally, and it is exactly why nineteen days produced zero rows: **the liveness artifact and the thing it measures are the same actor.**
 ★ **AND IT MAKES THE FIX EASIER, NOT HARDER: because nothing reads the file programmatically, deriving liveness from the scheduler's own `lastRunAt` breaks no consumer.** The census is what licenses that design.
 
+### ★★ A8 — THE RECORDED MECHANISM FOR #740 IS WRONG. THE PARSER DOES NOT "DROP THE `description` KEY" — THE WHOLE FRONTMATTER BLOCK RAISES.
+
+**#740 and OBJ-2 both state:** *"an unquoted scalar containing a colon-space is ambiguous, so the parser **drops the `description` key**."* **That was inferred from the LISTING’s behaviour and never tested against a parser. I tested it.**
+
+**REPRODUCED, both directions, one variable changed:**
+| input | result |
+|---|---|
+| `description: STEP 5 ONLY - CI gate, four jobs` **(control)** | **parses**, `keys=['name','description']`, value intact |
+| `description: STEP 5 ONLY: TypeScript Check, Test Suite` **(suspect)** | ⛔ **`ScannerError: mapping values are not allowed here`, line 2 col 25 — THE ENTIRE BLOCK FAILS TO PARSE. `name` does not survive either.** |
+
+⇒ **THE REAL MECHANISM: strict YAML RAISES on the whole document; the app then RECOVERS LENIENTLY and falls back to the first heading.** Nothing is "dropped" — **the app is catching a total parse failure and papering over it.** *(That the skill still appeared in the listing at all is the evidence for the lenient recovery; I have not read the app’s parser and do not claim its implementation — only that a strict parse raises and the app did not hard-fail.)*
+
+**WHY THIS CHANGES P3 RATHER THAN JUST TIDYING IT:**
+- A check written as *"assert a `description` key exists"* would work **by accident** — it would fail because the parse throws before any key check happens. **The design must treat a RAISE as the failure**, and say so, or the next maintainer "fixes" it into a `.get('description')` on a dict that was never produced.
+- **`name` is lost too.** So the blast radius of a colon-space is larger than #740 recorded — it is not a degraded skill, it is **a skill whose entire frontmatter is unreadable to a strict parser.**
+★ **AND IT STRENGTHENS THE "PARSE, DON’T PATTERN-MATCH" ARGUMENT that OBJ-2 already made on principle: the principle turns out to be load-bearing rather than stylistic**, because the observable symptom (a populated-looking listing) is produced by the app’s recovery, not by the data.
+
 ### A4 — CI HAS EXACTLY FOUR JOBS, AND RULE 19 NAMES THEM. A FIFTH JOB WOULD SILENTLY BREAK A GOVERNANCE CONTRACT
 `ci.yml` defines **TypeScript Check (baseline gate) · Test Suite · Build · Docker Build**. **`CLAUDE.md` rule 19 enumerates those four by name and requires every batch close to cite "all 4 GREEN."**
 ⇒ ⛔ **Adding a fifth job for the skill check would make every future "4/4" citation wrong and every past one ambiguous** — a governance-doc drift introduced by a fix aimed at governance drift. **The check must ride INSIDE an existing job.** *(The `TypeScript Check` job already runs a bare `node scripts/…` script, so the precedent exists.)*

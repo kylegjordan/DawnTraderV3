@@ -36,7 +36,7 @@ change-class: non_architecture
 
 ### OBJ-2 — #740 *(a colon-space in a skill description silently disarms that skill's trigger)*
 
-Skill frontmatter is YAML; an unquoted scalar containing a colon-space is ambiguous, so the parser **drops the `description` key** and the app falls back to the file's first heading — **which reads like a description, so the listing looks populated.** **MEASURED 2026-08-21/22:** `workflow-05-ci` and `workflow-07-verify-cc` both lost their descriptions this way. **Nothing errored.**
+Skill frontmatter is YAML; an unquoted scalar containing a colon-space is ambiguous. ⚠️ **MECHANISM CORRECTED 2026-08-26 BY TEST (audit A8) — it does NOT "drop the `description` key": a strict parse RAISES on the WHOLE BLOCK (`ScannerError: mapping values are not allowed here`) and `name` is lost too.** The app then recovers leniently and falls back to the file's first heading — **which reads like a description, so the listing looks populated.** **MEASURED 2026-08-21/22:** `workflow-05-ci` and `workflow-07-verify-cc` both lost their descriptions this way. **Nothing errored.**
 
 ⛔ **NOT COSMETIC — THE DESCRIPTION *IS* THE AUTO-INVOCATION TRIGGER.** A dropped description silently removes **the entire backup leg**, which is the only reason these are skills rather than plain markdown.
 
