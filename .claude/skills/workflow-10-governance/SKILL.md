@@ -38,6 +38,39 @@ description: STEP 10 ONLY of the DawnTrader batch workflow - Governance Updates.
 - `1-system-manual/LANGSTON_ARCHITECTURE.md` — update when the REVIEWER'S BUILD changes (model, runtime, invocation, read path, auth, his files); record what it was BEFORE and why. Not for per-batch review activity.
 - `CC/Langston MEMORY.md` — volatile state every batch
 
+## ⛔⛔ WHEN YOU REPORT THIS STEP TO KYLE: **NAME THE DOCUMENTS. ALL OF THEM. BY THEIR REAL NAMES.**
+
+**THIS STEP’S ENTIRE DELIVERABLE IS *WHICH DOCUMENTS YOU UPDATED*.** A report that describes the ideas you wrote and not the files you wrote them into has **omitted the only checkable fact it contained.**
+
+⚠️⚠️ **MEASURED 2026-08-26, AND IT IS WHY THIS SECTION EXISTS. A Step-10 report reached Kyle saying it had written *"the component map"* and *"the architecture manual."*** **THE WORK WAS ENTIRELY REAL** — `SYSTEM_IMPACT_MAP.md` +15 lines and `SYSTEM_MANUAL.md` +26, one commit, verifiable in thirty seconds. **But Kyle read two names we do not own, could match them to nothing, and called the whole report fantasy.** He was right to.
+★ **AND THE SESSION WAS OBEYING THE RULES — THAT IS THE POINT.** `CONDUCT.md` §2 bans **file paths**; §3 protected real names but scoped that protection to *"a core part of the **trading system**."* **Governance documents are files, and are not the trading system.** ⇒ **the two rules COMBINED to require the paraphrase.** Both were amended the same day; **this section is the half that could not fit under the `CONDUCT.md` byte cap.**
+
+⇒ **WRITE:** *"Updated the System Impact Map and the System Manual"* — **strip the folder, KEEP THE NAME.** A document’s name is not a file path.
+⛔ **AND LIST EVERY ONE YOU TOUCHED, not the two most interesting.** The list is the RESULT, not process-narration — the *"Kyle does not want the sausage-making"* rule is about narrating your own corrections, **never about naming your deliverables.**
+
+---
+
+## ⛔⛔ A BATCH THAT CANNOT CLOSE YET GETS A **BATCH PROGRESS REPORT** — AND IT IS LATER *CONVERTED* INTO THE COMPLETION REPORT (Kyle directive 2026-08-26)
+
+**THE TRIGGER, exactly:** the work is done and reviewed, **but the batch cannot be closed because something must ELAPSE or ACCUMULATE** — an observation window, a soak, evidence that only exists after N trades close, a second data feed that does not exist yet — **and you are moving on to another batch in the meantime.**
+
+⚠️ **THIS IS THE ONE PLACE A DATE IS LEGITIMATE (§9.4): a period whose LENGTH is the content.** *"+48h gate"*, *"14-day soak"*, *"until 30 closes accumulate"*. **The batch still gets no due date; the WINDOW gets its length.**
+
+**WHAT IT IS:** `Claude Comms and Packages/Batch Completion/<BATCH-ID>_PROGRESS_REPORT.md`, titled **`OPEN — <what is being waited on>`**. ★ **NOT a new invention:** `BATCH_67`, `BATCH_68` and `BATCH_73` all have one. ⚠️ **But it was NEVER GOVERNED — measured 2026-08-26: 43 occurrences of "progress report" across the corpus and EVERY governance mention is a USAGE. No definition, no trigger, no conversion rule.** Same shape as "hotfix" before 2026-08-21. **It fell out of use because nothing said to write one.**
+
+**IT MUST CARRY THE WHOLE BATCH UP TO NOW** — a reader must not need the chat scrollback:
+1. **What the batch is for**, and what shipped, with refs.
+2. **Every step completed**, with its evidence — review verdicts, CI, deploy sha, verification.
+3. ⛔ **THE PRE-REGISTERED CLOSE CRITERION: exactly what observation, over exactly what window, would count as PASS — and what would count as FAIL.** ★ **WRITTEN BEFORE THE DATA ARRIVES.** *(`BATCH_73`’s report carries this as "PRE-REGISTERED — do not data-mine", and it is the single most valuable thing in it: a criterion chosen AFTER seeing the window can always be made to pass.)*
+4. **What is unproven, stated as unproven**, and what would falsify it.
+5. **The governance files changed so far** — same naming rule as above.
+
+**CONVERSION, when the window closes:** the progress report **BECOMES** the completion report — same batch, renamed to `<BATCH-ID>_COMPLETION_REPORT.md`, with the observation’s **actual result** recorded **against the pre-registered criterion** and the objectives table completed. ⛔ **You do not write a fresh report from memory** — the whole point is that the evidence was captured while it was fresh.
+⛔ **AND THE BATCH IS NOT CLOSED UNTIL THAT CONVERSION HAPPENS.** A progress report is an OPEN state. The delivery-board card stays out of `Complete`, and the `RUNNING_ISSUES` entry stays open.
+⚠️ **IF THE OBSERVATION FAILS ITS CRITERION, THAT IS A RESULT, NOT A DELAY** — it converts to a completion report recording the failure and what follows, or the batch reopens at the step that needs redoing. **It must never quietly wait forever.**
+
+---
+
 **Rule:** every completion report lists which governance files were changed. If SIM or System Manual were applicable but not updated, batch not complete.
 
 ### 3.3 Asset-class onboarding learning-capture rule (ad-hoc since 2026-06-08)

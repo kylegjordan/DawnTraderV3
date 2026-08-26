@@ -19,7 +19,7 @@ Status updates, mid-batch progress, troubleshooting, loop reports, "where are we
 
 **SAY WHAT CHANGED AND WHY IT MATTERS, at the highest level that is still TRUE, in context.** Reach for an **example or an analogy** before reaching for detail. **He will ask a follow-up if he wants more** — a follow-up is cheap; a paragraph he cannot read costs the whole message.
 
-**LENGTH: TWO OR THREE SENTENCES.** ⚠️ **PREVIOUSLY STATED: "default shape, two paragraphs." NOW: two to three sentences. REASON: Kyle 2026-08-24 — the old default invited padding.** Go longer **only when more words make it SIMPLER**, never when they make it more complete.
+**LENGTH: TWO OR THREE SENTENCES.** Go longer **only when more words make it SIMPLER**, never when they make it more complete.
 
 **Technical depth IS welcome in:** your own reasoning, peer exchanges with Langston (both directions), commit messages, and governance documents. **Anything Kyle reads in chat is plain language.**
 ⚠️ **The recurring failure is drift into MECHANISM during progress reports.** If a sentence describes HOW something works at a level he would not naturally know, rewrite it to say WHAT happened and what changed for him. **When unsure whether a term is in his model, assume it is not.**
@@ -32,7 +32,9 @@ Inconsistent terminology makes it ambiguous which system object is meant. **Forb
 - **"paper mode"** — as-is
 
 ⛔⛔ **AND NEVER INVENT A SHORTHAND OR A NICKNAME FOR A COMPONENT THAT ALREADY HAS A NAME (Kyle, 2026-08-24 — his example: DO NOT call the SQE "the evaluator").** Renaming a thing to sound friendlier does not simplify it — it breaks the one vocabulary all four sessions, Langston and Kyle share, and it makes a message that reads smoothly and refers to nothing checkable. **The plain-language rule NEVER licenses a substitute noun.**
-Use the real names for mainstay components — **MCE, SQE, TCL, TEC, VTS, AMR, the FX5 scanner, the signal orchestrator, the pattern detector, the RTB pool/queue, IMF, DBS, DI, the liquidity and volatility filters, regimes, Net Expectancy, the EV gate, paper mode / live mode.** ★ **The list is NOT exhaustive and is not meant to be: if it is a core part of the trading system we discuss regularly, KEEP CALLING IT WHAT WE HAVE ALWAYS CALLED IT.** When in doubt, use the name that appears in the System Manual and the SIM. **Smaller items — individual functions, helpers, internal sub-steps — leave OUT of the message entirely** rather than renaming them. Plain language governs the EXPLANATION, not the NOUN. If Kyle may not know a term, **define it once** rather than substituting a vaguer word.
+Use the real names for mainstay components — **MCE, SQE, TCL, TEC, VTS, AMR, the FX5 scanner, the signal orchestrator, the pattern detector, the RTB pool/queue, IMF, DBS, DI, the liquidity and volatility filters, regimes, Net Expectancy, the EV gate, paper mode / live mode.** ⛔ **OUR DOCUMENTS HAVE NAMES TOO — SAY THEM, NEVER A FRIENDLY PARAPHRASE.** The **System Impact Map**, the **System Manual**, `RUNNING_ISSUES`, `BATCH_CATALOG`. ⚠️ **BANNING FILE PATHS DOES NOT MAKE A DOCUMENT’S NAME A PATH: strip the folder, KEEP THE NAME.** *(Cost of getting this wrong: `workflow-10-governance`.)*
+
+★ **The list is NOT exhaustive and is not meant to be: if it is a core part of the trading system we discuss regularly, KEEP CALLING IT WHAT WE HAVE ALWAYS CALLED IT.** When in doubt, use the name that appears in the System Manual and the SIM. **Smaller items — individual functions, helpers, internal sub-steps — leave OUT of the message entirely** rather than renaming them. Plain language governs the EXPLANATION, not the NOUN. If Kyle may not know a term, **define it once** rather than substituting a vaguer word.
 
 ## 4. TRADING-MODE DISTINCTIONS — DO NOT COLLAPSE THESE
 Two orthogonal axes: **mode** (paper | live) and **active trading** (on | off).
@@ -87,6 +89,7 @@ Use a **`#` heading** (the largest available), on its own, with a rule line unde
 ### THE BODY — THREE PARTS, IN THIS ORDER, ALL PLAIN LANGUAGE
 1. **THE BATCH LINE (2-3 sentences).** What this batch is for, what it is meant to do, what the finished outcome will be. ★ **This is the ONLY thing that repeats step to step.** Everything else must be new.
 2. **WHAT THIS STEP DID** — and *what it buys the batch*. Not what you typed; what changed.
+★ **IF THE STEP’S DELIVERABLE *IS* DOCUMENTS OR FILES, NAME THEM — ALL OF THEM.** Not a contradiction of *"not what you typed; what changed"*: **there, the list IS the result.** ⛔ **Omit it and the one CHECKABLE claim becomes unverifiable prose — which is how a real update reads as invented.**
 3. **WHAT THE NEXT STEP IS** — one line, and it closes the report.
 
 ### AT BATCH CLOSE — a `# 🟩 BATCH COMPLETE` report instead
