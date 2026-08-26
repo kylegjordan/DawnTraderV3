@@ -2882,6 +2882,30 @@ The COMMITTED copy carries the five **pre-Phase-14 regime keys** (`BULL_STABLE`/
 
 ---
 
+### #748 OPEN 2026-08-27 (CC-A; **CC-C observed the symptom, I found the mechanism, and the mechanism is MY code**) — ★★ **`load-conduct.mjs` HAS A SILENT FAIL PATH — AN OUTER `catch {}` THAT SWALLOWS EVERYTHING AFTER THE READ AND EMITS NOTHING. INSIDE THE LOADER BUILT TO FIX EXACTLY THAT CLASS.**
+
+**HOME: `B-RULES-1e`** — it is the same family as OBJ-1/2/3 (*an instrument whose silence means something other than what it appears to mean*) and that batch is at Step 2. **PLACED at `PHASE_19_PLAN.md` §governance queue position 1** (the in-flight batch). ⚠️ **Dispatched to Langston as an ADDENDUM to the Step-2 audit rather than folded in silently — he is mid-review and widening a document under review without saying so is its own defect.**
+
+**THE OBSERVATION (CC-C, his session, 2026-08-26):** on a resume at 17:17, **`CONDUCT.md` delivered ZERO of four chunks.** His own memory file loaded normally in the same event. It loaded correctly on an earlier resume that day and again at the compaction two hours later. **Intermittent, and nothing announced it.**
+
+**THE MECHANISM — established in code, not inferred from the symptom.** `.claude/hooks/load-conduct.mjs` has **two** failure paths and they behave oppositely:
+| path | behaviour |
+|---|---|
+| **`readFileSync` fails** (`:89`) | ✅ **ANNOUNCED, loudly** — writes `[⚠️ CONDUCT.md COULD NOT BE LOADED from … this session is running WITHOUT its behavioural rules … do NOT treat its absence as "no rules"]` to **stdout**, then exits. **Deliberate, and it works.** |
+| **anything AFTER the read throws** (`:162`) | ⛔ **`} catch { /* absolute backstop — never break a session over a conduct-load */ }` then `process.exit(0)`. EMITS NOTHING.** Chunking, manifest construction, `sizes[CHUNK_INDEX]`, the write itself — all inside it. |
+
+⇒ **"Zero chunks, no warning" is MECHANICALLY POSSIBLE, and only via the second path.** The first would have spoken. **That is consistent with CC-C’s report and it upgrades his observation from an unexplained intermittency to a located one.**
+⚠️ **WHAT IS STILL NOT ESTABLISHED, and I will not assert it: WHICH line threw.** His memory file loaded in the same event, so whatever failed was `CONDUCT`-specific at that instant. **I have no evidence for the trigger and am not proposing one.** Symptom + mechanism-that-permits-it; **the cause is open.**
+
+★★ **THE POINT, and it is the sharpest instance of this week’s theme: I WROTE THAT BACKSTOP, IN THE BATCH WHOSE ENTIRE SUBJECT IS INSTRUMENTS THAT FAIL SILENTLY.** The comment is honest about its intent — *never break a session* — and the intent is right. **"Never break the session" and "never say anything" are DIFFERENT REQUIREMENTS, and I collapsed them.** The read-failure branch four lines above proves I knew the difference: it fails open **and speaks.**
+
+**THE FIX (one line, not taken unilaterally — see the gate note above):** the outer catch **announces**, exactly as the read branch does — emit a short `[⚠️ CONDUCT.md loader failed after read — running WITHOUT behavioural rules]` before exiting 0. **Still fail-open; no longer silent.**
+★ **AND THE SAME AUDIT IS OWED ON `load-own-memory.mjs`** — same author, same pattern, same day. **Do not assume it differs; check it.**
+
+⇔ CC-C’s two verified findings in the same report, both of which stand: **the 3-byte per-file shortfall is `slices − 1` — newlines consumed at chunk boundaries, NOT loss** (re-derived: 4 slices, sum 24,560 vs file 24,563, and `join` reproduces the file exactly); and **no instrument measures the shared `MEMORY.md` at all** — confirmed against the sink: **246 native `InstructionsLoaded` rows, every one `memory_type: Project`, every `file_path` a `CLAUDE.md`. It has never once been named.**
+
+---
+
 ### #747 OPEN 2026-08-26 (CC-A, self-filed — **Kyle asked "so are we doing a hotfix for that? what are we doing here?" and the honest answer was that I had done neither**) — ★★ **A GATE THAT ONLY FIRES UNDER URGENCY DOES NOT COVER THE CASE WHERE NOTHING EVER FEELS URGENT.**
 
 **HOME: `B-GOV-REPORTING` — OWNER CC-A — PLACED at `PHASE_19_PLAN.md` §governance queue, POSITION 2** (after `B-RULES-1e`, before the guard batches). ⛔ **No date — a position** (§9.4).
