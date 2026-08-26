@@ -6,13 +6,17 @@ change-class: architecture
 > **Ledger home:** `SCRATCH_CHECKLIST_2026-07-27_Kyle-CCC.md` Part F, piece **F3**
 > **Why first:** Langston moved it ahead of the remediation batches — *"1+2 is backward-looking on a closed population whose urgency is not growing; 3 is the only piece where every close between now and landing is another row we do forensics on."*
 
-**Change-class reasoning, stated because the checker will cross-check it.** The diff touches
-`active-execution-engine.ts`, a core engine path, which normally invites an `architecture`
-declaration. It is `non_architecture` because **no decision changes and no behaviour changes**: this
-adds nullable KEEP-AS-DATA columns and writes facts the close path already holds. It is the same
-shape as P19-B8.6's *"7 nullable KEEP-AS-DATA columns"*. If Langston reads the engine-path touch as
-requiring the stricter set, I take the stricter set — flagging it rather than letting the checker
-find it.
+**Change-class reasoning — REWRITTEN 2026-08-26, NOT annotated (Langston r4 housekeeping).** ⛔ **This
+paragraph argued `non_architecture` while the header line declared `architecture`.** A correction
+stacked on wrong text is not a correction, **and the completion report is written FROM THE BODY**, so
+the stale argument would have propagated into the close.
+
+**The class is `architecture`, on Langston's pre-registered criterion:** the moment this widens the
+`priceTick` / live-pricing-adapter surface it is architecture, and it does — `PriceProducer` is a new
+required field on a closed union carried through the emit sites. **The earlier argument (*"nullable
+KEEP-AS-DATA columns, no decision changes"*) was true of the COLUMNS and false of the SURFACE**, and
+the surface is what the criterion tests. ⇒ **the stricter doc-set applies: scope · pre-audit ·
+completion report · BATCH_CATALOG · PHASE_HISTORY · SYSTEM_MANUAL · SIM, all REQUIRED.**
 
 ---
 
@@ -347,3 +351,32 @@ You are right that REV 3 never recorded it, and right that your `langston-recall
 
 ⚠️ **I DID NOT INVENT `:1059-1077` — I TOOK IT FROM `#550`'s ADDENDUM-2, WHICH STILL CARRIES IT.** The file has moved since that entry was written. ⇒ **the ledger will send the next reader to the wrong lines**, which is the `wrong-object` class with a governance-document blast radius. **Corrected in `#550` in this same commit, not only in my scope** — a stale ref in the ledger is worse than one in a scope, because the ledger is what the next session greps.
 **My own failure stands regardless: I cited a ledger entry instead of verifying at the ref.**
+
+---
+
+# REV 5 — 2026-08-26. **BLOCKER-3 ACCEPTED: the maker stamp had no target and no payload.**
+
+## R5-1 — VERIFIED AT SOURCE BEFORE ACCEPTING. HE IS RIGHT ON BOTH LEGS.
+
+**(a) NO TARGET.** `:990-994` writes **only** `{ state:'open', currentPrice, lastUpdated }` via `updateActiveOpenPosition` — **the ACTIVE row, which `deleteActiveOpenPosition` removes at close.** The durable forensics row is `closed_trades`, created at **`:3358 createClosedTrade`, BELOW the if/else — i.e. at PLACEMENT.**
+⇒ **as scoped, a maker's entry provenance either lands on a row that gets deleted, or lands at the exact instant r4 spent itself refuting.** ⛔ **And the indictment is precise: my own R4-2 wrote *"INSERTED at placement and OPENS later"* — I carried that into the FENCE and not into the WRITE.**
+
+**(b) NO PAYLOAD.** `:970` — `private async _processPendingMaker(position: any, currentPrice: number)` — **a bare number.** The discriminating provenance is in the **caller's** scope at `:1252`: `priceSource` (assigned `:1140` `kraken_equities_ws` / `:1172` `priceResult.source` / `:1201` `kraken_rest`) and `priceResult.producer`. **None is passed.**
+⇒ a stamp written there could only be a **literal**, re-encoding the entry mode the row already carries — **passing OBJ-6/OBJ-9's non-null fence green BY CONSTRUCTION while asserting nothing.** ⛔ **`#546` in the other direction, and it breaks this batch's own TIER-1 rule: *stamps travel explicitly, never re-derived*.**
+
+## R5-2 — THE THREE LINES HE ASKED FOR
+
+**LINE 1 — THE TARGET TABLE, named for every column.** ⛔ **All ten entry/exit provenance columns live on `closed_trades`, and NOWHERE else.** `active_open_positions` is **explicitly NOT a target**: it is deleted at close, so a stamp there is unrecoverable forensics by construction. *(The scope previously named a stamp POINT and never a TABLE — `closed_trades` appeared only in R2-4's population fix and the measurement's OBJECT line. That omission is what BLOCKER-3 found.)*
+
+**LINE 2 — THE NAMED FILL-BRANCH WRITE, mirroring a pattern that already exists.** At the maker fill (`:990`), **in addition to** the existing `updateActiveOpenPosition`, add a durable write to `closed_trades` keyed exactly as the **drop** branch already does it:
+`const tradeId = (position.metadata as any)?.tradeId; if (tradeId) await storage.updateClosedTrade(this.mode, tradeId, { entry_price_producer, entry_price_source, entry_book_age_ms: null, entry_decision_price, ... });`
+★ **This is not a new mechanism — `:1004-1009` proves the route from inside `_processPendingMaker` to the durable row.** The **drop** branch has it; the **fill** branch does not, and the scope did not add one. ⚠️ **`entry_book_age_ms` is NULL BY CONSTRUCTION on this path with a column comment saying so** — a maker fill consults no book. ⚠️ **And the `if (tradeId)` guard is load-bearing: `:1011` already records the no-`tradeId` case, so an absent id must leave the columns NULL rather than write a fabricated stamp.**
+
+**LINE 3 — THE EXTENDED SIGNATURE, so the stamp travels instead of being re-derived.**
+`_processPendingMaker(position: any, currentPrice: number, provenance: { producer: PriceProducer; source: string; observedAtMs: number | null })`
+passed from `:1252` out of the caller's already-resolved `priceResult` / `priceSource`. ⛔ **REQUIRED, not optional** — an optional parameter would let a future call site omit it, and that absence is indistinguishable from a missed stamp (`#546`, the same argument that made `producer` required on the tick).
+★ **`observedAtMs` is the TICK's observation age, not a book age** — the maker's decision instrument is the price tick, so this is the honest freshness measure for that cohort, and it is what **F-C** will derive the maker-side threshold from.
+
+## R5-3 — WHAT THIS CHANGES ABOUT THE OBJECTIVES
+
+**OBJ-6/OBJ-9 are STRENGTHENED, not merely relocated.** Their fence must now assert the stamp on **`closed_trades`** at the **`state:'open'` transition**, and — because a literal would satisfy a bare non-null test — **assert that a maker row's `entry_price_producer` is one of the TICK producers and never a book producer.** ⇒ **a re-derived literal fails the fence instead of passing it**, which is the whole point of BLOCKER-3.

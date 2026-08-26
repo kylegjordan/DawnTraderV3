@@ -691,3 +691,17 @@ The B65.2 functional commit (`0fcd19b1`) shipped trailing exits end-to-end. Subs
 ⚠️ **TWO ANCHOR-RECORD DEFECTS SURFACED, NOT FIXED HERE:** three governed docs still assert paper **2250.00/v3** against a live **v4/824.11**, and **`portfolio_anchor_events` has NO v4 row at all** (UNIQUE `(mode, anchor_version)` ⇒ genuinely absent) — **the anchor audit trail has a hole at its most recent change.**
 
 **GOVERNANCE FILES CHANGED:** `BATCH_CATALOG.md` · `PHASE_HISTORY.md` · `PHASE_19_PLAN.md` · `RUNNING_ISSUES.md` · scope · pre-audit · completion report. **SYSTEM_MANUAL and SIM judged NOT applicable, out loud:** a `module_constants` row read by existing services adds no component and changes no architecture or math.
+
+### B-PHANTOM-FILL-RECONSTRUCT — the columns, and the backfill that was cut (2026-08-26, CC-C)
+
+**change-class: non_architecture.** Migration applied 2026-08-24T10:21Z inside the `afb7d326c` deploy. ⛔ **Catalogued LATE** — the checker's open->48h nag was correct.
+
+**KYLE'S RULING SHAPED IT:** *"flag and remove from our accounts, but we don't delete these trades… we can replace the phantom exits with real market prices if we have them"* ⇒ **reconstruct BESIDE the original, never over it.** Five nullable columns on `closed_trades` + a partial index; every recorded `pnl`/`net_pnl`/`exit_price` untouched.
+
+⛔ **THE REAL DECISION WAS CUTTING THE BACKFILL.** The first version flagged 21 rows via a ticker-vs-ask detector whose founding premise — *"a maker exit never reads the order book, so maker rows cannot be contaminated"* — **was falsified by `#741`: the maker exit does not read the book for its PRICE, but the system reads the book to decide WHETHER IT FILLED.** Running it would have written a withdrawn verdict that **F-E** must re-stamp — two bases in one column, the `#641` shape. **The withdrawn reasoning is NOT reproduced in the migration file**; the error record lives in `#741`.
+
+**LANGSTON'S TWO CONDITIONS, both landed pre-deploy.** **COND-1:** `phantom_fill_suspect NOT NULL DEFAULT false` writes a **stated claim** — *"this row is clean"* — onto 534 rows where `#741` measures **109 of 525 contaminated**. The tri-state is carried by the nullable `reconstruction_basis`, and the contract is in the column COMMENTs: **`(false, NULL)` = NOT ASSESSED, not assessed-clean.** **COND-2:** the maker negative control removed from the fence **and its header** — ⚠️ I first pulled it from the assertion and left it in the header, which is withdrawn text sitting downstream of its own retraction.
+
+**BEHAVIOUR-IDENTICAL, measured by Langston at the ref:** across 534 rows `net_pnl` is NULL on 0 and differs from `pnl` on 0; sums identical at **−68.35** either way ⇒ **with all five columns NULL the deploy changed no displayed number.**
+
+**GOVERNANCE FILES CHANGED:** `BATCH_CATALOG.md` · `PHASE_HISTORY.md` · `RUNNING_ISSUES.md` (#741) · scope · pre-audit · completion report · migration + MANIFEST. **SYSTEM_MANUAL and SIM judged NOT applicable, out loud:** five columns on an existing table add no component and change no architecture or math.
