@@ -3784,19 +3784,34 @@ The VTS is fed by the **same** filtered scan (confirmed live: it is simulating `
 
 **HOME: `#743`'s batch (the last-known-good age-bound work), owner CC-C — now recorded HERE, in the ledger, rather than only in a scope file.** ⚠️ NO DATE, per `§9.4`. ↔ `#743`, `B-EXIT-PROVENANCE`.
 
-### #914 OPEN 2026-08-27 (CC-C; the full-lane price audit Kyle directed) — ⛔ THE VTS LEARNING POPULATION'S EXIT QUALITY IS UNMEASURABLE: IT RECORDS THE EXIT PRICE AND NOT THE STOP
+### #914 OPEN 2026-08-27 (CC-C; Kyle refused the first version of this entry and was right to) — ⛔⛔ **VTS EXITS HAVE ZERO SLIPPAGE BY CONSTRUCTION. PAPER EXITS DO NOT. THE TWO POPULATIONS ARE NOT COMPARABLE ON EXIT ECONOMICS.**
 
-**MEASURED, and the near-miss is part of the finding.** VTS closes are live and at volume — `vts_open_trades` holds **52,171 closed crypto + 7,560 closed xStock**, newest close **2026-08-26T20:55Z**. Their exit prices ARE retained, in `logs/virtual_trades/<date>.json` (**148 files, 39 MB, current to 20:33Z today**).
-⚠️ **I ALMOST FILED THE OPPOSITE.** `data/vts_trades_*.json` — the path named in `vts-runner.ts`'s own header comment — is **stale since 2026-03-30**, and stopping there would have produced *"VTS exit prices are not retained"*, which is **false**. The live sink is a different directory reached through `vts-service.logTrade`. **A stale path that still exists reads exactly like the live one.**
+⛔ **THIS ENTRY REPLACES A WRONG ONE, IN FULL.** I first filed *"the VTS records the exit price and NOT the stop, so its exit quality is unmeasurable."* **FALSE.** I read the top-level keys of **ONE** record and generalised. **`originalStopPrice` is present on 817 of 1,018 recent records** — the file mixes two record shapes and I sampled the sparser one. **Kyle rejected the claim on the correct grounds: we collect the same pricing data for both lanes, so the measurement should be possible.** It is. *(`MISTAKE: wrong-object` — one sample read as a population.)*
 
-**THE ACTUAL GAP:** the VTS closed record carries `exitPrice`, `exitReason`, `entryPrice`, `fees`, `netProfit` — and **NO `stopLoss`**. `vts_open_trades` has `stop_loss` but **no exit-price column**, and a closed row's `context` jsonb holds exactly one key (`mode` — verified by `jsonb_object_keys`, not assumed).
-⇒ **NEITHER SINK ALONE CAN ANSWER "did this exit fill better or worse than its stop?"** — the question that produced the load-bearing finding on the paper population (crypto stops mean **+100.8 bps ABOVE** stop pre-fix vs **−29.9 bps** post-fix). **On the VTS population that test cannot currently be run at all.**
+**MEASURED, 999 VTS stop-type closes, August 2026, split at the observation epoch:**
 
-⛔ **WHY THIS IS NOT COSMETIC:** VTS is the **wide** learning population — 12k+ trades against paper's dozens — and **`F-5` (per-strategy reach) and `F-E` (fill-integrity tiers) both intend to calibrate from it.** A population whose fill quality cannot be measured **cannot be used to calibrate fill-sensitive parameters**, and nothing currently says so. ⚠️ **And 69% of VTS closes are stop-outs** (222 of 321 over three days), so the unmeasurable cohort is the dominant one.
+| class | era | n | filled BELOW stop | mean bps vs stop |
+|---|---|---|---|---|
+| crypto | POST | 179 | **0.0%** | **+0.0** |
+| crypto | PRE | 390 | 1.5% | −2.2 |
+| xStock | POST | 61 | **0.0%** | **+0.0** |
+| xStock | PRE | 369 | **0.0%** | **+0.0** |
 
-**HOME: `F-E` (fill-integrity detector + disposition), owner CC-C** — it already owns "can this history be graded?", and this is the same question asked of the other population. ⚠️ **NOT folded into F-G**: F-G changes exit pricing, this is about whether the record can be read. Different objective, and merging them would let a fix to one report as coverage of the other.
-⚠️ **NO DATE, per `§9.4`.** ↔ `#911`, F-5, F-E.
-★ **Cheapest plausible fix, for whoever scopes it: add `stopLoss` (and `takeProfit`) to the VTS closed record — the values are on the in-memory trade object at close time, so this is a write-site field addition, not a new source.** **Verify that at the ref before committing to it.**
+**Against the ACTIVE (paper) population over the same window: crypto POST-fix n=19, 100.0% below stop, mean −29.9 bps.**
+
+★★ **A STOP THAT FILLS AT EXACTLY ITS TRIGGER PRICE, 999 TIMES OUT OF 999, IS NOT A MARKET OUTCOME — IT IS A MODELLING ASSUMPTION.** Verified at the code, both halves:
+- **The exit DECISION is genuinely SHARED.** `tec-evaluator.ts` `evaluateTECExit` is imported by **both** `vts-runner.ts:48` and `active-execution-engine.ts:59`, and its stop branch returns **`exitPrice: input.stopPrice`** (`:275`). **Kyle is right that the lanes share their inputs and their decision logic.**
+- **The FILL MODEL is where they diverge, and nothing says so.** VTS records the evaluator's return **verbatim** (`vts-runner.ts:3181` `exitPrice: decision.exitPrice`) ⇒ it *assumes it gets the stop price*. The active engine passes the live price into `closePosition` and takes **`actualExitPrice = _closeFill.fillPrice`** (`aee:2008`) — a **DEPTH-WALKED** fill (`aee:116`: *"paper fill now depth-walks the real book — RNG-free, no magic %"*).
+
+⇒ ⛔ **THE CONSEQUENCE, AND IT IS THE REASON THIS IS FILED:** **VTS is a world in which exiting is FREE.** Its ~12k-trade population — the WIDE one — systematically omits the exit cost the active population measures at **~30 bps per crypto stop**, on a lane where **84% of closes go out through the stop**. **Any parameter fitted on VTS is fitted against costless exits.**
+⚠️ **`F-5` (per-strategy reach) intends to fit from exactly this population, and `F-E` intends to tier it.** A reach or target distance fitted where exits are free is **optimistic by an amount nobody has quantified** — and it will not look wrong, because the VTS record is internally consistent.
+⚠️ **It also partly explains why VTS reads healthier than paper** (VTS 21% target-hits vs paper 16%): some of that gap is a fill model, not an edge.
+
+**NOT A DEFECT — DISPOSITION (2), working-as-designed but UNADDRESSED.** VTS is a *telemetry/learning* simulator and an idealised fill is a defensible choice for it. ⛔ **What is missing is a DECISION, which is Kyle's, not a unilateral code change:** does VTS adopt the depth-walked fill (making the populations comparable but breaking the series), or does it keep the ideal fill and **every VTS-derived parameter carry a stated exit-cost haircut**? **Recording it as a known, quantified difference is the minimum; silently fitting on it is not an option.**
+
+**HOME: `F-E` (fill-integrity detector + disposition), owner CC-C** — it already owns *"can this history be graded, and how?"*, and this is that question asked of the other population. ⚠️ **NOT folded into F-G**: F-G changes which price the exit DECISION reads; this is about the FILL MODEL behind it. Merging them would let a fix to one report as coverage of the other.
+⚠️ **NO DATE, per `§9.4`.** ↔ `#911`, F-5, F-E, `B-EXIT-TRANSACTABLE_SIDE`.
+★ **RESIDUAL, minor, kept from the withdrawn version because it is still true:** 119 of the scanned stop-closes carry no `originalStopPrice` (the sparser record shape) and are silently unmeasurable; and `data/vts_trades_*.json` — **the path named in `vts-runner.ts`'s own header** — has been **stale since 2026-03-30** while the live sink is `logs/virtual_trades/`. **A stale path that still exists reads exactly like the live one**, which is how the first version of this entry went wrong.
 
 ### #911 OPEN 2026-08-26 (CC-C; **Langston's Step-4 ruling on B-EXIT-PROVENANCE**) — ⛔ OBJ-3 SHIPS HALF-BLIND: THE ONLY INDEPENDENT WITNESS IS NOT RETAINED
 
@@ -3814,7 +3829,11 @@ The VTS is fed by the **same** filtered scan (confirmed live: it is simulating `
 **HOME: `B-EXIT-PROVENANCE-TICKER-RETENTION`, owner CC-C, slotted as the CLOSE GATE of `B-EXIT-PROVENANCE` — it runs before that batch closes, not after.**
 ⚠️ **NO DUE DATE, DELIBERATELY, AND THIS DEPARTS FROM THE WORDING OF THE RULING.** Langston asked for "a named piece with owner CC-C and a due date." **§9.4 was amended by Kyle on 2026-08-25: a home is a NAME AND A PLACE IN THE QUEUE, NEVER A CALENDAR DATE** — *"Who knows what we're gonna be doing on September fifth?"* A date on a batch is a fake commitment that expires into a stale record reading as a missed deadline. The one legitimate use of a date is a period whose LENGTH is the content (a soak, an observation window); this is not that. **The gate is stronger than a date anyway: this batch cannot close without it, which no date could enforce.** Flagged to Langston rather than silently substituted.
 
-**SCOPE WHEN IT RUNS:** retain the bid/ask already computed at `:682-683` in a per-symbol store on the adapter, expose an accessor, read it at the close sites, and extend the fence so the two columns are asserted non-null on crypto post-deploy rows. ⚠️ **The `#546` discipline applies to the fence too: it must distinguish "retention landed and the ticker was quiet" from "retention never landed."**
+**★★ SCOPE CORRECTED TWICE, 2026-08-27 — BOTH CORRECTIONS MATTER.**
+**(a) KYLE'S DIRECTIVE: THE GATE COVERS BOTH ASSET CLASSES.** *"For the second-feed gate, you have to do it for crypto and for xStock."* The original wording scoped only crypto because I believed xStock had no second feed. **It does** — and a crypto-only gate would close this batch with xStock rows still carrying an un-cross-checkable exit.
+**(b) IT IS PROBABLY A READ, NOT A BUILD.** The does-it-already-exist check (run properly, late) says the bid/ask are **already archived for both classes**: `crypto_spot_ticker_snap` holds **12,559,233 rows, every one with non-null `bid` AND `ask`**, newest write 2026-08-26T20:41Z; `xstock_spot_ticker_snap` is the same shape and is **already** the source `getDepthSnapshot` reads for xStock fills. ⇒ **no new retention on the WS adapter, which removes the entire reason Langston declined to widen `B-EXIT-PROVENANCE`** (reopening the hottest shared path).
+⚠️ **THE HONEST CAVEAT, and it is a design call not an implementer's:** the snap is written by the archiver on its own cadence, so a row read at close time carries an **ARCHIVE age, not a live one** — a genuinely independent witness, but a laggier one. **Whether that satisfies OBJ-3's "independent cross-check at close" is Langston's ruling.** ⛔ **And the two blanks must stay distinguishable: "not instrumented" and "no such feed" are different facts** — the previous scope wording conflated them for xStock.
+**Then extend the fence so the two columns are asserted non-null on post-deploy rows OF BOTH CLASSES.** ⚠️ **The `#546` discipline applies to the fence too: it must distinguish "retention landed and the ticker was quiet" from "retention never landed."**
 
 ### #910 OPEN 2026-08-26 (CC-C; **Langston's condition on the balance-curve hotfix**) — ★ THE EPOCH-READER CENSUS, RUN — AND IT IS NOT "SCOPE EVERYTHING"
 

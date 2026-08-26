@@ -88,5 +88,15 @@ Required before objectives are written, per `MANDATORY 1.b`:
 ## 7. KNOWN LIMITS OF THIS AUDIT, STATED
 
 - **xStock post-fix n=3.** Nothing about xStock's post-fix stop behaviour is readable yet.
-- **The VTS archive records `exitPrice` but NOT `stopLoss`** (`logs/virtual_trades/<date>.json`, 148 files, 39 MB, current) — so the §3 table **cannot be reproduced on the VTS population** without joining `vts_open_trades`. **The learning population's exit quality is therefore currently unmeasured**, which matters because F-5 and F-E both intend to calibrate from it. ⚠️ **Filed separately; not folded into F-G.**
+- ⛔ **CORRECTED 2026-08-27 — THE CLAIM THAT USED TO SIT HERE WAS FALSE.** It read *"the VTS archive records `exitPrice` but NOT `stopLoss`, so the §3 table cannot be reproduced on the VTS population."* **It can.** `originalStopPrice` is present on **817 of 1,018** recent records; I had read one record of the sparser of two shapes in those files. **The §3 table HAS now been reproduced on VTS, and the result is more important than the table:**
+
+  | class | era | n | filled BELOW stop | mean bps vs stop |
+  |---|---|---|---|---|
+  | VTS crypto | POST | 179 | **0.0%** | **+0.0** |
+  | VTS crypto | PRE | 390 | 1.5% | −2.2 |
+  | VTS xStock | POST | 61 | **0.0%** | **+0.0** |
+  | VTS xStock | PRE | 369 | **0.0%** | **+0.0** |
+
+  ★★ **999 of 999 VTS stops fill at EXACTLY the stop. That is a modelling assumption, not a market outcome** — and it is the mirror image of the active population's **100% below, −29.9 bps**. **The exit DECISION is genuinely shared** (`evaluateTECExit`, imported by both lanes; its stop branch returns `exitPrice: input.stopPrice`); **the FILL MODEL is not** — VTS records that return verbatim, the active engine depth-walks the book for a real fill. ⇒ **VTS is a world where exiting is free.**
+  ⚠️ **BEARING ON F-G, stated because it changes what a before/after would mean:** an F-G before/after measured on the VTS population would show **NOTHING**, because VTS has no exit slippage to remove. **F-G's effect is only observable on the active population.** ⛔ **And any VTS-derived reach or target parameter is fitted against costless exits.** *(Full entry + the disposition question: `RUNNING_ISSUES` `#914`.)*
 - **Live mode was NOT audited.** It shares the active path, so it inherits the finding, but no live-specific read was done. Stated so its absence is not read as a clean bill.
