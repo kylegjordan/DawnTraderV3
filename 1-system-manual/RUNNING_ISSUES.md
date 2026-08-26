@@ -3708,6 +3708,24 @@ The VTS is fed by the **same** filtered scan (confirmed live: it is simulating `
 
 **⇒ THE FIX MUST COVER BOTH, and the scope Langston already widened is right:** normalise at the market-scanner's Kraken egress — his three sites (`:698` DBS prefetch swallowed by a bare `catch {}`, `:831`, `:994`), the `:762` `setCostMetrics(pair.symbol)` RAW-vs-normalised key convention, the two `.has()` dedupe joins, and the missing `capturePreFilterReject`. ⚠️ **`B-BTC-HISTORY-SYMBOL-FIX` is now misnamed** — it is not Bitcoin-specific and not history-specific. **Rename to `B-SCANNER-EGRESS-NORMALISE`.**
 
+### #911 OPEN 2026-08-26 (CC-C; **Langston's Step-4 ruling on B-EXIT-PROVENANCE**) — ⛔ OBJ-3 SHIPS HALF-BLIND: THE ONLY INDEPENDENT WITNESS IS NOT RETAINED
+
+**THIS IS A CLOSE GATE, NOT A FOLLOW-ON.** Langston's words: *"deploy this ref. OBJ-3 stays OPEN, and B-EXIT-PROVENANCE DOES NOT CLOSE until the ticker-retention leg lands."* Filed at the moment of the ruling per §13, so the batch cannot quietly read as delivered.
+
+**THE GAP.** `closed_trades.exit_ticker_bid` / `exit_ticker_ask` are **NULL on every branch, both classes**, at deploy ref `68930cd35`. The Kraken ticker handler **computes both** (`kraken-websocket-adapter.ts:682-683`) and **discards them** — the `priceTick` emit at `:700` carries `{symbol, price, source, producer}` only, and **no per-symbol ticker bid/ask store exists** in that adapter or in `live-pricing-adapter` for a close to read. *(Independently verified by Langston at the ref; not ruled on my report.)*
+
+**⛔ WHY THIS IS NOT COSMETIC — AND HIS ARGUMENT IS STRONGER THAN THE ONE I MADE FOR IT.** `#741` is a **BOOK-contamination** defect. A provenance row carrying `exit_book_mid` and **no ticker** is **checking the suspect against itself.** The ticker is not the decorative half of OBJ-3; **it is the only independent witness.** ⇒ shipping book-only genuinely half-delivers the objective, which is exactly why the gate exists rather than a "nice to have" note.
+
+**⛔ WHAT WAS DELIBERATELY *NOT* DONE, and it is the load-bearing decision:** the two columns were **NOT** filled from `getBookForFill`'s top-of-book. **The book's best bid/ask IS NOT the ticker's** — writing it there would store **one feed under another feed's name**, the precise wrong-object substitution this entire batch exists to make impossible, **committed inside the instrument built to catch it.** Two NULLs and a named gap beat two convincing wrong numbers.
+⇒ **THE ONLY TRUTHFUL READING OF A NULL IN THESE TWO COLUMNS IS "not instrumented" — NEVER "no ticker existed."** Recorded in the drizzle comment, in the migration's `COMMENT ON`, and here, because a NULL that reads two ways is `#546`.
+
+**WHY NOT WIDEN THE BATCH (my recommendation, overruled, and I accept it):** widening reopens a CI-green ref into the hottest shared path in the system, days after `B-MBIM-SWITCH-ON` landed on that same adapter — and it contradicts the urgency argument that carried this piece ahead of F1+F2 in the first place (*every close between now and landing is another row we do forensics on*). **The gate answers the failure I was actually worried about — "reads as delivered" — without a re-audit of a shared component inside a cleared review.**
+
+**HOME: `B-EXIT-PROVENANCE-TICKER-RETENTION`, owner CC-C, slotted as the CLOSE GATE of `B-EXIT-PROVENANCE` — it runs before that batch closes, not after.**
+⚠️ **NO DUE DATE, DELIBERATELY, AND THIS DEPARTS FROM THE WORDING OF THE RULING.** Langston asked for "a named piece with owner CC-C and a due date." **§9.4 was amended by Kyle on 2026-08-25: a home is a NAME AND A PLACE IN THE QUEUE, NEVER A CALENDAR DATE** — *"Who knows what we're gonna be doing on September fifth?"* A date on a batch is a fake commitment that expires into a stale record reading as a missed deadline. The one legitimate use of a date is a period whose LENGTH is the content (a soak, an observation window); this is not that. **The gate is stronger than a date anyway: this batch cannot close without it, which no date could enforce.** Flagged to Langston rather than silently substituted.
+
+**SCOPE WHEN IT RUNS:** retain the bid/ask already computed at `:682-683` in a per-symbol store on the adapter, expose an accessor, read it at the close sites, and extend the fence so the two columns are asserted non-null on crypto post-deploy rows. ⚠️ **The `#546` discipline applies to the fence too: it must distinguish "retention landed and the ticker was quiet" from "retention never landed."**
+
 ### #910 OPEN 2026-08-26 (CC-C; **Langston's condition on the balance-curve hotfix**) — ★ THE EPOCH-READER CENSUS, RUN — AND IT IS NOT "SCOPE EVERYTHING"
 
 **HIS RULING:** *"A fifth reader found after the batch built to fix reader divergence means that census was incomplete. §13: a completed enumeration of epoch readers gets an owner and a date now, not a sixth patch later."* **Correct, and the census is run below.**

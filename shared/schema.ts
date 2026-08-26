@@ -1810,8 +1810,19 @@ export const closedTradesTable = pgTable("closed_trades", {
    *  of that distinction, per OBJ-4/OBJ-8. */
   exitBookMid: decimal("exit_book_mid", { precision: 20, scale: 10 }),
   exitBookAgeMs: doublePrecision("exit_book_age_ms"),
-  /** Ticker bid/ask at close — the second independent feed, so a row can be adjudicated
-   *  WITHOUT leaving the row (OBJ-3). Both classes populate where a ticker exists. */
+  /** ⛔ NOT YET INSTRUMENTED — NULL ON EVERY BRANCH AT THIS REF, ON BOTH CLASSES.
+   *  OBJ-3 wants the TICKER bid/ask as a SECOND INDEPENDENT feed, and that is not decoration:
+   *  #741 is a BOOK-contamination defect, so a row carrying `exit_book_mid` and no ticker is
+   *  checking the suspect against itself. The ticker is the only independent witness.
+   *  The handler COMPUTES both (`kraken-websocket-adapter.ts:682-683`) and DISCARDS them — the
+   *  emit carries price only, and no per-symbol ticker bid/ask store exists in the adapter or
+   *  the pricing adapter for a close to read.
+   *  ⛔ THEY ARE NOT FILLED FROM THE ORDER BOOK. Top-of-book is a DIFFERENT feed; writing it
+   *  here would store one feed under another's name — the exact substitution this batch exists
+   *  to prevent, committed inside the instrument built to catch it.
+   *  ⇒ THE ONLY TRUTHFUL READING OF A NULL HERE IS "not instrumented", NEVER "no ticker
+   *  existed". OBJ-3 is OPEN and this batch does not close until the retention leg lands
+   *  (Langston ruling, Step 4). */
   exitTickerBid: decimal("exit_ticker_bid", { precision: 20, scale: 10 }),
   exitTickerAsk: decimal("exit_ticker_ask", { precision: 20, scale: 10 }),
   // ── ENTRY LEG (OBJ-6/7/9/10) ──────────────────────────────────────────────

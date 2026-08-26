@@ -809,7 +809,13 @@ export class ActiveExecutionEngine {
     // re-open the exact door OBJ-5 exists to shut, so the parts travel separately instead:
     // the PRODUCER lands in the provenance column, and the close CONDITION lands in
     // `closeReason` — where it already belongs, and already is (`ExitCondition.type`).
-    provenance?: { producer: PriceProducer; source: string; observedAtMs: number | null },
+    // ⛔ REQUIRED, NOT OPTIONAL — corrected at Step 4, and the inconsistency was mine: twelve
+    // lines above argue `_processPendingMaker`'s stamp must be required, and then this one shipped
+    // with a `?`. Both production callers already pass it and there are no test callers, so the
+    // character was free. It matters more than usual because the derived call-site fence matches
+    // the literal `exitProvenance` inside this method's span and passes green whether or not the
+    // value was `undefined` at runtime — the one hole the fence structurally cannot see.
+    provenance: { producer: PriceProducer; source: string; observedAtMs: number | null },
   ): Promise<{ success: boolean; error?: string }> {
     console.log('[DEBUG-B9][ENGINE_FORCE_CLOSE]', {
       positionId,
@@ -825,7 +831,7 @@ export class ActiveExecutionEngine {
         reason: 'Manual stop requested by user',
       };
 
-      await this.closePosition(positionId, exitPrice, exitCondition, priceSource, provenance ? {
+      await this.closePosition(positionId, exitPrice, exitCondition, priceSource, {
         exitProvenance: {
           // A force-close IS the decision — there is no separate driving price to record.
           decisionPrice: exitPrice,
@@ -838,7 +844,7 @@ export class ActiveExecutionEngine {
           tickCadenceMs: null,
           bookMid: null, bookAgeMs: null, tickerBid: null, tickerAsk: null,
         },
-      } : undefined);
+      });
       
       return { success: true };
     } catch (error) {
@@ -1031,7 +1037,12 @@ export class ActiveExecutionEngine {
       // this method to the durable row. The drop branch had it; the fill branch did not.
       const _fillTradeId = (position.metadata as any)?.tradeId;
       if (_fillTradeId) {
-        await storage.updateClosedTrade(this.mode, _fillTradeId, {
+        // ⛔ RIDER-1 (Langston Step 4): the RETURN IS CAPTURED. `updateClosedTrade` destructures
+        // `.returning()` off a possibly-empty array, so a MISSING ROW yields `undefined` and
+        // throws nothing. The guard above covers a missing tradeId; it does NOT cover a tradeId
+        // that resolves to no row — a silent no-op that would leave the stamp absent while every
+        // log line says it was written. Same class as #704.
+        const _fillStamped = await storage.updateClosedTrade(this.mode, _fillTradeId, {
           entryPriceProducer: provenance.producer,
           entryPriceSource: provenance.source,
           entryObservedAtMs: provenance.observedAtMs,
@@ -1040,6 +1051,9 @@ export class ActiveExecutionEngine {
           // instrument is the price tick. The column comment carries the same statement.
           entryBookAgeMs: null,
         } as any);
+        if (!_fillStamped) {
+          console.warn(`[P19-B7.2c][MAKER_FILL_STAMP_NOROW:${this.mode}] ${position.symbol}: tradeId ${_fillTradeId} matched no closed_trades row — entry provenance NOT written (silent no-op made visible)`);
+        }
       } else {
         // ⛔ CONDITION-2 (Langston): the absence is LOGGED, never silent. A silent skip makes the
         // fill-rate instrument show a gap indistinguishable from a non-fill — the #546 shape
@@ -1059,6 +1073,13 @@ export class ActiveExecutionEngine {
       if (tradeId) {
         await storage.updateClosedTrade(this.mode, tradeId, {
           closedAt: new Date(),
+          // ⛔ B-EXIT-PROVENANCE OBJ-1 EXEMPTION, NAMED HERE RATHER THAN DISCOVERED AT STEP 8.
+          // This row is written with NULL exit provenance ON PURPOSE: the order NEVER FILLED, so
+          // no exit occurred and there is no price whose source could honestly be recorded.
+          // OBJ-1's "every post-deploy row carries a non-null exit_price_source" MUST exclude
+          // close_reason='never_filled'. Without that carve-out the coverage check reports a
+          // false failure, and the obvious "fix" is to stamp a price that never existed — which
+          // is worse than the gap it would be closing.
           closeReason: 'never_filled', // TYPED discriminator — visible, excluded from aggregates/learning
         } as any);
       }

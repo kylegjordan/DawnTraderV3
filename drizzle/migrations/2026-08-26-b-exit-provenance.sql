@@ -54,5 +54,9 @@ COMMENT ON COLUMN closed_trades.exit_book_age_ms IS
   'Age of the order-book snapshot at close. NULL BY CONSTRUCTION on xStock. B-EXIT-PROVENANCE.';
 COMMENT ON COLUMN closed_trades.entry_book_age_ms IS
   'NULL BY CONSTRUCTION on a MAKER-fill row: a maker fill consults no book, its decision instrument is the price tick. A taker row carries a real book age. B-EXIT-PROVENANCE.';
+COMMENT ON COLUMN closed_trades.exit_ticker_bid IS
+  'NOT YET INSTRUMENTED - NULL on every branch at the deploy ref, both classes. The ticker handler computes bid/ask and discards them; no per-symbol retention exists for a close to read. NEVER filled from the order book: top-of-book is a DIFFERENT feed, and #741 is a BOOK defect, so a row with a book mid and no ticker checks the suspect against itself. A NULL here reads "not instrumented", NEVER "no ticker existed". OBJ-3 OPEN. B-EXIT-PROVENANCE.';
+COMMENT ON COLUMN closed_trades.exit_ticker_ask IS
+  'NOT YET INSTRUMENTED - see exit_ticker_bid. OBJ-3 OPEN; this batch does not close until the ticker-retention leg lands. B-EXIT-PROVENANCE.';
 COMMENT ON COLUMN closed_trades.entry_price_producer IS
   'WHICH HANDLER produced the entry price, written AT THE FILL SEAM, never at placement (a maker is INSERTED at placement and OPENS later). B-EXIT-PROVENANCE.';

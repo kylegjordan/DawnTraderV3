@@ -113,6 +113,38 @@ describe('B-EXIT-PROVENANCE — the exit stamp cannot be satisfied by a non-prov
     expect(src).toMatch(/priceProducer\s*=\s*liveQuote\.producer/);
   });
 
+  it('BLOCKER-2: forceClosePosition takes provenance as REQUIRED, not optional', () => {
+    // ⛔ THE ONE HOLE THE DERIVED CALL-SITE TEST CANNOT SEE. That test matches the literal
+    // `exitProvenance` inside this method's span and passes green whether or not the value was
+    // `undefined` at runtime. An optional parameter therefore defeats it silently — so the
+    // requiredness is asserted HERE, on the signature itself, rather than assumed.
+    const sig = code(AEE).match(/async forceClosePosition\([\s\S]{0,400}?\)\s*:/)?.[0] ?? '';
+    expect(sig).toContain('provenance');                       // positive control
+    expect(sig).not.toMatch(/provenance\?\s*:/);
+    // ...and the body must not re-introduce optionality through a conditional pass.
+    expect(code(AEE)).not.toMatch(/provenance\s*\?\s*\{[\s\S]{0,40}exitProvenance/);
+  });
+
+  it('RIDER-1: the maker fill stamp captures its write result instead of trusting it', () => {
+    // `updateClosedTrade` destructures `.returning()` off a possibly-empty array, so a tradeId
+    // that resolves to NO ROW yields undefined and throws nothing. The tradeId guard does not
+    // cover that case; a silent no-op would leave the stamp absent while every log says written.
+    const src = code(AEE);
+    expect(src).toMatch(/const _fillStamped = await storage\.updateClosedTrade/);
+    expect(src).toMatch(/MAKER_FILL_STAMP_NOROW/);
+  });
+
+  it('RIDER-3: the never_filled cohort is named as the OBJ-1 exemption, in code', () => {
+    // The maker DROP branch writes a closed_trades row with close_reason='never_filled' and NULL
+    // exit provenance — deliberately unstamped, and HONEST, because no exit ever occurred. OBJ-1
+    // restated as "every post-deploy row non-null" fails on that cohort at Step 8 unless the
+    // predicate excludes it. Written down here so a Step-8 false failure is not "fixed" by
+    // stamping a price that never existed.
+    const src = code(AEE);
+    expect(src).toMatch(/closeReason:\s*'never_filled'/);
+    expect(AEE).toMatch(/OBJ-1 EXEMPTION/);   // the standing note, asserted against the raw file
+  });
+
   it('the producer vocabulary stays CLOSED, and the non-cacheable member is excluded', () => {
     // Called against the PRODUCTION function, not a copy of its switch.
     expect(toCachedProducer('position_entry_price_reused' as PriceProducer)).toBeNull();
