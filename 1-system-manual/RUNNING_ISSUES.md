@@ -3707,3 +3707,25 @@ The VTS is fed by the **same** filtered scan (confirmed live: it is simulating `
 ★★ **AND THE BTC-vs-DOGE ASYMMETRY IS A CLEAN CORROBORATION OF LANGSTON'S BYPASS MECHANISM.** Both bases carry the identical defect. **BTC is in `BENCHMARK_SYMBOLS` and got 5 VTS trades through the passive bypass while the engine was off. DOGE is NOT a benchmark, never got the waiver, and is therefore at zero in every lane for all time.** Same defect, different exposure, entirely explained by whether the pair was on the benchmark list. **That is a prediction his mechanism makes and the data confirms — neither of us designed the test, it fell out.**
 
 **⇒ THE FIX MUST COVER BOTH, and the scope Langston already widened is right:** normalise at the market-scanner's Kraken egress — his three sites (`:698` DBS prefetch swallowed by a bare `catch {}`, `:831`, `:994`), the `:762` `setCostMetrics(pair.symbol)` RAW-vs-normalised key convention, the two `.has()` dedupe joins, and the missing `capturePreFilterReject`. ⚠️ **`B-BTC-HISTORY-SYMBOL-FIX` is now misnamed** — it is not Bitcoin-specific and not history-specific. **Rename to `B-SCANNER-EGRESS-NORMALISE`.**
+
+### #910 OPEN 2026-08-26 (CC-C; **Langston's condition on the balance-curve hotfix**) — ★ THE EPOCH-READER CENSUS, RUN — AND IT IS NOT "SCOPE EVERYTHING"
+
+**HIS RULING:** *"A fifth reader found after the batch built to fix reader divergence means that census was incomplete. §13: a completed enumeration of epoch readers gets an owner and a date now, not a sixth patch later."* **Correct, and the census is run below.**
+
+**SCOPED — call the shared predicate (4):** `routes.ts:13126/13133` trades/analytics · **`routes.ts:12540/12562` balance-curve (the fifth reader, wired 2026-08-26)** · `dashboard-metrics.ts computeRollingEarnings` · `storage.getLifetimeScoreboard` (SQL, both-leg since `B-EPOCH-KEYING-PARITY`).
+
+**UNSCOPED — 4 functions, 8 call sites.** ⛔⛔ **AND THE FINDING IS THAT THEY MUST NOT ALL BE SCOPED:**
+
+| reader | call sites | verdict |
+|---|---|---|
+| `getRealizedPnlTotal` | `routes.ts:4669`, `:4742` | ⛔ **SHOULD BE SCOPED** — dashboard lifetime. `#902`. |
+| `getRecentClosedPnls` | `routes.ts:4670` | ⛔ **SHOULD BE SCOPED** — dashboard win rate. `#902`. |
+| `getDailyRealizedPnlSince` | `routes.ts:4775` | ⚠️ **JUDGE AT THE SITE** — a daily chart bounded by its own `since`. |
+| `getRealizedPnlSince` | `routes.ts:12432`, `:12680`, **`daily-loss-budget.ts:131`**, **`guardrail-settings.ts:129`** | ✅ **CORRECTLY UNSCOPED on the risk sites** — see below. |
+
+★★ **THE LOAD-BEARING RESULT: A BLANKET SWEEP WOULD HAVE BROKEN THE KILL SWITCH.** `daily-loss-budget.ts` and `guardrail-settings.ts` read realized P&L over a **SESSION** window **on purpose**. **A daily loss budget is not a lifetime scoreboard** — clamping it to the epoch would make it measure loss-since-the-epoch instead of loss-today, which is **strictly more permissive** and silently widens the risk envelope. ⇒ **the census is a PER-SITE JUDGEMENT, not a rule**, and *"scope everything"* is the wrong shape of fix.
+
+**FENCED, and mutation-proved:** `b-epoch-reader-census-fence.test.ts` (5 tests). It asserts **no file re-implements the both-leg rule locally** (the copy-per-reader shape `#900` exists to stop), that the shared clamp is used rather than a hand-rolled `max()`, that the balance curve is wired to the predicate, and — **a guard on the guard** — that `daily-loss-budget.ts` is **NOT** epoch-clamped, so a future "fix" that scopes it fails the suite. **MUTATION-PROVED:** removing the curve's `isInObservationEpoch` call turns it RED; restored ⇒ 16/16 green with the parity fence.
+⚠️ **`storage.ts` is the ONE legitimate second copy** — SQL cannot import the TS predicate. It is exempted in the fence **by name and with the reason**, and remains `#900`'s row-level parity target.
+
+**HOME: `B-EPOCH-PARITY-FENCE` (with `#900`/`#901`/`#902`), owner CC-C, due 2026-09-05.** Remaining work is the two `#902` sites and the `getDailyRealizedPnlSince` judgement.
