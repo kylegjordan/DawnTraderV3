@@ -418,6 +418,19 @@ ALL must be ✅ before the flip commit. Verify each at the **B8 switch-on** Step
 
 ---
 
+### ▶ THE GOVERNANCE / RULES QUEUE — **PLACED ORDER, NO DATES (§9.4)**
+
+★ **THIS BLOCK EXISTS BECAUSE NAMING A BATCH IS NOT PLACING IT (Kyle, 2026-08-26).** A session can name a batch, mint an issue number, declare it "locked" and correctly refuse a due date — **and the item still has no position anyone can look up.** Every governance batch below has a POSITION, and the `RUNNING_ISSUES` entries point HERE.
+
+| # | batch | owner | state | what has to be true before it starts |
+|---|---|---|---|---|
+| 1 | **`B-RULES-1e`** — mechanisms for three rules followed zero times (#739, #740, #741-CC-A) | CC-A | **IN FLIGHT, Step 2 with Langston** | — |
+| 2 | **`B-GOV-REPORTING`** — the reporting + progress-report rules landed 2026-08-26 | CC-A | **PUSHED, UNREVIEWED — gate owed** | goes to Langston as its own gate; **does not wait for 1e**, but is dispatched AFTER it so he holds one of mine at a time (#741) |
+| 3 | **`B-GATE-GUARD`** (#744) + **`B-ISSUE-BLOCK-GUARD`** (#745) — one hook, two checks | CC-A | queued | after `B-RULES-1e` ships, because both are the same hook family and 1e sets the CI-job precedent (audit A4) |
+| 4 | **`B-CREW-BOARD-REMOVAL`** — retired board code + the unroutable `CC-INFRA` owner alias | CC-A | **gated on KYLE** | follows Infra Claude’s onboarding. **Not a date — a dependency.** |
+
+⚠️ **#2 IS PLACED HONESTLY, NOT FLATTERINGLY: its changes are ALREADY LIVE AND UNREVIEWED.** The position states the gate is owed rather than pretending the work is pending.
+
 ### B-RULES-1c / 1d — **CLOSED 2026-08-25** (CC-A) · §5 decision-log entry
 
 **DECISION 1 — the workflow is ELEVEN SKILLS, not one, and the INDEX LIVES IN THE RULES FILE.** Kyle’s call, against my first build. Two triggers, explicitly unequal: the `§0.a` table is an ordinary file read and does NOT depend on skill auto-invocation (measured-unreliable); each step being its own skill gives ELEVEN independent backup triggers instead of one. Cost measured before deciding: ~512 extra tokens always-on, 0.5% of the context floor. The umbrella skill was DELETED — nothing makes an umbrella fire first, so it could not route.
