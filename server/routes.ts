@@ -12598,6 +12598,17 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
 
       res.json({
         ok: true, mode, days, basis: 'realized',
+        // ★ THE EFFECTIVE WINDOW START, PUBLISHED — added 2026-08-26 after Step-7 UI verification.
+        // `days` is the REQUESTED span and is NOT the window actually used: `clampWindowToEpoch`
+        // moves the start forward to the observation epoch. Any consumer that re-derives the start
+        // from `days` lands BEFORE the epoch and draws the pre-epoch era the clamp just excluded.
+        // ⛔ THAT IS EXACTLY WHAT HAPPENED: the client computed its own `Date.now() - days` and
+        // planted the carrier point a month before the epoch, so a correctly-clamped dataset still
+        // rendered a flat line back to July. The server clamp could not reach it, because the
+        // client was not reading the server's answer — the #641 two-sources shape, and the same
+        // family as #900 (a second implementation of a rule that never called the shared one).
+        // ⇒ THE WINDOW IS COMPUTED ONCE, HERE, AND TRAVELS. Consumers must not re-derive it.
+        windowStartAt: windowStart.toISOString(),
         hasData: windowed.length > 0 || carrier !== null,
         startLevel: carrier ? { t: carrier.t, balance: carrier.balance, cumPnl: carrier.cumPnl } : null,
         points: windowed,

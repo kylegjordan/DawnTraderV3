@@ -268,8 +268,19 @@ function ActiveModeDashboard({ mode }: { mode: "paper" | "live" }) {
               // when there is genuinely neither a carrier NOR any in-window point.
               const rawPoints = (curve.data?.points ?? []) as any[];
               const startLevel = curve.data?.startLevel ?? null;
-              const windowStartMs = Date.now() - (chartDays * 24 * 60 * 60 * 1000);
-              const seeded = startLevel
+              // ⛔ THE WINDOW START COMES FROM THE SERVER. It is NOT `Date.now() - chartDays`,
+              // which is what this line used to be and which is why the chart kept drawing a flat
+              // line back to July: the server clamps the window forward to the observation epoch,
+              // and re-deriving it here planted the carrier a month BEFORE that epoch — rendering
+              // exactly the pre-epoch era the clamp exists to exclude. Two computations of one
+              // window is the #641 shape; the server's is the only one that knows about the epoch.
+              // ⛔ NO SILENT FALLBACK TO THE OLD FORMULA: if the server did not send a window, we
+              // do not seed a carrier at all. Drawing real points only is honest degradation;
+              // recomputing the span would quietly restore the defect being fixed.
+              const windowStartMs = curve.data?.windowStartAt
+                ? new Date(curve.data.windowStartAt).getTime()
+                : null;
+              const seeded = (startLevel && windowStartMs !== null)
                 ? [{ t: new Date(windowStartMs).toISOString(), balance: startLevel.balance, cumPnl: startLevel.cumPnl, kind: "carry" }, ...rawPoints]
                 : rawPoints;
               if (!curve.data?.hasData || seeded.length === 0) {
