@@ -4556,6 +4556,32 @@ For each open position:
 
    **⚠️ LIMITATION, stated in the model rather than left to be rediscovered:** where the budget-derived ceiling falls below `floor_ms` the floor governs, and the symbol can then cover MORE than the remaining room inside the blind window — i.e. **near a stop, on a fast symbol, the stop can be crossed unseen**. This is not fixable by lowering the floor (a sub-second ceiling refuses on every ordinary tick gap) and is not created by the ceiling: near the stop with a stale mark the position is exposed whichever branch is taken. The structural fix is a **venue-resting exit** (`#563`) — our stop is evaluated IN-PROCESS, so it dies with our own liveness, whereas an exchange-held stop executes regardless. Also unaddressed here: **nothing validates a mark's VALUE, only its AGE** (`#567`), and σ lags a genuine volatility spike because the trailing window dilutes it (`#566`).
 2. **Mock price rejection** (Phase B9) — skips if price source is 'mock'
+
+   **★ 2a. PRICE PROVENANCE IS CAPTURED HERE AND PERSISTED AT THE CLOSE (B-EXIT-PROVENANCE, `#741`/`#743`, 2026-08-26).**
+
+   **THE ARCHITECTURAL POINT, and it is a distinction the system did not previously make: a price carries TWO different facts, and one of them cannot answer the other's question.**
+
+   | field | question it answers | why it cannot answer the other |
+   |---|---|---|
+   | `price_source` | **POLICY** — *may the engine ACT on this price?* | it is a FEED label. The book-midpoint handler and the last-trade-print handler **both stamp `kraken_ws`** |
+   | `price_producer` | **PROVENANCE** — *which HANDLER produced this number?* | it is deliberately NOT consulted by any gate, so widening it can never change a trading decision |
+
+   ⛔ **CONFLATING THEM IS `#741` ITSELF.** `handleV2BookUpdate` emits a book **MIDPOINT** and `handleV2TickerUpdate` emits a **LAST-TRADE PRINT**; both write the same cache key under the same `source`, last-writer-wins. A ghost-contaminated mid and a clean print therefore arrived **indistinguishable**, and a downstream reader took `kraken_ws` as evidence of a ticker print. **The two fields must never be re-merged.**
+
+   **THE CAPTURE RULE, stated so it is implementable rather than aspirational:** *a stamp is **CARRIED** wherever a quote object exposes provenance, and is a **LITERAL** only where the emitting line itself IS the provenance — never derived from a neighbouring value.* The exemption is the second clause, and it is written down per branch rather than taken silently:
+
+   | leg | producer | observation time |
+   |---|---|---|
+   | crypto via the pricing adapter | **CARRIED** from the quote — the only genuine carry | the venue observation time, preserved through last-known-good re-serves (`#743`) |
+   | xStock equities tick | **LITERAL** — no quote object exists; the line is the producer | the archiver's real venue-snap stamp |
+   | crypto direct REST | **LITERAL** | ⛔ **NULL** — that ticker carries no per-quote observation time, and **fabricating one from the fetch time would record fetch time as observation time**, which is the `#743` defect inside the column built to expose it |
+
+   ⛔⛔ **THE INTER-TICK CADENCE IS NOT AN AGE, AND MUST NEVER BE STORED AS ONE.** The engine computes `now − lastTick` — *how long since we last looked* — and **already logs it as `ageMs=`**, which is precisely why it is the value an implementer reaches for. It is persisted under its honest name (`exit_tick_cadence_ms`) and is **forbidden** as the source of any observation-time column. **The rename is half the prohibition; the old name was the invitation.**
+
+   **WHY A SEPARATE `exit_decision_price` COLUMN EXISTS:** the price that DROVE an exit is not always the price RECORDED. A resting maker exit closes **at its limit** while the venue tick that traded through it caused the close. Recording only the exit price leaves **the number that actually caused the exit with no trace at all** — which is what made `#741` hard to measure after the fact.
+
+   ⛔ **FORWARD-ONLY, and the objective is conditional by design.** These columns fix nothing historical. `exit_price_source` deliberately does **not** fall back to the close-condition parameter (which defaults to `'manual_stop'`): a fallback would satisfy a non-null check perfectly **while asserting nothing**. An unstamped close therefore lands NULL **so the coverage check can see it** — which makes "every row stamped" depend on every close path being wired, and that dependency is the objective having meaning rather than being true by construction. Rows with `close_reason='never_filled'` are an **explicit exemption**: no order filled, so no exit occurred and no price could honestly be recorded.
+
 3. **Price tick logging** — ring buffer of last 100 ticks for cadence verification
 4. **P/L calculation** — updates position with unrealized P/L
 5. **Exit condition check** — calls `checkExitConditions()`
