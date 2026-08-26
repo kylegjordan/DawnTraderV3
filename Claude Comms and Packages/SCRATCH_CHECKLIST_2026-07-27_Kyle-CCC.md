@@ -198,3 +198,22 @@
 `#900` SQL↔TS parity fence *(the fence I shipped asserts TS↔TS; the reader that was wrong by the largest margin is SQL with no test)* · `#901` the epoch **value** still resolves two ways (measured 4/534) · `#902` the last two unscoped epoch readers · `#903` the `/api/portfolio/overview` 401 that leaves the Dashboard balance card blank *(and was masking `#902`)* · `#908` `trades24h` hardcoded-100, **UNVERIFIED pending re-check**
 
 ⛔ **WHY #6 IS NOT LAST, stated because it is the judgement call in this list:** it is the only piece that changes **which assets can trade at all**. Everything from #10 onward fits models to the trade population — and that population has **never contained Bitcoin or Dogecoin**. Calibrating first and admitting them after means re-doing the calibration on a different universe.
+
+### ⛔ SEQUENCE RE-ORDERED BY KYLE, 2026-08-26 — THIS SUPERSEDES THE DEPENDENCY ORDER ABOVE
+
+> **His directive:** *"After the piece currently in progress the next 3 steps should be 6, 8, then 11. The rest can stay in the order you have them."*
+
+| run order | piece | note |
+|---|---|---|
+| **1st** | **#5 `B-EXIT-PROVENANCE`** — in flight, blocked at Step 1 on Langston | unchanged |
+| **2nd** | **#6 `B-SCANNER-EGRESS-NORMALISE`** — the BTC + DOGE fix | ★ **promoted**; independent of #5, so it can run while #5 is blocked |
+| **3rd** | **#8 F-G — trigger the exit on the side we transact on** | ★ **promoted ahead of the staleness bound** |
+| **4th** | **#11 F-5 — per-strategy reach structure** *(the reachability batch)* | ★ **promoted**; still **BUILD yes / FIT no**, and **p70=1.57R stays BOUNCED** under rule 29(a) |
+| 5th | #7 F-C / F3.5 — staleness bound (`#743`) | |
+| 6th | #9 F-D — VTS accessor + isolation | |
+| 7th | #10 F-E — detector + disposition, both legs | |
+| 8th | #12 F-F(b) — the reset gate | last, unchanged |
+
+⚠️ **TWO DEPENDENCY NOTES THIS RE-ORDER CREATES, recorded rather than silently absorbed — neither blocks Kyle's sequence, but both change what a piece can CLAIM:**
+1. **#8 (F-G) now runs BEFORE #7's staleness bound.** F-G's own G-3 asks for a measured before/after on stop-fill slippage. That still works — it needs **F-B's stamp** (#5), not F-C. **No conflict.**
+2. ⛔ **#11 (F-5) now runs BEFORE #10 (F-E).** F-5's scope says the reach FIT rests on **tier-A fills, which F-E is what produces.** ⇒ **F-5 ships BUILD-ONLY as already specified, and the FIT stays gated on F-E regardless of run order.** **The re-order does NOT unblock the fit, and #11 must not be closed as "reach calibrated" — only as "reach structure shipped, behaviour-neutral."**
