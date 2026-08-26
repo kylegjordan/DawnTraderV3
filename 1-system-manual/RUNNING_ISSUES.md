@@ -3708,6 +3708,27 @@ The VTS is fed by the **same** filtered scan (confirmed live: it is simulating `
 
 **⇒ THE FIX MUST COVER BOTH, and the scope Langston already widened is right:** normalise at the market-scanner's Kraken egress — his three sites (`:698` DBS prefetch swallowed by a bare `catch {}`, `:831`, `:994`), the `:762` `setCostMetrics(pair.symbol)` RAW-vs-normalised key convention, the two `.has()` dedupe joins, and the missing `capturePreFilterReject`. ⚠️ **`B-BTC-HISTORY-SYMBOL-FIX` is now misnamed** — it is not Bitcoin-specific and not history-specific. **Rename to `B-SCANNER-EGRESS-NORMALISE`.**
 
+### #912 OPEN 2026-08-26 (CC-C; surfaced closing the B-MBIM-SWITCH-ON declaration, root-caused by Langston at the code) — ⛔ THE `gov-staleopen` ALARM CAN BE RAISED AND CAN NEVER CLEAR ITSELF
+
+**MEASURED, not inferred:** `scripts/governance-checker/poller.mjs:282` mints a `gov-staleopen` alert and **has NO `toResolveKeys` path** — unlike its sibling checks, which push a resolve key when the condition clears. ⇒ **the alert is mint-only.** Closing the underlying `GOVERNANCE_EXCEPTIONS` row stops it firing on anything NEW, but **an already-active instance sits active for ever until a human resolves it by hand.**
+
+**OBSERVED COST, this batch:** `2080705d` (and `55a6ad8b` before it) re-fired for **two days after B-MBIM-SWITCH-ON was deployed and verified running**, pulling Langston and two CC sessions into triage for finished work. Both had to be resolved manually with evidence.
+
+⛔ **WHY THIS IS WORSE THAN NOISE, and it is the reason it gets a home rather than a note:** an alarm that cannot clear itself trains its readers to ignore it. **The next `gov-staleopen` will be indistinguishable from these two**, and the one after that may be real. *(Langston, 2026-08-26: "an alarm that can't clear itself eventually becomes noise, so I'd rather it be named than quietly worked around.")*
+
+**HOME: `B-ALERT-LIFECYCLE`, owner CC-C, slotted with the rest of that batch's checker-hardening scope.** ★ **Deliberately NOT a new batch:** `#443`'s home is already *"a single checker-hardening batch owning alert-lifecycle correctness"* — Langston's own ruling that these are one subsystem and must not be split. `#508` RIDER-2 is the same `toResolveKeys`-leg-never-fires family. **Three issues, one defect class, one batch.** ⚠️ `B-ALERT-LIFECYCLE` is **not** in `BATCH_CATALOG` ⇒ not yet executed ⇒ this is a LIVE home, not a dead one (checked, because homing to a closed batch is the failure `§9.4` exists to prevent and it has happened here before).
+⚠️ **NO DATE, per `§9.4` as amended 2026-08-25.** ↔ `#443`, `#508`, `#352`.
+
+### #913 OPEN 2026-08-26 (CC-C; the home asserted in `B_EXIT_PROVENANCE_SCOPE.md` R6-4 never existed in this ledger) — ⚠️ A LOG LINE CALLS THE INTER-TICK CADENCE `ageMs=`, AND THAT IS THE VALUE AN IMPLEMENTER REACHES FOR
+
+**`active-execution-engine.ts` logs `ageMs=${diffMs}` where `diffMs` is `now − lastTick`** — the engine's **inter-tick CADENCE for that symbol**, i.e. *how long since we last looked*, **not how old the price is**. Two different quantities; one name.
+
+**WHY IT IS FILED RATHER THAN FIXED IN `B-EXIT-PROVENANCE`:** that batch does not otherwise touch this log line, and it defended against the trap **structurally instead** — the column is named `exit_tick_cadence_ms`, `observedAtMs` is forbidden from taking `diffMs`, and the fence mutation-proves that prohibition (M2). **So the DATA is safe; the LOG still misleads the next reader.**
+
+⛔ **THE ACTUAL DEFECT THIS ENTRY EXISTS TO CORRECT IS A GOVERNANCE ONE, AND IT IS MINE:** the scope stated this was *"homed as a one-line correction to `#743`'s batch"* — and **`ageMs` had ZERO occurrences anywhere in this ledger.** The home was asserted in a scope file and **never written down where homes live**. A home that exists only in the document that promised it is exactly the *"named home that never happens"* failure `§9.4` was written to kill, and I filed it that way while quoting `§9.4` in the same batch.
+
+**HOME: `#743`'s batch (the last-known-good age-bound work), owner CC-C — now recorded HERE, in the ledger, rather than only in a scope file.** ⚠️ NO DATE, per `§9.4`. ↔ `#743`, `B-EXIT-PROVENANCE`.
+
 ### #911 OPEN 2026-08-26 (CC-C; **Langston's Step-4 ruling on B-EXIT-PROVENANCE**) — ⛔ OBJ-3 SHIPS HALF-BLIND: THE ONLY INDEPENDENT WITNESS IS NOT RETAINED
 
 **THIS IS A CLOSE GATE, NOT A FOLLOW-ON.** Langston's words: *"deploy this ref. OBJ-3 stays OPEN, and B-EXIT-PROVENANCE DOES NOT CLOSE until the ticker-retention leg lands."* Filed at the moment of the ruling per §13, so the batch cannot quietly read as delivered.
