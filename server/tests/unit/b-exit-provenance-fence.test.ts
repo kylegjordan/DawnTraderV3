@@ -145,6 +145,26 @@ describe('B-EXIT-PROVENANCE — the exit stamp cannot be satisfied by a non-prov
     expect(AEE).toMatch(/OBJ-1 EXEMPTION/);   // the standing note, asserted against the raw file
   });
 
+  it('OBJ-6: BOTH entry paths stamp — the taker open seam, not just the maker fill', () => {
+    // THIS TEST EXISTS BECAUSE STAGING CAUGHT WHAT THE PLAN MISSED. The Step-2 plan wired the
+    // MAKER fill and silently dropped the TAKER open seam, so the first post-deploy taker entry
+    // opened with NULL provenance while every other fence here passed green. OBJ-6 asks for a
+    // non-null entry source on EVERY new row; one of two paths cannot deliver that.
+    const src = code(AEE);
+    // The maker leg (durable write from inside the pending processor).
+    expect(src).toMatch(/entryPriceProducer:\s*provenance\.producer/);
+    // The taker leg (the createClosedTrade open seam), stamped from the depth snapshot.
+    expect(src).toMatch(/entryPriceSource:\s*_gate\.snapshot\.source/);
+    expect(src).toMatch(/entryBookAgeMs:\s*_gate\.snapshot\.ageMs/);
+    // ...and the walk must NOT be labelled a mid. A walk consumes book LEVELS; a mid is
+    // (bestBid+bestAsk)/2. Stamping one as the other is the wrong-object label this union exists
+    // to prevent, and it would be completely invisible in the resulting data.
+    expect(src).not.toMatch(/entryPriceProducer:[^;]{0,120}kraken_ws_book_mid/);
+    expect(src).toMatch(/crypto_ws_book_walk/);
+    // TWO entry-stamp sites, not one — asserted by COUNT, so deleting either one fails here.
+    expect((src.match(/entryPriceProducer:/g) ?? []).length).toBe(2);
+  });
+
   it('the producer vocabulary stays CLOSED, and the non-cacheable member is excluded', () => {
     // Called against the PRODUCTION function, not a copy of its switch.
     expect(toCachedProducer('position_entry_price_reused' as PriceProducer)).toBeNull();

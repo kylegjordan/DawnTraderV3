@@ -3594,6 +3594,27 @@ export class ActiveExecutionEngine {
         signalType: signalType as 'QUANT' | 'PATTERN' | 'HYBRID',
         patternType: patternType as any,
         patternStrength: patternStrength,
+        // ── B-EXIT-PROVENANCE OBJ-6/OBJ-7 — THE TAKER ENTRY STAMP, AT THE FILL SEAM.
+        // ⛔ ADDED 2026-08-26 AFTER STAGING CAUGHT IT: the Step-2 plan wired the MAKER fill and
+        // silently dropped this leg, so the first post-deploy taker entry (PLTR/USD) opened with
+        // NULL provenance while every fence passed green. OBJ-6 asks for a non-null entry source
+        // on EVERY new row; a plan covering one of two entry paths cannot deliver that.
+        // The taker fill is a DEPTH WALK, so the producer names the walk and NOT the mid — a walk
+        // consumes book LEVELS; a mid is (bestBid+bestAsk)/2. Two feeds, two producers.
+        entryPriceProducer: _gate.snapshot.source === 'crypto_ws_book'
+          ? 'crypto_ws_book_walk'
+          : 'xstock_ticker_snap_walk',
+        entryPriceSource: _gate.snapshot.source,
+        // ★ A REAL book age at the REAL fill instant — the value `entry_book_age_ms` was created
+        // for. It exists here, unlike on the maker path where NULL is the honest value because a
+        // resting fill consults no book at all.
+        entryBookAgeMs: _gate.snapshot.ageMs,
+        // The price the SIGNAL intended, kept beside the walked entry price above, so slippage is
+        // reconstructable from the row alone without re-deriving it from a second table (OBJ-7).
+        entryDecisionPrice: signal.entryPrice.toString(),
+        // ⛔ NULL: the depth snapshot carries an AGE, not a venue observation timestamp. Deriving
+        // one as `Date.now() - ageMs` would manufacture a precision the feed never provided.
+        entryObservedAtMs: null,
         // Batch 19E: Persist sourcePool from signal metadata
         sourcePool: (signal as any)?.metadata?.sourcePool || (signal as any)?.sourcePool || null,
         // B67.3: cohort marker (0=capped treatment / 1=uncapped control)

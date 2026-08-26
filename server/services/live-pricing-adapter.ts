@@ -71,6 +71,16 @@ export type PriceProducer =
                                        //        on that axis it is the honest leg.
   | 'entry_seed'                       // :784 seedLastKnownGoodPrice
   | 'mock'                             // :556 (fetchMockPrice defined :527)
+  | 'crypto_ws_book_walk'              // active-execution-engine.ts open seam — the taker ENTRY
+                                       //        fill is a DEPTH WALK of the crypto WS book's ask
+                                       //        levels. ⛔ DISTINCT FROM `kraken_ws_book_mid`, and
+                                       //        the distinction is the point: a walk consumes
+                                       //        LEVELS and a mid is (bestBid+bestAsk)/2. Stamping a
+                                       //        walk as a mid would be a wrong-object label of
+                                       //        exactly the kind this union exists to prevent.
+  | 'xstock_ticker_snap_walk'          // the same walk over the xStock ticker snapshot — a
+                                       //        different FEED, so a different producer. xStock has
+                                       //        no order book; the depth comes from a stored snap.
   | 'position_entry_price_reused'      // active-portfolio-manager.ts:323 — the force-close
                                        //        no-price fallback REUSES `position.avgPrice`.
                                        //        ⛔ NO HANDLER PRODUCED THIS NUMBER: it came off the
@@ -109,6 +119,9 @@ export function toCachedProducer(p: PriceProducer): CachedProducer | null {
     // Never cached: no handler produced it, so there is nothing to attribute a cached price to.
     case 'position_entry_price_reused':
       return null;
+    case 'crypto_ws_book_walk':
+    case 'xstock_ticker_snap_walk':
+      return p;
     case 'kraken_ws_ticker':
     case 'kraken_ws_book_mid':
     case 'kraken_ws_ticker_v1':
