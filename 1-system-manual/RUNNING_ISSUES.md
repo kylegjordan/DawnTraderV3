@@ -3649,3 +3649,33 @@ The VTS is fed by the **same** filtered scan (confirmed live: it is simulating `
 
 ★ **THIS STRENGTHENS THE FIX RATHER THAN CHANGING IT.** Depending on a venue continuing to accept a non-canonical alias is the fragility that bit us. **Resolve to our internal form (`BTC/USD`, which the resolver already produces) or to the canonical `restKey`** — and the class of failure disappears rather than moving.
 **STILL OPEN:** whether any OTHER pair silently lost its alias the same way. **The 11 `XBT/*` pairs are what errored in the retained window; a definitive sweep of every wsname against the OHLC endpoint remains task 2.**
+
+**★★★ #909 — THE SWEEP IS DONE AND IT IS DEFINITIVE. THE CLASS IS {XBT, XDG}: BITCOIN **AND DOGECOIN**. (2026-08-26)**
+
+**SWEEP, universe-wide, not a sample and not a log window.** Every **distinct base** in Kraken's tradeable universe, one representative pair each, its own `wsname` sent to the OHLC endpoint, 1 req/s:
+
+| | |
+|---|---:|
+| distinct bases tested | **661** |
+| **failures** | **2** |
+| `XBT` (`XBT/USD`, rest `XXBTZUSD`) | ⛔ `EQuery:Unknown asset pair` |
+| `XDG` (`XDG/USD`, rest `XDGUSD`) | ⛔ `EQuery:Unknown asset pair` |
+
+★ **INDEPENDENTLY CORROBORATED BY A SECOND METHOD.** Langston's census instruction — *"the exposed class is every base whose wsname ≠ internal form"* — run against `kraken-symbol-map.ts` (`krakenWsPair` vs `internalSymbol`): **8 of 130 entries diverge, across exactly two bases: `XBT→BTC` and `XDG→DOGE`.** **Two methods, opposite directions, identical answer.**
+
+⛔ **CORRECTION TO LANGSTON'S REVIEW, and it widens his own finding:** he derived the class as **`{XBT}`** from `REVERSE_ASSET_TRANSLATIONS` (a genuinely one-entry map). **But that map is the DYNAMIC fallback; the TIER-0 STATIC map carries the second case.** `XDG/USD → DOGE/USD` is in `KRAKEN_SYMBOL_MAP` and never reaches the fallback. ⇒ **the class is {XBT, XDG}. Dogecoin is affected identically and was missed by both of us.**
+
+**EMPIRICAL PROOF, with a control:**
+
+| base | paper closed | VTS | open | note |
+|---|---:|---:|---:|---|
+| **BTC / XBT** | **0** | 5 | **0** | 5 VTS only, via the benchmark bypass |
+| **DOGE / XDG** | **0** | **0** | **0** | ⛔ **zero EVERYWHERE, always** |
+| XRP *(control)* | 29 | — | — | does not diverge |
+| SUI *(control)* | 17 | — | — | does not diverge |
+| LINK *(control)* | 2 | — | — | does not diverge |
+| ADA *(control)* | 1 | — | — | does not diverge |
+
+★★ **AND THE BTC-vs-DOGE ASYMMETRY IS A CLEAN CORROBORATION OF LANGSTON'S BYPASS MECHANISM.** Both bases carry the identical defect. **BTC is in `BENCHMARK_SYMBOLS` and got 5 VTS trades through the passive bypass while the engine was off. DOGE is NOT a benchmark, never got the waiver, and is therefore at zero in every lane for all time.** Same defect, different exposure, entirely explained by whether the pair was on the benchmark list. **That is a prediction his mechanism makes and the data confirms — neither of us designed the test, it fell out.**
+
+**⇒ THE FIX MUST COVER BOTH, and the scope Langston already widened is right:** normalise at the market-scanner's Kraken egress — his three sites (`:698` DBS prefetch swallowed by a bare `catch {}`, `:831`, `:994`), the `:762` `setCostMetrics(pair.symbol)` RAW-vs-normalised key convention, the two `.has()` dedupe joins, and the missing `capturePreFilterReject`. ⚠️ **`B-BTC-HISTORY-SYMBOL-FIX` is now misnamed** — it is not Bitcoin-specific and not history-specific. **Rename to `B-SCANNER-EGRESS-NORMALISE`.**
