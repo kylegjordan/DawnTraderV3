@@ -47,7 +47,11 @@
 ⚠️ **The count above initially read "seven backups"; re-derived, the 7 INCLUDES the live file, so it is six.** The nine-total figure is unchanged. **The reconnect must not add a tenth.**
 
 ### A3 — `CLAUDE_CODE_FEATURE_WATCH.md` HAS NO PROGRAMMATIC WRITER **AND** NO PROGRAMMATIC READER
-Repo-wide search: **six files reference it, all Markdown** — `CLAUDE.md`, the shared `MEMORY.md`, `RUNNING_ISSUES.md` and three completion reports. **No `.mjs`, `.js`, `.py` or `.sh` touches it.**
+**SEVEN pre-existing files reference it, and ALL are Markdown** — `CLAUDE.md`, the shared `MEMORY.md`, `RUNNING_ISSUES.md`, two completion reports, a Langston design ask, and `B_MISTAKES_FILE_SCOPE_AND_PREAUDIT.md`. *(`git grep` returns 9; two are this batch's own documents.)* **No `.mjs`, `.js`, `.py` or `.sh` touches it.**
+
+⚠⚠ **THIS NUMBER WAS WRONG AT FIRST DISPATCH — IT READ "SIX" — AND HOW IT WAS WRONG IS ITSELF A FINDING FOR THIS BATCH.** I ran the census on **two** instruments. **BOTH RETURNED 6, AND EACH MISSED A DIFFERENT FILE:** the indexed search missed `B_MISTAKES_FILE_SCOPE_AND_PREAUDIT.md`; the shell `grep -rln --include=*.md` missed `CLAUDE.md`. **Neither reported a truncation, and the two counts AGREED, which is precisely what made the error invisible** — agreement between instruments reads as corroboration and here it was coincidence.
+★ **RESOLVED BY A THIRD INSTRUMENT THAT READS A DIFFERENT OBJECT: `git grep`, which searches the INDEX rather than the filesystem.** ⇒ **TWO INSTRUMENTS AGREEING IS NOT A CONTROL. A control is an instrument that would FAIL DIFFERENTLY.** *(Recorded because it is the same family as everything else in this batch, and it happened inside the audit written to close that family.)*
+★ **The load-bearing claim SURVIVES and is strengthened: 9 of 9 hits are `.md`.** The count was wrong; the conclusion — **no programmatic writer, no programmatic reader** — is not.
 ⇒ **The writer is a sentence in a prompt asking a session to remember; the reader is a human.** That is A3 stated structurally, and it is exactly why nineteen days produced zero rows: **the liveness artifact and the thing it measures are the same actor.**
 ★ **AND IT MAKES THE FIX EASIER, NOT HARDER: because nothing reads the file programmatically, deriving liveness from the scheduler's own `lastRunAt` breaks no consumer.** The census is what licenses that design.
 
