@@ -12,7 +12,7 @@ description: STEP 11 ONLY of the DawnTrader batch workflow - the Completion Repo
 **If the batch was parked on an observation window, a soak, or evidence that had to accumulate, it already has `<BATCH-ID>_PROGRESS_REPORT.md`** — see `workflow-10-governance` for when one is written.
 
 ⛔ **DO NOT WRITE A FRESH REPORT FROM MEMORY. CONVERT THAT FILE.** Rename it to `<BATCH-ID>_COMPLETION_REPORT.md` and finish it:
-1. **Record the observation’s ACTUAL RESULT against the criterion the progress report PRE-REGISTERED** — quote the criterion as written, then the outcome. ★ **A criterion chosen after seeing the window can always be made to pass. That is exactly what pre-registration prevents, and rewriting it now destroys the protection.**
+1. **BOTH HALVES, and a report with only the first has not closed the loop: (a) WHAT DATA CAME IN** — the observation’s actual result against the criterion the progress report PRE-REGISTERED**, and (b) WHAT DECISION OR ACTION WAS TAKEN ON IT**, and by whom — quote the criterion as written, then the outcome. ★ **A criterion chosen after seeing the window can always be made to pass. That is exactly what pre-registration prevents, and rewriting it now destroys the protection.**
 2. Complete the objectives table and the governance-files-changed list.
 3. ⚠️ **If the observation FAILED its criterion, the conversion RECORDS THE FAILURE — it does not become a delay.** Either the report closes the batch with a negative result and a named follow-up, or the batch reopens at the step that needs redoing.
 

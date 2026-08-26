@@ -43,7 +43,11 @@ description: STEP 10 ONLY of the DawnTrader batch workflow - Governance Updates.
 **THIS STEP’S ENTIRE DELIVERABLE IS *WHICH DOCUMENTS YOU UPDATED*.** A report that describes the ideas you wrote and not the files you wrote them into has **omitted the only checkable fact it contained.**
 
 ⚠️⚠️ **MEASURED 2026-08-26, AND IT IS WHY THIS SECTION EXISTS. A Step-10 report reached Kyle saying it had written *"the component map"* and *"the architecture manual."*** **THE WORK WAS ENTIRELY REAL** — `SYSTEM_IMPACT_MAP.md` +15 lines and `SYSTEM_MANUAL.md` +26, one commit, verifiable in thirty seconds. **But Kyle read two names we do not own, could match them to nothing, and called the whole report fantasy.** He was right to.
-★ **AND THE SESSION WAS OBEYING THE RULES — THAT IS THE POINT.** `CONDUCT.md` §2 bans **file paths**; §3 protected real names but scoped that protection to *"a core part of the **trading system**."* **Governance documents are files, and are not the trading system.** ⇒ **the two rules COMBINED to require the paraphrase.** Both were amended the same day; **this section is the half that could not fit under the `CONDUCT.md` byte cap.**
+⚠⚠ **MY FIRST DIAGNOSIS OF THIS WAS WRONG AND KYLE CORRECTED IT — recorded because the wrong version is the more flattering one.** I reported that §2’s **file-path** ban and §3’s trading-system-scoped name-protection **"COMBINED TO REQUIRE the paraphrase."** **They did not.** *(Kyle: "a file name is not the same as a file path — calling a file by its name shouldn’t create a conflict.")* ★ **`SYSTEM_IMPACT_MAP.md` is a NAME; `1-system-manual/SYSTEM_IMPACT_MAP.md` is a PATH. §2 banned the path and NEVER banned the name. Nothing forced the paraphrase.**
+
+⇒ **THE REAL GAP IS WEAKER AND STILL WORTH FIXING: §3 never told anyone to KEEP a document’s name, because its protection was scoped to *"a core part of the trading system."* A MISSING INSTRUCTION, NOT A CONTRADICTION.** The paraphrase was a choice the rules failed to prevent.
+
+⚠️ **WHY THE ERROR MATTERS MORE THAN THE FIX: "the rules REQUIRED it" absolves everyone and aims the repair at the wrong place.** I inflated a gap into a defect — **inside a diagnosis Kyle had asked me for, and then broadcast it to the crew as the finding.** Same shape as over-reading his narrow remark into a general rule the day before: **substituting my reconstruction for what was actually said.**
 
 ⇒ **WRITE:** *"Updated the System Impact Map and the System Manual"* — **strip the folder, KEEP THE NAME.** A document’s name is not a file path.
 ⛔ **AND LIST EVERY ONE YOU TOUCHED, not the two most interesting.** The list is the RESULT, not process-narration — the *"Kyle does not want the sausage-making"* rule is about narrating your own corrections, **never about naming your deliverables.**
@@ -52,7 +56,12 @@ description: STEP 10 ONLY of the DawnTrader batch workflow - Governance Updates.
 
 ## ⛔⛔ A BATCH THAT CANNOT CLOSE YET GETS A **BATCH PROGRESS REPORT** — AND IT IS LATER *CONVERTED* INTO THE COMPLETION REPORT (Kyle directive 2026-08-26)
 
-**THE TRIGGER, exactly:** the work is done and reviewed, **but the batch cannot be closed because something must ELAPSE or ACCUMULATE** — an observation window, a soak, evidence that only exists after N trades close, a second data feed that does not exist yet — **and you are moving on to another batch in the meantime.**
+**THE TRIGGER, in Kyle’s own shape (2026-08-26):** *"the work has been done, the code deployed on staging, and now we’re at an observational period that’s gonna last a few weeks with a set date for it to complete, **or a set quantity of actions have completed** — and therefore that data can be reviewed and decisioned or actioned."*
+
+⇒ **TWO WINDOW SHAPES, BOTH VALID:** a **set period** (*"four weeks"*, *"+48h"*) **or a set QUANTITY** (*"until 30 trades close"*, *"until the first post-deploy exit"*). **Name which one, and its value.**
+
+⛔⛔ **AND THE CLOSE CONDITION IS *TWO* THINGS, NOT ONE — THIS IS THE PART THAT GETS MISSED: THE DATA MUST BE IN **AND** A DECISION OR ACTION MUST HAVE BEEN TAKEN ON IT.** Kyle: *"once the data is in and the action or the decision has been made, that’s when the batch report is finalized with what data came in and what decision or what action was taken."*
+★ **A window that has merely ELAPSED does not close the batch.** Data with no decision on it is an open loop wearing a finished batch’s clothes — **the observation was run and nothing was concluded from it**, which is the whole failure the window existed to prevent.
 
 ⚠️ **THIS IS THE ONE PLACE A DATE IS LEGITIMATE (§9.4): a period whose LENGTH is the content.** *"+48h gate"*, *"14-day soak"*, *"until 30 closes accumulate"*. **The batch still gets no due date; the WINDOW gets its length.**
 
@@ -65,7 +74,10 @@ description: STEP 10 ONLY of the DawnTrader batch workflow - Governance Updates.
 4. **What is unproven, stated as unproven**, and what would falsify it.
 5. **The governance files changed so far** — same naming rule as above.
 
-**CONVERSION, when the window closes:** the progress report **BECOMES** the completion report — same batch, renamed to `<BATCH-ID>_COMPLETION_REPORT.md`, with the observation’s **actual result** recorded **against the pre-registered criterion** and the objectives table completed. ⛔ **You do not write a fresh report from memory** — the whole point is that the evidence was captured while it was fresh.
+**CONVERSION — when the data is in AND the decision or action has been taken:** the progress report **BECOMES** the completion report — same batch, renamed to `<BATCH-ID>_COMPLETION_REPORT.md`, recording **BOTH halves explicitly:**
+1. **WHAT DATA CAME IN** — the observation’s actual result, set **against the criterion the report pre-registered** (quote the criterion as written, then the outcome).
+2. **WHAT DECISION OR ACTION WAS TAKEN ON IT** — and by whom. ⛔ **A completion report that states the data and not the decision has not closed the loop.**
+Then complete the objectives table and the governance-files list. ⛔ **You do not write a fresh report from memory** — the whole point is that the evidence was captured while it was fresh.
 ⛔ **AND THE BATCH IS NOT CLOSED UNTIL THAT CONVERSION HAPPENS.** A progress report is an OPEN state. The delivery-board card stays out of `Complete`, and the `RUNNING_ISSUES` entry stays open.
 ⚠️ **IF THE OBSERVATION FAILS ITS CRITERION, THAT IS A RESULT, NOT A DELAY** — it converts to a completion report recording the failure and what follows, or the batch reopens at the step that needs redoing. **It must never quietly wait forever.**
 
