@@ -3784,6 +3784,20 @@ The VTS is fed by the **same** filtered scan (confirmed live: it is simulating `
 
 **HOME: `#743`'s batch (the last-known-good age-bound work), owner CC-C — now recorded HERE, in the ledger, rather than only in a scope file.** ⚠️ NO DATE, per `§9.4`. ↔ `#743`, `B-EXIT-PROVENANCE`.
 
+### #915 OPEN 2026-08-27 (CC-C; surfaced chasing the stop-distance question, and it is NOT what I was looking for) — ⛔ SIX LONG POSITIONS CLOSED `stop_hit` WITH THEIR STOP RECORDED **ABOVE** THE ENTRY PRICE
+
+**A long's stop must sit BELOW its entry. Six do not.** `closed_trades`, crypto_spot, `close_reason='stop_hit'`, since 2026-07-15: **6 of 160 rows (3.75%) have `stop_loss >= entry_price`, averaging 7.16% ABOVE entry.**
+
+⛔ **THE INNOCENT EXPLANATION IS RULED OUT, WHICH IS WHY THIS IS FILED.** A trailing stop that ratchets up past the entry is CORRECT — it is locking in profit. **All six rows are `trade_mode='TARGET'` with `ladder_rungs_hit = 0`**: they never entered trailing mode and never ratcheted a single rung. **So nothing legitimately moved that stop.**
+
+**Why it cannot be shrugged off as cosmetic:** a long whose stop is 7% above its entry is, by construction, *already stopped out at the moment of entry* — the exit condition is `currentPrice <= stopPrice` and that is true on the first tick. Either (a) the row's `stop_loss` does not belong to that trade, (b) `entry_price` was overwritten after the stop was set, or (c) the geometry was inverted at signal time and the guards did not reject it. **All three are worth knowing and I have not yet distinguished them.**
+
+⚠️ **AND IT IS GETTING WORSE, NOT BETTER: PRE-epoch 4 of 141 (2.8%); POST-epoch 2 of 19 (10.5%).** Small n post, so the RATE is not decision-grade — **the direction is what is reportable, not the multiple.**
+
+★ **HOW IT WAS FOUND, because the method is the transferable part:** it surfaced as *negative stop distances* while I was averaging `(entry−stop)/entry` to answer a different question. **The bad rows were silently dragging that average**, and my first answer to Kyle — *"stop distance tripled"* — was partly their doing. **Excluding them the real move is 1.69% → 3.12%, a DOUBLING, not a tripling.** An impossible value inside an average is invisible until the average is questioned.
+
+**HOME: `B-EXIT-TRANSACTABLE-SIDE` (F-G), owner CC-C** — F-G is already opening the exit-geometry surface and this is the same object; it should NOT get its own batch. ⚠️ **NO DATE, per `§9.4`.** ↔ `#677` (stop provenance — only 49/241 crypto closes carry a stop), `B-EXIT-TRANSACTABLE-SIDE`.
+
 ### #914 OPEN 2026-08-27 (CC-C; Kyle refused the first version of this entry and was right to) — ⛔⛔ **VTS EXITS HAVE ZERO SLIPPAGE BY CONSTRUCTION. PAPER EXITS DO NOT. THE TWO POPULATIONS ARE NOT COMPARABLE ON EXIT ECONOMICS.**
 
 ⛔ **THIS ENTRY REPLACES A WRONG ONE, IN FULL.** I first filed *"the VTS records the exit price and NOT the stop, so its exit quality is unmeasurable."* **FALSE.** I read the top-level keys of **ONE** record and generalised. **`originalStopPrice` is present on 817 of 1,018 recent records** — the file mixes two record shapes and I sampled the sparser one. **Kyle rejected the claim on the correct grounds: we collect the same pricing data for both lanes, so the measurement should be possible.** It is. *(`MISTAKE: wrong-object` — one sample read as a population.)*
