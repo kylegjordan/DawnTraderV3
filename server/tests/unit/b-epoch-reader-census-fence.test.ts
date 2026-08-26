@@ -1,77 +1,117 @@
 /**
- * B-EPOCH-READER-CENSUS — FENCE
+ * B-EPOCH-READER-CENSUS — FENCE (r2, after Langston blocked r1 for reproducing its own defect)
  *
- * WHY THIS EXISTS, and it is Langston's objection rather than my idea:
- * B-EPOCH-KEYING-PARITY shipped a fence that tests the PREDICATE in isolation. It enumerates no
- * readers and derives no readers. So when a FIFTH reader (the balance curve) turned up on
- * 2026-08-26 -- after the batch built to fix reader divergence -- nothing caught it, and nothing
- * would catch a sixth. His ruling: "a fifth reader found after the batch built to fix reader
- * divergence means that census was incomplete."
+ * ⛔ WHAT r1 GOT WRONG, kept because it is the whole reason this file is shaped the way it is:
+ * r1 enumerated its subjects as a HARDCODED NAME LIST — `['routes.ts','storage.ts','dashboard-metrics.ts']`
+ * — one message after I told Langston that the previous fence "enumerates nothing… a sixth would be
+ * invisible to it." A sixth reader in a FOURTH file was invisible to my replacement too. His ruling:
+ * "the subject must be DERIVED… a name list passes green while the defect is live."
  *
- * ⛔ WHAT THIS FENCE ASSERTS, and what it deliberately does NOT:
- *   IT DOES assert that no file re-implements the epoch rule locally -- the copy-per-reader shape
- *     that put the rule into one reader of four in the first place (#900).
- *   IT DOES NOT assert that every P&L reader is epoch-scoped, because THAT IS NOT TRUE AND MUST
- *     NOT BECOME TRUE. The daily-loss budget and the guardrail settings read realized P&L over a
- *     SESSION window on purpose: a daily loss budget is not a lifetime scoreboard, and clamping it
- *     to the epoch would silently widen the risk envelope. A blanket "scope everything" sweep would
- *     have broken the kill switch. The census is a per-site judgement, not a rule.
+ * ⇒ THE SUBJECT IS NOW DERIVED: walk every .ts under server/, apply the rule-shape regex, and assert
+ * each match imports the shared predicate. Nothing is listed by name except the ONE declared
+ * exception, and that exception carries its reason and its tracking issue.
  */
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'fs';
-import { join } from 'path';
+import { readFileSync, readdirSync, statSync } from 'fs';
+import { join, relative } from 'path';
 
-const ROOT = join(__dirname, '..', '..');
-const read = (rel: string) => readFileSync(join(ROOT, rel), 'utf8');
+const SERVER = join(__dirname, '..', '..');
 
-describe('B-EPOCH-READER-CENSUS — one home for the rule', () => {
+/** DERIVED subject: every .ts under server/, tests and build output excluded. */
+function allServerSources(dir = SERVER, acc: string[] = []): string[] {
+  for (const name of readdirSync(dir)) {
+    if (name === 'node_modules' || name === 'tests' || name === 'dist') continue;
+    const full = join(dir, name);
+    const st = statSync(full);
+    if (st.isDirectory()) allServerSources(full, acc);
+    else if (name.endsWith('.ts') && !name.endsWith('.test.ts')) acc.push(full);
+  }
+  return acc;
+}
+
+/**
+ * The RULE SHAPE, in both languages:
+ *   TS  — comparing an OPEN time against an epoch value
+ *   SQL — `opened_at >= (SELECT ts FROM epoch)`
+ * Anything matching this is implementing the both-leg rule. It must import the shared predicate
+ * instead — unless it is the one declared exception.
+ */
+const RULE_SHAPE = /opened?_?[Aa]t\s*\)?\s*>=\s*[_a-zA-Z]*[Ee]poch|opened_at\s*>=\s*\(\s*SELECT\s+ts/;
+
+/** THE ONE DECLARED EXCEPTION, by reason not convenience. */
+const SQL_EXCEPTION = 'storage.ts'; // the SQL implementation — cannot import a TS predicate. Tracked by #900.
+
+describe('B-EPOCH-READER-CENSUS — the subject is DERIVED, not listed', () => {
+  it('the derived sweep actually finds files — POSITIVE CONTROL, so a green result is not an empty one', () => {
+    const files = allServerSources();
+    expect(files.length).toBeGreaterThan(50);                       // the walk works
+    const matches = files.filter(f => RULE_SHAPE.test(readFileSync(f, 'utf8')));
+    expect(matches.length, 'the rule-shape regex matched NOTHING — it has rotted and every assertion below is vacuous')
+      .toBeGreaterThan(0);
+  });
+
+  it('★ EVERY file implementing the both-leg rule imports the shared predicate — one declared exception', () => {
+    const offenders: string[] = [];
+    for (const f of allServerSources()) {
+      const src = readFileSync(f, 'utf8');
+      if (!RULE_SHAPE.test(src)) continue;
+      const rel = relative(SERVER, f);
+      if (rel.endsWith(SQL_EXCEPTION)) continue;                    // declared, reasoned, tracked by #900
+      if (!/isInObservationEpoch/.test(src)) offenders.push(rel);
+    }
+    expect(offenders, `these files carry their own copy of the both-leg rule instead of importing it: ${offenders.join(', ')}`)
+      .toEqual([]);
+  });
+
   it('the shared predicate is exported from exactly ONE module', () => {
-    const dm = read('services/dashboard-metrics.ts');
+    const dm = readFileSync(join(SERVER, 'services', 'dashboard-metrics.ts'), 'utf8');
     expect(dm).toMatch(/export function isInObservationEpoch/);
     expect(dm).toMatch(/export function clampWindowToEpoch/);
   });
+});
 
-  it('★ NO FILE RE-IMPLEMENTS THE BOTH-LEG RULE LOCALLY — the copy-per-reader shape #900 exists to stop', () => {
-    // The rule's signature in code: comparing an OPEN time against the epoch. Any file that does
-    // that WITHOUT importing the shared predicate is carrying its own copy.
-    const suspects = ['routes.ts', 'storage.ts', 'services/dashboard-metrics.ts'];
-    for (const rel of suspects) {
-      const src = read(rel);
-      const reimplements = /openedAt\s*\)?\s*>=\s*epoch|opened_at\s*>=\s*\(SELECT ts/i.test(src);
-      if (!reimplements) continue;
-      // storage.ts is the SQL implementation and is the one legitimate second copy — it is a
-      // different language and cannot import the TS predicate. It is tracked by #900, which
-      // requires a row-level SQL-vs-TS parity fence. Everything else must import.
-      if (rel === 'storage.ts') continue;
-      expect(src, `${rel} compares an open time to the epoch without importing the shared predicate`)
-        .toMatch(/isInObservationEpoch/);
-    }
+describe('B-EPOCH-READER-CENSUS — IDENTITY, not counts (#579: a count survives a 1-for-1 swap)', () => {
+  const routes = () => readFileSync(join(SERVER, 'routes.ts'), 'utf8');
+  // Bound the body by the NEXT route declaration, not by a character count. A fixed window is a
+  // magic number that silently truncates when a handler grows -- which is how r2 of this fence
+  // first reported a false failure on trades/analytics.
+  const bodyOf = (marker: string) => {
+    const src = routes();
+    const i = src.indexOf(marker);
+    expect(i, `route ${marker} not found`).toBeGreaterThan(-1);
+    const next = src.indexOf('apiRouter.get(', i + marker.length);
+    return src.slice(i, next > i ? next : undefined);
+  };
+
+  it('★ balance-curve — the FIFTH reader — clamps AND keys on both legs', () => {
+    const b = bodyOf("'/active-engine/balance-curve'");
+    expect(b, 'must clamp its window to the epoch').toMatch(/clampWindowToEpoch/);
+    expect(b, 'must key its closes on BOTH legs').toMatch(/isInObservationEpoch/);
   });
 
-  it('★ every route that CLAMPS an epoch window also uses the shared clamp (no hand-rolled max())', () => {
-    const src = read('routes.ts');
-    const clampCalls = (src.match(/clampWindowToEpoch\(/g) ?? []).length;
-    // Two known epoch-windowed routes today: trades/analytics and balance-curve.
-    // A new one that hand-rolls `epoch > since ? epoch : since` instead of calling the shared
-    // clamp is the divergence this fence is for.
-    expect(clampCalls).toBeGreaterThanOrEqual(2);
-    expect(src).not.toMatch(/epoch\w*\s*>\s*since\s*\?\s*epoch/i);
+  it('★ trades/analytics clamps AND keys on both legs', () => {
+    const b = bodyOf("'/active-engine/trades/analytics'");
+    expect(b, 'must clamp its window to the epoch').toMatch(/clampWindowToEpoch/);
+    expect(b, 'must key its window on BOTH legs').toMatch(/isInObservationEpoch/);
   });
 
-  it('★ the balance curve — the FIFTH reader — is wired to the shared predicate, not a copy', () => {
-    const src = read('routes.ts');
-    const i = src.indexOf("'/active-engine/balance-curve'");
-    expect(i, 'balance-curve route not found').toBeGreaterThan(-1);
-    const body = src.slice(i, i + 4000);
-    expect(body, 'balance curve must clamp its window to the epoch').toMatch(/clampWindowToEpoch/);
-    expect(body, 'balance curve must key its closes on BOTH legs').toMatch(/isInObservationEpoch/);
+  it('no route hand-rolls the clamp instead of calling the shared one', () => {
+    expect(routes()).not.toMatch(/[_a-zA-Z]*[Ee]poch\w*\s*>\s*since\s*\?/);
   });
+});
 
-  it('the daily-loss budget is deliberately NOT epoch-scoped — clamping it would widen the risk envelope', () => {
-    // A guard on the guard: if someone "fixes" this by scoping it, the kill switch stops measuring
-    // today's loss and starts measuring loss-since-the-epoch, which is strictly more permissive.
-    const src = read('services/daily-loss-budget.ts');
-    expect(src).toMatch(/getRealizedPnlSince/);
-    expect(src, 'the daily-loss budget must NOT be epoch-clamped').not.toMatch(/isInObservationEpoch|clampWindowToEpoch/);
+describe('B-EPOCH-READER-CENSUS — the guard on the guard', () => {
+  it('★ the daily-loss budget is NOT epoch-scoped, by IMPORT or by HAND-ROLLED comparison', () => {
+    // Why this is a guard and not an omission: the daily-loss budget is the kill switch's
+    // NUMERATOR and measures loss over a SESSION window. Clamping it to the epoch changes what
+    // it measures. Langston's correction, taken: the direction is NOT fixed — under a
+    // max()-clamp the window can only shrink and the effect bites hardest ON RE-ANCHOR DAY;
+    // under a naive `since = epoch` REPLACEMENT it can instead pin the switch at kill. Either
+    // way it is the wrong instrument, so this fails on BOTH forms of the change.
+    const src = readFileSync(join(SERVER, 'services', 'daily-loss-budget.ts'), 'utf8');
+    expect(src, 'sanity: the budget must still read realized P&L over a session window').toMatch(/getRealizedPnlSince/);
+    expect(src, 'must not IMPORT the epoch predicate').not.toMatch(/isInObservationEpoch|clampWindowToEpoch/);
+    expect(src, 'must not HAND-ROLL an epoch comparison either — that is the copy-per-reader shape')
+      .not.toMatch(RULE_SHAPE);
   });
 });
