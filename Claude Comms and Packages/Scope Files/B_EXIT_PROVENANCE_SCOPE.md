@@ -427,3 +427,41 @@ Each branch above names its **source field**, not a meaning. ⛔⛔ **`diffMs` I
 
 **`_processPendingMaker` has EXACTLY ONE call site tree-wide — `:1252`** (verified: `grep` for the invocation returns 1, excluding the declaration). ⇒ **a REQUIRED third parameter breaks nothing else.**
 ★ **The VTS lane does NOT go through it:** `vts-runner.ts:2958` calls the **pure `evaluatePendingMaker`** directly, a separate pre-pass. ⇒ **the VTS maker leg is OUT OF SCOPE for this batch and says so here rather than being discovered later. HOME: F-D (VTS accessor + isolation), owner CC-C** — the piece that already owns VTS's divergence from the shared price path.
+
+---
+
+# REV 7 — 2026-08-26. **BLOCKER-5: the BODY was still r1 text with six revisions stacked on it.**
+
+★ **HIS INDICTMENT, and it lands because it is my own rule turned around:** r4's header says *"the completion report is written FROM THE BODY."* **I applied that to the change-class paragraph and to nothing else.** §2, §5 and §6 stayed r1 while six revisions of corrections accumulated after them. ⇒ **an implementer reading top-to-bottom builds the r1 design.** All four items are fixed IN PLACE below, not appended as another correction layer.
+
+## R7-1 — §5's EXIT PAYLOAD HAD NO `producer`. **THE ENTRY LEG GOT THE BATCH'S CENTRAL DECISION AND THE EXIT LEG DID NOT.**
+
+⛔ **This is the original batch — OBJ-1/2/3 — and it still shipped `priceSource: string` alone: the exact field r2 proved cannot discriminate a book midpoint from a ticker print.** R2-3(B) says `producer` is *"carried from the emitting handler, **persisted at close**"*; r5/r6 delivered that on the entry and left the close on the r1 shape.
+
+**`exitProvenance` is corrected to:** `{ producer: PriceProducer; source: string; observedAtMs: number | null; ... }`
+**AND `priceAgeMs` → `tickCadenceMs`** — the rename R2-4 already accepted and §5 never applied. **The old name is the invitation to `diffMs`; renaming it is half the prohibition.**
+
+## R7-2 — §6 SAID "ONE PAYLOAD EXTENSION ON THE SINGLE CLOSE PATH." **THERE ARE THREE CALL SITES.**
+
+| site | leg | covered by the r6 hoist? |
+|---|---|---|
+| **`:1443`** | taker close | ✅ same loop body |
+| **`:1364`** | ★ **the RESTING MAKER exit — closing at `_exitRestLimit` while `currentPrice` drove the decision.** **This IS the OBJ-2 case** | ✅ same loop body |
+| **`:821`** | `forceClosePosition` | ⛔ **NO — outside the loop entirely** |
+
+⇒ **R6-2 named only `:1252` as a pass site. Stated now: the hoisted `priceProducer` / `priceObservedAtMs` are passed at `:1252`, `:1364` AND `:1443`.** Without this an implementer stamps one branch of three.
+
+## R7-3 — THE `diffMs` PROHIBITION EXTENDS TO THE EXIT PAYLOAD, VERBATIM
+
+⛔ **`diffMs` is in scope at `:1364` and `:1443` too**, and §5 was still offering `priceAgeMs` as the slot to put it in. **R6-4's prohibition applies to the exit payload on every branch, identically: `diffMs` is `now − lastTick` (`:1245`), the engine's inter-tick cadence, and `:1272` already mislabels it `ageMs=`.** Where a close leg has no genuine observation stamp the honest value is **NULL**, with the same column-comment discipline given to `entry_book_age_ms`.
+
+## R7-4 — ⛔ `:821` IS WHERE THE FENCE GOES GREEN ON A LIE, AND IT DRAGS IN A SECOND FILE
+
+`closePosition`'s `priceSource` **defaults to `'manual_stop'` (`:805`)**, and `:1758` writes `exitPriceSource: priceSource ?? 'unknown'`. ⇒ **a non-null string that is a close CONDITION, not a provenance** — it satisfies "not null" perfectly while asserting nothing about where the price came from.
+
+★ **The pre-audit §4 already disposes of this correctly and better than the scope did** — OBJ-5 restated as *"no post-deploy close carries a value outside the enumerated vocabulary."* ⛔ **But that lived ONLY in the pre-audit while §2's OBJ-5 still read "null must be impossible."** **§2 OBJ-5 now carries the pre-audit's wording.** ⚠️ **Langston's framing, recorded because it is the process lesson: *"your Step-2 artifact is ahead of your Step-1 artifact, which is the ordering the crew just ruled against."***
+
+**SECOND FILE, ADDED TO BLAST RADIUS:** `active-portfolio-manager.ts` **`:323` `'entry_price_fallback'`** and **`:338` `` `manual_stop_${priceResult.source}` ``** — both write provenance-shaped strings into the same column from outside the engine, and **neither appeared in any blast-radius list in this scope.** They must join the enumerated vocabulary or be converted, and the fence must cover them.
+
+## R7-5 — RIDER, FIXED IN THE SAME COMMIT
+`live-pricing-adapter.ts:58-59` commented the two new producers to `active-execution-engine.ts:1145` / `:1220`. **The real sites are `:1140` / `:1201`** — the lines an implementer would follow. Corrected in code, with the old refs named so the correction is legible.

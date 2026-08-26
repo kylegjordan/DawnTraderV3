@@ -56,8 +56,8 @@ export type PriceProducer =
   | 'kraken_ws_ticker'                 // kraken-websocket-adapter.ts:692 handleV2TickerUpdate
   | 'kraken_ws_book_mid'               // :916 handleV2BookUpdate — THE #741 PATH (book midpoint)
   | 'kraken_ws_ticker_v1'              // :1049 handleTickerUpdate — UNREACHABLE, see #742
-  | 'kraken_equities_ws'               // active-execution-engine.ts:1145
-  | 'kraken_rest_engine_fallback'      // active-execution-engine.ts:1220
+  | 'kraken_equities_ws'               // active-execution-engine.ts:1140 (ref corrected 2026-08-26 — was :1145)
+  | 'kraken_rest_engine_fallback'      // active-execution-engine.ts:1201 (ref corrected 2026-08-26 — was :1220)
   | 'kraken_rest_poller'               // this file :369, inside fetchLivePrice
   | 'xstock_rest_gate_reserve'         // :348 — BY DESIGN, not a failure: the B8.9 xStock REST
                                        //        class-gate makes no venue ask, so nothing failed.

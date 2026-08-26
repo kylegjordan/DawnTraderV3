@@ -12527,7 +12527,17 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     try {
       const mode: 'paper' | 'live' = req.query.mode === 'live' ? 'live' : 'paper';
       const days = Math.max(1, Math.min(3650, parseInt(String(req.query.days ?? '30')) || 30));
-      const windowStart = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+      // B-OBSERVATION-EPOCH (Kyle 2026-08-26): this curve was the LAST unscoped reader on the
+      // Paper Trading page. Every other figure on that card resets at the observation epoch; the
+      // chart did not, so it still drew the 2250.00 / 2400.00 measurement-override era beside a
+      // set of numbers that begin at the epoch -- the same "two authoritative answers on one card"
+      // shape B-EPOCH-KEYING-PARITY fixed for the tiles. It is the FIFTH reader of this rule and
+      // it calls the SHARED predicate rather than carrying a copy: copy-per-reader is exactly what
+      // #900 exists to stop.
+      const _curveLifetime = await storage.getLifetimeScoreboard(mode);
+      const _curveEpoch = _curveLifetime.epochStartedAt ? new Date(_curveLifetime.epochStartedAt) : null;
+      const windowStart = clampWindowToEpoch(new Date(Date.now() - days * 24 * 60 * 60 * 1000), _curveEpoch);
 
       const { db: curveDb } = await import('./db.js');
       const { portfolioAnchorEvents } = await import('@shared/schema');
@@ -12546,6 +12556,10 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const num = (v: unknown): number => { const n = parseFloat(String(v ?? '')); return Number.isFinite(n) ? n : 0; };
       const closes = allClosed
         .filter(t => t.closedAt && t.closeReason !== 'never_filled')
+        // BOTH-LEG epoch keying, via the shared predicate. A trade OPENED before the epoch carries
+        // an entry price taken through the contaminated mini-book (#741), so it is not "properly
+        // traded with the right pricing data" and must not accrue onto the post-reset curve.
+        .filter(t => isInObservationEpoch(t as any, _curveEpoch))
         .map(t => ({ at: new Date(t.closedAt!), pnl: honestNetPnl(t) }))
         .sort((a, b) => a.at.getTime() - b.at.getTime());
 
