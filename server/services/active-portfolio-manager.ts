@@ -6,7 +6,7 @@ import { registerEngine, registerMicroService } from './mode-registry';
 import { SignalOrchestrator } from './signal-orchestrator';
 import type { StrategySignal } from './strategy-engine';
 import { i1TradeLifecycleDiagnostics } from './i1-trade-lifecycle-diagnostics.js';
-import { livePricingAdapter, isRestFallbackSource } from './live-pricing-adapter.js';
+import { livePricingAdapter, isRestFallbackSource, type PriceProducer } from './live-pricing-adapter.js';
 
 interface PortfolioMetrics {
   totalTrades: number;
@@ -320,7 +320,17 @@ export class ActivePortfolioManager {
           const result = await this.executionEngine.forceClosePosition(
             position.id,
             entryPrice,
-            'entry_price_fallback'
+            'entry_price_fallback',
+            {
+              // ⛔ B-EXIT-PROVENANCE P6: `position_entry_price_reused`, and NOT `entry_seed`.
+              // No handler produced this number — it came off the stored position row because no
+              // feed would serve one. Naming a real handler that never ran is precisely the
+              // wrong-object stamp this vocabulary exists to make impossible.
+              producer: 'position_entry_price_reused',
+              source: 'entry_price_fallback',
+              // No venue observed it, so there is no observation time. NULL is the honest value.
+              observedAtMs: null,
+            },
           );
 
           if (result.success) {
@@ -335,7 +345,17 @@ export class ActivePortfolioManager {
           const result = await this.executionEngine.forceClosePosition(
             position.id,
             priceResult.price,
-            `manual_stop_${priceResult.source}`
+            `manual_stop_${priceResult.source}`,
+            {
+              // ⛔ B-EXIT-PROVENANCE P6 (CONDITION-1) — THE SPLIT. The third argument above stays a
+              // composed string ONLY because it feeds the human-facing log; the PROVENANCE now
+              // travels in its own parts, so the enumerated-vocabulary fence has real values to
+              // grade. The close CONDITION reaches the row through `closeReason` (`manual_stop`),
+              // which is where it always belonged.
+              producer: priceResult.producer,
+              source: priceResult.source,
+              observedAtMs: priceResult.observedAt,
+            },
           );
 
           if (result.success) {
@@ -602,11 +622,19 @@ export class ActivePortfolioManager {
           // Phase 8.8.3-I6: Use getPriceWithFallback (includes 5s staleness guard + REST fallback)
           let currentPrice = avgPrice;
           let priceSource = 'entry_fallback';
+          // B-EXIT-PROVENANCE P9: the PRODUCER, resolved beside the source that was already here.
+          // Defaults match the fallback arm below — no feed served a price, so the number is the
+          // stored entry price and no handler produced it.
+          let priceProducer: PriceProducer = 'position_entry_price_reused';
+          let observedAtMs: number | null = null;
           let fallbackType: 'none' | 'rest_fallback' | 'entry_fallback' = 'entry_fallback';
           const liveQuote = await livePricingAdapter.getPriceWithFallback(position.symbol, 5000);
           if (liveQuote && liveQuote.price !== null && liveQuote.source !== 'no_reliable_price') {
             currentPrice = liveQuote.price;
             priceSource = liveQuote.source;
+            // A real quote object with a real provenance field — CARRIED, never re-derived.
+            priceProducer = liveQuote.producer;
+            observedAtMs = liveQuote.observedAt;
             // P19-B8.9: one shared membership + predicate (was 5 drifted inline copies).
             fallbackType = isRestFallbackSource(liveQuote.source) ? 'rest_fallback' : 'none';
           } else {
@@ -625,8 +653,25 @@ export class ActivePortfolioManager {
             pnl: pnl.toString(),
             pnlPercent: pnlPercent.toString(),
             closeReason: reason,
-            closedAt: new Date()
-          });
+            closedAt: new Date(),
+            // ── B-EXIT-PROVENANCE P9 — THE FIFTH CLOSE PATH, AND IT USED TO DROP THIS.
+            // `closeAllPositions` never calls `closePosition`, so it inherits none of the engine's
+            // stamping. It ALREADY resolves the producer and source a few lines above and only
+            // logged them — meaning a close that ran through here wrote a NULL provenance and the
+            // fence, scoped to the force-close entrypoints, could not see it. That is #546 landing
+            // inside the instrument built to prevent #546.
+            exitDecisionPrice: currentPrice.toString(),
+            exitPriceProducer: priceProducer,
+            exitPriceSource: priceSource,
+            exitObservedAtMs: observedAtMs,
+            // Outside the evaluation loop: no inter-tick cadence, no book read, no ticker
+            // retention. NULL on each rather than a fabricated zero.
+            exitTickCadenceMs: null,
+            exitBookMid: null,
+            exitBookAgeMs: null,
+            exitTickerBid: null,
+            exitTickerAsk: null,
+          } as any);
 
           // Log the close event
           // P19-B3b: createActiveTradeLog is (mode, log); thread this.mode. The

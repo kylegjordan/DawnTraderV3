@@ -83,7 +83,7 @@ import { aj17DiagnosticRunner } from './aj17-diagnostic-runner';
 import { aj18Diagnostic } from './aj18-rtb-diagnostic';
 import { aj19bDiagnostic } from './aj19b-lifecycle-diagnostic';
 import { aj19Diagnostic } from './aj19-max-position-diagnostic';
-import { livePricingAdapter, isKrakenVenueSource } from './live-pricing-adapter';
+import { livePricingAdapter, isKrakenVenueSource, type PriceProducer } from './live-pricing-adapter';
 import { krakenWebSocketAdapter } from '../exchanges/kraken/kraken-websocket-adapter.js';
 import { b4Diagnostics } from './b4-diagnostics.js';
 import { b5SizingAudit } from './b5-sizing-audit.js';
@@ -802,7 +802,14 @@ export class ActiveExecutionEngine {
   async forceClosePosition(
     positionId: string,
     exitPrice: number,
-    priceSource: string = 'manual_stop'
+    priceSource: string = 'manual_stop',
+    // ── B-EXIT-PROVENANCE P6 (CONDITION-1) — THE SPLIT, MADE AT THE CALL SITE.
+    // Callers used to pass a COMPOSED string (`manual_stop_${source}`), which an enumerated
+    // -vocabulary fence must reject outright. Widening the vocabulary to admit a prefix would
+    // re-open the exact door OBJ-5 exists to shut, so the parts travel separately instead:
+    // the PRODUCER lands in the provenance column, and the close CONDITION lands in
+    // `closeReason` — where it already belongs, and already is (`ExitCondition.type`).
+    provenance?: { producer: PriceProducer; source: string; observedAtMs: number | null },
   ): Promise<{ success: boolean; error?: string }> {
     console.log('[DEBUG-B9][ENGINE_FORCE_CLOSE]', {
       positionId,
@@ -818,7 +825,20 @@ export class ActiveExecutionEngine {
         reason: 'Manual stop requested by user',
       };
 
-      await this.closePosition(positionId, exitPrice, exitCondition, priceSource);
+      await this.closePosition(positionId, exitPrice, exitCondition, priceSource, provenance ? {
+        exitProvenance: {
+          // A force-close IS the decision — there is no separate driving price to record.
+          decisionPrice: exitPrice,
+          producer: provenance.producer,
+          source: provenance.source,
+          observedAtMs: provenance.observedAtMs,
+          // ⛔ NULL, not zero and not `diffMs`: this path runs OUTSIDE the evaluation loop, so no
+          // inter-tick cadence exists for it. A zero here would read as "instantaneous" — a
+          // fabricated measurement, which is worse than an absent one.
+          tickCadenceMs: null,
+          bookMid: null, bookAgeMs: null, tickerBid: null, tickerAsk: null,
+        },
+      } : undefined);
       
       return { success: true };
     } catch (error) {
@@ -967,7 +987,18 @@ export class ActiveExecutionEngine {
    *     (weekend window) — a shut book can't honestly fill, so the drop waits for the
    *     first open tick (conservative approximation, documented in the scope).
    */
-  private async _processPendingMaker(position: any, currentPrice: number): Promise<void> {
+  private async _processPendingMaker(
+    position: any,
+    currentPrice: number,
+    // ⛔ B-EXIT-PROVENANCE LINE 3 — REQUIRED, NEVER OPTIONAL. An optional parameter would let a
+    // future call site omit the stamp, and that absence is indistinguishable from a missed stamp
+    // (#546) — the same argument that made `producer` required on the tick itself.
+    // ★ IT IS PASSED, NOT RE-DERIVED. The only variable in scope at the call site is `priceSource`,
+    // which on the crypto WS leg is `'kraken_ws'` — the exact stamp #741 proves CANNOT discriminate
+    // a book midpoint from a ticker print. A producer derived from it would be a tick producer BY
+    // NAME and would pass the fence GREEN, so the fence would RATIFY the defect rather than catch it.
+    provenance: { producer: PriceProducer; source: string; observedAtMs: number | null },
+  ): Promise<void> {
     const limit = position.makerLimitPrice != null ? parseFloat(position.makerLimitPrice) : NaN;
     if (!Number.isFinite(limit)) {
       console.error(`[P19-B7.2c][PENDING_INVALID:${this.mode}] ${position.symbol} pending with no maker_limit_price — leaving untouched (investigate)`);
@@ -992,6 +1023,30 @@ export class ActiveExecutionEngine {
         currentPrice: currentPrice.toString(),
         lastUpdated: new Date(),
       } as any);
+      // ── B-EXIT-PROVENANCE P4 (R5-2 LINE 2) — THE DURABLE ENTRY STAMP, AT THE FILL SEAM.
+      // The write above targets `active_open_positions`, which the census shows is deleted from
+      // SEVEN independent paths including a timer-driven orphan sweep — so a stamp there is
+      // unrecoverable forensics by construction. `closed_trades` is the only durable target.
+      // ★ NOT A NEW MECHANISM: the DROP branch below already proves this exact route from inside
+      // this method to the durable row. The drop branch had it; the fill branch did not.
+      const _fillTradeId = (position.metadata as any)?.tradeId;
+      if (_fillTradeId) {
+        await storage.updateClosedTrade(this.mode, _fillTradeId, {
+          entryPriceProducer: provenance.producer,
+          entryPriceSource: provenance.source,
+          entryObservedAtMs: provenance.observedAtMs,
+          entryDecisionPrice: makerFillPrice(limit).toString(),
+          // ⛔ NULL BY CONSTRUCTION, not by omission: a maker fill consults NO book — its decision
+          // instrument is the price tick. The column comment carries the same statement.
+          entryBookAgeMs: null,
+        } as any);
+      } else {
+        // ⛔ CONDITION-2 (Langston): the absence is LOGGED, never silent. A silent skip makes the
+        // fill-rate instrument show a gap indistinguishable from a non-fill — the #546 shape
+        // landing on the one instrument we do not otherwise have. The drop branch records its
+        // own no-tradeId case for exactly this reason; the fill branch now matches it.
+        console.warn(`[P19-B7.2c][MAKER_FILL_UNSTAMPED:${this.mode}] ${position.symbol}: filled at ${makerFillPrice(limit)} but metadata carries no tradeId — entry provenance left NULL rather than fabricated (position opened normally)`);
+      }
       console.log(`[P19-B7.2c][MAKER_FILLED:${this.mode}] ${position.symbol}: price ${currentPrice} traded through limit ${limit} — pending→open at ${makerFillPrice(limit)} + maker fee (reserved at placement)`);
       return;
     }
@@ -1055,6 +1110,18 @@ export class ActiveExecutionEngine {
       try {
         let currentPrice: number;
         let priceSource: string;
+        // ── B-EXIT-PROVENANCE P1 (R6-2) — DECLARED HERE, beside `priceSource`, because naming
+        // only the CALL SITE was the same omission BLOCKER-3 found on the target table.
+        // `priceSource` answers a POLICY question (may the engine act on this price?);
+        // `priceProducer` answers a PROVENANCE question (which handler produced the number?).
+        // Conflating them is #741: a ghost book MIDPOINT and a clean ticker PRINT both stamp
+        // `kraken_ws`, so `priceSource` alone CANNOT discriminate them.
+        // ⛔ ASSIGNED ON ALL THREE RESOLUTION BRANCHES BELOW — never derived from `priceSource`,
+        // and `observedAtMs` is NEVER `diffMs` (`:1245` is inter-tick CADENCE, and the log at
+        // `:1272` already mislabels it `ageMs=`; taking it would be a wrong-object stamp
+        // wearing the right column name — R6-4).
+        let priceProducer: PriceProducer;
+        let priceObservedAtMs: number | null;
 
         // ── P19-B8.5 xSTOCK MARKS (Langston design-APPROVED 2026-07-16) ────────────────
         // Kraken spot REST carries NO tokenized equities (empirically proven: Ticker
@@ -1138,6 +1205,14 @@ export class ActiveExecutionEngine {
           }
           currentPrice = _eqTick.price;
           priceSource = 'kraken_equities_ws';
+          // B-EXIT-PROVENANCE P2 (R6-3, xStock branch): LITERAL producer, HONESTLY — there is no
+          // adapter quote object on this leg, so THE CODE AT THIS LINE IS THE PRODUCER. The stated
+          // exemption to "stamps travel explicitly": a stamp is CARRIED wherever a quote exposes
+          // provenance and is a LITERAL only where the emitting line itself IS the provenance.
+          priceProducer = 'kraken_equities_ws';
+          // ★ A REAL venue observation stamp — `equity-spot-archiver.ts:137` writes `tsMs` only on a
+          // genuine venue snap with a finite positive mark. NOT the time this object was built.
+          priceObservedAtMs = _eqTick.tsMs;
           withWsPrice++;
           // Feed the shared cache so UI/summary reads see the same mark, then FALL
           // THROUGH into the shared evaluation pipeline below — the crypto venue
@@ -1170,6 +1245,12 @@ export class ActiveExecutionEngine {
         if (priceResult !== null && priceResult.price !== null && isKrakenVenueSource(priceResult.source)) {
           currentPrice = priceResult.price;
           priceSource = priceResult.source;
+          // B-EXIT-PROVENANCE P2 (R6-3, crypto adapter branch): ★ THE ONLY GENUINE CARRY OF THE
+          // THREE — a real quote object with a real provenance field. `observedAt` is the ORIGINAL
+          // venue observation time, carried through last-known-good re-serves unrefreshed (#743),
+          // which is exactly why it is the honest freshness measure and `timestamp` is not.
+          priceProducer = priceResult.producer;
+          priceObservedAtMs = priceResult.observedAt;
           withWsPrice++;
           console.log(`[I7-WS-D][ENGINE_WS_PRICE] symbol=${position.symbol} price=${currentPrice}`);
         } else {
@@ -1199,6 +1280,13 @@ export class ActiveExecutionEngine {
             const lastTrade = parseFloat(tickerData.c[0]);
             currentPrice = (ask > 0 && bid > 0) ? (ask + bid) / 2 : lastTrade;
             priceSource = 'kraken_rest';
+            // B-EXIT-PROVENANCE P2 (R6-3, crypto direct-REST branch): LITERAL producer, honestly —
+            // direct `krakenService.getTicker`, mid computed inline, so the line is the producer.
+            priceProducer = 'kraken_rest_engine_fallback';
+            // ⛔ NULL, and NULL IS THE HONEST VALUE: the REST ticker carries no per-quote venue
+            // observation time. Fabricating one from `Date.now()` would record fetch time as
+            // observation time — precisely the #743 defect this column exists to make visible.
+            priceObservedAtMs = null;
             withRestPrice++;
 
             console.log(`[8.9.2][REST_TICK] ${position.symbol} bid=${bid} ask=${ask} mid=${currentPrice.toFixed(8)}`);
@@ -1249,11 +1337,48 @@ export class ActiveExecutionEngine {
         // has NO fill, so it never enters the TEC exit path. Fill (honest trade-through)
         // wins over the deadline in the same tick (R2). Handled then `continue`d.
         if ((position as any).state === 'pending') {
-          await this._processPendingMaker(position, currentPrice);
+          await this._processPendingMaker(position, currentPrice, {
+            producer: priceProducer,
+            source: priceSource,
+            observedAtMs: priceObservedAtMs,
+          });
           positionsEvaluated++;
           continue;
         }
-        
+
+        // ── B-EXIT-PROVENANCE P3 — THE EXIT STAMP, BUILT ONCE PER POSITION.
+        // Built here rather than at each close site on purpose: the two in-loop close sites are
+        // the SAME fact, and two constructions of one fact is how they drift apart (#641).
+        // ⛔ `tickCadenceMs` takes `diffMs` and `observedAtMs` NEVER does. `diffMs` is
+        // `now - lastTick` — the engine's INTER-TICK CADENCE for this symbol — and the log below
+        // already prints it as `ageMs=`, which is exactly why it is the value an implementer
+        // reaches for. Putting it in `observedAtMs` would be a wrong-object stamp wearing the
+        // right column's name. The rename is half the prohibition; this comment is the other half.
+        const _bookX = _posClass === 'xstock_spot'
+          ? null
+          : krakenWebSocketAdapter.getBookForFill(normalizeToInternalSymbol(position.symbol));
+        const _exitProvenanceBase = {
+          producer: priceProducer,
+          source: priceSource,
+          observedAtMs: priceObservedAtMs,
+          tickCadenceMs: diffMs,
+          // NULL BY CONSTRUCTION on xStock — that class has no order book at all, so a null here
+          // is the honest value and not a missed read (OBJ-4/OBJ-8's discipline, applied).
+          bookMid: _bookX ? (_bookX.bids[0].price + _bookX.asks[0].price) / 2 : null,
+          bookAgeMs: _bookX ? _bookX.ageMs : null,
+          // ⛔ NULL ON EVERY BRANCH TODAY, AND STATED RATHER THAN QUIETLY DROPPED. OBJ-3 asks for
+          // the TICKER bid/ask as a second independent feed. The ticker handler COMPUTES both
+          // (`kraken-websocket-adapter.ts:682-683`) and then DISCARDS them — they reach only a
+          // debug ring buffer, and no per-symbol retention exists for the engine to read at close.
+          // ⛔ THE BOOK'S top-of-book IS NOT THE TICKER'S. Filling these from `_bookX` would store
+          // one feed under the other feed's name — the precise wrong-object substitution this whole
+          // batch exists to make impossible, committed inside the instrument built to catch it.
+          // Retention is a real mechanism on a shared component and therefore a SCOPE decision,
+          // not an implementer's call: raised at Step 4 with the OBJ-3 gap named.
+          tickerBid: null as number | null,
+          tickerAsk: null as number | null,
+        };
+
         const tickEntry = {
           symbol: position.symbol,
           refreshedAt: new Date().toISOString(),
@@ -1368,6 +1493,12 @@ export class ActiveExecutionEngine {
             }, priceSource, {
               makerExitFill: { limit: _exitRestLimit },
               exitRest: { restedAtPrice: _exitRestLimit, placedAtMs: _restPlacedAtMs, outcome: 'fill' },
+              // ★ THIS IS THE OBJ-2 CASE, AND IT IS THE WHOLE REASON THE COLUMN EXISTS.
+              // The trade CLOSES at `_exitRestLimit` (the resting limit), but what DROVE the close
+              // is `currentPrice` — the venue tick that traded through it. Recording only the exit
+              // price leaves the number that actually caused the exit with no trace at all, which
+              // is exactly what made #741 hard to measure after the fact.
+              exitProvenance: { ..._exitProvenanceBase, decisionPrice: currentPrice },
             });
             continue;
           }
@@ -1440,8 +1571,13 @@ export class ActiveExecutionEngine {
             closeReason: exitCondition.type
           }));
 
-          await this.closePosition(position.id, currentPrice, exitCondition, priceSource,
-            _exitRestStamp ? { exitRest: _exitRestStamp } : undefined);
+          await this.closePosition(position.id, currentPrice, exitCondition, priceSource, {
+            ...(_exitRestStamp ? { exitRest: _exitRestStamp } : {}),
+            // Taker close: the decision price IS the exit price, so these two agree by
+            // construction here — and that agreement is itself the evidence that separates a
+            // taker close from the maker case above, where they must differ.
+            exitProvenance: { ..._exitProvenanceBase, decisionPrice: currentPrice },
+          });
         }
       } catch (error) {
         console.error(`[PaperExecution:${this.mode}] Error checking position ${position.symbol}:`, error);
@@ -1739,6 +1875,34 @@ export class ActiveExecutionEngine {
     options?: {
       makerExitFill?: { limit: number };
       exitRest?: { restedAtPrice: number; placedAtMs: number | null; outcome: 'fill' | 'convert' };
+      // ── B-EXIT-PROVENANCE P5 — the EXIT stamp, carried on the SAME explicit-payload
+      // mechanism Langston authored for `exitRest`, not a parallel one. Same constraint,
+      // and it is his: this method RE-FETCHES the position row, so a stamp must never be
+      // reconstructed from whichever fields happen to survive in the DB at close time.
+      exitProvenance?: {
+        /** The value that actually DROVE the exit — NOT always the recorded exit price. */
+        decisionPrice: number;
+        /** WHICH HANDLER produced it. `source` alone cannot discriminate a book midpoint
+         *  from a ticker print — both stamp `kraken_ws`. That is #741. */
+        producer: PriceProducer;
+        /** The POLICY label: may the engine act on this price? Kept ALONGSIDE `producer`,
+         *  never merged — merging them is what created the defect. */
+        source: string;
+        /** Venue OBSERVATION time. NULL where the leg genuinely has none.
+         *  ⛔ `diffMs` MUST NOT feed this on ANY branch — it is inter-tick CADENCE, and the
+         *  engine already logs it as `ageMs=`, so it is exactly the value an implementer
+         *  reaches for. Any use of it here is a wrong-object stamp and the fence fails it. */
+        observedAtMs: number | null;
+        /** RENAMED from `priceAgeMs`, which never held an age. The rename is half the
+         *  prohibition above: the old name was the invitation. */
+        tickCadenceMs: number | null;
+        /** Independent cross-check. `bookMid`/`bookAgeMs` are NULL BY CONSTRUCTION on
+         *  xStock — that class has no book — not by omission. */
+        bookMid: number | null;
+        bookAgeMs: number | null;
+        tickerBid: number | null;
+        tickerAsk: number | null;
+      };
     }
   ): Promise<void> {
     const position = await storage.getActiveOpenPosition(this.mode, positionId);
@@ -1755,7 +1919,12 @@ export class ActiveExecutionEngine {
       quantity: position.quantity,
       entryPrice: position.avgPrice,
       rawExitPriceParam: exitPrice,
-      exitPriceSource: priceSource ?? 'unknown',
+      // B-EXIT-PROVENANCE: RENAMED from `exitPriceSource`, which is now a real COLUMN. This is the
+      // `priceSource` PARAMETER — and when it is defaulted it holds a close CONDITION, not a
+      // provenance. Sharing the column's name with a log field is what cost a full review round:
+      // a grep for `exitPriceSource` found THIS LINE and read it as the writer, when it persists
+      // nothing. The name now says which of the two it is.
+      priceSourceParam: priceSource ?? 'unknown',
       mode: this.mode,
       positionOpenedAt: position.openedAt,
       now: new Date().toISOString()
@@ -2048,6 +2217,34 @@ export class ActiveExecutionEngine {
         exitRestedAtPrice: options?.exitRest ? options.exitRest.restedAtPrice.toString() : null,
         exitRestDurationMs: options?.exitRest?.placedAtMs != null
           ? Math.max(0, Date.now() - options.exitRest.placedAtMs)
+          : null,
+        // ── B-EXIT-PROVENANCE P5 — persist the exit stamp (OBJ-1/2/3).
+        // ⛔ `exit_price_source` falls back to the `priceSource` PARAMETER, never to a literal
+        // string. `closePosition`'s `priceSource` DEFAULTS to `'manual_stop'` upstream, which is
+        // a close CONDITION and not a provenance — it satisfies "not null" perfectly while
+        // asserting nothing. The OBJ-5 fence keys on the ENUMERATED vocabulary precisely so a
+        // value like that FAILS rather than passing green.
+        exitDecisionPrice: options?.exitProvenance
+          ? options.exitProvenance.decisionPrice.toString()
+          : null,
+        exitPriceProducer: options?.exitProvenance?.producer ?? null,
+        // ⛔ NO FALLBACK TO `priceSource`, DELIBERATELY. That parameter DEFAULTS to
+        // `'manual_stop'` upstream — a close CONDITION, not a provenance — and writing it here
+        // would satisfy a non-null fence perfectly while asserting nothing about where the price
+        // came from. An unstamped close must land NULL so the fence SEES it; a green fence over a
+        // condition string is the exact failure OBJ-5 was rewritten to catch.
+        exitPriceSource: options?.exitProvenance?.source ?? null,
+        exitObservedAtMs: options?.exitProvenance?.observedAtMs ?? null,
+        exitTickCadenceMs: options?.exitProvenance?.tickCadenceMs ?? null,
+        exitBookMid: options?.exitProvenance?.bookMid != null
+          ? options.exitProvenance.bookMid.toString()
+          : null,
+        exitBookAgeMs: options?.exitProvenance?.bookAgeMs ?? null,
+        exitTickerBid: options?.exitProvenance?.tickerBid != null
+          ? options.exitProvenance.tickerBid.toString()
+          : null,
+        exitTickerAsk: options?.exitProvenance?.tickerAsk != null
+          ? options.exitProvenance.tickerAsk.toString()
           : null,
         totalCost: totalCost.toString(),
         grossPnl: grossPnl.toString(),

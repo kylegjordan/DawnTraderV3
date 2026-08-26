@@ -71,6 +71,20 @@ export type PriceProducer =
                                        //        on that axis it is the honest leg.
   | 'entry_seed'                       // :784 seedLastKnownGoodPrice
   | 'mock'                             // :556 (fetchMockPrice defined :527)
+  | 'position_entry_price_reused'      // active-portfolio-manager.ts:323 — the force-close
+                                       //        no-price fallback REUSES `position.avgPrice`.
+                                       //        ⛔ NO HANDLER PRODUCED THIS NUMBER: it came off the
+                                       //        stored position row, not off any feed. Stamping it
+                                       //        `entry_seed` would name a real handler that never
+                                       //        ran — the wrong-object substitution this vocabulary
+                                       //        exists to prevent. It is never cached, so it is
+                                       //        excluded from `CachedProducer` alongside the
+                                       //        null-price arm.
+                                       //        ★ SAFE BY CONSTRUCTION: the engine's actionable gate
+                                       //        is `isKrakenVenueSource(source)` (:151), which reads
+                                       //        `source` and NEVER `producer`, so widening this union
+                                       //        cannot reject a price or skip a position. That is
+                                       //        design (B)'s defining property, verified at the ref.
   | 'no_price_produced';               // the null-price arm (:355 / :399 / :427) — no number was
                                        //        produced, so no handler produced it.
 
@@ -80,7 +94,7 @@ export type PriceProducer =
  * plant an UNPRODUCIBLE member in `CachedPrice` — the same shape as the `no_book_for_class` token
  * deleted from this batch's own vocabulary, one type over. `Exclude` is free and compile-time.
  */
-export type CachedProducer = Exclude<PriceProducer, 'no_price_produced'>;
+export type CachedProducer = Exclude<PriceProducer, 'no_price_produced' | 'position_entry_price_reused'>;
 
 /**
  * ⛔ NARROWING, NEVER A CAST. `:311` already carries `quote.source as CachedPrice['source']`, and that
@@ -92,6 +106,8 @@ export type CachedProducer = Exclude<PriceProducer, 'no_price_produced'>;
 export function toCachedProducer(p: PriceProducer): CachedProducer | null {
   switch (p) {
     case 'no_price_produced':
+    // Never cached: no handler produced it, so there is nothing to attribute a cached price to.
+    case 'position_entry_price_reused':
       return null;
     case 'kraken_ws_ticker':
     case 'kraken_ws_book_mid':

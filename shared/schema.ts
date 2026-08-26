@@ -1766,6 +1766,70 @@ export const closedTradesTable = pgTable("closed_trades", {
   // rest per row for the Phase-25 maker-exit economics read. AC-6 (Langston): every
   // maker-savings figure reports fills AND converts from these stamps — the
   // denominator, not just the wins.
+  // ══════════════════════════════════════════════════════════════════════════
+  // B-EXIT-PROVENANCE (#741/#743) — FOURTEEN nullable KEEP-AS-DATA provenance columns.
+  // ⛔ COUNT DERIVED, NOT QUOTED: the scope asserts "six", "seven" and "ten" in three
+  // different places and enumerates the list in none of them. These fourteen are derived
+  // from the section-5 exit payload (9) + the R5-2 LINE-2/LINE-3 entry payload (5), which
+  // are the operative design. The three asserted counts are all stale; this comment is the
+  // enumeration the scope never had.
+  //
+  // WHY THIS EXISTS: `price_source` answers a POLICY question (may the engine act on this
+  // price?). It CANNOT answer a PROVENANCE question. A ghost-contaminated book MIDPOINT and
+  // a clean ticker PRINT both arrive stamped `kraken_ws` — that is #741, and it is why a
+  // `*_price_producer` column exists ALONGSIDE `*_price_source` rather than replacing it.
+  // Merging them is what created the defect: a policy label was read as provenance evidence.
+  //
+  // ⛔ FORWARD-ONLY. These columns cannot fix a single existing trade. Historical repair is
+  // F1+F2. A NULL on a pre-deploy row means "batch not deployed yet" and MUST NOT be read
+  // as "no provenance" — that #546 distinction is the whole reason `exit_price_source`
+  // carries the one non-null guarantee below.
+  // ── EXIT LEG (OBJ-1/2/3) ──────────────────────────────────────────────────
+  /** The value that actually DROVE the exit. NOT always `exit_price`: a resting maker exit
+   *  records its limit while `currentPrice` caused the close, so the contaminated number
+   *  left no trace. That absence is the single fact that made #741 hard to measure. */
+  exitDecisionPrice: decimal("exit_decision_price", { precision: 20, scale: 10 }),
+  /** WHICH HANDLER produced the exit price. Closed vocabulary — see `PriceProducer` in
+   *  live-pricing-adapter.ts. A value outside it FAILS the OBJ-5 fence. */
+  exitPriceProducer: varchar("exit_price_producer", { length: 40 }),
+  /** ★ THE ONE NON-NULL GUARANTEE ON A POST-DEPLOY ROW (OBJ-1/OBJ-5). Nullable in the
+   *  schema ONLY so pre-deploy rows stay distinguishable from a missed stamp (#546);
+   *  the fence, not the column type, is what enforces coverage going forward. */
+  exitPriceSource: varchar("exit_price_source", { length: 40 }),
+  /** Venue OBSERVATION time of the exit-driving price. NULL where the leg genuinely has
+   *  none (crypto direct-REST carries no per-quote observation stamp).
+   *  ⛔ NEVER `diffMs`: that is inter-tick CADENCE, and the engine log already mislabels
+   *  it `ageMs=`. A cadence written here is a wrong-object stamp in the right column's
+   *  clothing — the fence must fail it. */
+  exitObservedAtMs: doublePrecision("exit_observed_at_ms"),
+  /** The engine's inter-tick cadence for this symbol. NAMED HONESTLY: it was `priceAgeMs`,
+   *  which never held an age. Kept as data because it is real telemetry — just not an age. */
+  exitTickCadenceMs: doublePrecision("exit_tick_cadence_ms"),
+  /** Independent cross-check at close: order-book mid + its age. NULL BY CONSTRUCTION on
+   *  xStock (no book for that class) — not by omission. The column comment IS the record
+   *  of that distinction, per OBJ-4/OBJ-8. */
+  exitBookMid: decimal("exit_book_mid", { precision: 20, scale: 10 }),
+  exitBookAgeMs: doublePrecision("exit_book_age_ms"),
+  /** Ticker bid/ask at close — the second independent feed, so a row can be adjudicated
+   *  WITHOUT leaving the row (OBJ-3). Both classes populate where a ticker exists. */
+  exitTickerBid: decimal("exit_ticker_bid", { precision: 20, scale: 10 }),
+  exitTickerAsk: decimal("exit_ticker_ask", { precision: 20, scale: 10 }),
+  // ── ENTRY LEG (OBJ-6/7/9/10) ──────────────────────────────────────────────
+  /** Written AT THE FILL SEAM, never at placement, and never re-derived from the row.
+   *  A maker order is INSERTED at placement and OPENS later, so a placement-time stamp
+   *  would be a wrong-INSTANT value wearing the fill's clothes and would pass a bare
+   *  non-null fence green (#546 in the other direction). */
+  entryPriceProducer: varchar("entry_price_producer", { length: 40 }),
+  entryPriceSource: varchar("entry_price_source", { length: 40 }),
+  entryDecisionPrice: decimal("entry_decision_price", { precision: 20, scale: 10 }),
+  /** ⛔ NULL BY CONSTRUCTION ON A MAKER-FILL ROW, and this comment is that record: a maker
+   *  fill consults NO book — its decision instrument is the price tick. A taker row carries
+   *  a real book age. One column, one vocabulary, one fence: `entry_price_producer` absorbs
+   *  the cohort rather than a second column family disagreeing with the first. */
+  entryBookAgeMs: doublePrecision("entry_book_age_ms"),
+  /** Venue observation time of the entry-driving tick. Same NULL discipline as the exit leg. */
+  entryObservedAtMs: doublePrecision("entry_observed_at_ms"),
+  // ══════════════════════════════════════════════════════════════════════════
   exitFeeMode: varchar("exit_fee_mode", { length: 8 }),
   exitRestOutcome: varchar("exit_rest_outcome", { length: 8 }),
   exitRestedAtPrice: decimal("exit_rested_at_price", { precision: 20, scale: 10 }),
