@@ -112,6 +112,31 @@ This is the item 1e was originally named for. **It was already ruled on:** *"PRE
 
 ---
 
+### ✅ LANGSTON'S RULING ON OBJ-5b — APPROVED WITH CONDITIONS (2026-08-26). He re-derived the whole census himself before ruling; the measurement stands as filed.
+
+**Q1 — (3) RECONNECT, not remove.** His reasoning, adopted: `langston-call` **is not archival** — it is one of his two live model sites and the caller of `langston-log-loaded` at `:104`. ★ **Deleting the repo copy leaves a live executable with NO SOURCE AT ALL — unversioned, unreviewable, outside every gate. That is a worse rule-18 outcome than the fork.**
+
+⚠️ **AND HE CORRECTED MY PRECEDENT BY ONE STEP, WHICH CHANGES WHAT WE COPY.** I wrote *"make it repo-canonical and shipped by `deploy.sh`, as the bridge already is."* **`deploy.sh` does NOT copy the bridge** — step 3 is `# code (expects files already scp'd to $BRIDGE_DIR)`; it chmods, it never installs. **The ONLY executable `deploy.sh` genuinely installs is `cc-send`** (`install -m 0755 "$BRIDGE_DIR/cc-send" /usr/local/bin/cc-send`). ⇒ **COPY THE `cc-send` PATTERN, NOT THE BRIDGE — a working precedent instead of an aspirational one.**
+
+**THE THREE CONDITIONS, binding:**
+| # | condition | why it is not a formality |
+|---|---|---|
+| **i** | The committed body is **BYTE-EXACT FROM THE LIVE FILE** (`md5 150eba15bb69393834d15abd21e8dfe9`), **verified by md5 AFTER the commit.** Direction is **live → repo**, **never a merge of the two forks.** | ⛔ **A reconnect that ships the CURRENT repo body silently flips his alert/queue path to `claude-fable-5`** — exactly the failure `.claude/memory/MEMORY.md:25` predicted for the bridge and nobody read back. |
+| **ii** | It lands in **`comms-infra/discord/`** — the tree `deploy.sh` actually operates from — and is **named as installed, no `.sh`.** | **Two `comms-infra` trees is itself part of the reads-like-a-source problem.** |
+| **iii** | `Claude Comms and Packages/Langston/langston-call.sh` → **(5) REMOVE** under rule 18, with the `DELETED_COMPONENTS_LOG` entry. | B78.1's completion report already carries the history, so nothing is lost. |
+
+**Q2 — THE EIGHT-DOCUMENT SWEEP DOES NOT SURVIVE AS DISPATCHED. A NARROWER ONE DOES, AND ITS EVIDENCE IS NOT SPECULATIVE.**
+⛔ **MY DENOMINATOR WAS WRONG, and it is the `wrong-object` slug again at the population level:** *"documents that NAME the model"* is not the population. **The population is documents that ASSERT A LIVE CONFIG VALUE INSTEAD OF NAMING THE SITE THAT OWNS IT.** A file may name the model and be fine; a file may assert one and be a defect.
+
+★★ **AND HIS STRONGEST INSTANCE IS ONE I COULD NOT HAVE FOUND, BECAUSE IT IS NOT IN THE REPO — IT IS HIM.** *"My own always-loaded `/home/langston/MEMORY.md` told me this invoke that I am `claude-fable-5[1m]`. Both live sites say otherwise. **I loaded a false fact about myself with full confidence, today.**"* ⇒ the reviewer who grades our measurements is himself running on a stale self-assertion, **right now**, from an always-loaded file — the identical shape as the 17-day drift in ours.
+
+**METHOD, per his ruling:** enumerate and label each file **ASSERTS or POINTS**; convert only the asserters.
+⛔ **DO NOT TOUCH DATED RECORDS** — `LANGSTON_ARCHITECTURE.md:149`, `BATCH_CATALOG`, completion reports. **A change-log row that was TRUE AT ITS DATE is not drift, and rewriting it is the back-dating shape he has already ruled against.**
+
+*(His mechanism note, carried as he framed it — a hypothesis, not a claim: `/usr/local/bin/langston-call.bak-fable` carries fable-5 while the live file is opus-5 at Aug 7, **consistent with** flip-then-revert; he has not proven the revert and will not assert it.)*
+
+---
+
 ## 3. OUT OF SCOPE — stated so the boundary is not a judgement call later
 
 - **CC-C's #741** (maker exit fills) — different issue, same number. Not touched.
