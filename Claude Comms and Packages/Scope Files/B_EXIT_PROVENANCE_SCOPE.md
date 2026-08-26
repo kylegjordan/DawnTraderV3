@@ -380,3 +380,50 @@ passed from `:1252` out of the caller's already-resolved `priceResult` / `priceS
 ## R5-3 — WHAT THIS CHANGES ABOUT THE OBJECTIVES
 
 **OBJ-6/OBJ-9 are STRENGTHENED, not merely relocated.** Their fence must now assert the stamp on **`closed_trades`** at the **`state:'open'` transition**, and — because a literal would satisfy a bare non-null test — **assert that a maker row's `entry_price_producer` is one of the TICK producers and never a book producer.** ⇒ **a re-derived literal fails the fence instead of passing it**, which is the whole point of BLOCKER-3.
+
+---
+
+# REV 6 — 2026-08-26. **BLOCKER-4 ACCEPTED: LINE 3 named a call site with nothing in scope to carry.**
+
+## R6-1 — VERIFIED AT SOURCE. HE IS RIGHT, AND THE TRAP IS ALREADY IN THE CODE.
+
+| claim | verified |
+|---|---|
+| `priceSource` is the only survivor at the call site | ✅ `let priceSource: string;` at **`:1057`**, outer |
+| `priceResult` is block-scoped and dies before `:1252` | ✅ `const priceResult` at **`:1150`**, inside the `else {` at `:1145`, closed at **`:1228`** |
+| `diffMs` is inter-tick cadence, not observation age | ✅ **`:1245` `const diffMs = now - lastTick;`** |
+| ⛔ **and it is ALREADY MISLABELLED** | ✅ **`:1272` logs `ageMs=${diffMs}`** |
+
+⛔ **WHY THIS WAS FATAL AND NOT CLERICAL, in his words and I accept them:** the one variable in scope at `:1252` is `priceSource`, which on the crypto WS leg is **`'kraken_ws'` — the exact stamp `#741` proves CANNOT discriminate a book midpoint from a ticker print.** An implementer would derive the producer from it, and **a producer derived from `'kraken_ws'` is a tick producer BY NAME, so it passes R5-3's fence GREEN. The fence would not catch that case — it would RATIFY it.** ⇒ **the literal I refuted in r5 survived into r6 through a scope line instead of a code line.**
+⚠️ **And `observedAtMs` had the worse trap: `diffMs` IS in scope, and `:1272` already calls it `ageMs`.** Taking it would be a second wrong-object stamp **wearing the right column name**.
+
+## R6-2 — THE HOIST, WITH THE **DECLARATION** SITE NAMED
+
+⛔ **Naming only the call site is the identical omission BLOCKER-3 found on the target table.** So, explicitly:
+
+**DECLARE at `:1057`, beside `priceSource`:**
+`let priceProducer: PriceProducer;`
+`let priceObservedAtMs: number | null;`
+**ASSIGN at all three resolution sites (below). PASS at `:1252`.**
+
+## R6-3 — THE THREE BRANCHES: WHICH **CARRIES**, WHICH **HONESTLY LITERALS**, AND WHY
+
+⛔ **His sharpest point, accepted without argument: *"stamps travel explicitly, never re-derived" is UNIMPLEMENTABLE AS AN ABSOLUTE here* — and an unstated exemption gets taken silently on the one branch where it is a lie.** So the exemption is stated per branch:
+
+| branch | leg | producer | why | `observedAtMs` SOURCE FIELD |
+|---|---|---|---|---|
+| **`:1172`** | crypto, adapter | ★ **CARRIES `priceResult.producer`** | a real quote object with a real provenance field — **the only genuine carry of the three** | ★ **`priceResult.observedAt`** — the venue observation time, carried through re-serves by the `#743` work already deployed |
+| **`:1140`** | xStock equities | **LITERAL, honestly** | there is no adapter quote — `_eqTick` comes from `getLatestEquityTick`, and **the code at this line IS the producer** | ★ **`_eqTick.tsMs`** — a REAL observation stamp, written only on a genuine venue snap with a finite positive mark (`equity-spot-archiver.ts:137`) |
+| **`:1201`** | crypto direct REST | **LITERAL, honestly** | direct `krakenService.getTicker`, mid computed inline — again **the line is the producer** | ⛔ **NULL** — the REST ticker carries no per-quote observation time, and **a NULL with a column comment is the honest value** |
+
+★ **THE RULE, RESTATED SO IT IS IMPLEMENTABLE:** *a stamp is CARRIED wherever a quote object exposes provenance, and is a LITERAL only where the emitting line itself is the provenance — never derived from a neighbouring value.* **The exemption is the second clause, and it is now written down per branch rather than left to be taken silently.**
+
+## R6-4 — `observedAtMs`: A NAMED SOURCE FIELD, AND ONE EXPLICIT PROHIBITION
+
+Each branch above names its **source field**, not a meaning. ⛔⛔ **`diffMs` IS FORBIDDEN AS THE SOURCE OF THIS COLUMN, ON EVERY BRANCH.** It is `now − lastTick` (`:1245`) — the engine's inter-tick cadence for that symbol — and `:1272` already prints it as `ageMs=`, so it is the value an implementer would reach for. **Any use of it here is a wrong-object stamp and the fence must fail it.**
+⚠️ **The `:1272` mislabel is NOT fixed by this batch** — it is a pre-existing log-line defect on a path we are not otherwise touching. **Named here so the next reader is not trapped by it; homed as a one-line correction to `#743`'s batch.**
+
+## R6-5 — BLAST RADIUS, IN THE SCOPE RATHER THAN IN A MESSAGE (his condition)
+
+**`_processPendingMaker` has EXACTLY ONE call site tree-wide — `:1252`** (verified: `grep` for the invocation returns 1, excluding the declaration). ⇒ **a REQUIRED third parameter breaks nothing else.**
+★ **The VTS lane does NOT go through it:** `vts-runner.ts:2958` calls the **pure `evaluatePendingMaker`** directly, a separate pre-pass. ⇒ **the VTS maker leg is OUT OF SCOPE for this batch and says so here rather than being discovered later. HOME: F-D (VTS accessor + isolation), owner CC-C** — the piece that already owns VTS's divergence from the shared price path.

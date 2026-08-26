@@ -3265,7 +3265,15 @@ export class DatabaseStorage implements IStorage {
    * Prefers the RECONSTRUCTED figure where one exists -- a measurement from retained market data,
    * not a formula -- and falls back to what was recorded. The originals are never mutated, so
    * `pnl` still answers "what did we record" while this answers "what actually happened".
-   * MEASURED at backfill: 21 of 521 lifetime trades affected; lifetime -74.11 -> -132.74.
+   * # ERROR CORRECTED 2026-08-26 (Langston, refusing the batch's N/A). This line read:
+   *   "MEASURED at backfill: 21 of 521 lifetime trades affected; lifetime -74.11 -> -132.74."
+   * THAT BACKFILL WAS CUT AND NEVER RAN. Its detector's founding premise was falsified by #741
+   * (a maker exit does not read the book for its PRICE, but the system reads the book to decide
+   * WHETHER IT FILLED), so the UPDATE was removed and the migration ships ALTER-only.
+   * LIVE TRUTH, re-derived at this ref: reconstructedNetPnl is NULL on ALL closed rows, zero
+   * trades corrected, and lifetime is UNCHANGED. The -132.74 figure never existed.
+   * A money figure stated as measured fact, for a pass that never executed, is the worst
+   * shape a stale comment can take -- the next reader believes a number nothing produced.
    */
   private static readonly HONEST_PNL = sql`COALESCE(${closedTradesTable.reconstructedNetPnl}, ${closedTradesTable.pnl})`;
 

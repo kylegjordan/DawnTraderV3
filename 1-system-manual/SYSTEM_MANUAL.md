@@ -12981,3 +12981,24 @@ Tracked at RUNNING_ISSUES #129.
 
 **Why it is not a return value or a per-call parameter.** Both were considered and rejected: the reason is set deep inside detector branches (some of them in shared guard code that no individual strategy owns), so a return-value design would have required every detector and every guard to thread it. The global's cost is the serialization constraint above, stated here so the trade is visible rather than rediscovered.
 
+
+### Realized P&L — the canonical definition (B-PHANTOM-FILL-RECONSTRUCT, 2026-08-26)
+
+**THE CANONICAL EXPRESSION:** realized P&L for a closed trade is
+**`COALESCE(reconstructed_net_pnl, pnl)`** — *"the honest figure where one has been measured, otherwise what was recorded."*
+
+★ **THIS CHANGED THE MEANING OF A CORE NUMBER WITHOUT CHANGING ANY DISPLAYED VALUE**, which is exactly why it belongs in this manual. Every money surface was repointed onto it — headline totals, win rate, profit factor, the equity curve, the per-strategy breakdown, the asset-class split. **Nothing on screen moved, because `reconstructed_net_pnl` is NULL on all 547 closed rows (measured 2026-08-26; honest lifetime and recorded lifetime are identical at −$136.02).** ⇒ *the number did not change; what the number MEANS did.*
+
+**WHY A RECONSTRUCTED FIGURE EXISTS AT ALL.** `#741`: the Kraken mini-book was never truncated to its subscribed depth, so stale "ghost" levels accumulated and a book **midpoint** computed from them could sit far from anything the venue traded. Fills priced against that book are not wrong arithmetic — **they are correct arithmetic on a price that never existed.** The reconstruction re-prices such a fill from retained market data. **The originals are NEVER mutated** (Kyle's ruling: *"flag and remove from our accounts, but we don't delete these trades"*), so `pnl` continues to answer *"what did we record"* while the canonical expression answers *"what actually happened."*
+
+⛔⛔ **THE TRI-STATE CONTRACT — READ THIS BEFORE USING `phantom_fill_suspect`.**
+
+| `phantom_fill_suspect` | `reconstruction_basis` | meaning |
+|---|---|---|
+| `false` | **NULL** | ⛔ **NOT ASSESSED.** **NOT assessed-clean.** Every pre-F-E row is in this state. |
+| `false` | *a basis* | assessed, and clean |
+| `true` | *a basis* | assessed, and contaminated |
+
+**`phantom_fill_suspect` is `NOT NULL DEFAULT false`, so a bare read of it says "clean" about every row that has never been looked at.** The nullable `reconstruction_basis` is what carries the third state. **Reading `false` alone as clean is the `#546` failure this contract exists to prevent.**
+
+⚠️ **THE EXPRESSION EXISTS TWICE, AND THAT IS RECORDED RATHER THAN HIDDEN:** once in SQL (`storage.ts`, `HONEST_PNL`) and once in TypeScript (`dashboard-metrics.ts`, `honestNetPnl()`). A row-by-row parity fence guards them — **but that fence selects rows where `reconstructed_net_pnl IS NOT NULL`, and that set is empty today, so the guard is REAL BUT UNPROVEN until F-E populates the column.** The two agree at present only because the fallback column they share is identical on every row.

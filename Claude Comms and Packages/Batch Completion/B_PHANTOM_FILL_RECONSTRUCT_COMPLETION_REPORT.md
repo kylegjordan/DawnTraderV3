@@ -1,6 +1,7 @@
 # B-PHANTOM-FILL-RECONSTRUCT — COMPLETION REPORT
 
-> **Owner:** Claude Analyst (CC-C) · **Closed 2026-08-26** · **change-class: non_architecture**
+> **Owner:** Claude Analyst (CC-C) · **Closed 2026-08-26** · **change-class: architecture**
+> ⛔ **CORRECTED 2026-08-26 — THIS REPORT DECLARED `non_architecture` WHILE ITS OWN SCOPE DECLARED `architecture`.** Langston refused the N/A and he is right: the scope declares architecture **specifically because** the batch changes the canonical meaning of realized P&L for every reader. **A completion report that contradicts its own scope on the class is the #641 shape inside one batch** — and it is the SECOND time I shipped that exact contradiction in one day (the other was `B-EXIT-PROVENANCE`'s change-class body, caught at r4).
 > **Migration applied** 2026-08-24T10:21Z inside the `afb7d326c` deploy (`dt-deploy` ran `db:migrate` in the same run, 734 ms).
 > ⛔ **CLOSED LATE** — the checker's *"open >48h"* nag was correct and is what prompted this. Recorded, not backdated.
 
@@ -41,4 +42,9 @@ Langston re-derived it on staging at the ref: across the **534** closed non-`nev
 ## 6. GOVERNANCE FILES CHANGED
 
 `BATCH_CATALOG.md` · `PHASE_HISTORY.md` · `RUNNING_ISSUES.md` (`#741`) · scope · pre-audit · this report · the migration + its MANIFEST registration.
-**SYSTEM_MANUAL judged NOT applicable** — no architecture, strategy, regime, filter, pipeline or math change. **SIM judged NOT applicable** — no component added, removed or re-keyed; five columns on an existing table.
+⛔⛔ **THE N/A CALL IS WITHDRAWN. BOTH DOCS WERE OWED AND ARE NOW WRITTEN.** This report originally judged SYSTEM_MANUAL and SIM *"not applicable — five columns on an existing table."* **That judged the COLUMNS and not the MEANING.** Langston, refusing it at the ref: *"the system now has a new definition of realized profit and loss, and every place money is displayed was repointed onto it — headline totals, win rate, profit factor, the equity curve, the per-strategy breakdown, the asset-class split. Nothing on screen changed... but the MEANING of what we made changed system-wide, even though the number did not."*
+
+**SYSTEM_MANUAL — WRITTEN:** the canonical definition of realized P&L is now `COALESCE(reconstructed_net_pnl, pnl)`, and the tri-state contract that governs it (`(false, NULL)` = **NOT ASSESSED**, never assessed-clean).
+**SIM — WRITTEN:** the five columns, their readers, and ⚠️ **the fact that the expression exists TWICE** — once in SQL (`storage.ts` `HONEST_PNL`) and once in TS (`dashboard-metrics.ts` `honestNetPnl()`) — which is precisely what the SIM exists to record.
+
+⚠️ **AND THE GUARD OVER THAT DUPLICATION IS REAL BUT UNPROVEN, stated rather than claimed:** the row-by-row parity fence runs over rows where `reconstructed_net_pnl IS NOT NULL`, and **that set is currently EMPTY (0 of 547)**. The two expressions agree today only because the third column they both fall back to is identical on every row. **The fence cannot fail until F-E populates the column** — tracked as `#900`'s sibling.

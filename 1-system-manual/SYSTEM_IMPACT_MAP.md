@@ -3460,3 +3460,17 @@ The B6.5b crypto-only dry-run proved the front half of the active crypto pipelin
 **BLAST RADIUS: LOW-but-not-UI.** The writer is non-throwing by construction (whole body in try/catch — it sits in live signal generation and telemetry must never break trading) and changes **no** signal, sizing or gating decision. **It is nevertheless orchestrator hot-path code, which is why the batch was re-declared `architecture`.**
 **FENCE:** `server/tests/unit/b-filter-diag-standardize-wiring-fence.test.ts` parses the orchestrator and asserts every canonical strategy is wired or explicitly justified absent, and that reset-count == record-count. **It caught a real defect on its first run** — one site recorded the local `StrategyType` id `'range_trading'` while `STRATEGY_DISPLAY_NAMES` and every other table use `'range_trade'`, which would have rendered a per-strategy row matching nothing else in the system.
 
+
+### `closed_trades` — the five reconstruction columns (B-PHANTOM-FILL-RECONSTRUCT, 2026-08-26)
+
+**★ ADDED TO THE SIM 2026-08-26 after Langston refused the batch's "not applicable" call.** The original judgement assessed the COLUMNS (*"five columns on an existing table"*) and missed the MEANING: **the canonical definition of realized P&L changed system-wide.**
+
+- **Columns**: `phantom_fill_suspect` (boolean NOT NULL DEFAULT false) · `reconstructed_exit_price` · `reconstructed_net_pnl` · `reconstructed_pnl_percent` · `reconstruction_basis` (all nullable) + a partial index on the flag.
+- **Upstream**: **nothing writes them yet.** Population is **F-E**'s job and needs **F-B**'s provenance stamp live first so the tiers are provable rather than inferred.
+- **Downstream — ⚠️ THE EXPRESSION IS IMPLEMENTED TWICE, which is why this entry exists:**
+  - **SQL** — `storage.ts` `HONEST_PNL` = `COALESCE(reconstructed_net_pnl, pnl)`, consumed by the realized-P&L readers and the scoreboard
+  - **TypeScript** — `dashboard-metrics.ts` `honestNetPnl()`, consumed by the rolling windows and the per-strategy/asset-class breakdowns
+  - ⇒ **one number, two implementations, in two languages.** A row-by-row parity fence exists; **it selects on `reconstructed_net_pnl IS NOT NULL` and that set is EMPTY (0 of 547), so it cannot currently fail.** Real guard, unproven. ↔ `#900` (the same shape on the epoch predicate).
+- **Shared state**: none. Pure columns.
+- **Blast radius**: **LOW today, HIGH the day F-E writes.** With every value NULL both implementations fall through to `pnl` and every displayed figure is unchanged — **measured: honest and recorded lifetime identical at −$136.02 over 547 rows.** The moment the column is populated, the two implementations must agree or the money figure forks by surface.
+- ⛔ **Tri-state**: `(false, NULL)` = **NOT ASSESSED**, never assessed-clean. Contract lives in the column COMMENTs and in the System Manual. **Do not read the boolean alone.**
