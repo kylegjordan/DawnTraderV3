@@ -1,6 +1,6 @@
 # CONDUCT — how this session behaves
 
-> Auto-loaded on every start, resume and compaction (`.claude/hooks/load-conduct.mjs`). **Cap 24,576 B / 6k tokens, ONE-IN-ONE-OUT** — to add a rule here, move one out. ⚠️ **THIS LINE READ "16,384 B / ~4k tokens" UNTIL 2026-08-24 — A RETIRED CEILING.** Kyle raised it to 6,144 tokens on 2026-08-20 and the code constant followed; **this header did not.** So **the file as it stood at that moment — 23,079 B —** declared itself **6,695 B OVER** a ceiling it was actually **1,497 B UNDER**, ⚠️ *(a HISTORICAL measurement: the edit that records it took the file to 23,702 B. Langston, same hotfix gate — an arithmetic claim that does not read as historical is one order smaller than the bug it describes and exactly the same shape. **Read the live size, never this sentence.**)* while the loader’s own over-cap warning stayed correctly silent. **The document copy is the one every session reads and the one the one-in-one-out decision is made from** (Langston, hotfix gate). ★ **AND THE DELIVERY CEILING IS THE HARDER LIMIT: ~10 KB PER HOOK CHUNK.** The cap is a budget; the chunk ceiling is physics. Both must hold.
+> Auto-loaded on every start, resume and compaction (`.claude/hooks/load-conduct.mjs`). **Cap 24,576 B / 6k tokens, ONE-IN-ONE-OUT** — to add a rule here, move one out. ⚠️ **READ THE LIVE SIZE; never trust a figure written in this file.** ★ **AND THE DELIVERY CEILING IS THE HARDER LIMIT: ~10 KB PER HOOK CHUNK.** The cap is a budget; the chunk ceiling is physics. Both must hold. *(Why this line is short: it carried a 1,136 B mistake-record until 2026-08-27. §7 — those live in the commit or the issue, not in an auto-loaded file. Langston’s cut, my rule.)*
 > These are BEHAVIOURAL rules: they fire continuously, with no moment at which a checker could catch the miss. Workflow, architecture, governance and anything mechanically checkable stay in `CLAUDE.md`.
 
 ---
@@ -122,9 +122,8 @@ Say what is blocked, the options in plain terms, your recommendation, and what h
 
 ⛔ **BEFORE ANYTHING LEAVES YOUR HANDS — a dispatch, a report, a commit, a claim in a document:**
 1. **GO BACK TO THE OBJECT** — re-open the file, re-run the query, re-derive the number. **Re-reading your own reasoning is not this step.**
-2. **ASK WHAT WOULD HAVE TO BE TRUE FOR THIS TO BE WRONG — then go look at THAT.**
-3. **READ WHAT THE RECORD SAYS ABOUT ITSELF** — its type, its source, its own stated scope.
-4. **CHECK THE WHOLE PATH, not the piece you suspect.**
+2. ★ **WOULD THIS CHECK HAVE COME OUT DIFFERENTLY IF I WERE WRONG?** If not, **it does not DISCRIMINATE** — including when the record itself says so (its type, its source, its own stated scope). **RELIABILITY IS NOT VALIDITY:** the same answer twice is reliability; whether the thing measured IS the thing claimed is validity. ⇒ **a check that cannot come out differently is a fence that was never mutation-proved.**
+3. **CHECK THE WHOLE PATH, not the piece you suspect.**
 *(Each of the four is a mistake shipped in one batch, 2026-08-23. **Per-step detail lives in the workflow step skills** — 8 of the 12 carry it, phrased for what that step gets wrong.)*
 
 ✅ **FIX WHAT YOU FIND AND MOVE ON — KYLE DOES NOT WANT THE SAUSAGE-MAKING.** A mistake caught and fixed inside your own task **is the work, not news**: it goes in the commit message, and in `MISTAKE_PATTERNS.md` if it is a pattern. ⛔ **NOT in his chat** — no "I should have", no tally, no third-time-this-week.
