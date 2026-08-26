@@ -3784,6 +3784,20 @@ The VTS is fed by the **same** filtered scan (confirmed live: it is simulating `
 
 **HOME: `#743`'s batch (the last-known-good age-bound work), owner CC-C — now recorded HERE, in the ledger, rather than only in a scope file.** ⚠️ NO DATE, per `§9.4`. ↔ `#743`, `B-EXIT-PROVENANCE`.
 
+### #914 OPEN 2026-08-27 (CC-C; the full-lane price audit Kyle directed) — ⛔ THE VTS LEARNING POPULATION'S EXIT QUALITY IS UNMEASURABLE: IT RECORDS THE EXIT PRICE AND NOT THE STOP
+
+**MEASURED, and the near-miss is part of the finding.** VTS closes are live and at volume — `vts_open_trades` holds **52,171 closed crypto + 7,560 closed xStock**, newest close **2026-08-26T20:55Z**. Their exit prices ARE retained, in `logs/virtual_trades/<date>.json` (**148 files, 39 MB, current to 20:33Z today**).
+⚠️ **I ALMOST FILED THE OPPOSITE.** `data/vts_trades_*.json` — the path named in `vts-runner.ts`'s own header comment — is **stale since 2026-03-30**, and stopping there would have produced *"VTS exit prices are not retained"*, which is **false**. The live sink is a different directory reached through `vts-service.logTrade`. **A stale path that still exists reads exactly like the live one.**
+
+**THE ACTUAL GAP:** the VTS closed record carries `exitPrice`, `exitReason`, `entryPrice`, `fees`, `netProfit` — and **NO `stopLoss`**. `vts_open_trades` has `stop_loss` but **no exit-price column**, and a closed row's `context` jsonb holds exactly one key (`mode` — verified by `jsonb_object_keys`, not assumed).
+⇒ **NEITHER SINK ALONE CAN ANSWER "did this exit fill better or worse than its stop?"** — the question that produced the load-bearing finding on the paper population (crypto stops mean **+100.8 bps ABOVE** stop pre-fix vs **−29.9 bps** post-fix). **On the VTS population that test cannot currently be run at all.**
+
+⛔ **WHY THIS IS NOT COSMETIC:** VTS is the **wide** learning population — 12k+ trades against paper's dozens — and **`F-5` (per-strategy reach) and `F-E` (fill-integrity tiers) both intend to calibrate from it.** A population whose fill quality cannot be measured **cannot be used to calibrate fill-sensitive parameters**, and nothing currently says so. ⚠️ **And 69% of VTS closes are stop-outs** (222 of 321 over three days), so the unmeasurable cohort is the dominant one.
+
+**HOME: `F-E` (fill-integrity detector + disposition), owner CC-C** — it already owns "can this history be graded?", and this is the same question asked of the other population. ⚠️ **NOT folded into F-G**: F-G changes exit pricing, this is about whether the record can be read. Different objective, and merging them would let a fix to one report as coverage of the other.
+⚠️ **NO DATE, per `§9.4`.** ↔ `#911`, F-5, F-E.
+★ **Cheapest plausible fix, for whoever scopes it: add `stopLoss` (and `takeProfit`) to the VTS closed record — the values are on the in-memory trade object at close time, so this is a write-site field addition, not a new source.** **Verify that at the ref before committing to it.**
+
 ### #911 OPEN 2026-08-26 (CC-C; **Langston's Step-4 ruling on B-EXIT-PROVENANCE**) — ⛔ OBJ-3 SHIPS HALF-BLIND: THE ONLY INDEPENDENT WITNESS IS NOT RETAINED
 
 **THIS IS A CLOSE GATE, NOT A FOLLOW-ON.** Langston's words: *"deploy this ref. OBJ-3 stays OPEN, and B-EXIT-PROVENANCE DOES NOT CLOSE until the ticker-retention leg lands."* Filed at the moment of the ruling per §13, so the batch cannot quietly read as delivered.
