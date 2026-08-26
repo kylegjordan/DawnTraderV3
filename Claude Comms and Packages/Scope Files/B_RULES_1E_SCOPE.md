@@ -80,6 +80,35 @@ This is the item 1e was originally named for. **It was already ruled on:** *"PRE
 
 ---
 
+### OBJ-5b — ★★ KYLE MADE OBJ-5 A RULE, AND MEASURING THE POPULATION FOUND SOMETHING WORSE THAN PROSE DRIFT
+
+**KYLE, 2026-08-25:** *"We don't need the rules file or any of the other files right now to name the model that Langston is working off of. That should just be a reference to a place where it can be found. That way, we don't have to go and update documents every time we change the model."*
+⇒ **OBJ-5 is no longer two sites. IT IS A RULE: no document names the model VALUE; every mention becomes a POINTER to the read sites.**
+
+**MEASURED POPULATION — 20 files assert a model value.** The **frozen** ones (completion reports, closed scope files, Telegram archives) are historical records and are **NOT rewritten**. **The LIVE authoritative set is eight:** `CLAUDE.md` · the shared `MEMORY.md` · `LANGSTON_ARCHITECTURE.md` · `SYSTEM_IMPACT_MAP.md` · `COMMS_BRIDGE_RUNBOOK.md` · `CLAUDE_CODE_FEATURE_WATCH.md` · `PHASE_19_PLAN.md` · `comms-infra/discord/DISCORD_BRIDGE_DESIGN.md`.
+
+⛔⛔ **AND THE MEASUREMENT TURNED UP A HARDER PROBLEM THAN STALE PROSE: `langston-call` — ONE OF THE TWO LIVE MODEL SITES — HAS NO REPO-CANONICAL SOURCE, AND TWO STALE FORKS THAT LOOK LIKE ONE.**
+
+| copy | model it names | last touched |
+|---|---|---|
+| **LIVE** `root@204.168.141.77:/usr/local/bin/langston-call` | **`claude-opus-5[1m]`** — the truth | 2026-08-07 |
+| `Claude Comms and Packages/comms-infra/langston-call.sh` | `claude-fable-5[1m]` | 2026-08-06 |
+| `Claude Comms and Packages/Langston/langston-call.sh` | `claude-opus-4-7` | 2026-05-07 |
+
+**All three md5s differ.** `comms-infra/discord/deploy.sh` **does not ship `langston-call` at all** — so unlike the Discord bridge (repo-canonical, deployed), **the live file has no source in this repo and the two that look like sources are both wrong.**
+
+★ **AND THE 2026-08-06 COPY IS THE ARGUMENT FOR KYLE'S RULE, NOT A COUNTEREXAMPLE TO IT.** Its commit is titled *"Reconcile Langston comms files to live Helsinki state (repo was stale through three model switches)"* — **somebody already did this reconciliation deliberately, and it was CORRECT ON THE DAY.** The model reverted to Opus 5 afterwards and **the reconciled copy was stale again within 19 days.** ⇒ **A MANUAL RECONCILIATION OF A VALUE THAT LIVES SOMEWHERE ELSE ROTS IMMEDIATELY. That is precisely why the fix is a pointer and not a correction.**
+
+⚠️ **CONSEQUENCE, stated plainly: restoring `langston-call` from either repo copy silently downgrades Langston's model** — and one of them names `claude-fable-5`, which our own ledger records as erroring on invocation.
+
+**DISPOSITIONS (§1.b), and the second is a decision I am NOT taking unilaterally:**
+- `Claude Comms and Packages/Langston/langston-call.sh` — **(5) disconnected, should stay disconnected**: that folder is the historical "Langston setup reference" (`CLAUDE.md` §4). **Mark it as historical, or remove it under rule 18.**
+- `Claude Comms and Packages/comms-infra/langston-call.sh` — **(3) or (5), and it is Langston's call:** either **RECONNECT** it (make `langston-call` genuinely repo-canonical and shipped by `deploy.sh`, as the Discord bridge already is) or **REMOVE** it. ⛔ **What it must not remain is a third forked copy that reads like a source.**
+
+**HOME for the fork itself:** `RUNNING_ISSUES` **#746** (minted from my own block, 730-759).
+
+---
+
 ## 3. OUT OF SCOPE — stated so the boundary is not a judgement call later
 
 - **CC-C's #741** (maker exit fills) — different issue, same number. Not touched.

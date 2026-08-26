@@ -2882,6 +2882,32 @@ The COMMITTED copy carries the five **pre-Phase-14 regime keys** (`BULL_STABLE`/
 
 ---
 
+### #746 OPEN 2026-08-25 (CC-A; found measuring the population for Kyle's no-named-models rule, not by looking for it) — ★★ **`langston-call` — ONE OF LANGSTON'S TWO LIVE MODEL SITES — HAS NO REPO-CANONICAL SOURCE, AND TWO STALE FORKS THAT READ LIKE ONE. ALL THREE NAME A DIFFERENT MODEL.**
+
+**HOME: `B-RULES-1e` OBJ-5b — OWNER CC-A — QUEUED (⛔ no batch due dates, §9.4).**
+
+| copy | model it names | last touched |
+|---|---|---|
+| **LIVE** `root@204.168.141.77:/usr/local/bin/langston-call` | **`claude-opus-5[1m]`** — the truth | 2026-08-07 |
+| `Claude Comms and Packages/comms-infra/langston-call.sh` | `claude-fable-5[1m]` | 2026-08-06 |
+| `Claude Comms and Packages/Langston/langston-call.sh` | `claude-opus-4-7` | 2026-05-07 |
+
+**All three md5s differ** (`150eba15…` / `5b153beb…` / `1557b604…`). **`comms-infra/discord/deploy.sh` does not ship `langston-call` at all** — so unlike the Discord bridge, which the SIM correctly calls repo-canonical and which `deploy.sh` pushes, **the live file has NO source in this repo while two files that look like sources sit in it, both wrong.**
+
+⚠️ **CONSEQUENCE: restoring from either repo copy silently DOWNGRADES Langston's model**, and one names `claude-fable-5`, which our own currency-check ledger records as erroring on invocation. **A restore would look successful and leave the alert/queue path broken.**
+
+★★ **THE 2026-08-06 COPY IS THE ARGUMENT FOR THE RULE, NOT A COUNTEREXAMPLE.** Its commit reads *"Reconcile Langston comms files to live Helsinki state (repo was stale through three model switches)"* — **the reconciliation was DELIBERATE and CORRECT ON THE DAY.** The model reverted to Opus 5 after, and the reconciled copy was **stale again within 19 days.** ⇒ **A MANUAL RECONCILIATION OF A VALUE THAT LIVES ELSEWHERE ROTS IMMEDIATELY** — which is exactly why Kyle's fix is a POINTER and not a correction. **Correcting these three files today would reproduce this issue in a fortnight.**
+
+★ **AND IT SHARPENS A CLAIM WE ALREADY RELY ON.** `MEMORY.md` and `CLAUDE.md` §8 both say the model is set at **two live sites** and warn that a single-site switch leaves him running split. **True — but only ONE of those two sites is repo-canonical.** The warning is right and the remedy it implies (edit both in the repo) is not available for the second.
+
+**DISPOSITIONS — the second is Langston's, not mine:**
+- `Claude Comms and Packages/Langston/langston-call.sh` → **(5) disconnected, stays disconnected.** That folder is the historical "Langston setup reference" (`CLAUDE.md` §4). Mark historical or remove under rule 18.
+- `Claude Comms and Packages/comms-infra/langston-call.sh` → **(3) RECONNECT** (make `langston-call` genuinely repo-canonical and shipped by `deploy.sh`, as the bridge already is) **or (5) REMOVE.** ⛔ **What it must not remain is a third forked copy that reads like a source.**
+
+⇔ #739 (the currency check that would surface a model change) · `B-RULES-1e` OBJ-5/OBJ-5b.
+
+---
+
 ### #745 OPEN 2026-08-25 (CC-A; **Langston declined to rule at the `B-CONDUCT-DELIVERY-HOTFIX` gate and named it a mechanism question**) — ★★ **THE #702 ISSUE-NUMBER BLOCKS DO NOT HOLD, AND THE REASON IS STRUCTURAL: NOTHING CHECKS THE BLOCK AT THE MOMENT A NUMBER IS MINTED.**
 
 **HOME: fold into `B-GATE-GUARD` as a SECOND CHECK — OWNER CC-A — QUEUED behind it (⛔ no batch due dates, §9.4).** Same hook, same trigger, same staged-diff read as #744; two hooks racing the same push is worse than one hook with two checks.
