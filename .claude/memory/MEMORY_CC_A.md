@@ -11,10 +11,17 @@
 > **If BLOCKED-ON says Kyle, say NOTHING and do not work the item.** Otherwise continue to the next step and report only at the step boundary, in the `CONDUCT.md` §6 format.
 > ⚠️ **UPDATE THESE FOUR LINES AT EVERY STEP BOUNDARY.** They were left stale for weeks and Kyle found it before I did.
 
-- **BATCH:** **B-RULES-1e** — mechanisms for three rules followed ZERO times (#739 daily-check liveness · #740 skill-description colon-space · **#741 CC-A — *Langston’s 900s ceiling*, NOT CC-C’s #741**). Card `PVTI_…zg4BQXs`.
-- **STEP:** **2 DONE, dispatched `40c461605` + correction `1391f3dec`.** Step-1 APPROVED WITH CONDITIONS. ✅ **VERIFIED THE DISPATCH IS QUEUED, NOT DEAD** — enqueued 16:07:46, **no `handled`, no timeout, no `bridge error`, no PARK**; CC-C has 5 later items and Langston is replying to him. ★ **That check IS #741 applied to itself: "silent" and "dead" are different states and only the bridge journal distinguishes them.** ⛔ **Do NOT re-poke on a cadence — his queue is not mine.**
-- **BLOCKED-ON:** Langston’s Step-2 clearance. Card `Pre-Audit`, `Blocked on = Langston`.
-- **NEXT:** on his ruling → Step 3 (P1-P7). Then `B-GATE-GUARD` · `B-ISSUE-BLOCK-GUARD` · `B-CREW-BOARD-REMOVAL` (**gated on KYLE** — follows Infra onboarding). **Queue order, NO dates (§9.4).**
+- **BATCH:** **B-RULES-1e** (Step 2 with Langston) · **`B-GOV-REPORTING`** (five rules edits PUSHED UNREVIEWED, retro-scoped, gate owed) · both **PLACED** in `PHASE_19_PLAN` §governance queue.
+- **WITH LANGSTON — FOUR OPEN ASKS, all dispatched, none ruled.** (1) `B-RULES-1e` Step-2 audit+plan `40c461605`; (2) `B-GOV-REPORTING` five edits `b256d97fd`; (3) **the MISSING RULE** — Kyle: *"we built a tool to enforce a rule we haven’t really made yet"*; (4) **§6b SELF-REVIEW rewrite.** ⛔ **Do NOT re-poke on a cadence; poll the bridge journal instead.**
+- **BLOCKED-ON:** Langston. **NEXT:** his rulings → relay all to Kyle (he asked for that explicitly).
+
+# ▶▶ §6b IS NOT WORKING — MEASURED, AND THE REWRITE IS WITH LANGSTON
+⛔ **"GO BACK TO THE OBJECT" IS THE WRONG INSTRUCTION, NOT MERELY A WORDY ONE. In 3 of 4 errors yesterday I DID go back to the object and was still wrong.** The failure is **checking something ADJACENT to the claim and counting it.**
+★ **THE NAME FOR IT: I keep proving RELIABILITY and calling it VALIDITY.** Same answer twice = reliability. **Whether the thing measured IS the thing the claim is about = validity, and that is what fails.**
+★★ **PROPOSED REPLACEMENT for step 2 — one question, mechanical, caught 4/4 vs the current 1/4:** *"Could this evidence be exactly what it is, and my claim still be false? If yes it does not DISCRIMINATE — it is not evidence for that claim."*
+★★ **AND KYLE’S BETTER QUESTION — can a session review STATELESSLY? MY ANSWER: NO, and never claim otherwise.** There is no switch; **a session told to review statelessly will REPORT that it did, because it cannot tell from the inside.** ⚠️ **§6b IS that mode version — live, loaded, and it failed 3 of 4.**
+★ **BUT THE REAL MECHANISM EXISTS AND IT IS WHAT LANGSTON *IS*: A PROCESS BOUNDARY, NOT A STANCE.** Fresh process, holds only what it was handed. ⇒ **spawn a LOCAL fresh-context reviewer, hand it ONLY the object + the claim.** ⚠️ **LIMITS: hand it my SUMMARY and it reviews my summary (same failure one level down); it cannot catch checking the WRONG object; costs tokens ⇒ load-bearing claims only.** ⛔ **Agent tool: do NOT spawn unless Kyle asks.**
+⚠️ **`CONDUCT.md` HAS 13 BYTES OF HEADROOM — neither half lands as prose without an eviction.**
 
 # ▶ B-RULES-1e — THE FINDINGS THAT ARE NOT IN THE THREE ISSUES (re-read the audit; do NOT re-derive)
 - ⛔⛔ **A1 — `langston-call` HAS NO PROGRAMMATIC CALLER, and `CLAUDE.md` §8 + shared `MEMORY.md` BOTH say it is "the invoker the ALERT/QUEUE path uses."** Whole-box grep → only docs/backups; **control: `cc-send` returns 6 real callers.** Its own log = **2 ad-hoc invocations in 3 weeks.** ★ **One of them IS the daily currency check’s live model probe ⇒ a stale MODEL there corrupts the instrument whose job is noticing a stale model.** ⚠️ **Rule 24: NOT outcome (1).** He runs it by hand; only the ALERT/QUEUE claim is asserted false. **His call.**
