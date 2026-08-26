@@ -160,3 +160,41 @@
 **★ ROUTING DEFECT, needs a home (Langston):** the alert-marker owner enum **and** `cc-wake-filter` routing are still `(CC-A|CC-B|Kyle)` — the roster has had four sessions since ~08-06 — so **his `owner=CC-C` markers are UNROUTABLE and his 04:00Z hand-off to me most likely evaporated.** Not ignored: undeliverable. Needs owner + due per §9.4.
 
 **★ TWO GOVERNANCE-PUSH ALERTS OPEN ON THIS WORK:** `05982e18` (B-BOOK-TRUNCATE-HOTFIX) and `0a261706` (B-PHANTOM-FILL-RECONSTRUCT) — code pushed, no governance push. Langston routed the register rows to CC-A; **resolve with the commit as evidence, never re-ack** (an ack silences the dedupe key for the whole batch).
+
+### ⏱⏱ THE PRICING-TRUST SERIES — CONSOLIDATED LIST, 2026-08-26 (Kyle-requested)
+
+> **THE GOAL, unchanged:** when this series closes we can trust the **entry and exit prices** of VTS simulated trades and active paper trades — a simulation as close to live Kraken spot as we can make it. **Live mode is Phase 21** except where a piece extends there for free.
+
+**✅ CLOSED**
+
+| # | piece | evidence |
+|---|---|---|
+| 0 | **`B-BOOK-TRUNCATE-HOTFIX`** (`#507`) — the mini-book never truncated to its subscribed depth | deployed `e6f7c70b3`; crossed book states 32.03% → **0** |
+| 1 | **F-A `B-MBIM-SWITCH-ON`** — the day-one alarm that had never run | deployed `afb7d326c`; 6 symbols, drift **0.000–0.028%** vs a 0.2% line; checksum **18,758/18,758** |
+| 2 | **F-F(a) `B-OBSERVATION-EPOCH`** — day one is today | live in `afb7d326c`; epoch `2026-08-22T22:01Z`; anchor untouched **824.11 / v4** |
+| 3 | **`B-EPOCH-KEYING-PARITY`** — the both-leg rule had reached 1 reader of 4 | deployed `30808c6c0`; all four dashboard figures agree at **−$4.91 / 6** |
+| 4 | **`B-PHANTOM-FILL-RECONSTRUCT`** (columns only, ALTER, no backfill) | migration applied; tri-state contract in column COMMENTs |
+
+**⏳ IN FLIGHT**
+
+| # | piece | state |
+|---|---|---|
+| 5 | **F-B / F3 `B-EXIT-PROVENANCE`** — stamp the price source + age on **BOTH legs, both paths** | ⛔ **BLOCKED at Step 1** — r4 with Langston at `d613ea775` since 05:48, chased 00:11. Stage-1 plumbing (closed `producer` union, `observedAt` carry-through) is **built and deployed**; **nothing writes provenance to a trade row yet** |
+
+**📋 QUEUED — dependency order**
+
+| # | piece | why here | owner · due |
+|---|---|---|---|
+| 6 | **`B-SCANNER-EGRESS-NORMALISE`** ★ **NEW — the BTC + DOGE fix** | ★ **RECOMMEND STARTING NOW, IN PARALLEL** — it touches the scanner egress, not the fill seam, so it is independent of the blocked #5. **And every piece below fits a model to the trade population**, which today is missing two major assets entirely | CC-C · **2026-09-05** |
+| 7 | **F-C / F3.5 — staleness bound** (`#743`) | threshold must be **derived from F-B's stamped data**, not chosen | CC-C · after #5 |
+| 8 | **F-G — trigger the exit on the side we transact on** ★ **NEW, Kyle directive** | the plan measured the mid-vs-bid gap and never closed it; **all nine stop-outs filled BELOW their stop**, median 0.17%. Sequenced **after F-B** so before/after is measured on stamped rows | CC-C · after #5 |
+| 9 | **F-D — VTS accessor + isolation** | VTS uses `getPriceWithFallback` **zero** times against an invariant saying all consumers must | CC-C |
+| 10 | **F-E — detector + disposition, BOTH legs** | tiers the history (A clean / B contaminated / C unassessable). **Needs #5 live so tiers are PROVABLE, and #6 done so the population is not missing BTC/DOGE** | CC-C |
+| 11 | **F-5 — per-strategy reach structure** *(the reachability batch)* | **BUILD yes / FIT no.** Ships behaviour-neutral seeded at today's `reach_atr_max=4.0`. ⛔ **p70 = 1.57R is still BOUNCED under rule 29(a)** — no stated population, and it rests on tier-A fills unprovable until **F-E**. Its measurement tail is **`P19-B-FEEVIABILITY` D3** | CC-C · **2026-09-10** |
+| 12 | **F-F(b) — THE RESET GATE** | gated on: MBIM clean ≥N days · stamp on **100%** of closes · **≥50 assessable** · **zero contaminated on BOTH legs**. The epoch is already set; **this is the gate, not the act** | CC-C · gated |
+
+**🔧 PARITY + HYGIENE — all mine, all due 2026-09-05**
+
+`#900` SQL↔TS parity fence *(the fence I shipped asserts TS↔TS; the reader that was wrong by the largest margin is SQL with no test)* · `#901` the epoch **value** still resolves two ways (measured 4/534) · `#902` the last two unscoped epoch readers · `#903` the `/api/portfolio/overview` 401 that leaves the Dashboard balance card blank *(and was masking `#902`)* · `#908` `trades24h` hardcoded-100, **UNVERIFIED pending re-check**
+
+⛔ **WHY #6 IS NOT LAST, stated because it is the judgement call in this list:** it is the only piece that changes **which assets can trade at all**. Everything from #10 onward fits models to the trade population — and that population has **never contained Bitcoin or Dogecoin**. Calibrating first and admitting them after means re-doing the calibration on a different universe.
