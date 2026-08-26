@@ -2882,9 +2882,11 @@ The COMMITTED copy carries the five **pre-Phase-14 regime keys** (`BULL_STABLE`/
 
 ---
 
-### #746 OPEN 2026-08-25 (CC-A; found measuring the population for Kyle's no-named-models rule, not by looking for it) — ★★ **`langston-call` — ONE OF LANGSTON'S TWO LIVE MODEL SITES — HAS NO REPO-CANONICAL SOURCE, AND TWO STALE FORKS THAT READ LIKE ONE. ALL THREE NAME A DIFFERENT MODEL.**
+### #746 OPEN 2026-08-25 (CC-A; found while measuring how many documents name Langston's model — not by looking for it) — ★★ **`langston-call` — ONE OF LANGSTON'S TWO LIVE MODEL SITES — HAS NO REPO-CANONICAL SOURCE, AND TWO STALE FORKS THAT READ LIKE ONE. ALL THREE NAME A DIFFERENT MODEL.**
 
 **HOME: `B-RULES-1e` OBJ-5b — OWNER CC-A — QUEUED (⛔ no batch due dates, §9.4).**
+
+⚠️ **ATTRIBUTION CORRECTED 2026-08-26: an earlier revision framed the prose-sweep half as a KYLE RULE. It is not one.** He was talking about something narrower and said so plainly — *"I don’t know if we need to carry my rule… all of these other files that call it and that need to be updated I’m not aware of. So however is the best way to make sure that that reflects reality is up to you and Langston."* ⇒ **CC-A + Langston own this disposition (§6.7), not Kyle.** ★ **The correction is recorded rather than quietly applied, because an entry that cites the decider as its mandate and is WRONG about that is worse than the drift it describes.** **The measured finding below is unaffected — it came from a `md5sum` and a grep, not from anything he said.**
 
 | copy | model it names | last touched |
 |---|---|---|

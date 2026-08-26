@@ -80,10 +80,11 @@ This is the item 1e was originally named for. **It was already ruled on:** *"PRE
 
 ---
 
-### OBJ-5b — ★★ KYLE MADE OBJ-5 A RULE, AND MEASURING THE POPULATION FOUND SOMETHING WORSE THAN PROSE DRIFT
+### OBJ-5b — THE MODEL VALUE IS FORKED ACROSS THREE COPIES OF ONE EXECUTABLE — **CC-A + LANGSTON DECIDE THE FIX**
 
-**KYLE, 2026-08-25:** *"We don't need the rules file or any of the other files right now to name the model that Langston is working off of. That should just be a reference to a place where it can be found. That way, we don't have to go and update documents every time we change the model."*
-⇒ **OBJ-5 is no longer two sites. IT IS A RULE: no document names the model VALUE; every mention becomes a POINTER to the read sites.**
+⚠️ **ATTRIBUTION CORRECTED, AND THE CORRECTION MATTERS BECAUSE IT CHANGES WHO OWNS THIS.** An earlier revision of this objective opened *"KYLE MADE OBJ-5 A RULE"* and quoted him. **He was talking about something narrower, and he said so:** *"I don't know if we need to carry my rule. I thought we were talking about something different... I know that when we changed Langston's model, it needs to be changed in two places, but all of these other files that call it and that need to be updated I'm not aware of. So however is the best way to make sure that that reflects reality is up to you and Langston."*
+⇒ **THERE IS NO KYLE RULE HERE. The disposition is CC-A + Langston's to settle** (§6.7 iterate-and-decide), and it is **not** a decision he owns. ★ **Recorded rather than silently rewritten, because a scope that cites the decider as its authority and is wrong about that is the more dangerous half of the error — it would have carried a manufactured mandate into Step 4.**
+**The FINDING below is unaffected: it was measured, not inferred from anything he said.**
 
 **MEASURED POPULATION — 20 files assert a model value.** The **frozen** ones (completion reports, closed scope files, Telegram archives) are historical records and are **NOT rewritten**. **The LIVE authoritative set is eight:** `CLAUDE.md` · the shared `MEMORY.md` · `LANGSTON_ARCHITECTURE.md` · `SYSTEM_IMPACT_MAP.md` · `COMMS_BRIDGE_RUNBOOK.md` · `CLAUDE_CODE_FEATURE_WATCH.md` · `PHASE_19_PLAN.md` · `comms-infra/discord/DISCORD_BRIDGE_DESIGN.md`.
 
@@ -106,6 +107,8 @@ This is the item 1e was originally named for. **It was already ruled on:** *"PRE
 - `Claude Comms and Packages/comms-infra/langston-call.sh` — **(3) or (5), and it is Langston's call:** either **RECONNECT** it (make `langston-call` genuinely repo-canonical and shipped by `deploy.sh`, as the Discord bridge already is) or **REMOVE** it. ⛔ **What it must not remain is a third forked copy that reads like a source.**
 
 **HOME for the fork itself:** `RUNNING_ISSUES` **#746** (minted from my own block, 730-759).
+
+⛔ **AND THE EIGHT-DOCUMENT SWEEP IS NOT ADOPTED — IT IS A PROPOSAL FOR LANGSTON TO RULE ON.** The population measurement stands (20 files assert a model value; 8 are live). **Whether the answer is a pointer sweep, a single named source of truth, or simply fixing the executable fork and leaving the prose alone, is the open question.** ★ **My own view, offered not assumed: the EXECUTABLE fork is the real defect and is worth fixing on its own merits; the prose sweep is the cheaper, more speculative half and should be argued for separately rather than smuggled in behind it.**
 
 ---
 
