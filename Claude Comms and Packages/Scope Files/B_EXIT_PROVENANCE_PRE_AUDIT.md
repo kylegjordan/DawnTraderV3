@@ -261,3 +261,79 @@ Both landed. **But your discipline point stands and the outcome does not excuse 
 reported the discharge without reading either back, and a short id would have no-opped with `exit 1`
 while I reported a discharge that never happened. Same class as filing the ledger row and calling it
 effective.
+
+---
+
+# STEP-2 ADDENDUM B — THE ENTRY / MAKER LEG (2026-08-26, after the scope cleared at r8)
+
+> **WHY AN ADDENDUM:** this pre-audit was written when the batch was **exit-only**. Revisions 3-8 widened it to both legs and added the maker fill, three close sites and a second file. **None of that had audit treatment.** Per this step's binding format, anything reaching the plan without it would be flagged `UNAUDITED` — so it is audited here, **first**, and the plan below falls out of it.
+
+## A. §9.5(a) COMPONENT CENSUS — EVERY HOP, repo-wide grep, tests excluded
+
+### A1 · Who **WRITES** the pending→open transition?
+**TWO, and I name them because an asserted absence needs presence-evidence:** `active-execution-engine.ts:991` (the maker fill — the site this batch stamps) and `core/trading/pending-maker-logic.ts:133` (the **pure** function's return shape, **not a DB write**).
+⛔ **`circuit-breaker.ts:202` matched the grep and is a SUBSTRING COLLISION, not a third writer** — it is `state:"open"` on a *circuit breaker* result object (`{allowed:false, state:"open", reason:"Circuit open…"}`). **Recorded because "a matching name is not a matching thing" is the pattern that has cost this project most, and a census that silently drops a hit is indistinguishable from one that never saw it.**
+
+### A2 · ★ Who **CREATES** a pending-maker position? **TWO CREATORS, ONE PROCESSOR.**
+- `active-execution-engine.ts:3487` — the crypto/engine placement path
+- ★ **`asset_classes/xstock_spot/eval-cycle.ts:980`** — **the xStock path creates its own**, same shape (`state:'pending'`, `makerLimitPrice`, `makerDeadline`)
+⇒ **both feed the SINGLE processor at `:1252`.** **This is why one stamp point is correct for both classes — but ONLY because R6-3's per-branch producer table already distinguishes the xStock tick (`_eqTick`) from the crypto adapter quote.** **Had the design used one literal, it would have mislabelled an entire asset class.**
+
+### A3 · ⛔ Who **DELETES** an active position? **SEVEN SITES — the highest-yield question, and it settles BLOCKER-3 beyond the close path.**
+`routes.ts:3522` · `routes.ts:12916` · `routes.ts:13015` · `active-engine-service.ts:851` (orphan sweep) · `active-execution-engine.ts:1010` (the maker DROP branch) · `active-execution-engine.ts:2206` · `active-portfolio-manager.ts:651`
+⇒ **provenance written to `active_open_positions` is destroyed from SEVEN independent paths, not merely "at close."** Langston's blocker said the row is deleted; **the census says it is deleted by seven callers including an orphan sweep that runs on a timer.** ⇒ **`closed_trades` as the sole target is not a preference, it is the only durable option.**
+
+### A4 · Who **SCHEDULES** work against pending makers?
+`_processPendingMaker` — declared `:970`, **called exactly ONCE, at `:1252`** (confirmed; a required third parameter therefore breaks nothing).
+The **pure** `evaluatePendingMaker` has **THREE** call sites: `:984` (inside the processor), ★ **`:1358` — the resting-maker EXIT, which is the `:1364` close site**, and `vts-runner.ts:2958` (the VTS pre-pass).
+⇒ **no second scheduler over the same component; no mutual-exclusion check required.**
+
+### A5 · Who **WRITES** the exit provenance column today?
+**EXACTLY ONE: `active-execution-engine.ts:1758` — `exitPriceSource: priceSource ?? 'unknown'`.** **Stated explicitly per the rule.** It is the single point the OBJ-5 vocabulary fence must cover, and the `?? 'unknown'` is precisely how a non-provenance value reaches the column.
+
+## B. SIM READ (mandatory)
+`SYSTEM_IMPACT_MAP.md:110` — **P19-B7.2c is recorded as "a NEW cross-cutting position lifecycle STATE, not a new singleton."** `:126` — P19-B7.2d joined **the xStock VTS lane to the SAME lifecycle** (corroborating A2's two creators). `:131` — P19-B8.6 added **the maker TARGET-exit rest lifecycle**, which is the `:1364` site.
+⚠️ **GOVERNANCE GAP, FLAGGED per this step's rule:** the SIM records the *state* and its lifecycle but **is silent on where that lifecycle's PROVENANCE is persisted** — which is exactly the hole BLOCKER-3 found. **The SIM entry is owed at Step 10 and is named here so it is not discovered at close.**
+
+## C. LEDGER CHECK (§9.5(b-ii)) — AND IT SURFACED MY OWN PRIOR FINDING
+`#532` (duplicate scheduler) — **not this component**; its defect is closed. `BATCH_CATALOG:416` P19-B7.2c — the lifecycle's own batch, **architecture class**.
+★★ **`RUNNING_ISSUES:3030`, MY OWN ADDENDUM OF 2026-08-23, and it reframes this leg:** *"the maker ENTRY leg fills iff `currentPrice <= limit`, and `active-execution-engine.ts:1252` feeds `_processPendingMaker` **the same book-derived midpoint** that `#741` shows was pushed UP by ghost bids… a too-high mid would make a resting BUY fill LATE or not at all ⇒ maker entries were SUPPRESSED."*
+⇒ **THE MAKER LEG IS NOT MERELY ANOTHER COHORT TO STAMP. Its FILL RATE ITSELF may have been distorted by the defect this arc exists to fix, and there is currently NO instrument on it.** The `observedAtMs` + `producer` stamp at `:990` **is** that instrument.
+⚠️ **And the honest limit, already Langston-corrected on that entry: the DIRECTION and MAGNITUDE of the bias are UNKNOWN.** The stamp makes it measurable **going forward**; it does not recover the past.
+
+## D. PROVENANCE READ (§9.5(b)) — ORIGINAL INTENT
+**Introducing commit `b48aef51f`, 2026-07-02, quoted verbatim:**
+> *"Kyle-simplified model (2026-07-02): maker-chosen promotion -> PENDING open trade holding a slot; fills ONLY on honest side-aware trade-through; hard timeout (`maker_max_pending_ms`, ~1h) = DROPPED, period (no convert)."*
+> *"NEW pure `server/core/trading/pending-maker-logic.ts` shared by BOTH engines (paper monitor pre-pass + VTS resolve pre-pass) — **parity by construction**."*
+
+★ **DISPOSITION (1) — STILL RELEVANT AND CORRECT.** The intent was that the fill **DECISION** be shared for parity. **This batch adds provenance CAPTURE and must not disturb that:** the pure `evaluatePendingMaker` is **not touched**, so parity-by-construction survives. ⇒ **the third parameter goes on the ENGINE's `_processPendingMaker`, never on the shared pure function** — putting it there would fork the very parity the original design bought.
+✅ **`bridge/canonical/` consulted: NO coverage of the pending-maker lifecycle** — it is a 2026-07 construct, post-dating the corpus. **Recorded as a finding per the rule, not as an absence of obligation.**
+
+## E. THE PLAN — every item back-references the finding it falls out of
+
+| # | change | falls out of | note |
+|---|---|---|---|
+| **P1** | **Hoist** `let priceProducer: PriceProducer;` + `let priceObservedAtMs: number \| null;` beside `priceSource` at `:1057`; assign at all three resolution sites | **A4** (one processor, one call site) + scope **R6-2** | the DECLARATION site is named, not just the call site — the omission BLOCKER-3 found on the target table |
+| **P2** | Per-branch assignment: `:1172` **carries** `priceResult.producer` / `.observedAt` · `:1140` literals the producer, carries **`_eqTick.tsMs`** · `:1201` literals, `observedAtMs` **NULL** | **A2** (two creators, one processor) + **R6-3** | ★ **A2 is why this table is load-bearing rather than tidy: one literal would have mislabelled an entire asset class** |
+| **P3** | Pass at **`:1252`, `:1364`, `:1443`** | **A4** (three `evaluatePendingMaker` sites; `:1358`→`:1364` is the exit) + **R7-2** | `:821` is outside the loop and is **not** covered — see P6 |
+| **P4** | **Fill-branch durable write at `:990`**: `tradeId` from `position.metadata` → `storage.updateClosedTrade`, mirroring the DROP branch at `:1004-1009`; `entry_book_age_ms` **NULL by construction** with a column comment | **A3** (seven deleters ⇒ the active row cannot hold it) + **R5-2** | the route is **proven** — the drop branch already uses it |
+| **P5** | `exitProvenance` gains `producer`; `priceAgeMs` → **`tickCadenceMs`**; `observedAtMs` added; **`diffMs` forbidden on every branch** | **A5** (exactly one writer, and it is the `?? 'unknown'` site) + **R7-1/R7-3** | the rename is half the prohibition — the old name was the invitation |
+| **P6** | **OBJ-5 fence keys on the ENUMERATED vocabulary**, not on non-null; covers `:821` and **`active-portfolio-manager.ts:323`/`:338`** | **A5** + **R7-4** | `:805` defaults to `'manual_stop'` ⇒ a null-only fence passes a close **condition** as a provenance |
+| **P7** | **Do NOT touch `core/trading/pending-maker-logic.ts`** | ★ **D** (provenance: *"shared by BOTH engines — parity by construction"*) | ⛔ **an explicit non-change, recorded so a later implementer does not "tidy" the parameter onto the shared pure function and fork the parity** |
+| **P8** | SIM entry for the pending-maker lifecycle's **provenance persistence** | **B** (SIM records the state, is silent on where provenance lives) | owed at Step 10, named now |
+
+⛔ **NOTHING IN THIS PLAN IS `UNAUDITED`.** Every row cites a finding in A-D. **P7 is a deliberate non-change and is listed precisely so its absence from the diff is not read as an oversight.**
+
+## F. RISKS, NAMED
+
+1. ⚠️ **The stamp does not recover the past.** Per **C**, the maker fill rate may itself have been distorted, and **direction and magnitude remain UNKNOWN**. This batch makes it measurable **forward only**. **Any later claim about the historical maker rate must not lean on this stamp.**
+2. ⚠️ **`:821` remains uncovered by the hoist by design** — it is outside the evaluation loop. **P6 handles it at the FENCE rather than by threading a parameter into a force-close path**, because a force-close is precisely where a partially-wired stamp would be least trustworthy.
+3. ⚠️ **Two creators (A2) mean a future third creator inherits the stamp silently and correctly, or silently and wrongly.** The per-branch table is the only thing standing between those outcomes. **A third creator is a scope trigger, not a free extension.**
+
+## G. PLAIN-LANGUAGE SUMMARY
+
+**What the audit turned up.** The active position record — where I had originally planned to write the price provenance — is **deleted from seven different places**, including a cleanup timer, so anything written there is gone. Provenance has to go on the permanent trade record instead. Two separate places create resting orders (crypto and xStock), but only **one** place processes their fills, so a single stamp point covers both — **provided** it records the price source per path, because the two classes get their prices from genuinely different feeds.
+
+**The most useful thing the audit found was my own note from three days ago:** the resting-order fill decision runs on the very price the original defect distorted, so **the fill rate itself may be wrong**, and we have no instrument on it. The stamp is that instrument. It only works going forward — it cannot recover what already happened.
+
+**One deliberate non-change**, written down so it isn't mistaken for an omission: the shared decision logic used by both engines stays untouched, because it was built shared *on purpose* to keep the two engines in step.
