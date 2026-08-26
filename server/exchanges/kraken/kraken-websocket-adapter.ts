@@ -808,8 +808,17 @@ export class KrakenWebSocketAdapter extends EventEmitter {
       // 2026-08-22: ONDO/USD bid=0.40349 ask=0.36411 (+10.8%), XRP/USD +24.9%, ZEC/USD +33%,
       // a dozen pairs. The paper CLOSE fill walks the bid side, so a stop-triggered SELL filled
       // against a bid that did not exist: ONDO stop_hit exited at 0.4033 against a 0.3696 stop,
-      // +8.8% above entry. 26 such exits lifetime = +$187.78 of phantom profit; the real crypto
-      // book is -$6.08. The mid (bestBid+bestAsk)/2 was poisoned the same way.
+      // +8.8% above entry. The mid (bestBid+bestAsk)/2 was poisoned the same way.
+      // ⛔ A MONEY FIGURE THAT USED TO SIT HERE IS WITHDRAWN AND IS NOT RESTATED. This comment
+      // asserted "26 such exits lifetime = +$187.78 of phantom profit". That figure, and two
+      // successors, were withdrawn as unreproducible: they came from instruments that cannot
+      // distinguish an affected trade from an unaffected one, and the control that proves it
+      // (maker exits, which never read the book) sat one GROUP BY away in the same table.
+      // ⇒ READ THE FIGURE AT ITS SOURCE, NEVER FROM THIS COMMENT: `1-system-manual/
+      // CHANGES_AND_FIXES.md` holds the current damage estimate and its bounds. A revisable
+      // number pinned in a code comment becomes a confidently wrong record the moment it moves,
+      // and this one had already moved twice before anyone re-read it.
+      // The MECHANISM above is unaffected and is what this handler is fixing.
       // Root: the 8.9.4-Patch handler predates anything consuming the book; #507 (07-15) deleted
       // a bogus sequence check and named real validation as unbuilt. Truncation is the half of
       // the contract nobody had read.

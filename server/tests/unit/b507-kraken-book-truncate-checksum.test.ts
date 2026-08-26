@@ -8,7 +8,11 @@
  * top-10 was orphaned in the Map forever, a snapshot was merged like a delta, and a dead bid
  * from an earlier higher price sat ABOVE the current real ask. Measured live 2026-08-22:
  * ONDO/USD bid=0.40349 ask=0.36411. The paper close fill walks the bid side, so stop-triggered
- * sells filled against bids that did not exist — 26 such exits, +$187.78 of phantom profit.
+ * sells filled against bids that did not exist.
+ * ⛔ The "+$187.78 of phantom profit" that used to close this line is WITHDRAWN and deliberately
+ * not replaced with a newer figure — see `1-system-manual/CHANGES_AND_FIXES.md` for the current
+ * estimate and its bounds. Three successive figures were withdrawn as unreproducible; restating
+ * any of them here would rebuild the same wrong record one file over.
  *
  * TWO PROPERTIES, each with a control that proves the instrument before its pass counts:
  *  (1) CHECKSUM — Kraken's own published worked example must produce Kraken's own published
