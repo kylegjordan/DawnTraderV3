@@ -609,6 +609,38 @@ The B65.2 functional ship deleted the paper-execution-engine consumption of meta
 - Validate fee/slippage models against actual Kraken fills
 - Validate cost-model accuracy against real Kraken fee schedules
 
+### 21.4 POST-LAUNCH REVISIT — the strong-trend lane's absent volume floor, and the unread half of the order book
+
+**KYLE'S DECISION, 2026-08-27, and the reasoning IS the item:** *"since you've shown me the results of trading these and the fact that it hasn't really caused any damage… let's look at it after we launch. And I get that just because it hasn't become a problem yet doesn't mean it won't ever."* => **DELIBERATELY DEFERRED ON EVIDENCE — not forgotten, and not unexamined.** Investigated in full 2026-08-27; **the investigation is the reason it is deferred rather than fixed.**
+
+**THE STATE.** `crypto_spot` `strong_trend` / `vts_strong_trend` are the ONLY filter paths of nine with `min_volume = 0` **AND** `min_liquidity = 0` (every other crypto path carries 150,000-500,000; **every xStock path carries a 150,000-500,000 `min_liquidity`, including its own strong-trend lane at 500,000**). Pairs with a directional bias >= 0.35 route to that profile and bypass the standard globals — `market-scanner.ts` B63.3, *"the key architectural promise of B63."* Live profile: `minPrice=0.001`, `minVolume=0`, `maxSpread=3%`, `minHistory=5`.
+
+**PROVENANCE — a documented, audited decision whose stated reason was SAMPLE SIZE, not risk.** `BATCH_63_SCOPE.md:58` proposed `volume=$250k`; `BATCH_63_COMPLETION_REPORT.md:197` records *"B63.4 loosened to min_volume=$0 to increase Path D trade count"*; `B64_AUTHORITY_BASELINE_AUDIT` caught it independently as *"1 intentional documented drift."* WARNING: **decided 2026-04-20 — four months before `#741`/`#507` established that thin books produce prices that never traded.** Disposition (2): working as designed, on a design predating the knowledge that changes its calculus.
+
+**NO FLOOR WAS ADDED — THREE INDEPENDENT MEASUREMENTS, ALL NULL** (crypto, opened >= 2026-07-15, banded on entry liquidity):
+
+| band | n | avg net % | mean abs ENTRY slip | mean EXIT slip | mean hold |
+|---|---|---|---|---|---|
+| <100k | 12 | **+2.14** | 0.516% | **0.576%** | 17.9h |
+| 100-250k | 12 | -1.27 | 0.137% | 0.865% | 6.4h |
+| 250-500k | 48 | -0.55 | 0.027% | 0.290% | 5.8h |
+| >500k | 218 | +0.45 to +1.23 | **1.184%** | **1.060%** | 7.5h |
+
+**The thinnest band is the BEST performer, has BETTER exit slippage than the deepest band, and shows no exit difficulty.** Thinnest symbol actually traded: **$25,858** daily volume. WARNING: **the >500k arm is inflated by the phantom-fill rows, so treat it as an upper bound — that only strengthens the direction.** A $100,000 floor was proposed and **WITHDRAWN**: it would have cost 12 of 290 trades (4.1%) to solve a failure that has not occurred. **A number chosen only so as not to be zero is a fitted-to-nothing constant.**
+
+**THE BETTER INSTRUMENT, ALREADY ~90% BUILT — this is what to pick up post-launch.** `depth-source.ts:129` `assessSufficiency(snap, side: 'asks'|'bids', orderNotional, config)` is **already side-generic** (`cumulativeNotional(side === 'asks' ? snap.asks : snap.bids)`), pure and unit-tested; `getDepthSnapshot` returns **both sides plus `ageMs`** in one call for **both** asset classes; `active-execution-engine.ts:249-251` already calls it at the open seam and already blocks the open. **Repo-wide it has exactly ONE non-test call site, and it passes `'asks'`. The bid side is never assessed anywhere.**
+=> **The unread half of the book IS the feature.**
+
+**KYLE'S FRAMING, RECORDED AS THE CORRECT ONE:** the book is looked at **ONCE**, before the trade, and **both sides are visible in that same snapshot** — so *"can we get in"* and *"what could we sell into"* are **one question asked at one moment**, not an entry check plus a later exit check. (CC-C's original "exit-side check" phrasing implied a second event and was wrong.)
+
+WARNING: **VERIFIED LIVE 2026-08-27, because the belief that this was xStock-only was WRONG.** Opens since the entry stamp deployed carry `entry_book_age_ms` populated with `entry_price_source = crypto_ws_book` (crypto) **AND** `xstock_ticker_snap` (xStock). **The depth gate runs on BOTH classes today.** A third row shows a maker fill with NULL book age — correct by construction, and the built-in control: a resting fill consults no book. *(That proof exists only because `B-EXIT-PROVENANCE`'s entry stamp shipped 2026-08-26; before it, there was no way to demonstrate the gate had run.)*
+
+**TWO LIMITS THAT MUST TRAVEL WITH THIS ITEM:**
+1. **Depth at entry does not predict depth when the stop fires 6-18h later.** It screens what is thin *now*; it is **not** a guarantee of exitability.
+2. **It CANNOT be costed in advance** — bid-side depth at entry is not retained, so nobody can say how many trades it would block. **Ship OBSERVE-ONLY first** (log what it would have blocked, no behaviour change), read it, then set the threshold from measured data. **That is precisely the discipline whose absence produced the withdrawn $100,000.**
+
+**OWNER: CC-C. PLACEMENT: here, Phase 21, after live activation — Kyle's explicit call.** No date, per section 9.4. Related: `#563` (venue-resting exit — the structural answer to in-process stops), `#741`, `#507`.
+
 ### 21.3 Live Mode Guardrails
 - **21-3a (NEW, P19-B6.8a 2026-06-30 — RUNNING_ISSUES #401): add the "Live Guardrails" tab to the Guardrails & Filters page** — a one-liner now that `CoreFourGuardrails` takes a required `mode` prop: a `TabsTrigger value="guardrails-live"` + `<CoreFourGuardrails mode="live" />`. P19-B6.8a pinned the existing tab to PAPER ("Paper Guardrails"), so **live-mode guardrails are currently UI-uneditable** — this item restores live-guardrail editability and MUST land before live active trading turns on. Deliberate interim gap (CC-B + Langston Step-4 consensus): acceptable only because live is dormant until this phase. **★ Two mode-leaks to fix when building the live instance (Langston Step-8 note + CC-B trace 2026-06-30) — `CoreFourGuardrails` is a SHARED subcomponent, so before rendering it with `mode="live"`: (1) the "Current Balance = $X" shown in the guardrail descriptions comes from a HARDCODED `fetch('/api/paper-sim/portfolio-summary')` (`core-four-guardrails.tsx:167`) — make it mode-aware (live needs the live portfolio summary, not paper-sim) or the live tab will display the paper balance; (2) confirm no warn-tier / guardrail copy string hardcodes "paper" (today it derives from the prop — keep it that way). The mode HEADER + tab label already derive from the prop, so those are safe.**
 - **21-3b (NEW, P19-B6.9 2026-06-30 — RUNNING_ISSUES #398/#396): calibrate the go-live WS-readiness gate's uptime threshold vs. the rolling-window granularity.** B6.9 fixed the #398 drift (parity-gate WS uptime is now a rolling-1h window via `feedIntegrityMonitor.getRollingWindowReadiness()`, denominator = snapshots present, NOT cumulative-since-boot). But the existing **99% floor** (`parity-gate.thresholds.minWsUptime`) interacts with the 12-snapshot/1h granularity: one reconnect in the last hour → (1−1/12)×100 = 91.7% → fails the gate, i.e. ANY reconnect/hour currently blocks go-live. Decide at go-live whether that's the intended bar or whether to relax (e.g. allow-1-reconnect, or a finer sub-snapshot reconnect window). Also confirm `MIN_READINESS_SAMPLES=6` (30-min warm-up before the gate is assessable) is the right go-live warm-up. **This is a THRESHOLD-calibration decision, not a bug** — B6.9 deliberately did NOT re-tune the floor (gate dormant until this phase). Pairs with the existing parity-gate validation below.
