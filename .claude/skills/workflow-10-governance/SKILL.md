@@ -78,6 +78,13 @@ description: STEP 10 ONLY of the DawnTrader batch workflow - Governance Updates.
 1. **WHAT DATA CAME IN** — the observation’s actual result, set **against the criterion the report pre-registered** (quote the criterion as written, then the outcome).
 2. **WHAT DECISION OR ACTION WAS TAKEN ON IT** — and by whom. ⛔ **A completion report that states the data and not the decision has not closed the loop.**
 Then complete the objectives table and the governance-files list. ⛔ **You do not write a fresh report from memory** — the whole point is that the evidence was captured while it was fresh.
+⛔⛔ **BEFORE THAT — HOW THIS SITS WITH THE ALERT-GATED CLOSURE WE ALREADY USE. THEY COMPOSE; NEITHER REPLACES THE OTHER (Langston condition 1, 2026-08-27).**
+
+⚠️ **THIS RULE AS FIRST WRITTEN WOULD HAVE RETROSPECTIVELY MIS-CLOSED BATCHES HE HAD ALREADY RATIFIED.** Measured counterexamples at the ref: **`P19-B8.5l` CLOSED 2026-07-27** with OBJ-3’s fence deferred to a named alert · **`B-MBIM-SWITCH-ON` CLOSED 2026-08-24** with the retention flip still armed · and two alerts live right now carrying owned exit criteria. **Under the bare text, every one of those was closed wrongly. They were not.**
+
+★ **THE DISPOSITION: THE SELF-RESCHEDULING ALERT IS THE WINDOW’S *TIMER*; THE PROGRESS REPORT IS ITS *RECORD*.** One fires; the other remembers. ⇒ **A batch may close with a genuinely deferred item PROVIDED the alert carries the criterion and the result is written back when it fires.** ★ **And that supplies the mechanism the sentence below otherwise lacks** — *"it must never quietly wait forever"* is a wish until something re-fires on its own.
+⛔ **PROSPECTIVE ONLY. This does not reopen a single closed batch.**
+
 ⛔ **AND THE BATCH IS NOT CLOSED UNTIL THAT CONVERSION HAPPENS.** A progress report is an OPEN state. The delivery-board card stays out of `Complete`, and the `RUNNING_ISSUES` entry stays open.
 ⚠️ **IF THE OBSERVATION FAILS ITS CRITERION, THAT IS A RESULT, NOT A DELAY** — it converts to a completion report recording the failure and what follows, or the batch reopens at the step that needs redoing. **It must never quietly wait forever.**
 

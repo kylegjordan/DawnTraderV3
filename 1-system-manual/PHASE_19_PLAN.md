@@ -431,6 +431,7 @@ ALL must be ✅ before the flip commit. Verify each at the **B8 switch-on** Step
 | 1 | **`B-RULES-1e`** — mechanisms for three rules followed zero times (#739, #740, #741-CC-A) | CC-A | **IN FLIGHT, Step 2 with Langston** | — |
 | 2 | **`B-GOV-REPORTING`** — the reporting + progress-report rules landed 2026-08-26 | CC-A | **PUSHED, UNREVIEWED — gate owed** | goes to Langston as its own gate; **does not wait for 1e**, but is dispatched AFTER it so he holds one of mine at a time (#741) |
 | 3 | **`B-GATE-GUARD`** (#744) + **`B-ISSUE-BLOCK-GUARD`** (#745) — one hook, two checks | CC-A | queued | after `B-RULES-1e` ships, because both are the same hook family and 1e sets the CI-job precedent (audit A4) |
+| 5 | **`B-CLAUDEMD-SLIM`** — the always-loaded file is **112 KB, ~64% of everything a session loads before it acts** | CC-A | **NAMED, NOW PLACED** | ★ **Placed 2026-08-27 on Langston’s rider, applying the rule shipped the same day: it was NAMED for weeks and never given a position, which is the exact failure §9.4 now forbids.** Follows the guard batches — it is the largest single lever on context and the least urgent. |
 | 4 | **`B-CREW-BOARD-REMOVAL`** — retired board code + the unroutable `CC-INFRA` owner alias | CC-A | **gated on KYLE** | follows Infra Claude’s onboarding. **Not a date — a dependency.** |
 
 ⚠️ **#2 IS PLACED HONESTLY, NOT FLATTERINGLY: its changes are ALREADY LIVE AND UNREVIEWED.** The position states the gate is owed rather than pretending the work is pending.
