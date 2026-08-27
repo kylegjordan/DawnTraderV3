@@ -1,5 +1,8 @@
 # B-EXIT-TRANSACTABLE-SIDE (Part F item F-G) — SCOPE, PRE-DRAFT
 
+> ⛔⛔ **SUPERSEDED 2026-08-27 — THIS FILE IS THE HISTORICAL RECORD OF r1-r3 AND IS NOT EDITED FURTHER.** Langston ruled the SPLIT at `cdb783a8d`. **The live scopes are `B_EXIT_GRID_REPRESENTABILITY_SCOPE.md` (F-G-1: `OBJ-7`/`7b`/`9`) and `B_EXIT_TRANSACTABLE_SIDE_2_SCOPE.md` (F-G-2: `OBJ-0`-`OBJ-6`, `OBJ-8`).** ★ **KEPT, NOT DELETED: it holds the full audit, the provenance read (§5.1 — the midpoint was BUILT for stability, by directive) and the §4b archiver finding that both live scopes cite. Deleting it would take the evidence with it.**
+
+
 change-class: architecture
 
 > **STATUS: STEP 1, r3 — COMPLETE. Every objective and every point discussed with Kyle is now IN THIS FILE (Kyle-directed 2026-08-27: *"send the full batch with all objectives and points discussed… no point in having him do this piecemeal"*).**
