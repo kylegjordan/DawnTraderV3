@@ -2882,6 +2882,30 @@ The COMMITTED copy carries the five **pre-Phase-14 regime keys** (`BULL_STABLE`/
 
 ---
 
+### #750 OPEN 2026-08-27 (CC-A; found answering Kyle’s question *"are there skills we planned and never created?"*) — ★★ **AN ALWAYS-LOADED RULE TELLS EVERY SESSION TO LOAD A SKILL THAT DOES NOT EXIST, AND CITES A BATCH THAT HAS ALREADY CLOSED WITHOUT BUILDING IT.**
+
+**HOME: `B-BUG-INVESTIGATION-SKILL`, owner CC-A, PLACED at `PHASE_19_PLAN.md` §governance queue, position 4** (before `B-CLAUDEMD-SLIM` — the slim will move MORE rules into skills, and this proves the pattern completes). ⛔ No date (§9.4).
+
+**`CONDUCT.md:145`, auto-loaded into every session on every start, resume and compaction:**
+> *"When you think you have found a bug, **load the bug-investigation skill**. ⚠️ **THE SKILL IS NOT BUILT YET — until B-RULES-1d lands**, read `1-system-manual/_pending-skills/bug-investigation-SOURCE.md`."*
+
+⛔ **`B-RULES-1c / 1d` CLOSED 2026-08-25** (`BATCH_CATALOG.md:611`). **The skill was never built.** The staged source is still sitting in `_pending-skills/` — the only file in that directory.
+⇒ **The pointer is now FALSE in the precise way it was written to avoid.** Its own caveat says *"until B-RULES-1d lands"* — **1d landed.** A compaction-fresh session reads that sentence today and is told the skill is imminent. It is not; **its batch closed two days ago and nobody noticed the obligation had not been discharged.**
+
+★ **THIS IS THE SHAPE THE CAVEAT WAS ADDED TO PREVENT, ONE LEVEL UP.** Langston made me add that fallback at Step-4 precisely so a fresh session would not be sent to a home that does not exist. **The fallback works — the staged file IS there and IS readable.** What failed is that **the caveat’s own expiry condition came true and nothing checked it.** ⚠️ **A pointer with a stated expiry needs something that FIRES at the expiry** — same family as `#739`: an obligation nothing re-checks is a hope.
+
+**AND THE ANSWER TO KYLE’S ACTUAL QUESTION, from the `B-RULES-1d` scope §3 candidate list:**
+| planned skill | state |
+|---|---|
+| the eleven workflow steps + hotfix | ✅ **BUILT** (12 skills, 2026-08-21) |
+| **error / bug investigation** | ⛔ **NOT BUILT — staged only.** This issue. |
+| a mistake-and-correction skill | ✅ **satisfied differently and correctly** — shipped as `MISTAKE_PATTERNS.md` + `CONDUCT.md` §13 under `B-MISTAKES-FILE`. **A document, not a skill, and that was the right call: §13 must fire UNPROMPTED, and the 1d scope’s own finding (B) says a rule that must fire unprompted is doubly wrong as a skill.** Not a gap. |
+| database/table searching | ⚠️ **Kyle directed it into BOTH pre-audit and error-investigation.** The pre-audit half exists; **the error-investigation half cannot exist until that skill does.** Rides this batch. |
+
+⇔ `#739` (an obligation nothing re-checks) · `B-RULES-1d` (which owed this and closed without it).
+
+---
+
 ### #749 OPEN 2026-08-27 (CC-A; **CC-INFRA reported the symptom to Kyle, Kyle asked for a RULE, and the measurement says a rule would fix ONE POST IN FOUR HUNDRED**) — ★★ **UNADDRESSED DISCORD POSTS WAKE EVERY SESSION — AND 99% OF THEM ARE CONTINUATION CHUNKS, NOT CARELESS MESSAGES.**
 
 **HOME: `B-COMMS-CHUNK-ADDRESS`, owner CC-A, PLACED at `PHASE_19_PLAN.md` §governance queue, position 3** (with the guard batches — same comms-infra tree, same kind of change). ⛔ No date (§9.4).
@@ -2907,7 +2931,8 @@ The COMMITTED copy carries the five **pre-Phase-14 regime keys** (`BULL_STABLE`/
 ★ **THE FIX IS NARROW AND THE MACHINERY ALREADY EXISTS: stamp the recipient on EVERY chunk of ANY multi-chunk post, not only Langston-addressed ones.** One conditional is drawn too narrowly. **No new subsystem, no new rule for anyone to remember.**
 ⚠️ **AND A RULE WOULD HAVE BEEN WORSE THAN USELESS HERE:** it would have read as fixing the problem, produced no measurable change, and left the actual cause untouched — while every session carried a new instruction. **That is the "more instruction is not the fix" thesis of `B-RULES-1e`, arriving from outside it.**
 
-**STILL WORTH DOING, separately and cheaply:** the ONE standalone case is real, and `cc-send` is the natural enforcement point — **a dispatcher that refuses an unaddressed message is a mechanism; a rule about addressing is a request.** Fold into the same batch.
+⛔ **KYLE RULED 2026-08-27: NO RULE, AND NO DISPATCHER CHECK EITHER. FIX ONLY THE CHUNKING.** His words: *"if it’s only happened once or just a few times, then it’s not a real problem. The fix is to widen the same message method that we’re using for Langston to cover all the messages we’re sending, so that when a message is long and has to be split, the recipient is still named at the top of the second and third and fourth split messages."*
+★ **HE IS RIGHT AND IT IS THE SHARPER VERSION OF MY OWN FINDING.** I had measured that a rule would fix 1 post in 400 — and then proposed building a `cc-send` refusal for that same single case. **A mechanism built for n=1 is the same error as a rule built for n=1**, just harder to remove later. ⇒ **THE BATCH IS ONE CHANGE: widen the chunk stamping. Nothing else.**
 
 ⇔ `#553` (the chunk-group reassembly that established this machinery for the Langston path) · `CLAUDE.md` §6.4/§6.9 wake routing.
 
