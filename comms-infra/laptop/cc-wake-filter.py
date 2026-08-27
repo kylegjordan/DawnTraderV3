@@ -59,6 +59,11 @@ def is_routine_push_notice(sender, text):
         return False
     return bool(_ROUTINE_PUSH.match((text or "").strip()))
 MY_RE = re.compile(r"@?\b(" + "|".join(NAMES.get(ALIAS, [])) + r")\b", re.I)
+# ★ EXPLICIT ALL-HANDS, for a session post that genuinely concerns every session (a shared-file
+# change, a protocol switch). Required BECAUSE the crew-post default became name-or-nothing
+# below: without this, a real announcement could be silently swallowed, and silence that looks
+# like agreement is the failure mode this file fears most.
+CREW_ALL_RE = re.compile(r"@crew\b|\bALL SESSIONS\b", re.I)
 OTHERS_RE = re.compile(
     r"@?\b(" + "|".join([p for k, v in NAMES.items() if k != ALIAS for p in v] + ["langston"]) + r")\b", re.I)
 # B-ALERT-PROTOCOL (#340): a system-alert triage reply ends with an owner marker
@@ -313,7 +318,19 @@ for raw in sys.stdin:
                 if is_routine_push_notice(sender, text):
                     continue
                 if sender and sender != MY_NAME:
-                    deliver, body = addressed_to_me(text)
+                    # ⛔ NAME-OR-NOTHING (Kyle 2026-08-26). This used addressed_to_me(), whose
+                    # no-name-mentioned case BROADCASTS — so a session narrating its own batch, or
+                    # talking to the reviewer, woke every other session. MEASURED over 4,000 rows:
+                    # 466 of 2,234 crew posts (21%) named nobody, each waking three sessions —
+                    # ~1,400 avoidable interruptions. Kyle: "I don't want you guys being notified
+                    # of each other's work unless you are deliberately called into that work."
+                    # ★ THE REVIEWER'S BRANCH ABOVE ALREADY WORKS THIS WAY — it wakes only on an
+                    # explicit tag or on your name, never on a plain reply. This makes the crew
+                    # branch consistent with it rather than inventing a new policy.
+                    # ⚠️ KYLE'S OWN POSTS ARE UNCHANGED (the kind=="" branch): an unaddressed
+                    # message from him still reaches everyone, because he means it.
+                    deliver = bool(MY_RE.search(text) or CREW_ALL_RE.search(text))
+                    body = text
                     if deliver:
                         print(f"WAKE[{sender} via {tp}->{ALIAS}]: {body}{media_suffix(d)}", flush=True)
         else:
