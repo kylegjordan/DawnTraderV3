@@ -10,14 +10,14 @@ change-class: non_architecture
 
 ## 1. WHY THIS EXISTS — AND THE MEASUREMENT THAT MAKES THE CASE
 
-**`CLAUDE.md` loads into every session on every start, resume and compaction.** It is **112,787 B — about 64% of everything a session loads before it does anything.**
+**`CLAUDE.md` loads into every session on every start, resume and compaction.** It is **114,985 B — about 64% of everything a session loads before it does anything.**
 
 ⚠️ **AND THE PREVIOUS SLIM IS BEING GIVEN BACK. Measured from the file's own history:**
 | | |
 |---|---|
 | peak, before the slim (2026-08-21) | 122,354 B |
 | low-water mark after it (2026-08-23) | **108,513 B** |
-| today (2026-08-27) | **112,787 B** |
+| today (2026-08-27) | **114,985 B** |
 
 ⇒ **The slim won 13,841 B. In four days 4,274 B has come back — 31% of the gain.** ⛔ **Nobody was careless: every one of those additions is a Kyle directive or a Langston condition.** The file is simply **the default destination for any new rule**, and nothing competes with it.
 ★ **So the real finding is not "the file is big" — it is that THE FILE GROWS BACK, and a one-off trim does not change that.** This batch removes what already has a home; **it does not solve the regrowth**, and §5 says so.
@@ -55,47 +55,38 @@ change-class: non_architecture
 
 ---
 
-### ⛔⛔ §9.5 — RE-CLASSIFIED (r3). **A FRESH-CONTEXT REVIEWER FOUND CONTENT THAT WOULD HAVE BEEN DESTROYED, INCLUDING THE CLAUSE THE SECTION IS NAMED AFTER.**
+### ⛔⛔ §9.5 — RE-CLASSIFIED B (r4). **THE RECLASSIFICATION HOLDS. THREE OF MY EIGHT MEASURED ABSENCES WERE FALSE, AND LANGSTON CAUGHT THEM.**
 
-**HOW THIS WAS FOUND, because the provenance matters:** Kyle noticed the fresh-context reviewer we designed **had never once been spawned** — the gate was mine. He granted standing approval; **this was run one**, pointed at the claim Langston was about to rule on. ★ **It contradicted a ruling he had already given** (*"the substance is in `workflow-01` + `workflow-02`, condensed — Class A is still safe for §9.5"*).
-⚠️ **THE REVIEWER’S OUTPUT IS A CLAIM, NOT A VERDICT. I RE-DERIVED EVERY ITEM BELOW MYSELF** with `grep -c` against `CLAUDE.md` and both skills, **with a positive control** — `COMPONENT CENSUS AT EVERY HOP` returns 1 in `CLAUDE.md` and 1 in `workflow-02`, so the query works and the zeros are real absences.
+⛔⛔ **STATED FIRST BECAUSE I ASSERTED THE OPPOSITE TO HIM: I told Langston *"I re-derived all eight at the ref with a control."* THAT CLAIM WAS FALSE, and it was the load-bearing one.** He re-derived at `49731af9f` and returned three present; **I verified all three myself before accepting, and he is right on every one:**
+| my score | the truth, verified by me at `49731af9f` |
+|---|---|
+| *"frozen historical record"* — **0/0** | **PRESENT**, `workflow-01-scope/SKILL.md:56`, verbatim in the parenthetical |
+| rule 22, *"an asserted absence needs presence-evidence"* — **0/0** | **PRESENT** twice — `workflow-02:61` verbatim, and `workflow-01:57` in its provenance-scoped form |
+| the five `bridge/canonical/` documents — **0/0** | **PRESENT**, `workflow-02:47`, all five |
 
-**MEASURED — present in `CLAUDE.md`, ABSENT from BOTH skills:**
-| clause | CLAUDE.md | wf-02 | wf-01 |
-|---|---|---|---|
-| *"tracing forward from one entry point structurally CANNOT discover a second entry point"* | 1 | **0** | **0** |
-| *"enumerate every scheduler, timer, clock subscription, service `.start()`, bootstrap call, cron and event subscription FIRST, repo-wide"* | 1 | **0** | **0** |
-| *"state each list in the audit"* | 1 | **0** | **0** |
-| *"the canonical corpus is a frozen historical record and is NOT edited"* (+ the obligation to update SIM / System Manual instead) | 1 | **0** | **0** |
-| the `rule 22` citation — *asserted absence needs presence-evidence* | 2 | **0** | **0** |
-| the five named `bridge/canonical/` files | 1 | **0** | **0** |
-| *"(does mechanism 2 respect mechanism 1’s in-flight guard?)"* | 1 | **0** | **0** |
-| *"The synthesis is the point, not the inventory"* + the four history-doc pointers | 1 | **0** | **0** |
+★★ **WHY MY CONTROL PASSED AND THE MEASUREMENT WAS STILL WRONG — THIS IS THE FINDING, AND IT IS BIGGER THAN THE BATCH.** My control was `COMPONENT CENSUS AT EVERY HOP`, **a phrase copied VERBATIM.** It proved the instrument could find an exact string. **But the claim was whether the CONTENT SURVIVED, and content survives as PARAPHRASE:** the five canonical documents are at `workflow-02:47` as *"the architecture/execution-flow, current-state-reference, project-history, invariants and phase-history documents"* — **descriptions, not the filenames I grepped for.**
+⇒ **THE CONTROL PROVED RELIABILITY AND I READ IT AS VALIDITY** — the exact §6b failure, committed inside the batch that diagnosed it, by the session that wrote the diagnosis.
+⇒ ★ **LANGSTON’S RULE, ADOPTED: THE FRESH REVIEWER GENERALISES AS A *FINDER*, NOT AS A *MEASURER*.** My own §2 says no matcher can decide duplicate-vs-move and the instrument must be reading and judging — **and then I put a `grep -c` column under §9.5.** ⛔ **A `grep -c` can never answer "did this content survive"; it answers "does this string appear."**
+✅ **AND IT IS THE EMPIRICAL CASE FOR HIS CONDITION (i), ONE HOUR AFTER HE SET IT: a reviewer HIT is a LEAD, re-derived at the ref before it moves anything. Three of eight hits were false.** Had the cut run on the reviewer's output, three items would have been duplicated into skills that already hold them — **the #641 two-copies shape, self-inflicted, inside a de-duplication batch.**
 
-★★ **THE FIRST TWO *ARE* THE ENTRY-POINT ENUMERATION — the phrase in the section’s own title — and they are in neither skill.** Not trimmed evidence: **a standing instruction to enumerate every scheduler, timer, `.start()`, bootstrap, cron and event subscription BEFORE tracing.** That is the exact discipline whose absence let the RTB dual-mechanism run seven months through two audits.
+**THE CARRY-ACROSS LIST, CUT TO WHAT ACTUALLY SURVIVES — THREE ITEMS, NOT EIGHT:**
+| # | what is genuinely absent | why it carries the reclassification alone |
+|---|---|---|
+| 1 | the **enumerate-FIRST, repo-wide** ORDERING and its structural rationale | `workflow-02:61` has the list (`timers, clock subs, .start(), bootstrap, cron`) **as one column of the census** — not as a PRIOR repo-wide step. ★ **The census is what you do AFTER you have already picked an entry point; the ordering is the whole point of the rule.** |
+| 2 | *"tracing forward from one entry point structurally CANNOT discover a second entry point"* | the structural reason the ordering exists; absent from both skills |
+| 3 | the **TRIGGER breadth** | §9.5 fires on *"ANY audit, pre-audit, **or architectural dispute**"*; both skills fire *"STEP 1/2 ONLY"*. ⛔ **It fails toward SILENCE — a dispute outside a batch step reaches no rule at all.** |
+**PARTIAL, NOT ABSENT (do NOT carry, per Langston):** the scheduler list (`wf-02:61`) and the in-flight-guard parenthetical, whose general form is at `wf-02:62` — *"two or more schedulers over one component require a mutual-exclusion check."*
+⚠️ **Honest tally: 3 present · 2 partial · 3 stand.** ★ **The reclassification A → B survives on those three, and item 3 is the one neither of us had before the reviewer ran** — which is why the mechanism is kept, as a finder.
+⚠️ **THE §9.5 CITATION COUNT: THREE MEASUREMENTS, THREE ANSWERS, AND NONE OF US STATED A POPULATION.** r3 said **290/103**; Langston said **293/112**; **mine now, object and population stated: `git grep -c '§9\.5' 49731af9f -- '*.md'` → 286 lines across 106 files** (control: `ENTRY-POINT ENUMERATION` → 5/5, so the instrument discriminates). ★ **The spread is almost certainly sub-citations (`§9.5(a)`, `§9.5(b-ii)`) and the `*.md` restriction — which is exactly the point: a bare number with no population produces three different truths.** **Magnitude is what carries the argument here (≈300 inbound citations, do not renumber), and none of the three changes a decision.**
 
-⛔ **AND A NARROWING NOBODY HAD NOTICED. §9.5 reads, verbatim: *"Two mandatory steps for ANY audit, pre-audit, **or architectural dispute** touching a subsystem."* Both skills fire ONLY at their own numbered step** (*"STEP 1 ONLY"* / *"STEP 2 ONLY"*). ⇒ **a standalone audit, or an architectural dispute outside a batch, would lose the discipline entirely. That fails toward SILENCE**, which is the direction that costs us.
-
-⚠️ **THE ADDRESS PROBLEM, separate from the substance and measured: `§9.5` is cited 290 times across 103 files.** Cutting the section leaves every one of those resolving to nothing — **true even if every clause had travelled.**
-
-★ **AND ONE OBSERVATION I PASS ON AS THE REVIEWER’S, NOT MINE:** both skills declare their **`§2` verbatim block authoritative over their own summary** — *"a derivation is not the rule."* **All §9.5 material sits in the summary halves.** So even where present, it lives in the half each file says is non-binding.
-
-⇒ **REVISED PLAN FOR §9.5 — CLASS B, and the cut is the LAST step, not the first:**
-1. **CARRY ACROSS to `workflow-02`, verbatim:** the entry-point-enumeration clause, *"state each list in the audit"*, the in-flight-guard parenthetical, the `rule 22` citation, the frozen-corpus + update-current-docs obligation, and the five named canonical files.
-2. **WIDEN THE TRIGGER** so the discipline reaches a standalone audit or dispute — **it belongs in the `bug-investigation` skill C-1 builds**, which is exactly the *"ANY audit"* case with no home today. ★ **C-1 and this are now coupled: neither ships without the other.**
-3. **KEEP A POINTER AT §9.5’s ADDRESS** so the 290 citations resolve. ⛔ **Do not delete the anchor.**
-4. **ONLY THEN cut the body**, re-verified clause by clause with the control above.
-
-★★ **AND THE STANDING LESSON, which outlives this batch: "the substance is there, condensed" IS A JUDGEMENT, AND IT WAS MADE BY THE TWO PEOPLE WHO ALREADY BELIEVED THE MOVE WAS SAFE.** A reader with no memory of forming that belief produced a list of eight specific absences in one pass. ⚠️ **One run, one claim, and it is the run I chose — that is a positive result, not proof the mechanism generalises.**
-
----
+*(Minor: his line citations run one high throughout — `:57/:62/:48` against my verified `:56/:61/:47`. Stated, not decision-bearing.)*
 
 ### CLASS C — TWO THINGS THIS BATCH **BUILDS**, not moves (Kyle directive 2026-08-27)
 
 > ⚠️ **BOTH WERE FOUND BY THIS BATCH’S OWN SCAN AND I FIRST PARKED THEM AS SEPARATE QUEUED BATCHES. Kyle’s correction: *"don’t just tell me about the fact that we don’t have a skill file for it, and then not actually propose or plan to fix it in the scope."*** ★ **That is the `#9.4` failure one level up — naming a defect and giving it a queue slot READS as handling it. Reporting is not proposing.**
 
 #### C-1 — **BUILD the bug-investigation skill** *(#750)*
-**`CONDUCT.md:145` tells every session, on every start, to *"load the bug-investigation skill"* — and the skill does not exist.** Its own caveat reads *"until `B-RULES-1d` lands"*; **`B-RULES-1d` closed 2026-08-25 without building it.** The source has been staged at `1-system-manual/_pending-skills/bug-investigation-SOURCE.md` since — the only file in that directory.
+**`CONDUCT.md:147` tells every session, on every start, to *"load the bug-investigation skill"* — and the skill does not exist.** Its own caveat reads *"until `B-RULES-1d` lands"*; **`B-RULES-1d` closed 2026-08-25 without building it.** The source has been staged at `1-system-manual/_pending-skills/bug-investigation-SOURCE.md` since — the only file in that directory.
 **BUILD:** the skill, from that staged source, at `.claude/skills/bug-investigation/`. **Then DELETE the staged file** — `B-RULES-1d`'s own instruction, never carried out.
 ★ **AND IT CARRIES A PIECE THAT HAS NOWHERE ELSE TO LIVE:** Kyle directed database/table searching into **both** the pre-audit and error-investigation skills. **The pre-audit half exists; the other half has had no home to go to.**
 **THEN:** `CONDUCT.md` §9's pointer loses its *"not built yet"* caveat and its dead batch reference — **which also frees bytes in the capped file.**
