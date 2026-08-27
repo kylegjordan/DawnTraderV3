@@ -2884,7 +2884,7 @@ The COMMITTED copy carries the five **pre-Phase-14 regime keys** (`BULL_STABLE`/
 
 ### #750 OPEN 2026-08-27 (CC-A; found answering Kyle’s question *"are there skills we planned and never created?"*) — ★★ **AN ALWAYS-LOADED RULE TELLS EVERY SESSION TO LOAD A SKILL THAT DOES NOT EXIST, AND CITES A BATCH THAT HAS ALREADY CLOSED WITHOUT BUILDING IT.**
 
-**HOME: `B-BUG-INVESTIGATION-SKILL`, owner CC-A, PLACED at `PHASE_19_PLAN.md` §governance queue, position 4** (before `B-CLAUDEMD-SLIM` — the slim will move MORE rules into skills, and this proves the pattern completes). ⛔ No date (§9.4).
+**HOME: `B-CLAUDEMD-SLIM` OBJ C-1 — owner CC-A — PLACED at `PHASE_19_PLAN.md` §governance queue, position 5.** ⚠️ **ABSORBED 2026-08-27 (Kyle), same correction as `#749`.** ★ **And it belongs here on the merits, not only by his instruction: the slim MOVES MORE RULES INTO SKILLS, so a batch that leaves one staged-but-unbuilt would be shipping the very pattern it depends on, broken.** ⛔ No date (§9.4).
 
 **`CONDUCT.md:145`, auto-loaded into every session on every start, resume and compaction:**
 > *"When you think you have found a bug, **load the bug-investigation skill**. ⚠️ **THE SKILL IS NOT BUILT YET — until B-RULES-1d lands**, read `1-system-manual/_pending-skills/bug-investigation-SOURCE.md`."*
@@ -2908,7 +2908,7 @@ The COMMITTED copy carries the five **pre-Phase-14 regime keys** (`BULL_STABLE`/
 
 ### #749 OPEN 2026-08-27 (CC-A; **CC-INFRA reported the symptom to Kyle, Kyle asked for a RULE, and the measurement says a rule would fix ONE POST IN FOUR HUNDRED**) — ★★ **UNADDRESSED DISCORD POSTS WAKE EVERY SESSION — AND 99% OF THEM ARE CONTINUATION CHUNKS, NOT CARELESS MESSAGES.**
 
-**HOME: `B-COMMS-CHUNK-ADDRESS`, owner CC-A, PLACED at `PHASE_19_PLAN.md` §governance queue, position 3** (with the guard batches — same comms-infra tree, same kind of change). ⛔ No date (§9.4).
+**HOME: `B-CLAUDEMD-SLIM` OBJ C-2 — owner CC-A — PLACED at `PHASE_19_PLAN.md` §governance queue, position 5.** ⚠️ **ABSORBED 2026-08-27 (Kyle). It was first filed as its own queued batch, and he was right that this reads as handling it: *"don’t just tell me about the fact... and then not actually propose or plan to fix it in the scope."* ★ A queue slot is not a plan.** ⛔ No date (§9.4).
 
 **THE SYMPTOM IS REAL AND CC-INFRA WAS RIGHT TO RAISE IT.** A post with no recipient name broadcasts: **every armed session wakes.** That is the designed behaviour of the wake filter (no name = broadcast), and it is disruptive at volume.
 
