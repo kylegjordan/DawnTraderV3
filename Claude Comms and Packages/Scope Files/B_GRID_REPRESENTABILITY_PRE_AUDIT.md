@@ -131,6 +131,10 @@
 - **LEG 2 — REACH (what window did I actually search?):** `/var/log/dawntrader/error*.log` — **15 files, daily rotation, `error__2026-08-14_00-00-00.log` through the live `error.log`** (retain = 14 + current).
 - **LEG 3 — INVOCATION (did the ticker writer run at all in that window?): YES** — the 191,433 `ticker-writer` lines. **A valid control, for a different question than the one I first used it for.**
 
+⛔⛔ **AND THE MAGNITUDE THAT FALLS OUT OF THE SAME GREP, STATED BEFORE ANYONE READS A NUMBER INTO THIS BATCH: `ticker-writer` flush-failed = ZERO across the entire 14-day reach**, with the `batch-writer` arm of the *identical* grep returning **5,908** as the positive control (Langston's count on staging at ruling time; mine was 5,897 hours earlier — the corpus is live and still accumulating).
+
+⇒ ⛔ **THE UNRECOVERABLE LEG HAS NO MEASURED OCCURRENCE IN REACH. `P1`–`P8` ARE PROPHYLACTIC ON IT.** ★ **That is the right call — the exposure is a total, silent, multi-hour loss on a leg with no re-fetch — but NOBODY MAY SIZE THIS BATCH AS REALIZED LOSS.** ⚠️ **The realized figure on the traded classes remains 6 `crypto_spot` + 2 `xstock_spot` + 7 pool-slot timeouts, and no measurable restart loss at n=4.**
+
 ⇒ **CONCLUSION UNCHANGED, now properly evidenced: `#705`'s core — the unrecoverable ticker instance — is unsized because it HAS NOT FIRED in the retained window, NOT because I mis-split the number.**
 
 **MEASUREMENT 2 (his requirement 2 — the bar-continuity check across a known deploy). ANSWER: NO DEFICIT AT FOUR RESTARTS. MY OWN HYPOTHESIS IS NOT SUPPORTED.** Restarts at `2026-08-26 18:09 / 18:20 / 18:43` and `2026-08-27 10:01` UTC, `crypto_spot_ohlc_1m` bars in the restart minute vs its ±6-minute neighbours:
