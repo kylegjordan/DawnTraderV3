@@ -78,4 +78,69 @@ Declared now so it cannot be chosen to fit the result:
 
 ## 11. AMENDMENTS
 
-*(None. Any amendment is appended here with its date, what changed, and why — never by editing the sections above.)*
+### AMENDMENT 1 - 2026-08-28, STILL PRE-DATA (Langston Step-1, BLOCKER-2 and answers (a) and (c))
+
+> **Appended, not edited.** Sections 1-10 above stand exactly as written on 2026-08-28. **This amendment is itself pre-data** - no row has been collected, no collector exists - so it changes the design, not the interpretation of a result. That distinction is the whole reason for the append-only rule, and it is the last moment at which it is true.
+
+**WHY THIS AMENDMENT EXISTS, stated plainly because it is the document's own justification:** Langston found that **the primary outcome as written was unobservable for most of the cohort**, and that the out-of-sample test was therefore unevaluable. That defect becomes invisible the moment data starts arriving; it would have surfaced at the 90-day read-out, costing 90 days instead of an afternoon. **This is the property the document was bought for.**
+
+#### A1.1 - THE OUTCOME HIERARCHY IS RESTRUCTURED (BLOCKER-2)
+
+**The defect.** Read-out is 90 days from the first collected row; §5's primary outcome was *still trading at 90 days*. A token born on day *d* has only 90-*d* days of observation, so a day-45 token's primary outcome **never exists**. §8.2 splits by launch date and evaluates on the later half - **which contains zero tokens with an observed primary outcome.**
+
+⛔ **AND §6's CLAIM THAT "censoring is uniform" IS WITHDRAWN AS FALSE.** Fixed ages make the *attempted* observations uniform. Administrative censoring is `read-out - launch date`, which is maximally NON-uniform **and correlated with the split** - the evaluation half is systematically the less-observed half, so outcomes are depressed there by construction and a model that generalised perfectly would read as failing.
+
+**The replacement, adopting Langston's options 1 + 2 together:**
+- **PRIMARY, for the out-of-sample test: GRADUATION.** Fast, near-fully observed across the whole cohort, and - decisively - **the H1/H2 published comparators are already stated in graduation terms** (1.485% vs 0.166%; 1.919% vs 0.110%). The instrument check in §8.1 already runs on this outcome, so the hierarchy now matches the only external answer key we have.
+- **SECONDARY: 90-day survival, treated as RIGHT-CENSORED**, not as a missing value and never as a negative. A token observed for 45 days without dying is *censored at 45 days*; scoring it as "did not survive 90" would be a fabricated negative.
+- **METHOD: explicit survival analysis with launch-date entry** (Kaplan-Meier / Cox), rather than a binary outcome at a fixed horizon.
+
+★ **THIS IS THE MORE IMPORTANT HALF OF THE FIX, and it is about §2 rather than about tokens.** The stated durable prize is case-control **survival** machinery to point at `#596`/`#597` - which are themselves censored problems. **A design that assumes censoring away builds the wrong machinery**, and we would have carried that defect into the population that has no answer key to catch it.
+
+#### A1.2 - TRAIT-CARRIER DEFINITION, IMPORTED NOT INVENTED (answer (a))
+
+**A carrier is a token with ANY advertised social channel present OR initial size above the platform default** - the union of H1 and H2, exactly as the published comparators define them.
+
+★ **The property that matters is not that this definition is better, but that it CANNOT HAVE BEEN FITTED: it was set by other people before our cohort existed.** Anything derived from first principles by me or by Langston is arguable; this is not.
+
+⚠️ **THE ASSUMED PREVALENCE IS PUBLISHED HERE, because §5 of the scope depends on it and the causality was unstated.** The scope's ~19,000 follow-ups/day is *derived from* an assumed carrier prevalence of **~20% of ~20,700 daily launches (~4,140 carriers), plus a 500/day control, each followed across the seven-point grid with attrition.** **If measured prevalence materially exceeds 20%, the traffic rises - the DEFINITION DOES NOT NARROW.** A trait definition quietly tightened to fit a traffic ceiling is trimming with the label moved, and §6's "nothing is trimmed to fit" would become uncheckable.
+
+#### A1.3 - CONTROL GROUP: 500 PER DAY, FIXED NUMBER, WITH ITS ARITHMETIC (answer (a))
+
+**500 non-carriers per day, a fixed count rather than a fixed fraction.** Because §6 takes a **census at birth**, the base rate and denominator come from the census, not the control; the control need only estimate follow-up outcomes among non-carriers, for which stable absolute *n* per day is what is wanted.
+
+**The arithmetic, recorded before day one so the number is derived rather than chosen:** at the published non-carrier graduation rate of 0.166%, **45,000 controls over 90 days yields ~75 expected events** - enough to bound the non-carrier base rate and support §8.3's matched comparison. That is ~2.4% of daily births and ~1,200 follow-up calls/day. ⚠️ **Attrition is accounted for, not ignored: with 68.67% dying on day one, a nominal control of *n* is ~0.31*n* by the 3-day checkpoint.**
+
+**Three binding conditions:**
+1. **Record the daily inclusion probability** (`control_n / non_carrier_births` that day) - a fixed count means unequal inclusion probability across days.
+2. **Inverse-probability weighting is PRE-REGISTERED NOW for any pooled analysis.** Discovering this at analysis time and correcting it then would be a choice that looks fitted - the exact thing this document exists to prevent.
+3. If the arithmetic above proves wrong, **the replacement number must be shown, not asserted.**
+
+#### A1.4 - THE TEMPORAL SPLIT IS KEPT, WITH TWO CONFOUNDS NOW CONTROLLED (answer (c))
+
+Splitting by launch date stands, and a random split is **rejected**: two tokens launched in the same hour share market conditions, and **a serial creator's launches would land on both sides - direct leakage into H3**, the most interesting hypothesis. Temporal is also the honest analogue of deployment.
+
+- **DRIFT CHECK, pre-registered now:** report the base rate and predictor distributions in each half. ⛔ **If the base rate moves between halves beyond the threshold in A1.5, a failed out-of-sample test is declared UNINTERPRETABLE, NOT A NULL.** Declared now precisely because declared later it is an excuse.
+- **WALLET LEAKAGE:** each creator wallet is assigned **entirely to the side of its first launch**. Boundary-crossing wallets are **not dropped** - serial launchers *are* the H3 signal.
+
+#### A1.5 - THE STOP RULES GET NUMBERS (Langston condition 3)
+
+§9's conditions were adjectives - *"large enough"*, *"materially below"*, *"indistinguishable from"* - and an unquantified stopping rule can be satisfied after the fact, which is the one thing this document exists to prevent. Replaced, before any data:
+
+| §9 condition | now |
+|---|---|
+| discovery lag too large | **median first-sight minus on-chain-creation > 60s**, or **>5% of births exceeding 300s** |
+| coverage materially below the independent count | **indexed count < 95%** of the audited count in the §A1.6 window, on **3 or more days in any rolling 7** |
+| separation indistinguishable from base rate | out-of-sample graduation lift **< 2.0x** with a 95% interval spanning 1.0 |
+| drift makes the split uninterpretable (A1.4) | between-half base-rate ratio **outside 0.5x-2.0x** |
+
+#### A1.6 - THE COVERAGE CONTROL IS REPLACED (answer (d))
+
+**§7's control does not reach, and it fails in the flattering direction.** The aggregator proposed as the independent count **cannot see bonding-curve tokens' pools** - which is the entire cohort at birth - so it plausibly under-indexes exactly the population being audited, making our coverage look **better** than it is.
+
+**And it misses the failure that will actually happen: births arrive by webhook, and a push drops SILENTLY** - no local error. That is the same class as `#704`, already paid for once.
+
+**Replacement - a windowed chain re-census.** One random N-minute window per day: enumerate **every** creation instruction on the launchpad program in that window directly from the chain, and compare against what the webhook actually delivered for the same window. Affordable because it is sampled - the §5 cost finding killed *continuous* unfiltered ingestion and says nothing about a windowed audit - and it detects delivery loss immediately as a window deficit.
+
+⚠️ **STATED REACH, because a control that covers one leg must never be described as covering three:** auditing a provider's webhook against **that same provider's** archival RPC is a different code path and **catches delivery loss**, but **does NOT catch provider-side indexing gaps**. If a second provider's free RPC is available it covers both and should be used; if not, that gap is a known, written limitation rather than an implied absence. The aggregator is retained as a **secondary cross-check only** - a divergence is informative, but it is not the control.
+
