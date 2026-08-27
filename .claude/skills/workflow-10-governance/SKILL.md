@@ -65,6 +65,8 @@ description: STEP 10 ONLY of the DawnTrader batch workflow - Governance Updates.
 
 ⚠️ **THIS IS THE ONE PLACE A DATE IS LEGITIMATE (§9.4): a period whose LENGTH is the content.** *"+48h gate"*, *"14-day soak"*, *"until 30 closes accumulate"*. **The batch still gets no due date; the WINDOW gets its length.**
 
+★ **AND THE CARD MOVES TO `Observation`** — the board column added 2026-08-27, sitting between `Governance` and `Complete`. **`Complete` is unreachable from there until the data is in AND a decision has been taken.** The card is the visible reminder; the report is the record.
+
 **WHAT IT IS:** `Claude Comms and Packages/Batch Completion/<BATCH-ID>_PROGRESS_REPORT.md`, titled **`OPEN — <what is being waited on>`**. ★ **NOT a new invention:** `BATCH_67`, `BATCH_68` and `BATCH_73` all have one. ⚠️ **But it was NEVER GOVERNED — measured 2026-08-26: 43 occurrences of "progress report" across the corpus and EVERY governance mention is a USAGE. No definition, no trigger, no conversion rule.** Same shape as "hotfix" before 2026-08-21. **It fell out of use because nothing said to write one.**
 
 **IT MUST CARRY THE WHOLE BATCH UP TO NOW** — a reader must not need the chat scrollback:

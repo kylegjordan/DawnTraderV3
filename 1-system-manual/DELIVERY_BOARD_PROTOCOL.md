@@ -19,7 +19,20 @@
 ## 2. Structure
 
 **COLUMNS (Status) — the workflow, condensed from 11 steps to 8:**
-`Backlog` → `Scope` → `Pre-Audit` → `Implementation` → `CI + Deploy` → `Verification` → `Governance` → `Complete`
+`Backlog` → `Scope` → `Pre-Audit` → `Implementation` → `CI + Deploy` → `Verification` → `Governance` → **`Observation`** → `Complete`
+
+## ★★ `Observation` — WORK DONE, WAITING ON DATA (Kyle directive 2026-08-27; column added the same day)
+
+**THE STATE IT NAMES:** all the work is finished, the code is deployed, **the governance documents are written and RECORD that an observation window is open** — and the batch is now waiting for **a period to elapse or a quantity to accumulate** before anyone can decide anything.
+
+⛔ **IT SITS AFTER `Governance`, NOT BEFORE, AND KYLE’S REASONING IS WHAT DECIDES IT: the governance documents must RECORD that we are in the window and what we are waiting for.** If `Observation` came first those documents would be written before anyone knew what they were recording. ★ **There is a SECOND governance touch on the way OUT** — the result is written into the same documents when the window closes — **but that does not need its own column; it is what leaving `Observation` MEANS.**
+
+⛔ **`Complete` IS UNREACHABLE FROM `Observation` UNTIL BOTH HAPPEN: THE DATA IS IN *AND* A DECISION OR ACTION HAS BEEN TAKEN ON IT.** An elapsed window with data nobody concluded anything from is **not** a finished batch.
+
+★ **WHY THIS COLUMN EXISTS AT ALL, in Kyle’s words:** *"if we go ahead and close these things while we are waiting for data to come in, then it is easy for those to slip through the crack and we forget that we need to look back at the data."* ⇒ **A batch parked here is a STANDING, VISIBLE REMINDER.** An alert quietly waiting in a queue is not. **That is the whole argument for the column, and it is the stronger one.**
+★ **AND IT DOES NOT BLOCK YOU.** A batch sitting in `Observation` is not work in progress — **move on to the next batch and come back when the data is there.** That is the point of separating it from the working stages.
+
+**THE REPORT TRACKS THE COLUMN, ONE DOCUMENT THROUGHOUT:** while the card is in `Observation` the batch has a **progress report**; when the data arrives and the decision is taken, **the same file becomes the completion report** — not a rewrite. *(Full rule: `workflow-10-governance`; the conversion: `workflow-11-completion`.)*
 *(Steps 5–6 merged: they always happen together. Steps 7–9 merged: a card sits in Verification while the iterate loop runs.)*
 
 **FIELDS ON EVERY CARD:**
