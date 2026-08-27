@@ -24,29 +24,34 @@ change-class: non_architecture
 
 ---
 
-## 2. THE CANDIDATES — TWO CLASSES, DIFFERENT RISK, HANDLED DIFFERENTLY
+## 2. THE CANDIDATES — **RE-DERIVED PER CLAUSE (r2, Langston bounce 2026-08-27)**
 
-⛔ **THE SPLIT IS THE WHOLE DESIGN. "Delete a duplicate" and "move content then delete" are not the same operation and must not be run as one pass.**
+⛔⛔ **r1 CLASSIFIED AT SECTION GRANULARITY. THE FILE’S UNIT IS THE CLAUSE, AND EVERY SECTION HERE MIXES TWO DIFFERENT TRIGGERS.** Langston: *"a distinctive phrase from §9.1 IS present in `workflow-11` — so phrase-match plus a negative control returns **duplicate** on a section that is **75% copied**. The negative control catches a broken query; it cannot catch a partial copy."*
 
-### CLASS A — DUPLICATES. The text is ALREADY in the skill, verbatim. Deleting the original removes nothing.
-| section | size | already lives in |
-|---|---|---|
-| §9.5 architectural audits (census, deletion-time state-write census, provenance read) | **6,038 B** | the pre-implementation audit skill **and** the scope skill |
-| §9.1 scaffolding declaration | **662 B** | the completion report skill |
-| §9.2 numeric deltas | **718 B** | the completion report skill |
-| **CLASS A TOTAL** | **7,418 B** | |
+⚠️ **AND MY SECOND ATTEMPT FAILED THE OTHER WAY, WHICH IS WORTH RECORDING: an exact 9-word-run matcher returned 0 of 3 and 0 of 3 — reporting as ORPHAN two clauses that ARE copied, condensed.** ⇒ **NEITHER MATCHER CAN DECIDE THIS. Too loose says "duplicate" on a partial copy; too strict says "orphan" on a reworded one.** ★ **The instrument is READING the destination and judging — which is what Langston did, and it is why this table has a stated disposition per clause rather than a score.**
 
-### CLASS B — MOVES. The rule is in `CLAUDE.md` and **NOT** in the skill that would use it. Content is carried across FIRST, verified, and only then cut.
-| rule | size | destination (verified to exist) |
-|---|---|---|
-| §9.3 *"staging-verified" means UI-navigated* — **both halves**, including *when Kyle asks, it is not optional* | **2,570 B** | the first-pass verification skill |
-| rule 19 — the four green checks, named | **618 B** | the CI skill |
-| rule 23 — fix-on-find | **1,471 B** | the implementation skill |
-| **CLASS B TOTAL** | **4,659 B** | |
+### ★★ THE GENERALISABLE FINDING, and it is bigger than this batch
+**EVERY ONE OF THESE SECTIONS CONTAINS BOTH STEP-TRIGGERED AND CONVERSATION-TRIGGERED CLAUSES, INTERLEAVED.** That is *why* section-level classification cannot work here — not because my check was sloppy, but because **the section is not the unit the trigger lives at.** A rule that fires *"when Kyle says X"* and a rule that fires *"at step 11"* sit in the same paragraph, and only one of them can move.
 
-**COMBINED: 12,077 B — 10.7% of the file. After: ~100,710 B.** ✅ **Every CLASS A and CLASS B destination skill EXISTS today** — checked against the twelve on disk, not assumed. ⚠️ **This line read *"none needs creating"* until Class C was added; that is now FALSE — C-1 CREATES one.** Corrected rather than left, because a "nothing to build" claim is exactly what a reviewer would rely on.
+### THE DISPOSITION TABLE — every clause accounted for
 
-⚠️ **FOUR MORE WERE FOUND AND ARE DELIBERATELY NOT IN THIS BATCH** — §7.1's batch-close sync gate, §6.5's file-first dispatch discipline, §6.7's iterate-to-consensus, and rule 19's `gh run list` command form. **Each needs a judgement about how much context a session needs BEFORE it knows which step it is on**, which is the one thing §4 says must never move. **They get their own pass once this one is proven.**
+| § | clause | already in a skill? | **disposition** |
+|---|---|---|---|
+| **9.1** | *"any sub-batch shipping scaffolding MUST state it at the TOP, in bold, separated"* | ✅ `workflow-11`, condensed | **CUT** — Class A |
+| **9.1** | *"**equally applies in REAL TIME** — mid-conversation, as a bold-prefixed inline disclaimer, not a parenthetical"* | ⛔ **nowhere** | ⛔ **STAYS — §3-protected.** It fires **mid-conversation**, not at step 11. There is no skill a session has open when it happens. |
+| **9.1** | pointer to the origin cases in the history doc | n/a | **stays with the surviving clause** |
+| **9.2** | *"any change to a previously-stated number → PREVIOUSLY STATED / NOW / REASON"* | ✅ `workflow-11` | **CUT** — Class A |
+| **9.2** | *"**PRE-AUDIT** and completion reports MUST carry a PREVIOUSLY-STATED-VS-NOW section at the top"* | ⚠️ **completion half only** | ★ **CARRY IT TOO** — the pre-audit half has no home. Into `workflow-02`, **then** cut. |
+| **9.2** | *"applies retroactively to IN-FLIGHT communications — lead the next message with the block"* | ⛔ **nowhere** | ⛔ **STAYS — §3-protected.** Fires in conversation. |
+| **9.3** | the curl-isn’t-verification half · the by-default half | ✅ `workflow-07:10-16` **(Langston verified at the ref)** | **CUT** — **Class A, not B.** r1 had this as a move; it is already there. |
+| **9.3** | *"when Kyle ASKS for verification, it is not optional"* · *"no assumptions when Kyle REPORTS issues"* | ⛔ nowhere | ⛔ **STAYS — §3-protected. Both fire on a KYLE UTTERANCE, not at step 7.** |
+| **9.5** | census · deletion-time state-write census · provenance read | ⚠️ **2/25 verbatim — but the SUBSTANCE is in `workflow-01` + `workflow-02`, condensed** (Langston re-derived) | **CUT** — Class A. ★ **r1 called it "verbatim"; that was FALSE and it passed for the right answer BY LUCK.** |
+| **r19** | the four job names **+ the `gh run list` command form** | ✅ job names in `workflow-05` | **CUT, WHOLE.** ★ **The command form comes forward too (Langston):** leaving the job list in one home and the command that checks it in another is the two-sources shape, self-inflicted. |
+| **r23** | fix-on-find | — | ⛔ **STAYS — r1 had it as a move and that was wrong.** It fires *when work surfaces a remnant* — at step 2, 4, 7 **or a plain conversation.** A session doing a pre-audit would not have it if it lived in `workflow-03`. |
+
+**REVISED TOTAL: §9.5 (6,038 B) + the two cut clauses of §9.1/§9.2 + §9.3’s two copied halves + rule 19 whole.** ⚠️ **DELIBERATELY NOT RESTATED AS A SINGLE BYTE FIGURE UNTIL THE CUTS ARE DRAFTED** — r1’s headline number was a section-level sum, and section sums are exactly what this bounce refuted. **The figure gets re-derived from the actual diff, not predicted.**
+
+⚠️ **FOUR HELD BACK, three confirmed by Langston** — §7.1 batch-close sync gate, §6.5 file-first dispatch, §6.7 iterate-to-consensus: **all fire unprompted, hold them.** ★ **The fourth — rule 19’s command form — he PULLED FORWARD; it is now in the table above.**
 
 ---
 
