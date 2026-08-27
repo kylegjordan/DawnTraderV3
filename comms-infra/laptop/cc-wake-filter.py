@@ -24,8 +24,18 @@ NAMES = {
     "CC-A": [r"claude[\s_-]*old", r"old[\s_-]*claude", r"cc[\s_-]*a"],
     "CC-B": [r"claude[\s_-]*new", r"new[\s_-]*claude", r"cc[\s_-]*b"],
     "CC-C": [r"claude[\s_-]*analyst", r"analyst[\s_-]*claude", r"cc[\s_-]*c"],  # Kyle named 2026-07-19 (revived "Previous CN")
+    # CC-INFRA onboarded 2026-08-26 (Kyle, lifting his own deferral). Until today Infra
+    # Claude could be NAMED in the channel and never woken — the alert-owner tuple below
+    # carried him for suppression only. Adding him here also means a message naming ONLY
+    # him now suppresses for CC-A/B/C rather than broadcasting to them, which is the
+    # behaviour the suppression entry was pre-placed to make correct.
+    "CC-INFRA": [r"infra[\s_-]*claude", r"claude[\s_-]*infra", r"cc[\s_-]*infra"],
 }
-ALIAS_NAME = {"CC-A": "OLD Claude", "CC-B": "NEW Claude", "CC-C": "ANALYST Claude"}  # display names (Kyle 2026-06-20; CC-C added 2026-07-19) + CC<->CC wake attribution
+ALIAS_NAME = {"CC-A": "OLD Claude", "CC-B": "NEW Claude", "CC-C": "ANALYST Claude",
+              "CC-INFRA": "Infra Claude"}  # display names (Kyle 2026-06-20; CC-C 2026-07-19; CC-INFRA 2026-08-26)
+# ⚠️ THE DISPLAY NAME IS ALSO THE `--sender` VALUE AND MUST MATCH THE CHANNEL EXACTLY, or
+# the session wakes on its own posts. "Infra Claude" is the form measured on the live
+# channel (31 posts as of the 2026-08-23 census), not "Claude Infra".
 MY_NAME = ALIAS_NAME.get(ALIAS, "")
 # 2026-08-18 #694 / Langston BLOCKER-1: suppression is CONTENT-keyed and FAIL-SAFE,
 # never sender-keyed. `dt-push-notice.sh` emits TWO variants under the SAME
@@ -64,9 +74,10 @@ OTHERS_RE = re.compile(
 # triages, offsets 1,825-5,558, ALL LOST.
 # ★ RIGHT OBSERVATION, ADJACENT OBJECT. The enumeration fix below is still correct and still needed
 # — it just was not the cause of what I attributed to it.
-# ★ CC-INFRA is included for SUPPRESSION ONLY. It does NOT onboard Infra Claude (deliberately
-# deferred by Kyle) — he has no entry in NAMES, so nothing here can wake him. It means an alert
-# owned by him will not wake the other three the day he IS onboarded, instead of re-earning this bug.
+# ★ CC-INFRA WAS included here for SUPPRESSION ONLY while his onboarding was deferred. ⛔ THAT
+# DEFERRAL ENDED 2026-08-26 (Kyle) — he now HAS an entry in NAMES above, so this tuple and that
+# registry agree and an alert owned by him both wakes him and stays out of the other three.
+# The pre-placement did its job: onboarding him required no change here at all.
 # ⛔ ONE LIST, BUILT ONCE. Langston, Step-4 2026-08-23: the first fix updated the regex and left
 # THREE other copies of the same enumeration drifting — the stale comment at the call site below,
 # ALERT_HANDLING_PROTOCOL.md:19 (which governs the EMITTER, so the filter accepted values the spec
