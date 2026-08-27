@@ -16,15 +16,18 @@
 | 5 | **LEDGER — `RUNNING_ISSUES` + `BATCH_CATALOG` + completion reports** | ✅ | `#705`, `#916`, `#917`, `#915`, `#120`, B-NEW-35, P19-B8.5, Batch 18J |
 | 6 | **`bridge/canonical/`** | ✅ | **NO COVERAGE of price representability or the batch writer — recorded as a finding, per the recording rule** |
 
-⛔ **WHAT I DID NOT DO, STATED RATHER THAN OMITTED: no fresh-context reviewer was spawned for the mechanism claims below.** This step's skill makes that mandatory for a mechanism claim (Mode B) under a standing approval — **but this session carries an explicit instruction not to spawn subagents, and a rule recorded in a repo file does not override the session's own instruction.** ⇒ **every mechanism claim here rests on MY OWN re-derivation at the ref and nothing else.** `REVIEWER: not spawned · session-level instruction · no verdict · n/a`
+✅ **INDEPENDENT READERS RUN (Kyle lifted the block 2026-08-28). FIVE spawned, Mode B — each handed THE CLAIM ALONE, never the files, so object-selection crossed the boundary too.**
+
+`REVIEWER: claim-only · splice/concurrency mechanism · HIT ×5 · re-derived y` — **and it found a census error, a mischaracterised population and an unbudgeted cost. See A4-R, A5-R, A7-R.**
+⛔ **Per the standing asymmetry: every HIT below was RE-DERIVED by me at the ref before it moved anything. No reviewer CLEAN is cited anywhere in this document as support for any claim.**
 
 ---
 
 ## 1. GOVERNANCE GAPS FOUND IN THE MAPS THEMSELVES
 
-**A1 — ⛔ `venue-validate.ts` HAS ZERO ENTRIES IN THE SIM.** Measured: `grep -ic "venue-validate"` = **0** across `SYSTEM_IMPACT_MAP.md`. It shipped in **P19-B8.5 (OBJ-8)**, it is the **only component in the system that talks to the live venue on the paper path**, and the impact map does not know it exists. **That silence is a governance gap under §9 rule 1, and F-G-1 touches this component** (§4 of the scope — the rounding currently lives there). **Plan item P6.**
+**A1 — ⛔ `venue-validate.ts` HAS ZERO ENTRIES IN THE SIM — CONFIRMED, WITH A FAR BETTER CONTROL THAN MINE.** My evidence was a bare zero. **The decisive control, re-derived: EVERY sibling in `server/services/execution/` IS in the SIM** — `depth-source` 5, `depth-walk` 4, `order-placer` 2, `depth-gate-config` 2, `exploration-lane` 2 — **and `venue-validate` alone is 0.** ★ **That establishes the SIM's own convention for that directory, which a bare zero never could.** ⚠️ **BUT MY IMPLIED SCOPE WAS TOO WIDE: `SYSTEM_MANUAL.md:4332` DOES document the `validate=true` behaviour, without naming the file.** The gap is SIM-specific — behaviour described, component unmapped. ★ **AND A DANGLING POINTER NEITHER OF US FOUND: that manual line cross-references SIM §3.7. Re-derived — THE SIM HAS NO §3.7; its sections run 3.1 to 3.6.** It shipped in **P19-B8.5 (OBJ-8)**, it is the **only component in the system that talks to the live venue on the paper path**, and the impact map does not know it exists. **That silence is a governance gap under §9 rule 1, and F-G-1 touches this component** (§4 of the scope — the rounding currently lives there). **Plan item P6.**
 
-**A2 — ⛔ `SYSTEM_MANUAL.md` IS SILENT ON PRICE REPRESENTABILITY.** Measured: `rounding` = **1 hit**, and that hit is `:10809`, about `doublePrecision` vs `decimal` column types — **unrelated**. `tick` = 125 hits, all clock/candle ticks, none about venue price increments. ⇒ **the manual documents the maths of what our prices MEAN and is silent on whether they can EXIST.** Under §9 rule 3 this batch changes signal-pipeline maths, so the manual gets a content update. **Plan item P7.**
+**A2 — ⛔ `SYSTEM_MANUAL.md` IS SILENT ON PRICE REPRESENTABILITY.** Measured: `rounding` = **1 hit**, and that hit is `:10809`, about `doublePrecision` vs `decimal` column types — **unrelated**. `tick` = 125 hits, all clock/candle ticks, none about venue price increments. ⇒ **the manual documents what our prices MEAN and is silent on whether they can EXIST.** ✅ **Reach EXTENDED beyond mine by the reader: `1-system-manual/sections/` (9,880 lines, a separate per-chapter corpus I never checked) is ALSO 0, controls passing.** ⚠⚠ **BUT THE STRONGEST ALTERNATIVE DEFEATS MY FRAMING AND I ADOPT IT: SILENCE-BECAUSE-UNIMPLEMENTED, NOT SILENCE-BECAUSE-OMITTED.** The manual documents the system **as it is**, and **nothing in the repo rounds a decision price** (A11) — so it is silent **because there is no referent.** ⛔ **That produces grep output IDENTICAL to an omission and my wording did not distinguish them.** ⇒ **P7 is NOT "fix an omission"; it is "document the behaviour this batch creates," and the gap becomes real only when the rounding ships.** ⚠️ **Also: `SYSTEM_MANUAL_OVERVIEW.md` calls the whole folder "the System Manual" — under that reading the corpus is NOT silent, since `#916` quantifies it. I measured the FILE, not the folder.**
 
 **A3 — `bridge/canonical/` HAS NO COVERAGE.** Consulted per §9.5(b). The pre-governance corpus documents the intended architecture but contains nothing on venue price grids, tick size, or the batch writer. **Recorded as required — an absence of provenance is a finding, not a blank.** ⇒ **no original-intent constraint binds the rounding design; we are not overturning a prior decision.**
 
@@ -46,13 +49,47 @@
 
 | question | answer |
 |---|---|
-| **writes/creates** | **exactly THREE** — `crypto-spot-archiver.ts`, `equity-spot-archiver.ts`, `kraken-futures-archiver.ts`, all via `bufferOhlcBar` |
+| **writes/creates** | ⛔⛔ **"THREE" IS RIGHT FOR MY SEARCH AND WRONG FOR THE CLAIM (R6).** THREE *call sites* of `bufferOhlcBar` — but `kraken-futures-archiver.ts` is a **parameterized class instantiated TWICE**, by `crypto-perp-archiver.ts:28` and `equity-perp-archiver.ts:24`, **and re-derived: neither facade contains the token `bufferOhlcBar` at all (grep count = 0 in both).** ⇒ **3 call sites · 4 buffers fed · 5 archiver modules · 2 runtime instances behind one call site.** A grep for the function name returns 3 and **structurally cannot see the other two.** |
 | **reads** | **exactly ONE** — `flushAssetClass:106` |
 | **mutates** | **exactly ONE** — `bufferOhlcBar:101` (`push`) |
 | ★ **DELETES** | **exactly ONE** — `batch.splice(0, batch.length)` at `:108` |
-| **schedules/starts** | ⛔ **TWO** — the interval timer at `:197-198` and `stopBatchWriter:209`, both fanning out over `ALL_ARCHIVE_CLASSES` |
+| **schedules/starts** | ⛔⛔ **ONE, NOT TWO — MY CENSUS WAS WRONG (A5-R).** The interval timer at `:197-198`, started once at `passive-archive-bootstrap.ts:208` and double-start-guarded at `:196`. **`stopBatchWriter:204` has ZERO CALLERS in the entire tree — re-derived: `grep -rn stopBatchWriter server/` returns ONLY its own definition.** I counted a function that never runs as a scheduler. |
 
 ⛔ **TWO SCHEDULERS ⇒ MUTUAL-EXCLUSION CHECK REQUIRED, and the result is the finding in A4.** `stopBatchWriter` calls `clearInterval` **before** draining, but **`clearInterval` does not cancel an already-executing callback** — so a narrow overlap window exists. **Today the splice-first drain makes that window harmless. Any fix must preserve that property.** The `acquireSlot()` semaphore bounds *concurrent inserts*; it does **not** prevent two flushes of the same class from both having read the buffer.
+
+### A4-R / A5-R / A7-R — ⛔⛔ WHAT THE INDEPENDENT READER OVERTURNED, ALL RE-DERIVED AT THE REF
+
+**R1 — THE CENSUS WAS WRONG: ONE SCHEDULER, NOT TWO.** `stopBatchWriter` has **zero callers**. ⇒ **the overlap source is not two schedulers racing; it is a SINGLE `setInterval` whose async callback is never awaited (`:197-199`), so tick N+1 fires whether or not tick N has settled.** The conclusion survives — overlap is reachable — but **my stated mechanism for it was wrong**, and "two schedulers require a mutual-exclusion check" was a §9.5(a) box I ticked against a function that never executes.
+
+**R2 — MY STATED EFFECT IS ONLY THE IDLE CASE.** I wrote *"a second concurrent flush finds an EMPTY buffer and returns early."* **Three archivers push continuously (`bufferOhlcBar:100-102`), so in steady state the second flush finds NEW rows and flushes a DISJOINT SET.** ⇒ **the property splice-first actually buys is ROW-SET DISJOINTNESS, not early return.** Early return is what happens only when nothing is arriving.
+
+**R3 — "WOULD INTRODUCE A NEW RACE" IS TOO STRONG.** Splice-first gives disjoint **ROW** sets, **not disjoint KEY sets** — Kraken sends many updates per minute, so consecutive drains routinely carry the same `(symbol, intervalBegin)`. **Re-derived at `:171`: `high: sql\`EXCLUDED.high\`` — LAST-WRITER-WINS, not `GREATEST`.** ⇒ **a same-key ordering race EXISTS TODAY.** Splice-after would change *which* rows can collide, not *whether* collision is possible. **The honest claim is narrower: splice-after widens an existing hazard and adds a duplicate write; it does not create the first race.**
+
+**R4 — ⛔ THE FIX NEEDS A QUEUE CAP AND I HAD NOT BUDGETED ONE.** Re-derived: **`ohlc-batch-writer.ts` has NO queue bound. Its sibling `archive-batch-writer.ts:34` has `DEFAULT_QUEUE_MAX = 50_000` with a drop-oldest overflow path at `:141-151`.** ⇒ **retain-on-failure against a persistently failing constraint is UNBOUNDED GROWTH against `ecosystem.config.cjs:25 max_memory_restart: '2G'`.** **Without a cap the fix converts silent data loss into a process restart loop.**
+
+**R5 — ⛔⛔ AND THE POPULATION I MEASURED IS 99.8% A KNOWN, ALREADY-FENCED INCIDENT. THIS IS THE BIGGEST CORRECTION IN THE DOCUMENT.** Re-derived by error text across the full retained logs:
+
+| error | count |
+|---|---|
+| **`no unique or exclusion constraint matching the ON CONFLICT`** | **5,888** |
+| `pool slot timeout (5s)` (this writer) | 7 |
+| ⛔ **`deadlock detected`** | ⛔ **2** |
+
+⇒ **5,888 of 5,897 are `#704` — the `crypto_perp_ohlc_1m` table that shipped 2026-08-18 without the UNIQUE constraint its three siblings carry. Root-caused, fenced, and recorded in `p19-perpfeed-ohlc-upsert-constraint-fence.test.ts:1-13`, which states the outcome itself: 368,841 bars scanned, 0 rows landed, ~15 h.**
+
+⛔ **I QUOTED `deadlock detected` AS THE REPRESENTATIVE SAMPLE AND CALLED IT "a POSTGRES error, so this is OURS." IT IS 2 OF 5,897.** ★ **I named the object and the population and never checked the COMPOSITION — then illustrated it with the rarest member.** ⚠️ **The §9.5(b-ii) ledger search missed it because I searched for the COMPONENT and not for the SYMPTOM; `#704` was sitting in the fence test's own header comment.**
+
+✅ **BUT OBJ-9 SURVIVES, BETTER FRAMED — AND `#704` IS ITS EVIDENCE, NOT ITS SUBJECT.** The constraint bug is fixed. **What is NOT fixed is the behaviour that turned it into 15 hours of total silent loss: the writer converts ANY persistent error into permanent, unrecoverable, invisible data loss** (failures go to `console.error`, successes to `console.log`). ⇒ **the real defect is the DROP, and #704 is the measured proof of what it costs.** ⚠️ **The residual on the traded classes is genuinely small — 6 `crypto_spot` + 2 `xstock_spot` — and must be reported that way.**
+
+### A5-R2 — ⛔ A SECOND READER, A SECOND SET OF CENSUS ERRORS — AND A DATA-LOSS PATH NEITHER OF US HAD FOUND
+
+**R6 — THE WRITER COUNT WAS A TOKEN COUNT, NOT A PRODUCER COUNT.** See the corrected census row above. ★ **This is precisely the failure the reviewer was asked to hunt: a count that is correct for the search performed and wrong for the claim it supports.** My instrument could not have found the two perp facades, and I did not say so.
+
+**R7 — ⛔⛔ NEW FINDING: EVERY RESTART AND EVERY DEPLOY SILENTLY LOSES THE LAST FLUSH WINDOW.** `stopBatchWriter` is defined, exported, and its own docstring says *"Drains pending buffers first."* **It has zero callers.** **Re-derived: the live shutdown handler `server/core/boot_orchestrator.ts:38-53` calls `stopVTSRunner()` and NOTHING ELSE.** ⇒ **up to one flush interval of buffered bars is discarded on every PM2 restart and every `dt-deploy`, with no log line at all.** ⚠️ **This is a SEPARATE loss path from the drop-on-failure `OBJ-9` targets, it is silent rather than merely quiet, and neither I nor Langston found it.** ⛔ **It also means my A7 "8 batches lost on the traded classes" is a FLOOR, not a total — deploy-time losses leave no error line to count.**
+
+**R8 — THE SEMAPHORE IS ACQUIRED *AFTER* THE DRAIN, so a slot timeout also destroys rows.** `acquireSlot()` at `:128`, splice at `:108`. **The logs carry 7 `pool slot timeout (5s)` failures on this writer** — a second, independent trigger for the same drop. **The retain-on-failure fix covers this too, which strengthens P5.**
+
+**R9 — METHOD NOTE, and it is worth carrying: `git grep -- 'server/**/*.ts'` DOES NOT MATCH `server/index.ts` under git's wildmatch.** The reviewer hit this, caught it, and re-ran without the pathspec. **That pathspec silently hides the entry point of the whole subsystem** — the same absent-as-valid class as `#546`'s trailing slash.
 
 ### A6 — PROVENANCE OF THE DEDUP (§9.5(b-ii)), and it decides the fix
 
@@ -63,8 +100,26 @@
 ✅ **PREPEND SATISFIES IT WITHOUT TOUCHING THE DEDUP AT ALL.** Prepended older rows enter the Map first; any fresher row for the same `(symbol, minute)` is inserted after and wins — **which is exactly what B-NEW-35 specifies.** ⇒ **no new field, no change to a shipped hotfix's logic, and the stated invariant is preserved rather than replaced.**
 ⚠️ **Langston proposed max-by-arrival. I am proposing prepend instead, and the difference is not cosmetic: max-by-arrival requires an arrival timestamp on every buffered row and REPLACES B-NEW-35's rule; prepend PRESERVES it. This is a deliberate divergence from his suggestion and he should rule on it.**
 
+### A6-R — ⛔⛔ THE FIFTH READER OVERTURNED MY FIX **AND** MY HEADLINE NUMBER. THE PREPEND-vs-APPEND DEBATE WAS THE WRONG AXIS.
+
+**R10 — ⛔ `#705` — THE ISSUE I FILED MYSELF — ALREADY SPECIFIES THE DESIGN, AND MY AUDIT DID NOT CITE IT.** Re-derived at `RUNNING_ISSUES.md:2744-2746`: the constraint is **transient-vs-permanent separation, bounding, and alerting** — *"the naive re-buffer against a permanent error would have grown the crypto_perp buffer unbounded for 15 hours — an OOM instead of a data gap… the #704 failure produced 4,802 stderr lines and zero alerts."* ⇒ **append-vs-prepend is ORTHOGONAL to all three.** ★ **Langston and I spent a round arguing an axis the ledger had already ruled secondary.** ⚠️ **Second §9.5(b-ii) miss in one audit: I searched for the component, FOUND the issue, and did not read what it specified.**
+
+**R11 — ⛔⛔ AND MY HEADLINE NUMBER IS NOT A LOSS FIGURE. `#704`'s 15-HOUR OUTAGE COST NIL ACTUAL DATA.** Re-derived at `#705`: *"OHLC rows are REPLAYABLE — the REST poller re-fetches a rolling 2,000-bar window, which is exactly why #704's 15-hour outage cost nil actual data."* And `#704` residual (b) records the drop-on-failure as **assessed and accepted**: *"silent-by-design at the buffer (`splice` before insert) … which is acceptable for replayab[le]"*. ⇒ **the splice ordering is NOT an unexamined idiom — it was judged at `#704`'s Step-4 review. My A4 framing of it as an accident was wrong.** ⛔ **962,386 "rows dropped" is a COUNT OF DROPPED BUFFER ROWS, NOT A COUNT OF LOST DATA, and I have been reporting it as loss.**
+
+**R12 — ✅ BUT THE REPLAYABILITY GUARANTEE IS NARROWER THAN `#705` STATES, AND THIS IS WHAT SAVES OBJ-9.** `kraken-futures-archiver.ts:56` `lastOhlcInterval` is an **in-memory monotonic high-water Map**, advanced at `:103`, with the skip at `:85` (`if (candle.time <= lastSeen) continue`). ⇒ **`#704` recovered only because its fix required a DEPLOY, which cleared that map.** **A transient flush failure in a RUNNING process leaves the high-water mark advanced and those bars are NEVER re-polled.** ⛔ **And the two WS legs — `crypto_spot` and `xstock_spot`, the TRADED classes — have NO re-fetch path at all.**
+
+⇒ ✅ **THE HONEST SIZE OF OBJ-9, FINALLY: the 5,888 `crypto_perp` failures were RECOVERED by the deploy. The real unrecoverable loss is the 6 `crypto_spot` + 2 `xstock_spot` failures on the WS legs, plus 7 pool-slot timeouts.** **Small, real, and on exactly the classes `OBJ-8` reads.** ★ **The batch survives; the justification is 1/700th the size I reported.**
+
+**R13 — ⛔ PREPEND HAS A SPECIFIC FAILURE MODE AGAINST THE BOUND `#705` REQUIRES.** The sibling `data-archive/archive-batch-writer.ts:141-151` bounds at `queueMax` and evicts **OLDEST via `buf.rows.shift()`** — from the FRONT. ⇒ **prepend puts the re-added rows exactly where that evictor looks first: adopt both and the retry silently stops working, with no test to catch it** (nothing in `server/tests/**` exercises the dedup, the ordering, the flush, or a failure — stated as presence-evidence).
+
+**R14 — ★ THE FIELD THAT WOULD REVEAL AN OUT-OF-ORDER WRITE IS OVERWRITTEN BY THE WRITE.** `:176` sets `capturedAt: sql\`NOW()\``, so a stale overwrite **stamps itself as freshly captured** — while `xstock_spot/ohlc-aggregator.ts:280` tiebreaks on exactly `captured_at DESC, id DESC` to "pick the latest tick." ⇒ **a stale overwrite is unobservable after the fact, by construction.**
+
+**R15 — the dedup is VACUOUS on two of four classes.** `kraken-futures-archiver.ts:85`'s high-water skip means a given `(symbol, interval_begin)` is buffered **at most once per process lifetime** for `crypto_perp`/`xstock_perp`. **The comment at `:110-126` describes a WS feed two of the four classes do not use.** ⚠️ **And SIM `:1301` cites that block as `:105-114`; at the ref it is `:110-126` — the SIM line numbers I quoted are stale.**
+
+⇒ ⛔ **P5 IS REWRITTEN AROUND `#705`'s OWN THREE CONSTRAINTS, NOT AROUND MY PREPEND PROPOSAL.**
+
 ### A7 — WHAT THE FIX DOES **NOT** COVER, measured
-**5,897 failed flushes / 962,386 rows, 08-14→08-27. By class: `crypto_perp` 5,889 · `crypto_spot` 6 · `xstock_spot` 2.** ⇒ **99.9% of the loss is on a class we do not trade.** The two traded classes lost **8 batches in two weeks**. ⛔ **This fix does not explain, and must not be reported as explaining, the missing exit minutes.** ⚠️ **Qualified per Langston Q7: negligible by COUNT is not negligible by CONCENTRATION — `deadlock` is load-correlated, load correlates with volatility, and volatility is when stops and targets are touched.**
+⛔ **SUPERSEDED BY R11/R12 — READ THOSE FIRST. "962,386 rows dropped" is a count of DROPPED BUFFER ROWS, NOT LOST DATA; the `crypto_perp` bulk was re-fetched on the deploy.** Raw: **5,897 failed flushes, 08-14→08-27, `crypto_perp` 5,889 · `crypto_spot` 6 · `xstock_spot` 2.** The two traded classes lost **8 batches in two weeks**. ⛔ **This fix does not explain, and must not be reported as explaining, the missing exit minutes.** ⚠️ **Qualified per Langston Q7: negligible by COUNT is not negligible by CONCENTRATION — `deadlock` is load-correlated, load correlates with volatility, and volatility is when stops and targets are touched.**
 
 ---
 
@@ -75,6 +130,26 @@
 
 ### A9 — ⛔ THE GUARDS THAT VALIDATED THE GEOMETRY RUN **UPSTREAM** OF THAT SEAM
 `applyGlobalGuards` is called **inside each strategy** — `adaptive-flow:181`, `defensive-hedge:242`, `volatility-edge:193`, and the rest — i.e. **before the signal ever reaches the orchestrator.** ⇒ **the geometry that was validated is not the geometry that ships.** ★ **This is Kyle's re-check, and it is a correctness requirement rather than a precaution.** `validateStopDistance` and `validateRR` re-run post-rounding.
+
+### A9-R — ⛔⛔ MY A9 CLAIM IS TRUE FOR **ONE** CHECK AND MOOT FOR **THREE**. THIS NARROWS P2.
+
+**A reader found the object I missed, and I re-derived it at the ref.** There **IS** a downstream geometry gate **inside** the orchestrator: **`normalizeAndGateTarget` (`core/calculations/signal-target-normalizer.ts:69`), called at `signal-orchestrator.ts:1662`** — after sizing and the SQE, before the sized signal is assembled. It re-computes `risk`, `rr` and `atrsToTarget` from scratch and drops on `invalid_geometry` / `rr_below_min` / `invalid_atr` / `unreachable`.
+
+⇒ **If rounding sits at the top of `buildSizedSignalForStrategy`, RR and reachability are RE-VALIDATED AUTOMATICALLY on the rounded numbers, with no new code.** ⛔ **So my sentence *"the validation already happened upstream of that point"* is FALSE for three of the four checks.**
+
+✅ **THE CLAIM SURVIVES EXACTLY WHERE IT MATTERS, AND SHARPER: `normalizeAndGateTarget` HAS NO STOP-DISTANCE CHECK.** Re-derived — its guard tests finiteness, positivity and `stopPrice >= entryPrice`, then computes `risk = entryPrice - stopPrice` and **never compares that risk to `MIN_STOP_DISTANCE_BPS`.** The 30 bps floor is enforced **ONLY** upstream by `applyGlobalGuards`; `validateStrategySignal:2980` checks ordering and finiteness, not distance.
+
+⇒ ⛔ **ROUNDING COULD PUSH A STOP INSIDE THE 30 bps FLOOR AND NOTHING DOWNSTREAM WOULD SEE IT. That is the entire residual — one check, not four.**
+
+⚠️ **AND "RE-RUN THE VALIDATION" WAS UNDERDETERMINED: the two reachability computations already use DIFFERENT ATRs** — the guard a clamped strategy-local `getEffectiveATR`, the normalizer the raw carrier `marketContext?.atr ?? sizingContext.atr`. **Known instrumented divergence (`#371`; `guard-eval-tracker.ts:41-62` exists to measure it).** Naming which validator P2 re-runs is part of P2.
+
+⚠️ **COVERAGE IS 18 OF 19, NOT UNIVERSAL:** `strategy-engine.ts:1092` (`detectLiquidityTrap`) returns geometry with **no guard call**, deliberate per its comment at `:1090-1091`, fenced out of the active path at `signal-orchestrator.ts:2457-2463` **but still reachable from `stage-b-validator.ts:350` and `routes.ts:11092`.** Stated because "the guards run in every strategy" is what I implied and it is not true.
+
+### A9-R2 — 🟨 FINDING OUTSIDE THIS BATCH: THE SYSTEM ALREADY MODIFIES A PRICE WITHOUT RE-VALIDATING
+
+On the paper taker open, `active-execution-engine.ts:3416` sets `actualEntryPrice = _openFill.fillPrice` — **the depth-walked VWAP fill, not `signal.entryPrice`** — and the position is written with that entry at `:3604` while `stopLoss`/`takeProfit` carry the **UNMODIFIED** signal values at `:3605-3606`. ⇒ **realised risk/reward differs from validated risk/reward on EVERY taker open and nothing re-checks it.** **Control reported by the reader: the geometry-validation token set returns 0 across the 4,440-line engine, while the identical pattern returns 11 on `signal-orchestrator.ts` and 10 on `strategy-engine.ts`.**
+
+⚠️ **CUTS BOTH WAYS: "re-validate after modifying a price" is NOT an invariant this pipeline maintains anywhere — so rounding introduces no new CLASS of gap.** ⛔ **But it is a real pre-existing defect, it is the mechanism `#915` collapsed to, and it is NOT F-G-1's to fix.** **DISPOSITION: recorded on `#915` as a neighbouring mechanism with its citing line, owner CC-C. NOT folded into F-G-1.**
 
 ### A10 — THE FLOOR ALREADY EXISTS (§9.5(b-ii) — this would have been filed as a defect without the ledger search)
 `strategy-helpers.ts:25` **`MIN_STOP_DISTANCE_BPS: 30`** — 0.3%, **GUARD-1, Batch 18J**, raised 20→30 on 4-LLM consensus; enforced at `validateStopDistance:352-355`. ⇒ **a minimum stop distance is not a new mechanism and must not be proposed as one.** **Away-rounding can only widen, so it can never breach this floor.**
@@ -114,11 +189,11 @@ He required the cost split per strategy before any scheme is adopted: *"a pooled
 | # | item | from | notes |
 |---|---|---|---|
 | **P1** | **Round at the orchestrator seam (`:481`/`:499`), basis `tick_size`, direction by price role** — entry nearest, stop and target away from entry; short branch **refuses and raises**; missing-leg triple **refused**, never defaulted to long | **A8, A11**, scope §5 | side derived from ordering; no new field on `StrategySignal` |
-| **P2** | **Re-run `validateStopDistance` + `validateRR` AFTER rounding** | **A9** | Kyle's re-check, restored as correctness |
+| **P2** | ⛔ **NARROWED BY A9-R: re-run `validateStopDistance` ONLY.** `normalizeAndGateTarget:1662` already re-validates RR, reachability and ordering downstream of the rounding seam — **the 30 bps stop floor is the ONE check with no downstream re-run.** | **A9-R** | Kyle's re-check, restored — **one check, not four.** ⚠️ **Name WHICH ATR it uses (`#371`).** |
 | **P3** | **`volatility-edge` target rounds TOWARD entry** (it is a `Math.min` ceiling) — one bit at one site | scope §5 (Langston) | the single cap; all others are floors |
 | **P4** | **Rounding-rejection taxonomy into `signal_eval_archive.reject_stage`**, two kinds recorded separately, rate against admits, **no threshold** | scope OBJ-7b | live table verified: `reject_stage` + `gate_decision` jsonb, ~7.0M rows/3d |
-| **P5** | ⛔ **OHLC writer: KEEP the splice at `:108`; on failure PREPEND the rows back.** Bounded retry + bounded buffer, degrade loudly. All classes | **A4, A5, A6** | ⚠️ **diverges from Langston's max-by-arrival — he rules** |
-| **P6** | **Add `venue-validate` to the SIM** | **A1** | governance gap, not optional |
+| **P5** | ⛔ **REWRITTEN (A6-R). Build `#705`'s OWN three constraints, which I failed to cite: (i) SEPARATE transient from permanent — retry the transient, fail loudly on the permanent; (ii) BOUND the buffer — it has none today and the sibling's cap is 50,000; (iii) ALERT — `#704` produced 4,802 stderr lines and ZERO alerts.** ⚠️ **Re-add order is a SECONDARY refinement, and prepend specifically COLLIDES with a front-evicting bound (R13) — so the bound's eviction end and the re-add end must be decided TOGETHER, not separately.** | **A6-R, A4, A5** | ⛔ **My prepend-vs-append framing and Langston's max-by-arrival were both the wrong axis; the ledger had already ruled it secondary.** |
+| **P6** | **Add `venue-validate` to the SIM** — **and fix the dangling `§3.7` cross-reference** the System Manual makes to a SIM section that does not exist | **A1** | sibling control establishes the convention |
 | **P7** | **System Manual content update: venue price representability** | **A2** | §9 rule 3 |
 | **P8** | ✅ **DONE — per-strategy cost split run** | **A12** | ⛔ **`vwap_bounce` median 4.428% vs pooled 0.241%; `volatility_edge` cheapest at 0.057%. Pooled figure must NOT be quoted as the cost.** Per side: n/a, all longs |
 
