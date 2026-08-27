@@ -3915,6 +3915,23 @@ The VTS is fed by the **same** filtered scan (confirmed live: it is simulating `
 
 
 
+✅✅ **RESOLVED SAME DAY — THE EXIT PATH IS CLEAN. `#915` COLLAPSES TO CAUSE (c) ALONE: INVERTED GEOMETRY ADMITTED AT SIGNAL TIME.**
+
+**Langston refuted one arm of my "both cannot be true" by measurement rather than leaving it open: THE RECORDED STOP *IS* THE EVALUATED STOP.** `closed_trades` and `active_open_positions` are written from the SAME `signal.stopPrice` at the same seam (`active-execution-engine.ts:3605`/`:3706`, one object, post-overlay); the ratchet only ever RAISES the open row (`:1753`, guarded `> stopLoss`) and `closed_trades.stop_loss` is never rewritten at close. **They cannot diverge in the direction my contradiction needed.** He also killed his own first candidate: the AMR overlay at `:4262-4267` mutates `stopPrice` ABOVE both writes, so it PRESERVES an inversion rather than manufacturing a mismatch.
+
+★ **HIS HYPOTHESIS, WITH ONE CITING LINE — AND I RAN THE DISCRIMINATOR HE HANDED ME: THE EXIT CHECK IS POLLED, NOT INSTANTANEOUS.** `tec-evaluator.ts:270` fires only on a cycle that OBSERVES `currentPrice <= stopPrice`. **NOTHING EVALUATES AT THE MOMENT OF ENTRY.** ⇒ this issue's *"by construction already stopped out at the moment of entry"* is **THE FALSE PREMISE**. The true statement is *"stopped out at the first poll where price sits at or below the stop"* — **a RACE, not a construction.**
+
+**✅ MEASURED — first post-open mark vs the recorded stop, the two `target_hit` rows:**
+
+| trade | entry | inverted stop | FIRST post-open mark | mark vs stop |
+|---|---|---|---|---|
+| `AAVE/USD` | 113.13 | 117.83 | **123.89** (+56 s) | **ABOVE** |
+| `UNI/USD` | 3.7856 | 3.9871 | **4.1947** (+7 s) | **ABOVE** |
+
+⇒ **BOTH WERE ALREADY ABOVE THEIR STOP BY THE FIRST POLL, so `currentPrice <= stopPrice` was FALSE and the trades escaped cleanly and ran to target. CONFIRMED — there is NO defect in the exit path.** Langston's pre-stated falsifier was *"below ⇒ my hypothesis dies and you are back to an evaluation defect"*; it did not.
+
+⚠️ **WHAT REMAINS OPEN IS NARROWER AND IT IS THE ORIGINAL ONE: inverted geometry is being ADMITTED AT SIGNAL TIME.** ★ **Both first marks sit ~9.5% and ~10.8% ABOVE their recorded entry, which is consistent with the `#741` entry-fill family — but that is a NEIGHBOURING claim I have NOT tested here and it is not asserted.**
+
 **HOME: `B-EXIT-TRANSACTABLE-SIDE` (F-G), owner CC-C** — F-G is already opening the exit-geometry surface and this is the same object; it should NOT get its own batch. ⚠️ **NO DATE, per `§9.4`.** ↔ `#677` (stop provenance — only 49/241 crypto closes carry a stop), `B-EXIT-TRANSACTABLE-SIDE`.
 
 ### #914 OPEN 2026-08-27 (CC-C; Kyle refused the first version of this entry and was right to) — ⛔⛔ **VTS EXITS HAVE ZERO SLIPPAGE BY CONSTRUCTION. PAPER EXITS DO NOT. THE TWO POPULATIONS ARE NOT COMPARABLE ON EXIT ECONOMICS.**

@@ -158,7 +158,12 @@ const targetPrice = Math.min(measuredMoveTarget, atrTarget);
 
 ★ **AND THE 12 EXCEPTIONS DO NOT WEAKEN THE RULE — THEY ARE `#915`'s INVERTED-STOP SHAPE** (stop ABOVE entry on a long), which **Langston's own rounded-triple assertion REJECTS on strict ordering.** ⇒ **the same check that makes rounding safe also refuses the malformed geometry, and side-inference never has to guess: an un-orderable triple is not a side problem, it is an invalid signal.**
 
-⚠️ **STATED LIMIT: zero shorts have ever been TAKEN, so the short branch ships UNEXERCISED.** It is derived, fenced and unproven by live data — **that is a §9.1 scaffolding declaration, not a verified capability**, and it must be re-verified at the first short rather than assumed to work.
+⛔⛔ **THE SHORT BRANCH REFUSES AND RAISES — IT DOES NOT COMPUTE (Langston's condition, and it closes a hole my own rule opened).** **A FULLY-INVERTED LONG (`stop > entry > target`) IS ORDERABLE AND READS AS A CLEAN SHORT.** My inference cannot tell it from a genuine short — and since **zero shorts have ever been taken, a short-shaped triple today can ONLY be a defect.** ⇒ **the rule would have silently PRICED IT AS A VALID SHORT instead of refusing it.**
+
+★ **SO WHILE THE BRANCH IS UNEXERCISED IT MUST REFUSE AND RAISE, NEVER COMPUTE. That converts an unproven code path into a TRIPWIRE and makes "unexercised" SELF-ANNOUNCING** — rather than a limitation somebody has to remember to re-verify at the first short. **A §9.1 scaffolding declaration that enforces itself.**
+
+✅ **DENOMINATOR STATED (Langston's second condition): `n=646` is NOT a subset — it is EVERY closed trade. MEASURED: 646 of 646 carry a full triple; ZERO rows are missing `entry_price`, `stop_loss` or `take_profit`.**
+⚠️ **BUT THE DISPOSITION IS WRITTEN DOWN ANYWAY, because "none today" is not "impossible" and an unwritten rule for an absent case is the `#568` absent-as-valid shape: a triple MISSING A LEG has no side AT ALL — it is REFUSED at the seam and raised, never defaulted to long.**
 
 ---
 
