@@ -3932,3 +3932,31 @@ The VTS is fed by the **same** filtered scan (confirmed live: it is simulating `
 ⚠️ **`storage.ts` is the ONE legitimate second copy** — SQL cannot import the TS predicate. It is exempted in the fence **by name and with the reason**, and remains `#900`'s row-level parity target.
 
 **HOME: `B-EPOCH-PARITY-FENCE` (with `#900`/`#901`/`#902`), owner CC-C, due 2026-09-05.** Remaining work is the two `#902` sites and the `getDailyRealizedPnlSince` judgement.
+
+### #916 OPEN 2026-08-27 (CC-C / Claude Analyst) — ⛔ OUR STOP AND TARGET PRICES ARE NOT PRICES THE VENUE ACCEPTS
+
+Kraken publishes a per-pair `tick_size` — **1,437 pairs, 11 distinct values, all powers of ten.** ⛔ **MEASURED on 406 closed crypto trades, each matched to its OWN published tick: entry 80.8% representable, STOP 2.7%, TARGET 9.9%.** Entries inherit validity from an observed print; **stops and targets are ATR-derived floats and are ~97% / ~90% prices that CANNOT EXIST on the venue.**
+
+**Nothing in the repo rounds a decision price.** The only tick-rounding code — `resilience.ts:287 ExchangeValidator.validateOrder` — carries **hardcoded BTC/ETH values and a `DEFAULT` of `0.00000001` (which rounds nothing)**, and has **exactly ONE caller: `server/test-resilience-phases3-6.ts`, a test file.** The live venue-vetting leg (`execution/venue-validate.ts:94`, P19-B8.5 OBJ-8) formats to `pairDecimals` **only for the message it sends Kraken — the rounded price is never written back to the trade, and it is BUY-side only, so no exit price is ever venue-formatted.**
+
+⇒ **TWO consequences.** **(a) LIVE:** an off-grid price is rejected or silently re-priced by the venue ⇒ **paper and live diverge at the exact moment of exit.** **(b) F-G:** the through-not-touch test **CANNOT DISCRIMINATE** — `high > limit` ≡ `high >= limit` when `limit` is off-grid ⇒ it would report a success and change nothing. **This is Langston's r2 placebo catch, now quantified at 2.7%.**
+
+**DECIDED (Kyle 2026-08-27): round at SIGNAL GENERATION, to NEAREST.** ⛔ **NOT to the unfavourable side — biasing the price re-writes the trade's RR and net-EV BEFORE the EV gate judges it. Pessimism belongs in the FILL MODEL, never in the price.** ★ **Kyle's post-round re-check ACCEPTED as a TAIL GUARD.** ⚠️ **Justified by the tail, not the median — and the first cut of that measurement used the WRONG DENOMINATOR:** % of PRICE gave median 0.0056% and read as unarguably negligible; against **stop DISTANCE** (what actually sets position size and RR) it is **median 0.347%, p95 2.343%, 62 of 406 >1%, 3 >5%, worst 12.96%.**
+
+⚠️ **xStock has NO published tick — Kraken does not index xStocks in `AssetPairs` at all.** Already documented, do NOT re-investigate: `symbol-canonicalizer.ts` `KNOWN_NONEXISTENT_NAMES` + B-NEW-36 sub-batch (c) + `#120`. **DERIVED instead, and recorded as a FLOOR not a tick:** one full partition (`xstock_spot_ticker_snap_2026_08_26`) shows prices **HARD-CAPPED at 4 decimals — 0 observations beyond, 445 of 476 symbols reaching 4dp, spanning $1.20–$2,993 with NO price-tiering.** A hard cap is the signature of a real grid; an arithmetic mean would not cap. ⛔ **But observed precision is a LOWER BOUND on fineness, never the tick** — a symbol showing 3dp may simply not have printed a 4dp value that day. ⇒ **round xStock to the COARSEST well-observed precision: guaranteed-valid even if the true tick is finer. Rounding FINER than reality places invalid prices; rounding COARSER cannot.**
+
+**HOME: `F-G` (`Claude Comms and Packages/Scope Files/B_EXIT_TRANSACTABLE_SIDE_SCOPE.md`) as `OBJ-7`, owner CC-C, placed in `PHASE_19_PLAN.md` §1 Part F at position 3 — shipping FIRST WITHIN F-G, ahead of `OBJ-0` and `OBJ-1`. Kyle-directed 2026-08-27.**
+
+⚠️ **PROVENANCE READ (§9.5 b-ii) — NO PRIOR DECISION EXISTS.** `tick_size` appears **0 times** in `SYSTEM_MANUAL.md` and **0 times** in `SYSTEM_IMPACT_MAP.md`; a grid-rounding search across `1-system-manual/` + every completion report returns only unrelated hits (clock ticks, DB round-trips). Positive control: `P19-B8.5` is present in the same corpus.
+
+### #917 OPEN 2026-08-27 (CC-C / Claude Analyst) — `asset-capabilities` IS ORPHANED PRE-GOVERNANCE CODE AND ITS TABLE HAS ALWAYS BEEN EMPTY (rule 18)
+
+`server/services/asset-capabilities.ts` (added **2025-10-10**, `ed250cadd` — Replit era, pre-governance) collects exactly what `#916` needs: per-symbol `tick_size`, `lot_size`, `min_notional` from Kraken. **`asset_capabilities` holds 0 rows, all time.**
+
+**Cause, established by census — not inferred from the empty table.** The only populating call is `syncFromKraken()`, reachable from exactly ONE place: the manual route `routes.ts:19119`. The service's own auto-refresh trigger sits inside `getCapability()` (`asset-capabilities.ts:227`), and **`getCapability` has ZERO callers repo-wide.** ⇒ **the refresh can only fire from a path nothing invokes.** The two remaining readers are GET routes that return whatever the table holds — which is nothing.
+
+⇒ **the real per-pair grid was already being collected, into a table nothing reads, by a function nothing calls.** **Disposition per rule 18 = DELETE, not stub.** Blast radius: 2 GET routes + 1 POST route + `storage.ts` CRUD (`:2983-3004`) + the `assetCapabilities` schema entry. Mechanics: `DELETED_COMPONENTS_LOG.md` entry + `.removed` archive.
+
+⛔ **DO NOT delete it in the same batch that builds `#916`'s rounding.** `#916` must FIRST establish where the live grid is read from, or the deletion removes a writer whose replacement is not yet in place — **§9.5(a-ii): a removed WRITER whose READER survives produces no compile error and no failing test.**
+
+**HOME: `B-ASSET-CAPS-REMOVAL`, owner CC-C, placed in `PHASE_19_PLAN.md` §1 Part F immediately AFTER `F-G` closes and BEFORE `F-5` starts.**
