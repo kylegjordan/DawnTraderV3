@@ -118,8 +118,31 @@
 
 ⇒ ⛔ **P5 IS REWRITTEN AROUND `#705`'s OWN THREE CONSTRAINTS, NOT AROUND MY PREPEND PROPOSAL.**
 
-### A7 — WHAT THE FIX DOES **NOT** COVER, measured
-⛔ **SUPERSEDED BY R11/R12 — READ THOSE FIRST. "962,386 rows dropped" is a count of DROPPED BUFFER ROWS, NOT LOST DATA; the `crypto_perp` bulk was re-fetched on the deploy.** Raw: **5,897 failed flushes, 08-14→08-27, `crypto_perp` 5,889 · `crypto_spot` 6 · `xstock_spot` 2.** The two traded classes lost **8 batches in two weeks**. ⛔ **This fix does not explain, and must not be reported as explaining, the missing exit minutes.** ⚠️ **Qualified per Langston Q7: negligible by COUNT is not negligible by CONCENTRATION — `deadlock` is load-correlated, load correlates with volatility, and volatility is when stops and targets are touched.**
+### A7 — ⛔ OBJ-9's JUSTIFICATION, REWRITTEN FROM SCRATCH (Langston requirement 1 — a correction stacked on wrong text propagates the withdrawn version into the completion report)
+
+⛔⛔ **THE COUNT IS NOT THE CASE. THE UNBOUNDED TAIL IS THE CASE.** Everything I previously wrote here rested on 5,897 failures / 962,386 rows, and **both measurements Langston required have now come back AGAINST my own framing, in the direction of making this objective smaller.**
+
+**MEASUREMENT 1 (his requirement 3 — split the figure by writer). ANSWER: NONE OF IT IS THE TICKER WRITER.** All **5,897** `flush failed` lines carry `[B74][batch-writer]` — the OHLC writer. The ticker writer logs `[B74][ticker-writer] … flush failed (N rows dropped)` at `ticker-batch-writer.ts:140-142`, a string my grep matches. **POSITIVE CONTROL: the `ticker-writer` tag appears 191,433 times in the retained log stream and ZERO of those are failures.** ⇒ **the instrument reaches that leg and the zero is real.** ★ **He suspected my retraction was over-broad in the other direction — it is not. `#705`'s core (the unrecoverable ticker instance) is unsized because it has NOT FIRED in the retained window, not because I mis-split the number.**
+
+**MEASUREMENT 2 (his requirement 2 — the bar-continuity check across a known deploy). ANSWER: NO DEFICIT AT FOUR RESTARTS. MY OWN HYPOTHESIS IS NOT SUPPORTED.** Restarts at `2026-08-26 18:09 / 18:20 / 18:43` and `2026-08-27 10:01` UTC, `crypto_spot_ohlc_1m` bars in the restart minute vs its ±6-minute neighbours:
+
+| restart (UTC) | bars in restart minute | neighbour avg | neighbour min |
+|---|---|---|---|
+| 08-26 18:09 | 90 | 105 | 70 |
+| 08-26 18:20 | 94 | 99 | 84 |
+| 08-26 18:43 | 98 | 95 | 83 |
+| 08-27 10:01 | **126** | 112 | 98 |
+
+**Every restart minute sits INSIDE the neighbour range; two are ABOVE their neighbour average.** ⇒ **`#918`'s discarded window produces no measurable WS-leg loss at n=4.** **Likely mechanism, NOT asserted: the WS feed re-sends the still-open minute's cumulative bar on reconnect and the upsert fills it in — so only a minute that had already CLOSED and been buffered-but-unflushed is lost, a ≤5 s window against a 60 s bar.**
+⚠️ **LIMITS, stated: n=4, one asset class, all prompt restarts. And the instrument measures bar PRESENCE, not bar COMPLETENESS — a bar present but truncated in its final seconds would not show here.**
+
+✅ **SO WHAT ACTUALLY JUSTIFIES OBJ-9, and it is structural rather than numeric: THE WRITER CONVERTS ANY PERSISTENT ERROR INTO PERMANENT, SILENT, TOTAL LOSS — AND THE TAIL IS UNBOUNDED.** `#704` is the proof the tail is real: **one missing constraint produced 368,841 bars scanned and 0 rows landed for ~15 hours**, and it cost nothing **only because that leg happened to be REST-replayable.** ⛔ **`#704` residual (b), which Langston wrote and which I under-read, states the boundary exactly: *"acceptable for replayable REST bars and NOT for WS-only ones."*** ⇒ **the identical event on `crypto_spot` or `xstock_spot` would be permanent and invisible.**
+
+★ **THE HONEST SHAPE: observed cost is small (6 `crypto_spot` + 2 `xstock_spot` + 7 pool-slot timeouts, and no measurable restart loss); POTENTIAL cost is a total, silent, multi-hour outage on a leg with no re-fetch.** **OBJ-9 is bought by the tail, not by the count — and the objective must be stated that way or it will be graded against a number that does not support it.**
+
+⚠️ **AND `#918` IS THEREFORE NOT OBJ-9's JUSTIFICATION EITHER.** It is a real mechanism — the drain genuinely never runs — with **measured impact nil at n=4.** **It ships inside OBJ-9 because wiring an existing function into the shutdown handler is trivial next to the retry work, NOT because it is load-bearing.** ⛔ **Do not let it become the new headline; that would repeat the mistake this section exists to correct.**
+
+⚠️ **EVICTION POLICY IS CHOSEN FROM SCRATCH, NOT COPIED (Langston's correction):** `archive-batch-writer.ts` is the **data-archive** family, not `#705`'s subject. **The passive-archive ticker writer has NO bound at all today.** ⇒ **there is no sibling shape to inherit; the eviction end and the re-add end are both open decisions and must be made in one document (P5).**
 
 ---
 
