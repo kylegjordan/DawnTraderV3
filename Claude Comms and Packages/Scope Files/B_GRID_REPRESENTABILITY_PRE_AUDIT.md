@@ -84,6 +84,31 @@ All 1,437 pairs reconciled: `10^-pair_decimals == tick_size` for **1,433**; **4 
 
 ---
 
+### A12 — ⛔ P8 RUN, AND THE POOLED MEDIAN WAS NOT REPRESENTATIVE. Langston's warning was right.
+
+He required the cost split per strategy before any scheme is adopted: *"a pooled median over a population that is mostly ATR-target strategies is measuring the wrong invariant for most of its rows."* **Run on 398 long crypto trades, extra RISK added by rounding the stop away from entry:**
+
+| strategy | n | median | p95 | worst |
+|---|---|---|---|---|
+| `morning_star` | 104 | 0.092% | 1.619% | 9.37% |
+| `inside_bar_reversal` | 65 | 0.224% | 1.098% | 3.34% |
+| `reverse_impulse` | 64 | 0.478% | 2.651% | 5.33% |
+| `pivot_shift` | 63 | 0.358% | 2.941% | **11.11%** |
+| `support_bounce` | 45 | 0.394% | 3.079% | 3.21% |
+| `sma_trend_ride` | 26 | 0.537% | 2.193% | 3.71% |
+| `volatility_edge` | 11 | **0.057%** | 0.128% | 0.13% |
+| `defensive_hedge` | 8 | 0.760% | 1.373% | 1.37% |
+| ⛔ **`vwap_bounce`** | **7** | ⛔ **4.428%** | **7.469%** | 7.47% |
+| `vwap_pullback` | 4 | 0.291% | 2.416% | 2.42% |
+| `mean_reversion` | 1 | 7.341% | — | 7.34% |
+| **ALL POOLED** | 398 | 0.241% | 2.941% | 11.11% |
+
+⛔ **`vwap_bounce`'s median is 4.428% — EIGHTEEN TIMES the pooled median of 0.241%, and above the pooled p95.** ⚠️ **`n=7`, so the RATE is not decision-grade; the SEPARATION is what is reportable.** ⇒ **quoting 0.241% as "the cost of away-rounding" would have been true of the batch and false of that strategy.** ★ **This is exactly the failure Langston named in advance, and it was invisible until the split.**
+
+✅ **AND THE EXCEPTION IS THE CHEAPEST CASE, which resolves a worry rather than raising one: `volatility_edge` — the ONE cap, the one strategy needing special handling (P3) — has the LOWEST cost of any strategy at 0.057% median.** Its target-side reach under the cap treatment is **+0.018% median, +0.15% worst (n=11)**. ⇒ **the special case is nearly free; P3 costs almost nothing to get right.**
+
+⚠️ **SIDE: not reported per side because there is nothing to report — all 398 are LONG and zero shorts have ever been taken (§3 of the scope). Stated rather than silently omitted.**
+
 ## 4. IMPLEMENTATION PLAN — every item back-references its finding
 
 | # | item | from | notes |
@@ -95,7 +120,7 @@ All 1,437 pairs reconciled: `10^-pair_decimals == tick_size` for **1,433**; **4 
 | **P5** | ⛔ **OHLC writer: KEEP the splice at `:108`; on failure PREPEND the rows back.** Bounded retry + bounded buffer, degrade loudly. All classes | **A4, A5, A6** | ⚠️ **diverges from Langston's max-by-arrival — he rules** |
 | **P6** | **Add `venue-validate` to the SIM** | **A1** | governance gap, not optional |
 | **P7** | **System Manual content update: venue price representability** | **A2** | §9 rule 3 |
-| **P8** | **Per-strategy cost split**, away-rounding, `volatility_edge` separate, reported per side | Langston's outstanding ask | owed before implementation closes |
+| **P8** | ✅ **DONE — per-strategy cost split run** | **A12** | ⛔ **`vwap_bounce` median 4.428% vs pooled 0.241%; `volatility_edge` cheapest at 0.057%. Pooled figure must NOT be quoted as the cost.** Per side: n/a, all longs |
 
 ⛔ **`UNAUDITED`: none.** Every item above traces to a finding in §1–§3.
 
