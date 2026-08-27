@@ -3932,6 +3932,16 @@ The VTS is fed by the **same** filtered scan (confirmed live: it is simulating `
 
 ⚠️ **WHAT REMAINS OPEN IS NARROWER AND IT IS THE ORIGINAL ONE: inverted geometry is being ADMITTED AT SIGNAL TIME.** ★ **Both first marks sit ~9.5% and ~10.8% ABOVE their recorded entry, which is consistent with the `#741` entry-fill family — but that is a NEIGHBOURING claim I have NOT tested here and it is not asserted.**
 
+★★ **NEIGHBOURING MECHANISM, SURFACED 2026-08-28 BY AN INDEPENDENT READER — RECORDED HERE RATHER THAN FILED SEPARATELY, because it is the same object as this issue's surviving cause (inverted geometry admitted at signal time).**
+
+**THE SYSTEM ALREADY MODIFIES A PRICE WITHOUT RE-VALIDATING.** On the paper taker open, `active-execution-engine.ts:3416` sets `actualEntryPrice = _openFill.fillPrice` — **the depth-walked VWAP fill, NOT `signal.entryPrice`** — and the position is written with that entry at `:3604`, while `stopLoss` and `takeProfit` carry the **UNMODIFIED** `signal.stopPrice` / `signal.targetPrice` at `:3605-3606`.
+
+⇒ **the realised risk/reward differs from the validated risk/reward on EVERY taker open, and nothing re-checks it.** ★ **That is exactly the shape of this issue: an entry recorded far from the geometry that was validated.** **Both `AAVE` and `UNI` show first post-open marks ~9.5% and ~10.8% above their recorded entry.**
+
+**CONTROL, reported by the reader and the reason this is not just an assertion:** the geometry-validation token set (`applyGlobalGuards|normalizeAndGateTarget|validateRR|validateStopDistance|validateReachability|invalid_geometry|minRR|min_rr`) returns **0 across the 4,440-line `active-execution-engine.ts`**, while the identical pattern returns **11 on `signal-orchestrator.ts`** and **10 on `strategy-engine.ts`** — so the search could have found a positive.
+
+⚠️ **NOT ASSERTED AS THE CAUSE OF THE 12 INVERTED ROWS — it is a mechanism with a citing line that would PRODUCE this shape, which is a different and weaker claim.** The discriminator has not been run. ⛔ **And it is NOT `F-G-1`'s to fix: "re-validate after modifying a price" is not an invariant this pipeline maintains anywhere, so the rounding work introduces no new class of gap.**
+
 **HOME: `B-EXIT-TRANSACTABLE-SIDE` (F-G), owner CC-C** — F-G is already opening the exit-geometry surface and this is the same object; it should NOT get its own batch. ⚠️ **NO DATE, per `§9.4`.** ↔ `#677` (stop provenance — only 49/241 crypto closes carry a stop), `B-EXIT-TRANSACTABLE-SIDE`.
 
 ### #914 OPEN 2026-08-27 (CC-C; Kyle refused the first version of this entry and was right to) — ⛔⛔ **VTS EXITS HAVE ZERO SLIPPAGE BY CONSTRUCTION. PAPER EXITS DO NOT. THE TWO POPULATIONS ARE NOT COMPARABLE ON EXIT ECONOMICS.**
@@ -4040,3 +4050,29 @@ Kraken publishes a per-pair `tick_size` — **1,437 pairs, 11 distinct values, a
 ⛔ **DO NOT delete it in the same batch that builds `#916`'s rounding.** `#916` must FIRST establish where the live grid is read from, or the deletion removes a writer whose replacement is not yet in place — **§9.5(a-ii): a removed WRITER whose READER survives produces no compile error and no failing test.**
 
 **HOME: `B-ASSET-CAPS-REMOVAL`, owner CC-C, placed in `PHASE_19_PLAN.md` §1 Part F immediately AFTER `F-G` closes and BEFORE `F-5` starts.**
+
+### #918 OPEN 2026-08-28 (CC-C, surfaced by an independent reader during F-G-1 Step 2) — ⛔ EVERY RESTART AND EVERY DEPLOY SILENTLY DISCARDS THE LAST FLUSH WINDOW OF ARCHIVED BARS
+
+**`stopBatchWriter` (`server/services/passive-archive/ohlc-batch-writer.ts:204`) is defined, exported, and its own docstring says *"Drains pending buffers first."* IT HAS ZERO CALLERS IN THE ENTIRE TREE.** Re-derived: `grep -rn stopBatchWriter server/` returns **only its own definition**.
+
+**And the live shutdown path never reaches it.** `server/core/boot_orchestrator.ts:38-53` calls `stopVTSRunner()` **and nothing else**.
+
+⇒ **Up to one flush interval (`BATCH_FLUSH_INTERVAL_MS`, 5 s) of buffered OHLC bars is discarded on every PM2 restart and every `dt-deploy` — with NO error line, because nothing throws.** ⛔ **This is SILENT, where the `#705` drop-on-failure path is at least noisy: that one writes to `error.log`; this one writes nothing at all.**
+
+★ **CONSEQUENCE FOR MEASUREMENT, and it is why this matters beyond the rows: every count of archive loss derived from `flush failed` log lines is a FLOOR, not a total.** The F-G-1 audit's *"8 batches lost on the traded classes"* counts only failures that logged. **Deploy-time and restart-time losses leave no trace to count**, so the true figure is unmeasured and this instrument cannot reach it.
+
+⚠️ **NOT YET ESTABLISHED, and deliberately not asserted:** whether the discarded window is RECOVERED. For `crypto_perp`/`xstock_perp` a restart CLEARS the in-memory `lastOhlcInterval` high-water map (`kraken-futures-archiver.ts:56`), so the REST poller re-fetches and the loss is likely nil — **the same mechanism that made `#704`'s outage cost nothing.** For the two **WS legs (`crypto_spot`, `xstock_spot`) there is no re-fetch path at all**, so those bars are plausibly gone. **That asymmetry is a hypothesis with a citing line, NOT a measurement — the discriminator is a bar-continuity check across a known deploy timestamp, and it has not been run.**
+
+**HOME: folded into `F-G-1` (`B-GRID-REPRESENTABILITY`) `OBJ-9`, owner CC-C** — it is the same component, the same buffer and the same class of loss, and `OBJ-9` is already rewriting that flush path around `#705`'s three constraints. **Wiring the existing drain into the shutdown handler is a smaller change than the retry work already scoped.** ⛔ **Disposition 1 (fold into the work in hand), NOT a new batch** — a separate batch touching the same twenty lines would collide with `OBJ-9` in review. ↔ `#705`, `#704`.
+
+### #919 OPEN 2026-08-28 (CC-C, surfaced by an independent reader during F-G-1 Step 2) — GUARD COVERAGE IS 18 OF 19, AND THE EXCEPTION IS REACHABLE FROM TWO NON-ORCHESTRATOR PATHS
+
+**`applyGlobalGuards` runs at 18 signal-construction sites** — the 10 file-based strategies plus 8 in-class detectors in `strategy-engine.ts`. **`detectLiquidityTrap` (`strategy-engine.ts:1092`) returns geometry with NO guard call**, deliberately, per its own comment at `:1090-1091`.
+
+✅ **It is fenced out of the ACTIVE orchestrator path** at `signal-orchestrator.ts:2457-2463`. ⚠️ **But it remains reachable from `stage-b-validator.ts:350` and `routes.ts:11092`.**
+
+⇒ **The statement *"the geometry guards run in every strategy"* — which the F-G-1 audit implied and which any reader would take from `applyGlobalGuards`'s ubiquity — IS FALSE.** ★ **Recorded because a false universal is exactly what a future audit would build on**, and because `F-G-1`'s rounding work reasons about what the guards do and do not cover.
+
+⚠️ **NOT a defect claim: the exclusion is deliberate and commented, and the active path is fenced.** **What is unestablished is whether the two surviving reach paths can produce a signal that TRADES.** That is the question to answer, not an assertion that they do.
+
+**HOME: `B-GUARD-COVERAGE-AUDIT`, owner CC-C, placed in `PHASE_19_PLAN.md` §1 Part F immediately AFTER `F-G-2`, alongside `B-MIN-STOP-DISTANCE`** — both are geometry-validation questions that want answering together, and neither blocks `F-G-1` or `F-G-2`. **Deliverable: trace whether `stage-b-validator.ts:350` and `routes.ts:11092` can reach execution, and either fence them or state why they need no guard.**
