@@ -121,6 +121,7 @@ import {
   getDepthSnapshot,
   assessWarmth,
   assessSufficiency,
+  getTickerWitness,
   recordDepthGateBlock,
   type DepthSnapshot,
 } from './execution/depth-source.js';
@@ -2010,6 +2011,18 @@ export class ActiveExecutionEngine {
       _takerCloseSlippage = _closeFill.slippageQuote;
     }
     
+    // ── B-EXIT-PROVENANCE OBJ-3 / #911 — THE INDEPENDENT WITNESS, STAMPED ON BOTH LEGS.
+    // Placed HERE, below the if/else, deliberately: the MAKER leg never fetches a depth snapshot
+    // at all (it filled at a resting limit — no book was consulted), so a witness taken inside the
+    // taker branch would be silently absent on exactly the cohort that produced this batch's first
+    // OBJ-2 specimen. One call, after both legs, covers both.
+    // ⛔ NOT taken from `_closeSnap`: on crypto that IS the book the fill walked — the suspect —
+    // and a cross-check against the suspect's own testimony agrees by construction and proves
+    // nothing. The archiver's ticker snapshot is a separate socket, hence a real second opinion.
+    // ⚠️ On xStock it is NOT independent (same table the fill reads) — a CONSISTENCY record only.
+    // Fail-OPEN: a null witness stamps NULL and never blocks the close.
+    const _witness = _closeClass ? await getTickerWitness(position.symbol, _closeClass) : null;
+
     // Get entry costs from position (persisted at entry time)
     const entryFee = position.entryFee ? parseFloat(position.entryFee) : (entryValue * (_b45FeePct / 100));
     const entrySlippage = position.entrySlippage ? parseFloat(position.entrySlippage) : 0;
@@ -2261,12 +2274,16 @@ export class ActiveExecutionEngine {
           ? options.exitProvenance.bookMid.toString()
           : null,
         exitBookAgeMs: options?.exitProvenance?.bookAgeMs ?? null,
+        // OBJ-3 (#911): the caller's payload wins if it ever carries one; otherwise the witness
+        // read above. Both may legitimately be absent — a NULL here now means "no witness row",
+        // which is a DIFFERENT fact from the pre-#911 "not instrumented" and the column comment
+        // has been corrected to say so.
         exitTickerBid: options?.exitProvenance?.tickerBid != null
           ? options.exitProvenance.tickerBid.toString()
-          : null,
+          : (_witness ? _witness.bid.toString() : null),
         exitTickerAsk: options?.exitProvenance?.tickerAsk != null
           ? options.exitProvenance.tickerAsk.toString()
-          : null,
+          : (_witness ? _witness.ask.toString() : null),
         totalCost: totalCost.toString(),
         grossPnl: grossPnl.toString(),
         netPnl: netPnl.toString(),

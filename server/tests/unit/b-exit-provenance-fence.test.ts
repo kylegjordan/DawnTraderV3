@@ -20,6 +20,7 @@ const SERVER = join(__dirname, '..', '..');
 const AEE = readFileSync(join(SERVER, 'services', 'active-execution-engine.ts'), 'utf8');
 const APM = readFileSync(join(SERVER, 'services', 'active-portfolio-manager.ts'), 'utf8');
 const LPA = readFileSync(join(SERVER, 'services', 'live-pricing-adapter.ts'), 'utf8');
+const LPA_DEPTH = readFileSync(join(SERVER, 'services', 'execution', 'depth-source.ts'), 'utf8');
 
 /** Strip line and block comments so a PROHIBITION cannot be satisfied — or violated — by prose.
  *  The comments in these files quote the very patterns being fenced, so scanning raw text would
@@ -163,6 +164,37 @@ describe('B-EXIT-PROVENANCE — the exit stamp cannot be satisfied by a non-prov
     expect(src).toMatch(/crypto_ws_book_walk/);
     // TWO entry-stamp sites, not one — asserted by COUNT, so deleting either one fails here.
     expect((src.match(/entryPriceProducer:/g) ?? []).length).toBe(2);
+  });
+
+  it('#911: the independent witness is read from the ARCHIVER, never from the book the fill walked', () => {
+    // ⛔ THE WHOLE POINT OF OBJ-3. #741 is an ORDER-BOOK defect, so on crypto the fill walks the
+    // suspect. A cross-check sourced from that same book agrees with itself by construction and
+    // proves nothing. The witness must come from the archiver's ticker snapshot instead.
+    const src = code(AEE);
+    expect(src).toMatch(/getTickerWitness\(position\.symbol,\s*_closeClass\)/);
+    // ...and it must NOT be sourced from the depth snapshot the taker leg already holds.
+    expect(src).not.toMatch(/exitTickerBid:[^;]{0,160}_closeSnap/);
+    expect(src).not.toMatch(/exitTickerAsk:[^;]{0,160}_closeSnap/);
+    // Both columns actually consume it — otherwise the call is decorative.
+    expect(src).toMatch(/exitTickerBid:[\s\S]{0,200}_witness\.bid/);
+    expect(src).toMatch(/exitTickerAsk:[\s\S]{0,200}_witness\.ask/);
+  });
+
+  it('#911: the witness is taken BELOW the maker/taker split, so the maker leg is covered', () => {
+    // The maker leg never fetches a depth snapshot (it filled at a resting limit). A witness taken
+    // inside the taker branch would be silently absent on exactly the cohort that produced this
+    // batch's first OBJ-2 specimen — a gap that would read as "no witness row" rather than as a
+    // missed call. Assert it sits after the branch closes, not inside it.
+    const src = code(AEE);
+    const makerIdx = src.indexOf('options?.makerExitFill');
+    const witnessIdx = src.indexOf('await getTickerWitness');
+    const persistIdx = src.indexOf('exitTickerBid:');
+    expect(makerIdx).toBeGreaterThan(-1);
+    expect(witnessIdx).toBeGreaterThan(makerIdx);
+    expect(persistIdx).toBeGreaterThan(witnessIdx);
+    // And it must be fail-OPEN: a telemetry cross-check may never block a close.
+    expect(code(LPA_DEPTH)).toMatch(/TICKER_WITNESS/);
+    expect(code(LPA_DEPTH)).toMatch(/return null;/);
   });
 
   it('the producer vocabulary stays CLOSED, and the non-cacheable member is excluded', () => {

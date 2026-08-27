@@ -76,6 +76,69 @@ export async function getDepthSnapshot(
   return null; // no depth feed for other classes
 }
 
+/**
+ * B-EXIT-PROVENANCE OBJ-3 / `#911` — THE INDEPENDENT WITNESS AT CLOSE.
+ *
+ * ⛔ WHY THIS IS A SEPARATE READ AND NOT `getDepthSnapshot`, WHICH THE CLOSE PATH ALREADY CALLS.
+ * `#741` is an ORDER-BOOK defect. For `crypto_spot` the fill walks `getBookForFill` — the live WS
+ * mini-book, i.e. THE SUSPECT. Stamping a cross-check FROM that same book is checking the suspect
+ * against its own testimony: it would agree with itself by construction and prove nothing.
+ * `crypto_spot_ticker_snap` is written by the ARCHIVER off a SEPARATE socket, so it is a genuinely
+ * independent observation of the same instant. That independence is the entire value of the column.
+ *
+ * ⚠️ AND IT IS NOT INDEPENDENT ON xSTOCK — stated here rather than discovered later (Langston,
+ * 2026-08-27). For `xstock_spot` the fill's own depth-walk reads `xstock_spot_ticker_snap`, THE
+ * SAME TABLE this function reads. There, the stamp is a CONSISTENCY record — it can catch a stale
+ * or mis-keyed read, and it CANNOT corroborate the price against a second feed. Two different
+ * epistemic values behind one column name; the schema comment carries the same warning.
+ *
+ * ⚠️ THE VALUE CARRIES AN ARCHIVE AGE, NOT A LIVE ONE. The archiver writes on its own cadence
+ * (measured 2026-08-27: xStock ~4s; crypto 5.0-9.0s across the top 5 symbols, 0 null sides in
+ * n≈4,970 over two hours). So this is a lagged witness, and `capturedAtMs` is returned so the lag
+ * is READABLE ON THE ROW rather than assumed to be zero. A witness whose staleness is unknown is
+ * the `#546` shape; one that reports its own age is not.
+ *
+ * FAIL-OPEN BY DESIGN: returns `null` on any miss or throw. This is a TELEMETRY cross-check —
+ * it must never be able to block or delay a close. Contrast `getDepthSnapshot`, which fails CLOSED
+ * because a fill genuinely cannot proceed without depth.
+ */
+export interface TickerWitness { bid: number; ask: number; capturedAtMs: number; }
+
+export async function getTickerWitness(
+  symbol: string,
+  assetClass: AssetClass,
+): Promise<TickerWitness | null> {
+  const table =
+    assetClass === 'crypto_spot' ? 'crypto_spot_ticker_snap'
+    : assetClass === 'xstock_spot' ? 'xstock_spot_ticker_snap'
+    : null;
+  if (!table) return null;
+  try {
+    // Table name is chosen from a closed literal set above — never interpolated from input.
+    const res = await db.execute<{ bid: string; ask: string; captured_ms: string }>(
+      table === 'crypto_spot_ticker_snap'
+        ? sql`SELECT bid::text, ask::text, EXTRACT(EPOCH FROM captured_at) * 1000 AS captured_ms
+              FROM crypto_spot_ticker_snap
+              WHERE symbol = ${symbol} AND bid > 0 AND ask > 0
+              ORDER BY captured_at DESC LIMIT 1`
+        : sql`SELECT bid::text, ask::text, EXTRACT(EPOCH FROM captured_at) * 1000 AS captured_ms
+              FROM xstock_spot_ticker_snap
+              WHERE symbol = ${symbol} AND bid > 0 AND ask > 0
+              ORDER BY captured_at DESC LIMIT 1`,
+    );
+    const rows = (res as any).rows ?? (res as unknown as any[]);
+    const r = Array.isArray(rows) ? rows[0] : undefined;
+    if (!r) return null;
+    const bid = parseFloat(r.bid), ask = parseFloat(r.ask);
+    if (!(bid > 0 && ask > 0)) return null;
+    return { bid, ask, capturedAtMs: Math.round(parseFloat(r.captured_ms) || 0) };
+  } catch (err) {
+    // Fail-OPEN and loud: the close proceeds, the columns land NULL, and the reason is on the record.
+    console.warn(`[B-EXIT-PROVENANCE][TICKER_WITNESS] ${symbol} (${assetClass}) lookup failed — stamping NULL, close unaffected:`, err instanceof Error ? err.message : err);
+    return null;
+  }
+}
+
 export interface WarmthResult { warm: boolean; reason: string; }
 
 /**
