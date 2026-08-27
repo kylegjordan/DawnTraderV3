@@ -520,9 +520,23 @@ Repo-wide grep per question, tests excluded; state each list in the audit. If a 
 
 **Recording rule:** every audit states what the provenance read found — including "consulted `bridge/canonical/`, no coverage of this component" (itself a finding: the canonical corpus documented only ONE of the two RTB mechanisms). A batch that changes a component documented in the canonical corpus updates the CURRENT docs (SIM / System Manual); the canonical corpus is a frozen historical record and is NOT edited.
 
-### 9.4 SURFACED-ISSUE SCHEDULING — every "fix it later" gets a named home, NOW (Kyle directive 2026-06-13)
+### 9.4 THE FIND IS THE TRIGGER — EVERY OUT-OF-SCOPE FINDING GETS A DECLARED DISPOSITION, IN THE SAME TURN *(Kyle directive 2026-06-13; TRIGGER CORRECTED 2026-08-27)*
 
-When CC and/or Langston surface an issue worth fixing and agree it should be fixed, it MUST be given a **concrete scheduled home at the moment of agreement** — a named batch, a specific roadmap phase AND item number, or a dated scheduled task/alert. **"Fix it later" / "in a future phase" / "post-launch" without a named home is NOT acceptable.** The failure mode this kills: vague deferral → everyone forgets → it never happens.
+⛔⛔ **IT FIRES THE MOMENT YOU FIND THE THING — NOT WHEN YOU DECIDE IT IS WORTH FIXING.** **THE TRIGGER: you come across ANYTHING outside the scope of what you are currently doing** — a defect, an unknown, a gap, a wrong assumption, **or a piece that requires an addition to the current batch, task, step or investigation.** ✅ **That is the whole test. No judgement gate in front of it.**
+
+⚠️ **THIS RULE READ, UNTIL 2026-08-27:** *"when CC and/or Langston surface an issue **worth fixing** and **agree it should be fixed**, it MUST be given a home **at the moment of agreement**."* ⛔ **THREE DECISION-GATES IN FRONT OF THE TRIGGER — so the rule could not fire until the deciding had already happened, which is exactly backwards.** *(Kyle: "the decision on what to do with the issue should NOT be the trigger for the rule to fire.")* ★ **THE DECISION IS THE RULE’S OUTPUT, NOT ITS PRECONDITION.**
+⚠️ **MEASURED THE SAME DAY, and it is why this was rewritten: a fresh-context reviewer returned EIGHT specific absences on a live scope. They were reported to Kyle and to Langston — and NOTHING in the scope changed.** The old trigger never fired, because they were never framed as *"an issue we agree to fix"*; they were observations about work already in flight. **Kyle: *"to just announce it and say hey, found this, that’s a problem — and then keep going and not do anything with that. That’s not acceptable."***
+
+⇒ **THE DISPOSITION IS MANDATORY AND IT IS ONE OF THESE FOUR. State which, in the same turn:**
+| # | disposition | when |
+|---|---|---|
+| **1** | **FOLD INTO THE WORK IN HAND** — amend the scope / audit / step you are on | **the current batch DEPENDS on it.** ★ *The one the old rule had no branch for at all.* |
+| **2** | **ADD AS AN ITEM TO AN EXISTING BATCH** | it belongs to work already planned — becomes an extra step or objective there |
+| **3** | **ITS OWN BATCH, PLACED IN THE PLAN** | it stands alone ⇒ the `HOME:` form below, positioned between named items |
+| **4** | **A SCHEDULED REVIEW** — placed between batches, or inside one | it needs looking at before it can be dispositioned |
+
+⛔ **"ANNOUNCE IT AND CARRY ON" IS NOT ON THE LIST. Telling Kyle, telling Langston, or filing it in a message is NOT a disposition** — reporting is not proposing, and a finding with no declared destination is an open loop wearing a finished one’s clothes.
+★ **AND IT IS FOUR OPTIONS, NOT ONE: the old rule offered only #3, so a finding that should have been folded into the work in hand had nowhere legitimate to go and got announced instead.**
 
 ⛔⛔ **A HOME IS A NAME AND A PLACE IN THE QUEUE — NEVER A CALENDAR DATE. DO NOT PUT A DUE DATE ON A BATCH (Kyle directive 2026-08-25).** His words: *"Who knows what we're gonna be doing on September fifth?"* **Batches are SLOTTED into the current batch/task list where they make the most sense; they are not booked against a day.** A date on a batch is a **fake commitment** — nothing enforces it, the queue in front of it moves, and it expires into a stale record that reads as a missed deadline rather than as work that was correctly re-ordered.
 ★ **THE ONE THING A DATE IS FOR, and it is the reason the mechanism exists at all: a period whose LENGTH is the point** — an observation window, a soak, a test period, a data-collection run. *"+48h gate"*, *"14-day soak"*, *"collect 30 days"*. **There the days ARE the content**, so the date is a measurement parameter, not a promise. `RUNNING_ISSUES` #87's *"+48h gate"* is the correct shape; **`B-GATE-GUARD` due 2026-09-05 was not.**

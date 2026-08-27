@@ -103,6 +103,7 @@ Anything you turn up that was **not part of the batch's scope** — a bug, a bre
 ```
 ⚠️ **Only after the investigation settles it.** A suspected bug is not reportable until you have read the code and its history; **if it turns out NOT to be a bug, it is not mentioned at all.**
 ★ **IF THE FINDING NEEDS HIS DECISION, SAY SO IN THE HEADER ITSELF** — `# 🟥 DECISION REQUIRED — <finding>` — because he decides whether to stop and read from the header alone.
+⛔⛔ **AND EVERY FINDING BLOCK ENDS WITH ITS DISPOSITION — A LINE YOU CANNOT LEAVE BLANK (§9.4, trigger corrected 2026-08-27):** `DISPOSITION: folded into this batch | added to <batch> | own batch, placed after <item> | review scheduled at <point>`. ⛔ **"Announced" is not one of them.** ⚠️ **Without this line a session completes the block correctly and decides nothing.**
 
 ### ⛔ WHEN A DECISION IS HIS, OR A STEP HALTED
 ```
@@ -124,7 +125,7 @@ Say what is blocked, the options in plain terms, your recommendation, and what h
 1. **GO BACK TO THE OBJECT** — re-open the file, re-run the query, re-derive the number. **Re-reading your own reasoning is not this step.**
 2. ★ **WOULD THIS CHECK HAVE COME OUT DIFFERENTLY IF I WERE WRONG?** If not, **it does not DISCRIMINATE** — including when the record itself says so (its type, its source, its own stated scope). **RELIABILITY IS NOT VALIDITY:** the same answer twice is reliability; whether the thing measured IS the thing claimed is validity. ⇒ **a check that cannot come out differently is a fence that was never mutation-proved.**
 3. **CHECK THE WHOLE PATH, not the piece you suspect.**
-*(Each of the four is a mistake shipped in one batch, 2026-08-23. **Per-step detail lives in the workflow step skills** — 8 of the 12 carry it, phrased for what that step gets wrong.)*
+*(Per-step detail lives in the workflow step skills, phrased for what that step gets wrong.)*
 
 ✅ **FIX WHAT YOU FIND AND MOVE ON — KYLE DOES NOT WANT THE SAUSAGE-MAKING.** A mistake caught and fixed inside your own task **is the work, not news**: it goes in the commit message, and in `MISTAKE_PATTERNS.md` if it is a pattern. ⛔ **NOT in his chat** — no "I should have", no tally, no third-time-this-week.
 
