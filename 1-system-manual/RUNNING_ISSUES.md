@@ -3028,6 +3028,10 @@ The COMMITTED copy carries the five **pre-Phase-14 regime keys** (`BULL_STABLE`/
 
 ⇔ `#744` (the mechanism) · `MISTAKE_PATTERNS` `skipped-the-gate` (this is instance 2, and it extends the pattern rather than repeating it).
 
+★★ **UPDATE 2026-08-27 — INSTANCE 4, AND LANGSTON INDEPENDENTLY RE-DERIVED `#744`’S DESIGN WITHOUT KNOWING IT EXISTED.** Edit 9 (the ungated fresh reviewer, live at `0bc4fb0d8` across four skills) was the **fourth** rules change in two days to ship with no scope. His ruling: *"Four rules-changes about not shipping unscoped rules-changes shipped unscoped. That is data, and it says the remedy is not another rule"* — and he then specified **a pre-push guard refusing a commit that touches `CLAUDE.md`, `CONDUCT.md` or `.claude/skills/**` without a scope reference**, citing `guard-bare-commit.mjs` as the precedent.
+✅ **THAT IS `#744`, arrived at from a different direction and one instance later.** ★ **Two independent derivations of the same file set is the strongest evidence the set is drawn correctly** — and **his set includes `.claude/skills/**`, which is exactly the widening recorded above from a case he never saw.** ⇒ **the widening is confirmed, not merely proposed.**
+**§9.4 DISPOSITION — #2, ADD TO AN EXISTING BATCH: it joins `B-GATE-GUARD` (#744), owner CC-A, already placed at `PHASE_19_PLAN.md` §governance queue position 4.** ⛔ **NOT its own batch as Langston proposed — he was ruling without knowing `#744` was already named, scoped and placed; a second hook racing the same push is worse than one hook with two checks.** *(Told to him; correcting the reviewer is the same duty in the other direction.)*
+
 ---
 
 ### #746 OPEN 2026-08-25 (CC-A; found while measuring how many documents name Langston's model — not by looking for it) — ★★ **`langston-call` — ONE OF LANGSTON'S TWO LIVE MODEL SITES — HAS NO REPO-CANONICAL SOURCE, AND TWO STALE FORKS THAT READ LIKE ONE. ALL THREE NAME A DIFFERENT MODEL.**

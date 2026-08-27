@@ -40,3 +40,8 @@
 ★★ **ASK IT ONE THING, AND NOT THE OBVIOUS ONE:** not *"does this support my finding?"* but **"WHAT OTHER STATES OF THE WORLD ARE CONSISTENT WITH THIS OBJECT?"** — that question reaches the wrong-object error; a yes/no cannot.
 ⛔ **SCOPE IT TO THAT ONE OUTPUT.** Never a disposition, never a verdict on the finding. The moment it rules on your conclusion it is guessing from a stub.
 ⚠️ **AND ITS LIMIT, which is Langston’s own measured case: a fresh context is blind to context it NEEDS, not only to context it should ignore.** He vacated a ruling of his own because a fresh invoke could not see his three earlier ones.
+
+⛔⛔ **AND FOR AN INVESTIGATION THE CLAIM-ONLY MODE IS MANDATORY, NOT OPTIONAL (Langston condition (ii), 2026-08-27).** A finding is almost always a **MECHANISM** claim or an **ABSENCE** claim — **the two classes where wrong-object is the documented failure.** ⇒ **Hand it the CLAIM ALONE: *"name the objects that would settle this, then — what other states of the world are consistent with them?"***
+★ **BECAUSE HANDING IT THE OBJECT LEAVES THE SELECTION WITH YOU, AND THAT IS WHERE THE ERROR LIVES.** ⚠️ **Langston’s #675 retraction: his failure was not misreading the file — it was believing that file WAS the object.** A reader given only the claim has to go and find it.
+⛔ **A HIT IS A LEAD, RE-DERIVED AT THE REF WITH A CONTROL BEFORE IT MOVES ANYTHING. A CLEAN IS NOT EVIDENCE** — *"the reviewer found nothing"* may never be cited as support for a finding (#453: a silence is not an absence).
+⛔ **LEAVE THE ONE-LINE RECORD where the finding lands:** **`REVIEWER: <object handed | claim-only> · <question> · <verdict> · re-derived y/n`** — **without a denominator the bar can never rise above "one run."**
