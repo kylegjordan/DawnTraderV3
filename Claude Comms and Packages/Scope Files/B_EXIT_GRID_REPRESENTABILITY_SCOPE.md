@@ -128,6 +128,26 @@ finalTarget  = entryPrice + riskDistance * targetAsRMultiple
 
   ⚠️ **A TICK-COUNT FLOOR WAS TESTED AND IS NOT NEEDED — and this corrects my own first reading.** I initially measured a `<20 ticks` probe against the 3× spread rule, found the populations diverging (4 tick-tight-but-spread-fine) and concluded BOTH floors were required. **Re-tested across thresholds, that divergence is an ARTEFACT OF THE PROBE VALUE:** at `<5 ticks` the tick-tight set is **1 trade, all of it already inside the spread-tight set**; at `<10 ticks`, **2 trades, again a strict subset (tick-only = 0)**. Divergence appears only at `<20`+, where the tick floor starts rejecting economically sound trades. ⇒ **at any genuinely tight threshold the spread floor STRICTLY DOMINATES; a second tick floor buys nothing and costs good trades.** ★ **This is exactly the 6b check — the first cut did not discriminate because I never asked whether the result survived a different probe value.** 
 
+  ⛔⛔ **RECOMMENDATION WITHDRAWN AND REPLACED — DO NOT BUILD A FLOOR YET (Kyle's caution, 2026-08-27, and he is right on both counts).**
+
+  **HIS FIRST QUESTION: *"why are we all of a sudden worried about the minimum stop distance where this hasn't been an issue with our trades before? All we're doing now is rounding."*** ✅ **ANSWER: ROUNDING DID NOT CREATE THIS AND THE FINDING IS PRE-EXISTING.** Langston INFERRED it from the rounding tail — a stop whose distance moves 12.96% on gridding must be a few ticks wide — so **the rounding measurement was the FLASHLIGHT, not the cause.** Those stops were equally tight before any of this work. **Nothing about rounding makes them tighter, and F-G-1 does not need this resolved.**
+
+  **HIS SECOND: *"every time we've instituted floors and ceilings, it hasn't worked out well… we put in the floor, we clamp something, and then we end up seeing trading impacts that we're not sure why it's happening."*** ✅ **THE CAUTION IS CORRECT AND IT IS SPECIFICALLY ABOUT CLAMPING.** ⛔ **A floor that WIDENS a too-tight stop hands the trade a geometry NOBODY DESIGNED — the strategy asked for one distance and the system silently substituted another. That is precisely the unexplained-impact failure he describes, and it is the SAME defect `OBJ-7b` refuses when it forbids re-rounding.** ⇒ **IF we ever act on this, the disposition is REJECT (the signal does not trade, and is recorded with its reason), NEVER CLAMP.**
+
+  **AND THE EVIDENCE DOES NOT YET SUPPORT ACTING AT ALL. MEASURED — 290 closed crypto trades banded by stop width in spreads:**
+
+  | band | trades | stopped out | avg net |
+  |---|---|---|---|
+  | **under 3× spread** | **5** | **80.0%** | **−$3.53** |
+  | 3–10× | 22 | 54.5% | +$6.52 |
+  | over 10× | 263 | 36.1% | +$0.28 |
+
+  **The gradient is monotonic in stop-out rate and is what theory predicts — but `n = 5`.** ⛔ **Against the 36.1% base rate, 4-of-5 gives a one-sided `p = 0.060`: SUGGESTIVE, NOT SIGNIFICANT.** ⚠️ **And the 3–10× band has the BEST average net of the three while stopping out more often than the wide band, which cuts against a simple tighter-is-worse story.** ★ **Building a mechanism on `n=5` at `p=0.06` is the VOLUME-FLOOR MISTAKE EXACTLY — we declined to threshold the volume ratio on 195 observations; acting here on 5 would be indefensible.**
+
+  ⇒ **DISPOSITION: RECORD, DO NOT MECHANISE.** ① **Stamp the stop's spread-multiple on every signal** — no behaviour change, no clamp, no rejection. ② **RE-ASK TRIGGER, derived not chosen: `n = 10` trades in the under-3× band.** At the same 80% rate that is `p = 0.006` — the smallest n at which the re-ask returns an ANSWER rather than another deferral (`n=5` cannot). **At ~1.7% incidence that is roughly 580 crypto trades.** ③ **If it confirms: REJECT, never clamp.** ④ **Owner CC-C + Langston jointly, per Kyle.**
+
+  ⚠️ **CLARIFICATION, because the phrasing was ambiguous: the multiple is measured FROM THE ENTRY — it is `|entry − stop| ÷ spread`, the stop's own width. It is not a distance from the target, and the target is not involved in this rule at all.**
+
   **RESIDUAL, STATED: the spread floor does NOT bound rounding-drift** (that is tick-width-driven, a different scale). **It does not need to: chain-preserving rounding already bounds worst-case R drift at 3.57% (§5), with zero trades above 5%.** **Bounded and acceptable ⇒ no second mechanism.** ⛔ **TO LANGSTON, not to Kyle: is 3× right for CRYPTO specifically? The heuristic's home is FX/CFD retail, and our fee ladder (0.80% taker) is a larger frictional term than the spread on most of our pairs — which may argue the floor should key on TOTAL round-trip friction rather than spread alone.**
 - **`#917` `B-ASSET-CAPS-REMOVAL` — ✅ Langston's Q5 PRIOR QUESTION IS ANSWERED, and the premise HOLDS.** He required the §9.5(a-ii) census before the scheduling: *does `OBJ-7`/`7b` READ anything `asset-capabilities` WRITES?* **NO. Neither module imports the other; `AutoMappingEntry` is written only at `kraken-asset-pairs-service.ts:401`/`:416` from that service's OWN AssetPairs fetch.** They are independent fetches of the same upstream ⇒ **`asset-capabilities` is upstream of NOTHING F-G reads, and `#917`'s orphan premise stands.** **HOME: `B-ASSET-CAPS-REMOVAL`, owner CC-C, placed AFTER `F-G-1` (not "after F-G", which the split made ambiguous — Langston's objection), before `F-G-2`.**
 
