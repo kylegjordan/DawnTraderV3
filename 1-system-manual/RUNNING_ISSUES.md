@@ -2882,6 +2882,37 @@ The COMMITTED copy carries the five **pre-Phase-14 regime keys** (`BULL_STABLE`/
 
 ---
 
+### #749 OPEN 2026-08-27 (CC-A; **CC-INFRA reported the symptom to Kyle, Kyle asked for a RULE, and the measurement says a rule would fix ONE POST IN FOUR HUNDRED**) — ★★ **UNADDRESSED DISCORD POSTS WAKE EVERY SESSION — AND 99% OF THEM ARE CONTINUATION CHUNKS, NOT CARELESS MESSAGES.**
+
+**HOME: `B-COMMS-CHUNK-ADDRESS`, owner CC-A, PLACED at `PHASE_19_PLAN.md` §governance queue, position 3** (with the guard batches — same comms-infra tree, same kind of change). ⛔ No date (§9.4).
+
+**THE SYMPTOM IS REAL AND CC-INFRA WAS RIGHT TO RAISE IT.** A post with no recipient name broadcasts: **every armed session wakes.** That is the designed behaviour of the wake filter (no name = broadcast), and it is disruptive at volume.
+
+**MEASURED — last 400 `cc_outbound` posts, automated notices (188) excluded:**
+| | |
+|---|---|
+| addressed to a named recipient | **88** |
+| NOT addressed ⇒ wakes everyone | **124 (58%)** |
+
+★★ **BUT THE CAUSE IS NOT CARELESSNESS, AND THE SECOND MEASUREMENT IS THE ONE THAT MATTERS.** Splitting those 124 by whether an earlier post shares the same second — i.e. whether it is part of the same multi-chunk send:
+| | |
+|---|---|
+| **continuation chunk of a multi-part post** | **123** |
+| genuinely standalone unaddressed | **1** |
+
+⇒ ⛔ **99% ARE CHUNKS. A RULE TELLING SESSIONS TO ADDRESS THEIR MESSAGES WOULD FIX ONE POST IN FOUR HUNDRED.**
+
+**THE MECHANISM, cited rather than inferred.** `comms-infra/discord/discord_common.py:252-256` builds `_grp` and stamps `GROUP_MARKER_FMT` on every chunk — **but only inside the Langston-addressed branch** (its own log line reads *"send: Langston-addressed multi-chunk"*). **Every other multi-chunk post — CC→CC and CC→Kyle — sends bare chunks.** Chunk 0 carries the recipient’s name because the AUTHOR wrote it; chunks 1..N carry nothing. The wake filter reads each chunk independently, finds no name, and broadcasts.
+
+★ **THE FIX IS NARROW AND THE MACHINERY ALREADY EXISTS: stamp the recipient on EVERY chunk of ANY multi-chunk post, not only Langston-addressed ones.** One conditional is drawn too narrowly. **No new subsystem, no new rule for anyone to remember.**
+⚠️ **AND A RULE WOULD HAVE BEEN WORSE THAN USELESS HERE:** it would have read as fixing the problem, produced no measurable change, and left the actual cause untouched — while every session carried a new instruction. **That is the "more instruction is not the fix" thesis of `B-RULES-1e`, arriving from outside it.**
+
+**STILL WORTH DOING, separately and cheaply:** the ONE standalone case is real, and `cc-send` is the natural enforcement point — **a dispatcher that refuses an unaddressed message is a mechanism; a rule about addressing is a request.** Fold into the same batch.
+
+⇔ `#553` (the chunk-group reassembly that established this machinery for the Langston path) · `CLAUDE.md` §6.4/§6.9 wake routing.
+
+---
+
 ### #748 OPEN 2026-08-27 (CC-A; **CC-C observed the symptom, I found the mechanism, and the mechanism is MY code**) — ★★ **`load-conduct.mjs` HAS A SILENT FAIL PATH — AN OUTER `catch {}` THAT SWALLOWS EVERYTHING AFTER THE READ AND EMITS NOTHING. INSIDE THE LOADER BUILT TO FIX EXACTLY THAT CLASS.**
 
 **HOME: `B-RULES-1e`** — it is the same family as OBJ-1/2/3 (*an instrument whose silence means something other than what it appears to mean*) and that batch is at Step 2. **PLACED at `PHASE_19_PLAN.md` §governance queue position 1** (the in-flight batch). ⚠️ **Dispatched to Langston as an ADDENDUM to the Step-2 audit rather than folded in silently — he is mid-review and widening a document under review without saying so is its own defect.**
