@@ -3893,6 +3893,28 @@ The VTS is fed by the **same** filtered scan (confirmed live: it is simulating `
 
 ★ **HOW IT WAS FOUND, because the method is the transferable part:** it surfaced as *negative stop distances* while I was averaging `(entry−stop)/entry` to answer a different question. **The bad rows were silently dragging that average**, and my first answer to Kyle — *"stop distance tripled"* — was partly their doing. **Excluding them the real move is 1.69% → 3.12%, a DOUBLING, not a tripling.** An impossible value inside an average is invisible until the average is questioned.
 
+⚠⚠ **CORRECTION 2026-08-27 (same day, same session) — THE POPULATION IS 12, NOT 6, AND MY OWN FILTER HID BOTH HALVES OF THE DIFFERENCE.** Re-measured with the close-reason and asset-class filters REMOVED: **12 of 646 trades carrying a full triple have a stop that is not below entry on a long-shaped trade.** My original query restricted to `close_reason='stop_hit'` AND `crypto_spot`, and each restriction hid a distinct population:
+
+
+
+- **3 are `xstock_spot`** — `SKHY/USD` ×2 (07-22, 07-23) and `CRCL/USD` (07-23). **The class was never looked at.** ★ **This is the same shape as `#741`/`#915`'s own lesson: I scoped to the class I was already thinking about.**
+
+- **3 closed on something OTHER than `stop_hit`** — `AAVE/USD` **`target_hit`**, `UNI/USD` **`target_hit`**, `XRP/USD` `trailing_stop_hit` (all 08-21/08-22).
+
+
+
+⛔⛔ **AND THE TWO `target_hit` ROWS CONTRADICT THE MECHANISM THIS ISSUE ASSERTS.** The entry above argues a long whose stop sits above its entry is *"by construction already stopped out at the moment of entry — the exit condition is `currentPrice <= stopPrice` and that is true on the first tick."* **`AAVE/USD` and `UNI/USD` reached their TARGETS instead.** ⇒ **either the stop recorded in `closed_trades` is not the stop the engine evaluated, or the exit check does not fire the way this issue claims. BOTH cannot be true.**
+
+
+
+⚠️ **THIS IS A SYMPTOM REPORT, NOT A CAUSE — rule 24 / `CONDUCT` §8. The mechanism above is now UNPROVEN and must be re-derived before anything is built on it.** ⛔ **Do NOT cite the "already stopped out at entry" reasoning until that is settled.** The `PRE-epoch 4/141 vs POST-epoch 2/19` direction claim inherits the same doubt: it was computed on the narrower population.
+
+
+
+★ **WHAT IS UNAFFECTED AND STILL USABLE: the SHAPE is real and independently confirmed on 12 rows across BOTH classes** — and `F-G-1` now depends on it in a way that is safe regardless of cause: **Langston's rounded-triple STRICT-ORDERING assertion rejects every one of these 12 as an invalid signal**, which is the correct disposition whether the cause is a recording defect or an evaluation defect. **F-G-1 does not need this resolved to ship.**
+
+
+
 **HOME: `B-EXIT-TRANSACTABLE-SIDE` (F-G), owner CC-C** — F-G is already opening the exit-geometry surface and this is the same object; it should NOT get its own batch. ⚠️ **NO DATE, per `§9.4`.** ↔ `#677` (stop provenance — only 49/241 crypto closes carry a stop), `B-EXIT-TRANSACTABLE-SIDE`.
 
 ### #914 OPEN 2026-08-27 (CC-C; Kyle refused the first version of this entry and was right to) — ⛔⛔ **VTS EXITS HAVE ZERO SLIPPAGE BY CONSTRUCTION. PAPER EXITS DO NOT. THE TWO POPULATIONS ARE NOT COMPARABLE ON EXIT ECONOMICS.**

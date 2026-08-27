@@ -152,7 +152,13 @@ const targetPrice = Math.min(measuredMoveTarget, atrTarget);
 
 ### ⚠️ SIDE — "AWAY FROM ENTRY" IS UNDEFINED WITHOUT IT
 
-**All 398 measured trades are LONGS. "Away from entry" has no meaning without the trade side, and the taxonomy carries short forms.** ⇒ **either state where side is read at the rounding seam, or SCOPE THE RULE TO LONGS AND REJECT OTHERWISE.** ⚠️ **`crypto_perp` is onboarded and will not stay long-only** — so an unstated assumption here becomes a live defect on the next class activation, not a theoretical one.
+**Langston's gap is real: "away from entry" is undefined without the trade side, `StrategySignal` (`strategy-engine.ts:119-133`) carries NO side field, and `crypto_perp` is onboarded and will not stay long-only** — so an unstated assumption becomes a live defect at the next class activation, not a theoretical one.
+
+✅ **RESOLVED WITHOUT A NEW FIELD, AND WITHOUT SCOPING TO LONGS: SIDE IS DERIVABLE FROM THE PRICE ORDERING ITSELF.** A long is `stop < entry < target`; a short is `target < entry < stop`. **MEASURED across every closed trade with a full triple (n=646): 634 are unambiguously LONG-shaped (398 crypto + 236 xStock), 0 are short-shaped, 12 are neither.**
+
+★ **AND THE 12 EXCEPTIONS DO NOT WEAKEN THE RULE — THEY ARE `#915`'s INVERTED-STOP SHAPE** (stop ABOVE entry on a long), which **Langston's own rounded-triple assertion REJECTS on strict ordering.** ⇒ **the same check that makes rounding safe also refuses the malformed geometry, and side-inference never has to guess: an un-orderable triple is not a side problem, it is an invalid signal.**
+
+⚠️ **STATED LIMIT: zero shorts have ever been TAKEN, so the short branch ships UNEXERCISED.** It is derived, fenced and unproven by live data — **that is a §9.1 scaffolding declaration, not a verified capability**, and it must be re-verified at the first short rather than assumed to work.
 
 ---
 
