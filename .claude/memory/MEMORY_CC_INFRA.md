@@ -12,9 +12,9 @@
 > ⚠️ **UPDATE THESE FOUR LINES AT EVERY STEP BOUNDARY.**
 
 - **BATCH:** `B-TOKEN-WATCH` (working name) — a **capture-only** observation feed over newly launched DEX tokens, to test whether our ingest/filter/rank/learn method finds a separating signal. **No trading, no wallet, no execution.** Kyle: not urgent, must not disturb fee-viability, the perpetuals feed, or the pipeline audit.
-- **STEP:** Pre-scope **CONCEPT REVIEW with Langston, dispatched** (`/home/langston/inbox/token-watch/CONCEPT.md`). An outright reject is a live option Kyle explicitly asked for. No scope exists; no code written.
-- **BLOCKED-ON:** Langston — awaiting his concept ruling before any scope is drafted.
-- **NEXT:** on PROCEED, write the scope **including the `STORAGE_POLICY.md` read** (retention is unsettled and must not be proposed before that read); on REJECT, take his reasoning to Kyle. Also owed at scope time: the re-check decay rule, the free-tier commercial-licence question, and whether this belongs in this repo at all.
+- **STEP:** Langston ruled **NOT A REJECT** — he would gate a *forward observation recorder* and reject "point DawnTrader at a new market", warning the second hides inside the first. His reframe: the prize is **case-control survival machinery built on free data WITH a published answer key**, then pointed at our own strategy population (#594/#596/#597) where data is scarce and there is none. *"The machinery is what we keep."*
+- **BLOCKED-ON:** **KYLE** — ⛔ the planned source is DEAD. CoinGecko API terms §6.1/§6.2 forbid storing or deriving from the data, **identically on free and every paid tier** (cache must refresh ≤24h). That forbids the dataset itself, not the tier. Recommendation put to him: read the chain direct via a commercial-use-permitted provider (Helius/Bitquery/Birdeye), which also supplies the true on-chain birth timestamp Langston's discovery-lag fix needs.
+- **NEXT (on his word):** pick the access route, then the three gates — measure requests-per-day against ~20.7k launches/day (I computed supply, never demand), write the **pre-registration** before data arrives, and read `STORAGE_POLICY.md` before proposing any retention.
 
 ---
 
@@ -43,6 +43,14 @@ I previously ran on my **own** rules file at `G:\My Drive\CLAUDE.md` and loaded 
 
 Until today I could be **named in the channel and never woken**: `cc-wake-filter.py` carried `CC-INFRA` in its alert-owner tuple for **suppression only** and had no `NAMES` entry, which the file stated in its own comment. The roster already had me; only that registry did not. Added the three name spellings + the display name **"Infra Claude"** (the form measured on the channel — it is also the `--sender` value, and a mismatch self-wakes). Repo mirror `comms-infra/laptop/cc-wake-filter.py` synced, pushed `0bda086c8`. **Watcher armed via the Monitor tool with alias `CC-INFRA`** — never Bash `run_in_background` (MEMORY 4.5). ⚠️ **Intended side effect:** a message naming only me now SUPPRESSES for CC-A/B/C rather than broadcasting to them; it reaches them when they next re-arm.
 ★ **THE TESTING LESSON, which cost me two false failures:** my first two canaries returned ALL-NEGATIVE and I nearly read that as a broken fix. It was a broken TEST — the filter is driven by a multi-file `tail` and only parses lines following a `==> filename <==` header, so it never saw my input. **A positive control is what separated "the fix is wrong" from "the instrument is deaf."** All ten cases pass with one.
+
+## ⚑ LANGSTON'S CONCEPT-REVIEW CATCHES (keep — they generalise)
+
+- **FOUR DENOMINATORS, ONE CLAIM.** I stacked four studies (18.67M / 832,941 / 100,063 / Solidus) as if one population. The "under 2% even with a perfect filter" ceiling is a **published conditional rate on their cohort**, not a prediction about ours. Arithmetic may only compose figures sharing a denominator.
+- **I COMPUTED SUPPLY AND NEVER DEMAND.** Quoted the rate limit as the cost model; ~**20.7k launches/day** is what actually sets cost, and tokens-per-request was unstated. Pre-code gate.
+- **IT IS LEFT-TRUNCATION, NOT SURVIVORSHIP** — and the name changes the fix. We see a token only once the feed notices it; with 68.67% dying on day one that removes a large *non-random* slice, and "size at birth" (the strongest predictor, HR 4.51) silently becomes size-at-discovery. Fix: record BOTH the on-chain creation time and first-sight time — the gap is a measured bias, not an unknown one. Plus a positive control on daily indexed count vs an independent count.
+- **DON'T TUNE THE SCHEDULE TO THE BUDGET** — that makes coverage "whatever we could afford". Census on birth, case-control on follow-up (100% trait-carriers + a fixed random control), a **fixed** observation grid so cohorts pool, death defined ex ante.
+- **ONE BATCH THEN ZERO DRIP.** His cost constraint is Kyle's attention, not API calls: stand it up, then nothing until a stated readout date. Iterating means it was not cheap.
 
 ## 📌 OPEN THREADS
 
