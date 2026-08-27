@@ -2882,6 +2882,19 @@ The COMMITTED copy carries the five **pre-Phase-14 regime keys** (`BULL_STABLE`/
 
 ---
 
+### #752 OPEN 2026-08-27 (CC-A, Kyle-directed; Langston condition on `B-GOV-REPORTING` edit 6) — ★★ **§9.4 HAD THREE DECISION-GATES IN FRONT OF ITS OWN TRIGGER, SO THE RULE COULD NOT FIRE UNTIL THE DECIDING HAD ALREADY HAPPENED.**
+
+**THE PRIOR WORDING, verbatim:** *"when CC and/or Langston surface an issue **worth fixing** and **agree it should be fixed**, it MUST be given a home **at the moment of agreement**."* ⇒ worth-fixing, agree-it-should-be-fixed, and a moment-of-agreement — **three gates, all of them decisions, all upstream of the trigger.** Kyle: *"the decision on what to do with the issue should NOT be the trigger for the rule to fire."*
+
+**THE MEASURED CASE THAT EXPOSED IT (2026-08-27).** A fresh-context reviewer returned **eight specific absences** against a live scope. All eight were reported to Kyle and to Langston, **and nothing in the scope changed.** They never crossed the old gates — they were observations about work in flight, not *"an issue we agree to fix."* Kyle: *"to just announce it and say hey, found this, that’s a problem — and then keep going and not do anything with that. That’s not acceptable."*
+
+**THE SECOND STRUCTURAL DEFECT, and it is why the right action had nowhere to go:** the old rule offered **ONE** disposition — a named batch. The correct action for the eight was **amend the scope in my hands**, and there was no branch for it. **A finding that should be folded into the work in hand had no legitimate destination, so it got announced instead — the rule’s own shape produced the behaviour it forbids.**
+
+**FIXED at `CLAUDE.md` §9.4:** the trigger is the FIND; the disposition is the OUTPUT, and it is one of **five** — fold into the work in hand · add to an existing batch · its own placed batch · a scheduled review · **NO WORK: withdrawn, carrying the citation that dissolves it.**
+★ **THE FIFTH IS LANGSTON’S AND IT IS NOT A ROUNDING-OUT — removing the judgement gate CREATED the need for it.** The rule now fires on things that turn out not to be findings, **and dispositions 1-4 all commit work**; a rule whose only exits commit work pressures you to manufacture a batch or quietly not fire it. **A withdrawal carries the citation that dissolves it (§9.5(b-ii)) — same evidence bar as the finding.**
+
+**HOME:** `B-GOV-REPORTING` edit 6, owner CC-A, placed in `PHASE_19_PLAN.md` §governance queue at position 2, after `B-RULES-1e`. **Landed; gate owed.**
+
 ### #751 OPEN 2026-08-27 (Langston, from a bounce of MY correction — which was itself wrong) — ★★ **THE `CONDUCT.md` CAP IS ENFORCED PER CHECKOUT, NOT PER ARTIFACT. THE SAME FILE IS 134 B OVER ON A WINDOWS CLONE AND 40 B UNDER ON A LINUX ONE, AND BOTH WARNINGS ARE TRUE STATEMENTS ABOUT DIFFERENT FILES.**
 
 **DISPOSITION — #3, ITS OWN BATCH: `B-EOL-NORMALISE`, owner CC-A, PLACED at `PHASE_19_PLAN.md` §governance queue, position 3** (before `B-GATE-GUARD`; the slim’s byte figures depend on it). ⛔ **NOT folded into `B-CLAUDEMD-SLIM` despite Langston calling the fix "one line": `renormalise` rewrites EVERY markdown file in the repo, and three sessions hold checkouts. The line is one; the blast radius is not.**
