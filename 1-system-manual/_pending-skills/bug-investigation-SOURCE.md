@@ -27,3 +27,16 @@
     **Before announcing a cause, do THREE things:** (1) **check its ARITHMETIC against the symptom** — can that endpoint fire every 5s? does a 15-min window contain a 15.4-min-old row? does the function you verified against even appear on this call path? *(seconds each; each has overturned a confident wrong answer)*; (2) **read the code**; (3) **★ READ THE IMPLEMENTATION'S HISTORY AND INTENT** — find the batch/commit that built it, what it was built to do, and why. **The system may have changed since that intent was set, in which case the SYSTEM may need to change — but you cannot tell that apart from a defect without knowing the original intent.** **CITE the history and the intent in the finding itself.**
     **THE EXCEPTION — active trading, requiring an immediate stop, OR actively causing irreversible loss (capital, or corruption of live/training data) → ANNOUNCE AT ONCE.** Speed beats certainty when a position is exposed or damage compounds. **If in doubt, announce.**
     **What you do announce still meets this rule's read-the-code bar and carries its citations** — quiet must never mean unaudited. **Why:** on 2026-07-22 eleven defect claims were announced and retracted in one day across all three sessions; each pulled peers into work that evaporated, and left Kyle unable to tell a real break from a false alarm. A retraction does not undo the cost. Evidence + full tally: `Claude Comms and Packages/Langston Design Asks/B_GOV_INVESTIGATE_BEFORE_ANNOUNCE_PROPOSAL.md`.
+
+---
+
+## ★★ BEFORE A FINDING LEAVES YOUR HANDS — A FRESH READER CHECKS IT (Kyle directive 2026-08-27)
+
+⛔ **THIS IS NOT OPTIONAL AND IT IS NOT ONLY FOR WORKFLOW STEPS. Kyle: *"after a session has investigated and thinks they have a finding — where they have a solution or an understanding of whatever it is they're investigating — then that should also go through the subagent review process."*** ✅ **Standing approval granted the same day: spawn one without asking.**
+
+**WHY AN INVESTIGATION NEEDS IT MORE THAN A STEP DOES:** by the time you have a finding you have built a story, and **re-reading your own reasoning tests the story against your memory of forming it — which is exactly as wrong as the story.** A reader with no memory of forming the belief cannot do that.
+
+**HAND IT ONLY THE OBJECT AND THE CLAIM.** ⛔ **Not your summary — hand it your summary and it reviews your summary, the same failure one level down.**
+★★ **ASK IT ONE THING, AND NOT THE OBVIOUS ONE:** not *"does this support my finding?"* but **"WHAT OTHER STATES OF THE WORLD ARE CONSISTENT WITH THIS OBJECT?"** — that question reaches the wrong-object error; a yes/no cannot.
+⛔ **SCOPE IT TO THAT ONE OUTPUT.** Never a disposition, never a verdict on the finding. The moment it rules on your conclusion it is guessing from a stub.
+⚠️ **AND ITS LIMIT, which is Langston’s own measured case: a fresh context is blind to context it NEEDS, not only to context it should ignore.** He vacated a ruling of his own because a fresh invoke could not see his three earlier ones.
