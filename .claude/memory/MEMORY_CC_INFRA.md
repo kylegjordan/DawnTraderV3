@@ -11,10 +11,10 @@
 > **If BLOCKED-ON says Kyle, say NOTHING and do not work the item.**
 > ⚠️ **UPDATE THESE FOUR LINES AT EVERY STEP BOUNDARY.**
 
-- **BATCH:** `B-TOKEN-WATCH` (working name) — a **capture-only** observation feed over newly launched DEX tokens, to test whether our ingest/filter/rank/learn method finds a separating signal. **No trading, no wallet, no execution.** Kyle: not urgent, must not disturb fee-viability, the perpetuals feed, or the pipeline audit.
-- **STEP:** Langston ruled **NOT A REJECT** — he would gate a *forward observation recorder* and reject "point DawnTrader at a new market", warning the second hides inside the first. His reframe: the prize is **case-control survival machinery built on free data WITH a published answer key**, then pointed at our own strategy population (#594/#596/#597) where data is scarce and there is none. *"The machinery is what we keep."*
-- **BLOCKED-ON:** **KYLE** — ⛔ the planned source is DEAD. CoinGecko API terms §6.1/§6.2 forbid storing or deriving from the data, **identically on free and every paid tier** (cache must refresh ≤24h). That forbids the dataset itself, not the tier. Recommendation put to him: read the chain direct via a commercial-use-permitted provider (Helius/Bitquery/Birdeye), which also supplies the true on-chain birth timestamp Langston's discovery-lag fix needs.
-- **NEXT (on his word):** pick the access route, then the three gates — measure requests-per-day against ~20.7k launches/day (I computed supply, never demand), write the **pre-registration** before data arrives, and read `STORAGE_POLICY.md` before proposing any retention.
+- **BATCH:** `B-TOKEN-WATCH` (working name) - **capture-only** observation feed over new Solana token launches. Tests whether our ingest/filter/rank/learn method finds a separating signal, and builds case-control survival machinery WHERE A PUBLISHED ANSWER KEY EXISTS before pointing it at our own strategies (#594/#596/#597) where there is none. **No trading, no wallet, no execution.**
+- **STEP:** DESIGN SETTLED, VERIFIED AND KYLE-APPROVED 2026-08-27. Langston ruled NOT-A-REJECT; his supply-vs-demand cost gate is DISCHARGED (see the verified-design section below).
+- **BLOCKED-ON:** Nothing. Proceeding.
+- **NEXT, in order:** (1) read `STORAGE_POLICY.md` BEFORE proposing any retention - designing storage before reading the document that governs it is the exact failure I was caught on in August; (2) write the PRE-REGISTRATION (hypothesis, predictor set, outcome definition, decision rule) BEFORE data arrives - Langston's condition, and the difference between a study and a story; (3) scope -> Langston Step-1; then build.
 
 ---
 
@@ -43,6 +43,19 @@ I previously ran on my **own** rules file at `G:\My Drive\CLAUDE.md` and loaded 
 
 Until today I could be **named in the channel and never woken**: `cc-wake-filter.py` carried `CC-INFRA` in its alert-owner tuple for **suppression only** and had no `NAMES` entry, which the file stated in its own comment. The roster already had me; only that registry did not. Added the three name spellings + the display name **"Infra Claude"** (the form measured on the channel — it is also the `--sender` value, and a mismatch self-wakes). Repo mirror `comms-infra/laptop/cc-wake-filter.py` synced, pushed `0bda086c8`. **Watcher armed via the Monitor tool with alias `CC-INFRA`** — never Bash `run_in_background` (MEMORY 4.5). ⚠️ **Intended side effect:** a message naming only me now SUPPRESSES for CC-A/B/C rather than broadcasting to them; it reaches them when they next re-arm.
 ★ **THE TESTING LESSON, which cost me two false failures:** my first two canaries returned ALL-NEGATIVE and I nearly read that as a broken fix. It was a broken TEST — the filter is driven by a multi-file `tail` and only parses lines following a `==> filename <==` header, so it never saw my input. **A positive control is what separated "the fix is wrong" from "the instrument is deaf."** All ten cases pass with one.
+
+## B-TOKEN-WATCH - THE VERIFIED DESIGN (measured 2026-08-27; do NOT re-research)
+
+**COINGECKO / GECKOTERMINAL IS DEAD FOR THIS.** Their terms 6.1/6.2 forbid storing or deriving from the Data **identically on free and every paid tier** (any cache must refresh within 24h). That forbids the DATASET, not the tier. Langston made licensing a pre-code gate; without it the build would have finished and then been unusable.
+
+**THE TWO-SERVICE SPLIT - Kyle-approved 2026-08-27, total cost $0/month:**
+- **BIRTHS -> Helius.** Key at `C:\Users\kyleg\.claude\.helius-key` (Kyle pasted it knowingly and accepted the risk; rotate from his dashboard if that changes). Webhook filtered to creation events. **VERIFIED on a real token: a creation parses as `type: CREATE, source: PUMP_FUN`** - creations ARE separable from the noise, and that single fact is why this is viable. ~20,700 launches/day at 1 credit = **621k/month of the 1M free tier**.
+- **FOLLOW-UPS -> DexScreener.** Free, **no account or key at all**, 300 req/min (432k/day) against our ~19k/day need. **Terms READ, not assumed: commercial use explicitly permitted and NO storage or derivation prohibition** - materially unlike CoinGecko. One call returns alive / price / 24h volume / buy+sell counts / creation time together; verified live on a real pre-graduation token.
+- **SPARE 379k Helius credits/month (12,633/day) -> THE LIQUIDITY GAP** (Kyle's call). DexScreener returns **liquidity: None** for pre-graduation tokens (bonding curve, not a standard pool), so pool depth is read on-chain for tokens under active follow-up. Liquidity being pulled is the clearest rug signal, so this is not optional colour.
+
+**MEASURED LIVE AGAINST THE CHAIN (the gate Langston set, now discharged):** the launchpad program runs **500 txns/sec = 43.2M/day, 83% of them FAILED** (bot competition). Launches are **~0.05% of that traffic**. Unfiltered ingestion is impossible at EVERY tier - 43M/day against 33k/day free, and still ~6x over the $999 tier. Everything hinged on server-side filtering, which is why the CREATE verification was the decisive test rather than a detail.
+
+**RESIDUAL, NAMED:** DexScreener needs no key, so there is no guaranteed service. If it throttles or changes, fall back to chain-direct on the spare Helius allowance - that headroom is the fallback as well as the liquidity budget.
 
 ## ⚑ LANGSTON'S CONCEPT-REVIEW CATCHES (keep — they generalise)
 
