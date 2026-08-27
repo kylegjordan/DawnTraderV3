@@ -122,7 +122,16 @@
 
 ⛔⛔ **THE COUNT IS NOT THE CASE. THE UNBOUNDED TAIL IS THE CASE.** Everything I previously wrote here rested on 5,897 failures / 962,386 rows, and **both measurements Langston required have now come back AGAINST my own framing, in the direction of making this objective smaller.**
 
-**MEASUREMENT 1 (his requirement 3 — split the figure by writer). ANSWER: NONE OF IT IS THE TICKER WRITER.** All **5,897** `flush failed` lines carry `[B74][batch-writer]` — the OHLC writer. The ticker writer logs `[B74][ticker-writer] … flush failed (N rows dropped)` at `ticker-batch-writer.ts:140-142`, a string my grep matches. **POSITIVE CONTROL: the `ticker-writer` tag appears 191,433 times in the retained log stream and ZERO of those are failures.** ⇒ **the instrument reaches that leg and the zero is real.** ★ **He suspected my retraction was over-broad in the other direction — it is not. `#705`'s core (the unrecoverable ticker instance) is unsized because it has NOT FIRED in the retained window, not because I mis-split the number.**
+**MEASUREMENT 1 (his requirement 3 — split the figure by writer). ANSWER: NONE OF IT IS THE TICKER WRITER.** All **5,897** `flush failed` lines carry `[B74][batch-writer]` — the OHLC writer. The ticker writer logs `[B74][ticker-writer] … flush failed (N rows dropped)` at `ticker-batch-writer.ts:140-142`, a string this grep matches.
+
+⛔ **CONTROL SWAPPED AT LANGSTON'S INSTRUCTION — MY FIRST ONE WAS THE WRONG SEVERITY CLASS, WHICH IS THE `#704` SHAPE A FOURTH TIME.** I cited 191,433 `ticker-writer` hits as the control. **Those are overwhelmingly `flushed N rows` from `console.log` at `ticker-batch-writer.ts:135` — STDOUT.** ⇒ **that proves the stream can carry a ticker-writer SUCCESS line; it cannot license an absence of ERROR lines.** ★ **My own sharpened rule (`RUNNING_ISSUES.md:2751`): the control must match the STREAM *and* the SEVERITY CLASS.**
+
+**THE THREE LEGS, STATED SEPARATELY:**
+- **LEG 1 — CAPABILITY (can the instrument see an error line?): YES, and the proof is inside my own corpus.** `ohlc-batch-writer.ts:185` is `console.error`, so **the 5,897 `[B74][batch-writer]` flush-failed lines ARE stderr** ⇒ `error.log` demonstrably carries writer failures of exactly this shape.
+- **LEG 2 — REACH (what window did I actually search?):** `/var/log/dawntrader/error*.log` — **15 files, daily rotation, `error__2026-08-14_00-00-00.log` through the live `error.log`** (retain = 14 + current).
+- **LEG 3 — INVOCATION (did the ticker writer run at all in that window?): YES** — the 191,433 `ticker-writer` lines. **A valid control, for a different question than the one I first used it for.**
+
+⇒ **CONCLUSION UNCHANGED, now properly evidenced: `#705`'s core — the unrecoverable ticker instance — is unsized because it HAS NOT FIRED in the retained window, NOT because I mis-split the number.**
 
 **MEASUREMENT 2 (his requirement 2 — the bar-continuity check across a known deploy). ANSWER: NO DEFICIT AT FOUR RESTARTS. MY OWN HYPOTHESIS IS NOT SUPPORTED.** Restarts at `2026-08-26 18:09 / 18:20 / 18:43` and `2026-08-27 10:01` UTC, `crypto_spot_ohlc_1m` bars in the restart minute vs its ±6-minute neighbours:
 
@@ -136,7 +145,14 @@
 **Every restart minute sits INSIDE the neighbour range; two are ABOVE their neighbour average.** ⇒ **`#918`'s discarded window produces no measurable WS-leg loss at n=4.** **Likely mechanism, NOT asserted: the WS feed re-sends the still-open minute's cumulative bar on reconnect and the upsert fills it in — so only a minute that had already CLOSED and been buffered-but-unflushed is lost, a ≤5 s window against a 60 s bar.**
 ⚠️ **LIMITS, stated: n=4, one asset class, all prompt restarts. And the instrument measures bar PRESENCE, not bar COMPLETENESS — a bar present but truncated in its final seconds would not show here.**
 
-✅ **SO WHAT ACTUALLY JUSTIFIES OBJ-9, and it is structural rather than numeric: THE WRITER CONVERTS ANY PERSISTENT ERROR INTO PERMANENT, SILENT, TOTAL LOSS — AND THE TAIL IS UNBOUNDED.** `#704` is the proof the tail is real: **one missing constraint produced 368,841 bars scanned and 0 rows landed for ~15 hours**, and it cost nothing **only because that leg happened to be REST-replayable.** ⛔ **`#704` residual (b), which Langston wrote and which I under-read, states the boundary exactly: *"acceptable for replayable REST bars and NOT for WS-only ones."*** ⇒ **the identical event on `crypto_spot` or `xstock_spot` would be permanent and invisible.**
+✅ **SO WHAT ACTUALLY JUSTIFIES OBJ-9 IS NOT AN ARGUMENT AT ALL — IT IS TWO LINES OF CODE, IN BOTH WRITERS (Langston: *"say it with the citation and it cannot be graded against a count"*).**
+
+| writer | drain | `try` | `catch` |
+|---|---|---|---|
+| `ohlc-batch-writer.ts` | **`:108` `batch.splice(0, batch.length)`** | `:127` | **`:184-189` — logs and returns. No re-buffer.** |
+| `ticker-batch-writer.ts` | **`:120` `batch.splice(0, batch.length)`** | `:121` | **`:139-143` — logs and returns. No re-buffer.** |
+
+⇒ **THE BUFFER IS EMPTIED *BEFORE* THE `try`, AND THE `catch` RE-ADDS NOTHING. Every failed flush loses its whole batch — permanently, totally, per-flush, and with no throw and no alert.** ⛔ **That is MECHANICALLY CERTAIN at those four line numbers. It needs no `29(c)` hypothesis label and no count to support it.** ⚠️ **"Silent" precisely: it DOES write `console.error`, but `#704` established that `error.log` is the stream no runbook names — 4,802 consecutive failures produced zero alerts and nothing on `out.log`.** **AND THE TAIL IS UNBOUNDED.** `#704` is the proof the tail is real: **one missing constraint produced 368,841 bars scanned and 0 rows landed for ~15 hours**, and it cost nothing **only because that leg happened to be REST-replayable.** ⛔ **`#704` residual (b), which Langston wrote and which I under-read, states the boundary exactly: *"acceptable for replayable REST bars and NOT for WS-only ones."*** ⇒ **the identical event on `crypto_spot` or `xstock_spot` would be permanent and invisible.**
 
 ★ **THE HONEST SHAPE: observed cost is small (6 `crypto_spot` + 2 `xstock_spot` + 7 pool-slot timeouts, and no measurable restart loss); POTENTIAL cost is a total, silent, multi-hour outage on a leg with no re-fetch.** **OBJ-9 is bought by the tail, not by the count — and the objective must be stated that way or it will be graded against a number that does not support it.**
 
