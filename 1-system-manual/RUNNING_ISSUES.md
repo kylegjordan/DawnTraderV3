@@ -2882,6 +2882,30 @@ The COMMITTED copy carries the five **pre-Phase-14 regime keys** (`BULL_STABLE`/
 
 ---
 
+### #751 OPEN 2026-08-27 (Langston, from a bounce of MY correction — which was itself wrong) — ★★ **THE `CONDUCT.md` CAP IS ENFORCED PER CHECKOUT, NOT PER ARTIFACT. THE SAME FILE IS 134 B OVER ON A WINDOWS CLONE AND 40 B UNDER ON A LINUX ONE, AND BOTH WARNINGS ARE TRUE STATEMENTS ABOUT DIFFERENT FILES.**
+
+**DISPOSITION — #3, ITS OWN BATCH: `B-EOL-NORMALISE`, owner CC-A, PLACED at `PHASE_19_PLAN.md` §governance queue, position 3** (before `B-GATE-GUARD`; the slim’s byte figures depend on it). ⛔ **NOT folded into `B-CLAUDEMD-SLIM` despite Langston calling the fix "one line": `renormalise` rewrites EVERY markdown file in the repo, and three sessions hold checkouts. The line is one; the blast radius is not.**
+
+**MEASURED, and I verified Langston’s bounce myself rather than accepting it:**
+| | bytes | CR count |
+|---|---|---|
+| the ARTIFACT at `origin/migration/aws-supabase` | **24,536** | **0** — LF-only, **40 B UNDER cap** |
+| my WINDOWS working copy | **24,710** | **174** — one per line, **134 B OVER** |
+
+`.gitattributes` forces `eol=lf` for `*.sh`, `infra/helsinki/*.sh` and `comms-infra/discord/**` — **and nothing for `*.md`.** So `autocrlf` materialises CRLF on the laptop checkouts and never on a Linux clone.
+
+⛔⛔ **MY "CORRECTION" WAS ITSELF WRONG, AND IT RETRACTED A NUMBER THAT WAS RIGHT.** I reported every cap figure as ~174 B optimistic and told Langston his ASK-4 ruling had been given against a number that did not exist. **It had not. His ruling stands, unretracted.** ★ **I measured the way MY enforcer measures — and my enforcer is reading the wrong file.**
+
+★★ **HIS SHARPENING, WHICH IS THE KEEPER AND REPLACES MY LESSON:** not *"measure the way the enforcer measures"* — **"MEASURE THE OBJECT THE RULE GOVERNS, AND IF THE ENFORCER READS A DIFFERENT ONE, THAT IS THE DEFECT."** My version would have had every session dutifully measuring its own local artefact forever.
+
+⚠️ **AND IT REACHES FURTHER THAN THE CAP: `Buffer.byteLength` means the CHUNK BOUNDARIES AND MANIFEST FIGURES DIFFER BY PLATFORM.** ⇒ **the delivery instrument built two days ago — the manifest whose whole purpose is letting a session count what it received — reports different numbers to different sessions.** Not yet measured across clones; **that measurement is this batch’s first task.**
+
+★ **SECOND INSTANCE OF THE `#649` CLASS, and the precedent sits THREE LINES ABOVE the missing rule** in `.gitattributes`: *"B-DEPLOY-LOCK (#649): ALL shell scripts ship LF — a CRLF working copy broke `dt-deploy.sh`’s shebang on staging (exit 127)."* **The same reasoning was written down, applied to `*.sh`, and never extended to the files the rules themselves live in.**
+
+⇔ `#649` (the first instance) · `B-GOV-REPORTING` §2b edit 8 (**now struck — see the correction there**) · `B-CLAUDEMD-SLIM` (its byte figures are unreliable until this lands).
+
+---
+
 ### #750 OPEN 2026-08-27 (CC-A; found answering Kyle’s question *"are there skills we planned and never created?"*) — ★★ **AN ALWAYS-LOADED RULE TELLS EVERY SESSION TO LOAD A SKILL THAT DOES NOT EXIST, AND CITES A BATCH THAT HAS ALREADY CLOSED WITHOUT BUILDING IT.**
 
 **HOME: `B-CLAUDEMD-SLIM` OBJ C-1 — owner CC-A — PLACED at `PHASE_19_PLAN.md` §governance queue, position 5.** ⚠️ **ABSORBED 2026-08-27 (Kyle), same correction as `#749`.** ★ **And it belongs here on the merits, not only by his instruction: the slim MOVES MORE RULES INTO SKILLS, so a batch that leaves one staged-but-unbuilt would be shipping the very pattern it depends on, broken.** ⛔ No date (§9.4).

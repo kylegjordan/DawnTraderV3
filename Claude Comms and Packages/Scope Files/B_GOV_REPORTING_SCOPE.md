@@ -51,7 +51,9 @@ change-class: non_architecture
 ### EDIT 7 — `CONDUCT.md` §6: **the FINDING block now ends with a DISPOSITION line that cannot be left blank.**
 ★ **This is the half I expect to hold, and the reason is structural: it is a FORMAT, not a discipline.** Until today that block had **no slot at all** for what happens to a finding — so a session could complete it correctly, by the book, and decide nothing. ⚠️ **Same defect as the step-10 report having no slot for the documents it changed, which THIS BATCH fixed two days ago. Second instance, and I did not recognise the shape.**
 
-### ⚠⚠ EDIT 8 — **AND IT IS A CORRECTION TO THIS SCOPE’S OWN NUMBERS: EVERY `CONDUCT.md` CAP FIGURE IN THIS DOCUMENT IS ~174 B OPTIMISTIC.**
+### ⛔ EDIT 8 — **STRUCK 2026-08-27: MY CORRECTION WAS ITSELF WRONG.** Langston bounced it and I verified: the ARTIFACT at origin is **LF-only, 24,536 B, 40 B UNDER cap** — the 24,710 exists only on my Windows checkout. **The figures in §2 were RIGHT; I retracted a correct number.** ★ **The real finding is bigger and is now `#751`: the cap is enforced PER CHECKOUT, not per artifact.** Superseded text follows.
+
+#### *(superseded)* the original edit-8 claim
 **MEASURED:** the loader enforces on `statSync().size` — the **on-disk** size, **CRLF**. My python measurements read the file in **text mode**, which silently collapses CRLF→LF. ⇒ **a 174-line file reads 174 B smaller to me than to the thing enforcing the cap.**
 | | |
 |---|---|
