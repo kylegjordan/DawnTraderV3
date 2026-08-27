@@ -11,10 +11,10 @@
 > **If BLOCKED-ON says Kyle, say NOTHING and do not work the item.**
 > ⚠️ **UPDATE THESE FOUR LINES AT EVERY STEP BOUNDARY.**
 
-- **BATCH:** B-CREW-STATUS-2 — crew status board rebuilt as memory restoration (where Kyle left each session, what it was mid-way through, what happened since).
-- **STEP:** Step-3 build largely landed; Langston Step-2 ruled PROCEED with four conditions, all folded into scope r3 (`c19594ece` → `535458f46`).
-- **BLOCKED-ON:** Kyle — he has directed that the crew status board be **DISABLED** now that CONDUCT.md step-summaries give him the same visibility inside each session's workflow. Do not continue building it without his word.
-- **NEXT:** confirm the board is disabled; the unbuilt remainder (persist-on-observation, blocked-on-Kyle sort, the two canaries, SIM entry, Langston Step-4) is PARKED, not forgotten — see OPEN THREADS.
+- **BATCH:** `B-TOKEN-WATCH` (working name) — a **capture-only** observation feed over newly launched DEX tokens, to test whether our ingest/filter/rank/learn method finds a separating signal. **No trading, no wallet, no execution.** Kyle: not urgent, must not disturb fee-viability, the perpetuals feed, or the pipeline audit.
+- **STEP:** Pre-scope **CONCEPT REVIEW with Langston, dispatched** (`/home/langston/inbox/token-watch/CONCEPT.md`). An outright reject is a live option Kyle explicitly asked for. No scope exists; no code written.
+- **BLOCKED-ON:** Langston — awaiting his concept ruling before any scope is drafted.
+- **NEXT:** on PROCEED, write the scope **including the `STORAGE_POLICY.md` read** (retention is unsettled and must not be proposed before that read); on REJECT, take his reasoning to Kyle. Also owed at scope time: the re-check decay rule, the free-tier commercial-licence question, and whether this belongs in this repo at all.
 
 ---
 
@@ -38,6 +38,11 @@ I previously ran on my **own** rules file at `G:\My Drive\CLAUDE.md` and loaded 
 - **Desktop app login ≠ CLI login** — separate credential stores; an app sign-in does not revive an expired CLI token. Anything that must survive a restart should not depend on an interactive login: use the long-lived token pattern (`/etc/langston/oauth.env`), proven since 2026-05-06.
 - **`git checkout origin/<ref> -- <path>` STAGES the file.** Prefer `git show origin/<ref>:<path> > <path>` — writes the worktree, touches the index not at all.
 - **Re-read issue numbers IMMEDIATELY BEFORE writing one.** Three sessions share one counter with no atomic allocation; I pushed a duplicate `#665` once (→ `#670`).
+
+## ✅ DISCORD WAKE — ONBOARDED 2026-08-26 (Kyle lifted his own deferral)
+
+Until today I could be **named in the channel and never woken**: `cc-wake-filter.py` carried `CC-INFRA` in its alert-owner tuple for **suppression only** and had no `NAMES` entry, which the file stated in its own comment. The roster already had me; only that registry did not. Added the three name spellings + the display name **"Infra Claude"** (the form measured on the channel — it is also the `--sender` value, and a mismatch self-wakes). Repo mirror `comms-infra/laptop/cc-wake-filter.py` synced, pushed `0bda086c8`. **Watcher armed via the Monitor tool with alias `CC-INFRA`** — never Bash `run_in_background` (MEMORY 4.5). ⚠️ **Intended side effect:** a message naming only me now SUPPRESSES for CC-A/B/C rather than broadcasting to them; it reaches them when they next re-arm.
+★ **THE TESTING LESSON, which cost me two false failures:** my first two canaries returned ALL-NEGATIVE and I nearly read that as a broken fix. It was a broken TEST — the filter is driven by a multi-file `tail` and only parses lines following a `==> filename <==` header, so it never saw my input. **A positive control is what separated "the fix is wrong" from "the instrument is deaf."** All ten cases pass with one.
 
 ## 📌 OPEN THREADS
 
