@@ -119,13 +119,40 @@ finalTarget  = entryPrice + riskDistance * targetAsRMultiple
 
 ⚠️ **THIS DOES NOT REOPEN THE "PESSIMISM IN THE PRICE" QUESTION Langston already settled (Q2: nearest, yes).** That ruling was about **biasing rounding as a MODELLING choice** — using it to inject conservatism. **This is different and narrower: it is about respecting what kind of quantity each price IS.** A boundary rounded into the thing it bounds is not conservative or aggressive — **it is wrong.**
 
-### ⛔ OPEN TO LANGSTON — HIS INTENT-CARRYING PROPOSAL, AND MY COUNTER
+### ✅ THE INTENT QUESTION IS SETTLED — MY COUNTER DID NOT SURVIVE, BUT IT COST ONE SITE, NOT NINETEEN
 
-**His proposal:** carry the designed target **distance** (or an explicit `intendedR` where the chain is genuine) at the **~19 signal-construction return sites** — 9 in-class detects + 10 files — so the orchestrator rounds chain-preserving when an R is carried and distance-preserving otherwise. *"Three numbers cannot tell you which was derived"* (`StrategySignal:119-133` carries three bare prices, a name, and untyped metadata).
+**Langston found the role where away-rounding is WRONG, and it is my own criterion with the sign reversed.** `volatility-edge.ts:188-189`, verbatim:
 
-**My counter, for him to break:** **direction-by-role is SAFE FOR EVERY ROLE WITHOUT KNOWING WHICH**, so intent-carrying stops being a CORRECTNESS requirement and becomes an OPTIMISATION. Away-rounding never violates a structural stop, never tightens an ATR stop, never brings any target closer, and moves both legs of a genuine R-chain outward together so R is approximately preserved. ⇒ **we buy correctness now without touching 19 return sites, and carry intent later only if the measured cost (median +0.24%) proves to matter.** ⛔ **If he holds that a per-strategy optimum is worth the 19 sites in THIS batch, I will build it — but I want the correctness/optimisation distinction tested first.**
+```
+// Conservative: take the smaller (closer) target
+const targetPrice = Math.min(measuredMoveTarget, atrTarget);
+```
 
-⚠️ **HIS SECOND ASK IS OUTSTANDING AND IS NOT DISCHARGED BY THE ABOVE: split the drift table BY STRATEGY before adopting any scheme.** *"A pooled median over a population that is mostly ATR-target strategies is measuring the wrong invariant for most of its rows."* **The 49.5%/48.0% direction split above IS reported per strategy; the COST table is still pooled.** Owed at Step 2.
+**That target is a CEILING, not a floor.** My table justified away-rounding the target as *"preserves at least K x ATR"* — **false for this strategy, whose design says AT MOST the measured move.** Rounding it away pushes it **past the bound it was defined by.** ★ **A boundary rounded OUT of the thing it bounds is as wrong as one rounded INTO it.** The mirror case passes: `vwap_pullback`'s `max(...)` is a FLOOR, so away is safe. ⇒ **THE DISCRIMINATOR IS CAP-vs-FLOOR, and there is exactly ONE cap.**
+
+✅ **HE THEREFORE WITHDREW THE 19-SITE BUILD — my evidence carried that part.** `R` is emergent for the ATR-target majority, and away-rounding moves both legs of a genuine chain outward together, so the chain sites need nothing carried. ⚠️ **A SECOND REAL CHAIN I DID NOT NAME: `strategy-engine.ts:532` (`sma_trend_ride`).** ⇒ **ONE BIT AT ONE SITE: carry `targetIsCap`, or round toward entry at `volatility-edge` alone.**
+
+### ⛔⛔ THE DEFECT AWAY-ROUNDING WOULD HAVE SHIPPED — THE INVARIANT IS PAIRWISE, NOT PER-PRICE
+
+**"Safe for every role without knowing which" was per-PRICE safety asserted where the quantity that matters is a RELATION between two prices rounded under two DIFFERENT rules.**
+
+**The counter-example, and it is not exotic:** tick `0.01`, stop `99.99` (already representable, so it does not move), entry `99.9949` → rounds NEAREST to `99.99`. ⛔ **RISK DISTANCE ZERO.**
+
+⛔ **AND MY FENCE ② COULD NOT SEE IT:** *"no stop moved toward entry"* is measured against the **UNROUNDED** entry, and in that example **the stop never moved at all.** ★ **A fence that cannot fire on the defect it was written for — the exact shape this batch keeps catching elsewhere.**
+
+⇒ **TWO REQUIREMENTS, BOTH IN THIS BATCH:** ① **define "away" relative to the ROUNDED entry** — fix the anchor first, then move the boundaries off it; ② **assert on the ROUNDED TRIPLE: strict ordering, ≥1 tick separation, stop distance ≥ floor.**
+
+### ⛔⛔ AND THIS RESURRECTS KYLE'S RE-CHECK. I DROPPED IT ON A FALSE PREMISE.
+
+**§5 above argued the re-check was unnecessary because Langston's round-THEN-gate ordering makes it a single pass. ✅ VERIFIED AT THE CODE, AND ROUND-THEN-GATE IS NOT WHAT HAPPENS: `applyGlobalGuards` fires INSIDE each strategy** — `adaptive-flow:181`, `defensive-hedge:242`, `volatility-edge:193`, and the rest — **UPSTREAM of the orchestrator seam where `OBJ-7` rounds.**
+
+⇒ **THE GEOMETRY THAT WAS GATED IS NOT THE GEOMETRY THAT SHIPS.** ★ **Kyle's original instinct was correct: *"that whole signal may not look like the signal that was created… therefore that stop and that target and entry combination may not work the way that the signal was designed to work."* ⚠️ I dropped his re-check on the argument that gate-ordering made it redundant — the ordering I asserted does not exist on this path.**
+
+⇒ **`validateStopDistance` AND `validateRR` ARE RE-RUN POST-ROUNDING.** That IS Kyle's re-check, restored, and it is now a correctness requirement rather than a precaution.
+
+### ⚠️ SIDE — "AWAY FROM ENTRY" IS UNDEFINED WITHOUT IT
+
+**All 398 measured trades are LONGS. "Away from entry" has no meaning without the trade side, and the taxonomy carries short forms.** ⇒ **either state where side is read at the rounding seam, or SCOPE THE RULE TO LONGS AND REJECT OTHERWISE.** ⚠️ **`crypto_perp` is onboarded and will not stay long-only** — so an unstated assumption here becomes a live defect on the next class activation, not a theoretical one.
 
 ---
 
@@ -161,7 +188,13 @@ finalTarget  = entryPrice + riskDistance * targetAsRMultiple
 
   ⚠️ **A TICK-COUNT FLOOR WAS TESTED AND IS NOT NEEDED — and this corrects my own first reading.** I initially measured a `<20 ticks` probe against the 3× spread rule, found the populations diverging (4 tick-tight-but-spread-fine) and concluded BOTH floors were required. **Re-tested across thresholds, that divergence is an ARTEFACT OF THE PROBE VALUE:** at `<5 ticks` the tick-tight set is **1 trade, all of it already inside the spread-tight set**; at `<10 ticks`, **2 trades, again a strict subset (tick-only = 0)**. Divergence appears only at `<20`+, where the tick floor starts rejecting economically sound trades. ⇒ **at any genuinely tight threshold the spread floor STRICTLY DOMINATES; a second tick floor buys nothing and costs good trades.** ★ **This is exactly the 6b check — the first cut did not discriminate because I never asked whether the result survived a different probe value.** 
 
-  ⛔⛔ **RECOMMENDATION WITHDRAWN AND REPLACED — DO NOT BUILD A FLOOR YET (Kyle's caution, 2026-08-27, and he is right on both counts).**
+  ⛔⛔ **AND §8 WAS WRONG IN ITS PREMISE — A MINIMUM STOP FLOOR ALREADY EXISTS AND HAS FOR BATCHES. VERIFIED AT THE CODE, NOT TAKEN:** `strategy-helpers.ts:25` **`MIN_STOP_DISTANCE_BPS: 30`** (0.3%, GUARD-1, **Batch 18J**, raised 20→30 on 4-LLM consensus), enforced by `validateStopDistance:352-355` inside `applyGlobalGuards` as a **VALIDITY gate that drops on every path including the VTS tag.**
+
+★ **THIS GIVES KYLE'S QUESTION — *"why are we all of a sudden worried about the minimum stop distance where this hasn't been an issue with our trades before?"* — A BETTER ANSWER THAN THE ONE I GAVE HIM. We are NOT suddenly worried: we instituted this floor batches ago and it has been running ever since.** ⚠️ **And it partly answers his CAUTION too: this is a floor we already have, and it has not produced the unexplained impacts he was warning about.**
+
+⇒ **THE OPEN QUESTION IS THE BASIS, NOT WHETHER TO HAVE ONE** — my `0.77x`-spread trade **passed the 0.3% gate cleanly**, so the gate exists and simply is not keyed on spread. ⛔ **RE-HOMED: `B-MIN-STOP-DISTANCE` is a RE-BASIS OF AN EXISTING GATE, NOT A NEW CLAMP.** `RECORD-DO-NOT-MECHANISE` still stands on the evidence (`n=5`, `p=0.060`). ★ **Away-rounding can never breach the existing floor — it only ever widens.**
+
+⛔⛔ **RECOMMENDATION WITHDRAWN AND REPLACED — DO NOT BUILD A FLOOR YET (Kyle's caution, 2026-08-27, and he is right on both counts).**
 
   **HIS FIRST QUESTION: *"why are we all of a sudden worried about the minimum stop distance where this hasn't been an issue with our trades before? All we're doing now is rounding."*** ✅ **ANSWER: ROUNDING DID NOT CREATE THIS AND THE FINDING IS PRE-EXISTING.** Langston INFERRED it from the rounding tail — a stop whose distance moves 12.96% on gridding must be a few ticks wide — so **the rounding measurement was the FLASHLIGHT, not the cause.** Those stops were equally tight before any of this work. **Nothing about rounding makes them tighter, and F-G-1 does not need this resolved.**
 
