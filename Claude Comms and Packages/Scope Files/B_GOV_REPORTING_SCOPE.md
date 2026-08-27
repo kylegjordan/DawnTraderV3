@@ -37,6 +37,32 @@ change-class: non_architecture
 
 ---
 
+## 2b. ★★ THREE MORE LANDED 2026-08-27, FOLDED IN AT KYLE’S DIRECTION — AND ALL THREE WERE PUSHED BEFORE THIS SECTION EXISTED
+
+⛔ **STATED FIRST BECAUSE IT IS THE THIRD OCCURRENCE TODAY: edits 6, 7 and 8 were written, committed and PUSHED with no scope entry and no gate.** Kyle asked *"has this been added to the scope and pushed to Langston?"* and the answer was **no to both.** ★ **Edit 6 IS the rule that forbids exactly this** — which makes it the sharpest instance of the pattern it was written to close.
+
+### EDIT 6 — `CLAUDE.md` §9.4: **THE TRIGGER INVERTED. THE FIND FIRES THE RULE; THE DECISION IS ITS OUTPUT.**
+**What it said until today:** *"When CC and/or Langston surface an issue **worth fixing** and **agree it should be fixed**, it MUST be given a home **at the moment of agreement**."*
+⛔ **THREE DECISION-GATES IN FRONT OF THE TRIGGER — the rule could not fire until the deciding had already happened.** *(Kyle: "the decision on what to do with the issue should NOT be the trigger for the rule to fire.")*
+⚠️ **MEASURED THE SAME DAY: a fresh-context reviewer returned EIGHT verified absences on a live scope. All eight were reported to Kyle and to Langston, AND NOTHING IN THE SCOPE CHANGED.** They never crossed the old gates — they were observations about work in flight, not *"an issue we agree to fix."*
+★ **AND THE SECOND STRUCTURAL DEFECT, which is why the right action had nowhere to go: the old rule offered ONE disposition — "a named batch."** The correct action was **amend the scope in my hands**, and there was no branch for it. **A finding that should be folded into the work in hand had no legitimate destination, so it got announced instead. The rule’s own shape produced the behaviour it forbids.**
+**NOW: four dispositions — fold into the work in hand · add to an existing batch · its own placed batch · a scheduled review. "Announce and carry on" is explicitly not one.**
+
+### EDIT 7 — `CONDUCT.md` §6: **the FINDING block now ends with a DISPOSITION line that cannot be left blank.**
+★ **This is the half I expect to hold, and the reason is structural: it is a FORMAT, not a discipline.** Until today that block had **no slot at all** for what happens to a finding — so a session could complete it correctly, by the book, and decide nothing. ⚠️ **Same defect as the step-10 report having no slot for the documents it changed, which THIS BATCH fixed two days ago. Second instance, and I did not recognise the shape.**
+
+### ⚠⚠ EDIT 8 — **AND IT IS A CORRECTION TO THIS SCOPE’S OWN NUMBERS: EVERY `CONDUCT.md` CAP FIGURE IN THIS DOCUMENT IS ~174 B OPTIMISTIC.**
+**MEASURED:** the loader enforces on `statSync().size` — the **on-disk** size, **CRLF**. My python measurements read the file in **text mode**, which silently collapses CRLF→LF. ⇒ **a 174-line file reads 174 B smaller to me than to the thing enforcing the cap.**
+| | |
+|---|---|
+| what I reported | **24,536 B — "40 B of headroom"** |
+| what the loader sees | **24,710 B — 134 B OVER CAP** |
+⛔ **So the one-in-one-out I performed did not buy the room I claimed, and the file has been over its ceiling since.** Nothing is lost — the loader never drops rules — but **the headroom figures in §2 of this scope are wrong and are corrected here rather than left.**
+★★ **AND IT IS THIS WEEK’S OWN LESSON INSIDE THE INSTRUMENT POLICING IT: my measuring tool and the ENFORCING tool read the same file and disagreed, silently, and the disagreement never surfaced because I only ever ran mine.** ⇒ **MEASURE THE WAY THE ENFORCER MEASURES, OR YOU ARE MEASURING A DIFFERENT FILE.**
+**REQUIRED: a real eviction sized in ON-DISK bytes, not text-mode bytes.**
+
+---
+
 ## 3. THE BLAST-RADIUS AUDIT — done now, which is the wrong time, and stated as such
 
 **WHO READS THESE FILES:** `CONDUCT.md` and `CLAUDE.md` auto-load into **every session, every start, every resume, every compaction** — CC-A, CC-B, CC-C and Infra. The two skills load **on invoke**, at Steps 10 and 11 of every batch by every session.
