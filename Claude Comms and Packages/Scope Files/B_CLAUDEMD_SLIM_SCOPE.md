@@ -45,13 +45,48 @@ change-class: non_architecture
 | **9.2** | *"applies retroactively to IN-FLIGHT communications — lead the next message with the block"* | ⛔ **nowhere** | ⛔ **STAYS — §3-protected.** Fires in conversation. |
 | **9.3** | the curl-isn’t-verification half · the by-default half | ✅ `workflow-07:10-16` **(Langston verified at the ref)** | **CUT** — **Class A, not B.** r1 had this as a move; it is already there. |
 | **9.3** | *"when Kyle ASKS for verification, it is not optional"* · *"no assumptions when Kyle REPORTS issues"* | ⛔ nowhere | ⛔ **STAYS — §3-protected. Both fire on a KYLE UTTERANCE, not at step 7.** |
-| **9.5** | census · deletion-time state-write census · provenance read | ⚠️ **2/25 verbatim — but the SUBSTANCE is in `workflow-01` + `workflow-02`, condensed** (Langston re-derived) | **CUT** — Class A. ★ **r1 called it "verbatim"; that was FALSE and it passed for the right answer BY LUCK.** |
+| **9.5** | census · deletion-time census · provenance read | ⚠️ **partially — see the block below** | ⛔ **NOT Class A. RE-CLASSIFIED r3 — CLASS B WITH A CARRY-ACROSS LIST.** |
 | **r19** | the four job names **+ the `gh run list` command form** | ✅ job names in `workflow-05` | **CUT, WHOLE.** ★ **The command form comes forward too (Langston):** leaving the job list in one home and the command that checks it in another is the two-sources shape, self-inflicted. |
 | **r23** | fix-on-find | — | ⛔ **STAYS — r1 had it as a move and that was wrong.** It fires *when work surfaces a remnant* — at step 2, 4, 7 **or a plain conversation.** A session doing a pre-audit would not have it if it lived in `workflow-03`. |
 
 **REVISED TOTAL: §9.5 (6,038 B) + the two cut clauses of §9.1/§9.2 + §9.3’s two copied halves + rule 19 whole.** ⚠️ **DELIBERATELY NOT RESTATED AS A SINGLE BYTE FIGURE UNTIL THE CUTS ARE DRAFTED** — r1’s headline number was a section-level sum, and section sums are exactly what this bounce refuted. **The figure gets re-derived from the actual diff, not predicted.**
 
 ⚠️ **FOUR HELD BACK, three confirmed by Langston** — §7.1 batch-close sync gate, §6.5 file-first dispatch, §6.7 iterate-to-consensus: **all fire unprompted, hold them.** ★ **The fourth — rule 19’s command form — he PULLED FORWARD; it is now in the table above.**
+
+---
+
+### ⛔⛔ §9.5 — RE-CLASSIFIED (r3). **A FRESH-CONTEXT REVIEWER FOUND CONTENT THAT WOULD HAVE BEEN DESTROYED, INCLUDING THE CLAUSE THE SECTION IS NAMED AFTER.**
+
+**HOW THIS WAS FOUND, because the provenance matters:** Kyle noticed the fresh-context reviewer we designed **had never once been spawned** — the gate was mine. He granted standing approval; **this was run one**, pointed at the claim Langston was about to rule on. ★ **It contradicted a ruling he had already given** (*"the substance is in `workflow-01` + `workflow-02`, condensed — Class A is still safe for §9.5"*).
+⚠️ **THE REVIEWER’S OUTPUT IS A CLAIM, NOT A VERDICT. I RE-DERIVED EVERY ITEM BELOW MYSELF** with `grep -c` against `CLAUDE.md` and both skills, **with a positive control** — `COMPONENT CENSUS AT EVERY HOP` returns 1 in `CLAUDE.md` and 1 in `workflow-02`, so the query works and the zeros are real absences.
+
+**MEASURED — present in `CLAUDE.md`, ABSENT from BOTH skills:**
+| clause | CLAUDE.md | wf-02 | wf-01 |
+|---|---|---|---|
+| *"tracing forward from one entry point structurally CANNOT discover a second entry point"* | 1 | **0** | **0** |
+| *"enumerate every scheduler, timer, clock subscription, service `.start()`, bootstrap call, cron and event subscription FIRST, repo-wide"* | 1 | **0** | **0** |
+| *"state each list in the audit"* | 1 | **0** | **0** |
+| *"the canonical corpus is a frozen historical record and is NOT edited"* (+ the obligation to update SIM / System Manual instead) | 1 | **0** | **0** |
+| the `rule 22` citation — *asserted absence needs presence-evidence* | 2 | **0** | **0** |
+| the five named `bridge/canonical/` files | 1 | **0** | **0** |
+| *"(does mechanism 2 respect mechanism 1’s in-flight guard?)"* | 1 | **0** | **0** |
+| *"The synthesis is the point, not the inventory"* + the four history-doc pointers | 1 | **0** | **0** |
+
+★★ **THE FIRST TWO *ARE* THE ENTRY-POINT ENUMERATION — the phrase in the section’s own title — and they are in neither skill.** Not trimmed evidence: **a standing instruction to enumerate every scheduler, timer, `.start()`, bootstrap, cron and event subscription BEFORE tracing.** That is the exact discipline whose absence let the RTB dual-mechanism run seven months through two audits.
+
+⛔ **AND A NARROWING NOBODY HAD NOTICED. §9.5 reads, verbatim: *"Two mandatory steps for ANY audit, pre-audit, **or architectural dispute** touching a subsystem."* Both skills fire ONLY at their own numbered step** (*"STEP 1 ONLY"* / *"STEP 2 ONLY"*). ⇒ **a standalone audit, or an architectural dispute outside a batch, would lose the discipline entirely. That fails toward SILENCE**, which is the direction that costs us.
+
+⚠️ **THE ADDRESS PROBLEM, separate from the substance and measured: `§9.5` is cited 290 times across 103 files.** Cutting the section leaves every one of those resolving to nothing — **true even if every clause had travelled.**
+
+★ **AND ONE OBSERVATION I PASS ON AS THE REVIEWER’S, NOT MINE:** both skills declare their **`§2` verbatim block authoritative over their own summary** — *"a derivation is not the rule."* **All §9.5 material sits in the summary halves.** So even where present, it lives in the half each file says is non-binding.
+
+⇒ **REVISED PLAN FOR §9.5 — CLASS B, and the cut is the LAST step, not the first:**
+1. **CARRY ACROSS to `workflow-02`, verbatim:** the entry-point-enumeration clause, *"state each list in the audit"*, the in-flight-guard parenthetical, the `rule 22` citation, the frozen-corpus + update-current-docs obligation, and the five named canonical files.
+2. **WIDEN THE TRIGGER** so the discipline reaches a standalone audit or dispute — **it belongs in the `bug-investigation` skill C-1 builds**, which is exactly the *"ANY audit"* case with no home today. ★ **C-1 and this are now coupled: neither ships without the other.**
+3. **KEEP A POINTER AT §9.5’s ADDRESS** so the 290 citations resolve. ⛔ **Do not delete the anchor.**
+4. **ONLY THEN cut the body**, re-verified clause by clause with the control above.
+
+★★ **AND THE STANDING LESSON, which outlives this batch: "the substance is there, condensed" IS A JUDGEMENT, AND IT WAS MADE BY THE TWO PEOPLE WHO ALREADY BELIEVED THE MOVE WAS SAFE.** A reader with no memory of forming that belief produced a list of eight specific absences in one pass. ⚠️ **One run, one claim, and it is the run I chose — that is a positive result, not proof the mechanism generalises.**
 
 ---
 
