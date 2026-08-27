@@ -2,9 +2,11 @@
 
 change-class: architecture
 
-> **STATUS: PRE-DRAFT.** This file exists because Kyle directed (2026-08-27) that the findings of the full-lane price audit be folded into F-G's scope **at the moment they were found**, rather than re-derived when the batch starts. **Objectives and verification criteria are NOT yet written; Step 1 has not been dispatched.** What follows is the AUDIT that F-G's objectives must fall out of.
+> **STATUS: STEP 1, r1 — objectives written 2026-08-27 after the provenance gate (§5) was discharged.** The audit in §2-§4 is what the objectives fall out of; §5 is what reframed them.
 >
-> ⛔ **DO NOT START IMPLEMENTATION FROM THIS FILE.** It is evidence, not a plan. The `#911` gate on `B-EXIT-PROVENANCE` runs first (Phase 19 plan §1, rows 1-2); F-G is row 3.
+> ⛔ **THIS IS NOT A BUG FIX AND THE SCOPE MUST NOT BE READ AS ONE.** §5.1 establishes from the introducing directive that the midpoint was built **deliberately, for stability, for the UI and analytics.** It is doing its job. **What went wrong is that a second consumer — the exit decision — started reading a number built for the screen.** ⇒ **F-G SEPARATES TWO USES OF ONE NUMBER.** Framing it as a defect invites a blanket swap, which is the `#546`-shaped risk here.
+>
+> ⛔ **SEQUENCING: `#911` on `B-EXIT-PROVENANCE` runs first** (Phase 19 plan §1 rows 1-2 — wired and deployed `ed86a758e`, awaiting one real close). F-G is row 3, Kyle's order of 2026-08-27.
 
 ---
 
@@ -66,15 +68,62 @@ change-class: architecture
 
 ---
 
-## 5. THE PROVENANCE READ — WHY IT WAS BUILT ON A MIDPOINT (TIER 1)
+## 5. THE PROVENANCE READ (MANDATORY 1.b) — ✅ DONE 2026-08-27. **IT CHANGES WHAT THIS BATCH IS.**
 
-⚠️ **NOT YET DONE. This section is the gate on Step 1 and is deliberately left empty rather than guessed.**
-Required before objectives are written, per `MANDATORY 1.b`:
-- `handleV2BookUpdate`'s midpoint — introduced under the `8.9.4-Patch` marker. **Read the introducing commit and quote it.** The comment *"Calculate stable midpoint from mini-book BBO"* suggests the intent was **STABILITY** (a mid is less jumpy than a crossing bid/ask), which would make this **disposition (2) — relevant but needing an update to today's intent**: stability is a legitimate goal for a *display* or a *signal* price and the wrong goal for a *fill* price.
-- `equity-spot-archiver.ts:135`'s `(bid+ask)/2` — carries the marker `P19-B8.5 xstock marks: mid from bid/ask when both sides exist, else last`. **Same question, different lane.**
-- **Both must be answered before F-G proposes a change**, because if the mid was chosen deliberately for stability, F-G is not "fixing a bug" — it is **separating two uses of one number**, which is a different and larger design.
+### 5.1 CRYPTO — TIER 1. **Disposition (2): relevant, needs updating to today's intent.**
 
----
+**Introducing commit `4beae06ed`, 2025-12-30, Replit-era Agent commit** — *"Improve trading platform stability with stateful mini-book handling… for stable mid-price computation."* It carries its own directive, and the directive is decisive.
+
+**`attached_assets/Pasted--4-Directive-8-9-4-Patch-Mini-Book-Safety-Upgrade-Targe_1767128713788.txt`, QUOTED VERBATIM (not summarised, per the evidence standard):**
+
+> **"Objective — Replace stateless 'last message' logic with a stateful in-memory mini-book that tracks top-of-book bids/asks and ensures stable mid-price computation."**
+>
+> **"Mirror the same logic in `market-data-ws.ts` so that analytics (Cortex, StrategyBob) also read stable mid-prices."**
+>
+> Outcome table: **"Prone to Depth-Jumping → Depth-stable mid-prices"** · **"High false volatility → Smooth, continuous pricing"** · **"Inconsistent between Cortex & UI → Unified price source"**
+>
+> Verification: **"Confirm no 'flash-crash' artifacts in UI."** · **"Compare midpoint with Kraken REST (b+a)/2 — should match within ±0.1%."**
+
+⛔⛔ **THE FINDING, AND IT REFRAMES THE BATCH: THE MIDPOINT WAS BUILT DELIBERATELY, FOR STABILITY, AND ITS NAMED CONSUMERS ARE *DISPLAY AND ANALYTICS* — the UI, Cortex, StrategyBob. THE DIRECTIVE NEVER CONTEMPLATED THIS PRICE DRIVING A FILL OR AN EXIT DECISION.** Every stated goal is about smoothness and cross-surface consistency; every verification step is a display check or a sanity check against REST.
+
+⇒ **F-G IS THEREFORE NOT "FIXING A BUG". It is SEPARATING TWO USES OF ONE NUMBER** that were merged later, when the exit path began reading the price built for the screen. **A stable mid is the RIGHT answer for a chart and the WRONG answer for a fill**, and both of those are true at the same time — which is why a blanket swap is the wrong shape and why §6 Q2 exists.
+★ **AND THE DIRECTIVE SPECIFIED THE CHECK THAT WOULD HAVE CAUGHT `#741`:** *"Compare midpoint with Kraken REST (b+a)/2 — should match within ±0.1%."* A crossed book fails that test trivially. **The check was written down on day one and never ran** — the same shape as MBIM (built `92e9c15fc`, the same day, wired to a manual route and never to boot). **Two independent alarms for this defect were specified in December and neither was live until August.**
+
+### 5.2 xSTOCK — TIER 1. **Disposition: `INFERRED-FROM-CODE`. Intent is NOT recoverable.**
+
+**Introducing commit `184c41881`, 2026-07-16, P19-B8.5** — governance-era, and its subject records *"Langston design-APPROVED + Step-4 APPROVED"*. The BATCH's purpose is documented at length: Kraken spot REST carries no tokenized equities, five open xStock positions had no marks, so the exit monitor's venue leg became the equities WS tick.
+
+⛔ **BUT THE MID-VS-LAST CHOICE ITSELF HAS NO WRITTEN JUSTIFICATION ANYWHERE.** The only record is the code comment asserting *what* it does — `// P19-B8.5 xstock marks: mid from bid/ask when both sides exist, else last` — never *why* a mid was chosen over the last traded price, which is what the VTS xStock lane uses for the same instrument.
+
+**ASSERTED ABSENCE, WITH PRESENCE-EVIDENCE (rule 22) — the instrument was proved before the absence was claimed:** a whole-corpus markdown grep for `"mid from bid/ask"` returns exactly ONE hit, this scope file. The same corpus contains **`P19-B8.5` 13× in the System Manual, 10× in the System Impact Map, 11× in `BATCH_CATALOG`** — so the batch is richly documented and the search plainly reaches it. **The gap is specific to this decision, not to the search.**
+
+⚠️ **CONSEQUENCE FOR THE BATCH:** the crypto change can be argued from the directive's own words. **The xStock change cannot be argued from provenance at all** — there is nothing to argue with. It must be justified on today's evidence, and F-G's scope must say so rather than implying a symmetry that does not exist.
+
+### 5.3 TIER 2 — one-line intent notes
+- `getBookForFill` — fill-grade accessor added for the depth-walked paper fill and the depth gate; returns both sides best-first plus `ageMs`. Not touched by F-G.
+- `assessSufficiency` / `getDepthSnapshot` — the open-seam depth gate. Not touched by F-G; its unread bid side is Roadmap 21.4, deliberately deferred by Kyle 2026-08-27.
+- `evaluateTECExit` — the SHARED exit decision, imported by both the VTS runner and the active engine. **F-G must not fork it** (the `B-EPOCH-KEYING-PARITY` lesson: a decided rule needs ONE home plus a parity test).
+
+### 5.4 `bridge/canonical/` — CONSULTED, per the recording rule
+The crypto midpoint **predates the 2026-01/02 governance change**, so the pre-governance corpus was consulted. ⚠️ **It has NO coverage of the mini-book or the mid-price decision** — that decision lives only in the `8.9.4-Patch` directive quoted above, which is an `attached_assets` artifact rather than part of the canonical corpus. **Recorded as a finding, per the rule, not as an absence of obligation.**
+
+## 5b. OBJECTIVES + VERIFICATION CRITERIA
+
+⛔ **READ OBJ-0 FIRST. IT IS THE ONE THAT CAN SINK THE BATCH.**
+
+| # | objective | verification criterion |
+|---|---|---|
+| **OBJ-0** | ⛔ **MEASURE THE BEHAVIOUR CHANGE BEFORE SHIPPING IT — SHADOW FIRST, SWITCH SECOND.** Deciding on the bid instead of the mid **moves when trades exit**, in opposite directions for the two exit types: for a long, the bid sits BELOW the mid, so **stops fire EARLIER and targets fire LATER**. This is not telemetry; it changes the trade population. | A shadow pass logs, per exit evaluation, what the bid-based decision WOULD have ruled versus what the mid-based decision DID rule — **no behaviour change** — for a stated observation window. **PRE-REGISTERED READ-OUT, written before the data exists:** the switch proceeds only if the shadow shows the bid-based rule would not have increased stop-outs by more than a stated multiple. **The number is set at Step 2 from the shadow's own design, not chosen after seeing the result.** |
+| **OBJ-1** | **The exit DECISION for a long reads the BID, not the mid** — the side we actually transact on. Applies to stop, target and trailing evaluation alike. | Every post-deploy exit evaluation records which side it decided on; a fence asserts the decision price is the bid-derived value on every long-exit branch, and that **no exit branch reads a mid**. |
+| **OBJ-2** | ⛔ **THE MID SURVIVES EVERYWHERE ELSE — this is the separation, and it is the objective most likely to be violated by a careless diff.** Signal generation, regime classification, the MCE, display and analytics keep the stable mid, exactly as Directive 8.9.4-Patch intended. | A fence enumerates the mid's consumers and asserts the count is UNCHANGED except at the exit-decision seam. ⛔ **A blanket swap fails this objective even if every test passes** — the `#546` shape: it would look like a completed fix while silently re-pricing signal generation. |
+| **OBJ-3** | **BOTH ASSET CLASSES.** crypto via the WS book's bid; xStock via the equities tick's bid. §2 establishes three of four lane/class combinations decide on a mid, by two different routes. | Post-deploy exits on both classes record a bid-derived decision. ⚠️ **A crypto-only change fixes half and would read as complete** — the xStock defect is different code with an identical symptom. |
+| **OBJ-4** | **DO NOT FORK THE SHARED EXIT DECISION.** `evaluateTECExit` is imported by both the VTS runner and the active engine. The side-selection must live in ONE place with a parity test, not be re-implemented per lane. | A test asserts both lanes resolve the exit side through the same function. ★ **This is the `B-EPOCH-KEYING-PARITY` lesson applied in advance: a decided rule needs ONE home plus a parity test, or it ships into one reader of four.** |
+| **OBJ-5** | **VTS DISPOSITION IS DECIDED AND WRITTEN DOWN — not left implicit.** VTS and paper are separate systems and must never be blended (Kyle, standing). Changing VTS mid-stream splits its series; leaving it means the two lanes price exits differently, which must then be a *stated* difference. | The scope names the choice and its consequence explicitly. ⚠️ **`#914` is the live precedent for what happens when a lane difference is real but unrecorded.** |
+| **OBJ-6** | **The change is measurable after the fact.** `B-EXIT-PROVENANCE` now stamps the decision price, its producer and an independent witness on every close. | A before/after read on stamped rows is possible **on the active population**. ⛔ **NOT on VTS** — `#914`: VTS has no exit slippage to remove, so an F-G before/after measured there would show nothing and would read as "no effect". |
+
+**CHANGE-CLASS: `architecture`.** It alters which price drives a live admission/exit decision on both asset classes — a risk-envelope edit, not telemetry.
+
+**OUT OF SCOPE, each with its home:** the unread bid side of the OPEN depth gate → Roadmap 21.4 (Kyle deferred, 2026-08-27) · the `:1272` `ageMs` mislabel → `#913` · historical row correction → F1+F2 · the VTS fill model → `#914`.
 
 ## 6. OPEN QUESTIONS FOR LANGSTON AT STEP 1
 
