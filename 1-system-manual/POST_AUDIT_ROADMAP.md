@@ -545,6 +545,17 @@ The B65.2 functional ship deleted the paper-execution-engine consumption of meta
 **What dies with (a), neither built:** `#591` limb (b) (the pinned quality multiplier, `B-CALIBRATION-QUALITY-WEIGHT`) and `B-EVIDENCE-GATE` OBJ-1 (**closed without build 2026-07-28**).
 **Mechanics:** rule 18 — record in `DELETED_COMPONENTS_LOG.md` with blast-radius verification, archive to `_archive/deleted-code/*.removed`. **Closes `RUNNING_ISSUES` #174.**
 
+### 16.9 `resetRateLimiter()` — INERT ON THE ONLY ENVIRONMENT WE RUN (added 2026-08-28, **Kyle decision: REMOVE IN PHASE 16**)
+
+**Kyle 2026-08-28, on the dead reset found while unblocking his own login:** *"if it's not interfering with anything right now, then go ahead and slot that in with a definite slot… in phase sixteen."* **Criterion applied and met — it is NOT interfering**, on two independent counts: it never executes here, and its body touches only the login attempt counter (`store.resetAll()`) plus one transparency-log row. **It has no trading-path reach at all** — no trades, no RTB queue, no filters, no scanner, no engine.
+
+**THE DEFECT IS A FALSE MECHANISM, NOT A MALFUNCTION.** `server/startup/rate-limiter-reset.ts:6` returns immediately when `NODE_ENV === "production"`, and **staging IS production** (`.env` and pm2 both). `server/index.ts:516-517` calls it on every boot, so **the call happens and the body does nothing.** What actually clears the login limiter on restart is the process being new — the helper contributes nothing to that. Its comment claims it *"guarantee[s] a clean state"*, which reads as a working mechanism to anyone who greps for one.
+
+**⛔ THE DISPOSITION IS A REAL FORK AND THE BATCH MUST DECIDE IT, NOT ASSUME IT.** The comment scopes its purpose to *"automated testing"* — so the question that separates DELETE from FIX is: **does any automated harness log in against a long-lived non-production process?** If yes, the guard is correct and the bug is that our only such environment is flagged production. If no, it is unreachable by construction and goes. **Enumerate the login callers before cutting** (§9.5(a-ii) — a removed writer with a surviving reader produces no compile error).
+
+⚠️ **CROSS-REFERENCE — this is `#935`'s sibling, not a duplicate.** `#935` was the LIVE defect (the login limit counted every client as one shared bucket behind the proxy, so my own automated logins locked Kyle out of his own account); it shipped as a hotfix on 2026-08-28. **This entry is the dead helper found while diagnosing that** — same file neighbourhood, unrelated mechanism, no urgency.
+**Mechanics:** rule 18 — record in `DELETED_COMPONENTS_LOG.md` with blast-radius verification, archive to `_archive/deleted-code/*.removed`. **Closes `RUNNING_ISSUES` #936.**
+
 **Phase 16 expected outcome**: All legacy infrastructure permanently removed. Schema cleaned. ~71 legacy tables dropped. LSP errors resolved. Residual paper percentage-trailing code purged from active codebase. **CI Test Suite restored to green per §16.7.**
 
 ---

@@ -4477,7 +4477,7 @@ Kraken publishes a per-pair `tick_size` — **1,437 pairs, 11 distinct values, a
 
 ### #936 OPEN 2026-08-28 (CC-C, split from `#935` on Langston's ruling) — `resetRateLimiter()` HAS NEVER RUN ON STAGING, AND ITS COMMENT CLAIMS IT GUARANTEES A CLEAN STATE
 
-`server/startup/rate-limiter-reset.ts:6` returns when `NODE_ENV === "production"`; staging **is** production. `index.ts:493-494` calls it every boot, so the call happens and the body does nothing. **What actually clears the login limiter on restart is the process being new.**
+`server/startup/rate-limiter-reset.ts:6` returns when `NODE_ENV === "production"`; staging **is** production. `index.ts:516-517` calls it every boot (was `:493-494`; the `#935` hotfix comment block above it shifted the lines — re-derived at the ref 2026-08-28), so the call happens and the body does nothing. **What actually clears the login limiter on restart is the process being new.**
 
 ⚠️ **KYLE ASKED WHETHER "clean state" MEANT THE OLD PAPER-TRADING RESET — closing all open trades, clearing the RTB pool, restarting filters and the scan — which used to run on every restart and was changed at Phase 19. ANSWERED FROM THE CODE AND THE RECORD, and the answer is in two parts:**
 - ⛔ **NO for THIS function.** Read in full: it does exactly two things — `store.resetAll()` on `loginLimiter`, and one transparency-log write. **It never touches trades, the RTB queue, filters, the scanner or the engine.** Its "clean state" is the login attempt counter and nothing else.
@@ -4486,7 +4486,10 @@ Kraken publishes a per-pair `tick_size` — **1,437 pairs, 11 distinct values, a
 ⚠️ **Searched and found NOTHING in `bridge/canonical/` describing a restart-reset behaviour** — stated as an asserted absence with its reach: grep for `reset on restart` / `clears all open` / `resets paper` and for `restart` near reset/clear/close-all across `bridge/canonical/*.md`.
 
 ⇒ **WHAT REMAINS IS A REAL BUT SMALL DEFECT: dead code whose comment claims a guarantee it does not provide.** The disposition needs the taxonomy read Langston named — does anything automated log into staging? — which decides FIX (make it run in the right environment) vs DELETE (rule 18, never leave legacy lingering).
-⇒ **HOME: `B-RATE-LIMITER-RESET-DISPOSITION`, owner CC-C, placed in `PHASE_19_PLAN` after the F-G-1 close and before the next Part-F piece.**
+⇒ ⛔ **HOME — SUPERSEDED BY KYLE, 2026-08-28, AND HIS PLACEMENT IS THE ONE THAT BINDS.** I had placed it in `PHASE_19_PLAN` after the F-G-1 close. **Kyle moved it:** *"if it's not interfering with anything right now, then go ahead and slot that in with a definite slot… in phase sixteen."*
+⇒ **HOME: `B-RATE-LIMITER-RESET-DISPOSITION`, owner CC-C, placed in `POST_AUDIT_ROADMAP` §3.4 Phase 16 at §16.9, after §16.8 Predictive-Learning Teardown.**
+★ **THE PLACEMENT IS RIGHT AND MY ORIGINAL WAS NOT: this is legacy-cleanup with no urgency, which is what Phase 16 IS.** Homing it in Phase 19 would have put a no-interference cleanup item ahead of the work Phase 19 exists to do. ⚠️ **§16.9 carries the disposition fork intact** — the FIX-vs-DELETE question turns on whether any automated harness logs in against a long-lived non-production process, and the batch answers that before cutting.
+⚠️ **NOTE THE TWO GROUNDS DID NOT COLLIDE:** the finding above stands as written — **no removal was warranted on the INTERFERENCE grounds Kyle originally raised**, and that remains true. He then dispositioned it on CLEANLINESS grounds, which is a different and valid reason. A finding that survives on one ground and is actioned on another is not a contradiction.
 
 ⇒ **Kyle DIRECTED the fix and DIRECTED the immediate unblock.** Unblock done by `pm2 restart` (in-memory store starts empty), verified by a single live login returning **HTTP 200** — one attempt spent deliberately, because "I restarted" is not "you can log in".
 
