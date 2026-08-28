@@ -98,6 +98,8 @@ CONTROL RESULT: BOTH ARMS FIRE
 ```
 ⇒ **the unanimity is a measurement, not a stuck arm.** ⚠️ It remains a control on the *classifier*, not on the *population*: it licenses reading 79/79 as real; it says nothing about whether 79 is a representative sample.
 
+★★ **UPGRADED FROM A CONSTRUCTED CONTROL TO A LIVE ONE, 2026-08-28 17:37Z — the other arm has now fired on REAL SIGNALS.** At n=187 on the xStock lane the live counters read **`{would_round: 183, on_grid: 4}`**. ⇒ **the 79/79 unanimity was a SMALL-SAMPLE ARTIFACT, not a stuck arm** — which is what Langston suspected and would not ratify on *"probably fine"*. **The population control now exists and no longer rests on a fixture.**
+
 ### 3c. ⛔ THE xSTOCK PASS ARM'S DENOMINATOR, PRE-REGISTERED (Langston attack 4)
 
 *"on-grid **OR** absent from the derived map"* is an unbounded escape hatch unless the absent set is fixed in advance — otherwise **the arm can pass by its denominator quietly shrinking.** Per `#933` the map is rebuilt only at boot and on a 6-hour timer, so the set is knowable.
@@ -113,6 +115,12 @@ CONTROL RESULT: BOTH ARMS FIRE
 ⚠️ **AND IT WAS NOT READABLE, WHICH IS THE SAME DEFECT ONE LEVEL DOWN.** The map lives in memory — a separate script reads a fresh EMPTY one — and only a **count** was exposed. **A better denominator nobody can read is not a better denominator.** Landed in the same pass: the resolver now exposes the derived **keys**; the refresher **names** the symbols it skipped in both its return and its log; and the running process emits the **complement** (`gridAbsentSymbols`) on the xStock diagnostics payload, so the absent set is enumerable from outside at read time.
 
 ⛔ **RECONCILIATION REQUIRED AT READ TIME:** every xStock passthrough in the window must name a symbol **absent from the live derived map at that moment**, read from `gridAbsentSymbols`. **A passthrough on a symbol that HAD a derived grid is a FAIL, not an escape.**
+
+### ✅ VERIFIED LIVE AT THE RE-DEPLOY (`9150e2174`, 17:26:27Z) — and it moved two numbers
+
+- **The named skips work.** 25 seconds after restart: `derived 453 grids, skipped 23 … — skipped: AMBR/USD,BHC/USD,…,WBD/USD`. **`WBD/USD` was NOT in the 22-name snapshot taken an hour earlier** — the rolling window had moved, which is exactly the drift that made the snapshot unusable as a denominator.
+- ⛔⛔ **THE LIVE MAP'S COMPLEMENT IS 30, THE LOG'S SKIP LIST IS 23, AND THE DIFFERENCE IS NOT AN ERROR — IT IS THE POINT.** The refresher's SQL only sees symbols that HAVE ticker rows in the window; a symbol with **no rows at all** is neither derived nor "skipped" — it is never considered. ⇒ **absent-from-map (30) = skipped (23) + never-observed (7).** **The log's skip list is a strict SUBSET of the denominator and must never be used as it.** Langston's live-map complement is the correct instrument, for a reason neither of us had stated.
+- ⛔ **A COLD-START HOLE THE MONOTONIC ARGUMENT DOES NOT COVER, now pre-registered:** the map grows from **EMPTY**, so between process start and the refresher's first completion (**measured ~25s at this deploy, ~20s at the previous**) the absent set is **the entire universe** — read directly during that window and it returned **483**. **An xStock position opening then would satisfy the PASS arm trivially.** ⇒ **AT READ TIME, any xStock open earlier than the first `[xstock-grid] derived` line following its process start is EXCLUDED and reported separately as cold-start — never counted as a pass.**
 ★ **ONE ALREADY RECONCILES:** the live log at 16:10:57 shows `ROOT/USD/sma_trend_ride verdict=grid_unknown` — and `ROOT/USD` is on the list above. The mechanism and the denominator agree on a real event.
 
 ## 4. WHAT IS UNPROVEN, AND WHAT WOULD FALSIFY IT
