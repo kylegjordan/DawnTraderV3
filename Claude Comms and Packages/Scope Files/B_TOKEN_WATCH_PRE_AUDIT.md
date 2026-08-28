@@ -331,3 +331,54 @@ The System Manual owns architecture, strategy logic, regime detection, filter de
 **What the audit turned up.** The server we want to record on is genuinely idle and has plenty of room — but the first number I read said the opposite, and it took a second measurement to show that the "half loaded" reading was three file-searches jammed on a hung Google Drive connection, one of them stuck since the 7th of August. That is fixed and verified. The bigger catch is Kyle's new tracking page: Langston's rule for this batch says nothing may touch the trading application, and a page on the staging site cannot avoid it. **The rule fired exactly as designed, so it gets amended openly by him rather than argued around by me** — and the amendment is narrow, with the footprint held to three files that only display things. Separately, the aging columns Kyle asked for ask about days we were not planning to look, so five of his seven columns would have sat permanently blank. **That is fixable for nothing, but only before the recording starts.**
 
 **The plan.** Two gates first, both one-way doors: Langston rules on the fence, and the observation schedule gets widened while it still can be. Then the collector, then a 72-hour proving run including a deliberate test that the safety valve actually fires. **Only then the page.**
+
+
+---
+
+# PART E — KYLE'S RULINGS, 2026-08-28, ARRIVING **DURING** LANGSTON'S REVIEW
+
+> ⚠️ **APPENDED, NOT EDITED INTO THE BODY ABOVE.** Langston was mid-review of this document when these landed. **Silently rewriting a document under review is how a reviewer ends up ruling on text that no longer exists** — so the body stands as he received it and the changes are recorded here, with the two affected findings named.
+
+## E-1 — ⛔ **AMENDMENT 3 IS WITHDRAWN. THE GRID DOES NOT CHANGE.**
+
+**F-9 proposed a superset observation grid** so Kyle's 5/15/45/60/75-day columns could be filled. **Kyle withdrew the requirement rather than accept the amendment:**
+
+> *"Regarding the aging, three and seven days are fine. We don't need to do five days. I just threw that out there not knowing what the daily checks were, so that's fine. We can limit this to the days that you'd already set to track."*
+
+⇒ **The pre-registered grid stands EXACTLY as written: 1h · 6h · 24h · 3d · 7d · 30d · 90d.** The aging tracker's columns become **3d · 7d · 30d · 90d** — the ages we actually observe.
+
+★ **AND THIS IS THE BETTER OUTCOME, not merely the cheaper one.** The proposed amendment was defensible, but it was **a design change made to serve a display**. Kyle's version removes the change entirely: **no pre-data amendment is needed, the pre-registration is never touched, and the one gate that had a closing window no longer exists.** ⇒ **`P1.2` IS STRUCK FROM THE PLAN.** *(The general form is worth keeping: when a display asks for something the measurement does not produce, changing the display is the first option to price, not the last.)*
+
+## E-2 — THE FENCE: KYLE RULES THE PAGE PROCEEDS, AND ADDS A CONSTRAINT STRONGER THAN MINE
+
+**On the substance he overrides the defensive reading, explicitly and with the reasoning stated:**
+
+> *"if it's just running in the background, then I can't see what's happening and won't know anything until the ninety days are up. Plus, it gives me a way of eyeballing it quickly to make sure that things are still moving and being recorded."*
+> *"we're not going to just flip, say, hey, let's start trading these. We need the data, and then we need to analyze that data. So I'm not as worried about it as Langston is, and I get why he's being defensive, but let's not be so defensive."*
+
+★ **HIS ARGUMENT IS ONE THE AUDIT DID NOT MAKE, AND IT IS AN OPERATIONAL ONE:** a collector with no visible surface is **unfalsifiable for 90 days.** If it silently stops on day 3, nothing tells anyone until the read-out. **The page is not a convenience — it is the liveness check on the study**, and F-14 (the page will look empty early) is what makes that check legible rather than confusing.
+
+⇒ **PART D's "the staging box was never measured" is now load-bearing rather than a caveat, because the page is going ahead. It gets measured before Phase 4.**
+
+**AND HE ADDS A CONSTRAINT I HAD NOT PROPOSED, which is tighter than my own amendment:**
+
+> *"this can be a page that sits at the bottom of our menu, and we could even fence it off from the rest of the staging site, meaning it sits on the same server, but... it sits in a different folder than the rest of the staging site files. That would be my preference."*
+
+⇒ **PHYSICAL SEPARATION, NOT JUST LOGICAL.** The study's page, its endpoint and its data file live in **their own directory**, not interleaved with the trading application's files. **This is a better answer to Langston's fence than the one I proposed**, and it converts his test from a judgement into a location:
+
+| my proposal (F-4) | Kyle's, which supersedes it |
+|---|---|
+| three display-only files, mixed in among the app's own | **the study's files live in their own folder**, so the fence is a **path**, not an opinion |
+| test = *"is this change display-only?"* — a judgement | test = ***"is this file inside the study's folder?"*** — **a fact anyone can check in a diff, in a listing, or in a file browser** |
+
+⚠️ **THE HONEST RESIDUAL, which the folder does not remove and I will not pretend it does: the route declaration and the menu entry MUST live in the application's own files** (F-5/F-6 measured exactly one of each, and neither can be extended from outside). ⇒ **the irreducible footprint is two lines in two existing files — one route, one menu entry — plus a self-contained folder.** **Two lines, not three files.** That is smaller than what F-4 proposed and it is the number Langston should rule against.
+
+## E-3 — THE DRIVE MOUNT: KYLE CONFIRMS NOTHING SHOULD BE USING IT
+
+> *"What files are you looking at on Google Drive? There's nothing that we're doing on Google Drive anymore. It should all be in your repo."*
+
+**Answer, precisely: nothing was reading Drive deliberately, and no DawnTrader file was involved.** The three stuck processes were **`find /` whole-disk searches** — sessions looking up `langston-call` and `dt-push-notice.sh`, both of which live in ordinary server directories. **A whole-disk search walks into every mounted path**, and these wandered into the Drive mount and blocked in a personal archive folder (an old website's media directory) that has nothing to do with this project. **The mount was not being used; it was being tripped over.**
+
+⇒ **This converts `#921` from a detection question into a removal one.** The audit already found **no cron entry, no script and no service references `/mnt/gdrive`**, the Drive repo path was retired from §7.1, and `CLAUDE.md` §8 already instructs Langston to **never** read from it. **Kyle's statement closes the last gap in that census: it is not merely unreferenced, it is not wanted.**
+
+⇒ **`B-HELSINKI-MOUNT-WATCH` IS RE-AIMED — from *"watch the mount"* to *"remove it, and watch what remains."*** ★ **A watcher for something that should not exist is a monitor for a self-inflicted problem** — the strictly better fix is that the searches have nothing to fall into. **`#921` updated accordingly.** ⚠️ **What still needs a detector after removal is narrower and real: a process stuck in uninterruptible I/O on that host at all**, which is the symptom that hid for 20 days and is not specific to this mount.
