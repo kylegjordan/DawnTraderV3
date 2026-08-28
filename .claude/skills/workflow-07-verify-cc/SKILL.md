@@ -31,7 +31,8 @@ With active trading on, **most changes have a staging-visible surface.** For any
 ⇒ ★ **VERIFY ON THE TAB YOUR BATCH TOUCHED — Filter Diagnostics, Ready-to-Buy, Open/Closed Trades — NEVER on the landing page.** ⛔ **A stale banner read as live telemetry is a finding you will have to withdraw, and it costs Kyle a turn.**
 
 ⇒ ⛔⛔ **"I NEED CREDENTIALS" IS NOT A REASON TO SKIP THIS STEP — IT MEANS YOU REACHED FOR THE WRONG BROWSER.** ★ **Both halves are true, which is exactly why sessions keep getting it wrong: the login wall is REAL on one surface and ABSENT on the other, and the rules file listed the credentials without ever saying which.**
-⚠️ **The `testuser123` credentials in `CLAUDE.md` §7 serve the in-app browser AND the authenticated API calls in that same section. They are NOT a precondition for §9.3 verification.**
+⚠️ **The `testuser123` credentials in `CLAUDE.md` §7 serve the AUTHENTICATED API CALL in that same section, and nothing else. They are NOT a precondition for §9.3 verification, and no session can log in with them.**
+★ **This line read *"serve the in-app browser AND the API calls"* until 2026-08-29 — describing the credentials as serving a surface this same section PROHIBITS three paragraphs above.** ⇒ ⛔ **The surviving half of the dead end Kyle told me to remove: I forbade the pane in one place and left it named as a legitimate consumer in another.** *(Langston, Step-4 finding 2.)*
 
 ## ALSO
 - PM2 logs, psql, CI status, server health — **as well as**, not instead of.

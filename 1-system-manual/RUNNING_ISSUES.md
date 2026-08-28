@@ -2882,6 +2882,18 @@ The COMMITTED copy carries the five **pre-Phase-14 regime keys** (`BULL_STABLE`/
 
 ---
 
+### #762 OPEN 2026-08-29 (Langston, Step-4 finding 3 on `B-CLAUDEMD-SLIM`) — ★ **THE SKILL-COUNT CHECK IS PROSE, NOT A MECHANISM — IT WENT STALE AT 13 AND WILL GO STALE AT 14.**
+
+⛔ **`B_CLAUDEMD_SLIM_SCOPE.md:123` says *"All THIRTEEN skills still parse"* — corrected by hand this batch from *"twelve"*, after the count had already passed while ignoring the very skill the batch built.**
+⚠️ **MEASURED BY LANGSTON AT THE REF: `scripts/check-skill-frontmatter.mjs` DOES NOT EXIST.** The only checks on the tree are `check-no-hardcoded-uuids.sh`, `check-reviewer-siblings.mjs`, `check-tsc-baseline.mjs`. ⇒ **the count is hand-kept, so it goes stale at the next skill exactly as it did at this one.**
+★ **The fix is to DERIVE the count, never to write it down** — the same property that makes `check-reviewer-siblings.mjs` work: its subject set is globbed from the tree, not enumerated.
+
+**HOME: fold into `B-RULES-1e`, which already scopes the skills-mechanism work** (Langston: *"not a new home"*). **Owner CC-A.** ⛔ **NOT a new batch — that would be the manufacture-a-batch failure `§9.4` disposition 5 exists to prevent.**
+
+★ **AND A BLAST-RADIUS NOTE HE RAISED THAT NOBODY HAD NAMED: `check-reviewer-siblings.mjs` globs BOTH paths this batch mutated** — it gained `bug-investigation/SKILL.md` and lost the `_pending-skills` arm. **He ran the invariant at the ref: 5 carry the mechanism, 5 carry the termination, control non-zero — it PASSES.** ⚠️ **But it passes because the new skill INHERITED both markers, not because anything checked.** ⇒ **a deletion inside a DERIVED subject set belongs in the §9.5(a-ii) census.**
+
+⇔ `B-RULES-1e` · `#740` (the frontmatter defect this count was meant to catch) · `scripts/check-reviewer-siblings.mjs`.
+
 ### #761 OPEN 2026-08-29 (CC-A; I caused a live outage attempting `#749` and could not diagnose it) — ⛔⛔ **THE CONTINUATION-CHUNK FIX TOOK CC↔CC AND CC↔LANGSTON SENDING DOWN FOR ~4 MINUTES, AND THE CAUSE IS STILL UNKNOWN.**
 
 **WHAT I DID:** patched `discord_common.py` to stamp recipient names on every continuation chunk of a multi-chunk post (`#749`, `B-CLAUDEMD-SLIM` P7), restarted `discord-cc-bridge.service`, and **every `cc-send` returned `send FAILED`.** Reverted from the backup within minutes; **verified restored: live file byte-identical to `discord_common.py.pre-749-20260829`, zero occurrences of my helper, `cc-send` returns an id, service active.**

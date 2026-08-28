@@ -5,6 +5,24 @@
 
 ---
 
+## ⛔ THE CHANGE LIST IS A COMMIT LIST, NOT A RANGE (Langston Step-4 finding 1, 2026-08-29)
+
+⛔ **I dispatched Step 4 citing `d5c7123d5..7d1f363d4` as "8 files, +141/-49". THE RANGE IS 32 COMMITS / 36 FILES / +1993/-183** — it carries `B-TOKEN-WATCH`, four `F-G-1` amendments, hotfix `#935`, `#937`/`#938` and three sessions’ memory files. ★ **My figure was the subset I had in mind; the object I NAMED was four other batches.**
+⚠️ **Non-blocking — he reconstructed the batch set himself — but in a batch about instruments that misreport, THE CHANGE LIST IS THE COMMIT LIST.** *(Rule 29(a): name the object.)*
+
+**THIS BATCH’S COMMITS, exhaustively:**
+| commit | what |
+|---|---|
+| `374c25da7` | `#759` split out, alert-check homed at queue 3 |
+| `5736ba0fc` | Step 3 (1/3) — the two carries + Kyle’s staging fix |
+| `a7b36201e` | the staging-login contradiction resolved by measurement |
+| `0caa5d12d` | the landing dashboard is stale; credentials cannot unblock the in-app pane |
+| `cc505f452` | ⚠️ **MISLABELLED** — carries the staging prohibition, titled `B-RULES-1c` (`#760`) |
+| `27512693d` | the record correction for `cc505f452` |
+| `5fabaac7d` | Step 3 (2/3) — the nine cuts, verified 22/22 |
+| `84710dc6d` | P6 — the `bug-investigation` skill built, staged source deleted |
+| `f22ba8bcb` | Step 3 (3/3) — governance updates, the dangling pointer, `#761` homed |
+
 ## 0. WHERE THE BATCH ACTUALLY IS — STATED FIRST BECAUSE IT IS NOT WHERE IT LOOKS
 
 ⛔⛔ **NONE OF THIS BATCH'S WORK HAS BEEN DONE. MEASURED, NOT ASSERTED: every item on the cut list is still in `CLAUDE.md`, the bug-investigation skill still does not exist, and the file is 117,191 B — it GREW during the batch meant to shrink it.**
