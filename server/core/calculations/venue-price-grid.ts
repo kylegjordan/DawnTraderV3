@@ -58,6 +58,11 @@
 /** A price's role in the trade, which determines its rounding DIRECTION. */
 export type PriceRole = 'entry' | 'stop' | 'target';
 
+// ⛔ THE ONE IMPORT THIS OTHERWISE-PURE MODULE CARRIES, and it is deliberate: the answer to
+// "whose fault is this verdict?" is needed by BOTH this module and the VTS panel, and a
+// hand-copy in the client is what Langston caught. `shared/` is the only place both can reach.
+import { VPG_WIRING_BUG_VERDICTS } from '../../../shared/venue-grid-verdicts.js';
+
 export type GridRefusal =
   /** A leg is missing, non-finite or non-positive. No side exists; never default to long. */
   | 'invalid_triple'
@@ -407,10 +412,12 @@ export function evaluateGridForTagging(
 ): GridTag {
   const r = roundTripleToGrid(entryPrice, stopPrice, targetPrice, tick, opts);
   if (!r.ok) {
-    // ⛔ `isWiringBug` MEANS "OUR PROBLEM, NOT THE SIGNAL'S" — so an unresolvable grid AND a
-    // failed self-check both qualify. Only `grid_unknown` did, which under-reported our own
-    // defects as signal defects.
-    const wiring = r.reason === 'grid_unknown' || r.reason === 'not_representable_after_rounding';
+    // ⛔ `isWiringBug` MEANS "OUR PROBLEM, NOT THE SIGNAL'S", AND ITS MEMBERSHIP IS NOT DECIDED
+    // HERE. It is read from `shared/venue-grid-verdicts.ts`, which the VTS panel also imports —
+    // because this list was written twice and the client's copy would have kept counting a newly
+    // added wiring verdict against SIGNAL QUALITY. Langston's r6 fold-in; adding a verdict to that
+    // set now fixes both sides at once, with no parity test to remember.
+    const wiring = VPG_WIRING_BUG_VERDICTS.has(r.reason ?? '');
     const verdict: GridTagVerdict =
       r.reason === 'grid_unknown' ? 'grid_unknown'
       : r.reason === 'degenerate_after_rounding' ? 'degenerate_after_rounding'

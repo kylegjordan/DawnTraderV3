@@ -9,6 +9,7 @@ import { apiFetch } from "@/lib/api";
 import type { FilterDiagnosticsData } from "./vts-shared";
 import { gateAggregateColumns, type GateDisposition } from "./gate-columns";
 import { ActiveSqeAndRtbSections } from './fd-sqe-rtb-sections';
+import { VPG_WIRING_BUG_VERDICTS, VPG_NOT_A_FAILURE_VERDICTS } from '@shared/venue-grid-verdicts';
 
 /**
  * P19-B8.4 (OBJ-1/2) — the mode's OWN scanner stage, fed by the mode-keyed
@@ -288,8 +289,12 @@ export type { GateDisposition };
  * render path could have known. These sets are a deliberate duplicate of that flag and must be
  * kept in step with `evaluateGridForTagging`.
  */
-const VPG_NOT_A_FAILURE = new Set(['on_grid', 'would_round']);
-const VPG_OUR_BUG = new Set(['grid_unknown', 'not_representable_after_rounding']);
+// ⛔ IMPORTED, NOT RE-STATED. These were a hand-copy of the server's literal — two homes for a
+// decided rule, and the default direction on extension was wrong: a sixth verdict marked as ours
+// server-side would have kept landing in the would-fail figure here, re-creating this very defect
+// one release later with no test failing. Langston's r6 fold-in condition.
+const VPG_NOT_A_FAILURE = VPG_NOT_A_FAILURE_VERDICTS;
+const VPG_OUR_BUG = VPG_WIRING_BUG_VERDICTS;
 
 export function FilterDiagnosticsPanel({ data, isLoading, gateDisposition = 'tag', modeTail = null, assetClass = 'crypto_spot' }: {
   data: FilterDiagnosticsData | undefined;

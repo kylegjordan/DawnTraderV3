@@ -13,6 +13,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { gcdOfIncrements, gridIsDerivedForClass, decideGridAction } from '../../markets/venue-grid-resolver';
+import { VPG_WIRING_BUG_VERDICTS, VPG_NOT_A_FAILURE_VERDICTS } from '../../../shared/venue-grid-verdicts';
 import {
   roundTripleToGrid,
   roundPriceForRole,
@@ -756,8 +757,49 @@ describe('F-G-1 / CHANGES-NEEDED-4 — the VTS tab must not file OUR bugs agains
 
   // CONTROL: a genuine signal-quality verdict must NOT be flagged as ours, or the panel would
   // exclude real failures from the figure that exists to count them.
-  it('CONTROL — signal-shape verdicts are NOT ours', () => {
+  // ⚠️ THE SHORT REFUSAL MOVED TO THE OURS SIDE, AND THAT IS A RECLASSIFICATION, NOT A LOOSENED
+  // CONTROL. Langston's second fold-in: a well-formed SHORT refused because the branch is
+  // unexercised is OUR policy limitation, not a malformed signal — so counting it against signal
+  // quality was wrong-shaped. n is ~0 today (zero shorts have ever been taken), so no number on
+  // any tab moves; what is wrong is the classification, and it is wrong for the day shorts arrive.
+  // ★ The control still has teeth: `unorderable` — a genuinely malformed triple — stays NOT ours.
+  it('CONTROL — a malformed triple is the SIGNALS fault, not ours', () => {
     expect(evaluateGridForTagging(100, 105, 110, 0.01).isWiringBug).toBe(false);  // unorderable
-    expect(evaluateGridForTagging(100, 110, 90, 0.01).isWiringBug).toBe(false);   // short refusal
+    expect(evaluateGridForTagging(100, 95, 110, 0.01).isWiringBug).toBe(false);   // a clean pass
+  });
+
+  it('an UNEXERCISED-BRANCH refusal is OURS — a policy limit, not a signal defect', () => {
+    expect(evaluateGridForTagging(100, 110, 90, 0.01).verdict).toBe('short_side_unexercised');
+    expect(evaluateGridForTagging(100, 110, 90, 0.01).isWiringBug).toBe(true);
+  });
+});
+
+describe('F-G-1 — "whose fault is this verdict" has ONE home, and both sides read it', () => {
+  // ⛔⛔ THE MEMBERSHIP LIVED IN TWO PLACES: an inline literal on the server and a hand-copied
+  // `Set` in the VTS panel. Langston's r6 condition, and the reason it is a condition rather than
+  // a nit is the DEFAULT DIRECTION ON EXTENSION: a sixth verdict marked as ours server-side would
+  // have kept landing in the client's "would fail the venue price grid" figure — re-creating
+  // CHANGES-NEEDED-4 one release later, silently, with no test failing.
+  // ★ FIXED BY REMOVING THE SECOND HOME, not by adding a parity test. Impossible over intercepted.
+  // MUTATION: re-inline the membership at either site and this stops being able to fail.
+
+  it('the server derives isWiringBug FROM the shared set, so they cannot disagree', () => {
+    for (const v of VPG_WIRING_BUG_VERDICTS) {
+      // every member must be reachable as a real verdict and flagged as ours
+      const probe = {
+        grid_unknown: () => evaluateGridForTagging(100, 95, 110, null),
+        not_representable_after_rounding: () => evaluateGridForTagging(1.234567, 1.20, 1.30, 1.23456789012345e-7),
+        short_side_unexercised: () => evaluateGridForTagging(100, 110, 90, 0.01),
+      }[v as string];
+      expect(probe, `no probe for verdict "${v}" — a member was added to the shared set without a case here`).toBeTruthy();
+      const tag = probe!();
+      expect(tag.verdict).toBe(v);
+      expect(tag.isWiringBug).toBe(true);
+    }
+  });
+
+  // the two sets must stay disjoint, or a verdict would be both "not a failure" and "our bug"
+  it('the two shared sets do not overlap', () => {
+    for (const v of VPG_WIRING_BUG_VERDICTS) expect(VPG_NOT_A_FAILURE_VERDICTS.has(v)).toBe(false);
   });
 });
