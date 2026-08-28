@@ -15,10 +15,16 @@ It is **NOT** satisfied by a successful API curl, a psql row count, a PM2 log li
 With active trading on, **most changes have a staging-visible surface.** For any change with one, load the affected tabs and verify it renders and behaves. **"Working in the background but not showing on the front end" is a failure state Kyle cannot detect.**
 **If there is genuinely no UI surface, SAY SO AND SAY WHY** — state the judgement rather than skipping the step.
 
-⛔⛔ **STAGING NEEDS NO LOGIN. USE THE CHROME TOOL AND NAVIGATE STRAIGHT TO IT (Kyle directive 2026-08-28).**
-★ **His words, and he has had to say this repeatedly:** *"I keep getting sessions telling me that they can't go to the staging site because they need a login and password. They don't need one. They just need to use Chrome for Claude and then navigate to it, and they'll be able to view the staging site without login and password."*
-⇒ ⛔ **"I need credentials" IS NOT A REASON TO SKIP THIS STEP. It is not true, and it has been costing real verification.** Navigate to **`https://188.245.193.8.sslip.io`** with the Chrome tool, load the affected tab, and read the DOM.
-⚠️ **The `testuser123` credentials in `CLAUDE.md` §7 exist for AUTHENTICATED API CALLS from the server, not for viewing the site.** ★ **That is almost certainly where the confusion comes from — seeing credentials in the infrastructure section and inferring a login wall that does not exist.**
+⛔⛔ **STAGING NEEDS NO LOGIN — IN *CLAUDE-IN-CHROME*. THE TOOL YOU PICK DECIDES THIS, AND THAT IS THE WHOLE DISTINCTION (Kyle directive 2026-08-28, MEASURED the same day).**
+★ **Kyle, who has had to say this repeatedly:** *"I keep getting sessions telling me that they can't go to the staging site because they need a login and password. They don't need one. They just need to use Chrome for Claude and then navigate to it."*
+
+| surface | what you get at `https://188.245.193.8.sslip.io` | use it for |
+|---|---|---|
+| ✅ **`mcp__claude-in-chrome__*`** — Kyle's real Chrome, carrying his session | **THE FULL DASHBOARD. No login.** *(Measured 2026-08-28: portfolio, Ready-to-Buy, Filter Health, strategy table all rendered.)* | ⛔ **§9.3 UI verification. This is the one the rule means.** |
+| ⚠️ the in-app Browser pane (`mcp__Claude_Browser__*`) | **a `"Welcome Back / Sign in"` FORM** — fresh profile, no cookies | general browsing; **needs the credentials, and that is why they exist** |
+
+⇒ ⛔⛔ **"I NEED CREDENTIALS" IS NOT A REASON TO SKIP THIS STEP — IT MEANS YOU REACHED FOR THE WRONG BROWSER.** ★ **Both halves are true, which is exactly why sessions keep getting it wrong: the login wall is REAL on one surface and ABSENT on the other, and the rules file listed the credentials without ever saying which.**
+⚠️ **The `testuser123` credentials in `CLAUDE.md` §7 serve the in-app browser AND the authenticated API calls in that same section. They are NOT a precondition for §9.3 verification.**
 
 ## ALSO
 - PM2 logs, psql, CI status, server health — **as well as**, not instead of.
