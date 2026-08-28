@@ -22,6 +22,9 @@
  */
 
 import { startBatchWriter } from '../services/passive-archive/ohlc-batch-writer.js';
+// F-G-1 (OBJ-3): xStock has no venue-published price grid, so it is derived from observed
+// prices. Started here because it reads the same archive this bootstrap fills.
+import { startXstockGridRefresher } from '../markets/xstock-grid-refresher.js';
 import { startTickerWriter, setTickerThrottle, setTickerThrottleForClass } from '../services/passive-archive/ticker-batch-writer.js';
 import { startEquitySpotArchiver } from '../services/passive-archive/equity-spot-archiver.js';
 import { startEquityPerpArchiver } from '../services/passive-archive/equity-perp-archiver.js';
@@ -207,6 +210,11 @@ export async function passiveArchiveBootstrap(): Promise<void> {
 
   startBatchWriter();
   startTickerWriter();
+
+  // F-G-1 (OBJ-3): warm the derived xStock price grids. Runs once now, then on its own
+  // cadence. Deliberately AFTER the writers so the archive it reads is being fed, and
+  // deliberately not awaited -- a slow derivation must not delay archiver startup.
+  startXstockGridRefresher();
 
   // Spawn archivers in parallel, each independent. Catch + log per-archiver
   // so one universe's failure can't block another.

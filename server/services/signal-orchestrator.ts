@@ -83,6 +83,11 @@ import { computeNetExpectancyKernel } from '../core/calculations/net-expectancy-
 // reorg-B2 (Piece A): central per-class target-floor + the shared normalizer (applied at the
 // active convergence point in buildSizedSignalForStrategy; VTS applies the same in vts-runner).
 import { getPerClassTargetGate } from '../core/calculations/expectancy.js';
+// F-G-1 (OBJ-7): the venue price grid and its rounding rules. Rounding happens at the ONE
+// orchestrator seam so no strategy can be born bypassing it.
+import { roundTripleToGrid } from '../core/calculations/venue-price-grid.js';
+import { resolveVenueGrid } from '../markets/venue-grid-resolver.js';
+import { validateStopDistance } from '../strategies/strategy-helpers.js';
 import { normalizeAndGateTarget } from '../core/calculations/signal-target-normalizer.js';
 // M5B: Import disabled - VTS now runs autonomously, not from signal orchestrator
 // import { captureSignalForVTS } from './vts-runner.js';
@@ -502,6 +507,60 @@ export class SignalOrchestrator {
     marketContext?: { high24h?: number; low24h?: number; atr?: number }
   ): Promise<SizedStrategySignal | null> {
     if (!rawSignal) return null;
+
+    // ══ F-G-1 (OBJ-7 / OBJ-7b / P1-P3) — VENUE PRICE GRID ══════════════════════════════════
+    // THE ONE ROUNDING SEAM. Every strategy's signal passes through here before sizing, the
+    // target gate and net-geometry. `strategy-engine.ts` alone computes a stop price at 33
+    // sites; rounding at 33 sites guarantees one is missed and a future strategy is born broken.
+    //
+    // ⛔ ROUND *THEN* GATE, ONE PASS. Everything below this line — sizing, SQE, the target gate,
+    // net expectancy — now judges the geometry that will actually ship. That ordering is the
+    // whole point: `applyGlobalGuards` already ran INSIDE the strategy, upstream of here, so
+    // without this the geometry that was validated is not the geometry that trades.
+    {
+      const _grid = resolveVenueGrid(rawSignal.symbol, sizingContext.assetClass);
+      // The ONE cap in the strategy set: `volatility-edge` takes Math.min(measuredMove, atr),
+      // so its target is a CEILING and rounding it AWAY would push it past the bound it was
+      // defined by. Every other target is a floor ("at least K x ATR").
+      const _isCap = strategyId === ('volatility_edge' as StrategyType);
+      const _r = roundTripleToGrid(
+        rawSignal.entryPrice, rawSignal.stopPrice, rawSignal.targetPrice,
+        _grid.tick, { targetIsCap: _isCap, symbol: rawSignal.symbol },
+      );
+      if (!_r.ok) {
+        // ⛔ REJECT, NEVER RE-ROUND. Rounding to nearest is deterministic, so "round again"
+        // could only mean rounding the OTHER way, and choosing the direction that lets a trade
+        // through is shopping for a pass. The rounded geometry IS the geometry.
+        console.warn(
+          `[F-G-1][GRID_REJECT] ${rawSignal.symbol}/${strategyId} reason=${_r.reason} ` +
+          `tick=${_grid.tick ?? 'null'} provenance=${_grid.provenance} ` +
+          `entry=${rawSignal.entryPrice} stop=${rawSignal.stopPrice} target=${rawSignal.targetPrice}`,
+        );
+        return null;
+      }
+      // P2 — THE POST-ROUND RE-CHECK (Kyle's, and it is a CORRECTNESS requirement rather than a
+      // precaution). NARROWED to the stop-distance floor alone: `normalizeAndGateTarget` below
+      // re-derives RR, reachability and ordering on the rounded numbers, so those three are
+      // already covered. `MIN_STOP_DISTANCE_BPS` is the ONE check with no downstream re-run —
+      // `validateStrategySignal` tests ordering, not distance.
+      if (!validateStopDistance(_r.entryPrice, _r.stopPrice)) {
+        console.warn(
+          `[F-G-1][GRID_REJECT] ${rawSignal.symbol}/${strategyId} reason=stop_distance_after_rounding ` +
+          `entry=${_r.entryPrice} stop=${_r.stopPrice} tick=${_grid.tick}`,
+        );
+        return null;
+      }
+      // ROUND ONCE, PERSIST ONLY THE ROUNDED VALUES. An unrounded shadow field would rebuild
+      // OBJ-2's defect: a second number under a name implying it is the one we use.
+      rawSignal = {
+        ...rawSignal,
+        entryPrice: _r.entryPrice,
+        stopPrice: _r.stopPrice,
+        targetPrice: _r.targetPrice,
+      };
+    }
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+
 
     // P19-B8.4b: active-path funnel — narrow the pipe's stamped class to the funnel grid
     // (crypto_spot|xstock_spot); mode is already 'paper'|'live'. Count this generated signal at the funnel
