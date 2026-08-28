@@ -571,7 +571,15 @@ export class SignalOrchestrator {
       // same drop-arm-on-missing-data defect he refused for the VTS lane, one module further out
       // — and with `MIN_INCREMENTS=50` plus a cold-start window where the refresher has not yet
       // run, the plausible worst case is that it switches the class off entirely.
-      if (!_r.ok && _r.reason === 'grid_unknown' && _grid.provenance !== 'venue_published') {
+      // ⛔⛔ BRANCH ON THE ASSET CLASS, NOT ON THE PROVENANCE OF A LOOKUP THAT FAILED. My first
+      // guard tested `_grid.provenance !== 'venue_published'` — but `resolveVenueGrid` returns
+      // `{ tick: null, provenance: 'unknown' }` on EVERY miss, crypto included. So inside the
+      // `grid_unknown` branch that test is TRUE BY CONSTRUCTION: a TAUTOLOGY that let CRYPTO pass
+      // through unrounded, the exact inverse of what I said the fix preserved. Langston, at the ref.
+      // ★ PUBLISHED-vs-DERIVED IS A PROPERTY OF THE ASSET CLASS, not of a failed lookup's result.
+      const _gridIsDerived = sizingContext.assetClass === 'xstock_spot'
+        || sizingContext.assetClass === 'xstock_perp';
+      if (!_r.ok && _r.reason === 'grid_unknown' && _gridIsDerived) {
         console.warn(
           `[F-G-1][GRID_UNRESOLVED_PASSTHROUGH] ${_gridSymbol}/${strategyId} — no DERIVED grid for this ` +
           `symbol (coverage gap in our own archive, not a venue fact). Proceeding UNROUNDED rather than ` +
