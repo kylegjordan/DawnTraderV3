@@ -1,4 +1,35 @@
 /**
+ * ════════════════════════════════════════════════════════════════════════════════════════
+ *  VOG — THE VENUE ORDER GATE
+ * ════════════════════════════════════════════════════════════════════════════════════════
+ *
+ * ★ A NAMED COMPONENT, sibling to the VPG (Kyle, 2026-08-28: *"July service makes sense now, but
+ *   a month from now, two months from now, that name won't really mean much"*). Refer to it as
+ *   **the VOG**. It is a GATE, not a probe or a check — on a definitive rejection it returns
+ *   `opened: false` and the trade does not happen.
+ *
+ * THE ONE QUESTION IT OWNS: *would the venue ACCEPT this order?* — asked of Kraken itself via
+ * `AddOrder` with `validate=true`, which executes nothing.
+ *
+ * ⛔ IT IS THE SECOND HALF OF A PAIR, AND THE ORDER MATTERS:
+ *     **VPG** decides what the venue can EXPRESS (price grid, lot precision, minimums).
+ *     **VOG** asks whether the venue would ACCEPT it.
+ *   The VPG runs first and feeds this gate. Asking about a price or a size the venue could never
+ *   take wastes the question and returns a "no" we could have answered ourselves.
+ *
+ * ⚠️ WHAT IT IS NOT: a fill model. Fill honesty is the depth-walk's job and never this gate's.
+ * ⚠️ PAPER-ONLY BY CONSTRUCTION: in live mode the REAL order is the venue contact.
+ * ⚠️ xSTOCK ALWAYS SKIPS — Kraken does not index xStocks in `AssetPairs`, so there is no oracle
+ *   for that class at all. Documented, not a defect: `#120`, B-NEW-36 sub-batch (c).
+ * ⚠️ IT FAILS OPEN ON DOUBT, deliberately: only definitive order-level codes reject; transport
+ *   trouble, rate limits, outages and unknown codes all SKIP, because they are not verdicts
+ *   about the order.
+ * ⛔ KNOWN GAP — `#922`: a SUCCESSFUL validation is recorded nowhere, so "ran and passed" is
+ *   indistinguishable from "never ran". Homed to `B-VALIDATE-OBSERVABILITY`.
+ *
+ * Origin: P19-B8.5 Step-3, `adf06d028`, 2026-07-14.
+ */
+/**
  * P19-B8.5 (OBJ-8) — real-venue WELL-FORMEDNESS vetting for paper opens.
  *
  * Every paper open is sent to Kraken `AddOrder validate=true` (executes NOTHING)

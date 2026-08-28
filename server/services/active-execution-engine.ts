@@ -3367,11 +3367,14 @@ export class ActiveExecutionEngine {
       // ⛔ THE VENUE REMAINS THE AUTHORITY. This is a PRE-FILTER, not a replacement: a local
       // check can be stale, the venue cannot. It only ever refuses what the venue would also
       // refuse; anything it passes still goes to the venue for the real verdict.
-      const _vpgClass = asValidAssetClass((signal as any).assetClass)
-        ?? safeResolveAssetClass(signal.symbol, 'kraken');
-      const _sizeLimits = _vpgClass
-        ? resolveVenueSizeLimits(signal.symbol, _vpgClass)
-        : { lotDecimals: null, ordermin: null, costmin: null };
+      // ⛔ USE `_openClass` (:3278) — ALREADY RESOLVED AND ALREADY NULL-GUARDED, 92 lines up in
+      // this same function. My first version read `(signal as any).assetClass`, which the
+      // promoted-signal literal at :2826-2881 NEVER SETS — it carries the class in
+      // `metadata.assetClass` (:2874-2875), as the 12 other readers in this file do. So that arm
+      // was DEAD on the RTB-promotion path and every resolution fell through to
+      // `safeResolveAssetClass(signal.symbol, …)` — THE SYMBOL INFERENCE I EXPLICITLY SAID I WAS
+      // AVOIDING BECAUSE TICKERS COLLIDE. Langston, verified at the ref.
+      const _sizeLimits = resolveVenueSizeLimits(signal.symbol, _openClass);
       const _venueQty = roundQuantityForVenue(
         quantity, signal.entryPrice,
         _sizeLimits.lotDecimals, _sizeLimits.ordermin, _sizeLimits.costmin,
@@ -3393,9 +3396,17 @@ export class ActiveExecutionEngine {
           'VPG: rounded size below venue minimum');
         return { opened: false, stage: 'VALIDATE_REJECTED', reason: 'VPG: rounded size below venue minimum' };
       }
+      // ⛔ WRITE THE ROUNDED SIZE BACK, so the probe, the fill, the fee and the position record
+      // are ONE number. My first version sent the venue the ROUNDED quantity at :3398 and then
+      // filled with the RAW one at :3426 — reproducing, on the size axis and in the same commit,
+      // the exact defect I had just fixed on the price axis: asking the venue about an order we
+      // do not place. It is self-sealing for the same reason too — a size-precision rejection can
+      // never surface, because the probe is pre-corrected. Langston caught it 28 lines below the
+      // fix. The rounded size is the one the venue can actually accept, so it is the one we fill.
+      if (_venueQty !== null) quantity = _venueQty.quantity;
       const _venueCheck = await validatePaperOrderWithVenue({
         symbol: signal.symbol,
-        quantity: _venueQty?.quantity ?? quantity,
+        quantity,
         limitPrice: _b72cLimit,
         addOrder: (p) => this.krakenService.addOrder(p),
       });
