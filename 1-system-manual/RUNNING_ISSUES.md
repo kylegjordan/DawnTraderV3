@@ -4128,6 +4128,16 @@ The VTS is fed by the **same** filtered scan (confirmed live: it is simulating `
 
 **MEASURED, not inferred:** `scripts/governance-checker/poller.mjs:282` mints a `gov-staleopen` alert and **has NO `toResolveKeys` path** — unlike its sibling checks, which push a resolve key when the condition clears. ⇒ **the alert is mint-only.** Closing the underlying `GOVERNANCE_EXCEPTIONS` row stops it firing on anything NEW, but **an already-active instance sits active for ever until a human resolves it by hand.**
 
+➕ **COMPANION OBSERVATION, 2026-08-28 (CC-C) — SAME HOME (`B-ALERT-LIFECYCLE`), DIFFERENT MECHANISM, AND DELIBERATELY NOT A NEW NUMBER.** `#912` is *an alert that cannot CLEAR itself*. This is *an alert whose OWNER is not a queryable property of the alert.*
+
+**MEASURED on the six long-unacked rows (2026-08-28):** `metadata` is **`{}` on all six.** The owner is real and correct — three CC-A, three CC-B — but it is recorded as **free prose inside `body`** (*"POST-CLOSE WATCH (owner CC-A; …)"*) and as Langston's transient `[[ALERT id=… owner=…]]` routing marker in the channel. **Neither is a field.**
+
+⇒ ★ **CONSEQUENCE, VISIBLE HOURLY: the heartbeat enumerates unacked alerts and can only say *"someone own these"*, because it genuinely cannot tell whose they are.** ⚠️ **An alert addressed to everyone is addressed to nobody** — and every session that checks must read six bodies to learn none is theirs. **These six have been active since 08-07 / 08-14.**
+
+⛔ **WHAT IS *NOT* ESTABLISHED, and it is why this is an OBSERVATION rather than a finding: I have NOT shown the missing field is WHY they have sat.** Their owners may simply not have reached them. **The absent field is proved; its causal role is a hypothesis** (rule 24 — announce the symptom, not the cause). ⚠️ **Not mine to work.** Recorded because I found it, and because `ALERT_HANDLING_PROTOCOL.md:22` (*an owner alias with no `NAMES` entry is silently unroutable*) is the same family: **the owner lives in a message, not on the record.**
+
+⚠️ **FOUND VIA A WRONG-OBJECT OF MY OWN, recorded because the near-miss is the useful part:** I queried `metadata.owner`, got nothing on all six, and was one step from reporting *"these alerts have no owner"* — **a fabricated finding that would have sent someone to fix a non-problem.** The owner was stated all along, in the field I had not read. **Caught by opening ONE FULL RECORD instead of trusting my own query.**
+
 **OBSERVED COST, this batch:** `2080705d` (and `55a6ad8b` before it) re-fired for **two days after B-MBIM-SWITCH-ON was deployed and verified running**, pulling Langston and two CC sessions into triage for finished work. Both had to be resolved manually with evidence.
 
 ⛔ **WHY THIS IS WORSE THAN NOISE, and it is the reason it gets a home rather than a note:** an alarm that cannot clear itself trains its readers to ignore it. **The next `gov-staleopen` will be indistinguishable from these two**, and the one after that may be real. *(Langston, 2026-08-26: "an alarm that can't clear itself eventually becomes noise, so I'd rather it be named than quietly worked around.")*
