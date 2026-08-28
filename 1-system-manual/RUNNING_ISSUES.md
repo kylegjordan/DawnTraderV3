@@ -4438,7 +4438,39 @@ Kraken publishes a per-pair `tick_size` — **1,437 pairs, 11 distinct values, a
 ⚠️ **AND IT MUST BE SAID IN F-G-1's COMPLETION REPORT AS A LIMIT OF THE GUARANTEE**, not left to be discovered by someone who reads "one rounding seam" as "every path".
 ⇒ **HOME: `B-INTENT-ENTRY-PARITY`, owner CC-C, placed in `PHASE_19_PLAN` §1 after `B-TARGET-FABRICATION`.** First question for that batch is whether the intent path should exist at all, not how to guard it.
 
-### #930 OPEN 2026-08-28 (CC-INFRA; Langston required it be filed rather than left as a flag in a change list) — THE FRESH-CONTEXT REVIEWER LOOP IS MANDATED IN FOUR SKILLS AND COULD NOT FIRE IN THE SESSION THOSE SKILLS GOVERN
+### #932 OPEN 2026-08-28 (CC-INFRA; found by Langston at the Step-4 r3 approval, re-derived by me before filing) — THE BURN THRESHOLDS ARE FRACTIONS OF THE CAP WHILE THE BUDGET IS DESIGNED TO CONSUME 99.3% OF IT, SO THE ALARM DISCRIMINATES *SPENDING* FROM *NOT SPENDING*
+
+**BUCKET 2 — WORKING AS BUILT, BUT THE REMEDY IS A SCOPE DECISION, NOT A UNILATERAL FIX.** The arithmetic is a defect; **which of three remedies to take is a judgement about what the alarm is for**, and taking one silently would be exactly the "fixing behaviour that was working" failure the taxonomy forbids.
+
+**RE-DERIVED BEFORE FILING** (his finding, my arithmetic — a reviewer hit is a lead, not a finding):
+
+| | |
+|---|---|
+| `BURN_WARN` = 0.80 × 1,000,000 | **800,000** |
+| `BURN_CRITICAL` = 0.90 × 1,000,000 | **900,000** |
+| `BIRTHS_RESERVED` — and births are `NEVER_SHED` | **803,000** |
+| **reserve ALONE crosses the warn line** | **TRUE** |
+| full nominal allocation (803,000 + 190,000) | **993,000** |
+| **full allocation crosses CRITICAL** | **TRUE** |
+
+⇒ **A month spending exactly its protected floor and ZERO discretionary credits projects `warning`. A month spending the full planned allocation projects `critical`** — the allocation the §5.1 re-derivation was performed specifically to declare affordable. **The thresholds are fractions of the CAP; the plan consumes 99.3% of the cap.** So `level` separates *spending* from *not spending*, never *on plan* from *off plan*.
+
+⛔ **AND `config.py` NAMES THIS EXACT FAILURE NINE LINES ABOVE THE CONSTANTS THAT PRODUCE IT** — *"an alarm that is always on is an alarm nobody reads"*, written while fixing the previous version of the same defect. **The warning was correct and did not reach the numbers underneath it.**
+
+★ **WHY r3 IS WHERE IT BECAME REACHABLE, stated precisely rather than as "pre-existing":** it is directionally pre-existing — 776,000 + 200,000 also read `critical` — **but r3 is the first version in which the NEVER-SHED floor ALONE crosses the warn line.** The reserve moved from 776,000 to 803,000 and its dependent constant did not move with it. ⇒ **a constant was re-derived and the thing that depends on it was not re-checked**, which is the class this batch has been paying for all day.
+
+⚠️ **THE SUITE CANNOT SEE IT, AND THAT IS THE SAME SHAPE AS THE ORIGINAL BLOCKER-1.** `test_mutations.py` M5 asserts `level is None` on a flat series worth **2,400 credits — 0.24% of the cap.** The threshold is never exercised anywhere near the load it exists to watch, exactly as the ledger cost was invisible because every test ran on an empty ledger.
+
+**THE THREE REMEDIES, for whoever decides:**
+1. **Raise the fractions** so they sit above the planned allocation. Cheapest; leaves the alarm measuring distance-to-cap, which is not what we want to know.
+2. ★ **Project against the PLAN rather than the cap** — warn when spend is running ahead of `BIRTHS_RESERVED` *pro-rata through the month*, which is the question actually being asked. **My recommendation**, and it makes the alarm mean something at every point in the month rather than only near the end.
+3. **Alert on the SHED TRANSITION instead** — fire when a discretionary leg actually stops. Strongest signal, latest warning.
+
+⛔ **IT DOES NOT HOLD THE PUSH, and Langston and I agree on why:** it does not touch `allowed()`, which is independently bounded and injection-tested. **The protection works; the reporting is uninformative.** Those are different failures and only one of them loses data.
+
+**HOME:** `B-BURN-THRESHOLD-BASIS`, **owner CC-INFRA**, placed in `PHASE_19_PLAN.md` at the Phase-19 tail beside `#931`/`#920`/`#926` — **same class: an instrument that answers confidently without discriminating.** ⚠️ **No date, per §9.4.**
+
+### #931 OPEN 2026-08-28 (CC-INFRA; Langston required it be filed rather than left as a flag in a change list) — THE FRESH-CONTEXT REVIEWER LOOP IS MANDATED IN FOUR SKILLS AND COULD NOT FIRE IN THE SESSION THOSE SKILLS GOVERN
 
 **BUCKET 1 — a real gap, and it is a GOVERNANCE gap rather than a tooling one.** `workflow-02`, `-04`, `-07` and `-11` each require a fresh-context reviewer for load-bearing claims, with Kyle's standing approval recorded in the skill text (2026-08-27). ⛔ **This session's harness configuration forbade spawning subagents unless Kyle asked per-case — so the mechanism was written into four skills and fired ZERO times.** ★ **That is precisely the "reads as covered" failure the mechanism exists to prevent, one level up: four skills asserted a safeguard that could not run.**
 

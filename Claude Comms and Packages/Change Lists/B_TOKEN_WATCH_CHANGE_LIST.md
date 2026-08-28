@@ -1,5 +1,42 @@
 # B-TOKEN-WATCH — CHANGE LIST (Step 4)
 
+> ⛔⛔ **REFRESHED AT THE APPROVED REF — THE FIGURES BELOW WERE THE r1 SUBMISSION'S AND SURVIVED THREE ROUNDS OF REVIEW UNCHANGED.**
+> **APPROVED AT r3, `3c6e6ced3`.** Langston re-read every module and all five suites himself and cleared all three blockers, both rulings and all three conditions.
+> ★ **This refresh is not housekeeping.** He made me purge superseded values from two other files this same round, on the reasoning that **in a package whose defence is that every number is traced inline, a stale trace is the defect wearing the fix's clothes.** The same standard applies to the document that describes the package. **The r1 figures are preserved below the line, labelled, rather than deleted — a reviewer must be able to find what he read.**
+
+## THE APPROVED STATE — re-derived, not remembered
+
+| | r1 submission | **APPROVED r3** |
+|---|---|---|
+| suites | 2 | **5** |
+| checks | 57 | **141** |
+| module lines | 1,430 | **2,382** |
+| test lines | 449 | **1,289** |
+| review rounds | — | **r1 CHANGES-NEEDED → r2 CHANGES-NEEDED → r3 APPROVED** |
+| fresh-reader rounds | 0 | **3** (capped; did NOT converge — each found more than the last) |
+
+**Per module at the approved ref:** `config.py` 251 · `store.py` 457 · `budget.py` 637 · `providers.py` 173 · `receiver.py` 389 · `follow_up.py` 335 · `tier.py` 140.
+
+## WHAT THE THREE REVIEW ROUNDS CHANGED — the load-bearing list
+
+⛔ **Every hunk quoted below the line is from the r1 submission and several are now WRONG AS CODE.** The shed decision, the burn projection and the tombstone-cache block were all rewritten. What replaced them:
+
+1. **The production path never charged a birth** — the ledger sat at zero for the 776k leg, so both burn thresholds were unreachable. Receiver now journals; the locked job folds.
+2. **The ledger cost 198 ms per observation** and scaled with the *birth* rate, invisible to every test because they ran on empty ledgers. Events aggregate by hour: **2.857 MB → 0.002 MB, 198 ms → 6.4 ms.**
+3. **The burn monitor's "two projections" were one** — `peak ≥ trailing` identically, so it read `warning` under ordinary load. Peak now answers a bounded question; both legs demonstrably bind.
+4. **The reserve did not fit its own derivation** — 776,000 was a 30-day figure that failed even there. Re-derived against the worst month: **803,000 / 190,000 / 7,000.**
+5. **A month boundary re-folded the entire previous month**, then left its final hour unfolded. Per-month journals plus a drain that archives rather than re-charges.
+6. **Past and late checkpoints were orphaned** on the write side, then on the read side. Misses recorded; unread buckets caught up, bounded and counted.
+7. **`size_source` was computed, then dropped, then persisted with no reader.** Now tallied daily and warned on.
+8. **Four documented "fixes" could be reverted with every check still passing.** `test_mutations.py` exists to make that impossible.
+
+**Every one of 1-8 was found by a reviewer, not by me.**
+
+---
+
+# ⬇ THE r1 SUBMISSION, PRESERVED — SUPERSEDED, NOT DELETED
+
+
 **Owner:** CC-INFRA · **2026-08-28** · **change-class:** `non_architecture`
 **READY AT:** `origin/migration/aws-supabase`, code landed `bdb688284` and `5643f40a1`.
 **Upstream gates:** Step-1 APPROVED (3 conditions discharged) · Step-2 APPROVED at `77c82f67b` (3 blockers discharged in `PART F`/`PART G`).

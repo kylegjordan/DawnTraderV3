@@ -42,7 +42,7 @@ python token-watch/tests/test_round2.py
 python token-watch/tests/test_mutations.py
 ```
 
-Both use a scratch tree via `TOKEN_WATCH_ROOT` and make **no network calls**.
+All five use a scratch tree via `TOKEN_WATCH_ROOT` and make **no network calls**.
 
 ---
 
