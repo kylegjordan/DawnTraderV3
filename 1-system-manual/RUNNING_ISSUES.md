@@ -2882,6 +2882,29 @@ The COMMITTED copy carries the five **pre-Phase-14 regime keys** (`BULL_STABLE`/
 
 ---
 
+### #753 OPEN 2026-08-27 (CC-A; Kyle-directed investigation after the third instance) — ★★ **ANOTHER SESSION’S UNCOMMITTED WORK KEEPS APPEARING IN A SESSION’S OWN WORKING TREE, AND THE MECHANISM HAS NEVER BEEN ESTABLISHED. THREE INSTANCES, ALL ON `RUNNING_ISSUES.md`, ACROSS THREE DIFFERENT SESSIONS.**
+
+⛔⛔ **KYLE’S DIRECTIVE, 2026-08-27: a FULL INVESTIGATION AND FIX, scheduled AHEAD of `B-MEASURE-GATE`.** ★ **This is the first time the class has been given a batch rather than a recovery** — each prior instance was recovered correctly and then closed as an incident, which is why the cause is still unknown at instance three.
+
+**THE THREE INSTANCES, object and population stated:**
+| # | date | whose content | where it was found | recovered how |
+|---|---|---|---|---|
+| 1 | 2026-07-28 | **CC-A’s** `#598` + `#582` annotations | **STAGED in CC-B’s index** | stash → pull → confirmed from origin. ⛔ **STASH DROPPED after proving nothing was lost — which destroyed the only artifact carrying HOW it got there. The mechanism is unreconstructable for this instance.** |
+| 2 | 2026-08-21 | **CC-C’s** `#736`/`#737` | **STAGED in CC-A’s index** (28 lines) | stash → pull. **`stash@{1}` RETAINED.** |
+| 3 | 2026-08-27 | **CC-C’s** `#705` + `#915` corrections | **UNSTAGED in CC-A’s working tree** (93 lines) | stash → rebase → **content confirmed arriving from origin, nothing lost.** **`stash@{0}` RETAINED.** |
+
+★★ **INSTANCE 3 IS THE ONE THAT BREAKS THE STANDING HYPOTHESIS, AND IT IS WHY THIS NEEDS AN INVESTIGATION RATHER THAN ANOTHER RECOVERY NOTE.** Instances 1 and 2 were **STAGED** — consistent with a stray `git add` or an index-touching hook. **Instance 3 was UNSTAGED**, in the working tree only. ⇒ **whatever wrote it did not use the index**, so *"someone ran `git add`"* cannot be the whole explanation. ✅ **Two retained stashes now exist as evidence, which is exactly what instance 1 lacked.**
+
+⚠️ **WHAT IS ALREADY RULED OUT, so the investigation does not re-tread it (measured at instance 1):** topology is clean — `.git` is a real directory, `--show-toplevel` correct, and **every reflog pull was `Fast-forward` ⇒ no merge, so no merge-staging.** §7.1 clone isolation holds. **The clones are genuinely separate.**
+★ **THE ONE STRUCTURAL FACT THE FIX MUST SIT ON: `RUNNING_ISSUES.md` IS THE ONLY FILE THIS HAS EVER HAPPENED TO, AND IT IS THE FILE ALL FOUR SESSIONS APPEND TO.** ⚠️ **The `#702` number blocks were the structural fix for COLLISION in that file — they do not touch this at all**, because this is not two sessions choosing the same number; it is one session’s bytes materialising in another’s checkout.
+
+⛔ **WHY IT IS DANGEROUS RATHER THAN UNTIDY, and it is `25.c` exactly: THE PATH IS ALWAYS RIGHT.** A session committing its own governance edits with explicit paths — the mandated form — **stages the correct filename and the wrong content, and `--name-only` shows nothing wrong.** ⇒ **it would publish another session’s work under the wrong name, and the only thing that has caught it all three times is a human-eye read of the hunk.**
+
+**DISPOSITION — #3, ITS OWN BATCH: `B-CROSS-SESSION-BLEED`, owner CC-A, placed in `PHASE_19_PLAN.md` §governance queue at position 2, AHEAD of `B-MEASURE-GATE` (Kyle 2026-08-27).**
+**SCOPE, in order:** (1) **establish the mechanism from the two retained stashes** — reflog, index mtimes, hook execution order, and the `.claude/hooks/` set that touches the tree (the rules-freshness hook re-stages paths by design); (2) **only then** design the fix; (3) **a detection leg regardless of whether the cause is found** — a pre-commit check that refuses a staged hunk in a shared governance file whose content does not match the committing session, since three instances have been caught by eye and eyes are not a mechanism. ⚠️ **DO NOT DROP EITHER STASH UNTIL THE MECHANISM IS ESTABLISHED** (§25.c: recovering the work and diagnosing the incident are two different jobs).
+
+⇔ `25.c` (the rule this class produced) · `#702` (number blocks — a DIFFERENT failure in the same file) · `MISTAKE_PATTERNS` `wrong-object` (a matching name is not a matching thing).
+
 ### #752 OPEN 2026-08-27 (CC-A, Kyle-directed; Langston condition on `B-GOV-REPORTING` edit 6) — ★★ **§9.4 HAD THREE DECISION-GATES IN FRONT OF ITS OWN TRIGGER, SO THE RULE COULD NOT FIRE UNTIL THE DECIDING HAD ALREADY HAPPENED.**
 
 **THE PRIOR WORDING, verbatim:** *"when CC and/or Langston surface an issue **worth fixing** and **agree it should be fixed**, it MUST be given a home **at the moment of agreement**."* ⇒ worth-fixing, agree-it-should-be-fixed, and a moment-of-agreement — **three gates, all of them decisions, all upstream of the trigger.** Kyle: *"the decision on what to do with the issue should NOT be the trigger for the rule to fire."*
