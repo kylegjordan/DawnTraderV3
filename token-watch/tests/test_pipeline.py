@@ -150,7 +150,12 @@ os.utime(birth_file, (old_ts, old_ts))  # older than any window — still untouc
 
 res = tier.tier_payloads(datetime.now(UTC))
 check("aged payload moved to cold", res["moved"] == 1, res)
-check("cold copy exists", os.path.exists(os.path.join(COLD_DIR, "old.jsonl.gz")))
+# ★ THE COLD NAME CARRIES ITS SOURCE PREFIX (2026-08-28). Both bulky stores
+#   name files by date, so an unprefixed cold name lets the second store
+#   silently overwrite the first — asserted directly in test_tiering block 4.
+check("cold copy exists, under its source prefix",
+      os.path.exists(os.path.join(COLD_DIR, "payload-old.jsonl.gz")),
+      sorted(os.listdir(COLD_DIR)))
 check("hot copy removed", not os.path.exists(old_p))
 check("POSITIVE CONTROL: the FRESH payload was left alone", os.path.exists(new_p),
       "if it had gone too, the age test would be doing nothing")

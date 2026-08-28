@@ -7,8 +7,11 @@ token-watch — tiering and the cold hand-off. (OBJ-6)
   that happened — the collector works fine right up until it doesn't, and by
   then there is a lot of data to move under pressure.
 
-⛔ THE ONLY DELETER IN THIS PACKAGE, and it deletes exactly one thing: bulky
-  raw provider payloads past their hot window.
+⛔ THE ONLY DELETER IN THIS PACKAGE, and it removes a hot copy ONLY after a
+  verified compressed copy exists in cold. Two bulky stores tier: the raw
+  provider payloads, and (added 2026-08-28, the day it was built) the
+  receiver's raw provenance store. See TIERED_SOURCES — adding a bulky writer
+  without adding it there is how a disk fills quietly.
   ⛔⛔ BIRTH RECORDS ARE DELETED BY NOTHING, EVER. There is no code path here
      that can touch them, and the test asserts it. A sampled or truncated
      birth census destroys the base rate of every rate in the study, and §5
@@ -36,6 +39,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 
 from config import COLD_DIR, PAYLOAD_DIR, PAYLOAD_HOT_DAYS, WORKING_INDEX_HOT_DAYS
+from provenance import RAW_DIR as PROVENANCE_RAW_DIR
 from store import DUE_DIR, ensure_dirs, periodic_lock
 
 UTC = timezone.utc
@@ -56,18 +60,51 @@ def _age_days(path: str, now: datetime) -> float:
     return (now - datetime.fromtimestamp(os.path.getmtime(path), UTC)).total_seconds() / 86400.0
 
 
+# ⛔ EVERY BULKY STORE THAT TIERS, AND ITS COLD-NAME PREFIX.
+#
+# ★ THE PREFIX IS NOT COSMETIC — IT IS A COLLISION FIX. Both stores name their
+#   files by date, so `payload/2026-08-28.jsonl` and
+#   `provenance/raw/2026-08-28.jsonl` would BOTH become
+#   `cold/2026-08-28.jsonl.gz` and the second would silently overwrite the
+#   first. Tiering that destroys the file it just archived is a data-loss path
+#   wearing a retention policy's clothes, one layer deeper than the failure the
+#   verify-before-remove order already guards against.
+#
+# ⚠️ THE PROVENANCE STORE WAS ADDED HERE ON 2026-08-28, THE SAME DAY IT WAS
+#    BUILT, AND KYLE ASKED THE QUESTION THAT FOUND IT. The receiver's raw store
+#    is the BULKIEST thing in the package — projected 2-14 GB over 90 days,
+#    which SPANS the 8 GiB store cap — and it shipped with no tiering at all,
+#    because tiering was written before the store existed. A new writer whose
+#    retention nobody extended is exactly how a disk fills.
+#
+# ⛔ TIERED, NEVER DELETED. Cold is compressed and kept: this store is the
+#    PRIMARY control on the accept path (a static, replayable header secret
+#    proves nothing about a body), so losing it loses the only thing that makes
+#    a poisoning partitionable. Compress-verify-remove preserves it; the
+#    protected set below is what stops anything here reaching the census.
+TIERED_SOURCES = (
+    (PAYLOAD_DIR, "payload"),
+    (PROVENANCE_RAW_DIR, "provenance-raw"),
+)
+
+
 def tier_payloads(now: datetime | None = None) -> dict:
-    """Compress payloads past the hot window into cold storage, then remove the
-    hot copy. Compress-then-verify-then-remove, in that order: a hand-off that
-    deletes before confirming the cold copy is readable is a data-loss path
+    """Compress bulky stores past the hot window into cold storage, then remove
+    the hot copy. Compress-then-verify-then-remove, in that order: a hand-off
+    that deletes before confirming the cold copy is readable is a data-loss path
     wearing a retention policy's clothes.
     """
     now = now or datetime.now(UTC)
     ensure_dirs()
+    os.makedirs(PROVENANCE_RAW_DIR, exist_ok=True)
     moved, freed, refused = 0, 0, 0
+    by_source = {}
 
-    for name in sorted(os.listdir(PAYLOAD_DIR)) if os.path.isdir(PAYLOAD_DIR) else []:
-        src = os.path.join(PAYLOAD_DIR, name)
+    for src_dir, prefix in TIERED_SOURCES:
+      listing = sorted(os.listdir(src_dir)) if os.path.isdir(src_dir) else []
+      by_source[prefix] = 0
+      for name in listing:
+        src = os.path.join(src_dir, name)
         if not os.path.isfile(src):
             continue
         if not _safe(src):
@@ -77,7 +114,7 @@ def tier_payloads(now: datetime | None = None) -> dict:
         if _age_days(src, now) <= PAYLOAD_HOT_DAYS:
             continue
 
-        dst = os.path.join(COLD_DIR, name + ".gz")
+        dst = os.path.join(COLD_DIR, "%s-%s.gz" % (prefix, name))
         size = os.path.getsize(src)
         with open(src, "rb") as fin, gzip.open(dst, "wb") as fout:
             shutil.copyfileobj(fin, fout)
@@ -93,8 +130,13 @@ def tier_payloads(now: datetime | None = None) -> dict:
         os.unlink(src)
         moved += 1
         freed += size
+        by_source[prefix] += 1
 
-    return {"moved": moved, "freed_bytes": freed, "refused": refused}
+    # ★ PER-SOURCE COUNTS, not just a total. A total of zero cannot distinguish
+    #   "nothing was old enough" from "a source was silently never walked" —
+    #   which is precisely the defect this function shipped with.
+    return {"moved": moved, "freed_bytes": freed, "refused": refused,
+            "by_source": by_source}
 
 
 def prune_due_buckets(now: datetime | None = None) -> dict:
