@@ -10,17 +10,11 @@ description: STEP 10 ONLY of the DawnTrader batch workflow - Governance Updates.
 ## ⛔ THE DOCUMENT SET — FULL TEXT, RELOCATED FROM `CLAUDE.md` §3 ON 2026-08-23
 > **This is the authoritative list, moved here VERBATIM rather than summarised.** It lived in the always-loaded rules file and was paid for on every start and every compaction by every session — but it is consulted at exactly ONE moment, the governance turn, which is the textbook case for a skill. **`CLAUDE.md` §3 keeps only what fires OUTSIDE this step:** batch NAMING and the CHANGE-CLASS declaration (they fire when a batch is created, at Step 1) and the MEMORY-file rules (they fire at session start).
 
-**Tier 1 — EVERY batch (no exceptions):**
-- `1-system-manual/BATCH_CATALOG.md` — add the new batch entry
-- `1-system-manual/PHASE_HISTORY.md` — update phase status
-- `1-system-manual/PHASE_19_PLAN.md` — **⏳ TEMPORARY RULE — DURING PHASE 19 ONLY (Kyle directive 2026-06-12, reaffirmed 2026-06-13):** the running Phase-19 plan MUST be updated after EVERY Phase-19 batch AND sub-batch — update §1 status board + §5 decision log, no exceptions. Owns sequencing + live status + phase-scoped decisions (item detail stays homed in `POST_AUDIT_ROADMAP.md` §3.2). **🗑 SELF-REMOVING: delete this Tier-1 line (and Langston CLAUDE.md §14, the matching rule) at Phase-19 close — this is a temporary rule, not permanent governance.**
-- `.claude/memory/MEMORY.md` — volatile state block (phase / batch / next-step) every batch
-- `Claude Comms and Packages/Scope Files/BATCH_N_SCOPE.md` — written in Step 1
-- `Claude Comms and Packages/Batch Completion/BATCH_N_COMPLETION_REPORT.md` — written in Step 11, includes list of governance files changed
+⛔⛔ **THE DOCUMENT LIST IS THE TIER LEDGER BELOW. THERE IS NO OTHER LIST IN THIS FILE.**
+⚠️ **The Tier-1 AND Tier-2 bullets that stood here are DELETED (2026-08-28).** ★ **The Tier-2 bullets went first; a fresh reader then found the TIER-1 bullets still standing — ninety lines EARLIER in reading order, self-declared *"the authoritative list"*, and ALREADY DIVERGED from the rows: they named only the mirror `MEMORY.md` (not the per-session files) and omitted Langston’s `MEMORY.md` entirely, which is now a Tier-1 row.**
+⇒ ⛔ **I fixed `#641` on one tier and left it standing on the other — and the copy I left was the one a top-down reader hits FIRST.**
 
-> **Note:** `CLAUDE_CODE_PROJECT_INSTRUCTIONS.md` (CCPI) was RETIRED 2026-04-20. Role absorbed by this file + MEMORY.md + BATCH_CATALOG + PHASE_HISTORY. Historical copy preserved at `1-system-manual/_archive/CLAUDE_CODE_PROJECT_INSTRUCTIONS.md` — do not edit, do not cite as live governance.
-
-**Tier 2 — judged every batch, never skipped by default:** ⛔ **THE LIST LIVES IN THE TIER LEDGER BELOW, WHICH IS THE ONLY COPY.** *(The bullets that stood here were deleted 2026-08-28 — they had already diverged from the table in the same file: `#641`.)*
+> **Note:** `CLAUDE_CODE_PROJECT_INSTRUCTIONS.md` (CCPI) was RETIRED 2026-04-20 — role absorbed by this file + `MEMORY.md` + `BATCH_CATALOG` + `PHASE_HISTORY`. Historical copy at `1-system-manual/_archive/`; **do not edit, do not cite as live governance.**
 
 ## ⛔⛔ WHEN YOU REPORT THIS STEP TO KYLE: **NAME THE DOCUMENTS. ALL OF THEM. BY THEIR REAL NAMES.**
 
@@ -92,13 +86,15 @@ When a substantive asset-class-onboarding learning surfaces in ANY batch, fold i
 ★★ **AND TIER 2 HAD NO SLOT.** *"Apply the judgement OUT LOUD and write it down"* is a **discipline**, not a **format** — so it degrades into a paragraph nobody writes. ✅ **Contrast the §9.4 disposition line, which works for exactly one reason: IT IS A SLOT YOU CANNOT LEAVE BLANK.** ⇒ **the same fix, applied here.**
 
 ⛔⛔ **AND IT GOES IN THE REPORT KYLE RECEIVES — IT IS NOT A PRIVATE WORKING NOTE (Kyle directive 2026-08-28).** ★ **His reason, and it is the design: *"if there are only two updates, then I know something is probably wrong and can call it out."*** ⇒ **the table is FOR SCANNING. He reads the SHAPE of the column, not the entries.**
-★★ **AND THE SECOND HALF OF HIS REASON IS THE REAL ONE: *"it gets them in the habit of looking at every file in our tiered governance system — and sometimes just looking at something reminds you that you need to do something."*** ⇒ **the table's job is to put all 20 names in front of you. The verdict column is the by-product; the ENUMERATION is the point.**
+★★ **AND THE SECOND HALF OF HIS REASON IS THE REAL ONE: *"it gets them in the habit of looking at every file in our tiered governance system — and sometimes just looking at something reminds you that you need to do something."*** ⇒ **the table's job is to put EVERY name in front of you. The verdict column is the by-product; the ENUMERATION is the point.**
 
 ⛔ **POST IT WHOLE. EVERY ROW, EVERY BATCH — including the `N/A`s.** ⚠️ **A table with the `N/A` rows deleted defeats it entirely: a short list is exactly what it exists to make visible.**
 ⛔ **EVERY ROW CARRIES A VERDICT *AND* ONE LINE — see the table below for what that line says.** **Keep it to a sentence: the substance is in the documents; this is an index.**
 
 ⛔⛔ **THIS TABLE IS NOW THE *ONLY* DOCUMENT LIST IN THIS SKILL. THE TIER-2 BULLETS ABOVE ARE DELETED, NOT DUPLICATED (Langston, 2026-08-28).**
 ★ **His catch, and it is `#641`: the table was a SECOND COPY of the bullet list IN THE SAME FILE, and it had ALREADY DIVERGED AT BIRTH** — `CONDUCT.md` existed only in the table, and the `MULTI_ASSET` row had dropped the bullet’s temporary WORKING-LIST trigger. **Once the table is the deliverable, the bullet list is the copy nobody fills: it rots and the triggers drift.**
+
+**VERDICT IS ONE OF EXACTLY TWO TOKENS: `✅` (updated) or `N/A` (judged not applicable).** ⚠️ *(Stated HERE, above the table — it used to be defined thirty lines below it, so a session filling top-down could invent its own tokens.)*
 
 | # | document | WHEN IT APPLIES | verdict | **ONE LINE — REQUIRED ON *EVERY* ROW** |
 |---|---|---|---|---|
@@ -107,6 +103,7 @@ When a substantive asset-class-onboarding learning surfaces in ANY batch, fold i
 | **T1** | `PHASE_19_PLAN.md` | ⏳ **Phase 19 only** — after EVERY batch and sub-batch |  |  |
 | **T1** | shared `MEMORY.md` + your own `MEMORY_CC_<X>.md` | every batch |  |  |
 | **T1** | the batch `SCOPE` | written at Step 1 |  |  |
+| **T1** | ★ **the batch `PRE_AUDIT`** | written at Step 2. ⛔ **REQUIRED by the governance checker for BOTH change classes (`config.mjs:127,:131`) and it was ABSENT from this ledger — so a fully-filled table could still FAIL the checker.** |  |  |
 | **T1** | the `COMPLETION_REPORT` | written at Step 11 |  |  |
 | **T1** | ★ **Langston’s `/home/langston/MEMORY.md`** | ⛔ **PROMOTED FROM TIER 2 (Langston):** §10.b says *"in the same turn you update your own"* — **unconditional. A verdict cell on a mandatory item lets an `N/A` be written against it.** |  |  |
 | **T2** | `SYSTEM_MANUAL.md` | architecture · strategy logic · regime detection · filter design · signal pipeline · quantitative math | | |
@@ -123,6 +120,12 @@ When a substantive asset-class-onboarding learning surfaces in ANY batch, fold i
 | **T2** | `LANGSTON_ARCHITECTURE.md` | the **REVIEWER’S BUILD** changed — model, runtime, invocation, read path, auth, his files. **Record what it was BEFORE and why.** | | |
 | **T2** | `CLAUDE.md` / `CONDUCT.md` | a **stable rule** changed. ⛔ **NOT per-batch state.** | | |
 | **T2** | `_archive/CLAUDE_MD_RULE_HISTORY.md` | ⛔ **MANDATORY IN THE SAME TURN as any `CLAUDE.md` rule add or material change** | | |
+| **T2** | ★ `DELETED_COMPONENTS_LOG.md` | ⛔ **any component removed — rule 18 mandates it in the SAME batch.** *(Only CONDITIONAL in the checker, so a removal batch could skip it with nothing raising.)* |  |  |
+| **T2** | ★ `MISTAKE_PATTERNS.md` | a `MISTAKE:` trailer was written, or the weekly pass ran (rule 28.a) |  |  |
+| **T2** | ★ `GOVERNANCE_EXCEPTIONS.md` | Kyle granted an explicit exception to a governed rule |  |  |
+| **T2** | ★ `ALERT_HANDLING_PROTOCOL.md` | the alert ack/resolve process changed |  |  |
+| **T2** | ★ `DELIVERY_BOARD_PROTOCOL.md` | the board’s columns, fields or ownership changed |  |  |
+| **T2** | ★ `CLAUDE_CODE_FEATURE_WATCH.md` | the daily model/feature check ran, or its ledger needs a row (rule 21) |  |  |
 
 ⛔⛔ **AN `N/A` MUST CITE A FACT ABOUT *THIS BATCH’S DIFF* — THIS IS WHAT MAKES THE COLUMN FALSIFIABLE (Langston, 2026-08-28).**
 ★ **His reasoning, and it dissolves the hole I could not close: you cannot tell a thoughtless `N/A` from a judged one by ASKING FOR MORE CARE. You can by requiring it to NAME AN OBJECT.**
@@ -137,7 +140,7 @@ When a substantive asset-class-onboarding learning surfaces in ANY batch, fold i
 | **`N/A`** | **a brief FACT that makes it checkable** — *"nothing under `server/` changed"*, not *"not applicable"*. |
 
 ⛔⛔ **ONE SENTENCE. HARD LIMIT, AND IT IS THE POINT OF THE RULE, NOT A STYLE NOTE.** ★ **Kyle, in the same breath: *"I don’t want a lot of time wasted or used up and a lot of effort used up on the sessions trying to summarise yet another piece of data … I don’t want to take up too much time, too much effort, or even tokens."***
-⇒ ⛔ **A ROW THAT RUNS TO A PARAGRAPH HAS BROKEN THE RULE JUST AS SURELY AS A BLANK ONE.** ★ **The column exists to make the work VISIBLE, not to re-describe it: twenty short lines a reader can scan beats twenty accurate ones nobody reads.** ⚠️ **If a change genuinely needs more than a sentence, that belongs in the document itself and in the completion report — not here.**
+⇒ ⛔ **A ROW THAT RUNS TO A PARAGRAPH HAS BROKEN THE RULE JUST AS SURELY AS A BLANK ONE.** ★ **The column exists to make the work VISIBLE, not to re-describe it: a screenful of short lines a reader can scan beats the same number of accurate ones nobody reads.** ⚠️ **If a change genuinely needs more than a sentence, that belongs in the document itself and in the completion report — not here.**
 
 ⇒ ✅ **THE POSTED TABLE IS THIS STEP’S DELIVERABLE.**
 
@@ -158,7 +161,7 @@ When a substantive asset-class-onboarding learning surfaces in ANY batch, fold i
 - **Skipping by default.** Use judgement on applicability — a display/data-quality service is SIM-scope, not System-Manual-scope — **but apply the judgement OUT LOUD and write it down.**
 
 ## 10.b — LANGSTON'S MEMORY
-Sync `/home/langston/MEMORY.md` in the same turn you update your own: batch closure, sequencing changes, operational invariants. **His MEMORY auto-loads every invocation — stale memory means a wrong baseline at the next review.** ⛔⛔ **KEEP IT UNDER THE BYTE CAP — ~24 KB. THERE IS NO LINE TARGET (Langston, 2026-08-28).** ⚠️ **This line read *"≤200 lines"* until today and that phrasing is what MANUFACTURED the overage: it is satisfiable in FORM while the file grows.** ★ **MEASURED 2026-08-28: Langston's `MEMORY.md` = 183 lines / 45,178 B — GREEN on the line count and 1.84× OVER the live cap.** **Watch bytes, never lines.** ⚠️ **It is also the row just PROMOTED to Tier 1, and it sits three headings above *"IF A DOCUMENT STATES A NUMBER, CHECK IT AGAINST THE LIVE VALUE."***
+Sync `/home/langston/MEMORY.md` in the same turn you update your own: batch closure, sequencing changes, operational invariants. **His MEMORY auto-loads every invocation — stale memory means a wrong baseline at the next review.** ⛔⛔ **KEEP IT UNDER THE CAP — AND THE CAP IS BOTH: `CLAUDE.md` §3.2 reads *"NO FILE MAY EXCEED 200 LINES **OR** 24,576 BYTES — whichever binds first, and it is usually the BYTES."*** ⚠️ **I wrote *"there is no line target"* here and that was WRONG — it contradicted the always-loaded rules file, which every session reads FIRST.** ★ **Langston’s *"bytes-first"* is from HIS file’s own header and is about which cap BINDS, not about the line cap ceasing to exist.** ⚠️ **This line read *"≤200 lines"* until today and that phrasing is what MANUFACTURED the overage: it is satisfiable in FORM while the file grows.** ⛔ **READ THE SIZE, DO NOT TRUST A FIGURE WRITTEN HERE: `ssh root@204.168.141.77 "wc -lc /home/langston/MEMORY.md"`.** ⚠️ **This line CARRIED a dated measurement until a fresh reader caught it — an instruction file asserting a live value, three headings above *"IF A DOCUMENT STATES A NUMBER, CHECK IT AGAINST THE LIVE VALUE."*** ★ **Name WHERE to read it, never WHAT it currently is.** *(It was well over when last measured; assume a prune is due until the command says otherwise.)*
 
 ## ⛔⛔ IF A DOCUMENT STATES A NUMBER, CHECK IT AGAINST THE LIVE VALUE
 **A governance document that asserts a constant, a threshold, a window size or a count is making a CLAIM ABOUT THE RUNNING SYSTEM — and it goes stale SILENTLY, because nothing compares the two.**
@@ -189,7 +192,7 @@ Move the card to **`Governance`**.
     [paste new MEMORY content]
     EOF
     scp /tmp/langston_memory.md root@204.168.141.77:/tmp/langston_memory.md
-    ssh root@204.168.141.77 'sudo -u langston cp /tmp/langston_memory.md /home/langston/MEMORY.md && wc -l /home/langston/MEMORY.md'
+    ssh root@204.168.141.77 'sudo -u langston cp /tmp/langston_memory.md /home/langston/MEMORY.md && wc -lc /home/langston/MEMORY.md'
     ```
 
     Update `/home/langston/CLAUDE.md` only when comms protocol or his persona changes (rare). **Repo-side docs reach Langston off the REVIEW BRANCH — so a doc he needs must be pushed, not merely saved** (`LANGSTON_ARCHITECTURE.md` §6).
