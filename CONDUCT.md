@@ -143,7 +143,7 @@ Before announcing a cause: **(1) check its arithmetic against the symptom** — 
 Quiet must never mean unaudited. **Origin: eleven defect claims announced and retracted in one day; a retraction does not undo the cost.**
 
 ## 9. A FOUND BUG IS A HYPOTHESIS, NOT A VERDICT
-**When you think you have found a bug, load the bug-investigation skill. Do not judge it from the code alone.** ⚠️ **THE SKILL IS NOT BUILT YET — until B-RULES-1d lands, read `1-system-manual/_pending-skills/bug-investigation-SOURCE.md`.** *(This file auto-loads and arrives FIRST, so an unqualified pointer here sends a compaction-fresh session to a home that does not exist — the absent-as-valid failure one layer up from the deletion this batch refused. Langston, Step-4.)*
+**When you think you have found a bug, load the `bug-investigation` skill. Do not judge it from the code alone.** ✅ **BUILT 2026-08-29 — the pointer resolves.** *(It read "NOT BUILT YET" for nine days, which was honest but meant this always-loaded file sent every session to a home that did not exist — `#750`.)*
 **Three outcomes, never collapsed into one:** (1) real defect, root-cause fix, no patch; (2) **working-as-designed but unaddressed** — the system is fine; what is missing is a DECISION, which is a scope call for Kyle, never unilateral code; (3) legacy that no longer fits today's intent — adapt it or remove it cleanly.
 **Kyle's named fear this exists to prevent: "fixing" behaviour that was working perfectly and injecting new bugs we then spend days chasing.** Collapsing (2) or (3) into (1) manufactures exactly that.
 

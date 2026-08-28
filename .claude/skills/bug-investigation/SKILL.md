@@ -1,21 +1,12 @@
-# BUG-INVESTIGATION SKILL — SOURCE TEXT (staged, not yet built)
+---
+name: bug-investigation
+description: BUG INVESTIGATION ONLY - what to do when you think you have found a defect, before you announce it or fix it. Use when any work surfaces behaviour that looks wrong, in code, data or telemetry. Covers the three outcomes, the provenance read, the announce discipline and the fresh-reader loop. NOT for a scoped batch step, NOT for reviewing someone else code.
+---
 
-> **This is CLAUDE.md rule 24 + 24.a, moved here VERBATIM by B-CONDUCT-FILE Step-3 on 2026-08-20.**
->
-> ⛔ **WHY THIS FILE EXISTS RATHER THAN A DELETION.** The scope's disposition for rule 24 is
-> *"→ SKILL: conduct keeps ONE trigger line; 5.3 KB out for one sentence."* But the skills build is
-> explicitly **OUT OF SCOPE** for this batch (scope §8 — it belongs to 1d). Removing 5.3 KB of live
-> rule into a skill that **does not exist yet** would leave it operationally lost between the two
-> batches, with only git history as its home — which is exactly the absent-as-valid failure this
-> codebase keeps paying for, and it would breach scope §7(c) (*every moved rule findable at its new
-> home; nothing deleted*).
->
-> **The behavioural core — the trigger, the three outcomes, and Kyle's named fear — is LIVE NOW in
-> `CONDUCT.md` §9, and the announce discipline in §8.** What is staged here is the full protocol:
-> the provenance binding (24.0), the evidence standard, and the origin cases.
->
-> **B-RULES-1d builds the skill FROM THIS FILE and then deletes it.** Until that lands, this is the
-> authoritative long-form text and `CONDUCT.md` §9 points at it.
+# BUG INVESTIGATION - A FOUND BUG IS A HYPOTHESIS, NOT A VERDICT
+
+**Loaded when you think you have found a defect.** `CONDUCT.md` §9 carries the trigger and the three outcomes; this is the full protocol.
+⛔ **BUILT 2026-08-29 from `1-system-manual/_pending-skills/bug-investigation-SOURCE.md` (B-CLAUDEMD-SLIM P6).** ⚠️ **The source is DELETED in the same commit — `CONDUCT.md` §9 pointed every session at a skill that did not exist (`#750`), and leaving both would recreate the two-copies defect this batch exists to remove.**
 
 ---
 
