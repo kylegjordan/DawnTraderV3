@@ -4435,6 +4435,18 @@ Kraken publishes a per-pair `tick_size` — **1,437 pairs, 11 distinct values, a
 ⇒ **INTERIM, LANDED IN THIS BATCH:** the miss is now LOUD — `[F-G-1][GRID_EVENT_UNCOUNTED]` on stderr naming the class and the reason, so an uncountable grid event announces itself instead of counting nothing quietly.
 ⇒ **HOME: `B-FUNNEL-PERP-CLASSES`, owner CC-C, placed in `PHASE_19_PLAN` §1 immediately after the perp active-path wiring item — it must land BEFORE perps trade, not after.** The widening is still not F-G-1's job; what changed is that "cannot happen" is no longer true, only "cannot happen yet."
 
+### #934 OPEN 2026-08-28 (CC-C, found at F-G-1 Step-7 UI verification — Kyle directed the browser check) — THE VPG ROW'S TWO NUMBERS RENDER UNDER COLUMN HEADERS THAT DESCRIBE SOMETHING ELSE
+
+**Seen on BOTH the Crypto and xStock Filter Diagnostics tabs**, Pipeline Summary (24h) table, at the deployed sha. The table's headers are `Stage | Quant | Pattern | Total | Counting Basis`. The VPG row emits its would-fail count in a **`colSpan={2}`** cell (`vts-filter-diagnostics-panel.tsx:507`) that is **right-aligned**, so it lands visually under **`Pattern`**; the population then lands under **`Total`**.
+
+**MEASURED ON SCREEN:** crypto reads `0` under *Pattern* and `295` under *Total*; xStock reads `0` under *Pattern* and `621` under *Total*.
+
+⛔ **THE NUMBERS ARE CORRECT AND THE LABELS ARE NOT** — 0 is not a pattern-lane figure and 295 is not `Quant + Pattern`. A reader scanning by column header takes both as something they are not. ★ **Same family as the two defects this batch already fixed** — a passthrough rendered under a heading reading *"rejected"*, and our own wiring bugs counted in a signal-quality figure. **The value is right and the frame around it lies**, which is the harder half to see.
+
+⚠️ **NOT A DATA DEFECT.** The API payload is correct (verified independently), the counting-basis text on the row is correct and explicitly says *"Right-hand figure is the population checked."* Only the column alignment misleads.
+
+⇒ **DISPOSITION: Kyle's call, because it is his display and the fix is one line.** Either folded into F-G-1 (disposition 1) or its own small batch. ⛔ **Deliberately NOT fixed unilaterally: Langston froze this batch's artifact at `5e5a3d8ae`, and while the client render is not the report, the criterion or the suite, re-opening a frozen batch for a cosmetic fix is exactly the kind of judgement I should not make alone.**
+
 ### #933 OPEN 2026-08-28 (CC-C, Langston BLOCKER-12 at F-G-1 r5) — THE KRAKEN ASSET-PAIRS MAP IS FILLED ONCE AT BOOT AND NOTHING EVER RETRIES IT
 
 `autoMap` is populated **only** inside `refresh()`, whose only production entry is `initialize()` at `server/index.ts:496`. That call's catch at `:521` **logs and continues** under the comment *"Non-fatal — static map fallback will be used"*; `isInitialized` is set **only on success**; and a whole-tree census returns **no interval, no retry, and no other production caller** (the two other `refresh()` callers are a diagnostic script and a manual route).
