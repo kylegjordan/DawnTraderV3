@@ -1,94 +1,114 @@
-# B-TOKEN-WATCH — SCOPE r1: capture-only observation of new Solana token launches
+# B-TOKEN-WATCH — SCOPE r2: capture-only observation of new Solana token launches
 
 **change-class:** `non_architecture` · **Owner:** CC-INFRA (Infra Claude) · 2026-08-28
-**Gates:** Langston concept review **NOT-A-REJECT** (2026-08-27, with conditions) → **this Step-1 scope**
-**Companion, already committed:** `B_TOKEN_WATCH_PRE_REGISTRATION.md` (`492f12dce`) — written and pushed **before any data exists**, which is its whole point.
+**Gates:** concept review **NOT-A-REJECT** → Step-1 **CHANGES-NEEDED (4 blockers)** → **this r2**
+**Companion:** `B_TOKEN_WATCH_PRE_REGISTRATION.md` + **AMENDMENT 1** (`c342427ad`) — both **pre-data**, and the amendment was verified byte-identical in sections 1-10 before commit.
+
+> **r1→r2, all four blockers.** **B1** the free-tier headline was one leg of two and a discretionary leg could silently kill the irreplaceable one — reserve, shed order and burn monitor added (§5). **B2** the primary outcome was unobservable for most of the cohort — fixed in the pre-registration amendment, summarised at §3. **B3** the governed documents named no provider while a session memory file named all three — providers and licensing citations now here (§5). **B4** my 1-day hot window was justified on a false claim that nothing queries this for 90 days — the store is split (§4). Plus his four conditions (§0 host, §8.4, stop-rule numbers, board card) and his correction to my storage predicate (§4).
 
 ---
 
-## 0. ⛔ THE FENCE, FIRST — Langston's condition, and it goes in paragraph one at his instruction
+## 0. ⛔ THE FENCE — Langston's condition, paragraph one at his instruction
 
-**This is an OBSERVATION RECORDER. It is not a new market for DawnTrader to trade.** His ruling: he would gate the recorder and reject *"point DawnTrader at a new market"* outright, **and warned the second hides inside the first.**
+**This is an OBSERVATION RECORDER, not a new market for DawnTrader to trade.** He would gate the recorder and reject *"point DawnTrader at a new market"* outright, **and warned the second hides inside the first.** The reason is arithmetic, not caution: bounded-loss / frequent-modest-win and near-total-loss-on-nearly-all need **opposite sizing, opposite position counts and opposite kill-switch semantics.** Different systems, not one system with a new input.
 
-The reason is not caution, it is arithmetic: bounded-loss / frequent-modest-win and near-total-loss-on-nearly-all-with-survivors-carrying-the-book need **opposite sizing, opposite position counts and opposite kill-switch semantics.** They are different systems, not one system with a new input.
+⛔ **HARD BOUNDARY, testable:** no entry in the canonical regime-strategy map · no strategy · no orchestrator contact · no appearance on the mode axis · no wallet, custody, execution or order path. **If any live-path file appears in this batch's diff, the change class is wrong and it has drifted.**
 
-⛔ **HARD BOUNDARY, testable:** no entry in the canonical regime-strategy map · no strategy · no orchestrator contact · no appearance on the mode axis · no wallet, no custody, no execution, no order path. **If any live-path file appears in this batch's diff, the `non_architecture` class is wrong and the batch has drifted.** That is the check, not the promise.
+★ **CO-TENANCY — the blind spot in that test (Langston condition 1).** The fence is a *diff* test, and **a webhook receiver taking ~20,700 POSTs/day plus an hourly scheduler produces NO DIFF while still contending for CPU, event loop and disk.**
+**HOST: Helsinki (`204.168.141.77`), NOT the staging box.** Staging runs the trading engine; Helsinki runs the comms bridges and the reviewer. **Stated resource bound:** the receiver is append-only to a file store, single process, no database, capped at the §5 request budget. **It must never be hosted on the trading box** — that is a scope constraint, not a preference, and the diff test cannot enforce it.
 
 ## 1. WHAT THIS IS FOR
 
-Record every new token launch on Solana **at birth**, then observe what becomes of it on a fixed schedule — so that in 90 days we hold something almost nobody collects: **the winners and the thousands of failures, recorded identically from the same starting line.**
+Record every new Solana token launch **at birth**, then observe it on a fixed schedule, so that in 90 days we hold **the winners and the thousands of failures, recorded identically from the same starting line.**
 
-**The durable prize is not tokens** (Langston's reframe, adopted). The published survival result already exists; re-deriving it is replicating a paper. What we keep is **case-control survival machinery, built where a published answer key exists to check our work against** — then pointed at our own strategy population, `#594` / `#596` / `#597`, which are the same statistical problem on data that is scarce, expensive and has no answer key. **A null result still delivers the machinery.**
+**The durable prize is the machinery, not the tokens.** The published survival result already exists; re-deriving it replicates a paper. What we keep is **case-control survival machinery built where a published answer key exists**, then pointed at `#594`/`#596`/`#597` — the same statistical problem on scarce data with no answer key. **A null result still delivers it.**
 
-## 2. PRE-AUDIT READS, NAMED (§1.6 — stated because a pre-audit that cannot name its sources did not happen)
+## 2. PRE-AUDIT READS, NAMED
 
-- **Does it already exist?** `BATCH_CATALOG.md` + `RUNNING_ISSUES.md` searched for `solana` · `dexscreener` · `helius` · `token launch` · `pump.fun`: **zero hits, both files.** **Not a rebuild.**
-- **`SYSTEM_IMPACT_MAP.md`** — **zero mentions** of any component here. This is new ground, so the batch **creates** a SIM node rather than extending one (§7). *(Recording the absence is itself the finding — rule 22: an asserted absence needs presence-evidence, and this is the evidence.)*
-- **`SYSTEM_MANUAL.md`** — **not applicable, judged explicitly rather than skipped.** The Manual documents trading architecture, math and the signal pipeline; this trades nothing and touches none of it.
-- **`STORAGE_POLICY.md` — READ IN FULL BEFORE ANY RETENTION WAS PROPOSED** (§4). ⚠️ This read is called out because designing storage *before* reading the document that governs it is the exact failure this session was caught on in August.
-- **Nearest precedent:** `P19-B-PERPFEED` — capture-only feed, born-daily tables, tiered storage, **trading explicitly deferred.** Same shape, different source. Its scope, pre-audit and close notes are the template.
+- **Already exists?** `BATCH_CATALOG.md` + `RUNNING_ISSUES.md`, terms `solana` · `dexscreener` · `helius` · `token launch` · `pump.fun`: **zero hits, both files. Not a rebuild.**
+  ⚠️ **INSTRUMENT NOTE (Langston, and it nearly corrupted his review): `dt-review grep -i` SILENTLY RETURNS ZERO — no error, clean exit.** His first pass "confirmed" this claim with a flag that manufactures zeros; a positive control caught it and the unflagged re-run held. **Never pass a flag to `dt-review grep`.**
+- **`SYSTEM_IMPACT_MAP.md`** — **zero mentions.** New ground; the batch **creates** a node (§7). Recording the absence *is* the presence-evidence rule 22 requires.
+- **`SYSTEM_MANUAL.md`** — **not applicable, judged explicitly.** It documents trading architecture and math; this trades nothing.
+- **`STORAGE_POLICY.md` — read in full BEFORE any retention was proposed** (§4). Called out because designing storage before reading its governing document is the exact failure this session was caught on in August.
+- **Nearest precedent:** `P19-B-PERPFEED` — capture-only, born-daily, tiered, trading deferred.
 
 ## 3. OBJECTIVES
 
-**OBJ-1 — Birth capture.** Subscribe to token-creation events on Solana and record one row per launch: on-chain creation timestamp, first-sight timestamp, venue, initial size, initial liquidity, creator wallet, and advertised social presence.
-**OBJ-2 — Discovery-lag instrument.** Persist **both** timestamps from OBJ-1 and report their distribution. ★ This is not telemetry: size-at-birth is the strongest published predictor, and any discovery delay silently converts it into *size-at-discovery* while we call it the published variable.
-**OBJ-3 — Coverage positive control.** Cross-check our daily indexed launch count against an independently sourced count. **A discovery feed's silence is worth nothing until the feed is shown able to speak** (29(b)).
-**OBJ-4 — Follow-up on the fixed grid.** 1h · 6h · 24h · 3d · 7d · 30d · 90d. Census on birth; **100% of trait-carriers plus a fixed random control of non-carriers.** Fixed ages, never an adaptive taper, so cohorts pool and censoring is uniform.
-**OBJ-5 — Death classification.** Record *faded* vs *liquidity-pulled*, ex ante. Both end at zero and a win/lose column would treat them identically; they may differ on day one, and that difference is a primary object of the study.
-**OBJ-6 — Storage + tiering** per §4, with the cold hand-off built **from day one** (§4, and see the #670 note).
+**OBJ-1 — Birth capture.** One row per launch: on-chain creation timestamp, first-sight timestamp, venue, initial size, initial liquidity, creator wallet, advertised social presence.
+**OBJ-2 — Discovery-lag instrument.** Persist **both** timestamps and report the distribution. Not telemetry: size-at-birth is the strongest published predictor, and any delay silently converts it to *size-at-discovery*.
+**OBJ-3 — Coverage control: WINDOWED CHAIN RE-CENSUS** (replaces r1's aggregator count — see pre-reg A1.6). One random N-minute window daily, every creation instruction enumerated from the chain, compared against what the webhook delivered. ⚠️ **Stated reach: catches DELIVERY LOSS, does NOT catch provider-side indexing gaps.** A control covering one leg is never described as covering three.
+**OBJ-4 — Follow-up on the fixed grid** (1h · 6h · 24h · 3d · 7d · 30d · 90d). Census on birth; 100% of trait-carriers plus **500 non-carrier controls/day** (arithmetic in pre-reg A1.3).
+**OBJ-5 — Death classification**, ex ante: *faded* vs *liquidity-pulled*.
+**OBJ-6 — Storage + tiering** per §4, **cold hand-off built day one**.
 **OBJ-7 — SIM node** (§7).
-**OBJ-8 — Alert routing kept OFF the trading alert stream** (§6).
+**OBJ-8 — Alert routing OFF the trading stream** (§6), **plus the OBJ-9 burn monitor.**
+**OBJ-9 — Credit reserve, shed order and burn monitor** (§5) — **new in r2, and it protects OBJ-1.**
 
-## 4. STORAGE — decided only after the policy read
+**Outcome hierarchy (pre-reg AMENDMENT 1):** **graduation is PRIMARY** for the out-of-sample test — near-fully observed, and the published comparators are already stated in graduation terms. **90-day survival is a RIGHT-CENSORED secondary** with launch-date entry. r1's *"censoring is uniform"* is **withdrawn as false**.
 
-**Classification: business data, never-drop, tiered** — the §7.5 predicate applied. Our follow-up series captures what a source looked like at a specific moment, and **that source keeps no history**; "what did this token look like at six hours old" is not reconstructable afterwards. Same reasoning that made the crew-status snapshots a primary record.
+## 4. STORAGE
 
-**Tier path:** **HOT** current day only · **WARM** daily `.jsonl.gz` · **COLD** indefinite. Each transition export → upload → **download-verified checksum** → only then remove from the tier above (§1), so a crash cannot lose a boundary.
+**Classification: business data, never-drop, tiered.** ⚠️ **r1 cited the wrong predicate** (Langston): §7.5's no-history argument is a *sufficient additional* reason for sources that mutate in place, **not the necessary test.** The operative test is §5.5's rule of thumb — ***"a structured record you might re-analyse from → never-drop, tiered"*** — which covers the whole store, chain-sourced rows included.
 
-**On the 30-day default rule (§2.5):** the standing rule constrains hot windows **longer** than 30 days, requiring a documented reader. One day is **shorter**, so it needs no exception — and is right here, because nothing queries this for 90 days. Stated rather than assumed, since departing from a default silently is how defaults rot.
+★ **AND THE DECISION IS OVER-DETERMINED, which is the point.** r1 said *"if that split is wrong, the retention decision is wrong with it."* **It isn't.** The birth census is the denominator of every rate in the study, and a sampled birth record destroys the base rate irrecoverably — so dropping it destroys the study **regardless of how policy classifies it.** Both reasons are stated here so that a future policy revision, or a reader who reopens the derived-vs-primary argument and wins it, still cannot strip the denominator.
+*(The "chain is permanent so this is reconstructable" counter is answered by §5's own measurement: reconstruction means 43.2M txns/day and is unaffordable at every tier. Reconstructable-but-unaffordable is operationally not reconstructable. And the **first-sight timestamp is irreducibly primary** under any reading — it is a fact about our instrument, not about the chain.)*
 
-**Substrate: a file store, OUTSIDE the trading database.** Follows §7.5's non-DB precedent and honours §0's fence — it cannot contend for the trading database's disk, which is at ~61% of cap.
+⛔ **THE STORE IS SPLIT (BLOCKER-4). r1's justification was FALSE.** I wrote *"nothing queries this for 90 days"*; **the follow-up scheduler queries it every hour for 90 days** — firing a 90-day checkpoint means looking up a birth record from 90 days ago. §2.5's invariant is **hot retention ≥ the deepest reader window**, not *shorter-than-30-is-fine*.
 
-★ **THE COLD HAND-OFF IS BUILT IN OBJ-6, NOT DEFERRED — and this corrects my own past work.** `#670` records that the crew-status store I built has **no cold hand-off and a warm tier growing unbounded.** Building another warm-growing store without one would repeat a defect I filed against myself. Doing it here also gives `#670` a proven pattern to copy.
-
-## 5. COST — measured, not estimated (Langston's supply-vs-demand gate, discharged)
-
-**Measured live against the chain 2026-08-27:** the launchpad program runs **500 txns/sec = 43.2M/day, 83% of them failed** (bot competition). Launches are **~0.05% of that traffic**. ⇒ **unfiltered ingestion is impossible at every tier** — 43M/day against a 33k/day free allowance, and still ~6× over the $999 tier.
-
-**Verified on a real token: a creation parses as its own distinct type**, so creations are separable from the noise. That single fact is why this is viable at all.
-
-| leg | source | volume | cost |
+| store | contents | hot | then |
 |---|---|---|---|
-| births | chain-direct, filtered to creation events | ~20,700/day = **621k/month** | free tier (1M/month) |
-| follow-ups | DEX aggregator, free, no key | ~19k/day vs a 432k/day ceiling | **free** |
-| liquidity pre-graduation | chain-direct, spare allowance | within **379k/month spare** | free |
+| **working index** (tiny) | token id · birth ts · carrier flag · alive/dead · next-due-age | **90 days** | tiers after read-out |
+| **birth payload + follow-up series** (bulky) | everything else | **1 day** | daily `.jsonl.gz` → warm → cold |
 
-**Total $0/month**, at ~62% of the free allowance. ⛔ **Nothing is trimmed to fit** — the full observation grid and the control group are intact. Kyle approved the split and the spare-allowance use on 2026-08-27.
+**The working index is the named reader with its 90-day lookback**, documented per §2.5's own requirement. Transitions: export → upload → **download-verified checksum** → only then remove above (§1).
+**Substrate: a file store OUTSIDE the trading database** — §7.5's non-DB precedent, and it cannot contend for a database already at ~61% of cap (verified at `BATCH_CATALOG.md:424`).
+★ **Cold hand-off built day one — correcting my own past work:** `#670` records that the crew-status store I built has none and its warm tier grows unbounded. Building a second the same way would repeat a defect I filed against myself; doing it here gives `#670` a proven pattern.
 
-**Licensing, read not assumed:** ⛔ the aggregator we originally planned on **forbids storing or deriving from its data identically on free and every paid tier** — that forbids the *dataset*, not the tier, and would have surfaced after the build had licensing not been made a pre-code gate. Both chosen sources were read directly: **commercial use permitted, no storage or derivation prohibition.**
+## 5. SOURCES, LICENSING AND COST
 
-## 6. ALERT ROUTING — deliberately separate
+⛔ **r1 NAMED NO PROVIDER — the #641 shape running the damaging direction** (Langston): the governed, reviewable document lacked the facts while a session-private memory file carried all three. *"A licensing finding that lives only in a memory file is not a gate; it's a recollection."* Named here:
 
-Failures here route **off** the trading alert stream (Langston). That queue is already carrying rows nobody has discharged; a research recorder's failures must not compete with trading failures for the same attention.
+| leg | provider | licence, read directly | volume | cost |
+|---|---|---|---|---|
+| births | **Helius** (Solana RPC + webhooks) | Terms of Service read 2026-08-27: **no clause restricting storage or derivation of data**; restrictions cover reselling the service and reverse-engineering the platform | ~20,700/day = **621k/month** | free tier (1M/mo) |
+| follow-ups | **DexScreener** (free, no key) | API Terms read 2026-08-27: *"may be used for both non-commercial and commercial purposes"*; **no storage or derivation prohibition**; restrictions cover reselling API access | ~19k/day vs 432k/day ceiling | **free** |
+| liquidity pre-graduation + OBJ-3 audit | **Helius**, spare allowance | as above | see reserve below | free |
+
+**Launch venue observed: pump.fun.** ⛔ **REJECTED AND WHY: CoinGecko / GeckoTerminal.** API Terms §6.1/§6.2 read 2026-08-27: *"We do not encourage caching or storage of Data"* (cache must refresh ≤24h) and *"you are not allowed to duplicate, reproduce, copy, store, derive from or translate any Data"* — **identical on free and every paid tier.** That forbids the **dataset**, not the tier, and would have surfaced *after* the build had licensing not been a pre-code gate.
+
+**Secret handling:** the Helius key lives at `~/.claude/.helius-key`, mode 600, **never committed and not in any governed document**. Kyle supplied it knowingly and accepted the disclosure risk on 2026-08-27; rotate from his dashboard if that changes. *(Recorded here rather than only in a memory file, so a future auditor reads it in the artifact.)*
+
+**Measured, live against the chain 2026-08-27** *(Langston tags these `RULED ON REPORTED FACT` — he cannot reach them; §8.8 is the agreed discharge)*: the launchpad runs **500 txns/sec = 43.2M/day, 83% failed**; launches are **~0.05%** of that. **Unfiltered ingestion is impossible at every tier** — 43M/day vs 33k/day free, still ~6× over the $999 tier. **Verified on a real token that a creation parses as its own distinct type**, which is the only reason this is viable.
+
+### ⛔ 5.1 CREDIT RESERVE, SHED ORDER AND BURN MONITOR (BLOCKER-1) — this protects OBJ-1
+
+**The defect r1 hid behind one number:** *"~62% of the free allowance"* was **the births leg alone** (621k/1M). The liquidity and audit legs draw from **the same 1M pool**, budgeted only as *"within the 379k spare"* — so the true ceiling is **100% of a hard cap with zero margin**, on an average launch rate with no stated variance.
+
+**And the ordering is the real hazard.** §6 says a sampled birth record destroys the base rate **irrecoverably**; §5 called liquidity *"not optional colour."* **A liquidity leg overspending in week 3 exhausts credits and stops birth capture — silently converting the census into a sample, in the one direction that cannot be undone.** A discretionary leg was able to kill the irreplaceable one. *(This is the `#704` shape in new clothes: a push-side failure producing no local error.)*
+
+1. **HARD RESERVE.** Births are reserved 621k/month plus margin. **Liquidity + audit legs are carved at ≤300k/month**, not "within 379k" — leaving ~79k/month unallocated as genuine headroom.
+2. **DECLARED SHED ORDER, enforced in code:** **liquidity reads shed FIRST · follow-ups SECOND · births NEVER.**
+3. **BURN MONITOR** on the §6 non-trading stream, alerting on projected exhaustion **before** it happens, not at it.
+
+## 6. ALERT ROUTING
+Failures route **off** the trading alert stream. That queue already carries undischarged rows; a research recorder's failures must not compete with trading failures for the same attention.
 
 ## 7. GOVERNANCE
-
-**Creates** a `token-watch` SIM node — read-only / non-trading — with inbound edges (chain event subscription, DEX aggregator) and outbound (file store) **enumerated**, because this tool's characteristic failure is upstream format drift and the edges are the entire value of the entry. Plus `BATCH_CATALOG`, `PHASE_HISTORY`, a `RUNNING_ISSUES` entry, and the Step-8 close item *SIM entry created, or explicitly waived with a written reason.*
+**Creates** a `token-watch` SIM node — read-only / non-trading — with **edges enumerated** (inbound: Helius webhook + RPC, DexScreener; outbound: file store), because this tool's characteristic failure is upstream format drift and the edges are the entry's whole value. Plus `BATCH_CATALOG`, `PHASE_HISTORY`, a `RUNNING_ISSUES` entry, and the Step-8 item *SIM entry created, or explicitly waived with a written reason.* **Board card created** (`Status: Scope · Owner: Infra Claude · Blocked on: Langston`).
 
 ## 8. VERIFICATION
 
-1. **Birth capture:** a token created on-chain appears in our store, and its recorded creation timestamp **matches the chain**, not our clock.
-2. **Discovery lag:** the distribution is reported with n; a median above a stated threshold is a **finding, not a footnote**.
-3. **Coverage control:** our daily count against the independent count, both stated. **FAILS IF** the independent probe cannot return a positive on a day we know launches occurred.
-4. **Grid integrity:** a sampled token carries checks at all seven ages, or a recorded reason it does not.
-5. **Death classification:** at least one of each class present and hand-checked against the chain.
-6. **Tiering:** kill the warm copy in a scratch location; confirm cold rehydrates and checksums match.
-7. **Fence:** `git diff` for this batch touches **no** live-path file. **FAILS IF** it does.
-8. **Cost:** measured credits/day after 72h against the 62% projection; a material overshoot re-opens §5.
+1. **Birth capture:** a token created on-chain appears in the store with a creation timestamp **matching the chain**, not our clock.
+2. **Discovery lag:** distribution reported with n; breaches of pre-reg A1.5's thresholds (median >60s, or >5% over 300s) are **findings, not footnotes**.
+3. **Coverage:** windowed re-census vs delivered births. **FAILS IF** the chain enumeration cannot return a positive in a window we know contained launches. Reach stated per OBJ-3.
+4. **Grid integrity:** a sampled token carries checks at **all seven ages it reached before read-out** — *(amended per Langston: r1 said "all seven ages", which only a day-0 token can satisfy; a criterion that cannot pass is not one).*
+5. **Death classification:** one of each class, hand-checked against the chain.
+6. **Tiering:** destroy the warm copy in a scratch location; cold rehydrates and checksums match.
+7. **Fence:** batch diff touches **no** live-path file, **and** the receiver is not hosted on the trading box (§0).
+8. **Cost:** **measured credits/day at 72h** against the §5.1 reserve — the agreed discharge for the legs Langston must otherwise rule on reported fact. **Material overshoot re-opens §5**, and the shed order must be observed firing under a deliberate over-budget test.
 
 ## 9. OUT OF SCOPE
-Trading, wallets, custody, execution · any signal, strategy or ranking use · historical backfill (we record forward) · any chain other than Solana · interim reporting before the 90-day read-out.
+Trading, wallets, custody, execution · any signal/strategy/ranking use · historical backfill · any chain but Solana · **interim reporting before the 90-day read-out.**
 
-## 10. OPEN FOR THE REVIEWER
-- The **trait-carrier definition** for OBJ-4's follow-up split is not yet pinned to a threshold. I would rather agree it with you than choose it and have it look fitted afterwards.
-- **Control-sample size** — a fixed number per day, or a fixed fraction? Fixed number makes daily cohorts comparable; fixed fraction tracks launch-rate changes. I lean fixed number and would take a correction.
+## 10. OPEN
+r1's two questions are **closed** — Langston answered both and they are pre-registered (A1.2, A1.3). Nothing withheld.
