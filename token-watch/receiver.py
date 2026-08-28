@@ -106,7 +106,8 @@ def follow_decision(mint: str, socials: dict, initial_size) -> tuple:
     return False, "not_sampled"
 
 
-def _journal_launch(day: str, followed: bool, reason: str, now: datetime) -> None:
+def _journal_launch(day: str, followed: bool, reason: str, size_source: str,
+                    now: datetime) -> None:
     """One append per launch, carrying BOTH the credit spend and the inclusion
     fields. ⛔ THE RECEIVER WRITES NO STATE FILE — it appends, and the locked
     hourly job folds.
@@ -123,7 +124,18 @@ def _journal_launch(day: str, followed: bool, reason: str, now: datetime) -> Non
     thresholds (800k / 900k) were arithmetically unreachable. We would have
     hit the provider's real wall with the monitor reading 20% and level=None.
     """
-    budget.record_pending("birth", 1, now, day=day, followed=followed, reason=reason)
+    # ⛔ size_source RIDES THE JOURNAL so something COUNTS it. Langston,
+    #    BLOCKER-3: it was persisted on the birth row and had NO READER —
+    #    nothing tallied it, nothing warned on it. An extraction break (the
+    #    provider renames a field, feePayer goes absent) makes every size
+    #    unresolvable → non-carrier → the 3% control arm, so THE SIZE LIMB OF
+    #    THE TRAIT DEFINITION SWITCHES OFF SILENTLY and the study degrades to
+    #    socials-only with no alarm.
+    # ★ Identical in shape to the received/recorded mismatch I fixed two
+    #   functions away — on the limb I had myself called the weakest thing in
+    #   the diff.
+    budget.record_pending("birth", 1, now, day=day, followed=followed,
+                          reason=reason, size_source=size_source)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -259,6 +271,7 @@ def ingest(events: list) -> int:
        and a hole in the census is unrecoverable.
     """
     n = 0
+    unresolved = 0
     received = len(events or [])
     seen = datetime.now(UTC)
     for ev in events or []:
@@ -282,7 +295,10 @@ def ingest(events: list) -> int:
                 followed=followed,
                 follow_reason=reason,
             )
-            _journal_launch(seen.strftime("%Y-%m-%d"), followed, reason, seen)
+            _journal_launch(seen.strftime("%Y-%m-%d"), followed, reason,
+                            launch["size_source"], seen)
+            if launch["size_source"] == "unresolved":
+                unresolved += 1
             n += 1
         except Exception:
             LOG.exception("event dropped — this is a hole in the census, not a nuisance")
@@ -299,6 +315,11 @@ def ingest(events: list) -> int:
     # ⇒ logging both numbers is the exact discrimination this module otherwise
     #   cannot make: a QUIET MARKET and a STOPPED RECOGNISER look identical
     #   from the recorded count alone.
+    if unresolved and n and unresolved == n:
+        LOG.warning(
+            "size_source=unresolved for ALL %d recorded launches in this "
+            "delivery — if this persists the size limb of the trait definition "
+            "has switched off and every token is routing to the control arm", n)
     if received and not n:
         LOG.warning(
             "received=%d recorded=0 — every event in this delivery was "

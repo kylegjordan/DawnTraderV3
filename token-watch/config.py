@@ -105,12 +105,18 @@ MONTHLY_CREDIT_CAP = 1_000_000
 #    that can shed anything would have been firing on births alone.
 # ⇒ RE-DERIVED AGAINST THE WORST MONTH, not the convenient one. 31 days at
 #   +25% is 802,125; rounded up to 803,000. The liquidity carve takes what is
-#   actually left, which is 197,000 rather than 200,000 — a 1.5% reduction on
-#   a leg the study can afford to lose, against a birth census it cannot.
-# ⚠️ AND UNALLOCATED IS NOW ZERO, STATED RATHER THAN IMPLIED. There is no
-#   slack. Above +25% the shed order fires and the carve becomes a residual by
-#   design — which the scope already says, and which is now arithmetically
-#   true instead of merely written down.
+#   left after a 7,000 separation, which is 190,000 rather than 200,000 — a 5%
+#   reduction on a leg the study can afford to lose, against a birth census it
+#   cannot.
+# ⚠️ UNALLOCATED IS 7,000, AND THAT IS THE SEPARATION, NOT SPARE CAPACITY.
+#   Above +25% the shed order fires and the carve becomes a residual by design
+#   — which the scope already says, and which is now arithmetically true
+#   instead of merely written down.
+# ⚠️ THIS PARAGRAPH PREVIOUSLY SAID "197,000" AND "UNALLOCATED IS NOW ZERO",
+#   eight lines above constants reading 190,000 and 7,000. A correction
+#   stacked on superseded text is not a correction — in a file whose whole
+#   defence is that every number is traced inline, a stale trace is the defect
+#   it exists to prevent, wearing the fix's clothes. (Langston, condition 1.)
 BIRTHS_RESERVED = 803_000        # 31-day month at +25% variance. PROTECTED FLOOR.
 LIQUIDITY_AUDIT_CARVE = 190_000  # DELIBERATELY BELOW the headroom, see below
 UNALLOCATED = MONTHLY_CREDIT_CAP - BIRTHS_RESERVED - LIQUIDITY_AUDIT_CARVE  # 7,000
@@ -127,7 +133,7 @@ UNALLOCATED = MONTHLY_CREDIT_CAP - BIRTHS_RESERVED - LIQUIDITY_AUDIT_CARVE  # 7,
 assert UNALLOCATED == 7_000, "the §5.1 arithmetic changed — amend the scope, not this file"
 assert LIQUIDITY_AUDIT_CARVE < MONTHLY_CREDIT_CAP - BIRTHS_RESERVED, (
     "the carve must sit BELOW the headroom or the shed order is unobservable")
-assert BIRTHS_RESERVED >= EXPECTED_LAUNCHES_PER_DAY * 31 * 1.25,     "the reserve no longer covers the worst month at the stated variance"
+
 
 # ⛔ THE SHED ORDER (scope §5.1, OBJ-9). Enforced in code, not intention.
 #    BIRTHS ARE NEVER SHED: a sampled birth record destroys the base rate
@@ -232,3 +238,14 @@ CREDITS = {"birth": 1, "follow_up": 0, "liquidity": 1,
            # log line. Zero credits, and it is in NEVER_SHED so the shed
            # decision can never suppress an audit record.
            "delivery": 0}
+
+# ⛔ THE RESERVE IS A FUNCTION OF THE PER-EVENT CREDIT, AND THE GUARD MUST SAY SO.
+#    Langston's tripwire on the §5.1 amendment: the first version of this assert
+#    omitted CREDITS["birth"], so a MEASURED 1.01 credits per birth at §8.8
+#    would break the reserve with the assert still green — at 7,000 unallocated
+#    there is no slack to absorb it.
+# ★ Put §8.8's result INTO THE GUARD, not into a paragraph. A measurement that
+#   only ever lands in prose is the shape this whole batch keeps failing on.
+assert BIRTHS_RESERVED >= EXPECTED_LAUNCHES_PER_DAY * 31 * 1.25 * CREDITS["birth"], (
+    "the reserve no longer covers the worst month at the stated variance and "
+    "the measured per-birth credit — re-derive §5.1 before changing this")

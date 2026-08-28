@@ -283,6 +283,11 @@ not_yet = {"mint": "MINT_EARLY", "age": "1h",
 store._append(store.due_path(EARLY), not_yet)
 
 calls_before = calls["n"]
+# ⛔ CLEAR THE CURSOR FIRST. Section 7 ran the job at a LATER hour, so the
+#    cursor now sits ahead of EARLY and a correctly-behaving job reads nothing
+#    — the BLOCKER-2 fix working, not a failure. A test that shares state with
+#    an earlier section has to say so.
+store.save_state("follow_up_cursor", {})
 early_result = follow_up.run_hour(EARLY)
 check("★ a not-yet-due entry is NOT observed",
       calls["n"] == calls_before, f"provider called {calls['n'] - calls_before} times")
@@ -299,6 +304,10 @@ due_now_entry = {"mint": "MINT_DUE", "age": "1h",
                  "due_at": (EARLY - timedelta(minutes=5)).isoformat()}
 store._append(store.due_path(EARLY), due_now_entry)
 before_due = calls["n"]
+# ⛔ CLEAR THE CURSOR. The first run above consumed this hour, and a consumed
+#    hour now correctly reads NOTHING — that is the BLOCKER-2 fix working, not
+#    a failure. Without this the control would assert into an empty read.
+store.save_state("follow_up_cursor", {})
 follow_up.run_hour(EARLY)
 check("POSITIVE CONTROL: an entry past its due time IS observed",
       calls["n"] > before_due, f"provider calls: {calls['n'] - before_due}")

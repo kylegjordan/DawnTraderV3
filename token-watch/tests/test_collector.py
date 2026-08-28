@@ -56,7 +56,13 @@ def section(title):
 
 
 store.ensure_dirs()
-T0 = datetime(2026, 8, 28, 12, 0, 0, tzinfo=UTC)
+# ⛔ RELATIVE TO NOW, NOT A HARD-CODED DATE. A fresh reader showed the pinned
+# literal made this suite pass only within ~60 minutes of it: once the wall
+# clock passed T0+1h the early grid points became misses and were not written
+# to buckets, and "dead token dropped from the due queue" then passed
+# VACUOUSLY on a queue that never had an entry. A test whose verdict depends
+# on the hour it runs is the absent-as-valid failure in a test file.
+T0 = datetime.now(UTC)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

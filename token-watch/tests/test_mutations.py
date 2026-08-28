@@ -182,8 +182,100 @@ check("★ a VIOLENT spike binds on the peak leg", spiked["binding_leg"] == "pea
 check("POSITIVE CONTROL: the two runs really did differ",
       flat["rate_peak_per_hour"] != spiked["rate_peak_per_hour"])
 check("a flat series does not raise an alarm", flat["level"] is None, flat["level"])
+
+# ⛔ THE SECOND REGIME, which Langston required asserting rather than leaving
+#    for the next reader to re-derive as "binding_leg is a constant" and
+#    re-open a closed finding. Inside the last SPIKE_HORIZON of a month both
+#    legs project over the same span, so `binding_leg` degenerates to "peak"
+#    — ~22.6% of the time. The ALARM stays correct there; only the diagnostic
+#    field stops discriminating.
+TB_LATE = datetime(2027, 3, 30, 12, 0, tzinfo=UTC)   # <7 days left in March
+
+
+def legs_late(spike):
+    p2 = store.state_path("budget")
+    if os.path.exists(p2):
+        os.remove(p2)
+    for h in range(24):
+        budget.charge("birth", 100, TB_LATE - timedelta(hours=24 - h))
+    if spike:
+        budget.charge("birth", spike, TB_LATE - timedelta(minutes=5))
+    return budget.burn_report(TB_LATE)
+
+
+late_flat = legs_late(0)
+check("★ inside the last week the legs share a span — degeneracy STATED, not hidden",
+      late_flat["binding_leg"] == "peak", late_flat["binding_leg"])
+check("★ and the ALARM is still correct there — a flat series raises nothing",
+      late_flat["level"] is None, late_flat)
+check("POSITIVE CONTROL: the two regimes really do differ",
+      flat["binding_leg"] != late_flat["binding_leg"],
+      f"mid-month={flat['binding_leg']} late={late_flat['binding_leg']}")
 shutil.rmtree(burn_root, ignore_errors=True)
 os.environ["TOKEN_WATCH_ROOT"] = ROOT
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+section("M6. the catch-up limb must DIE when removed (Langston BLOCKER-2)")
+# Reverting `_buckets_to_read` to `return [cur]` previously passed every check
+# — test_mutations' own thesis, applied to test_mutations.
+# ─────────────────────────────────────────────────────────────────────────────
+cat_root = tempfile.mkdtemp(prefix="token-watch-cat-")
+os.environ["TOKEN_WATCH_ROOT"] = cat_root
+store.ensure_dirs()
+N = datetime(2027, 5, 20, 15, 30, tzinfo=UTC)
+
+first = [b.strftime("%H") for b in follow_up._buckets_to_read(N)]
+check("POSITIVE CONTROL: a first run reads exactly this hour", first == ["15"], first)
+
+store.save_state("follow_up_cursor", {"last_bucket": "2027-05-20T12"})
+caught = [b.strftime("%H") for b in follow_up._buckets_to_read(N)]
+check("★ a cursor three hours behind reads THREE buckets, not one",
+      caught == ["13", "14", "15"], caught)
+
+store.save_state("follow_up_cursor", {"last_bucket": "2027-05-20T15"})
+check("★ a consumed hour reads NOTHING — not the same hour again",
+      follow_up._buckets_to_read(N) == [],
+      "re-reading a consumed bucket re-observes, re-appends, and spends the carve twice")
+shutil.rmtree(cat_root, ignore_errors=True)
+os.environ["TOKEN_WATCH_ROOT"] = ROOT
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+section("M7. an extraction break must be COUNTABLE (Langston BLOCKER-3)")
+# size_source was persisted with no reader, so a break would switch the size
+# limb of the trait definition off in silence.
+# ─────────────────────────────────────────────────────────────────────────────
+# ⛔ ASSERT ON THE DELTA, NOT AN ABSOLUTE. `config.ROOT` is bound at import,
+#    so setting the environment variable here does NOT give this section a
+#    fresh tree — a fresh reader caught exactly that annotation-as-fiction in
+#    an earlier suite. Earlier sections have already written to this day.
+TB2 = datetime.now(UTC) - timedelta(minutes=20)
+broken = [{"type": "CREATE", "source": "PUMP_FUN", "timestamp": int(TB2.timestamp()),
+           "feePayer": f"X{i}", "tokenTransfers": [{"mint": f"BRK{i:04d}"}],
+           # the provider renamed the field: nothing matches the creator
+           "nativeTransfers": [{"sender": f"X{i}", "amount": 2_000_000_000}]}
+          for i in range(6)]
+receiver.ingest(broken)
+budget.fold_pending(TB2)
+day = TB2.strftime("%Y-%m-%d")
+inc = store.load_state("inclusion", {}).get(day, {})
+check("★ an extraction break is COUNTED, not silent",
+      inc.get("size_unresolved", 0) >= 6, inc)
+_resolved_before = inc.get("size_resolved", 0)
+
+receiver.ingest([{"type": "CREATE", "source": "PUMP_FUN",
+                  "timestamp": int(TB2.timestamp()), "feePayer": "OK1",
+                  "tokenTransfers": [{"mint": "OKMINT"}],
+                  "nativeTransfers": [{"fromUserAccount": "OK1",
+                                       "amount": 2_000_000_000}]}])
+budget.fold_pending(TB2)
+inc2 = store.load_state("inclusion", {}).get(day, {})
+check("POSITIVE CONTROL: a healthy extraction increments the RESOLVED tally",
+      inc2.get("size_resolved", 0) == _resolved_before + 1,
+      f"before={_resolved_before} after={inc2.get('size_resolved')}")
+check("and the unresolved tally did NOT move for a healthy extraction",
+      inc2.get("size_unresolved") == inc.get("size_unresolved"), (inc, inc2))
 
 
 print("\n" + "=" * 60)

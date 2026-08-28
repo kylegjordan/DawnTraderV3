@@ -77,33 +77,56 @@ CATCHUP_MAX_BUCKETS = 48
 
 
 def _last_consumed(now):
-    """The last hour-bucket this job finished. Absent on a first run, which is
-    treated as 'only this hour' rather than as 'catch up on all of history'.
+    """The last hour-bucket this job finished, or None on a first run.
+
+    ⛔ None IS NOT `now - 1h`. Collapsing them is what made the two cases
+       indistinguishable below.
     """
     st = load_state("follow_up_cursor", {})
     v = st.get("last_bucket")
     if not v:
-        return now - timedelta(hours=1)
+        return None
     try:
         return datetime.strptime(v, "%Y-%m-%dT%H").replace(tzinfo=UTC)
     except ValueError:
-        return now - timedelta(hours=1)
+        return None
 
 
 def _buckets_to_read(now):
-    """Every unread bucket from the cursor up to and including this hour."""
-    start = _last_consumed(now) + timedelta(hours=1)
+    """Every unread bucket from the cursor up to and including this hour.
+
+    ⛔ THREE DISTINCT CASES, and the first version collapsed two of them.
+       It ended `return out or [cur]`, so "no unread buckets" fell through to
+       "read this hour again" — and re-reading a consumed bucket RE-OBSERVES
+       entries already observed, RE-APPENDS every not-yet-due entry to the
+       next bucket (the original is deliberately left in place), and SPENDS
+       THE LIQUIDITY CARVE TWICE.
+    ★ Langston: *"I could not get the lock" and "I did the work" must never be
+      the same code path* — this was that, one file over, in the fix I wrote
+      for it.
+
+      first run (no cursor) -> [this hour] only. NOT all of history.
+      cursor behind         -> every unread bucket, bounded.
+      cursor current        -> [] . Reading nothing is the correct answer.
+    """
     cur = now.replace(minute=0, second=0, microsecond=0)
+    last = _last_consumed(now)
+    if last is None:
+        return [cur]
+    start = last + timedelta(hours=1)
     out = []
     while start <= cur and len(out) < CATCHUP_MAX_BUCKETS:
         out.append(start)
         start += timedelta(hours=1)
-    return out or [cur]
+    return out
 
 
 def _buckets_too_old(now):
     """How many buckets the bound left behind. Reported, never silent."""
-    start = _last_consumed(now) + timedelta(hours=1)
+    last = _last_consumed(now)
+    if last is None:
+        return 0
+    start = last + timedelta(hours=1)
     cur = now.replace(minute=0, second=0, microsecond=0)
     total = 0
     while start <= cur:
@@ -269,7 +292,10 @@ def run_hour(now: datetime | None = None) -> dict:
         # and re-serialised WHOLE every hour — while `dead_set` correctly stops
         # re-checking those same mints. The dead can never appear again, so
         # keeping their last-seen state buys nothing and costs the whole file.
-        _advance_cursor(buckets)
+        # Advance to THIS hour regardless: a quiet hour is still a consumed
+        # hour, and leaving the cursor behind would make every later run
+        # re-read it.
+        _advance_cursor(buckets or [now.replace(minute=0, second=0, microsecond=0)])
         dead = dead_set()
         before = len(prev)
         prev = {m: v for m, v in prev.items() if m not in dead}

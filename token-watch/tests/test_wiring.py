@@ -119,7 +119,12 @@ headroom = MONTHLY_CREDIT_CAP - BIRTHS_RESERVED
 check("POSITIVE CONTROL: liquidity allowed well below the headroom",
       budget.allowed("liquidity"))
 budget.inject_spend("liquidity", headroom)
-check("★ liquidity REFUSED at the reserve boundary, not at the whole cap",
+# ⚠️ THIS CHECK CANNOT ATTRIBUTE THE REFUSAL, and its name used to claim it
+#    could. Injecting the headroom figure also exceeds the carve, so the CARVE
+#    refuses it — the reserve clause is never reached. The discriminating test
+#    is M4 in tests/test_mutations.py, which creates the re-homing case where
+#    only the reserve clause can speak. Renamed to what it actually shows.
+check("liquidity is refused once spend passes the carve/headroom region",
       not budget.allowed("liquidity"),
       f"headroom={headroom}; the old expression would still allow up to {MONTHLY_CREDIT_CAP}")
 check("births still allowed with non-birth spend at the boundary",

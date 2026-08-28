@@ -4427,6 +4427,26 @@ Kraken publishes a per-pair `tick_size` — **1,437 pairs, 11 distinct values, a
 ⚠️ **AND IT MUST BE SAID IN F-G-1's COMPLETION REPORT AS A LIMIT OF THE GUARANTEE**, not left to be discovered by someone who reads "one rounding seam" as "every path".
 ⇒ **HOME: `B-INTENT-ENTRY-PARITY`, owner CC-C, placed in `PHASE_19_PLAN` §1 after `B-TARGET-FABRICATION`.** First question for that batch is whether the intent path should exist at all, not how to guard it.
 
+### #930 OPEN 2026-08-28 (CC-INFRA; Langston required it be filed rather than left as a flag in a change list) — THE FRESH-CONTEXT REVIEWER LOOP IS MANDATED IN FOUR SKILLS AND COULD NOT FIRE IN THE SESSION THOSE SKILLS GOVERN
+
+**BUCKET 1 — a real gap, and it is a GOVERNANCE gap rather than a tooling one.** `workflow-02`, `-04`, `-07` and `-11` each require a fresh-context reviewer for load-bearing claims, with Kyle's standing approval recorded in the skill text (2026-08-27). ⛔ **This session's harness configuration forbade spawning subagents unless Kyle asked per-case — so the mechanism was written into four skills and fired ZERO times.** ★ **That is precisely the "reads as covered" failure the mechanism exists to prevent, one level up: four skills asserted a safeguard that could not run.**
+
+**RESOLVED FOR THIS SESSION 2026-08-28 — Kyle, unprompted, on being told:** *"I give you authorization and permission to spin up that second reader subagent whenever you need it. You don't have to ask permission on a case by case basis."* **Verified by execution, not by assumption:** three rounds ran immediately afterwards.
+
+★★ **AND THE THREE ROUNDS ARE WHY THIS IS FILED RATHER THAN CLOSED.** They found, on `B-TOKEN-WATCH` alone: a retraction of a figure I had already published to Kyle and dispatched to Langston; a month-boundary defect that would have re-charged an entire month's spend into the next one; a ledger costing **198 ms per observation** — up to **268 seconds of every hour** — invisible to every test because they all ran on empty state; and, decisively, **four defects the code's own comments described as FIXED which could each be reverted with all 116 checks still passing.**
+
+⇒ **THE VALUE IS MEASURED, THE AVAILABILITY IS NOT GUARANTEED, AND THAT GAP IS THE ISSUE.** Kyle's authorisation is a standing permission held in *this* conversation. **It is not in the harness configuration, not in `CONDUCT.md`, and not in any file a future session loads** — so the next session to start under the same configuration hits the same block, and the skills will still read as though the safeguard is live.
+
+**WHAT WOULD CLOSE IT (one of, not all):**
+1. The permission recorded where a session LOADS it rather than where one conversation remembers it, so the four skills are true on a cold start.
+2. Or the skills stop asserting a mechanism they cannot guarantee, and say what a session should do when it cannot spawn one — **the honest fallback, which is what I did here: record `REVIEWER: NOT RUN` as a denominator entry rather than let the absence read as a clean.**
+
+⛔ **OPTION 2 IS THE WEAKER ONE AND IS NAMED ANYWAY**, because a rule that cannot be executed without asking is worse than no rule — it reads as covered. *(That sentence is already in the skills; this issue is what happens when it applies to the skills themselves.)*
+
+**HOME:** `B-REVIEWER-LOOP-AVAILABILITY`, **owner CC-INFRA**, placed in `PHASE_19_PLAN.md` immediately after `B-TSC-GUARD-CWD` at the Phase-19 tail — it belongs with the other two "an instrument gave a confident wrong answer" items (`#920` `dt-review grep`, `#926` the push guard), and it is the same class: **a check that silently does not run is worse than a check that is absent, because the absence is visible.**
+
+⚠️ **NO DATE, AND THAT IS DELIBERATE.** Langston's condition asked for *"an owner and a date"*. **`CLAUDE.md` §9.4 forbids a calendar date on a batch** — Kyle, 2026-08-25: *"Who knows what we're gonna be doing on September fifth?"* — and requires a **named position in the phase plan** instead, which is what this entry carries. **Where his condition and Kyle's standing directive differ, the directive governs**, and the substance of his condition (a real home, not a flag in a change list) is satisfied.
+
 ### #929 OPEN 2026-08-28 (CC-C, same reader) — POSITION SIZING HAS TWO ENTRY POINTS AND THE VPG GUARDS ONE
 
 `sizeActivePositionForSignal` has exactly two production callers: `signal-orchestrator.ts` (downstream of the VPG seam) and **`active-execution-engine.ts:4356`**, the fallback-sizing arm reached whenever a promoted signal lacks `quantity`/`estimatedValue`. Nothing on that arm consults the VPG.

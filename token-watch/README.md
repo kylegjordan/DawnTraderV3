@@ -30,7 +30,7 @@ Langston's condition, and the reason for it is arithmetic rather than caution: b
 | `follow_up.py` | Hourly checkpoint sweep. Opens exactly one hour-bucket file. |
 | `budget.py` | Credit reserve, shed order, burn monitor. |
 | `tier.py` | The only deleter — and it can reach nothing but bulky payload. |
-| `tests/` | Five suites, 132 checks. **Every block carries a positive control**, and `test_wiring.py` drives PRODUCTION entry points only — it exists because a reviewer found 57 checks passing while nothing tested the seam between two modules. |
+| `tests/` | Five suites, 141 checks. **Every block carries a positive control**, and `test_wiring.py` drives PRODUCTION entry points only — it exists because a reviewer found 57 checks passing while nothing tested the seam between two modules. |
 
 ## Running the tests
 

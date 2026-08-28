@@ -232,3 +232,42 @@ A1.3's *"45,000 controls -> ~75 expected events"* is across the **full 90 days**
 3. **The true-age distribution is reported at read-out**, per checkpoint, as a stated property of the instrument rather than a footnote. If it is materially wider than `[nominal, nominal + 1h]`, that is an instrument finding and is reported as one.
 
 ⚠️ **A THIRD MECHANISM FOR THE SAME ONE-DIRECTIONAL BIAS, recorded because Langston found it and I had not:** the prior-sighting state the death classifier relies on is written once per run, so an exception escaping the per-token handler loses that hour's prior sightings while the observations are already on disk - and next hour a genuine liquidity pull reads as unclassified. **Same under-count, third route.** The per-age unclassified counts are now persisted, so the residual is **quantified rather than described**.
+
+
+### AMENDMENT 4 - 2026-08-28, STILL PRE-DATA (Langston Step-4 r2, condition 3)
+
+> **Appended, not edited. Sections 1-10 and AMENDMENTS 1-3 stand exactly as written.**
+> ⚠️ **PRE-DATA RE-VERIFIED AT THE OBJECT, not carried over from AMENDMENT 3:** `/var/lib/token-watch` still does not exist on the collector host and no `token-watch*` unit is installed. **No row collected.**
+
+#### A4.1 - THE REALISED AGE OF EACH CHECKPOINT, MEASURED AND PRE-REGISTERED
+
+**AMENDMENT 3 established that observations are late-but-never-early. Langston's condition is that *recoverable* is not the same as *comparable to the published hazard*, and he is right — so the distribution is stated here BEFORE data exists rather than discovered at read-out.**
+
+**MEASURED over all 60 birth-minutes x the timer's 0-5 minute jitter (n=360), for the `1h` checkpoint:**
+
+| | minutes |
+|---|---|
+| minimum | **60** |
+| 25th percentile | 75 |
+| **median** | **90** |
+| 75th percentile | 105 |
+| maximum | **119** |
+| **mean** | **89.5** |
+| **observations EARLIER than nominal** | **0** |
+
+⇒ **the `1h` label's realised age is uniform on roughly [60, 120] minutes, mean ~90 - a +49% overshoot** on the grid point that carries the day-one signal, where **68.67%** of the cohort dies. The same mechanism applies at every checkpoint, but the *proportional* distortion falls away with age: +49% at 1h, ~+2% at 3d, and under 0.1% at 90d.
+
+⛔ **PRE-REGISTERED CONSEQUENCES, so none of these can be chosen after the fact:**
+1. **The `1h` checkpoint is reported as a `[60, 120] min` window, never as "1 hour".** Any comparison against a published 1-hour hazard states this and is labelled **not directly comparable**.
+2. **The analysis uses TRUE age** (A3.2) - this amendment does not change that; it bounds the label's meaning for the reader who sees only the grid.
+3. **The realised distribution is reported at read-out** alongside the discovery-lag distribution, as a property of the instrument.
+
+#### A4.2 - WHY THE SWEEP IS NOT RUN FINER, STATED AS A JUDGEMENT RATHER THAN A CONSTRAINT
+
+**Langston offered the alternative: run the `1h` leg finer than hourly. Follow-ups cost zero credits and we sit under 5% of the provider's rate limit, so cost is not the obstacle — and he said so.**
+
+⛔ **I AM NOT TAKING IT, AND THE REASON IS THIS BATCH'S OWN MEASURED PATTERN.** A sub-hourly sweep requires **consumption tracking**: the job would re-read the same bucket several times an hour, so it needs to know which entries it has already observed. That is new state, a new writer, and a new way for "already observed" and "never observed" to become indistinguishable - **the exact failure class this batch has now produced five times**, most recently in the catch-up limb where "no unread buckets" and "read this hour again" collapsed into one path.
+
+★ **A +49% overshoot that is MEASURED, BOUNDED and PRE-REGISTERED is a weaker instrument than a 15-minute sweep. An unmeasured consumption-tracking bug is a CORRUPT one.** Given that the deliverable is the machinery rather than the token result, I take the weaker-but-honest instrument.
+
+⚠️ **AND THE DECISION IS REVERSIBLE ON EVIDENCE, WITH THE TRIGGER NAMED NOW:** if the read-out shows the `1h` leg is materially less informative than the published comparator - i.e. if H1/H2 reproduce at 6h and later but NOT at 1h - **that is an instrument finding under §8.1, and the sweep granularity is the first thing to change.** It is a stated hypothesis about our own instrument, not an open question we will re-litigate from taste.

@@ -75,7 +75,7 @@ def _month_key(when: datetime) -> str:
 
 def _blank(month: str) -> dict:
     return {"month": month, "spent": {"birth": 0, "follow_up": 0, "liquidity": 0},
-            "events": [], "journal_offset": 0}
+            "hours": {}, "journal_offset": 0}
 
 
 def _load(now: datetime) -> dict:
@@ -93,6 +93,41 @@ def _load(now: datetime) -> dict:
     return st
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# ⛔ EVENTS ARE AGGREGATED BY HOUR, NOT STORED PER CALL. (Langston BLOCKER-1)
+#
+#    MEASURED BY HIM ON THE COLLECTOR BOX, which is the 2-core machine the
+#    receiver shares with the crew's bridges:
+#        48h of per-birth rows at the design rate = 41,400 entries, 2.857 MB
+#        load 22.4 ms + save 103.0 ms  =>  198 ms PER OBSERVATION
+#        at 500-1,350 due entries/hour  =>  99-268 s of every hour, and
+#        7.1-19.3 GB of JSON churn per hour, 1.4-3.9 GB of it fsync'd
+#
+# ★ AND THE COST WAS LINEAR IN THE **BIRTH** RATE, NOT THE OBSERVATION RATE —
+#   the thing being re-parsed was one row per folded birth. Every test ran on
+#   an empty ledger, so nothing could see it. That is the same shape as
+#   BLOCKER-1 of the first review, inside the module that is this batch's own
+#   guard.
+#
+# ⇒ THE BURN MONITOR ALREADY BUCKETS BY HOUR (`_rate_per_hour` tiles the
+#   trailing window in 1-hour steps), so aggregating at WRITE time loses
+#   nothing it ever reads. 48 buckets replace 41,400 rows.
+# ─────────────────────────────────────────────────────────────────────────────
+def _hour_key(when: datetime) -> str:
+    return when.astimezone(UTC).strftime("%Y-%m-%dT%H")
+
+
+def _add_event(st: dict, when: datetime, kind: str, n: int) -> None:
+    buckets = st.setdefault("hours", {})
+    h = _hour_key(when)
+    slot = buckets.setdefault(h, {})
+    slot[kind] = slot.get(kind, 0) + n * CREDITS[kind]
+    # Keep only what the widest window needs, plus margin. Bounded at ~96 keys.
+    cutoff = _hour_key(when - BURN_TRAILING_WINDOW * 2)
+    for k in [k for k in buckets if k < cutoff]:
+        del buckets[k]
+
+
 def charge(kind: str, n: int, now: datetime | None = None) -> None:
     """Record n calls of a kind. Called AFTER the work, never before —
     charging first and failing second would over-report spend and shed early.
@@ -101,10 +136,7 @@ def charge(kind: str, n: int, now: datetime | None = None) -> None:
     now = now or datetime.now(UTC)
     st = _load(now)
     st["spent"][kind] = st["spent"].get(kind, 0) + n * CREDITS[kind]
-    st["events"].append({"ts": now.isoformat(), "kind": kind, "n": n})
-    # Keep only what the burn monitor's widest window needs, plus margin.
-    cutoff = (now - BURN_TRAILING_WINDOW * 2).isoformat()
-    st["events"] = [e for e in st["events"] if e["ts"] >= cutoff]
+    _add_event(st, now, kind, n)
     save_state(STATE, st)
 
 
@@ -336,7 +368,7 @@ def fold_pending(now: datetime | None = None) -> dict:
             #    suite. Gate on the CREDIT being non-zero, not on membership.
             if k in CREDITS and CREDITS[k] > 0:
                 st["spent"][k] = st["spent"].get(k, 0) + rec.get("n", 0) * CREDITS[k]
-                st["events"].append({"ts": rec["ts"], "kind": k, "n": rec.get("n", 0)})
+                _add_event(st, datetime.fromisoformat(rec["ts"]), k, rec.get("n", 0))
                 folded += 1
             # Inclusion tally rides the same fold — the realised denominator
             # for inverse-probability weighting, which the pre-registration
@@ -356,11 +388,16 @@ def fold_pending(now: datetime | None = None) -> dict:
                           "control_sample": 0, "not_sampled": 0})
                 inclusion[day]["launches"] += 1
                 inclusion[day][reason] = inclusion[day].get(reason, 0) + 1
+                # ⛔ TALLY THE EXTRACTION OUTCOME. Without a reader, a silent
+                #    extraction break switches off the size limb of the trait
+                #    definition and nothing notices (Langston BLOCKER-3).
+                src = rec.get("size_source")
+                if src:
+                    key = "size_unresolved" if src == "unresolved" else "size_resolved"
+                    inclusion[day][key] = inclusion[day].get(key, 0) + 1
                 inclusion_dirty = True
             offset = fh.tell()
 
-    cutoff = (now - BURN_TRAILING_WINDOW * 2).isoformat()
-    st["events"] = [e for e in st["events"] if e["ts"] >= cutoff]
     st["journal_offset"] = offset
     cursors = load_state("journal_cursors", {})
     cursors[_month_key(now)] = offset
@@ -415,7 +452,7 @@ def allowed(kind: str, now: datetime | None = None) -> bool:
     #    ★ A fresh reader found this by doing the algebra; I had read that line
     #      several times and seen the constant rather than the arithmetic.
     non_birth = spent_by("liquidity", now) + spent_by("follow_up", now)
-    headroom = MONTHLY_CREDIT_CAP - BIRTHS_RESERVED  # 224,000
+    headroom = MONTHLY_CREDIT_CAP - BIRTHS_RESERVED  # 197,000
     remaining = MONTHLY_CREDIT_CAP - spent_total(now)
 
     # ⚠️ TWO BOUNDS, AND THE SECOND WAS LOST IN MY FIRST FIX — the suite caught
@@ -430,14 +467,14 @@ def allowed(kind: str, now: datetime | None = None) -> bool:
     #        reserve exists for, silently unprotected.
     # ⚠️ HONEST NOTE ON REACHABILITY, because a fresh reader caught me shipping
     #    the SAME cancellation defect one step over. Today
-    #    LIQUIDITY_AUDIT_CARVE (200,000) < headroom (224,000) and
+    #    LIQUIDITY_AUDIT_CARVE (190,000) < headroom (197,000) and
     #    CREDITS["follow_up"] == 0, so `non_birth` IS `spent_by("liquidity")`
     #    and the headroom clause on the liquidity leg CANNOT BIND FIRST — the
     #    carve always trips before it. It is not decorative: it becomes the
     #    binding constraint the moment the follow-up leg is re-homed onto the
     #    paid provider, which §5's stated fallback contemplates.
     # ⛔ SO IT IS TESTED UNDER THAT CONDITION, not under today's constants —
-    #    a test that injects 224,000 cannot tell which of the two clauses
+    #    a test that injects the headroom figure cannot tell which of the two clauses
     #    refused it, and my first version of that test could not.
     if kind == "liquidity":
         return (spent_by("liquidity", now) < LIQUIDITY_AUDIT_CARVE
@@ -474,7 +511,7 @@ def shed_now(now: datetime | None = None) -> list:
 #   causes the exhaustion." The peak leg exists specifically to see the spike
 #   the mean averages away.
 # ─────────────────────────────────────────────────────────────────────────────
-def _rate_per_hour(events, since: datetime, until: datetime) -> float:
+def _rate_per_hour(hours: dict, since: datetime, until: datetime) -> float:
     """Spend per hour over a HALF-OPEN window [since, until).
 
     ⚠️ The half-open bound is not a detail. The first version used `<=` at both
@@ -485,10 +522,13 @@ def _rate_per_hour(events, since: datetime, until: datetime) -> float:
     over-eager burn alarm looks like caution rather than like a bug, right up
     until nobody believes it. Caught by the flat-series positive control.
     """
-    hours = max((until - since).total_seconds() / 3600.0, 1e-9)
-    lo, hi = since.isoformat(), until.isoformat()
-    spend = sum(e["n"] * CREDITS[e["kind"]] for e in events if lo <= e["ts"] < hi)
-    return spend / hours
+    span = max((until - since).total_seconds() / 3600.0, 1e-9)
+    lo, hi = _hour_key(since), _hour_key(until)
+    # Half-open on the hour KEY. The bucket boundary is the hour, so an event
+    # cannot be counted in two adjacent windows — the same property the
+    # per-event version needed an explicit comparison to get right.
+    spend = sum(sum(v.values()) for k, v in (hours or {}).items() if lo <= k < hi)
+    return spend / span
 
 
 def burn_report(now: datetime | None = None) -> dict:
@@ -500,17 +540,17 @@ def burn_report(now: datetime | None = None) -> dict:
     """
     now = now or datetime.now(UTC)
     st = _load(now)
-    events = st["events"]
+    hours = st.get("hours", {})
     total = sum(st["spent"].values())
 
-    trailing = _rate_per_hour(events, now - BURN_TRAILING_WINDOW, now)
+    trailing = _rate_per_hour(hours, now - BURN_TRAILING_WINDOW, now)
 
     # Peak hour within the trailing window — the highest single-hour spend.
     peak = 0.0
     step = BURN_PEAK_WINDOW
     cursor = now - BURN_TRAILING_WINDOW
     while cursor < now:
-        peak = max(peak, _rate_per_hour(events, cursor, cursor + step))
+        peak = max(peak, _rate_per_hour(hours, cursor, cursor + step))
         cursor += step
 
     # Hours remaining in the calendar month.
@@ -544,6 +584,17 @@ def burn_report(now: datetime | None = None) -> dict:
     #       whether the PEAK hour, if it PERSISTED, would exhaust the
     #       allowance inside a bounded horizon — not by pretending one hour
     #       represents the month.
+    # ⚠️ HONEST LIMIT, STATED RATHER THAN LEFT FOR THE NEXT READER TO
+    #    RE-DISCOVER (Langston, ruling 2): when `hours_left <= SPIKE_HORIZON`
+    #    the min() below returns `hours_left`, both legs project over the SAME
+    #    span, and `binding_leg` is "peak" identically again — because peak is
+    #    still the max over the buckets trailing means. That is the LAST SEVEN
+    #    DAYS OF EVERY MONTH, i.e. ~22.6% of the time.
+    # ★ THE ALARM REMAINS SOUND THERE (a 1.5x peak at seven days out projects
+    #   714,150 against an 800,000 line, verified). This is a DIAGNOSTIC-FIELD
+    #   limitation, not an alarm defect — `binding_leg` stops discriminating
+    #   near month end while `level` stays correct. Both regimes are asserted
+    #   in tests/test_mutations.py M5.
     proj_trailing = total + trailing * hours_left
     spike_horizon_h = min(SPIKE_HORIZON.total_seconds() / 3600.0, hours_left)
     proj_peak = total + peak * spike_horizon_h
@@ -582,5 +633,5 @@ def inject_spend(kind: str, credits: int, now: datetime | None = None) -> None:
     now = now or datetime.now(UTC)
     st = _load(now)
     st["spent"][kind] = st["spent"].get(kind, 0) + credits
-    st["events"].append({"ts": now.isoformat(), "kind": kind, "n": credits // max(CREDITS[kind], 1)})
+    _add_event(st, now, kind, credits // max(CREDITS[kind], 1))
     save_state(STATE, st)
