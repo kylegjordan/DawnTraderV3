@@ -66,6 +66,16 @@ select symbol, net_pnl, exit_price, take_profit, closed_at from closed_trades
 ```
 **ANY row ⇒ #732 returns to priority and is reported to Kyle that week.** **Zero rows ⇒ record "tripwire clear" in the run-log row.** *It rides this pass deliberately — no second scheduled job and no additional token cost.*
 
+### ⚠️ SECOND TRIPWIRE — `#754` STEP-SKIP RECURRENCE (added 2026-08-28, Langston’s condition)
+**`#754` was scoped down to a format change; three checker-side fixes were designed and NOT built — unscheduled on FREQUENCY, not refuted on merit.** ⛔ **Langston’s catch: *"`#754` holds the design if it recurs" is a trigger with no owner and no pass that looks for it — that is the line between DEPRIORITISED and DROPPED.*** ★ **So the pass looks for it, the same way it looks for `#732`.**
+**OWNER: CC-A. CHECK, on every run:**
+```
+git log --since=<window> --format='%B' | grep -iE 'skipped step|step [0-9]+ was not|no pre-?audit|straight to (build|implementation)'
+```
+plus **any new `MISTAKE:` trailer whose slug is `skipped-the-gate` or names a workflow step.**
+**ANY hit ⇒ `#754`’s unbuilt checker legs return to priority and are reported to Kyle that week. Zero ⇒ record "step-skip tripwire clear" in the run-log row.**
+⚠️ **STATED LIMIT, because this tripwire has the same defect as the one it copies: IT SEES COMMITS ONLY.** A step skipped and caught in conversation — **which is exactly how `#754` itself surfaced, Kyle catching it live** — leaves no commit and is invisible here. **So a clear reading is weak evidence, and it is recorded as such rather than as an all-clear.**
+
 ★ **THE PASS WRITES A DATED ROW BELOW ON EVERY RUN, INCLUDING "no new instances" — so a MISSING ROW IS THE ALARM.** A pass that runs and records nothing is indistinguishable from one that was skipped, which is the failure this whole file exists to catch.
 
 ---
