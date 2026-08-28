@@ -6,6 +6,30 @@
 
 ---
 
+## `PAYLOAD_DIR` (token-watch) — DELETED 2026-08-28 (Kyle asked; it never had a writer)
+
+**WHAT:** the storage constant `PAYLOAD_DIR = f"{ROOT}/payload"` (`token-watch/config.py`), its entry in `store.ensure_dirs()`, and its entry in `tier.TIERED_SOURCES`. `PAYLOAD_HOT_DAYS` was **renamed to `BULKY_HOT_DAYS`, not deleted** — it governs the tiering loop for every source, so a name tied to one store would have read as if the surviving store had no stated retention.
+
+⛔ **WHY: IT HAD ZERO WRITERS IN ITS ENTIRE HISTORY.** It was an empty directory that `ensure_dirs()` created and the daily tiering job walked, finding nothing, every day.
+
+★ **KYLE'S PREMISE WAS WRONG AND HIS CONCLUSION WAS RIGHT — recorded because the distinction is the useful part.** He asked whether it was *"a leftover of the build we were setting up outside the staging server."* It was not: `PAYLOAD_DIR` is host-independent and predates the Helsinki-vs-staging question entirely. **It was never a host artefact — it was a scope line that was never implemented.** `B_TOKEN_WATCH_SCOPE.md:61` declares *"birth payload + follow-up series (bulky) → 1 day → daily `.jsonl.gz` → warm → cold"*, and the store was created for that role and then never wired to anything.
+
+⇒ **RULE 24 OUTCOME (3) — legacy that no longer fits intent.** Its declared role (bulky birth payload, 1-day retention) is now genuinely performed by `provenance/raw/` — built 2026-08-28 for a security reason, at the same 1-day retention. Two names for one job, one of them empty.
+
+**BLAST-RADIUS VERIFICATION — before cutting:**
+- **§9.5(a) census, every hop:** WRITERS **zero** · READERS **zero** · MUTATORS **zero** · DELETERS `tier.tier_payloads` (walked it) · SCHEDULERS the daily `token-watch-tier.timer` (walked it).
+- ⛔ **PRESENCE-EVIDENCE FOR THE ABSENCE (rule 22), and my first instrument was DEAF:** a grep for write-shaped lines mentioning the constant returned **0 for `BIRTHS_DIR` and `OBSERVATIONS_DIR` too**, which are certainly written — writes go through `_append(birth_path(...))`, so the directory constant never appears on the write line. **The discriminating instrument is the path-builder census:** every written store has one (`birth_path`, `due_path`, `tombstone_path`, `observation_path`, `state_path`); **`payload_path` has never existed**, so nothing could construct a path into it.
+- **`git log -S PAYLOAD_DIR -- token-watch/`:** 3 commits; the constant only ever appeared in config, `ensure_dirs`, tier and tests. **No writer was ever added and then removed.**
+- **Fresh-context reviewer, claim-only mode**, asked *"what other states of the world are consistent with these objects?"* — enumerated and checked 13 routes a writer could take that a naive grep would miss (helper/path-builder, variable base, string literal, relative path + `WorkingDirectory`, env redirection, `subprocess`/shell redirect, dynamic access, test fixture in production, systemd unit, off-repo cron/tmpfiles/logrotate on the live box, deployed-vs-repo drift by `md5sum`, symlink/bind-mount, and a since-removed writer). No writer found by any route. ⚠️ **It also correctly refused to treat the empty directory on staging as evidence** — every other store is empty too, since nothing has been recorded yet, so that observation has no discriminating power. **The code analysis carries this; the directory listing does not.**
+- **221 checks / 8 suites green after removal**, including a new block asserting the constant is gone and that nothing tiers a `payload` source.
+
+⚠️ **WHAT WAS DELIBERATELY KEPT: the per-source cold-name PREFIX**, though only one source now remains. Stores name files by date, so a second source would collide and silently overwrite. Removing the prefix would make the NEXT addition unsafe by default, and this batch is itself the evidence that additions happen and get missed. `test_tiering` block 4 now asserts it against an **injected** second source, so the guarantee stays tested with one real store configured.
+
+⛔ **LEFT INTENTIONALLY, AND IT IS AN OPEN SCOPE QUESTION, NOT AN OVERSIGHT — RULE 24 OUTCOME (2):** the scope line above also covers the **follow-up series**. `record_observation` persists **extracted fields only**; the raw provider responses from follow-up calls are parsed and discarded, and no store retains them. **That is unchanged by this deletion** — `PAYLOAD_DIR` never held them either. Whether they should be retained is a decision for Kyle (it trades ~3.4 GB over 90 days against the ability to rebuild observations if the parser proves wrong), and it is recorded as a question rather than answered here.
+
+**ARCHIVE:** no file was removed — the deletion is four lines across three modules. Git history is the archive; `git log -S PAYLOAD_DIR -- token-watch/` reaches it.
+**RESTORE PATH:** re-add the constant to `config.py` and the entry to `TIERED_SOURCES`. ⛔ **Do not, without also adding a writer** — restoring it as-is recreates an empty directory with a daily job walking it.
+
 ## `guard-whole-fs-scan.mjs` + its two test files — DELETED 2026-08-28 (Langston ruling; lived 4 hours)
 
 **WHAT:** a PreToolUse hook meant to block whole-filesystem scans, because a wedged Google Drive mount on Helsinki makes them hang unkillably. Shipped 2026-08-28 under `#755`, rewritten three times, deleted the same day.

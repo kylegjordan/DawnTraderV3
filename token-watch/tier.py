@@ -8,10 +8,11 @@ token-watch — tiering and the cold hand-off. (OBJ-6)
   then there is a lot of data to move under pressure.
 
 ⛔ THE ONLY DELETER IN THIS PACKAGE, and it removes a hot copy ONLY after a
-  verified compressed copy exists in cold. Two bulky stores tier: the raw
-  provider payloads, and (added 2026-08-28, the day it was built) the
-  receiver's raw provenance store. See TIERED_SOURCES — adding a bulky writer
-  without adding it there is how a disk fills quietly.
+  verified compressed copy exists in cold. ONE bulky store tiers today — the
+  receiver's raw provenance store, added 2026-08-28, the day it was built.
+  (`PAYLOAD_DIR` was removed the same day: it had never had a writer. See the
+  note on TIERED_SOURCES.) Adding a bulky writer without adding it there is how
+  a disk fills quietly, and that has already happened once.
   ⛔⛔ BIRTH RECORDS ARE DELETED BY NOTHING, EVER. There is no code path here
      that can touch them, and the test asserts it. A sampled or truncated
      birth census destroys the base rate of every rate in the study, and §5
@@ -25,8 +26,9 @@ r1→r2 review, where my original justification was FALSE):
     checkpoint means reading a birth from 90 days ago. I had written "nothing
     queries this for 90 days", and the scheduler queries it hourly. The
     governing invariant is hot retention >= the deepest reader window.
-  • the BULKY PAYLOAD tiers at 1 day, because nothing reads it after the
-    observation is extracted.
+  • the BULKY RAW STORE tiers at 1 day, because nothing reads it in the normal
+    course — it is an audit record, consulted only to reconcile a suspected
+    poisoning, which is exactly the job a compressed cold copy still does.
 """
 
 from __future__ import annotations
@@ -38,7 +40,7 @@ import shutil
 import sys
 from datetime import datetime, timedelta, timezone
 
-from config import COLD_DIR, PAYLOAD_DIR, PAYLOAD_HOT_DAYS, WORKING_INDEX_HOT_DAYS
+from config import BULKY_HOT_DAYS, COLD_DIR, WORKING_INDEX_HOT_DAYS
 from provenance import RAW_DIR as PROVENANCE_RAW_DIR
 from store import DUE_DIR, ensure_dirs, periodic_lock
 
@@ -62,28 +64,38 @@ def _age_days(path: str, now: datetime) -> float:
 
 # ⛔ EVERY BULKY STORE THAT TIERS, AND ITS COLD-NAME PREFIX.
 #
-# ★ THE PREFIX IS NOT COSMETIC — IT IS A COLLISION FIX. Both stores name their
-#   files by date, so `payload/2026-08-28.jsonl` and
-#   `provenance/raw/2026-08-28.jsonl` would BOTH become
-#   `cold/2026-08-28.jsonl.gz` and the second would silently overwrite the
-#   first. Tiering that destroys the file it just archived is a data-loss path
-#   wearing a retention policy's clothes, one layer deeper than the failure the
-#   verify-before-remove order already guards against.
+# ⚠️ ADDING A BULKY WRITER WITHOUT ADDING IT HERE IS HOW A DISK FILLS QUIETLY,
+#    AND IT HAS ALREADY HAPPENED ONCE: the receiver's raw provenance store —
+#    the BULKIEST thing in the package, projected 2-14 GB over 90 days, which
+#    SPANS the 8 GiB cap — shipped with no tiering at all, because tiering was
+#    written before the store existed. Kyle's question found it. On this box
+#    the disk is shared with the live trading app, so a store with no retention
+#    is not an untidiness.
 #
-# ⚠️ THE PROVENANCE STORE WAS ADDED HERE ON 2026-08-28, THE SAME DAY IT WAS
-#    BUILT, AND KYLE ASKED THE QUESTION THAT FOUND IT. The receiver's raw store
-#    is the BULKIEST thing in the package — projected 2-14 GB over 90 days,
-#    which SPANS the 8 GiB store cap — and it shipped with no tiering at all,
-#    because tiering was written before the store existed. A new writer whose
-#    retention nobody extended is exactly how a disk fills.
+# ★ THE PREFIX IS KEPT DELIBERATELY THOUGH ONLY ONE SOURCE REMAINS, and that
+#   is a decision rather than a leftover. Stores here name files by DATE, so
+#   any second source would produce the same cold filename and the second write
+#   would silently overwrite the first — tiering that destroys the file it just
+#   archived, one layer deeper than the verify-before-remove order guards
+#   against. Removing the prefix now would make the NEXT addition unsafe by
+#   default, and the paragraph above is the evidence that additions happen.
+#   `test_tiering` asserts the property against an injected second source, so
+#   the guarantee stays tested with only one real store configured.
 #
 # ⛔ TIERED, NEVER DELETED. Cold is compressed and kept: this store is the
 #    PRIMARY control on the accept path (a static, replayable header secret
 #    proves nothing about a body), so losing it loses the only thing that makes
 #    a poisoning partitionable. Compress-verify-remove preserves it; the
-#    protected set below is what stops anything here reaching the census.
+#    protected set above is what stops anything here reaching the census.
+#
+# 🗑 `PAYLOAD_DIR` WAS REMOVED FROM THIS LIST ON 2026-08-28 — see
+#    `DELETED_COMPONENTS_LOG.md`. It had ZERO writers in its entire history:
+#    no `payload_path()` builder ever existed, so nothing could construct a
+#    path into it. It was an empty directory that `ensure_dirs()` created and
+#    this job walked daily, finding nothing. The scope role it was declared for
+#    (bulky birth payload, 1-day retention) is genuinely performed by the
+#    provenance store above, at the same retention.
 TIERED_SOURCES = (
-    (PAYLOAD_DIR, "payload"),
     (PROVENANCE_RAW_DIR, "provenance-raw"),
 )
 
@@ -111,7 +123,7 @@ def tier_payloads(now: datetime | None = None) -> dict:
             refused += 1
             LOG.error("REFUSED to tier a protected path: %s", src)
             continue
-        if _age_days(src, now) <= PAYLOAD_HOT_DAYS:
+        if _age_days(src, now) <= BULKY_HOT_DAYS:
             continue
 
         dst = os.path.join(COLD_DIR, "%s-%s.gz" % (prefix, name))

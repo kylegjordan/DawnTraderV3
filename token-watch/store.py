@@ -55,7 +55,6 @@ from config import (
     GRID_LABELS,
     LOCK_PATH,
     OBSERVATIONS_DIR,
-    PAYLOAD_DIR,
     STATE_DIR,
     TOMBSTONE_DIR,
 )
@@ -78,7 +77,6 @@ def ensure_dirs() -> None:
         OBSERVATIONS_DIR,
         DUE_DIR,
         TOMBSTONE_DIR,
-        PAYLOAD_DIR,
         COLD_DIR,
         STATE_DIR,
     ):

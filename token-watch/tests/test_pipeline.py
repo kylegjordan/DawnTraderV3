@@ -124,19 +124,21 @@ check("liquidity call refused BEFORE any network or key access", raised,
 # ─────────────────────────────────────────────────────────────────────────────
 section("5. TIERING — the only deleter, and births are unreachable from it")
 # ─────────────────────────────────────────────────────────────────────────────
-from config import BIRTHS_DIR, COLD_DIR, PAYLOAD_DIR  # noqa: E402
+from config import BIRTHS_DIR, COLD_DIR  # noqa: E402
+from provenance import RAW_DIR as BULKY_DIR  # noqa: E402
 
 check("births path is REFUSED by the safety predicate",
       not tier._safe(os.path.join(BIRTHS_DIR, "2026-08-28.jsonl")))
 check("observations path is REFUSED", not tier._safe(f"{ROOT}/observations/x.jsonl"))
 check("tombstones path is REFUSED", not tier._safe(f"{ROOT}/dead/dead.jsonl"))
 check("POSITIVE CONTROL: a payload path IS allowed",
-      tier._safe(os.path.join(PAYLOAD_DIR, "raw.jsonl")),
+      tier._safe(os.path.join(BULKY_DIR, "raw.jsonl")),
       "if everything were refused the predicate would be a constant")
 
 # An aged payload moves to cold and the hot copy goes; a fresh one stays.
-old_p = os.path.join(PAYLOAD_DIR, "old.jsonl")
-new_p = os.path.join(PAYLOAD_DIR, "new.jsonl")
+os.makedirs(BULKY_DIR, exist_ok=True)
+old_p = os.path.join(BULKY_DIR, "old.jsonl")
+new_p = os.path.join(BULKY_DIR, "new.jsonl")
 for p in (old_p, new_p):
     with open(p, "w", encoding="utf-8") as fh:
         fh.write('{"raw":"payload"}\n')
@@ -154,7 +156,7 @@ check("aged payload moved to cold", res["moved"] == 1, res)
 #   name files by date, so an unprefixed cold name lets the second store
 #   silently overwrite the first — asserted directly in test_tiering block 4.
 check("cold copy exists, under its source prefix",
-      os.path.exists(os.path.join(COLD_DIR, "payload-old.jsonl.gz")),
+      os.path.exists(os.path.join(COLD_DIR, "provenance-raw-old.jsonl.gz")),
       sorted(os.listdir(COLD_DIR)))
 check("hot copy removed", not os.path.exists(old_p))
 check("POSITIVE CONTROL: the FRESH payload was left alone", os.path.exists(new_p),

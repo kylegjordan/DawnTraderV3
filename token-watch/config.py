@@ -189,12 +189,15 @@ BIRTHS_DIR = f"{ROOT}/births"          # append-only census. NEVER deleted, neve
 OBSERVATIONS_DIR = f"{ROOT}/observations"
 DUE_DIR = f"{ROOT}/due"                # hour-bucketed schedule; see store.py
 TOMBSTONE_DIR = f"{ROOT}/dead"
-PAYLOAD_DIR = f"{ROOT}/payload"        # bulky raw payloads — tiers at 1 day
 COLD_DIR = f"{ROOT}/cold"              # the hand-off, built day one (OBJ-6)
 STATE_DIR = f"{ROOT}/state"
 LOCK_PATH = f"{STATE_DIR}/periodic.lock"
 
-PAYLOAD_HOT_DAYS = 1
+# ⛔ THE HOT WINDOW FOR EVERY BULKY STORE (was PAYLOAD_HOT_DAYS until
+#    2026-08-28). Renamed when PAYLOAD_DIR was deleted: the constant governs
+#    the tiering loop for ALL of TIERED_SOURCES, so a name tied to one store
+#    would have read as if the provenance store had no stated retention.
+BULKY_HOT_DAYS = 1
 WORKING_INDEX_HOT_DAYS = 90
 
 # ─────────────────────────────────────────────────────────────────────────────
