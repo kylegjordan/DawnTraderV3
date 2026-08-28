@@ -77,8 +77,20 @@ describe('F-G-1 OBJ-9 — transient vs permanent, asserted against the PRODUCTIO
 });
 
 describe('F-G-1 #918 — the drain that had no caller', () => {
-  it('exports a shutdown drain', () => {
-    expect(SRC).toContain('export async function drainArchiveBuffersForShutdown');
+  // MUTATION: drop stopTickerWriter from the drain and this fails.
+  // ⛔ THE FENCE ASKED THAT THE FUNCTION EXISTS AND IS CALLED. IT NEVER ASKED WHAT IT DRAINS —
+  // which is how it passed while the drain covered only the recoverable leg. Langston's catch.
+  it('drains BOTH writers, not just the recoverable one', () => {
+    // ⚠️ Anchored on the CALL, not on a fixed byte window — my first attempt sliced 900 chars
+    // from the declaration and landed entirely inside the docstring, so it failed unmutated.
+    const i = SRC.indexOf('export async function drainArchiveBuffersForShutdown');
+    const j = SRC.indexOf('Promise.allSettled', i);
+    expect(j).toBeGreaterThan(i);
+    const body = SRC.slice(j, j + 200);
+    expect(body).toContain('stopBatchWriter()');
+    expect(body).toContain('stopTickerWriter()');
+    // one failing leg must not skip the other
+
   });
 
   // MUTATION: remove the call from boot_orchestrator and this fails — which is the ONLY thing

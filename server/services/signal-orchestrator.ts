@@ -534,7 +534,13 @@ export class SignalOrchestrator {
     // whole point: `applyGlobalGuards` already ran INSIDE the strategy, upstream of here, so
     // without this the geometry that was validated is not the geometry that trades.
     {
-      const _grid = resolveVenueGrid(rawSignal.symbol, sizingContext.assetClass);
+      // ⛔ CANONICALISE FIRST. `resolveByInternal` (`kraken-asset-pairs-service.ts:539-540`) is an
+      // EXACT-KEY Map lookup with no fallback, and this block sits 59 lines ABOVE the pipeline's
+      // own `normalizeToInternalSymbol` at :596. So a non-canonical symbol form resolved to
+      // `grid_unknown` and REFUSED A VALID SIGNAL — a venue-keyed lookup run on the one form the
+      // very next stage exists to produce. Langston, at the ref.
+      const _gridSymbol = normalizeToInternalSymbol(rawSignal.symbol) || rawSignal.symbol;
+      const _grid = resolveVenueGrid(_gridSymbol, sizingContext.assetClass);
       // The ONE cap in the strategy set: `volatility-edge` takes Math.min(measuredMove, atr),
       // so its target is a CEILING and rounding it AWAY would push it past the bound it was
       // defined by. Every other target is a floor ("at least K x ATR").
@@ -556,7 +562,23 @@ export class SignalOrchestrator {
         const _key = reason.startsWith('grid_') ? reason : `grid_${reason}`;
         if (_fc) recordActivePreSqeReject(sizingContext.mode, _fc, _key, strategyId);
       };
-      if (!_r.ok) {
+      // ⛔⛔ PUBLISHED vs DERIVED — the cut that actually binds, and I stopped one module short of
+      // it (Langston, J1). My price/pre-filter asymmetry was right and I applied it to the WRONG
+      // axis. For CRYPTO the tick is the VENUE'S OWN STATEMENT: its absence means we genuinely do
+      // not know what the venue will accept, so refusing is correct. For xSTOCK the "grid" is OUR
+      // INFERENCE FROM OUR OWN ARCHIVE — its absence tells you about our observation coverage,
+      // NOT about the venue. Refusing an active xStock trade because our archive is thin is the
+      // same drop-arm-on-missing-data defect he refused for the VTS lane, one module further out
+      // — and with `MIN_INCREMENTS=50` plus a cold-start window where the refresher has not yet
+      // run, the plausible worst case is that it switches the class off entirely.
+      if (!_r.ok && _r.reason === 'grid_unknown' && _grid.provenance !== 'venue_published') {
+        console.warn(
+          `[F-G-1][GRID_UNRESOLVED_PASSTHROUGH] ${_gridSymbol}/${strategyId} — no DERIVED grid for this ` +
+          `symbol (coverage gap in our own archive, not a venue fact). Proceeding UNROUNDED rather than ` +
+          `refusing a valid signal. This is a data-coverage problem: see the xstock-grid-refresher.`,
+        );
+        _gridReject('unresolved_passthrough');
+      } else if (!_r.ok) {
         _gridReject(_r.reason ?? 'unknown');
         // ⛔ REJECT, NEVER RE-ROUND. Rounding to nearest is deterministic, so "round again"
         // could only mean rounding the OTHER way, and choosing the direction that lets a trade

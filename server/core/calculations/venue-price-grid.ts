@@ -57,7 +57,9 @@ export type GridRefusal =
   /** The venue grid for this symbol is unknown. NEVER silently default (no hard-coded fallback). */
   | 'grid_unknown'
   /** Rounding collapsed the geometry: entry/stop/target no longer strictly separated. */
-  | 'degenerate_after_rounding';
+  | 'degenerate_after_rounding'
+  /** ⛔ SELF-CHECK: the rounded output is not on the grid. A rounding DEFECT, not a signal fault. */
+  | 'not_representable_after_rounding';
 
 export interface GridResult {
   ok: boolean;
@@ -75,9 +77,20 @@ export interface GridResult {
  * (11 distinct values across 1,437 pairs), but this does NOT assume that — see `snap`.
  */
 export function decimalsOf(tick: number): number {
-  const s = tick.toExponential();
-  const exp = Number(s.slice(s.indexOf('e') + 1));
-  return exp < 0 ? Math.min(12, -exp) : 0;
+  // ⛔ THE MANTISSA IS PART OF THE ANSWER. My first version read ONLY the exponent of
+  // `toExponential()`, which is correct exactly when the mantissa is 1 — i.e. for powers of ten.
+  // `decimalsOf(0.0025)` returned 3, so `snap`'s closing `toFixed(3)` took an on-grid product and
+  // rounded it onto a 0.001 grid: `snap(12.3456, 0.0025, 'up')` → `12.348`, which is OFF GRID.
+  // ⛔ THAT IS THE EXACT COUNTER-EXAMPLE LANGSTON USED TO KILL MY DECIMAL-PLACE METHOD FOR xSTOCK,
+  // reintroduced by me at the final formatting line, one function below the GCD built to defeat
+  // it — and live on the six xStock symbols measured at a 0.0025 tick. Read the decimal string.
+  const str = String(tick);
+  if (str.includes('e') || str.includes('E')) {
+    const [mant, exp] = str.toLowerCase().split('e');
+    const mantDecimals = (mant.split('.')[1] ?? '').length;
+    return Math.min(12, Math.max(0, mantDecimals - Number(exp)));
+  }
+  return Math.min(12, (str.split('.')[1] ?? '').length);
 }
 
 type Dir = 'nearest' | 'up' | 'down';
@@ -193,13 +206,15 @@ export function roundTripleToGrid(
   const oneTick = t * (1 - 1e-9);
   if (!(e - s >= oneTick) || !(g - e >= oneTick)) return fail('degenerate_after_rounding');
 
-  return {
-    ok: true,
-    entryPrice: e,
-    stopPrice: s,
-    targetPrice: g,
-    representable: isOnGrid(e, t) && isOnGrid(s, t) && isOnGrid(g, t),
-  };
+  // ⛔⛔ THE SELF-CHECK, AND IT IS THE REAL FIX. The module already COMPUTED `representable` and
+  // NOBODY READ IT — the seam checked only `_r.ok`, so a rounding bug could return
+  // `ok:true, representable:false` and ship. Promoting it to a refusal catches this entire CLASS
+  // without anyone having to predict the next arithmetic error. Langston's point, and it is
+  // stronger than the arithmetic fix above: that one fixes the bug we found; this one fixes the
+  // bugs we have not.
+  const representable = isOnGrid(e, t) && isOnGrid(s, t) && isOnGrid(g, t);
+  if (!representable) return fail('not_representable_after_rounding');
+  return { ok: true, entryPrice: e, stopPrice: s, targetPrice: g, representable: true };
 }
 
 /**

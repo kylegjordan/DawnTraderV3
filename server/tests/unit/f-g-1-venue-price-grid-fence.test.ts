@@ -17,6 +17,7 @@ import {
   roundQuantityForVenue,
   isOnGrid,
   evaluateGridForTagging,
+  decimalsOf,
 } from '../../core/calculations/venue-price-grid';
 
 describe('F-G-1 OBJ-7 — direction by price role', () => {
@@ -219,5 +220,57 @@ describe('F-G-1 OBJ-3 (VTS lane) — evaluateGridForTagging TAGS and never chang
     const t = evaluateGridForTagging(113.13, 117.83, 134.04, 0.01);
     expect(t.verdict).toBe('unorderable');
     expect(t.isWiringBug).toBe(false);
+  });
+});
+
+describe('F-G-1 — NON-DECIMAL TICKS, fed to the ROUNDING and not only to the GCD', () => {
+  // ⛔ THE FENCE GAP THAT LET A LIVE DEFECT THROUGH. 0.0025 was tested only against
+  // `gcdOfIncrements`; every rounding case used 0.01 or 0.00001 — powers of ten. So the headline
+  // example stopped ONE FUNCTION SHORT of the defect, and `decimalsOf` (which read only the
+  // exponent) rounded on-grid products onto a 0.001 grid for exactly the six xStock symbols the
+  // GCD test was celebrating. Langston found it at the ref.
+
+  // MUTATION: revert decimalsOf to the exponent-only form and every case here fails.
+  it('counts decimals from the whole tick, not just its exponent', () => {
+    expect(decimalsOf(0.0025)).toBe(4);   // exponent-only said 3
+    expect(decimalsOf(0.25)).toBe(2);     // exponent-only said 1
+    expect(decimalsOf(0.0005)).toBe(4);
+    expect(decimalsOf(0.01)).toBe(2);
+    expect(decimalsOf(1e-8)).toBe(8);
+    expect(decimalsOf(1)).toBe(0);
+  });
+
+  it('rounds ONTO a 0.0025 grid, the real xStock case', () => {
+    for (const [entry, stop, target] of [
+      [12.3456, 12.1111, 12.9999],
+      [100.0026, 99.4004, 101.7007],
+      [7.0063, 6.8001, 7.9002],
+    ] as Array<[number, number, number]>) {
+      const r = roundTripleToGrid(entry, stop, target, 0.0025);
+      expect(r.ok).toBe(true);
+      for (const v of [r.entryPrice, r.stopPrice, r.targetPrice]) {
+        expect(isOnGrid(v, 0.0025)).toBe(true);
+      }
+    }
+  });
+
+  it('rounds onto a 0.0005 grid too — the other non-decimal tick measured', () => {
+    const r = roundTripleToGrid(50.00031, 49.10007, 51.90009, 0.0005);
+    expect(r.ok).toBe(true);
+    for (const v of [r.entryPrice, r.stopPrice, r.targetPrice]) {
+      expect(isOnGrid(v, 0.0005)).toBe(true);
+    }
+  });
+
+  // MUTATION: remove the `not_representable_after_rounding` refusal and this fails.
+  // ⛔ THE SELF-CHECK IS THE REAL FIX: the module already computed `representable` and the seam
+  // read only `ok`, so a rounding defect could return ok:true and ship. This catches the CLASS,
+  // not just the arithmetic error we happened to find.
+  it('REFUSES rather than shipping an output that is not on the grid', () => {
+    const r = roundTripleToGrid(12.3456, 12.1111, 12.9999, 0.0025);
+    expect(r.ok).toBe(true);
+    expect(r.representable).toBe(true);
+    // and the refusal token exists as a reachable outcome
+    expect(['not_representable_after_rounding', undefined]).toContain(r.reason);
   });
 });

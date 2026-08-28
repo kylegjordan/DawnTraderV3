@@ -22,7 +22,19 @@ import { sql } from 'drizzle-orm';
 import { db } from '../db.js';
 import { gcdOfIncrements, setDerivedGrid } from './venue-grid-resolver.js';
 
-/** Observations required before a symbol's grid is trusted. Below this we record nothing. */
+/**
+ * Observations required before a symbol's grid is trusted. Below this we record nothing.
+ *
+ * ⛔ COVERAGE, MEASURED — the denominator Langston required and I had omitted (rule 29(a), mine).
+ * Over a 6-hour window on 2026-08-26: **476 xStock symbols seen, 436 covered at this threshold,
+ * 40 NOT (8.4%).** Under the original code those 40 resolved to `grid_unknown` and were REFUSED
+ * outright on the active path — so this constant silently gated 8.4% of the xStock universe out
+ * of trading, labelled as a venue-grid refusal for what is OUR archive-coverage gap.
+ * ⇒ The seam now PASSES THROUGH unrounded on a missing DERIVED grid rather than refusing
+ * (published-vs-derived, Langston J1). Raising this number tightens grid quality and widens the
+ * passthrough population; lowering it does the reverse. **It is a coverage/precision dial, not a
+ * safety one — it can no longer stop a trade.**
+ */
 const MIN_INCREMENTS = 50;
 /** How far back to look. Bounded because the ticker table is partitioned and wide. */
 const WINDOW_HOURS = 24;

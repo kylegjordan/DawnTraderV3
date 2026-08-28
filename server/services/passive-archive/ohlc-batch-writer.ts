@@ -342,5 +342,20 @@ export async function stopBatchWriter(): Promise<void> {
  * shutdown path is trivial, NOT because it is load-bearing. It must not become OBJ-9's headline.
  */
 export async function drainArchiveBuffersForShutdown(): Promise<void> {
-  await stopBatchWriter();
+  // ⛔⛔ BOTH WRITERS, AND THE TICKER ONE MATTERS MORE. My first version drained OHLC only —
+  // fixing the leg whose measured impact is NIL (WS re-sends the open minute on reconnect) and
+  // leaving the leg where loss is PERMANENT. `#705`'s own title records Langston correcting this
+  // exact mis-sizing: *"I sized the risk on the OHLC writer, where it is recoverable, and the
+  // UNRECOVERABLE instance is the ticker writer."* ⛔ THAT IS THE THIRD TIME IN THIS BATCH, and
+  // the third was inside the commit whose own headline was the second.
+  // ⇒ ROUTING SIGNAL, recorded because it clearly does not stick as a lesson: any change touching
+  // the archive writers audits the TICKER leg last and separately, as its own step.
+  // Independent: one failing drain must not skip the other.
+  const { stopTickerWriter } = await import('./ticker-batch-writer.js');
+  const results = await Promise.allSettled([stopBatchWriter(), stopTickerWriter()]);
+  for (const r of results) {
+    if (r.status === 'rejected') {
+      console.error('[B74][shutdown] archive drain leg FAILED:', r.reason);
+    }
+  }
 }
