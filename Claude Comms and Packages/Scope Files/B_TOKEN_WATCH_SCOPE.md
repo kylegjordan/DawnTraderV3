@@ -1,4 +1,4 @@
-# B-TOKEN-WATCH — SCOPE r2: capture-only observation of new Solana token launches
+# B-TOKEN-WATCH — SCOPE r3: capture-only observation of new Solana token launches
 
 **change-class:** `non_architecture` · **Owner:** CC-INFRA (Infra Claude) · 2026-08-28
 **Gates:** concept review **NOT-A-REJECT** → Step-1 **CHANGES-NEEDED (4 blockers)** → **this r2**
@@ -26,7 +26,7 @@ Record every new Solana token launch **at birth**, then observe it on a fixed sc
 ## 2. PRE-AUDIT READS, NAMED
 
 - **Already exists?** `BATCH_CATALOG.md` + `RUNNING_ISSUES.md`, terms `solana` · `dexscreener` · `helius` · `token launch` · `pump.fun`: **zero hits, both files. Not a rebuild.**
-  ⚠️ **INSTRUMENT NOTE (Langston, and it nearly corrupted his review): `dt-review grep -i` SILENTLY RETURNS ZERO — no error, clean exit.** His first pass "confirmed" this claim with a flag that manufactures zeros; a positive control caught it and the unflagged re-run held. **Never pass a flag to `dt-review grep`.**
+  ⚠️ **INSTRUMENT NOTE — POINTER ONLY, the defect is homed in `RUNNING_ISSUES` (see below): `dt-review grep` with an unparsed flag SILENTLY RETURNS ZERO — no error, clean exit.** It nearly corrupted Langston's review of *this scope's own* zero-hits claim; a positive control caught it. **Never pass a flag to `dt-review grep` until it is fixed.** ⛔ Documenting a landmine is a patch — the real fix is that it **rejects unknown flags with a non-zero exit**, and that is filed rather than left in a batch scope that dies with the batch.
 - **`SYSTEM_IMPACT_MAP.md`** — **zero mentions.** New ground; the batch **creates** a node (§7). Recording the absence *is* the presence-evidence rule 22 requires.
 - **`SYSTEM_MANUAL.md`** — **not applicable, judged explicitly.** It documents trading architecture and math; this trades nothing.
 - **`STORAGE_POLICY.md` — read in full BEFORE any retention was proposed** (§4). Called out because designing storage before reading its governing document is the exact failure this session was caught on in August.
@@ -86,9 +86,14 @@ Record every new Solana token launch **at birth**, then observe it on a fixed sc
 
 **And the ordering is the real hazard.** §6 says a sampled birth record destroys the base rate **irrecoverably**; §5 called liquidity *"not optional colour."* **A liquidity leg overspending in week 3 exhausts credits and stops birth capture — silently converting the census into a sample, in the one direction that cannot be undone.** A discretionary leg was able to kill the irreplaceable one. *(This is the `#704` shape in new clothes: a push-side failure producing no local error.)*
 
-1. **HARD RESERVE.** Births are reserved 621k/month plus margin. **Liquidity + audit legs are carved at ≤300k/month**, not "within 379k" — leaving ~79k/month unallocated as genuine headroom.
+1. **HARD RESERVE — r3 correction: r2 DOUBLE-COUNTED THE HEADROOM** (Langston condition 2). r2 said births get *"621k plus margin"*, the carve is *"≤300k"*, and ~79k remains *"unallocated as genuine headroom"* — but 621 + 300 = 921 and 1,000 − 921 = **79. The 79k IS the remainder; it cannot also be the birth margin.** Restated, and **variance is now stated rather than assumed**, since budgeting on a mean was itself part of B1's finding:
+   - **BIRTHS: reserved 776k/month** = the 621k mean **+25% launch-rate variance**. This is the protected floor, not an average.
+   - **LIQUIDITY + AUDIT: hard carve ≤200k/month** (reduced from r2's 300k, which only fitted the mean). 776 + 200 = 976k.
+   - **~24k/month genuinely unallocated.**
+   - ⚠️ **ABOVE +25% the shed order fires and the 200k becomes a residual by design — stated, because r2 called it a carve while budgeting it as a residual.** That is the design working, not a failure: births never shed.
 2. **DECLARED SHED ORDER, enforced in code:** **liquidity reads shed FIRST · follow-ups SECOND · births NEVER.**
 3. **BURN MONITOR** on the §6 non-trading stream, alerting on projected exhaustion **before** it happens, not at it.
+   ★ **PROJECTED FROM WHAT (Langston, unprompted — and he is right that this is the trap):** *"a monitor projecting off a trailing mean is blind in the same direction as the budget, and will under-project during exactly the launch-rate spike that causes the exhaustion."* **So it does NOT use a trailing mean.** It projects from **BOTH a 24h trailing rate AND the peak 1h rate extrapolated forward, and alerts on whichever exhausts sooner** — at **80% of the month's allocation**, and again at 90%. The peak-derived leg exists specifically to see the spike the mean averages away.
 
 ## 6. ALERT ROUTING
 Failures route **off** the trading alert stream. That queue already carries undischarged rows; a research recorder's failures must not compete with trading failures for the same attention.
@@ -105,7 +110,8 @@ Failures route **off** the trading alert stream. That queue already carries undi
 5. **Death classification:** one of each class, hand-checked against the chain.
 6. **Tiering:** destroy the warm copy in a scratch location; cold rehydrates and checksums match.
 7. **Fence:** batch diff touches **no** live-path file, **and** the receiver is not hosted on the trading box (§0).
-8. **Cost:** **measured credits/day at 72h** against the §5.1 reserve — the agreed discharge for the legs Langston must otherwise rule on reported fact. **Material overshoot re-opens §5**, and the shed order must be observed firing under a deliberate over-budget test.
+8. **Cost:** **measured credits/day at 72h** against the §5.1 reserve — the agreed discharge for the legs Langston must otherwise rule on reported fact. **Material overshoot re-opens §5.**
+9. ⛔ **HARD CLOSE CONDITION — THE SHED ORDER MUST BE OBSERVED FIRING UNDER A DELIBERATE INJECTION.** Promoted from a verification item at Langston's ruling, and the reasoning is his: *"an unverified guard on an irreversible silent loss is not a guard."* **"72h ran and it never had to fire" is absence of opportunity, not evidence of capability** — leg 3 of the reach test. The budget is therefore driven artificially past its threshold in a scratch run, and the close requires **observing liquidity reads shed while births continue**. Without that observation the batch does not close, because §4 makes the loss irreversible: a sampled birth record destroys the base rate, and §5 measures reconstruction as unaffordable at every tier.
 
 ## 9. OUT OF SCOPE
 Trading, wallets, custody, execution · any signal/strategy/ranking use · historical backfill · any chain but Solana · **interim reporting before the 90-day read-out.**

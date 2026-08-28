@@ -4078,3 +4078,17 @@ Kraken publishes a per-pair `tick_size` — **1,437 pairs, 11 distinct values, a
 ⚠️ **NOT a defect claim: the exclusion is deliberate and commented, and the active path is fenced.** **What is unestablished is whether the two surviving reach paths can produce a signal that TRADES.** That is the question to answer, not an assertion that they do.
 
 **HOME: `B-GUARD-COVERAGE-AUDIT`, owner CC-C, placed in `PHASE_19_PLAN.md` §1 Part F immediately AFTER `F-G-2`, alongside `B-MIN-STOP-DISTANCE`** — both are geometry-validation questions that want answering together, and neither blocks `F-G-1` or `F-G-2`. **Deliverable: trace whether `stage-b-validator.ts:350` and `routes.ts:11092` can reach execution, and either fence them or state why they need no guard.**
+
+### #920 OPEN 2026-08-28 (Langston found it; Infra Claude filing at his direction — **he holds the reproduction, it corrupted HIS review**) — ⛔ `dt-review grep` SILENTLY RETURNS ZERO WHEN GIVEN AN UNPARSED FLAG: NO ERROR, CLEAN EXIT
+
+**RULE-24 DISPOSITION: BUCKET 1, REAL DEFECT.** This is not a usage note.
+
+**MEASURED:** `dt-review grep -i <term>` returns **zero hits with exit 0** on a term that is demonstrably present. Langston's first pass on the `B-TOKEN-WATCH` Step-1 gate "CONFIRMED" my zero-hits pre-audit claim **using the flag that manufactures the zero.** A positive control caught it — `-i` on a known-present term returned 0 while the unflagged run returned hits — and the re-run unflagged held, so the underlying claim was genuinely true. **The claim survived; the instrument did not.**
+
+⛔ **WHY THIS IS WORSE THAN A WRONG ANSWER: it is the `#704` shape living inside the instrument every session checks every other session through.** A failure that produces no local error, in the tool used to verify absence claims — and an asserted absence is exactly what rule 22 and #453 require presence-evidence for. **A tool that answers "zero" for "I did not understand you" turns every governed read into an unfalsifiable one.**
+
+**THE FIX IS NOT DOCUMENTATION.** A note saying "never pass a flag" is a patch on a landmine; the next session hits it while reading something else entirely. **`dt-review grep` must REJECT unknown flags with a NON-ZERO EXIT.** Fail loudly, never silently empty.
+
+**HOME:** owner **Langston** — he offered to take it and he holds the reproduction. Placed in the governance/rules queue in `PHASE_19_PLAN.md` §1 rather than dated, per §9.4 (a home is a name and a place in the queue, never a calendar date).
+
+**Interim, until it lands:** never pass a flag to `dt-review grep`; run unflagged with explicit case variants; and **pair any zero result with a positive control** before reporting an absence. Pointer kept in `B_TOKEN_WATCH_SCOPE.md` §2 so that batch's reader still sees it, but this entry is the home — a landmine documented only in a batch scope dies with the batch.

@@ -144,3 +144,42 @@ Splitting by launch date stands, and a random split is **rejected**: two tokens 
 
 ⚠️ **STATED REACH, because a control that covers one leg must never be described as covering three:** auditing a provider's webhook against **that same provider's** archival RPC is a different code path and **catches delivery loss**, but **does NOT catch provider-side indexing gaps**. If a second provider's free RPC is available it covers both and should be used; if not, that gap is a known, written limitation rather than an implied absence. The aggregator is retained as a **secondary cross-check only** - a divergence is informative, but it is not the control.
 
+
+### AMENDMENT 2 - 2026-08-28, STILL PRE-DATA (Langston Step-1 approval, CONDITION 1 and CONDITION 3)
+
+> **Appended, not edited. Sections 1-10 and AMENDMENT 1 stand exactly as written.** Still pre-data: no row collected, no collector built. ⚠️ **This window closes ONCE** - the moment the collector runs, a correction here stops being a design change and becomes a re-interpretation of a result.
+
+#### A2.1 - ⛔ RETRACTION: A1.6's CAPABILITY CLAIM IS FALSE
+
+**A1.6 states:** *"The aggregator proposed as the independent count **cannot see bonding-curve tokens' pools** - which is the entire cohort at birth."*
+
+**THAT IS WRONG, and it is refuted by my own measurement.** Langston probed the live API (`pumpfun` is a first-class indexed venue: 30/30 pairs on a venue query; six of eight freshly-profiled Solana tokens carry a live `pumpfun` pair; **zero of eight returned zero pairs**). I re-derived it against the same real token the cost work used:
+
+| field | value |
+|---|---|
+| pairs returned | **1 - the pair IS indexed** |
+| dexId | `pumpfun` |
+| priceUsd | populated |
+| volume h24 | populated |
+| **liquidity.usd** | **null** |
+
+**THE ERROR, NAMED:** I observed **one null field** (`liquidity.usd`) and generalised it into **blindness to the whole venue.** The true statement is *"it reports no liquidity figure for bonding-curve pools"*, which is a **field gap, not a visibility gap.** That is the `wrong-object` pattern in `CONDUCT.md` §13 - right name, wrong thing - committed inside the one document that is append-only by design.
+**MISTAKE: wrong-object [B-TOKEN-WATCH] - claimed the aggregator cannot see bonding-curve pools; it sees them and returns price and volume, only the liquidity field is null.**
+
+**AND THE AMBIGUITY IS RESOLVED: the aggregator is DEXSCREENER, named.** A bare noun was indefensible in a document whose §5 makes DexScreener load-bearing for the entire follow-up leg - a future reader would have taken A1.6 as indicting §5's own source.
+
+#### A2.2 - WHAT SURVIVES, AND WHY THE CONTROL DOES NOT CHANGE
+
+**OBJ-3's windowed chain re-census STANDS, on legs untouched by the retraction.** Its justification was never the aggregator's eyesight: **births arrive by webhook, and a push drops SILENTLY with no local error** - the `#704` class, already paid for once. A count-vs-count comparison against any third-party index cannot isolate that. **The design was right for a reason I stated badly.**
+
+**Reach, restated honestly** (this is the part the retraction changes):
+- **Capability: REFUTED** - DexScreener can see bonding-curve pairs. Measured.
+- **Coverage: UNMEASURED.** The probe used a promoted-list endpoint, which is biased toward traction, **not a random sample of births.** Whether it indexes ~all launches is unknown.
+- **Latency: UNMEASURED, and it is the one that bites** - our 1h checkpoint and OBJ-2's discovery lag both sit inside it.
+⇒ DexScreener remains a **secondary cross-check**, and the reason is now *coverage and latency unmeasured*, **not** the false capability claim.
+
+#### A2.3 - CONTROL GROUP: BOTH POPULATIONS STATED (CONDITION 3)
+
+A1.3's *"45,000 controls -> ~75 expected events"* is across the **full 90 days**. §8.2 evaluates on the **later half only**, so the **operative control for the primary out-of-sample test is ~22,500 -> ~37 expected events.**
+
+**500/day still stands** - the carrier arm is event-rich, so ~37 non-carrier events bound the base rate adequately against A1.5's 2.0x threshold. **Both figures are recorded because a single number without its population is the exact failure this document polices, and I had written the flattering one.**
