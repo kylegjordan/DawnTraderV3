@@ -27,6 +27,10 @@ type FunnelClass = {
   status: 'active' | 'dormant';
   sqeEvaluated: number;
   sqePassed: number;
+  // F-G-1 (#921): the pre-SQE stage was carried by the envelope and served by the route but
+  // never rendered here, so every reason counted into it was invisible on this tab.
+  signalsGenerated: number;
+  preSqeRejects: Record<string, number>;
   sqeGateRejects: Record<string, number>;
   sqeGateRejectsAtRefresh?: Record<string, number>;
   strategyNullReasons?: Record<string, Record<string, number>>;
@@ -35,6 +39,29 @@ type FunnelClass = {
     cyclesRun: number; refreshedAttempted: number; reconfirmed: number;
     rejectedInRefresh: number; promoted: number; droppedError?: number;
   };
+};
+
+
+/**
+ * F-G-1 (#921) — plain-language names for the VENUE PRICE GRID refusals, so the tab says what
+ * was refused rather than showing a raw reason token. Each is a DISTINCT category: they mean
+ * different things and folding them together would hide which one is actually firing.
+ */
+const GRID_REJECT_LABELS: Record<string, string> = {
+  grid_unknown: 'No venue price grid known',
+  grid_invalid_triple: 'Missing or invalid price',
+  grid_short_side_unexercised: 'Short-shaped signal (refused, never traded)',
+  grid_unorderable_triple: 'Prices in an impossible order',
+  grid_degenerate_after_rounding: 'Rounding collapsed the risk distance',
+  grid_stop_distance_after_rounding: 'Stop too tight after rounding',
+};
+const GRID_REJECT_BASIS: Record<string, string> = {
+  grid_unknown: 'the venue publishes no tick for this symbol and none could be derived — we refuse rather than invent one',
+  grid_invalid_triple: 'entry, stop or target absent, non-finite or non-positive — no side can be derived',
+  grid_short_side_unexercised: 'stop above and target below entry. Zero shorts have ever been taken, so this can only be a defect — it refuses and raises rather than pricing it',
+  grid_unorderable_triple: 'neither long-shaped nor short-shaped — the #915 inverted-stop shape',
+  grid_degenerate_after_rounding: 'after snapping to the grid the legs were less than one tick apart',
+  grid_stop_distance_after_rounding: 'the rounded stop fell inside the 0.3% minimum stop distance (GUARD-1)',
 };
 
 export function ActiveSqeAndRtbSections({
@@ -91,10 +118,63 @@ export function ActiveSqeAndRtbSections({
   const refreshRows = cls.sqeGateRejectsAtRefresh
     ? Object.entries(cls.sqeGateRejectsAtRefresh).sort((a, b) => b[1] - a[1])
     : null;
+  // F-G-1: split the pre-SQE rejects so VENUE PRICE GRID refusals read as their own category
+  // rather than being folded in with everything else (Kyle's requirement, 2026-08-28).
+  const preSqeAll = Object.entries(cls.preSqeRejects ?? {}).sort((a, b) => b[1] - a[1]);
+  const gridRows = preSqeAll.filter(([r]) => r.startsWith('grid_'));
+  const otherPreSqeRows = preSqeAll.filter(([r]) => !r.startsWith('grid_'));
+  const gridTotal = gridRows.reduce((t, [, n]) => t + n, 0);
   const rtb = cls.rtbRefresh;
 
   return (
     <div className="space-y-4" data-testid="fd-sqe-rtb-sections">
+      <DiagTableCard
+        theme="summary"
+        title="Pre-SQE Rejections — including the venue price grid"
+        subtitle={`${label} — cumulative${since ? ` since ${since}` : ''}`}
+        testId="fd-presqe-section"
+      >
+        <table className={`w-full text-sm ${FROZEN_FIRST_COL_TABLE}`}>
+          <thead>
+            <tr className={`border-b ${DIAG_TABLE_THEMES.summary.head}`}>
+              <th className="text-left p-2 font-medium">Reason</th>
+              <th className="text-right p-2 font-medium">Count</th>
+              <th className="text-left p-2 font-medium text-muted-foreground text-xs">Counting Basis</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr className="border-b bg-muted/30">
+              <td className="p-2 font-medium">Signals generated</td>
+              <td className="p-2 text-right font-mono">{cls.signalsGenerated.toLocaleString()}</td>
+              <td className="p-2 text-xs text-muted-foreground">the denominator — every signal that entered the funnel</td>
+            </tr>
+            <tr className="border-b bg-muted/30">
+              <td className="p-2 font-medium">Venue price grid — total</td>
+              <td className="p-2 text-right font-mono" data-testid="fd-grid-reject-total">{gridTotal.toLocaleString()}</td>
+              <td className="p-2 text-xs text-muted-foreground">
+                signals refused because their prices could not be placed on the venue's price grid (F-G-1)
+              </td>
+            </tr>
+            {gridRows.length === 0 ? (
+              <tr><td colSpan={3} className="p-3 text-sm text-muted-foreground">No venue-grid refusals recorded yet — an observed zero.</td></tr>
+            ) : gridRows.map(([reason, n]) => (
+              <tr key={reason} className="border-b last:border-0" data-testid={`fd-grid-reject-${reason}`}>
+                <td className="p-2 pl-6 font-medium">{GRID_REJECT_LABELS[reason] ?? reason}</td>
+                <td className="p-2 text-right font-mono">{n.toLocaleString()}</td>
+                <td className="p-2 text-xs text-muted-foreground">{GRID_REJECT_BASIS[reason] ?? 'a grid refusal reason this tab does not yet label'}</td>
+              </tr>
+            ))}
+            {otherPreSqeRows.map(([reason, n]) => (
+              <tr key={reason} className="border-b last:border-0">
+                <td className="p-2 font-medium">{reason}</td>
+                <td className="p-2 text-right font-mono">{n.toLocaleString()}</td>
+                <td className="p-2 text-xs text-muted-foreground">other pre-SQE rejection</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </DiagTableCard>
+
       <DiagTableCard
         theme="summary"
         title="SQE — Signal Quality Evaluation"
