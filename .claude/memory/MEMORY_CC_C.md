@@ -8,9 +8,8 @@
 
 **★ THE STANDING WORK LEDGER (Kyle 2026-08-20): `Claude Comms and Packages/SCRATCH_CHECKLIST_2026-07-27_Kyle-CCC.md` — re-read it AFTER EVERY batch/sub-batch close, update statuses, ADD findings that should become batches.** Part D = the unwind queue; A6 awaits Kyle's pick; A7/#618 = highest-priority untouched (risk envelope).
 
-## WHAT CHANGED 2026-06-19 → 07-19 (items 1-6 cut 08-24)
+## ARMED, from the 06-19 → 07-19 arc (items 1-6 cut 08-24 as #641 duplicates of the shared `MEMORY.md`)
 
-⚠️ **Items 1-6 CUT: duplicated verbatim in the shared `MEMORY.md` (#641 shape) or bare repo pointers. Read them there. Only the ARMED item survives:**
 7. **Weekend posture:** #531 — active-path xStock positions have NO weekend mechanism (4 held through the 48h shutdown 07-17→07-19); options paper (suspend/flatten/hold + calendar-based admission gate (d), NEVER a hold prediction) → Kyle ruling pending. xStock trades 24/5 (Sun 8pm ET → Fri 8pm ET); US holidays pause.
 
 ## YOUR DATA SOURCES (psql via staging: `ssh root@188.245.193.8` → deploy → `set -a && . ./.env` → `psql "$DATABASE_URL"`)
@@ -48,27 +47,31 @@ Plain language to Kyle every message (no code/paths/jargon; canonical terms: reg
 
 ## ★★★ CURRENT POSITION (2026-08-28) — READ FIRST
 
-**⏳ `F-G-1` / `B-GRID-REPRESENTABILITY` — STEP 4, r3 DISPATCHED. Steps 1+2 approved; step 3 code complete.**
-**Graded ref `0df3aa9fb`.** ⛔ **BLOCKER-5 just fixed, awaiting his re-read. Steps 5-11 (CI, deploy, verify, governance, report) ALL STILL TO DO.**
-★★ **Kyle granted write scope ⇒ LANGSTON'S STEP-4 IS THE ONLY INDEPENDENT CHECK.** He has returned **CHANGES-NEEDED twice**, five blockers total, **every one real.**
+**⏳ `F-G-1` / `B-GRID-REPRESENTABILITY` — STEP 4, r3 READY AT `cef6e7f83`. NOT YET DISPATCHED.**
+⛔ **GATE BEFORE DISPATCH: a round-3 fresh reader is reading the committed diff at the ref. Kyle's loop rule — the correction is itself unreviewed work, and termination REQUIRES an OBJECT round (a claim-only clean cannot close the loop).** Steps 5-11 (CI, deploy, verify, governance, report) ALL STILL TO DO.
+✅ **Board card CREATED** (Implementation / Analyst / Batch / Blocked-on Langston / Phase 19) — he asked twice and had no `Review` field to set.
+
+★★ **Kyle granted write scope ⇒ LANGSTON'S STEP-4 IS THE ONLY INDEPENDENT CHECK.** CHANGES-NEEDED **three times**, six blockers, every one real.
 
 **★ TWO NAMED SERVICES — use the names, never "the rounding code"/"the July service":**
 **THE VPG** `core/calculations/venue-price-grid.ts` — *can the venue express this price?* **THE VOG** `services/execution/venue-validate.ts` — *would the venue accept this order?* **VPG runs FIRST and feeds the VOG.**
-**Rules:** entry NEAREST · stop+target AWAY from entry · **EXCEPT `volatility_edge`'s `Math.min` CAP → TOWARD.** ⛔ **REJECT NEVER RE-ROUND · the invariant is PAIRWISE · `representable === false` is now a REFUSAL (the self-check that catches the CLASS).**
+**Rules:** entry NEAREST · stop+target AWAY · **EXCEPT `volatility_edge`'s `Math.min` CAP → TOWARD.** ⛔ **REJECT NEVER RE-ROUND · the invariant is PAIRWISE · published-vs-derived now has ONE home (`gridIsDerivedForClass`).**
 
-⛔⛔ **THE FIVE BLOCKERS, because the PATTERN is the lesson and it is one pattern:**
-1. **`decimalsOf` read only the EXPONENT** ⇒ `decimalsOf(0.0025)=3` ⇒ `snap` shipped **OFF-GRID prices on the six xStock symbols my own §4 celebrated** — the counter-example Langston used to kill my decimal method, reintroduced by me at the final formatting line, one function below the GCD built to defeat it.
-2. **The shutdown drain covered OHLC and left `stopTickerWriter` at ZERO callers** — the recoverable leg fixed, the unrecoverable one skipped. **THIRD instance of that same mis-sizing, inside the commit whose headline was the second.**
-3. **A venue-keyed lookup ran on a NON-CANONICAL symbol**, 59 lines above the normaliser, against an exact-key map.
-4. **`MIN_INCREMENTS=50` silently gated 8.4% of xStock out of trading as a HARD DROP.** Measured: **476 seen · 436 covered · 40 not.** Object stated, population omitted — **rule 29(a), which is MY OWN rule.**
-5. **My J1 fix was a TAUTOLOGY that let CRYPTO pass through unrounded** — `provenance !== 'venue_published'` inside the `grid_unknown` branch, where provenance is `'unknown'` BY CONSTRUCTION. **The exact inverse of what I told him the fix preserved.**
+⛔⛔ **SIX BLOCKERS + NINE READER FINDINGS — the enumeration is in the two commit messages and the change list §1-§8, which are in the repo. WHAT MEMORY NEEDS IS THE PATTERN, and FIVE of the reader findings were in code I wrote to fix the earlier four.**
+★★ **PATTERN 1 (his five): I BRANCH ON A DERIVED VALUE INSTEAD OF THE FACT** — exponent not tick, one writer not the class, raw symbol not canonical, covered count not universe, a failed lookup's provenance not the asset class.
+★★ **PATTERN 2, THE BIGGER ONE (the readers'): I ASSERT A CHECK INSTEAD OF RUNNING IT. Every control that could not fire in this batch passed a READING and failed a MUTATION.** ⇒ **RUN THE MUTATION. NEVER READ THE TEST.**
+⚠️ **AND A ONE-DIRECTIONAL CHECK CERTIFIES THE OPPOSITE ERROR: my own `isOnGrid` fix passed every on-grid case and was WORSE than the defect — it began accepting off-grid prices. A tolerance needs BOTH controls.**
+⚠️ **ONE MUTATION HARNESS REPORTED THREE CLEAN "NOT DETECTED" VERDICTS FROM AN INSTRUMENT THAT HAD CAPTURED NO OUTPUT AT ALL.** A silent instrument reads exactly like a passing test.
 
-★★ **THE ONE PATTERN UNDER ALL FIVE: I BRANCH ON A DERIVED/REPORTED VALUE INSTEAD OF THE UNDERLYING FACT.** Exponent instead of the tick · one writer instead of the class of writers · raw symbol instead of the canonical one · a covered count instead of the universe · **a failed lookup's provenance instead of the asset class.** ⇒ **BEFORE ANY CONDITIONAL: is this the FACT, or a value that merely correlates with it?**
-★ **AND HIS J1 RULING IS THE DESIGN: the cut is PUBLISHED vs DERIVED.** Crypto's tick is the VENUE'S statement ⇒ absence is a real unknown ⇒ **refuse.** xStock's grid is OUR inference from OUR archive ⇒ absence is **our coverage gap** ⇒ **pass through unrounded, loudly.** ⛔ **I made the drop-arm-on-missing-data mistake THREE times in this batch.**
+**★ HIS J1 RULING IS THE DESIGN: PUBLISHED vs DERIVED.** Crypto's tick is the VENUE'S statement ⇒ absence is a real unknown ⇒ **refuse.** xStock's grid is OUR inference from OUR archive ⇒ absence is **our coverage gap** ⇒ **pass through, loudly.** ⛔ **I made the drop-arm-on-missing-data mistake THREE times in this batch.**
 
-**★ xSTOCK GRID = GCD of observed increments.** His invented `0.0025` counter-example is REAL: **6 of 40 symbols.** GCD is safe by proof — every increment is a whole number of true ticks, so their GCD is too ⇒ **a derived grid always NESTS.**
+⛔ **THE HONEST LIMIT, now written into the change list §9 rather than left to be derived: F-G-1 guarantees prices are on the grid AS THE ORCHESTRATOR EMITS THEM. THREE execution paths bypass the seam** — `#928` an HTTP intent path taking a triple from the request body (its error string claims it checks prices; it does not) · `#929` a SECOND sizing caller · `#927` `entry * 1.02` fabricated in three places, one being the RTB **ranking** key, plus a **string-truthiness** trap where a stored `"0"` passes the null guard.
 
-**★ THREE FRESH READERS before dispatch found SIX more defects** (worst: the alert wrote to a Postgres table nobody watches instead of the JSONL §10.5 tails; and I fixed OHLC while leaving ticker). **All fixed.** ⛔ **A reviewer CLEAN is never evidence — never cite one.**
+**★ OPEN, MINE, ALL DISPOSITIONED + PLACED:** `#918` drain (impact NIL n=4, **must not become OBJ-9's headline**) · `#919` → 3e · `#921` → 3 fields still unrendered · `#922` → 3f · `#923` trailing ratchets off-grid → **F-G-2 / 3c** · `#924` → 3g · **`#925` AMENDED — my "NO WORK" was wrong on my own facts** → `B-FUNNEL-PERP-CLASSES` / **3j, and its ORDER is load-bearing (before perp wiring)** · **`#927` → `B-TARGET-FABRICATION` / 3i** · **`#928`+`#929` → `B-INTENT-ENTRY-PARITY` / 3h.**
+
+⚠️ **KYLE'S STANDING CORRECTIONS: pairs/coins/symbols are NEVER "markets" · a report that NAMES findings without a disposition, a severity and an owner is not a report · do not claim a step we are not in · and SPIN UP A FRESH READER EACH REVISION, then hand the corrected version BACK to a NEW one.**
+⚠️ **A SUBAGENT DESTROYED UNCOMMITTED WORK with `git checkout --`. VERIFY ANY FILE A READER TOUCHED. TELL READERS: read-only, no git writes.**
+⚠️ **LINE-ENDING TRAP BIT AGAIN: the repo stores `.ts` as LF, checkout gives CRLF, and 12 stray CRs made autocrlf refuse to normalise ⇒ a 308-line phantom rewrite. ALWAYS `git diff --cached --ignore-all-space --numstat` BEFORE COMMITTING and compare against the raw numstat.**
 
 ⛔ **STEP-10 OWES SIX TIER-1 DOCS, ALL UNTOUCHED:** `BATCH_CATALOG` · `PHASE_HISTORY` · `PHASE_19_PLAN` §1+§5 · **the SHARED `MEMORY.md`** · **Langston's `/home/langston/MEMORY.md`** · completion report. ⚠️ **SIM + System Manual were written at STEP 3 (plan items P6/P7) and MUST BE RE-VERIFIED at step 10 — they predate all eleven blocker/reader fixes.**
 
@@ -91,24 +94,19 @@ Plain language to Kyle every message (no code/paths/jargon; canonical terms: reg
 ✅ **`B-EPOCH-KEYING-PARITY` CLOSED.** ★★ **CARRY: a DECIDED rule shipped into ONE READER OF FOUR, and the 4 tests pinned the FUNCTION not the PARITY** — all green while the card showed THREE answers. Langston then holed that fence (**#900**). **OPEN, mine: #900 · #901 · #902 · #903.**
 
 ⛔ **STEP-7 MEANS THE *PAPER TRADING* PAGE, NOT THE DASHBOARD TAB (Kyle 2026-08-24)** — on the right page the defect was visible in ONE SCREENSHOT. ⚠️ **`/api/auth/login` allows 5 per 900 s** — repeated curl logins self-inflict a 429; get ONE token and reuse it. ⚠️ **Python `write_text` REWRITES EVERY LINE ENDING** (one edit = a 644-line diff for 12 real lines) — use `read_bytes`/`write_bytes` and check `git diff --cached --ignore-all-space --numstat` before committing.
-## THE LESSON THAT COST KYLE'S TRUST (`#507` closed; repo has the mechanics)
+## THE LESSON THAT COST KYLE'S TRUST (`#507` closed; the repo has the mechanics)
 
-I established a MECHANISM then attached THREE damage figures to it (**$187.78 · 111 rows · ~$111**), each from an instrument I never validated. **ALL THREE WITHDRAWN; Langston reproduced none.** Truth: **~$55 measurable / <$150 bounded, paper only.** ★ The control sat one `GROUP BY` away: **maker exits never read the book, so an honest instrument must be SILENT on them.**
+I established a MECHANISM then attached THREE damage figures to it, each from an instrument I never validated. **ALL THREE WITHDRAWN; Langston reproduced none.** Truth: ~$55 measurable / <$150 bounded, paper only. ★ The control sat one `GROUP BY` away: **maker exits never read the book, so an honest instrument must be SILENT on them.**
 ⇒ **A NEGATIVE CONTROL IS NOT A NICETY ADDED WHEN A NUMBER LOOKS ODD — IT IS WHAT CONVERTS A NUMBER INTO A MEASUREMENT.** Applies to a POSITIVE result as hard as to a zero.
-⚠️ **ARMED:** the `#507` trade-level leg is INSUFFICIENT and must be reported as such. Pre-registered PASS = **≥20 NEW crypto stop-type closes with 0 above entry**; cutline 2026-08-22 22:01Z.
 
 ## STANDING SESSION ITEMS (not dated state — the dated state is the block above)
 **⚠️ #1 ACTION ON WAKE/COMPACT: RE-ARM THE WAKE WATCHER.** It is ARMED (ALIAS **CC-C**, display **"ANALYST Claude"**, registered in `cc-wake-filter.py`) and fired continuously all session — but **compaction KILLS it.** Re-arm via the Monitor tool per shared MEMORY.md item 4.5 (`persistent: true`, NOT Bash run_in_background). Judge liveness by whether WAKE events have arrived; if none since a compaction, arm ONCE; doubled events ⇒ TaskStop one. Then sweep `/var/log/cc-discord-inbox.jsonl` for anything missed.
 
 **★ KYLE LIFTED MY READ-ONLY FOR TWO BATCHES (2026-07-21 GO; recorded in the roster `write_scope` field — the lift is SCOPED, not general).** I IMPLEMENT them, full 11-step, Langston reviews diffs.
 
-## RECENT HISTORY — CLOSED, one line each (repo completion reports are authoritative; do NOT re-narrate here)
+## RECENT HISTORY — CLOSED (the repo completion reports are authoritative; do NOT re-narrate here)
 
-- **07-27/28 Kyle scratch list** — Part A done; Parts B/C outstanding (`SCRATCH_CHECKLIST_2026-07-27_Kyle-CCC.md`).
-- **07-28 B-COST-ACCOUNTING-HONESTY** — premise was FALSE; the obvious fix would have broken correct P&L. ⚠️ **`%` basis changed at the 07-28 11:57Z cutover — pre/post are different denominators.**
-- **07-31 B-COST-MATH-CONSOLIDATION** — one shared `core/math/trade-pnl.ts`; **ended at the RISK ENVELOPE: Langston VOIDED his own P19-B6 approval** (#618).
-- **07-31 B-KILLSWITCH-WINDOW** — numerator only; **denominator leg still open** (→ `B-READER-TRUTH` obj-6). Report written LATE 08-07 (checker caught it).
-- **#632** restart re-anchors the loss window (Kyle's own circuit-breaker) · **#624** regime-stamp gap · **#677** stop-provenance (only 49/241 crypto closes carry a stop).
+07-27/28 Kyle scratch list (Parts B/C outstanding) · 07-28 `B-COST-ACCOUNTING-HONESTY` (premise FALSE; ⚠️ **the `%` basis changed at the 07-28 11:57Z cutover — pre/post are different denominators**) · 07-31 `B-COST-MATH-CONSOLIDATION` (**ended at the RISK ENVELOPE: Langston VOIDED his own P19-B6 approval, `#618`**) · 07-31 `B-KILLSWITCH-WINDOW` (numerator only; **denominator leg still open** → `B-READER-TRUTH` obj-6) · `#632` restart re-anchors the loss window · `#624` regime-stamp gap · `#677` stop-provenance (49/241 crypto closes carry a stop) · `P19-B-PERPFEED` CLOSED 08-19 · `B-EPOCH-KEYING-PARITY` CLOSED (**carry: a DECIDED rule shipped into ONE READER OF FOUR, and the 4 tests pinned the FUNCTION not the PARITY** — all green while the card showed THREE answers; Langston then holed that fence, `#900`).
 
 ## ★★ STANDING LESSONS — the ones that keep re-earning their place
 
@@ -134,4 +132,4 @@ I established a MECHANISM then attached THREE damage figures to it (**$187.78 ·
 **THIS ARC'S DISCIPLINES (hard-won, keep):** read-back after EVERY write · distinct updated_by ALWAYS (storage.ts coalesce trap) · §3/§9A/§9 same-action edits per flip · measured-never-forecast to Kyle (the struck-60% lesson) · instrument reach before reading silence (pm2-logs-empty; out.log rotates midnight; head-truncation manufactures zeros) · wrong-object reads: migration-seeds vs live DB, alert-body vs gauge, my-own-pre-audit-line vs my-own-code.
 
 - **⚠️ OPERATIVE RULE, NOT IN THE REPO — `Exit checks skipped` alerts (changed 2026-08-01, Langston):** treat as the recurring deep-evening mark-staleness class; **check exposure vs stop BEFORE dispositioning**, and **`price-skip-paper-*` rows are CC-B's EXCLUSIVELY** (lane partition settled 08-07 after a 4-second collision where my resolve freed the key his announced park had just blocked). Everything else in triage stays mine.
-**★ SESSION-FIX 07-27 — ✅ DONE (detail: `CLAUDE_CODE_SESSION_TRANSCRIPT_TRIM_RUNBOOK.md`).** Each session now has its OWN transcript folder (analyst = **4dfc = THIS session**) + a MEMORY-ONLY junction. ⚠️ Sessions still show "(fork)" — INTRINSIC + COSMETIC; do NOT re-root unless Kyle insists.
+**★ SESSION-FIX 07-27 ✅ DONE** (runbook has it). Own transcript folder (analyst = **4dfc = THIS session**) + memory-only junction. "(fork)" is intrinsic + cosmetic — do NOT re-root.
