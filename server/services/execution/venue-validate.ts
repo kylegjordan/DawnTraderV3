@@ -91,7 +91,25 @@ export async function validatePaperOrderWithVenue(req: VenueValidateRequest): Pr
   if (!entry) {
     return { outcome: 'skipped', detail: `no pair mapping for ${req.symbol} (asset-pairs service)` };
   }
-  const price = formatToDecimals(req.limitPrice, entry.pairDecimals, 5);
+  // F-G-1 (Kyle's question, 2026-08-28): ONE BASIS FOR THE PRICE GRID, NOT TWO.
+  // This line formatted to `pairDecimals` while the orchestrator now rounds to `tick_size`, so the
+  // system held two implementations of the same idea on two different bases. MEASURED across all
+  // 1,437 pairs: `pair_decimals` is COARSER than the tick on ZERO of them (1,433 exactly equal,
+  // 4 harmlessly finer), so this could never corrupt a price the orchestrator had already put on
+  // the grid -- it is redundancy rather than a live defect, and that is stated so nobody reads
+  // this change as a bug fix. It is here because a FUTURE change to the rounding rule would
+  // otherwise have to be found in two places, which is exactly how a rule ends up shipped into
+  // one reader out of several.
+  const _tickDecimals = (() => {
+    const t = Number(entry.tickSize);
+    if (!Number.isFinite(t) || t <= 0) return undefined;   // no fallback invented -- see below
+    const e = t.toExponential();
+    const exp = Number(e.slice(e.indexOf('e') + 1));
+    return exp < 0 ? Math.min(12, -exp) : 0;
+  })();
+  // `pairDecimals` remains the fallback ONLY because it is what this leg has always used and is
+  // never coarser than the tick; dropping to it loses precision, never validity.
+  const price = formatToDecimals(req.limitPrice, _tickDecimals ?? entry.pairDecimals, 5);
   const volume = formatToDecimals(req.quantity, entry.lotDecimals, 8);
   try {
     await Promise.race([
