@@ -95,20 +95,20 @@ When a substantive asset-class-onboarding learning surfaces in ANY batch, fold i
 ★★ **AND THE SECOND HALF OF HIS REASON IS THE REAL ONE: *"it gets them in the habit of looking at every file in our tiered governance system — and sometimes just looking at something reminds you that you need to do something."*** ⇒ **the table's job is to put all 20 names in front of you. The verdict column is the by-product; the ENUMERATION is the point.**
 
 ⛔ **POST IT WHOLE. EVERY ROW, EVERY BATCH — including the `N/A`s.** ⚠️ **A table with the `N/A` rows deleted defeats it entirely: a short list is exactly what it exists to make visible.**
-⛔ **VERDICT ONLY — `✅` or `N/A`. NOT what the update was** (Kyle: *"not what the update was, but whether or not it was updated"*). **The substance is in the documents; this is an index.**
+⛔ **EVERY ROW CARRIES A VERDICT *AND* ONE LINE — see the table below for what that line says.** **Keep it to a sentence: the substance is in the documents; this is an index.**
 
 ⛔⛔ **THIS TABLE IS NOW THE *ONLY* DOCUMENT LIST IN THIS SKILL. THE TIER-2 BULLETS ABOVE ARE DELETED, NOT DUPLICATED (Langston, 2026-08-28).**
 ★ **His catch, and it is `#641`: the table was a SECOND COPY of the bullet list IN THE SAME FILE, and it had ALREADY DIVERGED AT BIRTH** — `CONDUCT.md` existed only in the table, and the `MULTI_ASSET` row had dropped the bullet’s temporary WORKING-LIST trigger. **Once the table is the deliverable, the bullet list is the copy nobody fills: it rots and the triggers drift.**
 
 | # | document | WHEN IT APPLIES | verdict | **ONE LINE — REQUIRED ON *EVERY* ROW** |
 |---|---|---|---|---|
-| **T1** | `BATCH_CATALOG.md` | every batch | ✅ | |
-| **T1** | `PHASE_HISTORY.md` | every batch | ✅ | |
-| **T1** | `PHASE_19_PLAN.md` | ⏳ **Phase 19 only** — after EVERY batch and sub-batch | ✅ | |
-| **T1** | shared `MEMORY.md` + your own `MEMORY_CC_<X>.md` | every batch | ✅ | |
-| **T1** | the batch `SCOPE` | written at Step 1 | ✅ | |
-| **T1** | the `COMPLETION_REPORT` | written at Step 11 | ✅ | |
-| **T1** | ★ **Langston’s `/home/langston/MEMORY.md`** | ⛔ **PROMOTED FROM TIER 2 (Langston):** §10.b says *"in the same turn you update your own"* — **unconditional. A verdict cell on a mandatory item lets an `N/A` be written against it.** | ✅ | |
+| **T1** | `BATCH_CATALOG.md` | every batch |  |  |
+| **T1** | `PHASE_HISTORY.md` | every batch |  |  |
+| **T1** | `PHASE_19_PLAN.md` | ⏳ **Phase 19 only** — after EVERY batch and sub-batch |  |  |
+| **T1** | shared `MEMORY.md` + your own `MEMORY_CC_<X>.md` | every batch |  |  |
+| **T1** | the batch `SCOPE` | written at Step 1 |  |  |
+| **T1** | the `COMPLETION_REPORT` | written at Step 11 |  |  |
+| **T1** | ★ **Langston’s `/home/langston/MEMORY.md`** | ⛔ **PROMOTED FROM TIER 2 (Langston):** §10.b says *"in the same turn you update your own"* — **unconditional. A verdict cell on a mandatory item lets an `N/A` be written against it.** |  |  |
 | **T2** | `SYSTEM_MANUAL.md` | architecture · strategy logic · regime detection · filter design · signal pipeline · quantitative math | | |
 | **T2** | `SYSTEM_IMPACT_MAP.md` | any component added / removed / re-keyed, or cross-cutting state | | |
 | **T2** | `RUNNING_ISSUES.md` | issues opened, closed or annotated | | |
@@ -158,7 +158,7 @@ When a substantive asset-class-onboarding learning surfaces in ANY batch, fold i
 - **Skipping by default.** Use judgement on applicability — a display/data-quality service is SIM-scope, not System-Manual-scope — **but apply the judgement OUT LOUD and write it down.**
 
 ## 10.b — LANGSTON'S MEMORY
-Sync `/home/langston/MEMORY.md` in the same turn you update your own: batch closure, sequencing changes, operational invariants. **His MEMORY auto-loads every invocation — stale memory means a wrong baseline at the next review.** Keep it ≤200 lines.
+Sync `/home/langston/MEMORY.md` in the same turn you update your own: batch closure, sequencing changes, operational invariants. **His MEMORY auto-loads every invocation — stale memory means a wrong baseline at the next review.** ⛔⛔ **KEEP IT UNDER THE BYTE CAP — ~24 KB. THERE IS NO LINE TARGET (Langston, 2026-08-28).** ⚠️ **This line read *"≤200 lines"* until today and that phrasing is what MANUFACTURED the overage: it is satisfiable in FORM while the file grows.** ★ **MEASURED 2026-08-28: Langston's `MEMORY.md` = 183 lines / 45,178 B — GREEN on the line count and 1.84× OVER the live cap.** **Watch bytes, never lines.** ⚠️ **It is also the row just PROMOTED to Tier 1, and it sits three headings above *"IF A DOCUMENT STATES A NUMBER, CHECK IT AGAINST THE LIVE VALUE."***
 
 ## ⛔⛔ IF A DOCUMENT STATES A NUMBER, CHECK IT AGAINST THE LIVE VALUE
 **A governance document that asserts a constant, a threshold, a window size or a count is making a CLAIM ABOUT THE RUNNING SYSTEM — and it goes stale SILENTLY, because nothing compares the two.**
@@ -182,7 +182,7 @@ Move the card to **`Governance`**.
 
 10. **Governance Updates** — Update ALL applicable Tier 1 + Tier 2 docs (see §3). If batch touched architecture/math → update SYSTEM_MANUAL.md. If batch touched components → update SYSTEM_IMPACT_MAP.md. Failing to update either when applicable = incomplete batch.
 
-    **MANDATORY 10.b — Langston memory sync (Kyle directive 2026-05-07):** at the same time you update your own MEMORY.md, also update Langston's `/home/langston/MEMORY.md` on Hetzner with the batch closure block + sequencing changes + operational invariants. Langston's MEMORY auto-loads every `claude -p` invocation; stale MEMORY → wrong baseline at next review. Mirror your MEMORY structure (state block, recent-batch row, sequencing update, open-issue diff). Keep ≤200 lines. Sync via:
+    **MANDATORY 10.b — Langston memory sync (Kyle directive 2026-05-07):** at the same time you update your own MEMORY.md, also update Langston's `/home/langston/MEMORY.md` on Hetzner with the batch closure block + sequencing changes + operational invariants. Langston's MEMORY auto-loads every `claude -p` invocation; stale MEMORY → wrong baseline at next review. Mirror your MEMORY structure (state block, recent-batch row, sequencing update, open-issue diff). Keep ≤200 lines — ⛔ **SUPERSEDED 2026-08-28: THE LIVE CAP IS BYTES, ~24 KB, WITH NO LINE TARGET. See §10.b above.** *(This preserved-verbatim block declares itself authoritative on divergence, which is exactly why the stale number is corrected HERE and not only above.)* Sync via:
 
     ```bash
     cat > /tmp/langston_memory.md <<'EOF'
