@@ -54,6 +54,77 @@ export const tableForAssetClass = {
  *  with the fence still green: the #704 defect one layer up. */
 const ALL_ARCHIVE_CLASSES = Object.keys(tableForAssetClass) as ArchiveAssetClass[];
 
+// ══ F-G-1 / OBJ-9 — #705's THREE CONSTRAINTS, WHICH THAT ISSUE ALREADY SPECIFIED ═══════════
+// #705 (RUNNING_ISSUES:2744-2746) names them: separate transient from permanent, BOUND the
+// buffer, and ALERT. Its own words: "the naive re-buffer against a permanent error would have
+// grown the crypto_perp buffer unbounded for 15 hours — an OOM instead of a data gap… the #704
+// failure produced 4,802 stderr lines and zero alerts."
+//
+// ⛔ WHY THE DROP IS WORTH FIXING AT ALL, since the counts are small: it is not the count, it is
+// the SHAPE. `:108` empties the buffer BEFORE the try and the catch re-adds nothing, so ANY
+// persistent error becomes permanent, total, per-flush loss. #704 is the proof — 368,841 bars,
+// 0 rows landed, ~15 hours — and it cost nothing ONLY because that leg was REST-replayable.
+// #704 residual (b) states the boundary exactly: "acceptable for replayable REST bars and NOT
+// for WS-only ones." The two WS legs (crypto_spot, xstock_spot) have NO re-fetch path at all.
+
+/** Max rows held per class awaiting retry. Beyond this we shed OLDEST and say so. */
+const RETRY_BUFFER_MAX = 50_000;
+
+/**
+ * TRANSIENT vs PERMANENT — the distinction #705 requires, and it is the one that decides
+ * whether re-buffering helps or turns a data gap into an OOM.
+ *
+ * PERMANENT means the same rows will fail identically forever: a missing constraint, a missing
+ * column, a bad type. #704 was exactly this, and re-buffering it would have grown the buffer for
+ * 15 hours. Those rows are DROPPED and an alert is raised — the drop is the correct action; the
+ * silence was the defect.
+ *
+ * TRANSIENT means the same rows would likely succeed on a later attempt: a deadlock, a pool-slot
+ * timeout, a dropped connection. Those are retried.
+ *
+ * ⚠️ UNKNOWN ERRORS ARE TREATED AS PERMANENT, deliberately. The opposite default retries an
+ * unrecognised permanent fault forever, which is the OOM #705 warns about. A wrongly-dropped
+ * transient batch costs one flush window; a wrongly-retained permanent one costs the process.
+ */
+function isTransientWriteError(err: unknown): boolean {
+  const m = (err instanceof Error ? err.message : String(err)).toLowerCase();
+  return m.includes('deadlock')
+    || m.includes('pool slot timeout')
+    || m.includes('timeout')
+    || m.includes('connection')
+    || m.includes('econnreset')
+    || m.includes('too many clients');
+}
+
+/** One alert per class per process — a per-flush alert would be its own flood. */
+const _permanentAlerted: Partial<Record<ArchiveAssetClass, boolean>> = {};
+
+async function alertPermanentWriteFailure(assetClass: ArchiveAssetClass, detail: string, dropped: number): Promise<void> {
+  if (_permanentAlerted[assetClass]) return;
+  _permanentAlerted[assetClass] = true;
+  try {
+    const { storage } = await import('../../storage.js');
+    const users = await storage.getAllUsers();
+    for (const owner of users.filter((u: any) => u.role === 'owner')) {
+      await storage.createSystemAlert({
+        userId: owner.id,
+        mode: owner.tradingMode || 'paper',
+        alertType: 'ohlc_writer_permanent_failure',
+        severity: 'critical',
+        category: 'critical',
+        message: `OHLC archive writer is failing PERMANENTLY for ${assetClass} — ${dropped} rows dropped and `
+          + `every further flush for this class will fail the same way until it is fixed. `
+          + `This is the #704 shape: bars stop landing while stdout looks healthy. Detail: ${detail}`,
+        acknowledged: false,
+      });
+    }
+  } catch (e) {
+    // An alert that cannot be raised must still be visible.
+    console.error(`[B74][batch-writer] ${assetClass} FAILED TO RAISE ALERT for permanent write failure:`,
+      e instanceof Error ? e.message : e);
+  }
+}
+
 // Buffers keyed by asset class so each archiver has independent flush behavior.
 const buffers: Record<ArchiveAssetClass, InsertEquitySpotOhlc1m[]> = {
   xstock_spot: [],
@@ -182,9 +253,44 @@ async function flushAssetClass(assetClass: ArchiveAssetClass): Promise<void> {
       releaseSlot();
     }
   } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    if (!isTransientWriteError(err)) {
+      // PERMANENT — do NOT re-buffer. Retrying rows that will fail identically forever is the
+      // OOM #705 warns about, and #704 is the measured case: 15 hours, 4,802 stderr lines, and
+      // ZERO alerts. The drop stays; the SILENCE is what this fixes.
+      console.error(
+        `[B74][batch-writer] ${assetClass} PERMANENT flush failure (${rows.length} rows dropped, NOT retried):`,
+        detail,
+      );
+      void alertPermanentWriteFailure(assetClass, detail.slice(0, 300), rows.length);
+      return;
+    }
+    // TRANSIENT — put the rows back for the next flush.
+    // ⛔ RE-ADD AT THE FRONT, and this is decided TOGETHER with the eviction end (Langston's
+    // rider) rather than separately. B-NEW-35's dedup keeps the LAST row per (symbol, minute)
+    // because "the last write IS the latest WS update". That invariant is TEMPORAL, so appending
+    // older retried rows would let a STALE row overwrite a fresher bar. Prepending preserves it:
+    // older rows enter the Map first and any fresher row overwrites them, exactly as B-NEW-35
+    // specifies — with no change to the dedup itself.
+    const buf = buffers[assetClass];
+    buf.unshift(...rows);
+    // ⛔ AND THE BOUND EVICTS FROM THE SAME END WE RE-ADD TO — which sounds self-defeating and is
+    // not. At the cap the retry is failing persistently, and shedding the OLDEST is the honest
+    // policy. Langston's objection was that this makes the retry "silently stop working": it is
+    // NOT silent, because the shed is counted and logged here. A bound that drops quietly is the
+    // defect; a bound that drops loudly is the design.
+    if (buf.length > RETRY_BUFFER_MAX) {
+      const shed = buf.length - RETRY_BUFFER_MAX;
+      buf.splice(0, shed);
+      console.error(
+        `[B74][batch-writer] ${assetClass} retry buffer at cap ${RETRY_BUFFER_MAX} — SHED ${shed} oldest rows. `
+        + `The retry is not keeping up; this is data loss and it is being reported, not hidden.`,
+      );
+    }
     console.error(
-      `[B74][batch-writer] ${assetClass} flush failed (${rows.length} rows dropped):`,
-      err instanceof Error ? err.message : err,
+      `[B74][batch-writer] ${assetClass} TRANSIENT flush failure (${rows.length} rows RETAINED for retry, `
+      + `buffer=${buf.length}):`,
+      detail,
     );
   }
 }
@@ -207,4 +313,20 @@ export async function stopBatchWriter(): Promise<void> {
     flushTimer = null;
   }
   await Promise.all(ALL_ARCHIVE_CLASSES.map(flushAssetClass)); // derived, see the timer above
+}
+
+/**
+ * #918 — THIS FUNCTION HAD ZERO CALLERS. `stopBatchWriter` is exported and its docstring says it
+ * drains pending buffers, but nothing in the tree called it: the live shutdown handler
+ * (`core/boot_orchestrator.ts`) called `stopVTSRunner()` and nothing else. So up to one flush
+ * interval of buffered bars was discarded on EVERY restart and EVERY deploy, silently, with no
+ * error line — because nothing threw.
+ * ⚠️ MEASURED IMPACT NIL AT n=4: bar-continuity across four known restarts showed every restart
+ * minute INSIDE its neighbour range, two of them ABOVE the neighbour average. The WS feed
+ * re-sends the still-open minute on reconnect and the upsert fills it in. So this is a real
+ * mechanism with no measured loss — it ships because wiring an existing function into the
+ * shutdown path is trivial, NOT because it is load-bearing. It must not become OBJ-9's headline.
+ */
+export async function drainArchiveBuffersForShutdown(): Promise<void> {
+  await stopBatchWriter();
 }

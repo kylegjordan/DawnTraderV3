@@ -45,6 +45,23 @@ class BootOrchestrator {
       stopVTSRunner();
       console.log('[L6][BOOT_ORCHESTRATOR] VTS Runner stopped');
 
+      // #918 (F-G-1): DRAIN THE ARCHIVE BUFFERS BEFORE WE GO. `stopBatchWriter` was exported,
+      // documented as draining pending buffers, and called by NOTHING — this handler stopped at
+      // the VTS runner. So up to one flush interval of buffered bars was discarded on every
+      // restart and every deploy, silently, with no error line because nothing threw.
+      // ⚠️ Measured impact NIL at n=4 (bar-continuity across four restarts showed no deficit;
+      // the WS feed re-sends the still-open minute on reconnect). It is wired because it is
+      // trivial and correct, NOT because it is load-bearing.
+      // ⛔ Failure here must not block shutdown — a hung drain is worse than a lost flush window.
+      try {
+        const { drainArchiveBuffersForShutdown } = await import('../services/passive-archive/ohlc-batch-writer.js');
+        await drainArchiveBuffersForShutdown();
+        console.log('[L6][BOOT_ORCHESTRATOR] archive buffers drained (#918)');
+      } catch (e) {
+        console.error('[L6][BOOT_ORCHESTRATOR] archive drain FAILED — continuing shutdown:',
+          e instanceof Error ? e.message : e);
+      }
+
       console.log('[L3][BOOT_ORCHESTRATOR] Shutdown complete');
     };
 
