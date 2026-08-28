@@ -31,8 +31,9 @@ import os
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
+import budget
 from config import CONTROL_INCLUSION_P
-from store import ensure_dirs, load_state, record_birth, save_state
+from store import ensure_dirs, record_birth
 
 UTC = timezone.utc
 LOG = logging.getLogger("token-watch.receiver")
@@ -94,17 +95,24 @@ def follow_decision(mint: str, socials: dict, initial_size) -> tuple:
     return False, "not_sampled"
 
 
-def _log_inclusion(day: str, followed: bool, reason: str) -> None:
-    """Daily realised counts — the denominator for inverse-probability
-    weighting, which is pre-registered NOW rather than reconstructed at
-    analysis time. The DESIGN probability is a constant; this is the TRUTH,
-    and where they disagree the analysis uses this.
+def _journal_launch(day: str, followed: bool, reason: str, now: datetime) -> None:
+    """One append per launch, carrying BOTH the credit spend and the inclusion
+    fields. ⛔ THE RECEIVER WRITES NO STATE FILE — it appends, and the locked
+    hourly job folds.
+
+    ⚠️ THIS REPLACED AN UNLOCKED READ-MODIFY-WRITE, and that was Langston's
+    BLOCKER-2. The old `_log_inclusion` did load_state + save_state per launch
+    with no lock. It was benign only because no periodic job happened to touch
+    that file — and the fix for BLOCKER-1 (charging births) would have put the
+    receiver and the hourly job on the same budget counter, losing updates on
+    the exact number the shed order reads. One append fixes both.
+
+    ★ AND IT FIXES BLOCKER-1 ITSELF: nothing in production ever charged a
+    birth, so the ledger sat at zero for the 776,000-credit leg and the burn
+    thresholds (800k / 900k) were arithmetically unreachable. We would have
+    hit the provider's real wall with the monitor reading 20% and level=None.
     """
-    st = load_state("inclusion", {})
-    d = st.setdefault(day, {"launches": 0, "trait_carrier": 0, "control_sample": 0, "not_sampled": 0})
-    d["launches"] += 1
-    d[reason] = d.get(reason, 0) + 1
-    save_state("inclusion", st)
+    budget.record_pending("birth", 1, now, day=day, followed=followed, reason=reason)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -145,14 +153,37 @@ def parse_creation(event: dict) -> dict | None:
         "twitter": bool(event.get("twitter") or meta.get("twitter")),
         "website": bool(event.get("website") or meta.get("website")),
     }
+    # ⛔ THE INITIAL SIZE IS SELECTED BY ROLE, NEVER BY INDEX (Langston, Step-4
+    #    item 1 — and his reframing is the load-bearing part).
+    #
+    #    The earlier version took `nativeTransfers[0].amount` and called it the
+    #    creator's initial buy. NOTHING ESTABLISHED THAT. The "verified against
+    #    a real token" note above covers the CREATE filter, not this extraction.
+    #    If element [0] is mint rent or a platform fee, every token records a
+    #    near-constant size, the size limb of the trait definition fires for
+    #    everyone or for nobody, and it does so SILENTLY WITH A PLAUSIBLE
+    #    NUMBER ATTACHED.
+    #
+    # ★ WORSE, AND THIS IS WHY IT IS A NULL AND NOT A ZERO: an unparseable size
+    #   collapses to `big = False` → non-carrier → the 3% control arm. So an
+    #   extraction FAILURE would have been indistinguishable from a genuinely
+    #   small launch. `size_source` makes the failure loud instead.
+    creator = event.get("feePayer")
+    size, size_source = None, "unresolved"
+    for t in event.get("nativeTransfers") or []:
+        if creator and t.get("fromUserAccount") == creator:
+            size = (t.get("amount") or 0) / 1e9
+            size_source = "feePayer_native_transfer"
+            break
+
     return {
         "mint": mint,
         "created_at": created,
         "venue": event.get("source") or "unknown",
-        "initial_size": (event.get("nativeTransfers") or [{}])[0].get("amount", 0) / 1e9
-        if event.get("nativeTransfers") else None,
+        "initial_size": size,
+        "size_source": size_source,
         "initial_liquidity": None,
-        "creator": event.get("feePayer"),
+        "creator": creator,
         "socials": socials,
     }
 
@@ -166,6 +197,7 @@ def ingest(events: list) -> int:
        and a hole in the census is unrecoverable.
     """
     n = 0
+    received = len(events or [])
     seen = datetime.now(UTC)
     for ev in events or []:
         try:
@@ -187,11 +219,41 @@ def ingest(events: list) -> int:
                 followed=followed,
                 follow_reason=reason,
             )
-            _log_inclusion(seen.strftime("%Y-%m-%d"), followed, reason)
+            _journal_launch(seen.strftime("%Y-%m-%d"), followed, reason, seen)
             n += 1
         except Exception:
             LOG.exception("event dropped — this is a hole in the census, not a nuisance")
+
+    # ⛔ RECEIVED vs RECORDED — Langston, Step-4 item 3, and he is right that
+    # it costs three lines and does not need the coverage control.
+    #
+    # ★ THE SILENT PATH IS NOT A PARSE *FAILURE* — that throws and hits
+    #   LOG.exception above, which is loud. It is a parse *MISMATCH*:
+    #   parse_creation returns None on `type != "CREATE"` and the loop simply
+    #   continues. If the provider's event type ever drifts, every delivery
+    #   returns {"recorded": 0}, HTTP 200, AND NOT ONE LOG LINE, indefinitely.
+    #
+    # ⇒ logging both numbers is the exact discrimination this module otherwise
+    #   cannot make: a QUIET MARKET and a STOPPED RECOGNISER look identical
+    #   from the recorded count alone.
+    if received and not n:
+        LOG.warning(
+            "received=%d recorded=0 — every event in this delivery was "
+            "unrecognised. Sustained, this means the event shape changed, NOT "
+            "that the market went quiet.", received)
+    else:
+        LOG.info("received=%d recorded=%d", received, n)
+    _note_delivery(received, n)
     return n
+
+
+def _note_delivery(received: int, recorded: int) -> None:
+    """Append the pair so the ratio is reconstructable after the fact, not only
+    visible in a log line somebody has to be watching.
+    """
+    if received:
+        budget.record_pending("birth", 0, datetime.now(UTC),
+                              delivery={"received": received, "recorded": recorded})
 
 
 class Handler(BaseHTTPRequestHandler):

@@ -178,13 +178,39 @@ check("no module imports the trading application", not offending, offending)
 check("POSITIVE CONTROL: the scan actually read every module",
       scanned >= 6, f"scanned={scanned}")
 
-# The one network module is the only one importing urllib — that is what makes
-# the budget gate a chokepoint rather than a convention.
-net = []
+# ⛔ THIS CHECK USED TO MATCH THE SUBSTRING "urllib" ANYWHERE IN THE FILE TEXT.
+#    A fresh reader pointed out that tests a SPELLING, not a capability: it
+#    would have passed a module using http.client, socket, ssl, asyncio or a
+#    subprocess running curl, and would have FAILED a module that merely
+#    mentions urllib in a comment. Its silence was evidence about one word.
+#    Now it looks for any socket-bearing stdlib entry point.
+#
+# ⚠️ AND THE CLAIM IS RESTATED HONESTLY: `receiver.py` binds a LISTENING
+#    socket, so "exactly one module reaches the network" was false as worded.
+#    The property that matters — and the one the budget gate depends on — is
+#    that exactly one module makes OUTBOUND calls.
+OUTBOUND = ("urllib", "http.client", "requests", "httpx", "socket.create_connection",
+            "smtplib", "ftplib", "aiohttp", "subprocess", "os.system", "popen")
+outbound_modules, inbound_modules = [], []
 for fn in sorted(os.listdir(here)):
-    if fn.endswith(".py") and "urllib" in open(os.path.join(here, fn), encoding="utf-8").read():
-        net.append(fn)
-check("★ exactly ONE module reaches the network", net == ["providers.py"], net)
+    if not fn.endswith(".py"):
+        continue
+    body = open(os.path.join(here, fn), encoding="utf-8").read()
+    code = "\n".join(l for l in body.splitlines()
+                     if l.strip().startswith(("import ", "from ")) or "(" in l)
+    if any(tok in code for tok in OUTBOUND):
+        outbound_modules.append(fn)
+    if "http.server" in code or "socket.bind" in code:
+        inbound_modules.append(fn)
+
+check("★ exactly ONE module makes OUTBOUND calls",
+      outbound_modules == ["providers.py"], outbound_modules)
+check("the inbound listener is named, not hidden",
+      inbound_modules == ["receiver.py"], inbound_modules)
+check("POSITIVE CONTROL: the scan CAN detect an outbound primitive",
+      any(tok in open(os.path.join(here, "providers.py"), encoding="utf-8").read()
+          for tok in OUTBOUND),
+      "if it detected nothing anywhere, the empty list above would prove nothing")
 
 
 print("\n" + "=" * 60)

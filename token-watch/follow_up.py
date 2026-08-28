@@ -8,8 +8,9 @@ records the observation, and on death records the class and stops.
   time, so there is no index scan over ~1.86M census rows — which is what
   protects the 2-core box the co-tenancy clause is about.
 
-⛔ ONE OF FOUR SCHEDULERS OVER ONE STORE, so it takes the exclusive lock and
-  SKIPS if another job holds it. Skipping is correct: the grid is fixed ages
+⛔ ONE OF TWO SHIPPED PERIODIC JOBS over one store (the other is tiering; two
+  more are designed and not built), so it takes the exclusive lock and SKIPS if
+  another job holds it. Skipping is correct: the grid is fixed ages
   from creation, so a checkpoint missed by an hour is a late observation, while
   two jobs interleaving would be a corrupt one.
 """
@@ -23,6 +24,7 @@ from datetime import datetime, timezone
 import budget
 import providers
 from store import (
+    dead_set,
     due_now,
     ensure_dirs,
     load_state,
@@ -78,7 +80,17 @@ def run_hour(now: datetime | None = None) -> dict:
             stats["skipped"] = True
             return stats
 
+        # ★ FOLD THE RECEIVER'S JOURNAL FIRST, inside the lock. This is the
+        # only place birth spend enters the ledger, so the burn monitor below
+        # is reading a total that includes the 776,000-credit leg. Before
+        # BLOCKER-1 was fixed it was reading liquidity only, which capped the
+        # visible total at the 200k carve and made both burn thresholds
+        # unreachable.
+        folded = budget.fold_pending(now)
+        stats["folded_spend_rows"] = folded["folded"]
+
         prev = load_state("last_seen", {})
+        unclassified_by_age = {}
         for entry in due_now(now):
             stats["due"] += 1
             mint, age = entry["mint"], entry["age"]
@@ -125,9 +137,30 @@ def run_hour(now: datetime | None = None) -> dict:
                     # tombstoned is never re-checked, which is unrecoverable —
                     # so ambiguity costs one more observation, not a record.
                     stats["unclassified"] += 1
+                    unclassified_by_age[age] = unclassified_by_age.get(age, 0) + 1
             prev[mint] = {"pairs": state.get("pairs"), "alive": state.get("alive")}
 
+        # ⛔ PRUNE `last_seen` AGAINST THE TOMBSTONES — Langston, Step-4 item 5,
+        # and he is right that this is the defect I had just fixed one file
+        # over and left standing here. Unpruned it holds every followed mint
+        # ever observed (~417,600 by day 90 on our own expected rates), loaded
+        # and re-serialised WHOLE every hour — while `dead_set` correctly stops
+        # re-checking those same mints. The dead can never appear again, so
+        # keeping their last-seen state buys nothing and costs the whole file.
+        dead = dead_set()
+        before = len(prev)
+        prev = {m: v for m, v in prev.items() if m not in dead}
+        stats["last_seen_pruned"] = before - len(prev)
+        stats["unclassified_by_age"] = unclassified_by_age
         save_state("last_seen", prev)
+        # A quantified residual beats a stated one: the one-directional
+        # under-count of `liquidity_pulled` is now countable per age label
+        # rather than described in a document.
+        if unclassified_by_age:
+            un = load_state("unclassified", {})
+            for age, c in unclassified_by_age.items():
+                un[age] = un.get(age, 0) + c
+            save_state("unclassified", un)
 
     LOG.info("follow-up %s", stats)
     burn = budget.burn_report(now)

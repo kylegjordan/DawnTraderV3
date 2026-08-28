@@ -8,11 +8,16 @@ Group=tokenwatch
 WorkingDirectory=/opt/token-watch
 ExecStart=/usr/bin/python3 /opt/token-watch/follow_up.py
 CPUQuota=40%
-# MEASURED, not guessed: by day 90 the tombstone set is ~376,000 mints at ~195
-# bytes per set entry = ~73 MB resident, before the interpreter and the hour's
-# working data. 256M would have been uncomfortably close to a ceiling that
-# only bites in month three, and an OOM there looks like a crashed collector
-# rather than like a limit set too low.
+# ⚠️ RETRACTED JUSTIFICATION, KEPT AT 512M ON A DIFFERENT AND NARROWER ONE.
+# This previously cited "~376,000 mints x ~195 bytes = ~73 MB resident" as a
+# measurement. The BYTES-PER-ENTRY figure was measured; the 376,000 was not —
+# it silently converted a published 68.67% DAY-ONE death rate into a ~90%
+# CUMULATIVE one, which is a different quantity and is stated nowhere.
+# WHAT STANDS: the tombstone set is loaded whole, once per run, and grows
+# monotonically with followed tokens (~4,640/day by design). 256M is a ceiling
+# that would only bite in month three, and an OOM there reads as a crashed
+# collector rather than as a limit set too low. 512M is headroom, not a
+# derived figure, and it is labelled as such.
 MemoryMax=512M
 NoNewPrivileges=true
 PrivateTmp=true

@@ -13,12 +13,38 @@ token-watch — credit budget, shed order, burn monitor. (OBJ-9)
   deliberate over-budget injection — Langston: "an unverified guard on an
   irreversible silent loss is not a guard." "It ran 72 hours and never fired"
   is absence of opportunity, not evidence of capability. See
-  tests/test_shed_order.py, which drives the budget past the threshold on
-  purpose.
+  `tests/test_collector.py` section 4, which drives the budget past the
+  threshold on purpose.
+  ⚠️ THAT CITATION PREVIOUSLY NAMED `tests/test_shed_order.py`, WHICH HAS
+     NEVER EXISTED. A pointer to a non-existent test reads as coverage, which
+     is the same absent-as-valid failure this file is full of warnings about —
+     found by a fresh reader, not by me re-reading my own module.
+
+★ HOW SPEND IS RECORDED, AND WHY IT IS NOT A DIRECT WRITE (Langston BLOCKER-1
+  and BLOCKER-2 together — they have ONE fix, not two):
+
+  BLOCKER-1 was that nothing in production ever charged a birth. The ledger
+  sat at zero for the 776,000-credit leg, so BURN_WARN (800k) and
+  BURN_CRITICAL (900k) were arithmetically unreachable: we would have hit the
+  provider's real wall with the monitor reading 20% and level=None. The thing
+  OBJ-9 exists to watch was the thing it could not see.
+
+  BLOCKER-2 was that the obvious fix makes it worse. The receiver runs
+  continuously and the periodic jobs run hourly; both would then read-modify-
+  write one budget file with no mutual exclusion, and lost updates land on the
+  exact counter the shed order reads.
+
+  ⇒ THE RECEIVER NEVER WRITES BUDGET STATE. It APPENDS to a journal, and the
+  locked periodic jobs fold that journal into the ledger. The hot path stays
+  append-only and lock-free; every read-modify-write stays inside the lock.
+  The fold is idempotent by byte offset, so a crash mid-fold double-counts
+  nothing and loses nothing.
 """
 
 from __future__ import annotations
 
+import json
+import os
 from datetime import datetime, timedelta, timezone
 
 from config import (
@@ -32,6 +58,7 @@ from config import (
     MONTHLY_CREDIT_CAP,
     NEVER_SHED,
     SHED_ORDER,
+    STATE_DIR,
 )
 from store import load_state, save_state
 
@@ -44,7 +71,8 @@ def _month_key(when: datetime) -> str:
 
 
 def _blank(month: str) -> dict:
-    return {"month": month, "spent": {"birth": 0, "follow_up": 0, "liquidity": 0}, "events": []}
+    return {"month": month, "spent": {"birth": 0, "follow_up": 0, "liquidity": 0},
+            "events": [], "journal_offset": 0}
 
 
 def _load(now: datetime) -> dict:
@@ -71,6 +99,97 @@ def charge(kind: str, n: int, now: datetime | None = None) -> None:
     cutoff = (now - BURN_TRAILING_WINDOW * 2).isoformat()
     st["events"] = [e for e in st["events"] if e["ts"] >= cutoff]
     save_state(STATE, st)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# THE JOURNAL — the receiver's lock-free, append-only spend path.
+# ─────────────────────────────────────────────────────────────────────────────
+def journal_path() -> str:
+    return f"{STATE_DIR}/spend-journal.jsonl"
+
+
+def record_pending(kind: str, n: int, now: datetime | None = None, **extra) -> None:
+    """Called by the RECEIVER, on the hot path. Append only — never touches
+    budget state, never takes a lock, so it cannot lose an update against the
+    hourly job and cannot block ingestion waiting for one.
+
+    `extra` carries the inclusion fields (day / followed / reason) on the SAME
+    line as the spend. One journal, one fold, one lock — rather than a second
+    unlocked read-modify-write, which is what `_log_inclusion` used to be and
+    what BLOCKER-2 was actually about.
+    """
+    assert kind in CREDITS, kind
+    now = now or datetime.now(UTC)
+    os.makedirs(STATE_DIR, exist_ok=True)
+    rec = {"ts": now.isoformat(), "kind": kind, "n": n}
+    rec.update(extra)
+    with open(journal_path(), "a", encoding="utf-8") as fh:
+        fh.write(json.dumps(rec, sort_keys=True) + "\n")
+        fh.flush()
+        os.fsync(fh.fileno())
+
+
+def fold_pending(now: datetime | None = None) -> dict:
+    """Fold journalled spend into the ledger. ⛔ CALLERS MUST HOLD periodic_lock().
+
+    IDEMPOTENT BY BYTE OFFSET rather than by truncation: the ledger records how
+    far it has consumed, and the next fold starts there. ★ Truncating instead
+    would make a crash between 'state saved' and 'journal cleared' double-count
+    the whole file, and a crash the other way lose it — the offset has neither
+    failure, and it keeps the journal append-only like everything else here.
+    """
+    now = now or datetime.now(UTC)
+    st = _load(now)
+    offset = st.get("journal_offset", 0)
+    path = journal_path()
+    if not os.path.exists(path):
+        return {"folded": 0, "offset": offset}
+
+    folded = 0
+    # ⚠️ readline() in a while loop, NOT `for line in fh`. Python's file
+    # iterator uses a read-ahead buffer and DISABLES tell() inside it —
+    # "OSError: telling position disabled by next() call". The offset is the
+    # whole crash-safety mechanism here, so the loop has to be the form that
+    # can still report a position.
+    with open(path, "r", encoding="utf-8") as fh:
+        fh.seek(offset)
+        while True:
+            raw = fh.readline()
+            if not raw:
+                break
+            line = raw.strip()
+            if not line:
+                offset = fh.tell()
+                continue
+            try:
+                rec = json.loads(line)
+            except ValueError:
+                # A torn final line from a crash mid-append. STOP HERE rather
+                # than skipping it: advancing past a line we could not read
+                # would silently drop spend, and the next append completes it.
+                break
+            k = rec.get("kind")
+            if k in CREDITS:
+                st["spent"][k] = st["spent"].get(k, 0) + rec.get("n", 0) * CREDITS[k]
+                st["events"].append({"ts": rec["ts"], "kind": k, "n": rec.get("n", 0)})
+                folded += 1
+            # Inclusion tally rides the same fold — the realised denominator
+            # for inverse-probability weighting, which the pre-registration
+            # requires be logged rather than reconstructed at analysis time.
+            day, reason = rec.get("day"), rec.get("reason")
+            if day and reason:
+                inc = st.setdefault("inclusion", {}).setdefault(
+                    day, {"launches": 0, "trait_carrier": 0,
+                          "control_sample": 0, "not_sampled": 0})
+                inc["launches"] += 1
+                inc[reason] = inc.get(reason, 0) + 1
+            offset = fh.tell()
+
+    cutoff = (now - BURN_TRAILING_WINDOW * 2).isoformat()
+    st["events"] = [e for e in st["events"] if e["ts"] >= cutoff]
+    st["journal_offset"] = offset
+    save_state(STATE, st)
+    return {"folded": folded, "offset": offset}
 
 
 def spent_total(now: datetime | None = None) -> int:
@@ -101,15 +220,48 @@ def allowed(kind: str, now: datetime | None = None) -> bool:
     if kind in NEVER_SHED:
         return True
 
-    total = spent_total(now)
-    headroom = MONTHLY_CREDIT_CAP - BIRTHS_RESERVED  # what non-birth legs may use
+    # ⛔ THE RESERVE IS A CAP ON *NON-BIRTH* SPEND. That is the whole mechanism:
+    # births cannot be starved by discretionary legs if the discretionary legs
+    # are bounded below the point where the reserve would be touched.
+    #
+    # ⚠️ THE PREVIOUS VERSION DID NOT DO THIS, AND THE COMMENT SAID IT DID.
+    #    It read `total < headroom + BIRTHS_RESERVED` — and
+    #    `headroom = MONTHLY_CREDIT_CAP - BIRTHS_RESERVED`, so BIRTHS_RESERVED
+    #    CANCELS and the whole clause collapses to `total < MONTHLY_CREDIT_CAP`.
+    #    The reserve appeared in the expression and constrained nothing. It
+    #    read as a protection because the constant was written into the line.
+    #    ★ A fresh reader found this by doing the algebra; I had read that line
+    #      several times and seen the constant rather than the arithmetic.
+    non_birth = spent_by("liquidity", now) + spent_by("follow_up", now)
+    headroom = MONTHLY_CREDIT_CAP - BIRTHS_RESERVED  # 224,000
+    remaining = MONTHLY_CREDIT_CAP - spent_total(now)
+
+    # ⚠️ TWO BOUNDS, AND THE SECOND WAS LOST IN MY FIRST FIX — the suite caught
+    #    it, which is the whole reason the shed order has an injection test.
+    #    (a) NON-BIRTH SPEND < HEADROOM protects the reserve from the
+    #        discretionary legs. This is the bound the old expression only
+    #        appeared to apply.
+    #    (b) THE ACCOUNT MUST HAVE ROOM LEFT AT ALL. Scope §5.1: above +25%
+    #        launch-rate variance "the shed order fires and the 200k becomes a
+    #        residual BY DESIGN". Dropping (b) would have meant a births
+    #        overrun never sheds anything — which is the exact scenario the
+    #        reserve exists for, silently unprotected.
     if kind == "liquidity":
-        # The carve is the tighter of the two bounds: the explicit ≤200k carve,
-        # and whatever remains before the births reserve is touched.
-        return spent_by("liquidity", now) < LIQUIDITY_AUDIT_CARVE and total < headroom + BIRTHS_RESERVED
+        return (spent_by("liquidity", now) < LIQUIDITY_AUDIT_CARVE
+                and non_birth < headroom
+                and remaining > 0)
     if kind == "follow_up":
-        return total < MONTHLY_CREDIT_CAP
-    return True
+        return non_birth < headroom and remaining > 0
+
+    # ⛔ NO SILENT TAIL. A kind that is neither never-shed nor explicitly
+    #    budgeted must FAIL LOUD rather than default to allowed — the previous
+    #    `return True` here would have let a future spend kind through with no
+    #    gate and no error, which is the "convention callers may forget" shape
+    #    this module exists to remove.
+    raise AssertionError(
+        f"budget.allowed: unbudgeted kind {kind!r} — add it to SHED_ORDER or "
+        "NEVER_SHED before spending against it"
+    )
 
 
 def shed_now(now: datetime | None = None) -> list:

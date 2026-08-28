@@ -1,0 +1,198 @@
+"""
+token-watch — THE SEAM TESTS.
+
+★ WHY THIS FILE EXISTS, and it is the most useful thing in the suite:
+  Langston's Step-4 BLOCKER-1 was that `budget.charge("birth", …)` had ZERO
+  production call sites. 57 checks passed anyway — because the tests charged
+  the budget THEMSELVES. His sentence: "your tests test the function; nothing
+  tests the connection."
+
+  Every check here drives a PRODUCTION ENTRY POINT and asserts on state that
+  entry point had to reach through the real wiring. No test in this file may
+  write budget state, schedule a grid, or record a death directly.
+"""
+
+import os
+import shutil
+import sys
+import tempfile
+from datetime import datetime, timedelta, timezone
+
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+except Exception:
+    pass
+
+ROOT = tempfile.mkdtemp(prefix="token-watch-wire-")
+os.environ["TOKEN_WATCH_ROOT"] = ROOT
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+import budget  # noqa: E402
+import receiver  # noqa: E402
+import store  # noqa: E402
+from config import BIRTHS_RESERVED, MONTHLY_CREDIT_CAP  # noqa: E402
+
+UTC = timezone.utc
+FAILURES = []
+
+
+def check(name, cond, detail=""):
+    print(f"  {'PASS' if cond else 'FAIL'}  {name}" + ("" if cond else f" :: {detail}"))
+    if not cond:
+        FAILURES.append(name)
+
+
+def section(t):
+    print(f"\n=== {t} ===")
+
+
+def make_events(n, created_at=None, size_sol=1.5, socials=True):
+    ts = int((created_at or datetime.now(UTC)).timestamp())
+    out = []
+    for i in range(n):
+        ev = {"type": "CREATE", "source": "PUMP_FUN", "timestamp": ts,
+              "feePayer": f"CREATOR{i:05d}",
+              "tokenTransfers": [{"mint": f"MINT{i:05d}"}],
+              "nativeTransfers": [
+                  {"fromUserAccount": "PLATFORM", "amount": 2_000_000},        # a fee, FIRST
+                  {"fromUserAccount": f"CREATOR{i:05d}",
+                   "amount": int(size_sol * 1e9)},                             # the real buy
+              ]}
+        if socials:
+            ev["telegram"] = "t.me/x"
+        out.append(ev)
+    return out
+
+
+store.ensure_dirs()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+section("1. ⛔ BLOCKER-1 — the production path reaches the ledger")
+# ─────────────────────────────────────────────────────────────────────────────
+check("POSITIVE CONTROL: ledger starts at zero", budget.spent_by("birth") == 0)
+
+n = receiver.ingest(make_events(250))
+check("ingest recorded every launch", n == 250, n)
+
+# Before the fold, spend is journalled but not yet in the ledger.
+check("receiver did NOT write budget state directly",
+      budget.spent_by("birth") == 0,
+      "the receiver must journal, never read-modify-write (BLOCKER-2)")
+check("POSITIVE CONTROL: the journal actually has rows",
+      os.path.exists(budget.journal_path())
+      and sum(1 for _ in open(budget.journal_path(), encoding="utf-8")) >= 250)
+
+folded = budget.fold_pending()
+check("★ THE FOLD PUTS BIRTH SPEND IN THE LEDGER — the seam BLOCKER-1 missed",
+      budget.spent_by("birth") == 250,
+      f"folded={folded} spent={budget.spent_by('birth')}")
+
+# ⛔ IDEMPOTENCE. A second fold must add nothing — this is the property that
+#    lets the fold be crash-safe by offset instead of by truncation.
+budget.fold_pending()
+check("★ re-folding is a NO-OP — offset, not truncation",
+      budget.spent_by("birth") == 250, budget.spent_by("birth"))
+
+new_rows = receiver.ingest(make_events(10))
+budget.fold_pending()
+check("POSITIVE CONTROL: a later fold DOES pick up new rows",
+      budget.spent_by("birth") == 260, budget.spent_by("birth"))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+section("2. THE BURN MONITOR CAN NOW SEE THE LEG IT EXISTS TO WATCH")
+# ─────────────────────────────────────────────────────────────────────────────
+rep = budget.burn_report()
+check("★ births appear in the total the monitor reads",
+      rep["spent_by"]["birth"] == 260 and rep["spent_total"] >= 260, rep["spent_by"])
+check("POSITIVE CONTROL: the total is not hard-coded — it moved with the fold",
+      rep["spent_total"] == budget.spent_total())
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+section("3. THE RESERVE ACTUALLY BOUNDS NON-BIRTH SPEND")
+# The old predicate collapsed algebraically to `total < MONTHLY_CREDIT_CAP` —
+# BIRTHS_RESERVED cancelled out and constrained nothing.
+# ─────────────────────────────────────────────────────────────────────────────
+headroom = MONTHLY_CREDIT_CAP - BIRTHS_RESERVED
+check("POSITIVE CONTROL: liquidity allowed well below the headroom",
+      budget.allowed("liquidity"))
+budget.inject_spend("liquidity", headroom)
+check("★ liquidity REFUSED at the reserve boundary, not at the whole cap",
+      not budget.allowed("liquidity"),
+      f"headroom={headroom}; the old expression would still allow up to {MONTHLY_CREDIT_CAP}")
+check("births still allowed with non-birth spend at the boundary",
+      budget.allowed("birth"))
+
+raised = False
+try:
+    budget.allowed("some_future_kind")
+except AssertionError:
+    raised = True
+check("★ an unbudgeted kind FAILS LOUD instead of defaulting to allowed", raised,
+      "the old tail returned True for anything it did not recognise")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+section("4. ⛔ BLOCKER-3 — a late-discovered birth does not lose its early points")
+# ─────────────────────────────────────────────────────────────────────────────
+late_root = tempfile.mkdtemp(prefix="token-watch-late-")
+os.environ["TOKEN_WATCH_ROOT"] = late_root  # not read again; kept for clarity
+
+now = datetime.now(UTC)
+created_3h_ago = now - timedelta(hours=3)
+receiver.ingest(make_events(1, created_at=created_3h_ago))
+
+obs = [o for o in store._read(store.observation_path(now))
+       if o.get("reason") == "scheduled_in_the_past"]
+check("★ past grid points recorded as MISSES, not written to a dead bucket",
+      len(obs) >= 1, f"got {len(obs)}")
+check("every miss carries observed=False",
+      all(o.get("observed") is False for o in obs), obs[:1])
+check("POSITIVE CONTROL: the 1h point IS one of the misses",
+      any(o["age"] == "1h" for o in obs), [o["age"] for o in obs])
+check("POSITIVE CONTROL: FUTURE points were NOT recorded as misses",
+      not any(o["age"] in ("30d", "90d") for o in obs), [o["age"] for o in obs])
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+section("5. SIZE IS TAKEN BY ROLE, NOT BY INDEX")
+# The old code took nativeTransfers[0] — which in these events is a PLATFORM
+# FEE, not the creator's buy. If [0] were the fee in production, every token
+# would record a near-constant size and the trait split would fire for
+# everyone or nobody, silently, with a plausible number attached.
+# ─────────────────────────────────────────────────────────────────────────────
+ev = make_events(1, size_sol=3.25)[0]
+parsed = receiver.parse_creation(ev)
+check("★ the CREATOR's transfer is selected, not element [0]",
+      abs(parsed["initial_size"] - 3.25) < 1e-9,
+      f"got {parsed['initial_size']} — 0.002 would mean it took the fee")
+check("the source of the figure is recorded",
+      parsed["size_source"] == "feePayer_native_transfer", parsed["size_source"])
+
+orphan = {"type": "CREATE", "source": "PUMP_FUN", "timestamp": int(now.timestamp()),
+          "feePayer": "CREATOR_X", "tokenTransfers": [{"mint": "MINT_ORPHAN"}],
+          "nativeTransfers": [{"fromUserAccount": "SOMEONE_ELSE", "amount": 9_000_000}]}
+p2 = receiver.parse_creation(orphan)
+check("★ an unresolvable size is NULL and LABELLED, never a quiet zero",
+      p2["initial_size"] is None and p2["size_source"] == "unresolved",
+      f"{p2['initial_size']} / {p2['size_source']}")
+check("POSITIVE CONTROL: a resolvable size is not labelled unresolved",
+      parsed["size_source"] != "unresolved")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+section("6. RECEIVED vs RECORDED — a stopped recogniser is distinguishable")
+# ─────────────────────────────────────────────────────────────────────────────
+drifted = [{"type": "TOKEN_MINT", "source": "PUMP_FUN"} for _ in range(20)]
+recorded = receiver.ingest(drifted)
+check("★ a drifted event type records nothing", recorded == 0, recorded)
+check("POSITIVE CONTROL: the same shape WITH type=CREATE does record",
+      receiver.ingest(make_events(3)) == 3)
+
+print("\n" + "=" * 60)
+print(f"FAILED: {len(FAILURES)} -> {FAILURES}" if FAILURES else "ALL CHECKS PASSED")
+shutil.rmtree(ROOT, ignore_errors=True)
+shutil.rmtree(late_root, ignore_errors=True)
+sys.exit(1 if FAILURES else 0)

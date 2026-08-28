@@ -9,22 +9,34 @@ this process shares a 2-core box with the Discord bridges and the reviewer.
   answered at DESIGN time because that is the only time it is cheap):
 
     who WRITES/CREATES here?  -> exactly one: record_birth(), from the receiver
-    who READS here?           -> three: the follow-up scheduler, the coverage
-                                 audit, the summary publisher
+    who READS here?           -> ONE TODAY: the follow-up scheduler.
+                                 PLANNED, NOT BUILT: the coverage audit and the
+                                 summary publisher.
     who MUTATES here?         -> exactly one: record_observation() APPENDS.
                                  Birth records are never modified.
     ★ who DELETES here?       -> exactly one: tier.py, and ONLY bulky payload
                                  past its hot window.
                                  ⛔ BIRTH RECORDS ARE DELETED BY NOTHING, EVER.
-    who SCHEDULES here?       -> four: follow-up, coverage audit, summary
-                                 publisher, tiering. FOUR schedulers over one
-                                 store on two cores REQUIRE mutual exclusion,
-                                 so all four take periodic_lock().
+    who SCHEDULES here?       -> TWO TIMERS SHIP: follow-up (hourly), tiering
+                                 (daily). Two more are designed and NOT built:
+                                 the coverage audit and the summary publisher.
+                                 All periodic work takes periodic_lock(), so
+                                 adding the other two needs no redesign.
+    ★ who WRITES STATE here?  -> the two locked jobs — AND the receiver, which
+                                 is why it writes an APPEND-ONLY JOURNAL rather
+                                 than a state file (budget.record_pending).
+
+⚠️ THIS CENSUS PREVIOUSLY SAID "FOUR SCHEDULERS, ALL TAKE THE LOCK" AND NAMED
+   THREE READERS. Only two timers ship, and the receiver — a state writer that
+   takes no lock — was missing from the list entirely. Langston found the
+   omission (BLOCKER-2) and a fresh reader found the count. ★ The census is the
+   artifact the standing rule requires at every hop; one that describes the
+   design rather than the code is worse than none, because it is READ as the
+   code. Fixed to say what ships and what does not.
 
 ⚠️ The one-writer rule is enforced by SHAPE, not by discipline: the receiver is
-   the only module that calls record_birth(), and every periodic job is
-   serialised behind a single lock. Two jobs cannot interleave a read-modify
-   cycle because no job does one — every write is an append.
+   the only module that calls record_birth(), every periodic job is serialised
+   behind a single lock, and the receiver's own hot path only ever appends.
 """
 
 from __future__ import annotations
@@ -217,8 +229,39 @@ def schedule_grid(mint: str, created_at: datetime) -> None:
     and cohorts could no longer pool — which is the entire reason §6 fixes the
     ages.
     """
+    now = _now()
+    current_bucket = now.strftime("%Y-%m-%dT%H")
     for delta, label in zip(GRID, GRID_LABELS):
         due = created_at.astimezone(UTC) + delta
+
+        # ⛔ BLOCKER-3 (Langston): A GRID POINT ALREADY IN THE PAST IS RECORDED
+        #    AS A MISS, NOT WRITTEN TO A BUCKET NOBODY WILL EVER READ.
+        #
+        #    The scheduler reads exactly ONE bucket — the current hour. A birth
+        #    discovered three hours after creation used to write its '1h' entry
+        #    into a bucket three hours gone: written, never read, no log, no
+        #    counter. Two real triggers, neither exotic: discovery lag over an
+        #    hour (the very thing OBJ-2 exists to persist), and any receiver
+        #    outage, where the provider's retries deliver births whose early
+        #    points are already past.
+        #
+        # ★ AND THE UNIT FILE MADE IT READ AS COVERED: the timer sets
+        #   Persistent=true, which fires once on resume and reads only the
+        #   current hour. The unit says catch-up; the code had none. That is
+        #   "reads as covered" living in a service file.
+        #
+        # Same vocabulary as a shed, deliberately: a non-observation is a row,
+        # so the analysis can tell "we did not look" from "we looked and found
+        # nothing" without joining two files.
+        if due.strftime("%Y-%m-%dT%H") < current_bucket:
+            record_observation(mint, label, now, {
+                "observed": False,
+                "reason": "scheduled_in_the_past",
+                "due_at": due.isoformat(),
+                "first_seen_at": now.isoformat(),
+            })
+            continue
+
         _append(due_path(due), {"mint": mint, "age": label, "due_at": due.isoformat()})
 
 
@@ -260,16 +303,36 @@ def record_death(mint: str, when: datetime, death_class: str, age_label: str, ev
             "evidence": evidence,
         },
     )
-    # ⛔ UPDATE THE CACHE IN PLACE RATHER THAN LETTING mtime FORCE A RE-READ.
-    # MEASURED, and this is why it is not a micro-optimisation: by day 90 the
-    # tombstone file holds ~376,000 entries. Recording a death changes its
-    # mtime, so the very next `dead_set()` re-parses the WHOLE file — and a
-    # busy hour records ~520 deaths, each followed by a due-queue lookup.
-    # That is ~196 MILLION line re-parses in one hourly run, i.e. an hourly
-    # job that stops finishing inside its hour somewhere in month three.
-    # ⚠️ The failure would have arrived LATE and looked like a slow provider
-    # rather than like our own data structure — which is exactly the kind that
-    # gets misdiagnosed. Appending to the live set keeps the read O(1).
+    # ⛔⛔ RETRACTION — THE ORIGINAL JUSTIFICATION FOR THIS BLOCK WAS WRONG, and
+    # the wrong version was published to Kyle and dispatched to Langston.
+    #
+    # IT CLAIMED: recording a death invalidates the mtime cache, so the next
+    # due-queue lookup re-parses the whole file; at ~376,000 tombstones and
+    # ~520 deaths in a busy hour that is ~196 MILLION line re-parses per run,
+    # and the hourly job stops finishing inside its hour by month three.
+    #
+    # ⛔ THAT ARITHMETIC ASSUMED ONE dead_set() CALL PER DEATH. There is not
+    #   one. `due_now()` calls dead_set() ONCE and binds it to a local; the
+    #   hourly job calls due_now() once. MEASURED with an instrumented counter:
+    #   300 deaths in a run produced ONE dead_set() call, not 300.
+    # ⛔ AND the follow-up unit is Type=oneshot, so the process exits each hour
+    #   and the cache is cold at the top of every run regardless. One full
+    #   parse per hourly run is structurally unavoidable and this block cannot
+    #   remove it.
+    # ⚠️ The two population figures were also asserted rather than derived: the
+    #   ~376,000 silently turned a published 68.67% DAY-ONE death rate into a
+    #   ~90% CUMULATIVE one, and the 3x "busy hour" multiplier came from
+    #   nowhere at all.
+    #
+    # ✅ WHAT THIS BLOCK ACTUALLY BUYS, stated narrowly enough to be checkable:
+    #   `dead_set()` returns the cached set OBJECT, so mutating it in place
+    #   makes a death recorded mid-run visible to the remainder of that same
+    #   run. Rebuilding would rebind _DEAD_CACHE["set"] to a NEW set while the
+    #   generator still held the old one. It also removes the re-parse for any
+    #   future caller that does re-enter dead_set() — the coverage audit and
+    #   summary publisher are designed and not built.
+    # ★ Found by a fresh reader asking what else was consistent with the code;
+    #   I had traced the data structure and never traced its callers.
     if _DEAD_CACHE["mtime"] is not None:
         _DEAD_CACHE["set"].add(mint)
         try:
@@ -306,7 +369,15 @@ def observation_path(when: datetime) -> str:
 
 
 def record_observation(mint: str, age_label: str, when: datetime, fields: dict) -> None:
-    rec = {"mint": mint, "age": age_label, "observed_at": when.astimezone(UTC).isoformat()}
+    """⛔ `observed` IS SET HERE, UNCONDITIONALLY — never at the call sites.
+
+    Langston's Step-4 condition on keeping non-observations in the same stream:
+    a reader must be able to filter on `observed` without supplying a default.
+    A downstream `?? true` is the absent-as-valid failure waiting to happen, and
+    setting it at two call sites guarantees a third one day forgets.
+    """
+    rec = {"mint": mint, "age": age_label, "observed_at": when.astimezone(UTC).isoformat(),
+           "observed": True}
     rec.update(fields)
     _append(observation_path(when), rec)
 
