@@ -2882,6 +2882,37 @@ The COMMITTED copy carries the five **pre-Phase-14 regime keys** (`BULL_STABLE`/
 
 ---
 
+### #754 OPEN 2026-08-28 (Infra Claude, diagnosed after Kyle caught the skip; **six checkable claims re-derived at the ref by CC-A before adoption — all six hold**) — ★★ **A SESSION SKIPPED STEP 2 WITH NOTHING MISSING FROM ITS CONTEXT, AND NOTHING IN THE SYSTEM COULD HAVE CAUGHT IT.**
+
+⛔ **Every rule file and all eleven step skills were loaded. The skip happened anyway, and KYLE caught it — not the system.**
+
+**MECHANISM 1 — THE CHECKER STRUCTURALLY CANNOT SEE IT. Verified at the ref:**
+| claim | verified |
+|---|---|
+| `pre_audit` IS required for `non_architecture` | ✅ `config.mjs:131` |
+| enrolment filters `b.lastCode !== null` ⇒ **a batch with ZERO code commits is excluded entirely** | ✅ `poller.mjs:87` (`applyCutoff`) |
+| **no `preAuditAddTime` anywhere in the checker** | ✅ **0 occurrences; control: `scopeAddTime` = 3 in `poller.mjs`, 11 in its test** ⇒ the absence is real, not a broken grep |
+| `firstCode` is ALREADY computed | ✅ `poller.mjs:57,62` |
+| no hook enforces step order | ✅ 4 of 10 hooks mention "Step-N" — **all four are provenance comments about the hook itself, not enforcement** |
+
+⇒ ★★ **A SKIPPED STEP 2 IS INVISIBLE WHILE IT MATTERS AND SILENTLY CURABLE AFTERWARDS BY WRITING THE DOCUMENT LATE.** The checker can only ask *"does a pre-audit exist at close?"*, never *"did it exist BEFORE the first code commit?"* ★ **The missing half is a COMPARISON, not an instrument — both inputs already exist.**
+
+**MECHANISM 2 — THE ONE THAT GENERALISES, AND IT IS A FORMAT DEFECT, NOT A DISCIPLINE ONE.** His auto-loaded position block ended in a prose to-do **he had written himself**: *"scope → Langston Step-1; then build."* ⛔ **That is step 1 → step 3 with step 2 silently absent — and PROSE DOES NOT LOOK WRONG.**
+★★ **THE STRUCTURAL POINT: a session’s OWN memory file auto-loads FIRST and reads as "where I am", while `CLAUDE.md` §0.a is a table of ADDRESSES that never says which step you are ON. When the private list and the public rule disagreed, THE PRIVATE LIST WON AND NOTHING COMPARED THEM.** ⇒ **`1 → 3` is visibly wrong; "then build" is not.** ⚠️ **Same family as *an always-loaded file must not assert a live value* (the Langston-model line, wrong for 17 days): a private always-loaded assertion outranks the public rule and nothing reconciles them.**
+**MEASURED (CC-A, at the ref): of the four memory files, ONLY Infra’s carried a step number. CC-A, CC-B and CC-C did not.** ✅ **CC-A’s is now numbered.**
+
+**MECHANISM 3 — NO FRONT DOOR, and it is the honest residual neither fix closes.** The work began as a Kyle conversation, became research, became *"how would you scope this"*, and turned into a batch **by drift**. ⛔ **There was never a moment marked "Step 1 BEGINS", so there was never a moment marked "Step 1 ends, Step 2 next."** ★ **Compounding it: Langston gave a hard Step-1 review with blockers and conditions, and PASSING ONE STRONG GATE READS EXPERIENTIALLY AS PASSING *THE* GATE.**
+★★ **THIS IS §9.4’S OWN SHAPE ONE LAYER UP: a trigger that never announces itself.** §9.4 fires on a FIND, and a find is a moment you notice. **A conversation becoming a batch is a moment nobody notices, including the person in it.**
+
+**ALREADY DONE BY INFRA — DO NOT REDO:** the Step-2 document exists (`B_TOKEN_WATCH_PRE_AUDIT.md`, `6e50ae4e0`) and **it overturned two things in the approved scope**, so the step was not ceremony; his own position block now carries `STEP: N of 11`.
+
+**DISPOSITION — #2, ADD TO AN EXISTING BATCH, both legs:**
+- **(a) numbered-step position block standardised across all four sessions, prose next-step BANNED there → folds into `B-GATE-GUARD` (#744)** as a third check, owner CC-A. ★ **It is a FORMAT, not a reminder — the property that made edit 7 work.**
+- **(b) add `preAuditAddTime` and compare it against `firstCode`; flag when code precedes the pre-audit → same batch**, since `#744` is already the hook/checker family and **two mechanisms racing one push is worse than one with three checks.**
+⚠️ **NOT CLAIMED: neither leg closes mechanism 3.** Recorded as the open residual rather than papered over.
+
+⇔ `#744` · `#752` (§9.4’s trigger — same shape) · `MISTAKE_PATTERNS` `skipped-the-gate`.
+
 ### #753 OPEN 2026-08-27 (CC-A; Kyle-directed investigation after the third instance) — ★★ **ANOTHER SESSION’S UNCOMMITTED WORK KEEPS APPEARING IN A SESSION’S OWN WORKING TREE, AND THE MECHANISM HAS NEVER BEEN ESTABLISHED. THREE INSTANCES, ALL ON `RUNNING_ISSUES.md`, ACROSS THREE DIFFERENT SESSIONS.**
 
 ⛔⛔ **KYLE’S DIRECTIVE, 2026-08-27: a FULL INVESTIGATION AND FIX, scheduled AHEAD of `B-MEASURE-GATE`.** ★ **This is the first time the class has been given a batch rather than a recovery** — each prior instance was recovered correctly and then closed as an incident, which is why the cause is still unknown at instance three.
