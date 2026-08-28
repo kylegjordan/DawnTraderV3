@@ -15,6 +15,11 @@ It is **NOT** satisfied by a successful API curl, a psql row count, a PM2 log li
 With active trading on, **most changes have a staging-visible surface.** For any change with one, load the affected tabs and verify it renders and behaves. **"Working in the background but not showing on the front end" is a failure state Kyle cannot detect.**
 **If there is genuinely no UI surface, SAY SO AND SAY WHY** — state the judgement rather than skipping the step.
 
+⛔⛔ **STAGING NEEDS NO LOGIN. USE THE CHROME TOOL AND NAVIGATE STRAIGHT TO IT (Kyle directive 2026-08-28).**
+★ **His words, and he has had to say this repeatedly:** *"I keep getting sessions telling me that they can't go to the staging site because they need a login and password. They don't need one. They just need to use Chrome for Claude and then navigate to it, and they'll be able to view the staging site without login and password."*
+⇒ ⛔ **"I need credentials" IS NOT A REASON TO SKIP THIS STEP. It is not true, and it has been costing real verification.** Navigate to **`https://188.245.193.8.sslip.io`** with the Chrome tool, load the affected tab, and read the DOM.
+⚠️ **The `testuser123` credentials in `CLAUDE.md` §7 exist for AUTHENTICATED API CALLS from the server, not for viewing the site.** ★ **That is almost certainly where the confusion comes from — seeing credentials in the infrastructure section and inferring a login wall that does not exist.**
+
 ## ALSO
 - PM2 logs, psql, CI status, server health — **as well as**, not instead of.
 - ⚠️ **The application log retains only a couple of hours.** An empty grep over an older window proves nothing; **state the window the instrument actually covers.**

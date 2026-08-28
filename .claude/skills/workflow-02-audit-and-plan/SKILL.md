@@ -60,10 +60,26 @@ An end-to-end trace is **satisfied by the first sufficient explanation at each h
 | who **schedules/starts** work against it? | timers, clock subs, `.start()`, bootstrap, cron |
 **If a list has exactly one member, SAY SO explicitly** — an asserted absence needs presence-evidence. **Two or more schedulers over one component require a mutual-exclusion check.**
 
+## ⛔⛔ ENUMERATE THE ENTRY POINTS **FIRST**, REPO-WIDE — BEFORE THE TRACE AND BEFORE ANY CUT
+> **CARRIED FROM `CLAUDE.md` §9.5(a-ii) (B-CLAUDEMD-SLIM, 2026-08-28).** ⚠️ **It fires at BOTH triggers and the clause names both deliberately: at an AUDIT HOP, and BEFORE ANY DELETION.** Its source home was the deletion rule; landing it only at the audit census would carry it out of the deletion path it was written for.
+
+★★ **TRACING FORWARD FROM ONE ENTRY POINT STRUCTURALLY CANNOT DISCOVER A SECOND ENTRY POINT.** ⇒ **enumerate every scheduler, timer, clock subscription, service `.start()`, bootstrap call, cron and event subscription FIRST, repo-wide, tests excluded** — **then** trace, **then** cut.
+⚠️ **THIS IS NOT THE PER-HOP CENSUS ABOVE, AND THE DISTINCTION IS THE WHOLE POINT.** The census asks *"is there a SECOND thing doing this HERE?"* — **incuriosity at a hop the trace VISITED.** This asks *"is there a hop the trace NEVER VISITED?"* — **unreachability.** ⇒ **Different failure, different cure: the hop-census fixes the first; ONLY prior repo-wide enumeration fixes the second.**
+**If exactly ONE exists, SAY SO** — an asserted absence needs presence-evidence (rule 22). **Two or more concurrent entry points additionally require a mutual-exclusion check.**
+
 ## ⛔ §9.5(a-ii) — DELETION-TIME STATE-WRITE CENSUS
 Before cutting ANY code, **enumerate the state it WRITES and grep for READERS of each.** A removed WRITER whose READER survives produces **no compile error and no failing test** — caller-tracing, green CI and clean `tsc` all pass while the deletion silently breaks a live dependency.
 ⇒ **A deletion is verified by "zero callers AND every state it wrote has no surviving reader" — not by zero callers alone.**
 
+
+## ⛔ THE PRE-AUDIT CARRIES A "PREVIOUSLY-STATED-VS-NOW" SECTION AT THE TOP
+> **CARRIED FROM `CLAUDE.md` §9.2 (B-CLAUDEMD-SLIM, 2026-08-28).** ⚠️ **The COMPLETION half already lived in `workflow-11`; the PRE-AUDIT half lived nowhere but the rules file** — verified absent here, twice, before the carry.
+
+**List EVERY prior-number → new-number delta, with the decision source cited:**
+> **PREVIOUSLY STATED: X. NOW: Y. REASON: \<one line\>.**
+
+★ **It goes at the TOP, not in a footnote.** A number that moved between the scope and the audit is the single most decision-bearing thing in the document — **the reader is deciding whether to approve a plan built on it.**
+⚠️ **A number you corrected silently reads as a number that never changed.**
 
 ## ⛔ BEFORE THIS STEP LEAVES YOUR HANDS — REVIEW IT THE WAY LANGSTON WOULD
 **Against the OBJECT, not your memory** (`CONDUCT.md` §6b — the full mechanism and why it is positional rather than clever). Before dispatching: **every census list, every "exactly one exists", every number — re-derive it from the object.** An audit built on a remembered read is the failure this step exists to prevent.
