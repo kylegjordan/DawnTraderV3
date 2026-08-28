@@ -975,6 +975,12 @@ Kill-switch is **DB-backed per-mode**: `isKillSwitchTripped(mode)` (`guardrail-p
 
 | # | hook | what it does | blast radius |
 |---|---|---|---|
+> ⛔⛔ **THE RULES-FILE SURFACE CHANGED 2026-08-29 (B-CLAUDEMD-SLIM) — READ THIS BEFORE CITING A `CLAUDE.md` SECTION.**
+> **Nine clauses moved OUT of `CLAUDE.md` into the workflow step-skills; every one left a forwarding pointer at its own section, so existing citations still RESOLVE.** ⚠️ **But a citation that resolves is no longer proof the content is there — `§9.5`'s heading survives as a HUSK carrying its four sub-labels, and `rule 19` is an explicit hole.**
+> **Where they went:** `§9.1`/`§9.2` completion halves → `workflow-11-completion` · `§9.2` pre-audit half → `workflow-02-audit-and-plan` · `§9.3` verification definition + by-default duty → `workflow-07-verify-cc` · `§9.5(a)`/`(a-ii)`/`(b)` → `workflow-02-audit-and-plan` · `rule 19` → `workflow-05-ci` (+ the close-side trigger in `workflow-11-completion`).
+> ★ **FOUR CLAUSES DELIBERATELY STAYED, all for the same reason — they fire with no step to invoke:** `§9.1` real-time, `§9.2` in-flight, `§9.3` Kyle-asks, and **`§9.5`'s TRIGGER, which fires on *"any audit, pre-audit OR ARCHITECTURAL DISPUTE"* while `workflow-02` is gated `STEP 2 ONLY`.**
+> ⚠️ **SIM carries 20 `§9.x` citations. They resolve; check the destination skill for the substance.**
+
 | 1 | `fresh-rules.mjs` | re-stages `CLAUDE.md` / `.claude/*` when the branch has moved; warns instead when local edits exist | **MEDIUM** — can restage files into a session's index |
 | 2 | `session-reminder.mjs` | re-injects the governed-read rule + wake-watcher check | LOW |
 | 3 | `load-own-memory.mjs` | injects **this session's own** `MEMORY_CC_<X>.md` | LOW |

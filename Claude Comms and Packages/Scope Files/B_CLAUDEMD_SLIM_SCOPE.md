@@ -120,7 +120,7 @@ change-class: non_architecture
 ✅ **WORKED EXAMPLE, so the step is not abstract:** for *"cannot discover a second entry point"* the nearest paraphrase is `workflow-02:53` (*"satisfied by the first sufficient explanation at each hop"*) — **NOT the same proposition: `:53` is INCURIOSITY at a hop the trace VISITED; the clause is UNREACHABILITY of a hop it never visited.**
 3. ⛔ **A NEGATIVE CONTROL: the same check run against a skill that should NOT contain it must return zero.** Without that, a broken query returns "present" for everything and every cut looks safe. *(This is not hypothetical — a check of exactly this shape returned four false zeros on 2026-08-27 because a path was mangled, and the zeros read as "absent".)*
 4. **`CLAUDE.md` still parses as one document**, section numbering intact, and **every inbound `§` citation still resolves** — §9 alone carries 237 of them.
-5. **All twelve skills still parse** (frontmatter loads, `description` survives) — the check that already caught one self-inflicted break.
+5. **All THIRTEEN skills still parse** ⚠️ **(was twelve — this batch BUILDS the thirteenth, `bug-investigation`; a hard-coded count in a verification step passes while ignoring the very thing the batch added)** (frontmatter loads, `description` survives) — the check that already caught one self-inflicted break.
 
 **WHOLE-BATCH:** the next session start's loaded-set measurement **drops by approximately the sum of the cuts** — the programme's own instrument, measured rather than asserted.
 

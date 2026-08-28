@@ -6,6 +6,22 @@
 
 ---
 
+## B-CLAUDEMD-SLIM — the §9 eviction, 2026-08-29
+
+**WHAT MOVED AND WHY IT IS RECORDED HERE:** nine clauses left `CLAUDE.md` for the workflow step-skills. The OPERATIVE text lives at its destination; what follows is the EVIDENCE that produced each rule, which is what this file is for (`#564`: operative statement stays, supporting evidence relocates).
+
+**§9.1 SCAFFOLDING DECLARATION** — origin: the B79.0d ORB and `xstock_spot` scaffolding cases, where a batch shipped plumbing and the capability stayed inert with no statement saying so. **The real-time half stayed in `CLAUDE.md`: it fires mid-conversation, with no report and no step.**
+
+**§9.2 NUMERIC DELTAS** — origin: a strategy count, a threshold, a sub-batch count and a sequencing day each restated differently across messages with no delta surfaced. **The in-flight half stayed: it fires when you notice, not when you write a document.**
+
+**§9.3 STAGING-VERIFIED** — origin: "verified on staging" claimed off a successful curl and a PM2 line, with the UI never loaded; strengthened 2026-07-16 after an Open-Trades crash sat visible on staging while backend checks read green. ★ **2026-08-29 addition, from Kyle: the repeated "I can't reach staging without a login" is a TOOL error — Claude-in-Chrome carries his session and needs none; the in-app browser serves a sign-in form it can never pass, because a session may not type a password.**
+
+**§9.5 THE AUDIT RULES** — origin: the RTB refresh ran TWO independent mechanisms over one queue for ~7 months and two audits missed it, both tracing forward from ONE entry point. ★★ **The clause that carried the reclassification is the one that STAYED: the trigger fires on an ARCHITECTURAL DISPUTE, which has no step to invoke — and `workflow-02` is gated `STEP 2 ONLY`, so moving it would have put the rule behind the gate that excludes two of its three triggers.**
+
+**RULE 19 — CI CONFIRMATION** — origin: B-NEW-43 Phase 3; batches were being called complete on a red or unfinished CI run. **Cut whole; the number is left as an explicit hole because 840 citations span rules 1-29, in the same form as `rule 11` which has stood as a visible gap since 2026-07-24.**
+
+⚠️ **THE METHOD FAILURE WORTH KEEPING: three separate instruments called content "absent from the destination" and were wrong — an exact-phrase matcher (5 false), a concept-word matcher (3 false), and a completeness checker that could not tell a POINTER from a BODY (3 false).** ★★ **What actually worked was reading each destination file END TO END and citing the line rejected alongside the line accepted (Langston, 2026-08-28).**
+
 ## §0 — Mission (full original, condensed in CLAUDE.md 2026-06-20 per B-GOV R3)
 The condensed §0 in CLAUDE.md keeps every operative element; this is the full original framing (the motivational "why behind everything" passage), preserved for reference:
 
