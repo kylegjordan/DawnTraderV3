@@ -650,6 +650,21 @@ export class SignalOrchestrator {
         // This one is not dropped — it continues and is counted again at the SQE.
         if (_fc2) recordActiveGridPassthrough(sizingContext.mode, _fc2, _decision.reason);
         else _gridUncountable(`passthrough_${_decision.reason}`);
+        // ⛔⛔ STAMP WHAT THIS SIGNAL SAW AT BIRTH — DO NOT PLAN TO RE-DERIVE IT LATER.
+        // Langston's two catches, and one stamp closes both:
+        //  • The cold-start boundary was only in STDOUT, which rotates ~2-daily against a 7-day
+        //    window — so at close time a missing boundary line would read as "no cold-start
+        //    window" rather than "unreadable". Silence with no reach.
+        //  • Re-deriving the absent set at READ time is sound in the PASS direction and UNSOUND
+        //    in the FAIL direction: the map grows, so a symbol that has SINCE derived produces a
+        //    FALSE FAIL, and a restart resets the map so monotonicity holds only within a
+        //    lifetime. `gridTags` cannot rescue it — it is an aggregate verdict→count map with
+        //    no per-symbol record.
+        // ⇒ The row carries its own answer, immune to rotation, to later derivation and to
+        // restarts. An instrument read at the wrong moment is not an instrument.
+        rawSignal = { ...rawSignal, metadata: { ...(rawSignal.metadata ?? {}),
+          gridAtBirth: { resolved: false, reason: _decision.reason, provenance: _grid.provenance },
+        } };
         // ⛔ AND NO POST-ROUND RE-CHECK ON THIS PATH. `fail()` echoes the inputs back verbatim, so
         // `_r.entryPrice/_r.stopPrice` are the ORIGINAL unrounded floats — running the stop-distance
         // floor on them and booking `grid_stop_distance_after_rounding` would name a rounding that
@@ -702,6 +717,12 @@ export class SignalOrchestrator {
           entryPrice: _decision.entryPrice,
           stopPrice: _decision.stopPrice,
           targetPrice: _decision.targetPrice,
+          // ⛔ THE SUCCESS ARM STAMPS TOO. If only the passthrough stamped, "no stamp" would have
+          // to mean BOTH "rounded normally" AND "born before this shipped" — an absent value
+          // wearing a valid one's clothes, which is the failure this whole batch keeps meeting.
+          metadata: { ...(rawSignal.metadata ?? {}),
+            gridAtBirth: { resolved: true, tick: _grid.tick, provenance: _grid.provenance },
+          },
         };
       }
     }

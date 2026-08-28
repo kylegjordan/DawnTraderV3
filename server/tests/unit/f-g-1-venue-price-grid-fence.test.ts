@@ -876,3 +876,36 @@ describe('F-G-1 — the xStock absent set must be ENUMERABLE, not just countable
     expect((src.match(/skippedSymbols\.push\(/g) ?? []).length).toBe(2); // BOTH skip paths
   });
 });
+
+describe('F-G-1 — the row carries its own grid answer (Langston catches 1 + 2)', () => {
+  // ⛔⛔ ONE STAMP CLOSES BOTH CATCHES.
+  //  1. The cold-start boundary lived only in STDOUT, which rotates ~2-daily against a 7-day
+  //     window — a missing boundary line at close time would read as "no cold-start window"
+  //     rather than "unreadable". Silence with no reach.
+  //  2. Re-deriving the absent set at READ time is sound in the PASS direction and UNSOUND in the
+  //     FAIL direction: the map only grows, so a symbol that has SINCE derived yields a FALSE
+  //     FAIL — and a restart resets the map, so monotonicity holds only within a lifetime.
+  // ⇒ The signal records what it saw AT BIRTH. An instrument read at the wrong moment is not an
+  // instrument. `rawSignal.metadata` spreads into `rtb_signals.metadata` at the birth insert,
+  // so the answer is durable per row.
+  const seam = () => {
+    const raw = readFileSync(join(process.cwd(), 'server/services/signal-orchestrator.ts'), 'utf8');
+    return raw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+  };
+
+  // MUTATION: drop either stamp and this fails.
+  it('BOTH arms stamp — so "no stamp" cannot mean two different things', () => {
+    const code = seam();
+    expect((code.match(/gridAtBirth:/g) ?? []).length).toBe(2);
+    expect(code).toMatch(/gridAtBirth:\s*\{\s*resolved:\s*false/);
+    expect(code).toMatch(/gridAtBirth:\s*\{\s*resolved:\s*true/);
+  });
+
+  // MUTATION: stamp onto a local instead of rawSignal.metadata and this fails — the value would
+  // never reach the persisted row, which is the whole point of stamping it.
+  it('stamps onto rawSignal.metadata, which is what persists', () => {
+    const code = seam();
+    expect((code.match(/metadata:\s*\{\s*\.\.\.\(rawSignal\.metadata\s*\?\?\s*\{\}\)/g) ?? []).length)
+      .toBeGreaterThanOrEqual(2);
+  });
+});

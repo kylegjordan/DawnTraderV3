@@ -114,7 +114,22 @@ CONTROL RESULT: BOTH ARMS FIRE
 
 ⚠️ **AND IT WAS NOT READABLE, WHICH IS THE SAME DEFECT ONE LEVEL DOWN.** The map lives in memory — a separate script reads a fresh EMPTY one — and only a **count** was exposed. **A better denominator nobody can read is not a better denominator.** Landed in the same pass: the resolver now exposes the derived **keys**; the refresher **names** the symbols it skipped in both its return and its log; and the running process emits the **complement** (`gridAbsentSymbols`) on the xStock diagnostics payload, so the absent set is enumerable from outside at read time.
 
-⛔ **RECONCILIATION REQUIRED AT READ TIME:** every xStock passthrough in the window must name a symbol **absent from the live derived map at that moment**, read from `gridAbsentSymbols`. **A passthrough on a symbol that HAD a derived grid is a FAIL, not an escape.**
+⛔⛔ **RECONCILIATION READS THE ROW'S OWN STAMP — NOT A LIVE MAP AT READ TIME. CORRECTED AGAIN 2026-08-28, still before any data read (Langston catches 1 and 2, and one change closes both).**
+
+**Why the live-map version was wrong, and it was wrong in only ONE direction — which is worse than being wrong in both, because it looks sound:**
+- **Sound in PASS:** the map only grows, so a passthrough symbol *still* absent at read time is genuinely an escape. ✅
+- ⛔ **UNSOUND in FAIL:** a symbol that has **since derived** produces a **FALSE FAIL** — and a restart resets the map to empty, so monotonicity holds only *within one process lifetime*. `gridTags` cannot rescue it: it is an aggregate verdict→count map with **no per-symbol record**.
+- ⛔ **And the cold-start exclusion leaned on a boundary line in STDOUT, which rotates roughly every two days against a 7-day window.** A missing boundary at close time would have read as *"there was no cold-start window"* rather than *"I cannot see it"* — **silence with no reach**, on the instrument meant to bound the silence.
+
+★ **THE FIX IS ONE STAMP, AND IT DISSOLVES BOTH: the signal records what it saw AT BIRTH.** Every signal through the seam now carries `metadata.gridAtBirth` — `{resolved:true, tick, provenance}` on the rounded path, `{resolved:false, reason, provenance}` on the passthrough — and `rawSignal.metadata` spreads into `rtb_signals.metadata` at the birth insert, so it is **durable per row, immune to log rotation, to later re-derivation, and to restarts.**
+⇒ **BOTH arms stamp deliberately.** If only the passthrough did, *"no stamp"* would have to mean **both** *"rounded normally"* **and** *"born before this shipped"* — an absent value wearing a valid one's clothes, which is the failure this batch has met at every level.
+⇒ **THE COLD-START EXCLUSION IS NOW AUTOMATIC:** an open during the warm-up carries `resolved:false` on its own row and is classified by that, with no boundary line to find.
+
+⛔ **RECONCILIATION AT READ TIME:** read `metadata.gridAtBirth` off each position in the window.
+- xStock passthrough (`resolved:false`) → **PASS**, and it names its own reason.
+- xStock **off-grid while `resolved:true`** → **FAIL.** The grid was there and the price still missed it.
+- **Stamp missing entirely** → the row predates this change ⇒ **EXCLUDED and counted separately**, never silently passed.
+⚠️ `gridAbsentSymbols` on the diagnostics payload **stays** — it is a useful live operational read of coverage. **It is no longer the criterion's instrument**, and must not be used as one.
 
 ### ✅ VERIFIED LIVE AT THE RE-DEPLOY (`9150e2174`, 17:26:27Z) — and it moved two numbers
 

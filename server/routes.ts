@@ -8038,7 +8038,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // it untouched), so the absent set is monotonically shrinking and carries no rolling window.
       // ⚠️ BUT IT LIVES IN MEMORY: a separate script reads a fresh EMPTY map, and only a COUNT was
       // exposed. A better denominator nobody can read is not a better denominator.
-      // The COMPLEMENT is emitted (~24) rather than the whole map (~452).
+      // The COMPLEMENT is emitted rather than the whole map. ⚠️ No count is asserted here: the
+      // first version said "(~24)" and the live read was 30 — the same class as the snapshot
+      // list this replaced. The number is the payload's job, not the comment's.
       let _gridAbsentSymbols: string[] = [];
       try {
         const { getDerivedGridSymbols } = await import('./markets/venue-grid-resolver.js');
