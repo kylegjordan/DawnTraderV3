@@ -1,7 +1,7 @@
-# F-G-1 — B-GRID-REPRESENTABILITY — STEP-4 CHANGE LIST (r5)
+# F-G-1 — B-GRID-REPRESENTABILITY — STEP-4 CHANGE LIST (r6)
 
-> **READY AT: `origin/migration/aws-supabase`, commit `2245ab15e`.** Diff base `98cd011c7` (the commit before the first code commit).
-> **23 files, +2,755 / −8** — `git diff --shortstat 98cd011c7..2245ab15e -- server/ shared/ client/`, re-run at THIS ref, not carried forward from r4.
+> **READY AT: `origin/migration/aws-supabase`, commit `6250a3419`.** Diff base `98cd011c7` (the commit before the first code commit).
+> **23 files, +2,928 / −8** — `git diff --shortstat 98cd011c7..6250a3419 -- server/ shared/ client/`, re-run at THIS ref, not carried from r5.
 > ⛔ **BLOCKER-8 WAS THIS LINE. It said `+2,202 / −6`, which was the figure at `cef6e7f83` — i.e. BEFORE `01b54cf03`, the r3 code commit — under a sentence reading *"re-derived at the ref, not restated."* The sentence was the claim and the number was the counter-example.** ★ **AND IT IS `fix-follows-pointer` AGAIN: in r2 you named three per-SECTION counts, I fixed those three and restated the TOTAL.** The number now names the command that produced it, so the next reader can re-run it rather than trust it.
 > **Untracked check run:** the only `??` entry is `.claude/launch.json`, local config, deliberately not committed.
 > ⛔ **ONE GATE: the code diff.** Design rulings and the VPG↔VOG pairing were separate dispatches and are not re-asked here.
@@ -276,6 +276,26 @@ Repo-wide the same shape returns two more — `expectancy.ts`, `drift-dashboard-
 
 ---
 
+## 9f. WHAT CHANGED IN r6 — BLOCKER-12 AND CHANGES-NEEDED-4
+
+**BLOCKER-12 — and the asymmetry is the finding, and it is mine.** Your census is exact: `autoMap` is filled **only** inside `refresh()`, whose only production entry is `initialize()` at boot; that catch logs and continues; `isInitialized` is set only on success; **nothing re-invokes it.** One failed boot fetch leaves the map empty for the process lifetime.
+
+★ **Every other consumer of that service degrades to SKIP** — the VOG returns `skipped`, my own `resolveVenueSizeLimits` returns nulls and the size pre-filter skips, the symbol resolver guards with `isReady()` at five sites. **F-G-1 introduced the FIRST consumer whose empty-map behaviour is STOP TRADING, and it was the one not checking `isReady()`.** A deploy during a venue blip would have halted crypto trading until a restart, arriving as a few hundred `grid_grid_unknown` **signal-quality** rejects. **A trading outage wearing signal-quality clothes** — the exact shape this batch keeps producing, in the batch that keeps naming it.
+
+**RULE-24 OUTCOME (1), disposition 1.** `service_unready` is a distinct provenance; the seam refuses under **`venue_pairs_service_unready`** and raises **one** critical alert naming the restart as the remedy. ⛔ **Still a refusal — rule 10 stands.** What changed is that the state says what it is. ★ **The alarm claims its latch BEFORE the await** — BLOCKER-11 applied forward rather than re-learned.
+⚠️ **FREQUENCY NOT MEASURED.** Neither of us has measured how often that boot call fails. **The mechanism is cited; there is no rate here.**
+⛔ **THE RECOVERY HALF IS NOT IN THIS BATCH** — the app still needs a restart. Giving a **shared** service a retry lifecycle is boot behaviour, not rounding, and doing it six rounds deep is how a batch stops converging. **HOME: `B-VENUE-PAIRS-REINIT`, `#933`, `PHASE_19_PLAN` row 3k.**
+
+**CHANGES-NEEDED-4 — the render re-merged the taxonomy I split in this batch.** The VPG row summed every verdict except `on_grid`/`would_round`, including the two the module marks `isWiringBug: true`. Two explicit sets now, and the wiring-bug count renders **separately, labelled as ours**. ★ **`fix-follows-pointer` one tab over — the function was fixed, the call was not.** And your census is the reason it was invisible: `isWiringBug` has two production readers and **both are `console.error`**.
+
+⚠️ **ISSUE-NUMBER COLLISION, caught and corrected, and the miss is the interesting half.** I filed this as `#931` **after grepping the max as 932** — I read the max and then took a number below it. `#931`/`#932` were CC-INFRA's. Mine renumbered to **`#933`** as the newer entry, with every reference updated in the plan and the code. **The grep was right and I misused its answer**, which is a different failure from the ones above and worth one line rather than a paragraph.
+
+**ON YOUR HONEST LIMIT — accepted without argument, and I am not going to claim otherwise.** Steps 4 and 5 of the counter chain are **text-protected only**, and the `as any` I named as BLOCKER-10's mechanism is still live at `scanner.ts` and `routes.ts`, just moved. A relocated literal or a second payload builder passes all three assertions. **I am not claiming the value flows; I am claiming the two hardcoded lists carry the keys.** Making it flow needs those two `any`s typed, which is a change to shared diagnostic plumbing and not this batch.
+
+**J7/J9 — taken, and the sentence is corrected rather than defended.** *"One rounding seam"* is false. It reads **"one seam on the signal-birth path; three entry points bypass it, named"** in the System Manual, and the completion report will carry the same wording.
+
+---
+
 ## 10. ⛔ WHAT I WANT ATTACKED
 
 **J5 — ⛔ WITHDRAWN, AND THE WITHDRAWAL IS THE POINT.** I argued in r2 for keeping one source-text assertion against your "cut all eight", on the grounds that it was *"the only thing that made `#918` real"*. **A reader then deleted the call it guards and it stayed green** — it was matching the import line. **It was not doing the job I defended it for, and the defence read as principled while resting on a claim I had never tested.** It now requires a call form and is mutation-proved. ⇒ **The open question is not whether to keep it; it is whether my carve-out reasoning should have been trusted at all, given it survived a round of your review and mine.**
@@ -296,7 +316,7 @@ Repo-wide the same shape returns two more — `expectancy.ts`, `drift-dashboard-
 ⛔ **RE-DERIVED AT `e02f6d356` AFTER YOUR BLOCKER-8, NOT CARRIED FORWARD. Every number below was produced by a command run against this ref.**
 
 - **tsc: 384, EXACTLY the pre-existing baseline.** Message-keyed since `B-TSC-BASELINE-FIX`, so a flat 384 is meaningful rather than coincidental. ★ **AND IT IS ALSO A FENCE NOW:** your predicted mutation — keep the `decideGridAction` call, discard the result, hardcode `{action:'apply'}` — takes it to **390**. It no longer compiles.
-- **111 unit tests green** across **six** files — the sixth is `f-g-1-xstock-grid-counter-chain.test.ts`, new in r5 for BLOCKER-10's five-step chain. ⚠️ **This line has been wrong twice** (93 at r3, 105 at r4) for the same reason both times: it was written once and the suites kept growing. **It is re-run at each ref now rather than carried.**
+- **117 unit tests green** across **six** files — the sixth is `f-g-1-xstock-grid-counter-chain.test.ts`, new in r5 for BLOCKER-10's five-step chain. ⚠️ **This line has been wrong twice** (93 at r3, 105 at r4) for the same reason both times: it was written once and the suites kept growing. **It is re-run at each ref now rather than carried.**
 - **Every fix mutation-proved individually**, each with a baseline and a restored line either side — because the harness that reported three false *"NOT DETECTED"* verdicts is the reason a bare mutation result is not evidence. Proved at this ref: deleting the shutdown-drain CALL fails · the seam decision hardcoded fails to COMPILE (384 → 390) · `snap`'s EPS restored fails · the quantity floor restored fails · `short_side_unexercised` folded back fails · the legacy-key migration removed fails · **all FIVE steps of the xStock counter chain fail individually** · the latch never clearing fails · **and the persisting-fault CONTROL fails when the latch is simply deleted.**
 - ⚠️ **FIVE controls did NOT fire on first writing across the batch** — the `isOnGrid` band, the last-wins ordering, the self-check refusal, the quantity-floor value (it used a quantity that floors identically under both epsilons), and the seam fence. **Each was rewritten until the mutation killed it.** The count is here because it is the honest denominator for *"mutation-proved"*.
 - ⚠️ **One mutation harness reported three clean "NOT DETECTED" verdicts from an instrument that had captured no output at all**, and one edit script printed its success lines **before** the file write and then crashed. **Both read exactly like success.** Same class as every dead control here.
