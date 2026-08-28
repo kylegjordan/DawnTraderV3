@@ -886,8 +886,14 @@ describe('F-G-1 — the row carries its own grid answer (Langston catches 1 + 2)
   //     FAIL direction: the map only grows, so a symbol that has SINCE derived yields a FALSE
   //     FAIL — and a restart resets the map, so monotonicity holds only within a lifetime.
   // ⇒ The signal records what it saw AT BIRTH. An instrument read at the wrong moment is not an
-  // instrument. `rawSignal.metadata` spreads into `rtb_signals.metadata` at the birth insert,
-  // so the answer is durable per row.
+  // instrument.
+  // ⛔ THE SENTENCE THAT WAS HERE WAS WRONG AND IS CORRECTED IN PLACE, not below: it read
+  // "`rawSignal.metadata` spreads into `rtb_signals.metadata` at the birth insert, so the answer
+  // is durable per row." IT DOES NOT SPREAD — that insert builds a fresh object from an explicit
+  // field list, the stamp died there, and a post-deploy row carried no key. The field is now
+  // named in that list. ⚠️ And `rtb_signals` is a TRANSIENT pool (1 row table-wide when measured),
+  // so "durable per row" means durable for a row that lives minutes. The criterion grades
+  // POSITIONS; the rtb row is a waypoint.
   const seam = () => {
     const raw = readFileSync(join(process.cwd(), 'server/services/signal-orchestrator.ts'), 'utf8');
     return raw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
@@ -917,9 +923,28 @@ describe('F-G-1 — the row carries its own grid answer (Langston catches 1 + 2)
     expect(code).toMatch(/gridAtBirth:\s*rawSignal\.metadata\?\.gridAtBirth/);
   });
 
-  it('stamps onto rawSignal.metadata, which is what persists', () => {
+  // ⛔⛔ THIS TEST USED TO BE A NAME-OCCURRENCE COUNT — `.length >= 2` on the spread literal — TWO
+  // TESTS BELOW THE COMMENT SAYING I HAD REMOVED THAT SHAPE. Langston caught it. A floor will not
+  // break on correct changes, which is its only virtue; it passes if BOTH occurrences sit on dead
+  // paths, so it cannot distinguish "the stamp is wired" from "the identifier appears twice".
+  // ⇒ Replaced with the two things that actually have to be true, keyed on the ARMS.
+  it('each arm preserves prior metadata rather than replacing it', () => {
     const code = seam();
-    expect((code.match(/metadata:\s*\{\s*\.\.\.\(rawSignal\.metadata\s*\?\?\s*\{\}\)/g) ?? []).length)
-      .toBeGreaterThanOrEqual(2);
+    // the passthrough arm and the apply arm each spread the existing metadata before adding
+    for (const arm of [/resolved:\s*false/, /resolved:\s*true/]) {
+      const i = code.search(arm);
+      expect(i).toBeGreaterThan(-1);
+      const before = code.slice(Math.max(0, i - 260), i);
+      expect(before, 'the stamp must spread prior metadata, not replace it')
+        .toMatch(/\.\.\.\(rawSignal\.metadata\s*\?\?\s*\{\}\)/);
+    }
   });
+
+  // ⛔ AND WHAT THIS SUITE CANNOT DO, STATED RATHER THAN IMPLIED (Langston's point, and he is
+  // right): these are `readFileSync` + regex. They prove characters exist in one file. They
+  // CANNOT prove the value reaches a persisted row — which is exactly what failed once already,
+  // silently, at the RTB rebuild. The remaining hop (rtb row → promoted signal object, a FOURTH
+  // curated rebuild) is proven ONLY by observing a live promoted position carrying the stamp.
+  // ⇒ That observation is a GATE ON STEP 8, recorded in the progress report. No test here
+  // substitutes for it, and none should be read as though it does.
 });
