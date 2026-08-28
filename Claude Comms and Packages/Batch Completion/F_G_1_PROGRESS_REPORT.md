@@ -1,0 +1,87 @@
+# F-G-1 / B-GRID-REPRESENTABILITY — BATCH PROGRESS REPORT
+
+## **OPEN — awaiting (a) the visual UI check, which needs Kyle, and (b) an observation window on post-deploy trade geometry**
+
+> **Owner:** CC-C (Claude Analyst) · **Phase 19, plan row 3** · **Issues `#916`–`#930`, `#933`**
+> **Deployed sha:** `ca909072490786e414caade527ac9ff61f7745ab` — live on staging `2026-08-28T16:08:02Z`, `dt-deploy` asserted sha-identity and ENGINE RESUMED before recording.
+> **Rollback sha (known before deploying, per the step-6 rule):** `ed86a758e69136434aad98d777d184dfebec3a62`.
+> ⛔ **THIS IS NOT A COMPLETION REPORT AND THE BATCH IS NOT CLOSED.** Steps 8–11 are outstanding. It exists because the work is done and deployed and the remaining evidence is a *waiting* problem, not a *doing* one — and because the close criterion below has to be written **before** the data arrives.
+
+---
+
+## 1. WHAT THE BATCH IS FOR
+
+An exchange only accepts prices on a **grid** — a smallest permitted increment, published per pair. **Measured 2026-08-27 across 406 closed crypto trades, each against its own published Kraken `tick_size`: entry 80.8% representable, STOP 2.7%, TARGET 9.9%.** Stops and targets are ATR-derived floats and are overwhelmingly prices the venue cannot quote.
+
+Two consequences, and they are different:
+- **LIVE-PARITY DEBT** — in live mode these become real order prices, rejected or silently re-priced, so paper and live part company at the exact moment of exit.
+- **MEASUREMENT** — an exit test of the form *"did price trade THROUGH our limit?"* cannot discriminate at all when the limit is off-grid, because `high > limit` and `high >= limit` are then the same predicate.
+
+**What shipped:** **the VPG (Venue Price Grid)** — *can the venue express this price, and if not what is the nearest one that can?* — feeding **the VOG (Venue Order Gate)**, which asks Kraken *would you accept this order?*. Plus the bar-archive writer's silent dropped batches (`#705`/`#704`), and grid refusals surfaced as their own Filter Diagnostics category.
+
+---
+
+## 2. STEPS COMPLETED, WITH EVIDENCE
+
+| step | state | evidence |
+|---|---|---|
+| 1 Scope · 2 Audit | ✅ | Langston-approved before code existed |
+| 3 Implementation | ✅ | 23 files, **+2,928 / −8** at the deployed sha (`git diff --shortstat 98cd011c7..ca9090724 -- server/ shared/ client/`) |
+| 4 Code review | ✅ **APPROVED** | **Eight rounds. Twelve blockers, every one real.** Approved at `f280e9c6b`; two residuals landed at `ca9090724` |
+| 5 CI | ✅ | **4/4 green** on the deployed sha — TypeScript Check, Test Suite, Build, Docker Build |
+| 6 Deploy | ✅ | `dt-deploy` record written **only after** its own post-condition assertions passed |
+| 7 Verification | ⏳ **PART DONE** | runtime evidence below; **the visual UI check is outstanding and needs Kyle** |
+| 8–11 | ☐ | Langston second pass, iterate, governance, completion report |
+
+### Runtime evidence captured post-deploy (§3 of this report is the part that is NOT yet evidence)
+
+- **The grid resolver warmed at boot: 452 of 476 xStock symbols derived, 24 skipped** — read from the live log, not from a stored figure.
+- **79 real signals evaluated against the venue grid** in the first ~12 minutes — 58 xStock, 21 crypto — **and ALL 79 returned `would_round`. Zero were already on grid.** That is the batch's premise reproducing in production.
+- **3 signals refused** with `stop_distance_after_rounding`, and **the funnel counter matches the log exactly: 3 logged, 3 counted.** Two independent instruments agreeing, not one reading.
+- **`gridEvaluated` / `gridTags` reach the API on both lanes** (xStock 58, crypto 21) — the five-step counter chain Langston found dead-ended at `BLOCKER-10`, now carrying a live non-zero number end to end.
+- **The corrected log wording renders as intended:** `verdict=grid_unknown — OURS, not the signal's`.
+
+⚠️ **WHAT THAT EVIDENCE DOES *NOT* SHOW, stated because a reader will otherwise assume it does:** it shows the machinery runs, counts and refuses. **It does NOT yet show that trades opened after the deploy have on-grid prices** — that is §3, and it is unmeasured.
+
+---
+
+## 3. ⛔ THE PRE-REGISTERED CLOSE CRITERION — WRITTEN BEFORE THE DATA ARRIVES
+
+> **DO NOT DATA-MINE THIS.** A criterion chosen after seeing the window can always be made to pass. Written 2026-08-28, with **1 open and 1 close** in the post-deploy population at the time of writing.
+
+**THE WINDOW — a set QUANTITY, not a period:** the **first 30 crypto positions opened after `2026-08-28T16:08:02Z`**, or **7 days**, whichever comes first. If 7 days elapse with fewer than 30, that is reported as an underpowered read, **not** as a pass.
+
+**THE INSTRUMENT:** each position's `entry_price` / `stop_price` / `target_price` matched to **its own** published Kraken `tick_size` (fetched live from `/0/public/AssetPairs`; 1,437 pairs carry one). Representability tested as an exact multiple, relative tolerance at float precision. ✅ **The instrument is already proved** — run 2026-08-28 with a positive control (a constructed on-grid price → true) and a negative control (the same price plus a third of a tick → false), both correct.
+
+| | PASS | FAIL |
+|---|---|---|
+| **CRYPTO** | **100% of entry, stop and target on their published grid. No tolerance.** | ⛔ **ANY single off-grid leg.** The seam refuses or rounds — there is no third outcome — so one exception is not noise, it is **a live bypass path** (`#927`/`#928`/`#929`) and is itself the finding |
+| **xSTOCK** | on-grid **OR** the symbol absent from the derived map at open time — the passthrough arm is *designed* to ship unrounded when our own archive has no grid | an off-grid leg on a symbol that **did** have a derived grid |
+
+★ **WHY CRYPTO'S BAR IS ABSOLUTE:** for crypto the tick is the venue's own published statement, so the seam either rounds to it or refuses. A crypto trade that opens off-grid therefore did not come through the seam — which makes this criterion a live test of the three named bypass paths as well as of the rounding.
+
+**BASELINE FOR THE COMPARISON:** entry 80.8% / stop 2.7% / target 9.9%, n=406 closed crypto trades, pre-batch.
+
+---
+
+## 4. WHAT IS UNPROVEN, AND WHAT WOULD FALSIFY IT
+
+- ⛔ **THE HEADLINE IS NOT "ONE ROUNDING SEAM".** It is **"one seam on the signal-birth path; three entry points bypass it, named"** — `#928` an HTTP intent path taking a triple straight from the request body, `#929` a second position-sizing caller, `#927` a fabricated `entry * 1.02` target in three places, one of them the RTB **ranking** key. All homed with owners and plan positions. **Langston approved the batch shipping with them named; he did not approve it shipping under the old headline.**
+- **`#933`** — the published venue map is fetched **once at boot** and nothing retries it. F-G-1 introduced the first consumer whose empty-map behaviour is *stop trading*. **The detection half shipped** (distinct reason + one critical alert naming the restart); **the recovery half did not** and is `B-VENUE-PAIRS-REINIT`, plan row 3k. ⚠️ **Frequency unmeasured — the mechanism is cited, not a rate.**
+- **`#918`'s measured impact is NIL at n=4.** It ships because wiring an existing function into shutdown is trivially correct, **not** because it is load-bearing, and it must not become OBJ-9's headline.
+- **Steps 4 and 5 of the xStock counter chain are text-protected only** — the `as any` that made `BLOCKER-10` possible still exists at two sites, moved rather than removed. **The claim is that the two hardcoded lists carry the keys, not that the value flows.**
+- **Five controls in this batch did not fire on first writing** and were rewritten until the mutation killed them. **Of those, two were found by running the mutation, two by Langston naming them, one by a fresh reader — and none by reading my own test.**
+
+---
+
+## 5. GOVERNANCE FILES CHANGED SO FAR
+
+`SYSTEM_IMPACT_MAP.md` (§9.14b the VPG, §9.14c the VOG, and the bypass table) · `SYSTEM_MANUAL.md` (Chapter 5 representability section + the same bypass table) · `RUNNING_ISSUES.md` (`#916`–`#930`, `#933`; `#925` amended) · `PHASE_19_PLAN.md` (rows 3, 3b–3k) · `MISTAKE_PATTERNS.md` (`fix-follows-pointer`) · `MEMORY_CC_C.md` · the change list in `Claude Comms and Packages/Change Lists/`.
+
+☐ **Still owed at Step 10:** `BATCH_CATALOG.md`, `PHASE_HISTORY.md`, `PHASE_19_PLAN` §1 status board + §5 decision log, the shared `MEMORY.md`, and Langston's `/home/langston/MEMORY.md` (10.b).
+
+---
+
+## 6. CONVERSION
+
+When the window closes this file **becomes** `F_G_1_COMPLETION_REPORT.md` — same batch, recording **both halves**: what the data showed **against the criterion quoted as written above**, and **what decision or action was taken on it, and by whom.** A completion report that states the data and not the decision has not closed the loop.
