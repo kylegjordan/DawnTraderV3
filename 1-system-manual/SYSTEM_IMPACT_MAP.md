@@ -919,6 +919,38 @@ Kill-switch is **DB-backed per-mode**: `isKillSwitchTripped(mode)` (`guardrail-p
 
 ---
 
+### 9.14b THE VPG — Venue Price Grid Service (F-G-1) — ★ A NAMED COMPONENT
+
+- **Files**: `server/core/calculations/venue-price-grid.ts` (the service — pure, no imports, matching its two neighbours in that directory) · `server/markets/venue-grid-resolver.ts` (resolves the grid per symbol) · `server/markets/xstock-grid-refresher.ts` (derives the xStock grid, 6-hourly).
+- **★ NAME IT. It is THE VPG, not "the rounding code" (Kyle 2026-08-28: an unnamed service is one nobody looks for).** Same standing as the MCE, SQE and TEC.
+- **What**: the single answer to *"is this a price the venue can actually express, and if not, what is the nearest one that is?"* Measured 2026-08-27 on 406 closed crypto trades against Kraken's own published `tick_size`: entry 80.8% representable, **STOP 2.7%, TARGET 9.9%** — stops and targets are ATR-derived floats and overwhelmingly prices the venue cannot express.
+- **Upstream**: Kraken `/0/public/AssetPairs` `tick_size` (crypto — AUTHORITATIVE, 1,437 pairs / 11 distinct values) · **derived GCD of observed price increments (xStock — a FLOOR, never a tick, because Kraken does not index xStocks in `AssetPairs` at all: `#120`, B-NEW-36 sub-batch (c))**.
+- **Downstream — FOUR CALLERS, and the list is duplicated in the service header on purpose**: `signal-orchestrator.ts` (the ACTIVE path, **PAPER *and* LIVE** — one mode-agnostic seam) · `vts-runner.ts` (VTS lane, **TAG only**) · `xstock_spot/eval-cycle.ts` (xStock VTS lane, **TAG only** — and the lane that also births the xStock ACTIVE signal, which is why it tags rather than rounds) · `execution/venue-validate.ts` = **the VOG**, which shares the VPG's *basis* so the rule has one home.
+- **Shared state**: the derived xStock grid cache (module-level `Map`, warmed at passive-archive bootstrap, refreshed 6-hourly). **A failed refresh leaves the cache UNCHANGED rather than clearing it** — an empty cache would refuse every xStock signal.
+- **Execution**: synchronous per signal at the orchestrator seam; the refresher is a 6-hour interval started from `passive-archive-bootstrap.ts`.
+- **Blast Radius**: ⛔ **HIGH.** It sits on the ONE seam every strategy's signal passes through, ahead of sizing, the SQE and the target gate. A refusal drops the signal on the active path.
+- **RULES IT ENCODES**: entry rounds **NEAREST**; **stop and target round AWAY from entry** (a stop is a BOUNDARY — nearest would move 197 of 398 stops INTO the structural level they were placed behind); **EXCEPT `volatility_edge`, whose target is a `Math.min` CAP and rounds TOWARD entry.** ⛔ **REJECT, NEVER RE-ROUND** — nearest is deterministic, so "round again" can only mean the other way, which is shopping for a pass. ⛔ **The invariant is PAIRWISE**: rounding each price safely alone can still collapse the pair to zero risk distance.
+- ⛔ **NO FALLBACK FOR A PRICE; SKIP-ON-MISSING FOR A PRE-FILTER.** An invented tick emits an unplaceable order; a pre-filter refusing on missing metadata blocks trades on a data gap.
+- **Tests**: `f-g-1-venue-price-grid-fence.test.ts` (26 — direction by role, the pairwise collapse, every refusal, the GCD derivation, tag-only purity; four mutation-proved).
+
+---
+
+### 9.14c THE VOG — Venue Order Gate (P19-B8.5 OBJ-8, named F-G-1) — ★ A NAMED COMPONENT
+
+- **Files**: `server/services/execution/venue-validate.ts`.
+- **★ NAME IT. It is THE VOG — a GATE, not a probe or a check**: on a definitive rejection it returns `opened: false` and the trade does not happen.
+- **What**: asks Kraken itself *"would you ACCEPT this order?"* via `AddOrder` with `validate=true`, which executes nothing.
+- **⛔ IT IS THE SECOND HALF OF A PAIR AND THE ORDER MATTERS**: the **VPG** establishes what the venue can EXPRESS; the **VOG** asks whether it would ACCEPT it. The VPG runs first and feeds it. Asking about a price or size the venue could never take wastes the question.
+- **Upstream**: `active-execution-engine.ts` paper open seam, after the VPG has rounded price *and* size.
+- **Downstream**: a definitive rejection blocks the open; an ambiguity is a visible skip.
+- **Execution**: async, one network round-trip per paper open. **PAPER-ONLY BY CONSTRUCTION** — in live mode the real order is the venue contact.
+- **Blast Radius**: **MEDIUM** — it can block an open, but fails OPEN on every ambiguity.
+- ⚠️ **xSTOCK ALWAYS SKIPS** — Kraken does not index xStocks in `AssetPairs`, so there is no oracle for that class at all. Documented, not a defect.
+- ⛔ **KNOWN GAP `#922`**: a SUCCESSFUL validation is recorded nowhere, so *"ran and passed"* is indistinguishable from *"never ran"* — the `#704` shape, on a component that blocks opens. → `B-VALIDATE-OBSERVABILITY`.
+- **Tests**: `p19-b8-5-venue-validate.test.ts` (8).
+
+---
+
 ### 9.15 C5 Financial Diagnostics — ⚠️ **ADDED B-COST-MATH-CONSOLIDATION 2026-07-29; IT HAD NO SIM ENTRY AT ALL BEFORE THAT**
 - **File**: `server/services/c5-financial-diagnostics.ts` (Phase 8.8.3-C5). ⚠️ **The gap is recorded, not quietly filled: this component ran THREE self-checks on the live money path, on EVERY engine close, `isEnabled = true` with no caller ever disabling it — and the SIM was silent on it while `SYSTEM_MANUAL.md:10148` carried only a file-inventory row reading "Financial metric diagnostics."** A filename in a list is not a description of behaviour. **Per §9 that silence is itself a governance failure, and it is the most plausible reason three broken checks survived: nothing pointed at them, so nothing audited them.**
 - **What**: Verification-only. Emits observations; **asserts nothing that can act.** Never writes trading state (its own header carries a SCOPE LOCK). Four surfaces: `logBalanceReconciliation` (C5-1), `logGuardrailInput` (C5-2), `logPnlReconciliation` (C5-3), `logAnalyticsScope`.

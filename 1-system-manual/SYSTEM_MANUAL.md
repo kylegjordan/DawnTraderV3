@@ -4331,6 +4331,90 @@ The L-Series autonomy cluster (MCP, ARE, GASP, MOF, MACO, ECS, DCE, etc.) was di
 > - **⚠️ Known lying-state surfaces (do NOT trust for engine liveness):** the `health_engine` broadcast ENGINE block reads the legacy `global.tradingEngines` registry (#214 — reports `isRunning:false` during active paper; **the liveness CONSOLIDATION to the DB `system_context.isEngineActive` SSOT + the `LIVENESS_SPLIT` divergence witness SHIPPED in P19-B4b D5 — see the Runtime Shared-State box below; `global.tradingEngines` itself is a never-initialized vestigial global whose removal is homed #297 pending the agent-intent subsystem investigation**); the legacy Phase-22.3 `/live-trading/*` routes bypass the Phase-21 gate and broadcast fake live-active state (#213 — gate-or-retire before Phase 21; the `live-trading-service` stub itself was DELETED in P19-B2).
 > - **⚠️ Paper-fill destination (rule-20 correction, P19-B2 2026-06-13):** for SPOT there is **NO "Kraken paper order system."** Kraken's hosted demo is FUTURES-only; spot `validate=true` validates an order but never fills it. So paper-mode SPOT fills are a **Kraken-vetted, high-fidelity INTERNAL fill** — every paper order is sent to Kraken with `validate=true` (real-venue vetting) and then filled locally off real Kraken WS prices with a real-fee + L2-depth-slippage + partial-fill model (so paper EV ≈ live EV). The engine path is otherwise identical; only the order DESTINATION differs (live → real Kraken order; paper → validate-vetted local fill, via the OrderPlacer port — §3.7/§9.14 SIM). Any older text describing paper as "routing through Kraken's paper order system" for spot is stale.
 
+> ## ★ VENUE PRICE REPRESENTABILITY — THE VPG AND THE VOG (F-G-1, 2026-08-28)
+>
+> ⛔ **THE MANUAL WAS SILENT ON THIS UNTIL F-G-1, AND THE SILENCE WAS CORRECT UNTIL THEN.** A
+> current-state document has nothing to say about a behaviour that does not exist, and until this
+> batch **nothing in the system rounded a decision price**. The gap became real when the behaviour
+> did. *(That distinction matters: the same grep output — zero hits — is produced by an omission
+> and by an absent referent, and only one of them is a governance failure.)*
+>
+> ### The problem, measured
+>
+> An exchange accepts prices only on a **grid** — a smallest permitted increment, published
+> per pair. Prices between grid points do not exist as far as the venue is concerned.
+> **MEASURED 2026-08-27, 406 closed crypto trades each matched to its OWN published Kraken
+> `tick_size`:**
+>
+> | price | representable |
+> |---|---|
+> | entry | **80.8%** |
+> | stop | **2.7%** |
+> | target | **9.9%** |
+>
+> Entries inherit validity from an observed print. **Stops and targets are ATR-derived floats and
+> are overwhelmingly prices the venue cannot express.** Two consequences, and they are different:
+> **(i) LIVE-PARITY DEBT** — in live mode these become real order prices, rejected or silently
+> re-priced, so paper and live diverge at the exact moment of exit; **(ii) MEASUREMENT** — an exit
+> test of the form *"did price trade THROUGH our limit?"* cannot discriminate at all when the limit
+> is off-grid, because `high > limit` and `high >= limit` are then **the same predicate**.
+>
+> ### The two components, and the order between them
+>
+> **THE VPG — Venue Price Grid** (`core/calculations/venue-price-grid.ts`) answers *"is this a
+> price the venue can express, and if not, what is the nearest one that is?"*
+> **THE VOG — Venue Order Gate** (`services/execution/venue-validate.ts`) asks Kraken itself
+> *"would you ACCEPT this order?"*, via `AddOrder` with `validate=true`, which executes nothing.
+>
+> ⛔ **THE VPG RUNS FIRST AND FEEDS THE VOG.** Asking the venue about a price or a size it could
+> never take wastes the question and returns a "no" we could have answered ourselves. **Before
+> F-G-1 the VOG formatted the price for its own probe and the engine then filled at the UNROUNDED
+> price — so the oracle was answering about an order we did not place**, which is why 19% off-grid
+> entries produced no rejection flood.
+>
+> ### The rounding rules, and why direction is decided by ROLE
+>
+> | price | direction | why |
+> |---|---|---|
+> | **entry** | NEAREST | an observed print — a point estimate, not a boundary |
+> | **stop** | **AWAY from entry** | ⛔ a stop is a **BOUNDARY**. Our stops are structural levels (`supportLevel`, `min(c2Low,c1Low)`, `parentLow`), and **nearest rounding moves the stop TOWARD entry on 197 of 398 long crypto trades (49.5%)** — i.e. half of all stops would land INSIDE the structure they were deliberately placed behind. That is a design violation, not noise. Cost of the safe direction: **+0.241% median extra risk** |
+> | **target** | **AWAY from entry** | preserves *"at least K × ATR"* — and can never manufacture a win by moving the goalpost closer |
+> | **target, `volatility_edge` ONLY** | ⛔ **TOWARD entry** | its target is `Math.min(measuredMove, atrTarget)` — a **CEILING**. Rounding it away pushes it PAST the bound it was defined by. **A boundary rounded OUT of the thing it bounds is as wrong as one rounded INTO it.** The only cap in the strategy set |
+>
+> ⛔ **REJECT, NEVER RE-ROUND.** Rounding to nearest is deterministic, so *"round again"* can only
+> mean rounding the other way — and choosing the direction that lets a trade through is shopping
+> for a pass.
+> ⛔ **THE INVARIANT IS PAIRWISE, NOT PER-PRICE.** Rounding each price safely on its own does not
+> make the pair safe: with tick `0.01`, a stop of `99.99` is already representable and does not
+> move, while an entry of `99.9949` rounds to `99.99` — **risk distance zero**. "Away" is therefore
+> measured from the **ROUNDED** entry, and the rounded triple is asserted for strict ordering plus
+> at least one tick of separation.
+>
+> ### xStock has no published grid — it is DERIVED, and recorded as a FLOOR
+>
+> **Kraken does not index xStocks in `AssetPairs` at all** (`#120`, B-NEW-36 sub-batch (c)), and
+> the VOG skips every xStock, so there is **no oracle for that class**. The grid is derived as the
+> **GCD of observed price increments, per symbol**, over a stated window.
+> ⛔ **NOT a decimal-place count, and the reason is not academic: measured over one day of live
+> prices, 6 of 40 symbols derive a `0.0025` grid and 3 more derive `0.0005`.** A "round to the
+> coarsest decimal place" method would have emitted **invalid prices for 9 of those 40**, because
+> `0.001` is not a multiple of `0.0025`.
+> ★ **GCD is safe by proof rather than by hope**: every observed increment is a whole number of
+> true ticks, so their GCD is too — **a derived grid always NESTS inside the real one.** It can be
+> too coarse (we lose granularity); it can never emit an unrepresentable price.
+>
+> ### VTS TAGS; the active path REJECTS
+>
+> On the VTS learning lanes the VPG **annotates and never drops** — the trade still simulates on
+> its native geometry. Two reasons: VTS runs its guards under `'tag'` disposition by design, and a
+> drop arm on missing grid data would re-create the 95–97% strangle reorg-B3.2 was built to undo.
+> ⚠️ **The xStock ACTIVE signal is manufactured inside the xStock VTS lane**, which is why the
+> insertion point is per-lane at the normalizer and NOT at the shared strategy dispatcher: rounding
+> there would reach into the active path and delete a signal before the funnel counted it.
+>
+> ⛔ **NO FALLBACK FOR A PRICE; SKIP-ON-MISSING FOR A PRE-FILTER.** An invented tick emits an
+> unplaceable order. A pre-filter that refuses on missing metadata blocks trades on a data gap.
+
 ## Table of Contents
 
 1. [Architecture Overview](#1-architecture-overview)
