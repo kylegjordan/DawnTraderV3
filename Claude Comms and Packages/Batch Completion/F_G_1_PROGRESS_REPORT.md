@@ -258,6 +258,22 @@ active_open_positions e74a9a7c  WEN/USD  qty 19.44708601  opened 16:25:28.380Z
 **AUTHORITY:** Langston's CHANGES-NEEDED on §3e, all three legs re-derived by me at the ref before acting. **§3e is superseded on the interval end and on the floor's REASONING; its decoupling, its `WEN/USD` enumeration and its withdrawal of the floor all stand.** ✅ **Still pre-data on the crypto leg; the xStock leg holds the one excluded row.**
 
 ---
+### 3g. ➕ AMENDMENT 3b — THE THIRD RESET, AND THE POSITIVE CONTROL THE DURABILITY REF STILL LACKS (Langston, on re-derivation; **APPENDED**)
+
+✅ **(1) THE THIRD RESET, NAMED SO IT STOPS BEING A QUESTION.** The deploy clone's reflog carries a reset **AFTER** §3f's corrected interval end: **`0e5ad6d62 HEAD@{19:11:13Z}`**, an hour past `18:05:22Z`.
+⇒ **IT DOES NOT MOVE THE DURABILITY REF.** It is HOTFIX `#935` (trust-proxy): three files — `server/index.ts`, `PHASE_19_PLAN.md`, `RUNNING_ISSUES.md` — and **ZERO occurrences of `gridAtBirth`.**
+★ **POSITIVE CONTROL ON THAT GREP, because a zero is exactly what needs one: the identical grep returns 11 on `56ac8067a`.** The instrument discriminates; the zero is a measurement, not a silence.
+⚠️ **Recorded because a Step-8 reader who finds a reset an hour past the exclusion end will reopen a settled question** — and re-deriving it costs more than this paragraph.
+
+⛔⛔ **(2) THE RESIDUAL THAT IS ACTUALLY LOAD-BEARING, AND IT IS A CAPABILITY INFERENCE — THE THING I HAVE BEEN CAUGHT ON ALL DAY.**
+**`18:05:22Z` IS DATED FROM THE COMMIT THAT FIXES DURABILITY, NOT FROM AN OBSERVED DURABLE STAMP.** ★ *"The commit that makes X possible landed at T"* is **not** *"X was observed working from T"* — that is `capability ≠ coverage`, my own standing lesson, applied to a boundary rather than to an instrument.
+✅ **THE NEGATIVE CONTROL EXISTS:** §3c's `17:59:29Z` row, unstamped, correctly INSIDE the interval.
+⛔ **THE POSITIVE CONTROL DOES NOT: no row opened after `18:05:22Z` has yet been observed CARRYING `gridAtBirth: {resolved: …}`.** ⚠️ **On the 100%-no-tolerance leg the cost of being wrong is the THIRD recurrence of the same collision** — §3e reintroduced it once already after §3e existed to kill it.
+⇒ ✅ **PRE-REGISTERED, §9.4 DISPOSITION 1 — FOLD INTO THE WORK IN HAND: STEP 8 OPENS WITH THAT READ, BEFORE ANY PASS OR FAIL IS STATED.** The first `closed_trades` row opened after `18:05:22Z` is inspected for a populated `gridAtBirth`; **until it is, the exclusion boundary is asserted rather than proved and no result may be reported against the criterion.**
+★ **AND IT IS THE SAME READ AS GATE 2 — they are one observation, not two.** Gate 2 asks *"does the stamp reach a real position?"*; this asks *"and from when?"* **One row answers both, which is why this costs nothing to add and why neither can be discharged by argument.**
+⚠️ **Rule 29(b), and Langston named the precedent as my own `#704`: the control must match the thing whose absence it licenses.** A boundary justified by a diff needs a row, not a diff.
+
+---
 ## 4. WHAT IS UNPROVEN, AND WHAT WOULD FALSIFY IT
 
 - ⛔ **THE HEADLINE IS NOT "ONE ROUNDING SEAM".** It is **"one seam on the signal-birth path; three entry points bypass it, named"** — `#928` an HTTP intent path taking a triple straight from the request body, `#929` a second position-sizing caller, `#927` a fabricated `entry * 1.02` target in three places, one of them the RTB **ranking** key. All homed with owners and plan positions. **Langston approved the batch shipping with them named; he did not approve it shipping under the old headline.**
