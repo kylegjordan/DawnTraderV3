@@ -1,7 +1,7 @@
-# F-G-1 — B-GRID-REPRESENTABILITY — STEP-4 CHANGE LIST (r4)
+# F-G-1 — B-GRID-REPRESENTABILITY — STEP-4 CHANGE LIST (r5)
 
-> **READY AT: `origin/migration/aws-supabase`, commit `e02f6d356`.** Diff base `98cd011c7` (the commit before the first code commit).
-> **20 files, +2,556 / −7** — `git diff --shortstat 98cd011c7..e02f6d356 -- server/ shared/ client/`, run now, not carried forward.
+> **READY AT: `origin/migration/aws-supabase`, commit `2245ab15e`.** Diff base `98cd011c7` (the commit before the first code commit).
+> **23 files, +2,755 / −8** — `git diff --shortstat 98cd011c7..2245ab15e -- server/ shared/ client/`, re-run at THIS ref, not carried forward from r4.
 > ⛔ **BLOCKER-8 WAS THIS LINE. It said `+2,202 / −6`, which was the figure at `cef6e7f83` — i.e. BEFORE `01b54cf03`, the r3 code commit — under a sentence reading *"re-derived at the ref, not restated."* The sentence was the claim and the number was the counter-example.** ★ **AND IT IS `fix-follows-pointer` AGAIN: in r2 you named three per-SECTION counts, I fixed those three and restated the TOTAL.** The number now names the command that produced it, so the next reader can re-run it rather than trust it.
 > **Untracked check run:** the only `??` entry is `.claude/launch.json`, local config, deliberately not committed.
 > ⛔ **ONE GATE: the code diff.** Design rulings and the VPG↔VOG pairing were separate dispatches and are not re-asked here.
@@ -246,6 +246,36 @@ Repo-wide the same shape returns two more — `expectancy.ts`, `drift-dashboard-
 
 ---
 
+## 9e. WHAT CHANGED IN r5 — BLOCKER-10, BLOCKER-11, CHANGES-NEEDED-3
+
+**BLOCKER-10 — the xStock VTS lane was instrumented into a dead end, and the `as any` cast is the mechanism.** Your census is right at every hop. The chain now lands all five steps `SYSTEM_IMPACT_MAP` already specified, and **each has a control that dies when it is broken:**
+
+| step | was | now | mutation |
+|---|---|---|---|
+| 1 declare | field on no interface | on `XstockEvalCycleCounters` | build error |
+| 2 initialise | absent from the factory | `gridEvaluated: 0`, `gridTags: {}` | ✅ fails |
+| 3 write | **three `as any` casts** | typed, no cast | ✅ fails |
+| 4 accumulate | in neither the literal nor the key list | in both, plus a record merge for the verdict map | ✅ fails |
+| 5 expose | absent from the route's field-by-field literal | both keys present | ✅ fails |
+
+★ **THE CAST IS THE PART WORTH NAMING: it let a write to an undeclared field COMPILE, which is what made steps 1, 2, 4 and 5 optional.** Removing it turns a future rename into a build error rather than a silent zero. And your framing is the one I would not have reached — *"it no longer increments nothing, it increments something nothing reads"* — on the one class whose grid is **derived**, so the tab read **"perfectly on-grid"** exactly where we are least sure.
+
+**BLOCKER-11 — the latch defeated the re-arm its own neighbour promised.** Clears on a successful flush, and expires after a bounded window.
+
+⛔ **AND THE CONTROL ON THAT FIX CAUGHT A RACE I HAD JUST INTRODUCED.** The arm asserting a **persisting** fault still raises **once** — the arm that stops *"fix the latch"* becoming *"delete the latch"* — **failed: two alerts.** The raise is fire-and-forget, so the latch was set after an `await` and two close flushes both passed the check. It is now **claimed synchronously before the first await and released in the catch if the alert never got out**, which preserves the property the old ordering existed to protect. ★ **I only know because the control was written to fail in both directions; a one-directional re-arm test would have certified the race.**
+
+★★ **AND THE CLASS GREP CAUGHT THE REST OF IT: `alertPermanentWriteFailure` has TWO callers and I had cleared the latch on the OHLC leg only — the recoverable one.** The **ticker** leg — `#705`'s unrecoverable instance, the one you corrected my sizing on once already — now clears too. **`fix-follows-pointer` caught by its own remedy, in the file where that pattern's third instance lives.**
+
+**CHANGES-NEEDED-3 — decision right, stated reason wrong, and you are right that the reason is the permanent artifact.** It is scale-free in the **tick**; the error it absorbs is float error in `e − s`, which scales with the **price**. Same class, left alone because it is **UNREACHABLE** — the 0.3% stop floor puts real separations ~1e7 ticks out — **not** because it is sound. The comment now says that, and says what makes it live again: removing or lowering that floor.
+
+**THE GREP YOU ASKED ME TO RUN AND STATE — crypto VTS, raw symbol.**
+`vts-runner` passes `pair.symbol` with no canonicalisation · `resolveByInternal` is an exact-key `autoMap.get(symbol.toUpperCase())` · `autoMap` is keyed on `internalSymbol.toUpperCase()`, documented canonical `"ADA/USD"` · **live form read from the DB: `ZEC/USD`, `XMR/USD`, `USELESS/USD`** — `BASE/QUOTE` uppercase.
+⇒ **THEY MATCH.** Same conclusion as your xStock check and **the same caveat: by CONVENTION, not by enforcement.** Nothing makes the two keyspaces agree; they happen to.
+
+**YOUR ANSWER ON THE FIVE CONTROLS — taken, and it reframes the number I offered.** You are right that a control failing its mutation and being rewritten is the process *working*, and that the comparator I reached for was wrong. The split you asked for, at this ref: **of the controls that did not fire on first writing, two were found by RUNNING the mutation, two by YOU naming them, and one by a fresh reader.** ⇒ **zero were found by reading my own test.** And your sharper point stands: the harness that reported three false "NOT DETECTED" verdicts means **the honest denominator is mutations run on an instrument PROVEN to capture output**, which is why every mutation table since prints a baseline and a restored line either side. **Reviewed-process rather than internal habit is the correct reading, and I am not arguing with it.**
+
+---
+
 ## 10. ⛔ WHAT I WANT ATTACKED
 
 **J5 — ⛔ WITHDRAWN, AND THE WITHDRAWAL IS THE POINT.** I argued in r2 for keeping one source-text assertion against your "cut all eight", on the grounds that it was *"the only thing that made `#918` real"*. **A reader then deleted the call it guards and it stayed green** — it was matching the import line. **It was not doing the job I defended it for, and the defence read as principled while resting on a claim I had never tested.** It now requires a call form and is mutation-proved. ⇒ **The open question is not whether to keep it; it is whether my carve-out reasoning should have been trusted at all, given it survived a round of your review and mine.**
@@ -266,8 +296,8 @@ Repo-wide the same shape returns two more — `expectancy.ts`, `drift-dashboard-
 ⛔ **RE-DERIVED AT `e02f6d356` AFTER YOUR BLOCKER-8, NOT CARRIED FORWARD. Every number below was produced by a command run against this ref.**
 
 - **tsc: 384, EXACTLY the pre-existing baseline.** Message-keyed since `B-TSC-BASELINE-FIX`, so a flat 384 is meaningful rather than coincidental. ★ **AND IT IS ALSO A FENCE NOW:** your predicted mutation — keep the `decideGridAction` call, discard the result, hardcode `{action:'apply'}` — takes it to **390**. It no longer compiles.
-- **105 unit tests green** across five files. ⚠️ **§11 previously said 93, which was the count before the r3 commit it was describing.** The two F-G-1 suites alone hold **74 `it()` at this ref** (60 + 14).
-- **Every fix mutation-proved individually, and the two you would ask about first:** deleting the shutdown-drain CALL now fails · the seam decision hardcoded now fails to COMPILE · `snap`'s EPS restored to `1e-9` fails · the quantity floor restored fails · `short_side_unexercised` folded back fails · the legacy-key migration removed fails.
+- **111 unit tests green** across **six** files — the sixth is `f-g-1-xstock-grid-counter-chain.test.ts`, new in r5 for BLOCKER-10's five-step chain. ⚠️ **This line has been wrong twice** (93 at r3, 105 at r4) for the same reason both times: it was written once and the suites kept growing. **It is re-run at each ref now rather than carried.**
+- **Every fix mutation-proved individually**, each with a baseline and a restored line either side — because the harness that reported three false *"NOT DETECTED"* verdicts is the reason a bare mutation result is not evidence. Proved at this ref: deleting the shutdown-drain CALL fails · the seam decision hardcoded fails to COMPILE (384 → 390) · `snap`'s EPS restored fails · the quantity floor restored fails · `short_side_unexercised` folded back fails · the legacy-key migration removed fails · **all FIVE steps of the xStock counter chain fail individually** · the latch never clearing fails · **and the persisting-fault CONTROL fails when the latch is simply deleted.**
 - ⚠️ **FIVE controls did NOT fire on first writing across the batch** — the `isOnGrid` band, the last-wins ordering, the self-check refusal, the quantity-floor value (it used a quantity that floors identically under both epsilons), and the seam fence. **Each was rewritten until the mutation killed it.** The count is here because it is the honest denominator for *"mutation-proved"*.
 - ⚠️ **One mutation harness reported three clean "NOT DETECTED" verdicts from an instrument that had captured no output at all**, and one edit script printed its success lines **before** the file write and then crashed. **Both read exactly like success.** Same class as every dead control here.
 - **vite build: succeeds.**
