@@ -95,6 +95,20 @@ plus **any new `MISTAKE:` trailer whose slug is `skipped-the-gate` or names a wo
 ★ **WHY MORE RULE-TEXT CANNOT FIX THIS (Langston):** *"the gate did not fail from ignorance."* The rule existed, was one day old, was written by the person who broke it, and **predicted its own bypass in its own text.** A rule that has been tested that directly and still failed is not improved by another sentence.
 **THE COUNTER-HABIT, until #744 ships:** at the moment you judge something urgent, **that is the trigger to check whether a gate applies** — urgency is the condition the rule warns about, so feeling it is the cue, not the excuse.
 
+### `verification-weaker-than-claim` — **THE GATE RAN, PASSED, AND COULD NOT HAVE FAILED FOR THE REASON THAT MATTERED** — **LIVE — NOT IN §13** · mechanism: **NONE YET** (opened 2026-08-29, CC-C; **Langston directed it out of `#938`'s body — *"that belongs in `MISTAKE_PATTERNS.md` as its own named pattern, not buried"***)
+
+★★ **THE DISTINCTION FROM EVERY NEIGHBOUR HERE, AND IT IS WHY IT GETS ITS OWN SLUG: THE CHECK WAS RUN.** It is not `skipped-the-gate` — nothing was skipped. It is not `silence-not-evidence` — the instrument spoke. It is not `wrong-object` — the right artifact was examined. **A real check was performed on the real thing and PASSED, while being incapable of failing for the reason the claim rested on.**
+⇒ ⛔ **AND THAT IS WORSE THAN NO CHECK, because it produces a PASS in the record.** A missing verification is visible as missing. **This one leaves evidence of diligence behind it**, so the next reader stops.
+
+| # | the claim | the verification actually run | why it could not discriminate |
+|---|---|---|---|
+| 1 | `BATCH_79_0m_a`: `applicable:{…false}` added to the payload **"so frontend can render N/A"** for three non-applicable xStock gates | **G5, a genuine §9.3 Claude-in-Chrome UI check:** *"xStocks tab shows the amber banner… **Diagnostic panels load without errors.**"* | ⛔ **"Loads without errors" is TRUE whether the N/A renders or never renders.** The frontend half was never built (`#938`); the panel discards `applicable` as non-numeric and has never read it. **The batch shipped with a passing UI gate on a property its own claim did not depend on** |
+
+⚠️ **ONE INSTANCE. RECORDED AT ONE, DELIBERATELY, AND IT DOES NOT MEET THE §13 THRESHOLD** (3+ across 2+ batches) — it is here to ACCUMULATE, not because it has earned promotion. ★ **Langston's reason for naming it now rather than waiting: the class is invisible by construction — every instance leaves a GREEN gate in the record, so nobody goes looking. If it is not named, later instances will not be recognised as instances.**
+
+✅ **THE COUNTER-QUESTION, and it is one line at verification time — the same shape as `CONDUCT.md` §6b step 2:** ⛔ **"WOULD THIS CHECK HAVE COME OUT DIFFERENTLY IF THE CLAIM WERE FALSE?"** If the answer is no, **you have evidence that the page loaded, not evidence that the thing works.** ⚠️ **State the property the check actually discriminates**, not the property you were hoping to establish — *"panels load"* and *"the N/A renders"* are different sentences, and only one of them was ever tested.
+⚠️ **NOT A NEW RULE:** §6b step 2 already asks exactly this and is auto-loaded. **It fired at the wrong moment** — the batch asked it of its own reasoning and not of its own gate. **Same shape as rule 29's origin: the rule exists, and the failure happens one step before it reads.**
+
 ### `fix-follows-pointer` — **FIXED THE INSTANCE THAT WAS POINTED AT; THE CLASS STAYED WHERE IT WAS** — **LIVE — NOT IN §13** · mechanism: ✅ **grep the CLASS before fixing the instance, and STATE what the grep returned** (opened 2026-08-28, CC-C; **Langston named it, and it is his ruling on my own J8 question**)
 
 ⛔ **FAILS THE §13 BATCH-DIVERSITY LEG AND IS RECORDED ANYWAY** — five instances, **all inside `F-G-1`**. Same standing as `fix-relocates` directly above, and the two are **siblings that must not be merged.**
