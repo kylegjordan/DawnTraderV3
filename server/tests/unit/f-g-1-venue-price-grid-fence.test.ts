@@ -837,6 +837,10 @@ describe('F-G-1 — the ONE HOME rule is ENFORCED, not asked for', () => {
     // and must alias them, never build its own
     expect(panel).toMatch(/VPG_OUR_BUG\s*=\s*VPG_WIRING_BUG_VERDICTS/);
     expect(panel).toMatch(/VPG_NOT_A_FAILURE\s*=\s*VPG_NOT_A_FAILURE_VERDICTS/);
+    // ⚠️ WEAK LEG, AND LANGSTON NAMED IT AS SUCH — this is NAME-KEYED, so a differently-named
+    // local Set used at the two filter sites would pass. The IMPORT and DERIVATION assertions
+    // above are what carry the load. Kept because it catches the obvious revert cheaply;
+    // ⛔ DO NOT CITE IT as proof that no local membership can exist.
     expect(panel, 'the panel must not construct its own verdict Set').not.toMatch(/VPG_(OUR_BUG|NOT_A_FAILURE)\s*=\s*new Set/);
   });
 });

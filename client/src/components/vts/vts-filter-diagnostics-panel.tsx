@@ -279,10 +279,14 @@ export type { GateDisposition };
  * F-G-1 / Langston CHANGES-NEEDED-4 — WHOSE FAULT IS THIS VERDICT?
  *
  * ⛔ The VPG row used to sum "everything except on_grid and would_round" into one figure labelled
- * "would fail the venue price grid" — quietly including the two verdicts the VPG itself marks
- * `isWiringBug: true`. Those are OUR defects: no grid resolved, or a rounding that produced an
- * off-grid price. The module's own docstring says a VPG bug "must never be filed against the
- * signal… in the exact bucket used to judge signals", and this render did exactly that.
+ * "would fail the venue price grid" — quietly including the verdicts the VPG itself marks
+ * `isWiringBug: true`. Those are OURS: a VPG defect, or one of our own limitations. The module's
+ * own docstring says a VPG bug "must never be filed against the signal… in the exact bucket used
+ * to judge signals", and this render did exactly that.
+ * ⚠️ THIS PARAGRAPH ENUMERATED TWO MEMBERS AND THE SET NOW HAS THREE — Langston's residual, and it
+ * is the unfenceable class reproducing INSIDE the fix that documents it, three lines above the
+ * constants themselves. **Membership is read from the shared module and is deliberately NOT
+ * restated here**, in prose or in code.
  * ★ I split that taxonomy IN THIS BATCH and the only human-facing render re-merged it — the
  * function was fixed, the call was not. `fix-follows-pointer`, one tab over.
  * ⚠️ `isWiringBug` has two production readers and both are `console.error`, so nothing on the
