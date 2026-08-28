@@ -1616,8 +1616,11 @@ async function generatePhase10Signal(
     // A WIRING problem, not a quality verdict — loud, like `invalid_atr`, and never coerced
     // into a quality bucket where it would read as a property of the signal.
     console.error(
-      `[F-G-1][VTS_GRID_WIRING] ${symbol}/${strategy} verdict=${_gridTag.verdict} — no venue grid resolved; ` +
-      `simulating on native geometry and tagging. This is a data-wiring gap, not a signal defect.`,
+      `[F-G-1][VTS_GRID_WIRING] ${symbol}/${strategy} verdict=${_gridTag.verdict} — OURS, not the signal's; ` +
+      // ⛔ NAME THE BUCKET, DO NOT ENUMERATE IT. This line used to hardcode "no venue grid
+      // resolved" while printing a verdict that may be `short_side_unexercised` — self-refuting on
+      // its own line the moment the set grew. Langston, at the ref.
+      `simulating on native geometry and tagging. Cause is the verdict; see shared/venue-grid-verdicts.ts.`,
     );
   }
 

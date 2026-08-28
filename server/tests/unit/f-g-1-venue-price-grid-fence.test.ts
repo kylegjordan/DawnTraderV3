@@ -803,3 +803,41 @@ describe('F-G-1 — "whose fault is this verdict" has ONE home, and both sides r
     for (const v of VPG_WIRING_BUG_VERDICTS) expect(VPG_NOT_A_FAILURE_VERDICTS.has(v)).toBe(false);
   });
 });
+
+describe('F-G-1 — the ONE HOME rule is ENFORCED, not asked for', () => {
+  // ⛔⛔ I TOLD LANGSTON THE EXISTING TESTS CAUGHT A RE-INLINE. THEY DID NOT — they caught DRIFT
+  // AFTER one. He called it unsupported and he was right: I re-derived it, and a re-inline whose
+  // literal MATCHES the shared set passes the whole suite, 69/69. So `shared/venue-grid-verdicts.ts`
+  // saying "neither may re-state the membership locally" was an unenforced rule — the exact shape
+  // that file was created to remove, one level up.
+  // ★ THE TOOL WAS ALREADY IN THIS FILE, pointed the other way: the boot-drain assertion requires
+  // a CALL because an import could satisfy it. Here it is inverted — require the IMPORT, because
+  // an inline literal would otherwise satisfy everything.
+  // MUTATION: re-inline the membership at either consumer, matching or not, and this fails.
+  const stripped = (rel: string) =>
+    readFileSync(join(process.cwd(), rel), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+
+  // ⚠️ AND THE FIRST VERSION OF THIS TEST WAS TOO BROAD — it asserted no member STRING appeared in
+  // either file, and fired on `venue-price-grid.ts` for containing `'grid_unknown'`, which it
+  // legitimately does: it RETURNS that reason. A check that cannot tell "produces this reason"
+  // from "re-declares the membership" is a control that fires on the wrong thing, which is its own
+  // defect. Narrowed to the actual failure: the DERIVATION must read the shared set.
+  it('both consumers IMPORT the shared set and DERIVE from it, never re-declare it', () => {
+    const server = stripped('server/core/calculations/venue-price-grid.ts');
+    expect(server, 'the VPG must import the shared verdict set')
+      .toMatch(/import\s*\{[^}]*VPG_WIRING_BUG_VERDICTS[^}]*\}\s*from\s*['"][^'"]*venue-grid-verdicts/);
+    // the isWiringBug derivation reads the SET — not an inline chain of reason comparisons
+    expect(server, 'isWiringBug must be derived from the shared set')
+      .toMatch(/const\s+wiring\s*=\s*VPG_WIRING_BUG_VERDICTS\.has\(/);
+
+    const panel = stripped('client/src/components/vts/vts-filter-diagnostics-panel.tsx');
+    expect(panel, 'the panel must import the shared verdict sets')
+      .toMatch(/import\s*\{[^}]*VPG_WIRING_BUG_VERDICTS[^}]*\}\s*from\s*['"][^'"]*venue-grid-verdicts/);
+    // and must alias them, never build its own
+    expect(panel).toMatch(/VPG_OUR_BUG\s*=\s*VPG_WIRING_BUG_VERDICTS/);
+    expect(panel).toMatch(/VPG_NOT_A_FAILURE\s*=\s*VPG_NOT_A_FAILURE_VERDICTS/);
+    expect(panel, 'the panel must not construct its own verdict Set').not.toMatch(/VPG_(OUR_BUG|NOT_A_FAILURE)\s*=\s*new Set/);
+  });
+});
+

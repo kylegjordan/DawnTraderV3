@@ -714,8 +714,9 @@ export async function evaluateXstockPairForVTS(
         counters.gridTags[_gridTag.verdict] = (counters.gridTags[_gridTag.verdict] ?? 0) + 1;
         if (_gridTag.isWiringBug) {
           console.error(
-            `[F-G-1][VTS_GRID_WIRING] ${symbol}/${strategyKey} verdict=${_gridTag.verdict} — no venue grid ` +
-            `resolved; simulating on native geometry and tagging. Data-wiring gap, not a signal defect.`,
+            // ⛔ NAME THE BUCKET, DO NOT ENUMERATE IT — see the twin at vts-runner.
+            `[F-G-1][VTS_GRID_WIRING] ${symbol}/${strategyKey} verdict=${_gridTag.verdict} — OURS, not ` +
+            `the signal's; simulating on native geometry and tagging. See shared/venue-grid-verdicts.ts.`,
           );
         }
         const _b3xGate = getPerClassTargetGate(ASSET_CLASS, strategyKey);

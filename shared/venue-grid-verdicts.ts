@@ -16,7 +16,16 @@
  *
  * ⚠️ IMPORTED BY BOTH SIDES ON PURPOSE: `server/core/calculations/venue-price-grid.ts` derives
  * `GridTag.isWiringBug` from this set, and `client/src/components/vts/vts-filter-diagnostics-panel.tsx`
- * excludes it from the signal-quality figure. Neither may re-state the membership locally.
+ * excludes it from the signal-quality figure.
+ * ⛔ NEITHER MAY RE-STATE THE MEMBERSHIP LOCALLY — AND THAT SENTENCE IS NOW ENFORCED RATHER THAN
+ * ASKED FOR. It was an unenforced rule when first written, which is the exact shape this file was
+ * created to remove, one level up: a re-inline whose literal happened to MATCH passed the whole
+ * suite (measured, 69/69). ★ I had told Langston those tests caught the re-inline; they caught
+ * DRIFT AFTER one. The fence now requires the IMPORT at both consumer sites, comments stripped —
+ * an inline literal cannot satisfy it.
+ * ⛔ SO: ADD A VERDICT HERE, NEVER AT A CONSUMER. And when the membership changes, CHECK THE PROSE
+ * that describes this bucket — the fence proves the SET is in step and nothing proves the wording
+ * is, which is this defect's own original shape.
  */
 
 /**

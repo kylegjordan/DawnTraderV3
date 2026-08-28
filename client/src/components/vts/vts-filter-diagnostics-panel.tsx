@@ -286,8 +286,12 @@ export type { GateDisposition };
  * ★ I split that taxonomy IN THIS BATCH and the only human-facing render re-merged it — the
  * function was fixed, the call was not. `fix-follows-pointer`, one tab over.
  * ⚠️ `isWiringBug` has two production readers and both are `console.error`, so nothing on the
- * render path could have known. These sets are a deliberate duplicate of that flag and must be
- * kept in step with `evaluateGridForTagging`.
+ * render path could have known this was wrong.
+ * ⛔ THESE ARE NOT A DUPLICATE — they are ALIASES for the shared sets, and the body of this
+ * comment used to say the opposite two lines above "IMPORTED, NOT RE-STATED". I changed the code
+ * and left the old prose, so the file made two contradictory claims about the same two constants.
+ * A reader who greps "deliberate duplicate" re-adds the parity test that removing the second home
+ * made unnecessary. Langston, at the ref.
  */
 // ⛔ IMPORTED, NOT RE-STATED. These were a hand-copy of the server's literal — two homes for a
 // decided rule, and the default direction on extension was wrong: a sixth verdict marked as ours
@@ -509,9 +513,9 @@ export function FilterDiagnosticsPanel({ data, isLoading, gateDisposition = 'tag
                       native geometry. Right-hand figure is the population checked.
                       {vpgOurBugTotal > 0 && (
                         <span className="ml-1 text-sky-500" data-testid="vts-vpg-ourbug">
-                          · {fmt(vpgOurBugTotal)} excluded as OUR wiring, not the signal's: no venue grid
-                          resolved, or the rounding produced an off-grid price. Those are defects in the
-                          Venue Price Grid and must not count against signal quality.
+                          · {fmt(vpgOurBugTotal)} excluded because they are OURS, not the signal's —
+                          a Venue Price Grid defect or one of our own limitations. Those must not count
+                          against signal quality.
                         </span>
                       )}
                     </td>
