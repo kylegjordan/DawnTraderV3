@@ -249,3 +249,58 @@ CREDITS = {"birth": 1, "follow_up": 0, "liquidity": 1,
 assert BIRTHS_RESERVED >= EXPECTED_LAUNCHES_PER_DAY * 31 * 1.25 * CREDITS["birth"], (
     "the reserve no longer covers the worst month at the stated variance and "
     "the measured per-birth credit — re-derive §5.1 before changing this")
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# THE DEAD-MAN'S SWITCH — the accept-side controls (Langston, 2026-08-28)
+#
+# ★ WHY THESE ARE CONTROLS AND NOT OPS HYGIENE, in his words: an outbound
+#   collector fails SILENT and the switch catches that. An accept endpoint has
+#   a second failure direction the switch cannot see — a FLOOD. Given a static
+#   replayable header secret with no body integrity (see receiver.py), anyone
+#   holding it can write unbounded rows into an append-only store, and an
+#   append-only store cannot defend itself. SILENCE HAS A DETECTOR; VOLUME DOES
+#   NOT. So the rate cap and the store cap are the accept-side DUAL of the
+#   switch, not housekeeping — a future reader must not tune them off.
+# ═════════════════════════════════════════════════════════════════════════════
+
+# ⛔ DELIBERATELY LOOSE, AND IT IS A THRESHOLD TO INVESTIGATE, NOT A GATE.
+#    20,700/day is a MEAN (0.24/s) and launches are bursty and diurnal, so
+#    calibrating on the mean would false-fire every off-peak hour. Start wide;
+#    tighten against the MEASURED off-peak floor from the first days of real
+#    births and record the calibration in the pre-registration.
+LIVENESS_GAP_SECONDS = 900             # 15 minutes of zero recorded census rows
+
+# ⚠️ HONEST LIMIT, STATED RATHER THAN GLOSSED: the switch is driven by the
+#    hourly job, so DETECTION LATENCY IS UP TO ONE HOUR even though the
+#    threshold is 15 minutes. The retrospective leg (inter-arrival gaps read
+#    off the rows themselves) is what makes a gap that opened AND CLOSED
+#    between two checks still visible — without it, an hourly checker would
+#    only ever see gaps that happen to still be open when it looks.
+LIVENESS_CHECK_INTERVAL_SECONDS = 3600
+
+# ⛔ THE STORE CAP — Langston's (b), and the precedent does NOT cover it.
+#    The four passive-archive legs are cited as proof that capture-only work is
+#    safe on the trading box, but MEASURED: DATABASE_URL points at Supabase, so
+#    THEIR BYTES NEVER LAND ON THIS DISK. This study writes to local disk by
+#    design (its own folder), which makes it the FIRST capture-only writer to
+#    share filesystem fate with the trading app. A full `/` stops pm2 logging
+#    and stops the app writing, with no database write anywhere in the story.
+#    Measured 2026-08-28 on staging: / is 75G, 36G used, 37G available.
+STORE_CAP_BYTES = 8 * 1024 * 1024 * 1024        # 8 GiB, ~22% of free space
+STORE_CAP_WARN_BYTES = 6 * 1024 * 1024 * 1024   # warn with room to act
+
+# ⛔ THE MEMORY CAP — Langston's (a), and it protects the TRADING process.
+#    Measured on staging: 3,814 MB total and SWAP: 0. The trading node process
+#    was at 605 MB RSS seven minutes into a restart and grows. With no swap the
+#    OOM killer is the only backstop and IT SELECTS ON RSS — so a runaway study
+#    process does not need to touch the trading database to kill the live
+#    pipeline. User separation does nothing about this; a MemoryMax= line does.
+#    Stated here AND in the unit, where it is visible in a listing.
+UNIT_MEMORY_MAX = "512M"
+UNIT_TASKS_MAX = 64
+
+assert LIVENESS_GAP_SECONDS < LIVENESS_CHECK_INTERVAL_SECONDS, (
+    "a gap threshold at or above the check interval can only ever fire on "
+    "still-open gaps — the retrospective leg exists precisely to avoid that")
+assert STORE_CAP_WARN_BYTES < STORE_CAP_BYTES, "warn must leave room to act"

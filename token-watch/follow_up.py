@@ -21,6 +21,7 @@ import logging
 import sys
 from datetime import datetime, timedelta, timezone
 
+import liveness
 import budget
 import providers
 from store import (
@@ -168,6 +169,23 @@ def run_hour(now: datetime | None = None) -> dict:
              "last_seen_pruned": 0, "unclassified_by_age": {},
              "requeued_not_yet_due": 0, "buckets_read": 0,
              "buckets_skipped_too_old": 0}
+
+    # ⛔ THE DEAD-MAN'S SWITCH RUNS BEFORE THE LOCK, AND DELIBERATELY OUTSIDE
+    #    IT. A watchdog that a stuck lock can silence is not a watchdog — the
+    #    skip branch below returns early, so putting this inside would mean a
+    #    permanently-held lock disables the very check whose job is to notice
+    #    that nothing is happening. That is the failure this batch keeps
+    #    paying for, one layer up.
+    # ⚠️ THE TRADE, STATED: it reads the append-only census (safe to read
+    #    concurrently) and writes only its own state and gap files. Two
+    #    overlapping passes could at worst duplicate a gap record — VISIBLE,
+    #    and cheaply de-duplicated at analysis time on (started_at, ended_at).
+    #    A silenced watchdog is not visible at all. The asymmetry decides it.
+    try:
+        stats["liveness"] = liveness.check(now)
+    except Exception as exc:                       # never let it fail the hour
+        LOG.error("liveness check failed: %s", exc)
+        stats["liveness"] = {"error": str(exc)}
 
     with periodic_lock("follow_up") as held:
         if not held:

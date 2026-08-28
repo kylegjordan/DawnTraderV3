@@ -17,9 +17,26 @@ grid. It is the ONLY writer of birth records.
   provider filtering server-side, which is why verifying that a creation is
   separable from the noise was the decisive test rather than a detail.
 
-⚠️ AND A WEBHOOK PUSH DROPS SILENTLY, with no local error — the #704 class.
-   Nothing here can detect that; the coverage control (OBJ-3) exists precisely
-   because this module's silence is not evidence of a quiet market.
+⚠️ A WEBHOOK PUSH DROPS SILENTLY, with no local error — the #704 class. AND
+   THE SENTENCE THAT USED TO SIT HERE WAS FALSE IN HALF: it read "nothing here
+   can detect that", which is true of one failure direction and wrong about
+   the other. Langston caught it, and an asserted absence about our OWN
+   capability is the #453 class — the one this batch keeps paying for.
+
+   PARTIAL drop — some creations delivered, some lost. GENUINELY undetectable
+     locally; we cannot miss what we were never told about. This is what OBJ-3
+     is for, and it correctly waits for the proving run.
+
+   TOTAL stop — dead endpoint, crashed proxy, revoked secret, provider outage.
+     DETECTABLE HERE AND NOW, at zero credits and with no network call, because
+     the arrival rate is known: ~20,700/day is 0.24/s, so a long window with
+     zero RECORDED CENSUS ROWS is a Poisson impossibility. `liveness.py` does
+     exactly this, and it counts ROWS rather than POSTs so that it also catches
+     the failure below — a systematic parse error answering 200 forever looks
+     perfectly healthy from the POST side.
+
+   ⇒ this module's silence is still not evidence of a quiet market. It is now
+     evidence that something is checked, rather than that nothing can be.
 """
 
 from __future__ import annotations

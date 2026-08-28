@@ -196,6 +196,37 @@ check("★ a drifted event type records nothing", recorded == 0, recorded)
 check("POSITIVE CONTROL: the same shape WITH type=CREATE does record",
       receiver.ingest(make_events(3)) == 3)
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+section("7. THE DEAD-MAN'S SWITCH IS ACTUALLY WIRED TO THE HOURLY JOB")
+# ⛔ THE WHOLE REASON THIS FILE EXISTS. `test_liveness.py` proves the switch
+#    works when called; NOTHING there proves anything calls it. That is exactly
+#    how `budget.charge("birth", …)` sat with zero production call sites while
+#    57 checks passed. This drives `follow_up.run_hour` — the production entry
+#    point the timer invokes — and asserts on state only the switch can write.
+# ─────────────────────────────────────────────────────────────────────────────
+import follow_up as _fu  # noqa: E402
+import liveness as _lv  # noqa: E402
+
+_before = store.load_state("liveness", {})
+check("no liveness state exists before the hourly job has ever run",
+      not _before.get("checked_at"))
+_stats = _fu.run_hour(now=now)
+_after = store.load_state("liveness", {})
+check("★ run_hour REACHED the switch — it stamped its own state",
+      bool(_after.get("checked_at")), _after.get("checked_at"))
+check("and the hour's stats carry the switch's report",
+      isinstance(_stats.get("liveness"), dict) and "rows" in _stats["liveness"])
+
+# ★ AND IT MUST SURVIVE A SKIPPED CYCLE — a watchdog a stuck lock can silence
+#   is not a watchdog. Hold the lock, run the hour, confirm it STILL checked.
+store.save_state("liveness", {})
+with store.periodic_lock("tiering") as _held:
+    _skipped = _fu.run_hour(now=now + timedelta(hours=1))
+check("POSITIVE CONTROL: the cycle really was skipped", _skipped["skipped"] is True)
+check("★ the switch STILL ran on the skipped cycle",
+      bool(store.load_state("liveness", {}).get("checked_at")))
+
 print("\n" + "=" * 60)
 print(f"FAILED: {len(FAILURES)} -> {FAILURES}" if FAILURES else "ALL CHECKS PASSED")
 shutil.rmtree(ROOT, ignore_errors=True)
