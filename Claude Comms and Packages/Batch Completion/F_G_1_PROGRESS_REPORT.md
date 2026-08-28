@@ -194,7 +194,7 @@ closed_trades opened since anchor:  xstock_spot = 1   crypto_spot = 0
 ✅ **IT DOES NOT SINK THE AMENDMENT:** `WEN/USD` carries no stamp and is disposed by §3c's missing-stamp exclusion. **But the amendment must be honest about being written with one observation already inside its window, not zero.**
 
 ⛔⛔ **AND ADMITTING xSTOCK INHERITED A LIVE RULE COLLISION — TWO STANDING RULES GIVE OPPOSITE DISPOSITIONS TO THE SAME ROWS (Langston).** For the **1h41m between the window anchor `16:08:02Z` and the stamp becoming durable at the `17:49Z` deploy**, §3c says *"stamp missing ⇒ EXCLUDED, predates the change"* while the standing rule says *"post-deploy crypto is `resolved:true` or it is a defect."* **Same rows, opposite readings.**
-⇒ ✅ **DECLARED NOW: `2026-08-28T16:08:02Z → 17:49:00Z` IS A NAMED EXCLUSION INTERVAL FOR BOTH CLASSES.** The stamp **could not persist** in that interval, so an absent stamp there is not evidence of anything. **The defect reading begins at the STAMP-DURABLE ref (`17:49Z`), not at the window anchor.** ⚠️ `WEN/USD` falls inside it and is excluded on that ground as well as §3c's.
+⇒ ✅ **DECLARED NOW: `2026-08-28T16:08:02Z → 17:49:00Z` IS A NAMED EXCLUSION INTERVAL FOR BOTH CLASSES.** ⛔⛔ **THE END REF IS WRONG — CORRECTED TO `18:05:22Z` IN §3f. DO NOT IMPLEMENT FROM THIS LINE.** *(Pointer added 2026-08-28; the wrong value is left standing so the sequence stays auditable.)* The stamp **could not persist** in that interval, so an absent stamp there is not evidence of anything. **The defect reading begins at the STAMP-DURABLE ref (`17:49Z`), not at the window anchor.** ⚠️ `WEN/USD` falls inside it and is excluded on that ground as well as §3c's.
 
 ---
 
@@ -206,7 +206,7 @@ closed_trades opened since anchor:  xstock_spot = 1   crypto_spot = 0
 | crypto leg | ≈**21** (diluted by sharing) | ✅ **keeps all 30** |
 | xStock leg | ≈**9** opens | ✅ **a full 7 days of accrual** |
 | pooling | forbidden by a read-time rule I wrote for myself | ✅ **ARITHMETICALLY UNAVAILABLE — separate denominators. A mechanism, not a promise** |
-| `n < 15` UNDERPOWERED floor | needed | ⬜ **MOOT and withdrawn** — the crypto leg now terminates on its own count, so the floor is unreachable |
+| `n < 15` UNDERPOWERED floor | needed | ⬜ **MOOT and withdrawn** — ~~the crypto leg now terminates on its own count, so the floor is unreachable~~ ⛔ **THAT REASON IS FALSE — see §3f RIDER-1. The withdrawal STANDS, on REDUNDANCY (§3's blanket n<30 rule is strictly stronger), not on unreachability.** |
 
 ★★ **WHY THIS IS STRICTLY BETTER AND NOT A COMPROMISE: BOTH LEGS GO UP.** §3d bought xStock coverage by spending crypto depth. **Decoupling buys both.** ⚠️ **Kyle asked that xStock be COUNTED; he did not ask that the two SHARE A WINDOW — I introduced the sharing, and it was never load-bearing on his instruction.**
 ✅ **AND IT ANSWERS MY OWN ATTACK 3 PROPERLY:** I flagged *"never pool the legs"* as a rule I was asking myself to follow at read time — **the weakest kind.** Separate denominators make pooling impossible instead of forbidden. ★ **Impossible over intercepted, again.**
@@ -219,6 +219,45 @@ closed_trades opened since anchor:  xstock_spot = 1   crypto_spot = 0
 
 ---
 
+### 3f. ➕ AMENDMENT 3 — THE EXCLUSION INTERVAL ENDED 16m39s TOO EARLY, AND THE UNDERPOWERED RULE MUST APPLY PER LEG (Langston CHANGES-NEEDED; **APPENDED, NOT EDITED**)
+
+⛔⛔ **BLOCKER-1 — §3e's EXCLUSION INTERVAL ENDS AT THE WRONG REF, AND IT ERRS IN THE ONE DIRECTION THAT MANUFACTURES A FALSE DEFECT ON THE ABSOLUTE-BAR CLASS.**
+§3e declared `16:08:02Z → 17:49:00Z` stamp-non-durable. **The stamp did NOT become durable at 17:49Z.** That reset is `bf1ac9620`; durability arrives with **`56ac8067a` — the RTB field-list fix**, whose own subject is *"F-G-1: the birth stamp DIED at the RTB rebuild -- measured, not assumed"* and which adds `gridAtBirth: rawSignal.metadata?.gridAtBirth` to the rebuild.
+✅ **RE-DERIVED FROM THE DEPLOY CLONE'S REFLOG (`/home/deploy/dawntrader`), not from the deploy narrative:**
+```
+56ac8067a  HEAD@{18:05:22Z}: reset
+bf1ac9620  HEAD@{17:48:43Z}: reset
+```
+⇒ **THE TRUE END IS `2026-08-28T18:05:22Z`. §3e WAS 16m39s SHORT**, and §3c's own measurement already showed a row at **17:59:29Z carrying no `gridAtBirth`** — ten minutes *after* my interval closed. ★ **In that gap an unstamped CRYPTO row falls OUTSIDE the exclusion, where the standing rule reads it as *"did not come through the seam ⇒ bypass-path finding"* — a FALSE DEFECT on the 100%-no-tolerance leg. Which is the exact collision §3e was written to kill, reintroduced by §3e.**
+✅ **CORRECTED: THE EXCLUSION INTERVAL IS `2026-08-28T16:08:02Z → 18:05:22Z`, FOR BOTH CLASSES**, cited to the reflog line above.
+⚠️ **IT BITES ZERO ROWS TODAY — nothing opened in the gap — which is precisely why fixing it is free and why leaving it would not have been defensible.** A latent false-defect trigger costs nothing until it fires.
+
+---
+
+⛔ **RIDER-1 — MY REASON FOR WITHDRAWING THE `n < 15` FLOOR WAS FALSE. RIGHT DISPOSITION, WRONG REASON, AND THE REASON IS CORRECTED RATHER THAN LEFT STANDING.**
+§3e said the floor became *"unreachable"*. **It does not.** The crypto leg terminates on **30 crypto OR 7 days** — so under a `#570`-class drought it terminates on the **cap**, at n=12 or any value below 30, and the floor is squarely reachable.
+✅ **THE FLOOR IS `REDUNDANT`, NOT UNREACHABLE:** §3's blanket rule — *"If 7 days elapse with fewer than 30, that is reported as an underpowered read, **not** as a pass"* — is **strictly stronger**, catching every n<30, not merely n<15. ★ **The withdrawal survives on that mechanism.** ⚠️ Corrected here because this document's warrant is auditable reasoning; a right answer resting on a false premise is the shape Langston retracted `#675` over.
+
+⛔⛔ **AND THE GAP THAT WITHDRAWAL LEFT, WHICH IS THE PART THAT ACTUALLY MATTERS: I REMOVED THE ONLY EXPLICIT SHORT-n LABEL AT THE EXACT MOMENT DECOUPLING MADE THE xSTOCK LEG TERMINATE ON THE CAP.**
+At ≈2/day **into a weekend** (xStock booked ZERO on 08-22 and 08-23), the xStock leg ends at **n≈7-10 of 30 — near-certain, not a tail risk.** ⚠️ **And §3's underpowered rule and §3a's co-denominators are written in CRYPTO's terms.**
+⇒ ✅ **PRE-REGISTERED NOW, BEFORE ANY READ: §3's UNDERPOWERED RULE AND §3a's FOUR CO-DENOMINATORS APPLY *PER LEG, PER CLASS*.** An xStock leg that ends short is reported `UNDERPOWERED` in its own right, with its own four co-denominators.
+★ **WITHOUT THIS, A PASS ON 7 xSTOCK ROWS WOULD READ AS *"the class we are least sure about was tested"* — KYLE'S AMENDMENT DEFEATED THROUGH THE BACK DOOR, by the very decoupling that was supposed to serve it.**
+
+---
+
+⚠️ **RIDER-2 — NAME THE COUNTER'S SOURCE TABLE. §3e's EVIDENCE BLOCK IS COUNTABLE TWICE.**
+§3e prints `active_open_positions … WEN/USD` above `closed_trades … xstock_spot = 1`. **Those are the SAME POSITION, mirrored across two tables**, and a Step-8 reader unioning them gets **2**.
+✅ **MEASURED, and the identity is the quantity to 8 dp plus a 111 ms write gap:**
+```
+closed_trades       03edb8e1  WEN/USD  qty 19.44708601  opened 16:25:28.269Z
+active_open_positions e74a9a7c  WEN/USD  qty 19.44708601  opened 16:25:28.380Z
+```
+⇒ **n=1 IS CORRECT; THE SECOND ROW IS A MIRROR, NOT AN OBSERVATION.**
+⇒ ⛔ **BINDING: THE WINDOW COUNTER IS DENOMINATED IN `closed_trades` ROWS (which are written AT OPEN), AND THE TWO TABLES ARE NEVER UNIONED.** ★ Naming the source table is the fix; *"count positions"* is ambiguous across a schema that mirrors them.
+
+**AUTHORITY:** Langston's CHANGES-NEEDED on §3e, all three legs re-derived by me at the ref before acting. **§3e is superseded on the interval end and on the floor's REASONING; its decoupling, its `WEN/USD` enumeration and its withdrawal of the floor all stand.** ✅ **Still pre-data on the crypto leg; the xStock leg holds the one excluded row.**
+
+---
 ## 4. WHAT IS UNPROVEN, AND WHAT WOULD FALSIFY IT
 
 - ⛔ **THE HEADLINE IS NOT "ONE ROUNDING SEAM".** It is **"one seam on the signal-birth path; three entry points bypass it, named"** — `#928` an HTTP intent path taking a triple straight from the request body, `#929` a second position-sizing caller, `#927` a fabricated `entry * 1.02` target in three places, one of them the RTB **ranking** key. All homed with owners and plan positions. **Langston approved the batch shipping with them named; he did not approve it shipping under the old headline.**
