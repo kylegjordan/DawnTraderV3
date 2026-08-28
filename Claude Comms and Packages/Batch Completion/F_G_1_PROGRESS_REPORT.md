@@ -155,7 +155,7 @@ CONTROL RESULT: BOTH ARMS FIRE
 opens since the 17:49Z deploy, by asset class  ->  ZERO IN BOTH CLASSES
 positions carrying metadata.gridAtBirth        ->  0
 ```
-⇒ **NOT ONE OBSERVATION OF EITHER CLASS EXISTS IN THE POST-DEPLOY POPULATION.** The amendment is therefore a prediction, not a reaction — which is the ONLY property that makes amending a pre-registration legitimate, and it is perishable: **after the first open this could not honestly have been written.**
+⇒ **NOT ONE OBSERVATION OF EITHER CLASS EXISTS IN THE POST-DEPLOY POPULATION.** ⛔⛔ **THIS SENTENCE IS FALSE AND IS CORRECTED IN §3e — IT MEASURES THE DEPLOY REF, NOT THIS CRITERION'S OWN ANCHOR. Read §3e before relying on any of this section.** *(Pointer inserted 2026-08-28; no claim in §3d is altered — the wrong reasoning is left standing on purpose so the sequence is auditable.)* The amendment is therefore a prediction, not a reaction — which is the ONLY property that makes amending a pre-registration legitimate, and it is perishable: **after the first open this could not honestly have been written.**
 
 **WHAT KYLE FOUND** (his words: *"the way you need to see an Xstock trade also open, why only crypto?"*): §3's window counts **crypto positions only.** ⚠️ **And I had reported it to him more narrowly still — as though xStock were not graded at all. It is: §3's PASS/FAIL table has always carried an xStock row.** The defect is the COUNTER, not the grading.
 
@@ -177,6 +177,45 @@ Measured 7-day cadence: **crypto ≈5/day, xStock ≈2/day.** At that ratio 30 c
 ⇒ ⛔ **AND IF THE CRYPTO LEG ARRIVES WITH `n < 15` — half the original 30 — THE CRYPTO RESULT IS REPORTED AS `UNDERPOWERED`, PASS OR FAIL.** ★ **The number is set NOW, before any open, and it is deliberately mechanical: at the observed cadence ~21 is expected, so 15 is the point at which the cadence assumption this amendment rests on has visibly broken.** ⚠️ **`UNDERPOWERED` here means the same as in §3a and carries the same duty: state the §3a co-denominators so a drought is distinguishable from the seam refusing.**
 
 **AUTHORITY:** Kyle, 2026-08-28, after he found the gap himself. **Langston rules on it** — he set the freeze, and an amendment to a frozen criterion is his gate, not mine. ⚠️ **If he rejects it, §3 stands unamended and this section is struck rather than quietly deleted.**
+
+---
+
+### 3e. ➕ AMENDMENT 2 — DECOUPLED COUNTERS, AND §3d's PRE-DATA CLAIM WAS MEASURED ON THE WRONG POPULATION (Langston CHANGES-NEEDED, 2026-08-28; **APPENDED, NOT EDITED**)
+
+⛔⛔ **FIRST, THE BLOCKER, BECAUSE IT IS MINE AND IT IS THE SAME SHAPE I HAVE BEEN BURNED BY TWICE TODAY.** §3d claims *"NOT ONE OBSERVATION OF EITHER CLASS EXISTS."* **FALSE.** I measured **opens since the 17:49Z DEPLOY**; the window anchor in §3 — **and in §3d's own table** — is **`2026-08-28T16:08:02Z`**. ★ **I raced to capture a perishable pre-data property and captured it against the wrong ref, inside the amendment whose entire warrant is that property.**
+
+✅ **RE-DERIVED AT THE CRITERION'S OWN ANCHOR (by me, 20:30:25Z, after Langston named it):**
+```
+active_open_positions, opened_at > 2026-08-28T16:08:02Z
+  xstock_spot  WEN/USD  2026-08-28T16:25:28.380Z  gridAtBirth = NULL
+closed_trades opened since anchor:  xstock_spot = 1   crypto_spot = 0
+```
+⇒ **THE POPULATION §3d CREATES IS NOT EMPTY: n=1, NAMED — `WEN/USD`.** ★ **Enumerated here rather than described, because that property is exactly as perishable as the pre-data claim I was racing.** The crypto leg IS still empty at the anchor; only the newly-admitted class is not.
+✅ **IT DOES NOT SINK THE AMENDMENT:** `WEN/USD` carries no stamp and is disposed by §3c's missing-stamp exclusion. **But the amendment must be honest about being written with one observation already inside its window, not zero.**
+
+⛔⛔ **AND ADMITTING xSTOCK INHERITED A LIVE RULE COLLISION — TWO STANDING RULES GIVE OPPOSITE DISPOSITIONS TO THE SAME ROWS (Langston).** For the **1h41m between the window anchor `16:08:02Z` and the stamp becoming durable at the `17:49Z` deploy**, §3c says *"stamp missing ⇒ EXCLUDED, predates the change"* while the standing rule says *"post-deploy crypto is `resolved:true` or it is a defect."* **Same rows, opposite readings.**
+⇒ ✅ **DECLARED NOW: `2026-08-28T16:08:02Z → 17:49:00Z` IS A NAMED EXCLUSION INTERVAL FOR BOTH CLASSES.** The stamp **could not persist** in that interval, so an absent stamp there is not evidence of anything. **The defect reading begins at the STAMP-DURABLE ref (`17:49Z`), not at the window anchor.** ⚠️ `WEN/USD` falls inside it and is excluded on that ground as well as §3c's.
+
+---
+
+➕ **THE COUNTER CHANGE — §3d's SHARED WINDOW IS WITHDRAWN AND REPLACED. Langston's attack 1, and he is right that I did not have to make the trade at all.**
+
+| | §3d as written | **AMENDED (binding)** |
+|---|---|---|
+| window | first **30 of EITHER class**, one shared counter | ➕ **TWO INDEPENDENT COUNTERS: crypto = first 30 crypto or 7 days · xStock = first 30 xStock or 7 days.** Same anchor, same cap |
+| crypto leg | ≈**21** (diluted by sharing) | ✅ **keeps all 30** |
+| xStock leg | ≈**9** opens | ✅ **a full 7 days of accrual** |
+| pooling | forbidden by a read-time rule I wrote for myself | ✅ **ARITHMETICALLY UNAVAILABLE — separate denominators. A mechanism, not a promise** |
+| `n < 15` UNDERPOWERED floor | needed | ⬜ **MOOT and withdrawn** — the crypto leg now terminates on its own count, so the floor is unreachable |
+
+★★ **WHY THIS IS STRICTLY BETTER AND NOT A COMPROMISE: BOTH LEGS GO UP.** §3d bought xStock coverage by spending crypto depth. **Decoupling buys both.** ⚠️ **Kyle asked that xStock be COUNTED; he did not ask that the two SHARE A WINDOW — I introduced the sharing, and it was never load-bearing on his instruction.**
+✅ **AND IT ANSWERS MY OWN ATTACK 3 PROPERLY:** I flagged *"never pool the legs"* as a rule I was asking myself to follow at read time — **the weakest kind.** Separate denominators make pooling impossible instead of forbidden. ★ **Impossible over intercepted, again.**
+
+⛔ **MY ≈9 xSTOCK WAS ALSO OPTIMISTIC, AND THE REASON IS A DENOMINATOR ERROR I SHOULD HAVE CAUGHT: THE WINDOW OPENS ON A FRIDAY AND RUNS INTO A WEEKEND.** xStock booked **ZERO opens on 08-22 and 08-23**. **A blended daily rate does not describe a window whose first two days are a weekend** — combined-30 plausibly resolved to ≈**23 crypto + ≈7 xStock**, i.e. §3d **bought less of the very thing it existed for than its own arithmetic promised.** Decoupling removes that failure mode with the sharing.
+
+⚠️ **THE ONE COST, STATED PLAINLY AND FLAGGED TO KYLE: THE BATCH CLOSES LATER — ≈6-7 days rather than ≈4.3.** ★ **A faster close was a benefit to the SCHEDULE, never to the CRITERION** (Langston). **Kyle authorised counting xStock while we wait; he did not authorise trading evidence for speed, and this is his to reverse if he wants the earlier close.**
+
+**AUTHORITY:** Kyle authorised admitting xStock (§3d). **This revision is Langston's CHANGES-NEEDED ruling on the FORM of that admission**, appended per his instruction. **§3d is superseded on the counter and the pre-data claim; everything else in it stands.**
 
 ---
 
