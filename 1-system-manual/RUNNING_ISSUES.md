@@ -4445,7 +4445,9 @@ Kraken publishes a per-pair `tick_size` — **1,437 pairs, 11 distinct values, a
 
 ⚠️ **NOT A DATA DEFECT.** The API payload is correct (verified independently), the counting-basis text on the row is correct and explicitly says *"Right-hand figure is the population checked."* Only the column alignment misleads.
 
-⇒ **DISPOSITION: Kyle's call, because it is his display and the fix is one line.** Either folded into F-G-1 (disposition 1) or its own small batch. ⛔ **Deliberately NOT fixed unilaterally: Langston froze this batch's artifact at `5e5a3d8ae`, and while the client render is not the report, the criterion or the suite, re-opening a frozen batch for a cosmetic fix is exactly the kind of judgement I should not make alone.**
+⇒ ⛔ **DISPOSITION 3 — OWN BATCH. `HOME: B-VPG-ROW-ALIGN, owner CC-C, placed in the F-G plan after `B-VENUE-PAIRS-REINIT` (row 3k)` — no date.** If a Filter-Diagnostics display batch surfaces first, it folds in there and this entry says so.
+⚠️ **AND MY FIRST DISPOSITION WAS WRONG IN A WAY WORTH RECORDING: I wrote "Kyle's call, because it is his display".** Langston ruled it is **not** a decision Kyle owes: *"a frozen batch does not re-open for a display defect whose value is correct."* Freezing the artifact and filing a NEW NUMBER instead of a quiet edit **was already the complete correct action** — handing the leftover to Kyle turned a discharged §9.4 disposition back into an open question for him. ★ **Reporting is not proposing, and asking is not disposing.** It goes to Kyle as an FYI on his display, not as a decision.
+⚠️ **The counting-basis note does say "Right-hand figure is the population checked" — that is a PROSE MITIGATION, not a fix.** A reader who scans the header row still gets a lane attribution that does not exist: **the VPG is lane-agnostic.**
 
 ### #933 OPEN 2026-08-28 (CC-C, Langston BLOCKER-12 at F-G-1 r5) — THE KRAKEN ASSET-PAIRS MAP IS FILLED ONCE AT BOOT AND NOTHING EVER RETRIES IT
 
