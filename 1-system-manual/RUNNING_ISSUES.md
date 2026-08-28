@@ -2882,6 +2882,21 @@ The COMMITTED copy carries the five **pre-Phase-14 regime keys** (`BULL_STABLE`/
 
 ---
 
+### #760 CLOSED-SAME-TURN 2026-08-29 (CC-A; found by reading the log after a push, not by any check I ran) — ★★ **A COMMIT SHIPPED CORRECT WORK UNDER ANOTHER BATCH'S NAME, AND EVERY VERIFICATION PASSED WHILE IT DID.**
+
+⛔ **`cc505f452` is titled *"B-RULES-1c: the section-6 slim — comms depth to the runbook."* It contains TWO FILES — `.claude/skills/workflow-07-verify-cc/SKILL.md` and `CLAUDE.md` — carrying the staging-browser prohibition, which is `B-CLAUDEMD-SLIM` **P5** work. ★ **`B-RULES-1c` is a separate batch parked at Step 1; none of its work is in there.**
+
+**CAUSE:** the commit-message heredoc did not write, so `git commit -F` took a **stale message file** left by an earlier command in the same session. ⚠️ **`-q` suppressed any complaint, and my verification checked that the CONTENT had reached origin — which it had.**
+★★ **EVERY CHECK I RAN PASSED WHILE THE LABEL WAS WRONG.** *(And the same shell-quoting failure fired AGAIN while writing this entry, which is how the stale-message class keeps recurring: backticks inside a bash-embedded script are command-substituted, the heredoc dies, and the previous file survives to be picked up.)*
+
+⛔ **WHY IT IS NOT COSMETIC: the governance checker parses batch-ids from commit SUBJECTS to decide which batch owes which documents** — `extractBatchId` matches the pattern ANYWHERE in the subject (§3.0). ⇒ **this commit is attributed to `B-RULES-1c`, and `B-CLAUDEMD-SLIM` loses the evidence that P5 was part of it.**
+
+⚠️ **NOT REWRITTEN, deliberately: the commit is pushed and three other sessions work off this branch. Rewriting history to repair a label is a larger hazard than the label.** ✅ **The correction of record is this entry plus the commit carrying it.**
+**ATTRIBUTION:** `cc505f452` → **`B-CLAUDEMD-SLIM` P5 (staging-browser prohibition)**, NOT `B-RULES-1c`.
+
+★ **THE PATTERN, in the direction I had not been watching: A MATCHING NAME IS NOT A MATCHING THING — and here it was RIGHT CONTENT, WRONG NAME.** I confirmed the bytes landed and never looked at the box they landed in.
+⇔ `MISTAKE_PATTERNS` `wrong-object` · §3.0 batch-id attribution · `#542` (the commit-discipline family).
+
 ### #759 OPEN 2026-08-28 (CC-A; found while running the check itself, and it was about to report a false clean) — ★★ **THE MANDATED PER-TURN ALERT CHECK READS `tail -50` AND CANNOT SEE A SINGLE LIVE ALERT. ALL FOUR SESSIONS RUN IT.**
 
 ⛔ **MEASURED, whole file, at 2026-08-28:** the alerts log holds **736 rows**. The **six** active + unacknowledged alerts sit **117, 127, 154, 159, 269 and 385 rows from the end.** ⇒ ⛔⛔ **`tail -50` SEES ZERO OF THEM. Not some — zero.**
