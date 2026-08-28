@@ -427,71 +427,6 @@ export function FilterDiagnosticsPanel({ data, isLoading, gateDisposition = 'tag
           {modeTail ? ` ${modeTail === 'paper' ? 'Paper' : 'Live'} mode filters with its OWN thresholds; its real pipeline tail (pool, queue, gate, opens) is at the bottom of this tab.` : ''}
         </div>
       )}
-      {/* ── F-G-1 (VPG) — VENUE PRICE GRID on the VTS lanes ──────────────────────────────
-          Kyle 2026-08-28: the grid refusals must be VISIBLE with a category of their own, not
-          folded in where they cannot be understood. On the VTS lanes the VPG TAGS and never
-          drops, so these are NOT rejections — the trade still simulates on its native geometry.
-          Saying that on the card matters: a reader seeing a count here must not think trades
-          were lost. ⛔ And this could not inherit the paper tab's surface: routes/vts.ts:1639
-          sources rejections from getSkippedSignalsSummary, and a TAG IS NOT A SKIP. */}
-      {(() => {
-        const ve = data?.vtsEvaluation as any;
-        const evaluated = ve?.gridEvaluated ?? 0;
-        const tags = (ve?.gridTags ?? {}) as Record<string, number>;
-        const rows = Object.entries(tags).sort((a, b) => b[1] - a[1]);
-        const LABEL: Record<string, string> = {
-          on_grid: 'Already on the venue grid',
-          would_round: 'Would be rounded onto the grid',
-          grid_unknown: 'No venue grid known (WIRING GAP, not a signal fault)',
-          stop_distance_after_rounding: 'Stop would fall inside the 0.3% minimum after rounding',
-          degenerate_after_rounding: 'Rounding would collapse the risk distance',
-          unorderable: 'Prices in an impossible order (the #915 shape)',
-        };
-        return (
-          <Card className="border-2 border-amber-500/60 overflow-hidden" data-testid="vts-vpg-card">
-            <CardHeader className="py-3 bg-amber-500/10 border-b-2 border-amber-500/60">
-              <CardTitle className="text-xl font-bold">
-                Venue Price Grid (VPG) — 24h
-                <span className="ml-2 text-xs font-normal text-muted-foreground">
-                  tagged only — the VTS simulates on native geometry, so nothing here was dropped
-                </span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                <table className={`w-full text-sm ${FROZEN_FIRST_COL_TABLE}`}>
-                  <thead>
-                    <tr className="border-b bg-muted/50">
-                      <th className="text-left p-2 font-medium">Verdict</th>
-                      <th className="text-right p-2 font-medium">Count</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr className="border-b bg-muted/30">
-                      <td className="p-2 font-medium">Signals reaching the grid check</td>
-                      <td className="p-2 text-right font-mono" data-testid="vts-vpg-evaluated">
-                        {evaluated.toLocaleString()}
-                      </td>
-                    </tr>
-                    {rows.length === 0 ? (
-                      <tr>
-                        <td colSpan={2} className="p-3 text-sm text-muted-foreground">
-                          No grid verdicts recorded yet — an observed zero, not a blank.
-                        </td>
-                      </tr>
-                    ) : rows.map(([verdict, n]) => (
-                      <tr key={verdict} className="border-b last:border-0" data-testid={`vts-vpg-${verdict}`}>
-                        <td className="p-2 font-medium">{LABEL[verdict] ?? verdict}</td>
-                        <td className="p-2 text-right font-mono">{n.toLocaleString()}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
-        );
-      })()}
       {/* Batch 42: Pipeline Summary Table — 24h aggregated. P19-B8.4c REV-3: summary theme (blue border +
           filled header, OBJ-9) + own horizontal-scroll container with frozen first column (OBJ-10). */}
       <Card className="border-2 border-blue-500/70 overflow-hidden">
@@ -525,6 +460,24 @@ export function FilterDiagnosticsPanel({ data, isLoading, gateDisposition = 'tag
                   </tr>
                 </thead>
                 <tbody>
+                  {/* F-G-1 (VPG): ONE ROW, per Kyle 2026-08-28 — a card was overkill. On the VTS
+                      lanes the VPG TAGS and never drops, so this is a would-fail count, not a
+                      loss. The note column says so; the number would otherwise read as trades lost. */}
+                  <tr className="border-b hover:bg-muted/30" data-testid="vts-vpg-row">
+                    <td className="p-2 font-medium">Venue Price Grid (VPG)</td>
+                    <td className="p-2 text-right text-amber-500" colSpan={2}>
+                      {fmt(Object.entries(((data?.vtsEvaluation as any)?.gridTags ?? {}) as Record<string, number>)
+                        .filter(([k]) => k !== 'on_grid' && k !== 'would_round')
+                        .reduce((t, [, n]) => t + n, 0))}
+                    </td>
+                    <td className="p-2 text-right text-muted-foreground">
+                      {fmt((data?.vtsEvaluation as any)?.gridEvaluated ?? 0)}
+                    </td>
+                    <td className="p-2 text-xs text-muted-foreground">
+                      would fail the venue price grid — TAGGED, not dropped; the VTS still simulates on
+                      native geometry. Right-hand figure is the population checked.
+                    </td>
+                  </tr>
                   <tr className="border-b hover:bg-muted/30">
                     <td className="p-2 font-medium">Universe Scanned</td>
                     <td className="p-2 text-right">{fmt(universe)}</td>

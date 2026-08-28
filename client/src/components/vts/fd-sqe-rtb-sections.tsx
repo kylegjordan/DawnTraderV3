@@ -128,52 +128,6 @@ export function ActiveSqeAndRtbSections({
 
   return (
     <div className="space-y-4" data-testid="fd-sqe-rtb-sections">
-      <DiagTableCard
-        theme="summary"
-        title="Pre-SQE Rejections — including the venue price grid"
-        subtitle={`${label} — cumulative${since ? ` since ${since}` : ''}`}
-        testId="fd-presqe-section"
-      >
-        <table className={`w-full text-sm ${FROZEN_FIRST_COL_TABLE}`}>
-          <thead>
-            <tr className={`border-b ${DIAG_TABLE_THEMES.summary.head}`}>
-              <th className="text-left p-2 font-medium">Reason</th>
-              <th className="text-right p-2 font-medium">Count</th>
-              <th className="text-left p-2 font-medium text-muted-foreground text-xs">Counting Basis</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr className="border-b bg-muted/30">
-              <td className="p-2 font-medium">Signals generated</td>
-              <td className="p-2 text-right font-mono">{cls.signalsGenerated.toLocaleString()}</td>
-              <td className="p-2 text-xs text-muted-foreground">the denominator — every signal that entered the funnel</td>
-            </tr>
-            <tr className="border-b bg-muted/30">
-              <td className="p-2 font-medium">Venue price grid — total</td>
-              <td className="p-2 text-right font-mono" data-testid="fd-grid-reject-total">{gridTotal.toLocaleString()}</td>
-              <td className="p-2 text-xs text-muted-foreground">
-                signals refused because their prices could not be placed on the venue's price grid (F-G-1)
-              </td>
-            </tr>
-            {gridRows.length === 0 ? (
-              <tr><td colSpan={3} className="p-3 text-sm text-muted-foreground">No venue-grid refusals recorded yet — an observed zero.</td></tr>
-            ) : gridRows.map(([reason, n]) => (
-              <tr key={reason} className="border-b last:border-0" data-testid={`fd-grid-reject-${reason}`}>
-                <td className="p-2 pl-6 font-medium">{GRID_REJECT_LABELS[reason] ?? reason}</td>
-                <td className="p-2 text-right font-mono">{n.toLocaleString()}</td>
-                <td className="p-2 text-xs text-muted-foreground">{GRID_REJECT_BASIS[reason] ?? 'a grid refusal reason this tab does not yet label'}</td>
-              </tr>
-            ))}
-            {otherPreSqeRows.map(([reason, n]) => (
-              <tr key={reason} className="border-b last:border-0">
-                <td className="p-2 font-medium">{reason}</td>
-                <td className="p-2 text-right font-mono">{n.toLocaleString()}</td>
-                <td className="p-2 text-xs text-muted-foreground">other pre-SQE rejection</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </DiagTableCard>
 
       <DiagTableCard
         theme="summary"
@@ -190,6 +144,20 @@ export function ActiveSqeAndRtbSections({
             </tr>
           </thead>
           <tbody>
+            {/* F-G-1 (VPG): ONE ROW, per Kyle 2026-08-28 — a card was overkill. These are
+                PRE-SQE drops: the signal never reached the SQE, so this sits above Evaluated
+                rather than among the gate rows, or the funnel would read as if it had. */}
+            <tr className="border-b bg-amber-500/10" data-testid="fd-vpg-row">
+              <td className="p-2 font-medium">Venue Price Grid (VPG) — rejected</td>
+              <td className="p-2 text-right font-mono" data-testid="fd-vpg-total">{gridTotal.toLocaleString()}</td>
+              <td className="p-2 text-xs text-muted-foreground">
+                dropped BEFORE the SQE — prices that could not be placed on the venue's grid, or a
+                stop that fell inside the minimum distance once rounded
+                {gridRows.length > 0 && (
+                  <span className="ml-1">({gridRows.map(([r, n]) => `${r.replace(/^grid_/, '')} ${n}`).join(' · ')})</span>
+                )}
+              </td>
+            </tr>
             <tr className="border-b bg-muted/30">
               <td className="p-2 font-medium">Evaluated</td>
               <td className="p-2 text-right font-mono">{cls.sqeEvaluated.toLocaleString()}</td>
