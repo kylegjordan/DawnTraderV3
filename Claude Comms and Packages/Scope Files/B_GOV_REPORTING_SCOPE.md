@@ -97,6 +97,27 @@ change-class: non_architecture
 ⚠️ **TWO FAILURE MODES WRITTEN IN, because a loop invites both:** (1) ⛔ **CONVERGENCE BY EROSION** — rounds go quiet because the claim was weakened until it asserts nothing. **Read the FIRST version against the LAST; if it shrank every round, the honest output is `NO WORK — WITHDRAWN` (§9.4 disposition 5), not a thin finding.** ★ *Your fifth disposition is what makes that exit available — it would not have existed a day ago.* (2) ⛔ **A LOOP THAT WILL NOT CLOSE** — **capped at THREE rounds**, then **both positions go to you**, because iterating to agreement selects for persistence, not truth.
 **Every round is recorded, not just the last:** `REVIEWER r<n>: <object|claim-only> · <verdict> · <what you changed>`. ★ **The round COUNT is the useful number — a finding that took three rounds and one that took none are not equally trustworthy.**
 
+### ★★ EDIT 11 — **THE TIER LEDGER: A TABLE YOU FILL IN, NOT A LIST YOU READ (Kyle directive 2026-08-28).** ✅ **SCOPED BEFORE THE PUSH — second time running, after four that were not.**
+
+**KYLE’S COMPLAINT, and it is about DOING, not reporting:** *"there’s this habit of only one or two being updated now, and the other tiers are being ignored."* He also asked for the whole skill to be examined for what CAUSES the skip.
+
+★★ **THE STRUCTURAL CAUSE, AND IT IS A DEFECT WE HAVE ALREADY FIXED ONCE ELSEWHERE: THE EXISTING NAMING RULE FIRES AT *REPORT* TIME AND THE FAILURE HAPPENS AT *WORK* TIME.** Its own heading is *"WHEN YOU REPORT THIS STEP TO KYLE: NAME THE DOCUMENTS."*
+⇒ ⛔ **A session that updated two documents and names both has FULLY COMPLIED with it. It catches under-REPORTING; it cannot catch under-UPDATING.** ★ **The rule was aimed one step downstream of the behaviour Kyle is describing.**
+
+⛔ **SECOND CAUSE — TIER 2 HAD NO SLOT.** The skill already said *"apply the judgement OUT LOUD and write it down"* and already banned *"skipping by default"*. **Both are DISCIPLINES, not FORMATS, so they degrade into a paragraph nobody writes.** ✅ **Contrast edit 7 (the §9.4 disposition line), which works for exactly one reason: IT IS A SLOT YOU CANNOT LEAVE BLANK.** ⇒ **the same fix, applied here.**
+
+⛔ **THIRD CAUSE — THE LIST WAS 15 PROSE BULLETS WITH EACH TRIGGER BURIED MID-SENTENCE**, two carrying temporary notes. **To decide applicability you had to read every bullet in full; skimming is the natural failure and costs nothing visible.**
+
+⛔⛔ **FOURTH CAUSE, AND IT IS THE ONE THAT MADE THE OTHER THREE INVISIBLE: NOTHING CARRIED THE LIST FORWARD.** The completion report’s governance-files-changed list is written **by the same session, from what it remembers doing** — **so the checklist and the report are never compared, and a skipped tier is absent from BOTH.** ★ **That is why the habit persisted through a rule that already existed.**
+
+**WHAT LANDED:**
+1. **`workflow-10-governance`: a TIER LEDGER table.** Tier 1 rows are unconditional. **Every Tier-2 row takes a verdict — `UPDATED` or `N/A` — plus one line. A blank cell is the failure.** Each row carries its own trigger in a column, so applicability is read at a glance rather than reconstructed from prose.
+2. **`workflow-11-completion`: the governance-files-changed list is COPIED FROM that table, never written from recollection** — and **if there is no filled table, Step 10 is not finished.** ★ **This closes the fourth cause: the two artifacts now have to agree.**
+
+⚠️ **HONEST LIMIT, STATED IN THE SKILL ITSELF: NOTHING ENFORCES THE TABLE.** The governance checker grades the doc-set at close against the declared change-class — **but its `DOCS` table has no `CLAUDE.md`/`CONDUCT.md` entry, and per `#754` it cannot see a batch at all until the completion report first-adds.** ⇒ **this is a FORMAT that makes the omission VISIBLE, not a GATE that prevents it.** ★ **Same standing as the numbered-step field in `#754`: legibility, not enforcement — and worth having for the same reason.**
+
+**FOR LANGSTON:** the fix is a format and I believe it is the right shape, **but it adds ~1.9 KB to a step skill and its whole value rests on sessions actually filling a table that nothing checks.** ⚠️ **`#754`’s numbered-step field is the precedent — you accepted it on a SELF-READ argument (the writer is the reader, so an omission is visible to its own author). ⛔ THAT ARGUMENT IS WEAKER HERE: a blank Tier-2 cell is visible, but "N/A" typed without thinking is not, and I cannot tell those apart.** **That is the hole I would like you to aim at.**
+
 ---
 
 ## 3. THE BLAST-RADIUS AUDIT — done now, which is the wrong time, and stated as such

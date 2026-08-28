@@ -100,6 +100,46 @@ When a substantive asset-class-onboarding learning surfaces in ANY batch, fold i
 
 ---
 
+## ⛔⛔ THE TIER LEDGER — A TABLE YOU FILL IN, NOT A LIST YOU READ (Kyle directive 2026-08-28)
+
+⛔⛔ **KYLE'S COMPLAINT, AND IT IS ABOUT DOING, NOT REPORTING: *"there's this habit of only one or two being updated now, and the other tiers are being ignored."***
+
+★★ **THE STRUCTURAL CAUSE, NAMED — THE NAMING RULE ABOVE FIRES AT *REPORT* TIME, AND THE FAILURE HAPPENS AT *WORK* TIME.** Its heading is *"WHEN YOU REPORT THIS STEP TO KYLE"*. ⇒ **a session that updated two documents and names both has FULLY COMPLIED with it.** ⛔ **It catches under-REPORTING. It cannot catch under-UPDATING, which is the actual habit.**
+★★ **AND TIER 2 HAD NO SLOT.** *"Apply the judgement OUT LOUD and write it down"* is a **discipline**, not a **format** — so it degrades into a paragraph nobody writes. ✅ **Contrast the §9.4 disposition line, which works for exactly one reason: IT IS A SLOT YOU CANNOT LEAVE BLANK.** ⇒ **the same fix, applied here.**
+
+⛔ **FILL THIS IN. EVERY ROW. A BLANK CELL IS THE FAILURE — not the batch being small.**
+
+| document | verdict | one line |
+|---|---|---|
+| **TIER 1 — UNCONDITIONAL, no verdict column, these are always UPDATED** | | |
+| `BATCH_CATALOG.md` | ✅ updated | |
+| `PHASE_HISTORY.md` | ✅ updated | |
+| `PHASE_19_PLAN.md` *(Phase 19 only)* | ✅ updated | |
+| shared `MEMORY.md` + your own `MEMORY_CC_<X>.md` | ✅ updated | |
+| the batch `SCOPE` | ✅ exists from Step 1 | |
+| the `COMPLETION_REPORT` | ✅ Step 11 | |
+| **TIER 2 — EVERY ROW GETS A VERDICT: `UPDATED` or `N/A` + WHY** | | |
+| `SYSTEM_MANUAL.md` | | architecture · strategy · regime · filter · signal pipeline · math |
+| `SYSTEM_IMPACT_MAP.md` | | any component added / removed / re-keyed, or cross-cutting state |
+| `RUNNING_ISSUES.md` | | issues opened, closed or annotated |
+| `CHANGES_AND_FIXES.md` | | bug / risk registry |
+| `POST_AUDIT_ROADMAP.md` | | phase-level change |
+| `ADJUSTMENT_FRAMEWORK.md` | | parameter-adjustment governance |
+| `AUTHORITY_BASELINE.md` | | constitutional change |
+| `STORAGE_POLICY.md` | | retention / tiering |
+| `MULTI_ASSET_VTS_EXPANSION_PLAN.md` | | B78-B81 stretch |
+| `ASSET_CLASS_ONBOARDING_WORKFLOW.md` | | Phase-24 learnings (§3.3) |
+| `BUILD_METHOD_PLAYBOOK.md` | | the METHOD changed — a role, a gate, a rule that earned its place |
+| `LANGSTON_ARCHITECTURE.md` | | the REVIEWER'S BUILD changed |
+| `CLAUDE.md` / `CONDUCT.md` | | a stable rule changed — **NOT per-batch state** |
+| `_archive/CLAUDE_MD_RULE_HISTORY.md` | | **mandatory in the SAME turn as any `CLAUDE.md` rule change** |
+| Langston's `MEMORY.md` | | §10.b — same turn as your own |
+
+⇒ ✅ **THE FILLED TABLE IS THIS STEP'S DELIVERABLE, and it is what the completion report's governance-files-changed list is COPIED FROM.**
+⛔⛔ **DO NOT WRITE THAT LIST FROM WHAT YOU REMEMBER DOING.** ★ **That is the second half of the same defect: the report is written by the session, from its own recollection, so the checklist and the report are never compared and a skipped tier is invisible in both.**
+⚠️ **`N/A` IS A REAL ANSWER AND IS OFTEN CORRECT — a display-only change is SIM-scope, not System-Manual-scope.** ⛔ **But it is an ANSWER, so it is written down. Silence is not `N/A`.**
+⚠️ **HONEST LIMIT: nothing enforces this table.** The governance checker grades the doc-set at close against the declared change-class, but **its `DOCS` table has no `CLAUDE.md` / `CONDUCT.md` entry, and per `#754` it cannot see a batch at all until the completion report first-adds.** ⇒ **this is a format that makes the omission VISIBLE, not a gate that prevents it.**
+
 ## ⛔ THE ANTI-PATTERNS
 - **"I'll update governance after the deploy."** No. Deferred governance becomes forgotten governance.
 - **"We reorganised that doc recently so it must be current."** **Reorganising is not updating.** A TOC add, a history-archive move, a consolidation — none of them discharge the obligation to record THIS batch's change.
