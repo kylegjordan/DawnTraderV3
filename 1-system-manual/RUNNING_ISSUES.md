@@ -4201,3 +4201,19 @@ Kraken publishes a per-pair `tick_size` — **1,437 pairs, 11 distinct values, a
 
 **HOME: folded into `F-G-1` `P4` (§9.4 disposition 1 — the work in hand), owner CC-C.** Kyle's requirement is explicit and he has asked to be told when it is deployed AND visible, so *"counted"* is not *"done"* for this batch. **Deliverable: a pre-SQE reject row on the paper FD tab with grid refusals as a NAMED category of their own, not merged into a catch-all.**
 
+### #922 OPEN 2026-08-28 (CC-C, answering Kyle's question about how the July `validate=true` leg relates to the VPG) — A SUCCESSFUL VENUE VALIDATION IS RECORDED NOWHERE, SO "RAN AND PASSED" IS INDISTINGUISHABLE FROM "NEVER RAN"
+
+**`validatePaperOrderWithVenue` has three outcomes and only two are observable.** `rejected` logs loudly and calls `rtbMetricsService.recordOpenFailed(... 'VALIDATE_REJECTED' ...)`; `skipped` calls `recordValidateSkipped`. ⛔ **`ok` does nothing at all — no log line, no counter.** Re-derived: `rtb-metrics-service.ts` contains `recordValidateSkipped` at `:248` and **no success equivalent.**
+
+⇒ **The retained logs show ZERO `venue accepted` lines, and that zero is an INSTRUMENT GAP, not a measurement.** ★ **This is the `#704` shape exactly — a leg whose failure is visible and whose success is silent, so an outage reads the same as a clean run.** It is the reason `#704` went 15 hours unnoticed, and it is present here in a component that **BLOCKS OPENS**.
+
+**WHAT THE LEG IS ACTUALLY WORTH, measured, so this is not read as an argument to remove it:** exactly one real rejection in the retained window — `STRK/USD`, 2026-08-17, *"EGeneral:Invalid arguments:volume minimum not met"*. **Kraken refused on MINIMUM VOLUME, which is a constraint the VPG's price work would never catch.** The leg does real work and blocks a trade that would otherwise have been a pretend fill.
+
+**RELATIONSHIP TO THE VPG, since the question was whether they conflict — THEY DO NOT, and the ordering matters:** the **VPG decides what price we may use**; the validate leg asks the venue whether the **whole order** (pair status, size, notional, format) would be accepted. **Sequential, not competing** — the VPG rounds first, and the rounded price is what the probe now asks about.
+
+★ **AND IT WAS PREVIOUSLY GIVING A MISLEADING ANSWER, WHICH IS NOW FIXED.** Before the VPG, `venue-validate.ts:94` formatted the price for the probe and the engine then filled at the UNROUNDED price — **so the oracle was answering about an order we did not place.** That is why 19% off-grid entries produced no rejection flood: **the probe was pre-corrected.** With the VPG rounding upstream, the price asked about IS the price used, and the leg's answer became truthful for the first time.
+
+⚠️ **PARTIAL OVERLAP NOW EXISTS AND IS DELIBERATE:** `roundQuantityForVenue` (VPG) checks `ordermin`/`costmin` **locally**, so the `STRK` class of rejection can now be caught **before** a network round-trip. **The venue probe stays as the authority** — a local check can be stale, the venue cannot — but the overlap means a future reader may think one is redundant. **It is not: local is fast and fallible, venue is slow and definitive.**
+
+**HOME: `B-VALIDATE-OBSERVABILITY`, owner CC-C, placed in `PHASE_19_PLAN.md` §1 Part F after `F-G-2`, alongside `B-MIN-STOP-DISTANCE` and `B-GUARD-COVERAGE-AUDIT`** — all three are observability/decision questions on the same execution surface. ⛔ **NOT folded into F-G-1:** the fix is a counter on a component this batch does not otherwise change, and F-G-1 is already carrying more than it was scoped for.
+
