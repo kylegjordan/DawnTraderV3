@@ -67,6 +67,7 @@ import { signalQualityEvaluator, type SQEInput } from '../core/filters/signal_qu
 import {
   recordActiveSignalsGenerated,
   recordActivePreSqeReject,
+  recordActiveGridPassthrough,
   recordActiveStrategyNull,
   recordActivePostSqeReject,
   recordActiveSqeEvaluation,
@@ -86,7 +87,7 @@ import { getPerClassTargetGate } from '../core/calculations/expectancy.js';
 // F-G-1 (OBJ-7): the venue price grid and its rounding rules. Rounding happens at the ONE
 // orchestrator seam so no strategy can be born bypassing it.
 import { roundTripleToGrid } from '../core/calculations/venue-price-grid.js';
-import { resolveVenueGrid } from '../markets/venue-grid-resolver.js';
+import { resolveVenueGrid, gridIsDerivedForClass } from '../markets/venue-grid-resolver.js';
 import { validateStopDistance } from '../strategies/strategy-helpers.js';
 import { normalizeAndGateTarget } from '../core/calculations/signal-target-normalizer.js';
 // M5B: Import disabled - VTS now runs autonomously, not from signal orchestrator
@@ -536,7 +537,7 @@ export class SignalOrchestrator {
     {
       // ⛔ CANONICALISE FIRST. `resolveByInternal` (`kraken-asset-pairs-service.ts:539-540`) is an
       // EXACT-KEY Map lookup with no fallback, and this block sits 59 lines ABOVE the pipeline's
-      // own `normalizeToInternalSymbol` at :596. So a non-canonical symbol form resolved to
+      // own `normalizeToInternalSymbol` at :626. So a non-canonical symbol form resolved to
       // `grid_unknown` and REFUSED A VALID SIGNAL — a venue-keyed lookup run on the one form the
       // very next stage exists to produce. Langston, at the ref.
       const _gridSymbol = normalizeToInternalSymbol(rawSignal.symbol) || rawSignal.symbol;
@@ -549,18 +550,44 @@ export class SignalOrchestrator {
         rawSignal.entryPrice, rawSignal.stopPrice, rawSignal.targetPrice,
         _grid.tick, { targetIsCap: _isCap, symbol: rawSignal.symbol },
       );
+      // ONE derivation of the funnel class key, used by BOTH the reject helper and the
+      // passthrough counter — two copies of the same narrowing is how they drift apart.
+      // ⛔⛔ AND THE PERP CLASSES FALL OUT OF IT ENTIRELY, WHICH MUST BE LOUD RATHER THAN SILENT.
+      // The funnel keys on `crypto_spot|xstock_spot` ONLY (`active-funnel-tracker.ts` FunnelAsset-
+      // Class). So for `xstock_perp` or `crypto_perp` this is `undefined` and NEITHER a grid
+      // refusal NOR a passthrough is recorded anywhere — an `xstock_perp` signal would ship
+      // unrounded and INVISIBLY. Both fresh readers found this independently.
+      // ★ DISPOSITION, STATED RATHER THAN LEFT TO BE DISCOVERED (Langston's ask, §9.4):
+      //   • Neither perp class reaches this seam today — `pattern-pool-dispatch.ts` throws
+      //     CLASS_NOT_WIRED for perps, so the gap is currently unreachable, NOT harmless.
+      //   • `crypto_perp` additionally hard-REFUSES by construction: it takes the published
+      //     branch and `resolveByInternal` does not index Kraken Futures pairs, so every perp
+      //     resolves `grid_unknown`. That is the correct conservative direction, and PERPFEED
+      //     just landed 184 of them, so it is named here rather than found later.
+      //   • HOME: widening the funnel to four classes is `B-FUNNEL-PERP-CLASSES`, owner CC-C,
+      //     placed in `PHASE_19_PLAN` §1 immediately after the perp active-path wiring item —
+      //     it must land BEFORE perps trade, not after.
+      // ⇒ Until then the miss SAYS SO on stderr instead of counting nothing quietly.
+      const _fc2 = (sizingContext.assetClass === 'crypto_spot' || sizingContext.assetClass === 'xstock_spot')
+        ? sizingContext.assetClass : undefined;
+      const _gridUncountable = (reason: string) => {
+        console.error(
+          `[F-G-1][GRID_EVENT_UNCOUNTED] ${_gridSymbol}/${strategyId} class=${sizingContext.assetClass} ` +
+          `reason=${reason} — the active funnel cannot key this asset class, so this grid event is ` +
+          `NOT in any counter and will NOT appear on the Filter Diagnostics tab. See B-FUNNEL-PERP-CLASSES.`,
+        );
+      };
       const _gridReject = (reason: string) => {
         // P4 (Kyle 2026-08-28): a refusal that only logs is invisible where it matters.
         // These are PRE-SQE drops by construction -- this seam runs before the SQE -- so they
         // join the same funnel the Filter Diagnostics tab reads. The reason string is prefixed
         // so a reader can tell a grid refusal from every other pre-SQE drop at a glance.
-        const _fc = (sizingContext.assetClass === 'crypto_spot' || sizingContext.assetClass === 'xstock_spot')
-          ? sizingContext.assetClass : undefined;
         // ⚠️ `grid_unknown` ALREADY carries the prefix, so a blind `grid_${reason}` stored it as
         // `grid_grid_unknown`. It still passed the client filter, so nothing broke — but the
         // label lookup would have missed it and a reader would have seen a raw doubled token.
         const _key = reason.startsWith('grid_') ? reason : `grid_${reason}`;
-        if (_fc) recordActivePreSqeReject(sizingContext.mode, _fc, _key, strategyId);
+        if (_fc2) recordActivePreSqeReject(sizingContext.mode, _fc2, _key, strategyId);
+        else _gridUncountable(_key);
       };
       // ⛔⛔ PUBLISHED vs DERIVED — the cut that actually binds, and I stopped one module short of
       // it (Langston, J1). My price/pre-filter asymmetry was right and I applied it to the WRONG
@@ -577,15 +604,33 @@ export class SignalOrchestrator {
       // `grid_unknown` branch that test is TRUE BY CONSTRUCTION: a TAUTOLOGY that let CRYPTO pass
       // through unrounded, the exact inverse of what I said the fix preserved. Langston, at the ref.
       // ★ PUBLISHED-vs-DERIVED IS A PROPERTY OF THE ASSET CLASS, not of a failed lookup's result.
-      const _gridIsDerived = sizingContext.assetClass === 'xstock_spot'
-        || sizingContext.assetClass === 'xstock_perp';
+      // ⛔ AND IT IS NOW READ FROM ONE HOME rather than re-stated here. A fresh reader reverted
+      // this line to the blocker-5 tautology and the ENTIRE suite stayed green — the single most
+      // load-bearing line in that fix had no coverage at all, and it was a second copy of a rule
+      // `venue-grid-resolver.ts` already implements. Calling the resolver's own predicate makes
+      // the two structurally incapable of disagreeing, and puts the fence on the function.
+      const _gridIsDerived = gridIsDerivedForClass(sizingContext.assetClass);
       if (!_r.ok && _r.reason === 'grid_unknown' && _gridIsDerived) {
         console.warn(
           `[F-G-1][GRID_UNRESOLVED_PASSTHROUGH] ${_gridSymbol}/${strategyId} — no DERIVED grid for this ` +
           `symbol (coverage gap in our own archive, not a venue fact). Proceeding UNROUNDED rather than ` +
           `refusing a valid signal. This is a data-coverage problem: see the xstock-grid-refresher.`,
         );
-        _gridReject('unresolved_passthrough');
+        // ⛔ A PASSTHROUGH IS NOT A REJECT, AND I BOOKED IT AS ONE. A fresh reader caught this
+        // against `active-funnel-tracker.ts`'s own contract: `preSqeRejects` holds the sites that
+        // DROP a built signal before the SQE, "so they are a true subset of signalsGenerated".
+        // This signal is not dropped — it continues and is counted again at the SQE, so it would
+        // have pushed the pre-SQE stage above its own denominator (Langston's B8.4b defect,
+        // reproduced one bucket over) and rendered under a heading reading "rejected".
+        // It gets its OWN counter: a coverage gauge, not a filter.
+        if (_fc2) recordActiveGridPassthrough(sizingContext.mode, _fc2, 'unresolved_grid');
+        else _gridUncountable('unresolved_passthrough');
+        // ⛔ AND NO POST-ROUND RE-CHECK BELOW ON THIS PATH. `fail()` echoes the inputs back
+        // verbatim, so `_r.entryPrice/_r.stopPrice` here are the ORIGINAL unrounded floats —
+        // running the stop-distance floor on them and booking `grid_stop_distance_after_rounding`
+        // would name a rounding that did not happen, and would attribute an upstream geometry
+        // refusal to the venue grid. The rounded-value assignment is skipped for the same reason:
+        // it would be a no-op that reads like a write.
       } else if (!_r.ok) {
         _gridReject(_r.reason ?? 'unknown');
         // ⛔ REJECT, NEVER RE-ROUND. Rounding to nearest is deterministic, so "round again"
@@ -597,28 +642,31 @@ export class SignalOrchestrator {
           `entry=${rawSignal.entryPrice} stop=${rawSignal.stopPrice} target=${rawSignal.targetPrice}`,
         );
         return null;
+      } else {
+        // P2 — THE POST-ROUND RE-CHECK (Kyle's, and it is a CORRECTNESS requirement rather than a
+        // precaution). NARROWED to the stop-distance floor alone: `normalizeAndGateTarget` below
+        // re-derives RR, reachability and ordering on the rounded numbers, so those three are
+        // already covered. `MIN_STOP_DISTANCE_BPS` is the ONE check with no downstream re-run —
+        // `validateStrategySignal` tests ordering, not distance.
+        // ⚠️ REACHED ONLY WHEN `_r.ok` — i.e. only when rounding ACTUALLY HAPPENED. A reason
+        // ending "after_rounding" must never be bookable on a path where nothing was rounded.
+        if (!validateStopDistance(_r.entryPrice, _r.stopPrice)) {
+          _gridReject('stop_distance_after_rounding');
+          console.warn(
+            `[F-G-1][GRID_REJECT] ${rawSignal.symbol}/${strategyId} reason=stop_distance_after_rounding ` +
+            `entry=${_r.entryPrice} stop=${_r.stopPrice} tick=${_grid.tick}`,
+          );
+          return null;
+        }
+        // ROUND ONCE, PERSIST ONLY THE ROUNDED VALUES. An unrounded shadow field would rebuild
+        // OBJ-2's defect: a second number under a name implying it is the one we use.
+        rawSignal = {
+          ...rawSignal,
+          entryPrice: _r.entryPrice,
+          stopPrice: _r.stopPrice,
+          targetPrice: _r.targetPrice,
+        };
       }
-      // P2 — THE POST-ROUND RE-CHECK (Kyle's, and it is a CORRECTNESS requirement rather than a
-      // precaution). NARROWED to the stop-distance floor alone: `normalizeAndGateTarget` below
-      // re-derives RR, reachability and ordering on the rounded numbers, so those three are
-      // already covered. `MIN_STOP_DISTANCE_BPS` is the ONE check with no downstream re-run —
-      // `validateStrategySignal` tests ordering, not distance.
-      if (!validateStopDistance(_r.entryPrice, _r.stopPrice)) {
-        _gridReject('stop_distance_after_rounding');
-        console.warn(
-          `[F-G-1][GRID_REJECT] ${rawSignal.symbol}/${strategyId} reason=stop_distance_after_rounding ` +
-          `entry=${_r.entryPrice} stop=${_r.stopPrice} tick=${_grid.tick}`,
-        );
-        return null;
-      }
-      // ROUND ONCE, PERSIST ONLY THE ROUNDED VALUES. An unrounded shadow field would rebuild
-      // OBJ-2's defect: a second number under a name implying it is the one we use.
-      rawSignal = {
-        ...rawSignal,
-        entryPrice: _r.entryPrice,
-        stopPrice: _r.stopPrice,
-        targetPrice: _r.targetPrice,
-      };
     }
     // ═════════════════════════════════════════
 

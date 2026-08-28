@@ -10,7 +10,9 @@
  * ⛔ A CONTROL THAT CANNOT FIRE IS THE SAME DEFECT AS THE FENCE IT GUARDS.
  */
 import { describe, it, expect } from 'vitest';
-import { gcdOfIncrements } from '../../markets/venue-grid-resolver';
+import { readFileSync } from 'fs';
+import { join } from 'path';
+import { gcdOfIncrements, gridIsDerivedForClass } from '../../markets/venue-grid-resolver';
 import {
   roundTripleToGrid,
   roundPriceForRole,
@@ -176,7 +178,7 @@ describe('F-G-1 OBJ-3 (VTS lane) — evaluateGridForTagging TAGS and never chang
   // MUTATION: have it return the rounded triple in place of the inputs and this fails.
   // ⛔ THE WHOLE POINT: the VTS lane simulates on the NATIVE geometry. If this ever mutated,
   // it would also silently re-price the xStock ACTIVE signal, whose geometry is born in the
-  // same lane (eval-cycle.ts:637-639 feeds dispatchXstockActiveSignal:1133).
+  // same lane (eval-cycle.ts:640-642 feeds dispatchXstockActiveSignal at :1165).
   it('is pure — the callers prices are untouched', () => {
     const entry = 100.004, stop = 99.001, target = 110.007;
     const t = evaluateGridForTagging(entry, stop, target, 0.01);
@@ -262,15 +264,257 @@ describe('F-G-1 — NON-DECIMAL TICKS, fed to the ROUNDING and not only to the G
     }
   });
 
-  // MUTATION: remove the `not_representable_after_rounding` refusal and this fails.
-  // ⛔ THE SELF-CHECK IS THE REAL FIX: the module already computed `representable` and the seam
-  // read only `ok`, so a rounding defect could return ok:true and ship. This catches the CLASS,
-  // not just the arithmetic error we happened to find.
-  it('REFUSES rather than shipping an output that is not on the grid', () => {
-    const r = roundTripleToGrid(12.3456, 12.1111, 12.9999, 0.0025);
+  // ⛔⛔ THE ASSERTION THAT USED TO BE HERE COULD NOT FAIL, AND IT WAS THE ONE GUARDING THE PIECE
+  // I CALLED "THE REAL FIX". It read `expect(['not_representable_after_rounding', undefined])
+  // .toContain(r.reason)` — and a SUCCESSFUL call returns `reason: undefined`, which is in the
+  // array. Langston called it vacuous; a fresh reader then PROVED it, deleting the refusal from
+  // the module and getting 38/38 green. Two independent readers, same line.
+  // ★ WHY IT WAS WRITTEN THAT WAY, because the reason matters more than the fix: there is NO
+  // natural input that trips the self-check while the arithmetic is correct — it guards a defect
+  // CLASS, not a case. Rather than admit the branch was unexercised, I widened the assertion
+  // until it accepted both outcomes. That is not a weak test; it is a test-shaped comment.
+  // ⇒ REPLACED with the strongest thing that CAN fail: a property sweep asserting the success
+  // path never emits an off-grid leg, checked with the guard's own predicate. If the arithmetic
+  // regresses anywhere in that space, this dies.
+  it('PROPERTY — every successful rounding lands on the grid, across the real tick set', () => {
+    const ticks = [0.01, 0.1, 1, 0.0001, 0.0025, 0.0005, 1e-5, 1e-8, 0.05];
+    let exercised = 0;
+    for (const t of ticks) {
+      for (const base of [0.00012345, 1.234567, 12.34567, 199.9999, 68000.12345, 1234567.891]) {
+        const r = roundTripleToGrid(base, base * 0.97, base * 1.06, t);
+        if (!r.ok) continue;               // refusals are covered by their own tests
+        exercised++;
+        expect(isOnGrid(r.entryPrice, t)).toBe(true);
+        expect(isOnGrid(r.stopPrice, t)).toBe(true);
+        expect(isOnGrid(r.targetPrice, t)).toBe(true);
+        expect(r.representable).toBe(true);
+      }
+    }
+    // POSITIVE CONTROL: without this, a build where everything refused would pass vacuously —
+    // which is exactly the failure mode that produced the assertion this replaces.
+    expect(exercised).toBeGreaterThan(30);
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// THE SECOND-READER ROUND. Three defects a fresh-context reader found in the blocker-5
+// CORRECTION — i.e. in work written to fix a defect, by the same session, in the same context.
+// Every one of them is fenced here, because an unfenced fix is a defect waiting for the next edit.
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+
+describe('F-G-1 — SHAPE IS CHECKED BEFORE THE GRID, so the passthrough path is never shape-blind', () => {
+  // MUTATION: move the `!finite(tick)` check back above the isLong/isShort derivation and every
+  // case here fails. That was the real ordering, and it meant a short-shaped or #915-inverted
+  // triple on an unresolved xStock grid was NEVER shape-checked — it passed through into sizing.
+  // My claim that "all other refusal reasons still refuse for both classes" was false: those
+  // reasons were not applied-and-passed, they were never evaluated.
+  it('refuses a SHORT-shaped triple on its shape, even with NO tick at all', () => {
+    const r = roundTripleToGrid(100, 110, 90, null);
+    expect(r.ok).toBe(false);
+    expect(r.reason).toBe('short_side_unexercised');
+  });
+
+  it('refuses an UNORDERABLE (#915-inverted) triple on its shape, even with NO tick at all', () => {
+    // stop ABOVE entry AND target ABOVE entry — neither long- nor short-shaped.
+    const r = roundTripleToGrid(100, 105, 110, null);
+    expect(r.ok).toBe(false);
+    expect(r.reason).toBe('unorderable_triple');
+  });
+
+  it('refuses a non-finite triple on its shape, even with NO tick at all', () => {
+    expect(roundTripleToGrid(NaN, 95, 110, null).reason).toBe('invalid_triple');
+    expect(roundTripleToGrid(100, 0, 110, null).reason).toBe('invalid_triple');
+  });
+
+  it('still reports grid_unknown when the SHAPE is valid and only the tick is missing', () => {
+    const r = roundTripleToGrid(100, 95, 110, null);
+    expect(r.ok).toBe(false);
+    expect(r.reason).toBe('grid_unknown');
+  });
+});
+
+describe('F-G-1 — a REFUSAL echoes the inputs back UNROUNDED, which is why the seam must not re-gate', () => {
+  // This is the fact the passthrough fix rests on, asserted rather than asserted-about. `fail()`
+  // returns the ORIGINAL numbers, so on the xStock passthrough path `_r.entryPrice/_r.stopPrice`
+  // are the raw floats. Running the post-round stop-distance floor on them and booking
+  // `grid_stop_distance_after_rounding` would name a rounding that never happened.
+  // MUTATION: make fail() emit zeros/nulls and this fails.
+  it('returns the ORIGINAL entry/stop/target on a grid_unknown refusal', () => {
+    const r = roundTripleToGrid(100.123456, 95.654321, 110.987654, null);
+    expect(r.ok).toBe(false);
+    expect(r.entryPrice).toBe(100.123456);
+    expect(r.stopPrice).toBe(95.654321);
+    expect(r.targetPrice).toBe(110.987654);
+    expect(r.representable).toBe(false);
+  });
+
+  // MUTATION: hoist validateStopDistance back out of the `else` and this fails.
+  // ⚠️ SOURCE-TEXT, and I know what that is worth (J4). It is here because the alternative is
+  // driving the whole orchestrator; it asserts ORDER, which is the thing that broke, not wording.
+  it('SEAM: the post-round re-check sits INSIDE the ok-branch, after the passthrough branch', () => {
+    const SEAM = readFileSync(join(process.cwd(), 'server/services/signal-orchestrator.ts'), 'utf8');
+    const iPass = SEAM.indexOf('recordActiveGridPassthrough(');
+    expect(iPass).toBeGreaterThan(-1);
+    const iElse = SEAM.indexOf('} else {', iPass);
+    const iStop = SEAM.indexOf('validateStopDistance(_r.entryPrice', iPass);
+    expect(iElse).toBeGreaterThan(iPass);
+    expect(iStop).toBeGreaterThan(iElse); // the re-check is reachable ONLY when _r.ok
+  });
+});
+
+describe('F-G-1 — A PASSTHROUGH IS NOT A REJECT (the funnel subset invariant)', () => {
+  // `active-funnel-tracker.ts` defines preSqeRejects as the sites that DROP a built signal before
+  // the SQE, "so they are a true subset of signalsGenerated". A passthrough drops nothing and is
+  // counted again downstream, so booking it there would push that stage above its own denominator
+  // — Langston's B8.4b defect, reproduced one bucket over. Found by a fresh reader.
+  // MUTATION: point recordActiveGridPassthrough at recordActivePreSqeReject and this fails.
+  it('lands in gridPassthroughs and leaves preSqeRejects completely untouched', async () => {
+    const t = await import('../../core/observability/active-funnel-tracker');
+    const before = t.getActiveFunnelStats('paper', 'xstock_spot');
+    const rejectsBefore = JSON.stringify(before.preSqeRejects);
+    const passBefore = before.gridPassthroughs?.['unresolved_grid'] ?? 0;
+
+    t.recordActiveGridPassthrough('paper', 'xstock_spot', 'unresolved_grid');
+
+    const after = t.getActiveFunnelStats('paper', 'xstock_spot');
+    expect(after.gridPassthroughs['unresolved_grid']).toBe(passBefore + 1);
+    expect(JSON.stringify(after.preSqeRejects)).toBe(rejectsBefore);
+    // and it must never appear under a grid_* reject key either
+    expect(Object.keys(after.preSqeRejects).filter((k) => k.includes('passthrough'))).toEqual([]);
+  });
+
+  // MUTATION: add gridPassthroughs into the preSqeRejects sum anywhere and this fails.
+  // ⛔⛔ MEASURED ON DELTAS, NEVER ON ABSOLUTES, AND A FRESH READER PROVED WHY. The tracker
+  // reloads a checkpoint from the gitignored `logs/` dir at module load, so its absolute counts
+  // carry whatever a previous run left on disk. The reader seeded that file with
+  // `signalsGenerated: 5000` and the absolute form of this test PASSED under a mutation that
+  // books passthroughs straight into `preSqeRejects` — the one automated control speaking to
+  // this claim could be silenced by a file on disk. A delta cannot be, because ambient state
+  // cancels out of a before/after subtraction.
+  it('does not inflate the pre-SQE stage — measured as a DELTA, immune to ambient checkpoint state', async () => {
+    const t = await import('../../core/observability/active-funnel-tracker');
+    const sum = (m: Record<string, number>) => Object.values(m).reduce((a, b) => a + b, 0);
+    const before = t.getActiveFunnelStats('paper', 'xstock_spot');
+
+    t.recordActiveSignalsGenerated('paper', 'xstock_spot', 1);
+    t.recordActiveGridPassthrough('paper', 'xstock_spot', 'unresolved_grid');
+
+    const after = t.getActiveFunnelStats('paper', 'xstock_spot');
+    expect(after.signalsGenerated - before.signalsGenerated).toBe(1);
+    expect(sum(after.preSqeRejects) - sum(before.preSqeRejects)).toBe(0);   // NOTHING was rejected
+    expect(sum(after.gridPassthroughs) - sum(before.gridPassthroughs)).toBe(1);
+  });
+});
+
+describe('F-G-1 — isOnGrid, the predicate the self-check is built on', () => {
+  // ⛔ TWO CONTROLS, BOTH REQUIRED. Tuned in one direction only, this predicate was wrong twice:
+  // an ABSOLUTE 1e-9 band over-refused exact multiples at large q, and my first fix (the same
+  // 1e-9 scaled by q) started ACCEPTING off-grid prices — strictly worse, because an over-refusal
+  // loses a trade and a false accept SHIPS an unplaceable order.
+
+  // MUTATION: restore the absolute `1e-9` band and the last two of these fail.
+  it('POSITIVE — accepts exact multiples, including at very large tick counts', () => {
+    for (const [p, t] of [
+      [100, 0.01], [68000.5, 0.1], [200, 0.0025], [12.3475, 0.0025],
+      [0.00012345, 1e-8],
+      [68000.5, 0.00001],   // 6.8e9 ticks — the absolute band FAILS this
+      [1e6, 0.00001],       // 1e11 ticks — and this
+    ] as [number, number][]) {
+      expect(isOnGrid(p, t)).toBe(true);
+    }
+  });
+
+  // MUTATION: scale the band by 1e-9 instead of Number.EPSILON and the last two of these fail.
+  it('NEGATIVE — rejects prices that sit between ticks, at every scale', () => {
+    for (const [p, t] of [
+      [100.005, 0.01], [68000.55, 0.1], [200.00003, 0.0001], [12.34875, 0.0025],
+      [68000.500005, 0.00001],    // half a tick out at 6.8e9 ticks
+      [1000000.000005, 0.00001],  // half a tick out at 1e11 ticks
+    ] as [number, number][]) {
+      expect(isOnGrid(p, t)).toBe(false);
+    }
+  });
+});
+
+describe('F-G-1 — PUBLISHED vs DERIVED has exactly one home', () => {
+  // ⛔ THIS IS THE LINE BLOCKER-5 WAS ABOUT, AND IT HAD ZERO COVERAGE. A fresh reader reverted the
+  // orchestrator's copy to the tautology (`provenance !== 'venue_published'`, true by construction
+  // inside the grid_unknown branch, which let CRYPTO pass through unrounded) and the whole suite
+  // stayed green. The rule now lives in ONE exported function, and the fence is on the function.
+
+  // MUTATION: add crypto to the derived set and this fails — that IS blocker-5.
+  it('CRYPTO is published: absence of a tick is a real unknown, so it must NOT pass through', () => {
+    expect(gridIsDerivedForClass('crypto_spot')).toBe(false);
+    expect(gridIsDerivedForClass('crypto_perp')).toBe(false);
+  });
+
+  // MUTATION: drop xstock_perp and this fails.
+  it('xSTOCK is derived: absence is OUR coverage gap, so it passes through', () => {
+    expect(gridIsDerivedForClass('xstock_spot')).toBe(true);
+    expect(gridIsDerivedForClass('xstock_perp')).toBe(true);
+  });
+
+  // An unknown class must take the CONSERVATIVE side. A new asset class defaulting to "derived"
+  // would silently start shipping unrounded prices on the day it is added.
+  it('an unrecognised asset class is treated as PUBLISHED — refuse, never pass through', () => {
+    expect(gridIsDerivedForClass('something_new')).toBe(false);
+    expect(gridIsDerivedForClass('')).toBe(false);
+  });
+});
+
+describe('F-G-1 — a tag verdict must say WHOSE fault it is', () => {
+  // MUTATION: fold not_representable_after_rounding back into 'unorderable' and this fails.
+  // That mapping recorded a VPG ARITHMETIC defect as a malformed SIGNAL, on both VTS lanes, in
+  // the exact bucket used to judge signal quality. `unorderable`'s own doc says "not long-shaped
+  // and not short-shaped" — a property of the signal, which is a different claim entirely.
+  it('separates OUR defects from the signal shape', () => {
+    expect(evaluateGridForTagging(100, 105, 110, 0.01).verdict).toBe('unorderable');   // signal
+    expect(evaluateGridForTagging(NaN, 95, 110, 0.01).verdict).toBe('invalid_triple'); // values
+    expect(evaluateGridForTagging(100, 95, 110, null).verdict).toBe('grid_unknown');   // wiring
+  });
+
+  // MUTATION: narrow isWiringBug back to grid_unknown only and this fails.
+  it('flags a wiring problem as ours, and a shape problem as the signals', () => {
+    expect(evaluateGridForTagging(100, 95, 110, null).isWiringBug).toBe(true);
+    expect(evaluateGridForTagging(100, 105, 110, 0.01).isWiringBug).toBe(false);
+  });
+});
+
+describe('F-G-1 — the SELF-CHECK, finally EXERCISED rather than asserted-about', () => {
+  // ⛔⛔ THIS BRANCH WAS UNTESTED THROUGH FOUR REVIEW ROUNDS, and both the vacuous assertion I
+  // wrote and the tag-verdict arm I later added were unfenced for the SAME reason: I assumed no
+  // input could reach it while the arithmetic is correct. That assumption was wrong.
+  // ★ THE REACHABLE INPUT: `decimalsOf` CLAMPS AT 12, and `snap` closes with `toFixed(that many)`.
+  // So a tick whose decimal form needs MORE than 12 places is truncated on the way out, and the
+  // snapped value is not a multiple of the tick. Found by a fresh reader as a note about the
+  // clamp; turned into a fence by asking what input would prove it.
+  // ⚠️ HONEST SCOPE: no resolver we own can currently PRODUCE such a tick — `gcdOfIncrements`
+  // works at 8dp and Kraken publishes powers of ten. This is a real execution of the guard, not
+  // a claim that the condition occurs in production.
+
+  const PATHOLOGICAL_TICK = 1.23456789012345e-7; // needs 21 decimals; decimalsOf clamps to 12
+
+  // MUTATION: delete the `if (!representable) return fail(...)` line and this fails.
+  // A fresh reader deleted exactly that line and the whole suite stayed green.
+  it('REFUSES when its own output is not on the grid, instead of shipping it', () => {
+    const r = roundTripleToGrid(1.234567, 1.20, 1.30, PATHOLOGICAL_TICK);
+    expect(r.ok).toBe(false);
+    expect(r.reason).toBe('not_representable_after_rounding');
+  });
+
+  // CONTROL: the same triple on a normal tick must SUCCEED — otherwise the test above would pass
+  // for any reason at all, which is how the assertion it replaces came to be worthless.
+  it('CONTROL — the identical triple on a real tick rounds cleanly', () => {
+    const r = roundTripleToGrid(1.234567, 1.20, 1.30, 0.0001);
     expect(r.ok).toBe(true);
     expect(r.representable).toBe(true);
-    // and the refusal token exists as a reachable outcome
-    expect(['not_representable_after_rounding', undefined]).toContain(r.reason);
+  });
+
+  // MUTATION: map not_representable_after_rounding back to 'unorderable' and this fails.
+  // This is the arm that recorded OUR arithmetic defect as a malformed SIGNAL on both VTS lanes.
+  it('TAGS it as our defect, not as a malformed signal', () => {
+    const tag = evaluateGridForTagging(1.234567, 1.20, 1.30, PATHOLOGICAL_TICK);
+    expect(tag.verdict).toBe('not_representable_after_rounding');
+    expect(tag.isWiringBug).toBe(true); // OURS, not the signal's
   });
 });

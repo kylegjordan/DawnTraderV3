@@ -1586,7 +1586,7 @@ async function generatePhase10Signal(
   // and the simulation continues on the NATIVE geometry below, unchanged.
   // ⛔ THE INSERTION POINT IS HERE, PER-LANE, AND NOT AT `callStrategyDetect`. That dispatcher has
   // TWO production callers, and the xStock ACTIVE signal's geometry is born inside this same VTS
-  // lane (`eval-cycle.ts:637-639` feeds `dispatchXstockActiveSignal:1133`). Rounding or refusing
+  // lane (`eval-cycle.ts:640-642` feeds `dispatchXstockActiveSignal` at `:1165`). Rounding or refusing
   // in the dispatcher would reach into the active path and delete a signal BEFORE
   // `recordActiveSignalsGenerated` counts it — the denominator defect, one lane up.
   const _gridTag = evaluateGridForTagging(

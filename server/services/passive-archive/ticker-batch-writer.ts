@@ -21,6 +21,11 @@ import {
   type InsertEquitySpotTickerSnap,
 } from '../../../shared/schema.js';
 import type { ArchiveAssetClass } from './ohlc-batch-writer.js';
+// F-G-1 / OBJ-9: the retry policy is SHARED with the OHLC writer rather than copied — a
+// second implementation of a decided rule is the defect B-EPOCH-KEYING-PARITY is held on.
+// (Moved up from mid-file, Langston: an import buried beside its first use reads as a
+// circular-dependency workaround. There is no cycle — ohlc imports nothing from ticker.)
+import { isTransientWriteError, alertPermanentWriteFailure, RETRY_BUFFER_MAX } from './ohlc-batch-writer.js';
 
 const BATCH_FLUSH_INTERVAL_MS = 5_000;
 const POOL_SLOT_TIMEOUT_MS = 5_000;
@@ -113,10 +118,6 @@ export function bufferTickerSnap(assetClass: ArchiveAssetClass, row: InsertEquit
   tickerBuffers[assetClass].push(row);
   return true;
 }
-
-// F-G-1 / OBJ-9: the retry policy is SHARED with the OHLC writer rather than copied — a
-// second implementation of a decided rule is the defect B-EPOCH-KEYING-PARITY is held on.
-import { isTransientWriteError, alertPermanentWriteFailure, RETRY_BUFFER_MAX } from './ohlc-batch-writer.js';
 
 async function flushTickerAssetClass(assetClass: ArchiveAssetClass): Promise<void> {
   const batch = tickerBuffers[assetClass];

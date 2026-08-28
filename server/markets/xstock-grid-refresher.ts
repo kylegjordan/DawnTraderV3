@@ -2,7 +2,8 @@
  * F-G-1 / B-GRID-REPRESENTABILITY (OBJ-3) — DERIVE THE xSTOCK PRICE GRID FROM OBSERVED PRICES.
  *
  * Kraken does not publish a tick for xStocks and offers no `validate=true` oracle for them
- * (`venue-validate.ts:92` skips every xStock), so the grid must be DERIVED. See
+ * (`venue-validate.ts:123-126` — no asset-pairs entry ⇒ `skipped` — for every xStock), so the
+ * grid must be DERIVED. See
  * `venue-grid-resolver.ts` for why this is a GCD over observed increments rather than a
  * decimal-place count — and note that the distinction is not academic: measured 2026-08-28 over
  * one day of live prices, 6 of 40 symbols derive a 0.0025 grid and 3 more derive 0.0005. A

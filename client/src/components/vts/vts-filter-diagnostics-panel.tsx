@@ -196,6 +196,11 @@ type FunnelClassCounts = {
   sqeEvaluated: number;
   sqePassed: number;
   preSqeRejects: Record<string, number>;
+  /** F-G-1 — VPG passthroughs: signals that shipped UNROUNDED for want of a derived xStock grid.
+   *  ⛔ NOT a reject and never summed with `preSqeRejects` — the signal continued down the funnel.
+   *  OPTIONAL: a pre-F-G-1 server omits it, and an omitted field must not render as a zero that
+   *  reads "we have full coverage". */
+  gridPassthroughs?: Record<string, number>;
   postSqeRejects: Record<string, number>;
   sqeGateRejects: Record<string, number>;
   /** OBJ-3 refresh-phase slice — OPTIONAL: a pre-OBJ-3 server omits it and the section

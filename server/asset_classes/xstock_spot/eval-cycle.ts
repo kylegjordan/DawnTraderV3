@@ -682,8 +682,8 @@ export async function evaluateXstockPairForVTS(
         // DROP. The strategy-level un-strangle itself is the `'tag'` arg on `callStrategyDetect` above.
         // ── F-G-1 (OBJ-3, VTS lane 2 of 2) — VENUE PRICE GRID: TAG ONLY, NEVER DROP ──────────
         // Langston's ruling 2026-08-28, and THIS lane is why the insertion point is here rather
-        // than at `callStrategyDetect`: the geometry read at :637-639 above is ALSO what feeds
-        // `dispatchXstockActiveSignal` at :1133, so the xStock ACTIVE signal is manufactured
+        // than at `callStrategyDetect`: the geometry read at :640-642 above is ALSO what feeds
+        // `dispatchXstockActiveSignal` at :1165, so the xStock ACTIVE signal is manufactured
         // inside this VTS lane. Rounding or refusing in the shared dispatcher would reach into
         // the active path and delete a signal BEFORE `recordActiveSignalsGenerated` counts it.
         // Tagging here leaves the active dispatch's geometry untouched — the orchestrator rounds

@@ -12,7 +12,7 @@
  *
  *   xSTOCK  — DERIVED, AND RECORDED AS A FLOOR, NOT A TICK. Kraken does not index xStocks in
  *             `AssetPairs` at all (documented: `symbol-canonicalizer.ts` KNOWN_NONEXISTENT_NAMES,
- *             B-NEW-36 sub-batch (c), #120), and `venue-validate.ts:92` returns `skipped` for
+ *             B-NEW-36 sub-batch (c), #120), and `venue-validate.ts:123-126` returns `skipped` for
  *             every xStock, so there is no `validate=true` oracle either — I looked for one
  *             before proposing this, and recorded its absence rather than leaving it untried.
  *             ⇒ the venue's true xStock tick is UNKNOWABLE from anything we can call.
@@ -91,10 +91,30 @@ export function getDerivedGridCount(): number {
  * the Dash coin). Resolving by name alone would return the wrong venue's grid for those symbols.
  * That collision is handled correctly elsewhere in the system; this module must not re-open it.
  */
+/**
+ * ⛔⛔ THE ONE HOME OF PUBLISHED-vs-DERIVED — the distinction Langston's J1 ruling turns on, and
+ * the reason blocker-5 happened.
+ *
+ *   PUBLISHED (crypto): the tick is the VENUE'S OWN STATEMENT. Its absence means we genuinely do
+ *     not know what the venue will accept ⇒ REFUSE.
+ *   DERIVED (xStock): the "grid" is OUR INFERENCE FROM OUR OWN ARCHIVE. Its absence tells you
+ *     about our observation coverage, not about the venue ⇒ PASS THROUGH, loudly.
+ *
+ * ⚠️ IT IS EXPORTED BECAUSE IT WAS WRITTEN TWICE — once here as an inline `assetClass === ...`
+ * test, once in `signal-orchestrator.ts` as `_gridIsDerived`. Two copies of a decided rule is
+ * exactly the defect `B-EPOCH-KEYING-PARITY` is held on, and here the two copies were the SAME
+ * rule the batch's central ruling depends on. A fresh reader then proved the orchestrator's copy
+ * had ZERO test coverage: reverting it to the blocker-5 tautology left the whole suite green.
+ * ⇒ ONE function, ONE home, directly fenced.
+ */
+export function gridIsDerivedForClass(assetClass: string): boolean {
+  return assetClass === 'xstock_spot' || assetClass === 'xstock_perp';
+}
+
 export function resolveVenueGrid(symbol: string, assetClass: string): VenueGrid {
   if (!symbol) return UNKNOWN;
 
-  if (assetClass === 'xstock_spot' || assetClass === 'xstock_perp') {
+  if (gridIsDerivedForClass(assetClass)) {
     return derived.get(symbol.toUpperCase()) ?? UNKNOWN;
   }
 

@@ -31,6 +31,11 @@ type FunnelClass = {
   // never rendered here, so every reason counted into it was invisible on this tab.
   signalsGenerated: number;
   preSqeRejects: Record<string, number>;
+  /** F-G-1 — VPG passthroughs: signals that shipped UNROUNDED for want of a derived xStock grid.
+   *  ⛔ NOT a reject and never summed with `preSqeRejects` — the signal continued down the funnel.
+   *  OPTIONAL: a pre-F-G-1 server omits it, and an omitted field must not render as a zero that
+   *  reads "we have full coverage". */
+  gridPassthroughs?: Record<string, number>;
   sqeGateRejects: Record<string, number>;
   sqeGateRejectsAtRefresh?: Record<string, number>;
   strategyNullReasons?: Record<string, Record<string, number>>;
@@ -103,6 +108,13 @@ export function ActiveSqeAndRtbSections({
   const gridRows = preSqeAll.filter(([r]) => r.startsWith('grid_'));
   const otherPreSqeRows = preSqeAll.filter(([r]) => !r.startsWith('grid_'));
   const gridTotal = gridRows.reduce((t, [, n]) => t + n, 0);
+  // ⛔ PASSTHROUGHS ARE COUNTED SEPARATELY AND ARE NOT ADDED TO `gridTotal`. A passthrough is a
+  // signal that SHIPPED (unrounded, for want of a derived xStock grid) — it was not rejected, and
+  // it is counted again at every stage below. `undefined` means the server predates the field:
+  // render nothing rather than a 0, which would read as "full grid coverage".
+  const gridPassthroughTotal = cls.gridPassthroughs
+    ? Object.values(cls.gridPassthroughs).reduce((t, n) => t + n, 0)
+    : null;
   const rtb = cls.rtbRefresh;
 
   return (
@@ -135,8 +147,30 @@ export function ActiveSqeAndRtbSections({
                 {gridRows.length > 0 && (
                   <span className="ml-1">({gridRows.map(([r, n]) => `${r.replace(/^grid_/, '')} ${n}`).join(' · ')})</span>
                 )}
+
               </td>
             </tr>
+            {/* ⛔ ITS OWN ROW, AND THAT IS THE POINT. This sentence used to live INSIDE the cell
+                above, whose label reads "rejected" — so a number that is explicitly NOT a
+                rejection was rendered under a rejection heading, on rejection styling. A fresh
+                reader called it: the disclaimer was in the cell, the heading was not.
+                Still ONE row per idea, per Kyle 2026-08-28 — a card was overkill; a mislabel is
+                not the alternative. Rendered only when non-zero, so a healthy system shows the
+                single reject row and nothing else. */}
+            {gridPassthroughTotal !== null && gridPassthroughTotal > 0 && (
+              <tr className="border-b bg-sky-500/10" data-testid="fd-vpg-passthrough">
+                <td className="p-2 font-medium">Venue Price Grid (VPG) — shipped unrounded</td>
+                <td className="p-2 text-right font-mono" data-testid="fd-vpg-passthrough-total">
+                  {gridPassthroughTotal.toLocaleString()}
+                </td>
+                <td className="p-2 text-xs text-muted-foreground">
+                  NOT rejected and NOT counted in the row above — these signals traded. We had no
+                  derived grid for that xStock symbol yet, which is a gap in our own price archive
+                  rather than anything the venue said. Counted per evaluation, so one uncovered
+                  symbol re-checked all day inflates it: read it as how often, not how many symbols.
+                </td>
+              </tr>
+            )}
             <tr className="border-b bg-muted/30">
               <td className="p-2 font-medium">Evaluated</td>
               <td className="p-2 text-right font-mono">{cls.sqeEvaluated.toLocaleString()}</td>

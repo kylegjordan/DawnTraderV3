@@ -103,11 +103,18 @@ export function isTransientWriteError(err: unknown): boolean {
     || m.includes('too many clients');
 }
 
-/** One alert per class per process — a per-flush alert would be its own flood. */
-const _permanentAlerted: Partial<Record<ArchiveAssetClass, boolean>> = {};
+/**
+ * One alert per WRITER:CLASS per process — a per-flush alert would be its own flood.
+ * ⚠️ The key is `ohlc:crypto_spot`, NOT an `ArchiveAssetClass`. It was typed as one and reached by
+ * an `as ArchiveAssetClass` cast, so the type asserted something false and the comment above it
+ * said "per class" while the code was per writer-and-class. Langston, at the ref. Typing it as a
+ * plain string map removes the cast AND makes the two writers' latches visibly independent —
+ * which is the behaviour we want: OHLC failing must not silence the ticker leg.
+ */
+const _permanentAlerted: Record<string, boolean> = {};
 
 export async function alertPermanentWriteFailure(writer: 'ohlc' | 'ticker', assetClass: ArchiveAssetClass, detail: string, dropped: number): Promise<void> {
-  const _latchKey = `${writer}:${assetClass}` as ArchiveAssetClass;
+  const _latchKey = `${writer}:${assetClass}`;
   if (_permanentAlerted[_latchKey]) return;
   try {
     // ⛔ THE JSONL ALERT SYSTEM, NOT `storage.createSystemAlert`. My first version wrote to the
@@ -129,6 +136,12 @@ export async function alertPermanentWriteFailure(writer: 'ohlc' | 'ticker', asse
         + `until it is fixed. This is the #704 shape: bars stop landing while stdout looks healthy, `
         + `because success logs to stdout and failure to stderr. Detail: ${detail}`,
       metadata: { assetClass, dropped, detail, source: `${writer}-batch-writer`, issue: '#705' },
+      // ⛔ THE LATCH ABOVE DIES WITH THE PROCESS — so without this, every restart re-raises the
+      // SAME permanent fault as a fresh alert, and a fault that survives restarts (which is what
+      // "permanent" means) would produce one alert per restart forever. Langston's rider.
+      // `addAlert` suppresses a duplicate only while an alert with this key is still UNRESOLVED,
+      // so resolving it deliberately re-arms the warning rather than muting it for good.
+      dedupe_key: `${writer}-writer-permanent-${assetClass}`,
     });
     // ⛔ LATCH ONLY AFTER A SUCCESSFUL RAISE. Setting it first — as I did — burns the one-shot
     // for the whole process even when the alert never actually got out.

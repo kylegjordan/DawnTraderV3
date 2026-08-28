@@ -18,6 +18,17 @@
  *                                    xStock active signal, which is why it tags rather than rounds
  *   4. `execution/venue-validate.ts` — shares the VPG's BASIS (`tick_size`) for the outbound
  *                                    order string, so the rule has one home rather than two
+ *   5. `active-execution-engine.ts` — `roundQuantityForVenue` for the SIZE pre-filter
+ *
+ * ⛔ WHO DOES **NOT** CALL IT, AND MUST BE NAMED HERE OR THIS LIST READS AS A CENSUS WHEN IT IS
+ * ONLY A LIST OF FRIENDS (Langston's condition):
+ *   - `trailing-exit-controller.ts` — DOES NOT, and that is `#923`. It ratchets a live stop with
+ *     `Math.max` over ATR-derived floats and takes the result straight off-grid. So between
+ *     F-G-1 and F-G-2 the system advertises a grid guarantee that the trailing controller breaks
+ *     on the first ratchet. HOME: `F-G-2`, owner CC-C, placed in `PHASE_19_PLAN` §1 after F-G-1.
+ *     ⚠️ Presently UNREACHABLE — Langston re-derived it: the ladder is config-locked off
+ *     (`trailing_enabled_active=false`, `moonbag_qualifying_strategies=[]`, all four classes).
+ *     That lowers the urgency and NOT the obligation: a config flip re-arms it silently.
  *
  * ⛔ IF YOU ARE ABOUT TO ROUND, SNAP OR FORMAT A PRICE ANYWHERE ELSE, CALL THE VPG INSTEAD.
  *   A second implementation is how a decided rule ends up shipped into one reader out of several.
@@ -116,10 +127,41 @@ function snap(price: number, tick: number, dir: Dir): number {
   return Number((n * tick).toFixed(decimalsOf(tick)));
 }
 
-/** True when `price` is an exact multiple of `tick`, computed in integer space. */
+/**
+ * True when `price` is an exact multiple of `tick`, computed in integer space.
+ *
+ * ⛔⛔ THE TOLERANCE IS RELATIVE TO `q`, AND MAKING IT ABSOLUTE WAS A REAL DEFECT IN THIS FILE.
+ * `q = price / tick` is a COUNT OF TICKS and can be enormous — an xStock at $200 on a derived
+ * `2e-8` grid gives `q = 1e10`, where one float ULP already exceeds `1e-9`. A fixed `1e-9` band
+ * therefore says "not on grid" about prices that ARE exact multiples. MEASURED, with the
+ * off-grid control held at false throughout:
+ *     isOnGrid(68000.5, 0.00001)  ->  false      (68000.5 IS 6.8e9 ticks exactly)
+ *     isOnGrid(1e6,     0.00001)  ->  false      (1e11 ticks exactly)
+ * ⛔ AND THE CONSEQUENCE WAS NOT COSMETIC: `roundTripleToGrid` promotes `!representable` to
+ * `not_representable_after_rounding`, a REFUSAL. So the self-check added to catch a rounding bug
+ * would itself have refused valid signals — the guard becoming the thing it guards against.
+ * ⇒ Scale the band with `q`, at FLOAT PRECISION and not at a hand-picked constant.
+ * ⛔⛔ AND MY OWN FIRST FIX WAS WORSE THAN THE DEFECT. I scaled the ORIGINAL `1e-9` by `q` —
+ * which at `q = 6.8e9` opens a band of ~6.8 TICKS and starts accepting prices that are genuinely
+ * OFF grid. MEASURED against a deliberate half-tick control set:
+ *     absolute 1e-9   -> 2 on-grid MISSES,        0 false accepts   (the reported defect)
+ *     relative 1e-9   -> 0 misses,                2 FALSE ACCEPTS   (my fix — strictly worse:
+ *                                                                    an off-grid price now SHIPS)
+ *     relative EPS*8  -> 0 misses,                0 false accepts   (clean on both)
+ * `Number.EPSILON * 8` is ~1.8e-15 relative — a few ULPs, which is the precision actually
+ * available; the `max(1, |q|)` floor preserves the old behaviour for small `q`.
+ * ★ THE CONTROL IS THE WHOLE POINT: checking only that on-grid prices pass would have certified
+ * the false-accept version. A tolerance needs BOTH a positive and a negative control, or it is
+ * tuned in one direction only.
+ * ⚠️ HONEST LIMIT: at `q` beyond ~1e14 a double cannot represent the grid at all, so this
+ * predicate stops discriminating. That is a fact about floats, not a tolerance to widen — and it
+ * is unreachable here (`gcdOfIncrements` floors derived ticks at 1e-8, and no published Kraken
+ * tick is finer than 1e-8 either).
+ * Reported by a fresh-context reader; re-derived here, with controls, before anything changed.
+ */
 export function isOnGrid(price: number, tick: number): boolean {
   const q = price / tick;
-  return Math.abs(q - Math.round(q)) < 1e-9;
+  return Math.abs(q - Math.round(q)) < Math.max(1, Math.abs(q)) * Number.EPSILON * 8;
 }
 
 /**
@@ -180,10 +222,12 @@ export function roundTripleToGrid(
   const finite = (v: number) => Number.isFinite(v) && v > 0;
   if (!finite(entryPrice) || !finite(stopPrice) || !finite(targetPrice)) return fail('invalid_triple');
 
-  // NO HARD-CODED FALLBACK. If the venue grid is unknown we refuse; we do not invent one.
-  if (!finite(tick as number)) return fail('grid_unknown');
-  const t = tick as number;
-
+  // ⛔ SHAPE FIRST, GRID SECOND — AND THE ORDER IS THE POINT. These checks need NO TICK, and
+  // `grid_unknown` used to return ABOVE them, so on the xStock passthrough path (where a missing
+  // DERIVED grid proceeds rather than refusing) a SHORT-SHAPED or #915-INVERTED triple was never
+  // shape-checked at all and went straight into sizing. My claim that "all other refusal reasons
+  // still refuse for both classes" was FALSE — those four were not applied-and-passed, they were
+  // never evaluated. Found by a second reader on the correction itself.
   // SIDE IS DERIVED FROM THE ORDERING, not carried. `StrategySignal` has no side field, and
   // measured across all 646 closed trades with a full triple: 634 are unambiguously long-shaped,
   // 0 short-shaped, 12 neither (#915's inverted stops).
@@ -198,6 +242,11 @@ export function roundTripleToGrid(
   if (isShort) return fail('short_side_unexercised');
   if (!isLong) return fail('unorderable_triple');
 
+  // NO HARD-CODED FALLBACK. If the venue grid is unknown we refuse; we do not invent one.
+  // ⚠️ Now reached only AFTER the shape is proven valid, so a caller that chooses to proceed on
+  // `grid_unknown` is proceeding with geometry that is at least well-formed.
+  if (!finite(tick as number)) return fail('grid_unknown');
+  const t = tick as number;
   const e = snap(entryPrice, t, 'nearest');
   const s = roundPriceForRole(stopPrice, t, 'stop', true);
   const g = roundPriceForRole(targetPrice, t, 'target', true, opts.targetIsCap === true);
@@ -271,7 +320,17 @@ export type GridTagVerdict =
   /** Rounding would collapse the legs to less than one tick apart. */
   | 'degenerate_after_rounding'
   /** Not long-shaped and not short-shaped, or a leg is missing — the `#915` family. */
-  | 'unorderable';
+  | 'unorderable'
+  /** ⚠️ OUR ARITHMETIC, NOT THE SIGNAL'S SHAPE — the VPG rounded and the result was still not a
+   *  multiple of the tick. A DEFECT IN THIS MODULE, and it must never be filed against the
+   *  signal. It had been folded into `unorderable`, whose own doc says "not long-shaped and not
+   *  short-shaped" — i.e. a property of the SIGNAL — so a VPG bug would have been recorded on
+   *  both VTS lanes as bad xStock signal quality, in the exact bucket used to judge signals.
+   *  Found by a fresh-context reader. */
+  | 'not_representable_after_rounding'
+  /** ⚠️ A leg is non-finite or non-positive. Also previously folded into `unorderable`, which is
+   *  a different claim: this triple is not malformed in its ORDER, it is malformed in its VALUES. */
+  | 'invalid_triple';
 
 export interface GridTag {
   verdict: GridTagVerdict;
@@ -291,10 +350,15 @@ export function evaluateGridForTagging(
 ): GridTag {
   const r = roundTripleToGrid(entryPrice, stopPrice, targetPrice, tick, opts);
   if (!r.ok) {
-    const wiring = r.reason === 'grid_unknown';
+    // ⛔ `isWiringBug` MEANS "OUR PROBLEM, NOT THE SIGNAL'S" — so an unresolvable grid AND a
+    // failed self-check both qualify. Only `grid_unknown` did, which under-reported our own
+    // defects as signal defects.
+    const wiring = r.reason === 'grid_unknown' || r.reason === 'not_representable_after_rounding';
     const verdict: GridTagVerdict =
       r.reason === 'grid_unknown' ? 'grid_unknown'
       : r.reason === 'degenerate_after_rounding' ? 'degenerate_after_rounding'
+      : r.reason === 'not_representable_after_rounding' ? 'not_representable_after_rounding'
+      : r.reason === 'invalid_triple' ? 'invalid_triple'
       : 'unorderable';
     return { verdict, tick: tick ?? null, wouldBe: null, isWiringBug: wiring };
   }

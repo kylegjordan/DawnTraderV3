@@ -41,6 +41,11 @@ export interface ActiveFunnelClassData {
   preSqeRejectsByStrategy: Record<string, Record<string, number>>;
   /** POST-SQE, pre-RTB rejects (position_cap, reachability) — signals that passed the SQE but were dropped
    *  before the RTB queue. Kept distinct from preSqeRejects so the funnel order is honest. */
+  /** F-G-1 — signals that shipped UNROUNDED because we have no DERIVED grid for that xStock
+   *  symbol yet. ⛔ NOT A REJECT: nothing was dropped, so this is NEVER summed with, or rendered
+   *  beside, the pre-SQE reject rows. It is a gauge of OUR OWN archive coverage. Absent on a
+   *  pre-F-G-1 checkpoint, snapshotted as {} (absent-honest). */
+  gridPassthroughs: Record<string, number>;
   postSqeRejects: Record<string, number>;
   sqeGateRejects: Record<string, number>;
   /** B-FILTER-DIAG-PAPER OBJ-3 (2026-08-07): the refresh-phase slice of sqeGateRejects —

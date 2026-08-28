@@ -159,6 +159,16 @@ export interface ActiveFunnelRecord {
    *  broken — Langston B8.4b). This is its own pre-generation stage; the panel renders it above the signal
    *  funnel, not as a funnel subset. */
   strategyAttrition: Record<string, number>;
+  /** F-G-1 — VPG signals that shipped UNROUNDED because we have no DERIVED grid for that xStock
+   *  symbol yet. ⛔ THIS IS NOT A REJECT AND MUST NEVER LIVE IN `preSqeRejects`. The signal was
+   *  NOT dropped: it continues to the SQE and is counted again at every later stage, so mixing it
+   *  into the pre-SQE drop bucket would let that stage exceed `signalsGenerated` and read as a
+   *  broken funnel — the SAME defect Langston caught on `strategyAttrition` (B8.4b), reproduced
+   *  one bucket over. It is a COVERAGE gauge (how thin is our own xStock archive), not a filter.
+   *  Additive field: an old checkpoint without it reloads as {} via the merge-over-blank below,
+   *  so no keySchema bump — bumping would DISCARD live funnel history for a purely additive key
+   *  (the `sqeGateRejectsAtRefresh` precedent). Shape: reason -> count. */
+  gridPassthroughs: Record<string, number>;
   /** POST-SQE, pre-RTB rejects by reason (position_cap + the target-gate reasons) — signals that PASSED the
    *  SQE but were dropped before the RTB queue. Distinct from preSqeRejects because these sites sit AFTER the
    *  SQE call in buildSizedSignalForStrategy — lumping them into preSqeRejects would misstate the funnel
@@ -198,6 +208,7 @@ function _blank(): ActiveFunnelRecord {
     preSqeRejects: {},
     preSqeRejectsByStrategy: {},
     strategyAttrition: {},
+    gridPassthroughs: {},
     postSqeRejects: {},
     sqeGateRejects: {},
     sqeGateRejectsAtRefresh: {},
@@ -266,6 +277,7 @@ export function reloadCheckpointFromDisk(): void {
           preSqeRejects: { ...(v.preSqeRejects ?? {}) },
           preSqeRejectsByStrategy: { ...(v.preSqeRejectsByStrategy ?? {}) },
           strategyAttrition: { ...(v.strategyAttrition ?? {}) },
+          gridPassthroughs: { ...(v.gridPassthroughs ?? {}) },
           postSqeRejects: { ...(v.postSqeRejects ?? {}) },
           sqeGateRejects: { ...(v.sqeGateRejects ?? {}) },
           rtbRefresh: { ...b.rtbRefresh, ...(v.rtbRefresh ?? {}) },
@@ -361,6 +373,32 @@ export function recordActiveStrategyNull(
   }
 }
 
+/**
+ * F-G-1 — count one VPG PASSTHROUGH: a signal that shipped with UNROUNDED prices because no
+ * DERIVED grid exists for that xStock symbol yet.
+ *
+ * ⛔ DELIBERATELY NOT `recordActivePreSqeReject`, and that was the defect a fresh reader caught.
+ * `preSqeRejects` is defined as the sites that DROP a built signal before the SQE, "so they are a
+ * true subset of signalsGenerated". A passthrough drops nothing — it is counted here AND flows on
+ * to be counted at the SQE, so it would have inflated the pre-SQE stage above its own denominator
+ * and rendered under a heading that reads "rejected" for signals that were not.
+ *
+ * ★ WHAT THIS NUMBER MEANS, AND WHAT IT DOES **NOT**: it counts SIGNAL EVALUATIONS that shipped
+ * unrounded — once per symbol x strategy x lane x scan cycle. It is NOT a symbol count, and it is
+ * NOT the refresher's coverage percentage.
+ * ⛔ MY FIRST DOCSTRING CALLED IT "a gauge of how thin our xStock archive is", which is a number
+ * this counter structurally CANNOT produce: one permanently-uncovered symbol re-evaluated all day
+ * emits an unbounded count, so a large value can mean "a handful of symbols, all day" while
+ * reading as "many trades shipped wrong". The refresher's own figure is the per-SYMBOL one
+ * (`xstock-grid-refresher.ts`: 476 seen / 436 covered / 40 not). Fresh-reader finding, and the
+ * defect was in the DESCRIPTION rather than the code — a name is a claim.
+ * ⇒ Read it as "how often did we ship unrounded", never as "how much of the universe is uncovered".
+ */
+export function recordActiveGridPassthrough(mode: FunnelMode, assetClass: FunnelAssetClass, reason: string): void {
+  const r = _get(mode, assetClass);
+  r.gridPassthroughs[reason] = (r.gridPassthroughs[reason] ?? 0) + 1;
+}
+
 export function recordActiveStrategyAttrition(mode: FunnelMode, assetClass: FunnelAssetClass, strategy: string): void {
   const r = _get(mode, assetClass);
   r.strategyAttrition[strategy] = (r.strategyAttrition[strategy] ?? 0) + 1;
@@ -438,6 +476,8 @@ export function getActiveFunnelStats(mode: FunnelMode, assetClass: FunnelAssetCl
     preSqeRejects: { ...r.preSqeRejects },
     preSqeRejectsByStrategy: Object.fromEntries(Object.entries(r.preSqeRejectsByStrategy).map(([s, m]) => [s, { ...m }])),
     strategyAttrition: { ...r.strategyAttrition },
+    // reloaded pre-F-G-1 checkpoints lack the field — snapshot as {} (absent-honest)
+    gridPassthroughs: { ...(r.gridPassthroughs ?? {}) },
     postSqeRejects: { ...r.postSqeRejects },
     sqeGateRejects: { ...r.sqeGateRejects },
     // reloaded pre-OBJ-3 checkpoints lack the field — snapshot as {} (absent-honest)
@@ -475,7 +515,12 @@ export function hasActiveFunnelActivity(mode: FunnelMode, assetClass: FunnelAsse
   const r = _stats.get(_key(mode, assetClass));
   if (!r) return false;
   return r.signalsGenerated > 0 || r.sqeEvaluated > 0 || r.rtbRefresh.cyclesRun > 0
-    || Object.keys(r.preSqeRejects).length > 0;
+    || Object.keys(r.preSqeRejects).length > 0
+    // F-G-1: a passthrough IS activity. Unreachable today only because `signalsGenerated`
+    // increments first at the top of the seam — an ordering guaranteed by a comment, not by the
+    // type system. Omitting it here meant a bucket holding ONLY passthroughs would render
+    // "awaiting activation" and hide the number entirely. Fresh-reader finding.
+    || Object.keys(r.gridPassthroughs).length > 0;
 }
 
 /** Test-only: wipe all counters + the checkpoint. NOT called on any production path. */
