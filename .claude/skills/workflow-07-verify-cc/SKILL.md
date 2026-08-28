@@ -18,12 +18,13 @@ With active trading on, **most changes have a staging-visible surface.** For any
 ⛔⛔ **STAGING NEEDS NO LOGIN — IN *CLAUDE-IN-CHROME*. THE TOOL YOU PICK DECIDES THIS, AND THAT IS THE WHOLE DISTINCTION (Kyle directive 2026-08-28, MEASURED the same day).**
 ★ **Kyle, who has had to say this repeatedly:** *"I keep getting sessions telling me that they can't go to the staging site because they need a login and password. They don't need one. They just need to use Chrome for Claude and then navigate to it."*
 
-| surface | what you get at `https://188.245.193.8.sslip.io` | use it for |
-|---|---|---|
-| ✅ **`mcp__claude-in-chrome__*`** — Kyle's real Chrome, carrying his session | **THE FULL DASHBOARD. No login.** *(Measured 2026-08-28: portfolio, Ready-to-Buy, Filter Health, strategy table all rendered.)* | ⛔ **§9.3 UI verification. This is the one the rule means.** |
-| ⚠️ the in-app Browser pane (`mcp__Claude_Browser__*`) | **a `"Welcome Back / Sign in"` FORM** — fresh profile, no cookies | general browsing; **needs the credentials, and that is why they exist** |
+| surface | verdict |
+|---|---|
+| ✅ **`mcp__claude-in-chrome__*`** — Kyle's real Chrome, carrying his session | ⛔ **THE ONLY SURFACE FOR STAGING.** **The full dashboard loads with NO LOGIN** *(measured 2026-08-28: portfolio, Ready-to-Buy, Filter Health, strategy table all rendered).* |
+| ⛔⛔ the in-app Browser pane (`mcp__Claude_Browser__*`) | ⛔⛔ **DO NOT USE IT FOR STAGING. IT IS A DEAD END, NOT AN ALTERNATIVE.** It serves a `"Welcome Back / Sign in"` form, and **a session MAY NOT TYPE A PASSWORD INTO A FORM** — a hard boundary, not a permission we can grant. ⇒ **it can never get past that page, no matter what credentials exist.** |
 
-⛔⛔ **AND DO NOT TRY TO LOG IN — YOU CANNOT, AND YOU DO NOT NEED TO.** ★ **A session may not type a password into a form; that is a hard boundary, not a preference.** ⇒ **Provisioning more test credentials would NOT unblock the in-app browser** — the constraint is the typing, not the account. **Claude-in-Chrome carries Kyle's session and needs no login, which is why it is the mandated surface.**
+⛔⛔ **THAT IS WHY THIS IS A PROHIBITION AND NOT A COMPARISON (Kyle, 2026-08-28).** ★ **His correction: *"if you need login details and the ability to log in with a password using the in-app method, then that can't work — so that needs to be removed, or we explicitly say don't use the in-app login method."*** ⚠️ **My first version described it as an option that merely *needs the credentials*. It is not an option. Documenting a dead end as a choice invites a session to spend a turn discovering it.**
+✅ **AND NO AMOUNT OF TEST CREDENTIALS FIXES IT — the constraint is the TYPING, not the account.**
 
 ⛔⛔ **THE LANDING DASHBOARD IS STALE WINDOW DRESSING — IGNORE EVERYTHING ON IT (Kyle, 2026-08-28).** *"Nothing has been updated on that in over six months… old alerts and messages and warnings that we don't need to listen to."*
 ⚠️ **MEASURED THE SAME DAY, AND IT CAUGHT ME: I read its *"database 153.37 GB — 1533.7% of the 10 GB limit"* banner and a *"CRITICAL"* alert from 8/14 and filed them as a finding. Both are dashboard furniture.**
