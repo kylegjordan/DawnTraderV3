@@ -56,6 +56,7 @@
 - ✅ **What a quiet final round licenses: DISPATCHING.** You may proceed to Langston.
 - ⛔ **What it NEVER licenses: SAYING THE FINDING IS CORRECT.** *"The reviewer agreed"* / *"it came back clean"* **may not be written in the dispatch, the scope or the report** — a clean is not evidence (#453), and Langston will bounce it as one.
 ★ **Both hold at once because they answer different questions: the loop decides WHEN YOU ARE DONE ITERATING; it does not decide WHETHER YOU ARE RIGHT. Langston decides that, and the loop exists to stop wasting his rounds on errors a reader could have caught.**
+✅ **KYLE’S OWN FRAMING, and it is narrower than "clean" — the loop closes when THE REVIEWER’S OWN CALLED-OUT ITEMS ARE SATISFIED, nothing wider: *"that is the best version of what they can put forward in front of Langston."*** ⛔ **NOT *"this is correct."* Langston still pokes holes in it, and is expected to.**
 
 ⚠️ **TWO WAYS THE LOOP FAILS — WATCH FOR BOTH, THEY ARE NOT HYPOTHETICAL:**
 1. ⛔ **CONVERGENCE BY EROSION.** Rounds can end quietly because the claim has been weakened until it asserts nothing. ★ **Before dispatching, read the FIRST version against the LAST: if the finding got smaller every round, you did not verify it — you dissolved it, and the honest output is `NO WORK — WITHDRAWN` (§9.4 disposition 5), not a thin finding.**

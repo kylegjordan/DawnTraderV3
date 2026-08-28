@@ -85,7 +85,9 @@ change-class: non_architecture
 **KYLE’S SEQUENCE, for a standalone investigation:** find what you believe is the issue → **fresh reviewer, stateless** → **correct what it finds** → **hand the corrected version BACK to a fresh reviewer** → iterate until neither has anything left → **only then Langston.**
 ★ **THE ARGUMENT FOR THE SECOND ROUND, which is what makes it a loop rather than a step: THE CORRECTION IS ITSELF UNREVIEWED WORK**, written by the same session in the same context that produced the error. **An uninspected correction is exactly as likely to be wrong as the thing it replaced** — the mechanism’s own premise, applied to its own output. **Each round gets a FRESH reviewer**; re-using one that has seen the earlier draft rebuilds the memory-of-forming-the-belief the boundary exists to remove.
 
-⛔⛔ **AND HERE IS THE COLLISION WITH YOUR CONDITION (i), SURFACED RATHER THAN PAPERED OVER — it is the one thing in this edit I want you to rule on.** Your rule: **a reviewer CLEAN is never evidence.** Kyle’s loop **terminates on a clean.** ✅ **I believe both hold, because they answer different questions, and I have written the distinction in as the load-bearing line:**
+⛔ **I FRAMED THIS AS A COLLISION WITH YOUR CONDITION (i). IT IS NOT ONE, AND THE OVERSTATEMENT WAS MINE — KYLE CORRECTED IT.**
+✅ **His termination condition is NARROWER than "clean": the loop closes when THE REVIEWER’S OWN CALLED-OUT ITEMS HAVE BEEN SATISFIED.** Verbatim: *"I’m not saying that this is absolutely clean — I’m just saying they iterate to a point where they believe it’s right. … that is the best version of what they can put forward in front of Langston. And Langston may still poke holes in it and find errors with it."*
+⇒ ★ **So the loop never asserts correctness at all, and your rule is untouched.** I had read "terminates on a clean" as a verdict; **it is a hand-off.** The distinction I wrote as a reconciliation turns out to be simply what he meant:
 | a quiet final round | |
 |---|---|
 | ✅ **licenses** | **DISPATCHING** — you may proceed to Langston |
