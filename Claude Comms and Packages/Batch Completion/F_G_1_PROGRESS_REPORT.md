@@ -146,6 +146,40 @@ CONTROL RESULT: BOTH ARMS FIRE
 - ⛔ **A COLD-START HOLE THE MONOTONIC ARGUMENT DOES NOT COVER, now pre-registered:** the map grows from **EMPTY**, so between process start and the refresher's first completion (**measured ~25s at this deploy, ~20s at the previous**) the absent set is **the entire universe** — read directly during that window and it returned **483**. **An xStock position opening then would satisfy the PASS arm trivially.** ⇒ **AT READ TIME, any xStock open earlier than the first `[xstock-grid] derived` line following its process start is EXCLUDED and reported separately as cold-start — never counted as a pass.**
 ★ **ONE ALREADY RECONCILES:** the live log at 16:10:57 shows `ROOT/USD/sma_trend_ride verdict=grid_unknown` — and `ROOT/USD` is on the list above. The mechanism and the denominator agree on a real event.
 
+### 3d. ➕ AMENDMENT 1 — xSTOCK OPENS NOW COUNT TOWARD THE WINDOW (Kyle, 2026-08-28; **APPENDED, NOT EDITED; STILL PRE-DATA**)
+
+⛔⛔ **§3 ABOVE IS UNTOUCHED AND STAYS UNTOUCHED.** Langston froze this document because *"a pre-registered criterion that keeps moving while the data accrues is NOT pre-registered."* **This is appended beneath it** — the `B-TOKEN-WATCH` AMENDMENT-1 shape — so both the original and the change are readable, in order, by anyone auditing whether the bar moved to fit a result.
+
+✅ **PRE-DATA PROOF, MEASURED AT THE MOMENT OF WRITING (2026-08-28T20:23:25Z), NOT ASSERTED:**
+```
+opens since the 17:49Z deploy, by asset class  ->  ZERO IN BOTH CLASSES
+positions carrying metadata.gridAtBirth        ->  0
+```
+⇒ **NOT ONE OBSERVATION OF EITHER CLASS EXISTS IN THE POST-DEPLOY POPULATION.** The amendment is therefore a prediction, not a reaction — which is the ONLY property that makes amending a pre-registration legitimate, and it is perishable: **after the first open this could not honestly have been written.**
+
+**WHAT KYLE FOUND** (his words: *"the way you need to see an Xstock trade also open, why only crypto?"*): §3's window counts **crypto positions only.** ⚠️ **And I had reported it to him more narrowly still — as though xStock were not graded at all. It is: §3's PASS/FAIL table has always carried an xStock row.** The defect is the COUNTER, not the grading.
+
+**WHAT CHANGES — ONE THING ONLY:**
+| | §3 as written | AMENDED |
+|---|---|---|
+| **the window** | first **30 crypto** positions opened after `2026-08-28T16:08:02Z`, or 7 days | ➕ **first 30 positions of EITHER CLASS**, same start, same 7-day cap |
+| **crypto PASS/FAIL** | 100% on the published grid, no tolerance; any off-grid leg is the finding | ⬜ **UNCHANGED** |
+| **xStock PASS/FAIL** | on-grid **OR** absent from the derived map at open time | ⬜ **UNCHANGED** |
+| **§3a co-denominators, §3b control, §3c denominator** | mandatory | ⬜ **UNCHANGED** |
+
+★ **THE ARGUMENT, WHICH IS HIS AND IS CORRECT: xStock is half the system, ALL FIVE currently-open positions are xStock, and a window denominated only in crypto structurally under-samples the class we are least sure about.** ⚠️ **Least sure precisely because its grid is OUR INFERENCE rather than the venue's statement** — so the softer standard and the thinner sampling were compounding, in the same direction, on the same class.
+
+⛔⛔ **THE COST, STATED WITH ITS ARITHMETIC RATHER THAN GLOSSED — THIS AMENDMENT BUYS COVERAGE BY SPENDING CRYPTO DEPTH.**
+Measured 7-day cadence: **crypto ≈5/day, xStock ≈2/day.** At that ratio 30 combined opens resolve to **≈21 crypto + ≈9 xStock in ≈4.3 days**, against §3's original **30 crypto in ≈6 days.** ⇒ **we trade ≈9 crypto observations for ≈9 xStock observations and a faster close.** ★ **At the OBSERVED ratio crypto still supplies ~71% of the window, so the absolute crypto bar keeps most of its power** — that is what makes the trade acceptable, and it is a fact about the current cadence, **not a guarantee.**
+
+⚠️ **SO THE FAILURE MODE THE AMENDMENT INTRODUCES IS PRE-REGISTERED HERE RATHER THAN DISCOVERED LATER: A CRYPTO DROUGHT OR AN xSTOCK BURST NOW ENDS THE WINDOW EARLY ON A THIN CRYPTO LEG.** Under §3 that was impossible — the counter could not advance without crypto.
+⇒ ⛔ **BINDING AT READ TIME: report the two legs SEPARATELY, each with its own n, and NEVER pooled into one percentage.** The classes are graded by different standards against different kinds of truth; a combined figure would be an averaging artifact of exactly the kind I have produced before.
+⇒ ⛔ **AND IF THE CRYPTO LEG ARRIVES WITH `n < 15` — half the original 30 — THE CRYPTO RESULT IS REPORTED AS `UNDERPOWERED`, PASS OR FAIL.** ★ **The number is set NOW, before any open, and it is deliberately mechanical: at the observed cadence ~21 is expected, so 15 is the point at which the cadence assumption this amendment rests on has visibly broken.** ⚠️ **`UNDERPOWERED` here means the same as in §3a and carries the same duty: state the §3a co-denominators so a drought is distinguishable from the seam refusing.**
+
+**AUTHORITY:** Kyle, 2026-08-28, after he found the gap himself. **Langston rules on it** — he set the freeze, and an amendment to a frozen criterion is his gate, not mine. ⚠️ **If he rejects it, §3 stands unamended and this section is struck rather than quietly deleted.**
+
+---
+
 ## 4. WHAT IS UNPROVEN, AND WHAT WOULD FALSIFY IT
 
 - ⛔ **THE HEADLINE IS NOT "ONE ROUNDING SEAM".** It is **"one seam on the signal-birth path; three entry points bypass it, named"** — `#928` an HTTP intent path taking a triple straight from the request body, `#929` a second position-sizing caller, `#927` a fabricated `entry * 1.02` target in three places, one of them the RTB **ranking** key. All homed with owners and plan positions. **Langston approved the batch shipping with them named; he did not approve it shipping under the old headline.**
