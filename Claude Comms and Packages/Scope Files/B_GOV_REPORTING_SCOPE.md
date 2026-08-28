@@ -79,6 +79,22 @@ change-class: non_architecture
 ⚠️ **THE LIMITS, stated rather than discovered later:** hand it my SUMMARY and it reviews my summary — the same failure one level down; it is blind to context it NEEDS, not only to context it should ignore; it costs tokens, so it is for load-bearing claims only.
 **EVIDENCE: ONE RUN.** It contradicted a Langston ruling — 8 absences in §9.5 including the clause the section is titled after — and I re-derived all eight with a control. **§9.5 was re-classified Class A → Class B on it.** ⚠️ **One run, one claim, my choice of target. A positive result, NOT proof it generalises**, and it is not offered as one.
 
+### ★★ EDIT 10 — **THE REVIEWER IS A LOOP, NOT A ONE-SHOT (Kyle 2026-08-27).** Scoped BEFORE the push this time.
+✅ **Stated first because it is the one thing that has gone wrong four times running: this is in the scope BEFORE it is anywhere else.** Written into `_pending-skills/bug-investigation-SOURCE.md`; the skill itself is built by `B-CLAUDEMD-SLIM` Class C (`#750`).
+
+**KYLE’S SEQUENCE, for a standalone investigation:** find what you believe is the issue → **fresh reviewer, stateless** → **correct what it finds** → **hand the corrected version BACK to a fresh reviewer** → iterate until neither has anything left → **only then Langston.**
+★ **THE ARGUMENT FOR THE SECOND ROUND, which is what makes it a loop rather than a step: THE CORRECTION IS ITSELF UNREVIEWED WORK**, written by the same session in the same context that produced the error. **An uninspected correction is exactly as likely to be wrong as the thing it replaced** — the mechanism’s own premise, applied to its own output. **Each round gets a FRESH reviewer**; re-using one that has seen the earlier draft rebuilds the memory-of-forming-the-belief the boundary exists to remove.
+
+⛔⛔ **AND HERE IS THE COLLISION WITH YOUR CONDITION (i), SURFACED RATHER THAN PAPERED OVER — it is the one thing in this edit I want you to rule on.** Your rule: **a reviewer CLEAN is never evidence.** Kyle’s loop **terminates on a clean.** ✅ **I believe both hold, because they answer different questions, and I have written the distinction in as the load-bearing line:**
+| a quiet final round | |
+|---|---|
+| ✅ **licenses** | **DISPATCHING** — you may proceed to Langston |
+| ⛔ **never licenses** | **saying the finding is CORRECT.** *"The reviewer agreed"* may not appear in the dispatch, the scope or the report |
+★ **The loop decides WHEN YOU ARE DONE ITERATING. It does not decide WHETHER YOU ARE RIGHT — you do.** Its purpose is to stop spending your rounds on errors a reader could have caught. **If you think that distinction will not survive contact, say so, because it is the whole hinge.**
+
+⚠️ **TWO FAILURE MODES WRITTEN IN, because a loop invites both:** (1) ⛔ **CONVERGENCE BY EROSION** — rounds go quiet because the claim was weakened until it asserts nothing. **Read the FIRST version against the LAST; if it shrank every round, the honest output is `NO WORK — WITHDRAWN` (§9.4 disposition 5), not a thin finding.** ★ *Your fifth disposition is what makes that exit available — it would not have existed a day ago.* (2) ⛔ **A LOOP THAT WILL NOT CLOSE** — **capped at THREE rounds**, then **both positions go to you**, because iterating to agreement selects for persistence, not truth.
+**Every round is recorded, not just the last:** `REVIEWER r<n>: <object|claim-only> · <verdict> · <what you changed>`. ★ **The round COUNT is the useful number — a finding that took three rounds and one that took none are not equally trustworthy.**
+
 ---
 
 ## 3. THE BLAST-RADIUS AUDIT — done now, which is the wrong time, and stated as such

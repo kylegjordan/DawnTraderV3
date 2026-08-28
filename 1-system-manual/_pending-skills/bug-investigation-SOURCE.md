@@ -45,3 +45,20 @@
 ★ **BECAUSE HANDING IT THE OBJECT LEAVES THE SELECTION WITH YOU, AND THAT IS WHERE THE ERROR LIVES.** ⚠️ **Langston’s #675 retraction: his failure was not misreading the file — it was believing that file WAS the object.** A reader given only the claim has to go and find it.
 ⛔ **A HIT IS A LEAD, RE-DERIVED AT THE REF WITH A CONTROL BEFORE IT MOVES ANYTHING. A CLEAN IS NOT EVIDENCE** — *"the reviewer found nothing"* may never be cited as support for a finding (#453: a silence is not an absence).
 ⛔ **LEAVE THE ONE-LINE RECORD where the finding lands:** **`REVIEWER: <object handed | claim-only> · <question> · <verdict> · re-derived y/n`** — **without a denominator the bar can never rise above "one run."**
+
+## ⛔⛔ IT IS A LOOP, NOT A ONE-SHOT — AND IT RUNS *BEFORE* LANGSTON, NEVER INSTEAD OF HIM (KYLE, 2026-08-27)
+★★ **THE SEQUENCE, AND IT IS MANDATORY FOR A STANDALONE INVESTIGATION:**
+> **you find what you believe is the issue → hand it to a fresh reviewer for a stateless review → CORRECT what it finds → HAND THE CORRECTED VERSION BACK to a fresh reviewer → repeat until neither of you has anything left → ONLY THEN dispatch to Langston.**
+⛔ **A SINGLE ROUND IS NOT THIS.** The first pass finds the obvious error; **the correction itself is unreviewed work**, and it is written by the same session, in the same context, that produced the original. ★ **An uninspected correction is exactly as likely to be wrong as the thing it replaced — that is the whole premise of the mechanism, applied to its own output.**
+⚠️ **EACH ROUND GETS A *FRESH* REVIEWER.** Re-using one that has seen your earlier draft rebuilds the memory-of-forming-the-belief that the boundary exists to remove. **Round 3’s reader must not know what rounds 1 and 2 said.**
+
+⛔⛔ **TERMINATION IS A GATE, NOT A VERDICT — AND THIS IS THE LINE THAT KEEPS THE LOOP HONEST (Langston’s condition (i), which the loop would otherwise collide with).**
+- ✅ **What a quiet final round licenses: DISPATCHING.** You may proceed to Langston.
+- ⛔ **What it NEVER licenses: SAYING THE FINDING IS CORRECT.** *"The reviewer agreed"* / *"it came back clean"* **may not be written in the dispatch, the scope or the report** — a clean is not evidence (#453), and Langston will bounce it as one.
+★ **Both hold at once because they answer different questions: the loop decides WHEN YOU ARE DONE ITERATING; it does not decide WHETHER YOU ARE RIGHT. Langston decides that, and the loop exists to stop wasting his rounds on errors a reader could have caught.**
+
+⚠️ **TWO WAYS THE LOOP FAILS — WATCH FOR BOTH, THEY ARE NOT HYPOTHETICAL:**
+1. ⛔ **CONVERGENCE BY EROSION.** Rounds can end quietly because the claim has been weakened until it asserts nothing. ★ **Before dispatching, read the FIRST version against the LAST: if the finding got smaller every round, you did not verify it — you dissolved it, and the honest output is `NO WORK — WITHDRAWN` (§9.4 disposition 5), not a thin finding.**
+2. ⛔ **A LOOP THAT WILL NOT CLOSE.** **Cap it at THREE rounds.** Still contested ⇒ **stop and dispatch BOTH positions to Langston**, saying what the reviewer holds and what you hold. **Do not keep spawning until one of you yields — that selects for persistence, not truth.**
+
+**RECORD EVERY ROUND, not just the last:** `REVIEWER r<n>: <object|claim-only> · <verdict> · <what you changed>`. ★ **The round COUNT is the useful number — a finding that took three rounds and one that took none are not equally trustworthy, and only the record can tell them apart later.**
