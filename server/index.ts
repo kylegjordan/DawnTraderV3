@@ -142,13 +142,36 @@ const app = express();
 // takes the entry two from the right, which is the one Caddy wrote; a forged entry sits further
 // left and is ignored. Trusting too much here is a worse bug than the one being fixed.
 //
+// ⛔⛔ THE PREMISE THAT MAKES `2` CORRECT, AND MY FIRST VERSION ARGUED THE CONCLUSION WITHOUT IT
+// (Langston, at the ref): **nginx APPENDS rather than passes through.**
+// `/etc/nginx/sites-available/dawntrader:42,:58,:70` and `/etc/nginx/proxy_params:3` all use
+// `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for` — APPEND. So at the app:
+//     socket = 127.0.0.1 (nginx) · XFF = "…forged…, <client>, 127.0.0.1 (Caddy)"
+//     ⇒ addrs = [nginx, Caddy, client, …forged…] ⇒ trust 2 lands on <client>; forgery sits left.
+// ⚠️ HAD NGINX USED `$http_x_forwarded_for` (pass-through), `2` WOULD HAVE RETURNED THE FORGED
+// ENTRY — i.e. exactly the bypass the paragraph above argues against, shipped with the argument
+// against it sitting in the comment. **Append-vs-pass-through IS the hop count.** Verified, not
+// assumed, at all four directive sites.
+// ★ A third, independent reason `2` is right: `express-rate-limit ^8` throws
+// `ERR_ERL_PERMISSIVE_TRUST_PROXY` on `trust proxy === true`. The library refuses the mistake.
+//
+// ⛔ RIDER — THE FORGERY RESISTANCE IS HELD BY `ufw`, NOT BY THIS LINE, AND THIS FIX INTRODUCES
+// THAT DEPENDENCY (Langston). The app binds `0.0.0.0:5000` (verified with `ss`), and only ufw
+// (default DROP; 22/80/443 open) keeps :5000 off the internet. Anything reaching :5000 DIRECTLY
+// with a forged `X-Forwarded-For` now gets `req.ip` = the forged value ⇒ total limiter bypass.
+// **Before this line, a direct hit keyed on the attacker's real socket address.** So a later bind
+// change (to 127.0.0.1) or a firewall edit must not be made blind to this. Named in `#935`.
+//
 // BLAST RADIUS, censused before the change (hotfix §2):
 //   • rate limiters in the tree: EXACTLY ONE (`loginLimiter`, routes.ts) — stated explicitly.
 //   • other readers of `req.ip` / `req.ips` / XFF / X-Real-IP: ZERO.
-//   • `req.protocol` readers: ONE (`routes.ts`, self-referential base URL for a calibration
+//   • `req.protocol` readers: ONE (`routes.ts:16651`, self-referential base URL for a calibration
 //     self-check). It becomes `https` instead of `http`; that URL already 302-redirected to HTTPS
 //     via Caddy and `fetch` follows redirects, so the call now goes direct instead of via a
 //     redirect. No behaviour depends on the scheme string itself.
+//   • `req.secure` readers: ZERO · `req.hostname` readers: ZERO. ⚠️ **Both also flip under
+//     `trust proxy` and NEITHER was in my first census** — they are clean, but they were
+//     UNSTATED rather than censused, which is not the same thing (Langston ran them).
 app.set('trust proxy', 2);
 
 // CORS Configuration - restrict access to allowed origins only
