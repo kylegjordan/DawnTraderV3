@@ -10,6 +10,7 @@
  * ⛔ A CONTROL THAT CANNOT FIRE IS THE SAME DEFECT AS THE FENCE IT GUARDS.
  */
 import { describe, it, expect } from 'vitest';
+import { gcdOfIncrements } from '../../markets/venue-grid-resolver';
 import {
   roundTripleToGrid,
   roundPriceForRole,
@@ -135,5 +136,36 @@ describe('F-G-1 OBJ-7b kind (i) — VENUE-IMPOSSIBLE size', () => {
   // MUTATION: add a lotDecimals fallback and this fails.
   it('returns null when lot precision is unknown — never invents one', () => {
     expect(roundQuantityForVenue(1, 100, null, null, null)).toBeNull();
+  });
+});
+
+describe('F-G-1 OBJ-3 — the DERIVED xStock grid, and why it is a GCD not a decimal count', () => {
+  // MUTATION: replace the GCD with a decimal-place count and this fails.
+  // ⛔ THIS IS NOT HYPOTHETICAL. Langston invented 0.0025 as a counter-example to my original
+  // "round to the coarsest decimal place" method. Run against one real day of xStock prices,
+  // 6 of 40 symbols derive EXACTLY 0.0025 and 3 more derive 0.0005. Rounding those to a
+  // "coarser" 0.001 would have made every price we emit for them INVALID, because 0.001 is
+  // not a multiple of 0.0025.
+  it('recovers a NON-DECIMAL increment that a decimal-place count cannot express', () => {
+    const prices = [10.0, 10.0025, 10.005, 10.0075, 10.01];
+    const inc = prices.slice(1).map((p, i) => p - prices[i]);
+    expect(gcdOfIncrements(inc)).toBeCloseTo(0.0025, 10);
+  });
+
+  it('recovers a decimal increment where one exists', () => {
+    const prices = [308.34, 308.35, 308.38, 308.39];
+    const inc = prices.slice(1).map((p, i) => p - prices[i]);
+    expect(gcdOfIncrements(inc)).toBeCloseTo(0.01, 10);
+  });
+
+  // MUTATION: return the raw gcd instead of null when g <= 1 and this fails.
+  // A GCD of one integer unit is a FAILURE to establish a grid, not a 1e-8 tick.
+  it('returns null rather than a plausible-looking 1e-8 when no common factor exists', () => {
+    expect(gcdOfIncrements([0.00000001, 0.00000003, 0.00000007])).toBeNull();
+  });
+
+  it('returns null on too few observations rather than guessing from one increment', () => {
+    expect(gcdOfIncrements([0.01])).toBeNull();
+    expect(gcdOfIncrements([])).toBeNull();
   });
 });
