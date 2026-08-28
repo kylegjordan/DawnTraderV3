@@ -116,6 +116,8 @@ import { dataAggregator } from './data-aggregator.js';
 // paper fill now depth-walks the real book (Langston C-Q5: RNG-free, no magic %).
 import { resolveFillDepthGateConfig } from './execution/depth-gate-config.js';
 // P19-B8.5 (OBJ-8): real-venue well-formedness vetting for paper opens (paper-only leg).
+import { roundQuantityForVenue } from '../core/calculations/venue-price-grid.js';
+import { resolveVenueSizeLimits } from '../markets/venue-grid-resolver.js';
 import { validatePaperOrderWithVenue } from './execution/venue-validate.js';
 import {
   getDepthSnapshot,
@@ -3355,9 +3357,45 @@ export class ActiveExecutionEngine {
     // VISIBLE skip + proceed — fill honesty is the depth-walk's and never this leg's.
     // ══════════════════════════════════════════════════════════════════════════════
     if (this.mode === 'paper') {
+      // F-G-1 (OBJ-7b kind (i), Kyle 2026-08-28): THE VPG FEEDS THIS PROBE.
+      // The two services do different jobs and must work as a pair: the VPG establishes what the
+      // venue can EXPRESS, and this leg asks the venue whether it would ACCEPT it. Asking about a
+      // quantity the venue could never take wastes the question and returns a "no" we could have
+      // answered ourselves -- exactly the STRK/USD case (2026-08-17,
+      // "EGeneral:Invalid arguments:volume minimum not met"), which cost a network round-trip to
+      // learn something `ordermin` already said.
+      // ⛔ THE VENUE REMAINS THE AUTHORITY. This is a PRE-FILTER, not a replacement: a local
+      // check can be stale, the venue cannot. It only ever refuses what the venue would also
+      // refuse; anything it passes still goes to the venue for the real verdict.
+      const _vpgClass = asValidAssetClass((signal as any).assetClass)
+        ?? safeResolveAssetClass(signal.symbol, 'kraken');
+      const _sizeLimits = _vpgClass
+        ? resolveVenueSizeLimits(signal.symbol, _vpgClass)
+        : { lotDecimals: null, ordermin: null, costmin: null };
+      const _venueQty = roundQuantityForVenue(
+        quantity, signal.entryPrice,
+        _sizeLimits.lotDecimals, _sizeLimits.ordermin, _sizeLimits.costmin,
+      );
+      // ⛔ A MISSING LIMIT IS NOT A REJECTION. If the venue metadata is absent we SKIP the local
+      // pre-filter and let the venue answer — refusing here would block a live trade on a DATA
+      // GAP, which is the same "drop arm on missing data" defect Langston refused for the VTS
+      // lane. The no-fallback rule is right for a PRICE (an invented tick emits an unplaceable
+      // order); it is wrong for a pre-filter whose only job is to save a round-trip.
+      const _sizeKnown = _sizeLimits.lotDecimals != null
+        && (_sizeLimits.ordermin != null || _sizeLimits.costmin != null);
+      if (_sizeKnown && _venueQty === null) {
+        console.error(
+          `[PaperExecution:${this.mode}][VPG_SIZE_REJECT] ${signal.symbol} qty=${quantity} @ ${signal.entryPrice} ` +
+          `is not placeable at this venue (lotDecimals=${_sizeLimits.lotDecimals} ordermin=${_sizeLimits.ordermin} ` +
+          `costmin=${_sizeLimits.costmin}) — refused locally, no pretend fill.`,
+        );
+        rtbMetricsService.recordOpenFailed(signal.symbol, signal.strategy, 'VALIDATE_REJECTED',
+          'VPG: rounded size below venue minimum');
+        return { opened: false, stage: 'VALIDATE_REJECTED', reason: 'VPG: rounded size below venue minimum' };
+      }
       const _venueCheck = await validatePaperOrderWithVenue({
         symbol: signal.symbol,
-        quantity,
+        quantity: _venueQty?.quantity ?? quantity,
         limitPrice: _b72cLimit,
         addOrder: (p) => this.krakenService.addOrder(p),
       });
