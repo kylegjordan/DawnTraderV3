@@ -109,6 +109,20 @@ export function setDerivedGrid(symbol: string, grid: VenueGrid): void {
 }
 
 /** Test/diagnostic access. */
+/**
+ * ⛔ THE KEYS, NOT JUST THE COUNT — and this gap is why a count was not enough.
+ * Langston proposed "absent from the LIVE derived map at open time" as the honest denominator for
+ * the xStock passthrough arm, and he is right that it beats a snapshot list: nothing in this
+ * module ever REMOVES an entry (`setDerivedGrid` is the only writer, called only on success; the
+ * refresher's failure path leaves the cache untouched and its skips `continue`), so within a
+ * process lifetime the map only GROWS and the absent set is monotonically shrinking.
+ * ⚠️ BUT THAT INSTRUMENT WAS NOT READABLE: only a COUNT was exposed, so the complement could not
+ * be enumerated at read time. A better denominator nobody can read is not a better denominator.
+ */
+export function getDerivedGridSymbols(): string[] {
+  return Array.from(derived.keys()).sort();
+}
+
 export function getDerivedGridCount(): number {
   return derived.size;
 }

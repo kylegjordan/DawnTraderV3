@@ -12,7 +12,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { gcdOfIncrements, gridIsDerivedForClass, decideGridAction } from '../../markets/venue-grid-resolver';
+import { gcdOfIncrements, gridIsDerivedForClass, decideGridAction, setDerivedGrid, getDerivedGridSymbols } from '../../markets/venue-grid-resolver';
 import { VPG_WIRING_BUG_VERDICTS, VPG_NOT_A_FAILURE_VERDICTS } from '../../../shared/venue-grid-verdicts';
 import {
   roundTripleToGrid,
@@ -845,3 +845,34 @@ describe('F-G-1 — the ONE HOME rule is ENFORCED, not asked for', () => {
   });
 });
 
+describe('F-G-1 — the xStock absent set must be ENUMERABLE, not just countable', () => {
+  // ⛔⛔ THE DENOMINATOR HAS TO BE READABLE OR IT IS NOT A DENOMINATOR. Langston's residual: the
+  // honest measure for the passthrough arm is "absent from the LIVE derived map at open time" —
+  // better than a snapshot list, because the map only ever GROWS within a process lifetime, so the
+  // absent set is monotonically shrinking and carries no rolling window. ⚠️ But only a COUNT was
+  // exposed, and the map lives in memory — a separate script reads a fresh EMPTY one. A better
+  // denominator nobody can read is not a better denominator.
+  // MUTATION: return a count, or an unsorted list, and this fails.
+  it('exposes the derived KEYS, sorted, so the complement can be computed', () => {
+    setDerivedGrid('ZZTEST-B/USD', { tick: 0.01, provenance: 'derived_gcd' } as any);
+    setDerivedGrid('ZZTEST-A/USD', { tick: 0.01, provenance: 'derived_gcd' } as any);
+    const keys = getDerivedGridSymbols();
+    expect(Array.isArray(keys)).toBe(true);
+    expect(keys).toContain('ZZTEST-A/USD');
+    expect(keys).toContain('ZZTEST-B/USD');
+    expect(keys.indexOf('ZZTEST-A/USD')).toBeLessThan(keys.indexOf('ZZTEST-B/USD')); // sorted
+  });
+
+  // MUTATION: drop `skippedSymbols` from the refresher's return or its log and this fails.
+  // A COUNT cannot be reconciled against; the only way back to the absent set was re-deriving from
+  // a ROLLING 24h window that has since moved — the shrinking denominator arriving inside the
+  // check meant to prevent it.
+  it('the refresher NAMES the symbols it skipped, in both the return and the log', () => {
+    const src = readFileSync(join(process.cwd(), 'server/markets/xstock-grid-refresher.ts'), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+    expect(src).toMatch(/skippedSymbols:\s*string\[\]/);        // in the return TYPE
+    expect(src).toMatch(/return\s*\{[^}]*skippedSymbols[^}]*\}/); // actually returned
+    expect(src).toMatch(/skipped:\s*\$\{skippedSymbols/);        // and named in the log
+    expect((src.match(/skippedSymbols\.push\(/g) ?? []).length).toBe(2); // BOTH skip paths
+  });
+});

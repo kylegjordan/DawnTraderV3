@@ -102,11 +102,17 @@ CONTROL RESULT: BOTH ARMS FIRE
 
 *"on-grid **OR** absent from the derived map"* is an unbounded escape hatch unless the absent set is fixed in advance — otherwise **the arm can pass by its denominator quietly shrinking.** Per `#933` the map is rebuilt only at boot and on a 6-hour timer, so the set is knowable.
 
-**MEASURED AT THE DEPLOY BOOT: 452 derived / 24 skipped of 476.** The skipped set, read from the refresher's own SQL 2026-08-28 (22 symbols at that moment — the 24h window rolls, and that drift is itself part of what must reconcile):
+**MEASURED AT THE DEPLOY BOOT: 452 derived / 24 skipped of 476.** ⚠️ **The list below is an ILLUSTRATIVE SNAPSHOT, not the denominator** — 22 names read from the refresher's own SQL after the boot, against a boot count of 24. It is kept because `ROOT/USD` reconciles against a real event, **not because it defines the PASS arm:**
 
 `AMBR/USD · BHC/USD · BLDP/USD · BMBL/USD · EVGO/USD · EWN/USD · EWS/USD · FUFU/USD · GOTU/USD · KRAQ/USD · LIDR/USD · PARA/USD · ROOT/USD · SLMT/USD · STRK/USD · SUIG/USD · TAL/USD · TBLL/USD · TONX/USD · TOTL/USD · TRON/USD · UWMC/USD`
 
-⛔ **RECONCILIATION REQUIRED AT READ TIME:** every xStock passthrough in the window must name a symbol **on this list or on a later boot's equivalent list**. **A passthrough on a symbol that HAD a derived grid is a FAIL, not an escape.**
+⛔⛔ **THE DENOMINATOR IS THE LIVE MAP, NOT THIS LIST — CORRECTED 2026-08-28 BEFORE THE WINDOW ACCUMULATED (Langston's two residuals).** My first wording said *"on this list **or on a later boot's equivalent list**"*, and **that clause reopened the hatch this section exists to close: NO LATER LIST EXISTED.** The refresher emitted `derived N, skipped N` — **counts only; the skipped NAMES were never logged, never returned, never stored** — so at read time the clause resolved to re-deriving from a **rolling 24h SQL window that has since moved.** The shrinking denominator, arriving inside the sentence meant to prevent it. **And the list below is 22 names against a boot measurement of 24 skipped: two symbols were unnamed and would have been undecidable.**
+
+★ **THE CORRECT DENOMINATOR, and it is better than any snapshot: `absent from the LIVE derived map at open time`.** Nothing in the resolver ever REMOVES an entry — `setDerivedGrid` is the only writer and is called only on success, the refresher's failure path leaves the cache untouched, and its skips `continue`. ⇒ **within a process lifetime the derived map only GROWS, so the absent set is MONOTONICALLY SHRINKING and is a strict subset of the boot 24. No rolling window appears anywhere in it.**
+
+⚠️ **AND IT WAS NOT READABLE, WHICH IS THE SAME DEFECT ONE LEVEL DOWN.** The map lives in memory — a separate script reads a fresh EMPTY one — and only a **count** was exposed. **A better denominator nobody can read is not a better denominator.** Landed in the same pass: the resolver now exposes the derived **keys**; the refresher **names** the symbols it skipped in both its return and its log; and the running process emits the **complement** (`gridAbsentSymbols`) on the xStock diagnostics payload, so the absent set is enumerable from outside at read time.
+
+⛔ **RECONCILIATION REQUIRED AT READ TIME:** every xStock passthrough in the window must name a symbol **absent from the live derived map at that moment**, read from `gridAbsentSymbols`. **A passthrough on a symbol that HAD a derived grid is a FAIL, not an escape.**
 ★ **ONE ALREADY RECONCILES:** the live log at 16:10:57 shows `ROOT/USD/sma_trend_ride verdict=grid_unknown` — and `ROOT/USD` is on the list above. The mechanism and the denominator agree on a real event.
 
 ## 4. WHAT IS UNPROVEN, AND WHAT WOULD FALSIFY IT

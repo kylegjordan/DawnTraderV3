@@ -44,10 +44,18 @@ const REFRESH_MS = 6 * 60 * 60 * 1000;
 
 let timer: NodeJS.Timeout | null = null;
 
-export async function refreshXstockGrids(): Promise<{ derived: number; skipped: number }> {
+/**
+ * ⛔ THE SKIPPED SYMBOLS ARE NAMED, NOT JUST COUNTED (Langston residual-1, 2026-08-28).
+ * This returned `{derived, skipped}` as bare counts and logged the same. That made the absent set
+ * UNRECONCILABLE after the fact: the only way back to it was re-deriving from a ROLLING 24h SQL
+ * window that has since moved — i.e. the shrinking denominator, arriving inside the very check
+ * meant to prevent it. A count cannot be reconciled against; a list can.
+ */
+export async function refreshXstockGrids(): Promise<{ derived: number; skipped: number; skippedSymbols: string[] }> {
   const windowDesc = `last ${WINDOW_HOURS}h`;
   let derivedCount = 0;
   let skipped = 0;
+  const skippedSymbols: string[] = [];
 
   // DISTINCT prices only: repeated identical prints carry no increment information, and
   // including them would not change the GCD while multiplying the row count.
@@ -73,12 +81,14 @@ export async function refreshXstockGrids(): Promise<{ derived: number; skipped: 
     }
     if (increments.length < MIN_INCREMENTS) {
       skipped++;
+      skippedSymbols.push(String(r.symbol));
       continue;
     }
     const tick = gcdOfIncrements(increments);
     if (tick == null) {
       // UNSTABLE, and that is a real outcome rather than a reason to fall back to decimals.
       skipped++;
+      skippedSymbols.push(String(r.symbol));
       continue;
     }
     setDerivedGrid(r.symbol, {
@@ -92,9 +102,11 @@ export async function refreshXstockGrids(): Promise<{ derived: number; skipped: 
 
   console.log(
     `[F-G-1][xstock-grid] derived ${derivedCount} grids, skipped ${skipped} ` +
-      `(min ${MIN_INCREMENTS} increments, ${windowDesc})`,
+      `(min ${MIN_INCREMENTS} increments, ${windowDesc})` +
+      // NAMED so the absent set can be reconciled later without re-running a rolling window.
+      (skippedSymbols.length ? ` — skipped: ${skippedSymbols.sort().join(',')}` : ''),
   );
-  return { derived: derivedCount, skipped };
+  return { derived: derivedCount, skipped, skippedSymbols };
 }
 
 /**

@@ -8031,6 +8031,25 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         console.warn(`[xstocks-filter-diagnostics] byStrategy enrichment skipped:`, err instanceof Error ? err.message : err);
       }
 
+      // ⛔ THE ABSENT SET, COMPUTED HERE BECAUSE IT MUST BE READABLE FROM OUTSIDE THE PROCESS
+      // (Langston residual, 2026-08-28). The xStock passthrough arm's honest denominator is
+      // "absent from the LIVE derived map at open time" — that map only ever GROWS within a
+      // process lifetime (one writer, called only on success; the refresher's failure path leaves
+      // it untouched), so the absent set is monotonically shrinking and carries no rolling window.
+      // ⚠️ BUT IT LIVES IN MEMORY: a separate script reads a fresh EMPTY map, and only a COUNT was
+      // exposed. A better denominator nobody can read is not a better denominator.
+      // The COMPLEMENT is emitted (~24) rather than the whole map (~452).
+      let _gridAbsentSymbols: string[] = [];
+      try {
+        const { getDerivedGridSymbols } = await import('./markets/venue-grid-resolver.js');
+        const { XSTOCK_SPOT_SYMBOLS } = await import('../shared/asset-classes.js');
+        const have = new Set(getDerivedGridSymbols());
+        _gridAbsentSymbols = Array.from(XSTOCK_SPOT_SYMBOLS)
+          .filter((sym) => !have.has(String(sym).toUpperCase())).sort();
+      } catch (err) {
+        console.warn('[xstocks-filter-diagnostics] gridAbsentSymbols unavailable:', err instanceof Error ? err.message : err);
+      }
+
       const vtsEvaluation = {
         timestamp: Date.now(),
         quantPairsEvaluated: quantPairsEval || (lt?.pairsEntered ?? 0),
@@ -8119,6 +8138,14 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         // "0 would-fail / 0 checked" — an absent value wearing a plausible number's clothes, on
         // the one asset class whose grid is DERIVED rather than published, i.e. reading as
         // "perfectly on-grid" precisely where we are least sure.
+        // ⛔ THE ABSENT SET, EXPOSED BECAUSE THE DENOMINATOR HAS TO BE READABLE FROM OUTSIDE THE
+        // PROCESS (Langston residual, 2026-08-28). The xStock passthrough arm's honest denominator
+        // is "absent from the LIVE derived map at open time" — the map only ever grows within a
+        // process lifetime, so that set is monotonically shrinking and carries no rolling window.
+        // ⚠️ BUT IT LIVES IN MEMORY: a separate script reads a fresh EMPTY map, and only a COUNT
+        // was exposed. A better denominator nobody can read is not a better denominator.
+        // The COMPLEMENT is emitted (small, ~24) rather than the whole map (~452).
+        gridAbsentSymbols: _gridAbsentSymbols,
         gridEvaluated: lt?.gridEvaluated ?? 0,
         gridTags: lt?.gridTags ?? {},
         nullReasonDetail: lt?.nullReasonAggregate ?? {},
