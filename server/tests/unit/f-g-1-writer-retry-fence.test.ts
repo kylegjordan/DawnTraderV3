@@ -7,6 +7,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'fs';
+import { isTransientWriteError } from '../../services/passive-archive/ohlc-batch-writer';
 import { join } from 'path';
 
 const SRC = readFileSync(
@@ -25,13 +26,11 @@ describe('F-G-1 OBJ-9 — transient vs permanent, asserted against the PRODUCTIO
     expect(body).not.toMatch(/return\s+true\s*;/);
   });
 
-  // MUTATION: drop 'deadlock' from the list and this fails. Deadlock is the error we actually
-  // observed on the traded classes, so it must be retried rather than dropped.
-  it('classifies the errors we have actually seen as transient', () => {
-    for (const t of ['deadlock', 'pool slot timeout', 'connection']) {
-      expect(SRC).toContain(`'${t}'`);
-    }
-  });
+  // ⛔ REMOVED, NOT REPAIRED. This asserted the SOURCE contained the literal `'connection'`, and
+  // it broke the moment I narrowed that match to `'connection terminated'` — a change that made
+  // the classifier BETTER. A test that fails on an improvement is testing the wording, not the
+  // behaviour. The behavioural suite at the bottom of this file covers the same ground by
+  // CALLING the classifier, which is what should have been written first.
 
   // MUTATION: remove the permanent-path `return` and this fails — permanent rows would be
   // re-buffered, which is #705's OOM.
@@ -90,5 +89,43 @@ describe('F-G-1 #918 — the drain that had no caller', () => {
     // and it must not be able to block shutdown
     const i = boot.indexOf('drainArchiveBuffersForShutdown');
     expect(boot.slice(Math.max(0, i - 400), i + 400)).toContain('catch');
+  });
+});
+
+describe('F-G-1 OBJ-9 — the classifier, EXERCISED rather than grepped', () => {
+  // ⛔ THE SOURCE-TEXT TESTS ABOVE PROVE WORDING, NOT BEHAVIOUR. An independent reader pointed
+  // out that all of them pass against a classifier matching no real driver string. These CALL it.
+
+  // MUTATION: remove the statement-timeout guard and this fails.
+  // A permanently-slow write is message-indistinguishable from a transient one under a bare
+  // `timeout` match, and would be retried forever on the branch that raises NO alert.
+  it('treats a PERMANENT statement timeout as permanent, not transient', () => {
+    expect(isTransientWriteError(new Error('canceling statement due to statement timeout'))).toBe(false);
+  });
+
+  it('treats the real transient driver errors as transient', () => {
+    for (const msg of [
+      'deadlock detected',
+      'ohlc-batch-writer: pool slot timeout (5s)',
+      'Connection terminated unexpectedly',
+      'read ECONNRESET',
+      'sorry, too many clients already',
+    ]) {
+      expect(isTransientWriteError(new Error(msg))).toBe(true);
+    }
+  });
+
+  // MUTATION: default unknown to transient and this fails — that is #705's OOM.
+  it('treats #704s real error, and anything unrecognised, as PERMANENT', () => {
+    expect(isTransientWriteError(new Error(
+      'there is no unique or exclusion constraint matching the ON CONFLICT specification',
+    ))).toBe(false);
+    expect(isTransientWriteError(new Error('column "foo" does not exist'))).toBe(false);
+    expect(isTransientWriteError(new Error('something nobody has seen before'))).toBe(false);
+  });
+
+  it('handles a non-Error throw without crashing the flush path', () => {
+    expect(isTransientWriteError('deadlock detected')).toBe(true);
+    expect(isTransientWriteError(null)).toBe(false);
   });
 });

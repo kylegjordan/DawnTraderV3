@@ -88,11 +88,18 @@ export const RETRY_BUFFER_MAX = 50_000;
  */
 export function isTransientWriteError(err: unknown): boolean {
   const m = (err instanceof Error ? err.message : String(err)).toLowerCase();
+  // ⛔ NOT a bare `timeout` substring. Postgres emits "canceling statement due to statement
+  // timeout" for a write that is PERMANENTLY too slow — a missing index, a bloated partition —
+  // and that is message-indistinguishable from a transient one. A bare match would retry it
+  // forever on the branch that raises NO ALERT, which is #704's exact signature: loud on stderr,
+  // silent everywhere anyone looks. Match the transient timeouts specifically instead.
+  if (m.includes('statement timeout') || m.includes('canceling statement')) return false;
   return m.includes('deadlock')
     || m.includes('pool slot timeout')
-    || m.includes('timeout')
-    || m.includes('connection')
+    || m.includes('connection terminated')
+    || m.includes('connection reset')
     || m.includes('econnreset')
+    || m.includes('etimedout')
     || m.includes('too many clients');
 }
 

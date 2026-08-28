@@ -4315,3 +4315,26 @@ Kraken publishes a per-pair `tick_size` — **1,437 pairs, 11 distinct values, a
 
 **HOME: `B-VALIDATE-OBSERVABILITY`, owner CC-C, placed in `PHASE_19_PLAN.md` §1 Part F after `F-G-2`, alongside `B-MIN-STOP-DISTANCE` and `B-GUARD-COVERAGE-AUDIT`** — all three are observability/decision questions on the same execution surface. ⛔ **NOT folded into F-G-1:** the fix is a counter on a component this batch does not otherwise change, and F-G-1 is already carrying more than it was scoped for.
 
+### #923 OPEN 2026-08-28 (CC-C, surfaced by an independent reader on F-G-1's implementation) — THE TRAILING EXIT RATCHETS STOPS OFF THE VENUE PRICE GRID AFTER THE VPG HAS PUT THEM ON IT
+
+**`trailing-exit-controller.ts:1088-1292` computes `newStopPrice` by float `Math.max` and contains ZERO references to the VPG** (re-derived: `grep -c 'venue-price-grid\|roundPriceForRole\|roundTripleToGrid'` = **0**). So a stop that F-G-1 placed on the grid at signal generation **leaves it again the first time the trailing logic ratchets.**
+
+⚠️ **HARMFUL NOW? NO — and that is why it is not being fixed here.** Paper mode never sends a stop to the venue (`#916`: exits have zero venue contact), so nothing is rejected today. **It matters for (a) LIVE, where a trailing stop becomes a real order price, and (b) `OBJ-8`'s through-not-touch test, which is undecidable on an off-grid limit.** ★ **Both are exactly what `F-G-2` exists to address.**
+
+**DISPOSITION 2 — ADD AS AN ITEM TO AN EXISTING BATCH: `F-G-2`, whose `OBJ-1` already touches trailing evaluation and whose `OBJ-8` is the test this breaks.** Owner CC-C. ⛔ **NOT folded into F-G-1:** F-G-1 rounds at signal BIRTH; this is an EXIT mutation, and F-G-2 owns exits. Splitting one geometry surface across two batches is how a rule ships into one reader of several.
+
+### #924 OPEN 2026-08-28 (CC-C, same reader) — TWO LIVE-PATH SITES MUTATE A GRIDDED PRICE AFTER THE VPG, BOTH DORMANT TODAY
+
+**(a) `trading-engine.ts:536` — `bufferedStopPrice = baseStopPrice * (1 - stopBuffer)` (default 5%), sent to Kraken at `:547` as `.toString()`.** Multiplying a gridded stop by 0.95 leaves the grid by construction. Reached via `placeStopAndTargetOrders` (`:519`, called `:286`).
+**(b) `active-execution-engine.ts:4317-4318` — `signalAny.stopPrice` recomputed from AMR overlay multipliers, downstream of the VPG seam.**
+
+⚠️ **HARMFUL NOW? NO, AND BOTH REASONS ARE STATED SO NOBODY HAS TO RE-DERIVE THEM.** (a) is a LIVE order path and **live mode is Phase-21 gated — it does not run.** (b) is an identity today: `:4299` logs *"11.7S deleted; AMR inactive"*, so the multipliers default to 1 — **but only up to floating-point dust, which is enough to leave the grid, and it stops being an identity the moment AMR is reactivated.**
+
+**DISPOSITION 3 — ITS OWN BATCH, PLACED: `B-GRID-LIVE-PATH-PARITY`, owner CC-C, placed in `PHASE_19_PLAN.md` §1 Part F AFTER `F-G-2`, alongside `B-MIN-STOP-DISTANCE` / `B-GUARD-COVERAGE-AUDIT` / `B-VALIDATE-OBSERVABILITY`.** ★ **It is genuinely a LIVE-READINESS item, not a Phase-19 trading-behaviour one** — grouping it with the other execution-surface questions keeps them reviewable together. ↔ `#734` (the other Phase-21 go-live blocker).
+
+### #925 OPEN 2026-08-28 (CC-C, same reader) — PERP-CLASS GRID REFUSALS ARE LOGGED BUT NOT COUNTED
+
+`signal-orchestrator.ts:551-552` narrows to `crypto_spot | xstock_spot` before recording, because **`FunnelAssetClass` itself admits only those two.** A `crypto_perp` / `xstock_perp` grid refusal therefore gets a `console.warn` and no funnel row.
+
+⛔ **DISPOSITION 5 — NO WORK, AND THE CITATION THAT DISSOLVES IT:** the perp classes **are not active-traded** (they are capture-only), and the narrowing is **the funnel's own pre-existing scope**, not something F-G-1 introduced. **Widening `FunnelAssetClass` to admit perps would be a change to the funnel's contract made inside a rounding batch, on a class that cannot trade** — scope creep dressed as completeness. **Recorded so a future reader finds the answer rather than the question.** ⚠️ **Re-open this the moment a perp class becomes active-traded.**
+
