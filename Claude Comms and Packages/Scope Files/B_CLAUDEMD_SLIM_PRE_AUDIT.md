@@ -100,10 +100,12 @@ I claimed `#749` is a **NEW FEATURE** on the comms send path, strengthening a ch
 ★★ **This is a §9.5(b-ii) miss inside a document whose F6 row asserts the ledger was searched. The rule exists precisely to stop this, I invoked it, and I still filed the finding.**
 ✅ **RESIDUAL, and it is much smaller: the batch still edits live comms code, so the change-class deserves one line of confirmation from Langston — not a challenge.** **DISPOSITION: §9.4 #5 — WITHDRAWN, carrying `RUNNING_ISSUES:3076` + `:3079` as the citations that dissolve it.**
 
-### F11 — ★★ **NEW AT r3, AND IT IS A HARD PREREQUISITE THE AUDIT NEVER MENTIONED.**
+### F11 — **NEW AT r3: A DEPENDENCY THIS AUDIT NEVER NAMED. ⚠️ DEFLATED ON CHECKING — THE QUEUE ALREADY ENFORCES IT.**
 **`PHASE_19_PLAN.md:448`** places **`B-EOL-NORMALISE` (#751) at position 6 with: *"**Before the slim**: the cap and the delivery-chunk figures are PER CHECKOUT until this lands, so the slim's byte targets are unreliable without it."***
 ⇒ ⛔ **THIS AUDIT IS BUILT ALMOST ENTIRELY ON BYTE MEASUREMENTS, TRIPPED OVER CRLF THREE TIMES IN ONE DAY, AND THE WHOLE-BATCH VERIFICATION (`SCOPE:125`/P9) IS A BYTE DELTA — precisely the figure the plan declares unreliable until #751 lands.**
-**DISPOSITION: §9.4 #1 — FOLD INTO THIS BATCH as a sequencing constraint: `B-EOL-NORMALISE` lands FIRST, or the slim's verification is not decision-grade.**
+✅✅ **AND THE QUEUE ALREADY SATISFIES IT — CHECKED BEFORE LETTING THE ESCALATION STAND, WHICH DEFLATES MY OWN FINDING: `B-EOL-NORMALISE` IS POSITION 6, THE SLIM IS 9.** ★ **Nothing needs to move and no decision is required.**
+⚠️ **So the finding is smaller than I first wrote it: NOT *"a hard prerequisite nobody noticed"* — the PLAN noticed, in writing, at `:448`. What was missing is that THIS AUDIT never named the dependency**, so a reader of the audit alone would not know its byte figures are provisional.
+**DISPOSITION: §9.4 #1 — FOLD INTO THIS BATCH as a stated precondition on the VERIFICATION, not a re-ordering: every byte figure here is PROVISIONAL until #751 lands.**
 
 ---
 
