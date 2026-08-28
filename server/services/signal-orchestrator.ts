@@ -550,7 +550,11 @@ export class SignalOrchestrator {
         // so a reader can tell a grid refusal from every other pre-SQE drop at a glance.
         const _fc = (sizingContext.assetClass === 'crypto_spot' || sizingContext.assetClass === 'xstock_spot')
           ? sizingContext.assetClass : undefined;
-        if (_fc) recordActivePreSqeReject(sizingContext.mode, _fc, `grid_${reason}`, strategyId);
+        // ⚠️ `grid_unknown` ALREADY carries the prefix, so a blind `grid_${reason}` stored it as
+        // `grid_grid_unknown`. It still passed the client filter, so nothing broke — but the
+        // label lookup would have missed it and a reader would have seen a raw doubled token.
+        const _key = reason.startsWith('grid_') ? reason : `grid_${reason}`;
+        if (_fc) recordActivePreSqeReject(sizingContext.mode, _fc, _key, strategyId);
       };
       if (!_r.ok) {
         _gridReject(_r.reason ?? 'unknown');

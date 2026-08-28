@@ -68,7 +68,7 @@ const ALL_ARCHIVE_CLASSES = Object.keys(tableForAssetClass) as ArchiveAssetClass
 // for WS-only ones." The two WS legs (crypto_spot, xstock_spot) have NO re-fetch path at all.
 
 /** Max rows held per class awaiting retry. Beyond this we shed OLDEST and say so. */
-const RETRY_BUFFER_MAX = 50_000;
+export const RETRY_BUFFER_MAX = 50_000;
 
 /**
  * TRANSIENT vs PERMANENT — the distinction #705 requires, and it is the one that decides
@@ -86,7 +86,7 @@ const RETRY_BUFFER_MAX = 50_000;
  * unrecognised permanent fault forever, which is the OOM #705 warns about. A wrongly-dropped
  * transient batch costs one flush window; a wrongly-retained permanent one costs the process.
  */
-function isTransientWriteError(err: unknown): boolean {
+export function isTransientWriteError(err: unknown): boolean {
   const m = (err instanceof Error ? err.message : String(err)).toLowerCase();
   return m.includes('deadlock')
     || m.includes('pool slot timeout')
@@ -99,27 +99,34 @@ function isTransientWriteError(err: unknown): boolean {
 /** One alert per class per process — a per-flush alert would be its own flood. */
 const _permanentAlerted: Partial<Record<ArchiveAssetClass, boolean>> = {};
 
-async function alertPermanentWriteFailure(assetClass: ArchiveAssetClass, detail: string, dropped: number): Promise<void> {
-  if (_permanentAlerted[assetClass]) return;
-  _permanentAlerted[assetClass] = true;
+export async function alertPermanentWriteFailure(writer: 'ohlc' | 'ticker', assetClass: ArchiveAssetClass, detail: string, dropped: number): Promise<void> {
+  const _latchKey = `${writer}:${assetClass}` as ArchiveAssetClass;
+  if (_permanentAlerted[_latchKey]) return;
   try {
-    const { storage } = await import('../../storage.js');
-    const users = await storage.getAllUsers();
-    for (const owner of users.filter((u: any) => u.role === 'owner')) {
-      await storage.createSystemAlert({
-        userId: owner.id,
-        mode: owner.tradingMode || 'paper',
-        alertType: 'ohlc_writer_permanent_failure',
-        severity: 'critical',
-        category: 'critical',
-        message: `OHLC archive writer is failing PERMANENTLY for ${assetClass} — ${dropped} rows dropped and `
-          + `every further flush for this class will fail the same way until it is fixed. `
-          + `This is the #704 shape: bars stop landing while stdout looks healthy. Detail: ${detail}`,
-        acknowledged: false,
-      });
-    }
+    // ⛔ THE JSONL ALERT SYSTEM, NOT `storage.createSystemAlert`. My first version wrote to the
+    // Postgres `system_alerts` table — a DIFFERENT system, served by a different route, which
+    // the per-turn alert check does not read. `/var/log/dawntrader/system-alerts.jsonl` is the
+    // one CLAUDE.md §10.5 has every session tail every turn, the one the dispatcher promotes and
+    // the one the System Alerts page renders. An alert in the other store is an alert nobody
+    // sees — which would have made this whole change ceremonial, since VISIBILITY is the entire
+    // point: #704 produced 4,802 stderr lines and zero alerts, and ran 15 hours.
+    // ⚠️ `category` must be an SSOT value — `addAlert` throws on an off-list one. 'breakage' is
+    // the fit; 'critical' (my first choice) is a SEVERITY, not a category.
+    const { addAlert } = await import('../system-alerts.js');
+    await addAlert({
+      triggers_at: new Date(),
+      category: 'breakage',
+      severity: 'critical',
+      title: `${writer.toUpperCase()} archive writer failing PERMANENTLY — ${assetClass}`,
+      body: `${dropped} rows dropped and every further flush for this class will fail the same way `
+        + `until it is fixed. This is the #704 shape: bars stop landing while stdout looks healthy, `
+        + `because success logs to stdout and failure to stderr. Detail: ${detail}`,
+      metadata: { assetClass, dropped, detail, source: `${writer}-batch-writer`, issue: '#705' },
+    });
+    // ⛔ LATCH ONLY AFTER A SUCCESSFUL RAISE. Setting it first — as I did — burns the one-shot
+    // for the whole process even when the alert never actually got out.
+    _permanentAlerted[_latchKey] = true;
   } catch (e) {
-    // An alert that cannot be raised must still be visible.
     console.error(`[B74][batch-writer] ${assetClass} FAILED TO RAISE ALERT for permanent write failure:`,
       e instanceof Error ? e.message : e);
   }
@@ -262,7 +269,7 @@ async function flushAssetClass(assetClass: ArchiveAssetClass): Promise<void> {
         `[B74][batch-writer] ${assetClass} PERMANENT flush failure (${rows.length} rows dropped, NOT retried):`,
         detail,
       );
-      void alertPermanentWriteFailure(assetClass, detail.slice(0, 300), rows.length);
+      void alertPermanentWriteFailure('ohlc', assetClass, detail.slice(0, 300), rows.length);
       return;
     }
     // TRANSIENT — put the rows back for the next flush.

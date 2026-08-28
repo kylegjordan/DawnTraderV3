@@ -74,7 +74,7 @@ export interface GridResult {
  * integer-space arithmetic below. `0.00001` -> 5. Ticks on Kraken are powers of ten today
  * (11 distinct values across 1,437 pairs), but this does NOT assume that — see `snap`.
  */
-function decimalsOf(tick: number): number {
+export function decimalsOf(tick: number): number {
   const s = tick.toExponential();
   const exp = Number(s.slice(s.indexOf('e') + 1));
   return exp < 0 ? Math.min(12, -exp) : 0;

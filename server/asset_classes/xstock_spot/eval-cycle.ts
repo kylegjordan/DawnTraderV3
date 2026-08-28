@@ -693,6 +693,16 @@ export async function evaluateXstockPairForVTS(
           resolveVenueGrid(symbol, ASSET_CLASS).tick,
           { minStopDistanceBps: GLOBAL_CONSTANTS.MIN_STOP_DISTANCE_BPS },
         );
+        // ⛔ COUNT IT. My first version COMPUTED `_gridTag` here and incremented NOTHING —
+        // it was read only by the wiring-bug log below. So half the VTS grid coverage produced
+        // no number at all, and a zero on the tab would have been indistinguishable from "no
+        // xStock signal ever fails", "every one fails", and "the lane never ran".
+        // ⚠️ Denominator FIRST, same as the crypto lane, so a verdict count can never exceed
+        // the population it is drawn from.
+        (counters as any).gridEvaluated = ((counters as any).gridEvaluated ?? 0) + 1;
+        (counters as any).gridTags ??= {};
+        (counters as any).gridTags[_gridTag.verdict] =
+          (((counters as any).gridTags[_gridTag.verdict]) ?? 0) + 1;
         if (_gridTag.isWiringBug) {
           console.error(
             `[F-G-1][VTS_GRID_WIRING] ${symbol}/${strategyKey} verdict=${_gridTag.verdict} — no venue grid ` +

@@ -53,6 +53,8 @@
  * errors are not symmetric — ambiguity resolves OPEN.
  */
 
+import { decimalsOf } from '../../core/calculations/venue-price-grid.js';
+
 import { krakenAssetPairsService } from '../../markets/kraken-asset-pairs-service.js';
 
 export type VenueValidateOutcome =
@@ -131,13 +133,12 @@ export async function validatePaperOrderWithVenue(req: VenueValidateRequest): Pr
   // this change as a bug fix. It is here because a FUTURE change to the rounding rule would
   // otherwise have to be found in two places, which is exactly how a rule ends up shipped into
   // one reader out of several.
-  const _tickDecimals = (() => {
-    const t = Number(entry.tickSize);
-    if (!Number.isFinite(t) || t <= 0) return undefined;   // no fallback invented -- see below
-    const e = t.toExponential();
-    const exp = Number(e.slice(e.indexOf('e') + 1));
-    return exp < 0 ? Math.min(12, -exp) : 0;
-  })();
+  // ⛔ ONE IMPLEMENTATION, NOT TWO. My first version re-derived decimals-from-tick inline here,
+  // which meant the VPG and the VOG shared a BASIS while holding two copies of the arithmetic
+  // that reads it — the same shape as the pairDecimals/tick_size split this change existed to
+  // remove, one level down. Import the VPG's own helper instead.
+  const _t = Number(entry.tickSize);
+  const _tickDecimals = Number.isFinite(_t) && _t > 0 ? decimalsOf(_t) : undefined;
   // `pairDecimals` remains the fallback ONLY because it is what this leg has always used and is
   // never coarser than the tick; dropping to it loses precision, never validity.
   const price = formatToDecimals(req.limitPrice, _tickDecimals ?? entry.pairDecimals, 5);

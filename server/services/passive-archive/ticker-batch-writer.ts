@@ -114,6 +114,10 @@ export function bufferTickerSnap(assetClass: ArchiveAssetClass, row: InsertEquit
   return true;
 }
 
+// F-G-1 / OBJ-9: the retry policy is SHARED with the OHLC writer rather than copied — a
+// second implementation of a decided rule is the defect B-EPOCH-KEYING-PARITY is held on.
+import { isTransientWriteError, alertPermanentWriteFailure, RETRY_BUFFER_MAX } from './ohlc-batch-writer.js';
+
 async function flushTickerAssetClass(assetClass: ArchiveAssetClass): Promise<void> {
   const batch = tickerBuffers[assetClass];
   if (batch.length === 0) return;
@@ -137,9 +141,37 @@ async function flushTickerAssetClass(assetClass: ArchiveAssetClass): Promise<voi
       releaseSlot();
     }
   } catch (err) {
+    // ⛔⛔ THIS IS `#705`'s UNRECOVERABLE LEG, AND IT IS THE ONE THAT MATTERS MOST.
+    // `#705`'s own title records Langston correcting my original sizing: *"I sized the risk on
+    // the OHLC writer, where it is recoverable, and the UNRECOVERABLE instance is the ticker
+    // writer."* OHLC bars are REST-replayable — which is exactly why `#704`'s 15-hour outage cost
+    // nil actual data. TICKER ROWS ARE POINT-IN-TIME SNAPSHOTS WITH NO RE-FETCH PATH AT ALL.
+    // A dropped ticker flush is permanently gone.
+    // ⚠️ I fixed the OHLC writer first and left this one untouched — reproducing, in the FIX, the
+    // same mis-sizing Langston had already corrected me on once.
+    const detail = err instanceof Error ? err.message : String(err);
+    if (!isTransientWriteError(err)) {
+      console.error(
+        `[B74][ticker-writer] ${assetClass} PERMANENT flush failure (${rows.length} rows dropped, NOT retried):`,
+        detail,
+      );
+      void alertPermanentWriteFailure('ticker', assetClass, detail.slice(0, 300), rows.length);
+      return;
+    }
+    const buf = tickerBuffers[assetClass];
+    buf.unshift(...rows);
+    if (buf.length > RETRY_BUFFER_MAX) {
+      const shed = buf.length - RETRY_BUFFER_MAX;
+      buf.splice(0, shed);
+      console.error(
+        `[B74][ticker-writer] ${assetClass} retry buffer at cap ${RETRY_BUFFER_MAX} — SHED ${shed} oldest rows. `
+        + `⛔ THESE ARE UNRECOVERABLE: ticker snapshots have no re-fetch path. Reported, not hidden.`,
+      );
+    }
     console.error(
-      `[B74][ticker-writer] ${assetClass} flush failed (${rows.length} rows dropped):`,
-      err instanceof Error ? err.message : err,
+      `[B74][ticker-writer] ${assetClass} TRANSIENT flush failure (${rows.length} rows RETAINED for retry, `
+      + `buffer=${buf.length}):`,
+      detail,
     );
   }
 }

@@ -42,27 +42,6 @@ type FunnelClass = {
 };
 
 
-/**
- * F-G-1 (#921) — plain-language names for the VENUE PRICE GRID refusals, so the tab says what
- * was refused rather than showing a raw reason token. Each is a DISTINCT category: they mean
- * different things and folding them together would hide which one is actually firing.
- */
-const GRID_REJECT_LABELS: Record<string, string> = {
-  grid_unknown: 'No venue price grid known',
-  grid_invalid_triple: 'Missing or invalid price',
-  grid_short_side_unexercised: 'Short-shaped signal (refused, never traded)',
-  grid_unorderable_triple: 'Prices in an impossible order',
-  grid_degenerate_after_rounding: 'Rounding collapsed the risk distance',
-  grid_stop_distance_after_rounding: 'Stop too tight after rounding',
-};
-const GRID_REJECT_BASIS: Record<string, string> = {
-  grid_unknown: 'the venue publishes no tick for this symbol and none could be derived — we refuse rather than invent one',
-  grid_invalid_triple: 'entry, stop or target absent, non-finite or non-positive — no side can be derived',
-  grid_short_side_unexercised: 'stop above and target below entry. Zero shorts have ever been taken, so this can only be a defect — it refuses and raises rather than pricing it',
-  grid_unorderable_triple: 'neither long-shaped nor short-shaped — the #915 inverted-stop shape',
-  grid_degenerate_after_rounding: 'after snapping to the grid the legs were less than one tick apart',
-  grid_stop_distance_after_rounding: 'the rounded stop fell inside the 0.3% minimum stop distance (GUARD-1)',
-};
 
 export function ActiveSqeAndRtbSections({
   modeTail, assetClass,
