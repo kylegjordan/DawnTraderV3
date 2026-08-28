@@ -12,9 +12,11 @@
 > ⚠️ **UPDATE THESE FOUR LINES AT EVERY STEP BOUNDARY.**
 
 - **BATCH:** `B-TOKEN-WATCH` (working name) - **capture-only** observation feed over new Solana token launches. Tests whether our ingest/filter/rank/learn method finds a separating signal, and builds case-control survival machinery WHERE A PUBLISHED ANSWER KEY EXISTS before pointing it at our own strategies (#594/#596/#597) where there is none. **No trading, no wallet, no execution.**
-- **STEP:** DESIGN SETTLED, VERIFIED AND KYLE-APPROVED 2026-08-27. Langston ruled NOT-A-REJECT; his supply-vs-demand cost gate is DISCHARGED (see the verified-design section below).
-- **BLOCKED-ON:** Nothing. Proceeding.
-- **NEXT, in order:** (1) read `STORAGE_POLICY.md` BEFORE proposing any retention - designing storage before reading the document that governs it is the exact failure I was caught on in August; (2) write the PRE-REGISTRATION (hypothesis, predictor set, outcome definition, decision rule) BEFORE data arrives - Langston's condition, and the difference between a study and a story; (3) scope -> Langston Step-1; then build.
+- **STEP: 2 — PRE-IMPLEMENTATION AUDIT AND IMPLEMENTATION PLAN, IN PROGRESS.** ⛔ **I had gone STEP-1-APPROVED -> BUILD and skipped 2 entirely; KYLE CAUGHT IT 2026-08-28.** Step 1 CLOSED: scope r3 + pre-reg AMENDMENT 1 + AMENDMENT 2 + `#920` pushed at `8c5412f38`; Langston APPROVED with three conditions, all discharged in that commit.
+- **BLOCKED-ON:** Nothing. Proceeding with Step 2.
+- **NEXT, in order:** (1) the merged Step-2 document `B_TOKEN_WATCH_PRE_AUDIT.md` — audit FIRST, plan falls out of it, every plan item back-referencing its finding, six sources named, §9.5(a) census at every hop; (2) Langston signs off ONCE on both; (3) then Step 3 build.
+- ★ **NEW SCOPE, KYLE 2026-08-28 — A TRACKER PAGE ON THE STAGING SITE (OBJ-10), built AFTER the collector is proven, but part of this study.** Three panels: aggregate of everything launched; aggregate of survivors with an aging tracker (5/15/30/45/60/75/90 days); the same aging for the dead showing WHERE they died; then a table of the oldest 100 survivors still alive.
+  ⛔ **THIS COLLIDES WITH LANGSTON'S OWN FENCE AND MUST NOT BE SLID IN QUIETLY.** §0 of the scope says host on Helsinki, NOT the trading box, and its testable clause is *"if any live-path file appears in this batch's diff, the change class is wrong."* A staging page puts files in the trading app. **The fence needs an EXPLICIT NARROW AMENDMENT at Step 2, argued to Langston — never a silent breach.** My recommended shape: the collector publishes a small pre-aggregated summary from Helsinki; the page only renders it. **No study data in the trading database, no query load on the trading box, no engine contact.**
 
 ---
 

@@ -4102,6 +4102,20 @@ Kraken publishes a per-pair `tick_size` — **1,437 pairs, 11 distinct values, a
 
 **HOME: `B-GUARD-COVERAGE-AUDIT`, owner CC-C, placed in `PHASE_19_PLAN.md` §1 Part F immediately AFTER `F-G-2`, alongside `B-MIN-STOP-DISTANCE`** — both are geometry-validation questions that want answering together, and neither blocks `F-G-1` or `F-G-2`. **Deliverable: trace whether `stage-b-validator.ts:350` and `routes.ts:11092` can reach execution, and either fence them or state why they need no guard.**
 
+### #921 OPEN 2026-08-28 (CC-INFRA; measured live during `B-TOKEN-WATCH` Step-2) — NOTHING DETECTS A WEDGED DRIVE MOUNT ON HELSINKI, AND IT SAT WEDGED FOR 20+ DAYS
+
+**BUCKET 1 — a real gap, but the gap is DETECTION, not the remedy.** ⚠️ **§9.5(b-ii) applied BEFORE filing:** the wedge itself is **already documented** in `COMMS_BRIDGE_RUNBOOK.md`, which names the symptom (*"processes stuck in D-state I/O wait… the rclone Google-Drive FUSE mount has WEDGED"*) and carries the full remedy. **That half is a cross-reference and is NOT re-filed here.** What is new is that **no monitor, alert or heartbeat looks for the condition.**
+
+**MEASURED 2026-08-28 on `204.168.141.77`:** `timeout 5 ls /mnt/gdrive` → **exit 124**. Three processes in uninterruptible sleep, all blocked in one directory inside a personal archive folder on the Drive: `find / -name langston-call*` **started 2026-08-07 13:49 — 20d 16h**, plus two 9d 15h searches for `dt-push-notice.sh`. Each contributed exactly **1.00** to load average for its whole life.
+
+★ **THE PART THAT MAKES THIS WORTH A BATCH RATHER THAN A NOTE: it was found BY ACCIDENT.** `B-TOKEN-WATCH`'s Step-2 audit needed Helsinki's spare capacity, read load `1.01 / 1.00 / 1.00` on a 2-core box, and only caught the truth because CPU was simultaneously **98.9% idle** — a flat, non-varying load with no CPU behind it. **Read without that second measurement, the box looks half-consumed; read casually, it looks fine. Neither reading finds a 20-day outage.** ⚠️ **All three stuck processes came from OUR OWN shell fallback pattern** (`… || find / -name '<thing>'`), so the trigger recurs every time a session looks something up on that host.
+
+**FIXED ON FIND (rule 23), and verified by measurement rather than assertion:** stale searches killed, `rclone-gdrive.service` restarted → **mount responsive (exit 0), 23 entries, service `active`, load decaying 1.11 → 0.56**. ★ **A POSITIVE CONTROL CAUGHT A FALSE PASS IN THAT VERIFICATION:** the first post-fix listing returned **empty**, which taken at face value says the mount returned holding nothing; it was a cold cache racing the restart, and an explicit re-probe with an exit code and a count settled it. **An empty result is the absent-as-valid trap (#546/#568 class), inside the check meant to confirm the fix.**
+
+**HOME:** `B-HELSINKI-MOUNT-WATCH`, owner CC-INFRA, placed in `PHASE_19_PLAN.md` immediately after `B-TOKEN-WATCH`, after `B-TEC-STATE-DURABILITY` in the table — that ordering is deliberate, because `B-TOKEN-WATCH` puts a **second long-running service on that host**, which doubles what a silent wedge takes down.
+
+**SCOPE WHEN IT RUNS:** a periodic probe with a **bounded timeout** (an unbounded probe joins the pile it is meant to detect) that alerts on a wedge, plus a sweep for processes stuck on the mount. ⚠️ **And the honest open question, stated rather than assumed away: nothing on Helsinki appears to need `/mnt/gdrive` at all** — no cron entry, no script and no service references it, the Drive repo path was retired from §7.1, and the only openers found were the three stuck searches. **If nothing needs it, removing the mount is a better fix than watching it.** That is a decision for Kyle, not a unilateral removal.
+
 ### #920 OPEN 2026-08-28 (Langston found it; Infra Claude filing at his direction — **he holds the reproduction, it corrupted HIS review**) — ⛔ `dt-review grep` SILENTLY RETURNS ZERO WHEN GIVEN AN UNPARSED FLAG: NO ERROR, CLEAN EXIT
 
 **RULE-24 DISPOSITION: BUCKET 1, REAL DEFECT.** This is not a usage note.
