@@ -4587,6 +4587,22 @@ Kraken publishes a per-pair `tick_size` — **1,437 pairs, 11 distinct values, a
    ⚠️ **CREDIT AND STANDING: Langston supplied this as an explicitly-labelled LEAD from an occurrence census, not a path trace. It moved this entry only because I re-derived all four legs at `origin/migration/aws-supabase` myself, with the control stated above.** A reviewer hit is a lead, never evidence.
 2. **WHY none has opened since 2026-07-26.** They still generate signals and still reach the seam, so something downstream is declining them — **not identified.** ⚠️ **It is NOT F-G-1: that deployed 2026-08-28, a month after the last open.** A cause that postdates the effect is not the cause.
 
+➕➕ **AMENDED 2026-08-28T22:10Z — THE FINDING IS ROUGHLY TWICE THE SIZE I FILED, AND A CLAIM I REPEATED TO KYLE AND LANGSTON IS WRONG AS STATED.**
+
+⛔ **THE CORRECTION FIRST. I said, several times, “ZERO CRYPTO REFUSALS — all 196 are currency pairs.” THAT IS FALSE BY OUR OWN CLASSIFICATION.** The refusal stream grew to **238**, and **42 of them are `USDC/CAD/morning_star` — whose `asset_class` IS `crypto_spot`.** ★ **By the label the system actually uses, crypto refusals are NOT zero.**
+✅ **WHAT REMAINS TRUE, and it is the substance rather than the wording: every one of the 238 is a CURRENCY-LIKE pair** — fiat-vs-fiat or **stablecoin-vs-fiat**. **Not one is a volatile crypto asset.** ⚠️ **Both sentences matter and only the second was ever the point; the first was the one I actually said.**
+⚠️ **AND THE INSTRUMENT THAT HID IT WAS MINE: a HARDCODED THREE-SYMBOL EXCLUSION** (`grep -cvE "USD/CAD|USD/CHF|GBP/USD"`). It read `NON-fiat = 0` for hours **because those were the only three symbols that had appeared yet.** A fourth pair made it read 41 instantly. ★ **A denominator defined by an enumeration of what you have already seen cannot detect the thing it is watching for.**
+
+➕ **THE SECOND FAMILY, MEASURED CLEANLY — non-overlapping, with the overlap check reported:**
+
+| set | n | net | symbols |
+|---|---|---|---|
+| **A — stablecoin-leg** (`USDC/*`, `USDT/*`) | **20** | **−$19.47** | `USDC/AUD` `USDC/CAD` `USDC/CHF` `USDC/GBP` `USDT/AUD` `USDT/GBP` |
+| **B — pure fiat-fiat** | **13** | **−$10.42** | `USD/CAD` `USD/CHF` `GBP/USD` `EUR/USD` `AUD/USD` |
+| **A ∩ B** | **0** | — | ✅ control run, sets are disjoint |
+| **A + B** | **33** | **−$29.89** | vs **414 `crypto_spot` closes at +$142.55** ⇒ **8.0% of the population, and every one of the 33 a loss-maker in aggregate** |
+
+★★ **SET A IS KYLE'S OWN QUESTION, NOW WITH DATA. `#550` records him asking in July: *“should a near-flat USD-stablecoin pair like `USDC/CHF` be in the tradeable universe at all, sized/targeted like a volatile asset?”*** — **`USDC/CHF` is in set A.** ⚠️ **He raised it as a hypothetical; it has 20 closed trades and −$19.47 behind it.** ⇒ **the two families are ONE scope question and this entry now covers both.**
 **PROVENANCE (§9.5(b)) — this is admission by omission, not a decision:** repo-wide grep for `isForex` / `forexPairs` / `FIAT_PAIRS` / `fiatQuote` and for the symbols themselves returns **no exclusion of any kind**. **Kraken labels crypto and fiat identically** — `aclass_base = "currency"` for both (`kraken-asset-pairs-service.ts:22`) — so the universe builder had no discriminator to apply even in principle. **Nobody let these in; nobody kept them out.**
 
 ⚠️ **§9.5(b-ii) LEDGER SEARCH RUN BEFORE FILING, AND IT PARTLY HITS — recorded as a cross-reference, not claimed as new.** `#550` already carries **Kyle's own open scope question** (2026-07-20): *"should a near-flat USD-stablecoin pair like USDC/CHF be in the tradeable universe at all, sized/targeted like a volatile asset?"* — filed there as rule-24 outcome (2), a decision he owns. **This entry does not re-file that.** What is new: `USDC/CHF` is a **stablecoin-vs-fiat** pair with a crypto leg; **these five have NO crypto leg at all**, and unlike the open question they have **realised P&L and a live refusal stream** attached. Same family, sharper case, new evidence.
