@@ -12,7 +12,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { gcdOfIncrements, gridIsDerivedForClass } from '../../markets/venue-grid-resolver';
+import { gcdOfIncrements, gridIsDerivedForClass, decideGridAction } from '../../markets/venue-grid-resolver';
 import {
   roundTripleToGrid,
   roundPriceForRole,
@@ -287,12 +287,15 @@ describe('F-G-1 — NON-DECIMAL TICKS, fed to the ROUNDING and not only to the G
         expect(isOnGrid(r.entryPrice, t)).toBe(true);
         expect(isOnGrid(r.stopPrice, t)).toBe(true);
         expect(isOnGrid(r.targetPrice, t)).toBe(true);
-        expect(r.representable).toBe(true);
+        // ⛔ NOT `expect(r.representable).toBe(true)` — a fresh reader pointed out that
+        // `representable: true` is HARDCODED on the success return, so asserting it after `ok`
+        // restates `ok` and survives deleting the self-check entirely. Decoration, not a check.
       }
     }
-    // POSITIVE CONTROL: without this, a build where everything refused would pass vacuously —
-    // which is exactly the failure mode that produced the assertion this replaces.
-    expect(exercised).toBeGreaterThan(30);
+    // POSITIVE CONTROL, threshold set from the MEASURED value (46 of 54 combinations round
+    // successfully; the other 8 refuse as degenerate). At 30 it carried 16 combinations of slack
+    // — a control loose enough to absorb a real regression is barely a control.
+    expect(exercised).toBeGreaterThanOrEqual(46);
   });
 });
 
@@ -303,11 +306,13 @@ describe('F-G-1 — NON-DECIMAL TICKS, fed to the ROUNDING and not only to the G
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 
 describe('F-G-1 — SHAPE IS CHECKED BEFORE THE GRID, so the passthrough path is never shape-blind', () => {
-  // MUTATION: move the `!finite(tick)` check back above the isLong/isShort derivation and every
-  // case here fails. That was the real ordering, and it meant a short-shaped or #915-inverted
-  // triple on an unresolved xStock grid was NEVER shape-checked — it passed through into sizing.
-  // My claim that "all other refusal reasons still refuse for both classes" was false: those
-  // reasons were not applied-and-passed, they were never evaluated.
+  // MUTATION: move the `!finite(tick)` check back above the isLong/isShort derivation and the
+  // SHORT and UNORDERABLE cases fail. ⚠️ NOT "every case here" — my first comment said that, and a
+  // fresh reader checked: `invalid_triple` was already first in the original order, and the
+  // `grid_unknown` case returns the same reason either way, so two of these four are unchanged by
+  // that mutation. TWO controls, not four. The defect was real — a short-shaped or #915-inverted
+  // triple on an unresolved xStock grid was NEVER shape-checked and passed into sizing — but a
+  // comment that overstates its own coverage is how the next reader mis-sizes a regression.
   it('refuses a SHORT-shaped triple on its shape, even with NO tick at all', () => {
     const r = roundTripleToGrid(100, 110, 90, null);
     expect(r.ok).toBe(false);
@@ -348,17 +353,22 @@ describe('F-G-1 — a REFUSAL echoes the inputs back UNROUNDED, which is why the
     expect(r.representable).toBe(false);
   });
 
-  // MUTATION: hoist validateStopDistance back out of the `else` and this fails.
-  // ⚠️ SOURCE-TEXT, and I know what that is worth (J4). It is here because the alternative is
-  // driving the whole orchestrator; it asserts ORDER, which is the thing that broke, not wording.
-  it('SEAM: the post-round re-check sits INSIDE the ok-branch, after the passthrough branch', () => {
-    const SEAM = readFileSync(join(process.cwd(), 'server/services/signal-orchestrator.ts'), 'utf8');
-    const iPass = SEAM.indexOf('recordActiveGridPassthrough(');
-    expect(iPass).toBeGreaterThan(-1);
-    const iElse = SEAM.indexOf('} else {', iPass);
-    const iStop = SEAM.indexOf('validateStopDistance(_r.entryPrice', iPass);
-    expect(iElse).toBeGreaterThan(iPass);
-    expect(iStop).toBeGreaterThan(iElse); // the re-check is reachable ONLY when _r.ok
+  // ⛔⛔ THE ORDERING ASSERTION THAT USED TO BE HERE DID NOT DISCRIMINATE. It compared three
+  // `indexOf` positions and asserted the stop-distance check came after a `} else {` — but
+  // DISABLING that check outright, and hoisting it out while leaving the `else` that carries the
+  // rounded-value assignment, BOTH kept every position in order. A fresh reader ran both and the
+  // suite stayed green. It also did not strip comments, unlike the sibling assertion hardened in
+  // the same commit for exactly that reason.
+  // ⇒ REPLACED. The seam no longer HAS a decision to order — it dispatches on `decideGridAction`,
+  // whose every arm is exercised above. What is left to assert is that the seam CALLS it, written
+  // so a bare import cannot satisfy it: the one assertion kept in the writer fence WAS satisfied
+  // by an import, which is #918's own shape reproduced in the test guarding #918.
+  it('SEAM: the orchestrator CALLS the extracted decision (an import cannot satisfy this)', () => {
+    const raw = readFileSync(join(process.cwd(), 'server/services/signal-orchestrator.ts'), 'utf8');
+    const code = raw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+    expect(code).toMatch(/decideGridAction\s*\(\s*\w+\.assetClass/);
+    // and no second copy of the rule has grown back inside the seam
+    expect(code).not.toMatch(/_gridIsDerived\s*=/);
   });
 });
 
@@ -379,8 +389,14 @@ describe('F-G-1 — A PASSTHROUGH IS NOT A REJECT (the funnel subset invariant)'
     const after = t.getActiveFunnelStats('paper', 'xstock_spot');
     expect(after.gridPassthroughs['unresolved_grid']).toBe(passBefore + 1);
     expect(JSON.stringify(after.preSqeRejects)).toBe(rejectsBefore);
-    // and it must never appear under a grid_* reject key either
-    expect(Object.keys(after.preSqeRejects).filter((k) => k.includes('passthrough'))).toEqual([]);
+    // ⛔ AND MEASURED AS A DELTA, for the same reason as the test below. The PRE-FIX code wrote
+    // exactly the key `grid_unresolved_passthrough` into this bucket, and the tracker reloads a
+    // checkpoint from `logs/` at module load — so an absolute `toEqual([])` would fail on any
+    // machine carrying a pre-fix checkpoint, for a reason unrelated to the code. Fresh-reader
+    // finding, and the pressure such a test creates is to weaken it, which is this file's history.
+    const passKeys = (m: Record<string, number>) =>
+      Object.keys(m).filter((k) => k.includes('passthrough')).length;
+    expect(passKeys(after.preSqeRejects) - passKeys(before.preSqeRejects)).toBe(0);
   });
 
   // MUTATION: add gridPassthroughs into the preSqeRejects sum anywhere and this fails.
@@ -434,6 +450,67 @@ describe('F-G-1 — isOnGrid, the predicate the self-check is built on', () => {
       expect(isOnGrid(p, t)).toBe(false);
     }
   });
+
+  // ⛔ EVERY CONTROL ABOVE IS EXACTLY HALF A TICK OUT — THE EASIEST OFF-GRID CASE TO REJECT.
+  // A fresh reader binary-searched the band and found it could be loosened by ~2,800x with all
+  // of them still green. A real arithmetic regression does not land at half a tick; it lands a
+  // hundredth of one out. These are the controls that actually bracket the tolerance.
+  // MUTATION: loosen the band by ~100x and these fail while the half-tick ones do not.
+  it('NEGATIVE, TIGHT — rejects a price a HUNDREDTH of a tick off grid', () => {
+    for (const [p, t] of [
+      [100.0001, 0.01],
+      [68000.501, 0.1],
+      [200.000025, 0.0025],
+      [0.000123450001, 1e-8],
+    ] as [number, number][]) {
+      expect(isOnGrid(p, t)).toBe(false);
+    }
+  });
+});
+
+describe('F-G-1 — THE SEAM DECISION, called directly', () => {
+  // ⛔⛔ THIS IS THE BLOCK THAT WAS MISSING, AND ITS ABSENCE WAS PROVED TWICE. The published-vs-
+  // derived rule lived inline in `signal-orchestrator.buildSizedSignalForStrategy`, which NO TEST
+  // EXECUTES: a fresh reader replaced it with a literal `true` — reinstating blocker-5, crypto
+  // passing through UNROUNDED — and the whole suite stayed green. Extracting the PREDICATE and
+  // fencing it left the CALL unguarded, so the identical mutation still passed.
+  // ⇒ The whole DECISION is a pure function now, and these call it.
+
+  // MUTATION: drop the class test from decideGridAction and this fails. IT IS BLOCKER-5.
+  it('CRYPTO with no tick REJECTS — it never passes through', () => {
+    expect(decideGridAction('crypto_spot', { ok: false, reason: 'grid_unknown' }).action).toBe('reject');
+    expect(decideGridAction('crypto_perp', { ok: false, reason: 'grid_unknown' }).action).toBe('reject');
+  });
+
+  // MUTATION: drop the grid_unknown test and this fails.
+  it('xSTOCK with no tick PASSES THROUGH — absence is our coverage gap, not a venue fact', () => {
+    for (const c of ['xstock_spot', 'xstock_perp']) {
+      const d = decideGridAction(c, { ok: false, reason: 'grid_unknown' });
+      expect(d.action).toBe('passthrough');
+      expect(d.action === 'passthrough' && d.reason).toBe('unresolved_grid');
+    }
+  });
+
+  // ⛔ THE ARM THAT MAKES THE PASSTHROUGH SAFE, and it is why the branch keys on the REASON and
+  // not on the class alone. MUTATION: key the passthrough on the class only and this fails — a
+  // short-shaped or #915-inverted xStock triple would then enter sizing having never been checked.
+  it('EVERY OTHER refusal still refuses, for xStock too', () => {
+    for (const reason of ['invalid_triple', 'short_side_unexercised', 'unorderable_triple',
+                          'degenerate_after_rounding', 'not_representable_after_rounding']) {
+      expect(decideGridAction('xstock_spot', { ok: false, reason }).action).toBe('reject');
+      expect(decideGridAction('crypto_spot', { ok: false, reason }).action).toBe('reject');
+    }
+  });
+
+  it('a successful rounding is APPLIED', () => {
+    expect(decideGridAction('crypto_spot', { ok: true }).action).toBe('apply');
+    expect(decideGridAction('xstock_spot', { ok: true }).action).toBe('apply');
+  });
+
+  // An unrecognised class must take the CONSERVATIVE side end-to-end, not only in the predicate.
+  it('an unrecognised class REFUSES rather than passing through', () => {
+    expect(decideGridAction('something_new', { ok: false, reason: 'grid_unknown' }).action).toBe('reject');
+  });
 });
 
 describe('F-G-1 — PUBLISHED vs DERIVED has exactly one home', () => {
@@ -463,17 +540,22 @@ describe('F-G-1 — PUBLISHED vs DERIVED has exactly one home', () => {
 });
 
 describe('F-G-1 — a tag verdict must say WHOSE fault it is', () => {
-  // MUTATION: fold not_representable_after_rounding back into 'unorderable' and this fails.
-  // That mapping recorded a VPG ARITHMETIC defect as a malformed SIGNAL, on both VTS lanes, in
-  // the exact bucket used to judge signal quality. `unorderable`'s own doc says "not long-shaped
-  // and not short-shaped" — a property of the signal, which is a different claim entirely.
+  // ⚠️ THE MUTATION THIS BLOCK ONCE NAMED IS CAUGHT BY THE SELF-CHECK BLOCK BELOW, NOT HERE —
+  // corrected after a fresh reader checked it. Nothing in this block produces
+  // `not_representable_after_rounding`, so folding it back into 'unorderable' leaves these three
+  // assertions green. Kept because the verdicts it DOES pin are worth pinning; the comment is now
+  // honest about which block carries the load. A mutation comment naming a mutation the block
+  // cannot catch is how the next reader mis-sizes a regression.
+  // MUTATION THIS BLOCK ACTUALLY CATCHES: fold `invalid_triple` back into 'unorderable'.
   it('separates OUR defects from the signal shape', () => {
     expect(evaluateGridForTagging(100, 105, 110, 0.01).verdict).toBe('unorderable');   // signal
     expect(evaluateGridForTagging(NaN, 95, 110, 0.01).verdict).toBe('invalid_triple'); // values
     expect(evaluateGridForTagging(100, 95, 110, null).verdict).toBe('grid_unknown');   // wiring
   });
 
-  // MUTATION: narrow isWiringBug back to grid_unknown only and this fails.
+  // ⚠️ SAME CORRECTION: narrowing `isWiringBug` back to `grid_unknown` only leaves BOTH
+  // assertions here green, because neither case produces the reason that narrowing would drop.
+  // The self-check block below is what catches it. Fresh-reader finding.
   it('flags a wiring problem as ours, and a shape problem as the signals', () => {
     expect(evaluateGridForTagging(100, 95, 110, null).isWiringBug).toBe(true);
     expect(evaluateGridForTagging(100, 105, 110, 0.01).isWiringBug).toBe(false);
@@ -516,5 +598,31 @@ describe('F-G-1 — the SELF-CHECK, finally EXERCISED rather than asserted-about
     const tag = evaluateGridForTagging(1.234567, 1.20, 1.30, PATHOLOGICAL_TICK);
     expect(tag.verdict).toBe('not_representable_after_rounding');
     expect(tag.isWiringBug).toBe(true); // OURS, not the signal's
+  });
+});
+
+describe('F-G-1 — the pre-fix passthrough counts are MIGRATED, not stranded and not deleted', () => {
+  // The `keySchema` is deliberately NOT bumped (bumping discards ALL live funnel history for a
+  // purely additive field), so counts written by the pre-fix code under the key
+  // `grid_unresolved_passthrough` are still on disk inside `preSqeRejects`. Left there, the client
+  // renders them forever under a heading reading "Venue Price Grid (VPG) — rejected": the fix
+  // would be live for new counts while the tab kept reporting old passthroughs as rejections.
+  // MUTATION: drop the migration from the reload and this fails.
+  it('moves the legacy key into gridPassthroughs, preserving the count', async () => {
+    const t = await import('../../core/observability/active-funnel-tracker');
+    const m = t.migrateLegacyPassthroughKey({
+      preSqeRejects: { grid_unresolved_passthrough: 7, unmappable_symbol: 2 },
+      gridPassthroughs: { unresolved_grid: 3 },
+    });
+    expect(m.preSqeRejects.grid_unresolved_passthrough).toBeUndefined();
+    expect(m.preSqeRejects.unmappable_symbol).toBe(2);   // untouched
+    expect(m.gridPassthroughs.unresolved_grid).toBe(10); // 3 + 7, NOT lost and NOT double-counted
+  });
+
+  it('is a no-op when there is nothing legacy to move', async () => {
+    const t = await import('../../core/observability/active-funnel-tracker');
+    const m = t.migrateLegacyPassthroughKey({ preSqeRejects: { unmappable_symbol: 2 } });
+    expect(m.preSqeRejects).toEqual({ unmappable_symbol: 2 });
+    expect(m.gridPassthroughs).toEqual({});
   });
 });

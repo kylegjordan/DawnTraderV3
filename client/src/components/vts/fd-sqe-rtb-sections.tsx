@@ -105,7 +105,13 @@ export function ActiveSqeAndRtbSections({
   // F-G-1: split the pre-SQE rejects so VENUE PRICE GRID refusals read as their own category
   // rather than being folded in with everything else (Kyle's requirement, 2026-08-28).
   const preSqeAll = Object.entries(cls.preSqeRejects ?? {}).sort((a, b) => b[1] - a[1]);
-  const gridRows = preSqeAll.filter(([r]) => r.startsWith('grid_'));
+  // ⛔ A PASSTHROUGH KEY MUST NEVER LAND IN THE REJECT ROW, even if one reaches us. The server
+  // migrates the pre-F-G-1 `grid_unresolved_passthrough` key out of this bucket on checkpoint
+  // reload — but a client can be newer than the server it is talking to, and this filter is what
+  // decides the label a human reads. A fresh reader found the historical counts still rendering
+  // under "rejected" indefinitely; the server fix is the cure and this is the guard.
+  const isPassthroughKey = (r: string) => r.includes('passthrough');
+  const gridRows = preSqeAll.filter(([r]) => r.startsWith('grid_') && !isPassthroughKey(r));
   const otherPreSqeRows = preSqeAll.filter(([r]) => !r.startsWith('grid_'));
   const gridTotal = gridRows.reduce((t, [, n]) => t + n, 0);
   // ⛔ PASSTHROUGHS ARE COUNTED SEPARATELY AND ARE NOT ADDED TO `gridTotal`. A passthrough is a

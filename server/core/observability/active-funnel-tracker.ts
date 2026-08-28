@@ -202,6 +202,36 @@ export interface ActiveFunnelRecord {
 
 const _stats = new Map<string, ActiveFunnelRecord>();
 
+/**
+ * F-G-1 — MIGRATE, DO NOT PURGE, THE PRE-FIX PASSTHROUGH KEY.
+ *
+ * Before this batch the seam booked a passthrough as `grid_unresolved_passthrough` inside
+ * `preSqeRejects`. Those counts are still on disk, and the `keySchema` is deliberately NOT bumped
+ * (bumping discards ALL live funnel history for a purely additive field). Left alone, the client
+ * filter `r.startsWith('grid_')` folds them into the total under a heading reading
+ * **"Venue Price Grid (VPG) — rejected"** — so the fix would be live for new counts while the tab
+ * kept reporting old passthroughs as rejections, indefinitely. A fresh reader caught it.
+ * ⛔ MOVED, NOT DELETED. The signals were real; only the bucket was wrong. Deleting them would
+ * make the funnel's history quietly disagree with itself, which is the failure one layer up.
+ */
+export function migrateLegacyPassthroughKey(v: Partial<ActiveFunnelRecord>): {
+  preSqeRejects: Record<string, number>;
+  gridPassthroughs: Record<string, number>;
+} {
+  const rejects = { ...(v.preSqeRejects ?? {}) };
+  const through = { ...(v.gridPassthroughs ?? {}) };
+  const LEGACY = 'grid_unresolved_passthrough';
+  if (rejects[LEGACY] != null) {
+    through['unresolved_grid'] = (through['unresolved_grid'] ?? 0) + rejects[LEGACY];
+    delete rejects[LEGACY];
+    console.warn(
+      `[active-funnel-tracker] migrated ${through['unresolved_grid']} legacy "${LEGACY}" counts out of ` +
+      `preSqeRejects into gridPassthroughs — they were passthroughs, never rejections (F-G-1).`,
+    );
+  }
+  return { preSqeRejects: rejects, gridPassthroughs: through };
+}
+
 function _blank(): ActiveFunnelRecord {
   return {
     signalsGenerated: 0,
@@ -274,10 +304,10 @@ export function reloadCheckpointFromDisk(): void {
         const b = _blank();
         _stats.set(k, {
           ...b, ...v,
-          preSqeRejects: { ...(v.preSqeRejects ?? {}) },
           preSqeRejectsByStrategy: { ...(v.preSqeRejectsByStrategy ?? {}) },
           strategyAttrition: { ...(v.strategyAttrition ?? {}) },
-          gridPassthroughs: { ...(v.gridPassthroughs ?? {}) },
+          // supplies BOTH preSqeRejects and gridPassthroughs -- the legacy key moves between them
+          ...migrateLegacyPassthroughKey(v),
           postSqeRejects: { ...(v.postSqeRejects ?? {}) },
           sqeGateRejects: { ...(v.sqeGateRejects ?? {}) },
           rtbRefresh: { ...b.rtbRefresh, ...(v.rtbRefresh ?? {}) },
@@ -476,8 +506,11 @@ export function getActiveFunnelStats(mode: FunnelMode, assetClass: FunnelAssetCl
     preSqeRejects: { ...r.preSqeRejects },
     preSqeRejectsByStrategy: Object.fromEntries(Object.entries(r.preSqeRejectsByStrategy).map(([s, m]) => [s, { ...m }])),
     strategyAttrition: { ...r.strategyAttrition },
-    // reloaded pre-F-G-1 checkpoints lack the field — snapshot as {} (absent-honest)
-    gridPassthroughs: { ...(r.gridPassthroughs ?? {}) },
+    // ⚠️ NO `?? {}` HERE, AND THE COMMENT THAT USED TO BE HERE WAS FALSE. It read "reloaded
+    // pre-F-G-1 checkpoints lack the field — snapshot as {}", but `_blank()` always carries it and
+    // the reload fills it, so the guard was dead and its stated reason never applied. A dead guard
+    // with a plausible comment is worse than no guard: it documents a protection that isn't there.
+    gridPassthroughs: { ...r.gridPassthroughs },
     postSqeRejects: { ...r.postSqeRejects },
     sqeGateRejects: { ...r.sqeGateRejects },
     // reloaded pre-OBJ-3 checkpoints lack the field — snapshot as {} (absent-honest)

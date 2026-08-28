@@ -149,14 +149,20 @@ function snap(price: number, tick: number, dir: Dir): number {
  *                                                                    an off-grid price now SHIPS)
  *     relative EPS*8  -> 0 misses,                0 false accepts   (clean on both)
  * `Number.EPSILON * 8` is ~1.8e-15 relative — a few ULPs, which is the precision actually
- * available; the `max(1, |q|)` floor preserves the old behaviour for small `q`.
+ * available. ⚠️ The `max(1, |q|)` floor preserves the SHAPE of the old rule (a constant floor for
+ * small `q`) and NOT its behaviour: the old floor was `1e-9` and this one is ~1.78e-15, which is
+ * 5.6e5x TIGHTER. My first wording said "preserves the old behaviour", which would have told the
+ * next reader that small-`q` cases were untouched. They are not; they are strictly stricter.
  * ★ THE CONTROL IS THE WHOLE POINT: checking only that on-grid prices pass would have certified
  * the false-accept version. A tolerance needs BOTH a positive and a negative control, or it is
  * tuned in one direction only.
- * ⚠️ HONEST LIMIT: at `q` beyond ~1e14 a double cannot represent the grid at all, so this
- * predicate stops discriminating. That is a fact about floats, not a tolerance to widen — and it
- * is unreachable here (`gcdOfIncrements` floors derived ticks at 1e-8, and no published Kraken
- * tick is finer than 1e-8 either).
+ * ⚠️ HONEST LIMIT, AND IT IS A SLOPE RATHER THAN THE CLIFF I FIRST WROTE. The band widens
+ * CONTINUOUSLY with `q`: it is ~1.8e-4 ticks at `q = 1e11` (a value this file's own negative
+ * control uses), ~1e-3 ticks at `q ~ 5.6e11`, and discrimination is fully gone near `q ~ 2.8e14`.
+ * Naming only the far end understated it. That is a fact about doubles, not a tolerance to widen.
+ * ⚠️ Reachable in principle at the finest derivable tick above roughly $5,600 — and the smallest
+ * tick `gcdOfIncrements` can actually return is `2e-8`, not `1e-8` as I first wrote, because it
+ * returns null at `g <= 1` on an 8dp integer scale. Conservative direction; corrected for accuracy.
  * Reported by a fresh-context reader; re-derived here, with controls, before anything changed.
  */
 export function isOnGrid(price: number, tick: number): boolean {

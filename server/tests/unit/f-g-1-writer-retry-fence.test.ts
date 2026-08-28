@@ -231,8 +231,11 @@ describe('F-G-1 OBJ-9 — RETRY vs DROP, observed through the buffer instead of 
     expect(_alerts[0].category).toBe('breakage');   // an off-SSOT category would THROW in addAlert
     expect(_alerts[0].severity).toBe('critical');
     expect(String(_alerts[0].title)).toContain('crypto_perp');
-    // survives a restart: without this, the per-process latch is the only suppression
-    expect(_alerts[0].dedupe_key).toBeTruthy();
+    // ⛔ THE EXACT KEY, not merely a truthy one. `toBeTruthy()` passes on a per-flush unique
+    // string — which would DEFEAT the cross-restart dedup this rider exists for, since the store
+    // suppresses only a repeat of the SAME key. Proving "a key was passed" is not proving "the
+    // same key will be passed next time". Fresh-reader finding.
+    expect(_alerts[0].dedupe_key).toBe('ohlc-writer-permanent-crypto_perp');
   });
 
   // MUTATION: remove the latch (or set it before a successful raise) and this fails.
@@ -253,10 +256,28 @@ describe('F-G-1 OBJ-9 — RETRY vs DROP, observed through the buffer instead of 
     expect(_alerts).toHaveLength(1);
   });
 
-  it('bounds the retry buffer — the constant is real and finite', () => {
-    expect(Number.isFinite(RETRY_BUFFER_MAX)).toBe(true);
-    expect(RETRY_BUFFER_MAX).toBeGreaterThan(0);
-  });
+  // ⛔⛔ THIS TEST USED TO ASSERT ONLY THAT `RETRY_BUFFER_MAX` WAS FINITE AND POSITIVE, WHICH
+  // MEANT THE BOUND'S BEHAVIOUR WAS COVERED BY NOTHING AT ALL. Deleting the entire shed block
+  // left it green; so did `RETRY_BUFFER_MAX = 1e9`. It was one of the "behavioural cover"
+  // replacements for the deleted source-text half, and it was STRICTLY WEAKER than the assertion
+  // it replaced — that one at least required `splice` and a `console.error` to be present.
+  // A fresh reader caught it. This version drives the bound.
+  // MUTATION: delete the shed block, or raise the cap, and this fails.
+  it('SHEDS at the cap instead of growing without limit, and sheds the OLDEST', async () => {
+    _dbState.throwWith = new Error('deadlock detected');   // transient => every row is re-buffered
+    for (let i = 0; i < RETRY_BUFFER_MAX + 5; i++) bufferOhlcBar('xstock_spot', bar(i));
+    await stopBatchWriter();                               // fails, re-adds, trips the cap
+
+    _dbState.throwWith = null;
+    _dbState.inserted.length = 0;
+    await stopBatchWriter();
+    const rows = _dbState.inserted.flat();
+    expect(rows).toHaveLength(RETRY_BUFFER_MAX);            // bounded, not 50,005
+    // and the FIVE that went are the oldest: T0..T4 are gone, the newest survives.
+    const symbols = new Set(rows.map((r: any) => r.symbol));
+    for (let i = 0; i < 5; i++) expect(symbols.has(`T${i}/USD`)).toBe(false);
+    expect(symbols.has(`T${RETRY_BUFFER_MAX + 4}/USD`)).toBe(true);
+  }, 30_000);
 });
 
 describe('F-G-1 #918 — the drain that had no caller', () => {
@@ -281,18 +302,22 @@ describe('F-G-1 #918 — the drain that had no caller', () => {
     expect(_dbState.inserted.flat()).toHaveLength(1);
   });
 
-  // ⚠️ THE ONE SOURCE-TEXT ASSERTION I KEPT, AND I AM FLAGGING IT RATHER THAN BURYING IT.
-  // Langston ruled "cut all eight". This one is cross-module — it checks that another file CALLS
-  // the drain — and it is the ONLY thing that made #918 real: the function existed, was exported,
-  // documented, and had zero callers. Importing `boot_orchestrator` to test it behaviourally would
-  // execute the real boot path. ⇒ KEPT, but hardened against his actual objection: COMMENTS ARE
-  // STRIPPED FIRST, so a mention in prose can no longer satisfy it — which is exactly how the
-  // `createSystemAlert` assertion lied.
-  it('is actually CALLED from the live shutdown handler (comments stripped)', () => {
+  // ⚠️ THE ONE SOURCE-TEXT ASSERTION I KEPT — AND MY FIRST VERSION OF IT WAS SATISFIED BY THE
+  // IMPORT LINE, NOT THE CALL. That is #918's exact shape ("the function existed, was exported,
+  // documented, and had zero callers") reproduced INSIDE the test guarding #918. I hardened it
+  // against the comment vector, which was Langston's stated objection, and not against the
+  // identifier-without-a-call vector, which is the defect the test is about. A fresh reader ran
+  // the mutation: deleting `await drainArchiveBuffersForShutdown();` left BOTH assertions green,
+  // because the first occurrence in the stripped text is `const { drainArchiveBuffersForShutdown }
+  // = await import(...)` and `catch` was inside the window regardless.
+  // ⇒ It now requires a CALL FORM. An import — bare, named, or destructured — cannot match it.
+  // ⚠️ AND IT WEAKENS MY OWN J5 ARGUMENT TO LANGSTON: I defended keeping this against his ruling
+  // on the grounds that it was "the only thing that made #918 real". It was not doing that job.
+  it('is actually CALLED from the live shutdown handler — a call, not an import', () => {
     const raw = readFileSync(join(process.cwd(), 'server/core/boot_orchestrator.ts'), 'utf8');
     const code = raw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
-    expect(code).toContain('drainArchiveBuffersForShutdown');
-    const i = code.indexOf('drainArchiveBuffersForShutdown');
+    expect(code).toMatch(/await\s+drainArchiveBuffersForShutdown\s*\(\s*\)/);
+    const i = code.search(/await\s+drainArchiveBuffersForShutdown\s*\(/);
     expect(code.slice(Math.max(0, i - 400), i + 400)).toContain('catch');
   });
 });

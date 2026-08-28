@@ -43,9 +43,12 @@ export interface ActiveFunnelClassData {
    *  before the RTB queue. Kept distinct from preSqeRejects so the funnel order is honest. */
   /** F-G-1 — signals that shipped UNROUNDED because we have no DERIVED grid for that xStock
    *  symbol yet. ⛔ NOT A REJECT: nothing was dropped, so this is NEVER summed with, or rendered
-   *  beside, the pre-SQE reject rows. It is a gauge of OUR OWN archive coverage. Absent on a
-   *  pre-F-G-1 checkpoint, snapshotted as {} (absent-honest). */
-  gridPassthroughs: Record<string, number>;
+   *  beside, the pre-SQE reject rows. It counts EVALUATIONS, not symbols.
+   *  ⚠️ OPTIONAL, and it has to be: this contract declared it REQUIRED while both client copies
+   *  declared it optional "because a pre-F-G-1 server omits it" — and under a required field such
+   *  a server is simply non-conforming, so the two halves of the same contract disagreed about
+   *  whether the old server was legal. A fresh reader caught it. Optional is the true statement. */
+  gridPassthroughs?: Record<string, number>;
   postSqeRejects: Record<string, number>;
   sqeGateRejects: Record<string, number>;
   /** B-FILTER-DIAG-PAPER OBJ-3 (2026-08-07): the refresh-phase slice of sqeGateRejects —

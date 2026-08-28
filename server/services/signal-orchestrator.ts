@@ -87,7 +87,7 @@ import { getPerClassTargetGate } from '../core/calculations/expectancy.js';
 // F-G-1 (OBJ-7): the venue price grid and its rounding rules. Rounding happens at the ONE
 // orchestrator seam so no strategy can be born bypassing it.
 import { roundTripleToGrid } from '../core/calculations/venue-price-grid.js';
-import { resolveVenueGrid, gridIsDerivedForClass } from '../markets/venue-grid-resolver.js';
+import { resolveVenueGrid, decideGridAction } from '../markets/venue-grid-resolver.js';
 import { validateStopDistance } from '../strategies/strategy-helpers.js';
 import { normalizeAndGateTarget } from '../core/calculations/signal-target-normalizer.js';
 // M5B: Import disabled - VTS now runs autonomously, not from signal orchestrator
@@ -537,7 +537,7 @@ export class SignalOrchestrator {
     {
       // ⛔ CANONICALISE FIRST. `resolveByInternal` (`kraken-asset-pairs-service.ts:539-540`) is an
       // EXACT-KEY Map lookup with no fallback, and this block sits 59 lines ABOVE the pipeline's
-      // own `normalizeToInternalSymbol` at :626. So a non-canonical symbol form resolved to
+      // own `normalizeToInternalSymbol` further down this method. So a non-canonical symbol form resolved to
       // `grid_unknown` and REFUSED A VALID SIGNAL — a venue-keyed lookup run on the one form the
       // very next stage exists to produce. Langston, at the ref.
       const _gridSymbol = normalizeToInternalSymbol(rawSignal.symbol) || rawSignal.symbol;
@@ -589,55 +589,37 @@ export class SignalOrchestrator {
         if (_fc2) recordActivePreSqeReject(sizingContext.mode, _fc2, _key, strategyId);
         else _gridUncountable(_key);
       };
-      // ⛔⛔ PUBLISHED vs DERIVED — the cut that actually binds, and I stopped one module short of
-      // it (Langston, J1). My price/pre-filter asymmetry was right and I applied it to the WRONG
-      // axis. For CRYPTO the tick is the VENUE'S OWN STATEMENT: its absence means we genuinely do
-      // not know what the venue will accept, so refusing is correct. For xSTOCK the "grid" is OUR
-      // INFERENCE FROM OUR OWN ARCHIVE — its absence tells you about our observation coverage,
-      // NOT about the venue. Refusing an active xStock trade because our archive is thin is the
-      // same drop-arm-on-missing-data defect he refused for the VTS lane, one module further out
-      // — and with `MIN_INCREMENTS=50` plus a cold-start window where the refresher has not yet
-      // run, the plausible worst case is that it switches the class off entirely.
-      // ⛔⛔ BRANCH ON THE ASSET CLASS, NOT ON THE PROVENANCE OF A LOOKUP THAT FAILED. My first
-      // guard tested `_grid.provenance !== 'venue_published'` — but `resolveVenueGrid` returns
-      // `{ tick: null, provenance: 'unknown' }` on EVERY miss, crypto included. So inside the
-      // `grid_unknown` branch that test is TRUE BY CONSTRUCTION: a TAUTOLOGY that let CRYPTO pass
-      // through unrounded, the exact inverse of what I said the fix preserved. Langston, at the ref.
-      // ★ PUBLISHED-vs-DERIVED IS A PROPERTY OF THE ASSET CLASS, not of a failed lookup's result.
-      // ⛔ AND IT IS NOW READ FROM ONE HOME rather than re-stated here. A fresh reader reverted
-      // this line to the blocker-5 tautology and the ENTIRE suite stayed green — the single most
-      // load-bearing line in that fix had no coverage at all, and it was a second copy of a rule
-      // `venue-grid-resolver.ts` already implements. Calling the resolver's own predicate makes
-      // the two structurally incapable of disagreeing, and puts the fence on the function.
-      const _gridIsDerived = gridIsDerivedForClass(sizingContext.assetClass);
-      if (!_r.ok && _r.reason === 'grid_unknown' && _gridIsDerived) {
+      // ⛔⛔ THE DECISION IS NOT MADE HERE ANY MORE, AND THAT IS THE FIX.
+      // It used to be an inline branch in this method — which NO TEST EXECUTES. A fresh reader
+      // replaced the class test with a literal `true`, reinstating blocker-5 (crypto passing
+      // through UNROUNDED into sizing, the SQE and execution), and the whole suite stayed GREEN.
+      // The round before that had extracted the predicate and fenced it — which fenced the
+      // FUNCTION and left the CALL unguarded: the same gap, moved one line.
+      // ⇒ `decideGridAction` is pure, it is the ONE home of published-vs-derived, and a test can
+      // CALL it. What is left here is dispatch, with no judgement of its own to get wrong.
+      const _decision = decideGridAction(sizingContext.assetClass, _r);
+      if (_decision.action === 'passthrough') {
         console.warn(
           `[F-G-1][GRID_UNRESOLVED_PASSTHROUGH] ${_gridSymbol}/${strategyId} — no DERIVED grid for this ` +
           `symbol (coverage gap in our own archive, not a venue fact). Proceeding UNROUNDED rather than ` +
           `refusing a valid signal. This is a data-coverage problem: see the xstock-grid-refresher.`,
         );
-        // ⛔ A PASSTHROUGH IS NOT A REJECT, AND I BOOKED IT AS ONE. A fresh reader caught this
-        // against `active-funnel-tracker.ts`'s own contract: `preSqeRejects` holds the sites that
-        // DROP a built signal before the SQE, "so they are a true subset of signalsGenerated".
-        // This signal is not dropped — it continues and is counted again at the SQE, so it would
-        // have pushed the pre-SQE stage above its own denominator (Langston's B8.4b defect,
-        // reproduced one bucket over) and rendered under a heading reading "rejected".
-        // It gets its OWN counter: a coverage gauge, not a filter.
-        if (_fc2) recordActiveGridPassthrough(sizingContext.mode, _fc2, 'unresolved_grid');
-        else _gridUncountable('unresolved_passthrough');
-        // ⛔ AND NO POST-ROUND RE-CHECK BELOW ON THIS PATH. `fail()` echoes the inputs back
-        // verbatim, so `_r.entryPrice/_r.stopPrice` here are the ORIGINAL unrounded floats —
-        // running the stop-distance floor on them and booking `grid_stop_distance_after_rounding`
-        // would name a rounding that did not happen, and would attribute an upstream geometry
-        // refusal to the venue grid. The rounded-value assignment is skipped for the same reason:
-        // it would be a no-op that reads like a write.
-      } else if (!_r.ok) {
-        _gridReject(_r.reason ?? 'unknown');
-        // ⛔ REJECT, NEVER RE-ROUND. Rounding to nearest is deterministic, so "round again"
-        // could only mean rounding the OTHER way, and choosing the direction that lets a trade
-        // through is shopping for a pass. The rounded geometry IS the geometry.
+        // ⛔ A PASSTHROUGH IS NOT A REJECT (Langston BLOCKER-6). `preSqeRejects` holds the sites
+        // that DROP a built signal before the SQE, "so they are a true subset of signalsGenerated".
+        // This one is not dropped — it continues and is counted again at the SQE.
+        if (_fc2) recordActiveGridPassthrough(sizingContext.mode, _fc2, _decision.reason);
+        else _gridUncountable(`passthrough_${_decision.reason}`);
+        // ⛔ AND NO POST-ROUND RE-CHECK ON THIS PATH. `fail()` echoes the inputs back verbatim, so
+        // `_r.entryPrice/_r.stopPrice` are the ORIGINAL unrounded floats — running the stop-distance
+        // floor on them and booking `grid_stop_distance_after_rounding` would name a rounding that
+        // never happened, and would attribute an upstream geometry refusal to the venue grid.
+      } else if (_decision.action === 'reject') {
+        _gridReject(_decision.reason);
+        // ⛔ REJECT, NEVER RE-ROUND. Rounding to nearest is deterministic, so "round again" could
+        // only mean rounding the OTHER way, and choosing the direction that lets a trade through
+        // is shopping for a pass. The rounded geometry IS the geometry.
         console.warn(
-          `[F-G-1][GRID_REJECT] ${rawSignal.symbol}/${strategyId} reason=${_r.reason} ` +
+          `[F-G-1][GRID_REJECT] ${_gridSymbol}/${strategyId} reason=${_decision.reason} ` +
           `tick=${_grid.tick ?? 'null'} provenance=${_grid.provenance} ` +
           `entry=${rawSignal.entryPrice} stop=${rawSignal.stopPrice} target=${rawSignal.targetPrice}`,
         );

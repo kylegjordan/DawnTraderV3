@@ -111,6 +111,46 @@ export function gridIsDerivedForClass(assetClass: string): boolean {
   return assetClass === 'xstock_spot' || assetClass === 'xstock_perp';
 }
 
+/**
+ * ⛔⛔ THE SEAM'S DECISION, EXTRACTED — AND THE REASON IS MEASURED, NOT STYLISTIC.
+ *
+ * This branch used to live inline in `signal-orchestrator.ts` inside a long private method that
+ * **no test executes** — a fresh reader replaced the class test there with a literal `true`
+ * (reinstating blocker-5: crypto passing through UNROUNDED) and the entire suite stayed green.
+ * The previous round had extracted `gridIsDerivedForClass` and fenced it, which fenced the
+ * FUNCTION and left the CALL unguarded: the same gap the commit claimed to close, moved one line.
+ * ⇒ Extracting the whole decision is the only version of this fix that can be tested, because a
+ * pure function CAN be called by a test and a private method on a 3,000-line service cannot.
+ *
+ *   PUBLISHED (crypto) + no tick  -> REJECT.      The venue's own statement is missing, so we
+ *                                                 genuinely do not know what it would accept.
+ *   DERIVED (xStock)  + no tick  -> PASSTHROUGH.  Absence is OUR archive-coverage gap, not a
+ *                                                 venue fact; refusing would be a self-inflicted
+ *                                                 outage wearing venue-safety clothes (J1).
+ *   any other refusal            -> REJECT.       Shape, degeneracy and self-check failures are
+ *                                                 refusals for BOTH classes. This arm is why the
+ *                                                 passthrough is keyed on the REASON and not on
+ *                                                 the class alone.
+ */
+export type GridAction =
+  | { action: 'apply' }
+  | { action: 'passthrough'; reason: string }
+  | { action: 'reject'; reason: string };
+
+export function decideGridAction(
+  assetClass: string,
+  r: { ok: boolean; reason?: string },
+): GridAction {
+  if (r.ok) return { action: 'apply' };
+  // ⛔ BRANCH ON THE ASSET CLASS, NEVER ON THE PROVENANCE OF A LOOKUP THAT FAILED. Blocker-5 was
+  // exactly that: `provenance !== 'venue_published'` is TRUE BY CONSTRUCTION inside the
+  // grid_unknown branch, because a miss returns the shared UNKNOWN for every class.
+  if (r.reason === 'grid_unknown' && gridIsDerivedForClass(assetClass)) {
+    return { action: 'passthrough', reason: 'unresolved_grid' };
+  }
+  return { action: 'reject', reason: r.reason ?? 'unknown' };
+}
+
 export function resolveVenueGrid(symbol: string, assetClass: string): VenueGrid {
   if (!symbol) return UNKNOWN;
 
@@ -133,7 +173,12 @@ export function resolveVenueSizeLimits(symbol: string, assetClass: string): {
   ordermin: number | null;
   costmin: number | null;
 } {
-  if (assetClass === 'xstock_spot' || assetClass === 'xstock_perp') {
+  // ⚠️ USES THE SHARED PREDICATE. This site held a byte-identical inline copy of the
+  // xStock test, three functions below the function extracted to be its one home — so the
+  // extraction removed one duplicate and walked past another in the same file. Adding a derived
+  // class would have updated one and silently not the other: the `B-EPOCH-KEYING-PARITY` shape,
+  // inside the fix that cites it. Fresh-reader finding.
+  if (gridIsDerivedForClass(assetClass)) {
     return { lotDecimals: null, ordermin: null, costmin: null };
   }
   const e = krakenAssetPairsService.resolveByInternal(symbol);
