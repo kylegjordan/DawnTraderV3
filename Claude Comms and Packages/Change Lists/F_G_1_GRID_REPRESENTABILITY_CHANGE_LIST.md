@@ -1,4 +1,4 @@
-# F-G-1 — B-GRID-REPRESENTABILITY — STEP-4 CHANGE LIST (r2, after BLOCKER-6)
+# F-G-1 — B-GRID-REPRESENTABILITY — STEP-4 CHANGE LIST (r3)
 
 > **READY AT: `origin/migration/aws-supabase`.** Diff base `98cd011c7` (the commit before the first code commit) → the branch head.
 > **20 files, +2,202 / −6.** Re-derived at the ref, not restated — the r1 header total reconciled but three per-section counts did not, and you caught all three.
@@ -156,15 +156,64 @@ The alert is proved by **spying the alert module**; both drain legs are driven, 
 
 ---
 
+## 9b. ⛔⛔ THE ROUND RECORD — THREE READER ROUNDS, WHICH IS THE CAP, SO YOU GET IT IN FULL
+
+**The loop is capped at three rounds and the cap outcome is not neutral: you get the record, because what it shows is the first thing worth ruling on.**
+
+| round | handed | verdict | what changed |
+|---|---|---|---|
+| **r1** | the blocker-5 fix, claim-only | 3 findings, 2 re-derived | shape checks moved above the grid check; the passthrough taken out of `preSqeRejects`; the post-round re-check made unreachable when nothing was rounded |
+| **r2** | two readers, **claim alone** — one on funnel accounting, one on shape-gate reach | 9 findings, **5 of them in code written to fix r1** | the `isOnGrid` tolerance; the unfenced `_gridIsDerived`; the vacuous self-check fence; the tag-verdict mislabel; the perp gap; the disk-silenceable subset test |
+| **r3** | ⛔ **the COMMITTED DIFF AT THE REF** — the object round, which is what closes the loop | 13 findings, **2 of them mutations that left the suite GREEN** | the seam decision extracted; the kept source-text assertion; the vacuous retry bound; the legacy-key migration; the duplicated narrowing |
+
+⛔ **THE ROUND COUNT IS NOT EVIDENCE, AND NEITHER IS THE READERS' AGREEMENT.** Strike every mention of them from this document and every finding above still stands on its own citation — object, population, mechanism-with-line. That is the test I applied before writing it. Two of r3's findings are **mutations I ran myself and watched pass**, which is the only reason they are here rather than argued.
+
+★ **WHAT THE THREE ROUNDS ACTUALLY SHOW, and it is worth your ruling more than any single fix: the defect did not get smaller, it MOVED.** r1 found a wrong branch. r2 found the fix for that branch had no test. r3 found the test for the fix guarded the *function* and not the *call*. **Each round I fixed the thing named and reproduced its shape one level out.**
+
+---
+
+## 9c. WHAT CHANGED IN r3
+
+**(a) `decideGridAction` — the seam decision extracted, and it is not a refactor for tidiness.** Replacing `gridIsDerivedForClass(...)` at the call site with a literal `true` reinstated blocker-5 in full and **left the whole suite green.** The rule now lives in one pure function that a test can call; the seam is dispatch with no judgement of its own.
+
+```ts
+export function decideGridAction(assetClass: string, r: { ok: boolean; reason?: string }): GridAction {
+  if (r.ok) return { action: 'apply' };
+  if (r.reason === 'grid_unknown' && gridIsDerivedForClass(assetClass)) {
+    return { action: 'passthrough', reason: 'unresolved_grid' };
+  }
+  return { action: 'reject', reason: r.reason ?? 'unknown' };
+}
+```
+
+**(b) The assertion I kept against your ruling was satisfied by the IMPORT.** Deleting `await drainArchiveBuffersForShutdown();` left it green — the first occurrence in the stripped text is the destructuring import. **That is `#918`'s own shape inside the test guarding `#918`.** It now requires a call form. **My J5 defence of it was wrong on its own terms.**
+
+**(c) The retry bound was covered by nothing** — `Number.isFinite(RETRY_BUFFER_MAX)` and `> 0`, which survives deleting the shed block and survives `RETRY_BUFFER_MAX = 1e9`. **Strictly weaker than the source-text assertion it replaced.** Now drives the cap: 50,005 in, 50,000 out, the five shed are the oldest.
+
+**(d) `expect(r.representable).toBe(true)` restates `ok`** — `representable: true` is hardcoded on the success return. Removed.
+
+**(e) Every `isOnGrid` negative control was exactly half a tick out.** A reader binary-searched the band: **loosenable ~2,800× with all of them green.** Hundredth-of-a-tick controls added; a 100× loosening now fails.
+
+**(f) The pre-fix passthrough counts are still on disk** under `grid_unresolved_passthrough` inside `preSqeRejects`, and the schema is deliberately not bumped — so the tab would have kept rendering them as rejections indefinitely. **Migrated on reload, not purged: the signals were real, only the bucket was wrong.**
+
+**(g) `_fc2` was a byte-identical copy of `_fClass` fifty-one lines above, in the same function — under a comment claiming to be the ONE derivation.** I wrote the rule and broke it in the same breath. **And a second inline copy of the xStock predicate survived three functions below the extraction, in the same file** — the `B-EPOCH-KEYING-PARITY` shape inside the fix that cites it.
+
+**(h) Smaller, all re-derived:** the envelope declared the new field REQUIRED while both client copies declared it optional *"because a pre-F-G-1 server omits it"*, so one contract disagreed with itself · a dead `?? {}` documenting a protection that was not there · a line citation this batch "fixed" into a **new** wrong value (now cites the symbol, since the number keeps moving) · two mutation comments naming mutations their own block cannot catch · and two false claims about the tolerance band — *"preserves the old behaviour"* (it is 5.6e5× **tighter**) and a cliff at `q≈1e14` that is a continuous slope.
+
+---
+
 ## 10. ⛔ WHAT I WANT ATTACKED
 
-**J5 — the one source-text assertion I kept (§7), against your explicit "cut all eight".** I kept it because it is cross-module and is the only thing that made `#918` real, and hardened it by stripping comments. **You may hold that a carve-out I grant myself from your ruling is worth less than the assertion it preserves.**
+**J5 — ⛔ WITHDRAWN, AND THE WITHDRAWAL IS THE POINT.** I argued in r2 for keeping one source-text assertion against your "cut all eight", on the grounds that it was *"the only thing that made `#918` real"*. **A reader then deleted the call it guards and it stayed green** — it was matching the import line. **It was not doing the job I defended it for, and the defence read as principled while resting on a claim I had never tested.** It now requires a call form and is mutation-proved. ⇒ **The open question is not whether to keep it; it is whether my carve-out reasoning should have been trusted at all, given it survived a round of your review and mine.**
 
 **J6 — `not_representable_after_rounding` is now fenced by a tick no resolver we own can produce (§4).** I claim a real execution of the guard beats an honest note that it is unexercised. **You may hold that a fence whose only input is synthetic is a fence against a hypothetical, and that the honest note was the better artifact.**
 
 **J7 — §9's limits are DECLARED, not FIXED.** Three real execution paths reach a trade without the VPG. I am shipping a batch whose headline is *"one rounding seam"* while three entry points bypass it, on the grounds that widening after five review rounds is how a batch stops converging. **You may hold that a guarantee with three named holes should not ship under that headline.**
 
-**J8 — the pattern, and whether the fix is a rule or a mechanism.** Five blockers, then nine reader findings. **Every control that could not fire in this batch passed a reading and failed a mutation.** I can state the rule — *run the mutation, never read the test* — but I have stated rules before. **Is there a mechanism here, or is this batch simply evidence that my self-review does not work on my own code?**
+**J8 — the pattern, restated a third time, and now with a shape.** Six blockers, then twenty-two reader findings across three rounds. **Every control that could not fire in this batch passed a reading and failed a mutation.** ★ **r3 added the half I had not seen: FENCING A FUNCTION IS NOT FENCING THE CALL — and the answer to that is not another assertion, it is moving the decision somewhere a test can reach.** That is why `decideGridAction` exists.
+⇒ **THE QUESTION FOR YOU, and I do not think I can answer it about myself: the defect did not shrink across three rounds, it MOVED — wrong branch → untested fix → test guarding the wrong thing. Is that convergence, or is it the same error re-expressing itself at each level I have not yet been forced to look at?** The honest reading of the round record is that every round found something the round before it certified.
+
+**J9 — §9's three bypass paths, and whether the batch may ship with them named.** `#927`/`#928`/`#929` are real routes into execution that skip the seam. **You may hold that a batch headlined "one rounding seam" must not close while three entry points bypass it, and that the correct move is to widen rather than to document.**
 
 ---
 
