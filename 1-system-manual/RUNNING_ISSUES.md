@@ -2906,10 +2906,29 @@ The COMMITTED copy carries the five **pre-Phase-14 regime keys** (`BULL_STABLE`/
 
 **ALREADY DONE BY INFRA — DO NOT REDO:** the Step-2 document exists (`B_TOKEN_WATCH_PRE_AUDIT.md`, `6e50ae4e0`) and **it overturned two things in the approved scope**, so the step was not ceremony; his own position block now carries `STEP: N of 11`.
 
-**DISPOSITION — #2, ADD TO AN EXISTING BATCH, both legs:**
+⛔⛔ **LANGSTON RULED 2026-08-28 AT `440a5db92`. FIVE OF MY SIX HOLD; TWO CORRECTIONS, AND THE SECOND IS THE ONE TO SIT WITH. I RE-DERIVED BOTH MYSELF BEFORE FILING THEM.**
+
+**⛔ CORRECTION-1 — MY CLAIM WAS TOO STRONG IN THE DIRECTION THAT MATTERS.** I wrote *"a zero-code batch is never examined at all."* ✅ **VERIFIED AGAINST ME: `anchorClosedBatches(batches)` runs at `poller.mjs:588`, BEFORE `applyCutoff` at `:596`, and `:106` sets `b.lastCode = b.completionAddTime` for any batch with a completion report.** ⇒ a governance-only batch is invisible **UNTIL ITS COMPLETION REPORT FIRST-ADDS, and is then graded on the full doc-set including `pre_audit`.**
+★ **His words, and the reason this matters beyond accuracy: *"Don’t file the absolute version; it’s refutable in one read and it makes the rest look unchecked."*** ✅ **THE ACCURATE CLAIM — and it is the entire finding — is the second clause I already had: INVISIBLE WHILE IT MATTERS, SILENTLY CURABLE AFTERWARDS.**
+
+**⛔⛔ CORRECTION-2 — MY FIX (b) WOULD HAVE GRADED `B-TOKEN-WATCH` GREEN. IT IS SILENT ON THE CASE THAT GENERATED IT.** ✅ **VERIFIED: `B-TOKEN-WATCH` has touched ZERO code files** (memory mirrors, `PHASE_19_PLAN`, `RUNNING_ISSUES`, and its own scope/pre-audit/pre-registration) ⇒ **`firstCode` is null, and by the time code lands the pre-audit’s first-add (`6e50ae4e0`) will PRECEDE it.** ★ **Kyle cured the skip before any code existed, so an order predicate has nothing to catch here.**
+⇒ **(b) SHIPS — it catches the worse downstream form — BUT THE LEDGER MUST NOT SAY IT CLOSES `#754`.** ⚠️ **Implementation condition: `scopeCommitTime` uses `Math.max` for re-open detection; `preAuditAddTime` MUST use `Math.min`, or a later pre-audit revision makes a TIMELY one read LATE.**
+*(Minor, his count against mine: 3 of 10 hooks mention Step-N, not 4 — all provenance comments either way, substance unchanged. And he re-measured the memory files: only Infra’s and CC-A’s carry a step field; CC-B and CC-C do not.)*
+
+**✅ Q1 RULED — ACCEPT (a) ONLY WITH A RECONCILER; THE FIELD ALONE IS STRUCK.** ★ **His reasoning, which answers my own doubt: a numbered field buys ONE thing prose cannot — A SUCCESSOR RELATION, so an omission becomes a GAP rather than a smooth sentence.** ⛔ **But a private field that nothing compares to anything is exactly the model line that was wrong for 17 days inside a file that predicted it would go stale.** ⇒ **THE COMPARISON IS THE MECHANISM; THE NUMBER IS ONLY WHAT MAKES COMPARISON POSSIBLE.** **Reconciler, reusing a shipped primitive: a session at `STEP: N` on batch X must have the documents step N implies present at the ref — `docPresent(batchId,'pre_audit')` already exists at `checker.mjs:112`.**
+
+**✅ Q2 RULED — BOTH IN `#744`, ON ONE CONDITION: ONE IMPLEMENTATION OF THE PREDICATE, NOT TWO.** The predicate is *"code exists for batch X and no pre-audit exists for batch X"*, with two RANGES: a **push-time guard that PREVENTS** (precedent `guard-push-tsc-baseline.mjs`) and the **30-minute checker that DETECTS**. ★ **Splitting them across batches means one ships and the other becomes "later" — which is what §13 exists to stop.** ⚠️ **Two independent copies of the rule WOULD justify splitting (#641 shape); one shared predicate does not.** **Condition: the checker leg lands its `poller.test.mjs` cases in the SAME commit.**
+
+**✅✅ Q3 RULED — NOT IRREDUCIBLE, AND NOT UNOWNED: THE FRONT DOOR ALREADY EXISTS, IT IS SIMPLY UNALARMED.** ★ **The moment work becomes a batch is unmarkable PROSPECTIVELY but perfectly markable at an event already computed every tick: THE FIRST-ADD OF A SCOPE FILE FOR A BATCH-ID THE CHECKER HAS NEVER SEEN (`scopeCommitTime`, `poller.mjs:586`). `B_TOKEN_WATCH_SCOPE.md` WALKED THROUGH THAT DOOR AND NOTHING EMITTED.**
+⚠️ **DESIGN CONSTRAINT, and it is mechanism 1 eating the fix: THE EMIT MUST SIT OUTSIDE `applyCutoff`, or the cutoff swallows it exactly as it swallowed the batch.** ★ **This is the ONLY one of the three that fires at "Step 1 BEGINS."**
+
+**✅ THE COMPOUNDING OBSERVATION — ACCEPTED BY LANGSTON WITH NO DEFENCE, and he is changing his own practice: *"my Step-1 verdicts will name the next gate and its owner in the verdict line, the same way I already home §13 items. Starting now."***
+
+**DISPOSITION — #2, ADD TO AN EXISTING BATCH — THREE CHECKS, ONE PREDICATE, all into `B-GATE-GUARD` (#744), owner CC-A:**
 - **(a) numbered-step position block standardised across all four sessions, prose next-step BANNED there → folds into `B-GATE-GUARD` (#744)** as a third check, owner CC-A. ★ **It is a FORMAT, not a reminder — the property that made edit 7 work.**
 - **(b) add `preAuditAddTime` and compare it against `firstCode`; flag when code precedes the pre-audit → same batch**, since `#744` is already the hook/checker family and **two mechanisms racing one push is worse than one with three checks.**
-⚠️ **NOT CLAIMED: neither leg closes mechanism 3.** Recorded as the open residual rather than papered over.
+- **(c) THE SCOPE-FIRST-ADD EMIT** — fires at "Step 1 begins", **outside `applyCutoff`.**
+⚠️ **NOT CLAIMED, and Langston required this stay explicit: (b) DOES NOT CLOSE `#754`** — it would have graded the originating case green. **Mechanism 3 is closed by (c), not by (a) or (b).**
 
 ⇔ `#744` · `#752` (§9.4’s trigger — same shape) · `MISTAKE_PATTERNS` `skipped-the-gate`.
 
