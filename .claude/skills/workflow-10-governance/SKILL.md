@@ -20,23 +20,7 @@ description: STEP 10 ONLY of the DawnTrader batch workflow - Governance Updates.
 
 > **Note:** `CLAUDE_CODE_PROJECT_INSTRUCTIONS.md` (CCPI) was RETIRED 2026-04-20. Role absorbed by this file + MEMORY.md + BATCH_CATALOG + PHASE_HISTORY. Historical copy preserved at `1-system-manual/_archive/CLAUDE_CODE_PROJECT_INSTRUCTIONS.md` — do not edit, do not cite as live governance.
 
-**Tier 2 — When applicable:**
-- `1-system-manual/MULTI_ASSET_VTS_EXPANSION_PLAN.md` — living plan for B78-B81 stretch (created 2026-05-07). Update BEFORE each batch (sanity-check assumptions) + AFTER (record what landed + deltas vs plan + threshold table populations).
-  - **⏳ TEMPORARY (Kyle directive 2026-06-03 — while xStock calibration is in progress; REMOVE this note when calibration completes):** the bottom of `MULTI_ASSET_VTS_EXPANSION_PLAN.md` carries the **"WORKING LIST — items to reset/recalibrate for the xStock 15-MINUTE BAR switch."** REVIEW + UPDATE that tracker (status ☐/◐/☑, add newly-surfaced items) as part of **every governance batch** during the xStock calibration arc. Stop maintaining it (and delete this note + retire the list) once the calibration is done.
-- `1-system-manual/SYSTEM_MANUAL.md` — architecture + math. Any change to system architecture, strategy logic, regime detection, filter design, signal pipeline, or quantitative math MUST be reflected.
-- `1-system-manual/SYSTEM_IMPACT_MAP.md` — file-level dependency map. Any change adding/removing/modifying a component MUST be reflected. Consulted in Step 2 pre-audit.
-- `1-system-manual/CHANGES_AND_FIXES.md` — bug/risk registry
-- `1-system-manual/POST_AUDIT_ROADMAP.md` — phase-level roadmap updates
-- `1-system-manual/ADJUSTMENT_FRAMEWORK.md` — parameter-adjustment governance changes
-- `1-system-manual/AUTHORITY_BASELINE.md` — constitutional baseline changes
-- `1-system-manual/RUNNING_ISSUES.md` — open issue tracker, update counts
-- `1-system-manual/ASSET_CLASS_ONBOARDING_WORKFLOW.md` — when Phase 24 learnings surface (see §3.3)
-- `1-system-manual/STORAGE_POLICY.md` — **canonical storage & retention policy reference (Kyle directive 2026-07-08).** The single statement of the hot/warm/cold tiers, per-table retention windows, the move-not-delete path + timing, tunable knobs, and the machinery. Update whenever a retention window / tier boundary / capture cadence / storage-machinery item changes (the System Manual + SIM carry the implementation; this file carries the policy).
-- `CLAUDE.md` (this file) — stable workflow/governance/identity changes only, NOT per-batch state
-- `1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md` — **the rule-narration companion. When you ADD or MATERIALLY CHANGE a rule in this file, append its backstory here in the SAME turn** (what happened, the measurement, why the rule is shaped that way). A rule without its origin gets optimised away by the next person who finds it inconvenient.
-- `1-system-manual/BUILD_METHOD_PLAYBOOK.md` — **★ UPDATE WHEN THE *METHOD* CHANGES (Kyle directive 2026-07-24), NOT for project state.** Trigger: a role added/removed, a gate moved, a tool that replaced another, a rule that earned its place, or a failure that taught something generalisable to any project. **NOT a Tier-1 per-batch doc** — a playbook that tracks batch state decays into a stale second copy of the rules. **When you add a rule there, add the incident that produced it in the same edit.** It is DESCRIPTIVE (portable, role-based, for reuse elsewhere); this file stays authoritative for THIS project.
-- `1-system-manual/LANGSTON_ARCHITECTURE.md` — update when the REVIEWER'S BUILD changes (model, runtime, invocation, read path, auth, his files); record what it was BEFORE and why. Not for per-batch review activity.
-- `CC/Langston MEMORY.md` — volatile state every batch
+**Tier 2 — judged every batch, never skipped by default:** ⛔ **THE LIST LIVES IN THE TIER LEDGER BELOW, WHICH IS THE ONLY COPY.** *(The bullets that stood here were deleted 2026-08-28 — they had already diverged from the table in the same file: `#641`.)*
 
 ## ⛔⛔ WHEN YOU REPORT THIS STEP TO KYLE: **NAME THE DOCUMENTS. ALL OF THEM. BY THEIR REAL NAMES.**
 
@@ -113,28 +97,48 @@ When a substantive asset-class-onboarding learning surfaces in ANY batch, fold i
 ⛔ **POST IT WHOLE. EVERY ROW, EVERY BATCH — including the `N/A`s.** ⚠️ **A table with the `N/A` rows deleted defeats it entirely: a short list is exactly what it exists to make visible.**
 ⛔ **VERDICT ONLY — `✅` or `N/A`. NOT what the update was** (Kyle: *"not what the update was, but whether or not it was updated"*). **The substance is in the documents; this is an index.**
 
-```
-GOVERNANCE LEDGER — <batch-id>
-TIER 1 (unconditional)          TIER 2 (judged, every row)
-  BATCH_CATALOG            ✅     SYSTEM_MANUAL              ✅ / N/A
-  PHASE_HISTORY            ✅     SYSTEM_IMPACT_MAP          ✅ / N/A
-  PHASE_19_PLAN            ✅     RUNNING_ISSUES             ✅ / N/A
-  MEMORY (shared + own)    ✅     CHANGES_AND_FIXES          ✅ / N/A
-  the batch SCOPE          ✅     POST_AUDIT_ROADMAP         ✅ / N/A
-  the COMPLETION REPORT    ✅     ADJUSTMENT_FRAMEWORK       ✅ / N/A
-                                  AUTHORITY_BASELINE         ✅ / N/A
-                                  STORAGE_POLICY             ✅ / N/A
-                                  MULTI_ASSET_VTS_PLAN       ✅ / N/A
-                                  ASSET_CLASS_ONBOARDING     ✅ / N/A
-                                  BUILD_METHOD_PLAYBOOK      ✅ / N/A
-                                  LANGSTON_ARCHITECTURE      ✅ / N/A
-                                  CLAUDE.md / CONDUCT.md     ✅ / N/A
-                                  CLAUDE_MD_RULE_HISTORY     ✅ / N/A
-                                  Langston's MEMORY          ✅ / N/A
-```
-**WHEN A TIER-2 ROW APPLIES — the triggers, so applicability is decided from a list and not from memory:** `SYSTEM_MANUAL` = architecture · strategy · regime · filter · signal pipeline · math · `SYSTEM_IMPACT_MAP` = any component added/removed/re-keyed, or cross-cutting state · `RUNNING_ISSUES` = issues opened/closed/annotated · `CHANGES_AND_FIXES` = bug or risk registry · `POST_AUDIT_ROADMAP` = phase-level change · `ADJUSTMENT_FRAMEWORK` = parameter-adjustment governance · `AUTHORITY_BASELINE` = constitutional change · `STORAGE_POLICY` = retention or tiering · `MULTI_ASSET_VTS_PLAN` = B78-B81 stretch · `ASSET_CLASS_ONBOARDING` = Phase-24 learnings (§3.3) · `BUILD_METHOD_PLAYBOOK` = the METHOD changed (a role, a gate, a rule that earned its place) · `LANGSTON_ARCHITECTURE` = the REVIEWER'S BUILD changed · `CLAUDE.md`/`CONDUCT.md` = a stable rule changed, **NOT per-batch state** · `CLAUDE_MD_RULE_HISTORY` = **mandatory in the SAME turn as any `CLAUDE.md` rule change** · Langston's `MEMORY` = §10.b, same turn as your own.
+⛔⛔ **THIS TABLE IS NOW THE *ONLY* DOCUMENT LIST IN THIS SKILL. THE TIER-2 BULLETS ABOVE ARE DELETED, NOT DUPLICATED (Langston, 2026-08-28).**
+★ **His catch, and it is `#641`: the table was a SECOND COPY of the bullet list IN THE SAME FILE, and it had ALREADY DIVERGED AT BIRTH** — `CONDUCT.md` existed only in the table, and the `MULTI_ASSET` row had dropped the bullet’s temporary WORKING-LIST trigger. **Once the table is the deliverable, the bullet list is the copy nobody fills: it rots and the triggers drift.**
 
-⇒ ✅ **THE POSTED TABLE IS THIS STEP'S DELIVERABLE, and it is what the completion report's governance-files-changed list is COPIED FROM.**
+| # | document | WHEN IT APPLIES | verdict | **`why` — REQUIRED ON EVERY `N/A`** |
+|---|---|---|---|---|
+| **T1** | `BATCH_CATALOG.md` | every batch | ✅ | — |
+| **T1** | `PHASE_HISTORY.md` | every batch | ✅ | — |
+| **T1** | `PHASE_19_PLAN.md` | ⏳ **Phase 19 only** — after EVERY batch and sub-batch | ✅ | — |
+| **T1** | shared `MEMORY.md` + your own `MEMORY_CC_<X>.md` | every batch | ✅ | — |
+| **T1** | the batch `SCOPE` | written at Step 1 | ✅ | — |
+| **T1** | the `COMPLETION_REPORT` | written at Step 11 | ✅ | — |
+| **T1** | ★ **Langston’s `/home/langston/MEMORY.md`** | ⛔ **PROMOTED FROM TIER 2 (Langston):** §10.b says *"in the same turn you update your own"* — **unconditional. A verdict cell on a mandatory item lets an `N/A` be written against it.** | ✅ | — |
+| **T2** | `SYSTEM_MANUAL.md` | architecture · strategy logic · regime detection · filter design · signal pipeline · quantitative math | | |
+| **T2** | `SYSTEM_IMPACT_MAP.md` | any component added / removed / re-keyed, or cross-cutting state | | |
+| **T2** | `RUNNING_ISSUES.md` | issues opened, closed or annotated | | |
+| **T2** | `CHANGES_AND_FIXES.md` | bug / risk registry | | |
+| **T2** | `POST_AUDIT_ROADMAP.md` | phase-level roadmap change | | |
+| **T2** | `ADJUSTMENT_FRAMEWORK.md` | parameter-adjustment governance | | |
+| **T2** | `AUTHORITY_BASELINE.md` | constitutional baseline | | |
+| **T2** | `STORAGE_POLICY.md` | hot/warm/cold tiers, per-table retention | | |
+| **T2** | `MULTI_ASSET_VTS_EXPANSION_PLAN.md` | B78-B81 stretch — **update BEFORE (sanity-check assumptions) AND AFTER (what landed, deltas vs plan, threshold-table populations)**. ⏳ **TEMPORARY (Kyle 2026-06-03, while xStock calibration runs): also REVIEW the "WORKING LIST — items to reset/recalibrate for the xStock 15-MINUTE BAR switch" at its foot EVERY governance batch.** | | |
+| **T2** | `ASSET_CLASS_ONBOARDING_WORKFLOW.md` | Phase-24 learnings surface (§3.3) | | |
+| **T2** | `BUILD_METHOD_PLAYBOOK.md` | the **METHOD** changed — a role added/removed, a gate moved, a rule that earned its place. **NOT project state.** | | |
+| **T2** | `LANGSTON_ARCHITECTURE.md` | the **REVIEWER’S BUILD** changed — model, runtime, invocation, read path, auth, his files. **Record what it was BEFORE and why.** | | |
+| **T2** | `CLAUDE.md` / `CONDUCT.md` | a **stable rule** changed. ⛔ **NOT per-batch state.** | | |
+| **T2** | `_archive/CLAUDE_MD_RULE_HISTORY.md` | ⛔ **MANDATORY IN THE SAME TURN as any `CLAUDE.md` rule add or material change** | | |
+
+⛔⛔ **AN `N/A` MUST CITE A FACT ABOUT *THIS BATCH’S DIFF* — THIS IS WHAT MAKES THE COLUMN FALSIFIABLE (Langston, 2026-08-28).**
+★ **His reasoning, and it dissolves the hole I could not close: you cannot tell a thoughtless `N/A` from a judged one by ASKING FOR MORE CARE. You can by requiring it to NAME AN OBJECT.**
+✅ *"N/A — nothing under `server/` changed"* ⇒ **checkable against the diff, by Langston or by Kyle, without the session’s help.**
+⛔ *"N/A — not applicable"* ⇒ **says nothing and is not an answer.**
+⇒ ★★ **THIS CONVERTS A SILENT FALSE NEGATIVE INTO A CHECKABLE FALSE STATEMENT** — which Langston can bounce at Step 4 or Step 11. **Same move as rule 29(a): state the object and the population, or it is not an answer.**
+
+⚠️ **THE `why` COLUMN IS FOR `N/A` ROWS ONLY — AND THAT IS HOW BOTH DIRECTIVES HOLD AT ONCE.** ✅ **Kyle: *"not what the update was, but whether or not it was updated"*** ⇒ **an UPDATED row carries NO explanation; the substance is in the document.** ✅ **Langston: an `N/A` must be falsifiable** ⇒ **a SKIPPED row carries the fact that justifies skipping it.** ★ **They are not in tension: one governs what you did, the other governs what you DIDN’T.**
+
+⇒ ✅ **THE POSTED TABLE IS THIS STEP’S DELIVERABLE.**
+
+⛔⛔ **AND IT GETS A DURABLE HOME — WITHOUT ONE, CAUSE 4 IS NOT CLOSED (Langston, 2026-08-28).** ★ **His catch: if the filled ledger exists ONLY in the session’s own output, then the completion report is transcribed by that same session FROM ITS OWN SCROLLBACK — shorter-range recollection, NOT a different source. Both still come from one head.**
+⇒ **WRITE THE FILLED LEDGER INTO TWO PLACES, BOTH DURABLE:**
+1. **the governance commit message** — so it is pinned to the diff it describes, and Langston or Kyle can compare the two **without the session’s help**;
+2. **the batch’s completion report** (or its progress report, if the batch is parked) — **transcribed from (1), not from memory.**
+★★ **THAT is what makes *"the two artifacts have to agree"* mean anything.**
 
 ⚠️ **IT IS AN EXPRESS EXCEPTION TO `CONDUCT.md` §6's *"two or three sentences, all plain language"* — STATED HERE BECAUSE THE COLLISION WOULD OTHERWISE PRODUCE THE EXACT BEHAVIOUR THIS SECTION EXISTS TO STOP.** A session obeying §6 literally would compress twenty rows to *"updated the usual governance docs"*, which is the habit Kyle is describing. ★ **§6 governs the PROSE; this table is an INDEX, and §3 already requires our documents be called by their real names.** ⇒ **post the table AND the three-part body; the table does not replace them.**
 ⛔⛔ **DO NOT WRITE THAT LIST FROM WHAT YOU REMEMBER DOING.** ★ **That is the second half of the same defect: the report is written by the session, from its own recollection, so the checklist and the report are never compared and a skipped tier is invisible in both.**
