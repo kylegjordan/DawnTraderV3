@@ -5,10 +5,27 @@ A single-process HTTP endpoint that Helius pushes token-creation events to,
 appends one census row per launch, and schedules that launch's observation
 grid. It is the ONLY writer of birth records.
 
-⛔ HOSTED ON HELSINKI, NEVER ON THE TRADING BOX. That is a scope constraint,
-   not a preference, and the fence's diff test cannot enforce it: ~20,700
-   POSTs/day plus an hourly scheduler produce NO DIFF while still contending
-   for CPU, event loop and disk.
+⛔ HOSTED ON STAGING — KYLE OVERRULED THE HELSINKI-ONLY FENCE, 2026-08-28.
+   This header said the opposite until today, so it is corrected rather than
+   annotated. His reason defeated the argument on evidence: four capture-only
+   legs already run on that box (`server/services/passive-archive/`,
+   `crypto-perp-archiver.ts:8-11` says CAPTURE ONLY in its own header), storing
+   everything and trading none of it. "A collector cannot sit on the trading
+   box" was refuted by four collectors that do.
+
+   ★ AND THE SECURITY AXIS RAN THE OTHER WAY FROM MY ARGUMENT: staging already
+     serves :443 publicly behind Caddy with a valid certificate, so this is a
+     NEW PATH ON AN ALREADY-PUBLIC PROXY. Helsinki would have meant opening the
+     FIRST non-SSH port on the box running the reviewer and the crew's comms.
+
+⛔ WHAT THE FENCE'S HOST PROTECTION IS REPLACED BY, because losing it was real:
+   own unprivileged user · own path · NO study data in the trading database
+   (stricter than the precedent, which writes to Supabase) · `MemoryMax=` in
+   the unit — staging has SWAP: 0, so the OOM killer selects on RSS and would
+   take the TRADING process, not this one · a store cap, because the archivers'
+   bytes go to Supabase and OURS LAND ON THE TRADING APP'S DISK. The diff test
+   still cannot enforce any of it, so it is stated in the unit where it is
+   visible in a listing.
 
 ★ WHY A WEBHOOK AND NOT POLLING, measured rather than assumed: the launchpad
   program runs ~500 transactions/second — 43.2M/day, 83% of them failed bot
@@ -49,6 +66,7 @@ from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import budget
+import provenance
 from config import CONTROL_INCLUSION_P, PLATFORM_DEFAULT_SIZE
 from store import ensure_dirs, record_birth
 
@@ -364,13 +382,61 @@ def _note_delivery(received: int, recorded: int) -> None:
 
 
 class Handler(BaseHTTPRequestHandler):
+    def _remote(self) -> str:
+        """The caller, preferring the proxy's forwarded address.
+
+        ⚠️ X-Forwarded-For IS CALLER-CONTROLLED and this does not pretend
+           otherwise — it is recorded for the AUDIT TRAIL, never trusted for a
+           decision. Nothing in this file authorises on it.
+        """
+        fwd = self.headers.get("X-Forwarded-For")
+        if fwd:
+            return fwd.split(",")[0].strip()
+        try:
+            return self.client_address[0]
+        except Exception:
+            return "unknown"
+
     def do_POST(self):  # noqa: N802
+        remote = self._remote()
         length = int(self.headers.get("Content-Length") or 0)
         if length > MAX_BODY:
+            provenance.record_rejected("body_too_large", remote, length)
             self.send_response(413)
             self.end_headers()
             return
+
+        # ⛔⛔ THE AUTH GATE SITS AHEAD OF EVERYTHING, AND AHEAD OF THE BODY
+        #    READ WHERE IT CAN. An unauthenticated caller must not be able to
+        #    reach the parser, the census, or the raw store — the raw store
+        #    especially, because writing an unauthenticated body to disk is
+        #    handing a stranger a write primitive.
+        ok, reason = provenance.authorized(self.headers.get("Authorization"))
+        if not ok:
+            raw = self.rfile.read(min(length, MAX_BODY)) if length else b""
+            provenance.record_rejected(
+                reason, remote, length,
+                hashlib.sha256(raw).hexdigest() if raw else None)
+            # 401 with NO detail. Telling the caller which half was wrong tells
+            # an attacker which half to fix.
+            self.send_response(401)
+            self.end_headers()
+            return
+
         raw = self.rfile.read(length)
+
+        # ★ THE RAW COPY LANDS BEFORE THE PARSE, AND THAT ORDER IS THE POINT.
+        #   Persisting after a successful parse would keep a record of exactly
+        #   the deliveries that already worked, and lose the ones that reveal a
+        #   parser defect — which is the case the store most needs to answer.
+        try:
+            provenance.record_accepted(raw, remote)
+        except OSError:
+            # Never let an audit-write failure drop a census row: the census is
+            # irreversible and the audit is not. Loud, and it continues.
+            LOG.exception("provenance write FAILED — census row proceeds "
+                          "unaudited; this is a degraded state, not a normal one")
+
         try:
             payload = json.loads(raw.decode("utf-8"))
         except Exception:
