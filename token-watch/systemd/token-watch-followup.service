@@ -6,6 +6,8 @@ Type=oneshot
 User=tokenwatch
 Group=tokenwatch
 WorkingDirectory=/opt/token-watch
+Environment=TOKEN_WATCH_ROOT=/var/lib/token-watch
+Environment=PYTHONUNBUFFERED=1
 ExecStart=/usr/bin/python3 /opt/token-watch/follow_up.py
 CPUQuota=40%
 # ⚠️ RETRACTED JUSTIFICATION, KEPT AT 512M ON A DIFFERENT AND NARROWER ONE.
@@ -19,6 +21,7 @@ CPUQuota=40%
 # collector rather than as a limit set too low. 512M is headroom, not a
 # derived figure, and it is labelled as such.
 MemoryMax=512M
+TasksMax=64
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict

@@ -6,9 +6,12 @@ Type=oneshot
 User=tokenwatch
 Group=tokenwatch
 WorkingDirectory=/opt/token-watch
+Environment=TOKEN_WATCH_ROOT=/var/lib/token-watch
+Environment=PYTHONUNBUFFERED=1
 ExecStart=/usr/bin/python3 /opt/token-watch/tier.py
 CPUQuota=25%
 MemoryMax=256M
+TasksMax=64
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict

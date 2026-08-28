@@ -1,10 +1,23 @@
-# token-watch — birth receiver. Helsinki ONLY, never the trading box.
-#
-# The fence's diff test cannot enforce the host: ~20,700 POSTs/day plus an
-# hourly scheduler produce NO DIFF while still contending for CPU, event loop
-# and disk. So the constraint lives here, where it is checkable in a listing.
 [Unit]
-Description=token-watch birth receiver (capture-only observation study; no trading)
+# ═══════════════════════════════════════════════════════════════════════════
+# token-watch — the birth receiver. CAPTURE ONLY: no trading, no wallet, no
+# execution, no order path, and NO WRITE TO THE TRADING DATABASE.
+#
+# ⛔ THE ISOLATION IS STATED HERE BECAUSE NOTHING ELSE CAN ENFORCE IT.
+#    The diff test cannot: ~20,700 POSTs/day plus an hourly sweep produce no
+#    diff at all while still contending for CPU, memory and disk. So the
+#    constraints live in the unit, where they are visible in a listing and
+#    where systemd actually applies them.
+#
+# ★ THIS RUNS ON THE TRADING BOX BY KYLE'S RULING (2026-08-28), overruling the
+#   original Helsinki-only fence. The precedent is real — four passive-archive
+#   legs already capture-and-store here without trading. What that precedent
+#   does NOT cover is (a) the ACCEPT direction (they dial out; this listens)
+#   and (b) the FILESYSTEM: their bytes go to Supabase, ours land on this
+#   disk. MemoryMax and the store cap exist for exactly that gap.
+# ═══════════════════════════════════════════════════════════════════════════
+Description=token-watch birth receiver (capture-only observation study)
+Documentation=file:///opt/token-watch/README.md
 After=network-online.target
 Wants=network-online.target
 
@@ -17,18 +30,53 @@ ExecStart=/usr/bin/python3 /opt/token-watch/receiver.py
 Restart=always
 RestartSec=5
 
-# Resource bound STATED, not assumed. This shares two cores with the Discord
-# bridges and the reviewer; a runaway here degrades the crew's comms.
-CPUQuota=40%
-MemoryMax=256M
+# The shared secret. ⛔ IF THIS FILE IS MISSING THE SERVICE STILL STARTS AND
+# THEN REFUSES EVERY REQUEST — provenance.authorized() fails CLOSED on an
+# absent secret. A misconfigured receiver that accepted everything would
+# silently poison a 90-day census; one that accepts nothing is noticed in
+# minutes. Do not "fix" a 401 storm by removing this line.
+EnvironmentFile=/etc/token-watch/webhook.env
+Environment=TOKEN_WATCH_ROOT=/var/lib/token-watch
+Environment=TOKEN_WATCH_HOST=127.0.0.1
+Environment=TOKEN_WATCH_PORT=8797
+Environment=PYTHONUNBUFFERED=1
 
-# It writes exactly one tree and reads exactly one secret.
-NoNewPrivileges=true
-PrivateTmp=true
+# ⛔ MEMORY: staging has 3,814 MB and SWAP: 0. With no swap the OOM killer is
+#    the only backstop and IT SELECTS ON RSS — so a runaway study process does
+#    not need to touch the trading database to kill the live pipeline; it only
+#    needs to be memory-hungry at the wrong moment. Running as a separate user
+#    does nothing about that. This line does. (Langston, 2026-08-28.)
+MemoryMax=512M
+TasksMax=64
+CPUQuota=50%
+
+# ⛔ LOOPBACK ONLY. The public edge is Caddy -> nginx; this process must never
+#    be reachable directly. TOKEN_WATCH_HOST above is the code-side half; this
+#    is the kernel-side half, so neither alone is load-bearing.
+IPAddressAllow=localhost
+IPAddressDeny=any
+
+# Filesystem: the service may write to its own store and NOTHING else.
 ProtectSystem=strict
 ProtectHome=true
 ReadWritePaths=/var/lib/token-watch
-ReadOnlyPaths=/etc/token-watch
+PrivateTmp=true
+PrivateDevices=true
+NoNewPrivileges=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+UMask=0077
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=token-watch
 
 [Install]
 WantedBy=multi-user.target
