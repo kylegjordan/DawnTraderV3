@@ -288,7 +288,7 @@ The System Manual owns architecture, strategy logic, regime detection, filter de
 | **P4.4** | **One new page** rendering the four panels, plus **the age of the oldest cohort shown on its face** so an empty column reads as young rather than broken. | Kyle's Part-0 request, **F-14** | **1 live-path file** |
 | **P4.5** | **One route declaration and one nav entry.** The URL-only option (**F-5**) is available and **deliberately declined** — a page Kyle has to remember the address of is a page he will not use. | **F-5** | *(the route file, already counted)* |
 
-★ **TOTAL LIVE-PATH FOOTPRINT: three files** — the route table, the nav list, and the page — **plus one new self-contained endpoint file.** **Every one display-only. That is the amendment's test in F-4, and it is checkable in the diff.**
+⛔ **SUPERSEDED — THIS TOTAL WAS WRONG AND IT CONTRADICTED THE TABLE ABOVE IT. SEE `F-15` AND `PART G`: THE ANSWER IS FIVE PATHS, NOT THREE.** *(Left in place rather than silently corrected: this is the line Langston ruled against, and a reviewer must be able to find what he read. **The original text followed:**)* ~~TOTAL LIVE-PATH FOOTPRINT: three files~~ — the route table, the nav list, and the page — **plus one new self-contained endpoint file.** **Every one display-only. That is the amendment's test in F-4, and it is checkable in the diff.**
 
 ## PHASE 5 — GOVERNANCE
 
@@ -457,3 +457,75 @@ His Gate-2 ruling arrived **before** Kyle's withdrawal and carried **Condition A
 ## F-21 — WHAT I OWE, IN ORDER
 
 **BLOCKER-1** five-file set · **BLOCKER-2** the replacement test, legs 1–5, plus the catch-all placement · **BLOCKER-3** delivery leg specified (account, single path, freshness stamp, byte bound) + `P4.0` as a Phase-4 entry condition · **`#921`** rehomed with (a) routed to CC-A unconditionally. **None of it is code. All of it is Step 2 finishing properly.**
+
+
+---
+
+# PART G — THE THREE BLOCKERS DISCHARGED. **THIS IS THE OPERATIVE PLAN FOR PHASE 4; PART B's PHASE-4 TABLE IS SUPERSEDED.**
+
+## G-1 — `P4.0` **MEASURED, NOT REASONED.** PART D's NAMED GAP IS CLOSED.
+
+**Object:** the staging box, `188.245.193.8`. **Measured live 2026-08-28** — the same instrument set that caught F-1's trap, including the D-state check that F-1 taught me to run.
+
+| | measured | reading |
+|---|---|---|
+| CPU | **2 cores, 89.5% idle** | headroom |
+| Load | **0.77 / 0.55 / 0.53 — falling across three samples** | ★ **a real workload, unlike Helsinki's frozen 1.00.** The variance is what says it is genuine |
+| Memory | 3,814 MB total, **2,494 MB available** | headroom |
+| Disk | 75 GB, **37 GB free (50% used)** | ⚠️ **materially tighter than Helsinki's 51 GB** — worth stating even though our footprint is trivial |
+| **D-state processes** | **ZERO** | **the Helsinki failure is not also present here** |
+
+**Demand this leg adds: one file written per day, and one file read per page view.** Against 89.5% idle and 37 GB free, that is negligible — **and it is now negligible by measurement rather than by my say-so, which is the whole point of `P4.0`.**
+
+## G-2 — ⛔ **BLOCKER-3(a): THE DELIVERY LEG. THE EXISTING CREDENTIAL MUST NOT BE USED, AND THE REASON IS STRONGER THAN "IT IS UNRESTRICTED".**
+
+**MEASURED — what the Helsinki→staging path can actually do today.** Three keys authorise the `deploy` account on staging: one unlabelled with **no restrictions**, one labelled `langston-dt-agent@204.168.141.77` with **no restrictions at all — no source restriction, no forced command**, and one labelled `langston@helsinki` carrying **only** a source-address restriction. ⇒ **the existing path is a full shell as `deploy` — the account that owns the entire trading application.**
+
+⚠️ **AND `CLAUDE.md` §8 DESCRIBES THIS AS "IP-RESTRICTED", WHICH IS TRUE AND INCOMPLETE. Source-restricted is not path-restricted**, and reading §8 would leave a session believing the constraint is tighter than it is.
+
+⛔ **§9.5(b-ii) — SEARCHED THE LEDGER BEFORE FILING, AND IT IS ALREADY THERE. `RUNNING_ISSUES` `#110`, homed to Phase 20.4 security**, records exactly this: *"the `deploy@staging` SSH access Langston has is full deploy-user shell. **The intended use is read-only verification (logs / pm2 / curl).** A ForceCommand wrapper in `authorized_keys` would constrain the keypair to a specific allowlist of read commands, closing the residual escalation path."* ⇒ **CROSS-REFERENCE, NOT A NEW FINDING.** I was one step from filing a governed, homed decision as a discovery — the third time this check has paid for itself in this batch.
+
+★★ **AND THE LEDGER GIVES ME A BETTER ARGUMENT THAN THE ONE I HAD.** I was going to reject the existing credential because it is *over-powered*. **The real reason is that its RECORDED INTENT is read-only verification** — so using it to write files onto the trading box would **repurpose a credential away from its governed purpose**, quietly, with no diff and no decision. ⇒ **the objection is not "it can do too much", it is "it was not granted for this."**
+
+### THE DELIVERY SPECIFICATION — every clause a fact about the system, not a promise about behaviour
+
+| # | clause | why this rather than the obvious thing |
+|---|---|---|
+| **1** | **A DEDICATED ACCOUNT ON STAGING, not `deploy`.** | `deploy` owns the application. The study must not hold the application's identity. |
+| **2** | **A DEDICATED KEY carrying a FORCED COMMAND plus the restrictive options**, alongside the existing source-address restriction. **The key cannot open a shell.** | This is `#110`'s own proposed fix, applied to a new credential where it costs nothing and blocks nothing — **rather than waiting on a Phase-20 decision about an existing one.** |
+| **3** | **EXACTLY ONE DESTINATION PATH**, under the study's own directory, **OUTSIDE the application's working tree**. | ⛔ **The `audit.ts` precedent drops files INSIDE the app's working directory. I am deliberately NOT copying it** — that would put an external host's unattended write inside the trading application's runtime tree, which is precisely Langston's *"no diff, and your fence amendment does not reach it."* **The file lives where nothing else looks; the endpoint reads that one absolute path.** |
+| **4** | **The application's account gets READ on that path and nothing else. The study's account gets no access to the application's tree at all.** | The capability is one-way and one-file **by filesystem permission, not by intention.** |
+| **5** | **SIZE BOUND, STATED — ≤64 KB, and here is the derivation** rather than the adjective: four aggregate panels are a few dozen numbers (~4 KB); the oldest-100 table is 100 rows × ~10 fields ≈ 20 KB. **A ≤64 KB ceiling is ~2.5× the expected payload.** A write exceeding it is rejected, not truncated. | ⚠️ **"One small file" was an adjective, and Langston was right to refuse it.** |
+
+## G-3 — ⛔ **BLOCKER-3(b): I CITED THE SILENT-PUSH FAILURE TWICE AND THEN BUILT ONE. THE FRESHNESS STAMP IS NOT OPTIONAL.**
+
+**The indictment is exact and it is mine.** `A1.6` and `A2.2` both invoke `#704` — *"a push drops SILENTLY with no local error"* — as the justification for the coverage control. **Then `P4.2` was a push with no freshness check.** ⇒ **a stale summary served by a perfectly healthy endpoint renders as current data.**
+
+★★ **AND IT COMPOSES WITH `F-14` IN THE DIRECTION THAT HURTS, WHICH IS THE PART I WOULD HAVE MISSED.** F-14 established that the page is **legitimately** near-empty for its first weeks and must say so, or an empty panel reads as broken. **That explanation is exactly the cover story a dead feed needs.** ⇒ *"empty because young"* and *"empty because the push died nine days ago"* **must not look the same on that page.**
+
+| # | requirement |
+|---|---|
+| **1** | **The file carries `computed_at` ON ITS FACE**, written by the collector at computation time — not inferred from the file's timestamp, which the copy itself would refresh. |
+| **2** | ⛔ **THE ENDPOINT COMPARES IT** — a summary older than a stated threshold is served **flagged as stale**. **Not a human noticing the numbers stopped moving.** |
+| **3** | **The page renders the two states DIFFERENTLY and unmistakably**: *"no tokens have reached 30 days yet"* versus *"this data stopped updating N days ago."* |
+| **4** | **A missing file is a THIRD state**, distinct from both — never rendered as zeroes. *(An absent file reading as "zero survivors" is the absent-as-valid trap on the surface Kyle actually looks at.)* |
+
+## G-4 — BLOCKER-1 + BLOCKER-2: THE CORRECTED PHASE-4 PLAN
+
+| # | item | live-path cost |
+|---|---|---|
+| **P4.0** | ⛔ **ENTRY CONDITION — staging measured. DISCHARGED at G-1.** | none |
+| **P4.1** | Summary publisher on Helsinki: computes the four panels once daily, writes one file **with `computed_at`**, **≤64 KB**, holding the exclusive lock as the fourth scheduler (**F-13**). | **none — Helsinki only** |
+| **P4.2** | Delivery per **G-2**: dedicated account, forced-command key, one destination path outside the app tree, read-only for the app. | **none — no file in the app** |
+| **P4.3** | **One new endpoint file** — GET-only, one file read of one absolute path, **serves the staleness verdict alongside the payload** (**G-3**). | **1 new** |
+| **P4.4** | **One new page file** — four panels, the oldest-cohort age on its face (**F-14**), and the three distinct states of **G-3**. | **1 new** |
+| **P4.5** | **The three existing files**: route declaration, nav entry, and the endpoint mount. ⚠️ **The mount goes ABOVE the catch-all** or the endpoint resolves to nothing (**F-16**). | **3 existing, ≤2/≤2/≤4 added lines** |
+
+★ **TOTAL: FIVE live-path paths — `App.tsx`, `sidebar.tsx`, the new page, the new endpoint, `routes.ts`.** **This is the number `F-16` leg 1 enforces, and it is derived from the plan rather than asserted about it.** ⛔ **A sixth path under the client or server tree is a breach, full stop.**
+
+## G-5 — WHAT IS STILL OPEN, STATED SO IT IS NOT MISTAKEN FOR CLOSED
+
+- ⛔ **`#921`(a) — the `CONDUCT.md` line banning whole-filesystem scans — IS NOT MINE TO WRITE AND IS NOT DONE.** That file is over its cap under one-in-one-out and CC-A is mid-rewrite of the rules files. **Routed, not completed.** It is the only part of `#921` that is unconditional, so **its being routed rather than done is the live risk in this batch's tail.**
+- **`#921`(b) — mount removal — is Kyle's**, and blocked on the root-crontab gap Langston's instrument cannot reach.
+- **`#110`** is untouched by this batch. **G-2 works AROUND the existing credential rather than fixing it** — a Phase-20 decision stays a Phase-20 decision.
+- ⚠️ **`CLAUDE.md` §8's "IP-restricted" wording is incomplete** (G-2). **Not corrected here** — that file is the same contended surface as `CONDUCT.md`, and a one-word governance edit made mid-rewrite by a fourth session is the collision rule 25.c exists for. **Raised in the channel with `#110` cited.**
