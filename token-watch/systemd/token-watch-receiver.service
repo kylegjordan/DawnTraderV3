@@ -1,0 +1,34 @@
+# token-watch — birth receiver. Helsinki ONLY, never the trading box.
+#
+# The fence's diff test cannot enforce the host: ~20,700 POSTs/day plus an
+# hourly scheduler produce NO DIFF while still contending for CPU, event loop
+# and disk. So the constraint lives here, where it is checkable in a listing.
+[Unit]
+Description=token-watch birth receiver (capture-only observation study; no trading)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=tokenwatch
+Group=tokenwatch
+WorkingDirectory=/opt/token-watch
+ExecStart=/usr/bin/python3 /opt/token-watch/receiver.py
+Restart=always
+RestartSec=5
+
+# Resource bound STATED, not assumed. This shares two cores with the Discord
+# bridges and the reviewer; a runaway here degrades the crew's comms.
+CPUQuota=40%
+MemoryMax=256M
+
+# It writes exactly one tree and reads exactly one secret.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/token-watch
+ReadOnlyPaths=/etc/token-watch
+
+[Install]
+WantedBy=multi-user.target

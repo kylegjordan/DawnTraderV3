@@ -56,11 +56,23 @@ assert set(DISPLAY_AGES) <= set(GRID_LABELS), "display cannot offer an unobserve
 # SAMPLING — pre-registration §6 + AMENDMENT 1 §A1.3.
 # Census on birth (no sampling, ever). Case-control on follow-up.
 # ─────────────────────────────────────────────────────────────────────────────
+EXPECTED_LAUNCHES_PER_DAY = 20_700    # measured against the chain, scope §5
 CONTROL_SAMPLE_PER_DAY = 500          # fixed random non-carriers, A1.3
 EXPECTED_CARRIER_PREVALENCE = 0.20    # A1.3's published assumption, ~4,140/day
 # ⛔ If MEASURED prevalence exceeds this, the TRAFFIC rises and the trait
 #    definition does NOT narrow. A definition tightened to fit a ceiling is
 #    trimming with the label moved (AMENDMENT 1).
+
+# The per-token inclusion probability for the CONTROL arm, derived from the
+# expected non-carrier population rather than tuned.
+#   20,700/day x (1 - 0.20) = 16,560 non-carriers ; 500 / 16,560 = 0.0302
+# ★ THE REALISED probability is LOGGED DAILY and is what the analysis uses —
+#   inverse-probability weighting is pre-registered NOW rather than discovered
+#   at analysis time (AMENDMENT 1). This constant is the DESIGN target; the
+#   log is the truth, and where they disagree the log wins.
+CONTROL_INCLUSION_P = CONTROL_SAMPLE_PER_DAY / (
+    EXPECTED_LAUNCHES_PER_DAY * (1 - EXPECTED_CARRIER_PREVALENCE)
+)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CREDIT BUDGET — scope §5.1, r3 (the r2 double-count is corrected here).

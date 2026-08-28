@@ -1,0 +1,15 @@
+[Unit]
+Description=token-watch follow-up, hourly
+
+[Timer]
+# On the hour. The grid is FIXED AGES from on-chain creation, so a checkpoint
+# is served by the bucket for its hour — the timer's job is only to arrive
+# once per hour, not to be precise about when within it.
+OnCalendar=hourly
+# Spread away from the top of the hour: the Discord bridges and the backup
+# sync share this box, and a thundering herd on two cores is self-inflicted.
+RandomizedDelaySec=300
+Persistent=true
+
+[Install]
+WantedBy=timers.target

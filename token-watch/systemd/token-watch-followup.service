@@ -1,0 +1,17 @@
+[Unit]
+Description=token-watch follow-up checkpoint sweep (one hour bucket)
+
+[Service]
+Type=oneshot
+User=tokenwatch
+Group=tokenwatch
+WorkingDirectory=/opt/token-watch
+ExecStart=/usr/bin/python3 /opt/token-watch/follow_up.py
+CPUQuota=40%
+MemoryMax=256M
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/token-watch
+ReadOnlyPaths=/etc/token-watch
