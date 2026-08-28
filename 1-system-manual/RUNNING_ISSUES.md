@@ -4406,6 +4406,33 @@ Kraken publishes a per-pair `tick_size` — **1,437 pairs, 11 distinct values, a
 
 **HOME:** own batch, `B-TSC-GUARD-CWD`, **owner CC-B** (holds `#680`, the guard's originating issue and the option-(b) drop check this fires through), placed in `PHASE_19_PLAN.md` beside `B-SSH-KEY-CENSUS` at the Phase-19 tail — it blocks pushes today but has a known, reliable workaround (push from the clone root), so it is not a hotfix. **Cross-ref `#920`** — same class, different tool.
 
+### #925 AMENDED 2026-08-28 (CC-C) — the disposition above is SUPERSEDED by two independent fresh readers
+
+⛔ **DISPOSITION 5 WAS WRONG ON THE FACTS I MYSELF WROTE, AND I AM RECORDING THE CORRECTION RATHER THAN EDITING IT AWAY.** I dismissed this as "the funnel's own pre-existing scope, not something F-G-1 introduced." **F-G-1 DID introduce a new instance of it:** the passthrough branch (`signal-orchestrator.ts`) tests `xstock_spot || xstock_perp`, so `xstock_perp` is explicitly written into the PASS-THROUGH-UNROUNDED arm while the funnel cannot key it. That is not a refusal that goes uncounted — it is **a signal shipping with unrounded prices, counted nowhere at all.** Both readers found it independently, from different directions.
+★ **AND THE SECOND HALF I HAD NOT NOTICED:** `crypto_perp` takes the PUBLISHED branch, and `resolveByInternal` does not index Kraken Futures pairs, so **every perp resolves `grid_unknown` and hard-refuses.** Correct conservative direction — and PERPFEED has just landed 184 of them, so it is stated rather than left to be discovered.
+⇒ **INTERIM, LANDED IN THIS BATCH:** the miss is now LOUD — `[F-G-1][GRID_EVENT_UNCOUNTED]` on stderr naming the class and the reason, so an uncountable grid event announces itself instead of counting nothing quietly.
+⇒ **HOME: `B-FUNNEL-PERP-CLASSES`, owner CC-C, placed in `PHASE_19_PLAN` §1 immediately after the perp active-path wiring item — it must land BEFORE perps trade, not after.** The widening is still not F-G-1's job; what changed is that "cannot happen" is no longer true, only "cannot happen yet."
+
+### #927 OPEN 2026-08-28 (CC-C, surfaced by a fresh-context reader on F-G-1) — THE PROMOTION PATH INVENTS A TARGET PRICE IN THREE PLACES, AND ONE OF THEM IS THE RANKING KEY
+
+`active-execution-engine.ts:2821` reads `signal.targetPrice ? parseFloat(...) : entryPrice * 1.02` — a fabricated 2% target when the stored one is null. The same `entry * 1.02` is re-implemented at `ready_to_buy_service.ts:1788` (inside `rMultipleCore`, which is the **ranking** key) and again at `:1943` (shadow-pool sim). **So the order in which the RTB pool ranks candidates can depend on an invented number**, and the rule has three homes — the `B-EPOCH-KEYING-PARITY` shape.
+⚠️ **A second, sharper defect in the same expression:** these columns arrive from Postgres as **strings**, so a stored `"0"` is **truthy** — the guard passes and `parseFloat("0")` puts a **zero target** into sizing. `:2820` `parseFloat(signal.stopPrice)` yields `NaN` on null with no guard at all.
+⛔ **NOT FOLDED INTO F-G-1.** F-G-1 rounds at signal BIRTH; this is a fabrication at PROMOTION, on a path F-G-1 does not touch, and pulling it in would widen a rounding batch into the ranking key.
+⇒ **HOME: `B-TARGET-FABRICATION`, owner CC-C, placed in `PHASE_19_PLAN` §1 after `F-G-2`.** Scope: one home for the default-target rule, and a string-aware null guard.
+
+### #928 OPEN 2026-08-28 (CC-C, same reader) — AN HTTP PATH REACHES TRADE EXECUTION WITH A PRICE TRIPLE THAT IS NEVER SHAPE-CHECKED
+
+`routes.ts:11176-11182` → `intent-executor.ts:441` takes `intent.signal` **straight from the request body** and calls `processSignal` (`:512` paper, `:487` live), bypassing the signal orchestrator and therefore the VPG seam entirely. Its own guard validates `symbol` and `strategy` only — **while its error string claims "(symbol, strategy, prices)"**, which is the message telling a reader the check is wider than it is. Downstream, `pre-execution-validator.ts:133` uses `Math.abs(entryPrice - stopPrice)`, so **an inverted triple passes silently.**
+⛔ **NOT FOLDED IN, and the reason is honest scope rather than convenience:** F-G-1's guarantee is "prices are on the venue grid **as the orchestrator emits them**", and this path does not go through the orchestrator. Widening the batch to a second executor entry point after four review rounds is how a batch stops converging.
+⚠️ **AND IT MUST BE SAID IN F-G-1's COMPLETION REPORT AS A LIMIT OF THE GUARANTEE**, not left to be discovered by someone who reads "one rounding seam" as "every path".
+⇒ **HOME: `B-INTENT-ENTRY-PARITY`, owner CC-C, placed in `PHASE_19_PLAN` §1 after `B-TARGET-FABRICATION`.** First question for that batch is whether the intent path should exist at all, not how to guard it.
+
+### #929 OPEN 2026-08-28 (CC-C, same reader) — POSITION SIZING HAS TWO ENTRY POINTS AND THE VPG GUARDS ONE
+
+`sizeActivePositionForSignal` has exactly two production callers: `signal-orchestrator.ts` (downstream of the VPG seam) and **`active-execution-engine.ts:4356`**, the fallback-sizing arm reached whenever a promoted signal lacks `quantity`/`estimatedValue`. Nothing on that arm consults the VPG.
+★ **THIS IS THE §9.5(a) CENSUS QUESTION ANSWERED CORRECTLY FOR ONCE — "who else calls this?" rather than "does the path I am tracing work?"** A forward trace from the orchestrator can never discover the second caller.
+⇒ **HOME: folded into `B-INTENT-ENTRY-PARITY` (#928) as its second objective** — both are the same shape (an execution entry point that skips a guarantee the batch advertises), and splitting them would produce two batches auditing the same call graph.
+
 ### #925 OPEN 2026-08-28 (CC-C, same reader) — PERP-CLASS GRID REFUSALS ARE LOGGED BUT NOT COUNTED
 
 `signal-orchestrator.ts:551-552` narrows to `crypto_spot | xstock_spot` before recording, because **`FunnelAssetClass` itself admits only those two.** A `crypto_perp` / `xstock_perp` grid refusal therefore gets a `console.warn` and no funnel row.

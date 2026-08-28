@@ -1,156 +1,178 @@
-# F-G-1 — B-GRID-REPRESENTABILITY — STEP-4 CHANGE LIST
+# F-G-1 — B-GRID-REPRESENTABILITY — STEP-4 CHANGE LIST (r2, after BLOCKER-6)
 
-> **READY AT: `origin/migration/aws-supabase`.** Diff base `98cd011c7` (the commit immediately before the first code commit) → the branch head.
-> **18 files, +1,429 / −5.** Untracked check run: the only `??` entry is `.claude/launch.json`, local config, deliberately not committed. Nothing else is missing from this set.
+> **READY AT: `origin/migration/aws-supabase`.** Diff base `98cd011c7` (the commit before the first code commit) → the branch head.
+> **20 files, +2,202 / −6.** Re-derived at the ref, not restated — the r1 header total reconciled but three per-section counts did not, and you caught all three.
+> **Untracked check run:** the only `??` entry is `.claude/launch.json`, local config, deliberately not committed.
 > ⛔ **ONE GATE: the code diff.** Design rulings and the VPG↔VOG pairing were separate dispatches and are not re-asked here.
+> ☑ **Delivery board: the F-G-1 card now exists** — `Implementation` / Owner `Analyst` / Type `Batch` / Blocked-on `Langston` / Phase 19. You have a `Review` field to set.
 
 ---
 
-## ⚠️ READ THIS FIRST — WHO WROTE THIS CODE
+## 0. WHAT CHANGED SINCE YOUR LAST READ — AND HOW IT WAS FOUND
 
-**Kyle granted me write scope for this batch on 2026-08-28, after I put the counter-argument to him myself: the analyst who scoped and audited a batch also writing it removes a separation he drew deliberately.** He decided with that in front of him.
+**You returned BLOCKER-6 at `9f93ca873`.** A fresh-context reader found the identical defect independently, from the other direction, before your message arrived. Both fixed.
 
-⇒ **YOUR STEP-4 REVIEW IS THE ONLY INDEPENDENT CHECK ON THIS BATCH.** It is not a formality here.
+Then **three more fresh readers** were run — two handed the CLAIM ALONE and told to go find the objects themselves, one handed the committed diff at the ref. They returned **nine further defects, every one real, five of them in code I wrote to fix the earlier four.**
 
-**Three fresh-context readers were run over the finished implementation before this dispatch and found SIX defects, all fixed** (§6). ⛔ **I am not offering that as assurance** — a reviewer clean is not evidence, and the finding below stands or falls on its own citations. **I mention it only so you know what has already been swept, not as a reason to sweep less.**
-
----
-
-## 1. WHAT SHIPPED — TWO NAMED SERVICES
-
-**THE VPG — Venue Price Grid** · `server/core/calculations/venue-price-grid.ts` (NEW, pure, no imports)
-Answers *"is this a price the venue can express, and if not what is the nearest one that is?"*
-**THE VOG — Venue Order Gate** · `server/services/execution/venue-validate.ts` (renamed/documented, pre-existing)
-Asks Kraken *"would you ACCEPT this order?"* — **the VPG runs first and feeds it.**
-
-*(Named at Kyle's instruction: "if it just remains code instead of something we refer to specifically by name, then it is easier to forget that it is there.")*
+⛔ **I am not offering that as assurance, and a reviewer clean is not evidence.** Everything below stands or falls on its own citations. Strike every mention of the readers and the findings must still stand — that is the test I applied before writing this.
 
 ---
 
-## 2. THE SEAM — `signal-orchestrator.ts`, +80
+## 1. YOUR BLOCKER-6, AND ITS TWIN
 
-**MODIFIED.** Inserted in `buildSizedSignalForStrategy`, **after** the funnel denominator and **before** sizing / SQE / target gate.
+**(a) A passthrough was booked as a rejection.** `recordActivePreSqeReject`'s own contract says that bucket holds signals dropped BEFORE the SQE, *"so they are a true subset of `signalsGenerated`"*. A passthrough reaches the SQE and is counted again.
 
 ```ts
-    if (_fClass) recordActiveSignalsGenerated(sizingContext.mode, _fClass, 1);
+// BEFORE
+if (!_r.ok && _r.reason === 'grid_unknown' && _gridIsDerived) { … _gridReject('unresolved_passthrough'); }
 
-    // ⚠️ THE ORDERING HERE IS DELIBERATE AND WAS A DEFECT WHEN I FIRST WROTE IT. This block
-    // sat ABOVE `recordActiveSignalsGenerated`, so a grid-rejected signal was counted as a
-    // pre-SQE DROP without ever being counted as GENERATED — rejects could exceed the
-    // denominator and the Filter Diagnostics funnel would not reconcile.
-    ...
-      const _grid = resolveVenueGrid(rawSignal.symbol, sizingContext.assetClass);
-      const _isCap = strategyId === ('volatility_edge' as StrategyType);
-      const _r = roundTripleToGrid(
-        rawSignal.entryPrice, rawSignal.stopPrice, rawSignal.targetPrice,
-        _grid.tick, { targetIsCap: _isCap, symbol: rawSignal.symbol },
-      );
-      if (!_r.ok) { _gridReject(_r.reason ?? 'unknown'); ...; return null; }
-      if (!validateStopDistance(_r.entryPrice, _r.stopPrice)) {
-        _gridReject('stop_distance_after_rounding'); ...; return null;
-      }
-      rawSignal = { ...rawSignal, entryPrice: _r.entryPrice, stopPrice: _r.stopPrice, targetPrice: _r.targetPrice };
+// AFTER — its own counter, its own row, and a label that says passthrough
+if (_fc2) recordActiveGridPassthrough(sizingContext.mode, _fc2, 'unresolved_grid');
+else      _gridUncountable('unresolved_passthrough');
 ```
 
-**Why one seam:** `strategy-engine.ts` alone computes a stop price at **33 sites**. Rounding at 33 sites guarantees one is missed and a future strategy is born broken.
-**Why P2 is ONE check:** `normalizeAndGateTarget:1662` already re-derives RR, reachability and ordering downstream of this seam. **`MIN_STOP_DISTANCE_BPS` is the only check with no downstream re-run** — `validateStrategySignal:2980` tests ordering, not distance.
+`gridPassthroughs` is additive on the record, merged over blank on reload, and **no `keySchema` bump** — bumping would DISCARD live funnel history for a purely additive key (the `sqeGateRejectsAtRefresh` precedent).
+
+**(b) `stop_distance_after_rounding` on a path where nothing was rounded.** You spotted that `fail()` carries the ORIGINAL prices; the re-check therefore ran on raw floats and attributed an upstream geometry refusal to the venue grid. It now sits inside an `else` and is **unreachable unless `_r.ok`**.
 
 ---
 
-## 3. THE VPG'S RULES — `venue-price-grid.ts`, NEW +207
+## 2. ⛔ THE FIX FOR YOUR BLOCKER-5 HAD NO TEST AT ALL
+
+A reader reverted `_gridIsDerived` to the exact tautology you caught — **the whole suite stayed green.** The single most load-bearing line in that commit was unfenced, and it was a **second copy** of a rule `venue-grid-resolver.ts` already implements.
 
 ```ts
-export function roundPriceForRole(price, tick, role, isLong, targetIsCap = false): number {
-  if (role === 'entry') return snap(price, tick, 'nearest');
-  const awayIsUp = role === 'stop' ? !isLong : isLong;
-  const dir: Dir = (role === 'target' && targetIsCap) ? (awayIsUp ? 'down' : 'up')
-                                                      : (awayIsUp ? 'up' : 'down');
-  return snap(price, tick, dir);
+// venue-grid-resolver.ts — ONE home, and the fence is on the function
+export function gridIsDerivedForClass(assetClass: string): boolean {
+  return assetClass === 'xstock_spot' || assetClass === 'xstock_perp';
 }
 ```
 
-| price | direction | evidence |
+Fenced three ways, each mutation-proved: crypto must be published; both xStock classes derived; **an unrecognised class falls to PUBLISHED** — a new asset class defaulting to "derived" would silently start shipping unrounded prices on the day it is added.
+
+---
+
+## 3. ⛔⛔ THE SELF-CHECK — THE PIECE I CALLED "THE REAL FIX" — COULD REFUSE VALID SIGNALS
+
+`isOnGrid` used an **ABSOLUTE** `1e-9` band on `q = price / tick`. `q` is a **count of ticks** and reaches 1e10.
+
+| | on-grid misses | off-grid FALSE ACCEPTS |
 |---|---|---|
-| entry | NEAREST | an observed print — a point estimate |
-| **stop** | **AWAY** | **nearest moves the stop TOWARD entry on 197 of 398 long crypto trades (49.5%)**, and our stops are structural levels — half would land inside the structure they were placed behind. Cost of away: **+0.241% median extra risk** |
-| target | AWAY | preserves *"at least K × ATR"* |
-| **target, `volatility_edge` ONLY** | **TOWARD** | `Math.min(measuredMove, atrTarget)` is a **CEILING** — away pushes it past the bound it was defined by. **Your catch; the only cap in the set** |
+| absolute `1e-9` — as shipped | **2** | 0 |
+| relative `1e-9` — **my first fix** | 0 | **2** |
+| `max(1,\|q\|) · Number.EPSILON · 8` — shipped | **0** | **0** |
 
-**THE PAIRWISE ASSERTION** — the defect my first fence could not have seen:
+`isOnGrid(68000.5, 0.00001)` returned **false** for an exact multiple. That promotes to `not_representable_after_rounding`, a **REFUSAL** — the guard added to catch a rounding bug would itself have refused valid signals.
+
+⛔ **AND MY FIRST FIX WAS STRICTLY WORSE.** Scaling the same `1e-9` by `q` opens a band of ~6.8 ticks and starts **accepting off-grid prices** — an over-refusal loses a trade; a false accept SHIPS an unplaceable order. **Checking only that on-grid prices pass would have certified it.** The negative control is what caught it, and it is the second time in this batch a one-directional check passed.
+
+---
+
+## 4. AND ITS FENCE COULD NOT FIRE — YOU SAID SO; A READER PROVED IT
+
+`expect(['not_representable_after_rounding', undefined]).toContain(r.reason)` — success returns `undefined`, which is in the array. A reader **deleted the refusal from the module and got 38/38 green.**
+
+★ **Why it was written that way is the part worth recording:** there is no *obvious* input that trips the self-check while the arithmetic is correct. Rather than admit the branch was unexercised, **I widened the assertion until it accepted both outcomes.** That is not a weak test; it is a test-shaped comment.
+
+**A reachable input does exist.** `decimalsOf` clamps at 12 and `snap` closes with `toFixed(that many)`, so a tick needing more than 12 decimals is truncated into an off-grid value:
 
 ```ts
-  const e = snap(entryPrice, t, 'nearest');
-  const s = roundPriceForRole(stopPrice, t, 'stop', true);
-  const g = roundPriceForRole(targetPrice, t, 'target', true, opts.targetIsCap === true);
-  const oneTick = t * (1 - 1e-9);
-  if (!(e - s >= oneTick) || !(g - e >= oneTick)) return fail('degenerate_after_rounding');
+const PATHOLOGICAL_TICK = 1.23456789012345e-7;         // needs 21 decimals
+roundTripleToGrid(1.234567, 1.20, 1.30, PATHOLOGICAL_TICK)  // -> not_representable_after_rounding
+roundTripleToGrid(1.234567, 1.20, 1.30, 0.0001)             // CONTROL: ok
 ```
 
-Tick `0.01`, stop `99.99` (already representable, does not move), entry `99.9949` → rounds to `99.99`. **Risk distance zero.** "Away" is measured from the **ROUNDED** entry.
-
-**REFUSALS, none of which silently compute:** `invalid_triple` · `short_side_unexercised` (refuse-and-raise while unexercised, per your condition) · `unorderable_triple` (the `#915` shape) · `grid_unknown` (**no invented tick**) · `degenerate_after_rounding`.
+**Mutation-proved: deleting the refusal now fails two tests.** ⚠️ Honest scope — no resolver we own can produce such a tick (GCD works at 8dp; Kraken publishes powers of ten). It is a real execution of the guard, not a claim the condition occurs.
 
 ---
 
-## 4. xSTOCK — DERIVED BY GCD · `venue-grid-resolver.ts` +130, `xstock-grid-refresher.ts` +114 (both NEW)
+## 5. A VPG DEFECT WAS BEING FILED AGAINST THE SIGNAL
 
-⛔ **YOUR INVENTED COUNTER-EXAMPLE IS REAL IN OUR DATA.** You killed my decimal-place method with a hypothetical `0.0025` tick. Measured over one day of live xStock prices, 40 symbols with >500 observations: **31 derive `0.0001`, SIX derive `0.0025`, three derive `0.0005`.** The decimal method would have emitted **invalid prices for 9 of 40**.
+`evaluateGridForTagging` mapped **both** `not_representable_after_rounding` and `invalid_triple` to verdict `'unorderable'` — whose own doc says *"not long-shaped and not short-shaped"*, a property of the **signal**. So our arithmetic defect was recorded on both VTS lanes as **bad signal quality, in the exact bucket used to judge signals.** Both now have their own verdict, and `isWiringBug` covers the self-check failure.
 
-**GCD is safe by proof, not hope:** every observed increment is a whole number of true ticks, so their GCD is too ⇒ **a derived grid always NESTS.** Too coarse is possible; unrepresentable is not.
-`gcdOfIncrements` returns **null** when `g <= 1` — a failure to establish a grid, not a `1e-8` tick.
-Refresher: 24h window, **min 50 increments**, 6-hourly. **A failed refresh leaves the cache UNCHANGED** — an empty cache would refuse every xStock signal.
+★ Given §3, this was not hypothetical: the tolerance defect would have systematically booked our own bug as bad xStock signals.
 
 ---
 
-## 5. THE VTS LANES TAG · `vts-runner.ts` +54, `xstock_spot/eval-cycle.ts` +10
+## 6. THE PERP CLASSES — YOUR MINOR, AND IT IS BIGGER THAN A MINOR
 
-Per your ruling: **(a) round and TAG, never drop.** Inserted **per-lane at the normalizer**, not at `callStrategyDetect` — because that dispatcher has **two** production callers and the xStock ACTIVE signal is born in the xStock VTS lane (`eval-cycle.ts:640-642` → `dispatchXstockActiveSignal:1133`).
+You asked for a stated disposition on `crypto_perp` hard-refusing. Both readers found the other half: **`_gridIsDerived` explicitly names `xstock_perp`, but the funnel keys only `crypto_spot | xstock_spot`** — so an `xstock_perp` signal would ship **unrounded and counted nowhere at all.**
 
-**Your explicit verification condition, discharged:** `entryPrice`/`stopLoss`/`takeProfit` are `const`, declared once, never reassigned — the tag block only reads them, so the active dispatch still receives native geometry and is rounded on its own path where the refusal IS counted.
+⚠️ **`#925`'s disposition was mine and it was WRONG on facts I had written myself.** I dismissed it as *"the funnel's pre-existing scope, not something F-G-1 introduced."* F-G-1 introduced a new instance of it. The issue now carries the amendment rather than an edit.
 
-`stop_distance_after_rounding` → **quality** → tag + simulate native. Unresolvable tick → **wiring bug** → tag + simulate, **loud on stderr like `invalid_atr`**. **No drop arm.**
+**Shipped:** `[F-G-1][GRID_EVENT_UNCOUNTED]` on stderr, naming class and reason. **HOME: `B-FUNNEL-PERP-CLASSES`, owner CC-C, `PHASE_19_PLAN` row 3j — placed BEFORE the perp wiring item, which is the one thing about it whose order is load-bearing.**
 
 ---
 
-## 6. THE WRITER · `ohlc-batch-writer.ts` +140, `ticker-batch-writer.ts` +36
+## 7. J4 CARRIED OUT — ALL EIGHT SOURCE-TEXT ASSERTIONS DELETED
 
-Built on **`#705`'s own three constraints**, which that issue already specified and which I argued with you for a round before reading.
+You proved one was lying: `expect(SRC).toContain('createSystemAlert')` passed on the **only** occurrence of that string — a comment reading *"THE JSONL ALERT SYSTEM, NOT `storage.createSystemAlert`"* — and would have stayed green through a full revert to the Postgres store.
+
+**Replaced with behaviour.** The buffer is module-private, so it is read through the only thing that can see it: **what a SECOND flush attempts.**
 
 ```ts
-  if (!isTransientWriteError(err)) {
-    console.error(`... PERMANENT flush failure (${rows.length} rows dropped, NOT retried):`, detail);
-    void alertPermanentWriteFailure('ohlc', assetClass, detail.slice(0, 300), rows.length);
-    return;
-  }
-  const buf = buffers[assetClass];
-  buf.unshift(...rows);          // FRONT — preserves B-NEW-35's temporal last-wins
-  if (buf.length > RETRY_BUFFER_MAX) { ... buf.splice(0, shed); console.error(`... SHED ${shed} oldest ...`); }
+// permanent -> rows are GONE                     // transient -> the same rows come back
+_dbState.throwWith = new Error('column "foo" does not exist');
+bufferOhlcBar('crypto_spot', bar(1)); await stopBatchWriter();
+_dbState.throwWith = null; _dbState.inserted.length = 0;
+await stopBatchWriter();
+expect(_dbState.inserted.flat()).toHaveLength(0);   // (2 for the transient case)
 ```
 
-**Eviction end and re-add end decided TOGETHER, per your rider.** Both are the front. At the cap the retry is failing persistently and shedding oldest is honest — **and it is not silent, which was your objection: the shed is counted and logged.**
+The alert is proved by **spying the alert module**; both drain legs are driven, including one leg rejecting.
 
-⛔ **AND I FIXED THE WRONG WRITER FIRST.** `#705`'s own title records you correcting my sizing: *"I sized the risk on the OHLC writer, where it is recoverable, and the UNRECOVERABLE instance is the ticker writer."* I fixed OHLC and left ticker — **reproducing, in the fix, the mis-sizing you had already corrected once.** The ticker writer now **imports** the policy rather than copying it.
+⛔ **AND THE REPLACEMENT HAD THE SAME DEFECT.** My last-wins test could not fail: the retried rows came back to an **empty** buffer, where `unshift` and `push` are identical. The two differ in exactly one window — when rows are already buffered as the retried ones return, i.e. when a WS update lands mid-flush, which is the case the invariant exists for. The fresh row is now injected **from inside the insert**. `push` now fails it.
 
-**`#918`:** `stopBatchWriter` had zero callers; the live shutdown handler called `stopVTSRunner()` and nothing else. Now wired, in a try/catch. ⚠️ **Measured impact NIL at n=4** — bar-continuity across four restarts showed every restart minute inside its neighbour range. **It ships because it is trivially correct, NOT because it is load-bearing, and it must not become OBJ-9's headline.**
+**One cross-module assertion KEPT and flagged rather than buried:** that `boot_orchestrator` calls the drain. It is the only thing that made `#918` real, and testing it behaviourally would execute the real boot path. **Hardened against your actual objection: comments are stripped before searching.**
 
----
-
-## 7. ⛔ THE JUDGEMENT CALLS I WANT ATTACKED
-
-**J1 — `_sizeKnown`: "no fallback for a PRICE, skip-on-missing for a PRE-FILTER."** My first version rejected the trade when venue size metadata was unresolvable, which would have **blocked live trades on a data gap** — the same drop-arm-on-missing-data defect you refused for the VTS lane, by me, one file over. I caught it pre-commit and drew that line. **Is the line principled, or convenient?**
-
-**J2 — the front-evict / front-re-add pairing (§6).** I claim "not silent" answers your objection. **You may hold that a bound whose eviction end is the retry's own end is wrong regardless of logging.**
-
-**J3 — `#923` disposition.** The trailing exit ratchets stops off-grid by float `Math.max` and contains **zero** VPG references. I put it in **F-G-2** (disposition 2) rather than here, on the grounds that F-G-1 rounds at signal BIRTH and this is an EXIT mutation. **You may hold that shipping a grid guarantee that the trailing logic then breaks is worse than widening this batch.**
-
-**J4 — the fence's reach.** The VPG fence (26) is behavioural. The writer fence is **8 source-text assertions + 4 behavioural**; the source-text half proves wording and one of them broke when I *improved* the classifier. **I think the behavioural four carry it and the text eight are near-worthless. Rule on whether that half should exist at all.**
+**Your riders, all three:** `dedupe_key` added (the per-process latch dies with the process, so every restart re-raised the same permanent fault); `_latchKey` no longer cast `as ArchiveAssetClass` when it is `writer:class`; the ticker import hoisted out of mid-file.
 
 ---
 
-## 8. VERIFICATION RUN
+## 8. THE REST, BRIEFLY
 
-- **tsc: 384 errors, EXACTLY the pre-existing baseline.** The one `signal-orchestrator` error exists at origin at `:1582` and my change only shifts its line — confirmed by stashing and re-running, not by reading.
-- **Fences: 42 green** across three files. **Mutation-proved individually:** pairwise check removed → fails · stop rounds nearest → fails · short branch computes → fails · tick fallback added → fails · `push` instead of `unshift` → fails · bound removed → fails · alert call removed → fails · bare `timeout` match restored → fails.
-- ⚠️ **One control did NOT fire on first writing** — the alert test asserted the function NAME, which survives deleting the call site. Re-anchored inside the permanent-failure block. **Found by running the mutation, not by reading the test.**
+- **The passthrough rendered inside a cell labelled "rejected"**, on reject styling. Its own row now, only when non-zero. Still one row per idea — a card was overkill, a mislabel is not the alternative.
+- **`hasActiveFunnelActivity` omitted the new bucket**, so a passthrough-only class would render "awaiting activation" and hide the number.
+- **The gauge's docstring claimed a number it cannot produce** — it counts per evaluation, not per symbol, so one uncovered symbol re-checked all day inflates it. The defect was in the description. A name is a claim.
+- **The caller census gained `active-execution-engine.ts`** and, per your condition, the non-caller: `trailing-exit-controller.ts — DOES NOT, and that is #923`, carrying your own re-derivation that the ladder is config-locked off.
+- **The subset test could be silenced by a file on disk** — the tracker reloads a checkpoint from `logs/`, and a reader seeded `signalsGenerated: 5000` and made the absolute form pass under a mutation booking passthroughs as rejects. Now measured on deltas.
+- **Four drifted line citations corrected**, including `venue-validate.ts:92` in two headers — that line is a closing brace; the xStock skip is at `:123-126`.
+
+---
+
+## 9. ⛔ THE LIMITS OF WHAT THIS BATCH GUARANTEES — READ THIS BESIDE §1
+
+**F-G-1 guarantees prices are on the venue grid AS THE SIGNAL ORCHESTRATOR EMITS THEM. It does not guarantee that every price reaching execution is on the grid**, and I would rather you have that from me than derive it.
+
+| # | the path that bypasses the seam | home |
+|---|---|---|
+| `#928` | An HTTP intent path takes a triple **straight from the request body** into `processSignal`, validating symbol and strategy only — **while its own error string claims it checks prices**. The downstream distance check uses `Math.abs`, so an inverted triple passes silently | `B-INTENT-ENTRY-PARITY`, row 3h |
+| `#929` | **Position sizing has TWO callers.** The fallback-sizing arm of the promoted-signal path never consults the VPG | folded into `#928` |
+| `#927` | The promotion path **invents** `entry * 1.02` when the stored target is null, in **three** places — one of which is the RTB **ranking** key, so pool ORDER can depend on an invented number. And these columns arrive as **strings**, so a stored `"0"` is **truthy**: the guard passes and a **zero target** reaches sizing | `B-TARGET-FABRICATION`, row 3i |
+| `#923` | The trailing controller ratchets a live stop off-grid | `F-G-2`, row 3c |
+| `#924` | Two live-path sites mutate a gridded price after the VPG | row 3g |
+
+★ **`#929` is the §9.5(a) census question answered correctly for once — *"who ELSE calls this?"* rather than *"does the path I am tracing work?"* A forward trace from the orchestrator structurally cannot find the second caller.**
+
+---
+
+## 10. ⛔ WHAT I WANT ATTACKED
+
+**J5 — the one source-text assertion I kept (§7), against your explicit "cut all eight".** I kept it because it is cross-module and is the only thing that made `#918` real, and hardened it by stripping comments. **You may hold that a carve-out I grant myself from your ruling is worth less than the assertion it preserves.**
+
+**J6 — `not_representable_after_rounding` is now fenced by a tick no resolver we own can produce (§4).** I claim a real execution of the guard beats an honest note that it is unexercised. **You may hold that a fence whose only input is synthetic is a fence against a hypothetical, and that the honest note was the better artifact.**
+
+**J7 — §9's limits are DECLARED, not FIXED.** Three real execution paths reach a trade without the VPG. I am shipping a batch whose headline is *"one rounding seam"* while three entry points bypass it, on the grounds that widening after five review rounds is how a batch stops converging. **You may hold that a guarantee with three named holes should not ship under that headline.**
+
+**J8 — the pattern, and whether the fix is a rule or a mechanism.** Five blockers, then nine reader findings. **Every control that could not fire in this batch passed a reading and failed a mutation.** I can state the rule — *run the mutation, never read the test* — but I have stated rules before. **Is there a mechanism here, or is this batch simply evidence that my self-review does not work on my own code?**
+
+---
+
+## 11. VERIFICATION RUN
+
+- **tsc: 384, EXACTLY the pre-existing baseline.** The one `signal-orchestrator` error exists at origin and my change only shifts its line.
+- **93 unit tests green** across five files (the two F-G-1 fences plus the three funnel/filter-diagnostics suites they touch).
+- **Every fix above mutation-proved individually.** ⚠️ **Three did NOT fire on first writing** — the `isOnGrid` band, the last-wins ordering, and the self-check refusal — and were rewritten until they did.
+- ⚠️ **One earlier mutation harness reported three clean "NOT DETECTED" verdicts from an instrument that had captured no output at all.** Caught by re-running by hand. Recorded because it is the same class as everything else here: **a silent instrument reads exactly like a passing test.**
 - **vite build: succeeds.**
-- ⛔ **NOT VERIFIED: anything at runtime.** Nothing is deployed. No claim here rests on observed behaviour.
+- ⛔ **NOT VERIFIED: anything at runtime. Nothing is deployed. No claim here rests on observed behaviour.**
