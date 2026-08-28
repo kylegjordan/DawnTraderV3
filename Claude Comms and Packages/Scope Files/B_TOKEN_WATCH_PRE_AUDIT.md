@@ -529,3 +529,30 @@ His Gate-2 ruling arrived **before** Kyle's withdrawal and carried **Condition A
 - **`#921`(b) — mount removal — is Kyle's**, and blocked on the root-crontab gap Langston's instrument cannot reach.
 - **`#110`** is untouched by this batch. **G-2 works AROUND the existing credential rather than fixing it** — a Phase-20 decision stays a Phase-20 decision.
 - ⚠️ **`CLAUDE.md` §8's "IP-restricted" wording is incomplete** (G-2). **Not corrected here** — that file is the same contended surface as `CONDUCT.md`, and a one-word governance edit made mid-rewrite by a fourth session is the collision rule 25.c exists for. **Raised in the channel with `#110` cited.**
+
+
+---
+
+# PART H — PHASE-3 DEPLOYMENT ITEMS, NAMED NOW RATHER THAN DISCOVERED ON SWITCH-ON DAY
+
+> **Langston's Step-4 instruction, and the reasoning is his:** a gap named at design time is a task; the same gap found on the day the collector is supposed to start is an outage with an audience.
+
+## H-1 — ⛔ AS SHIPPED, THE RECEIVER CANNOT RECEIVE
+
+**Confirmed at the object:** `receiver.py` binds `127.0.0.1` by default, and **no unit in `token-watch/systemd/` configures a reverse proxy, a TLS terminator, or any authentication.** The provider's webhook is an inbound call from the public internet; the loopback interface is not reachable from there. **The collector would start cleanly, log that it is listening, and record nothing** — and its own `received=0` warning would not fire either, because no delivery would ever arrive to be counted.
+
+★ **THE BINDING IS CORRECT AND THE DEPLOYMENT IS ABSENT.** Binding to loopback is the right default for a process with no authentication in front of it; what is missing is the thing that belongs in front of it. **Not a code defect — a deployment item, which is exactly why it needs a name before Phase 3 rather than a discovery during it.**
+
+**REQUIRED BEFORE THE COLLECTOR IS SWITCHED ON:**
+1. **A reverse proxy terminating TLS**, forwarding only the webhook path to `127.0.0.1`. The host already runs the crew's bridges; this must not disturb them.
+2. **AUTHENTICATION ON THE WEBHOOK PATH** — a shared secret the provider sends and the receiver verifies. ⛔ **Without it the endpoint accepts a launch record from anyone who finds the URL**, and the census is the one artefact in this study that cannot be repaired after the fact: a poisoned birth record is indistinguishable from a real one, and §4 makes the loss irreversible by design.
+3. **The firewall opened for exactly that port**, and nothing else.
+4. ⚠️ **A POSITIVE CONTROL BEFORE THE REAL FEED IS POINTED AT IT** — one synthetic creation delivered end-to-end from outside the host, and its row read back out of the census. **"The service is running" is not evidence that it can receive**, and this whole batch is a catalogue of that distinction.
+
+## H-2 — THE STAGING BOX IS STILL UNMEASURED (`P4.0`, carried forward)
+
+Recorded in `PART D` as a gap and promoted to a Phase-4 entry condition in `PART G`. **It has not been discharged**, because Phase 4 has not begun. Restated here so it is visible from the deployment list rather than only from the audit that created it.
+
+## H-3 — THE COVERAGE CONTROL IS STILL NOT BUILT
+
+`providers.chain_creations()` raises by design and **no timer ships for it**. ⛔ **This is the item that makes H-1's positive control matter more than it looks:** until the coverage control exists, a receiver that silently stops receiving has **no independent detector at all** — the only signal is the `received`/`recorded` pair, which cannot fire if nothing arrives.
