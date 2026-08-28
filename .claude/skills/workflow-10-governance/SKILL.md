@@ -107,35 +107,36 @@ When a substantive asset-class-onboarding learning surfaces in ANY batch, fold i
 ★★ **THE STRUCTURAL CAUSE, NAMED — THE NAMING RULE ABOVE FIRES AT *REPORT* TIME, AND THE FAILURE HAPPENS AT *WORK* TIME.** Its heading is *"WHEN YOU REPORT THIS STEP TO KYLE"*. ⇒ **a session that updated two documents and names both has FULLY COMPLIED with it.** ⛔ **It catches under-REPORTING. It cannot catch under-UPDATING, which is the actual habit.**
 ★★ **AND TIER 2 HAD NO SLOT.** *"Apply the judgement OUT LOUD and write it down"* is a **discipline**, not a **format** — so it degrades into a paragraph nobody writes. ✅ **Contrast the §9.4 disposition line, which works for exactly one reason: IT IS A SLOT YOU CANNOT LEAVE BLANK.** ⇒ **the same fix, applied here.**
 
-⛔ **FILL THIS IN. EVERY ROW. A BLANK CELL IS THE FAILURE — not the batch being small.**
+⛔⛔ **AND IT GOES IN THE REPORT KYLE RECEIVES — IT IS NOT A PRIVATE WORKING NOTE (Kyle directive 2026-08-28).** ★ **His reason, and it is the design: *"if there are only two updates, then I know something is probably wrong and can call it out."*** ⇒ **the table is FOR SCANNING. He reads the SHAPE of the column, not the entries.**
+★★ **AND THE SECOND HALF OF HIS REASON IS THE REAL ONE: *"it gets them in the habit of looking at every file in our tiered governance system — and sometimes just looking at something reminds you that you need to do something."*** ⇒ **the table's job is to put all 20 names in front of you. The verdict column is the by-product; the ENUMERATION is the point.**
 
-| document | verdict | one line |
-|---|---|---|
-| **TIER 1 — UNCONDITIONAL, no verdict column, these are always UPDATED** | | |
-| `BATCH_CATALOG.md` | ✅ updated | |
-| `PHASE_HISTORY.md` | ✅ updated | |
-| `PHASE_19_PLAN.md` *(Phase 19 only)* | ✅ updated | |
-| shared `MEMORY.md` + your own `MEMORY_CC_<X>.md` | ✅ updated | |
-| the batch `SCOPE` | ✅ exists from Step 1 | |
-| the `COMPLETION_REPORT` | ✅ Step 11 | |
-| **TIER 2 — EVERY ROW GETS A VERDICT: `UPDATED` or `N/A` + WHY** | | |
-| `SYSTEM_MANUAL.md` | | architecture · strategy · regime · filter · signal pipeline · math |
-| `SYSTEM_IMPACT_MAP.md` | | any component added / removed / re-keyed, or cross-cutting state |
-| `RUNNING_ISSUES.md` | | issues opened, closed or annotated |
-| `CHANGES_AND_FIXES.md` | | bug / risk registry |
-| `POST_AUDIT_ROADMAP.md` | | phase-level change |
-| `ADJUSTMENT_FRAMEWORK.md` | | parameter-adjustment governance |
-| `AUTHORITY_BASELINE.md` | | constitutional change |
-| `STORAGE_POLICY.md` | | retention / tiering |
-| `MULTI_ASSET_VTS_EXPANSION_PLAN.md` | | B78-B81 stretch |
-| `ASSET_CLASS_ONBOARDING_WORKFLOW.md` | | Phase-24 learnings (§3.3) |
-| `BUILD_METHOD_PLAYBOOK.md` | | the METHOD changed — a role, a gate, a rule that earned its place |
-| `LANGSTON_ARCHITECTURE.md` | | the REVIEWER'S BUILD changed |
-| `CLAUDE.md` / `CONDUCT.md` | | a stable rule changed — **NOT per-batch state** |
-| `_archive/CLAUDE_MD_RULE_HISTORY.md` | | **mandatory in the SAME turn as any `CLAUDE.md` rule change** |
-| Langston's `MEMORY.md` | | §10.b — same turn as your own |
+⛔ **POST IT WHOLE. EVERY ROW, EVERY BATCH — including the `N/A`s.** ⚠️ **A table with the `N/A` rows deleted defeats it entirely: a short list is exactly what it exists to make visible.**
+⛔ **VERDICT ONLY — `✅` or `N/A`. NOT what the update was** (Kyle: *"not what the update was, but whether or not it was updated"*). **The substance is in the documents; this is an index.**
 
-⇒ ✅ **THE FILLED TABLE IS THIS STEP'S DELIVERABLE, and it is what the completion report's governance-files-changed list is COPIED FROM.**
+```
+GOVERNANCE LEDGER — <batch-id>
+TIER 1 (unconditional)          TIER 2 (judged, every row)
+  BATCH_CATALOG            ✅     SYSTEM_MANUAL              ✅ / N/A
+  PHASE_HISTORY            ✅     SYSTEM_IMPACT_MAP          ✅ / N/A
+  PHASE_19_PLAN            ✅     RUNNING_ISSUES             ✅ / N/A
+  MEMORY (shared + own)    ✅     CHANGES_AND_FIXES          ✅ / N/A
+  the batch SCOPE          ✅     POST_AUDIT_ROADMAP         ✅ / N/A
+  the COMPLETION REPORT    ✅     ADJUSTMENT_FRAMEWORK       ✅ / N/A
+                                  AUTHORITY_BASELINE         ✅ / N/A
+                                  STORAGE_POLICY             ✅ / N/A
+                                  MULTI_ASSET_VTS_PLAN       ✅ / N/A
+                                  ASSET_CLASS_ONBOARDING     ✅ / N/A
+                                  BUILD_METHOD_PLAYBOOK      ✅ / N/A
+                                  LANGSTON_ARCHITECTURE      ✅ / N/A
+                                  CLAUDE.md / CONDUCT.md     ✅ / N/A
+                                  CLAUDE_MD_RULE_HISTORY     ✅ / N/A
+                                  Langston's MEMORY          ✅ / N/A
+```
+**WHEN A TIER-2 ROW APPLIES — the triggers, so applicability is decided from a list and not from memory:** `SYSTEM_MANUAL` = architecture · strategy · regime · filter · signal pipeline · math · `SYSTEM_IMPACT_MAP` = any component added/removed/re-keyed, or cross-cutting state · `RUNNING_ISSUES` = issues opened/closed/annotated · `CHANGES_AND_FIXES` = bug or risk registry · `POST_AUDIT_ROADMAP` = phase-level change · `ADJUSTMENT_FRAMEWORK` = parameter-adjustment governance · `AUTHORITY_BASELINE` = constitutional change · `STORAGE_POLICY` = retention or tiering · `MULTI_ASSET_VTS_PLAN` = B78-B81 stretch · `ASSET_CLASS_ONBOARDING` = Phase-24 learnings (§3.3) · `BUILD_METHOD_PLAYBOOK` = the METHOD changed (a role, a gate, a rule that earned its place) · `LANGSTON_ARCHITECTURE` = the REVIEWER'S BUILD changed · `CLAUDE.md`/`CONDUCT.md` = a stable rule changed, **NOT per-batch state** · `CLAUDE_MD_RULE_HISTORY` = **mandatory in the SAME turn as any `CLAUDE.md` rule change** · Langston's `MEMORY` = §10.b, same turn as your own.
+
+⇒ ✅ **THE POSTED TABLE IS THIS STEP'S DELIVERABLE, and it is what the completion report's governance-files-changed list is COPIED FROM.**
+
+⚠️ **IT IS AN EXPRESS EXCEPTION TO `CONDUCT.md` §6's *"two or three sentences, all plain language"* — STATED HERE BECAUSE THE COLLISION WOULD OTHERWISE PRODUCE THE EXACT BEHAVIOUR THIS SECTION EXISTS TO STOP.** A session obeying §6 literally would compress twenty rows to *"updated the usual governance docs"*, which is the habit Kyle is describing. ★ **§6 governs the PROSE; this table is an INDEX, and §3 already requires our documents be called by their real names.** ⇒ **post the table AND the three-part body; the table does not replace them.**
 ⛔⛔ **DO NOT WRITE THAT LIST FROM WHAT YOU REMEMBER DOING.** ★ **That is the second half of the same defect: the report is written by the session, from its own recollection, so the checklist and the report are never compared and a skipped tier is invisible in both.**
 ⚠️ **`N/A` IS A REAL ANSWER AND IS OFTEN CORRECT — a display-only change is SIM-scope, not System-Manual-scope.** ⛔ **But it is an ANSWER, so it is written down. Silence is not `N/A`.**
 ⚠️ **HONEST LIMIT: nothing enforces this table.** The governance checker grades the doc-set at close against the declared change-class, but **its `DOCS` table has no `CLAUDE.md` / `CONDUCT.md` entry, and per `#754` it cannot see a batch at all until the completion report first-adds.** ⇒ **this is a format that makes the omission VISIBLE, not a gate that prevents it.**
