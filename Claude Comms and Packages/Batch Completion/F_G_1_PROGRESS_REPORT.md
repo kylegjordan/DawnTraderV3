@@ -274,6 +274,22 @@ active_open_positions e74a9a7c  WEN/USD  qty 19.44708601  opened 16:25:28.380Z
 ⚠️ **Rule 29(b), and Langston named the precedent as my own `#704`: the control must match the thing whose absence it licenses.** A boundary justified by a diff needs a row, not a diff.
 
 ---
+### 3h. ➕ READ-TIME OBLIGATIONS — CLASS COMPOSITION, AND SAYING **n** OUT LOUD (Langston-directed; **APPENDED, NOT EDITED; POST-DATA ON THE xSTOCK LEG**)
+
+⛔⛔ **THIS CANNOT LOOSEN THE CRITERION, AND THE REASON IS SPELLED OUT RATHER THAN LEFT ON TRUST — because a POST-DATA append to a pre-registered artifact must justify its own harmlessness.** §3's bar is **100% of entry/stop/target on the published grid, for crypto opens, no tolerance.** Everything below concerns **CO-DENOMINATORS and POPULATION LABELLING** — the context a result is read in. ★ **A class breakdown on a co-denominator cannot move a pass/fail bar that is denominated in on-grid legs of opened positions. Nothing here adds an exemption, widens a tolerance, or excuses a single off-grid leg.**
+
+**(1) THE CLASS SPLIT IS MANDATORY AT READ TIME, and it exists because a sentence I wrote three times is false.** I reported *“ZERO crypto refusals.”* **`USDC/CAD` is `asset_class = crypto_spot`**, so by our own label crypto refusals are **not** zero. ⇒ **every refusal figure is reported split: (a) volatile crypto assets, (b) stablecoin-vs-fiat (`USDC/*`, `USDT/*`), (c) pure fiat-fiat.** ⚠️ **“crypto refusals = 0” is not a sentence this batch may print again without the split behind it.**
+
+**(2) ⛔ PIN THE CLASS COMPOSITION — THE POPULATION CAN CHANGE UNDER THE WINDOW (Langston, and I had not seen it).** Sets **A** (stablecoin-leg, 20 closes) and **B** (fiat-fiat, 13) are labelled `crypto_spot`, **so they are INSIDE this criterion's population.** ★ **`#937` may remove them from the tradeable universe MID-WINDOW** — which would **silently swap the composition of “the first 30 crypto positions”** between the day the criterion was written and the day it is read. ⇒ ⛔ **RECORD THE PER-CLASS COMPOSITION OF THE WINDOW AT READ TIME, and state whether any universe change landed inside it.** A criterion whose population was redefined during the observation is not the criterion that was pre-registered.
+
+**(3) ⛔ SAY `n` OUT LOUD, AND SAY WHICH ARM FIRED.** At 22:14Z: **9h since the last crypto open, capital 97.6% deployed across 5 xStock positions** ⇒ **the 7-day arm is likely to fire before the 30-open arm.** ★ **“100%, no tolerance” ON n=3 IS A MUCH WEAKER STATEMENT THAN ON n=30, AND MUST NOT BE READ AS THE STRONG ONE.** ⇒ the result prints **`PASS (n=…)`** or **`UNDERPOWERED (n=…)`**, never a bare PASS — per leg, per §3f RIDER-1.
+
+**(4) ➕ MY OWN INSTRUMENT CORRECTION, found chasing a counter that went DOWN by one.** §3a's co-denominators come from `/api/vts/filter-diagnostics`, whose `vtsEvaluation` is **`getVTSEvalRolling24h()`** (`vts-runner.ts:282`) — it **prunes to a trailing 24h and aggregates**, so it **CAN decrease** and is **NOT cumulative-since-start.**
+⛔⛔ **AND ITS HISTORY IS AN IN-MEMORY ARRAY THAT RESETS ON RESTART, SO THE WINDOW IS 24h NOMINAL BUT BOUNDED BELOW BY PROCESS UPTIME.** At 22:14Z the process had been up since **19:11Z** ⇒ **`gridEvaluated: 943` is ≈943 in THREE HOURS, not in 24.** ★ **A reader taking it as a 24-hour figure understates the rate by ~8×.** ⇒ ⛔ **every co-denominator read states BOTH the nominal window AND the process start, and takes the SMALLER as its true reach.**
+
+**AUTHORITY:** Langston, on the `USDC/CAD` correction — *“the wording is the small part; your instrument is the finding.”* Items (1)–(3) are his; (4) is mine. ⚠️ **§3 and §3a are BYTE-UNTOUCHED; this is an addendum below them, and it is POST-DATA on the xStock leg** — which is exactly why its non-loosening is argued above rather than asserted.
+
+---
 ## 4. WHAT IS UNPROVEN, AND WHAT WOULD FALSIFY IT
 
 - ⛔ **THE HEADLINE IS NOT "ONE ROUNDING SEAM".** It is **"one seam on the signal-birth path; three entry points bypass it, named"** — `#928` an HTTP intent path taking a triple straight from the request body, `#929` a second position-sizing caller, `#927` a fabricated `entry * 1.02` target in three places, one of them the RTB **ranking** key. All homed with owners and plan positions. **Langston approved the batch shipping with them named; he did not approve it shipping under the old headline.**
