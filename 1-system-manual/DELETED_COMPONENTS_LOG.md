@@ -6,6 +6,19 @@
 
 ---
 
+## `guard-whole-fs-scan.mjs` + its two test files — DELETED 2026-08-28 (Langston ruling; lived 4 hours)
+
+**WHAT:** a PreToolUse hook meant to block whole-filesystem scans, because a wedged Google Drive mount on Helsinki makes them hang unkillably. Shipped 2026-08-28 under `#755`, rewritten three times, deleted the same day.
+
+⛔⛔ **WHY IT WAS DELETED — Langston's three reasons, in his order of weight:**
+1. **IT BOUND NO ACTOR AT THE HAZARD.** The mount is on Helsinki; a CC session reaches it only over ssh; **Langston, who runs ON that box, does not load this repo's settings.** ★ **The enforcement point and the blast radius do not intersect.** ⇒ *"That isn't partial coverage, it's ZERO COVERAGE WEARING A LABEL — and a label is worse than nothing, because it stops the next reader looking."*
+2. ★★ **SHELL IS NOT A REGULAR LANGUAGE, SO THE INSTRUMENT CANNOT CONVERGE.** `$( )`, aliases, `bash -c`, `xargs`, heredocs, variable expansion. **Every tightening traded a false negative for a false positive.** ⇒ *"That's not three bugs, it's ONE PROPERTY OF THE INSTRUMENT, observed three times. v3→v4→v5 pulling against each other is the DIAGNOSIS, not a sign you were close."*
+3. ⛔ **THE RESIDUAL WAS DISQUALIFYING ON ITS OWN.** It blocked prose describing itself — **proven live, when the command adding the comment documenting that limitation was refused by the running hook.** ⇒ *"A control that cannot be DESCRIBED IN THE PRESENCE OF ITSELF cannot be audited by anyone, including its author."*
+
+**BLAST RADIUS:** zero. Three files removed (`→` git history), one `PreToolUse` entry unwired from `.claude/settings.local.json`; the other three guards untouched and verified still wired. **No state was written by it and no reader depended on it** — it only ever exited 0 or 2.
+**THE RULE SURVIVES, HONESTLY LABELLED:** `CONDUCT.md` §11 now says *"THIS IS A RULE, NOT A GUARD — nothing checks this."*
+**RESTORE PATH:** `git log --diff-filter=D -- .claude/hooks/guard-whole-fs-scan.mjs`. ⛔ **Do not restore it. The replacement is `B-GDRIVE-UNMOUNT` — removing the hazard, not matching commands against it.**
+
 ## 2026-08-21 — B-BALANCE-TRUTH Step E (#618): two orphaned metric helpers in `active-portfolio-manager.ts`
 
 **What:** `private calculateSharpeRatio(trades)` and `private calculateProfitFactor(trades)` deleted from `server/services/active-portfolio-manager.ts`. Archived to `1-system-manual/_archive/deleted-code/active-portfolio-manager-metric-helpers-2026-08-21.ts.removed`.

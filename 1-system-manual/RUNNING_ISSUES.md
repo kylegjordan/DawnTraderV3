@@ -2882,6 +2882,21 @@ The COMMITTED copy carries the five **pre-Phase-14 regime keys** (`BULL_STABLE`/
 
 ---
 
+### #757 OPEN 2026-08-28 (Langston ruling on `#756`; the replacement for a control that could not work) — ★★ **REMOVE THE HAZARD INSTEAD OF MATCHING COMMANDS AGAINST IT. `/mnt/gdrive` WAS RETIRED FIVE WEEKS AGO AND IS STILL MOUNTED.**
+
+★ **His framing, and it is the whole ruling:** *"Unmount + disable the unit and `find /` stops hanging for every actor, on every box, with no matcher. **That is a mechanism; a regex over free-form shell is a habit.**"*
+
+**MEASURED BY LANGSTON FROM INSIDE THE BOX (I could not see this):** `gdrive: on /mnt/gdrive type fuse.rclone`, **`rclone-gdrive.service` active/running.** Kyle retired the mount **2026-07-23**; it has been up five weeks past its retirement.
+**CENSUS OF LIVE READERS, within the directories he can read** (`/opt/discord-bridges`, `/home/langston`, `/usr/local/bin`, `/etc/cron.d`, `/opt/langston-memory`, his crontab): **exactly ONE hit — `discord-langston-bridge.py:167`, which is the RETIREMENT BANNER TEXT inside his own prompt.** No reader, no cron, no open handle.
+⚠️ **HE STATED HIS OWN REACH LIMIT RATHER THAN CLAIMING AN ABSENCE: *"I'm `langston`, not root — that is a BOUNDED census, not a global absence (#453)."*** ⇒ ⛔ **A ROOT-SIDE READER AND OPEN-HANDLE CENSUS IS REQUIRED BEFORE THE UNMOUNT.** *(I reached the same one-hit result and had read it as "no live exposure"; his version names the population and mine did not.)*
+
+**HOME: `B-GDRIVE-UNMOUNT` — OWNER **Infra Claude** (root is required and no other session has it); **CC-A files it**; placed in `PHASE_19_PLAN.md` §governance queue **after `B-CROSS-SESSION-BLEED`**, since both are infrastructure-hygiene items and that one is already next.
+⚠️ **ONE CORRECTION TO THE HAND-OFF, AND IT IS THE SAME ONE I MADE TO HIM ON `#755` THIS MORNING: he wrote *"due 2026-09-04."* §9.4 (Kyle, 2026-08-25) STRUCK DATES ON BATCHES — a home is a NAME and a PLACE.** ★ **The date is dropped and replaced with the placement above.** *(Recorded because he accepted the identical correction eight hours ago; the form is not yet automatic for either of us.)*
+
+**THE INTERVAL IS COVERED BY A RULE, NOT A CONTROL, AND IT SAYS SO:** `CONDUCT.md` §11 plus Langston's own §18/§9. ⛔ **Honestly labelled as a rule — not as coverage.**
+
+⇔ `#755` (the guard, shipped) · `#756` (the guard, killed) · `DELETED_COMPONENTS_LOG.md`.
+
 ### #756 OPEN 2026-08-28 (CC-A, from a fresh-reviewer pass Kyle ordered on everything Langston had not seen) — ★★ **TWO OF THE THREE THINGS I REPORTED TODAY WERE WRONG, AND ONE WAS INVERTED: THE GUARD BLOCKED THE SAFE CASE AND ALLOWED THE DANGEROUS ONE.**
 
 ⛔⛔ **`#755`'s GUARD (v1-v3) WATCHED THE WRONG MACHINE.** The wedged mount is on **Helsinki**. A CC session cannot reach it locally — **only by sending a command over ssh.** I built a PreToolUse guard matching the command **as typed on the laptop**. Measured, by me, after the reviewer named it:
