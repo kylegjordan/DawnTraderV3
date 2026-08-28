@@ -2924,11 +2924,20 @@ The COMMITTED copy carries the five **pre-Phase-14 regime keys** (`BULL_STABLE`/
 
 **✅ THE COMPOUNDING OBSERVATION — ACCEPTED BY LANGSTON WITH NO DEFENCE, and he is changing his own practice: *"my Step-1 verdicts will name the next gate and its owner in the verdict line, the same way I already home §13 items. Starting now."***
 
-**DISPOSITION — #2, ADD TO AN EXISTING BATCH — THREE CHECKS, ONE PREDICATE, all into `B-GATE-GUARD` (#744), owner CC-A:**
-- **(a) numbered-step position block standardised across all four sessions, prose next-step BANNED there → folds into `B-GATE-GUARD` (#744)** as a third check, owner CC-A. ★ **It is a FORMAT, not a reminder — the property that made edit 7 work.**
-- **(b) add `preAuditAddTime` and compare it against `firstCode`; flag when code precedes the pre-audit → same batch**, since `#744` is already the hook/checker family and **two mechanisms racing one push is worse than one with three checks.**
-- **(c) THE SCOPE-FIRST-ADD EMIT** — fires at "Step 1 begins", **outside `applyCutoff`.**
-⚠️ **NOT CLAIMED, and Langston required this stay explicit: (b) DOES NOT CLOSE `#754`** — it would have graded the originating case green. **Mechanism 3 is closed by (c), not by (a) or (b).**
+⛔⛔ **DISPOSITION — SCOPED DOWN BY KYLE, 2026-08-28. ONE CHANGE SHIPS. THE TOOL IS NOT TOUCHED.**
+★ **His ruling, and it overrides the three-check design Langston and I converged on:** *"I don’t wanna go in and completely overhaul that tool to catch something that’s probably not gonna happen that often … let’s find the easy improvements and add those in and move back on to what we were doing."* ⚠️ **He also named the reason it matters NOW: the rules and skills changes are themselves newly implemented, so this is the worst moment to stack untested tooling on top of them.**
+
+**✅ SHIPPED — FORMAT ONLY, NO CODE, NOTHING TO TEST:**
+1. **`CLAUDE.md` §0.a: you are always ON a numbered step — write it as `STEP: N of 11` · `NEXT STEP: N+1 of 11` in your memory file’s position block, never as prose.** ★ **The table is ADDRESSES and never said which step you are on; the memory file DOES claim to say that and auto-loads FIRST.**
+2. **CC-A’s position block converted.** CC-B and CC-C to follow — **a one-line format change each, not a batch.**
+
+**⛔ NOT BUILT, AND DELIBERATELY SO — the design is preserved here in case it recurs, but nothing is scheduled:**
+- **(b) `preAuditAddTime` vs `firstCode`** — ⚠️ **and Langston already proved it would have graded THIS case GREEN**, so it never was the fix for `#754`. *(If ever built: `Math.min`, not `Math.max`.)*
+- **(c) the scope-first-add emit** — the "Step 1 begins" alarm at `poller.mjs:586`, outside `applyCutoff`.
+- **the checker-side reconciler** for `STEP: N` (`docPresent(batchId,'pre_audit')`, `checker.mjs:112`).
+★ **All three are real and Langston’s reasoning for them stands. They are UNSCHEDULED on frequency, not refuted on merit — that distinction is the point of recording them rather than deleting them.**
+
+⚠️ **WHAT THIS HONESTLY DOES NOT DO, stated because Langston struck the field-alone version and Kyle then accepted the residual: IT BUYS LEGIBILITY, NOT ENFORCEMENT.** A session can write `STEP: 2` and not do step 2; **nothing compares the field to reality.** ★ **It is kept because it costs nothing and makes the one failure we have actually observed visible at a glance.** ⛔ **Mechanism 3 (no front door) remains OPEN and unfixed — not closed, not accepted, just not worth tooling yet.**
 
 ⇔ `#744` · `#752` (§9.4’s trigger — same shape) · `MISTAKE_PATTERNS` `skipped-the-gate`.
 
