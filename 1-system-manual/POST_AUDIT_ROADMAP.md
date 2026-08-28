@@ -591,6 +591,16 @@ The B65.2 functional ship deleted the paper-execution-engine consumption of meta
 ### 20.4.5 Observability hardening (NEW 2026-06-12 — §19.6.6 long-tail)
 - Extend the §19.6.6 internal-health layer: remaining subsystem rows, threshold tuning from Phase-19/25 observed baselines, alert-fatigue review (escalation N values), runbook links per alert category.
 
+### 20.4.6 TRADEABLE-UNIVERSE BOUNDARY — fiat-vs-fiat currency pairs are inside the crypto universe (NEW 2026-08-28, `RUNNING_ISSUES` #937)
+
+**A PRE-LIVE GUARDRAIL QUESTION, not cleanup.** Pure fiat currency pairs — `USD/CAD`, `USD/CHF`, `GBP/USD`, `EUR/USD`, `AUD/USD` — are admitted to the **crypto** scan universe, evaluated by crypto strategies, and stored with `asset_class = 'crypto_spot'`. **13 have opened and closed** (2026-07-15 → 07-26, **every one a loss, −$10.42 total**, against 414 crypto closes at +$142.55). They are **still generating signals today.**
+
+**WHY IT IS HERE AND NOT IN PHASE 16:** this is not legacy residue — it is a live boundary the system does not currently draw, and **the risk is asymmetric across the mode boundary.** In paper mode it costs ~$10 and pollutes 3.1% of the crypto population. **In live mode it places real orders on instruments nobody chose to trade, sized and targeted by crypto logic.** ⇒ it must be settled **before Phase 21**, which is what makes Phase 20 its home.
+
+**THE DECISION IS KYLE'S (rule 24 outcome 2 — working-as-designed-but-unaddressed; what is missing is a decision, not a fix):** exclude fiat-vs-fiat pairs from the crypto universe, admit them deliberately as their own asset class, or leave them in with stated reasoning. **Do not silently add a filter** — the boundary should be written down wherever it lands.
+
+**Mechanics:** the exclusion, if chosen, needs a real discriminator. **Kraken labels crypto and fiat identically** (`aclass_base = "currency"` for both, `kraken-asset-pairs-service.ts:22`), so `aclass` cannot separate them — a maintained fiat list or a base-asset check is required. **Enumerate every admission path before adding one gate** (§9.5(a-ii)): `#937` records that the path admitting non-USD-quoted `USD/CAD` is **not yet traced**, against an `allowedQuoteCurrencies` list of `['USD','EUR','USDT']` at `routes.ts:3732`.
+
 ### 20.5 Architecture Cleanup
 - Decompose monolithic pages (enhanced-system-monitoring 4,528 lines, ai-transparency 2,074 lines)
 - Define centralized polling policy (POLLING_TIERS)
