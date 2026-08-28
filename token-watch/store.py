@@ -117,11 +117,14 @@ def _read(path: str):
 
 # ─────────────────────────────────────────────────────────────────────────────
 # MUTUAL EXCLUSION — §9.5(a) requires it wherever two or more schedulers touch
-# one component. We have four.
+# one component. TWO periodic jobs ship (follow-up, tiering); two more are
+# designed and not built. The RECEIVER does not take this lock and must not —
+# it only ever appends, and blocking ingestion on an hourly job would trade a
+# recoverable delay for an unrecoverable census gap.
 # ─────────────────────────────────────────────────────────────────────────────
 @contextmanager
 def periodic_lock(holder: str, wait: bool = False):
-    """Exclusive lock for the four periodic jobs.
+    """Exclusive lock for the periodic jobs.
 
     O_EXCL rather than fcntl so it behaves identically when tested off-Linux.
     Yields True if held, False if another job holds it — the caller must check
@@ -172,6 +175,7 @@ def record_birth(
     initial_size,
     initial_liquidity,
     creator: str,
+    size_source: str,
     socials: dict,
     followed: bool,
     follow_reason: str,
@@ -195,6 +199,13 @@ def record_birth(
         "discovery_lag_s": (first_seen_at - created_at).total_seconds(),
         "venue": venue,
         "initial_size": initial_size,
+        # ⛔ PERSISTED, not just computed. A fresh reader found the label was
+        # produced by the parser and then DISCARDED before the record was
+        # written — so "unresolved" and "genuinely small" were indistinguishable
+        # in the stored data, which is the exact discrimination the label exists
+        # to provide. Computed-and-dropped is worse than never computed: the
+        # code reads as though the protection is there.
+        "size_source": size_source,
         "initial_liquidity": initial_liquidity,
         "creator": creator,
         "socials": socials,
@@ -253,7 +264,7 @@ def schedule_grid(mint: str, created_at: datetime) -> None:
         # Same vocabulary as a shed, deliberately: a non-observation is a row,
         # so the analysis can tell "we did not look" from "we looked and found
         # nothing" without joining two files.
-        if due.strftime("%Y-%m-%dT%H") < current_bucket:
+        if due <= now:
             record_observation(mint, label, now, {
                 "observed": False,
                 "reason": "scheduled_in_the_past",
@@ -262,7 +273,26 @@ def schedule_grid(mint: str, created_at: datetime) -> None:
             })
             continue
 
-        _append(due_path(due), {"mint": mint, "age": label, "due_at": due.isoformat()})
+        # ⛔ THE SAME-HOUR ORPHAN — my first version of this fix still lost it,
+        #    and a fresh reader reproduced it: a token created 40 minutes ago
+        #    produced ZERO misses and a due entry in the CURRENT bucket.
+        #
+        #    The first version compared hour-BUCKET strings with `<`, so a
+        #    point already past but inside the current hour was neither a miss
+        #    nor safely scheduled — it went into the current bucket, which the
+        #    hourly job has already read (the timer fires 0-5 minutes past the
+        #    hour and reads once). Written, never read: exactly the orphan
+        #    BLOCKER-3 was about, surviving inside the hour.
+        #
+        # ⇒ ANYTHING STILL DUE THIS HOUR GOES INTO THE NEXT BUCKET. It costs at
+        #   most one hour of lateness, the true age stays recoverable from
+        #   created_at and observed_at, and nothing is silently dropped.
+        if due.strftime("%Y-%m-%dT%H") == current_bucket:
+            due_bucket = due + timedelta(hours=1)
+        else:
+            due_bucket = due
+        _append(due_path(due_bucket),
+                {"mint": mint, "age": label, "due_at": due.isoformat()})
 
 
 def due_now(hour: datetime):
@@ -352,9 +382,18 @@ def dead_set() -> set:
     """
     path = tombstone_path()
     if not os.path.exists(path):
-        return set()
+        # ⛔ MARK THE CACHE AS INITIALISED even with no file yet. A fresh reader
+        #    found that returning early WITHOUT setting mtime left the cache
+        #    cold, so record_death's in-place add was skipped by its
+        #    `mtime is not None` guard — and the first death of a run was
+        #    invisible to the rest of that run. On a oneshot unit that is a
+        #    cold cache at the top of EVERY hour until the file exists.
+        if _DEAD_CACHE["mtime"] is None:
+            _DEAD_CACHE["mtime"] = 0
+            _DEAD_CACHE["set"] = set()
+        return _DEAD_CACHE["set"]
     mtime = os.path.getmtime(path)
-    if _DEAD_CACHE["mtime"] != mtime:
+    if _DEAD_CACHE["mtime"] in (None, 0) or _DEAD_CACHE["mtime"] != mtime:
         _DEAD_CACHE["set"] = {r["mint"] for r in _read(path)}
         _DEAD_CACHE["mtime"] = mtime
     return _DEAD_CACHE["set"]
@@ -369,12 +408,18 @@ def observation_path(when: datetime) -> str:
 
 
 def record_observation(mint: str, age_label: str, when: datetime, fields: dict) -> None:
-    """⛔ `observed` IS SET HERE, UNCONDITIONALLY — never at the call sites.
+    """⛔ `observed` IS ALWAYS PRESENT ON EVERY ROW — it is defaulted here and
+    a caller may override it.
 
     Langston's Step-4 condition on keeping non-observations in the same stream:
     a reader must be able to filter on `observed` without supplying a default.
-    A downstream `?? true` is the absent-as-valid failure waiting to happen, and
-    setting it at two call sites guarantees a third one day forgets.
+    A downstream `?? true` is the absent-as-valid failure waiting to happen.
+
+    ⚠️ THE DOCSTRING PREVIOUSLY SAID "never at the call sites", WHICH WAS FALSE —
+    both call sites pass it, and the miss rows are False precisely because
+    `rec.update(fields)` lets them. The behaviour was right and the stated
+    invariant was not the one enforced; a fresh reader caught the divergence.
+    What is guaranteed is PRESENCE, not that call sites stay silent.
     """
     rec = {"mint": mint, "age": age_label, "observed_at": when.astimezone(UTC).isoformat(),
            "observed": True}

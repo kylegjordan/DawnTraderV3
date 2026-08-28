@@ -44,6 +44,7 @@ token-watch — credit budget, shed order, burn monitor. (OBJ-9)
 from __future__ import annotations
 
 import json
+import logging
 import os
 from datetime import datetime, timedelta, timezone
 
@@ -64,6 +65,7 @@ from store import load_state, save_state
 
 UTC = timezone.utc
 STATE = "budget"
+LOG = logging.getLogger("token-watch.budget")
 
 
 def _month_key(when: datetime) -> str:
@@ -82,6 +84,10 @@ def _load(now: datetime) -> dict:
         # New month: the allowance resets. Start clean rather than carrying a
         # stale denominator — a spend figure against the wrong month is the
         # wrong-object failure with a plausible number attached.
+        # ★ AND `journal_offset` RESETTING TO 0 IS NOW CORRECT rather than
+        #   catastrophic, because the journal is per-month: offset 0 is the
+        #   true start of a NEW file, not a replay of the old one. With a
+        #   single journal this same line re-folded the entire previous month.
         st = _blank(month)
     return st
 
@@ -104,8 +110,26 @@ def charge(kind: str, n: int, now: datetime | None = None) -> None:
 # ─────────────────────────────────────────────────────────────────────────────
 # THE JOURNAL — the receiver's lock-free, append-only spend path.
 # ─────────────────────────────────────────────────────────────────────────────
-def journal_path() -> str:
-    return f"{STATE_DIR}/spend-journal.jsonl"
+def journal_path(now: datetime | None = None) -> str:
+    """⛔ ONE JOURNAL PER CALENDAR MONTH, and that is a correctness fix rather
+    than housekeeping.
+
+    THE DEFECT IT REPLACES, found by a fresh reader who EXECUTED it rather than
+    reasoning about it: the ledger resets on a month boundary, and the reset
+    included `journal_offset`. With a single perpetual journal file that meant the
+    offset went back to 0 on the 1st and THE ENTIRE PREVIOUS MONTH WAS RE-FOLDED
+    into the new month's ledger. At ~620-776k birth credits/month, month two
+    opens near the cap and month three opens ABOVE it — after which
+    `remaining > 0` is false forever, both discretionary legs shed permanently,
+    and the burn monitor reads critical permanently. The inclusion tallies —
+    the pre-registered weighting denominator — double-count the same way.
+
+    ★ A per-month file makes the reset CORRECT BY CONSTRUCTION: a new month is
+      a new file, so offset 0 is the true start rather than a replay. It also
+      bounds the file's growth, which the single-file version never did.
+    """
+    now = now or datetime.now(UTC)
+    return f"{STATE_DIR}/spend-journal-{_month_key(now)}.jsonl"
 
 
 def record_pending(kind: str, n: int, now: datetime | None = None, **extra) -> None:
@@ -123,7 +147,7 @@ def record_pending(kind: str, n: int, now: datetime | None = None, **extra) -> N
     os.makedirs(STATE_DIR, exist_ok=True)
     rec = {"ts": now.isoformat(), "kind": kind, "n": n}
     rec.update(extra)
-    with open(journal_path(), "a", encoding="utf-8") as fh:
+    with open(journal_path(now), "a", encoding="utf-8") as fh:
         fh.write(json.dumps(rec, sort_keys=True) + "\n")
         fh.flush()
         os.fsync(fh.fileno())
@@ -141,11 +165,32 @@ def fold_pending(now: datetime | None = None) -> dict:
     now = now or datetime.now(UTC)
     st = _load(now)
     offset = st.get("journal_offset", 0)
-    path = journal_path()
+    path = journal_path(now)
     if not os.path.exists(path):
         return {"folded": 0, "offset": offset}
 
+    # ⛔ TRUNCATION / REPLACEMENT DETECTION. If the recorded offset is past the
+    #    end of the file, the file was truncated, rotated, restored from backup
+    #    or replaced. The offset only ever moves FORWARD, so without this check
+    #    every subsequent fold reads nothing and ALL LATER SPEND IS SILENTLY
+    #    LOST FOREVER — reproduced by a fresh reader: after a truncation the
+    #    fold returned folded=0 at the old offset and the ledger never moved
+    #    again. ⚠️ Silence here is exactly BLOCKER-1 returning by another route.
+    size = os.path.getsize(path)
+    anomaly = None
+    if offset > size:
+        anomaly = f"offset {offset} past EOF {size} — journal truncated or replaced"
+        # Re-fold from the start of THIS MONTH'S file. That may double-count
+        # what survived the truncation, and double-counting is the recoverable
+        # error here: it over-states spend, which sheds discretionary legs
+        # early. Under-stating would let the discretionary legs eat the birth
+        # reserve, which is the irreversible one.
+        offset = 0
+
     folded = 0
+    bad_lines = 0
+    inclusion = load_state("inclusion", {})
+    inclusion_dirty = False
     # ⚠️ readline() in a while loop, NOT `for line in fh`. Python's file
     # iterator uses a read-ahead buffer and DISABLES tell() inside it —
     # "OSError: telling position disabled by next() call". The offset is the
@@ -164,10 +209,31 @@ def fold_pending(now: datetime | None = None) -> dict:
             try:
                 rec = json.loads(line)
             except ValueError:
-                # A torn final line from a crash mid-append. STOP HERE rather
-                # than skipping it: advancing past a line we could not read
-                # would silently drop spend, and the next append completes it.
-                break
+                # ⛔ TORN TAIL vs INTERIOR CORRUPTION — these need OPPOSITE
+                #    handling, and the first version could not tell them apart.
+                #
+                #    A line with no terminating newline is a TORN TAIL from a
+                #    crash mid-append: stop, because the next append completes
+                #    it and advancing past it would drop real spend.
+                #
+                #    A COMPLETE line that will not parse is interior
+                #    corruption, and stopping on it stalls the fold FOREVER —
+                #    every later fold returns 0 at the same offset, birth spend
+                #    stops reaching the ledger, and we are back in BLOCKER-1
+                #    with no error anywhere. Skip it, count it, and say so.
+                if not raw.endswith("\n"):
+                    # Torn tail: correct to stop, but NOT correct to stop
+                    # SILENTLY — a permanently malformed tail would produce
+                    # folded=0 every hour, which is also exactly what a
+                    # genuinely quiet hour produces.
+                    LOG.warning("journal has a torn final line at offset %d — fold "
+                                "stopped here; the next append should complete it", offset)
+                    break
+                bad_lines += 1
+                LOG.error("journal line unparseable at offset %d — SKIPPED, "
+                          "spend from this line is lost: %.120s", offset, line)
+                offset = fh.tell()
+                continue
             k = rec.get("kind")
             if k in CREDITS:
                 st["spent"][k] = st["spent"].get(k, 0) + rec.get("n", 0) * CREDITS[k]
@@ -178,18 +244,32 @@ def fold_pending(now: datetime | None = None) -> dict:
             # requires be logged rather than reconstructed at analysis time.
             day, reason = rec.get("day"), rec.get("reason")
             if day and reason:
-                inc = st.setdefault("inclusion", {}).setdefault(
+                # ⛔ ITS OWN STATE FILE, NOT THE BUDGET BLOB. The budget resets
+                # every month; this must not. A fresh reader found the tally
+                # living inside the monthly blob, which meant the realised
+                # inclusion counts — the PRE-REGISTERED denominator for
+                # inverse-probability weighting — were silently discarded on
+                # the 1st of every month. config.py says of this exact figure
+                # "the log is the truth, and where they disagree the log wins";
+                # a truth that evaporates monthly is not one.
+                inclusion.setdefault(
                     day, {"launches": 0, "trait_carrier": 0,
                           "control_sample": 0, "not_sampled": 0})
-                inc["launches"] += 1
-                inc[reason] = inc.get(reason, 0) + 1
+                inclusion[day]["launches"] += 1
+                inclusion[day][reason] = inclusion[day].get(reason, 0) + 1
+                inclusion_dirty = True
             offset = fh.tell()
 
     cutoff = (now - BURN_TRAILING_WINDOW * 2).isoformat()
     st["events"] = [e for e in st["events"] if e["ts"] >= cutoff]
     st["journal_offset"] = offset
+    if anomaly:
+        st.setdefault("anomalies", []).append({"ts": now.isoformat(), "what": anomaly})
+        LOG.error("BUDGET JOURNAL ANOMALY: %s", anomaly)
+    if inclusion_dirty:
+        save_state("inclusion", inclusion)
     save_state(STATE, st)
-    return {"folded": folded, "offset": offset}
+    return {"folded": folded, "offset": offset, "bad_lines": bad_lines, "anomaly": anomaly}
 
 
 def spent_total(now: datetime | None = None) -> int:
@@ -246,6 +326,17 @@ def allowed(kind: str, now: datetime | None = None) -> bool:
     #        residual BY DESIGN". Dropping (b) would have meant a births
     #        overrun never sheds anything — which is the exact scenario the
     #        reserve exists for, silently unprotected.
+    # ⚠️ HONEST NOTE ON REACHABILITY, because a fresh reader caught me shipping
+    #    the SAME cancellation defect one step over. Today
+    #    LIQUIDITY_AUDIT_CARVE (200,000) < headroom (224,000) and
+    #    CREDITS["follow_up"] == 0, so `non_birth` IS `spent_by("liquidity")`
+    #    and the headroom clause on the liquidity leg CANNOT BIND FIRST — the
+    #    carve always trips before it. It is not decorative: it becomes the
+    #    binding constraint the moment the follow-up leg is re-homed onto the
+    #    paid provider, which §5's stated fallback contemplates.
+    # ⛔ SO IT IS TESTED UNDER THAT CONDITION, not under today's constants —
+    #    a test that injects 224,000 cannot tell which of the two clauses
+    #    refused it, and my first version of that test could not.
     if kind == "liquidity":
         return (spent_by("liquidity", now) < LIQUIDITY_AUDIT_CARVE
                 and non_birth < headroom

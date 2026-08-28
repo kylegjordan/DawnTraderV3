@@ -30,7 +30,7 @@ Langston's condition, and the reason for it is arithmetic rather than caution: b
 | `follow_up.py` | Hourly checkpoint sweep. Opens exactly one hour-bucket file. |
 | `budget.py` | Credit reserve, shed order, burn monitor. |
 | `tier.py` | The only deleter — and it can reach nothing but bulky payload. |
-| `tests/` | Three suites, 82 checks. **Every block carries a positive control**, and `test_wiring.py` drives PRODUCTION entry points only — it exists because a reviewer found 57 checks passing while nothing tested the seam between two modules. |
+| `tests/` | Four suites, 112 checks. **Every block carries a positive control**, and `test_wiring.py` drives PRODUCTION entry points only — it exists because a reviewer found 57 checks passing while nothing tested the seam between two modules. |
 
 ## Running the tests
 
@@ -38,6 +38,7 @@ Langston's condition, and the reason for it is arithmetic rather than caution: b
 python token-watch/tests/test_collector.py
 python token-watch/tests/test_pipeline.py
 python token-watch/tests/test_wiring.py
+python token-watch/tests/test_round2.py
 ```
 
 Both use a scratch tree via `TOKEN_WATCH_ROOT` and make **no network calls**.

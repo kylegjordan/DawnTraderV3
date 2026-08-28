@@ -32,7 +32,7 @@ from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import budget
-from config import CONTROL_INCLUSION_P
+from config import CONTROL_INCLUSION_P, PLATFORM_DEFAULT_SIZE
 from store import ensure_dirs, record_birth
 
 UTC = timezone.utc
@@ -53,7 +53,7 @@ MAX_BODY = 4 * 1024 * 1024
 #   DEFINITION DOES NOT NARROW. A definition tightened to fit a traffic ceiling
 #   is trimming with the label moved.
 # ─────────────────────────────────────────────────────────────────────────────
-PLATFORM_DEFAULT_SIZE = 1.0  # the launchpad's default initial buy, in SOL
+
 
 
 def is_trait_carrier(socials: dict, initial_size) -> bool:
@@ -144,8 +144,30 @@ def parse_creation(event: dict) -> dict | None:
     if not mint:
         return None
 
+    # ⛔ THE CREATION TIMESTAMP IS VALIDATED, NOT ASSUMED — and a missing one
+    #    is a REFUSAL, not a substitution.
+    #
+    #    The first version read `ts` as POSIX seconds and fell back to "now"
+    #    when it was falsy. A fresh reader found two failures in that one line:
+    #    a MILLISECOND timestamp raises, which the caller's broad except
+    #    swallows into a log line and DROPS THE LAUNCH FROM THE CENSUS; and
+    #    `ts == 0` is falsy, so created_at silently became now() — making
+    #    discovery_lag_s zero and recording the left-truncation that OBJ-2
+    #    exists to expose as ABSENT.
+    # ★ A fabricated creation time is worse than a refused event, because the
+    #   fabrication is invisible and lands in the strongest published predictor.
     ts = event.get("timestamp")
-    created = datetime.fromtimestamp(ts, UTC) if ts else datetime.now(UTC)
+    if ts is None:
+        return None
+    try:
+        ts = float(ts)
+    except (TypeError, ValueError):
+        return None
+    if ts > 1e11:          # milliseconds — the provider has sent both shapes
+        ts /= 1000.0
+    if ts <= 0:
+        return None
+    created = datetime.fromtimestamp(ts, UTC)
 
     meta = event.get("events", {}).get("nft") or {}
     socials = {
@@ -168,13 +190,25 @@ def parse_creation(event: dict) -> dict | None:
     #   collapses to `big = False` → non-carrier → the 3% control arm. So an
     #   extraction FAILURE would have been indistinguishable from a genuinely
     #   small launch. `size_source` makes the failure loud instead.
+    # ⛔ THE LARGEST transfer FROM the creator, not the first one.
+    #    A fresh reader reproduced the flaw in my first fix: the creator also
+    #    pays priority fees, account rent and mint rent FROM THE SAME ACCOUNT,
+    #    and those can be ordered before the buy. Given transfers of 5,000
+    #    lamports then 3 SOL, taking the first returned 0.000005 SOL — a wrong
+    #    near-zero number WEARING THE "RESOLVED" LABEL, which lands the token
+    #    at non-carrier and into the 3% control arm.
+    # ★ That is the original index bug moved down one level: I replaced
+    #   "position 0" with "first match" and kept the same assumption that
+    #   ordering means something.
     creator = event.get("feePayer")
     size, size_source = None, "unresolved"
-    for t in event.get("nativeTransfers") or []:
-        if creator and t.get("fromUserAccount") == creator:
-            size = (t.get("amount") or 0) / 1e9
-            size_source = "feePayer_native_transfer"
-            break
+    mine = [t for t in (event.get("nativeTransfers") or [])
+            if creator and t.get("fromUserAccount") == creator]
+    if mine:
+        biggest = max(mine, key=lambda t: t.get("amount") or 0)
+        size = (biggest.get("amount") or 0) / 1e9
+        size_source = ("feePayer_largest_of_%d" % len(mine)) if len(mine) > 1 \
+            else "feePayer_sole_transfer"
 
     return {
         "mint": mint,
@@ -213,6 +247,7 @@ def ingest(events: list) -> int:
                 first_seen_at=seen,
                 venue=launch["venue"],
                 initial_size=launch["initial_size"],
+                size_source=launch["size_source"],
                 initial_liquidity=launch["initial_liquidity"],
                 creator=launch["creator"],
                 socials=launch["socials"],
@@ -251,9 +286,15 @@ def _note_delivery(received: int, recorded: int) -> None:
     """Append the pair so the ratio is reconstructable after the fact, not only
     visible in a log line somebody has to be watching.
     """
-    if received:
-        budget.record_pending("birth", 0, datetime.now(UTC),
-                              delivery={"received": received, "recorded": recorded})
+    if not received:
+        return
+    # ⛔ kind="delivery", NOT a zero-credit "birth". A fresh reader found that
+    #    the note rode in as a birth row: it incremented the fold's `folded`
+    #    counter (100 births reported as 101 rows) and injected an n=0 birth
+    #    event into the burn monitor's event stream. A record that is not
+    #    spend must not be counted as spend, even at zero.
+    budget.record_pending("delivery", 1, datetime.now(UTC),
+                          received=received, recorded=recorded)
 
 
 class Handler(BaseHTTPRequestHandler):

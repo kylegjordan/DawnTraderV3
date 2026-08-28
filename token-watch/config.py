@@ -58,6 +58,19 @@ assert set(DISPLAY_AGES) <= set(GRID_LABELS), "display cannot offer an unobserve
 # ─────────────────────────────────────────────────────────────────────────────
 EXPECTED_LAUNCHES_PER_DAY = 20_700    # measured against the chain, scope §5
 CONTROL_SAMPLE_PER_DAY = 500          # fixed random non-carriers, A1.3
+
+# ⛔ THE TRAIT THRESHOLD. It lived in receiver.py, OUTSIDE the file whose own
+#    docstring claims "ONE home for every number this study depends on" — found
+#    by a fresh reader. It is one of the two limbs of the trait definition and
+#    therefore determines the exposure group, so it belongs under the same
+#    amend-the-document-first discipline as everything else here.
+# ⚠️ AND ITS PROVENANCE IS STATED RATHER THAN IMPLIED: this figure is MINE, not
+#    the literature's. It is flagged to Langston as the weakest constant in the
+#    batch, and the trait definition is PROVISIONAL pending the extraction
+#    verification in the Phase-3 proving run. Do not cite the "set before our
+#    cohort existed" argument for it — that argument protects thresholds
+#    imported from published work, and this one was not.
+PLATFORM_DEFAULT_SIZE = 1.0   # SOL. PROVISIONAL — see above.
 EXPECTED_CARRIER_PREVALENCE = 0.20    # A1.3's published assumption, ~4,140/day
 # ⛔ If MEASURED prevalence exceeds this, the TRAFFIC rises and the trait
 #    definition does NOT narrow. A definition tightened to fit a ceiling is
@@ -90,7 +103,7 @@ assert UNALLOCATED == 24_000, "the §5.1 arithmetic changed — amend the scope,
 #    irrecoverably, and §5 measures reconstruction as unaffordable at every
 #    tier. Reconstructable-but-unaffordable is operationally not reconstructable.
 SHED_ORDER = ("liquidity", "follow_up")   # first to go, then second
-NEVER_SHED = ("birth",)
+NEVER_SHED = ("birth", "delivery")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # BURN MONITOR — OBJ-9, r3.
@@ -175,4 +188,9 @@ HELIUS_ENV = "/etc/token-watch/helius.env"
 DEXSCREENER_BASE = "https://api.dexscreener.com"
 DEXSCREENER_RATE_PER_MIN = 300
 
-CREDITS = {"birth": 1, "follow_up": 0, "liquidity": 1}
+CREDITS = {"birth": 1, "follow_up": 0, "liquidity": 1,
+           # `delivery` is NOT spend. It is a webhook-delivery note carried on
+           # the same journal so the received/recorded ratio survives beyond a
+           # log line. Zero credits, and it is in NEVER_SHED so the shed
+           # decision can never suppress an audit record.
+           "delivery": 0}

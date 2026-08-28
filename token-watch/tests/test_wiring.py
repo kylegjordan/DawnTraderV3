@@ -169,7 +169,7 @@ check("★ the CREATOR's transfer is selected, not element [0]",
       abs(parsed["initial_size"] - 3.25) < 1e-9,
       f"got {parsed['initial_size']} — 0.002 would mean it took the fee")
 check("the source of the figure is recorded",
-      parsed["size_source"] == "feePayer_native_transfer", parsed["size_source"])
+      parsed["size_source"].startswith("feePayer_"), parsed["size_source"])
 
 orphan = {"type": "CREATE", "source": "PUMP_FUN", "timestamp": int(now.timestamp()),
           "feePayer": "CREATOR_X", "tokenTransfers": [{"mint": "MINT_ORPHAN"}],

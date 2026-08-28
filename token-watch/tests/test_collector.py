@@ -67,6 +67,7 @@ first_seen = T0 + timedelta(seconds=42)
 rec = store.record_birth(
     mint="MINT_A", created_at=created, first_seen_at=first_seen, venue="pumpfun",
     initial_size=1.5, initial_liquidity=None, creator="WALLET_1",
+    size_source="feePayer_sole_transfer",
     socials={"telegram": True, "website": False, "twitter": False},
     followed=True, follow_reason="trait_carrier:telegram",
 )
@@ -81,6 +82,7 @@ check("discovery lag computed and non-zero", rec["discovery_lag_s"] == 42.0, rec
 rec2 = store.record_birth(
     mint="MINT_CTRL", created_at=T0, first_seen_at=T0 + timedelta(seconds=7),
     venue="pumpfun", initial_size=0.1, initial_liquidity=None, creator="W2",
+    size_source="feePayer_sole_transfer",
     socials={}, followed=False, follow_reason="not_sampled",
 )
 check("POSITIVE CONTROL: lag varies with input", rec2["discovery_lag_s"] == 7.0, rec2["discovery_lag_s"])
@@ -213,7 +215,7 @@ check("POSITIVE CONTROL: without a spike, peak ≈ trailing",
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-section("6. MUTUAL EXCLUSION — four schedulers, one store, two cores")
+section("6. MUTUAL EXCLUSION — two shipped periodic jobs, one store, two cores")
 # ─────────────────────────────────────────────────────────────────────────────
 with store.periodic_lock("job_a") as got_a:
     check("POSITIVE CONTROL: first holder gets the lock", got_a)

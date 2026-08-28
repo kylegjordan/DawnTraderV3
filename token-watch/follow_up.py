@@ -70,7 +70,13 @@ def classify_death(state: dict, previous: dict | None) -> str | None:
 def run_hour(now: datetime | None = None) -> dict:
     now = now or datetime.now(UTC)
     ensure_dirs()
-    stats = {"due": 0, "observed": 0, "dead": 0, "shed": 0, "unclassified": 0, "errors": 0}
+    # ⛔ EVERY KEY PRESENT ON EVERY PATH. A fresh reader pointed out that
+    #    `skipped` existed only on the skip branch — reintroducing exactly the
+    #    absent-as-valid shape record_observation forbids for `observed`: a
+    #    reader would need a default to interpret its absence.
+    stats = {"due": 0, "observed": 0, "dead": 0, "shed": 0, "unclassified": 0,
+             "errors": 0, "skipped": False, "folded_spend_rows": 0,
+             "last_seen_pruned": 0, "unclassified_by_age": {}}
 
     with periodic_lock("follow_up") as held:
         if not held:
@@ -78,6 +84,9 @@ def run_hour(now: datetime | None = None) -> dict:
             # be visible, or a permanently-stuck lock reads as a quiet market.
             LOG.warning("another periodic job holds the lock — cycle SKIPPED, not performed")
             stats["skipped"] = True
+            # ⚠️ AND NO BURN CHECK RUNS ON THIS PATH — the return is before it.
+            #    That is stated rather than hidden: a skipped hour is an hour
+            #    with no budget projection, which matters if skips persist.
             return stats
 
         # ★ FOLD THE RECEIVER'S JOURNAL FIRST, inside the lock. This is the
@@ -120,8 +129,16 @@ def run_hour(now: datetime | None = None) -> dict:
                 except providers.Shed:
                     stats["shed"] += 1
                     fields["chain_liquidity"] = {"shed": True}
-                except Exception:
+                except Exception as e:
+                    # ⛔ A FAILED READ MUST NOT LOOK LIKE A READ THAT WAS NEVER
+                    #    DUE. Previously this branch wrote nothing, so the key
+                    #    was simply absent — identical on disk to the case
+                    #    where the guard above decided no read was needed. A
+                    #    bad key or an RPC change would then be invisible in
+                    #    the observation stream, which is the discrimination
+                    #    the Shed marker exists to preserve, one branch over.
                     LOG.exception("liquidity read failed for %s", mint)
+                    fields["chain_liquidity"] = {"error": type(e).__name__}
 
             record_observation(mint, age, now, fields)
             stats["observed"] += 1
@@ -175,4 +192,12 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s %(message)s")
     result = run_hour()
-    sys.exit(0 if not result.get("errors") else 1)
+    # ⛔ A SKIPPED CYCLE MUST NOT EXIT 0. Under a oneshot unit, systemd records
+    #    a skipped hour and a completed hour IDENTICALLY on a zero exit — so a
+    #    lock wedged by a hung tiering run would show a clean success every
+    #    hour while no spend was folded and no burn check ran. The log line was
+    #    right and did not reach the exit code, which is what a supervisor
+    #    actually reads. Found by a fresh reader.
+    if result.get("skipped"):
+        sys.exit(75)          # EX_TEMPFAIL — retry-able, not a crash
+    sys.exit(1 if result.get("errors") else 0)
