@@ -98,6 +98,14 @@ export interface RejectedReasonBreakdown {
 }
 
 export interface VTSEvalSnapshot {
+  // ── F-G-1 (VPG) — venue price grid tagging on the VTS lanes ───────────────────────────────
+  /** Signals that reached the grid check. THE DENOMINATOR — incremented before any verdict, so
+   *  a verdict count can never exceed the population it is drawn from. */
+  gridEvaluated?: number;
+  /** Verdict -> count. A RECORD rather than one field per verdict, because the rolling-24h
+   *  aggregator is a fixed list and a new top-level key would be silently dropped on the way to
+   *  the diagnostics route. */
+  gridTags?: Record<string, number>;
   timestamp: number;
   quantPairsEvaluated: number;
   patternPairsEvaluated: number;

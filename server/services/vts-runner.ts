@@ -337,6 +337,15 @@ export function getVTSEvalRolling24h(): VTSEvalSnapshot | null {
     aggregated.patternDetected += snap.patternDetected;
     aggregated.quantPatternDetected = (aggregated.quantPatternDetected ?? 0) + (snap.quantPatternDetected ?? 0);
     aggregated.quantPatternNoDetection = (aggregated.quantPatternNoDetection ?? 0) + (snap.quantPatternNoDetection ?? 0);
+    // F-G-1: VPG grid tags — merged GENERICALLY so a verdict added later cannot be dropped by
+    // this fixed list (the trap every field above is subject to).
+    aggregated.gridEvaluated = (aggregated.gridEvaluated ?? 0) + (snap.gridEvaluated ?? 0);
+    if (snap.gridTags) {
+      aggregated.gridTags ??= {};
+      for (const [k, v] of Object.entries(snap.gridTags)) {
+        aggregated.gridTags[k] = (aggregated.gridTags[k] ?? 0) + (v as number);
+      }
+    }
     aggregated.signalsGenerated += snap.signalsGenerated;
     aggregated.totalStrategyEvaluations += snap.totalStrategyEvaluations;
     aggregated.quantStrategyEvaluations = (aggregated.quantStrategyEvaluations ?? 0) + (snap.quantStrategyEvaluations ?? 0);
@@ -1585,6 +1594,24 @@ async function generatePhase10Signal(
     resolveVenueGrid(symbol, _assetClass).tick,
     { minStopDistanceBps: GLOBAL_CONSTANTS.MIN_STOP_DISTANCE_BPS },
   );
+  // COUNT IT WHERE IT CAN BE SEEN. Langston: routes/vts.ts:1639 sources its rejections from
+  // `getSkippedSignalsSummary` -- the `logSkippedSignal` path -- and A TAG IS NOT A SKIP, so
+  // nothing tagged here would ever appear there. These counters ride the existing
+  // `VTSEvalSnapshot` -> `getVTSEvalRolling24h()` -> VTS diagnostics route path instead.
+  // ⚠️ AND THE DENOMINATOR IS COUNTED FIRST, DELIBERATELY. `gridEvaluated` increments on EVERY
+  // signal that reaches here, before any verdict, so a verdict count can never exceed the
+  // population it is drawn from -- the same reconcile trap I hit on the paper side and which
+  // Langston flagged carries identically here.
+  if (counters) {
+    counters.gridEvaluated = (counters.gridEvaluated ?? 0) + 1;
+    // ⛔ A NESTED RECORD, NOT ONE FIELD PER VERDICT. The rolling-24h aggregator is a FIXED LIST
+    // of explicit field additions, so a new top-level key would be SILENTLY DROPPED between the
+    // per-cycle snapshot and the rolling window the diagnostics route serves -- present in the
+    // cycle, absent from the tab, and nothing would fail. One record with one generic merge means
+    // a verdict added later appears on its own instead of vanishing.
+    (counters.gridTags ??= {});
+    counters.gridTags[_gridTag.verdict] = (counters.gridTags[_gridTag.verdict] ?? 0) + 1;
+  }
   if (_gridTag.isWiringBug) {
     // A WIRING problem, not a quality verdict — loud, like `invalid_atr`, and never coerced
     // into a quality bucket where it would read as a property of the signal.
