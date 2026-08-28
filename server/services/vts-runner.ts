@@ -39,6 +39,9 @@ import { getCachedNumberRequired, getCachedConstant, GLOBAL_KEY } from './module
 // Note: isSignalProfitable is retained as a regime-aware ROI pre-filter (not EV math)
 import { isSignalProfitable, getROIDetails, getDynamicROIThreshold, getPerClassTargetGate } from '../core/calculations/expectancy.js';
 // reorg-B2 (Piece A): shared central target-floor normalizer (applied at the VTS convergence point).
+import { GLOBAL_CONSTANTS } from '../strategies/strategy-helpers.js';
+import { evaluateGridForTagging } from '../core/calculations/venue-price-grid.js';
+import { resolveVenueGrid } from '../markets/venue-grid-resolver.js';
 import { normalizeAndGateTarget } from '../core/calculations/signal-target-normalizer.js';
 import { getPredictiveConfidence } from '../core/utils/score-calculator.js';
 import { logSkippedSignal } from '../core/logging/skipped-signals-logger.js';
@@ -1567,6 +1570,30 @@ async function generatePhase10Signal(
   // reorg-B2 (Piece A): central target-floor lift + universal RR gate (per-class) — the VTS
   // convergence point. VTS calls strategyEngine.detect* DIRECTLY (not via the orchestrator),
   // so the SAME normalizer must run here too, or sim-to-live target parity breaks.
+
+  // ── F-G-1 (OBJ-3, VTS lane) — VENUE PRICE GRID: TAG ONLY, NEVER DROP ────────────────────
+  // Langston's ruling 2026-08-28. VTS runs its guards under 'tag' by design, and a drop arm on
+  // missing grid data would re-create the 95-97% strangle reorg-B3.2 undid. So this ANNOTATES
+  // and the simulation continues on the NATIVE geometry below, unchanged.
+  // ⛔ THE INSERTION POINT IS HERE, PER-LANE, AND NOT AT `callStrategyDetect`. That dispatcher has
+  // TWO production callers, and the xStock ACTIVE signal's geometry is born inside this same VTS
+  // lane (`eval-cycle.ts:637-639` feeds `dispatchXstockActiveSignal:1133`). Rounding or refusing
+  // in the dispatcher would reach into the active path and delete a signal BEFORE
+  // `recordActiveSignalsGenerated` counts it — the denominator defect, one lane up.
+  const _gridTag = evaluateGridForTagging(
+    entryPrice, stopLoss, strategySignal.targetPrice,
+    resolveVenueGrid(symbol, _assetClass).tick,
+    { minStopDistanceBps: GLOBAL_CONSTANTS.MIN_STOP_DISTANCE_BPS },
+  );
+  if (_gridTag.isWiringBug) {
+    // A WIRING problem, not a quality verdict — loud, like `invalid_atr`, and never coerced
+    // into a quality bucket where it would read as a property of the signal.
+    console.error(
+      `[F-G-1][VTS_GRID_WIRING] ${symbol}/${strategy} verdict=${_gridTag.verdict} — no venue grid resolved; ` +
+      `simulating on native geometry and tagging. This is a data-wiring gap, not a signal defect.`,
+    );
+  }
+
   const _b2Gate = getPerClassTargetGate(_assetClass, strategy);
   const _b2 = normalizeAndGateTarget({
     entryPrice, stopPrice: stopLoss, targetPrice: strategySignal.targetPrice,

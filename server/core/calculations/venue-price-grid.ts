@@ -205,3 +205,74 @@ export function roundQuantityForVenue(
   if (costmin != null && Number.isFinite(costmin) && q * price < costmin) return null;
   return { quantity: q };
 }
+
+/**
+ * F-G-1 (OBJ-3 / VTS lane) — EVALUATE THE GRID WITHOUT CHANGING BEHAVIOUR.
+ *
+ * ⛔ THE VTS LANE TAGS; IT NEVER DROPS (Langston ruling, 2026-08-28). VTS runs its guards under
+ * `'tag'` disposition by design, and a drop arm here on missing grid data would re-create the
+ * 95-97% strangle that reorg-B3.2 was built to undo. So this function is PURE ANNOTATION: it
+ * reports what rounding WOULD do, and the caller simulates on the NATIVE geometry regardless.
+ *
+ * ⛔ AND IT IS CARRIED IN A SIBLING FIELD, NEVER BY WIDENING `vtsGateVerdict`. That union rides
+ * onto the trade record, so rows written before this landed must read as NOT INSTRUMENTED — never
+ * as PASSED. A widened union would make an absence indistinguishable from a pass (`#546`).
+ *
+ * ★ Both VTS lanes call THIS function rather than each implementing the rule, because a decided
+ * rule shipped into one reader out of several is the defect `B-EPOCH-KEYING-PARITY` is held on.
+ */
+export type GridTagVerdict =
+  /** Every leg was already an exact multiple of the venue tick. Nothing would move. */
+  | 'on_grid'
+  /** Rounding would move at least one leg, and the result is still a valid trade. */
+  | 'would_round'
+  /** ⚠️ WIRING BUG, NOT A QUALITY VERDICT — the venue grid could not be resolved at all. */
+  | 'grid_unknown'
+  /** The rounded stop would fall inside the 0.3% minimum stop distance (GUARD-1). */
+  | 'stop_distance_after_rounding'
+  /** Rounding would collapse the legs to less than one tick apart. */
+  | 'degenerate_after_rounding'
+  /** Not long-shaped and not short-shaped, or a leg is missing — the `#915` family. */
+  | 'unorderable';
+
+export interface GridTag {
+  verdict: GridTagVerdict;
+  tick: number | null;
+  /** What rounding WOULD have produced. Null when it could not be computed. */
+  wouldBe: { entryPrice: number; stopPrice: number; targetPrice: number } | null;
+  /** True only when the verdict is a wiring problem rather than a property of the signal. */
+  isWiringBug: boolean;
+}
+
+export function evaluateGridForTagging(
+  entryPrice: number,
+  stopPrice: number,
+  targetPrice: number,
+  tick: number | null | undefined,
+  opts: { targetIsCap?: boolean; minStopDistanceBps?: number } = {},
+): GridTag {
+  const r = roundTripleToGrid(entryPrice, stopPrice, targetPrice, tick, opts);
+  if (!r.ok) {
+    const wiring = r.reason === 'grid_unknown';
+    const verdict: GridTagVerdict =
+      r.reason === 'grid_unknown' ? 'grid_unknown'
+      : r.reason === 'degenerate_after_rounding' ? 'degenerate_after_rounding'
+      : 'unorderable';
+    return { verdict, tick: tick ?? null, wouldBe: null, isWiringBug: wiring };
+  }
+  const t = tick as number;
+  const already = isOnGrid(entryPrice, t) && isOnGrid(stopPrice, t) && isOnGrid(targetPrice, t);
+  const wouldBe = { entryPrice: r.entryPrice, stopPrice: r.stopPrice, targetPrice: r.targetPrice };
+
+  // The one QUALITY verdict in the set: the rounded stop falls inside the minimum stop distance.
+  // Tagged rather than dropped precisely so the counterfactual stays measurable — does a
+  // sub-tick-margin setup actually win? That is the measurement worth having.
+  const bps = opts.minStopDistanceBps;
+  if (bps != null && Number.isFinite(bps)) {
+    const dist = Math.abs(r.entryPrice - r.stopPrice) / r.entryPrice;
+    if (dist < bps / 10000) {
+      return { verdict: 'stop_distance_after_rounding', tick: t, wouldBe, isWiringBug: false };
+    }
+  }
+  return { verdict: already ? 'on_grid' : 'would_round', tick: t, wouldBe, isWiringBug: false };
+}

@@ -79,6 +79,9 @@ import { scanPatterns } from '../../services/pattern-recognizer.js';
 // reorg-B3.3x (2026-06-24): the SHARED VTS gate (reorg-B2 normalizer + reorg-B3.2 tag-don't-drop +
 // reorg-B3.3y target<=entry validity) — the same one crypto vts-runner runs. Unifies xStock VTS gating
 // onto the one SSOT instead of a hand-rolled second copy (Langston Option B).
+import { GLOBAL_CONSTANTS } from '../../strategies/strategy-helpers.js';
+import { evaluateGridForTagging } from '../../core/calculations/venue-price-grid.js';
+import { resolveVenueGrid } from '../../markets/venue-grid-resolver.js';
 import { normalizeAndGateTarget } from '../../core/calculations/signal-target-normalizer.js';
 import { getPerClassTargetGate } from '../../core/calculations/expectancy.js';
 import { computeRealHybridScore, computeRealDecayPenalty } from '../../core/utils/vts-real-score.js';
@@ -677,6 +680,25 @@ export async function evaluateXstockPairForVTS(
         // exactly as today. On the VTS learning path the QUALITY gates (`rr_below_min`, `unreachable`) TAG
         // (`vtsGateVerdict`) + simulate with the NATIVE target; DATA-VALIDITY (`invalid_atr`, `invalid_geometry`)
         // DROP. The strategy-level un-strangle itself is the `'tag'` arg on `callStrategyDetect` above.
+        // ── F-G-1 (OBJ-3, VTS lane 2 of 2) — VENUE PRICE GRID: TAG ONLY, NEVER DROP ──────────
+        // Langston's ruling 2026-08-28, and THIS lane is why the insertion point is here rather
+        // than at `callStrategyDetect`: the geometry read at :637-639 above is ALSO what feeds
+        // `dispatchXstockActiveSignal` at :1133, so the xStock ACTIVE signal is manufactured
+        // inside this VTS lane. Rounding or refusing in the shared dispatcher would reach into
+        // the active path and delete a signal BEFORE `recordActiveSignalsGenerated` counts it.
+        // Tagging here leaves the active dispatch's geometry untouched — the orchestrator rounds
+        // it on its own path, where the refusal is counted into the active funnel.
+        const _gridTag = evaluateGridForTagging(
+          entryPrice, stopLoss, takeProfit,
+          resolveVenueGrid(symbol, ASSET_CLASS).tick,
+          { minStopDistanceBps: GLOBAL_CONSTANTS.MIN_STOP_DISTANCE_BPS },
+        );
+        if (_gridTag.isWiringBug) {
+          console.error(
+            `[F-G-1][VTS_GRID_WIRING] ${symbol}/${strategyKey} verdict=${_gridTag.verdict} — no venue grid ` +
+            `resolved; simulating on native geometry and tagging. Data-wiring gap, not a signal defect.`,
+          );
+        }
         const _b3xGate = getPerClassTargetGate(ASSET_CLASS, strategyKey);
         const _b3x = normalizeAndGateTarget({
           entryPrice, stopPrice: stopLoss, targetPrice: takeProfit,

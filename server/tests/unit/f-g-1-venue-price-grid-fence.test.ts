@@ -16,6 +16,7 @@ import {
   roundPriceForRole,
   roundQuantityForVenue,
   isOnGrid,
+  evaluateGridForTagging,
 } from '../../core/calculations/venue-price-grid';
 
 describe('F-G-1 OBJ-7 — direction by price role', () => {
@@ -167,5 +168,56 @@ describe('F-G-1 OBJ-3 — the DERIVED xStock grid, and why it is a GCD not a dec
   it('returns null on too few observations rather than guessing from one increment', () => {
     expect(gcdOfIncrements([0.01])).toBeNull();
     expect(gcdOfIncrements([])).toBeNull();
+  });
+});
+
+describe('F-G-1 OBJ-3 (VTS lane) — evaluateGridForTagging TAGS and never changes anything', () => {
+  // MUTATION: have it return the rounded triple in place of the inputs and this fails.
+  // ⛔ THE WHOLE POINT: the VTS lane simulates on the NATIVE geometry. If this ever mutated,
+  // it would also silently re-price the xStock ACTIVE signal, whose geometry is born in the
+  // same lane (eval-cycle.ts:637-639 feeds dispatchXstockActiveSignal:1133).
+  it('is pure — the callers prices are untouched', () => {
+    const entry = 100.004, stop = 99.001, target = 110.007;
+    const t = evaluateGridForTagging(entry, stop, target, 0.01);
+    expect(entry).toBe(100.004);
+    expect(stop).toBe(99.001);
+    expect(target).toBe(110.007);
+    expect(t.wouldBe).not.toBeNull();
+    expect(t.wouldBe!.entryPrice).not.toBe(entry); // it DID compute a different value...
+  });
+
+  // MUTATION: drop the isOnGrid short-circuit and this fails.
+  it('says on_grid when nothing would move', () => {
+    const t = evaluateGridForTagging(100.0, 99.0, 110.0, 0.01);
+    expect(t.verdict).toBe('on_grid');
+  });
+
+  it('says would_round when a leg would move', () => {
+    const t = evaluateGridForTagging(100.004, 99.001, 110.007, 0.01);
+    expect(t.verdict).toBe('would_round');
+  });
+
+  // MUTATION: set isWiringBug false for grid_unknown and this fails.
+  // A missing grid is a DATA-WIRING gap, not a property of the signal, and must never be
+  // coerced into a quality bucket where it reads as the signal's fault.
+  it('flags an unresolvable grid as a WIRING bug, not a quality verdict', () => {
+    const t = evaluateGridForTagging(100, 99, 110, null);
+    expect(t.verdict).toBe('grid_unknown');
+    expect(t.isWiringBug).toBe(true);
+    expect(t.wouldBe).toBeNull();
+  });
+
+  // MUTATION: remove the minStopDistanceBps branch and this returns would_round.
+  it('tags stop_distance_after_rounding as a QUALITY verdict, not a wiring bug', () => {
+    // 0.3% of 100 is 0.30; a stop 0.02 away is far inside the floor.
+    const t = evaluateGridForTagging(100.0, 99.98, 110.0, 0.01, { minStopDistanceBps: 30 });
+    expect(t.verdict).toBe('stop_distance_after_rounding');
+    expect(t.isWiringBug).toBe(false);
+  });
+
+  it('tags the #915 inverted shape as unorderable rather than guessing a side', () => {
+    const t = evaluateGridForTagging(113.13, 117.83, 134.04, 0.01);
+    expect(t.verdict).toBe('unorderable');
+    expect(t.isWiringBug).toBe(false);
   });
 });
