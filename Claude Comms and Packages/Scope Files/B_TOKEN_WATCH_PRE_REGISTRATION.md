@@ -183,3 +183,52 @@ Splitting by launch date stands, and a random split is **rejected**: two tokens 
 A1.3's *"45,000 controls -> ~75 expected events"* is across the **full 90 days**. §8.2 evaluates on the **later half only**, so the **operative control for the primary out-of-sample test is ~22,500 -> ~37 expected events.**
 
 **500/day still stands** - the carrier arm is event-rich, so ~37 non-carrier events bound the base rate adequately against A1.5's 2.0x threshold. **Both figures are recorded because a single number without its population is the exact failure this document polices, and I had written the flattering one.**
+
+
+### AMENDMENT 3 - 2026-08-28, STILL PRE-DATA (Langston Step-4 conditions on items 1 and 2)
+
+> **Appended, not edited. Sections 1-10 and AMENDMENTS 1-2 stand exactly as written.**
+> ⚠️ **PRE-DATA VERIFIED AT THE OBJECT, not assumed:** `/var/lib/token-watch` does not exist on the collector host and no `token-watch*` unit is installed. **No row has been collected.** This is the last moment at which a change here is a design decision rather than a re-interpretation of a result.
+> ⛔ **A DIFFERENT "AMENDMENT 3" WAS PROPOSED AND WITHDRAWN BEFORE IT LANDED** - a 12-point superset observation grid. Kyle withdrew the *requirement* instead of accepting the amendment (*"three and seven days are fine"*), so **the grid has never been amended and section 6 stands unchanged.** That proposal is recorded in the Step-2 document; it never entered this one. **This is the first amendment to bear the number.**
+
+#### A3.1 - THE TRAIT DEFINITION IS PROVISIONAL PENDING EXTRACTION VERIFICATION
+
+**Langston's Step-4 condition, and his reframing is the load-bearing part.** I had put forward the *threshold* as the weakest thing in the batch. He agreed it was weak and pointed out I was **attacking the recoverable half**: `initial_size` is persisted on every birth row, so if the platform default is really 0.5 or 2.0 the split can be re-derived at analysis time and amended honestly.
+
+⛔ **WHAT IS NOT RECOVERABLE IS THE MEASURAND.** Section 4 fixes `initial size` as a predictor. It does not say **which quantity that is**, and the code's extraction of it has never been verified against a real provider payload - the "verified against a real token" evidence covers the event-type filter, not this field. **If the extracted number is a platform fee or account rent rather than the creator's own buy, then every token records a near-constant value, the size limb of the trait definition fires for everyone or for nobody, and it does so silently with a plausible number attached.**
+
+★ **AND THE FAILURE HAS A DIRECTION.** An unresolvable size collapses to *not a carrier* and lands the token in the ~3% control arm - so an **extraction failure would be indistinguishable from a genuinely small launch**, and the bias runs one way.
+
+⇒ **THE TRAIT DEFINITION IN SECTION 4 IS HEREBY MARKED PROVISIONAL** in its size limb. It becomes final only when all three hold, in this order:
+1. The extraction selects the creator's own transfer **by role, verified against captured real creation events** - not by position and not by first match. *(Both of those were tried and both were wrong; the current code takes the largest transfer from the fee payer and records `size_source` on every row.)*
+2. An unresolvable size is recorded as **null with its `size_source`**, so a failure is loud rather than silently becoming a non-carrier.
+3. **Only then** is the platform default set from the first day's observed distribution, **by a further dated amendment**.
+
+⛔ **THE ORDER IS NOT NEGOTIABLE, and Langston's reason is why:** setting the default before the measurand is verified *"measures the wrong thing precisely."* **Until (1) and (2) are evidenced in the Phase-3 proving run, no analysis may report the size limb as a pre-registered predictor.** The social-channel limb is unaffected and remains final.
+
+⚠️ **AND THE PROVENANCE IS STATED PLAINLY: the threshold value is MINE, not the literature's.** Section 3's protection - *a threshold set before our cohort existed cannot have been fitted to it* - **does not attach to it.** That argument protects figures imported from published work. This one was set before our cohort existed **by the person who will analyse it**, which buys none of that.
+
+#### A3.2 - OBSERVATION TIMING: NOMINAL AGE IS A LABEL, TRUE AGE IS THE DATUM
+
+**Langston's item 2, and my stated bound was wrong.** I claimed the 1h checkpoint bounded the exposure of the death-classification ambiguity. **It does not, because the observation does not happen at one hour.**
+
+**MEASURED against the shipped scheduler and timer.** The job reads a whole hour-bucket at the top of the hour, while the entries inside it fall due at different minutes. True age at observation, for tokens born at :02, :10, :30, :55 and :59:
+
+| born at | nominal age | TRUE age observed |
+|---|---|---|
+| :02 | 60 min | 60 min |
+| :10 | 60 min | 52 min |
+| :30 | 60 min | 32 min |
+| :55 | 60 min | **7 min** |
+| :59 | 60 min | **3 min** |
+
+⛔ **EARLY IS WORSE THAN LATE, AND NOT SYMMETRICALLY SO.** With 68.67% dying on day one, a token read at three minutes looks alive - **and the entry is then consumed, so the real one-hour checkpoint never happens.** The observation is not merely noisy; it is spent.
+
+**FIXED IN CODE, not documented around:** an entry that is not yet due is **re-queued to the next bucket** rather than observed. ⇒ **observations are LATE-BUT-NEVER-EARLY**, with true age falling in roughly `[nominal, nominal + 1h]`.
+
+⇒ **PRE-REGISTERED NOW, so it cannot be chosen later:**
+1. **The analysis uses TRUE age**, computed from `created_at` and `observed_at`, **never the nominal label.** The grid label identifies which checkpoint a row belongs to; it is **not** a measurement.
+2. **Cohorts pool on the LABEL** - which is what section 6's fixed-ages requirement is for - **while every survival computation uses the true age.** These are different roles for the same row and were previously conflated.
+3. **The true-age distribution is reported at read-out**, per checkpoint, as a stated property of the instrument rather than a footnote. If it is materially wider than `[nominal, nominal + 1h]`, that is an instrument finding and is reported as one.
+
+⚠️ **A THIRD MECHANISM FOR THE SAME ONE-DIRECTIONAL BIAS, recorded because Langston found it and I had not:** the prior-sighting state the death classifier relies on is written once per run, so an exception escaping the per-token handler loses that hour's prior sightings while the observations are already on disk - and next hour a genuine liquidity pull reads as unclassified. **Same under-count, third route.** The per-age unclassified counts are now persisted, so the residual is **quantified rather than described**.

@@ -19,12 +19,14 @@ from __future__ import annotations
 
 import logging
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import budget
 import providers
 from store import (
+    _append as store_append,
     dead_set,
+    due_path,
     due_now,
     ensure_dirs,
     load_state,
@@ -67,6 +69,15 @@ def classify_death(state: dict, previous: dict | None) -> str | None:
     return None
 
 
+def _append_next_bucket(entry: dict, now: datetime) -> None:
+    """Move a not-yet-due entry into the next hour's bucket.
+
+    An append, like everything else in this store — the original entry stays
+    where it was, so the schedule remains auditable after the fact.
+    """
+    store_append(due_path(now + timedelta(hours=1)), entry)
+
+
 def run_hour(now: datetime | None = None) -> dict:
     now = now or datetime.now(UTC)
     ensure_dirs()
@@ -76,7 +87,8 @@ def run_hour(now: datetime | None = None) -> dict:
     #    reader would need a default to interpret its absence.
     stats = {"due": 0, "observed": 0, "dead": 0, "shed": 0, "unclassified": 0,
              "errors": 0, "skipped": False, "folded_spend_rows": 0,
-             "last_seen_pruned": 0, "unclassified_by_age": {}}
+             "last_seen_pruned": 0, "unclassified_by_age": {},
+             "requeued_not_yet_due": 0}
 
     with periodic_lock("follow_up") as held:
         if not held:
@@ -103,6 +115,25 @@ def run_hour(now: datetime | None = None) -> dict:
         for entry in due_now(now):
             stats["due"] += 1
             mint, age = entry["mint"], entry["age"]
+
+            # ⛔ NEVER OBSERVE EARLY. The job reads a whole hour-bucket at the
+            #    top of the hour, but entries inside it are due at different
+            #    minutes — so without this check a token born at :55 has its
+            #    "1h" checkpoint read at :02 the next hour, i.e. AT SEVEN
+            #    MINUTES OF AGE. Measured across the hour: 60, 52, 32, 7 and 3
+            #    minutes for tokens born at :02, :10, :30, :55 and :59.
+            # ★ THAT IS WORSE THAN LATE, AND NOT SYMMETRICALLY SO. With 68.67%
+            #   dying on day one, a token read at 3 minutes looks alive, the
+            #   entry is consumed, and the real 1h checkpoint never happens —
+            #   the observation is not just noisy, it is spent.
+            # ⇒ re-queue to the next bucket. Observations become
+            #   LATE-BUT-NEVER-EARLY, and the true age is always recoverable
+            #   from created_at and observed_at.
+            due_at = entry.get("due_at")
+            if due_at and due_at > now.isoformat():
+                _append_next_bucket(entry, now)
+                stats["requeued_not_yet_due"] += 1
+                continue
             try:
                 state = providers.token_state(mint)
             except providers.Shed as s:

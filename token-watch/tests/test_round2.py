@@ -259,6 +259,41 @@ check("every stats key is present on the SKIP path too",
                                  "last_seen_pruned", "unclassified_by_age")), skipped)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+section("8. ⛔ NEVER OBSERVE EARLY — the bucket is read whole, entries are not")
+# The job reads an hour-bucket at the top of the hour while entries inside it
+# fall due at different minutes. Measured before the fix: a token born at :55
+# had its "1h" checkpoint read at :02 the next hour — SEVEN MINUTES of age; at
+# :59 it was three. Worse than late and not symmetrically so: the entry is
+# consumed, so the real checkpoint never happens.
+# ─────────────────────────────────────────────────────────────────────────────
+EARLY = datetime.now(UTC).replace(minute=2, second=0, microsecond=0)
+not_yet = {"mint": "MINT_EARLY", "age": "1h",
+           "due_at": (EARLY + timedelta(minutes=40)).isoformat()}
+store._append(store.due_path(EARLY), not_yet)
+
+calls_before = calls["n"]
+early_result = follow_up.run_hour(EARLY)
+check("★ a not-yet-due entry is NOT observed",
+      calls["n"] == calls_before, f"provider called {calls['n'] - calls_before} times")
+check("★ it is re-queued rather than dropped",
+      early_result["requeued_not_yet_due"] >= 1, early_result)
+requeued = [e for e in store._read(store.due_path(EARLY + timedelta(hours=1)))
+            if e["mint"] == "MINT_EARLY"]
+check("the entry is in the NEXT bucket, so the checkpoint still happens",
+      len(requeued) == 1, f"{len(requeued)} entries")
+
+# POSITIVE CONTROL: an entry that IS due gets observed on the same path, so
+# the check above is the due-time test working rather than the job being inert.
+due_now_entry = {"mint": "MINT_DUE", "age": "1h",
+                 "due_at": (EARLY - timedelta(minutes=5)).isoformat()}
+store._append(store.due_path(EARLY), due_now_entry)
+before_due = calls["n"]
+follow_up.run_hour(EARLY)
+check("POSITIVE CONTROL: an entry past its due time IS observed",
+      calls["n"] > before_due, f"provider calls: {calls['n'] - before_due}")
+
+
 print("\n" + "=" * 60)
 print(f"FAILED: {len(FAILURES)} -> {FAILURES}" if FAILURES else "ALL CHECKS PASSED")
 shutil.rmtree(ROOT, ignore_errors=True)
