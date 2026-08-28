@@ -1,7 +1,8 @@
-# F-G-1 — B-GRID-REPRESENTABILITY — STEP-4 CHANGE LIST (r3)
+# F-G-1 — B-GRID-REPRESENTABILITY — STEP-4 CHANGE LIST (r4)
 
-> **READY AT: `origin/migration/aws-supabase`.** Diff base `98cd011c7` (the commit before the first code commit) → the branch head.
-> **20 files, +2,202 / −6.** Re-derived at the ref, not restated — the r1 header total reconciled but three per-section counts did not, and you caught all three.
+> **READY AT: `origin/migration/aws-supabase`, commit `e02f6d356`.** Diff base `98cd011c7` (the commit before the first code commit).
+> **20 files, +2,556 / −7** — `git diff --shortstat 98cd011c7..e02f6d356 -- server/ shared/ client/`, run now, not carried forward.
+> ⛔ **BLOCKER-8 WAS THIS LINE. It said `+2,202 / −6`, which was the figure at `cef6e7f83` — i.e. BEFORE `01b54cf03`, the r3 code commit — under a sentence reading *"re-derived at the ref, not restated."* The sentence was the claim and the number was the counter-example.** ★ **AND IT IS `fix-follows-pointer` AGAIN: in r2 you named three per-SECTION counts, I fixed those three and restated the TOTAL.** The number now names the command that produced it, so the next reader can re-run it rather than trust it.
 > **Untracked check run:** the only `??` entry is `.claude/launch.json`, local config, deliberately not committed.
 > ⛔ **ONE GATE: the code diff.** Design rulings and the VPG↔VOG pairing were separate dispatches and are not re-asked here.
 > ☑ **Delivery board: the F-G-1 card now exists** — `Implementation` / Owner `Analyst` / Type `Batch` / Blocked-on `Langston` / Phase 19. You have a `Review` field to set.
@@ -202,6 +203,49 @@ export function decideGridAction(assetClass: string, r: { ok: boolean; reason?: 
 
 ---
 
+## 9d. WHAT CHANGED IN r4 — YOUR BLOCKER-7/8/9 AND BOTH CHANGES-NEEDED
+
+⛔ **YOUR PREDICTED MUTATION PASSED. I RAN IT.** Keep the `decideGridAction` call, discard its result, dispatch on a hardcoded `{ action: 'apply' }` — **blocker-5 reinstated in full, 56/56 green.** The fence had gone *identifier present* → *call form present* and still not *the value decides*.
+✅ **FIXED STRUCTURALLY, NOT WITH ANOTHER ASSERTION: the `apply` arm now CARRIES the rounded prices and the seam assigns from them**, so a hardcoded action has nothing to assign and **does not compile** — measured, 384 → 390 tsc errors under your mutation. Rule 29: prefer impossible over intercepted.
+
+**BLOCKER-7 — confirmed, and I ran your J8 remedy on it before fixing.** `rg '1e-9' venue-price-grid.ts` returns **FOUR** sites, not three:
+
+| # | site | verdict |
+|---|---|---|
+| 1 | `snap()`'s `EPS` | **SAME CLASS** (ratio `price/tick`) — **FIXED** |
+| 2 | `isOnGrid`'s band | same class — already fixed |
+| 3 | `roundQuantityForVenue`'s floor nudge | **SAME CLASS** (ratio `qty/step`) — **FIXED** |
+| 4 | `oneTick = t * (1 - 1e-9)` | ⚠️ **NOT this class** — a relative shrink of a tick VALUE, already scale-free. **LEFT ALONE, and stated so the next reader does not "fix" it** |
+
+Repo-wide the same shape returns two more — `expectancy.ts`, `drift-dashboard-aggregator.ts` — and **both are absolute epsilons on BOUNDED quantities** (a probability, a shift fraction), a different shape wearing the same constant.
+
+**MEASURED MYSELF** — on-grid inputs only, counting inputs moved a **FULL TICK**, n=200,000 per cell:
+
+| cell | before | after |
+|---|---|---|
+| tick `1e-5` @ $1k–100k (q≈1e10) | **14.1%** | 0.0% |
+| tick `2e-8` @ $10–300 (q≈1e10) | **14.4%** | 0.0% |
+| tick `0.01` @ $1k–100k (q≈1e7) — CONTROL | 0.0% | 0.0% |
+| tick `0.01` @ $1–100 (q≈1e4) — CONTROL | 0.0% | 0.0% |
+| tick `0.0025` @ $10–300 (q≈1e5) — CONTROL | 0.0% | 0.0% |
+
+⚠️ **You reported 49.3% on the first cell; I get 14.1% on my sampling.** The defect reproduces either way and the **controls** are what make it a measurement. **I report mine, not yours.**
+
+**BLOCKER-9 — discharged, and I reproduced your grep first.** Grepping the added lines of both governed docs for `923|927|928|929|bypass|DOES NOT|not guarantee|trailing-exit` returned **0**, exactly as you said. The bypass table is now in **`SYSTEM_IMPACT_MAP.md` §9.14b** and the **System Manual** Chapter-5 section; the same grep now returns **9**. ★ **And the same entry carried two stale numbers of exactly BLOCKER-8's kind — "FOUR CALLERS" (five) and "26 tests" (74)** — both corrected, and the test line now says to read the count from the suite rather than from the line.
+
+**CHANGES-NEEDED-1** — `short_side_unexercised` still routed to `'unorderable'`, whose own doc says *"not long-shaped and **not short-shaped**"*. A **policy** refusal filed as a malformed signal. Own verdict now.
+
+**CHANGES-NEEDED-2 — you were right, and the root cause is worth more than the fix.** `_fc2` was still present and I had reported it changed. **The edit script printed its success line BEFORE the file write, then crashed on a later anchor — so nothing was written and I read the print as proof.** ⇒ **A progress message emitted before the work it reports cannot come out differently if the work did not happen.** Same shape as every dead control in this batch. Fixed, and **read back from disk** rather than from the tool's own report.
+
+**J8 — your ruling ADOPTED, as a named pattern.** `fix-follows-pointer` is in `MISTAKE_PATTERNS.md` with five F-G-1 instances and your mechanism verbatim: **grep the CLASS before fixing the instance, and STATE what the grep returned.** ★ **Stating it is the part that does the work** — an unstated grep is indistinguishable from one never run, and *"I fixed it and there are no others"* is an asserted absence needing presence-evidence like any other. It fails the §13 batch-diversity leg (one batch) and is recorded anyway, beside `fix-relocates`, which it is a **sibling of and must not be merged with**: that one is the fix landing somewhere new, this one is the defect staying put while the fix travels.
+
+**J9 — `#927` SPLIT.** The string-truthiness leg is **`#930`** with the evidence you required: the guard at `active-execution-engine.ts:2821`, the column as `decimal(...)` (drizzle yields a JS **string**), `Boolean('0') === true`, `parseFloat('0') === 0`.
+⚠️ **AND A NARROWING YOU DID NOT ASK FOR, WHICH I ALMOST DID NOT STATE: those columns are `.notNull()`** — so the *null* path is unreachable and the exposure is a stored **ZERO**, not a null. **Whether one has ever been written is NOT established.** The defect is confirmed by construction; **the incidence is unmeasured**, and the entry says so rather than implying impact.
+
+**BOARD — you were right, there were two.** Consolidated to one (`…zg4UsFg`, the 08-27 card), duplicate deleted, all seven fields verified **at the API**. ⚠️ **`gh project item-list` returned NOTHING for either card while both existed** — the lie you warned about. **My own earlier read-back used that tool and printed nothing, and I read the empty output as a formatting problem rather than as the instrument failing.** Another instance of the same class, in the same hour you named it.
+
+---
+
 ## 10. ⛔ WHAT I WANT ATTACKED
 
 **J5 — ⛔ WITHDRAWN, AND THE WITHDRAWAL IS THE POINT.** I argued in r2 for keeping one source-text assertion against your "cut all eight", on the grounds that it was *"the only thing that made `#918` real"*. **A reader then deleted the call it guards and it stayed green** — it was matching the import line. **It was not doing the job I defended it for, and the defence read as principled while resting on a claim I had never tested.** It now requires a call form and is mutation-proved. ⇒ **The open question is not whether to keep it; it is whether my carve-out reasoning should have been trusted at all, given it survived a round of your review and mine.**
@@ -219,9 +263,12 @@ export function decideGridAction(assetClass: string, r: { ok: boolean; reason?: 
 
 ## 11. VERIFICATION RUN
 
-- **tsc: 384, EXACTLY the pre-existing baseline.** The one `signal-orchestrator` error exists at origin and my change only shifts its line.
-- **93 unit tests green** across five files (the two F-G-1 fences plus the three funnel/filter-diagnostics suites they touch).
-- **Every fix above mutation-proved individually.** ⚠️ **Three did NOT fire on first writing** — the `isOnGrid` band, the last-wins ordering, and the self-check refusal — and were rewritten until they did.
-- ⚠️ **One earlier mutation harness reported three clean "NOT DETECTED" verdicts from an instrument that had captured no output at all.** Caught by re-running by hand. Recorded because it is the same class as everything else here: **a silent instrument reads exactly like a passing test.**
+⛔ **RE-DERIVED AT `e02f6d356` AFTER YOUR BLOCKER-8, NOT CARRIED FORWARD. Every number below was produced by a command run against this ref.**
+
+- **tsc: 384, EXACTLY the pre-existing baseline.** Message-keyed since `B-TSC-BASELINE-FIX`, so a flat 384 is meaningful rather than coincidental. ★ **AND IT IS ALSO A FENCE NOW:** your predicted mutation — keep the `decideGridAction` call, discard the result, hardcode `{action:'apply'}` — takes it to **390**. It no longer compiles.
+- **105 unit tests green** across five files. ⚠️ **§11 previously said 93, which was the count before the r3 commit it was describing.** The two F-G-1 suites alone hold **74 `it()` at this ref** (60 + 14).
+- **Every fix mutation-proved individually, and the two you would ask about first:** deleting the shutdown-drain CALL now fails · the seam decision hardcoded now fails to COMPILE · `snap`'s EPS restored to `1e-9` fails · the quantity floor restored fails · `short_side_unexercised` folded back fails · the legacy-key migration removed fails.
+- ⚠️ **FIVE controls did NOT fire on first writing across the batch** — the `isOnGrid` band, the last-wins ordering, the self-check refusal, the quantity-floor value (it used a quantity that floors identically under both epsilons), and the seam fence. **Each was rewritten until the mutation killed it.** The count is here because it is the honest denominator for *"mutation-proved"*.
+- ⚠️ **One mutation harness reported three clean "NOT DETECTED" verdicts from an instrument that had captured no output at all**, and one edit script printed its success lines **before** the file write and then crashed. **Both read exactly like success.** Same class as every dead control here.
 - **vite build: succeeds.**
 - ⛔ **NOT VERIFIED: anything at runtime. Nothing is deployed. No claim here rests on observed behaviour.**
