@@ -4427,7 +4427,8 @@ The L-Series autonomy cluster (MCP, ARE, GASP, MOF, MACO, ECS, DCE, etc.) was di
 > | `#929` | **position sizing has TWO callers**; the fallback-sizing arm of the promoted-signal path never consults the VPG | folded into `#928` |
 > | `#927` | the promotion path **invents** a target (`entry * 1.02`) in **three** places, one of which is the RTB **ranking** key — so pool ORDER can depend on an invented number | `B-TARGET-FABRICATION` |
 > | `#923` | the **trailing exit controller DOES NOT call the VPG** and ratchets a live stop off-grid | `F-G-2` |
-> | `#924` | two live-path sites mutate a gridded price after the VPG; both dormant today | row 3g |
+> | `#939` | two live-path sites mutate a gridded price after the VPG; both dormant today *(renumbered from `#924` on a collision)* | row 3g |
+> | `#923` | the trailing exit ratchets a gridded stop back off the grid | row **3f.b** — census first; **not** F-G-2 |
 >
 > ★ **A GUARANTEE STATED WITHOUT ITS BOUNDARY IS READ AS UNIVERSAL.** These were recorded in the
 > batch's change list and NOT here, which meant the only durable artifact said "one rounding seam"

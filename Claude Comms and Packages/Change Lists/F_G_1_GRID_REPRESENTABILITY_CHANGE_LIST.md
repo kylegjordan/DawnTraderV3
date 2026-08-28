@@ -151,7 +151,7 @@ The alert is proved by **spying the alert module**; both drain legs are driven, 
 | `#929` | **Position sizing has TWO callers.** The fallback-sizing arm of the promoted-signal path never consults the VPG | folded into `#928` |
 | `#927` | The promotion path **invents** `entry * 1.02` when the stored target is null, in **three** places — one of which is the RTB **ranking** key, so pool ORDER can depend on an invented number. And these columns arrive as **strings**, so a stored `"0"` is **truthy**: the guard passes and a **zero target** reaches sizing | `B-TARGET-FABRICATION`, row 3i |
 | `#923` | The trailing controller ratchets a live stop off-grid | `F-G-2`, row 3c |
-| `#924` | Two live-path sites mutate a gridded price after the VPG | row 3g |
+| `#939` | Two live-path sites mutate a gridded price after the VPG *(dispatched to Langston as `#924`; RENUMBERED 2026-08-28 on a collision with CC-INFRA's entry — ANNOTATED, not rewritten, because this list records what he was actually sent)* | row 3g |
 
 ★ **`#929` is the §9.5(a) census question answered correctly for once — *"who ELSE calls this?"* rather than *"does the path I am tracing work?"* A forward trace from the orchestrator structurally cannot find the second caller.**
 
