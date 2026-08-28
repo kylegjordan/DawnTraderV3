@@ -88,6 +88,41 @@ import { getPerClassTargetGate } from '../core/calculations/expectancy.js';
 // orchestrator seam so no strategy can be born bypassing it.
 import { roundTripleToGrid } from '../core/calculations/venue-price-grid.js';
 import { resolveVenueGrid, decideGridAction } from '../markets/venue-grid-resolver.js';
+
+/**
+ * BLOCKER-12 — one alarm per process for an unloaded venue-pairs map.
+ * ⚠️ LATCHED, and for the same reason the writer's permanent-failure alert is: this fires on
+ * EVERY crypto signal while the map is empty, so an unlatched alert would be its own flood —
+ * which is the shape that made the original problem invisible in the first place.
+ * ⛔ It is deliberately NOT bounded by a re-arm window like the writer's: this state is cleared
+ * only by a restart (nothing re-invokes `initialize()`), so re-raising it on a timer would just
+ * repeat a message whose remedy has not changed. The DURABLE fix — re-initialising the service
+ * without a restart — changes a shared service's lifecycle and is homed separately.
+ */
+let _venuePairsUnreadyAlerted = false;
+async function alertVenuePairsServiceUnready(assetClass: string): Promise<void> {
+  if (_venuePairsUnreadyAlerted) return;
+  _venuePairsUnreadyAlerted = true;   // claimed BEFORE the await (the BLOCKER-11 race)
+  try {
+    const { addAlert } = await import('./system-alerts.js');
+    await addAlert({
+      triggers_at: new Date(),
+      category: 'breakage',
+      severity: 'critical',
+      title: 'Kraken asset-pairs map is EMPTY — every crypto signal is being refused',
+      body: 'The venue price grid cannot be resolved for any crypto symbol because the published '
+        + 'asset-pairs map never loaded. It is filled only by initialize() at boot, whose failure '
+        + 'path logs and continues, and nothing re-invokes it — so this persists until the process '
+        + 'is restarted. Active crypto trading is stopped for the duration. RESTART THE APP; the '
+        + 'durable fix is B-VENUE-PAIRS-REINIT.',
+      metadata: { assetClass, source: 'signal-orchestrator/venue-price-grid', issue: '#933' },
+      dedupe_key: 'venue-pairs-service-unready',
+    });
+  } catch (e) {
+    _venuePairsUnreadyAlerted = false;   // never got out — let the next signal try again
+    console.error('[F-G-1] FAILED TO RAISE venue-pairs-unready alert:', e instanceof Error ? e.message : e);
+  }
+}
 import { validateStopDistance } from '../strategies/strategy-helpers.js';
 import { normalizeAndGateTarget } from '../core/calculations/signal-target-normalizer.js';
 // M5B: Import disabled - VTS now runs autonomously, not from signal orchestrator
@@ -603,7 +638,7 @@ export class SignalOrchestrator {
       // FUNCTION and left the CALL unguarded: the same gap, moved one line.
       // ⇒ `decideGridAction` is pure, it is the ONE home of published-vs-derived, and a test can
       // CALL it. What is left here is dispatch, with no judgement of its own to get wrong.
-      const _decision = decideGridAction(sizingContext.assetClass, _r);
+      const _decision = decideGridAction(sizingContext.assetClass, _r, _grid.provenance);
       if (_decision.action === 'passthrough') {
         console.warn(
           `[F-G-1][GRID_UNRESOLVED_PASSTHROUGH] ${_gridSymbol}/${strategyId} — no DERIVED grid for this ` +
@@ -620,6 +655,16 @@ export class SignalOrchestrator {
         // floor on them and booking `grid_stop_distance_after_rounding` would name a rounding that
         // never happened, and would attribute an upstream geometry refusal to the venue grid.
       } else if (_decision.action === 'reject') {
+        // ⛔⛔ BLOCKER-12 — AN UNLOADED VENUE MAP IS AN INFRASTRUCTURE ALARM, NOT 300 SIGNAL
+        // REJECTIONS. `autoMap` is filled only by `initialize()` at boot, whose catch logs and
+        // continues, and NOTHING re-invokes it — so one failed boot fetch refuses every crypto
+        // signal until the next restart. Before this, that arrived as a pile of
+        // `grid_grid_unknown` pre-SQE rejects: a trading outage wearing signal-quality clothes.
+        // ⇒ It is still a REFUSAL (rule 10 — an invented tick emits an unplaceable order), but it
+        // announces itself as what it is, once per process rather than once per signal.
+        if (_decision.reason === 'venue_pairs_service_unready') {
+          void alertVenuePairsServiceUnready(sizingContext.assetClass);
+        }
         _gridReject(_decision.reason);
         // ⛔ REJECT, NEVER RE-ROUND. Rounding to nearest is deterministic, so "round again" could
         // only mean rounding the OTHER way, and choosing the direction that lets a trade through

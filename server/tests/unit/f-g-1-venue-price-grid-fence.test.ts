@@ -701,3 +701,63 @@ describe('F-G-1 — a POLICY refusal is not a malformed signal', () => {
     expect(evaluateGridForTagging(100, 105, 110, 0.01).verdict).toBe('unorderable'); // still
   });
 });
+
+describe('F-G-1 / BLOCKER-12 — an unloaded venue map is INFRASTRUCTURE, not 300 bad signals', () => {
+  // ⛔⛔ `autoMap` is populated only inside `refresh()`, whose only production entry is
+  // `initialize()` at boot — and that call's catch LOGS AND CONTINUES, `isInitialized` is set only
+  // on success, and NOTHING re-invokes it. So one failed boot fetch leaves the map empty for the
+  // whole process lifetime: every crypto symbol resolves `grid_unknown`, every crypto signal is
+  // refused, and it arrives as a few hundred SIGNAL-QUALITY rejects. A deploy during a Kraken blip
+  // would have been a silent crypto blackout. Langston's census; rule-24 outcome (1).
+  // ★ THE ASYMMETRY IS THE FINDING AND IT IS MINE: every other consumer of that service degrades
+  // to SKIP on a miss. The seam is the one new consumer that turns a miss into a REFUSAL.
+
+  const T = { entryPrice: 100, stopPrice: 95, targetPrice: 110 };
+
+  // MUTATION: drop the service_unready arm (or the isReady gate) and this fails —
+  // the reason collapses back to plain `grid_unknown` and the outage hides in signal quality.
+  it('names the infrastructure cause instead of hiding inside grid_unknown', () => {
+    const d = decideGridAction('crypto_spot', { ok: false, reason: 'grid_unknown', ...T }, 'service_unready');
+    expect(d.action).toBe('reject');
+    expect(d.action === 'reject' && d.reason).toBe('venue_pairs_service_unready');
+  });
+
+  // CONTROL: an ordinary per-symbol miss must NOT be relabelled. Without this, the fix could be
+  // "call everything unready", which would alarm on every genuine data gap.
+  it('CONTROL — a per-symbol miss is still an ordinary grid_unknown refusal', () => {
+    const d = decideGridAction('crypto_spot', { ok: false, reason: 'grid_unknown', ...T }, 'unknown');
+    expect(d.action).toBe('reject');
+    expect(d.action === 'reject' && d.reason).toBe('grid_unknown');
+  });
+
+  // xStock never consults that map, so its passthrough must survive unchanged.
+  it('does not disturb the xStock passthrough', () => {
+    const d = decideGridAction('xstock_spot', { ok: false, reason: 'grid_unknown', ...T }, 'unknown');
+    expect(d.action).toBe('passthrough');
+  });
+
+  // and an omitted provenance must not silently become the infrastructure branch
+  it('an absent provenance takes the ordinary path, never the alarm path', () => {
+    const d = decideGridAction('crypto_spot', { ok: false, reason: 'grid_unknown', ...T });
+    expect(d.action === 'reject' && d.reason).toBe('grid_unknown');
+  });
+});
+
+describe('F-G-1 / CHANGES-NEEDED-4 — the VTS tab must not file OUR bugs against the SIGNAL', () => {
+  // The panel summed every verdict except on_grid/would_round into "would fail the venue price
+  // grid" — including the two the VPG itself marks `isWiringBug: true`. I split that taxonomy in
+  // this batch and the only human-facing render re-merged it. This pins the flag the render's
+  // duplicated set has to stay in step with.
+  // MUTATION: set isWiringBug false for either verdict and this fails.
+  it('marks BOTH our-fault verdicts as wiring bugs', () => {
+    expect(evaluateGridForTagging(100, 95, 110, null).isWiringBug).toBe(true);          // grid_unknown
+    expect(evaluateGridForTagging(1.234567, 1.20, 1.30, 1.23456789012345e-7).isWiringBug).toBe(true);
+  });
+
+  // CONTROL: a genuine signal-quality verdict must NOT be flagged as ours, or the panel would
+  // exclude real failures from the figure that exists to count them.
+  it('CONTROL — signal-shape verdicts are NOT ours', () => {
+    expect(evaluateGridForTagging(100, 105, 110, 0.01).isWiringBug).toBe(false);  // unorderable
+    expect(evaluateGridForTagging(100, 110, 90, 0.01).isWiringBug).toBe(false);   // short refusal
+  });
+});

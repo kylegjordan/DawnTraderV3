@@ -4435,6 +4435,17 @@ Kraken publishes a per-pair `tick_size` — **1,437 pairs, 11 distinct values, a
 ⇒ **INTERIM, LANDED IN THIS BATCH:** the miss is now LOUD — `[F-G-1][GRID_EVENT_UNCOUNTED]` on stderr naming the class and the reason, so an uncountable grid event announces itself instead of counting nothing quietly.
 ⇒ **HOME: `B-FUNNEL-PERP-CLASSES`, owner CC-C, placed in `PHASE_19_PLAN` §1 immediately after the perp active-path wiring item — it must land BEFORE perps trade, not after.** The widening is still not F-G-1's job; what changed is that "cannot happen" is no longer true, only "cannot happen yet."
 
+### #933 OPEN 2026-08-28 (CC-C, Langston BLOCKER-12 at F-G-1 r5) — THE KRAKEN ASSET-PAIRS MAP IS FILLED ONCE AT BOOT AND NOTHING EVER RETRIES IT
+
+`autoMap` is populated **only** inside `refresh()`, whose only production entry is `initialize()` at `server/index.ts:496`. That call's catch at `:521` **logs and continues** under the comment *"Non-fatal — static map fallback will be used"*; `isInitialized` is set **only on success**; and a whole-tree census returns **no interval, no retry, and no other production caller** (the two other `refresh()` callers are a diagnostic script and a manual route).
+⇒ **One failed boot fetch leaves the published venue map empty for the entire process lifetime.** Before F-G-1 that degraded to SKIP everywhere it was consulted. **F-G-1 introduced the first consumer whose empty-map behaviour is STOP TRADING** — every crypto symbol resolves no tick, the seam refuses, and active crypto trading halts until a restart.
+⚠️ **FREQUENCY NOT MEASURED. The mechanism is cited, not a rate** — neither Langston nor I have measured how often that boot call fails, and this entry must not be read as claiming it is common.
+
+**LANDED IN F-G-1 (rule-24 outcome (1), disposition 1 — fold into the work in hand):** the state is now DISTINGUISHABLE and LOUD rather than silent. `resolveVenueGrid` checks `isReady()` first and returns a `service_unready` provenance; the seam refuses under the reason **`venue_pairs_service_unready`** and raises **one** critical alert naming the restart as the remedy. ⛔ **It is still a refusal — rule 10 stands, an invented tick emits an unplaceable order.** What changed is that a trading outage no longer arrives disguised as a few hundred signal-quality rejections.
+
+⛔ **WHAT IS *NOT* FIXED, AND WHY IT IS NOT IN THIS BATCH:** the app still cannot recover without a restart. Making it recover means giving a **shared service** a retry/refresh lifecycle that many consumers depend on — a change to boot-time behaviour, not to rounding — and doing it inside a batch already five review rounds deep is how a batch stops converging.
+⇒ **HOME: `B-VENUE-PAIRS-REINIT`, owner CC-C, placed in `PHASE_19_PLAN` §1 at row 3k, immediately after `B-FUNNEL-PERP-CLASSES` (3j).** Scope: a bounded retry on the boot path plus a periodic re-check, and a decision on whether `isReady()` false should gate the active engine as a whole rather than per-signal.
+
 ### #930 OPEN 2026-08-28 (CC-C, split out of #927 on Langston's condition) — A STORED ZERO IS TRUTHY, SO A NULL-GUARD PASSES AND A ZERO TARGET REACHES SIZING
 
 **EVIDENCE, cited rather than asserted — this was `RULED ON REPORTED FACT` and bounced until it was.**

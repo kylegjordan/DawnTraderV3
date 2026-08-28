@@ -274,6 +274,23 @@ export type { FilterDiagnosticsData };
 // P19-B8.3: the disposition type + aggregate-column contract live in the pure,
 // unit-tested gate-columns module (re-exported here for existing importers).
 export type { GateDisposition };
+/**
+ * F-G-1 / Langston CHANGES-NEEDED-4 — WHOSE FAULT IS THIS VERDICT?
+ *
+ * ⛔ The VPG row used to sum "everything except on_grid and would_round" into one figure labelled
+ * "would fail the venue price grid" — quietly including the two verdicts the VPG itself marks
+ * `isWiringBug: true`. Those are OUR defects: no grid resolved, or a rounding that produced an
+ * off-grid price. The module's own docstring says a VPG bug "must never be filed against the
+ * signal… in the exact bucket used to judge signals", and this render did exactly that.
+ * ★ I split that taxonomy IN THIS BATCH and the only human-facing render re-merged it — the
+ * function was fixed, the call was not. `fix-follows-pointer`, one tab over.
+ * ⚠️ `isWiringBug` has two production readers and both are `console.error`, so nothing on the
+ * render path could have known. These sets are a deliberate duplicate of that flag and must be
+ * kept in step with `evaluateGridForTagging`.
+ */
+const VPG_NOT_A_FAILURE = new Set(['on_grid', 'would_round']);
+const VPG_OUR_BUG = new Set(['grid_unknown', 'not_representable_after_rounding']);
+
 export function FilterDiagnosticsPanel({ data, isLoading, gateDisposition = 'tag', modeTail = null, assetClass = 'crypto_spot' }: {
   data: FilterDiagnosticsData | undefined;
   isLoading: boolean;
@@ -383,6 +400,10 @@ export function FilterDiagnosticsPanel({ data, isLoading, gateDisposition = 'tag
     if (n === undefined || n === null) return '—';
     return n.toLocaleString();
   };
+  // F-G-1: the OUR-BUG half of the VPG verdicts, kept OUT of the would-fail figure.
+  const vpgOurBugTotal = Object.entries((((data?.vtsEvaluation as any)?.gridTags ?? {}) as Record<string, number>))
+    .filter(([k]) => VPG_OUR_BUG.has(k))
+    .reduce((t, [, n]) => t + n, 0);
 
   return (
     <div className={`space-y-4 ${SHARED_DIAG_WIDTH}`} data-testid={isEnforce ? 'fd-enforce-panel' : 'fd-tag-panel'}>
@@ -472,7 +493,7 @@ export function FilterDiagnosticsPanel({ data, isLoading, gateDisposition = 'tag
                     <td className="p-2 font-medium">Venue Price Grid (VPG)</td>
                     <td className="p-2 text-right text-amber-500" colSpan={2}>
                       {fmt(Object.entries(((data?.vtsEvaluation as any)?.gridTags ?? {}) as Record<string, number>)
-                        .filter(([k]) => k !== 'on_grid' && k !== 'would_round')
+                        .filter(([k]) => !VPG_NOT_A_FAILURE.has(k) && !VPG_OUR_BUG.has(k))
                         .reduce((t, [, n]) => t + n, 0))}
                     </td>
                     <td className="p-2 text-right text-muted-foreground">
@@ -481,6 +502,13 @@ export function FilterDiagnosticsPanel({ data, isLoading, gateDisposition = 'tag
                     <td className="p-2 text-xs text-muted-foreground">
                       would fail the venue price grid — TAGGED, not dropped; the VTS still simulates on
                       native geometry. Right-hand figure is the population checked.
+                      {vpgOurBugTotal > 0 && (
+                        <span className="ml-1 text-sky-500" data-testid="vts-vpg-ourbug">
+                          · {fmt(vpgOurBugTotal)} excluded as OUR wiring, not the signal's: no venue grid
+                          resolved, or the rounding produced an off-grid price. Those are defects in the
+                          Venue Price Grid and must not count against signal quality.
+                        </span>
+                      )}
                     </td>
                   </tr>
                   <tr className="border-b hover:bg-muted/30">

@@ -33,8 +33,33 @@
 import { krakenAssetPairsService } from './kraken-asset-pairs-service.js';
 
 /** How the grid for a symbol was established — stamped so a reader never has to guess. */
-export type GridProvenance = 'venue_published' | 'derived_gcd' | 'derived_decimals' | 'unknown';
+export type GridProvenance = 'venue_published' | 'derived_gcd' | 'derived_decimals' | 'unknown' | 'service_unready';
 
+/**
+ * ⛔⛔ BLOCKER-12 — `service_unready` IS NOT `unknown`, AND COLLAPSING THEM IS WHAT MADE THIS A
+ * TRADING OUTAGE INSTEAD OF AN ALARM.
+ *
+ * `unknown` means *the venue has no tick for THIS SYMBOL* — a per-symbol data gap, and refusing
+ * one signal is the correct, conservative answer (J1).
+ * `service_unready` means *the published map is not loaded at all* — an infrastructure state, and
+ * refusing on it refuses EVERY crypto signal for the whole process lifetime.
+ *
+ * ⚠️ HOW IT HAPPENS, and Langston's census is the citation: `autoMap` is populated only inside
+ * `refresh()`, whose only production entry is `initialize()` at boot; that call's catch logs and
+ * continues under *"Non-fatal — static map fallback will be used"*, `isInitialized` is set only on
+ * success, and **nothing re-invokes it**. So one failed boot fetch leaves the map empty until the
+ * next restart. **A deploy during a Kraken blip would have been a crypto blackout, booked as a few
+ * hundred `grid_grid_unknown` SIGNAL-QUALITY rejects.**
+ * ★ THE ASYMMETRY IS THE FINDING AND IT IS MINE: every other consumer of that service degrades to
+ * SKIP on a miss — the VOG returns `skipped`, my own `resolveVenueSizeLimits` returns nulls and
+ * the size pre-filter skips, the symbol resolver guards with `isReady()` at five sites. **The seam
+ * is the one new consumer that turns a miss into a REFUSAL, and it was the one not checking
+ * `isReady()`.**
+ * ⛔ RULE-24 OUTCOME (1): a real defect, introduced by this batch, root-caused rather than patched.
+ * The fix is NOT a fallback tick — rule 10 stands, an invented tick emits an unplaceable order.
+ * It is to make the state SAY WHAT IT IS so it alarms as infrastructure instead of hiding inside
+ * signal-quality counts.
+ */
 export interface VenueGrid {
   tick: number | null;
   provenance: GridProvenance;
@@ -45,6 +70,11 @@ export interface VenueGrid {
 }
 
 const UNKNOWN: VenueGrid = { tick: null, provenance: 'unknown' };
+
+/** BLOCKER-12: the published map is absent, which is OUR infrastructure and not the venue's
+ *  answer about a symbol. Kept as a distinct sentinel so the seam can alarm rather than count.
+ */
+const SERVICE_UNREADY: VenueGrid = { tick: null, provenance: 'service_unready' };
 
 /** Derived xStock grids, keyed by symbol. Populated by `setDerivedGrid` (see the refresher). */
 const derived = new Map<string, VenueGrid>();
@@ -150,6 +180,7 @@ export type GridAction =
 export function decideGridAction(
   assetClass: string,
   r: { ok: boolean; reason?: string; entryPrice: number; stopPrice: number; targetPrice: number },
+  provenance?: GridProvenance,
 ): GridAction {
   if (r.ok) {
     return {
@@ -165,6 +196,12 @@ export function decideGridAction(
   if (r.reason === 'grid_unknown' && gridIsDerivedForClass(assetClass)) {
     return { action: 'passthrough', reason: 'unresolved_grid' };
   }
+  // ⛔ BLOCKER-12: an unloaded map is an INFRASTRUCTURE fault, not a signal defect. Still a
+  // refusal — we do not invent a tick — but under a reason that names the real cause, so it
+  // alarms instead of arriving as a few hundred signal-quality rejects.
+  if (r.reason === 'grid_unknown' && provenance === 'service_unready') {
+    return { action: 'reject', reason: 'venue_pairs_service_unready' };
+  }
   return { action: 'reject', reason: r.reason ?? 'unknown' };
 }
 
@@ -176,6 +213,9 @@ export function resolveVenueGrid(symbol: string, assetClass: string): VenueGrid 
   }
 
   // crypto_spot / crypto_perp — the venue publishes it.
+  // ⛔ BLOCKER-12: ASK WHETHER THE MAP IS THERE BEFORE ASKING WHAT IS IN IT. Without this, an
+  // empty map is indistinguishable from 300 symbols the venue has no tick for.
+  if (!krakenAssetPairsService.isReady()) return SERVICE_UNREADY;
   const entry = krakenAssetPairsService.resolveByInternal(symbol);
   const raw = entry?.tickSize;
   if (raw == null) return UNKNOWN;
