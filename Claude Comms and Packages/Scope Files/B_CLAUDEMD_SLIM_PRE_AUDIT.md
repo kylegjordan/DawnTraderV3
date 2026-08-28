@@ -1,15 +1,20 @@
 # B-CLAUDEMD-SLIM — PRE-IMPLEMENTATION AUDIT **AND** IMPLEMENTATION PLAN
 
-change-class: non_architecture ⚠️ **CHALLENGED BY F10** · **Owner:** CC-A · **Step 2 of 11**
-**Scope APPROVED r5** (`c7ce7d8ea`) · **Audit ref: `e44c2ba47`** · **Placement:** `PHASE_19_PLAN.md` §governance queue, **position 9**
+change-class: non_architecture · **Owner:** CC-A · **Step 2 of 11** · **Scope APPROVED r5** (`c7ce7d8ea`)
+**Audit ref: `e44c2ba47`** · **Placement:** `PHASE_19_PLAN.md` §governance queue, **position 9**
 
 > ⛔ **THE AUDIT COMES FIRST AND THE PLAN FALLS OUT OF IT.** Every plan item back-references its finding; anything without one is flagged **`UNAUDITED`**.
 
-**PREVIOUSLY STATED / NOW / REASON (§9.2, and I owed this block and did not write it):**
-> **PREVIOUSLY STATED: queue position 5** (`SCOPE:5`). **NOW: position 9.** **REASON:** four batches were placed ahead of it on 2026-08-27/28 (`B-CROSS-SESSION-BLEED`, `B-MEASURE-GATE`, `B-EXIT-LATCH-INVESTIGATION`, and the guard pair). `PHASE_19_PLAN.md:449` confirms 9. ⚠️ **I silently adopted the correct value. §9.2 mandates this block — and §9.2 is one of the sections this batch is cutting.**
+**PREVIOUSLY STATED / NOW / REASON (§9.2):** **PREVIOUSLY: queue position 5** (`SCOPE:5`). **NOW: position 9.** **REASON:** four batches placed ahead of it 2026-08-27/28; `PHASE_19_PLAN.md:449` confirms.
 
-**`REVIEWER r1: object · "re-derive, refute the absences, find plan items with no finding" · HIT ×8, three load-bearing · re-derived y`**
-**`REVIEWER r2: object · "are the corrections wrong in a NEW way?" · HIT ×13 · re-derived y (all load-bearing ones, by me, at the ref)`**
+## ⛔⛔ THE ROUND RECORD — READ THIS FIRST, IT IS THE MOST IMPORTANT THING IN THE DOCUMENT
+| round | mode | verdict | re-derived |
+|---|---|---|---|
+| **r1** | object | **HIT ×8** — three load-bearing | y |
+| **r2** | object | **HIT ×13** — including that my *fix* had the flaw it fixed | y |
+| **r3** | object | **HIT ×11** — including a correct number I replaced with an unreproducible one | y |
+
+⛔⛔ **THE ERROR RATE DID NOT CONVERGE, AND THAT IS THE FINDING I MOST WANT LANGSTON TO RULE ON.** Three rounds, ~32 accepted corrections, and **round 3 still found eleven** — several of them *inside the paragraphs correcting the same class of error one bullet earlier.* ★ **The loop is not polishing; it is still finding first-order defects at round three.** ⚠️ **Kyle's termination condition — the reviewer's own called-out items satisfied — is met for r3's list, but the TREND says the next round would find more.** **I stopped at the cap, as required, rather than because it was clean.**
 
 ---
 
@@ -21,100 +26,84 @@ change-class: non_architecture ⚠️ **CHALLENGED BY F10** · **Owner:** CC-A �
 |---|---|---|
 | 1 | **CODE at the ref** | `CLAUDE.md`, 12 `SKILL.md`, `CONDUCT.md`, the loaders, `fresh-rules.mjs`, `discord_common.py` |
 | 2 | **RUNTIME instrument** | `~/.claude/instructions-loaded.jsonl` — **F1** |
-| 3 | **`SYSTEM_IMPACT_MAP.md`** | NOT silent, 11 lines incl. a component entry — **F4** |
-| 4 | **`SYSTEM_MANUAL.md`** | NOT silent, 15 lines incl. a by-number pointer into a cut target — **F5** |
-| 5 | **the LEDGER** (§9.5(b-ii)) | `#339` · `#564` · `#749` · `#750` — **F6** |
-| 6 | **`bridge/canonical/`** (§9.5(b)) | 14 files, **zero coverage** (control run) — **F7** |
+| 3 | **`SYSTEM_IMPACT_MAP.md`** | applicable — **F4** |
+| 4 | **`SYSTEM_MANUAL.md`** | applicable, `:517` — **F5** |
+| 5 | **the LEDGER** | ⛔ **searched, and I still MISSED `#749`'s own disposition — see F10** |
+| 6 | **`bridge/canonical/`** | 14 files, zero coverage (control run) — **F7** |
 
 ---
 
-### F1 — THE LOADED SET
+### F1 — THE LOADED SET, **FROM THE INSTRUMENT THIS TIME.**
 
-| file | at `e44c2ba47` | how it arrives |
-|---|---|---|
-| `CLAUDE.md` | **117,191** | harness-native |
-| `CONDUCT.md` | **24,536** | `load-conduct.mjs` |
-| `MEMORY_CC_A.md` | **24,426** | `load-own-memory.mjs` |
-| shared `MEMORY.md` | **18,056** | harness-native |
-| **TOTAL** | **184,209** | |
+⛔ **MY EARLIER TABLE REPORTED REF-TREE BYTES FOR FILES THE HARNESS DOES NOT LOAD FROM THE REF** — the memory truth files live in the user cache (F1b proves it), and `CONDUCT.md` loads from the working tree. **I measured the ref copy of files nobody reads from the ref, in a table headed *"how it arrives"*.**
 
-⇒ **`CLAUDE.md` = 63.6%.** ✅ **The scope's *"~64%"* holds.** ⚠️ **Its *"112 KB"* is stale.**
-⚠️ **63.6% IS A CEILING, NOT A MEASUREMENT** — `session-reminder.mjs` and the per-chunk manifests are injected and not in the table, so the true share is **lower**.
-⛔ **INSTRUMENT REACH: the native sink reports exactly ONE file.** It answers *"what does the harness load?"*, **not *"what is in the context?"*** ⚠️ **Row-count population, corrected: `cwd == C:\DawnTraderV3-old` returns 338 rows, not the 170 I first wrote — and the log carries TWO row schemas, the native rows having no `cwd` key at all. My figure had no stated predicate.**
-
-⛔⛔ **AND MY FIRST DRAFT REPORTED TWO OF THESE FROM MY WORKING TREE IN A DOCUMENT HEADED "AUDIT REF" — the CRLF trap I retracted the same morning (`#751`).**
-
-### F1b — CORRECTED: **TWO DIVERGENCES, NOT THREE — AND THE THIRD WAS CRLF FOR THE THIRD TIME TODAY.**
-| copy | bytes | |
-|---|---|---|
-| truth file (user cache) | **17,884** | ⇐ **the STALE one** |
-| mirror at the ref | **18,056** | |
-| mirror in my worktree | 18,110 | ⛔ **NOT a divergence: 54 B over 54 lines. `tr -d '\r'` → 18,056, `diff` vs the ref is EMPTY.** |
-⇒ ★ **ONE real divergence, and I never stated its DIRECTION: the TRUTH FILE is behind the mirror** — it still says *"YOU ARE ONE OF THREE SESSIONS"* where the mirror says four and names CC-INFRA. **The §3.1 two-step was run backwards.**
-**DISPOSITION: §9.4 #4 — scheduled review, folded into `B-CROSS-SESSION-BLEED` (#753).** ⚠️ **Not a finding about the slim.**
-
-### F2 — INBOUND CITATION CENSUS. **RE-MEASURED AT `e44c2ba47`.**
-
-| target | occurrences |
+**What the instrument actually reports (last CC-A `SessionStart`, 2026-08-28T06:06:20Z):**
+| file | bytes AS LOADED |
 |---|---|
-| §9.3 | **462** |
-| §9.5 | **341** |
-| §9.1 | **234** |
-| §9.2 | **145** |
-| rule 19 | **36** *(case-insensitive)* |
-| **total** | **1,218** |
+| `CLAUDE.md` | **114,901** |
+| `CONDUCT.md` | 24,710 |
+| `MEMORY_CC_A.md` | 24,000 |
+| shared `MEMORY.md` | 17,884 |
+| **TOTAL** | **181,495** |
+⇒ **`CLAUDE.md` = 63.3% of what a session actually loads.** ✅ **The scope's *"~64%"* survives — the CONCLUSION held while the DERIVATION was wrong, which is the least comfortable way to be right.**
 
-⚠️ **MY EARLIER FIGURES (1,188) WERE MEASURED AT THE PARENT COMMIT WHILE THE HEADER SAID "AUDIT REF".** ★ **The audit's own landing added ~30 citations to the targets it counts. The instrument is inside the population it measures.**
-⚠️ **POPULATION, STATED AS A CHOICE: `*.md` only. That EXCLUDES 22 live `§9.x` citations in tracked TypeScript/JS** — `poller.mjs:137` (`§9.5(a-ii)`), `active-funnel-tracker.ts:108`/`:416`, `eval-cycle.ts:1153`, `active-execution-engine.ts:3304`, and others. **Several are §9.5 — the dangling class — and they sit outside P2's sampling and outside F8's reader row.** *(20 `dist/` build artifacts are correctly excluded; that is also a choice.)*
-✅ Boundary-anchoring works: naive `§9.1` = 281, anchored = 234. **Control: `§9.99` = 0.** Contamination = 51 (`§9.10` 26, `§9.13` 13, **`§9.14` 12 — which I missed first time**).
+⛔ **AND P9's PREMISE IS REFUTED BY THIS SAME LOG: a second instrument already exists.** 236 rows are `log-instructions-loaded.mjs` SessionStart rows carrying **per-file bytes and `context_bytes_total`**. ★ **I proposed `wc -c` as the missing instrument while the instrument was in the file I was reading.**
+⚠️ **ROW COUNT: 169 by `cwd` exact, 170 by suffix. My "corrected" 338 is unreproducible under any predicate — I RETRACTED A CORRECT NUMBER AND REPLACED IT WITH A WRONG ONE**, inside the finding series about stated populations. **The original 170 stands.** *(The schema half was right: 236 rows carry no `cwd` key at all.)*
 
-⛔ **RETRACTED: my *"the file's own 237 figure is off by 8×"*.** I compared their **anchored** count to my **prefix** count. **Anchored `§9` = 372.** ⇒ **237 vs 372 is a population dispute, not an error of magnitude.** ★ **I corrected exactly this contamination for `§9.1` one bullet earlier and then committed it myself.** *(And it lives at **`CLAUDE.md:448`**, not `:462` as I cited — a wrong line reference inside a finding about citation integrity.)*
+### F1b — **`MEMORY.md`: ONE REAL DIVERGENCE, DIRECTION STATED.**
+truth **17,884** (*"ONE OF THREE SESSIONS"*, no CC-INFRA) · ref mirror **18,056** (*"FOUR"*) · worktree 18,110 = **CRLF only, not a divergence**.
+⇒ ★ **THE TRUTH FILE IS THE STALE ONE — the §3.1 two-step was run backwards.** **DISPOSITION: §9.4 #4, scheduled review, folded into `B-CROSS-SESSION-BLEED` (#753).**
 
-### F3 — ★★ **TWO FAILURE MODES, NOT ONE — AND REGIME B IS AN INFERENCE, NOT AN ESTABLISHED FACT.**
+### F2 — CITATION CENSUS AT `e44c2ba47`
 
-| regime | targets | occurrences | what happens |
+| target | occurrences | regime |
+|---|---|---|
+| §9.3 | **462** | A |
+| §9.5 | **341** | **B** |
+| §9.1 | **234** | A |
+| §9.2 | **145** | A |
+| rule 19 | **36** | **B** |
+| **total** | **1,218** | **841 A / 377 B** |
+
+⚠️ **CORRECTED AGAIN AT r3 — the contamination bullet was still measured at the PARENT, one bullet after retracting exactly that.** At this ref: **naive `§9.1` = 288, anchored 234, contamination 54** (`§9.10` 27, `§9.13` 14, `§9.14` 13). My published 26/13/12 = 51 reconciled only against the *old* 230.
+⛔ **AND THE CONTROL IS NOT CLEAN: `§9.99` returns 1, not 0 — the hit is THIS DOCUMENT'S OWN CONTROL SENTENCE.** ★ **The control passes only by excluding the measuring instrument from the population, and I never declared that.**
+⚠️ **POPULATION: `*.md`. That excludes `§9.x` citations in tracked source — 27 across `*.ts/*.js/*.mjs`, NOT the 22 I wrote (22 is `server/` alone, while my own example list cited `poller.mjs`, outside it — two populations spliced in the bullet whose purpose is naming the population).** ⛔ **My *"20 `dist/` artifacts correctly excluded"* has no object: there are ZERO tracked files under `dist/` at the ref.**
+
+### F3 — **TWO FAILURE MODES.**
+| regime | targets | occ | what happens |
 |---|---|---|---|
-| **A — HOLLOW BUT RESOLVING** | §9.1 · §9.2 · §9.3 — **verified: each retains ≥1 clause** (`SCOPE:41,42,45,47`) | **841** | pointer resolves, lands on a section that no longer says what was cited. **§4's *"citations still resolve"* PASSES VACUOUSLY.** |
-| **B — ⛔ DANGLING** | **rule 19** (`SCOPE:49` **"CUT, WHOLE"**) · **§9.5** | **377** | **the pointer BREAKS.** |
+| **A — hollow but resolving** | §9.1 · §9.2 · §9.3 (each retains ≥1 clause) | **841** | pointer resolves onto a section that no longer says what was cited. **§4's check PASSES VACUOUSLY.** |
+| **B — dangling** | rule 19 (`SCOPE:49` *"CUT, WHOLE"*) · §9.5 | **377** | **the pointer BREAKS.** |
+⚠️ **REGIME B IS AN INFERENCE: the scope never says §9.5's heading is removed, and never defines Class A/B/C.** It rests on `SCOPE:52`'s 6,038 B matching `CLAUDE.md:500-529` (re-derived 6,039 B, line 500 = the heading). **DISPOSITION: §9.4 #1 — FOLD INTO THIS BATCH: Step 3 does not begin until the scope states it explicitly.**
 
-⚠️ **FLAGGED FOR LANGSTON, BECAUSE I STATED IT AS FACT AND IT IS NOT: THE SCOPE NEVER SAYS §9.5's HEADING IS REMOVED.** *"Class A/B/C"* **is never defined anywhere in the scope** — grep returns usages only. My regime-B assignment rests entirely on `SCOPE:52`'s 6,038 B matching `CLAUDE.md` lines 500-529 (**re-derived: 6,039 B, line 500 IS the `### 9.5` heading**). ★ **Good evidence, and still an inference. F5 was then "corrected" on the strength of it. This is a SCOPE AMBIGUITY for Langston to settle, alongside F10.**
+### F3b — **A KEPT HEADING SERVES 29% OF §9.5's CITATIONS.** sub-citations `§9.5(a/a-ii/b/b-ii)` = **242**; bare `§9.5` = **99**. ⇒ ⛔ **a husk gives `§9.5(a-ii)` nothing — F3-A's failure inside my own fix for F3-B.** ⇒ **P1c.**
 
-### F3b — ★★ **NEW, AND IT BREAKS MY OWN FIX: A KEPT HEADING SERVES ONLY 29% OF §9.5's CITATIONS.**
-| §9.5 citation shape | count |
-|---|---|
-| **sub-citations** — `§9.5(a)`, `§9.5(a-ii)`, `§9.5(b)`, `§9.5(b-ii)` | **242** |
-| bare `§9.5` | **99** |
-⇒ ⛔ **A husk resolves `§9.5` and gives `§9.5(a-ii)` NOTHING — the sub-labels exist only inside the deleted body.** ★★ **THIS IS F3-A's VACUOUS-RESOLUTION FAILURE ONE LEVEL DOWN, INSIDE THE FIX I WROTE FOR F3-B.** **P1b must carry the sub-labels, not just the heading.**
+### F4 — **SIM APPLICABLE.** ⚠️ **CORRECTED EVIDENCE: `SIM:938`/`:957` are untouched by the cuts and were the wrong citations.** The real evidence: **SIM carries 6 anchored `§9.5`, 3 `§9.3`, 10 `§9.1`** — several dangling under regime B. ★ **Right verdict, wrong citations, in a finding series about citation integrity.**
 
-### F4 — **`SYSTEM_IMPACT_MAP.md` APPLICABLE; the scope names it zero times.** `SIM:938` (component entry for `fresh-rules.mjs`) · `SIM:957` (live cross-reference into §5). ⇒ **CONTENT update required.**
+### F5 — **`SYSTEM_MANUAL:517`** — *"GOVERNANCE LESSON (now `CLAUDE.md` §9.5)"* — **dangles if regime B holds.**
 
-### F5 — **`SYSTEM_MANUAL:517`** — *"GOVERNANCE LESSON (now `CLAUDE.md` §9.5)"* — **dangles if regime B holds.** ⚠️ **Conditional on F3's inference, not established.**
+### F6 — **`#339` NO-TRIM** at risk under regime B unless P1+P1b+P1c land. **`#564`** — this batch is it, applied to §9.
 
-### F6 — LEDGER. **`#339` NO-TRIM** — ⛔ **regime B puts it at risk: 377 citations with no forwarding address IS content made unfindable.** Satisfied only if P1+P1b land **and P1b covers the sub-labels (F3b)**. **`#564`** — this batch is §564 applied to §9. `#749`/`#750` = Class C.
+### F7 — **`bridge/canonical/`: 14 files, ZERO coverage** (control run). ⇒ no original-intent record; provenance is git history + `_archive/CLAUDE_MD_RULE_HISTORY.md`.
 
-### F7 — **`bridge/canonical/`: 14 files, ZERO coverage of the instruction files** (control: `DawnTrader` returns 9/7/4 in three corpus files). ⇒ **no original-intent record exists; provenance is git history + `_archive/CLAUDE_MD_RULE_HISTORY.md`** — which is why that file is the right destination for evicted EVIDENCE.
+### F8 — CENSUS. **Population: this repo; Langston's own `CLAUDE.md` and server-side scripts are outside any local grep.**
+Writers: four sessions by hand. Readers: the harness + **1,218 markdown + 27 source citations**. Programmatic mutator: **`fresh-rules.mjs:124`, exactly one.**
+⛔ **DELETER — REFUTED, by that same component.** `git checkout <ref> -- CLAUDE.md` is a whole-file replacement; its own comment records it *"reverted my commit's content in the working tree"*. ⚠️ **I called it a mutator in one row and asserted no deleter in the next.** *(Guards at `:101`/`:111`.)*
+⚠️ `config.mjs:31` `HOUSEKEEPING_ONLY_BASENAMES` **does** key off `CLAUDE.md`. ⇒ **no automated reader validates a citation.**
 
-### F8 — §9.5(a) CENSUS. **Population: this repo. Langston's `/home/langston/CLAUDE.md` and server-side scripts are OUTSIDE any laptop-local grep.**
+### F9 — ⛔ **RETRACTED: no renumber cascade.** `CLAUDE.md:161` = `11. *(removed)*` — a rule was cut whole, the hole left explicit, 12-29 unrenumbered. ⚠️ **n=1, and it is FIVE WEEKS OLD (`b3d9b8bcb`, 2026-07-24) — I called it "the established practice" and PART 3 called it "years-deep". Both overstated.** ⚠️ **My "840 across rules 1-29" was unreproducible (866 anchored / 810 line-based / 1,674 unanchored).** ✅ **What survives: the explicit hole is the right FORM, and it should cite `:161`.**
 
-| question | answer |
-|---|---|
-| writes | four sessions, by hand |
-| reads | the harness + **1,218 markdown citations + 22 in tracked source (F2)** |
-| mutates programmatically | **`fresh-rules.mjs:124`. Exactly one, in-repo** — confirmed against the working tree too |
-| ★ **DELETES** | ⛔ **REFUTED — the same component.** `git checkout <ref> -- CLAUDE.md` is a **whole-file replacement**; its own comment records it *"reverted my commit's content in the working tree"* (`:104-108`). ⚠️ **I called it a mutator in one row and asserted no deleter in the next.** *(Guards at `:100`/`:110` narrow the window; the second exists because the first was insufficient.)* |
-| schedules | the SessionStart chain. ⚠️ **`config.mjs:31` `HOUSEKEEPING_ONLY_BASENAMES` keys off `CLAUDE.md`** — my *"the checker does not grade it"* was true of `DOCS` and incomplete as stated |
+### F10 — ⛔⛔ **SUBSTANTIALLY WITHDRAWN. THE LEDGER REFUTES IT, AND F6 SAYS I SEARCHED THE LEDGER.**
+I claimed `#749` is a **NEW FEATURE** on the comms send path, strengthening a change-class challenge, and blamed `SCOPE:95` for a wrong reading.
+⛔ **`SCOPE:95` WAS CORRECT** — it says the code *"already stamps every chunk of a Langston-addressed post"*, which is exactly what `discord_common.py:251-256` does. **Blaming it would have sent a reviewer to "fix" a correct line.**
+⛔ **AND `#749`'s OWN ENTRY SETTLES IT (`RUNNING_ISSUES:3076`): *"THE FIX IS NARROW AND THE MACHINERY ALREADY EXISTS … One conditional is drawn too narrowly. No new subsystem."* Kyle, `:3079`: *"widen the same message method."*** ⇒ **it is a WIDENING of existing per-chunk stamping — a modification, not a new feature.**
+★★ **This is a §9.5(b-ii) miss inside a document whose F6 row asserts the ledger was searched. The rule exists precisely to stop this, I invoked it, and I still filed the finding.**
+✅ **RESIDUAL, and it is much smaller: the batch still edits live comms code, so the change-class deserves one line of confirmation from Langston — not a challenge.** **DISPOSITION: §9.4 #5 — WITHDRAWN, carrying `RUNNING_ISSUES:3076` + `:3079` as the citations that dissolve it.**
 
-⇒ **NO AUTOMATED READER VALIDATES A CITATION.**
-
-### F9 — ⛔ **RETRACTED: THE RENUMBER CASCADE IS NOT A LIVE RISK, AND THE FILE ITSELF REFUTES IT.**
-**`CLAUDE.md:161` reads `11. *(removed)*`.** ★ **A rule has ALREADY been cut whole from this list, the hole was left explicit, and rules 12-29 were NOT renumbered.** ⇒ **the established practice is one line above rule 13, in the file I was auditing.**
-⚠️ **And my supporting number was unreproducible: I wrote 840 across rules 1-29; anchored-occurrence gives 866, line-based 810, unanchored 1,674. No population yielded 840** — a stated-without-population aggregate **inside the finding series whose subject is stated populations.**
-✅ **What survives: P1b's "explicit hole" is CORRECT — and it is not novel. It should cite `:161` as its form.**
-
-### F10 — ⚠️ **CHANGE-CLASS CHALLENGE STANDS; MY PREMISE ABOUT THE EXISTING CODE WAS WRONG.**
-I wrote that `#749` modifies *"recipient stamping on every chunk"*. **Re-derived at `discord_common.py:251-256`: the block stamps `GROUP_MARKER_FMT = '⟨grp={grp} {i}/{n}⟩'` — a REASSEMBLY GROUP ID. No recipient name is written to any chunk anywhere in that function.**
-⇒ ★ **The mechanism I described does not exist yet, so `#749` is a NEW FEATURE on the send path, not a modification — which STRENGTHENS the change-class challenge rather than weakening it.** ⚠️ **I inherited the wrong reading from `SCOPE:95` and never re-derived it. Langston had already corrected me on this exact point once (*"a reassembly marker, not a name"*) and I re-imported the error into the audit.**
-⛔ **A documentation batch that adds a feature to the live comms send path is not obviously `non_architecture`. FOR LANGSTON.**
+### F11 — ★★ **NEW AT r3, AND IT IS A HARD PREREQUISITE THE AUDIT NEVER MENTIONED.**
+**`PHASE_19_PLAN.md:448`** places **`B-EOL-NORMALISE` (#751) at position 6 with: *"**Before the slim**: the cap and the delivery-chunk figures are PER CHECKOUT until this lands, so the slim's byte targets are unreliable without it."***
+⇒ ⛔ **THIS AUDIT IS BUILT ALMOST ENTIRELY ON BYTE MEASUREMENTS, TRIPPED OVER CRLF THREE TIMES IN ONE DAY, AND THE WHOLE-BATCH VERIFICATION (`SCOPE:125`/P9) IS A BYTE DELTA — precisely the figure the plan declares unreliable until #751 lands.**
+**DISPOSITION: §9.4 #1 — FOLD INTO THIS BATCH as a sequencing constraint: `B-EOL-NORMALISE` lands FIRST, or the slim's verification is not decision-grade.**
 
 ---
 
@@ -122,31 +111,32 @@ I wrote that `#749` modifies *"recipient stamping on every chunk"*. **Re-derived
 
 | # | item | falls out of |
 |---|---|---|
-| **P1** | Regime-A cut clauses leave a **forwarding pointer at their own section** | **F3-A** + the `§2` precedent |
-| **P1b** | **Regime B: `§9.5`'s HEADING survives as a husk; `rule 19`'s number survives as an explicit hole, in the form of `CLAUDE.md:161`** | **F3-B**, **F5**, **F9** (form), **F6** |
-| **P1c** | ★ **NEW: THE HUSK MUST CARRY THE SUB-LABELS `(a)`, `(a-ii)`, `(b)`, `(b-ii)` AS NAMED POINTERS** — a bare heading serves 99 of 341 | **F3b** |
-| **P2** | §4 gains: **follow ONE real inbound citation per cut clause and confirm it still supports the citing sentence** | **F3-A** |
-| **P2b** | ⚠️ **Stated limit, not a fix: samples ~6 of 1,240. No automated reader exists (F8).** Residual named, not discharged. **§9.4 #4.** | **F8** |
-| **P3** | **SIM content update** | **F4** |
-| **P4** | **System Manual content update** — `:517` re-aimed | **F5** |
-| **P5** | **Update `_archive/CLAUDE_MD_RULE_HISTORY.md`** with evicted evidence | **F7** |
-| **P6** | Execute the cuts per the approved scope | ⚠️ **`UNAUDITED` as to WHICH clauses — that is the scope's determination. Audited as to CONSEQUENCE (F3, F3b).** |
-| **P6b** | ⛔ **NEW: FIND A DESTINATION FOR CARRY-ACROSS ITEM 2 — THE PLAN HAS NONE, AND IT IS THE ONE THAT CARRIES THE RECLASSIFICATION.** The trigger-breadth clause fires on *"any audit, pre-audit **or architectural dispute**"*; both skills fire `STEP 1/2 ONLY`. ★ **By §3's own boundary test a rule that must fire UNPROMPTED cannot live in a skill — so it has no legal home except `CLAUDE.md`, which contradicts regime B.** **FOR LANGSTON.** | **round-2 finding; unplanned** |
-| **P7** | The nearest-paraphrase step, per cut, before the cut | ⚠️ **`UNAUDITED` — Langston condition (iii), a method requirement** |
-| **P8** | Class C: `#749`, `#750` | ⛔ **`UNAUDITED` AND FLAGGED — F10. Split it out or audit it separately.** |
-| **P9** | Re-measure after the cut; **second instrument NAMED: `wc -c` at the ref**, since the sink cannot see hook-injected files | **F1** |
-| **P10** | Update the skill-count check — Class C builds a **thirteenth** skill and `SCOPE:123` checks for twelve | **F7/P8** |
+| **P0** | ⛔ **`B-EOL-NORMALISE` (#751) LANDS FIRST** | **F11** |
+| **P1** | Regime-A cut clauses leave a forwarding pointer at their section | **F3-A** + the `§2` precedent |
+| **P1b** | Regime B: `§9.5`'s heading survives as a husk; `rule 19`'s number as an explicit hole **in the form of `CLAUDE.md:161`** | **F3-B**, **F5**, **F9** |
+| **P1c** | **The husk carries the four sub-labels as named pointers** — a bare heading serves 99 of 341 | **F3b** |
+| **P1d** | ★ **Carry-across item 2 (trigger breadth) lands ON the §9.5 husk** — a rule that must fire unprompted stays in `CLAUDE.md` (`SCOPE:107-108`), and the husk is a legal host | **r3** — ⛔ **my P6b claimed this was a contradiction needing Langston. It is not: P1b/P1c already solve it. WITHDRAWN, §9.4 #5.** |
+| **P2** | §4 gains: follow ONE real inbound citation per cut clause and confirm it still supports the citing sentence | **F3-A** |
+| **P2b** | ⚠️ Stated limit: samples ~6 of **1,245** (1,218 md + 27 source). No automated reader exists. **§9.4 #4, scheduled review at close.** | **F8** |
+| **P3** | SIM content update — **on the 19 dangling §9.x citations, not `:938`/`:957`** | **F4** |
+| **P4** | System Manual — `:517` re-aimed | **F5** |
+| **P5** | `_archive/CLAUDE_MD_RULE_HISTORY.md` takes the evicted evidence | **F7** |
+| **P6** | Execute the cuts per the approved scope | ⚠️ **`UNAUDITED` as to WHICH clauses — the scope's determination. Audited as to consequence.** |
+| **P7** | Nearest-paraphrase step per cut, before the cut | ⚠️ **`UNAUDITED` — Langston condition (iii)** |
+| **P8** | Class C: `#749`, `#750` | ✅ **`#749` is a narrow widening (F10) — no longer flagged.** ⚠️ **One line of change-class confirmation still wanted.** |
+| **P9** | Re-measure after the cut — ⚠️ **using the EXISTING per-file instrument in the same log, not `wc -c`** | **F1** |
+| **P10** | Update the skill-count check — Class C builds a thirteenth | **P8** |
 
 ---
 
 ## PART 3 — PLAIN LANGUAGE
 
-**Two review rounds changed this document more than the original draft contained.**
+**Three review rounds. Each found roughly ten real errors, and the third still found eleven — several inside the paragraphs correcting the same kind of error one line earlier.** That is the honest headline: **this stopped because it hit the round limit, not because it came out clean.**
 
-The rules file is **117,191 bytes, about 64% of what a session reads before starting work** — a ceiling, not an exact figure, because some injected text still isn't counted.
+The rules file is **about 64% of what a session reads before starting work** — the conclusion held, while my way of getting there was wrong twice.
 
-**My central finding was half wrong and the correction was wrong again in a new way.** Trimming these sections leaves most pointers working but landing on something emptier — a quiet failure. **For two of the five, the section goes away entirely and the pointers simply break.** I then proposed keeping an empty heading behind as a signpost — **and about seven in ten of those pointers are to *sub-parts* of the section, which an empty heading cannot help at all.** The fix had the same flaw as the problem.
+**The two things worth your attention:**
 
-**I also claimed a renumbering risk that the file itself refutes** — a rule was already removed years-deep in this list, the gap was simply left visible, and nothing was renumbered. **That's the pattern to copy, not a danger to guard against.**
+**I filed a concern that our own records already answered.** I flagged that part of this batch adds something new to the live messaging code. **Our issue log says plainly that it's a narrowing fix to code that already exists** — and my own audit claims to have searched that log. The rule I invoked exists specifically to stop that.
 
-**Two things are going to Langston as questions rather than answers:** whether one section is really being deleted outright (the scope never actually says so), and the fact that **one piece of this work adds a feature to the live messaging code**, which may mean this isn't the kind of batch we filed it as.
+**And the batch has a prerequisite nobody noticed.** Another queued item fixes a line-ending problem that makes every size measurement unreliable **per copy of the repo** — and the plan already says, in writing, that it must land before this batch. **This audit is built almost entirely on size measurements, and I tripped over that exact problem three times today.** That one now sits at the top of the plan.
