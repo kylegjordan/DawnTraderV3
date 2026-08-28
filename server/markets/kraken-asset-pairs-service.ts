@@ -69,6 +69,11 @@ export interface AutoMappingEntry {
   pairDecimals?: number;      // price precision (raw.pair_decimals)
   lotDecimals?: number;       // volume precision (raw.lot_decimals)
   ordermin?: string;          // minimum order volume (raw.ordermin)
+  // F-G-1 (OBJ-7): the AUTHORITATIVE price grid for this pair. Prefer this over
+  // `pairDecimals` anywhere a venue-representable PRICE is produced -- the two
+  // disagree on 4 of 1,437 pairs and the decimals are the looser of the two.
+  tickSize?: string;          // minimum price increment (raw.tick_size)
+  costmin?: string;           // minimum order NOTIONAL (raw.costmin) -- OBJ-7b kind (i)
 }
 
 /**
@@ -381,6 +386,15 @@ class KrakenAssetPairsService {
             pairDecimals: raw.pair_decimals,
             lotDecimals: raw.lot_decimals,
             ordermin: raw.ordermin,
+            // F-G-1 (OBJ-7): the venue's PRICE GRID. Retained because `pairDecimals` is an
+            // INSUFFICIENT rounding basis -- measured across all 1,437 pairs at 2026-08-27,
+            // 10^-pair_decimals === tick_size for 1,433 but FOUR disagree (CELRUSD, REQUSD,
+            // VTHOUSD, WINUSD), where the decimals permit one digit FINER than the tick
+            // allows, so formatting to decimals can emit a price the tick rejects. None of
+            // the four is currently traded => latent, not live, which is precisely why it is
+            // fixed at the basis rather than at a symbol list.
+            tickSize: raw.tick_size,
+            costmin: raw.costmin,
           };
 
           // Determine tier
