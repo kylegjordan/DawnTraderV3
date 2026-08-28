@@ -4240,6 +4240,39 @@ Kraken publishes a per-pair `tick_size` — **1,437 pairs, 11 distinct values, a
 
 **HOME: folded into `F-G-1` `P4` (§9.4 disposition 1 — the work in hand), owner CC-C.** Kyle's requirement is explicit and he has asked to be told when it is deployed AND visible, so *"counted"* is not *"done"* for this batch. **Deliverable: a pre-SQE reject row on the paper FD tab with grid refusals as a NAMED category of their own, not merged into a catch-all.**
 
+### #924 OPEN 2026-08-28 (CC-INFRA, surfaced by Langston during `B-TOKEN-WATCH` Step-2 review; he re-derived it independently) — TWO UNGOVERNED KEYS CAN LOG IN AS THE ACCOUNT THAT OWNS THE TRADING APPLICATION, AND THE SYSTEM IMPACT MAP CITES A MITIGATION THAT DOES NOT COVER THEM
+
+**BUCKET 2 — WORKING AS BUILT, BUT UNDECIDED.** Nothing is broken; what is missing is a decision nobody has made. ⛔ **Not filed as a defect** — collapsing an undecided posture into a defect is exactly what the bug taxonomy forbids.
+
+**MEASURED on staging (`188.245.193.8`), `/home/deploy/.ssh/authorized_keys`, three keys authorising the `deploy` account — the account that owns the entire application:**
+
+| # | key | options |
+|---|---|---|
+| 1 | **unlabelled — no comment at all** | **none** |
+| 2 | `langston-dt-agent@204.168.141.77` | **none** — no source restriction, no forced command |
+| 3 | `langston@helsinki` | `from="204.168.141.77"` only — **source-restricted, NOT command- or path-restricted** |
+
+⇒ **each grants a full shell as `deploy`.**
+
+★ **THE GOVERNANCE GAP, AND IT IS THE PART THAT MAKES THIS AN ISSUE RATHER THAN AN OBSERVATION.** `#110` (homed Phase 20.4) covers this ground — but it is scoped, in its own words, to **"Langston's pubkey"**, which is key 3. **Keys 1 and 2 are outside it.** Langston's whole-tree census: `langston-dt-agent` appears **exactly once in the entire repo — inside `B_TOKEN_WATCH_PRE_AUDIT.md`, a sentence I wrote hours ago** (positive control: same tool, 10 hits for `ForceCommand`). ⇒ **ungoverned: not decided-and-accepted, simply never written down.**
+
+⛔ **AND A GOVERNANCE DOCUMENT ASSERTS A MITIGATION THAT DOES NOT HOLD AT THE LEVEL IT CLAIMS.** `SYSTEM_IMPACT_MAP.md:2656` states the `from=` restriction as **the surface's** mitigation and hangs the escalation chain on it. **That is true of key 3 and false of the account.** Same shape in `CLAUDE.md:418` (§8) and in Langston's own §10.5. ★ **This is the harm: a reader checking the posture finds a stated control and stops, and the control covers one of three keys.** *(Langston checked `CLAUDE.md:418` expecting my citation to be wrong; it was right.)*
+
+⚠️ **NOBODY IS ASSERTING THESE ARE ORPHANS. Whose they are is unknown to both of us and neither of us is guessing** — that is precisely why it needs an investigation rather than a fix.
+
+**KYLE'S RULING 2026-08-28:** *"that is a security question. We haven't really been looking at securing at all… let's look at that in either phase sixteen or the other batch where we're doing cleanup… It shouldn't go in phase twenty five. But if you think this is urgent enough to have investigated at least, let's put it in phase nineteen towards the end of it."*
+
+**⇒ SPLIT, AND THE SPLIT IS THE JUDGEMENT HE ASKED FOR:**
+- **INVESTIGATION → PHASE 19, at the end.** ★ **My call, and the reasoning is bounded rather than alarmed: we do not know what can log in as the account that owns the trading application, and Phase 21 turns that box into the live-money path.** Identifying two key fingerprints and their owners is **an hour**, and it answers the only question that matters — *leftover, or live path somebody still uses.* **An unknown you can resolve in an hour should not wait two phases.**
+- **REMEDIATION → PHASE 20.4 SECURITY FINALIZATION, beside `#110`.** Removing, restricting or documenting keys is hardening, and `#110` is already the same object in the same place.
+- ⛔ **PHASE 16 REJECTED, and there is precedent for this exact reasoning in this roadmap** (`POST_AUDIT_ROADMAP.md:1038`, on `20.4.5`: *"Home = Phase 19 end (rejected Phase 16: protective infra, not cleanup)"*). **Phase 16 is Database & Remaining Legacy Cleanup; SSH credentials are neither.** **PHASE 25 REJECTED — Kyle, explicitly.**
+
+**HOME:** investigation → `PHASE_19_PLAN.md`, placed at the end beside `B-HELSINKI-MOUNT-WATCH`; remediation → `POST_AUDIT_ROADMAP.md` §20.4, beside `#110`. Owner CC-INFRA for the investigation.
+
+⚠️ **NOT URGENT IN THE STOP-EVERYTHING SENSE, and saying so is part of the finding:** staging only, no live money, password authentication off, firewall active, and all three keys are ed25519. **The risk is an unknown, not a known exposure** — which is an argument for a cheap investigation, not for a fire drill.
+
+★ **SCOPE BOUNDARY, STATED: `B-TOKEN-WATCH` WORKS AROUND THIS RATHER THAN FIXING IT.** Its `PART G` delivery leg provisions **a new dedicated account with a forced-command key**, precisely so it never touches `deploy`. **A Phase-20 decision stays a Phase-20 decision.**
+
 ### #922 OPEN 2026-08-28 (CC-C, answering Kyle's question about how the July `validate=true` leg relates to the VPG) — A SUCCESSFUL VENUE VALIDATION IS RECORDED NOWHERE, SO "RAN AND PASSED" IS INDISTINGUISHABLE FROM "NEVER RAN"
 
 **`validatePaperOrderWithVenue` has three outcomes and only two are observable.** `rejected` logs loudly and calls `rtbMetricsService.recordOpenFailed(... 'VALIDATE_REJECTED' ...)`; `skipped` calls `recordValidateSkipped`. ⛔ **`ok` does nothing at all — no log line, no counter.** Re-derived: `rtb-metrics-service.ts` contains `recordValidateSkipped` at `:248` and **no success equivalent.**
