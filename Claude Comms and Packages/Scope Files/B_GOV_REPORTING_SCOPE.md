@@ -129,6 +129,16 @@ change-class: non_architecture
 
 ⛔ **AND THE TWO DIRECTIVES ARE NOT IN TENSION — I checked before choosing between them.** **Kyle: *"not what the update was, but whether or not it was updated."*** **Langston: an `N/A` must be falsifiable.** ✅ **Resolved by scoping the column: an UPDATED row carries NO explanation (the substance is in the document); a SKIPPED row carries the fact that justifies skipping it.** ★ **One governs what you DID, the other what you DIDN’T.**
 
+★★ **r3 — KYLE RULED THE TENSION HIMSELF AND HIS ANSWER IS BETTER THAN MY SPLIT. THE THIRD COLUMN IS BACK, ON *EVERY* ROW.**
+⛔ **I had resolved his directive against Langston’s by SCOPING the column — explanation on `N/A` rows only, none on updated rows.** ✅ **Kyle: *"if we add that third column back in based on what I’m saying, then I think there’s no longer a conflict between what Langston is proposing and what I’m proposing."*** ⇒ **there was never a conflict to resolve; there was a MISSING COLUMN, and I had removed it.**
+| verdict | the one line |
+|---|---|
+| **`✅`** | **a concise one-sentence descriptor of WHAT CHANGED** — ⛔ not a detailed statement |
+| **`N/A`** | **a brief FACT that makes it checkable** — *"nothing under `server/` changed"*, never *"not applicable"* |
+⛔⛔ **AND THE ONE-SENTENCE LIMIT IS THE RULE, NOT A STYLE NOTE.** Kyle in the same breath: *"I don’t want a lot of time wasted … a lot of effort used up on the sessions trying to summarise yet another piece of data … I don’t want to take up too much time, too much effort, or even tokens."*
+⇒ ★ **A ROW THAT RUNS TO A PARAGRAPH HAS BROKEN THE RULE AS SURELY AS A BLANK ONE.** **Twenty short lines a reader can scan beats twenty accurate ones nobody reads** — and anything needing more than a sentence belongs in the document and the completion report, not in the index.
+⚠️ **MY ERROR HERE WAS CHOOSING BETWEEN TWO PEOPLE RATHER THAN ASKING: I built an elegant reconciliation for a conflict that dissolved the moment Kyle restated what he actually wanted.** ★ **Langston’s falsifiability condition survives untouched — it just now applies alongside a descriptor instead of instead of one.**
+
 **THE OTHER FOUR, all verified by me before adopting:**
 - ⛔ **I DEMOTED LANGSTON’S MEMORY.** §10.b in the same file says *"in the same turn you update your own"* — **unconditional** — and I put it in Tier 2 **with a verdict cell, which lets an `N/A` be written against a mandatory item.** ✅ **Promoted to Tier 1.**
 - ⛔ **THE TABLE WAS A SECOND COPY OF THE BULLET LIST IN THE SAME FILE AND HAD ALREADY DIVERGED AT BIRTH** — **measured: `CONDUCT.md` appeared ONLY in the table (0 occurrences in the bullets), and the `MULTI_ASSET` row had dropped the bullet’s temporary WORKING-LIST trigger.** ★ **`#641`, created by the fix for a different problem.** ✅ **The bullets are DELETED; the table is the only list, with every trigger folded in.**

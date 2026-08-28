@@ -100,15 +100,15 @@ When a substantive asset-class-onboarding learning surfaces in ANY batch, fold i
 ⛔⛔ **THIS TABLE IS NOW THE *ONLY* DOCUMENT LIST IN THIS SKILL. THE TIER-2 BULLETS ABOVE ARE DELETED, NOT DUPLICATED (Langston, 2026-08-28).**
 ★ **His catch, and it is `#641`: the table was a SECOND COPY of the bullet list IN THE SAME FILE, and it had ALREADY DIVERGED AT BIRTH** — `CONDUCT.md` existed only in the table, and the `MULTI_ASSET` row had dropped the bullet’s temporary WORKING-LIST trigger. **Once the table is the deliverable, the bullet list is the copy nobody fills: it rots and the triggers drift.**
 
-| # | document | WHEN IT APPLIES | verdict | **`why` — REQUIRED ON EVERY `N/A`** |
+| # | document | WHEN IT APPLIES | verdict | **ONE LINE — REQUIRED ON *EVERY* ROW** |
 |---|---|---|---|---|
-| **T1** | `BATCH_CATALOG.md` | every batch | ✅ | — |
-| **T1** | `PHASE_HISTORY.md` | every batch | ✅ | — |
-| **T1** | `PHASE_19_PLAN.md` | ⏳ **Phase 19 only** — after EVERY batch and sub-batch | ✅ | — |
-| **T1** | shared `MEMORY.md` + your own `MEMORY_CC_<X>.md` | every batch | ✅ | — |
-| **T1** | the batch `SCOPE` | written at Step 1 | ✅ | — |
-| **T1** | the `COMPLETION_REPORT` | written at Step 11 | ✅ | — |
-| **T1** | ★ **Langston’s `/home/langston/MEMORY.md`** | ⛔ **PROMOTED FROM TIER 2 (Langston):** §10.b says *"in the same turn you update your own"* — **unconditional. A verdict cell on a mandatory item lets an `N/A` be written against it.** | ✅ | — |
+| **T1** | `BATCH_CATALOG.md` | every batch | ✅ | |
+| **T1** | `PHASE_HISTORY.md` | every batch | ✅ | |
+| **T1** | `PHASE_19_PLAN.md` | ⏳ **Phase 19 only** — after EVERY batch and sub-batch | ✅ | |
+| **T1** | shared `MEMORY.md` + your own `MEMORY_CC_<X>.md` | every batch | ✅ | |
+| **T1** | the batch `SCOPE` | written at Step 1 | ✅ | |
+| **T1** | the `COMPLETION_REPORT` | written at Step 11 | ✅ | |
+| **T1** | ★ **Langston’s `/home/langston/MEMORY.md`** | ⛔ **PROMOTED FROM TIER 2 (Langston):** §10.b says *"in the same turn you update your own"* — **unconditional. A verdict cell on a mandatory item lets an `N/A` be written against it.** | ✅ | |
 | **T2** | `SYSTEM_MANUAL.md` | architecture · strategy logic · regime detection · filter design · signal pipeline · quantitative math | | |
 | **T2** | `SYSTEM_IMPACT_MAP.md` | any component added / removed / re-keyed, or cross-cutting state | | |
 | **T2** | `RUNNING_ISSUES.md` | issues opened, closed or annotated | | |
@@ -130,7 +130,14 @@ When a substantive asset-class-onboarding learning surfaces in ANY batch, fold i
 ⛔ *"N/A — not applicable"* ⇒ **says nothing and is not an answer.**
 ⇒ ★★ **THIS CONVERTS A SILENT FALSE NEGATIVE INTO A CHECKABLE FALSE STATEMENT** — which Langston can bounce at Step 4 or Step 11. **Same move as rule 29(a): state the object and the population, or it is not an answer.**
 
-⚠️ **THE `why` COLUMN IS FOR `N/A` ROWS ONLY — AND THAT IS HOW BOTH DIRECTIVES HOLD AT ONCE.** ✅ **Kyle: *"not what the update was, but whether or not it was updated"*** ⇒ **an UPDATED row carries NO explanation; the substance is in the document.** ✅ **Langston: an `N/A` must be falsifiable** ⇒ **a SKIPPED row carries the fact that justifies skipping it.** ★ **They are not in tension: one governs what you did, the other governs what you DIDN’T.**
+⛔⛔ **EVERY ROW GETS ONE LINE — BOTH VERDICTS. KYLE RULED THIS DIRECTLY, 2026-08-28, AND IT SUPERSEDES MY EARLIER "`N/A` ROWS ONLY" SPLIT.** His words: *"if we add that third column back in based on what I’m saying, then I think there’s no longer a conflict between what Langston is proposing and what I’m proposing."*
+| verdict | what the line says |
+|---|---|
+| **`✅`** | **a concise one-sentence descriptor of WHAT CHANGED.** ⛔ **Not a detailed statement** — the substance is in the document. |
+| **`N/A`** | **a brief FACT that makes it checkable** — *"nothing under `server/` changed"*, not *"not applicable"*. |
+
+⛔⛔ **ONE SENTENCE. HARD LIMIT, AND IT IS THE POINT OF THE RULE, NOT A STYLE NOTE.** ★ **Kyle, in the same breath: *"I don’t want a lot of time wasted or used up and a lot of effort used up on the sessions trying to summarise yet another piece of data … I don’t want to take up too much time, too much effort, or even tokens."***
+⇒ ⛔ **A ROW THAT RUNS TO A PARAGRAPH HAS BROKEN THE RULE JUST AS SURELY AS A BLANK ONE.** ★ **The column exists to make the work VISIBLE, not to re-describe it: twenty short lines a reader can scan beats twenty accurate ones nobody reads.** ⚠️ **If a change genuinely needs more than a sentence, that belongs in the document itself and in the completion report — not here.**
 
 ⇒ ✅ **THE POSTED TABLE IS THIS STEP’S DELIVERABLE.**
 
