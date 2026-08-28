@@ -4140,3 +4140,18 @@ Kraken publishes a per-pair `tick_size` — **1,437 pairs, 11 distinct values, a
 **HOME:** owner **Langston** — he offered to take it and he holds the reproduction. Placed in the governance/rules queue in `PHASE_19_PLAN.md` §1 rather than dated, per §9.4 (a home is a name and a place in the queue, never a calendar date).
 
 **Interim, until it lands:** never pass a flag to `dt-review grep`; run unflagged with explicit case variants; and **pair any zero result with a positive control** before reporting an absence. Pointer kept in `B_TOKEN_WATCH_SCOPE.md` §2 so that batch's reader still sees it, but this entry is the home — a landmine documented only in a batch scope dies with the batch.
+
+### #921 OPEN 2026-08-28 (CC-C, found chasing Kyle's requirement that grid refusals get their OWN Filter Diagnostics category) — ⛔ THE ENTIRE PRE-SQE REJECT STAGE IS COLLECTED, SERVED BY THE API, AND NEVER RENDERED ON THE PAPER FILTER DIAGNOSTICS TAB
+
+**Kyle's instruction was *"let's make sure that has a category of its own — let's not just fold that into other rejection where it's hidden."* Chasing it found something larger than a labelling problem: there is no category because THERE IS NO ROW.**
+
+**The chain, each link verified at the ref:** `recordActivePreSqeReject` (`active-funnel-tracker.ts:312`) stores per-reason into `r.preSqeRejects[reason]` — **a keyed map, so every distinct reason DOES get its own counter; nothing buckets to "other" at the recorder.** The envelope carries it (`shared/active-funnel-envelope.ts:40` `preSqeRejects: Record<string, number>`). The route serves it (`routes.ts:13807` spreads `getActiveFunnelStats`). ⛔ **And the paper-mode client section never reads it.**
+
+**POSITIVE CONTROL, because this is an absence claim (rule 22).** In `client/src/components/vts/fd-sqe-rtb-sections.tsx` — the component that fetches `/api/active-engine/diagnostics/funnel?mode=…` at `:44` — reference counts are: **`sqeGateRejects` 5 · `rtbRefresh` 2 · `preSqeRejects` 0 · `postSqeRejects` 0 · `strategyAttrition` 0 · `signalsGenerated` 0.** ⇒ **the component demonstrably DOES render envelope fields; four of them, including the whole pre-SQE stage, are simply not among them.**
+
+⇒ **CONSEQUENCE FOR `F-G-1`: the `grid_*` counters landed at `d8c349b66` increment a number that reaches the API and dies there.** ★ **A prefix cannot satisfy Kyle's requirement, because the requirement is about what he can SEE and the stage is not on the page at all.**
+
+⚠️ **AND IT IS WIDER THAN THIS BATCH: `postSqeRejects`, `strategyAttrition` and `signalsGenerated` are equally unrendered.** `signalsGenerated` is the funnel's own DENOMINATOR. **This batch fixes only the row it needs and does NOT silently adopt the other three** — naming them here so the next reader knows the gap is four fields wide, not one.
+
+**HOME: folded into `F-G-1` `P4` (§9.4 disposition 1 — the work in hand), owner CC-C.** Kyle's requirement is explicit and he has asked to be told when it is deployed AND visible, so *"counted"* is not *"done"* for this batch. **Deliverable: a pre-SQE reject row on the paper FD tab with grid refusals as a NAMED category of their own, not merged into a catch-all.**
+
