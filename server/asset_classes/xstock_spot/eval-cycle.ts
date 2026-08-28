@@ -214,6 +214,13 @@ export interface XstockEvalCycleCounters {
   vtsDestination: number;
   byStrategyNullReasons: Record<string, Record<string, number>>;
   nullReasonAggregate: Record<string, number>;
+  /** F-G-1 — VPG tag verdicts on this lane, and the denominator they are drawn from.
+   *  ⛔ THESE WERE WRITTEN THROUGH `as any` CASTS AND EXISTED ON NO INTERFACE, WHICH IS EXACTLY
+   *  WHY THE CHAIN COMPILED WHILE GOING NOWHERE. `SYSTEM_IMPACT_MAP.md` states a five-step
+   *  contract for this counter family — declare, initialise, write, accumulate, expose — and the
+   *  batch did step 3 alone. The cast is what made steps 1 and 2 optional. Langston BLOCKER-10. */
+  gridEvaluated: number;
+  gridTags: Record<string, number>;
   // B-NEW-12.b (2026-05-13): per-lane null-reason aggregates so the panel's
   // Quant + Pattern columns can show their share of each reason against
   // their own evaluation total. Previously the panel rendered the combined
@@ -267,6 +274,8 @@ export function makeEmptyXstockCycleCounters(): XstockEvalCycleCounters {
     vtsDestination: 0,
     byStrategyNullReasons: {},
     nullReasonAggregate: {},
+    gridEvaluated: 0,
+    gridTags: {},
     quantNullReasonAggregate: {},
     patternNullReasonAggregate: {},
     byStrategy: {},
@@ -699,10 +708,10 @@ export async function evaluateXstockPairForVTS(
         // xStock signal ever fails", "every one fails", and "the lane never ran".
         // ⚠️ Denominator FIRST, same as the crypto lane, so a verdict count can never exceed
         // the population it is drawn from.
-        (counters as any).gridEvaluated = ((counters as any).gridEvaluated ?? 0) + 1;
-        (counters as any).gridTags ??= {};
-        (counters as any).gridTags[_gridTag.verdict] =
-          (((counters as any).gridTags[_gridTag.verdict]) ?? 0) + 1;
+        // ⛔ NO `as any` HERE ANY MORE — the fields are on the interface, so a future rename
+        // breaks the build instead of silently writing to a property nobody declared.
+        counters.gridEvaluated += 1;
+        counters.gridTags[_gridTag.verdict] = (counters.gridTags[_gridTag.verdict] ?? 0) + 1;
         if (_gridTag.isWiringBug) {
           console.error(
             `[F-G-1][VTS_GRID_WIRING] ${symbol}/${strategyKey} verdict=${_gridTag.verdict} — no venue grid ` +

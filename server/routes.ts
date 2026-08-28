@@ -8113,6 +8113,14 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         byStrategy: enrichedByStrategy,
         // Full per-strategy null-reason breakdown (what each strategy is failing on).
         byStrategyNullReasons: lt?.byStrategyNullReasons ?? {},
+        // ⛔ F-G-1 / Langston BLOCKER-10 — THIS LITERAL IS THE LAST STEP OF A FIVE-STEP CHAIN AND
+        // IT IS BUILT FIELD BY FIELD WITH NO SPREAD, so a counter missing here is invisible no
+        // matter how correctly it was written upstream. The xStock tab was rendering
+        // "0 would-fail / 0 checked" — an absent value wearing a plausible number's clothes, on
+        // the one asset class whose grid is DERIVED rather than published, i.e. reading as
+        // "perfectly on-grid" precisely where we are least sure.
+        gridEvaluated: lt?.gridEvaluated ?? 0,
+        gridTags: lt?.gridTags ?? {},
         nullReasonDetail: lt?.nullReasonAggregate ?? {},
         // B-NEW-12.b (2026-05-13): per-lane null-reason aggregates now
         // separately maintained in eval-cycle.ts. Was emitting the combined

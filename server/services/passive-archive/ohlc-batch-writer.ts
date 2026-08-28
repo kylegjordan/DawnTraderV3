@@ -103,19 +103,51 @@ export function isTransientWriteError(err: unknown): boolean {
     || m.includes('too many clients');
 }
 
+/** How long a raised alert suppresses the next one for the same writer:class. */
+export const ALERT_RE_ARM_MS = 6 * 60 * 60 * 1000;
+
 /**
- * One alert per WRITER:CLASS per process — a per-flush alert would be its own flood.
+ * ⛔⛔ BLOCKER-11: A LATCH THAT NEVER CLEARS DEFEATS THE RE-ARM THE `dedupe_key` COMMENT PROMISES.
+ * It read *"resolving it deliberately re-arms the warning rather than muting it for good"* — TRUE
+ * at `addAlert`, and FALSE in-process, because this map was set once and never cleared. An operator
+ * who resolved the alert got SILENCE while the permanent fault kept dropping rows — on the ticker
+ * leg, unrecoverably — until a restart. A mechanism claim contradicted by code two functions up,
+ * inside the change whose entire point is visibility. Langston, at the ref.
+ * ⇒ Two ways it clears, and both are needed:
+ *   • a SUCCESSFUL flush for that writer:class clears it immediately (the fault is over, so the
+ *     next occurrence is genuinely new); and
+ *   • it expires after `ALERT_RE_ARM_MS`, so a fault that PERSISTS re-announces itself on a
+ *     bounded cadence instead of once per process lifetime.
+ * ⚠️ It is still a suppressor, not a guarantee: between a resolve and the next expiry the operator
+ * sees nothing. Bounding the silence is the fix available here; removing it would re-create the
+ * per-flush flood this exists to prevent.
+ * One alert per WRITER:CLASS per window — a per-flush alert would be its own flood.
  * ⚠️ The key is `ohlc:crypto_spot`, NOT an `ArchiveAssetClass`. It was typed as one and reached by
  * an `as ArchiveAssetClass` cast, so the type asserted something false and the comment above it
  * said "per class" while the code was per writer-and-class. Langston, at the ref. Typing it as a
  * plain string map removes the cast AND makes the two writers' latches visibly independent —
  * which is the behaviour we want: OHLC failing must not silence the ticker leg.
  */
-const _permanentAlerted: Record<string, boolean> = {};
+const _permanentAlerted: Record<string, number> = {};
+
+/** Clear the latch for one writer:class — called when a flush SUCCEEDS, so a fault that is over
+ *  does not silence the next, genuinely new one. */
+export function clearPermanentAlertLatch(writer: 'ohlc' | 'ticker', assetClass: ArchiveAssetClass): void {
+  delete _permanentAlerted[`${writer}:${assetClass}`];
+}
 
 export async function alertPermanentWriteFailure(writer: 'ohlc' | 'ticker', assetClass: ArchiveAssetClass, detail: string, dropped: number): Promise<void> {
   const _latchKey = `${writer}:${assetClass}`;
-  if (_permanentAlerted[_latchKey]) return;
+  const _last = _permanentAlerted[_latchKey];
+  if (_last != null && Date.now() - _last < ALERT_RE_ARM_MS) return;
+  // ⛔ CLAIM THE LATCH SYNCHRONOUSLY, BEFORE THE FIRST `await`. This call is fire-and-forget, so
+  // two flushes close together would BOTH pass the check above and BOTH raise if the latch were
+  // only set after the write. Found by the CONTROL on the re-arm fence — the test asserting a
+  // persisting fault raises once, which is the arm that stops "fix the latch" becoming "delete
+  // the latch". ⚠️ It is released again in the catch below if the raise never got out, which is
+  // the property the previous ordering existed to protect: a latch set on an alert that failed to
+  // send burns the one-shot for nothing.
+  _permanentAlerted[_latchKey] = Date.now();
   try {
     // ⛔ THE JSONL ALERT SYSTEM, NOT `storage.createSystemAlert`. My first version wrote to the
     // Postgres `system_alerts` table — a DIFFERENT system, served by a different route, which
@@ -143,10 +175,12 @@ export async function alertPermanentWriteFailure(writer: 'ohlc' | 'ticker', asse
       // so resolving it deliberately re-arms the warning rather than muting it for good.
       dedupe_key: `${writer}-writer-permanent-${assetClass}`,
     });
-    // ⛔ LATCH ONLY AFTER A SUCCESSFUL RAISE. Setting it first — as I did — burns the one-shot
-    // for the whole process even when the alert never actually got out.
-    _permanentAlerted[_latchKey] = true;
+    // The claim above stands: the alert is out.
   } catch (e) {
+    // ⛔ RELEASE THE CLAIM — the alert never got out, so the next failure must be allowed to try
+    // again. This is the property the old "latch only after a successful raise" ordering was
+    // protecting; claiming-then-releasing keeps it while also closing the two-flush race.
+    delete _permanentAlerted[_latchKey];
     console.error(`[B74][batch-writer] ${assetClass} FAILED TO RAISE ALERT for permanent write failure:`,
       e instanceof Error ? e.message : e);
   }
@@ -279,6 +313,9 @@ async function flushAssetClass(assetClass: ArchiveAssetClass): Promise<void> {
     } finally {
       releaseSlot();
     }
+    // BLOCKER-11: the fault is over, so the NEXT permanent failure is genuinely new and must
+    // not be swallowed by a latch set hours ago.
+    clearPermanentAlertLatch('ohlc', assetClass);
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
     if (!isTransientWriteError(err)) {

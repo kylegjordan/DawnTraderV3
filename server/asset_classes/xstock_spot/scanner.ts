@@ -982,6 +982,11 @@ class XstockSpotScannerService {
             imfPerFamily: {},
             familyFanOutSum: 0, familyQualifiedUnique: 0, benchmarksRemoved: 0, vtsDestination: 0,
             byStrategyNullReasons: {}, nullReasonAggregate: {},
+            // F-G-1 (Langston BLOCKER-10): the VPG tag counters. ⛔ THIS LITERAL AND THE KEY LIST
+            // BELOW ARE BOTH HARDCODED, so a counter absent from either is silently dropped on the
+            // way to the tab — which is the trap the crypto lane documents avoiding and this lane
+            // walked into, in the same commit.
+            gridEvaluated: 0, gridTags: {},
             quantNullReasonAggregate: {}, patternNullReasonAggregate: {},
             byStrategy: {},
           };
@@ -1002,7 +1007,9 @@ class XstockSpotScannerService {
           'quantSignalsGenerated', 'patternSignalsGenerated',
           'quantSignalsRejected', 'patternSignalsRejected',
           'quantTradesOpened', 'patternTradesOpened',
-          'setupHashDeduped'] as const) {
+          'setupHashDeduped',
+          // F-G-1: the VPG denominator. Its verdict map is merged separately below.
+          'gridEvaluated'] as const) {
           lt[k] = (lt[k] ?? 0) + ((cycleCounters as any)[k] ?? 0);
         }
         for (const k of Object.keys(cycleCounters.globalFilterCounters)) {
@@ -1042,6 +1049,11 @@ class XstockSpotScannerService {
         }
         for (const reason of Object.keys(cycleCounters.nullReasonAggregate)) {
           lt.nullReasonAggregate[reason] = (lt.nullReasonAggregate[reason] ?? 0) + cycleCounters.nullReasonAggregate[reason];
+        }
+        // F-G-1 (BLOCKER-10): the VPG verdict map. A record, so it merges per key rather than sums.
+        if (!lt.gridTags) lt.gridTags = {};
+        for (const v of Object.keys(cycleCounters.gridTags ?? {})) {
+          lt.gridTags[v] = (lt.gridTags[v] ?? 0) + cycleCounters.gridTags[v];
         }
         // B-NEW-12.b per-lane null reason accumulators
         if (!(lt as any).quantNullReasonAggregate) (lt as any).quantNullReasonAggregate = {};

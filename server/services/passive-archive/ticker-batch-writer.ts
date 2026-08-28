@@ -25,7 +25,7 @@ import type { ArchiveAssetClass } from './ohlc-batch-writer.js';
 // second implementation of a decided rule is the defect B-EPOCH-KEYING-PARITY is held on.
 // (Moved up from mid-file, Langston: an import buried beside its first use reads as a
 // circular-dependency workaround. There is no cycle — ohlc imports nothing from ticker.)
-import { isTransientWriteError, alertPermanentWriteFailure, RETRY_BUFFER_MAX } from './ohlc-batch-writer.js';
+import { isTransientWriteError, alertPermanentWriteFailure, clearPermanentAlertLatch, RETRY_BUFFER_MAX } from './ohlc-batch-writer.js';
 
 const BATCH_FLUSH_INTERVAL_MS = 5_000;
 const POOL_SLOT_TIMEOUT_MS = 5_000;
@@ -138,6 +138,12 @@ async function flushTickerAssetClass(assetClass: ArchiveAssetClass): Promise<voi
         await db.insert(table as any).values(slice as any);
       }
       console.log(`[B74][ticker-writer] ${assetClass} flushed ${rows.length} rows`);
+      // BLOCKER-11, and this leg needed it as much as the OHLC one: the fault is over, so
+      // the NEXT permanent failure is genuinely new and must not be swallowed by a latch set
+      // hours ago. ⚠️ Found by grepping the CLASS of `alertPermanentWriteFailure` callers
+      // rather than fixing the site I was looking at — which is the whole point of
+      // `fix-follows-pointer`, and this file is where that pattern's third instance lives.
+      clearPermanentAlertLatch('ticker', assetClass);
     } finally {
       releaseSlot();
     }

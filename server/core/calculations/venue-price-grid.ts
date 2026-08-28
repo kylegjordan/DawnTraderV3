@@ -165,9 +165,18 @@ function snap(price: number, tick: number, dir: Dir): number {
  *   1. `snap`'s `EPS`                       — SAME CLASS (ratio `price/tick`).  FIXED.
  *   2. `isOnGrid`'s band                    — SAME CLASS (same ratio).          FIXED.
  *   3. `roundQuantityForVenue`'s floor nudge — SAME CLASS (ratio `qty/step`).   FIXED.
- *   4. `oneTick = t * (1 - 1e-9)`           — ⚠️ NOT this class, and it is stated so the next
- *      reader does not "fix" it: that is a RELATIVE shrink of a tick VALUE, not an absolute
- *      epsilon on an unbounded ratio. It is already scale-free. LEFT ALONE, deliberately.
+ *   4. `oneTick = t * (1 - 1e-9)`           — ⚠️ SAME CLASS AFTER ALL, AND LEFT ALONE FOR A
+ *      DIFFERENT REASON THAN I FIRST WROTE. I said it was "already scale-free" and that was wrong
+ *      in a way that mattered, because a wrong reason in this list becomes permanent guidance for
+ *      whoever reads it next. It IS scale-free in the TICK — but the error it has to absorb is
+ *      float error in `e - s`, which scales with the PRICE. Langston measured it: exactly-one-tick
+ *      triples, n=20,000/cell — tick `1e-5` @ $1k-100k gives 79.1% spurious
+ *      `degenerate_after_rounding`; tick `2e-8` @ $10-300 gives 69.6%; control tick `0.01` @
+ *      $1k-100k (q~1e7) gives 0.00%.
+ *      ⇒ LEFT ALONE because it is UNREACHABLE, not because it is sound: the 0.3% minimum stop
+ *      distance puts every real separation ~1e7 ticks out, far below where the band bites.
+ *      **Bounded by reachability, not by scale-freedom.** If that floor is ever removed or
+ *      lowered, this line becomes live and must move to the relative band with the other three.
  * ⚠️ Repo-wide the same shape returns two more hits — `expectancy.ts` and
  * `drift-dashboard-aggregator.ts` — and BOTH are absolute epsilons on BOUNDED quantities (a
  * probability, a shift fraction), so they are a different shape wearing the same constant.

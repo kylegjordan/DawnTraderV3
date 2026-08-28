@@ -321,3 +321,44 @@ describe('F-G-1 #918 — the drain that had no caller', () => {
     expect(code.slice(Math.max(0, i - 400), i + 400)).toContain('catch');
   });
 });
+
+describe('F-G-1 / BLOCKER-11 — the latch must not outlive the fault', () => {
+  // ⛔⛔ THE `dedupe_key` COMMENT PROMISED "resolving it deliberately re-arms the warning rather
+  // than muting it for good." TRUE at `addAlert`, FALSE in-process: the latch was set once and
+  // never cleared, so an operator who resolved got SILENCE while the permanent fault kept dropping
+  // rows — on the ticker leg, unrecoverably — until a restart. A mechanism claim contradicted by
+  // code two functions up, inside the change whose entire point is visibility. Langston, at the ref.
+  // MUTATION: remove the clear-on-success call and this fails.
+  it('re-arms after a SUCCESSFUL flush, so the next permanent failure is not swallowed', async () => {
+    _dbState.throwWith = new Error('column "gone" does not exist');
+    bufferOhlcBar('crypto_spot', bar(90));
+    await stopBatchWriter();
+    await waitFor(() => _alerts.length > 0);
+    expect(_alerts).toHaveLength(1);
+
+    // the fault clears and a flush succeeds
+    _dbState.throwWith = null;
+    bufferOhlcBar('crypto_spot', bar(91));
+    await stopBatchWriter();
+
+    // a NEW permanent failure must announce itself, not be muted by the old latch
+    _dbState.throwWith = new Error('column "gone-again" does not exist');
+    bufferOhlcBar('crypto_spot', bar(92));
+    await stopBatchWriter();
+    await waitFor(() => _alerts.length > 1);
+    expect(_alerts).toHaveLength(2);
+  });
+
+  // CONTROL: while the fault PERSISTS, it must still be one alert, not one per flush. Without this
+  // the fix above could be "delete the latch", which re-creates the flood it exists to prevent.
+  it('CONTROL — a PERSISTING fault still raises only once', async () => {
+    _dbState.throwWith = new Error('column "still-gone" does not exist');
+    for (let i = 0; i < 3; i++) {
+      bufferOhlcBar('xstock_spot', bar(93 + i));
+      await stopBatchWriter();
+    }
+    await waitFor(() => _alerts.length > 0);
+    await waitFor(() => _alerts.length > 1, 200);
+    expect(_alerts).toHaveLength(1);
+  });
+});
