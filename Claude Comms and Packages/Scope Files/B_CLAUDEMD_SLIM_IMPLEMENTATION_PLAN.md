@@ -19,25 +19,30 @@
 ⚠️ **I first ran an EXACT-PHRASE census. It reported eight items as *"in the rules file only, must be carried."* THREE OF THOSE EIGHT WERE FALSE** — the destination holds them in different words.
 ★★ **That is the same failure that produced five false absences in the step-2 audit, run again with the same instrument.** ✅ **Corrected by your condition (iii): for every claimed absence, name the nearest wording at the destination and say whether it is the same proposition.** **The table below is the paraphrase-checked result; the exact-phrase result is discarded.**
 
-| # | clause | destination | nearest paraphrase at destination | disposition |
+| # | clause | destination | accepted line / rejected line | disposition |
 |---|---|---|---|---|
-| 1 | **§9.1 scaffolding declaration** | `wf-11` | **`:35-37` — the heading AND the banner, near-verbatim** | ✅ **CUT + pointer** |
-| 2 | §9.1 *"equally applies in REAL TIME"* | — | — | ⛔ **STAYS** — fires mid-conversation, no step |
-| 3 | **§9.2 numeric-delta block** | `wf-11` | present | ✅ **CUT + pointer** |
-| 4 | **§9.2 PRE-AUDIT half** | `wf-02` | ⛔ **1 of 4 concept words — genuinely ABSENT** | ⚠️ **CARRY FIRST, then cut** |
-| 5 | §9.2 in-flight/retroactive half | — | — | ⛔ **STAYS** |
-| 6 | **§9.3 curl-is-not-verification** | `wf-07` | **`:10-11` — curl · psql · PM2 · build, all four** | ✅ **CUT + pointer** |
-| 7 | **§9.3 by-default UI verification** | `wf-07` | ⚠️ **2 of 4 — `:8` has *"the UI has been navigated"* but NOT the by-default obligation** | ⚠️ **CARRY the obligation, then cut** |
-| 8 | §9.3 Kyle-asks + no-assumptions halves | — | — | ⛔ **STAYS** |
-| 9 | **§9.5 component census** | `wf-02` | `:52-61`, verbatim heading | ✅ **CUT + pointer** |
-| 10 | **§9.5 deletion-time census** | `wf-02` | present | ✅ **CUT + pointer** |
-| 11 | **§9.5 provenance read** | `wf-02` | **`:44-48` — the whole section, incl. `bridge/canonical/` and archaeology** | ✅ **CUT + pointer** |
-| 12 | ★ **§9.5 SURVIVOR — enumerate-FIRST ORDERING** | `wf-02` | ⛔ **`"entry point"` NOT PRESENT.** `:53` has the census, `:61` the scheduler list — **the ORDERING is absent** | ⚠️ **CARRY as ONE clause adjacent to `:53` with the hop-vs-unreachability discriminator** |
-| 13 | ★★ **§9.5 SURVIVOR — TRIGGER BREADTH** | `wf-02` | ⛔ **`"architectural dispute"` NOT PRESENT, 1 of 3** — skills fire `STEP 1/2 ONLY` | ⚠️ **CARRY — it is the item that carries the A→B reclassification alone** |
-| 14 | **rule 19 — the four job names** | `wf-05` | ⚠️ **present ONLY in the frontmatter `description`, not the body** | ⚠️ **CARRY into the BODY, then cut** |
-| 15 | **rule 19 — `gh run list` command form** | `wf-05` | present in body | ✅ **CUT with the rest of rule 19** |
+| 1 | **§9.1 scaffolding declaration** | `wf-11` | ACCEPT `:35-37` heading + banner | ✅ **CUT + pointer** |
+| 2 | §9.1 real-time half | — | — | ⛔ **STAYS** |
+| 3 | **§9.2 numeric-delta block** | `wf-11` | ACCEPT `:40` *"PREVIOUSLY STATED: X. NOW: Y"* | ✅ **CUT + pointer** |
+| 4 | **§9.2 PRE-AUDIT half** | `wf-02` | REJECT — zero hits on PREVIOUSLY / NOW / delta anywhere in `wf-02` | ⚠️ **CARRY, then cut** |
+| 5 | §9.2 in-flight half | — | — | ⛔ **STAYS** |
+| 6 | **§9.3 curl-is-not-verification** | `wf-07` | ACCEPT `:10-11` | ✅ **CUT + pointer** |
+| 7 | **§9.3 by-default UI verification** | `wf-07` | ⛔ **ACCEPT `:14-16` — *"UI VERIFICATION IS THE DEFAULT, NOT AN EXTRA"* + the *"if there is genuinely no UI surface, SAY SO AND SAY WHY"* escape clause.** REJECTED my earlier read of `:8` | ✅ **CUT + pointer — MY CARRY WAS A FALSE ABSENCE** |
+| 8 | §9.3 Kyle-asks + no-assumptions | — | — | ⛔ **STAYS** |
+| 9 | **§9.5 component census** | `wf-02` | ACCEPT `:52-61` **including `:59` *"who **DELETES** here?"*** — ⚠️ my matcher first REJECTED that row because the phrase spans markdown bold markers; **the end-to-end read caught it within minutes** | ✅ **CUT + pointer** |
+| 10 | **§9.5 deletion-time census** | `wf-02` | ACCEPT `:63-65` | ✅ **CUT + pointer** |
+| 11 | **§9.5 provenance read** | `wf-02` | ACCEPT `:36`, `:47-48`, `:50` incl. the RECORDING RULE | ✅ **CUT + pointer** |
+| 12 | ★ **§9.5 enumerate-FIRST ordering** | `wf-02` | REJECT — `:63-65` renders (a-ii) as the **state-write census only**; the ordering is absent | ⚠️ **CARRY — ⛔ PLACEMENT CORRECTED: ONE clause naming BOTH triggers (at an audit hop AND before any cut), or it is carried OUT of the deletion path it was written for** |
+| 13 | ★★ **§9.5 TRIGGER BREADTH** | — | genuinely absent from `wf-02` — **but `wf-02:3` is gated `STEP 2 ONLY` in its own frontmatter** | ⛔⛔ **RECLASSIFIED TO *STAYS*.** ★ **Writing the trigger into a skill that REFUSES TO LOAD outside step 2 puts the rule behind the exact gate that excludes two of its three triggers — and it would READ AS COVERED.** An unscheduled architectural dispute has no step to invoke. **Cut §9.5's BODIES; keep the trigger line on the always-loaded surface.** |
+| 14 | **rule 19 — the four job names** | `wf-05` | ⛔ **ACCEPT `:10-11` under `## THE FOUR JOBS`, verbatim incl. the *(baseline gate)* parenthetical, again at `:42`.** REJECTED my earlier read of the frontmatter | ✅ **CUT — MY CARRY WAS A FALSE ABSENCE** |
+| 15 | **rule 19 — `gh run list` form** | `wf-05` | ACCEPT `:15` | ✅ **CUT** |
+| — | *(rule 19's CLOSE trigger, which my table never asked about)* | `wf-11` | ACCEPT `:30` — *"CI run ID + green status, per-job"* | ✅ **covered** |
 
-**⇒ 7 CUT-AND-POINT · 5 CARRY-THEN-CUT · 3 STAY.** *(Control: `"Grow the portfolio as much and as fast as possible"` → 1 in `CLAUDE.md`, 0 in all eleven skills. The instrument discriminates.)*
+**⇒ CORRECTED TALLY: 9 CUT-AND-POINT · 2 CARRY (items 4, 12) · 4 STAY (2, 5, 8, 13).**
+
+⛔⛔ **AND THE FINDING THAT MATTERS MORE THAN THE TALLY — LANGSTON’S, AND IT IS ABOUT ME, NOT THE MATCHER: MY PARAPHRASE PASS CAUGHT THREE FALSE ABSENCES AND MISSED TWO, BECAUSE THESE TWO WERE NOT PARAPHRASE FAILURES.**
+★ **Item 7 read `:8` and stopped. Item 14 read the frontmatter and stopped.** ⇒ **BOTH ARE FIRST-SUFFICIENT-EXPLANATION-AT-THE-HOP — §9.5(a), APPLIED TO A FILE INSTEAD OF A CODE PATH.** ⚠️ **That is the rule this very audit invokes, committed inside the audit that invokes it, for the third time today.** **A better matcher does not fix it.**
+✅ **NEW CONDITION, ADOPTED, AND IT RAN BEFORE THIS TABLE: READ EACH DESTINATION FILE END TO END ONCE, AND CITE THE LINE YOU REJECTED AS WELL AS THE LINE YOU ACCEPTED.** *(The files are 43-119 lines; the whole eleven-skill set is smaller than the file being cut.)* ★ **It paid immediately: item 9's `who **DELETES** here?` row came back a false REJECT from the matcher and the read found it at `:59`.**
 
 ---
 
@@ -54,7 +59,7 @@
 | **P7** | **BUILD `#749` — recipient stamped on every chunk of a multi-recipient post** | continuation chunks wake every session |
 | **P8** | **SIM + System Manual content updates** — SIM carries 19 `§9.x` citations, `SYSTEM_MANUAL:517` points at `§9.5` by number | F4, F5 |
 | **P9** | **`_archive/CLAUDE_MD_RULE_HISTORY.md` takes the evicted evidence** | F7 |
-| **P10** | **Re-measure at the REF** — and **the figure must be reproducible by a second party** | your condition 4 |
+| **P10** | ⛔ **Re-measure with `git show <ref>:CLAUDE.md | wc -c` — NEVER a working-copy `wc -c` — and the second party reproduces THAT EXACT FORM.** ★ **Langston: the invariant relied on is *"measure at the ref"*, NOT *"this file has no CRLF"* — a checkout measurement re-opens the hole just closed.** | his conditions 3 + 4 |
 | **P11** | **Update the skill-count check** — P6 builds a THIRTEENTH skill; `SCOPE:123` checks for twelve | F7/P8 |
 
 ⚠️ **P5 is new since your last sight of this batch. Everything else you have ruled on.**
