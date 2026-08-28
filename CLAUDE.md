@@ -170,7 +170,8 @@ Two MEMORY.md files, kept in sync:
 
 18. **Legacy-component removal — NEVER leave legacy lingering (Kyle directive 2026-06-13, SUPERSEDES the 2026-05-22 "mark, don't delete in-flight" posture).** When any batch surfaces legacy code (system / module / function / helper / route / type that predates current architecture and is a removal candidate), do NOT leave it stubbed, commented-out, deprecated, or lingering — lingering legacy creates confusion AND the risk a dead path accidentally re-enters the live system. **Two acceptable dispositions, decided AT the moment of surfacing:** (a) discuss it + **delete it on the spot** — still through the full workflow (Langston Step-4 diff review, CI, deploy) with certainty-before-cutting blast-radius verification (trace every caller, confirm no UI/runtime dependency, prove no dangling reference via tsc); OR (b) **schedule a concrete dated deletion** — a named batch / roadmap phase+item / dated task, never a vague "Phase 16 someday." **Mechanics:** every removal is recorded in `1-system-manual/DELETED_COMPONENTS_LOG.md` (what / why / blast-radius verification / archive path / commit) and the file archived to `1-system-manual/_archive/deleted-code/` with a non-compilable `.removed` suffix (git history is the authoritative archive; the copy is for quick browse). List any "left intentionally" items (e.g. forward-looking permission taxonomy) in the log so a later grep doesn't read as a missed sweep. Recurring legacy theme still holds: **user-ID dependency** (system is mode-based; userId-coupled paths are prime candidates). First application: P19-B2 `live-trading-service` stub deletion 2026-06-13. (The old "Phase 16 consolidated sweep" was right mid-migration; that era is over and lingering stubs now cost more than the deferral saves — Langston.) See history doc §5.18.
 
-19. **CI per-batch confirmation rule (Kyle directive 2026-05-23, B-NEW-43 Phase 3).** Every batch close MUST verify all 4 GitHub Actions jobs are GREEN on the head commit of `migration/aws-supabase` BEFORE marking complete. The 4 jobs: TypeScript Check (baseline gate), Test Suite, Build, Docker Build. Verification: `gh run list --branch migration/aws-supabase --limit 1` → confirm `completed success`. If `in_progress` or `queued`, wait via `gh run watch <run-id> --exit-status`. If RED, batch NOT complete — surface to Kyle + iterate. Completion reports MUST cite run ID + green status. See history doc §5.19.
+19. *(removed 2026-08-29 — the CI confirmation rule moved to `workflow-05-ci`, which carries the four job names, the `gh run list` form and the all-4-green gate; the batch-CLOSE trigger is in `workflow-11-completion`)*
+    ⚠️ **THE NUMBER IS LEFT AS AN EXPLICIT HOLE AND 20-29 ARE NOT RENUMBERED** — 840 citations span `rule 1`-`rule 29`. **Same form as rule 11 above, which has stood as a visible gap since 2026-07-24.**
 
 20. **TRADING-MODE TAXONOMY — two orthogonal axes; DO NOT CONFUSE.** → `CONDUCT.md` section 4.
     ⚠️ **MOVED AND DELIBERATELY STRIPPED OF ITS COUNTS AND ENUMERATIONS.** The DISTINCTIONS are conduct — you mis-speak them unprompted, with no moment at which you would think to check. The COUNTS were not: **rules do not drift, facts do.** B-RULES-1a caught this very taxonomy asserting 18 strategies against the SSOT's 19, with one missing entirely, inside an always-loaded file. **Current state and counts are read from the SSOT and the System Manual, never from a rules file.**
@@ -473,61 +474,35 @@ OpenClaw replaced as Langston's runtime. See history doc §8.1 for the migration
 
 ### 9.1 SCAFFOLDING-VS-FUNCTIONAL declaration (Kyle directive 2026-05-11)
 
-Any sub-batch shipping scaffolding without making the user-facing capability functional MUST state this at the TOP of the completion report, in bold, separated from other content:
-
-> 🚨 THIS BATCH DOES NOT MAKE \<CAPABILITY\> FUNCTIONAL. \<CAPABILITY\> WILL REMAIN INERT UNTIL \<BATCH N+x\>.
-
-Equally applies in real time — if mid-conversation you tell Kyle a capability is being set up but won't actually be active until a later batch, surface as bold-prefixed inline disclaimer, not a parenthetical. See history doc §9.1 for the B79.0d ORB + xstock_spot scaffolding origin cases.
+⛔ **THE COMPLETION-REPORT DECLARATION MOVED TO `workflow-11-completion` (B-CLAUDEMD-SLIM, 2026-08-29)** — it fires at ONE moment, writing the report, and lives there in full with the banner text.
+★ **WHAT STAYS HERE IS THE HALF THAT HAS NO STEP:** Equally applies in real time — if mid-conversation you tell Kyle a capability is being set up but won't actually be active until a later batch, surface as bold-prefixed inline disclaimer, not a parenthetical. See history doc §9.1 for the B79.0d ORB + xstock_spot scaffolding origin cases.
 
 ### 9.2 NUMERIC-DELTAS-MUST-BE-SURFACED (Kyle directive 2026-05-11)
 
-Any change to a previously-stated number (strategy count, threshold value, sub-batch count, LOC estimate, sequencing day, verification gate count) MUST be surfaced in the next user-facing communication as:
-
-> **PREVIOUSLY STATED: X. NOW: Y. REASON: \<one line\>.**
-
-Pre-audit and completion reports MUST include a "PREVIOUSLY-STATED-VS-NOW" section at the top listing every prior-number → new-number delta with decision source cited. Applies retroactively to in-flight communications: if you realize a previously-stated number is now different, lead the next message with the PREVIOUSLY/NOW/REASON block. See history doc §9.2 for origin context.
+⛔ **THE `PREVIOUSLY STATED / NOW / REASON` BLOCK AND ITS DOCUMENT REQUIREMENTS MOVED (B-CLAUDEMD-SLIM, 2026-08-29): the COMPLETION-report half to `workflow-11-completion`, the PRE-AUDIT half to `workflow-02-audit-and-plan`.** Both fire while writing one document.
+★ **WHAT STAYS HERE IS THE HALF THAT FIRES MID-CONVERSATION, WITH NO DOCUMENT AND NO STEP:** Applies retroactively to in-flight communications: if you realize a previously-stated number is now different, lead the next message with the PREVIOUSLY/NOW/REASON block. See history doc §9.2 for origin context.
 
 ### 9.3 STAGING-VERIFIED means UI-navigated, not curl-checked (Kyle directive 2026-05-11)
 
-"Staging verified" / "verified on staging" / etc. is **reserved for outcomes visually inspected on the staging UI via Claude-in-Chrome**. It is NOT satisfied by: a successful API curl, a psql row count, a PM2 log line, or a `npm run build` + `pm2 restart`. Those are backend health checks — they do NOT prove the UI panel renders correctly, that values aren't undefined-rendering-as-"--", or that the layout isn't broken.
-
-**Requires:** invoke `mcp__Claude_in_Chrome__navigate` to load the staging URL; use `mcp__Claude_in_Chrome__read_page` or `get_page_text` to read the actual DOM; cross-check rendered values; optionally screenshot via `mcp__Claude_in_Chrome__gif_creator`. Kyle's browser opens a tab when Claude-in-Chrome navigates — false claims of "staging verified" are immediately detectable.
-
-**★ STRENGTHENED (Kyle directive 2026-07-16) — UI verification is now a REQUIRED verification step BY DEFAULT, not only when Kyle asks.** The era when everything was backend plumbing is over: with active trading ON, the majority of changes have a staging-visible surface (Filter Diagnostics tabs, the Ready-to-Buy queue tab, Open/Closed Trades tabs, the Dashboard). For ANY change with a UI-visible surface, the implementer MUST navigate the staging site (Claude-in-Chrome / the browser tools), load the affected tab(s), and visually verify the change renders and behaves correctly — as part of Step 7, before claiming completion. Backend health (logs, psql, curl) alone is INSUFFICIENT: "working in the background but not showing on the front end" is a failure state Kyle cannot detect, and it can mask or cause other problems. This was not being done consistently (Kyle called it out 2026-07-16 after the Open Trades crash sat visible on staging while backend checks read green).
-
-**Flip side — when Kyle asks for UI verification, it is NOT optional.** If Kyle says "verify it on staging" / "check the UI" / "navigate to the staging site and confirm" — hard requirement to use Claude-in-Chrome, not a suggestion.
+⛔ **THE DEFINITION AND THE BY-DEFAULT OBLIGATION MOVED TO `workflow-07-verify-cc` (B-CLAUDEMD-SLIM, 2026-08-29)** — which also carries **the browser table: Claude-in-Chrome is the ONLY surface for staging, and the in-app pane is a dead end.**
+★ **WHAT STAYS HERE FIRES WHEN KYLE SPEAKS, NOT WHEN A STEP RUNS:** **Flip side — when Kyle asks for UI verification, it is NOT optional.** If Kyle says "verify it on staging" / "check the UI" / "navigate to the staging site and confirm" — hard requirement to use Claude-in-Chrome, not a suggestion.
 
 **No assumptions when Kyle reports issues.** Every issue raised must be confirmed (reproduce + locate code path + quote actual data), investigated (not dismissed with "marked N/A"), tracked in a dedicated batch-tracking document. Quick-fixing one item + declaring everything resolved is the failure mode. Enumerate → tackle each with evidence → only mark resolved when independently re-verified. See history doc §9.3 for the full rationale.
 
 ### 9.5 ARCHITECTURAL AUDITS — ENTRY-POINT ENUMERATION + PROVENANCE READ (Kyle directive 2026-07-19)
 
-**Origin:** the RTB refresh ran TWO independent mechanisms concurrently over the same queue for ~7 months, and **two separate audits missed it** — both traced forward from ONE entry point and both read only CURRENT code and CURRENT docs. *(Full narrative + the audit record: history doc §9.5-origin-rtb.)*
+⛔⛔ **THE BODIES MOVED TO `workflow-02-audit-and-plan` (B-CLAUDEMD-SLIM, 2026-08-29). THIS HEADING AND ITS SUB-LABELS ARE A FORWARDING ADDRESS AND ARE NOT DELETED — 341 citations point here, and 242 of them cite a SUB-LABEL that a bare heading could not serve.**
 
-**Two mandatory steps for ANY audit, pre-audit (`workflow-02-audit-and-plan`), or architectural dispute touching a subsystem:**
-
-**(a) COMPONENT CENSUS AT EVERY HOP — NOT A PATH TRACE.** ⚠️ **An end-to-end trace is satisfied by the FIRST SUFFICIENT EXPLANATION at each hop** — reaching a component it asks *"what happens here?"*, finds **a** mechanism, and moves on, because the narrative already works. **Nothing in the method ever asks "is there a SECOND thing doing this?"** ⇒ **A COMPLETE NARRATIVE IS NOT AN EXHAUSTIVE INVENTORY.** So at every component on the path, produce a CENSUS, not a step. *(Why an explicitly end-to-end-instructed audit still missed it: history doc §9.5-why-a-trace-is-not-enough.)*
-
-| Census question | Why it is the one that catches duplicates |
+| cited as | now lives at |
 |---|---|
-| Who **writes/creates** here? | multiple producers |
-| Who **reads** here? | hidden consumers |
-| Who **mutates** state here? | competing updaters |
-| **Who DELETES here?** | ★ the highest-yield question — BOTH RTB refresh mechanisms delete queued signals; this alone surfaces them |
-| Who **schedules/starts** work against it? | timers, clock subscriptions, service `.start()`, bootstrap, cron, event subscriptions |
+| **§9.5(a)** — component census at every hop | `workflow-02-audit-and-plan`, *"COMPONENT CENSUS AT EVERY HOP, NOT A PATH TRACE"* |
+| **§9.5(a-ii)** — deletion-time state-write census | `workflow-02-audit-and-plan`, *"DELETION-TIME STATE-WRITE CENSUS"* + *"ENUMERATE THE ENTRY POINTS FIRST"* |
+| **§9.5(b)** — the provenance read | `workflow-02-audit-and-plan`, *"THE PROVENANCE READ — ORIGINAL INTENT, NOT JUST CURRENT STATE"* |
+| **§9.5(b-ii)** — search the ledger before filing a finding | `workflow-02-audit-and-plan`, in the six-sources table |
 
-Repo-wide grep per question, tests excluded; state each list in the audit. If a list has exactly one member, say so explicitly (asserted absence needs presence-evidence, rule 22). **Two or more schedulers over one component require a mutual-exclusion check** (does mechanism 2 respect mechanism 1's in-flight guard?).
-
-**★ (a-ii) DELETION-TIME STATE-WRITE CENSUS — before cutting ANY code, enumerate the STATE IT WRITES and grep for READERS of each (#568, Langston-endorsed 2026-07-22).** Caller-tracing answers *"does anything still CALL this?"* — but a **removed WRITER whose READER survives produces NO compile error and NO failing test**, so caller-tracing, green CI and a clean `tsc` all pass while the deletion silently breaks a live dependency. ⇒ **A deletion is verified by "zero callers AND every state it wrote has no surviving reader" — never by zero callers alone.** ⚠️ **And tracing forward from one entry point structurally CANNOT discover a second entry point**, so enumerate every scheduler, timer, clock subscription, service `.start()`, bootstrap call, cron and event subscription FIRST, repo-wide, tests excluded — and **if exactly one exists, SAY SO** (an asserted absence needs presence-evidence, rule 22). Concurrent entry points additionally require a mutual-exclusion check. *(The five absent-as-valid instances in one day, and the `isRefreshing` case: history doc §9.5-a-ii-origin.)*
-
-**(b) READ THE PROVENANCE — original intent, not just current state.** For any component whose behavior is disputed, surprising, or predates the 2026-01/02 governance change (the Replit exit), consult BOTH:
-- **`bridge/canonical/`** — the pre-governance reference corpus (`DawnTrader_System_Architecture_Execution_Flow.md`, `DawnTrader_Current_State_Reference.md`, `DawnTrader_Complete_Project_History.md`, `DawnTrader_System_Invariants_Design_Guarantees.md`, the `Phase_N_Implementation_History.md` set). **Kyle's framing (2026-07-19): these document the system we INTENDED to build at that time. The purpose is unchanged; the architecture has completely changed — so they are NOT current-state truth and must never be cited as such. Their value is WHY something was built the way it was.** Refer back to them whenever we are in dispute over how something functions.
-- **Git archaeology of the component's origin** — `git log -S "<symbol>" --reverse`, then READ the introducing commit's message, its attached directive/spec (Replit-era commits often attach the directive under `attached_assets/`), and what it deleted.
-
-**(b-ii) SEARCH THE GOVERNANCE LEDGER BEFORE FILING ANYTHING AS A FINDING (added 2026-07-19 after a third recurrence).** Before recording ANY behavior as a defect/discovery, grep `RUNNING_ISSUES.md` + `BATCH_CATALOG.md` + the completion reports for the component and the symbol. **A deliberate, Kyle-approved, Langston-reviewed decision reported as a defect is worse than no finding** — it burns review cycles and impugns work that was done correctly. ★ **And when the CODE COMMENT names its own provenance — a batch id, an issue number, "Langston-approved" — FOLLOW IT. Do not read it and move on.** (The RTB audit reported the shadowed Confidence/Governance gates as a discovery; the comment beside them cited "P19-B8.5 OBJ-6 (Langston-approved)" and "#514" — a three-day-old governed decision. Kyle caught it from memory. See #534 WITHDRAWN.) A finding that survives this check is real; one that does not becomes a cross-reference, and any NEW insight about it (e.g. a coupling to other work) is recorded ON the existing issue rather than as a fresh one.
-
-**The synthesis is the point, not the inventory.** The RTB finding was not *"A is right, B is wrong"* — it was *the documented mechanism has the right engineering and the wrong semantics; the undocumented one is the reverse; combine them.* **That judgement is UNREACHABLE from current code alone.** *(Worked example: history doc §9.5-the-synthesis.)*
-
-**Recording rule:** every audit states what the provenance read found — including "consulted `bridge/canonical/`, no coverage of this component" (itself a finding: the canonical corpus documented only ONE of the two RTB mechanisms). A batch that changes a component documented in the canonical corpus updates the CURRENT docs (SIM / System Manual); the canonical corpus is a frozen historical record and is NOT edited.
+⛔⛔ **THE TRIGGER STAYS HERE AND IS NOT MOVED, AND THE REASON IS THE WHOLE POINT (Langston, 2026-08-28): THIS FIRES ON *"ANY AUDIT, PRE-AUDIT, **OR ARCHITECTURAL DISPUTE**"* — AND `workflow-02` IS GATED `STEP 2 ONLY` IN ITS OWN FRONTMATTER.**
+★ **Writing the trigger into a skill that refuses to load outside step 2 would put the rule behind the exact gate that excludes two of its three triggers — and it would READ AS COVERED.** ⇒ **an unscheduled architectural dispute has no step to invoke, so the trigger must live where it is always loaded.**
+⚠️ **So: a DISPUTE about how a component behaves obliges you to run the census and the provenance read, even with no batch and no step open. Load `workflow-02-audit-and-plan` and work from it.**
 
 ### 9.4 THE FIND IS THE TRIGGER — EVERY OUT-OF-SCOPE FINDING GETS A DECLARED DISPOSITION, IN THE SAME TURN *(Kyle directive 2026-06-13; TRIGGER CORRECTED 2026-08-27)*
 
