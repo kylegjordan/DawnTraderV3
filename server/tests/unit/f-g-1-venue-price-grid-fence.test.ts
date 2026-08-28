@@ -469,6 +469,9 @@ describe('F-G-1 — isOnGrid, the predicate the self-check is built on', () => {
 });
 
 describe('F-G-1 — THE SEAM DECISION, called directly', () => {
+  // the triple every case below carries; the `apply` arm must hand these back verbatim
+  const T = { entryPrice: 100, stopPrice: 95, targetPrice: 110 };
+
   // ⛔⛔ THIS IS THE BLOCK THAT WAS MISSING, AND ITS ABSENCE WAS PROVED TWICE. The published-vs-
   // derived rule lived inline in `signal-orchestrator.buildSizedSignalForStrategy`, which NO TEST
   // EXECUTES: a fresh reader replaced it with a literal `true` — reinstating blocker-5, crypto
@@ -478,14 +481,14 @@ describe('F-G-1 — THE SEAM DECISION, called directly', () => {
 
   // MUTATION: drop the class test from decideGridAction and this fails. IT IS BLOCKER-5.
   it('CRYPTO with no tick REJECTS — it never passes through', () => {
-    expect(decideGridAction('crypto_spot', { ok: false, reason: 'grid_unknown' }).action).toBe('reject');
-    expect(decideGridAction('crypto_perp', { ok: false, reason: 'grid_unknown' }).action).toBe('reject');
+    expect(decideGridAction('crypto_spot', { ok: false, reason: 'grid_unknown', ...T }).action).toBe('reject');
+    expect(decideGridAction('crypto_perp', { ok: false, reason: 'grid_unknown', ...T }).action).toBe('reject');
   });
 
   // MUTATION: drop the grid_unknown test and this fails.
   it('xSTOCK with no tick PASSES THROUGH — absence is our coverage gap, not a venue fact', () => {
     for (const c of ['xstock_spot', 'xstock_perp']) {
-      const d = decideGridAction(c, { ok: false, reason: 'grid_unknown' });
+      const d = decideGridAction(c, { ok: false, reason: 'grid_unknown', ...T });
       expect(d.action).toBe('passthrough');
       expect(d.action === 'passthrough' && d.reason).toBe('unresolved_grid');
     }
@@ -497,19 +500,27 @@ describe('F-G-1 — THE SEAM DECISION, called directly', () => {
   it('EVERY OTHER refusal still refuses, for xStock too', () => {
     for (const reason of ['invalid_triple', 'short_side_unexercised', 'unorderable_triple',
                           'degenerate_after_rounding', 'not_representable_after_rounding']) {
-      expect(decideGridAction('xstock_spot', { ok: false, reason }).action).toBe('reject');
-      expect(decideGridAction('crypto_spot', { ok: false, reason }).action).toBe('reject');
+      expect(decideGridAction('xstock_spot', { ok: false, reason, ...T }).action).toBe('reject');
+      expect(decideGridAction('crypto_spot', { ok: false, reason, ...T }).action).toBe('reject');
     }
   });
 
-  it('a successful rounding is APPLIED', () => {
-    expect(decideGridAction('crypto_spot', { ok: true }).action).toBe('apply');
-    expect(decideGridAction('xstock_spot', { ok: true }).action).toBe('apply');
+  // ⛔ THE APPLY ARM CARRIES THE PRICES, AND THE SEAM ASSIGNS FROM THEM. That is what turns
+  // Langston's predicted mutation — keep the call, discard the result, hardcode `{action:'apply'}`
+  // — from something a test must catch into something that does not COMPILE (measured: 384 -> 390
+  // tsc errors under it). MUTATION: drop the price fields from the apply arm and this fails, and
+  // so does the orchestrator's build.
+  it('a successful rounding is APPLIED, and carries the prices the seam will use', () => {
+    for (const c of ['crypto_spot', 'xstock_spot']) {
+      const d = decideGridAction(c, { ok: true, ...T });
+      expect(d.action).toBe('apply');
+      expect(d).toMatchObject({ entryPrice: 100, stopPrice: 95, targetPrice: 110 });
+    }
   });
 
   // An unrecognised class must take the CONSERVATIVE side end-to-end, not only in the predicate.
   it('an unrecognised class REFUSES rather than passing through', () => {
-    expect(decideGridAction('something_new', { ok: false, reason: 'grid_unknown' }).action).toBe('reject');
+    expect(decideGridAction('something_new', { ok: false, reason: 'grid_unknown', ...T }).action).toBe('reject');
   });
 });
 
@@ -624,5 +635,69 @@ describe('F-G-1 — the pre-fix passthrough counts are MIGRATED, not stranded an
     const m = t.migrateLegacyPassthroughKey({ preSqeRejects: { unmappable_symbol: 2 } });
     expect(m.preSqeRejects).toEqual({ unmappable_symbol: 2 });
     expect(m.gridPassthroughs).toEqual({});
+  });
+});
+
+describe('F-G-1 / BLOCKER-7 — snap() carried the SAME absolute-epsilon defect, twelve lines up', () => {
+  // ⛔⛔ I FIXED `isOnGrid` AND WALKED PAST `snap`, WHICH ASKS THE IDENTICAL QUESTION IN THE SAME
+  // FILE. Langston found it. `rg '1e-9' venue-price-grid.ts` returns FOUR sites and I had fixed
+  // ONE — the grep would have returned all of them the first time.
+  // ★ This is the block Langston's J8 remedy exists for: when a defect is named, grep the CLASS
+  // before fixing the instance, and state what the grep returned.
+  //
+  // MEASURED, on-grid inputs only, counting inputs moved a FULL TICK, n=200,000 per cell:
+  //   tick 1e-5 @ $1k-100k (q~1e10): 14.1% -> 0.0%   |   tick 2e-8 @ $10-300 (q~1e10): 14.4% -> 0.0%
+  //   CONTROLS (q <= 1e7) unchanged at 0.0% throughout.
+  // MUTATION: restore `const EPS = 1e-9` and the large-q cases fail while the controls do not.
+  it('does NOT move an already-on-grid price at large tick counts', () => {
+    for (const [tick, price] of [
+      [1e-5, 68000.5],
+      [1e-5, 1234.56789],
+      [2e-8, 200.00000004],
+      [2e-8, 12.3456789],
+    ] as [number, number][]) {
+      const onGrid = Math.round(price / tick) * tick;
+      expect(isOnGrid(onGrid, tick)).toBe(true);            // premise
+      for (const dir of ['up', 'down'] as const) {
+        const snapped = roundPriceForRole(onGrid, tick, dir === 'up' ? 'target' : 'stop', true);
+        expect(Math.abs(snapped - onGrid)).toBeLessThan(tick * 0.5);
+      }
+    }
+  });
+
+  // CONTROL: the small-q cases the old constant handled correctly must be untouched by the fix.
+  // Without this, tightening the epsilon to zero would also pass the test above.
+  it('CONTROL — still absorbs real float dust at ordinary tick counts', () => {
+    for (const [tick, price] of [[0.01, 100], [0.0025, 12.3475], [0.1, 68000.5]] as [number, number][]) {
+      const onGrid = Math.round(price / tick) * tick;
+      expect(roundPriceForRole(onGrid, tick, 'stop', true)).toBeCloseTo(onGrid, 10);
+      expect(roundPriceForRole(onGrid, tick, 'target', true)).toBeCloseTo(onGrid, 10);
+    }
+  });
+
+  // The third instance of the class, in the SIZE path.
+  // MUTATION: restore `Math.floor(quantity / step + 1e-9)` and this fails.
+  // ⛔ THE VALUE IS CHOSEN, NOT ASSUMED. My first version used 2.5, which floors identically under
+  // both epsilons — the test passed under the mutation and I only know that because I ran it.
+  // 5.1 at lotDecimals 8 gives lots = 509999999.99999994: a fixed 1e-9 is far too small to lift it
+  // over the integer boundary, so the old code floors to 509,999,999 lots and SILENTLY LOSES a
+  // whole lot of size. The relative band lifts it correctly.
+  // MUTATION: restore `Math.floor(_lots + 1e-9)` and this fails.
+  it('roundQuantityForVenue does not silently lose a whole lot at large lot counts', () => {
+    const r = roundQuantityForVenue(5.1, 100, 8, null, null);
+    expect(r).not.toBeNull();
+    expect(r!.quantity).toBeCloseTo(5.1, 9);   // old code returns 5.09999999
+  });
+});
+
+describe('F-G-1 — a POLICY refusal is not a malformed signal', () => {
+  // Langston: I pulled the two arithmetic reasons out of the `unorderable` bucket and left the one
+  // that is not a defect at all. A well-formed SHORT is refused because the branch is unexercised
+  // — a policy decision — and `unorderable`'s own doc says "not long-shaped and NOT SHORT-SHAPED",
+  // which is the one thing that triple demonstrably is.
+  // MUTATION: fold short_side_unexercised back into 'unorderable' and this fails.
+  it('tags a refused short as a short, not as an unorderable triple', () => {
+    expect(evaluateGridForTagging(100, 110, 90, 0.01).verdict).toBe('short_side_unexercised');
+    expect(evaluateGridForTagging(100, 105, 110, 0.01).verdict).toBe('unorderable'); // still
   });
 });

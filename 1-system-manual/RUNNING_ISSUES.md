@@ -4413,10 +4413,21 @@ Kraken publishes a per-pair `tick_size` — **1,437 pairs, 11 distinct values, a
 ⇒ **INTERIM, LANDED IN THIS BATCH:** the miss is now LOUD — `[F-G-1][GRID_EVENT_UNCOUNTED]` on stderr naming the class and the reason, so an uncountable grid event announces itself instead of counting nothing quietly.
 ⇒ **HOME: `B-FUNNEL-PERP-CLASSES`, owner CC-C, placed in `PHASE_19_PLAN` §1 immediately after the perp active-path wiring item — it must land BEFORE perps trade, not after.** The widening is still not F-G-1's job; what changed is that "cannot happen" is no longer true, only "cannot happen yet."
 
+### #930 OPEN 2026-08-28 (CC-C, split out of #927 on Langston's condition) — A STORED ZERO IS TRUTHY, SO A NULL-GUARD PASSES AND A ZERO TARGET REACHES SIZING
+
+**EVIDENCE, cited rather than asserted — this was `RULED ON REPORTED FACT` and bounced until it was.**
+- **The guard:** `active-execution-engine.ts:2821` — `const targetPrice = signal.targetPrice ? parseFloat(signal.targetPrice) : entryPrice * 1.02;`
+- **The column type:** `shared/schema.ts:686`, `:722`, `:1226` — `decimal("target_price", { precision: 20, scale: 8 })`. Drizzle's `decimal` yields a **JS string** at runtime, deliberately, to preserve precision.
+- **The arithmetic:** `Boolean('0') === true` and `parseFloat('0') === 0`. So a stored `"0"` **passes the truthiness guard** and installs a **zero target** — an infinite-RR signal — instead of taking the fallback.
+- `:2820` `parseFloat(signal.stopPrice)` has **no guard at all** and yields `NaN` on a null.
+
+⚠️ **AND THE HONEST NARROWING, WHICH I ALMOST DID NOT STATE: those three columns are `.notNull()`.** So the *null* path is unreachable for signals read from them, and the live exposure is a stored **ZERO**, not a stored null. **Whether a zero is ever actually written is NOT established** — I have not queried it, and the parts being correct is not the same as the case occurring. ⇒ **The DEFECT is confirmed by construction; the INCIDENCE is unmeasured, and this entry must not be read as claiming one.** The first query for that batch is `SELECT count(*) FROM rtb_signals WHERE target_price = 0`.
+⇒ **HOME: `B-STRING-TRUTHINESS-GUARDS`, owner CC-C, placed in `PHASE_19_PLAN` §1 after `B-TARGET-FABRICATION` (row 3i).** Scope is the class, not this site: a repo-wide census of `x ? parseFloat(x) : <fallback>` over decimal columns.
+
 ### #927 OPEN 2026-08-28 (CC-C, surfaced by a fresh-context reader on F-G-1) — THE PROMOTION PATH INVENTS A TARGET PRICE IN THREE PLACES, AND ONE OF THEM IS THE RANKING KEY
 
 `active-execution-engine.ts:2821` reads `signal.targetPrice ? parseFloat(...) : entryPrice * 1.02` — a fabricated 2% target when the stored one is null. The same `entry * 1.02` is re-implemented at `ready_to_buy_service.ts:1788` (inside `rMultipleCore`, which is the **ranking** key) and again at `:1943` (shadow-pool sim). **So the order in which the RTB pool ranks candidates can depend on an invented number**, and the rule has three homes — the `B-EPOCH-KEYING-PARITY` shape.
-⚠️ **A second, sharper defect in the same expression:** these columns arrive from Postgres as **strings**, so a stored `"0"` is **truthy** — the guard passes and `parseFloat("0")` puts a **zero target** into sizing. `:2820` `parseFloat(signal.stopPrice)` yields `NaN` on null with no guard at all.
+⛔ **SPLIT 2026-08-28 (Langston's condition): the string-truthiness leg is NOT part of this issue and is now `#930`.** It is an independent live-path defect, not a footnote of a rounding batch — and he was right to refuse it as `RULED ON REPORTED FACT` until the guard line and the column type were cited. They now are, on `#930`.
 ⛔ **NOT FOLDED INTO F-G-1.** F-G-1 rounds at signal BIRTH; this is a fabrication at PROMOTION, on a path F-G-1 does not touch, and pulling it in would widen a rounding batch into the ranking key.
 ⇒ **HOME: `B-TARGET-FABRICATION`, owner CC-C, placed in `PHASE_19_PLAN` §1 after `F-G-2`.** Scope: one home for the default-target rule, and a string-aware null guard.
 

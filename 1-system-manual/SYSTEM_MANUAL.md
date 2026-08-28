@@ -4414,6 +4414,25 @@ The L-Series autonomy cluster (MCP, ARE, GASP, MOF, MACO, ECS, DCE, etc.) was di
 >
 > ⛔ **NO FALLBACK FOR A PRICE; SKIP-ON-MISSING FOR A PRE-FILTER.** An invented tick emits an
 > unplaceable order. A pre-filter that refuses on missing metadata blocks trades on a data gap.
+>
+> ### ⛔⛔ WHAT THIS DOES NOT GUARANTEE
+>
+> The VPG guarantees prices are on the venue grid **as the signal orchestrator emits them.** It does
+> **not** guarantee that every price reaching execution is on the grid. **Three routes reach a trade
+> without passing through the seam**, and one live component deliberately does not call it:
+>
+> | | the path | home |
+> |---|---|---|
+> | `#928` | an **HTTP intent path** takes a price triple straight from the request body into execution, validating symbol and strategy only — **while its own error string claims it checks prices**; the downstream distance check uses `Math.abs`, so an **inverted** triple passes silently | `B-INTENT-ENTRY-PARITY` |
+> | `#929` | **position sizing has TWO callers**; the fallback-sizing arm of the promoted-signal path never consults the VPG | folded into `#928` |
+> | `#927` | the promotion path **invents** a target (`entry * 1.02`) in **three** places, one of which is the RTB **ranking** key — so pool ORDER can depend on an invented number | `B-TARGET-FABRICATION` |
+> | `#923` | the **trailing exit controller DOES NOT call the VPG** and ratchets a live stop off-grid | `F-G-2` |
+> | `#924` | two live-path sites mutate a gridded price after the VPG; both dormant today | row 3g |
+>
+> ★ **A GUARANTEE STATED WITHOUT ITS BOUNDARY IS READ AS UNIVERSAL.** These were recorded in the
+> batch's change list and NOT here, which meant the only durable artifact said "one rounding seam"
+> and nothing said where that seam ends. A change list is not something a future reader loads.
+
 
 ## Table of Contents
 

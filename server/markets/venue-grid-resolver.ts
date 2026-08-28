@@ -132,16 +132,33 @@ export function gridIsDerivedForClass(assetClass: string): boolean {
  *                                                 passthrough is keyed on the REASON and not on
  *                                                 the class alone.
  */
+/**
+ * ⛔⛔ THE `apply` ARM CARRIES THE PRICES, AND THAT IS A FENCE RATHER THAN A CONVENIENCE.
+ * Langston predicted — correctly, I ran it — that a caller could keep the call, DISCARD its
+ * result and dispatch on a hardcoded `{ action: 'apply' }`, reinstating blocker-5 in full with
+ * every test green. The fence had gone *identifier present* → *call form present* and still not
+ * *the value decides*, which is J5's shape two steps out.
+ * ★ A REGEX CANNOT CLOSE THAT, AND NEITHER CAN ANOTHER ASSERTION. Making the decision carry the
+ * only copy of the rounded prices means a hardcoded action does not COMPILE — the caller has
+ * nothing to assign. Rule 29: prefer impossible over intercepted; a hook is the fallback.
+ */
 export type GridAction =
-  | { action: 'apply' }
+  | { action: 'apply'; entryPrice: number; stopPrice: number; targetPrice: number }
   | { action: 'passthrough'; reason: string }
   | { action: 'reject'; reason: string };
 
 export function decideGridAction(
   assetClass: string,
-  r: { ok: boolean; reason?: string },
+  r: { ok: boolean; reason?: string; entryPrice: number; stopPrice: number; targetPrice: number },
 ): GridAction {
-  if (r.ok) return { action: 'apply' };
+  if (r.ok) {
+    return {
+      action: 'apply',
+      entryPrice: r.entryPrice,
+      stopPrice: r.stopPrice,
+      targetPrice: r.targetPrice,
+    };
+  }
   // ⛔ BRANCH ON THE ASSET CLASS, NEVER ON THE PROVENANCE OF A LOOKUP THAT FAILED. Blocker-5 was
   // exactly that: `provenance !== 'venue_published'` is TRUE BY CONSTRUCTION inside the
   // grid_unknown branch, because a miss returns the shared UNKNOWN for every class.

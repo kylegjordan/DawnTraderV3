@@ -94,6 +94,27 @@ plus **any new `MISTAKE:` trailer whose slug is `skipped-the-gate` or names a wo
 ★ **WHY MORE RULE-TEXT CANNOT FIX THIS (Langston):** *"the gate did not fail from ignorance."* The rule existed, was one day old, was written by the person who broke it, and **predicted its own bypass in its own text.** A rule that has been tested that directly and still failed is not improved by another sentence.
 **THE COUNTER-HABIT, until #744 ships:** at the moment you judge something urgent, **that is the trigger to check whether a gate applies** — urgency is the condition the rule warns about, so feeling it is the cue, not the excuse.
 
+### `fix-follows-pointer` — **FIXED THE INSTANCE THAT WAS POINTED AT; THE CLASS STAYED WHERE IT WAS** — **LIVE — NOT IN §13** · mechanism: ✅ **grep the CLASS before fixing the instance, and STATE what the grep returned** (opened 2026-08-28, CC-C; **Langston named it, and it is his ruling on my own J8 question**)
+
+⛔ **FAILS THE §13 BATCH-DIVERSITY LEG AND IS RECORDED ANYWAY** — five instances, **all inside `F-G-1`**. Same standing as `fix-relocates` directly above, and the two are **siblings that must not be merged.**
+
+★★ **THE DISTINCTION, WHICH IS THE WHOLE REASON FOR A SEPARATE SLUG.** `fix-relocates` is the correction reintroducing the same class **somewhere new**. **This is the opposite motion: the defect STAYS PUT, and the FIX travels to whichever instance the last reader's finger was on.** Langston's ruling, in his words: *"Convergence predicts a shrinking residue; re-expression-at-each-level predicts the defect climbing to a new abstraction. What I measure is a third thing."*
+
+⛔ **AND IT IS NOT A CHARACTER FLAW — IT IS WHAT REVIEW PRESSURE SELECTS FOR.** Each round a reviewer names an instance; the cheapest edit that satisfies the objection **as worded** is to fix that instance. Nothing in the exchange ever asks *"where else does this exact thing live?"* ⇒ **the counter-habit has to fire at FIX time, because at REVIEW time the question is never posed.**
+
+| # | what was named | what I fixed | what I left, in the same file or the same sentence |
+|---|---|---|---|
+| 5 | `isOnGrid` used an absolute `1e-9` on a ratio reaching 1e10 | `isOnGrid` | ⛔ **`snap()` — TWELVE LINES ABOVE, asking the identical question** — and `roundQuantityForVenue`. `rg '1e-9' venue-price-grid.ts` returns **four** sites; I fixed **one** and reported the class as handled. Langston measured `snap` moving an already-on-grid price a **full tick** on 14% of a 200k sample |
+| 4 | the seam fence asserted an **identifier** was present | made it assert a **call form** | ⛔ **still not that the returned value DECIDES.** Langston predicted a mutation — keep the call, discard the result, hardcode the action — **would pass, and it did.** Each edit was the minimum that satisfied the objection as worded |
+| 3 | the change list's **per-section** counts were wrong | corrected those three | left the **header total** restated at a ref where it had moved, and the test count 8 low — *"re-derived at the ref, not restated"* sat above a block that was neither |
+| 2 | the VPG caller census omitted a caller | added it to the **service header** | left **"FOUR CALLERS"** in the System Impact Map, and the same entry's test count at 26 while the suites held 74 |
+| 1 | `_fc2` duplicated `_fClass` in the same function | wrote the comment explaining why it must not | ⛔ **left the duplicate in place AND reported it as changed** — the edit script printed its success line **before** the file write, then crashed on a later anchor, so nothing was written and I read the print as proof |
+
+★ **INSTANCE 1 IS ITS OWN LESSON AND BELONGS IN THIS FILE TWICE OVER: A PROGRESS MESSAGE EMITTED BEFORE THE WORK IT REPORTS CANNOT COME OUT DIFFERENTLY IF THE WORK DID NOT HAPPEN.** Same shape as every control in that batch that could not fire. **Read the object back from disk; never the tool's own report of having written it.**
+
+✅ **THE MECHANISM, and it is cheap enough to survive contact — Langston's, adopted verbatim:** *"when a defect is named, grep the class before fixing the instance, and state what the grep returned."* Treat it as **§9.5(a)'s component census applied to defect CLASSES rather than to callers** — same discipline, different axis. **Stating the grep is the part that does the work**: an unstated grep is indistinguishable from one never run, and *"I fixed the instance and there are no others"* is an asserted absence, which needs presence-evidence like any other (rule 22).
+⚠️ **HONEST LIMIT:** it fires only once a defect has been NAMED. It does nothing for a class nobody has pointed at yet — that is what the fresh-reader loop is for, and the two mechanisms are complements rather than substitutes.
+
 ### `fix-relocates` — **THE CORRECTION REINTRODUCED THE SAME DEFECT CLASS IN A NEW PLACE** — **LIVE — NOT IN §13** · mechanism: **the fresh-reader LOOP, already mandated in `workflow-02/-04/-07/-11` and unblocked by Kyle's standing authorisation 2026-08-28** (opened 2026-08-28, CC-INFRA)
 
 ⛔ **FAILS THE §13 BATCH-DIVERSITY LEG AND IS RECORDED ANYWAY.** Five instances, **all inside `B-TOKEN-WATCH`** — one context, not two batches, so it does **not** promote under the 3+/2-batches floor. **It is here because the instance COUNT is unusually high for a single batch and because a mechanism already exists**, which is the state this file says a pattern should reach.

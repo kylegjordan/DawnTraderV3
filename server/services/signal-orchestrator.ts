@@ -550,8 +550,15 @@ export class SignalOrchestrator {
         rawSignal.entryPrice, rawSignal.stopPrice, rawSignal.targetPrice,
         _grid.tick, { targetIsCap: _isCap, symbol: rawSignal.symbol },
       );
-      // ONE derivation of the funnel class key, used by BOTH the reject helper and the
-      // passthrough counter — two copies of the same narrowing is how they drift apart.
+      // ⛔⛔ REUSES `_fClass` — IT DOES NOT RE-DERIVE IT, and the previous comment here claimed to
+      // be "ONE derivation… two copies of the same narrowing is how they drift apart" while sitting
+      // on a byte-identical SECOND copy of `_fClass`, fifty-one lines above in the same function.
+      // I wrote the rule and broke it in the same breath.
+      // ⚠️ AND I REPORTED IT AS FIXED WHILE IT WAS STILL PRESENT — Langston caught that at the ref.
+      // The edit script printed its success line BEFORE the file write, then crashed on a later
+      // anchor, so nothing was written and I read the print as proof. A progress message emitted
+      // before the work it reports is the same defect class as every control in this batch that
+      // could not fire: it cannot come out differently if the work did not happen.
       // ⛔⛔ AND THE PERP CLASSES FALL OUT OF IT ENTIRELY, WHICH MUST BE LOUD RATHER THAN SILENT.
       // The funnel keys on `crypto_spot|xstock_spot` ONLY (`active-funnel-tracker.ts` FunnelAsset-
       // Class). So for `xstock_perp` or `crypto_perp` this is `undefined` and NEITHER a grid
@@ -568,8 +575,7 @@ export class SignalOrchestrator {
       //     placed in `PHASE_19_PLAN` §1 immediately after the perp active-path wiring item —
       //     it must land BEFORE perps trade, not after.
       // ⇒ Until then the miss SAYS SO on stderr instead of counting nothing quietly.
-      const _fc2 = (sizingContext.assetClass === 'crypto_spot' || sizingContext.assetClass === 'xstock_spot')
-        ? sizingContext.assetClass : undefined;
+      const _fc2 = _fClass;
       const _gridUncountable = (reason: string) => {
         console.error(
           `[F-G-1][GRID_EVENT_UNCOUNTED] ${_gridSymbol}/${strategyId} class=${sizingContext.assetClass} ` +
@@ -642,11 +648,15 @@ export class SignalOrchestrator {
         }
         // ROUND ONCE, PERSIST ONLY THE ROUNDED VALUES. An unrounded shadow field would rebuild
         // OBJ-2's defect: a second number under a name implying it is the one we use.
+        // ⛔ THE PRICES COME FROM THE DECISION, NOT FROM `_r`. That is deliberate and it is the
+        // fence: a mutation that discards the decision and hardcodes `{ action: 'apply' }` — the
+        // one Langston predicted would pass, and did — now has nothing to assign here and fails
+        // to COMPILE. Impossible beats intercepted.
         rawSignal = {
           ...rawSignal,
-          entryPrice: _r.entryPrice,
-          stopPrice: _r.stopPrice,
-          targetPrice: _r.targetPrice,
+          entryPrice: _decision.entryPrice,
+          stopPrice: _decision.stopPrice,
+          targetPrice: _decision.targetPrice,
         };
       }
     }

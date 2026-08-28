@@ -119,7 +119,25 @@ type Dir = 'nearest' | 'up' | 'down';
  */
 function snap(price: number, tick: number, dir: Dir): number {
   const q = price / tick;
-  const EPS = 1e-9;
+  // ⛔⛔ THE SAME ABSOLUTE-EPSILON-ON-A-RATIO DEFECT AS `isOnGrid`, TWELVE LINES BELOW — AND I
+  // FIXED THAT ONE AND WALKED PAST THIS ONE. `q` is a COUNT OF TICKS and reaches ~1e10, where a
+  // fixed `1e-9` nudge is larger than a whole tick, so the ceil/floor jumps a full increment on a
+  // price that was ALREADY on the grid. The docstring above claimed the opposite — "a value
+  // already sitting on the grid is never pushed a whole tick away by dust" — which was false at
+  // exactly the scale the `isOnGrid` banner is about.
+  // MEASURED HERE, on-grid inputs only, counting inputs moved a FULL TICK, n=200,000 per cell:
+  //     tick 1e-5 @ $1k-100k   (q~1e10):  14.1% moved  ->  0.0% after
+  //     tick 2e-8 @ $10-300    (q~1e10):  14.4% moved  ->  0.0% after
+  //     tick 0.01 @ $1k-100k   (q~1e7):    0.0%  CONTROL, unchanged
+  //     tick 0.01 @ $1-100     (q~1e4):    0.0%  CONTROL, unchanged
+  //     tick 0.0025 @ $10-300  (q~1e5):    0.0%  CONTROL, unchanged
+  // (Langston reported 49.3% on his own sampling of the first cell; mine is 14.1%. The defect
+  // reproduces either way — the controls are what make it a measurement. I report mine.)
+  // ⚠️ IT IS NOT A REFUSAL: the output stays ON grid, so `representable` never trips. For a plain
+  // long the spurious tick moves stop and target AWAY, the cheap direction — but the `targetIsCap`
+  // arm (`volatility_edge`, dir `down`) moves the target one tick TOWARD entry, past the bound it
+  // was defined by. Bounded harm, false invariant.
+  const EPS = Math.max(1, Math.abs(q)) * Number.EPSILON * 8;
   let n: number;
   if (dir === 'nearest') n = Math.floor(q + 0.5);           // half-up
   else if (dir === 'up') n = Math.ceil(q - EPS);
@@ -141,6 +159,20 @@ function snap(price: number, tick: number, dir: Dir): number {
  * `not_representable_after_rounding`, a REFUSAL. So the self-check added to catch a rounding bug
  * would itself have refused valid signals — the guard becoming the thing it guards against.
  * ⇒ Scale the band with `q`, at FLOAT PRECISION and not at a hand-picked constant.
+ *
+ * ⛔⛔ THE CLASS GREP, STATED RATHER THAN THE INSTANCE FIXED (Langston's J8 remedy, and this file
+ * is what produced the rule). `rg '1e-9' venue-price-grid.ts` at the ref returns FOUR sites:
+ *   1. `snap`'s `EPS`                       — SAME CLASS (ratio `price/tick`).  FIXED.
+ *   2. `isOnGrid`'s band                    — SAME CLASS (same ratio).          FIXED.
+ *   3. `roundQuantityForVenue`'s floor nudge — SAME CLASS (ratio `qty/step`).   FIXED.
+ *   4. `oneTick = t * (1 - 1e-9)`           — ⚠️ NOT this class, and it is stated so the next
+ *      reader does not "fix" it: that is a RELATIVE shrink of a tick VALUE, not an absolute
+ *      epsilon on an unbounded ratio. It is already scale-free. LEFT ALONE, deliberately.
+ * ⚠️ Repo-wide the same shape returns two more hits — `expectancy.ts` and
+ * `drift-dashboard-aggregator.ts` — and BOTH are absolute epsilons on BOUNDED quantities (a
+ * probability, a shift fraction), so they are a different shape wearing the same constant.
+ * ⇒ I fixed ONE of these three on the first pass and reported the class as handled. The grep
+ * would have returned all three the first time; it took a reviewer to ask.
  * ⛔⛔ AND MY OWN FIRST FIX WAS WORSE THAN THE DEFECT. I scaled the ORIGINAL `1e-9` by `q` —
  * which at `q = 6.8e9` opens a band of ~6.8 TICKS and starts accepting prices that are genuinely
  * OFF grid. MEASURED against a deliberate half-tick control set:
@@ -292,7 +324,11 @@ export function roundQuantityForVenue(
   if (!Number.isFinite(quantity) || quantity <= 0) return null;
   if (lotDecimals == null || !Number.isFinite(lotDecimals)) return null; // no fallback
   const step = Math.pow(10, -lotDecimals);
-  const q = Number((Math.floor(quantity / step + 1e-9) * step).toFixed(Math.min(12, lotDecimals)));
+  // ⛔ THIRD INSTANCE OF THE SAME CLASS. `quantity / step` reaches ~1e10 at `lotDecimals = 8`,
+  // where a fixed `1e-9` is bigger than a whole step and floors to the wrong lot.
+  const _lots = quantity / step;
+  const q = Number((Math.floor(_lots + Math.max(1, Math.abs(_lots)) * Number.EPSILON * 8) * step)
+    .toFixed(Math.min(12, lotDecimals)));
   if (q <= 0) return null;
   if (ordermin != null && Number.isFinite(ordermin) && q < ordermin) return null;
   if (costmin != null && Number.isFinite(costmin) && q * price < costmin) return null;
@@ -327,6 +363,12 @@ export type GridTagVerdict =
   | 'degenerate_after_rounding'
   /** Not long-shaped and not short-shaped, or a leg is missing — the `#915` family. */
   | 'unorderable'
+  /** ⚠️ A POLICY REFUSAL, NOT A DEFECT AT ALL — the triple is a well-formed SHORT, and we refuse
+   *  shorts because the branch is unexercised. It was folded into `unorderable`, whose own doc
+   *  says "not long-shaped and NOT SHORT-SHAPED" — the one thing this triple demonstrably is.
+   *  I pulled the two arithmetic reasons out of that bucket for exactly this reason and left the
+   *  one that is not a defect. Langston, at the ref. */
+  | 'short_side_unexercised'
   /** ⚠️ OUR ARITHMETIC, NOT THE SIGNAL'S SHAPE — the VPG rounded and the result was still not a
    *  multiple of the tick. A DEFECT IN THIS MODULE, and it must never be filed against the
    *  signal. It had been folded into `unorderable`, whose own doc says "not long-shaped and not
@@ -365,6 +407,7 @@ export function evaluateGridForTagging(
       : r.reason === 'degenerate_after_rounding' ? 'degenerate_after_rounding'
       : r.reason === 'not_representable_after_rounding' ? 'not_representable_after_rounding'
       : r.reason === 'invalid_triple' ? 'invalid_triple'
+      : r.reason === 'short_side_unexercised' ? 'short_side_unexercised'
       : 'unorderable';
     return { verdict, tick: tick ?? null, wouldBe: null, isWiringBug: wiring };
   }
