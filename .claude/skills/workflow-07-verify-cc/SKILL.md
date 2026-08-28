@@ -23,6 +23,12 @@ With active trading on, **most changes have a staging-visible surface.** For any
 | ✅ **`mcp__claude-in-chrome__*`** — Kyle's real Chrome, carrying his session | **THE FULL DASHBOARD. No login.** *(Measured 2026-08-28: portfolio, Ready-to-Buy, Filter Health, strategy table all rendered.)* | ⛔ **§9.3 UI verification. This is the one the rule means.** |
 | ⚠️ the in-app Browser pane (`mcp__Claude_Browser__*`) | **a `"Welcome Back / Sign in"` FORM** — fresh profile, no cookies | general browsing; **needs the credentials, and that is why they exist** |
 
+⛔⛔ **AND DO NOT TRY TO LOG IN — YOU CANNOT, AND YOU DO NOT NEED TO.** ★ **A session may not type a password into a form; that is a hard boundary, not a preference.** ⇒ **Provisioning more test credentials would NOT unblock the in-app browser** — the constraint is the typing, not the account. **Claude-in-Chrome carries Kyle's session and needs no login, which is why it is the mandated surface.**
+
+⛔⛔ **THE LANDING DASHBOARD IS STALE WINDOW DRESSING — IGNORE EVERYTHING ON IT (Kyle, 2026-08-28).** *"Nothing has been updated on that in over six months… old alerts and messages and warnings that we don't need to listen to."*
+⚠️ **MEASURED THE SAME DAY, AND IT CAUGHT ME: I read its *"database 153.37 GB — 1533.7% of the 10 GB limit"* banner and a *"CRITICAL"* alert from 8/14 and filed them as a finding. Both are dashboard furniture.**
+⇒ ★ **VERIFY ON THE TAB YOUR BATCH TOUCHED — Filter Diagnostics, Ready-to-Buy, Open/Closed Trades — NEVER on the landing page.** ⛔ **A stale banner read as live telemetry is a finding you will have to withdraw, and it costs Kyle a turn.**
+
 ⇒ ⛔⛔ **"I NEED CREDENTIALS" IS NOT A REASON TO SKIP THIS STEP — IT MEANS YOU REACHED FOR THE WRONG BROWSER.** ★ **Both halves are true, which is exactly why sessions keep getting it wrong: the login wall is REAL on one surface and ABSENT on the other, and the rules file listed the credentials without ever saying which.**
 ⚠️ **The `testuser123` credentials in `CLAUDE.md` §7 serve the in-app browser AND the authenticated API calls in that same section. They are NOT a precondition for §9.3 verification.**
 
