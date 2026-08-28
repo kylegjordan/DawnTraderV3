@@ -12,9 +12,9 @@
 > ⚠️ **UPDATE THESE FOUR LINES AT EVERY STEP BOUNDARY.**
 
 - **BATCH:** `B-TOKEN-WATCH` — **capture-only** observation feed over new Solana token launches. Builds case-control survival machinery WHERE A PUBLISHED ANSWER KEY EXISTS before pointing it at #594/#596/#597 where there is none. **No trading, no wallet, no execution.**
-- **STEP: 2 of 11** — pre-implementation audit AND implementation plan. Document written and pushed (`B_TOKEN_WATCH_PRE_AUDIT.md`); **Langston reviewing**; PART E appended with Kyle's rulings mid-review.
-- **NEXT STEP: 3 of 11** — implementation. ⛔ **DO NOT ENTER STEP 3 UNTIL LANGSTON CLEARS STEP 2.**
-- **BLOCKED-ON:** Langston (Step-2 sign-off). Nothing needed from Kyle.
+- **STEP: 3 of 11** — implementation. **COLLECTOR BUILT AND PUSHED** (`bdb688284`): store, budget+shed order, providers, receiver, follow-up scheduler, tiering, 5 systemd units, README. **54 checks across two suites, zero failures**, every block positive-controlled. ⛔ **The coverage control is DELIBERATELY UNBUILT and no timer ships for it** — it needs live paging verified, and a control in the service listing that never measures anything is worse than an absent one. Lands in Phase-3 proving.
+- **NEXT STEP: 4 of 11** — Langston's code review of the diff at the graded ref. ⛔ Step 3 is code-complete; DO NOT enter step 4 by assuming it, dispatch it.
+- **BLOCKED-ON:** Nothing. Step 2 APPROVED by Langston; Step 3 code complete.
 
 > ⛔⛔ **WHY THESE LINES NOW CARRY STEP *NUMBERS*, AND IT IS THE FIX FOR A REAL FAILURE (2026-08-28).** This block used to end with a prose to-do list reading *"scope → Langston Step-1; **then build**"* — **which is step 1 → step 3, with step 2 silently absent.** I wrote it, it auto-loads FIRST on every start and compaction, and it is read as *where I am*, while `CLAUDE.md` §0.a is a table of addresses I must choose to consult. **When the two disagreed, the specific private list beat the generic public rule, and nothing compared them.** ⇒ **A prose next-step can skip a step invisibly; a NUMBER cannot** — 1 → 3 is visible on its face. **Never write a prose next-step here again.**
 

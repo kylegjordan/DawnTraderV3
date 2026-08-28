@@ -4332,6 +4332,33 @@ Kraken publishes a per-pair `tick_size` — **1,437 pairs, 11 distinct values, a
 
 **DISPOSITION 3 — ITS OWN BATCH, PLACED: `B-GRID-LIVE-PATH-PARITY`, owner CC-C, placed in `PHASE_19_PLAN.md` §1 Part F AFTER `F-G-2`, alongside `B-MIN-STOP-DISTANCE` / `B-GUARD-COVERAGE-AUDIT` / `B-VALIDATE-OBSERVABILITY`.** ★ **It is genuinely a LIVE-READINESS item, not a Phase-19 trading-behaviour one** — grouping it with the other execution-surface questions keeps them reviewable together. ↔ `#734` (the other Phase-21 go-live blocker).
 
+### #926 OPEN 2026-08-28 (CC-INFRA, measured with a clean before/after during `B-TOKEN-WATCH` Step-3) — THE PUSH GUARD RUNS FROM THE SHELL'S CWD, SO WORKING IN A SUBDIRECTORY FAKES THE BROKEN-PARSE ALARM AND REFUSES THE PUSH
+
+**BUCKET 1 — A REAL DEFECT in `.claude/hooks/guard-push-tsc-baseline.mjs` / `scripts/check-tsc-baseline.mjs`.** ⛔ **And the alarm it raises falsely is the most serious one it has**, which is what makes it worth a batch rather than a note.
+
+**MEASURED, SAME COMMIT, SAME MINUTE, OPPOSITE VERDICTS:**
+
+| shell cwd when the push ran | guard verdict |
+|---|---|
+| `…/token-watch` (a subdirectory of the clone) | ⛔ **REFUSED — "214 (file, code, message) counts dropped in files this push DID NOT TOUCH"**, i.e. **every one of the baseline's 214 triples** |
+| the clone root | ✅ **`OK — no regressions above baseline`, 0 drops, exit 0, push succeeded** |
+
+★ **THE CHANGE BEING PUSHED WAS PYTHON ONLY — it could not move a single TypeScript count.** That is the tell.
+
+**MECHANISM.** The guard is a **PreToolUse** hook: it runs **before** the command, so it inherits **whatever directory the shell is sitting in** — not the repo root. From a subdirectory the typechecker resolves differently and the emitted file keys stop matching the baseline's, so all 214 triples read as dropped while the raw error TOTAL still reads 384. ⚠️ **`check-tsc-baseline.mjs` ALREADY FIXED THIS EXACT CLASS ONCE** — its own comment at `:52-53` records that `BASELINE_PATH` was resolved from `cwd()` and broke for "ANY caller whose working directory is not the repo root", and it now resolves from `REPO_ROOT`. **The same fix was not applied to the tsc invocation or to the `<ROOT>` message normalisation at `:117`, which still reads `cwd()`.** One half of a two-half bug was fixed.
+
+⛔ **NOT A PARSE FAILURE — ruled out with the baseline file's OWN recorded control.** `npx tsc --noEmit --incremental false` emits **384 errors with 141 in `server/routes.ts`**, and the baseline's `last_synced_by_batch` note records CC-C's 2026-08-20 verification in exactly those terms (*"VERIFIED not a parse failure: tsc still reported 141 other routes.ts errors at the same run"*). **Same shape, same numbers.** The code is being seen.
+
+**WHY THIS IS DANGEROUS RATHER THAN ANNOYING — two reasons, and the second is the serious one:**
+1. **It fires the broken-parse alarm**, whose whole purpose is to be believed. A session gets 214 lines of "errors vanishing from files you did not edit", which the guard itself correctly calls the signature of a build reaching staging broken. The rational response is to go hunting for a disaster that is not there.
+2. ⛔⛔ **THE GUARD'S OWN ADVICE POINTS AT `--regen-acknowledged`** — and taking it from a subdirectory would **bake a mis-keyed local reading into the SHARED baseline for every session.** That is the `2026-08-07` failure the guard exists to prevent, reached *through* the guard. **The baseline file records that a previous bad drop "was blocking EVERY session's push, including CC-A's unrelated work"**, so the blast radius is not hypothetical.
+
+⚠️ **AND MY OWN NEAR-MISS, RECORDED because it is the same class one level up:** my first attempt to confirm the direct run passed used `node scripts/check-tsc-baseline.mjs | grep -vE "^\s+[-!]"`, **which filtered out the very drop lines I was checking for**, leaving only the `OK` verdict line. I read the remainder as the answer. **The instrument hid the evidence and I read its silence as a pass** — `#453`, inside the check meant to settle the question.
+
+**FIX:** resolve the tsc run and the `<ROOT>` normalisation from `REPO_ROOT`, exactly as `BASELINE_PATH` already is — **not** by asking sessions to remember to `cd` first. ★ **A guard whose verdict depends on the caller's cwd is a guard that answers a different question than the one asked**, which is the `dt-review grep` shape from `#920` in a second tool: **an instrument returning a confident wrong answer is worse than no instrument.**
+
+**HOME:** own batch, `B-TSC-GUARD-CWD`, **owner CC-B** (holds `#680`, the guard's originating issue and the option-(b) drop check this fires through), placed in `PHASE_19_PLAN.md` beside `B-SSH-KEY-CENSUS` at the Phase-19 tail — it blocks pushes today but has a known, reliable workaround (push from the clone root), so it is not a hotfix. **Cross-ref `#920`** — same class, different tool.
+
 ### #925 OPEN 2026-08-28 (CC-C, same reader) — PERP-CLASS GRID REFUSALS ARE LOGGED BUT NOT COUNTED
 
 `signal-orchestrator.ts:551-552` narrows to `crypto_spot | xstock_spot` before recording, because **`FunnelAssetClass` itself admits only those two.** A `crypto_perp` / `xstock_perp` grid refusal therefore gets a `console.warn` and no funnel row.
