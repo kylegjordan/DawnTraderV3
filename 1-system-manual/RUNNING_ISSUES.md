@@ -2882,6 +2882,28 @@ The COMMITTED copy carries the five **pre-Phase-14 regime keys** (`BULL_STABLE`/
 
 ---
 
+### #758 OPEN 2026-08-28 (CC-A, at Kyle’s direction after Infra Claude reported non-convergence; Langston re-framed two of my three findings) — ★★ **THE REVIEWER LOOP ASKS *"IS THIS BUILT CORRECTLY?"* AND NEVER *"IS THIS THE RIGHT THING TO BUILD?"*** — **AND THE ACTIONABLE ERROR RATE IS HIGHER THAN THE FALSE-FINDING RATE.**
+
+**KYLE’S QUESTION:** *"If asking the wrong question is the problem, how do we fix that?"*
+
+★★ **F4 — THE WORKED EXAMPLE IS `#756`: THREE REVIEWS, ALL ASKING IMPLEMENTATION, ALL FINDING REAL DEFECTS, ALL CORRECT — AND THE ARTIFACT WAS UNSALVAGEABLE FROM ITS FIRST LINE.** Its enforcement point (a hook on the laptop) could never reach its blast radius (a wedged mount on Langston’s server). ⛔ **I had MEASURED that and not drawn the conclusion.** When Langston finally asked the approach question it deleted the whole thing.
+✅ **He has three of his own it would have caught:** `B-5 Obj-10` (correct implementation, **no live caller**) · `#675` (**the decline table cannot populate at ANY cadence** — preceded by three rounds of cadence debate) · `B-ARM-REMOVAL` (the knob allocated scan attention while the binding constraint was the net-EV drought).
+⛔ **HIS CONDITION, and it is what stops round 1 becoming a philosophy round: MAKE IT FALSIFIABLE — name the enforcement point at `file:line`, name the failure class it must catch, SHOW THEY INTERSECT.** Not *"is this a good idea."*
+
+⛔⛔ **F2 — I MEASURED THE WRONG THING, AND LANGSTON REFUSED MY DENOMINATOR.** I counted findings that were FALSE: ~62 across six reviews, ~20 re-derived, **one false** (a reader read a grep hit on the Discord bridge as an exposure; the hit is a prompt string telling him NOT to read from there) ⇒ I reported **1-in-20**.
+★ **His ledger holds SIX retractions of his own** — `crypto-OBJ-6` · `B-ARM-REMOVAL` mtime-as-origin · `#666` · `#675` · `#677` · the vacated `B-FILTER-DIAG` ruling — **plus one miss the other way (`B-5 Obj-10`).** ★★ **THREE OF THE SIX WERE RIGHT-DISPOSITION / INVENTED-MECHANISM: `#675` and `#677` both survived on a DIFFERENT mechanism after he withdrew his own.**
+⇒ ⛔ **A SESSION TOLD *"fix X because Y"* ACTS ON Y. If Y is fabricated they rebuild the wrong thing — and FROM THE INSIDE IT IS INDISTINGUISHABLE FROM A FALSE FINDING.** ★ **That is exactly what Infra is describing, and my count could not see it.**
+✅ **FIX: not fewer findings — rule 29(c). Every MECHANISM claim cites the implementing `file:line` or is labelled `HYPOTHESIS`.**
+
+✅ **F1 — NON-CONVERGENCE IS NOT A DEFECT.** Measured on one document: r1 8 · r2 13 · r3 11, and I reported the trend as alarming. **Langston: *"one party checking its own assertions three times — the generator and the checker share a failure mode. You measured your BASE RATE, not your RESIDUAL."*** ⇒ **the 3-round cap stands, but its stated reason changes: the measurement does not converge BY CONSTRUCTION.** ⛔ **The rule text must not read as *"iterate until clean."*** It never gets clean.
+
+⛔ **F3 — THE FLAT PILE IS REAL AND SEVERITY IS THE WRONG AXIS.** I proposed a severity filter. **Langston: the distinguishing property is what ACTION it demands and what it COSTS IF WRONG — *"prose says 20, table has 21"* and *"the guard blocks the safe case"* are BOTH CORRECT and differ in DISPOSITION.** ✅ **§9.4’s five dispositions already are the mechanism; disposition 5 is the slot going unused.** ⇒ **NO severity field. Enforce the rule we have.**
+
+**HOME: `B-REVIEWER-LOOP`, owner CC-A, placed in `PHASE_19_PLAN.md` §governance queue at position 4, after `B-GDRIVE-UNMOUNT`** — **before the four rules batches behind it, because they all USE the loop.** Scope: `Claude Comms and Packages/Scope Files/B_REVIEWER_LOOP_SCOPE.md`.
+⚠️ **NOT CLAIMED: none of this touches the CLAIM-FRAME residual — whether the question asked was the right one at all. Langston named that as irreducibly his, as the outer boundary.**
+
+⇔ `#756` (the guard — the worked example) · `#752` (§9.4’s dispositions) · rule 29(c).
+
 ### #757 OPEN 2026-08-28 (Langston ruling on `#756`; the replacement for a control that could not work) — ★★ **REMOVE THE HAZARD INSTEAD OF MATCHING COMMANDS AGAINST IT. `/mnt/gdrive` WAS RETIRED FIVE WEEKS AGO AND IS STILL MOUNTED.**
 
 ★ **His framing, and it is the whole ruling:** *"Unmount + disable the unit and `find /` stops hanging for every actor, on every box, with no matcher. **That is a mechanism; a regex over free-form shell is a habit.**"*
