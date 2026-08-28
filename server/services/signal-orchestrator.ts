@@ -1426,6 +1426,17 @@ export class SignalOrchestrator {
         // No downstream plumbing is needed: `active-execution-engine.ts:3143` spreads
         // `...signal.metadata` onto the position row.
         maxHoldingMs: _maxHoldingMs,
+        // ⛔⛔ THE SAME DEFECT AS `maxHoldingMs` DIRECTLY ABOVE, AND I WALKED INTO IT WITH THAT
+        // COMMENT ON SCREEN. I stamped `gridAtBirth` onto `rawSignal.metadata` at the seam and
+        // asserted to Langston that it "spreads into rtb_signals.metadata at the birth insert".
+        // IT DOES NOT: this object is a FRESH build from an EXPLICIT FIELD LIST and never spreads
+        // `rawSignal.metadata` — which is precisely what the note above records for `#550`.
+        // MEASURED, which is the only reason I know: a post-deploy row at 17:59:29Z carried NO
+        // `gridAtBirth` key. The stamp died exactly where the file says stamps die.
+        // ⇒ Third instance of a documented pattern, in the file that documents it. `#933`'s
+        // sibling: an allow-list is not a pass-through, and a comment warning about it is not a
+        // fence against it.
+        gridAtBirth: rawSignal.metadata?.gridAtBirth,
         // P19-B8.5l (#581, unblocks #556): carry the entry-time ATR forward. RE-ENABLED after
         // the source fix in THIS batch — the B8.5k carry was reverted because `sizingContext.atr`
         // was a SINGLE SHARED value per scan cycle (the pattern pass at :1846 never re-stamped it,

@@ -896,13 +896,27 @@ describe('F-G-1 — the row carries its own grid answer (Langston catches 1 + 2)
   // MUTATION: drop either stamp and this fails.
   it('BOTH arms stamp — so "no stamp" cannot mean two different things', () => {
     const code = seam();
-    expect((code.match(/gridAtBirth:/g) ?? []).length).toBe(2);
+    // ⚠️ NOT a count of the identifier — my first version asserted `gridAtBirth:` appeared
+    // exactly twice and broke the moment the carry-through line was added, which is a THIRD
+    // legitimate occurrence. A control keyed on how many times a NAME appears fails on correct
+    // changes and is the brittle-by-name shape this batch keeps finding. Assert the two ARMS.
     expect(code).toMatch(/gridAtBirth:\s*\{\s*resolved:\s*false/);
     expect(code).toMatch(/gridAtBirth:\s*\{\s*resolved:\s*true/);
   });
 
   // MUTATION: stamp onto a local instead of rawSignal.metadata and this fails — the value would
   // never reach the persisted row, which is the whole point of stamping it.
+  // ⛔⛔ AND THE STAMP MUST SURVIVE THE RTB REBUILD, WHICH IS WHERE IT DIED. The RTB metadata is
+  // a FRESH object from an EXPLICIT FIELD LIST that never spreads `rawSignal.metadata` — the file
+  // already documents `maxHoldingMs` dying there (#550, 0 of 15 positions carried it) and I
+  // stamped the raw signal anyway and told Langston it flowed. MEASURED: a post-deploy row
+  // carried no `gridAtBirth`. An allow-list is not a pass-through.
+  // MUTATION: remove the field from that list and this fails.
+  it('the stamp is carried through the RTB rebuild, not just set on the raw signal', () => {
+    const code = seam();
+    expect(code).toMatch(/gridAtBirth:\s*rawSignal\.metadata\?\.gridAtBirth/);
+  });
+
   it('stamps onto rawSignal.metadata, which is what persists', () => {
     const code = seam();
     expect((code.match(/metadata:\s*\{\s*\.\.\.\(rawSignal\.metadata\s*\?\?\s*\{\}\)/g) ?? []).length)
