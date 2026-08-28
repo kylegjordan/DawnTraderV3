@@ -69,6 +69,61 @@ def classify_death(state: dict, previous: dict | None) -> str | None:
     return None
 
 
+# ⛔ CATCH-UP BOUND. A long outage must not make one run try to observe days of
+#    backlog: that would blow the lock's staleness window and get the lock
+#    stolen mid-run. Anything older is left in place and COUNTED, so the gap is
+#    a reported number rather than a silence.
+CATCHUP_MAX_BUCKETS = 48
+
+
+def _last_consumed(now):
+    """The last hour-bucket this job finished. Absent on a first run, which is
+    treated as 'only this hour' rather than as 'catch up on all of history'.
+    """
+    st = load_state("follow_up_cursor", {})
+    v = st.get("last_bucket")
+    if not v:
+        return now - timedelta(hours=1)
+    try:
+        return datetime.strptime(v, "%Y-%m-%dT%H").replace(tzinfo=UTC)
+    except ValueError:
+        return now - timedelta(hours=1)
+
+
+def _buckets_to_read(now):
+    """Every unread bucket from the cursor up to and including this hour."""
+    start = _last_consumed(now) + timedelta(hours=1)
+    cur = now.replace(minute=0, second=0, microsecond=0)
+    out = []
+    while start <= cur and len(out) < CATCHUP_MAX_BUCKETS:
+        out.append(start)
+        start += timedelta(hours=1)
+    return out or [cur]
+
+
+def _buckets_too_old(now):
+    """How many buckets the bound left behind. Reported, never silent."""
+    start = _last_consumed(now) + timedelta(hours=1)
+    cur = now.replace(minute=0, second=0, microsecond=0)
+    total = 0
+    while start <= cur:
+        total += 1
+        start += timedelta(hours=1)
+    return max(0, total - CATCHUP_MAX_BUCKETS)
+
+
+def _entries_across(buckets):
+    for b in buckets:
+        for e in due_now(b):
+            yield e
+
+
+def _advance_cursor(buckets):
+    if buckets:
+        save_state("follow_up_cursor",
+                   {"last_bucket": max(buckets).strftime("%Y-%m-%dT%H")})
+
+
 def _append_next_bucket(entry: dict, now: datetime) -> None:
     """Move a not-yet-due entry into the next hour's bucket.
 
@@ -88,7 +143,8 @@ def run_hour(now: datetime | None = None) -> dict:
     stats = {"due": 0, "observed": 0, "dead": 0, "shed": 0, "unclassified": 0,
              "errors": 0, "skipped": False, "folded_spend_rows": 0,
              "last_seen_pruned": 0, "unclassified_by_age": {},
-             "requeued_not_yet_due": 0}
+             "requeued_not_yet_due": 0, "buckets_read": 0,
+             "buckets_skipped_too_old": 0}
 
     with periodic_lock("follow_up") as held:
         if not held:
@@ -112,7 +168,25 @@ def run_hour(now: datetime | None = None) -> dict:
 
         prev = load_state("last_seen", {})
         unclassified_by_age = {}
-        for entry in due_now(now):
+
+        # ⛔ CATCH UP ON UNREAD BUCKETS — BLOCKER-3 was only half-fixed, and a
+        #    fresh reader executed the other half. The write side now records
+        #    past grid points as misses; the READ side still consumed exactly
+        #    one bucket, so a missed run (a held lock, a service failure, an
+        #    outage) orphaned that whole hour: no miss row, no counter, no log,
+        #    exit 0 — indistinguishable from an hour with nothing due.
+        # ★ AND THE UNIT FILE MADE IT READ AS COVERED FROM BOTH SIDES: the
+        #   timer's Persistent=true fires once on resume, and "once" against a
+        #   one-bucket reader is not catch-up. I cited that fact while fixing
+        #   only the writer.
+        # ⚠️ BOUNDED at CATCHUP_MAX_BUCKETS: an unbounded catch-up after a long
+        #   outage would try to observe days of backlog in one run and blow the
+        #   lock's staleness window. Anything older is left in place and
+        #   COUNTED, so the gap is visible rather than silently skipped.
+        buckets = _buckets_to_read(now)
+        stats["buckets_read"] = len(buckets)
+        stats["buckets_skipped_too_old"] = _buckets_too_old(now)
+        for entry in _entries_across(buckets):
             stats["due"] += 1
             mint, age = entry["mint"], entry["age"]
 
@@ -195,6 +269,7 @@ def run_hour(now: datetime | None = None) -> dict:
         # and re-serialised WHOLE every hour — while `dead_set` correctly stops
         # re-checking those same mints. The dead can never appear again, so
         # keeping their last-seen state buys nothing and costs the whole file.
+        _advance_cursor(buckets)
         dead = dead_set()
         before = len(prev)
         prev = {m: v for m, v in prev.items() if m not in dead}

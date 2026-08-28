@@ -221,7 +221,17 @@ receiver.ingest([{
     "nativeTransfers": [{"fromUserAccount": "CREATOR_RUN", "amount": 2_000_000_000}],
     "telegram": "t.me/x",
 }])
-LATER = RUN + timedelta(hours=1, minutes=5)
+# ⛔ FIND the bucket the 1h checkpoint actually landed in, rather than
+#    computing it as RUN+1h5m. That arithmetic silently crossed an hour
+#    boundary whenever the wall clock's minute was late, and the section then
+#    failed for a reason that had nothing to do with the code — the
+#    clock-dependence a fresh reader flagged in the other suites.
+_due_1h = RUN + timedelta(hours=1)
+_bucket = _due_1h.replace(minute=0, second=0, microsecond=0)
+if not any(e["mint"] == "MINT_RUN" and e["age"] == "1h"
+           for e in store._read(store.due_path(_bucket))):
+    _bucket = _bucket + timedelta(hours=1)      # same-hour rule pushed it on
+LATER = _bucket + timedelta(minutes=59)
 
 calls = {"n": 0}
 

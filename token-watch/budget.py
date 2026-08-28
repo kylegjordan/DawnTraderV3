@@ -54,6 +54,7 @@ from config import (
     BURN_PEAK_WINDOW,
     BURN_TRAILING_WINDOW,
     BURN_WARN_FRACTION,
+    SPIKE_HORIZON,
     CREDITS,
     LIQUIDITY_AUDIT_CARVE,
     MONTHLY_CREDIT_CAP,
@@ -153,6 +154,77 @@ def record_pending(kind: str, n: int, now: datetime | None = None, **extra) -> N
         os.fsync(fh.fileno())
 
 
+def _previous_month(now: datetime) -> datetime:
+    first = now.astimezone(UTC).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    return first - timedelta(days=1)
+
+
+def _drain_previous_month(now: datetime) -> dict:
+    """Fold anything left in LAST month's journal.
+
+    ⛔ SPEND IS ARCHIVED AND LOGGED, NEVER CHARGED TO THE NEW MONTH — it came
+       out of an allowance that has already reset. Charging it forward would
+       make a new month open pre-spent, which is the very defect the per-month
+       journal was introduced to remove.
+    ✅ INCLUSION TALLIES ARE FOLDED NORMALLY: they belong to a DAY and are the
+       study's weighting denominator, not a billing quantity.
+    """
+    prev = _previous_month(now)
+    path = journal_path(prev)
+    if not os.path.exists(path):
+        return {"drained": 0}
+
+    cursor = load_state("journal_cursors", {})
+    key = _month_key(prev)
+    offset = cursor.get(key, 0)
+    size = os.path.getsize(path)
+    if offset >= size:
+        return {"drained": 0}
+
+    inclusion = load_state("inclusion", {})
+    archive = load_state("closed_months", {})
+    bucket = archive.setdefault(key, {"birth": 0, "follow_up": 0, "liquidity": 0})
+    drained = 0
+    with open(path, "r", encoding="utf-8") as fh:
+        fh.seek(offset)
+        while True:
+            raw = fh.readline()
+            if not raw:
+                break
+            line = raw.strip()
+            if not line:
+                offset = fh.tell()
+                continue
+            try:
+                rec = json.loads(line)
+            except ValueError:
+                if not raw.endswith("\n"):
+                    break
+                offset = fh.tell()
+                continue
+            k = rec.get("kind")
+            if k in CREDITS and CREDITS[k] > 0:
+                bucket[k] = bucket.get(k, 0) + rec.get("n", 0) * CREDITS[k]
+            day, reason = rec.get("day"), rec.get("reason")
+            if day and reason:
+                inc = inclusion.setdefault(
+                    day, {"launches": 0, "trait_carrier": 0,
+                          "control_sample": 0, "not_sampled": 0})
+                inc["launches"] += 1
+                inc[reason] = inc.get(reason, 0) + 1
+            drained += 1
+            offset = fh.tell()
+
+    cursor[key] = offset
+    save_state("journal_cursors", cursor)
+    save_state("inclusion", inclusion)
+    save_state("closed_months", archive)
+    if drained:
+        LOG.warning("drained %d row(s) from the closed month %s — spend archived, "
+                    "NOT charged to the current month; inclusion tallies folded", drained, key)
+    return {"drained": drained}
+
+
 def fold_pending(now: datetime | None = None) -> dict:
     """Fold journalled spend into the ledger. ⛔ CALLERS MUST HOLD periodic_lock().
 
@@ -163,11 +235,30 @@ def fold_pending(now: datetime | None = None) -> dict:
     failure, and it keeps the journal append-only like everything else here.
     """
     now = now or datetime.now(UTC)
+
+    # ⛔ DRAIN THE PREVIOUS MONTH'S TAIL FIRST. The per-month journal fixed the
+    #    re-fold, and a fresh reader executed what it left behind: rows written
+    #    between the last fold of a month and midnight are never folded by ANY
+    #    later run — up to an hour of births, ~862 at design rate, EVERY month.
+    # ★ THE SPEND IS NOT CHARGED TO THE NEW MONTH, because it was not spent
+    #   from the new month's allowance. It is archived and LOGGED, so a silent
+    #   loss becomes a recorded one.
+    # ⇒ BUT THE INCLUSION TALLIES ARE FOLDED, because they are the study's
+    #   denominator and belong to a DAY, not to a billing period. Losing them
+    #   would corrupt the pre-registered weighting; losing the spend figure
+    #   only under-reports a month that has closed.
+    _drain_previous_month(now)
+
     st = _load(now)
     offset = st.get("journal_offset", 0)
     path = journal_path(now)
     if not os.path.exists(path):
-        return {"folded": 0, "offset": offset}
+        # ⛔ THE SAME KEYS ON EVERY PATH — the rule this package states for
+        #    `stats` and for `observed`, violated in the function `follow_up`
+        #    calls. A caller subscripting `anomaly` got a KeyError only on
+        #    this branch, and `.get()` returned the same None a clean fold
+        #    returns.
+        return {"folded": 0, "offset": offset, "bad_lines": 0, "anomaly": None}
 
     # ⛔ TRUNCATION / REPLACEMENT DETECTION. If the recorded offset is past the
     #    end of the file, the file was truncated, rotated, restored from backup
@@ -235,7 +326,15 @@ def fold_pending(now: datetime | None = None) -> dict:
                 offset = fh.tell()
                 continue
             k = rec.get("kind")
-            if k in CREDITS:
+            # ⛔ NON-SPEND KINDS DO NOT COUNT AS SPEND ROWS AND DO NOT ENTER THE
+            #    BURN STREAM. My first attempt at this fixed the LABEL and
+            #    neither of the two effects it claimed to remove — a fresh
+            #    reader executed it: 100 launches still reported 101 folded
+            #    rows and a delivery record still landed in the monitor's event
+            #    list, because `delivery` is in CREDITS and the test only
+            #    asserted `>= 250`. Reverting the label change survived every
+            #    suite. Gate on the CREDIT being non-zero, not on membership.
+            if k in CREDITS and CREDITS[k] > 0:
                 st["spent"][k] = st["spent"].get(k, 0) + rec.get("n", 0) * CREDITS[k]
                 st["events"].append({"ts": rec["ts"], "kind": k, "n": rec.get("n", 0)})
                 folded += 1
@@ -263,6 +362,9 @@ def fold_pending(now: datetime | None = None) -> dict:
     cutoff = (now - BURN_TRAILING_WINDOW * 2).isoformat()
     st["events"] = [e for e in st["events"] if e["ts"] >= cutoff]
     st["journal_offset"] = offset
+    cursors = load_state("journal_cursors", {})
+    cursors[_month_key(now)] = offset
+    save_state("journal_cursors", cursors)
     if anomaly:
         st.setdefault("anomalies", []).append({"ts": now.isoformat(), "what": anomaly})
         LOG.error("BUDGET JOURNAL ANOMALY: %s", anomaly)
@@ -418,9 +520,34 @@ def burn_report(now: datetime | None = None) -> dict:
         nxt = now.replace(month=now.month + 1, day=1, hour=0, minute=0, second=0, microsecond=0)
     hours_left = max((nxt - now).total_seconds() / 3600.0, 0.0)
 
+    # ⛔ THE PEAK LEG IS NOT EXTRAPOLATED ACROSS THE MONTH. It used to be, and
+    #    a fresh reader proved that made the whole "two projections" design a
+    #    single projection: `peak` is the maximum over the 24 one-hour buckets
+    #    that `trailing` averages, so peak >= trailing IDENTICALLY. Over 2,000
+    #    randomised series `binding_leg` took exactly ONE value — "peak" — and
+    #    it read "peak" even on the suite's own FLAT control, whose comment
+    #    claims the trailing leg binds there.
+    # ★ AND IT WAS NOT MERELY REDUNDANT, IT WAS WRONG: extrapolating the worst
+    #   single hour across the rest of the month put the monitor at
+    #   warning/critical under ordinary designed load — one hour at 1.5x the
+    #   mean projected 801,828 against a 800,000 warning line while the honest
+    #   trailing projection was 638,264, 35% under the cap. An alarm that is
+    #   always on is an alarm nobody reads, which is the failure OBJ-9 exists
+    #   to avoid.
+    #
+    # ⇒ TWO DIFFERENT QUESTIONS, ANSWERED SEPARATELY:
+    #   (1) THE BUDGET QUESTION — will this month's spend rate exhaust the
+    #       allowance? Projected from the TRAILING rate, which is the only
+    #       honest estimator of a month-long total.
+    #   (2) THE SPIKE QUESTION — Langston's original concern, that a mean is
+    #       blind in the same direction as the budget. Answered by asking
+    #       whether the PEAK hour, if it PERSISTED, would exhaust the
+    #       allowance inside a bounded horizon — not by pretending one hour
+    #       represents the month.
     proj_trailing = total + trailing * hours_left
-    proj_peak = total + peak * hours_left
-    projected = max(proj_trailing, proj_peak)  # whichever exhausts sooner
+    spike_horizon_h = min(SPIKE_HORIZON.total_seconds() / 3600.0, hours_left)
+    proj_peak = total + peak * spike_horizon_h
+    projected = max(proj_trailing, proj_peak)
 
     level = None
     if projected >= MONTHLY_CREDIT_CAP * BURN_CRITICAL_FRACTION:

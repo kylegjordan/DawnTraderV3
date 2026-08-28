@@ -42,6 +42,17 @@ LISTEN_HOST = os.environ.get("TOKEN_WATCH_HOST", "127.0.0.1")
 LISTEN_PORT = int(os.environ.get("TOKEN_WATCH_PORT", "8797"))
 MAX_BODY = 4 * 1024 * 1024
 
+# Plausibility bounds for a creation timestamp. A launch cannot predate the
+# launchpad, and one dated in the future is a provider or clock fault, not a
+# token. Both are REFUSALS: a fabricated creation time is invisible and lands
+# in the strongest published predictor.
+EPOCH_FLOOR = 1_600_000_000            # 2020-09-13; well before this venue existed
+FUTURE_TOLERANCE_S = 3600              # a modest clock skew, not a decade
+
+
+def _epoch_ceiling() -> float:
+    return datetime.now(UTC).timestamp() + FUTURE_TOLERANCE_S
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # THE TRAIT DEFINITION — fixed before data, imported from the literature.
@@ -163,9 +174,26 @@ def parse_creation(event: dict) -> dict | None:
         ts = float(ts)
     except (TypeError, ValueError):
         return None
-    if ts > 1e11:          # milliseconds — the provider has sent both shapes
+    # ⛔ NORMALISE BY MAGNITUDE UNTIL IT IS PLAUSIBLE, THEN BOUND IT.
+    #    My first fix divided by exactly 1000 once, for milliseconds, and never
+    #    re-checked — so MICROSECOND and NANOSECOND timestamps still raised,
+    #    were still swallowed by the caller's broad handler, and the launch was
+    #    still dropped from the census. A fresh reader executed all four units:
+    #    seconds and milliseconds accepted, microseconds and nanoseconds
+    #    raising. ★ That is the IDENTICAL failure one unit over — the same
+    #    shape as replacing "position 0" with "first match".
+    for _ in range(3):
+        if ts <= 1e11:
+            break
         ts /= 1000.0
     if ts <= 0:
+        return None
+    # ⛔ AND A PLAUSIBILITY BOUND, because "parseable" is not "valid". A far
+    #    future value was accepted and gave created_at in 2286 — a NEGATIVE
+    #    discovery lag with the whole observation grid scheduled decades out.
+    #    An epoch-adjacent value made all seven grid points misses. Neither
+    #    raised; both silently corrupted the strongest published predictor.
+    if not (EPOCH_FLOOR <= ts <= _epoch_ceiling()):
         return None
     created = datetime.fromtimestamp(ts, UTC)
 

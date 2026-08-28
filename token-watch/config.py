@@ -92,11 +92,42 @@ CONTROL_INCLUSION_P = CONTROL_SAMPLE_PER_DAY / (
 # 1,000,000 credits/month on the free tier.
 # ─────────────────────────────────────────────────────────────────────────────
 MONTHLY_CREDIT_CAP = 1_000_000
-BIRTHS_RESERVED = 776_000       # 621k mean + 25% launch-rate variance. PROTECTED FLOOR.
-LIQUIDITY_AUDIT_CARVE = 200_000  # hard carve; becomes a residual above +25% variance
-UNALLOCATED = MONTHLY_CREDIT_CAP - BIRTHS_RESERVED - LIQUIDITY_AUDIT_CARVE  # 24,000
 
-assert UNALLOCATED == 24_000, "the §5.1 arithmetic changed — amend the scope, not this file"
+# ⛔ THE STATED DERIVATION WAS WRONG AND THE BUDGET DID NOT FIT. A fresh reader
+#    did the arithmetic across month lengths; I had done it for one.
+#    "621k mean + 25% variance = 776,000" is a THIRTY-DAY month — and it does
+#    not hold even there:
+#        28-day: 579,600 mean -> 724,500 at +25%   fits
+#        30-day: 621,000 mean -> 776,250 at +25%   EXCEEDS 776,000 by 250
+#        31-day: 641,700 mean -> 802,125 at +25%   EXCEEDS 776,000 by 26,125
+#    In the SEVEN 31-day months of the year, births at the stated variance
+#    exceeded both the reserve AND the cap-minus-carve — so the only clause
+#    that can shed anything would have been firing on births alone.
+# ⇒ RE-DERIVED AGAINST THE WORST MONTH, not the convenient one. 31 days at
+#   +25% is 802,125; rounded up to 803,000. The liquidity carve takes what is
+#   actually left, which is 197,000 rather than 200,000 — a 1.5% reduction on
+#   a leg the study can afford to lose, against a birth census it cannot.
+# ⚠️ AND UNALLOCATED IS NOW ZERO, STATED RATHER THAN IMPLIED. There is no
+#   slack. Above +25% the shed order fires and the carve becomes a residual by
+#   design — which the scope already says, and which is now arithmetically
+#   true instead of merely written down.
+BIRTHS_RESERVED = 803_000        # 31-day month at +25% variance. PROTECTED FLOOR.
+LIQUIDITY_AUDIT_CARVE = 190_000  # DELIBERATELY BELOW the headroom, see below
+UNALLOCATED = MONTHLY_CREDIT_CAP - BIRTHS_RESERVED - LIQUIDITY_AUDIT_CARVE  # 7,000
+
+# ⛔ WHY THE CARVE IS 190,000 AND NOT THE FULL 197,000 THAT REMAINS: with the
+#    carve set exactly equal to the headroom, BOTH discretionary legs refuse at
+#    the same instant and the SHED ORDER BECOMES UNOBSERVABLE — there is no
+#    state in which liquidity has shed and follow-up has not. The scope
+#    specifies an order, and an order that can never be seen firing in sequence
+#    is the same shape as the guard that was never tested.
+# ⇒ 7,000 credits of separation buys a window in which liquidity has stopped
+#   and follow-up has not, which is what the injection test observes.
+
+assert UNALLOCATED == 7_000, "the §5.1 arithmetic changed — amend the scope, not this file"
+assert LIQUIDITY_AUDIT_CARVE < MONTHLY_CREDIT_CAP - BIRTHS_RESERVED, (
+    "the carve must sit BELOW the headroom or the shed order is unobservable")
+assert BIRTHS_RESERVED >= EXPECTED_LAUNCHES_PER_DAY * 31 * 1.25,     "the reserve no longer covers the worst month at the stated variance"
 
 # ⛔ THE SHED ORDER (scope §5.1, OBJ-9). Enforced in code, not intention.
 #    BIRTHS ARE NEVER SHED: a sampled birth record destroys the base rate
@@ -116,6 +147,13 @@ BURN_WARN_FRACTION = 0.80
 BURN_CRITICAL_FRACTION = 0.90
 BURN_TRAILING_WINDOW = timedelta(hours=24)
 BURN_PEAK_WINDOW = timedelta(hours=1)
+# ⛔ THE PEAK LEG ASKS A BOUNDED QUESTION: "if this hour's rate PERSISTED, would
+#    we exhaust the allowance within a week?" It does NOT extrapolate one hour
+#    across the whole month — doing that made the monitor read critical under
+#    ordinary designed load, and an alarm that is always on is an alarm nobody
+#    reads. Seven days is the horizon over which a sustained rate change would
+#    still leave time to act.
+SPIKE_HORIZON = timedelta(days=7)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # COVERAGE CONTROL — OBJ-3, the windowed chain re-census.
