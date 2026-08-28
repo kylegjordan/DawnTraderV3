@@ -14,7 +14,17 @@ change-class: non_architecture · **Owner:** CC-A · **Step 2 of 11** · **Scope
 | **r2** | object | **HIT ×13** — including that my *fix* had the flaw it fixed | y |
 | **r3** | object | **HIT ×11** — including a correct number I replaced with an unreproducible one | y |
 
-⛔⛔ **THE ERROR RATE DID NOT CONVERGE, AND THAT IS THE FINDING I MOST WANT LANGSTON TO RULE ON.** Three rounds, ~32 accepted corrections, and **round 3 still found eleven** — several of them *inside the paragraphs correcting the same class of error one bullet earlier.* ★ **The loop is not polishing; it is still finding first-order defects at round three.** ⚠️ **Kyle's termination condition — the reviewer's own called-out items satisfied — is met for r3's list, but the TREND says the next round would find more.** **I stopped at the cap, as required, rather than because it was clean.**
+**Three rounds, ~32 accepted corrections, and round 3 still found eleven** — several *inside the paragraphs correcting the same class of error one bullet earlier.* **I stopped at the cap, not because it came out clean.**
+
+⛔⛔ **LANGSTON'S READ, AND IT IS BETTER THAN THE ONE I DISPATCHED: NON-CONVERGENCE IS THE EXPECTED RESULT, NOT AN ANOMALY.** Verbatim: *"Three rounds by the same reader is not three measurements — it is one party checking its own assertions three times, and the generator and the checker share a failure mode. **You measured your base rate, not your residual.**"*
+⇒ ★ **The trend does NOT say "a fourth round would find more"; it says THIS DOCUMENT'S NUMBERS ARE NOT DECISION-GRADE ON SELF-REVIEW ALONE, AT ANY ROUND COUNT.** **No r4 — it buys nothing structural.** ⚠️ **My framing implied more rounds would help. It would not.**
+
+★★ **AND THE SPLIT IS THE ACTUAL FINDING — THE ~32 ARE NOT ONE CLASS:**
+| class | items | covered by |
+|---|---|---|
+| **wrong-object / wrong-population** | the large majority | ✅ **`B-MEASURE-GATE`, queue position 3 — approved, unbuilt, and landing well ahead of the slim at 9.** ⇒ **the loop was a MANUAL STAND-IN for a mechanism already agreed. That is why it is expensive, and it stops being the mechanism the moment that ships.** |
+| ⛔ **RETRIEVAL — F10, F11, P9** | 3 | ⛔ **NOTHING. `B-MEASURE-GATE` does not reach these: object, population and number were all FINE.** ★ **What failed is that a record we had already written already contained the answer** — `RUNNING_ISSUES:3076`, `PHASE_19_PLAN:448`, and the log I was reading. **A measure-time gate passes all three clean.** |
+⛔ **DO NOT LET THE GATE BE CREDITED WITH COVERING THE RETRIEVAL CLASS.** ✅ **Langston held his own threshold rather than bending it on first sighting: 3 instances, ONE batch — below his floor of 3+ across 2+ distinct batches.** ⇒ **filed as a PATTERN CANDIDATE carrying the three refs; no §13 slot, and NO NEW RULE — which is `B-RULES-1e`'s own thesis.**
 
 ---
 
@@ -91,21 +101,25 @@ Writers: four sessions by hand. Readers: the harness + **1,218 markdown + 27 sou
 ⛔ **DELETER — REFUTED, by that same component.** `git checkout <ref> -- CLAUDE.md` is a whole-file replacement; its own comment records it *"reverted my commit's content in the working tree"*. ⚠️ **I called it a mutator in one row and asserted no deleter in the next.** *(Guards at `:101`/`:111`.)*
 ⚠️ `config.mjs:31` `HOUSEKEEPING_ONLY_BASENAMES` **does** key off `CLAUDE.md`. ⇒ **no automated reader validates a citation.**
 
-### F9 — ⛔ **RETRACTED: no renumber cascade.** `CLAUDE.md:161` = `11. *(removed)*` — a rule was cut whole, the hole left explicit, 12-29 unrenumbered. ⚠️ **n=1, and it is FIVE WEEKS OLD (`b3d9b8bcb`, 2026-07-24) — I called it "the established practice" and PART 3 called it "years-deep". Both overstated.** ⚠️ **My "840 across rules 1-29" was unreproducible (866 anchored / 810 line-based / 1,674 unanchored).** ✅ **What survives: the explicit hole is the right FORM, and it should cite `:161`.**
+### F9 — ⛔ **RETRACTED: no renumber cascade.** `CLAUDE.md:161` = `11. *(removed)*` — a rule was cut whole, the hole left explicit, 12-29 unrenumbered. ⚠️ **n=1, `b3d9b8bcb`, 2026-07-24 — stated exactly that way per Langston condition 6. NOT "established practice", NOT "years-deep": I wrote both and both were overstated.** ⚠️ **My "840 across rules 1-29" was unreproducible (866 anchored / 810 line-based / 1,674 unanchored).** ✅ **What survives: the explicit hole is the right FORM, and it should cite `:161`.**
 
 ### F10 — ⛔⛔ **SUBSTANTIALLY WITHDRAWN. THE LEDGER REFUTES IT, AND F6 SAYS I SEARCHED THE LEDGER.**
 I claimed `#749` is a **NEW FEATURE** on the comms send path, strengthening a change-class challenge, and blamed `SCOPE:95` for a wrong reading.
 ⛔ **`SCOPE:95` WAS CORRECT** — it says the code *"already stamps every chunk of a Langston-addressed post"*, which is exactly what `discord_common.py:251-256` does. **Blaming it would have sent a reviewer to "fix" a correct line.**
 ⛔ **AND `#749`'s OWN ENTRY SETTLES IT (`RUNNING_ISSUES:3076`): *"THE FIX IS NARROW AND THE MACHINERY ALREADY EXISTS … One conditional is drawn too narrowly. No new subsystem."* Kyle, `:3079`: *"widen the same message method."*** ⇒ **it is a WIDENING of existing per-chunk stamping — a modification, not a new feature.**
 ★★ **This is a §9.5(b-ii) miss inside a document whose F6 row asserts the ledger was searched. The rule exists precisely to stop this, I invoked it, and I still filed the finding.**
-✅ **RESIDUAL, and it is much smaller: the batch still edits live comms code, so the change-class deserves one line of confirmation from Langston — not a challenge.** **DISPOSITION: §9.4 #5 — WITHDRAWN, carrying `RUNNING_ISSUES:3076` + `:3079` as the citations that dissolve it.**
+✅ **CHANGE-CLASS CONFIRMED BY LANGSTON: `non_architecture` STANDS.** *"Widening an existing conditional in the send path is a modification of live behaviour with no new subsystem and no new active-path emission; my pre-registered criterion is not tripped."*
+✅ **CITATION RECONCILED (his condition 2), RE-DERIVED BY ME ON THE LIVE FILE: `:251` is the `if multi_langston:` guard — the conditional `#749` widens — and `:252-256` is its body through the log line.** ⇒ **the ledger cites the BODY, I cited the guard WITH the body; same block, and `:251` is the more precise start because the guard IS the thing being widened.**
+**DISPOSITION: §9.4 #5 — WITHDRAWN, carrying `RUNNING_ISSUES:3076` + `:3079`.**
 
-### F11 — **NEW AT r3: A DEPENDENCY THIS AUDIT NEVER NAMED. ⚠️ DEFLATED ON CHECKING — THE QUEUE ALREADY ENFORCES IT.**
+### F11 — **A RE-DISCOVERY, NOT A DISCOVERY (Langston condition 1). THE CONSTRAINT WAS ALWAYS WRITTEN DOWN AND ALWAYS ORDERED CORRECTLY; NOBODY RETRIEVED IT.**
 **`PHASE_19_PLAN.md:448`** places **`B-EOL-NORMALISE` (#751) at position 6 with: *"**Before the slim**: the cap and the delivery-chunk figures are PER CHECKOUT until this lands, so the slim's byte targets are unreliable without it."***
 ⇒ ⛔ **THIS AUDIT IS BUILT ALMOST ENTIRELY ON BYTE MEASUREMENTS, TRIPPED OVER CRLF THREE TIMES IN ONE DAY, AND THE WHOLE-BATCH VERIFICATION (`SCOPE:125`/P9) IS A BYTE DELTA — precisely the figure the plan declares unreliable until #751 lands.**
 ✅✅ **AND THE QUEUE ALREADY SATISFIES IT — CHECKED BEFORE LETTING THE ESCALATION STAND, WHICH DEFLATES MY OWN FINDING: `B-EOL-NORMALISE` IS POSITION 6, THE SLIM IS 9.** ★ **Nothing needs to move and no decision is required.**
 ⚠️ **So the finding is smaller than I first wrote it: NOT *"a hard prerequisite nobody noticed"* — the PLAN noticed, in writing, at `:448`. What was missing is that THIS AUDIT never named the dependency**, so a reader of the audit alone would not know its byte figures are provisional.
-**DISPOSITION: §9.4 #1 — FOLD INTO THIS BATCH as a stated precondition on the VERIFICATION, not a re-ordering: every byte figure here is PROVISIONAL until #751 lands.**
+★★ **WHAT P0 LEGITIMATELY ADDS IS CONVERTING AN ORDERING INTO A GATE (Langston):** an ordering can be reordered; a gate cannot. ⇒ **Step 3 does not open until `#751` is CLOSED, and this batch does not move ahead of it on any future reorder.**
+**DISPOSITION: §9.4 #1 — FOLD INTO THIS BATCH as a GATE on Step 3 and a stated precondition on the verification: every byte figure here is PROVISIONAL until `#751` lands.**
+⚠️ **AND THE CLASS MATTERS MORE THAN THE ITEM: this is the same RETRIEVAL failure as F10 — the record existed, was correct, and was not consulted.** ⛔ **`B-MEASURE-GATE` does NOT reach this class: object, population and number were all fine.**
 
 ---
 
@@ -124,9 +138,9 @@ I claimed `#749` is a **NEW FEATURE** on the comms send path, strengthening a ch
 | **P4** | System Manual — `:517` re-aimed | **F5** |
 | **P5** | `_archive/CLAUDE_MD_RULE_HISTORY.md` takes the evicted evidence | **F7** |
 | **P6** | Execute the cuts per the approved scope | ⚠️ **`UNAUDITED` as to WHICH clauses — the scope's determination. Audited as to consequence.** |
-| **P7** | Nearest-paraphrase step per cut, before the cut | ⚠️ **`UNAUDITED` — Langston condition (iii)** |
+| **P7** | Nearest-paraphrase step per cut, before the cut — ⛔ **OUTPUT FORM FIXED (Langston condition 5): each cut clause carries EITHER its nearest surviving paraphrase WITH A CITATION, OR the explicit line *"none — this behaviour is now unwritten."*** ★ **No gloss (#452).** | ⚠️ **`UNAUDITED` — a method requirement, accepted as such** |
 | **P8** | Class C: `#749`, `#750` | ✅ **`#749` is a narrow widening (F10) — no longer flagged.** ⚠️ **One line of change-class confirmation still wanted.** |
-| **P9** | Re-measure after the cut — ⚠️ **using the EXISTING per-file instrument in the same log, not `wc -c`** | **F1** |
+| **P9** | Re-measure after the cut using the **EXISTING per-file instrument**, not `wc -c` — ⛔ **and the figure MUST BE REPRODUCIBLE BY A SECOND PARTY (Langston condition 4): a close cannot rest on a number only I can produce.** ★ **That is what `#751` buys.** | **F1**, **F11** |
 | **P10** | Update the skill-count check — Class C builds a thirteenth | **P8** |
 
 ---
