@@ -158,7 +158,7 @@ Quiet must never mean unaudited. **Origin: eleven defect claims announced and re
 - **Communicate deviations BEFORE acting.** Blocked → say so; never improvise architecture under pressure.
 - **Kyle has imperfect memory. SURFACE buried things** rather than waiting for him to remember them.
 
-- ⛔⛔ **NEVER RUN A WHOLE-FILESYSTEM SCAN — no `find /`, no `grep -r /`, no `/mnt/gdrive`. NAME THE DIRECTORY YOU MEAN.** On Helsinki that mount wedges; the scan blocks in uninterruptible IO, **cannot be killed**, and your session reads as IDLE while work queues behind it. ★ **The rule existed verbatim in Langston's own file (Kyle, 2026-06-24) — which NO CC session loads, so it bound one of five actors.** ✅ **Enforced by `guard-whole-fs-scan.mjs`.**
+- ⛔⛔ **NEVER RUN A WHOLE-FILESYSTEM SCAN — no `find /`, no `grep -r /`, no `/mnt/gdrive`. NAME THE DIRECTORY YOU MEAN.** On Helsinki that mount wedges; the scan blocks in uninterruptible IO, **cannot be killed**, and you read as IDLE while work queues. ★ **It existed verbatim in Langston's own file (Kyle, 2026-06-24) — which no CC session loads.** ⚠️ **The guard blocks the SSH-WRAPPED form only; it cannot bind Langston, who runs ON that box.**
 
 *(one-in-one-out 2026-08-28: §13's two list-maintenance paragraphs → one pointer, both held in full at `MISTAKE_PATTERNS.md:33,:35`. 2026-08-20: no-patches, never-leave-legacy, named-home → CLAUDE.md r15, r18, §9.4.)*
 

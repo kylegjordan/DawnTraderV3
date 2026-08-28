@@ -2882,6 +2882,38 @@ The COMMITTED copy carries the five **pre-Phase-14 regime keys** (`BULL_STABLE`/
 
 ---
 
+### #756 OPEN 2026-08-28 (CC-A, from a fresh-reviewer pass Kyle ordered on everything Langston had not seen) — ★★ **TWO OF THE THREE THINGS I REPORTED TODAY WERE WRONG, AND ONE WAS INVERTED: THE GUARD BLOCKED THE SAFE CASE AND ALLOWED THE DANGEROUS ONE.**
+
+⛔⛔ **`#755`'s GUARD (v1-v3) WATCHED THE WRONG MACHINE.** The wedged mount is on **Helsinki**. A CC session cannot reach it locally — **only by sending a command over ssh.** I built a PreToolUse guard matching the command **as typed on the laptop**. Measured, by me, after the reviewer named it:
+| command | v3 verdict | reality |
+|---|---|---|
+| `ssh root@204.168.141.77 'find / -name x'` | **ALLOWED** | ⛔ **the only form that reaches the wedged mount** |
+| `find / -name x` (local) | **BLOCKED** | ✅ a Windows laptop with no such mount — harmless |
+| `grep -rn foo /mnt/gdrive` | **ALLOWED** | ⛔ aimed straight at it |
+| `find / -xdev -name x` | **BLOCKED** | ✅ **the exact form my own refusal text RECOMMENDS** |
+★★ **AND THE `grep`/`rg` RULE COULD NEVER MATCH A WELL-FORMED COMMAND** — it required the path immediately after the flags, but `grep` takes the **pattern** first. **It could only ever match `grep -r /`, which is a malformed grep.**
+⚠️ **AND IT BOUND NONE OF THE ACTORS THAT CAN TRIGGER IT: Langston runs ON that box out of `/home/langston` and does not load this repo's settings.** ⇒ **I added a guard for the four who cannot reach the hazard and left the one who can.**
+
+**✅ v4 SHIPPED — it matches the SSH-WRAPPED form, allows local scans and `-xdev`, fixes the `grep`/`rg` ordering, and fixes `/mnt/gdrive-backup` (a sibling path `\b` was blocking).**
+**✅ CONTROLS ARE NOW COMMITTED — `test/guard-whole-fs-scan.test.mjs`, 23 named cases, 23 pass, plus six live hook-path cases.** ⛔ **`#755` claimed *"CONTROLS, all three, re-run: 6 blocked, 10 pass"* and NO TEST ARTIFACT WAS EVER COMMITTED — unreproducible, and the six forms were unnamed. That is `CONDUCT.md` §10 violated in the same commit that edited §10's neighbour.**
+**✅ `CONDUCT.md` corrected: it said *"Enforced by"* with no gap stated — a stronger guarantee than exists, in the always-loaded file.**
+
+⛔⛔ **AND THE SECOND WRONG THING, WHICH I HAD ALREADY REPORTED TO KYLE AS A FINDING: I TOLD HIM THE REPO STORES ONLY UNIX LINE ENDINGS AND THAT `#751` IS THEREFORE A ONE-LINE FIX, NOT A MASS REWRITE. THAT IS FALSE.**
+★ **I sampled FIVE files and generalised to 1,925.** **Measured across the whole set (`git ls-files --eol`): 1,803 `i/lf` — and 119 `i/crlf`, plus one `i/mixed` and one `i/-text`.**
+⚠️ **Not all archive: `AUDIT_PLAN.md`, `LEGACY_DEPRECATION_PLAN.md`, all six System Manual `sections/PHASE*.md`, Langston's identity and skill files, and 20 batch scope files.**
+⇒ ⛔ **The plan's original *"rewrites every markdown file … three sessions hold checkouts"* framing was RIGHT and my correction was wrong. `B-EOL-NORMALISE` is NOT cheap.**
+
+★★ **AND MY "COSTS NOTHING TO A 449-BEHIND CLONE" WAS WORSE THAN WRONG — IT WAS DISGUISED.** The reviewer simulated the real pull: **93 of the 121 CRLF-stored markdown files are touched by it**, `git status` then reports **0 dirty — because of the stat cache, not cleanliness** — and a single `touch` flips them. **All 121 surface at the first editor save, checkout or renormalize.** ⇒ **the 449-behind clone is the WORST case, not the free one.**
+⚠️ **Also: `git add --renormalize .` stages 266 files, not 121 and not 1,925 — it sweeps 145 non-markdown files (81 `.txt`, 51 `.ts`, 6 `.tsx`…) because `core.autocrlf=true` normalizes those on add regardless.** ★ **And `core.autocrlf` is set at the SYSTEM scope (`C:/Program Files/Git/etc/gitconfig`), not per-repo — so a repo-local fix leaves it in place and a new clone inherits it.**
+★ **A live in-repo precedent already demonstrates the end state: the existing `*.sh text eol=lf` rule against a CRLF-stored blob leaves `attached_assets/REPLIT_PUSH_SCRIPT…sh` PERMANENTLY DIRTY in a fresh clone — 91 insertions / 91 deletions, empty under `--ignore-cr-at-eol`.**
+
+**DISPOSITION: §9.4 #1 — FOLD INTO `B-EOL-NORMALISE` (#751) as a scope correction, and it makes that batch BIGGER, not smaller.** The reviewer's suggested shape, which I am carrying rather than deciding: **two sequenced parts — add the attribute (policy going forward), then a SEPARATE isolated renormalize commit touching only markdown, avoiding the 145-file sweep** — plus a decision on the system-scoped `core.autocrlf`, which neither the plan nor I had considered.
+⚠️ **AND THE SLIM'S GATE HARDENS RATHER THAN SOFTENS: every byte figure in the `B-CLAUDEMD-SLIM` audit stays provisional until `#751` lands, and `#751` is now known to be a real batch.**
+
+★★ **THE PATTERN ACROSS BOTH, AND IT IS THE SAME ONE: I SAMPLED, GENERALISED, AND REPORTED.** Five files for 1,925; a local mental model for a remote hazard. **Both survived my own review and died on a fresh reader's first pass.**
+
+⇔ `#755` (the guard) · `#751` (the line endings) · `MISTAKE_PATTERNS` `wrong-object`.
+
 ### #755 FIXED-SAME-TURN 2026-08-28 (Infra Claude found it; Langston ruled it unconditional and immediate; CC-A verified and shipped) — ★★ **A RULE WITH A MEASURED TWO-INCIDENT HISTORY BOUND ONE OF FIVE ACTORS, BECAUSE IT LIVED IN THE ONLY FILE NO CC SESSION LOADS.**
 
 ⛔ **THE HAZARD, VERIFIED BY ME BEFORE ACTING:** `timeout 8 ls /mnt/gdrive` on Helsinki → **exit 124.** The Google Drive mount is **wedged**, and per Infra had been for 20+ days. Any scan walking from `/` blocks in **uninterruptible IO** — unkillable, no timeout — and **the session that ran it reads as IDLE while work queues behind it.**
