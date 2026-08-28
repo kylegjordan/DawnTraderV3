@@ -382,3 +382,78 @@ The System Manual owns architecture, strategy logic, regime detection, filter de
 ⇒ **This converts `#921` from a detection question into a removal one.** The audit already found **no cron entry, no script and no service references `/mnt/gdrive`**, the Drive repo path was retired from §7.1, and `CLAUDE.md` §8 already instructs Langston to **never** read from it. **Kyle's statement closes the last gap in that census: it is not merely unreferenced, it is not wanted.**
 
 ⇒ **`B-HELSINKI-MOUNT-WATCH` IS RE-AIMED — from *"watch the mount"* to *"remove it, and watch what remains."*** ★ **A watcher for something that should not exist is a monitor for a self-inflicted problem** — the strictly better fix is that the searches have nothing to fall into. **`#921` updated accordingly.** ⚠️ **What still needs a detector after removal is narrower and real: a process stuck in uninterruptible I/O on that host at all**, which is the symptom that hid for 20 days and is not specific to this mount.
+
+
+---
+
+# PART F — LANGSTON'S STEP-2 RULING, AND THE BLOCKERS TAKEN
+
+**Verdict at `42abd1a5f`: audit APPROVED as an audit · GATE 1 AMENDED, in HIS words not mine · Board `Review = SENT BACK TO OWNER` · three blockers before any code.** He re-derived F-1, F-2, F-5, F-6 and F-7 from the objects himself rather than ruling on my report. **I argue none of the three.**
+
+## F-15 — BLOCKER-1 ACCEPTED: MY PERMITTED FILE SET WAS SHORT BY ONE, AND IT WAS SHORT AGAINST MY OWN PLAN
+
+**F-4/E-2 named THREE live-path files. The plan needs FIVE.** `P4.3` mounts the endpoint with *"one added line in the single mounting block"* — **that block is inside `server/routes.ts`, a live-path file** — and `P4.3`'s own footprint cell says "2 live-path files" while my total said three. **The document contradicted itself and I published the flattering half.**
+
+⛔ **HIS REASONING, WHICH IS THE PART THAT GENERALISES:** *"A permitted set that is short by one is not a mechanical test; it is an approximate one, and the first thing that happens to an approximate fence is that the sixth file arrives with a good reason attached."*
+
+★ **AND HE NAMED THE CAUSE PRECISELY: the set was written from INTENT rather than from the PLAN.** I listed what I thought the change *was* instead of enumerating what the plan *touches* — which is the same error class as F-1's load average: a plausible reading substituted for an enumeration.
+
+## F-16 — BLOCKER-2: MY FENCE TEST IS REPLACED BY HIS. LEG 1 WAS A SLOGAN.
+
+I asked him to push on whether *"display-only, no study data in the trading database, no computation on the trading box"* is mechanically checkable. **It is not.** Legs 2 and 3 are. **Leg 1 is not:** *"display-only"* is a semantic property of source — **a reviewer must read the component and form a judgement, which is exactly the judgement the original clause existed to remove.** My replacement needed a reviewer every time; the clause it replaced needed none.
+
+⛔ **THE FENCE TEST, ADOPTED VERBATIM. EVERY LEG IS A COMMAND:**
+
+1. **Exactly FIVE live-path paths may appear in the diff, named now** — `client/src/App.tsx` · `client/src/components/layout/sidebar.tsx` · `client/src/pages/<page>.tsx` (new) · `server/routes/<endpoint>.ts` (new) · `server/routes.ts`. **Any sixth path under `client/` or `server/` is a breach, full stop, no argument entertained.** → `git diff --name-only`
+2. **Line budget on the three EXISTING files** — `App.tsx` ≤2 added/0 deleted · `sidebar.tsx` ≤2 added/0 deleted · `routes.ts` ≤4 added/0 deleted. *(A file whitelist with no line budget permits a rewrite of `routes.ts`.)* → `git diff --numstat`
+3. **Zero occurrences in the two NEW files** of any database/schema/storage import · any strategy, orchestrator, engine or MCE import · any non-GET route verb. **The endpoint is GET-only and performs exactly one file read of exactly one path.** → four greps
+4. **Zero files under `migrations/` or `shared/schema*` in the diff.**
+5. **Unchanged and still binding:** collector never hosted on the trading box · no study data in the trading database.
+
+★ **The shape is the `#704` lesson: the subject is DERIVED FROM THE DIFF, never asserted about the code.** ⛔ **His stop rule: *"If any leg needs a paragraph of explanation to pass, it has failed."***
+
+⚠️ **AND A DEFECT IN MY PLAN THAT ONLY HIS RE-DERIVATION FOUND: the mount block TERMINATES IN A CATCH-ALL.** Re-derived here — the last sub-router mount is followed seven lines later by `apiRouter.all('*', …)`. ⇒ **the new mount must go ABOVE that line or the endpoint 404s.** `P4.3` said "one added line in the single mounting block" and would have produced a route that resolves to nothing. **Not a fence issue — a working-code issue, found by a reviewer reading the object I had only counted.**
+
+## F-17 — BLOCKER-3: THE DELIVERY LEG WAS THE ONLY PLAN ITEM WITH NO FINDING BEHIND IT
+
+**He is right and this is the most serious of the three.** `P4.2` is the highest-risk element of Phase 4, and I disposed of it with *"no new listening port"* — **which answers a question nobody asked.**
+
+**(a) IT IS A WRITE CAPABILITY ONTO THE TRADING BOX, GRANTED TO AN EXTERNAL HOST, ON A TIMER.** ⛔ **It produces NO DIFF, which makes it exactly the blind spot the co-tenancy clause was written for — and my own fence amendment does not reach it.** ⇒ **named account, ONE named destination path, no other write reachable from that credential.** To be specified before Phase 4, with the same "derived, not asserted" standard as F-16.
+
+**(b) A PUSH DROPS SILENTLY — AND I CITED THAT EXACT FAILURE TWICE WHILE BUILDING ON IT.** `A1.6` and `A2.2` both invoke `#704` (*"a push drops silently with no local error"*) as the justification for the coverage control — **and then `P4.2` is a push with no freshness check.** ⇒ **the file carries `computed_at` on its face, the page renders it, and the ENDPOINT compares it** — not a human noticing the numbers stopped moving.
+★ **AND IT COMPOSES WITH F-14, WHICH IS THE PART I WOULD HAVE MISSED:** *"empty because young"* and *"empty because the push died nine days ago"* **must not look the same on that page.** F-14 made the page's early emptiness legible; without a freshness stamp that same explanation becomes the cover story for a dead feed.
+
+**(c) "One small file" is an adjective.** Four panels plus a 100-row table — **state the byte bound.**
+
+**(d) `P4.0` — PART D's "the staging box was not measured" becomes an ENTRY CONDITION on Phase 4**, measured not reasoned, before `P4.1`. Phase 4 is already gated behind Phase 3, so it costs a line. *(His §13 point: a named gap in a "what I did not establish" section is still a sentence until it has a home.)*
+
+## F-18 — PRECISION CORRECTION TO F-5, HIS, ACCEPTED
+
+F-5 said *"eight pages reachable by address and linked nowhere."* **The arithmetic is right; the adjective is not.** Four of the eight are `/login`, `/register`, `/` and the catch-all. **Genuinely unlinked: FOUR** — `/active-trades`, `/watchlist`, `/daily-brief`, `/system/config`. **The conclusion survives at four**, and the correction is his own measurement rule: state the magnitude you measured, not the one that reads better.
+
+## F-19 — ★ `#921` IS THREE THINGS, AND HE FOUND A BETTER FINDING THAN THE ONE I FILED
+
+**He checked rather than reasoned, and my negative claim survives with a stated reach:** live references to the mount on Helsinki are `discord-langston-bridge.py:167` and `langston_queue.py:43`, **both prose** — a banner and a comment example, zero functional reads; the 15-minute backup job contains zero mount references; `/etc/cron.d`, `/etc/crontab`, `cron.daily`, `cron.hourly` all zero. ⚠️ **REACH, STATED: `/var/spool/cron/crontabs` is permission-denied to him, so root's and other users' crontabs are outside his instrument.** The mount unit is `enabled` — **it returns on every boot regardless.**
+
+⛔⛔ **BUT THE RECURRENCE HAS A CAUSE I NAMED WRONGLY.** I wrote that the stuck searches came from *"our own shell fallback pattern"* and recorded that in the ledger. **He looked: it is in no script.** It is **typed by sessions** — and here is why it keeps being typed:
+
+> **The prohibition ALREADY EXISTS.** `/home/langston/CLAUDE.md` §9, Kyle's own directive, verbatim: ***"NEVER run `find /` or any whole-filesystem scan… it has hung your worker 30+ min twice."*** **That file is LANGSTON'S. No CC session loads it.**
+> **Re-derived here with a positive control: `CONDUCT.md` returns ZERO matches** for `find /`, whole-filesystem, D-state or uninterruptible — control: the same file greps to 125 non-blank lines, so the instrument is not deaf. The repo `CLAUDE.md`'s two mount mentions are **neither a prohibition on whole-filesystem scans.**
+
+★ **A RULE WRITTEN AFTER THIS EXACT FAILURE IS LOADED ONLY BY THE ONE PARTICIPANT WHO CANNOT CAUSE IT.** That is the `#641` two-homes shape **running in the damaging direction**, and **it is a better finding than the one I filed.**
+
+⇒ **`#921` REHOMED AS DECIDE-THEN-ACT, three parts, and the order is not free:**
+| | part | status |
+|---|---|---|
+| **(a)** | **THE TRIGGER — one line in `CONDUCT.md` prohibiting whole-filesystem scans.** Cheapest, **prevents rather than observes**, and it is a rule-PLACEMENT fix. | ⛔ **UNCONDITIONAL AND IMMEDIATE — do it regardless of what happens to the mount.** ⚠️ **NOT MINE TO EDIT UNILATERALLY:** `CONDUCT.md` is over its cap under one-in-one-out, CC-A is mid-rewrite of the rules files, and it is the named residual collision surface. **Routed to CC-A's arc, with the wrench called in the channel.** |
+| **(b)** | **THE SUBSTRATE — remove the mount.** Likely on his evidence plus mine. | **Kyle's call — it is his mount.** Blocked on the root-crontab gap being closed by someone who can read it. |
+| **(c)** | **DETECTION — survives ONLY if (b) says the mount stays.** | ⛔ **As I placed it, `B-HELSINKI-MOUNT-WATCH` is a watcher for a hazard we may be about to delete, sequenced AHEAD of the decision that determines whether it should exist.** Re-sequenced behind (b). |
+
+## F-20 — AMENDMENT 3 AND ITS TWO CONDITIONS ARE MOOT
+
+His Gate-2 ruling arrived **before** Kyle's withdrawal and carried **Condition A** (the cost claim was discharged on the free leg while the paying leg was disposed of by *"the shed order will absorb it"* — **budgeting by mechanism instead of by arithmetic, and the mirror image of his own r1→r2 BLOCKER-1**) and **Condition B** (two documents count the grid and would have gone stale on landing). **Both moot: Kyle withdrew the requirement, so there is no amendment.** He confirmed after PART E: *"not reviewed, agreed."*
+★ **Condition A is kept on the record anyway, because the lesson outlives the amendment: I discharged a cost claim on the leg that was free and waved at the leg that costs money.**
+
+## F-21 — WHAT I OWE, IN ORDER
+
+**BLOCKER-1** five-file set · **BLOCKER-2** the replacement test, legs 1–5, plus the catch-all placement · **BLOCKER-3** delivery leg specified (account, single path, freshness stamp, byte bound) + `P4.0` as a Phase-4 entry condition · **`#921`** rehomed with (a) routed to CC-A unconditionally. **None of it is code. All of it is Step 2 finishing properly.**
