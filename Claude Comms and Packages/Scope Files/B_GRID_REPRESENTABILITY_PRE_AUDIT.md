@@ -227,6 +227,24 @@ He required the cost split per strategy before any scheme is adopted: *"a pooled
 
 ⚠️ **SIDE: not reported per side because there is nothing to report — all 398 are LONG and zero shorts have ever been taken (§3 of the scope). Stated rather than silently omitted.**
 
+### A13 — ⛔ THE ROUNDING IS A NAMED SERVICE: **THE VPG (VENUE PRICE GRID)** — Kyle, 2026-08-28
+
+**His reasoning, and it is a governance point rather than a style one:** *"if it just remains code instead of something we refer to specifically by name, then it is easier to forget that it is there and that it is a component, an important component in our system."* ⇒ **`server/core/calculations/venue-price-grid.ts` is THE VPG**, a named component in the same sense as the MCE, the SQE and the TEC. **It is not "the rounding code" and must not be referred to that way in any document or message.**
+
+**IT OWNS ONE QUESTION:** *is this a price the venue can actually express, and if not, what is the nearest one that is?* — for every asset class, on every lane.
+
+**FOUR CALLERS TODAY, and the list lives in the service's own header so it cannot go stale unseen:** the signal orchestrator (**paper AND live** — one mode-agnostic seam), `vts-runner`, `xstock_spot/eval-cycle`, and `execution/venue-validate` (which shares the VPG's **basis** rather than its code, so the outbound order string cannot drift onto a second rule).
+
+⇒ **P6 and P7 now carry a naming obligation, not just a coverage one: the SIM entry and the System Manual section name the VPG as a component.** An unnamed service is one nobody looks for.
+
+### A14 — PROVENANCE OF THE SECOND FORMATTER (§9.5(b), answering Kyle's direct question)
+
+**He asked when it was added and guessed the initial build. It is NOT — it is six weeks old.** `formatToDecimals` was introduced **2026-07-14 at `adf06d028`, P19-B8.5 Step-3**, whose own commit subject reads *"OBJ-8 Kraken `validate=true` vetting leg (paper-only, conservative classifier, **precision from pair metadata**, visible skips)"*. ⇒ **it was built deliberately, for a stated purpose — formatting the outbound order string to the venue's own precision so OUR formatting could never manufacture a false precision rejection.** That intent is correct and survives; only its BASIS changed.
+
+**✅ `bridge/canonical/` — NO COVERAGE, AND THIS TIME THE INSTRUMENT IS PROVED.** Concept search across the 14-file, 288 KB corpus: `decimals` 0 files · `rounding` 0 · `round` 0 · `increment` 0 · `minimum order` 0 · `ordermin` 0 · `lot size` 0 · `order format` 0. **`precision` returns exactly ONE file, and the hit is rhetorical** — *"Every layer refines precision and reduces uncertainty before committing capital"* (`DawnTrader_Mathematical_Architecture_v1.5.0.md:47`), nothing to do with price precision. **POSITIVE CONTROL: `Kraken` returns 3 files, so the instrument reads the corpus.** ⇒ **the pre-governance corpus never contemplated venue price representability at all**, which is consistent with A3 and means no original-intent constraint binds the VPG's design.
+
+---
+
 ## 4. IMPLEMENTATION PLAN — every item back-references its finding
 
 | # | item | from | notes |

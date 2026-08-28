@@ -1,5 +1,28 @@
 /**
- * F-G-1 / B-GRID-REPRESENTABILITY (OBJ-7, OBJ-7b, OBJ-3) — VENUE PRICE GRID.
+ * ════════════════════════════════════════════════════════════════════════════════════════
+ *  VPG — THE VENUE PRICE GRID SERVICE
+ * ════════════════════════════════════════════════════════════════════════════════════════
+ *
+ * ★ A NAMED COMPONENT, in the same sense as the MCE, the SQE and the TEC (Kyle, 2026-08-28:
+ *   *"if it just remains code instead of something we refer to specifically by name, then it is
+ *   easier to forget that it is there and that it is a component, an important component in our
+ *   system"*). Refer to it as **the VPG**. It is not "the rounding code".
+ *
+ * WHAT IT OWNS: the single answer to *"is this a price the venue can actually express, and if
+ * not, what is the nearest one that is?"* — for every asset class, on every lane.
+ *
+ * WHO CALLS IT (keep this list current — it is the reason the service exists):
+ *   1. `signal-orchestrator.ts`  — the ACTIVE path, PAPER **and** LIVE (one mode-agnostic seam)
+ *   2. `vts-runner.ts`           — the VTS learning lane (TAG only, never drop)
+ *   3. `xstock_spot/eval-cycle.ts` — the xStock VTS lane (TAG only), which ALSO births the
+ *                                    xStock active signal, which is why it tags rather than rounds
+ *   4. `execution/venue-validate.ts` — shares the VPG's BASIS (`tick_size`) for the outbound
+ *                                    order string, so the rule has one home rather than two
+ *
+ * ⛔ IF YOU ARE ABOUT TO ROUND, SNAP OR FORMAT A PRICE ANYWHERE ELSE, CALL THE VPG INSTEAD.
+ *   A second implementation is how a decided rule ends up shipped into one reader out of several.
+ *
+ * F-G-1 / B-GRID-REPRESENTABILITY (OBJ-7, OBJ-7b, OBJ-3).
  *
  * WHY THIS EXISTS. Measured 2026-08-27 on 406 closed crypto trades, each matched to its OWN
  * published Kraken `tick_size`: entry prices are 80.8% representable, STOPS 2.7%, TARGETS 9.9%.
