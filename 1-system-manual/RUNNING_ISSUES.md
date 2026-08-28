@@ -2882,6 +2882,32 @@ The COMMITTED copy carries the five **pre-Phase-14 regime keys** (`BULL_STABLE`/
 
 ---
 
+### #755 FIXED-SAME-TURN 2026-08-28 (Infra Claude found it; Langston ruled it unconditional and immediate; CC-A verified and shipped) — ★★ **A RULE WITH A MEASURED TWO-INCIDENT HISTORY BOUND ONE OF FIVE ACTORS, BECAUSE IT LIVED IN THE ONLY FILE NO CC SESSION LOADS.**
+
+⛔ **THE HAZARD, VERIFIED BY ME BEFORE ACTING:** `timeout 8 ls /mnt/gdrive` on Helsinki → **exit 124.** The Google Drive mount is **wedged**, and per Infra had been for 20+ days. Any scan walking from `/` blocks in **uninterruptible IO** — unkillable, no timeout — and **the session that ran it reads as IDLE while work queues behind it.**
+⚠️ **ONE CORRECTION TO THE REPORT, MEASURED: the three stuck whole-disk searches are NOT currently present** — `ps` shows **zero D-state processes**. **The mount is wedged; the stuck scans have since cleared or been killed.** ★ **Stated because *"three searches stuck on it"* would otherwise propagate as a current fact.**
+
+★★ **THE FINDING THAT GENERALISES, AND IT IS NOT ABOUT DRIVE MOUNTS: THE RULE ALREADY EXISTED, VERBATIM, AND COULD NOT REACH US.** `/home/langston/CLAUDE.md:303` — *"NEVER run `find /` or any whole-filesystem scan (Kyle directive 2026-06-24 — it has hung your worker 30+ min twice, making you look IDLE to Kyle while a review sits queued)"*.
+⛔ **That is LANGSTON'S file. No CC session loads it.** ⇒ **a Kyle directive with two measured incidents behind it bound exactly ONE of five actors for two months, and the other four had no way to learn it existed.**
+★ **Same family as `#754` mechanism 2 — a private always-loaded file outranking the shared rule with nothing reconciling them — except here the private file belongs to a DIFFERENT ACTOR, so the asymmetry is invisible from both sides.**
+
+**✅ SHIPPED THIS TURN — PREVENTION FIRST, per rule 29 (*prefer impossible over intercepted*):**
+1. **`.claude/hooks/guard-whole-fs-scan.mjs`** — a PreToolUse guard BLOCKING `find /`, `grep -r /`, `du /`, `ls -R /` and anything aimed at `/mnt/gdrive`, with scoped alternatives named in the refusal. **Fail-open by construction** (malformed input → exit 0), so **its silence is NOT evidence of compliance (#453)**.
+2. **`CONDUCT.md` §11** — the rule in one line, because **a hook covers only sessions that have restarted since it landed, and only this tool.**
+
+⛔⛔ **THE GUARD FIRED TWICE ON MY OWN CORRECT WORK BEFORE IT WAS RIGHT, AND THAT IS THE DURABLE LESSON.** v1 scanned the whole command string, so it blocked **the heredoc writing THIS ledger entry** — text that merely *contained* `find /` — and then blocked **the test script** containing the patterns as string literals. v2 split on command separators and still fired.
+★★ **A REGEX CANNOT DISTINGUISH *A COMMAND* FROM *TEXT MENTIONING A COMMAND*, and documentation and test fixtures legitimately contain both.** ⇒ **v3 matches ONLY at the very start of the command**, accepting a **stated gap** — a scan buried mid-pipeline or inside a heredoc is NOT caught — in exchange for a near-zero false-positive rate.
+⛔ **The trade is deliberate: A GUARD THAT FIRES ON CORRECT WORK IS A GUARD THAT GETS SWITCHED OFF — the same end as no guard, reached more annoyingly.** **The `CONDUCT.md` line covers the judgement; the hook covers the reflex.**
+
+**CONTROLS, all three, re-run on v3:** ✅ **POSITIVE** — 6 whole-fs forms blocked. ✅ **NEGATIVE** — 10 ordinary forms pass, **including the two heredoc/string-literal cases that false-fired on v1 and v2.** ✅ **FAIL-OPEN** — malformed stdin → exit 0.
+
+⛔ **ONE CORRECTION TO THE HAND-OFF, AND IT IS KYLE'S OWN RULE: *"it needs an owner and a DATE in the ledger"* — §9.4 (Kyle, 2026-08-25) STRUCK DATES ON BATCHES.** ★ **A home is a NAME and a PLACE, never a calendar date.** **Moot here — it shipped the same turn — but the form is corrected rather than followed.**
+
+**✅ THE `CONDUCT.md` CAP CONCERN RESTED ON A WRONG FIGURE: at the ref it was 24,536 B — 40 B UNDER cap, not over.** The "over cap" belief is **the CRLF artifact for the third time in one day** (`#751`). ★ **One-in-one-out honoured anyway: §13's two list-MAINTENANCE paragraphs collapsed to one pointer — verified held IN FULL at `MISTAKE_PATTERNS.md:33,:35` BEFORE evicting.** **Final: 24,560 B LF, 16 B under, all 14 sections intact, largest chunk ~4.9 KB against the ~10 KB ceiling.**
+★ **The header line now reads: check the size AT THE REF, never your working copy — because that is the mistake, three times over.**
+
+⇔ `#754` (same family) · `#751` (the CRLF artifact) · rule 29 (*prefer impossible over intercepted*).
+
 ### #754 OPEN 2026-08-28 (Infra Claude, diagnosed after Kyle caught the skip; **six checkable claims re-derived at the ref by CC-A before adoption — all six hold**) — ★★ **A SESSION SKIPPED STEP 2 WITH NOTHING MISSING FROM ITS CONTEXT, AND NOTHING IN THE SYSTEM COULD HAVE CAUGHT IT.**
 
 ⛔ **Every rule file and all eleven step skills were loaded. The skip happened anyway, and KYLE caught it — not the system.**

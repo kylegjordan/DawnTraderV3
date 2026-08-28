@@ -1,6 +1,6 @@
 # CONDUCT — how this session behaves
 
-> Auto-loaded on every start, resume and compaction (`.claude/hooks/load-conduct.mjs`). **Cap 24,576 B / 6k tokens, ONE-IN-ONE-OUT** — to add a rule here, move one out. ⚠️ **READ THE LIVE SIZE; never trust a figure written in this file.** ★ **AND THE DELIVERY CEILING IS THE HARDER LIMIT: ~10 KB PER HOOK CHUNK.** The cap is a budget; the chunk ceiling is physics. Both must hold. *(Why this line is short: it carried a 1,136 B mistake-record until 2026-08-27. §7 — those live in the commit or the issue, not in an auto-loaded file. Langston’s cut, my rule.)*
+> Auto-loaded on every start, resume and compaction (`.claude/hooks/load-conduct.mjs`). **Cap 24,576 B, ONE-IN-ONE-OUT** — to add a rule, move one out. ⚠️ **READ THE LIVE SIZE AT THE REF, NEVER A FIGURE WRITTEN HERE, AND NEVER YOUR WORKING COPY — `core.autocrlf` adds one byte per line and has produced a false "over cap" three times (`#751`).** ★ **The ~10 KB per hook chunk is the harder limit: the cap is a budget, the chunk ceiling is physics.**
 > These are BEHAVIOURAL rules: they fire continuously, with no moment at which a checker could catch the miss. Workflow, architecture, governance and anything mechanically checkable stay in `CLAUDE.md`.
 
 ---
@@ -45,7 +45,7 @@ Two orthogonal axes: **mode** (paper | live) and **active trading** (on | off).
 **Verify state in code, never from governance-doc wording, and never from a component's name** — several components carry names from an earlier era.
 
 ## 5. WHEN TO SPEAK — THE DEFAULT IS SILENCE
-**Kyle gets a report AT THE END OF A WORKFLOW STEP** — not on every wake, not on every Langston round-trip, not on every push. He was getting *"three to four updates, the same three or four updates"* as work narrated itself. **Measured 2026-08-18: automated notices outnumbered Kyle's own messages ~14:1, and each tended to produce a turn of commentary.**
+**Kyle gets a report AT THE END OF A WORKFLOW STEP** — not on every wake, not on every Langston round-trip, not on every push. He was getting *"three to four updates, the same three or four updates"* as work narrated itself. **Measured 2026-08-18: automated notices outran his own messages ~14:1.**
 
 **Iterate with Langston continuously — he was explicit he does NOT want that reduced. What he wants gone is the RUNNING NARRATION of it.**
 
@@ -79,7 +79,7 @@ Two orthogonal axes: **mode** (paper | live) and **active trading** (on | off).
 
 ### THE HEADER IS THE POINT — HE SCROLLS PAST EVERYTHING ELSE
 Use a **`#` heading** (the largest available), on its own, with a rule line under it. **NOT `##`, NOT bold text.** He needs to find these while scrolling.
-⚠️ **HONEST LIMIT: markdown in his terminal has NO underline and NO colour — I cannot set either.** A `#` heading plus a rule plus the emoji marker is the strongest differentiation available. Do not claim otherwise.
+⚠️ **HONEST LIMIT: his terminal has no underline and no colour.** The `#` heading + rule + emoji is the strongest differentiation available; do not claim otherwise.
 
 ```
 # 🟦 STEP 4 COMPLETED — Langston's code review
@@ -158,7 +158,9 @@ Quiet must never mean unaudited. **Origin: eleven defect claims announced and re
 - **Communicate deviations BEFORE acting.** Blocked → say so; never improvise architecture under pressure.
 - **Kyle has imperfect memory. SURFACE buried things** rather than waiting for him to remember them.
 
-*(one-in-one-out 2026-08-20: no-patches, never-leave-legacy and named-home moved out — each fires at a known trigger, so they are procedure. Live at CLAUDE.md r15, r18, §9.4.)*
+- ⛔⛔ **NEVER RUN A WHOLE-FILESYSTEM SCAN — no `find /`, no `grep -r /`, no `/mnt/gdrive`. NAME THE DIRECTORY YOU MEAN.** On Helsinki that mount wedges; the scan blocks in uninterruptible IO, **cannot be killed**, and your session reads as IDLE while work queues behind it. ★ **The rule existed verbatim in Langston's own file (Kyle, 2026-06-24) — which NO CC session loads, so it bound one of five actors.** ✅ **Enforced by `guard-whole-fs-scan.mjs`.**
+
+*(one-in-one-out 2026-08-28: §13's two list-maintenance paragraphs → one pointer, both held in full at `MISTAKE_PATTERNS.md:33,:35`. 2026-08-20: no-patches, never-leave-legacy, named-home → CLAUDE.md r15, r18, §9.4.)*
 
 ## 12. WHEN NAMED, ANSWER — FAST
 When Langston or an alert names your session, **reply publicly right away** — not when the work is done. State: **I have got it**, what you will do, and when. **Responding fast is mandatory; fixing fast is not.** Dispose of the alert in the same breath — fix now, or re-schedule it to a concrete time, or turn it off *with the reason stated*. **An alert must never be left silently active, and a call-out must never be left unanswered.**
@@ -167,8 +169,7 @@ When Langston or an alert names your session, **reply publicly right away** — 
 
 ## 13. THE MISTAKES THAT KEEP RECURRING — the short list (auto-loaded; full index `1-system-manual/MISTAKE_PATTERNS.md`)
 **Ordered most-recent-instance first. 3-5 slots. Promotion = 3+ instances across 2+ distinct batches, as a FLOOR.**
-⛔ **A LIVE RULE LEAVES THIS LIST ONLY WHEN A MECHANISM COVERS ITS CLASS — NEVER BY NEWNESS.** A working rule goes quiet, and quiet sinks it in the ordering — evicting it there restarts the mistake it was preventing. **Cap pressure = MECHANISE the oldest, or raise the cap.** Detail: `1-system-manual/MISTAKE_PATTERNS.md`.
-⛔ **AN ABSENCE FROM THIS LIST IS NOT A RETIREMENT** — a live pattern displaced by the slot limit is held in the index flagged `LIVE — NOT IN §13`. **Read the index before concluding a pattern is dead.**
+⛔ **AN ABSENCE FROM THIS LIST IS NOT A RETIREMENT, AND A RULE LEAVES IT ONLY WHEN A MECHANISM COVERS ITS CLASS — NEVER BY NEWNESS. READ THE INDEX before concluding a pattern is dead:** `1-system-manual/MISTAKE_PATTERNS.md` (`:33`, `:35`), which holds both rules in full.
 
 1. ★ **`wrong-object` — RIGHT NAME, WRONG THING.** The path is right, the file is right, the command runs — and it measures something other than what your claim is about. **Before reporting any number: name the OBJECT, name the POPULATION, pin it BY REF.** *(5 attributed instances across 2 batches — worktree-not-ref, a baseline that had moved, `-200` misread as a denominator, substring-not-thing, size-not-growth. Detail in the index.)* **No mechanism yet — this one is on you.**
 
