@@ -508,6 +508,22 @@ export class SignalOrchestrator {
   ): Promise<SizedStrategySignal | null> {
     if (!rawSignal) return null;
 
+
+
+    // P19-B8.4b: active-path funnel — narrow the pipe's stamped class to the funnel grid
+    // (crypto_spot|xstock_spot); mode is already 'paper'|'live'. Count this generated signal at the funnel
+    // TOP (the denominator), then the gates below record their own drops (pre-SQE / SQE / post-SQE). A class
+    // outside the grid (a future asset class) is simply not counted. Dormant until paper-active (B8.5).
+    const _fClass: FunnelAssetClass | undefined =
+      (sizingContext.assetClass === 'crypto_spot' || sizingContext.assetClass === 'xstock_spot')
+        ? sizingContext.assetClass : undefined;
+    if (_fClass) recordActiveSignalsGenerated(sizingContext.mode, _fClass, 1);
+
+    // ⚠️ THE ORDERING HERE IS DELIBERATE AND WAS A DEFECT WHEN I FIRST WROTE IT. This block
+    // sat ABOVE `recordActiveSignalsGenerated`, so a grid-rejected signal was counted as a
+    // pre-SQE DROP without ever being counted as GENERATED -- rejects could exceed the
+    // denominator and the Filter Diagnostics funnel would not reconcile. Count it in at the
+    // top of the funnel FIRST, then drop it.
     // ══ F-G-1 (OBJ-7 / OBJ-7b / P1-P3) — VENUE PRICE GRID ══════════════════════════════════
     // THE ONE ROUNDING SEAM. Every strategy's signal passes through here before sizing, the
     // target gate and net-geometry. `strategy-engine.ts` alone computes a stop price at 33
@@ -527,7 +543,17 @@ export class SignalOrchestrator {
         rawSignal.entryPrice, rawSignal.stopPrice, rawSignal.targetPrice,
         _grid.tick, { targetIsCap: _isCap, symbol: rawSignal.symbol },
       );
+      const _gridReject = (reason: string) => {
+        // P4 (Kyle 2026-08-28): a refusal that only logs is invisible where it matters.
+        // These are PRE-SQE drops by construction -- this seam runs before the SQE -- so they
+        // join the same funnel the Filter Diagnostics tab reads. The reason string is prefixed
+        // so a reader can tell a grid refusal from every other pre-SQE drop at a glance.
+        const _fc = (sizingContext.assetClass === 'crypto_spot' || sizingContext.assetClass === 'xstock_spot')
+          ? sizingContext.assetClass : undefined;
+        if (_fc) recordActivePreSqeReject(sizingContext.mode, _fc, `grid_${reason}`, strategyId);
+      };
       if (!_r.ok) {
+        _gridReject(_r.reason ?? 'unknown');
         // ⛔ REJECT, NEVER RE-ROUND. Rounding to nearest is deterministic, so "round again"
         // could only mean rounding the OTHER way, and choosing the direction that lets a trade
         // through is shopping for a pass. The rounded geometry IS the geometry.
@@ -544,6 +570,7 @@ export class SignalOrchestrator {
       // already covered. `MIN_STOP_DISTANCE_BPS` is the ONE check with no downstream re-run —
       // `validateStrategySignal` tests ordering, not distance.
       if (!validateStopDistance(_r.entryPrice, _r.stopPrice)) {
+        _gridReject('stop_distance_after_rounding');
         console.warn(
           `[F-G-1][GRID_REJECT] ${rawSignal.symbol}/${strategyId} reason=stop_distance_after_rounding ` +
           `entry=${_r.entryPrice} stop=${_r.stopPrice} tick=${_grid.tick}`,
@@ -559,17 +586,7 @@ export class SignalOrchestrator {
         targetPrice: _r.targetPrice,
       };
     }
-    // ═══════════════════════════════════════════════════════════════════════════════════════
-
-
-    // P19-B8.4b: active-path funnel — narrow the pipe's stamped class to the funnel grid
-    // (crypto_spot|xstock_spot); mode is already 'paper'|'live'. Count this generated signal at the funnel
-    // TOP (the denominator), then the gates below record their own drops (pre-SQE / SQE / post-SQE). A class
-    // outside the grid (a future asset class) is simply not counted. Dormant until paper-active (B8.5).
-    const _fClass: FunnelAssetClass | undefined =
-      (sizingContext.assetClass === 'crypto_spot' || sizingContext.assetClass === 'xstock_spot')
-        ? sizingContext.assetClass : undefined;
-    if (_fClass) recordActiveSignalsGenerated(sizingContext.mode, _fClass, 1);
+    // ═════════════════════════════════════════
 
     // Directive 11.4H.1 Task 6: Validate and normalize symbol before event dispatch
     const canonicalSymbol = normalizeToInternalSymbol(rawSignal.symbol);
