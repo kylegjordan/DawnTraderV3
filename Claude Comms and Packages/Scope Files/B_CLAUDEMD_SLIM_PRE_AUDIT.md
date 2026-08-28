@@ -111,7 +111,7 @@ I claimed `#749` is a **NEW FEATURE** on the comms send path, strengthening a ch
 
 | # | item | falls out of |
 |---|---|---|
-| **P0** | ⛔ **`B-EOL-NORMALISE` (#751) LANDS FIRST** | **F11** |
+| **P0** | ✅ **`B-EOL-NORMALISE` (#751) LANDS FIRST — ALREADY TRUE: it is queue position 6, the slim is 9.** Recorded as a stated precondition on the verification, **not a re-ordering**: every byte figure in this audit is PROVISIONAL until it lands. | **F11** |
 | **P1** | Regime-A cut clauses leave a forwarding pointer at their section | **F3-A** + the `§2` precedent |
 | **P1b** | Regime B: `§9.5`'s heading survives as a husk; `rule 19`'s number as an explicit hole **in the form of `CLAUDE.md:161`** | **F3-B**, **F5**, **F9** |
 | **P1c** | **The husk carries the four sub-labels as named pointers** — a bare heading serves 99 of 341 | **F3b** |
@@ -139,4 +139,4 @@ The rules file is **about 64% of what a session reads before starting work** —
 
 **I filed a concern that our own records already answered.** I flagged that part of this batch adds something new to the live messaging code. **Our issue log says plainly that it's a narrowing fix to code that already exists** — and my own audit claims to have searched that log. The rule I invoked exists specifically to stop that.
 
-**And the batch has a prerequisite nobody noticed.** Another queued item fixes a line-ending problem that makes every size measurement unreliable **per copy of the repo** — and the plan already says, in writing, that it must land before this batch. **This audit is built almost entirely on size measurements, and I tripped over that exact problem three times today.** That one now sits at the top of the plan.
+**And this audit never named a dependency it rests on.** Another queued item fixes a line-ending problem that makes file sizes differ depending on which copy of the repo you look at. **The plan already puts it ahead of this batch, so nothing needs to move** — but the audit did not say so, and its numbers are provisional until that lands. **This audit is built almost entirely on file sizes, and I hit that exact problem three times today.**
