@@ -12,9 +12,9 @@
 > ⚠️ **UPDATE THESE FOUR LINES AT EVERY STEP BOUNDARY.**
 
 - **BATCH:** `B-TOKEN-WATCH` — **capture-only** observation feed over new Solana token launches. Builds case-control survival machinery WHERE A PUBLISHED ANSWER KEY EXISTS before pointing it at #594/#596/#597 where there is none. **No trading, no wallet, no execution.**
-- **STEP: 4 of 11** — Langston's code review. **r1 returned CHANGES-NEEDED (3 blockers, all cleared).** Two fresh-reader rounds since found 20+ more, several EXECUTED not argued — including two I introduced while fixing r1. **112 checks / 4 suites, all passing.** Pushed `f3d3ef899`. Board card moved to `Implementation`, read back.
-- **NEXT STEP: 5 of 11** — GitHub push + CI 4/4 green. ⛔ Only after Langston clears the diff; do not enter step 5 by assuming his silence is approval.
-- **BLOCKED-ON:** Langston (Step-4 r3 review). Nothing needed from Kyle.
+- **STEP: 5 of 11** — GitHub push + CI. **Step 4 APPROVED by Langston at `3c6e6ced3`** after r1 CHANGES-NEEDED → r2 CHANGES-NEEDED → r3 APPROVED, plus **three fresh-reader rounds (capped; did NOT converge)**. **141 checks / 5 suites.** Board card at `CI + Deploy`, `Blocked on = External`, read back. CI running on `bcaef67f3`.
+- **NEXT STEP: 6 of 11** — staging deploy via `dt-deploy`. ⛔ **BUT SEE THE FENCE:** this batch deploys to HELSINKI, not the trading box, and the Phase-4 page is not built. Step 6 here means standing the collector up on Helsinki, which is gated behind the Phase-3 proving run.
+- **BLOCKED-ON:** CI (external). Nothing needed from Kyle.
 
 > ⛔⛔ **WHY THESE LINES NOW CARRY STEP *NUMBERS*, AND IT IS THE FIX FOR A REAL FAILURE (2026-08-28).** This block used to end with a prose to-do list reading *"scope → Langston Step-1; **then build**"* — **which is step 1 → step 3, with step 2 silently absent.** I wrote it, it auto-loads FIRST on every start and compaction, and it is read as *where I am*, while `CLAUDE.md` §0.a is a table of addresses I must choose to consult. **When the two disagreed, the specific private list beat the generic public rule, and nothing compared them.** ⇒ **A prose next-step can skip a step invisibly; a NUMBER cannot** — 1 → 3 is visible on its face. **Never write a prose next-step here again.**
 
