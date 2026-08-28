@@ -260,6 +260,22 @@ def record_death(mint: str, when: datetime, death_class: str, age_label: str, ev
             "evidence": evidence,
         },
     )
+    # ⛔ UPDATE THE CACHE IN PLACE RATHER THAN LETTING mtime FORCE A RE-READ.
+    # MEASURED, and this is why it is not a micro-optimisation: by day 90 the
+    # tombstone file holds ~376,000 entries. Recording a death changes its
+    # mtime, so the very next `dead_set()` re-parses the WHOLE file — and a
+    # busy hour records ~520 deaths, each followed by a due-queue lookup.
+    # That is ~196 MILLION line re-parses in one hourly run, i.e. an hourly
+    # job that stops finishing inside its hour somewhere in month three.
+    # ⚠️ The failure would have arrived LATE and looked like a slow provider
+    # rather than like our own data structure — which is exactly the kind that
+    # gets misdiagnosed. Appending to the live set keeps the read O(1).
+    if _DEAD_CACHE["mtime"] is not None:
+        _DEAD_CACHE["set"].add(mint)
+        try:
+            _DEAD_CACHE["mtime"] = os.path.getmtime(tombstone_path())
+        except OSError:
+            _DEAD_CACHE["mtime"] = None  # fall back to a re-read; never guess
 
 
 _DEAD_CACHE = {"mtime": None, "set": set()}

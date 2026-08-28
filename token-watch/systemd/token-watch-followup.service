@@ -8,7 +8,12 @@ Group=tokenwatch
 WorkingDirectory=/opt/token-watch
 ExecStart=/usr/bin/python3 /opt/token-watch/follow_up.py
 CPUQuota=40%
-MemoryMax=256M
+# MEASURED, not guessed: by day 90 the tombstone set is ~376,000 mints at ~195
+# bytes per set entry = ~73 MB resident, before the interpreter and the hour's
+# working data. 256M would have been uncomfortably close to a ceiling that
+# only bites in month three, and an OOM there looks like a crashed collector
+# rather than like a limit set too low.
+MemoryMax=512M
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict

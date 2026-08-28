@@ -132,6 +132,31 @@ store.record_death("MINT_B", T0, "faded", "6h", {"volume_24h": 0})
 check("POSITIVE CONTROL: valid death class accepted", "MINT_B" in store.dead_set())
 
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+section("3b. TOMBSTONE CACHE — fast on our own writes, still correct on others'")
+# The cache is updated IN PLACE by record_death, because letting mtime force a
+# re-read costs ~196M line re-parses in a busy hour by day 90. The risk that
+# optimisation introduces is the opposite one: an in-place update that stamps
+# the mtime could MASK a write by another process. Both directions tested.
+# ─────────────────────────────────────────────────────────────────────────────
+store.record_death("MINT_FAST", T0, "faded", "1h", {})
+check("own write is visible immediately", "MINT_FAST" in store.dead_set())
+
+# An EXTERNAL writer appends straight to the file, bypassing record_death.
+import json as _json, time as _time
+_time.sleep(0.01)
+with open(store.tombstone_path(), "a", encoding="utf-8") as _fh:
+    _fh.write(_json.dumps({"mint": "MINT_EXTERNAL", "died_at": T0.isoformat(),
+                           "death_class": "faded", "age_at_death": "1h",
+                           "evidence": {}}) + chr(10))
+check("★ an EXTERNAL write is still picked up — the cache did not mask it",
+      "MINT_EXTERNAL" in store.dead_set(),
+      "an in-place cache that stamps mtime can hide another writer; this is that test")
+check("POSITIVE CONTROL: a mint never recorded is NOT in the set",
+      "MINT_NEVER_DIED" not in store.dead_set(),
+      "if everything were present the membership test would be meaningless")
+
 # ─────────────────────────────────────────────────────────────────────────────
 section("4. ⛔ THE SHED ORDER — THE HARD CLOSE CONDITION, FIRED ON PURPOSE")
 # Langston: 'an unverified guard on an irreversible silent loss is not a
