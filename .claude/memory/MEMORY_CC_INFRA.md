@@ -12,9 +12,15 @@
 > ⚠️ **UPDATE THESE FOUR LINES AT EVERY STEP BOUNDARY.**
 
 - **BATCH:** `B-TOKEN-WATCH` — **capture-only** observation feed over new Solana token launches. Builds case-control survival machinery WHERE A PUBLISHED ANSWER KEY EXISTS before pointing it at #594/#596/#597 where there is none. **No trading, no wallet, no execution.**
-- **STEP: 5 of 11 — COMPLETE. CI 4/4 GREEN, verified per job.** Run **`33182142814`** on `488ef47dc`; my work confirmed an ancestor (18 `token-watch/` files at that sha). ⚠️ Three earlier runs on my own heads read **cancelled** — superseded by other sessions pushing, all steps green underneath. **`gh run watch --exit-status` EXITED 0 on a cancelled run**, so the per-job rule is what caught it; do not trust the watch alone.
-- **NEXT STEP: 6 of 11** — deploy. ⛔ **FOR THIS BATCH THAT MEANS HELSINKI, NOT `dt-deploy`, NOT the trading box** (scope §0 fence). And it is **BLOCKED ON A KYLE DECISION**: standing the collector up requires Helsinki's **first public non-SSH listener** (measured: it exposes only port 22 today).
-- **BLOCKED-ON:** ⛔ **KYLE** — the public-listener decision for step 6. Do NOT proceed to deploy without it.
+- **STEP: 6 of 11** — deploy. ⛔ **FOR THIS BATCH DEPLOY MEANS HELSINKI, NOT `dt-deploy`, NOT the trading box** (scope §0 fence). Step 5 CLOSED: **CI 4/4 green, verified per job, run `33182142814` on `488ef47dc`** (my work an ancestor; 18 `token-watch/` files at that sha).
+- **NEXT STEP: 7 of 11** — first-pass verification. ⛔ But Phase 3 (the 72h proving run + the shed-order injection) comes first, and Phase 4 (the staging page) is gated behind that.
+- **BLOCKED-ON:** ⛔ **NOTHING — KYLE DELEGATED THE DECISION 2026-08-28:** *"I'll let you and Langston decide what is best for the system. iterate to consensus and then implement whatever you guys agree on."* ⇒ **iterate with Langston, reach consensus, IMPLEMENT. Do not come back to Kyle unless it is a true deadlock.**
+
+> ⛔⛔ **THE DECISION UNDER DELEGATION — THE COLLECTOR NEEDS HELSINKI'S FIRST PUBLIC NON-SSH LISTENER.**
+> **MEASURED 2026-08-28:** Helsinki exposes **port 22 and nothing else**; everything else binds loopback. ufw allows 22 **and 18888 ("Replit upload temp server") — a stale rule for a system frozen 2026-03-30, with nothing listening on it.**
+> **WHY IT IS UNAVOIDABLE:** the provider PUSHES creations; polling instead means 43.2M txns/day, unaffordable at every tier. The push is why the study is viable at all.
+> **WHAT `PART H` REQUIRES:** reverse proxy terminating TLS → loopback · **a shared secret on the webhook path (NOT optional — without it anyone who finds the URL can poison the census, which §4 makes irreversible)** · firewall opened for that one port · **a positive control delivering one synthetic creation from OUTSIDE the host and reading the row back** before the real feed is pointed at it.
+> ⚠️ **AND MY OWN `PART G` CONTRADICTS ITSELF ON THIS — CORRECT IT WHEN IMPLEMENTING.** It rejected a pull-based delivery partly because *"a new public listener is a security-surface change this batch has no business making."* **The batch does add one, unavoidably.** The true reason to reject the pull model is narrower: it would add a SECOND surface. Say that instead.
 
 > ⛔⛔ **WHY THESE LINES NOW CARRY STEP *NUMBERS*, AND IT IS THE FIX FOR A REAL FAILURE (2026-08-28).** This block used to end with a prose to-do list reading *"scope → Langston Step-1; **then build**"* — **which is step 1 → step 3, with step 2 silently absent.** I wrote it, it auto-loads FIRST on every start and compaction, and it is read as *where I am*, while `CLAUDE.md` §0.a is a table of addresses I must choose to consult. **When the two disagreed, the specific private list beat the generic public rule, and nothing compared them.** ⇒ **A prose next-step can skip a step invisibly; a NUMBER cannot** — 1 → 3 is visible on its face. **Never write a prose next-step here again.**
 
@@ -62,6 +68,16 @@ Until today I could be **named in the channel and never woken**: `cc-wake-filter
 **MEASURED LIVE AGAINST THE CHAIN (the gate Langston set, now discharged):** the launchpad program runs **500 txns/sec = 43.2M/day, 83% of them FAILED** (bot competition). Launches are **~0.05% of that traffic**. Unfiltered ingestion is impossible at EVERY tier - 43M/day against 33k/day free, and still ~6x over the $999 tier. Everything hinged on server-side filtering, which is why the CREATE verification was the decisive test rather than a detail.
 
 **RESIDUAL, NAMED:** DexScreener needs no key, so there is no guaranteed service. If it throttles or changes, fall back to chain-direct on the spare Helius allowance - that headroom is the fallback as well as the liquidity budget.
+
+## ✅ B-TOKEN-WATCH — STEPS 1-5 CLOSED, DO NOT RE-DERIVE (repo is authoritative)
+
+**Step 1 APPROVED** (3 conditions) · **Step 2 APPROVED** (3 blockers) · **Step 3 built** · **Step 4 APPROVED at r3** `3c6e6ced3` after r1/r2 CHANGES-NEEDED · **Step 5 CI 4/4 green** run `33182142814`. **141 checks / 5 suites.** Docs: scope, pre-registration (**append-only, AMENDMENTS 1-4**), `B_TOKEN_WATCH_PRE_AUDIT.md` (PARTS A-H), change list refreshed at the approved ref.
+
+★ **THREE FRESH-READER ROUNDS, CAPPED, DID NOT CONVERGE — each found more than the last.** The decisive result: **four defects the code's own comments called FIXED could each be reverted with all 116 checks still green.** `tests/test_mutations.py` exists for that and asks a different question from the other suites — not *does it work* but ***would we notice***.
+
+**FILED, ALL PLACED AT THE PHASE-19 TAIL, NO DATES (§9.4):** `#920` `dt-review grep` silent zero · `#921` no detector for a wedged Helsinki mount (**re-aimed: REMOVE the mount, Kyle**) · `#924` two ungoverned SSH keys reach the `deploy` account (investigation Phase-19 end, remediation §20.4 beside `#110`) · `#926` push guard reads the shell's cwd · `#931` the fresh-reader loop could not fire · `#932` burn thresholds are fractions of the CAP while the plan consumes 99.3% of it — **level separates spending from not-spending, never on-plan from off-plan.**
+
+⚠️ **`#932`'s remedy is a SCOPE DECISION, not a fix** (recommendation: project against the plan pro-rata). It does not touch the spend gate, which is independently bounded and injection-tested.
 
 ## ⚑ LANGSTON'S CONCEPT-REVIEW CATCHES (keep — they generalise)
 
