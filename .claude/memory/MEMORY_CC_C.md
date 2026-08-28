@@ -46,31 +46,30 @@ Plain language to Kyle every message (no code/paths/jargon; canonical terms: reg
 
 ## ★★★ CURRENT POSITION (2026-08-28) — READ FIRST
 
-**⏳ `F-G-1` / `B-GRID-REPRESENTABILITY` — STEP 4, r5 DISPATCHED 14:42 at `2245ab15e` (head `20bcce2e7`). Awaiting his fifth read.** Steps 5-11 ALL STILL TO DO.
-★★ **Kyle granted write scope ⇒ LANGSTON'S STEP-4 IS THE ONLY INDEPENDENT CHECK.** **CHANGES-NEEDED FIVE TIMES; eleven blockers; every one real.**
-✅ CI 4/4 green each push · tsc 384 baseline · 111 tests / six suites · board card `…zg4UsFg` (the duplicate I created is deleted).
+**⏳ `F-G-1` — STEP 4 ✅ APPROVED · STEP 5 ✅ CI 4/4 · STEP 6 ✅ DEPLOYED · STEP 7 PART-DONE. ⛔ FROZEN at `5e5a3d8ae` by Langston's ruling — DO NOT EDIT the report, the criterion or the suite.**
+**Live sha `56ac8067a`** (deployed 17:49Z; `5e5a3d8ae` is docs+tests only). Rollback `ed86a758e`.
 
-**★ TWO NAMED SERVICES:** **VPG** `core/calculations/venue-price-grid.ts` — *can the venue express this price?* · **VOG** `services/execution/venue-validate.ts` — *would it accept this order?* **VPG runs FIRST.**
-**Rules:** entry NEAREST · stop+target AWAY · **EXCEPT `volatility_edge`'s `Math.min` CAP → TOWARD.** ⛔ **REJECT NEVER RE-ROUND · PAIRWISE invariant · published-vs-derived and the whole seam decision now live in ONE pure `decideGridAction`.**
+⛔⛔ **TWO GATES, BOTH OUTSIDE MY CONTROL — DO NOT TRY TO CLOSE THEM WITH EDITS:**
+1. **KYLE: the visual UI check.** Needs a browser login; **I do not type passwords into forms.** He picks: he logs staging in, or he accepts the data checks. **Step 7 is NOT complete without it and I have said so to both of them.**
+2. **EMPIRICAL: one promoted position carrying `metadata.gridAtBirth`.** ⚠️ **A Monitor is ARMED** polling `active_open_positions` every 5 min; it wakes me when the first appears. Crypto runs ~5 opens/day. **0 of 5 current positions carry it (all pre-fix).**
+★ **LANGSTON'S FREEZE REASON, and it is the discipline I lacked: "a pre-registered criterion that keeps moving while the data accrues is NOT pre-registered."** I was spending the exact property §3 was written to buy, one individually-defensible correction at a time — which is why I could not see it from inside. **Stop while the residual is smaller than the measurement.**
+⛔ **THE ONE EXCEPTION, not a loophole: if the live observation CONTRADICTS the promotion-hop code evidence, that is a CODE DEFECT and reopens as a NEW round with a number — never a quiet edit to a frozen doc.**
 
-⛔⛔ **THE THREE PATTERNS THIS BATCH PRODUCED — the enumeration is in the commit messages and change-list §9b-§9e, which are in the repo. MEMORY KEEPS THE PATTERNS.**
-1. ★ **BRANCH ON A DERIVED VALUE INSTEAD OF THE FACT** (his blockers 1-5): exponent not tick · one writer not the class · raw symbol not canonical · covered count not universe · a failed lookup's provenance not the asset class.
-2. ★★ **ASSERT A CHECK INSTEAD OF RUNNING IT.** Every control that could not fire passed a READING and failed a MUTATION. ⇒ **RUN THE MUTATION, NEVER READ THE TEST.** ⚠️ **A ONE-DIRECTIONAL CHECK CERTIFIES THE OPPOSITE ERROR** — my `isOnGrid` fix passed every on-grid case and began ACCEPTING off-grid prices; and my BLOCKER-11 fix introduced a race that only the *persisting-fault* arm caught. **Write both arms.**
-3. ★★★ **`fix-follows-pointer` — LANGSTON NAMED IT, and it is now in `MISTAKE_PATTERNS.md` with five instances.** The defect STAYS PUT; the FIX travels to whichever instance the last reviewer pointed at. `1e-9` appeared FOUR times in one file and I fixed one. ⇒ ✅ **MECHANISM: when a defect is named, GREP THE CLASS before fixing the instance, and STATE what the grep returned.** *(§9.5(a)'s census, applied to defect classes instead of callers. Stating it is the load-bearing half — an unstated grep is indistinguishable from one never run.)*
+**★ THE ARTIFACT:** `…/Batch Completion/F_G_1_PROGRESS_REPORT.md` — §3 the pre-registered criterion (30 crypto opens or 7 days; **crypto bar ABSOLUTE, 100% on grid**), §3a co-denominators, §3b the live classifier control, §3c the xStock denominator. **Reconciliation reads `metadata.gridAtBirth` off the row, NOT a live map.**
+⛔ **POST-DEPLOY CRYPTO IS `resolved:true` OR IT IS A DEFECT** — passthrough is xStock-only, so an unstamped crypto row is a **bypass finding**, never cold-start.
 
-⛔ **AND THE INSTRUMENT LESSONS, which cost more than the code:**
-- **A mutation harness reported three clean "NOT DETECTED" verdicts having captured NO OUTPUT AT ALL.** ⇒ **every mutation table now prints a BASELINE and a RESTORED line either side.**
-- **An edit script printed its success lines BEFORE the file write, then crashed — nothing was written and I reported it fixed.** ⇒ **READ THE OBJECT BACK FROM DISK, never the tool's own report.** *(And my read-back window was itself wrong once — `+30` lines missed a hit at `+44`.)*
-- **`gh project item-list` returns NOTHING for cards that exist.** ⇒ **read the board at the GraphQL API.** Langston warned me and my own read-back had already hit it silently.
-- ⚠️ **A SUBAGENT DESTROYED UNCOMMITTED WORK with `git checkout --`.** Tell readers: read-only, no git writes. Verify any file one touched.
-- ⚠️ **LINE ENDINGS: the repo stores `.ts`/`.md` as LF, checkout gives CRLF, and stray CRs make autocrlf refuse to normalise ⇒ a 308-line phantom rewrite.** ✅ **ALWAYS compare `git diff --cached --numstat` against `--ignore-all-space --numstat` BEFORE committing.**
+**★ LIVE EVIDENCE ALREADY CAPTURED:** 452→453/476 grids derived at boot · **79 signals, ALL `would_round`, ZERO on-grid**; later **187 → `{would_round:183, on_grid:4}`** (the other arm fires — small-sample artifact retired) · 3 refusals with **counter matching log exactly 3/3** · the stamp on a real row: `{"tick":0.001,"resolved":true,"provenance":"venue_published"}`.
 
-⛔ **THE HONEST LIMIT, now in SIM 9.14b AND the System Manual (BLOCKER-9), not just the change list: F-G-1 guarantees prices are on the grid AS THE ORCHESTRATOR EMITS THEM. THREE execution paths bypass the seam** — `#928` HTTP intent path (error string claims it checks prices; it does not) · `#929` a SECOND sizing caller · `#927` `entry*1.02` fabricated in three places, one the RTB **ranking** key. **`#930`** split out: a stored `"0"` is a truthy string ⇒ zero target. ⚠️ **Defect confirmed by construction; INCIDENCE UNMEASURED — the columns are `notNull`, so the exposure is a stored zero and nobody has queried for one.**
+⛔⛔ **THE PATTERNS THIS BATCH PRODUCED — memory keeps these, the repo keeps the enumeration:**
+1. **BRANCH ON A DERIVED VALUE INSTEAD OF THE FACT** (his blockers 1-5).
+2. **ASSERT A CHECK INSTEAD OF RUNNING IT.** Every dead control passed a READING and failed a MUTATION. ⇒ **RUN THE MUTATION.** ⚠️ **A ONE-DIRECTIONAL CHECK CERTIFIES THE OPPOSITE ERROR** — my `isOnGrid` fix began ACCEPTING off-grid prices; my latch fix introduced a race only the *persisting-fault* arm caught. **Write both arms.**
+3. ★★ **`fix-follows-pointer` — HIS, now in `MISTAKE_PATTERNS.md`.** The defect stays put; the fix travels to whichever instance the last reviewer pointed at. ⇒ ✅ **GREP THE CLASS BEFORE FIXING THE INSTANCE, AND STATE WHAT THE GREP RETURNED.**
+4. ★ **AN ALLOW-LIST IS NOT A PASS-THROUGH.** I stamped `rawSignal.metadata` and asserted it flowed; the RTB rebuild is an **explicit field list** and the stamp DIED — **third instance of a defect the file documents at that exact line (`#550`), with the warning on screen.**
+5. ★ **A NAME-OCCURRENCE COUNT IS NOT A CONTROL** — my own fence asserted an identifier appeared exactly twice and broke on a correct change.
 
-**★ MINE, ALL PLACED IN `PHASE_19_PLAN`:** `#918` (impact NIL n=4, **not OBJ-9's headline**) · `#919`→3e · `#921` · `#922`→3f · `#923`→**F-G-2**/3c · `#924`→3g · **`#925` AMENDED (my "NO WORK" was wrong on my own facts)**→3j **whose ORDER is load-bearing** · `#927`→3i · `#928`+`#929`→3h · `#930`→3i.b.
+⛔ **INSTRUMENT LESSONS (they cost more than the code):** a mutation harness that reported three clean verdicts **having captured no output** · an edit script that **printed success before the write, then crashed** (hit TWICE — read back from disk, never the tool's report) · `gh project item-list` returning nothing for cards that exist (**read the board at the GraphQL API**) · **pm2 `--lines N` covers ~1s** on this feed — grep `/var/log/dawntrader/out.log` · Langston's own `items(first:50)` on a 62-item board — **assert `len == totalCount` before asserting absence** · **LINE ENDINGS: repo stores LF, checkout gives CRLF — ALWAYS diff `--numstat` vs `--ignore-all-space --numstat` before committing.**
 
-⚠️ **KYLE'S STANDING CORRECTIONS:** pairs/coins are NEVER "markets" · a report naming findings without a disposition, severity and owner is not a report · do not claim a step we are not in · **spin up a FRESH reader each revision and hand the corrected version to a NEW one.**
-⚠️ **LANGSTON'S MEMORY: ZERO F-G-1 content, 45KB (~2x guidance) — OWED AT STEP 10 (10.b). Never write it mid-invoke.**
+⛔ **STEP 10 OWES:** `BATCH_CATALOG` · `PHASE_HISTORY` · `PHASE_19_PLAN` §1+§5 · shared `MEMORY.md` · **Langston's `/home/langston/MEMORY.md` (he prunes FIRST — 48KB vs 24KB cap, his cut, do not touch until he says)** · convert the progress report → completion report · **`resolve --evidence` on alert `ebd151de`** · **`B-BALANCE-TRUTH` closed or converted in the SAME turn** (declared OPEN in `GOVERNANCE_EXCEPTIONS`, owner me, state verified at the ref — the row does NOT claim its objectives are done).
 
 ⛔ **STEP-10 OWES SIX TIER-1 DOCS, ALL UNTOUCHED:** `BATCH_CATALOG` · `PHASE_HISTORY` · `PHASE_19_PLAN` §1+§5 · **the SHARED `MEMORY.md`** · **Langston's `/home/langston/MEMORY.md`** · completion report. ⚠️ **SIM + System Manual were written at STEP 3 (plan items P6/P7) and MUST BE RE-VERIFIED at step 10 — they predate all eleven blocker/reader fixes.**
 
