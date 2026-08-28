@@ -55,14 +55,59 @@ Two consequences, and they are different:
 
 | | PASS | FAIL |
 |---|---|---|
-| **CRYPTO** | **100% of entry, stop and target on their published grid. No tolerance.** | ⛔ **ANY single off-grid leg.** The seam refuses or rounds — there is no third outcome — so one exception is not noise, it is **a live bypass path** (`#927`/`#928`/`#929`) and is itself the finding |
+| **CRYPTO** | **100% of entry, stop and target on their published grid. No tolerance.** | ⛔ **ANY single off-grid leg.** The seam refuses or rounds — there is no third outcome — so one exception is not noise, it is **a live bypass path** — one of `#927`/`#928`/`#929` **or a fourth nobody has named yet**, and which one is the investigation, not the conclusion. It is itself the finding |
 | **xSTOCK** | on-grid **OR** the symbol absent from the derived map at open time — the passthrough arm is *designed* to ship unrounded when our own archive has no grid | an off-grid leg on a symbol that **did** have a derived grid |
 
-★ **WHY CRYPTO'S BAR IS ABSOLUTE:** for crypto the tick is the venue's own published statement, so the seam either rounds to it or refuses. A crypto trade that opens off-grid therefore did not come through the seam — which makes this criterion a live test of the three named bypass paths as well as of the rounding.
+★ **WHY CRYPTO'S BAR IS ABSOLUTE:** for crypto the tick is the venue's own published statement, so the seam either rounds to it or refuses. A crypto trade that opens off-grid therefore did not come through the seam.
+
+⛔⛔ **STRUCK 2026-08-28, BEFORE ANY DATA READ — Langston's attack 1, and it is the sentence that would have been quoted.** This paragraph continued: *"…which makes this criterion a live test of the three named bypass paths as well as of the rounding."* **THAT IS AN OVERCLAIM.** The instrument reads `entry/stop/target` off **opened positions**, and a PASS would have laundered into *"the three holes are clean."* **Per-hole reachability, pre-registered:**
+
+| hole | reachable by this instrument? |
+|---|---|
+| `#927` — fabricated `entry * 1.02` in the **RTB ranking key** | ⛔ **UNREACHABLE BY THIS INSTRUMENT.** It is a *ranking input* and never becomes a stored position leg. Structurally invisible in **either** direction — a PASS says nothing about it |
+| `#927` — fabricated target that DOES persist | ◐ **PARTIAL.** Counted, not inferred: positions where `target_price / entry_price` sits within float tolerance of exactly `1.02`. Reported as a count, never as an absence |
+| `#928` — HTTP intent path | ⛔ **UNREACHABLE UNLESS INVOKED, and nothing counts invocations.** A never-exercised path is silent at **zero opportunity**, however loud the check — Langston's own `#661` leg 3. **A PASS is not evidence about this path** |
+| `#929` — second position-sizing caller | ⛔ **Same. UNREACHABLE UNLESS INVOKED, uncounted** |
+
+⇒ **THE CRITERION TESTS THE ROUNDING. IT DOES NOT CLEAR THE THREE HOLES**, and no reading of it may be written as though it did.
 
 **BASELINE FOR THE COMPARISON:** entry 80.8% / stop 2.7% / target 9.9%, n=406 closed crypto trades, pre-batch.
 
 ---
+
+### 3a. ⛔ WHAT "UNDERPOWERED" MUST DISCRIMINATE (Langston attack 2)
+
+**`UNDERPOWERED` as first written collapsed two different worlds:** fewer than 30 opens can mean a **net-EV drought** (`#570` — `rtb_signals` sat empty for 2+ days in July) **or the seam refusing at volume.** The first is weather; **the second is a finding**, and one label cannot carry both.
+
+⛔ **THE EXPECTED RATE, STATED NOW BECAUSE I PICKED 30 WITHOUT ONE — which makes a quantity a period wearing a quantity's clothes.** Measured over the 8 days to 2026-08-28, crypto opens/day: **23, 7, 6, 5, 5, 5, 4, 2 — median 5, mean ~7.** ⇒ **30 opens at the median needs ~6 days against a 7-day cap.** The window is therefore **marginal by design and likely to terminate at or near the cap.**
+★ **THE THRESHOLD IS NOT BEING LOWERED NOW THAT THE RATE IS KNOWN.** Moving it after the attack is exactly the goalpost-shift this section exists to prevent. What changes is that the **co-denominators carry the read** when n is short.
+
+**MANDATORY AT READ TIME — all four over the SAME window, or the read is not reportable:**
+`grid evaluations` · `grid refusals by reason` · `crypto positions opened` · `signals generated`.
+⇒ **few opens + many evaluations + many refusals = a FINDING. Few opens + few evaluations = weather.**
+
+### 3b. ✅ POSITIVE CONTROL ON THE **LIVE** CLASSIFIER — RUN, NOT ASSUMED (Langston attack 3)
+
+The `0 of 79 already on grid` reading came from the **live** `evaluateGridForTagging`, a different object on a different path from the offline `tick_size` matcher I had proved. **A 79/79 unanimous result is exactly the shape of an arm that cannot return the other value** (`#704`'s lesson: a control must match the stream it licenses an absence about).
+
+**RUN 2026-08-28 against the DEPLOYED source at `ca9090724`, on staging:**
+```
+ON-GRID triple  -> verdict = on_grid       (must be on_grid)
+OFF-GRID triple -> verdict = would_round   (must be would_round)
+CONTROL RESULT: BOTH ARMS FIRE
+```
+⇒ **the unanimity is a measurement, not a stuck arm.** ⚠️ It remains a control on the *classifier*, not on the *population*: it licenses reading 79/79 as real; it says nothing about whether 79 is a representative sample.
+
+### 3c. ⛔ THE xSTOCK PASS ARM'S DENOMINATOR, PRE-REGISTERED (Langston attack 4)
+
+*"on-grid **OR** absent from the derived map"* is an unbounded escape hatch unless the absent set is fixed in advance — otherwise **the arm can pass by its denominator quietly shrinking.** Per `#933` the map is rebuilt only at boot and on a 6-hour timer, so the set is knowable.
+
+**MEASURED AT THE DEPLOY BOOT: 452 derived / 24 skipped of 476.** The skipped set, read from the refresher's own SQL 2026-08-28 (22 symbols at that moment — the 24h window rolls, and that drift is itself part of what must reconcile):
+
+`AMBR/USD · BHC/USD · BLDP/USD · BMBL/USD · EVGO/USD · EWN/USD · EWS/USD · FUFU/USD · GOTU/USD · KRAQ/USD · LIDR/USD · PARA/USD · ROOT/USD · SLMT/USD · STRK/USD · SUIG/USD · TAL/USD · TBLL/USD · TONX/USD · TOTL/USD · TRON/USD · UWMC/USD`
+
+⛔ **RECONCILIATION REQUIRED AT READ TIME:** every xStock passthrough in the window must name a symbol **on this list or on a later boot's equivalent list**. **A passthrough on a symbol that HAD a derived grid is a FAIL, not an escape.**
+★ **ONE ALREADY RECONCILES:** the live log at 16:10:57 shows `ROOT/USD/sma_trend_ride verdict=grid_unknown` — and `ROOT/USD` is on the list above. The mechanism and the denominator agree on a real event.
 
 ## 4. WHAT IS UNPROVEN, AND WHAT WOULD FALSIFY IT
 
