@@ -124,6 +124,33 @@ try {
 
 const app = express();
 
+// ⛔⛔ HOTFIX 2026-08-28 (#935) — WITHOUT THIS, THE LOGIN RATE LIMIT IS GLOBAL, NOT PER-CLIENT,
+// AND ANY FIVE ATTEMPTS LOCK OUT EVERY USER FOR 15 MINUTES.
+//
+// THE CHAIN: client → Caddy(:443) → nginx(:8080) → app(:5000). nginx forwards the real client in
+// `X-Forwarded-For`, but Express does not read XFF unless it is told to trust the proxy — so
+// `req.ip` resolved to the PROXY's address (127.0.0.1) for EVERY request. `express-rate-limit`
+// keys on `req.ip`, so all users — and any localhost `curl` on the box — shared ONE 5-attempt
+// bucket.
+// ⚠️ MEASURED, not inferred: `/var/log/nginx/access.log` logs `127.0.0.1` as the remote address
+// for real browser traffic, because Caddy is nginx's client. nginx's own `X-Real-IP $remote_addr`
+// is therefore ALSO Caddy, not the user. The real client survives only in `X-Forwarded-For`.
+//
+// ★ WHY `2` AND NOT `true`: it is the number of trusted hops (Caddy, then nginx). `true` would
+// trust the leftmost XFF entry, which a client can forge by sending its own `X-Forwarded-For` —
+// that would let an attacker rotate a header to bypass the limit entirely. With `2`, Express
+// takes the entry two from the right, which is the one Caddy wrote; a forged entry sits further
+// left and is ignored. Trusting too much here is a worse bug than the one being fixed.
+//
+// BLAST RADIUS, censused before the change (hotfix §2):
+//   • rate limiters in the tree: EXACTLY ONE (`loginLimiter`, routes.ts) — stated explicitly.
+//   • other readers of `req.ip` / `req.ips` / XFF / X-Real-IP: ZERO.
+//   • `req.protocol` readers: ONE (`routes.ts`, self-referential base URL for a calibration
+//     self-check). It becomes `https` instead of `http`; that URL already 302-redirected to HTTPS
+//     via Caddy and `fetch` follows redirects, so the call now goes direct instead of via a
+//     redirect. No behaviour depends on the scheme string itself.
+app.set('trust proxy', 2);
+
 // CORS Configuration - restrict access to allowed origins only
 // Set ALLOWED_ORIGINS env var to comma-separated list of allowed domains
 // e.g. ALLOWED_ORIGINS=https://staging.dawntrader.com,https://dawntrader.com

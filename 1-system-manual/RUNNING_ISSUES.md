@@ -4452,6 +4452,24 @@ Kraken publishes a per-pair `tick_size` — **1,437 pairs, 11 distinct values, a
 ⇒ **INTERIM, LANDED IN THIS BATCH:** the miss is now LOUD — `[F-G-1][GRID_EVENT_UNCOUNTED]` on stderr naming the class and the reason, so an uncountable grid event announces itself instead of counting nothing quietly.
 ⇒ **HOME: `B-FUNNEL-PERP-CLASSES`, owner CC-C, placed in `PHASE_19_PLAN` §1 immediately after the perp active-path wiring item — it must land BEFORE perps trade, not after.** The widening is still not F-G-1's job; what changed is that "cannot happen" is no longer true, only "cannot happen yet."
 
+### #935 OPEN 2026-08-28 (CC-C — HOTFIX; surfaced by locking KYLE out of his own system) — THE LOGIN RATE LIMIT IS GLOBAL, NOT PER-CLIENT, SO ANY FIVE ATTEMPTS LOCK OUT EVERY USER
+
+**Chain:** client → Caddy(:443) → nginx(:8080) → app(:5000). nginx forwards the real client in `X-Forwarded-For`, but **Express is never told to trust the proxy** (`trust proxy` set NOWHERE — censused), so `req.ip` resolves to the **proxy's** address for every request. `express-rate-limit` keys on `req.ip` ⇒ **all users, plus any localhost `curl` on the box, share ONE 5-attempt / 15-minute bucket.**
+
+⚠️ **MEASURED, NOT INFERRED:** `/var/log/nginx/access.log` records `127.0.0.1` as the remote address for real browser traffic, because Caddy is nginx's client. **nginx's own `X-Real-IP $remote_addr` is therefore also Caddy, not the user** — the real client survives only in `X-Forwarded-For`.
+
+⛔ **SECURITY IMPACT IN BOTH DIRECTIONS, which is why it is not merely an annoyance:** (a) **anyone on the internet can lock the owner out of the trading system** with five wrong passwords, repeatably — a trivial denial of service; (b) brute-force protection is **weaker** than intended, because one attacker consumes everybody's allowance instead of their own.
+
+**HOW IT SURFACED, recorded because the cause matters:** I called the login endpoint repeatedly from the server while measuring F-G-1, and **Kyle was locked out of the UI.** My own memory file carries the warning *"`/api/auth/login` allows 5 per 900 s — get ONE token and reuse it"* and I did it anyway. **The carelessness is mine; the shared bucket is the defect.**
+
+**FIX:** `app.set('trust proxy', 2)` in `server/index.ts` — the number of trusted hops (Caddy, then nginx). ⛔ **Deliberately NOT `true`:** that trusts the leftmost `X-Forwarded-For` entry, which a client can forge, letting an attacker rotate a header and bypass the limit entirely. **Trusting too much here is a worse bug than the one being fixed.**
+
+**BLAST RADIUS, censused before the change (hotfix §2):** rate limiters in the tree — **EXACTLY ONE**, stated explicitly · other readers of `req.ip`/`req.ips`/XFF/`X-Real-IP` — **ZERO** · `req.protocol` readers — **ONE** (a self-referential base URL for a calibration self-check; becomes `https` instead of `http`, and that URL already 302-redirected to HTTPS with `fetch` following redirects, so it now goes direct instead of via a redirect).
+
+★ **SEPARATE FINDING, FOUND WHILE UNBLOCKING: `resetRateLimiter()` HAS NEVER RUN ON STAGING.** `server/startup/rate-limiter-reset.ts` returns immediately when `NODE_ENV === "production"`, and staging **is** production. Its comment claims it *"guarantees a clean state"*. **What actually clears the limiter on restart is the process being new** — the helper is inert. ⇒ **a mechanism believed to be doing work and doing none**, the recurring shape of this whole arc. **HOME: folded into this hotfix's follow-up or its own item — CC-C's call at the close, not deferred silently.**
+
+⇒ **Kyle DIRECTED the fix and DIRECTED the immediate unblock.** Unblock done by `pm2 restart` (in-memory store starts empty), verified by a single live login returning **HTTP 200** — one attempt spent deliberately, because "I restarted" is not "you can log in".
+
 ### #934 OPEN 2026-08-28 (CC-C, found at F-G-1 Step-7 UI verification — Kyle directed the browser check) — THE VPG ROW'S TWO NUMBERS RENDER UNDER COLUMN HEADERS THAT DESCRIBE SOMETHING ELSE
 
 **Seen on BOTH the Crypto and xStock Filter Diagnostics tabs**, Pipeline Summary (24h) table, at the deployed sha. The table's headers are `Stage | Quant | Pattern | Total | Counting Basis`. The VPG row emits its would-fail count in a **`colSpan={2}`** cell (`vts-filter-diagnostics-panel.tsx:507`) that is **right-aligned**, so it lands visually under **`Pattern`**; the population then lands under **`Total`**.
