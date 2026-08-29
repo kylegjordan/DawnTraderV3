@@ -803,3 +803,35 @@ and directly beneath it, the line the whole batch was framed on:
 I hypothesised **coarse xStock detection** - if xStock updated far less often, the mark at a valid check would be a draw either side of the stop, giving symmetric wide scatter. **Measured, 7 days:** xStock median inter-snap gap **4.61 s**; crypto **20.05 s**.
 **REFUTED FOR xSTOCK - 4.61 s is not coarse.** **AND THE CRYPTO NUMBER IS A WRONG-OBJECT READ THAT I AM NOT USING:** for xStock the archive and the mark are written in the **same call**, so the snap gap IS the mark cadence; for crypto the archive is a **different path** from the engine's price cache, whose measured evaluation cadence is **~1,500 ms** (section 10.4). **The two columns are not the same quantity and must not be compared** - stated because the table above puts them side by side and invites exactly that.
 
+## 19. CANDIDATE 2 NOT SUPPORTED, MY SPREAD-IDENTIFIER FAILS - AND THE ANOMALY SURVIVES A MATCHED-SPREAD COMPARISON
+
+**The test:** `#943`'s physical signature is a WIDE spread (shut market). If wide-spread rows exist OUTSIDE the 00:15 minute and behave like the cohort, then candidate 2 is real **and** spread becomes the positive row identifier `#943` owes, replacing the time proxy. **xStock `stop_hit`, all 144, split three ways:**
+
+| group | n | below stop | % | median deviation | median spread |
+|---|---|---|---|---|---|
+| **A** 00:15 cohort | 39 | 7 | **17.9%** | **-2.8149%** (ABOVE stop) | 4.20% |
+| **B** wide spread, NOT 00:15 | 15 | 9 | **60.0%** | **+0.4223%** (BELOW stop) | **8.77%** |
+| **C** normal spread, not 00:15 | 90 | 44 | **48.9%** | **-0.0011%** (AT the stop) | 0.157% |
+
+### 19.1 BOTH THINGS I WAS TESTING FOR COME BACK NEGATIVE
+
+**CANDIDATE 2 - NOT SUPPORTED.** Group B is not a leak of the same defect: it skews **BELOW** the stop while the 00:15 cohort skews **ABOVE**, and its spreads are **wider** than the cohort's (8.77% vs 4.20%). **Opposite direction on a wider signature is not the same phenomenon.**
+**AND MY PROPOSED IDENTIFIER FAILS WITH IT.** I expected spread to replace the minute-of-close proxy as `#943`'s positive identifier. **It cannot: wide spread outside 00:15 produces the opposite behaviour.** => **`#943` still owes a positive row identifier, and it is NOT the spread.** *(Recorded because the proposal was mine and it would otherwise look untried.)*
+
+### 19.2 THE RESULT THAT MATTERS - THE ANOMALY SURVIVES ON MATCHED SPREAD REGIMES
+
+**The obvious remaining explanation for the class difference was that xStock's quotes are simply wider, so its exits scatter. Group C settles it.**
+
+| | n | median spread | below stop |
+|---|---|---|---|
+| **crypto, POST-epoch** | 24 | **~0.109%** (from the 0.0545% median half-spread) | **24 = 100%** |
+| **xStock group C** | 90 | **0.157%** | **44 = 48.9%** |
+
+=> **COMPARABLE SPREAD REGIMES, OPPOSITE SIDEDNESS.** Crypto is 100% one-sided at a tight spread; xStock at a similarly tight spread sits **dead on its stop** (median -0.0011%). **"xStock spreads are wider" is eliminated as the explanation**, and the anomaly is now stated on the cleanest population either class has.
+
+### 19.3 AN OBSERVATION I AM NOT PROMOTING TO A FINDING
+
+**Group B - 15 xStock stop-outs, median spread 8.77%, 60% below stop, median +0.4223%.** That is the crypto-like direction appearing on xStock's widest-spread rows. **n=15, and I have not tested it against anything.** **NOT a finding, NOT dispositioned as one** - recorded so it is not re-discovered as novel, and because if it survives it would be the first xStock evidence pointing the same way as crypto.
+
+**DISPOSITION (section 9.4): (1) fold into the work in hand.** Candidate 2 closed as not-supported; the spread-identifier proposal withdrawn with its measurement; **candidates 3 and 5 remain open, and 5 remains untestable until `BLOCKER-3` wires an instrument.**
+
