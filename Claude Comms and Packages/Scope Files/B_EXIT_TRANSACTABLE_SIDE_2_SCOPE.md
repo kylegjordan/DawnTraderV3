@@ -629,3 +629,73 @@ A near-zero xStock median would be worthless if xStock exits were simply **snapp
 
 **DISPOSITION (§9.4): (1) folded into the work in hand.** ⛔ **`OBJ-3`'s narrowing is a RECOMMENDATION TO LANGSTON at Step 4, not an edit I make to the objective.**
 
+## 16. LANGSTON'S THREE PRE-REGISTERED CONDITIONS ON THE `OBJ-3` NARROWING - MEASURED
+
+> **His ruling (2026-08-29): NARROWING GRANTED CONDITIONAL. Criteria fixed BEFORE I looked: (a) shifted-series power >=80% - (b) both epoch halves coin-like at 0.05 - (c) the symmetry conclusion invariant to the `#943` exclusion. Any failure => `OBJ-3` stands as approved, both classes.**
+> **AND HE STRUCK MY HEADLINE:** *"Your statistics are not the strongest argument and I want you to stop leading with them."* **He is right, and section 15 led with `24/24` and `p ~ 6e-8`.**
+
+### 16.0 THE ARGUMENT THAT ACTUALLY CARRIES THE ARM - MECHANISTIC, WITH THE LINE (his 29(c))
+
+| path | the price the exit decision reads |
+|---|---|
+| **crypto** | `kraken-websocket-adapter.ts:680` -> `translateV2ToV1(update)` -> `c[0]`, and `kraken-v2-translator.ts:53-58` sets that to **`(bid + ask) / 2`** whenever both sides exist |
+| **xStock** | **`active-execution-engine.ts:1230` - `currentPrice = _eqTick.price;`** - a **SCALAR**. **There is no bid/ask pair on this leg to take a midpoint of.** The code says so itself at `:1232`: *"there is no adapter quote object on this leg."* |
+
+=> **THE SUBSTITUTION HAS NO xSTOCK ANALOGUE BY CONSTRUCTION. Replacing "the mid" with "the bid" is not unnecessary on xStock - it is UNDEFINED there, because there is no mid.** **This discharges the arm without a single p-value. The statistics CORROBORATE; they do not decide.**
+
+### 16.1 CONDITION (3) - THE NUMBER HE SAID WAS MISSING, AND IT RUNS THE **OPPOSITE** WAY
+
+**His worry:** *"If it runs strongly one-sided, the exclusion manufactured the symmetry."* **It IS strongly one-sided - and in the direction that makes the worry not apply.**
+
+| series | n | below stop | % | exact two-sided p |
+|---|---|---|---|---|
+| **the EXCLUDED `#943` cohort** | 39 | **7** | **17.9%** | **7.0e-05** |
+| xStock, exclusion **ON** | 105 | 53 | **50.5%** | 1.00 |
+| xStock, exclusion **OFF** | 144 | 60 | **41.7%** | **0.0549** |
+
+=> **The cohort is strongly ABOVE stop. Excluding it removed ABOVE-stop rows, so the exclusion moved xStock TOWARD 50%, not away from crypto's below-stop bias.** => **it cannot have manufactured a false absence of a BELOW-stop bias.**
+**(c) HOLDS - but MARGINALLY, and I am not rounding that away: with the exclusion OFF, `p = 0.0549` against a 0.05 threshold.** **What is robust is the thing actually at issue: BOTH readings are <=50.5% below, against crypto's 100%. Any residual xStock lean is OPPOSITE in direction to crypto's.**
+
+### 16.2 CONDITION (a) - POWER, DISTRIBUTION-FREE, AND IT SETTLES HIS DISPERSION OBJECTION
+
+His point: robust sigma from my own p10/p90 is **0.257** while the stddev is **1.396**, implying power of **>99%** or **~16%** - *"the absence is either decisive or vacuous."*
+**Run as he specified - add crypto's `+0.1657` to each observed xStock deviation, recount, sign test. No distributional assumption.**
+- **shifted below-stop rate `p1 = 90/105 = 0.8571`**
+- rejection region `k <= 41` or `k >= 64` (n=105, alpha=0.05 two-sided)
+- **POWER = 100.0% - PASS.**
+=> **The stddev of 1.396 is outlier-inflated; the DENSITY NEAR ZERO is tight, which is what a sign test keys on. The absence is decisive, not vacuous.**
+
+### 16.3 CONDITION (b) - BOTH HALVES COIN-LIKE, AND ONE OF THEM IS UNINFORMATIVE
+
+| half | n | below | % | p |
+|---|---|---|---|---|
+| **PRE** | **101** | 52 | 51.5% | 0.842 |
+| **POST** | **4** | 1 | 25.0% | 0.625 |
+
+**PRE passes on real power.** **POST passes the LETTER and is EVIDENCE OF NOTHING - a sign test at n=4 cannot reject any hypothesis, so its "coin-like" is the instrument being silent, not the series being symmetric (`#661` leg 3).** **I am reporting it as a pass-by-vacuity rather than banking it, because condition (b) was written to replace my pooling argument with measurement - and at n=4 there is no measurement.**
+=> **The pooling he told me not to argue is now unnecessary for PRE and unresolved for POST.** **His `#675` point stands: `exit_book_mid` NULL is evidence about what xStock POPULATES, not about what the epoch TOUCHED. I am not re-arguing it.**
+
+### 16.4 NEW, AND IT ANSWERS HIS *"one-day-old minute-of-close proxy is load-bearing"* DIRECTLY
+
+**The `#943` exclusion is no longer only a time proxy - it has an independent PHYSICAL signature.** Spread at close, from the equities ticker snapshots:
+
+| cohort | n | median spread | p90 | over 1% |
+|---|---|---|---|---|
+| **00:15** | 65 | **8.2192%** | **39.15%** | **49 of 65** |
+| all other xStock | 167 | **0.1665%** | 1.59% | 21 |
+
+=> **~49x wider at the median.** **That is the signature of a SHUT MARKET, and `00:15` UTC is `20:15` ET - minutes after US extended hours end.**
+**AND IT CONVERGES WITH LANGSTON'S OWN INDEPENDENT TRIAGE THE SAME DAY** (the `Exit checks skipped` alerts): *"the price we're carrying for these two isn't a price anyone traded at... with the market shut..."* - **he found it on the WEEKEND boundary from the alert side; `#943` is the DAILY boundary from the trade side. Same root, two instruments, neither derived from the other.**
+=> **The cohort is a physically distinct population, not a cherry-pick.** **The proxy is still a proxy - `#943` still owes a positive row-level identifier - but it is now corroborated rather than asserted.**
+
+### 16.5 => AGAINST HIS CRITERIA
+
+| criterion | result |
+|---|---|
+| **(a) shifted-series power >=80%** | **PASS - 100.0%** |
+| **(b) both epoch halves coin-like at 0.05** | **PASS ON THE LETTER.** PRE genuine (n=101, p=0.842); **POST vacuous (n=4)** |
+| **(c) invariant to the `#943` exclusion** | **PASS, MARGINALLY** - exclusion-off `p=0.0549`; **and the excluded cohort is one-sided in the OPPOSITE direction, so it cannot have manufactured the absence** |
+
+**I HAVE NOT EDITED `OBJ-3`.** Two of three pass with a caveat I am not smoothing over, and **his instruction was explicit: do not edit the objective yet.** => **returned to him for confirmation.**
+**If confirmed, the narrowed arm ships as he specified: a FENCE WITH A DERIVED SUBJECT** (F-G-1 precedent - never a name list) **asserting no xStock exit path reads a book mid, so a future mid-based path fails CI instead of passing silently.**
+
