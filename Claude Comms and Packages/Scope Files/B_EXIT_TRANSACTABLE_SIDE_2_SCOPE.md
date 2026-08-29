@@ -835,3 +835,37 @@ I hypothesised **coarse xStock detection** - if xStock updated far less often, t
 
 **DISPOSITION (section 9.4): (1) fold into the work in hand.** Candidate 2 closed as not-supported; the spread-identifier proposal withdrawn with its measurement; **candidates 3 and 5 remain open, and 5 remains untestable until `BLOCKER-3` wires an instrument.**
 
+## 20. CANDIDATE 5 REFUTED WITH EXISTING DATA - AND I TESTED MY OWN HEADLINE FOR INDEPENDENCE
+
+### 20.1 CANDIDATE 5 IS DEAD, AND IT DID NOT NEED THE INSTRUMENT I SAID IT NEEDED
+
+Section 18.3 said candidate 5 was untestable because `latch_trigger_price` is empty. **That was true of the DIRECT test and false of the question.** A break-even ratchet moves the stop UP to about the entry price - **so a BE-ratcheted stop-out must exit at ~entry.** That is testable from columns that are fully populated.
+
+**xStock `stop_hit`, `#943` cohort and wide-spread rows excluded, n=90:**
+
+| | n | p10 vs entry | median vs entry | p90 vs entry | within 0.25% of entry |
+|---|---|---|---|---|---|
+| **exits ABOVE its stop** | 46 | -4.922% | **-2.749%** | -1.749% | **1 of 46** |
+| exits BELOW its stop | 44 | -3.800% | **-2.821%** | -1.361% | 1 of 44 |
+
+=> **REFUTED. Rows that exit ABOVE their recorded stop are still ~2.7% BELOW their entry price** - they are ordinary losing stop-outs, not stops that had been ratcheted up to break-even. **One row in 46 sits near entry.**
+=> **And the two groups are INDISTINGUISHABLE relative to entry (-2.749% vs -2.821%).** They are the same kind of trade; the only difference is which side of the *recorded* stop they landed on. **The xStock symmetry is not a ratchet artifact, and the comparison in sections 15-19 is not confounded by one.**
+
+**METHOD NOTE ON MYSELF: I declared this untestable one section ago because I reached for the direct instrument and stopped when it was empty.** The question was answerable from `entry_price`, which is populated on all 144. **Same shape as section 10.1, where I nearly filed the basis-gap test as blocked on `#911` while 13.3M usable rows sat one census away.** => **BEFORE RECORDING SOMETHING AS UNTESTABLE, ASK WHAT ELSE WOULD HAVE TO BE TRUE.**
+
+### 20.2 AND I PUT MY OWN HEADLINE THROUGH THE CHECK I HAD ONLY APPLIED TO xSTOCK
+
+`24/24` at `p ~ 6e-8` **assumes independent draws.** If those 24 crypto stop-outs were a handful of symbols in a short window, the effective n is far smaller and I have been over-quoting my own strongest number.
+
+**Measured: 24 stop-outs across 20 DISTINCT SYMBOLS, 6 DAYS and 21 DISTINCT HOURS** (2026-08-23 04:45Z -> 2026-08-28 16:10Z). Most-repeated symbol is `TRUMP/USD` at 3; then `AAVE/EUR` and `ZEC/USD` at 2.
+=> **Well spread, not clustered.** **Conservatively collapsing to one draw per symbol still gives 20 one-sided draws, `p ~ 1.9e-6`.** **The headline survives, and it survives a test I ran against myself rather than against the side I wanted to cut.**
+
+### 20.3 => WHERE THE ANOMALY NOW STANDS
+
+**ELIMINATED WITH NUMBERS:** the `_last` fallback arm (2 of 14.5M) - the `#636` carried mark (0) - residual `#943` contamination outside 00:15 (opposite direction) - **spread regime** (matched at ~0.11% vs 0.157%, opposite sidedness) - **detection cadence** (xStock 4.61s) - **the BE-ratchet artifact** (exits sit 2.7% below entry).
+**STILL OPEN:** candidate 3, a genuinely buried small offset - **against which section 16.2 measured 100% power at xStock's own half-spread.**
+
+=> ⛔ **THE HONEST STATE: THE MIDPOINT MECHANISM IS ON BOTH CLASSES, THE SIDEDNESS IS ON ONE, AND SIX EXPLANATIONS ARE DEAD.** ★ **That is a better-framed question than the one Langston handed me, and it is NOT a licence to narrow `OBJ-3` - it is the reason `OBJ-3` must stay as approved: the xStock arm is what would settle it.**
+
+**DISPOSITION (section 9.4): (1) fold into the work in hand.**
+
