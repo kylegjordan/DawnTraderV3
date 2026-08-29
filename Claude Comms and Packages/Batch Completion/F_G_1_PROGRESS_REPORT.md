@@ -345,6 +345,23 @@ target          0.5613 / 0.0001 = 5613   ON GRID
 - ✅ **FOUR POSITIVE CONTROLS RUN, all fired:** off-grid leg · `ABSENT` stamp · `resolved:false` · missing intent-side leg. ✅ **NEGATIVE CONTROL: the real `SPX/USD` row passes.** ★ **The alarm is now proved able to say both words.**
 
 ---
+### 3k. ➕ `never_filled` ROWS — THE DENOMINATOR DECIDED **BEFORE** MORE DATA ARRIVES (Langston-directed)
+
+⛔⛔ **THIS HAD TO BE FIXED NOW OR THE WINDOW'S SIZE WOULD BE DATA-DEPENDENT** — i.e. decidable after seeing which answer helps. **Langston: *“Decide it now, in writing.”***
+
+✅ **RE-DERIVED AT THE DB (his figures, my query):** August crypto, truly closed — **121 rows; 109 carry `intended_entry_price`; 12 do NOT, and ALL TWELVE are `close_reason = never_filled`.** ★ **All 12 still carry `stop_loss` AND `take_profit`.** ⇒ **≈9.9% of closes lose ONLY the entry leg, permanently, once closed** — `intended_entry_price` lives on the `active_open_positions` row, which is gone.
+
+**THE DECISION, AND ITS REASONING, SO A LATER READER CAN CHECK THE MOTIVE:**
+✅ **`never_filled` ROWS **DO** COUNT toward §3's “first 30 crypto positions opened”.** They passed through the seam and were stamped; **two of their three legs remain permanently testable.** ⛔ **Excluding them would discard two-thirds of a valid observation to avoid an honest gap in the other third** — and would shrink the window on a property (whether a fill happened) that **has nothing to do with what this batch tests.**
+
+⛔ **THE COST IS CARRIED BY A LABEL, NOT BY AN EXCLUSION — Langston's binding rule, adopted verbatim:** a `never_filled` row whose open AND close both fall inside an **unwatched** interval is reported **`UNREADABLE (entry)`** — **never scored either way.** ★ **`#546`: an absent value must not wear a pass's clothes** — and it must not wear a failure's either.
+⇒ ✅ **THEREFORE THE BAR IS REPORTED PER LEG, EACH WITH ITS OWN n:** `entry n=…`, `stop n=…`, `target n=…`. **The entry denominator is (opens − unreadable), stated explicitly.** ⚠️ **This does NOT soften the bar: every READABLE leg must still be on grid, 100%, no tolerance. It makes the denominator honest, not the threshold.**
+⇒ ⛔ **AND ANY WATCH GAP IS RECONCILED AGAINST THE OPEN-COUNT** — the interval's open-count is queried, and every `never_filled` row inside it is enumerated by id, not assumed absent.
+
+★ **WHY THE WATCH IS NOW LOAD-BEARING, AND ONLY HERE:** for the other ≈90% the intent triple survives in `closed_trades` forever, so a retrospective read is as good as a live one. **The watch buys latency, not coverage — EXCEPT on this ~10% slice, where it buys the entry leg outright.** *(Langston's ruling on the 00:15→02:06 gap: the clock does NOT restart, because the instrument reads durable rows rather than a log tail. **n=2 stands.**)*
+⚠️ **AND `closed_trades` HOLDS A ROW FOR THESE POSITIONS TOO, WRITTEN AT OPEN** — a retrospective read unioning both tables would report **n=4** for the two positions observed so far. **It is n=2.** *(§3f RIDER-2's never-union rule, biting a second time.)*
+
+---
 ## 4. WHAT IS UNPROVEN, AND WHAT WOULD FALSIFY IT
 
 - ⛔ **THE HEADLINE IS NOT "ONE ROUNDING SEAM".** It is **"one seam on the signal-birth path; three entry points bypass it, named"** — `#928` an HTTP intent path taking a triple straight from the request body, `#929` a second position-sizing caller, `#927` a fabricated `entry * 1.02` target in three places, one of them the RTB **ranking** key. All homed with owners and plan positions. **Langston approved the batch shipping with them named; he did not approve it shipping under the old headline.**
