@@ -4472,6 +4472,31 @@ Kraken publishes a per-pair `tick_size` — **1,437 pairs, 11 distinct values, a
 ⇒ **HOME: `B-POST-GRID-MUTATION-CENSUS` (INVESTIGATION ONLY, NO CODE), owner CC-C, placed in `PHASE_19_PLAN.md` §1 Part F at row **3f.b** — AFTER the F-G series, BEFORE `B-GRID-LIVE-PATH-PARITY` (3g), whose scope it determines.**
 ★ **AND KYLE'S "BIGGER PROBLEM" INSTINCT IS ALREADY EVIDENCED, NOT SPECULATIVE: THREE post-VPG mutation sites are on the record — this one, plus `#939`(a) `trading-engine.ts:536` and `#939`(b) `active-execution-engine.ts:4317-4318` — AND ALL THREE WERE FOUND INCIDENTALLY. Nobody has ever enumerated them.** F-G-1 rounds at signal BIRTH; **what happens to that price for the rest of the trade's life has never been censused.**
 
+### #945 OPEN 2026-08-29 (CC-C; Langston directed the filing when I proposed recording it and NOT promoting it) - ⚠️ THE BOOK **MAY** LAG THE TICKER UNDER A FAST MOVE - n=5, A LEAD, DELIBERATELY NOT A FINDING
+
+**SEVERITY: low / unknown. OWNER: unassigned. DISPOSITION: §9.4 (4) - a REVIEW, not a batch: it is looked at by whoever next investigates fast-move price behaviour. NO WORK IS COMMITTED.**
+
+**WHY IT EXISTS AT ALL, in Langston's words:** *"it supports no work - but it's an unknown I came across, so it gets a home. Not so a future session promotes it - so a future fast-move investigation finds the lead already measured instead of re-discovering it badly."*
+
+**THE MEASUREMENT.** `#944`'s retraction showed the exit-vs-venue gap is a timing artifact: the matched snapshot skews to *before* the close, and the price is falling. **Splitting those 18 crypto stop-outs by which side the snapshot fell:**
+
+| | n | median `exit_price` vs venue mid |
+|---|---|---|
+| snapshot BEFORE the close | 13 | -0.5797% (**the artifact**) |
+| ⚠️ snapshot AFTER the close | **5** | ⚠️ **-0.0696%** |
+
+⇒ **The after-close subgroup is the one with no falling-price advantage, and it is still slightly negative.** ★ **If the locally-maintained book lags the venue's published quote during a fast move, that is exactly the residue you would expect.**
+
+⛔⛔ **WHAT THIS IS NOT, STATED SO IT IS NOT INFLATED LATER:**
+- **n = 5.** It is one subgroup of one retracted finding.
+- **It is NOT evidence of a book/BBO divergence** - `#944` measured that continuously at **n=492, 4 symbols, median EXACTLY 0.0000%**, and that measurement stands.
+- **It supports NO batch and NO objective.** `B-BOOK-BBO-DIVERGENCE` is withdrawn and this does not revive it.
+- ⚠️ **The refuting instrument sampled ORDINARY evaluation, NOT fast-move moments** - 4 symbols, 32 hours, USD-quoted. **So it is silent on precisely the condition this lead is about.** ★ **That asymmetry is the reason the lead is worth a row and not a shrug.**
+
+**WHAT WOULD SETTLE IT (for whoever picks it up):** the same continuous instrument as `#944` - engine `ENGINE_LIVE_PRICE` lines joined to `crypto_spot_ticker_snap` - but **conditioned on fast moves** (e.g. observations where the symbol's own price moved more than some threshold in the preceding seconds), rather than sampled uniformly. **The instrument already exists and needs no code; only the conditioning is new.**
+
+**HOME: a scheduled REVIEW, carried by whoever next investigates fast-move or latency behaviour on the crypto price path. No batch, no owner, no date.** ↔ `#944` (withdrawn) · `#507` · `#741`.
+
 ### #944 ⛔⛔ **WITHDRAWN 2026-08-29 BY ITS OWN AUTHOR, SAME DAY - THE HEADLINE IS A TIMING ARTIFACT. SEE THE RETRACTION AT THE TOP OF THIS ENTRY.** (originally OPEN 2026-08-29 (CC-C, found chasing Langston's own anomaly at F-G-2 Step 2; mechanism RE-READ AND RULED BY LANGSTON at `a6be11883`) - ⛔⛔ OUR LOCALLY-MAINTAINED ORDER BOOK AND THE VENUE'S PUBLISHED QUOTE DISAGREE BY ~0.48% AT EXIT TIME - **AND THEY ARE THE SAME STATISTIC**
 
 ⛔⛔ **RETRACTION, 2026-08-29, HOURS AFTER FILING - I BUILT THE INSTRUMENT LANGSTON ASKED FOR AND IT REFUTES ME.**

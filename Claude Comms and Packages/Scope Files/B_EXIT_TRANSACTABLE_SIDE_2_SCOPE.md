@@ -1011,3 +1011,25 @@ At a stop-out the price is **falling**, so a snapshot matched from *before* the 
 
 ✅ **AND THE CRYPTO/xSTOCK ANOMALY IS UNAFFECTED:** crypto 24/24 below its stop vs xStock 53/105 stands - **that comparison never involved the venue snapshot.** **It remains open, with six candidates eliminated.**
 
+## 24. LANGSTON'S THREE RULINGS ON THE RETRACTION - AND HE DID NOT SIMPLY ACCEPT THE REVERT
+
+**1. THE WITHDRAWAL ITSELF NEEDS NOTHING FROM HIM.** *"Nothing advances on it - `B-BOOK-BBO-DIVERGENCE` dissolves, `PHASE_19_PLAN` 3b.c struck. That's disposition 5, withdrawn with the citation that dissolves it. Clean."*
+
+### 24.1 ⛔ 2. THE SEQUENCING REVERT IS A DIFFERENT ANIMAL - AND THE THIRD READ-OUT **STAYS**
+
+★★ **HE APPLIED HIS OWN STANDING RULE AGAINST HIMSELF, AND IT IS THE SHARPEST THING IN THE EXCHANGE.** Undoing the prerequisite lets `OBJ-1` route through the object unguarded **on a measurement he READ but did not RUN** ⇒ **`RULED ON REPORTED FACT`, which is DISQUALIFYING FOR A PROCEED on that leg.**
+⇒ ✅ **KEEP THE THIRD READ-OUT.** **It stops being a PREREQUISITE and becomes the GUARD.** *"Cheap, and it means the revert doesn't rest on my reading your query. If it comes back on-grid and non-divergent, the leg is evidenced rather than reported."*
+★ **THE SHAPE WORTH KEEPING: a retraction removed a blocking gate, and rather than taking the removal on trust he converted the gate into a cheap ONGOING measurement.** ⇒ **the revert is not an act of faith in my query; it is a claim that will be checked by the batch's own read-out.**
+⛔ **SO `OBJ-0` CARRIES: decision price vs contemporaneous venue BBO, PER ARM, reported separately, NEVER netted into the 2x2.** **Same wording as section 22.3; only its JUSTIFICATION changed - from prerequisite to guard.**
+
+### 24.2 3. THE `n=5` HINT GETS A ROW, NOT A BATCH - AND THE REASON IS THE OPPOSITE OF THE OBVIOUS ONE
+
+*"Agreed it supports no work - but it's an unknown I came across, so it gets a home. **Not so a future session promotes it - so a future fast-move investigation finds the lead already measured instead of re-discovering it badly.**"*
+⇒ ✅ **Filed as `#945`**, carrying the -0.0696%, the n, and the stated limits (4 symbols, 32 h, USD-quoted, ORDINARY-evaluation sampling and therefore **silent on precisely the fast-move condition the lead is about**). **§9.4 disposition 4 - a review, no owner, no date.**
+
+### 24.3 ⛔⛔ AND HE SHARPENED MY OWN LESSON ONE NOTCH - IT IS AN **AXIS** RULE, NOT A TIGHTNESS RULE
+
+I wrote: *"a control that excludes almost nothing is not a weak control, it is the absence of one."*
+**He is sharper:** *"the control wasn't weak, it was **aimed at the wrong axis**. It bounded elapsed time; the confound was signed direction relative to the close. **A control that doesn't split the population on the axis the confound runs along excludes nothing no matter how tight the threshold.**"*
+⇒ ★★ **THAT IS THE DIFFERENCE BETWEEN A REMINDER AND A MECHANISM.** *"Be more rigorous"* is unusable; **"name the axis the confound runs along, then check your control splits on it"** is a step. ✅ **Filed as `verification-weaker-than-claim` INSTANCE 3, and it gives that slug its FIRST MECHANISM.** ⚠️ **It also takes the slug to 3 instances across 2 batches, meeting the §13 floor - RAISED for the weekly pass, NOT promoted unilaterally (`CONDUCT.md` is over cap under one-in-one-out).**
+
