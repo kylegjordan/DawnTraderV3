@@ -303,3 +303,37 @@ With the mechanism known, two predicates looked obvious. **Neither works, and I 
 
 **The per-consumer audit is downstream of OBJ-2, which is downstream of `#911`'s instrumentation.** ⇒ **Do not schedule it yet.** ⚠️ **But every xStock calibration read taken between 2026-07-17 and the fix is contaminated by a favourably-biased quarter of its population, and any conclusion already drawn from one should be re-checked rather than trusted.**
 
+## 14. ✅ OBJ-2 IS SOLVED - AND §10'S "BLOCKED ON `#911`" WAS MY OWN WRONG-SHAPE ERROR
+
+⛔⛔ **§10 CONCLUDED THE IDENTIFIER WAS BLOCKED ON `#911`'s PER-ROW INSTRUMENTATION. THAT WAS WRONG, AND THE REASON IS THE ONE LANGSTON HAD ALREADY NAMED ONE LEVEL UP: I WENT LOOKING FOR A PER-SYMBOL SIGNATURE FOR AN EVENT I HAD JUST PROVED IS BOOK-WIDE.**
+★ **He said a per-SYMBOL spread guard is the wrong SHAPE because the event is book-wide. The identical objection applies to a per-SYMBOL identifier, and I did not carry his point across.**
+
+### 14.1 THE IDENTIFIER - A MARKET-STATE PREDICATE, NOT A ROW PROPERTY
+
+**For each close, measure the fraction of the WHOLE BOOK that was stubbed (`spread > 20%`) within ±90s of it:**
+
+| | n | median book-stub % | **≥ 10%** | ≥ 20% | no snaps |
+|---|---|---|---|---|---|
+| **00:15 cohort** | 65 | **17.52%** | ✅ **59 (90.8%)** | 6 | 0 |
+| all other xStock | 167 | **0.04%** | ✅ **1 (0.6%)** | 0 | 0 |
+
+✅ **At a `≥ 10%` book-stub threshold: SENSITIVITY 59/65 = 90.8%, SPECIFICITY 166/167 = 99.4%.** ⇒ **against 26-29% sensitivity for both per-symbol attempts in §10.**
+✅ **AND IT NEEDS NO NEW INSTRUMENTATION** - it is computable TODAY, retroactively, for any close, from `xstock_spot_ticker_snap` alone. **`#911` is not a prerequisite.**
+
+### 14.2 WHY IT WORKS WHERE THE PER-ROW PREDICATES FAILED
+
+§10.1 diagnosed the per-row failure correctly - *"the stub exists at INSTANTS and the nearest snap frequently lands on a normal one"* - **and then drew the wrong conclusion from it.** The fix is not a better per-row observation; it is **to stop asking about the row.** ★ **The condition being detected is a STATE OF THE MARKET, and the market's state is observable from the other 475 symbols even when this symbol's own snap is missing.** ⇒ **the missing observation stops mattering.**
+
+### 14.3 ⚠️ LIMITS, STATED BEFORE ANYONE USES IT AS A GATE
+
+- ⛔ **THE `10%` THRESHOLD IS POST-HOC, chosen after seeing this table. It is NOT pre-registered and must be before it gates anything.** The separation is wide (17.52% vs 0.04% medians) so the exact cut is not delicate, **but that is an argument for picking it deliberately, not for skipping the step.**
+- **6 cohort rows fall below it** - closes at `00:15` where the book was NOT broadly stubbed. **Those may be genuine closes that merely coincide with the minute**, which would make them correct exclusions from the exclusion. Untested.
+- **1 non-cohort row exceeds it.** If the mechanism is real, that row is a contaminated close the MINUTE PROXY MISSES - **which is the identifier doing its job, not a false positive.** Untested.
+- ★ **IT IS STRICTLY BETTER THAN THE PROXY IN KIND: it measures the CONDITION, not the CLOCK** - so it travels to any future occurrence at any time of day, which the `00:15` rule cannot.
+
+### 14.4 ⇒ CONSEQUENCES
+
+- ✅ **`OBJ-2` DELIVERED.** The leg Langston kept with me (his split (a)) is done, and it was never blocked.
+- ✅ **`F-G-2`'s xStock legs are unblocked** - it can exclude on a mechanism-based predicate instead of a time proxy. ⚠️ **Langston's both-populations condition should still stand** until the threshold is pre-registered.
+- ⛔ **`§10.2`'s claim that the identifier requires `#911` IS WITHDRAWN.** `#911` remains valuable on its own merits; it is not a prerequisite for this.
+
