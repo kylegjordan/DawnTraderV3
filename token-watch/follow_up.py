@@ -22,6 +22,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 
 import liveness
+import summary
 import budget
 import providers
 from store import (
@@ -292,8 +293,10 @@ def run_hour(now: datetime | None = None) -> dict:
             if not state.get("alive"):
                 cls = classify_death(state, prev.get(mint))
                 if cls:
-                    record_death(mint, now, cls, age, {k: state.get(k) for k in
-                                                       ("volume_h24", "liquidity_usd", "pairs", "evidence")})
+                    record_death(mint, now, cls, age,
+                                 {k: state.get(k) for k in
+                                  ("volume_h24", "liquidity_usd", "pairs", "evidence")},
+                                 created_at=entry.get("created_at"))
                     stats["dead"] += 1
                 else:
                     # Ambiguous: it stays in the schedule. A token wrongly
@@ -328,6 +331,19 @@ def run_hour(now: datetime | None = None) -> dict:
             for age, c in unclassified_by_age.items():
                 un[age] = un.get(age, 0) + c
             save_state("unclassified", un)
+
+        # ⛔ THE PUBLISHED SUMMARY — INSIDE the lock, unlike the dead-man's
+        #    switch above. It uses save_state, which is read-modify-write, and
+        #    store.py's own rule is that every such caller holds the lock. The
+        #    switch is outside because a stuck lock must never silence a
+        #    watchdog; a summary is not a watchdog, and a skipped refresh is
+        #    visible on the page as a stale `generated_at`.
+        try:
+            stats["summary"] = {k: v for k, v in summary.build(now).items()
+                                if k in ("generated_at",)}
+        except Exception as exc:
+            LOG.error("summary build failed: %s", exc)
+            stats["summary"] = {"error": str(exc)}
 
     LOG.info("follow-up %s", stats)
     burn = budget.burn_report(now)

@@ -289,8 +289,14 @@ def schedule_grid(mint: str, created_at: datetime) -> None:
             due_bucket = due + timedelta(hours=1)
         else:
             due_bucket = due
+        # ★ `created_at` RIDES THE SCHEDULE ENTRY so the death record can carry
+        #   it (see record_death). It is derivable from due_at minus the grid
+        #   offset, but only APPROXIMATELY at death time — an observation can be
+        #   late, and the lateness would land in the birth cohort. Carrying the
+        #   exact value costs one field per entry and removes the estimate.
         _append(due_path(due_bucket),
-                {"mint": mint, "age": label, "due_at": due.isoformat()})
+                {"mint": mint, "age": label, "due_at": due.isoformat(),
+                 "created_at": created_at.astimezone(UTC).isoformat()})
 
 
 def due_now(hour: datetime):
@@ -313,7 +319,8 @@ def tombstone_path() -> str:
     return f"{TOMBSTONE_DIR}/dead.jsonl"
 
 
-def record_death(mint: str, when: datetime, death_class: str, age_label: str, evidence: dict) -> None:
+def record_death(mint: str, when: datetime, death_class: str, age_label: str,
+                 evidence: dict, created_at: str | None = None) -> None:
     """★ death_class is 'faded' or 'liquidity_pulled', defined EX ANTE.
 
     Both end at zero, so a win/lose column would treat them identically — but
@@ -328,6 +335,12 @@ def record_death(mint: str, when: datetime, death_class: str, age_label: str, ev
             "died_at": when.astimezone(UTC).isoformat(),
             "death_class": death_class,
             "age_at_death": age_label,
+            # ⛔ THE BIRTH TIME TRAVELS WITH THE DEATH. Without it every
+            #    survival calculation — and every birth-cohort breakdown — has
+            #    to join this record against ~1.86M birth rows to find out when
+            #    the token started. A death record that cannot say when its own
+            #    token was born is half a survival observation.
+            "created_at": created_at,
             "evidence": evidence,
         },
     )

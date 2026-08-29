@@ -12,6 +12,7 @@ token-watch — THE SEAM TESTS.
   write budget state, schedule a grid, or record a death directly.
 """
 
+import json
 import os
 import shutil
 import sys
@@ -276,6 +277,29 @@ check("★ token_state REACHED the raw store — production wiring, not a direct
 _disk = open(_pr._follow_up_path(datetime.now(UTC)), encoding="utf-8").read()
 check("★ and a field token_state never reads survived into the store",
       "UNREAD_FIELD" in _disk)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+section("9. THE PUBLISHED SUMMARY IS REACHED BY THE HOURLY JOB")
+# ⛔ The page reads ONE file. If nothing refreshes it, the page shows whatever
+#    was true when someone last ran the builder by hand — which looks live and
+#    is not. This drives `follow_up.run_hour` and asserts the file moved.
+# ─────────────────────────────────────────────────────────────────────────────
+import summary as _sm  # noqa: E402
+
+if os.path.exists(_sm.SUMMARY_PATH):
+    os.unlink(_sm.SUMMARY_PATH)
+check("no published summary before the hourly job runs",
+      not os.path.exists(_sm.SUMMARY_PATH))
+
+_fu.run_hour(now=now + timedelta(hours=2))
+check("★ run_hour PUBLISHED the summary — production wiring",
+      os.path.exists(_sm.SUMMARY_PATH))
+_pub = json.load(open(_sm.SUMMARY_PATH, encoding="utf-8"))
+check("and it carries the census the receiver actually recorded",
+      _pub["launches"]["total"] > 0, _pub["launches"]["total"])
+check("★ and it states the tracked denominator, so the page cannot mislabel it",
+      "never over all launches" in _pub["tracked"]["note"])
 
 print("\n" + "=" * 60)
 print(f"FAILED: {len(FAILURES)} -> {FAILURES}" if FAILURES else "ALL CHECKS PASSED")
