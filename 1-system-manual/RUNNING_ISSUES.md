@@ -4472,6 +4472,33 @@ Kraken publishes a per-pair `tick_size` — **1,437 pairs, 11 distinct values, a
 ⇒ **HOME: `B-POST-GRID-MUTATION-CENSUS` (INVESTIGATION ONLY, NO CODE), owner CC-C, placed in `PHASE_19_PLAN.md` §1 Part F at row **3f.b** — AFTER the F-G series, BEFORE `B-GRID-LIVE-PATH-PARITY` (3g), whose scope it determines.**
 ★ **AND KYLE'S "BIGGER PROBLEM" INSTINCT IS ALREADY EVIDENCED, NOT SPECULATIVE: THREE post-VPG mutation sites are on the record — this one, plus `#939`(a) `trading-engine.ts:536` and `#939`(b) `active-execution-engine.ts:4317-4318` — AND ALL THREE WERE FOUND INCIDENTALLY. Nobody has ever enumerated them.** F-G-1 rounds at signal BIRTH; **what happens to that price for the rest of the trade's life has never been censused.**
 
+### #941 PARTLY-FIXED 2026-08-29 (CC-C; found by the Kyle-directed F-G-2 provenance audit) — ⛔⛔ BOTH REFERENCE MAPS ASSERTED A MECHANISM THE CODE CONTRADICTS, AND ONE OF THEM WAS THE CONTRAST `#741`'s WHOLE RATIONALE RESTED ON
+
+**SEVERITY: medium (documentation; no code defect, no trading impact). OWNER: CC-C. DISPOSITION: §9.4 (1) — folded into the work in hand, doc fixes LANDED this turn; what stays OPEN is the DETECTION residual at the bottom.**
+
+**THE OBJECT.** `translateV2ToV1` (`kraken-v2-translator.ts:42-68`) writes the **BBO midpoint** `(bid+ask)/2` into the v1 `c` field whenever both sides are present, falling back to the genuine last trade **only** on a one-sided or empty book. Kraken's v1 `c` is documented as *"last trade closed"*, and the code's own comment says so plainly: *"'c' field carries the Mark Price to the UI/Engine"*. **THE CODE IS HONEST. THE DOCS WERE NOT.**
+
+**WHAT EACH DOC SAID, re-derived at `origin/migration/aws-supabase`:**
+
+| doc | the assertion | verdict |
+|---|---|---|
+| `SYSTEM_MANUAL.md:8388` | ticker channel = *"trade-based price updates"* | ⛔ **FALSE** |
+| `SYSTEM_MANUAL.md:8392` | documents the CALL, never the substitution | ⚠️ silent |
+| `SYSTEM_MANUAL.md:8397` | `'tick' … bid, ask, **last**` | ⚠️ the name carries the error onward |
+| `SYSTEM_IMPACT_MAP.md` §2.1 | *"`handleV2BookUpdate` emits a book MIDPOINT and `handleV2TickerUpdate` emits a **LAST-TRADE PRINT**"* | ⛔⛔ **FALSE, AND LOAD-BEARING** |
+
+★★ **THE SIM ONE IS THE FINDING.** That sentence is the **contrast the entire `#741` two-field rationale is explained through** — *a ghost-contaminated mid and a clean print were indistinguishable.* **There is no clean print.** Both crypto producers emit a **midpoint**; they differ by **FEED** (ticker BBO vs depth-10 book), not by kind.
+✅ **`#741`'s SEPARATION IS UNAFFECTED AND STILL CORRECT** — different feeds carry different contamination, which is precisely why provenance must be recorded. **This does not reopen `#741` and nothing about the two fields changes.** ⛔ **What it kills is a reader's belief that a transactable one-sided trade price exists on the live crypto path.** It does not: `kraken_ws_ticker_v1` (`kraken-websocket-adapter.ts:1081`) is raw v1 and honest, but it is the **fallback**, not the live path.
+
+⚠️ **SILENCE INVITES A CHECK; AN ASSERTION ENDS ONE.** This is why it outranks an ordinary doc gap — a reader with a question consulted the map, got a confident answer, and stopped. **Eight months.**
+
+⚠️ **AND MY OWN AUDIT UNDERSTATED IT FIRST.** §9.4 as written recorded the System Manual as *silent* and the SIM as *silent*. Both were assertions. **I read the node the call sits in and not the four lines above it** — the §9.5(a) census question applied one hop too narrowly. The scope's §9.4 now carries the correction, marked rather than silently rewritten. `MISTAKE: wrong-object [F-G-2]`
+
+✅ **FIXED THIS TURN:** `SYSTEM_MANUAL.md` now carries the mark-price mechanism, its Directive 8.9.1 intent (`b4c0d2d67`, 2025-12-30 — *sound, not a defect to remove*), and the eleven-week ordering (`cb8ee0942`, 2025-10-10, already read `c[0]`) at the `translateV2ToV1` node; `SYSTEM_IMPACT_MAP.md` §2.1's sentence is corrected in place with the correction marked.
+
+⛔ **WHAT STAYS OPEN — THE DETECTION RESIDUAL, and it is the only part that needs a home.** The governance checker's `DOCS` table grades whether a doc was **touched**, never whether what it **says** is true; both of these read perfectly plausibly for months. **Same family as the AMR *"30 obs/class"* line (live value 100) and the always-loaded Langston-model line (wrong 17 days) — but a DIFFERENT object: those are docs asserting a live CONFIG VALUE; this is a reference map asserting a MECHANISM, which is what you consult the map to learn.** ⚠️ **No detector is proposed here and none should be invented in this entry** — the honest state is that this class is caught by an audit that goes to the code, and by nothing else.
+**HOME: raised at the next weekly mistake pass for a recurrence tripwire on the mechanism-claim variant; the two doc fixes need no further work.**
+
 ### #940 OPEN 2026-08-29 (CC-C; Langston found it while measuring the F-G-2 r6 gate, I re-derived it) — ⛔ `exit_ticker_bid` IS NOT TRUSTWORTHY ON xSTOCK, AND F-G-2 HAD JUST MADE IT AN OBJECTIVE'S INDEPENDENT WITNESS
 
 **MEASURED — all 6 xStock closes carrying BOTH `exit_decision_price` and `exit_ticker_bid`:**

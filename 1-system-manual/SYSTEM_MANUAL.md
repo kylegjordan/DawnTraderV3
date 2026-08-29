@@ -8385,16 +8385,34 @@ MarketDataWebSocket (singleton)
     │
     ├── Connects to wss://ws.kraken.com/v2
     ├── Subscribes to:
-    │   ├── ticker channel (trade-based price updates)
+    │   ├── ticker channel (BBO updates — see the mark-price note below)
     │   └── book channel (order book, depth=10)
     │
     ├── Processes:
     │   ├── v2 ticker updates → translateV2ToV1() → TickData events
+    │   │     ⛔ THE `c` FIELD CARRIES A **MARK PRICE, NOT A TRADE.** Kraken's v1 `c` is
+    │   │     documented as "last trade closed", and `translateV2ToV1` substitutes the
+    │   │     BBO MIDPOINT `(bid+ask)/2` into it whenever both sides are present, falling
+    │   │     back to the genuine last trade ONLY on a one-sided or empty book.
+    │   │     ★ INTENT (Directive 8.9.1, `b4c0d2d67` 2025-12-30): last-trade goes stale on
+    │   │     low-volume pairs, so a mid is the better mark. THAT REASONING IS SOUND AND THE
+    │   │     SUBSTITUTION IS NOT A DEFECT TO REMOVE.
+    │   │     ⚠️ WHAT IS WRONG IS THE **LABEL**: the value keeps the v1 field's trade-price
+    │   │     NAME, and this manual asserted "trade-based price updates" until 2026-08-29.
+    │   │     Downstream it is read as `lastPrice` (`kraken-websocket-adapter.ts:680`) and
+    │   │     re-emitted under producer `kraken_ws_ticker`, which therefore reports a MID
+    │   │     under a trade-price name. `kraken_ws_book_mid` and `kraken_ws_ticker_v1` are
+    │   │     honestly named; that one is not.
+    │   │     ⛔ AND THE CONSUMER PREDATES THE SUBSTITUTION BY ELEVEN WEEKS
+    │   │     (`cb8ee0942` 2025-10-10 already read `tickerData.c[0]`) — a field's MEANING
+    │   │     changed underneath live readers, which is why this is recorded here rather
+    │   │     than left to the reader to infer. Audit: `B_EXIT_TRANSACTABLE_SIDE_2_SCOPE.md` §9.
     │   ├── v2 book updates → stateful mini-book → OrderBookSnapshot events
     │   └── v2 heartbeats → staleness tracking
     │
     └── Emits:
         ├── 'tick' (TickData) — bid, ask, last, source, volumes
+        │     ⚠️ `last` HERE IS THE MARK PRICE described above, not a trade price.
         ├── 'orderbook' (OrderBookSnapshot) — top 10 bids/asks
         ├── 'stale' (ageMs) — data freshness alert
         ├── 'connected' / 'disconnected'
