@@ -305,7 +305,23 @@ NEGATIVE CONTROL: 2.7955 / 0.001 = 2795.5 -> OFF GRID (the test discriminates)
 
 ⛔⛔ **`n = 1`. THIS IS NOT A PASS AGAINST §3, AND MUST NEVER BE READ AS ONE.** §3's bar is the **first 30 crypto opens or 7 days**, whichever comes first. **One on-grid position is one observation** — per §3h(3) the result prints `PASS (n=…)` / `UNDERPOWERED (n=…)` and this is neither yet. ⚠️ **It discharges the two MECHANISM gates; it does not touch the criterion.**
 
-⛔ **INSTRUMENT TRAP FOUND IN THE SAME READ, and it would have produced a FALSE FAIL:** `closed_trades.target_exit_price` is **NULL at open** — the live target lives in **`active_open_positions.take_profit`** (`3.031`). ★ **A read that takes all three legs from `closed_trades` alone at open time sees a missing target and scores the row as failing.** ⇒ ⛔ **BINDING, extending §3f RIDER-2: entry + stop from `closed_trades`; TARGET from `active_open_positions.take_profit` while the position is open, and from `closed_trades.target_exit_price` only once closed. Name the source table per leg.**
+⛔⛔ **CORRECTED 2026-08-29 (Langston, re-derived by me) — MY FIRST RIDER GRADED THE WRONG COLUMN, AND IT IS THE DEFECT THIS WHOLE BATCH EXISTS TO FENCE: A TEST THAT CANNOT FAIL.**
+**`closed_trades.entry_price` = `2.795` is the FILL, not the seam's output.** The seam's own number is `active_open_positions.intended_entry_price` = **`2.789`**. ✅ **VERIFIED EXACTLY: `2.795 − 2.789 = 0.006`, and `entry_slippage 0.11470578 ÷ qty 19.11763 = 0.006`.**
+★ **A VENUE FILL IS ON THE VENUE'S GRID BY CONSTRUCTION — so grading the entry leg on `entry_price` GRADES KRAKEN, NOT US, AND CAN NEVER RETURN A FAILURE.** ⚠️ **Exactly the objection I raised against a control-free pass, committed by me one column over, inside the rider meant to make the read sound.**
+
+⛔ **AND MY CROSS-TABLE FIX WAS OVER-WIDE.** `closed_trades.take_profit` carries `3.031` **in the same row, at open** — so the split is **NOT** open-table-vs-closed-table. ★ **THE REAL PATTERN IS INTENT-SIDE vs FILL-SIDE:** `intended_entry_price` / `actual_entry_price` / `target_exit_price` / `actual_exit_price` are NULL here **as one family**, because none of them is known until the fill or the close.
+
+✅ **BINDING — THE CRITERION IS READ ON THE THREE INTENT-SIDE COLUMNS, ALL PRESENT AT OPEN IN `active_open_positions`, NO CROSS-TABLE HOP AND NO CLOSE-TIME SWITCH:**
+
+| leg | column | TRUMP/USD | on 0.001 grid |
+|---|---|---|---|
+| entry | **`intended_entry_price`** | `2.789` | ✅ 2789 |
+| stop | **`stop_loss`** | `2.644` | ✅ 2644 |
+| target | **`take_profit`** | `3.031` | ✅ 3031 |
+
+★ **THE §3i VERDICT IS UNCHANGED — both entry values happen to sit on the grid — but the TEST changed, and that is the point: a right answer from an instrument that could not have said otherwise is not evidence.**
+
+⚠️ **SUPERSEDED BELOW — the original rider is kept for the sequence:** ⛔ **INSTRUMENT TRAP FOUND IN THE SAME READ, and it would have produced a FALSE FAIL:** `closed_trades.target_exit_price` is **NULL at open** — the live target lives in **`active_open_positions.take_profit`** (`3.031`). ★ **A read that takes all three legs from `closed_trades` alone at open time sees a missing target and scores the row as failing.** ⇒ ⛔ **BINDING, extending §3f RIDER-2: entry + stop from `closed_trades`; TARGET from `active_open_positions.take_profit` while the position is open, and from `closed_trades.target_exit_price` only once closed. Name the source table per leg.**
 
 ---
 ## 4. WHAT IS UNPROVEN, AND WHAT WOULD FALSIFY IT
