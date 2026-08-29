@@ -4517,7 +4517,7 @@ Kraken publishes a per-pair `tick_size` — **1,437 pairs, 11 distinct values, a
 ### ⇒ WHAT IS ESTABLISHED, AND WHAT IS NOT
 
 ✅ **ESTABLISHED:** the print arrives on the primary feed, fresh; the engine evaluates and closes on it; the venue book at that second disagrees by 17-73%; it recurs at one fixed minute; it is xStock-only; it has closed 65 positions.
-⛔ **NOT ESTABLISHED, AND NOT GUESSED AT:** **why the feed emits it at 00:15** (00:15 UTC = 20:15 ET — a plausible venue settlement/roll boundary, **stated as a hypothesis, untested**) · **whether the same bad print also drives ENTRIES** — ⚠️ **NOT YET CHECKED, and it is the first thing the batch must check.**
+⛔ **NOT ESTABLISHED, AND NOT GUESSED AT:** **why the feed emits it at 00:15** (00:15 UTC = 20:15 ET — a plausible venue settlement/roll boundary, **stated as a hypothesis, untested**) · ✅ **ENTRIES — CHECKED 2026-08-29, AND THEY ARE NOT AFFECTED.** Opens do **not** cluster at 00:15: ≤3 per minute-of-day since 07-17 against **65** exits in that one minute, and **no** currently-open position carries a 00:15 `opened_at`. ★ **A STRUCTURAL REASON SUPPORTS IT: an exit is evaluated tick-by-tick against a live position, so one bad print acts immediately — an entry must traverse scanner → SQE → RTB → EV gate, which one tick cannot carry.** ⚠️ **NOT RULED OUT: the bad price contaminating RANKING or selection inputs more diffusely. That is a different question and it is untested.**
 
 ### ⇒ WHAT IT COSTS US TODAY
 
