@@ -4569,7 +4569,30 @@ I recorded it as *"a depth-10 mid and a BBO mid are different statistics; on a t
 
 **HOME: `B-BOOK-BBO-DIVERGENCE`, owner CC-C, placed in `PHASE_19_PLAN` at row 3b.c, after the F-G-1 soak and before F-G-2 implementation (3c).**
 
-### #943 OPEN 2026-08-29 (CC-C; found adjudicating `#940` during F-G-2 Step 2) — ⛔⛔ THE xSTOCK PRICE FEED EMITS A BAD PRINT AT 00:15 UTC MOST DAYS, AND THE ENGINE CLOSES POSITIONS ON IT. **65 CLOSES — 27% OF ALL xSTOCK STOP-OUTS.**
+### #943 OPEN 2026-08-29 (CC-C; found adjudicating `#940` during F-G-2 Step 2) — ⛔⛔ THE xSTOCK PRICE FEED EMITS A BAD PRINT AT 00:15 UTC MOST DAYS, AND THE ENGINE CLOSES POSITIONS ON IT. **65 CLOSES — 27% OF ALL xSTOCK STOP-OUTS.**
+
+⛔⛔ **MECHANISM ESTABLISHED 2026-08-29, AND ONE FIGURE IN THIS ENTRY IS CORRECTED (Langston's Step-1 condition 3 asked for its object and population, and it did not have one).**
+
+⛔ **CORRECTION FIRST.** This entry says *"THE VENUE'S OWN BOOK AT THAT INSTANT WAS `bid 143.20 / ask 143.30`."* **NOT SUPPORTED AS WRITTEN** — that came from a `xstock_spot_ticker_snap` row **~1 second earlier**; **no `NOW/USD` snap exists at the `00:15:00.736` mark instant at all.** The claim should have named its object and its offset. **The conclusion survives, and the real book is worse than the one I quoted.**
+
+✅ **THE MECHANISM — THE BID COLLAPSES TO A STUB AND THE MID FOLLOWS IT.** Each bad mark is **EXACTLY the symbol's MINIMUM mid over the retained window**, to four decimals, on two independent symbols. That located the producing book:
+
+| symbol | bid | ask | **mid = THE MARK** | spread | `last` (CORRECT) |
+|---|---|---|---|---|---|
+| **NOW/USD** | ⛔ **92.50** | 145.00 | **118.7500** | **44.21%** | 143.20 |
+| **TGT/USD** | ⛔ **48.45** | 163.70 | **106.0750** | ⛔ **108.65%** | 163.18 |
+| **WEN/USD** | 7.57 | ⛔ **19.05** | **13.3100** | **86.25%** | 8.21 |
+
+⇒ ★★ **A GENUINELY QUOTED TWO-SIDED BOOK WITH ONE SIDE COLLAPSED. Both sides are `> 0`, so the mid arm fires, and `(bid+ask)/2` across a 44-109% spread is a number nobody would trade at.** ✅ **The `last` field is CORRECT in every case.**
+**RECURRENT, not momentary:** the identical stub books repeat — `NOW` 10:52:42 + 12:42:24, `WEN` 04:35:35 + 10:35:36 + 12:42:24 — and **all three appear together at `12:42:24.08`, one sweep.** ⇒ **feed-wide, not per-symbol: per-symbol liquidity, staleness and subscription faults are ELIMINATED.**
+
+✅ **ARM DETERMINED, NOT INFERRED (his condition 2): all three took the `mid` arm**, read from the snap written in the same call. **`#636`'s population rate is not leaned on.**
+
+⇒ ⛔ **RULE-24 OUTCOME (2) — WORKING AS DESIGNED, DECISION MISSING.** The feed is correct, the writer is correct, the arithmetic is correct. **Nobody ever decided what the mark should be when the book is not a market.**
+⛔ **NO FIX IS DESIGNED HERE (rule 15).** The candidate is now **evidenced rather than guessed** — `last` is right in every observed case and the SPREAD is the discriminator the AGE gate structurally cannot see. ⚠️ **But "prefer `last`", "refuse the mark" and "refuse the EXIT" are different answers with a real trade-off, and refusing is not free** — `#594`'s eleven exit-skip alerts are what refusing looks like.
+
+---
+
 
 **SEVERITY: HIGH — ongoing, daily, and it is CORRUPTING THE xSTOCK TRADE RECORD, which is a calibration input. OWNER: CC-C to surface; the fix is a scope call. DISPOSITION: §9.4 (3) — its own batch, placement proposed below. RULE-24 OUTCOME (1): a real defect — not in the feed (external) but in acting on an obviously-impossible print with no deviation guard.**
 

@@ -124,3 +124,55 @@ Read at the second in `/var/log/dawntrader/out__2026-08-29_06-24-29.log`:
 Once a day, at about eight in the evening New York time, our tokenized-stock price feed reports a price that is badly wrong — and because the price arrives *fresh*, every safety check we have waves it through. The system then closes positions on it. That has happened 65 times since mid-July, and it accounts for about a quarter of all our tokenized-stock exits.
 
 This batch does **not** fix it. It works out **why** it happens, and produces a way to tell those trades apart from real ones in the data. We deliberately aren't designing a fix yet: the obvious one is to reject prices that jump too far, and picking that number before understanding the cause is exactly the kind of patch we've agreed not to ship.
+
+---
+
+## 9. OBJ-1 ANSWERED DURING STEP 1 - LANGSTON'S CONDITION 3 CRACKED IT
+
+> **His condition 3 asked me to name the object and population behind *"the venue's own book was 143.20/143.30 at that instant"*, and predicted that if it came from `xstock_spot_ticker_snap` the arithmetic would be impossible and would point at the writer. It was the highest-yield lead in the batch and it resolved the OTHER way - at the feed, not the writer.**
+
+### 9.1 CONDITION 3, ANSWERED - AND MY ORIGINAL FIGURE WAS FRAMED WRONG
+
+**Object: `xstock_spot_ticker_snap`. Population: snaps for the three symbols in `00:14:50`-`00:15:10` on 2026-08-29.**
+
+| symbol | captured_at | bid | ask | last | mid |
+|---|---|---|---|---|---|
+| NOW/USD | 00:14:55.665 | 143.20 | 143.30 | 143.20 | 143.2500 |
+| NOW/USD | 00:14:59.964 | 143.20 | 143.30 | 143.20 | 143.2500 |
+| TGT/USD | 00:15:00.183 | 157.00 | 167.00 | 163.18 | 162.0000 |
+| WEN/USD | 00:15:00.183 | 7.70 | 8.36 | 8.21 | 8.0300 |
+
+⛔ **SO THE `143.20/143.30` I QUOTED WAS FROM A SNAP ~1 SECOND EARLIER, NOT THE MARK INSTANT.** The engine wrote `118.75` at `00:15:00.736` and **no NOW/USD snap exists at that timestamp.** ⇒ **`#943`'s phrasing *"the venue's own book at that instant was 143.20/143.30"* is NOT supported as written and is corrected below.** ★ **His instinct that the figure was load-bearing and unsourced was right.**
+
+### 9.2 THE MECHANISM, ESTABLISHED - **THE BID COLLAPSES TO A STUB AND THE MID FOLLOWS IT**
+
+**Each bad mark is EXACTLY the symbol's MINIMUM mid over the retained window** - `NOW/USD` min_mid `118.7500`, `TGT/USD` min_mid `106.0750`, to four decimals, on two independent symbols. **That is not coincidence, and it located the producing book:**
+
+| symbol | bid | ask | **mid = THE MARK** | spread | `last` (CORRECT) |
+|---|---|---|---|---|---|
+| **NOW/USD** | ⛔ **92.50** | 145.00 | **118.7500** | **44.21%** | 143.20 |
+| **TGT/USD** | ⛔ **48.45** | 163.70 | **106.0750** | ⛔ **108.65%** | 163.18 |
+| **WEN/USD** | 7.57 | ⛔ **19.05** | **13.3100** | **86.25%** | 8.21 |
+
+⇒ ★★ **THE BOOK LOSES ITS REAL BID (or ask) AND SHOWS A DEEP STUB, WHILE THE OTHER SIDE STAYS NEAR THE TRUE PRICE. Both sides are `> 0`, so the mid arm fires, and `(bid+ask)/2` on a 44-109% spread is a number NOBODY WOULD EVER TRADE AT.**
+✅ **AND THE `last` FIELD IS CORRECT THROUGHOUT** - 143.20, 163.18, 8.21. **The `_last` fallback would have produced the right answer; it is not reached because both sides are present.**
+
+**RECURRENCE, not a momentary glitch:** the identical stub books appear at multiple timestamps - `NOW` at 10:52:42 and 12:42:24, `WEN` at 04:35:35, 10:35:36 and 12:42:24. **All three appear together at `12:42:24.08`.**
+
+### 9.3 CONDITION 2 - THE ARM IS **DETERMINED**, NOT INFERRED
+
+**Per-row: all three took the `1 mid` arm** (`bid > 0 AND ask > 0`). ⇒ ✅ **`#636`'s population rate is not being leaned on; the arm for THESE rows is read from the archived snap written in the same call, exactly as he specified.**
+
+### 9.4 CONDITION 4 - SIMULTANEITY, AND IT ELIMINATES EVERY PER-SYMBOL EXPLANATION
+
+**`NOW`, `TGT` and `WEN` all carry their stub book at `12:42:24.08` - the same sweep.** ⇒ **feed-wide or venue-wide, not per-symbol.** ⛔ **ELIMINATED by this: per-symbol liquidity, per-symbol staleness, per-symbol subscription faults.**
+
+### 9.5 CONDITION 1 - THE AXIS SENTENCE RESOLVES, AND IT RESOLVES HIS WAY ROUND
+
+He warned that *"the guard's axis is incomplete"* presupposes a real-but-meaningless value, and that a **writer** defect would make a deviation gate a mask.
+✅ **The measurement settles it: the value is REAL** - a genuinely quoted two-sided book, faithfully archived, faithfully averaged. **The writer is correct. The feed is correct. The ARITHMETIC is correct.** ⇒ **it IS a value-plausibility problem, and the axis sentence stands - now conditional-satisfied rather than presupposed.**
+
+### 9.6 ⇒ RULE-24 DISPOSITION, AND THE FIX IS NOT DESIGNED HERE
+
+**OUTCOME (2) - WORKING AS DESIGNED, DECISION MISSING.** Every component does what it was built to do. **Nobody ever decided what the mark should be when the book is not a market.** ⛔ **The batch still designs no fix** - but the candidate is now EVIDENCED rather than guessed: **the `last` price is correct in every observed case, and the spread is the discriminator that the age gate cannot see.** ⚠️ **Whether the answer is "prefer `last` on an absurd spread", "refuse the mark", or "refuse the EXIT" is a design question with a real trade-off - and refusing to act is not free either** (`#594`'s eleven exit-skip alerts are what refusing looks like).
+
