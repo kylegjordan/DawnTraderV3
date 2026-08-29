@@ -290,6 +290,24 @@ active_open_positions e74a9a7c  WEN/USD  qty 19.44708601  opened 16:25:28.380Z
 **AUTHORITY:** Langston, on the `USDC/CAD` correction — *“the wording is the small part; your instrument is the finding.”* Items (1)–(3) are his; (4) is mine. ⚠️ **§3 and §3a are BYTE-UNTOUCHED; this is an addendum below them, and it is POST-DATA on the xStock leg** — which is exactly why its non-loosening is argued above rather than asserted.
 
 ---
+### 3i. ✅ FIRST POST-DURABILITY ROW OBSERVED — GATE 2 AND §3g's POSITIVE CONTROL BOTH DISCHARGED, **ON n=1**
+
+**`TRUMP/USD` · `crypto_spot` · opened `2026-08-29T00:15:02.176Z` — the FIRST row of any class opened after the durability ref `18:05:22Z`.**
+```
+gridAtBirth = {"tick": 0.001, "resolved": true, "provenance": "venue_published"}
+entry  2.795 / 0.001 = 2795   ON GRID
+stop   2.644 / 0.001 = 2644   ON GRID
+target 3.031 / 0.001 = 3031   ON GRID
+NEGATIVE CONTROL: 2.7955 / 0.001 = 2795.5 -> OFF GRID (the test discriminates)
+```
+✅ **§3g's POSITIVE CONTROL IS DISCHARGED: the `18:05:22Z` boundary is now OBSERVED, not inferred from a commit.** ✅ **GATE 2 is discharged: the stamp reaches a real promoted position.** ★ **One row answered both, exactly as §3g predicted.**
+★ **AND IT IS A GENUINE VOLATILE CRYPTO ASSET** — not a currency-like pair — so it is the first observation that speaks to the crypto leg at all.
+
+⛔⛔ **`n = 1`. THIS IS NOT A PASS AGAINST §3, AND MUST NEVER BE READ AS ONE.** §3's bar is the **first 30 crypto opens or 7 days**, whichever comes first. **One on-grid position is one observation** — per §3h(3) the result prints `PASS (n=…)` / `UNDERPOWERED (n=…)` and this is neither yet. ⚠️ **It discharges the two MECHANISM gates; it does not touch the criterion.**
+
+⛔ **INSTRUMENT TRAP FOUND IN THE SAME READ, and it would have produced a FALSE FAIL:** `closed_trades.target_exit_price` is **NULL at open** — the live target lives in **`active_open_positions.take_profit`** (`3.031`). ★ **A read that takes all three legs from `closed_trades` alone at open time sees a missing target and scores the row as failing.** ⇒ ⛔ **BINDING, extending §3f RIDER-2: entry + stop from `closed_trades`; TARGET from `active_open_positions.take_profit` while the position is open, and from `closed_trades.target_exit_price` only once closed. Name the source table per leg.**
+
+---
 ## 4. WHAT IS UNPROVEN, AND WHAT WOULD FALSIFY IT
 
 - ⛔ **THE HEADLINE IS NOT "ONE ROUNDING SEAM".** It is **"one seam on the signal-birth path; three entry points bypass it, named"** — `#928` an HTTP intent path taking a triple straight from the request body, `#929` a second position-sizing caller, `#927` a fabricated `entry * 1.02` target in three places, one of them the RTB **ranking** key. All homed with owners and plan positions. **Langston approved the batch shipping with them named; he did not approve it shipping under the old headline.**
