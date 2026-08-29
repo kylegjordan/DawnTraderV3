@@ -362,6 +362,30 @@ target          0.5613 / 0.0001 = 5613   ON GRID
 ⚠️ **AND `closed_trades` HOLDS A ROW FOR THESE POSITIONS TOO, WRITTEN AT OPEN** — a retrospective read unioning both tables would report **n=4** for the two positions observed so far. **It is n=2.** *(§3f RIDER-2's never-union rule, biting a second time.)*
 
 ---
+### 3l. ⛔ THE `UNREADABLE (entry)` LABEL IS WITHDRAWN — IT WAS AN ASSERTED ABSENCE AND IT IS NOW FALSIFIED (Langston condition 1)
+
+⛔⛔ **§3k SAID: *“`intended_entry_price` lives on the `active_open_positions` row, which is gone”* — AND I NEVER CENSUSED THE OTHER TABLES BEFORE SAYING IT.** ★ **Langston: *“the UNREADABLE label is not earned yet — it's an asserted absence.”*** ⚠️ **Rule 22, in the section I wrote to be careful about exactly this.**
+
+✅ **THE CENSUS, RUN:**
+| table | rows | verdict |
+|---|---|---|
+| `rtb_signals` | **0** | ⛔ a LIVE queue, not a history — rows are removed on promote/expire. **Langston's first candidate cannot recover anything, on retention.** |
+| `rtb_shadow_pairings` | **50,232**, `2026-07-14 → 2026-08-29` | ✅ **DURABLE.** Carries `entry_price` / `stop_price` / `target_price`, snapshotted at promotion |
+| join key | — | `closed_trades.metadata->>'originalSignalId'` → `rtb_shadow_pairings.signal_id`. **`closed_trades` has no `signal_id` COLUMN** — the key is in the metadata |
+
+✅ **POSITIVE CONTROL — HIS, AND IT IS THE ONE THAT MATTERS, because a value EXISTING is not the RIGHT value existing:** on the **109** August crypto rows that DID fill and carry both numbers — **`rtb_shadow_pairings.entry_price = intended_entry_price` on 109 of 109. 0 differ, 0 null.**
+✅ **AND ALL TWELVE `never_filled` ROWS HAVE A SHADOW ROW CARRYING `entry_price` — 12 of 12.**
+
+⇒ ✅ **THE ENTRY LEG IS DURABLY READABLE FOR EVERY ROW, INCLUDING `never_filled`. `UNREADABLE (entry)` IS WITHDRAWN — no row will be stamped with it.** §3k's decision to COUNT `never_filled` **stands and is now free of its only cost.**
+
+★★ **AND LANGSTON'S REASON FOR COUNTING THEM SUPERSEDES MINE — recorded because it is stronger and mine was merely adequate.** I argued *“two of three legs stay testable.”* **His: `never_filled` is NOT INDEPENDENT OF THE PROPERTY UNDER TEST** — **if the seam ever emitted an off-grid entry, an unfillable price is a plausible signature of exactly that.** ⚠️ **He states he has NOT verified that mechanism and does not assert it** — but it cannot be ruled out, **and that alone forbids excluding the slice: excluding it would be SELECTING ON THE OUTCOME**, removing the rows most enriched for the defect.
+⇒ ⛔ **COROLLARY, BINDING: A `never_filled` ROW WHOSE STOP OR TARGET IS OFF GRID IS *THE FINDING*, NOT A DATA GAP.**
+
+➕ **ENTRY-LEG FLOOR, PRE-REGISTERED (condition 2):** per-leg `n` reported honestly would still permit **entry closing at n=3 while stop/target close at n=30** — and **entry is precisely the leg carrying `#927`/`#928`/`#929`.** ⇒ **the entry leg needs `n ≥ 20` READABLE or it prints `UNDERPOWERED` and the window extends FOR THAT LEG ONLY**; stop and target close on their own `n`. ✅ **Kept even though the census just made it non-binding in practice — it costs nothing and it guards a future retention change.**
+
+➕ **WHO READS THE HEARTBEAT (condition 3) — ANSWERED HONESTLY RATHER THAN INVENTED.** **Reader: THIS SESSION, at its own hourly crew heartbeat**, which already prompts a watcher check. ⛔ **RESIDUAL, NAMED: if the session dies, the watch dies with it and NOTHING NOTICES.** ★ **What makes that survivable is the census above, not a second watcher: the criterion reads DURABLE rows — `closed_trades` + `rtb_shadow_pairings` — so a dead watch now costs LATENCY ONLY, on every slice.** ⚠️ **That was NOT true an hour ago**, when the `never_filled` entry leg was believed perishable and the watch was genuinely load-bearing.
+
+---
 ## 4. WHAT IS UNPROVEN, AND WHAT WOULD FALSIFY IT
 
 - ⛔ **THE HEADLINE IS NOT "ONE ROUNDING SEAM".** It is **"one seam on the signal-birth path; three entry points bypass it, named"** — `#928` an HTTP intent path taking a triple straight from the request body, `#929` a second position-sizing caller, `#927` a fabricated `entry * 1.02` target in three places, one of them the RTB **ranking** key. All homed with owners and plan positions. **Langston approved the batch shipping with them named; he did not approve it shipping under the old headline.**
