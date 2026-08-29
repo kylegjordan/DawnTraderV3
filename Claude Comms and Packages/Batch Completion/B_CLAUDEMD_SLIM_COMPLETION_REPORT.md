@@ -30,36 +30,44 @@
 
 ## 2. GOVERNANCE LEDGER
 
-**TIER 1 — unconditional**
-| document | verdict | one line |
-|---|---|---|
-| `BATCH_CATALOG.md` | ✅ | entry added — ★ **it read `N/A` until the ledger this batch introduced caught its own Tier-1 gap** |
-| `PHASE_HISTORY.md` | **N/A** | Phase-19 status unchanged; this is a governance-queue batch |
-| `PHASE_19_PLAN.md` | ✅ | queue rebuilt to 12 items; `#751`'s stale "before the slim" rationale corrected |
-| shared `MEMORY.md` + `MEMORY_CC_A.md` | ✅ | own file updated and mirrored, under cap |
-| the batch `SCOPE` | ✅ | r5, plus the skill-count correction |
-| the `PRE_AUDIT` | ✅ | r3 after three reviewer rounds |
-| the `COMPLETION_REPORT` | ✅ | this document |
-| Langston's `MEMORY.md` | **N/A** | no operational invariant changed for him; his `CLAUDE.md` §13 was updated separately |
+**CHANGE-CLASS: `non_architecture`** — declared in the scope header, Langston-confirmed. **`REQ` = required for this class and cannot take `N/A`; `jdg` = judged.** *(Matrix: `workflow-10-governance`, landed `d8d4999bb`.)*
 
-**TIER 2 — judged**
-| document | verdict | one line |
-|---|---|---|
-| `SYSTEM_MANUAL.md` | ✅ | `:517`'s by-number pointer re-aimed — its body moved, the citation still resolves |
-| `SYSTEM_IMPACT_MAP.md` | ✅ | content note naming all nine moves and warning that its 20 `§9.x` citations resolve without proving content |
-| `RUNNING_ISSUES.md` | ✅ | `#759`-`#762` filed; `#750` closed |
-| `_archive/CLAUDE_MD_RULE_HISTORY.md` | ✅ | the evicted evidence for all five sections, plus the method failure |
-| `MISTAKE_PATTERNS.md` | ✅ | `shell-mangled-text` promoted; today's 40 trailers logged mid-week |
-| `CLAUDE.md` / `CONDUCT.md` | ✅ | the cuts, the husk, the hole, the credentials correction |
-| `CHANGES_AND_FIXES.md` | **N/A** | no bug fixed — nothing entered the registry |
-| `POST_AUDIT_ROADMAP.md` | **N/A** | no phase-level change; the queue lives in `PHASE_19_PLAN` |
-| `ADJUSTMENT_FRAMEWORK.md` | **N/A** | no parameter governance touched |
-| `AUTHORITY_BASELINE.md` | **N/A** | no constitutional change |
-| `STORAGE_POLICY.md` | **N/A** | no retention or tiering change |
-| `MULTI_ASSET_VTS_EXPANSION_PLAN.md` | **N/A** | nothing under `server/` changed |
-| `ASSET_CLASS_ONBOARDING_WORKFLOW.md` | **N/A** | no Phase-24 learning surfaced |
-| `BUILD_METHOD_PLAYBOOK.md` | **N/A** | ⚠️ **borderline — the reviewer loop changed how we work, but that is `B-REVIEWER-LOOP`'s to record, not this batch's** |
-| `LANGSTON_ARCHITECTURE.md` | **N/A** | his build did not change |
+⛔⛔ **THIS LEDGER WAS WRONG ON ITS FIRST PUBLICATION AND IS CORRECTED IN PLACE, NOT QUIETLY OVERWRITTEN.** It marked `PHASE_HISTORY.md` **N/A** on the reasoning *"Phase-19 status unchanged; this is a governance-queue batch."* ★ **That reasoning is irrelevant: phase history is REQUIRED for `non_architecture`, so no reasoning could have licensed the `N/A`.** The governance checker raised **`a25799c8` — *"Missing required governance doc: phase_history for B-CLAUDEMD-SLIM"***. **The checker caught it. The author did not, and the two-tier ledger could not — it rendered a legitimate judgement and a missed obligation as the same cell.** ⇒ **that is why the change-class matrix now leads the ledger.**
+
+**TIER 1**
+| document | req? | verdict | one line |
+|---|---|---|---|
+| `BATCH_CATALOG.md` | **REQ** | ✅ | entry added — ★ **it read `N/A` until the ledger this batch introduced caught its own Tier-1 gap** |
+| `PHASE_HISTORY.md` | **REQ** | ✅ | ⚠️ **CORRECTED FROM `N/A` after checker alert `a25799c8`** — entry added, carrying the six-failed-instruments finding and this miss |
+| `PHASE_19_PLAN.md` | **REQ** | ✅ | queue rebuilt to 12 items; `#751`’s stale "before the slim" rationale corrected |
+| shared `MEMORY.md` + `MEMORY_CC_A.md` | **REQ** | ✅ | own file updated and mirrored, under cap |
+| the batch `SCOPE` | **REQ** | ✅ | r5, plus the skill-count correction |
+| the `PRE_AUDIT` | **REQ** | ✅ | r3 after three reviewer rounds |
+| the `COMPLETION_REPORT` | **REQ** | ✅ | this document |
+| Langston’s `MEMORY.md` | **REQ** | ✅ | ⚠️ **ALSO CORRECTED FROM `N/A`** — required in every class; his `CLAUDE.md` §13 was updated, and that is not the same file |
+
+**TIER 2**
+| document | req? | verdict | one line |
+|---|---|---|---|
+| `SYSTEM_MANUAL.md` | jdg | ✅ | `:517`’s by-number pointer re-aimed — its body moved, the citation still resolves |
+| `SYSTEM_IMPACT_MAP.md` | jdg | ✅ | content note naming all nine moves, warning that its 20 `§9.x` citations resolve without proving content |
+| `RUNNING_ISSUES.md` | jdg | ✅ | `#759`-`#762` filed; `#750` closed |
+| `_archive/CLAUDE_MD_RULE_HISTORY.md` | jdg | ✅ | the evicted evidence for all five sections, plus the method failure |
+| `MISTAKE_PATTERNS.md` | jdg | ✅ | `shell-mangled-text` promoted; the day’s 40 trailers logged mid-week |
+| `CLAUDE.md` / `CONDUCT.md` | jdg | ✅ | the cuts, the husk, the hole, the credentials correction |
+| `CHANGES_AND_FIXES.md` | jdg | **N/A** | no bug fixed — nothing entered the registry |
+| `POST_AUDIT_ROADMAP.md` | jdg | **N/A** | no phase-level change; the queue lives in `PHASE_19_PLAN` |
+| `ADJUSTMENT_FRAMEWORK.md` | jdg | **N/A** | no parameter governance touched |
+| `AUTHORITY_BASELINE.md` | jdg | **N/A** | no constitutional change |
+| `STORAGE_POLICY.md` | jdg | **N/A** | no retention or tiering change |
+| `DELETED_COMPONENTS_LOG.md` | jdg | ✅ | the whole-filesystem-scan guard, deleted as unenforceable (`#756`) |
+| `MULTI_ASSET_VTS_EXPANSION_PLAN.md` | jdg | **N/A** | nothing under `server/` changed |
+| `ASSET_CLASS_ONBOARDING_WORKFLOW.md` | jdg | **N/A** | no Phase-24 learning surfaced |
+| `BUILD_METHOD_PLAYBOOK.md` | jdg | **N/A** | ⚠️ **borderline** — the reviewer loop changed how we work, but that is `B-REVIEWER-LOOP`’s to record |
+| `LANGSTON_ARCHITECTURE.md` | jdg | **N/A** | his build did not change |
+| `ALERT_HANDLING_PROTOCOL.md` · `DELIVERY_BOARD_PROTOCOL.md` · `GOVERNANCE_EXCEPTIONS.md` | jdg | **N/A** | no alert-class, board-field or exception change |
+
+**TALLY — counted from the rows, not asserted: 25 rows · 8 required, all now ✅ · 17 judged, 7 ✅ and 10 `N/A`.** ⚠️ **Two required rows were `N/A` at first publication.** ★ **A required row cannot take `N/A`: if it genuinely does not apply, the change-class is wrong and gets re-declared.**
 
 ---
 
