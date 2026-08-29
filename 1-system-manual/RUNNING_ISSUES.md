@@ -4472,6 +4472,48 @@ Kraken publishes a per-pair `tick_size` — **1,437 pairs, 11 distinct values, a
 ⇒ **HOME: `B-POST-GRID-MUTATION-CENSUS` (INVESTIGATION ONLY, NO CODE), owner CC-C, placed in `PHASE_19_PLAN.md` §1 Part F at row **3f.b** — AFTER the F-G series, BEFORE `B-GRID-LIVE-PATH-PARITY` (3g), whose scope it determines.**
 ★ **AND KYLE'S "BIGGER PROBLEM" INSTINCT IS ALREADY EVIDENCED, NOT SPECULATIVE: THREE post-VPG mutation sites are on the record — this one, plus `#939`(a) `trading-engine.ts:536` and `#939`(b) `active-execution-engine.ts:4317-4318` — AND ALL THREE WERE FOUND INCIDENTALLY. Nobody has ever enumerated them.** F-G-1 rounds at signal BIRTH; **what happens to that price for the rest of the trade's life has never been censused.**
 
+### #944 OPEN 2026-08-29 (CC-C, found chasing Langston's own anomaly at F-G-2 Step 2; mechanism RE-READ AND RULED BY LANGSTON at `a6be11883`) - ⛔⛔ OUR LOCALLY-MAINTAINED ORDER BOOK AND THE VENUE'S PUBLISHED QUOTE DISAGREE BY ~0.48% AT EXIT TIME - **AND THEY ARE THE SAME STATISTIC**
+
+**SEVERITY: HIGH (paper today; the active crypto exit path reads the suspect object, and Phase 21 is live). OWNER: CC-C. DISPOSITION: §9.4 (3) - its own batch, PLACED at `PHASE_19_PLAN` row 3b.c, BEFORE F-G-2 implementation and after the F-G-1 soak. RULE-24 OUTCOME: (1) a real defect - and NOT a design question, see below.**
+
+**WHAT WAS MEASURED (USD-quoted crypto - see the population note).** Each exit joined to its own class's ticker snapshot, the venue's published BBO, nearest within 60s:
+
+| | n | median join offset | `exit_price` vs venue MID | vs venue BID | below mid |
+|---|---|---|---|---|---|
+| **crypto**, POST-`e6f7c70b3` | 18 | 1.7 s | ⛔ **-0.4229%** | ⛔ **-0.3029%** | **16 of 18** |
+| xStock (`#943` cohort excluded) | 105 | 1.1 s | ✅ **+0.0054%** | +0.0631% | 49 of 105 |
+
+⇒ **xStock's recorded exit price IS the venue mid. Crypto's sits ~0.42% below it and ~0.30% below the venue BID - i.e. below anything transactable.**
+**NOT THE FILL WALK:** `exit_slippage` is populated on all 24 crypto POST rows at a median **0.0659% of notional** - about **one eighth** of the gap. The rest is present *before* the fill, and on the three rows carrying `exit_decision_price` the DECISION is already below the venue mid (SPX -0.2658%, CHIP -0.3220%, DOG -1.2243%; **n=3, one sub-penny - a LEAD, not a result**).
+
+### ⛔⛔ WHY IT IS A DEFECT AND NOT A DESIGN CHOICE - I HEDGED, AND LANGSTON REFUTED THE HEDGE AT THE CODE
+
+I recorded it as *"a depth-10 mid and a BBO mid are different statistics; on a thin book they legitimately differ"*. **Wrong.** `kraken-websocket-adapter.ts:910-911` computes `bestBid = Math.max(...book.bids.keys())` and `bestAsk = Math.min(...book.asks.keys())`; `:917` says *"Calculate stable midpoint from mini-book BBO"*; `:918` `(bestBid+bestAsk)/2`, emitted `:945` as `kraken_ws_book_mid`.
+⇒ ★ **"DEPTH-10" NAMES THE SUBSCRIPTION, NOT THE STATISTIC. It is a TOP-OF-BOOK mid.** ⇒ **ONE quantity constructed two ways - ours from a locally delta-maintained book, the venue's published - and two constructions of the same quantity differing by 0.48% is a BOOK-STATE ERROR.** ↔ **`#507`/`#741` family.**
+⚠️ **DIRECTION CANDIDATE (Langston's), CARRIED AS HYPOTHESIS AND EXPLICITLY NOT MEASURED:** an orphaned ask below the true best ask drags `Math.min(asks)` down - `#507`'s defect on the mirror side. **Do not cite it as established.**
+
+### ⛔ WHY IT RE-ORDERS F-G-2 RATHER THAN WIDENING IT
+
+**`OBJ-1` sources crypto's BID from that same mini-book.** ⇒ **F-G-2 does not leave this divergence standing beside its fix - it ROUTES THE NEW DECISION PRICE THROUGH THE OBJECT UNDER SUSPICION.** ★ **That is F-G-2's own §1 argument turned around: you cannot pre-register a rule-vs-rule before/after while the series both arms read is moving under you.**
+⇒ **THE MEASUREMENT LEG IS A PREREQUISITE OF F-G-2 IMPLEMENTATION. The FIX leg may sit in Phase 20 with `#507` if the measurement says CRC/resubscribe is the root.**
+✅ **`OBJ-0` is NOT re-based (Langston):** the 2x2 is rule-vs-rule and stays internally valid on a biased series **because both arms read the same one**; re-basing would fold two fixes into one unseparable number. **A THIRD READ-OUT is added instead - decision price vs contemporaneous venue BBO, per arm, reported separately, NEVER netted into the 2x2.**
+
+### ⛔ THE INSTRUMENT DOES NOT EXIST - CENSUSED, NOT ASSUMED
+
+**No table in the schema matches `book|depth|orderbook`; zero rows returned. The book mid is NEVER PERSISTED** (`exit_book_mid` exists only on `closed_trades`, n=5). ⇒ **every figure above is EXIT-DERIVED BY NECESSITY, not by choice**, and the batch's first deliverable is the continuous instrument: **book mid vs ticker mid, same symbol, same instant - then n stops being 18.**
+
+### ⚠️ POPULATION AND INSTRUMENT LIMITS, STATED
+
+- **USD-quoted crypto only.** 6 of 24 POST rows did not join; **5 are `/EUR` pairs with ZERO snapshots EVER** (the crypto ticker archive does not cover EUR-quoted pairs at all - adjacent to `#937`, and the measurement leg needs that coverage widened), 1 is a momentary gap in a symbol with 29,670 snaps.
+- ⛔ **MY <=5s "JOIN CONTROL" IS WITHDRAWN - it moved 17 of 18 rows and discriminated almost nothing**, and I had presented it as the check that ruled out the falling-price timing confound. The join argument now rests only on the comparable median offsets (1.7s vs 1.1s), **which is weaker than I first stated it.**
+- ⛔ **LANGSTON TAGGED EVERY FIGURE HERE `RULED ON REPORTED FACT`. Under rule 29 that is DISQUALIFYING FOR A PROCEED on this leg, not a disclaimer** - these numbers carry no weight until re-derived on the built instrument.
+
+### ✅ WHAT F-G-2 MAY AND MAY NOT CLAIM AT CLOSE (Langston's wording)
+
+✅ **MAY: *the decision reads the transactable SIDE of the price we hold.*** ⛔ **MAY NOT: *the exit price is transactable.*** With the limit stated, naming this divergence and this batch.
+
+**HOME: `B-BOOK-BBO-DIVERGENCE`, owner CC-C, placed in `PHASE_19_PLAN` at row 3b.c, after the F-G-1 soak and before F-G-2 implementation (3c).**
+
 ### #943 OPEN 2026-08-29 (CC-C; found adjudicating `#940` during F-G-2 Step 2) — ⛔⛔ THE xSTOCK PRICE FEED EMITS A BAD PRINT AT 00:15 UTC MOST DAYS, AND THE ENGINE CLOSES POSITIONS ON IT. **65 CLOSES — 27% OF ALL xSTOCK STOP-OUTS.**
 
 **SEVERITY: HIGH — ongoing, daily, and it is CORRUPTING THE xSTOCK TRADE RECORD, which is a calibration input. OWNER: CC-C to surface; the fix is a scope call. DISPOSITION: §9.4 (3) — its own batch, placement proposed below. RULE-24 OUTCOME (1): a real defect — not in the feed (external) but in acting on an obviously-impossible print with no deviation guard.**
