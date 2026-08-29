@@ -1,4 +1,4 @@
-# F-G-2 — B-EXIT-TRANSACTABLE-SIDE — SCOPE (Step 1, r7)
+# F-G-2 — B-EXIT-TRANSACTABLE-SIDE — SCOPE (Step 1, r8)
 
 change-class: architecture
 
@@ -68,6 +68,34 @@ exit_decision_price ≠ exit_ticker_bid     9 of  9 crypto carrying a bid
 | **`net_pnl`** | the booked P&L of the same rows | **−$121.96** |
 
 ✅ **Post-epoch they agree in sign** — both costs. ⚠️ **On the POOLED 74 they did not** (+$60.55 stop-gap against −$270.91 `net_pnl`), **which is exactly why the object must be named: a column headed "money" beside a row headed "net" becomes "the fix costs us money" two documents later.**
+
+
+### ⛔⛔ r8 — THE POST-EPOCH POOL STRADDLES A **SECOND** INSTRUMENT CHANGE (Langston, after withdrawing BLOCKER-1)
+
+**I split at one boundary and did not ask whether there was another. There was, and it is F-G-1's own deploy** — the VPG rounds **stop AWAY from entry**, moving the very price the fill is measured against.
+
+✅ **SPLIT AGAIN at `2026-08-28T16:08:02Z`:**
+
+| era | n | below stop | median shortfall |
+|---|---|---|---|
+| post-book-fix, **PRE-GRID** (`22-08 22:01Z → 28-08 16:08Z`) | **23** | 23 = 100% | **0.161%** |
+| **POST-GRID** (`≥ 28-08 16:08:02Z`) | ⛔ **1** | 1 = 100% | 0.227% |
+
+⇒ ⛔ **23 OF THE 24 ARE PRE-GRID. THE POST-GRID EVIDENCE IS n=1.** ★ **The direction is unchanged — both sub-eras are 100% below — but "24 of 24" must never be read as a statement about TODAY'S system.** ⚠️ **Same finding one level down: I corrected a pooled number by pooling a smaller one.**
+
+### ⚠️ THE MECHANISM CITATION NEEDS ITS MEASUREMENT WINDOWS DATED (Langston, item 2 — NOT YET DISCHARGED)
+
+The `31.08% → 0` crossed-book verification is **Langston's**, and he flags that **if the zero leg was measured after `B-MBIM-SWITCH-ON` (`afb7d326c`, 08-24) it is not comparable** — the checksum-mismatch arm `continue`s ABOVE the crossed detector, so a resubscribing update never reaches the counter and **a zero after ≠ a clean book.**
+
+⛔ **BOTH LEGS' WINDOWS MUST BE STATED BEFORE THE COUNTER IS CITED.** ✅ **The fill-distribution shift at `e6f7c70b3` is INDEPENDENT evidence and probably carries the era split on its own** — but the crossed-book counter may not be the load-bearing leg unadorned. **Owed at Step 2.**
+
+### ⛔ `−$11.28` IS A **BASIS** FIGURE, NOT A REALISED COST (Langston, item 3 — ADOPTED)
+
+**If `exit_decision_price = exit_book_mid` (12/12) and the stop is bid-referenced, then a 0.166% median shortfall is THE HALF-SPREAD BY CONSTRUCTION — an accounting difference between two reference prices, not money lost.**
+
+⛔ **So it is renamed: `mid-vs-bid BASIS GAP`, never "cost".** ✅ **Condition 1's discriminating pair is exactly what settles which it is** — and until that lands, **no figure from this row may be reported as a loss.** ⚠️ **`net_pnl −$121.96` is a genuine realised number and is a DIFFERENT object; the two must not be summed or compared.**
+
+⚠️ **ALL POST-EPOCH FIGURES ABOVE ARE `RULED ON REPORTED FACT` and Langston has flagged that as DISQUALIFYING at Step 4 since they enable the proceed. He re-derives them there.**
 
 ### ⚠️ THE HONEST CONSEQUENCE — DIRECTION EXPECTED, MAGNITUDE UNKNOWN (Langston's amendment)
 
