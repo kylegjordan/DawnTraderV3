@@ -2,7 +2,7 @@
 
 change-class: architecture
 
-> **STATUS: Step 1 r5 — fresh-reader pass 2026-08-29, see §7. r4 text otherwise unchanged.** r4 said: Step 1 r4. This file is the OTHER HALF of the former F-G, and it is the ORIGINAL batch — replace the midpoint at the exit decision.** Langston ruled the split at `cdb783a8d`.
+> **STATUS: Step 1 r6 — Langston CHANGES-NEEDED on r5 discharged; see §8. §2 REWRITTEN on the mechanism (BLOCKER-1), `OBJ-9` added (BLOCKER-4), `OBJ-3` amended (BLOCKER-3).** r5 was the fresh-reader pass, §7. r4 said: Step 1 r4. This file is the OTHER HALF of the former F-G, and it is the ORIGINAL batch — replace the midpoint at the exit decision.** Langston ruled the split at `cdb783a8d`.
 >
 > ⛔⛔ **HARD PREREQUISITE: `F-G-1` MUST BE DEPLOYED AND SOAKED BEFORE `OBJ-0`'s SHADOW RUN STARTS.** Not a preference — **`OBJ-0`'s entire read-out is invalid otherwise.** See §1.
 >
@@ -24,9 +24,23 @@ change-class: architecture
 
 ## 2. THE ONE-SENTENCE CASE
 
-**The exit decision reads a MIDPOINT — a price nobody can transact at — while a sell actually fills on the BID.** Measured on the r3 population: **all nine stop-outs filled BELOW their stop, median 0.17%.** The exits are systematically worse than the levels we set.
+**THE EXIT DECIDES ON A BOOK MIDPOINT — BY OUR OWN LABEL, NOT BY INFERENCE.** ✅ **MEASURED 2026-08-29: 12 of 12 stamped crypto exits carry `exit_price_producer = kraken_ws_book_mid`.** A midpoint is a price nobody can transact at; a sell fills on the BID. ★ **This is a MECHANISM claim, evidenced by the system's own provenance stamp — it cannot be overturned by however the fills happen to land** (rule 29(c)).
 
-⛔ **THIS IS NOT A BUG FIX AND MUST NOT BE SCOPED AS ONE.** The provenance read (r3 §5.1) established from the introducing directive that the midpoint was **built deliberately, for STABILITY**, with named consumers that were display and analytics. **A second consumer later read it for a decision it was never built to serve.** Rule 24 outcome **(3)**: legacy that no longer fits today's intent.
+⛔⛔ **r6 REWRITE — THE r4/r5 SENTENCE WAS *"the exits are systematically worse than the levels we set"*, AND THAT IS FALSE ON THE MEASURED POPULATION. Langston measured it; I re-derived every figure.** The same 74 active-paper crypto `stop_hit` closes, split by direction:
+
+| arm | n | median | money |
+|---|---|---|---|
+| filled **BELOW** stop | 48 (64.9%) | **0.147%** | **−$22.71** |
+| filled **ABOVE** stop | 26 (35.1%) | **2.844%** | **+$83.26** |
+| **net** | 74 | — | ⛔ **+$60.55 — the population exits BETTER than its stops** |
+
+⇒ ⛔ **THERE ARE TWO PHENOMENA AND THE BATCH NAMED ONLY ONE.** A **frequency skew** of about half a spread (64.9% below, binomial one-sided **p = 0.0070** — real, not noise), and a **much larger, unexplained tail in the opposite direction.** ★ **The 64.9% is now SUPPORTING EVIDENCE for the mechanism, never the case itself.**
+
+⚠️ **AND THE HONEST CONSEQUENCE: FIXING THE SIDE-SELECTION MAY REDUCE MEASURED P&L**, because the +$83.26 tail is not a fill mechanic and this batch does not explain it. **That is not an argument against the fix — deciding on an untransactable price is wrong whichever way the money lands — but it must be said BEFORE the shadow run, not discovered in it.** *(New `OBJ-9` measures that tail first; see below.)*
+
+⚠️ **MISSINGNESS CHECKED, NOT ASSUMED (Langston):** the 91 rows without a stop reference run 07-15→07-27 and the 74 with one run 07-25→08-28 ⇒ **instrument start-date censoring, not selection.**
+
+⛔ **THIS IS NOT A BUG FIX AND MUST NOT BE SCOPED AS ONE.** The provenance read (r3 §5.1) established from the introducing directive that the midpoint was **built deliberately, for STABILITY**, with named consumers that were display and analytics. **A second consumer later read it for a decision it was never built to serve.** Rule 24 outcome **(3)**: legacy that no longer fits today's intent. ⚠️ **`#7.9` flags that the TEMPORAL half of this — that the decision-consumer arrived AFTER — is not cited here; it must carry a commit or date by Step 2.**
 
 ---
 
@@ -37,11 +51,12 @@ change-class: architecture
 | **OBJ-0** | ⛔ **MEASURE THE BEHAVIOUR CHANGE BEFORE SHIPPING IT — SHADOW FIRST, SWITCH SECOND.** Deciding on the transactable side moves when trades exit, in OPPOSITE directions for the two exit types: for a long, **stops fire EARLIER and targets fire LATER.** Not telemetry — it changes the trade population. ⛔ **RUNS ONLY AFTER `F-G-1` IS DEPLOYED (§1).** | ⛔ **PRE-REGISTRATION, rewritten at r2 after Langston holed r1 on three counts:** (a) **WRONG SIDE** — stops firing earlier IS the intended behaviour, so gating on a rise in stop count would reject the batch for succeeding; (b) **ONE METRIC ON A TWO-SIDED CHANGE** — targets firing later needs its own read-out; (c) **NO n-FLOOR AND NO WINDOW RULE** (`#661` leg 2). ⇒ ① **THE DISCORDANT CELL IS THE KILL CRITERION** — a trade the NEW rule stops out that the OLD rule rode back to `target_hit`. **The only cell where the change destroys value.** ② **Both exit types reported separately, never netted.** ③ **n-floor and window span set at Step 2 from the exit rate, BEFORE the shadow runs.** ④ **Every cell of the 2×2 published, including those that favour the change.** |
 | **OBJ-1** | **The exit DECISION for a long reads the BID, not the mid** — the side we actually transact on. Stop, target and trailing alike. ✅ **Not gated by `F-G-1`: bid-vs-mid is unaffected by gridding (Langston Q1 — my r3 dependency graph had this wrong).** | Every post-deploy exit decision cites a bid-derived price in its provenance stamp (`B-EXIT-PROVENANCE`, `#911`). ⚠️ **A target's FILL price was already correct — it is a resting maker order filling at our own ask. It is the TRIGGER that reads the mid, so we may book wins nobody paid for. Different failure from the stop, same cause; both are in scope.** |
 | **OBJ-2** | ⛔⛔ **THE LABEL MUST BECOME HONEST.** `8.9.4-Patch` ships `{ a:[bestAsk], b:[bestBid], c:[midpoint] }` and **in Kraken's ticker schema `c` IS THE LAST-TRADE FIELD.** `8.9.1` does the identical substitution in the translator. ⇒ **the midpoint was published UNDER THE NAME OF A TRADED PRICE, twice, by two directives eight months apart.** ⚠️ `kraken-websocket-adapter.ts:681` still names the variable `lastPrice` while holding a mid. | ⛔ **THE FENCE ASSERTS THE LABEL, NOT THE CONSUMER SET.** A field named for a traded price carries one, or is renamed to what it holds. **Consumer-counting is the weaker test and would pass a correctly-read wrong value — which is exactly how this survived eight months: NO DOWNSTREAM READER WAS MISBEHAVING.** ★ The mid legitimately survives for charts and smoothed series, **under an honest name.** ⚠️ **Kyle's correction: anything that becomes a price we TRANSACT at — signal-time entry, stop, target, trigger — needs the transactable side. My r1 claim that "the mid stays for signal generation" was WRONG.** |
-| **OBJ-3** | **BOTH ASSET CLASSES.** crypto via the WS book's bid; xStock via the equities tick's bid. r3 §2 established that three of four lane/class combinations decide on a mid, by two different mechanisms. | Both classes verified independently on live post-deploy rows. **Neither class may be discharged by the other's evidence.** |
+| **OBJ-3** | **BOTH ASSET CLASSES.** crypto via the WS book's bid; xStock via the equities tick's bid. r3 §2 established that three of four lane/class combinations decide on a mid, by two different mechanisms. | Both classes verified independently on live post-deploy rows. **Neither class may be discharged by the other's evidence.** ⛔⛔ **r6 BLOCKER-3 (Langston, re-derived by me): THERE IS NO xSTOCK INSTRUMENT TODAY — **0 of 144** xStock `stop_hit` closes carry `original_stop_price`, against **74 of 165** for crypto.** ★ **So this criterion is UNSATISFIABLE for xStock as written, and “neither class discharged by the other” makes that fatal rather than partial.** ⇒ **RESOLVE IN SCOPE, NOT AT STEP 8: either wire the xStock stop reference first (its own prerequisite), or restate OBJ-3 as crypto-only with the xStock gap named as a stated limit.** ⚠️ **It must not be discovered at verification time.** Needs an n-floor too (§7.8). |
 | **OBJ-4** | **DO NOT FORK THE SHARED EXIT DECISION.** `evaluateTECExit` is imported by BOTH `vts-runner.ts:51` and `active-execution-engine.ts:59` — **and there are THREE CALL SITES, not two: `vts-runner.ts:3101` (real resolver), `vts-runner.ts:3882` (shadow resolver), `active-execution-engine.ts:1705`.** Side-selection lives in ONE place with a parity test. | A parity fence proves both callers resolve the same side for the same inputs. ⛔ **A per-lane copy is the `#641` two-copies shape and fails this objective even if every test passes.** |
 | **OBJ-5** | **VTS DISPOSITION IS DECIDED AND WRITTEN DOWN — not left implicit.** VTS and paper are separate systems and must never be blended (Kyle, standing). Changing VTS mid-stream splits its series. | An explicit, recorded decision — change it, or leave it and record the difference. ★ **Informed by `#914`: VTS has NO FILL LAYER AT ALL — 999/999 stops fill at exactly the stop price. It is a world where exiting is free, which is why it was never a calibration surface for this.** |
 | **OBJ-6** | **The change is measurable after the fact.** `B-EXIT-PROVENANCE` stamps the decision price, its producer and an independent witness on every close. | A before/after read on stamped rows. ⚠️ **`B-EXIT-PROVENANCE` must be CLOSED first — it still needs one post-`ed86a758e` close showing the `#911` witness populated.** |
 | **OBJ-8** | ⛔⛔ **HOW WE DECIDE A SIMULATED EXIT FILLED — THE INSTRUMENT.** ⛔ **WE CAN NEVER PROVE A PAPER FILL — no counterparty exists.** ★ **Kyle's framing makes it answerable: that limit is GLOBAL to paper AND VTS, applies to every candidate equally, and therefore DOES NOT DISCRIMINATE. The question is which ESTIMATOR is least wrong and whether it is LABELLED honestly.** **INSTRUMENT = the 1-MINUTE OHLC BAR's `high`, plus `volume`/`trade_count`.** ⛔ **DEPENDS ON `F-G-1`: through-not-touch is a PLACEBO on off-grid limits (`F-G-1` §3).** | ① **THROUGH, NOT TOUCH** — the named industry standard (TradingView `backtest_fill_limits_assumption`). **Fence: count exact `high == limit` — ~0 before `F-G-1`, non-zero after.** ② ⛔ **NAME IT WHAT IT PROVES — `traded_through_at`, NEVER `fill_confirmed`.** "Filled" on trade-through evidence is `OBJ-2`'s mislabelling in a new costume, inside the batch that exists to end it. ③ ⛔ **SHIP AS A DOCUMENTED CONSERVATIVE PROXY — through-not-touch NARROWS Langston's objection (1), it does not CLOSE it:** queue position is size-ahead vs size-through and *"N ticks through"* measures neither. **Do not let "industry standard" do the work of "measured."** ④ **RECORD THE VOLUME RATIO, DO NOT THRESHOLD IT** — measured 195 matched crypto exits: **median 18.1× · p10 0.4× · p90 1001×.** ⚠️ A $100k floor was proposed and **WITHDRAWN** — a number chosen only so as not to be zero. ⑤ **POPULATION = ACTIVE PAPER ONLY** — confirmed, not assumed: the shadow resolver reuses the same `evaluateTECExit` (`vts-runner.ts:3882`) **but VTS has no fill layer (`#914`) and shadows have their OWN price fetch** ⇒ measuring fill realism there would measure nothing. ⚠️ **Shadows ARE live despite a code comment saying dormant — 47,500 pairings, newest 2026-08-27.** ⑥ ⚠️ **CONSERVATIVE-DIRECTION DEFECT, NOTED NOT FIXED:** the bar writer overwrites `high` rather than `GREATEST` — `server/services/passive-archive/ohlc-batch-writer.ts:302`, `high: sql`EXCLUDED.high`` inside an `onConflictDoUpdate` ⇒ an out-of-order flush can bias a high DOWN — **fewer fills, never more.** |
+| **OBJ-9** | ⛔⛔ **NEW IN r6 (Langston BLOCKER-4) — EXPLAIN THE ABOVE-STOP TAIL BEFORE `OBJ-0` RUNS.** 26 of 74 crypto stop-outs (35.1%) exit a median **2.844%** ABOVE their stop, worst 9.13%, worth **+$83.26** — against the below-stop arm's −$22.71. ★ **A stop-out exiting 2.8% away from its stop is NOT a fill mechanic.** ⇒ **`OBJ-0`'s discordant cell cannot attribute a before/after difference to side-selection while a third of stop-outs exit by an unexplained mechanism.** | **Name the mechanism, with a `file:line`, or state it unexplained.** Candidates to eliminate, not to assume: gap-through on a thin book · the 24h max-hold time-exit (`#550`) mis-labelled `stop_hit` · a trailing ratchet having moved the stop after `original_stop_price` was recorded (`#923`) · exit-decision price and fill price disagreeing. ⛔ **DELIVERABLE IS AN ATTRIBUTION, NOT A NUMBER — and `OBJ-0` MAY NOT START until this is answered or explicitly deferred with Langston's agreement.** |
 
 ---
 
@@ -75,7 +90,7 @@ n = 74     below stop = 48 (64.9%)     median shortfall = 0.057%
 
 ⇒ ⛔ **NOT "all" — 64.9%. NOT 0.17% — 0.057%.**
 
-⚠️ **THIS DOES NOT FALSIFY THE BATCH:** 64.9% against a ~50% null is a real one-sided skew, in the direction §2 claims. **But the case must be restated on a NAMED population, and "all nine" must not survive into Step 2** — a universal asserted on n=9 is exactly the shape that becomes *"we always fill below"* two documents later.
+⚠️ **SUPERSEDED BY r6 — READ §2 AND §8 FIRST.** I concluded here that the skew still carried the case. **Langston then split the same 74 by DIRECTION and the aggregate runs the OTHER way (+$60.55).** §2 is rewritten on the MECHANISM; the 64.9% is now supporting evidence only. **What survives from this section: the population defect was real, and “all nine” is gone from the body.** ⚠️ Original reasoning kept below so the sequence is auditable: 64.9% against a ~50% null is a real one-sided skew. **But the case must be restated on a NAMED population, and "all nine" must not survive into Step 2** — a universal asserted on n=9 is exactly the shape that becomes *"we always fill below"* two documents later.
 
 ### 7.2 ✅ THREE CITATIONS WERE WRONG — CORRECTED INLINE
 
@@ -144,6 +159,51 @@ The HARD PREREQUISITE says F-G-1 must be **DEPLOYED AND SOAKED**. ✅ §1 derive
 ### 7.10 ✅ WHAT THE READER CONFIRMED AS SOLID — stated, because a clean is worth knowing
 
 active-execution-engine.ts:59 exact · kraken-websocket-adapter.ts:681 exact and genuinely carrying the mid · the whole 8.9.1 leg of OBJ-2 · ed86a758e is genuinely the #911 witness-wiring commit · OBJ-3's "three of four lane/class combinations" matches r3 §2 exactly · OBJ-4's two-importer census is true at the ref · §1's confound logic is internally valid · OBJ-8②/③'s naming discipline and *"do not let 'industry standard' do the work of 'measured'"* are honest self-limits · and §4's own r3 correction — *"I wrote that Kyle had RULED... He had NOT — he SUGGESTED it"* — is the suggestion-vs-decision discipline applied to itself, unprompted.
+
+---
+
+## 8. ✅ r6 — LANGSTON'S RULINGS ON THE r5 OPEN ITEMS (2026-08-29)
+
+★ **All figures below were re-derived by me at the live DB before anything moved.** His BLOCKER-1 split, the xStock instrument gap and the 12/12 producer count all reproduce exactly.
+
+### 8.1 Q4 — `c` IS THREE-STATE, AND THE ANSWER WAS IN A LINE I HAD ALREADY QUOTED
+
+⛔ **Not two states — THREE:** midpoint · genuine last-trade · **ZERO** (`?? 0` ⇒ `c:["0"]`). **Neither "carry a traded price" nor "rename it" is available.**
+
+✅ **DISPOSITION: CARRY THE DISCRIMINATOR** — adopt the `producer:` label pattern the adapter **already uses at `kraken-websocket-adapter.ts:945`** (`producer: 'kraken_ws_book_mid'`).
+
+⚠️ ★ **I FOUND THAT LINE WHILE REFUTING THE 8.9.4 LEG AND DID NOT NOTICE IT ANSWERED Q4.** The honest-label pattern I cited as evidence *against* one claim was the fix for another, in the same file.
+
+✅ **HONEST LIMIT, STATED SO IT IS NOT INFLATED:** `translateV2ToV1` has **exactly one consumer** (`:680`), which guards `<= 0` at `:685` ⇒ **the zero state reaches nothing today.** Real, contained.
+
+### 8.2 §7.6 — DO NOT PATCH THE ARITHMETIC, CHANGE THE ESTIMAND
+
+✅ `P(ratio < 1×)` **is directly measurable on the same 195 exits that produced the deciles** — it was never necessary to infer it from a p10. **Measure it at Step 2, THEN derive n.** The counting rules ①–④ are the valuable part and they stand unchanged.
+
+✅ **The `n<100` per-class floor is DROPPED — report the per-class CI half-width instead.** ★ **A half-width never needs justifying**, which is precisely what the threshold could not do.
+
+### 8.3 §7.7 — "SOAKED" IS STRUCK, AND NEEDS NO REPLACEMENT INVENTED
+
+⛔ Struck from the HARD PREREQUISITE. ✅ **THE GATE IS: F-G-1's OWN PRE-REGISTERED CRITERION RETURNS `PASS`** — 30 crypto opens or 7 days from `2026-08-28T16:08:02Z`, armed as self-firing alert `2093a98a`.
+
+★ **Falsifiable, owned, and dated by MEASUREMENT rather than by promise** — which is the §9.4 distinction between a window whose length is the content and a date nobody can enforce.
+
+### 8.4 §7.8 — THE FOUR UNFALSIFIABLE CRITERIA, THREE WITH CONSTRUCTIBLE FIXES
+
+| criterion | r6 replacement |
+|---|---|
+| `OBJ-8`① | ✅ **Replace the equality count with a MUTATION PAIR: touch-only and through-only must return DIFFERENT fill sets on the same bars.** ★ The same proof shape F-G-1 used — a control that cannot fire is the defect it guards against |
+| `OBJ-1` | ✅ **USE THE INDEPENDENT WITNESS.** `exit_ticker_bid` exists and is populated ⇒ assert `exit_decision_price ≈ exit_ticker_bid`. **A SECOND instrument, not the suspect checking itself** — which was `#911`'s own objection |
+| `OBJ-3` | ⛔ **Needs BLOCKER-3 resolved FIRST** (no xStock instrument at all), then an n-floor |
+| `OBJ-5` | ✅ **The criterion becomes: NAME WHAT WOULD CHANGE THE DECISION.** Not "a decision was recorded" — which both branches satisfy |
+
+### 8.5 Q1 / Q2 / Q3 — ANSWERED, WITH THE MEASUREMENTS
+
+**Q1 (OBJ-0's n-floor).** ✅ **74 usable crypto stop-outs over 07-25→08-28 = ~2.2/day carrying a stop reference.** ⇒ **a discordant cell with any power is WEEKS, not days.** Re-derive on the gridded population, but the window arithmetic can start from that order of magnitude now.
+
+**Q2 (OBJ-6 / `B-EXIT-PROVENANCE`).** ⛔ **It does NOT degrade to a stated limit, and the gate is NOT "one close arrived."** Provenance IS landing post-`ed86a758e` — but at **12 of 334** crypto and **9 of 232** xStock, **≈3.6% coverage.** ✅ **THE GATE IS COVERAGE SUFFICIENT FOR A BEFORE/AFTER READ, and the number must be stated at Step 2.** Existence is already proven; sufficiency is not.
+
+**Q3 (VTS disposition).** ✅ **CONFIRMED — leave VTS unchanged and record the difference — but CONDITIONALLY.** §7.9's `#914` lead is unresolved: **if a 1.5% slippage tail is real, "non-surface" is false and Q3 REOPENS.** ⛔ **Resolve at Step 2 against the object that actually holds VTS exit prices** — `vts_open_trades` has no exit-price column, so my query was against the wrong object. ★ **Langston notes this is the same shape as his own crypto-`OBJ-6` retraction; stopping rather than guessing was right.**
 
 ---
 
