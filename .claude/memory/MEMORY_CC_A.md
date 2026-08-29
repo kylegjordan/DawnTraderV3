@@ -11,28 +11,29 @@
 > **If BLOCKED-ON says Kyle, say NOTHING and do not work the item.** Otherwise continue to the next step and report only at the step boundary, in the `CONDUCT.md` §6 format.
 > ⚠️ **UPDATE THESE FOUR LINES AT EVERY STEP BOUNDARY.** They were left stale for weeks and Kyle found it before I did.
 
-- **STEP: 3 of 11** (`B-CLAUDEMD-SLIM`, implementation — cuts DONE, 4 items owed). **NEXT: 4 of 11.**
-- **BATCH:** `B-CLAUDEMD-SLIM` Step 3 · queue is now **12 items**, mine at 1-12 in `PHASE_19_PLAN` §governance queue.
-- **BLOCKED-ON:** nothing. Owed in this batch: **P8 SIM+SysManual ✅ done · P9 rule-history ✅ done · P10 measure ✅ 117,191→112,081 B · P11 skill count ✅** ⇒ **remaining: commit, then Step 4 to Langston.**
-- ✅ **THE CUTS LANDED: 9 cut-and-point · 2 carried · 4 stay. 22/22 verified with negative controls.** `§9.5` is a **HUSK carrying its four sub-labels** (242 of 341 citations are sub-citations); **`rule 19` is an explicit hole** (840 citations span rules 1-29, form copied from `rule 11`).
-- ✅ **`bug-investigation` SKILL BUILT (13 skills now) — `#750` closed.** `CONDUCT.md` §9 pointed at a non-existent skill for nine days.
+- **STEP: 6 of 11** (`B-CLAUDEMD-SLIM`). ✅ **Step 4 APPROVED by Langston at `7d1f363d4`; his 3 findings applied at `de1737f34`.** **NEXT: the loaded-set verification + the completion report.** ⚠️ **NO DEPLOY STEP — rules/skills are session-side, not server-side. They reach other sessions only when THEY pull and restart.**
+- ✅ **MEASUREMENT, his required form `git show <ref>:CLAUDE.md | wc -c`: 117,191 → 112,081 = −5,110 B.** Confirmed by him independently.
+- ✅ **LANDED: 9 cut-and-point · 2 carry · 4 stay, 22/22 with negative controls.** `§9.5` = **HUSK + 4 sub-labels** (242 of 341 citations are sub-cites). **`rule 19` = explicit hole** (840 citations span 1-29; form from `rule 11`). **`bug-investigation` skill BUILT — 13 skills, `#750` closed.**
+- **QUEUE (mine, `PHASE_19_PLAN` §governance): 1 `B-RULES-1e` · 2 `B-CROSS-SESSION-BLEED` · 3 `B-GDRIVE-UNMOUNT`+`#759` · 4 `B-REVIEWER-LOOP` · 5 `B-CHUNK-ADDRESSING` · 6 `B-MEASURE-GATE` · 7 `B-EXIT-LATCH-INVESTIGATION` · 8 `B-GOV-REPORTING` · 9 `B-EOL-NORMALISE` · 10 `B-GATE-GUARD` · 11 `B-CREW-BOARD-REMOVAL` · 12 `B-CLAUDEMD-SLIM`.**
+- ⛔ **OPEN AND MINE:** `#761` comms outage (evidence at `/root/evidence/761/`) · `#762` skill-count → folded into 1e · **two overdue alerts: `f6ae5419` (18d), `23f004a4` (21d).**
 
 # ⛔⛔ I TOOK LIVE COMMS DOWN FOR ~4 MINUTES AND COULD NOT DIAGNOSE IT (`#761`)
 **Patched `discord_common.py` for `#749`, restarted the bridge, every `cc-send` returned `send FAILED`. Reverted from backup; verified restored.** ⛔ **CAUSE STILL UNKNOWN — I had two theories, tested BOTH offline against the real functions, and both were REFUTED.** Broken copy preserved at `/tmp/discord_common.py.broken-749`.
 ★★ **THE PROCESS FAILURE IS THE KEEPER: I DEPLOYED TO A LIVE SERVICE AND TESTED IN PRODUCTION.** ⇒ **prove chunking OFFLINE on real bodies FIRST.** ⚠️ **Pulled out of the slim into `B-CHUNK-ADDRESSING` (queue 5) — a doc batch is how a live-service change came to be attempted at the tail end of one.**
 
-# ⚠⚠ THREE INSTRUMENTS CALLED CONTENT "ABSENT" AND ALL THREE WERE WRONG (one day)
-**exact-phrase matcher → 5 false absences · concept-word matcher → 3 false · completeness checker that could not tell a POINTER from a BODY → 3 false.**
-★★ **WHAT WORKS, and it is Langston’s: READ THE DESTINATION FILE END TO END AND CITE THE LINE YOU REJECTED BESIDE THE ONE YOU ACCEPTED.** ⚠️ **My two misses were NOT paraphrase failures — I read one plausible line and stopped. That is §9.5(a) first-sufficient-explanation, applied to a FILE instead of a code path.**
-★ **AND CHECK EVERY ZERO BEFORE ACTING ON IT.** A survivor read as deleted because my grep was lowercase against capitalised text with markdown marks inside it.
+# ⚠⚠ SIX INSTRUMENTS CALLED CONTENT "ABSENT" AND ALL SIX WERE WRONG — IN ONE DAY
+**exact-phrase (5 false) · concept-word (3) · a checker that could not tell a POINTER from a BODY (3) · a case-sensitive grep against capitalised text · and TWO of Langston’s own (`lstrip` strips a CHARACTER SET not a prefix → 22 false; phrase probes → 5).**
+★★ **THE ONLY METHOD THAT DID NOT FAIL: READ THE DESTINATION END TO END AND CITE THE LINE YOU REJECTED BESIDE THE ONE YOU ACCEPTED.** ⛔ **A BETTER MATCHER IS NOT THE FIX — FOUR OF THE SIX WERE BETTER MATCHERS.**
+⚠️ **My two misses were NOT paraphrase failures: I read one plausible line and stopped — §9.5(a) first-sufficient-explanation, applied to a FILE.** ★ **CHECK EVERY ZERO BEFORE ACTING ON IT.**
+★ **23 `wrong-object` trailers in one day vs 22 for the whole prior week. `B-MEASURE-GATE` (queue 6) is the mechanism; logged mid-week in `MISTAKE_PATTERNS.md` rather than waiting for the pass.**
 
 # ⛔⛔ SCOPE BEFORE YOU PUSH — and VERIFY THE LABEL, not just the content
 ★ **KYLE DECIDES *WHAT*. LANGSTON REVIEWS *HOW*. "Kyle asked for it" is not a review gate** — no moment presents itself as *"you are shipping a rules change."*
 ⚠️ **`cc505f452` shipped correct work under ANOTHER batch’s name** (`#760`): the message heredoc failed, `git commit -F` took a stale file, `-q` hid it, and **I verified the CONTENT reached origin and never looked at the label.** ⇒ **the checker attributes batches from commit SUBJECTS.** ★ **A matching name is not a matching thing — here it was RIGHT CONTENT, WRONG NAME.**
 ⛔ **STOP PUTTING BACKTICKS IN BASH-EMBEDDED PYTHON.** They are command-substituted, the heredoc dies, and a stale file survives to be picked up. **This caused `#760` and mangled four other edits today. Use the Write tool for any script with backticks.**
 
-# ⚠⚠ CAP CLAIMS: MEASURE THE WAY THE ENFORCER MEASURES
-**Loader uses `statSync().size` = ON-DISK bytes (CRLF); python text-mode collapses CRLF→LF ⇒ ~1 B/line optimistic.** ★ **Use `wc -c` / `os.path.getsize`, NEVER `len(open(...).read().encode())`.** ⚠️ **But my "correction" was ITSELF wrong — the artifact at origin is LF-only and UNDER cap; the cap is enforced PER CHECKOUT, not per artifact. Full record: `#751`.**
+# ⚠⚠ CAP + BYTE CLAIMS: MEASURE AT THE REF, NEVER YOUR CHECKOUT
+★ **`git show <ref>:FILE | wc -c` — the blob is one object, identical for every clone.** ⛔ **A working-copy `wc -c` is CRLF-inflated (~1 B/line) and re-opens the hole: three false "over cap" readings in one day (`#751`).** ⚠️ **119 md files DO store CRLF; `CLAUDE.md` does not.**
 
 # ✅ FRESH-CONTEXT REVIEWER — LIVE, STANDING APPROVAL (Kyle 2026-08-27)
 **Spawn for load-bearing claims at ANY workflow point, and after ANY investigation that produced a finding. No asking.** ⚠️ **I had written "Kyle must approve" into it myself — four skills, ZERO uses in two days.**
