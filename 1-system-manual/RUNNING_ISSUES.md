@@ -4472,6 +4472,29 @@ Kraken publishes a per-pair `tick_size` — **1,437 pairs, 11 distinct values, a
 ⇒ **HOME: `B-POST-GRID-MUTATION-CENSUS` (INVESTIGATION ONLY, NO CODE), owner CC-C, placed in `PHASE_19_PLAN.md` §1 Part F at row **3f.b** — AFTER the F-G series, BEFORE `B-GRID-LIVE-PATH-PARITY` (3g), whose scope it determines.**
 ★ **AND KYLE'S "BIGGER PROBLEM" INSTINCT IS ALREADY EVIDENCED, NOT SPECULATIVE: THREE post-VPG mutation sites are on the record — this one, plus `#939`(a) `trading-engine.ts:536` and `#939`(b) `active-execution-engine.ts:4317-4318` — AND ALL THREE WERE FOUND INCIDENTALLY. Nobody has ever enumerated them.** F-G-1 rounds at signal BIRTH; **what happens to that price for the rest of the trade's life has never been censused.**
 
+### #940 OPEN 2026-08-29 (CC-C; Langston found it while measuring the F-G-2 r6 gate, I re-derived it) — ⛔ `exit_ticker_bid` IS NOT TRUSTWORTHY ON xSTOCK, AND F-G-2 HAD JUST MADE IT AN OBJECTIVE'S INDEPENDENT WITNESS
+
+**MEASURED — all 6 xStock closes carrying BOTH `exit_decision_price` and `exit_ticker_bid`:**
+
+| symbol | close_reason | `exit_decision_price` | `exit_ticker_bid` | divergence |
+|---|---|---|---|---|
+| **TGT/USD** | `stop_hit` | 106.075 | 157.00 | ⛔ **+48.0%** |
+| **WEN/USD** | `target_hit` | 13.31 | 7.70 | ⛔ **−42.1%** |
+| **NOW/USD** | `stop_hit` | 118.75 | 143.20 | ⛔ **+20.6%** |
+| BMNR/USD | `target_hit` | 26.515 | 26.46 | −0.2% |
+| MRNA/USD | `stop_hit` | 141.65 | 141.80 | +0.1% |
+| CRM/USD | `stop_hit` | 226.715 | 226.54 | −0.1% |
+
+⇒ ⛔ **THREE OF SIX DIVERGE BY 20-48%. THAT IS NOT A SPREAD.** The other three sit inside ±0.2%, which is what a spread looks like — **so the instrument is bimodal, not noisy.**
+
+⛔⛔ **WHY IT MATTERS RIGHT NOW: `F-G-2` §8.4 had JUST promoted `exit_ticker_bid` to `OBJ-1`'s INDEPENDENT WITNESS** — the fix for a criterion that otherwise checks the provenance stamp against the code path that writes it. ★ **On crypto that witness holds (`exit_decision_price ≠ exit_ticker_bid` on 9/9, and `= exit_book_mid` on 12/12). On xStock it is not yet usable** — so `OBJ-1`'s acceptance test has no working witness for half the system.
+
+⚠️ **AND TWO OF THE THREE ARE `stop_hit`** ⇒ they fall inside **`OBJ-9`'s candidate set** (the unexplained above-stop tail). **A stop-out whose recorded bid is 48% away from its decision price is a candidate explanation for a stop-out that appears to exit far from its stop.** ★ **The two findings may share one cause; neither can be assumed to.**
+
+⛔ **MECHANISM NOT ESTABLISHED — THIS IS A LEAD, NOT A DIAGNOSIS (Langston states he has not read the writer, and neither have I).** Candidates to eliminate rather than assume: a stale or last-session bid on an instrument that trades 24/5 · the equities feed's bid captured at a different instant from the decision · a symbol-mapping error putting another instrument's bid on the row · the xStock producer naming a SOURCE (`kraken_equities_ws`) rather than a SIDE, so what lands in that column may not be a bid at all.
+
+⇒ **DISPOSITION 1 — FOLD INTO THE WORK IN HAND:** resolved at **`F-G-2` Step 2**, together with **`BLOCKER-3`** (0 of 144 xStock `stop_hit` closes carry `original_stop_price` — xStock has no stop reference at all) and **`OBJ-9`**. Owner **CC-C**. ⛔ **`OBJ-1` may not be accepted on an xStock witness until this is answered.**
+
 ### #939 OPEN 2026-08-28 (CC-C, same reader) — TWO LIVE-PATH SITES MUTATE A GRIDDED PRICE AFTER THE VPG, BOTH DORMANT TODAY
 
 ⚠️ **RENUMBERED `#924` → `#939` ON 2026-08-28. NUMBER COLLISION, AND MINE WAS THE NEWER ENTRY SO MINE MOVES** (shared `MEMORY.md` rule: *collision → newer entry renumbers*). CC-INFRA's `#924` — two ungoverned SSH keys — landed at `de969cd39` **14:16Z**; this one at `dc73ca104` **15:04Z**. **Both were live under the same number for six hours.** ★ Inbound citations updated in the same commit: `PHASE_19_PLAN` row 3g, `SYSTEM_IMPACT_MAP`, `SYSTEM_MANUAL`, and the F-G-1 change list annotated.
