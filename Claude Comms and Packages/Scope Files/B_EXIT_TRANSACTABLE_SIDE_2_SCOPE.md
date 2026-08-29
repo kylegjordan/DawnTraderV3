@@ -1,4 +1,4 @@
-# F-G-2 — B-EXIT-TRANSACTABLE-SIDE — SCOPE (Step 1, r8)
+# F-G-2 — B-EXIT-TRANSACTABLE-SIDE — SCOPE (Step 1, r9)
 
 change-class: architecture
 
@@ -96,6 +96,35 @@ The `31.08% → 0` crossed-book verification is **Langston's**, and he flags tha
 ⛔ **So it is renamed: `mid-vs-bid BASIS GAP`, never "cost".** ✅ **Condition 1's discriminating pair is exactly what settles which it is** — and until that lands, **no figure from this row may be reported as a loss.** ⚠️ **`net_pnl −$121.96` is a genuine realised number and is a DIFFERENT object; the two must not be summed or compared.**
 
 ⚠️ **ALL POST-EPOCH FIGURES ABOVE ARE `RULED ON REPORTED FACT` and Langston has flagged that as DISQUALIFYING at Step 4 since they enable the proceed. He re-derives them there.**
+
+
+### ✅ r9 — ITEM 2 DISCHARGED BY LANGSTON, AND THE CAVEAT IS **RATE-DEPENDENT**, NOT BINARY
+
+✅ **HIS PAIR IS CLEAN. The zero leg is at `e6f7c70b3`, BEFORE `afb7d326c`** — three legs, one self-dating:
+
+1. **The denominator dates itself.** `0 of 8,774` carries `checksum mismatch 8,774/8,774` — a **100%-mismatch population is the PRE-precision signature** (`symbolPrecision` unpopulated, `String(qty)` cannot reconstruct the CRC input). Post-precision the same endpoint reads **18,758/18,758 MATCHES**. ⇒ **that population cannot exist after the MBIM deploy.**
+2. **The record predates the deploy** — `GOVERNANCE_EXCEPTIONS.md:29`, stamped `2026-08-23T11:00:00Z`, already carries `0 of 8,774`; `afb7d326c` deployed 08-24.
+3. ★ **THE STRUCTURAL LEG, which decides it:** at `e6f7c70b3` the mismatch arm did **NOT** `continue` — the fix item reads *"compute Kraken's checksum and COUNT match/mismatch — OBSERVE ONLY, never resubscribe"*. The `softResubscribe` + `continue` entered at the MBIM deploy (adapter `:850-856`, *"Corrected 2026-08-24"*). **So the crossed detector at `:884` was REACHABLE for all 8,774 updates.**
+
+⛔⛔ **AND THE INVERSE IS WHY IT MATTERED: had that arm been live in that build, the counter would have read `0` BY CONSTRUCTION on 100% of updates — perfectly blind, perfectly reassuring, and INDISTINGUISHABLE FROM THE NUMBER HE ACTUALLY GOT.**
+
+⇒ ✅ **STANDING RULE, replacing r8's flat "not comparable" — which would have been read as "unusable" when the instrument is still good: THE BLINDNESS IS RATE-DEPENDENT. The blind fraction is exactly `mismatches / updatesApplied`.** ⛔ **NEVER QUOTE `crossedDetections` WITHOUT THE MISMATCH COUNT BESIDE IT.**
+
+### ⛔⛔ r9 — `OBJ-0` HAS NO READ-OUT YET, AND THE 23 PRE-GRID ROWS ARE A DIFFERENT INSTRUMENT
+
+**Langston sharpens item 1 beyond a sample-size note: F-G-1 MOVES THE STOP PRICE THE FILL IS MEASURED AGAINST, so the 23 pre-grid rows measure a stop the system NO LONGER EMITS.** ★ **A different instrument, not older data — the same logic as the epoch split, one level down.**
+
+⇒ ✅ **`OBJ-0` HAS NO READ-OUT.** ⛔ **DO NOT MINT A SECOND GATE:** ride **F-G-1's own pre-registered accrual** (30 crypto positions or 7 days, alert `2093a98a`). `PHASE_19_PLAN.md:36` already carries the hard prerequisite.
+
+### ✅ r9 — THE BASIS-GAP TEST, PRE-REGISTERED **BEFORE** CONDITION 1'S DATA LANDS
+
+⛔ **A prohibition is weaker than a prediction, so item 3 becomes a falsifiable test rather than a rule about wording (Langston).**
+
+**IF the 0.166% median shortfall is the half-spread by construction, it PREDICTS a ≈0.33% spread on those names at their exit timestamps.**
+
+✅ **MEASURE IT.** ⇒ **If the measured half-spread comes in MATERIALLY BELOW 0.166%, the residual is NOT accounting and there is something real underneath.**
+
+⚠️ **PRE-REGISTERED NOW, BEFORE THE DATA, precisely so it cannot become a post-hoc fit** — which is the whole reason it is written here rather than decided at read time.
 
 ### ⚠️ THE HONEST CONSEQUENCE — DIRECTION EXPECTED, MAGNITUDE UNKNOWN (Langston's amendment)
 
