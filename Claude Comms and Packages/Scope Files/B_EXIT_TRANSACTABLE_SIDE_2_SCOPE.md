@@ -699,3 +699,63 @@ His point: robust sigma from my own p10/p90 is **0.257** while the stddev is **1
 **I HAVE NOT EDITED `OBJ-3`.** Two of three pass with a caveat I am not smoothing over, and **his instruction was explicit: do not edit the objective yet.** => **returned to him for confirmation.**
 **If confirmed, the narrowed arm ships as he specified: a FENCE WITH A DERIVED SUBJECT** (F-G-1 precedent - never a name list) **asserting no xStock exit path reads a book mid, so a future mid-based path fails CI instead of passing silently.**
 
+## 17. RETRACTED - LANGSTON FAILED THE NARROWING, AND SECTION 16.0 IS WRONG. `OBJ-3` STANDS AS APPROVED, BOTH CLASSES.
+
+### 17.1 THE RETRACTION, RE-DERIVED BY ME AT THE REF RATHER THAN ACCEPTED ON REPORT
+
+**Section 16.0 claimed the mid-for-bid substitution is UNDEFINED on xStock because `active-execution-engine.ts:1230` reads a scalar. THAT IS FALSE.** Verified at `origin/migration/aws-supabase`, `equity-spot-archiver.ts:130-137`:
+
+```
+const _mark = (_bid > 0 && _ask > 0) ? (_bid + _ask) / 2 : _last;
+if (Number.isFinite(_mark) && _mark > 0) latestEquityTick.set(..., { price: _mark, tsMs: Date.now() });
+```
+
+**Its own comment at `:129` says it in words: *"P19-B8.5 xstock marks: mid from bid/ask when both sides exist, else last."*** Writer census, tree-wide, tests excluded: **exactly ONE `.set` site** (`:137`), and `getLatestEquityTick` (`:115`) returns that object to `:1230`.
+=> **`_eqTick.price` IS A MIDPOINT** - three-state with a `_last` fallback, **structurally identical to crypto's `c`**. The substitution is not absent on xStock; **it is ONE HOP UPSTREAM of the line I measured.**
+
+### 17.2 THE FAILURE IS `wrong-object`, AND IT CONTRADICTED MY OWN r1 SCOPE
+
+**`B_EXIT_TRANSACTABLE_SIDE_SCOPE.md:37` at `cdb783a8d`, written by me, says:**
+> *"`getLatestEquityTick` <- `equity-spot-archiver.ts:135` **`(bid + ask) / 2`** - **YES, a different route to the same defect**"*
+
+and directly beneath it, the line the whole batch was framed on:
+> *"**A CRYPTO-ONLY F-G FIXES HALF THE PROBLEM AND WOULD READ AS COMPLETE.**"*
+
+**I argued for exactly the crypto-only narrowing my own scope was written to prevent.** Two distinct errors, and neither is the statistics:
+1. **I TRACED TO THE CONSUMER AND STOPPED.** `currentPrice = _eqTick.price` is a scalar AT THAT LINE, and I generalised "scalar" into "no mid exists on this lane" without one hop upstream. **Langston's `#675` shape: a true absence measured on the adjacent object, then generalised onto the lane.**
+2. **I MISREAD A COMMENT AS EVIDENCE ABOUT A DIFFERENT THING.** The `:1232` note (*"no adapter quote object on this leg"*) is `B-EXIT-PROVENANCE` R6-3 about where the provenance STAMP originates - **object shape at the consumer**, not **semantics of the number**. Bid and ask plainly exist on that leg: they are in the same payload, buffered to `xstock_spot_ticker_snap` - **which is exactly why `exit_ticker_bid` adjudicated EXACT on 6 of 6 in the `#940` rider.** My own evidence, two sections earlier, refuted my own claim.
+
+**MISTAKE: wrong-object [F-G-2] - measured at the consumer, generalised about the producer, and contradicted a finding I had written myself.**
+
+### 17.3 THE STATISTICS, RE-RUN UNDER HIS CORRECTED SPECIFICATION
+
+**He withdrew his own power spec as wrong:** he set the shift at crypto's absolute `+0.1657%`, but the mechanism predicts **xStock's OWN half-spread** - `0.1665% / 2 = 0.0833%` from section 16.4.
+
+| shift | p1 | power |
+|---|---|---|
+| +0.1657 (his original spec) | 90/105 = 0.857 | 100.0% |
+| **+0.0833 (corrected - xStock's own half-spread)** | **84/105 = 0.800** | **100.0%** |
+
+**(a) passes under BOTH specifications.** **It does not rescue the narrowing** - with the mechanism refuted, (b) failing on substance (n=4 is no measurement) and (c) marginal at 0.0549, there is nothing to stack them on.
+**BUT IT SHARPENS WHAT REMAINS, and this is the useful residue: at n=105 we had 100% power to detect an offset the size of xStock's own half-spread, AND WE DID NOT DETECT ONE.**
+
+### 17.4 => THE REAL OPEN QUESTION, WHICH IS BETTER THAN THE ONE I ASKED
+
+**THE MECHANISM IS ON BOTH CLASSES. THE SIDEDNESS IS NOT.** crypto 24/24 below; xStock 53/105. **That is an ANOMALY TO EXPLAIN, not a licence to cut** - and 17.3 rules out "we could not have seen it."
+
+**Candidates, to ELIMINATE and not to assume (his list, and it is the deliverable):**
+1. **the `_last` fallback arm firing often on thin names** - when a side is missing the mark is a genuine last trade, so those rows carry no mid at all
+2. **residual `#943` contamination outside the 00:15 minute** - the proxy is minute-of-close and the defect is a shut-market quote; those are not the same set
+3. **a ~0.08% offset genuinely buried** - though 17.3 argues against it
+
+**DISPOSITION (section 9.4): (1) FOLD INTO THE WORK IN HAND.** `OBJ-3` stands as approved, both asset classes, unamended.
+
+### 17.5 TWO THINGS HE CORRECTED THAT WOULD HAVE SHIPPED
+
+- **THE FENCE WORDING WAS WRONG AND WOULD HAVE PASSED BY VOCABULARY.** I drafted *"no xStock exit path reads a **book** mid."* **xStock's mid is a TICKER mid, off `data.bid`/`data.ask` - never the book.** That fence goes green while the live defect sails under it. **Any fence here asserts the TICKER mid, with a derived subject.**
+- **`BLOCKER-3` IS NOT DISCHARGED BY SECTION 11.** He holds that `OBJ-3`'s xStock arm still needs a stop reference wired **as its own prerequisite, in scope, not at Step 8.** Section 11 established `stop_loss` is populated 144/144 and usable for MEASUREMENT; it did not wire an instrument for the objective.
+
+### 17.6 WHAT HE ACCEPTED
+
+**`#943` - accepted, and he called it the strongest thing in the round.** The 49x median spread at 00:15 against every other close is a physical signature arrived at independently of his own alert triage, and it corroborates the minute-of-close proxy properly. **It still owes the positive row-level identifier.**
+
