@@ -759,3 +759,47 @@ and directly beneath it, the line the whole batch was framed on:
 
 **`#943` - accepted, and he called it the strongest thing in the round.** The 49x median spread at 00:15 against every other close is a physical signature arrived at independently of his own alert triage, and it corroborates the minute-of-close proxy properly. **It still owes the positive row-level identifier.**
 
+## 18. THE ANOMALY - TWO CANDIDATES ELIMINATED WITH NUMBERS, AND A FIFTH THAT MAY DISSOLVE THE COMPARISON
+
+**The question (Langston's framing, and it is better than the one I asked): the midpoint mechanism is on BOTH classes; the sidedness is on ONE. crypto 24/24 below stop; xStock 53/105.**
+
+**RETENTION FLOOR, STATED BEFORE ANY ZERO IS READ (his condition 2):** `xstock_spot_ticker_snap` holds **2026-07-01 -> 2026-08-29, 59.5 days** - it spans the whole stop-out population, so retention does not bound anything below.
+**PREDICATE, PER HIS CONDITION 1:** measured on **POSITIVE** (`bid > 0 AND ask > 0`), never on null. A `0` or negative quote is stored non-null and still takes `_last`; a null-based predicate would under-count the fallback and manufacture the very absence being tested.
+
+### 18.1 THE THREE STATES OF `parseTickerSnap`, MEASURED - 7 days, 14,565,408 snaps
+
+| state | condition | snaps | share |
+|---|---|---|---|
+| **1 mid** | `bid>0 AND ask>0` -> `_mark=(bid+ask)/2`, written | **14,565,406** | **100.000%** |
+| **2 `_last` arm** | else `last>0` -> `_mark=last`, written | **2** | 0.000% |
+| **3 `#636` no-write** | else -> **nothing written, previous mark CARRIED** | **0** | 0.000% |
+
+**CANDIDATE 1 (my `_last` fallback) - ELIMINATED.** 2 snaps in 14.5 million. It dilutes nothing.
+**CANDIDATE 4 (his `#636` carried mark) - NOT OBSERVED**, and it was the better candidate because it predicts **attenuation** rather than sidedness, which is the shape that would reconcile "full power for an offset that size" with "did not see one."
+**INSTRUMENT REACH, STATED: a payload with no `symbol` returns at `:121` before BOTH the stamp and the buffer, so it writes no snap row and is INVISIBLE to this instrument.** The count covers snaps that reached `bufferTickerSnap`. **The `#636` zero is bounded by that, and by the 7-day window** - the full-history query exceeded the statement timeout and is not reported as a result.
+**Structural note (his, and stronger than my grep): `latestEquityTick` is a module-private `const` at `:112`, never exported, and `:137` is the only `.set`. No caller can defeat it.**
+
+### 18.2 => THE ANOMALY IS NOW HARDER, NOT EASIER
+
+**xStock marks are midpoints essentially 100% of the time.** Both attenuation candidates are dead. So the two classes take the same mechanism and produce opposite sidedness, and nothing measured so far explains it.
+
+### 18.3 CANDIDATE 5, MINE - AND IT WOULD NOT EXPLAIN THE ANOMALY, IT WOULD DISSOLVE THE COMPARISON
+
+**The exit trigger is SHARED.** `active-execution-engine.ts:1793-1806` returns `price: currentPrice` for both `target_hit` and `stop_hit`, and the xStock branch *"falls through into the shared evaluation pipeline"* (`:1243`). **So a `stop_hit` fires when the mark crosses the stop, and the recorded `exit_price` IS that mark.**
+=> **An `exit_price` ABOVE its `stop_loss` should therefore be IMPOSSIBLE. 53 of 105 xStock rows are above it.**
+
+**The mechanism that makes it possible is already on this file at section 11.5: the RATCHETED stop is not recoverable from `closed_trades`.** The ratchet writes only to the open-position row (`:1757`), that row is deleted at close, and **both** `closed_trades` stop columns keep the **entry-time** stop. A break-even ratchet exit is returned as `type: 'stop_hit'` (`:1813-1824`, its own comment: *"indistinguishable from a real stop-out"*).
+=> **A ratcheted-up stop that is hit produces a genuine `stop_hit` whose `exit_price` sits ABOVE the entry-time `stop_loss` I am measuring against.**
+
+**IF xStock ratchets materially more often than crypto - longer holds, different volatility - then the xStock "symmetry" is not an absence of bias. It is a DIFFERENT STOP being used as the yardstick on half the rows,** and the crypto/xStock comparison in sections 15-17 is confounded rather than informative.
+
+**NOT CLAIMED, AND THE INSTRUMENT FOR IT DOES NOT EXIST TODAY.** `latch_trigger_price` is populated on **0 of 659** closed trades (section 12.4) and `original_stop_price` is absent on all 144 xStock rows (section 11) - **both fed from the same perishable in-memory state.** So the ratchet rate per class is **not measurable from `closed_trades` at all**, and I am recording a candidate, not a finding.
+=> **This is the first thing that makes `BLOCKER-3` load-bearing rather than procedural: Langston kept it open on the ground that "a usable field is not a wired instrument," and candidate 5 is the question that needs the wired one.**
+
+**DISPOSITION (section 9.4): (1) fold into the work in hand.** Candidates 1 and 4 closed with numbers; **2 (residual `#943` outside 00:15) and 3 (a buried offset) remain open**; **5 is new and, if true, retires the comparison rather than explaining it.**
+
+### 18.4 ONE THING I MEASURED THAT DOES NOT ANSWER WHAT I POINTED IT AT
+
+I hypothesised **coarse xStock detection** - if xStock updated far less often, the mark at a valid check would be a draw either side of the stop, giving symmetric wide scatter. **Measured, 7 days:** xStock median inter-snap gap **4.61 s**; crypto **20.05 s**.
+**REFUTED FOR xSTOCK - 4.61 s is not coarse.** **AND THE CRYPTO NUMBER IS A WRONG-OBJECT READ THAT I AM NOT USING:** for xStock the archive and the mark are written in the **same call**, so the snap gap IS the mark cadence; for crypto the archive is a **different path** from the engine's price cache, whose measured evaluation cadence is **~1,500 ms** (section 10.4). **The two columns are not the same quantity and must not be compared** - stated because the table above puts them side by side and invites exactly that.
+
