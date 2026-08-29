@@ -271,3 +271,30 @@ With the mechanism known, two predicates looked obvious. **Neither works, and I 
 ⚠️ **STILL NOT DESIGNING THE FIX (rule 15)** - but this materially reorders the candidates, and it is the kind of finding that should reach the decision BEFORE it is taken, not after.
 ★ **AND IT CONNECTS TO EXISTING WORK RATHER THAN COMPETING WITH IT: `#531`/`#583` (xStock weekend posture) are the same surface, and `isXstockLiquidFillWindowET` already exists** - the system ALREADY models "is this a liquid window", and uses it to gate FILLS. **It does not gate EXIT PRICING.** ⛔ **Stated as an observation about what exists; NOT a proposal.**
 
+## 13. OBJ-4 - THE CONTAMINATION IS **FAVOURABLE-BIASED**, WHICH IS THE DANGEROUS DIRECTION
+
+**All xStock closes carrying a `net_pnl`:**
+
+| population | n | total P&L | avg P&L | win rate |
+|---|---|---|---|---|
+| **ALL xStock closes (what consumers read today)** | 243 | **-$253.40** | **-$1.043** | **38.3%** |
+| **EXCLUDING the `00:15` cohort (the honest book)** | 178 | ⛔ **-$350.83** | ⛔ **-$1.971** | ⛔ **34.8%** |
+| the cohort alone | 65 | **+$97.43** | +$1.499 | 47.7% |
+
+⇒ ⛔⛔ **26.7% OF THE xSTOCK POPULATION IS SYNTHETIC, AND IT FLATTERS THE RECORD IN EVERY DIMENSION:**
+- **average P&L reads `-$1.043` when the honest figure is `-$1.971`** - the loss appears **47% SMALLER** than it is
+- **win rate reads 38.3% against a true 34.8%** - **3.5 points overstated**
+- **$97.43 of phantom profit** sits in a book that is actually down $350.83
+
+★★ **THE DIRECTION IS THE FINDING.** Contamination that made results look WORSE would be self-correcting - somebody would investigate. **This makes a losing configuration look roughly half as losing**, which is exactly the bias that survives review and gets built on. ⇒ **It is also why this went unnoticed for six weeks: nothing about the numbers invited a second look.**
+
+### 13.1 THE CONSUMER CENSUS - NAMED, AND THE PER-CONSUMER AUDIT IS **NOT** CLAIMED
+
+**Repo-wide, tests excluded, 20+ modules read `closed_trades`.** The learning- and reporting-critical ones: `calibration_report_service.ts` · `metrics-core.ts` · `behavioral-template.ts` · `c5-financial-diagnostics.ts` · `c13-validation-service.ts` · `c14-validation-service.ts` · `i1-trade-lifecycle-diagnostics.ts` · `daily-brief.ts` · `ai-summary-task.ts` · `replay-ablation.ts` · `ready_to_buy_service.ts` · `active-portfolio-manager.ts` · `exploration-lane.ts` · `routes.ts` · `routes/vts.ts`.
+
+⛔ **I HAVE NOT AUDITED THESE INDIVIDUALLY, AND I AM NOT PRETENDING TO.** A per-consumer walk of 20+ modules asking *"does this one already exclude the cohort?"* is its own batch. **What IS established: NONE of them can be excluding it, because the cohort had no identifier until today and still has only a time proxy (OBJ-2).** ⇒ ✅ **the exclusion question is answerable in one line for all of them right now - none exclude it - and the per-module audit only becomes useful once an identifier EXISTS.**
+
+### 13.2 ⇒ SEQUENCING CONSEQUENCE
+
+**The per-consumer audit is downstream of OBJ-2, which is downstream of `#911`'s instrumentation.** ⇒ **Do not schedule it yet.** ⚠️ **But every xStock calibration read taken between 2026-07-17 and the fix is contaminated by a favourably-biased quarter of its population, and any conclusion already drawn from one should be re-checked rather than trusted.**
+
