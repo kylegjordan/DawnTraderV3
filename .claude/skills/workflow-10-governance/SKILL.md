@@ -94,6 +94,30 @@ When a substantive asset-class-onboarding learning surfaces in ANY batch, fold i
 ⛔⛔ **THIS TABLE IS NOW THE *ONLY* DOCUMENT LIST IN THIS SKILL. THE TIER-2 BULLETS ABOVE ARE DELETED, NOT DUPLICATED (Langston, 2026-08-28).**
 ★ **His catch, and it is `#641`: the table was a SECOND COPY of the bullet list IN THE SAME FILE, and it had ALREADY DIVERGED AT BIRTH** — `CONDUCT.md` existed only in the table, and the `MULTI_ASSET` row had dropped the bullet’s temporary WORKING-LIST trigger. **Once the table is the deliverable, the bullet list is the copy nobody fills: it rots and the triggers drift.**
 
+⛔⛔ **STATE THE CHANGE-CLASS FIRST — IT DECIDES WHICH ROWS ARE *REQUIRED* AND WHICH ARE *JUDGED* (Kyle, 2026-08-29).**
+★ **His catch: a two-column ledger hides the thing he most needs to see — whether an `N/A` was a legitimate judgement or a missed obligation.** ⚠️ **On a `non_architecture` batch an `N/A` against the System Manual is fine. On an `architecture` batch the SAME cell is a RED FAILURE.** ⇒ **without the class at the top, the reader cannot tell those apart, and neither can the author.**
+
+**WRITE THIS LINE ABOVE THE TABLE:** `CHANGE-CLASS: <architecture | non_architecture | sub_batch | hotfix>` — **the same class declared in the scope header (§3.0), which the governance checker grades against (`scripts/governance-checker/config.mjs`, `CLASS_DOCSET`).**
+
+| document | architecture | non_architecture | sub_batch | hotfix |
+|---|---|---|---|---|
+| the batch `SCOPE` | **REQUIRED** | **REQUIRED** | judged | judged |
+| the batch `PRE_AUDIT` | **REQUIRED** | **REQUIRED** | judged | judged |
+| `COMPLETION_REPORT` | **REQUIRED** | **REQUIRED** | **REQUIRED** | judged |
+| `BATCH_CATALOG.md` | **REQUIRED** | **REQUIRED** | **REQUIRED** | judged |
+| `PHASE_HISTORY.md` | **REQUIRED** | **REQUIRED** | **REQUIRED** | judged |
+| `SYSTEM_MANUAL.md` | **REQUIRED** | judged | judged | judged |
+| `SYSTEM_IMPACT_MAP.md` | **REQUIRED** | judged | judged | judged |
+| `CHANGES_AND_FIXES.md` | judged | judged | judged | ⛔ **REQUIRED — the ONLY one a hotfix must have** |
+| `PHASE_19_PLAN.md` · shared `MEMORY.md` + your own `MEMORY_CC_<X>.md` · Langston’s `MEMORY.md` | **REQUIRED** | **REQUIRED** | **REQUIRED** | **REQUIRED** |
+| every other row in the ledger below | judged | judged | judged | judged |
+
+⚠️ **THE THREE LOCAL-STATE ROWS ARE REQUIRED IN *EVERY* CLASS, HOTFIX INCLUDED, AND THAT IS DELIBERATE — they are how the NEXT session and Langston find out what happened.** ★ **The governance checker does not grade them (they are not in its `CLASS_DOCSET`), so nothing but this row asks.**
+
+⛔ **A `REQUIRED` ROW CANNOT TAKE `N/A`. If it is genuinely not applicable, THE CLASS IS WRONG — re-declare it, do not write `N/A` against an obligation.**
+★ **A `hotfix` requiring exactly ONE document is not laxity: the fast path is short BECAUSE it is narrow, and `workflow-hotfix` carries the qualifying test that decides whether you are on it at all.**
+⚠️ **The class is AMENDABLE — a sub-batch that grows re-declares (§3.0). Amend the class, then re-read this table; do not carry an old class forward because the ledger is already half-filled.**
+
 **VERDICT IS ONE OF EXACTLY TWO TOKENS: `✅` (updated) or `N/A` (judged not applicable).** ⚠️ *(Stated HERE, above the table — it used to be defined thirty lines below it, so a session filling top-down could invent its own tokens.)*
 
 | # | document | WHEN IT APPLIES | verdict | **ONE LINE — REQUIRED ON *EVERY* ROW** |
