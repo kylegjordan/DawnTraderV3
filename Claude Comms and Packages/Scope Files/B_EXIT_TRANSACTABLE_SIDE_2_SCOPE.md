@@ -468,3 +468,47 @@ I asked whether the two columns ever differ, expecting `trailing_stop_hit` to se
 | **`original_stop_price` is not an independent witness** | (1) folded in — **recorded as a BINDING NEGATIVE.** It may not be cited as corroboration of `stop_loss`; it is derived from it. |
 | **The trailing in-force stop is unrecoverable** | ⛔ **(2) added as an item to `B-POST-GRID-MUTATION-CENSUS`** (`PHASE_19_PLAN` row 3f.b, the investigation batch that already owns the post-VPG mutation sites) — **it is a mutation-site instrumentation gap, which is that batch's subject, not this one's.** |
 
+## 12. ⛔⛔ STEP-2 ROUND 3 — THE xSTOCK EVIDENCE §2 NEVER HAD, AND IT **REOPENS `OBJ-9`'s UNGATING**
+
+### 12.1 ✅ THE GAP LANGSTON NAMED IS NOW FILLED — §2 HAD **NO** xSTOCK EVIDENCE AT ALL
+
+`xstock_spot_ticker_snap` carries bid/ask, and the join covers **144 of 144** xStock stop-outs (100%, vs 70.9% on crypto). Combined with §11's `stop_loss` at 144/144, **the xStock leg is measurable today.**
+
+### 12.2 ⛔⛔ AND THE SIGN IS **OPPOSITE TO CRYPTO** — xSTOCK STOP-OUTS EXIT **ABOVE** THEIR STOP
+
+**All 659 closed trades are `side = 'buy'` (verified, not assumed) — so for a long, exiting ABOVE the stop is BETTER than the stop, and a median that sits there is not a fill mechanic.**
+
+| class | era | n | % above stop | median % above |
+|---|---|---|---|---|
+| crypto | PRE | 141 | 46.1% | 1.784% |
+| ✅ **crypto** | **POST** | **24** | ✅ **0.0%** | — |
+| xstock | PRE | 137 | 56.9% | 0.277% |
+| ⛔ **xstock** | **POST** | **7** | ⛔ **85.7% (6 of 7)** | ⛔ **3.055%** |
+
+### 12.3 ⛔ WHAT THIS DOES TO `OBJ-9` — ITS RESTATEMENT IS **CRYPTO-ONLY** AND WAS APPLIED BATCH-WIDE
+
+✅ **`OBJ-9`'s crypto claim is CONFIRMED and STRENGTHENED.** It rested on the 74 rows carrying `original_stop_price`; re-derived on the **full 165** via `stop_loss`, **POST-epoch crypto above-stop is 0 of 24.** The crossed-book attribution (31.08% → 0 at `e6f7c70b3`) survives a wider population than it was built on.
+
+⛔ **BUT `OBJ-9` r7 CONCLUDED — batch-wide — *"the tail is entirely pre-epoch"*, *"very likely an artifact of the crossed-book era"*, and therefore *"`OBJ-0` is NO LONGER GATED ON IT."*** ★ **THAT IS TRUE OF CRYPTO AND FALSE OF xSTOCK.** The xStock tail is **live post-epoch** and **larger** than it was before (0.277% → 3.055%).
+✅ **AND THE ASYMMETRY IS EXACTLY WHAT THE MECHANISM PREDICTS, which is why it is a finding and not a puzzle:** `e6f7c70b3` fixed the **crypto book**. xStock rides `kraken_equities_ws` — **a different feed the hotfix never touched** (§2 already notes xStock's producer is *"a SOURCE, not a SIDE"* and `exit_book_mid` is NULL on all of them). **A crypto-book fix cannot extinguish an equities-feed artifact, and it did not.**
+
+⇒ ⛔ **`OBJ-0`'s xSTOCK LEG IS STILL GATED ON `OBJ-9`. The crypto leg is correctly ungated.** ⚠️ **`OBJ-9`'s deliverable — an attribution with a `file:line`, or an explicit "unexplained" — is now OWED FOR xSTOCK SPECIFICALLY and cannot be discharged by the crossed-book citation.**
+⚠️ **POWER, STATED: the POST xStock cell is n=7.** It is not a settled magnitude. **What it does establish is that the count is NOT ZERO**, and *zero* is the entire load-bearing claim the ungating rested on. ★ **A single non-zero row would have been enough; there are six.**
+
+### 12.4 ⛔ A HYPOTHESIS I COULD NOT TEST — AND THE DEAD INSTRUMENT THAT STOPPED ME
+
+**The candidate:** a **break-even ratchet** exit is returned as `type: 'stop_hit'` (`active-execution-engine.ts:1813-1824`, whose own comment states a BE scratch *"is indistinguishable from a real stop-out in `close_reason`"*). ⇒ **a position exiting at a ratcheted-UP stop would be recorded as a `stop_hit` sitting ABOVE its entry-time `stop_loss`** — which is precisely the shape above. **It also composes with §11.5: the in-force ratcheted stop is not recoverable from `closed_trades`.**
+
+⛔⛔ **UNTESTABLE TODAY, AND THE ZERO IS NOT EVIDENCE.** The discriminator would be `latch_trigger_price`. **It is populated on 0 of 659 closed trades — every class, every close reason.** ★ **So `latch_fired = 0` on the above-stop rows means NOTHING; the column is dead, not negative.** ⚠️ **Same family and same cause as §11.3: it is read from in-memory engine state at close (`_finalState?.latchTriggerPrice`, `:2220`) and a restart empties it.** **THREE columns now — `original_stop_price`, `latch_trigger_price`, `rung_target_history` — all sourced from that one perishable object.**
+
+### 12.5 ⇒ DISPOSITION
+
+| item | disposition (§9.4) |
+|---|---|
+| **xStock basis-gap evidence** | ✅ **(1) folded in** — §2's stated "no xStock evidence" gap is closed |
+| ⛔ **`OBJ-9` ungating is crypto-only** | ⛔ **(1) FOLDED IN — `OBJ-9` is AMENDED, not reopened as a new item.** Its crypto half stands and is strengthened; **its xStock half is owed.** `OBJ-0`'s xStock leg remains gated |
+| **BE-ratchet candidate** | **(4) a scheduled review inside this batch** — it cannot be dispositioned until an instrument exists |
+| ⛔ **Three perishable-state columns** | ⛔ **(2) added to `B-POST-GRID-MUTATION-CENSUS`** alongside §11.5 — one cause, one home |
+
+⚠️ **NOT CLAIMED: that the BE ratchet explains the xStock tail.** The mechanism is cited at the line; the attribution is untested and stays untested until `latch_trigger_price` (or an equivalent) carries data.
+
