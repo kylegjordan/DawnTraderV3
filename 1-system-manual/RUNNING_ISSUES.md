@@ -4472,6 +4472,62 @@ Kraken publishes a per-pair `tick_size` — **1,437 pairs, 11 distinct values, a
 ⇒ **HOME: `B-POST-GRID-MUTATION-CENSUS` (INVESTIGATION ONLY, NO CODE), owner CC-C, placed in `PHASE_19_PLAN.md` §1 Part F at row **3f.b** — AFTER the F-G series, BEFORE `B-GRID-LIVE-PATH-PARITY` (3g), whose scope it determines.**
 ★ **AND KYLE'S "BIGGER PROBLEM" INSTINCT IS ALREADY EVIDENCED, NOT SPECULATIVE: THREE post-VPG mutation sites are on the record — this one, plus `#939`(a) `trading-engine.ts:536` and `#939`(b) `active-execution-engine.ts:4317-4318` — AND ALL THREE WERE FOUND INCIDENTALLY. Nobody has ever enumerated them.** F-G-1 rounds at signal BIRTH; **what happens to that price for the rest of the trade's life has never been censused.**
 
+### #943 OPEN 2026-08-29 (CC-C; found adjudicating `#940` during F-G-2 Step 2) — ⛔⛔ THE xSTOCK PRICE FEED EMITS A BAD PRINT AT 00:15 UTC MOST DAYS, AND THE ENGINE CLOSES POSITIONS ON IT. **65 CLOSES — 27% OF ALL xSTOCK STOP-OUTS.**
+
+**SEVERITY: HIGH — ongoing, daily, and it is CORRUPTING THE xSTOCK TRADE RECORD, which is a calibration input. OWNER: CC-C to surface; the fix is a scope call. DISPOSITION: §9.4 (3) — its own batch, placement proposed below. RULE-24 OUTCOME (1): a real defect — not in the feed (external) but in acting on an obviously-impossible print with no deviation guard.**
+
+⚠️ **ANNOUNCED IMMEDIATELY UNDER `CONDUCT.md` §8's EXCEPTION** (*corruption of live or training data → announce at once*), **not held to the end of Step 2.** Paper mode, so **no capital is at risk today** — but Phase 21 is live mode and this fires daily.
+
+### THE EVIDENCE, READ FROM THE RUNTIME LOG AT THE SECOND
+
+`/var/log/dawntrader/out__2026-08-29_06-24-29.log` (⚠️ **the file rotated at 06:24 holds 00:00→06:24 — the one stamped `00-00-00` holds the PREVIOUS day**):
+
+| time | event |
+|---|---|
+| 00:14:00 | `NOW/USD price=143.14999999999998 source=kraken_equities_ws` · `EXIT_EVAL … sl=128.53571429 distSL=10.2091%` — **10% clear of its stop** |
+| ⛔ **00:15:00** | ⛔ `[I7-WS-D][CACHE_WRITE] symbol=NOW/USD price=118.75 source=kraken_equities_ws` |
+| 00:15:00 | `ENGINE_PRICE_READ … price=118.75 ageMs=1479` — ⛔ **FRESH, 1.5 s old. NOT STALE.** |
+| 00:15:00 | `EXIT_EVAL … distSL=-8.2406%` → `[EXIT_TRIGGER] symbol=NOW/USD type=stop_hit price=118.75` |
+
+⛔ **THE VENUE'S OWN BOOK AT THAT INSTANT WAS `bid 143.20 / ask 143.30`** (`xstock_spot_ticker_snap`, offset −1.0 s). ⇒ **the engine closed the position on a price 17% below a market that never moved.**
+
+**Same minute, same signature:** `TGT/USD` decided at **106.075** against a book of **157.00 / 167.00** (−32.4%) · `WEN/USD` decided at **13.31** against **7.70 / 8.36** (+72.9%), booked as a **`target_hit`** on a take-profit of **8.562** the market never reached.
+
+### ⛔ IT IS NOT ANY OF THE THINGS IT LOOKS LIKE — EACH ELIMINATED WITH EVIDENCE
+
+| candidate | eliminated by |
+|---|---|
+| **stale price** | ⛔ `ageMs=1479`. The guard that exists (*"Exit checks skipped — mark older than ceiling"*) **cannot fire: the price is fresh.** |
+| **a midnight restart / cold cache** | ⛔ `pm2` uptime **18 h** at the time of reading — the process had been up ~5.5 h before 00:15. |
+| **the `last_known_good` fallback** | ⛔ The bad print is stamped `source=kraken_equities_ws`, the primary. |
+| **a scheduled job at 00:15** | ⛔ No cron matches; the xStock universe cron is **06:00 UTC**. |
+| **stale-at-open** | ⛔ The decision prices match neither the market at close **nor** the market at open (−12.3% / −32.2% / +63.3%). |
+
+### THE POPULATION — THIS IS NOT THREE ROWS
+
+**65 xStock closes land at exactly `00:15` UTC, 2026-07-17 → 2026-08-29. ZERO crypto, ever.** Next-largest single-minute concentration since 08-01 is **4**.
+
+| close_reason | at 00:15 | total xStock | share |
+|---|---|---|---|
+| `stop_hit` | **39** | 144 | ⛔ **27.1%** |
+| `target_hit` | **26** | 88 | ⛔ **29.5%** |
+
+⛔⛔ **AND THE COHORT IS THE PROFITABLE HALF OF THE BOOK, WHICH IS WHY IT HAS SURVIVED UNNOTICED:** 00:15 cohort **+$97.43** (n=65, avg +$1.50) · every other xStock close **−$350.83** (n=178, avg −$1.97). ★ **A false stop that fires above your entry books a WIN.** *(`NOW/USD`: entry 135.53, "stopped out", filled 143.20.)* ⇒ **it flatters the xStock record and looks like nothing is wrong.**
+
+### ⇒ WHAT IS ESTABLISHED, AND WHAT IS NOT
+
+✅ **ESTABLISHED:** the print arrives on the primary feed, fresh; the engine evaluates and closes on it; the venue book at that second disagrees by 17-73%; it recurs at one fixed minute; it is xStock-only; it has closed 65 positions.
+⛔ **NOT ESTABLISHED, AND NOT GUESSED AT:** **why the feed emits it at 00:15** (00:15 UTC = 20:15 ET — a plausible venue settlement/roll boundary, **stated as a hypothesis, untested**) · **whether the same bad print also drives ENTRIES** — ⚠️ **NOT YET CHECKED, and it is the first thing the batch must check.**
+
+### ⇒ WHAT IT COSTS US TODAY
+
+- **Every xStock calibration or learning read is contaminated** — ~27% of stop-outs exited on a decision no market supported. *(Companion to the standing crypto position: the two classes are now each compromised, for different reasons.)*
+- ⛔ **It is invisible in the data**: the rows carry ordinary `stop_hit`/`target_hit` reasons, and `exit_price`/`exit_ticker_bid` are the CORRECT market values — **only the DECISION was wrong.**
+- **`F-G-2` must exclude this cohort** from every xStock population, or it will measure this instead of side-selection.
+
+**HOME: `B-XSTOCK-FEED-SANITY` — owner CC-C, placed in `PHASE_19_PLAN` ahead of the F-G series' xStock legs, because F-G-2's own xStock objectives cannot be read until this cohort is identifiable.** ⚠️ **No due date (§9.4); a placement.**
+⛔ **THE FIX IS NOT OBVIOUS AND IS NOT PRE-JUDGED HERE.** A deviation guard is the first thing anyone reaches for, and rule 15 says the structural cause comes first — **we do not yet know why the print exists**, and a threshold chosen before that is a patch. **Investigation first.**
+
 ### #942 OPEN 2026-08-29 (CC-C; found running the mandatory per-turn alert check, after an hourly heartbeat contradicted my own read) — ⛔⛔ THE "NO SILENT DROP" CLOSURE GUARANTEE DOES NOT COVER `info`, AND THAT IS THE SEVERITY BATCH-CLOSURE VERIFICATION GATES ARE MINTED AT
 
 **SEVERITY: medium. OWNER: CC-C to surface; the DECISION is Kyle's (see the bottom). DISPOSITION: §9.4 (2) — added as an item to `B-ALERT-LIFECYCLE`, the existing home of `#912`. RULE-24 OUTCOME (2): WORKING AS DESIGNED, DECISION MISSING — no code is to be changed unilaterally.**
@@ -4529,7 +4585,7 @@ Kraken publishes a per-pair `tick_size` — **1,437 pairs, 11 distinct values, a
 ⛔ **WHAT STAYS OPEN — THE DETECTION RESIDUAL, and it is the only part that needs a home.** The governance checker's `DOCS` table grades whether a doc was **touched**, never whether what it **says** is true; both of these read perfectly plausibly for months. **Same family as the AMR *"30 obs/class"* line (live value 100) and the always-loaded Langston-model line (wrong 17 days) — but a DIFFERENT object: those are docs asserting a live CONFIG VALUE; this is a reference map asserting a MECHANISM, which is what you consult the map to learn.** ⚠️ **No detector is proposed here and none should be invented in this entry** — the honest state is that this class is caught by an audit that goes to the code, and by nothing else.
 **HOME: raised at the next weekly mistake pass for a recurrence tripwire on the mechanism-claim variant; the two doc fixes need no further work.**
 
-### #940 OPEN 2026-08-29 (CC-C; Langston found it while measuring the F-G-2 r6 gate, I re-derived it) — ⛔ `exit_ticker_bid` IS NOT TRUSTWORTHY ON xSTOCK, AND F-G-2 HAD JUST MADE IT AN OBJECTIVE'S INDEPENDENT WITNESS
+### #940 **SUPERSEDED BY `#943` 2026-08-29 — THE BLAME IS INVERTED, SEE THE RIDER AT THE END OF THIS ENTRY.** OPEN 2026-08-29 (CC-C; Langston found it while measuring the F-G-2 r6 gate, I re-derived it) — ⛔ `exit_ticker_bid` IS NOT TRUSTWORTHY ON xSTOCK, AND F-G-2 HAD JUST MADE IT AN OBJECTIVE'S INDEPENDENT WITNESS
 
 **MEASURED — all 6 xStock closes carrying BOTH `exit_decision_price` and `exit_ticker_bid`:**
 
@@ -4551,6 +4607,19 @@ Kraken publishes a per-pair `tick_size` — **1,437 pairs, 11 distinct values, a
 ⛔ **MECHANISM NOT ESTABLISHED — THIS IS A LEAD, NOT A DIAGNOSIS (Langston states he has not read the writer, and neither have I).** Candidates to eliminate rather than assume: a stale or last-session bid on an instrument that trades 24/5 · the equities feed's bid captured at a different instant from the decision · a symbol-mapping error putting another instrument's bid on the row · the xStock producer naming a SOURCE (`kraken_equities_ws`) rather than a SIDE, so what lands in that column may not be a bid at all.
 
 ⇒ **DISPOSITION 1 — FOLD INTO THE WORK IN HAND:** resolved at **`F-G-2` Step 2**, together with **`BLOCKER-3`** (0 of 144 xStock `stop_hit` closes carry `original_stop_price` — xStock has no stop reference at all) and **`OBJ-9`**. Owner **CC-C**. ⛔ **`OBJ-1` may not be accepted on an xStock witness until this is answered.**
+
+⛔⛔ **RIDER 2026-08-29 — `#940` HAS THE BLAME BACKWARDS, AND I FILED IT THAT WAY.**
+
+**`#940` says `exit_ticker_bid` "IS NOT TRUSTWORTHY". Adjudicated against an INDEPENDENT THIRD SOURCE — `xstock_spot_ticker_snap`, which neither column feeds — on all 6 rows carrying both:**
+
+| | agreement with the independent book |
+|---|---|
+| ✅ **`exit_ticker_bid`** | ✅ **0.0% / −0.2% / 0.2% / 0.0% / 0.0% / 0.0% — EXACT on all six** |
+| ⛔ **`exit_decision_price`** | ⛔ **0.1% / 0.0% / 0.1% / −17.1% / −32.4% / +72.9%** |
+
+⇒ ★ **`exit_ticker_bid` IS THE TRUSTWORTHY COLUMN. The witness was right and the thing it was witnessing was wrong — which is exactly what an independent witness is FOR.** ⛔ **I read a disagreement and blamed the newer column without going to a third source.**
+⇒ **The three divergent rows are all `#943`'s 00:15 cohort.** `#940` is not a separate defect; **it is `#943` seen through two columns.** ⚠️ **`#940` stays OPEN only as the pointer** — its own finding is withdrawn under **§9.4 disposition 5**, carrying this citation.
+**`MISTAKE: wrong-object [F-G-2]` — adjudicated a two-way disagreement without the third source that settles it.**
 
 ### #939 OPEN 2026-08-28 (CC-C, same reader) — TWO LIVE-PATH SITES MUTATE A GRIDDED PRICE AFTER THE VPG, BOTH DORMANT TODAY
 

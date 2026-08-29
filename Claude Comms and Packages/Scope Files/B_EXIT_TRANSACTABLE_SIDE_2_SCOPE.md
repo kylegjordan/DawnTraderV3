@@ -558,3 +558,31 @@ I asked whether the two columns ever differ, expecting `trailing_stop_hit` to se
 | **Movement dominates the gap** | ✅ **(1) folded in — it becomes a STATED EXPECTATION for `OBJ-0`**: the before/after read must separate the movement term or it will over-credit side-selection |
 | **The tautology caveat** | **(1) folded in as a BINDING CAVEAT** — `r=0.744` may not be cited as proof of mechanism |
 
+## 14. ⛔⛔ RIDER TO §12 — THE xSTOCK ABOVE-STOP MAGNITUDE IS `#943`, AND `OBJ-9`'s xSTOCK HALF IS THEREBY **ANSWERED**
+
+⚠️ **§12.2 REPORTED: xStock POST-epoch above-stop = 6 of 7, median +3.055%.** ✅ **THE COUNT STANDS. THE MAGNITUDE DOES NOT — it is three rows of `#943`'s 00:15 UTC cohort.**
+
+| symbol | closed | % vs stop | |
+|---|---|---|---|
+| PDD/USD | 2026-08-25 **00:15:05** | ⛔ **+5.877%** | `#943` |
+| NOW/USD | 2026-08-29 **00:15:00** | ⛔ **+11.409%** | `#943` |
+| TGT/USD | 2026-08-29 **00:15:01** | ⛔ **+8.624%** | `#943` |
+| SNDK/USD | 08-25 14:37 | +0.116% | |
+| SNAP/USD | 08-26 13:53 | +0.233% | |
+| CRM/USD | 08-27 11:25 | −0.086% | |
+| MRNA/USD | 08-28 12:24 | +0.070% | |
+
+⇒ **Excluding the `#943` cohort, the remaining four sit ESSENTIALLY AT THE STOP (−0.086% to +0.233%, median ≈ +0.09%) — nothing resembling `OBJ-9`'s 2.844% tail.**
+
+### ⇒ THIS CHANGES `OBJ-9`'s STATUS FROM *OWED* TO *ANSWERED*
+
+⛔ **§12.3 concluded *"`OBJ-9`'s deliverable is now OWED FOR xSTOCK SPECIFICALLY."* THAT IS DISCHARGED IN THE SAME STEP, and the deliverable is exactly what `OBJ-9` asked for — an ATTRIBUTION, not a number:**
+> **The large xStock above-stop exits are `#943`: the equities feed emits a bad print at 00:15 UTC and the engine closes on it. Evidenced at `out__2026-08-29_06-24-29.log` 00:15:00 — `CACHE_WRITE … NOW/USD price=118.75 source=kraken_equities_ws`, read fresh at `ageMs=1479`, against a venue book of 143.20/143.30.**
+
+⇒ **`OBJ-0`'s xStock leg is NOT gated on an unexplained mechanism.** ✅ **It is gated on a POPULATION RULE, which is a far cheaper thing:**
+⛔ **BINDING — EVERY xSTOCK POPULATION IN THIS BATCH EXCLUDES `to_char(closed_at,'HH24:MI') = '00:15'` UNTIL `#943` IS RESOLVED**, and any read that does not state the exclusion is not reportable. ⚠️ **That is ~27% of xStock stop-outs and ~29.5% of target-hits — it will materially thin the xStock leg, and the `UNDERPOWERED` rule applies to what remains.**
+
+⚠️ **HONEST RESIDUAL, NOT PAPERED OVER: the minute-of-close is a PROXY for the defect, not the defect itself.** A genuine exit that happens to fall in that minute is excluded too, and a `#943` print landing at some other minute would be missed. **It is the best available discriminator today and it is labelled as a proxy.** ⇒ **`#943`'s batch owes a positive identifier on the row.**
+
+★ **AND THE CRYPTO HALF OF §12 IS UNAFFECTED** — crypto has never had a 00:15 close, so `OBJ-9`'s crypto attribution (the crossed-book era) and its POST-epoch zero both stand exactly as re-derived.
+
