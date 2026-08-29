@@ -126,6 +126,10 @@ The `31.08% → 0` crossed-book verification is **Langston's**, and he flags tha
 
 ⚠️ **PRE-REGISTERED NOW, BEFORE THE DATA, precisely so it cannot become a post-hoc fit** — which is the whole reason it is written here rather than decided at read time.
 
+### ✅ RULE-24 CLASSIFICATION — RESTORED AND CORRECTED (§9, 2026-08-29)
+
+⛔ **OUTCOME (1) ON THE SUBSTITUTION, not outcome (3) on the midpoint.** ★ **The midpoint's own intent is SOUND and stays** — a stale last-trade is the wrong number for marking a low-volume pair (§9.1). **What is defective is that `b4c0d2d67` changed the MEANING of `c` underneath an exit-decision consumer that had been reading it since `cb8ee0942`, eleven weeks earlier** (§9.2), and that neither map records the change (§9.4). ⇒ **The remedy is unchanged — give the exit its own transactable price — but it is a DEFECT FIX, not a legacy retirement, and Step 2 states it that way.**
+
 ### ⚠️ THE HONEST CONSEQUENCE — DIRECTION EXPECTED, MAGNITUDE UNKNOWN (Langston's amendment)
 
 ⛔ **r6 said the fix "MAY reduce measured P&L". That is softer than the measurement warrants.** **Moving a long's exit decision from mid to bid fires stops EARLIER — mechanically.** ⇒ **the below arm grows and any above arm shrinks. THE DIRECTION IS EXPECTED; ONLY THE MAGNITUDE IS UNKNOWN.**
@@ -244,7 +248,7 @@ The HARD PREREQUISITE says F-G-1 must be **DEPLOYED AND SOAKED**. ✅ §1 derive
 
 - **#914's "999/999 stops fill at exactly the stop".** The reviewer reads #914's own table as **~993/999 with a 1.5% real-slippage tail on crypto-PRE**, plus **119 stop-closes with no originalStopPrice, silently unmeasurable** — i.e. 999 is the MEASURABLE SUBSET, not the population. ⛔ **I could not reproduce either figure: vts_open_trades carries no exit-price column, so my query was against the wrong object and I STOPPED rather than guess.** ⚠️ **If the tail is real, OBJ-5/Q3's premise — VTS as a "non-surface" — weakens, because a 1.5% tail IS a surface.** **Langston should rule; I am not asserting it.**
 - **The target-fill claim** — *"a target's FILL price was already correct — a resting maker order filling at our own ask"* — **carries no file:line**, and #914 describes the active exit as a **depth-walked** fill. **If targets depth-walk too, OBJ-1's trigger-only scoping is too narrow.** Unverified.
-- **The provenance temporal claim** — *"a second consumer later read it for a decision it was never built to serve"* — is the entire basis for rule-24 outcome **(3)** rather than **(1)**, and it lives in the superseded r3 file with no commit or date cited here.
+- ✅ **RESOLVED BY §9 (2026-08-29) — AND THE ANSWER WAS THE OPPOSITE OF THE CLAIM.** The provenance temporal claim — *"a second consumer later read it for a decision it was never built to serve"* — was the entire basis for rule-24 outcome **(3)** rather than **(1)**, and it lives in the superseded r3 file with no commit or date cited here.
 
 ### 7.10 ✅ WHAT THE READER CONFIRMED AS SOLID — stated, because a clean is worth knowing
 
@@ -314,3 +318,53 @@ active-execution-engine.ts:59 exact · kraken-websocket-adapter.ts:681 exact and
 - **`OBJ-8` ships a PROXY, not a proof.** We cannot prove a paper fill. The objective is an estimator that is honestly labelled and conservatively biased — **not a fill confirmation, and the column name must never imply one.**
 - **`OBJ-0` can sink this batch, by design.** If the discordant cell shows the new rule stopping out trades the old rule rode to target, **that is the batch failing its own pre-registered test and it does not ship.**
 - **The r3 §4/§4b staleness carries forward:** those sections were written when the instrument was the ticker archive. **`OBJ-8` supersedes that.** What survives unchanged is §4b's finding that the archiver bypasses the translator and retains a REAL traded price — **still true, still load-bearing for `OBJ-2`.**
+
+## 9. ⛔⛔ THE PROVENANCE AUDIT (Kyle-directed, 2026-08-29) — ORIGINAL INTENT IS VALID, AND §2's TEMPORAL CLAIM IS **BACKWARDS**
+
+**Kyle: *"understand the original build intent and determine if it is still valid and if so, is it working as intended."*** Sources consulted: git archaeology · `bridge/canonical/` · `SYSTEM_MANUAL` · `SYSTEM_IMPACT_MAP` · the live code at `origin/migration/aws-supabase` · runtime producer labels.
+
+### 9.1 ✅ ORIGINAL INTENT — FOUND, QUOTED, AND IT IS **SOUND**
+
+**Introducing commit `b4c0d2d67`, 2025-12-30, Replit-era:** *"Improve price calculation for low-volume trading pairs — Update Kraken WebSocket adapters to v2 and **implement midpoint pricing for improved accuracy on low-volume pairs**."* The translator's own docstring names Directive 8.9.1 and the reason: *"Last Trade price… **is often stale on low-volume pairs**."*
+
+✅ **THE INTENT IS STILL VALID AND THIS BATCH MUST NOT PROPOSE REMOVING IT.** A stale last-trade genuinely is the wrong number for marking a position on a pair that trades rarely. ⇒ **rule 24 outcome is NOT "delete the midpoint."**
+
+### 9.2 ⛔⛔ BUT §2's TEMPORAL CLAIM IS BACKWARDS — **THE EXIT CONSUMER CAME FIRST, BY ELEVEN WEEKS**
+
+§2 (inherited from r3 §5.1) says the midpoint had *"named consumers that were display and analytics"* and that **"a second consumer LATER read it for a decision it was never built to serve."**
+
+⛔ **MEASURED — THE OPPOSITE:**
+
+| when | what | evidence |
+|---|---|---|
+| **2025-10-10** | the paper execution engine reads `tickerData.c[0]` **for its exit decision**, and calls it `// Current price` | `cb8ee0942`, `paper-execution-engine.ts` |
+| **2025-12-30** | the **midpoint is substituted INTO `c`** | `b4c0d2d67` |
+
+⇒ ★★ **THE DECISION CONSUMER WAS ALREADY READING THAT FIELD WHEN THE MIDPOINT WAS PUT INTO IT.** **Nothing "later read" anything — the meaning of a field changed underneath a live consumer.**
+
+⛔⛔ **THIS SETS THE RULE-24 CLASSIFICATION — AND THE BATCH CURRENTLY HAS NONE, WHICH I CAUSED.** r4/r6 §2 claimed outcome **(3)** — *legacy that no longer fits today's intent* — in a paragraph my r7 rewrite REPLACED WHOLESALE. ⚠️ **I removed the batch's disposition while fixing its evidence, and only this audit found it: a batch with no stated rule-24 outcome has no disposition at all.** **The archaeology supports outcome (1) on the SUBSTITUTION**: a real defect introduced at `b4c0d2d67`, which fixed a genuine staleness problem for one consumer **and silently changed the semantics for another that was already there.** ⚠️ **The batch's remedy is unchanged; its justification is not, and Step 2 must restate it.**
+
+### 9.3 ⛔ THE MECHANICAL PICTURE — ONE SEAM, ONE MISLEADING LABEL, FIFTEEN INHERITORS
+
+✅ **`translateV2ToV1` has EXACTLY ONE consumer** (`kraken-websocket-adapter.ts:680`) — stated explicitly as an asserted absence with presence-evidence. It immediately does `const lastPrice = parseFloat(safeData.c[0])` — **the midpoint, renamed to `lastPrice` in one line.**
+
+✅ **THREE `priceTick` PRODUCERS. ONLY ONE CARRIES A MID UNDER A TRADE-PRICE NAME:**
+
+| line | producer | carries | honest? |
+|---|---|---|---|
+| `:700` | **`kraken_ws_ticker`** | ⛔ **the MIDPOINT** (via the translator) | ⛔ **NO — named for a ticker, carries a mid** |
+| `:945` | `kraken_ws_book_mid` | an explicit midpoint | ✅ **YES** |
+| `:1081` | `kraken_ws_ticker_v1` | raw v1 `ticker.c[0]`, a genuine last trade | ✅ YES |
+
+★ **F-G-2 cited `:945` as its evidence — the HONEST one. The mislabelled producer is `:700`, and it is the one feeding the price cache.**
+
+⚠️ **FIFTEEN live readers of `c[0]` across the server, and every one names it `currentPrice`, `lastPrice`, `lastTrade` or `marketPrice`** — including `active-execution-engine.ts:1304` (`lastTrade`) and `trading-engine.ts:610` (`marketPrice`, the LIVE order path, `#939`). ⛔ **Not all read the substituted field — the REST and v1 paths carry a genuine last trade — so the count is a SURFACE, not a defect list. Step 2 must split it.**
+
+### 9.4 ⛔ THE GOVERNANCE FINDING — BOTH MAPS ARE SILENT ON THE SUBSTITUTION
+
+- **`bridge/canonical/` — NO document mentions the midpoint at all.** ✅ Stated as a finding per §9.5's recording rule, not as an absence of interest: the corpus predates `b4c0d2d67` (2025-12-30), so **it documents a system in which prices are traded prices.** ⚠️ Its standing invariant — *"Price cache is the single source of truth for current prices"* (`DawnTrader_System_Invariants_Design_Guarantees.md:230`) — **is exactly what makes the substitution load-bearing: whatever enters the cache DEFINES "current price" for everything downstream.**
+- **`SYSTEM_MANUAL.md:8392`** documents the CALL — *"v2 ticker updates → translateV2ToV1() → TickData events"* — **and NOT the substitution.** A reader learns the function is invoked, never that a mid replaces a last trade.
+- **`SYSTEM_IMPACT_MAP` — silent.**
+
+⇒ ⛔ **This is the §9 framing rule verbatim: *buried implemented logic is a governance failure, not just a documentation miss.*** **The one line that would have prevented eight months of this is a sentence in the System Manual saying the `c` field carries a mark price, not a trade.** **Owed at Step 2 regardless of what else this batch does.**
+
