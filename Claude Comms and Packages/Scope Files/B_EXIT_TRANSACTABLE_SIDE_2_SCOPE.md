@@ -421,3 +421,50 @@ PRE-boundary stop shortfall reads **0.0149%** median — *better* than its own h
 
 **DISPOSITION (§9.4):** all six items above are **(1) folded into the work in hand** — they are Step-2 measurement results for this batch. **No new issue is minted.** ⚠️ **`10.3`'s invalid control and `10.4`'s spurious correlation are recorded as BINDING NEGATIVES, not as findings** — their entire value is stopping a later reader citing them.
 
+## 11. ✅⛔ STEP-2 ROUND 2 — **`BLOCKER-3` IS RESOLVED: ITS MEASUREMENT IS EXACT AND ITS CONCLUSION DOES NOT FOLLOW**
+
+### 11.1 THE MEASUREMENT STANDS, RE-DERIVED
+
+`original_stop_price`: **0 of 144** xStock `stop_hit`, **74 of 165** crypto. ✅ **Reproduced exactly. Langston's number is right and is not in question.**
+
+### 11.2 ⛔ BUT "NO xSTOCK INSTRUMENT TODAY" IS FALSE — `closed_trades.stop_loss` IS POPULATED **144 of 144**
+
+| column | xStock `stop_hit` | crypto `stop_hit` |
+|---|---|---|
+| `original_stop_price` | 0 / 144 | 74 / 165 |
+| ✅ **`stop_loss`** | ✅ **144 / 144, all POSITIVE** | ✅ **165 / 165** |
+
+★ **The absence was real and the conclusion drawn from it was not.** ⇒ **`OBJ-3` is NOT unsatisfiable for xStock, and does not need restating as crypto-only.**
+
+### 11.3 THE MECHANISM, AT THE LINE — WHY ONE COLUMN IS EMPTY AND THE OTHER IS FULL
+
+- **`closed_trades.stop_loss` is written AT OPEN from the signal:** `storage.createClosedTrade(... stopLoss: signal.stopPrice.toString() ...)` — `active-execution-engine.ts:3654`. **It is the entry-time stop and nothing rewrites it on this table.**
+- **`closed_trades.original_stop_price` is read from IN-MEMORY engine state at close:** `_getTES(position.id)` → `_finalState?.originalStopPrice ?? null` (`:2215-2219`, written at `:2297`). Its own comment says it plainly — *"null on persisted trades that closed before this state was tracked."* ⇒ **a process restart empties it, which is why it is partial on crypto and absent on xStock.**
+- ⛔ **AND IT IS NOT AN INDEPENDENT WITNESS.** At `:1701-1702` it is `(position as any).originalStopPrice ?? (stopLoss ?? undefined)` — **it FALLS BACK TO `stopLoss`.** ⇒ **the column that looks like a second opinion is derived from the thing it would be checked against.**
+
+### 11.4 ⛔⛔ AND THE CONTROL FAILED TO DISCRIMINATE — WHICH IS THE MORE USEFUL RESULT
+
+I asked whether the two columns ever differ, expecting `trailing_stop_hit` to separate them: a ratchet moves the stop **by definition**, so the "original" and the in-force stop must diverge there.
+
+| close_reason | n (both present) | equal | differ |
+|---|---|---|---|
+| `stop_hit` | 74 | **74** | 0 |
+| `target_hit` | 55 | **55** | 0 |
+| ⛔ **`trailing_stop_hit`** | **14** | ⛔ **14** | ⛔ **0** |
+
+⇒ ⛔ **143 of 143 IDENTICAL, INCLUDING EVERY TRAILING STOP.** ★ **So the equality does NOT license "the columns are interchangeable" — it shows the arm cannot come out the other way, exactly like `entry_price` on the venue grid (§10.3). The fallback at `:1702` is why.**
+
+### 11.5 ➕ THE GENUINE RESIDUAL, AND IT IS A NEW FINDING RATHER THAN `BLOCKER-3`'s
+
+⛔ **ON A `trailing_stop_hit` CLOSE, THE STOP THAT WAS ACTUALLY IN FORCE IS NOT RECOVERABLE FROM `closed_trades` AT ALL.** The ratchet writes **only** to the open-position row (`storage.updateActiveOpenPosition(... stopLoss ...)`, `:1757`) — and that row is deleted at close (the §9.5(a) census found **seven** deletion sites). Both `closed_trades` columns hold the **entry-time** stop.
+⇒ **A trailing exit measured against either column is measured against a stop that was no longer in force** — it will read as a large, unexplained gap. ↔ **This is `#923`'s mechanism seen from the data side, and it is a live candidate for `OBJ-9`'s above-stop tail** (which lists *"a trailing ratchet having moved the stop"* as a candidate to eliminate, not assume).
+⚠️ **BOUNDED: n=14 crypto trailing closes, and I have NOT shown this explains any specific `OBJ-9` row.** The unrecoverability is proved at the line; the attribution is not.
+
+### 11.6 ⇒ DISPOSITION
+
+| item | disposition (§9.4) |
+|---|---|
+| **`BLOCKER-3`** | ✅ **RESOLVED IN SCOPE, as Langston required — (1) folded in.** `OBJ-3` reads the xStock stop from **`closed_trades.stop_loss`**, 144/144, and is **not** restated as crypto-only. **Population excludes `trailing_stop_hit` per 11.5.** |
+| **`original_stop_price` is not an independent witness** | (1) folded in — **recorded as a BINDING NEGATIVE.** It may not be cited as corroboration of `stop_loss`; it is derived from it. |
+| **The trailing in-force stop is unrecoverable** | ⛔ **(2) added as an item to `B-POST-GRID-MUTATION-CENSUS`** (`PHASE_19_PLAN` row 3f.b, the investigation batch that already owns the post-VPG mutation sites) — **it is a mutation-site instrumentation gap, which is that batch's subject, not this one's.** |
+
