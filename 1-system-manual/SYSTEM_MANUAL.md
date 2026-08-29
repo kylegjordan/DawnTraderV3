@@ -4554,6 +4554,7 @@ All signal generation now flows exclusively through the FX5 → RTB → TCL pipe
 | **Lines** | ~2,308 | ~766 |
 | **Primary Mode** | Paper | Live + Paper |
 | **Monitoring** | 1.5s cycle with re-entrancy guard | `monitorActiveTrades()` via strategyEngine |
+| ⛔⛔ **Monitoring — CORRECTED 2026-08-29 (`#928`-adjacent, F-G-2 Step-2 FINDING A1; Langston found this row)** | — | ⛔ **`monitorActiveTrades()` IS DEAD. IT HAS ZERO CALLERS.** Presence-evidenced repo-wide, tests excluded: `monitorActiveTrades` appears exactly ONCE — its own definition at `trading-engine.ts:677`. The whole limb is dead end-to-end: `:677` (no callers) → `checkTradeExitConditions:688` (sole caller `:684`) → `strategy-engine.checkExitConditions:1106` (sole caller `trading-engine:696`) → the `:1123-1138` switch → six per-strategy exit helpers `:1151-1199`, one caller each. ⚠️ **THE ROW ABOVE READ AS LIVE AND IS EXACTLY THE ARTIFACT A FUTURE SESSION WOULD TRACE FORWARD FROM AND RE-WIRE** — it is a SEPARATE exit implementation that never imports `evaluateTECExit` and reads a THIRD price source (`kraken.getTicker(symbol).c[0]`, the v1 REST ticker). **Re-wiring it would bypass everything `F-G-2` does.** **Homed: `PHASE_19_PLAN` 3h as a NAMED item; its disposition is decidable WITHOUT 3h's verdict on the HTTP intent path.** |
 | **Exit Logic** | Direct SL/TP/trailing/max hold checking | Delegates to `strategyEngine.checkExitConditions()` |
 | **RTB Promotion** | Full multi-signal promotion (C.14.B) | None |
 | **Pricing** | WebSocket priority + REST fallback | Direct Kraken REST |
