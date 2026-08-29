@@ -4569,7 +4569,44 @@ I recorded it as *"a depth-10 mid and a BBO mid are different statistics; on a t
 
 **HOME: `B-BOOK-BBO-DIVERGENCE`, owner CC-C, placed in `PHASE_19_PLAN` at row 3b.c, after the F-G-1 soak and before F-G-2 implementation (3c).**
 
-### #943 OPEN 2026-08-29 (CC-C; found adjudicating `#940` during F-G-2 Step 2) — ⛔⛔ THE xSTOCK PRICE FEED EMITS A BAD PRINT AT 00:15 UTC MOST DAYS, AND THE ENGINE CLOSES POSITIONS ON IT. **65 CLOSES — 27% OF ALL xSTOCK STOP-OUTS.**
+### #943 OPEN 2026-08-29 (CC-C; found adjudicating `#940` during F-G-2 Step 2) — ⛔⛔ THE xSTOCK PRICE FEED EMITS A BAD PRINT AT 00:15 UTC MOST DAYS, AND THE ENGINE CLOSES POSITIONS ON IT. **65 CLOSES — 27% OF ALL xSTOCK STOP-OUTS.**
+
+⛔⛔ **RE-FRAMED 2026-08-29 BY ITS AUTHOR: THIS IS NOT A NEW DEFECT CLASS. IT IS A QUANTIFICATION AND ROOT-CAUSE OF ONE ALREADY HOMED AT `#531` ADDENDUM-2, AND KYLE HAS ALREADY RULED ON IT ONCE.**
+
+**FOUND BY READING `#531` WHILE CHECKING AN UNRELATED WEEKEND OBSERVATION - i.e. LATE, and by accident rather than by the search that should have surfaced it.**
+
+**THE PRIOR ART, VERBATIM (`#531` ADDENDUM-2, 2026-07-19/20, CC-B + Langston code-read at `bfb365fa7`):**
+> *"**FIX-D: THE xSTOCK EXIT LEG GUARDS FRESHNESS BUT NOT PLAUSIBILITY**… (b) **FRESH-BUT-WRONG NOT GUARDED** - the ONLY value tests before the mark is committed are `:947` `!Number.isFinite(price) || price <= 0`… **No plausibility band, and its absence is DELIBERATE: `:1058` records the `exit_integrity.max_fallback_deviation_pct` knob as RETIRED on the reasoning that venue-only made refereeing unnecessary.**"*
+> *"**TAXONOMY: bucket (2) WORKS-AS-DESIGNED-BUT-UNADDRESSED - a SCOPE CALL.**"*
+> *"**★ KYLE RULING 2026-07-19 (Discord, verbatim): “Please accept the pricing that comes in at re-open for tonight and observe.”**"*
+> *"**(4) `B-XSTOCK-EXIT-PLAUSIBILITY` SPLIT OUT - Langston APPROVED the split.**"*
+
+⇒ ⛔ **THE CLASS, THE TAXONOMY AND THE BATCH ALL EXISTED. `#943` DID NOT DISCOVER THEM.** ★ **And ADDENDUM-2's own worked example is `AMGN phantom-stopped 07-17 00:15Z` - THE SAME MINUTE, six weeks earlier, on n=6 rows.**
+
+⛔⛔ **AND THERE IS A BINDING CONSTRAINT ON ANY FIX THAT I DID NOT CITE WHEN I PUT THE DECISION TO KYLE TONIGHT:**
+> *"**★ NEGATIVE REQUIREMENT, BINDING ON ANY FIX (CC-A, load-bearing): the plausibility comparator MUST be the pair's OWN price history, NEVER a second venue** - a cross-venue check would undo venue-only and re-import the very fiction that cut removed. **Candidate mechanism: revive the retired per-class deviation band.**"*
+
+✅ **MY PROPOSED CANDIDATE SURVIVES IT** - `last` is the pair's own venue print, not a second venue. ⚠️ **But I proposed it without knowing the constraint existed, which is luck rather than diligence.**
+
+### ✅ WHAT `#943` DOES ADD, STATED WITHOUT INFLATION
+
+**ADDENDUM-2 established the CLASS on 6 rows and named it unguarded. `#943` supplies what it did not have:**
+| | ADDENDUM-2 (2026-07) | `#943` (2026-08-29) |
+|---|---|---|
+| **cause** | *"fresh-but-wrong"*, mechanism unstated | ✅ **one side of the book collapses to a stub; `(bid+ask)/2` follows it. Spreads 44-109%; `last` correct throughout** |
+| **scale** | 6 divergent rows | ✅ **65 closes = 27.1% of ALL xStock stop-outs** |
+| **structure** | — | ✅ **BOOK-WIDE and scheduled: 389 of 476 symbols (82%) at once; ZERO in 8.17M snaps during US RTH** |
+| **cost** | — | ✅ **favourably biased: reported avg −$1.04 vs honest −$1.97; +$97 phantom** |
+
+⇒ ★ **The value is the root cause, the magnitude and the DIRECTION of the bias - and the last of those is what makes it worth re-opening a decision Kyle already made provisionally in July.** ⛔ **It is NOT a new class and must not be reported as one.**
+
+### ⇒ DISPOSITION, CORRECTED
+
+⛔ **`B-XSTOCK-FEED-SANITY` should NOT stand as a separate batch.** ⇒ **Its findings attach to `B-XSTOCK-EXIT-PLAUSIBILITY` (`#531` (4), Langston-approved), which already owns this class.** ⚠️ **The `PHASE_19_PLAN` 3b.b placement and the Step-1 scope stand as the EVIDENCE for that batch, not as a competing one - Langston's ruling to confirm.**
+⚠️ **AND `#943`'s framing to Kyle needs the July ruling attached: he has already said “accept and observe” once. The new information is the magnitude and the favourable bias, which are grounds to re-ask - not grounds to present it as unseen.**
+
+---
+
 
 ⛔⛔ **MECHANISM ESTABLISHED 2026-08-29, AND ONE FIGURE IN THIS ENTRY IS CORRECTED (Langston's Step-1 condition 3 asked for its object and population, and it did not have one).**
 
