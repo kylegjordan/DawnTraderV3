@@ -176,3 +176,31 @@ He warned that *"the guard's axis is incomplete"* presupposes a real-but-meaning
 
 **OUTCOME (2) - WORKING AS DESIGNED, DECISION MISSING.** Every component does what it was built to do. **Nobody ever decided what the mark should be when the book is not a market.** ⛔ **The batch still designs no fix** - but the candidate is now EVIDENCED rather than guessed: **the `last` price is correct in every observed case, and the spread is the discriminator that the age gate cannot see.** ⚠️ **Whether the answer is "prefer `last` on an absurd spread", "refuse the mark", or "refuse the EXIT" is a design question with a real trade-off - and refusing to act is not free either** (`#594`'s eleven exit-skip alerts are what refusing looks like).
 
+## 10. OBJ-2 - BOTH CANDIDATE IDENTIFIERS TESTED AND BOTH FAIL. THE REASON IS THE USEFUL PART.
+
+With the mechanism known, two predicates looked obvious. **Neither works, and I am recording the failure rather than the hope.**
+
+**All xStock `stop_hit` + `target_hit`, nearest snap within +/-30s:**
+
+| | n | median divergence from venue `last` | p90 | over 5% | median spread | over 20% |
+|---|---|---|---|---|---|---|
+| **00:15 cohort** | 65 | 1.728% | 9.027% | **17** | 8.219% | **19** |
+| all other xStock | 167 | 0.069% | 0.482% | 5 | 0.166% | 2 |
+
+⇒ **The separation is real and strong in the AGGREGATE - the cohort's median divergence is 25x the rest.** ⛔ **BUT AS A ROW-LEVEL IDENTIFIER BOTH FAIL ON SENSITIVITY: `spread > 20%` catches 19 of 65 (29%); `divergence > 5%` catches 17 of 65 (26%). Each MISSES roughly THREE QUARTERS of the cohort.**
+
+### 10.1 WHY THEY FAIL, AND IT IS NOT THE THRESHOLD
+
+**The stub book exists at specific INSTANTS. The nearest snap within +/-30s frequently lands on a NORMAL one** - and §9.1 already showed the sharpest case: **the engine wrote its mark at `00:15:00.736` and NO `NOW/USD` snap exists at that timestamp at all.**
+⇒ ⛔ **A row-level predicate CANNOT be computed reliably, because the evidence at the decision instant is not always stored.** ★ **No threshold fixes that - it is a missing-observation problem wearing a threshold problem's clothes.**
+
+### 10.2 ⇒ WHAT WOULD ACTUALLY SOLVE OBJ-2, AND IT ALREADY HAS AN ISSUE NUMBER
+
+**The book that drove the decision has to be recorded ON the trade row.** ★ **That is exactly what `exit_ticker_bid` / `exit_ticker_ask` were built for - and they are populated on 6 xStock rows out of 232 (`#911`, KNOWN OPEN, already a close gate on `B-EXIT-PROVENANCE`).**
+⇒ ✅ **OBJ-2's honest answer: the identifier is `exit_ticker_bid`/`exit_ticker_ask` at the decision instant, and it is BLOCKED ON `#911`'s instrumentation reaching coverage.** ⛔ **Not a new batch. Not a new field. An existing open issue whose value this finding materially raises.**
+⚠️ **AND THE PROXY MUST THEREFORE STAND FOR NOW.** `F-G-2` keeps the minute-of-close exclusion **and** reports both populations (Langston's condition 3 there) - **that stays the right call, and this measurement is why.**
+
+### 10.3 THE AGGREGATE RESULT IS STILL WORTH HAVING
+
+**A 25x median divergence is decision-grade evidence for OBJ-4** (calibration contamination) **even though it is not a per-row selector.** ⇒ **carried to OBJ-4, not discarded.**
+
