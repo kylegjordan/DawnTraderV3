@@ -967,3 +967,47 @@ With the limit stated, naming the divergence and the batch that owns it.
 
 **HIS STANDING: `RULED ON REPORTED FACT` on every figure in section 21** - the -0.4229%, the 16/18, the slippage median. **Per rule 29 that is DISQUALIFYING FOR A PROCEED on that leg, not a disclaimer** => the numbers carry no weight until re-derived on the built instrument.
 
+## 23. ⛔⛔ SECTIONS 21 AND 22 ARE RETRACTED. THE 0.48% WAS A TIMING ARTIFACT. F-G-2's SEQUENCING REVERTS.
+
+**I built the continuous instrument Langston specified, from data that already existed - no code change.** The engine's own `ENGINE_LIVE_PRICE` log lines ARE the book mid it decides on; joined to `crypto_spot_ticker_snap`, same symbol, same instant, **no exits involved**, one observation per symbol per minute over 32 hours.
+
+| | n joined | symbols | median join offset | p10 | **median** | p90 | book below ticker |
+|---|---|---|---|---|---|---|---|
+| engine book mid vs venue ticker mid | **492** | 4 | 3.9 s | -0.0940% | ⛔ **0.0000%** | +0.1080% | 42.5% |
+
+**Per symbol, so no single pair carries it: `SPX/USD` n=164 **0.0000%** - `TRUMP/USD` n=262 **0.0000%** - `US/USD` n=49 **0.0000%** - `CHIP/USD` n=17 +0.0117%.**
+⇒ ⛔ **THERE IS NO SYSTEMATIC BOOK/BBO DIVERGENCE. The two constructions agree exactly at the median on every symbol.**
+
+### 23.1 THE ARTIFACT IS IDENTIFIED, NOT MERELY SUSPECTED
+
+At a stop-out the price is **falling**, so a snapshot matched from *before* the close carries a **higher** price and makes `exit_price` look low for free. **Same 18 rows, signed offsets:**
+
+| | n | median diff |
+|---|---|---|
+| snapshot BEFORE the close (median -1.17 s) | **13 of 18** | ⛔ **-0.5797%** |
+| snapshot AFTER the close | 5 of 18 | -0.0696% |
+
+⇒ **An EIGHTFOLD swing decided by nothing but which side of the close the snapshot fell on. That is the whole of the -0.4229%.**
+
+### 23.2 ⛔⛔ THE LESSON, AND IT IS THE SHARPEST ONE OF THE BATCH
+
+**Langston struck my <=5s "join control" because it moved 17 of 18 rows. I recorded the strike and did not follow it through.** That control existed to rule out **exactly this** falling-price confound - **and the confound turned out to be the entire finding.**
+⇒ ★★ **A CONTROL THAT EXCLUDES ALMOST NOTHING IS NOT A WEAK CONTROL. IT IS THE ABSENCE OF ONE.** ⚠️ **And an absent control let a wrong number reach a reviewer, reorder a batch, and reach Kyle - inside a batch whose own section 10.3 already carries "an arm that cannot come out the other way is not a control."** **I wrote that sentence and then failed it on the same page.**
+
+### 23.3 ⇒ EVERYTHING THAT MOVED, MOVES BACK
+
+| | |
+|---|---|
+| `#944` | ⛔ **WITHDRAWN** under §9.4 disposition 5, carrying this citation |
+| `B-BOOK-BBO-DIVERGENCE` | ⛔ **WITHDRAWN BEFORE IT STARTED** - its measurement leg IS the measurement above, and it returns no defect. `PHASE_19_PLAN` 3b.c struck; board card retitled |
+| **F-G-2 sequencing** | ✅ **REVERTS - there is no prerequisite.** `OBJ-1` is not routing a new decision price through a suspect object |
+| **`OBJ-0` third read-out** | **Langston's call** - it no longer has this justification, and it costs little |
+| **Completion-report limit (section 22.6)** | ⚠️ **His wording STANDS on its own merits** - we still cannot claim the exit price is transactable, because that was never demonstrated either way |
+
+### 23.4 WHAT SURVIVES, DELIBERATELY NOT INFLATED
+
+⚠️ **Even matched AFTER the close the median is -0.0696%, so the book MAY lag the ticker under a fast move. n=5.** **A HINT. Not a finding. It supports no batch and no objective**, and it is recorded only so it is neither lost nor grown into one.
+⚠️ **LIMITS OF THE REFUTING INSTRUMENT, STATED: 4 symbols, 32 hours, USD-quoted, sampled from symbols we hold during ORDINARY evaluation - not from fast-move moments specifically.** **Far stronger than the 18 exit rows it overturns. Not unlimited.**
+
+✅ **AND THE CRYPTO/xSTOCK ANOMALY IS UNAFFECTED:** crypto 24/24 below its stop vs xStock 53/105 stands - **that comparison never involved the venue snapshot.** **It remains open, with six candidates eliminated.**
+
