@@ -869,3 +869,52 @@ Section 18.3 said candidate 5 was untestable because `latch_trigger_price` is em
 
 **DISPOSITION (section 9.4): (1) fold into the work in hand.**
 
+## 21. THE CLASS-SPECIFIC DIFFERENCE, MEASURED - AND IT IS AN ORDER OF MAGNITUDE LARGER THAN THIS BATCH'S PREMISE
+
+**The anomaly asked what is different about crypto. This is it, and it is not a half-spread.**
+
+### 21.1 CRYPTO'S EXIT PRICE SITS BELOW THE VENUE'S OWN PUBLISHED QUOTE. xSTOCK'S SITS ON IT.
+
+Each exit joined to its own class's ticker snapshot - **the venue's published BBO** - nearest within 60s:
+
+| | n | median join offset | `exit_price` vs snapshot MID | vs snapshot BID | below mid |
+|---|---|---|---|---|---|
+| **crypto** POST-epoch | 18 | **1.7 s** | **-0.4229%** | **-0.3029%** | **16 of 18** |
+| **xStock** (`#943` excluded) | 105 | **1.1 s** | **+0.0054%** | +0.0631% | 49 of 105 |
+
+**JOIN-DISTANCE CONTROL, because stop-outs happen on FALLING prices and a distant snapshot would manufacture exactly this:** the offsets are comparable (1.7s vs 1.1s), and **tightening to <=5s (17 of 18 crypto rows) moves the crypto figure to -0.4798% - the gap GROWS, it does not wash out.** xStock tightens to +0.0058%.
+
+=> **xStock's recorded exit price IS the venue mid. Crypto's is ~0.48% BELOW it - and ~0.30% below the venue BID, i.e. below anything transactable.**
+
+### 21.2 IT IS NOT THE FILL WALK
+
+`exit_slippage` is populated on all 24 crypto POST rows: **median 0.0659% of notional.** => **the depth walk accounts for roughly an eighth of the 0.48% gap.** The rest is present *before* the fill.
+
+### 21.3 AND THE DECISION PRICE ITSELF IS ALREADY BELOW THE VENUE MID (n=3 - THIN, AND SAID SO)
+
+The only three crypto stop-outs carrying `exit_decision_price`:
+
+| symbol | decision vs venue mid | fill vs venue mid |
+|---|---|---|
+| SPX/USD | **-0.2658%** | -0.6894% |
+| CHIP/USD | **-0.3220%** | -0.5797% |
+| DOG/USD | **-1.2243%** | -2.2907% |
+
+=> **The DECISION is already below the venue's published mid, before any fill.** **n=3, one of them a sub-penny asset where tick effects are large. This is a LEAD, not a result** - it accrues at the post-deploy rate (section 13.1).
+
+### 21.4 WHAT THIS DOES TO THE BATCH'S PREMISE - AND IT IS THE REASON TO SAY IT AT STEP 2
+
+**This batch is premised on: the exit decision reads a MIDPOINT while a sell fills on the BID. That is a HALF-SPREAD story, and crypto's median half-spread is 0.0545%.**
+**Measured, the crypto exit price sits 0.48% from the venue's own quote - roughly NINE TIMES the half-spread, and on the wrong side of the bid.**
+
+=> ★ **A DIFFERENT AND LARGER MECHANISM IS PRESENT.** The r1 scope already names the likely route: the crypto active path reads `livePricingAdapter.getPriceWithFallback` <- the adapter cache <- **`handleV2BookUpdate`'s DEPTH-10 BOOK midpoint**, whereas `crypto_spot_ticker_snap` carries the **TICKER BBO**. **Two different feeds from the same venue, disagreeing by ~0.48% at exit time.**
+
+⛔ **WHAT IS NOT ESTABLISHED, AND I AM NOT ASSERTING IT:**
+1. **That the book/BBO divergence CAUSES the one-sided below-stop pattern.** It is consistent with it and it is class-specific, which is what the anomaly needed - **but the decision-side evidence is n=3.**
+2. **That the book mid is WRONG.** A depth-10 mid and a BBO mid are different statistics; on a thin book they legitimately differ. **Which one the exit decision SHOULD use is a design question, not a defect finding.**
+3. **That this survives the `#741` history.** The book feed is the one with the crossed-state defect; POST-epoch it is clean - **but "clean" was established against crossed states, not against BBO agreement.**
+
+=> ⛔ **THIS IS NOT A LICENCE TO WIDEN THE BATCH.** It is stated at Step 2 because **F-G-2 as scoped would fix the 0.055% half-spread and leave a ~0.48% divergence in place, and the completion report would read as though the exit price had been made transactable.** **That is the `#941` failure shape - a document that reads as complete over a mechanism nobody measured.**
+
+**DISPOSITION (section 9.4): (1) FOLD INTO THE WORK IN HAND as a Step-2 finding, and DISPATCHED TO LANGSTON as its own gate** - whether `OBJ-0`'s before/after arm must measure against the venue BBO rather than against our own prior price, and whether the book/BBO divergence is its own batch. **Not decided here.**
+
