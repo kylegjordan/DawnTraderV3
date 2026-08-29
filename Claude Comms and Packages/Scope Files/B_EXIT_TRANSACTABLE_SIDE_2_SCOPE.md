@@ -586,3 +586,46 @@ I asked whether the two columns ever differ, expecting `trailing_stop_hit` to se
 
 ★ **AND THE CRYPTO HALF OF §12 IS UNAFFECTED** — crypto has never had a 00:15 close, so `OBJ-9`'s crypto attribution (the crossed-book era) and its POST-epoch zero both stand exactly as re-derived.
 
+## 15. ★★ STEP-2 ROUND 5 — THE CLEANEST RESULT IN THE BATCH: **THE BIAS IS CRYPTO-ONLY AND TOTAL**
+
+**Populations, both cleaned, and the cleaning is ARGUED rather than assumed:**
+- **crypto = POST-epoch only** (its PRE book was crossed 31.08% of the time — §10.6)
+- **xStock = POOLED across that epoch, DELIBERATELY.** ⛔ **This is not the pooling error I made twice.** The epoch is `e6f7c70b3`, a **crypto BOOK** fix, and **xStock never reads that book** — evidenced, not assumed: `exit_book_mid` is **NULL on every xStock row**, and its producer is `kraken_equities_ws`. **A fix to an object a class does not read cannot split that class's series.**
+- **both exclude `#943`'s 00:15 cohort.**
+
+| | n | below stop | % below | median |
+|---|---|---|---|---|
+| ⛔ **crypto** | 24 | ⛔ **24** | ⛔ **100.0%** | **0.1657%** |
+| ✅ **xStock** | 105 | 53 | ✅ **50.5%** | ✅ **0.0044%** |
+
+★ **0.1657% reproduces the headline `0.166%` this batch was opened on, from a different column and a different population. The number that started it survives contact.**
+★ **Under a null of "no side bias", 24 of 24 one-sided is p ≈ 6×10⁻⁸ (sign test). xStock's 53 of 105 is indistinguishable from a coin.**
+
+### 15.1 ✅ AND THE "BY CONSTRUCTION" TRAP WAS CHECKED **BEFORE** THE CONCLUSION, NOT AFTER
+
+A near-zero xStock median would be worthless if xStock exits were simply **snapped to the stop** — the §10.3 / `entry_price`-on-the-grid failure, which has now caught me twice in this batch.
+
+| | exactly at stop | p10 | p50 | p90 | **stddev** |
+|---|---|---|---|---|---|
+| crypto | ✅ **0** | **+0.0604** | +0.1657 | +1.0282 | **0.3825** |
+| xStock | ✅ **0** | **−0.2566** | +0.0044 | +0.4012 | ⭐ **1.3960** |
+
+✅ **NOT SNAPPED — and the discriminator is the opposite of what a snapping artifact looks like: xStock's distribution is nearly 4× WIDER than crypto's.** It is not tight-at-zero; it is **broad and CENTRED on zero**. ⇒ **the contrast is real.**
+
+### 15.2 ⛔⛔ THIS KILLS "IT IS JUST PRICE MOVEMENT" AS AN EXPLANATION **OF THE SIDEDNESS**
+
+§13.2 found the crypto gap tracks recent price movement, and warned the correlation was partly tautological. **Round 5 settles the part that matters.**
+⇒ ★ **BOTH CLASSES STOP OUT ON A FALLING PRICE. If detection-lag overshoot were the whole story, xStock would be biased below its stop TOO. It is not — it is symmetric.**
+⇒ ⛔ **So the crypto one-sidedness needs a CLASS-SPECIFIC cause, and the midpoint substitution is exactly that: it is on the crypto path only** (§9 — `c[0]` carries the BBO mid via `translateV2ToV1`; xStock's producer is *a SOURCE, not a SIDE*). ★ **A tight distribution with a floor at ~one half-spread (`p10 = +0.0604%` against a median half-spread of `0.0545%`) is the signature of a SYSTEMATIC OFFSET, not of noise.**
+⚠️ **STILL NOT PROVEN, AND THE GAP IS NAMED: this establishes a class-specific systematic offset whose size and floor are consistent with the mid/bid mechanism. It does not exhibit the mechanism end-to-end — `OBJ-0`'s before/after arm is what does that.** ★ **Movement and the offset COMPOSE: movement sets the magnitude's variance (§13.2), the offset sets its SIGN and its floor.**
+
+### 15.3 ⇒ WHAT IT DOES TO THE BATCH
+
+| | |
+|---|---|
+| ✅ **The crypto thesis** | **STRENGTHENED on an independent population** — a different column, a different denominator, and a control that could have refuted it |
+| ⛔ **`OBJ-3` — "BOTH ASSET CLASSES"** | ⛔ **NEEDS A SCOPE DECISION. xStock shows NO side bias at n=105.** Applying the same change there would be a fix to a class with no measured defect. ⇒ **`OBJ-3`'s xStock arm should become *verify the absence holds*, not *make the same change*** — stated for Langston, **not decided unilaterally** |
+| ✅ **§13.2's right-sizing** | **UNCHANGED and now better founded** — the spread is a MINORITY of the magnitude, and it is the whole of the SIGN |
+
+**DISPOSITION (§9.4): (1) folded into the work in hand.** ⛔ **`OBJ-3`'s narrowing is a RECOMMENDATION TO LANGSTON at Step 4, not an edit I make to the objective.**
+
