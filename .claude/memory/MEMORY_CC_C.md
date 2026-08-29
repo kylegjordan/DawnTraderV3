@@ -23,7 +23,7 @@
 **WRITE SCOPE (Kyle, 2026-07-21, SCOPED — roster `write_scope`):** I implement my OWN governance/tooling batches. **Analysis of TRADING behaviour stays READ-ONLY**; anything else needs a fresh grant. ★★ **EXTENDED 2026-08-28 for `F-G-1` — I IMPLEMENT THE BATCH I SCOPED AND AUDITED.** ⚠️ **⇒ THE INDEPENDENT CHECK RESTS ENTIRELY ON LANGSTON'S REVIEW.** **`F-G-2` implementation needs its OWN grant; SCOPING is analyst work and Kyle asked for it.**
 
 ## ★★ THE HEADLINE FINDING (2026-07-20) — READ BEFORE ANALYZING ANY TRADING RESULT
-**THE ACTIVE PATH HAS TWO ADMISSION LANES AND THEY MUST NEVER BE POOLED.** `closed_trades.metadata->>'admissionBasis'`: **`exploration`** = the GOVERNED lane, admitted on KNOWN-NEGATIVE netEV, **SUPPOSED to lose money** — the losses are the price of learning data. **`organic`** = genuine positive-netEV. ⇒ **Pooling them reads a deliberate learning spend as strategy failure — I did exactly that on 07-19 and gave Kyle a false headline.** **Per-cohort numbers move constantly: RE-QUERY, never quote from memory.**
+**THE ACTIVE PATH HAS TWO ADMISSION LANES AND THEY MUST NEVER BE POOLED.** `closed_trades.metadata->>'admissionBasis'`: **`exploration`** = the GOVERNED lane, admitted on KNOWN-NEGATIVE netEV, **SUPPOSED to lose money**; **`organic`** = genuine positive-netEV. ⇒ **Pooling reads a deliberate learning spend as strategy failure — I did exactly that and gave Kyle a false headline. RE-QUERY, never quote from memory.**
 
 ## ★ VERIFIED MECHANICS (measured — trust these; detail in the repo)
 - **Net-EV kernel arithmetic is CORRECT** at all 3 call sites; independently reproduced to 3 decimals. NOT a units repeat.
@@ -46,19 +46,27 @@
 
 ## ★★★ CURRENT POSITION (2026-08-28) — READ FIRST
 
-⛔ **F-G-2 PROVENANCE AUDIT — INTENT SOUND** (`b4c0d2d67` 2025-12-30, *“accuracy on low-volume pairs”*), **DO NOT REMOVE THE MIDPOINT.** ⛔ **The exit consumer `cb8ee0942` 2025-10-10 PREDATES it by ELEVEN WEEKS ⇒ a field's meaning changed UNDER a live consumer = outcome (1) on the SUBSTITUTION.** Full audit: scope §9 + `#941`.
+⛔ **F-G-2 PROVENANCE: midpoint INTENT SOUND** (`b4c0d2d67`) — **do NOT remove it.** ⛔ **The exit consumer `cb8ee0942` PREDATES it by ELEVEN WEEKS ⇒ a field's meaning changed UNDER a live consumer.** Full audit: scope §9 + `#941`.
 
-✅ **`F-G-2` STEP 2 CLEARED by Langston (4 conditions, all applied). Card `Implementation`, `Review=Approved`, ⛔ BLOCKED ON KYLE — implementation needs a WRITE GRANT.** Doc: `B_EXIT_TRANSACTABLE_SIDE_2_PRE_AUDIT.md` (deltas table + census + 9-item plan); audit body in the SCOPE §9-§24. ⛔ **HE FAILED MY `OBJ-3` NARROWING — IT STANDS, BOTH CLASSES: `_eqTick.price` IS A MID TOO.** ⇒ ★★ **READ A VALUE AT A CONSUMER ⇒ TRACE ONE HOP UP BEFORE GENERALISING ABOUT THE PRODUCER** (my own r1 scope already said so). ➕ **`FINDING A1`: a FOURTH exit-decision impl (`strategy-engine:1106`), separate from `evaluateTECExit`, reading the v1 REST ticker. DEAD, presence-evidenced. `PHASE_19_PLAN` 3h.b — NAMED, because module adjacency is NOT a disposition.** ⚠️ **LANGSTON CAUGHT A DOC DEFECT IN A FILE I HAD CLAIMED SWEPT** (`SYSTEM_MANUAL:4556` + its `sections/PHASE5_*` mirror called that DEAD loop LIVE; FIXED). ⇒ ★★ **“I READ THE FILE” IS NOT “I READ IT FOR THIS COMPONENT.”**
+✅ **`F-G-2` STEP 2 CLEARED (Langston, 4 conditions applied). Card `Implementation`, ⛔ BLOCKED ON KYLE — needs a WRITE GRANT.** Doc: `B_EXIT_TRANSACTABLE_SIDE_2_PRE_AUDIT.md` (deltas + census + 9-item plan); audit body SCOPE §9-§24. ⛔ **`OBJ-3` NARROWING FAILED — IT STANDS, BOTH CLASSES: `_eqTick.price` IS A MID TOO.** ⇒ ★★ **READ A VALUE AT A CONSUMER ⇒ TRACE ONE HOP UP BEFORE GENERALISING ABOUT THE PRODUCER.** ➕ **`FINDING A1`: a FOURTH exit-decision impl (`strategy-engine:1106`), DEAD, presence-evidenced → `PHASE_19_PLAN` 3h.b, NAMED (adjacency is NOT a disposition).** ⚠️ **Langston caught a doc defect in a file I claimed swept** ⇒ ★★ **“I READ THE FILE” ≠ “I READ IT FOR THIS COMPONENT.”**
 
-⛔⛔ **`#944` WITHDRAWN BY ME, SAME DAY — THE 0.48% BOOK/VENUE GAP WAS A TIMING ARTIFACT** (continuous instrument, no exits, n=492: median EXACTLY 0.0000%). ⛔⛔ **THE LESSON (Langston's): MY CONTROL WAS NOT WEAK, IT WAS AIMED AT THE WRONG AXIS — it bounded ELAPSED TIME while the confound ran along SIGNED DIRECTION relative to the close.** ⇒ ★ **NAME THE AXIS THE CONFOUND RUNS ALONG, THEN CHECK YOUR CONTROL SPLITS ON IT.** (`verification-weaker-than-claim` inst. 3; §13 floor met, raised for the weekly pass.) ✅ **Batch dissolved; sequencing reverted but the third read-out KEPT as a GUARD. `#945` = the n=5 residue, a REVIEW.**
+⛔⛔ **`#944` WITHDRAWN BY ME SAME DAY — the 0.48% book/venue gap was a TIMING ARTIFACT** (continuous instrument, no exits, n=492, median EXACTLY 0.0000%). ⛔⛔ **THE LESSON (Langston's): MY CONTROL WAS AIMED AT THE WRONG AXIS — it bounded ELAPSED TIME while the confound ran along SIGNED DIRECTION.** ⇒ ★ **NAME THE AXIS THE CONFOUND RUNS ALONG, THEN CHECK YOUR CONTROL SPLITS ON IT.** (`verification-weaker-than-claim` inst. 3.) ✅ **Sequencing reverted but the third read-out KEPT as a GUARD. `#945` = the n=5 residue.**
 
-★ **STEP-2 RESULTS (scope §10-§24 + the PRE_AUDIT deltas table — READ THERE):** basis-gap test IS runnable · the half-spread explains **≤~45%** · `OBJ-6` coverage **100% since 08-27** (3.6% was a DENOMINATOR ERROR) · **SIX anomaly candidates ELIMINATED with numbers** · **the crypto/xStock sidedness anomaly is STILL OPEN.**
+★ **F-G-2 STEP-2 RESULTS (scope §10-§24 + the PRE_AUDIT deltas table):** basis-gap test IS runnable · half-spread explains **≤~45%** · `OBJ-6` coverage **100% since 08-27** (3.6% was a DENOMINATOR ERROR) · **SIX anomaly candidates ELIMINATED** · **the crypto/xStock sidedness anomaly is STILL OPEN.**
 
 ⛔⛔ **ARMS THAT CANNOT COME OUT THE OTHER WAY — NEVER CITE:** target exits show **exactly 0** shortfall **because they REST AS MAKER LIMITS** · `original_stop_price` **falls back to `stop_loss`** (`aee:1702`).
 
-⛔ **`#943` — the xStock feed emits a BAD PRINT at 00:15 UTC and the engine CLOSES on it: 65 closes, 27.1% of ALL xStock stop-outs, ZERO crypto.** **Spread there 8.22% vs 0.1665% ⇒ SHUT-MARKET; 00:15 UTC = 20:15 ET.** ✅ **Entries NOT affected.** **`PHASE_19_PLAN` 3b.b = `B-XSTOCK-FEED-SANITY`, MINE, INVESTIGATION — unblocked, no write grant needed.** ⛔ **xStock populations report BOTH excluded and unexcluded (Langston cond. 3); SPREAD IS NOT A SUBSTITUTE for the time proxy.**
+✅ **`B-XSTOCK-FEED-SANITY` (`#943`) STEP 1 APPROVED (Langston, 4 conditions applied). Card `Scope`, BLOCKED ON KYLE — the disposition is his. 4 of 5 objectives ANSWERED WITH MEASUREMENTS in `B_XSTOCK_FEED_SANITY_SCOPE.md` §9-§13 — READ THERE.**
 
-⛔ **`#940` INVERTED — the witness matched an INDEPENDENT THIRD SOURCE 6/6; the thing it witnessed was wrong. Withdrawn §9.4(5).** ★ **ADJUDICATE A TWO-WAY DISAGREEMENT WITH A THIRD SOURCE.** ⛔ **`#941`** both maps ASSERTED the OPPOSITE of the code — FIXED. ⚠️ **Silence invites a check; an assertion ends one.** ⛔ **`#942`** the no-silent-drop guarantee **excludes `info`** — 6 closure gates rotting. **KYLE'S DECISION.**
+★★ **MECHANISM: ONE SIDE OF THE BOOK COLLAPSES TO A STUB AND `(bid+ask)/2` FOLLOWS IT.** NOW bid **92.50**/ask 145 → mid **118.75** (true 143.20); TGT bid **48.45**/ask 163.70 → **106.075** (true 163.18). Spreads 44-109%. ✅ **`last` IS CORRECT IN EVERY CASE.** ⛔ **Feed, writer and arithmetic all correct ⇒ RULE-24 (2): nobody decided what the mark should be when the book is not a market.** ★ **Found because each bad mark is EXACTLY that symbol's MINIMUM mid, to 4dp.**
+
+⛔⛔ **BOOK-WIDE AND SCHEDULED, NOT PER-SYMBOL: at `00:15` UTC **389 of 476 symbols (82%)** go stub AT ONCE (typical minute ~5%).** ★★ **ZERO STUBS IN 8.17M SNAPS ACROSS THE 5 HOURS US RTH IS OPEN ⇒ a CLOSED-UNDERLYING property, ~19h/weekday + all weekend.** ⇒ ⛔ **A PER-SYMBOL SPREAD GUARD IS THE WRONG SHAPE — it just asks “is the book open?”, which `isXstockLiquidFillWindowET` ALREADY answers for FILLS but NOT for exit pricing.** ⚠️ **My survivor hypothesis was TESTED (28.6%) and SUPERSEDED.**
+
+⛔ **CONTAMINATION IS FAVOURABLE-BIASED — the dangerous direction: 26.7% of xStock closes are synthetic. Reported avg **−$1.04** vs honest **−$1.97**; win 38.3% vs 34.8%; **+$97 phantom** in a book down $351.** ★ **That is WHY it survived 6 weeks.** ⛔ **NO consumer excludes it (20+ read `closed_trades`) — none could, it had no identifier.**
+
+⛔ **OBJ-2 (a row identifier) FAILED, and the failure is the useful part: spread>20% catches 19/65, divergence>5% 17/65 — each misses ~¾. NOT the threshold: the stub exists at INSTANTS and the decision-instant book is often NOT STORED.** ⇒ **the identifier is `exit_ticker_bid`/`ask` at the decision instant — BLOCKED ON `#911` (6 of 232).** ⇒ **the `00:15` PROXY stands; F-G-2 keeps its exclusion AND both-populations reporting.**
+
+⛔ **`#940` INVERTED — the witness matched an INDEPENDENT THIRD SOURCE 6/6; the thing it witnessed was wrong. Withdrawn §9.4(5).** ★ **ADJUDICATE A TWO-WAY DISAGREEMENT WITH A THIRD SOURCE.** ⛔ **`#941`** both maps ASSERTED the OPPOSITE of the code — FIXED. ⚠️ **Silence invites a check; an assertion ends one.** ⛔ **`#942`** the no-silent-drop guarantee **excludes `info`** — 6 gates rotting. **KYLE'S.**
 
 ✅ **ALERT `63d41a75` (retention sweep) IS MINE, acked. Baseline 154.74 GiB / 77.4% (08-29); measurement armed as `c244f2b8`, fires 08-31T04:00Z.** ★ **MEASURE THE DROP; NEVER READ THE SWEEP'S EXIT CODE AS THE EFFECT.** ⚠️ Zero freed 08-29 is EXPECTED (July not age-eligible until 08-31); zero on/after 08-31 escalates. **The alert body's own ~42GB/96% is STALE — Langston superseded it (3.88 GB/day, ~84% peak, 59.4 GB).**
 
@@ -79,7 +87,7 @@
 
 ⛔⛔ **THE PATTERNS F-G-1 PRODUCED — ALL HAVE FULL `MISTAKE_PATTERNS.md` ENTRIES; READ THEM THERE:** `fix-follows-pointer` · `verification-weaker-than-claim` · `control-enumerates-the-observed`. **The two that fire at KEYBOARD time and so stay here:** **BRANCH ON A DERIVED VALUE, NOT THE FACT** · ⚠️ **A ONE-DIRECTIONAL CHECK CERTIFIES THE OPPOSITE ERROR — my `isOnGrid` fix began ACCEPTING off-grid prices. WRITE BOTH ARMS.**
 
-⛔ **INSTRUMENT LESSONS:** read back from DISK after every write · board fields need **GraphQL**, and **read the field back** · **LINE ENDINGS: build with the file's newline ONCE** · ⛔ **A GATE IN THE SAME COMMAND AS THE ACTION IS NOT A GATE — use a shell conditional** · ⛔⛔ **ROTATED LOGS ARE NAMED FOR THE ROTATION TIME:** the file stamped `00-00-00` holds the PREVIOUS day · **psql scans of the ticker snaps TIME OUT — bound the window and SAY you bounded it** · **a “control” that excludes 1 of 18 rows discriminates NOTHING.**
+⛔ **INSTRUMENT LESSONS:** read back from DISK · board fields need GraphQL, READ THE FIELD BACK · **build strings with the file's newline ONCE** · ⛔ **A GATE IN THE SAME COMMAND AS THE ACTION IS NOT A GATE — use a shell conditional** · ⛔⛔ **UNQUOTED HEREDOC EXECUTES BACKTICKS — dispatch bodies use `<<'EOF'` ALWAYS; interpolate via a placeholder** (`shell-mangled-text`, blanked the one word an argument turned on) · **`git commit -m` with double quotes in the text BREAKS — use `-F msgfile`** · ⛔ **ROTATED LOGS ARE NAMED FOR THE ROTATION TIME** · **psql scans of ticker snaps TIME OUT — bound the window and SAY so** · **a “control” excluding 1 of 18 rows discriminates NOTHING.**
 
 ✅ **STEP 10 DONE 2026-08-29** — BATCH_CATALOG · PHASE_HISTORY · PHASE_19_PLAN §1+§5 · shared MEMORY · SIM+SysManual re-verified. ⛔ **STILL OWED: Langston's `/home/langston/MEMORY.md` (10.b) — he prunes FIRST, do not touch until he says. And the progress report CONVERTS to a completion report only when the data is in AND a decision is taken.**
 
@@ -100,19 +108,19 @@
 
 ★★ **F-E NEEDS NO NEW TRADES — it grades the 547 closed paper trades already in hand against retained venue OHLC. A CLASSIFICATION job, not an accumulation wait.** The "30 per strategy" worry belongs to F-5's FIT, not F-E. **F-E does NOT gate F-5 shipping; it gates the FIT, which is deferred anyway.**
 
-**★ DATA USABILITY — fill-integrity TIERS (detail in the repo):** A clean **289/525** · B contaminated **109 exits + 18 taker entries** · C unassessable **127, ENRICHED not neutral**. ⛔ **BUT SELECTION DOES NOT TIER** — `signal-orchestrator:2160` reads the same cache ⇒ **every crypto trade since 2025-12-30 was SELECTED through a possibly-contaminated feed.** ⇒ **accounting: use the tiers. CALIBRATION: treat crypto as compromised as a whole.**
+**★ DATA USABILITY — fill-integrity TIERS (repo has the detail):** A clean **289/525** · B contaminated **109 exits + 18 taker entries** · C unassessable **127**. ⛔ **SELECTION DOES NOT TIER** — `signal-orchestrator:2160` reads the same cache ⇒ **every crypto trade since 2025-12-30 was SELECTED through a possibly-contaminated feed.** ⇒ **accounting: use the tiers. CALIBRATION: crypto compromised as a whole.**
 
 **TWO EXPOSURES, NOT ONE:** VTS *learning* since **2025-12-30**; paper *money* since **2026-06-16**. **The book was NEVER SPECIFIED** — Directive 8.9.0 covers the TICKER channel only.
 
 ✅ **`B-EPOCH-KEYING-PARITY` CLOSED.** ★★ **CARRY: a DECIDED rule shipped into ONE READER OF FOUR, and the 4 tests pinned the FUNCTION not the PARITY** — all green while the card showed THREE answers. **OPEN, mine: #900-#903.**
 
-⛔ **STEP-7 MEANS THE *PAPER TRADING* PAGE, NOT THE DASHBOARD TAB (Kyle 2026-08-24)** — on the right page the defect was visible in ONE SCREENSHOT. ⚠️ **`/api/auth/login` allows 5 per 900 s** — repeated curl logins self-inflict a 429; get ONE token and reuse it. ⚠️ **Python `write_text` REWRITES EVERY LINE ENDING** (one edit = a 644-line diff for 12 real lines) — use `read_bytes`/`write_bytes` and check `git diff --cached --ignore-all-space --numstat` before committing.
+⛔ **STEP-7 MEANS THE *PAPER TRADING* PAGE, NOT THE DASHBOARD TAB (Kyle 08-24).** ⚠️ **`/api/auth/login` allows 5 per 900s — get ONE token and reuse it.** ⚠️ **Python `write_text` REWRITES EVERY LINE ENDING — use `read_bytes`/`write_bytes`.**
 ## ★★ A NEGATIVE CONTROL IS WHAT CONVERTS A NUMBER INTO A MEASUREMENT (`#507`; the repo holds the case)
 
 I established a MECHANISM then hung THREE damage figures on it from instruments I never validated. **All three WITHDRAWN; Langston reproduced none.** ★ **The control sat one `GROUP BY` away: maker exits never read the book, so an honest instrument must be SILENT on them.** ⇒ **Applies to a POSITIVE result as hard as to a zero.**
 
 ## STANDING SESSION ITEMS (not dated state — the dated state is the block above)
-**⚠️ #1 ACTION ON WAKE/COMPACT: RE-ARM THE WAKE WATCHER.** It is ARMED (ALIAS **CC-C**, display **"ANALYST Claude"**, registered in `cc-wake-filter.py`) and fired continuously all session — but **compaction KILLS it.** Re-arm via the Monitor tool per shared MEMORY.md item 4.5 (`persistent: true`, NOT Bash run_in_background). Judge liveness by whether WAKE events have arrived; if none since a compaction, arm ONCE; doubled events ⇒ TaskStop one. Then sweep `/var/log/cc-discord-inbox.jsonl` for anything missed.
+**⚠️ #1 ON WAKE/COMPACT: RE-ARM THE WAKE WATCHER** — ALIAS **CC-C**, display **“ANALYST Claude”**. **Compaction KILLS it.** Arm via Monitor per shared MEMORY 4.5 (`persistent: true`, NEVER Bash run_in_background). **Judge liveness by whether WAKE events arrive; doubled ⇒ TaskStop one.** Then sweep `/var/log/cc-discord-inbox.jsonl`.
 
 **★ KYLE LIFTED MY READ-ONLY FOR TWO BATCHES (2026-07-21 GO; recorded in the roster `write_scope` field — the lift is SCOPED, not general).** I IMPLEMENT them, full 11-step, Langston reviews diffs.
 
@@ -122,10 +130,7 @@ I established a MECHANISM then hung THREE damage figures on it from instruments 
 
 ## ★★ STANDING LESSONS — the ones that keep re-earning their place
 
-1. **A MATCHING NAME IS NOT A MATCHING THING** — substring collisions · a stream vs its file · a mirror row vs an observation. **Anchor on a delimiter; NAME THE SOURCE TABLE.**
-2. **A CONTROL THAT CANNOT FIRE IS THE SAME DEFECT AS THE FENCE IT GUARDS** — prove it by breaking it. ⚠️ **A ONE-DIRECTIONAL check certifies the OPPOSITE error: write BOTH arms.**
-3. **CAPABILITY ≠ COVERAGE** — a positive control proves the instrument CAN see it, not that it WAS looking. **State the time reach.** ★ **AND IT APPLIES TO BOUNDARIES: *the commit that makes X possible landed at T* is NOT *X was observed from T*.**
-4. **NAME THE POPULATION BEFORE THE NUMBER — AND NAME THE REF.** A deploy time is not a window anchor.
+1. **A MATCHING NAME IS NOT A MATCHING THING** · **A CONTROL THAT CANNOT FIRE IS THE DEFECT IT GUARDS — write BOTH arms** · **CAPABILITY ≠ COVERAGE: state the time reach** · **NAME THE POPULATION AND THE REF BEFORE THE NUMBER — a deploy time is not a window anchor.**
 5. **`B-KILLSWITCH-WINDOW` shipped FIVE errors while APPROVED — pattern: ASSERTING A CHECK INSTEAD OF RUNNING IT.**
 6. **TWO RULES I AUTHORED are in `CLAUDE.md` (auto-loads — read them THERE): r24.a investigate-before-announce, r29 measurement discipline.**
 
