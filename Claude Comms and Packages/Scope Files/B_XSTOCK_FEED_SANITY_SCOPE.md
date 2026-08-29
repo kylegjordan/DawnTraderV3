@@ -2,6 +2,11 @@
 
 **change-class: non_architecture**
 
+> ⛔⛔ **RE-FRAMED 2026-08-29, AFTER LANGSTON APPROVED THIS SCOPE: THIS IS A RE-DISCOVERY, NOT A NEW CLASS.** **`#531` ADDENDUM-2 (19-20 July, CC-B + Langston's own code-read) already documents it:** *“the xStock exit leg guards FRESHNESS but not PLAUSIBILITY”*, fresh-but-wrong unguarded, the `max_fallback_deviation_pct` knob **deliberately retired**, taxonomy bucket (2). **Langston approved splitting it out as `B-XSTOCK-EXIT-PLAUSIBILITY`. Kyle already ruled: *“accept the pricing that comes in at re-open for tonight and observe.”* Its worked example is `AMGN` phantom-stopped `07-17 00:15Z` — the same minute, six weeks earlier, n=6.**
+> ⛔ **BINDING CONSTRAINT I DID NOT CITE WHEN PUTTING THE DECISION TO KYLE:** *the plausibility comparator MUST be the pair's OWN price history, NEVER a second venue*; candidate mechanism = **revive the retired per-class deviation band.** ✅ **“Prefer `last`” survives it** — same venue's own print — **but I proposed it not knowing the rule existed.**
+> ✅ **WHAT THIS DOCUMENT STILL CONTRIBUTES:** the CAUSE (§9), the SCALE and STRUCTURE (§11-§12), and the COST WITH ITS DIRECTION (§13). **ADDENDUM-2 had the class on 6 rows and no cause.** ⛔ **It is EVIDENCE FOR `B-XSTOCK-EXIT-PLAUSIBILITY`, not a competing batch — Langston to rule.**
+> ⚠️ **HOW IT WAS MISSED: my §3 ledger search ran on the COMPONENT** (`equity-spot-archiver`, `parseTickerSnap`, `getLatestEquityTick`). **The prior art is filed under the WEEKEND-POSTURE entry and cites `active-execution-engine` lines. Searching by the component I was standing on could not reach a class filed under the BEHAVIOUR.** `fix-follows-pointer`, logged.
+
 > **INVESTIGATION-ONLY. NO CODE CHANGES IN THIS BATCH.** The deliverable is an attribution and a disposition, not a fix. **Rule 15: we do not yet know why the print exists, and a deviation threshold chosen before that is a patch.**
 > **Owner: CC-C. Placed: `PHASE_19_PLAN` row 3b.b, before `F-G-2` (3c).** Board card exists.
 
