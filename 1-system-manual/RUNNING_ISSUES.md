@@ -4472,7 +4472,37 @@ Kraken publishes a per-pair `tick_size` — **1,437 pairs, 11 distinct values, a
 ⇒ **HOME: `B-POST-GRID-MUTATION-CENSUS` (INVESTIGATION ONLY, NO CODE), owner CC-C, placed in `PHASE_19_PLAN.md` §1 Part F at row **3f.b** — AFTER the F-G series, BEFORE `B-GRID-LIVE-PATH-PARITY` (3g), whose scope it determines.**
 ★ **AND KYLE'S "BIGGER PROBLEM" INSTINCT IS ALREADY EVIDENCED, NOT SPECULATIVE: THREE post-VPG mutation sites are on the record — this one, plus `#939`(a) `trading-engine.ts:536` and `#939`(b) `active-execution-engine.ts:4317-4318` — AND ALL THREE WERE FOUND INCIDENTALLY. Nobody has ever enumerated them.** F-G-1 rounds at signal BIRTH; **what happens to that price for the rest of the trade's life has never been censused.**
 
-### #944 OPEN 2026-08-29 (CC-C, found chasing Langston's own anomaly at F-G-2 Step 2; mechanism RE-READ AND RULED BY LANGSTON at `a6be11883`) - ⛔⛔ OUR LOCALLY-MAINTAINED ORDER BOOK AND THE VENUE'S PUBLISHED QUOTE DISAGREE BY ~0.48% AT EXIT TIME - **AND THEY ARE THE SAME STATISTIC**
+### #944 ⛔⛔ **WITHDRAWN 2026-08-29 BY ITS OWN AUTHOR, SAME DAY - THE HEADLINE IS A TIMING ARTIFACT. SEE THE RETRACTION AT THE TOP OF THIS ENTRY.** (originally OPEN 2026-08-29 (CC-C, found chasing Langston's own anomaly at F-G-2 Step 2; mechanism RE-READ AND RULED BY LANGSTON at `a6be11883`) - ⛔⛔ OUR LOCALLY-MAINTAINED ORDER BOOK AND THE VENUE'S PUBLISHED QUOTE DISAGREE BY ~0.48% AT EXIT TIME - **AND THEY ARE THE SAME STATISTIC**
+
+⛔⛔ **RETRACTION, 2026-08-29, HOURS AFTER FILING - I BUILT THE INSTRUMENT LANGSTON ASKED FOR AND IT REFUTES ME.**
+
+**THE CONTINUOUS INSTRUMENT, built from data that already existed (no code change): the engine's own `ENGINE_LIVE_PRICE` log lines - the BOOK mid it actually decides on - joined to `crypto_spot_ticker_snap`, same symbol, same instant, NO EXITS INVOLVED.** Sampled one observation per symbol per minute over 32 hours.**
+
+| | n joined | symbols | median join offset | p10 | **median** | p90 | book below ticker |
+|---|---|---|---|---|---|---|---|
+| **engine book mid vs venue ticker mid** | **492** | 4 | 3.9 s | -0.0940% | ⛔ **0.0000%** | +0.1080% | **42.5%** |
+
+**PER SYMBOL, so one pair cannot carry it: `SPX/USD` n=164 median 0.0000% - `TRUMP/USD` n=262 **0.0000%** - `US/USD` n=49 **0.0000%** - `CHIP/USD` n=17 +0.0117%.**
+⇒ ⛔ **THERE IS NO SYSTEMATIC BOOK/BBO DIVERGENCE. The two constructions agree EXACTLY at the median, on every symbol.**
+
+**AND THE ARTIFACT IS IDENTIFIED, NOT MERELY SUSPECTED.** At a stop-out the price is FALLING, so a snapshot matched from *before* the close carries a HIGHER price and makes `exit_price` look low for free. **Signed offsets on the same 18 rows:**
+
+| | n | median diff |
+|---|---|---|
+| snapshot BEFORE the close (median offset -1.17 s) | **13 of 18** | ⛔ **-0.5797%** |
+| snapshot AFTER the close | 5 of 18 | **-0.0696%** |
+
+⇒ **An EIGHTFOLD swing decided by nothing but which side of the close the snapshot fell on.** ★ **That is the whole of the -0.4229%.**
+
+⛔⛔ **AND MY WITHDRAWN "CONTROL" IS EXACTLY WHAT SHOULD HAVE CAUGHT THIS.** I ran a <=5s tightening, it moved 17 of 18 rows, and I reported it as having ruled out the falling-price confound. **Langston struck it as non-discriminating and he was right; the confound it was supposed to exclude is the entire finding.** ⇒ ★ **A CONTROL THAT EXCLUDES ALMOST NOTHING IS NOT A WEAK CONTROL - IT IS THE ABSENCE OF ONE, AND IT LET A WRONG NUMBER REORDER A BATCH.**
+
+⇒ **WITHDRAWN under §9.4 disposition 5, carrying the citation that dissolves it.** **`B-BOOK-BBO-DIVERGENCE` is WITHDRAWN BEFORE IT STARTED - its measurement leg is the measurement above, and it returns no defect.** **`PHASE_19_PLAN` row 3b.c struck; F-G-2's sequencing REVERTS - there is no prerequisite.**
+
+⚠️ **ONE SMALLER QUESTION SURVIVES AND IS NOT PROMOTED: even matched AFTER the close, the median is -0.0696%, and the book could lag the ticker under a fast move. n=5. That is a HINT, not a finding, and it does NOT support a batch.** ✅ **Recorded so it is neither lost nor inflated.**
+⚠️ **LIMITS OF THE REFUTING INSTRUMENT, STATED: 4 symbols, 32 hours, USD-quoted, and the sample comes from symbols we hold during ordinary evaluation.** **It is far stronger than the 18 exit rows it overturns, and it is not unlimited.**
+
+---
+
 
 **SEVERITY: HIGH (paper today; the active crypto exit path reads the suspect object, and Phase 21 is live). OWNER: CC-C. DISPOSITION: §9.4 (3) - its own batch, PLACED at `PHASE_19_PLAN` row 3b.c, BEFORE F-G-2 implementation and after the F-G-1 soak. RULE-24 OUTCOME: (1) a real defect - and NOT a design question, see below.**
 
