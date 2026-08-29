@@ -4472,6 +4472,36 @@ Kraken publishes a per-pair `tick_size` — **1,437 pairs, 11 distinct values, a
 ⇒ **HOME: `B-POST-GRID-MUTATION-CENSUS` (INVESTIGATION ONLY, NO CODE), owner CC-C, placed in `PHASE_19_PLAN.md` §1 Part F at row **3f.b** — AFTER the F-G series, BEFORE `B-GRID-LIVE-PATH-PARITY` (3g), whose scope it determines.**
 ★ **AND KYLE'S "BIGGER PROBLEM" INSTINCT IS ALREADY EVIDENCED, NOT SPECULATIVE: THREE post-VPG mutation sites are on the record — this one, plus `#939`(a) `trading-engine.ts:536` and `#939`(b) `active-execution-engine.ts:4317-4318` — AND ALL THREE WERE FOUND INCIDENTALLY. Nobody has ever enumerated them.** F-G-1 rounds at signal BIRTH; **what happens to that price for the rest of the trade's life has never been censused.**
 
+### #942 OPEN 2026-08-29 (CC-C; found running the mandatory per-turn alert check, after an hourly heartbeat contradicted my own read) — ⛔⛔ THE "NO SILENT DROP" CLOSURE GUARANTEE DOES NOT COVER `info`, AND THAT IS THE SEVERITY BATCH-CLOSURE VERIFICATION GATES ARE MINTED AT
+
+**SEVERITY: medium. OWNER: CC-C to surface; the DECISION is Kyle's (see the bottom). DISPOSITION: §9.4 (2) — added as an item to `B-ALERT-LIFECYCLE`, the existing home of `#912`. RULE-24 OUTCOME (2): WORKING AS DESIGNED, DECISION MISSING — no code is to be changed unilaterally.**
+
+**THE MECHANISM, CITED AT THE LINE.** `server/services/system-alerts.ts:585` — `if (a.severity === 'info') continue; // info never pushes` — inside `computeResurfaceStale`. It is not an oversight: `RESURFACE_TTL_MS` (`:556`) is **typed** `Record<'active'|'acknowledged', Record<'warning'|'critical', number>>`, so `info` is excluded by the type as well as the branch. ⇒ **an `info` alert can never re-surface and can never escalate to Kyle, for ever, by construction.**
+
+**WHAT THAT COLLIDES WITH.** `ALERT_HANDLING_PROTOCOL.md:40` clause 7 states the guarantee unconditionally — *"a diagnosed-but-unfixed alert can never silently rot"* — then lists TTLs for **critical and warning only**. ⚠️ **The exemption IS disclosed, but at clause 1 (`Fire`), about the initial post — not at clause 7, where the guarantee is claimed.** A reader of clause 7 gets an absolute promise followed by a table that silently omits a severity.
+
+**MEASURED — the whole alert file (746 distinct alerts ever), unacked + active + past `triggers_at`:**
+
+| severity | rotting >7d | <1d | mechanism that would chase it |
+|---|---|---|---|
+| critical | 0 | 0 | 2h/4h re-surface + Kyle escalation |
+| **warning** | **0** | 2 | 6h/12h re-surface + Kyle escalation |
+| ⛔ **info** | ⛔ **6 (15–22 DAYS)** | 1 | ⛔ **NONE. There is no path** |
+
+**THE SIX, and five of them are batch verification or decision gates:** `f6ae5419` VC-2 decision point (B-REGIME-REFRESH-PIPE, 18.9d) · `2b0a4688` #605 PIN PROOF (21.1d) · `23f004a4` B-OUTCOME-FEEDBACK-WIRE #602 post-deploy verification (21.9d) · `7c4a873f` T-W20C-SCALAR-LEG (16.0d) · `d32ca173` B-FILTER-DIAG-PAPER OBJ-2 soak (15.0d) · `65bb4388` daily dt-deploy observation (21.2d).
+
+⛔⛔ **WHY THIS IS NOT MERELY UNTIDY: `workflow-10-governance` PERMITS A BATCH TO CLOSE WITH A DEFERRED ITEM *"PROVIDED THE ALERT CARRIES THE CRITERION AND THE RESULT IS WRITTEN BACK WHEN IT FIRES."*** ★ **That disposition — Langston's condition 1, which retrospectively ratified `P19-B8.5l` and `B-MBIM-SWITCH-ON` — rests on the alert being a TIMER THAT FIRES.** ⇒ **A closure gate minted at `info` is not a timer. It fires once into a queue with no chaser, and the batch is already closed.**
+
+**POSITIVE CONTROL, and it is stated honestly rather than flattered.** The instrument is not blind to slow warnings: **3 warnings have historically taken >7 days** to be acked or resolved. So the contrast is *"info has no mechanism and 6 are rotting now; warning has a mechanism and 0 are rotting now"* — **NOT** *"warnings never sit."*
+⛔ **AND THE CAUSAL CLAIM IS BOUNDED (rule 24, and it is the same caveat I put on `#912`'s companion): the ABSENCE of the mechanism is PROVED at the line and in the type. That it is WHY these six sat is a hypothesis** — their owners may simply not have reached them. **`#912`'s companion supplies a second sufficient explanation (the owner is prose in `body`, not a field), and the two compound.**
+
+**RELATION TO `#912` — SAME HOME, THIRD DISTINCT MECHANISM, DELIBERATELY ITS OWN NUMBER.** `#912` = an alert that can never CLEAR itself · its companion = an alert whose OWNER is not a queryable field · **this** = an alert that can never be CHASED. ★ **It gets a number rather than a third companion note because it carries a DECISION for Kyle, and a decision buried inside another issue's body does not get made.**
+
+⛔ **NOT FIXED HERE, AND DELIBERATELY SO.** *"info never pushes"* is a **sound** noise-control decision — pushing every FYI to Discord is exactly the alert fatigue this system was built to avoid. **The defect is not the exemption; it is that batch-closure gates were filed at a severity that inherits it, and nobody chose that.**
+
+🟥 **THE DECISION, WHICH IS KYLE'S:** should a scheduled gate that a batch CLOSED against be minted at **`warning`** (inheriting the 6h/12h re-surface and the Kyle escalation), while genuine FYIs stay `info`? ⚠️ **Cost of yes: those gates start pushing to Discord and nudging until resolved — which is the point, and also the noise.** **Cost of no: the closure guarantee keeps reading as covering them.** ★ **Either answer is fine; what is not fine is the current state, where the document promises the first and the code does the second.**
+✅ **CHECKED AND CLEAN — my own three gates are `warning`:** `2093a98a` (F-G-1 close window, `triggers_at 2026-09-04`), `c244f2b8` (retention measurement, 08-31), `63d41a75` (retention watch, acked). **F-G-1's progress-report claim that its criterion no longer depends on a session staying alive is UNAFFECTED and stands.**
+
 ### #941 PARTLY-FIXED 2026-08-29 (CC-C; found by the Kyle-directed F-G-2 provenance audit) — ⛔⛔ BOTH REFERENCE MAPS ASSERTED A MECHANISM THE CODE CONTRADICTS, AND ONE OF THEM WAS THE CONTRAST `#741`'s WHOLE RATIONALE RESTED ON
 
 **SEVERITY: medium (documentation; no code defect, no trading impact). OWNER: CC-C. DISPOSITION: §9.4 (1) — folded into the work in hand, doc fixes LANDED this turn; what stays OPEN is the DETECTION residual at the bottom.**
