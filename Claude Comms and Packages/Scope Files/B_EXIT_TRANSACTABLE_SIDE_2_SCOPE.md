@@ -512,3 +512,49 @@ I asked whether the two columns ever differ, expecting `trailing_stop_hit` to se
 
 ⚠️ **NOT CLAIMED: that the BE ratchet explains the xStock tail.** The mechanism is cited at the line; the attribution is untested and stays untested until `latch_trigger_price` (or an equivalent) carries data.
 
+## 13. ⛔ STEP-2 ROUND 4 — `OBJ-6`'s OWED NUMBER (AND IT WAS A DENOMINATOR ERROR), PLUS WHAT ACTUALLY DRIVES THE GAP
+
+### 13.1 ✅ `OBJ-6` COVERAGE — THE NUMBER §8.5 Q2 REQUIRED AT STEP 2
+
+⚠️ **PREVIOUSLY STATED (§8.5 Q2):** *"Provenance IS landing post-`ed86a758e` — but at **12 of 334** crypto and **9 of 232** xStock, **≈3.6% coverage**."*
+✅ **NOW — measured per day so the ONSET is read from the data rather than assumed from a commit timestamp:**
+
+| day | crypto stamped | xStock stamped |
+|---|---|---|
+| 2026-08-26 | 0 / 2 | 1 / 2 |
+| 2026-08-27 | ✅ **4 / 4** | ✅ **4 / 4** |
+| 2026-08-28 | ✅ **7 / 7** | ✅ **1 / 1** |
+| 2026-08-29 | ✅ **2 / 2** | ✅ **3 / 3** |
+| **since 08-27** | ✅ **13 / 13 = 100%** | ✅ **8 / 8 = 100%** |
+
+⛔ **REASON FOR THE DELTA — IT IS A DENOMINATOR ERROR, NOT AN IMPROVEMENT.** The 3.6% divided by **334 and 232 lifetime closes**, the overwhelming majority of which closed **before the column existed**. ★ **A feature cannot stamp a row that closed before it shipped, so those rows are not misses — they are not in the population.**
+⇒ ⛔ **THE GATE'S ANSWER CHANGES COMPLETELY. 3.6% reads as *"the instrument barely works"*; 100%-since-onset reads as *"the instrument works perfectly and we need more trades."*** ✅ **`OBJ-6` is NOT blocked on instrumentation. It is blocked on VOLUME ONLY — 21 stamped closes exist today, accruing at ~5/day across both classes.**
+⚠️ **A commit timestamp was deliberately NOT used as the anchor** (`ed86a758e` is 2026-08-27T09:59Z) — **a commit time is not a deploy time**, and the 08-26 partial row is exactly the boundary a commit-anchored read would have mis-stated.
+
+### 13.2 ★★ WHAT DRIVES THE BELOW-STOP GAP — AND IT RIGHT-SIZES THIS BATCH'S BENEFIT
+
+§10.4 established the evaluation interval is **essentially constant (~1.5 s)**, so the variance must come from **how fast price was moving**. Tested directly — predictor = the absolute % range of the ticker mid over the **60 s before close**; population = POST-epoch crypto stop-outs.
+
+| | |
+|---|---|
+| **n** | 18 |
+| **r** | **0.744** |
+| predictor range | **0.0000% → 1.2243%** — genuinely wide, unlike §10.4's 4.8% |
+| outcome range | 0.0487% → 1.2951% |
+| **median shortfall ÷ 60 s range** | **0.795** |
+
+⚠️⚠️ **THE CAVEAT IS LOAD-BEARING AND IS STATED BEFORE THE CONCLUSION: THIS IS PARTLY TAUTOLOGICAL.** **A stop-out means price moved down through the stop by definition**, so a large 60 s range and a large shortfall both follow from *"price fell fast."* ⇒ **this is CONSISTENT WITH the movement-during-detection account; it does not ESTABLISH it, and it does not exclude the spread contributing on top.** ★ **Unlike §10.4 I am reporting this one — the predictor genuinely varies and n is 18 — but it is evidence, not proof.**
+
+⇒ ⛔⛔ **THE CONSEQUENCE FOR THIS BATCH, AND IT MUST BE STATED BEFORE IMPLEMENTATION, NOT AFTER:**
+- the gap is **≈2.2 half-spreads** (§10.2) ⇒ **the spread accounts for AT MOST ~45% of it**
+- the remainder tracks **price movement during the detection interval**, which **reading the bid instead of the mid DOES NOT FIX**
+★ **F-G-2's change addresses the SMALLER COMPONENT.** ✅ **THAT IS NOT AN ARGUMENT AGAINST THE BATCH — deciding on a price nobody will trade with us at is wrong on its own terms, and `OBJ-0` measures the change directly.** ⛔ **It IS an argument against promising the whole gap as the benefit**, and against any completion report that attributes a post-change improvement to side-selection without separating the movement term.
+
+### 13.3 ⇒ DISPOSITION
+
+| item | disposition (§9.4) |
+|---|---|
+| **`OBJ-6` coverage = 100% since 08-27, volume-blocked only** | ✅ **(1) folded in — §8.5 Q2's owed number is DISCHARGED**, and its 3.6% is corrected as a denominator error |
+| **Movement dominates the gap** | ✅ **(1) folded in — it becomes a STATED EXPECTATION for `OBJ-0`**: the before/after read must separate the movement term or it will over-credit side-selection |
+| **The tautology caveat** | **(1) folded in as a BINDING CAVEAT** — `r=0.744` may not be cited as proof of mechanism |
+
