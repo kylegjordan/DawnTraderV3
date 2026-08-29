@@ -324,6 +324,27 @@ NEGATIVE CONTROL: 2.7955 / 0.001 = 2795.5 -> OFF GRID (the test discriminates)
 ⚠️ **SUPERSEDED BELOW — the original rider is kept for the sequence:** ⛔ **INSTRUMENT TRAP FOUND IN THE SAME READ, and it would have produced a FALSE FAIL:** `closed_trades.target_exit_price` is **NULL at open** — the live target lives in **`active_open_positions.take_profit`** (`3.031`). ★ **A read that takes all three legs from `closed_trades` alone at open time sees a missing target and scores the row as failing.** ⇒ ⛔ **BINDING, extending §3f RIDER-2: entry + stop from `closed_trades`; TARGET from `active_open_positions.take_profit` while the position is open, and from `closed_trades.target_exit_price` only once closed. Name the source table per leg.**
 
 ---
+### 3j. ✅ OBSERVATION 2 — AND THE WATCH THAT SHOULD HAVE REPORTED IT WAS DEAD ON ARRIVAL
+
+**`SPX/USD` · `crypto_spot` · opened `2026-08-29T01:35:30.320Z` · `{tick 0.0001, resolved true, venue_published}`** — read on the §3i intent-side columns:
+```
+entry(intended) 0.5287 / 0.0001 = 5287   ON GRID
+stop            0.5091 / 0.0001 = 5091   ON GRID
+target          0.5613 / 0.0001 = 5613   ON GRID
+```
+✅ **n = 2 crypto opens, 2 on-grid, 0 off-grid.** ⛔ **Still not a pass — §3's bar is 30 or 7 days.**
+
+⛔⛔ **THE PART THAT MATTERS: MY KILL-CRITERION WATCH DID NOT REPORT THIS POSITION, AND HAD NOT BEEN WORKING SINCE THE MOMENT IT WAS ARMED.**
+**Root cause, measured by re-running its own command with stderr restored:** the nested `ssh → su -c → psql -c` quoting collapsed — `psql` never received the SQL (`invalid command \`, `bash: SELECT: command not found`). ★ **AND I HAD WRITTEN `2>/dev/null` INTO IT, so a total failure printed nothing and was INDISTINGUISHABLE FROM “no new positions.”**
+⚠️ **TWO HOURS ARMED, ZERO CAPABILITY.** A `KILL-CRITERION HIT` could have passed through it unseen — on the one condition that would sink the batch.
+★★ **AND IT IS THE SAME DEFECT CLASS THE BATCH EXISTS TO FENCE, ON THE ALARM BUILT TO FENCE IT** — `control-enumerates-the-observed`'s sibling: **an instrument whose silence is read as a result, never proved able to speak.** ⛔ **I found it only because I refused to trust the silence and queried the DB directly.**
+
+✅ **REBUILT AND PROVED BEFORE ARMING, which is what I failed to do the first time:**
+- **SQL moved to a FILE on staging** (`/home/deploy/fg1check.sql` + `fg1check.sh`) — **no nested quoting to collapse.**
+- ⛔ **NO stderr suppression.** A non-zero exit or an error string now emits **`WATCH-BROKEN (rc=…)`** as an event — **the watch reports its own death.**
+- ✅ **FOUR POSITIVE CONTROLS RUN, all fired:** off-grid leg · `ABSENT` stamp · `resolved:false` · missing intent-side leg. ✅ **NEGATIVE CONTROL: the real `SPX/USD` row passes.** ★ **The alarm is now proved able to say both words.**
+
+---
 ## 4. WHAT IS UNPROVEN, AND WHAT WOULD FALSIFY IT
 
 - ⛔ **THE HEADLINE IS NOT "ONE ROUNDING SEAM".** It is **"one seam on the signal-birth path; three entry points bypass it, named"** — `#928` an HTTP intent path taking a triple straight from the request body, `#929` a second position-sizing caller, `#927` a fabricated `entry * 1.02` target in three places, one of them the RTB **ranking** key. All homed with owners and plan positions. **Langston approved the batch shipping with them named; he did not approve it shipping under the old headline.**
