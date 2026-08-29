@@ -918,3 +918,52 @@ The only three crypto stop-outs carrying `exit_decision_price`:
 
 **DISPOSITION (section 9.4): (1) FOLD INTO THE WORK IN HAND as a Step-2 finding, and DISPATCHED TO LANGSTON as its own gate** - whether `OBJ-0`'s before/after arm must measure against the venue BBO rather than against our own prior price, and whether the book/BBO divergence is its own batch. **Not decided here.**
 
+## 22. LANGSTON'S RULING ON SECTION 21 - HE REFUTED MY OWN HEDGE, AND IT IS WORSE THAN I FRAMED IT
+
+### 22.1 MY "NOT ASSERTED" ITEM 2 IS REFUTED - ONE STATISTIC COMPUTED TWO WAYS
+
+I hedged that a depth-10 mid and a BBO mid are different statistics that may legitimately differ on a thin book - a design question, not a defect. **He re-read the adapter at `a6be11883` and that is wrong:**
+- `kraken-websocket-adapter.ts:910-911` - `bestBid = Math.max(...book.bids.keys())`, `bestAsk = Math.min(...book.asks.keys())`
+- `:917` comment - *"8.9.4-Patch: Calculate stable midpoint from mini-book BBO"* - `:918` `midpoint = (bestBid+bestAsk)/2`, emitted `:945` as `kraken_ws_book_mid`
+
+=> **"DEPTH-10" DESCRIBES THE SUBSCRIPTION, NOT THE STATISTIC. It is a TOP-OF-BOOK mid.** So this is **ONE quantity constructed two ways** - ours from a locally delta-maintained book, the venue's published - **and two constructions of the same quantity disagreeing by 0.48% is not a design question. It is a BOOK-STATE ERROR, `#507`/`#741` family.**
+**His direction candidate, carried as HYPOTHESIS ONLY: an orphaned ask below the true best ask drags `Math.min(asks)` down - `#507` on the mirror side. NOT MEASURED.**
+
+### 22.2 THE SEQUENCING IS WORSE THAN MY FRAMING
+
+I wrote that F-G-2 as scoped leaves the divergence standing beside the fix. **He is sharper: `OBJ-1` SOURCES CRYPTO'S BID FROM THAT SAME MINI-BOOK.**
+=> **F-G-2 does not leave it beside the fix - IT ROUTES THE NEW DECISION PRICE THROUGH THE OBJECT UNDER SUSPICION.**
+
+### 22.3 HIS TWO ANSWERS
+
+**Q1 - DO NOT RE-BASE `OBJ-0`. NO.** The 2x2 is **rule-vs-rule** and stays internally valid on a biased series **because both arms read the same one**; re-basing folds two fixes into one unseparable number. => **ADD A THIRD READ-OUT - decision price vs contemporaneous venue BBO, PER ARM, reported separately, NEVER netted into the 2x2.**
+
+**Q2 - OWN BATCH, and its MEASUREMENT leg is a PREREQUISITE of F-G-2 implementation, not a successor.** The measurement, not the fix. **My own section 1 argument turned on me: you cannot pre-register a rule-vs-rule before/after while the series both arms read is moving under you.** `HOME: B-BOOK-BBO-DIVERGENCE, owner CC-C, PHASE_19_PLAN 3b.c, before F-G-2 implementation, after the F-G-1 soak.` Fix leg may sit in Phase 20 with `#507`.
+
+### 22.4 TWO DEFECTS HE FOUND IN MY MEASUREMENT - BOTH CORRECTED
+
+**(1) MY 5-SECOND JOIN CONTROL IS WITHDRAWN. It moved 17 of 18 rows, so it discriminated almost nothing** - and I presented it as the thing that ruled out the timing confound. **Struck. Section 21's join argument now rests only on the comparable median offsets (1.7s vs 1.1s), which is weaker than I stated it.**
+
+**(2) THE 6 NON-JOINING ROWS, EXPLAINED - a POPULATION BOUNDARY, not random dropout:**
+
+| symbol | snaps in window | snaps EVER |
+|---|---|---|
+| AAVE/EUR x2, JUP/EUR, ZEC/EUR, TRUMP/EUR | 0 | **0** |
+| US/USD | 0 | 29,670 |
+
+=> **FIVE OF SIX ARE `/EUR` PAIRS WITH ZERO SNAPSHOTS EVER - the crypto ticker archive does not cover EUR-quoted pairs at all.** One is a genuine momentary gap.
+=> **SO SECTION 21's -0.4229% IS A USD-QUOTED-CRYPTO FIGURE, and is stated as that population from here on.** The archive's symbol coverage not matching the trading universe is adjacent to `#937`; it belongs to the new batch's measurement leg, which needs the coverage anyway.
+
+### 22.5 THE CLEAN INSTRUMENT DOES NOT EXIST - CENSUSED, NOT ASSUMED
+
+He asked for book mid vs ticker mid, same symbol, same instant, continuously, so that n stops being 18. **Censused: NO table in the schema matches `book|depth|orderbook` - zero rows. The book mid is NEVER PERSISTED**; `exit_book_mid` exists only on `closed_trades` (n=5).
+=> **The instrument must be BUILT, which is why the measurement leg is a batch and not a query - and why every figure in section 21 is exit-derived by necessity, not by choice.**
+
+### 22.6 COMPLETION-REPORT LANGUAGE - HIS, AND IT CLOSES MY `#941` CONCERN WITHOUT WIDENING THE BATCH
+
+**F-G-2 MAY CLAIM: the decision reads the transactable SIDE of the price we hold.**
+**F-G-2 MAY NOT CLAIM: the exit price is transactable.**
+With the limit stated, naming the divergence and the batch that owns it.
+
+**HIS STANDING: `RULED ON REPORTED FACT` on every figure in section 21** - the -0.4229%, the 16/18, the slippage median. **Per rule 29 that is DISQUALIFYING FOR A PROCEED on that leg, not a disclaimer** => the numbers carry no weight until re-derived on the built instrument.
+
