@@ -692,6 +692,21 @@ The B65.2 functional commit (`0fcd19b1`) shipped trailing exits end-to-end. Subs
 
 **GOVERNANCE FILES CHANGED:** `BATCH_CATALOG.md` · `PHASE_HISTORY.md` · `PHASE_19_PLAN.md` · `RUNNING_ISSUES.md` · scope · pre-audit · completion report. **SYSTEM_MANUAL and SIM judged NOT applicable, out loud:** a `module_constants` row read by existing services adds no component and changes no architecture or math.
 
+### F-G-1 / B-GRID-REPRESENTABILITY — every price we emit is now one the venue can actually express (2026-08-28, CC-C) — ⛔ **OPEN: OBSERVATION WINDOW**
+
+**change-class: architecture.** Deployed `56ac8067a` 2026-08-28T18:05:22Z (durability ref; code first live at `bf1ac9620` 17:48:43Z). CI 4/4 green. Langston Step-4 APPROVED. ⛔⛔ **NOT CLOSED — the batch is in a pre-registered observation window and its record is a PROGRESS REPORT, not a completion report** (`F_G_1_PROGRESS_REPORT.md`). Board card in `Observation`.
+
+**THE MEASUREMENT THAT JUSTIFIED IT:** across 406 closed crypto trades, matched to each pair's own published Kraken `tick_size` — **entry 80.8% representable, stop 2.7%, target 9.9%.** ★ **The stop is the number that matters: 97% of our stop prices were values the venue cannot express.**
+
+⛔ **AND WHAT THAT DOES *NOT* MEAN — corrected before Step 4, because the batch would otherwise have been graded against a false claim.** In paper mode stops and targets never become resting venue orders; `venue-validate.ts` validates `type:'buy'` only. **We were not emitting invalid ORDERS. We were emitting invalid THRESHOLDS** — which is (a) live-parity debt and (b) an `OBJ-8` discrimination problem, since through-vs-touch is undecidable on an off-grid limit.
+
+**WHAT SHIPPED:** the **VPG** (`server/core/calculations/venue-price-grid.ts`) — a named service, five callers — answering *“can the venue express this price?”*, with `decideGridAction()` as the extracted, testable seam decision. **Entry rounds NEAREST; stop and target round AWAY from entry, except `volatility_edge`'s `Math.min` CAP, which rounds TOWARD.** ★ **CRYPTO vs xSTOCK ARE ASYMMETRIC BY DESIGN:** a crypto tick is the venue's own published statement ⇒ **absence REFUSES**; an xStock grid is our GCD inference from our own archive ⇒ **absence PASSES THROUGH UNROUNDED**, because refusing on our own coverage gap would drop valid signals. Three test suites; `gridAtBirth` stamped on the row so the geometry is auditable without a live map.
+
+⛔ **ELEVEN BLOCKERS FROM LANGSTON, AND THE PATTERN ACROSS THEM IS ONE SENTENCE: I BRANCHED ON A DERIVED VALUE INSTEAD OF THE FACT.** Also caught: a fence that could not fail, an `isOnGrid` tolerance fix that started ACCEPTING off-grid prices (a one-directional check certifies the opposite error), and `gridAtBirth` dying at the RTB rebuild — **an explicit field list documented at that exact line for `#550`, third instance of a defect the file warns about on screen.**
+
+**FINDINGS RAISED, ALL HOMED:** `#927`-`#939`. The load-bearing one is **`#937` — fiat-vs-fiat AND stablecoin-vs-fiat pairs are inside the CRYPTO universe** (33 closed trades, −$29.89, 8.0% of the crypto population), which the VPG surfaced because **every single grid refusal is one of them and none is a volatile crypto asset.** Kyle's scope call, roadmap §20.4.6.
+
+✅ **PRE-REGISTERED CLOSE CRITERION, written before any data and amended NINE times — every amendment APPENDED, never edited, so the audit trail shows the bar did not move to fit a result** (§3d–§3l). First 30 crypto opens or 7 days from `2026-08-28T16:08:02Z`, **separate counters per class**, exclusion `16:08:02Z→18:05:22Z` for both, read on the **intent-side** columns only. **PASS = 100% of readable crypto legs exactly on their tick, no tolerance.** Armed to fire on its own as alert `2093a98a` so it does not depend on a session staying alive.
 ### B-PHANTOM-FILL-RECONSTRUCT — the columns, and the backfill that was cut (2026-08-26, CC-C)
 
 **change-class: non_architecture.** Migration applied 2026-08-24T10:21Z inside the `afb7d326c` deploy. ⛔ **Catalogued LATE** — the checker's open->48h nag was correct.

@@ -1,6 +1,10 @@
 # F-G-1 / B-GRID-REPRESENTABILITY — BATCH PROGRESS REPORT
 
-## **OPEN — awaiting (a) the visual UI check, which needs Kyle, and (b) an observation window on post-deploy trade geometry**
+## **OPEN — awaiting ONE thing: the pre-registered observation window on post-deploy trade geometry**
+
+✅ **The visual UI check is DONE (2026-08-28).** Both Paper Trading Filter Diagnostics tabs navigated in Claude-in-Chrome, which carries Kyle's own session; the VPG row renders live on each — crypto **0 would-fail / 344→347 incrementing across two reads**, xStock **0 / 294**. ⚠️ **The earlier title said this needed Kyle. It did not** — I had inferred a login blocker from a rules line that listed credentials without naming which browser needs them; `CLAUDE.md` was corrected the same day.
+
+⛔ **WHAT REMAINS IS THE WINDOW ONLY** — 30 crypto opens or 7 days from `2026-08-28T16:08:02Z`, per-class counters. **At writing: crypto n=3/30, all legs on grid, 0 off-grid · xStock n=0/30 (weekend closure).**
 
 > **Owner:** CC-C (Claude Analyst) · **Phase 19, plan row 3** · **Issues `#916`–`#930`, `#933`**
 > **Deployed sha:** `ca909072490786e414caade527ac9ff61f7745ab` — live on staging `2026-08-28T16:08:02Z`, `dt-deploy` asserted sha-identity and ENGINE RESUMED before recording.
@@ -404,7 +408,21 @@ target          0.5613 / 0.0001 = 5613   ON GRID
 
 `SYSTEM_IMPACT_MAP.md` (§9.14b the VPG, §9.14c the VOG, and the bypass table) · `SYSTEM_MANUAL.md` (Chapter 5 representability section + the same bypass table) · `RUNNING_ISSUES.md` (`#916`–`#930`, `#933`; `#925` amended) · `PHASE_19_PLAN.md` (rows 3, 3b–3k) · `MISTAKE_PATTERNS.md` (`fix-follows-pointer`) · `MEMORY_CC_C.md` · the change list in `Claude Comms and Packages/Change Lists/`.
 
-☐ **Still owed at Step 10:** `BATCH_CATALOG.md`, `PHASE_HISTORY.md`, `PHASE_19_PLAN` §1 status board + §5 decision log, the shared `MEMORY.md`, and Langston's `/home/langston/MEMORY.md` (10.b).
+✅ **STEP 10 RUN 2026-08-29 — every Tier-1 doc landed, and the batch DELIBERATELY STAYS OPEN** (Kyle: *“the patch report remains a progress report, and the batch remains open because we're still in the middle of this observation window”*):
+
+| document | what landed |
+|---|---|
+| **`BATCH_CATALOG.md`** | full entry, flagged **OPEN: OBSERVATION WINDOW**, carrying the measurement, the crypto/xStock asymmetry and its reason, the eleven blockers' one-sentence pattern, and the criterion |
+| **`PHASE_HISTORY.md`** | Phase-19 Part-F entry, **OPEN not closed**, with the live tally |
+| **`PHASE_19_PLAN.md`** | §1 status row → **OPEN — OBSERVATION WINDOW** (was *“NEXT”*); §5 decision log → the four decisions worth re-reading |
+| **shared `MEMORY.md`** | one consensus truth: the VPG is live, **and the asymmetry is deliberate — do not “fix” it**, plus read-it-on-the-intent-side-columns |
+| **`SYSTEM_IMPACT_MAP.md` / `SYSTEM_MANUAL.md`** | written at Step 3, **RE-VERIFIED at Step 10** — which caught two contradictory `#923` lines I had created and a stale test list |
+| **`RUNNING_ISSUES.md`** | `#927`–`#939` filed and homed; `#924`→`#939` renumbered on a collision |
+| **`POST_AUDIT_ROADMAP.md`** | §16.9 and §20.4.6 placed |
+| **`MISTAKE_PATTERNS.md`** | `fix-follows-pointer`, `verification-weaker-than-claim`, `control-enumerates-the-observed` |
+| **`CHANGES_AND_FIXES.md`** | `FIX-2026-08-28-A` — the `#935` hotfix that rode alongside |
+
+⛔ **STILL OWED, and it is not a Tier-1 doc:** Langston's `/home/langston/MEMORY.md` (10.b) — **he is pruning it first, 48KB against a 24KB cap, and asked that nobody touch it until he says.**
 
 ---
 
