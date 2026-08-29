@@ -234,3 +234,40 @@ With the mechanism known, two predicates looked obvious. **Neither works, and I 
 
 **It sharpens it and does not change it.** The trade-off was *prefer the last trade / refuse the mark / refuse the exit*. **OBJ-3 adds: whatever is chosen applies for ~19 hours of every weekday and all weekend - the entire period the underlying is shut - not to one minute a day.** ⇒ **"refuse the exit" is a much larger posture than it looked when this appeared to be a single minute**, and `#531`/`#583` (xStock weekend posture, already open) are the same surface.
 
+## 12. THE `00:15` CONCENTRATION IS ANSWERED - AND MY SURVIVOR HYPOTHESIS IS SUPERSEDED, NOT CONFIRMED
+
+**§11.1 offered a survivor effect as the leading candidate. I tested it, then found a better explanation that is MEASURED rather than hypothesised. Both are recorded; the first is withdrawn as the primary.**
+
+### 12.1 THE SURVIVOR TEST - REAL BUT INSUFFICIENT
+
+**Of xStock positions open just before the sweep, how many close at it? 10 of 35 across 14 days = 28.6%.** ⇒ **A real effect, but the book does NOT empty** - the majority survive and are still open during the later stub windows. ⛔ **So survivorship cannot explain why the later windows produce almost no closes.**
+
+### 12.2 ⛔⛔ THE ACTUAL ANSWER: AT `00:15` **82% OF THE ENTIRE BOOK GOES STUB AT ONCE**
+
+**Stub rate and symbol coverage by minute, hour 00 UTC, 2026-08-22 -> 2026-08-30:**
+
+| minute | snaps | symbols | stub % | **symbols carrying a stub** |
+|---|---|---|---|---|
+| 00 | 5,225 | 476 | 6.72% | **307** |
+| 01-12 | ~4,000 | ~455 | ~1.2% | **~24** |
+| 13 | 4,714 | 476 | 7.02% | **306** |
+| 14 | 4,393 | 374 | 0.14% | 5 |
+| ⛔ **15** | ⛔ **16,053** | **476** | ⛔ **23.55%** | ⛔ **389 of 476 = 82%** |
+| 16 | 8,626 | 445 | 11.42% | 124 |
+| 17-19 | ~5,500 | ~410 | 3-4.5% | 68-86 |
+| 20+ | ~4,500 | ~300 | <1% | ~20 |
+
+⇒ ★★ **`00:15` IS A BOOK-WIDE STUB EVENT: 82% of all symbols quote a broken book SIMULTANEOUSLY, at FOUR TIMES the normal snap volume, decaying over the next four minutes.** **At a typical minute only ~24 of 476 symbols (5%) are stubbed.**
+
+### 12.3 ⇒ THAT IS THE WHOLE CONCENTRATION, AND THE ARITHMETIC CHECKS
+
+**P(a given open position is exposed) is `389/476 = 82%` at `00:15` against `24/476 = 5%` at a typical minute - a SIXTEENFOLD difference.** With the 1-5 xStock positions typically open, that turns a rare event into a near-certainty **for every position at once**.
+✅ **Order-of-magnitude check: ~3 positions x 82% x 43 days ~= 106 expected closes; 65 observed.** ⇒ **the right order, and lower than expected rather than higher - consistent with only some stubs crossing a given position's stop or target.**
+
+### 12.4 ⇒ WHAT IT MEANS FOR THE FIX, WHICH IS THE POINT
+
+⛔ **THE EXPOSURE IS NOT "ONE MINUTE A DAY" AND IT IS NOT "EVERY POSITION ALL NIGHT" EITHER.** It is: **a book-wide quote collapse that recurs on a schedule, in which essentially every open position is simultaneously priced off a broken book for a few minutes.**
+⇒ ★ **A per-symbol guard is the WRONG SHAPE** - the event is book-wide, so a rule that asks *"is THIS symbol's spread absurd?"* fires 389 times in one minute and is indistinguishable from a rule that asks *"is the book open?"* **The cheaper and more honest question is the second one.**
+⚠️ **STILL NOT DESIGNING THE FIX (rule 15)** - but this materially reorders the candidates, and it is the kind of finding that should reach the decision BEFORE it is taken, not after.
+★ **AND IT CONNECTS TO EXISTING WORK RATHER THAN COMPETING WITH IT: `#531`/`#583` (xStock weekend posture) are the same surface, and `isXstockLiquidFillWindowET` already exists** - the system ALREADY models "is this a liquid window", and uses it to gate FILLS. **It does not gate EXIT PRICING.** ⛔ **Stated as an observation about what exists; NOT a proposal.**
+
