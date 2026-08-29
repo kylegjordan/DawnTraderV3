@@ -16,7 +16,8 @@ import {
   Brain,
   Bell,
   Zap,
-  FlaskConical
+  FlaskConical,
+  Sprout,
 } from "lucide-react";
 import { useTrading } from "@/hooks/use-trading";
 import { Button } from "@/components/ui/button";
@@ -45,6 +46,9 @@ const navigation = [
   { name: "AI Transparency", href: "/ai-transparency", icon: Sparkles },
   { name: "System Monitoring", href: "/systems", icon: Activity },
   { name: "System Alerts", href: "/system-alerts", icon: Bell },
+  // B-TOKEN-WATCH: at the bottom, as Kyle asked — the study is not part
+  // of the trading pipeline and its placement should say so.
+  { name: "Token Launch Study", href: "/token-watch", icon: Sprout },
   { name: "Settings", href: "/settings", icon: Settings },
 ];
 

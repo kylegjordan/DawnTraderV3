@@ -36,6 +36,9 @@ const SystemConfigPage = lazy(() => import("@/pages/system-config"));
 const AnalyticsPage = lazy(() => import("@/pages/analytics"));
 const MachineLearningPage = lazy(() => import("@/pages/machine-learning"));
 const SystemAlertsPage = lazy(() => import("@/pages/system-alerts"));
+// B-TOKEN-WATCH: the observation study's tracking page. Self-contained —
+// its own folder, its own route, and one published summary file for data.
+const TokenWatchPage = lazy(() => import("@/pages/token-watch/TokenWatchPage"));
 
 class DiagnosticErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; error: Error | null }> {
   constructor(props: { children: ReactNode }) {
@@ -245,6 +248,7 @@ function Router() {
               <Route path="/analytics" component={AnalyticsPage} />
               <Route path="/machine-learning" component={MachineLearningPage} />
               <Route path="/system-alerts" component={SystemAlertsPage} />
+              <Route path="/token-watch" component={TokenWatchPage} />
               <Route path="/settings" component={Settings} />
               <Route path="/system/config" component={SystemConfigPage} />
               <Route path="/:rest*">

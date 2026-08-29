@@ -22300,6 +22300,11 @@ Please:
   apiRouter.use('/status', statusRouter);
   console.log('[Phase 1] Status routes mounted at /api/status');
 
+  // B-TOKEN-WATCH: the observation study's tracking page reads ONE published
+  // summary file. This is the study's entire server-side footprint.
+  const { tokenWatchRouter } = await import('./routes/token-watch.js');
+  apiRouter.use('/token-watch', tokenWatchRouter);
+
   // Phase 41F-D: Mount health monitoring routes into apiRouter
   const { healthRouter } = await import('./routes/health.js');
   apiRouter.use('/health', healthRouter);
