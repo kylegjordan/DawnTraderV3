@@ -53,6 +53,9 @@ LOG = logging.getLogger("token-watch.provenance")
 PROVENANCE_DIR = f"{ROOT}/provenance"
 RAW_DIR = f"{PROVENANCE_DIR}/raw"
 REJECTED_PATH = f"{PROVENANCE_DIR}/rejected.jsonl"
+# Raw provider responses from observation checkpoints. Kyle 2026-08-28:
+# retain everything, tier it to cold, pull it back out to analyse.
+FOLLOW_UP_DIR = f"{PROVENANCE_DIR}/follow-up"
 
 # The env var the unit sets. Kept as a name here so the unit and the code
 # cannot drift apart silently.
@@ -165,6 +168,49 @@ def record_rejected(reason: str, remote: str, body_len: int,
     return rec
 
 
+def _follow_up_path(when: datetime) -> str:
+    return f"{FOLLOW_UP_DIR}/{when.strftime('%Y-%m-%d')}.jsonl"
+
+
+def record_follow_up(mint: str, source: str, raw, when: datetime = None) -> None:
+    """Persist ONE raw provider response from an observation checkpoint.
+
+    ★ KYLE'S RULING, 2026-08-28, closing the open scope question this batch
+      raised against itself: *"as long as we can have all the data we need in
+      storage and cold storage, I'm fine with that. If we wanna look at things
+      again, we just pull them out of cold storage."* ⇒ RETAIN, then tier.
+
+    ⛔ WHY IT IS WORTH THE BYTES, and it is the same argument as the birth side:
+       `token_state` returns EIGHT extracted fields out of a response that
+       carries far more. Every one of those extractions is a decision made
+       today about what matters, and a decision made today is exactly the thing
+       a 90-day study discovers it got wrong. Keeping the response means an
+       extraction defect costs a re-parse; discarding it means the observation
+       is unrecoverable and the study silently carries the defect to the end.
+
+    ⚠️ THIS IS NOT THE OBSERVATION. The observation — the extracted, analysable
+       row — is `store.record_observation`, and it stays hot for the full 90
+       days because the scheduler reads it. THIS is the raw material behind it,
+       and it tiers to cold at one day like every other bulky store. Two
+       records of the same event at two different retentions, deliberately.
+    """
+    when = when or _now()
+    os.makedirs(FOLLOW_UP_DIR, exist_ok=True)
+    body = json.dumps(raw, sort_keys=True) if not isinstance(raw, str) else raw
+    rec = {
+        "observed_at": when.isoformat(),
+        "mint": mint,
+        "source": source,
+        "bytes": len(body),
+        "sha256": hashlib.sha256(body.encode("utf-8")).hexdigest(),
+        "body": body,
+    }
+    with open(_follow_up_path(when), "a", encoding="utf-8") as fh:
+        fh.write(json.dumps(rec, sort_keys=True) + "\n")
+        fh.flush()
+        os.fsync(fh.fileno())
+
+
 def stats() -> dict:
     """Cumulative counts, so the size projection above becomes a measurement."""
     accepted = bytes_written = 0
@@ -184,6 +230,22 @@ def stats() -> dict:
                 rejected = sum(1 for line in fh if line.strip())
         except OSError:
             pass
+    follow_up = fu_bytes = 0
+    if os.path.isdir(FOLLOW_UP_DIR):
+        for name in os.listdir(FOLLOW_UP_DIR):
+            path = os.path.join(FOLLOW_UP_DIR, name)
+            try:
+                fu_bytes += os.path.getsize(path)
+                with open(path, encoding="utf-8") as fh:
+                    follow_up += sum(1 for line in fh if line.strip())
+            except OSError:
+                continue
     mean = round(bytes_written / accepted, 1) if accepted else None
+    fu_mean = round(fu_bytes / follow_up, 1) if follow_up else None
+    # ★ EVERY STORE REPORTS ITS OWN COUNT AND MEAN SIZE. The 90-day projections
+    #   in this module's header are ESTIMATES; these are what replaces them with
+    #   a measurement once real traffic arrives.
     return {"accepted": accepted, "rejected": rejected,
-            "bytes_written": bytes_written, "mean_body_bytes": mean}
+            "bytes_written": bytes_written, "mean_body_bytes": mean,
+            "follow_up": follow_up, "follow_up_bytes": fu_bytes,
+            "follow_up_mean_bytes": fu_mean}

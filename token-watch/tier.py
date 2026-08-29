@@ -8,11 +8,12 @@ token-watch — tiering and the cold hand-off. (OBJ-6)
   then there is a lot of data to move under pressure.
 
 ⛔ THE ONLY DELETER IN THIS PACKAGE, and it removes a hot copy ONLY after a
-  verified compressed copy exists in cold. ONE bulky store tiers today — the
-  receiver's raw provenance store, added 2026-08-28, the day it was built.
-  (`PAYLOAD_DIR` was removed the same day: it had never had a writer. See the
-  note on TIERED_SOURCES.) Adding a bulky writer without adding it there is how
-  a disk fills quietly, and that has already happened once.
+  verified compressed copy exists in cold. TWO bulky stores tier, both raw
+  provider data: the webhook bodies the receiver accepts, and the observation
+  responses behind every checkpoint. (`PAYLOAD_DIR` was removed 2026-08-28: it
+  had never had a writer. See the note on TIERED_SOURCES.) Adding a bulky
+  writer without adding it there is how a disk fills quietly, and that has
+  already happened once in this package.
   ⛔⛔ BIRTH RECORDS ARE DELETED BY NOTHING, EVER. There is no code path here
      that can touch them, and the test asserts it. A sampled or truncated
      birth census destroys the base rate of every rate in the study, and §5
@@ -41,6 +42,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 
 from config import BULKY_HOT_DAYS, COLD_DIR, WORKING_INDEX_HOT_DAYS
+from provenance import FOLLOW_UP_DIR as PROVENANCE_FOLLOW_UP_DIR
 from provenance import RAW_DIR as PROVENANCE_RAW_DIR
 from store import DUE_DIR, ensure_dirs, periodic_lock
 
@@ -72,15 +74,14 @@ def _age_days(path: str, now: datetime) -> float:
 #    the disk is shared with the live trading app, so a store with no retention
 #    is not an untidiness.
 #
-# ★ THE PREFIX IS KEPT DELIBERATELY THOUGH ONLY ONE SOURCE REMAINS, and that
-#   is a decision rather than a leftover. Stores here name files by DATE, so
-#   any second source would produce the same cold filename and the second write
-#   would silently overwrite the first — tiering that destroys the file it just
-#   archived, one layer deeper than the verify-before-remove order guards
-#   against. Removing the prefix now would make the NEXT addition unsafe by
-#   default, and the paragraph above is the evidence that additions happen.
-#   `test_tiering` asserts the property against an injected second source, so
-#   the guarantee stays tested with only one real store configured.
+# ★ THE PREFIX IS LOAD-BEARING AGAIN, AND THAT VINDICATES KEEPING IT. When
+#   PAYLOAD_DIR was deleted only one source remained and the prefix could have
+#   been dropped as dead weight; it was kept because stores here name files by
+#   DATE, so any second source collides. A second source arrived the SAME DAY.
+#   Without the prefix, `provenance/raw/2026-08-28.jsonl` and
+#   `provenance/follow-up/2026-08-28.jsonl` would both become
+#   `cold/2026-08-28.jsonl.gz` and the second would silently overwrite the
+#   first — tiering that destroys the file it just archived.
 #
 # ⛔ TIERED, NEVER DELETED. Cold is compressed and kept: this store is the
 #    PRIMARY control on the accept path (a static, replayable header secret
@@ -97,6 +98,7 @@ def _age_days(path: str, now: datetime) -> float:
 #    provenance store above, at the same retention.
 TIERED_SOURCES = (
     (PROVENANCE_RAW_DIR, "provenance-raw"),
+    (PROVENANCE_FOLLOW_UP_DIR, "provenance-follow-up"),
 )
 
 
@@ -108,7 +110,8 @@ def tier_payloads(now: datetime | None = None) -> dict:
     """
     now = now or datetime.now(UTC)
     ensure_dirs()
-    os.makedirs(PROVENANCE_RAW_DIR, exist_ok=True)
+    for _d, _ in TIERED_SOURCES:          # every source, not just the first
+        os.makedirs(_d, exist_ok=True)
     moved, freed, refused = 0, 0, 0
     by_source = {}
 

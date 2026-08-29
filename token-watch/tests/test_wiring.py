@@ -227,6 +227,56 @@ check("POSITIVE CONTROL: the cycle really was skipped", _skipped["skipped"] is T
 check("★ the switch STILL ran on the skipped cycle",
       bool(store.load_state("liveness", {}).get("checked_at")))
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+section("8. THE FOLLOW-UP RAW STORE IS REACHED BY THE PRODUCTION OBSERVATION PATH")
+# ⛔ Same discipline as section 7. `test_tiering` proves record_follow_up works
+#    when called; nothing there proves the OBSERVER calls it. This drives the
+#    real `providers.token_state`, stubbing ONLY the network read, and asserts
+#    on a store only that production path could have reached.
+# ─────────────────────────────────────────────────────────────────────────────
+import providers as _pv  # noqa: E402
+import provenance as _pr  # noqa: E402
+
+_RESPONSE = {"pairs": [{"dexId": "raydium", "priceUsd": "0.004",
+                        "volume": {"h24": 1234.0},
+                        "txns": {"h24": {"buys": 9, "sells": 4}},
+                        "liquidity": {"usd": None},
+                        "pairCreatedAt": 1756400000000,
+                        "UNREAD_FIELD": "must survive"}]}
+
+# ⚠️ EARLIER BLOCKS IN THIS SUITE DRIVE SPEND PAST THE CAP ON PURPOSE, so the
+#    shed order is armed by the time we get here and token_state would raise
+#    Shed before reaching any store. Clear the ledger so this block tests the
+#    WIRING rather than re-testing the shed.
+import config as _cfg  # noqa: E402
+for _n in os.listdir(_cfg.STATE_DIR) if os.path.isdir(_cfg.STATE_DIR) else []:
+    if "spend" in _n or "budget" in _n:
+        os.unlink(os.path.join(_cfg.STATE_DIR, _n))
+check("POSITIVE CONTROL: with the ledger cleared, follow-up spend is allowed again",
+      budget.allowed("follow_up") is True)
+
+_before = _pr.stats()["follow_up"]
+_real_get = _pv._get
+_pv._get = lambda url, headers=None: _RESPONSE
+try:
+    _state = _pv.token_state("MINT_WIRED")
+finally:
+    _pv._get = _real_get
+
+check("the observation still extracts what it always did",
+      _state["alive"] is True and _state["buys_h24"] == 9, _state)
+_rows = _pr.stats()
+check("★ token_state REACHED the raw store — production wiring, not a direct call",
+      _rows["follow_up"] == _before + 1, _rows)
+
+# ★ AND THE FIELD THE EXTRACTOR IGNORES MUST BE IN IT. That is the entire
+#   reason Kyle ruled to retain these: what we chose not to extract today is
+#   what a 90-day study discovers it needed.
+_disk = open(_pr._follow_up_path(datetime.now(UTC)), encoding="utf-8").read()
+check("★ and a field token_state never reads survived into the store",
+      "UNREAD_FIELD" in _disk)
+
 print("\n" + "=" * 60)
 print(f"FAILED: {len(FAILURES)} -> {FAILURES}" if FAILURES else "ALL CHECKS PASSED")
 shutil.rmtree(ROOT, ignore_errors=True)

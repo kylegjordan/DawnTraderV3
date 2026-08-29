@@ -33,6 +33,7 @@ import urllib.request
 from datetime import datetime, timezone
 
 import budget
+import provenance
 from config import DEXSCREENER_BASE, HELIUS_ENV
 
 UTC = timezone.utc
@@ -98,6 +99,13 @@ def token_state(mint: str) -> dict:
         raise
     budget.charge("follow_up", 1)
 
+    # ⛔ PERSIST THE RAW RESPONSE BEFORE EXTRACTING FROM IT. Below, eight
+    #    fields are taken out of a response that carries far more, and the
+    #    choice of which eight is a decision made TODAY about what matters —
+    #    exactly the thing a 90-day study discovers it got wrong. Written
+    #    first so a response that CRASHES the extraction is still kept.
+    provenance.record_follow_up(mint, "dexscreener_token_state", data)
+
     pairs = (data or {}).get("pairs") or []
     if not pairs:
         # ⚠️ NO PAIR IS NOT PROOF OF DEATH. It is also what an indexing gap
@@ -145,6 +153,9 @@ def pool_liquidity(mint: str) -> dict:
     with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
         data = json.loads(resp.read().decode("utf-8"))
     budget.charge("liquidity", 1)
+    # Same reasoning as token_state: the chain response carries the full
+    # holder list and we keep three numbers off it.
+    provenance.record_follow_up(mint, "helius_largest_accounts", data)
     holders = ((data or {}).get("result") or {}).get("value") or []
     return {
         "holder_count": len(holders),

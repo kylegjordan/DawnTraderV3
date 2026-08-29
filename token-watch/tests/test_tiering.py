@@ -96,12 +96,11 @@ out = tier.tier_payloads(NOW)
 check("NEGATIVE CONTROL — past the window the SAME file moves", out["moved"] == 1, out)
 
 print("\n=== 4. ⛔ THE COLLISION — same date, two stores, must NOT overwrite")
-# ★ TESTED AGAINST AN INJECTED SECOND SOURCE, because only one real bulky store
-#   remains after PAYLOAD_DIR was deleted. The guarantee is about what happens
-#   when a source is ADDED — and the module's own history says additions happen
-#   and get missed — so it must stay tested even while unexercised in
-#   production. Deleting this block with the store would have removed the only
-#   thing standing between the next addition and a silent overwrite.
+# ★ AN INJECTED THIRD SOURCE, so the guarantee is tested independently of how
+#   many real stores happen to be configured. This block was written when only
+#   ONE remained and the prefix could have looked like dead weight — a second
+#   arrived the same day, which is the argument for testing the property rather
+#   than the current configuration.
 reset()
 second = os.path.join(ROOT, "second-bulky")
 os.makedirs(second, exist_ok=True)
@@ -134,6 +133,30 @@ check("and nothing tiers a 'payload' source any more",
       "payload" not in [p for _, p in tier.TIERED_SOURCES],
       [p for _, p in tier.TIERED_SOURCES])
 
+print("\n=== 4c. THE FOLLOW-UP RAW STORE — Kyle's ruling: retain, then tier")
+# ★ The scope's other half. `record_observation` keeps the EXTRACTED row hot for
+#   90 days because the scheduler reads it; this keeps the RAW response behind
+#   it and tiers that to cold at one day. Two records of one event, two
+#   retentions, deliberately.
+reset()
+os.makedirs(provenance.FOLLOW_UP_DIR, exist_ok=True)
+provenance.record_follow_up("MINT_A", "dexscreener_token_state",
+                            {"pairs": [{"priceUsd": "0.004", "extra": "kept"}]},
+                            when=NOW - timedelta(days=3))
+f = os.path.join(provenance.FOLLOW_UP_DIR, (NOW - timedelta(days=3)).strftime("%Y-%m-%d") + ".jsonl")
+check("the raw follow-up response is persisted", os.path.exists(f))
+age(f, 3)
+out = tier.tier_payloads(NOW)
+check("★ and it TIERS — it is in TIERED_SOURCES, not orphaned like PAYLOAD_DIR was",
+      out["by_source"]["provenance-follow-up"] == 1, out)
+check("the hot copy is gone", not os.path.exists(f))
+# ⛔ THE POINT OF KEEPING RAW: a field we do NOT extract must survive to cold.
+arc = [x for x in cold_files() if "follow-up" in x]
+check("a cold copy exists under its own prefix", len(arc) == 1, cold_files())
+blob = gzip.open(os.path.join(COLD_DIR, arc[0]), "rb").read().decode()
+check("★ and a field the extractor NEVER reads is still in it — that is why we keep raw",
+      '"extra": "kept"' in blob or '\\"extra\\": \\"kept\\"' in blob, blob[:120])
+
 print("\n=== 5. THE CENSUS IS UNREACHABLE FROM HERE — the protected set holds")
 reset()
 birth = store.birth_path(NOW)
@@ -151,7 +174,7 @@ print("\n=== 6. PER-SOURCE COUNTS — a zero must not hide a source never walked
 reset()
 out = tier.tier_payloads(NOW)
 check("every configured source is reported, even at zero",
-      set(out["by_source"]) == {"provenance-raw"}, out["by_source"])
+      set(out["by_source"]) == {"provenance-raw", "provenance-follow-up"}, out["by_source"])
 
 print("\n%d passed, %d failed" % (PASS, FAIL))
 shutil.rmtree(ROOT, ignore_errors=True)
