@@ -1,4 +1,4 @@
-# F-G-2 — B-EXIT-TRANSACTABLE-SIDE — SCOPE (Step 1, r4)
+# F-G-2 — B-EXIT-TRANSACTABLE-SIDE — SCOPE (Step 1, r7)
 
 change-class: architecture
 
@@ -24,23 +24,56 @@ change-class: architecture
 
 ## 2. THE ONE-SENTENCE CASE
 
-**THE EXIT DECIDES ON A BOOK MIDPOINT — BY OUR OWN LABEL, NOT BY INFERENCE.** ✅ **MEASURED 2026-08-29: 12 of 12 stamped crypto exits carry `exit_price_producer = kraken_ws_book_mid`.** A midpoint is a price nobody can transact at; a sell fills on the BID. ★ **This is a MECHANISM claim, evidenced by the system's own provenance stamp — it cannot be overturned by however the fills happen to land** (rule 29(c)).
+**THE EXIT DECIDES ON A BOOK MIDPOINT — A PRICE NOBODY CAN TRANSACT AT — WHILE A SELL FILLS ON THE BID.**
 
-⛔⛔ **r6 REWRITE — THE r4/r5 SENTENCE WAS *"the exits are systematically worse than the levels we set"*, AND THAT IS FALSE ON THE MEASURED POPULATION. Langston measured it; I re-derived every figure.** The same 74 active-paper crypto `stop_hit` closes, split by direction:
+✅ **THE DISCRIMINATING MEASUREMENT (r7 — the r6 instrument could not fail; see §8.6):**
 
-| arm | n | median | money |
-|---|---|---|---|
-| filled **BELOW** stop | 48 (64.9%) | **0.147%** | **−$22.71** |
-| filled **ABOVE** stop | 26 (35.1%) | **2.844%** | **+$83.26** |
-| **net** | 74 | — | ⛔ **+$60.55 — the population exits BETTER than its stops** |
+```
+exit_decision_price = exit_book_mid      12 of 12 crypto, exactly
+exit_decision_price ≠ exit_ticker_bid     9 of  9 crypto carrying a bid
+```
 
-⇒ ⛔ **THERE ARE TWO PHENOMENA AND THE BATCH NAMED ONLY ONE.** A **frequency skew** of about half a spread (64.9% below, binomial one-sided **p = 0.0070** — real, not noise), and a **much larger, unexplained tail in the opposite direction.** ★ **The 64.9% is now SUPPORTING EVIDENCE for the mechanism, never the case itself.**
+★ **Two INDEPENDENT columns, and they disagree in the direction the batch claims.** ⛔ **This is the same witness §8.4 mandates for `OBJ-1` — the evidence and the acceptance test are now the same instrument, deliberately.**
 
-⚠️ **AND THE HONEST CONSEQUENCE: FIXING THE SIDE-SELECTION MAY REDUCE MEASURED P&L**, because the +$83.26 tail is not a fill mechanic and this batch does not explain it. **That is not an argument against the fix — deciding on an untransactable price is wrong whichever way the money lands — but it must be said BEFORE the shadow run, not discovered in it.** *(New `OBJ-9` measures that tail first; see below.)*
+✅ **MECHANISM, cited (29(c)):** `active-execution-engine.ts:768` `const currentPrice = priceResult?.price ?? null` → passed to `evaluateTECExit` at `:1705` → stamped `exitDecisionPrice` at `:2263`. **For crypto that price is produced by `kraken_ws_book_mid` (`kraken-websocket-adapter.ts:945`).**
 
-⚠️ **MISSINGNESS CHECKED, NOT ASSUMED (Langston):** the 91 rows without a stop reference run 07-15→07-27 and the 74 with one run 07-25→08-28 ⇒ **instrument start-date censoring, not selection.**
+⚠️ **CRYPTO-ONLY, AND THIS COMPOUNDS `BLOCKER-3` RATHER THAN BEING COVERED BY IT (Langston):** xStock's producer is `kraken_equities_ws` — **a SOURCE, not a SIDE** — and `exit_book_mid` is **NULL on all 9**. ⛔ **§2's case has NO xStock evidence at all.**
 
-⛔ **THIS IS NOT A BUG FIX AND MUST NOT BE SCOPED AS ONE.** The provenance read (r3 §5.1) established from the introducing directive that the midpoint was **built deliberately, for STABILITY**, with named consumers that were display and analytics. **A second consumer later read it for a decision it was never built to serve.** Rule 24 outcome **(3)**: legacy that no longer fits today's intent. ⚠️ **`#7.9` flags that the TEMPORAL half of this — that the decision-consumer arrived AFTER — is not cited here; it must carry a commit or date by Step 2.**
+---
+
+### ⛔⛔ THE ERA SPLIT IS THE FINDING — AND MY OWN r5 "CORRECTION" DESTROYED IT
+
+**r5 said the headline was wrong (64.9%, 0.057%). r6 built on that. BOTH WERE THE ERROR: I pooled across a boundary the r3 file had already named, and Langston's `BLOCKER-1` was correct arithmetic on my bad pool.**
+
+✅ **Split at `2026-08-22T22:01Z`** — the epoch `PART_F_REORG:100` states:
+
+| era | n | below stop | median shortfall | above-stop rows |
+|---|---|---|---|---|
+| **PRE** (`< 22:01Z`) | 50 | 24 = **48.0%** | — | **26** |
+| **POST** (`≥ 22:01Z`) | 24 | 24 = **100.0%** | **0.166%** | ⛔ **ZERO** |
+
+⇒ ★★ **PRE-EPOCH IS A COIN FLIP. POST-EPOCH IS 24 OF 24.** **The original scope claim — "all nine below, median 0.17%" — WAS RIGHT; it has since grown to 24 of 24 at 0.166%.**
+
+✅ **AND THE EPOCH IS A KNOWN INSTRUMENT CHANGE, NOT A CHOSEN DATE:** `2026-08-22T22:01Z` is `e6f7c70b3`, **`B-BOOK-TRUNCATE-HOTFIX`**, which Langston independently verified took **crossed book states from 31.08% of 8,452 to 0 of 8,774.** ★ **Before it the "midpoint" was computed from a CROSSED book — garbage — so fills scattered both ways. After it the book is clean and the mid-to-bid gap appears as a consistent one-sided cost.** **That is a mechanism for the split, not a cut chosen to help.**
+
+⚠️ **SO PRE-EPOCH DATA IS NOT A LARGER SAMPLE OF THE SAME THING — IT IS A DIFFERENT INSTRUMENT.** Pooling it is the `wrong-object` pattern, and I committed it while criticising the scope for a number without a population.
+
+### ✅ THE MONEY, WITH THE OBJECT NAMED (Langston condition 2)
+
+⛔ **"Money" is ambiguous here and the two objects point OPPOSITE ways on the pooled population.** Named explicitly, POST-epoch:
+
+| object | definition | POST-epoch (n=24) |
+|---|---|---|
+| **stop-gap value** | `Σ quantity × (actual_exit − original_stop)` | **−$11.28** |
+| **`net_pnl`** | the booked P&L of the same rows | **−$121.96** |
+
+✅ **Post-epoch they agree in sign** — both costs. ⚠️ **On the POOLED 74 they did not** (+$60.55 stop-gap against −$270.91 `net_pnl`), **which is exactly why the object must be named: a column headed "money" beside a row headed "net" becomes "the fix costs us money" two documents later.**
+
+### ⚠️ THE HONEST CONSEQUENCE — DIRECTION EXPECTED, MAGNITUDE UNKNOWN (Langston's amendment)
+
+⛔ **r6 said the fix "MAY reduce measured P&L". That is softer than the measurement warrants.** **Moving a long's exit decision from mid to bid fires stops EARLIER — mechanically.** ⇒ **the below arm grows and any above arm shrinks. THE DIRECTION IS EXPECTED; ONLY THE MAGNITUDE IS UNKNOWN.**
+
+★ **This is not an argument against the fix — deciding on an untransactable price is wrong whichever way the money lands — but it must be on the page BEFORE the shadow run, not discovered inside it.**
 
 ---
 
@@ -90,7 +123,7 @@ n = 74     below stop = 48 (64.9%)     median shortfall = 0.057%
 
 ⇒ ⛔ **NOT "all" — 64.9%. NOT 0.17% — 0.057%.**
 
-⚠️ **SUPERSEDED BY r6 — READ §2 AND §8 FIRST.** I concluded here that the skew still carried the case. **Langston then split the same 74 by DIRECTION and the aggregate runs the OTHER way (+$60.55).** §2 is rewritten on the MECHANISM; the 64.9% is now supporting evidence only. **What survives from this section: the population defect was real, and “all nine” is gone from the body.** ⚠️ Original reasoning kept below so the sequence is auditable: 64.9% against a ~50% null is a real one-sided skew. **But the case must be restated on a NAMED population, and "all nine" must not survive into Step 2** — a universal asserted on n=9 is exactly the shape that becomes *"we always fill below"* two documents later.
+⛔⛔ **REVERSED AT r7 — THIS ENTIRE SECTION WAS THE ERROR. READ §2 FIRST.** **The scope's original claim was RIGHT and my "correction" here was the wrong-object:** I pooled 74 rows across the `2026-08-22T22:01Z` book-truncate epoch that `PART_F_REORG:100` already named. **Split properly: PRE 48.0% (a coin flip, and a DIFFERENT INSTRUMENT — crossed book 31.08%→0), POST 24 of 24 = 100.0%, median 0.166%.** ★ **I criticised the scope for a number without a population and then produced one with the WRONG population** — and Langston's `BLOCKER-1` was correct arithmetic on my bad pool, so it dissolves with it. ✅ **WHAT SURVIVES FROM THIS SECTION: the original number genuinely carried no stated population, and saying so was right.** ⚠️ Original reasoning kept below so the sequence is auditable. I concluded here that the skew still carried the case. **Langston then split the same 74 by DIRECTION and the aggregate runs the OTHER way (+$60.55).** §2 is rewritten on the MECHANISM; the 64.9% is now supporting evidence only. **What survives from this section: the population defect was real, and “all nine” is gone from the body.** ⚠️ Original reasoning kept below so the sequence is auditable: 64.9% against a ~50% null is a real one-sided skew. **But the case must be restated on a NAMED population, and "all nine" must not survive into Step 2** — a universal asserted on n=9 is exactly the shape that becomes *"we always fill below"* two documents later.
 
 ### 7.2 ✅ THREE CITATIONS WERE WRONG — CORRECTED INLINE
 
