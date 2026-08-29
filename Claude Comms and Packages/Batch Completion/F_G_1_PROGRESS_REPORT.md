@@ -345,20 +345,22 @@ target          0.5613 / 0.0001 = 5613   ON GRID
 - ✅ **FOUR POSITIVE CONTROLS RUN, all fired:** off-grid leg · `ABSENT` stamp · `resolved:false` · missing intent-side leg. ✅ **NEGATIVE CONTROL: the real `SPX/USD` row passes.** ★ **The alarm is now proved able to say both words.**
 
 ---
-### 3k. ➕ `never_filled` ROWS — THE DENOMINATOR DECIDED **BEFORE** MORE DATA ARRIVES (Langston-directed)
+### 3k. ➕ `never_filled` ROWS COUNT — THE DENOMINATOR DECIDED **BEFORE** MORE DATA ARRIVES (Langston-directed)
 
-⛔⛔ **THIS HAD TO BE FIXED NOW OR THE WINDOW'S SIZE WOULD BE DATA-DEPENDENT** — i.e. decidable after seeing which answer helps. **Langston: *“Decide it now, in writing.”***
+⚠️ **BODY REWRITTEN 2026-08-29 TO THE SURVIVING VERSION (Langston).** §3l falsified five load-bearing sentences in the original, and **this file BECOMES `F_G_1_COMPLETION_REPORT.md` (§6) — so a correction STACKED on wrong text would convert the wrong text verbatim into the completion report's argument.** ★ **The error record lives in the commit (`98e365bfc`) and in the mistake log, NOT here.** ⛔ **This is the same standard he applied to my `#937` body, and it is right for the same reason.**
 
-✅ **RE-DERIVED AT THE DB (his figures, my query):** August crypto, truly closed — **121 rows; 109 carry `intended_entry_price`; 12 do NOT, and ALL TWELVE are `close_reason = never_filled`.** ★ **All 12 still carry `stop_loss` AND `take_profit`.** ⇒ **≈9.9% of closes lose ONLY the entry leg, permanently, once closed** — `intended_entry_price` lives on the `active_open_positions` row, which is gone.
+⛔⛔ **DECIDED NOW BECAUSE OTHERWISE THE WINDOW'S SIZE IS DATA-DEPENDENT** — i.e. settleable later by whichever answer helps. **Langston: *“Decide it now, in writing.”***
 
-**THE DECISION, AND ITS REASONING, SO A LATER READER CAN CHECK THE MOTIVE:**
-✅ **`never_filled` ROWS **DO** COUNT toward §3's “first 30 crypto positions opened”.** They passed through the seam and were stamped; **two of their three legs remain permanently testable.** ⛔ **Excluding them would discard two-thirds of a valid observation to avoid an honest gap in the other third** — and would shrink the window on a property (whether a fill happened) that **has nothing to do with what this batch tests.**
+✅ **MEASURED:** August crypto, truly closed — **121 rows; 109 carry `intended_entry_price`; 12 do NOT, and ALL TWELVE are `close_reason = never_filled`** (all 12 retain `stop_loss` and `take_profit`).
 
-⛔ **THE COST IS CARRIED BY A LABEL, NOT BY AN EXCLUSION — Langston's binding rule, adopted verbatim:** a `never_filled` row whose open AND close both fall inside an **unwatched** interval is reported **`UNREADABLE (entry)`** — **never scored either way.** ★ **`#546`: an absent value must not wear a pass's clothes** — and it must not wear a failure's either.
-⇒ ✅ **THEREFORE THE BAR IS REPORTED PER LEG, EACH WITH ITS OWN n:** `entry n=…`, `stop n=…`, `target n=…`. **The entry denominator is (opens − unreadable), stated explicitly.** ⚠️ **This does NOT soften the bar: every READABLE leg must still be on grid, 100%, no tolerance. It makes the denominator honest, not the threshold.**
-⇒ ⛔ **AND ANY WATCH GAP IS RECONCILED AGAINST THE OPEN-COUNT** — the interval's open-count is queried, and every `never_filled` row inside it is enumerated by id, not assumed absent.
+✅ **DECISION: `never_filled` ROWS **DO** COUNT toward §3's “first 30 crypto positions opened”.**
+★★ **THE REASON IS LANGSTON'S AND IT IS STRONGER THAN THE ONE I FIRST GAVE: `never_filled` IS NOT INDEPENDENT OF THE PROPERTY UNDER TEST.** If the seam ever emitted an off-grid entry, **an unfillable price is a plausible signature of exactly that.** ⚠️ **He states he has NOT verified that mechanism and does not assert it** — but it cannot be ruled out, **and that alone forbids excluding the slice: excluding it would be SELECTING ON THE OUTCOME**, removing the rows most enriched for the defect.
+⇒ ⛔ **BINDING COROLLARY: A `never_filled` ROW WHOSE STOP OR TARGET IS OFF GRID IS *THE FINDING*, NOT A DATA GAP.**
 
-★ **WHY THE WATCH IS NOW LOAD-BEARING, AND ONLY HERE:** for the other ≈90% the intent triple survives in `closed_trades` forever, so a retrospective read is as good as a live one. **The watch buys latency, not coverage — EXCEPT on this ~10% slice, where it buys the entry leg outright.** *(Langston's ruling on the 00:15→02:06 gap: the clock does NOT restart, because the instrument reads durable rows rather than a log tail. **n=2 stands.**)*
+✅ **AND THE DECISION COSTS NOTHING, because the entry leg is DURABLY READABLE for every row — see §3l.** `rtb_shadow_pairings` carries `entry_price` for all 12, and it equals `intended_entry_price` on **109 of 109** filled rows where both exist. ⛔ **No row is stamped `UNREADABLE`; that label was withdrawn before it was ever applied.**
+
+✅ **PER-LEG `n` STANDS (condition 2), and it is a guard rather than a live constraint:** the bar is reported per leg — `entry n=…`, `stop n=…`, `target n=…` — and **the entry leg needs `n ≥ 20` readable or it prints `UNDERPOWERED` and the window extends FOR THAT LEG ONLY.** ⚠️ **This makes the DENOMINATOR honest, never the THRESHOLD: every readable leg must still be on grid, 100%, no tolerance.** ★ Kept though currently non-binding, because it guards a future retention change.
+
 ⚠️ **AND `closed_trades` HOLDS A ROW FOR THESE POSITIONS TOO, WRITTEN AT OPEN** — a retrospective read unioning both tables would report **n=4** for the two positions observed so far. **It is n=2.** *(§3f RIDER-2's never-union rule, biting a second time.)*
 
 ---
@@ -371,6 +373,8 @@ target          0.5613 / 0.0001 = 5613   ON GRID
 |---|---|---|
 | `rtb_signals` | **0** | ⛔ a LIVE queue, not a history — rows are removed on promote/expire. **Langston's first candidate cannot recover anything, on retention.** |
 | `rtb_shadow_pairings` | **50,232**, `2026-07-14 → 2026-08-29` | ✅ **DURABLE.** Carries `entry_price` / `stop_price` / `target_price`, snapshotted at promotion |
+
+✅✅ **AND `DURABLE` IS NOW *EARNED*, NOT ASSUMED — Langston ran the census neither of us had: `rtb_shadow_pairings` HAS NO DELETER ANYWHERE IN THE TREE.** One writer (`rtb-shadow-store.ts`, INSERT + UPDATE), four readers in `routes.ts`, plus migrations and tests — **zero sweep / prune / retention references, and the table is ABSENT from the retention sweep's list.** ★ **Independent corroboration: `routes.ts:2796` records 14,232 rows on 2026-07-22 against 50,232 today — monotone, no trim.** ⚠️ **AND THE `2026-07-14` START IS THE CRYPTO PAPER-ACTIVE SWITCH-ON, NOT A RETENTION FLOOR** — that distinction is the `B-ARM-REMOVAL` trap (an mtime read as an origin) **and it does not bite here, because it was checked rather than assumed.**
 | join key | — | `closed_trades.metadata->>'originalSignalId'` → `rtb_shadow_pairings.signal_id`. **`closed_trades` has no `signal_id` COLUMN** — the key is in the metadata |
 
 ✅ **POSITIVE CONTROL — HIS, AND IT IS THE ONE THAT MATTERS, because a value EXISTING is not the RIGHT value existing:** on the **109** August crypto rows that DID fill and carry both numbers — **`rtb_shadow_pairings.entry_price = intended_entry_price` on 109 of 109. 0 differ, 0 null.**
