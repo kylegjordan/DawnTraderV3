@@ -370,3 +370,54 @@ active-execution-engine.ts:59 exact · kraken-websocket-adapter.ts:681 exact and
 
 ⇒ ⛔ **This is the §9 framing rule verbatim: *buried implemented logic is a governance failure, not just a documentation miss.*** **The one line that would have prevented eight months of this is a sentence in the System Manual saying the `c` field carries a mark price, not a trade.** **Owed at Step 2 regardless of what else this batch does.**
 
+## 10. ⛔ STEP-2 MEASUREMENT ROUND 1 (CC-C, 2026-08-29) — THE TEST IS RUNNABLE, THE HALF-SPREAD HYPOTHESIS FAILS, AND ONE CORRELATION I ALMOST REPORTED IS SPURIOUS
+
+### 10.1 ✅ THE BASIS-GAP TEST IS **NOT** BLOCKED ON `#911` — I WAS ONE CENSUS AWAY FROM FILING THAT IT WAS
+
+**I opened this round about to record *"unrunnable"*:** `exit_ticker_bid`/`exit_ticker_ask` are populated on **3 of 165** crypto stop-outs, which is `#911`'s known non-instrumentation. ⛔ **THAT WOULD HAVE BEEN A FALSE ABSENCE — an asserted blocker with no census behind it (rule 22).**
+✅ **A schema-wide census for ANY retained bid/ask found `crypto_spot_ticker_snap` — 13,277,061 rows, 2026-07-01 → now, 687 symbols, partitioned monthly.** Joined nearest-snapshot within ±120 s of close: **117 of 165 crypto stop-outs covered (70.9%).**
+⇒ ★ **THE SPREAD IS RECOVERABLE FOR THE WHOLE POPULATION. `#911` blocks the per-row witness ON THE TRADE ROW; it does not block the measurement.** *(§9.5(a): census every hop before declaring an absence. The instrument existed and was one query away.)*
+
+### 10.2 ⛔ THE HALF-SPREAD DOES **NOT** ACCOUNT FOR THE BELOW-STOP GAP
+
+**POST-era crypto stop-outs (n=19 with a snapshot join), medians:**
+
+| quantity | value |
+|---|---|
+| shortfall vs stop — `(stop_loss − exit_price)/stop_loss` | **0.2270%** |
+| half-spread at close — `((ask−bid)/2)/mid` | **0.0545%** |
+| **ratio, shortfall ÷ half-spread** | ⛔ **2.23** |
+
+⇒ **The gap is ≈ 2.2 half-spreads ≈ ONE FULL SPREAD.** ★ **So *"it is just the half-spread"* — the benign reading that would have dissolved this batch — is QUANTITATIVELY REFUTED at n=19.** ⚠️ **n=19 is thin and is stated as thin;** it is a first read, not a settled figure.
+
+### 10.3 ⛔⛔ THE CONTROL I FIRST BUILT IS **INVALID**, AND I AM RECORDING IT BECAUSE IT READ AS DECISIVE
+
+I compared stop exits against **target** exits — same side, same asset, so a spread cost should appear on both. **Target exits show a shortfall of EXACTLY `0.0000%`, n=103 PRE and n=14 POST.** ★ **That looked like a clean refutation of any spread-based mechanism.**
+⛔ **IT IS NOT A COMPARATOR. THE TWO ARMS EXIT BY DIFFERENT MECHANISMS.** Read at the code: both branches return `price: currentPrice` (`active-execution-engine.ts:1793-1806`) — **but a target exit RESTS AS A MAKER LIMIT and closes AT THE LIMIT** (`aee:1364`, the resting-maker exit this batch's own `exit_decision_price` column exists to disambiguate). **A limit order filling at its limit is not evidence about what a market exit pays.**
+⇒ ⛔ **BINDING: the exact-zero target shortfall may NOT be cited, by me or anyone, as refuting a spread mechanism.** ★ **Same family as `entry_price` being on the venue grid BY CONSTRUCTION: an arm that cannot come out the other way is not a control.**
+
+### 10.4 ⛔ AND THE CORRELATION IS SPURIOUS — STATED BEFORE ANYONE QUOTES IT
+
+The natural next hypothesis is **detection latency**: `exit_price` is `currentPrice`, which on the crypto path is the **BBO mid** (§9), so the shortfall is how far the mid travelled past the stop between evaluations. **Measured: `r = 0.934`** between shortfall and `exit_tick_cadence_ms`.
+⛔ **THAT NUMBER IS WORTHLESS AND I AM NOT REPORTING IT AS SUPPORT.** **n = 5**, and the predictor barely moves: **cadence spans 1499–1571 ms (4.8%) while shortfall spans 0.0994%–1.2951% (13×).** ★ **A near-constant predictor cannot explain a 13-fold outcome range, whatever the coefficient says.**
+✅ **WHAT THE CADENCE DATA DOES SAY, and it is the useful half: the evaluation interval is essentially CONSTANT at ~1.5 s.** ⇒ **the variance in shortfall must come from how fast price was MOVING, not from how long we waited.** That is the next test, and it needs a velocity term this scope does not yet have.
+
+### 10.5 ⛔ THE BINDING CONSTRAINT ON THIS BATCH, MEASURED — THE EXIT-PROVENANCE COLUMNS ARE THINNER THAN §2 ASSUMED
+
+**Crypto stop-outs, n = 165 total. Population per column:**
+
+| column | populated | |
+|---|---|---|
+| `exit_price` · `actual_exit_price` · `stop_loss` | **165** | full |
+| `original_stop_price` | 74 | |
+| ⛔ `exit_decision_price` · `exit_book_mid` · `exit_tick_cadence_ms` · `exit_book_age_ms` | ⛔ **5** | |
+
+⇒ ⛔ **EVERY OBJECTIVE DENOMINATED IN `exit_decision_price` HAS n = 5 ON THE STOP-OUT LEG, NOT THE 12 §2 QUOTES** (§2's 12 spans **all** close reasons, not stop-outs). **Any objective that needs the DECISION price rather than the FILL price is underpowered today and accrues at the post-deploy rate.**
+
+### 10.6 ⛔ THE PRE-ERA IS NOT A COMPARATOR, AND I AM NOT USING IT AS ONE
+
+PRE-boundary stop shortfall reads **0.0149%** median — *better* than its own half-spread (ratio 0.58). ⛔ **DO NOT READ THAT AS "EXECUTION USED TO BE BETTER."** Before `e6f7c70b3` (2026-08-22T22:01Z) **the book was in a crossed state 31.08% of the time**; a favourable fill measured against a corrupt book is an artifact, not a result.
+★ **This is the third time in this arc that a pooled or cross-era comparison would have produced a confident wrong number. It is stated here so the next reader does not re-derive it.**
+
+**DISPOSITION (§9.4):** all six items above are **(1) folded into the work in hand** — they are Step-2 measurement results for this batch. **No new issue is minted.** ⚠️ **`10.3`'s invalid control and `10.4`'s spurious correlation are recorded as BINDING NEGATIVES, not as findings** — their entire value is stopping a later reader citing them.
+
