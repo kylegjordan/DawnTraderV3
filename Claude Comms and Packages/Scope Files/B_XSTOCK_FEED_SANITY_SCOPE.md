@@ -204,3 +204,33 @@ With the mechanism known, two predicates looked obvious. **Neither works, and I 
 
 **A 25x median divergence is decision-grade evidence for OBJ-4** (calibration contamination) **even though it is not a per-row selector.** ⇒ **carried to OBJ-4, not discarded.**
 
+## 11. OBJ-3 ANSWERED - IT IS NOT ONE MINUTE. IT IS A CLOSED-UNDERLYING-MARKET PHENOMENON.
+
+**Population: `xstock_spot_ticker_snap`, 2026-08-22 -> 2026-08-30, `bid > 0 AND ask > 0`. A stub book is `spread > 20%`. ~13 million snaps.**
+
+| UTC hour | ET | snaps | stub books | % |
+|---|---|---|---|---|
+| **00** | **20:00 (extended hours JUST CLOSED)** | 254,088 | **7,244** | ⛔ **2.851% - THE PEAK** |
+| 01-07 | 21:00-03:00 | ~1.39M | ~4,973 | 0.26-0.50% |
+| **08-10** | **04:00-06:00 (European morning, US shut)** | 640,656 | **12,434** | ⛔ **1.69-2.41%** |
+| 11-13 | 07:00-09:00 (US pre-open) | 1.15M | 4,706 | 0.15-0.78% |
+| 14 | **10:00 (US OPEN)** | 1,690,649 | 304 | **0.018%** |
+| ⛔ **15-19** | ⛔ **11:00-15:00 (US REGULAR TRADING)** | ⛔ **8,172,799** | ⛔ **0** | ⛔ **0.000%** |
+| 20-23 | 16:00-19:00 (after the US close, extended) | 1.28M | 9,596 | 0.30-1.45% |
+
+⇒ ★★ **ZERO STUB BOOKS IN 8,172,799 SNAPS ACROSS THE FIVE HOURS THE US MARKET IS ACTUALLY OPEN. They appear ONLY when the underlying is shut, and PEAK in the hour immediately after extended hours end.**
+✅ **THE ANSWER TO OBJ-3: NOT one minute, and not a glitch. It is a STRUCTURAL PROPERTY OF THE TOKENIZED BOOK WHEN THE UNDERLYING MARKET IS CLOSED** - there is no arbitrage anchor, so one side of the quote walks away.
+★ **The snap counts corroborate independently: ~1.6M snaps/hour during RTH against ~200k outside. The feed is an order of magnitude busier when the market is open, and clean.**
+
+### 11.1 ⛔ BUT THE CLOSES STILL CLUSTER AT `00:15`, AND THAT IS NOW THE SHARPER QUESTION
+
+**Stub books run at 1-2.9% across MANY hours. The closes are 65 at `00:15` and essentially nothing elsewhere.** ⇒ **exposure alone does not explain the concentration.**
+
+**LEADING CANDIDATE, STATED AS A HYPOTHESIS AND NOT MEASURED: A SURVIVOR EFFECT.** `00:15` is the **first sweep after the underlying shuts.** Positions vulnerable to a stub-book mid are closed on that first exposure - **so the later stub books at 08-10 and 20-23 UTC find nothing left to close.**
+⚠️ **NOT ESTABLISHED. What would settle it: the count of OPEN xStock positions immediately before and after each sweep in the shut window** - if the book empties at the first sweep, the hypothesis holds; if positions survive it and are still there at 08:00, it does not.
+★ **It matters because it changes the fix's target: if it is a survivor effect, the exposure is EVERY position held across the US close, not a 00:15 edge case.**
+
+### 11.2 ⇒ WHAT THIS DOES TO THE DECISION ALREADY WITH KYLE
+
+**It sharpens it and does not change it.** The trade-off was *prefer the last trade / refuse the mark / refuse the exit*. **OBJ-3 adds: whatever is chosen applies for ~19 hours of every weekday and all weekend - the entire period the underlying is shut - not to one minute a day.** ⇒ **"refuse the exit" is a much larger posture than it looked when this appeared to be a single minute**, and `#531`/`#583` (xStock weekend posture, already open) are the same surface.
+
