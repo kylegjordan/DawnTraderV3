@@ -771,3 +771,38 @@ The B65.2 functional commit (`0fcd19b1`) shipped trailing exits end-to-end. Subs
 **⛔ OPEN, NOT CLOSED: both objectives are only observable on a POST-DEPLOY CLOSE and there were ZERO at close of work.** Criterion pre-registered BEFORE the data in `B_EXIT_BOOK_AGE_STAMP_PROGRESS_REPORT.md` §4 and armed as self-firing alert **`65a1379e`** (fires 2026-09-06T12:05:09Z): **20 post-deploy closes or 7 days.**
 
 **GOVERNANCE FILES CHANGED:** `SYSTEM_IMPACT_MAP.md` (new §2.1.2.a + the split epoch + a stale line corrected) · `SYSTEM_MANUAL.md` (the `translateV2ToV1` node) · `PHASE_19_PLAN.md` (rows 3b.h, 3b.i, three leads homed at 3b.g) · `RUNNING_ISSUES.md` (`#964`) · `BATCH_CATALOG.md` · `PHASE_HISTORY.md` · `EXIT_PATH_MACHINERY_AUDIT_2026-08-30.md` (a stale count of mine) · scope · pre-audit · change list · progress report · migration + MANIFEST · `MEMORY_CC_C.md`.
+
+---
+
+## B-SCANNER-EGRESS-NORMALISE (CC-C, ✅ **CLOSED — same-day functional verification, NO observation window**, deployed 2026-08-30) — Phase 19, plan row 5 · `#906`
+
+**change-class: architecture · CI 4/4 green on `fd81ce18c` (run 33322557313) · deployed `fd81ce18cf6cdec6feb23b44b1bbdd03a67d9630` at 2026-08-30T16:36:32Z, restart #586 · Langston APPROVED at that ref.**
+
+**THE DEFECT.** The market scanner passed Kraken's raw `wsname` straight through to the venue. **Kraken's own OHLC endpoint rejects Kraken's own wsname for exactly two bases** — `XBT/USD` and `XDG/USD` return `EQuery:Unknown asset pair` / 0 candles, while `BTC/USD`, `DOGE/USD` and `ETH/USD` return 721. The rejection cached as `null`, the history filter failed closed, and **Bitcoin and Dogecoin were rejected on every scan, in every lane, for the life of the scanner.**
+⛔ **INVISIBLE TWICE OVER — which is why it survived:** the history branches carry no `capturePreFilterReject`, and every capture call is gated `!isPassiveLearning`. So a history rejection is never archived at all, and VTS is never archived under any circumstance. `#906` read the archive, correctly saw zero rows, and said *"never evaluated"*; the runtime log correctly showed the evaluation. **Both were right about different instruments.**
+
+**THE FIX — one statement at `market-scanner.ts:712-715`,** where the batch is final and unconsumed, plus **one guard at `:889`.** `toCanonical`, not the locked resolver (whose slashed branch holds only `{XBT:BTC}` and so fixes Bitcoin while leaving Dogecoin broken — `#229`/Phase 20 owns that consolidation). Slashed-only guard because `wsname` is optional and the REST-key fallback would hit a branch that can mangle (`XTZUSD → T/USD`) or throw.
+
+**THE GUARD, and it is the part that mattered most.** The normalisation sits ABOVE the B63.3 DBS prefetch, so post-fix the 31 BTC-quoted pairs gain OHLC, gain a DBS score, and any score ≥ 0.35 would route onto `active_strong_trend` — **live thresholds `minVolume` 0.00 / `minPrice` 0.001.** ≥8 of the 31 clear 0.001 BTC; **`TBTC/XBT` carries ~$110 of 24h volume against a floor of ZERO.** The bypass now additionally requires a non-BTC quote. **It is not a units fix — it refuses a gate BYPASS to pairs whose money gates are denominated wrong (`#966`); a zero-volume bypass is only safe if the thing bypassed measured the right quantity.**
+
+**LIVE-VERIFIED, TWO-SIDED, at the deploy boundary (pre-side captured BEFORE deploying, not reconstructed):**
+| population | PRE (24h) | POST |
+|---|---|---|
+| `XBT/%` | 65,268 rows / 12 syms | **0** |
+| `BTC/%` | **ABSENT** | **126 / 11** |
+| `XDG/%` | 8,738 / 8 | **0** |
+| `DOGE/%` | **ABSENT** | **16 / 8 (all eight wsnames)** |
+| `%/XBT` | 42,098 / 30 | **0** |
+| `%/BTC` | **ABSENT** | **94 / 30** |
+| `ETH/%`, `SOL/%` *(controls)* | present | **still present** |
+
+Plus: **zero `XBT/USD` history rejections post-deploy, zero history rejections for any symbol**, and `BTC/USD` reaching the guardrail check **with a strategy assigned** (`morning_star`, paper). **GUARD VERIFIED: `%/BTC` rows carrying `threshold = 0` = ZERO** — not one took the bypass.
+
+**CLOSED WITHOUT AN OBSERVATION WINDOW, deliberately.** The defect is a CODE PATH, not a rate; by the per-assertion test a few examples settle it, and 126 + 16 + 94 rows across three populations with two controls settle it. Attaching a *"a Dogecoin VTS trade appears"* criterion would be a RATE criterion on a code-path repair — the over-strictness converted at F-G-1. ⚠️ **Stated and NOT claimed: `vts_open_trades` showed 0 post-deploy opens for ANY symbol (cadence 39/24h over 27 symbols of ~660), so that instrument had zero opportunity and its silence is cited in neither direction.**
+
+**FIVE OF MY OWN CONSEQUENCE-CLAIMS WERE KILLED IN REVIEW, each by one query:** blast radius 26→**56** · the INVARIANT T2 repair (`trades` table holds **0 rows**) · *"the 31 become tradable"* (21,574 `low_volume` rows across 31/31) · *"Bitcoin and Dogecoin are one failure"* (the `gate_decision` label) · *"this batch does nothing for Dogecoin"* (**the archive is gated to the active lane and cannot see VTS**). ★ **The first four were queries I did not run; the fifth was a query the instrument could not answer whose output I read as the answer — `#453`, from my own always-loaded file.**
+
+**Governance:** SIM cross-cutting carry entry · System Manual **B63.6** (the bypass invariant) · `PHASE_19_PLAN` row 5 · `RUNNING_ISSUES` `#906` closed, **`#965`/`#966`/`#967`/`#968` opened and placed**.
+**Homed out, each to a placed plan row:** `#965` the already-active dedupe reads a table holding 0 rows and T2's real enforcement site is unestablished (3b.j) · `#966` non-USD quote denomination, **direction per quote** (5.a) · `#967` the 0.25 active-path price floor excludes Dogecoin **and Cardano** — Kyle's decision (5.b) · `#968` the change-class marker is unparseable in 17 of 329 scope files (3b.k).
+⚠️ **VERIFIER TRAP, recorded: `capturePreFilterReject` writes the POST-normalise symbol, so a `LIKE '%/XBT'` predicate returns ZERO after deploy — that is the batch WORKING. Always anchor on `'%/BTC' OR '%/XBT'` split at the deploy boundary.**
+**Deferred, stated:** `OBJ-5` — history rejections are still never archived, so the archive may not be cited for or against the history leg.

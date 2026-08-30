@@ -11329,6 +11329,29 @@ Trade records opened under each cohort should be segmented in observation analys
 
 ---
 
+
+## B63.6 The Strong-DBS Bypass Is Fenced Against Non-USD-Quoted Pairs (B-SCANNER-EGRESS-NORMALISE, 2026-08-30)
+
+**What changed:** the B63.3 DBS-aware routing at `market-scanner.ts:889` — *"strong-DBS pairs bypass normal global filters"* — now additionally requires that the pair's quote currency is not Bitcoin.
+
+**Why this is architecture and not a patch.** B63.3's promise is that a pair with `dbsScore >= 0.35` is routed onto the `strong_trend` global filter profile instead of the standard one. The live `active_strong_trend` profile carries **`minVolume = 0`**, `minPrice = 0.001`, `minHistoryDays = 5`. That zero-volume floor is defensible **only because the volume it replaces was measuring the right quantity.** It is not, for a non-USD quote: `market-scanner.ts:820` computes `volume24h = volume24hCoins * currentPrice` where `currentPrice` is `ticker.c[0]`, **the price in the QUOTE currency**, and the comment two lines above at `:818` states the invariant this breaks — *"All filter thresholds (minVolume, patternMinVolume) are in USD. Must compare like units."* The arithmetic satisfies that invariant **only when the quote is USD.**
+
+**The measured consequence, by quote — and the error is NOT uniformly conservative:**
+
+| quote | effect on the volume bar | direction |
+|---|---|---|
+| **BTC** | overstates by ~5 orders of magnitude (a pair would need ~500,000 BTC of daily volume to clear a bar meant to read $500,000) | ✅ **fail-safe** |
+| **EUR** | understates by single-digit percent | ⚠️ negligible |
+| ⛔ **any quote worth less than a dollar** | **the sign inverts — the gate becomes far too PERMISSIVE** | ⛔ **admits what should be refused** |
+
+Measured 24h in `signal_eval_archive` (`source='market-scanner'`), the scanner population by quote: **USD 636 distinct symbols · EUR 534 / 554,317 rows · JPY 10 / 17,789 rows**, plus AUD, GBP, ETH, CAD, CHF, DAI, EURC, PYUSD, EUROP. `screener_filters.quote_currencies` is `[]` on every live row, so **nothing restricts the quote today** — the universe already admits these and judges them with USD-shaped constants. *(Stated as measured: that is the population present, not the survival. The inversion is FX arithmetic, not a claim that any JPY pair currently clears the gate.)*
+
+**Why the fence is scoped to `{BTC, XBT}` and not to every non-USD quote.** `symbol-canonicalizer.ts:100-123` applies one translation map to both slots of a slashed pair, and the only entry that can appear in a wsname's **quote** slot is `XBT → BTC` — every other quote entry is a Z/X-prefixed REST form that never appears slashed. So the set of quotes whose venue-resolvability changed in this batch is exactly `{XBT}`, and the predicate is that set plus its output. **Broadening the fence would not have been conservative:** EUR-quoted pairs alone are 534 symbols already taking the bypass today, so denying it to them is a live behaviour change with no measurement behind it. The general denomination question is `RUNNING_ISSUES` **#966**, which must establish **survival per quote**, not merely population, before widening anything.
+
+**Invariant this establishes, and it generalises beyond B63.3:** *a filter BYPASS may only be granted where the bypassed filter was measuring the quantity it claims to measure.* Unlocking a code path introduces every action that path can take — the bypass was harmless while BTC-quoted pairs could not resolve at the venue at all, and became load-bearing the moment they could.
+
+**Verified live** at the deploy boundary: every post-deploy `%/BTC` rejection carries the standard profile's thresholds (`low_volume` 500,000; `pattern_low_price` 0.25), and the count of `%/BTC` rows carrying `threshold = 0` — the strong-trend floor — is **zero**. The fence is a true no-op for existing behaviour: the BTC-quoted pairs fail the same gate, with the same label, as they did before the batch.
+
 # Appendix B64a — Regime & Strategy Drift Dashboard
 
 **Batch:** B64a (promoted from B71 during B63 closeout)

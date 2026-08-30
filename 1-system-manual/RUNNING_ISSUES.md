@@ -5739,3 +5739,20 @@ I recorded it as *"a depth-10 mid and a BBO mid are different statistics; on a t
 ⚠️ **STATED AS MEASURED AND NO FURTHER: that is the POPULATION PRESENT, not the SURVIVAL. The inversion is FX arithmetic; it is NOT a claim that any JPY pair currently clears the gate.** Establishing survival is this item's first job.
 
 ⛔ **AND IT KILLS THE OBVIOUS "SAFE" FIX.** Denying the strong-DBS bypass to every non-USD quote is **NOT** conservative: **EUR alone is 534 symbols already taking that path today**, so stripping it is a live behaviour change with no measurement behind it. **The `B-SCANNER-EGRESS-NORMALISE` guard is deliberately narrow to `{BTC, XBT}` — the exact set that batch rewrote — and widening it belongs HERE, with the survival measurement done first.**
+
+
+---
+
+### #906 — ✅ **CLOSED 2026-08-30** — Bitcoin and Dogecoin were never traded because the scanner sent Kraken a name Kraken rejects
+
+**Batch `B-SCANNER-EGRESS-NORMALISE`, deployed `fd81ce18c` at 2026-08-30T16:36:32Z. Langston approved at the ref; CI 4/4. Closed same-day on functional verification, NO observation window.**
+
+**ROOT CAUSE, complete chain:** the scanner emitted Kraken's raw `wsname`; **Kraken's own OHLC endpoint rejects Kraken's own wsname for exactly two bases** (`XBT/USD`, `XDG/USD` → `EQuery:Unknown asset pair`; `BTC/USD`, `DOGE/USD`, `ETH/USD` → 721) → `getPairHistoryDays` caches `null` → `passesHistoryFilter` fails closed → rejected on every scan, in every lane.
+**FIX:** one statement at `market-scanner.ts:712-715` (`toCanonical`, slashed-only guard) **plus a guard at `:889`** denying the B63.3 strong-DBS bypass to BTC-quoted pairs.
+
+**VERIFIED two-sided at the deploy boundary, pre-side captured before deploying:** `XBT/%` 65,268 rows/12 syms → **0** · `BTC/%` ABSENT → **126/11** · `XDG/%` 8,738/8 → **0** · `DOGE/%` ABSENT → **16/8** · `%/XBT` 42,098/30 → **0** · `%/BTC` ABSENT → **94/30** · controls `ETH/%`, `SOL/%` present throughout. Zero `XBT/USD` history rejections; `BTC/USD` reaching the guardrail check with `morning_star` assigned. **Guard verified: `%/BTC` rows carrying `threshold=0` = ZERO.**
+
+⚠️ **THIS ISSUE'S OWN PREMISE WAS HALF-STALE AND IS CORRECTED HERE, NOT QUIETLY DROPPED.** `#906` said *"never evaluated."* The archive genuinely held zero rows — **because history rejections carry no `capturePreFilterReject` at all**, so the instrument could not have shown one. The pairs WERE being evaluated and rejected, invisibly. **Neither reading was wrong; they were different instruments, and one has a hole exactly where the defect lived.** That hole is `OBJ-5`, deliberately deferred — **so the archive may not be cited for or against the history leg until it lands.**
+
+**SPAWNED, each placed in the plan:** `#965` (3b.j) · `#966` (5.a) · `#967` (5.b) · `#968` (3b.k).
+**MISTAKE: silence-not-evidence [B-SCANNER-EGRESS-NORMALISE] — five consequence-claims killed in review; the last one read a lane-gated instrument's silence as an answer about the lane it cannot observe.**
