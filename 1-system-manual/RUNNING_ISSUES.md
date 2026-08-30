@@ -824,6 +824,28 @@ MSYS2_ARG_CONV_EXCL='*' git show "…:.claude/memory/MEMORY.md"               ->
 
 ## B79.0n.SCORING + B79.0n.TEC closure entries (2026-05-26)
 
+### #970 OPEN 2026-08-30 (CC-A; measured on Langston’s own gate, and it corrected my first reading of it) — ⛔⛔ OUR RECORDS DISAGREE WITH THEMSELVES: **27% OF IDENTIFIED DECISIONS ARE MULTI-HOMED, AND 96% OF THOSE PAIRS SHARE LESS THAN HALF THEIR TEXT**
+
+**MEASURED AT THE PINNED REF `e4425782` — 1,948 tracked `.md`. Method: an ID in a DEFINITIONAL position (heading, or bolded lead) is a HOME; anything else is a citation. Lexical and exact, ZERO semantic matching.**
+
+| | |
+|---|---|
+| IDs with a findable home | **556** |
+| ⛔ multi-homed | **151 = 27%** |
+| ✅ **POSITIVE CONTROL — single-homed** | **405** *(a detector matching everything returns zero)* |
+| mean homes per ID / mean files CITING it | **1.35** / **8.6** |
+| ⚠️ cited somewhere, **no home found at all** | **228** |
+
+★ **STABLE ACROSS DRIFT: 556/151/405/142/9 reproduce IDENTICALLY at the pinned ref two days after the first run.**
+
+⛔⛔ **KYLE’S OBJECTION IS THE FINDING, AND IT IS THE DOMINANT CASE: of the 125 pairs with enough text to compare, 120 — 96% — SHARE LESS THAN HALF THEIR DISTINCTIVE TERMS.** His words: *"we end up losing real decisions that were made that were slightly different than the ones that we kept."* ⇒ **A MERGE-ON-SIMILARITY PASS WOULD BE CHOOSING UNAIDED BETWEEN TWO MATERIALLY DIFFERENT TEXTS, AS THE NORMAL CASE. CONSOLIDATION IS OFF THE TABLE.**
+
+⚠️ **AND TESTING HIS OBJECTION CORRECTED MY OWN HEADLINE — I REPORTED 27% AS DUPLICATION BEFORE RUNNING THE SPLIT.** **142 (94%) are TRUE multi-homing** (`RUNNING_ISSUES.md` is one home). **9 (6%) are NAMESPACE COLLISIONS** — per-document LOCAL numbered lists colliding with global issue numbers, **and that 6% is the class that would have DESTROYED data.** ★ **Measured: `#10` is *"TELEMETRY — per-asset-class telemetry buckets"* in one document and *"#10 (BLOCKER): kraken-websocket-adapter"* in another. Term overlap 0.00.** Median ID 92 in collisions vs 415 in true multi-homing ⇒ **early-era and bounded.**
+
+⛔ **HONEST CEILING: this measures ID-CARRYING propositions ONLY. `#641` — thirteen-plus sites of copied comment prose with NO ID, the largest divergence we have ever found — is structurally INVISIBLE to it.** ★ **But that class is n=1 and UNSIZED; calling this batch mis-aimed from it would inflate an unmeasured magnitude (Langston). Sizing it is `B-IDLESS-DIVERGENCE-SIZING`.**
+
+⇒ **HOME: `B-DISAGREEMENT-FINDER`, owner CC-A, placed in `PHASE_19_PLAN.md` §governance queue at row 8.5, after `B-INSTRUMENTS-OVER-RULES`.** ✅ **Step 1 APPROVED r2 (`1ceeaf0b2`), four conditions + two corrections applied.** ⛔ **A DETECTOR — it deletes nothing, merges nothing, decides nothing.**
+
 ### #954 OPEN 2026-08-30 (CC-C; measured at the B-EXIT-PROVENANCE close) — ⚠️ THE CRYPTO TICKER ARCHIVE HOLDS **NO `/EUR` PAIRS AT ALL**, SO EVERY `/EUR` CLOSE IS WITNESS-BLIND — AND THE OBSERVATION WAS **ORPHANED BY MY OWN WITHDRAWAL**
 
 **SEVERITY: low-medium (telemetry coverage; no trading impact — the witness is fail-open by design and blocks nothing). OWNER: CC-C. DISPOSITION: §9.4 (2) — added as an item to `B-XSTOCK-BOOK-LADDER` (plan row **3b.d**), whose subject is already *"what market data do we actually subscribe to, per class"* — the archive UNIVERSE is the same question one level up.**
