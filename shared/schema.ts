@@ -1825,8 +1825,13 @@ export const closedTradesTable = pgTable("closed_trades", {
    *  `xstock_spot_ticker_snap` record, computed in SQL as `NOW() - captured_at`. A row age and a
    *  book age are different measurements — NEVER pool them. `DepthSnapshot.source`
    *  (`crypto_ws_book` | `xstock_ticker_snap`) is the discriminator.
-   *  ⛔ NULL on a MAKER-fill row by construction: a resting fill consults no depth at all.
-   *  Discriminable by `exit_fee_mode = 'maker'`. */
+   *  ⛔ A NULL IS FOUR-VALUED AND `exit_fee_mode` DOES NOT SEPARATE THEM ON ITS OWN — that column
+   *  has exactly one writer (inside `closePosition`), so any close that does not come through there
+   *  lands NULL/NULL. `maker` = a resting fill consulted no depth; `taker` = the walk ran and
+   *  `getDepthSnapshot` returned null (cold/one-sided book); `exit_fee_mode IS NULL` = the row came
+   *  from a non-`closePosition` path (`never_filled`, `closeAllPositions`, `engine_stop_cleanup`,
+   *  `hard_reset`, the two manual routes) or predates the column — use `close_reason` and
+   *  `closed_at` for those, never the fee mode. */
   exitFillDepthAgeMs: doublePrecision("exit_fill_depth_age_ms"),
   /** ★ THE INDEPENDENT WITNESS AT CLOSE (OBJ-3, wired by `#911` 2026-08-27).
    *  Read from the ARCHIVER's ticker snapshot (`getTickerWitness`), NOT from the depth snapshot

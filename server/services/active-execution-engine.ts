@@ -2036,10 +2036,6 @@ export class ActiveExecutionEngine {
       // `entry_book_age_ms`, which is the depth-GATE reading with three awaits before its own walk.
       // Three different instants; the column comments name which is which.
       _fillDepthAgeMs = _closeSnap ? _closeSnap.ageMs : null;
-      // OBJ-1 verification leg (paired log): crypto cannot be reconstructed after the fact — nothing
-      // persists the WS mini-book, and the nearby ticker archive is a DIFFERENT feed off a separate
-      // socket. This line is the contemporaneous record the column is checked against.
-      console.log(`[B-EXIT-BOOK-AGE-STAMP][FILL_DEPTH_AGE] symbol=${position.symbol} class=${_closeClass ?? 'none'} depthSource=${_closeSnap?.source ?? 'none'} ageMs=${_fillDepthAgeMs ?? 'null'}`);
       const _closeFill = await this.orderPlacer.closeOrder({
         symbol: position.symbol, side: 'sell', quantity, requestedPrice: exitPrice, mode: this.mode, positionId,
         assetClass: _closeClass ?? undefined,
@@ -2056,6 +2052,14 @@ export class ActiveExecutionEngine {
       actualExitPrice = _closeFill.fillPrice;
       exitFee = _closeFill.feeQuote;
       _takerCloseSlippage = _closeFill.slippageQuote;
+      // OBJ-1 verification leg (paired log): crypto cannot be reconstructed after the fact — nothing
+      // persists the WS mini-book, and the nearby ticker archive is a DIFFERENT feed off a separate
+      // socket. This is the contemporaneous record the column is checked against.
+      // ⛔ PLACED HERE, BELOW THE FILL, DELIBERATELY. It was first written between the depth read and
+      // the walk that consumes it — i.e. INSIDE the very interval this column exists to measure. A
+      // console.log to a PM2-piped stdout can block under backpressure, so the instrument would have
+      // perturbed its own measurement. The value is captured above; the reporting waits.
+      console.log(`[B-EXIT-BOOK-AGE-STAMP][FILL_DEPTH_AGE] symbol=${position.symbol} class=${_closeClass ?? 'none'} depthSource=${_closeSnap?.source ?? 'none'} ageMs=${_fillDepthAgeMs ?? 'null'}`);
     }
     
     // ── B-EXIT-PROVENANCE OBJ-3 / #911 — THE INDEPENDENT WITNESS, STAMPED ON BOTH LEGS.
@@ -2324,8 +2328,16 @@ export class ActiveExecutionEngine {
         // ── B-EXIT-BOOK-AGE-STAMP OBJ-1 — the age of the depth the FILL walked. NOT from
         // `exitProvenance`: that payload is built once per position above the exit-condition
         // evaluation, so it carries a DECISION-time age. This one is taken at the fill.
-        // ⛔ NULL on the MAKER leg by construction (a resting fill consults no depth), and that null
-        // is discriminable by `exit_fee_mode = 'maker'`.
+        // ⛔ A NULL HERE IS FOUR-VALUED, NOT TWO. `exit_fee_mode` alone does NOT separate them —
+        // that column has exactly ONE writer, at :2296 inside this function, so every close that does
+        // NOT come through here lands NULL/NULL:
+        //   fee_mode='maker'  → a resting fill consulted no depth. The honest structural null.
+        //   fee_mode='taker'  → the taker branch ran and `getDepthSnapshot` returned null
+        //                       (cold or one-sided book). Also honest, and a different fact.
+        //   fee_mode IS NULL  → the row was NOT written by `closePosition` at all — `never_filled`,
+        //                       `closeAllPositions`, `engine_stop_cleanup`, `hard_reset`, or the two
+        //                       routes.ts manual paths — OR it predates this column.
+        //                       ⇒ USE `close_reason` AND `closed_at`, NOT `exit_fee_mode`.
         // ⛔ NOT the same QUANTITY across classes: crypto = live WS mini-book age; xStock =
         // `xstock_spot_ticker_snap` ROW age. Never pool them. `DepthSnapshot.source` is the
         // discriminator and the column comment says so.
