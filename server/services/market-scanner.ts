@@ -12,6 +12,7 @@ import { computeDirectionalBias } from '../core/metrics/directional-bias.js';
 import type { OHLCData } from '../types/market-regime.types.js';
 // P19-B5a: active-path pre_filter reject capture (gated on !isPassiveLearning).
 import { capturePreFilterReject } from './data-archive/signal-eval-archiver.js';
+import { toCanonical } from './utils/symbol-canonicalizer.js';
 import { tradingModeToRunMode } from './run-mode-controller.js';
 
 // B63.3: Local ATR helper (mirrors fx5-scanner.ts computeATRFromOHLC — 14-period Wilder)
@@ -623,6 +624,37 @@ export async function collectAdaptiveBatch(
     console.log(`[11.4C-R2][AdaptiveScan] Refilled batch: +${fillPairs.length} pairs from Kraken (total=${batch.length})`);
   }
   
+  // ── B-SCANNER-EGRESS-NORMALISE (#906/#909) — NORMALISE ONCE, HERE, AND ONLY HERE.
+  // `pair.symbol` is Kraken's own `wsname` (:563 `pairsObj[pairName]?.wsname`). Every egress
+  // below then treated it as the INTERNAL symbol, which it is not for two bases.
+  //
+  // ⛔ WHY THIS IS NOT COSMETIC — MEASURED AGAINST THE LIVE VENUE (RUNNING_ISSUES:4571):
+  //   XBT/USD -> 0 candles, `EQuery:Unknown asset pair`     <- the form WE were sending
+  //   BTC/USD -> 721 candles, ok
+  //   ETH/USD -> 721 candles, ok                            <- also a wsname; accepted
+  // Kraken's OHLC endpoint REJECTS Kraken's own wsname for Bitcoin. That null is cached by
+  // `getPairHistoryDays` (kraken.ts:648-653) and `passesHistoryFilter` fails CLOSED on null
+  // (:380-381, "be conservative & fail") => a permanent, silent rejection. Universe-wide the
+  // class is exactly TWO bases of 661: XBT and XDG (#909's sweep). Both were at ZERO trades.
+  //
+  // ⛔ WHY *HERE* AND NOWHERE ELSE — this is the ONE point where the batch is FINAL and
+  // UNCONSUMED. Earlier is unsafe: the ticker/pairInfo join at :600 keys on the RAW wsname,
+  // and the refill dedupe at :611 compares `usedSymbols` against `allPairs` in RAW form, so
+  // normalising above either breaks the join or silently admits duplicates. Later is worse:
+  // it would mean N call-site edits, i.e. a second convention to keep in step (#641).
+  //
+  // ⛔ `toCanonical`, NOT `normalizeToInternalSymbol` — AND THE DIFFERENCE IS DOGECOIN.
+  // The resolver's slashed branch (kraken-symbol-resolver.ts:94-99) short-circuits on a
+  // ONE-ENTRY table {XBT:BTC} and never reads its own `mapByWsPair`, so it returns XDG/USD
+  // unchanged. `toCanonical` (symbol-canonicalizer.ts:98-124) carries XBT->BTC AND XDG->DOGE.
+  // That resolver is a 🔒 LOCKED MODULE and its consolidation is homed to Phase 20 (#229),
+  // so it is not this batch's to edit.
+  //
+  // ✅ BLAST RADIUS, MEASURED NOT ASSUMED: `toCanonical`'s base table changes only XBT and
+  // XDG; XLM/XRP/XTZ are identity entries, and its quote entries are Z-prefixed forms that
+  // never appear in a wsname. The raw form stays recoverable at `pair.pairInfo.wsname`.
+  batch = batch.map(p => ({ ...p, symbol: toCanonical(p.symbol) }));
+
   const evaluatedSymbols = batch.map(p => p.symbol);
   
   // STEP 4: Apply FX5 filters to the adaptive batch
