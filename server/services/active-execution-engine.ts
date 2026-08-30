@@ -1408,7 +1408,11 @@ export class ActiveExecutionEngine {
           // exit-condition evaluation, for every position on every tick — not at the close.
           bookMid: _bookX ? (_bookX.bids[0].price + _bookX.asks[0].price) / 2 : null,
           bookAgeMs: _bookX ? _bookX.ageMs : null,
-          // ⛔ NULL ON EVERY BRANCH TODAY, AND STATED RATHER THAN QUIETLY DROPPED. OBJ-3 asks for
+          // ⛔ NULL ON EVERY BRANCH TODAY — OF *THIS PAYLOAD FIELD*, AND ONLY OF IT. The COLUMN
+          // `exit_ticker_bid` IS filled, from `_witness` at the persist site (`#911`, 2026-08-27).
+          // Read without that clause this is an absence claim about the column, which `#911`
+          // refuted — the same stale-absence corrected in the live DB comment 40 lines away.
+          // OBJ-3 asks for
           // the TICKER bid/ask as a second independent feed. The ticker handler COMPUTES both
           // (`kraken-websocket-adapter.ts:682-683`) and then DISCARDS them — they reach only a
           // debug ring buffer, and no per-symbol retention exists for the engine to read at close.
@@ -2340,7 +2344,9 @@ export class ActiveExecutionEngine {
         //                       ⇒ USE `close_reason` AND `closed_at`, NOT `exit_fee_mode`.
         // ⛔ NOT the same QUANTITY across classes: crypto = live WS mini-book age; xStock =
         // `xstock_spot_ticker_snap` ROW age. Never pool them. `DepthSnapshot.source` is the
-        // discriminator and the column comment says so.
+        // ⛔ THE DISCRIMINATOR IS `closed_trades.asset_class`, WHICH IS `.notNull()` AND IS ON THE
+        // ROW. `DepthSnapshot.source` is the IN-PROCESS form and is NEVER PERSISTED — naming it
+        // alone pointed a reader at an object they cannot reach from the table (Langston, Step 4).
         exitFillDepthAgeMs: _fillDepthAgeMs,
         // OBJ-3 (#911): the caller's payload wins if it ever carries one; otherwise the witness
         // read above. Both may legitimately be absent — a NULL here now means "no witness row",

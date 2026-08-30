@@ -1823,8 +1823,11 @@ export const closedTradesTable = pgTable("closed_trades", {
    *  ⛔ NOT THE SAME QUANTITY ACROSS CLASSES, AND THIS IS THE WHOLE REASON IT IS NOT CALLED
    *  `book_age`: `crypto_spot` = the live WS mini-book's age; `xstock_spot` = the ROW AGE of a
    *  `xstock_spot_ticker_snap` record, computed in SQL as `NOW() - captured_at`. A row age and a
-   *  book age are different measurements — NEVER pool them. `DepthSnapshot.source`
-   *  (`crypto_ws_book` | `xstock_ticker_snap`) is the discriminator.
+   *  book age are different measurements — NEVER pool them.
+   *  ⛔ DISCRIMINATE ON `closed_trades.asset_class`, WHICH IS `.notNull()` AND IS ON THE ROW.
+   *  `DepthSnapshot.source` (`crypto_ws_book` | `xstock_ticker_snap`) is the IN-PROCESS form and
+   *  is NEVER PERSISTED — naming it alone sends a reader to an object they cannot reach from the
+   *  table (Langston, Step 4).
    *  ⛔ A NULL IS FOUR-VALUED AND `exit_fee_mode` DOES NOT SEPARATE THEM ON ITS OWN — that column
    *  has exactly one writer (inside `closePosition`), so any close that does not come through there
    *  lands NULL/NULL. `maker` = a resting fill consulted no depth; `taker` = the walk ran and
