@@ -1,6 +1,7 @@
 # B-SCANNER-EGRESS-NORMALISE — CHANGE LIST (Step 4)
 
-**READY AT: `origin/migration/aws-supabase` @ `827ecb359`** · **1 file, +32 / −0** *(30 of the 32 lines are the comment)*
+**READY AT: `origin/migration/aws-supabase` @ `218dbfb72`** *(code at `0b18ee530`)* · **1 file changed, 1 executable statement** *(the rest is the comment)*
+⛔ **SUPERSEDES the `827ecb359` framing: a third reader found that version UNSAFE (§11), and the provenance read Kyle ordered settled the module choice on citations (§12).**
 **change-class:** `architecture` *(declared up — see the scope's header; downgrade at will)* · **Owner:** CC-C · **Phase 19, plan row 5**
 **Gate for this dispatch: the diff. One ask.**
 
@@ -58,3 +59,31 @@
 - **`OBJ-1b` Dogecoin:** a `DOGE/`-base pair APPEARS in the evaluated set. **One line settles it.** ⚠️ **May FAIL — see §6.3; that would be a real result, not a delay.**
 - **`OBJ-6` controls:** XRP, SUI, LINK, ADA still evaluated, and **still rejecting on VOLUME rather than history** — ⛔ **a control shifting to `history failed` is an unmistakable regression.**
 - ⛔ **`OBJ-3` may NOT be verified from the `already_active` counter** — it reads a constant 0 (`routes.ts:7748-7758`, `#5415`).
+
+
+---
+
+## 8. ⛔⛔ WHAT CHANGED AFTER THE FIRST DISPATCH — READ THIS BEFORE THE DIFF
+
+### 8.1 ⛔ MY FIRST VERSION WAS UNSAFE. GUARDED.
+`p.symbol` is **NOT always slashed** — `:564` is `pairsObj[pairName]?.wsname || pairName` and `wsname` is **optional** (`kraken-pair-metadata-service.ts:15`). On a non-slashed input `toCanonical` leaves its safe branch: **Pattern 1 (`:188-192`) splits on `lastIndexOf('Z')` ⇒ `XTZUSD → T/USD`, silently wrong**, and the `PF_` branch (`:157-166`) **can THROW inside an unguarded `.map` on the scan path.** ⇒ ✅ **slashed-only guard added; a non-slashed entry is now byte-identical to today.**
+⛔ **AND MY "the raw form stays recoverable at `pair.pairInfo.wsname`" WAS FALSE** for exactly those entries — `wsname` is undefined precisely when it bites.
+
+### 8.2 ⭐⭐ THE JUSTIFICATION IS STRONGER THAN "TWO COINS DO NOT TRADE" — **INVARIANT T2 IS NOT HOLDING**
+`bridge/canonical/DawnTrader_System_Invariants_Design_Guarantees.md:30` — ***"INVARIANT T2: Maximum one open position per symbol at any time."***
+**Its enforcing test is `activeTradeSymbols.has(pair.symbol)` — a RAW venue name against a set built from the `trades.symbol` DB column, which is internal form.** ⇒ ⛔ **for `XBT`/`XDG` it can never match ⇒ T2 IS CURRENTLY UNENFORCEABLE FOR BITCOIN AND DOGECOIN, and a Bitcoin pair with an open position has been re-evaluated every cycle.** ✅ **This batch repairs a founding invariant.**
+
+### 8.3 ✅ THE MODULE CHOICE IS DECIDED, ON THREE CITATIONS — NOT PUT TO YOU AS A QUESTION
+⚠️ **Three modules are each designated authoritative in three documents** *(Phase-8 history → the resolver; execution-flow §3.1 → the canonicalizer; `symbol-normalize.ts:9` → itself)*. **That is `#229` at its root: the ambiguity is in the founding record.**
+⭐ **THE TIE IS BROKEN BY THE NEWEST MODULE, IN WRITING.** `symbol-normalize.ts:88-95` fails soft with **`'crypto_spot raw form not handled — use server/services/utils/symbol-canonicalizer.ts'`** and states *"we recommend callers continue to use the legacy canonicalizer for crypto raw forms."* **And mechanically `normalize()` cannot do this job: `XBT/USD` passes its canonical regex and comes back unchanged.**
+⇒ ✅ **`toCanonical` it is. The resolver stays untouched — locked, cannot resolve `XDG`, and homed to `#229`'s Phase-20 consolidation.**
+
+### 8.4 ⛔ THE PLACEMENT ARGUMENT I GAVE YOU WAS PARTLY FALSE — HERE IS THE HONEST VERSION
+- **"The only point" is true of an INTERVAL `(614, 658)`, not a point** — everything between is comment.
+- ⛔ **"Later would need N call-site edits" IS FALSE.** `kraken.ts:296` hands the string to Kraken **verbatim, no resolver** ⇒ **one edit at the venue boundary would fix every caller of `getOHLCData`/`getPairHistoryDays`.**
+- ⚠️ **THEY ARE NOT EQUIVALENT, and that is the real argument for the scanner: a venue-boundary fix does NOT repair the membership joins in §8.2, so it would leave INVARIANT T2 broken.** ⛔ **That is my reasoning; attack it.**
+
+### 8.5 ⚠️ CARRIED, NOT FIXED
+- **The designated handler for crypto RAW forms (`toCanonical`) is unsafe on raw forms** (§8.1). **Filed to `#229`.** This batch avoids it via the guard.
+- **Two resolvers now compose** — `normalizeToInternalSymbol(toCanonical(x))` at `fx5-scanner.ts:990` — different tables, different quote handling, **untested composition.** `#229`.
+- ⛔ **NO TEST exercises this function's symbol form.** The suite does not guard the change ⇒ **all the weight is on `OBJ-6`'s live controls.**
