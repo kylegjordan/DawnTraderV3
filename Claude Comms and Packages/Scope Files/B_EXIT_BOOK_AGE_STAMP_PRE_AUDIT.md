@@ -75,6 +75,20 @@
 **And the live DB comments do not distinguish them:** `exit_book_age_ms` reads *"Age of the order-book snapshot at close"* — **no instant qualifier** — while `entry_book_age_ms` is precise about its own carve-out.
 ⇒ ⛔ **ANYONE COMPARING ENTRY BOOK AGE TO EXIT BOOK AGE TODAY IS COMPARING TWO DIFFERENT INSTANTS, AND NOTHING SAYS SO.** **Measured: 662 closes, `entry_book_age_ms` on 17, `exit_book_age_ms` on 16** — small, post-deploy, and about to grow. **This is exactly the wrong-object class the batch exists to end, already live in the schema.**
 
+### ⭐⭐ FINDING-E2 — **THERE ARE *THREE* INSTANTS, NOT TWO, AND THE ENTRY COLUMN'S OWN COMMENT OVERSTATES ITS PRECISION**
+
+**Re-derived: on the ENTRY the snapshot is fetched at `active-execution-engine.ts:3288` (`_evaluateOpenDepthGate`) and the WALK consumes it at `:3438` (`bookAsks: _gate.snapshot.asks`) — with THREE `await`s in between, including `validatePaperOrderWithVenue` (a venue round-trip) and `evaluateXstockPriceLiveness`.**
+⇒ ⛔ **So `entry_book_age_ms` is the age at the DEPTH-GATE evaluation, not at the fill — and its own comment at `:3675-3676` calls it *"★ A REAL book age at the REAL fill instant."* That is not literally true.**
+
+| column | instant | gap to the walk |
+|---|---|---|
+| `exit_book_age_ms` | **exit DECISION-time** (`:1382`) | the whole exit evaluation |
+| `entry_book_age_ms` | **entry GATE-time** (`:3288`) | ⚠ **3 awaits, incl. a venue call** |
+| ⭐ *(new)* `exit_fill_book_age_ms` | **FILL-time** | ⭐ **snapshot `:1997`, walk `:1999` — two lines, NO await between** |
+
+⭐ **THE NEW COLUMN WOULD BE THE TIGHTEST OF THE THREE.** ⚠ **And that is the point: a reader comparing any two of these today gets no warning that they are different instants, and one of the three actively claims to be an instant it is not.**
+**§9.4 DISPOSITION: (2) ADDED TO THIS BATCH, folded into P8.** P8 already corrects instant-precision on the exit columns; **leaving the entry comment overstating its own would leave the pair misleading in the opposite direction, which defeats the item.** ⛔ **A COMMENT EDIT ONLY — no entry-side behaviour, and the fence's `entryPriceProducer:` count assertion (`:166`) is untouched.**
+
 ### ⛔ FINDING-F — **THE LIVE DATABASE ASSERTS AN ABSENCE THAT 18 ROWS REFUTE**
 The `2026-08-26` migration's `COMMENT ON COLUMN closed_trades.exit_ticker_bid` reads: *"**NOT YET INSTRUMENTED** - NULL on every branch at the deploy ref, both classes … OBJ-3 OPEN."*
 ⛔ **`#911` wired the witness on 2026-08-27** (`active-execution-engine.ts:2015-2019`). **MEASURED NOW: `exit_ticker_bid` is NON-NULL on 18 of 662 closes.**
@@ -114,7 +128,7 @@ The `2026-08-26` migration's `COMMENT ON COLUMN closed_trades.exit_ticker_bid` r
 | **P5** | **`kraken_rest_poller` DOES NOT SPLIT.** Record the reason **in the union comment**, naming `#951` and the three arms. | FINDING-I, condition 2 |
 | **P6** | **Union comment carries the two things a later reader will otherwise get wrong:** (a) `_mid` records the **KIND** and says **NOTHING** about which BBO — `#952`'s axis is untouched; (b) `kraken_ws_ticker` is a **PREFIX of `kraken_ws_ticker_v1`** ⇒ ⛔ **cohort queries ENUMERATE, never `LIKE`.** | FINDING-H, condition 3 |
 | **P7** | **OBJ-1 — the fill book age.** `let _fillBookAgeMs: number \| null = null` **above** the `if` at `:1982`, assigned from `_closeSnap.ageMs` in the taker branch, read at the persist. ⭐ **The `_witness` at `:2015-2019` is the precedent: placed below both legs deliberately, because the maker leg consults no book.** New column **`exit_fill_book_age_ms`**. | FINDING-E |
-| **P8** | **COMMENT PASS — four sites plus two corrections.** `active-execution-engine.ts:1389`, `:1923-1925`, `shared/schema.ts:1807-1810`, the SQL `COMMENT ON COLUMN` statements. ⛔ **`exit_book_age_ms` gains its INSTANT qualifier (decision-time, vs `entry_book_age_ms`'s fill-time).** ⛔ **`exit_ticker_bid`/`_ask` lose "NOT YET INSTRUMENTED" — 18 rows refute it.** ⚠️ **The "no book for that class" line is TRUE of `exit_book_mid`/`exit_book_age_ms` and only MISLEADING as a class-level claim — it gains a BOUND, not a correction.** | FINDING-E, FINDING-F |
+| **P8** | **COMMENT PASS — four sites plus THREE corrections (E2 added).** ⭐ **`entry_book_age_ms`'s *"at the REAL fill instant"* is corrected to GATE-time (FINDING-E2).** `active-execution-engine.ts:1389`, `:1923-1925`, `shared/schema.ts:1807-1810`, the SQL `COMMENT ON COLUMN` statements. ⛔ **`exit_book_age_ms` gains its INSTANT qualifier (decision-time, vs `entry_book_age_ms`'s fill-time).** ⛔ **`exit_ticker_bid`/`_ask` lose "NOT YET INSTRUMENTED" — 18 rows refute it.** ⚠️ **The "no book for that class" line is TRUE of `exit_book_mid`/`exit_book_age_ms` and only MISLEADING as a class-level claim — it gains a BOUND, not a correction.** | FINDING-E, FINDING-E2, FINDING-F |
 | **P9** | **GOVERNANCE — record the SPLIT EPOCH (deploy sha + UTC) in `SYSTEM_IMPACT_MAP.md` `:317-320`**, and state that a cohort query spanning it must enumerate both old and new members. | condition 3 |
 | **P10** | **VERIFICATION.** OBJ-2: a post-deploy close carries a split member; a forced one-sided book yields `_last`. OBJ-1: coverage **bounded on `closed_at >= 2026-07-15T21:43:55Z`** and excluding **all SIX** non-stamping close paths; **crypto verified by a paired log line at the fill site**, never by reconstruction. | FINDING-H, r6, r3 MATERIAL-D |
 
