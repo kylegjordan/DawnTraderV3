@@ -12027,6 +12027,43 @@ Spawning a new asset class = inserting rows for whatever differs from the defaul
 - **Cycle-break batch (TBD)** moves `kraken-websocket-adapter.ts` to `exchanges/kraken/` after DI inversion of the `live-pricing-adapter` dependency.
 - **Filter-as-first-class batch (B82/B83 TBD)** promotes filters to `module_name='filter:X'` rows in `module_constants` (Synthesis §3.3 first-class filter family).
 
+
+---
+
+## ⭐⭐ xSTOCK TRADING SESSIONS — KRAKEN'S FOUR WINDOWS, AND WHY THE PRICING BASIS IS NOT THE SAME IN ALL FOUR
+
+> **RECORDED 2026-08-30, Kyle-directed: *"Make sure that it is included in documentation where it cannot get lost, and that we're not fumbling around trying to figure this out a month from now."***
+> **SOURCE: Kraken's own published documentation** — `support.kraken.com/articles/market-hours-explained` and `support.kraken.com/articles/xstocks-faq`. ⛔ **THIS IS VENUE FACT, NOT OUR INFERENCE.** Re-read it at the source before relying on it for a decision; venues change.
+
+### THE FOUR SESSIONS — all times **US Eastern**
+
+| session | window (ET) | what the price is quoted AGAINST |
+|---|---|---|
+| **Market open** | **09:30 - 16:00** | ⭐ **the live underlying equity market.** Market makers *"actively quote around real-time reference pricing"*, so the token tracks the stock closely. |
+| **After-hours** | **16:00 - 20:00** | the underlying's **extended-hours** session |
+| ⛔ **Overnight** | **20:00 - 04:00** | ⛔⛔ **NOT a live equity reference. Kraken, verbatim: market makers *"use alternative data sources including ATS platforms, index futures, and internal models to approximate fair value."*** Overnight venue is **Blue Ocean ATS** (its own session is 20:00-04:00 ET, Sun-Thu). |
+| **Pre-market** | **04:00 - 09:30** | the underlying's pre-market session |
+
+**THE WEEK:** trading runs **Sunday 20:00 ET → Friday 20:00 ET**. Closed weekends and US market holidays.
+⚠️ **A 24/7 SUBSET EXISTS AND IS GROWING** — Kraken has extended a named list (TSLAx, QQQx, SPYx, NVDAx, CRCLx, AAPLx, HOODx, MSTRx, GLDx, GOOGLx) to continuous trading. **Do not assume 24/5 uniformly across the universe; check the current list.**
+
+### ⛔⛔ THE CONSEQUENCE THAT COST US — READ THIS BEFORE TREATING AN xSTOCK PRICE AS TRADEABLE
+
+**Kraken states plainly: *"Spreads are wider outside market hours."*** And at **20:00 ET the pricing basis CHANGES** — every market maker stops quoting against a live equity reference and starts quoting against models and futures. ⇒ ⭐ **THE WHOLE UNIVERSE RE-QUOTES AT THAT BOUNDARY.**
+
+**MEASURED ON OUR OWN DATA (`#958`):** at **00:15 UTC = 20:15 ET**, ~15 minutes into that transition, **every subscribed symbol emits a frame inside a sub-second burst**, and our engine has closed positions on those prices — `WEN` at **13.31** having been **8.01** seconds earlier; `TGT` at **106.075** while our archive holds a normal **157/167** for the same instant. ⛔ **That one minute is 27.1% of all xStock stop-outs and 29.5% of target-hits.**
+
+⇒ ⛔⛔ **THE VENUE IS BEHAVING AS DOCUMENTED. WE ARE THE ONES READING A SESSION-TRANSITION RE-QUOTE AS A TRADEABLE PRICE.**
+
+### ⚠️ WHAT WE CANNOT CURRENTLY DO ABOUT IT WITHOUT WORK — stated so nobody scopes it as a one-liner
+
+⛔ **WE DO NOT KNOW WHICH SESSION A PRICE CAME FROM, AT THE POINT WHERE IT MATTERS.**
+- Kraken tags each quote with `is_extended_hours` — **and that tag exists in exactly one place in our system: a write into the ARCHIVE** (`equity-spot-archiver.ts:157`). **The live mark the exit path evaluates against never carries it.** *(Control: a genuinely-read field like `bidQty` returns 12 usages.)*
+- ⛔ **AND THE TAG IS A `boolean` WHILE THIS IS A FOUR-WAY DISTINCTION.** It collapses overnight, pre-market and after-hours into one bucket — **and the 20:00 boundary sits between two of the three it cannot separate.**
+
+✅ **THEREFORE THE HONEST SESSION KEY IS THE TIMESTAMP, EVALUATED AGAINST THE TABLE ABOVE. The boolean is a cross-check on that, never the key.**
+⚠️ **And the table above is the thing that must not go stale: it is a VENUE fact with a US-holiday calendar and a DST shift behind it.** `xstock_spot/market-hours.ts` already models the weekend boundary; **it does not model the four sessions.**
+
 ## Phase 24 retrospective — xstock_spot full onboarding (2026-05-10)
 
 Phase 24 closed with xstock_spot fully integrated across 9 sub-batches: **B79** (dormant scaffold + canonical regime/strategy whitelist + 18-stage walkthrough), **B79.TEC** (per-asset-class TEC config with HARD-FAIL boot), **B79.0a** (live observability scanner via centralClock subscription, telemetry partitioning via separate-instance triad, asset-class-aware data-freshness gate), **B79.0b** (N3+N4 cleanup pattern + signature-guarded wildcard DELETE), **B79.0c** (per-symbol predicate for 24/7 vs 24/5 within an asset class — Kraken Phase 1 names), **B79.0d** (ORB strategy real implementation — detect logic + strategy-engine dispatch + regime mapping + Layer-1 thresholds + ablation auto-include + DB-tunable rollback), **B79.0f** (ticker-collision disambiguation — the SUI bug class — with `XSTOCK_SPOT_KRAKEN_COLLISIONS` set + WARN log + provenance + 4862-row backfill), **B79.0g** (persistence-at-trade-open with `vts_open_trades` table + bootstrap-with-re-resolve + atomic-close-time-deferred-as-pinned-batch), **B79.0e** (`equity_*` → `xstock_*` namespace cleanup — 172 DB objects in single transaction).
