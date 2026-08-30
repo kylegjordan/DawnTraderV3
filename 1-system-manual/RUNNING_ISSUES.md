@@ -5830,3 +5830,21 @@ Corroborated by `active-portfolio-manager.ts:202`'s own comment: *"No direct pro
 ⛔ **SO THIS IS NOT AN OWNERSHIP FAILURE — IT IS A NOTIFICATION FAILURE.** `system-alerts.ts:585` (`if (a.severity === 'info') continue;`) means **`info` never pushes**, so seven correctly-assigned verifications sat 15-23 days **without their named owners ever being told they were due.** The routing worked; the doorbell was disconnected.
 ★ **THAT IS A STRICTLY SHARPER STATEMENT OF `#942` than "info can rot," and it changes what the fix has to do:** the repair is not to re-assign or chase these — **it is to make an `info` alert reach the owner it already names.** Recorded on `#942` for `B-ALERT-LIFECYCLE`; **decision remains Kyle's.**
 ⚠️ **Still not taken by me, and now for a stronger reason than lane discipline: taking them would repair seven instances and leave the doorbell disconnected.**
+
+
+---
+
+### #942 CORROBORATION 2026-08-30 (c) — ⭐ **THE POSITIVE CONTROL THIS ISSUE HAS BEEN MISSING WAS ALREADY SITTING IN THE DATA**
+
+`#942` argued from the LINE (`system-alerts.ts:585`) and, in (a)/(b), from seven rotted instances. **Neither leg is a control: an instrument that only ever produced the failing case cannot show the mechanism is the CAUSE.** *(Exactly the objection Langston raised against my `threshold=0` guard evidence hours earlier — the same shape, one issue over.)*
+
+⇒ ✅ **THE CONTROL EXISTS AND IT IS CLEAN. Same dispatcher, same protocol, same repo, same author — different severity, opposite outcome:**
+| alert | severity | age / state | outcome |
+|---|---|---|---|
+| the **seven** in (b) | **`info`** | 15-23 days **active, un-acked** | ⛔ **never pushed; owners never told** |
+| `2093a98a` — F-G-1 close window, owner CC-C | **`warning`** | `scheduled`, fires 2026-09-04T16:08:02 | ✅ **will push and re-surface** |
+| `65a1379e` — `B-EXIT-BOOK-AGE-STAMP` close criterion | **`warning`** | `scheduled`, fires 2026-09-06T12:05:09 | ✅ **will push and re-surface** |
+
+⇒ ★★ **SEVERITY IS THE ONLY VARIABLE THAT DIFFERS, AND IT PREDICTS THE OUTCOME PERFECTLY.** That upgrades `#942` from *"the code says `info` is skipped"* to a mechanism claim with a working comparison behind it.
+⚠️ **HONEST LIMIT: the two `warning` rows are `scheduled`, not yet fired — so the positive arm is PREDICTED FROM THE SAME CODE PATH, not yet OBSERVED delivering.** It becomes an observed control on 2026-09-04. **Stated rather than glossed, because a predicted control is weaker than a fired one.**
+✅ **AND IT ANSWERS A QUESTION I OWED MYSELF: my own two open batches are NOT exposed to this defect** — both are `warning`, so the mechanism that lost seven verifications cannot silently lose mine. **Checked rather than assumed, because I had just finished proving the failure exists.**
