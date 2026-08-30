@@ -847,6 +847,27 @@ MSYS2_ARG_CONV_EXCL='*' git show "…:.claude/memory/MEMORY.md"               ->
 
 ---
 
+### #956 OPEN 2026-08-30 (CC-C; Langston-ruled a SYSTEM defect on the round record) — ⛔⛔ *“WAS THIS DECIDED, AND WHERE?”* IS NOT ANSWERABLE BY ANY SINGLE SEARCH — AND THAT, NOT CARELESSNESS, IS WHY THIS AUDIT WAVERED
+
+**SEVERITY: high (governance/method; it gates the certification of every disposition in the machinery audit). OWNER: CC-C. DISPOSITION: §9.4 (3) — own batch, `B-DECIDED-INTENT-INDEX`, placed in `PHASE_19_PLAN` at row **3b.g**, BEFORE the exit-path redesign and AFTER `B-XSTOCK-BOOK-LADDER` (3b.d). Langston rules on the placement.**
+
+**MEASURED, IN ONE AUDIT: three times I reported a deliberate, documented, REVIEWED decision as a defect.**
+| # | what I filed as a defect | the citation that dissolved it | where it lived |
+|---|---|---|---|
+| 1 | rule 1b — *“the actionable gate must become producer-aware”* | *“the gate reads `source` and NEVER `producer` … **design (B)'s defining property**”* | **a CODE HEADER** (`live-pricing-adapter.ts:92-97`) |
+| 2 | P6 — *“VTS honours the clamp and the active engine discards it; one is wrong”* | *“No regression to fill conventions … **VTS clamps to level. Paper returns exit-at-currentPrice.**”* | **a COMPLETION REPORT**, numbered objective 7 |
+| 3 | §12.6 item 7 — *“an alternative nobody has considered”* | the concurrency reversal, Kyle-directed and Langston-code-verified, with its reasoning | **a SCOPE FILE** (`ITEM_4_ARCHITECTURE_INVESTIGATION`) |
+
+⛔ **NONE WAS IN `RUNNING_ISSUES`. I grepped the ledger each time and called that a provenance read.**
+⭐⭐ **AND IT IS NOT ONE SESSION'S CARELESSNESS — WHICH IS THE WHOLE REASON THIS IS FILED AS A SYSTEM DEFECT: ME AND TWO INDEPENDENT FRESH READERS ALL DEFAULTED TO THE LEDGER.** The ledger is the corpus the rules name most prominently and the only one with a searchable shape.
+⚠️ **§9.5(b-ii) ALREADY SAYS *“grep `RUNNING_ISSUES` + `BATCH_CATALOG` + the completion reports”* — and all three of us still went to the ledger.** ⇒ ⛔ **A RULE THAT NAMES A CORPUS NOBODY CAN SEARCH IS NOT A RULE THAT FIRES. THE FIX IS AN INDEX, NOT A STRONGER SENTENCE.**
+
+**LANGSTON'S RULING THAT MAKES IT BLOCKING:** *“findings survive as MEASUREMENTS and are NOT CERTIFIED AS DISPOSITIONS.”* ⇒ **every sentence in the audit of the form *“this is wrong / unintended / nobody decided this”* is UNCERTIFIED until this index exists** — and that is true **wherever it sits**, not only in the proposal sections. ★ *My own offered split (findings survive, proposals do not) was ruled **the wrong cut, and one that failed in my own favour**.*
+
+**DELIVERABLE (shape, not fix — rule 15):** one searchable index of decided intent — **batch id → numbered objectives → the `file:line` or document that carries the decision** — spanning **completion reports, scope files and load-bearing code headers.**
+
+---
+
 ### #955 OPEN 2026-08-30 (CC-C; Kyle-directed — the question this audit failed to answer three times) — ✅✅ **ANSWERED: THE xSTOCK "LOW BID" IS A REAL, SYMMETRIC, TWO-SIDED WIDENING. IT IS KRAKEN'S MARKET, NOT OUR PARSER.**
 
 **SEVERITY: n/a — THIS ENTRY IS AN ANSWER, NOT A DEFECT. OWNER: CC-C. DISPOSITION: §9.4 (5) — the "broken bid" reading is WITHDRAWN, carrying the measurement that dissolves it. The `#943` low-bid LEG CLOSES; `#943`'s remaining 00:15 leg stays open and is narrowed (see below).**

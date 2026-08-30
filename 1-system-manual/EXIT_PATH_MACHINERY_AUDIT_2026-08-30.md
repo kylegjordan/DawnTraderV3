@@ -79,10 +79,13 @@
 ## 3. ⛔ THE xSTOCK "ORDER BOOK" IS NOT A BOOK
 
 **We subscribe to `ohlc` and `ticker` only** (`equity-spot-archiver.ts:237-247`). **We never subscribe to `book`.**
-**Everything downstream that thinks it is asking a book is answered by a single ticker row:** `depth-source.ts:49-70` does `SELECT ask, ask_qty, bid, bid_qty FROM xstock_spot_ticker_snap … ORDER BY captured_at DESC LIMIT 1` and synthesises a one-level ladder.
+⛔⛔ **CORRECTED 2026-08-30 (Langston ruling, re-derived by me at the ref) — AND THE CORRECTION MAKES THIS FINDING STRONGER, NOT WEAKER.** I called the one ticker row *"synthesised"*, *"a single fake level"*, *"not a book"*. **THAT IS WRONG.** `B_2_LQ_SWEEP_RESULTS.md:57`, a Kyle-pointed, Langston-resolved decision (2026-06-02), states verbatim: *"**only `bid`/`ask`/`bid_qty`/`ask_qty` are Kraken's real executable book** (so our depth metric ask×ask_qty reads REAL Kraken depth, not the underlying)"*. ⇒ ✅ **THE ROW IS REAL EXECUTABLE TOP-OF-BOOK. Nothing is being fabricated.**
+⭐⭐ **THE ACTUAL FINDING, AND IT IS A DIFFERENT AND SHARPER ONE: THE SAME RATIFIED DECISION NAMES THE LADDER AS PART OF THE BINDING CONSTRAINT —** *"the binding execution constraint is live order-book DEPTH (`bid_qty`/`ask_qty` **+ the book ladder**)"* — **and we implemented the first half and never built the second.** ⇒ **NOT "a component answering a question it cannot answer." A DOCUMENTED DECISION, HALF-IMPLEMENTED.** *(Which is also why `#955`'s answer holds: the quote we store is real, and what is missing is the depth behind it.)*
+
+**What downstream actually receives is ONE LEVEL of that real book:** `depth-source.ts:49-70` does `SELECT ask, ask_qty, bid, bid_qty FROM xstock_spot_ticker_snap … ORDER BY captured_at DESC LIMIT 1` and wraps it as a one-level ladder.
 
 ⛔⛔ **AND OUR OWN CODE RECORDS THAT A REAL BOOK EXISTS AND IS NOT CONSUMED** — `imf-liquidity.ts:18-22`: *"verified via the `ws-equities` `book` channel = a real CLOB depth ladder."*
-⇒ ★ **Every xStock spread, depth and "bid we would sell into" is inferred from one row of a channel that is not a book.** **This is the clearest instance of the layered-design problem: a component built for one purpose is being consulted by another that needs something it cannot provide.**
+⇒ ★ **Every xStock spread, depth and "bid we would sell into" is REAL but is TOP-OF-BOOK ONLY — one level of a ladder the ratified decision says we need.** **This is the clearest instance of the layered-design problem: a component built for one purpose is being consulted by another that needs something it cannot provide.**
 
 ---
 
@@ -209,7 +212,7 @@ And the editing left the corpus self-contradictory:
 
 ---
 
-### 8.1 ⛔⛔ THE HEADLINE: **THE FOUNDING ARCHITECTURE NEVER SAID WHICH PRICE DRIVES A TRADE**
+### 8.1 ⛔⛔ THE HEADLINE: **THE FOUNDING CORPUS NEVER SAID WHICH PRICE DRIVES A TRADE** *(scope: those 14 files — qualified 2026-08-30 per the ruling; NOT a claim about the whole record)*
 
 **RE-DERIVED ACROSS ALL 14 FILES, WITH POSITIVE CONTROLS:**
 
@@ -280,7 +283,9 @@ exitSlippage = |triggerPrice - actualExitPrice| × quantity
 
 ---
 
-### 8.4 ⛔ BREAK-EVEN AND MAKER/TAKER: **NEVER DESIGNED. NOT ONCE.**
+### 8.4 ⛔ BREAK-EVEN AND MAKER/TAKER: **ABSENT FROM THE FOUNDING CORPUS — NOT ONCE IN THOSE 14 FILES**
+
+> ⛔ **HEADLINE QUALIFIED 2026-08-30 (Langston ruling). It read *"NEVER DESIGNED. NOT ONCE."* — a claim about the WHOLE RECORD, measured on a 14-file design-era population.** That is rule 29(a) and `#453` at once. **The measurement is unchanged and correct; its SCOPE is `bridge/canonical/` and nothing wider.** ★ *Most bodies in §8 already carry the qualifier; the headlines did not, and headlines are what get quoted.*
 
 **RE-DERIVED, WITH CONTROLS:**
 
@@ -948,3 +953,59 @@ And **objective 4**: *"Preserves paper's **'exit at currentPrice' fill conventio
 ⇒ ⭐⭐ **AND THE FOUNDING DESIGN ALREADY HAD THE RIGHT SHAPE (§8.2): DECIDE ON ONE PRICE, FILL AT ANOTHER.** *(Deleted 2026-01-18; recoverable only at `485699a2f^`.)*
 > ✅ **THE RECOMMENDATION, STATED AS A RECOMMENDATION AND NOT AS A FINDING: the exit TRIGGER should read a value estimate — the last trade, or the mid, whichever proves more stable — and the FILL should be modelled at the transactable side, depth-walked. Today we use one number for both, and it is the wrong one for each job.**
 ⚠️ **This is a PROPOSAL. It rests on §14.2, which is measured; it does not yet rest on an outcome test. `OBJ-0` remains the instrument that would confirm or refute it — and its arms should now be TRIGGER-side vs FILL-side, not mid vs bid.**
+
+---
+
+## 15. ⛔ LANGSTON'S RULING ON THE ROUND RECORD — **MY SPLIT WAS THE WRONG CUT, AND IT FAILED IN MY OWN FAVOUR**
+
+> **THE GATE I ASKED:** *"Three times in this audit I reported a deliberate, documented, reviewed decision as a defect. Does that pattern invalidate the FINDINGS (§1-9) or only the PROPOSALS (§10-13)?"*
+> **HIS RULING: NEITHER.** *"The split you offered is the wrong cut, and it fails in your own favour."*
+
+### 15.1 ⭐ THE CORRECT CUT — IT IS A **CLAIM TYPE**, NOT A SECTION NUMBER
+
+> **THE EXPOSED CLASS IS *DISPOSITIONAL CLAIMS* — any sentence asserting that current behaviour is UNINTENDED, UNDECIDED or UNSPECIFIED — WHEREVER IT SITS IN THE DOCUMENT.**
+> **DESCRIPTIVE claims — what the code does, what the DB holds, what a counter reads — are untouched, because they never depended on the corpus.**
+
+★★ **WHY MY CUT FAILED IN MY OWN FAVOUR: it quarantined the damage to the sections I had already retracted, and left every normative sentence in §1-§9 standing.** ⛔ **My findings sections are not uniformly descriptive, and I wrote them as though they were.**
+
+**His three proofs, all verified by me:**
+1. ⛔ **§8.6 ALREADY CONTAINED A SELF-CAUGHT INSTANCE INSIDE THE "SURVIVING" RANGE** — my own parenthetical records a §1-9 conclusion the batch record refuted. **I caught that one. Nothing said it was the only one.**
+2. ⛔ **§1.1's GLOSS *IS* WITHDRAWN RULE 1b, STILL STANDING.** §12.1 rescued the measurement and moved the defect to the write side — correctly — **but the normative sentence in §1.1 was never corrected.** *(Fixed in this pass.)*
+3. ⛔ **§8's HEADLINES WERE THE MOST EXPOSED TEXT IN THE DOCUMENT.** *"NEVER DESIGNED. NOT ONCE."* is a claim about the **whole record**, measured on a **14-file design-era population** — rule 29(a) and `#453` simultaneously. ★ *"Most of the bodies already carry the qualifier; the headlines do not, and the headlines are what get quoted."* **Both §8.1 and §8.4 headlines now carry their scope.**
+
+### 15.2 ✅ THE TEST HE SET ME, RUN — AND §1.2 IS **NOT** A FINDING
+
+**He named my own first-nominated attack candidate and pointed out I had not searched the corpus I had just finished naming as the one I keep missing.** Fair, and I had not.
+
+**SEARCHED: `P19_B7_2c_SCOPE.md`, `P19_B7_2c_PRE_AUDIT.md`, `P19_B7_2c_COMPLETION_REPORT.md`** — the batch that shipped the resting-maker exit, **which Langston reviewed and approved.**
+| term | hits across all three |
+|---|---|
+| `bid` · `ask` · `midpoint` · `which side` · `transactable` | **0 · 0 · 0 · 0 · 0** |
+| ✅ **CONTROL** — `maker` in the scope | **26** |
+
+⇒ ✅ **THE CORPUS IS REAL, THE SEARCH WORKS ON IT, AND THE SIDE QUESTION IS GENUINELY ABSENT.** `SYSTEM_MANUAL.md:540` records the mechanism and its safeguard (*"venue-only-gated price — a phantom can't phantom-fill"*) **and never addresses the side.**
+⇒ ⛔ **SO §1.2 IS NOT DECIDED-AGAINST-ME — BUT IT IS ALSO NOT A DEFECT. IT IS RULE-24 OUTCOME (2): AN UNDOCUMENTED CONVENTION, WHERE WHAT IS MISSING IS A DECISION.** **Reclassified. It may not be cited as a defect until someone decides which side a resting sell should trigger on.**
+
+### 15.3 ✅ WHAT SURVIVES WITHOUT RE-DERIVATION (his list, adopted verbatim)
+
+**Pure measurement, controls stated:** §1.4 · §5's 705 trailing states · §12.0's dead-caller proof · §13.2's `db.update(trades)` kill-switch blindness · §13.3's correction · the 19/19 provenance stamps. ➕ **And `#955`/§14's symmetric-widening answer, which is measurement with two controls and was produced after his ruling.**
+
+⚠️ **STILL OWED — §4 BULLET 1 IS DISPOSITIONAL AND UNRE-DERIVED.** *"It is not a print"* is a claim about a naming convention, the same shape as rule 1b. **The TABLE is measurement and survives; that one sentence does not, until the completion reports are searched for it.**
+
+### 15.4 ⛔⛔ AND THE CORPUS PROBLEM IS A **SYSTEM** DEFECT — NAMED AND PLACED, AS HE DIRECTED
+
+> **His ruling, and it is the part that is not mine to fix by trying harder:** *"Three misses, three citations, all in completion reports or code headers, none in the ledger — and you grepped the ledger each time and called it a provenance read. **That is a SYSTEM defect, not a discipline defect: nothing in our governance makes 'was this decided, and where' answerable by a single search.** `RUNNING_ISSUES` holds open problems; **decided intent lives in completion reports, scope files and code headers, unindexed.**"*
+
+⇒ ★★ **THIS IS THE ROOT CAUSE OF EVERY WAVER IN THIS AUDIT, AND OF KYLE'S LOST CONFIDENCE.** A session cannot answer *"is this behaviour intended?"* without reading a corpus that has **no index, no search entry point, and no rule pointing at it.** ⇒ **Three of us — me, and two independent readers — all defaulted to the ledger, because the ledger is the thing the rules name.**
+
+> ⛔ **HOME: `B-DECIDED-INTENT-INDEX`, owner CC-C, placed in `PHASE_19_PLAN` IMMEDIATELY BEFORE the exit-path redesign work and AFTER `B-XSTOCK-BOOK-LADDER` (3b.d) — i.e. it precedes every disposition in §10-§15, because every one of them depends on being able to answer "was this decided, and where."** *(Langston asked me to name it and place it relative to the redesign; he rules on the placement.)*
+
+**WHAT IT MUST DELIVER — the shape, not the fix (rule 15):** a **single searchable index of DECIDED INTENT** — batch id → numbered objectives → the file:line or doc that carries the decision — spanning **completion reports, scope files and load-bearing code headers**, so that §9.5(b-ii)'s *"search the ledger before filing a finding"* becomes a search that can actually return a decision. ⚠️ **Today that rule names one corpus and the answers live in three others.**
+⛔ **AND THE RULE TEXT ITSELF IS IN SCOPE:** §9.5(b-ii) says *"grep `RUNNING_ISSUES` + `BATCH_CATALOG` + the completion reports."* **It already names the completion reports — and all three of us still went to the ledger, because the ledger is the one with a searchable shape.** ⇒ **A rule that names a corpus nobody can search is not a rule that fires. The fix is an index, not a stronger sentence.**
+
+### 15.5 ✅ THE BOTTOM LINE, IN HIS WORDS
+
+> **"Findings survive as MEASUREMENTS and are NOT CERTIFIED AS DISPOSITIONS."**
+
+⇒ **Read every §1-§9 sentence of the form *"this is wrong / unintended / nobody decided this"* as UNCERTIFIED until the decided-intent search exists.** **The numbers are good. The verdicts on them are not yet earned.**
+✅ **Nothing here changes F-G-2's crypto leg. `B-EXIT-PROVENANCE`'s close is acknowledged, 19/19 noted.**
