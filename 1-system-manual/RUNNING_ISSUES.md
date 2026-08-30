@@ -847,6 +847,30 @@ MSYS2_ARG_CONV_EXCL='*' git show "…:.claude/memory/MEMORY.md"               ->
 
 ---
 
+### #963 CLOSED-ON-ARRIVAL 2026-08-30 (CC-C; Kyle directed the check that found it) — ✅✅ **F-G-2's xSTOCK "NO INSTRUMENT" BLOCKER IS REFUTED. THE ORIGINAL STOP HAS BEEN ARCHIVED ALL ALONG, IN A TABLE NOBODY LOOKED IN.**
+
+**SEVERITY: n/a — this REMOVES work. OWNER: CC-C. DISPOSITION: §9.4 (5) — the "we do not collect this" claim is WITHDRAWN, carrying the measurement that dissolves it.**
+
+⛔ **THE CLAIM THAT STOOD, AND IT WAS IN F-G-2's SCOPE AS r6 BLOCKER-3:** *"THERE IS NO xSTOCK INSTRUMENT TODAY — 0 of 144 xStock `stop_hit` closes carry `original_stop_price`."* ✅ **That column IS empty for xStock — re-verified: 0 of 243 closes.** ⛔ **BUT THE DATA IT REPRESENTS IS NOT MISSING.**
+
+⭐ **KYLE'S INSTRUCTION, VERBATIM, AND IT IS WHY THIS WAS FOUND:** *"just make sure that this data is not already being captured somewhere in all of the data that we're capturing and archiving, because it's happened many times before where you or one of the other sessions has said we don't have this data, we're not collecting it — and it turned out it was in one of the other data tables."*
+
+**MEASURED:**
+| check | result |
+|---|---|
+| xStock closes that JOIN to an `execution_attempt_audit` row carrying a `stop_price` (`a.trade_id = c.id`) | ✅ **243 of 243** |
+| … where `closed_trades.stop_loss` **equals** that audit `stop_price` to 4 dp | ✅✅ **243 of 243 IDENTICAL** |
+| `execution_attempt_audit` rows overall / carrying `stop_price` | **400,925 / 400,925** |
+
+⇒ ⭐⭐ **THE ORIGINAL STOP IS RECORDED FOR EVERY xSTOCK CLOSE, IN TWO PLACES, AND THEY AGREE ON EVERY ROW.** ⛔ **F-G-2's OBJ-3 is NOT unsatisfiable for xStock, and no instrumentation batch needs to be built to make it satisfiable.**
+
+⚠️ **THE ONE CAVEAT, AND IT DECIDES WHICH SOURCE IS DURABLE: `closed_trades.stop_loss` equals the original ONLY BECAUSE THE RATCHET IS OFF.** Break-even is `false` on all four asset classes and 0 of 705 trailing states ever latched, so the stop has never moved from where it was placed. ⇒ ⛔ **IF BREAK-EVEN IS EVER TURNED ON, `stop_loss` BECOMES THE RATCHETED VALUE AND SILENTLY STOPS BEING THE ORIGINAL** — `active-execution-engine.ts:1756-1758` writes it. ✅ **`execution_attempt_audit.stop_price` is stamped at ATTEMPT time and is therefore the DURABLE source; `stop_loss` is a coincidence of the current configuration.**
+⭐ **SO THE CORRECT FORM OF THE FINDING IS NOT *“use `stop_loss`”* — IT IS *“JOIN THE AUDIT TABLE, AND DO NOT LET A FUTURE RATCHET-ON SILENTLY CHANGE WHAT THE COLUMN MEANS.”***
+
+★ **AND THE LESSON IS KYLE'S, NOT MINE: an ASSERTED ABSENCE OF DATA NEEDS THE SAME PRESENCE-EVIDENCE AS ANY OTHER ABSENCE (`#453`).** ⛔ **I checked ONE column, found it empty, and reported “no instrument” — in a system with 19 stop-bearing columns across 12 tables.**
+
+---
+
 ### #962 OPEN 2026-08-30 (CC-C; round-2 reader, re-derived by me at the ref) — ⛔⛔ A RESTING MAKER SELL IS DECLARED FILLED WHEN THE **MIDPOINT** REACHES THE LIMIT, THEN BOOKED **AT** THE LIMIT WITH SLIPPAGE ZERO — **59% OF xSTOCK MAKER EXITS BOOKED AT A PRICE NO BID EVER REACHED**
 
 **SEVERITY: high. OWNER: CC-C. DISPOSITION: §9.4 (2) — added as an item to `B-EXIT-TRIGGER-FILL-PARITY` (plan row **3b.c**), because it is the OTHER half of that batch's subject and 5 of that batch's own 9-row sample are maker rows.**
