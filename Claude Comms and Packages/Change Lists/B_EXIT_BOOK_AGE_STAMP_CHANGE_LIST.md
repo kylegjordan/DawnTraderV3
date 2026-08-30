@@ -1,6 +1,6 @@
 # B-EXIT-BOOK-AGE-STAMP — CHANGE LIST (Step 4)
 
-**READY AT: `origin/migration/aws-supabase` @ `279f4c2c6`** · 13 files, +375 / −64
+**READY AT: `origin/migration/aws-supabase` @ `1770137e0`** · 13 files + a follow-up commit (`279f4c2c6` is the body; `1770137e0` carries two reader-driven fixes — see §10)
 **change-class:** `non_architecture` · **Owner:** CC-C
 **Design (B) — Langston-ruled 2026-08-30; four Step-1 conditions and three Step-2 conditions all applied.**
 **Gate for this dispatch: the diff. One ask.**
@@ -122,3 +122,28 @@ export function markKindOf(bid: number, ask: number): 'mid' | 'last' {
 - **`P9` — the SIM entry + SPLIT EPOCH (deploy sha + UTC) lands at Step 10**, because the sha does not exist until Step 6.
 - **`#941`, `#952`, `#957`, `#951` are NOT closed.** This batch records what reached the exit; **they ask what the vocabulary SHOULD be.**
 - **Three leads homed at `3b.g`, not fixed here** — all correct today, all needing a signature or symbol-form change, all behaviour-adjacent ⇒ `OBJ-3` forbids them.
+
+
+---
+
+## 10. ⛔ AFTER THE BODY — A THIRD READER, AND IT FOUND TWO THINGS THAT WERE MINE
+
+> **REVIEWER:** `object + claim` · *"this change alters NO runtime behaviour"* · **HIT** · re-derived **y**
+
+**(a) ⛔ THE INSTRUMENT WAS INSIDE THE INTERVAL IT MEASURES.** I placed the paired verification log **between the depth read and the walk that consumes it** — the exact window `exit_fill_depth_age_ms` records. **A `console.log` to a PM2-piped stdout can block under backpressure**, so the instrument could delay the thing it exists to measure, and `OBJ-3` forbids a behaviour change on a hot path. ✅ **MOVED BELOW THE FILL — the value is captured above, the reporting waits.**
+
+**(b) ⛔ MY NULL DISCRIMINATOR SEPARATED TWO STATES OF FOUR.** I wrote that a NULL is *"discriminable by `exit_fee_mode = 'maker'`"*. **`exit_fee_mode` has exactly ONE writer (`:2296`, inside `closePosition`)**, so every close that does not route through there lands **NULL on both columns** — `closeAllPositions`, `engine_stop_cleanup`, `hard_reset`, `never_filled` and the two `routes.ts` manual paths. ✅ **All four states now enumerated in all three homes (schema, engine, live DB), and the third says to use `close_reason` + `closed_at`, never the fee mode.**
+
+### ⛔⛔ AND ONE THE READER RAISED THAT I HAVE **NOT** FIXED, BECAUSE I DO NOT THINK I SHOULD — RULE ON IT
+**`_fillDepthAgeMs` is `number | null`, never `undefined`, so drizzle includes `exit_fill_depth_age_ms` in EVERY `closePosition` UPDATE.** ⇒ **against a database lacking the column, every taker close throws at the UPDATE and the close does not record.**
+**Worlds where that happens: a rollback that drops the column while the code stays · a container started without the migrate step · a restore from a pre-epoch snapshot · a developer DB.**
+✅ **`dt-deploy.sh` runs `db:migrate` BEFORE `pm2 restart`, so the forward path is safe — and I proved the migration applies (`BEGIN…ROLLBACK` on staging, twice).** ⛔ **The REVERSE path is the exposure, and there is no rollback file** — §7.1 keeps rollback files out of git, so I did not add one.
+**My position: this is the same coupling every additive column on this table already has, and inventing a bespoke guard for one column would be a patch. But it is a live-trading failure mode and it is YOUR call, not mine.**
+
+### ✅ WHAT THE READER CHECKED AND FOUND CLEAN — recorded so it is not re-derived
+- **The predicate is exactly equivalent at all four replaced sites** for NaN / 0 / negative / undefined, **and the differing coalescing at each site is untouched.** ⚠️ **Stated limit: `markKindOf` is SYMMETRIC, so confirming the arg order `(bid, ask)` at four sites has no power — an order error is invisible today and would only surface if the predicate ever becomes asymmetric.**
+- **No producer value is compared, prefix-matched, used as a key, or filtered on** — one hit repo-wide and it is `!== null`. **`isRestFallbackSource`'s substring test takes `source` at all five callers**, and both the old and new names contain `kraken_rest` anyway, so it classifies identically.
+- **`V1TickerFormat` has exactly one producer and one consumer**; the new required field breaks no other construction site and **does not reach the wire** (the object is never spread into a broadcast).
+- **The hoisted variable is initialized at declaration, has four references, and sits in no loop or closure** — no TDZ, no cross-iteration retention.
+- **The migration lexes to 8 terminated statements**, all five `COMMENT ON` targets are created by the preceding migration, and MANIFEST bijection holds.
+- ⚠️ **`git grep` searches the index, so the reader's sweep DID cover all 272 tracked `.sql` files — the `.gitignore` trap did not apply to it.**
