@@ -824,6 +824,43 @@ MSYS2_ARG_CONV_EXCL='*' git show "…:.claude/memory/MEMORY.md"               ->
 
 ## B79.0n.SCORING + B79.0n.TEC closure entries (2026-05-26)
 
+### #953 OPEN 2026-08-30 (CC-C; surfaced by a fresh reviewer attacking the draft-1 design, re-derived by me at the ref) — ⛔⛔ A LIVE EXIT ROUTE PLACES A **REAL MARKET SELL** AND THEN BOOKS THE EXIT AT A **RANDOM HAIRCUT** INSTEAD OF READING THE FILL — AND IT SURVIVES THE DEAD-LIMB DELETION
+
+**SEVERITY: high — PHASE-21 GO-LIVE BLOCKER CLASS (no paper-mode trading impact today). OWNER: CC-C. DISPOSITION: §9.4 (2) — added as an item to `B-INTENT-ENTRY-PARITY` / plan row **3h**, which already owns the question *"should the HTTP intent path exist at all?"* — the same two callers are its subject.**
+
+⛔ **THE FINDING IS NOT THE `Math.random()` — §1.5 of `EXIT_PATH_MACHINERY_AUDIT_2026-08-30.md` already flagged that. THE FINDING IS THAT IT IS LIVE-REACHABLE AND SURVIVES THE CLEANUP WE HAVE PLANNED.**
+
+**RE-DERIVED AT THE REF.** `trading-engine.closeTrade` has **three** callers, tests excluded:
+| caller | status |
+|---|---|
+| `trading-engine.ts:703` (`'strategy_exit'`) | ⛔ **DEAD** — inside `monitorActiveTrades`, the limb plan row **3h.b** deletes |
+| `routes.ts:5054` — `engine.closeTrade(id, 'manual')` | ✅ **LIVE** |
+| `command-router.ts:240` — `engine.closeTrade(trade.id, 'user_command')` | ✅ **LIVE** |
+
+⇒ **Row 3h.b removes ONE of three. TWO LIVE CALLERS REMAIN, AND NEITHER APPEARS ANYWHERE IN `PHASE_19_PLAN.md`.**
+
+⛔⛔ **AND THE PRICING IS WORSE IN LIVE MODE THAN IN PAPER.** `trading-engine.ts:633-647`, verbatim shape:
+```
+await this.kraken.addOrder({ pair, type:'sell', ordertype:'market', volume });   // A REAL ORDER
+exitSlippage = Math.random() * 0.1;                                              // live
+...
+} else { exitSlippage = Math.random() * 0.05; }                                  // paper
+const exitPrice = marketPrice * (1 - exitSlippage / 100);
+await storage.closeTrade(targetTrade.id, exitPrice, exitFee, exitSlippage);
+```
+⇒ ★★ **IN LIVE MODE IT SENDS A REAL MARKET SELL TO THE VENUE AND THEN BOOKS A RANDOMLY-GENERATED HAIRCUT OFF `marketPrice` AS THE EXIT PRICE — IT NEVER READS THE ACTUAL FILL.** The realised P&L on that trade is a simulation of a trade that genuinely happened.
+
+⛔ **AND IT VIOLATES A STILL-LIVE FOUNDING INVARIANT.** `bridge/canonical/DawnTrader_System_Invariants_Design_Guarantees.md` **F7**: *"Production trading decisions MUST use only real market data… Mock pricing is prohibited in production."* **A `Math.random()` exit price in a live-mode branch is mock pricing in production by the invariant's own words.**
+⚠️ **AND IT IS NOT THE `ENABLE_MOCK_PRICING` PATH** — that one is env-gated and off. **This is unconditional.**
+
+**WHY IT HAS SURVIVED:** it is not on the active-execution path anyone audits. `#928`/`#929` (plan 3h) found the HTTP intent path for **entries**; this is the same module's **exit** side, reachable from an HTTP route and the command router.
+
+⛔ **NO FIX PRE-JUDGED (rule 15).** The first question is **3h's own question, which is why it is homed there**: should these two routes exist at all? If they stay, the exit must read the venue fill, not manufacture one. **A `Math.random()` removal alone would cure the instance and leave the route booking a modelled exit for a real order — the `fix-follows-pointer` shape.**
+
+⚠️ **POPULATION, STATED: paper mode today, so no live capital is affected — the live branch is Phase-21 gated. This is filed as a GO-LIVE BLOCKER, not a live incident.** ↔ `#734` (the other Phase-21 go-live blocker in this family).
+
+---
+
 ### #952 OPEN 2026-08-30 (CC-C, surfaced by an independent fresh reader on the machinery audit; re-derived at the ref) — ⛔⛔ THE "CLEAN TICKER PRINT" DOES NOT EXIST — THE v1 `c` FIELD IS OVERWRITTEN WITH A MIDPOINT, AND TWO CODE COMMENTS ASSERT THE OPPOSITE
 
 **SEVERITY: medium. OWNER: CC-C. DISPOSITION: §9.4 (1) — folded in as the UNFIXED CODE-COMMENT LEG OF `#941`, not a new root.**

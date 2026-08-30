@@ -510,7 +510,10 @@ ACK: {"method":"subscribe","result":{"channel":"book","snapshot":true,"symbol":"
 
 ---
 
-## 10. ⛔ THE CORRECT DESIGN — DRAFT 1, START TO FINISH (Kyle-directed 2026-08-30)
+## 10. ⛔⛔ [SUPERSEDED BY §11 — DO NOT ACT ON THIS SECTION] THE CORRECT DESIGN — DRAFT 1 (Kyle-directed 2026-08-30)
+
+> ⛔⛔ **SUPERSEDED 2026-08-30 BY §11 (DRAFT 2). KEPT AS THE RECORD; NOT TO BE ACTED ON.** A fresh reviewer, handed only this document and one question, returned **two `WRONG` verdicts, two `UNPROVEN`, eight assumed-away alternatives and one internal contradiction.** ★ **Principle 3 as written here would have caused SILENT DATA LOSS at the kill-switch flatten** — a refusal there routes to `deleteActiveOpenPosition`, and the exit monitor is already stopped, so *"fail or wait"* has nothing to wait for. **Read §11.**
+
 
 > **Kyle's instruction:** *"come up with the correct design. How should the system be working? … look at what is the correct design from start to finish for this piece of machinery. And then we look at the current state and what needs to be done to get it to the correct state, and that needs to be looked at multiple times so that we don't do a half ass job. … I don't know if that means that this is a huge refactor and build or if this is a ripout and replace."*
 > ⛔⛔ **THIS IS DRAFT 1 AND IS LABELLED AS SUCH DELIBERATELY. It has not been through the fresh-reader loop and Langston has not seen it. It is a proposal to be attacked, not a plan to be executed.**
@@ -618,3 +621,100 @@ ACK: {"method":"subscribe","result":{"channel":"book","snapshot":true,"symbol":"
 ⇒ ★★ **FIVE OF THE SEVEN PRINCIPLES ALREADY HAVE A BATCH DOING PART OF THE WORK. What is missing is not mostly work — it is the CONTRACT they would all be implementing, plus four named gaps.** That is the strongest evidence for 10.0's "large refactor, small ripout" verdict rather than a rebuild.
 
 ⛔⛔ **NEXT ON THIS SECTION, AND IT IS NOT OPTIONAL: draft 1 goes through the fresh-reader loop (`workflow-02`) and then to Langston. Kyle asked for it to be "looked at multiple times so that we don't do a half ass job" — a design reviewed once is a design reviewed by its author.**
+
+---
+
+## 11. ⛔⛔ THE CORRECT DESIGN — **DRAFT 2**. §10 IS SUPERSEDED; READ THIS INSTEAD.
+
+> ⛔ **§10 (DRAFT 1) IS KEPT AS THE RECORD AND MUST NOT BE ACTED ON. Two of its seven principles were WRONG and one of those would have caused SILENT DATA LOSS at the kill switch.** A fresh reviewer, handed only the document and one question — *"what other states of the world are consistent with §0-§9 that this design has assumed away?"* — returned eight assumed-away alternatives, two `WRONG` verdicts, two `UNPROVEN`, and one internal contradiction. **Every load-bearing correction below is re-derived by me at the ref before adoption; a reviewer HIT is a lead.**
+> ★ **This is Kyle's *"looked at multiple times so that we don't do a half ass job."* Draft 1 was a design reviewed by its author.**
+
+### 11.0 ⛔ P1 WAS WRONG: **THE PRICE OBJECT ALREADY EXISTS, AND THE DEFECT HAPPENED INSIDE IT**
+
+⛔ **DRAFT 1 SAID: *"TODAY: prices move as bare `number`s."* THAT IS FALSE OF THE CRYPTO PATH AND I DID NOT CHECK IT.** `live-pricing-adapter.ts:145-161` defines `PriceQuote { price, source, producer, observedAt }`; `:55-99` is a **closed 15-member `PriceProducer` union carrying its own anti-omission rule** — *"an optional field would let a future producer omit it, and that absence is indistinguishable from a missed stamp (#546)."* **Twelve non-test callers already receive it.**
+
+⇒ ★★ **AND `#951` HAPPENED ANYWAY, AT THAT OBJECT'S OWN CONSTRUCTOR.** `fetchFromKrakenRest` is declared `Promise<number | null>` — **provenance stripped by the SIGNATURE, one call inside the module** — so the caller building the object supplied the missing field from ambient context. **A typed object at the module boundary did not prevent a defect one hop inside the module.**
+
+⛔⛔ **AND DRAFT 1's OWN `observedAt` RULE PERMITTED THE DEFECT IT CLAIMED TO FORBID.** I wrote *"the venue's timestamp where the venue provides one; otherwise the moment of RECEIPT. NEVER the moment of READ."* **On the rate-limited branch the cached number IS received now.** ⇒ **I collapsed venue-time and receipt-time into one field — which is precisely the one-field-two-meanings defect §4 of this audit is about.**
+
+⛔ **AND P1 WAS AIMED AT THE WRONG LAYER FOR ITS OWN HEADLINE EXAMPLE.** §1.1's non-determinism is **not** a bare number: both producers emit a fully-provenanced event with **distinct `producer` values**, and `kraken-websocket-adapter.ts:942-944` says so — *"emitted with the SAME `source` as a ticker print — which is exactly why the exit monitor could not tell them apart."* **The failure is a CONSUMER reading the coarse field of a well-typed object. Enriching the object cannot fix that.**
+
+✅ **P1, CORRECTED — THREE RULES, EACH AIMED AT A MEASURED FAILURE:**
+| # | rule | the failure it addresses |
+|---|---|---|
+| **1a** | ⛔ **NO INTERNAL FUNCTION MAY RETURN A BARE PRICE.** A private helper returning `Promise<number>` is the laundering site. | `#951`, at the constructor |
+| **1b** | ⛔ **A GATE READS THE FINEST FIELD THE OBJECT CARRIES.** `isKrakenVenueSource(source)` must become producer-aware; `producer` is on the same object, four lines away. | §1.1 non-determinism — **a local fix, not a contract** |
+| **1c** | ⛔ **VENUE-TIME AND RECEIPT-TIME ARE TWO FIELDS, NEVER ONE.** ⚠️ **The equities feed has NO venue timestamp at all** (`equity-spot-archiver.ts:137` sets `tsMs: Date.now()`), so on that class a single field can never discriminate. | draft 1's own collapse |
+⚠️ **AND THE HONEST LIMIT ON ALL THREE, measured in-repo by the reviewer and re-derived: a type cannot require a stamp at a seam nobody wrote** — `active-execution-engine.ts:3663-3667` records the maker leg being wired while *"the first post-deploy taker entry (PLTR/USD) opened with NULL provenance **while every fence passed green**."* **Persistence shreds it too: every price column is `decimal(20,8)` and the provenance columns are plain `VARCHAR(40)` with no CHECK constraint.** ⇒ **type-level enforcement is a partial instrument. Say so; do not sell it as a guarantee.**
+
+### 11.1 ⛔⛔ P3 WAS WRONG, AND THIS IS THE ONE THAT WOULD HAVE CAUSED HARM
+
+⛔ **DRAFT 1 CLAIMED an xStock position outside market hours *"reaches the outcome by accident of staleness."* THAT IS FALSE ABOUT TODAY, AND I TOOK IT FROM A READER'S CHARACTERISATION WITHOUT CHECKING.** `active-execution-engine.ts:1162-1228` refuses **explicitly**, on a risk-derived per-symbol staleness ceiling, with fail-closed knob handling, named skip reasons and a streak-triggered alert: *"STALENESS IS BLOCKING (Langston condition 1): a tick older than the class-explicit max-age yields NO price — never evaluate a stop/target against a stale mark."* **The exit monitor already refuses, and better than P3 described it.**
+
+⛔⛔ **AND WHERE IT STILL SUBSTITUTES, REFUSING IS *DESTRUCTIVE*. RE-DERIVED BY ME AT THE REF:**
+`active-engine-service.ts:815-819` stops the engine **FIRST**, then calls `forceCloseAllOpenPositionsOnStop()` — *"engine is dead, now clean up positions."* ⇒ **at the moment that price is requested THE EXIT MONITOR NO LONGER EXISTS. There is no next tick, so F7's own escape hatch — "fail OR WAIT" — is unavailable.** And the fallthrough at `active-engine-service.ts:848` calls **`storage.deleteActiveOpenPosition('paper', orphan.id)`**.
+⇒ ★★ **A LITERAL P3 AT THE KILL-SWITCH FLATTEN CONVERTS THE RISK SYSTEM'S TERMINAL ACTION INTO SILENT DATA LOSS — the position is DELETED, producing NO closed-trade row — under exactly the feed-outage conditions most likely to co-occur with a loss spike.**
+★ **And the codebase already holds the opposite rule, deliberately, on the close path:** `order-placer.ts:110-115` — *"Config missing (fail-closed) — **a close MUST still exit (never a stuck position)**."* **Draft 1 did not acknowledge it existed.**
+
+✅ **P3, CORRECTED — REFUSAL IS CONDITIONAL ON A NEXT TICK EXISTING:**
+> ⛔ **WHERE A NEXT EVALUATION WILL COME, REFUSE** (the exit monitor — already does).
+> ⛔ **WHERE NONE WILL COME — the kill-switch flatten, engine-stop cleanup, a manual close — SUBSTITUTE, BUT LOUDLY, AND RECORD THE SUBSTITUTION AS PROVENANCE ON THE ROW.** A booked exit at a declared substitute price is recoverable; **a deleted position is not.**
+> ✅ **The design target is not "never substitute" — it is "never substitute SILENTLY."**
+
+### 11.2 ⚠️ P2 WAS UNPROVEN AND OVERSTATED — IT IS A HYPOTHESIS WITH A LIVE KILL CRITERION
+
+⛔ **DRAFT 1 CALLED THE SIDE TABLE *"THE WHOLE BATCH"* AND GAVE IT NO REFUTATION BRANCH — while §10.4, on STRONGER evidence, DID.** That asymmetry is the finding.
+⛔ **THE DECIDING INSTRUMENT EXISTS, IS PRE-REGISTERED, AND HAS NOT RUN:** F-G-2's scope records *"`OBJ-0` HAS NO READ-OUT"*, and `OBJ-0` itself warns *"for a long, **stops fire EARLIER and targets fire LATER** — it changes the trade population"*, with a kill criterion of *"a trade the NEW rule stops out that the OLD rule rode back to `target_hit`."*
+
+⛔⛔ **AND ON THIS AUDIT'S OWN PUBLISHED ROWS, THE BID IS FARTHER FROM THE TRADED PRICE THAN THE MID ON FOUR OF FIVE** *(population stated honestly: five hand-picked pathological name-observations, NOT a sample — but §9.4 is presented as the premise in one row, and the same arithmetic applies to it)*:
+
+| | bid vs last | mid vs last | worse |
+|---|---|---|---|
+| NOW/USD | −35.4% | −17.1% | **bid** |
+| TGT/USD | −70.3% | −35.0% | **bid** |
+| WEN/USD | −7.8% | +62.1% | mid |
+| PLTR/USD | −7.80% | −2.67% | **bid** |
+| BABA/USD | −5.59% | +2.84% | **bid** |
+
+★★ **AND THE TWO EFFECTS PUSH THE SAME WAY: a widening pulls a long's stop CLOSER (bid falls) AND pushes its target FURTHER (bid falls).** BABA: the target trigger moves from 2.56 away to **12.56 away**. ⇒ **more stop-outs AND fewer target-hits, from a book event with no trade — which is exactly OBJ-0's discordant cell, and draft 1 never mentioned it.**
+
+✅ **P2, CORRECTED — FOUR AMENDMENTS:**
+1. ⛔ **IT IS A HYPOTHESIS UNTIL `OBJ-0` READS OUT, AND IT CARRIES ITS REFUTATION BRANCH IN THE DESIGN:** if OBJ-0's kill criterion fires, **the side rule does not ship and this section is re-argued.**
+2. ★ **TRIGGER-SIDE AND FILL-SIDE ARE SEPARATE QUESTIONS AND DRAFT 1 COLLAPSED THEM** — §8.2 found the founding design **separated them deliberately** (decide on a crossing, fill at the pre-declared level). Real venues do the same: equity stops trigger on the last trade; derivatives liquidate on a mark **precisely so a withdrawn quote cannot fire a stop.** ⇒ **the table needs a TRIGGER column and a FILL column.**
+3. ★ **A SIDE IS NOT A SCALAR.** `depth-walk.ts:44` already computes a size-aware VWAP. *"The side we transact on"* is a top-of-book quantity in draft 1 and a **depth-walked** one in reality — a top bid for a handful of units is not the price the position exits at.
+4. ⛔ **THE TABLE NEEDS AN ASSET-CLASS COLUMN.** F-G-2's own scope: *"§2's case has **NO xStock evidence at all**"* — the 12/12 and 9/9 are **crypto**. Draft 1 generalised a crypto-only measurement to both classes silently.
+⚠️ **AND A3 STANDS UNRESOLVED: if the wide books turn out to be the frame-type defect (§9.3(d)/P5), then P5 is nearly the whole prize and P2 is worth a rounding error** — BABA was **118.62/118.63**, a one-cent spread, two hours before the widening. **Nothing in §0-§9 orders those magnitudes, and draft 1 asserted the reverse.**
+
+### 11.3 ✅ §10.0's VERDICT SURVIVES — BUT RE-ARGUED, BECAUSE ITS STATED CRITERION IS SELF-CONTRADICTED
+
+⛔ **DRAFT 1 ARGUED "large refactor, small ripout" FROM *"the parts are not individually broken"* — WHICH THIS AUDIT CONTRADICTS FOUR TIMES**, including calling the depth gate *"well-built"* in §10 and *"not a gate"* in §9.3(c) sixty lines earlier.
+✅ **THE VERDICT IS RIGHT; THE EVIDENCE THAT DECIDES IT IS COUPLING AND PINNING, AND IT WAS ABSENT FROM DRAFT 1. Measured:** `getPriceWithFallback` **12 non-test call sites**; `evaluateTECExit` **3**; `DepthSnapshot` is **already one interface with two implementations** — so P4 is a **data** problem, not an abstraction problem; **262 test files** pin behaviour, 17 on the execution engine alone; and a **full shadow lane already exists** (47,500 pairings) so a parallel implementation is cheap to validate.
+⇒ ★★ **LOW COUPLING + HIGH TEST PINNING + AN EXISTING SHADOW LANE ⇒ REFACTOR. That is the argument; "the parts work" was not.**
+
+### 11.4 ⛔ THE GAP TABLE OVER-READ ITS OWN EVIDENCE — HONEST RESTATEMENT
+
+⛔ **DRAFT 1 SAID *"five of seven principles already have a batch doing part of the work."* FOUR OF THE FIVE CITED ROWS ARE INVESTIGATION BATCHES THAT EXPLICITLY FORBID PRE-JUDGING A FIX** (`3b.b`, `3b.d`, `3b.f`, `3f.b` all carry *"NO FIX PRE-JUDGED"* / *"INVESTIGATION ONLY — NO CODE"*).
+✅ **HONEST FORM: five principles have a batch that will produce the EVIDENCE on which the fix could be decided. NONE has a batch committed to the fix the principle names.** ★ *That does not overturn 11.3 — arguably it strengthens the missing-contract reading — but it is not what draft 1 claimed.*
+⚠️ **AND ROW 2's COVERAGE IS ONE ASSET CLASS:** F-G-2's `OBJ-3` is recorded unsatisfiable for xStock — **0 of 144** xStock `stop_hit` closes carry `original_stop_price`.
+
+### 11.5 ⛔ AND THE INTERNAL CONTRADICTION, RESOLVED
+
+⛔ **§10.8 said *"NO NEW FLOORS, CLAMPS OR THRESHOLDS ARE PROPOSED"* while §10.4 said *"`min_levels` becomes a real threshold"* and §10.3 required rejecting a stub book — which needs a WIDTH threshold, since a stub is wide but not crossed.**
+✅ **RESOLVED BY NAMING THE TWO KINDS SEPARATELY:**
+- ⛔ **NO NEW CONSTRAINT ON WHAT A PRICE OR A TRADE MAY BE** — no stop floors, no spread caps, no size clamps. **Kyle's rule, unchanged.**
+- ✅ **A DATA-ADMISSIBILITY GATE IS NOT A CLAMP, AND IT MUST BE CAPABLE OF FAILING.** *"Is this quote usable?"* is a different question from *"is this trade allowed?"* **Draft 1 used one sentence for both.**
+
+### 11.6 ⛔⛔ A NEW LIVE FINDING THE ATTACK SURFACED — `#953`
+
+**The dead-limb deletion at plan row 3h.b removes ONE of THREE callers of `trading-engine.closeTrade`. The other two are LIVE:** `routes.ts:5054` (`'manual'`) and `command-router.ts:240` (`'user_command'`).
+⛔ **AND THAT ROUTE PRICES ITS EXIT WITH `Math.random()` — RE-DERIVED AT THE REF, AND IT IS WORSE IN LIVE MODE THAN IN PAPER:** `trading-engine.ts:633-647` places **a REAL market sell** (`this.kraken.addOrder({ type:'sell', ordertype:'market' })`), then sets `exitSlippage = Math.random() * 0.1` and books `exitPrice = marketPrice * (1 - exitSlippage/100)`.
+⇒ ★★ **IN LIVE MODE IT SENDS A REAL ORDER AND THEN BOOKS A RANDOM HAIRCUT INSTEAD OF READING THE ACTUAL FILL.** §1.5 flagged the random pricing; **what the attack added is that it SURVIVES 3h.b and appears NOWHERE in the plan.** **Filed `#953`. Phase-21 blocker class.**
+
+### 11.7 ⚠️ WHAT REMAINS ASSUMED-AWAY AND IS NOT YET RESOLVED — CARRIED FORWARD HONESTLY
+
+⛔ **Draft 2 does NOT settle these. They are named so draft 3 or Langston can take them, rather than being quietly inherited:**
+1. ★ **SHOULD THE MARK BE THE MID AT ALL?** Draft 1's single ✅ row was **asserted, never argued**. Marking a long at the **bid** is what still-live invariant **F4** implies (*"slippage MUST always work against the trader… no positive slippage"*), and it makes exposure honest **exactly when the mid is untransactable.** ⇒ **Marking at the mid overstates equity in precisely the conditions this whole audit is about.**
+2. ★ **STOP-MOVEMENT POLICY IS NOT SEPARABLE FROM P2, AND DRAFT 1 TREATED IT AS SEVERABLE.** §8.5: T1 constrains a stop **only at entry**; nothing governs how it may move after. And **a break-even stop parked at entry is the level most likely to be brushed by half a spread** ⇒ **switching triggers to the bid CHANGES THE COST OF TURNING BREAK-EVEN BACK ON** — which is §5's live question and Kyle's own decision.
+3. ⚠️ **A3's magnitude ordering** (11.2) — unresolved and it decides how much P2 is worth.
+
+⛔⛔ **NEXT: DRAFT 2 GOES TO A *FRESH* REVIEWER — NOT THE ONE THAT PRODUCED THESE FINDINGS, WHICH HAS NOW SEEN MY DRAFT AND HAS REBUILT THE MEMORY THE BOUNDARY EXISTS TO REMOVE.** *(`workflow-02`: each round gets a fresh reviewer; the correction is itself unreviewed work by the session that erred.)* **Langston sees it only after that round closes.**
