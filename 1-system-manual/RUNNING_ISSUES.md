@@ -5848,3 +5848,29 @@ Corroborated by `active-portfolio-manager.ts:202`'s own comment: *"No direct pro
 ⇒ ★★ **SEVERITY IS THE ONLY VARIABLE THAT DIFFERS, AND IT PREDICTS THE OUTCOME PERFECTLY.** That upgrades `#942` from *"the code says `info` is skipped"* to a mechanism claim with a working comparison behind it.
 ⚠️ **HONEST LIMIT: the two `warning` rows are `scheduled`, not yet fired — so the positive arm is PREDICTED FROM THE SAME CODE PATH, not yet OBSERVED delivering.** It becomes an observed control on 2026-09-04. **Stated rather than glossed, because a predicted control is weaker than a fired one.**
 ✅ **AND IT ANSWERS A QUESTION I OWED MYSELF: my own two open batches are NOT exposed to this defect** — both are `warning`, so the mechanism that lost seven verifications cannot silently lose mine. **Checked rather than assumed, because I had just finished proving the failure exists.**
+
+
+---
+
+### #942 CORROBORATION (d) — ⛔⛔ **I OVERSTATED (c) ONE MESSAGE AFTER WRITING IT. "SEVERITY PREDICTS THE OUTCOME PERFECTLY" IS FALSE, AND THE TRUE VERSION IS MORE USEFUL.**
+
+**I went to convert (c)'s PREDICTED positive arm into an OBSERVED one using history instead of waiting for 2026-09-04. The history refutes the claim it was meant to strengthen.**
+
+**Population: the alerts log, last 600 lines, deduped to unique alert ids — a WINDOW, not the full store, and the rates below are of that window.**
+| severity | unique alerts | acknowledged | resolved | ack rate |
+|---|---:|---:|---:|---:|
+| `critical` | 13 | 13 | 13 | **100%** |
+| `warning` | 502 | 494 | 486 | **98%** |
+| **`info`** | **85** | **76** | **72** | ⭐ **89%** |
+
+⇒ ⛔ **`info` ALERTS ARE NOT SYSTEMATICALLY LOST. 76 of 85 got acknowledged.** The gap to `warning` is **89% vs 98%** — real, but nothing like the *"never pushes ⇒ rots"* story (c) implied. **The seven in (b) are the 11% TAIL, not the class.**
+
+✅ **WHAT SURVIVES, UNCHANGED:** the mechanism, cited at the line — `system-alerts.ts:585`, `if (a.severity === 'info') continue;`. **`info` genuinely never pushes.** That is a code fact and it is not in question.
+⛔ **WHAT DIES: the inference I drew from it.** I reasoned *no push ⇒ owner never told ⇒ rots*, and skipped the step where **the PULL-based per-turn check (`CLAUDE.md` §10.5) catches them anyway — evidently about 9 times in 10.**
+
+⇒ ★★ **THE ACCURATE STATEMENT, AND IT SHARPENS THE FIX RATHER THAN WEAKENING IT: `info`'s ONLY safety net is OPPORTUNISTIC READING, and SCHEDULED VERIFICATIONS ARE EXACTLY THE CLASS THAT NET IS WORST AT.** A session running the per-turn check sees an immediate alert and acts; it sees *"verify X, owner CC-B, due three weeks ago"* and reads it as **not-mine-not-now**. **All seven in (b) are owed verifications, not incidents — that is the correlation worth chasing, not severity alone.**
+⚠️ **AND THE FIX FOLLOWS THE CORRECTED DIAGNOSIS, NOT THE ORIGINAL ONE:** *"make `info` push"* would raise the volume on 85 alerts to catch 9. **The narrower repair is to make a SCHEDULED-VERIFICATION alert reach its NAMED owner** — the property all seven share and the 76 do not.
+⚠️ **INSTRUMENT LIMIT, STATED: a 600-line window, and `acknowledged` is a state flag — it does not prove a human read it rather than a sweep setting it.** The 89% is a ceiling on the problem's size, not a measurement of diligence.
+
+★ **RECORDED IN FULL BECAUSE THE ERROR IS THE POINT: (c) was written to supply a missing control, and it asserted a perfect correlation from a comparison of 7 against 2 — n=2 on the arm that mattered. The very next query, on n=502 and n=85, refuted it.** ⇒ **a control with two members is a control in name only, and I built one while congratulating myself for adding rigour.**
+**MISTAKE: control-enumerates-the-observed [#942] — built a two-member "control" from the cases already in hand and read a perfect correlation off it.**
