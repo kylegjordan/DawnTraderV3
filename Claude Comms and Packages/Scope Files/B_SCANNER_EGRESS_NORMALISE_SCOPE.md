@@ -168,3 +168,37 @@ const poolSymbols = new Set(activeFilterPool.getSymbolsRaw(mode));      // INTER
 - **`OBJ-1` SPLITS: `OBJ-1a` Bitcoin — passes the history filter instead of failing it. `OBJ-1b` Dogecoin — REACHES evaluation at all.** ⛔ **They are different hops and must never again be verified as one.**
 - ⭐ **The close criterion gets SHARPER, not looser: `XBT/USD` must stop being rejected on `history failed`, and `XDG/USD` must APPEAR in the evaluated set. Both are single-observation, both are visible in one log read.**
 - ⛔ **`OBJ-6`'s controls stand and are now doubly earned** — ETH and SOL reject on VOLUME today, so a control shifting to `history failed` after this change is an unmistakable regression signal.
+
+
+---
+
+## 9. ⛔⛔ SECOND READER — **§6.3's FIX IS TO A PRODUCTION-LOCKED MODULE, AND §6/§7 ARE A RE-DERIVATION OF A FOUR-DAY-OLD LEDGER ENTRY. BOTH WITHDRAWN.**
+
+> **REVIEWER:** `claim-only` · *"only one pair changes; the table already handles Bitcoin"* · **HIT** · re-derived **y**
+> ⭐ **Kyle asked for a second reader on the load-bearing parts. It paid for itself on its first run — it stopped an edit to a locked file and caught me presenting a known finding as new.**
+
+### 9.1 ⛔⛔ THE MODULE IS PRODUCTION-LOCKED. I PROPOSED EDITING IT.
+**`server/markets/kraken-symbol-resolver.ts:1-6`, verbatim:**
+> *"🔒 **LOCKED MODULE — DO NOT MODIFY.** Directive: 8.8.4-A4.R10R-4 (Core System Hardening). Owner: Dawn Trader Core. **This module is production-locked. Changes require a formal directive.**"*
+
+⇒ ⛔ **§6.3 PROPOSED CHANGING `normalizeInternal` INSIDE THAT FILE. WITHDRAWN — it is not this batch's to edit.**
+⚠️ **AND ITS HOME ALREADY EXISTS: `RUNNING_ISSUES:2427` (`#229`) names all four competing normalisers, homes their consolidation to PHASE 20, and NOTES THE LOCKED STATUS EXPLICITLY.** ⇒ **a state of the world consistent with every object: the divergence is known, deliberately NOT patched in place, and owned elsewhere.**
+
+### 9.2 ⛔ §6 AND §7 ARE A RE-DERIVATION OF `#909` (2026-08-26) — INCLUDING ITS CORRECTION
+**`RUNNING_ISSUES:4639-4657` already contains, four days before I "found" it:**
+- *"**8 of 130 entries diverge, across exactly two bases: `XBT→BTC` and `XDG→DOGE`**"* — **my §7 census, identical, to the number.**
+- A **live 661-distinct-base sweep** returning exactly those two — evidence I do not have.
+- ⛔⛔ **AND MY §7 "CORRECTION" ITSELF:** *"`XDG/USD → DOGE/USD` is in `KRAKEN_SYMBOL_MAP` and never reaches the fallback ⇒ the class is {XBT, XDG}. **Dogecoin is affected identically and was missed by both of us.**"*
+⇒ ★★ **I RE-DERIVED A FOUR-DAY-OLD FINDING, THEN RE-DERIVED ITS ALREADY-RECORDED CORRECTION, AND PRESENTED BOTH AS NEW — in a batch whose Step-1 skill mandates the ledger search precisely to prevent this.** *(§9.5(b-ii): a finding that fails the ledger check becomes a CROSS-REFERENCE, and any new insight is recorded ON the existing issue.)*
+✅ **§6 AND §7 ARE HEREBY CROSS-REFERENCES TO `#909`, NOT FINDINGS.**
+
+### 9.3 ⚠️ AND MY POPULATION MAY BE THE WRONG ONE
+**The reader's sharpest point, which I had not considered at all:** the other consumer functions in that same file (`toKrakenRest:147`, `toKrakenWS:177`, `isMappable:223`, `getSymbolMappingDetails:349`) **consult `krakenAssetPairsService.resolveAny` — the LIVE AssetPairs fetch (~1,437 pairs, a 20-entry normalisation table that also normalises the QUOTE side)** — while `normalizeInternal` **never calls it**.
+⇒ ⛔ **My "130 pairs, 1 changes" silently selected the STATIC map as the population. Nothing establishes that as the right denominator, and the file's own siblings use the other one.** **`wrong-object`, on a denominator, in a measurement I offered as the safety argument.**
+
+### 9.4 ✅ WHAT SURVIVES, AND IT IS THE PART THE BATCH WAS ALWAYS FOR
+1. ⭐ **DEFECT A STANDS AND IS UNAFFECTED BY THE LOCK.** `market-scanner.ts` is **not** a locked module. Passing a raw venue name where an internal symbol is expected is wrong at those eight sites regardless of what the resolver would have done.
+2. ⭐ **§8's LIVE MEASUREMENTS ARE GENUINELY NEW** — they post-date `#906`/`#909` and one of them REFUTES `#906`: **`XBT/USD` is evaluated today and rejected on `history failed`; Dogecoin appears in ZERO of 362 distinct evaluated pairs.** *(Those came from the runtime, which no prior entry read.)*
+3. ✅ **THE RESOLVER CHANGE IS RE-HOMED, NOT ABANDONED:** it needs a **formal directive** per the lock, and `#229` already places the four-normaliser consolidation in **Phase 20**. ⇒ **Langston rules whether this batch gets a directive or whether it waits for `#229`.**
+
+★★ **THE LESSON, AND IT IS THE SAME ONE ALL DAY: I SEARCHED THE LEDGER FOR THE COMPONENT AND NOT FOR THE BEHAVIOUR.** `#909` is titled around the SWEEP, not around `normalizeInternal` — so a symbol-name grep missed it, exactly as `#174` was missed for seven weeks. **Search the behaviour, then the component.**
