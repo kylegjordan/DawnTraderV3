@@ -101,3 +101,38 @@ const poolSymbols = new Set(activeFilterPool.getSymbolsRaw(mode));      // INTER
 - ✅ **The scanner egress work (§2, `OBJ-1`-`OBJ-5`) STILL STANDS** — passing a raw wsname where an internal symbol is expected is wrong independently of whether the resolver would have normalised it.
 - ⚠️ **`OBJ-6`'s regression risk RISES with the wider fix**, and the four controls become more load-bearing, not less.
 - ⚠️ **INSTRUMENT LIMIT, STATED: I could NOT confirm the live symbol forms from `signal_eval_archive` — the query hit the statement timeout.** The finding above rests on the CODE, which is sufficient for it; **no claim here rests on that unread table.**
+
+
+---
+
+## 7. ⛔⛔ §6 OVERCLAIMED AND I AM CORRECTING IT BEFORE IT REACHES CODE — **THE TABLE *HANDLES* BITCOIN**
+
+**§6 said the one-entry table *"is the whole BTC-vs-DOGE asymmetry, at the line."* THAT IS FALSE, and the measurement that refutes it is one I ran myself, ten minutes later.**
+
+### 7.1 THE MEASUREMENT — 130 MAPPED PAIRS, **ONE** CHANGES ANSWER
+| | |
+|---|---:|
+| pairs in `kraken-symbol-map.ts` | **130** |
+| pairs whose **WS form differs** from the internal form | **8** |
+| of those, base `XBT` *(already in `REVERSE_ASSET_TRANSLATIONS`)* | **7** |
+| ⭐ **pairs whose ANSWER actually changes under the §6.3 fix** | ⭐ **1 — `XDG/USD → DOGE/USD`** |
+
+⇒ ✅ **`normalizeInternal('XBT/USD')` RETURNS `BTC/USD` CORRECTLY TODAY** — base `XBT`, table hit, done. **Bitcoin was never broken in the resolver.**
+
+### 7.2 ⇒ THERE ARE **TWO** DEFECTS, NOT ONE ROOT CAUSE, AND THEY EXPLAIN DIFFERENT COINS
+| defect | who it breaks | why |
+|---|---|---|
+| **A — the SCANNER never calls a normaliser at all** (§2) | ⭐ **BOTH BTC and DOGE** | `pair.symbol` is the raw wsname at every egress and in both dedupe joins. **The resolver is not involved because it is never invoked.** |
+| **B — `normalizeInternal`'s slashed branch skips its own maps** (§6) | ⛔ **DOGE ONLY** | `XBT` is in the static table so Bitcoin resolves; `XDG` is not. **This bites only where the resolver IS called** — 58 sites across 10 files. |
+
+⇒ ⛔ **DEFECT A IS THE PRIMARY CAUSE AND IT IS THE ONE THIS BATCH WAS ALWAYS ABOUT.** Defect B is real, worth fixing, and **explains only the second coin, only in the other 58 places.**
+⇒ ⚠️ **AND `#906`'s framing was right all along, where mine was not:** it filed *"the BTC-specific non-evaluation trace, which is a **different bug** and may survive (1)."* **Bitcoin still needs its own explanation, and defect B is not it.**
+
+### 7.3 ★★ THE ERROR, NAMED — IT IS TODAY'S PATTERN FOR THE SIXTH TIME
+**I found a mechanism that would produce the observed asymmetry, and did not test it against the case it was supposed to explain.** One line of arithmetic — *does the table already contain `XBT`?* — refutes it, and the table is FOUR LINES LONG.
+⛔ **A story that fits the symptom is not a cause.** *(`CONDUCT` §8: a cause is a CLAIM, and a claim sends people to work — here, to the wrong file.)*
+✅ **What survives is BETTER SCOPED, not smaller: the batch fixes A for both coins, fixes B for Dogecoin and every future map-only pair, and leaves Bitcoin's own trace explicitly OPEN rather than falsely closed by a fix that could never have reached it.**
+
+### 7.4 ✅ WHAT THIS DOES TO THE RISK — IT COLLAPSES IT
+**The 58-call-site blast radius was the right thing to worry about and the wrong denominator.** ⇒ **For 129 of 130 mapped pairs `normalizeInternal` returns a BYTE-IDENTICAL answer before and after.** **Only Dogecoin moves.**
+⛔ **`OBJ-6`'s four controls (XRP, SUI, LINK, ADA) are all in the unchanged 129** — so the control set is now provably conservative rather than hopefully so, and **any control regression would indicate a defect-A error, not a defect-B one.** That is a sharper instrument than I had before.
