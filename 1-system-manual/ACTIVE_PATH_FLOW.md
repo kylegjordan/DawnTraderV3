@@ -289,3 +289,72 @@ If step 2 fails, the signal has **already left the queue** and is **deliberately
 
 **Dormant-by-decision or dormant-by-defect (§4e):** live and firing (44 closes on 2026-07-24; reason mix stop / target / never_filled / max_holding_period). ⚠️ **The `max_holding_period` sub-driver is currently PAUSED** (paper + live, `max_hold_switch` seeded false 2026-07-24, Kyle) — a dormant-by-DECISION exit; see the max-hold policy thread + the weekend slot-jam (HOP D→E).
 **Absence behaviour (§4d):** a position removed outside `closePosition` leaves an honest NULL-closed row (no fabricated close) — which is why the orphans surface as visible data-integrity blemishes rather than silent corruption; the readers' `closed_at IS NOT NULL` filter is the backstop.
+
+---
+
+# 6. ⭐⭐ THE PRICE FLOW — WHERE IT ENTERS, WHAT HAPPENS TO IT, WHO READS IT, WHAT IT DECIDES
+
+> **ADDED 2026-08-30, Kyle-directed, and it is the question this document did not answer:** *"Why can't we trace how the data is flowing? Where it comes in from, what it goes into, what happens to it, what reads it, what decisions are made based on those readings, and are those decisions correct?"*
+> **§1-§5 trace the SIGNAL flow — a candidate becoming a trade. This traces the PRICE flow — a number arriving from a venue and ending up in a decision.** They are different paths and only the first was mapped.
+>
+> ⛔⛔ **EVERY ROW IS SPLIT INTO TWO COLUMNS, AND THE SPLIT IS LOAD-BEARING (Langston ruling, 2026-08-30):**
+> - **WHAT IT IS** — descriptive. What the code does, what the table holds, what a counter reads. ✅ **Certified: this class never depended on the intent corpus.**
+> - **IS THE DECISION CORRECT?** — dispositional. ⛔ **UNCERTIFIED until `B-DECIDED-INTENT-INDEX` (`#956`, plan row 3b.g) exists**, because *"was this decided, and where"* is not currently answerable by any single search. **A cell reading `DECISION PENDING` means nobody has ruled — NOT that it is broken.**
+> ★ **That is the discipline this document previously lacked and it is why the audit wavered: the trace and the verdict were written in the same sentence.**
+
+---
+
+## 6.1 ⛔ CRYPTO — TWO SOCKETS, TWO PRODUCERS, **ONE CACHE SLOT**
+
+| # | hop | WHAT IT IS *(descriptive — certified)* | IS THE DECISION CORRECT? |
+|---|---|---|---|
+| **1** | **ENTRY — trading adapter** | `wss://ws.kraken.com/v2`. Subscribes **`ticker` + `book` (depth 10) + `instrument`** (`kraken-websocket-adapter.ts:1265-1289`). | ✅ Right venue: we fill here. |
+| **2** | **ENTRY — archiver (a SECOND socket)** | Same venue, separate connection, `ohlc(1)` + `ticker` → `crypto_spot_ticker_snap`. | ✅ **Deliberate and load-bearing** — its independence is what makes the exit witness meaningful (`depth-source.ts:86-87`). |
+| **3** | **BECOMES — the book mid** | The book ladder is held in memory, **truncated to the granted depth and CRC-verified, resubscribing on mismatch** (`:833-889`). Top-of-book → **`(bestBid+bestAsk)/2`** (`:906`). Emitted `source:'kraken_ws'`, `producer:'kraken_ws_book_mid'`. | ⛔ **DECISION PENDING** — that a **midpoint** is the right thing to compare a stop against. See `#955`/§14 of the audit: in a wide book the mid is a value estimate, not a transactable price. |
+| **4** | **BECOMES — the ticker "last"** | `translateV2ToV1` **overwrites the v1 `c` field — nominally *last trade closed* — with `(bid+ask)/2`** (`kraken-v2-translator.ts:52-58`), falling back to `last` only if a side is zero. Emitted `source:'kraken_ws'`, `producer:'kraken_ws_ticker'`. | ⚠️ **The PRODUCER is honest** — its own header says *"Uses Midpoint … instead of Last Trade price."* ⛔ **Two CONSUMING comments call it *"a clean ticker PRINT"* (`#952`).** ⇒ **the two crypto producers differ by WHICH BBO, not by kind.** |
+| **5** | ⛔ **HELD — ONE cache slot, last-writer-wins** | Both producers write the same key (`live-pricing-adapter.ts:860`) under **the same `source`**. `producer` distinguishes them; **the actionability gate reads `source` and never `producer` — and that is a documented, deliberate safety property** (`:92-97`). | ⛔ **DECISION PENDING.** The gate is right as designed. **What nobody has ruled on is whether two producers should share one slot at all.** *(Audit rule 1b was WITHDRAWN for aiming at the gate; the write side is the open question.)* |
+| **6** | **HELD — the REST leg** | The poller writes the same slot with `source:'kraken_rest'`. ⛔ **When the per-symbol cooldown BLOCKS, `fetchFromKrakenRest` returns a CACHED price as a bare number (`:582-586`) and the caller stamps `observedAt: Date.now()` and `cachedAt: Date.now()` (`:496-505`, `:425-441`).** | ⛔ **NOT A PENDING DECISION — A DEFECT (`#951`, plan 3b.f).** An arbitrarily old price is re-served with both clocks reset, and `kraken_rest` passes the venue gate while `last_known_good` would not. **The rate limiter is deciding actionability.** |
+| **7** | **READ — the exit monitor** | `getPriceWithFallback(symbol, 2000)` (`active-execution-engine.ts:1249`) → gates on `age = now − cachedAt ≤ 2000ms` **AND** `isKrakenVenueSource(source)` (`:1020`, `:1025`). Non-venue → discarded, one REST retry, then the position is **skipped** with a named reason. | ✅ **The refusal behaviour is right and better than the audit first described.** ⛔ The 2000 ms window is defeated by hop 6. |
+| **8** | **DECIDES — stop / target** | `evaluateTECExit`, three non-test callers, **shared by both lanes.** Compares the hop-7 price against stop and target. **Measured: 23 of 23 stamped closes read a midpoint; zero from any last-trade producer.** | ⛔ **DECISION PENDING** — the audit's central open question, and `OBJ-0` is the instrument. |
+| **9** | **FILLS — depth-walked** | The active path walks `getBookForFill` — a real 10-level ladder — for a size-aware VWAP. **VTS books the LEVEL instead.** | ⚠️ **BOTH ARE DECIDED, and differently, ON PURPOSE** — `BATCH_65_COMPLETION_REPORT` objective 7 preserved both conventions deliberately. ⛔ **What is NOT decided: that the row does not record WHICH fill model priced it.** |
+
+---
+
+## 6.2 ⛔ xSTOCK — **ONE SOCKET, NO BOOK CHANNEL, AND THREE DIFFERENT "PRICES" FROM ONE FRAME**
+
+| # | hop | WHAT IT IS *(descriptive — certified)* | IS THE DECISION CORRECT? |
+|---|---|---|---|
+| **1** | **ENTRY** | `wss://ws-equities.kraken.com`, **ONE connection**, subscribing **`ohlc(1)` + `ticker` and nothing else** (`equity-spot-archiver.ts:237-247`). ⛔ **No `book` subscription exists anywhere in the repo** *(control: the same search finds `book` 4× in the crypto adapter).* | ⛔ **HALF A DECIDED THING.** `B_2_LQ_SWEEP_RESULTS.md:57` (Kyle-pointed, Langston-resolved) ratifies depth as the permanent screen **and names *"`bid_qty`/`ask_qty` + the book ladder"*** as the binding constraint. **We built the first half.** `#949`, plan 3b.d. |
+| **2** | ⛔ **NOT A REST ALTERNATIVE** | Kraken publishes **no REST for xStocks** — empirically closed twice. | ✅ **Not a choice. There is one source.** |
+| **3** | **BECOMES (a) — the in-memory mark** | `parseTickerSnap` computes **`(bid+ask)/2`, or `last` if a side is zero**, and stores `{price, tsMs}` in a module-private map (`:131-139`). ⛔ **No source tag, so a reader cannot tell a mid from a `last` fallback.** `tsMs` is **receipt time**, not venue time. | ⛔ **DECISION PENDING on the mid** (as crypto hop 3). ⛔ **The untagged fallback is a real gap — a reader cannot know which of two different quantities it holds.** |
+| **4** | **BECOMES (b) — the archived row** | The same parsed object, **throttled to ≤1 row per symbol per 4 s**, batch-flushed every 5 s, into `xstock_spot_ticker_snap`. ⚠️ **The row and the hop-3 mark are SIBLINGS from one parse — not independent witnesses.** | ✅ **Correct as an archive.** ⛔ **`#950`: it was built as an archive explicitly forbidden to share state with trading, and then became the trading feed. That inversion was never decided.** |
+| **5** | ⭐ **WHAT THE ROW ACTUALLY IS** | ⭐ **`bid`/`ask`/`bid_qty`/`ask_qty` are KRAKEN'S REAL EXECUTABLE TOP-OF-BOOK** — ratified, verbatim. **The other ticker fields (`volume`, `vwap`, `high`, `low`) are UNDERLYING-EQUITY referenced and are NOT the token's.** | ✅ **Decided and correct.** ⚠️ **The audit called this row "synthesised" and "a fake level" — that was WRONG and is corrected.** |
+| **6** | **READ (a) — the exit monitor** | `getLatestEquityTick` → the hop-3 **midpoint** (`active-execution-engine.ts:1163`, `:1230-1231`). ⛔ **Staleness is BLOCKING here** — a tick older than the class ceiling yields **no price**, with named skip reasons and a streak alert. ⛔ **No REST fallback exists for this class.** | ✅ **The refusal is right.** ⛔ **DECISION PENDING on the mid — and `#955` makes this the sharpest case: extended-hours spreads average 13.8%, so the mid is 7% from either side.** |
+| **7** | **READ (b) — the entry fill** | `depth-source.ts:49-70` reads **one row** and wraps it as a **one-level** ladder. The depth gate's `min_levels` is seeded at **1** for xStock (3 for crypto) and `warmth_max_age_ms` at **15,000** (5,000) against a **4 s** cadence. | ⚠️ **`min_levels=1` is a DOCUMENTED ACCOMMODATION** — the seed comment says *"xStock has only top-of-book."* ⛔ **`warmth_max_age_ms` and `sufficiency_multiple` are NOT accommodations and can discriminate.** ⛔ **And this is an ENTRY gate — it does not gate exits.** |
+| **8** | **READ (c) — the scanner** | Reads **`last`** from the same table (`scanner.ts:640`), plus a **20-minute median** of `ask × ask_qty` for the liquidity screen (`:686-693`) — deliberately smoothed *"so the depth gate doesn't flip on a single jittery tick."* | ✅ **The smoothing is a stated, sound decision.** ⚠️ **It is also why a live ladder is not a drop-in replacement.** |
+| **9** | ⛔⛔ **THE CONSEQUENCE OF 3 + 7 + 8** | ⭐ **THREE DIFFERENT DEFINITIONS OF "THE xSTOCK PRICE", FROM ONE VENUE FRAME, AT THREE CADENCES: the exit reads an unthrottled in-memory MID; the entry fill walks a ≤4 s-old ASK from the database; the scanner reads LAST.** | ⛔ **DECISION PENDING — and it is the single most important open question in this document.** **Nothing states that these should differ, and nothing states that they should agree.** |
+| **10** | **THE WITNESS** | The exit-provenance cross-check reads `xstock_spot_ticker_snap`. ⛔ **On xStock that is THE SAME TABLE the fill's depth-walk reads** (`depth-source.ts:89-93`) ⇒ **a CONSISTENCY record, not corroboration.** On crypto it is a genuinely separate socket. | ✅ **Stated in code and in the schema, deliberately.** ⭐ **It is the reason `F-G-2`'s xStock legs are held.** |
+
+---
+
+## 6.3 ✅ WHAT THIS TRACE SETTLES, AND WHAT IT LEAVES OPEN
+
+**SETTLED — measured, controlled, and not dependent on anyone's intent:**
+1. ✅ **There is exactly ONE source per asset class**, and for xStock there is no alternative in existence. **The source was never the open question.**
+2. ✅ **The xStock quote we store is Kraken's real executable top-of-book.** Not inferred, not fabricated.
+3. ✅ **The wide xStock bids are a genuine symmetric two-sided widening** — `#955`: mean position of the last trade in the spread is 0.45-0.55 in every band, against 0.49 across 5.28 M tight quotes.
+4. ✅ **Every exit decision, both classes, both lanes, reads a computed midpoint** — 23 of 23 stamped closes.
+5. ✅ **What is missing on xStock is the LADDER, not the quote** — and the ladder was already named as needed by a ratified decision.
+
+**OPEN, AND EACH HAS A HOME:**
+| open question | home |
+|---|---|
+| Should a stop trigger on a midpoint? | `F-G-2` (3c), instrument `OBJ-0` |
+| Three xStock price definitions from one frame — intended? | ⛔ **UNOWNED. The largest gap this trace exposes.** |
+| Should two crypto producers share one cache slot? | write-side reformulation of rule 1b — **unowned** |
+| The ladder half of the ratified depth decision | `B-XSTOCK-BOOK-LADDER` (3b.d) |
+| An old price re-served with both clocks reset | `B-PRICE-AGE-TRUTH` (3b.f) — **a defect, not a pending decision** |
+| A live route pricing a real sell with `Math.random()` | `B-LEGACY-LIVE-EXIT-PATH`, **Phase 21.1.a, hard go-live blocker** |
+| *"Was this decided, and where?"* is unanswerable | `B-DECIDED-INTENT-INDEX` (3b.g) — **precedes the redesign** |
+
+⛔⛔ **AND THE HONEST LIMIT ON THIS WHOLE SECTION: every "IS THE DECISION CORRECT?" cell reading `DECISION PENDING` is exactly that — PENDING. It is NOT a finding of breakage, and it may not be cited as one until `#956` lands.** ★ **That is the discipline the audit lacked: the trace is certified, the verdicts on it are not.**
