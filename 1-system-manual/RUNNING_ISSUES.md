@@ -847,6 +847,24 @@ MSYS2_ARG_CONV_EXCL='*' git show "…:.claude/memory/MEMORY.md"               ->
 
 ---
 
+### #960 OPEN 2026-08-30 (CC-C; a reader's LEAD whose stated mechanism I REFUTED, and the conclusion then survived on a different one) — ⚠️ THE xSTOCK FEED'S SUBSCRIPTION LIST IS **FROZEN AT PROCESS BOOT** WHILE THE TRADING UNIVERSE REFRESHES DAILY
+
+**SEVERITY: medium — mechanism established, CONSEQUENCE NOT. OWNER: CC-C.**
+> **HOME: added as an item to `B-XSTOCK-FEED-SANITY` (plan row **3b.b**), which already owns what the feed does and does not carry.**
+
+⛔ **THE READER'S MECHANISM WAS WRONG AND I REFUTED IT BEFORE ADOPTING ANYTHING.** It reported that the feed *"reads `xstocks-universe.json`, a static file."* **FALSE — and the code says so itself** (`universe-loader.ts:54-57`): *"switched from static JSON file read to in-memory read. **`xstocks-universe.json` was DELETED in this sub-batch** — universe is now DB-backed via `xstock_spot_universe` (populated … at daily 06:00 UTC + boot-time init)."* ★ *The reader had read the file's stale top-of-file doc comment at `:8`, not the code path.*
+
+✅ **BUT THE CONCLUSION SURVIVES ON A DIFFERENT MECHANISM, RE-DERIVED BY ME WITH A CONTROL:**
+- `loadEquitySpotUniverse` has **exactly ONE call site repo-wide** (`equity-spot-archiver.ts:404`), and `state.symbols` is assigned there and **never reassigned** *(control: the same grep returns the import at `:23` and the loader's own definition, so it finds real usage)*.
+- `subscribe()` (`:237-246`) always sends `state.symbols` — **including on every reconnect.**
+⇒ ⛔ **THE FEED'S SUBSCRIPTION LIST IS FIXED AT PROCESS BOOT. THE TRADING UNIVERSE IS REPLACED DAILY AT 06:00 UTC. BETWEEN RESTARTS THEY DIVERGE.**
+**Supporting, not conclusive: 476 distinct symbols wrote ticker rows on 2026-08-28 against 496 rows in `xstock_spot_universe`.**
+
+⚠️ **WHAT IS *NOT* ESTABLISHED, AND I AM NOT CLAIMING IT: what happens to a universe member with no feed.** It plausibly cannot be selected at all (the scanner reads the same archive that would hold no rows for it) — **which would make this benign — or it reaches selection with a stale/absent price, which would not.** ⛔ **Untested. That is the batch's question.**
+★ **AND A MITIGATING FACT, STATED SO THE SEVERITY IS NOT INFLATED: the process restarts often — pm2 reports 584 restarts — so the divergence window is bounded by restart frequency, not by the daily cron.**
+
+---
+
 ### #959 OPEN 2026-08-30 (CC-C; surfaced by the fresh reader attacking the plan draft, re-derived by me at the ref) — ⛔⛔⛔ **THE EXIT *TRIGGER* AND THE EXIT *FILL* READ DIFFERENT PRICES FROM DIFFERENT SAMPLES. ON xSTOCK THEY DISAGREE BY 14% ON AVERAGE, AND STOP-OUTS FILL *BETTER* THAN THEIR OWN STOP.**
 
 **SEVERITY: CRITICAL — this is the mechanism that manufactures the contaminated P&L, and it was absent from my own "complete list" of what is wrong. OWNER: CC-C.**
