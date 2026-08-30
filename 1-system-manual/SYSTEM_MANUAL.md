@@ -8401,9 +8401,22 @@ MarketDataWebSocket (singleton)
     │   │     ⚠️ WHAT IS WRONG IS THE **LABEL**: the value keeps the v1 field's trade-price
     │   │     NAME, and this manual asserted "trade-based price updates" until 2026-08-29.
     │   │     Downstream it is read as `lastPrice` (`kraken-websocket-adapter.ts:680`) and
-    │   │     re-emitted under producer `kraken_ws_ticker`, which therefore reports a MID
-    │   │     under a trade-price name. `kraken_ws_book_mid` and `kraken_ws_ticker_v1` are
-    │   │     honestly named; that one is not.
+    │   │     re-emitted under producer `kraken_ws_ticker`, which therefore reported a MID
+    │   │     under a trade-price name. `kraken_ws_book_mid` and `kraken_ws_ticker_v1` were
+    │   │     honestly named; that one was not.
+    │   │     ✅ FIXED 2026-08-30 (`B-EXIT-BOOK-AGE-STAMP`, `#962`): `translateV2ToV1` now
+    │   │     returns `markKind: 'mid' | 'last'` ALONGSIDE `c`, decided by the single
+    │   │     predicate `markKindOf` (`services/market-data/mark-kind.ts`), and the adapter
+    │   │     emits `kraken_ws_ticker_mid` or `kraken_ws_ticker_last` accordingly. The
+    │   │     SUBSTITUTION IS UNCHANGED — only the LABEL was wrong, and only the label moved.
+    │   │     ⛔ `_mid` RECORDS THE KIND AND SAYS NOTHING ABOUT **WHICH BBO** PRODUCED IT.
+    │   │     Both crypto legs come out `_mid`; `#952`'s question — which of the two is
+    │   │     supposed to be the trade print, and whether we need one at all — IS STILL OPEN
+    │   │     and this split must not be read as having settled it.
+    │   │     ⛔ THE KIND IS DECIDED WHERE THE PRICE IS BUILT AND CARRIED FROM THERE. It may
+    │   │     NEVER be re-derived downstream: `price-cache.ts` coalesces a missing bid/ask to
+    │   │     the price itself, so on a cold entry the predicate answers `mid` for what may
+    │   │     have been a last trade — and the `priceTick` emit drops bid/ask entirely.
     │   │     ⛔ AND THE CONSUMER PREDATES THE SUBSTITUTION BY ELEVEN WEEKS
     │   │     (`cb8ee0942` 2025-10-10 already read `tickerData.c[0]`) — a field's MEANING
     │   │     changed underneath live readers, which is why this is recorded here rather
