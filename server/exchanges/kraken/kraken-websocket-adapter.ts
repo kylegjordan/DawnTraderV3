@@ -678,6 +678,9 @@ export class KrakenWebSocketAdapter extends EventEmitter {
       
       // Translate v2 to v1 format and update price cache
       const safeData = translateV2ToV1(update);
+      // NAMED `lastPrice` AND IT IS A MIDPOINT ON ESSENTIALLY EVERY TICK (#952). The name is left
+      // alone deliberately — renaming it is a behaviour-adjacent edit this batch's OBJ-3 forbids —
+      // but `safeData.markKind` now says which it is, carried from where it was decided.
       const lastPrice = parseFloat(safeData.c[0]);
       const bid = parseFloat(safeData.b[0]);
       const ask = parseFloat(safeData.a[0]);
@@ -697,7 +700,15 @@ export class KrakenWebSocketAdapter extends EventEmitter {
       
       // B78.1: emit priceTick event instead of direct call to livePricingAdapter.
       // live-pricing-adapter subscribes via .on('priceTick', ...) at module-load.
-      this.emit('priceTick', { symbol: internalSymbol, price: lastPrice, source: 'kraken_ws', producer: 'kraken_ws_ticker' } as PriceTickEvent);
+      // B-EXIT-BOOK-AGE-STAMP P2: the producer now states the KIND. `_mid` on essentially every
+      // tick; `_last` only on a one-sided or empty book. Carried from `translateV2ToV1`, never
+      // re-derived here — see `mark-kind.ts` for why re-derivation downstream is unsafe.
+      this.emit('priceTick', {
+        symbol: internalSymbol,
+        price: lastPrice,
+        source: 'kraken_ws',
+        producer: safeData.markKind === 'mid' ? 'kraken_ws_ticker_mid' : 'kraken_ws_ticker_last',
+      } as PriceTickEvent);
       this.priceTickCount++;
 
       // priceCache is updated by live-pricing-adapter's priceTick handler (cycle-broken)

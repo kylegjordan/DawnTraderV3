@@ -202,12 +202,60 @@ describe('B-EXIT-PROVENANCE — the exit stamp cannot be satisfied by a non-prov
     expect(toCachedProducer('position_entry_price_reused' as PriceProducer)).toBeNull();
     expect(toCachedProducer('no_price_produced' as PriceProducer)).toBeNull();
     expect(toCachedProducer('kraken_ws_book_mid' as PriceProducer)).toBe('kraken_ws_book_mid');
-    // THE PROPERTY THAT MAKES WIDENING SAFE, asserted rather than assumed: the engine's actionable
-    // gate reads source and never producer, so a new producer cannot cause a price to be rejected
-    // and a position to be skipped. That was the single largest risk in this batch, and it is
-    // structurally absent rather than merely guarded.
+    // THE PROPERTY THAT MAKES WIDENING SAFE THROUGH THE VENUE GATE, asserted rather than assumed:
+    // that gate reads source and never producer, so a new producer cannot cause a price to be
+    // rejected or a position to be skipped THROUGH IT.
+    // NARROWED 2026-08-30 (B-EXIT-BOOK-AGE-STAMP). This said the risk was 'structurally absent
+    // rather than merely guarded', FULL STOP. Too strong, and withdrawn over two reader rounds:
+    // toCachedProducer's null arm IS a producer-dependent branch - it gates the cache write, a
+    // miss there reaches last_known_good, fails this very gate, and falls to direct REST, which
+    // is a SKIPPED POSITION if REST also fails. Unreachable TODAY only because of today's call
+    // sites, which is #546's entire lesson. The P11 test below is what holds the property now.
     const gate = code(LPA).match(/export function isKrakenVenueSource[\s\S]{0,220}?\n\}/)?.[0] ?? '';
     expect(gate).toContain('source ===');
     expect(gate).not.toContain('producer');
+  });
+
+  it('P11 - every SPLIT member is CACHEABLE: the six new producers sit in the passthrough arm', () => {
+    // WHY THIS EXISTS AND WHY THE TYPE SYSTEM CANNOT REPLACE IT: toCachedProducer's `never`
+    // default forces every new union member to be HANDLED. It says NOTHING about WHICH arm. A
+    // member dropped into the `return null` arm still belongs to CachedProducer (an Exclude of two
+    // hardcoded names), so returning null for it COMPILES - and would silently suppress the cache
+    // write for that producer. Behaviourally load-bearing TODAY for kraken_ws_ticker_* only: the
+    // other four reach the cache via updateCache(..., producer: CachedProducer), which never calls
+    // this switch. Asserted for all six anyway, because that safety is a call-site fact and call
+    // sites move.
+    for (const m of [
+      'kraken_ws_ticker_mid',
+      'kraken_ws_ticker_last',
+      'kraken_equities_ws_mid',
+      'kraken_equities_ws_last',
+      'kraken_rest_engine_fallback_mid',
+      'kraken_rest_engine_fallback_last',
+    ] as PriceProducer[]) {
+      expect(toCachedProducer(m)).toBe(m);
+    }
+  });
+
+  it('P11 - the SPLIT is pure re-description: coarse names gone, nothing merged or deleted', () => {
+    // Langston's condition 1: split only - never merge, never delete a member, never change which
+    // number is produced. The three coarse names must be gone from the union; the three members
+    // deliberately NOT split must still be present, each for a stated reason (book_mid has no
+    // last-trade arm; ticker_v1 is unreachable; rest_poller has a THIRD arm - the rate-limited
+    // bare cached price, #951).
+    // SCOPED TO THE PRODUCER UNION, and the first version of this test was NOT - it searched the
+    // whole file and matched the SOURCE union, where 'kraken_equities_ws' legitimately still
+    // lives and MUST. That failure was this batch's own subject landing on its own test: only the
+    // PRODUCER splits. Slice first, then assert.
+    const src = code(LPA);
+    const unionStart = src.indexOf('export type PriceProducer =');
+    expect(unionStart).toBeGreaterThan(-1);
+    const union = src.slice(unionStart, src.indexOf("'no_price_produced';", unionStart));
+    expect(union).not.toContain("'kraken_ws_ticker'");
+    expect(union).not.toContain("'kraken_equities_ws'");
+    expect(union).not.toContain("'kraken_rest_engine_fallback'");
+    expect(union).toContain("'kraken_ws_book_mid'");
+    expect(union).toContain("'kraken_ws_ticker_v1'");
+    expect(union).toContain("'kraken_rest_poller'");
   });
 });

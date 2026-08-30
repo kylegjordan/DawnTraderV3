@@ -142,6 +142,7 @@ import { isXstockMarketOpenUTC } from '../asset_classes/xstock_spot/market-hours
 // P19-B7.2c: the shared PURE pending-maker fill/drop decision (paper+VTS parity — R2).
 import { evaluatePendingMaker, makerFillPrice, isMarketableAtPlacement } from '../core/trading/pending-maker-logic.js';
 import { getLatestEquityTick } from './passive-archive/equity-spot-archiver.js'; // P19-B8.5 xstock marks — the equities-feed venue leg
+import { markKindOf } from './market-data/mark-kind.js'; // B-EXIT-BOOK-AGE-STAMP P1 — the one mid-or-last predicate
 // P19-B8.5e (`#548`) — risk-derived per-symbol mark-staleness ceiling. The POLICY is pure
 // (`mark-staleness`); the σ MEASUREMENT is cached (`sigma-rate-cache`) so the exit path
 // never awaits a DB read to decide whether a mark is trustworthy.
@@ -1233,7 +1234,11 @@ export class ActiveExecutionEngine {
           // adapter quote object on this leg, so THE CODE AT THIS LINE IS THE PRODUCER. The stated
           // exemption to "stamps travel explicitly": a stamp is CARRIED wherever a quote exposes
           // provenance and is a LITERAL only where the emitting line itself IS the provenance.
-          priceProducer = 'kraken_equities_ws';
+          // B-EXIT-BOOK-AGE-STAMP P3: the producer now states the KIND, carried from the archiver's
+          // tick map where it was decided. Still a LITERAL producer on this leg (there is no adapter
+          // quote object here, so the code at this line IS the provenance) — only now it is a literal
+          // that discriminates.
+          priceProducer = _eqTick.kind === 'mid' ? 'kraken_equities_ws_mid' : 'kraken_equities_ws_last';
           // ★ A REAL venue observation stamp — `equity-spot-archiver.ts:137` writes `tsMs` only on a
           // genuine venue snap with a finite positive mark. NOT the time this object was built.
           priceObservedAtMs = _eqTick.tsMs;
@@ -1241,7 +1246,10 @@ export class ActiveExecutionEngine {
           // Feed the shared cache so UI/summary reads see the same mark, then FALL
           // THROUGH into the shared evaluation pipeline below — the crypto venue
           // chain is skipped entirely (spot REST cannot serve this class).
-          livePricingAdapter.updateCache(normalizeToInternalSymbol(position.symbol), currentPrice, 'kraken_equities_ws', 'kraken_equities_ws');
+          // ⛔ ONLY THE PRODUCER SPLITS. The third argument is the `source`, and
+          // `isKrakenVenueSource` tests `source === 'kraken_equities_ws'` — splitting THAT would gate
+          // real prices. Two axes, deliberately: source = policy, producer = provenance.
+          livePricingAdapter.updateCache(normalizeToInternalSymbol(position.symbol), currentPrice, 'kraken_equities_ws', priceProducer);
         } else {
 
         // Phase 8.8.3-I7-WS-D (D5): Use WebSocket cache FIRST with 2-second stale threshold
@@ -1302,11 +1310,14 @@ export class ActiveExecutionEngine {
             const ask = parseFloat(tickerData.a[0]);
             const bid = parseFloat(tickerData.b[0]);
             const lastTrade = parseFloat(tickerData.c[0]);
-            currentPrice = (ask > 0 && bid > 0) ? (ask + bid) / 2 : lastTrade;
+            // B-EXIT-BOOK-AGE-STAMP P1/P4: one predicate, one home — and the kind is decided right
+            // here, where `ask`/`bid` are in scope, so this leg needs no plumbing at all.
+            const _restKind = markKindOf(bid, ask);
+            currentPrice = _restKind === 'mid' ? (ask + bid) / 2 : lastTrade;
             priceSource = 'kraken_rest';
             // B-EXIT-PROVENANCE P2 (R6-3, crypto direct-REST branch): LITERAL producer, honestly —
             // direct `krakenService.getTicker`, mid computed inline, so the line is the producer.
-            priceProducer = 'kraken_rest_engine_fallback';
+            priceProducer = _restKind === 'mid' ? 'kraken_rest_engine_fallback_mid' : 'kraken_rest_engine_fallback_last';
             // ⛔ NULL, and NULL IS THE HONEST VALUE: the REST ticker carries no per-quote venue
             // observation time. Fabricating one from `Date.now()` would record fetch time as
             // observation time — precisely the #743 defect this column exists to make visible.
@@ -1329,7 +1340,7 @@ export class ActiveExecutionEngine {
             // Phase 8.8.3-I7: Broadcast this REST price to frontend
             // Normalize to internal format for consistent cache keys
             const internalSymbol = normalizeToInternalSymbol(position.symbol);
-            livePricingAdapter.updateCache(internalSymbol, currentPrice, 'kraken_rest', 'kraken_rest_engine_fallback');
+            livePricingAdapter.updateCache(internalSymbol, currentPrice, 'kraken_rest', priceProducer);
             console.log(`[I7][REST_BROADCAST] symbol=${internalSymbol} price=${currentPrice}`);
           } catch (krakenError) {
             console.warn(`[B9.PRICING][SKIP_DUE_TO_NO_PRICE] ${position.symbol}: Kraken REST failed, skipping position check`, krakenError);
@@ -1386,8 +1397,15 @@ export class ActiveExecutionEngine {
           source: priceSource,
           observedAtMs: priceObservedAtMs,
           tickCadenceMs: diffMs,
-          // NULL BY CONSTRUCTION on xStock — that class has no order book at all, so a null here
-          // is the honest value and not a missed read (OBJ-4/OBJ-8's discipline, applied).
+          // NULL BY CONSTRUCTION on xStock — `getBookForFill` is the crypto WS mini-book and has no
+          // xStock equivalent, so a null here is the honest value and not a missed read
+          // (OBJ-4/OBJ-8's discipline, applied).
+          // ⛔ BOUNDED 2026-08-30 (B-EXIT-BOOK-AGE-STAMP): this is true of `bookMid`/`bookAgeMs` and
+          // is NOT a class-level claim that xStock "has no book". The FILL-time `getDepthSnapshot`
+          // DOES return an xStock ladder — synthesised from one `xstock_spot_ticker_snap` row — and
+          // `exit_fill_depth_age_ms` is populated on xStock from it. Two different reads.
+          // ⛔ AND THESE TWO ARE DECISION-TIME: this payload is built ONCE PER POSITION, above the
+          // exit-condition evaluation, for every position on every tick — not at the close.
           bookMid: _bookX ? (_bookX.bids[0].price + _bookX.asks[0].price) / 2 : null,
           bookAgeMs: _bookX ? _bookX.ageMs : null,
           // ⛔ NULL ON EVERY BRANCH TODAY, AND STATED RATHER THAN QUIETLY DROPPED. OBJ-3 asks for
@@ -1906,8 +1924,13 @@ export class ActiveExecutionEngine {
       exitProvenance?: {
         /** The value that actually DROVE the exit — NOT always the recorded exit price. */
         decisionPrice: number;
-        /** WHICH HANDLER produced it. `source` alone cannot discriminate a book midpoint
-         *  from a ticker print — both stamp `kraken_ws`. That is #741. */
+        /** WHICH HANDLER produced it. `source` alone cannot discriminate the two `kraken_ws`
+         *  producers — both stamp `kraken_ws`. That is #741.
+         *  ⛔ CORRECTED 2026-08-30: this said "a book midpoint from a ticker PRINT". THE TICKER LEG
+         *  IS ALSO A MIDPOINT (`kraken-v2-translator.ts` overwrites `c` with `(bid+ask)/2` whenever
+         *  both sides exist) — they differ by WHICH BBO, not by kind (#952/#941). The KIND is now
+         *  carried in the producer's own `_mid`/`_last` suffix; WHICH BBO remains #952's open
+         *  question and the suffix does not answer it. */
         producer: PriceProducer;
         /** The POLICY label: may the engine act on this price? Kept ALONGSIDE `producer`,
          *  never merged — merging them is what created the defect. */
@@ -1920,8 +1943,13 @@ export class ActiveExecutionEngine {
         /** RENAMED from `priceAgeMs`, which never held an age. The rename is half the
          *  prohibition above: the old name was the invitation. */
         tickCadenceMs: number | null;
-        /** Independent cross-check. `bookMid`/`bookAgeMs` are NULL BY CONSTRUCTION on
-         *  xStock — that class has no book — not by omission. */
+        /** Independent cross-check. `bookMid`/`bookAgeMs` are NULL BY CONSTRUCTION on xStock —
+         *  `getBookForFill` is the crypto WS mini-book with no xStock equivalent — not by omission.
+         *  ⛔ BOUNDED 2026-08-30: NOT a claim that xStock has no book anywhere. The FILL-time
+         *  `getDepthSnapshot` returns a synthesised xStock ladder and `exit_fill_depth_age_ms` is
+         *  populated from it on that class.
+         *  ⛔ AND BOTH ARE DECISION-TIME — this payload is built once per position, above the
+         *  exit-condition evaluation. `exit_fill_depth_age_ms` is the FILL-time one. */
         bookMid: number | null;
         bookAgeMs: number | null;
         tickerBid: number | null;
@@ -1980,6 +2008,13 @@ export class ActiveExecutionEngine {
     let exitFee: number;
     let _exitSlippageOverride: number | null = null;
     let _takerCloseSlippage = 0;
+    // ── B-EXIT-BOOK-AGE-STAMP OBJ-1 / P7 — THE AGE OF THE DEPTH THE FILL ACTUALLY WALKED.
+    // DECLARED HERE, ABOVE THE IF/ELSE, FOR THE REASON THE `_witness` BELOW IS PLACED BELOW IT: the
+    // MAKER leg fetches no depth at all (it filled at a resting limit — no book was consulted), so a
+    // NULL on that leg is the honest value and is discriminable by `exit_fee_mode = 'maker'`.
+    // ⛔ `_closeSnap` is `const`-scoped to the else block and the persist is ~280 lines below it, so
+    // it is NOT in scope there — hence a hoisted `let` rather than a read at the write site.
+    let _fillDepthAgeMs: number | null = null;
     if (options?.makerExitFill) {
       // P19-B8.6 MAKER fill leg: the resting exit filled at its limit — price = the
       // limit exactly (makerFillPrice semantics, same CI-guarded fill=limit rule as
@@ -1995,6 +2030,16 @@ export class ActiveExecutionEngine {
     } else {
       const _closeCfg = _closeClass ? await resolveFillDepthGateConfig(_closeClass) : null;
       const _closeSnap = _closeClass ? await getDepthSnapshot(position.symbol, _closeClass) : null;
+      // OBJ-1: the FILL-time depth age — taken two lines before the walk that consumes it, with no
+      // await in between. ⛔ NOT the same instant as `exit_book_age_ms`, which is built once per
+      // position ABOVE the exit-condition evaluation; and NOT the same instant as
+      // `entry_book_age_ms`, which is the depth-GATE reading with three awaits before its own walk.
+      // Three different instants; the column comments name which is which.
+      _fillDepthAgeMs = _closeSnap ? _closeSnap.ageMs : null;
+      // OBJ-1 verification leg (paired log): crypto cannot be reconstructed after the fact — nothing
+      // persists the WS mini-book, and the nearby ticker archive is a DIFFERENT feed off a separate
+      // socket. This line is the contemporaneous record the column is checked against.
+      console.log(`[B-EXIT-BOOK-AGE-STAMP][FILL_DEPTH_AGE] symbol=${position.symbol} class=${_closeClass ?? 'none'} depthSource=${_closeSnap?.source ?? 'none'} ageMs=${_fillDepthAgeMs ?? 'null'}`);
       const _closeFill = await this.orderPlacer.closeOrder({
         symbol: position.symbol, side: 'sell', quantity, requestedPrice: exitPrice, mode: this.mode, positionId,
         assetClass: _closeClass ?? undefined,
@@ -2276,6 +2321,15 @@ export class ActiveExecutionEngine {
           ? options.exitProvenance.bookMid.toString()
           : null,
         exitBookAgeMs: options?.exitProvenance?.bookAgeMs ?? null,
+        // ── B-EXIT-BOOK-AGE-STAMP OBJ-1 — the age of the depth the FILL walked. NOT from
+        // `exitProvenance`: that payload is built once per position above the exit-condition
+        // evaluation, so it carries a DECISION-time age. This one is taken at the fill.
+        // ⛔ NULL on the MAKER leg by construction (a resting fill consults no depth), and that null
+        // is discriminable by `exit_fee_mode = 'maker'`.
+        // ⛔ NOT the same QUANTITY across classes: crypto = live WS mini-book age; xStock =
+        // `xstock_spot_ticker_snap` ROW age. Never pool them. `DepthSnapshot.source` is the
+        // discriminator and the column comment says so.
+        exitFillDepthAgeMs: _fillDepthAgeMs,
         // OBJ-3 (#911): the caller's payload wins if it ever carries one; otherwise the witness
         // read above. Both may legitimately be absent — a NULL here now means "no witness row",
         // which is a DIFFERENT fact from the pre-#911 "not instrumented" and the column comment
@@ -3671,9 +3725,15 @@ export class ActiveExecutionEngine {
           ? 'crypto_ws_book_walk'
           : 'xstock_ticker_snap_walk',
         entryPriceSource: _gate.snapshot.source,
-        // ★ A REAL book age at the REAL fill instant — the value `entry_book_age_ms` was created
-        // for. It exists here, unlike on the maker path where NULL is the honest value because a
-        // resting fill consults no book at all.
+        // ★ A REAL depth age — the value `entry_book_age_ms` was created for. It exists here,
+        // unlike on the maker path where NULL is the honest value because a resting fill consults
+        // no depth at all.
+        // ⛔ CORRECTED 2026-08-30 (B-EXIT-BOOK-AGE-STAMP): this said "at the REAL fill instant".
+        // It is the DEPTH-GATE instant. `_gate` is taken by `_evaluateOpenDepthGate` far above and
+        // the walk that consumes its snapshot is ~150 lines and THREE awaits later — one of them
+        // `validatePaperOrderWithVenue`, a venue round-trip. Close to the fill, not at it.
+        // ⛔ AND ON xSTOCK THIS IS A TICKER-SNAP ROW AGE, not an order-book age — `getDepthSnapshot`
+        // computes it in SQL as `NOW() - captured_at`. Do not compare it across classes.
         entryBookAgeMs: _gate.snapshot.ageMs,
         // The price the SIGNAL intended, kept beside the walked entry price above, so slippage is
         // reconstructable from the row alone without re-deriving it from a second table (OBJ-7).

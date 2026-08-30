@@ -3,6 +3,7 @@ import { normalizeToInternalSymbol } from '../markets/kraken-symbol-resolver.js'
 import { priceTraceService } from './price-trace-service';
 import { priceCache } from './price-cache.js';
 import { restRateLimiter } from './market-data/rest-rate-limiter.js';
+import { markKindOf } from './market-data/mark-kind.js';
 import { krakenWebSocketAdapter } from '../exchanges/kraken/kraken-websocket-adapter.js';
 import { trackPipelineTime } from './system-health-service.js';
 // P19-B8.9 (OBJ-2): class resolution for the xstock REST class-gate (shared module, no cycle).
@@ -53,24 +54,49 @@ interface RestFallbackMetric {
  * future producer omit it, and that absence is indistinguishable from a missed stamp (#546).
  */
 export type PriceProducer =
-  | 'kraken_ws_ticker'                 // kraken-websocket-adapter.ts:692 handleV2TickerUpdate
-  | 'kraken_ws_book_mid'               // :916 handleV2BookUpdate — THE #741 PATH (book midpoint)
-  | 'kraken_ws_ticker_v1'              // :1049 handleTickerUpdate — UNREACHABLE, see #742
-  | 'kraken_equities_ws'               // active-execution-engine.ts:1140 (ref corrected 2026-08-26 — was :1145)
-  | 'kraken_rest_engine_fallback'      // active-execution-engine.ts:1201 (ref corrected 2026-08-26 — was :1220)
-  | 'kraken_rest_poller'               // this file :369, inside fetchLivePrice
-  | 'xstock_rest_gate_reserve'         // :348 — BY DESIGN, not a failure: the B8.9 xStock REST
+  // ── B-EXIT-BOOK-AGE-STAMP: the `_mid` / `_last` SPLIT. Langston-ruled 2026-08-30.
+  // WHY: `producer` answered WHICH HANDLER and never WHICH KIND OF NUMBER, so `kraken_ws_ticker`
+  // — which emits a BBO MIDPOINT on essentially every tick and a last trade only on a one-sided
+  // or empty book — read as a trade print to everyone downstream (#952/#941). Splitting is PURE
+  // RE-DESCRIPTION: no member merged, none deleted, and not one number changed.
+  // ⛔ A `_mid` SUFFIX RECORDS THE KIND AND SAYS NOTHING ABOUT *WHICH* BBO PRODUCED IT. #952 asks
+  //    which book a midpoint came from, and BOTH crypto legs come out `_mid` here — this split does
+  //    not touch that question and must not be read as having settled it.
+  // ⛔ `kraken_ws_ticker` IS A STRICT PREFIX OF `kraken_ws_ticker_v1`, so after the split three
+  //    members share it. ANY cohort query over `exit_price_producer` MUST ENUMERATE the members it
+  //    wants — never `LIKE 'kraken_ws_ticker%'`, where `_` is itself a LIKE wildcard.
+  | 'kraken_ws_ticker_mid'             // kraken-websocket-adapter.ts:700 handleV2TickerUpdate — the common arm
+  | 'kraken_ws_ticker_last'            // :700 — the one-sided/empty-book arm. RARE on xStock (0 in 373,450
+                                       //        ticker snaps); the CRYPTO rate is UNMEASURED (#962).
+  | 'kraken_ws_book_mid'               // :945 handleV2BookUpdate — THE #741 PATH. NOT SPLIT: it has no
+                                       //        last-trade arm at all (`:911-913` skips a one-sided book),
+                                       //        so its kind was already fully determined.
+  | 'kraken_ws_ticker_v1'              // :1081 handleTickerUpdate — UNREACHABLE, see #742. NOT SPLIT:
+                                       //        splitting an unreachable member invents two dead names.
+  | 'kraken_equities_ws_mid'           // active-execution-engine.ts:1236 (+ the updateCache arg at :1244)
+  | 'kraken_equities_ws_last'          // same site; the archiver's `latestEquityTick.kind` decides which
+  | 'kraken_rest_engine_fallback_mid'  // active-execution-engine.ts:1309 (+ the updateCache arg at :1332)
+  | 'kraken_rest_engine_fallback_last' // same site — `ask`/`bid` are in scope at :1301-1303
+  | 'kraken_rest_poller'               // this file :547, inside fetchLivePrice (mid computed at :692)
+                                       // ⛔ DELIBERATELY *NOT* SPLIT (Langston condition 2). This producer
+                                       //    has THREE arms, not two: the mid and the last (both :692), and
+                                       //    the RATE-LIMITED branch at :631 which returns
+                                       //    `cached?.price` — a BARE NUMBER with no age and no kind. A
+                                       //    `_mid`/`_last` dichotomy here would stamp a laundered cached
+                                       //    value with a confident kind: #951 wearing a new label, and
+                                       //    #546 exactly. #951 splits it when it fixes that branch.
+  | 'xstock_rest_gate_reserve'         // :522 — BY DESIGN, not a failure: the B8.9 xStock REST
                                        //        class-gate makes no venue ask, so nothing failed.
                                        //        Splitting it from the outage legs is what lets a row
                                        //        answer "outage, or gate?" (#743).
-  | 'last_known_good_all_apis_failed'  // :389 — genuine outage leg
-  | 'last_known_good_fetch_exception'  // :418 — genuine outage leg
-  | 'last_known_good_reserve'          // :925 — the last-resort re-serve INSIDE getPriceWithFallback,
+  | 'last_known_good_all_apis_failed'  // :569 — genuine outage leg
+  | 'last_known_good_fetch_exception'  // :602 — genuine outage leg
+  | 'last_known_good_reserve'          // :1143 — the last-resort re-serve INSIDE getPriceWithFallback,
                                        //        i.e. the leg the CLOSE PATH hits. Writes nothing to
                                        //        the cache and passes `timestamp` through unrefreshed:
                                        //        on that axis it is the honest leg.
-  | 'entry_seed'                       // :784 seedLastKnownGoodPrice
-  | 'mock'                             // :556 (fetchMockPrice defined :527)
+  | 'entry_seed'                       // :994 seedLastKnownGoodPrice
+  | 'mock'                             // :747 (fetchMockPrice defined :713)
   | 'crypto_ws_book_walk'              // active-execution-engine.ts open seam — the taker ENTRY
                                        //        fill is a DEPTH WALK of the crypto WS book's ask
                                        //        levels. ⛔ DISTINCT FROM `kraken_ws_book_mid`, and
@@ -90,12 +116,21 @@ export type PriceProducer =
                                        //        exists to prevent. It is never cached, so it is
                                        //        excluded from `CachedProducer` alongside the
                                        //        null-price arm.
-                                       //        ★ SAFE BY CONSTRUCTION: the engine's actionable gate
-                                       //        is `isKrakenVenueSource(source)` (:151), which reads
-                                       //        `source` and NEVER `producer`, so widening this union
-                                       //        cannot reject a price or skip a position. That is
-                                       //        design (B)'s defining property, verified at the ref.
-  | 'no_price_produced';               // the null-price arm (:355 / :399 / :427) — no number was
+                                       //        ★ SAFE THROUGH THE VENUE GATE — AND THAT IS THE WHOLE
+                                       //        CLAIM (narrowed 2026-08-30, B-EXIT-BOOK-AGE-STAMP).
+                                       //        `isKrakenVenueSource(source)` (:224) reads `source` and
+                                       //        NEVER `producer`, so widening cannot reject a price or
+                                       //        skip a position THROUGH THAT GATE.
+                                       //        ⛔ THIS LINE USED TO SAY THE RISK WAS "STRUCTURALLY
+                                       //        ABSENT" FULL STOP. IT IS NOT. `toCachedProducer`'s
+                                       //        `null` arm IS a producer-dependent branch: it gates the
+                                       //        cache write at :473 and :1248, and a miss there reaches
+                                       //        `last_known_good`, fails the venue gate, and falls to
+                                       //        direct REST — a SKIPPED POSITION if REST also fails.
+                                       //        It is unreachable TODAY only because of today's call
+                                       //        sites, which is #546's entire lesson. A new member goes
+                                       //        in the PASSTHROUGH arm, and the fence asserts it.
+  | 'no_price_produced';               // the null-price arm (:531 / :581 / :613) — no number was
                                        //        produced, so no handler produced it.
 
 /**
@@ -122,11 +157,20 @@ export function toCachedProducer(p: PriceProducer): CachedProducer | null {
     case 'crypto_ws_book_walk':
     case 'xstock_ticker_snap_walk':
       return p;
-    case 'kraken_ws_ticker':
+    // ⛔ B-EXIT-BOOK-AGE-STAMP P11 — THE SIX SPLIT MEMBERS BELONG IN *THIS* ARM, NOT THE `null` ONE
+    //    ABOVE. The `never` default forces a DECISION for every new member; it cannot force the
+    //    CORRECT one. A member placed in the null arm suppresses the cache write at :429 and :1201,
+    //    which reaches `last_known_good`, fails the venue gate, and falls to direct REST — a skip if
+    //    REST also fails. Unreachable today only because of today's call sites (#546's whole lesson).
+    //    `b-exit-provenance-fence.test.ts` asserts each of these returns NON-NULL.
+    case 'kraken_ws_ticker_mid':
+    case 'kraken_ws_ticker_last':
     case 'kraken_ws_book_mid':
     case 'kraken_ws_ticker_v1':
-    case 'kraken_equities_ws':
-    case 'kraken_rest_engine_fallback':
+    case 'kraken_equities_ws_mid':
+    case 'kraken_equities_ws_last':
+    case 'kraken_rest_engine_fallback_mid':
+    case 'kraken_rest_engine_fallback_last':
     case 'kraken_rest_poller':
     case 'xstock_rest_gate_reserve':
     case 'last_known_good_all_apis_failed':
@@ -638,11 +682,14 @@ export class LivePricingAdapter {
       
       const tickerData = data.result[resultKey];
       
-      // 8.9.2: Calculate midpoint from bid/ask, fallback to last trade
+      // 8.9.2: Calculate midpoint from bid/ask, fallback to last trade.
+      // B-EXIT-BOOK-AGE-STAMP P1: the mid-or-last PREDICATE now has one home (`markKindOf`); the
+      // arithmetic and this function's own guards are unchanged. `kraken_rest_poller` is NOT split
+      // by kind — see the union comment: its rate-limited branch above returns a bare cached price.
       const ask = parseFloat(tickerData?.a?.[0] || '0');
       const bid = parseFloat(tickerData?.b?.[0] || '0');
       const lastTrade = parseFloat(tickerData?.c?.[0] || '0');
-      const midpoint = (ask > 0 && bid > 0) ? (ask + bid) / 2 : lastTrade;
+      const midpoint = markKindOf(bid, ask) === 'mid' ? (ask + bid) / 2 : lastTrade;
       
       if (midpoint <= 0 || isNaN(midpoint)) {
         console.log(`[8.9.2][KRAKEN_REST_INVALID_PRICE] ${symbol}: bid=${bid} ask=${ask} last=${lastTrade}`);

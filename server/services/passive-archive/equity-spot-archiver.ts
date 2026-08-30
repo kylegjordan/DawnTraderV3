@@ -23,6 +23,7 @@ import WebSocket from 'ws';
 import { loadEquitySpotUniverse } from './universe-loader.js';
 import { bufferOhlcBar } from './ohlc-batch-writer.js';
 import { bufferTickerSnap } from './ticker-batch-writer.js';
+import { markKindOf } from '../market-data/mark-kind.js';
 import { makeBackoff, type BackoffPolicy } from './reconnect-policy.js';
 // P19-B4a (C3) — silent-stall watchdog deps.
 import { addAlert } from '../system-alerts.js';
@@ -109,10 +110,14 @@ function parseOhlcBar(data: any): void {
 // per-position pin/unpin to manage — condition 3 is satisfied by architecture).
 // Staleness judgment belongs to the READER (the engine enforces its blocking
 // max-age knob); this map only reports what the feed last said and when.
-const latestEquityTick = new Map<string, { price: number; tsMs: number }>();
+// B-EXIT-BOOK-AGE-STAMP P3: `kind` added. The mark below is a MID or a LAST and this map was the
+// only place that knew which — it computed the distinction and discarded it one line later, so the
+// exit monitor (the single consumer) could not tell them apart. A LITERAL FIELD-ADD: `parseTickerSnap`'s
+// logic, its guards and its #594/#636 stamp ordering are all unchanged.
+const latestEquityTick = new Map<string, { price: number; tsMs: number; kind: 'mid' | 'last' }>();
 
 /** Latest equities-feed tick for an internal symbol ('BIIB/USD'), or null. */
-export function getLatestEquityTick(symbol: string): { price: number; tsMs: number } | null {
+export function getLatestEquityTick(symbol: string): { price: number; tsMs: number; kind: 'mid' | 'last' } | null {
   return latestEquityTick.get(symbol.toUpperCase()) ?? null;
 }
 
@@ -132,9 +137,12 @@ function parseTickerSnap(data: any): void {
     const _bid = data.bid != null ? Number(data.bid) : NaN;
     const _ask = data.ask != null ? Number(data.ask) : NaN;
     const _last = data.last != null ? Number(data.last) : NaN;
-    const _mark = (_bid > 0 && _ask > 0) ? (_bid + _ask) / 2 : _last;
+    // B-EXIT-BOOK-AGE-STAMP P1: one predicate, one home. `_bid`/`_ask` are NaN when a side is
+    // absent here (not 0 as on the crypto side) and `markKindOf` handles both — NaN > 0 is false.
+    const _kind = markKindOf(_bid, _ask);
+    const _mark = _kind === 'mid' ? (_bid + _ask) / 2 : _last;
     if (Number.isFinite(_mark) && _mark > 0) {
-      latestEquityTick.set(String(data.symbol).toUpperCase(), { price: _mark, tsMs: Date.now() });
+      latestEquityTick.set(String(data.symbol).toUpperCase(), { price: _mark, tsMs: Date.now(), kind: _kind });
     }
   }
   bufferTickerSnap(ASSET_CLASS, {

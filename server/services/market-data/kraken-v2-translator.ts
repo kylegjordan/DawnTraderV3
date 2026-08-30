@@ -1,3 +1,5 @@
+import { markKindOf } from './mark-kind.js';
+
 /**
  * Directive 8.9.0-B: Kraken WebSocket v2 Translation Utility
  * 
@@ -33,6 +35,18 @@ export interface V1TickerFormat {
   b: string[];
   c: string[];
   v?: string[];
+  /**
+   * B-EXIT-BOOK-AGE-STAMP P2 — WHAT KIND OF NUMBER `c[0]` ACTUALLY IS, decided here where it is
+   * built. `c` is nominally "last trade closed" and this function OVERWRITES it with a midpoint
+   * whenever both sides exist (#952), so every consumer downstream was reading a mid under a
+   * print's name — including a variable literally called `lastPrice`.
+   * REQUIRED, not optional: an optional field lets a future producer omit it, and that absence
+   * is indistinguishable from a missed stamp (#546) — the same rule `PriceProducer` carries.
+   * Do NOT re-derive this from `a`/`b` at a consumer. It round-trips exactly TODAY because both
+   * are written from the same locals below, but that is an unstated invariant of a function
+   * neither end owns; the moment `a`/`b` come from anywhere else the derivation drifts silently.
+   */
+  markKind: 'mid' | 'last';
 }
 
 /**
@@ -52,11 +66,11 @@ export function translateV2ToV1(update: KrakenV2TickerUpdate): V1TickerFormat {
   // 2. Calculate Mark Price (Midpoint)
   // We prioritize Midpoint because 'Last' is often stale on low-volume pairs.
   // We only use 'Last' if the order book is empty (bid or ask is 0).
-  let markPrice = last;
-  
-  if (bid > 0 && ask > 0) {
-    markPrice = (bid + ask) / 2;
-  }
+  // B-EXIT-BOOK-AGE-STAMP P1: the predicate has ONE home now (`markKindOf`). The arithmetic and
+  // the 8.9.1 policy above are unchanged — only the mid-or-last TEST moved, and it moved because
+  // it was written out in four files with no two sharing a line.
+  const markKind = markKindOf(bid, ask);
+  const markPrice = markKind === 'mid' ? (bid + ask) / 2 : last;
 
   // 3. Return normalized v1 structure
   // 'c' field carries the Mark Price to the UI/Engine
@@ -64,6 +78,7 @@ export function translateV2ToV1(update: KrakenV2TickerUpdate): V1TickerFormat {
     a: [String(ask), String(update.ask_qty ?? 0)],
     b: [String(bid), String(update.bid_qty ?? 0)],
     c: [String(markPrice)],
+    markKind,
     v: update.volume !== undefined ? [String(update.volume)] : update.v
   };
 }

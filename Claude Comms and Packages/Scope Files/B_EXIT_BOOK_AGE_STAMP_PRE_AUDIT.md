@@ -84,7 +84,7 @@
 |---|---|---|
 | `exit_book_age_ms` | **exit DECISION-time** (`:1382`) | the whole exit evaluation |
 | `entry_book_age_ms` | **entry GATE-time** (`:3288`) | ⚠ **3 awaits, incl. a venue call** |
-| ⭐ *(new)* `exit_fill_book_age_ms` | **FILL-time** | ⭐ **snapshot `:1997`, walk `:1999` — two lines, NO await between** |
+| ⭐ *(new)* `exit_fill_depth_age_ms` | **FILL-time** | ⭐ **snapshot `:1997`, walk `:1999` — two lines, NO await between** |
 
 ⭐ **THE NEW COLUMN WOULD BE THE TIGHTEST OF THE THREE.** ⚠ **And that is the point: a reader comparing any two of these today gets no warning that they are different instants, and one of the three actively claims to be an instant it is not.**
 **§9.4 DISPOSITION: (2) ADDED TO THIS BATCH, folded into P8.** P8 already corrects instant-precision on the exit columns; **leaving the entry comment overstating its own would leave the pair misleading in the opposite direction, which defeats the item.** ⛔ **A COMMENT EDIT ONLY — no entry-side behaviour, and the fence's `entryPriceProducer:` count assertion (`:166`) is untouched.**
@@ -314,7 +314,7 @@ I wrote: *"A producer member cannot gate, reject, skip or re-price anything."* �
 - **It is produced by `getDepthSnapshot` returning a `DepthSnapshot`, and `DepthSnapshot.source` is ALREADY the class discriminator (`'crypto_ws_book' | 'xstock_ticker_snap'`, `depth-source.ts:31`).** **The name now matches the object that produces it and asserts nothing about a book.**
 - ⛔ **NOT crypto-only.** **`#961`'s headline is overwhelmingly xStock (0/26 populated), so making it crypto-only DELETES the measurement for the class that needs it most.**
 - ✅ **AND IT IS BOUND BY FEED AND CLASS IN BOTH HOMES** — the `shared/schema.ts` comment AND the `COMMENT ON COLUMN` — each stating: *crypto = live WS mini-book age; xStock = `xstock_spot_ticker_snap` ROW age; they are not the same quantity and must not be pooled.*
-⚠️ **FREE TO RENAME: `exit_fill_book_age_ms` appears nowhere in the tree — it is unimplemented.**
+⛔⛔ **AND MY "FREE TO RENAME" CLAIM WAS A CODE-ONLY GREP — LANGSTON CAUGHT IT, AND IT IS `fix-follows-pointer` A SECOND TIME IN ONE BATCH, THIS TIME AGAINST MY OWN CENSUS PREDICATE.** `exit_fill_book_age_ms` was live at **SEVEN** governance occurrences across THREE files — `B_EXIT_BOOK_AGE_STAMP_SCOPE.md:26, :72, :159, :161` (`:72` reads *"DECISION, MADE IN SCOPE AND NOT AT IMPLEMENTATION TIME"*), `PHASE_19_PLAN.md:43` (Langston's own ruling text) and this file's own `E2` table. ✅ **ALL RENAMED IN THE SAME COMMIT AS P7, or the scope records a decision naming a column that never exists.** ⚠️ **My grep was `--include=*.ts --include=*.sql`: the same instrument-reach failure as the `.sql`-gitignore one, one turn later.**
 
 ## ⛔⛔ CONDITION 2 — **THE WITHDRAWN CLAIM IS STILL WRITTEN IN BOTH FILES I AM EDITING, AND `P11` LANDS DIRECTLY UNDER ONE OF THEM**
 | site | text still standing |

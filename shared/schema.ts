@@ -1805,11 +1805,29 @@ export const closedTradesTable = pgTable("closed_trades", {
   /** The engine's inter-tick cadence for this symbol. NAMED HONESTLY: it was `priceAgeMs`,
    *  which never held an age. Kept as data because it is real telemetry — just not an age. */
   exitTickCadenceMs: doublePrecision("exit_tick_cadence_ms"),
-  /** Independent cross-check at close: order-book mid + its age. NULL BY CONSTRUCTION on
-   *  xStock (no book for that class) — not by omission. The column comment IS the record
-   *  of that distinction, per OBJ-4/OBJ-8. */
+  /** Independent cross-check: order-book mid + its age, from the crypto WS mini-book
+   *  (`getBookForFill`). NULL BY CONSTRUCTION on xStock — that accessor has no xStock equivalent —
+   *  not by omission. The column comment IS the record of that distinction, per OBJ-4/OBJ-8.
+   *  ⛔ BOUNDED 2026-08-30 (B-EXIT-BOOK-AGE-STAMP): "no book for that class" was a CLASS-LEVEL
+   *  claim and is too wide. The FILL-time `getDepthSnapshot` DOES return an xStock ladder; see
+   *  `exit_fill_depth_age_ms`, which IS populated on xStock.
+   *  ⛔ INSTANT: these are DECISION-time — `_exitProvenanceBase` is built once per position ABOVE
+   *  the exit-condition evaluation, for every position on every tick. They are NOT a close-time
+   *  reading, and they are NOT comparable to `entry_book_age_ms` (a depth-GATE reading) or to
+   *  `exit_fill_depth_age_ms` (the fill). THREE DIFFERENT INSTANTS. */
   exitBookMid: decimal("exit_book_mid", { precision: 20, scale: 10 }),
   exitBookAgeMs: doublePrecision("exit_book_age_ms"),
+  /** ★ B-EXIT-BOOK-AGE-STAMP OBJ-1 — THE AGE OF THE DEPTH THE FILL ACTUALLY WALKED.
+   *  Taken from `getDepthSnapshot` two lines before the walk that consumes it, no await between —
+   *  the tightest of the three age columns on this table.
+   *  ⛔ NOT THE SAME QUANTITY ACROSS CLASSES, AND THIS IS THE WHOLE REASON IT IS NOT CALLED
+   *  `book_age`: `crypto_spot` = the live WS mini-book's age; `xstock_spot` = the ROW AGE of a
+   *  `xstock_spot_ticker_snap` record, computed in SQL as `NOW() - captured_at`. A row age and a
+   *  book age are different measurements — NEVER pool them. `DepthSnapshot.source`
+   *  (`crypto_ws_book` | `xstock_ticker_snap`) is the discriminator.
+   *  ⛔ NULL on a MAKER-fill row by construction: a resting fill consults no depth at all.
+   *  Discriminable by `exit_fee_mode = 'maker'`. */
+  exitFillDepthAgeMs: doublePrecision("exit_fill_depth_age_ms"),
   /** ★ THE INDEPENDENT WITNESS AT CLOSE (OBJ-3, wired by `#911` 2026-08-27).
    *  Read from the ARCHIVER's ticker snapshot (`getTickerWitness`), NOT from the depth snapshot
    *  the fill itself walks.
@@ -1836,9 +1854,17 @@ export const closedTradesTable = pgTable("closed_trades", {
   entryPriceSource: varchar("entry_price_source", { length: 40 }),
   entryDecisionPrice: decimal("entry_decision_price", { precision: 20, scale: 10 }),
   /** ⛔ NULL BY CONSTRUCTION ON A MAKER-FILL ROW, and this comment is that record: a maker
-   *  fill consults NO book — its decision instrument is the price tick. A taker row carries
-   *  a real book age. One column, one vocabulary, one fence: `entry_price_producer` absorbs
-   *  the cohort rather than a second column family disagreeing with the first. */
+   *  fill consults NO depth — its decision instrument is the price tick. A taker row carries
+   *  a real age. One column, one vocabulary, one fence: `entry_price_producer` absorbs
+   *  the cohort rather than a second column family disagreeing with the first.
+   *  ⛔ INSTANT, ADDED 2026-08-30 (B-EXIT-BOOK-AGE-STAMP): this is the DEPTH-GATE reading, NOT the
+   *  fill. `_evaluateOpenDepthGate` runs and the walk that consumes its snapshot happens ~150 lines
+   *  and THREE awaits later, one of them a venue round-trip. The engine comment at the write site
+   *  used to call it "the REAL fill instant"; that was too strong and has been corrected.
+   *  ⛔ AND NOT THE SAME QUANTITY ACROSS CLASSES, for the same reason as
+   *  `exit_fill_depth_age_ms`: on xStock this is a `xstock_spot_ticker_snap` ROW AGE, not an
+   *  order-book age. An xStock row can carry a value here beside a structurally-NULL
+   *  `exit_book_age_ms`, and the two are not comparable. */
   entryBookAgeMs: doublePrecision("entry_book_age_ms"),
   /** Venue observation time of the entry-driving tick. Same NULL discipline as the exit leg. */
   entryObservedAtMs: doublePrecision("entry_observed_at_ms"),
