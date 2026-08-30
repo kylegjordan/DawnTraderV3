@@ -2,6 +2,8 @@
 
 **Batch:** `B-SCANNER-EGRESS-NORMALISE` (`#906`) · **change-class: `architecture`** · **Owner:** CC-C · **Phase 19, plan row 5**
 **Created:** 2026-08-30 · **Kyle-directed this batch next, 2026-08-30.**
+**change-class**: architecture
+> ⚠️ **THIS LINE IS DELIBERATELY ON ITS OWN AND MUST STAY THAT WAY.** The class was declared in the header line above from the start, and the governance checker COULD NOT READ IT — its marker (`config.mjs:180`) requires the marker to BEGIN a line AND the colon to sit OUTSIDE the bold. `**change-class:** x` FAILS; `**change-class**: x` PARSES — one character's position, and the two render IDENTICALLY. **17 scope files across four authors are in that state; the parser fix is `#968`.** Until it lands: own line, colon outside the asterisks.
 
 > ⚠️ **CHANGE-CLASS DECLARED `architecture` DELIBERATELY, AND I MAY BE OVER-DECLARING.** It adds no component and changes no routing — but it **changes WHICH PAIRS TRADE**, on a core engine path (the scanner). §3.0 says an under-declared class touching core engine paths gets cross-checked anyway; declaring up costs a doc set, declaring down costs a flag. **Langston may downgrade it.**
 

@@ -5678,3 +5678,43 @@ I recorded it as *"a depth-10 mid and a BBO mid are different statistics; on a t
 ⚠️ **THIS ISSUE EXISTS BECAUSE I GOT DOGECOIN WRONG TWICE.** I reported it as *"never reaches the scanner"* (refuted: 25,294 archive rows in 3 days) and then as *"the same failure as Bitcoin"* (refuted: `XBT/USD` has 0 archive rows and dies at the history filter; `XDG/USD` has 545 and dies at `low_price`). **Both were asserted without reading which gate the row died at — one column in the table I was already querying.**
 
 **MISTAKE: wrong-object [B-SCANNER-EGRESS-NORMALISE] — twice attributed a cause to Dogecoin without reading the rejection label already present on its own rows.**
+
+
+---
+
+### #968 — THE CHANGE-CLASS MARKER FAILS ON THE MOST NATURAL WAY TO WRITE IT, AND HAS DONE SO 17 TIMES ACROSS FOUR AUTHORS
+
+**OPEN** · surfaced 2026-08-30 by a live system alert on `B-SCANNER-EGRESS-NORMALISE` · owner **CC-C** · **HOME: `B-CHANGE-CLASS-PARSER`, owner CC-C, placed in `PHASE_19_PLAN.md` at row 3b.k, after 3b.j.**
+
+**THE ALERT THAT FOUND IT:** `71c73252` — *"Change-class undeclared for B-SCANNER-EGRESS-NORMALISE — defaulting to strictest (architecture)."* **The class WAS declared, in the header, from Step 1.** The checker could not read it.
+
+**THE MARKER** (`scripts/governance-checker/config.mjs:180`):
+`/(?:^|\n)\s*(?:[-*>]\s*)?(?:\*\*)?change-class(?:\*\*)?\s*[:=]\s*`?([a-z_]+)`?/i`
+
+**IT IMPOSES TWO REQUIREMENTS THAT `CLAUDE.md` §3.0 NEVER STATES**, and the second is invisible:
+1. the marker must **BEGIN a line** — §3.0 says *"declares its change-class on a header line"*, and every author read that as *a field on the header line*, alongside Batch/Owner/Phase;
+2. ⛔ **the colon must sit OUTSIDE the bold.**
+
+**MEASURED, by running the live regex over every candidate form:**
+| written as | result |
+|---|---|
+| `**change-class:** architecture` | ⛔ **FAILS** |
+| `**change-class**: architecture` | ✅ parses |
+| `change-class: architecture` | ✅ parses |
+| `- change-class: architecture` | ✅ parses |
+| `> **change-class:** architecture` | ⛔ **FAILS** |
+| `**Batch:** X · **change-class:** architecture` | ⛔ **FAILS** |
+
+⇒ ★★ **`**change-class:**` AND `**change-class**:` RENDER IDENTICALLY. The difference is one character's position, and it decides whether the declaration exists.** This is the same family as the skill-description colon-space trap already recorded in `CLAUDE.md` §0.a: **valid file, plausible text, silently dropped value.**
+
+**POPULATION — the checker reads only files with `SCOPE` in the name** (`checker.mjs:238`, `/SCOPE/i`), so pre-audits are out of scope:
+**329 SCOPE-named files · 136 parse · 17 declare a class the checker cannot read.**
+`BATCH_B_GOV_2_SCOPE` · `BATCH_B_GOV_SCOPE` · `BATCH_B_GOV_SCOPE_CONVERGED` · `B_ALERT_PROTOCOL_SCOPE` · `B_AMR_INPUT_INTEGRITY_ARC_SCOPE` · `B_DISCORD_SCOPE` · **`B_EXIT_BOOK_AGE_STAMP_SCOPE`** · `B_GOV_3_SCOPE_governance-checker-golive` · `B_LANGSTON_QUEUE_345_SCOPE` · `B_LANGSTON_QUEUE_SCOPE` · **`B_SCANNER_EGRESS_NORMALISE_SCOPE`** · `B_TRADE_RECORD_RETENTION_SCOPE` · `P19_B_RENAME_SCOPE` · `P19_REORG_B2_1_SCOPE` · `P19_REORG_B2_2_SCOPE` · `P19_REORG_B3_SCOPE` · `ACTIVE_PATH_FLOW_DOC_SCOPE_PREP` *(not a batch scope)*.
+**Authors span CC-A, CC-B and CC-C** — it is not one person's habit.
+
+✅ **THE DIRECTION IS SAFE AND THAT IS WHY IT SURVIVED: fail-closed grades the batch against the STRICTEST doc-set,** so nothing was ever under-graded. **The cost is a false alert every time plus a declaration that reads as present and is not** — and an alert that is routinely wrong is an alert that stops being read, which is the actual risk.
+
+⛔ **THE FIX IS THE PARSER, NOT 17 DOCUMENTS (rule 15).** Editing every scope to satisfy a regex that disagrees with the documented convention is the patch; relaxing the regex to accept the convention as written is the fix, and it makes all 17 correct retroactively. **Deliverables: (a) accept the marker mid-line and with the colon inside the bold; (b) add all six forms above as test cases; (c) re-run against the 329 and report the new parse count; (d) reconcile `CLAUDE.md` §3.0's wording with whatever the parser then accepts — the two must not describe different things again.**
+⚠️ **GUARD AGAINST THE OBVIOUS OVER-CORRECTION: the marker must not start matching PROSE ABOUT change-class.** Four of the 17 are documents *discussing* the mechanism (`BATCH_B_GOV_SCOPE`, `B_GOV_3_SCOPE`, `ACTIVE_PATH_FLOW_DOC_SCOPE_PREP`), and a loosened regex could bind a sentence instead of a declaration. **That is a real risk of a wrong-but-confident value, which is worse than the current fail-closed.**
+
+**INTERIM, until it lands:** put the declaration **on its own line with the colon outside the asterisks** — `**change-class**: architecture`. Applied to `B-SCANNER-EGRESS-NORMALISE` in this commit, with a note in the file saying why the line is on its own.
