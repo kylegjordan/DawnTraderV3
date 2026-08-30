@@ -165,3 +165,56 @@
 - **§4's "a write, not a fetch" HOLDS for xStock** — `getDepthSnapshot` already runs for the class.
 - **BLOCKER-1's column split is correct, and no existing reader would mix them** — `exitBookAgeMs` has no client consumer; **the only mixing surface is the column comments, which is MATERIAL-E.**
 - **Deploy ordering is safe** — `db:migrate` runs before restart, so the columns exist before the new code does.
+
+---
+
+# ⛔ r4 — LANGSTON'S BLOCKER-C AND CHANGES-NEEDED-D. BOTH RESOLVED.
+
+## ✅ CHANGES-NEEDED-D — **ANSWERED WITH THE RANGE. THERE IS NO FOURTH WRITER.**
+
+**His question: the 14 `stop_hit` + 5 `target_hit` rows with a null `exit_fee_mode` cannot come from the three paths I named — give the `closed_at` range and say which.**
+
+| cohort | rows | earliest | latest |
+|---|---|---|---|
+| `stop_hit`, fee_mode null | 14 | **2026-07-15 06:18:24Z** | **2026-07-15 17:33:36Z** |
+| `target_hit`, fee_mode null | 5 | **2026-07-15 06:30:42Z** | **2026-07-15 20:53:25Z** |
+| ⭐ **earliest row that HAS a `fee_mode`** | — | **2026-07-15 21:43:55Z** | — |
+
+⇒ ✅ **ALL 19 CLOSED BEFORE THE COLUMN'S FIRST WRITE, ON THE SAME DAY IT SHIPPED. THEY PREDATE THE STAMP.**
+⇒ ✅ **THERE IS NO FOURTH TERMINAL-CLOSE WRITER — the alarming branch is ruled out, not assumed away.**
+✅ **RESOLUTION: the carve-out takes a `closed_at` BOUND, not only close-reason filters.** **Coverage asserts on `closed_at >= 2026-07-15 21:43:55Z`, excludes `close_reason='never_filled'`, and excludes the three non-`closePosition` paths by name.**
+
+## ⛔⛔ BLOCKER-C — **THE KIND IS COMPUTED AND DISCARDED ONE LINE LATER, ON BOTH SITES. THE CARRIER IS NOW NAMED.**
+
+**Re-derived — neither structure has anywhere to put it:**
+| site | structure | has a kind field? |
+|---|---|---|
+| xStock | `latestEquityTick = new Map<string, { price: number; tsMs: number }>()` (`:112`) | ⛔ **NO** |
+| crypto | `V1TickerFormat { a; b; c; v? }` (`kraken-v2-translator.ts:31-36`) | ⛔ **NO** |
+
+★ **And his framing is the right one: this is BLOCKER-A one hop downstream. An implementer with no sanctioned route improvises one, and the nearest thing to hand is the consumer's variable name — which is `lastPrice`, holding a mid.**
+
+### ✅ THE CARRIER — **ONE EXPORTED PREDICATE, TWO DIFFERENT CARRIAGE ROUTES, AND NO SECOND COPY OF THE RULE**
+
+⛔ **THE RULE ITSELF MUST EXIST ONCE.** Both sites already implement the same predicate independently — *"a mid iff both sides are positive, else `last`"* — which is the `#641` two-copies shape already in the tree.
+✅ **`export function markKindOf(bid, ask): 'mid' | 'last'` — defined ONCE, in the translator, and CALLED by both producers.** **Neither site re-states the rule; the existing duplicated conditionals become calls.**
+
+**HOP-BY-HOP:**
+| # | hop | change |
+|---|---|---|
+| **xStock 1** | `equity-spot-archiver.ts:112` | `latestEquityTick` value type gains **`kind: 'mid' \| 'last'`** |
+| **xStock 2** | `:136-138` | `.set(...)` carries `kind: markKindOf(_bid, _ask)` — ⛔ **a LITERAL FIELD-ADD. `parseTickerSnap`'s logic is UNCHANGED, per `#594`'s restated constraint that this map is the ONLY venue price source for the class.** |
+| **xStock 3** | `active-execution-engine.ts:1163` | the **single** engine consumer *(census: 1 engine call site)* reads `_eqTick.kind` into a local, **the same way it already reads `_eqTick.tsMs`** |
+| ⭐ **crypto 1** | `kraken-websocket-adapter.ts:681-683` | ⛔ **NO STRUCTURAL CHANGE. `V1TickerFormat` is NOT widened.** The adapter **already parses `a[0]` and `b[0]` two lines below `c[0]`** — so the kind is **RE-DERIVED there by calling the SAME exported `markKindOf`.** |
+| **both** | → `exitProvenance` → `exit_mark_kind` | rides the existing provenance payload, **like every other stamp this batch's parent added** |
+
+⭐⭐ **WHY CRYPTO RE-DERIVES RATHER THAN CARRIES: `V1TickerFormat` is a shared translator contract on a live trading path, and widening it is a bigger blast radius than this batch has any business taking.** ✅ **Re-deriving is safe ONLY because the predicate is a pure function of two values the consumer already has in hand — and it cannot drift, because both ends call the same exported function.** ⛔ **This is NOT "inferring from the variable name" — the name is ignored entirely; the values are re-read.**
+
+### ✅ §5 DISPOSITIONS FOR THE STRUCTURES THE TAG TOUCHES *(the omission he named)*
+| object | intent | disposition |
+|---|---|---|
+| `latestEquityTick` | `P19-B8.5` — the venue mark for a class with no REST; **`#594`: the ONLY venue price source for xStock** | **(2) relevant, needs updating** — a field-add, no logic change |
+| `getLatestEquityTick` | the single accessor | **(1) correct** — signature widens with the value type; **one engine consumer** |
+| `translateV2ToV1` / `V1TickerFormat` | `8.9.1`/`8.9.4-Patch` — carries the mark to the UI/engine in the v1 shape | ⛔ **(1) CORRECT AND UNTOUCHED** — the contract is not widened |
+| `kraken-websocket-adapter` ticker handler | parses the v1 payload for the engine | **(2)** — re-derives the kind from values it already parses |
+| the price cache | `#743`/`#951` territory | ⛔ **(1) UNTOUCHED — the tag does not enter the cache.** *(It would be a fourth object on a slot two producers already share.)* |
