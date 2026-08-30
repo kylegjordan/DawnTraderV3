@@ -1,9 +1,14 @@
-# xSTOCK PRICING — THE PLAN (DRAFT 3)
+# xSTOCK PRICING — **THE MECHANISM INVENTORY, WITH EIGHT UNCOSTED ROWS**
+
+> ⛔⛔ **THIS IS NOT "THE PLAN" AND MUST NOT BE CALLED ONE — Langston's ruling, 2026-08-30.** It is a **stable mechanism inventory** in which **eight of thirteen rows have no measured consequence.** ★ **Naming it accurately is the point: Kyle asked whether these are the only items, and the honest answer is *"no — and here are the eight I have not costed,"* NOT *"I cannot know."***
 
 **Owner CC-C · Kyle-directed · Draft 1 → 2 → 3, all 2026-08-30**
 
-> ⛔ **NOT FOR ACTION.** Kyle's process: **draft → second reader → converge → Langston → then him.** **Two reader rounds done; this is round 2's correction.** Next stop is Langston with the full round record — **the loop caps at three and I am not going to iterate it to agreement, because that selects for persistence rather than truth.**
-> ⭐⭐ **BOTH ROUNDS FOUND SOMETHING LARGER THAN THE THING THE PREVIOUS DRAFT LED WITH.** Draft 1's list was called complete and was not. **Draft 2's headline number turned out to be the 00:15 burst measured through two more columns.** Every correction below is re-derived by me at the ref.
+> ✅ **PROCESS COMPLETE: two reader rounds + LANGSTON HAS RULED (2026-08-30).** His verdict: **not fit as “the plan” — but my REASON was wrong, and that matters more than the verdict.** See the reframing directly below. **Every figure here is `RULED ON REPORTED FACT`; his ruling rests on none of them, and he re-derived four mechanisms himself.**
+> ⭐⭐ **LANGSTON'S RULING ON THE ROUND RECORD, AND IT INVERTS WHAT I READ INTO IT.** I asked whether the surface is unbounded. **It is not, and the record proves the opposite.**
+> **NOT ONE ROUND FOUND A NEW MECHANISM.** R1 found an unmeasured comparison between two reads **already in the inventory**; R2 found an **un-disaggregated population** (rule 29); R3 found **two consequences of mechanisms already on the list**, one of them my own audit §1.2. ⇒ ⭐ **The mechanism inventory has been STABLE for three drafts. Only the magnitude ordering moves.**
+⇒ ⛔ **SO THE NEXT ROUND'S HEADLINE IS ALREADY SITTING IN THE EIGHT UNCOSTED ROWS BELOW — AND THERE ARE EIGHT, NOT AN UNKNOWN NUMBER.** ★ **That converts *"how many more rounds?"* into *"do the eight measurements"* — hours, not rounds.**
+⛔ **AND THE SELF-DIAGNOSIS I GOT RIGHT AND THEN DID NOT APPLY: I stop at provenance and do not measure. I said so about `#962` — and left eight other rows in the same table in exactly that state.**
 
 ---
 
@@ -35,16 +40,16 @@ Draft 2 led with a 14.038% trigger-vs-fill gap. **Disaggregated: burst rows n=5 
 |---|---|---|
 | ⛔ **W1** | **The exit fill has no staleness ceiling; the entry does** (§0A). `#961` | **certain · largest · not the burst** |
 | ⛔ **W2** | **The maker exit fills on a midpoint and books the limit at zero slippage** (§0B). `#962` | **certain · not the burst** |
-| **W3** | **Every exit *trigger* reads a midpoint**, both classes, both lanes. | certain |
-| **W4** | **A venue re-quote at each session boundary reaches the decision path.** *(Event certain; "is treated as tradeable" remains unearned — `#958`'s own words.)* | event certain |
+| **W3** | **Every exit *trigger* reads a midpoint**, both classes, both lanes. | mechanism certain · ⛔ **CONSEQUENCE UNMEASURED** |
+| **W4** | **A venue re-quote at each session boundary reaches the decision path.** | event certain · ⛔ **CONSEQUENCE UNMEASURED** *("treated as tradeable" is unearned — `#958`'s own words)* |
 | **W5** | **The 4-second sampling is a TRADING defect** — it is σ's denominator (ceiling capped 300 s), it feeds both fills, and it drives the spread and depth gates. ⚠️ *The fail-open bias clause is `#958`'s measurement, cited not re-asserted: 43.6% of marks lost, 0% on static names → 50% on the fastest.* | certain |
-| **W6** | **The ranking price is a 15-minute aggregated bar close, not the ticker `last`** — and `last` is selected at `scanner.ts:641` and consumed nowhere. ⚠️ **Draft 2 called this "four definitions, not three." Wrong: a dead column is not a definition. There are still THREE live ones; what changed is WHICH the third is.** | certain |
-| **W7** | **An xStock instance of the `#951` laundering on the exit path** — `:1239` preserves the honest age, `:1244` republishes it as observed-now, and it passes the venue gate. | certain |
-| **W8** | ⚠️ **NARROWED: not "we cannot tell which session."** The session flag **is** archived and read by nothing; the precise defect is that **the exit path cannot see it, because the in-memory tick carries only `{price, tsMs}`.** | certain |
+| **W6** | **The ranking price is a 15-minute aggregated bar close, not the ticker `last`** — and `last` is selected at `scanner.ts:641` and consumed nowhere. ⚠️ **Draft 2 called this "four definitions, not three." Wrong: a dead column is not a definition. There are still THREE live ones; what changed is WHICH the third is.** | mechanism certain · ⛔ **CONSEQUENCE UNMEASURED** |
+| **W7** | **An xStock instance of the `#951` laundering on the exit path** — `:1239` preserves the honest age, `:1244` republishes it as observed-now, and it passes the venue gate. | mechanism certain · ⛔ **CONSEQUENCE UNMEASURED** |
+| **W8** | ⚠️ **NARROWED: not "we cannot tell which session."** The session flag **is** archived and read by nothing; the precise defect is that **the exit path cannot see it, because the in-memory tick carries only `{price, tsMs}`.** | mechanism certain · ⛔ **CONSEQUENCE UNMEASURED** |
 | ➕ **W9** | **The fill's forensic columns are NULL BY CONSTRUCTION on xStock** — `bookMid`/`bookAgeMs` (crypto 15/78 populated, **xStock 0/26**), so the age W1 needs is not in `closed_trades` and must be reconstructed. | certain |
-| ➕ **W10** | **The spread gate reads a quote up to 30 MINUTES old and FAILS OPEN** — absent data emits a sentinel that passes. ⇒ ⛔ **Absent price data makes ENTRY easier while making EXIT impossible.** | certain |
-| ➕ **W11** | **The newest 15-minute bar can be a one-minute stub** — partial buckets are emitted by design, and `source_bar_count`, which would say so, is written and read by nothing. | certain |
-| ➕ **W12** | **The mark silently changes definition** — mid **or** `last`, untagged; **and σ bounds a MID's staleness using the dispersion of `last`.** | certain |
+| ➕ **W10** | **The spread gate reads a quote up to 30 MINUTES old and FAILS OPEN** — absent data emits a sentinel that passes. ⇒ ⛔ **Absent price data makes ENTRY easier while making EXIT impossible.** | mechanism certain · ⛔ **CONSEQUENCE UNMEASURED — and Langston flags it as risk-moving with no number** |
+| ➕ **W11** | **The newest 15-minute bar can be a one-minute stub** — partial buckets are emitted by design, and `source_bar_count`, which would say so, is written and read by nothing. | mechanism certain · ⛔ **CONSEQUENCE UNMEASURED** |
+| ➕ **W12** | **The mark silently changes definition** — mid **or** `last`, untagged; **and σ bounds a MID's staleness using the dispersion of `last`.** | mechanism certain · ⛔ **CONSEQUENCE UNMEASURED** |
 | ➕ **W13** | **The feed's subscription list is frozen at process boot** while the universe refreshes daily. `#960` | mechanism certain, **consequence untested** |
 
 ⛔ **`#953` — REMOVAL RE-ARGUED, BECAUSE DRAFT 2's REASONING WAS PARTLY FALSE AND SKIPPED MY OWN RULE.** It is genuinely off the xStock price path *(it reads a REST endpoint carrying zero xStock pairs)*, and that is the **only** valid ground. ⛔ **"Phase-21 gated" was FALSE for two of its four defects — the paper branch books a random haircut and writes the legacy table in BOTH modes.** ⛔ **And I struck it without doing what `#954` — my own entry, two above it — requires: enumerate what the row was the sole record of.** ✅ **CARRIED: the kill-switch blindness, and the amendment to the audit's §9.2 clearance (*"naming a population is not proving it complete"*), both now belong to `B-LEGACY-LIVE-EXIT-PATH`.** ⚠️ **And that issue currently has two homes under two batch names across three documents — fix before it is worked.**
@@ -83,6 +88,45 @@ Today: the **mid**. A sell needs a **buyer**, so the honest comparator is the **
 ⛔ **STILL NOT STARTABLE, AND DRAFT 2's CLAIM THAT IT WAS IS WITHDRAWN AS A HEDGE** — it named a new blocker and declared it already cleared in the same breath. **The inventory is still incomplete: no maker booked price, no 30-minute spread read, no partial-bar composition (W10, W11).**
 
 ---
+
+
+---
+
+## 3b. ⭐⭐ STEP 0 — **INSTRUMENTATION, AND IT SHIPS NOW** *(Langston's ruling, 2026-08-30)*
+
+> **THE INDEX QUESTION, ANSWERED: `B-DECIDED-INTENT-INDEX` does NOT become step 0. SPLIT EACH STEP AT THE INTENT SEAM.**
+> - **A DEFECT claim is intent-independent** — *"an age is computed and discarded"*, *"a mid clears a sell"* — **and those are certain.**
+> - **A BEHAVIOUR CHANGE is not.** It waits for the index, **or** for a decided-intent citation at the site.
+
+✅ **SO STEP 0 IS: RECORD `bookAgeMs` AND `bookMid` ON THE CLOSE.**
+**It commits code, decides nothing, and CANNOT BE WRONG UNDER ANY INTENT VERDICT.** ⭐ **And it kills a real dependency: `W9` says those columns are NULL BY CONSTRUCTION on xStock, which is why `W1`'s 22-of-243 is RECONSTRUCTED rather than read.** ⇒ **Ship it and the largest finding stops resting on a reconstruction.**
+
+---
+
+## 3c. ⛔⛔ AND A DECIDED-INTENT MARKER I MISSED — WHICH INVALIDATES MY SEARCH, NOT MY FINDING
+
+**`active-execution-engine.ts:1501-1505`, three lines above the comparator `#962` is about, verbatim:**
+> *"**D1 (Langston-approved INTENTIONAL divergence from entry semantics)**: entries route a marketable order to the stored-taker check; the exit RESTS the marketable price and requires a LATER venue tick at/through the limit — same-tick place-and-fill is prohibited as an optimistic touch-fill. **Do not "fix" this into entry-parity.**"*
+
+✅ **`#962` SURVIVES IT: D1 rules on TIMING (no same-tick touch-fill), NOT on SIDE.**
+⛔ **BUT ANY STEP-2 CHANGE THAT COLLAPSES D1 INTO ENTRY-PARITY RE-OPENS A DECIDED QUESTION — and the comment says so in terms.**
+
+⛔⛔ **THE METHOD POINT IS BIGGER THAN THE CITATION, AND IT IS MINE.** I searched `P19-B7.2c`'s **scope, pre-audit and completion report**, found **0** hits for `bid`/`ask`/`midpoint`/`which side` against a **positive control of 26 for `maker`** — and concluded *"nobody decided which side it reads."*
+⇒ ★★ **MY CONTROL PROVED THE SEARCH WORKED ON THAT CORPUS. IT DID NOT PROVE THE CORPUS COULD CONTAIN THE ANSWER — AND IT STRUCTURALLY CANNOT, BECAUSE THE DECISION LIVES IN A CODE COMMENT.** **That is leg-1 instrument reach: I reported a silence as an absence from a corpus that had zero opportunity to speak.** *(Exactly the failure `#956` exists to record — committed while writing the entry about it.)*
+
+⇒ ⭐ **A SCOPE-DEFINING REQUIREMENT FOR `#956` / `B-DECIDED-INTENT-INDEX`, folded in: ITS CORPUS MUST INCLUDE IN-CODE DECIDED-INTENT MARKERS, OR IT CERTIFIES NOTHING.** **Completion reports, scope files AND code headers/comments — the `D1` marker is the worked example.**
+
+---
+
+## 3d. ⚠️ THE FIVE HE WOULD RE-DERIVE BEFORE ANYONE BUILDS — carried verbatim, not paraphrased
+
+1. ⛔ **`W1`'s distribution is RECONSTRUCTED, not read** (`W9`). **State the join key and the coverage denominator.**
+2. ⛔⛔ **`W2`'s 52/88 IS AN UPPER BOUND, AND THE INSTRUMENT'S BIAS RUNS THE SAME DIRECTION AS THE FINDING.** *"Max bid in ±15 s"* is measured **through the throttled snap stream that `W5` says loses 43.6% of frames — and a DROPPED BID MAKES "no bid reached it" MORE LIKELY.** ➕ **And crypto REST computes a mid too, so crypto maker exits are an UNMEASURED ADJACENT POPULATION for `#962`.**
+3. **`W6`'s *"`last` consumed nowhere"* is an ASSERTED ABSENCE** (`#453`) — **needs a whole-tree census stated as one.**
+4. **`W10` moves risk and has no number.**
+5. ⭐ **`W13` is a candidate CONFOUNDER for `W1`'s age distribution, not merely an independent row** — a frozen subscription list would itself produce stale books.
+
+⛔ **AND A HOUSEKEEPING GATE HE SET: fix `#953`'s TWO HOMES under TWO batch names across THREE documents BEFORE it is worked. That is the `#641` shape and I named it myself.**
 
 ## 4. ⛔⛔ THE BIGGEST RISK — DRAFT 2 NAMED THE WRONG ONE
 

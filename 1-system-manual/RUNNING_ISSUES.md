@@ -1050,6 +1050,12 @@ MSYS2_ARG_CONV_EXCL='*' git show "…:.claude/memory/MEMORY.md"               ->
 
 **LANGSTON'S RULING THAT MAKES IT BLOCKING:** *“findings survive as MEASUREMENTS and are NOT CERTIFIED AS DISPOSITIONS.”* ⇒ **every sentence in the audit of the form *“this is wrong / unintended / nobody decided this”* is UNCERTIFIED until this index exists** — and that is true **wherever it sits**, not only in the proposal sections. ★ *My own offered split (findings survive, proposals do not) was ruled **the wrong cut, and one that failed in my own favour**.*
 
+⛔⛔ **SCOPE-DEFINING REQUIREMENT ADDED 2026-08-30 (Langston, and I supplied the worked example by committing the failure): THE INDEX'S CORPUS MUST INCLUDE IN-CODE DECIDED-INTENT MARKERS, OR IT CERTIFIES NOTHING.**
+**THE CASE:** I searched `P19-B7.2c`'s scope, pre-audit and completion report for whether anyone had decided which price side a resting maker sell reads. **0 hits, against a positive control of 26 for `maker`.** I concluded *"nobody decided."*
+⇒ ⛔ **THE DECISION WAS IN A CODE COMMENT** — `active-execution-engine.ts:1501-1505`, *"**D1 (Langston-approved INTENTIONAL divergence from entry semantics)** … Do not 'fix' this into entry-parity."* **Three lines above the comparator.**
+⇒ ★★ **MY CONTROL PROVED THE SEARCH WORKED ON THAT CORPUS; IT DID NOT PROVE THE CORPUS COULD CONTAIN THE ANSWER — AND IT STRUCTURALLY COULD NOT.** **Leg-1 instrument reach: a silence reported as an absence from a corpus with ZERO OPPORTUNITY to speak.** ⚠️ *Committed while writing this very entry.*
+✅ **SO THE CORPUS IS: completion reports + scope files + BATCH_CATALOG + `RUNNING_ISSUES` + IN-CODE HEADERS AND MARKERS. `D1` is the worked example and the index must return it.**
+
 **DELIVERABLE (shape, not fix — rule 15):** one searchable index of decided intent — **batch id → numbered objectives → the `file:line` or document that carries the decision** — spanning **completion reports, scope files and load-bearing code headers.**
 
 ---
