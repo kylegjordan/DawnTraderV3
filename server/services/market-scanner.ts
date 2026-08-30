@@ -653,7 +653,24 @@ export async function collectAdaptiveBatch(
   // ✅ BLAST RADIUS, MEASURED NOT ASSUMED: `toCanonical`'s base table changes only XBT and
   // XDG; XLM/XRP/XTZ are identity entries, and its quote entries are Z-prefixed forms that
   // never appear in a wsname. The raw form stays recoverable at `pair.pairInfo.wsname`.
-  batch = batch.map(p => ({ ...p, symbol: toCanonical(p.symbol) }));
+  // ⛔⛔ SLASHED-ONLY GUARD — ADDED AFTER A SECOND READER FOUND MY FIRST VERSION UNSAFE.
+  // `:564` is `pairsObj[pairName]?.wsname || pairName`, and `wsname` is OPTIONAL
+  // (`kraken-pair-metadata-service.ts:15`). When it is absent `symbol` is the COMPACT REST key
+  // (`XXBTZUSD`), not a slashed pair — and on non-slashed input `toCanonical` leaves the safe
+  // slashed branch entirely:
+  //   • Pattern 1 (`symbol-canonicalizer.ts:188-192`) splits on `lastIndexOf('Z')`, so
+  //     `XTZUSD` -> base `T`, quote `USD` -> `T/USD`. SILENTLY WRONG, no throw.
+  //   • the `PF_`/`PI_` branch (`:157-166`) can THROW — inside this unguarded `.map`, that
+  //     would take down the scan cycle.
+  //   • and for exactly those entries `pairInfo.wsname` is UNDEFINED, so the raw form is NOT
+  //     recoverable afterwards — which is why "recoverable at pairInfo.wsname" was too strong.
+  // ⇒ CONVERT ONLY WHAT WE KNOW THE SHAPE OF. A non-slashed entry is left byte-identical, i.e.
+  //   exactly as it behaves today, so this cannot regress the compact-key path. The two target
+  //   bases are slashed in the venue's own wsname (`XBT/USD`, `XDG/USD`), so the fix still lands.
+  batch = batch.map(p => ({
+    ...p,
+    symbol: p.symbol?.includes('/') ? toCanonical(p.symbol) : p.symbol,
+  }));
 
   const evaluatedSymbols = batch.map(p => p.symbol);
   

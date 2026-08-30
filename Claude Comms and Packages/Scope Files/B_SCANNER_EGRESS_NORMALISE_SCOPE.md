@@ -252,3 +252,36 @@ raw wsname sent → **Kraken rejects it** → `getOHLCData` returns 0 candles �
 - **`:658`'s benchmark list is a FOURTH benchmark definition, hedged INCOMPLETELY:** it carries `XBT/USD` **and** `BTC/USD`, but **`XBT/EUR` is missing while `BTC/EUR` is present, and NO Dogecoin spelling appears at all.**
 - **`fx5-scanner.ts:1267` spreads `...s` LAST, so the RAW symbol OVERWRITES the normalised one** — how the raw form survives into the pattern pool and the archive.
 - ⛔ **`already_active` (`:774`/`:783`) reads a CONSTANT 0** (`routes.ts:7748-7758` never surfaces it, `#5415`) ⇒ **`OBJ-3` MAY NOT BE VERIFIED FROM THAT COUNTER.**
+
+---
+
+## 11. ⛔⛔ THIRD READER — **MY ONE-LINER WAS UNSAFE. GUARDED. And two of its other findings change the review.**
+
+> **REVIEWER:** `object + claim` · the PLACEMENT claim at `827ecb359` · **HIT** · re-derived **y**
+
+### 11.1 ⛔ THE DEFECT IN MY OWN CHANGE — `p.symbol` IS NOT ALWAYS SLASHED
+**`market-scanner.ts:564` is `symbol: pairsObj[pairName]?.wsname || pairName`, and `wsname` is OPTIONAL (`kraken-pair-metadata-service.ts:15` `wsname?: string`).** ⇒ **when it is absent, `symbol` is the COMPACT REST KEY (`XXBTZUSD`), not a pair.**
+**On non-slashed input `toCanonical` leaves the safe branch entirely:**
+- ⛔ **Pattern 1 (`symbol-canonicalizer.ts:188-192`) splits on `lastIndexOf('Z')` ⇒ `XTZUSD` → base `T`, quote `USD` → `T/USD`. SILENTLY WRONG.**
+- ⛔⛔ **the `PF_`/`PI_` branch (`:157-166`) can THROW — inside an unguarded `.map` on the scan path, that takes down the cycle.**
+- ⛔ **AND MY "the raw form stays recoverable at `pair.pairInfo.wsname`" IS FALSE FOR EXACTLY THOSE ENTRIES** — `wsname` is undefined precisely when this bites.
+✅ **FIXED: a slashed-only guard.** A non-slashed entry is now left **byte-identical**, i.e. exactly as it behaves today, so the compact-key path cannot regress. The two target bases are slashed in the venue's own wsname, so the fix still lands.
+
+### 11.2 ⛔ A SECOND BEHAVIOUR DELTA, IN THE OPPOSITE DIRECTION FROM THE ONE I NAMED
+**`:805`/`:814` (pool + active-trades membership) and `:698` (benchmark) were comparing a RAW string against INTERNAL-form sets** — `poolSymbols` from `fx5-scanner.ts:990/1418`, `activeTradeSymbols` from the `trades.symbol` DB column.
+⇒ ⛔ **BEFORE this change, a Bitcoin pair WITH AN OPEN TRADE was never counted `already_active` and was RE-EVALUATED EVERY CYCLE. After it, that pair is SKIPPED.**
+⚠️ **That is a real behaviour change the OHLC measurement cannot see, and my change list named only the benchmark delta. Both go to review.**
+
+### 11.3 ⚠️ THE PLACEMENT ARGUMENT IS WEAKER THAN I WROTE IT — AND THE ALTERNATIVE IS BETTER THAN I ALLOWED
+- **"The only point" is true of an INTERVAL, not a point.** The last raw-keyed read is `:614`; the first symbol-consuming read is `:658`. Everything between is comment. **Any line in `(614, 658)` behaves identically.**
+- ⭐⭐ **AND THE STRONGER ALTERNATIVE I DID NOT CONSIDER: the VENUE BOUNDARY.** `kraken.ts:296` `const params: any = { pair, interval }` hands the string to Kraken **verbatim, with no resolver**. **One edit there fixes EVERY caller of `getOHLCData`/`getPairHistoryDays`, not just this scanner.** ⇒ **my *"later means N call-site edits"* was false — later at the RIGHT boundary means ONE.**
+⛔ **THIS IS A REAL ARCHITECTURAL QUESTION FOR LANGSTON, NOT A DETAIL: fix at the scanner's egress, or at the venue adapter where the string actually leaves us?** *(The scanner fix also corrects the membership joins in 11.2, which a venue-boundary fix would NOT — so they are not equivalent.)*
+
+### 11.4 ⚠️ TWO RESOLVERS ARE NOW CHAINED, AND NOTHING TESTS THE COMPOSITION
+`fx5-scanner.ts:990` re-applies `normalizeToInternalSymbol` to output this change already ran `toCanonical` over ⇒ **the effective pipeline is `normalizeToInternalSymbol(toCanonical(x))`.** **The two have DIFFERENT tables and different quote handling** — the resolver leaves the quote untouched (`:73-79`), `toCanonical` maps it (`:122`). **They may agree on every live pair; nothing opened tests it.** ↔ `#229`.
+
+### 11.5 ⚠️ AND THE SUITE DOES NOT GUARD THIS
+**No test exercises `collectAdaptiveBatch`'s symbol form** — `server/tests/` references the call site only in a comment. ⇒ **the change is unguarded against regression**, which raises the weight on `OBJ-6`'s live controls.
+
+### 11.6 ✅ WHAT THE READER CONFIRMED
+**Exhaustive post-line consumer enumeration: no consumer after the line reads a raw venue field.** The only post-line read of one — `:778 const baseCurrency = pairInfo.base` — is **assigned and never read**. **Idempotency holds.** **The line cannot run twice** (`collectAdaptiveBatch` has exactly one call site). **`pairInfo` is non-undefined for every entry** (filtered at `:568`, `:608`, `:614`) — *the gap is `wsname`, not `pairInfo`.*
