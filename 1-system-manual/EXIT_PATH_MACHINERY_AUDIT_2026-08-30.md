@@ -624,7 +624,10 @@ ACK: {"method":"subscribe","result":{"channel":"book","snapshot":true,"symbol":"
 
 ---
 
-## 11. ⛔⛔ THE CORRECT DESIGN — **DRAFT 2**. §10 IS SUPERSEDED; READ THIS INSTEAD.
+## 11. ⛔⛔ [SUPERSEDED BY §12 — ROUND 1 OF THE LOOP] THE CORRECT DESIGN — DRAFT 2
+
+> ⛔ **SUPERSEDED 2026-08-30 BY §12 (DRAFT 3). KEPT AS THE ROUND-1 RECORD.** A second, different fresh reviewer graded each correction NARROWED-vs-HEDGE and returned: **1b STILL-WRONG** (it reported a documented, reviewed design property as a defect), **1c's evidence STILL-WRONG** (the equities feed DOES carry a venue timestamp), **P3 a HEDGE** that silently retracted two of this audit's own findings, and **§11.7 incomplete** — P4, P6 and P7 were never re-examined while the round read as complete. **Read §12.**
+
 
 > ⛔ **§10 (DRAFT 1) IS KEPT AS THE RECORD AND MUST NOT BE ACTED ON. Two of its seven principles were WRONG and one of those would have caused SILENT DATA LOSS at the kill switch.** A fresh reviewer, handed only the document and one question — *"what other states of the world are consistent with §0-§9 that this design has assumed away?"* — returned eight assumed-away alternatives, two `WRONG` verdicts, two `UNPROVEN`, and one internal contradiction. **Every load-bearing correction below is re-derived by me at the ref before adoption; a reviewer HIT is a lead.**
 > ★ **This is Kyle's *"looked at multiple times so that we don't do a half ass job."* Draft 1 was a design reviewed by its author.**
@@ -718,3 +721,87 @@ ACK: {"method":"subscribe","result":{"channel":"book","snapshot":true,"symbol":"
 3. ⚠️ **A3's magnitude ordering** (11.2) — unresolved and it decides how much P2 is worth.
 
 ⛔⛔ **NEXT: DRAFT 2 GOES TO A *FRESH* REVIEWER — NOT THE ONE THAT PRODUCED THESE FINDINGS, WHICH HAS NOW SEEN MY DRAFT AND HAS REBUILT THE MEMORY THE BOUNDARY EXISTS TO REMOVE.** *(`workflow-02`: each round gets a fresh reviewer; the correction is itself unreviewed work by the session that erred.)* **Langston sees it only after that round closes.**
+
+---
+
+## 12. ⛔ THE CORRECT DESIGN — **DRAFT 3**. §11 SUPERSEDED. ROUND 2 OF THE LOOP.
+
+> **ROUND 2 REVIEWER — a DIFFERENT fresh reader, given draft 2 and one question: *"did each correction replace a wrong claim with a NARROWER CHECKABLE one, or with a HEDGE?"*** Verdicts: **1a NARROWED · 1b STILL-WRONG · 1c rule NARROWED / evidence STILL-WRONG · P3 HEDGE · P2 NARROWED (two population defects) · 11.3 NARROWED (one count wrong) · 11.4 NARROWED · 11.5 NARROWED, no criticism · 11.6 NARROWED but contains an error · 11.7 UNCHANGED-RISK, incomplete.**
+> ★ **Its summary judgement, which is the one worth acting on: *"where draft 2 corrects a CLAIM it narrows well. Where it corrects a PRINCIPLE it substitutes a rule whose escape hatch is wider than the one it replaced, and it never re-examines P4-P7 at all while implying the round was complete."***
+> ✅ **Every correction below is re-derived by me at the ref before adoption.**
+
+### 12.0 ⛔⛔ THE PUBLISHED ERROR, FIXED FIRST — `#953` HAD **ONE** LIVE CALLER, NOT TWO
+
+**RE-DERIVED AND CONFIRMED: `command-router.ts:240` IS DEAD.** `CommandRouter` is constructed once (`routes.ts:110`) and **no method is ever invoked on it**; `routeCommand` and `confirmCommand` appear only as their own definitions. ✅ **Control: `getActiveTrades(` returns 31 call sites**, so the shape finds live calls.
+⇒ **By `#953`'s OWN dead-limb criterion it is dead. `trading-engine.closeTrade` has ONE live caller — `routes.ts:5054`, an authenticated HTTP route — and two dead ones.**
+★★ **THE MECHANISM, AND IT IS THE ONE I KEEP PAYING FOR: I ENUMERATED THE CALLERS OF `closeTrade` AND STOPPED, WITHOUT ASKING WHETHER THOSE CALLERS ARE THEMSELVES REACHABLE. One hop, not two.** ⇒ ⛔ **A CALLER LIST IS NOT A REACHABILITY PROOF.** *(The mirror of §9.5(a-ii): I applied enumerate-the-entry-points DOWNWARD from the symbol and never UPWARD from the caller.)*
+✅ **The finding survives, halved: one reachable authenticated route still places a REAL market sell and books a random haircut. Severity unchanged — one path is enough. Corrected in `RUNNING_ISSUES` and `PHASE_19_PLAN` the same day.**
+
+### 12.1 ⛔⛔ RULE 1b IS **WITHDRAWN** — IT REPORTED A DOCUMENTED, REVIEWED DESIGN PROPERTY AS A DEFECT
+
+**Draft 2's 1b said: *"a gate reads the finest field the object carries — `isKrakenVenueSource(source)` must become producer-aware."*** ⛔ **THAT IS §9.5(b-ii), AND THE CITATION THAT DISSOLVES IT IS IN THE FILE I WAS QUOTING.**
+
+`live-pricing-adapter.ts:45-50`, verbatim: *"`source` answers a **POLICY** question (may the engine act on this?); `producer` answers a **PROVENANCE** question (where did this number actually come from?)."*
+`:92-97`, verbatim: *"★ **SAFE BY CONSTRUCTION**: the engine's actionable gate is `isKrakenVenueSource(source)`, which reads `source` and **NEVER** `producer`, so widening this union **cannot reject a price or skip a position**. **That is design (B)'s defining property, verified at the ref.**"*
+
+⇒ **The separation is the point, and my rule would have destroyed the safety property: making the gate producer-aware turns every future producer addition into a potential actuation change.** *(Kyle's named fear, `CONDUCT` §9: "fixing" behaviour that was working and injecting new bugs.)*
+
+✅ **AND THE REFORMULATION IS BETTER THAN THE RULE IT REPLACES — THE DEFECT IS AT THE *WRITE* SIDE, NOT THE READ SIDE.**
+§1.1's non-determinism is **two producers writing ONE cache slot, last-writer-wins** (`live-pricing-adapter.ts:860`; both `:700` and `:945` stamp `source:'kraken_ws'`). ⇒ ⛔ **A producer-aware gate would only LABEL the alternation; it cannot remove it. The fix is that two producers should not share one slot** — or, if they must, the slot records which one won. **Nothing about the gate needs to change.**
+★ **This is why the round mattered: draft 2 aimed a rule at the reader of a value when the defect is in who writes it.**
+
+### 12.2 ⛔ RULE 1c's **EVIDENCE** WAS WRONG — THE EQUITIES FEED **DOES** CARRY A VENUE TIMESTAMP
+
+**Draft 2 asserted: *"the equities feed has NO venue timestamp at all."*** ⛔ **FALSE, AND RE-DERIVED ON THE SAME SOCKET AND THE SAME DISPATCHER.** `equity-spot-archiver.ts:84` guards on `data.interval_begin` and `:90` persists `intervalBegin: new Date(data.interval_begin)` — **a venue-supplied timestamp from `ws-equities`, on the `ohlc` channel.**
+
+✅ **THE TRUE STATEMENT, WHICH IS NARROWER AND STILL SUPPORTS THE RULE:** *the `ticker` channel **as we parse it** carries no venue time* — `parseTickerSnap` sets `capturedAt: new Date()` — **and whether the WIRE carries one is UNKNOWN, because no raw frame is retained.**
+⚠️ **THIS IS THE SAME ERROR CLASS §6 OF THIS AUDIT ALREADY WITHDREW A CLAIM FOR** — reasoning about a producer from what a consumer holds. **I did it again, one section later.**
+⇒ ★ **AND IT IS LOAD-BEARING: if the ticker frame carries a timestamp, the fix on that class is "READ THE FIELD", not "accept receipt-only."** ✅ **The instrument that settles it is already placed — raw-frame capture, `#943` / plan row 3b.b.** **Rule 1c stands; its justification now names the unknown instead of asserting an absence.**
+
+### 12.3 ⛔⛔ P3 WAS A HEDGE, AND WORSE — IT SILENTLY RETRACTED TWO OF MY OWN FINDINGS
+
+**THREE defects in draft 2's corrected P3, all adopted:**
+
+**(a) THE PREDICATE IS NOT LOCALLY DECIDABLE.** *"Refuse where a next evaluation will come"* is not a property the call site can test. **The same function serves both the refuse-correct caller and the substitute-correct caller**, so the rule reduces to **call-site identity, not a check on the world** — and call-site identity does not answer it either: the kill switch stops the engine **from a different module**, with no notice to the loop that just refused; an xStock position refused at Friday close is refused every tick until Sunday; and the skip rail exists precisely because a feed can stay dark indefinitely.
+
+**(b) ⛔⛔ IT BLESSED BEHAVIOUR THIS AUDIT GRADES AS A DEFECT, WITHOUT A DISPOSITION.** `active-portfolio-manager.ts:313-330` **already** substitutes, **already** does it loudly, and **already** records the substitution as provenance — `producer:'position_entry_price_reused'`, `source:'entry_price_fallback'`, `observedAtMs: null`. ⇒ **Corrected P3's three bullets describe CURRENT BEHAVIOUR AT THE EXACT SITE.** And `skippedCount` in that function is declared and never incremented — **force-close cannot refuse today even if it wanted to.**
+⛔ **Meanwhile §1.3 grades that same path *"CAN CHANGE A TRADING DECISION"* and §8.11 grades it *"a defect AND an invariant violation — F7 is binding and explicit."* Draft 2 blessed it and never named the module.** ⇒ **THAT IS A SILENT RETRACTION, AND §9.4 DISPOSITION 5 REQUIRES THE CITATION THAT DISSOLVES A FINDING.**
+✅ **THE DISPOSITION, STATED NOW:** the force-close substitution is **rule-24 outcome (2) — working as designed, with a decision missing** — *not* outcome (1). **What remains genuinely defective there is narrower than §1.3 claimed: it is that force-close bypasses `isKrakenVenueSource` while the exit monitor enforces it, so the same system holds two different bars for "actionable" and neither cites the other.** §1.3 and §8.11 are **amended, not withdrawn**, and the amendment is recorded here rather than by quietly writing a principle over the top.
+
+**(c) IT AMENDS A STILL-LIVE FOUNDING INVARIANT WITHOUT SAYING SO.** F7: *"If no real price is available, the operation must fail or wait… `no_reliable_price` is an explicit failure state, **not a fallback**."* §8.5 lists F7 as **still live and correct**. **Corrected P3 prescribes a fallback where waiting is impossible.** ⇒ ✅ **That is right engineering and an UNSTATED INVARIANT AMENDMENT. Stated now: F7 needs a clause for the terminal case — "where no further evaluation is possible, a DECLARED substitute is preferred to a refusal that destroys the record." That is Kyle's call, not mine.**
+
+✅ **P3, DRAFT 3 — AND IT IS NOW A CONSTRUCTION RULE, NOT A PREDICATE:**
+> ⛔ **THE CALLER DOES NOT DECIDE. EVERY PRICE CONSUMER DECLARES, AT ITS DEFINITION, WHETHER IT IS RE-ENTRANT (something will ask again) OR TERMINAL (nothing will).** A re-entrant consumer refuses; a terminal consumer substitutes with declared provenance. **The property becomes a static fact about the call site, written down and greppable, instead of a runtime judgement no caller can make.**
+> ⛔ **AND THE TERMINAL SET IS A CENSUS, NOT A LIST: §10.7 asserts SIX close sinks and draft 2 named THREE. Nothing mapped three onto six.** The census (§9.5(a)) is a **precondition** of this principle, and it is already placed at plan row **3f.b**.
+
+### 12.4 ⚠️ P2's COUNTER-EVIDENCE HAS A CLASS DEFECT, AND THE SPLIT IT ARGUES IS ALREADY RULED
+
+✅ **The arithmetic checks out — all five rows re-verified to the fourth decimal, and "four of five" is right.**
+⛔ **BUT ALL FIVE ROWS ARE xSTOCK.** NOW/TGT/WEN are §7's stub-book table; PLTR/BABA are §9.4's pre-weekend equities snapshot. **The pro-case for P2 is CRYPTO (12/12 and 9/9).** ⇒ **The table indicts a class whose evidence base is separately absent and says NOTHING about the crypto leg** — which is the exact error amendment 4 flags one line later. **I stated the sampling problem honestly and missed the class problem entirely.**
+⛔ **AND THE xSTOCK LEG IS ALREADY HELD** by Langston's r10 class split, on the stronger ground that the xStock bid has no independent witness. **Draft 2 argued for a split that had been ruled the same day, and did not cite the ruling.**
+⚠️ **AND THE REFUTATION BRANCH'S TRIGGER DOES NOT EXIST YET:** the branch is genuinely binding in F-G-2's scope — *"`OBJ-0` can sink this batch, by design… it does not ship"* — **but the n-floor and window span are deferred to Step 2, so the criterion cannot fire yet.** ✅ **A real commitment with an unset threshold. Say so; do not present it as armed.**
+
+### 12.5 ✅ COUNTS AND CITATIONS CORRECTED
+
+| draft 2 said | truth | note |
+|---|---|---|
+| `getPriceWithFallback` **12** call sites | **10** non-test call sites | 12 counted the definition + 2 doc-comment mentions ⇒ **a grep-line count sold as a call-site count.** ★ **Does not change §11.3's conclusion — 10 is still low coupling — but it is the same class of error as everything else on this page.** |
+| `PriceProducer` **15**-member union | **16** | — |
+| kill-switch stop at `:815-819` | **`:812`** | — |
+| the delete at `:848` | **`:851`** | — |
+| *"SILENT data loss"* | **data-silent only** | the branch logs `[CRITICAL]` and one line per deletion. **The RECORD is destroyed; the LOG is not.** Say "no trade record", not "silent". |
+
+### 12.6 ⛔ §11.7 WAS INCOMPLETE, AND THE OMISSION WAS THE DANGEROUS KIND — SILENCE READ AS SURVIVAL
+
+⛔⛔ **DRAFT 2 NEVER STATED WHICH PRINCIPLES THE ATTACK ROUND DID NOT REACH. P4, P6 AND P7 WERE NEVER RE-EXAMINED, AND A READER WOULD TAKE THEIR ABSENCE FROM THE CORRECTIONS AS SURVIVAL.** *(This is `#546`'s shape — absent-as-valid — inside my own review loop.)*
+
+✅ **THE COMPLETE CARRIED-FORWARD LIST:**
+1. **Should the mark be the mid at all?** *(unchanged from draft 2; the reviewer withdrew nothing about it — F4 implies bid-marking and mid-marking overstates equity exactly when the mid is untransactable.)*
+2. **Stop-movement policy is not separable from P2** *(unchanged; a break-even stop parked at entry is the level most likely to be brushed by half a spread ⇒ P2 changes the cost of §5's live decision, which is Kyle's).*
+3. **A3's magnitude ordering** — if the wide books are the frame-type defect, P5 is the prize and P2 is a rounding error. **Unresolved.**
+4. ➕ **F7 needs a terminal-case clause (12.3(c)) — Kyle's call.**
+5. ➕ **11.0's own stated limit has NO HOME:** NULL provenance passing green fences, and `varchar(40)` provenance columns with no CHECK constraint. **Stated in draft 2 and then dropped.**
+6. ➕ ⛔ **P4, P6 AND P7 HAVE NOT BEEN THROUGH A SINGLE ROUND.** P4 was touched only obliquely; **P6 (one exit implementation) and P7 (one close funnel, one stop owner) are untouched — including the clamp disagreement draft 1's own gap table already marked unowned.**
+7. ➕ ★ **AND §8.8 HANDS US AN ALTERNATIVE TO P6 THAT NOBODY HAS CONSIDERED: VTS AND PAPER WERE NEVER DESIGNED TO RUN CONCURRENTLY.** ⇒ *"One shared exit implementation"* is **not** the only way to end the two-worlds problem — **not running both at once is the other, and it is the founding design.** **Unexamined.**
+
+⛔⛔ **ROUND STATUS: 2 OF 3. The loop does NOT close here — items 6 and 7 mean the design has principles that have never been attacked, and a round that has not reached a principle cannot certify it.** ⇒ **Draft 3 goes to round 3 scoped to P4/P6/P7 ONLY. If round 3 does not close it, the FULL ROUND RECORD goes to Langston with the disagreement intact, per his cap rule — iterating to agreement selects for persistence, not truth.**

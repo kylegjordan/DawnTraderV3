@@ -858,9 +858,11 @@ MSYS2_ARG_CONV_EXCL='*' git show "…:.claude/memory/MEMORY.md"               ->
 |---|---|
 | `trading-engine.ts:703` (`'strategy_exit'`) | ⛔ **DEAD** — inside `monitorActiveTrades`, the limb plan row **3h.b** deletes |
 | `routes.ts:5054` — `engine.closeTrade(id, 'manual')` | ✅ **LIVE** |
-| `command-router.ts:240` — `engine.closeTrade(trade.id, 'user_command')` | ✅ **LIVE** |
+| `command-router.ts:240` — `engine.closeTrade(trade.id, 'user_command')` | ⛔ **DEAD — CORRECTED 2026-08-30, SAME DAY, BY ITS AUTHOR.** `CommandRouter` is constructed once (`routes.ts:110`) and **no method is ever invoked on it**; `routeCommand` and `confirmCommand` appear only as their own definitions. ✅ Positive control: `getActiveTrades(` returns **31** call sites, so the search shape finds live calls. ★ **By this issue's OWN dead-limb criterion — the one used at plan row 3h.b, *“ZERO callers, the name appears exactly ONCE, its own definition”* — this is dead.** |
 
-⇒ **Row 3h.b removes ONE of three. TWO LIVE CALLERS REMAIN, AND NEITHER APPEARS ANYWHERE IN `PHASE_19_PLAN.md`.**
+⇒ **CORRECTED COUNT: row 3h.b removes ONE of three; of the remaining two, ONE IS LIVE — `routes.ts:5054`, an authenticated HTTP route — and one is dead.** ⚠️ **MY ORIGINAL FILING SAID “TWO LIVE CALLERS” AND THAT WAS WRONG.**
+★★ **THE MECHANISM, RECORDED BECAUSE IT IS THE SAME SHAPE I KEEP PAYING FOR: I ENUMERATED THE CALLERS OF `closeTrade` AND STOPPED, WITHOUT ASKING WHETHER THOSE CALLERS ARE THEMSELVES REACHABLE.** One hop, not two. ⇒ **A CALLER LIST IS NOT A REACHABILITY PROOF — walk each caller up to a real entry point before calling it live.** *(`wrong-object`; and it is the mirror of §9.5(a-ii)'s enumerate-the-entry-points-first rule, which I applied downward and not upward.)*
+✅ **THE FINDING SURVIVES, NARROWED: one live authenticated HTTP route still places a REAL market sell and books a random haircut, and it still appears nowhere else in `PHASE_19_PLAN.md`.** The severity is unchanged — one reachable path is enough — but the surface is half what I filed.
 
 ⛔⛔ **AND THE PRICING IS WORSE IN LIVE MODE THAN IN PAPER.** `trading-engine.ts:633-647`, verbatim shape:
 ```
