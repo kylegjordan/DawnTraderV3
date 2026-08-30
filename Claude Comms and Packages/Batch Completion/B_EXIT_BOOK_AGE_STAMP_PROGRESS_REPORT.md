@@ -35,7 +35,17 @@ The exit fill walks a depth ladder and **never recorded how old it was**, so `#9
 
 ## 4. ⛔⛔ THE PRE-REGISTERED CLOSE CRITERION — WRITTEN BEFORE THE DATA ARRIVES. DO NOT DATA-MINE.
 
-**WINDOW: 20 post-deploy closes OR 7 days, whichever comes first.** *(Anchor: `closed_at > 2026-08-30T12:05:09Z`.)*
+⛔⛔ **WINDOW REPLACED 2026-08-30, SAME DAY, BY ITS AUTHOR — AND THE CHANGE IS TO THE *STOPPING RULE*, NOT TO THE BAR (Kyle, and he is right).**
+⛔ **WAS: "20 post-deploy closes OR 7 days." That is a ROW COUNT applied to a FUNCTIONAL question, and it is the pattern Kyle called out: *"if we see the functionality works for a few, we see it for them all… I don't know why we have to keep waiting."*** 
+✅ **NOW — A COVERAGE RULE: close when every combination the mechanism can produce has been OBSERVED ONCE, whichever comes first with 7 days.**
+| # | cell | why it is the variation that matters | status |
+|---|---|---|---|
+| **V1** | a **crypto TAKER** close | the only cell where `exit_fill_depth_age_ms` must be NON-NULL — it is C2's whole assertion | ⏳ |
+| **V2** | a **crypto MAKER** close | the structural NULL, the cell that would read as a failure without the carve-out | ✅ **SPX/USD 12:08:18Z** |
+| **V3** | an **xStock** close (either leg) | the ONLY cell that exercises the `kraken_equities_ws_*` split; crypto can never reach it | ⏳ *(venue shut until Sun 20:00 ET)* |
+⭐ **THE BAR IS UNCHANGED: C1-C4 below are word-for-word what they were before any data existed. Only the stopping rule moved, and it moved from a count to a list of cells DERIVED FROM THE MECHANISM — what the code can produce — not from what happened to pass.**
+⚠️ **STATED BECAUSE IT IS THE OBVIOUS OBJECTION: this was edited AFTER one close landed. That close (V2) satisfied a cell the ORIGINAL criterion already contained, and no assertion was weakened, added or removed. If any C-assertion had moved, this would be data-mining and the edit would be illegitimate.**
+*(Original anchor unchanged: `closed_at > 2026-08-30T12:05:09Z`.)*
 ✅ **ARMED AS A SELF-FIRING ALERT — `65a1379e-a382-43fe-960a-9e47f68e76eb`, state `scheduled`, fires `2026-09-06T12:05:09Z`, severity `warning`.** ★ **The alert carries this whole criterion in its body, including both carve-outs and the enumerate-never-`LIKE` rule, so whoever picks it up does not need this file to act — and the window cannot quietly elapse.**
 
 **POPULATION — stated so it cannot be quietly reshaped:** rows in `closed_trades` with `closed_at > 12:05:09Z` **AND `close_reason <> 'never_filled'`** *(that cohort carries NULL provenance BY DESIGN — `B-EXIT-PROVENANCE`'s own carve-out)*.
