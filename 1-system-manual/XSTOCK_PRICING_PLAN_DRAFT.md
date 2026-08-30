@@ -47,7 +47,7 @@ Draft 2 led with a 14.038% trigger-vs-fill gap. **Disaggregated: burst rows n=5 
 | **W7** | **An xStock instance of the `#951` laundering on the exit path** — `:1239` preserves the honest age, `:1244` republishes it as observed-now, and it passes the venue gate. | mechanism certain · ⛔ **CONSEQUENCE UNMEASURED** |
 | **W8** | ⚠️ **NARROWED: not "we cannot tell which session."** The session flag **is** archived and read by nothing; the precise defect is that **the exit path cannot see it, because the in-memory tick carries only `{price, tsMs}`.** | mechanism certain · ⛔ **CONSEQUENCE UNMEASURED** |
 | ➕ **W9** | **The fill's forensic columns are NULL BY CONSTRUCTION on xStock** — `bookMid`/`bookAgeMs` (crypto 15/78 populated, **xStock 0/26**), so the age W1 needs is not in `closed_trades` and must be reconstructed. | certain |
-| ➕ **W10** | **The spread gate reads a quote up to 30 MINUTES old and FAILS OPEN** — absent data emits a sentinel that passes. ⇒ ⛔ **Absent price data makes ENTRY easier while making EXIT impossible.** | mechanism certain · ⛔ **CONSEQUENCE UNMEASURED — and Langston flags it as risk-moving with no number** |
+| ➕ **W10** | **The spread gate reads a quote up to 30 MINUTES old and FAILS OPEN** — absent data emits a sentinel that passes. ⇒ ⛔ **Absent price data makes ENTRY easier while making EXIT impossible.** | ✅ **COSTED (§1b): 171 of 486 — 35% of the universe — clear it on ABSENT data overnight** |
 | ➕ **W11** | **The newest 15-minute bar can be a one-minute stub** — partial buckets are emitted by design, and `source_bar_count`, which would say so, is written and read by nothing. | mechanism certain · ⛔ **CONSEQUENCE UNMEASURED** |
 | ➕ **W12** | **The mark silently changes definition** — mid **or** `last`, untagged; **and σ bounds a MID's staleness using the dispersion of `last`.** | ✅ **COSTED (§1b): fallback fired 0 times in 373,450 rows across both sessions — LATENT, not live** |
 | ➕ **W13** | **The feed's subscription list is frozen at process boot** while the universe refreshes daily. `#960` | mechanism certain, **consequence untested** |
@@ -82,6 +82,21 @@ The mark is `(bid+ask)/2` when both sides exist, **else `last`** — untagged, s
 ⛔⛔ **AND I CALLED IT A “BOUND”, WHICH IT IS NOT — LANGSTON'S CORRECTION, AND I HAD ALREADY SAID THE WORD TO KYLE. A MEAN IS NOT A BOUND.** The crypto **max is 0.87% against a mean of 0.114% — ~8× its own mean.** ⇒ **F-G-2's outcome effect lives in the TAIL: only trades RESTING ON THE TRIGGER flip, and each flips on the gap it sees AT THAT INSTANT, not on the population average.** ✅ **So this is a CENTRAL TENDENCY, not a ceiling — and if a bound is wanted it is the MAX, which at n=11 cannot see a tail and is therefore only a FLOOR on the bound.**
 ⛔ **SECOND CAVEAT — WRONG POPULATION: I measured REALIZED EXITS; F-G-2 acts at THRESHOLD CROSSINGS, a SUPERSET including crossings that did NOT become an exit under the mid and WOULD under the bid.** ★ **That difference is EXACTLY WHERE F-G-2's EFFECT WOULD HIDE, and it carries no stamp so it cannot be reconstructed.** ✅ **Both caveats and all four figures are now written into the F-G-2 scope at his direction, so no later reader attributes an expected effect to his clearance that he never stated.**
 ⚠️ **n=3 / n=3 / n=11. Far too small to decide anything. Stated as a direction with its population, not as a result.** ⇒ **DISPATCHED TO LANGSTON, because it touches a leg he released.**
+
+### ⛔⛔ **W10 — COSTED, AND IT IS THE BIGGEST NUMBER OF THE FOUR. 35% OF THE UNIVERSE PASSES THE SPREAD GATE ON *ABSENT* DATA OVERNIGHT.**
+The spread gate reads the newest ticker row **within a 30-minute window**, and when there is none it emits a sentinel that **PASSES**.
+| instant | universe (non-delisted) | symbols WITH data in the gate's window | ⛔ **falling through to the passing sentinel** |
+|---|---|---|---|
+| regular hours, 2026-08-28 20:00 UTC | 486 | **476** | 10 · *and of those 476 only **3** are older than 1 minute, none older than 5* |
+| ⛔ **overnight, 2026-08-28 03:00 UTC** | 486 | **315** | ⛔⛔ **171 — 35% of the universe** |
+⇒ ⭐⭐ **OVERNIGHT, MORE THAN A THIRD OF THE UNIVERSE CLEARS THE SPREAD GATE WITHOUT A SPREAD BEING CHECKED AT ALL.** ⛔ **And it fails in the dangerous direction: absent price data makes ENTRY EASIER, while the exit path's staleness ceiling makes EXIT HARDER on the very same silence.**
+⚠️ **Two instants, one per session — a snapshot, not a rolling window (rule 13). Direction and order of magnitude, not a rate.**
+
+### ⛔ **W11 — NOT COSTED. I MEASURED THE WRONG OBJECT TWICE AND AM RECORDING THAT RATHER THAN THE NUMBER.**
+**Attempt 1** counted 1-minute bars inside a **1-minute window** — which can only ever return 1. **It measured nothing.**
+**Attempt 2** counted bars in a **COMPLETED** 15-minute bucket: 475 symbols, **400 complete**, mean **14.41 of 15**, 3 stubs. ⛔ **Also the wrong object — the scanner takes `ohlc[length-1]`, the CURRENTLY FORMING bucket, which is PARTIAL BY CONSTRUCTION. A completed bucket being complete says nothing about it.**
+⇒ ✅ **AND RESTATING THE QUESTION DISSOLVES HALF OF IT: a forming bucket's CLOSE is just the latest 1-minute close, which is a defensible price.** ⛔ **The live concern is its RANGE — a 1-bar range understates ATR, and ATR sets stop and target geometry. THAT is unmeasured.**
+⚠️ **W11 STAYS TAGGED `CONSEQUENCE UNMEASURED`, with the question now correctly stated.**
 
 ⭐⭐⭐ **LANGSTON'S READ ON THE PATTERN, AND IT IS A BIGGER QUESTION THAN ANY OF THE THREE NUMBERS: *“Third collapse into `#943` is no longer a coincidence — worth someone asking whether `#943` IS A DISTINCT REGIME rather than an outlier window.”*** ⇒ ⛔⛔ **IF THE 00:15 COHORT IS A REGIME AND NOT AN ANOMALY, THEN EXCLUDING IT FROM EVERY MEASUREMENT IS NOT CLEANING THE DATA — IT IS REFUSING TO MEASURE ONE OF THE TWO REGIMES WE ACTUALLY TRADE IN.** **UNANSWERED, and it reframes `#943`.**
 
