@@ -5776,3 +5776,30 @@ Langston named seven active un-acked alerts in the channel at the close of `B-SC
 ★ **THIS IS NOT A NEW FINDING AND IT IS NOT A NEW BATCH.** It is `#942` showing its face, the same way `DOGE/BTC` at 0.000001086 against a 0.25 floor was `#966` showing its face and correctly produced no new item. **Disposition unchanged: `B-ALERT-LIFECYCLE`, decision Kyle's.**
 ⚠️ **What the four DO add is the thing `#942` could not supply on 08-29 — a MEASURED CONSEQUENCE rather than a mechanism read.** The issue argued from the line that `info` can rot; **these are four that have, for 15-23 days, carrying OWED VERIFICATIONS from four different batches.** *"Scheduled ≠ verified"* is no longer a prediction.
 ⛔ **NOT TAKEN BY ME, DELIBERATELY:** two carry other sessions' owners (CC-A, CC-B) and the other two belong to batches that are not mine. Langston has already named them in the channel where their owners will see them; **re-posting the same list would be noise, not diligence.**
+
+
+---
+
+### #965 AMENDMENT 1 — ✅ **INVARIANT T2 *IS* ENFORCED. THE SCANNER'S CHECK IS A DEAD REDUNDANT SECOND GATE, NOT THE ENFORCEMENT. SEVERITY DROPS.**
+
+**Answered 2026-08-30 by CC-C, immediately after the issue was filed — this was the issue's own FIRST deliverable (*"find where T2 is actually enforced, not fix the dead check"*), and it took three reads.**
+
+⛔ **THE FILING IMPLIED A SAFETY GAP. THERE IS NONE.** The real enforcement is at the execution engine, and it reads a table that is alive:
+`active-execution-engine.ts:3570-3606` —
+```ts
+const existingPositions = await storage.getActiveOpenPositions(this.mode);
+const existingPositionForSymbol = existingPositions.find(p => p.symbol === signal.symbol);
+if (existingPositionForSymbol) { … return { opened: false, stage: 'DUP_POSITION', … }; }
+```
+`getActiveOpenPositions` (`storage.ts:3772-3777`) selects **`activeOpenPositions`** — the `active_open_positions` table, **measured live at 2 rows**, not the empty `trades` table. Its own comment states the intent: *"Check for duplicate BEFORE creating trade — prevents orphan trade records."*
+
+✅ **REACHABILITY PROVEN TO A REAL ENTRY POINT, not asserted from a caller list** *(the standing rule: a caller list is not a reachability proof — walk each caller UP)*:
+**`eventBus.onPromotion` (`ready_to_buy_service.ts:519`, an event subscription) → `executePromotedSignal` (`:2889`) → `processSignal` (`:4203`) → `executeSimulatedTrade` (`:2977`) → the T2 check (`:3570`).**
+Corroborated by `active-portfolio-manager.ts:202`'s own comment: *"No direct processSignal() call — RTB promotion handles execution."*
+
+✅ **AND THE INVARIANT HOLDS IN THE DATA:** `active_open_positions` = **2 rows across 2 distinct symbols**; **symbols holding >1 open position = 0.**
+⚠️ **NOT CLAIMED: that T2 has never been violated historically.** My check for double-booking grouped on `(symbol, opened_at)` and so catches only exact-timestamp collisions — **a weak instrument, and its zero is reported as such rather than as a clean history.**
+
+⇒ ⭐ **WHAT `#965` ACTUALLY IS, RESTATED:** the scanner's `activeTradeSymbols` gate (`market-scanner.ts:773`/`:782`) is a **redundant SECOND check that has never excluded anything**, because it reads `trades` (0 rows). **It is dead legacy, not a missing safety property** ⇒ **rule 18 disposition: delete it on the spot through the full workflow, or a named dated deletion — with `DELETED_COMPONENTS_LOG` + `_archive`.** The `already_active` counter beside it reads a constant 0 and is separately confirmed dead by `#5415`.
+⛔ **SEVERITY: was implicitly "a founding invariant may be unenforced." NOW: cleanliness/legacy.** ⚠️ **The batch keeps its slot at plan row 3b.j and its first deliverable is DISCHARGED — but do NOT let the de-escalation dissolve it: a dead gate that LOOKS like an enforcement is exactly what made me cite it as one in a Step-4 dispatch and hand Kyle an invariant repair that did not exist.**
+★ **THIS IS WHY LANGSTON INSISTED THE ORDER BE *ESTABLISH, THEN FIX*. Had the batch opened by "fixing" the dead check, it would have hardened a redundant gate and never learned that the real one was fine.**
