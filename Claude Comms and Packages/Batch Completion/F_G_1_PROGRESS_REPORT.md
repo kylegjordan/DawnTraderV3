@@ -429,3 +429,36 @@ target          0.5613 / 0.0001 = 5613   ON GRID
 ## 6. CONVERSION
 
 When the window closes this file **becomes** `F_G_1_COMPLETION_REPORT.md` — same batch, recording **both halves**: what the data showed **against the criterion quoted as written above**, and **what decision or action was taken on it, and by whom.** A completion report that states the data and not the decision has not closed the loop.
+
+### 3n. ➕ AMENDMENT 4 — **THE 30-COUNT ARM IS REPLACED BY A DISCHARGE SET. THE BAR IS UNTOUCHED. (Langston, 2026-08-30, on CC-C's request; §3 BYTE-UNTOUCHED, APPENDED NOT EDITED.)**
+
+> ⛔ **TRIGGER: Kyle, 2026-08-30 — *"I don't know why we need these observations and these soaks when we can see if the functionality works… if we see it for a few, we see it for them all."*** ★ **He is right about the CLASS of criterion this project keeps writing, and this amendment is that objection actioned rather than acknowledged.**
+
+## ⛔⛔ FIRST — MY REQUEST MISCOUNTED ITS OWN EVIDENCE, IN THE SENTENCE THAT CARRIED THE ARGUMENT
+
+I asked for conversion on the grounds of *"six symbols, four distinct tick sizes."* **The six post-deploy rows are `0.001, 0.0001, 0.00001, 0.001, 0.001, 0.0001` ⇒ THREE distinct ticks, not four; and FIVE distinct symbols, not six, with TRUMP on three of the six opens.**
+⇒ ⛔ **A coverage rule is a claim about a DENOMINATOR, and I would have replaced a count with an UNCOUNTED one.** *(Langston: disqualifying for a coverage rule as I framed it.)*
+**MISTAKE: wrong-object [F-G-1] — miscounted my own table in the load-bearing sentence of an argument about evidence standards.**
+
+## ⛔ AND MY PREMISE WAS REFUTED BY THIS DOCUMENT'S OWN §3
+
+I wrote: *"no failure mode hides for 24 opens then appears."* **FALSE, and §3k is where:**
+- **`never_filled` is 12 of 121 August crypto closed rows (~10%)**, and **§3k binds *"a `never_filled` row whose stop or target is off grid is THE FINDING."*** ⇒ **at n=6 the expected count of that slice is 0.6.** ⛔ **The slice MOST ENRICHED FOR THE DEFECT is probably absent from the window, and its absence is INVISIBLE.**
+- ★★ **THAT IS A RATE, NOT A BINARY — AND A COUNT *IS* THE CORRECT INSTRUMENT FOR A RATE.** Same shape for §3's `#927` persisted-target arm, which §3 itself calls **PARTIAL, *"counted, never inferred."***
+
+✅ **WHAT IS ACTUALLY BINARY: tick resolution** — six rows, all `resolved:true`, all `venue_published`, do settle that.
+⛔ **WHAT IS RATE-LIMITED: which BIRTH PATH and which STRATEGY BRANCH produced the triple.** **`volatility_edge` is the one arm in the seam that rounds *TOWARD* (a `Math.min` cap), and there is no evidence it is sampled in the six.**
+
+## ✅ CONVERTED — THE DISCHARGE SET REPLACES THE COUNT
+⛔ **THE 7-DAY CAP AND THE 100%-ON-GRID, NO-TOLERANCE BAR ARE UNTOUCHED. Only the 30-count arm is replaced.**
+| # | to discharge |
+|---|---|
+| **1** | **`volatility_edge` sampled once on-grid** — **OR** the config lock making it unreachable, **cited to the line** *(the `#677` lesson: an absence needs presence-evidence)* |
+| **2** | **≥1 `never_filled` crypto row inside the window, read on BOTH stop and target** |
+| **3** | **`#927`'s `target/entry ≈ 1.02` count reported WITH ITS DENOMINATOR** |
+| **4** | **§3h(1) composition split — and `TRUMP/EUR` classified** |
+| **5** | **§3l's entry-leg `n ≥ 20` STANDS.** ⚠️ **Langston, stated plainly: *"20 was MECHANICAL, not derived — it survives on (2)'s rate argument, not on its original wording."*** |
+
+⭐ **WHAT THIS BUYS, IN HIS WORDS: *"under the converted rule you STILL DON'T CLOSE TODAY, but you close on EVIDENCE and possibly BEFORE 09-04."*** ⇒ **the count is gone, the rigour is not.**
+
+★★ **THE STANDING LESSON, WHICH IS THE PART THAT OUTLIVES THIS BATCH: *"functional vs statistical"* IS THE RIGHT DISTINCTION AND I APPLIED IT TOO WIDELY.** ⛔ **A single criterion can contain BOTH — F-G-1's tick resolution is binary and its birth-path coverage is rate-limited.** ⇒ **THE TEST IS PER-ASSERTION, NEVER PER-BATCH: ask of each assertion separately whether its failure mode is a code path (a few examples settle it) or a RATE (only a count does).**
