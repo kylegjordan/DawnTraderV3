@@ -41,9 +41,9 @@ Draft 2 led with a 14.038% trigger-vs-fill gap. **Disaggregated: burst rows n=5 
 | ⛔ **W1** | **The exit fill has no staleness ceiling; the entry does** (§0A). `#961` | **certain · largest · not the burst** |
 | ⛔ **W2** | **The maker exit fills on a midpoint and books the limit at zero slippage** (§0B). `#962` | **certain · not the burst** |
 | **W3** | **Every exit *trigger* reads a midpoint**, both classes, both lanes. | ✅ **COSTED (§1b): +0.060% vs the bid on ordinary days; the 3.9% was the burst** |
-| **W4** | **A venue re-quote at each session boundary reaches the decision path.** | event certain · ⛔ **CONSEQUENCE UNMEASURED** *("treated as tradeable" is unearned — `#958`'s own words)* |
+| **W4** | **A venue re-quote at each session boundary reaches the decision path.** | ✅ **COSTED BY CITATION (§1b): 27.1% of stop-outs, from `#943`** *("treated as tradeable" remains unearned)* |
 | **W5** | **The 4-second sampling is a TRADING defect** — it is σ's denominator (ceiling capped 300 s), it feeds both fills, and it drives the spread and depth gates. ⚠️ *The fail-open bias clause is `#958`'s measurement, cited not re-asserted: 43.6% of marks lost, 0% on static names → 50% on the fastest.* | certain |
-| **W6** | **The ranking price is a 15-minute aggregated bar close, not the ticker `last`** — and `last` is selected at `scanner.ts:641` and consumed nowhere. ⚠️ **Draft 2 called this "four definitions, not three." Wrong: a dead column is not a definition. There are still THREE live ones; what changed is WHICH the third is.** | mechanism certain · ⛔ **CONSEQUENCE UNMEASURED** |
+| **W6** | **The ranking price is a 15-minute aggregated bar close, not the ticker `last`.** ⚠️ *Draft 2's "four definitions" was a count inflation — a dead column is not a definition.* | ✅ **COSTED (§1b): 0.2376% mean / 2.857% max from the live mark; 10.6% over 0.5%** |
 | **W7** | **An xStock instance of the `#951` laundering on the exit path** — `:1239` preserves the honest age, `:1244` republishes it as observed-now, and it passes the venue gate. | mechanism certain · ⛔ **CONSEQUENCE UNMEASURED** |
 | **W8** | ⚠️ **NARROWED: not "we cannot tell which session."** The session flag **is** archived and read by nothing; the precise defect is that **the exit path cannot see it, because the in-memory tick carries only `{price, tsMs}`.** | mechanism certain · ⛔ **CONSEQUENCE UNMEASURED** |
 | ➕ **W9** | **The fill's forensic columns are NULL BY CONSTRUCTION on xStock** — `bookMid`/`bookAgeMs` (crypto 15/78 populated, **xStock 0/26**), so the age W1 needs is not in `closed_trades` and must be reconstructed. | certain |
@@ -97,6 +97,34 @@ The spread gate reads the newest ticker row **within a 30-minute window**, and w
 **Attempt 2** counted bars in a **COMPLETED** 15-minute bucket: 475 symbols, **400 complete**, mean **14.41 of 15**, 3 stubs. ⛔ **Also the wrong object — the scanner takes `ohlc[length-1]`, the CURRENTLY FORMING bucket, which is PARTIAL BY CONSTRUCTION. A completed bucket being complete says nothing about it.**
 ⇒ ✅ **AND RESTATING THE QUESTION DISSOLVES HALF OF IT: a forming bucket's CLOSE is just the latest 1-minute close, which is a defensible price.** ⛔ **The live concern is its RANGE — a 1-bar range understates ATR, and ATR sets stop and target geometry. THAT is unmeasured.**
 ⚠️ **W11 STAYS TAGGED `CONSEQUENCE UNMEASURED`, with the question now correctly stated.**
+
+### ✅ **W6 — COSTED. The ranking price sits ~0.24% from the live mark, and 1 in 10 names is over half a percent out.**
+The scanner ranks and sizes on the newest **15-minute bar close**, not on the live mark. At one regular-hours instant, 472 symbols:
+| mean gap | max | **over 0.5% out** |
+|---|---|---|
+| **0.2376%** | **2.857%** | **50 of 472 — 10.6%** |
+⚠️ **A quarter of a percent is small for RANKING — it only reorders names that were within a quarter percent of each other anyway.** ⛔ **It is NOT small for GEOMETRY: the same number sets entry, stop and target, so a 2.9% error puts the stop 2.9% from where it was meant to be.** ⚠️ *One instant, regular hours. Snapshot, not a rolling window (rule 13).*
+
+### ✅ **W4 — COSTED BY CITATION, not re-measured** *(same treatment as W5)*
+The consequence of a session-boundary re-quote reaching the decision path is **already measured in `#943`/`#958`: that one minute is 27.1% of all xStock stop-outs and 29.5% of target-hits.** ⛔ **Cited, not re-asserted — the number is theirs.**
+
+### ⛔ **W7, W8, W11 — CANNOT BE COSTED FROM STORED DATA, AND HERE IS WHY EACH**
+| # | why not | what would settle it |
+|---|---|---|
+| **W7** *(the exit-path laundering)* | **the cache is never persisted** — whether a given exit read a republished mark or a fresh tick leaves no trace | ⭐ **STEP 0's instrumentation. This is a second, independent reason to ship it.** |
+| **W8** *(session unknowable at the decision point)* | **its consequence IS W4's** — the cost of not knowing the session is the cost of acting inside the re-quote | **subsumed; do not double-count** |
+| **W11** *(partial forming bar)* | the price half dissolves on restatement; **the live question is whether a 1-bar RANGE understates ATR** | an ATR comparison — **not yet run** |
+
+### ⭐ **THE COSTING, TOTALLED**
+| costed | consequence |
+|---|---|
+| **W3** | +0.060% vs the bid on ordinary days — **the 3.9% was the burst** |
+| **W12** | **0 in 373,450 rows** across both sessions — latent, not live |
+| ⛔ **W10** | ⛔ **35% of the universe clears the spread gate on ABSENT data overnight** |
+| **W6** | 0.2376% mean / 2.857% max — small for ranking, **not small for geometry** |
+| **W4** | 27.1% of stop-outs *(cited from `#943`)* |
+⇒ ⭐⭐ **FIVE OF EIGHT COSTED. THREE CANNOT BE COSTED FROM STORED DATA, AND TWO OF THOSE THREE POINT AT THE SAME FIX — STEP 0's INSTRUMENTATION.**
+⇒ ⛔ **AND THE ORDERING SURVIVES THE COSTING: `W1` (9.1% of closes, worst 25.9 min) and `W2` (59% of maker exits) remain the two largest, and `W10` at 35% is now third. Nothing that was costed displaced them.**
 
 ⭐⭐⭐ **LANGSTON'S READ ON THE PATTERN, AND IT IS A BIGGER QUESTION THAN ANY OF THE THREE NUMBERS: *“Third collapse into `#943` is no longer a coincidence — worth someone asking whether `#943` IS A DISTINCT REGIME rather than an outlier window.”*** ⇒ ⛔⛔ **IF THE 00:15 COHORT IS A REGIME AND NOT AN ANOMALY, THEN EXCLUDING IT FROM EVERY MEASUREMENT IS NOT CLEANING THE DATA — IT IS REFUSING TO MEASURE ONE OF THE TWO REGIMES WE ACTUALLY TRADE IN.** **UNANSWERED, and it reframes `#943`.**
 
