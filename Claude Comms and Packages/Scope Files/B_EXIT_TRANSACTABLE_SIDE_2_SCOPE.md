@@ -33,6 +33,40 @@ change-class: architecture
 
 ---
 
+## 0b. ⚠️ THE MID-VS-BID GAP, MEASURED — AND TWO CAVEATS LANGSTON REQUIRED IN THE RECORD *(2026-08-30)*
+
+> ⛔ **WRITTEN HERE AT HIS DIRECTION SO THAT NO LATER READER ATTRIBUTES AN EXPECTED EFFECT TO HIS CRYPTO-LEG CLEARANCE THAT HE NEVER STATED.** *(He released the crypto leg on the SEAM and on the MECHANISM BEING REAL; there was NO magnitude in that ruling. `RULED ON REPORTED FACT` — he re-derived none of these four.)*
+
+**How far does the MID the exit trigger reads sit above the BID we would actually sell into?**
+| population | n | mean | max |
+|---|---|---|---|
+| xStock, ORDINARY days | **3** | **+0.060%** | 0.21% |
+| xStock, 00:15 burst | **3** | +7.782% | 72.86% |
+| crypto (control) | **11** | **+0.114%** | **0.87%** |
+| xStock pooled *(do not use)* | 6 | +3.921% | 72.86% |
+
+### ⛔⛔ CAVEAT 1 — **A MEAN IS NOT A BOUND, AND I CALLED IT ONE**
+**I wrote that this *"bounds F-G-2's expected effect."* It does not.** ⭐ **The crypto max is 0.87% against a mean of 0.114% — roughly EIGHT TIMES its own mean.**
+⇒ ⛔ **F-G-2's outcome effect does not live in the mean of that distribution. The only trades that flip are the ones RESTING ON THE TRIGGER, and each flips on the gap it happens to see AT THAT INSTANT — not on the population average.**
+⇒ ✅ **So `~0.06% / ~0.11%` is the CENTRAL TENDENCY of the gap. It is NOT a ceiling on what `OBJ-0` will measure.** ⚠️ **If a bound is wanted it is the MAX — and n=11 cannot see a tail, so even that is a FLOOR on the bound.**
+
+### ⛔⛔ CAVEAT 2 — **WRONG POPULATION: I MEASURED REALIZED EXITS; F-G-2 ACTS AT THRESHOLD CROSSINGS**
+**Threshold crossings are a SUPERSET of realized exits** — they include crossings that **did not become an exit under the mid and would under the bid.** ⛔ **That population carries no stamp and cannot be reconstructed backwards.**
+⇒ ★★ **THE DIFFERENCE BETWEEN THE TWO POPULATIONS IS EXACTLY WHERE F-G-2's EFFECT WOULD HIDE.** **Not a defect in the measurement — a scope limit, recorded beside it.**
+
+⚠️ **AND THE POPULATION CANNOT BE WIDENED BACKWARDS EITHER WAY: `exit_ticker_bid` exists only from the `B-EXIT-PROVENANCE` stamp (2026-08-26).**
+
+✅ **`OBJ-0` REMAINS THE INSTRUMENT. It measures OUTCOMES, not price gaps, and nothing above substitutes for it.**
+
+---
+
+### ➕ **W12's DISPOSITION — THE MARK TAG FOLDS IN HERE** *(Langston's preference (1), 2026-08-30)*
+**The xStock mark is `(bid+ask)/2` when both sides exist, else `last` — and it is UNTAGGED, so a consumer cannot tell which it holds.** ✅ **Measured: the fallback fired 0 times in 333,535 regular-hours rows and 0 times in 39,915 overnight rows** *(the overnight window chosen deliberately — a collapsed side is the case that would trigger it)*.
+⛔ **BUT "LATENT HAZARD" IS AN ANNOUNCEMENT, NOT A DISPOSITION — §9.4 gives five outcomes and that is not one.** ⭐ **THE HAZARD IS THE *UNTAGGED* PART: if the fallback ever fires we have no way to SEE it, and the zero above is only readable because bid/ask presence can still be reconstructed today.**
+⇒ ✅ **DISPOSITION §9.4 (1) — FOLD INTO THE WORK IN HAND: `F-G-2` stamps the mark's KIND (`mid` \| `last`) on the same read path it is already changing. Near-zero marginal cost, and it makes the zero permanently observable instead of reconstructible.**
+
+---
+
 ## 1. ⛔ WHY THIS WAITS FOR F-G-1 — THE CONFOUND
 
 **`OBJ-0` is a pre-registered before/after: a 2×2 of old-rule × new-rule exit outcomes, whose DISCORDANT CELL is the kill criterion** — a trade the NEW rule stops out that the OLD rule rode back to `target_hit`.
