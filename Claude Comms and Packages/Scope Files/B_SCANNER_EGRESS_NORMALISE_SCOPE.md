@@ -67,3 +67,37 @@ const poolSymbols = new Set(activeFilterPool.getSymbolsRaw(mode));      // INTER
 - ✅ **`OBJ-1` is BINARY.** *"Does a BTC/DOGE row appear in the evaluation archive"* is a property of a code path. **One row each settles it. There is no failure mode that hides for 30 evaluations and then appears** — and unlike `F-G-1`'s `never_filled` slice, no sub-population here is enriched for the defect, because the defect is total: the count is **zero**, not low.
 - ✅ **`OBJ-6` is BINARY PER PAIR.** Four named controls, each either still evaluated or not.
 ⇒ ⛔ **NO ROW COUNT, NO SOAK. This batch can close the same day it deploys**, and that is a property of the question, not a shortcut.
+
+
+---
+
+## 6. ⛔⛔ ROOT CAUSE MOVED ONE LEVEL DOWN — **THE RESOLVER SKIPS ITS OWN MAPS ON THE ONE INPUT FORM THE SCANNER PASSES IT** *(CC-C, 2026-08-30, at Kyle's direction to use the existing machinery)*
+
+> **Kyle's instruction, verbatim:** *"make sure that you are utilizing the symbol resolver… Don't just put in something static that has to be fed in in multiple places in the code. We have a name resolver… and they should fit within that."*
+> ⭐ **Following it changed the batch. The fix is smaller, deeper, and REMOVES a static table's load rather than extending it.**
+
+### 6.1 THE MAPPING ALREADY EXISTS — IT IS NOT MISSING DATA
+`kraken-symbol-map.ts:102` — **`{ internalSymbol: "DOGE/USD", krakenRestPair: "XDGUSD", krakenWsPair: "XDG/USD", baseAsset: "DOGE" }`** — and `kraken-symbol-resolver.ts:33` loads it: `mapByWsPair.set(entry.krakenWsPair.toUpperCase(), entry)`.
+⇒ ✅ **`mapByWsPair` HOLDS `XDG/USD → DOGE/USD` TODAY.** Nothing needs adding.
+
+### 6.2 ⛔ BUT `normalizeInternal` NEVER ASKS IT — FOR SLASHED INPUT ONLY
+| input form | what `normalizeInternal` consults | result for Dogecoin |
+|---|---|---|
+| compact (`XDGUSD`) | ✅ `mapByRestPair` (`:102`), then `mapByCompact` (`:105`) — **the authoritative maps** | ✅ `DOGE/USD` |
+| ⛔ **slashed (`XDG/USD`)** | ⛔ **`:94-99` SHORT-CIRCUITS on `REVERSE_ASSET_TRANSLATIONS[base] \|\| base` and returns before any map is read** | ⛔ **`XDG/USD` — UNCHANGED** |
+
+⛔⛔ **AND THAT TABLE HAS EXACTLY ONE ENTRY: `{ 'XBT': 'BTC' }` (`:46-48`).**
+⇒ ★★ **THAT IS THE WHOLE BTC-vs-DOGE ASYMMETRY, AT THE LINE.** Bitcoin is the one base in the hardcoded table, so it normalises. Dogecoin is not, so it does not — **even though its mapping is sitting in the map the function declined to read.** *(The `#906` ledger entry called the symbol-form mismatch a "STRONGEST LEAD, NOT YET PROVEN." This is the proof, and it is one level below where the lead pointed.)*
+⚠️ **`mapKrakenPairToInternal(wsPair)` (`:192-196`) DOES read `mapByWsPair` and would return `DOGE/USD` correctly — so the resolver contains both a working path and a broken one for the same question.**
+
+### 6.3 ✅ THE FIX — INSIDE THE EXISTING RESOLVER, AND IT DELETES A DEPENDENCY RATHER THAN ADDING ONE
+**In `normalizeInternal`'s slashed branch, consult `mapByWsPair` (and `mapByInternal`) BEFORE falling back to `REVERSE_ASSET_TRANSLATIONS`.**
+- ⛔ **NOT** `'XDG': 'DOGE'` added to the static table — that would create a **SECOND HOME** for data already in `kraken-symbol-map.ts`, which is the `#641` two-copies shape this project keeps paying for.
+- ✅ **ONE authoritative source (`kraken-symbol-map.ts`), consulted on every input form.** Fixes `XDG`, `XBT`, and **every other WS-form pair the map already knows** — not two coins.
+- ✅ **The static table survives only as a last-resort fallback for pairs absent from the map**, and its role becomes explicit instead of load-bearing-by-accident.
+
+### 6.4 ⚠️ WHAT THIS CHANGES ABOUT THE BATCH — STATED, NOT BURIED
+- ⛔ **BLAST RADIUS GROWS AND MUST BE CENSUSED AT STEP 2.** `normalizeToInternalSymbol` has many callers; a fix here reaches all of them. **That is the right fix and a wider one** — the §9.5(a) census now covers the resolver's callers, not just the scanner's egress.
+- ✅ **The scanner egress work (§2, `OBJ-1`-`OBJ-5`) STILL STANDS** — passing a raw wsname where an internal symbol is expected is wrong independently of whether the resolver would have normalised it.
+- ⚠️ **`OBJ-6`'s regression risk RISES with the wider fix**, and the four controls become more load-bearing, not less.
+- ⚠️ **INSTRUMENT LIMIT, STATED: I could NOT confirm the live symbol forms from `signal_eval_archive` — the query hit the statement timeout.** The finding above rests on the CODE, which is sufficient for it; **no claim here rests on that unread table.**
