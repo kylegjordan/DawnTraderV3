@@ -431,3 +431,79 @@ ws.send(JSON.stringify({ method:'subscribe', params:{ channel:'ticker', symbol:s
 | **the xStock price source** | not previously a finding | ⛔ **an archive built to share NO state with trading BECAME the trading feed**, and its named replacement (`B79.5`) was triggered and never built. `#950` |
 
 ⚠️ **COVERAGE, STATED HONESTLY: this section is `bridge/canonical/` + git history ONLY.** The wider archive layer (`1-system-manual/_archive/`, `Archived Reports - Pre-Phase 12 Governance Implementation/`, root-level review docs) and the new-governance batch reports were **still being swept when this section was written — treat that layer as UNEXAMINED, not as empty.**
+
+---
+
+## 9. ✅ THE SECOND INDEPENDENT AUDIT — CONVERGENCE, DIVERGENCE, AND WHAT IT ADDED (Kyle-directed 2026-08-30)
+
+> **Kyle's instruction:** *"another independent audit run on the same exact system to make sure that the findings come up consistent."*
+> **METHOD:** two fresh readers, each given **only a question** — *"when the system decides to close a position, what price does it use and where does it come from?"* and *"what market data do we actually receive for tokenized equities, and what do we compute from it?"* — and **forbidden from opening this audit or the F-G-2 / feed-sanity scopes.** Neither was told any finding. Each was required to produce a positive control for every absence claim.
+> ⚠️ **INDEPENDENCE IS PARTIAL AND THE READER DISCLOSED IT ITSELF:** the xStock reader's final step searched governance docs and surfaced `RUNNING_ISSUES` `#949`, which is derived from this audit. **Its §1-§5 were established from code before any governance file was opened (tool-call order confirms); its governance-contradiction section is NOT independent.** Recorded rather than glossed — the disclosure is why the rest can be trusted.
+
+### 9.1 ✅ CONVERGED — reached from code, with controls, without sight of this document
+
+| finding | this audit | independent reader | status |
+|---|---|---|---|
+| **Every exit decision reads a computed MIDPOINT — both classes, both lanes.** No exit path compares against a traded price, and none against the **bid**, which is the side a long actually sells into | §1, §4 | **CONFIRMED and quantified: of 23 stamped closes, 14 `kraken_ws_book_mid` + 9 `kraken_equities_ws` mid; ZERO from any last-trade producer** | ✅ **This is F-G-2's entire premise, independently re-derived** |
+| xStock subscribes to bars + ticker **only** — no `book` | §3 | **CONFIRMED with positive control** (the same search finds `book` 4× and `instrument` 1× in the crypto adapter) | ✅ |
+| The xStock "book" is one ticker row inflated to a single level | §3 | **CONFIRMED, traced end-to-end** | ✅ |
+| The equities ingestion never reads the frame type; **crypto does, 600 lines away** | §6 (leading hypothesis for the low bid) | **CONFIRMED** — and the crypto side added it **after a measured incident** | ✅ **My hypothesis now has a precedent, see 9.3** |
+| `is_extended_hours` is stored and never read | §6 | **CONFIRMED and quantified** — 709,792 extended-hours quotes in one day, carrying **≈4.4× the spread and ≈⅕ the depth** | ✅ **stronger than my version** |
+| The fourth exit implementation is **dead** | FINDING A1 / plan 3h.b | **CONFIRMED independently** — one grep line, the definition; controls returned 3 and 5 hits for live siblings | ✅ |
+| Break-even off on all four asset classes | §5 | **CONFIRMED from the live DB** — *and the reader self-corrected an earlier sweep that had read the migration seed instead of the live row* | ✅ |
+| Two producers write one price slot under one tag; **the actionability gate reads the tag, not the producer** | §1 | **CONFIRMED, with a live collision observed** (`SPX/USD` written twice in one second at different values) | ✅ |
+| VTS and the active path price the same decision differently | §1, §8.2 | **CONFIRMED and quantified — see 9.4** | ✅ |
+
+⇒ ★★ **NINE INDEPENDENT CONFIRMATIONS, INCLUDING EVERY FINDING THIS AUDIT CALLS DECISION-CHANGING. The findings come up consistent.**
+
+### 9.2 ⛔ DIVERGED — ONE CLAIM REFUTED, AND IT WAS THE MOST ALARMING ONE
+
+**THE READER CLAIMED:** *"the daily-loss budget is blind to every close except the monitor-loop one"* — reasoning that only one site emits the trade-closed event while five other paths write a close.
+
+**THE OBSERVATION IS TRUE. THE CONSEQUENCE IS FALSE, AND I RE-DERIVED BOTH HALVES AT THE REF.**
+- ✅ **TRUE:** `emitTradeClosed` has exactly **one** producer call site (`active-execution-engine.ts:2590`); the definition at `event-bus.ts:186` is the only other hit. Control: the same search shape returned many live `TRADE_CLOSED` sites, so it discriminates.
+- ⛔ **REFUTED:** **the daily-loss budget does not listen to that event — it queries the database.** `daily-loss-budget.ts:131` calls `storage.getRealizedPnlSince(mode, windowStart)`, which at `storage.ts:3280-3290` sums realised P&L **`.from(closedTradesTable)`** filtered on `closedAt IS NOT NULL` and the mode. ⇒ **A close written by ANY of the six sinks is counted. The kill switch is not blind.**
+
+⇒ ★★ **THE RISK-ENVELOPE ALARM DOES NOT HOLD, AND IT WAS NOT RELAYED.** What survives is narrower and real: **five close paths do not write to the exit-decision archive and do not emit the event** ⇒ a **forensics gap** (the archive undercounts exits, so any population drawn from it is biased toward monitor-loop closes) and a **promotion-latency** effect, itself backstopped by the periodic sweep at `active-execution-engine.ts:419`.
+⚠️ **RECORD THIS AS THE MECHANISM, NOT THE ANECDOTE: a fresh reader's HIT is a LEAD. This one was confidently argued, internally coherent, and wrong at the consequence — and repeating it would have sent the crew at the kill switch.** *(`workflow-02`: a HIT must be re-derived at the ref before it moves anything.)*
+
+### 9.3 ⛔⛔ WHAT THE READERS ADDED — FOUR THINGS THIS AUDIT DID NOT HAVE
+
+**(a) THE "CLEAN TICKER PRINT" DOES NOT EXIST — AND TWO CODE COMMENTS SAY IT DOES.**
+`kraken-v2-translator.ts:52-58` overwrites the v1 `c` field — nominally *last trade closed* — with `(bid+ask)/2`, falling back to `last` only when a side is zero. The consuming variable is named `lastPrice`. **But `live-pricing-adapter.ts:47-49` describes the pair as *"a ghost-contaminated book MIDPOINT and a clean ticker PRINT"*, and `kraken-websocket-adapter.ts:943-944` asserts the same.**
+⇒ ★★ **THE REAL DIFFERENCE BETWEEN THE TWO CRYPTO PRICE PRODUCERS IS *WHICH BBO THE MIDPOINT CAME FROM* — NOT MIDPOINT-VERSUS-PRINT.** **Any analysis that used the ticker leg as a trade-print control was comparing two midpoints and could not have detected what it was looking for.** ⚠️ **This is a control-validity defect in the instrument, not merely a stale comment — same class as `control-enumerates-the-observed`.** **Filed `#952`.**
+
+**(b) A RATE-LIMITER BRANCH LAUNDERS A CACHED PRICE INTO A "FRESH VENUE READ" — RE-DERIVED BY ME, VERBATIM.**
+`live-pricing-adapter.ts:582-586`: when the per-symbol REST cooldown blocks, the function **returns `cached?.price`** — a bare number with no age. The caller at `:496-505` then stamps it `source:'kraken_rest'`, `producer:'kraken_rest_poller'`, **`observedAt: Date.now()`**, beside the inline comment **`// a genuine venue read: observed now`** — **which is false on that branch.** And `kraken_rest` passes the engine's venue-source actionability gate.
+⇒ ⛔ **AN ARBITRARILY OLD PRICE HAS ITS AGE RESET TO ZERO AND IS THEN TREATED AS ACTIONABLE. Every staleness guard downstream is reading a timestamp that was manufactured.**
+⚠️ **POPULATION, STATED: the reader measured 995 blocked against 264 allowed over a busy 25-minute window. I did NOT reproduce that ratio** — my own scan of 10,613 live log lines on a **closed-market Saturday** found **6 blocked / 5 allowed**, which establishes the branch is live and frequently taken but is far too small, and from too quiet a period, to carry the proportion. **The CODE defect is re-derived and certain; the RATE is the reader's and is not re-derived.** **Filed `#951`.**
+
+**(c) THE ONE-LEVEL LADDER PASSES ITS OWN WARMTH CHECK BY CONSTRUCTION.** The depth gate's `min_levels` is seeded at **1 for xstock_spot** against **3 for crypto**, and `warmth_max_age_ms` at **15,000 ms against 5,000** — on a feed throttled to **one row per 4 seconds** and flushed in 5-second batches. ⇒ ★★ **ANY `min_levels` ABOVE 1 WOULD BLOCK EVERY xSTOCK FILL PERMANENTLY, because the snapshot it grades can never contain a second level. The gate cannot fail, which means it is not a gate.** *(`CONDUCT` §6b step 2: a check that cannot come out differently does not discriminate.)* **Folds into `B-XSTOCK-BOOK-LADDER` (plan 3b.d).**
+
+**(d) THE CRYPTO SIDE ALREADY SUFFERED THE FAILURE I HYPOTHESISED FOR xSTOCK, AND FIXED IT.** `kraken-websocket-adapter.ts:804-806` records that a **snapshot was merged as a delta**, producing measured crossed books on **2026-08-22 — ONDO +10.8%, XRP +24.9%, ZEC +33%** — and `:825-830` now replaces state on `message.type === 'snapshot'`. **The equities archiver never reads `msg.type` at all.**
+⇒ ★★ **§6's low-bid hypothesis is no longer only a hypothesis about a mechanism — the identical mechanism is on this codebase's record, with measured damage, one asset class over.** It remains unproven *for xStock* until raw frames are captured; **but the prior is now strong and the fix pattern already exists in-repo.**
+
+### 9.4 ⛔ THE LIVE NUMBER THAT MAKES THE WHOLE THING CONCRETE
+
+Last snapshot before the weekend close, 2026-08-29 12:42:24:
+
+| symbol | bid | ask | last trade | midpoint | **what the engine recorded as the price** |
+|---|---|---|---|---|---|
+| **PLTR/USD** | 171.00 | 190.00 | 185.46 | **180.50** | **180.50000000** |
+| **BABA/USD** | 112.00 | 132.00 | 118.63 | **122.00** | **122.00000000** |
+
+★★ **THE ENGINE'S MARK MATCHES THE MIDPOINT TO THE DIGIT — 2.67% BELOW the last trade on one name and 2.84% ABOVE it on the other, opposite directions, from the same widening.** Two hours earlier BABA quoted **118.62 / 118.63** — a one-cent spread. **The book widening alone moved the exit-decision price by 2.8% with no trade occurring**, and BABA's take-profit sits at 124.5567 against a midpoint that reached 122.00.
+⇒ ★ **THIS IS §6's "LOW BID" AND F-G-2's PREMISE IN ONE ROW: the decision price is a midpoint, the midpoint follows whichever side collapses, and nothing on the exit path is looking at the side we would actually trade on.**
+
+### 9.5 ✅ AND THE ONE FACT I ASSERTED WITHOUT RE-CHECKING — NOW PROBED LIVE
+
+**§8.7 rests on a `book`-channel capture from 2026-05-28. The reader correctly flagged that nobody had re-probed it since.** I ran a **read-only** subscription (no credentials, no order, no capital) at **2026-08-30T03:55:29Z**:
+
+```
+ACK: {"method":"subscribe","result":{"channel":"book","snapshot":true,"symbol":"TSLA/USD"},"success":true,...}
+ACK: {"method":"subscribe","result":{"channel":"book","snapshot":true,"symbol":"GLD/USD"},"success":true,...}
+```
+
+✅ **THE CHANNEL EXISTS AND ACCEPTS THE SUBSCRIPTION TODAY, `success:true` on both a liquid and a thin name** ⇒ **`P19_B4b_1_SCOPE.md:76`'s *"if Kraken equities EVER exposes a book channel"* is refuted at the venue, not merely by an old document.**
+⛔⛔ **BUT ZERO BOOK FRAMES ARRIVED IN 25 SECONDS, AND THAT IS NOT EVIDENCE OF ANYTHING — IT WAS SATURDAY 03:55 UTC AND xSTOCKS ARE CLOSED (24/5, Friday 20:00 ET).** ★ **A silent instrument on a shut market has zero opportunity to speak** (`#661` leg 3). **The May capture observed the 20-level ladder; I have NOT.**
+⇒ **OWED, AND IT IS A WINDOW WHOSE TIMING IS THE CONTENT: re-run this probe after the Sunday 20:00 ET reopen (2026-08-31T00:00Z) and record the observed level count.** Until then `B-XSTOCK-BOOK-LADDER` carries *"subscription accepted; ladder depth confirmed May, not re-observed"* — **not *"a 20-level ladder is available."***

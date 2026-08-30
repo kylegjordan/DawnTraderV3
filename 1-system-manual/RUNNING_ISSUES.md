@@ -824,6 +824,55 @@ MSYS2_ARG_CONV_EXCL='*' git show "…:.claude/memory/MEMORY.md"               ->
 
 ## B79.0n.SCORING + B79.0n.TEC closure entries (2026-05-26)
 
+### #952 OPEN 2026-08-30 (CC-C, surfaced by an independent fresh reader on the machinery audit; re-derived at the ref) — ⛔⛔ THE "CLEAN TICKER PRINT" DOES NOT EXIST — THE v1 `c` FIELD IS OVERWRITTEN WITH A MIDPOINT, AND TWO CODE COMMENTS ASSERT THE OPPOSITE
+
+**SEVERITY: high (CONTROL-VALIDITY, not a runtime break). OWNER: CC-C. DISPOSITION: §9.4 (1) — FOLD INTO `B-XSTOCK-BOOK-LADDER` / the F-G-2 measurement work, because it invalidates an instrument both of them would otherwise use.**
+
+`kraken-v2-translator.ts:52-58` overwrites the v1 `c` field — nominally **last trade closed** — with `(bid + ask) / 2`, falling back to `last` only when a side is zero. The consuming variable is named `lastPrice`.
+
+⛔ **AND THE CODEBASE DOCUMENTS IT AS THE OPPOSITE, IN TWO PLACES:**
+- `live-pricing-adapter.ts:47-49` — describes the two producers as *"a ghost-contaminated book MIDPOINT and a clean ticker PRINT"*
+- `kraken-websocket-adapter.ts:943-944` — asserts the same distinction
+
+⇒ ★★ **THE REAL DIFFERENCE BETWEEN THE TWO `kraken_ws` PRODUCERS IS *WHICH BBO THE MIDPOINT CAME FROM*, NOT MIDPOINT-VERSUS-PRINT.**
+
+**WHY THIS IS A DEFECT AND NOT A STALE COMMENT: any analysis that used the ticker leg as a trade-print control was comparing two midpoints, and therefore could not have detected the thing it was built to detect.** Same class as `control-enumerates-the-observed` — an instrument that cannot return the discriminating answer, while reading as though it can.
+
+**BLAST RADIUS TO ESTABLISH IN THE BATCH:** every place that treats `kraken_ws_ticker` as an independent witness to `kraken_ws_book_mid`, including any divergence check between them. **A divergence of zero between two midpoints is not agreement — it is the same statistic twice.**
+
+**FIX SHAPE (not pre-judged):** either stop overwriting `c` and carry the midpoint in its own field, or rename the field and correct both comments. ⛔ **Rule 15 — no patch: the question is which of the two producers is supposed to be the trade print, and whether we need one at all.**
+
+---
+
+### #951 OPEN 2026-08-30 (CC-C, surfaced by an independent fresh reader on the machinery audit; code re-derived at the ref, rate NOT re-derived) — ⛔⛔ A RATE-LIMITER BRANCH RETURNS A **CACHED** PRICE AND THE CALLER STAMPS IT `observedAt: Date.now()` AS "A GENUINE VENUE READ" — AND IT PASSES THE ACTIONABILITY GATE
+
+**SEVERITY: high. OWNER: CC-C. DISPOSITION: §9.4 (3) — own batch, `B-PRICE-AGE-TRUTH`, placed in `PHASE_19_PLAN` at row **3b.f**, WITH the other price-provenance prerequisites and BEFORE `F-G-2`, because F-G-2's before/after arms both read a price whose age this branch can fabricate.**
+
+**RE-DERIVED VERBATIM AT THE REF.** `live-pricing-adapter.ts:582-586`, inside `fetchFromKrakenRest`:
+```
+if (!restRateLimiter.check(symbol)) {
+  const cached = this.priceCache.get(this.normalizeSymbol(symbol));
+  console.log(`[8.8.5][REST_BLOCKED] ${symbol}: Rate limited, using cached price=...`);
+  krakenWebSocketAdapter.incrementRestFallbackBlocked();
+  return cached?.price ?? null;      // <- a bare number. No age. No provenance.
+}
+```
+The caller, `:496-505`, stamps that number unconditionally:
+```
+source: 'kraken_rest',
+producer: 'kraken_rest_poller',
+observedAt: Date.now(),            // a genuine venue read: observed now
+```
+⛔ **THE COMMENT IS FALSE ON THAT BRANCH, AND `kraken_rest` PASSES THE ENGINE'S `isKrakenVenueSource` ACTIONABILITY GATE.**
+
+⇒ **An arbitrarily old cached price has its age reset to zero and is then treated as actionable. Every staleness guard downstream is reading a timestamp that was manufactured at read time rather than observed at the venue.** ★ **This is the `#940` shape — the witness is right and the witnessed thing is wrong — and it defeats exactly the guards written to catch a stale mark.**
+
+⚠️ **POPULATION AND ITS LIMIT, STATED (rule 29).** The reader measured **995 `REST_BLOCKED` against 264 allowed** over a busy 25-minute window; **I did not reproduce that ratio.** My own scan of **10,613 live log lines on a closed-market Saturday** returned **6 blocked / 5 allowed** — enough to establish the branch is live and frequently taken, **far too small and from too quiet a period to carry a proportion.** ⇒ **THE CODE DEFECT IS RE-DERIVED AND CERTAIN; THE RATE IS NOT MINE AND IS NOT RE-DERIVED.** First deliverable of the batch is an honest rate over a representative open-market window.
+
+**FIX SHAPE (not pre-judged, rule 15):** the branch must either return the cached entry **with its original `observedAt`**, or return null and let the caller's own staleness logic decide. **The choice is a design question — a rate-limited symbol having no fresh price is a real state and `no_reliable_price` is the founding invariant's prescribed answer** (`bridge/canonical/..._Invariants_...md`, F7: *"If no real price is available, the operation must fail or wait"*).
+
+---
+
 ### #950 OPEN 2026-08-30 (CC-C, provenance read under Kyle's machinery-audit directive) — ⛔ THE xSTOCK FEED WAS BUILT AS AN ARCHIVE THAT WAS TO SHARE **NO STATE** WITH TRADING, AND BECAME THE TRADING FEED WITHOUT A DECISION — AND ITS NAMED REPLACEMENT WAS TRIGGERED AND NEVER BUILT
 
 **SEVERITY: high. OWNER: CC-C. DISPOSITION: §9.4 (3) — own batch, `B-XSTOCK-LIVE-FEED`, placed in `PHASE_19_PLAN` immediately AFTER `B-XSTOCK-FEED-SANITY` (#943), which must characterise the defect before a feed is rebuilt on top of it.**
