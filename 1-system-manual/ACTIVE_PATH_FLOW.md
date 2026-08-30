@@ -350,7 +350,7 @@ If step 2 fails, the signal has **already left the queue** and is **deliberately
 | open question | home |
 |---|---|
 | Should a stop trigger on a midpoint? | `F-G-2` (3c), instrument `OBJ-0` |
-| Three xStock price definitions from one frame — intended? | ⛔ **UNOWNED. The largest gap this trace exposes.** |
+| Three xStock price definitions from one frame — intended? | ✅ **`#957` — a SCHEDULED REVIEW (§9.4 disposition 4), placed as the FIRST QUESTION of `B-DECIDED-INTENT-INDEX` (3b.g).** ★ *Filed as a review and not a defect on purpose: calling it a defect would commit the exact error `#956` records — asserting behaviour is unintended from a corpus that cannot answer it.* |
 | Should two crypto producers share one cache slot? | write-side reformulation of rule 1b — **unowned** |
 | The ladder half of the ratified depth decision | `B-XSTOCK-BOOK-LADDER` (3b.d) |
 | An old price re-served with both clocks reset | `B-PRICE-AGE-TRUTH` (3b.f) — **a defect, not a pending decision** |

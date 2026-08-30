@@ -847,6 +847,27 @@ MSYS2_ARG_CONV_EXCL='*' git show "…:.claude/memory/MEMORY.md"               ->
 
 ---
 
+### #957 OPEN 2026-08-30 (CC-C; surfaced by the price-flow trace, `ACTIVE_PATH_FLOW.md` §6) — ⛔ xSTOCK PRODUCES **THREE DIFFERENT DEFINITIONS OF "THE PRICE" FROM ONE VENUE FRAME**, AT THREE CADENCES, AND NOTHING SAYS WHETHER THEY SHOULD AGREE
+
+**SEVERITY: unknown — and that is the point. OWNER: CC-C. DISPOSITION: §9.4 (4) — A SCHEDULED REVIEW, not a batch: it must be LOOKED AT before it can be dispositioned, and it is placed as the first question of `B-DECIDED-INTENT-INDEX` (plan row 3b.g), because the answer is exactly the kind of thing that index is being built to make findable.**
+
+⛔ **DESCRIPTIVE, AND THEREFORE CERTIFIED (Langston's ruling, 2026-08-30): one `ws-equities` ticker frame is parsed once and becomes THREE different numbers, read by three different consumers, at three different cadences.**
+
+| consumer | reads | cadence | `path:line` |
+|---|---|---|---|
+| **the exit monitor** | the **MIDPOINT** `(bid+ask)/2`, or `last` if a side is zero — **untagged**, from an in-memory map | **unthrottled** | `equity-spot-archiver.ts:131-139` → `active-execution-engine.ts:1163`, `:1230-1231` |
+| **the entry fill** | the **ASK** (+ `ask_qty`), out of the database | **≤1 row per symbol per 4 s, flushed every 5 s** | `depth-source.ts:49-70` |
+| **the scanner** | **`last`** | the 30 s scan cycle | `scanner.ts:640` |
+
+⇒ ⛔ **THE EXIT DECISION AND THE ENTRY FILL DO NOT READ THE SAME NUMBER, AND NEITHER READS WHAT THE SCANNER RANKED ON.**
+
+⚠️ **WHAT THIS ENTRY DOES *NOT* CLAIM, AND THE RESTRAINT IS DELIBERATE: it does NOT say this is wrong.** Different consumers wanting different quantities can be entirely correct — a mark for display, an ask for a buy fill, and a last for ranking are three legitimate needs. ⛔ **THE FINDING IS THAT NOTHING STATES WHICH IT IS.** Searched: no scope file, completion report or code header found stating that the three should differ, or that they should agree.
+★★ **AND THAT ABSENCE IS ITSELF UNCERTIFIED UNTIL `#956` LANDS** — which is precisely why this is a REVIEW and not a defect. *(If I filed it as a defect I would be committing the exact error `#956` exists to record: asserting that behaviour is unintended from a search of a corpus that cannot answer the question.)*
+
+**WHAT THE REVIEW MUST ANSWER:** for each of the three, **what is this number FOR** — and does the consumer reading it want a value estimate, a transactable side, or a ranking key? ⇒ **Then, and only then, whether the divergence is design or drift.** ↔ `#955` (the mid is a value estimate, not a transactable price) · ↔ `#949` (the missing ladder) · ↔ `F-G-2` (which side a trigger should read).
+
+---
+
 ### #956 OPEN 2026-08-30 (CC-C; Langston-ruled a SYSTEM defect on the round record) — ⛔⛔ *“WAS THIS DECIDED, AND WHERE?”* IS NOT ANSWERABLE BY ANY SINGLE SEARCH — AND THAT, NOT CARELESSNESS, IS WHY THIS AUDIT WAVERED
 
 **SEVERITY: high (governance/method; it gates the certification of every disposition in the machinery audit). OWNER: CC-C. DISPOSITION: §9.4 (3) — own batch, `B-DECIDED-INTENT-INDEX`, placed in `PHASE_19_PLAN` at row **3b.g**, BEFORE the exit-path redesign and AFTER `B-XSTOCK-BOOK-LADDER` (3b.d). Langston rules on the placement.**
