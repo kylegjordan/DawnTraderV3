@@ -896,6 +896,23 @@ MSYS2_ARG_CONV_EXCL='*' git show "…:.claude/memory/MEMORY.md"               ->
 ✅ **RECONNECT AND RESTART RULED OUT INDEPENDENTLY BY THE READER TOO:** `pm2` uptime **34 h** spanning the event; **no** `disconnected` / `connected (attempt N)` / `subscribed to…` lines in 00:13-00:25; and the 60-second heartbeat diagnostic **fires unbroken right through the silence.** ⇒ **the socket never dropped.**
 ⚠️ **AND A SHAPE DISTINCTION WORTH KEEPING: irregular 476-symbol bursts at odd times (09:14:08, 16:08:01, 17:26:25) DO look like reconnect snapshots — a DIFFERENT shape from the on-the-second 00:15 event.**
 
+✅✅✅ **CAUSE ESTABLISHED FROM KRAKEN'S OWN DOCUMENTATION (Kyle-directed 2026-08-30: *"look online, look in forums, look in Kraken's own documentation — if this is happening consistently, people are aware of it"*). HE WAS RIGHT, AND I HAD BUILT INSTRUMENTS BEFORE LOOKING OUTWARD.**
+
+⭐⭐ **THE 00:15 UTC EVENT IS A DOCUMENTED SESSION BOUNDARY. IT IS NOT A BUG, AND IT IS NOT KRAKEN MALFUNCTIONING.**
+
+**KRAKEN DEFINES FOUR xSTOCK SESSIONS** (`support.kraken.com/articles/market-hours-explained`): **Overnight 8 PM-4 AM ET · Pre-market 4-9:30 AM · Market open 9:30 AM-4 PM · After-hours 4-8 PM.** ⇒ ⛔ **20:00 ET IS THE AFTER-HOURS → OVERNIGHT BOUNDARY**, and the trading week itself runs *"from 8:00 PM ET on Sunday through 8:00 PM ET on Friday."*
+
+⛔⛔ **AND THE PRICING *BASIS* CHANGES AT THAT BOUNDARY — THIS IS THE MECHANISM** (`support.kraken.com/articles/xstocks-faq`, verbatim): during market hours *"market makers actively quote around real-time reference pricing."* **Outside them, *"market makers use alternative data sources including ATS platforms, index futures, and internal models to approximate fair value"*** — and, stated plainly by Kraken, ***"Spreads are wider outside market hours."***
+⇒ **The overnight venue is named: Blue Ocean ATS, whose session is 8:00 PM - 4:00 AM ET, Sunday-Thursday.** ⇒ ⭐ **AT 20:00 ET THE ENTIRE MARKET-MAKER UNIVERSE SWITCHES FROM QUOTING AGAINST A LIVE EQUITY REFERENCE TO QUOTING AGAINST MODELS AND FUTURES — AND RE-QUOTES EVERY SYMBOL ON THE NEW BASIS.** That is precisely a one-frame-per-symbol universe-wide burst at a session boundary.
+★ **Independent corroboration that this is known and expected:** *"Off-hours, the peg widens"*; the documented decoupling scenarios include *"liquidity gaps during low trading volume"* and *"non-trading hours speculation … when U.S. markets are closed but xStocks trade continuously."*
+
+⇒ ⛔⛔ **THEREFORE THE DEFECT IS OURS, AND IT IS NOW EXACTLY NAMEABLE: WE EVALUATE STOPS AND TARGETS AGAINST A SESSION-TRANSITION RE-QUOTE AS THOUGH IT WERE A TRADEABLE MARKET PRICE.** The venue is behaving as documented; we are reading it as something it is not. **27.1% of all xStock stop-outs and 29.5% of target-hits fire in that one minute.**
+⭐⭐ **AND THE FIX-SHAPED FACT IS ALREADY IN OUR HANDS: KRAKEN TELLS US WHICH SESSION EVERY QUOTE BELONGS TO — the `is_extended_hours` flag — AND WE STORE IT AND NEVER READ IT** (709,792 flagged quotes in a single day; the field has ZERO readers repo-wide). ⛔ **The one field that would let us handle this correctly is the one we discard.**
+
+⛔ **NO FIX PRE-JUDGED (rule 15).** The question is not *"filter out 00:15"* — that is the deviation-threshold patch Kyle already refused. **It is: should the exit path evaluate at all during a session whose pricing basis Kraken states is models-and-futures rather than a live reference?** That is a scope decision. ⇒ **Folds into `B-XSTOCK-FEED-SANITY` (3b.b), and it reframes that batch from *"find the bad print"* to *"decide how we treat each of the four documented sessions."*
+
+⚠️ **STILL OWED, AND NOW NARROW: the raw-frame capture is ARMED for the Sunday reopen (cron, staging, 2026-08-31 00:05-00:25 UTC, instrument proven live — 61 frames, ACKs and heartbeats recorded with the market shut). It no longer has to establish the CAUSE; it has to record whether the frames carry a distinguishing `msg.type` we could key on** — which is the difference between a clean fix and another threshold.
+
 ⚠️ **WHAT IS *NOT* ESTABLISHED, AND I AM NOT CLAIMING IT: that the prices inside the burst are WRONG.** The burst is real, recurring and venue-side; **whether its contents are a stale re-quote, a settlement mark, or a legitimate session-roll price is UNKNOWN and cannot be read from the archive** — Langston: the in-memory mark **discards `data.bid` entirely**, so the ticker table is the only bid record we have. ⇒ ⛔ **THE RAW-FRAME CAPTURE (3b.b) IS THE SOLE REMAINING INSTRUMENT, and it must record `msg.type`, since the archiver never reads it.**
 
 ---
