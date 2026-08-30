@@ -706,6 +706,20 @@ The B65.2 functional commit (`0fcd19b1`) shipped trailing exits end-to-end. Subs
 
 **GOVERNANCE FILES CHANGED:** `BATCH_CATALOG.md` · `PHASE_HISTORY.md` · `PHASE_19_PLAN.md` · `RUNNING_ISSUES.md` · scope · pre-audit · completion report. **SYSTEM_MANUAL and SIM judged NOT applicable, out loud:** a `module_constants` row read by existing services adds no component and changes no architecture or math.
 
+### B-EXIT-PROVENANCE (+ its close gate B-EXIT-PROVENANCE-TICKER-RETENTION, #911) — a trade now proves its own prices instead of being reconstructed later (2026-08-30, CC-C) — ✅ **CLOSED**
+
+**change-class: architecture.** Body deployed `640ae5c7a`; the close gate `#911` deployed `ed86a758e` (2026-08-27). Steps 1-10 all run; SIM + System Manual content landed at `ef1633cce`. **Report:** `Claude Comms and Packages/Batch Completion/B_EXIT_PROVENANCE_COMPLETION_REPORT.md`.
+
+**WHAT IT DOES.** 14 columns on `closed_trades` recording, for every fill, **WHICH price source drove it, HOW STALE that price was, and an INDEPENDENT cross-check** — so a trade carries its own provenance instead of being reconstructed from logs afterwards.
+
+**WHY IT NEEDED A CLOSE GATE (Langston, Step 4).** `#741` is an **order-book** defect, and on crypto the fill walks the live WS mini-book — **the suspect**. A cross-check taken from that same book *agrees with itself by construction and proves nothing*, so the witness had to come off a **separate socket** (the archiver's ticker snapshot). The body could not close until that landed.
+
+**THE DATA (population: every close with `closed_at IS NOT NULL` at/after the `#911` deploy; read live 2026-08-30).** `crypto_spot` **13** closes and `xstock_spot` **6** — ✅ **19/19 carry both `exit_price_source` and `exit_price_producer`**, across both close reasons. Independent witness **17/19**; the 2 nulls are **both `TRUMP/EUR`**, and the crypto ticker archive holds **0** `/EUR` rows against **698,794** `/USD` in the same window ⇒ **an archive-universe gap, not a batch defect** (the witness is fail-open by design). ✅ **On the population where the witness can exist, 17/17.**
+
+⚠️ **KNOWN LIMIT THAT IS NOW LOAD-BEARING ELSEWHERE: the witness is NOT independent on xStock** — `depth-source.ts:89-93`, the fill's own depth-walk reads **the same table**, so there it is a *consistency* record and cannot corroborate against a second feed. **Two epistemic values behind one column name.** ★ **This is the reason `F-G-2`'s xStock legs are held (`PHASE_19_PLAN` 3b.d).**
+
+⛔ **GOVERNANCE WAS LATE AND THE CHECKER CAUGHT IT, NOT ME** — alert `2200283b`, *"code pushed 66h ago, no governance push."* `BATCH_CATALOG`, `PHASE_HISTORY` and the completion report were all **absent** (measured with positive controls). ★ **The mechanism: a batch held open by a close gate owes governance TWICE — once when the body ships, once when the gate closes — and only the first fired, because no PROGRESS REPORT existed to hold the open state in between.** `#954` opened for the `/EUR` archive gap, which had been recorded only inside a plan row that was later withdrawn.
+
 ### F-G-1 / B-GRID-REPRESENTABILITY — every price we emit is now one the venue can actually express (2026-08-28, CC-C) — ⛔ **OPEN: OBSERVATION WINDOW**
 
 **change-class: architecture.** Deployed `56ac8067a` 2026-08-28T18:05:22Z (durability ref; code first live at `bf1ac9620` 17:48:43Z). CI 4/4 green. Langston Step-4 APPROVED. ⛔⛔ **NOT CLOSED — the batch is in a pre-registered observation window and its record is a PROGRESS REPORT, not a completion report** (`F_G_1_PROGRESS_REPORT.md`). Board card in `Observation`.

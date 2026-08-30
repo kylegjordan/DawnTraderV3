@@ -824,6 +824,29 @@ MSYS2_ARG_CONV_EXCL='*' git show "…:.claude/memory/MEMORY.md"               ->
 
 ## B79.0n.SCORING + B79.0n.TEC closure entries (2026-05-26)
 
+### #954 OPEN 2026-08-30 (CC-C; measured at the B-EXIT-PROVENANCE close) — ⚠️ THE CRYPTO TICKER ARCHIVE HOLDS **NO `/EUR` PAIRS AT ALL**, SO EVERY `/EUR` CLOSE IS WITNESS-BLIND — AND THE OBSERVATION WAS **ORPHANED BY MY OWN WITHDRAWAL**
+
+**SEVERITY: low-medium (telemetry coverage; no trading impact — the witness is fail-open by design and blocks nothing). OWNER: CC-C. DISPOSITION: §9.4 (2) — added as an item to `B-XSTOCK-BOOK-LADDER` (plan row **3b.d**), whose subject is already *"what market data do we actually subscribe to, per class"* — the archive UNIVERSE is the same question one level up.**
+
+**MEASURED, WITH A POSITIVE CONTROL** (`crypto_spot_ticker_snap`, last 3 days, read live 2026-08-30):
+
+| filter | rows |
+|---|---|
+| `symbol LIKE '%/EUR'` | **0** |
+| ✅ **CONTROL** `symbol LIKE '%/USD'` | **698,794** |
+
+⇒ **On a `/EUR` close the independent ticker witness has nothing to read.** Confirmed downstream: of the 13 crypto closes since the `#911` deploy, **exactly 2 carry no witness and BOTH are `TRUMP/EUR`**; all 11 `/USD` closes have one.
+
+✅ **NOT A DEFECT IN THE WITNESS.** `depth-source.ts` is explicit — *"FAIL-OPEN BY DESIGN: returns `null` on any miss or throw. This is a TELEMETRY cross-check — it must never be able to block or delay a close."* **A null on a `/EUR` pair is correct behaviour.** What is missing is **coverage**, and coverage that nobody has stated is coverage nobody can reason about.
+
+⛔⛔ **HOW IT LOST ITS HOME, AND THE MECHANISM IS WORTH MORE THAN THE ISSUE.** This observation was recorded **inside `PHASE_19_PLAN` row 3b.c** — *"the crypto ticker archive has ZERO coverage of `/EUR` pairs (5 of the 6 non-joining rows), so it needs widening too."* **I withdrew that entire row on 2026-08-29** when `#944`'s 0.48% divergence turned out to be a timing artifact.
+★ **THE FINDING WAS CORRECTLY WITHDRAWN. THE ARCHIVE-COVERAGE OBSERVATION SITTING BESIDE IT WAS NOT PART OF THE CLAIM AND IS STILL TRUE — AND IT WENT WITH THE ROW.**
+⇒ ⛔ **STANDING LESSON: A WITHDRAWAL IS SCOPED TO THE *CLAIM*, NEVER TO EVERYTHING WRITTEN IN THE SAME ROW.** §9.4 disposition 5 dissolves a finding; **it does not dissolve the facts collected beside it.** Before striking a row, **enumerate what else it was the only record of.** *(This is the `#941`/`#952` shape — a partly-true entry losing its untrue half and taking a true one with it — one level up, at the plan row rather than the ledger entry.)*
+
+**WHAT THE BATCH OWES:** state whether `/EUR` pairs are (a) deliberately outside the archive universe, (b) an omission, or (c) trading-inactive and therefore correctly excluded — **and if any `/EUR` pair can be TRADED, the witness gap is a real coverage hole on a tradeable population.** ⚠️ **`TRUMP/EUR` closed twice in three days, so at least one `/EUR` pair IS trading** — which makes (c) unavailable on today's evidence and is why this is filed rather than dismissed.
+
+---
+
 ### #953 OPEN 2026-08-30 (CC-C; surfaced by a fresh reviewer attacking the draft-1 design, re-derived by me at the ref) — ⛔⛔ A LIVE EXIT ROUTE PLACES A **REAL MARKET SELL** AND THEN BOOKS THE EXIT AT A **RANDOM HAIRCUT** INSTEAD OF READING THE FILL — AND IT SURVIVES THE DEAD-LIMB DELETION
 
 **SEVERITY: high — PHASE-21 GO-LIVE BLOCKER CLASS (no paper-mode trading impact today). OWNER: CC-C. DISPOSITION: §9.4 (2) — added as an item to `B-INTENT-ENTRY-PARITY` / plan row **3h**, which already owns the question *"should the HTTP intent path exist at all?"* — the same two callers are its subject.**
