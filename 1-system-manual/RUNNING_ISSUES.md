@@ -876,6 +876,26 @@ MSYS2_ARG_CONV_EXCL='*' git show "…:.claude/memory/MEMORY.md"               ->
 
 ⛔⛔ **AND OUR POSITIONS CLOSE ON IT.** Same log, same second: `00:15:01 [KrakenWS] Unsubscribed from NOW/USD after position close` · `00:15:01 … TGT/USD` · `00:15:03 … WEN/USD`. ★ **Those are the SAME THREE SYMBOLS as the audit's §7 stub-book table.** Prior measurement: the 00:15 cohort is **27.1% of all xStock stop-outs and 29.5% of target-hits.**
 
+✅✅ **CONFIRMED BY AN INDEPENDENT CLAIM-ONLY READER (mode B — it was given the claim and found the objects itself). AND IT RECOVERED THE PRICES THE TRADES ACTUALLY EXITED ON, WHICH I HAD SAID WERE UNRECOVERABLE.**
+
+⛔⛔ **THE SMOKING GUN — 2026-08-29, INSIDE THE 688 ms BURST. THREE EXITS FIRED ON PRICES THE ARCHIVE DOES NOT CONTAIN:**
+| symbol | engine mark before | ⛔ **exit fired at** | move | what the ARCHIVE holds for that instant |
+|---|---|---|---|---|
+| **WEN/USD** | `8.215` (00:14:59.115) → `8.01` (00:15:00.615) | ⛔ **`13.31`** (00:15:02.116) | **+66%** | ONE row: bid **7.70** / ask **8.36** (mid 8.03). **`13.31` appears NOWHERE.** |
+| **NOW/USD** | `143.25` | ⛔ **`118.75`** | **−17%** | — |
+| **TGT/USD** | `163.35` | ⛔ **`106.075`** | **−35%** | a row showing bid **157** / ask **167** — **a NORMAL quote at the same moment** |
+⇒ ⭐⭐ **TGT IS THE CLINCHER: AT ONE INSTANT THE ARCHIVE HOLDS A SANE 157/167 QUOTE AND THE ENGINE CLOSED THE POSITION AT 106.075.** The two are samples of the same stream and they disagree violently.
+⇒ ⛔ **AND THE MOVES RUN IN BOTH DIRECTIONS — +66%, −17%, −35%. This is NOT "the bid is low." It is a burst of wild prices in both directions.** *(My framing, and Kyle's, was directionally too narrow.)*
+
+⛔ **CORRECTION TO MY OWN INFERENCE, AND IT MATTERS: "exactly one row per symbol" IS AN ARTIFACT OF THE THROTTLE, NOT EVIDENCE OF A BULK SNAPSHOT.** Under a 4 s window **any** burst shorter than 4 s yields at most one row per symbol **by construction**. **The burst in fact carried SEVERAL frames per symbol** — which is exactly how WEN moved 8.01 → 13.31 while producing one archived row. ⇒ **I read a throttle signature as a venue signature.**
+⛔ **AND A SECOND CORRECTION: I SAID THE TRIGGERING PRICES WERE UNRECOVERABLE. THEY ARE NOT** — `closed_trades.exit_decision_price` durably preserves the exact triggering mark for a COMPLETED exit. *(Marks that were evaluated and did NOT trigger remain unrecoverable.)* ★ **That is `B-EXIT-PROVENANCE` earning its keep for the second time.**
+
+⚠️ **THE LOSS RATE, MEASURED EXTERNALLY BECAUSE THE SYSTEM CARRIES NO INSTRUMENT FOR IT** (5 symbols × 10 min RTH): **43.6% of distinct engine marks never reach the archive**, and **the loss SCALES WITH HOW FAST THE SYMBOL MOVES** — a near-static name loses **0%**, the fastest loses **50%**. ⇒ ⛔ **EVERY STATISTIC OVER THIS TABLE IS BIASED PRECISELY WHERE PRICE MOTION MATTERS.**
+❗ **AND THERE IS NO DROP COUNTER: `bufferTickerSnap`'s boolean return is DISCARDED at `equity-spot-archiver.ts:140`, and `cumulativeTickerSnaps` counts FRAMES PARSED, never ROWS WRITTEN.** The system cannot report its own data loss.
+
+✅ **RECONNECT AND RESTART RULED OUT INDEPENDENTLY BY THE READER TOO:** `pm2` uptime **34 h** spanning the event; **no** `disconnected` / `connected (attempt N)` / `subscribed to…` lines in 00:13-00:25; and the 60-second heartbeat diagnostic **fires unbroken right through the silence.** ⇒ **the socket never dropped.**
+⚠️ **AND A SHAPE DISTINCTION WORTH KEEPING: irregular 476-symbol bursts at odd times (09:14:08, 16:08:01, 17:26:25) DO look like reconnect snapshots — a DIFFERENT shape from the on-the-second 00:15 event.**
+
 ⚠️ **WHAT IS *NOT* ESTABLISHED, AND I AM NOT CLAIMING IT: that the prices inside the burst are WRONG.** The burst is real, recurring and venue-side; **whether its contents are a stale re-quote, a settlement mark, or a legitimate session-roll price is UNKNOWN and cannot be read from the archive** — Langston: the in-memory mark **discards `data.bid` entirely**, so the ticker table is the only bid record we have. ⇒ ⛔ **THE RAW-FRAME CAPTURE (3b.b) IS THE SOLE REMAINING INSTRUMENT, and it must record `msg.type`, since the archiver never reads it.**
 
 ---
