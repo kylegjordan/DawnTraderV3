@@ -132,6 +132,20 @@ I suspected `/tmp/trailing-states.json` was being wiped, losing ratchets. **REFU
 
 ---
 
+
+### 5.2 ⛔⛔ THE PROVENANCE KYLE SUPPLIED — AND IT IS THE PART NO ARTIFACT HOLDS
+
+**Kyle, 2026-08-30, verbatim in substance:** *"I did make the decision to turn off the ratcheting exits… a lot of it had to do with the breakevens exiting, causing us to exit trades before we could see how they were gonna actually finish. And, therefore, we weren't learning anything from them. **And that was when we were just using the VTS, not even using the paper trading system.**"*
+
+⇒ ★★ **THE PREMISE WAS A LEARNING-DATA PREMISE, NOT A RISK PREMISE.** Break-even was truncating trades before their outcome was observable, which destroyed the very thing the VTS existed to produce. **On a pure learning lane that is a correct call.**
+⇒ ⛔⛔ **AND THE CONDITION IT RESTED ON NO LONGER HOLDS. We are not VTS-only any more.** Paper trading is live, it models fills, and it is the surface we intend to take to live mode in Phase 21. **A protective stop that truncates a learning sample is a cost; a missing protective stop on a lane headed for real capital is a different question entirely.**
+
+**THE GATE IS NAMED AND IT HAS NOT MOVED.** `trailing-exit-controller.ts:1119-1122` says xStock BE *"flips after B79.4 ablation evidence per RUNNING_ISSUES #80."* **`#80` reads: *"B79.4 — extend B73 exit-strategy ablation to xstock_spot… Currently blocking per-asset-class TEC config decisions for xstock_spot. OPEN — NEAR-TERM."*** ⚠️ **Its sequencing precondition was met 2026-05-08 and it has been OPEN and "near-term" since 2026-05-11 — sixteen weeks.**
+
+⇒ ⛔ **SO THE LIVE STATE IS: break-even off on all four asset classes; the premise for switching it off has expired; and the evidence that would settle turning it back on has not been collected in four months.** ★ **571 of 705 stops never moved from where they were placed.**
+
+**RULE-24 OUTCOME (2) — WORKING AS CONFIGURED, DECISION MISSING.** ⛔ **NOT a defect and NOT to be flipped unilaterally: it is a risk-posture call and it is Kyle's.** ✅ **What this audit adds is that the question is now RIPE — the original reason is spent, and Phase 21 makes it consequential.**
+
 ## 6. ⛔ THE LOW BID: STILL UNRESOLVED, AND THE EVIDENCE CANNOT SETTLE IT
 
 **I previously told Kyle *"the feed is correct, the writer is correct, the arithmetic is correct."* THE FIRST CLAIM IS WITHDRAWN — I could not have known it.**
