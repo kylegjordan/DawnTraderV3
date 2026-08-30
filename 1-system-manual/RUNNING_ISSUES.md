@@ -824,6 +824,30 @@ MSYS2_ARG_CONV_EXCL='*' git show "…:.claude/memory/MEMORY.md"               ->
 
 ## B79.0n.SCORING + B79.0n.TEC closure entries (2026-05-26)
 
+### #946 OPEN 2026-08-29 (CC-A) — ⛔ LANGSTON’S `MEMORY.md` IS **2× ITS CAP**, AND THE PARTS THAT LOOK LOAD-BEARING **ALREADY EXCEED IT ON THEIR OWN**
+
+**MEASURED at `/home/langston/MEMORY.md`, summing encoded line bytes: 49,224 B against the 24,576 B cap in `CLAUDE.md` §3.2 — over by 24,648, almost exactly double.** 202 lines, 70 blank. **The 25 heaviest lines carry 44% of the file.**
+
+**SECTION BREAKDOWN (largest first):** STANDING NOTES 9,598 (19%) · governance-integrity program 5,278 (11%) · **retractions 5,214 (11%)** · CURRENT STATE 4,156 (8%) · `F-G-1` **(OPEN)** 3,804 (8%) · `B-MISTAKES-FILE` **(closed)** 3,376 · `B-CONDUCT-FILE` **(closed)** 2,665 · `P19-B-PERPFEED` **(closed)** 2,482 · `B-MBIM-SWITCH-ON` **(closed)** 2,447 · rulings-that-generalise 2,402 · CC-A errors 2,034 · `B-EPOCH-KEYING-PARITY` **(closed)** 1,950 · the board 1,606 · preamble 912 · comms 654 · ledger header 646.
+
+**THE EASY CUT IS REAL BUT INSUFFICIENT.** Five CLOSED-batch sections total **12,920 B (26%)**, and STANDING NOTES carries ~4,600 B more of the same class on four single lines (`B-ARM-REMOVAL` **1,469 B on ONE line**, `P19-B8.5l` 1,117, `P19-B8.5h` 1,045, `B-TSC-BASELINE-FIX` 962). ★ **`CLAUDE.md` §3.2 already orders exactly this — collapse a closed batch to ONE line the moment it closes, because the completion report is the authoritative record.** ⇒ **collapsing all of it lands at ~32,000 B. STILL OVER.**
+
+⛔⛔ **AND THAT IS THE FINDING, NOT THE ARITHMETIC: WHAT REMAINS AFTER THE EASY CUTS IS ~26,700 B OF THINGS THAT ALL LOOK LOAD-BEARING — AND IT EXCEEDS THE CAP BEFORE A SINGLE NEW LINE IS WRITTEN.** His reviewer ledger alone (retractions + generalising rulings + per-session error log + header) is **10,296 B**, and `B-REVIEWER-LOOP` **F2** counts those six retractions as load-bearing evidence. ⇒ **the cap cannot be met by trimming; either something changes structurally or the cap is wrong for this file.**
+
+**THREE SHAPES PUT TO LANGSTON — HIS RULING, NOT MINE** (Kyle: *"work with Langston to understand what is necessary and what could be cut"*):
+
+| | shape | the objection that decides it |
+|---|---|---|
+| **A** | **the ledger MOVES to the repo** (`LANGSTON_REVIEWER_LEDGER.md`) with a pointer — frees ~9,000 B | ⛔ **its value is POSITIONAL: it works because it arrives BEFORE he reviews, without him remembering to fetch it. A pointer only fires if he goes and reads it — and he cannot be relied on to remember what he does not know he has forgotten.** Moving it may destroy the property that makes it work. |
+| **B** | **compress in place** — each retraction to one line (claim / truth / error-class), reasoning to the repo | keeps the positional property, loses the narrative that makes a retraction legible as a *pattern* rather than an incident |
+| **C** | ★ **the cap is wrong for HIM and we say so** | **he is STATELESS per-invoke — this file plus his `CLAUDE.md` IS his entire memory, where a CC session accumulates context across a long conversation. A cap derived for one may be indefensible for the other.** ⇒ a Kyle scope question, not a trim. |
+
+⚠️ **MY OWN INTEREST DECLARED, here and in the dispatch: I raised this because his `MEMORY.md` is a REQUIRED row in the new change-class ledger (`d8d4999bb`) and I could not discharge it cleanly — I appended a line to an already-over-cap file rather than skip a required row.** ★ **So I have an interest in the answer being *"trim it"*, and the framing above should be weighted accordingly.**
+
+★ **AND IT NAMES A GAP IN THE MATRIX I JUST SHIPPED: it has two states, REQUIRED and JUDGED, and no state for *BLOCKED*.** A required row that cannot be discharged cleanly has nowhere honest to go, so it takes a ✅ it has not earned — **the same class of defect the matrix was built to remove, one level up.**
+
+⇒ **HOME: added to `B-GOV-REPORTING`, owner CC-A, placed in `PHASE_19_PLAN.md` §governance queue at position 8, after `B-EXIT-LATCH-INVESTIGATION`** — the batch that already owns the ledger format, since the BLOCKED-state gap and the trim are the same finding from two ends.
+
 ### #635 OPEN 2026-07-31 (CC-B; Langston Step-4 required home, #594) — ★ THE xSTOCK STALL WATCHDOG DETECTS A **TOTAL** FEED STALL ONLY, AND ITS THRESHOLDS ARE UNCALIBRATED FOR THE AGGREGATE CLOCK IT NOW READS
 
 ★ **RULE 24 OUTCOME (2) — WORKING-AS-DESIGNED-BUT-UNADDRESSED. A SCOPE DECISION, NOT A DEFECT.** #594 correctly repointed the watchdog from an any-frame clock to a DATA clock. **Both are UNIVERSE-WIDE** — stamped once per symbol-tick across ~485 symbols ⇒ **one symbol going dark while 484 keep ticking leaves the clock reading FRESH.** The watchdog cannot see a PARTIAL stall and never could; #594 neither introduced nor fixed that.
