@@ -40,7 +40,7 @@ Draft 2 led with a 14.038% trigger-vs-fill gap. **Disaggregated: burst rows n=5 
 |---|---|---|
 | ⛔ **W1** | **The exit fill has no staleness ceiling; the entry does** (§0A). `#961` | **certain · largest · not the burst** |
 | ⛔ **W2** | **The maker exit fills on a midpoint and books the limit at zero slippage** (§0B). `#962` | **certain · not the burst** |
-| **W3** | **Every exit *trigger* reads a midpoint**, both classes, both lanes. | mechanism certain · ⛔ **CONSEQUENCE UNMEASURED** |
+| **W3** | **Every exit *trigger* reads a midpoint**, both classes, both lanes. | ✅ **COSTED (§1b): +0.060% vs the bid on ordinary days; the 3.9% was the burst** |
 | **W4** | **A venue re-quote at each session boundary reaches the decision path.** | event certain · ⛔ **CONSEQUENCE UNMEASURED** *("treated as tradeable" is unearned — `#958`'s own words)* |
 | **W5** | **The 4-second sampling is a TRADING defect** — it is σ's denominator (ceiling capped 300 s), it feeds both fills, and it drives the spread and depth gates. ⚠️ *The fail-open bias clause is `#958`'s measurement, cited not re-asserted: 43.6% of marks lost, 0% on static names → 50% on the fastest.* | certain |
 | **W6** | **The ranking price is a 15-minute aggregated bar close, not the ticker `last`** — and `last` is selected at `scanner.ts:641` and consumed nowhere. ⚠️ **Draft 2 called this "four definitions, not three." Wrong: a dead column is not a definition. There are still THREE live ones; what changed is WHICH the third is.** | mechanism certain · ⛔ **CONSEQUENCE UNMEASURED** |
@@ -49,12 +49,39 @@ Draft 2 led with a 14.038% trigger-vs-fill gap. **Disaggregated: burst rows n=5 
 | ➕ **W9** | **The fill's forensic columns are NULL BY CONSTRUCTION on xStock** — `bookMid`/`bookAgeMs` (crypto 15/78 populated, **xStock 0/26**), so the age W1 needs is not in `closed_trades` and must be reconstructed. | certain |
 | ➕ **W10** | **The spread gate reads a quote up to 30 MINUTES old and FAILS OPEN** — absent data emits a sentinel that passes. ⇒ ⛔ **Absent price data makes ENTRY easier while making EXIT impossible.** | mechanism certain · ⛔ **CONSEQUENCE UNMEASURED — and Langston flags it as risk-moving with no number** |
 | ➕ **W11** | **The newest 15-minute bar can be a one-minute stub** — partial buckets are emitted by design, and `source_bar_count`, which would say so, is written and read by nothing. | mechanism certain · ⛔ **CONSEQUENCE UNMEASURED** |
-| ➕ **W12** | **The mark silently changes definition** — mid **or** `last`, untagged; **and σ bounds a MID's staleness using the dispersion of `last`.** | mechanism certain · ⛔ **CONSEQUENCE UNMEASURED** |
+| ➕ **W12** | **The mark silently changes definition** — mid **or** `last`, untagged; **and σ bounds a MID's staleness using the dispersion of `last`.** | ✅ **COSTED (§1b): fallback fired 0 times in 373,450 rows across both sessions — LATENT, not live** |
 | ➕ **W13** | **The feed's subscription list is frozen at process boot** while the universe refreshes daily. `#960` | mechanism certain, **consequence untested** |
 
 ⛔ **`#953` — REMOVAL RE-ARGUED, BECAUSE DRAFT 2's REASONING WAS PARTLY FALSE AND SKIPPED MY OWN RULE.** It is genuinely off the xStock price path *(it reads a REST endpoint carrying zero xStock pairs)*, and that is the **only** valid ground. ⛔ **"Phase-21 gated" was FALSE for two of its four defects — the paper branch books a random haircut and writes the legacy table in BOTH modes.** ⛔ **And I struck it without doing what `#954` — my own entry, two above it — requires: enumerate what the row was the sole record of.** ✅ **CARRIED: the kill-switch blindness, and the amendment to the audit's §9.2 clearance (*"naming a population is not proving it complete"*), both now belong to `B-LEGACY-LIVE-EXIT-PATH`.** ⚠️ **And that issue currently has two homes under two batch names across three documents — fix before it is worked.**
 
 ---
+
+---
+
+## 1b. ✅ **COSTING THE EIGHT — MEASUREMENTS TAKEN 2026-08-30. TWO DONE, AND BOTH COLLAPSE.**
+
+### ✅ **W12 — CONSEQUENCE MEASURED AT ZERO. DOWNGRADED.**
+The mark is `(bid+ask)/2` when both sides exist, **else `last`** — untagged, so a reader cannot tell which it holds. **How often does the fallback fire?**
+| window | rows | fell back to `last` |
+|---|---|---|
+| regular hours, 2026-08-28 14:00-15:00 UTC | **333,535** | **0** |
+| ⭐ **overnight, 2026-08-28 00:30-01:30 UTC** | **39,915** | **0** |
+⇒ ✅ **ZERO IN BOTH SESSIONS. The untagged fallback has not fired.** ⛔ **DOWNGRADED to a LATENT HAZARD: the mechanism is real and the ambiguity would be undetectable if it did fire — but it is not a live defect and must not be costed as one.**
+*(The overnight window was run deliberately: a collapsed side is the case that would trigger it, and stubs concentrate outside regular hours. One window would not have settled it.)*
+
+### ⛔⛔ **W3 — CONSEQUENCE MEASURED, AND IT IS THE BURST FOR THE THIRD TIME. THIS ONE BEARS ON `F-G-2`.**
+**The question W3 exists to answer: how far is the MID the trigger reads from the BID we would actually sell into?**
+| cohort | n | mean mid-above-bid | max |
+|---|---|---|---|
+| ⛔ **xStock, 00:15 burst** | 3 | **+7.782%** | **72.86%** |
+| ✅ **xStock, ORDINARY** | 3 | **+0.060%** | 0.21% |
+| ✅ **crypto (control)** | 11 | **+0.114%** | 0.87% |
+⇒ ⭐⭐ **OUTSIDE THE BURST THE TRIGGER'S MID SITS 0.060% ABOVE THE BID — BELOW THE CRYPTO CONTROL, AND EFFECTIVELY NOTHING.** The 3.921% pooled figure was the burst.
+
+⛔⛔ **AND THIS IS LOAD-BEARING ON `F-G-2`, WHOSE CRYPTO LEG LANGSTON RELEASED.** F-G-2's core change is moving the exit trigger from the midpoint to the transactable side. ⇒ **On this evidence that change moves the trigger by ~0.06% on xStock and ~0.11% on crypto on ordinary days.** ⚠️ **It does NOT refute F-G-2 — `OBJ-0` measures OUTCOMES, not price gaps, and a tenth of a percent at the stop can still flip a trade. But it bounds the expected effect, and F-G-2's case has never carried that bound.**
+⚠️ **n=3 / n=3 / n=11. Far too small to decide anything. Stated as a direction with its population, not as a result.** ⇒ **DISPATCHED TO LANGSTON, because it touches a leg he released.**
+
+⭐⭐ **AND THE PATTERN IS NOW THREE FOR THREE: `#959`'s 14.038%, W3's 3.921%, and the overnight P&L's +157.52 ALL COLLAPSED INTO THE 00:15 BURST WHEN DISAGGREGATED.** ⇒ ⛔ **STANDING RULE FOR THE REMAINING SIX: every consequence figure gets the burst split BEFORE it is written down, not after someone asks.**
 
 ## 2. ⭐ WHAT THE OUTSIDE WORLD ALREADY DOES *(neither round faulted this)*
 **(a) Validate the tick at ingest and hold the last good value.** **(b) A separate mark price for risk — Kraken publish it themselves.** **(c) Mainstream brokers do not run stops overnight** — recorded, **not** recommended; Kyle's call is to keep trading all four sessions.
