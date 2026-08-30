@@ -182,3 +182,252 @@ I suspected `/tmp/trailing-states.json` was being wiped, losing ratchets. **REFU
 ⇒ ⛔⛔ **BOOK QUALITY IS A PREREQUISITE OF F-G-2, NOT A PARALLEL CONCERN.** *"Read the transactable side"* only helps if the transactable side is real.
 
 ★ **AND KYLE'S FRAMING CORRECTION WAS THE RIGHT ONE:** I proposed preferring the last trade when the spread is absurd. **That treats the symptom.** His position — *"we shouldn't be having any ridiculous spreads; root out the issue"* — is the correct one, and §6 is where that root-cause work now sits.
+
+---
+
+## 8. ⛔ THE PROVENANCE READ — WHAT WAS BUILT, AND WHY (Kyle-directed 2026-08-30)
+
+> **CORPUS: all 14 files of `bridge/canonical/`** plus recovered git history, read by two independent fresh readers whose load-bearing claims are **re-derived at the ref below, with positive controls.**
+> **Kyle's instruction:** *"read up on the intent of all these pieces that were built and have been slapped together. Let's understand what was built and why."*
+> ⚠️ **This corpus is INTENT, never current-state truth.** Where it and today's code disagree, that gap IS the finding.
+
+### 8.0 ⛔ PREMISE CORRECTION — THE CORPUS IS **NOT** FROZEN, AND OUR OWN RULES SAY IT IS
+
+`workflow-01-scope/SKILL.md:23` and `:56` describe `bridge/canonical/` as **"never edited"** / **"NEVER edited (frozen historical record)"**.
+
+**MEASURED AT THE REF.** `git log -- bridge/canonical/` returns governance-era commits touching it — `69b3ed8f2` (B-NEW-34 closure), `af99bd5dd` (B79.0n.STRATEGY), `8ef70628d` (B-4.7). Per-file last-commit dates run from **2025-12-13** (`..._Invariants_...md`, genuinely frozen) to **2026-06-11** (`..._Regime_Strategy_Mapping.md`).
+
+⇒ **A session told "frozen pre-governance corpus" dates everything here to Dec 2025 – Feb 2026 and is wrong by four months on the regime mapping.**
+
+And the editing left the corpus self-contradictory:
+- `..._Execution_Flow.md:299` — *"**Note (2026-05-15):** previous wording \"5-minute intervals = ~2.5 days\" was doc drift; the canonical bar interval has always been 60 minutes… B-NEW-34 … corrected this doc."*
+- `..._Current_State_Reference.md:174` — **still reads** *"721 candles per symbol (5-minute intervals)"*.
+
+**The correction landed in one file and not its sibling.** A session consulting the second reads a known-wrong value as original intent.
+
+**DISPOSITION (§9.4 #3): own batch — `B-CANONICAL-FREEZE`, owner CC-C, placed in `PHASE_19_PLAN` after the exit-path redesign.** Either the corpus is frozen (move the three edits to a dated addendum) or the rule is wrong (say so, and stamp every edited file with its edit date). **Ledger: `#948`.**
+
+---
+
+### 8.1 ⛔⛔ THE HEADLINE: **THE FOUNDING ARCHITECTURE NEVER SAID WHICH PRICE DRIVES A TRADE**
+
+**RE-DERIVED ACROSS ALL 14 FILES, WITH POSITIVE CONTROLS:**
+
+| term | files |  | control term | files |
+|---|---|---|---|---|
+| `midpoint` · `mid-price` · `mark price` · `last trade` | **0 · 0 · 0 · 0** | | `price` | **10** |
+| `tick size` · `venue` · `rounding` · `representable` | **0 · 0 · 0 · 0** | | `bid` / `ask` | **4 / 6** |
+| `staleness` · `max age` · `quote age` | **0 · 0 · 0** | | `spread` / `slippage` | **6 / 9** |
+
+★ **The instrument finds the vocabulary it is looking for. The eleven terms are genuinely absent.**
+
+The cache struct carries all three prices and **defines the relationship between none of them** — `..._Execution_Flow.md:276-288`:
+```
+interface CachedPrice { symbol; price; ask; bid; volume24h; high24h; low24h;
+                        lastSource: 'kraken_ws' | 'kraken_rest'; lastUpdatedAt; }
+```
+`price` sits beside `ask` and `bid` with **no stated relationship to them**, and `price` is never defined as last-trade, mid, or anything else. Every exit description in the corpus says only *"live price"* or *"currentPrice"*. **`bid` and `ask` appear corpus-wide in exactly two places — the two struct lines — and are never consumed by anything.**
+
+Spread enters **only on the entry side**, in the profitability gate (`:542`): `const totalCost = (feeRate × 2) + (spread × 1.1) + slippage;` — **it never enters the exit path at all.**
+
+⇒ ★★ **THIS REFRAMES §4 OF THIS AUDIT. The eight price representations are NOT drift away from a specification — THERE WAS NO SPECIFICATION.** Every layer that needed "the price" invented its own answer, in isolation, and each was individually defensible. **That is the mechanism behind Kyle's "pieces of two or three different intended designs fighting against each other."**
+⇒ ★ **AND IT REFRAMES F-G-1: the venue price grid was not repairing a regression. The intent that a price must be venue-representable NEVER EXISTED** — prices were treated as continuous real numbers throughout.
+
+---
+
+### 8.2 ⛔⛔ THE ORIGINAL EXIT WAS A **STATIC BRACKET**, AND IT WAS **DELETED ON 2026-01-18** — NOT AMENDED
+
+Recovered from git at `485699a2f^:bridge/canonical/DawnTrader_System_Architecture_Execution_Flow.md`. **This section exists in NO file on disk today.** Verbatim:
+
+```
+4. Evaluate exit conditions:
+   ├─ currentPrice <= stopLoss   → Stop-loss triggered
+   └─ currentPrice >= takeProfit → Take-profit triggered
+```
+
+⛔⛔ **AND THE FILL WAS AT THE *LEVEL*, NOT AT THE OBSERVED PRICE** (`§6.2`, verbatim):
+```
+triggerPrice = 98.00 (stop-loss hit)
+STEP 1: Apply Exit Slippage (0.15%)
+  actualExitPrice = triggerPrice × (1 - 0.0015) = 97.85
+exitSlippage = |triggerPrice - actualExitPrice| × quantity
+```
+
+★★ **READ THAT AGAIN, BECAUSE IT IS THE SINGLE MOST CONSEQUENTIAL LINE IN THE WHOLE PROVENANCE READ.** The trade was **DECIDED** on `currentPrice` crossing the level, but **FILLED** at the *pre-declared level* degraded by a constant — **never at the price that triggered it.** A modern reader assumes fill = the observed price. **The founding design says the opposite.**
+
+⇒ ★★ **THIS IS THE ORIGIN OF §1's VTS-vs-ACTIVE SPLIT, AND IT INVERTS WHICH ONE IS "BROKEN."** VTS books the level (999/999 stops fill at exactly the stop — `#914`). **VTS IS NOT A DEFECT. VTS IS DESIGN 1, PRESERVED UNCHANGED.** The active path's depth-walked VWAP is the *newer* answer, added without anything ever reconciling the two. **The Phase-25 lanes measure two different worlds because one lane never left 2025.**
+⚠️ **This does not make VTS *right* — a fill model with no book is still a world where exiting is free. It means "fix VTS to match active" is the wrong framing: this is a DECISION about which model we want, not a bug.**
+
+**AND AFTER THE DELETION, THE CORPUS CONTAINS NO SURVIVING STATEMENT OF WHAT TRIGGERS AN EXIT AT ALL.** `targetPrice` survives only as an input to the entry-side profitability gate; `stopPrice` only as an input to position sizing (`Phase_8:352`). **The only statement of exit-trigger logic in the entire founding corpus was deleted seven months ago and never replaced.**
+
+---
+
+### 8.3 ⛔ FIVE SUCCESSIVE EXIT DESIGNS, AND THE PIVOT IS DATABLE TO ONE DAY
+
+| # | design | first appears | evidence |
+|---|---|---|---|
+| **1** | **Static bracket**, fill at `triggerPrice × (1−0.0015)` | 2025-12-12 | deleted §6, `485699a2f^` |
+| **2** | **Trend-slope trailing** — `TrailingStop = BaseStop × (1 + Acceleration × TrendSlope)`, `BaseStop = 1.5%`, `Acceleration = 0.002 × slope(EMA20)` | 2026-01-08 `ea958bffe` | Math Arch §10.2 |
+| **3** | **Regime-volatility trailing + two-stage latch** — `stopDistance = baseDistance × (1 + volatilityFactor × regime.volatility)` | 2026-01-18 `485699a2f` | Exec Flow §10.3 |
+| **4** | **APR-SLE** — "Adaptive Profit Realization & Stop-Loss Evolution" | 2026-01-18 `1dbc8c187` | Core Files `:163` |
+| **5** | **Per-strategy exit geometry** — ATR stops, R-multiple targets | 2026-06-11 `8ef70628d` | Regime Mapping `:23,:110` |
+
+⛔ **DESIGNS 2 AND 3 ARE TWO DIFFERENT FORMULAS FOR ONE NAMED MECHANISM.** Design 2 is driven by **trend slope**; design 3 by **regime volatility**. Both are canonical, both survive in the corpus today, **and neither was ever reconciled against the other.**
+
+⛔⛔ **DESIGN 4 WAS NEVER DESIGNED IN A DOCUMENT.** `apr-sle-engine.ts` appears **exactly once corpus-wide**, as an inventory row: *"| `server/services/apr-sle-engine.ts` | Adaptive Profit Realization & Stop-Loss Evolution |"*. It entered the record as a **catalogue entry**, listed adjacently to `trailing-exit-controller.ts` — **no formula, no rationale, no statement of how the two relate or which is authoritative. Two exit engines side by side, one of them entirely undocumented.** Neither is in `DELETED_COMPONENTS_LOG.md`.
+
+⇒ ★★ **THIS IS THE DIRECT ANCESTOR OF THIS AUDIT'S §0 VERDICT.** The audit found **four exit designs resident in the code at once**. The provenance shows **five in the documents**, arriving the same way each time: **added OVER the previous one, never INSTEAD of it, with no reconciliation and — twice — no design text at all.** The code did not decay into this state. **It was built this way, one undocumented addition at a time.**
+
+---
+
+### 8.4 ⛔ BREAK-EVEN AND MAKER/TAKER: **NEVER DESIGNED. NOT ONCE.**
+
+**RE-DERIVED, WITH CONTROLS:**
+
+| absence | files | ✅ control | files |
+|---|---|---|---|
+| `breakeven` · `break-even` · `break even` | **0 · 0 · 0** | `trailing` | **4** |
+| `ratchet` | **0** | `stop-loss` | **5** |
+| `maker` · `post-only` · `resting` · `limit order` · `order type` | **0 · 0 · 0 · 0 · 0** | `take-profit` | **3** |
+| `exit_reason` · `close_reason` | **0 · 0** | `taker` · `latch` | **1 · 1** |
+
+⛔ **BREAK-EVEN HAS NO FOUNDING DESIGN.** No latch, no enable, no concept. ⚠️ **`CLAUDE.md` rule 15 names "BE enable" as a per-asset-class knob and cites a "BE-latch origin" — that origin is not in this corpus.** ⇒ **§5's finding stands and strengthens: Kyle's decision to switch it off was a decision about a mechanism that never had a stated purpose to begin with.**
+
+⛔ **TAKER WAS ASSUMED, NEVER DECIDED.** `taker` appears twice, both in one fee table — *"Entry Fee 0.10% Kraken taker fee | Exit Fee 0.10% Kraken taker fee"* — and `maker` appears **zero times corpus-wide.** There is no order-type model anywhere. **The exit was modelled purely as an instantaneous price event plus a constant haircut.** `Complete_Project_History.md:44` names a layer *"[Order Management + Adaptive Sizing + Trailing Exits]"* — **"Order Management" is never described anywhere in the corpus.**
+⇒ ★★ **THIS IS WHY §1's MAKER-EXIT-ON-A-MID FINDING HAS NO GOVERNING RULE TO CITE. Resting orders were never in the design.** The maker exit is a later capability bolted onto a fill model that assumed you always cross.
+
+⛔ **AND THE REAL TRADE TABLES WERE NEVER DESIGNED TO RECORD *WHY* A POSITION EXITED.** `paper_sim_trades` / `live_trades` (`Exec Flow §14.1`) carry no exit-reason field; the only `resultType?: 'take_profit' | 'stop_loss' | 'timeout'` in the corpus is on the **VTS simulator's in-memory record** (`Phase_11:223`). ⇒ **A timeout exit was designed for the simulator and never for the real path.**
+
+---
+
+### 8.5 ✅ WHAT *WAS* SPECIFIED — AND THE ONE THAT IS STILL BINDING
+
+`..._Invariants_Design_Guarantees.md` (2025-12-13, the genuinely frozen file) declares 42 invariants. The four that bear on this audit:
+
+- **T1** *"Every trade MUST have a stop-loss price below the entry price… There are no exceptions to this rule."* ⚠️ **T1 constrains the stop ONLY AT ENTRY, relative to entry price. NOTHING IN THE CORPUS CONSTRAINS HOW A STOP MAY MOVE AFTERWARDS** — which is precisely the gap `#923` (the trailing exit ratcheting stops off-grid) sits in.
+- **F4** *"Slippage MUST always work against the trader… There is no 'positive slippage' in the simulation model."* ✅ Still right.
+- **F7** *"Production trading decisions MUST use only real market data… If no real price is available, the operation must fail or wait… 'no_reliable_price' is an explicit failure state, not a fallback."* ✅ **STILL LIVE, STILL CORRECT — and §1's force-close finding VIOLATES IT** by bypassing the venue-source gate.
+  ⚠️ **BUT F7 WAS UNSATISFIABLE AS WRITTEN.** It requires provenance traceable to **four** sources; the struct's own field can represent **two** (`'kraken_ws' | 'kraken_rest'`). **Binance and CoinGecko prices were designed to be reachable and unstampable.** ★ **That is the direct ancestor of §1's non-determinism finding: the gate reads a `source` tag that never had enough values to carry the answer.**
+- **A8** *"Position monitoring MUST run at least every 2 seconds… Slower monitoring risks missing exit triggers."* ✅ Still right.
+
+⛔ **AND A STRUCTURAL TENSION INSIDE THE FOUNDING DOCUMENT ITSELF.** **P5** states *"Trading parameters belong in `guardrails_v2`… **Magic numbers are prohibited**."* But `guardrails_v2` as documented has **six parameters — risk-per-trade, max position, max open, cooldown, daily-loss kill-switch, max exposure — and NOT ONE of them is an exit parameter.** Meanwhile `BaseStop = 1.5%` and `Acceleration = 0.002` sit as literals in a document.
+⇒ ★★ **EVERY GOVERNED RISK PARAMETER IS ENTRY-SIDE. THE EXIT PATH WAS NEVER BROUGHT UNDER CONFIGURATION GOVERNANCE AT ALL.** That is not a drift; it is the founding state, and it explains why exit behaviour today is spread across code literals, a `/tmp` file and four engines.
+
+⛔ **THERE IS NO FRESHNESS INVARIANT.** Freshness exists only as bucket refresh *parameters* (2s / 15s / 30s / 60s) and one test criterion. `Phase_8:401` says *"REST API fallback **if cache stale**"* — **and "stale" is never defined anywhere.** The only numeric bar was a validation target that **failed by a factor of 62**: *"Feed Latency < 100ms"* vs measured *"6233 ms ❌"*.
+⇒ ★ **§1's "signal generation is ungated on bar age" is not a rule someone removed. No such rule was ever written.**
+
+---
+
+### 8.6 ⛔ THE ORDER BOOK WAS A VOCABULARY THE MATH BORROWED, NOT A FEED ANYONE DESIGNED
+
+The Market Data Layer enumerates every feed and **depth is not among them** (`Exec Flow:45-46`): *"Kraken REST **(OHLC, Ticker)** … Kraken WebSocket **(Real-time Ticks)** … Binance/CoinGecko (Fallback) … OHLC Cache."*
+
+Yet **LQ — an IMF hard gate — is defined three mutually incompatible ways, two of which need book data**: `LQ = bidVolume / askVolume` (`Math Arch:61`) · `log10(bidVolume × askVolume)` (`:450`) · `log10(volume24h × price) × 10` (`Exec Flow:338`). **Same symbol, same threshold `LQ ≥ 40`, three different quantities — and only the third is computable from the feeds the architecture specifies.** A fourth phantom, *"Depth Imbalance > 1.4"* (`Regime_Strategy_Mapping:89,173`), is a **live regime trigger with no formula, no source and no ingestion anywhere.**
+
+⇒ **In the FOUNDING corpus, no order-book ingestion was ever designed for either asset class** — the synthesised ladder was the only thing buildable to satisfy metrics whose definitions assumed a feed that was never specified.
+
+⛔⛔ **BUT THE BATCH RECORD REFUTES THE COMFORTABLE VERSION OF THAT STORY, AND THIS IS THE HARDEST FINDING IN THE WHOLE PROVENANCE READ — SEE §8.7.** *(Corrected before dispatch: an earlier draft of this section concluded "no order-book ingestion was ever designed" full stop. True of `bridge/canonical/`. **False of the batch record**, which contains the question, the empirical answer, and a named objective to plumb it.)*
+
+---
+
+---
+
+### 8.7 ⛔⛔ THE xSTOCK ORDER BOOK: **ASKED, ANSWERED, OBJECTIVE-ASSIGNED — AND STILL NOT SUBSCRIBED TO**
+
+**This is the sharpest finding of the provenance read, and it is a four-step chain every link of which is verified at the ref.**
+
+**STEP 1 — THE QUESTION WAS WRITTEN DOWN.** `BATCH_79_SCOPE.md:508` lists what crypto already has: *"- Order book depth (top N levels)"*. The xStock column, `:523-525`, verbatim:
+```
+- Bid/ask spread:   TBD — does Kraken xStocks WS publish bid/ask? Or only mid?
+- Order book depth: TBD — is the Kraken Equities WS book channel exposed?
+- Min order size, lot size, price tick: TBD — ... but tick size?
+```
+⇒ **At the moment xStocks entered the system (2026-05-07), the order book was an open question in the scope. Neither planned nor ruled out.**
+
+**STEP 2 — IT WAS ANSWERED, EMPIRICALLY, AND THE ANSWER WAS YES.** `B_XSTOCK_GLOBAL_FILTER_SCOPE.md:79` (batch **B-XSTOCK-CALIB / B.1.5**; Langston's condition 1 required exactly this method), verbatim:
+> *"**O0 PRELIMINARY FINDING (2026-05-28, read-only `book`-channel capture, no order placed):** the ws-equities `book` channel returns a FULL 20-level depth ladder (price+qty) for both TSLA/USD AND thin GLD/USD → **execution venue is a CLOB, not RFQ.** Depth IS the binding gate… MM depth is real even on thin names (TSLA 787@-few-cents; GLD 1,100-3,300/level)."*
+
+**STEP 3 — PLUMBING IT WAS A NAMED OBJECTIVE OF THAT BATCH.** Same file, `:81`: *"**O2 — Order-book depth plumbing** (R2). *Verify:* depth visible in Filter Diagnostics; gate fires on thin depth."* And Langston's condition 2 specified the home: *"R3 = a SEPARATE `xstock_spot/imf-liquidity.ts` module."*
+
+**STEP 4 — AND TODAY NOTHING SUBSCRIBES TO IT.** Verified at the ref, `equity-spot-archiver.ts:237-247`:
+```js
+ws.send(JSON.stringify({ method:'subscribe', params:{ channel:'ohlc', symbol:state.symbols, interval:1 }}));
+ws.send(JSON.stringify({ method:'subscribe', params:{ channel:'ticker', symbol:state.symbols }}));
+```
+**`ohlc` and `ticker`. That is the complete subscription list. A repo-wide search for a `book` channel subscription across the market-data and passive-archive services returns ZERO.**
+
+★★ **AND THE MODULE THAT LANGSTON NAMED AS THE HOME CARRIES THE CONFIRMATION AS A COMMENT WHILE READING A ONE-LEVEL LADDER.** `xstock_spot/imf-liquidity.ts:18-22` records *"verified via the `ws-equities` `book` channel = a real CLOB depth ladder"* — and §3 of this audit found the depth it actually consumes is **one row of `xstock_spot_ticker_snap` synthesised into a single level.**
+
+⛔ **THE GOVERNANCE RECORD NOW CONTRADICTS ITSELF ON WHETHER THE CHANNEL EXISTS:**
+- `P19_B4b_1_SCOPE.md:76` — *"A real xStock depth feed (**if Kraken equities ever exposes a book channel**…) is a future item"*
+- `MULTI_ASSET_VTS_EXPANSION_PLAN.md:172` — *"the execution venue is a real CLOB (**20-level depth ladder confirmed**)"*
+
+**Two of our own governance documents assert opposite things about the same channel** — the #641 two-copies shape, on the single question that decides whether our liquidity gate is measuring anything real.
+
+⚠️ **AND THE RESEARCH KYLE COMMISSIONED SAID TO USE IT.** `X-Stocks Volume Feed Research - Multi LLM.md:86`: *"The **live Level-2 order book** (`book` channel): sum the resting market-maker depth within whatever slippage band you'll tolerate… The ticker already hands you top-of-book `bid_qty`/`ask_qty`; the `book` channel gives the full ladder."*
+**What shipped instead was the declaration at `B_2_LQ_SWEEP_RESULTS.md:57`: *"DEPTH is the correct, permanent liquidity screen for xStocks"* — using top-of-book, with the full-ladder question already answered and unconsumed.**
+
+⇒ ★★ **THIS REWRITES §3 AND §6 OF THIS AUDIT.** The xStock non-book is **not** an unavoidable consequence of a feed we never had. **We confirmed we have the feed, assigned an objective to plumb it, and shipped the one-level synthesis anyway.** ⇒ **And it is the strongest available lead on §6's unresolved low bid: a synthesised one-level ladder built from a ticker row we never discriminate by frame type is exactly the instrument that would produce an impossible bid — and the real ladder that could contradict it is one subscription line away.**
+**DISPOSITION (§9.4 #3):** own batch — **`B-XSTOCK-BOOK-LADDER`**, owner CC-C, placed in `PHASE_19_PLAN` at row **3b.d**, **BEFORE `F-G-2`** and alongside `B-XSTOCK-FEED-SANITY`. **A PREREQUISITE, not a successor. Ledger: `#949`.**
+
+---
+
+### 8.8 ⛔ THE VTS AND PAPER TRADING WERE **NEVER MEANT TO RUN AT THE SAME TIME**
+
+**The corpus is unambiguous and it is the opposite of today's system.** `..._Execution_Flow.md:562` — *"VTS operates when trading engine is **STOPPED**"*. `..._Current_State_Reference.md:304` — *"Triggered when engine is STOPPED"*. `Phase_11:265` — *"**Passive Learning Mode**: VTS runs automatically when trading engines are stopped"*, and `:271` — *"VTS is the **sole source** of telemetry writes during passive learning."* The architecture diagram draws them as two forks off one scanner: *"PASSIVE LEARNING PATH (Engine Stopped) | ACTIVE TRADING PATH (Engine Running)."*
+
+⇒ ★★ **THEY WERE THE SAME SLOT, TIME-MULTIPLEXED. VTS was what ran INSTEAD OF trading, so the system never sat idle learning nothing. There was no design in which both produce trades at once.**
+**Concurrency is a deliberate June-2026 reversal** (`ITEM_4`), not the original plan — and our own investigation recorded the old behaviour as still live at the time: *"VTS genuinely STOPS when active trading turns on… you cannot turn on active-paper today without going dark on VTS learning."*
+
+**AND THREE MORE INVERSIONS IN THE SAME FAMILY:**
+1. ⛔ **VTS WAS THE *ONLY* CALIBRATION SURFACE, BY DESIGN.** `Phase_10:323` — *"MLCalibrationService | Strategy calibration from VTS"*; the shipped weights artifact carries `"source": "VTS"`. **Today the same arrangement is filed as a defect** — *"predictive weights are simulator-locked today; paper outcomes never reach them."*
+2. ⛔ **VTS WAS ORIGINALLY PRICE-ISOLATED** — *"Uses isolated cache bucket (vtsSimulation)"*, *"VTS data is completely isolated."* **Today's compute-once-fan-out is the deliberate opposite.**
+3. ⛔⛔ **THE 42-INVARIANT CONSTITUTION NEVER NAMES THE VTS.** It has a dedicated *"Paper Trading Specific Invariants"* section and **no VTS invariant, no isolation guarantee, no contamination guarantee** — for the lane that generates most of the trades. ★ **The one parity guarantee that exists is paper↔live only** (`Phase_9:87`, *"Ensure paper simulation and live trading use identical mathematical models"*). **THERE HAS NEVER BEEN A VTS↔PAPER PARITY TEST** — which is precisely the gap §1's "VTS books the level, active depth-walks" sits in, unnoticed for the system's whole life.
+
+---
+
+### 8.9 ⛔ THE xSTOCK FEED WAS BUILT AS A **PASSIVE ARCHIVE THAT NOTHING WAS TO CONSUME** — AND THEN BECAME THE LIVE TRADING FEED WITHOUT ANYONE DECIDING SO
+
+`BATCH_74_SCOPE.md:37` (2026-04-30) — the feed was scoped **before xStocks were a trading asset class**, as an archive: *"Persistent WebSocket subscription on `wss://ws-equities.kraken.com` covering all 128 xStocks, persisting 1-min OHLC + per-update ticker snapshots."* Two channels, `ohlc` and `ticker`, and **`:93` made non-consumption explicit: *"Subscribe via separate WebSocket connections (**no shared state** with FX5 / signal-orchestrator / VTS)."***
+
+**Then B79.0a wired the live scanner to read the archive table:** *"a live xstock_spot scanner… **reads xstock prices from the `equity_spot_ticker_snap` database table** every 30 seconds."*
+
+⇒ ★★ **CRYPTO READS THE EXCHANGE; xSTOCK READS OUR OWN ARCHIVE.** The cause is real and forced — Kraken has **no public REST for xStocks** (`AssetPairs` returns zero xStock pairs; empirically closed B79.0k, re-verified 2026-05-15). **But the inversion itself — an archive explicitly built to share no state with the trading path becoming the trading path's price source — is nowhere declared as a design decision. It happened between two batches.**
+
+⚠️ **AND B79 FLAGGED IT AT SCOPE TIME AND IT WAS NEVER CLOSED.** `BATCH_79_SCOPE.md:391`: *"**Currently archiver is passive-only.** Does VTS need real-time xStock prices, or is 1m archive lookup sufficient? **Critical question — if VTS needs real-time, we need to build/extend a live-pricing-adapter for the equities WS endpoint.**"* — with `:135` naming the batch: *"**B79.5** — live-pricing adapter for `wss://ws-equities.kraken.com` — TRIGGERED by Phase 19 active-trading prerequisite."*
+⇒ ⛔ **PHASE 19 ACTIVE TRADING IS ON. THE TRIGGER FIRED. B79.5 IS NOT IN THE BATCH RECORD.** The named prerequisite for exactly the state we are now in was scoped, triggered, and never built — and §1's stale-mark and §6's low-bid findings both live on the path it would have replaced.
+**DISPOSITION (§9.4 #3): own batch — `B-XSTOCK-LIVE-FEED`, owner CC-C, placed in `PHASE_19_PLAN` immediately after `B-XSTOCK-FEED-SANITY`, which must characterise the defect first. Ledger: `#950`.**
+
+★ **AND THE ASSET-CLASS DIVERGENCE ITSELF WAS DELIBERATE AND WELL-ARGUED** — hours (24/5), volatility (0.5-2% vs 2-8% ATR), microstructure, macro inputs, failure modes, sector correlation, tokenization-vs-underlying — under an explicit doctrine: *"**Centralize the dispatcher; share the methods; vary only the DATA — never fork LOGIC.**"* ⇒ **The asymmetries §3 found are not all drift. Some are the doctrine working. The ones that are NOT — a synthesised book, an archive-as-feed — are the ones that forked logic while claiming to vary only data.**
+
+### 8.10 ⛔ SIX MORE ABSENCES, EACH ONE LOAD-BEARING
+
+1. **Time-based exit.** The stated philosophy is *"Day Trading | Positions closed within defined holding periods"* — **those holding periods are never defined anywhere.** No max-hold in `guardrails_v2` or any doc.
+2. **Manual close.** Named twice as an exit path, **never designed anywhere.**
+3. **`Complete_Project_History.md`** — the 23 KB *"For New Engineering Leadership"* narrative — **contains ZERO occurrences of "exit", "stop-loss", "trailing" or "take-profit."** The document written to explain the system to a newcomer never says how a position is closed.
+4. **Long-only is load-bearing and mostly unstated.** T1 and F4 both silently assume it. A later reader adding shorts finds both inverted and no guidance.
+5. **Where stop and target VALUES come from is silent.** The signal object is never defined; Trade Safety only validates that a stop was *supplied*.
+6. ⚠️ **THE SYSTEM HAS FORM HERE.** `Phase_11:800`: *"Directive 11.6 addresses contaminated trade and ML data caused by the **random exit bug** in VTS simulation."* All pre-2026-01-21 VTS trades were purged. **The corpus never says what the random exit logic actually was** — and §1 of this audit found a live route that still prices an exit with `Math.random()`.
+
+---
+
+### 8.11 ✅ WHAT THE PROVENANCE READ CHANGES — REVISED DISPOSITIONS
+
+| audit finding | before the read | after |
+|---|---|---|
+| **§0 four exit designs resident** | accumulated decay | ⛔ **BUILT THIS WAY** — five designs in the docs, each added OVER the last, two with no design text at all |
+| **§4 eight price representations** | drift from a design | ⛔ **no design existed** — rule-24 outcome **(3)**: legacy that never fit. Needs a DECISION, not a fix |
+| **§3 the xStock non-book** | an implementation shortcut | ⛔ **the only thing buildable** — outcome **(3)** |
+| **§1 VTS books level / active depth-walks** | a divergence to fix | ✅ **VTS IS DESIGN 1, UNCHANGED; the active path is the later answer.** Reconcile deliberately — do NOT "fix" VTS |
+| **§1 maker exit on a mid** | a defect | ⛔ **no order-type model was ever designed** — outcome **(3)**, and the mid it reads is §8.1's undefined `price` |
+| **§1 non-deterministic exit price** | a defect | ⛔ **still a defect** — and F7's two-value tag shows the gate never *could* carry the answer |
+| **§1 ungated bar age** | a missing check | ⛔ **never specified** — outcome **(2)**: a DECISION is missing, not code |
+| **§1 force-close bypasses the venue gate** | a defect | ⛔ **a defect AND an invariant violation** — F7 is binding and explicit |
+| **§5 the ratchet is off** | a setting with an expired reason | ⛔ **and the mechanism never had a stated purpose in the first place** |
+| **F-G-1 the venue price grid** | repairing a regression | ✅ **NEW intent, correctly added** — the corpus has no concept of a representable price |
+| **§3 the xStock non-book** *(revised again by §8.7)* | never designed | ⛔⛔ **CONFIRMED TO EXIST 2026-05-28, OBJECTIVE ASSIGNED, NEVER SUBSCRIBED TO.** Outcome **(1)** — a real defect, and a **prerequisite of F-G-2**. `#949` |
+| **§1 VTS vs active fill model** *(revised again by §8.8)* | a divergence | ⛔ **there has NEVER been a VTS↔paper parity test** — the only parity guarantee ever written is paper↔live |
+| **§6 the low bid** | unresolved, stored data cannot settle it | ⛔ **unchanged — but §8.7 supplies the missing instrument.** The real ladder is one subscription line away |
+| **the xStock price source** | not previously a finding | ⛔ **an archive built to share NO state with trading BECAME the trading feed**, and its named replacement (`B79.5`) was triggered and never built. `#950` |
+
+⚠️ **COVERAGE, STATED HONESTLY: this section is `bridge/canonical/` + git history ONLY.** The wider archive layer (`1-system-manual/_archive/`, `Archived Reports - Pre-Phase 12 Governance Implementation/`, root-level review docs) and the new-governance batch reports were **still being swept when this section was written — treat that layer as UNEXAMINED, not as empty.**

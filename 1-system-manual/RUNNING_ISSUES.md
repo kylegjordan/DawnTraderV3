@@ -824,6 +824,57 @@ MSYS2_ARG_CONV_EXCL='*' git show "…:.claude/memory/MEMORY.md"               ->
 
 ## B79.0n.SCORING + B79.0n.TEC closure entries (2026-05-26)
 
+### #950 OPEN 2026-08-30 (CC-C, provenance read under Kyle's machinery-audit directive) — ⛔ THE xSTOCK FEED WAS BUILT AS AN ARCHIVE THAT WAS TO SHARE **NO STATE** WITH TRADING, AND BECAME THE TRADING FEED WITHOUT A DECISION — AND ITS NAMED REPLACEMENT WAS TRIGGERED AND NEVER BUILT
+
+**SEVERITY: high. OWNER: CC-C. DISPOSITION: §9.4 (3) — own batch, `B-XSTOCK-LIVE-FEED`, placed in `PHASE_19_PLAN` immediately AFTER `B-XSTOCK-FEED-SANITY` (#943), which must characterise the defect before a feed is rebuilt on top of it.**
+
+`BATCH_74_SCOPE.md:37` scoped the xStock feed as a passive archive **before xStocks were a trading asset class**, and `:93` made non-consumption explicit: *"Subscribe via separate WebSocket connections (**no shared state** with FX5 / signal-orchestrator / VTS)."* B79.0a then wired the live scanner to read `equity_spot_ticker_snap` every 30 seconds. ⇒ **crypto reads the exchange; xStock reads our own archive.**
+
+The cause is real and forced — Kraken has no public REST for xStocks (`AssetPairs` returns zero xStock pairs; closed empirically at B79.0k, re-verified 2026-05-15). **The inversion is not the problem. The absence of a decision is.** Nothing in the record declares "the archive is now the price source."
+
+⛔ **AND B79 FLAGGED IT AT SCOPE TIME WITH A NAMED SUCCESSOR.** `BATCH_79_SCOPE.md:391`: *"**Currently archiver is passive-only.** … **Critical question — if VTS needs real-time, we need to build/extend a live-pricing-adapter for the equities WS endpoint.**"* `:135`: *"**B79.5** — live-pricing adapter for `wss://ws-equities.kraken.com` — **TRIGGERED by Phase 19 active-trading prerequisite**."*
+⇒ **Phase 19 active trading is ON. The trigger fired. `B79.5` is not in the batch record.** §1's stale-mark findings and #943's low bid both live on the path B79.5 would have replaced.
+
+**Full provenance: `EXIT_PATH_MACHINERY_AUDIT_2026-08-30.md` §8.9.**
+
+---
+
+### #949 OPEN 2026-08-30 (CC-C, provenance read under Kyle's machinery-audit directive) — ⛔⛔ THE xSTOCK `book` CHANNEL WAS **CONFIRMED TO EXIST**, GIVEN A NAMED PLUMBING OBJECTIVE, AND IS **STILL NOT SUBSCRIBED TO** — WHILE THE MODULE THAT RECORDS THE CONFIRMATION READS A ONE-LEVEL LADDER
+
+**SEVERITY: high. OWNER: CC-C. DISPOSITION: §9.4 (3) — own batch, `B-XSTOCK-BOOK-LADDER`, placed in `PHASE_19_PLAN` at row **3b.d**, BEFORE `F-G-2` (row 3c) and alongside `B-XSTOCK-FEED-SANITY` (3b.b). It is a PREREQUISITE, not a successor — same standing as 3b.b.**
+
+**A four-step chain, every link verified at `origin/migration/aws-supabase`:**
+
+1. **ASKED.** `BATCH_79_SCOPE.md:523-525` — crypto's inventory lists *"Order book depth (top N levels)"*; the xStock column reads *"Order book depth: **TBD** — is the Kraken Equities WS book channel exposed?"*
+2. **ANSWERED — YES.** `B_XSTOCK_GLOBAL_FILTER_SCOPE.md:79` (batch B-XSTOCK-CALIB / B.1.5; Langston's condition 1 mandated the method): *"**O0 PRELIMINARY FINDING (2026-05-28, read-only `book`-channel capture)**: the ws-equities `book` channel returns a FULL 20-level depth ladder (price+qty) for both TSLA/USD AND thin GLD/USD → **execution venue is a CLOB, not RFQ.** Depth IS the binding gate."*
+3. **OBJECTIVE ASSIGNED.** Same file `:81` — *"**O2 — Order-book depth plumbing** (R2). *Verify:* depth visible in Filter Diagnostics; gate fires on thin depth."* Langston's condition 2 named the home: `xstock_spot/imf-liquidity.ts`.
+4. ⛔ **NOT SUBSCRIBED TO.** `equity-spot-archiver.ts:237-247` subscribes to **`ohlc` and `ticker` only** — that is the complete list. A repo-wide search for a `book`-channel subscription across the market-data and passive-archive services returns **zero**.
+
+★ **And `xstock_spot/imf-liquidity.ts:18-22` carries the confirmation as a comment** — *"verified via the `ws-equities` `book` channel = a real CLOB depth ladder"* — **while the depth it consumes is one row of `xstock_spot_ticker_snap` synthesised into a single level** (`depth-source.ts:49-70`).
+
+⛔ **THE GOVERNANCE RECORD CONTRADICTS ITSELF ON WHETHER THE CHANNEL EXISTS:** `P19_B4b_1_SCOPE.md:76` — *"**if** Kraken equities **ever** exposes a book channel"* vs `MULTI_ASSET_VTS_EXPANSION_PLAN.md:172` — *"a real CLOB (**20-level depth ladder confirmed**)"*. **#641 two-copies shape, on the question that decides whether the liquidity gate measures anything real.**
+⚠️ **The commissioned research recommended the ladder** (`X-Stocks Volume Feed Research - Multi LLM.md:86`); what shipped was top-of-book declared *"the correct, **permanent** liquidity screen"* (`B_2_LQ_SWEEP_RESULTS.md:57`) with the full-ladder question already answered.
+
+**WHY IT IS A PREREQUISITE, NOT A PARALLEL ITEM:** F-G-2 moves the exit decision off the midpoint onto the bid. **A synthesised one-level ladder built from a ticker row we never discriminate by frame type is exactly the instrument that would produce an impossible bid** — and the real ladder that could contradict it is one subscription line away. **Full provenance: audit §8.7.**
+
+---
+
+### #948 OPEN 2026-08-30 (CC-C, provenance read under Kyle's machinery-audit directive) — ⚠️ `bridge/canonical/` IS **NOT FROZEN**, AND TWO OF OUR OWN SKILL FILES SAY IT IS
+
+**SEVERITY: medium. OWNER: CC-C. DISPOSITION: §9.4 (3) — own batch, `B-CANONICAL-FREEZE`, placed in `PHASE_19_PLAN` AFTER the exit-path redesign work (it is a corpus-hygiene fix, not on the trading path).**
+
+`workflow-01-scope/SKILL.md:23` and `:56` describe the corpus as **"never edited"** / **"NEVER edited (frozen historical record)"**, and every batch is sent there for original intent on that understanding.
+
+**MEASURED:** `git log -- bridge/canonical/` returns governance-era commits touching it — `69b3ed8f2` (B-NEW-34), `af99bd5dd` (B79.0n.STRATEGY), `8ef70628d` (B-4.7). Per-file last-commit dates run **2025-12-13 → 2026-06-11**. A session told "pre-governance corpus" dates the regime mapping four months wrong.
+
+⛔ **AND THE EDIT LEFT THE CORPUS SELF-CONTRADICTORY.** `..._Execution_Flow.md:299` carries a 2026-05-15 note correcting *"5-minute intervals"* to 60-minute bars; **`..._Current_State_Reference.md:174` still reads *"721 candles per symbol (5-minute intervals)"*.** The correction landed in one file and not its sibling ⇒ **a session consulting the second reads a known-wrong value as original intent.**
+
+**FIX (either, not both):** freeze it for real — move the three edits into a dated addendum file and revert the originals; **or** correct the rule, and stamp every edited file with its edit date and the batch that touched it. **Leaving both standing is the failure the rule was written to prevent.**
+
+⇒ **NOTE FOR THE INTERIM: every provenance citation in `EXIT_PATH_MACHINERY_AUDIT_2026-08-30.md` §8 was taken at a named ref or a named commit for this reason.**
+
+---
+
 ### #947 OPEN 2026-08-29 (CC-INFRA, found when Kyle asked why B-TOKEN-WATCH's change-class was undecided) — THIRTEEN SCOPE FILES DECLARE A CHANGE-CLASS THE CHECKER CANNOT READ, BECAUSE ITS PATTERN IS LINE-ANCHORED
 
 `CHANGE_CLASS_MARKER` (`scripts/governance-checker/config.mjs:180`) begins with a line anchor followed by optional list markers, so a declaration is only seen at the START of a line. **But the house style for a scope header is one line carrying several fields** — `**Batch:** X · **Created:** Y · **change-class:** non_architecture` — and a mid-line declaration never matches.
