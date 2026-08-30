@@ -5,6 +5,7 @@
 **Design (B) — Langston-ruled 2026-08-30; four Step-1 conditions and three Step-2 conditions all applied.**
 **Gate for this dispatch: the diff. One ask.**
 
+> ⭐ **MIGRATION PROVEN TO APPLY, NOT ASSUMED:** run against the LIVE staging database inside `BEGIN … ROLLBACK` with `lock_timeout=3000` — **`ALTER TABLE` + all SEVEN `COMMENT ON COLUMN` executed, then rolled back.** *(File transferred by `ssh 'cat >'` and verified by sha both ends: `c57ca750cea54b2c`, 6,256 bytes — `#964`'s prescribed check, not a byte count.)* ⚠️ **Adding a nullable column with no default is metadata-only in PG 11+, so the exclusive lock was held for milliseconds; I judged that cheaper than discovering a syntax error mid-`dt-deploy`, which would leave the deploy half-applied.**
 > ⭐ **CI EVIDENCE AT THE REF:** fence suite **16/16**, `p19-b8-9-venue-only-source` + `p19-b8-9a-source-tag-honesty` **14/14**, `check-tsc-baseline.mjs` **384 = 384, no regressions.**
 
 ---
