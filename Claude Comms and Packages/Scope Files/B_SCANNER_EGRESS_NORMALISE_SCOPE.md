@@ -285,3 +285,42 @@ raw wsname sent → **Kraken rejects it** → `getOHLCData` returns 0 candles �
 
 ### 11.6 ✅ WHAT THE READER CONFIRMED
 **Exhaustive post-line consumer enumeration: no consumer after the line reads a raw venue field.** The only post-line read of one — `:778 const baseCurrency = pairInfo.base` — is **assigned and never read**. **Idempotency holds.** **The line cannot run twice** (`collectAdaptiveBatch` has exactly one call site). **`pairInfo` is non-undefined for every entry** (filtered at `:568`, `:608`, `:614`) — *the gap is `wsname`, not `pairInfo`.*
+
+---
+
+## 12. ✅ THE PROVENANCE READ — **THE ARCHITECTURE QUESTION IS ANSWERED FROM THE SYSTEM ITSELF. DECIDED, NOT ASKED.**
+
+> ⛔ **Kyle, 2026-08-30: *"Don't put that decision to me… You are looking at the code. You should understand what's happening… You've got readers. You've got Langston. But this is our system. Figure this out."*** ✅ **Correct — an architecture call is not his. Here it is, decided, with citations.**
+> ⚠️ **AND THE READ IS WHY I WAS THRASHING. `MANDATORY 1.b` / §9.5(b) require it BEFORE proposing a change; I skipped it and reversed myself five times on a small fix. The rule's own justification says exactly this: skipping the read does not save the cost, it defers it into a more expensive form.**
+
+### 12.1 THE THREE DESIGNATIONS, AND WHY THEY LOOKED CONTRADICTORY
+| document | designates | for |
+|---|---|---|
+| `bridge/canonical/Phase_8_Implementation_History.md` §5.3.7 | **`kraken-symbol-resolver.ts`** | *"Canonical Symbol Mapping (I7) — single authoritative symbol format BASE/QUOTE… dynamic resolution with fallback… bidirectional conversion Kraken ↔ Internal"* |
+| `bridge/canonical/DawnTrader_System_Architecture_Execution_Flow.md` §3.1 | **`symbol-canonicalizer.ts`** | *"ensures consistent symbol naming **across all subsystems**, translating between Kraken's exchange format and the canonical BASE/QUOTE format"* |
+| `server/utils/symbol-normalize.ts:1-9` *(B79, **"Langston rev 3 §G"**, the newest)* | **itself** | *"**This module is the SINGLE LOOKUP boundary for symbol-form translation**"* — and it names **the scanner** as a consumer |
+
+⇒ ⛔ **THREE modules each designated authoritative, in three documents. That is `#229`'s four-module sprawl seen at its ROOT: the ambiguity is in the founding record, not only in the code.** ★ **And it is why every new fact moved me — I was choosing between boundaries without knowing any of them WAS one.**
+
+### 12.2 ⭐⭐ THE TIE IS BROKEN BY THE NEWEST MODULE ITSELF, IN WRITING
+**`symbol-normalize.ts:88-95`, `normalizeCryptoSpot`'s own fall-through:**
+> *"Full normalization is in `server/services/utils/symbol-canonicalizer.ts` (legacy module)… For B79 **we don't duplicate the legacy logic — we recommend callers continue to use the legacy canonicalizer for crypto raw forms** while this utility covers display-form → canonical for xstocks."*
+> …and its fail-soft message is literally **`'crypto_spot raw form not handled — use server/services/utils/symbol-canonicalizer.ts'`**.
+
+⇒ ✅ **THE SELF-DECLARED SINGLE BOUNDARY EXPLICITLY DELEGATES CRYPTO RAW FORMS TO THE CANONICALIZER.** **That is not an inference — it is the module's own routing instruction, in a Langston-reviewed file.**
+⚠️ **AND IT IS DECISIVE ON THE MECHANICS TOO: `XBT/USD` PASSES `CRYPTO_SPOT_CANONICAL` (uppercase `BASE/QUOTE`), so `normalize()` would return it UNCHANGED and NOT fix Bitcoin.** ⇒ **`normalize()` is the wrong tool here, exactly as its own comment says.**
+
+### 12.3 ✅ THE DECISION
+⭐ **`toCanonical` (`symbol-canonicalizer.ts`) IS CORRECT FOR THIS BATCH, on three converging citations:** the execution-flow doc designates it for cross-subsystem naming · the newest boundary module routes crypto raw forms to it by name · and it is the only one of the three that handles **both** `XBT→BTC` and `XDG→DOGE`.
+⛔ **THE RESOLVER IS NOT THE RIGHT CALL HERE** — it is the Kraken↔internal **mapping** component, it is **LOCKED**, and its slashed branch cannot resolve `XDG`. **Its repair belongs to `#229`'s Phase-20 consolidation, which already owns it.**
+✅ **THE IMPLEMENTATION AT `0b18ee530` STANDS UNCHANGED. What changes is that it now rests on cited intent rather than on convenience.**
+
+### 12.4 ⛔⛔ AND THE READ PROMOTED A SIDE-EFFECT INTO AN INVARIANT REPAIR
+**`bridge/canonical/DawnTrader_System_Invariants_Design_Guarantees.md:30` — *"**INVARIANT T2:** Maximum one open position per symbol at any time. A new trade for symbol X cannot be opened if symbol X already has an open position."***
+**The enforcing check is `activeTradeSymbols.has(pair.symbol)` — a RAW venue name tested against a set built from the `trades.symbol` DB column, which is internal form.**
+⇒ ⛔⛔ **FOR `XBT` AND `XDG`, THAT TEST CAN NEVER MATCH ⇒ INVARIANT T2 IS CURRENTLY UNENFORCEABLE FOR BITCOIN AND DOGECOIN.**
+⇒ ★★ **I had this written up as an incidental second behaviour delta (§11.2). It is not incidental — it is a FOUNDING INVARIANT not holding, and this batch repairs it.** **That is a materially stronger justification than *"two coins do not trade"*, and I only have it because Kyle made me do the read.**
+
+### 12.5 ⚠️ ONE NEW FINDING THE READ SURFACED — RECORDED, NOT FIXED HERE
+**The designated path for crypto RAW forms is `toCanonical`, whose non-slashed branch is the one the third reader showed can MANGLE (`XTZUSD → T/USD`) or THROW.** ⇒ **the recommended handler for raw forms is unsafe on exactly the raw forms it is recommended for.**
+✅ **This batch is unaffected — the slashed-only guard at `0b18ee530` never enters that branch.** **§9.4 DISPOSITION: added to `#229`'s consolidation, which already owns all four modules.**
