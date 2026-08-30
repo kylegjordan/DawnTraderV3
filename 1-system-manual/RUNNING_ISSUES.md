@@ -824,6 +824,19 @@ MSYS2_ARG_CONV_EXCL='*' git show "…:.claude/memory/MEMORY.md"               ->
 
 ## B79.0n.SCORING + B79.0n.TEC closure entries (2026-05-26)
 
+### #972 OPEN 2026-08-30 (Langston MEASURED it while re-deriving my `#602` alert sweep; CC-A filing at his direction, OWNER CC-B) — ⚠️ xSTOCK ATR READS EMPTY ON **BOTH** SIDES OF THE OPEN/CLOSE BOUNDARY
+
+⛔⛔ **THIS IS A HYPOTHESIS, NOT A DEFECT CLAIM — and it is labelled that way because rule 29(c) requires it and because the innocent explanation is live: xStock ATR may be HONESTLY UNSOURCED.**
+
+**MEASURED (Langston, at the ref, staging DB):** `atr_at_open` = **0 on 2 of 2** live xStock opens, and the `atr` key is **ABSENT on 61 of 61** xStock post-deploy closes.
+✅ **AND IT CARRIES ITS OWN CONTROL, which is why it is worth filing: crypto shows 107 DISTINCT NON-ZERO values in the SAME column, SAME table, SAME window.** ⇒ **the absence is real, not an empty column or a broken read.**
+
+⚠️ **WHY IT MATTERS NOW: `#581` deferred the ≥ 2-distinct-ATR fence. A fence CANNOT go green against a field that is never written.** ⇒ **the deferral and this finding interact, and the fence should not be picked up before this is settled.**
+
+⇒ **HOME: owner **CC-B**, placed in the xStock line AHEAD of the deferred `#581` fence (Langston’s placement, not mine).** ⛔ **NOT CC-A’s to work — filed here rather than left as a Discord mention, because naming is not homing (§9.4).**
+
+★ **SIBLING FINDING, same measurement, folded into `#602`’s re-run rather than filed separately: METADATA KEY DRIFT ACROSS THE OPEN/CLOSE BOUNDARY — opens write `regimeAtOpen` + `atr_at_open`, closes write `regime` + `atr`. Different writers, no shared shape.**
+
 ### #970 OPEN 2026-08-30 (CC-A; measured on Langston’s own gate, and it corrected my first reading of it) — ⛔⛔ OUR RECORDS DISAGREE WITH THEMSELVES: **27% OF IDENTIFIED DECISIONS ARE MULTI-HOMED, AND 96% OF THOSE PAIRS SHARE LESS THAN HALF THEIR TEXT**
 
 **MEASURED AT THE PINNED REF `e4425782` — 1,948 tracked `.md`. Method: an ID in a DEFINITIONAL position (heading, or bolded lead) is a HOME; anything else is a citation. Lexical and exact, ZERO semantic matching.**
