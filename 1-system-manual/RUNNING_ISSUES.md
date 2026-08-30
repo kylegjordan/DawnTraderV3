@@ -882,6 +882,11 @@ await storage.closeTrade(targetTrade.id, exitPrice, exitFee, exitSlippage);
 
 ⛔ **NO FIX PRE-JUDGED (rule 15).** The first question is **3h's own question, which is why it is homed there**: should these two routes exist at all? If they stay, the exit must read the venue fill, not manufacture one. **A `Math.random()` removal alone would cure the instance and leave the route booking a modelled exit for a real order — the `fix-follows-pointer` shape.**
 
+➕➕ **ESCALATED 2026-08-30 (round-3 review, re-derived by me at the ref) — A THIRD DEFECT ON THE SAME SINGLE ROUTE, AND IT REACHES THE RISK ENVELOPE.**
+`trading-engine.closeTrade:649` calls `storage.closeTrade`, which at `storage.ts:1604+` does **`db.update(trades)`** — the **legacy `trades` table**. The daily-loss kill switch reads `getRealizedPnlSince`, which sums **`.from(closedTradesTable)`** (`storage.ts:3285`).
+⇒ ⛔⛔ **A CLOSE THROUGH THIS ROUTE IS INVISIBLE TO THE DAILY-LOSS KILL SWITCH.** So the one live authenticated route now: **(a)** places a REAL market sell, **(b)** books a `Math.random()` haircut instead of the fill, **(c)** writes a table the kill switch cannot see, and **(d)** books the live exit fee at a hardcoded `0.0026` against a Tier-1 taker of **0.80%**.
+★ **AND IT AMENDS A REFUTATION OF MINE.** Audit §9.2 said *"a close written by ANY of the six sinks is counted — the kill switch is not blind."* **True of the sinks I enumerated; this one was not among them.** ⇒ **NAMING A POPULATION IS NOT PROVING IT COMPLETE.** §9.2 amended in the same commit.
+
 ⚠️ **POPULATION, STATED: paper mode today, so no live capital is affected — the live branch is Phase-21 gated. This is filed as a GO-LIVE BLOCKER, not a live incident.** ↔ `#734` (the other Phase-21 go-live blocker in this family).
 
 ---

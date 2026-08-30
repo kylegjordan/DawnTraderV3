@@ -128,7 +128,7 @@
 
 ### 5.1 A HYPOTHESIS I CHASED AND DROPPED
 I suspected `/tmp/trailing-states.json` was being wiped, losing ratchets. **REFUTED: `/tmp` is on rootfs, the box has not rebooted since 2026-03-30, and the file is live with 705 states.** *(systemd does age-clean `/tmp` at 30d, but the file is written continuously so its mtime never ages.)*
-⚠️ **A real fragility does remain: the ratcheted stop is NEVER persisted to the database.** It lives in memory plus that one file; `vts_open_trades` keeps the **original** stop, so anything reading positions from the DB sees the unratcheted level unless the file is also read.
+⛔ **CORRECTED 2026-08-30 (round 3): THIS SENTENCE WAS OVER-GENERAL AND IS STRUCK FOR THE ACTIVE LANE.** It read *"the ratcheted stop is NEVER persisted to the database."* ✅ **True for VTS.** ⛔ **FALSE for the active lane — `active-execution-engine.ts:1756-1758` writes `updateActiveOpenPosition({ stopLoss: decision.newStopPrice.toString() })`.** ★ *The §5 ratchet analysis is unaffected — break-even is off, 0 latches in 705 states — but the persistence claim was wrong and I published it.* **The residual fragility, correctly stated: the VTS-lane ratchet state** It lives in memory plus that one file; `vts_open_trades` keeps the **original** stop, so anything reading positions from the DB sees the unratcheted level unless the file is also read.
 
 ---
 
@@ -462,9 +462,12 @@ ws.send(JSON.stringify({ method:'subscribe', params:{ channel:'ticker', symbol:s
 
 **THE OBSERVATION IS TRUE. THE CONSEQUENCE IS FALSE, AND I RE-DERIVED BOTH HALVES AT THE REF.**
 - ✅ **TRUE:** `emitTradeClosed` has exactly **one** producer call site (`active-execution-engine.ts:2590`); the definition at `event-bus.ts:186` is the only other hit. Control: the same search shape returned many live `TRADE_CLOSED` sites, so it discriminates.
-- ⛔ **REFUTED:** **the daily-loss budget does not listen to that event — it queries the database.** `daily-loss-budget.ts:131` calls `storage.getRealizedPnlSince(mode, windowStart)`, which at `storage.ts:3280-3290` sums realised P&L **`.from(closedTradesTable)`** filtered on `closedAt IS NOT NULL` and the mode. ⇒ **A close written by ANY of the six sinks is counted. The kill switch is not blind.**
+- ⛔ **REFUTED — BUT SEE THE AMENDMENT BELOW, WHICH IS MINE AND WHICH PARTLY REHABILITATES THE ALARM:** **the daily-loss budget does not listen to that event — it queries the database.** `daily-loss-budget.ts:131` calls `storage.getRealizedPnlSince(mode, windowStart)`, which at `storage.ts:3280-3290` sums realised P&L **`.from(closedTradesTable)`** filtered on `closedAt IS NOT NULL` and the mode. ⇒ **A close written by ANY of the six sinks is counted. The kill switch is not blind.**
 
 ⇒ ★★ **THE RISK-ENVELOPE ALARM DOES NOT HOLD, AND IT WAS NOT RELAYED.** What survives is narrower and real: **five close paths do not write to the exit-decision archive and do not emit the event** ⇒ a **forensics gap** (the archive undercounts exits, so any population drawn from it is biased toward monitor-loop closes) and a **promotion-latency** effect, itself backstopped by the periodic sweep at `active-execution-engine.ts:419`.
+⛔⛔ **AMENDMENT 2026-08-30 (round 3) — MY REFUTATION WAS OVER-BROAD, AND A REAL BLINDNESS EXISTS BY A DIFFERENT MECHANISM.** I wrote *"a close written by ANY of the six sinks is counted."* ✅ **True of the sinks I ENUMERATED — they all write `closed_trades`.** ⛔ **But there is a path I did not enumerate and it writes a DIFFERENT TABLE:** `routes.ts:5054` → `trading-engine.closeTrade:649` → `storage.closeTrade` (`storage.ts:1604+`), which does **`db.update(trades)`** — the legacy `trades` table — while `getRealizedPnlSince` sums **`.from(closedTradesTable)`**. ⇒ ⛔ **A CLOSE THROUGH THAT ROUTE IS INVISIBLE TO THE DAILY-LOSS KILL SWITCH.**
+★★ **SO THE READER WAS WRONG FOR THE REASON IT GAVE — it reasoned from the EVENT — AND RIGHT THAT A BLINDNESS EXISTS.** ⇒ **NAMING A POPULATION IS NOT PROVING IT COMPLETE: I proved the five sinks I looked at were counted; I never proved there were only five.** ➕ **Escalated onto `#953`, which is the same route.**
+
 ⚠️ **RECORD THIS AS THE MECHANISM, NOT THE ANECDOTE: a fresh reader's HIT is a LEAD. This one was confidently argued, internally coherent, and wrong at the consequence — and repeating it would have sent the crew at the kill switch.** *(`workflow-02`: a HIT must be re-derived at the ref before it moves anything.)*
 
 ### 9.3 ⛔⛔ WHAT THE READERS ADDED — FOUR THINGS THIS AUDIT DID NOT HAVE
@@ -805,3 +808,79 @@ ACK: {"method":"subscribe","result":{"channel":"book","snapshot":true,"symbol":"
 7. ➕ ★ **AND §8.8 HANDS US AN ALTERNATIVE TO P6 THAT NOBODY HAS CONSIDERED: VTS AND PAPER WERE NEVER DESIGNED TO RUN CONCURRENTLY.** ⇒ *"One shared exit implementation"* is **not** the only way to end the two-worlds problem — **not running both at once is the other, and it is the founding design.** **Unexamined.**
 
 ⛔⛔ **ROUND STATUS: 2 OF 3. The loop does NOT close here — items 6 and 7 mean the design has principles that have never been attacked, and a round that has not reached a principle cannot certify it.** ⇒ **Draft 3 goes to round 3 scoped to P4/P6/P7 ONLY. If round 3 does not close it, the FULL ROUND RECORD goes to Langston with the disagreement intact, per his cap rule — iterating to agreement selects for persistence, not truth.**
+
+---
+
+## 13. ⛔ DRAFT 4 — ROUND 3 CLOSED THE LOOP, AND IT OVERTURNED **P6** PLUS TWO OF MY PUBLISHED CLAIMS
+
+> **ROUND 3 — a third fresh reader, scoped to P4/P6/P7 ONLY (the three principles no round had reached).** Verdicts: **P4 UNPROVEN and mis-scoped · P6 WRONG · P7 DEFENSIBLE for the funnel, WRONG for "exactly one owner is a compile error."**
+> ✅ **Every correction below re-derived by me at the ref before adoption.** ⛔ **THE LOOP CLOSES AT ROUND 3 PER LANGSTON'S CAP. This section IS the round record, and it goes to him with the disagreements intact rather than iterated away.**
+
+### 13.0 ⛔⛔ **P6 IS WITHDRAWN.** IT REPORTED A NUMBERED, TESTED, REVIEWED OBJECTIVE AS A DEFECT — **THE THIRD TIME IN THIS AUDIT**
+
+**P6's decisive clause was: *"the exit evaluator returns a clamped exit price… VTS honours it and the active engine discards it. One of those is wrong."*** ⛔ **NEITHER IS WRONG. PRESERVING TWO DISTINCT FILL CONVENTIONS WAS A NUMBERED OBJECTIVE OF THE BATCH THAT CREATED THE SHARED EVALUATOR.**
+
+`BATCH_65_COMPLETION_REPORT.md`, **objective 7**, verbatim: *"**No regression to fill conventions** | ✅ | **VTS clamps to stop/target level (as pre-B65). Paper returns exit-at-currentPrice (as pre-B65).** Exit-reason taxonomy unchanged."*
+And **objective 4**: *"Preserves paper's **'exit at currentPrice' fill convention** for the returned `ExitCondition`."* And **objective 5** pins it in a seven-scenario parity suite whose first two cases are *"(1) simple stop clamp, (2) simple target clamp."*
+
+⛔ **AND THE MECHANISM WAS MISDESCRIBED TOO.** There is no *"honour vs discard"* of a shared value: **the active engine never reads `decision.exitPrice` at ANY site** — it is a VTS-only field (2 read sites, both `vts-runner`) — and `ExitCondition.price`, the field the active side writes, is read at **0 sites** (control: `exitCondition.type` = 21 reads). ⇒ **a VTS-only field and a dead field, not a contract in dispute.**
+
+✅ **DISPOSITION: rule-24 outcome (2). What is genuinely defective is ONE DOC-COMMENT** — `tec-evaluator.ts:168`, *"Price to record on the closed trade"* — **true for VTS, false for the active lane, on a SHARED interface.** That is §4's one-field-two-meanings shape, and **it is what made two successive fresh readers infer a contract that never existed.** *(A stale comment on a shared type is not cosmetic: it manufactures findings.)*
+
+⛔⛔ **AND P6's HEADLINE CLAUSE DESCRIBES THE STATUS QUO: `evaluateTECExit` already has exactly three non-test callers and BOTH LANES USE IT. There is one exit-decision implementation today.**
+
+✅ **WHAT SURVIVES, AND IT IS NARROWER AND REAL: the row records which *LANE*, not which *FILL MODEL* — and those coincide only by inertia.** Plus **two live items P6 did not contain**, both of which outrank what it did:
+1. ⛔ **THE CLAMP IS LATCH-CONDITIONAL.** `trailing_stop_hit` and `break_even_stop` return `currentPrice`, not the level. With break-even off on all four classes (§5), those branches never fire — **so turning break-even back on silently switches VTS's fill convention from level-clamped to observed-price for those trades.** ⇒ ★★ **§5's risk-posture decision — KYLE'S — also changes a measurement convention, and nothing anywhere says so.** **UNOWNED.**
+2. ⛔ **THE LARGER CROSS-LANE DIVERGENCE IS ON THE *OPEN* SIDE, NOT THE EXIT.** The active engine still applies AMR stop/target distance multipliers; `vts-runner` records them **DELETED (Kyle-directed 2026-08-07)**. ⇒ **when AMR is active for a class the two lanes trade DIFFERENT GEOMETRY for the same signal** — a bigger two-worlds source than any exit clamp, and outside P6's scope entirely.
+
+### 13.1 ⛔⛔ AND §12.6 ITEM 7 WAS **ITSELF** A §9.5(b-ii) VIOLATION — I MADE THE ERROR WHILE NAMING IT
+
+**Draft 3 said the "do not run both at once" alternative was one *"nobody has considered."*** ⛔ **FALSE. It was the STATUS QUO, and reversing it was a Kyle-directed, Langston-code-verified decision with its reasoning on the record** — `ITEM_4_ARCHITECTURE_INVESTIGATION.md` §0: *"VTS genuinely STOPS when active trading turns on… you cannot turn on active-paper today without going dark on VTS learning,"* with the reversal's stated reason at §5: VTS must keep learning through Phase 19's start/stop debugging, and deferring it is *"the moving-target trap."* **Two named contamination points were fixed as part of it.**
+⇒ ★★ **I CRITICISED DRAFT 2 FOR AN INCOMPLETE CARRY-FORWARD LIST AND THEN PUT A REVIEWED DECISION ON IT AS AN UNEXAMINED ALTERNATIVE.** *(Three occurrences of this class now: rule 1b, P6, and this. **Grepping the ledger is not enough — the batch COMPLETION REPORTS are where numbered objectives live, and that is the corpus I keep not searching.**)*
+
+✅ **AND ON THE MERITS, NEITHER OPTION SOLVES §1.4:** serialising the lanes makes the two worlds **sequential rather than simultaneous** — it does not make a level-clamped exit and a depth-walked VWAP the same quantity; it confounds the difference with the period instead. **And the pooling risk it would remove is already removed by columns that exist** (the archive carries `source` and `mode`; the learning store is source-keyed; the durable rows are in different stores).
+
+### 13.2 ⛔⛔ A PUBLISHED REFUTATION OF MINE WAS OVER-BROAD — §9.2 IS AMENDED, AND THE ORIGINAL ALARM IS PARTLY REHABILITATED
+
+**§9.2 said: *"A close written by ANY of the six sinks is counted. The kill switch is not blind."*** ✅ **TRUE OF THE SINKS I ENUMERATED — they all write `closed_trades`, and `getRealizedPnlSince` sums `.from(closedTradesTable)`.**
+⛔ **BUT THERE IS A PATH I DID NOT ENUMERATE, AND IT WRITES A DIFFERENT TABLE.** `routes.ts:5054` → `trading-engine.closeTrade:649` → `storage.closeTrade` (`storage.ts:1604+`), which does **`db.update(trades)`** — the **legacy `trades` table**, not `closed_trades`.
+⇒ ⛔⛔ **A CLOSE THROUGH THAT ROUTE IS INVISIBLE TO THE DAILY-LOSS KILL SWITCH.**
+★ **The round-1 reader's alarm was wrong for the reason it gave — it reasoned from the trade-closed EVENT, and the budget reads the database. But a real blindness exists via a different mechanism, and my refutation was scoped to a census I had drawn myself.** ⇒ **NAMING THE POPULATION IS NOT THE SAME AS PROVING IT COMPLETE. I proved the five sinks I looked at were counted; I did not prove there were only five.**
+⇒ ➕ **`#953` ESCALATES: that single live authenticated route now (a) places a REAL market sell, (b) books a `Math.random()` haircut instead of the fill, AND (c) writes a table the kill switch cannot see.** *(It also books the live exit fee at a hardcoded `0.0026` against a Tier-1 taker of 0.80%.)*
+
+### 13.3 ⛔ AND §5.1 OF THIS AUDIT IS FACTUALLY WRONG — CORRECTED
+
+**§5.1 states *"the ratcheted stop is NEVER persisted to the database."*** ✅ True for VTS. ⛔ **FALSE for the active lane:** `active-execution-engine.ts:1756-1758` writes `updateActiveOpenPosition({ stopLoss: decision.newStopPrice.toString() })`.
+⇒ **The §5 ratchet analysis stands — break-even is off, 0 latches in 705 states — but the "never persisted" claim was over-general and is struck.**
+
+### 13.4 ⚠️ P4 — UNPROVEN AND MIS-SCOPED (adopted)
+
+- ✅ **Its "one abstraction" half is ALREADY SATISFIED** — one `DepthSnapshot`, two class-keyed implementations. **§11.3 said so and P4 still asked for it.**
+- ⛔ **Its live half rests on THREE unnamed preconditions, any one of which changes its shape:** **(i) LQ RECALIBRATION** — the xStock LQ is `log10(askDepthUsd+1)×10` calibrated `$10K→40 … $1M→60` on **top-of-book**; summing 20 levels adds ≈**+10 points to every name** and **re-creates the saturation defect the module was forked to remove**. **(ii) THE SMOOTHING WINDOW** — the xStock depth read is a **20-minute median**, explicitly *"so the depth gate doesn't flip on a single jittery tick"*; a live in-memory book has no analogue, and persisting a 20-level ladder means a table whose one-level ancestor already holds ~14.6M rows, through a writer that **drops rows permanently on flush failure**. **(iii) A CHECKSUM** — crypto's book is trustworthy because of CRC verification and resubscribe-on-mismatch; **whether `ws-equities` emits one is unknown**, and without it the shared implementation's desync detector has no input.
+- ⛔⛔ **AND ITS ONLY ACTUATOR IS AN *ENTRY* GATE, INSIDE AN EXIT-PATH DESIGN.** The depth assessors have exactly two call sites, both in the open-depth gate, and the close path states *"Closes are NOT depth-gated (you must always be able to exit)."* ⇒ **a 20-level ladder changes WHICH TRADES OPEN and how they fill — it does NOT, on its own, change which price a stop is compared against.** ★ **That reframes P4 out of the exit-path design and into the entry/selection surface**, and it means **making `min_levels` real silently re-bases the Phase-25 population.**
+
+### 13.5 ✅ P7 — THE FUNNEL IS MORE FEASIBLE THAN I CLAIMED; THE OWNERSHIP RULE IS WRONG
+
+✅ **THE KILL-SWITCH OBJECTION I RAISED IN §12.3 DOES NOT APPLY TO THE FUNNEL — re-derived: `stop()` sets flags and clears intervals; the OBJECTS SURVIVE, and `forceCloseAllOpenPositionsOnStop` calls straight through to the shared `closePosition` today.** The `deleteActiveOpenPosition` sweep is the **post-failure** path, not the flatten path. *(§12.3's point about REFUSAL still stands; it was never a point about the funnel.)*
+⛔ **BOTH MY CENSUSES WERE WRONG IN THE DIRECTION THAT MATTERS:** **eight** active-lane close sinks (not six), plus **two** that destroy the position with no record, **four** in VTS, and **one on a different table** (13.2). And **six** post-signal-birth stop mutations, not three — **the two I missed are the two that PERSIST** (the active-lane DB write, 13.3, and the VTS in-memory maps).
+⛔ **TWO SINKS STRUCTURALLY RESIST A SHARED FUNNEL:** `never_filled` (**no exit occurred** — forcing it through a funnel that stamps an exit price is the fabrication its own exemption comment refuses) and `engine_stop_cleanup` (**no position row survives** for the funnel to re-fetch). **And one would CHANGE BEHAVIOUR if forced through: the manual route prices at a flat 0.05% while the funnel depth-walks** — its own comment claims it *"MUST stay in lockstep with the engine close path"*, and the P&L arithmetic was consolidated while **the fill model was not.**
+⛔ **"EXACTLY ONE OWNER … A COMPILE ERROR" IS WRONG.** Per **storage location** single ownership is achievable and largely already holds. Per **value** it is not: pre-open geometry (AMR), in-flight risk (the ratchet) and order placement (the venue buffer) are **three legitimately different authorities**, and a type cannot make one the owner of the others without deciding which layer loses its authority — **a policy question I stated as a mechanism.**
+➕ **ONE NEW UNFLAGGED ITEM WORTH MORE THAN THE RULE: the AMR recompute is UNCONDITIONAL.** It is guarded on the stop/target existing, **not** on an overlay being present, and the multipliers default via `?? 1` — so **every paper open recomputes `entryPrice − (entryPrice − stopPrice)`, which is not identity in IEEE-754** and can land off a grid the VPG compares with 1e-9 epsilons. **And the active engine does not import the grid-tagging helper, so nothing tags the result.** ⇒ **folds into `B-POST-GRID-MUTATION-CENSUS` (3f.b).**
+
+### 13.6 ⛔ WHERE THE DESIGN ACTUALLY STANDS AFTER THREE ROUNDS
+
+| principle | after 3 rounds |
+|---|---|
+| **P1** price object | ⚠️ **1a stands · 1b WITHDRAWN (reviewed property) · 1c stands, evidence corrected** |
+| **P2** decision names its side | ⚠️ **HYPOTHESIS with a real refutation branch whose threshold is not yet set. Counter-evidence is all xStock; the class split is already ruled.** |
+| **P3** refuse vs substitute | ✅ **rewritten as a static construction rule; terminal-set census is a precondition (3f.b)** |
+| **P4** one real book | ⛔ **UNPROVEN, mis-scoped — belongs to the ENTRY surface, not this design** |
+| **P5** frame types read | ✅ **unattacked and unchanged — the only principle no round has faulted** |
+| **P6** one exit impl | ⛔⛔ **WITHDRAWN. Status quo + a reviewed decision + a stale comment.** Two real items extracted (latch-conditional clamp; open-side geometry divergence) |
+| **P7** one funnel, one owner | ✅ **funnel: DEFENSIBLE and more feasible than I claimed** · ⛔ **ownership: WRONG, it is policy** |
+
+⇒ ★★ **THE HONEST SUMMARY, AND IT IS NOT THE ONE I EXPECTED: OF SEVEN PRINCIPLES, ONE SURVIVES UNTOUCHED (P5), TWO SURVIVE REWRITTEN (P1a/c, P3), TWO ARE HYPOTHESES OR MIS-SCOPED (P2, P4), ONE IS WITHDRAWN (P6), AND ONE IS HALF-RIGHT (P7).**
+⛔⛔ **AND THE PATTERN ACROSS ALL THREE ROUNDS IS ONE THING, NOT SEVEN: I REPEATEDLY PROPOSED FIXING BEHAVIOUR THAT WAS DELIBERATE AND DOCUMENTED — rule 1b, P6, and my own §12.6 item 7.** ★ **Every one of those citations was in a batch COMPLETION REPORT or a code header, not in `RUNNING_ISSUES`. I grepped the ledger each time and called it a provenance read.** ⇒ ✅ **THE CORRECTION THAT MATTERS MORE THAN THE DESIGN: §9.5(b-ii)'s search must include the completion reports and the code headers, because that is where numbered objectives and design properties actually live.**
+⇒ ★ **AND THAT VINDICATES §10.0's VERDICT FROM THE OTHER DIRECTION: so much of what I took for chaos turns out to be recorded, reasoned decisions I had not read. The machinery is in worse shape than a clean design and far better shape than "nobody knows why anything is like this."**
+
+⛔ **LOOP CLOSED AT ROUND 3 (the cap). This goes to Langston as the full round record, disagreements intact — the round count is not evidence, and iterating to agreement selects for persistence rather than truth.**
