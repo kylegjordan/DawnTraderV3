@@ -847,6 +847,43 @@ MSYS2_ARG_CONV_EXCL='*' git show "…:.claude/memory/MEMORY.md"               ->
 
 ---
 
+### #962 OPEN 2026-08-30 (CC-C; round-2 reader, re-derived by me at the ref) — ⛔⛔ A RESTING MAKER SELL IS DECLARED FILLED WHEN THE **MIDPOINT** REACHES THE LIMIT, THEN BOOKED **AT** THE LIMIT WITH SLIPPAGE ZERO — **59% OF xSTOCK MAKER EXITS BOOKED AT A PRICE NO BID EVER REACHED**
+
+**SEVERITY: high. OWNER: CC-C. DISPOSITION: §9.4 (2) — added as an item to `B-EXIT-TRIGGER-FILL-PARITY` (plan row **3b.c**), because it is the OTHER half of that batch's subject and 5 of that batch's own 9-row sample are maker rows.**
+
+**RE-DERIVED:** `active-execution-engine.ts:1507-1508` calls `evaluatePendingMaker({ side:'sell', currentPrice, limit:_exitRestLimit })` — and on xStock `currentPrice` is `_eqTick.price` (`:1230`), **the MIDPOINT.** The log line itself reads *"venue price ${currentPrice} **traded through** the resting exit"* — **treating a mid as a traded price.** Then `:1991` `actualExitPrice = _mLimit` and `:1993` `_exitSlippageOverride = 0` — *"slippage 0 by construction."*
+⇒ ⛔ **A SELL NEEDS A BUYER TO LIFT IT — THE *BID* MUST REACH THE LIMIT. Triggering on the mid fires HALF A SPREAD EARLY, which on an xStock overnight quote averaging 13.8% wide is ~7% early.**
+
+**MEASURED (round-2 reader, using the MAXIMUM bid in a ±15 s window — maximally generous — over all maker `target_hit` closes since 1 July):**
+| class | n | bid reached | **bid NEVER reached** | mean shortfall | max |
+|---|---|---|---|---|---|
+| ⛔ **xstock_spot** | 88 | 36 | ⛔⛔ **52 (59%)** | **4.842%** | **26.559%** |
+| crypto_spot | 151 (75 witnessed) | 37 | 38 (51%) | 0.734% | 11.030% |
+⇒ **The mechanism is CLASS-AGNOSTIC but 6.6× larger on xStock.** `MOH/USD` booked **219.84** against a book of **bid 198.23 / ask 207.00** — **above even the ask.**
+
+⛔⛔ **AND THIS IS MY OWN `EXIT_PATH_MACHINERY_AUDIT` §1.2, WHICH I DEMOTED THIS MORNING.** I searched `P19-B7.2c` (scope + pre-audit + completion report), found **zero** hits for `bid`/`ask`/`midpoint`/`which side` against a positive control of 26 for `maker`, and correctly concluded **nobody ever decided which side it should read.** ⇒ ⛔ **I was right on the PROVENANCE and wrong to stop there: I never measured the CONSEQUENCE. "An undocumented convention" and "59% of maker exits book fills that never happened" are the same fact at two different levels of diligence.**
+★ **rule-24 outcome (2) STILL — a decision is missing, not a defect introduced — but its cost is now measured, and a missing decision with a measured cost is a decision that has to be MADE.**
+
+---
+
+### #961 OPEN 2026-08-30 (CC-C; round-2 reader, re-derived by me at the ref) — ⛔⛔⛔ **THE EXIT FILL WALKS A BOOK OF UNBOUNDED AGE. THE ENTRY REFUSES ONE OLDER THAN 15 SECONDS — THROUGH THE SAME FUNCTION, FIFTEEN HUNDRED LINES APART.**
+
+**SEVERITY: high, and OUTSIDE the 00:15 burst — this fires on ordinary days. OWNER: CC-C. DISPOSITION: §9.4 (1) — FOLD INTO `B-EXIT-TRIGGER-FILL-PARITY` (plan row **3b.c**) as its FIRST item, ahead of the trigger/fill divergence that named the batch.**
+
+**RE-DERIVED, WITH A POSITIVE CONTROL:**
+- **ENTRY** `active-execution-engine.ts:251-253`: `getDepthSnapshot(...)` → **`assessWarmth(snapshot,'asks',config)`** → `if (!warmth.warm) return { pass:false }`. `depth-source.ts:150-152` blocks on `snap.ageMs > config.warmthMaxAgeMs`; live value **`warmth_max_age_ms = 15000`** for `xstock_spot`.
+- **CLOSE** `:1996-2003`: fetches the **same object**, resolves the **same config** — and passes `bookBids: _closeSnap?.bids` **straight into `closeOrder`**, taking only `beyondDepthPenaltyBps` from the config. ⛔ **`assessWarmth` is NEVER CALLED. `ageMs` is computed and DISCARDED.**
+- ✅ **CONTROL: `assessWarmth` has EXACTLY ONE call site repo-wide** (`:252`), plus its import and its definition.
+⚠️ **And the underlying query has no `captured_at` floor at all** (`depth-source.ts:52-57`) — so a burst row with a zero quantity is filtered out and an **arbitrarily older row is returned silently.**
+
+**MEASURED (243 xStock closes since 1 July, reconstructing the row `getDepthSnapshot` would have returned):** p50 **2.32 s** · p90 **11.53 s** · p99 **245 s** · **max 1,554.9 s**. ⛔ **22 of 243 (9.1%) filled on a book OLDER than the 15 s the entry gate would have refused.**
+✅ **The reconstruction is validated: on every taker row `actual_exit_price` equals the reconstructed bid to the cent** — `OMC` 82.13, `DD` 145.00, `MPC` 336.22, `WDAY` 183.21, `PWR` 693.00, `TER` 388.39.
+⛔⛔ **WORST CASE: `OMC/USD`, 2026-08-07, `stop_hit`, booked at 82.13 on a bid captured 1,554.9 seconds — 25.9 MINUTES — earlier.** ★ **The TRIGGER that fired that stop was bound by a ceiling hard-capped at 300 s. The FILL then booked against a book 5× past the trigger's own cap and 104× past the entry gate's.**
+
+⇒ ⭐⭐ **THIS IS BIGGER THAN THE DIVERGENCE THAT NAMED THE BATCH, AND IT IS THE PART THAT IS NOT THE BURST.** `#959` says the two reads take different samples; **the sharper statement is that ONE READ HAS A CEILING, FAILS CLOSED AND IS INSTRUMENTED, AND THE OTHER HAS NONE.**
+
+---
+
 ### #960 OPEN 2026-08-30 (CC-C; a reader's LEAD whose stated mechanism I REFUTED, and the conclusion then survived on a different one) — ⚠️ THE xSTOCK FEED'S SUBSCRIPTION LIST IS **FROZEN AT PROCESS BOOT** WHILE THE TRADING UNIVERSE REFRESHES DAILY
 
 **SEVERITY: medium — mechanism established, CONSEQUENCE NOT. OWNER: CC-C.**
@@ -867,7 +904,9 @@ MSYS2_ARG_CONV_EXCL='*' git show "…:.claude/memory/MEMORY.md"               ->
 
 ### #959 OPEN 2026-08-30 (CC-C; surfaced by the fresh reader attacking the plan draft, re-derived by me at the ref) — ⛔⛔⛔ **THE EXIT *TRIGGER* AND THE EXIT *FILL* READ DIFFERENT PRICES FROM DIFFERENT SAMPLES. ON xSTOCK THEY DISAGREE BY 14% ON AVERAGE, AND STOP-OUTS FILL *BETTER* THAN THEIR OWN STOP.**
 
-**SEVERITY: CRITICAL — this is the mechanism that manufactures the contaminated P&L, and it was absent from my own "complete list" of what is wrong. OWNER: CC-C.**
+**SEVERITY: high (DOWNGRADED from CRITICAL 2026-08-30, same day — see the magnitude correction below). OWNER: CC-C. DISPOSITION: §9.4 (3) — own batch, `B-EXIT-TRIGGER-FILL-PARITY`, placed in `PHASE_19_PLAN` at row **3b.c**, before `F-G-2`.** ⚠️ *The `DISPOSITION:` field was MISSING from the original filing — §9.4 makes it mandatory and the plan was building a step on it.*
+
+⛔⛔ **MAGNITUDE CORRECTED THE SAME DAY: THE 14.038% IS THREE POPULATIONS STACKED, AND DISAGGREGATING IT REMOVES THE HEADLINE.** Burst rows (00:15-00:16): n=5, mean **25.21%**. **NON-burst xStock: n=4, mean 0.068% — a THIRD of the crypto control's 0.209%.** ⇒ ⛔ **Outside the burst there is essentially no divergence, so the magnitude belongs to `#943`/`#958`, NOT to the exit path.** ★ **What survives, and it is real and separable: the TRANSMISSION claim — the divergence is WHY a bad print books a GAIN rather than a loss.** ⚠️ **AND 5 of the 9 rows are MAKER exits that never execute the fill path this entry names (`#962`), and the `+17.16%` figure has n=4, not 9 — rule 29 failed in my own headline table.**
 > **HOME: `B-EXIT-TRIGGER-FILL-PARITY`, owner CC-C, placed in `PHASE_19_PLAN` at row **3b.c** — the slot vacated by the withdrawn `B-BOOK-BBO-DIVERGENCE` — BEFORE `F-G-2` (3c) and alongside the other xStock prerequisites.**
 
 **THE TWO READS ARE DIFFERENT OBJECTS, NOT TWO VIEWS OF ONE:**
