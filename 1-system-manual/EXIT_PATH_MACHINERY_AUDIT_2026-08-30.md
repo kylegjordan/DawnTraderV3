@@ -507,3 +507,114 @@ ACK: {"method":"subscribe","result":{"channel":"book","snapshot":true,"symbol":"
 ✅ **THE CHANNEL EXISTS AND ACCEPTS THE SUBSCRIPTION TODAY, `success:true` on both a liquid and a thin name** ⇒ **`P19_B4b_1_SCOPE.md:76`'s *"if Kraken equities EVER exposes a book channel"* is refuted at the venue, not merely by an old document.**
 ⛔⛔ **BUT ZERO BOOK FRAMES ARRIVED IN 25 SECONDS, AND THAT IS NOT EVIDENCE OF ANYTHING — IT WAS SATURDAY 03:55 UTC AND xSTOCKS ARE CLOSED (24/5, Friday 20:00 ET).** ★ **A silent instrument on a shut market has zero opportunity to speak** (`#661` leg 3). **The May capture observed the 20-level ladder; I have NOT.**
 ⇒ **OWED, AND IT IS A WINDOW WHOSE TIMING IS THE CONTENT: re-run this probe after the Sunday 20:00 ET reopen (2026-08-31T00:00Z) and record the observed level count.** Until then `B-XSTOCK-BOOK-LADDER` carries *"subscription accepted; ladder depth confirmed May, not re-observed"* — **not *"a 20-level ladder is available."***
+
+---
+
+## 10. ⛔ THE CORRECT DESIGN — DRAFT 1, START TO FINISH (Kyle-directed 2026-08-30)
+
+> **Kyle's instruction:** *"come up with the correct design. How should the system be working? … look at what is the correct design from start to finish for this piece of machinery. And then we look at the current state and what needs to be done to get it to the correct state, and that needs to be looked at multiple times so that we don't do a half ass job. … I don't know if that means that this is a huge refactor and build or if this is a ripout and replace."*
+> ⛔⛔ **THIS IS DRAFT 1 AND IS LABELLED AS SUCH DELIBERATELY. It has not been through the fresh-reader loop and Langston has not seen it. It is a proposal to be attacked, not a plan to be executed.**
+> ★ **METHOD NOTE — WHY THE TARGET STATE IS WRITTEN BEFORE THE MIGRATION: §8 established there was never a specification for which price drives a trade. Writing a migration plan first would be building the eleventh answer on top of ten undeclared ones.** The target state must exist as a document before anything is sequenced against it.
+
+### 10.0 ⛔ THE ANSWER TO KYLE'S "REFACTOR OR RIPOUT" QUESTION, STATED FIRST
+
+**NEITHER, AND THE DISTINCTION MATTERS FOR COST.** The audit found four exit designs resident and eight price representations — but **the parts are not individually broken.** The book walker works. The exit evaluator works. The venue price grid works. The depth gate is well-built. What is missing is **a declared contract between them**, which is why every layer invented its own answer (§8.1).
+
+⇒ ★★ **THE WORK IS: DECLARE THE CONTRACT, MAKE IT ENFORCEABLE AT THE TYPE LEVEL, THEN DELETE WHAT THE CONTRACT MAKES UNREACHABLE.** That is a **large refactor with a small ripout inside it** — not a rebuild. **A rebuild would discard working components to solve a specification problem, which is the most expensive possible way to fix an absent document.**
+
+### 10.1 ⛔ PRINCIPLE 1 — A PRICE IS AN OBJECT WITH PROVENANCE, AND A BARE NUMBER MAY NEVER CROSS A BOUNDARY
+
+**TODAY:** prices move as bare `number`s. `fetchFromKrakenRest` returns `cached?.price` — a float with no age — and the caller manufactures `observedAt: Date.now()` (`#951`). `latestEquityTick` stores `{price, tsMs}` with **no source tag at all**, so a reader cannot tell a midpoint from a `last` fallback. Two producers write one cache slot under one `source` tag and the actionability gate reads the tag, not the producer.
+
+**CORRECT:** every price that can reach a decision is a single immutable object carrying, at minimum:
+| field | why |
+|---|---|
+| `value` | — |
+| `side` | ⛔ **`bid` \| `ask` \| `mid` \| `last`** — the field that does not exist today and whose absence is this entire audit |
+| `venue` + `producer` | which socket, which code path — **distinct fields, because §9.1 showed the gate reading the coarser one** |
+| `observedAt` | ⛔ **the venue's timestamp where the venue provides one; otherwise the moment of RECEIPT. NEVER the moment of READ.** |
+| `frameType` | `snapshot` \| `update` — §9.3(d)'s measured crossed books came from not having this |
+| `sessionFlag` | regular / extended hours — stored today, read by nothing, and worth **4.4× the spread** |
+
+⇒ ★★ **THE LAUNDERING DEFECT BECOMES UNCONSTRUCTIBLE, NOT MERELY FIXED.** There is no way to build this object from a cached float without carrying the cached float's own `observedAt`. *(`CLAUDE.md` rule 29's "prefer impossible over intercepted" — a hook is the fallback, not the first choice.)*
+
+### 10.2 ⛔⛔ PRINCIPLE 2 — THE DECISION NAMES THE SIDE IT NEEDS. THIS IS THE WHOLE BATCH.
+
+**TODAY:** every exit decision reads a midpoint (§9.1, independently confirmed: 23 of 23 stamped closes). Nothing anywhere states which side a decision *should* read, because §8.1 found the founding architecture never said.
+
+**CORRECT — a table, because a rule that is a format gets followed and a rule that is a paragraph gets paraphrased:**
+
+| decision | direction | ⇒ side it MUST read |
+|---|---|---|
+| long **stop** trigger | we sell | ⛔ **BID** |
+| long **target** trigger | we sell | ⛔ **BID** |
+| **entry** fill / sizing | we buy | ⛔ **ASK** (walked, see 10.4) |
+| **mark** for display, unrealised P&L, exposure | no trade | ✅ **MID is correct here** |
+| **spread / liquidity** measurement | — | ⛔ **BOTH sides, never the mid** |
+
+⛔ **AND THE CONVERSE IS THE PART THAT IS EASY TO LOSE: THE MIDPOINT IS NOT BANNED. IT IS CORRECT FOR MARKS AND WRONG FOR TRIGGERS.** A design that deletes the midpoint everywhere would break display and P&L, and would be over-correcting from a real finding — the shape `CONDUCT` §9 outcome (2) exists to prevent.
+★ **F-G-2 is the first instalment of this row and only the first.** The table is the contract; F-G-2 implements two of its five lines.
+
+### 10.3 ✅ PRINCIPLE 3 — A PRICE THAT CANNOT BE SOURCED CORRECTLY **REFUSES**. THIS IS ALREADY LAW.
+
+**We do not need to invent this.** Founding invariant **F7** (`bridge/canonical/..._Invariants_...md:149-156`) says it verbatim: *"If no real price is available, **the operation must fail or wait**… `no_reliable_price` is an explicit failure state, **not a fallback**."*
+
+⚠️ **BUT F7 WAS UNSATISFIABLE AS WRITTEN AND THAT IS WHY IT DECAYED** (§8.5): it demanded provenance traceable to four sources while the struct could represent two. **A rule that cannot be complied with gets routed around, and every route around it is individually reasonable.** ⇒ **10.1's object is what makes F7 enforceable for the first time.**
+
+⇒ **CONCRETE CONSEQUENCES:** the rate-limited branch returns `no_reliable_price`, not a laundered cache (`#951`) · a stub or crossed book returns `no_reliable_price`, not a midpoint of nonsense · **an xStock position outside market hours REFUSES EXPLICITLY rather than reaching the same outcome by accident of staleness**, which is what happens today.
+
+### 10.4 ⛔ PRINCIPLE 4 — ONE BOOK ABSTRACTION, REAL ON BOTH ASSET CLASSES
+
+**TODAY:** crypto gets a genuine 10-level ladder with snapshot handling, truncation and checksum verification. xStock gets **one ticker row inflated into a single level**, graded by a gate seeded at `min_levels = 1` — **a gate that cannot fail** (§9.3(c)).
+
+**CORRECT:** both classes subscribe to the venue's `book` channel and expose **one** depth interface. The synthesised ladder is deleted. `min_levels` becomes a real threshold on both.
+⚠️ **HONEST PRECONDITION, NOT ASSUMED: the ws-equities subscription is accepted (probed 2026-08-30), and a 20-level ladder was observed once in May. I have not re-observed it** (§9.5). **If the reopen probe shows the ladder is thin or absent, this principle changes shape — and the design must say so rather than assume the happy case.**
+★ **WHAT SURVIVES EITHER WAY: the depth gate must be capable of returning "insufficient". Today it structurally cannot.**
+
+### 10.5 ⛔ PRINCIPLE 5 — FRAME TYPES ARE READ, NOT DISCARDED
+
+**TODAY:** the equities ingestion never reads the frame type; the crypto adapter does, **and added it after a measured incident** — crossed books of +10.8%, +24.9% and +33% on 2026-08-22 (§9.3(d)).
+**CORRECT:** a `snapshot` replaces state; an `update` merges. **The identical rule on both classes, from one shared implementation** — the doctrine `ASSET_CLASS_ONBOARDING_WORKFLOW` already states: *"share the methods; vary only the DATA — never fork LOGIC."*
+★ **This is the leading candidate cause of the 00:15 bad print (`#943`), and it is unproven for xStock until raw frames are captured** — but the fix pattern already exists in-repo, one asset class over.
+
+### 10.6 ⛔ PRINCIPLE 6 — ONE EXIT DECISION IMPLEMENTATION; THE FILL MODEL IS A DECLARED CHOICE
+
+**TODAY:** four resident designs; a dead fourth limb reading a third price source; and **VTS books the level while the active path depth-walks** — a difference nobody chose, because §8.2 shows VTS is design 1 unchanged and the depth-walk is the later answer.
+
+**CORRECT:**
+1. **ONE exit-decision implementation**, shared. The dead limb is deleted under rule 18 (already placed at plan row 3h.b).
+2. **The lanes may differ in the FILL model — but the difference is DECLARED, ARITHMETIC, AND RECORDED ON EVERY ROW**, so a comparison across lanes can correct for it instead of silently pooling two worlds.
+3. ⛔ **AND THE CLAMP DISAGREEMENT IS RESOLVED IN ONE DIRECTION OR THE OTHER:** the exit evaluator returns a clamped exit price and documents it as *"price to record on the closed trade"*; **VTS honours it and the active engine discards it.** One of those is wrong. **Which one is a decision, not a defect** — `CONDUCT` §9 outcome (2).
+
+### 10.7 ⛔ PRINCIPLE 7 — ONE CLOSE FUNNEL, AND ONE OWNER FOR STOP MUTATION
+
+**TODAY:** six sinks can mark a trade closed; **five never write to the exit-decision archive** ⇒ any population drawn from that archive is biased toward monitor-loop closes. *(✅ The kill switch is NOT affected — it reads the trades table, §9.2.)*
+**TODAY, separately:** at least three sites mutate a stop after the venue price grid has placed it — the trailing ratchet, a 5% buffer sent to the venue, and an overlay recompute — **and all three were found incidentally.**
+
+**CORRECT:** every close goes through one funnel that archives and emits, whatever triggered it. **Every mutation of entry/stop/target has exactly one owner, and mutating one anywhere else is a compile error, not a review catch.** ★ **The census that establishes the full mutation list is already placed (plan row 3f.b) and must land BEFORE this principle can be implemented — you cannot funnel writers you have not enumerated.**
+
+### 10.8 ✅ WHAT THE CORRECT DESIGN DOES **NOT** CHANGE
+
+⛔ **STATED EXPLICITLY, BECAUSE A DESIGN DOCUMENT THAT ONLY LISTS CHANGES READS AS "REPLACE EVERYTHING."**
+- **The venue price grid stays** — new intent, correctly added, and §8.1 shows nothing it replaced.
+- **The exit evaluator's decision logic stays.** Its inputs are wrong; its arithmetic is not.
+- **The crypto book pipeline is the reference implementation, not a problem** — snapshot handling, truncation, checksum. **xStock should converge on it.**
+- **The asset-class divergence is mostly correct and deliberate** (hours, volatility, microstructure, macro inputs, failure modes, sector correlation). ⇒ **only the asymmetries that forked LOGIC while claiming to vary only DATA are in scope: the synthesised book, the archive-as-feed, the frame-type blindness.**
+- **The exploration lane stays.** It is governed, it is supposed to lose money, and nothing here touches it.
+- ⛔ **NO NEW FLOORS, CLAMPS OR THRESHOLDS ARE PROPOSED.** *(Kyle, 2026-08-27: "every time we've instituted floors and ceilings, it hasn't worked out well.")* **Every principle above is about knowing WHICH NUMBER you are holding — none is about constraining what the number may be.**
+
+### 10.9 ⛔ THE GAP TABLE — CURRENT STATE → TARGET, AND WHERE EACH PIECE ALREADY LIVES
+
+| # | principle | current state | already placed as | still unowned |
+|---|---|---|---|---|
+| 1 | price object with provenance | bare floats; forged ages | `#951` → plan **3b.f** | ⛔ **the OBJECT itself — no batch owns it** |
+| 2 | decision names its side | all mids | `F-G-2` → plan **3c** | F-G-2 covers 2 of 5 rows |
+| 3 | refuse rather than substitute | F7 decayed | partially in 3b.f | ⛔ **unowned as a principle** |
+| 4 | one real book | synthesised 1 level | `#949` → plan **3b.d** | reopen probe armed |
+| 5 | frame types read | equities blind | `#943` → plan **3b.b** | ⛔ raw-frame capture unbuilt |
+| 6 | one exit impl | 4 resident, 1 dead | dead limb → **3h.b** | ⛔ **the clamp disagreement is unowned** |
+| 7 | one close funnel, one stop owner | 6 sinks, 3+ mutators | census → **3f.b** | ⛔ **the funnel itself unowned** |
+
+⇒ ★★ **FIVE OF THE SEVEN PRINCIPLES ALREADY HAVE A BATCH DOING PART OF THE WORK. What is missing is not mostly work — it is the CONTRACT they would all be implementing, plus four named gaps.** That is the strongest evidence for 10.0's "large refactor, small ripout" verdict rather than a rebuild.
+
+⛔⛔ **NEXT ON THIS SECTION, AND IT IS NOT OPTIONAL: draft 1 goes through the fresh-reader loop (`workflow-02`) and then to Langston. Kyle asked for it to be "looked at multiple times so that we don't do a half ass job" — a design reviewed once is a design reviewed by its author.**
