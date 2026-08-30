@@ -127,7 +127,7 @@ The `2026-08-26` migration's `COMMENT ON COLUMN closed_trades.exit_ticker_bid` r
 | **P4** | **Split `kraken_rest_engine_fallback` → `_mid`/`_last`** at `active-execution-engine.ts:1309` + `:1332`. ⭐ **Zero plumbing — `ask`/`bid` are in scope at `:1301-1303`.** | FINDING-B |
 | **P5** | **`kraken_rest_poller` DOES NOT SPLIT.** Record the reason **in the union comment**, naming `#951` and the three arms. | FINDING-I, condition 2 |
 | **P6** | **Union comment carries the two things a later reader will otherwise get wrong:** (a) `_mid` records the **KIND** and says **NOTHING** about which BBO — `#952`'s axis is untouched; (b) `kraken_ws_ticker` is a **PREFIX of `kraken_ws_ticker_v1`** ⇒ ⛔ **cohort queries ENUMERATE, never `LIKE`.** | FINDING-H, condition 3 |
-| **P7** | **OBJ-1 — the fill book age.** `let _fillBookAgeMs: number \| null = null` **above** the `if` at `:1982`, assigned from `_closeSnap.ageMs` in the taker branch, read at the persist. ⭐ **The `_witness` at `:2015-2019` is the precedent: placed below both legs deliberately, because the maker leg consults no book.** New column **`exit_fill_book_age_ms`**. | FINDING-E |
+| **P7** | **OBJ-1 — the fill book age.** `let _fillBookAgeMs: number \| null = null` **above** the `if` at `:1982`, assigned from `_closeSnap.ageMs` in the taker branch, read at the persist. ⭐ **The `_witness` at `:2015-2019` is the precedent: placed below both legs deliberately, because the maker leg consults no book.** ⭐⭐ **NEW COLUMN `exit_fill_depth_age_ms` — RENAMED (condition 1): `getDepthSnapshot` returns a `DepthSnapshot`, and on xStock its `ageMs` is a TICKER-SNAP ROW AGE, so `book_age` would assert a book on a class that has none.** ✅ **NOT crypto-only — `#961`'s headline is overwhelmingly xStock (0/26), so a crypto-only column deletes the measurement where it matters most.** ⛔ **BOUND BY FEED AND CLASS IN BOTH HOMES** (schema + `COMMENT ON COLUMN`): crypto = live WS mini-book age; xStock = `xstock_spot_ticker_snap` row age; **not the same quantity, never pooled.** *(`DepthSnapshot.source` is already the discriminator.)* | FINDING-E |
 | **P8** | **COMMENT PASS — four sites plus THREE corrections (E2 added).** ⭐ **`entry_book_age_ms`'s *"at the REAL fill instant"* is corrected to GATE-time (FINDING-E2).** `active-execution-engine.ts:1389`, `:1923-1925`, `shared/schema.ts:1807-1810`, the SQL `COMMENT ON COLUMN` statements. ⛔ **`exit_book_age_ms` gains its INSTANT qualifier (decision-time, vs `entry_book_age_ms`'s fill-time).** ⛔ **`exit_ticker_bid`/`_ask` lose "NOT YET INSTRUMENTED" — 18 rows refute it.** ⚠️ **The "no book for that class" line is TRUE of `exit_book_mid`/`exit_book_age_ms` and only MISLEADING as a class-level claim — it gains a BOUND, not a correction.** | FINDING-E, FINDING-E2, FINDING-F |
 | **P9** | **GOVERNANCE — record the SPLIT EPOCH (deploy sha + UTC) in `SYSTEM_IMPACT_MAP.md` `:317-320`**, and state that a cohort query spanning it must enumerate both old and new members. | condition 3 |
 | **P10** | **VERIFICATION.** OBJ-2: a post-deploy close carries a split member; a forced one-sided book yields `_last`. OBJ-1: coverage **bounded on `closed_at >= 2026-07-15T21:43:55Z`** and excluding **all SIX** non-stamping close paths; **crypto verified by a paired log line at the fill site**, never by reconstruction. | FINDING-H, r6, r3 MATERIAL-D |
@@ -136,6 +136,8 @@ The `2026-08-26` migration's `COMMENT ON COLUMN closed_trades.exit_ticker_bid` r
 | ⭐ **P12** *(added audit r3)* | **Correct the stale count in `EXIT_PATH_MACHINERY_AUDIT_2026-08-30.md:645`** — *"15-member"* → **16**, counted at the ref. *(Mine, 4 days old, cited by this batch.)* | audit r3 |
 
 | ⭐ **P13** *(added audit r4)* | **Correct all SIX stale `file:line` anchors inside the `PriceProducer` union comment** (`:56-60`, `:101-102`). ⛔ **Two carry an explicit *"ref corrected 2026-08-26"* annotation and are wrong anyway — a correction that went stale reads as freshly checked, which is worse than no anchor.** | audit r4 |
+
+| ⭐ **P14** *(added audit r5 — Langston condition 2)* | ⛔⛔ **CORRECT THE WITHDRAWN CLAIM AT ITS TWO REAL HOMES** — `live-pricing-adapter.ts:95-97` and `b-exit-provenance-fence.test.ts:205-208`, both of which still say a new producer *"cannot cause a price to be rejected and a position to be skipped … structurally absent rather than merely guarded."* ⛔ **SHIPS IN THE SAME COMMIT AS `P11`, or the new test contradicts the comment directly above it.** | condition 2, A-CORRECTION 1+4 |
 
 ⛔ **NOTHING IN THIS PLAN IS `UNAUDITED`.**
 
@@ -294,3 +296,48 @@ I wrote: *"A producer member cannot gate, reject, skip or re-price anything."* �
 
 ## ✅ P9 WIDENS — **THE MEMBER NAMES ARE ENUMERATED IN SEVEN GOVERNANCE SURFACES**
 `SYSTEM_MANUAL.md` (2 lines) · `SYSTEM_IMPACT_MAP.md` (1) · `ACTIVE_PATH_FLOW.md` (2) · `PHASE_19_PLAN.md` (2) · `EXIT_PATH_MACHINERY_AUDIT_2026-08-30.md` (6) · `RUNNING_ISSUES.md` · scope/completion docs. **P9 records the split epoch AND updates the enumerations that would otherwise read as complete.**
+
+---
+
+# ✅ AUDIT r5 — **STEP 2 CLEARED BY LANGSTON 2026-08-30T11:00Z, THREE CONDITIONS. ALL THREE APPLIED; TWO CHANGE WHAT GETS BUILT.**
+
+> ⭐ **He re-derived FINDING-A, FINDING-B, A-CORRECTION 5, FINDING-I, FINDING-G, the scope-r5 withdrawal and FINDING-E/E2 himself, at `4fb22d085` — not ruled on reported fact.** **Change-class `non_architecture` STANDS.**
+
+## ⛔⛔ CONDITION 1 — **P7 WAS BUILDING A THIRD COLUMN CARRYING THE EXACT DEFECT `FINDING-E` EXISTS TO END, AND HE IS RIGHT**
+
+**`_closeSnap = getDepthSnapshot(position.symbol, _closeClass)` (`:1997`) — and on xStock `getDepthSnapshot` returns `ageMs` = `EXTRACT(EPOCH FROM (NOW() - captured_at)) * 1000` from `xstock_spot_ticker_snap` (`depth-source.ts:52-55`).**
+⇒ ⛔ **An xStock row after this batch would have read: `entry_book_age_ms` = snap ROW AGE · `exit_book_age_ms` = structural NULL · `exit_fill_book_age_ms` = snap ROW AGE. Three columns, three behaviours, one class — and the new one is THIS BATCH'S OWN PRODUCT, wearing `book_age` in its name on a class with no book.**
+⚠️ **`E-CORRECTION 2` WROTE THE INSTRUCTION ITSELF — *"P8 must bound BOTH columns by FEED and CLASS"* — AND I NEVER CARRIED IT INTO `P7`.** ★ **My own `fix-follows-pointer`: the correction reached `P8` and stopped.**
+
+✅ **RESOLUTION — AND IT IS NEITHER OF THE TWO OPTIONS HE OFFERED, BECAUSE A THIRD ONE FIXES THE NAME AS WELL AS THE COMMENT:**
+⭐⭐ **THE COLUMN IS `exit_fill_depth_age_ms`, NOT `exit_fill_book_age_ms`.**
+- **It is produced by `getDepthSnapshot` returning a `DepthSnapshot`, and `DepthSnapshot.source` is ALREADY the class discriminator (`'crypto_ws_book' | 'xstock_ticker_snap'`, `depth-source.ts:31`).** **The name now matches the object that produces it and asserts nothing about a book.**
+- ⛔ **NOT crypto-only.** **`#961`'s headline is overwhelmingly xStock (0/26 populated), so making it crypto-only DELETES the measurement for the class that needs it most.**
+- ✅ **AND IT IS BOUND BY FEED AND CLASS IN BOTH HOMES** — the `shared/schema.ts` comment AND the `COMMENT ON COLUMN` — each stating: *crypto = live WS mini-book age; xStock = `xstock_spot_ticker_snap` ROW age; they are not the same quantity and must not be pooled.*
+⚠️ **FREE TO RENAME: `exit_fill_book_age_ms` appears nowhere in the tree — it is unimplemented.**
+
+## ⛔⛔ CONDITION 2 — **THE WITHDRAWN CLAIM IS STILL WRITTEN IN BOTH FILES I AM EDITING, AND `P11` LANDS DIRECTLY UNDER ONE OF THEM**
+| site | text still standing |
+|---|---|
+| `live-pricing-adapter.ts:95-97` | *"★ SAFE BY CONSTRUCTION … widening this union cannot reject a price or skip a position. That is design (B)'s defining property, verified at the ref."* |
+| `b-exit-provenance-fence.test.ts:205-208` | *"a new producer cannot cause a price to be rejected and a position to be skipped … structurally absent rather than merely guarded."* |
+
+⛔ **`A-CORRECTION 1` + `A-CORRECTION 4` settle the true statement: the null arm GATES A CACHE WRITE, it is STRUCTURALLY REACHABLE for a future member, and only TODAY'S CALL SITES make it unreachable.** ⇒ ★★ **`P11` EXISTS BECAUSE OF THAT — and its assertion would have landed inside the very `it()` block whose comment tells the next reader the risk is structurally absent.**
+⚠️ **His diagnosis is my own pattern and it is correct: `fix-follows-pointer`. The correction travelled to the anchors (`P13`) and the book-age comments (`P8`) and NOT to the sentence carrying the withdrawn claim.**
+✅ **NEW PLAN ITEM `P14`: correct BOTH sentences to the true, narrower statement — *widening cannot change behaviour THROUGH THE VENUE GATE, which reads `source`; the null arm of `toCachedProducer` IS a producer-dependent branch, unreachable today only because of the call sites, which is why `P11` asserts arm placement.*** ⛔ **`P14` ships in the SAME commit as `P11`, or the test contradicts the comment above it.**
+
+## ✅ CONDITION 3 — **TWO OF MY MEASUREMENTS WERE WRONG. BOTH CONCLUSIONS SURVIVE; BOTH ARE CORRECTED.**
+
+**(a) ⛔ `kraken_rest_engine_fallback` CONTAINS ONE OF THE THREE NEEDLES, NOT TWO.** **Re-run: `kraken_rest` → True · `rest_fallback` → **False** (`rest_engine_fallback` intervenes) · `last_known_good` → False.** ✅ **The hazard is UNCHANGED — `.some()` needs one match — but the count was wrong and I repeated it to him.**
+
+**(b) ⛔ *"None of the five files carries a baselined entry"* IS FALSE.** **`.tsc-baseline.json` carries `server/services/active-execution-engine.ts` → `TS2339` → *"Property 'assetClass' does not exist on type '{}'"*, count 3 — the file `P3`, `P4`, `P7` and `P8` all edit.**
+✅ **THE CONCLUSION HOLDS, FOR THE REAL MECHANISM AND NOT MINE — quoted from the baseline's own `context` field: *"Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any NEW MESSAGE appearing for a (file, code)."*** ⇒ **the entry yields NO HEADROOM: a new message under an existing (file, code) fails.** ⛔ **Under the OLD v1 per-(file, code) COUNT baseline it would NOT have.** ★ **A false premise under a true conclusion is exactly what rule 29 is for.**
+
+## ✅ THE THIRD LEAD OF THE SAME FAMILY — HOMED, AS HE ASKED
+⛔ **`isKrakenVenueSource(source: string)` (`live-pricing-adapter.ts:180`) takes a BARE `string`, and THREE members (`kraken_equities_ws`, `mock`, `entry_seed`) live in BOTH the source and producer unions** ⇒ **a future caller passing a producer would compile and would look plausible.** **`A-CORRECTION 2` named it and gave it NO DISPOSITION.**
+✅ **DISPOSITION: §9.4 (4) — scheduled review at `B-DECIDED-INTENT-INDEX` 3b.g, with the symbol-keying asymmetry and the `isRestFallbackSource` substring test.** ★ **His reason, adopted: *"a lead with no home is the one that goes missing."*** ⛔ **All three need a signature or symbol-form change and are behaviour-adjacent ⇒ OBJ-3 forbids them here.**
+
+## ⛔⛔ AND HE CORRECTED `#964`'s OWN FIX — **A BYTE COUNT IS A WEAK CHECK, AND THIS DOCUMENT PROVED IT**
+**My staged copy matched at 39,956 bytes; the ref reads 39,660. Same 296 lines, CRLF against LF, IDENTICAL CONTENT.**
+⇒ ⭐⭐ **A BYTE COUNT THAT MATCHES CAN STILL BE THE WRONG ARTIFACT, AND ONE THAT DIFFERS CAN STILL BE THE RIGHT ONE.** ✅ **THE CHECK THAT SETTLES IT IS THE SHA OF THE LF-NORMALISED BODY AGAINST THE REF — quote it when staging, and he clears provenance in one command instead of inferring it.**
+✅ **`#964` deliverable (b) is REWRITTEN: not "verify the byte count" but "quote the sha of the LF-normalised body, and name the ref it matches."**
