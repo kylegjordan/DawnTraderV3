@@ -640,8 +640,14 @@ export async function collectAdaptiveBatch(
   // ⛔ WHY *HERE* AND NOWHERE ELSE — this is the ONE point where the batch is FINAL and
   // UNCONSUMED. Earlier is unsafe: the ticker/pairInfo join at :600 keys on the RAW wsname,
   // and the refill dedupe at :611 compares `usedSymbols` against `allPairs` in RAW form, so
-  // normalising above either breaks the join or silently admits duplicates. Later is worse:
-  // it would mean N call-site edits, i.e. a second convention to keep in step (#641).
+  // normalising above either breaks the join or silently admits duplicates.
+  // ⛔ AND THE HONEST ARGUMENT FOR *NOT* GOING LATER — my first version of this comment said
+  //   "later would mean N call-site edits", WHICH IS FALSE and shipped as such for one commit.
+  //   `kraken.ts:296` hands the string to Kraken VERBATIM with no resolver, so ONE edit there
+  //   would fix every caller of getOHLCData/getPairHistoryDays. The real reason to fix HERE is
+  //   that a venue-boundary fix reaches ONLY the venue call: it would NOT repair the membership
+  //   and archive legs above (`poolSymbols`, the stablecoin regex, `benchmarkSet`,
+  //   `capturePreFilterReject`, `evaluatedSymbols`), which never touch `kraken.ts:296`.
   //
   // ⛔ `toCanonical`, NOT `normalizeToInternalSymbol` — AND THE DIFFERENCE IS DOGECOIN.
   // The resolver's slashed branch (kraken-symbol-resolver.ts:94-99) short-circuits on a
@@ -650,9 +656,22 @@ export async function collectAdaptiveBatch(
   // That resolver is a 🔒 LOCKED MODULE and its consolidation is homed to Phase 20 (#229),
   // so it is not this batch's to edit.
   //
-  // ✅ BLAST RADIUS, MEASURED NOT ASSUMED: `toCanonical`'s base table changes only XBT and
-  // XDG; XLM/XRP/XTZ are identity entries, and its quote entries are Z-prefixed forms that
-  // never appear in a wsname. The raw form stays recoverable at `pair.pairInfo.wsname`.
+  // ⛔ BLAST RADIUS — 56 WSNAMES, NOT 26, AND MY FIRST VERSION OF THIS COMMENT WAS WRONG AT
+  // THE LINE (Langston, Step 4). `toCanonical` applies ONE map to BOTH positions:
+  //   `krakenToStandard[base] || base`  AND  `krakenToStandard[quote] || quote`  (:121-122)
+  // The `// Base currencies` / `// Quote currencies` headings in that table are COMMENTS, not
+  // structure — so XBT maps in the QUOTE slot too. Census of the live AssetPairs payload
+  // (1,437 wsnames): 26 base-side + 31 quote-side, 1 overlap = 56 changed.
+  // ⇒ THE 31 ARE THE BTC-QUOTED PAIRS, `AAVE/XBT … ZRX/XBT`, AND THEY FAIL CLOSED TODAY EXACTLY
+  //   AS `XBT/USD` DOES — venue-probed: `ADA/XBT` -> 0 candles / `EQuery`, `ADA/BTC` -> 721.
+  //   After this line they resolve and become eligible for the survivor set FOR THE FIRST TIME.
+  // ⚠️ THAT IS A REAL WIDENING, NOT A SIDE-EFFECT: nothing has yet asked whether sizing,
+  //   friction, Net Expectancy or the guardrails are denominated correctly for a NON-FIAT
+  //   quote. Homed as its own item — see the change list. Excluding the quote slot is NOT the
+  //   answer: it would re-introduce a venue-rejecting form.
+  // ⛔ AND "the raw form stays recoverable at `pair.pairInfo.wsname`" WAS ALSO FALSE — `wsname`
+  //   is undefined for exactly the entries that fall back to the REST key, which is precisely
+  //   when it would be needed. The guard above makes it moot: those entries are not touched.
   // ⛔⛔ SLASHED-ONLY GUARD — ADDED AFTER A SECOND READER FOUND MY FIRST VERSION UNSAFE.
   // `:564` is `pairsObj[pairName]?.wsname || pairName`, and `wsname` is OPTIONAL
   // (`kraken-pair-metadata-service.ts:15`). When it is absent `symbol` is the COMPACT REST key

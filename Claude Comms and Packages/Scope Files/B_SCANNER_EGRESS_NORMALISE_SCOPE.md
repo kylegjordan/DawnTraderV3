@@ -161,6 +161,7 @@ const poolSymbols = new Set(activeFilterPool.getSymbolsRaw(mode));      // INTER
 ⚠️ **CONTROL, and it keeps me honest: 11 of the 18 XBT rejections are VOLUME, exactly like the ETH and SOL controls. Only 7 are history. So this is NOT a blanket symbol failure** — the history site is implicated, the whole path is not.
 
 ### 8.3 ⛔ DOGECOIN'S CAUSE IS **NOT** THE SAME BUG, AND IT IS EARLIER
+> ⛔⛔ **THIS SECTION IS REFUTED BY MEASUREMENT — SEE §13.2. Dogecoin IS evaluated, 25,294 times in three days. Read §13.2, not this.**
 **It never reaches evaluation at all.** ⇒ **the egress sites cannot explain it — a symbol never passed to them cannot be mangled by them.** Candidates, to eliminate rather than assume: absent from the venue universe fetch · dropped in the `pairInfo` join (`:577-586` already instruments a *"SHORT UNIVERSE / join-drops"* warning) · excluded by the **adaptive batch selection** · in the failure-tracker **cooldown blacklist** (`adaptive-scan-manager.ts:48-118`).
 ⚠️ **The cooldown lead is UNRESOLVED, not cleared: I searched 1,500 log lines for `FailureTracker` and found ZERO — but the CONTROL is the same string, so a zero cannot distinguish *"not firing"* from *"not logged in this window."* Silence is not evidence (`#453`).**
 
@@ -316,6 +317,7 @@ raw wsname sent → **Kraken rejects it** → `getOHLCData` returns 0 candles �
 ✅ **THE IMPLEMENTATION AT `0b18ee530` STANDS UNCHANGED. What changes is that it now rests on cited intent rather than on convenience.**
 
 ### 12.4 ⛔⛔ AND THE READ PROMOTED A SIDE-EFFECT INTO AN INVARIANT REPAIR
+> ⛔⛔ **WITHDRAWN — THE CITATION IS TO A DEAD LEG. SEE §13.1. The `trades` table holds ZERO rows, so that check never matches for ANY symbol. Do not carry this into the completion report.**
 **`bridge/canonical/DawnTrader_System_Invariants_Design_Guarantees.md:30` — *"**INVARIANT T2:** Maximum one open position per symbol at any time. A new trade for symbol X cannot be opened if symbol X already has an open position."***
 **The enforcing check is `activeTradeSymbols.has(pair.symbol)` — a RAW venue name tested against a set built from the `trades.symbol` DB column, which is internal form.**
 ⇒ ⛔⛔ **FOR `XBT` AND `XDG`, THAT TEST CAN NEVER MATCH ⇒ INVARIANT T2 IS CURRENTLY UNENFORCEABLE FOR BITCOIN AND DOGECOIN.**
@@ -324,3 +326,50 @@ raw wsname sent → **Kraken rejects it** → `getOHLCData` returns 0 candles �
 ### 12.5 ⚠️ ONE NEW FINDING THE READ SURFACED — RECORDED, NOT FIXED HERE
 **The designated path for crypto RAW forms is `toCanonical`, whose non-slashed branch is the one the third reader showed can MANGLE (`XTZUSD → T/USD`) or THROW.** ⇒ **the recommended handler for raw forms is unsafe on exactly the raw forms it is recommended for.**
 ✅ **This batch is unaffected — the slashed-only guard at `0b18ee530` never enters that branch.** **§9.4 DISPOSITION: added to `#229`'s consolidation, which already owns all four modules.**
+
+
+---
+
+# 13. ⛔⛔ STEP-4 CORRECTIONS — **TWO OF THIS DOCUMENT'S CLAIMS ARE MEASURABLY FALSE**
+
+> **Langston, at the ref. Appended, not rewritten — the false versions stay visible above with a pointer here, because a claim that is silently deleted teaches nobody and a reader of the old text would never know it moved.**
+
+## 13.1 ⛔⛔ §12.4's INVARIANT-T2 ARGUMENT IS **WITHDRAWN** — IT RESTS ON A TABLE THAT IS EMPTY
+
+`getActiveTrades` reads the **`trades`** table (`storage.ts:1535-1543`). **MEASURED on staging: `trades` = 0 rows** — against the positive controls **`active_open_positions` = 2** and **`closed_trades` = 665**, so the instrument can see rows where rows exist.
+⇒ ⛔ **`activeTradeSymbols` is EMPTY FOR EVERY SYMBOL.** The check `activeTradeSymbols.has(pair.symbol)` fails to match for Ethereum exactly as it fails for Bitcoin. **NO SYMBOL-FORM FIX REPAIRS IT** — and there is no Bitcoin open position anywhere, so *"a Bitcoin pair with an open position has been re-evaluated every cycle"* describes nothing that has happened.
+⛔⛔ **AND I GAVE THIS TO KYLE AS THE BATCH'S HEADLINE JUSTIFICATION — an invariant repair, *"materially stronger than two coins do not trade."* IT WAS NOT. Withdrawn to him directly, not only here.**
+⚠️ **THE THIRD READER HAD FLAGGED IT and I did not act:** it wrote that this dedupe leg *"is fed by the legacy path and test endpoints only — worth establishing before drawing conclusions from it."* **Being told and not checking is worse than not being told.**
+✅ **THE PLACEMENT CONCLUSION SURVIVES ON OTHER LEGS — the ones Langston verified independently:** `poolSymbols` (keyed on internal form from `fx5-scanner.ts:1123`), the stablecoin regex, `benchmarkSet`, the `capturePreFilterReject` values, and `evaluatedSymbols`. **None of those is reachable from a venue-boundary fix at `kraken.ts:296`.**
+➕ **AND THE REAL FINDING IS BIGGER THAN THIS BATCH: THE SCANNER'S ALREADY-ACTIVE DEDUPE READS A TABLE THE ACTIVE PATH DOES NOT WRITE.** **§9.4 DISPOSITION: its own item — `B-SCANNER-DEDUPE-DEAD-TABLE`, owner CC-C, `RUNNING_ISSUES` #965, placed in `PHASE_19_PLAN.md` at row 3b.j, after 3b.i.**
+
+## 13.2 ⭐⭐ §8.3 IS REFUTED — **DOGECOIN IS EVALUATED 25,294 TIMES IN THREE DAYS**
+
+**Population: `signal_eval_archive`, `captured_at > NOW() - '3 days'`, counted by symbol prefix.**
+| prefix | rows | |
+|---|---:|---|
+| **`XDG%`** | **25,294** | ⇒ **Dogecoin reaches evaluation constantly** |
+| `DOGE%` | **0** | ⇒ **the archive holds the RAW form ONLY — exactly what an un-normalised scanner writes** |
+| `XBT%` *(control)* | 167,215 | |
+| `ETH%` *(control)* | 208,584 | |
+
+⇒ ⛔ **MY *"0 of 362 ⇒ Dogecoin never reaches the scanner"* WAS A ONE-ROTATION WINDOW READ AS A UNIVERSE.** `BATCH_SIZE` is 300 against ~660 tradable pairs with rotation, so any single batch misses more than half the universe **and its absence is uninformative.**
+⇒ ⭐ **BITCOIN AND DOGECOIN ARE THE *SAME* FAILURE — both reach the venue call carrying a wsname the venue rejects.** **`OBJ-1a`/`OBJ-1b` COLLAPSE BACK INTO ONE OBJECTIVE and the single change covers both.**
+✅ **AND THIS IS A STRONGER RESULT THAN THE SPLIT WAS:** one cause, one fix, one observation to verify.
+⚠️ **`OBJ-1b`'s instrument is corrected with it — Langston's *"use the universe (`allSymbols` at `market-scanner.ts:589`), not the batch"* is right about the batch being the wrong denominator; the archive is better still, because it is three days deep instead of one cycle.**
+
+## 13.3 ⛔ THE BLAST RADIUS IS **56**, AND `OBJ-6`'s CONTROLS COULD NOT HAVE SEEN THE OTHER 31
+
+**`toCanonical` applies `krakenToStandard` to BOTH slots** (`symbol-canonicalizer.ts:121-122`). **Census of the live payload (1,437 wsnames): 26 base + 31 quote − 1 overlap = 56.** My *"the quote entries are Z-prefixed forms that never appear in a wsname"* is **FALSE** — `XBT` is a quote in 31 pairs.
+**Venue-probed: `ADA/XBT` → 0 candles / `EQuery` · `ADA/BTC` → 721.** ⇒ **the 31 BTC-quoted pairs `AAVE/XBT … ZRX/XBT` fail closed today and PASS after this — a third behaviour delta, and the largest.**
+✅ **`OBJ-6` AMENDED:** the four existing controls are **all `/USD`** and **structurally cannot observe the quote-slot class.** **`ADA/XBT` is added to the observed set.**
+⛔ **AND THE OPEN QUESTION THIS RAISES IS NOT THIS BATCH'S:** nothing here checked whether sizing, friction, Net Expectancy or the guardrails are denominated correctly for a **non-fiat quote**. **§9.4 DISPOSITION: its own item — `B-NONFIAT-QUOTE-DENOMINATION`, owner CC-C, `RUNNING_ISSUES` #966, placed in `PHASE_19_PLAN.md` at row 5.a, after row 5.** ⛔ **Excluding the quote slot is NOT the alternative — it would re-emit a venue-rejecting form.**
+
+## 13.4 ✅ §3.4's "ONE BEHAVIOUR DELTA" IS WRONG — **THERE ARE FOUR**
+| # | delta | direction |
+|---|---|---|
+| **1** | `XBT`/`XDG` pass the history filter instead of failing closed | ✅ **the intended repair** |
+| **2** | `:658`'s benchmark list starts matching on the internal form | ⚠️ **repair, but it changes which pairs are benchmarks** |
+| **3** | ⭐ **31 BTC-quoted pairs become venue-resolvable for the first time** | ⚠️ **the largest, and unasked** |
+| **4** | `setCostMetrics` (`:762`) re-keys the cost cache to internal form | ✅ **repair — every reader already looks up internal** |
+➕ **AND A FIFTH THAT IS A CONSEQUENCE OF (1): with the prefetch now resolving, Bitcoin enters `dbsCache`, so it can route onto a different filter profile than it does today.** ⚠️ **That is correct behaviour arriving for the first time — but it IS new behaviour, and calling it "one delta" hid it.**

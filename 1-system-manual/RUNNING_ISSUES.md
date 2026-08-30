@@ -5599,3 +5599,35 @@ I recorded it as *"a depth-10 mid and a BBO mid are different statistics; on a t
 
 ⛔ **DISPOSITION 5 — NO WORK, AND THE CITATION THAT DISSOLVES IT:** the perp classes **are not active-traded** (they are capture-only), and the narrowing is **the funnel's own pre-existing scope**, not something F-G-1 introduced. **Widening `FunnelAssetClass` to admit perps would be a change to the funnel's contract made inside a rounding batch, on a class that cannot trade** — scope creep dressed as completeness. **Recorded so a future reader finds the answer rather than the question.** ⚠️ **Re-open this the moment a perp class becomes active-traded.**
 
+
+
+---
+
+### #965 — THE SCANNER'S "ALREADY HAS AN OPEN POSITION" CHECK READS A TABLE NOTHING WRITES
+
+**OPEN** · surfaced by Langston at `B-SCANNER-EGRESS-NORMALISE` Step 4, 2026-08-30 · owner **CC-C** · **HOME: `B-SCANNER-DEDUPE-DEAD-TABLE`, owner CC-C, placed in `PHASE_19_PLAN.md` at row 3b.j, after 3b.i.**
+
+`market-scanner.ts:773`/`:782` skip a pair when `activeTradeSymbols.has(pair.symbol)`. That set is built from `getActiveTrades`, which selects from the **`trades`** table (`storage.ts:1535-1543`).
+**MEASURED on staging 2026-08-30 — `trades` = 0 rows.** Positive controls in the same query: **`active_open_positions` = 2**, **`closed_trades` = 665** ⇒ the instrument sees rows where rows exist, so the zero is real and not an empty read.
+⇒ **`activeTradeSymbols` is empty for EVERY symbol. The check has never excluded anything**, and the `already_active` counter beside it reports a constant 0 — which is separately confirmed by `#5415` (`routes.ts:7748-7758` never surfaces it).
+
+⛔ **HOW THIS ENTERED THE RECORD, because that is the part worth keeping:** I cited this check as the enforcer of **INVARIANT T2** (`bridge/canonical/DawnTrader_System_Invariants_Design_Guarantees.md:30` — *"Maximum one open position per symbol at any time"*) and told Kyle the egress batch REPAIRED a founding invariant. **It does not.** The check is dead for Ethereum exactly as it is dead for Bitcoin, so no symbol-form change touches it.
+⚠️ **A second reader had flagged this leg as *"fed by the legacy path and test endpoints only — worth establishing before drawing conclusions from it"* and I drew the conclusion anyway.**
+
+⭐ **THE FIRST JOB OF THE BATCH IS NOT THE FIX — IT IS TO FIND WHERE T2 IS *ACTUALLY* ENFORCED.** The execution engine is the likely home. **An invariant enforced in one place and dead-checked in another is not the same finding as an unenforced invariant, and only one of them is an emergency.**
+
+**MISTAKE: silence-not-evidence [B-SCANNER-EGRESS-NORMALISE] — read an empty set as "no matching symbols" without ever asking whether the set could contain anything.**
+
+---
+
+### #966 — 31 BTC-QUOTED PAIRS BECOME TRADABLE AS A SIDE EFFECT, AND OUR MONEY ARITHMETIC ASSUMES A FIAT QUOTE
+
+**OPEN** · surfaced by Langston at `B-SCANNER-EGRESS-NORMALISE` Step 4, 2026-08-30 · owner **CC-C** · **HOME: `B-NONFIAT-QUOTE-DENOMINATION`, owner CC-C, placed in `PHASE_19_PLAN.md` at row 5.a, immediately after row 5.**
+
+`toCanonical` applies `krakenToStandard` to **both** slots of a slashed pair (`symbol-canonicalizer.ts:121-122`) — the `// Base currencies` / `// Quote currencies` headings in that table are comments, not structure.
+**Census of the live Kraken AssetPairs payload (1,437 wsnames): 26 base-side + 31 quote-side − 1 overlap = 56 wsnames change form.** The 31 are the BTC-quoted pairs `AAVE/XBT … ZRX/XBT`.
+**Venue-probed: `ADA/XBT` → 0 candles / `EQuery:Unknown asset pair` · `ADA/BTC` → 721 candles.** ⇒ **they fail closed today exactly as `XBT/USD` does, and they pass afterwards.**
+
+⛔ **THE ISSUE IS NOT THE SYMBOL FORM — IT IS THE DENOMINATION.** Position sizing, the friction model, Net Expectancy and the guardrails are all written against a quote unit that does not itself move. **A BTC-quoted position is two exposures wearing one price:** the instrument can rise against Bitcoin while the position loses value in dollars, and every dollar-denominated limit we enforce is then measuring the wrong thing.
+⛔ **EXCLUDING THE QUOTE SLOT IS NOT THE FIX** — it would re-emit a form the venue rejects. **If these pairs are to be excluded, they are excluded at ADMISSION with the reason recorded, never by mangling their name.**
+⚠️ **This is why row 5 is not finished when it deploys:** the change is correct and the population it widens has never been assessed.

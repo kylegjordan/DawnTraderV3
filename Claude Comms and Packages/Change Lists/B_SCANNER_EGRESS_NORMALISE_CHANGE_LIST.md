@@ -90,3 +90,35 @@
 - **The designated handler for crypto RAW forms (`toCanonical`) is unsafe on raw forms** (§8.1). **Filed to `#229`.** This batch avoids it via the guard.
 - **Two resolvers now compose** — `normalizeToInternalSymbol(toCanonical(x))` at `fx5-scanner.ts:990` — different tables, different quote handling, **untested composition.** `#229`.
 - ⛔ **NO TEST exercises this function's symbol form.** The suite does not guard the change ⇒ **all the weight is on `OBJ-6`'s live controls.**
+
+
+---
+
+## 9. ⛔⛔ STEP-4 CHANGES-NEEDED APPLIED — **TWO OF MY CLAIMS WERE MEASURABLY FALSE, ONE OF THEM INSIDE THE SHIPPED COMMENT**
+
+> ✅ **The executable statement is APPROVED as written; the guard is sound. Everything below is the RECORD, which I called the substance of the diff — so it matters more, not less.**
+
+### 9.1 ⛔ BLOCKER-1 — **THE BLAST RADIUS IS 56 WSNAMES, NOT 26, AND MY EXCLUSION ARGUMENT WAS WRONG AT THE LINE**
+**`toCanonical` applies ONE MAP TO BOTH POSITIONS** (`symbol-canonicalizer.ts:121-122`): `krakenToStandard[base] || base` **and** `krakenToStandard[quote] || quote`. **The `// Base currencies` / `// Quote currencies` headings are COMMENTS, NOT STRUCTURE** ⇒ **`XBT` maps in the QUOTE slot too.**
+**Census of the live AssetPairs payload (1,437 wsnames): 26 base-side + 31 quote-side, 1 overlap = 56 changed.**
+⇒ ⛔ **MY SENTENCE *"its quote entries are Z-prefixed forms that never appear in a wsname"* IS FALSE AND SHIPPED IN THE CODE COMMENT. Deleted from both homes.**
+⭐ **AND THE 31 ARE A THIRD BEHAVIOUR DELTA — THE LARGEST.** They are the BTC-quoted pairs `AAVE/XBT … ZRX/XBT`. **Venue-probed by Langston: `ADA/XBT` → 0 candles / `EQuery`; `ADA/BTC` → 721. Same for LINK, ETH, SOL.** ⇒ **they fail closed TODAY exactly as `XBT/USD` does, and after this they PASS — 31 BTC-quoted instruments become eligible for the survivor set FOR THE FIRST TIME.**
+⛔⛔ **AND NOTHING IN THIS BATCH ASKED WHETHER SIZING, FRICTION, NET EXPECTANCY OR THE GUARDRAILS ARE DENOMINATED CORRECTLY FOR A NON-FIAT QUOTE.** ⇒ **§9.4 DISPOSITION: its own item — `B-NONFIAT-QUOTE-DENOMINATION`, owner CC-C, placed in `PHASE_19_PLAN.md` after row 5.** ⛔ **Excluding the quote slot is NOT the fix — it would re-introduce a venue-rejecting form.**
+✅ **`OBJ-6` AMENDED: the four controls are ALL `/USD` and STRUCTURALLY CANNOT SEE THIS CLASS. One `/XBT` pair is added to the observed set.**
+
+### 9.2 ⛔ BLOCKER-2 — **THE `T2` ARGUMENT IS BUILT ON A DEAD LEG. WITHDRAWN.**
+`getActiveTrades` reads the **`trades`** table (`storage.ts:1535-1543`). **MEASURED on staging: `trades` = 0 rows, against `active_open_positions` = 2 and `closed_trades` = 665 as the positive control.**
+⇒ ⛔ **`activeTradeSymbols` IS EMPTY FOR EVERY SYMBOL, NOT JUST `XBT`/`XDG` — NO SYMBOL-FORM FIX REPAIRS IT.** ⇒ **my *"a Bitcoin pair with an open position has been re-evaluated every cycle"* IS UNSUPPORTED: there is no Bitcoin open position anywhere.**
+⛔⛔ **I TOLD KYLE THIS WAS THE BATCH'S STRONGEST JUSTIFICATION — AN INVARIANT REPAIR. IT IS NOT. WITHDRAWN, AND CORRECTED TO HIM.**
+⚠️ **AND THE THIRD READER HAD WARNED ME:** it wrote that this dedupe leg *"is fed by the legacy path and test endpoints only — worth establishing before drawing conclusions from it."* **I drew the conclusion anyway. Being told and not acting is worse than not being told.**
+✅ **THE PLACEMENT CONCLUSION SURVIVES on the legs Langston DID verify — `poolSymbols` (internal-form keys), the stablecoin regex, `benchmarkSet`, the `capturePreFilterReject` values and `evaluatedSymbols` — none of which `kraken.ts:296` reaches.** ⛔ **§8.2 must NOT reach the completion report as written.**
+➕ **AND WHAT BLOCKER-2 SURFACED IS BIGGER THAN THIS BATCH: the scanner's already-active leg reads a table the ACTIVE PATH DOES NOT WRITE.** Langston is not folding it in; it needs its own home.
+
+### 9.3 ⛔ THE PLACEMENT CLAIM IN THE SHIPPED COMMENT — CORRECTED IN CODE, NOT JUST IN THE DISPATCH
+The comment still said *"Later is worse: it would mean N call-site edits."* **I retracted that in the dispatch and left the code carrying the false version.** ✅ **Replaced with the honest argument: one edit at `kraken.ts:296` WOULD fix every venue caller; the reason to fix HERE is that it would NOT repair the membership and archive legs, which never reach that line.**
+
+### 9.4 ⭐⭐ AND `OBJ-1b`'s PREMISE IS SETTLED — **DOGECOIN IS EVALUATED 25,294 TIMES IN THREE DAYS**
+**Langston proposed testing the UNIVERSE rather than the batch. Better: the ARCHIVE already answers it.** **`signal_eval_archive`, 3 days: `XDG%` = 25,294 rows · `DOGE%` = 0 · controls `XBT%` = 167,215, `ETH%` = 208,584.**
+⇒ ✅ **DOGECOIN REACHES EVALUATION CONSTANTLY. My "0 of 362 ⇒ not reaching the scanner" was a one-rotation window, and the truth is the opposite.**
+⇒ ⭐ **SO BITCOIN AND DOGECOIN ARE THE *SAME* FAILURE, NOT TWO — the scope's §8.3 "Dogecoin's cause is NOT the same bug and it is earlier" is WITHDRAWN.** **`OBJ-1a`/`OBJ-1b` collapse back into one objective, and the fix covers both.**
+⚠️ **AND THE ZERO `DOGE%` ROWS IS THE CORROBORATION:** the archive holds the RAW form only, never the internal one — exactly what a scanner writing un-normalised symbols produces.
