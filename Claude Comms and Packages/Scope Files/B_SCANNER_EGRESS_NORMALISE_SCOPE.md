@@ -136,3 +136,35 @@ const poolSymbols = new Set(activeFilterPool.getSymbolsRaw(mode));      // INTER
 ### 7.4 ✅ WHAT THIS DOES TO THE RISK — IT COLLAPSES IT
 **The 58-call-site blast radius was the right thing to worry about and the wrong denominator.** ⇒ **For 129 of 130 mapped pairs `normalizeInternal` returns a BYTE-IDENTICAL answer before and after.** **Only Dogecoin moves.**
 ⛔ **`OBJ-6`'s four controls (XRP, SUI, LINK, ADA) are all in the unchanged 129** — so the control set is now provably conservative rather than hopefully so, and **any control regression would indicate a defect-A error, not a defect-B one.** That is a sharper instrument than I had before.
+
+
+---
+
+## 8. ⛔⛔ MEASURED AT THE LIVE RUNTIME — **THE TWO COINS FAIL AT DIFFERENT PLACES, AND `#906`'s PREMISE IS STALE**
+
+**Instrument: 3,000 lines of live PM2 log, 2026-08-30T14:15Z. 362 DISTINCT pairs evaluated, 328 rejections.** *(This is what the scanner is doing NOW — not what the ledger recorded on 08-25.)*
+
+| coin | reaches evaluation? | outcome |
+|---|---|---|
+| ⭐ **BITCOIN — `XBT/USD`** | ✅ **YES. IT IS EVALUATED.** *(18 XBT-base pairs seen: `XBT/USD`, `/EUR`, `/GBP`, `/JPY`, `/CHF`, `/CAD`, `/AUD`, `/USDT`, `/USDC`, `/USDQ`, `/USDR`, `/EURC`, `/EUROP`, `/DAI`, `/FIDD`, `/PYUSD`, `/AUSD`, `/USD1`)* | ⛔ **`REJECTED XBT/USD: history failed`** |
+| ⭐ **DOGECOIN — `XDG/` or `DOGE/`** | ⛔⛔ **NO. ZERO APPEARANCES IN 362 DISTINCT EVALUATED PAIRS.** | **never reaches a rejection either — it is not in the batch at all** |
+| `BTC/` base | ⛔ never appears | consistent with the scanner seeing **raw venue names only** |
+
+### 8.1 ⛔ `#906`'s PREMISE IS OUT OF DATE — SAID PLAINLY
+`#906` records *"`XBT/USD` and `BTC/USD` produce ZERO rows. **Not rejected — never evaluated.**"* ⇒ ⛔ **`XBT/USD` IS EVALUATED TODAY AND IS REJECTED.** Something moved between 08-25 and now. **A batch built on "never evaluated" would have been aimed at the wrong hop.**
+
+### 8.2 ⭐⭐ BITCOIN'S CAUSE — AND THE ARGUMENT IS ABOUT THE *WORLD*, NOT THE CODE
+**`REJECTED XBT/USD: history failed`** comes from `passesHistoryFilter` (`market-scanner.ts:368-381`), which calls `krakenService.getPairHistoryDays(pair, mode)` → `getOHLCData(pair, 1440)` and, per its own comment, *"If we cannot determine history (null), **be conservative & fail**."*
+⇒ ★★ **BITCOIN HAS THE LONGEST PRICE HISTORY OF ANY CRYPTO ASSET ON KRAKEN. A "not enough history" verdict for `XBT/USD` CANNOT BE A TRUE PROPERTY OF THE WORLD.** ⇒ **it is a LOOKUP returning null and a filter failing closed on null** — and the lookup is handed `pair.symbol`, the **raw venue name**, at `:831`/`:994`.
+✅ **THIS IS DEFECT A, AT ONE SPECIFIC SITE, AND THE BATCH ALREADY COVERS IT.**
+⚠️ **NOT YET PROVEN, and I am not asserting it: that `getOHLCData` cannot serve `XBT/USD`.** The discriminating test is direct — call it with the raw form and the internal form and compare. **That is the first task of Step 2, not a conclusion here.**
+⚠️ **CONTROL, and it keeps me honest: 11 of the 18 XBT rejections are VOLUME, exactly like the ETH and SOL controls. Only 7 are history. So this is NOT a blanket symbol failure** — the history site is implicated, the whole path is not.
+
+### 8.3 ⛔ DOGECOIN'S CAUSE IS **NOT** THE SAME BUG, AND IT IS EARLIER
+**It never reaches evaluation at all.** ⇒ **the egress sites cannot explain it — a symbol never passed to them cannot be mangled by them.** Candidates, to eliminate rather than assume: absent from the venue universe fetch · dropped in the `pairInfo` join (`:577-586` already instruments a *"SHORT UNIVERSE / join-drops"* warning) · excluded by the **adaptive batch selection** · in the failure-tracker **cooldown blacklist** (`adaptive-scan-manager.ts:48-118`).
+⚠️ **The cooldown lead is UNRESOLVED, not cleared: I searched 1,500 log lines for `FailureTracker` and found ZERO — but the CONTROL is the same string, so a zero cannot distinguish *"not firing"* from *"not logged in this window."* Silence is not evidence (`#453`).**
+
+### 8.4 ✅ WHAT THIS DOES TO THE BATCH — IT SPLITS AN OBJECTIVE, IT DOES NOT KILL ONE
+- **`OBJ-1` SPLITS: `OBJ-1a` Bitcoin — passes the history filter instead of failing it. `OBJ-1b` Dogecoin — REACHES evaluation at all.** ⛔ **They are different hops and must never again be verified as one.**
+- ⭐ **The close criterion gets SHARPER, not looser: `XBT/USD` must stop being rejected on `history failed`, and `XDG/USD` must APPEAR in the evaluated set. Both are single-observation, both are visible in one log read.**
+- ⛔ **`OBJ-6`'s controls stand and are now doubly earned** — ETH and SOL reject on VOLUME today, so a control shifting to `history failed` after this change is an unmistakable regression signal.
