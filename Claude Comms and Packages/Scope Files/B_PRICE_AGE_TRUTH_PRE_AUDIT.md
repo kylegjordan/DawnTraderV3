@@ -11,7 +11,8 @@
 
 > **PREVIOUSLY STATED: this batch gates THREE downstream batches. NOW: TWO (`P1`, `F-C`). REASON:** Langston's same-day plan ruling records `F-G-2` as **DECOUPLED with a design carve-out**, not gated (scope §7.4).
 > **PREVIOUSLY STATED: `isKrakenVenueSource` at `:151`. NOW: `:224`. REASON:** `:151` is `toCachedProducer`, a different function. **The `SYSTEM_IMPACT_MAP` carried the same wrong number and is corrected in the same commit.**
-> **PREVIOUSLY STATED: ~843 laundering events/day. NOW: ~843 is the OUTERMOST of three nested sets and overstates the trading delta. REASON:** the counter fires above the `cached == null` check (condition 1). **The innermost set is measured in §2.3 and is far smaller.**
+> ⛔ **PREVIOUSLY STATED: ~843 laundering events/day. NOW: WITHDRAWN ENTIRELY — no daily rate is claimed. REASON: the events occupy a 3.5-minute burst, not the 95.7-minute window I divided by (§F1). This figure reached Kyle and is corrected to him.**
+> **SUPERSEDED — ~843 laundering events/day. NOW: ~843 is the OUTERMOST of three nested sets and overstates the trading delta. REASON:** the counter fires above the `cached == null` check (condition 1). **The innermost set is measured in §2.3 and is far smaller.**
 > **PREVIOUSLY STATED (OBJ-4 falsifier): "a row whose `observedAt` post-dates its own `cachedAt`". NOW: WITHDRAWN — satisfied by construction. REASON:** `:483-484` writes `observedAt` then `cachedAt` in one literal, so the relation holds on every path pre-fix. **Replaced with re-serve monotonicity.**
 > **PREVIOUSLY STATED: xStock coverage is "unknown, market shut". NOW: xStock CANNOT reach the branch, structurally. REASON:** the xstock gate at `:513` returns above the `:540` call.
 
@@ -50,6 +51,7 @@ The **header** comment at `:143-150` says *"`:311` already carries `quote.source
 ## A2. SOURCE 2 — RUNTIME LOGS + DATABASE
 
 **A2.1 — THE THREE NESTED SETS (condition 1), each measured or bounded.**
+> ⛔⛔ **THE RATE IN THIS TABLE IS WITHDRAWN — SEE §F1. The 56 events occupy 3.5 MINUTES, not 95.7; I divided a burst by the whole capture window. "0.59/min" and "~843/day" are wrong by ~27×. The COUNTS stand; the RATE does not. And §F3: the "positive control" in this section matched a different string than claimed.**
 **Window: PM2 log, `2026-08-30 18:22:26 → 19:58:05` = 95.7 min, 36,728 lines.**
 
 | set | measurement | instrument |
@@ -212,12 +214,13 @@ The reader measured the ledger entry's line numbers against HEAD: `#951` cites `
 ## E1. ⛔⛔ THE PLAN NAMED ONE UNION. **THERE ARE TWO, AND THE SECOND BREAKS FIVE ASSIGNMENTS.**
 **RE-DERIVED:** `PriceQuote.source` (**`:195`**) = **7 members**, including `'no_reliable_price'`. `CachedPrice.source` (**`:211`**) = **6** — the same list minus that one.
 ⇒ ⛔ **P2/P4 as written moved only `CachedPrice`. Adding a literal there alone makes the five `cached.source → PriceQuote` assignments (`:391`, `:425`, `:1077`, `:1093`, `:1119`) non-assignable.** ✅ **BOTH unions move, or neither compiles.**
-★ **And it explains why the `as` at `:478` is safe TODAY, which I had attributed to the guard alone: `PriceQuote['source']` minus `'no_reliable_price'` EQUALS `CachedPrice['source']` exactly.** The cast is currently a no-op **by arithmetic between two unions**, not by the guard. ⇒ **the correct statement of the binding: any literal added to `:195` and NOT to `:211` is admitted silently.**
+⛔ **THE CLAUSE THAT FOLLOWED HERE IS REVERTED — SEE §G1. It replaced A1.1's CORRECT guard attribution with a wrong one. The arithmetic makes the cast NECESSARY; the `:467` guard makes it SOUND. Retained below only as the record of the error:** ★ ~~And it explains why the `as` at `:478` is safe TODAY, which I had attributed to the guard alone: `PriceQuote['source']` minus `'no_reliable_price'` EQUALS `CachedPrice['source']` exactly.** The cast is currently a no-op **by arithmetic between two unions**, not by the guard. ⇒ **the correct statement of the binding: any literal added to `:195` and NOT to `:211` is admitted silently.**
 
 ## E2. ⛔⛔ THE NEW LITERAL'S **NAME** IS A BEHAVIOUR DECISION — `isRestFallbackSource` MATCHES BY **SUBSTRING**
 **RE-DERIVED at `:253-254`:** `REST_FALLBACK_SOURCES = ['rest_fallback','kraken_rest','last_known_good']` and `some(s => source.includes(s))`.
 ⇒ ⛔⛔ **A literal named `kraken_rest_reserve` or `last_known_good_rate_limited` — the two names I would most naturally have chosen — is SILENTLY classified `rest_fallback: true`. One sharing no substring is classified `false`. The signature is `(source: string)`, so NEITHER outcome errors.**
 Consumed out-of-module at `routes.ts:12220, 12754, 12842, 13026` and `active-portfolio-manager.ts:639`.
+> ⛔ **OVERSTATED — SEE §G2. All five callers only interpolate the result into a `console.log`; it is never branched on, returned or persisted. This is LOG CONSISTENCY, not a behaviour gate.**
 ⇒ ✅ **NEW PLAN ITEM P8: the literal's name is chosen against this predicate DELIBERATELY, and the intended `isRestFallbackSource` verdict is stated and asserted in a test.** ⛔ **This is exactly the trap I was walking into.**
 
 ## E3. ⛔ MY CENSUS COUNTED `.get(` CALL SITES AND CALLED THEM READERS — **AND MY SEARCH SHAPE COULD NOT HAVE FOUND THE REST**
@@ -232,7 +235,7 @@ The cache writer at `:474` is reachable from a **second, unscheduled** path: `ge
 ## E5. ⛔⛔ "0 TEST REFERENCES" WAS A NAME SEARCH — **AND A TEST NAMES THIS EXACT BRANCH AND PINS THE TOKEN I INTEND TO CHANGE**
 **`server/tests/unit/b-exit-provenance-fence.test.ts:244-245`** carries *"`rest_poller` has a THIRD arm — the rate-limited bare cached price, #951"*, and **`:259` asserts `expect(union).toContain("'kraken_rest_poller'")`.**
 Two further suites execute the path transitively via `getPriceWithFallback` (`p19-b8-9a-source-tag-honesty.test.ts:34,44`; `p19-b8-9-venue-only-source.test.ts:77,86`).
-⇒ ⛔ **P3 must state what happens to that assertion.** ⚠️ **AND THE REACH TRAP: `tsconfig.json` excludes `**/*.test.ts`, so the TypeScript Check job does NOT type-check tests — P4's compile-error falsifier must be exercised against PRODUCTION code, or it proves nothing.**
+⇒ ⚠️ **P3 states the assertion's disposition — but see §G6: it pins the token's PRESENCE, so ADDING a fifth producer leaves it green. Only a rename or removal breaks it.** ⚠️ **AND THE REACH TRAP: `tsconfig.json` excludes `**/*.test.ts`, so the TypeScript Check job does NOT type-check tests — P4's compile-error falsifier must be exercised against PRODUCTION code, or it proves nothing.**
 
 ## E6. ⛔ **AN INVERTED CITATION, IN MY SECTION ABOUT CITATIONS.**
 My §A2.1 wrote *"`incrementRestFallbackBlocked()` fires at `:630` **above the `cached` read**."* **RE-DERIVED: `:628` is the `cached` read; `:630` is the counter. It fires BELOW it.**
@@ -275,3 +278,100 @@ The two-`CachedPrice` separation (structurally different types — `price-cache.
 | **P4** | falsifier exercised against **production** code — tests are not type-checked | **E5** |
 | **P6** | gains: the rate-limiter's own **reason-split** log as the 1:1 control · the `[B69][CLASSIFY_FALLTHROUGH]` counter · ⛔ **and the 60 s/15 s reconciliation, which is now a PRECONDITION of any magnitude claim** | **E9, E7, E10** |
 | **P9 (new)** | **`getAllPrices()` (`:418`) ships `source`/`producer`/`observedAt` out of the module to two consumers — check both against the new literal** | **E3** |
+
+
+---
+
+# F. ✅⛔ **E10 IS RESOLVED — AND THE RESOLUTION IS THAT MY HEADLINE RATE WAS WRONG BY A FACTOR OF ~27.**
+
+**Measured on staging after round 2 flagged the config/measurement gap. The reader could not do this — it has no staging access — so this half is mine, and the error was mine.**
+
+## F1. ⛔⛔ THE 56 EVENTS OCCUPY **3.5 MINUTES**, NOT 95.7. I DIVIDED A BURST BY A WINDOW IT DID NOT OCCUPY.
+**TRUE span of all 56 `REST_BLOCKED` events: `19:54:28 → 19:57:58` = 3 min 30 s.** The 95.7-minute figure was the span of the whole 36,728-line log capture, **not of the events in it.**
+⇒ ⛔ **WITHDRAWN: "0.59/min", "35.1/hour", "~843/day".** All three divide by the wrong denominator. **The `~843/day` reached Kyle and is corrected to him directly.**
+★ **The events are a BURST at the tail of the capture, so the honest position is: I CANNOT extrapolate a daily rate from one burst, and any figure that tries is manufacturing precision.**
+
+## F2. ✅ AND WITH THE RIGHT DENOMINATOR, THE CONFIG AND THE MEASUREMENT RECONCILE **ALMOST EXACTLY**
+**Within the burst: 56 blocked · 19 allowed · 75 checks total, across 5 symbols in 210 s.**
+- **75 checks / 5 symbols / 210 s = one check per symbol per ~14 s.** ✅ **That is `REFRESH_INTERVAL_MS = 15000`, confirmed empirically.**
+- **56 of 75 blocked = 74.7%.** ✅ **A 60 s per-symbol cooldown against a 15 s poll blocks 3 of every 4 — 75.0%.**
+- **Per-symbol deltas, `BTC/USD`: 15s, 15s, 30s, 15s, 15s, 30s, 15s, 15s, 15s, 30s** — the poll cadence, with the 30s gaps being the allowed ticks.
+- **The block reason is `cooldown` on all 56, `no_tokens` on ZERO** — and the log even prints `cooldown (45s remaining)`, i.e. **15 s after the last allowed call**, which is the poll interval landing inside a 60 s cooldown.
+⇒ ⭐ **E10 IS CLOSED: there is no anomaly. The mechanism is exactly what the config says, and the gap was entirely my arithmetic.**
+
+## F3. ⛔ AND MY "POSITIVE CONTROL" WAS MATCHING A DIFFERENT STRING THAN I CLAIMED
+§A2.1 cited *"`REST_FALLBACK` (the allowed leg) = 19"* as the control proving the instrument distinguishes the two legs.
+**RE-DERIVED: the precise pattern `[I7][REST_FALLBACK]` returns ZERO.** The 19 hits came from a loose `REST_FALLBACK` substring matching a **different** log prefix.
+✅ **The REAL allowed-leg indicator is `[8.8.5][RestRateLimiter] ALLOWED <symbol>: tokens=N/10`, and it is genuinely 19 — the same number by coincidence of the burst, from a different line.**
+⇒ ⛔ **The control was right about the number and wrong about the object.** ★ **A control that matches the wrong string is not a control — it is a second uncontrolled measurement wearing a control's name.** *(Same family as the `restFallbackBlocked`/`restFallbacksBlocked` one-letter miss earlier in this same audit.)*
+
+## F4. ⭐⭐ THE RECONCILIATION INDEPENDENTLY CONFIRMS **LANGSTON'S COLUMN (2)**, WHICH I HAD TREATED AS AN UNMEASURED CHORE
+If blocking is ~75% **whenever the REST leg is reached**, then the laundering rate is governed **entirely by how often the REST leg is reached at all** — and `fetchLivePrice` reaches it only when the earlier branches do not satisfy the request.
+⇒ ★★ **THE FREQUENCY IS A FUNCTION OF WS QUIETNESS. THAT IS EXACTLY HIS COLUMN (2)** — *"whether there was a concurrent WS-write gap on that symbol during the `REST_BLOCKED` burst"* — **and the burst structure is positive evidence for his hypothesis that the laundered row wins precisely when WS is quiet.**
+⇒ **P6 is upgraded from a chore to the batch's central measurement, and it now has a stated mechanism to test rather than a number to collect.**
+
+## F5. ⇒ WHAT SURVIVES UNCHANGED
+- **The defect itself** — the discarded `observedAt`, the `Date.now()` stamp, the refreshed `cachedAt`. **None of this rests on the rate.**
+- **The innermost-set finding** — `exit_price_producer = 'kraken_rest_poller'` is **0 of 17 stamped crypto closes**, and the 4.5% symbol-overlap figure. **Neither is a per-minute rate, so neither is touched by F1.**
+- **The plan's sequencing** — P1/P3/P5 provenance-only, P2 behaviour-changing and gated behind P6.
+⛔ **What does NOT survive: any statement of how often this happens per day. There isn't one, and there will not be one until P6 measures the reach-rate rather than the block-rate.**
+
+
+---
+
+# G. ⛔⛔ READER ROUND 3 (mode A, object = the CORRECTED document) — **IT CAUGHT ME OVERTURNING A CORRECT STATEMENT. LOOP CLOSES AT THE 3-ROUND CAP.**
+
+**`REVIEWER r3: object (this document + the adapter/rate-limiter/asset-classes at the ref) · "check the corrections themselves" · HIT ×9 · re-derived: y`**
+⛔ **CAP REACHED. Per the rule, the FULL round record goes to Langston rather than a fourth round** — iterating to agreement selects for persistence, not truth.
+
+## G1. ⛔⛔ **E1's STAR CLAUSE WAS BACKWARDS, AND IT "CORRECTED" A1.1 INTO AN ERROR. REVERTED.**
+E1 claimed the `as` at `:478` is safe *"by arithmetic between two unions, not by the guard."* **That is inverted.**
+✅ **The arithmetic is why the cast is NECESSARY** — without the assertion, `quote.source` (7 members) is **not assignable** to `CachedPrice['source']` (6) and `:478` would not compile.
+✅ **What makes it SOUND AT RUNTIME is precisely the guard at `:467`**, which excludes exactly the one excess member `'no_reliable_price'`.
+⇒ ⛔ **A1.1's ORIGINAL ATTRIBUTION TO THE GUARD WAS RIGHT. E1 REPLACED A CORRECT STATEMENT WITH A WRONG ONE. REVERTED to A1.1.**
+★ **This is the EROSION mode the loop is warned about, caught in the act — and it is why a correction gets reviewed rather than trusted.** ✅ **E1's binding conclusion survives untouched: a literal added to `:195` and not `:211` is admitted silently.** Right conclusion, wrong reason — now corrected to the right reason.
+
+## G2. ⛔ **E2 OVERSTATED: `isRestFallbackSource` FEEDS ONLY LOG LINES. IT IS A LOG-CONSISTENCY ITEM, NOT A BEHAVIOUR GATE.**
+**All five callers traced** (`routes.ts:12220, 12754, 12842, 13026`; `active-portfolio-manager.ts:639`): every one is `fallbackType = isRestFallbackSource(...) ? 'rest_fallback' : 'none'`, and `fallbackType` is **only interpolated into a `console.log`** (`:12228`, `:12759`, `:12847`, `:13031`, `apm:644`). **Never branched on, never returned, never persisted.**
+⇒ ⛔ **A misclassification changes ONE WORD IN FIVE LOG LINES. My "THE NAME IS A BEHAVIOUR DECISION" is withdrawn.**
+⚠️ **And the trap may be a false alarm on its merits: for a rate-limited re-serve, `rest_fallback: true` is arguably the CORRECT verdict** — the substring would have produced the right answer by accident.
+✅ **P8 SURVIVES BUT IS RE-AIMED AND BROADENED:** it is log consistency, **and there is a SECOND substring matcher I missed** — `routes.ts:12336` `priceSource.includes('kraken_ws') ? 'WS' : …`, **shipped to the client at `:12394`.** A repo sweep finds exactly these two. **P8 names both.**
+
+## G3. ⛔ **E10's EXPECTED FIGURE WAS WRONG BY 4×, AND TWO OF MY THREE HYPOTHESES ARE REFUTED FROM THE REPO**
+- ⛔ **My "~45/hour/symbol" is wrong.** At `P=15s`, `C=60s`: **3 blocks per 4 checks × 240 checks/hour = 180 blocks/hour/symbol.** ⇒ expected **287/symbol, 1,435 total** over 95.7 min against 56 observed ⇒ **the gap is ~25.6×, not "roughly an order of magnitude."**
+- ✅ **"the cooldown is DB-overridden" — REFUTED.** `rest-rate-limiter.ts:128` is the **only** `new RestRateLimiter()` in the repo and is called with **no options**; `60000` is a literal default. Same for `REFRESH_INTERVAL_MS` — no DB read, no env var.
+- ✅ **"the poller does not tick every symbol every 15 s" — REFUTED, and elegantly:** for any constant period `P`, blocks are `(W/P)(1 − 1/⌈C/P⌉)`; solving for 11.2 blocks/symbol gives `P ≈ 256/342/384 s`, **each contradicting its own bracket**, and **any `P > 60 s` yields ZERO cooldown blocks.** ⇒ **a slower poller makes blocks VANISH, not shrink.**
+⇒ ⭐⭐ **ONLY MY THIRD HYPOTHESIS SURVIVES — the measured population is not 95.7 minutes of poller operation. AND ROUND 3 DERIVES ITS DURATION INDEPENDENTLY: 56 ÷ (5 × 3/min) = 3.73 min, and 19 ÷ (5 × 1/min) = 3.8 min — BOTH LEGS AGREE.**
+✅ **THAT INDEPENDENTLY CONFIRMS §F1's 3.5 minutes, reached by a different route entirely** (F1 read the timestamps; G3 derives it from the config arithmetic). **Two methods, no shared mechanism, same answer.**
+
+## G4. ⭐⭐ **A FAR BETTER INSTRUMENT EXISTS AND NOBODY NAMED IT — IT REMOVES THE LOG-CAPTURE DEPENDENCY ENTIRELY**
+**`GET /api/diagnostics/8.8.5/rate-limiter`** (`routes.ts:10907-10924`) returns `getStats()`: **cumulative process-lifetime `allowedCount` and `blockedCount`** (`rest-rate-limiter.ts:31-32`) plus **`perSymbolCooldowns`** (`lastFetchTime.size` — how many distinct symbols have ever been allowed).
+⇒ **Two hits separated by a known interval give the TRUE block rate with NO dependence on log capture** — which is the exact weakness that produced §F1's error. ✅ **P6 uses the endpoint; the log grep becomes the cross-check, not the primary.**
+✅ **And `perSymbolCooldowns` directly answers a question my census got wrong:** **`trackedSymbols` GROWS at runtime** (`:942-944` `updateCache`, `:1000` `seedLastKnownGoodPrice`) — **it is not fixed at the five hardcoded seeds, and my entry-point census did not record that.** ⇒ **observing `REST_BLOCKED` for exactly the five seeds and no others is itself a datum needing explanation.**
+
+## G5. ⛔⛔ **E8's SUPPRESSION CHAIN IS WRONG, AND THE REAL CONSEQUENCE IS THE OPPOSITE AND WORSE**
+**Traced with the `fetchPrice` write suppressed:**
+- **Row present (the normal crypto case):** `:1112` `fetchPrice` → `:1113` `updated = priceCache.get(...)` — **the suppressed write leaves the OLD ROW in the map, so `updated` is truthy** and `:1115-1122` returns it carrying **the row's ORIGINAL tag**. ⇒ **if that tag is `kraken_ws`/`kraken_rest` it PASSES `isKrakenVenueSource` and is used as ACTIONABLE.** ⛔ **A stale price treated as venue-fresh — which is WORSE than a skip, and is the same laundering family this batch exists to fix.**
+- **No row at all:** `updated` undefined → `:1134` returns **`null`** → the engine's gate fails on `priceResult !== null` → direct REST → on failure `_recordPriceSkip` + `continue`. ⇒ **a skip IS reachable — via a NULL RETURN, not via a `last_known_good` tag failing the venue gate.**
+⇒ ⛔ **E8's stated chain (`:1134` → `last_known_good` → fails the gate → skip) does not hold. The `:1134` arm is effectively unreachable with a non-null `cached`** — it needs the `:1111` `try` to throw, and `fetchPrice` (`:456-497`) wraps its whole body and returns `void`.
+⭐ **AND THE CONSEQUENCE FOR P1/P3 IS THE IMPORTANT PART: today's honest `last_known_good` tagging is delivered by the `:474` WRITE (via `fetchLivePrice:564-571`) and the `:1115` return — NOT by the `:1134` last-resort arm.** ⇒ **suppressing the write removes the very mechanism that produces the honest tag.** **P3's placement decision is now load-bearing for the honest path too, not only for re-serve.**
+⚠️ **Citation correction: `:160-165` and `b-exit-provenance-fence.test.ts:210-213` are both COMMENT PROSE. I presented one as a test pin. The suite's actual assertions are `:214-216`, `:236`, `:259`.**
+
+## G6. ⛔ **E5 OVERSTATED THE TEST'S GRIP.** `b-exit-provenance-fence.test.ts:259` is `expect(union).toContain("'kraken_rest_poller'")` — it pins the token's **PRESENCE**. ⇒ **adding a fifth producer alongside it leaves the assertion GREEN; only a removal or rename breaks it.** ✅ **"PINS THE TOKEN I INTEND TO CHANGE" is withdrawn** — the plan adds, it does not rename. **E5's `tsconfig` reach trap stands.**
+
+## G7. ⛔ **A1.4's STALE-CITATION CENSUS FOUND 2 OF 4 — IN THE SECTION ABOUT STALE CITATIONS**
+Two more in the same file: **`:162`** says the null arm suppresses at *"`:429` and `:1201`"* (**actual `:474` and `:1248`**), and **`:1243`** says *"the same rule as the writer at `:307`"* (**actual `:474`**). ⭐ **Meanwhile `:127` cites the identical pair CORRECTLY as `:473`/`:1248`** — so the file holds a correct and a stale citation for the same two sites.
+✅ **A1.4's narrow claim ("the only such cast is at `:478`") is true; its CENSUS was incomplete.** ⇒ **the generalisable lesson survives and is strengthened: 4 stale absolute citations in one file, 0 stale relative ones.**
+
+## G8. ✅ CONFIRMED BY ROUND 3, recorded and NOT cited as support
+E1's counts and the five assignment sites (**complete — `peekCachedPrice`'s consumer is `string`-typed so adds no sixth break**) · the `:252` array and `:253-254` predicate · **E6 both halves** · E9's one-caller claim · the `tsconfig` test exclusion · `REST_BLOCKED` has **exactly one emitter** (`:629`), so Set 1's instrument is unambiguous.
+⚠️ **Round 3 has NO staging or database access** ⇒ **it could confirm none of §A2/§D3's runtime or SQL numbers. Every such figure in this document remains single-sourced to me, and Langston is told so.**
+
+## G9. ⇒ FINAL PLAN DELTA FROM ROUND 3
+| # | change | from |
+|---|---|---|
+| **A1.1** | ✅ **REVERTED to the guard attribution.** The cast is *necessary* by union arithmetic and *sound* by the `:467` guard. | **G1** |
+| **P8** | **Re-aimed: log consistency, not a behaviour gate. Broadened to BOTH substring matchers** (`isRestFallbackSource` **and** `routes.ts:12336`). | **G2** |
+| **P6** | **Primary instrument becomes `GET /api/diagnostics/8.8.5/rate-limiter`** (cumulative counters + `perSymbolCooldowns`); the log grep demotes to cross-check. **Adds: why only the 5 seeds appear when `trackedSymbols` grows.** | **G3, G4** |
+| **P3** | ⛔ **Escalated: a suppressed write does NOT fail closed — it re-serves the OLD row under its ORIGINAL venue tag and PASSES the actionability gate.** And it removes the mechanism that produces today's honest tag. | **G5** |
+| **P7** | **Strengthened by evidence: 4 stale absolute citations in this one file, 0 stale relative ones.** | **G7** |
