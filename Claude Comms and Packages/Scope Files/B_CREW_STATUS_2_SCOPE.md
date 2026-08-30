@@ -1,6 +1,6 @@
 # B-CREW-STATUS-2 — SCOPE r3: status capture that matches where Kyle left the session
 
-**change-class:** `non_architecture` · **Owner:** CC-INFRA (Infra Claude) · 2026-08-17
+**change-class**: `non_architecture` · **Owner:** CC-INFRA (Infra Claude) · 2026-08-17
 **Revises:** B-CREW-STATUS (closed 2026-08-07, Langston Step-8 PROCEED)
 **Gates:** Step-1 **PROCEED w/ 7 conditions** → Step-2 **CHANGES-NEEDED, 3 blockers** → r2 → Step-2 **PROCEED TO STEP 3 w/ 4 conditions** → **this r3, which lands all four in the text.**
 **r1→r2:** all three blockers discharged by measurement; **§2's headline was WRONG and is retracted in place** (§2.0).

@@ -1,6 +1,6 @@
 # B-TOKEN-WATCH — SCOPE r3: capture-only observation of new Solana token launches
 
-**change-class:** `non_architecture` · **Owner:** CC-INFRA (Infra Claude) · 2026-08-28
+**change-class**: `non_architecture` · **Owner:** CC-INFRA (Infra Claude) · 2026-08-28
 **Gates:** concept review **NOT-A-REJECT** → Step-1 **CHANGES-NEEDED (4 blockers)** → **this r2**
 **Companion:** `B_TOKEN_WATCH_PRE_REGISTRATION.md` + **AMENDMENT 1** (`c342427ad`) — both **pre-data**, and the amendment was verified byte-identical in sections 1-10 before commit.
 

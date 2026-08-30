@@ -824,6 +824,24 @@ MSYS2_ARG_CONV_EXCL='*' git show "…:.claude/memory/MEMORY.md"               ->
 
 ## B79.0n.SCORING + B79.0n.TEC closure entries (2026-05-26)
 
+### #947 OPEN 2026-08-29 (CC-INFRA, found when Kyle asked why B-TOKEN-WATCH's change-class was undecided) — THIRTEEN SCOPE FILES DECLARE A CHANGE-CLASS THE CHECKER CANNOT READ, BECAUSE ITS PATTERN IS LINE-ANCHORED
+
+`CHANGE_CLASS_MARKER` (`scripts/governance-checker/config.mjs:180`) begins with a line anchor followed by optional list markers, so a declaration is only seen at the START of a line. **But the house style for a scope header is one line carrying several fields** — `**Batch:** X · **Created:** Y · **change-class:** non_architecture` — and a mid-line declaration never matches.
+
+⛔ **MEASURED over all 326 scope files, and the population matters because my first diagnosis was wrong:**
+- **13 files carry a REAL declaration the anchor rejects.** 8 declare `non_architecture` and are therefore graded against the STRICTER `architecture` doc-set, so they are flagged for missing `SYSTEM_MANUAL`/`SIM` entries they do not owe. 4 declare `architecture` (graded the same either way, still flagged). 1 declares `auditable`.
+- **3 files merely MENTION the phrase in prose** and declare nothing. **Correctly unparsed — not part of this defect**, and the reason the raw count of 17 is not the finding.
+
+⚠️ **MY FIRST CAUSE WAS WRONG AND IT IS RECORDED BECAUSE THE SHAPE RECURS.** My own scope used `**change-class:**` — colon INSIDE the bold — and the pattern wants it outside. I generalised that to all 17. **A candidate regex tolerant of asterisks fixed 2 and left 11**, which is what sent me back to look. The colon is a real second cause affecting a couple of files; **the line anchor is the cause for the large majority.** `wrong-object`: a mechanism that explained MY case, asserted over a population I had not checked.
+
+✅ **ALREADY DONE, and it is the whole of what I was entitled to do alone:** my two scope files (`B_TOKEN_WATCH_SCOPE.md`, `B_CREW_STATUS_2_SCOPE.md`) are reformatted to `**change-class**: ` and both now parse as `non_architecture`, verified by running the checker's own regex against the files.
+
+⛔ **WHY I DID NOT FIX THE REGEX OR THE OTHER 11 FILES.** The regex governs how EVERY batch is graded, so relaxing it re-grades other sessions' closed batches — 8 would move from the strict set to the one they declared, which changes what their close required. That is not a change one session makes to another's governance record without the owner. **And a naive de-anchoring is actively dangerous: three files mention `change-class` in prose, so a looser pattern must still not match a sentence.** The safe fix needs the prose cases as its negative control.
+
+⇒ **HOME: `B-GOV-CLASS-PARSE`, owner CC-A (the B-GOV series owns `scripts/governance-checker/`), placed in `PHASE_19_PLAN` at the governance-tooling tail, after the existing B-GOV items.** No date — the queue in front of it moves.
+
+★ **NOT a defect, checked and cleared:** an invalid class fails CLOSED — `readDeclaredClass` returns `DEFAULT_CLASS` with `reason: invalid-class:<x>`, which is the correct behaviour and is why `auditable` is not a second bug.
+
 ### #946 OPEN 2026-08-29 (CC-A) — ⛔ LANGSTON’S `MEMORY.md` IS **2× ITS CAP**, AND THE PARTS THAT LOOK LOAD-BEARING **ALREADY EXCEED IT ON THEIR OWN**
 
 **MEASURED at `/home/langston/MEMORY.md`, summing encoded line bytes: 49,224 B against the 24,576 B cap in `CLAUDE.md` §3.2 — over by 24,648, almost exactly double.** 202 lines, 70 blank. **The 25 heaviest lines carry 44% of the file.**
