@@ -4,7 +4,7 @@ change-class: non_architecture
 
 **Owner:** CC-A · **Opened:** 2026-08-30 · **Directive:** Kyle, 2026-08-30 — *"Yes, please scope it as a batch."*
 **Placement:** `PHASE_19_PLAN.md` §governance queue — **position TBD, and it is the batch's own OBJ-7 to recommend it** (Kyle is holding the pricing-feed work pending that recommendation).
-**Gate:** Langston, Step 1.
+**Gate:** Langston — ✅ **STEP 1: CHANGES NEEDED (2026-08-30), ALL THREE APPLIED, marked `[L]`. OBJ-1 CLEARS AND PROCEEDED IMMEDIATELY; it did not wait for the other two.**
 
 > ⛔ **KYLE'S QUESTION, WHICH THIS BATCH EXISTS TO ANSWER, IN HIS WORDS:** *"I'm not sure that I can trust the way that it's currently working through these batches … I don't trust that the sessions are able to digest everything that they need to … We've been building this governance and build system, and maybe it's not the right setup anymore. And if it's not, then what is?"*
 
@@ -58,7 +58,7 @@ change-class: non_architecture
 | already decided | ruling | what this batch does instead |
 |---|---|---|
 | **Trim `CLAUDE.md` by deleting rules** | ⛔ **`#339` — KYLE RULED NO-TRIM** (nothing deleted or made unfindable); `#564` then produced the PLACEMENT rule (operative statement stays, depth moves to a runbook) | ✅ **OBJ-3 changes what LOADS, not what EXISTS.** No rule is deleted. **A rule that no longer earns its always-loaded slot moves to a skill or a scoped file — the `#564` mechanism, applied to the whole file rather than one section.** |
-| **Grade findings by SEVERITY to shrink the pile** | ⛔ **LANGSTON RULED AGAINST IT** (`B_REVIEWER_LOOP_SCOPE.md` F3): *"I'd rather enforce the existing rule than add a severity field nobody calibrates"* — the axis is DISPOSITION, not severity | ⚠️ **OBJ-4 IS A DIFFERENT OBJECT AND I AM FLAGGING IT FOR HIS RULING RATHER THAN ASSUMING IT CLEARS.** He rejected grading **FINDINGS**. OBJ-4 scales the **REVIEW APPARATUS** to the change. **If he reads that as the same ruling, OBJ-4 dies and I will not argue it twice.** |
+| **Grade findings by SEVERITY to shrink the pile** | ⛔ **LANGSTON RULED AGAINST IT** (`B_REVIEWER_LOOP_SCOPE.md` F3): *"I'd rather enforce the existing rule than add a severity field nobody calibrates"* — the axis is DISPOSITION, not severity | ✅ **RULED: NOT A DUPLICATE — I WON THE DISTINCTION.** He re-read F3 at the ref: *"F3’s subject is a finding already produced being triaged; OBJ-4’s is the apparatus deployed before any finding exists."* ⛔⛔ **AND OBJ-4 IS STRUCK ANYWAY — ON MY OWN OBJ-1 RESULT, NOT ON THIS ROW. See OBJ-4.** |
 
 ### 2.2 ⛔ WHAT THIS BATCH DOES **NOT** OWN — `B-REVIEWER-LOOP` ALREADY HAS IT
 
@@ -113,6 +113,10 @@ change-class: non_architecture
 
 > ⛔ **ORDERED BY LEVERAGE. OBJ-1 IS THE BATCH; IF ONLY ONE THING SHIPS, IT IS OBJ-1.**
 
+> ⛔⛔ **`[L CHANGE 1]` NON-COVERAGE, STATED PLAINLY RATHER THAN HALF-SAID IN A FALSIFIER: OBJ-1 INSTRUMENTS THE CODE-REACHABILITY CLASS AND DOES **NOT** ADDRESS THE PROSE CLASS THAT PRODUCED THIS WEEK’S SIX WRONG ABSENCES.**
+> ★ **ALL SIX — exact-phrase, concept-word, the pointer-vs-body checker, the case-sensitive grep, and Langston’s own two — WERE SEARCHING PROSE. NOT ONE WOULD HAVE BEEN SAVED BY WHAT THIS OBJECTIVE INSTALLS.**
+> ⚠️ **This batch therefore fixes the SMALLER half of the measured problem, and says so in its own scope rather than letting a shipped tool read as a solved problem.** ⇒ **the prose half is `#970` → `B-DISAGREEMENT-FINDER`.**
+
 ### **OBJ-1 — GIVE THE SESSIONS AN INSTRUMENT FOR THE ERROR CLASS THAT ACTUALLY BITES: "DOES THIS EXIST / WHO CALLS THIS / IS THIS REACHABLE"**
 
 ⛔⛔ **THIS IS THE HIGHEST-LEVERAGE CHANGE AVAILABLE AND NO RULE CAN SUBSTITUTE FOR IT.** **MEASURED, this week, `#946` and the `B-CLAUDEMD-SLIM` completion report: SIX separate instruments called content "absent" in one day and ALL SIX WERE WRONG — and FOUR of the six were BETTER MATCHERS than the one before.** ⇒ **a better matcher is provably not the fix.** The same class produced CC-C's `#906`-premise-is-stale, the LOCKED-module edit, and the "it does nothing for Dogecoin" reversal — **all reachability questions answered by reading text.**
@@ -130,15 +134,24 @@ change-class: non_architecture
 ⛔ **NO RULE IS DELETED — `#339` NO-TRIM binds.** Apply the `#564` placement rule to the whole file and adopt the mechanism Anthropic documents for this exact problem: **per-directory `CLAUDE.md` and path-scoped rules, so a session loads repository-wide rules PLUS only what its work touches.**
 **VERIFICATION:** ✅ **read from `~/.claude/instructions-loaded.jsonl` — the live sink, never a stored figure.** Target stated as a measured before/after at a session start, not asserted. ⛔ **PAIRED NEGATIVE CONTROL, MANDATORY: a session working in a scoped area must still load the repo-wide rules — proven by naming a rule that MUST survive and showing it present. A reduction that silently drops a binding rule is a REGRESSION, not a win.**
 
-### **OBJ-4 — SIZE THE REVIEW TO THE CHANGE ⚠️ GATED ON LANGSTON, AND IT MAY DIE HERE**
-**Nine executable lines received three fresh readers and four review rounds.** Proposal: the apparatus scales with the change; the heavy version is reserved for what earns it — **and the pricing-feed and reachability work is exactly what earns it.**
-⛔⛔ **LANGSTON MAY RULE THIS IS HIS OWN F3 UNDER A NEW NAME. I HAVE STATED THE DISTINCTION IN §2.1 AND WILL NOT ARGUE IT TWICE.** ⚠️ **AND THE HONEST RISK, NAMED BY ME AND NOT WAITING FOR HIM TO FIND IT: this objective reduces scrutiny, and every other objective here increases capability. It is the only one that could make quality WORSE. If it ships it needs `B-REVIEWER-LOOP` P6's rebuild-rounds metric watching it.**
+### **OBJ-4 — SIZE THE REVIEW TO THE CHANGE** — ⛔⛔ **STRUCK `[L CHANGE 2]`. IT DIED ON MY OWN OBJ-1 RESULT, NOT ON THE RULING I EXPECTED.**
+
+✅ **I WON THE DISTINCTION I ARGUED FOR AND LOST THE OBJECTIVE ANYWAY.** Langston re-read his own F3 at the ref and ruled it **NOT a duplicate**: *"F3’s subject is a finding already produced being triaged; OBJ-4’s is the apparatus deployed before any finding exists."*
+⛔⛔ **IT DIES BECAUSE ITS SIZING INPUT DOES NOT EXIST. I proposed DIFF SIZE — *"nine executable lines, three fresh readers."* But OBJ-1 measured `toCanonical` at **65 references across 10 files** including tests, a telemetry service and a diagnostic.** ⇒ ★ **A rule keyed on diff size would have sized `B-SCANNER-EGRESS-NORMALISE` *DOWN* — the one batch in the population that needed the deeper read, and the batch this entire scope is built on.** **The input I would have calibrated on is the input my own OBJ-1 just proved UNCORRELATED with blast radius.**
+★ **AND THE SECONDARY REASON, SUFFICIENT ALONE, WHICH IS THE ONE I WILL CARRY: it is the only objective here that REDUCES scrutiny, while every other one increases capability. Kyle’s stated problem is that he does not trust sessions to digest what they need to. SHIPPING LESS REVIEW INTO A TRUST DEFICIT IS THE WRONG DIRECTION WHATEVER THE CALIBRATION.**
+⇒ **DISPOSITION 3 (not 5 — the idea is fine, its input does not exist yet, and OBJ-1 is what would create it): `HOME: B-REVIEW-SIZING-BY-BLAST-RADIUS`, owner CC-A, placed in the `PHASE_19_PLAN.md` governance queue AFTER `B-REVIEWER-LOOP`. No date.** **Ship OBJ-1, accumulate blast-radius readings across N batches, THEN ask.**
 
 ### **OBJ-5 — GOVERNANCE**
 Per the change-class matrix (`d8d4999bb`). ⚠️ **`SYSTEM_IMPACT_MAP.md` is `judged` for `non_architecture` and I am marking it REQUIRED BY JUDGEMENT anyway** — this batch edits the estate the SIM documents, and OBJ-5 carries the §3 stale-cap correction. **Using the class to dodge an applicable doc is the exact failure the matrix was built to expose.**
 
+### **OBJ-8 — ✅ `[L CHANGE 3]` THE PROSE CLASS GETS A BOUNDED MEASUREMENT, NOT A TOOL — DONE, AND IT SPAWNED A BATCH**
+⛔ **P1 FAILED AT (c) AND THE RULING IS *BUILD NOTHING*: the language server is not a better search — IT IS NOT A SEARCH. The compiler DECIDES identity, so 65 references is a DERIVATION, total over its domain. Prose has no compiler, so any tool must CONSTRUCT that relation — and constructing it IS the paraphrase problem.** ★ **That is why four better matchers all failed.**
+✅ **MEASURED at the pinned ref `e4425782`, lexical and exact, zero semantic matching: 556 IDs with a home · 151 multi-homed (27%) · 405 single-homed as the positive control · 142 true multi-homing vs 9 namespace collisions.** ⛔ **And 96% of comparable pairs share LESS THAN HALF their text — which is what killed the consolidation version.**
+⇒ **FILED AS `#970`; HOME: `B-DISAGREEMENT-FINDER`, queue row 8.5, Step 1 APPROVED r2.** ★ **Langston’s gate was *"if it’s large, THEN scope it."* It came back large.**
+
 ### **OBJ-6 — MEASURE WHETHER THE 1.b SKIP GENERALISES**
-⛔ **ONE BATCH IS ONE OBSERVATION.** Across the last N closed batches, in how many did a provenance read actually happen, and in how many did it happen only because Kyle ordered it? **Deliverable is a NUMBER with its population, or an explicit "the instrument cannot see this" refusal.** ⚠️ **If the skip does NOT generalise, this batch says so and the §1 finding is narrowed to CC-C.**
+⛔ **ONE BATCH IS ONE OBSERVATION.** Across the last N closed batches, in how many did a provenance read actually happen, and in how many did it happen only because Kyle ordered it? **Deliverable is a NUMBER with its population, or an explicit "the instrument cannot see this" refusal.**
+⛔⛔ **AND LANGSTON NAMED THE RECURSION THAT MAKES THIS SHARPER THAN I SCOPED IT: THE MANDATORY 1.b PROVENANCE READ *IS* A PROSE SEARCH.** This scope’s own §4 is a grep over the ledger corpus with a substring-noise correction I made by hand (38 → word-boundary). ⇒ **every 1.b in this system inherits the paraphrase failure mode — so OBJ-1’s finding does not sit BESIDE the governance problem, it UNDERCUTS THE CONFIDENCE OF THE READ THAT GATES EVERY SCOPE, INCLUDING THIS ONE.** ⚠️ **If the skip does NOT generalise, this batch says so and the §1 finding is narrowed to CC-C.**
 
 ### **OBJ-7 — THE RECOMMENDATION KYLE IS HOLDING FOR**
 **Kyle is holding the pricing-feed work pending this.** Deliverable: **hold, or build in parallel** — with the reasoning stated. ⛔ **DELIVERED AT STEP 1 CLOSE, NOT AT BATCH CLOSE** — he is blocked now, and making him wait for the whole batch would be this batch committing the failure it is diagnosing.
