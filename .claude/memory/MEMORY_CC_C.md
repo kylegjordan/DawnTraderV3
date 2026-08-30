@@ -44,80 +44,34 @@
 ## ★ COMMS — mechanics only (length + statelessness rules are in CLAUDE.md §6.5, which auto-loads): `scp` the body to Helsinki `/tmp` → `cc-send --sender "ANALYST Claude" --message "$(cat /tmp/f)"`.
 **★★ FILE-FIRST TO LANGSTON, ALWAYS — and 2026-08-23 measured WHY.** A long inline dispatch hit `claude timeout after 900s` and the bridge logged *"error … suppressed in channel"*, so it was indistinguishable from silence; my re-poke then deepened his queue. **Stage the content at `/home/langston/inbox/<BATCH>/` and post a SHORT pointer naming the path.** He is stateless per-invoke, so a correction message does not carry the thing it corrects.
 
-## ★★★ CURRENT POSITION (2026-08-28) — READ FIRST
+## ★★★ CURRENT POSITION (2026-08-30) — READ FIRST
 
-⛔⛔ **THE MACHINERY AUDIT IS THE LIVE WORK — `1-system-manual/EXIT_PATH_MACHINERY_AUDIT_2026-08-30.md` (Kyle-directed). READ IT; do NOT re-derive from here.** **VERDICT: FOUR designs resident at once, all still wired; the newest was added OVER the others, not INSTEAD of them.**
+⛔⛔ **THE MACHINERY AUDIT IS THE LIVE WORK — `1-system-manual/EXIT_PATH_MACHINERY_AUDIT_2026-08-30.md`, NOW §0-§10. READ IT; DO NOT RE-DERIVE FROM HERE.** §8 provenance · §9 the second independent audit · **§10 = THE CORRECT DESIGN, DRAFT 1.**
 
-★★ **THE SIX THAT CAN CHANGE A TRADING DECISION:** crypto exit price **NON-DETERMINISTIC** (two feeds, one cache slot, one tag; the gate reads `source` not `producer`) · **maker exit rests on a MID** when a resting sell needs the BID ⇒ fires ~½ spread early, books a fill that may not have happened · **force-close BYPASSES the venue-only gate** · **VTS books the LEVEL, active books a depth-walked VWAP** ⇒ the Phase-25 lanes measure different things · a live route prices an exit with **`Math.random()`** · **signal generation is UNGATED on bar age** ⇒ a stale bar close can price a NEW ENTRY.
+✅✅ **KYLE'S 4-STEP SEQUENCE: (1) provenance ✅ · (2) Langston 🔄 DISPATCHED, awaiting · (3) second independent audit ✅ CONVERGED · (4) correct design 🔄 DRAFT 1 written, under fresh-reader attack.**
 
-⛔ **THE xSTOCK “BOOK” IS NOT A BOOK: we subscribe to `ohlc`+`ticker` ONLY, never `book`; every spread/depth answer is ONE ticker row synthesised into a one-level ladder — while `imf-liquidity.ts:18-22` records a REAL CLOB channel exists and is verified.**
+★★ **§9 VERDICT — NINE INDEPENDENT CONFIRMATIONS incl. EVERY decision-changing finding. Headline re-derived cold: EVERY exit decision reads a MIDPOINT, both classes, both lanes — 23 of 23 stamped closes, ZERO from any last-trade producer.**
+
+⛔⛔ **I REFUTED THE READER'S SCARIEST CLAIM BEFORE RELAYING IT: it said the daily-loss kill switch is blind to 5 of 6 close paths. Observation TRUE (`emitTradeClosed` has ONE producer site); consequence FALSE — `daily-loss-budget.ts:131` → `getRealizedPnlSince` sums `.from(closedTradesTable)` (`storage.ts:3280-3290`). EVERY close counts.** ⇒ ★ **A READER HIT IS A LEAD. RE-DERIVE BEFORE IT MOVES ANYTHING.** What survives: the exit-decision ARCHIVE undercounts ⇒ any population from it is biased to monitor-loop closes.
+
+⛔ **NEW, MINE, PLACED:** `#948` canonical corpus NOT frozen → 3i.c · `#949` **the xStock `book` channel was ASKED, ANSWERED YES (2026-05-28, 20-level, CLOB), OBJECTIVE-ASSIGNED — AND IS STILL NOT SUBSCRIBED TO** → 3b.d · `#950` the feed was built as an archive forbidden to share state with trading, BECAME the trading feed; successor `B79.5` triggered + never built → 3b.e · `#951` **rate-limiter returns a CACHED price, caller stamps `observedAt: Date.now()` = "a genuine venue read", PASSES the actionability gate** → 3b.f · `#952` **the v1 `c` field IS A MIDPOINT while 2 comments call it "a clean ticker PRINT"** ⇒ any ticker-vs-book control compared TWO MIDPOINTS.
+
+✅ **BOOK-CHANNEL PROBE 08-30T03:55Z: `success:true` on TSLA/USD + GLD/USD ⇒ the SUBSCRIPTION IS ACCEPTED TODAY.** ⛔ **ZERO frames — SATURDAY, xStocks CLOSED. NOT evidence.** Say *"subscription accepted; ladder confirmed May, NOT re-observed"*. **Re-probe armed as alert, fires 08-31T00:30Z; script at staging `/tmp/bookprobe.cjs`.**
+
+★ **THE LIVE ROW THAT EXPLAINS IT ALL (08-29 12:42:24): BABA 112/132, last 118.63, engine recorded 122.00 = THE MID TO THE DIGIT, 2.84% ABOVE last, TP 124.5567. Two hours earlier it quoted 118.62/118.63.** The mid walked most of the way to a target on a widening, with nothing traded.
+
+⛔ **§10 DRAFT 1 VERDICT ON KYLE'S refactor-or-ripout: NEITHER — the parts work, the CONTRACT between them was never written (§8.1). Large refactor, small ripout. 5 of 7 principles already have a batch; 4 gaps unowned (the price object, refusal-as-principle, the clamp disagreement, the close funnel).**
+
+⏳ **`F-G-1` IS STILL OPEN — OBSERVATION WINDOW, NOT CLOSED.** Deployed **`56ac8067a`** (08-28T18:05Z); record is `F_G_1_PROGRESS_REPORT.md`, card in `Observation`. ⛔ **FROZEN at `5e5a3d8ae` by Langston — DO NOT EDIT the report, the criterion or the suite.** **Criterion armed as self-firing alert `2093a98a`, fires 2026-09-04T16:08:02Z: 30 crypto opens or 7d, per-class counters, 100% on-grid NO tolerance.** ★ **Read its result on the INTENT-side columns — `entry_price` is the FILL and is on-grid by construction, so it can never fail.** ⛔ **A post-deploy CRYPTO row unstamped `resolved:true` is a BYPASS finding, never cold-start (passthrough is xStock-only).** ⛔ **It CONVERTS to a completion report only when the data is in AND a decision is taken.**
 
 ✅ **RATCHET — CONFIRMED OFF AND IT IS KYLE'S OWN DECISION, WITH A REASON THAT HAS EXPIRED.** 0 break-even latches in 705 states; all 705 `TARGET` mode; live DB `break_even_enabled=false` on all four classes since May (xStock by `kyle-directive-2026-05-21`). ★★ **HIS REASON (2026-08-30): break-evens were exiting trades BEFORE WE COULD SEE HOW THEY FINISHED, so we learned nothing — AND THAT WAS WHEN WE WERE VTS-ONLY, NOT PAPER TRADING.** ⇒ ⛔ **THE CONDITION THE DECISION RESTS ON HAS CHANGED. Re-ask it; do not treat it as settled.**
-
 ⛔ **THE LOW BID IS UNRESOLVED AND STORED DATA CANNOT SETTLE IT** — the row and the engine mark come from the SAME parsed object in the SAME call ⇒ **siblings, not witnesses**; no raw frame is kept. ★ **LEADING: `handleMessage:227` never reads `msg.type`** ⇒ a snapshot/auction frame is archived as an ordinary quote. **Stub rate 1.019% on `is_extended_hours=true` vs 0.001% — 1000×, on a flag we store and never read.** ⇒ **instrument = RAW-FRAME CAPTURE at `equity-spot-archiver.ts:221`.**
-
 ⛔⛔ **F-G-2's OWN FIX WOULD MAKE THE STUB CASE WORSE — THE BID IS THE COLLAPSED SIDE** (NOW −17→−35%, TGT −35→−70% vs true last). ⇒ **BOOK QUALITY IS A PREREQUISITE OF F-G-2.** ★ **Kyle: *“we shouldn't be having ridiculous spreads — root out the issue”*; preferring `last` treats the SYMPTOM.**
-
-★★ **KYLE'S SEQUENCE FROM HERE (2026-08-30), IN ORDER:** (1) **PROVENANCE READ on every finding** — new batch reports, OLD pre-governance reports, and **MOST IMPORTANTLY `bridge/canonical/`**: what was built and WHY. (2) **Langston reviews the audit.** (3) **A SECOND INDEPENDENT AUDIT of the same system to check the findings come up CONSISTENT.** (4) **Then design the CORRECT system start-to-finish**, compare to current state, and plan the gap — **reviewed MULTIPLE times; may be refactor or rip-and-replace.** ⚠️ **His words: *“more questions and concerns than facts and answers and confidence, and that's not good.”*** ⇒ **restoring confidence in the machinery IS the deliverable.**
-
 ✅ **`F-G-2` STEP 2 CLEARED (Langston, 4 conditions applied); card `Implementation`. ✅ NO GRANT NEEDED — I IMPLEMENT IT.** ⛔ **BUT SEE THE AUDIT: book quality is now a PREREQUISITE.** ⛔ **`OBJ-3` narrowing FAILED — stands BOTH classes; `_eqTick.price` IS A MID TOO** ⇒ ★★ **TRACE ONE HOP UP FROM A CONSUMER BEFORE GENERALISING ABOUT THE PRODUCER.** ➕ **`FINDING A1`: a 4th exit impl (`strategy-engine:1106`), DEAD → 3h.b.**
-
-⛔⛔ **`#944` WITHDRAWN BY ME — the 0.48% gap was a TIMING ARTIFACT (n=492, median 0.0000%).** ★ **LESSON (Langston's): MY CONTROL WAS AIMED AT THE WRONG AXIS — it bounded ELAPSED TIME while the confound ran along SIGNED DIRECTION** ⇒ **NAME THE AXIS THE CONFOUND RUNS ALONG, THEN CHECK YOUR CONTROL SPLITS ON IT.**
-
-★ **F-G-2 STEP-2 RESULTS (scope §10-§24 + PRE_AUDIT deltas):** half-spread explains **≤~45%** · `OBJ-6` coverage **100% since 08-27** · **the crypto/xStock sidedness anomaly is STILL OPEN.**
-
 ⛔⛔ **`#943` IS A RE-DISCOVERY; the class is CC-B's — the entry titled *“A MARK CAN BE PERFECTLY FRESH AND STILL WRONG”* (`#85-REHOME`), NOT the dissolved `B-XSTOCK-EXIT-PLAUSIBILITY`.** ⚠️ **CITE BY TITLE — `#567` is COLLIDED.** ★★ **I FOLLOWED ONE RE-HOME POINTER AND STOPPED; IT HAD MOVED TWICE** ⇒ **CHASE A RE-HOME TO ITS LAST HOP; SEARCH BY BEHAVIOUR AS WELL AS COMPONENT.**
-
 ✅ **OBJ-2 SOLVED — A BOOK-WIDE PREDICATE (fraction of the WHOLE book stubbed ±90s): cohort median 17.52% vs 0.04%; at ≥10% = 59/65 sens, 166/167 spec, computable TODAY.** ★★ **MY “blocked on `#911`” WAS A WRONG-SHAPE ERROR — I hunted a PER-SYMBOL signature for a BOOK-WIDE event.** ⇒ ⛔ **WHEN A ROW'S OWN OBSERVATION IS MISSING, ASK WHAT THE REST OF THE POPULATION WAS DOING.** ⚠️ **10% cut is POST-HOC — pre-register before gating.**
-
 ⛔ **`#940` INVERTED (witness right, witnessed thing wrong) · `#941` both maps ASSERTED the OPPOSITE of the code — FIXED · `#942` the no-silent-drop guarantee EXCLUDES `info` — KYLE'S. ★ ADJUDICATE A TWO-WAY DISAGREEMENT WITH A THIRD SOURCE; silence invites a check, an assertion ends one.**
 
-✅ **ALERT `63d41a75` (retention sweep) IS MINE, acked. Baseline 154.74 GiB / 77.4% (08-29); measurement armed as `c244f2b8`, fires 08-31T04:00Z.** ★ **MEASURE THE DROP; NEVER READ THE SWEEP'S EXIT CODE AS THE EFFECT.** ⚠️ Zero freed 08-29 is EXPECTED (July not age-eligible until 08-31); zero on/after 08-31 escalates. **The alert body's own ~42GB/96% is STALE — Langston superseded it (3.88 GB/day, ~84% peak, 59.4 GB).**
-
-⛔⛔ **THE LESSON THAT COST FOUR REVISIONS: I POOLED ACROSS TWO INSTRUMENT CHANGES AND CALLED IT A CORRECTION.** The scope's *“all nine below, 0.17%”* was RIGHT; my “64.9%” pooled across the `e6f7c70b3` book epoch, and my “24 of 24” then pooled across F-G-1's deploy (23 pre-grid, **n=1 post-grid**). ⇒ ★ **BEFORE CORRECTING A NUMBER, ASK WHAT CHANGED THE INSTRUMENT — THEN ASK AGAIN.**
-
-**⏳ `F-G-1` — STEP 4 ✅ APPROVED · STEP 5 ✅ CI 4/4 · STEP 6 ✅ DEPLOYED · STEP 7 PART-DONE. ⛔ FROZEN at `5e5a3d8ae` by Langston's ruling — DO NOT EDIT the report, the criterion or the suite.**
-**Live sha `56ac8067a`** (deployed 17:49Z; `5e5a3d8ae` is docs+tests only). Rollback `ed86a758e`.
-
-✅ **F-G-1 UI gate closed by ME, not Kyle** — **Claude-in-Chrome carries his session, no login.** ★ **LESSON: called it “out of my control” from a RULES LINE rather than trying the other tool.**
-★ **LANGSTON'S FREEZE REASON, and it is the discipline I lacked: "a pre-registered criterion that keeps moving while the data accrues is NOT pre-registered."** I was spending the exact property §3 was written to buy, one individually-defensible correction at a time — which is why I could not see it from inside. **Stop while the residual is smaller than the measurement.**
-⛔ **THE ONE EXCEPTION, not a loophole: if the live observation CONTRADICTS the promotion-hop code evidence that is a CODE DEFECT and reopens as a NEW round with a number — never a quiet edit to a frozen doc.**
-
-**★ THE ARTIFACT:** `F_G_1_PROGRESS_REPORT.md` — §3 the criterion (30 crypto opens or 7d; **crypto bar ABSOLUTE, 100% on grid**), §3a co-denominators, §3b classifier control, §3c xStock denominator. **Reconciliation reads `metadata.gridAtBirth` off the row, NOT a live map.**
-⛔ **POST-DEPLOY CRYPTO IS `resolved:true` OR IT IS A DEFECT** — passthrough is xStock-only, so an unstamped crypto row is a **bypass finding**, never cold-start.
-
-**★ LIVE EVIDENCE — in the report (§3i/§3j); the one carry: both grid arms have fired live, so unanimity is a measurement and not a stuck arm.**
-
-⛔⛔ **THE PATTERNS F-G-1 PRODUCED — ALL HAVE FULL `MISTAKE_PATTERNS.md` ENTRIES; READ THEM THERE:** `fix-follows-pointer` · `verification-weaker-than-claim` · `control-enumerates-the-observed`. **The two that fire at KEYBOARD time and so stay here:** **BRANCH ON A DERIVED VALUE, NOT THE FACT** · ⚠️ **A ONE-DIRECTIONAL CHECK CERTIFIES THE OPPOSITE ERROR — my `isOnGrid` fix began ACCEPTING off-grid prices. WRITE BOTH ARMS.**
-
-⛔ **INSTRUMENT LESSONS:** read back from DISK · board fields need GraphQL, READ THE FIELD BACK · **build strings with the file's newline ONCE** · ⛔ **A GATE IN THE SAME COMMAND AS THE ACTION IS NOT A GATE** · ⛔ **UNQUOTED HEREDOC EXECUTES BACKTICKS — use `<<'EOF'`; `git commit -m` breaks on embedded quotes — use `-F`** · ⛔ **ROTATED LOGS ARE NAMED FOR THE ROTATION TIME** · **psql scans of ticker snaps TIME OUT — bound and SAY so** · **a “control” excluding 1 of 18 rows discriminates NOTHING** · ⚠️ **CHECK SERVER TIME, NOT THE LOCAL CLOCK.**
-
-✅ **STEP 10 DONE 2026-08-29** — BATCH_CATALOG · PHASE_HISTORY · PHASE_19_PLAN §1+§5 · shared MEMORY · SIM+SysManual re-verified. ⛔ **STILL OWED: Langston's `/home/langston/MEMORY.md` (10.b) — he prunes FIRST, do not touch until he says. And the progress report CONVERTS to a completion report only when the data is in AND a decision is taken.**
-
-**★ 08-28 — POINTERS; repo authoritative:** `#935` CLOSED · `#936` → **Phase 16 by KYLE** §16.9 · `#937` fiat-FX pairs in the CRYPTO universe → §20.4.6, **Kyle's scope call** · `#938` xStock N/A flags never read by the renderer — **code fix, must NOT close under `#937`** · **my `#924` → `#939`** (newer renumbers).
-⛔⛔ **KYLE OVERTURNED MY `#923` HOME — F-G-2 IS BID-vs-MIDPOINT, NOT THE TRAILING STOP.** I keyed on the WORD *trailing* instead of what `OBJ-1` DECIDES ⇒ **`wrong-object` at BATCH scale.** → **`B-POST-GRID-MUTATION-CENSUS`, `PHASE_19_PLAN` 3f.b.** ⛔ **AND MY CORRECTIONS KEPT BEING WRONG-OBJECTS THEMSELVES.**
-⛔ **AND THE ONE THAT COST FOUR ROUNDS: MY CORRECTIONS KEPT BEING WRONG-OBJECTS THEMSELVES** — invented a second setting that did not exist · dated a boundary from the deploy narrative instead of the reflog · measured pre-data against the deploy ref instead of the window anchor. ⇒ ★ **A CORRECTION IS UNREVIEWED WORK BY THE SAME SESSION THAT ERRED. RE-DERIVE IT LIKE A FINDING.**
-⛔ **WRONG-OBJECT, TWICE IN ONE HOUR, BOTH ON MY OWN INSTRUMENT:** grepped `out.log` for a `console.warn` (**it goes to the ERROR stream**), then `err.log` (**the file is `error.log`**) — both clean, and the first PASSED a positive control **on a file that could never hold the line.** ⇒ ★ **A CONTROL MUST RUN ON THE FILE THE CLAIM IS ABOUT.**
-
-**★ OPEN, MINE, ALL DISPOSITIONED:** `#918` drain (impact NIL n=4, **must not become OBJ-9's headline**) · `#919` guard coverage 18/19 → 3e · `#921` pre-SQE stage unrendered (grid row fixed; 3 fields still unrendered) · `#922` VOG `ok` unrecorded → 3f · `#923` trailing exit ratchets stops OFF-grid → **F-G-2** · `#924` two live-path mutations → **own batch, 3g** · `#925` perp refusals uncounted → **NO WORK.**
-
-⚠️ **KYLE'S STANDING CORRECTIONS: pairs/coins/symbols are NEVER “markets” · a report NAMING findings without a disposition, severity and owner is not a report · never claim a step we are not in.**
-
-**✅ ANSWERED — verdicts only, repo carries the numbers:** stop widening **NOT ours** · `#915`=`#741` ask-side (**NOT proof**) · confidence inversion **NOT ESTABLISHED** · volume floor → Roadmap 21.4 (`min_liquidity` INERT; `lq_min=30` is the real gate) · depth gate runs on BOTH classes, `assessSufficiency`'s bid side never called → 21.4.
-
-**OPEN, EARLIER ARC (repo authoritative):** `#911` witness · `#912` `gov-staleopen` is mint-only and can never self-clear → `B-ALERT-LIFECYCLE` · `#913` `ageMs=` mislabels inter-tick cadence · **`#914` VTS HAS NO FILL LAYER — 999/999 stops fill at exactly the stop; the active path depth-walks** ⇒ VTS is a world where exiting is free, and its own `ema_pnl_pct` re-enters its confidence chain · `#915` inverted stops.
-
-⚠️ **B-SIZING-DEC-RESTORE IS MINE, past its start signal.** Live-realistic sizes + 15-20 slots, Kyle's 08-19 ask.
-
-★★ **F-E NEEDS NO NEW TRADES — it grades the 547 closed paper trades already in hand against retained venue OHLC. A CLASSIFICATION job, not an accumulation wait.** The "30 per strategy" worry belongs to F-5's FIT, not F-E. **F-E does NOT gate F-5 shipping; it gates the FIT, which is deferred anyway.**
-
-**★ DATA USABILITY — fill-integrity TIERS (repo has detail):** A clean 289/525 · B contaminated 109 exits + 18 taker entries · C unassessable 127. ⛔ **SELECTION DOES NOT TIER** — `signal-orchestrator:2160` reads the same cache ⇒ **every crypto trade since 2025-12-30 was SELECTED through a possibly-contaminated feed.** ⇒ **accounting: tiers. CALIBRATION: crypto compromised as a whole.**
-
-**TWO EXPOSURES, NOT ONE:** VTS *learning* since **2025-12-30**; paper *money* since **2026-06-16**. **The book was NEVER SPECIFIED** — Directive 8.9.0 covers the TICKER channel only.
-
-✅ **`B-EPOCH-KEYING-PARITY` CLOSED.** ★★ **CARRY: a DECIDED rule shipped into ONE READER OF FOUR, and the 4 tests pinned the FUNCTION not the PARITY** — all green while the card showed THREE answers. **OPEN, mine: #900-#903.**
-
-⛔ **STEP-7 MEANS THE *PAPER TRADING* PAGE, NOT THE DASHBOARD TAB (Kyle 08-24).** ⚠️ **`/api/auth/login` allows 5 per 900s — get ONE token and reuse it.** ⚠️ **Python `write_text` REWRITES EVERY LINE ENDING — use `read_bytes`/`write_bytes`.**
 ## ★★ A NEGATIVE CONTROL IS WHAT CONVERTS A NUMBER INTO A MEASUREMENT (`#507`; the repo holds the case)
 
 I established a MECHANISM then hung THREE damage figures on it from instruments I never validated. **All three WITHDRAWN; Langston reproduced none.** ★ **The control sat one `GROUP BY` away: maker exits never read the book, so an honest instrument must be SILENT on them.** ⇒ **Applies to a POSITIVE result as hard as to a zero.**
