@@ -13,7 +13,7 @@
 ⛔ **`#961` — the largest defect on the plan — is currently RECONSTRUCTED, not read.** The exit fill walks an order book and **never records how old it was.** `bookAgeMs` and `bookMid` are **NULL BY CONSTRUCTION on xStock** (`active-execution-engine.ts:1381-1392` — `_posClass === 'xstock_spot' ? null : getBookForFill(...)`). **Measured: crypto 15/78 populated, xStock 0/26.**
 ⇒ **So `#961`'s headline — 22 of 243 closes filled on a book older than the entry gate's own 15 s limit, worst 1,554.9 s — was rebuilt by joining the ticker archive after the fact.** ⛔ **A finding that large should not rest on a reconstruction.**
 
-⛔ **`#962`/`W12` — the mark is `(bid+ask)/2` when both sides exist, else `last`, and it is UNTAGGED.** Measured 0 fallbacks in 373,450 rows across both sessions — **but that zero is only readable because bid/ask presence can still be reconstructed today.** ⇒ **If the fallback ever fires we have no way to SEE it.** *(Langston's disposition: fold the tag in here.)*
+⛔ **`#962`/`W12` — the mark is `(bid+ask)/2` when both sides exist, else `last`, and it is UNTAGGED.** Measured 0 fallbacks in 373,450 rows — ⛔ **an xSTOCK TICKER-SNAP population; the CRYPTO arm is UNMEASURED and this zero may not be cited as covering it (r3, restated r7).** **And that zero is only readable because bid/ask presence can still be reconstructed today.** ⇒ **If the fallback ever fires we have no way to SEE it.** *(Langston's disposition: fold the tag in here.)*
 
 ⛔ **`W7` cannot be costed at all without this** — whether a given exit read a republished mark or a fresh tick **leaves no trace**, because the cache is never persisted.
 
@@ -24,8 +24,8 @@
 | # | objective | verification |
 |---|---|---|
 | **OBJ-1** *(r3)* | **On every TAKER close — INCLUDING `forceClosePosition`, which IS one (r3 BLOCKER-B) — record the age of the book the FILL walked, into a NEW column `exit_fill_book_age_ms`.** ⛔ **NOT into `exit_book_age_ms`, which holds DECISION-time age (BLOCKER-1).** | ⛔ **BOTH cohorts asserted, and the coverage query CARRIES `B-EXIT-PROVENANCE`'s CARVE-OUT (r3 MATERIAL-C): it EXCLUDES `close_reason='never_filled'` and the three paths that never call `closePosition`, because `exit_fee_mode` is THREE-valued (107 live nulls) and a binary partition false-reds on all of them.** ⛔ **AND CRYPTO IS VERIFIED BY A PAIRED LOG LINE AT THE FILL SITE, NOT BY RECONSTRUCTION (r3 MATERIAL-D) — nothing persists the crypto WS mini-book, and the nearby ticker archive is a DIFFERENT FEED off a SEPARATE SOCKET.** |
-| **OBJ-2** *(r3)* | **Record the mark's KIND in a NEW column `exit_mark_kind`** (`mid` / `last`), **derived at BOTH sites that compute it — `equity-spot-archiver.ts:135` AND `kraken-v2-translator.ts:55-59` (r3 BLOCKER-A).** ⛔ **NEVER inferred from a consumer's variable name: `kraken-websocket-adapter.ts:681` is called `lastPrice` and holds a MID.** ⛔ **NOT by widening the source/producer vocabulary — `:813-816` prohibits it.** | A post-deploy close carries the kind; a forced-`last` unit test yields `last`. |
-| **OBJ-3** *(r2)* | ⛔ **NO BEHAVIOUR CHANGE.** | ✅ **A DIFF PROPERTY, NOT A REPLAY** (a replay cannot cover the maker leg, which is where BLOCKER-2 lives): **no changed line feeds a price, a gate, a comparator or an `await` that did not already exist.** `_closeSnap` is already computed and already awaited on the taker branch — a CHECKED FACT. |
+| **OBJ-2** *(r7 — REDESIGNED ON LANGSTON'S RULING; supersedes r3/r5)* | ⭐ **NO NEW COLUMN. SPLIT THE COARSE MEMBERS OF THE EXISTING CLOSED `PriceProducer` UNION** so `exit_price_producer` alone determines the kind. **THREE members split** — `kraken_ws_ticker`, `kraken_equities_ws`, `kraken_rest_engine_fallback` — each into `_mid`/`_last`, decided where the predicate runs. ⛔ **`kraken_rest_poller` DOES NOT SPLIT (condition 2): its rate-limited branch `live-pricing-adapter.ts:583-587` returns `cached?.price` bare, so it has THREE arms and a two-way tag would stamp a laundered value — `#951`/`#546`. Leave coarse, say why in the union comment, `#951` splits it.** ⛔ **PURE RE-DESCRIPTION (condition 1): split only — never merge, never delete a member, never change which number is produced.** ⛔ **STRICT SUFFIX (condition 3), and `kraken_ws_ticker` is already a PREFIX of `kraken_ws_ticker_v1` ⇒ cohort queries ENUMERATE, never `LIKE`.** ⛔ **The union comment must state that `_mid` records the KIND and answers NOTHING about WHICH BBO — `#952`'s axis is untouched and both crypto legs come out `_mid`.** | **A post-deploy close carries a split member; a forced one-sided book yields `_last`.** ⭐ **AND THE SPLIT EPOCH — deploy sha + UTC — IS RECORDED IN THE SIM, because `F-G-2` 3c partitions closed trades by exit provenance and would otherwise silently read one cohort as two.** |
+| **OBJ-3** *(r2; condition 4 added r7)* | ⛔ **NO BEHAVIOUR CHANGE — and the change-class stays `non_architecture` ONLY IF THIS HOLDS LITERALLY: no new emission site, no gate reading `producer`, no behaviour change. If any moves, RE-DECLARE `architecture` and the ledger entry leads with it.** | ✅ **A DIFF PROPERTY, NOT A REPLAY** (a replay cannot cover the maker leg, which is where BLOCKER-2 lives): **no changed line feeds a price, a gate, a comparator or an `await` that did not already exist.** `_closeSnap` is already computed and already awaited on the taker branch — a CHECKED FACT. |
 | **OBJ-4** | **The reconstruction that `#961` rests on is retired for post-deploy rows** — the number is READ, not rebuilt. | `#961` updated to cite read values once n permits. |
 
 ---
@@ -358,3 +358,58 @@ r2 said: *"the mark-kind tag gets its own column rather than widening the enumer
 ## 🟨 OUT OF SCOPE, FOUND BY r1 — **THE CLOSE STAMP CAN LAND ON THE WRONG ROW**
 `active-execution-engine.ts:2196` picks the target row via `trades.find(t => t.openedAt && !t.closedAt)` over `getClosedTradesBySymbol` — **symbol-keyed, unbounded, `openedAt DESC`.** With two concurrently-open rows for one symbol, `closePosition` stamps **the first match, not the position being closed.**
 **DISPOSITION: own issue, §9.4 (4) a scheduled review — it needs a concurrency census before it can be dispositioned, and it is not this batch's object.** ⛔ **NOT re-derived beyond reading the two functions; filed as a LEAD, not a finding.**
+
+---
+
+# ✅ r7 — LANGSTON RULED **DESIGN (B)**, WITH FOUR CONDITIONS. ALL FOUR WRITTEN IN. TWO OF MY ARGUMENTS CORRECTED.
+
+> **RULING (2026-08-30T10:16Z, re-read at `58cc5bff8`): design (B) — split the coarse members of the existing closed `PriceProducer` union. NOT a pre-emption of `#952`, PROVIDED it is pure re-description.**
+> ⛔ **Board untouched by design: he sets `Review` at Step 4 on the diff, not on a design gate.**
+
+## ⛔ CORRECTION A — **MY EVIDENCE-2 WAS INVERTED, AND HE IS RIGHT. THE CONCLUSION SURVIVES AND GETS STRONGER.**
+
+I argued *"stamping a **last-trade fallback** `kraken_ws_ticker` IS that wrong-object label."* ⛔ **That is backwards.**
+✅ **Re-derived at `SYSTEM_IMPACT_MAP.md:319` (its own `CORRECTED 2026-08-29` line):** *"`c[0]` carries the **BBO MIDPOINT** whenever both sides are present — genuine last-trade **only** on a one-sided or empty book."*
+⇒ ⭐ **`kraken_ws_ticker` IS A MIDPOINT WEARING A PRINT'S NAME, AND THAT IS THE ARM THAT FIRES ESSENTIALLY ALWAYS.** I argued the case from the rare arm. **The mislabel is on ~100% of rows, not on an edge case.**
+
+⚠️ **AND I AM NOT CARRYING THE NUMBER HE ATTACHED TO IT — `#962`'s "0 in 373,450" IS AN xSTOCK TICKER-SNAP POPULATION.** r3 states that limit in this same document (`§r3 BLOCKER-A`) and says *"OBJ-2 may not cite that zero as covering crypto."* **The crypto last-arm rate is UNMEASURED.**
+✅ **The argument does not need it: the SIM line above is STRUCTURAL, not empirical** — *both sides present ⇒ midpoint* is a property of the code, and it holds whatever the arm frequency turns out to be.
+
+## ⭐⭐ ADOPTED — **HIS DECIDING ARGUMENT, WHICH I DID NOT MAKE: (A) BUILDS A SECOND HOME FOR ONE RULE**
+
+Under **(A)**, `exit_mark_kind` travels the same six hops as `producer` **and can contradict it, with nothing that could catch the contradiction.** ⛔ **`producer='kraken_ws_book_mid'` + `exit_mark_kind='last'` is REPRESENTABLE and is a contradiction in terms.**
+✅ **Under (B) it is UNREPRESENTABLE — one field, one union, and a missed member is a BUILD FAILURE.** **Re-derived: `toCachedProducer`'s `default:` arm at `live-pricing-adapter.ts:137-140` closes on `const _exhaustive: never = p`.** ⇒ **not a convention, a compile error.**
+★ **That is `#641`'s shape — a decided rule needs ONE HOME — and (A) manufactures the second one.**
+
+## ⚠️ CORRECTION B — **MY (B) COST LINE WAS WRONG. THE SAVING IS THE *DOWNSTREAM* CARRY, NOT THE UPSTREAM ONE.**
+
+r6 said *"the four sites where the predicate already runs."* ⛔ **Only ONE has the predicate at its emit site.**
+| member | predicate | producer stamped | same scope? |
+|---|---|---|---|
+| `kraken_rest_engine_fallback` | `active-execution-engine.ts:1305` | `:1309` | ✅ **YES — zero plumbing** |
+| `kraken_ws_ticker` | `kraken-v2-translator.ts:57-58` | adapter `:699` | ⛔ needs an upstream carry |
+| `kraken_equities_ws` | `equity-spot-archiver.ts:135` | engine `:1236` | ⛔ needs the archiver field-add |
+✅ **(B) is still smaller than (A) — but the saving is `PriceTickEvent` + `updateCache` + `CachedPrice` + `getPriceWithFallback`, four structures untouched. Stated honestly.**
+
+⭐ **ONE REFINEMENT, MEASURED, AND I AM STILL TAKING THE FIELD-ADD:** at the crypto WS site the adapter's `parseFloat(safeData.b[0]/.a[0])` (`:682-683`) round-trips **exactly** from the translator's own `bid`/`ask` locals (`:64-65` writes `String(bid)`/`String(ask)`; `String→parseFloat` is exact for doubles). **So re-deriving there would be correct TODAY.**
+⛔ **I am not doing it.** That exactness is an **unstated invariant of a function neither end owns** — the moment `a`/`b` are populated from anything but the locals the mid was computed from, the derivation diverges **silently**. **Rule 15: the field-add is the structural answer; the round-trip is the patch.**
+
+## ✅ THE FOUR CONDITIONS — BINDING, WRITTEN INTO THE OBJECTIVES
+
+**1. PURE RE-DESCRIPTION.** ⛔ **SPLIT ONLY. Never merge a member, never delete one, never change which number is produced.** ★ **This is the line that keeps this an INSTRUMENT and leaves `#952`'s question — *which is supposed to be the print, and do we need one* — untouched.** **The moment a member is removed or two mids are collapsed it becomes `#952`'s decision and it goes back to Langston.**
+
+**2. ⛔ `kraken_rest_poller` DOES NOT SPLIT IN THIS BATCH.** **Re-derived: `fetchFromKrakenRest`'s rate-limited branch (`live-pricing-adapter.ts:583-587`) returns `cached?.price ?? null` — a bare number with no provenance.** ⇒ **that producer has THREE arms, not two, and a `_mid`/`_last` dichotomy would stamp a laundered cached value with a confident kind — `#951` wearing a new label, and `#546` exactly.**
+✅ **Leave it COARSE, state why in the union comment, and let `#951` split it when it fixes that branch.** *(§9.4 disposition (1) — folded into the work in hand.)*
+⇒ ⭐ **THEREFORE THE SPLIT IS THREE MEMBERS, NOT FOUR:** `kraken_ws_ticker`, `kraken_equities_ws`, `kraken_rest_engine_fallback`.
+
+**3. STRICT SUFFIX EXTENSIONS** — `kraken_ws_ticker` → `kraken_ws_ticker_mid` / `_last`.
+⛔⛔ **AND THE COLLISION IS NAMED: `kraken_ws_ticker` IS ALREADY A PREFIX OF `kraken_ws_ticker_v1` (`live-pricing-adapter.ts:56`).** ⇒ **PREFIX RECOVERY IS NOT CLEAN. Every cohort query over `exit_price_producer` must ENUMERATE — never `LIKE 'kraken_ws_ticker%'`.**
+⛔ **AND MY "COARSE, NOT WRONG" WAS TRUE FOR A HUMAN READER AND FALSE FOR A QUERY.** `F-G-2` at 3c partitions closed trades by exit provenance and **would silently see one cohort as two.**
+✅ **SO: RECORD THE SPLIT EPOCH — deploy sha + UTC — IN THE SIM**, the same shape as the deploy-boundary rule, on a vocabulary boundary instead of a clock.
+
+**4. CHANGE-CLASS STAYS `non_architecture` ONLY IF OBJ-3 HOLDS LITERALLY** — **no new emission site, no gate reading `producer`, no behaviour change.** ⛔ **If any of those moves: re-declare `architecture`, and the ledger entry leads with it.**
+⚠️ **The `SYSTEM_IMPACT_MAP.md:320` property is the thing being preserved:** *"adding a producer cannot cause a price to be rejected, a position to be skipped, or the escalation rail to fire … A future change that makes any gate read `producer` RE-ARMS it."*
+
+## ⛔ AND THE NOTE THAT GOES IN THE UNION COMMENT ITSELF — **`_mid` MUST NOT READ AS HAVING SETTLED `#952`**
+**(B) is ORTHOGONAL to `#952`'s real axis.** `#952` asks **WHICH BBO** the midpoint came from — ticker BBO or depth-10 book — and **both crypto legs come out `_mid` under this split.**
+⇒ ⛔ **The union comment must SAY that a `_mid` suffix records the KIND and answers NOTHING about which book produced it.** **Otherwise the split reads as having closed `#952`, which is exactly the pre-emption the ruling is conditioned against.**
