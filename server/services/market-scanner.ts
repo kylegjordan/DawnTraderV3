@@ -650,13 +650,24 @@ export async function collectAdaptiveBatch(
   //   and archive legs above (`poolSymbols`, the stablecoin regex, `benchmarkSet`,
   //   `capturePreFilterReject`, `evaluatedSymbols`), which never reach that call.
   //
-  // ⛔⛔ WHAT THIS FIXES IS BITCOIN. IT DOES NOTHING FOR DOGECOIN, AND DOGECOIN DOES NOT NEED
-  //   FIXING — measured 24h: `XBT/USD` has ZERO archive rows (it passes volume and price and
+  // ⛔⛔ WHAT THIS FIXES IS BITCOIN IN THE ACTIVE LANE **AND DOGECOIN IN THE VTS LANE** — and
+  //   my "it does nothing for Dogecoin" was measured with an instrument that CANNOT SEE VTS.
+  //   Every `capturePreFilterReject` call is gated `!isPassiveLearning` (`:900`, `:907`, `:914`,
+  //   `:1055`+), so `signal_eval_archive` is ACTIVE-LANE ONLY. Live `screener_filters`: the
+  //   seven `vts_*` crypto profiles carry `min_price` 0.05, so Dogecoin at 0.0851 CLEARS the
+  //   VTS floor, reaches `passesHistoryFilter` at `:922` under the wsname, and fails closed —
+  //   venue-probed: `XDG/USD` -> EQuery, `DOGE/USD` -> 721 (controls `ADA/USD` -> 721,
+  //   `XBT/USD` -> EQuery, `BTC/USD` -> 721). CORROBORATED: the VTS closed corpus
+  //   `logs/virtual_trades` holds ONE doge/xdg occurrence across 151 daily files, against
+  //   `ADA/` in 74 of 151. ⇒ Dogecoin is absent from the learning population, not present in
+  //   it, and THIS LINE REPAIRS THAT.
+  // ⛔ SEPARATELY, IN THE ACTIVE LANE ONLY, DOGECOIN IS EXCLUDED BY A WORKING PRICE FLOOR —
+  //   measured 24h: `XBT/USD` has ZERO archive rows (it passes volume and price and
   //   dies at the history filter, whose branches carry no `capturePreFilterReject`, so the
   //   rejection is never archived), while `XDG/USD` has 545 rows carrying `low_price`,
   //   observed 0.0851 against a threshold of 0.25. The active path's min price is 0.25 on
-  //   every profile but strong_trend (live `screener_filters`); VTS's is 0.05, which is why
-  //   Dogecoin is present in the learning population and absent from active trading.
+  //   every profile but strong_trend (live `screener_filters`); VTS's is 0.05, so the ACTIVE
+  //   floor is what excludes Dogecoin there — a separate, working gate, not this batch's bug.
   //   CONTROL: `ADA/USD` fails the identical gate at 0.2013. ⇒ Dogecoin is excluded BY A
   //   WORKING PRICE FLOOR, not by a symbol form. Whether 0.25 is the right floor is a
   //   DECISION, not a defect, and it is homed as its own item.
@@ -682,7 +693,8 @@ export async function collectAdaptiveBatch(
   //   symbol LIKE '%/XBT': `low_volume` = 21,574 rows across 31 of 31 distinct symbols.
   //   Every one already REACHES the volume gate and fails it, on the venue-supplied 24h volume
   //   attached at the `:600` join — ABOVE this line, so nothing here moves that number.
-  //   ⇒ correct claim: they become ELIGIBLE TO BE ASSESSED, not tradable.
+  //   ⇒ correct claim FOR THE STANDARD PROFILE: they become ELIGIBLE TO BE ASSESSED. ⛔ It is
+  //   FALSE for the strong_trend route, which has no volume floor — hence the guard at `:889`.
   // ⚠️ AND THE REASON THEY FAIL IS A UNITS DEFECT THAT IS LIVE TODAY, INDEPENDENT OF THIS FIX:
   //   `:820` computes `volume24hCoins * currentPrice`, and `currentPrice` is `ticker.c[0]` —
   //   the price in the QUOTE currency. The comment at `:818` states the invariant ("All filter
@@ -886,7 +898,29 @@ export async function collectAdaptiveBatch(
       // strong_trend global filter profile instead of the standard one. This is the key
       // architectural promise of B63 — strong-DBS pairs bypass normal global filters.
       const cachedDbs = dbsCache.get(pair.symbol);
-      const isStrongBullDbs = !!(strongTrendFilters && cachedDbs && cachedDbs.score >= B63_STRONG_DBS_THRESHOLD);
+      // ⛔⛔ B-SCANNER-EGRESS-NORMALISE GUARD — A BTC-QUOTED PAIR MAY NOT TAKE THE STRONG-DBS
+      // BYPASS. Langston, Step-4 round 3, and it is a REAL deploy risk this batch created.
+      // The normalisation at `:714` sits ABOVE the B63.3 prefetch at `:789`, so post-fix the
+      // 31 `%/XBT` pairs resolve, gain OHLC, gain a DBS score, and any scoring >= 0.35 lands
+      // HERE — on a profile whose live values are `minVolume = 0`, `minPrice = 0.001`
+      // (`screener_filters.active_strong_trend`). MEASURED: at least 8 of the 31 clear a
+      // 0.001 BTC price floor (WBTC .9995, TBTC .98004, PAXG .0564, ETH .0318, XMR .0064,
+      // BCH .0032, AAVE .0016, SOL .00135) — and `TBTC/XBT` carries ~0.001 BTC ≈ $110 of 24h
+      // volume against a floor of ZERO.
+      // ⇒ THE WHOLE "they only become eligible to be ASSESSED" ARGUMENT RESTS ON THE STANDARD
+      //   PROFILE'S VOLUME FLOOR, AND THIS ROUTE DOES NOT HAVE ONE.
+      // ⚠️ WHY THE BYPASS IS UNSAFE HERE SPECIFICALLY, rather than merely untested: the money
+      //   gates it skips are denominated wrong for a non-USD quote (`:820` multiplies coin
+      //   volume by the QUOTE-currency price — see #966). A zero-volume bypass is only ever
+      //   safe if the thing being bypassed was measuring the right quantity.
+      // ✅ THIS IS A NO-OP FOR TODAY: the 31 already fail `low_volume` on the standard profile
+      //   and they continue to, identically — same rows, same label, same archive. It blocks
+      //   ONLY the path this batch would otherwise open. Reversible when #966 decides whether
+      //   BTC-quoted instruments belong in the universe at all.
+      const quoteCcy = pair.symbol?.includes('/') ? pair.symbol.split('/')[1] : '';
+      const quoteIsNonUsdCrypto = quoteCcy === 'BTC' || quoteCcy === 'XBT';
+      const isStrongBullDbs = !!(strongTrendFilters && cachedDbs && cachedDbs.score >= B63_STRONG_DBS_THRESHOLD
+        && !quoteIsNonUsdCrypto);
       const activeMinVolume = isStrongBullDbs ? strongTrendFilters!.minVolume : minVolume;
       const activeMinPrice = isStrongBullDbs ? strongTrendFilters!.minPrice : minPrice;
       const activeMaxBidAskSpread = isStrongBullDbs ? strongTrendFilters!.maxBidAskSpread : maxBidAskSpread;

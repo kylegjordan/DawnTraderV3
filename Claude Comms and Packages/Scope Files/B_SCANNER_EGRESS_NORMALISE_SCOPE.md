@@ -399,6 +399,7 @@ raw wsname sent → **Kraken rejects it** → `getOHLCData` returns 0 candles �
 ⇒ ⛔ **PREFIX COUNTING IS WHAT MISLED ME.** §13.2's `XBT%` = 167,215 rows are `XBT/AUD`, `XBT/CHF`, `XBT/JPY`, `XBT/DAI` and friends — **`XBT/USD` itself contributes ZERO.** I counted a prefix and reported a coin.
 
 ## 14.2 ⛔ DOGECOIN IS EXCLUDED BY A **WORKING PRICE FLOOR** — outcome (2), not a defect
+> ⛔⛔ **HALF-WITHDRAWN. TRUE OF THE ACTIVE LANE ONLY.** The archive is gated `!isPassiveLearning`, so it cannot see VTS — where Dogecoin CLEARS the 0.05 floor, reaches the history filter under `XDG/USD`, and fails closed on a venue rejection. **`OBJ-1b` REINSTATED on the VTS-history mechanism; see the change list §11.1.**
 **Live `screener_filters`: the active path's `min_price` is `0.25` on every profile except `strong_trend` (`0.001`); VTS's is `0.05`.**
 ⇒ **Dogecoin at $0.085 clears the VTS floor and fails the active one** — which is exactly why it is everywhere in the learning population and nowhere in active trading.
 ⇒ **`ADA/USD` failing the same gate at $0.2013 is the control: a coin nobody has ever called broken, excluded by the same rule.**

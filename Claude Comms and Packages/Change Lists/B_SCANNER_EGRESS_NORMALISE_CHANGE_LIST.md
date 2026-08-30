@@ -156,6 +156,7 @@ The comment still said *"Later is worse: it would mean N call-site edits."* **I 
 ⇒ **`#966` REWRITTEN AND BROADENED — it is NOT "non-fiat", it is ANY NON-USD QUOTE, and it now carries the two gates and the line.**
 
 ### 10.3 ⛔⛔ **MY §13.2 COLLAPSE IS REFUTED. BITCOIN AND DOGECOIN ARE NOT THE SAME FAILURE — AND NEITHER OF MY TWO PREVIOUS STORIES WAS RIGHT EITHER.**
+> ⛔⛔ **HALF-WITHDRAWN — SEE §11.1. The ACTIVE-lane leg stands; *"this batch does nothing for Dogecoin either way"* was measured with an archive gated to the active lane and is FALSE for VTS. `OBJ-1b` is REINSTATED.**
 **The presence table settles it. 24h, by exact symbol:**
 
 | symbol | archive rows | dies at |
@@ -185,3 +186,51 @@ The comment cited bare `kraken.ts:296` from inside `server/services/`, where the
 
 ### 10.6 ✅ RIDER-1 APPLIED — the stamps are at the six sites, not only in the tail
 **His diagnosis is exact, and it is `fix-follows-pointer` landing on me** — the pattern I adopted from him at F-G-1. I stamped the scope where he pointed and left this document's §3, §4, §6.3, §7 and §8.2 reading clean and false, **and the completion report is written FROM this document.** ✅ **One-line withdrawal stamps now sit AT each of those sites.**
+
+
+---
+
+## 11. ⛔⛔ ROUND-3 VERDICT — **BOTH BLOCKERS CONFIRMED. ONE OF THEM IS A REAL DEPLOY RISK THIS BATCH CREATED, AND MY §10.3 WITHDRAWAL WAS MEASURED WITH A BLIND INSTRUMENT.**
+
+### 11.1 ⛔⛔ (a) `OBJ-1b` IS **REINSTATED** — my archive measurement CANNOT SEE THE LANE MY CLAIM WAS ABOUT
+**RE-DERIVED AT THE REF: every `capturePreFilterReject` call is gated `!isPassiveLearning`** — `:900`, `:907`, `:914`, `:1055`, `:1063`, `:1071`, `:1079`. ⇒ ⛔ **`signal_eval_archive` IS ACTIVE-LANE ONLY.**
+⇒ ★★ **§10.3's *"this batch does nothing for Dogecoin either way"* IS A CLAIM ABOUT THE VTS LANE, MADE WITH AN INSTRUMENT THAT STRUCTURALLY CANNOT OBSERVE THE VTS LANE.** **The active-lane leg stands** — Dogecoin dies at `low_price` 0.0851 vs 0.25, `ADA/USD` fails the identical gate, outcome (2). **The lane-wide conclusion does not.**
+
+**MEASURED, THE LEG I NEVER RAN:**
+- Live `screener_filters`: **the seven `vts_*` crypto profiles carry `min_price` = 0.05.** ⇒ **Dogecoin at 0.0851 CLEARS the VTS floor** and reaches `passesHistoryFilter(pair.symbol)` at `:922` **under the wsname.**
+- **Venue-probed, the exact call:** `XDG/USD` → **`EQuery:Unknown asset pair`** · `DOGE/USD` → **721**. Controls: `ADA/USD` → 721 · `XBT/USD` → EQuery · `BTC/USD` → 721.
+- **CORROBORATION with a positive control — VTS closed corpus `logs/virtual_trades`, 151 daily files:** `doge|xdg` = **1 occurrence, in 1 file** · **`ADA/` = 74 of 151 files.**
+⇒ ⛔ **DOGECOIN IS ABSENT FROM THE LEARNING POPULATION, NOT PRESENT IN IT — the opposite of what I wrote — AND THIS BATCH REPAIRS THAT.**
+✅ **`OBJ-1b` REINSTATED on the VTS-history mechanism, NOT the active-price one.** ⛔ **`#967` (the 0.25 floor) is UNAFFECTED and still goes to Kyle — it is an independent active-lane question.**
+★ **DOUBLY INVISIBLE, which is why it survived: the history branches carry no capture, AND the passive lane carries no capture at all.**
+
+### 11.2 ⛔⛔ (b) **THE REAL DEPLOY RISK — B63.3's STRONG-DBS ROUTE HAS NO VOLUME FLOOR, AND THIS BATCH UNLOCKS IT FOR THE 31**
+**MY "not tradable" ARGUMENT RESTS ENTIRELY ON THE STANDARD PROFILE'S VOLUME GATE. THE STRONG-TREND ROUTE DOES NOT HAVE ONE.**
+**RE-DERIVED at the ref:** the normalisation is at **`:714`**; the B63.3 DBS prefetch calls `ohlcCache.getOHLCData(pair.symbol, 60)` at **`:789`** — **BELOW it.** ⇒ post-fix the `%/XBT` pairs resolve → gain OHLC → gain a DBS score → **`:889` routes any score ≥ 0.35 onto `strongTrendFilters`.**
+**Live `screener_filters.active_strong_trend`: `minVolume` = 0.00 · `minPrice` = 0.001 · `minHistoryDays` = 5 · enabled.**
+**MEASURED — at least 8 of the 31 clear a 0.001 BTC price floor:** WBTC .9995 · TBTC .98004 · PAXG .0564 · ETH .0318 · XMR .0064 · BCH .0032 · AAVE .0016 · SOL .00135.
+⇒ ⛔⛔ **`TBTC/XBT` CARRIES ~0.001 BTC ≈ $110 OF 24h VOLUME AGAINST A FLOOR OF ZERO.**
+⚠️ **MY OWN INSTRUMENT WAS WEAKER THAN HIS AND I SHOULD SAY SO: my archive query returned 6, not 8, because the price gate only fires on pairs that PASSED volume, so the two BTC-wrapper tokens never produce a price row. He read live prices; I read rejections.** ★ **A rejection archive cannot enumerate what would happen if the rejection stopped.**
+
+✅ **GUARD IMPLEMENTED — FOLDED IN UNDER §9.4 DISPOSITION 1, BECAUSE THE BATCH DEPENDS ON IT.** At `:889` the strong-DBS bypass now additionally requires a quote that is not BTC.
+⭐ **IT IS A TRUE NO-OP FOR TODAY'S BEHAVIOUR:** the 31 already fail `low_volume` on the standard profile and continue to — **same rows, same label, same archive population.** It blocks **only** the path this batch would otherwise open.
+⛔ **AND IT IS NOT A UNITS FIX — it is a refusal to grant a gate-BYPASS to a pair whose money gates are denominated wrong (`#966`).** ★ **A zero-volume bypass is only safe if the thing being bypassed was measuring the right quantity.** **Reversible the moment `#966` decides whether BTC-quoted instruments belong in the universe at all.**
+★★ **HIS FRAMING, AND IT IS EXACT: this is my own `pre-existing-therefore-fine` pattern landing on me. UNLOCKING A PATH INTRODUCES EVERY ACTION THAT PATH TAKES.**
+
+### 11.3 ✅ (c) THE THREE FALSE COMMENT STATEMENTS — CORRECTED IN PLACE
+| was | now |
+|---|---|
+| *"IT DOES NOTHING FOR DOGECOIN, AND DOGECOIN DOES NOT NEED FIXING"* | **it fixes Bitcoin in the active lane AND Dogecoin in the VTS lane**, with the gating, the probe and the corpus control cited |
+| *"Dogecoin is present in the learning population"* | **absent — 1 of 151 files against `ADA/` in 74** |
+| *"they become ELIGIBLE TO BE ASSESSED, not tradable"* | **true for the standard profile, FALSE for the strong_trend route** — hence the guard |
+
+### 11.4 ⛔ THE PATTERN, NOW AT FIVE — AND THE FIFTH IS A DIFFERENT FAILURE FROM THE FIRST FOUR
+| # | asserted | killed by |
+|---|---|---|
+| 1 | blast radius = 26 | `toCanonical`'s **second** lookup |
+| 2 | this repairs INVARIANT T2 | `SELECT count(*) FROM trades` = 0 |
+| 3 | the 31 become tradable | their `low_volume` rows |
+| 4 | Bitcoin and Dogecoin are one failure | the `gate_decision` **label** |
+| 5 | **this batch does nothing for Dogecoin** | **the `!isPassiveLearning` gate on the instrument itself** |
+⛔ **1-4 were "I did not run the query." 5 IS WORSE: I RAN A QUERY THE INSTRUMENT COULD NOT ANSWER AND READ ITS OUTPUT AS THE ANSWER.** ★ **A silence from a lane the instrument does not observe is `#453` — and I have the rule, in my own always-loaded file, naming exactly this.**
+**MISTAKE: silence-not-evidence [B-SCANNER-EGRESS-NORMALISE] — read an active-lane-gated archive as evidence about the passive lane.**
