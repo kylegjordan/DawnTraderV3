@@ -847,6 +847,24 @@ MSYS2_ARG_CONV_EXCL='*' git show "…:.claude/memory/MEMORY.md"               ->
 
 ---
 
+
+### #964 OPEN 2026-08-30 (CC-C; hit twice in one session while staging a Langston dispatch) — ⛔⛔ **A FAILED `scp` FOLLOWED BY A `cp` PUTS A *STALE FILE OF THE SAME NAME* IN FRONT OF THE REVIEWER, UNDER THE RIGHT FILENAME**
+
+**SEVERITY: medium — it is a WRONG-ARTIFACT-TO-REVIEWER mechanism, not a data defect. OWNER: CC-C. DISPOSITION: §9.4 (3) — its own batch, `B-DISPATCH-STAGING-VERIFY`, owner CC-C, placed in `PHASE_19_PLAN.md` at **row 3b.i**, after `B-EXIT-BOOK-AGE-STAMP` (3b.h) and before `F-G-2` (3c). ⭐ **PLACED, not merely named — the row exists and states its four deliverables.**
+
+⛔ **MEASURED TWICE TODAY, both from `C:\DawnTraderV3-analyst` to `root@204.168.141.77`:**
+1. `scp <local>.sql root@…:/tmp/q.sql` → **`scp: failed to upload`**, then `psql -f /tmp/q.sql` **executed a leftover `/tmp/q.sql` from an earlier session** and returned a table of `xstock_spot_ticker_snap` column types — a perfectly plausible result **for a query I did not write.**
+2. `scp <local>.md root@…:/tmp/pa_full.md` → **failed**, then `cp /tmp/pa_full.md /home/langston/inbox/<BATCH>/STEP2_PRE_AUDIT_AND_PLAN.md` **succeeded on a stale file and reported 28,764 bytes.** ⇒ **A 28KB document I never wrote sat in Langston's inbox under the filename of my Step-2 audit.**
+
+★★ **WHY IT IS DANGEROUS RATHER THAN MERELY ANNOYING: EVERY INDIVIDUAL COMMAND BEHAVED CORRECTLY AND THE FAILURE PRINTED.** `scp` said it failed; `cp` and `psql` then did exactly what they were told, to a file that existed. **The shell's `;` separator means a failed `scp` does not stop the chain, and `/tmp` is shared, world-writable and never cleaned.** ⇒ **the artifact is CONFIDENTLY WRONG and carries the right name, the right path and a plausible size.**
+⚠️ **This is `wrong-object` with the reviewer as the victim: a MATCHING NAME IS NOT A MATCHING THING** — and the one check that catches it (`wc -c` both ends) is the check nobody runs, because the file "obviously" just went up.
+
+✅ **WHAT I DID INSTEAD, AND IT IS THE PROPOSED FIX:** `ssh <host> 'cat > <remote path>' < <local file>` — **one command, no intermediate, and a non-zero exit means nothing was written.** Then **verify the byte count at both ends before naming the path to anyone.** *(Verified 39,956 = 39,956 on the re-send, plus first and last line.)*
+
+⛔ **SCOPE OF THE EXPOSURE — this is not mine alone:** `CLAUDE.md` §6.4 and §6.5 both TEACH the scp-to-`/tmp`-then-reference pattern (*"scp the body to Helsinki `/tmp` → `cc-send --message \"$(cat /tmp/…)\"`"*), so **every session dispatching a multi-line message or staging a file for Langston is running the vulnerable shape, and a stale `/tmp` file would be posted to the channel as their own words.**
+**THE BATCH: (a) replace the `scp`+reference pattern in `CLAUDE.md` §6.4/§6.5 with the `ssh 'cat >'` form; (b) require a byte-count verification before a staged path is named; (c) use a per-session unique filename so a collision cannot silently resolve; (d) establish WHY `scp` is failing on this box — not yet diagnosed, and it is a separate question from making the pattern safe.**
+⚠️ **(d) IS DELIBERATELY NOT A PRECONDITION FOR (a)-(c): the pattern is unsafe whether or not `scp` is fixed, because `/tmp` collisions do not require a transfer failure — two sessions using the same filename is enough.**
+
 ### #963 CLOSED-ON-ARRIVAL 2026-08-30 (CC-C; Kyle directed the check that found it) — ✅✅ **F-G-2's xSTOCK "NO INSTRUMENT" BLOCKER IS REFUTED. THE ORIGINAL STOP HAS BEEN ARCHIVED ALL ALONG, IN A TABLE NOBODY LOOKED IN.**
 
 **SEVERITY: n/a — this REMOVES work. OWNER: CC-C. DISPOSITION: §9.4 (5) — the "we do not collect this" claim is WITHDRAWN, carrying the measurement that dissolves it.**
@@ -5021,8 +5039,10 @@ Kraken publishes a per-pair `tick_size` — **1,437 pairs, 11 distinct values, a
 
 **HOME: a scheduled REVIEW, carried by whoever next investigates fast-move or latency behaviour on the crypto price path. No batch, no owner, no date.** ↔ `#944` (withdrawn) · `#507` · `#741`.
 
-### #944 ⛔⛔ **WITHDRAWN 2026-08-29 BY ITS OWN AUTHOR, SAME DAY - THE HEADLINE IS A TIMING ARTIFACT. SEE THE RETRACTION AT THE TOP OF THIS ENTRY.** (originally OPEN 2026-08-29 (CC-C, found chasing Langston's own anomaly at F-G-2 Step 2; mechanism RE-READ AND RULED BY LANGSTON at `a6be11883`) - ⛔⛔ OUR LOCALLY-MAINTAINED ORDER BOOK AND THE VENUE'S PUBLISHED QUOTE DISAGREE BY ~0.48% AT EXIT TIME - **AND THEY ARE THE SAME STATISTIC**
-
+### #944 ⛔⛔ **WITHDRAWN 2026-08-29 BY ITS OWN AUTHOR, SAME DAY - THE HEADLINE IS A TIMING ARTIFACT. SEE THE RETRACTION AT THE TOP OF THIS ENTRY.** (originally OPEN 2026-08-29 (CC-C, found chasing Langston's own anomaly at F-G-2 Step 2; mechanism RE-READ AND RULED BY LANGSTON at `a6be11883`) - ⛔⛔ OUR LOCALLY-MAINTAINED ORDER BOOK AND THE VENUE'S PUBLISHED QUOTE DISAGREE BY ~0.48% AT EXIT TIME - **AND THEY ARE THE SAME STATISTIC**
+
+
+
 ⛔⛔ **RETRACTION, 2026-08-29, HOURS AFTER FILING - I BUILT THE INSTRUMENT LANGSTON ASKED FOR AND IT REFUTES ME.**
 
 **THE CONTINUOUS INSTRUMENT, built from data that already existed (no code change): the engine's own `ENGINE_LIVE_PRICE` log lines - the BOOK mid it actually decides on - joined to `crypto_spot_ticker_snap`, same symbol, same instant, NO EXITS INVOLVED.** Sampled one observation per symbol per minute over 32 hours.**
@@ -5093,8 +5113,11 @@ I recorded it as *"a depth-10 mid and a BBO mid are different statistics; on a t
 
 **HOME: `B-BOOK-BBO-DIVERGENCE`, owner CC-C, placed in `PHASE_19_PLAN` at row 3b.c, after the F-G-1 soak and before F-G-2 implementation (3c).**
 
-### #943 OPEN 2026-08-29 (CC-C; found adjudicating `#940` during F-G-2 Step 2) — ⛔⛔ THE xSTOCK PRICE FEED EMITS A BAD PRINT AT 00:15 UTC MOST DAYS, AND THE ENGINE CLOSES POSITIONS ON IT. **65 CLOSES — 27% OF ALL xSTOCK STOP-OUTS.**
-
+### #943 OPEN 2026-08-29 (CC-C; found adjudicating `#940` during F-G-2 Step 2) — ⛔⛔ THE xSTOCK PRICE FEED EMITS A BAD PRINT AT 00:15 UTC MOST DAYS, AND THE ENGINE CLOSES POSITIONS ON IT. **65 CLOSES — 27% OF ALL xSTOCK STOP-OUTS.**
+
+
+
+
 ⛔⛔ **RE-FRAMED 2026-08-29 BY ITS AUTHOR: THIS IS NOT A NEW DEFECT CLASS. IT IS A QUANTIFICATION AND ROOT-CAUSE OF ONE ALREADY HOMED AT `#531` ADDENDUM-2, AND KYLE HAS ALREADY RULED ON IT ONCE.**
 
 **FOUND BY READING `#531` WHILE CHECKING AN UNRELATED WEEKEND OBSERVATION - i.e. LATE, and by accident rather than by the search that should have surfaced it.**
@@ -5131,7 +5154,8 @@ I recorded it as *"a depth-10 mid and a BBO mid are different statistics; on a t
 
 ---
 
-
+
+
 ⛔⛔ **MECHANISM ESTABLISHED 2026-08-29, AND ONE FIGURE IN THIS ENTRY IS CORRECTED (Langston's Step-1 condition 3 asked for its object and population, and it did not have one).**
 
 ⛔ **CORRECTION FIRST.** This entry says *"THE VENUE'S OWN BOOK AT THAT INSTANT WAS `bid 143.20 / ask 143.30`."* **NOT SUPPORTED AS WRITTEN** — that came from a `xstock_spot_ticker_snap` row **~1 second earlier**; **no `NOW/USD` snap exists at the `00:15:00.736` mark instant at all.** The claim should have named its object and its offset. **The conclusion survives, and the real book is worse than the one I quoted.**
