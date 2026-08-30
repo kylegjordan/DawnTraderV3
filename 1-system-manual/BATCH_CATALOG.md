@@ -748,3 +748,26 @@ The B65.2 functional commit (`0fcd19b1`) shipped trailing exits end-to-end. Subs
 **BEHAVIOUR-IDENTICAL, measured by Langston at the ref:** across 534 rows `net_pnl` is NULL on 0 and differs from `pnl` on 0; sums identical at **−68.35** either way ⇒ **with all five columns NULL the deploy changed no displayed number.**
 
 **GOVERNANCE FILES CHANGED:** `BATCH_CATALOG.md` · `PHASE_HISTORY.md` · `RUNNING_ISSUES.md` (#741) · scope · pre-audit · completion report · migration + MANIFEST. **SYSTEM_MANUAL and SIM judged NOT applicable, out loud:** five columns on an existing table add no component and change no architecture or math.
+
+
+---
+
+## B-EXIT-BOOK-AGE-STAMP (CC-C, ⛔ **OPEN — OBSERVATION WINDOW**, deployed 2026-08-30) — Phase 19, plan row 3b.h · `#961` + `#962`
+
+**WHAT:** records two facts on every close and **changes no behaviour** — the age of the depth snapshot the FILL walked (new column `exit_fill_depth_age_ms`), and whether the number that DROVE the exit was a MIDPOINT or a LAST TRADE. Deployed `104fa755bf28b852c7c648081aa32a9683424d9f` at **2026-08-30T12:05:09Z**.
+
+**⭐ THE DESIGN CHANGED AT STEP 1 AND THE REASON IS THE ENTRY'S POINT.** The scope decided a second column (`exit_mark_kind`). **Langston ruled design (B) instead: SPLIT three coarse `PriceProducer` members into `_mid`/`_last`, so `exit_price_producer` alone determines the kind.** His deciding argument, which I had not made: **two provenance fields travelling the same six hops CAN CONTRADICT EACH OTHER with nothing to catch it** — `producer='kraken_ws_book_mid'` beside `mark_kind='last'` is representable under (A) and unrepresentable under (B). ⛔ **AND (A) WAS ONLY EVER ON THE TABLE BECAUSE OF MY OWN ERROR: `GAP-3` cited a prohibition at lines that are the WebSocket BROADCAST PAYLOAD, inverting the union's documented "safe to widen" property.**
+
+**NOT SPLIT, each for a stated reason:** `kraken_ws_book_mid` (no last-trade arm at all) · `kraken_ws_ticker_v1` (unreachable, `#742`) · ⛔ **`kraken_rest_poller` — THREE arms, not two: its rate-limited branch returns a BARE CACHED PRICE (`#951`), so a two-way tag would stamp a laundered value.**
+
+**⭐ ONE PREDICATE, ONE HOME:** `markKindOf` (`services/market-data/mark-kind.ts`). The mid-or-last rule existed in **FOUR files with no two sharing a line** — a DEDUPLICATION, not a bug fix; the four were convergent and their coalescing still differs by design (xStock → NaN, crypto → 0).
+
+**⛔ THE COLUMN IS `_depth_age`, NOT `_book_age`, AND THAT IS LANGSTON'S CONDITION 1:** on xStock the value is a **ticker-snap ROW age**, so `book_age` would assert a book on a class that has none — the batch committing its own subject. ★ **It also surfaced that `closed_trades` now carries THREE DIFFERENT INSTANTS whose names do not say so** — `exit_book_age_ms` (decision-time), `entry_book_age_ms` (depth-GATE time, three awaits before its walk), and the new fill-time one.
+
+**SIX LIVE-DATABASE COMMENTS CORRECTED**, including one asserting `exit_ticker_bid` was *"NOT YET INSTRUMENTED"* against **18 populated rows**.
+
+**★ FOUR FRESH READERS, ALL HIT, ALL RE-DERIVED.** They overturned, in order: my "pure passthrough" description of the narrowing switch (it has two null arms that gate a cache write) · my over-correction calling that a live skip chain (both members are unreachable today) · my claim that a required parameter would surface stale test call sites (**tests are outside `tsc`, proven present-tense**) · my log placement (**it sat INSIDE the interval it measures**) · and my NULL discriminator (**it separated two states of four**). ⛔ **A fifth error was Langston's: my column comment named `DepthSnapshot.source` as the discriminator, and that value is NEVER PERSISTED — `closed_trades.asset_class` is `.notNull()` and was already on the row.**
+
+**⛔ OPEN, NOT CLOSED: both objectives are only observable on a POST-DEPLOY CLOSE and there were ZERO at close of work.** Criterion pre-registered BEFORE the data in `B_EXIT_BOOK_AGE_STAMP_PROGRESS_REPORT.md` §4 and armed as self-firing alert **`65a1379e`** (fires 2026-09-06T12:05:09Z): **20 post-deploy closes or 7 days.**
+
+**GOVERNANCE FILES CHANGED:** `SYSTEM_IMPACT_MAP.md` (new §2.1.2.a + the split epoch + a stale line corrected) · `SYSTEM_MANUAL.md` (the `translateV2ToV1` node) · `PHASE_19_PLAN.md` (rows 3b.h, 3b.i, three leads homed at 3b.g) · `RUNNING_ISSUES.md` (`#964`) · `BATCH_CATALOG.md` · `PHASE_HISTORY.md` · `EXIT_PATH_MACHINERY_AUDIT_2026-08-30.md` (a stale count of mine) · scope · pre-audit · change list · progress report · migration + MANIFEST · `MEMORY_CC_C.md`.

@@ -36,6 +36,7 @@ The exit fill walks a depth ladder and **never recorded how old it was**, so `#9
 ## 4. ⛔⛔ THE PRE-REGISTERED CLOSE CRITERION — WRITTEN BEFORE THE DATA ARRIVES. DO NOT DATA-MINE.
 
 **WINDOW: 20 post-deploy closes OR 7 days, whichever comes first.** *(Anchor: `closed_at > 2026-08-30T12:05:09Z`.)*
+✅ **ARMED AS A SELF-FIRING ALERT — `65a1379e-a382-43fe-960a-9e47f68e76eb`, state `scheduled`, fires `2026-09-06T12:05:09Z`, severity `warning`.** ★ **The alert carries this whole criterion in its body, including both carve-outs and the enumerate-never-`LIKE` rule, so whoever picks it up does not need this file to act — and the window cannot quietly elapse.**
 
 **POPULATION — stated so it cannot be quietly reshaped:** rows in `closed_trades` with `closed_at > 12:05:09Z` **AND `close_reason <> 'never_filled'`** *(that cohort carries NULL provenance BY DESIGN — `B-EXIT-PROVENANCE`'s own carve-out)*.
 
