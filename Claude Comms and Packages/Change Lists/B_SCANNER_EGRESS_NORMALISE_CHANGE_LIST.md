@@ -234,3 +234,35 @@ The comment cited bare `kraken.ts:296` from inside `server/services/`, where the
 | 5 | **this batch does nothing for Dogecoin** | **the `!isPassiveLearning` gate on the instrument itself** |
 ⛔ **1-4 were "I did not run the query." 5 IS WORSE: I RAN A QUERY THE INSTRUMENT COULD NOT ANSWER AND READ ITS OUTPUT AS THE ANSWER.** ★ **A silence from a lane the instrument does not observe is `#453` — and I have the rule, in my own always-loaded file, naming exactly this.**
 **MISTAKE: silence-not-evidence [B-SCANNER-EGRESS-NORMALISE] — read an active-lane-gated archive as evidence about the passive lane.**
+
+
+---
+
+## 12. ✅ STEP 4 CLOSED — **APPROVED at `fd81ce18c`**, with two conditions carried forward
+
+**Langston re-derived both executable legs rather than reading the report.**
+
+### 12.1 ✅ (i) THE GUARD IS AT THE RIGHT LAYER — and the reason is the no-op property
+Of the three options, **denying the bypass is the only one that changes nothing today.** Excluding at admission would remove 31 symbols from the archive population — **a behaviour change shipped as a safety fix** — and a units repair at `:820` is `#966`'s entire subject and may not be smuggled into a Step-4 round.
+**`isStrongBullDbs` has exactly four downstream consumers (`:924-927`) plus the history-context branch at `:953`** ⇒ one predicate, one place, all four thresholds move together.
+
+### 12.2 ✅ (ii) `BTC || XBT` IS EXACTLY THE RIGHT SET — and broadening would NOT have been conservative
+**`symbol-canonicalizer.ts:100-123`: the only entry that can appear in a slashed wsname's QUOTE slot is `XBT → BTC`** — every other quote entry (`ZUSD`, `ZEUR`, `XXBT`, `XETH`…) is a Z/X-prefixed REST form that never appears slashed. ⇒ **the set of quotes this batch rewrites is exactly `{XBT}`, and the predicate is that set plus its output.** The `XBT` arm is dead post-normalise; **kept deliberately — it costs nothing and it is the arm that survives if the map order ever changes.**
+⛔ **AND I WAS WRONG TO CONSIDER BROADENING IT "the safe direction."** **Measured 24h, `signal_eval_archive`, `source='market-scanner'`: EUR carries 534 distinct symbols / 554,317 rows — a hair under USD's 636** — plus AUD, GBP, ETH, JPY, CAD, CHF, DAI, EURC, PYUSD, EUROP. **Those already take the bypass today.** Stripping it from them is **a live behaviour change with no measurement behind it**, and it destroys the no-op property that justified folding a guard into a Step-4 round at all.
+
+### 12.3 ⭐ `#966` CHANGES SHAPE — **the units error is NOT uniformly conservative** *(§9.4 disposition 2 — folds into the existing item)*
+- **BTC quote:** the product **overstates the bar** by ~5 orders of magnitude ⇒ **fail-safe**, nothing gets in.
+- **EUR quote:** understates by single-digit percent ⇒ negligible.
+- ⛔ **A QUOTE WORTH LESS THAN A DOLLAR INVERTS THE SIGN AND THE GATE BECOMES FAR TOO *PERMISSIVE*.** **JPY: 10 symbols / 17,789 rows in the same 24h.**
+⚠️ **STATED AS MEASURED: that is the POPULATION, not the SURVIVAL. The inversion is FX arithmetic, not a claim that any JPY pair clears the gate.**
+⇒ **`#966` must state DIRECTION PER QUOTE, not merely "denominated wrong" — the BTC case and the JPY case need opposite urgency**, and only one of them is currently safe by accident.
+
+### 12.4 ⛔⛔ (iii) CONDITION ON CLOSE — **THE VERIFICATION PREDICATE CHANGES MEANING AT THE DEPLOY BOUNDARY**
+**`capturePreFilterReject` writes `symbol: pair.symbol` at `:934` — the POST-normalise form.**
+⇒ **"same rows, same label, same archive" holds for the COUNT and the LABEL but NOT for the SYMBOL STRING.** ⛔ **The `LIKE '%/XBT'` predicate that produced the 21,574-row / 31-symbol baseline returns ZERO after deploy.**
+⇒ ★★ **THAT IS THE BATCH WORKING — AND A VERIFIER REUSING THAT PREDICATE READS A FALSE ABSENCE.** Same for the `already_active` `continue` at `:884-888`, which now consumes the canonical form and can skip a pair into producing **no row at all.**
+✅ **BINDING ON STEP 8: the anchor is `symbol LIKE '%/BTC' OR symbol LIKE '%/XBT'`, with the pre/post split taken at the deploy boundary.** ⛔ **A single-form predicate is disqualified.**
+★ **This is the batch's own failure mode turned on its verification: a name that stops matching is not a thing that stopped existing.**
+
+### 12.5 ✅ THE ONE CORRECTION THAT WENT THE OTHER WAY
+He took my 6-vs-8 correction over his own number. **The generalisable line, now standing: *a rejection archive cannot enumerate what happens when the rejection stops*** — same shape as `#704`'s stream/severity rule.

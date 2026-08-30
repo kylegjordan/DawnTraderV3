@@ -5718,3 +5718,24 @@ I recorded it as *"a depth-10 mid and a BBO mid are different statistics; on a t
 ⚠️ **GUARD AGAINST THE OBVIOUS OVER-CORRECTION: the marker must not start matching PROSE ABOUT change-class.** Four of the 17 are documents *discussing* the mechanism (`BATCH_B_GOV_SCOPE`, `B_GOV_3_SCOPE`, `ACTIVE_PATH_FLOW_DOC_SCOPE_PREP`), and a loosened regex could bind a sentence instead of a declaration. **That is a real risk of a wrong-but-confident value, which is worse than the current fail-closed.**
 
 **INTERIM, until it lands:** put the declaration **on its own line with the colon outside the asterisks** — `**change-class**: architecture`. Applied to `B-SCANNER-EGRESS-NORMALISE` in this commit, with a note in the file saying why the line is on its own.
+
+
+---
+
+### #966 AMENDMENT 2 — **THE ERROR IS NOT UNIFORMLY CONSERVATIVE. IT INVERTS, AND THE INVERTED SIDE IS THE DANGEROUS ONE.**
+
+**Appended 2026-08-30, Langston at Step-4 close. §9.4 disposition 2 — folds into this item, not a new one.**
+
+⛔ **AMENDMENT 1 SAID "denominated wrong" AND LEFT IT THERE. THAT WORDING HIDES THE ONLY THING THAT MATTERS: WHICH DIRECTION.**
+`:820` multiplies coin volume by the **quote-currency** price and compares it to a flat `500,000`:
+| quote | effect on the bar | consequence |
+|---|---|---|
+| **BTC** | overstates by ~5 orders of magnitude | ✅ **fail-safe** — nothing gets in, which is why it survived unnoticed |
+| **EUR** | understates by single-digit percent | ⚠️ negligible in practice |
+| ⛔ **any quote worth LESS than a dollar** | **THE SIGN INVERTS — the gate becomes far too PERMISSIVE** | ⛔ **admits what should be refused** |
+
+⇒ ★★ **THE BTC CASE AND THE SUB-DOLLAR-QUOTE CASE NEED OPPOSITE URGENCY, AND ONLY THE BTC CASE IS SAFE BY ACCIDENT.** A units defect that EXCLUDES announces itself as an empty result; one that ADMITS looks exactly like ordinary trading.
+**MEASURED, 24h, `signal_eval_archive`, `source='market-scanner'`, distinct symbols / rows: EUR 534 / 554,317 · USD 636 / — · JPY 10 / 17,789**, plus AUD, GBP, ETH, CAD, CHF, DAI, EURC, PYUSD, EUROP.
+⚠️ **STATED AS MEASURED AND NO FURTHER: that is the POPULATION PRESENT, not the SURVIVAL. The inversion is FX arithmetic; it is NOT a claim that any JPY pair currently clears the gate.** Establishing survival is this item's first job.
+
+⛔ **AND IT KILLS THE OBVIOUS "SAFE" FIX.** Denying the strong-DBS bypass to every non-USD quote is **NOT** conservative: **EUR alone is 534 symbols already taking that path today**, so stripping it is a live behaviour change with no measurement behind it. **The `B-SCANNER-EGRESS-NORMALISE` guard is deliberately narrow to `{BTC, XBT}` — the exact set that batch rewrote — and widening it belongs HERE, with the survival measurement done first.**
