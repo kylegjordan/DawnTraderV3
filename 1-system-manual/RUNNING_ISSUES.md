@@ -1229,7 +1229,7 @@ await storage.closeTrade(targetTrade.id, exitPrice, exitFee, exitSlippage);
 
 **SEVERITY: high. OWNER: CC-C. DISPOSITION: §9.4 (3) — own batch, `B-PRICE-AGE-TRUTH`, placed in `PHASE_19_PLAN` at row **3b.f**, WITH the other price-provenance prerequisites and BEFORE `F-G-2`, because F-G-2's before/after arms both read a price whose age this branch can fabricate.**
 
-**RE-DERIVED VERBATIM AT THE REF.** `live-pricing-adapter.ts:582-586`, inside `fetchFromKrakenRest`:
+**RE-DERIVED VERBATIM AT THE REF.** `live-pricing-adapter.ts:627-631` (was `:582-586` — STALE, corrected 2026-08-31; the adapter gained ~45 lines), inside `fetchFromKrakenRest`:
 ```
 if (!restRateLimiter.check(symbol)) {
   const cached = this.priceCache.get(this.normalizeSymbol(symbol));
@@ -1273,6 +1273,9 @@ observedAt: Date.now(),            // a genuine venue read: observed now
 **FIX SHAPE (not pre-judged, rule 15):** the branch must either return the cached entry **with its original `observedAt`**, or return null and let the caller's own staleness logic decide. **The choice is a design question — a rate-limited symbol having no fresh price is a real state and `no_reliable_price` is the founding invariant's prescribed answer** (`bridge/canonical/..._Invariants_...md`, F7: *"If no real price is available, the operation must fail or wait"*).
 
 ---
+
+
+⚠️ **CITATION DRIFT CORRECTED 2026-08-31 (found by a fresh reader during `B-PRICE-AGE-TRUTH` Step 2).** This entry's line numbers were resolved against HEAD and are stale by ~45 lines in the adapter: `:582-586`→**`:627-631`**, `:496-505`→**`:540-549`**, `:425-441`→**`:470-486`**, `:1013`→**`:1058`**, and in the engine `:1249`→**`:1257`**. ⛔ **The failure mode is specific and worth naming: a reader resolving the OLD numbers at HEAD lands on unrelated code and could conclude EITHER *"already fixed"* OR *"never existed."*** ★ Fourth drift instance in one day (this entry, my own scope, the `SYSTEM_IMPACT_MAP`, and a code header comment) — **and the one comment that survived said *"the guard above"* instead of a number.**
 
 ### #950 OPEN 2026-08-30 (CC-C, provenance read under Kyle's machinery-audit directive) — ⛔ THE xSTOCK FEED WAS BUILT AS AN ARCHIVE THAT WAS TO SHARE **NO STATE** WITH TRADING, AND BECAME THE TRADING FEED WITHOUT A DECISION — AND ITS NAMED REPLACEMENT WAS TRIGGERED AND NEVER BUILT
 
@@ -5974,3 +5977,36 @@ CC-A's batch argues the workflow is not reliably firing. **This is that thesis, 
 ✅ **AND HE TIGHTENED MY OWN PROPOSED RULE:** not *"no review narration in comments"* but — **production source explains what the code DOES; the review that produced it lives in the commit message and the change list, both of which already carry it in full.** A comment saying *"my first version said X, WHICH IS FALSE"* is **a second copy of the record living in the artifact — the `#641` two-homes shape.**
 
 **MISTAKE: verification-weaker-than-claim [#969] — cited an unexercised guard as prevention, in a post about measurement discipline, having written the unexercised note myself.**
+
+
+---
+
+### #970 — THE CANONICAL DESIGN SAID **ONE** RATE-GOVERNED PRICE CACHE WITH NO DIRECT VENUE CALLS. THERE ARE **TWO**, AND THE SECOND MAKES DIRECT VENUE CALLS. **NOBODY RECORDED WHY.**
+
+**OPEN** · surfaced 2026-08-31 during `B-PRICE-AGE-TRUTH` Step-2, by the **`bridge/canonical/` provenance read** — which is exactly what that corpus is for · owner **CC-C**
+**HOME: `B-TWO-CACHE-INTENT`, owner CC-C, placed in `PHASE_19_PLAN.md` at row 3b.l, after 3b.k.**
+
+⛔⛔ **THIS IS NOT FILED AS A DEFECT. IT IS FILED AS AN UNRECORDED DIVERGENCE, AND THE DISTINCTION IS THE WHOLE POINT** — re-scoping a deliberate, approved architectural decision as a defect is worse than filing nothing (§9.5(b-ii)).
+
+**WHAT THE CANONICAL CORPUS SAYS** — `bridge/canonical/DawnTrader_System_Architecture_Execution_Flow.md`, quoted verbatim:
+> `:194` — **"Price Cache | `server/services/price-cache.ts` | Unified rate-governed cache (4 buckets)"**
+> `:257` — **"The Price Cache is the single source of truth for all price data, consolidating multiple sources with rate limiting."**
+> `:633` — **"All pricing from unified Price Cache (no direct Kraken calls)"**
+
+**WHAT IS TRUE TODAY, measured at `origin/migration/aws-supabase`:**
+| | canonical intent | today |
+|---|---|---|
+| caches | **one**, `price-cache.ts` | **two** — `price-cache.ts` **and** `live-pricing-adapter.ts:258` `private priceCache: Map<string, CachedPrice>` |
+| rate limiting | **one** governed layer | **two** — the unified cache's buckets **and** the adapter's own `restRateLimiter` (`:627`) |
+| venue calls | **"no direct Kraken calls"** | the adapter calls Kraken REST **directly** (`fetchFromKrakenRest`, `:624`) |
+| the type | one `CachedPrice` | **two interfaces sharing the name** — `price-cache.ts:41` (exported) and `live-pricing-adapter.ts:207` (file-local) |
+
+⚠️⚠️ **STATED PROPERLY, BECAUSE THE CORPUS IS NOT CURRENT-STATE TRUTH:** `bridge/canonical/` records **what we INTENDED to build then**, the architecture has changed deliberately since, and it is **NEVER** cited as evidence that today's system is wrong. ⇒ **This entry does NOT claim the second cache should not exist.**
+
+⇒ ⛔ **THE ACTUAL FINDING IS THE SILENCE.** Searched `RUNNING_ISSUES.md`, `BATCH_CATALOG.md` and `SYSTEM_IMPACT_MAP.md` for the divergence: **no entry records the decision to run two caches, or why the "no direct Kraken calls" property was given up.** The SIM documents **both** caches as separate components (`:370`, `:1187`) and **never says why there are two.**
+⚠️ **INSTRUMENT REACH, STATED: my search was by term** (*"two cache"*, *"second cache"*, *"dual cache"*, cross-references between the two filenames). **A decision recorded in different words would not have been found.** ⇒ **the first job of the batch is to search harder before concluding it was never decided — an absence from a term-search is not an absence.**
+
+★ **WHY IT MATTERS ENOUGH TO HOME RATHER THAN NOTE.** The defect `B-PRICE-AGE-TRUTH` fixes lives **exactly at this seam**: `B-EXIT-PROVENANCE` built a careful provenance vocabulary on the *second* cache, and the leg it missed is the one belonging to the second cache's *own* rate limiter — a mechanism the canonical design did not expect to exist at all. **A second implementation of a governed thing, unrecorded, is how a census of four legs misses a fifth.**
+
+⛔ **THE THREE-OUTCOME READ IS THE BATCH'S FIRST DELIVERABLE, NOT A FIX:** (1) a deliberate, correct split serving two different purposes — then **record it and close**; (2) correct-but-undecided — then a decision is owed, and it is Kyle's; (3) drift that should converge — then it is a real consolidation and needs its own plan. ⛔ **No code changes on this item until that read is done.**
+↔ Same family as `#229` (four competing symbol modules) — **a second implementation nobody decided to have.**
