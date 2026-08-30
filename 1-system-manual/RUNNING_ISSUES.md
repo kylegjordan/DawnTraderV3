@@ -847,6 +847,39 @@ MSYS2_ARG_CONV_EXCL='*' git show "…:.claude/memory/MEMORY.md"               ->
 
 ---
 
+### #958 OPEN 2026-08-30 (CC-C; Kyle-directed after he rejected `#955` as too tame for the phenomenon; parser/throttle half CONFIRMED by Langston at `ad7a3960c`) — ⭐ **THE 00:15 UTC EVENT, TRACED: A RECURRING DAILY VENUE-SIDE BURST ON THE xSTOCK FEED. NOT A RECONNECT, NOT A STALL, NOT A WIDE MARKET.**
+
+**SEVERITY: high. OWNER: CC-C. DISPOSITION: §9.4 (1) — FOLDED INTO `B-XSTOCK-FEED-SANITY` (plan row 3b.b), which already owns the 00:15 print and already carries the raw-frame capture that is the only remaining instrument.**
+
+⛔⛔ **THIS SUPERSEDES THE SCOPE OF MY OWN `#955` ANSWER, AND KYLE WAS RIGHT TO REJECT IT.** `#955` measured the STATIC SHAPE of ARCHIVED quotes over 3 days and concluded symmetric widening. **That is correct and it does not reach this.** The phenomenon is a **TEMPORAL, SIMULTANEOUS, RECURRING** event, and an aggregate over millions of rows cannot see 422 rows. *(Scope restatement, not a retraction — Langston's framing.)*
+
+**MEASURED, FROM THE RUNTIME LOG — the `[B74][ticker-writer] xstock_spot flushed N rows` line, every 5 s:**
+| when | rows in one 5 s flush |
+|---|---|
+| 00:13:00 → 00:14:55 (baseline) | **45-70** |
+| ⛔ **2026-08-29 00:15:01** | **487** |
+| ⛔ **2026-08-28 00:15:03 → 00:15:33** | **471, 270, 342, 292, 360, 338** |
+| ⛔ **2026-08-27 00:15:14 → 00:15:34** | **340, 280, 315, 289** |
+⇒ ⭐ **THREE CONSECUTIVE TRADING DAYS, THE SAME MINUTE. A 6-10× BURST AGAINST THE OVERNIGHT BASELINE.**
+⚠️ **BASELINE CORRECTION I MADE MID-MEASUREMENT: >250 rows/flush is the NORMAL US-regular-hours rate (2026-08-26 15:10-15:12 sustained 435-475). The burst is anomalous ONLY against the ~50 overnight baseline.** *(My first pass reported RTH volume as recurring bursts. Caught by asking what the baseline was.)*
+
+**AND IN THE DATABASE, THE SAME INSTANT:** 422 distinct symbols, **exactly one row each**, all within **~100 ms of 00:15:00.000** (.181 = 45 rows · .183 = 51 · .184 = 32 · .25 = 21 · .281 = 45) — against 191-307 symbols at 2-3 rows each in every adjacent minute. **Then NO ROWS AT ALL at 00:16, 00:17, 00:18**, and 24 symbols at 00:19.
+
+⛔ **THREE CAUSES ELIMINATED WITH EVIDENCE, NOT ASSUMED:**
+| candidate | eliminated by |
+|---|---|
+| **a market event** | 422 instruments do not print simultaneously to the millisecond |
+| **a reconnect/resubscribe** | the socket is HEALTHY through it — `00:14:28 [B74][equity-spot] connected=true last_msg_age_ms=4`. **No disconnect, no reconnect, no resubscribe line.** |
+| **a process-wide event-loop stall** (Langston's own preferred candidate) | ⭐ **his one-query discriminator, run: the CRYPTO lane — same process, same batch writer, different socket — is CLEAN THROUGH THE WINDOW: 00:16 → 106 symbols, 00:17 → 79, 00:18 → 80.** A stall would have starved both. |
+
+⇒ ⭐⭐ **WHAT REMAINS: A VENUE-SIDE BULK EMISSION ON `ws-equities` — one frame per subscribed symbol, unprompted, at the same minute every day.** **00:15 UTC = 20:15 US Eastern = 15 minutes after the 8 pm ET daily session boundary for this instrument class.**
+
+⛔⛔ **AND OUR POSITIONS CLOSE ON IT.** Same log, same second: `00:15:01 [KrakenWS] Unsubscribed from NOW/USD after position close` · `00:15:01 … TGT/USD` · `00:15:03 … WEN/USD`. ★ **Those are the SAME THREE SYMBOLS as the audit's §7 stub-book table.** Prior measurement: the 00:15 cohort is **27.1% of all xStock stop-outs and 29.5% of target-hits.**
+
+⚠️ **WHAT IS *NOT* ESTABLISHED, AND I AM NOT CLAIMING IT: that the prices inside the burst are WRONG.** The burst is real, recurring and venue-side; **whether its contents are a stale re-quote, a settlement mark, or a legitimate session-roll price is UNKNOWN and cannot be read from the archive** — Langston: the in-memory mark **discards `data.bid` entirely**, so the ticker table is the only bid record we have. ⇒ ⛔ **THE RAW-FRAME CAPTURE (3b.b) IS THE SOLE REMAINING INSTRUMENT, and it must record `msg.type`, since the archiver never reads it.**
+
+---
+
 ### #957 OPEN 2026-08-30 (CC-C; surfaced by the price-flow trace, `ACTIVE_PATH_FLOW.md` §6) — ⛔ xSTOCK PRODUCES **THREE DIFFERENT DEFINITIONS OF "THE PRICE" FROM ONE VENUE FRAME**, AT THREE CADENCES, AND NOTHING SAYS WHETHER THEY SHOULD AGREE
 
 **SEVERITY: unknown — and that is the point. OWNER: CC-C. DISPOSITION: §9.4 (4) — A SCHEDULED REVIEW, not a batch: it must be LOOKED AT before it can be dispositioned, and it is placed as the first question of `B-DECIDED-INTENT-INDEX` (plan row 3b.g), because the answer is exactly the kind of thing that index is being built to make findable.**
@@ -909,6 +942,10 @@ MSYS2_ARG_CONV_EXCL='*' git show "…:.claude/memory/MEMORY.md"               ->
 
 ⇒ ⭐⭐ **NO BID-COLLAPSE SIGNATURE IN ANY BAND, INCLUDING AT 00:15. The wide quotes are structurally indistinguishable from 5.28M tight ones — and the MOST extreme band is the MOST centred.** ⇒ **both sides widen together around the traded price.**
 **Concentration confirms the mechanism: 76,321 wide rows in extended hours vs 748 in regular hours (≈100:1), mean spread 13.80% vs 7.50%.** A thin overnight market in which the maker is not obliged to quote tightly.
+
+⛔⛔ **SCOPE RESTATEMENT 2026-08-30 (Kyle rejected this answer as too tame; Langston ruled it a scope restatement, NOT a retraction).** **What `#955` measures is the STATIC SHAPE of 4-second-sampled ARCHIVED quotes. That measurement stands.** ⛔ **What it CANNOT reach: a temporal, simultaneous, sub-sampling-window event** — and that is exactly the phenomenon Kyle described. **422 rows are statistically invisible in a 5.28M-row aggregate.** ⇒ **See `#958`: a recurring daily venue-side burst at 00:15 UTC, on which our positions close.**
+⭐ **AND THE SAMPLING IS WORSE-SHAPED THAN I FIRST WROTE (Langston, re-derived): there are THREE samplings, not two.** `latestEquityTick` is a **last-write-wins map with NO history**, and the exit monitor **POLLS** it on its own cycle — it does not react per frame either. ⇒ **The archive is NOT a subset of what the exit saw; they are TWO DIFFERENT SAMPLES OF ONE STREAM, and a sub-4s excursion that reverts is invisible to BOTH.**
+⚠️ **AND THE THROTTLE IS VALUE-BLIND: `ticker-batch-writer.ts:110-119` compares elapsed time only and DROPS — it never looks at the row, so it cannot be dropping "only unchanged frames." Live window for `xstock_spot` = 4000 ms.**
 
 ⚠️ **WHAT THIS DOES NOT COVER, STATED SO IT IS NOT ABSORBED:** `#943`'s `NOW/USD` case has a **tight** venue book (143.20/143.30) coexisting with a bad mark. **A 59.5%-mid-ish aggregate over 2,085 rows cannot exonerate one row.** That leg stays open, still needs the raw frame (`PHASE_19_PLAN` 3b.b), and is now a much narrower question.
 
