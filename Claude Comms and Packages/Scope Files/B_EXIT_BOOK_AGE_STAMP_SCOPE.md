@@ -218,3 +218,143 @@
 | `translateV2ToV1` / `V1TickerFormat` | `8.9.1`/`8.9.4-Patch` — carries the mark to the UI/engine in the v1 shape | ⛔ **(1) CORRECT AND UNTOUCHED** — the contract is not widened |
 | `kraken-websocket-adapter` ticker handler | parses the v1 payload for the engine | **(2)** — re-derives the kind from values it already parses |
 | the price cache | `#743`/`#951` territory | ⛔ **(1) UNTOUCHED — the tag does not enter the cache.** *(It would be a fourth object on a slot two producers already share.)* |
+
+---
+
+# ⛔⛔ r5 — I RE-DERIVED r4's CARRIER AT THE REF BEFORE DISPATCHING IT, AND IT WAS WRONG IN THE LOAD-BEARING HALF.
+
+> ⚠️ **r4's crypto route does not reach the site that needs it.** Re-deriving the kind at `kraken-websocket-adapter.ts:681-683` puts it in that function's local scope and **nowhere else** — the value that drives a crypto exit is read four hops later, out of the price cache. **r4 also asserted the price cache was UNTOUCHED. For crypto it is THE CARRIER.**
+> ★ **What the re-derivation found instead is SMALLER, and it is the shape this system already chose once and had reviewed.**
+
+## ⛔ CORRECTION 1 — **THE PREDICATE HAS THREE IMPLEMENTATIONS, NOT TWO. r3 FOUND A SECOND; THERE IS A THIRD.**
+
+| # | site | code | in r3/r4? |
+|---|---|---|---|
+| 1 | `equity-spot-archiver.ts:135` | `_mark = (_bid>0 && _ask>0) ? (_bid+_ask)/2 : _last` | ✅ |
+| 2 | `kraken-v2-translator.ts:55-59` | `markPrice = last; if (bid>0 && ask>0) markPrice = (bid+ask)/2` | ✅ |
+| ⛔ **3** | **`active-execution-engine.ts:1301-1305`** | **`currentPrice = (ask > 0 && bid > 0) ? (ask + bid) / 2 : lastTrade`** — the crypto direct-REST fallback, written out inline **in the engine itself** | ⛔ **NO** |
+
+⇒ ★ **The rule is stated three times in three files and no two of them share a line.** Any batch that adds a kind tag while leaving three separate copies of the rule that decides it has built the `#641` shape into the instrument.
+
+## ⛔⛔ CORRECTION 2 — **THE EXIT DECISION HAS THREE PRICE-RESOLUTION BRANCHES, AND `producer` ALREADY SOLVED EXACTLY THIS PROBLEM ON EXACTLY THESE THREE.**
+
+**Re-derived at `active-execution-engine.ts:1136-1148` — `priceProducer` is declared once and *"ASSIGNED ON ALL THREE RESOLUTION BRANCHES BELOW"*:**
+| branch | line | how `producer` gets there **today** |
+|---|---|---|
+| xStock WS | `:1231-1239` | ⭐ **LITERAL** — *"there is no adapter quote object on this leg, so THE CODE AT THIS LINE IS THE PRODUCER"* |
+| crypto WS | `:1271-1277` | ⭐ **CARRIED** — *"★ THE ONLY GENUINE CARRY OF THE THREE — a real quote object with a real provenance field"* |
+| crypto REST | `:1306-1313` | ⭐ **LITERAL** — *"direct `krakenService.getTicker`, mid computed inline, so the line is the producer"* |
+
+⇒ ⛔⛔ **THE MARK KIND IS THE SAME PROBLEM ONE AXIS OVER, AND THE CODE SAYS SO IN ITS OWN WORDS.** `:1909-1911`: *"`source` alone cannot discriminate a book midpoint from a ticker print — both stamp `kraken_ws`. That is #741."*
+★ **`producer` answers WHICH HANDLER. It does NOT answer WHICH KIND OF NUMBER** — `kraken_ws_ticker` **sounds like a print and is a midpoint** (`kraken-v2-translator.ts:55-59`). **That is `#952`, and it is the gap `exit_mark_kind` closes.**
+
+## ✅ THE CORRECTED CARRIER — **`updateCache` IS THE CHOKE POINT, AND IT ALREADY TAKES A REQUIRED, NO-DEFAULT `producer` FOR THIS EXACT REASON**
+
+**MEASURED — `updateCache` has THREE live callers, and they ARE the three branches:**
+| caller | line | kind derivable there? |
+|---|---|---|
+| the crypto WS priceTick handler | `live-pricing-adapter.ts:1201` | ✅ from `bid`/`ask` parsed at `kraken-websocket-adapter.ts:682-683` — **cited by an existing comment at `:1393-1396` as computed-then-discarded** |
+| the xStock feed-through | `active-execution-engine.ts:1244` | ✅ once `latestEquityTick` carries it (the field-add r4 specified) |
+| the crypto REST feed-through | `active-execution-engine.ts:1332` | ✅ `ask`/`bid` are **already in scope** at `:1301-1303` |
+
+✅ **SO: `markKind` becomes a REQUIRED, NO-DEFAULT PARAMETER OF `updateCache`, BESIDE `producer`, AND EVERY CALL SITE STATES ITS OWN.** The rationale is already written at `:848-851`: *"REQUIRED, no default. A default here would silently mislabel a future caller as whichever producer happened to be most common — the conflation this batch exists to end."* **Identical argument, identical shape, one axis over.**
+
+**HOP-BY-HOP, ALL THREE BRANCHES:**
+| branch | hops |
+|---|---|
+| **xStock** | `equity-spot-archiver.ts:112` value type gains `kind` → `:137` sets it (**literal field-add; `parseTickerSnap`'s logic UNCHANGED per `#594`**) → `getLatestEquityTick` widens → engine `:1239` reads it → `updateCache` `:1244` |
+| **crypto WS** | translator predicate → `PriceTickEvent` (`:93-105`) gains `markKind` **REQUIRED + CLOSED, per its own stated rule at `:98-102`: *"a fourth producer is a COMPILE ERROR rather than a silent absence"*** → adapter `:699` emits it → handler `:1201` → `updateCache` → `CachedPrice` (`:163-173`) → `getPriceWithFallback` returns it beside `producer` → engine `:1276` |
+| **crypto REST** | ⭐ **LITERAL at `:1305`** — zero plumbing, `ask`/`bid` in scope |
+| **all three** | → `exitProvenance` (`:1906-1929`, gains `markKind`) → `:2280` region → `exit_mark_kind` |
+
+⛔ **AND THE `#743` CARRY-THROUGH DISCIPLINE APPLIES:** a last-known-good re-serve must carry the ORIGINAL `markKind` unrefreshed, exactly as `observedAt` is carried at `:479`, `:526`, `:559`, `:1032`, `:1048`, `:1074`, `:1097`. *(Those legs are unreachable from the exit decision — `isKrakenVenueSource` at `:1269` rejects `last_known_good` — but a field that is right only on the reachable path is a trap for the next reader.)*
+
+## ✅ §5 DISPOSITIONS — **CORRECTED. r4 SAID THE PRICE CACHE WAS UNTOUCHED. FOR CRYPTO IT IS THE CARRIER.**
+| object | intent | disposition |
+|---|---|---|
+| `latestEquityTick` / `getLatestEquityTick` | `P19-B8.5`; **`#594`: the ONLY venue price source for xStock** | **(2)** — field-add, no logic change |
+| `translateV2ToV1` / `V1TickerFormat` | `8.9.1` — midpoint as mark because *"'Last' is often stale on low-volume pairs"* | **(1) CORRECT, CONTRACT UNWIDENED** — the predicate is exported, the return shape is not touched |
+| `PriceTickEvent` | `B78.1`; `#741` added `producer` **required + closed** | **(2)** — one more required+closed field, same rule |
+| ⛔ **`updateCache` / `CachedPrice` / `getPriceWithFallback`** | `P19-B8.9a`, `#743`, `#951` | ⛔ **(2) — RELEVANT AND MUST BE UPDATED. r4 SAID "UNTOUCHED" AND THAT WAS WRONG: this is the only route from the crypto feed to the exit decision.** |
+| the crypto REST fallback branch | `8.9.2` | **(2)** — literal derivation at `:1305` |
+
+## ⛔ CORRECTION 3 — **TWO MORE COMMENT SITES, AND ONE OF THEM IS *NOT* WRONG, WHICH CHANGES THE FIX**
+- ➕ **`active-execution-engine.ts:1909-1911`** — *"a book midpoint from a **ticker print**"*. ⛔ **The ticker does not emit a print; it emits a midpoint.** This is the misconception the batch exists to end, sitting four lines from where `markKind` is added.
+- ⚠️ **`shared/schema.ts:1807-1810` — NOT SIMPLY WRONG, AND r3 OVERSTATED IT.** *"NULL BY CONSTRUCTION on xStock (no book for that class)"* stays **TRUE of `exitBookMid`/`exitBookAgeMs`**, whose source (`getBookForFill`, `:1381-1383`) really is crypto-only. ⇒ **The fix is not a correction but a BOUND: it is true of those two columns and MISLEADING as a class-level claim, because the fill-time `getDepthSnapshot` DOES synthesise an xStock ladder.** **Say which columns it governs.**
+
+## ✅ CORRECTION 4 — **THE FILL-AGE STAMP GOES BELOW BOTH LEGS, AND THE PRECEDENT IS TWENTY LINES AWAY**
+r3 resolved BLOCKER-B as *"write from the taker branch only."* ⛔ **`_closeSnap` is `const`-scoped to the `else` block (`:1997`) and the persist is at `:2280` — it is not in scope there.**
+✅ **The same function already solved this, for the same reason, at `:2015-2019`:** the witness is *"Placed HERE, below the if/else, deliberately: the MAKER leg never fetches a depth snapshot at all … a witness taken inside the taker branch would be silently absent on exactly the cohort that produced this batch's first OBJ-2 specimen."*
+⇒ **`let _fillBookAgeMs: number | null = null` above the `if`, assigned in the taker branch, read at persist.** **The maker null is then structural and discriminable by `exit_fee_mode='maker'`** — not a suppressed write.
+
+## ⚠️ KNOWN TOUCH, STATED NOW RATHER THAN DISCOVERED IN CI
+**Making `markKind` required on `updateCache` surfaces two existing three-argument call sites** — `server/tests/unit/p19-b8-9-venue-only-source.test.ts:75` and `:95` — **which today omit the already-required `producer`.** They are in the change set, not a surprise.
+
+---
+
+# ⛔⛔ r6 — TWO FRESH READERS, RUN CLAIM-ONLY. **GAP-3'S PREMISE IS FALSE, AND THAT OPENS A SMALLER DESIGN THAN ANY REVISION SO FAR.**
+
+> **REVIEWER r1:** `claim-only` · *"exactly one `exit_fee_mode` writer, three non-stamping terminal-close paths"* · **HIT** · re-derived **y**
+> **REVIEWER r2:** `claim-only` · *"the mark predicate has two implementations; neither carrier tags the kind; the crypto consumer can re-derive it"* · **HIT** · re-derived **y**
+> ⛔ **Neither reader was told the conclusion, and each was asked only *"what other states of the world are consistent with these objects?"* Every item below was re-derived by me at the ref before it moved anything.**
+
+## ⛔⛔ WITHDRAWN — **GAP-3. I CITED A PROHIBITION THAT IS NOT THERE.**
+
+r2 said: *"the mark-kind tag gets its own column rather than widening the enumerated vocabulary, which `:813-816` explicitly prohibits."* **Re-read at the ref: `live-pricing-adapter.ts:806-822` is the WebSocket BROADCAST PAYLOAD. It says nothing about vocabulary.**
+⛔⛔ **AND THE UNION SAYS THE OPPOSITE OF WHAT I CLAIMED, IN ITS OWN TEXT (`:92-97`):** *"★ SAFE BY CONSTRUCTION: the engine's actionable gate is `isKrakenVenueSource(source)` (:151), which reads `source` and NEVER `producer`, **so widening this union cannot reject a price or skip a position. That is design (B)'s defining property, verified at the ref.**"*
+⇒ ★ **`PriceProducer` IS DESIGNED TO BE WIDENED SAFELY. GAP-3 INVERTED ITS DEFINING PROPERTY, AND EVERY REVISION SINCE HAS BUILT ON THAT.**
+⚠️ **Same misreading I withdrew as `#953` rule 1b four days ago — retracted in the ledger, then used as this scope's foundation. `fix-follows-pointer`, one hop up.**
+
+## ⛔ THE PREDICATE HAS **FOUR** IMPLEMENTATIONS — r3 FOUND 2, r5 FOUND A 3rd, THE READER FOUND A 4th
+| # | site | class |
+|---|---|---|
+| 1 | `equity-spot-archiver.ts:135` | xStock |
+| 2 | `kraken-v2-translator.ts:57-58` | crypto |
+| 3 | `active-execution-engine.ts:1305` | crypto |
+| ⛔ **4** | **`live-pricing-adapter.ts:645`** — the Kraken spot REST poller inside `fetchLivePrice` | crypto |
+
+⚠️ **AND THEY ARE NOT IDENTICAL, so "one rule, four copies" overstates it:** the xStock site guards its output (`:136` `Number.isFinite(_mark) && _mark > 0`); the translator emits unconditionally and relies on its consumer's guard. **Provenance says convergent, not copied** — `8.9.1` for the translator, `P19-B8.5` for the archiver. ⇒ **a shared predicate is still right, but as a DEDUPLICATION, not as a bug fix.**
+
+## ⭐ AND A **FIFTH** PRODUCER WHOSE KIND IS **ALREADY FULLY DETERMINED**
+**`kraken-websocket-adapter.ts:908-918` → `:943`** emits a mini-book BBO midpoint with **no last-trade arm at all** (`if (bestBid <= 0 || bestAsk <= 0) continue`), stamped **`producer: 'kraken_ws_book_mid'`**.
+⇒ ⛔ **THE KIND IS NOT ABSENT FROM THE SYSTEM — IT IS RECORDED FOR ONE OF THE UNION'S MEMBERS AND COARSE FOR FOUR.** The four ambiguous ones are `kraken_ws_ticker`, `kraken_equities_ws`, `kraken_rest_engine_fallback`, `kraken_rest_poller`.
+
+## ⛔⛔ THEREFORE — THE ONE GATE FOR LANGSTON. **TWO DESIGNS, AND GAP-3 WAS THE ONLY THING RULING (B) OUT.**
+
+| | **(A) A NEW `exit_mark_kind` COLUMN** *(r2-r5's design)* | ⭐ **(B) SPLIT THE FOUR COARSE PRODUCERS IN THE EXISTING CLOSED UNION** |
+|---|---|---|
+| what changes | a column, `PriceTickEvent`, `updateCache`, `CachedPrice`, `getPriceWithFallback`, `exitProvenance`, 3 call sites, 2 tests | ⭐ **the union + the 4 producing sites. NO new column, NO cache change, NO event change.** |
+| how the kind reaches the exit | a new value carried 6 hops | ⭐ **`exit_price_producer` ALREADY CARRIES IT — 19/19 populated at `B-EXIT-PROVENANCE` close** |
+| blast radius of the vocabulary | — | **`kraken_ws_book_mid` appears in exactly 3 files** *(2 source, 1 fence test)* |
+| ⛔ **cost** | a fourth object on the provenance payload | ⛔ **HISTORY: existing rows carry the coarse values, so old rows become un-interpretable in the new terms.** A new column leaves history intact. |
+| precedent | — | ⭐ **THE UNION ALREADY DID THIS SPLIT ONCE, FOR THIS REASON:** `crypto_ws_book_walk` vs `kraken_ws_book_mid` — *"a walk consumes LEVELS and a mid is (bestBid+bestAsk)/2. Stamping a walk as a mid would be a wrong-object label of exactly the kind this union exists to prevent."* |
+
+⇒ ★★ **BY THE UNION'S OWN RULE, STAMPING A LAST-TRADE FALLBACK `kraken_ws_ticker` IS THAT WRONG-OBJECT LABEL.** ⛔ **I am NOT deciding this. It is the gate.**
+
+## ⛔ THE TRAP THAT KILLS ANY "RE-DERIVE AT THE CONSUMER" VARIANT — INCLUDING r4's
+**`price-cache.ts:402-416` `updateFromWebSocket(symbol, price)` sets `ask: existing?.ask ?? price`, `bid: existing?.bid ?? price`.**
+⇒ ⛔⛔ **ON A COLD ENTRY `bid === ask === price > 0`, SO `bid>0 && ask>0` RETURNS `mid` FOR A VALUE THAT MAY HAVE BEEN A LAST TRADE.** On a warm entry the sides come from a prior REST refresh **at a different instant**.
+✅ **THE KIND MUST BE DERIVED WHERE THE PREDICATE RUNS AND CARRIED. It may NEVER be re-derived downstream.** *(And r4's adapter route dead-ends regardless: `kraken-websocket-adapter.ts:700` emits `{symbol, price, source, producer}` — **bid and ask are dropped at that boundary.**)*
+
+## ⛔⛔ §9.5(b-ii) — **THREE OPEN LEDGER ENTRIES ALREADY COVER THIS. THIS BATCH INSTRUMENTS; IT DOES NOT CLOSE THEM.**
+- **`#941` PARTLY-FIXED** — *"Both crypto producers emit a midpoint; they differ by FEED, not by kind. There is no clean print."*
+- **`#952` OPEN (mine)** — the `c`-field overwrite. ⛔ **Its fix shape is explicitly NOT pre-judged and cites rule 15: *"the question is which of the two producers is supposed to be the trade print, and whether we need one at all."*** ⇒ **design (B) is a THIRD option `#952` did not list, which is a reason to put it to Langston, not to adopt it quietly.**
+- **`#957` OPEN (mine)** — the xStock exit mark is *"untagged"*, and its disposition is **§9.4 (4) a SCHEDULED REVIEW placed at `B-DECIDED-INTENT-INDEX` 3b.g.**
+⇒ ✅ **THE SEPARATION THAT MAKES THIS BATCH LEGITIMATE: `#952`/`#957` ask WHAT THE VOCABULARY SHOULD BE — a decision. This batch RECORDS WHAT ACTUALLY REACHED THE EXIT — an instrument, and a prerequisite for answering them from data rather than from argument.** ⛔ **The scope claims neither entry closed.**
+
+## ⛔ AND THE `exit_fee_mode` CARVE-OUT — **r1 FOUND SIX TERMINAL-CLOSE PATHS, NOT THREE**
+| # | path | `close_reason` | named in r3? |
+|---|---|---|---|
+| 1-3 | `active-execution-engine.ts:1077`, `active-engine-service.ts:352`, `active-portfolio-manager.ts:651` | `never_filled` / `engine_stop_cleanup` / caller string | ✅ |
+| ⛔ **4** | **`storage.ts:4508-4514`** — `hardResetActiveEngineTables`, BULK `.where(isNull(closedAt))` | `hard_reset` | ⛔ NO |
+| ⛔ **5** | **`routes.ts:12941` → `createClosedTrade`** | ⛔ **`reason \|\| 'manual_close'` — `reason` IS `req.body`** | ⛔ NO |
+| ⛔ **6** | **`routes.ts:13052` → `createClosedTrade`** | `stranded_clear` | ⛔ NO |
+
+⛔⛔ **AND THE PART THAT WEAKENS r4's ANSWER, HONESTLY STATED: `close_reason` IS CALLER-SUPPLIED UNVALIDATED TEXT on paths 5 and 3.** A row reading `stop_hit` with a null `fee_mode` therefore **does not require a fourth engine writer** — a manual API close whose caller passed that string produces it. ⇒ **`close_reason` IS NOT A DISCRIMINATOR between the stamping and non-stamping paths.**
+⚠️ **r4's dating stands as measured** — all 19 closed 2026-07-15 06:18-20:53, the first-ever stamp is 21:43:55 — **but "they predate the writer's deployment" and "they came from a non-stamping path" are BOTH consistent with it, and the repo dates no row.** ✅ **Benign either way: neither needs a fourth writer.** ⛔ **But I may not assert the first as established.**
+✅ **CARVE-OUT, FINAL: bound on `closed_at >= 2026-07-15T21:43:55Z` AND exclude all SIX paths by name.**
+⚠️ **AND `storage.ts:3128` is `.set(updates)` with NO column whitelist — "exactly one writer" is a CONVENTION at this ref, not a structural guarantee.**
+
+## 🟨 OUT OF SCOPE, FOUND BY r1 — **THE CLOSE STAMP CAN LAND ON THE WRONG ROW**
+`active-execution-engine.ts:2196` picks the target row via `trades.find(t => t.openedAt && !t.closedAt)` over `getClosedTradesBySymbol` — **symbol-keyed, unbounded, `openedAt DESC`.** With two concurrently-open rows for one symbol, `closePosition` stamps **the first match, not the position being closed.**
+**DISPOSITION: own issue, §9.4 (4) a scheduled review — it needs a concurrency census before it can be dispositioned, and it is not this batch's object.** ⛔ **NOT re-derived beyond reading the two functions; filed as a LEAD, not a finding.**
