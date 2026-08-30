@@ -847,6 +847,35 @@ MSYS2_ARG_CONV_EXCL='*' git show "…:.claude/memory/MEMORY.md"               ->
 
 ---
 
+### #959 OPEN 2026-08-30 (CC-C; surfaced by the fresh reader attacking the plan draft, re-derived by me at the ref) — ⛔⛔⛔ **THE EXIT *TRIGGER* AND THE EXIT *FILL* READ DIFFERENT PRICES FROM DIFFERENT SAMPLES. ON xSTOCK THEY DISAGREE BY 14% ON AVERAGE, AND STOP-OUTS FILL *BETTER* THAN THEIR OWN STOP.**
+
+**SEVERITY: CRITICAL — this is the mechanism that manufactures the contaminated P&L, and it was absent from my own "complete list" of what is wrong. OWNER: CC-C.**
+> **HOME: `B-EXIT-TRIGGER-FILL-PARITY`, owner CC-C, placed in `PHASE_19_PLAN` at row **3b.c** — the slot vacated by the withdrawn `B-BOOK-BBO-DIVERGENCE` — BEFORE `F-G-2` (3c) and alongside the other xStock prerequisites.**
+
+**THE TWO READS ARE DIFFERENT OBJECTS, NOT TWO VIEWS OF ONE:**
+| | reads | from | cadence |
+|---|---|---|---|
+| **the TRIGGER** (decide to exit) | the in-memory **mid** | `getLatestEquityTick`, `active-execution-engine.ts:1163` | **unthrottled** |
+| **the FILL** (what we book) | a depth-walked **bid** | `:1997` → `depth-source.ts:49-70` → the **4-second-throttled** `xstock_spot_ticker_snap` | **≤1 row / 4 s** |
+⇒ `order-placer.ts:99-103` books `closeFillFull(...).avgFillPrice`; **the trigger price is used ONLY to compute slippage at `:120`.**
+
+**MEASURED, RE-DERIVED BY ME — every `closed_trades` row carrying both columns:**
+| class | n | mean abs gap | max gap | **signed, `stop_hit`** |
+|---|---|---|---|---|
+| ⛔ **`xstock_spot`** | **9** | **14.038%** | **48.01%** | ⛔⛔ **+17.16%** |
+| ✅ **`crypto_spot` (CONTROL)** | 15 | **0.209%** | 1.08% | ✅ **−0.28%** |
+
+⇒ ⭐⭐ **THE SIGN IS THE FINDING. A stop-out is a forced sale: it should fill AT or WORSE than the stop — crypto's −0.28% is exactly right. xStock fills +17.16% BETTER than its own stop, WHICH BOOKS A GAIN.** That is not a market outcome; **it is two different samples disagreeing.**
+**SPECIMENS (00:15 UTC):** `TGT/USD` stop triggered at **106.075**, **booked at 157.00** · `NOW/USD` 118.75 → **143.20** · `WEN/USD` target at 13.31 → **8.562** · `MOH/USD` 281.025 → **219.84**.
+
+⭐⭐ **THIS IS THE MACHINE BEHIND THE CONTAMINATED P&L.** The decision-path doc recorded that 77% of the overnight profit sits inside the burst window and treated the cause as *"a false stop above entry books a win."* ⛔ **That was only half of it: the win is booked because the FILL COMES FROM A DIFFERENT SAMPLE than the trigger.** ⇒ **`#955`/`#958`'s framing is completed, not contradicted.**
+
+⚠️ **HONEST LIMITS, BOTH STATED BY THE READER AND BOTH VERIFIED:** `n=9`. **`exit_decision_price` has only been stamped since 2026-08-26 21:23 UTC**, so **the historical 00:15 cohort (26 of 30 closes examined) is NOT recoverable** — which ⛔ **corrects my own `#958` claim that the triggering prices are recoverable: they are, for trades closed AFTER the stamp shipped, and not before.**
+
+⛔ **AND IT WAS MISSING FROM MY OWN CLOSED LIST.** Kyle asked *"make sure those are the only items that need to be considered."* **The answer is no, and the missing one is the largest.** ★ *`W2` in the plan draft said "every exit decision reads a midpoint" — that is the TRIGGER only. I never asked what the FILL reads.*
+
+---
+
 ### #958 OPEN 2026-08-30 (CC-C; Kyle-directed after he rejected `#955` as too tame for the phenomenon; parser/throttle half CONFIRMED by Langston at `ad7a3960c`) — ⭐ **THE 00:15 UTC EVENT, TRACED: A RECURRING DAILY VENUE-SIDE BURST ON THE xSTOCK FEED. NOT A RECONNECT, NOT A STALL, NOT A WIDE MARKET.**
 
 **SEVERITY: high. OWNER: CC-C. DISPOSITION: §9.4 (1) — FOLD INTO THE WORK IN HAND.**
