@@ -132,8 +132,10 @@ The `2026-08-26` migration's `COMMENT ON COLUMN closed_trades.exit_ticker_bid` r
 | **P9** | **GOVERNANCE — record the SPLIT EPOCH (deploy sha + UTC) in `SYSTEM_IMPACT_MAP.md` `:317-320`**, and state that a cohort query spanning it must enumerate both old and new members. | condition 3 |
 | **P10** | **VERIFICATION.** OBJ-2: a post-deploy close carries a split member; a forced one-sided book yields `_last`. OBJ-1: coverage **bounded on `closed_at >= 2026-07-15T21:43:55Z`** and excluding **all SIX** non-stamping close paths; **crypto verified by a paired log line at the fill site**, never by reconstruction. | FINDING-H, r6, r3 MATERIAL-D |
 
-| ⭐ **P11** *(added audit r3)* | ⛔ **THE SIX NEW MEMBERS GO IN `toCachedProducer`'s PASSTHROUGH ARM, AND A TEST ASSERTS EACH RETURNS NON-NULL.** **The `never` arm forces a DECISION, not a CORRECT one: a member placed in the `null` arm suppresses the cache write, which ends in `last_known_good` → a failed venue gate → `_recordPriceSkip` — a SKIPPED POSITION, with a green build.** ⭐ **The type system cannot express this; the test can.** | A-CORRECTION 1 |
+| ⭐ **P11** *(added audit r3)* | ⛔ **THE SIX NEW MEMBERS GO IN `toCachedProducer`'s PASSTHROUGH ARM, AND A TEST ASSERTS EACH RETURNS NON-NULL.** **The `never` arm forces a DECISION, not a CORRECT one: a member placed in the `null` arm suppresses the cache write, which ends in `last_known_good` → a failed venue gate → `_recordPriceSkip` — a SKIPPED POSITION, with a green build.** ⭐ **The type system enforces that every member is HANDLED and says NOTHING about WHERE — that is the gap.** ⚠️ **HONEST REACH (audit r4): behaviourally load-bearing for `kraken_ws_ticker` ONLY; the other two enter via `updateCache(producer: CachedProducer)` and never touch the switch.** | A-CORRECTION 1, 5, 6 |
 | ⭐ **P12** *(added audit r3)* | **Correct the stale count in `EXIT_PATH_MACHINERY_AUDIT_2026-08-30.md:645`** — *"15-member"* → **16**, counted at the ref. *(Mine, 4 days old, cited by this batch.)* | audit r3 |
+
+| ⭐ **P13** *(added audit r4)* | **Correct all SIX stale `file:line` anchors inside the `PriceProducer` union comment** (`:56-60`, `:101-102`). ⛔ **Two carry an explicit *"ref corrected 2026-08-26"* annotation and are wrong anyway — a correction that went stale reads as freshly checked, which is worse than no anchor.** | audit r4 |
 
 ⛔ **NOTHING IN THIS PLAN IS `UNAUDITED`.**
 
@@ -242,3 +244,53 @@ I wrote: *"A producer member cannot gate, reject, skip or re-price anything."* �
 
 ## ✅ AND A REJECTION MODE NEITHER OF US HAD NAMED
 `exit_price_producer` / `entry_price_producer` are `VARCHAR(40)` with **no CHECK constraint and no enum type** (`migration:26,35`). ⇒ **a member over 40 characters is a WRITE REJECTION with nothing to do with any gate.** ✅ **Longest new name is 32 (FINDING-D) — but the rule for future splits is: check the width, because the type system will not.**
+
+---
+
+# ✅ AUDIT r4 — ROUND 2, OBJECT ROUND. **THE LOOP CLOSES HERE.** Design (B) survives; **I over-claimed the danger in r3 and under-claimed the protection.**
+
+> **REVIEWER r3 (A, round 2):** `object + claim` · the corrected FINDING-A and `P11` · **HIT** · re-derived **y**
+> ⭐ **Round count: 2 on FINDING-A, 1 on FINDING-E/F. Termination is legitimate — the final round READ THE OBJECTS at the ref** *(and reported HEAD `4f005b461`, matching origin).*
+> ⛔ **Strike every mention of this loop and the plan still stands on its own citations. That is the test, and it passes.**
+
+## ⛔ A-CORRECTION 4 — **I OVERSTATED THE DANGER TWICE. NEITHER NULL ARM IS REACHABLE, AND THE CHAIN DOES NOT END IN A SKIP.**
+1. ⛔ **THE NULL-ARM MEMBERS CANNOT REACH EITHER GATE TODAY.** `'no_price_produced'` is emitted only at `live-pricing-adapter.ts:487`, `:537`, `:569`, **each paired with `price: null` and `source: 'no_reliable_price'` — both excluded by the guard at `:426`, which runs BEFORE `toCachedProducer` at `:428`.** `'position_entry_price_reused'` is produced only at `active-portfolio-manager.ts:628` and never enters either site. **And `PriceTickEvent.source` is narrowed to the single literal `'kraken_ws'` (`kraken-websocket-adapter.ts:95`); its three emitters stamp `:700`/`:945`/`:1081`, none a null-arm member.** ★ **The code says so itself at `:1196-1199`.**
+2. ⛔ **AND THE CHAIN DOES NOT END IN A SKIP.** A cache miss fails the venue gate at `:1268` **into the direct Kraken REST leg (`:1288-1332`), which ON SUCCESS stamps `kraken_rest_engine_fallback` and the position is NOT skipped.** **A skip requires REST to ALSO fail** (`:1298` `rest_no_data`, `:1337` `rest_failed`). ⇒ **r3's *"= A SKIPPED POSITION"* was too strong.**
+✅ **WHAT SURVIVES, AND IT IS STILL THE REASON `P11` EXISTS: the branch is real and STRUCTURALLY reachable for a FUTURE member. `#546`'s whole lesson is that "unreachable today" is a property of today's call sites, not of the type.**
+
+## ⛔⛔ A-CORRECTION 5 — **`toCachedProducer` IS NOT ON THE PATH FOR TWO OF THE THREE MEMBERS. `P11`'s REACH IS ONE, NOT THREE.**
+**`kraken_equities_ws` and `kraken_rest_engine_fallback` enter the cache through the DIRECT call `updateCache(..., producer)` at `active-execution-engine.ts:1244` and `:1332`, whose 4th parameter is typed `producer: CachedProducer` (`live-pricing-adapter.ts:851`) and which NEVER calls the switch.**
+⇒ ⭐ **ONLY `kraken_ws_ticker` actually flows through `toCachedProducer`, via the priceTick listener at `:1201`.**
+✅ **`P11` STAYS — but its honest reach is stated: behaviourally load-bearing for ONE member; for the other two the arm placement is a statement about the TYPE, not about any path a value takes.** ⚠️ **An unstated reach is how a test reads as covering three things while covering one.**
+
+## ✅ A-CORRECTION 6 — **I UNDER-CLAIMED THE PROTECTION. MEMBER *EXISTENCE* IS COMPILE-ENFORCED; ARM *PLACEMENT* IS NOT.**
+**The reader built a minimal replica under `--strict` and MEASURED it: removing a literal from the union makes the `as PriceTickEvent` casts at `:700`/`:945`/`:1081` raise `TS2352` — the negative control compiled clean.** ⇒ **the `as` does NOT defeat the check, contrary to what the cast's neighbourhood implies.** **And `updateCache`'s `producer: CachedProducer` protects `:1244`/`:1332`.**
+⇒ ✅ **The gap `P11` fills is NARROWER and REALER than r3 said: not "the type system does not protect this" but "the type system enforces that every member is HANDLED and says nothing about WHERE."** *(`CachedProducer = Exclude<…>` removes exactly two hardcoded names, so a new member in the `null` arm still belongs to `CachedProducer` and returning `null` for it compiles.)*
+
+## ⛔⛔ CORRECTION TO **SCOPE r5** — **"MAKING A PARAMETER REQUIRED SURFACES TWO TEST CALL SITES" IS FALSE. TESTS ARE OUTSIDE `tsc`.**
+**`tsconfig.json:3` excludes `**/*.test.ts`.** ⭐ **PRESENT-TENSE PROOF, not inference: `server/tests/unit/p19-b8-9-venue-only-source.test.ts:75` calls `livePricingAdapter.updateCache('AAPL/USD', 214.25, 'kraken_equities_ws')` — THREE arguments to a function whose 4th (`producer`) is REQUIRED with no default — AND CI IS GREEN.**
+⇒ ⛔ **A stale producer literal in ANY `*.test.ts` is invisible to the TypeScript Check. It is caught only if the assertion EXECUTES and the runtime behaviour changes.** ⇒ **scope r5's "known touch, in the change set, not a surprise" is withdrawn: those two sites will not fail the build.**
+
+## ✅ WHAT CI *DOES* GATE, STATED PRECISELY
+**`.github/workflows/ci.yml` — "TypeScript Check (baseline gate)" runs `scripts/check-tsc-baseline.mjs` against `.tsc-baseline.json`. It is NOT a clean build** *(the baseline exists because `continue-on-error: true` once swallowed ~700 errors)*. **It compares per-file, per-code AND per-message, and fails on any new pair.**
+✅ ⇒ **None of `live-pricing-adapter.ts`, `active-execution-engine.ts`, `kraken-websocket-adapter.ts`, `active-portfolio-manager.ts` or `shared/schema.ts` carries a baselined entry — so ANY new type error in the five files this batch touches is a new pair and FAILS.** **That is the real protection, and it is stronger than "tsc passes."**
+
+## ⛔ NEW — **EVERY `file:line` ANCHOR INSIDE THE UNION COMMENT IS ALREADY STALE, INCLUDING TWO THAT SAY "REF CORRECTED"**
+| comment says | actual |
+|---|---|
+| `kraken-websocket-adapter.ts:692` | ⛔ **`:700`** *(`:692` is `firstTickReceived.add`)* |
+| `:916` | ⛔ **`:945`** |
+| `:1049` | ⛔ **`:1081`** |
+| `active-execution-engine.ts:1140` *("ref corrected 2026-08-26 — was :1145")* | ⛔ **`:1236`** |
+| `:1201` *(same annotation)* | ⛔ **`:1309`** |
+| the null-price arms `:355 / :399 / :427` | ⛔ **`:487 / :537 / :569`** |
+⇒ ⛔ **TWO CARRY AN EXPLICIT "ref corrected" ANNOTATION AND ARE WRONG ANYWAY — a correction that itself went stale, which is worse than no anchor because it reads as freshly checked.** **A split DOUBLES these anchors and nothing in the repo checks them.**
+✅ **NEW PLAN ITEM `P13`: correct all six anchors in the same pass — the comment block is already being edited.**
+
+## ⚠️ LATENT HAZARD, NAMED NOT FIXED — **A SUBSTRING PREDICATE OVER A BARE `string`**
+`live-pricing-adapter.ts:208-211`: `REST_FALLBACK_SOURCES = ['rest_fallback','kraken_rest','last_known_good']`, and **`isRestFallbackSource(source: string)` uses `.some(s => source.includes(s))` — a SUBSTRING test, not equality.**
+⛔ **`'kraken_rest_engine_fallback'` CONTAINS BOTH `'kraken_rest'` AND `'rest_fallback'`.** ✅ **Every caller today passes `.source`, so it is correct now — but the parameter is a BARE `string`, so nothing stops a future caller passing a producer, and it would match.**
+**DISPOSITION: §9.4 (4) — a scheduled review with the symbol-keying lead at `B-DECIDED-INTENT-INDEX` 3b.g. NOT folded in: narrowing that signature is a behaviour-adjacent change and OBJ-3 forbids it here.**
+
+## ✅ P9 WIDENS — **THE MEMBER NAMES ARE ENUMERATED IN SEVEN GOVERNANCE SURFACES**
+`SYSTEM_MANUAL.md` (2 lines) · `SYSTEM_IMPACT_MAP.md` (1) · `ACTIVE_PATH_FLOW.md` (2) · `PHASE_19_PLAN.md` (2) · `EXIT_PATH_MACHINERY_AUDIT_2026-08-30.md` (6) · `RUNNING_ISSUES.md` · scope/completion docs. **P9 records the split epoch AND updates the enumerations that would otherwise read as complete.**
