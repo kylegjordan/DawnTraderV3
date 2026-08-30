@@ -1,4 +1,4 @@
-# F-G-2 — B-EXIT-TRANSACTABLE-SIDE — SCOPE (Step 1, r9)
+# F-G-2 — B-EXIT-TRANSACTABLE-SIDE — SCOPE (Step 1, r10 - class split)
 
 change-class: architecture
 
@@ -9,6 +9,27 @@ change-class: architecture
 > ⛔ **OBJECTIVE NUMBERS UNCHANGED** (`OBJ-0`–`OBJ-6`, `OBJ-8`) — Langston's r1/r2/r3 rulings, `#911`, `#914`, `#915` and `PHASE_19_PLAN` all cite them by these names. `OBJ-7`/`7b`/`9` moved to `F-G-1` and are **not** renumbered there either.
 >
 > ⚠️ **THE FULL AUDIT, PROVENANCE READ AND MEASUREMENT that produced this batch live in the r3 file `B_EXIT_TRANSACTABLE_SIDE_SCOPE.md` at `cdb783a8d`. That file is the HISTORICAL RECORD and is NOT edited further — this one supersedes it. §5.1's provenance finding (the midpoint was BUILT for stability, by directive, and is not a bug) is unchanged and still governs how this batch is framed.**
+
+---
+
+## 0. ⛔⛔ r10 — **THE BATCH SPLITS BY ASSET CLASS**, AND ONE CARVE-OUT BINDS THE DESIGN (Langston ruling, 2026-08-30, re-derived by him at `0797e0132b` and `90c0b16eb`)
+
+⛔ **CRYPTO LEGS PROCEED ON THE `F-G-1` SOAK ALONE. xSTOCK LEGS SIT BEHIND `B-XSTOCK-FEED-SANITY` (plan 3b.b) AND `B-XSTOCK-BOOK-LADDER` (3b.d).**
+
+**WHY THE xSTOCK HOLD — RE-ARGUED OFF THE WITNESS, NOT OFF THE DEPTH SEED:** `depth-source.ts:89-93` states that the independent cross-check **IS NOT INDEPENDENT ON xSTOCK** — *"the fill's own depth-walk reads `xstock_spot_ticker_snap`, **THE SAME TABLE this function reads** … it **CANNOT corroborate the price against a second feed**."* ⇒ **on xStock this batch would move the exit decision onto a bid that no second feed can contradict.**
+⛔ *(The `min_levels` argument is WITHDRAWN as the lead: the seed comment at `2026-06-16-p19-b4b1-fill-depth-gate-seed.sql:45` declares the accommodation out loud — "xStock has only top-of-book" — making it rule-24 outcome (2); and the depth gate runs before an active OPEN, so an ENTRY gate does not gate an EXIT-side batch.)*
+
+**WHY NO CRYPTO HOLD:** crypto book quality was raised as a prerequisite and **WITHDRAWN BY ITS OWN AUTHOR 24 hours earlier** (`#944` / plan 3b.c — continuous instrument n=492 putting book-vs-ticker at **exactly 0.0000%**, that row saying in terms *"F-G-2's sequencing REVERTS — no prerequisite"*). Post-epoch crypto is instrumented: crossed-book detections **0 of 31,059**, checksum **18,758/18,758**, a real 10-level ladder, an independent witness wired. **And holding is not free — BABA's decision price sat 2.84% above the last trade against a target of 124.5567.**
+
+⛔⛔ **THE CARVE-OUT — IT BINDS THIS BATCH'S DESIGN, AND IT IS ANSWERED HERE BECAUSE LANGSTON REQUIRED THE SCOPE TO STATE WHICH IT IS:**
+
+> **`F-G-2` MAY NOT USE `observedAt`, `cachedAt`, OR ANY AGE-DERIVED VALUE AS A SAMPLE FILTER OR COVARIATE IN ITS BEFORE/AFTER ARMS.**
+
+✅ **ANSWER, STATED PLAINLY: IT DOES NOT, AND IT WILL NOT.** `OBJ-0`'s arms are split on **WHICH SIDE the exit decision reads** (`exit_book_mid` vs `exit_ticker_bid`) and on the **F-G-1 grid epoch**. **No age term appears in the arm definition, in the sample filter, or as a covariate.**
+⛔ **IF A LATER REVISION NEEDS ONE, THE `#951` PREREQUISITE REATTACHES BY CONSTRUCTION** — the fabricated clock would then be selecting the population — **and this section must be re-argued before that revision ships.**
+
+★ **WHY THE AGE DEFECT IS NOT A CONFOUND HERE (the ground Langston accepted): a stale bid and a stale mid are stale IDENTICALLY.** `#951` re-serves an unchanged price with a refreshed clock; **it does not move one arm relative to the other.** It is a real defect with its own home at plan row **3b.f** — it is not this batch's gate.
+⚠️ **AND THE ROW GAVE *TWO* GROUNDS, BOTH NOW DISCHARGED — NOT ONE.** Ground 1 by the differential argument above; **ground 2** (that `#952` killed F-G-2's self-check) by the narrowing: the **PRINT** control dies, the **BID** control survives on a separate socket returning raw bid/ask (`getTickerWitness`, `depth-source.ts:107`). **A release resting on one of two stated grounds would have been a hole.**
 
 ---
 
