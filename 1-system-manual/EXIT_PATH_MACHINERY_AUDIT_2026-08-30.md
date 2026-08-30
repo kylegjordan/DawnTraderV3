@@ -884,3 +884,67 @@ And **objective 4**: *"Preserves paper's **'exit at currentPrice' fill conventio
 ⇒ ★ **AND THAT VINDICATES §10.0's VERDICT FROM THE OTHER DIRECTION: so much of what I took for chaos turns out to be recorded, reasoned decisions I had not read. The machinery is in worse shape than a clean design and far better shape than "nobody knows why anything is like this."**
 
 ⛔ **LOOP CLOSED AT ROUND 3 (the cap). This goes to Langston as the full round record, disagreements intact — the round count is not evidence, and iterating to agreement selects for persistence rather than truth.**
+
+---
+
+## 14. ✅✅ **THE LOW BID IS ANSWERED. IT IS REAL, IT IS KRAKEN'S, AND IT IS NOT A COLLAPSED BID.**
+
+> **Kyle, 2026-08-30, and it is the question this audit has failed to answer three times:** *"There are moments when the entire set of xStocks, their bid price is unexplainably lower than it should be. Two to three times lower… That hasn't been explained to me yet. Why is that happening?"*
+> ⛔ **THE PREVIOUS ANSWER — *"stored data cannot settle it, the row and the engine mark are siblings"* — WAS WRONG ABOUT WHAT STORED DATA CAN DO.** That was true of the question *"did our parser mangle this row?"* **It is NOT true of the question *"is this quote internally the shape of a real quote?"* — which is answerable today, and which I never asked.**
+
+### 14.1 ⭐ THE TEST, AND WHY IT DISCRIMINATES
+
+**A real two-sided quote has a property: the last traded price sits BETWEEN the bid and the ask, roughly centred.** A quote whose **bid has collapsed** (ask intact) has the opposite property — the last trade hugs the **ask**, because the ask is still near fair value and the bid is not.
+
+**So measure the last trade's POSITION IN THE SPREAD:  `pos = (last − bid) / (ask − bid)`.**
+- Genuine symmetric widening ⇒ **`pos` ≈ 0.5**
+- **Bid collapsed** ⇒ **`pos` → 1.0**
+- Ask collapsed ⇒ `pos` → 0.0
+
+★ **That is the "how is it SUPPOSED to work" step I had been skipping: a quote is not just three numbers, it has a STRUCTURE, and the structure is testable against stored data.**
+
+### 14.2 ✅ THE RESULT — n = 77,060 WIDE ROWS, WITH TWO CONTROLS
+
+**Population: `xstock_spot_ticker_snap`, last 3 days, `bid>0 AND ask>0 AND last>0`. "Wide" = quoted spread > 5%.**
+
+| cohort | n | **mean `pos`** | mid-ish (0.25-0.75) | hugs ASK (bid-collapse signature) |
+|---|---|---|---|---|
+| MODERATE 5-20% | 65,959 | **0.459** | 57.3% | 2,585 (3.9%) |
+| WIDE 20-50% | 8,541 | **0.548** | 47.4% | 1,413 (16.5%) |
+| **EXTREME >50%** | **2,560** | **0.446** | **71.4%** | 155 **(6.1%)** |
+| ✅ **CONTROL — TIGHT <1%** | **5,282,570** | **0.492** | **57.5%** | — |
+| ✅ **CONTROL — the 00:15 UTC minute, wide rows only** | **2,085** | **0.511** | **59.5%** | — |
+
+⇒ ⭐⭐ **THE WIDE QUOTES ARE STRUCTURALLY INDISTINGUISHABLE FROM THE 5.28 MILLION TIGHT ONES. Same mean position, same mid-ish fraction. THE MOST EXTREME BAND IS THE MOST CENTRED OF ALL (71.4%).**
+⇒ ⛔ **THERE IS NO BID-COLLAPSE SIGNATURE. If one side were breaking, `pos` would run to 1.0 and mid-ish would collapse toward zero. It does neither, in ANY band, INCLUDING at 00:15.**
+
+### 14.3 ✅ THE ANSWER, IN ONE LINE
+
+> ⭐⭐ **BOTH SIDES WIDEN TOGETHER, SYMMETRICALLY, AROUND THE TRADED PRICE. THE BID IS NOT BROKEN AND IT IS NOT OURS — IT IS A GENUINELY THIN OVERNIGHT MARKET IN WHICH THE MARKET MAKER PULLS BOTH SIDES.**
+
+**And the concentration confirms the mechanism.** Wide rows by session, same window: **extended hours 76,321 · regular hours 748** — a ratio of roughly **100 : 1**, with an average extended-hours spread of **13.80%** against **7.50%** in regular hours. **This is what a tokenized-equity market looks like when the underlying US market is shut and nobody is obliged to quote tightly.**
+
+⇒ ✅ **`#943`'s "low bid" leg is ANSWERED AND CLOSED: the price we are storing is the price Kraken is publishing.** ⛔ **What was WRONG was never the bid — it was that WE MAKE EXIT DECISIONS ON THE MIDPOINT OF A QUOTE THAT AVERAGES 13.8% WIDE, AS THOUGH IT WERE A PRICE.**
+
+### 14.4 ⚠️ WHAT THIS DOES **NOT** ANSWER — STATED SO IT IS NOT QUIETLY ABSORBED
+
+⛔ **ONE CASE IS NOT EXPLAINED BY THIS AND MUST NOT BE FILED UNDER IT.** `#943`'s runtime evidence has `NOW/USD` sitting 10.2% clear of its stop at 00:14, then a `CACHE_WRITE … price=118.75` at 00:15 read fresh at `ageMs=1479` — **against a venue book reported as 143.20 / 143.30, i.e. TIGHT.**
+⇒ **A tight venue book coexisting with a bad mark is NOT symmetric widening, and §14.2 does not cover it.** ⚠️ **The population here is ALL 00:15 rows; that case is ONE row, and a 59.5%-mid-ish aggregate cannot exonerate an individual row.**
+✅ **THAT residual still needs the raw frame** — instrument already placed at `PHASE_19_PLAN` 3b.b, and the re-probe is armed. **It is now a much smaller question: not "why are the bids low" (answered) but "is there a separate, rarer event where a tight book and a bad mark coexist."**
+
+### 14.5 ⛔⛔ AND IT SETTLES THE DESIGN QUESTION KYLE HAS ASKED FOUR TIMES
+
+**His question: *"What data source should we be using for our pricing?"* — and it has two halves that I have been running together, which is most of why he has not had an answer.**
+
+**HALF ONE — THE SOURCE. Settled, and not actually in doubt:**
+| | source | status |
+|---|---|---|
+| **xStock** | `wss://ws-equities.kraken.com` | ⛔ **THE ONLY SOURCE THAT EXISTS.** Kraken publishes **no REST** for xStocks (empirically closed, twice). **There is nothing to choose between.** |
+| **crypto** | `wss://ws.kraken.com/v2` | The venue we fill on. **Also not in doubt.** |
+⇒ ✅ **THE SOURCE WAS NEVER THE PROBLEM. WHAT IS IN DOUBT IS WHICH *CHANNEL* AND WHICH *FIELD* — and there the answer is now concrete: we subscribe to `ticker` and `ohlc`, and we do NOT subscribe to `book`, which is the only channel that carries what we would actually transact against.**
+
+**HALF TWO — WHICH NUMBER TO COMPUTE FROM IT. §14.2 changes this answer, and it changes it AWAY from where F-G-2 was heading:**
+⛔ **IN A SYMMETRIC 13.8% WIDENING, THE BID IS NOT "THE HONEST PRICE" — IT IS THE WORST CASE, AND IT IS AS FAR FROM VALUE AS THE ASK IS.** Moving the exit **trigger** onto the bid would fire stops the market never justified. **That is exactly what my own draft-2 arithmetic showed (bid worse than the mid on 4 of 5 rows) and I could not explain WHY. §14.2 is why.**
+⇒ ⭐⭐ **AND THE FOUNDING DESIGN ALREADY HAD THE RIGHT SHAPE (§8.2): DECIDE ON ONE PRICE, FILL AT ANOTHER.** *(Deleted 2026-01-18; recoverable only at `485699a2f^`.)*
+> ✅ **THE RECOMMENDATION, STATED AS A RECOMMENDATION AND NOT AS A FINDING: the exit TRIGGER should read a value estimate — the last trade, or the mid, whichever proves more stable — and the FILL should be modelled at the transactable side, depth-walked. Today we use one number for both, and it is the wrong one for each job.**
+⚠️ **This is a PROPOSAL. It rests on §14.2, which is measured; it does not yet rest on an outcome test. `OBJ-0` remains the instrument that would confirm or refute it — and its arms should now be TRIGGER-side vs FILL-side, not mid vs bid.**

@@ -631,6 +631,19 @@ The B65.2 functional ship deleted the paper-execution-engine consumption of meta
 - Test live order execution path end-to-end
 - Validate kill switch functions correctly for live mode
 
+#### 21.1.a ⛔⛔ **`B-LEGACY-LIVE-EXIT-PATH` (`#953`) — HARD GO-LIVE BLOCKER. NO REAL CAPITAL TRADES UNTIL THIS IS CLOSED.**
+**HOME: `B-LEGACY-LIVE-EXIT-PATH`, owner CC-C, placed in `POST_AUDIT_ROADMAP` at Phase 21.1, immediately after *“Resolve BUG-010, BUG-011 (TradingEngine placeholder code for live mode)”* and before 21.2.** *(Kyle-directed 2026-08-30: this must be slotted into Phase 21 and confirmed.)*
+
+⭐ **IT IS ALREADY THIS SECTION'S SUBJECT — 21.1 owns *“TradingEngine placeholder code for live mode”* AND *“validate kill switch functions correctly for live mode”*, and `#953` is both of those in one route.**
+
+**ONE live authenticated HTTP route (`routes.ts:5054` → `trading-engine.closeTrade`) carries FOUR defects, all re-derived at the ref:**
+1. It places a **REAL market sell** on the venue (`kraken.addOrder({type:'sell', ordertype:'market'})`).
+2. It then books `exitPrice = marketPrice * (1 - Math.random()*0.1/100)` — **a randomly generated haircut instead of the actual fill.** Founding invariant **F7** forbids exactly this (*“mock pricing is prohibited in production”*), and this is **not** the env-gated mock path; it is unconditional.
+3. It writes the **legacy `trades` table** (`storage.closeTrade` → `db.update(trades)`) while the daily-loss kill switch sums **`.from(closedTradesTable)`** ⇒ ⛔ **a close through this route is INVISIBLE to the kill switch.**
+4. It books the live exit fee at a hardcoded **`0.0026`** against a July-9 Tier-1 taker of **0.80%**.
+
+⚠️ **NO PAPER-MODE IMPACT TODAY** — the live branch is Phase-21 gated, which is why this is a blocker and not an incident. ⛔ **NO FIX PRE-JUDGED (rule 15): the first question is whether this route should exist at all, which is `PHASE_19_PLAN` row 3h's subject. Deleting the `Math.random()` alone would leave a real order booking a modelled exit against a table the risk system cannot see.** ↔ `#734` (the other Phase-21 go-live blocker in this family).
+
 ### 21.2 Paper-to-Live Transition Testing
 - Run parallel paper+live (small position sizes) to validate consistency
 - Compare paper sim results with live execution results

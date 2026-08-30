@@ -847,6 +847,33 @@ MSYS2_ARG_CONV_EXCL='*' git show "…:.claude/memory/MEMORY.md"               ->
 
 ---
 
+### #955 OPEN 2026-08-30 (CC-C; Kyle-directed — the question this audit failed to answer three times) — ✅✅ **ANSWERED: THE xSTOCK "LOW BID" IS A REAL, SYMMETRIC, TWO-SIDED WIDENING. IT IS KRAKEN'S MARKET, NOT OUR PARSER.**
+
+**SEVERITY: n/a — THIS ENTRY IS AN ANSWER, NOT A DEFECT. OWNER: CC-C. DISPOSITION: §9.4 (5) — the "broken bid" reading is WITHDRAWN, carrying the measurement that dissolves it. The `#943` low-bid LEG CLOSES; `#943`'s remaining 00:15 leg stays open and is narrowed (see below).**
+
+⛔ **MY PREVIOUS ANSWER WAS WRONG ABOUT WHAT THE DATA COULD DO.** I said repeatedly that stored data could not settle it because the archived row and the engine mark are *"siblings, not witnesses"* — same parsed object, same call. **That is true of *"did our parser mangle this row?"* It is FALSE of *"is this quote internally the SHAPE of a real quote?"*, which is answerable today and which I never asked.**
+
+**THE TEST.** A real two-sided quote puts the last trade between the sides, roughly centred. A quote whose **bid has collapsed** puts the last trade hard against the **ask**. So measure `pos = (last-bid)/(ask-bid)`: symmetric widening ⇒ `pos`≈0.5; bid collapse ⇒ `pos`→1.0.
+
+**RESULT — `xstock_spot_ticker_snap`, 3 days, `bid>0 AND ask>0 AND last>0`:**
+
+| cohort | n | mean `pos` | mid-ish |
+|---|---|---|---|
+| wide 5-20% | 65,959 | **0.459** | 57.3% |
+| wide 20-50% | 8,541 | **0.548** | 47.4% |
+| **extreme >50%** | **2,560** | **0.446** | **71.4%** |
+| ✅ **CONTROL — tight <1%** | **5,282,570** | **0.492** | **57.5%** |
+| ✅ **CONTROL — 00:15 UTC, wide only** | **2,085** | **0.511** | **59.5%** |
+
+⇒ ⭐⭐ **NO BID-COLLAPSE SIGNATURE IN ANY BAND, INCLUDING AT 00:15. The wide quotes are structurally indistinguishable from 5.28M tight ones — and the MOST extreme band is the MOST centred.** ⇒ **both sides widen together around the traded price.**
+**Concentration confirms the mechanism: 76,321 wide rows in extended hours vs 748 in regular hours (≈100:1), mean spread 13.80% vs 7.50%.** A thin overnight market in which the maker is not obliged to quote tightly.
+
+⚠️ **WHAT THIS DOES NOT COVER, STATED SO IT IS NOT ABSORBED:** `#943`'s `NOW/USD` case has a **tight** venue book (143.20/143.30) coexisting with a bad mark. **A 59.5%-mid-ish aggregate over 2,085 rows cannot exonerate one row.** That leg stays open, still needs the raw frame (`PHASE_19_PLAN` 3b.b), and is now a much narrower question.
+
+⭐ **AND IT REDIRECTS `F-G-2`: in a symmetric widening the bid is not "the honest price" — it is the worst case, as far from value as the ask.** That is why my own draft-2 arithmetic found the bid worse than the mid on 4 of 5 rows. **The founding design's shape was right (audit §8.2): decide on one price, fill at another. `OBJ-0`'s arms should become TRIGGER-side vs FILL-side, not mid vs bid.**
+
+---
+
 ### #953 OPEN 2026-08-30 (CC-C; surfaced by a fresh reviewer attacking the draft-1 design, re-derived by me at the ref) — ⛔⛔ A LIVE EXIT ROUTE PLACES A **REAL MARKET SELL** AND THEN BOOKS THE EXIT AT A **RANDOM HAIRCUT** INSTEAD OF READING THE FILL — AND IT SURVIVES THE DEAD-LIMB DELETION
 
 **SEVERITY: high — PHASE-21 GO-LIVE BLOCKER CLASS (no paper-mode trading impact today). OWNER: CC-C. DISPOSITION: §9.4 (2) — added as an item to `B-INTENT-ENTRY-PARITY` / plan row **3h**, which already owns the question *"should the HTTP intent path exist at all?"* — the same two callers are its subject.**
