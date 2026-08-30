@@ -132,6 +132,9 @@ The `2026-08-26` migration's `COMMENT ON COLUMN closed_trades.exit_ticker_bid` r
 | **P9** | **GOVERNANCE — record the SPLIT EPOCH (deploy sha + UTC) in `SYSTEM_IMPACT_MAP.md` `:317-320`**, and state that a cohort query spanning it must enumerate both old and new members. | condition 3 |
 | **P10** | **VERIFICATION.** OBJ-2: a post-deploy close carries a split member; a forced one-sided book yields `_last`. OBJ-1: coverage **bounded on `closed_at >= 2026-07-15T21:43:55Z`** and excluding **all SIX** non-stamping close paths; **crypto verified by a paired log line at the fill site**, never by reconstruction. | FINDING-H, r6, r3 MATERIAL-D |
 
+| ⭐ **P11** *(added audit r3)* | ⛔ **THE SIX NEW MEMBERS GO IN `toCachedProducer`'s PASSTHROUGH ARM, AND A TEST ASSERTS EACH RETURNS NON-NULL.** **The `never` arm forces a DECISION, not a CORRECT one: a member placed in the `null` arm suppresses the cache write, which ends in `last_known_good` → a failed venue gate → `_recordPriceSkip` — a SKIPPED POSITION, with a green build.** ⭐ **The type system cannot express this; the test can.** | A-CORRECTION 1 |
+| ⭐ **P12** *(added audit r3)* | **Correct the stale count in `EXIT_PATH_MACHINERY_AUDIT_2026-08-30.md:645`** — *"15-member"* → **16**, counted at the ref. *(Mine, 4 days old, cited by this batch.)* | audit r3 |
+
 ⛔ **NOTHING IN THIS PLAN IS `UNAUDITED`.**
 
 ---
@@ -202,3 +205,40 @@ They are TypeScript; only `COMMENT ON COLUMN` in a migration reaches Postgres. �
 **`:848` and `:1392` write the PAYLOAD field `bookAgeMs`, not the column identifier `exitBookAgeMs`.**
 ⇒ ⛔ **A grep on the COLUMN NAME finds FOUR of the SIX things that determine what lands in `exit_book_age_ms`, and MISSES THE TWO THAT DECIDE WHETHER A REAL VALUE IS EVER BUILT.** **An auditor searching by column name sees the persist at `:2278` and never the capture at `:1383-1392`.**
 ★ **THIS IS THE `wrong-object` PATTERN AS A SEARCH-SURFACE PROPERTY, and it is the mechanism by which the instant mismatch stayed invisible.** ⇒ **RULE FOR P8 AND FOR ANY FUTURE AUDIT OF THESE COLUMNS: search the PAYLOAD FIELD NAME AND the COLUMN NAME. One is not a superset of the other.**
+
+---
+
+# ⛔⛔ AUDIT r3 — FRESH READER ON FINDING-A. **MY HEADLINE WAS FALSE AS WRITTEN. THE SAFETY SURVIVES, NARROWER, AND IT NOW HAS A TEST.**
+
+> **REVIEWER r2 (A):** `claim-only` · *"nothing reads a producer value, so splitting a member cannot change behaviour"* · **HIT** · re-derived **y**
+> ⚠️ **Same independence caveat, and the reader raised it itself: my pre-audit was in its working tree (untracked at its ref). It nonetheless CONTRADICTED me, which an echo does not.**
+
+## ⛔⛔ A-CORRECTION 1 — **THERE *IS* A PRODUCER-VALUE-DEPENDENT BRANCH, AND IT CAN END IN A SKIPPED POSITION**
+
+I wrote: *"A producer member cannot gate, reject, skip or re-price anything."* ⛔ **That is false as stated.**
+**Re-derived: `toCachedProducer` is NOT a pure passthrough. It has TWO behaviour classes — 16 members, 16 arms, of which `no_price_produced` and `position_entry_price_reused` return `null` (`:118-121`) and fourteen return `p`.**
+**And that null gates a CACHE WRITE at two sites:** `:428-429` (`if (_cachedProducer !== null) this.priceCache.set(...)`) and `:1200-1201` (`if (_p !== null) livePricingAdapter.updateCache(...)`).
+⇒ ⛔ **THE STRUCTURAL CHAIN THE READER TRACED, AND IT IS REAL:** producer maps to `null` → **no cache write** → `getPriceWithFallback` falls through to `source:'last_known_good'` (`:1090-1097`) → **fails `isKrakenVenueSource` at `active-execution-engine.ts:1269`** → direct REST → **on REST failure `_recordPriceSkip(...); continue;` — a SKIPPED POSITION.**
+
+✅ **WHAT SURVIVES, AND IT IS WHAT THE BATCH ACTUALLY NEEDS:**
+1. ⭐ **NO CODE *COMPARES* A PRODUCER VALUE.** The census + positive control stand: `producer ===/==/!==/!=` → **zero**; `source ===` → **20** (reader's superset: **116**). **The single producer-dependent branch is `toCachedProducer`, and it is a membership test, not a value comparison.**
+2. ⭐⭐ **ALL THREE MEMBERS BEING SPLIT SIT IN THE PASSTHROUGH ARM TODAY** — `:125`, `:128`, `:129`. ⇒ **PROVIDED the six new members land in the SAME ARM, the change is behaviour-identical.**
+⛔⛔ **AND THE `never` ARM FORCES A *DECISION*, NOT A *CORRECT* ONE — the reader's sharpest point.** A future member placed in the `null` arm, or an `Exclude` widened at `:107`, reproduces the skip chain **with no other code change and a green build.**
+✅ ⇒ **NEW PLAN ITEM `P11`: the six new members go in the PASSTHROUGH arm, and a test asserts `toCachedProducer` returns each of them NON-NULL.** ★ **The compile-time guard cannot express this; a test can. Without it the batch's safety rests on the implementer picking the right arm.**
+
+## ⛔ A-CORRECTION 2 — **MY "THE TRIPWIRE RUNS IN CI TODAY" WAS TOO STRONG**
+`b-exit-provenance-fence.test.ts:209-211` **regex-scopes to the BODY of `isKrakenVenueSource` only.** ⇒ **a producer read introduced in ANY OTHER FUNCTION leaves it green.** ✅ **It fences the one function that matters most; it does not fence condition 4.**
+⛔ **AND THE TYPE OFFERS NO BACKUP: `isKrakenVenueSource(source: string)` (`:180`) takes a BARE `string`, not the source union** — so TypeScript would **not** catch a future caller passing a `producer` where a `source` belongs. **Three members (`kraken_equities_ws`, `mock`, `entry_seed`) are in BOTH unions, so such a call would even look plausible.** **Behavioural today, not type-enforced.**
+
+## ⚠️ A-CORRECTION 3 — **CLOSED AT COMPILE TIME, OPEN AT EVERY RUNTIME BOUNDARY**
+`toCachedProducer`'s `default` arm **returns `p`** (`:139`). ⇒ **a string arriving from the database or an untyped boundary passes through NON-NULL and is cached.** *(And `active-portfolio-manager.ts:675` writes the payload `as any`.)* **Compile-time exhaustiveness is not runtime rejection** — worth stating because the union's own comment invites the stronger reading.
+
+## ⛔⛔ TOOLING FACT THAT PRODUCES SILENT FALSE ABSENCES IN THIS REPO — **RECORD IT, IT WILL BITE AGAIN**
+**`.gitignore:47` is `*.sql`, and the migrations are FORCE-ADDED.** ⇒ ⛔ **any search tool that honours `.gitignore` scans ZERO migration files and reports a clean absence.** The reader hit this and re-ran its corpus off `git ls-files`.
+★ **This is `#546`'s shape in the toolchain: the instrument returns silence and the silence looks like evidence.** ⇒ **ANY absence claim over this repo must state whether its instrument saw the 271 force-added `.sql` files.** *(My own FINDING-A census was `--include=*.ts` and therefore never looked at SQL at all — the conclusion is unchanged, because the reader checked and found only the migration, but my stated reach was narrower than my claim.)*
+
+## ✅ CORRECTED IN MY OWN GOVERNANCE DOC — **A STALE COUNT**
+`1-system-manual/EXIT_PATH_MACHINERY_AUDIT_2026-08-30.md:645` calls it a **"closed 15-member `PriceProducer` union."** **Counted at the ref: 16 members, 16 case arms.** ⛔ **Mine, four days old, in a document this batch cites.** **Corrected in the same commit.**
+
+## ✅ AND A REJECTION MODE NEITHER OF US HAD NAMED
+`exit_price_producer` / `entry_price_producer` are `VARCHAR(40)` with **no CHECK constraint and no enum type** (`migration:26,35`). ⇒ **a member over 40 characters is a WRITE REJECTION with nothing to do with any gate.** ✅ **Longest new name is 32 (FINDING-D) — but the rule for future splits is: check the width, because the type system will not.**

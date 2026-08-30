@@ -642,7 +642,7 @@ ACK: {"method":"subscribe","result":{"channel":"book","snapshot":true,"symbol":"
 
 ### 11.0 ⛔ P1 WAS WRONG: **THE PRICE OBJECT ALREADY EXISTS, AND THE DEFECT HAPPENED INSIDE IT**
 
-⛔ **DRAFT 1 SAID: *"TODAY: prices move as bare `number`s."* THAT IS FALSE OF THE CRYPTO PATH AND I DID NOT CHECK IT.** `live-pricing-adapter.ts:145-161` defines `PriceQuote { price, source, producer, observedAt }`; `:55-99` is a **closed 15-member `PriceProducer` union carrying its own anti-omission rule** — *"an optional field would let a future producer omit it, and that absence is indistinguishable from a missed stamp (#546)."* **Twelve non-test callers already receive it.**
+⛔ **DRAFT 1 SAID: *"TODAY: prices move as bare `number`s."* THAT IS FALSE OF THE CRYPTO PATH AND I DID NOT CHECK IT.** `live-pricing-adapter.ts:145-161` defines `PriceQuote { price, source, producer, observedAt }`; `:55-99` is a **closed **16**-member `PriceProducer` union *(corrected 2026-08-30: this said 15. Counted at the ref — 16 members, 16 `toCachedProducer` arms. `B-EXIT-BOOK-AGE-STAMP` audit r3.)* carrying its own anti-omission rule** — *"an optional field would let a future producer omit it, and that absence is indistinguishable from a missed stamp (#546)."* **Twelve non-test callers already receive it.**
 
 ⇒ ★★ **AND `#951` HAPPENED ANYWAY, AT THAT OBJECT'S OWN CONSTRUCTOR.** `fetchFromKrakenRest` is declared `Promise<number | null>` — **provenance stripped by the SIGNATURE, one call inside the module** — so the caller building the object supplied the missing field from ambient context. **A typed object at the module boundary did not prevent a defect one hop inside the module.**
 
