@@ -202,3 +202,53 @@ const poolSymbols = new Set(activeFilterPool.getSymbolsRaw(mode));      // INTER
 3. ✅ **THE RESOLVER CHANGE IS RE-HOMED, NOT ABANDONED:** it needs a **formal directive** per the lock, and `#229` already places the four-normaliser consolidation in **Phase 20**. ⇒ **Langston rules whether this batch gets a directive or whether it waits for `#229`.**
 
 ★★ **THE LESSON, AND IT IS THE SAME ONE ALL DAY: I SEARCHED THE LEDGER FOR THE COMPONENT AND NOT FOR THE BEHAVIOUR.** `#909` is titled around the SWEEP, not around `normalizeInternal` — so a symbol-name grep missed it, exactly as `#174` was missed for seven weeks. **Search the behaviour, then the component.**
+
+---
+
+## 10. ✅ SECOND READER #2 — **THE PER-SITE SURVEY IS DONE, AND THE CAUSAL CHAIN NOW CLOSES END-TO-END**
+
+> **REVIEWER:** per-site consumer survey, evidence taken AT THE RECEIVER · **HIT** · re-derived **y** · **all 12 line numbers still match.**
+
+### 10.1 ⭐⭐ THE CHAIN, COMPLETE — AND IT RECONCILES `#906` WITH MY §8 LOG READ
+**MEASURED AT `RUNNING_ISSUES:4571`, already in the ledger, against Kraken's live OHLC endpoint:**
+| form sent | candles | result |
+|---|---:|---|
+| **`XBT/USD`** *(the exact wsname the scanner sends)* | **0** | ⛔ **`EQuery:Unknown asset pair`** |
+| `BTC/USD` | **721** | ✅ ok |
+| `ETH/USD` *(also a wsname)* | **721** | ✅ ok |
+
+⇒ ★★ **KRAKEN'S OWN OHLC ENDPOINT REJECTS KRAKEN'S OWN WSNAME FOR BITCOIN, WHILE ACCEPTING IT FOR ETHEREUM.** **Universe-wide: 2 of 661 bases fail — `XBT` and `XDG`. The two coins in this batch, and only those.**
+
+⇒ ⭐ **THE FULL CAUSAL CHAIN, EVERY LINK EVIDENCED:**
+raw wsname sent → **Kraken rejects it** → `getOHLCData` returns 0 candles → `getPairHistoryDays` caches **null** (`kraken.ts:648-653`) → `passesHistoryFilter` **fails closed on null** (*"be conservative & fail"*, `:380-381`) → **`REJECTED XBT/USD: history failed`** *(which §8 observed live today)*.
+
+### 10.2 ⭐⭐⭐ THIS RESOLVES THE CONTRADICTION I FLAGGED IN §8.1
+**§8.1 said `#906`'s *"never evaluated"* was stale, because I saw `XBT/USD` evaluated. BOTH ARE TRUE, and the reader found why:**
+⛔ **THE HISTORY BRANCHES (`:826-836`, `:993-1002`) HAVE NO `capturePreFilterReject` — while the volume, price and spread branches beside them DO.**
+⇒ **A history rejection is NEVER ARCHIVED.** `#906` read `signal_eval_archive` and correctly saw zero rows; I read the runtime log and correctly saw the evaluation.
+⇒ ★ **Bitcoin has been evaluated and rejected, INVISIBLY, the whole time. Neither of us was wrong — we read different instruments, and one has a hole exactly where the defect lives.**
+⇒ ⛔ **`OBJ-5` IS THEREFORE NOT COSMETIC — the missing archive call is WHY this stayed unexplained for days.**
+
+### 10.3 ✅ THE PER-SITE DISPOSITION — `OBJ-2` DISCHARGED
+| site | form | evidence AT THE RECEIVER |
+|---|---|---|
+| `:698` OHLC prefetch | ⛔ **INTERNAL** | goes verbatim to Kraken REST (`kraken.ts:296`); raw is **measured broken** |
+| `:831` / `:994` history | ⛔ **INTERNAL** | same endpoint, same measurement |
+| `:762` `setCostMetrics` | ⛔ **INTERNAL** | cache stores the key verbatim (`cost-cache.ts:115`); **every reader looks up internal** |
+| `:773` / `:782` dedupe joins | ⛔ **INTERNAL** | pool keys come from `fx5-scanner.ts:1123` `symbol: normalizedSymbol`; trades documented `BASE/QUOTE` |
+| `:721`/`:797`/`:850` `dbsCache` | ✅ **EITHER** | function-local Map, **no external reader** |
+| `:789` stablecoin regex | ✅ **EITHER** | **provably form-insensitive** — no base or quote in its alphabet has a Kraken alias |
+| `:809`/`:816`/`:823` archive | ⚠️ **EITHER in principle** | the column **already holds mixed forms** ⇒ a CONSISTENCY choice |
+| `:854` survivor | ⚠️ **tolerates either** | `fx5-scanner.ts:902`/`:989` normalise on arrival |
+| `:872`/`:877` `recordScanResult` | ⛔ **N/A — DEAD** | body commented out (`adaptive-scan-manager.ts:306-308`, *"Batch 52: PairFailureTracker recording disabled"*) |
+
+⇒ ✅ **NO SITE BREAKS IF NORMALISED, AND THE INTUITION INVERTS: the only sites that reach the venue are exactly the ones where RAW is measured broken.**
+
+### 10.4 ✅ TWO OF MY OWN OPEN LEADS, CLOSED WITH EVIDENCE
+- ⛔ **THE COOLDOWN-BLACKLIST HYPOTHESIS FOR DOGECOIN IS DEAD.** §8.3 left it *"UNRESOLVED, not cleared"*. **`recordScanResult` is a NO-OP — disabled at Batch 52** ⇒ it cannot exclude anything. ✅ *(My "zero FailureTracker lines" was right for the right reason — but the silence could never have shown that, which is why recording it as unresolved was correct.)*
+- ⭐ **`:698`'s bare `catch {}` (`:723-725`) SWALLOWS the venue rejection**, so a rejected pair is indistinguishable from a genuinely thin one.
+
+### 10.5 ⚠️ CARRIED FORWARD, NOT FIXED HERE
+- **`:658`'s benchmark list is a FOURTH benchmark definition, hedged INCOMPLETELY:** it carries `XBT/USD` **and** `BTC/USD`, but **`XBT/EUR` is missing while `BTC/EUR` is present, and NO Dogecoin spelling appears at all.**
+- **`fx5-scanner.ts:1267` spreads `...s` LAST, so the RAW symbol OVERWRITES the normalised one** — how the raw form survives into the pattern pool and the archive.
+- ⛔ **`already_active` (`:774`/`:783`) reads a CONSTANT 0** (`routes.ts:7748-7758` never surfaces it, `#5415`) ⇒ **`OBJ-3` MAY NOT BE VERIFIED FROM THAT COUNTER.**
