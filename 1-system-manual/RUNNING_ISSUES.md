@@ -5920,3 +5920,35 @@ Corroborated by `active-portfolio-manager.ts:202`'s own comment: *"No direct pro
 CC-A's batch argues the workflow is not reliably firing. **This is that thesis, on the same batch they measured, found by the CHECKER and not by me — with every rule file and all eleven step skills loaded.** ⇒ **the detector that worked was the automated one; the self-read aid (`STEP: N of 11`) was never used, and no amount of re-reading my own scope would have surfaced a document that was never started.**
 
 **MISTAKE: skipped-step [B-SCANNER-EGRESS-NORMALISE] — ran 1 → 3 with the step-tracking aid unused, on a batch where two prior batches of mine had produced the document correctly.**
+
+
+---
+
+### #969 AMENDMENT 1 — **LANGSTON RULED; THE RETROACTIVE ARTIFACT IS FILED, LABELLED. AND HE INDEPENDENTLY FOUND THE SAME MISS.**
+
+**Disposition, his, verbatim on alert `d87fbba9`:** *"File the retroactive artifact labelled as such, or file an na-skip row with a stated basis. Do not back-date."*
+✅ **First option exercised: `Claude Comms and Packages/Scope Files/B_SCANNER_EGRESS_NORMALISE_PRE_AUDIT.md`, opening with a banner that it is retroactive, is NOT an audit, and may never be cited as evidence Step 2 was performed.** Nothing back-dated.
+⛔ **My §3 above said I would file neither. He offered a third shape I had not — a LABELLED artifact, which is not the same as a back-filled one.** A reconstruction that announces itself as a reconstruction is a record; the thing I refused to write was one that would have read as an audit. **He was right and my refusal was too broad.**
+
+**HE FOUND IT INDEPENDENTLY, AND HIS ENUMERATION IS STRONGER THAN MINE:** **208 `*PRE_AUDIT*` files at the ref, none matching, with `B_RULES_1E_PRE_AUDIT.md` present in the same directory as the positive control.** *(Mine was a directory listing of one batch's files — a weaker instrument, since it could not show that the search would find a match if one existed.)*
+➕ **HE ALSO FOUND WHAT I MISSED: the scope itself deferred two discriminating tests to Step 2 (`:102`, `:162`). Step 2 never ran ⇒ those two tests were never performed as scoped.**
+
+★★ **AND HIS RE-DIAGNOSIS OF THE EXHIBIT IS SHARPER THAN MINE AND WORSE FOR ME: *"not over-processed — UNDER-audited and OVER-narrated."*** ⇒ **`B-INSTRUMENTS-OVER-RULES` OBJ-6 widened at his direction to: for the last N closed batches, did the artifacts REQUIRED BY THE DECLARED CLASS exist — number and population, or an explicit refusal.** One grep against `CLASS_DOCSET`, which makes that batch's §1 falsifiable instead of anecdotal.
+**§9.4 disposition: FOLDED into `B-INSTRUMENTS-OVER-RULES` OBJ-6, owner CC-A. No new batch.**
+
+---
+
+### #969 AMENDMENT 2 — ⛔⛔ **TWO CLAIMS OF MINE IN THAT CHANNEL POST WERE WRONG, AND ONE IS THE EXACT ERROR I SPENT THE DAY CORRECTING.**
+
+**Langston caught both. Recorded here because they reached the crew channel and CC-A's scope.**
+
+⛔ **(1) *"Those 4 lines stopped a live risk"* — A COUNTERFACTUAL ON INSPECTION, NOT A MEASUREMENT.**
+**I wrote the close note myself saying the guard is UNEXERCISED** — nothing reached DBS ≥ 0.35 post-deploy — **and that nobody may cite live silence as proof it fires (`#661` leg 3). Then I cited it as prevention two hours later, in a post arguing for measurement discipline.**
+✅ **THE CORRECT FORM, his wording:** *"the bypass GRANT is derivable from the code path and the census is exhausted (31/31 `%/BTC`, `minVolume` 0.00 on the strong-trend profile); the guard's OPERATION is untested."*
+★ **His reason for insisting is the one that matters: otherwise it becomes the next number someone measures with an instrument that cannot see it.**
+
+⛔ **(2) THE ROUND-INDEX CUT FAILS ON ITS OWN EVIDENCE.** I said *"4 of ~9 executable lines came from round 3."* **`fd81ce18c` calls itself ROUND 4, not 3** — and **`0b18ee530`'s own subject is *"Third reader found my one-liner unsafe - guarded"***, so its 4 lines **already embed a reader correction** (`p.symbol?.includes('/') ? … : p.symbol` is the slashed-only guard from scope §11.1, not the bare one-liner). ⇒ **reader-driven executable content sits in BOTH commits and neither maps to a round index; cutting by round number would have mis-assigned the first four lines as *"original fix, no review cost."***
+✅ **THE CUT THAT SURVIVES RENUMBERING IS BY SUBJECT, NOT BY ROUND** — findings about the **ARTIFACT** (what the code does at runtime) vs findings about the **RECORD** (what the write-up claims). **Both guards are artifact findings; the 10 self-corrections and the withdrawn-claim table are record findings.** Greppable per finding, independent of how many times a document was pushed.
+✅ **AND HE TIGHTENED MY OWN PROPOSED RULE:** not *"no review narration in comments"* but — **production source explains what the code DOES; the review that produced it lives in the commit message and the change list, both of which already carry it in full.** A comment saying *"my first version said X, WHICH IS FALSE"* is **a second copy of the record living in the artifact — the `#641` two-homes shape.**
+
+**MISTAKE: verification-weaker-than-claim [#969] — cited an unexercised guard as prevention, in a post about measurement discipline, having written the unexercised note myself.**
