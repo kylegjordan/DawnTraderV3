@@ -151,3 +151,54 @@ The `2026-08-26` migration's `COMMENT ON COLUMN closed_trades.exit_ticker_bid` r
 Two things turned up that were not on anyone's list. The entry side of a trade already records exactly what we are adding to the exit side — so this is a proven pattern, not new invention. But the two columns are named as if they were a matching pair and they are not: the entry one records the moment the trade actually filled, and the exit one records a moment earlier, when the decision was taken. Nothing anywhere says so, so anyone comparing them is comparing two different things. And the database itself still carries a note saying one of our newer columns is "not yet instrumented" — it was true when written three days ago and eighteen rows now disprove it. Both are being fixed in the same pass, because it is already open.
 
 **The plan** is ten items: make the mid-or-last decision in one place instead of four, make three of our price-source labels precise enough to answer the question, deliberately leave a fourth alone because it has a third behaviour that would make any two-way label a lie, record the book age at the exit fill the way we already do at the entry, correct the misleading notes, and record the exact moment the labels changed so later analysis does not read one group as two.
+
+---
+
+# ⛔ AUDIT r2 — FRESH READER ON FINDING-E/F. **FINDING-E's MECHANISM WAS WRONG IN TWO WAYS AND THE CONCLUSION GOT BIGGER. ONE WRONG-OBJECT EDIT CAUGHT BEFORE IT SHIPPED.**
+
+> **REVIEWER r1 (E/F):** `claim-only` · *"the two book-age columns are a false pair; the ticker comment is stale"* · **HIT** · re-derived **y**
+> ⚠️ **METHODOLOGICAL LIMIT THE READER RAISED ITSELF, AND IT IS FAIR: `B_EXIT_BOOK_AGE_STAMP_PRE_AUDIT.md` was committed at the ref it finished on, so it found my own claim near-verbatim in the repo. The independence is therefore WEAKER than a clean claim-only run.** ✅ **What redeems it: it returned findings that CONTRADICT my version. An echo does not contradict.**
+
+## ⛔ E-CORRECTION 1 — **THE EXIT AGE IS CAPTURED *EARLIER* THAN I SAID: BEFORE THE EXIT IS EVEN EVALUATED**
+I wrote *"at the moment the exit decision was taken."* **Re-derived: `_exitProvenanceBase` is built at `active-execution-engine.ts:1384`; `checkExitConditions` runs at `:1456`** — 72 lines and an `await` later — and the base is spread unchanged into both close sites (`:1525`, `:1603`), neither of which overrides `bookAgeMs`.
+⇒ ⛔ **It is captured for EVERY position on EVERY tick, whether or not an exit occurs. Not "at the decision" — BEFORE it.** ✅ **Conclusion unchanged and strengthened; the stated mechanism was wrong.**
+
+## ⛔⛔ E-CORRECTION 2 — **THE BIGGER ONE: THE TWO COLUMNS DIFFER IN *FEED AND ASSET-CLASS SEMANTICS*, NOT ONLY IN INSTANT**
+**Re-derived at `depth-source.ts:47-70`: on xStock, `getDepthSnapshot` returns `ageMs` = `EXTRACT(EPOCH FROM (NOW() - captured_at)) * 1000` from `xstock_spot_ticker_snap`, with `source: 'xstock_ticker_snap'`.**
+⇒ ⛔ **THAT IS A DATABASE ROW AGE, NOT AN ORDER-BOOK AGE** — while `exit_book_age_ms` is **null by construction on xStock** (`:1381-1383`).
+⇒ ⛔⛔ **SO AN xSTOCK ROW CARRIES A TICKER-SNAP ROW AGE IN `entry_book_age_ms` BESIDE A STRUCTURAL NULL IN `exit_book_age_ms`, AND THE TWO ARE NOT THE SAME KIND OF QUANTITY AT ALL.** **A comparison of these columns can be wrong for this reason with the instant question set entirely aside.**
+✅ **P8 must therefore bound BOTH columns by FEED and CLASS, not only by instant.**
+
+## ✅ E-CORRECTION 3 — **WRITER CENSUS: FOUR AND TWO, NOT ONE EACH**
+| column | writers |
+|---|---|
+| `exit_book_age_ms` | `:1392` *(the base)* · `:848` *(force-close, explicit null)* · `active-portfolio-manager.ts:671` *(explicit null)* · `:2278` *(`?? null` default — any caller passing no provenance)* |
+| `entry_book_age_ms` | `:3677` · `:1055` *(maker fill, explicit null)* |
+⚠️ **Consequence for any population claim: two of four exit writers hardcode `null`, so a "these two disagree" observation is consistent with a WRITER-MIX effect rather than a timing effect.** ⛔ **Do not attribute a null-rate difference to instant without partitioning by writer.**
+
+## ✅ FINDING-F — **NOW VERIFIED AGAINST THE LIVE DATABASE, WHICH IS NOT WHAT I ORIGINALLY CHECKED**
+⚠️ **I asserted *"the live database asserts an absence"* having read only the MIGRATION FILE. The reader was right to separate those, and supplied the query.** ✅ **Run against staging via `col_description('closed_trades'::regclass, …)`, the APPLIED comment returns:**
+> *"NOT YET INSTRUMENTED - NULL on every branch at the deploy ref, both classes …"*
+**against a measured 18 non-null `exit_ticker_bid` rows of 662 closes.** ⇒ ✅ **FINDING-F STANDS, now on the object it names.**
+★ **And it settles the reader's open alternatives: the comment IS applied, and it is stale — not absent, not hand-corrected.** *(The reader could not distinguish these; it correctly said so rather than guessing.)*
+
+## ⛔⛔ P8 CORRECTION — **A WRONG-OBJECT EDIT CAUGHT BEFORE IT SHIPPED**
+⛔ **`active-execution-engine.ts:1393`'s *"NULL ON EVERY BRANCH TODAY"* IS NARROWLY TRUE AND MUST NOT BE "CORRECTED."** It describes the **`_exitProvenanceBase.tickerBid` PAYLOAD FIELD**, which is still literally `tickerBid: null as number | null` at `:1402`. **The COLUMN is filled from `_witness` (`:2026`), bypassing the payload entirely.**
+⇒ ★ **Two write sources with different statuses and no single comment describing both.** **P8 edits the DB comment and leaves `:1393` alone** — editing it would have replaced a true statement about one object with a false one about another, inside the pass built to stop exactly that.
+
+## ⚠️ STRUCTURAL FACT WORTH RECORDING — **`shared/schema.ts` COMMENTS ARE NEVER EMITTED TO THE DATABASE**
+They are TypeScript; only `COMMENT ON COLUMN` in a migration reaches Postgres. ⇒ **schema-vs-database comment divergence is the STEADY STATE of this codebase, not a missed step** — so the same divergence may exist on columns nobody has looked at. **P8 must edit BOTH homes or it fixes only the one an analyst does not read.**
+
+## 🟨 LEAD — NOT ESTABLISHED, NOT A FINDING
+**Symbol-keying asymmetry:** `:1383` calls `getBookForFill(normalizeToInternalSymbol(position.symbol))`; `depth-source.ts:43` calls `getBookForFill(symbol)` with whatever the caller passed. **If the two forms diverge for any symbol, one side reads a book and the other reads nothing — a null-rate difference with no instant component.** ⛔ **I have NOT established that they diverge.**
+**DISPOSITION: §9.4 (4) — a scheduled review, placed with `#957` at `B-DECIDED-INTENT-INDEX` 3b.g**, which already owns "three definitions of the price from one venue frame." **Not folded in: it needs a symbol-form census this batch has no reason to run.**
+
+## ⚠️ E-CORRECTION 4 — **THE HARM IS PROSPECTIVE, NOT ACTUAL. SAYING OTHERWISE WOULD BE OVER-CLAIMING.**
+**Superset grep (all directories, `.ts`/`.js`/`.mjs`/`.sql`) on both column names returns ONLY: two `ADD COLUMN`, two `COMMENT ON COLUMN`, four writers, one fence assertion, two declarations.**
+⇒ ⛔ **NO READER EXISTS. Nothing in `client/`, no aggregator, no analytics path reads either column by name.**
+✅ **So "anyone comparing the two is comparing different instants" is a claim about a FUTURE or AD-HOC consumer — not about a code path that is wrong today.** ★ **The finding survives and its shape changes: this is a trap being laid for the reader this batch is about to create, which is a reason to fix it NOW and not a reason to call it live damage.**
+
+## ⭐⭐ E-CORRECTION 5 — **HOW THE MISMATCH SURVIVED: THE COLUMN NAME IS THE WRONG SEARCH KEY**
+**`:848` and `:1392` write the PAYLOAD field `bookAgeMs`, not the column identifier `exitBookAgeMs`.**
+⇒ ⛔ **A grep on the COLUMN NAME finds FOUR of the SIX things that determine what lands in `exit_book_age_ms`, and MISSES THE TWO THAT DECIDE WHETHER A REAL VALUE IS EVER BUILT.** **An auditor searching by column name sees the persist at `:2278` and never the capture at `:1383-1392`.**
+★ **THIS IS THE `wrong-object` PATTERN AS A SEARCH-SURFACE PROPERTY, and it is the mechanism by which the instant mismatch stayed invisible.** ⇒ **RULE FOR P8 AND FOR ANY FUTURE AUDIT OF THESE COLUMNS: search the PAYLOAD FIELD NAME AND the COLUMN NAME. One is not a superset of the other.**
