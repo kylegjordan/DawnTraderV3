@@ -38,9 +38,11 @@
 2. ⛔ **`toCanonical`, NOT `normalizeToInternalSymbol`, AND THE DIFFERENCE IS DOGECOIN.** The resolver's slashed branch (`kraken-symbol-resolver.ts:94-99`) short-circuits on a **one-entry** table `{XBT:BTC}` and never reads its own `mapByWsPair`, so it returns `XDG/USD` unchanged. `toCanonical` carries **both** `XBT→BTC` and `XDG→DOGE`.
 3. ✅ **THE RESOLVER IS LEFT ALONE, AND THAT IS DECIDED, NOT ASKED (§8.3).** It is 🔒 LOCKED (*"changes require a formal directive"*, `:1-6`), it cannot resolve `XDG`, and `#229` already homes its repair to **Phase 20**. **A reader caught me proposing to edit it; I have not.** ⛔ **No directive is requested — `#229` owns it.**
 4. ⚠️ **ONE BEHAVIOUR DELTA, NAMED NOT ABSORBED:** the scanner's LOCAL benchmark list (`:658`… `['BTC/USD','ETH/USD','SOL/USD','XBT/USD','BTC/EUR','ETH/EUR']`) carries **`XBT/USD` AND `BTC/USD`**, but **`XBT/EUR` is absent while `BTC/EUR` is present.** ⇒ **after normalisation `XBT/EUR` matches as a benchmark where it did not before.** I judge that a strict improvement over a list that plainly intends it — **but it is a change and it is yours to accept.** *(It is also a FOURTH benchmark definition; `#229`-adjacent, not fixed here.)*
+> ⛔ **FALSE - THERE ARE FOUR PLUS A CONSEQUENCE. See §9.5 and §10.**
 
 ## 4. ✅ BLAST RADIUS — MEASURED, AND SMALLER THAN THE CALL-SITE COUNT SUGGESTS
 - **`toCanonical`'s base table changes only `XBT` and `XDG`.** `XLM`/`XRP`/`XTZ` are **identity** entries; its quote entries are **Z-prefixed** forms that never appear in a wsname.
+> ⛔ **FALSE - `toCanonical` maps BOTH slots; the blast radius is 56, not 26. See §9.1.**
 - **Idempotent** — `toCanonical(toCanonical(x)) === toCanonical(x)` for every slashed form *(replicated against the branch's logic, not called live — stated as such)*.
 - ⛔ **CORRECTED (§8.1): "the raw form stays recoverable at `pair.pairInfo.wsname`" IS FALSE for `wsname`-absent entries — it is undefined precisely when it would be needed.** The guard makes this moot: those entries are no longer touched.
 - ⚠️ **`evaluatedSymbols` LEAVES the function** (`:436` type, `:1070` return) into `fx5-24h-window.ts:196`, where it feeds a **deduplicated COUNT** (`uniqueEvaluated = evaluatedSet.size`), not a join. ⇒ **TRANSIENT, BOUNDED, COSMETIC: a 24-hour window spanning the deploy holds BOTH spellings for the two bases and counts them as two distinct symbols for ≤24h.** **Named so it is not later mistaken for a defect.**
@@ -55,11 +57,13 @@
 1. ⛔ **`OBJ-5` (the missing `capturePreFilterReject` on the history branches) IS NOT IN THIS DIFF, AND THAT IS DELIBERATE.** It is the reason the defect stayed invisible, and it is owed — **but it changes what gets WRITTEN to `signal_eval_archive`, which is a different blast radius from a symbol form.** ⇒ **it lands as its own change, after this one verifies.** ⛔ **Say so if you disagree; I am not asking, I am declaring.**
 2. ⛔ **It does not touch the LOCKED resolver, `BENCHMARK_SYMBOLS`, or any filter threshold.** A Bitcoin that is now evaluated and then rejected on **liquidity** is a **PASS** here — that is `#906` objective 1.
 3. ⛔ **It does not explain Dogecoin's total absence from evaluation.** `XDG` fails the same venue call, but Dogecoin appears in **0 of 362** distinct evaluated pairs, so it is not reaching the scanner at all. **Stated as OPEN.**
+> ⛔ **WITHDRAWN - one rotation of a 300-wide batch read as a universe. See §10.3.**
 
 ## 7. ✅ VERIFICATION — FUNCTIONAL, SAME-DAY, NO SOAK
 > **Kyle, 2026-08-30:** *"If we see the functionality works for a few, we see it for them all."* **Per-assertion test applied: both of these are code-path facts, not rates.**
 - **`OBJ-1a` Bitcoin:** `XBT/USD` stops being rejected on `history failed`. **One log line settles it.**
 - **`OBJ-1b` Dogecoin:** a `DOGE/`-base pair APPEARS in the evaluated set. **One line settles it.** ⚠️ **May FAIL — see §6.3; that would be a real result, not a delay.**
+> ⛔ **WITHDRAWN ENTIRELY - Dogecoin is excluded by a working price floor, not a symbol form. See §10.3.**
 - **`OBJ-6` controls:** XRP, SUI, LINK, ADA still evaluated, and **still rejecting on VOLUME rather than history** — ⛔ **a control shifting to `history failed` is an unmistakable regression.**
 - ⛔ **`OBJ-3` may NOT be verified from the `already_active` counter** — it reads a constant 0 (`routes.ts:7748-7758`, `#5415`).
 
@@ -75,6 +79,7 @@
 ### 8.2 ⭐⭐ THE JUSTIFICATION IS STRONGER THAN "TWO COINS DO NOT TRADE" — **INVARIANT T2 IS NOT HOLDING**
 `bridge/canonical/DawnTrader_System_Invariants_Design_Guarantees.md:30` — ***"INVARIANT T2: Maximum one open position per symbol at any time."***
 **Its enforcing test is `activeTradeSymbols.has(pair.symbol)` — a RAW venue name against a set built from the `trades.symbol` DB column, which is internal form.** ⇒ ⛔ **for `XBT`/`XDG` it can never match ⇒ T2 IS CURRENTLY UNENFORCEABLE FOR BITCOIN AND DOGECOIN, and a Bitcoin pair with an open position has been re-evaluated every cycle.** ✅ **This batch repairs a founding invariant.**
+> ⛔ **WITHDRAWN - the citation is to a table with 0 rows. See §9.2.**
 
 ### 8.3 ✅ THE MODULE CHOICE IS DECIDED, ON THREE CITATIONS — NOT PUT TO YOU AS A QUESTION
 ⚠️ **Three modules are each designated authoritative in three documents** *(Phase-8 history → the resolver; execution-flow §3.1 → the canonicalizer; `symbol-normalize.ts:9` → itself)*. **That is `#229` at its root: the ambiguity is in the founding record.**
@@ -122,3 +127,61 @@ The comment still said *"Later is worse: it would mean N call-site edits."* **I 
 ⇒ ✅ **DOGECOIN REACHES EVALUATION CONSTANTLY. My "0 of 362 ⇒ not reaching the scanner" was a one-rotation window, and the truth is the opposite.**
 ⇒ ⭐ **SO BITCOIN AND DOGECOIN ARE THE *SAME* FAILURE, NOT TWO — the scope's §8.3 "Dogecoin's cause is NOT the same bug and it is earlier" is WITHDRAWN.** **`OBJ-1a`/`OBJ-1b` collapse back into one objective, and the fix covers both.**
 ⚠️ **AND THE ZERO `DOGE%` ROWS IS THE CORROBORATION:** the archive holds the RAW form only, never the internal one — exactly what a scanner writing un-normalised symbols produces.
+
+
+---
+
+## 10. ⛔⛔ ROUND-2 VERDICT APPLIED — **LANGSTON CONFIRMED BOTH BLOCKERS AND FOUND A THIRD. THE THIRD KILLS MY OWN COLLAPSE CLAIM.**
+
+> **He re-derived BLOCKER-1 and BLOCKER-2 himself and matched my numbers to the unit** (56 = 26 base + 31 quote − 1 overlap `XDG/XBT`; `trades` = 0 against controls 2 and 665). **Those are settled. What follows is new.**
+
+### 10.1 ⛔ BLOCKER-3 — **"THEY BECOME TRADABLE" WAS THE SAME OVER-REACH, A THIRD TIME**
+**RE-DERIVED, not accepted on his say-so.** 24h, `source='market-scanner'`, `symbol LIKE '%/XBT'`: **`low_volume` = 21,574 rows across 31 of 31 distinct symbols.**
+⇒ **every one of the 31 ALREADY REACHES the volume gate and fails it**, on venue-supplied 24h volume attached at the `:600` join — **above my line, so this change cannot move it.**
+✅ **CORRECTED IN BOTH HOMES: they become ELIGIBLE TO BE ASSESSED, not tradable.** ⭐ **This CUTS the deploy risk — nothing starts trading on Monday because of this batch.**
+★★ **AND THE SHAPE IS THE POINT: this is the third time in one batch I asserted a consequence without checking the next gate.** Blast radius, T2, and now this. **The fix each time was one query I had not run.**
+
+### 10.2 ⭐⭐ AND THE REASON THEY FAIL IS A **UNITS DEFECT**, LIVE TODAY, INDEPENDENT OF THIS BATCH
+**`market-scanner.ts:820`: `const volume24h = volume24hCoins * currentPrice;` — and `currentPrice` is `ticker.c[0]`, the price in the QUOTE currency.**
+**The comment DIRECTLY ABOVE IT, at `:818`, states the invariant it breaks: *"All filter thresholds (minVolume, patternMinVolume) are in USD. Must compare like units."*** ⇒ **the arithmetic satisfies that ONLY when the quote IS USD.**
+
+| population (24h, `low_volume`) | observed min | median | max | threshold |
+|---|---:|---:|---:|---:|
+| `%/USD` | 0.00 | **10,218.51** | 499,938.50 | 500,000 |
+| `%/XBT` | 0.00 | **0.08** | 15.40 | 500,000 |
+
+⇒ ⛔ **A BTC-QUOTED PAIR WOULD NEED ~500,000 BTC OF DAILY VOLUME TO CLEAR A BAR MEANT TO READ $500,000.** Structurally unreachable. **`ETH/XBT` at 4.66 BTC ≈ $510k of real volume is labelled `low_volume`.**
+⛔ **THE MIN-PRICE FLOOR HAS THE IDENTICAL SHAPE** — `currentPrice < activeMinPrice` compares a quote-denominated price against a flat `0.25`. **`XDG/XBT` observed 0.000001 vs 0.25.** ⇒ **BTC-quoted pairs are excluded TWICE OVER by units, not by liquidity.**
+⚠️ **AND THE ERROR RUNS BOTH WAYS: a weak-quote pair faces a threshold that is far too LENIENT.** `quote_currencies` is `[]` in every live `screener_filters` row — **no quote restriction exists**, so the universe already admits these and judges them with USD-shaped constants.
+⇒ **`#966` REWRITTEN AND BROADENED — it is NOT "non-fiat", it is ANY NON-USD QUOTE, and it now carries the two gates and the line.**
+
+### 10.3 ⛔⛔ **MY §13.2 COLLAPSE IS REFUTED. BITCOIN AND DOGECOIN ARE NOT THE SAME FAILURE — AND NEITHER OF MY TWO PREVIOUS STORIES WAS RIGHT EITHER.**
+**The presence table settles it. 24h, by exact symbol:**
+
+| symbol | archive rows | dies at |
+|---|---:|---|
+| **`XBT/USD`** | **0** | ⛔ **the history filter — whose branches carry NO `capturePreFilterReject`, so the rejection is NEVER ARCHIVED** |
+| **`XDG/USD`** | **545** | ⛔ **`low_price`: observed **0.0851** vs threshold **0.25** |
+| `ADA/USD` *(control)* | 546 | **`low_price`: 0.2013 vs 0.25 — the identical gate, on a coin nobody calls broken** |
+| `ETH/USD` *(control)* | 1,995 | `family_imf_di` — reaches the strategy layer |
+| `BTC/USD`, `DOGE/USD` | 0, 0 | **the internal forms are not written today — which is the batch's premise** |
+
+**Live `screener_filters`: the active path's `min_price` is `0.25` on every profile but `strong_trend` (`0.001`); VTS's is `0.05`.** ⇒ **Dogecoin at $0.085 clears the VTS floor and fails the active one. That is why it is everywhere in the learning population and nowhere in active trading.**
+⇒ ⛔⛔ **DOGECOIN IS EXCLUDED BY A WORKING PRICE FLOOR. IT IS BUG-TAXONOMY OUTCOME (2) — WORKING AS DESIGNED, DECISION MISSING — NOT A DEFECT, AND THIS BATCH DOES NOTHING FOR IT EITHER WAY** (normalising `XDG/USD` to `DOGE/USD` leaves the price at 0.0851 and the floor at 0.25).
+⇒ ✅ **`OBJ-1b` IS WITHDRAWN under §9.4 disposition 5**, carrying the citation that dissolves it. **`OBJ-1a` — Bitcoin — is the batch, alone and unchanged.**
+➕ **THE DECISION THAT REPLACES IT: is `0.25` the right active-path price floor when it excludes Dogecoin AND Cardano?** **§9.4 DISPOSITION: its own item — `B-PRICE-FLOOR-REVIEW`, owner CC-C, `RUNNING_ISSUES` #967, placed in `PHASE_19_PLAN.md` at row 5.b.** ⛔ **Kyle's call, not mine — he asked for "the fix for Bitcoin and Doge" and half of that request has no defect under it.**
+
+★★ **THE HONEST SCORE ON THIS BATCH'S RECORD: I stated Dogecoin's cause THREE times — "never reaches the scanner" (wrong), "the same failure as Bitcoin" (wrong), and now "a working price floor" (measured, with a control that fails the same gate).** ⛔ **The first two were both asserted without asking which GATE the row died at — one column in the table I was already querying.**
+
+### 10.4 ✅ VERIFICATION INSTRUMENT — HIS IS BETTER THAN MINE, ADOPTED
+All seven `capturePreFilterReject` sites sit at `:877`–`:1056`, **downstream of the normalisation at `:658`.** ⇒ post-deploy, on `source='market-scanner'` and `captured_at >` deploy time:
+- **`BTC/%` appears and `XBT/%` falls to zero** — two-sided, so a null result is a FAILURE rather than an ambiguity.
+- **`ETH/%` unchanged as the control.**
+⛔ **`XDG/%` → `DOGE/%` is expected to flip too, and it proves NOTHING about tradability** — Dogecoin will still be rejected at `low_price`, just under a different spelling.
+⚠️ **AND THE ARCHIVE STILL CANNOT SEE `OBJ-1a`'s ACTUAL WIN** — history rejections are never captured (`OBJ-5`, deferred). **`XBT/USD` disappearing from the runtime log line is the instrument for that leg, and it is the ONE thing the archive cannot tell us.**
+
+### 10.5 ✅ RIDER-2 APPLIED — the path was ambiguous and the sibling is a trap
+The comment cited bare `kraken.ts:296` from inside `server/services/`, where the sibling `kraken.ts` is a deprecated 5-line B78 shim. **Qualified to `server/exchanges/kraken/kraken.ts:296`, with the shim named so the next reader does not repeat the lookup.**
+
+### 10.6 ✅ RIDER-1 APPLIED — the stamps are at the six sites, not only in the tail
+**His diagnosis is exact, and it is `fix-follows-pointer` landing on me** — the pattern I adopted from him at F-G-1. I stamped the scope where he pointed and left this document's §3, §4, §6.3, §7 and §8.2 reading clean and false, **and the completion report is written FROM this document.** ✅ **One-line withdrawal stamps now sit AT each of those sites.**

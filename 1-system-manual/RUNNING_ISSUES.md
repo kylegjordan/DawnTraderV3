@@ -5631,3 +5631,50 @@ I recorded it as *"a depth-10 mid and a BBO mid are different statistics; on a t
 ⛔ **THE ISSUE IS NOT THE SYMBOL FORM — IT IS THE DENOMINATION.** Position sizing, the friction model, Net Expectancy and the guardrails are all written against a quote unit that does not itself move. **A BTC-quoted position is two exposures wearing one price:** the instrument can rise against Bitcoin while the position loses value in dollars, and every dollar-denominated limit we enforce is then measuring the wrong thing.
 ⛔ **EXCLUDING THE QUOTE SLOT IS NOT THE FIX** — it would re-emit a form the venue rejects. **If these pairs are to be excluded, they are excluded at ADMISSION with the reason recorded, never by mangling their name.**
 ⚠️ **This is why row 5 is not finished when it deploys:** the change is correct and the population it widens has never been assessed.
+
+
+---
+
+### #966 AMENDMENT 1 — **BROADER THAN FILED, AND THE MECHANISM IS NOW CITED TO THE LINE**
+
+**Appended 2026-08-30 at Step-4 round 2. The issue as filed said "non-fiat quote" and treated the exposure as arriving WITH `B-SCANNER-EGRESS-NORMALISE`. Both are wrong, and in the same direction — it is wider and it is already live.**
+
+⛔ **IT IS NOT "NON-FIAT". IT IS ANY NON-USD QUOTE**, and the defect is arithmetic, not policy:
+`market-scanner.ts:820` — `const volume24h = volume24hCoins * currentPrice;` where `currentPrice = ticker.c[0]` is the price **in the quote currency**.
+**The comment two lines above it, `:818`, states the invariant this breaks in so many words: *"All filter thresholds (minVolume, patternMinVolume) are in USD. Must compare like units."*** ⇒ **the product is USD only when the quote IS USD**; otherwise it is quote-denominated and is compared against a flat `500,000`.
+
+| population (24h, `low_volume`, `source='market-scanner'`) | median observed | threshold |
+|---|---:|---:|
+| `%/USD` | **10,218.51** | 500,000 |
+| `%/XBT` | **0.08** | 500,000 |
+
+⇒ **a BTC-quoted pair needs ~500,000 BTC of daily volume to clear a bar meant to read $500,000.** `ETH/XBT` carries 4.66 BTC ≈ $510k of genuine volume and is labelled `low_volume`.
+⛔ **THE MIN-PRICE FLOOR IS THE SAME SHAPE** — `currentPrice < activeMinPrice` compares a quote-denominated price against a flat `0.25`; `XDG/XBT` observes `0.000001`. **BTC-quoted pairs are excluded twice over by units.**
+⚠️ **AND IT RUNS BOTH WAYS — a weak-quote pair meets a threshold that is far too LENIENT.** This is the more dangerous direction: the units error that EXCLUDES is visible as an empty result; the one that ADMITS is invisible.
+⚠️ **`quote_currencies` is `[]` on every live `screener_filters` row — there is no quote restriction at all.** The universe already admits these pairs and judges them with USD-shaped constants. **The exposure predates this batch; the batch only makes the venue call resolve.**
+
+✅ **CORRECTION TO THE ISSUE'S OWN MAGNITUDE (Langston, BLOCKER-3, re-derived here):** the 31 do **NOT** "become tradable". **Measured 24h: `low_volume` = 21,574 rows across 31 of 31 distinct symbols** — they already reach the volume gate and fail it, above the changed line. **They become eligible to be ASSESSED.** The item stands; its magnitude was overstated. **One high-volume BTC-quoted pair clearing a corrected gate is all it takes for the denomination question to become live.**
+
+---
+
+### #967 — IS $0.25 THE RIGHT ACTIVE-PATH PRICE FLOOR? IT EXCLUDES DOGECOIN **AND** CARDANO
+
+**OPEN** · surfaced 2026-08-30 at `B-SCANNER-EGRESS-NORMALISE` Step-4 round 2 · owner **CC-C** · **DECISION IS KYLE'S** · **HOME: `B-PRICE-FLOOR-REVIEW`, owner CC-C, placed in `PHASE_19_PLAN.md` at row 5.b, after 5.a.**
+
+⛔ **THIS IS NOT A DEFECT. It is bug-taxonomy outcome (2): working as designed, decision missing.** Filed because the design is doing something nobody has decided in the current era.
+
+**Live `screener_filters`: the active path's `min_price` is `0.25` on every profile except `strong_trend` (`0.001`). VTS's is `0.05`.**
+**MEASURED, 24h, `source='market-scanner'`:**
+| symbol | rows | gate | observed | threshold |
+|---|---:|---|---:|---:|
+| `XDG/USD` | 545 | `low_price` | **0.0851** | 0.25 |
+| `ADA/USD` | 546 | `low_price` | **0.2013** | 0.25 |
+
+⇒ **two top-tier, liquid coins are excluded from active trading by a price floor, and both are present in the VTS learning population** (which uses `0.05`) — so they are studied and never traded. **The two populations disagree about the same asset by construction.**
+
+★ **WHY THE QUESTION IS LIVE NOW:** a minimum price is a sane proxy for "avoid sub-penny illiquid tokens", but **$0.25 is not that boundary any more** — it catches assets whose liquidity is not in question. **Nobody chose 0.25 against today's universe; it is inherited.**
+⛔ **THE DECISION, PUT PLAINLY: keep the floor as-is, lower it, or replace it with a liquidity/tick-size test that measures what the floor was a proxy for.** ⚠️ **Not a unilateral change — it widens what the system trades, which is a risk-envelope move.**
+
+⚠️ **THIS ISSUE EXISTS BECAUSE I GOT DOGECOIN WRONG TWICE.** I reported it as *"never reaches the scanner"* (refuted: 25,294 archive rows in 3 days) and then as *"the same failure as Bitcoin"* (refuted: `XBT/USD` has 0 archive rows and dies at the history filter; `XDG/USD` has 545 and dies at `low_price`). **Both were asserted without reading which gate the row died at — one column in the table I was already querying.**
+
+**MISTAKE: wrong-object [B-SCANNER-EGRESS-NORMALISE] — twice attributed a cause to Dogecoin without reading the rejection label already present on its own rows.**

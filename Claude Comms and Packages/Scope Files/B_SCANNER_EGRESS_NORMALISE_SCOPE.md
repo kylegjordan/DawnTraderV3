@@ -344,6 +344,7 @@ raw wsname sent → **Kraken rejects it** → `getOHLCData` returns 0 candles �
 ➕ **AND THE REAL FINDING IS BIGGER THAN THIS BATCH: THE SCANNER'S ALREADY-ACTIVE DEDUPE READS A TABLE THE ACTIVE PATH DOES NOT WRITE.** **§9.4 DISPOSITION: its own item — `B-SCANNER-DEDUPE-DEAD-TABLE`, owner CC-C, `RUNNING_ISSUES` #965, placed in `PHASE_19_PLAN.md` at row 3b.j, after 3b.i.**
 
 ## 13.2 ⭐⭐ §8.3 IS REFUTED — **DOGECOIN IS EVALUATED 25,294 TIMES IN THREE DAYS**
+> ⛔⛔ **AND §13.2 IS ITSELF REFUTED — SEE §14. The 25,294 count is real, but it counts a PREFIX, not the coin: Dogecoin dies at a price floor and Bitcoin dies at the history filter. They are NOT one failure.**
 
 **Population: `signal_eval_archive`, `captured_at > NOW() - '3 days'`, counted by symbol prefix.**
 | prefix | rows | |
@@ -373,3 +374,44 @@ raw wsname sent → **Kraken rejects it** → `getOHLCData` returns 0 candles �
 | **3** | ⭐ **31 BTC-quoted pairs become venue-resolvable for the first time** | ⚠️ **the largest, and unasked** |
 | **4** | `setCostMetrics` (`:762`) re-keys the cost cache to internal form | ✅ **repair — every reader already looks up internal** |
 ➕ **AND A FIFTH THAT IS A CONSEQUENCE OF (1): with the prefetch now resolving, Bitcoin enters `dbsCache`, so it can route onto a different filter profile than it does today.** ⚠️ **That is correct behaviour arriving for the first time — but it IS new behaviour, and calling it "one delta" hid it.**
+
+
+---
+
+# 14. ⛔⛔ §13.2 IS ITSELF REFUTED — **BITCOIN AND DOGECOIN ARE NOT THE SAME FAILURE, AND I HAVE NOW GOT DOGECOIN WRONG TWICE**
+
+> **Round-2 measurement, with controls. §13.2's collapse stood for one commit and is withdrawn here rather than edited away.**
+
+## 14.1 THE TABLE THAT SETTLES IT — the missing column was the rejection LABEL, on rows I was already counting
+
+**24h, `source='market-scanner'`, by EXACT symbol — not by prefix, which is what hid this:**
+
+| symbol | archive rows | dies at | observed vs threshold |
+|---|---:|---|---|
+| **`XBT/USD`** | **0** | ⛔ **the history filter** — its branches carry no `capturePreFilterReject`, so the rejection is **never archived** | — |
+| **`XDG/USD`** | **545** | ⛔ **`low_price`** | **0.0851 vs 0.25** |
+| `ADA/USD` *(control)* | 546 | **`low_price` — the identical gate** | 0.2013 vs 0.25 |
+| `ETH/USD` *(control)* | 1,995 | `family_imf_di` — reaches the strategy layer | — |
+| `BTC/USD` · `DOGE/USD` | 0 · 0 | the internal forms are not written today — **the batch's premise, confirmed** | — |
+
+⇒ ⛔ **PREFIX COUNTING IS WHAT MISLED ME.** §13.2's `XBT%` = 167,215 rows are `XBT/AUD`, `XBT/CHF`, `XBT/JPY`, `XBT/DAI` and friends — **`XBT/USD` itself contributes ZERO.** I counted a prefix and reported a coin.
+
+## 14.2 ⛔ DOGECOIN IS EXCLUDED BY A **WORKING PRICE FLOOR** — outcome (2), not a defect
+**Live `screener_filters`: the active path's `min_price` is `0.25` on every profile except `strong_trend` (`0.001`); VTS's is `0.05`.**
+⇒ **Dogecoin at $0.085 clears the VTS floor and fails the active one** — which is exactly why it is everywhere in the learning population and nowhere in active trading.
+⇒ **`ADA/USD` failing the same gate at $0.2013 is the control: a coin nobody has ever called broken, excluded by the same rule.**
+⇒ ⛔⛔ **THIS BATCH DOES NOTHING FOR DOGECOIN EITHER WAY.** Normalising `XDG/USD` to `DOGE/USD` leaves the price at 0.0851 and the floor at 0.25.
+
+✅ **`OBJ-1b` IS WITHDRAWN — §9.4 disposition 5, carrying the citation that dissolves it.** **`OBJ-1a` — Bitcoin — is the batch, alone and unchanged, and it is a genuine defect with a complete causal chain.**
+➕ **REPLACED BY A DECISION, NOT A FIX: `#967` / `B-PRICE-FLOOR-REVIEW`, owner CC-C, placed at plan row 5.b.** ⛔ **Kyle asked for "the fix for Bitcoin and Doge" and half that request has no defect under it. He is told that directly, not left to read it here.**
+
+## 14.3 ★★ THE PATTERN, STATED ONCE — three consequence-claims in one batch, each killed by a query I had not run
+| # | I asserted | the query that killed it |
+|---|---|---|
+| 1 | blast radius = 26 | reading `toCanonical`'s **second** lookup |
+| 2 | this repairs INVARIANT T2 | `SELECT count(*) FROM trades` = **0** |
+| 3 | the 31 become tradable | their **`low_volume`** rows — 21,574 across 31 of 31 |
+| 4 | Bitcoin and Dogecoin are one failure | the **`gate_decision` label** on Dogecoin's own rows |
+
+⛔ **All four are the same move: I established a mechanism, then asserted what it CAUSED without checking the next gate.** ★ **The correction each time cost one query against data already in front of me.**
+**MISTAKE: wrong-object [B-SCANNER-EGRESS-NORMALISE] — counted a symbol PREFIX and reported a COIN; the label column that distinguishes them was in the same rows.**

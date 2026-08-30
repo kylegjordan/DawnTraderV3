@@ -643,13 +643,25 @@ export async function collectAdaptiveBatch(
   // normalising above either breaks the join or silently admits duplicates.
   // ⛔ AND THE HONEST ARGUMENT FOR *NOT* GOING LATER — my first version of this comment said
   //   "later would mean N call-site edits", WHICH IS FALSE and shipped as such for one commit.
-  //   `kraken.ts:296` hands the string to Kraken VERBATIM with no resolver, so ONE edit there
+  //   `server/exchanges/kraken/kraken.ts:296` hands the string to Kraken VERBATIM with no
+  //   resolver (NOT the deprecated 5-line B78 shim at `server/services/kraken.ts`), so ONE edit
   //   would fix every caller of getOHLCData/getPairHistoryDays. The real reason to fix HERE is
   //   that a venue-boundary fix reaches ONLY the venue call: it would NOT repair the membership
   //   and archive legs above (`poolSymbols`, the stablecoin regex, `benchmarkSet`,
-  //   `capturePreFilterReject`, `evaluatedSymbols`), which never touch `kraken.ts:296`.
+  //   `capturePreFilterReject`, `evaluatedSymbols`), which never reach that call.
   //
-  // ⛔ `toCanonical`, NOT `normalizeToInternalSymbol` — AND THE DIFFERENCE IS DOGECOIN.
+  // ⛔⛔ WHAT THIS FIXES IS BITCOIN. IT DOES NOTHING FOR DOGECOIN, AND DOGECOIN DOES NOT NEED
+  //   FIXING — measured 24h: `XBT/USD` has ZERO archive rows (it passes volume and price and
+  //   dies at the history filter, whose branches carry no `capturePreFilterReject`, so the
+  //   rejection is never archived), while `XDG/USD` has 545 rows carrying `low_price`,
+  //   observed 0.0851 against a threshold of 0.25. The active path's min price is 0.25 on
+  //   every profile but strong_trend (live `screener_filters`); VTS's is 0.05, which is why
+  //   Dogecoin is present in the learning population and absent from active trading.
+  //   CONTROL: `ADA/USD` fails the identical gate at 0.2013. ⇒ Dogecoin is excluded BY A
+  //   WORKING PRICE FLOOR, not by a symbol form. Whether 0.25 is the right floor is a
+  //   DECISION, not a defect, and it is homed as its own item.
+  //
+  // ⛔ `toCanonical`, NOT `normalizeToInternalSymbol` — AND THE NAME THAT MOTIVATED IT.
   // The resolver's slashed branch (kraken-symbol-resolver.ts:94-99) short-circuits on a
   // ONE-ENTRY table {XBT:BTC} and never reads its own `mapByWsPair`, so it returns XDG/USD
   // unchanged. `toCanonical` (symbol-canonicalizer.ts:98-124) carries XBT->BTC AND XDG->DOGE.
@@ -662,13 +674,24 @@ export async function collectAdaptiveBatch(
   // The `// Base currencies` / `// Quote currencies` headings in that table are COMMENTS, not
   // structure — so XBT maps in the QUOTE slot too. Census of the live AssetPairs payload
   // (1,437 wsnames): 26 base-side + 31 quote-side, 1 overlap = 56 changed.
-  // ⇒ THE 31 ARE THE BTC-QUOTED PAIRS, `AAVE/XBT … ZRX/XBT`, AND THEY FAIL CLOSED TODAY EXACTLY
-  //   AS `XBT/USD` DOES — venue-probed: `ADA/XBT` -> 0 candles / `EQuery`, `ADA/BTC` -> 721.
-  //   After this line they resolve and become eligible for the survivor set FOR THE FIRST TIME.
-  // ⚠️ THAT IS A REAL WIDENING, NOT A SIDE-EFFECT: nothing has yet asked whether sizing,
-  //   friction, Net Expectancy or the guardrails are denominated correctly for a NON-FIAT
-  //   quote. Homed as its own item — see the change list. Excluding the quote slot is NOT the
-  //   answer: it would re-introduce a venue-rejecting form.
+  // ⇒ THE 31 ARE THE BTC-QUOTED PAIRS, `AAVE/XBT … ZRX/XBT` — venue-probed: `ADA/XBT` -> 0
+  //   candles / `EQuery`, `ADA/BTC` -> 721. After this line their venue calls RESOLVE.
+  // ⛔ BUT THEY DO *NOT* BECOME TRADABLE, AND MY FIRST WORDING ("eligible for the survivor set
+  //   FOR THE FIRST TIME") WAS THE SAME OVER-REACH TWICE CORRECTED ABOVE — a consequence
+  //   asserted without checking the next gate. MEASURED, 24h, source='market-scanner',
+  //   symbol LIKE '%/XBT': `low_volume` = 21,574 rows across 31 of 31 distinct symbols.
+  //   Every one already REACHES the volume gate and fails it, on the venue-supplied 24h volume
+  //   attached at the `:600` join — ABOVE this line, so nothing here moves that number.
+  //   ⇒ correct claim: they become ELIGIBLE TO BE ASSESSED, not tradable.
+  // ⚠️ AND THE REASON THEY FAIL IS A UNITS DEFECT THAT IS LIVE TODAY, INDEPENDENT OF THIS FIX:
+  //   `:820` computes `volume24hCoins * currentPrice`, and `currentPrice` is `ticker.c[0]` —
+  //   the price in the QUOTE currency. The comment at `:818` states the invariant ("All filter
+  //   thresholds are in USD. Must compare like units") and the arithmetic satisfies it ONLY
+  //   when the quote IS USD. For `/XBT` the product is BTC-denominated and is compared against
+  //   a flat 500,000; measured medians: `/USD` 10,218 vs `/XBT` 0.08. The min-price floor has
+  //   the same shape (0.25, quote-denominated). ⇒ a BTC-quoted pair would need ~500,000 BTC of
+  //   daily volume to clear a bar meant to read $500,000. Homed as its own item — see the
+  //   change list. Excluding the quote slot is NOT the answer: it re-emits a rejected form.
   // ⛔ AND "the raw form stays recoverable at `pair.pairInfo.wsname`" WAS ALSO FALSE — `wsname`
   //   is undefined for exactly the entries that fall back to the REST key, which is precisely
   //   when it would be needed. The guard above makes it moot: those entries are not touched.
