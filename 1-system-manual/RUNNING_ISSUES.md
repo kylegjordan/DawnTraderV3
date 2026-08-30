@@ -5981,9 +5981,9 @@ CC-A's batch argues the workflow is not reliably firing. **This is that thesis, 
 
 ---
 
-### #970 — THE CANONICAL DESIGN SAID **ONE** RATE-GOVERNED PRICE CACHE WITH NO DIRECT VENUE CALLS. THERE ARE **TWO**, AND THE SECOND MAKES DIRECT VENUE CALLS. **NOBODY RECORDED WHY.**
+### #971 — THE CANONICAL DESIGN SAID **ONE** RATE-GOVERNED PRICE CACHE WITH NO DIRECT VENUE CALLS. THERE ARE **TWO**, AND THE SECOND MAKES DIRECT VENUE CALLS. **NOBODY RECORDED WHY.**
 
-**OPEN** · surfaced 2026-08-31 during `B-PRICE-AGE-TRUTH` Step-2, by the **`bridge/canonical/` provenance read** — which is exactly what that corpus is for · owner **CC-C**
+**OPEN** · ⚠️ **RENUMBERED #970 → #971 on 2026-08-31: CC-A minted `#970` and pushed first, so by the standing rule the NEWER entry renumbers. Their `#970` (records-disagree-with-themselves) is intact and untouched at this file's `:827`.** · surfaced 2026-08-31 during `B-PRICE-AGE-TRUTH` Step-2, by the **`bridge/canonical/` provenance read** — which is exactly what that corpus is for · owner **CC-C**
 **HOME: `B-TWO-CACHE-INTENT`, owner CC-C, placed in `PHASE_19_PLAN.md` at row 3b.l, after 3b.k.**
 
 ⛔⛔ **THIS IS NOT FILED AS A DEFECT. IT IS FILED AS AN UNRECORDED DIVERGENCE, AND THE DISTINCTION IS THE WHOLE POINT** — re-scoping a deliberate, approved architectural decision as a defect is worse than filing nothing (§9.5(b-ii)).

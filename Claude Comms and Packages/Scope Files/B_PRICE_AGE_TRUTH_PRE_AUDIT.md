@@ -30,11 +30,12 @@
 **A1.1 — THE GUARD AND THE CAST (condition 5).**
 The cache write at `:474-484` is preceded by a **real runtime guard at `:467`**: `if (quote && quote.price !== null && quote.source !== 'no_reliable_price')`.
 ⛔ **THAT GUARD DOES NOT VALIDATE THE SOURCE UNION.** It excludes exactly one literal. The write then does `source: quote.source as CachedPrice['source']` (`:478`) — **an `as` cast, which will silently accept a literal the type does not list.**
-⇒ ⛔ **BINDING ON THE PLAN: a new `source` literal MUST be added to `CachedPrice['source']` (`:210`), or the cast admits it silently and the cache holds a value the type says is impossible.**
+⇒ ⛔ **BINDING ON THE PLAN: a new `source` literal MUST be added to `CachedPrice['source']` (`:211` — ⛔ cited as `:210` three times, corrected per §E11), or the cast admits it silently and the cache holds a value the type says is impossible.**
 
 **A1.2 — `CachedPrice` IS FILE-LOCAL, WHICH BOUNDS THE TYPE CHANGE.**
+> ⛔⛔ **OVERTURNED IN PART — SEE §E1/§E2. The union escapes the file THREE ways: an exported signature, a SECOND union (`PriceQuote:195`) that must move with it, and a SUBSTRING matcher that classifies by name.**
 Two interfaces share the name: `live-pricing-adapter.ts:207 interface CachedPrice` (**no `export`**) and `price-cache.ts:41 export interface CachedPrice`. **They are different types in different modules.** ⇒ **extending the adapter's union is structurally a one-file change** and cannot reach `vts-runner`/`signal-orchestrator`, which import the *other* one.
-**Current union (`:210`), six literals:** `'mock' | 'kraken_ws' | 'kraken_equities_ws' | 'kraken_rest' | 'entry_seed' | 'last_known_good'`.
+**Current union (`:211`), six literals:** `'mock' | 'kraken_ws' | 'kraken_equities_ws' | 'kraken_rest' | 'entry_seed' | 'last_known_good'`.
 ⚠️ **NOT the same enumeration as the gate's.** `isKrakenVenueSource` (`:224`) enumerates the *venue* literals — condition 10's "three literals". **Two different lists; do not conflate them.**
 
 **A1.3 — `toCachedProducer`'s NULL ARM IS THE TRAP (condition 5), CONFIRMED.**
@@ -58,7 +59,7 @@ The **header** comment at `:143-150` says *"`:311` already carries `quote.source
 | **3 — consumed at an exit decision** | ⭐ **BOUNDED ABOVE and small — see A2.2** | position + close overlap |
 
 ✅ **Positive control:** `REST_FALLBACK` (the *allowed* leg) = **19** in the same window ⇒ the instrument distinguishes the two legs rather than matching everything.
-⚠️ **Set 1 = Set 2 in this window, but the nesting is structurally real** — `incrementRestFallbackBlocked()` fires at `:630` above the `cached` read, so a cold-start/post-restart window would separate them. **Langston's correction stands as a structural point even though this window shows no divergence.**
+⚠️ **Set 1 = Set 2 in this window, but the nesting is structurally real** — `incrementRestFallbackBlocked()` fires at `:630`, BELOW the `cached` read at `:628` but ABOVE the `return` at `:631` (⛔ **this sentence said "above the `cached` read" and was INVERTED — see §E6; the structural point is unchanged**), so a cold-start/post-restart window would separate them. **Langston's correction stands as a structural point even though this window shows no divergence.**
 ⚠️ **The "~843/day" figure is an EXTRAPOLATION from 95.7 minutes on a Saturday evening, not a measurement.** Labelled as such.
 
 **A2.2 — ⭐ THE INNERMOST SET IS SMALL, AND THIS IS THE FINDING THAT SHOULD DRIVE THE DECISION.**
@@ -114,7 +115,9 @@ Langston requires a second column: **whether a concurrent WS-write gap existed o
 - **Bootstrap callers: EXACTLY ONE** — `server/index.ts:1027` `livePricingAdapter.start(useMockMode)`.
 - **Instances: EXACTLY ONE** — `:1232` `export const livePricingAdapter = new LivePricingAdapter()` (module singleton).
 ⇒ **One instance, one scheduler, one bootstrap ⇒ no mutual-exclusion check required.**
+> ⛔ **INFERENCE WITHDRAWN — SEE §E4. The count is right; the conclusion does not follow. The on-demand path reaches the same writer from EIGHT external call sites and can race the timer.**
 - **`fetchFromKrakenRest`: `private`, EXACTLY ONE call site (`:540`), 0 test references.**
+> ⛔ **"0 test references" WAS A NAME SEARCH — SEE §E5. A test NAMES this branch and PINS the token this batch intends to change.**
 - **`incrementRestFallbackBlocked`: EXACTLY ONE writer (`:630`)** ⇒ the counter is cleanly attributable.
 
 ⛔ **§9.5(a-ii) deletion-time state-write census: N/A — THIS BATCH DELETES NOTHING.** Stated rather than skipped.
@@ -127,7 +130,7 @@ Langston requires a second column: **whether a concurrent WS-write gap existed o
 | # | plan item | falls out of | verification |
 |---|---|---|---|
 | **P1** | **Carry the age.** `fetchFromKrakenRest`'s rate-limited branch returns the cache **row** (or `{price, observedAt}`), not a bare number; the caller propagates `observedAt` instead of stamping `Date.now()`. | **A1** | a rate-limited re-serve carries `observedAt !== Date.now()`, **against a control**: a genuine REST read in the same window whose `observedAt` IS ≈ now |
-| **P2** | **Tell the truth in `source`** — a **new literal**, added to `CachedPrice['source']` (`:210`). Non-actionability is inherited because `isKrakenVenueSource` (`:224`) does not list it. ⛔ **The gate is NOT touched.** | **A1.1, A3** | the gate's own source list is byte-unchanged in the diff |
+| **P2** | **Tell the truth in `source`** — a **new literal**, added to `CachedPrice['source']` (`:211` — ⛔ cited as `:210` three times, corrected per §E11). Non-actionability is inherited because `isKrakenVenueSource` (`:224`) does not list it. ⛔ **The gate is NOT touched.** | **A1.1, A3** | the gate's own source list is byte-unchanged in the diff |
 | **P3** | **A new fifth `producer` token, with its `toCachedProducer` placement STATED.** ⛔ **It must NOT map to `null`** — that suppresses the cache write and breaks re-serve. | **A1.3** | a re-served row still appears in the cache after the change; **the falsifier is the absence of that row** |
 | **P4** | **Extend the union properly, do not ride the cast.** The `as` at `:478` would admit the new literal silently. | **A1.1** | removing the new literal from `CachedPrice['source']` **must produce a compile error** — if it does not, P4 failed |
 | **P5** | **OBJ-4 replacement — re-serve monotonicity.** For a symbol, `observedAt` may advance only when a genuine venue read occurred. | **§7.3 (condition 3)** | a tick logging `REST_BLOCKED` on symbol S **must not** advance S's `observedAt` |
@@ -198,3 +201,77 @@ The reader measured the ledger entry's line numbers against HEAD: `#951` cites `
 ## D6. ⚠️ TWO OPEN ITEMS THE READER SURFACED THAT I AM **NOT** CLOSING
 1. **`MONITOR_INTERVAL_MS` is DB-resolved** (`active-execution-engine.ts:260-262`, `active_execution.monitoring_interval_ms`) ⇒ **the engine's read cadence is not knowable from the repo.** It bears on how often a laundered row could be consumed. **Unresolved; not asserted either way.**
 2. **A key-normalisation asymmetry:** `fetchPrice` writes with the raw argument (`:474`) while readers normalise (`:628`, `:1060`). **They coincide today** — `addSymbols` has no external caller and `normalizeInternal` is identity on `BASE/QUOTE` — **but nothing enforces it.** ⇒ **Recorded as a latent condition, not a finding.**
+
+
+---
+
+# E. ⛔⛔ READER ROUND 2 (mode A, object = this document) — **ELEVEN HITS. FOUR CHANGE THE PLAN. ONE IS AN INVERTED CITATION INSIDE MY OWN SECTION ABOUT CITATION DRIFT.**
+
+**`REVIEWER r2: object (this document + the adapter at the ref) · "what other states of the world are consistent with its evidence" · HIT ×11 · re-derived: y`**
+
+## E1. ⛔⛔ THE PLAN NAMED ONE UNION. **THERE ARE TWO, AND THE SECOND BREAKS FIVE ASSIGNMENTS.**
+**RE-DERIVED:** `PriceQuote.source` (**`:195`**) = **7 members**, including `'no_reliable_price'`. `CachedPrice.source` (**`:211`**) = **6** — the same list minus that one.
+⇒ ⛔ **P2/P4 as written moved only `CachedPrice`. Adding a literal there alone makes the five `cached.source → PriceQuote` assignments (`:391`, `:425`, `:1077`, `:1093`, `:1119`) non-assignable.** ✅ **BOTH unions move, or neither compiles.**
+★ **And it explains why the `as` at `:478` is safe TODAY, which I had attributed to the guard alone: `PriceQuote['source']` minus `'no_reliable_price'` EQUALS `CachedPrice['source']` exactly.** The cast is currently a no-op **by arithmetic between two unions**, not by the guard. ⇒ **the correct statement of the binding: any literal added to `:195` and NOT to `:211` is admitted silently.**
+
+## E2. ⛔⛔ THE NEW LITERAL'S **NAME** IS A BEHAVIOUR DECISION — `isRestFallbackSource` MATCHES BY **SUBSTRING**
+**RE-DERIVED at `:253-254`:** `REST_FALLBACK_SOURCES = ['rest_fallback','kraken_rest','last_known_good']` and `some(s => source.includes(s))`.
+⇒ ⛔⛔ **A literal named `kraken_rest_reserve` or `last_known_good_rate_limited` — the two names I would most naturally have chosen — is SILENTLY classified `rest_fallback: true`. One sharing no substring is classified `false`. The signature is `(source: string)`, so NEITHER outcome errors.**
+Consumed out-of-module at `routes.ts:12220, 12754, 12842, 13026` and `active-portfolio-manager.ts:639`.
+⇒ ✅ **NEW PLAN ITEM P8: the literal's name is chosen against this predicate DELIBERATELY, and the intended `isRestFallbackSource` verdict is stated and asserted in a test.** ⛔ **This is exactly the trap I was walking into.**
+
+## E3. ⛔ MY CENSUS COUNTED `.get(` CALL SITES AND CALLED THEM READERS — **AND MY SEARCH SHAPE COULD NOT HAVE FOUND THE REST**
+**Missed access sites, re-derived:** **`:418` `this.priceCache.forEach((cached, symbol) => {`** inside `getAllPrices()` — **a BULK reader of every row that ships `source`, `producer` AND `observedAt` out of the module** (consumed `server/index.ts:1100`, `routes.ts:6105`) — plus **`.size` at `:1204`, `:1214`, `:1225`** (`getCacheSize()`, consumed in `active-session-reset.ts`).
+⇒ **20 access sites; my table accounted for 16.** ⛔ **My grep was `\.priceCache\.(set|get|delete|clear)` and STRUCTURALLY COULD NOT FIND `forEach`, `size` or `has`.** ★ **`:418` is material: it is a bulk reader of exactly the three fields this batch changes.**
+
+## E4. ⛔ "ONE INSTANCE, ONE SCHEDULER ⇒ NO MUTUAL-EXCLUSION CHECK" — **THE COUNT IS RIGHT AND THE INFERENCE IS WRONG**
+The cache writer at `:474` is reachable from a **second, unscheduled** path: `getPriceWithFallback` → `await this.fetchPrice(normalized)` (`:1112`) → `fetchLivePrice` → `:474`. **That path has EIGHT external call sites** (`active-execution-engine.ts:766,1257` · `active-portfolio-manager.ts:308,631` · `routes.ts:10677,12213,12748,12837,13021` · `verification-test-protocol.ts:331`).
+⇒ ⛔ **The 15 s timer's fan-out and a concurrent `getPriceWithFallback` CAN both be inside `fetchPrice` for the same symbol. The entry-point census does not license the no-race conclusion, and I drew it anyway.**
+⚠️ **Also: "EXACTLY ONE instance" is a CALL-SITE fact, not structural — the class is `export class LivePricingAdapter` (`:257`), so a second is constructible.**
+
+## E5. ⛔⛔ "0 TEST REFERENCES" WAS A NAME SEARCH — **AND A TEST NAMES THIS EXACT BRANCH AND PINS THE TOKEN I INTEND TO CHANGE**
+**`server/tests/unit/b-exit-provenance-fence.test.ts:244-245`** carries *"`rest_poller` has a THIRD arm — the rate-limited bare cached price, #951"*, and **`:259` asserts `expect(union).toContain("'kraken_rest_poller'")`.**
+Two further suites execute the path transitively via `getPriceWithFallback` (`p19-b8-9a-source-tag-honesty.test.ts:34,44`; `p19-b8-9-venue-only-source.test.ts:77,86`).
+⇒ ⛔ **P3 must state what happens to that assertion.** ⚠️ **AND THE REACH TRAP: `tsconfig.json` excludes `**/*.test.ts`, so the TypeScript Check job does NOT type-check tests — P4's compile-error falsifier must be exercised against PRODUCTION code, or it proves nothing.**
+
+## E6. ⛔ **AN INVERTED CITATION, IN MY SECTION ABOUT CITATIONS.**
+My §A2.1 wrote *"`incrementRestFallbackBlocked()` fires at `:630` **above the `cached` read**."* **RE-DERIVED: `:628` is the `cached` read; `:630` is the counter. It fires BELOW it.**
+✅ **My SCOPE said it correctly** (*"`:630`, ABOVE `return cached?.price ?? null`"* — `:631`). **The restatement flipped a true claim into a false one.**
+✅ **The structural point SURVIVES and is unchanged:** the counter is **unconditional within the branch**, so it counts entries including `cached == null`. **Only my phrasing was wrong — but it was wrong in the one section arguing that citations must be checked.**
+
+## E7. ⛔ "xStock CANNOT reach the branch, STRUCTURALLY" — **OVERSTATED. THE GATE TESTS A RESOLVER'S VERDICT, NOT THE CLASS.**
+`safeResolveAssetClass` returns **`AssetClass | null`** (`shared/asset-classes.ts:820`, `:842 return null` in the catch). ⇒ **an xStock symbol that FAILS classification is `null !== 'xstock_spot'` and falls through to `:540`.**
+⚠️ **`xstock_perp` is a separate active class** (`:39`, `:97-103`) and the gate tests `xstock_spot` **only**.
+⛔ **AND THERE IS AN INSTRUMENT I DID NOT READ: `_classifyFallthroughCount` (`:825`) and the `[B69][CLASSIFY_FALLTHROUGH]` log (`:830`).** ⇒ **the claim is downgraded to *"no `xstock_spot`-RESOLVING symbol reaches it"*, and the fallthrough counter is added to P6.**
+✅ **One point in my favour I had not made: the gate is UPSTREAM of `:540`, so the property survives a second caller of `fetchFromKrakenRest` — a stronger form than I gave.**
+
+## E8. ⛔ "SUPPRESSES THE CACHE WRITE ENTIRELY" — **SCOPED TO ONE OF THREE WRITERS, AND THE CONSEQUENCE IS BIGGER THAN I SAID**
+`updateCache` (`:891-900`) takes `producer: CachedProducer` **directly and never calls the switch**; `seedLastKnownGoodPrice` hardcodes `'entry_seed'` (`:994`). ⇒ **suppression applies to the `fetchPrice` path only** — which is the relevant one here, so the conclusion holds and the word *"entirely"* does not.
+⛔ **AND THE DOWNSTREAM IS A TRADING DECISION, NOT MERELY "BREAKS RE-SERVE":** suppressed write → the row keeps ageing → `getPriceWithFallback` falls to the `:1134` last-resort re-serve tagged `last_known_good` → **fails `isKrakenVenueSource`** → direct REST → **position SKIPPED if REST also fails.** *(Chain documented in-code at `:160-165` and pinned by `b-exit-provenance-fence.test.ts:210-213`.)*
+
+## E9. ⛔ A POSITIVE CONTROL FOR A2.1 EXISTED AND I DID NOT RUN IT
+`server/services/market-data/rest-rate-limiter.ts:57`/`:64` log **`[8.8.5][RestRateLimiter] BLOCKED <symbol>: cooldown|no_tokens`** — **with the REASON** — and `:22`/`:128` keep a `blockedCount`. **`check(symbol)` has ONE caller (`:627`)** ⇒ **the two instruments must agree 1:1.** ✅ **Added to P6 as the control, and it supplies the cooldown-vs-token-exhaustion split my single count could not.**
+
+## E10. ⛔⛔ **MY OWN MEASUREMENT DOES NOT RECONCILE WITH THE CONFIG, AND I DID NOT NOTICE**
+`rest-rate-limiter.ts:45` — `perSymbolCooldownMs ?? 60000`; `live-pricing-adapter.ts:284` — `REFRESH_INTERVAL_MS = 15000`.
+⇒ **A 15 s poll against a 60 s per-symbol cooldown should block roughly 3 of every 4 polls — on the order of 45/hour/symbol. I measured 56 blocks across 5 symbols in 95.7 min ≈ ONE PER SYMBOL PER 8.7 MINUTES.** ⛔ **That is roughly an order of magnitude BELOW the configured behaviour, and I reported the number without reconciling it.**
+⇒ **P6 MUST reconcile it before any magnitude claim is trusted.** ★ **Either the poller does not tick every symbol every 15 s, or the cooldown is DB-overridden, or my log window is not what I think it is — and until that is settled, the 56 is a number without a mechanism.**
+
+## E11. ✅ CITATION: the union is at **`:211`**, not `:210` (`:210` is `timestamp: string`). **Cited wrongly three times; corrected.**
+
+## E12. ✅ WHAT THE READER CONFIRMED — recorded, NOT cited as support
+The two-`CachedPrice` separation (structurally different types — `price-cache.ts:41` has `lastSource: PriceSourceTag` and **no `source` field at all**) · the `:467` guard's single-literal exclusion · the `:513` gate ordering · all three `bridge/canonical` quotes verbatim · the `CHANGES_AND_FIXES` absence, **re-run under a wider pattern than mine** (`rate.?limit|RestRateLimiter|REST_BLOCKED`) and surviving · **the client is insulated** — the server ships a precomputed boolean (`routes.ts:12392`) and no client file compares a source literal.
+⚠️ **It could NOT verify anything in §A2 (PM2 + database) — no staging access.** ⇒ **every runtime number in this document remains single-sourced to me and is flagged as such for Langston.**
+⚠️ **Search-reach artifact worth knowing: a SECOND copy of `routes.ts` exists at `docs/current_state/screeners_export/backend/routes.ts` and is hit by "repo-wide" greps.** It did not distort these counts.
+
+---
+
+## E13. ⇒ PLAN ITEMS ADDED OR CHANGED BY ROUND 2
+| # | change | from |
+|---|---|---|
+| **P2/P4** | ⛔ **BOTH unions move** — `PriceQuote:195` **and** `CachedPrice:211` | **E1** |
+| **P8 (new)** | **The literal's NAME is chosen against `isRestFallbackSource`'s SUBSTRING match, the intended verdict stated and asserted in a test** | **E2** |
+| **P3** | must state the disposition of **`b-exit-provenance-fence.test.ts:259`**, which pins `'kraken_rest_poller'` | **E5** |
+| **P4** | falsifier exercised against **production** code — tests are not type-checked | **E5** |
+| **P6** | gains: the rate-limiter's own **reason-split** log as the 1:1 control · the `[B69][CLASSIFY_FALLTHROUGH]` counter · ⛔ **and the 60 s/15 s reconciliation, which is now a PRECONDITION of any magnitude claim** | **E9, E7, E10** |
+| **P9 (new)** | **`getAllPrices()` (`:418`) ships `source`/`producer`/`observedAt` out of the module to two consumers — check both against the new literal** | **E3** |
