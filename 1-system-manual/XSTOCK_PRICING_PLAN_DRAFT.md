@@ -1,110 +1,102 @@
-# xSTOCK PRICING — THE PLAN (DRAFT 2)
+# xSTOCK PRICING — THE PLAN (DRAFT 3)
 
-**Owner CC-C · Kyle-directed · Draft 1 2026-08-30, attacked and rewritten same day**
+**Owner CC-C · Kyle-directed · Draft 1 → 2 → 3, all 2026-08-30**
 
-> ⛔ **NOT FOR ACTION YET.** Kyle's process: **draft → second reader → converge → Langston → then him.** Draft 1 has had **one** reader round; this is the correction. It goes to a **fresh** reader, then Langston.
-> ⭐⭐ **ROUND 1 FOUND SOMETHING LARGER THAN ANYTHING ON DRAFT 1's LIST, AND DRAFT 1 CALLED THAT LIST COMPLETE.** Kyle asked *"make sure those are the only items."* **The answer was no.** Every correction below is re-derived by me at the ref.
-
----
-
-## 0. ⛔⛔ THE ONE THING TO READ IF YOU READ NOTHING ELSE
-
-**THE EXIT TRIGGER AND THE EXIT FILL READ DIFFERENT PRICES, FROM DIFFERENT SAMPLES.**
-
-| | reads | from | cadence |
-|---|---|---|---|
-| **decide to exit** | the in-memory **MID** | `active-execution-engine.ts:1163` | **unthrottled** |
-| **what we book** | a depth-walked **BID** | `:1997` → `depth-source.ts:49-70` → the **4-second-throttled archive** | **≤1 row / 4 s** |
-
-**MEASURED (all `closed_trades` rows carrying both columns), with a control:**
-
-| class | n | mean abs gap | max | **`stop_hit`, SIGNED** |
-|---|---|---|---|---|
-| ⛔ **xStock** | 9 | **14.038%** | **48.01%** | ⛔⛔ **+17.16%** |
-| ✅ **crypto (CONTROL)** | 15 | **0.209%** | 1.08% | ✅ **−0.28%** |
-
-⭐⭐ **THE SIGN IS THE FINDING.** A stop-out is a forced sale — it must fill **at or worse than** the stop. **Crypto does (−0.28%). xStock fills 17% BETTER than its own stop, which books a GAIN.**
-**`TGT/USD`: stop triggered at 106.075. Booked at 157.00.**
-
-⇒ ⭐ **THIS IS THE MACHINE BEHIND THE CONTAMINATED P&L.** We had recorded that 77% of overnight profit sits in the burst window and attributed it to *"a false stop above entry books a win."* **Half right. The win is booked because the FILL COMES FROM A DIFFERENT SAMPLE than the trigger.**
-⚠️ **LIMITS: n=9, and the stamp only ships from 2026-08-26, so the historical cohort is NOT recoverable — correcting `#958`.**
+> ⛔ **NOT FOR ACTION.** Kyle's process: **draft → second reader → converge → Langston → then him.** **Two reader rounds done; this is round 2's correction.** Next stop is Langston with the full round record — **the loop caps at three and I am not going to iterate it to agreement, because that selects for persistence rather than truth.**
+> ⭐⭐ **BOTH ROUNDS FOUND SOMETHING LARGER THAN THE THING THE PREVIOUS DRAFT LED WITH.** Draft 1's list was called complete and was not. **Draft 2's headline number turned out to be the 00:15 burst measured through two more columns.** Every correction below is re-derived by me at the ref.
 
 ---
 
-## 1. ⛔ WHAT IS WRONG — THE CORRECTED LIST
+## 0. ⛔⛔ WHAT ACTUALLY MATTERS — AND IT IS NOT WHAT DRAFT 2 LED WITH
+
+**Two defects, both OUTSIDE the 00:15 burst, both firing on ordinary days.**
+
+### ⛔ **A. THE EXIT FILL WALKS A BOOK OF UNBOUNDED AGE. THE ENTRY REFUSES ONE OLDER THAN 15 SECONDS — THROUGH THE SAME FUNCTION.** `#961`
+- **ENTRY** (`active-execution-engine.ts:251-253`): `getDepthSnapshot` → **`assessWarmth`** → refuses if `ageMs > 15 s`.
+- **CLOSE** (`:1996-2003`): fetches the **same object**, resolves the **same config**, takes only the penalty from it — **`assessWarmth` is never called; `ageMs` is computed and discarded.** ✅ *Control: `assessWarmth` has exactly one call site repo-wide.*
+- **MEASURED, 243 xStock closes: p50 2.32 s · p90 11.5 s · p99 245 s · max 1,554.9 s. ⛔ 22 of 243 (9.1%) filled on a book older than the entry gate's own limit.**
+- ⛔ **WORST: `OMC/USD` `stop_hit` booked at 82.13 on a bid captured 25.9 MINUTES earlier — while the trigger that fired it was bound by a ceiling capped at 300 s.**
+⇒ ⭐ **One read has a ceiling, fails closed and is instrumented. The other has none.**
+
+### ⛔ **B. A RESTING MAKER SELL IS DECLARED FILLED WHEN THE *MIDPOINT* REACHES THE LIMIT — 59% OF THEM BOOK AT A PRICE NO BID EVER REACHED.** `#962`
+`:1507-1508` compares the limit against `currentPrice`, which on xStock is the **mid**; the log even says the mid *"traded through"* the limit. `:1991` books **at** the limit, `:1993` sets slippage to **zero by construction**.
+**MEASURED with the MAXIMUM bid in a ±15 s window — maximally generous: 52 of 88 xStock maker exits (59%) booked at a limit no bid ever reached.** Mean shortfall **4.842%**, max **26.559%**. `MOH` booked **219.84** against **bid 198.23 / ask 207.00 — above even the ask.**
+⛔⛔ **AND THIS IS MY OWN AUDIT §1.2, WHICH I DEMOTED THIS MORNING.** I proved nobody ever decided which side it reads — and stopped there. **I never measured the consequence.** *"An undocumented convention"* and *"59% of maker exits book fills that never happened"* are the same fact at two levels of diligence.
+
+### ⚠️ **AND DRAFT 2's HEADLINE IS DEMOTED — ITS NUMBER WAS THE BURST**
+Draft 2 led with a 14.038% trigger-vs-fill gap. **Disaggregated: burst rows n=5 at 25.21%; NON-burst xStock n=4 at 0.068% — a THIRD of the crypto control's 0.209%.** ⇒ **Outside the burst there is essentially no divergence; the magnitude belongs to `#943`, not the exit path.** Also: **5 of those 9 rows are maker exits that never touch the fill path draft 2 named**, and the `+17.16%` figure has **n=4, not 9** — **rule 29 failed in my own headline table.**
+✅ **WHAT SURVIVES AND IS SEPARABLE: the TRANSMISSION claim — the divergence is *why* a bad print books a GAIN rather than a loss.** That is a row, not a headline.
+
+---
+
+## 1. ⛔ WHAT IS WRONG — REVISED AGAIN
 
 | # | what is wrong | status |
 |---|---|---|
-| ⛔ **W1** | **The exit trigger and the exit fill read different samples** (§0). `#959` | **certain, and largest** |
-| **W2** | **We never receive the order book for xStock.** Depth and spread come from one top-of-book row. | certain |
-| **W3** | **Every exit *trigger* reads a midpoint**, both classes, both lanes. ⚠️ *Draft 1 said "every exit decision" — that was the trigger only, and not asking what the fill read is how W1 was missed.* | certain |
-| **W4** | **A venue re-quote at each session boundary reaches the decision path.** | ⚠️ **event certain; *"is treated as a tradeable price"* is the judgement `#958` itself says is unearned. See §3 step 1 — now cheaply earnable.** |
-| ⛔ **W5** | **The 4-second sampling is a TRADING defect, not a measurement one.** ⚠️ **DRAFT 1 SAID THE OPPOSITE AND WAS WRONG.** The archive is a **live gating input**: it is the denominator of **σ**, which sets the exit staleness ceiling (`sigma-rate.ts:89-105` → `active-execution-engine.ts:1202-1213`, cap **300 s**); it feeds **both fills**; and it drives the scanner's spread gate and its **20-minute depth median**. ⛔⛔ **AND THE BIAS RUNS FAIL-OPEN: tick loss scales with symbol speed, so σ is understated most on the fastest names — the staleness window is WIDEST exactly where a stale mark costs most.** | **certain** |
-| **W6** | **There are FOUR price definitions, not three.** The ranking price is **not** the ticker `last` — that column is selected at `scanner.ts:641` and **never consumed**; the eval price is `:910` `latestBar.close`, a **15-minute aggregated bar** off the **`ohlc` channel**. | certain |
-| **W7** | **An xStock instance of the `#951` laundering, on the exit path.** `:1239` preserves the honest age (`priceObservedAtMs = _eqTick.tsMs`), then `:1244` republishes that mark via `updateCache`, which stamps `observedAt: now` — and it passes the venue gate. **A mark up to 300 s old becomes an "observed-now venue read."** | certain |
-| **W8** | **We cannot tell which session a price came from at the decision point.** ⚠️ *Reclassified: a missing CAPABILITY, not a defect — and §3 does NOT moot it.* | certain |
+| ⛔ **W1** | **The exit fill has no staleness ceiling; the entry does** (§0A). `#961` | **certain · largest · not the burst** |
+| ⛔ **W2** | **The maker exit fills on a midpoint and books the limit at zero slippage** (§0B). `#962` | **certain · not the burst** |
+| **W3** | **Every exit *trigger* reads a midpoint**, both classes, both lanes. | certain |
+| **W4** | **A venue re-quote at each session boundary reaches the decision path.** *(Event certain; "is treated as tradeable" remains unearned — `#958`'s own words.)* | event certain |
+| **W5** | **The 4-second sampling is a TRADING defect** — it is σ's denominator (ceiling capped 300 s), it feeds both fills, and it drives the spread and depth gates. ⚠️ *The fail-open bias clause is `#958`'s measurement, cited not re-asserted: 43.6% of marks lost, 0% on static names → 50% on the fastest.* | certain |
+| **W6** | **The ranking price is a 15-minute aggregated bar close, not the ticker `last`** — and `last` is selected at `scanner.ts:641` and consumed nowhere. ⚠️ **Draft 2 called this "four definitions, not three." Wrong: a dead column is not a definition. There are still THREE live ones; what changed is WHICH the third is.** | certain |
+| **W7** | **An xStock instance of the `#951` laundering on the exit path** — `:1239` preserves the honest age, `:1244` republishes it as observed-now, and it passes the venue gate. | certain |
+| **W8** | ⚠️ **NARROWED: not "we cannot tell which session."** The session flag **is** archived and read by nothing; the precise defect is that **the exit path cannot see it, because the in-memory tick carries only `{price, tsMs}`.** | certain |
+| ➕ **W9** | **The fill's forensic columns are NULL BY CONSTRUCTION on xStock** — `bookMid`/`bookAgeMs` (crypto 15/78 populated, **xStock 0/26**), so the age W1 needs is not in `closed_trades` and must be reconstructed. | certain |
+| ➕ **W10** | **The spread gate reads a quote up to 30 MINUTES old and FAILS OPEN** — absent data emits a sentinel that passes. ⇒ ⛔ **Absent price data makes ENTRY easier while making EXIT impossible.** | certain |
+| ➕ **W11** | **The newest 15-minute bar can be a one-minute stub** — partial buckets are emitted by design, and `source_bar_count`, which would say so, is written and read by nothing. | certain |
+| ➕ **W12** | **The mark silently changes definition** — mid **or** `last`, untagged; **and σ bounds a MID's staleness using the dispersion of `last`.** | certain |
+| ➕ **W13** | **The feed's subscription list is frozen at process boot** while the universe refreshes daily. `#960` | mechanism certain, **consequence untested** |
 
-⛔ **REMOVED FROM THE LIST:** `#953` (the `Math.random()` live route). **It is not an xStock price-path item** — it is one HTTP route, class-agnostic, Phase-21 gated, already placed at **21.1**, and excluded from this plan. *Listing it made the list look longer while it was the only provenance item and was not being worked.*
-⚠️ **A LEAD, NOT A FINDING:** the feed's subscription universe comes from a **static JSON file** read once at boot, while the trading universe is bulk-replaced daily by cron. **476 symbols wrote rows on 08-28 against 496 in the universe table.** ⇒ **Settles with one check: does the cron rewrite the file, or only the table?**
-
----
-
-## 2. ⭐ WHAT THE OUTSIDE WORLD ALREADY DOES *(unchanged from draft 1 — round 1 did not fault it)*
-
-**(a) VALIDATE THE TICK AT INGEST AND HOLD THE LAST GOOD VALUE** — *"ignore a fresh bad print and keep the last valid value until inputs normalize."* **Causal, not temporal.**
-**(b) A SEPARATE MARK PRICE FOR RISK — AND KRAKEN PUBLISH IT THEMSELVES** (*"Last price vs. Mark price"*, futures).
-**(c) ⚠️ Mainstream brokers do not run stops overnight at all** — **the conservative end, recorded, NOT recommended.** Kyle's call is to keep trading all four sessions.
+⛔ **`#953` — REMOVAL RE-ARGUED, BECAUSE DRAFT 2's REASONING WAS PARTLY FALSE AND SKIPPED MY OWN RULE.** It is genuinely off the xStock price path *(it reads a REST endpoint carrying zero xStock pairs)*, and that is the **only** valid ground. ⛔ **"Phase-21 gated" was FALSE for two of its four defects — the paper branch books a random haircut and writes the legacy table in BOTH modes.** ⛔ **And I struck it without doing what `#954` — my own entry, two above it — requires: enumerate what the row was the sole record of.** ✅ **CARRIED: the kill-switch blindness, and the amendment to the audit's §9.2 clearance (*"naming a population is not proving it complete"*), both now belong to `B-LEGACY-LIVE-EXIT-PATH`.** ⚠️ **And that issue currently has two homes under two batch names across three documents — fix before it is worked.**
 
 ---
 
-## 3. ✅ THE PLAN — CORRECTED
-
-### ⭐ STEP 0 — **FIX THE TRIGGER/FILL DIVERGENCE (W1). NEW, AND IT GOES FIRST.**
-**Blocked on nothing.** Readable from `closed_trades` today. **It is the largest live distortion in the population Phase 25 will calibrate from.**
-⛔ **NO FIX PRE-JUDGED, and the first question is NOT "which price is right":** it is **which of the two reads is SUPPOSED to be authoritative** — and `BATCH_65` already ruled that VTS and paper keep **different fill conventions on purpose**. **Search that record before calling either one wrong.**
-**OWNER:** CC-C + Langston. `B-EXIT-TRIGGER-FILL-PARITY`, plan row **3b.c**.
-
-### STEP 1 — **SEE THE TICKS** *(makes W4's judgement earnable)*
-⭐⭐ **CORRECTED TWICE BY ROUND 1:**
-- ⛔ **The raw capture was armed for the WRONG NIGHT.** It pointed at **Monday 00:15 UTC = Sunday 20:15 ET, the weekly OPEN.** **Measured: of 66 cohort closes since 1 July — Sat 18, Thu 15, Tue 13, Fri 11, Wed 9, and MONDAY ZERO.** ✅ **RE-ARMED DAILY, with a 10-day retention prune.**
-- ⭐ **AND IT IS NO LONGER THE ONLY INSTRUMENT.** The **`ohlc` channel already exists, is already archived, and carries `trade_count`** — so the venue's own printed trades for the same minute are available **today**. Specimens: `INTU` booked a `target_hit` at **374.96** while the venue printed **3 trades, all at 350.51**; `AMZN` **in regular hours** booked at **278.99** against **787 trades** inside 285.90-287.00.
-⚠️ **CONTROL STATED HONESTLY: the same test flags 52.7% of crypto exits, so "outside the bar" is partly quote-vs-trade-range and is NOT by itself proof of non-transactability.** ⇒ **It settles the extreme specimens, not the general case.**
-⇒ ⛔ **THEREFORE STEP 1 NO LONGER BLOCKS STEP 3.**
-
-### STEP 2 — **SUBSCRIBE TO THE BOOK, STORE IT, CONSUME NOTHING** *(fixes W2)*
-⛔⛔ **DRAFT 1's JUSTIFICATION FOR RESTRAINT WAS ARITHMETICALLY FALSE AND IS WITHDRAWN.** It claimed consuming 20 levels shifts the liquidity score **"+10 points per name."** Since `LQ = log10(depth)×10`, **+10 points is exactly a 10× ladder — an assumption presented as a calibration fact, from a ladder observed ONCE, in May.** And the stated consequence was wrong anyway: **saturation needs ≈$10 billion**, while the module's own scale puts $1M at 60. **60→70 re-creates nothing.**
-✅ **THE REAL REASON FOR RESTRAINT, which round 1 supplied: the risk is a NON-UNIFORM shift** (thin names carry proportionally less behind top-of-book), **and two gates read this input, not one** — LQ **and** the two-sided depth gate. **And the input is a 20-minute rolling median, so consuming a ladder changes the STATISTIC's definition, not just its scale.**
-⛔ **AND STORING IT IS NOT SMALL, WHICH DRAFT 1 DID NOT COST:** there is **no order-book table anywhere in the schema**; `xstock_spot_ticker_snap` already writes **2.85 M rows / 880 MB per trading day** at **one level per side**, and its July partition is **26 GB**. A 20-level ladder is 40 pairs against 2, arriving as **per-change deltas**. ⛔ **And the batch writer CANNOT be reused: it drops by elapsed time, which is coherent for a snapshot and CORRUPTING for a delta.**
-⚠️ **AND THE COUPLING IS THE PROCESS, NOT THE TABLE: that socket is the class's only price source, and the stall watchdog FORCE-CLOSES it on a data-clock stall.**
-
-### STEP 3 — **A PLAUSIBILITY GATE AT INGEST** *(addresses W4)*
-⛔⛔ **DRAFT 1 CLAIMED THIS MOOTS W8. IT DOES NOT, AND THE CLAIM IS WITHDRAWN.** Gating *"does not become the mark"* protects **exactly one consumer — the exit trigger.** **The fill, σ, the scanner's spread and depth gates, the ticker-witness and the probe cron all read the DB table and bypass it entirely; the ranking price is on another channel altogether (W6).**
-⛔ **AND "HOLD THE LAST GOOD VALUE" HAS FIVE FAILURE MODES, ALL SPECIFIC:** (1) **if the hold refreshes the timestamp it defeats the staleness ceiling — re-creating `#951` as the fix for W4**; (2) **if it does not, the gate converts "closes on a bad price" into "cannot close at all"** — the burst ran **30 s** against a 15 s floor; (3) **the first tick after any restart has no predecessor, and pm2 reports 584 restarts**; (4) **the weekly reopen legitimately gaps after 48 h shut**; (5) ⛔ **a per-tick gate is blind to a RAMP — `WEN` walked 8.01 → 13.31 in steps.**
-⇒ **The gate must sit where BOTH writes pass, must not drop the archive row (that is the forensic trace), and needs a false-positive budget.** **Threshold philosophy → Kyle.**
-
-### STEP 4 — **DECIDE THE NUMBER FOR EACH JOB** *(fixes W3, W6)*
-⛔ **DRAFT 1 BLOCKED THIS TWICE AND WAS WRONG.** It is a **specification** task: it needs a **correct inventory**, not clean data.
-⚠️ **BUT IT CANNOT START TODAY EITHER, FOR A REASON DRAFT 1 DID NOT NAME: the inventory is WRONG. There are four prices, not three (W6).** ⇒ **Fix the inventory, then it is startable immediately.**
+## 2. ⭐ WHAT THE OUTSIDE WORLD ALREADY DOES *(neither round faulted this)*
+**(a) Validate the tick at ingest and hold the last good value.** **(b) A separate mark price for risk — Kraken publish it themselves.** **(c) Mainstream brokers do not run stops overnight** — recorded, **not** recommended; Kyle's call is to keep trading all four sessions.
 
 ---
 
-## 4. ⛔⛔ THE BIGGEST RISK — AND IT IS IN THE PLAN'S OWN SHAPE
+## 3. ✅ THE PLAN — REORDERED BY ROUND 2
 
-> **Step 3 makes the exit TRIGGER honest and leaves the exit FILL dishonest — and they are wired in series.**
+### ⭐ **STEP 1 — GIVE THE FILL THE CEILING THE ENTRY ALREADY HAS.** *(W1)*
+**The fix is calling a function that already exists, three lines from where the snapshot is fetched.** Blocked on nothing.
+⛔ **NOT PRE-JUDGED: refusing a stale book at close is NOT obviously right** — `order-placer.ts:110-115` carries the deliberate opposite rule, *"a close MUST still exit (never a stuck position)."* ⇒ **The question is what a close does when the book is cold: substitute loudly, widen, or wait. That is a risk call.**
 
-**Today the burst produces a visible absurdity: a stop at 106.075 that books at 157.00. Both numbers are wrong, and the PAIR is obviously wrong, which is why anyone noticed.** After step 3 the trigger is validated, the burst stops firing stops, **and the loud specimens disappear.** The fill path is untouched — it still walks a 4-second-old archived bid — so **every ordinary exit keeps booking at a price the decision was not made on** (crypto 0.209% vs xStock 14.038%).
+### ⭐ **STEP 2 — DECIDE WHAT A RESTING SELL FILLS ON.** *(W2)*
+Today: the **mid**. A sell needs a **buyer**, so the honest comparator is the **bid**.
+⛔ **THE FIRST QUESTION IS PROVENANCE, NOT CODE:** `BATCH_65` ruled that the two lanes keep **different fill conventions on purpose.** **Search that record before calling this wrong.** ⚠️ **And note the trap: a parity check comparing trigger to fill on the maker leg agrees with itself by construction (`:1993` sets slippage to zero), so half the population would pass by definition.**
 
-⇒ ⛔⛔ **THE PLAN AS DRAFTED WOULD REMOVE THE EVIDENCE OF A DEFECT AND LEAVE THE DEFECT — immediately before Phase 25 calibrates on this population. A gate that suppresses the symptom that makes a second defect findable is worse than no gate.**
-✅ **THAT IS WHY W1 IS NOW STEP 0.**
+### **STEP 3 — SEE THE TICKS.** *(makes W4 earnable)*
+✅ **Capture re-armed DAILY** after round 1 caught it pointed at **Monday — where the cohort has ZERO events in 65.**
+⭐ **And it is not the only instrument: the `ohlc` channel is already archived and carries `trade_count`.** Specimen: `INTU` booked a target at **374.96** while the venue printed **3 trades, all at 350.51**.
+⛔ **DRAFT 2's SECOND SPECIMEN IS WITHDRAWN — `AMZN` points the OTHER WAY** (a resting sell 2.6% *below* a bar with 787 prints is maximally transactable). **The test is sign-blind, and the control already conceded it flags 52.7% of crypto exits.**
 
-**AND A SECOND, STRUCTURAL RISK:** §1 presents eight items as certain wrongs, **while every *"this is unintended"* verdict is uncertified until `B-DECIDED-INTENT-INDEX` lands.** Steps 2 and 3 commit code. ⛔ **There must be a gate between "certain" and "build": each step states, before it ships, which record it searched for a prior decision.** *(`BATCH_65` is the worked example — it already rules on fill conventions.)*
+### **STEP 4 — A PLAUSIBILITY GATE AT INGEST.** *(W4)*
+⛔ **It protects exactly ONE consumer — the exit trigger.** The fills, σ, the scanner gates and the ranking channel all bypass it.
+⛔ **AND DRAFT 2's INSTRUCTION WAS BACKWARDS: *"must not drop the archive row — that is the forensic trace."* FOR THE BURST THE ARCHIVE ROW DOES NOT EXIST** — the frame that set the mark was dropped by the 4-second throttle. **The trace it was told to preserve was already destroyed.**
+⚠️ **AND THE RAMP FAILURE MODE IS WITHDRAWN:** `WEN`'s archive shows a **one-step ask jump of +128%** (`7.57 / 19.05`, mid **13.31** exactly) — **the specimen cited to prove a per-tick gate is blind is the one it catches.** ✅ **Four failure modes survive, including that refreshing the held timestamp re-creates `#951` as the fix for W4.**
+
+### **STEP 5 — SUBSCRIBE TO THE BOOK, STORE IT, CONSUME NOTHING.** *(W2-feed)*
+⚠️ **MOVED LAST.** Storing it means a new table beside one already writing **930-958 MB/day** into a **26 GB monthly partition**, with **no order-book table anywhere in the schema** and a batch writer whose time-based drop is **coherent for a snapshot and corrupting for a delta.** ⭐ **And round 2's point: the restraint argument against *consuming* a ladder applies equally to *storing* it.**
+
+### **STEP 6 — DECIDE THE NUMBER FOR EACH JOB.** *(W3, W6)*
+⛔ **STILL NOT STARTABLE, AND DRAFT 2's CLAIM THAT IT WAS IS WITHDRAWN AS A HEDGE** — it named a new blocker and declared it already cleared in the same breath. **The inventory is still incomplete: no maker booked price, no 30-minute spread read, no partial-bar composition (W10, W11).**
+
+---
+
+## 4. ⛔⛔ THE BIGGEST RISK — DRAFT 2 NAMED THE WRONG ONE
+
+⛔ **DRAFT 2 SAID: step 3's gate would hide the evidence for the trigger/fill divergence. REFUTED BY MY OWN POPULATION** — strip the burst, which is exactly what the gate does, and non-burst divergence is **0.068%** against a crypto control of 0.209%. **There is no residual for the gate to hide.**
+
+✅ **THE REAL RISK IS THE MIRROR OF IT, AND IT IS WORSE:** the ingest gate touches **neither W1 nor W2** — **9.1% and 59% of closes, on ordinary days, outside the burst entirely.** ⇒ ⛔ **Ship the gate first and the burst stops producing the visible absurdities that made those two findable, while both remain — immediately before Phase 25 calibrates on this population.** ✅ **That is why W1 and W2 are now steps 1 and 2 and the gate is step 4.**
+
+⛔ **AND THE STRUCTURAL RISK STANDS, UNCHANGED AND UNANSWERED:** every *"this is unintended"* verdict here is **uncertified** until `B-DECIDED-INTENT-INDEX` lands, and steps 1, 2 and 4 commit code. **Each step states, before it ships, which record it searched for a prior decision.** ⭐ **Point it at the maker leg first — `BATCH_65` already rules on fill conventions.**
 
 ---
 
 ## 5. ⚠️ WHAT THIS PLAN STILL DOES NOT DO
-
 1. It does not stop us trading any session. **Kyle's decision.**
 2. It does not exclude 00:15. **The gate is causal.**
-3. It does not consume the order book. **That re-calibrates two live gates and is its own batch.**
-4. ⛔ **It no longer claims W5 is a measurement problem — that was wrong and is corrected.** **But it still does not FIX the sampling**; it fixes what the sampling feeds, one consumer at a time.
-5. It does not answer refactor-vs-rip-out for the exit path. **Separate question; answer stands at large-refactor-small-ripout.**
+3. It does not consume the order book.
+4. It does not fix the sampling — it fixes what the sampling feeds, one consumer at a time.
+5. ⛔ **It does not settle W13's consequence, and does not pretend to.**
