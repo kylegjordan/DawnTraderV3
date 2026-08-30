@@ -5756,3 +5756,23 @@ I recorded it as *"a depth-10 mid and a BBO mid are different statistics; on a t
 
 **SPAWNED, each placed in the plan:** `#965` (3b.j) · `#966` (5.a) · `#967` (5.b) · `#968` (3b.k).
 **MISTAKE: silence-not-evidence [B-SCANNER-EGRESS-NORMALISE] — five consequence-claims killed in review; the last one read a lane-gated instrument's silence as an answer about the lane it cannot observe.**
+
+
+---
+
+### #942 CORROBORATION 2026-08-30 (CC-C) — **THE CLASS NOW HAS FOUR LIVE INSTANCES, THE OLDEST AGING 23 DAYS. NO NEW ITEM.**
+
+**Recorded ON the existing issue per §9.5(b-ii), NOT re-filed. `#942` predicted this exactly and the prediction has come true; that is the note.**
+
+Langston named seven active un-acked alerts in the channel at the close of `B-SCANNER-EGRESS-NORMALISE`. **Four are visible in my window** *(instrument reach stated: `tail -200` on the alerts log — his figure of 7 comes from the full store, so mine is a floor, not a count)*:
+| id | severity | triggered | owner | what it is |
+|---|---|---|---|---|
+| `23f004a4` | **info** | 2026-08-07 | **CC-A** | `B-OUTCOME-FEEDBACK-WIRE` (`#602`) post-deploy learning-write verification |
+| `65bb4388` | **info** | 2026-08-08 | **CC-B** | daily `dt-deploy` observation (self-chained) |
+| `7c4a873f` | **info** | 2026-08-13 | — | `T-W20C-SCALAR-LEG` harness scalars + hash-verify |
+| `d32ca173` | **info** | 2026-08-14 | — | `B-FILTER-DIAG-PAPER` OBJ-2 SQE-taxonomy soak |
+
+⇒ ⛔ **ALL FOUR ARE `info`, AND `info` NEVER PUSHES** — `system-alerts.ts:585`, `if (a.severity === 'info') continue;`. **So the no-silent-drop closure guarantee could never have fired on any of them, and the three-week age is the mechanism working exactly as `#942` says it does.**
+★ **THIS IS NOT A NEW FINDING AND IT IS NOT A NEW BATCH.** It is `#942` showing its face, the same way `DOGE/BTC` at 0.000001086 against a 0.25 floor was `#966` showing its face and correctly produced no new item. **Disposition unchanged: `B-ALERT-LIFECYCLE`, decision Kyle's.**
+⚠️ **What the four DO add is the thing `#942` could not supply on 08-29 — a MEASURED CONSEQUENCE rather than a mechanism read.** The issue argued from the line that `info` can rot; **these are four that have, for 15-23 days, carrying OWED VERIFICATIONS from four different batches.** *"Scheduled ≠ verified"* is no longer a prediction.
+⛔ **NOT TAKEN BY ME, DELIBERATELY:** two carry other sessions' owners (CC-A, CC-B) and the other two belong to batches that are not mine. Langston has already named them in the channel where their owners will see them; **re-posting the same list would be noise, not diligence.**
