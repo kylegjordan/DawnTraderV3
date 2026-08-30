@@ -5806,3 +5806,27 @@ Corroborated by `active-portfolio-manager.ts:202`'s own comment: *"No direct pro
 ⇒ ✅ **SO THE ENFORCEMENT CLAIM RESTS ON EXACTLY TWO LEGS, BOTH STATED: CODE REACHABILITY walked to an event-bus entry point, and the OUTCOME in the live table. It does NOT rest on observed invocation, and nobody may later upgrade it to that.** *(Same standing as `B-SCANNER-EGRESS-NORMALISE`'s own guard, recorded as unexercised — `#661` leg 3.)*
 
 ★ **THIS IS WHY LANGSTON INSISTED THE ORDER BE *ESTABLISH, THEN FIX*. Had the batch opened by "fixing" the dead check, it would have hardened a redundant gate and never learned that the real one was fine.**
+
+
+---
+
+### #942 CORROBORATION 2026-08-30 (b) — **THE CENSUS IS NOW COMPLETE AT SEVEN, AND IT SHARPENS THE ISSUE: EVERY ONE IS CORRECTLY OWNED AND NO OWNER WAS EVER TOLD.**
+
+**Closing my own stated floor.** The (a) note above reported **four** and said explicitly that `tail -200` made it *"a floor, not a count."* The hourly heartbeat then supplied the full id list, so the population is now enumerated rather than sampled:
+
+| id | severity | triggered | owner | owed verification |
+|---|---|---|---|---|
+| `f6ae5419` | info | 2026-08-10 | **CC-A** | VC-2 — has a genuine <0.30 regime-gate rejection been observed (`B-REGIME-REFRESH-PIPE`) |
+| `23f004a4` | info | 2026-08-07 | **CC-A** | `B-OUTCOME-FEEDBACK-WIRE` (`#602`) first active-path learning write |
+| `27860643` | info | 2026-08-30 | **CC-A** | `B-STORAGE-HARDEN` Wave C — first natural archive tiering, peak-RSS |
+| `65bb4388` | info | 2026-08-08 | **CC-B** | daily `dt-deploy` observation (self-chained) |
+| `2b0a4688` | info | 2026-08-08 | **CC-B** | `#605` pin proof on a naturally aged-out batch |
+| `7c4a873f` | info | 2026-08-13 | **CC-B** | `T-W20C-SCALAR-LEG` harness scalars + hash-verify |
+| `d32ca173` | info | 2026-08-14 | **CC-B** | `B-FILTER-DIAG-PAPER` OBJ-2 SQE-taxonomy soak |
+
+**CC-A 3 · CC-B 4 · CC-C 0.** ✅ **None are mine, so the (a) disposition stands unchanged — and it is now stated from a complete population rather than a partial one.**
+
+⇒ ⭐⭐ **AND THE COMPLETE CENSUS SAYS SOMETHING THE PARTIAL ONE COULD NOT: EVERY ONE OF THE SEVEN IS CORRECTLY OWNED, WITH THE OWNER NAMED IN THE ALERT BODY. NOT ONE IS ORPHANED.**
+⛔ **SO THIS IS NOT AN OWNERSHIP FAILURE — IT IS A NOTIFICATION FAILURE.** `system-alerts.ts:585` (`if (a.severity === 'info') continue;`) means **`info` never pushes**, so seven correctly-assigned verifications sat 15-23 days **without their named owners ever being told they were due.** The routing worked; the doorbell was disconnected.
+★ **THAT IS A STRICTLY SHARPER STATEMENT OF `#942` than "info can rot," and it changes what the fix has to do:** the repair is not to re-assign or chase these — **it is to make an `info` alert reach the owner it already names.** Recorded on `#942` for `B-ALERT-LIFECYCLE`; **decision remains Kyle's.**
+⚠️ **Still not taken by me, and now for a stronger reason than lane discipline: taking them would repair seven instances and leave the doorbell disconnected.**
