@@ -162,23 +162,45 @@ def _read_new(path: str, offset: int):
     return rows, sizes, offset
 
 
-def _mint_corrections() -> dict:
-    """`recorded mint -> corrected mint`, from BLOCKER-C's repair store.
+def _correction_key(recorded_mint, created_at):
+    """The composite key BLOCKER-D needed, and the mint alone could not be.
 
-    ⛔ WHY THE SWEEP HAS TO KNOW ABOUT THIS. The census is APPEND-ONLY, so the
-       19 birth rows written before the conservation fix still carry the
-       collapsed mint -- USDC. A sweep reading them at face value would look up
-       USDC's channels (which always resolve), assign it to the treatment arm,
-       and re-create the exact contamination the fix removed. The correction is
-       recorded rather than rewritten, so every READER has to apply it.
+    ⛔ `recorded_mint` ALONE IS NOT A KEY. It is USDC on every collapse, so
+       nineteen corrections reduced to a dict of ONE and every collapsed birth
+       was substituted to the SAME mint -- reproducing, inside the fix, the
+       exact one-identity-for-many-launches defect BLOCKER-C was filed for.
 
-    ★ AND IT SUBSTITUTES RATHER THAN SKIPS, which is the better of the two. The
-      real launched token behind each collapse is known; skipping would discard
-      19 genuine launches to avoid 19 wrong ones. Substituting studies the token
-      that actually launched, and `in_control_sample` then hashes the REAL
-      identity, so the arm draw is the one that token was always entitled to.
+    ⛔⛔ AND THE ROOT CAUSE WAS WORSE THAN "the reader joined on the wrong
+       field". The corrections carried a `signature` "so they would join to the
+       birth row" -- and THE BIRTH ROW HAD NO SIGNATURE. The join was
+       impossible, so the reader fell back to the only shared field, which was
+       the collapsed mint. **A key written on ONE side of a join is not a key.**
+       Births now carry `signature`; this composite exists for the rows written
+       before that field did.
+
+    ⇒ `(recorded_mint, created_at)` is unique per launch -- two collapses would
+      have to share a creation instant to collide, and that case REFUSES rather
+      than guessing.
     """
-    out = {}
+    return (recorded_mint, created_at)
+
+
+def _mint_corrections() -> dict:
+    """BLOCKER-C's repair store, keyed so it can actually be applied.
+
+    ⛔ WHY THE SWEEP HAS TO KNOW ABOUT THIS AT ALL. The census is APPEND-ONLY,
+       so births written before the conservation fix still carry the collapsed
+       mint. A sweep reading them at face value would look up USDC -- whose
+       channels always resolve -- and route it to the TREATMENT arm, recreating
+       the contamination the fix removed. A correction that is RECORDED rather
+       than rewritten must be applied by every READER.
+
+    ⛔⛔ AN AMBIGUOUS KEY REFUSES RATHER THAN GUESSING. If two corrections share
+       a key and disagree, the mapping is DROPPED and logged: substituting the
+       wrong real token is worse than leaving the collapse visible, because the
+       collapse is detectable and a wrong substitution is not.
+    """
+    out, seen = {}, set()
     if not os.path.exists(CORRECTIONS_PATH):
         return out
     try:
@@ -191,10 +213,18 @@ def _mint_corrections() -> dict:
                 except ValueError:
                     continue
                 rec, cor = r.get("recorded_mint"), r.get("corrected_mint")
-                if rec and cor and rec != cor:
-                    out[rec] = cor
+                created = r.get("created_at")
+                if not (rec and cor and created) or rec == cor:
+                    continue
+                k = _correction_key(rec, created)
+                if k in seen and out.get(k) != cor:
+                    LOG.error("ambiguous mint correction for %s -- DROPPED "
+                              "rather than guessed", k)
+                    out.pop(k, None)
+                    continue
+                seen.add(k)
+                out[k] = cor
     except OSError as exc:
-        # Loud: reading nothing here would silently reinstate the collapse.
         LOG.error("could not read mint corrections (%s) -- collapsed mints will "
                   "be swept at face value", exc)
     return out
@@ -242,7 +272,9 @@ def run(now: datetime = None) -> dict:
             recorded_mint = birth.get("mint")
             # BLOCKER-C: the birth row may carry a collapsed mint. Study the
             # token that actually launched, not the payment currency.
-            mint = corrections.get(recorded_mint, recorded_mint)
+            mint = corrections.get(
+                _correction_key(recorded_mint, birth.get("created_at")),
+                recorded_mint)
             if mint != recorded_mint:
                 stats["mint_corrected"] += 1
             reason = birth.get("follow_reason")

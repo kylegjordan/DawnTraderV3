@@ -93,10 +93,24 @@ def _append(path: str, record: dict) -> None:
     is nothing; a hole in the base rate is the study.
     """
     os.makedirs(os.path.dirname(path), exist_ok=True)
+    # ⛔ THE MODE IS SET IN CODE, NOT INHERITED FROM WHOEVER RAN THE PROCESS.
+    #    MEASURED 2026-08-31: `social-checks.jsonl` was 0644 inside a 0751
+    #    store, so the trading app's user could read it — against the stated
+    #    isolation clause. The cause is that the file's mode depended on the
+    #    CALLER'S umask: the service sets UMask=0077, a manual repair run does
+    #    not. A permission that varies by who happened to create the file is
+    #    not a permission, and the claim about it cannot be true twice.
+    _new = not os.path.exists(path)
     with open(path, "a", encoding="utf-8") as fh:
         fh.write(json.dumps(record, separators=(",", ":"), sort_keys=True) + "\n")
         fh.flush()
         os.fsync(fh.fileno())
+    if _new:
+        try:
+            os.chmod(path, 0o600)
+        except OSError:
+            pass
+
 
 
 def _read(path: str):
@@ -177,6 +191,7 @@ def record_birth(
     socials: dict,
     followed: bool,
     follow_reason: str,
+    signature: str | None = None,
 ) -> dict:
     """Record one launch and schedule its whole observation grid.
 
@@ -192,6 +207,14 @@ def record_birth(
     """
     rec = {
         "mint": mint,
+        # ⛔ THE TRANSACTION SIGNATURE, AND ITS ABSENCE WAS BLOCKER-D'S REAL
+        #    CAUSE. The BLOCKER-C corrections carried a signature "so they
+        #    would join to the birth row" -- and the birth row had no
+        #    signature, so the join was impossible and the reader fell back to
+        #    the MINT, which is USDC on every collapse. Nineteen corrections
+        #    collapsed to one. A join key written on ONE side of a join is not
+        #    a join key.
+        "signature": signature,
         "created_at": created_at.astimezone(UTC).isoformat(),
         "first_seen_at": first_seen_at.astimezone(UTC).isoformat(),
         "discovery_lag_s": (first_seen_at - created_at).total_seconds(),

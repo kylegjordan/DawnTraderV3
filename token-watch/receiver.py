@@ -380,6 +380,10 @@ def parse_creation(event: dict) -> dict | None:
         "initial_liquidity": None,
         "creator": creator,
         "socials": socials,
+        # BLOCKER-D: the join key, carried from the event so it exists
+        # on BOTH sides of the join. A key written on one side only is
+        # not a key -- that is what made the corrections unjoinable.
+        "signature": event.get("signature"),
     }
 
 
@@ -413,6 +417,7 @@ def ingest(events: list) -> int:
                 initial_liquidity=launch["initial_liquidity"],
                 creator=launch["creator"],
                 socials=launch["socials"],
+                signature=launch.get("signature"),
                 followed=followed,
                 follow_reason=reason,
             )

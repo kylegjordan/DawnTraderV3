@@ -397,7 +397,8 @@ REAL = "3ESCWpPJQbau34D77Pw1bGB19E2kXZSeWvedqC9apump"
 birth(USDC, "deferred", False)
 os.makedirs(os.path.dirname(promote.CORRECTIONS_PATH), exist_ok=True)
 with open(promote.CORRECTIONS_PATH, "w", encoding="utf-8") as fh:
-    fh.write(json.dumps({"recorded_mint": USDC, "corrected_mint": REAL}) + chr(10))
+    fh.write(json.dumps({"recorded_mint": USDC, "corrected_mint": REAL,
+                         "created_at": (NOW - timedelta(minutes=30)).isoformat()}) + chr(10))
 _r = stub({USDC: ["twitter", "telegram"]})   # USDC always resolves channels
 try:
     st = promote.run(NOW)
@@ -416,7 +417,8 @@ check("** USDC did NOT reach the treatment arm off its own channels",
 reset()
 os.makedirs(os.path.dirname(promote.CORRECTIONS_PATH), exist_ok=True)
 with open(promote.CORRECTIONS_PATH, "w", encoding="utf-8") as fh:
-    fh.write(json.dumps({"recorded_mint": USDC, "corrected_mint": REAL}) + chr(10))
+    fh.write(json.dumps({"recorded_mint": USDC, "corrected_mint": REAL,
+                         "created_at": (NOW - timedelta(minutes=30)).isoformat()}) + chr(10))
 birth("ORDINARY", "deferred", False)
 _r = stub({})
 try:
@@ -425,6 +427,49 @@ finally:
     providers._get = _r
 check("POSITIVE CONTROL - an uncorrected mint is swept unchanged",
       st["mint_corrected"] == 0 and checks()[0]["mint"] == "ORDINARY", st)
+
+print(chr(10) + "=== 14. BLOCKER-D: MANY COLLAPSES, MANY DISTINCT SUBSTITUTIONS")
+# ** THE DISCRIMINATING TEST. Keyed on the mint alone, all three collapses
+#    would resolve to ONE substituted identity -- reproducing, inside the fix,
+#    the one-identity-for-many-launches defect BLOCKER-C was filed for.
+#    Archive evidence: 78 USDC collapses -> 78 DISTINCT real mints.
+reset()
+os.makedirs(os.path.dirname(promote.CORRECTIONS_PATH), exist_ok=True)
+_births = [(NOW - timedelta(minutes=m), "REAL%d" % m) for m in (30, 40, 50)]
+with open(promote.CORRECTIONS_PATH, "w", encoding="utf-8") as fh:
+    for created, real in _births:
+        birth(USDC, "deferred", False, created=created)
+        fh.write(json.dumps({"recorded_mint": USDC, "corrected_mint": real,
+                             "created_at": created.isoformat()}) + chr(10))
+_r = stub({})
+try:
+    st = promote.run(NOW)
+finally:
+    providers._get = _r
+_got = sorted(r["mint"] for r in checks())
+check("all three collapsed births were substituted", st["mint_corrected"] == 3, st)
+check("** THREE DISTINCT identities, not one repeated",
+      _got == ["REAL30", "REAL40", "REAL50"], _got)
+check("* and none of them is still USDC", USDC not in _got, _got)
+
+# ** AMBIGUITY REFUSES rather than substituting the wrong real token: a
+#    collapse is detectable, a wrong substitution is not.
+reset()
+os.makedirs(os.path.dirname(promote.CORRECTIONS_PATH), exist_ok=True)
+_c = NOW - timedelta(minutes=30)
+birth(USDC, "deferred", False, created=_c)
+with open(promote.CORRECTIONS_PATH, "w", encoding="utf-8") as fh:
+    fh.write(json.dumps({"recorded_mint": USDC, "corrected_mint": "ONE",
+                         "created_at": _c.isoformat()}) + chr(10))
+    fh.write(json.dumps({"recorded_mint": USDC, "corrected_mint": "TWO",
+                         "created_at": _c.isoformat()}) + chr(10))
+_r = stub({})
+try:
+    st = promote.run(NOW)
+finally:
+    providers._get = _r
+check("** an AMBIGUOUS correction is DROPPED, not guessed",
+      st["mint_corrected"] == 0 and checks()[0]["mint"] == USDC, st)
 
 print("\n%d passed, %d failed" % (PASS, FAIL))
 shutil.rmtree(ROOT, ignore_errors=True)
