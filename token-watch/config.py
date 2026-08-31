@@ -45,6 +45,29 @@ GRID = (
 GRID_LABELS = ("1h", "6h", "24h", "3d", "7d", "30d", "90d")
 assert len(GRID) == len(GRID_LABELS)
 
+# ⛔⛔ THE SWEEP CONSUMES A BUCKET WHILE ITS HOUR IS STILL OPEN. That is safe
+#    ONLY while no checkpoint can fall due in the hour of its own birth --
+#    which is exactly what a one-hour minimum guarantees: a token born at
+#    12:30 has its earliest grid point at 13:30, in the NEXT bucket. Both
+#    writers land at `open_hour + 1` or later: `schedule_grid` by this
+#    arithmetic, and `_append_next_bucket` by `now + 1h` off a `now` captured
+#    once at run start. Margin: one hour.
+# ★ THIS ASSERT REPLACES A WHOLE MECHANISM (Langston, 2026-08-31). I built a
+#   line high-water mark and an elapsed-hours-only cursor to make the sweep
+#   safe against appends into an open bucket -- against a loss I had reported
+#   and then measured to be ZERO. He went further than my withdrawal: the
+#   loss is not merely unobserved, it is UNREACHABLE, and the reason is this
+#   constant. The mechanism was reverted; three defects were found while
+#   building it, two inside the failure family it was addressing.
+# ⇒ SO THE EXPOSURE IS CONVERTED INTO AN IMPORT-TIME FAILURE AT THE EXACT
+#   EDIT THAT WOULD MAKE THE SWEEP UNSAFE -- a sub-hour grid point. No
+#   persistent state, no runtime cost, and it fails loudly at the change
+#   rather than silently at 03:00. The cure for a silent-loss shape is a loud
+#   row, not a recovery path for a loss that has never been reachable.
+assert min(GRID) >= timedelta(hours=1), (
+    "the hourly sweep consumes a bucket while its hour is still open; that is "
+    "safe only while no checkpoint can fall due in the hour of its own birth")
+
 # The aging tracker on the staging page (OBJ-10) may only offer ages the grid
 # actually observes. Kyle's original request included 5/15/45/60/75d; those
 # are NOT here because we do not look on those days and a column we cannot

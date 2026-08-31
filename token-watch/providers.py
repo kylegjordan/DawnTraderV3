@@ -84,11 +84,33 @@ def _pace(url: str) -> None:
         _LAST_CALL[host] = now
 
 
-def _get(url: str, headers: dict | None = None):
-    _pace(url)
-    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, **(headers or {})})
+def _request(req):
+    """⛔⛔ THE ONE EGRESS. EVERY outbound call in this package goes through
+    here, and the pacer is inside it.
+
+    Langston, 2026-08-31 (BLOCKER-1): the pacer was added to `_get` -- the
+    function that had been REPORTED -- and `pool_liquidity` built its own
+    Request and called `urlopen` directly, so it never passed through either.
+    Two egress sites, one paced. That is fix-follows-the-pointer INSIDE the
+    fix for fix-follows-the-pointer: the correction travelled to the function
+    named in the finding and not to the CLASS, which is every outbound call.
+
+    ⚠️ IT WAS HARMLESS ON THE DAY AND THAT IS NOT THE POINT. `pool_liquidity`
+    calls a host with no entry in RATE_PER_MIN_BY_HOST, so even routed through
+    the pacer it would return unpaced. THE DEFECT IS THAT THE GUARD REACHED
+    LESS FAR THAN IT APPEARED TO, and the appearance is what the next person
+    acts on: the first person to add that host to the rate table will believe
+    they have paced it. The documented DexScreener fallback -- chain-direct on
+    the spare Helius allowance -- is precisely the change that arms it.
+    """
+    _pace(req.full_url)
     with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
         return json.loads(resp.read().decode("utf-8"))
+
+
+def _get(url: str, headers: dict | None = None):
+    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, **(headers or {})})
+    return _request(req)
 
 
 def helius_key() -> str:
@@ -219,8 +241,7 @@ def pool_liquidity(mint: str) -> dict:
     req = urllib.request.Request(url, data=body, headers={
         "Content-Type": "application/json", "User-Agent": USER_AGENT,
     })
-    with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
-        data = json.loads(resp.read().decode("utf-8"))
+    data = _request(req)
     budget.charge("liquidity", 1)
     # Same reasoning as token_state: the chain response carries the full
     # holder list and we keep three numbers off it.

@@ -67,3 +67,76 @@
 3. **Is putting 3b.f-b / 3b.l at 10-11 right**, or do they belong with the F-tail?
 4. **Seven of these have no board card**, so they have been invisible. **That is a process failure of mine**, and it is why this table exists.
 5. ⚠️ **Three observation windows close 09-04, 09-06, 09-07.** Nothing that changes the price path may deploy inside them without splitting a population at a deploy boundary.
+
+---
+---
+
+# PART 2 — EVERYTHING ELSE STILL OPEN ON THE SCRATCH LIST (NOT among the 29)
+
+> **Kyle asked for the remaining scratch-list steps that are NOT one of the 29 pricing-trust pieces. THERE ARE 31.** Two scratch items ARE already inside the 29 and are excluded here to avoid double-counting: **A15 (`#964`) = row 3b.i**, and **A7 (`#618`) = plan row 4.b**.
+> ⚠️⚠️ **STATUS IS AS THE LEDGER RECORDS IT. I HAVE NOT RE-VERIFIED EACH AGAINST THE CODE TODAY** — and this ledger has been wrong in the expensive direction: **A7 sat marked *"build pending / highest priority and UNTOUCHED"* for nine days after the build had shipped.** ⇒ **every row below needs a status re-derivation before it is worked, not treated as fact.**
+
+## 🟥 GO-LIVE BLOCKER — 1
+
+| id | name | what it is |
+|---|---|---|
+| **`#734`** | **`B-DRAWDOWN-ANCHOR-COHERENCE`** | ⛔⛔ **A PHASE-21 BLOCKER THAT READS HARMLESS FROM THE PAPER SIDE.** The health endpoint has returned `critical` since the 08-12 re-anchor. **It THROWS in live mode** — tripped twice, independently. |
+
+## ⛔ DECISIONS THAT ARE KYLE'S — 7 (CC-C must not pick these alone)
+
+| id | name | the question |
+|---|---|---|
+| **A12 / `#624`** | globalRegime at-open stamp | **Why absent on 37% of crypto and 26% of xStock opens?** Never explained; Kyle asked for it reviewed. |
+| **A13 / `#616`** | AMR friction input is ~half a constant | The fee contributes 26.7 of the live 56 every cycle and carries **zero information about conditions**. Langston's gate: no weight change until ruled. |
+| **A14 / `#626`** | what is `costs` on the VTS path | A live tooltip says *"VTS rows may use a different composition"* and **nobody has traced it**. |
+| **C1** | 24-hour trade caps | Force-close trades that have not closed in 24h? Folds in the 9-day-open positions. |
+| **C2** | Friday early-shutdown for xStocks | The active lane attempts fills **after** the daily close; only the freshness rail stops it. |
+| **C3** | xStock off-hours liquidity → **time-of-day admission gating** | ★★ **DIRECTLY ADJACENT TO THE SESSION DECISION KYLE MADE TODAY** — categorise each xStock by full-day activity and decide whether ADMISSION should be time-gated. |
+| **A6** | slippage / negative-cost presentation | ✅ **ALREADY RULED 08-20** — (a) + the measurement half of (b). ⇒ the WORK is D2.7 below. |
+
+## 🔧 CC-C FIX WORK — 9
+
+| id | name | what it does |
+|---|---|---|
+| **A9** | six fabricated `\|\| 50000` balance fallbacks | ⛔ **TWO OF THE SIX SIZE POSITIONS** (`routes.ts:14852`, `:15017` → `calculateRiskAmount` → `quantity`). **A ghost default deciding trade size.** |
+| **A10** | the client re-invents what the server stopped faking | Fabricates `status:'OK'` and a zero portfolio when the API errors. **A false all-clear is worse than an error.** |
+| **A8 / `#620`** | engine-vs-persisted profit check | The one P&L invariant never checked: **does the net the engine COMPUTED equal the net actually SAVED?** |
+| **A11 / `#622`** | nothing verifies a completion report's governance list | Mine claimed the System Manual was updated when it had not been touched. **Mechanically decidable.** |
+| **A4** | exploration anneal-counter defect | Counts open and orphaned rows as closed — reads 188 against a true 184. |
+| **A5** | crypto orphan close-path | 3 rows (AVAX, ETH, MET) written at open, position gone, **close details never filled in**. |
+| **A2** | exploration-lane marker column | Show which trades came in on the exploration lane. Display-only; data already stored. |
+| **`#733`** | `B-CANONICAL-CORPUS-ACCURACY` | 4 of 14 canonical files are machine-regenerated while the rules file calls the directory frozen. **Docs only.** |
+| **`#900`-`#904`** | parity + hygiene *(5 issues, one row)* | SQL↔TS parity fence · the epoch value resolves two ways (4/534) · two unscoped epoch readers · the portfolio endpoint. |
+
+## 📦 QUEUED BATCHES / ARCS — 13
+
+| id | name | what it is |
+|---|---|---|
+| **D2.6 / D6 / `#703`** | **commodity-perp capture** | Gold, silver, copper, WTI, nat gas + CHF. **Capture-only. Kyle GO given 08-20.** ★ **THE ONE ITEM WHOSE COST GROWS WHILE IT WAITS** — every day is data not collected. |
+| **D2.7** | A6's display batch | Costs against ACTUAL fills, price-improvement as a credit, + the signal-staleness metric. **Kyle already ruled the shape.** |
+| **D4** | `B-SIZING-DEC-RESTORE` resumption | Delete two dead config knobs, derived-slots display, **+ `#698` paper-slots (~$150 x 15-20)**. |
+| **D5** | the storage arc | `B-DAILY-CUTOVER-SWEEP` (`#688`/`#689`) + **`B-STORAGE-REPORT` (`#697` — Kyle's standing storage page)**. |
+| **D2** | `P19-B-PERPFEED` close-out | The sweep: orphan drop, 4 dead retention keys, the tail counter. |
+| **D3** | `P19-B-FEEVIABILITY` tail | Per-strategy reachability package → batch close. **Date-paced, not hands-on.** |
+| **D2.5** | the `#618` build | ✅ **Two of three legs SHIPPED** (measured 08-30). **Denominator + guardrail adjudication remain** = plan row 4.b. |
+| **D1** | live-investigation drain | ◐ mostly done; **open: Langston's ruling on `#696`.** |
+| **D7** | BloFin venue research | Relaunched 08-20; **report owed to Kyle.** |
+| **D8** | strategy-combinations study | Deferred from FEEVIABILITY batch two; **never started.** |
+| **D9** | seven untriggered 19.4.5 observational gates | Deferred **by design** until their triggers fire; re-check at every batch close. |
+| **D10** | fake-wins follow-through | ⚠️ **CC-B's lane** — tracked here for visibility only. |
+| **B1** | flow-document verification pass | Re-verify every stage of `ACTIVE_PATH_FLOW.md` against the code. **I own that document.** |
+
+## ⚠️ OWED INSIDE AN ALREADY-CLOSED BATCH — 2
+
+| | |
+|---|---|
+| **`B-BALANCE-TRUTH` residual** | the `netPnl ?? pnl` family of six converts **only with a fence asserting the two columns agree** — identical on all rows today, but **redundant-today decays silently**. |
+| **rides `#734`** | `active-portfolio-manager.ts:505` keeps its 1,000-row cap — held out by Langston deliberately. |
+
+---
+
+## ⇒ WHAT THE TWO TABLES SAY TOGETHER
+
+**29 pricing-trust pieces + 31 other open items = 60. Eight are done; three are in observation.**
+⛔ **THE HONEST HEADLINE: the pricing-trust series is what stands between us and trustworthy entry/exit prices, and it is 8 of 29 complete.**
+★ **Only three things in Part 2 plausibly COMPETE with the series for priority:** `#734` (it throws in live mode), **`#703`** (capture-only, already approved, and its cost grows daily), and **C1/C2/C3** — the session-behaviour decisions, which are **adjacent to the decision Kyle made today** and would be cheap to settle in the same breath.
