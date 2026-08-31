@@ -48,13 +48,25 @@ try {
   // The hook stamps its own hash: five clones have been measured running three versions of one
   // hook concurrently, and HEAD does not say which. Without it an FP rate is computed over an
   // unknown mixture of versions — the sink already holds three distinct hook_sha values.
-  SELF = createHash('sha256').update(readFileSync(fileURLToPath(import.meta.url))).digest('hex').slice(0, 12);
+  // ⛔⛔ NORMALISE LINE ENDINGS BEFORE HASHING. Hashing the file as it sits on disk gave the LF
+  // blob and the CRLF checkout TWO DIFFERENT IDENTITIES for ONE source version — so the live
+  // hook stamped one sha while a document filtered its table on the other, and measured the
+  // wrong population. That is this hook's own `worktree-not-ref` shape landing on the hook's own
+  // identity field, found by a fresh reader. `hook_sha` must identify SOURCE, not checkout form.
+  const src = readFileSync(fileURLToPath(import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+  SELF = createHash('sha256').update(src).digest('hex').slice(0, 12);
 } catch { /* identity is diagnostic, never a precondition */ }
 
 function note(row) {
   if (!SINK) return;
   try {
-    appendFileSync(SINK, JSON.stringify({ ts: new Date().toISOString(), hook_sha: SELF, ...row }) + '\n', 'utf8');
+    // ⛔ STAMPED HERE so it reaches EVERY row including the bail paths. r2 set it only on the
+    // decided row, so the suite's own fail-open arm wrote four rows labelled REAL — contaminating
+    // `decided:false`, which is the fail-open health signal this file relies on. And it is written
+    // explicitly rather than left undefined: an absent key must not be ambiguous between "real
+    // traffic" and "written by a hook version that predates the marker". Both reader-found.
+    const synthetic = process.env.GUARD_SYNTHETIC === '1';
+    appendFileSync(SINK, JSON.stringify({ ts: new Date().toISOString(), hook_sha: SELF, synthetic, ...row }) + '\n', 'utf8');
   } catch { /* a sink we cannot write must never affect the session */ }
 }
 
@@ -65,6 +77,12 @@ function note(row) {
  */
 function stripMentions(cmd) {
   let s = cmd;
+  // ⛔⛔ ORDER IS LOAD-BEARING: THE QUOTED-ARGUMENT RULES RUN FIRST.
+  // With heredoc-elision first, a `<<` appearing inside MESSAGE TEXT reached the unterminated-
+  // heredoc rule and ate everything to end of command — so `cc-send --message "cat <<EOF ..."
+  // && wc -c CLAUDE.md` went silent on a real instrument. Eliding the quoted region first means
+  // that `<<` is already gone before the heredoc rules see it. Reader-found, suite arm D11.
+  s = stripQuotedProse(s);
   // Heredoc bodies. The delimiter is literal text on the wire, which is what makes this
   // detectable with no model call.
   // ⚠️ THE MARKER MUST NOT CONTAIN `<<` — r1's did, the unterminated pattern below then matched
@@ -72,20 +90,41 @@ function stripMentions(cmd) {
   // unreported. This leg's own class, one level down: the elision text mistaken for its target.
   s = s.replace(/<<-?\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\1[\s\S]*?^\s*\2\s*$/gm, ' [heredoc-elided] ');
   s = s.replace(/<<-?\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\1[\s\S]*$/m, ' [unterminated-heredoc-elided] ');
-  // ⛔ THE LEG r1 CLAIMED AND DID NOT HAVE. A quoted argument is PROSE unless the quote itself is
-  // the command. This is what makes `cc-send --message "...grep -c..."` — the motivating
-  // incident — stop firing, while `bash -c "grep -c x y"` still fires because the flag says the
-  // quote is a command.
-  const QUOTE = /(--message|--body|--text|--note|-m)\s+(['"])([\s\S]*?)\2/g;
-  s = s.replace(QUOTE, ' [quoted-message-elided] ');
-  // Payload side of a write redirection: `echo "..." > f`, `printf %s "..." >> f`.
-  s = s.replace(/\b(echo|printf|cat)\b[^|;&\n]*?(['"])([\s\S]*?)\2([^|;&\n]*?>>?)/g, ' [write-payload-elided] $4');
   return s;
 }
 
-/** Split into pipeline / sequence stages so a token pair must co-occur in ONE stage. */
+/** A quoted argument is PROSE unless the quote itself is running something. */
+function stripQuotedProse(cmd) {
+  // ⛔⛔ THE `execRe` GUARD IS THE MOST IMPORTANT LINE IN THIS FILE, BECAUSE OVER-ELISION IS WORSE
+  // THAN UNDER-ELISION: a missed mention is noise; A SWALLOWED INSTRUMENT IS A BLIND GUARD THAT
+  // READS AS A CLEAN ONE. r2 elided the whole quoted region including any `$( )` inside it, so
+  //   cc-send --message "count: $(grep -c MISTAKE file)"
+  // ran the instrument, fed the result straight into a crew post AS A CLAIM, and was SILENT.
+  // ⇒ a quoted region containing a command substitution or a backtick is NOT prose. Leave it.
+  const execRe = /\$\(|`/;
+  let s = cmd;
+  // `--message=` as well as `--message ` — r2 required whitespace, and the motivating incident
+  // recurred verbatim with an `=`. Reader-found.
+  s = s.replace(/(--message|--body|--text|--note|-m)(\s+|=)(['"])([\s\S]*?)\3/g,
+    (m, _f, _sep, _q, body) => (execRe.test(body) ? m : ' [quoted-message-elided] '));
+  // Payload side of a write redirection. ⚠️ ANCHORED WITHIN ONE STAGE: r2's was unanchored and
+  // backtracked until it found a `>`, so a second quote later let it swallow every stage in
+  // between — `echo "a" ; grep -c TODO f ; echo "b" > log` went silent on a real instrument.
+  s = s.replace(/\b(echo|printf)\b[^|;&\n]*?(['"])([^'"\n]*?)\2\s*(>>?)/g,
+    (m, _c, _q, body, redir) => (execRe.test(body) ? m : ' [write-payload-elided] ' + redir));
+  return s;
+}
+
+/**
+ * Split into stages so a token pair must co-occur in ONE stage.
+ * ⚠️ SINGLE `&` IS A SEPARATOR TOO — r2 omitted it, and background chains are the single most
+ * likely place for unrelated commands to sit side by side. Reader-found.
+ * ⛔ STATED LIMIT, not a claim to have solved shell parsing: this split is quote- and
+ * substitution-unaware. A quoted `;` splits a stage that should not split, and a pipe inside
+ * `$( )` splits one instrument into two. Both directions are known and neither is handled.
+ */
 function stages(s) {
-  return s.split(/\|\||&&|[|;\n]/).map((x) => x.trim()).filter(Boolean);
+  return s.split(/\|\||&&|[|;&\n]/).map((x) => x.trim()).filter(Boolean);
 }
 
 /**
@@ -144,7 +183,6 @@ function main() {
   // separated at read time. Without this the denominator is not the thing the bar is about.
   note({
     decided: true,
-    synthetic: process.env.GUARD_SYNTHETIC === '1' || undefined,
     tool: (payload && (payload.tool_name || payload.toolName)) || null,
     cmd_bytes: cmd.length,
     mention_elided: stripped.length !== cmd.length,
@@ -154,7 +192,10 @@ function main() {
 
   if (!hits.length) return;
   const text =
-    'MEASUREMENT-SHAPE WARNING (rule 29, warn-only — nothing was blocked, and this hook does not block):\n' +
+    // ⚠️ SCOPED TO THIS HOOK. r2 said "nothing was blocked", which is a claim about the whole
+    // PreToolUse decision — and a SIBLING hook is registered on the same Bash matcher that CAN
+    // exit non-zero. This file can only speak for itself. Reader-found.
+    'MEASUREMENT-SHAPE WARNING (rule 29 — THIS hook is warn-only and did not block; it cannot speak for other hooks):\n' +
     hits.map((h) => '• ' + h.id + ': ' + h.say).join('\n') +
     '\nIf the reading is not about to become a claim, ignore this.';
   try {

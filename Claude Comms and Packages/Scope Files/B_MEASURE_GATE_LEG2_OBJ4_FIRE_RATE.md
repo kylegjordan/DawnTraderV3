@@ -38,14 +38,20 @@ The suite sets `GUARD_SYNTHETIC=1`; the hook records `synthetic: true`. **Rows a
 > **The signal *"is this reading about to become a claim?"* is not present before execution.** It lives in the result and in what the session does next. A pre-execution stage can therefore only fire on the INSTRUMENT — and instruments like `grep -c` are ubiquitous in ordinary work here.
 ★ **That is an argument that a pre-execution predicate will have a high floor. It is NOT a measurement that it does, and `r1` conflated the two.** ⇒ **it remains an argument for Langston's Q2 predicate (*a result that could not have answered the request* — claim-linked, and only available on `PostToolUse`), and it is now offered as reasoning for him to weigh, not as a finding.**
 
-✅ **ALSO SURVIVES, and it is measured rather than argued:** `count-is-not-a-set` and `absence-without-control` were **one detector wearing two names** — across 54 `r1` fires the first NEVER fired alone and the second fired alone once. **Merged into `count-from-search` in `r2`.** Presenting them as two overstated the design's coverage.
+⚠️⚠️ **`r3` — AND THE ONE THING `r2` LABELLED "MEASURED RATHER THAN ARGUED" IS THE ONE I HAVE TO PULL THE LABEL OFF.**
+`r2` wrote: *"across 54 `r1` fires the first NEVER fired alone and the second fired alone once."*
+⛔ **THE FIGURE DOES NOT REPRODUCE — the sink holds 58 such fires, and the "alone" count reads 2 or 3 at every window tried, not 1. No `hook_sha` subset sums to 54.**
+⛔⛔ **AND THE DEEPER PROBLEM IS THE POPULATION, NOT THE ARITHMETIC: ALL 58 OF THOSE ROWS ARE UNLABELLED — THE EXACT ROWS §1 DECLARES "CANNOT BE CLEANED AND ARE NOT USABLE AS A RATE."** I disowned the population two sections earlier and then derived a finding from it. ★ **Contamination reaches a RATE through the denominator; it reaches a CO-OCCURRENCE claim through the NUMERATOR — and 39 of the 58 are the pair firing together, inside bursts where the suite was running payloads chosen to fire.** ⇒ **a state fully consistent with the evidence is that one shape "never fired alone" because no test payload isolated it.**
+✅ **WHAT SURVIVES, AS DESIGN REASONING AND NOT AS MEASUREMENT: the two predicates both keyed on `grep -c`, so they were structurally one detector.** That is readable from the two regexes without any fire data at all. **Merged into `count-from-search` on that ground alone.**
 
 ---
 
 ## 3. ⛔ AND `r1`'s OTHER HEADLINE — *"a true positive on its author"* — IS ALSO WITHDRAWN
 
 A fresh reader traced it to the object. **The predicate did not match the author's instrument.** `r1`'s `absence-without-control` required a search token and a count token **anywhere in the command, with no locality**. In the flagged command the `| wc -l` belonged to `git diff --numstat` and the `grep` was an unrelated later stage feeding `cut`.
-⇒ **A RIGHT ANSWER FROM AN UNRELATED CONJUNCT.** ⛔ **And the same erroneous instrument had already run TWICE, SILENTLY, 34 and 17 minutes earlier in the same session.** A detector credited with catching an error it missed two of three times.
+⇒ **A RIGHT ANSWER FROM AN UNRELATED CONJUNCT.**
+⚠️⚠️ **`r3` — AND `r2`'s SUPPORTING SENTENCE HAS NO OBJECT BEHIND IT, SO IT IS WITHDRAWN.** It read *"the same erroneous instrument had already run TWICE, SILENTLY, 34 and 17 minutes earlier."* ⛔ **THE SINK STORES NO COMMAND TEXT — only `cmd_bytes` — so it cannot identify "the same instrument", and its earliest row POSTDATES the times cited.** ★ **The claim came from a reader's transcript analysis, and I restated it as though the sink carried it. That is `RULED ON REPORTED FACT` — the standard Langston refuses — inside a retraction written to fix exactly that.**
+✅ **What is left standing on an object I hold: the predicate as written could not have matched the instrument, which is readable from the two regexes.**
 ✅ **Fixed in `r2`: matching is PER PIPELINE STAGE**, so a token pair must co-occur in one stage. The author's command is now a regression case (`E1b`) and is silent.
 
 ---
@@ -56,6 +62,20 @@ A fresh reader traced it to the object. **The predicate did not match the author
 - **Real mutation arms.** `r1`'s "mutations" mutated nothing — they fed different inputs to an unmodified hook. **`r2` patches a copy of the hook, re-runs the whole suite against it, and requires the suite to FAIL:** remove mention-elision · remove locality · drop a shape · make it block. **All four now fail the suite.**
 - ★ **AND ARM `G` IMMEDIATELY EARNED ITS KEEP: the locality mutation PASSED.** `E1` had been written against the author's own command, which stopped firing because the **predicate was narrowed**, not because of locality — so the arm tested nothing. **The mutation caught a test that was passing for the wrong reason**, which is the same shape as everything else in this document, one level further down.
 - **No throw can escape.** `main()` is wrapped; the top-level identity computation is wrapped. **The honest claim is "no REACHABLE path exits non-zero", not "none exists"** — an uncaught throw would exit 1, which still does not block.
+
+---
+
+## 4b. ⛔ `r3` — THE STATED LIMITS, WRITTEN DOWN BEFORE ANY WINDOW IS QUOTED
+
+**A second object round found the `r2` fix had made the guard BLIND in four ways it was not blind before.** All are fixed and all are now regression cases — but the class is the finding:
+
+⛔⛔ **OVER-ELISION IS WORSE THAN UNDER-ELISION, AND `r2` TRADED ONE FOR THE OTHER WITHOUT NOTICING.** A missed mention is noise. **A swallowed instrument is a blind guard that reads as a clean one.** The worst case: `cc-send --message "count: $(grep -c X f)"` — the instrument RUNS, its output goes into a crew post AS A CLAIM, and `r2` was silent on it. ⇒ **a quoted region containing `$(` or a backtick is not prose and is no longer elided.**
+
+**STILL TRUE AND NOT SOLVED — stated rather than discovered later:**
+- **`stages()` is quote- and substitution-unaware.** A quoted `;` splits a stage that should not split; a pipe inside `$( )` splits one instrument into two. **Both directions known, neither handled.** ⇒ **this is a shell-shaped problem being solved with regexes, and each fix has so far produced a new blind spot.**
+- ⛔ **`hook_sha` WAS SPLITTING ONE SOURCE VERSION INTO TWO IDENTITIES BY LINE ENDING** — LF blob vs CRLF checkout — **so the live hook stamped one sha while `r2`'s own table filtered on the other.** ★ **That is this hook's own `worktree-not-ref` shape landing on the hook's own identity field.** ✅ Fixed: the hash normalises line endings, so it identifies SOURCE rather than checkout form.
+- ⛔ **The sink carries NO SESSION OR CLONE ID**, so "real traffic" pools every session.
+- ⛔⛔ **AND THE REAL WINDOW IS SELF-CONTAMINATING: auditing this guard is itself real-marked traffic, enriched in the very shapes being audited.** A window accrued while the batch is under active development measures the developer working on the guard. **Any future rate must exclude the batch's own sessions or say plainly that it does not.**
 
 ---
 

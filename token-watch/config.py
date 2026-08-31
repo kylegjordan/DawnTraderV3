@@ -275,6 +275,26 @@ DEXSCREENER_RATE_PER_MIN = 300
 RATE_PER_MIN_BY_HOST = {
     "api.dexscreener.com": int(os.environ.get("TOKEN_WATCH_REQ_PER_MIN", "240")),
 }
+# ⛔⛔ AND EVERY OTHER HOST MUST BE CLASSIFIED, NOT DEFAULTED (Langston,
+#    2026-09-01). `_pace` used to `.get(host)` and silently return on a miss,
+#    so an unlisted host was UNPACED BY OMISSION and looked identical to one
+#    deliberately exempt. The trigger is named in our own docs: the
+#    DexScreener fallback goes chain-direct on the spare Helius allowance, and
+#    whoever makes that change adds a host to the table above and believes
+#    they have paced everything.
+# ⇒ TWO EXPLICIT SETS, EACH ENTRY CARRYING ITS REASON, AND `_pace` RAISES ON A
+#   HOST IN NEITHER -- a silent no-op becomes a loud failure at the exact edit.
+UNPACED_HOSTS = {
+    "mainnet.helius-rpc.com":
+        "credit-metered, not rate-metered: the liquidity read is gated by "
+        "budget.allowed/charge against the monthly credit cap, and Helius "
+        "publishes no per-minute ceiling we are near. If that changes, move "
+        "it to RATE_PER_MIN_BY_HOST -- do not delete it from both.",
+    "api.helius.xyz":
+        "same account and same credit gate as the RPC host above.",
+}
+assert not (set(RATE_PER_MIN_BY_HOST) & set(UNPACED_HOSTS)), (
+    "a host cannot be both paced and deliberately exempt")
 
 
 CREDITS = {"birth": 1, "follow_up": 0, "liquidity": 1,

@@ -42,7 +42,7 @@ I previously ran on my **own** rules file at `G:\My Drive\CLAUDE.md` and loaded 
 
 ## ⚑ STANDING LESSONS (earned; do not re-learn)
 
-- **THE INVOKE TO LANGSTON MUST `cd /home/langston` FIRST.** `sudo -u langston …` does not change directory, so the process inherits `cwd=/root`, which langston cannot read — **every Bash call dies with a bare `Exit code 1` and no output.** I did this across a whole session of consults without noticing; he disclosed it each time and reviewed anyway. Canary: demand `echo LANGSTON_SHELL_OK` back. Full form: `cd /home/langston && sudo -u langston env CLAUDE_CODE_OAUTH_TOKEN=$TOK HOME=/home/langston /usr/bin/claude -p --model 'claude-opus-5[1m]' --permission-mode bypassPermissions < PROMPT.md` — prompt on **stdin**, never `-p "$(cat …)"`.
+- **THE INVOKE TO LANGSTON MUST `cd /home/langston` FIRST.** `sudo -u langston …` does not change directory, so the process inherits `cwd=/root`, which langston cannot read — **every Bash call dies with a bare `Exit code 1` and no output.** I did this across a whole session of consults without noticing; he disclosed it each time and reviewed anyway. Canary: demand `echo LANGSTON_SHELL_OK` back. ⛔⛔ **NEVER PUT THE TOKEN IN argv — EVERY LOCAL ACCOUNT CAN READ IT.** Langston caught this 2026-09-01: `ps` showed a live `sk-ant-oat01-…` in my invoke's command line; `/proc` has no hidepid and `nova` has a shell on that box. **langston already reads `/etc/langston/oauth.env` (640 langston:langston), so argv added a reader class for ZERO benefit.** ✅ **THE ONLY FORM:** `cd /home/langston && sudo -u langston HOME=/home/langston sh -c "set -a; . /etc/langston/oauth.env; set +a; exec /usr/bin/claude -p --model 'claude-opus-5[1m]' --permission-mode bypassPermissions" < PROMPT.md` — prompt on **stdin**, never `-p "$(cat …)"`. **Verified with a positive control: canary in argv 4, real tokens 0** — the earlier check returned 0 with a DEAD canary and proved nothing.
 - **NEVER hand structured text to a shell.** It has mangled a Discord post, a Python heredoc, a CLI prompt, a git commit message and a review dispatch. Write to a file → pass the path or pipe on stdin.
 - **VERIFY THE ARTIFACT, NOT THE SOURCE.** Two in one hour: a text-cleanup regex whose backreference became a literal control character and silently **deleted** every bolded sentence; and a patch script that printed four success lines then died before writing, so three "landed" edits never existed. Both caught only by reading the rendered output.
 - **MEASURE THE RIGHT POPULATION.** Twice now I have reported a ratio over the wrong denominator — most recently claiming "7 of 8 user turns are machine" when that was a raw-record count, not what the shipped filter admits. Langston caught it by reading my own code against my claim.
@@ -119,6 +119,4 @@ I could be named in the channel and never woken — `cc-wake-filter.py` had no `
 
 ## ✅ CLOSED — repo is authoritative
 
-- **B-CREW-STATUS** (2026-08-07) — the first board. Superseded in substance by B-CREW-STATUS-2 and by CONDUCT.md's per-step summaries.
-- **B-COMMS-IMAGES / -2** — two-way Discord images for all sessions including Langston.
-- **Langston Phase B** — `langston-recall` over `/opt/langston-memory/`, nightly index 04:10Z, refuses on degraded corpus.
+- **B-CREW-STATUS · B-COMMS-IMAGES/-2 · Langston Phase B** — all closed; detail in the repo, not here.

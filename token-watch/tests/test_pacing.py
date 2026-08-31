@@ -81,7 +81,10 @@ def _stub_urlopen(req, timeout=None):
 urllib.request.urlopen = _stub_urlopen
 
 DEX = config.DEXSCREENER_BASE + "/latest/dex/tokens/AAA"
-OTHER = "https://example.invalid/whatever"
+# The negative control uses a host that is DELIBERATELY EXEMPT, not one that
+# is merely absent -- since 2026-09-01 an unclassified host RAISES, so an
+# absent host would test the refusal rather than the exemption.
+OTHER = "https://mainnet.helius-rpc.com/?api-key=stub"
 
 
 def burst(url, n):
@@ -169,6 +172,35 @@ check("a 429 still surfaces as a shed, not a silent retry",
 check("...and it was attempted exactly once", len(_calls) == 1, str(len(_calls)))
 check("...and the shed names the reason",
       "rate-limited" in str(raised), str(raised))
+
+print("\nBLOCK 5 -- AN UNCLASSIFIED HOST IS REFUSED, NOT SILENTLY UNPACED")
+# THE DEFECT (Langston, 2026-09-01): `_pace` did RATE_PER_MIN_BY_HOST.get(host)
+#   and returned on a miss, so "unlisted by omission" and "deliberately exempt"
+#   were the same code path. A new host was unpaced and looked fine. The
+#   trigger is in our own docs: the DexScreener fallback goes chain-direct on
+#   the spare Helius allowance, and whoever makes that change adds a host to
+#   the table and believes they have paced everything.
+_raised = None
+try:
+    providers._pace("https://some-new-provider.example/api")
+except Exception as exc:
+    _raised = exc
+check("an unclassified host RAISES rather than passing unpaced",
+      isinstance(_raised, RuntimeError), repr(_raised))
+check("...and the message says how to classify it",
+      _raised is not None and "UNPACED_HOSTS" in str(_raised), str(_raised))
+
+# NEGATIVE CONTROL -- a host DELIBERATELY exempt must pass silently, or the
+#   raise is just a blanket ban and the liquidity read breaks.
+_ok = True
+try:
+    providers._pace("https://mainnet.helius-rpc.com/?api-key=x")
+except Exception as exc:
+    _ok = False
+check("a deliberately-exempt host passes without raising", _ok)
+check("...and the two sets are disjoint",
+      not (set(config.RATE_PER_MIN_BY_HOST) & set(config.UNPACED_HOSTS)),
+      str(set(config.RATE_PER_MIN_BY_HOST) & set(config.UNPACED_HOSTS)))
 
 print("\n%d passed, %d failed" % (PASS, FAIL))
 sys.exit(1 if FAIL else 0)
