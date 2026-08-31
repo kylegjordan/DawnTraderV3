@@ -99,18 +99,28 @@ A sentinel-gated probe (`.claude/hooks/probe-warn-delivery.mjs`, fires only on t
 
 **Wired events at the ref: `PreToolUse` (4 hooks, chained) · `SessionStart` (3, plus the chunked loaders) · `InstructionsLoaded` (1).** `.claude/settings.json` is **NOT PRESENT AT THE REF** — stated rather than assumed, because §1 named only `settings.local.json` and an absent second settings file is a thing a reader would otherwise have to take on trust.
 
-## 6. ⛔⛔ `[r2]` **FINDING C — THE PROBE WAS COMMITTED AGAINST ITS OWN RECORDED DISPOSITION, AND OBJ-4’S GATE HAS BEEN OPEN FOR 28 DAYS**
+## 6. ⛔⛔ `[r3]` **FINDING C — §4.1 ASSERTED THE PROBE WAS "WIRED LOCALLY". IT WAS NEVER REGISTERED. THE SENTENCE WAS FALSE WHEN WRITTEN AND IT IS STILL THERE.**
 
-§4.1 recorded a disposition in words that leave no room: *"the probe **stays wired locally (uncommitted)** so it answers on the next session start. **OBJ-4 does not get finalised until it does.**"*
+⚠️ **THIS FINDING WAS WRITTEN THE OTHER WAY ROUND EARLIER TODAY AND A FRESH READER REFUTED IT AGAINST THE OBJECT. THE `[r2]` VERSION IS SUPERSEDED, AND WHAT REPLACES IT IS BETTER, SO THE CORRECTION IS RECORDED RATHER THAN QUIETLY SWAPPED.**
+**I claimed the batch-close sync gate had swept up a file whose uncommittedness WAS its design, and filed a "check 4 has no fourth outcome" defect against the gate.** ⛔ **THE GATE DID ITS JOB. I ACCUSED IT OF THE OPPOSITE OF WHAT IT DID, AND THE ITEM I FILED AGAINST IT IS WITHDRAWN.**
 
-⛔ **AT THE REF IT IS COMMITTED, AND HAS BEEN SINCE `3fd7ed119` ON 2026-08-03.** Its subject says how: **"Arm the #623 warn-delivery probe (found orphaned by the gate-4 untracked review)."**
+**WHAT §4.1 SAYS, AT THE REF, TODAY:** *"was wired **LOCALLY and deliberately NOT committed**"* · *"the probe **stays wired locally (uncommitted)** so it answers on the next session start."*
 
-★★ **SO THE SYNC GATE WORKED EXACTLY AS DESIGNED AND PRODUCED THE WRONG OUTCOME.** §7.1 check 4 requires every untracked file to be *"committed, deliberately ignored, or named disposable"* — and it exists precisely because a never-committed file once sat in one place for a fortnight. **It found this one, and the reviewing session had no way to know the file was untracked ON PURPOSE, because check 4 has no fourth outcome for *"deliberately uncommitted, with the reason written down one document over."*** ⇒ **A file whose uncommittedness IS its design was swept up by the check built to catch files whose uncommittedness is an accident.**
+**WHAT THE ARMING COMMIT SAYS — `3fd7ed119`, 2026-08-07, quoted not summarised:** *"a probe written during the B-MEASURE-GATE leg 2 pre-audit, **never registered**, sitting untracked for days — **an instrument measuring nothing**."* … *"**Now registered.**"* ✅ **And `RUNNING_ISSUES:2198` records the same: found by the §7.1 gate-4 untracked-file review, orphaned and unregistered.**
 
-⚠️ **AND THE GATE IT GUARDS NEVER CLOSED.** OBJ-4 was made conditional on the probe answering. **The probe has been live in all three clones for 28 days and the question is still open** — nobody typed the sentinel, and nothing ever asked why the answer had not arrived. **An open gate with no expiry reads exactly like a closed one.**
+⛔⛔ **SO IT WAS NEVER WIRED. IT COULD NOT HAVE ANSWERED ANYTHING, AND §4.1’S DISPOSITION — *"stays wired locally so it answers on the next session start"* — WAS NEVER TRUE FOR A SINGLE SESSION.**
 
-**DISPOSITION (§9.4 #1 — fold into the work in hand):** the probe is re-armed with a liveness leg this commit (FINDING D) and **OBJ-4 stays gated on it**, now with a stated read-site rather than a hope. ★ **The check-4 gap is NOT this batch’s** — filed to `B-GOV-REPORTING` (row 8), which already owns the matrix’s missing `BLOCKED` state and is the same shape: **a checker with no representation for "deliberately not the normal state."**
+★★ **AND THAT IS `#978` SHAPE A, IN THIS BATCH’S OWN PRE-AUDIT, ABOUT THIS BATCH’S OWN INSTRUMENT: AN ASSERTED LIVE STATE WITH NO READ-SITE.** The sentence names a condition of the world (*"wired"*), cites nothing that would show it, and **nothing ever compared it to `settings.local.json`.** ⇒ **for eight days the document told every reader the gate was armed and waiting, and there was nothing armed.**
 
+★ **THE GATE IS THE ONLY THING IN THE STORY THAT WORKED.** §7.1 check 4 requires untracked files to be reviewed **BY EYE**, and that review is what noticed an instrument measuring nothing. **The check that caught it is the one I filed a defect against**, which is `wrong-object` at the level of blame rather than of measurement: **right file, right event, wrong actor.**
+
+⚠️ **TWO FIGURES IN THE `[r2]` VERSION WERE ALSO WRONG AND ARE CORRECTED HERE: the arming commit is 2026-08-07, NOT 08-03, so the probe has been registered for 24 days, NOT 28.** Both were asserted without opening the commit.
+
+✅ **WHAT SURVIVES, AND IT IS THE HALF THAT MATTERS: OBJ-4’S GATE HAS NEVER CLOSED.** The objective was made conditional on the probe answering. **In 24 registered days nobody typed the sentinel and nothing ever asked why the answer had not arrived** — and both the commit body and `RUNNING_ISSUES:2198` set *"once the answer is recorded, unregister and delete it"* as its exit condition, **which no document at the ref records ever happening.** ⛔ **AN OPEN GATE WITH NO EXPIRY READS EXACTLY LIKE A CLOSED ONE.**
+
+**DISPOSITION (§9.4 #1 — fold into the work in hand):** the probe is re-armed with a real liveness leg (FINDING D), **OBJ-4 stays gated on it with a stated read-site**, and **§4.1’s false sentence is left in place with this correction beside it** rather than edited away — it is the batch’s own best worked example of the class it exists to catch.
+
+**REVIEWER: claim-only · "was the disposition reversed by the sync gate?" · HIT, refuted the framing · re-derived y (commit body + `RUNNING_ISSUES:2198`, both read at the object).**
 ## 7. ⛔⛔ `[r2]` **FINDING D — THE PROBE COULD NOT HAVE TERMINATED. ITS SILENCE HAS THREE MEANINGS AND IT CANNOT TELL THEM APART.**
 
 I fired the sentinel today. **No stderr surfaced.** ⛔ **THAT RESULT IS STILL WORTH NOTHING, AND FOR A DIFFERENT REASON THAN IN JULY.** July’s reason was the session boundary (a fresh hook is live from the NEXT session). That one is discharged — the hook is committed at the ref, **wired in my own `settings.local.json` under `PreToolUse` matcher `Bash`**, and this session started weeks after the commit. **Every link in the chain is verified at the object except the last one.**
@@ -124,9 +134,30 @@ I fired the sentinel today. **No stderr surfaced.** ⛔ **THAT RESULT IS STILL W
 
 ⇒ **AN INSTRUMENT WHOSE SILENCE CANNOT BE DISTINGUISHED FROM ITS ABSENCE IS NOT AN INSTRUMENT** (rule 29(b), `#453`). ★ **AND IT WAS SITTING INSIDE THIS BATCH’S OWN GATE** — the batch whose entire subject is a check that runs cleanly and measures the wrong thing. **I would have read (a) off a result that is equally (c).**
 
-**FIXED THIS COMMIT, one leg, fail-open:** every fire appends one row to `~/.claude/probe-warn-delivery.jsonl` **before** writing stderr. ✅ **Next session start the three states separate: a row and no stderr ⇒ (a), a real answer. No row ⇒ (c), and the probe SAYS SO instead of implying (a).**
+⚠️ **`[r3]` MY FIRST FIX WAS INSUFFICIENT, AND THE SAME FRESH READER CAUGHT IT — THE THREE STATES WERE AN UNDER-COUNT.**
+I wrote the trace **INSIDE the sentinel branch**, so every failure that happens BEFORE the match still produced no row and no stderr: **no stdin · invalid JSON · or the payload arriving under a spelling this file does not read.** ⇒ **exactly the ambiguity the fix was meant to remove, moved one step earlier.**
+
+⛔⛔ **AND THE THIRD OF THOSE IS NOT HYPOTHETICAL — A SIBLING HOOK’S OWN HEADER RECORDS IT HAPPENING FOR REAL.** `guard-push-tsc-baseline.mjs:63-69` at the ref: its first revision read `process.env.CLAUDE_TOOL_INPUT`, **which is never set**, so *"a guard documented as fail-closed would have been silently fail-OPEN"* on every push — **"an inert hook and a satisfied hook look identical from outside."**
+✅ **MEASURED AT THE REF, and it is why this is a real exposure and not a worry: `guard-bare-commit` and `guard-push-tsc-baseline` BOTH accept `tool_input` AND `toolInput`. `guard-governed-read` and my probe accepted only `tool_input`.**
+
+✅✅ **FIXED PROPERLY THIS COMMIT: the row is written UNCONDITIONALLY on every invocation, BEFORE any decision, and records what was actually parsed** — the tool, **which spelling carried the payload**, whether a command was present, and whether the sentinel matched. **Both spellings accepted, mirroring the guards that work.**
+⇒ **ABSENCE OF A ROW NOW MEANS ONE THING ONLY: THE HOOK DID NOT RUN.** A row with `matched_sentinel: true` and no stderr seen is state (a) — **a real answer, at last.**
+
+**REVIEWER: claim-only · "can a silent run be told apart from a hook that did not run?" · HIT, named 7 further states · re-derived y (`guard-push-tsc-baseline.mjs:63-69` + spelling census across all three guards).**
 
 ★ **AND THIS IS OBJ-5’S OWN SUBJECT, ONE LEVEL DOWN: a mechanism must report whether it is live.** The probe is now a worked instance of the objective it exists to gate — **use it as OBJ-5’s reference implementation rather than designing that leg from scratch.**
+
+## 9′. ⛔ `[r3]` **FINDING F — "THE HOOK LAYER IS FAIL-OPEN BY CONSTRUCTION" IS FALSE, AND §1 GENERALISED IT FROM ONE FILE**
+
+§1 quoted `guard-governed-read.mjs:8-10` — *"Fail-OPEN by construction … it only ever blocks the one precise dangerous shape"* — and called it **"the precedent contract"** for the layer. ⛔ **MEASURED ACROSS ALL TEN HOOKS AT THE REF, THAT CONTRACT IS NOT THE LAYER’S.**
+- **Three hooks exit 2 (block) by design:** `guard-governed-read.mjs:36` · `guard-bare-commit.mjs:249,:304` · `guard-push-tsc-baseline.mjs:111`.
+- ⛔⛔ **AND `guard-push-tsc-baseline` IS EXPLICITLY FAIL-*CLOSED* IN NAMED BRANCHES:** no upstream ⇒ *"FAIL CLOSED by running the check rather than skipping it"* (`:123-126`); **comparator missing ⇒ `refuse()` — an ERROR CONDITION THAT BLOCKS THE PUSH** (`:138-144`); touched-set uncomputable ⇒ refuse (`:154`).
+- ✅ **Six ARE fail-open** — the three loaders, the reminder, and the two logging hooks.
+
+★ **WHY IT MATTERS TO THIS BATCH RATHER THAN BEING TRIVIA: §1’s sentence is the DESIGN PRECEDENT every leg-2 hook was to be built on.** ⇒ **the honest statement is that fail-open is a CHOICE MADE PER HOOK against its own failure cost, not a property of the layer** — and `guard-push-tsc-baseline` is the standing proof that fail-CLOSED is sometimes the right one **and that it has already fired wrongly in production once** (`:40-47`, a cwd-relative path refused every push while the file was present).
+★ **Langston’s non-negotiable that leg-2 hooks be fail-open still stands — it is a constraint on THESE hooks, not a description of the layer. Both things are true and §1 collapsed them.**
+
+**REVIEWER: claim-only · "is every hook fail-open?" · HIT, refuted · re-derived y (exit-code census across all ten at the ref).**
 
 ## 8. `[r2]` **FINDING E — BOTH NEW EVENT SURFACES ARE FROM ZERO, AND `PostToolUse` IS THE SECOND** *(this answers Langston’s C3 and generalises it)*
 
