@@ -22,16 +22,26 @@ token-watch — THE SOCIALS CHECK AND PROMOTION SWEEP. (#973)
    a token promoted within the hour loses at most its 1h observation, and that
    loss is RECORDED AS A MISS rather than hidden.
 
-⛔⛔ THE CONTROL ARM IS THE REASON THIS IS NOT A COSMETIC FIX. `follow_decision`
-   tests the carrier limbs FIRST and draws the random control from whatever is
-   left — so at birth the control is drawn from *"not big enough"*, which is
-   NOT the same set as *"not a carrier"* once socials are known. A control
-   token later found to have a channel is a CARRIER SITTING INSIDE THE
-   COMPARISON GROUP, which biases every rate the study reports, quietly.
-   ⇒ a promoted control token is RECLASSIFIED. The control arm shrinks, and
-     the pre-registration already requires the analysis to use the REALISED
-     inclusion rate from the daily log rather than the planned constant — so
-     the shrinkage is self-correcting by a decision made before any data.
+⛔⛔ THE ARM IS ASSIGNED HERE, ONCE, FROM COMPLETE INFORMATION — AND THAT IS
+   KYLE'S DESIGN, NOT THE ONE I PROPOSED (2026-08-31).
+
+   I was going to draw the control at BIRTH and RECLASSIFY any token later
+   found to have a channel. He asked why we assign it before we know. Do not
+   make the wrong assignment and then correct it — do not make it yet. A
+   logged reclassification is honest and still an artifact a reviewer is right
+   to distrust; a single assignment made once has nothing to explain.
+
+   THE CONTAMINATION IT REMOVES: drawn at birth, the control came from "not
+   big enough" — because at birth SIZE is the only knowable fact — which is
+   NOT the same set as "not a carrier". A control token later found to have a
+   channel was A CARRIER SITTING INSIDE THE COMPARISON GROUP, biasing every
+   rate the study reports, quietly.
+
+   ⇒ at birth a non-carrier is `deferred`, in no arm at all. HERE, with both
+     facts known, it becomes a carrier, or is drawn into the control from
+     CONFIRMED non-carriers — the population the control was always meant to
+     sample. Nothing is ever moved afterwards, and a resolved token is never
+     re-examined.
 
 ⛔ THE CENSUS IS APPEND-ONLY AND IS NOT REWRITTEN. A promotion is a NEW record
    joined to the birth on `mint`. Editing the birth row would destroy the

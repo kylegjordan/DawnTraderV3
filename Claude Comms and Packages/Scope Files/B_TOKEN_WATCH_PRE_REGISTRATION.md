@@ -296,3 +296,41 @@ A1.3's *"45,000 controls -> ~75 expected events"* is across the **full 90 days**
 - **n = 8.** It refutes *near-constant*; it does not establish the DISTRIBUTION of launch sizes, and no rate in this study may be computed from it.
 - **`PLATFORM_DEFAULT_SIZE = 1.0` REMAINS MY ASSUMPTION, NOT THE LITERATURE'S.** 3 of these 8 sit above it and 5 below, which is the first real-data signal that the threshold splits the population at all rather than degenerately — but 8 observations cannot calibrate it, and **AMENDMENT 3's PROVISIONAL marking on the trait definition STANDS UNCHANGED.**
 - The sample is 8 consecutive creations from one moment, so it carries whatever composition that moment had.
+
+### AMENDMENT 6 - 2026-08-31, POST-FEED. THE CENSUS WAS RESET TO MAKE IT PRE-DATA AGAIN, AND THAT IS THE POINT
+
+⛔⛔ **THIS AMENDMENT IS NOT PRE-DATA IN THE ORIGINAL SENSE AND MUST NOT BE READ AS IF IT WERE.** The feed went live at 05:12Z and 4,381 launches were recorded before this change. **The census was RESET rather than carried forward**, so the study's DATA is once again wholly downstream of its design — but the reset itself is a fact this document is obliged to carry.
+
+**WHAT WAS ARCHIVED, NOT DELETED:** `/root/token-watch-preswitch-archive-2026-08-31` on staging — births 4,381 · raw provenance 4,381 · follow-up payloads 2,771 · observations 963 · deaths 7 · social checks 1,885. Read back and confirmed non-empty before the reset.
+
+**WHY:** two design defects were found by the first hours of real traffic, and fixing either mid-stream would have left a permanent seam in hour four of a ninety-day study.
+
+#### (a) THE SOCIALS LIMB WAS STRUCTURALLY DEAD (`#973`)
+
+Section 4 defines a trait carrier as *"any advertised channel OR initial size above the platform default."* **MEASURED on 116 real launches: ZERO carried any channel, and the carrier count equalled the above-threshold count EXACTLY.** The provider's creation event has no social fields — both branches the parser reads are empty on every real payload, `events` is an empty object, and the handles live in the token's off-chain profile. **The first limb could never fire, so the definition in force was size-only.**
+
+★ **The document predicted this SHAPE and got the half wrong.** Section 10 warned an extraction break would make *"the size limb switch off silently"* leaving socials-only. **The reverse happened.**
+
+⇒ **RESOLVED, AT NO COST.** The follow-up provider we already call returns the channels in its `info` block — verified on a token 12 minutes old, the age at which we check. ~43k requests/day against a 432k/day ceiling and **zero credits**. Nothing is rationed and no launch is excluded.
+
+#### (b) THE CONTROL ARM WAS DRAWN FROM THE WRONG POPULATION
+
+`follow_decision` tested the carrier limbs first and drew the random control from the remainder. **But at birth SIZE is the only knowable fact, so "the remainder" meant "not big enough" — which is NOT "not a carrier."** A control token later found to have a channel is **a carrier inside the comparison group**, biasing every reported rate silently.
+
+⛔ **MY PROPOSED FIX WAS TO RECLASSIFY SUCH TOKENS. KYLE REJECTED IT AND HE WAS RIGHT:** do not make the wrong assignment and then correct it — do not make it yet. *A logged reclassification is honest and still an artifact a reviewer is right to distrust; a single assignment made once has nothing to explain.*
+
+⇒ **THE ASSIGNMENT RULE, AS NOW IN FORCE:**
+| at | what happens |
+|---|---|
+| **birth** | size above the platform default ⇒ `trait_carrier`, followed immediately and **never reconsidered** (size is final). Everything else ⇒ **`deferred` — recorded in the census, in NO arm.** |
+| **first hourly sweep** | channels fetched. **ONE arm assigned, for good:** `trait_carrier` if any channel, else the control draw over **confirmed non-carriers** ⇒ `control_sample` or `not_sampled`. |
+| **ever after** | **nothing moves.** A resolved token is never re-examined, even if its channels later change. |
+
+⚠️ **THE COST, STATED RATHER THAN GLOSSED: a deferred token starts being observed ~1h later than a size-carrier, so the arms carry different left-truncation.** That is unavoidable without a sub-hourly sweep, which **AMENDMENT 4 rejected on measured grounds**, and it is now **MEASURED, not unknown** — every socials check records `observed_at_age_s`, so the analysis can condition on it.
+
+⚠️ **AND `socials` IS NOW *OBSERVED AT FIRST CHECK*, NOT *AT LAUNCH*.** A token can add a channel on day three. The field carries the age it was taken at, and no analysis may read it as a birth characteristic.
+
+#### WHAT IS UNCHANGED, SO THE AMENDMENT IS NOT READ AS WIDER THAN IT IS
+
+The observation grid, the death definitions, the census-on-birth rule, `PLATFORM_DEFAULT_SIZE`, and `CONTROL_INCLUSION_P` are all **untouched**. ★ The control's realised inclusion rate is still logged daily and **the analysis uses the log, not the constant** — a decision made before any data, and the reason the drawn rate differing from the planned one is self-correcting rather than a defect.
+

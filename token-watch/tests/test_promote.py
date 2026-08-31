@@ -1,12 +1,17 @@
 """
 token-watch — THE SOCIALS CHECK AND PROMOTION SWEEP (#973).
 
-⛔⛔ BLOCK 3 IS WHY THIS SUITE EXISTS. `follow_decision` tests the carrier limbs
-   FIRST and draws the random control from what is left — so at birth the
-   control is drawn from "not big enough", which is NOT "not a carrier" once
-   socials are known. A control token later found to have a channel is a
-   CARRIER SITTING INSIDE THE COMPARISON GROUP, and it would bias every rate
-   the study reports without ever announcing itself.
+⛔⛔ BLOCK 3 AND BLOCK 9 ARE WHY THIS SUITE EXISTS. At birth only SIZE is
+   knowable, so a control drawn there comes from "not big enough" — NOT from
+   "not a carrier". A control token with a channel is a CARRIER SITTING INSIDE
+   THE COMPARISON GROUP, and it would bias every rate the study reports
+   without ever announcing itself.
+
+★ THE DESIGN REMOVES THAT RATHER THAN CORRECTING IT (Kyle, 2026-08-31): a
+  non-carrier is `deferred` at birth, in no arm, and the sweep assigns ONE arm
+  once both facts are known. Block 9 proves both directions with a single mint
+  that hashes INTO the draw: without a channel it becomes control; WITH one it
+  becomes a carrier and never reaches the draw at all.
 """
 
 import json
