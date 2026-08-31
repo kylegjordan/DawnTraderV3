@@ -1,25 +1,41 @@
 """
 token-watch — THE OPEN HOUR IS READ BUT NEVER CONSUMED.
 
-⛔⛔ THE DEFECT, MEASURED LIVE 2026-08-31: the sweep read the CURRENT hour's
-   bucket and then marked that hour consumed -- while the hour was still open
-   and entries were still being appended to it. Bucket 18 held 2,375
-   checkpoints; 1,245 were attempted and **1,130 were never read at all**.
-   The cursor said `last_bucket: 2026-08-31T18`, so the next run started at
-   19 and those entries became unreachable.
+⛔⛔ READ THIS FIRST: THE FINDING THIS SUITE WAS WRITTEN FOR WAS WITHDRAWN.
+   I reported that the sweep consumed the OPEN hour while entries were still
+   being appended, dropping 1,130 of bucket 18's 2,377 checkpoints with no
+   record of any kind. MEASURED AFTERWARDS: all 1,130 were REQUEUED to later
+   buckets by the not-yet-due path, which writes no observation row BY DESIGN.
+   I read that absence as loss. GENUINELY UNREACHABLE: 0, of 10,490 distinct
+   (mint, age) scheduled that day.
 
-★ AND A DROPPED CHECKPOINT IS STRICTLY WORSE THAN A SHED ONE. A shed leaves a
-  row, which is exactly why survival is published as an UPPER BOUND. A dropped
-  entry leaves nothing and is indistinguishable from a token nobody needed to
-  check -- it does not widen the bound, it silently narrows the population.
+⛔ AND THE MECHANISM WAS WRONG TOO. `schedule_grid` writes ALL SEVEN
+   checkpoints AT BIRTH (store.py:260), and a grid point already past is
+   recorded as a miss rather than written to a bucket nobody reads. So an
+   hour's bucket is fully populated BEFORE that hour opens, and the only
+   append during a run is the requeue -- which targets `now + 1h`, the NEXT
+   bucket, never the current one. The condition cannot currently occur.
 
-⇒ THE FIX HAS TWO HALVES AND BOTH ARE NEEDED:
+★ SO WHAT IS THIS SUITE FOR? It defends a SHAPE, not a measured loss: "an hour
+  is consumed only once it can no longer change" should hold in its own right,
+  not because `_append_next_bucket` happens to target the next hour and the
+  timer happens to fire once per hour. Change either and the old code drops
+  entries silently. ⚠️ That is speculative-future hardening, which rule 15
+  distrusts, and it adds state -- so KEEPING IT IS LANGSTON'S RULING, not
+  mine. If he reverts it, this file goes with it.
+
+⇒ THE CHANGE HAS TWO HALVES AND BOTH ARE NEEDED:
   (1) the cursor advances only over hours that have FULLY ELAPSED, and
-  (2) the open hour carries a LINE HIGH-WATER MARK, so re-reading it resumes
-      rather than re-observing -- because re-observing spends the liquidity
-      carve twice, which is the double-spend the old code avoided by
-      consuming the bucket outright.
-  Block 3 is the one that fails if either half is missing.
+  (2) a partly-read bucket carries a LINE HIGH-WATER MARK, keyed BY BUCKET so
+      it survives the rollover, so re-reading resumes instead of re-observing
+      -- re-observing spends the liquidity carve twice, which is what the old
+      consume-outright behaviour existed to avoid.
+
+★ MY FIRST VERSION OF (2) KEYED THE MARK ON "THE HOUR THAT IS OPEN NOW", so a
+  mark was discarded the moment its hour elapsed and the next run re-read the
+  bucket from line 0. The fix reproduced a defect of the bug's own family.
+  Block 3's last check is what caught it; M2 in the mutation set reproduces it
+  deliberately. Nothing here was caught by re-reading my own work.
 """
 
 import os
@@ -117,10 +133,13 @@ check("...and the mark for the hour that just elapsed SURVIVED the rollover",
       (st2.get("marks") or {}).get(OPEN_H.strftime("%Y-%m-%dT%H")) == 2, str(st2))
 
 print("\nBLOCK 3 -- LATE ARRIVALS ARE PICKED UP, AND NOTHING IS OBSERVED TWICE")
-# ⛔⛔ THE DISCRIMINATING BLOCK -- THIS IS THE LIVE DEFECT, REPRODUCED.
-#     Entries are appended to an hour AFTER a run has already read it. That is
-#     not an edge case: tokens are born continuously and their 1h checkpoint
-#     lands in the hour that is currently open, so it happens every hour.
+# ⛔⛔ THE DISCRIMINATING BLOCK. Entries are appended to an hour AFTER a run
+#     has already read it.
+# ⚠️ THIS IS A CONSTRUCTED CASE, NOT AN OBSERVED ONE -- an earlier version of
+#     this comment claimed it "happens every hour", which was the withdrawn
+#     finding restated as if it were a premise. It does NOT happen today:
+#     checkpoints are written at birth, so a bucket is complete before its
+#     hour opens. The block exists so the invariant holds if that changes.
 ROOT2_H = later.replace(minute=0, second=0, microsecond=0)
 NOW2 = later
 queue("MintC", ROOT2_H, ROOT2_H - timedelta(minutes=5))
