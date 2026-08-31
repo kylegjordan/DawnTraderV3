@@ -1,3 +1,94 @@
+# ⭐⭐ THE MASTER ORDER — 2026-08-31, KYLE-DIRECTED, LANGSTON-APPROVED
+
+> **THIS BLOCK IS THE LIVE ORDERING AND SUPERSEDES EVERY SEQUENCE BELOW IT.** Kyle asked for one place holding: what is left, in order · what sits outside that list · what is done · what was discarded. **The detail behind each row stays where it already lives — this is the index, not a second copy.**
+> **Order ruled by Langston 2026-08-31 with five changes to my draft.** ★ **HIS ORDERING PRINCIPLE, WHICH I HAD WRONG: order by WHEN THE GATE LIFTS, not by how big the piece is.** A piece fenced a week out does not outrank one fenced on a question that can be answered today.
+
+---
+
+## ⓵ THE REMAINING WORK — 17 pieces, in order
+
+⛔ **ROW 0 — NOT A BATCH, AND IT IS DUE NOW.** **Run the `ws-equities` `book` re-probe** (alert `046e6000`). The 08-30 probe returned `success:true` and **zero frames — because it was Saturday.** Read-only, no credentials, no capital, no deploy; it disturbs no observation window. ⛔ **Until the observed level-count per side exists for a liquid and a thin name, `3b.d` HAS NO SCOPE TO WRITE.** Write the count into `#949` and plan row 3b.d.
+
+| # | piece | deploy-eligible | note |
+|---|---|---|---|
+| **1** | **`F-G-2` — CRYPTO half** | now | Step-2 doc is **not** soak-gated. ⛔ **Langston's condition: it absorbs the three last-48h inputs BEFORE it reaches him, or he bounces it at Step 2 without reading the substance.** |
+| **2** | **`3b.b` `B-XSTOCK-FEED-SANITY`** | ⛔ **≥ 09-07** | scope + build now, **deploy after the last window closes** — it changes the xStock exit price path. ⛔⛔ **DO NOT BUILD A 20:15 RULE.** ⛔ **BLOCKED ON A KYLE DECISION THAT IS NOT YET ASKABLE — see ⓹.** |
+| **3** | `3b.d` `B-XSTOCK-BOOK-LADDER` | ⛔ capture-only until 09-07 | ⛔⛔ **ANSWER THIS BEFORE SCOPING IT: does `F-G-2`'s xStock half need DEPTH, or only SIDE?** We already have both sides at top-of-book. **If only side, this is NOT F-G-2's prerequisite and drops to the tail.** |
+| **4** | `3b.e` `B-XSTOCK-LIVE-FEED` | after 3 | the feed was built as an archive and became the trading feed without a decision |
+| **5** | `F-5` — per-strategy reach | — | Kyle's 4th. **BUILD only; the FIT stays gated on `F-E`.** |
+| **6** | `3b.l` `B-TWO-CACHE-INTENT` (`#971`) | — | ⭐ **MOVED UP.** An investigation, not a build. It gates 8 **and** decides *which store* a staleness bound is enforced at. |
+| **7** | `F-C` — staleness bound (`#743`) | — | **DERIVES the maximum actionable age.** |
+| **8** | `3b.f-b` `B-PRICE-AGE-REFUSAL` | after 7 | ⭐ **MOVED DOWN, and this is the sharpest correction: it ENFORCES the bound 7 DERIVES.** Ship it first and you hardcode the number. ⚠️ **My own `#951` measurement is the warning — the re-serve is a 4-rung sawtooth 14.3/29.3/44.3/59.3 s, so a hand-picked 15 s guard lands INSIDE the densest rung.** |
+| **9** | `F-D` — VTS accessor + isolation | — | |
+| **10** | `F-E` — detector + disposition | — | tiers the history A clean / B contaminated / C unassessable |
+| **11** | `3b.g` `B-DECIDED-INTENT-INDEX` (`#956`) | — | ⚠️ **today's void `#959` is its 4th measured instance; a 5th before the series closes and it JUMPS** |
+| **12** | `3b.f-a` `B-OPENTRADE-REFRESH-LANE` (`#977`) | — | Kyle placed it; **Langston's recommendation to Kyle is that it sits here** |
+| **13** | `F-F(b)` — **THE RESET GATE** | gated | ⭐ **MOVED TO LAST OF THE THIRTEEN.** Its gate is *zero contaminated on both legs* — 8, 12 and the whole xStock block all move that read. |
+| 14 | `3b.m` `B-PROVENANCE-LOSS-CENSUS` (`#976`) | — | ⚠️ **does not reach `F-G-2`** |
+| 15 | `3b.j` `B-SCANNER-DEDUPE-DEAD-TABLE` (`#965`) | — | ⚠️ does not reach `F-G-2` |
+| 16 | `3b.k` `B-CHANGE-CLASS-PARSER` (`#968`) | — | ⚠️ does not reach `F-G-2` |
+| 17 | `3b.i` `B-DISPATCH-STAGING-VERIFY` (`#964`) | — | ⚠️ does not reach `F-G-2` |
+
+⏳ **AND 3 PIECES ARE IN OBSERVATION, NOT IN THE ORDER — they close themselves:** `F-G-1` grid **09-04** · `3b.h` exit-book-age **09-06** · `3b.f` price-age-truth **09-07**.
+
+---
+
+## ⓶ OUTSIDE THAT LIST — 31 open items
+
+**Full table with descriptions: `Claude Comms and Packages/PRICING_TRUST_SERIES_MASTER_TABLE_2026-08-31.md` PART 2.** Index only here:
+
+- 🟥 **GO-LIVE BLOCKER (1):** `#734` `B-DRAWDOWN-ANCHOR-COHERENCE` — **throws in live mode**, tripped twice.
+- ⛔ **KYLE'S DECISIONS (7):** A12/`#624` · A13/`#616` · A14/`#626` · **C1** 24h caps · **C2** Friday early-shutdown · **C3** off-hours admission gating ★ *(Langston ruled C3 folds into row 2)* · A6 *(already ruled — the work is D2.7)*.
+- 🔧 **CC-C FIX WORK (9):** **A9** six `|| 50000` balance fallbacks, **two of which SIZE POSITIONS** · A10 client false all-clear · A8/`#620` · A11/`#622` · A4 · A5 · A2 · `#733` · `#900`-`#904`.
+- 📦 **QUEUED BATCHES (13):** **`#703` commodity-perp capture** ★ *(VERIFIED NOT RUNNING 08-31: zero rows for all six named symbols across both perp tables, all time, against a positive control of 8,346 `PF_XBTUSD` rows in one day. Kyle GO given 08-20. The only item whose cost GROWS while it waits.)* · D2.7 · D4 · D5 · D2 · D3 · D2.5 · D1 · D7 · D8 · D9 · D10 *(CC-B's)* · B1.
+- ⚠️ **OWED INSIDE A CLOSED BATCH (2):** the `netPnl ?? pnl` fence · the `#734`-riding 1,000-row cap.
+
+⚠️ **STATUS ABOVE IS AS THIS LEDGER RECORDS IT AND IS NOT RE-VERIFIED.** ★ **A7 sat marked *"highest priority and UNTOUCHED"* for nine days after its build shipped, and `#703` was believed running when it is not. RE-DERIVE BEFORE WORKING ANY ROW.**
+
+---
+
+## ⓷ COMPLETED — 8 of the 29
+
+| piece | what it fixed |
+|---|---|
+| `B-BOOK-TRUNCATE-HOTFIX` (`#507`) | the book never truncated to its subscribed depth — **crossed books 32.03% → 0**. ★ **This is "the book order fix", and it created the epoch every later measurement splits on.** |
+| `F-A` `B-MBIM-SWITCH-ON` | the book-drift alarm, written day one, had **never been switched on** |
+| `F-F(a)` `B-OBSERVATION-EPOCH` | fixes the date measurements count from |
+| `B-EPOCH-KEYING-PARITY` | the epoch rule had reached **one dashboard reader of four** |
+| `B-PHANTOM-FILL-RECONSTRUCT` | the columns that let a fill be reconstructed |
+| `F-B` `B-EXIT-PROVENANCE` | **every trade records which price drove it and how stale it was** — 14 columns |
+| `B-EXIT-PROVENANCE-TICKER-RETENTION` (`#911`) | a **second, independent** feed on each row, off a separate socket |
+| `B-SCANNER-EGRESS-NORMALISE` | **the Bitcoin + Dogecoin fix** — they had never traded at all |
+
+---
+
+## ⓸ DISCARDED / WITHDRAWN — kept visible, never deleted
+
+| item | disposition |
+|---|---|
+| `#959` `B-EXIT-TRIGGER-FILL-PARITY` (was 3b.c) | ⛔ **VOID 2026-08-31, same day, by me.** A rediscovery of `3b.b` that reported the **intended** design (*decide on one price, fill at another*) as a defect. |
+| `B-XSTOCK-SESSION-TRANSITION` | ⛔ **WITHDRAWN 2026-08-31, same day, by me.** A rediscovery — the answer was already in `#943`'s own 35 KB Step-1 scope, four days earlier. **Two reader rounds spent on it.** |
+| `B-BOOK-BBO-DIVERGENCE` (the original 3b.c) | ⛔ **WITHDRAWN 2026-08-29 by its author.** The 0.48% was a **timing artifact** — a continuous instrument (n=492) puts the book/ticker median at **exactly 0.0000%**. |
+| `#735` | ⛔ **WITHDRAWN 2026-08-21, the same day it was filed, before anyone acted.** Kept rather than deleted because a finding that reached Kyle must leave a visible correction. |
+| `F4` — mid-vs-ticker divergence instrument | ✅ **SUPERSEDED by `F-A`.** MBIM *is* that instrument. **Do not build a second one.** |
+| `B-MIN-STOP-DISTANCE` (3d) — the K-tick floor | ⛔ **RECOMMENDATION WITHDRAWN 2026-08-27** on Kyle's caution + the evidence. **No floor is built.** *(Kyle: "every time we've instituted floors and ceilings, it hasn't worked out well.")* |
+
+---
+
+## ⓹ ⛔⛔ THE OPEN QUESTION THAT IS **NOT YET ASKABLE** — and why row 2 cannot start
+
+**Langston ruled that `C3` folds into row 2 and that both go to Kyle in one breath:** *"if the book is a stub for most of the day and we now trade all four sessions, what is the intended behaviour off a stub book?"*
+
+⛔⛔ **KYLE REFUSED THE QUESTION ON 2026-08-31, AND HE IS RIGHT TO — THE PREMISE IS UNVERIFIED.** His account: what was actually observed was **a single reading, at 20:15 ET, in which every xStock's bid dropped hard — then no price feed for about three minutes — then trading resumed on more normal lines with wider overnight spreads.** ★ **The large bid drop does NOT, on his account, recur through the rest of after-hours and overnight.**
+
+⇒ ⚠️ **MY *"stub for ~19 hours a weekday"* FIGURE IS SUSPECT FOR A NAMED REASON: `B_XSTOCK_FEED_SANITY_SCOPE.md` §11 defines a stub as `spread > 20%` — WHICH IS A WIDTH TEST, NOT A BID-DROP TEST.** A genuinely thin overnight market has a wide spread and no collapsed side, **and `EXIT_PATH_MACHINERY_AUDIT` §14 already established that overnight widening is real, symmetric and Kraken's own.** ⇒ **§11 may be counting honest wide quotes as stubs.**
+
+✅ **THE VERIFICATION OWED BEFORE KYLE IS ASKED ANYTHING — a discriminator, not a re-count:** measure a **BID DROP** (a bid falling sharply against its OWN previous value while the ask holds) separately from a **WIDE SPREAD**, across the full off-hours window. **If bid drops occur only at 20:15, this is a transition-instant batch. If they recur through the session, it is a session-behaviour decision and Kyle decides then.**
+⛔ **UNTIL THAT MEASUREMENT EXISTS, ROW 2 DOES NOT START AND KYLE IS NOT ASKED.**
+
+---
+---
+
 # SCRATCH CHECKLIST — Kyle ⇄ Claude Analyst (CC-C) — started 2026-07-27
 
 > ★ **STANDING WORK LEDGER (Kyle-directed 2026-08-20, superseding the original delete-when-done header).** This is now THE Kyle ⇄ CC-C reference list for everything outside/alongside the roadmap: quick fixes, decisions owed, deferred research, and the batch queue. **Discipline: CC-C re-reads this after EVERY batch/sub-batch close, updates statuses, and ADDS any new finding that should become a batch.** Items still cross-reference RUNNING_ISSUES (#NNN) for their evidence; this file is the at-a-glance queue, not the evidence store.
