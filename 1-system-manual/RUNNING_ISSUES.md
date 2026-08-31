@@ -6254,3 +6254,28 @@ CC-A's batch argues the workflow is not reliably firing. **This is that thesis, 
 
 ★ **CONSEQUENCE FOR WORK ALREADY QUEUED, and this is why Kyle placed it where he did: `XSTOCK_PRICING_PLAN` P1 (the 15 s freshness guard) was scoped against a 60 s floor, where REFUSAL is the only available answer. On a live 2 s lane the guard may need no refusal path at all** ⇒ **ruling on `3b.f-b` before this lands is ruling on a world that may not exist.**
 ✅ **`B-PRICE-AGE-TRUTH` (3b.f) IS NOT INVALIDATED and continues:** a price must not misreport its age at ANY refresh rate. **But it does not address WHY the price is old** — Kyle's *"treating a symptom"* lands on that half, and this issue is the other half.
+
+---
+
+### #951 AMENDMENT — ⛔ THE RESIDUAL, HOMED OUT OF THE CHANGE LIST (Langston Step-4 condition 3, 2026-08-31)
+
+**Step 4 APPROVED at `4e8dbf288`**, three conditions, none touching the executable diff. **This records the limitation that existed only in the change list — a comms artifact, not a governed record.**
+
+⛔ **THREE MUTATIONS STILL PASS THE FENCE GREEN, AND THEY SHARE ONE SHAPE:** the behavioural fixture pins **one symbol** (`ZZZTEST/USD`), **one cached-row shape** (`source: 'kraken_rest'`) and **one blocked-reason** (`'cooldown'`) ⇒ **any production condition keyed on a dimension the fixture happens to satisfy is INVISIBLE to it.**
+| defeat | the added condition | what escapes |
+|---|---|---|
+| blocked-reason gate | `getBlockedReason(symbol) === 'cooldown'` | the **`'no_tokens'`** arm — a REST storm, i.e. exactly when a re-serve matters |
+| tracked-symbol gate | `trackedSymbols.has(symbol)` | **every real symbol**; the synthetic fixture symbol is structurally exempt |
+| cached-source gate | `cached.source === 'kraken_rest'` | most real rows are `kraken_ws` |
+
+✅ **LANGSTON RULED THIS ACCEPTABLE AND DECLINED TO ASK FOR A FOURTH FIXTURE. His grounds, recorded so they are citable rather than remembered:** (a) **all three surviving mutations ARE the carved-out refusal behaviour**, which has its own batch, its own `#971` gate and its own Step 4 — *"they are not silently shippable, they are a different review's surface"*; (b) the property this batch actually ships is covered end-to-end by the `:538`-spanning fence, and he confirmed `quote.observedAt` is the **sole occurrence in the repo**, so *"uniquely red" is a fact about the codebase, not about my test run*; (c) *"more fixtures is an arms race against your own data — three named defeats in the record beat a fourth fixture and an implied 'covered.'"*
+
+⛔⛔ **BINDING FORWARD ON `B-PRICE-AGE-REFUSAL` (row 3b.f-a→3b.f-b), LANGSTON'S WORDS: its fence MUST BE BEHAVIOURAL ACROSS THE BLOCKED-REASON ARMS, because `'cooldown'` is exactly the dimension this fixture pins.** ⇒ a refusal fence that arms only via cooldown inherits this residual instead of closing it.
+
+★ **AND HE STRENGTHENED THE SAFETY PROPERTY BEYOND WHAT I CLAIMED.** I rested it on `source` being an unconditional literal. It also holds one hop I did not cite: **`getPriceWithFallback` computes its freshness window off `cachedAt`, NEVER `observedAt`** (`:1170`, both arms `:1176`/`:1186`) ⇒ **pinning the age CANNOT flip which leg the engine takes — the 2000 ms window is blind to the field this batch changed.** His census: **every consumer of `observedAt` outside the adapter is a recorded provenance field** (`aee:1378`/`:1398` → `:2326`, `active-portfolio-manager:357`/`:637`/`:666`) — **zero gates, zero age arithmetic.** ⇒ the flat claim I refused to assert is in fact **true on the decision path**; I was more conservative than the evidence required, *"which is the right direction to be wrong in."*
+
+⛔ **CONDITION 1 — A FALSE MECHANISM IN MY OWN COMMENT, AND THE ARITHMETIC BEING RIGHT IS WHAT MADE IT SURVIVE.** The `Number.isFinite` guard was justified in-source by *"a NaN reaches `isPriceVenueQuiet` and reads as NOT QUIET, i.e. fresh venue data."* **The arithmetic is correct; the REACHABILITY is false — that predicate is never fed `observedAt`.** Both call sites derive `ageMs` elsewhere: `routes.ts:5169` from `peekCachedPrice` (`:463`, `Date.now() - cached.cachedAt`) and `routes.ts:12392` from `:12217` (`Date.now() - new Date(liveQuote.timestamp)`). **Re-derived by me at the ref before amending.**
+⇒ **THE REACHABLE CONSEQUENCE IS NARROWER AND DIFFERENT: a NaN would be PERSISTED into `entryObservedAtMs` (`aee:1052`) / `exitObservedAtMs` (`aee:2326`, `apm:666`) — a CORRUPT PROVENANCE COLUMN, not a false-fresh price.** **Guard KEPT; only its stated mechanism was wrong.** ⚠️ **Langston's framing, adopted: in a batch whose whole thesis is *do not launder a claim*, a comment naming the wrong consumer is the one defect a later reader inherits verbatim.**
+★ **`wrong-object`, FOURTH INSTANCE THIS BATCH** — and the first three were caught by readers, this one by Langston. **All four were in my CORRECTIONS, not in the original code.**
+
+✅ **WHERE THE `SYSTEM_MANUAL` WITHDRAWAL WENT (Langston's non-blocking note: he found zero hits for `#951` and zero for the withdrawn absolute, consistent with withdrawal-by-deletion but not RECORDED anywhere).** The absolute — *"`price_producer` is NOT consulted by any gate, so widening it can never change a trading decision"* — **was not deleted. It was REWRITTEN IN PLACE at `SYSTEM_MANUAL.md:4671`**, which now carries the withdrawal explicitly, dated, attributed to `B-PRICE-AGE-TRUTH`, with the reason (`toCachedProducer` IS a producer-consulted branch) and the surviving narrower claim. **Verified at the ref. The grep-shaped hole was the search term, not the record.**
