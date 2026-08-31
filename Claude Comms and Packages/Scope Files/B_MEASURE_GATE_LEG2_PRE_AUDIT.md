@@ -397,6 +397,44 @@ The arming commit said it in advance: *"If it does not, 'warn-mode hook' is not 
 
 ---
 
+## 18. ✅✅ `[r7]` **THE CHANNEL QUESTION IS CLOSED. `additionalContext` REACHES THE MODEL ON `PreToolUse` WITHOUT BLOCKING — OBJ-4 IS BUILDABLE AS APPROVED.**
+
+★★ **LANGSTON REFUSED THE BINARY I OFFERED HIM, AND HE WAS RIGHT TO: *"THE DELIVERY MECHANISM DOES NOT GET TO PICK THE RISK POSTURE."*** I had put *"`additionalContext`, or it blocks"* to him as the two options. **His ruling: a measurement-shape predicate is a HEURISTIC, so it WILL false-positive; a guard that false-blocks gets routed around and then trusted anyway — the worst outcome available.** ⇒ **non-blocking stands, and the third channel gets MEASURED.**
+
+**Run on `PreToolUse` / matcher `Bash` — the event OBJ-4 actually hooks, per his warning that availability may be event-scoped — with IDENTICAL text across every arm and both channels.**
+
+| channel | arm | exit | blocks the call? | ✅ reached the model? |
+|---|---|---|---|---|
+| `stderr` | `warn_exit0` | 0 | no | ⛔ **NO** |
+| `stderr` | `error_exit1` | 1 | no | ⛔ **NO** |
+| `stderr` | `block_exit2` | 2 | **yes** | ✅ verbatim |
+| **stdout JSON** | `json_deny` — **THE POSITIVE CONTROL** | 0 | yes (deny) | ✅ **verbatim** |
+| **stdout JSON** | ★★ **`json_ac` — `additionalContext` ALONE** | **0** | ✅ **NO — the command RAN** | ✅✅ **YES, DELIVERED AND LABELLED** |
+| **stdout JSON** | `json_both` | 0 | yes (deny) | ✅ both fields |
+
+✅ **THE CONTROL IS WHAT MAKES THE `json_ac` ROW READABLE, AND IT WAS RUN FIRST DELIBERATELY: had `json_deny` been silent too, the JSON channel would simply not be parsed, and `json_ac`’s result would say NOTHING about `additionalContext` specifically.** It delivered ⇒ the channel is live ⇒ **`json_ac`’s result is about the field, not about the channel.**
+
+⇒ ✅✅ **LANGSTON’S PRE-REGISTERED OUTCOME 1: *"reaches → OBJ-4 ships there, non-blocking, as approved at Step 1."* THAT IS THE RESULT. OBJ-4 AND OBJ-6c BOTH HAVE A WORKING NON-BLOCKING CHANNEL AND NEITHER NEEDS TO BLOCK.**
+
+### ⛔⛔ AND IT CORRECTS AN OVER-GENERALISATION I WOULD OTHERWISE HAVE MADE FROM §17
+
+§17 concluded *"stderr is delivered only when the hook BLOCKS the call"* — **which remains true FOR STDERR, and all three of its arms still hold.** ⛔ **BUT THE NATURAL NEXT INFERENCE — *"so nothing non-blocking reaches the model"* — IS FALSE, AND `json_ac` IS THE COUNTEREXAMPLE: non-blocking, exit 0, delivered.**
+★ **THE BLOCKING FRAME IS CHANNEL-SPECIFIC, NOT A PROPERTY OF THE HOOK SYSTEM.** ⇒ **stderr and stdout-JSON are DIFFERENT CHANNELS WITH DIFFERENT RULES, and a result measured on one may not be carried to the other.** ⚠️ **That is precisely the over-reach Langston’s D1 stamp was written to prevent, and it is the inference I was one step from making.**
+
+### ⚠️ WHAT IS DOCUMENTED VS WHAT IS MEASURED — STATED SEPARATELY ON PURPOSE
+
+**The JSON SHAPE is documented** (`hookSpecificOutput` → `hookEventName` + `additionalContext`, on stdout, exit 0). **I treated that as a HYPOTHESIS ABOUT THE CONTRACT and nothing more** — which is why there is a control arm at all. ★ **The docs also independently state the stderr result I had already measured: on exit 0 stderr *"goes to the debug log only, never shown in transcript."*** ⚠️ **Two sources agreeing is NOT a control — they could share an error. What carries the finding is the run, and the doc is corroboration.**
+
+**POPULATION, unchanged in kind from D1’s stamp: n=1 per arm · one session · one harness build · one hook file · event `PreToolUse` · matcher `Bash`.** ⛔ **Not citable for any other event** — availability is event-scoped and I have measured exactly one event.
+
+### ✅ THE HASH STAMP — LANGSTON’S Q2 ADDITION, LANDED HERE
+
+*"`project_dir` is not sufficient. Stamp the hook file’s hash on every probe row — that converts a one-time census into a standing read-site."*
+✅ **DONE: every row now carries `hook_sha` (sha256, 12 chars) computed from the executing file itself.** Current value `33f803270c5e`; **4 of 221 rows carry it**, because only post-`[r7]` rows do — stated rather than glossed.
+★★ **WHY IT IS NOT COSMETIC: without it, §13’s five-clone / three-version census is a measurement taken ONCE AND ASSERTED THEREAFTER — which is `#978` shape A, the exact class this document catches at §4.1.** ⇒ **the estate’s divergence is now READABLE FROM THE SINK at any later moment, by anyone, without re-running the census.**
+
+---
+
 ## 15. `[r2]` WHAT I STILL WILL NOT ASSERT
 
 - ⛔ **Whether warn-only `PreToolUse` stderr reaches the model. STILL OPEN.** P1 answers it; **until it does, OBJ-4 is not finalised** — and that is now a read-site, not a hope.

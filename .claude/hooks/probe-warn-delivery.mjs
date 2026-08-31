@@ -1,48 +1,74 @@
 #!/usr/bin/env node
-// TEMPORARY PROBE (CC-A, B-MEASURE-GATE leg 2, #623). Measures what gates delivery of a
-// PreToolUse hook's stderr to the model.
+// TEMPORARY PROBE (CC-A, B-MEASURE-GATE leg 2, #623). Measures what actually reaches the model
+// from a PreToolUse hook, so no objective in this batch rests on an assumed channel.
 //
-// r5 2026-08-31 — a fresh reader refuted "everything else was held constant" in the r4 pair,
-// on two counts that both had to be fixed rather than caveated:
-//   (1) THE TWO ARMS WROTE DIFFERENT TEXT (139 vs 140 bytes — the arm name was interpolated
-//       into the message), so payload varied alongside exit code. ⇒ the text is now IDENTICAL
-//       across arms; the arm is recorded in the sink only.
-//   (2) EXIT CODE CO-VARIED WITH BLOCKED/NOT-BLOCKED. Exit 2 aborts the tool call; exit 0 lets
-//       it run. So "the exit code gates delivery" and "a hook that BLOCKS gets its stderr shown
-//       as the block reason" fit the same two rows, and the pair could not separate them.
-//       ⇒ a THIRD arm at exit 1: non-zero, but NON-blocking. It splits them —
-//         exit 1 delivers  ⇒ blocking is not the gate; non-zero is.
-//         exit 1 silent    ⇒ blocking (or exit-2 specifically) is the gate, not merely non-zero.
-//       Either result is an answer, which is the only reason to run it.
+// r7 2026-08-31, Langston's Q1 ruling. He refused the binary I offered ("additionalContext or
+// block") on the grounds that the DELIVERY MECHANISM DOES NOT GET TO PICK THE RISK POSTURE: a
+// measurement-shape predicate is a heuristic, it will false-positive, and a guard that
+// false-blocks gets routed around and then trusted anyway. So non-blocking stands, and the
+// third channel gets MEASURED rather than assumed — on the event OBJ-4 actually hooks
+// (PreToolUse), with identical text across arms, "or you will have measured the adjacent
+// object again."
 //
-// ⚠️ THE EXIT-2 ARM GENUINELY BLOCKS ITS COMMAND — that is what it is for — and every arm fires
-// only on its own distinctive sentinel, so all three are inert for any other command.
-// FAIL-OPEN otherwise. Sink rows are written unconditionally, before any decision, so an absent
-// row means the hook did not run — subject to the stated limit that note() swallows write errors.
+// THE STDERR RESULT ALREADY IN HAND (r6, three arms, one write call site, identical payload):
+//   exit 0 no block -> SILENT · exit 1 no block -> SILENT · exit 2 BLOCKS -> delivered verbatim.
+//   ⇒ stderr is delivered only when the hook BLOCKS. Exit 2 is how a hook signals a block.
+//   Population: n=1 per arm, one session, one build. NOT citable more broadly.
+//
+// THE JSON ARMS BELOW. The documented shape is hookSpecificOutput{hookEventName, ...} on
+// STDOUT with exit 0 — treated here as a HYPOTHESIS ABOUT THE CONTRACT, not as evidence of
+// delivery, which is the whole reason there is a positive control arm:
+//   json_ac    additionalContext alone, exit 0, no block  <- the thing OBJ-4 needs
+//   json_deny  permissionDecisionReason + deny, exit 0    <- POSITIVE CONTROL: documented to
+//                                                            reach the model; if this is silent
+//                                                            too, the JSON channel is not
+//                                                            parsed at all and json_ac's
+//                                                            silence says nothing about
+//                                                            additionalContext specifically
+//   json_both  both fields in one object                  <- isolates a dropped additionalContext
+//                                                            from an unparsed object
+//
+// ⚠️ THE BLOCKING ARMS GENUINELY ABORT THEIR COMMAND. Every arm fires only on its own
+// distinctive sentinel, so all of them are inert for any other command.
+// FAIL-OPEN otherwise. Sink rows are written unconditionally, before any decision.
 import { readFileSync, appendFileSync, writeSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
+import { createHash } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 
 const SINK = join(homedir(), '.claude', 'probe-warn-delivery.jsonl');
-const ARMS = [
-  ['CCA_HOOK_PROBE_2e7', 'block_exit2', 2],  // non-zero, blocking
-  ['CCA_HOOK_PROBE_5b1', 'error_exit1', 1],  // non-zero, NON-blocking — the discriminator
-  ['CCA_HOOK_PROBE_9f3', 'warn_exit0', 0],   // zero, non-blocking
+
+// Langston, Q2: project_dir is NOT sufficient. Stamping the hook file's own hash turns a
+// one-time census into a STANDING READ-SITE — otherwise we measured the estate exactly once
+// and asserted it thereafter, which is #978 shape A, the thing this batch is fixing at §4.1.
+// FIVE clones currently run THREE versions of this file and HEAD does not tell you which.
+let SELF = null;
+try {
+  SELF = createHash('sha256').update(readFileSync(fileURLToPath(import.meta.url))).digest('hex').slice(0, 12);
+} catch { /* fail-open: identity is diagnostic, never a precondition */ }
+
+// stderr arms (r6, kept so the result stays reproducible)
+const STDERR_ARMS = [
+  ['CCA_HOOK_PROBE_2e7', 'block_exit2', 2],
+  ['CCA_HOOK_PROBE_5b1', 'error_exit1', 1],
+  ['CCA_HOOK_PROBE_9f3', 'warn_exit0', 0],
+];
+// stdout-JSON arms (r7)
+const JSON_ARMS = [
+  ['CCA_HOOK_PROBE_a11', 'json_ac'],
+  ['CCA_HOOK_PROBE_b22', 'json_deny'],
+  ['CCA_HOOK_PROBE_c33', 'json_both'],
 ];
 
-// IDENTICAL for every arm. Nothing in it identifies which arm wrote it, so payload is constant.
-const TEXT = 'PROBE-WARN-DELIVERY: identical text, one shared write call site; only the exit code differs.\n';
+// IDENTICAL across every arm and every channel. Nothing in it names the arm, so payload is
+// constant and the channel is the only variable.
+const TEXT = 'PROBE-DELIVERY: identical text, one payload; only the channel and exit code differ.';
 
 function note(row) {
   try {
-    appendFileSync(SINK, JSON.stringify({ ts: new Date().toISOString(), ...row }) + '\n', 'utf8');
+    appendFileSync(SINK, JSON.stringify({ ts: new Date().toISOString(), hook_sha: SELF, ...row }) + '\n', 'utf8');
   } catch { /* a sink we cannot write must never block the session */ }
-}
-
-// THE ONE WRITE CALL SITE. Returns bytes accepted by the write(2) syscall.
-function emit(text) {
-  try { return writeSync(2, Buffer.from(text, 'utf8')); }
-  catch (e) { return { error: String(e && e.message) }; }
 }
 
 let raw = '';
@@ -55,21 +81,38 @@ catch (e) { note({ stage: 'parse_failed', raw_bytes: raw.length, error: String(e
 
 const input = payload.tool_input || payload.toolInput || {};
 const cmd = input.command || '';
-const hit = ARMS.find(([sentinel]) => cmd.includes(sentinel));
 
 const base = {
   stage: 'ran',
   tool: payload.tool_name || payload.toolName || null,
   spelling: payload.tool_input ? 'tool_input' : (payload.toolInput ? 'toolInput' : 'neither'),
-  command_present: Boolean(cmd),
-  arm: hit ? hit[1] : null,
-  // which clone this hook copy is executing from — five clones hold three different versions
-  // of this file, and HEAD does not tell you which (see the pre-audit's clone census).
   project_dir: process.env.CLAUDE_PROJECT_DIR || null,
 };
 
-if (!hit) { note({ ...base, exit_code: 0 }); process.exit(0); }
+const se = STDERR_ARMS.find(([s]) => cmd.includes(s));
+if (se) {
+  let bytes;
+  try { bytes = writeSync(2, Buffer.from(TEXT + '\n', 'utf8')); }
+  catch (e) { bytes = { error: String(e && e.message) }; }
+  note({ ...base, channel: 'stderr', arm: se[1], bytes_written: bytes, exit_code: se[2] });
+  process.exit(se[2]);
+}
 
-const bytes_written = emit(TEXT);
-note({ ...base, bytes_intended: Buffer.byteLength(TEXT, 'utf8'), bytes_written, exit_code: hit[2] });
-process.exit(hit[2]);
+const js = JSON_ARMS.find(([s]) => cmd.includes(s));
+if (js) {
+  const hso = { hookEventName: 'PreToolUse' };
+  if (js[1] === 'json_ac' || js[1] === 'json_both') hso.additionalContext = TEXT;
+  if (js[1] === 'json_deny' || js[1] === 'json_both') {
+    hso.permissionDecision = 'deny';
+    hso.permissionDecisionReason = TEXT;
+  }
+  const out = JSON.stringify({ hookSpecificOutput: hso });
+  let bytes;
+  try { bytes = writeSync(1, Buffer.from(out, 'utf8')); }
+  catch (e) { bytes = { error: String(e && e.message) }; }
+  note({ ...base, channel: 'stdout_json', arm: js[1], fields: Object.keys(hso), bytes_written: bytes, exit_code: 0 });
+  process.exit(0); // documented as the exit code for structured control
+}
+
+note({ ...base, channel: null, arm: null, exit_code: 0 });
+process.exit(0);
