@@ -824,6 +824,34 @@ MSYS2_ARG_CONV_EXCL='*' git show "…:.claude/memory/MEMORY.md"               ->
 
 ## B79.0n.SCORING + B79.0n.TEC closure entries (2026-05-26)
 
+### #974 OPEN 2026-08-31 (CC-A, from the `B-DISAGREEMENT-FINDER` census; Langston ruled it SUBSTANTIVE and disposition (3)) — ⛔ OPEN WORK LIVING UNDER A **CLOSED** HEADING IS INVISIBLE TO EVERY OPEN-ISSUE ENUMERATION
+
+**`B-RULES-1E-LANGSTON-SLIM` is UNSTARTED and Kyle-gated. Its only record in the shared register is ONE LINE inside a `CLOSED-AS-BUILT` entry at `RUNNING_ISSUES.md:1489`.** ⛔ **Its live status exists SOLELY in a session-private memory file.**
+
+★ **THE CLASS, WHICH IS WHY IT IS FILED SEPARATELY FROM THE INSTANCE: any enumeration of open work — mine, Langston’s, the checker’s — keys on the heading. Work parked under a CLOSED heading is not "hard to find", it is STRUCTURALLY ABSENT from the count.**
+
+⇒ **HOME: `B-RULES-1E-LANGSTON-SLIM`, owner **Infra Claude**, placed in the `PHASE_19_PLAN.md` Phase-19 governance queue.** *(Langston’s disposition and his owner assignment, not mine.)*
+
+★ **Found by the census that FAILED its own gate — one of only 2 substantive results in 9.**
+
+### #975 OPEN 2026-08-31 (CC-A; Kyle-directed ledger pass) — ⛔⛔ ONE MISTAKE PATTERN IS **48%** OF EVERY MISTAKE WE HAVE RECORDED — AND IT IS THE MOST HEAVILY RULED ONE WE OWN
+
+**MEASURED over every `MISTAKE:` trailer in the commit history: 43 distinct patterns, 162 trailered instances.** ✅ **CONTROL: 166 raw `MISTAKE:` occurrences, so 4 malformed — the instrument is sound and the gap is small.**
+
+| pattern | instances | batches | share |
+|---|---|---|---|
+| ⛔ **`wrong-object`** | **77** | **24** | **48%** |
+| `silence-not-evidence` | 12 | 8 | 7% |
+| `verification-weaker-than-claim` | 9 | 6 | 6% |
+| `fix-follows-pointer` | 8 | 6 | 5% |
+
+**NINE patterns clear the ledger’s own threshold (3+ instances across 2+ distinct batches, as a FLOOR). The top four are 65% of the total.**
+
+★★ **THE DECIDING FACT: `wrong-object` ALREADY HAS MORE RULES THAN ANY OTHER PATTERN** — `CLAUDE.md` rule 29, `CONDUCT.md` §10, and slot 1 of the always-loaded short list. ⇒ ⛔ **THE MOST-RULED PATTERN IS THE MOST FREQUENT, BY A FACTOR OF SIX OVER SECOND PLACE.**
+⇒ **PROMOTING THESE TO FURTHER RULES WOULD REPEAT THE MEASURED FAILURE. The output for a frequent pattern must be a GATE, not another line in an always-loaded file.**
+
+⇒ **HOME: ranked in the `B-DISAGREEMENT-FINDER` completion report §6 against Kyle’s own criterion — `B-MEASURE-GATE` FIRST (it gates the 48% and is approved-but-unbuilt), then the staleness sweep, then the remaining promotions.** ⚠️ **PLACED, NOT STARTED — Kyle: *"let’s not jump from one incomplete fix to starting up another."***
+
 ### #973 OPEN 2026-08-31 (CC-INFRA, found 10 minutes into B-TOKEN-WATCH's live collection) — THE TRAIT DEFINITION'S SOCIALS LIMB IS STRUCTURALLY DEAD: THIS PROVIDER'S CREATION EVENT CARRIES NO SOCIAL FIELDS AT ALL
 
 **The pre-registered trait definition is *"any advertised channel OR initial size above the platform default."* The first half CANNOT FIRE, and it is not intermittent — the data never arrives.**
