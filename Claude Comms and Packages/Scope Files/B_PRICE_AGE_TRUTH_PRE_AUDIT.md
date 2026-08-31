@@ -526,6 +526,7 @@ BLOCKER-1 establishes that P2 — the honest `source` literal — **cannot ship 
 | **`kraken.ts:624` `getPairHistoryDays`** | `Promise<number \| null>`, `return cached.days` on a 24 h-TTL hit | ✅ **SAME SHAPE, NOT A DEFECT — the quantity is HISTORY-DAYS, not a price.** A day-count re-served up to 24 h stale is immaterial to the pass/fail its caller makes, and it carries a real TTL rather than none. **Recorded so the next census does not re-open it.** |
 | sites returning `cached?.price` as a bare value | — | **EXACTLY ONE: `:631`** |
 
+> ⛔⛔ **WITHDRAWN — SEE B2.7. A claim-only reader found SIX mechanisms that evade my search; I re-derived two at the ref and both hold. The shape occurs at MANY sites. What survives: `:631` is an instance, it is the one on this batch's path, and P1 fixes it.**
 ⇒ ✅ **OBJ-3's ANSWER: the price-substitution shape occurs at EXACTLY ONE site, and this batch fixes it.**
 ⚠️ **REACH, STATED: the search was `Promise<number | null>` + `cached?.price`-style returns across three pricing files.** A substitution returning a differently-typed primitive, or living outside those three files, would not have been found. **The negative result is bounded by that, and I am not claiming a repo-wide absence.**
 
@@ -577,3 +578,56 @@ Langston: *"P6 gates nothing here now — move it with P2 or label it explicitly
 **The reason `OBJ-3` was droppable in the first place is that it was the ONLY objective with no plan item** — it existed as a numbered promise in the scope and as nothing else. **A reviewer reading Part B would see a complete-looking item list and no gap**, because the gap was in a document he was not re-reading.
 ⇒ ★★ **THE LEDGER IN B2.5 IS THE STRUCTURAL FIX AND IT IS CHEAP: an objective with no item is visible in one line. Without it, "no longer gating" and "silently dropped" are indistinguishable from the outside — which is precisely Kyle's objection.**
 ⚠️ **AND THE LEDGER ITSELF IS NEW AND UNREVIEWED. It is not exempt from its own rule.**
+
+
+---
+
+# PART B2.7 — ⛔⛔ **`OBJ-3`'s CENSUS IS REFUTED. "EXACTLY ONE SITE" IS WITHDRAWN. THE CLAIM-ONLY READER FOUND SIX MECHANISMS THAT EVADE MY SEARCH.**
+
+**`REVIEWER r4: claim-only · "the price-substitution shape occurs at exactly one site" · HIT ×6 · re-derived: 2 of 6 at the ref, both CONFIRMED`**
+★ **This is the reader Kyle's intervention required. Without it a FALSE CENSUS would have gone to Langston as a discharged objective.**
+
+## B2.7.1 ⛔ THE TWO I RE-DERIVED MYSELF — **BOTH CONFIRMED, BOTH FATAL TO THE CLAIM**
+
+**(a) THE SAME IDIOM, IN A FILE MY SEARCH DID NOT COVER.** `server/services/signal-orchestrator.ts:2387-2389`:
+```ts
+const cachedPrice = priceCache.getCachedPrice(symbol);
+const rawPrice = cachedPrice?.price || 0;
+```
+⇒ **literally the `cached?.price` shape, discarding `lastUpdatedAt`/`lastSource`, feeding the SIGNAL PIPELINE.**
+⛔ **And it reads through `price-cache.ts:247-249` — `getCachedPrice(symbol) { return this.cache.get(symbol) || null; }` — which enforces NO TTL AT ALL. Unbounded age.**
+⚠️ **Worse than provenance loss, and I am naming it because it is on the page: `?? ` is not used — `|| 0` turns an absent price into ZERO**, which is a fabricated value, not a null. **Same unbounded read at `routes.ts:4631`, `trading-state-sync.ts:296` (both multiply a cached price into a portfolio USD value) and `routes/vts-audit.ts:91`.**
+
+**(e) SUBSTITUTION INSIDE A *WRITE* PATH — INVISIBLE TO EVERY SEARCH I RAN.** `server/core/cache/cost-cache.ts:106-115`:
+```ts
+spreadIn = existing.v.spread;              // prior good measurement retained
+…
+cache.set(symbol, { v: clamped, t: Date.now() });
+```
+⇒ ⛔⛔ **A PRIOR MEASUREMENT IS CARRIED FORWARD AND RE-STAMPED WITH A FRESH `t`. THE AGE OF THE RETAINED VALUE IS SILENTLY RESET.**
+★★ **THAT IS `#951`'s OWN DEFECT CLASS, IN A DIFFERENT CACHE — and it is invisible BOTH to a return-site search AND to a quote-constructor census, because it happens on the WRITE side.** **The same reset-on-carry-forward appears at `price-cache.ts:402-431`.**
+
+## B2.7.2 ⇒ THE HONEST STATE OF `OBJ-3`
+⛔ **WITHDRAWN: *"the price-substitution shape occurs at EXACTLY ONE site."*** **It occurs at many; I found one because I searched one shape in three files.**
+✅ **WHAT SURVIVES, and it is all this batch needed: `fetchFromKrakenRest:631` is an instance, it is the instance on THIS batch's path, and P1 fixes it.** ⛔ **`OBJ-3` as written — a CENSUS of the class — is NOT discharged and I am not going to claim it is.**
+
+★★ **AND MY OWN CAVEAT DID NOT SAVE ME.** B2.5.2 stated the reach honestly — *"the search was `Promise<number|null>` + `cached?.price`-style returns across three pricing files… I am not claiming a repo-wide absence."* **Then the very next line said *"OBJ-3's ANSWER: the shape occurs at EXACTLY ONE site."*** ⇒ ⛔ **A CORRECTLY-STATED LIMIT DOES NOT NEUTRALISE AN OVERCLAIM SITTING BESIDE IT.** **The caveat and the headline contradicted each other and the headline is what a reader carries away.**
+
+## B2.7.3 ⇒ THE SIX EVASION MECHANISMS — **the generalisable output, and worth more than the census**
+| # | mechanism | example |
+|---|---|---|
+| **a** | same idiom, **different file** | `signal-orchestrator.ts:2387` |
+| **b** | **synchronous** — no `Promise` to match | `vts-runner.ts:3862` xStock shadow price; the SQL at `:3841-3856` selects `last` and **drops `captured_at`** |
+| **c** | `Promise<number>` — **not** `\| null` | `cost-metrics.ts:51-54`, falling through to `DEFAULT_SPREAD` with no measured-vs-default marker |
+| **d** | cached field **not named `price`** | `kraken.ts:630 cached.days` · `cost-metrics.ts:54 cached.spread` · `price-liveness.ts:92 _cache.value` |
+| **e** | ⭐ **not a `return` at all — substitution on the WRITE path** | `cost-cache.ts:106` · `price-cache.ts:402-431` |
+| **f** | **richer than a number, still missing provenance** | `kraken-websocket-adapter.ts:3218 getLatestPriceData → {bid,ask,mid}` — no timestamp, no age, **while its sibling `getBookForFill:3245` DOES return `ageMs`** |
+| **g** | **the parameter boundary** — loss is unavoidable by signature | `vts-service.ts:299 updateMarketPrice(symbol, price: number)`; `vts-audit.ts:101` reads `cached.lastUpdatedAt` at `:99` and **drops it at the call** |
+
+⇒ ★ **THE SEARCH THAT WOULD ACTUALLY FIND THE CLASS is write-side and type-shaped, not read-side and name-shaped:** grep `cache.set(` for entries whose timestamp field is `Date.now()` **while a value field is sourced from `existing`/`cached`** — **the only form that reaches (e) at all** — plus a parameter census for positional `price: number`.
+
+## B2.7.4 ✅ §9.4 DISPOSITION — **HOMED, NOT FOLDED IN, AND NOT ASSERTED AS DEFECTS**
+⛔ **These are NOT filed as defects.** The reader was scoped to *"what other states of the world are consistent"* and explicitly gave **no verdict**; `getPairHistoryDays` is already an example of the same shape being harmless. **Calling them defects would be the `#453`-inverse — asserting a problem from a pattern match.**
+➕ **OWN ITEM: `B-PROVENANCE-LOSS-CENSUS`, owner CC-C, `RUNNING_ISSUES` `#973` (⚠️ minted as #972; CC-A/Langston took that number first, so the newer entry renumbers), placed in `PHASE_19_PLAN.md` at row 3b.m, after 3b.l.**
+⛔ **ITS FIRST DELIVERABLE IS THE WRITE-SIDE SEARCH ABOVE PLUS A THREE-OUTCOME READ PER INSTANCE** — real defect / working-as-designed-but-undecided / legacy — **not a fix.**
+⚠️ **AND IT IS EXPLICITLY NOT A PREREQUISITE OF THIS BATCH.** `P1` fixes the instance on this batch's path; the class is larger and is now visible instead of hidden behind a false "exactly one."

@@ -6070,3 +6070,26 @@ CC-A's batch argues the workflow is not reliably firing. **This is that thesis, 
 
 **CONSEQUENCE FOR `#951`:** its `source`-relabel half is **carved out** to `B-PRICE-AGE-REFUSAL` (plan row 3b.f-b) and **gated on this leg landing.** The parent still ships its provenance half, which changes no decision path.
 ⛔ **THIS ITEM'S FIRST DELIVERABLE IS STILL THE THREE-OUTCOME READ** — the limiter leg is now part of what that read must dispose of, not a fix to start on.
+
+
+---
+
+### #973 — PROVENANCE IS LOST AT **SUBSTITUTION BOUNDARIES** ACROSS THE PRICING LAYER, AND A RETURN-SITE SEARCH CANNOT SEE MOST OF IT
+
+**OPEN** · surfaced 2026-08-31 by a claim-only reader during `B-PRICE-AGE-TRUTH` Step 2, **after Kyle required that a restored objective go back through review** · owner **CC-C**
+**HOME: `B-PROVENANCE-LOSS-CENSUS`, owner CC-C, placed in `PHASE_19_PLAN.md` at row 3b.m, after 3b.l.**
+
+⛔⛔ **NOT FILED AS DEFECTS. The reader was scoped to *"what other states of the world are consistent"* and gave NO verdict, and `kraken.ts:630 getPairHistoryDays` is already a case of the same shape being harmless (a day-count re-served stale is immaterial). Asserting a defect from a pattern match is the `#453`-inverse.**
+
+**THE SHAPE:** a site that substitutes a previously-cached value and passes it on **stripped of the age/provenance the surrounding types carry** — so a consumer cannot tell a fresh measurement from a retained one.
+
+**RE-DERIVED AT THE REF (2 of the reader's 6, both confirmed):**
+- **`signal-orchestrator.ts:2387-2389`** — `const rawPrice = cachedPrice?.price || 0;` reading `price-cache.ts:247-249 getCachedPrice()`, which enforces **NO TTL at all**. Feeds the signal pipeline. ⚠️ **`|| 0` turns an absent price into ZERO — a fabricated value, not a null.** Same unbounded read at `routes.ts:4631`, `trading-state-sync.ts:296`, `routes/vts-audit.ts:91`.
+- **`core/cache/cost-cache.ts:106-115`** — `spreadIn = existing.v.spread;` then `cache.set(symbol, { v: clamped, t: Date.now() });` ⇒ ⛔ **a retained measurement re-stamped with a fresh timestamp; the age is silently reset.** ★ **That is `#951`'s own defect class in a different cache**, and it is **invisible to a return-site search AND to a quote-constructor census, because it happens on the WRITE side.** Same shape at `price-cache.ts:402-431`.
+
+**THE SIX EVASION MECHANISMS — the durable output:** (a) same idiom, different file · (b) synchronous, no `Promise` · (c) `Promise<number>` without `| null` · (d) the cached field is not named `price` · ⭐ (e) **substitution on the WRITE path, not a return** · (f) returns an object richer than a number but still provenance-free (`kraken-websocket-adapter.ts:3218`, **whose sibling `:3245` DOES return `ageMs`**) · (g) **the parameter boundary** — `vts-service.ts:299 updateMarketPrice(symbol, price: number)`, where `vts-audit.ts:99-101` reads `lastUpdatedAt` and then drops it at the call.
+
+⇒ ⛔ **FIRST DELIVERABLE IS THE SEARCH, NOT A FIX — and it must be WRITE-SIDE and TYPE-SHAPED, not read-side and name-shaped:** grep `cache.set(` for entries whose timestamp field is `Date.now()` while a value field comes from `existing`/`cached` (**the only form that reaches (e)**), plus a parameter census for positional `price: number`. **Then a three-outcome read per instance.**
+
+★★ **WHY THIS EXISTS AS AN ITEM AT ALL: I asserted *"the shape occurs at EXACTLY ONE site"* one line after correctly stating that my search was bounded to two idioms in three files.** ⇒ **A correctly-stated limit does not neutralise an overclaim sitting beside it, and the headline is what a reader carries away.**
+⚠️ **NOT a prerequisite of `B-PRICE-AGE-TRUTH`** — that batch fixes the instance on its own path.
