@@ -6208,3 +6208,49 @@ CC-A's batch argues the workflow is not reliably firing. **This is that thesis, 
 
 ★ **SCOPING STATED SO IT IS NOT MISTAKEN FOR AN OVERSIGHT:** two sources write `reject_stage='sqe'` in this window — `signal-orchestrator` 343,621 and **`vts-runner` 300,070**. My first query filtered to one source and would have silently excluded **47% of the stage population**; the coverage check caught it. The `vts-runner` rows are the VTS's own caller-side net-EV rejects (`net_ev_below_floor` 21,880, `net_ev_rejected` 5,051 in a 3-day sample), stamped `'sqe'` **deliberately** — `vts-runner.ts:5044`: *"B70.1 Step 3.6b: caller-side Net-EV reject → reject_stage='sqe'"*. **Working as designed, not a mis-stamp** (rule-24 outcome 2), and they do not feed the active funnel counters. ⚠️ **But note the consequence for anyone else querying this table: "SQE rejects" over `signal_eval_archive` WITHOUT a source filter mixes two pipelines, one of which has no SQE.**
 
+---
+
+### #977 — ⭐⭐ THE 2-SECOND REFRESH LANE FOR OPEN POSITIONS IS BUILT, ITS LOOP RUNS EVERY SECOND, AND NOTHING SUBSCRIBES TO IT
+
+**OPEN** · surfaced 2026-08-31 by **Kyle**, who challenged the premise of `B-PRICE-AGE-TRUTH` — *"if Kraken throttles us because we exceed their rate limits, then we're treating a symptom"* · owner **CC-C**
+**HOME: `B-OPENTRADE-REFRESH-LANE`, owner CC-C, placed in `PHASE_19_PLAN.md` at row 3b.f-a, after 3b.f and BEFORE 3b.f-b (Kyle's placement, 2026-08-31).**
+
+⛔⛔ **KYLE'S PREMISE IS REFUTED AND THE REFUTATION IS THE FINDING. WE ARE NOT EXCEEDING KRAKEN'S LIMITS — WE ARE THROTTLING OURSELVES, HARD, FOR A RISK THAT IS NOT MATERIALISING.**
+`restRateLimiter` (`market-data/rest-rate-limiter.ts`) is **entirely client-side**: it never reads a Kraken response, a status or a header. *"Rate limited"* in this codebase means **our own limiter declined to ask.**
+
+**MEASURED — object, population and instrument named.**
+| quantity | value | object |
+|---|---|---|
+| limiter decisions, 5 log windows ~1 day | **58,236** | `[8.8.5][RestRateLimiter]` lines, `out__2026-08-30*` + `08-31*` |
+| blocked by the **self-imposed 60s per-symbol cooldown** | **45,218** | |
+| ⛔ blocked by **token exhaustion** — the only "we are going too fast" signal | ⭐ **1** | |
+| allowed | 13,017 | |
+| total Kraken REST volume, one 3h55m window | **~4,853 req / 14,134 s = 0.34 req/s** | adapter leg 1,846 + engine direct leg 1,850 + cache batches 215 + OHLC 942 |
+| shared-cache budget in use | **`weight=0/10`**, every minute, all day | `[A4.R10R-1][PriceCache][HEALTH]` |
+
+⛔ **ZERO VENUE-SIDE RATE-LIMIT REJECTIONS ACROSS TWO DAYS — AND THE ZERO IS EARNED (`#453` discharged, positive control run).** `makePublicRequest` **THROWS** on any Kraken `data.error`, so a rate-limit reply is observable. **It is: 8 such throws on 08-30, 17 on 08-31, reaching `error__*.log` with their codes. ALL 25 ARE `EQuery:Unknown asset pair`. NOT ONE IS A RATE LIMIT.** ⇒ the instrument demonstrably holds the string; its silence on rate limits counts as evidence.
+
+⛔⛔ **THE ACTUAL DEFECT — THE PURPOSE-BUILT MECHANISM IS SWITCHED OFF.**
+`price-cache.ts:59-62` defines four refresh buckets; `server/index.ts:394` initialises it and arms a **1-second** `refreshBuckets()` loop (`:91-96`). **The loop runs. The lists are the problem.**
+| bucket | interval | subscribers | status |
+|---|---|---|---|
+| `openTrade` | **2000 ms** | ⛔ **NONE** | **DEAD** |
+| `readyToBuy` | 15000 ms | `rtb-refresh-service.ts:427` | live (2 symbols) |
+| `fx5Snapshot` | 30000 ms | ⛔ **NONE** | **DEAD** |
+| `vtsSimulation` | 60000 ms | `vts-runner.ts` x3 | live (157 symbols) |
+★ **THE TWO DEAD LANES ARE EXACTLY THE TWO SERVING THE ACTIVE TRADING PATH.**
+⇒ **THE COLLISION, and it is the SAME NUMBER on both sides:** the exit monitor asks for **2000 ms** freshness (`active-execution-engine.ts:1257`) while the lane built to deliver **2000 ms** holds zero symbols — so it falls to `fetchFromKrakenRest`, floor **60 s**. **Thirty times coarser than the design intent, with the designed answer running and empty.**
+
+★ **PRIOR ART — LANGSTON-VERIFIED, CITED NOT RE-DERIVED (`§9.5(b-ii)`).** `mini-book-integrity-monitor.ts:121` and `:234` already record that `getTicker` -> `makePublicRequest` is *"a bare `fetch` with NO limiter"* whose calls *"NEVER ENTER that budget — THEY COMPETE WITH IT FROM OUTSIDE."* **Measured here: 1,850 such calls in 3h55m.** At least **five** limiter modules exist (`rest-rate-limiter`, `price-cache`'s weight gate, `rate-control`, `multi-timeframe-scanner`, `resilience`) and **none shares a view of total load.** ⇒ **COORDINATION defect, not a compliance one.**
+
+★ **PROVENANCE (`§9.5(b)`), and it exonerates the original design.** `bridge/canonical/DawnTrader_System_Architecture_Execution_Flow.md:255-275` specifies the four buckets and the 10-weighted-req/s ceiling; `bridge/reference/DawnTrader_Chat_Archive_1.18.26.md:3408` states the design-time risk verbatim — *"Kraken has strict API Rate Limits. If we fetch 1m, 5m, 15m, and 1H candles for 100+ pairs every cycle, we will be banned instantly"* — answered by the Cascading Waterfall. **The conservatism was correct for the load it was designed against. It was never re-examined against today's load, and the bucket that would have carried the exit path was never wired.**
+⚠️ **CHECKED AND NOT CITED:** `DawnTrader_Chat_Archive_12.13.25.md:15053` *"we briefly exceeded the configured limit"* is **MAX_TRADES (concurrent positions), NOT an API limit** — a `wrong-object` trap avoided; it is not evidence here.
+
+⚠️ **KNOWN LIMITS, STATED SO THE BATCH IS NOT SCOPED AS TRIVIAL.**
+1. **The `openTrade` bucket has never held a symbol in production**, so its refresh path is **unexercised** — subscribing is necessary, not sufficient.
+2. **The engine reads the adapter's PRIVATE map, not the shared cache.** The adapter **writes** to the shared cache (`:805`, `:1026`) and **reads it never.** Re-pointing that read is the real work.
+3. **The WS feed is primary**; this governs the REST fallback. The claim is about the fallback's floor, **not** about all pricing.
+4. `fx5Snapshot=0` is a **second** dead lane — **the scanner's, not the exit path's. Deliberately NOT folded in;** it gets its own disposition rather than padding this scope.
+
+★ **CONSEQUENCE FOR WORK ALREADY QUEUED, and this is why Kyle placed it where he did: `XSTOCK_PRICING_PLAN` P1 (the 15 s freshness guard) was scoped against a 60 s floor, where REFUSAL is the only available answer. On a live 2 s lane the guard may need no refusal path at all** ⇒ **ruling on `3b.f-b` before this lands is ruling on a world that may not exist.**
+✅ **`B-PRICE-AGE-TRUTH` (3b.f) IS NOT INVALIDATED and continues:** a price must not misreport its age at ANY refresh rate. **But it does not address WHY the price is old** — Kyle's *"treating a symptom"* lands on that half, and this issue is the other half.
