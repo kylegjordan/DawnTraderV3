@@ -6026,3 +6026,19 @@ CC-A's batch argues the workflow is not reliably firing. **This is that thesis, 
 
 
 > ⚠️ **STALE LINE CITATIONS CORRECTED 2026-08-31 (`B-PRICE-AGE-TRUTH` Step 2, BLOCKER-3).** The adapter gained ~45 lines and the engine ~8, so every absolute citation to them written before 2026-08-30 resolves to unrelated code. Mapping applied: `:582-586`→`:627-631` · `:496-505`→`:540-549` · `:425-441`→`:470-486` · `lpa:1013`→`:1058` · `aee:1249`→`:1257` · `aee:1020`/`:1025`→`:1277`/`:1289` · `fetchLivePrice:460`→`:504` · `fetchPrice:412`/`:419`→`:456`/`:463`. ⛔ **A reader resolving the OLD numbers at HEAD lands on unrelated code and could conclude either "already fixed" or "never existed."** ★ **This is the FIFTH drift instance in two days, and the class was fixed one document at a time until a reviewer made me grep it — `fix-follows-pointer`.**
+
+
+---
+
+### #971 AMENDMENT 1 — ⭐ **THE UN-LIMITED ENGINE REST LEG FOLDS IN HERE. IT IS THE SAME "no direct Kraken calls" DIVERGENCE, ONE HOP FURTHER ON.**
+
+**Folded 2026-08-31 on Langston's §13 disposition 2 at `B-PRICE-AGE-TRUTH` Step 2 — *"literally the same divergence, so it gets a home without manufacturing a batch."***
+
+**RE-DERIVED AT THE REF.** The crypto exit's price gate is `active-execution-engine.ts:1277`. On failure its **else-arm (`:1289-1300`)** calls `this.krakenService.getTicker(restPair)` → `kraken.ts:259` → `makePublicRequest` (`:177`) → **a bare `fetch`.**
+⛔ **`restRateLimiter.check` has EXACTLY ONE production caller — `live-pricing-adapter.ts:627`.** ⇒ **the engine's own fallback REST call is NOT rate-limited.**
+
+⇒ ★★ **THIS IS THE CANONICAL VIOLATION IN ITS PUREST FORM.** `bridge/canonical/…Execution_Flow.md:633` says **"All pricing from unified Price Cache (no direct Kraken calls)"** — and here is a direct Kraken call, on the live exit path, bypassing the only rate limiter in production.
+⚠️ **NOT filed as a live defect: today it is SUPPRESSED by the very laundering `#951` is about** — the mislabelled `kraken_rest` tag passes the gate, so the else-arm is not taken. ⛔ **Fixing the label without fixing this would UNSUPPRESS it.** ★ **A defect currently hidden by another defect, and the fix order matters.**
+
+**CONSEQUENCE FOR `#951`:** its `source`-relabel half is **carved out** to `B-PRICE-AGE-REFUSAL` (plan row 3b.f-b) and **gated on this leg landing.** The parent still ships its provenance half, which changes no decision path.
+⛔ **THIS ITEM'S FIRST DELIVERABLE IS STILL THE THREE-OUTCOME READ** — the limiter leg is now part of what that read must dispose of, not a fix to start on.

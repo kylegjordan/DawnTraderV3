@@ -128,6 +128,7 @@ Langston requires a second column: **whether a concurrent WS-write gap existed o
 ---
 
 # PART B — THE IMPLEMENTATION PLAN
+> ⛔⛔ **SUPERSEDED BY PART B2 (below), rebuilt under Langston's four Step-2 blockers. Retained as the record of what was sent back. Where they differ, B2 governs.**
 **Every item back-references the audit finding it falls out of. Nothing here is `UNAUDITED`.**
 
 | # | plan item | falls out of | verification |
@@ -440,3 +441,56 @@ APF carried **the same stale triple** §D4 "corrected" in `#951`, and its gate c
 ## H7. ⚠️ WHAT HE COULD **NOT** RE-DERIVE, AND HE REPORTED NO NUMBER RATHER THAN A ZERO
 **He did not locate the app stdout stream this turn, and his own note says that path returns false zeros** ⇒ **he reported NO number for the 56/19 burst and the 3.5-minute span.** ⇒ **§F1/§F2 remain SINGLE-SOURCED TO ME** — consistent with P2 being gated anyway. ★ **Refusing to publish a zero from an unvalidated instrument is the same discipline this batch keeps having to relearn.**
 **Board: Review = SENT BACK TO OWNER, read back, census 71 of 71.**
+
+
+---
+
+# PART B2 — ⛔ **THE PLAN, REBUILT UNDER THE FOUR BLOCKERS. THIS SUPERSEDES PART B.**
+
+> **Part B is retained above as the record of what was sent back. Where the two differ, B2 governs.**
+
+## B2.0 ⛔⛔ THE STRUCTURAL CONSEQUENCE OF BLOCKER-1: **THE BATCH SPLITS. THE PROVENANCE HALF SHIPS; THE BEHAVIOUR HALF IS CARVED OUT.**
+
+BLOCKER-1 establishes that P2 — the honest `source` literal — **cannot ship until the engine's direct-REST else-arm (`active-execution-engine.ts:1289-1300`) is routed through `restRateLimiter`**, because relabelling makes the gate at `:1277` fail and sends the blocked population to a **bare `fetch` with no limiter** (`kraken.ts:177`).
+**Langston homed that leg to `#971`/`B-TWO-CACHE-INTENT`** (§13 disposition 2) — *"literally the same 'no direct Kraken calls' divergence."* ⇒ **the fix for P2's precondition lives in another batch, whose own first deliverable is a three-outcome READ, not a fix.**
+
+⇒ ⛔ **HOLDING THE WHOLE BATCH BEHIND THAT WOULD PARK A CORRECT, ZERO-BEHAVIOUR-CHANGE PROVENANCE FIX BEHIND AN UNSCHEDULED ARCHITECTURAL READ.** ★ **That is precisely the shape Langston refused for the pricing-feed work on 2026-08-30 — *"parking trading-value work behind a governance batch is the failure this batch is diagnosing."***
+
+✅ **THEREFORE, PROPOSED (his call, not mine to take):**
+| | ships in THIS batch | carved out |
+|---|---|---|
+| **P1** carry the true age · **P3** fifth producer token · **P5** re-serve monotonicity · **P7** comment truth · **P9** read-site check | ✅ **YES — provenance-only, no decision path changes** | |
+| **P2** the honest `source` literal · **P8** the substring-matcher naming | | ⛔ **CARVED OUT to `B-PRICE-AGE-REFUSAL`, owner CC-C, placed at plan row 3b.f-b, immediately after 3b.f — GATED on `#971` landing the limiter leg** |
+⚠️ **STATED PLAINLY: the carve-out means this batch makes the age RECOVERABLE and does NOT make the engine REFUSE a stale re-serve.** ⛔ **That is exactly the `#743` distinction — *recoverability is not a bound* — and I am accepting the same boundary here that I drew for F-C, applied to my own batch.**
+
+## B2.1 THE REBUILT ITEMS
+
+| # | plan item | falls out of | ⛔ verification — **each must be able to FAIL** |
+|---|---|---|---|
+| **P1** | `fetchFromKrakenRest`'s rate-limited branch returns the cache **row** (or `{price, observedAt}`), not a bare number; the caller propagates `observedAt` instead of stamping `Date.now()`. | A1, D1 | a rate-limited re-serve carries `observedAt !== Date.now()`, **against a control**: a genuine REST read in the same window whose `observedAt` IS ≈ now. ⚠️ **P1 is INERT on the decision path and must be described that way — no gate reads `observedAt` (§D1).** |
+| **P3** | A fifth `producer` token. ⛔ **FENCED INVARIANT, not a note: it MUST NOT map to `null` in `toCachedProducer`.** | A1.3, G5, H4 | ✅ **A test that FAILS if the token is placed in the `null` arm.** ⛔ **And state the `closed_trades.exit_price_producer` column side** — the in-memory map is not the persistence contract (`#704` shape). |
+| **P5** | Re-serve monotonicity: for a symbol, `observedAt` may advance only when a genuine venue read occurred. | §7.3 | a tick logging `REST_BLOCKED` on symbol S **must not** advance S's `observedAt`. |
+| **P7** | ⛔ **WIDENED: comments carry no absolute line numbers AND no false mechanism prose.** | A1.4, G7, H4 | **`:127-129` and `:162-164` are rewritten** — both currently assert the refuted skip-chain. ⚠️ **And `:1115` performs NO age re-check, so the re-serve bypasses the 2000 ms window as well as the predicate; the corrected comment must say so.** |
+| **P9** | ⛔ **EXTENDED beyond the literal: `getAllPrices()` (`:418`) ships `source`/`producer`/`observedAt` to `server/index.ts:1100` and `routes.ts:6105`.** Check both **read sites**, not only the new literal. | E3, H5 | each consumer named and its handling of a carried-through `observedAt` stated. |
+| **P2** ⛔ **CARVED OUT** | The honest `source` literal, added to **BOTH** unions (`PriceQuote:195` **and** `CachedPrice:211`). | E1, H1 | ⛔ **NEW, and it can fail: a post-change tick on a rate-limited re-serve must take the `:1277` ELSE-arm, evidenced by its `[P19-B8.5][VENUE_ONLY]` warn naming the new literal — with a control: a genuine venue read in the same window still taking the `if`-arm.** ⛔ **The old criterion ("source list byte-unchanged") passed if P2 was never implemented.** |
+| **P8** ⛔ **CARVED OUT with P2** | The literal's name chosen against **both** substring matchers — `isRestFallbackSource` (`:252-254`) **and** `routes.ts:12336`. | E2, G2 | intended verdict of each matcher **stated and asserted in a test**. ⚠️ **Log consistency, NOT a behaviour gate (§G2).** |
+
+## B2.2 ⛔ P6 — THE PRE-REGISTERED DECISION RULE **(written before any measurement; this is the BLOCKER-2 fix)**
+
+> **P2 SHIPS ONLY IF the engine's direct-REST else-arm (`active-execution-engine.ts:1289-1300`) FIRST passes through `restRateLimiter`. Otherwise P2 is HELD — regardless of the measured rate.**
+> ★ **A STRUCTURAL precondition, deliberately, not a magnitude one: routing around a ban-prevention limiter is not a thing to trade off against a percentage, and any threshold I invented I would have picked to clear.**
+
+**P6 still MEASURES and REPORTS, for the record and for `#971`:**
+1. **Reach-rate** — blocked-branch entries/hour, via `GET /api/diagnostics/8.8.5/rate-limiter` (`routes.ts:10907-10924`), **two reads ≥1 h apart**. ⛔ **Assert no reset in-window** — the sibling reset route (`:10929-10931`) voids a cumulative-delta read — **and name who can reach it; it requires auth.**
+2. **Projected added un-limited call rate** = reach-rate × fraction of window with ≥1 open crypto position.
+3. **Langston's column (2)** — concurrent WS-write gap per symbol during a burst.
+⛔ **FALSIFIER: if (1) cannot be obtained WITHOUT a log grep, P6 is NOT discharged.** ★ **That dependency is exactly what produced §F1's 27× error.**
+
+## B2.3 ✅ TIER-1 SET, CORRECTED
+**`ACTIVE_PATH_FLOW.md` JOINS IT** (BLOCKER-3) — it already documents this defect at `:316-317` and **must be updated when the batch lands**, not merely cited. ⛔ **My §A5 "sole provenance is the git commit" is withdrawn as false.**
+
+## B2.4 ⇒ WHAT THE BATCH NO LONGER CLAIMS
+- ⛔ **It does not make the engine refuse a stale re-serve.** That is P2, carved out.
+- ⛔ **It states no daily rate.** (§F1.)
+- ⛔ **It does not assert that `observedAt` reaches a gate.** It does not (§D1).
+- ✅ **It DOES make the age recoverable, the provenance honest, and P1/F-C buildable** — which was the batch's actual purpose.
