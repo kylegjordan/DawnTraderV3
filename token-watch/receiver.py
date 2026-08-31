@@ -205,6 +205,75 @@ def _journal_launch(day: str, followed: bool, reason: str, size_source: str,
 # ─────────────────────────────────────────────────────────────────────────────
 # EVENT PARSING
 # ─────────────────────────────────────────────────────────────────────────────
+def _launched_mint(event: dict):
+    """The mint this transaction CREATED, by conservation rather than position.
+
+    ⛔⛔ BLOCKER-C (Langston, 2026-08-31) — AND IT IS THE SAME MISTAKE A THIRD
+       TIME, ONE FIELD OVER. The shipped rule took the FIRST `tokenTransfers`
+       entry carrying a mint. A pump.fun CREATE settled in USDC puts three USDC
+       payment legs ahead of the new token, so the launch was recorded AS USDC.
+       MEASURED: 19 of 1,344 births (1.4%) -- but 13 of 15 TRAIT CARRIERS in one
+       window, because USDC resolves twitter+website every time and so is routed
+       to the treatment arm on every collapse. It fails in the FLATTERING
+       direction and would have manufactured the H1/H2 result.
+
+    ★ THE FILE ALREADY CONTAINED THE LESSON, APPLIED TO THE WRONG FIELD. Eighty
+      lines below, on `initial_size`: *"That is the original index bug moved
+      down one level: I replaced 'position 0' with 'first match' and kept the
+      same assumption that ordering means something."* That correction was made
+      for SIZE and not for IDENTITY one screen above it. `fix-follows-pointer`
+      -- the fix travelled to the field the reviewer named, not to the class.
+
+    ⇒ SO THIS RULE IS NOT POSITIONAL AT ALL, because a third positional rule
+      would be the same error a third time. It is a CONSERVATION property:
+
+        a medium of exchange NETS TO ZERO -- it only moves between accounts.
+        a launched token NETS POSITIVE  -- it is created out of nothing.
+
+      Measured on a real collapsed event: USDC's four balance changes sum to
+      EXACTLY 0 (-6,378,706 +6,299,956 +18,900 +59,850); the launched mint's
+      sum to +2e15. That is not a heuristic about this venue, it is what
+      minting IS, and it cannot rot the way a quote-currency denylist would.
+
+    ⛔ VALIDATED AGAINST EVERY EVENT COLLECTED BEFORE IT SHIPPED -- 1,393 raw
+       payloads: it AGREES with the old rule on 1,374 (98.6%), DIFFERS on
+       exactly the 19 USDC collapses, recovers a real mint for all 19, and
+       resolves NOTHING in zero cases. Agreeing where we were right and
+       disagreeing precisely where we were wrong is the only shape that shows a
+       replacement is a fix rather than a different guess.
+    """
+    net = {}
+    for acc in event.get("accountData") or []:
+        for ch in acc.get("tokenBalanceChanges") or []:
+            m = ch.get("mint")
+            amt = (ch.get("rawTokenAmount") or {}).get("tokenAmount")
+            if not m or amt is None:
+                continue
+            try:
+                net[m] = net.get(m, 0) + int(amt)
+            except (TypeError, ValueError):
+                continue
+    created = [(v, m) for m, v in net.items() if v > 0]
+    if created:
+        return max(created)[1]
+
+    # ⚠️ FALLBACK, AND IT IS THE OLD RULE KEPT DELIBERATELY. If a payload
+    #    carries no balance changes at all there is nothing to conserve, so the
+    #    conservation test cannot speak. Refusing outright would drop a real
+    #    launch; falling back is strictly better than the old behaviour because
+    #    the conservation test has already had its say. Zero of 1,393 real
+    #    events reached this branch -- it is here for the payload shape we have
+    #    not seen, not for one we have.
+    for t in event.get("tokenTransfers") or []:
+        if t.get("mint"):
+            return t["mint"]
+    for acc in event.get("accountData") or []:
+        for ch in acc.get("tokenBalanceChanges") or []:
+            if ch.get("mint"):
+                return ch["mint"]
+    return None
+
+
 def parse_creation(event: dict) -> dict | None:
     """Extract a launch from one provider event, or None if it is not one.
 
@@ -215,19 +284,7 @@ def parse_creation(event: dict) -> dict | None:
     if (event or {}).get("type") != "CREATE":
         return None
 
-    mint = None
-    for t in event.get("tokenTransfers") or []:
-        if t.get("mint"):
-            mint = t["mint"]
-            break
-    if not mint:
-        for acc in event.get("accountData") or []:
-            for ch in acc.get("tokenBalanceChanges") or []:
-                if ch.get("mint"):
-                    mint = ch["mint"]
-                    break
-            if mint:
-                break
+    mint = _launched_mint(event)
     if not mint:
         return None
 

@@ -325,6 +325,66 @@ _pst = store.load_state("promote", {})
 check("* run_hour REACHED the socials sweep - production wiring",
       bool(_pst.get("checked_at")), _pst)
 
+section("11. BLOCKER-C: THE LAUNCHED MINT IS DECIDED BY CONSERVATION")
+# The shipped rule took the FIRST tokenTransfer carrying a mint. A pump.fun
+# CREATE settled in USDC puts three USDC payment legs ahead of the new token,
+# so the launch was recorded AS USDC -- 19 of 1,344 births, but 13 of 15 TRAIT
+# CARRIERS, because USDC resolves twitter+website every time and so is routed
+# to the treatment arm on every collapse. It failed in the FLATTERING
+# direction and would have manufactured the result.
+USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+REAL = "3ESCWpPJQbau34D77Pw1bGB19E2kXZSeWvedqC9apump"
+_collapsed = {
+    "type": "CREATE", "source": "PUMP_FUN",
+    "timestamp": int(now.timestamp()), "feePayer": "yeHEQqFE",
+    # three payment legs FIRST, exactly as the real event arrives
+    "tokenTransfers": [{"mint": USDC}, {"mint": USDC}, {"mint": USDC},
+                       {"mint": REAL}],
+    "accountData": [{"tokenBalanceChanges": [
+        # USDC only MOVES -- these sum to exactly zero
+        {"mint": USDC, "rawTokenAmount": {"tokenAmount": "-6378706"}},
+        {"mint": USDC, "rawTokenAmount": {"tokenAmount": "6299956"}},
+        {"mint": USDC, "rawTokenAmount": {"tokenAmount": "18900"}},
+        {"mint": USDC, "rawTokenAmount": {"tokenAmount": "59850"}},
+        # the launched token is CREATED -- it nets positive
+        {"mint": REAL, "rawTokenAmount": {"tokenAmount": "1000000000000000"}},
+    ]}],
+    "nativeTransfers": [{"fromUserAccount": "yeHEQqFE", "amount": 2000000000}],
+}
+_p = receiver.parse_creation(_collapsed)
+check("** the LAUNCHED mint is recorded, not the payment currency",
+      _p["mint"] == REAL, _p["mint"])
+check("* and specifically NOT USDC, which three transfer legs point at first",
+      _p["mint"] != USDC)
+
+# POSITIVE CONTROL: an ordinary single-token creation is unchanged.
+_plain = dict(_collapsed)
+_plain["tokenTransfers"] = [{"mint": REAL}]
+_plain["accountData"] = [{"tokenBalanceChanges": [
+    {"mint": REAL, "rawTokenAmount": {"tokenAmount": "1000000000000000"}}]}]
+check("POSITIVE CONTROL - an ordinary creation still resolves the same mint",
+      receiver.parse_creation(_plain)["mint"] == REAL)
+
+# ** THE RULE IS NOT POSITIONAL. Reversing the transfer order must not change
+#    the answer -- that is what makes this a fix rather than a third guess
+#    after "position 0" and "first match".
+_rev = dict(_collapsed)
+_rev["tokenTransfers"] = list(reversed(_collapsed["tokenTransfers"]))
+_rev["accountData"] = [{"tokenBalanceChanges": list(reversed(
+    _collapsed["accountData"][0]["tokenBalanceChanges"]))}]
+check("** ORDER-INVARIANT - reversing every list gives the same mint",
+      receiver.parse_creation(_rev)["mint"] == REAL,
+      receiver.parse_creation(_rev)["mint"])
+
+# A payload with no balance changes at all cannot be judged by conservation;
+# it falls back rather than dropping a real launch.
+_nobal = {"type": "CREATE", "source": "PUMP_FUN",
+          "timestamp": int(now.timestamp()), "feePayer": "C1",
+          "tokenTransfers": [{"mint": REAL}],
+          "nativeTransfers": [{"fromUserAccount": "C1", "amount": 1000000000}]}
+check("a payload with nothing to conserve falls back rather than dropping it",
+      receiver.parse_creation(_nobal)["mint"] == REAL)
+
 print("\n" + "=" * 60)
 print(f"FAILED: {len(FAILURES)} -> {FAILURES}" if FAILURES else "ALL CHECKS PASSED")
 shutil.rmtree(ROOT, ignore_errors=True)
