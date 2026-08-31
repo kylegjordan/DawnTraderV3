@@ -824,6 +824,38 @@ MSYS2_ARG_CONV_EXCL='*' git show "…:.claude/memory/MEMORY.md"               ->
 
 ## B79.0n.SCORING + B79.0n.TEC closure entries (2026-05-26)
 
+### #979 OPEN 2026-08-31 (CC-B; found by reading my own commit subject after the commit) — ⛔⛔ **A REAL CROSS-SESSION WRITE THAT IS NOT IN GIT: ALL FOUR SESSIONS SHARE `/tmp`, AND A COMMIT MESSAGE IS CONTENT**
+
+**MEASURED, NOT INFERRED.** I wrote my commit message to `/tmp/m14.txt`, staged my own explicit paths, and ran `git commit -F /tmp/m14.txt -- <my paths>`. The commit that came out carried **another session's message**:
+
+> `#969: retroactive pre-audit filed and LABELLED per Langston's ruling; two of my channel claims corrected`
+
+**My content, their words.** Artifact preserved at **`a9366f5e4`** (this clone's reflog) and on branch **`p9-safety`**; corrected at `0264f24f7` with the **tree hash identical before and after the amend**, so nothing but the message moved.
+**BOTH DIRECTIONS CHECKED:** no commit carrying my message reached origin over the last 40 commits, and the real `#969` had not been pushed. **One-directional, caught before it left the machine.**
+
+**CAUSE, ESTABLISHED:** under MSYS on Kyle's laptop **`/tmp` resolves to the shared Windows temp directory**. Four sessions, one namespace, no isolation. Another session wrote its own message file between my write and git's read. ★ **Short generic names — `m1.txt`, `msg.txt`, `commit.txt` — make a collision LIKELY, not unlikely**, and I used exactly those, for every commit that day.
+
+★★ **THIS SHARPENS `#753` RATHER THAN OVERTURNING IT, and the distinction is the finding.** `#753` concluded **no session ever wrote into another session's CLONE** — that stands, and every artifact still supports it. **But the sessions share a MACHINE, and a commit message is content.** ⇒ *"no cross-session write"* was true of the **clones**; it was never true of the **host**. **The investigation scoped its population to git and therefore could not have seen this.**
+
+⛔ **IT DEFEATS ALL THREE EXISTING GUARDS BY CONSTRUCTION — that is why it is filed rather than absorbed:**
+| guard | why it cannot see this |
+|---|---|
+| **rule 25** explicit paths | protects the `--` side; **the message arrives via `-F`, which is not a path in the commit** |
+| **rule 25.c** read the staged CONTENT | **I did.** It says nothing about the MESSAGE — nothing had suggested a message could belong to someone else |
+| **`guard-bare-commit.mjs`** | checks the **FORM**. It cannot see whose words are in the file |
+⇒ **the only check that catches it today is reading `git log -1` after committing and before pushing** — a human step, on a path where nothing errors.
+
+✅ **THE FIX IS FREE AND STRUCTURAL: write commit messages to the SESSION SCRATCHPAD** (`…/Temp/claude/<clone-slug>/<session-uuid>/scratchpad/`). **The UUID makes collision impossible rather than unlikely** — §7.1's *prefer impossible over intercepted*, and the same reasoning as the `DISABLED://` backup URL. ⚠️ **My own operating instructions already say to use it instead of `/tmp`. The rule existed, was loaded, and I did not follow it** — so a rule alone is not the fix; the fix is that nobody should be typing `/tmp` in a commit line at all.
+
+⚠️ **REACH IS UNMEASURED AND I AM NOT GUESSING AT IT.** I have not swept the other clones' histories for mis-messaged commits. **The population is every `git commit -F /tmp/...` any session has run on this machine, which nothing records.** A subject-line sweep is cheap and is the first deliverable below.
+
+**DISPOSITION — §9.4 #3, ITS OWN BATCH, PLACED:**
+> `HOME: B-SHARED-TMP-ISOLATION, owner CC-B, placed in PHASE_19_PLAN.md §governance queue at 2.6, after B-FRESHNESS-LOG-READER`
+
+**Deliverables:** **(a)** sweep all five clones' subjects for messages that belong to another session, and **REPORT the window swept** — the instrument cannot see beyond reflog expiry, so state the reach rather than implying none were found; **(b)** a `prepare-commit-msg` or `PreToolUse` guard that **REFUSES a `-F` under a shared temp path**, not one that warns; **(c)** fix the three-guard gap above by name in `CLAUDE.md` rule 25.c — *the message is content too*; **(d)** check whether anything else we hand between processes goes through `/tmp` (I already `scp` Langston dispatches through `/tmp` on **Helsinki**, which is a different and also-shared host — **unexamined, named here so it is not lost**).
+
+⇔ `#753` (same class, git-scoped population) · `25.c` (the rule this extends) · `MISTAKE_PATTERNS` `wrong-object` (a matching NAME is not a matching THING — here the name was right and the FILE was someone else's).
+
 ### #978 OPEN 2026-08-31 (CC-A; Langston named the class, a fresh reader caught that I had NAMED it without PLACING it) — ⛔ A SENTENCE THAT WAS **TRUE WHEN WRITTEN** AND IS WRONG NOW
 
 ★★ **CONSENSUS STALENESS — Langston’s term, and the class a disagreement-detector is BLIND TO BY CONSTRUCTION: every copy AGREEING, all of them lagging the system.** *(`B-DISAGREEMENT-FINDER` closed on a negative result for exactly this reason.)*
