@@ -103,8 +103,39 @@ When our own REST rate limiter declines to ask Kraken for a price, the code re-s
 
 ---
 
-## 7. GOVERNANCE FILES CHANGED SO FAR
+## 7. THE TIER LEDGER — POSTED WHOLE, INCLUDING THE `N/A` ROWS
 
-`SYSTEM_IMPACT_MAP.md` (second epoch on `exit_price_producer`, with its instant; the *"`kraken_rest_poller` is UNCHANGED"* line corrected — `F-G-2` at 3c reads it) · `SYSTEM_MANUAL.md:4671` (the *"no producer is consulted by any gate"* absolute **WITHDRAWN**) · `ACTIVE_PATH_FLOW.md` hop 6 · `PHASE_19_PLAN.md` row 3b.f **and new row 3b.f-a** · `BATCH_CATALOG.md` · `PHASE_HISTORY.md` · `RUNNING_ISSUES.md` (`#951` amendment; **`#977` opened, placed, then amended against myself**) · `Change Lists/B_PRICE_AGE_TRUTH_CHANGE_LIST.md` · `MEMORY_CC_C.md` + mirror.
+**CHANGE-CLASS: `architecture`** (as declared in the scope header; the governance checker grades against it).
+
+| # | document | verdict | one line |
+|---|---|---|---|
+| T1 | `BATCH_CATALOG.md` | ✅ | New OPEN entry: the defect, what shipped, the sawtooth, and why it cannot close. |
+| T1 | `PHASE_HISTORY.md` | ✅ | Phase-19 entry recording the batch as open on an observation window. |
+| T1 | `PHASE_19_PLAN.md` | ✅ | Row 3b.f status + its deliverable (2) answered; new row **3b.f-a** created for `#977`. |
+| T1 | shared `MEMORY.md` + own `MEMORY_CC_C.md` | ✅ | Own file and its mirror rewritten to the current position; shared file unchanged because nothing here alters a cross-session consensus truth. |
+| T1 | the batch `SCOPE` | ✅ | Written at Step 1 with the `change-class: architecture` header; approved with seven conditions. |
+| T1 | the batch `PRE_AUDIT` | ✅ | Written at Step 2; approved with four conditions, all applied. |
+| T1 | the `COMPLETION_REPORT` | ✅ | A **PROGRESS** report stands in its place — this document — and converts at close. |
+| T1 | Langston's `/home/langston/MEMORY.md` | ✅ | Synced with the open state, the armed alert and the joint-read criterion. |
+| T2 | `SYSTEM_MANUAL.md` | ✅ | The *"no producer is consulted by any gate"* absolute withdrawn at `:4671`. |
+| T2 | `SYSTEM_IMPACT_MAP.md` | ✅ | Second epoch on `exit_price_producer` recorded with its instant; the *"`kraken_rest_poller` is UNCHANGED"* line corrected. |
+| T2 | `RUNNING_ISSUES.md` | ✅ | `#951` amendment; `#977` opened, placed, then amended against my own severity claim. |
+| T2 | `CHANGES_AND_FIXES.md` | ✅ | `FIX-2026-08-31-A` registered, carrying the unmeasured-xStock and conditional-WS risks. |
+| T2 | `POST_AUDIT_ROADMAP.md` | N/A | No phase-level change — the new batch was placed in `PHASE_19_PLAN.md` at row 3b.f-a instead. |
+| T2 | `ADJUSTMENT_FRAMEWORK.md` | N/A | No parameter, threshold or adjustment rule appears in this batch's diff. |
+| T2 | `AUTHORITY_BASELINE.md` | N/A | No authority or risk-envelope boundary is touched; the diff is one service file and one test file. |
+| T2 | `STORAGE_POLICY.md` | N/A | No retention window, tier boundary or capture cadence changed — no migration in this batch. |
+| T2 | `MULTI_ASSET_VTS_EXPANSION_PLAN.md` | ✅ | Dated WORKING-LIST review: no status changes because the diff is the crypto REST path only; the unmeasured xStock arm carried forward as an observation. |
+| T2 | `ASSET_CLASS_ONBOARDING_WORKFLOW.md` | N/A | No onboarding learning surfaced — the crypto/xStock asymmetry is a measurement gap recorded on `#951`, not a playbook step. |
+| T2 | `BUILD_METHOD_PLAYBOOK.md` | N/A | No role, gate or tool changed; the method lesson went to `MISTAKE_PATTERNS.md` where it belongs. |
+| T2 | `LANGSTON_ARCHITECTURE.md` | N/A | His model, runtime, invocation, read path and auth are all unchanged by this batch. |
+| T2 | `CLAUDE.md` / `CONDUCT.md` | N/A | No stable rule changed; neither file appears in this batch's diff. |
+| T2 | `_archive/CLAUDE_MD_RULE_HISTORY.md` | N/A | It follows a `CLAUDE.md` rule add or change, and there was none. |
+| T2 | `DELETED_COMPONENTS_LOG.md` | N/A | Nothing was removed — the change is additive on `live-pricing-adapter.ts`. |
+| T2 | `MISTAKE_PATTERNS.md` | ✅ | Four `wrong-object` instances appended, all four sitting in my corrections rather than the original code. |
+| T2 | `GOVERNANCE_EXCEPTIONS.md` | N/A | No exception to a governed rule was granted by Kyle in this batch. |
+| T2 | `ALERT_HANDLING_PROTOCOL.md` | N/A | The ack/resolve process is unchanged — an alert was armed, the protocol was not edited. |
+| T2 | `DELIVERY_BOARD_PROTOCOL.md` | N/A | No column, field or ownership change; cards moved within the existing scheme. |
+| T2 | `CLAUDE_CODE_FEATURE_WATCH.md` | N/A | The daily model/feature check did not run as part of this batch. |
 
 **SPAWNED-READER RECORD:** `REVIEWER r1: object · implementation · HIT (regression + non-failing test) · re-derived y` · `REVIEWER r2: object · fence adequacy · HIT (4 evasions) · re-derived y` · `REVIEWER r3: object · terminating round · HIT (the :538 gap, the third slice, the missing positive control) · re-derived y`.
