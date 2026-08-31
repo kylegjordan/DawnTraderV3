@@ -79,6 +79,16 @@ STATE = "promote"
 #    outage without letting a long backlog run away in a single pass.
 MAX_CHECKS_PER_RUN = 1500
 
+# A LOOKUP THAT RESOLVED NOTHING IS RETRIED, NOT GUESSED (Langston, BLOCKER-A).
+# A no-pair answer is what an INDEXING GAP looks like as well as a dead token,
+# and the provider's own indexing latency is UNMEASURED (A2.2) -- so treating it
+# as "confirmed no channels" hangs the arm assignment on an unmeasured quantity,
+# in the ADVERSE direction: no-pairs correlates with dying fast, which is the
+# outcome under study. After this many attempts the token is assigned
+# `unresolved` -- an arm that is NEITHER carrier NOR control, so it can never
+# contaminate the comparison group, and it is excludable by name.
+MAX_RESOLUTION_ATTEMPTS = 3
+
 # ⛔ PACING, AND IT IS NOT POLITENESS — THE FIRST LIVE RUN HIT IT. The sweep
 #    fired 384 requests as fast as the loop ran and the provider answered 429.
 #    Its published ceiling is 300/min, so requests are spaced to stay under it.
@@ -165,9 +175,11 @@ def run(now: datetime = None) -> dict:
     now = now or _now()
     st = load_state(STATE, {})
     cursors = st.setdefault("cursors", {})
+    tries = st.setdefault("attempts", {})   # mint -> unresolved lookups so far
     stats = {"checked": 0, "with_channel": 0, "scheduled": 0,
              "control_drawn": 0, "errors": 0, "shed": False, "shed_reason": None,
-             "bounded_out": 0}
+             "bounded_out": 0, "unresolved_no_pairs": 0,
+             "unresolved_error": 0, "resolution_exhausted": 0}
 
     # ⛔ PROCESS FILE BY FILE, ADVANCING THE CURSOR TO THE LAST ROW ACTUALLY
     #    HANDLED. The first version advanced past everything it READ before
@@ -220,14 +232,49 @@ def run(now: datetime = None) -> dict:
                 stop = True
                 break
             except Exception as exc:
+                # BLOCKER-B. This used to log a counter and advance the cursor,
+                # so the token stayed `deferred` in the census FOR EVER -- in no
+                # arm, never scheduled, with no row saying why, and the only
+                # trace an integer that cannot be joined to a mint. It
+                # contradicted this module's own invariant 170 lines above it.
+                # "Checked, and the check FAILED" is a THIRD state and it is now
+                # recorded like the other two.
                 stats["errors"] += 1
-                LOG.warning("socials lookup failed for %s: %s", mint, exc)
-                consumed += nbytes          # a hard failure is not retried for ever
+                attempts = int(tries.get(mint, 0)) + 1
+                LOG.warning("socials lookup failed for %s (attempt %d): %s",
+                            mint, attempts, exc)
+                giving_up = attempts >= MAX_RESOLUTION_ATTEMPTS
+                _append(CHECKS_PATH, {
+                    "mint": mint,
+                    "checked_at": now.isoformat(),
+                    "socials": None,
+                    "socials_status": "error",
+                    "error": "%s: %s" % (type(exc).__name__, exc),
+                    "attempts": attempts,
+                    "had_channel": None,
+                    "was": reason,
+                    "becomes": "unresolved" if giving_up else "deferred",
+                })
+                if giving_up:
+                    stats["resolution_exhausted"] += 1
+                    tries.pop(mint, None)
+                    consumed += nbytes      # abandoned, but ON THE RECORD
+                else:
+                    tries[mint] = attempts  # retried next sweep; cursor holds
                 continue
 
             budget -= 1
-            socials = state.get("socials") or {}
-            found = _has_channel(socials)
+            raw_socials = state.get("socials")
+            # THREE STATES, NEVER TWO. resolved / no_pairs / error need
+            # different answers, and collapsing them is the shape this batch has
+            # now paid for four times.
+            if raw_socials is None:
+                status = "no_pairs"
+                socials, found = {}, False
+            else:
+                status = "resolved"
+                socials = raw_socials
+                found = _has_channel(socials)
             stats["checked"] += 1
 
             age_s = None
@@ -238,30 +285,51 @@ def run(now: datetime = None) -> dict:
                 except (ValueError, TypeError):
                     age_s = None
 
+            attempts = int(tries.get(mint, 0)) + 1
             rec = {
                 "mint": mint,
                 "checked_at": now.isoformat(),
-                # ★ THE AGE THE OBSERVATION WAS TAKEN AT. Without it this field
-                #   would read as "socials at launch", a stronger claim than the
-                #   data supports — a token can add a channel on day three.
+                # THE AGE THE OBSERVATION WAS TAKEN AT. Without it this field
+                # would read as "socials at launch", a stronger claim than the
+                # data supports -- a token can add a channel on day three.
                 "observed_at_age_s": age_s,
-                "socials": socials,
-                "had_channel": found,
+                "socials": socials if status == "resolved" else None,
+                "socials_status": status,
+                "attempts": attempts,
+                "had_channel": found if status == "resolved" else None,
                 "was": reason,
             }
 
-            # ⛔⛔ ONE ASSIGNMENT, MADE ONCE, FROM COMPLETE INFORMATION. Both
-            #    facts are now known — size (at birth) and channels (just
-            #    fetched) — so the arm decided here is final and no later
-            #    observation can move it.
+            if status != "resolved":
+                # UNRESOLVED: no arm is assigned. The token stays deferred and
+                # is retried, because "we could not look" is not evidence of
+                # anything. The record is written EITHER WAY -- that is
+                # BLOCKER-B: a failed check is a third state and must not be
+                # recorded as neither.
+                stats["unresolved_" + status] += 1
+                if attempts >= MAX_RESOLUTION_ATTEMPTS:
+                    rec["becomes"] = "unresolved"
+                    stats["resolution_exhausted"] += 1
+                    tries.pop(mint, None)
+                    consumed += nbytes          # give up, but ON THE RECORD
+                else:
+                    rec["becomes"] = "deferred"
+                    tries[mint] = attempts
+                    # DO NOT consume: it must come back on the next sweep.
+                _append(CHECKS_PATH, rec)
+                continue
+
+            tries.pop(mint, None)
+            # ONE ASSIGNMENT, MADE ONCE, FROM COMPLETE INFORMATION. Both facts
+            # are now known -- size (at birth) and channels (just resolved) --
+            # so the arm decided here is final.
             if found:
                 stats["with_channel"] += 1
                 arm = "trait_carrier"
             elif in_control_sample(mint):
-                # ★ THE CONTROL IS DRAWN FROM CONFIRMED NON-CARRIERS, which is
-                #   the population it was always meant to sample. Drawn at
-                #   birth it came from "not big enough" — a different and wrong
-                #   set, because the socials answer did not exist yet.
+                # DRAWN FROM CONFIRMED NON-CARRIERS -- and "confirmed" now means
+                # the lookup actually RESOLVED, not merely that it returned
+                # without raising.
                 arm = "control_sample"
                 stats["control_drawn"] += 1
             else:
@@ -282,6 +350,7 @@ def run(now: datetime = None) -> dict:
         cursors[name] = consumed
 
     st["cursors"] = cursors
+    st["attempts"] = tries
     st["checked_at"] = now.isoformat()
     save_state(STATE, st)
     LOG.info("promote %s", stats)

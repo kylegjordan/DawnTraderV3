@@ -81,6 +81,19 @@ def stub(mapping):
     return real
 
 
+
+
+def stub_nopair():
+    """The provider indexes nothing for this token yet.
+
+    This is the BLOCKER-A case: `token_state` returns evidence=no_pairs_returned
+    and socials=None. It is NOT "no channels" -- it is "we could not look".
+    """
+    real = providers._get
+    providers._get = lambda url, headers=None: {"pairs": []}
+    return real
+
+
 def checks():
     if not os.path.exists(promote.CHECKS_PATH):
         return []
@@ -286,6 +299,92 @@ finally:
 check("* NEGATIVE CONTROL - the same mint WITH a channel is a carrier, "
       "never a control", st["control_drawn"] == 0
       and checks()[0]["becomes"] == "trait_carrier", st)
+
+print(chr(10) + "=== 10. BLOCKER-A: A NO-PAIR LOOKUP IS UNRESOLVED, NOT A NON-CARRIER")
+# The provider returning no pair is what an INDEXING GAP looks like as well as
+# a dead token -- providers.py says so in its own comment -- and its indexing
+# latency is UNMEASURED (A2.2). Treating it as "confirmed no channels" hung the
+# arm assignment on an unmeasured quantity, in the ADVERSE direction: no-pairs
+# correlates with dying fast, which is the outcome. Measured live: 4 of 385.
+reset()
+birth("C00012", "deferred", False)      # this mint hashes INTO the control draw
+_r = stub_nopair()
+try:
+    st = promote.run(NOW)
+finally:
+    providers._get = _r
+check("* it is counted as UNRESOLVED, with its own counter",
+      st["unresolved_no_pairs"] == 1, st)
+check("** and it is NOT drawn into the control, though the mint qualifies",
+      st["control_drawn"] == 0, st)
+check("no arm was assigned - it stays deferred for another look",
+      checks()[0]["becomes"] == "deferred", checks()[0])
+check("* the record NAMES why it is unresolved",
+      checks()[0]["socials_status"] == "no_pairs", checks()[0])
+check("* and had_channel is None, not False - we did not observe an absence",
+      checks()[0]["had_channel"] is None, checks()[0])
+
+# POSITIVE CONTROL: the SAME mint, once the provider resolves, IS drawn.
+_r = stub({})
+try:
+    st2 = promote.run(NOW + timedelta(hours=1))
+finally:
+    providers._get = _r
+check("* POSITIVE CONTROL - once resolved, the same mint IS drawn into control",
+      st2["control_drawn"] == 1, st2)
+
+print(chr(10) + "=== 11. BLOCKER-A: the retry is BOUNDED and ends on the record")
+reset()
+birth("NEVER", "deferred", False)
+_r = stub_nopair()
+try:
+    runs = [promote.run(NOW + timedelta(hours=h)) for h in range(4)]
+finally:
+    providers._get = _r
+check("it is retried, not abandoned on the first miss",
+      sum(r["unresolved_no_pairs"] for r in runs) == promote.MAX_RESOLUTION_ATTEMPTS,
+      [r["unresolved_no_pairs"] for r in runs])
+check("* the retry is BOUNDED - it does not loop for ever",
+      sum(r["resolution_exhausted"] for r in runs) == 1,
+      [r["resolution_exhausted"] for r in runs])
+last = checks()[-1]
+check("** it ends in `unresolved` - NEITHER carrier NOR control, so it can "
+      "never contaminate the comparison group",
+      last["becomes"] == "unresolved", last)
+check("and it is excludable BY NAME, not by inference",
+      last["mint"] == "NEVER" and last["attempts"] == promote.MAX_RESOLUTION_ATTEMPTS,
+      last)
+
+print(chr(10) + "=== 12. BLOCKER-B: A FAILED CHECK IS RECORDED, NOT DROPPED")
+# The error path used to log a counter and advance the cursor, so the token
+# stayed deferred FOR EVER -- in no arm, never scheduled, with no row saying
+# why, and the only trace an integer that cannot be joined to a mint.
+reset()
+birth("BOOM", "deferred", False)
+_real_ts3 = providers.token_state
+providers.token_state = (lambda m: (_ for _ in ()).throw(RuntimeError("provider exploded")))
+try:
+    st = promote.run(NOW)
+finally:
+    providers.token_state = _real_ts3
+check("the failure is counted", st["errors"] == 1, st)
+check("** and A RECORD EXISTS - the third state is not recorded as neither",
+      len(checks()) == 1, checks())
+check("* the record names the failure and carries the mint",
+      checks()[0]["socials_status"] == "error"
+      and "provider exploded" in checks()[0]["error"]
+      and checks()[0]["mint"] == "BOOM", checks()[0])
+check("it stays deferred for a retry rather than vanishing",
+      checks()[0]["becomes"] == "deferred", checks()[0])
+
+# POSITIVE CONTROL: it really does come back and resolve.
+_r = stub({"BOOM": ["twitter"]})
+try:
+    st2 = promote.run(NOW + timedelta(hours=1))
+finally:
+    providers._get = _r
+check("* POSITIVE CONTROL - the failed token returns and is assigned",
+      st2["checked"] == 1 and checks()[-1]["becomes"] == "trait_carrier", st2)
 
 print("\n%d passed, %d failed" % (PASS, FAIL))
 shutil.rmtree(ROOT, ignore_errors=True)

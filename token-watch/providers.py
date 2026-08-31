@@ -128,7 +128,17 @@ def token_state(mint: str) -> dict:
         # ⚠️ NO PAIR IS NOT PROOF OF DEATH. It is also what an indexing gap
         # looks like, and the two are indistinguishable from here. The caller
         # decides, against the death definition — this function reports.
-        return {"alive": False, "pairs": 0, "evidence": "no_pairs_returned"}
+        # ⛔ `socials: None` IS NOT COSMETIC — IT IS THE DIFFERENCE BETWEEN
+        #    "no channels" AND "we could not look". Langston, BLOCKER-A: the
+        #    caller did `state.get("socials") or {}`, so an ABSENT key became
+        #    an EMPTY dict became `had_channel: False`, and the token was
+        #    assigned as a CONFIRMED non-carrier off a lookup that resolved
+        #    nothing. No-pairs is what an INDEXING GAP looks like as well as
+        #    a dead token — this function's own comment says so four lines
+        #    up — and the direction is adverse, because no-pairs correlates
+        #    with dying fast, which is the outcome under study.
+        return {"alive": False, "pairs": 0, "evidence": "no_pairs_returned",
+                "socials": None}
 
     p = max(pairs, key=lambda x: float((x.get("volume") or {}).get("h24") or 0))
     txns = (p.get("txns") or {}).get("h24") or {}

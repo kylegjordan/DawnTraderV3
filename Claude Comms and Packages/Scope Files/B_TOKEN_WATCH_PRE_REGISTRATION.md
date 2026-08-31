@@ -286,7 +286,11 @@ A1.3's *"45,000 controls -> ~75 expected events"* is across the **full 90 days**
 | range | **0.01 to 3.457 SOL** |
 | `size_source` | `feePayer_largest_of_10` … `_of_12` — every creation carries **10-12** creator transfers |
 
-⇒ **THE VALUES ARE NOT NEAR-CONSTANT, so the extractor is reading the creator's own buy and not a fee or rent.** The named failure did not occur.
+⇒ **THE VALUES ARE NOT NEAR-CONSTANT, so the extractor is NOT reading a FIXED fee or rent.** The named failure did not occur.
+
+⚠️ **AND THAT IS ALL IT ESTABLISHES — the original wording said ‘so the extractor is reading the creator's own buy’, and that DOES NOT FOLLOW (Langston, 2026-08-31).** Not-near-constant excludes a fixed fee. It does NOT exclude a different VARIABLE quantity — a proportional fee, the bonding-curve seed, an LP deposit, a same-transaction swap leg — each of which varies with launch size and would produce eight distinct values in a plausible range while being the WRONG MEASURAND. **One failure mode of the measurand was excluded; the measurand itself was not established, and there is no ground truth anywhere in this amendment.**
+
+⇒ **A3.1 CONDITION 1 asked for selection by role ‘verified against captured real creation events’. `feePayer_largest_of_10` is role-FILTERED then MAGNITUDE-selected — met procedurally, unmet substantively ⇒ A3.1 CONDITION 3 HAS NOT UNLOCKED, and `PROVISIONAL` stands for a second reason.** Discharge is cheap and is not yet done: cross-check the extracted SOL against an independent report of the creator's initial buy for 5-10 mints.
 
 ⛔⛔ **AND THE COUNTERFACTUAL IS THE PART THAT MATTERS, because it measures how close this came to happening.** The pre-fix code took `nativeTransfers[0]`. Against the same 8 real creations, the first creator transfer would have recorded **0.0000000010, 0.00001, 0.0022, 0.00251952, 0.00251952, 0.003, 0.008, 0.03 SOL** — **wrong in 8 of 8.**
 
@@ -333,4 +337,55 @@ Section 4 defines a trait carrier as *"any advertised channel OR initial size ab
 #### WHAT IS UNCHANGED, SO THE AMENDMENT IS NOT READ AS WIDER THAN IT IS
 
 The observation grid, the death definitions, the census-on-birth rule, `PLATFORM_DEFAULT_SIZE`, and `CONTROL_INCLUSION_P` are all **untouched**. ★ The control's realised inclusion rate is still logged daily and **the analysis uses the log, not the constant** — a decision made before any data, and the reason the drawn rate differing from the planned one is self-correcting rather than a defect.
+
+### AMENDMENT 7 - 2026-08-31, POST-FEED (Langston's ruling on AMENDMENT 6: two blockers, one correction, one condition)
+
+⛔⛔ **AMENDMENT 6 WAS NOT RATIFIED. This amendment carries what it got wrong and what it left open.** The socials sweep was STOPPED at 10:20:59Z (timer disabled, receiver left running so the census is unbroken) before the 11:00:28Z fire, so no further token was assigned under the defective rule.
+
+#### (a) ⛔ MY STATEMENT OF THE RESIDUAL WAS WRONG, IN THE FLATTERING DIRECTION
+
+AMENDMENT 6 said: *"a deferred token starts being observed ~1h later than a size-carrier, so the arms carry different left-truncation."*
+
+**THAT IS FALSE, and I built the thing that makes it false.** `store.schedule_grid` anchors every checkpoint on **`created_at`**, never on when scheduling happened — `due = created_at + delta`, re-read at the ref. So a carrier born 08:30 and a deferred token born 08:30 and promoted at the 09:00 sweep BOTH have their `1h` point due at 09:30, both read from the 10:00 bucket, both observed at a true age of 90 minutes. **Identical. In normal operation there is NO differential truncation between the arms.**
+
+★ I wrote the cost down as though I had not built the fix. **A residual invented is as damaging as one concealed: it invites a design answer to a problem that does not exist, and it makes the real one harder to see.**
+
+⇒ **THE REAL RESIDUAL IS NARROWER AND SHARPER:** a promotion delayed past age 60 minutes (backlog, per-run bound, or shed) means the `1h` point is recorded as `scheduled_in_the_past`. **That is a COUNTED data gap and it is analysable.** It applies to deferred tokens only.
+
+#### (b) ⛔ TWO BLOCKERS RE-OPENED 6(b)'s CONTAMINATION THROUGH THE ERROR PATH
+
+**BLOCKER-A — a lookup that resolved NOTHING was assigned as a CONFIRMED non-carrier.** `token_state`'s no-pair branch returned no `socials` key; the caller's `state.get("socials") or {}` turned an ABSENT key into an EMPTY dict into `had_channel: False`. But **no-pairs is what an INDEXING GAP looks like as well as a dead token** — `providers.py` says so in its own comment — and the provider's indexing latency is **UNMEASURED (A2.2)**. ⚠️ **The direction is ADVERSE: no-pairs correlates with dying fast, which is the outcome under study**, so the control arm was being enriched with unknown-status early deaths.
+**MEASURED BLAST RADIUS, from the raw follow-up provenance: 4 of 385 resolved checks (1.0%) rested on an unresolved lookup.** Those four are identifiable by mint and excludable by name.
+⇒ **FIXED:** the no-pair branch now returns `socials: None` explicitly; every check records `socials_status ∈ {resolved, no_pairs, error}`; **an unresolved lookup assigns NO arm** and is retried up to 3 times, after which the token becomes **`unresolved` — neither carrier nor control**, so it can never contaminate the comparison group.
+
+**BLOCKER-B — the error path dropped a token out of every arm, permanently and silently.** It logged a counter, advanced the cursor and wrote no record, so the token stayed `deferred` in the census for ever: in no arm, never scheduled, with no row saying why, and the only trace an integer that cannot be joined to a mint. **It contradicted this module's own stated invariant 170 lines above it.** ★ And the loss was **SELECTIVE**, falling hardest on tokens the provider cannot resolve — disproportionately the dead. A uniform offset would have been harmless; a selection effect is not.
+⇒ **FIXED:** a failed check writes its record, with the error, before any retry-or-abandon decision.
+
+#### (c) OUTCOME-BLINDNESS DECLARATION (Langston's condition on ratifying AMENDMENT 6)
+
+**What outcome data existed when these design changes were decided:** 963 observations and 7 deaths, from the pre-reset window, inventoried in AMENDMENT 6 as *what was archived*.
+
+⛔ **NONE OF IT INFORMED EITHER FIX, AND BOTH ARE DERIVABLE WITHOUT IT:**
+- **6(a)** is a **payload-schema fact** — a field absent from every creation event. Establishable from one event and zero outcomes.
+- **6(b)** is a **set-membership error** — the control was drawn from *"not big enough"* rather than *"not a carrier"*. Derivable from the code alone, with no data at all.
+- **BLOCKER-A and BLOCKER-B** were raised by a reviewer reading the source, not the results.
+
+★ **THE LINE THIS DECLARATION EXISTS TO DRAW (Langston's, and it generalises past this batch): a mid-collection design change motivated by a defect discoverable WITHOUT looking at outcomes is legitimate; one motivated by an outcome PATTERN is not.** The declaration is what makes that checkable instead of merely trusted.
+⚠️ **AND MY ORIGINAL ARGUMENT FOR AMENDMENT 6 WAS THE WRONG ONE.** I argued the reset made the data downstream of the design again. **That is true of the DATA and false of the ANALYST** — discarding rows does not discard knowledge, and pre-registration binds the analyst, not the rows.
+
+#### (d) A1.2's PREVALENCE CLAUSE HAS FIRED, AND IT IS RECORDED HERE
+
+A1.2: *"If measured prevalence materially exceeds 20%, the traffic rises — THE DEFINITION DOES NOT NARROW."*
+
+**MEASURED, WITH ITS POPULATION STATED (the earlier 31.8% was quoted with no `n`, which Langston rightly bounced):**
+| object | value |
+|---|---|
+| population | **post-reset census, n = 863 launches over 0.7h** |
+| above `PLATFORM_DEFAULT_SIZE` (1.0 SOL) | **292 = 33.8%** of that n |
+| observed launch rate | **27,813/day** |
+| implied carriers | **~9,411/day** against the modelled 4,140 — **2.27×** |
+
+⇒ **THE DEFINITION DOES NOT NARROW, per A1.2.** The traffic re-derivation: follow-ups cost **zero credits** and the free ceiling is 432,000/day, against a projected ~9,400 carriers/day plus the control arm and the socials sweep — comfortably inside it. **The credit budget is untouched, because no leg of this rise consumes credits.** ⚠️ n = 863 over 0.7h is a *short* window and carries whatever composition that period had; this is a fired-clause record, not a calibration.
+
+⛔ **AND `PLATFORM_DEFAULT_SIZE` IS NOT TO BE CALIBRATED FROM THIS.** A quantile fitted by the person who will analyse the data buys none of the protection A3.1's provenance clause describes — **fitting it later relocates the problem rather than fixing it.** It stays declared-and-arbitrary, `PROVISIONAL` per AMENDMENT 3, and the weight moves to the continuous dose-response, with 1.0 retained as the pre-registered binary cut **for the H2 replication only**, because the published comparator is binary.
 
