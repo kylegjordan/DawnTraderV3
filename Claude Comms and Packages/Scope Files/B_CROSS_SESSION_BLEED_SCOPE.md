@@ -100,3 +100,39 @@ r1 said nine files is the ceiling. **It is 14** — 4 single-file entries + the 
 
 ## OBJECTIVES — UNCHANGED IN SUBSTANCE, RE-AIMED
 OBJ-1/3 (report which version ran; assert the index is clean rather than trusting `reset`) are **strengthened** by C1: the one-run exposure is exactly the window in which a hook cannot vouch for itself. **OBJ-2's option (c) — gate on `behind` — is now the WEAKEST option**, because the commit gap is not the causal variable; **time-since-last-run is.** OBJ-4 must record the two-events split and the tracing artefact, not the r1 version.
+
+---
+
+# r3 — LANGSTON'S RULING APPLIED + THE FALSIFIER RUN. The single-mechanism claim SURVIVES, on 12 occurrences.
+
+## L1 — his self-pinning attack: CORRECT, and I have located its trigger
+He argued the residue **blocks delivery of its own fix**: `git status --porcelain` reports STAGED changes, so a clone carrying staged `.claude/hooks` skips every future hook fix as *"UNCOMMITTED local edits"*. **Mechanically right.** ⚠️ **But the loop checks `git diff --name-only REMOTE_REF -- path` FIRST (`:95`) and `continue`s when empty** — and residue leaves the WORKING TREE equal to origin, so there is no diff and the run exits harmlessly before reaching the dirty branch.
+⇒ **THE PIN ONLY ARMS WHEN A NEW HOOK FIX LANDS WHILE RESIDUE IS PRESENT.** Then worktree ≠ origin ⇒ differs ⇒ dirty check sees the staged entry ⇒ **the fix is refused indefinitely.** **MEASURED: 1 occurrence in 391 logged runs across all clones (CC-C, 2026-07-24 — the hook's own first day).** Rare, real, and unbounded once armed. **LIVE CHECK: all three clones carry ZERO staged hook entries right now, so nothing is currently primed.**
+
+## L2 — his second finding, ACCEPTED, and it is the sharpest thing in the batch
+My `RUNNING_ISSUES.md` was staged 2026-08-16 and skipped-as-dirty from then on — **the one file whose stated purpose is issue-number uniqueness.** And the skip message says **"you have UNCOMMITTED local edits here."** ⇒ **THAT WORDING IS THE MISATTRIBUTION ENGINE BEHIND #753's ENTIRE FRAMING.** The hook delivers origin's bytes, stages them, then tells the next session those bytes are its own local work. Every instance was then read as *another session writing into my tree*. **Folded in as OBJ-5** (§13 disposition (1)): distinguish *dirty-because-I-edited* from *dirty-because-a-prior-run-staged-origin's-bytes* by comparing the **index blob to the origin blob** — identical ⇒ hook residue, clear it, and **never call it local work** — plus corrected wording.
+
+## L3 — OBJ-2 SETTLED per his ruling: **(b) + OBJ-1. Option (c) retired.**
+Time-since-last-run is a proxy exactly as `behind` was. **The causal predicate is: are the on-disk hook bytes the origin bytes at run time — and OBJ-1 IS that predicate, so it subsumes the gate rather than accompanying it.** Reset-verification asserts on the **index blob**, never on `reset`'s exit code.
+
+## ★★ L4 — THE FALSIFIER, RUN. `git log origin --find-object=<blob> -- <path>` on every preserved artifact.
+**POPULATION: 12 occurrences — my 2, plus ALL 10 preserved stashes across the other two clones** (CC-A 6, CC-C 4). Not a sample.
+
+| clone | artifacts | paths | result |
+|---|---|---|---|
+| CC-B (mine) | 2 events, 9 files | hooks, settings, `CLAUDE.md`, rule-history, `RUNNING_ISSUES.md` | **all origin-reachable** |
+| CC-A | 6 stashes (08-09 → 08-31) | `RUNNING_ISSUES.md` ×6 | **all origin-reachable** |
+| CC-C | 4 stashes (08-20 → 08-31) | `RUNNING_ISSUES.md` ×3, `load-conduct.mjs` ×1 | **all origin-reachable** |
+
+⇒ **ZERO UNREACHABLE BLOBS. Not one byte in any preserved instance was content a session wrote directly into another session's tree.** Every one came from origin, delivered by the receiving clone's own hook.
+
+★ **AND THE SHAPE CONFIRMS IT: 9 of the 10 preserved artifacts are the SAME FILE** — `RUNNING_ISSUES.md`, the most frequently-changing entry in the watched list, therefore the one the hook refreshes most often. **The "bleed" tracks refresh frequency, not session behaviour.**
+
+⇒ **#753's premise is refuted on its own evidence. There is no cross-session write. The batch name describes the appearance the skip-message created.**
+
+⚠️ **HONEST LIMIT, stated because the falsifier only reaches what was kept:** this is 12 PRESERVED occurrences. **Instance 1 (2026-07-28) had its stash DROPPED and cannot be tested** — and #753 itself records that drop as why the cause survived. Any unpreserved occurrence is equally untestable. **The claim is: no second mechanism appears in ANY artifact that still exists.**
+
+⚠️ **AND A METHOD NOTE I OWE, having hit it twice today:** my first falsifier run used `git log --all`, which includes `refs/stash` — so it found the stash commit itself and reported **9/9 UNREACHABLE**, i.e. "second mechanism confirmed." A false alarm produced by the instrument including the artifact under test. **Searching `origin` explicitly is the correct form.** Same newest-first ordering trap also made my r1 attribution name the wrong commit. **Both are the `wrong-object` pattern; both were caught by re-deriving rather than re-reading.**
+
+## OBJECTIVES — FINAL SET
+**OBJ-1** hook reports whether its own on-disk bytes are origin's bytes at run time *(subsumes the retired gate)* · **OBJ-2(b)** verify the index is clean after refresh, asserted on the index blob · **OBJ-3** no silent catch — a failed reset is reported, not swallowed · **OBJ-4** record the 12 occurrences and the two tracing artefacts · **OBJ-5** distinguish hook-residue from genuine local edits and fix the skip wording *(L2)*.
