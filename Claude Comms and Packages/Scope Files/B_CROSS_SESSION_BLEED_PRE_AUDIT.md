@@ -161,3 +161,66 @@ Once a path is refreshed it is **dirty relative to HEAD** — and every subseque
 `REVIEWER r1: claim-only (mode B) · 6 claims · 4 HITS (A8/A9/A10/A11) · re-derived y`
 `REVIEWER r2: object round · corrected-claim · 2 HITS (A12/A13) + 1 new mechanism (A14) · re-derived y`
 ⚠️ **STOPPING AT TWO ROUNDS, AND SAYING SO RATHER THAN CLAIMING CONVERGENCE: r2's corrections are themselves UNREVIEWED.** A12/A13 are scoping fixes I can state precisely; **A14 is a NEW mechanism claim and has had NO independent round.** Per the loop's own rule the correction is exactly as likely to be wrong as what it replaced — **so A14 goes to Langston flagged as single-sourced, not as established.**
+
+---
+
+# AUDIT r4 — LANGSTON'S STEP-2 RULING. Three mandatory corrections taken, class overruled to `architecture`, and his one hypothesis REFUTED on measurement.
+
+## M1 — A7's INTERVAL: I OVER-CORRECTED; HIS VERSION IS RIGHT
+r3/A11 replaced "28 days" with "12 days detected-but-unfixed" on the strength of the `CC-C-685-not-mine-2026-08-09` stash. **That was not a detection.** His evidence, re-checked: `fresh-rules.mjs:120` — *"both incidents were misread as another session writing into this clone. It was never that"*; **#753's instance table lists 07-28 · 08-21 · 08-27 — 08-09 is ABSENT**; and the stash object's reflog date is **2026-08-18**, nine days after its own label. The fix landed **18 minutes** after the 08-21 occurrence.
+
+⇒ **28 days introduction→IDENTIFICATION, ~0 identification→fix. ZERO days known-and-unfixed.** ★ **And that RESTORES my A7 explanation to its full span:** the acceptance-set gap covers the **whole 28 days**, not the first 16. **My correction was worse than the thing it corrected** — I read a stash LABEL as an event date without checking the object's own reflog.
+
+## M2 — A10 "THE ONLY THING THAT WOULD PUBLISH": REFUTED, WRONG POPULATION. Verified at the ref.
+
+| script | `git add -A` | `cd` guard | target branch |
+|---|---|---|---|
+| `scripts/github-push.sh` | `:51` | **yes** `:22` (`set -e` aborts off-Replit) | `dawntrader-v4` `:16` |
+| **`REPLIT_PUSH_SCRIPT.sh`** (repo root) | **`:46`** | **NONE** | `dawntrader-v4` `:19` |
+| **`Claude Comms and Packages/REPLIT_PUSH_SCRIPT.sh`** | **`:46`** | **NONE** | `dawntrader-v4` `:19` |
+
+Both `REPLIT_PUSH_SCRIPT.sh` copies run **unguarded**, and **`1-system-manual/REPLIT_ONBOARDING_PROMPT.md:88` + `:118-123` — an UNARCHIVED path — still mandate the push script.** My *"every invocation is Replit-era"* was **false**.
+
+★ **ONE REFINEMENT I OWE, in the safer direction:** all three target **`dawntrader-v4`, not the review branch**, so the *push* would not reach `migration/aws-supabase`. **The risk is not the push — it is the local `git add -A` + commit, which bakes hook residue into local history on whatever branch is checked out, where an ordinary later push carries it.** ⇒ **P9 covers all four artifacts and retires the two onboarding directives.** *(`fix-follows-pointer` avoided — my own named pattern, nearly committed on my own batch.)*
+
+## M3 — A1's ORDERING BOUND: **DROPPED, NOT DEFENDED**
+He is right that `settings.local.json` establishes **registration** order, not **execution** order, and that my own hook header (`:18-20`) already calls the ordering *"UNDOCUMENTED"*.
+
+**I tried to establish it and could not.** Pairing the two hooks that both write logs (`fresh-rules` #1, `log-instructions-loaded` #13) over the last 40 runs: **25/40 paired, median gap 30.4 s, range 0.52–115.8 s.** Consistent with sequential, **but it does not exclude concurrency and 15 did not pair at all.**
+
+⇒ **the "only `fresh-rules` runs stale, blast radius one file" bound is WITHDRAWN.** If execution is concurrent, `load-conduct`/`load-own-memory` can read `CLAUDE.md` **while `checkout` is writing it** — a torn read, for which I have no instrument. **Recorded as an open risk, not a bounded one.**
+
+## M4 — ★ HIS HYPOTHESIS IS REFUTED ON MEASUREMENT, AND THE REFUTATION IS USEFUL
+He proposed (29(c), explicitly untested — he cannot read stashes): *"your stash corpus is the fingerprint of the aborted pull; stash is the documented way out."* **Testable, so I tested it:** for every stash in all four clones, the gap to the next `pull (start)` in that clone's reflog.
+
+| | |
+|---|---|
+| population | **19 stashes, 4 clones** — the whole corpus *(grown from 13; a moving count I should have stamped)* |
+| stashes with a pull within 180 s | **2 / 19** |
+| the rest | 368 s → **122,330 s (34 h)** |
+
+⇒ **NOT the fingerprint of aborted pulls.**
+
+★ **AND THAT SEPARATES THE TWO FINDINGS RATHER THAN MERGING THEM:** the stashing is driven by **A5, the misattribution WORDING** — sessions read *"you have UNCOMMITTED local edits"*, conclude foreign content, and stash under rule 25.c. **A14 is the mechanical harm; A5 is what generates the human response.** They need different fixes, and the priority follows: **the wording has produced 19 recorded reactions; the freeze reaches every skipped path silently.**
+
+## A14 — CONFIRMED BY HIS OWN SCRATCH REPRODUCTION, and larger than I wrote
+- ⛔ **`git pull` ABORTS** — *"Please commit your changes or stash them before you merge. Aborting."* I wrote the freeze lasts *"until the session pulls."* **The pull is the thing it blocks.** Not a stale file with an exit — **a stale file barricading the exit.**
+- **ERA-INDEPENDENT:** pre-fix leaves `M ` staged, also non-empty at `:100`. **08-21 changed which column, not whether it freezes** — which **strengthens A12**.
+- `:157` says *"Commit and push them"* — the misattribution is now **an instruction to publish hook residue.** ⚠️ **Magnitude honestly, per his caution: the content is origin's own and a behind-HEAD clone cannot push, so this is AUTHORSHIP NOISE, not content loss. Not inflated.**
+
+## CHANGE-CLASS — OVERRULED to `architecture` (his ruling, my request)
+Delta is exactly `system_manual` + `sim`. **The bind he flagged is real:** `SYSTEM_MANUAL.md`'s silence is **CORRECT** — `:23` and `:70-72` exclude build/process machinery and route it to `BUILD_METHOD_PLAYBOOK.md` and the SIM — but `architecture` makes `system_manual` **required** and `workflow-10:117` forbids `N/A` on a required row.
+
+⇒ **P11: file a confirmed `na-skip | system_manual` exceptions row carrying the verbatim `:70-72` citation. DO NOT invent a Manual section to satisfy a checker.**
+**P6 extended:** `SIM:1000` update **plus** `:992-993` — a GFM table header separated from its body by the blockquote at `:994-999`, **currently rendering as literal pipe text.**
+
+## NEW ITEMS, homed per §13
+- **FOLDED IN:** pull-block → **P5** · four publishers + two onboarding directives → **P9** · na-skip row → **P11** · broken SIM table → **P6**.
+- ➕ **`B-FRESHNESS-LOG-READER` — owner CC-B, `PHASE_19_PLAN` governance queue, immediately after this batch.** My A2 *"no code reader"* is right, **but I missed what it collides with:** `fresh-rules.mjs:40-41` asserts in the **present tense** that *"the monitoring routine reads"* the log, and **`CLAUDE.md:202` — auto-loaded into every session — cites the pairing as LIVE DETECTION COVERAGE.** The `freshness-log-review` cron is defined in **no committed artifact**. **A claimed control cited as protection it may not provide** (#661 leg 3).
+- ➕ **`B-GOV-CLASS-GUARD-HOOKS` — owner CC-A**, after `B-CHANGE-CLASS-PARSER` (#968), same file. `CORE_ENGINE_PATHS` (`config.mjs:187-198`) has **no `.claude/` entry**, so the under-declaration cross-check is **structurally blind to the hook estate** — the one file class executing in every session in five clones. **It would not have flagged my `non_architecture`. He had to.**
+
+## ⚠️ WHAT REMAINS UNVERIFIED BY HIM — his tag, carried forward
+The run log, the stash corpus and A12/A13's byte-identity **live on laptop clones he cannot reach.** **`RULED ON REPORTED FACT` — no PROCEED on the A12/A13 legs.** **A14 carries because he re-derived the mechanism himself.** ⇒ **M4 above is mine-only by the same constraint** — a measurement he cannot check, and it should be read with that tag.
+
+## ⚠️ AND A COUNT I MISSTATED THREE TIMES
+The run log was cited as **396** (audit), **403** (dispatch), **409** (now). **Not an inconsistency — a live counter read at three different moments.** The error was presenting a moving figure as a fixed one. **Any count of a growing artifact is stamped with its read time from here on.**
