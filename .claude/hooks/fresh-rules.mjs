@@ -97,22 +97,58 @@ try {
    * staged? Then it is THIS HOOK'S OWN PRIOR REFRESH, not the session's work.
    *
    * ⚠️ THE FAIL DIRECTION IS DELIBERATE AND ASYMMETRIC: every uncertainty returns FALSE — "treat
-   * it as the session's own edit and do not touch it". Losing a refresh costs a stale file that
-   * the next run retries; losing a genuine local edit is unrecoverable. The cheap error is the
-   * only one this may make.
+   * it as the session's own edit and do not touch it".
+   * ★ CORRECTED after Langston attacked it at Step-4: this read "losing a genuine local edit is
+   * unrecoverable", and that OVERSTATES the risk this fence carries. He built the case — a session
+   * deliberately reverting a file to an older origin version — and the edit IS overwritten and IS
+   * misreported as ours. But everything that can fall through this hole is, BY CONSTRUCTION,
+   * content origin's history already holds at that path: that is what makes `--find-object` hit.
+   * So the misclassifiable class is recoverable from origin, and the honest claim is narrower than
+   * the one I wrote. The design stands; the justification for it was inflated.
    *
    * PROVED OFFLINE before shipping (scratch origin + clone, B-CROSS-SESSION-BLEED Step 3):
    *   residue            → refreshed, index clean afterwards  (the freeze breaks)
    *   residue-check OFF  → the freeze RETURNS                 (mutation-proof: the fence can fail)
    *   genuine edit       → PRESERVED, unstaged and staged forms both
    */
+  /** One FILE: did origin ever hold these exact bytes on this exact path? */
+  function blobWasAtOrigin(file) {
+    try {
+      const wt = run(['hash-object', '--', file]);
+      if (!wt) return false;
+      return Boolean(run(['log', REMOTE_REF, '--find-object', wt, '--format=%H', '-1', '--', file]));
+    } catch { return false; }
+  }
+
   function isHookResidue(p) {
     try {
       const staged = run(['diff', '--cached', '--name-only', '--', p]);
       if (staged) return false;                    // staged ⇒ the session's, never ours to clear
-      const wt = run(['hash-object', '--', p]);
-      if (!wt) return false;
-      return Boolean(run(['log', REMOTE_REF, '--find-object', wt, '--format=%H', '-1', '--', p]));
+
+      // ⛔⛔ A DIRECTORY PATHSPEC CANNOT BE HASHED, AND `.claude/hooks` IS `FILES[1]`.
+      // Langston's Step-4 blocker, reproduced: `git hash-object -- .claude/hooks` exits 128, the
+      // throw was caught, and the directory could therefore NEVER be residue — so the entry the
+      // header calls the worst one to be stale on stayed frozen while the single files un-froze.
+      // ★ AND THE REWORDING MADE IT WORSE THERE: the frozen directory then wore the new sentence
+      // "content ORIGIN HAS NEVER HELD … genuinely YOUR edits" about bytes THIS HOOK had written
+      // one commit earlier. Narrowing a false claim to one path and stating it more confidently is
+      // not a fix. So the directory gets its own arm: enumerate the modified members and require
+      // EVERY ONE to be residue — one genuine edit anywhere under it preserves the whole entry.
+      let isDir = false;
+      try { run(['hash-object', '--', p]); } catch { isDir = true; }
+      if (isDir) {
+        // ⚠️ ENUMERATE WITH `status --porcelain`, NOT `diff --name-only`. My first cut used the
+        // diff, which lists only TRACKED modifications — and the case a behind clone actually
+        // produces is a NEW guard file arriving UNTRACKED (`??`), invisible to it. The members
+        // list came back empty, the arm returned false, and the directory stayed frozen exactly
+        // as before the fix. Caught in the rig, not in review: the arm was right and its
+        // enumerator was blind to the commonest member.
+        const members = run(['status', '--porcelain', '--', p])
+          .split('\n').map((l) => l.slice(3).trim()).filter(Boolean);
+        if (!members.length) return false;         // nothing enumerable ⇒ preserve
+        return members.every(blobWasAtOrigin);
+      }
+      return blobWasAtOrigin(p);
     } catch { return false; }                      // unknown ⇒ preserve
   }
 
@@ -192,7 +228,12 @@ try {
     // one question the original defect turned on. It can now, and a leak is named rather than lost.
     residue_refreshed: residueRefreshed.map(([p]) => p),
     index_leaks: indexLeaks.map(([p, why2]) => `${p}: ${why2}`),
-    quiet: changed.length === 0 && skippedDirty.length === 0 && skippedUnpushed.length === 0,
+    // Langston Step-4 FINDING-2: this keyed on the three ORIGINAL arrays while its twin six
+    // lines below had been amended — I wrote the "correct by coincidence is not good enough"
+    // argument and then left the identical gap here. No consumer reads it yet, which is
+    // exactly why it would have rotted unnoticed.
+    quiet: changed.length === 0 && skippedDirty.length === 0 && skippedUnpushed.length === 0
+           && residueRefreshed.length === 0 && indexLeaks.length === 0,
   });
 
   // The two new arrays are included deliberately: a residue refresh also pushes to `changed`, so
