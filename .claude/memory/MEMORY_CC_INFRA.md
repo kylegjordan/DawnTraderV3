@@ -55,8 +55,8 @@ I previously ran on my **own** rules file at `G:\My Drive\CLAUDE.md` and loaded 
 
 ## ✅ DISCORD WAKE — ONBOARDED 2026-08-26 (Kyle lifted his own deferral)
 
-Until today I could be **named in the channel and never woken**: `cc-wake-filter.py` carried `CC-INFRA` in its alert-owner tuple for **suppression only** and had no `NAMES` entry, which the file stated in its own comment. The roster already had me; only that registry did not. Added the three name spellings + the display name **"Infra Claude"** (the form measured on the channel — it is also the `--sender` value, and a mismatch self-wakes). Repo mirror `comms-infra/laptop/cc-wake-filter.py` synced, pushed `0bda086c8`. **Watcher armed via the Monitor tool with alias `CC-INFRA`** — never Bash `run_in_background` (MEMORY 4.5). ⚠️ **Intended side effect:** a message naming only me now SUPPRESSES for CC-A/B/C rather than broadcasting to them; it reaches them when they next re-arm.
-★ **THE TESTING LESSON, which cost me two false failures:** my first two canaries returned ALL-NEGATIVE and I nearly read that as a broken fix. It was a broken TEST — the filter is driven by a multi-file `tail` and only parses lines following a `==> filename <==` header, so it never saw my input. **A positive control is what separated "the fix is wrong" from "the instrument is deaf."** All ten cases pass with one.
+I could be named in the channel and never woken — `cc-wake-filter.py` had no `NAMES` entry for me. Fixed: three spellings + display name **"Infra Claude"** (also the `--sender` value; a mismatch self-wakes). **Arm the watcher with the Monitor tool, alias `CC-INFRA`** — never Bash `run_in_background`. ⚠️ Side effect: a message naming only me now SUPPRESSES for CC-A/B/C.
+★ **THE TESTING LESSON:** my first two canaries came back ALL-NEGATIVE and I nearly read that as a broken fix. **It was a broken TEST** — the filter only parses lines following a `==> filename <==` header, so it never saw my input. **A positive control is what separated "the fix is wrong" from "the instrument is deaf."**
 
 ## B-TOKEN-WATCH - THE VERIFIED DESIGN (measured 2026-08-27; do NOT re-research)
 
