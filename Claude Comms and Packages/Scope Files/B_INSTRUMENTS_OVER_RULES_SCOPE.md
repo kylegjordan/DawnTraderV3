@@ -149,7 +149,36 @@ Per the change-class matrix (`d8d4999bb`). ⚠️ **`SYSTEM_IMPACT_MAP.md` is `j
 ✅ **MEASURED at the pinned ref `e4425782`, lexical and exact, zero semantic matching: 556 IDs with a home · 151 multi-homed (27%) · 405 single-homed as the positive control · 142 true multi-homing vs 9 namespace collisions.** ⛔ **And 96% of comparable pairs share LESS THAN HALF their text — which is what killed the consolidation version.**
 ⇒ **FILED AS `#970`; HOME: `B-DISAGREEMENT-FINDER`, queue row 8.5, Step 1 APPROVED r2.** ★ **Langston’s gate was *"if it’s large, THEN scope it."* It came back large.**
 
-### **OBJ-6 — MEASURE WHETHER THE 1.b SKIP GENERALISES**
+### **OBJ-6 — ✅ DONE. THE SKIP GENERALISES, AND IT IS IMPROVING BUT NOT SOLVED.**
+
+⛔ **POPULATION DISCIPLINE FIRST, BECAUSE IT DECIDES THE WHOLE RESULT: the mandatory 1.b read became a STANDING SCOPE OBLIGATION on 2026-07-29.** Scopes written before that were never bound by it, and scoring them would manufacture a failure rate out of a rule that did not exist. ⇒ **population = the 51 scope documents first committed on or after 2026-07-29** (of 326 scopes in the repo).
+
+| result | count | share |
+|---|---|---|
+| provenance read **EVIDENT** (2+ markers) | **21** | 41% |
+| **WEAK** (exactly 1 marker) | 9 | 18% |
+| ⛔ **NO MARKER AT ALL** | **21** | **41%** |
+
+✅ **NEGATIVE CONTROL: `STORAGE_POLICY.md`, a document that cannot contain a provenance read, returns 0 markers** — so the instrument discriminates rather than matching everything.
+
+**THE TREND — and it changes the conclusion from "systematically skipped" to "improving and still not solved":**
+
+| window | n | EVIDENT | NONE |
+|---|---|---|---|
+| 29 Jul – 10 Aug | 26 | 31% | **46%** |
+| 11 Aug – 22 Aug | 5 | 40% | 60% |
+| 23 – 31 Aug | 20 | **55%** | **30%** |
+
+⚠️ **The middle band is n=5 and I am not reading a trend through it.** The comparison that carries is the first band against the last: **EVIDENT 31% → 55%, NONE 46% → 30%.**
+
+★ **VERDICT ON KYLE’S SUSPICION — CONFIRMED, AND WIDER THAN ONE BATCH.** *"I don’t know that it’s doing the provenance."* **It is absent from 21 of 51 scopes written after it became binding, and from 30% of those written in the last week.**
+
+⛔⛔ **TWO HONEST LIMITS, AND THE FIRST IS LANGSTON’S OWN RECURSION LANDING ON THIS VERY MEASUREMENT:**
+1. **MY MARKERS DETECT FORM, NOT THE ACT.** A scope could genuinely do the read and use none of my words ⇒ the `NONE` bucket is an **UPPER BOUND** on skipping. ★ **This is the paraphrase problem one level down — I am measuring a prose corpus with a lexical instrument, which is precisely what `#970` says cannot be trusted.** ⇒ **the DIRECTION is sound; the precise figure is not.**
+2. ⛔ **THE SECOND HALF OF THIS OBJECTIVE IS A REFUSAL, NOT A NUMBER.** *"In how many did it happen ONLY because Kyle ordered it?"* — **my instrument cannot see that.** It is visible on `B-SCANNER-EGRESS-NORMALISE` only because a commit subject happened to say so. ★ **Recorded as a refusal per the objective’s own wording, rather than estimated.**
+
+⇒ **CONSEQUENCE FOR THIS BATCH: the §2 diagnosis survives — but the honest framing is that the workflow rule IS taking hold, slowly, while a third of recent scopes still skip it.** ★ **That is an argument for an INSTRUMENT, not for another rule** — which is this batch’s whole thesis, arriving as a measurement rather than an assertion.
+
 ⛔ **ONE BATCH IS ONE OBSERVATION.** Across the last N closed batches, in how many did a provenance read actually happen, and in how many did it happen only because Kyle ordered it? **Deliverable is a NUMBER with its population, or an explicit "the instrument cannot see this" refusal.**
 ⛔⛔ **AND LANGSTON NAMED THE RECURSION THAT MAKES THIS SHARPER THAN I SCOPED IT: THE MANDATORY 1.b PROVENANCE READ *IS* A PROSE SEARCH.** This scope’s own §4 is a grep over the ledger corpus with a substring-noise correction I made by hand (38 → word-boundary). ⇒ **every 1.b in this system inherits the paraphrase failure mode — so OBJ-1’s finding does not sit BESIDE the governance problem, it UNDERCUTS THE CONFIDENCE OF THE READ THAT GATES EVERY SCOPE, INCLUDING THIS ONE.** ⚠️ **If the skip does NOT generalise, this batch says so and the §1 finding is narrowed to CC-C.**
 
