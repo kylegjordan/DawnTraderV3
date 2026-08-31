@@ -309,6 +309,14 @@ def build(now: datetime = None) -> dict:
         },
         "oldest_survivors": _oldest_survivors(dead, OLDEST_N, now),
         "display_ages": list(DISPLAY_AGES),
+        # ⛔ THE ORDER OF THE CHECKPOINTS, CARRIED EXPLICITLY. The payload is
+        #    written with sort_keys=True, so `by_age_at_death` comes back
+        #    ALPHABETICALLY — 1h, 24h, 30d, 3d, 6h, 7d, 90d — and a page reading
+        #    Object.keys() renders 30 days between 24 hours and 3 days. Caught
+        #    on the live page, not in a test: the numbers were right and the
+        #    sequence was nonsense, which is the same shape as #934 (a correct
+        #    value under a heading that misdescribes it).
+        "grid_ages": list(GRID_LABELS),
     }
 
     save_state(STATE, st)

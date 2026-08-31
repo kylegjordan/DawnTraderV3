@@ -112,6 +112,20 @@ check("every grid age is present even at zero — no absent-as-valid",
 check("★ faded and liquidity_pulled are never collapsed",
       p["died"]["by_class"] == {"faded": 2, "liquidity_pulled": 2}, p["died"]["by_class"])
 
+print(chr(10) + "=== 3b. THE CHECKPOINT ORDER SURVIVES THE JSON — caught on the live page")
+# ⛔ THE PAYLOAD IS WRITTEN WITH sort_keys=True, so `by_age_at_death` comes back
+#    ALPHABETICALLY: 1h, 24h, 30d, 3d, 6h, 7d, 90d. A page reading Object.keys()
+#    then renders 30 days BETWEEN 24 hours and 3 days. The numbers were right and
+#    the sequence was nonsense — invisible to every check here until I looked at
+#    the rendered page. The order is now carried explicitly.
+on_disk = json.load(open(summary.SUMMARY_PATH, encoding="utf-8"))
+check("★ the payload carries the checkpoint order explicitly",
+      on_disk.get("grid_ages") == list(summary.GRID_LABELS), on_disk.get("grid_ages"))
+check("POSITIVE CONTROL — the bucket keys ALONE are out of order, which is why "
+      "the explicit list is needed",
+      list(on_disk["died"]["by_age_at_death"]) != list(summary.GRID_LABELS),
+      list(on_disk["died"]["by_age_at_death"]))
+
 print("\n=== 4. THE SURVIVOR AGING BUCKETS")
 reset()
 birth("OLD", NOW - timedelta(days=95), True)      # older than every bucket

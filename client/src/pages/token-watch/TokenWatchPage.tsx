@@ -38,6 +38,7 @@ type Summary = {
     follow_reason: string | null;
   }>;
   display_ages: string[];
+  grid_ages: string[];
 };
 
 type Response =
@@ -152,7 +153,11 @@ export default function TokenWatchPage() {
 
   const s = data.summary;
   const tracked = s.tracked.total;
-  const deathAges = Object.keys(s.died.by_age_at_death);
+  // ⛔ NEVER Object.keys() HERE. The payload is written with sorted keys, so
+  //    the checkpoints come back ALPHABETICALLY and 30 days renders between
+  //    24 hours and 3 days. Seen on the live page. The order is carried
+  //    explicitly by the study, which is the only thing that knows it.
+  const deathAges = s.grid_ages ?? Object.keys(s.died.by_age_at_death);
 
   return (
     <div className="space-y-6 p-6">
