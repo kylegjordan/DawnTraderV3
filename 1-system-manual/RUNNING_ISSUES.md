@@ -824,6 +824,28 @@ MSYS2_ARG_CONV_EXCL='*' git show "…:.claude/memory/MEMORY.md"               ->
 
 ## B79.0n.SCORING + B79.0n.TEC closure entries (2026-05-26)
 
+### #978 OPEN 2026-08-31 (CC-A; Langston named the class, a fresh reader caught that I had NAMED it without PLACING it) — ⛔ A SENTENCE THAT WAS **TRUE WHEN WRITTEN** AND IS WRONG NOW
+
+★★ **CONSENSUS STALENESS — Langston’s term, and the class a disagreement-detector is BLIND TO BY CONSTRUCTION: every copy AGREEING, all of them lagging the system.** *(`B-DISAGREEMENT-FINDER` closed on a negative result for exactly this reason.)*
+
+**TWO SHAPES, AND THEY NEED DIFFERENT MECHANISMS — Langston split them:**
+| | shape | detectable by |
+|---|---|---|
+| **A** | **an asserted live VALUE with no read-site** — his model line (`claude-fable-5[1m]`, wrong for **20 days** against two live sites); `CLAUDE.md` §3’s strategy count (18 vs the SSOT’s 19) | **FORM ALONE** — a value present, a pointer absent. No id, no register. |
+| **B** | **a claimed STATE the register contradicts** — `#732` "deprioritised, tripwire guards it" (4 days stale) · "CI 4/4 unsatisfiable" (3 weeks past `#669`) · `B-EPOCH-KEYING-PARITY`’s heading | **the id AND the register** |
+
+⛔⛔ **AND THE INSTANCE THAT BREAKS THE SIMPLE FRAMING: `B-MISTAKES-FILE` TOLD LANGSTON ON EVERY INVOKE, FOR TEN DAYS, THAT HE OWED A STEP-4 GATE HE HAD ALREADY GIVEN.** ★ **It asserts no VALUE — it asserts an OPEN OBLIGATION, a NEGATIVE.** His own note: *"an open obligation is not a value that lives at a read-site, so my read-site rule does not catch these — only a correction does."*
+
+⚠️ **AND "WE ALREADY HAVE THE RULE" IS THE STRONGEST EVIDENCE *AGAINST* TREATING THIS AS FREE (Langston).** The read-site rule was **auto-loaded into every invoke he ran for twenty days while the false model value sat a few lines above it in the same file.** ★ **A rule that fails to fire on the file it lives in has reported its enforcement value, and it is ZERO.** ⇒ **this is the FIRST mechanism for a rule that has only ever been a sentence.**
+
+★ **HIS DISCRIMINATOR, WORTH KEEPING AS A STANDING TEST: of every *"we already own it"*, ask — DOES THE OWNED THING EXECUTE, OR IS IT PROSE?** A language server executes. **This rule has never executed.**
+
+⛔ **BLIND SPOT AT BIRTH, NAMED RATHER THAN DISCOVERED: the delivery-board recipe case — a correct fix that landed in ONE of two homes — has NO REGISTER ENTRY, so claimed-vs-register returns CLEAR over a corpus that EXCLUDES it.** ★ **The tripwire shape (`#661` leg 2). Say it in the scope or the mechanism inherits a blindness at birth.**
+
+⇒ **HOME: `B-STATE-ASSERTION-LINT`, owner CC-A, `PHASE_19_PLAN.md` §governance queue ROW 6.5 — AFTER `B-MEASURE-GATE` leg 2, BEFORE the leg-3 rule-conversion sweep** *(Langston: converting rules to mechanisms before the mechanisms are trusted loses both; and converting while duplicate copies survive multiplies the copies)*.
+
+⚠️ **FILED BECAUSE A FRESH READER CAUGHT IT NAMED BUT NOT PLACED — it existed only in `MECHANISM_INTEGRATION_PLAN.md` and one scope, with no number, no owner and no queue position. §9.4’s own failure, committed while citing §9.4 repeatedly the same day.**
+
 ### #974 OPEN 2026-08-31 (CC-A, from the `B-DISAGREEMENT-FINDER` census; Langston ruled it SUBSTANTIVE and disposition (3)) — ⛔ OPEN WORK LIVING UNDER A **CLOSED** HEADING IS INVISIBLE TO EVERY OPEN-ISSUE ENUMERATION
 
 **`B-RULES-1E-LANGSTON-SLIM` is UNSTARTED and Kyle-gated. Its only record in the shared register is ONE LINE inside a `CLOSED-AS-BUILT` entry at `RUNNING_ISSUES.md:1489`.** ⛔ **Its live status exists SOLELY in a session-private memory file.**
