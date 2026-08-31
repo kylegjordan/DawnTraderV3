@@ -46,6 +46,7 @@ import { execFileSync } from 'node:child_process';
 import { appendFileSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, basename } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const BRANCH = 'migration/aws-supabase';
 const REMOTE_REF = `origin/${BRANCH}`;
@@ -94,6 +95,27 @@ try {
 
   let behind = null;
   try { behind = parseInt(run(['rev-list', '--count', `HEAD..${REMOTE_REF}`]), 10); } catch { }
+
+  // ★★ OBJ-1 - THE HOOK STATES WHETHER *IT* IS THE VERSION AT ORIGIN.
+  //
+  // A4, in the scope's words: this hook runs from the session's OWN clone, so a session that is
+  // BEHIND runs its own STALE COPY of the hook - and "behind" is simultaneously the condition
+  // that makes the hook do the most work AND the condition that guarantees the fix is absent.
+  // The repair always lands one session late. Nothing could see that from the output.
+  //
+  // ★ This SUBSUMES the retired OBJ-2(c) time-since-last-run gate, which was a proxy exactly as
+  // `behind` was. The causal predicate is: ARE THE ON-DISK HOOK BYTES THE ORIGIN BYTES AT RUN
+  // TIME - so ask that directly, of the file node actually loaded (`import.meta.url`), not of
+  // whatever happens to sit at the canonical path.
+  //
+  // ⚠ IT REPORTS, IT NEVER REFUSES. A hook that declined to run when stale would disarm itself
+  // in precisely the clone that needs it most - which is A4 again, one level up.
+  let selfAtOrigin = null;                  // null = could not tell, and that is reported as null
+  try {
+    const selfBlob = run(['hash-object', '--', fileURLToPath(import.meta.url)]);
+    const originBlob = run(['rev-parse', `${REMOTE_REF}:.claude/hooks/fresh-rules.mjs`]);
+    if (selfBlob && originBlob) selfAtOrigin = (selfBlob === originBlob);
+  } catch { /* unknown stays null - never guess, and never block */ }
 
   const changed = [];
   const skippedDirty = [];
@@ -296,6 +318,8 @@ try {
     skipped_unpushed: skippedUnpushed.map(([p]) => p),
     // ★ P4 — the run record could not previously answer "did the index stay clean?", which is the
     // one question the original defect turned on. It can now, and a leak is named rather than lost.
+    // ★ OBJ-1: null means the hook could not tell, and null is REPORTED rather than assumed true.
+    self_at_origin: selfAtOrigin,
     residue_refreshed: residueRefreshed.map(([p]) => p),
     index_leaks: indexLeaks.map(([p, why2]) => `${p}: ${why2}`),
     // Langston Step-4 FINDING-2: this keyed on the three ORIGINAL arrays while its twin six
@@ -303,22 +327,37 @@ try {
     // argument and then left the identical gap here. No consumer reads it yet, which is
     // exactly why it would have rotted unnoticed.
     quiet: changed.length === 0 && skippedDirty.length === 0 && skippedUnpushed.length === 0
-           && residueRefreshed.length === 0 && indexLeaks.length === 0,
+           && residueRefreshed.length === 0 && indexLeaks.length === 0 && selfAtOrigin !== false,
   });
 
   // The two new arrays are included deliberately: a residue refresh also pushes to `changed`, so
   // this is correct today by coincidence rather than by construction — and a later edit that
   // separated them would silence the report without any test noticing.
   if (changed.length === 0 && skippedDirty.length === 0 && skippedUnpushed.length === 0
-      && residueRefreshed.length === 0 && indexLeaks.length === 0) process.exit(0);
+  // ⛔ `selfAtOrigin === false` BREAKS THE QUIET EXIT DELIBERATELY: a stale hook with nothing
+  // else to say is the single case where silence is most wrong, because everything it reports
+  // below was produced by the out-of-date copy. `null` does NOT break it - unknown is not bad news.
+      && residueRefreshed.length === 0 && indexLeaks.length === 0 && selfAtOrigin !== false) process.exit(0);
 
   let out = '[RULES FRESHNESS — this session was running an out-of-date copy]\n';
-  if (changed.length) {
+  if (selfAtOrigin === false) {
+    out += '⛔ THIS HOOK IS NOT THE VERSION AT ORIGIN - you are running an out-of-date copy of ME.\n' +
+           '  Everything below was produced by that older copy, so treat it as provisional.\n' +
+           '  Pull, then START A NEW SESSION: a hook is read at session start, so pulling alone\n' +
+           '  does NOT swap the code already running this turn.\n';
+  }
+  // ⛔ A RESIDUE REFRESH ALSO PUSHES TO `changed`, so a residue path was listed TWICE - once
+  // here as a plain refresh, and again under the residue heading WITH the explanation of whose
+  // the content was. My own comment already owned that; Langston's Step-8 rider is that owning
+  // it is not fixing it.
+  // ★ THE RESIDUE BLOCK IS THE SOLE LISTING FOR THOSE PATHS, because it is the one that says
+  // WHOSE the content was - the entire point of this batch. Listing a path twice, once without
+  // its explanation, reintroduces the ambiguity the wording fix exists to remove.
+  const residuePaths = new Set(residueRefreshed.map(([rp]) => rp));
+  const plainChanged = changed.filter(([cp]) => !residuePaths.has(cp));
+  if (plainChanged.length) {
     out += `REFRESHED from ${REMOTE_REF} just now:\n`;
-    for (const [p, why] of changed) out += `  - ${p}  (${why})\n`;
-    out += '★ ACT ON THIS: the file on disk changed AFTER your rules were loaded, so what you are\n' +
-           '  holding may be stale. RE-READ CLAUDE.md (and any other file listed) with the Read tool\n' +
-           '  BEFORE acting on any rule this turn. Do not rely on the copy already in your context.\n';
+    for (const [p, why] of plainChanged) out += `  - ${p}  (${why})\n`;
   }
   if (skippedUnpushed.length) {
     out += 'NOT refreshed — you have LOCAL COMMITS here not yet pushed (yours is NEWER, not stale):\n';
@@ -337,6 +376,19 @@ try {
            'not you, and not another session; it is now advanced to origin):\n';
     for (const [p, why] of residueRefreshed) out += `  - ${p}  (${why})\n`;
   }
+  // ⛔⛔ THE RE-READ INSTRUCTION IS GATED ON *ANY* REFRESH, NOT ON `plainChanged`.
+  // I very nearly shipped this as a regression while fixing the double-listing: the instruction
+  // used to live inside the plain block, so a run whose refreshes were ALL residue would have
+  // rewritten files under the session and then said nothing about re-reading them. A residue
+  // refresh changes the bytes on disk exactly as a plain one does - whose they were is a
+  // separate question from whether the loaded copy is now stale.
+  // ★ Same shape as everything else in this file: a narrowing that looks like tidying and
+  // silently drops a case.
+  if (changed.length) {
+    out += '★ ACT ON THIS: the file on disk changed AFTER your rules were loaded, so what you are\n' +
+           '  holding may be stale. RE-READ CLAUDE.md (and any other file listed) with the Read tool\n' +
+           '  BEFORE acting on any rule this turn. Do not rely on the copy already in your context.\n';
+  }
   if (skippedDirty.length) {
     out += 'NOT refreshed — these hold content ORIGIN HAS NEVER HELD, so they are genuinely YOUR edits\n' +
            'and were left untouched:\n';
@@ -345,7 +397,14 @@ try {
   }
   if (indexLeaks.length) {
     out += '⚠️ INDEX NOT CLEAN after refresh — report this, do NOT commit these paths:\n';
-    for (const l of indexLeaks) out += `  - ${l}\n`;
+    // ⛔ THE TWIN-SITE DRIFT, THIRD TIME IN THIS FILE (Langston Step-8 FINDING-1).
+    // This read `for (const l of indexLeaks)` and interpolated the ARRAY, so a session was shown
+    // `- .claude/hooks,index still staged after reset` - comma-joined - while the run record
+    // formats the same pair correctly. One site amended, its twin not: the EXACT drift I wrote
+    // up about `quiet` a few lines above, in the same commit.
+    // ★ Cosmetic, and fail-open is intact. But THIS IS THE ONE LINE A SESSION READS WHEN THE
+    // FENCE FIRES, and legibility is this batch's primary deliverable.
+    for (const [p2, why2] of indexLeaks) out += `  - ${p2}  (${why2})\n`;
   }
   process.stdout.write(out);
   process.exit(0);
