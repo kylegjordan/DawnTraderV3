@@ -840,3 +840,39 @@ Archive: git history is authoritative (this is a field-retirement within live fi
 
 **RESTORE PATH:** git history is authoritative — the rules text is recoverable at any commit before this one, and the tooling is untouched at `HEAD` today. **Nothing here is unrecoverable.**
 
+
+---
+
+## `REPLIT_PUSH_SCRIPT.sh` — ALL THREE COPIES DELETED (2026-08-31, `B-CROSS-SESSION-BLEED` P9, Langston-authorised)
+
+**WHAT WAS REMOVED:** three runnable copies of the Replit-era push script.
+
+| path | blob **AT THE REF** | bytes | stored EOL |
+|---|---|---|---|
+| `REPLIT_PUSH_SCRIPT.sh` (root) | `b4ca7ac5c968a733d9779748d3bb3632a20e9b10` | 2,931 | LF |
+| `Claude Comms and Packages/REPLIT_PUSH_SCRIPT.sh` | `9cd8585c1050334f11a6b793cf760420850f3bdc` | 3,022 | **CRLF** |
+| `attached_assets/REPLIT_PUSH_SCRIPT_1772132688227.sh` | `9cd8585c1050334f11a6b793cf760420850f3bdc` | 3,022 | **CRLF** |
+
+⚠️⚠️ **READ THE BLOB COLUMN BEFORE ANY FUTURE SWEEP, AND READ IT AT THE REF.** I first reported all three as *"byte-identical, blob `b4ca7ac5c`"*. **That was measured with `git hash-object` on my WORKING TREE**, where checkout had normalised the line endings on the way in — so three files that origin stores as **two different blobs** hashed identically for me. ★ **A deletion verified against `b4ca7ac5c` finds ONE file, removes it, and reads the sweep as COMPLETE while two survive.** Caught by Langston, who fetched all three at the ref and hashed them. **`wrong-object`, worktree-not-ref — in the batch whose entire subject is that class.** ⚠️ **And my own record had already refuted me: `RUNNING_ISSUES.md:3674` states the CRLF-stored blob while `:3817` asserted byte-identical — two lines of one file disagreeing.**
+
+**WHY REMOVED:** all three ran `git add -A` at `:46` under `set -e` with **NO `cd` guard**, so they committed *whatever clone invoked them*. This was the second publication mechanism examined under `#753` — and it refuted my own *"only one thing could publish this"*. Replit has been **FROZEN since 2026-03-30** (`CLAUDE.md` rule 2), so nothing legitimately invokes them.
+
+★ **SECOND DEFECT CLEARED BY THE SAME DELETION (Langston, and I had not named it):** `.gitattributes:12` `*.sh text eol=lf` **matches at any depth**, so both CRLF-stored copies were **permanently dirty in a fresh clone** — they can never match the declared attribute. ⛔ **A permanently-dirty file is exactly what an unguarded `git add -A` publishes.** The two defects compounded, and deleting all three clears both.
+
+**BLAST RADIUS — VERIFIED, NOT ASSUMED.** `git grep` at the ref: **no code, no npm script, no CI job, no service invokes them.** Every reference is prose. Five live directives named them and are **archive-marked in place, NOT repointed** (below); every other match is a frozen scope file, a completion report, `_archive/`, or a Telegram archive — historical records, deliberately not rewritten (§2 precedent).
+
+⛔ **DELIBERATELY NOT REPOINTED AT `scripts/github-push.sh` (Langston's ruling, and it overruled my recommendation).** That script hardcodes `REPO_DIR="/home/runner/workspace"` at `:18` and `cd`s into it under `set -e` at `:22`, so **off-Replit it ABORTS**. ★ **Repointing yields a safe no-op dressed up as a working path — a retirement wearing a fix's clothes.** `_archive/CLAUDE_CODE_PROJECT_INSTRUCTIONS.md:744` already calls **both** scripts deprecated.
+
+**THE FIVE DIRECTIVES — DISPOSITION (5) RETIRE/MARK, not (2) update:**
+`BATCH_19G_HF2/INSTRUCTIONS.md:32` — an **executed** batch's instruction record, same class as a frozen scope file; **archive-marked, history not rewritten** · `Claude Comms and Packages/Langston/AGENTS.md:27` · `Langston/skills/dt-master-workflow/SKILL.md:58` · `Langston/skills/dt-replit-ops/SKILL.md:25` **and** `:101`.
+★ **The three Langston files describe a workflow where HE deploys to Replit and pushes. He does neither** (`CLAUDE.md` rule 4), and `Langston/BOOTSTRAP.md:86` already labels `dt-replit-ops` *"Legacy… historical/fallback"*. **`.claude/skills/` does not exist at the ref — these are repo-resident documents, unarchived and not loaded.** He authorised the marking of his own files explicitly; I did not touch them on my own judgement.
+
+✅ **LEFT INTENTIONALLY, so a later grep does not read as a missed sweep:** `scripts/github-push.sh` **stays** — it is the guarded one (`cd` + `set -e` ⇒ aborts off-Replit) and it is the script `REPLIT_ONBOARDING_PROMPT.md:88` and `:118-126` mandate. ⛔ **Retiring those two pointers would have removed the SAFE path.** ⚠️ **My own pre-audit `:184` said to retire them and was WRONG**; verified at the file by both of us.
+
+**ARCHIVE:** `1-system-manual/_archive/deleted-code/REPLIT_PUSH_SCRIPT.sh.root.removed` (2,931 B) · `…comms.removed` (3,022 B) · `…attached.removed` (3,022 B) — **written from the REF, not the worktree**, so the archived bytes are the bytes origin held.
+
+**RESTORE PATH:** git history is authoritative; both blobs are recoverable at any commit before this one, and the `.removed` copies are for quick browse. **Restoring is a Kyle decision and would require re-arming the `cd` guard first** — the unguarded form is what made them dangerous.
+
+⚠️⚠️ **AND THE ARCHIVE ITSELF SILENTLY BROKE THE THING IT WAS PRESERVING — caught by verifying the claim instead of asserting it.** I wrote the three `.removed` files straight from the ref, then checked whether each STAGED blob equalled the ref blob it came from. **Two did not.** `core.autocrlf` rewrote the CRLF-stored pair to LF on `git add`, so both archives collapsed onto the root blob `b4ca7ac5c` — **destroying the exact CRLF-vs-LF distinction whose loss had made the deletion census wrong one step earlier.** ★ **An archive that normalises is not an archive**, and this one would have read as complete and faithful while holding two files that never existed in that form. ⇒ **`.gitattributes` now carries `1-system-manual/_archive/deleted-code/REPLIT_PUSH_SCRIPT*.removed -text`**, and all three archived blobs are re-verified **equal to the ref blobs** at this commit.
+
+⚠⚠ **SCOPED TO THESE THREE, AND THE NARROWING IS ITSELF THE FINDING.** My first attempt was the directory-wide `deleted-code/** -text`, and staging it showed **45 pre-existing `.removed` files from other batches flip to MODIFIED in one move** — the rule would have rewritten every archive in the folder, under my name, in a commit whose subject is three files. ★ **Rule 25.c exactly: the path is right, so the explicit-path habit cannot see it — the CONTENT was not mine to change.** Caught by reading the staged name-status instead of the stat summary. ⛔ **A future deletion archived here does NOT inherit the protection** — add its own pattern, or it will be normalised the same way. **Stated as a live gap rather than fixed broadly, because fixing it broadly is the thing that just went wrong.**

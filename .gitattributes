@@ -10,3 +10,13 @@ comms-infra/discord/** text eol=lf
 # B-DEPLOY-LOCK (#649): ALL shell scripts ship LF — a CRLF working copy broke
 # dt-deploy.sh's shebang on staging (exit 127). Same class as the helsinki rule.
 *.sh text eol=lf
+
+# B-CROSS-SESSION-BLEED (#753): AN ARCHIVE THAT NORMALISES IS NOT AN ARCHIVE.
+# `core.autocrlf` rewrote two deleted CRLF-stored scripts to LF on `git add`, so the
+# .removed copies no longer matched the blobs they were preserving — and CRLF-vs-LF was
+# the exact property whose loss made the deletion census wrong in the first place.
+# `-text` disables all EOL conversion here so a deleted file is archived as it WAS.
+# ⚠ SCOPED TO THESE THREE, DELIBERATELY. A directory-wide `-text` re-normalised all 45
+# pre-existing .removed files at once - rewriting OTHER batches' archives under my name,
+# which is rule 25.c exactly: the path is right and the content is not mine to change.
+1-system-manual/_archive/deleted-code/REPLIT_PUSH_SCRIPT*.removed -text

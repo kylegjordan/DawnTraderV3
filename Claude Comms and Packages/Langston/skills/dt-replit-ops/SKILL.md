@@ -22,6 +22,7 @@ Please unzip BATCH_N-DIR_X.Y.Z_DESCRIPTION.zip and follow the INSTRUCTIONS.md fi
 1. Replit unzips the batch
 2. Replit places files according to PART A of INSTRUCTIONS.md
 3. Replit applies surgical edits from PART B (if any)
+> ⛔⛔ **RETIRED 2026-08-31 (`B-CROSS-SESSION-BLEED` P9, Langston-authorised). `REPLIT_PUSH_SCRIPT.sh` NO LONGER EXISTS** — all three copies deleted (root, `Claude Comms and Packages/`, `attached_assets/`), archived under `1-system-manual/_archive/deleted-code/` and logged in `DELETED_COMPONENTS_LOG.md`. **It ran `git add -A` with `set -e` but NO `cd` guard, so it swept whatever clone invoked it** — the second publication mechanism examined under `#753`. **Replit has been FROZEN since 2026-03-30 (`CLAUDE.md` rule 2), so the instruction below is historical.** ⛔ **It is deliberately NOT repointed at `scripts/github-push.sh`: that script hardcodes `REPO_DIR="/home/runner/workspace"` and `cd`s into it under `set -e`, so off-Replit it ABORTS — repointing would yield a safe no-op dressed up as a working path** (Langston, 2026-08-31). **Nothing below is executable today.**
 4. Replit runs the commit and push using REPLIT_PUSH_SCRIPT.sh with the message from PART C
 5. Replit pushes to GitHub
 
@@ -98,6 +99,7 @@ npm run dev
 
 ### Push to GitHub
 ```
+> ⛔⛔ **RETIRED 2026-08-31 (`B-CROSS-SESSION-BLEED` P9, Langston-authorised). `REPLIT_PUSH_SCRIPT.sh` NO LONGER EXISTS** — all three copies deleted (root, `Claude Comms and Packages/`, `attached_assets/`), archived under `1-system-manual/_archive/deleted-code/` and logged in `DELETED_COMPONENTS_LOG.md`. **It ran `git add -A` with `set -e` but NO `cd` guard, so it swept whatever clone invoked it** — the second publication mechanism examined under `#753`. **Replit has been FROZEN since 2026-03-30 (`CLAUDE.md` rule 2), so the instruction below is historical.** ⛔ **It is deliberately NOT repointed at `scripts/github-push.sh`: that script hardcodes `REPO_DIR="/home/runner/workspace"` and `cd`s into it under `set -e`, so off-Replit it ABORTS — repointing would yield a safe no-op dressed up as a working path** (Langston, 2026-08-31). **Nothing below is executable today.**
 bash REPLIT_PUSH_SCRIPT.sh "Commit message here"
 ```
 
