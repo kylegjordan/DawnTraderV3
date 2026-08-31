@@ -494,3 +494,56 @@ BLOCKER-1 establishes that P2 — the honest `source` literal — **cannot ship 
 - ⛔ **It states no daily rate.** (§F1.)
 - ⛔ **It does not assert that `observedAt` reaches a gate.** It does not (§D1).
 - ✅ **It DOES make the age recoverable, the provenance honest, and P1/F-C buildable** — which was the batch's actual purpose.
+
+
+---
+
+# PART B2.5 — ⛔⛔ **THE OBJECTIVE LEDGER. NOTHING FROM THE SCOPE IS ALLOWED TO BE "NO LONGER GATING" AND QUIETLY DROPPED.**
+
+> **KYLE, 2026-08-31, and it is a sharper point than the condition that prompted it:** *"These items that have been dropped are no longer gating and just kind of ignoring them. Let's not do that… if there's an outstanding issue that was a part of the original scope, then let's be proactive about it and make sure it gets included."*
+> ⛔ **He is right, and the audit of my own rebuild is worse than the one item Langston named.** **Measured: of `OBJ-1`…`OBJ-5`, ZERO appear anywhere in Part B2** — the rebuilt plan carried plan-items and **silently stopped tracing the objectives they exist to discharge.** `P4` was gone outright. **A plan that renumbers its items and drops its objectives reads as complete while covering less.**
+
+## B2.5.1 EVERY OBJECTIVE, ITS ITEM, AND ITS DISPOSITION — **no row may be blank**
+
+| objective (from the scope) | plan item | disposition |
+|---|---|---|
+| **OBJ-1** — the rate-limited branch stops discarding age | **P1** | ✅ **SHIPS HERE** |
+| **OBJ-2** — the labels tell the truth, actionability measured first | **P2 + P8** | ⛔ **CARVED OUT** → `B-PRICE-AGE-REFUSAL`, row 3b.f-b, gated on `#971` |
+| **OBJ-3** — census of price-**SUBSTITUTION** sites, not quote-construction sites | ⭐ **P10 (NEW — it had no plan item at all)** | ✅ **DISCHARGED IN THIS DOCUMENT — see B2.5.2** |
+| **OBJ-4** — the persisted poison | **P5** | ✅ **SHIPS HERE** *(falsifier replaced — §7.3)* |
+| **OBJ-5** — `#743`/F-C not folded in, boundary written | scope §5 | ✅ **DISCHARGED** — boundary written and Langston-confirmed |
+| — | **P4** ⛔ **WAS DROPPED FROM B2 ENTIRELY** | ✅ **RESTORED — CARVED OUT with P2** *(it is the union/cast item FOR P2's literal; it has no meaning without P2)* |
+| — | **P6** | ⚠️ **EXPLICITLY NON-GATING HERE — MOVES WITH P2.** See B2.5.3 |
+| — | **P7, P9** | ✅ **SHIP HERE** |
+
+## B2.5.2 ⭐ **OBJ-3 — DISCHARGED NOW, WITH A NEGATIVE RESULT STATED**
+**The shape to find: a function that SUBSTITUTES a cached value and returns it as a BARE primitive, losing provenance one call-frame below the site that constructs the quote.** *(That shape is why `B-EXIT-PROVENANCE`'s census of four quote-constructors could not see the fifth leg — scope §2.)*
+
+**Census, `server/services/live-pricing-adapter.ts` + `price-cache.ts` + `server/exchanges/kraken/kraken.ts`:**
+| site | returns | verdict |
+|---|---|---|
+| **`live-pricing-adapter.ts:624` `fetchFromKrakenRest`** | `Promise<number \| null>`, `return cached?.price ?? null` (`:631`) | ⛔ **THE INSTANCE — this batch's subject** |
+| **`kraken.ts:624` `getPairHistoryDays`** | `Promise<number \| null>`, `return cached.days` on a 24 h-TTL hit | ✅ **SAME SHAPE, NOT A DEFECT — the quantity is HISTORY-DAYS, not a price.** A day-count re-served up to 24 h stale is immaterial to the pass/fail its caller makes, and it carries a real TTL rather than none. **Recorded so the next census does not re-open it.** |
+| sites returning `cached?.price` as a bare value | — | **EXACTLY ONE: `:631`** |
+
+⇒ ✅ **OBJ-3's ANSWER: the price-substitution shape occurs at EXACTLY ONE site, and this batch fixes it.**
+⚠️ **REACH, STATED: the search was `Promise<number | null>` + `cached?.price`-style returns across three pricing files.** A substitution returning a differently-typed primitive, or living outside those three files, would not have been found. **The negative result is bounded by that, and I am not claiming a repo-wide absence.**
+
+## B2.5.3 ⚠️ **P6 — WHY "NON-GATING" IS WRITTEN DOWN RATHER THAN LEFT IMPLICIT**
+Langston: *"P6 gates nothing here now — move it with P2 or label it explicitly non-gating, so its own falsifier can't block closure of a batch it no longer governs."*
+✅ **BOTH, deliberately: P6 MOVES WITH P2 to `B-PRICE-AGE-REFUSAL` (it is that batch's precondition), AND it is labelled NON-GATING for `B-PRICE-AGE-TRUTH`.**
+⛔ **It is NOT dropped, and the distinction is the whole of Kyle's point: a non-gating item still has an owner, a home and a criterion — it simply does not block THIS close.** ⇒ **P6's pre-registered decision rule (B2.2) travels with it, unchanged and still written before any measurement.**
+
+## B2.5.4 ✅ LANGSTON'S FOUR CONDITIONS — EACH WITH ITS ITEM
+| # | condition | where it lands |
+|---|---|---|
+| **1** | **Prove the split held** — P1 needs the MIRROR of P2's criterion: post-change, a rate-limited re-serve must still take the `:1277` **IF**-arm, because P1 propagates `observedAt` only and `source` stays `kraken_rest`. | ✅ **P1's verification, rewritten below.** ★ *"That check is what makes 'zero behaviour change' falsifiable instead of asserted."* |
+| **2** | **P3's fence is load-bearing, not hygiene** — a misplaced token **IS** P2, with the unlimited-fetch consequence and no honest label. Mutation-prove the test; state the column side. | ✅ **P3, escalated.** |
+| **3** | **The gate on `#971` must not become a park** — if `#971`'s read lands no limiter leg, `B-PRICE-AGE-REFUSAL` **absorbs the limiter routing as its own first item.** | ✅ **Written into plan row 3b.f-b now, not later.** |
+| **4** | **P4 is unaccounted for** — carve it explicitly or it reads as dropped. | ✅ **B2.5.1 restores it, carved with P2.** |
+
+**P1's VERIFICATION, REWRITTEN (condition 1):** post-change, a tick on a rate-limited re-serve **must still take the `:1277` IF-arm** — `source` remains `kraken_rest`, only `observedAt` changes. **CONTROL: the same tick's `observedAt` must differ from `Date.now()`.** ⇒ **the pair together is what makes "no behaviour change" falsifiable: if the ELSE-arm is taken, P1 has silently shipped P2.**
+
+## B2.5.5 ✅ THE TWO NOTES
+- **`ACTIVE_PATH_FLOW.md:316-317` is marked "HALF-FIXED, pointer to 3b.f-b" — NOT "fixed."** *(His wording, adopted verbatim.)*
+- **B2.4 goes VERBATIM into the completion report and the catalog row**, so the batch's own limits travel with its name.
