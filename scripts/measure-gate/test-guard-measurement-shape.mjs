@@ -182,14 +182,29 @@ function extractCommands(path, label) {
   text.split('\n').forEach((line, i) => {
     const at = label + ':' + (i + 1);
     // Markdown homes: a backticked span that reads like one of the mandated reads.
+    let hit = false;
     for (const m of line.matchAll(/`([^`]*(?:tail|cat)\s[^`]*(?:system-alerts|cc-discord-inbox|cc-wake)[^`]*)`/g)) {
-      out.push({ site: at, cmd: m[1].trim() });
+      out.push({ site: at, cmd: m[1].trim() }); hit = true;
+    }
+    // ⛔ FENCED BLOCKS. `CLAUDE.md:279` — the §6.6 mandated inbox read — lives inside a ```bash
+    // fence, NOT backticks, so the pattern above never saw it. A home written as a fence was
+    // invisible to a fixture whose whole point is that a reworded home gets picked up.
+    // Reader-found.
+    if (!hit && /^\s*(?:ssh|tail|cat)\b/.test(line)
+        && /\b(?:tail|cat)\s/.test(line)
+        && /(?:system-alerts|cc-discord-inbox|cc-wake)/.test(line)) {
+      out.push({ site: at, cmd: line.trim() });
     }
     // ⛔ JSON ALLOWLIST HOME: entries are `"Bash(<command>)"`, NOT backticked — so the markdown
     // pattern above found NOTHING here and the aggregate control still passed on the other
     // homes' hits. A control that cannot fail for the case it was added for. Reader-found.
-    for (const m of line.matchAll(/"Bash\(([^"]*(?:tail|cat)\s[^"]*(?:system-alerts|cc-discord-inbox|cc-wake)[^"]*)\)"/g)) {
-      out.push({ site: at, cmd: m[1].replace(/:\*$/, '').trim() });
+    // ⚠️ `(?:[^"\\]|\\.)*` NOT `[^"]*` — the allowlist's own entries contain ESCAPED quotes
+    // (`"Bash(ssh h \"tail -20 …\")"`), and `[^"]*` stopped at the first `\"`, so two of the
+    // four entries were invisible. THE SAME ESCAPING CLASS AS THE MISS THIS HOME WAS ADDED TO
+    // FIX, one level in: the home was added because JSON isn't backticked, and inside it the
+    // double-quoted entries were still being skipped. Reader-found.
+    for (const m of line.matchAll(/"Bash\(((?:[^"\\]|\\.)*(?:tail|cat)\s(?:[^"\\]|\\.)*(?:system-alerts|cc-discord-inbox|cc-wake)(?:[^"\\]|\\.)*)\)"/g)) {
+      out.push({ site: at, cmd: m[1].replace(/\\"/g, '"').replace(/:\*$/, '').trim() });
     }
   });
   return out;
@@ -283,6 +298,19 @@ console.log('\n=== K. FROZEN LIMITS — asserting the KNOWN HOLES so an edit reo
         'moved — the reason this fires has changed');
 }
 {
+  // ⛔ K4 — THE PINS THAT MAKE THE `KNOWN GAPS` HEADER TRUE. Its claim is that every listed gap
+  // is pinned so an edit reopens or closes it LOUDLY. That was FALSE for two of them until these
+  // existed: widening the log exemption and closing the sed gap both left the suite green.
+  const widened = run(bash('head -50 /var/data/app.log | wc -l'));
+  check('K4a a NON-/var/log truncation still fires (pins the exemption WIDTH)', !!widened.ctx,
+        'silent — the exemption has been widened beyond /var/log/');
+  const sedcase = run(bash("sed -n '1,50p' /tmp/f.txt | wc -l"));
+  check('K4b KNOWN GAP: sed -n truncation is NOT caught (pins the gap)', sedcase.ctx === null,
+        'this now FIRES — sed was added to the shape; update KNOWN GAPS 1c');
+  const chained = run(bash('ssh h "tail -50 /var/log/dawntrader/system-alerts.jsonl" && git log -100 --grep=MISTAKE'));
+  check('K4c an unrelated measurement in the same && chain STILL fires', !!chained.ctx,
+        'silent — the exemption is whole-command again, not pipeline-scoped');
+
   // ⛔⛔ K3 — AND LANGSTON'S OWN EXAMPLE OF THE GAP IS COVERED. He wrote "nothing now catches
   // `tail -200 log | grep -c X`". MEASURED: it FIRES, on `count-from-search`, because the second
   // stage carries `grep -c` regardless of how the first stage truncated. My first version of
@@ -329,7 +357,12 @@ if (!process.env.GUARD_UNDER_TEST) {
   };
   const MUTS = [
     ['remove mention-elision', (s) => s.replace('function stripMentions(cmd) {', 'function stripMentions(cmd) { return cmd;')],
-    ['remove locality (match whole command)', (s) => s.replace('stages(stripped).some((st) => sh.test(st, stripped))', 'sh.test(stripped, stripped)')],
+    // ⚠️ KEYED ON AN EXACT SOURCE STRING, so it breaks every time that line is edited — three
+    // times so far. That is the DESIGN WORKING: it fails loudly ("patch did not change the
+    // source") instead of silently passing and leaving the leg untested. Update it, never
+    // loosen it into a regex that might match something else.
+    ['remove locality (match whole command)', (s) => s.replace(
+      'stages(stripped).some((st) => sh.test(st, sequenceOf(stripped, st)))', 'sh.test(stripped, stripped)')],
     ['drop shape worktree-not-ref', dropShape('worktree-not-ref')],
     ['drop shape truncation-is-not-population', dropShape('truncation-is-not-population')],
     ['drop shape count-from-search', dropShape('count-from-search')],
@@ -341,6 +374,12 @@ if (!process.env.GUARD_UNDER_TEST) {
     // Over-elision is worse than under-elision: a swallowed instrument is a BLIND guard that
     // reads as a clean one. This mutation removes the execRe guard that keeps `$( )` alive.
     ['let elision swallow command substitutions', (s) => s.replace('const execRe = /\\$\\(|`/;', 'const execRe = /$^/;')],
+    // ⛔ ADDED r3, reader-found: KNOWN GAPS claims every gap is pinned so an edit "fails the
+    // suite loudly". It was FALSE for two of them — WIDENING the log exemption and CLOSING the
+    // sed gap both left the suite green. A gap nothing notices is not pinned, it is described.
+    ['WIDEN the log exemption to /var/', (s) => s.replace('!/\\/var\\/log\\//.test(seq)', '!/\\/var\\//.test(seq)')],
+    ['CLOSE the sed gap (add sed -n to the shape)', (s) => s.replace(
+      "(/\\bhead\\s+-n?\\s*\\d+/.test(st)", "(/\\bsed\\s+-n/.test(st) || /\\bhead\\s+-n?\\s*\\d+/.test(st)")],
   ];
   let mi = 0;
   for (const [name, mut] of MUTS) {

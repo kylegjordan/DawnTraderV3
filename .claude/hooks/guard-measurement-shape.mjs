@@ -41,19 +41,32 @@
 //
 // Stated as its own block on Langston's condition, because these previously lived inside
 // justification comments and A JUSTIFICATION READS AS "HANDLED". Its silence is not a clean bill
-// of health; these are the cases where it is quiet BY CONSTRUCTION. Each is pinned by an arm in
-// scripts/measure-gate/test-guard-measurement-shape.mjs §K, asserting CURRENT behaviour, so an
-// edit that changes one fails the suite loudly instead of silently widening or closing a hole.
+// of health; these are the cases where it is quiet BY CONSTRUCTION.
+//
+// ⚠️ EACH GAP BELOW EXCEPT (3) IS PINNED — by an arm in test-guard-measurement-shape.mjs §K
+// asserting CURRENT behaviour, and by a §G mutation that must break the suite. So an edit that
+// widens or closes one fails loudly rather than silently.
+// ⛔ THAT SENTENCE WAS FALSE WHEN FIRST WRITTEN AND A READER MEASURED IT: widening the log
+// exemption to `/var/` and closing the `sed` gap BOTH left the suite green. Two arms and two
+// mutations were added to make the claim true. ★ A CLAIM THAT A THING IS PINNED IS ITSELF A
+// CLAIM, and it is the kind that reads as covered — which is this whole block's subject.
+// ⚠️ GAP (3) IS THE STATED EXCEPTION: it is not pinned, because it is not demonstrable.
 //
 //  1. `tail` WAS DELIBERATELY REMOVED FROM THE TRUNCATION SHAPE, AND THAT SOLD COVERAGE.
 //     `tail -200 log | wc -l` and `tail -200 log > slice` are NOT caught. The trade bought
 //     freedom from a permanent false-positive floor (see the shape's own note) and it is a real
 //     loss, not a clean win. ⚠️ `tail -200 log | grep -c X` IS still caught — by
 //     `count-from-search`, not by the truncation shape.
-//  1b. AND ANY TRUNCATED READ OF A PATH UNDER `/var/log/` IS EXEMPT, so `head -50 /var/log/app.log
-//     | wc -l` is NOT caught even though that count COULD become a claim. Bought to keep the
-//     per-turn alert check silent — the project's own permission allowlist pins a `| head -60`
-//     capped form of it, a FOURTH home for the mandated set. Same trade as (1), same direction.
+//  1b. A TRUNCATION IS EXEMPT WHEN `/var/log/` APPEARS ANYWHERE IN ITS OWN PIPELINE — which is
+//     WIDER than "a truncated read of a log path" and NARROWER than "anywhere in the command".
+//     ⇒ `head -50 /var/log/app.log | wc -l` is NOT caught, though that count could become a
+//     claim; and `head -50 CLAUDE.md | wc -l` piped in the same stage as a log path would also
+//     be missed. Bought to keep the per-turn alert check silent — the permission allowlist pins
+//     a `| head -60` capped form of it, a FOURTH home for the mandated set.
+//     ⚠️ AN EARLIER WORDING HERE SAID "ANY TRUNCATED READ OF A PATH UNDER /var/log/", which
+//     UNDERSTATED IT while the test was whole-command: `ssh h "tail -50 /var/log/…" && git log
+//     -100` went silent, suppressing a repo measurement with no log in it. Now pipeline-scoped,
+//     and K4c pins that. Same trade as (1), same direction.
 //  1c. AND THE TRUNCATION SHAPE ONLY KNOWS `head` AND `git log -N`. `sed -n '1,50p' log | wc -l`
 //     is a truncating read it has never covered, and `tail … | sort | uniq -c` and
 //     `tail … | grep X | wc -l` are silent too. ⚠️ THE GAP SET IS NOT THE TWO CASES THE SUITE
@@ -171,6 +184,20 @@ function stages(s) {
 }
 
 /**
+ * SEQUENCE elements — split on sequencing operators ONLY, so a pipeline stays whole.
+ * ⛔ THIS EXISTS BECAUSE THE `/var/log/` EXEMPTION WAS WHOLE-COMMAND AND SILENCED UNRELATED
+ * MEASUREMENTS. Measured: `ssh h "tail -50 /var/log/…/system-alerts.jsonl" && git log -100
+ * --grep=X` went SILENT — doing the per-turn alert check and a repo measurement in one `&&`
+ * chain suppressed the warning on the repo measurement, which has no log in it at all.
+ * ⇒ an exemption must be scoped to the PIPELINE the truncation is actually in, not to any
+ * mention anywhere in the command. Reader-found.
+ */
+function sequenceOf(s, stage) {
+  const parts = s.split(/&&|\|\||[;\n]/);
+  return parts.find((p) => p.includes(stage)) || stage;
+}
+
+/**
  * Each shape is a rule-29 failure visible in one command stage, with no model call, never firing
  * on a value. Deliberately few — a matcher that fires often is a matcher that gets ignored.
  */
@@ -200,11 +227,12 @@ const SHAPES = [
     // claim, so firing on it is the permanent-floor problem again.
     // ⚠️ THE COST IS REAL AND IS LISTED IN KNOWN GAPS: `head -50 /var/log/app.log | wc -l` COULD
     // become a claim and is now silent. Bought silence on a mandated command; sold that case.
-    // ⚠️ THE EXEMPTION TESTS `whole`, NOT `st`. In the allowlisted form the PATH sits in stage 1
-    // (`tail -50 /var/log/… 2>&1`) and the TRUNCATION in stage 2 (`head -60`), so a stage-scoped
-    // exemption never saw the path and the command still fired. The locality mechanism working
-    // against its own exemption — caught by the fixture, not by re-reading the change.
-    test: (st, whole) => !/\/var\/log\//.test(whole)
+    // ⚠️ THE EXEMPTION IS SCOPED TO THE PIPELINE, NOT THE STAGE AND NOT THE WHOLE COMMAND.
+    // Stage-scoped failed: in the allowlisted form the PATH is in stage 1 (`tail -50 /var/log/…`)
+    // and the TRUNCATION in stage 2 (`head -60`), so it never saw the path.
+    // Whole-command was then TOO WIDE: `ssh h "tail -50 /var/log/…" && git log -100 --grep=X`
+    // went silent, suppressing a repo measurement that has no log in it. Both reader-found.
+    test: (st, seq) => !/\/var\/log\//.test(seq)
       && (/\bhead\s+-n?\s*\d+/.test(st) || /\bgit\s+log\b[^\n]*\s-\d+\b/.test(st)),
     say: 'This read is TRUNCATED. A head/-N slice is not the population — if the result becomes a count, a share or an absence claim, re-run it unbounded or state the truncation beside the number.',
   },
@@ -235,7 +263,7 @@ function main() {
   const stripped = stripMentions(cmd);
   const hits = [];
   for (const sh of SHAPES) {
-    if (stages(stripped).some((st) => sh.test(st, stripped))) hits.push(sh);
+    if (stages(stripped).some((st) => sh.test(st, sequenceOf(stripped, st)))) hits.push(sh);
   }
 
   // Written on EVERY decided invocation, fired or not: the denominator has to exist before the
