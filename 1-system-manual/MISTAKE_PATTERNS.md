@@ -255,6 +255,32 @@ plus **any new `MISTAKE:` trailer whose slug is `skipped-the-gate` or names a wo
 ✅ **THE FIX, and it is available today: write any script containing backticks with the Write tool, then run the FILE.** ⛔ **Do not inline it.**
 **Mechanism that would retire it:** a pre-execution check refusing a Bash heredoc whose body contains an unescaped backtick. **HOME: `B-GATE-GUARD` (#744), owner CC-A, queue position 10** — same hook family, and it is a shell-shape check exactly like the bare-commit guard.
 
+### `contaminated-feed` — **THE CHECK WAS RIGHT, THE OBJECT WAS RIGHT, AND THE *INPUT* WAS WRONG** — **NEW 2026-08-31, n=1** · mechanism: **NONE YET — candidate, see below**
+
+★★ **LANGSTON NAMED THIS AND DIRECTED IT FILED SEPARATELY, 2026-08-31: *"A correct instrument that didn’t fire because its FEED was contaminated is a DISTINCT CLASS from `wrong-object`: the check was right, the object was right, the input was wrong. Don’t fold it into `wrong-object` — a pattern index that merges those loses the one guard that would have caught this."***
+
+⛔⛔ **THE DISTINCTION, AND IT IS THE WHOLE REASON FOR THE SLUG: `wrong-object` IS POINTING THE INSTRUMENT AT THE WRONG THING. THIS IS POINTING A CORRECT INSTRUMENT AT THE RIGHT THING AND FEEDING IT BAD INPUT.** A merged index would file both under *"check your object"* — and that advice is useless here, **because the object was already right.**
+
+**INSTANCE 1 — `B-MEASURE-GATE` leg 2, OBJ-6b, 2026-08-31 (CC-A). The instrument contained the correct conclusion and printed the opposite.**
+`scripts/measure-gate/obj6b_tools.py` compares Bash share in erroring windows against a baseline and branches on the difference. **Its `else` branch reads, almost verbatim, the finding that was true:** *"the erroring windows look like everything else — `wrong-object` is mostly Bash is TRUE AND NEARLY VACUOUS … the population test PASSES but it is NOT evidence that a Bash-scoped hook catches the class."*
+⛔ **IT DID NOT FIRE, BECAUSE THE BASELINE I FED IT WAS DRAWN FROM A DIFFERENT PERIOD THAN THE MEASUREMENT** — three of six sampled transcripts contribute ZERO calls to the era. **The comparison reported `+11.1 pp`; against a same-era control it is `+0.3 pp`.** ⇒ **I read the printout and not the branch, and published the manufactured effect as the batch’s justification.** *(Full retraction: `B_MEASURE_GATE_LEG2_OBJ6B_RESULT.md` `r2`. The script is committed UNMODIFIED, contaminated baseline included, because it is the evidence.)*
+
+✅ **CANDIDATE MECHANISM, LANGSTON’S FORM: READ THE BRANCH YOU DID *NOT* TAKE, AND ASK WHAT INPUT WOULD HAVE FIRED IT.** ★ **It is cheap, it is checkable, and it is available at exactly the moment the number arrives** — which is the moment rule 29 fires too late for.
+⚠️ **n=1. Not promoted, not in §13, and the floor is unchanged: 3+ instances across 2+ distinct batches, no severity override** (`vendor-docs-unread` precedent, Langston 2026-08-30).
+
+---
+
+### `small-fix-hides-the-design-error` — **I CORRECTED THE VISIBLE ARITHMETIC SLIP AND THE TWO STRUCTURAL CONFOUNDS SURVIVED IT** — **NEW 2026-08-31, n=1** · mechanism: **NONE YET**
+
+★★ **LANGSTON, SAME RULING: *"the visible-arithmetic-fix-while-the-design-error-stands observation — that one belongs written down."***
+
+**INSTANCE 1 — same batch, same hour.** In `OBJ-6b r1` I noticed unprompted that my baseline population CONTAINED the windows being compared against it, corrected `+9.9` to `+11.1 pp`, and **reported the correction as diligence.** ⛔ **The two confounds that actually killed the result — a control drawn from a different PERIOD, and a window shape that ENDS AT A COMMIT when committing is itself the measured operation — were untouched, and the visible fix made the number look more carefully derived.**
+
+⇒ ⛔⛔ **THE FAILURE MODE: A SELF-CAUGHT SMALL ERROR RAISES CONFIDENCE IN THE SURROUNDING RESULT, AND IT IS EVIDENCE ABOUT ONE LINE OF ARITHMETIC.** ★ **The tell is the KIND of error, not the number of them: an arithmetic fix says nothing about whether the two populations were comparable, and it FEELS like it does.**
+⚠️ **n=1, not promoted.** ★ **Related but distinct from `fix-relocates` (`:186`), which is the SAME defect reappearing elsewhere; here the defect never moved — a NEIGHBOURING correction merely made it less visible.**
+
+---
+
 ### `wrong-object` — **PROMOTED TO §13** · mechanism: **NONE YET**
 **Right name, wrong thing.** The path is correct, the file is correct, the command runs — and it measures something other than what the claim is about.
 **INSTANCES (attributed, condition 4 — no grandfathering):**

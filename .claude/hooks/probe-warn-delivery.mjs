@@ -30,6 +30,13 @@
 //
 // ⚠️ THE BLOCKING ARMS GENUINELY ABORT THEIR COMMAND. Every arm fires only on its own
 // distinctive sentinel, so all of them are inert for any other command.
+// ⛔ ABSENT `hook_sha` MEANS "PRE-r7, VERSION UNKNOWN" - IT DOES NOT MEAN "SAME VERSION AS THE
+//    STAMPED ROWS" (Langston condition, 2026-08-31). Rows written before r7 carry no stamp, and
+//    five clones on this machine ran three different versions of this file concurrently, so an
+//    unstamped row cannot be attributed to a version AT ALL. A `SINK-NOTE` row carrying this text
+//    and its own counts is appended to the sink itself, because the sink is what a later reader
+//    opens - a caveat that lives only in source is a caveat the reader never sees. #546 shape:
+//    an unstamped field invites absent to be read as uniform.
 // FAIL-OPEN otherwise. Sink rows are written unconditionally, before any decision.
 import { readFileSync, appendFileSync, writeSync } from 'node:fs';
 import { join } from 'node:path';
