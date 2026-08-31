@@ -1,4 +1,4 @@
-# B-CROSS-SESSION-BLEED — SCOPE (r1)
+# B-CROSS-SESSION-BLEED — SCOPE (r4 — read to the end; r1's central claim is superseded)
 
 change-class: non_architecture
 **Owner:** CC-B (taken over from CC-A 2026-08-31) · **Issue:** #753 · **Queue:** governance position 2, Kyle-directed 2026-08-27 ahead of the measurement gate · **Status:** Step 1, awaiting Langston
@@ -136,3 +136,37 @@ Time-since-last-run is a proxy exactly as `behind` was. **The causal predicate i
 
 ## OBJECTIVES — FINAL SET
 **OBJ-1** hook reports whether its own on-disk bytes are origin's bytes at run time *(subsumes the retired gate)* · **OBJ-2(b)** verify the index is clean after refresh, asserted on the index blob · **OBJ-3** no silent catch — a failed reset is reported, not swallowed · **OBJ-4** record the 12 occurrences and the two tracing artefacts · **OBJ-5** distinguish hook-residue from genuine local edits and fix the skip wording *(L2)*.
+
+---
+
+# r4 — LANGSTON'S TWO BLOCKERS CLEARED, TWO CONDITIONS ANSWERED. Population was wrong in BOTH directions.
+
+## BLOCKER-1 CLEARED — "origin-reachable" was the wrong predicate, and the pairing instrument he named settles it
+He was right: **`origin-reachable` is produced by ANYTHING that writes origin's bytes** — this hook, a `checkout`, a `restore`, a stash pop, a session pasting back a file it read from origin. So 12/12 falsified *"a session wrote its own NOVEL work into another clone"* and **did not support my second clause, "delivered by the receiving clone's own hook."** I asserted attribution from a test that only established provenance.
+
+**RUN, using the instrument at `:133` that I had and did not use** — pair every artifact to a logged `refreshed:` of THAT path in THAT clone at or before the stash:
+
+| | |
+|---|---|
+| artifacts paired to a logged refresh of the same path in the same clone | **22 / 22** |
+| typical lag, refresh → stash | **0.1 – 2.1 h** |
+| two long lags, both explained | CC-B 347.3 h (refreshed 08-16, sat through my 15-day dormancy, stashed today) · CC-A 207.9 h |
+
+⇒ **ATTRIBUTED, not merely consistent.** Every surviving artifact has a logged hook refresh of its own path in its own clone immediately before it appeared.
+
+## ⚠️ AND MY POPULATION WAS WRONG IN BOTH DIRECTIONS — I under-counted the artifacts and over-counted them
+- **UNDER:** I censused **3 clones**. There are **FIVE** — `DawnTraderV3`, `-old`, `-analyst`, `-infra`, `-new`. **I had missed the Infra clone entirely**, which holds **3 more artifacts** (all `RUNNING_ISSUES.md`, all origin-reachable, all paired). Langston's CONDITION-2 said four sessions; the answer is five clones. **Corrected artifact population: 22, not 12.**
+- **OVER:** my first pairing run reported **5 UNPAIRED**. They are all one stash, `b85j-ab-baseline` (2026-07-25), holding `active-execution-engine.ts`, `vts-runner.ts`, `b72-warmup.ts`, a test and a migration manifest — **my own work-in-progress, not a bleed artifact.** None of those paths is in the watched list, so nothing could pair. **Excluding it gives 22/22; leaving it in would have manufactured five phantom second-mechanism cases.**
+
+## BLOCKER-2 ACCEPTED — the "9 of 10 same file" leg is STRUCK
+`RUNNING_ISSUES.md` is simultaneously the most-refreshed watched entry **and** the most cross-session-contended file we have. **Both hypotheses predict that shape identically, so it discriminates nothing.** It was presented as an independent second leg and it is not one. **Struck. The pairing above is the only attribution evidence.**
+
+## CONDITION-1 — the census becomes a GATE, because this batch's own fix is the arming event
+The pin arms when a new hook fix lands while residue is present, **and this batch lands a new hook fix.** *(Live census now, all five clones: **0 staged hook entries** — nothing primed at this moment, but that is a scope-time reading, not a deploy-time one.)* ⇒ **OBJ-6: a zero-residue census across ALL FIVE clones is a named PRE-deploy and POST-deploy gate; any primed clone is cleared BY HAND first. The fix cannot deliver itself.**
+
+## CONDITION-3 — the fence must be mutation-proved and must not break fail-open
+**OBJ-2(b)/OBJ-3 acceptance: revert the reset call ⇒ the index assertion FAILS.** A fence that cannot fail was never proved. **And it must preserve `:43` FAIL-OPEN — report the leak, never block a session start.**
+
+## THE PREMISE, IN LANGSTON'S WORDS — DOWNGRADED, NOT REFUTED
+I over-claimed "refuted". His formulation, adopted verbatim into #753: **from *"cross-session write, cause unknown"* to *"no cross-session write in any surviving artifact; one permanently untestable."*** That is sufficient **because OBJ-1/2(b)/3/5 all key on a SIGNATURE (index blob vs origin blob), not on a cause** — origin bytes get cleared, novel bytes get preserved as local work. **It fails safe against the untestable case in both directions.**
+
