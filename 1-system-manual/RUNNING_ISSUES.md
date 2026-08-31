@@ -6161,3 +6161,38 @@ CC-A's batch argues the workflow is not reliably firing. **This is that thesis, 
 ⛔⛔ **AND THAT CLASS OF INSTRUMENT IS SQL RUN BY PEOPLE — invisible to every repo grep, which is the stated reach limit on the reader's "no code reader exists" finding.** ⇒ **ENUMERATE `exit_price_producer`, never `LIKE` it** — the same rule already standing for this column in `MEMORY_CC_C`.
 
 ✅ **NOT a reason to hold the batch:** the partition was already incomplete for `kraken_rest_poller`, which likewise carries no kind. **This makes an existing gap bigger and NAMES it, rather than creating one.**
+
+**#206 UPDATE 2026-08-31 (CC-B, working alert `7c4a873f`) — ★ 25-12 IS NO LONGER DATA-BLOCKED. The accrual happened; what remains is the harness work.**
+
+**MEASURED, whole table, no sampling —** `signal_eval_provenance`, the table the B8.5b integrity leg actually writes to:
+| | |
+|---|---|
+| rows 2026-08-01 → 08-31 | **15,293,173** |
+| `settled_window_hash` NOT NULL | **15,293,173 = 100.00%** |
+| `ind_vwap` NOT NULL | **14,456,075 = 94.53%** |
+⇒ the scalars and the hash are captured at full coverage **right now**. The alert's premise (the harness never consumed them) remains true of the HARNESS; it is **no longer true of the DATA**.
+
+⚠️ **CORRECTION TO MY OWN FIRST READING, recorded because it is the `wrong-object` pattern and I want the instance countable.** I first queried **`signal_eval_archive`** and measured **0 / 3,760,614** for `ind_vwap`, `ind_atr` and `settled_window_hash` — **against a working positive control** (`atrAtOpen` = 108, a key present on only 108 rows, so the instrument could see a rare key). **That zero was REAL for that table and MEANINGLESS for the claim**: the capture writes to `signal_eval_provenance`. **This entry's own phrase *"typed columns"* is what pointed me at the wrong table** — the columns are typed, on a different table. Caught before it reached a report; had it not been, I would have filed a dead capture instrument that is in fact at 100% coverage.
+
+⛔ **THE ONE GENUINE CONSTRAINT, and it changes the study's shape: JULY IS GONE.** Both `signal_eval_archive` and `signal_eval_provenance` now start **2026-08-01 00:00:06** — rolling-30 retention, expected per `STORAGE_POLICY` (July was the last full-month partition, sweep-eligible today). ⇒ **the hash-coverage window this entry cites (from 2026-07-13) NO LONGER EXISTS.** The gate-test re-scopes to the August window — **a better base than July ever was** (a full month at 100% hash) — **but the 84.07% (08-06) and 70.73% (07-06) figures are now a DIFFERENT POPULATION. Label them; do not treat the sequence as a trend.** ★ **A study whose data window can age out while the study is queued is a shape worth noticing** — the accrual gate and the retention gate ran against each other, and retention won.
+
+**WHY NOT RUN TODAY:** the two harness legs are unbuilt — `b5-w20c-provenance-replay.ts` still recomputes indicators from bars. That is implementation work needing a scope and a Langston Step-1; **run as a drive-by it produces a 99% gate figure nobody can defend.** **RE-HOMED: micro-batch `T-W20C-SCALAR-LEG`, owner CC-B, sequenced after `B-FILTER-DIAG-XSTOCK` (#682).** Successor alert `a3610acf` registered, triggers 2026-09-07T12:00Z, `state=scheduled` read back.
+
+---
+
+**#675 UPDATE 2026-08-31 (CC-B) — B-FILTER-DIAG-PAPER OBJ-2 SOAK CLOSED (alert `d32ca173` resolved with evidence). The SQE gate taxonomy IS legible; the residual is enumerated and dispositioned.**
+
+**OBJECT:** first token of `gate_decision->>'reason'` where `reject_stage='sqe'` AND `source='signal-orchestrator'` (the active path — the only source feeding the funnel counters). **POPULATION:** all such rows since the NetEV promotion 2026-08-07 = **343,582**. Windowed deliberately: the alert's own body warns cumulative counters keep pre-promotion NetEV in `uncategorized` forever, so the cumulative share is not the measurement.
+
+| token | n | verdict |
+|---|---|---|
+| `NetEV` | 336,489 | canonical |
+| **`duplicate_pair_active`** | **7,055** | **NOT canonical** |
+| `RegimeWeight` | 38 | canonical |
+
+**Exactly ONE non-canonical token. Uncategorized share = 2.05%**, under the <5% indicator.
+
+**DISPOSITION — RULED A NON-GATE, deliberately NOT promoted.** `duplicate_pair_active` is the pair-exclusivity check at RTB queue admission (`ready_to_buy_service.ts:2104-2147`, `gate='pair_exclusivity'`, `path='rtb-queue-admission'`). **It is not an SQE quality gate and the code says so four lines above the emit:** *"SQE evaluation already happened upstream before calling queueSQESignal / Trust upstream SQE result."* It blocks on **live-execution state** (does this pair already hold a position), not on signal quality — Langston's justified-outside test. **Promoting it would assert pair-exclusivity is an SQE gate, which is false, and would make the taxonomy LESS legible.**
+
+★ **SCOPING STATED SO IT IS NOT MISTAKEN FOR AN OVERSIGHT:** two sources write `reject_stage='sqe'` in this window — `signal-orchestrator` 343,621 and **`vts-runner` 300,070**. My first query filtered to one source and would have silently excluded **47% of the stage population**; the coverage check caught it. The `vts-runner` rows are the VTS's own caller-side net-EV rejects (`net_ev_below_floor` 21,880, `net_ev_rejected` 5,051 in a 3-day sample), stamped `'sqe'` **deliberately** — `vts-runner.ts:5044`: *"B70.1 Step 3.6b: caller-side Net-EV reject → reject_stage='sqe'"*. **Working as designed, not a mis-stamp** (rule-24 outcome 2), and they do not feed the active funnel counters. ⚠️ **But note the consequence for anyone else querying this table: "SQE rejects" over `signal_eval_archive` WITHOUT a source filter mixes two pipelines, one of which has no SQE.**
+
