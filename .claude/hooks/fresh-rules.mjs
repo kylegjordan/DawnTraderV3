@@ -89,6 +89,32 @@ try {
   const changed = [];
   const skippedDirty = [];
   const skippedUnpushed = [];
+  const residueRefreshed = [];   // P5(b): dirty-but-ours, refreshed instead of frozen
+  const indexLeaks = [];         // P2/P3: the reset did not leave the index clean
+
+  /**
+   * ★ Is the worktree content for `path` something ORIGIN ONCE HELD on that path, with nothing
+   * staged? Then it is THIS HOOK'S OWN PRIOR REFRESH, not the session's work.
+   *
+   * ⚠️ THE FAIL DIRECTION IS DELIBERATE AND ASYMMETRIC: every uncertainty returns FALSE — "treat
+   * it as the session's own edit and do not touch it". Losing a refresh costs a stale file that
+   * the next run retries; losing a genuine local edit is unrecoverable. The cheap error is the
+   * only one this may make.
+   *
+   * PROVED OFFLINE before shipping (scratch origin + clone, B-CROSS-SESSION-BLEED Step 3):
+   *   residue            → refreshed, index clean afterwards  (the freeze breaks)
+   *   residue-check OFF  → the freeze RETURNS                 (mutation-proof: the fence can fail)
+   *   genuine edit       → PRESERVED, unstaged and staged forms both
+   */
+  function isHookResidue(p) {
+    try {
+      const staged = run(['diff', '--cached', '--name-only', '--', p]);
+      if (staged) return false;                    // staged ⇒ the session's, never ours to clear
+      const wt = run(['hash-object', '--', p]);
+      if (!wt) return false;
+      return Boolean(run(['log', REMOTE_REF, '--find-object', wt, '--format=%H', '-1', '--', p]));
+    } catch { return false; }                      // unknown ⇒ preserve
+  }
 
   for (const [path, why] of FILES) {
     let differs = '';
@@ -98,6 +124,21 @@ try {
     // (a) UNCOMMITTED local edits — never overwrite.
     let dirty = '';
     try { dirty = run(['status', '--porcelain', '--', path]); } catch { dirty = ''; }
+    // ★★ B-CROSS-SESSION-BLEED P5(b) — DIRTY IS NOT THE SAME QUESTION AS "YOURS".
+    //
+    // THE DEFECT THIS FIXES (#753, A14): once this hook refreshed a path, that path was dirty
+    // against HEAD — so EVERY LATER RUN took this branch and skipped it, forever. The worktree
+    // froze at origin-tip-as-of-the-first-refresh and never advanced again. Measured: one clone
+    // held a 14-day-old copy of RUNNING_ISSUES.md while origin moved 755 commits. The hook exists
+    // so nobody runs stale rules, and its own refresh was what made a file permanently stale.
+    // Worse, `git pull` ABORTS on a dirty worktree — so the freeze also barricades its own exit.
+    //
+    // THE DISCRIMINATOR: content ORIGIN ONCE HELD ON THIS PATH, with nothing staged, is OUR OWN
+    // PRIOR REFRESH — not the session's work. Refresh it; do not freeze it.
+    if (dirty && isHookResidue(path)) {
+      residueRefreshed.push([path, why]);
+      dirty = '';                       // fall through to the refresh below
+    }
     if (dirty) { skippedDirty.push([path, why]); continue; }
 
     // (b) ★ COMMITTED-BUT-NOT-YET-PUSHED work — also never overwrite. THIS WAS MISSING IN THE
@@ -112,17 +153,31 @@ try {
 
     // ⛔ `git checkout <ref> -- <path>` WRITES THE INDEX AS WELL AS THE WORKING TREE. That is
     // documented git behaviour, not a bug in git — but it made THIS hook silently stage every file
-    // it refreshed, holding ORIGIN's content (i.e. OTHER SESSIONS' work) in MY index under a path
-    // I recognised as mine. MEASURED TWICE: 2026-08-09 (stash `CC-C-685-not-mine`) and 2026-08-21
-    // (CC-C's #736/#737 sitting staged in CC-A's index, one `git commit` away from being published
-    // under the wrong author). Rule 25.c is EXACTLY this shape — the path is right, so the
-    // explicit-path habit that protects against the wrong FILE cannot see the wrong CONTENT — and
-    // both incidents were misread as another session writing into this clone. It was never that.
-    // THE RESET IS THE FIX: the refresh still lands in the working tree, but the index is left
-    // untouched, so a later `git add <my paths>` can no longer sweep in a refreshed governance file.
+    // it refreshed, holding ORIGIN's content in MY index under a path I recognised as mine.
+    // ⚠️ DATE CORRECTED 2026-08-31 (B-CROSS-SESSION-BLEED, Langston condition 1): this comment read
+    // "MEASURED TWICE: 2026-08-09 and 2026-08-21". THE 2026-08-09 EVENT WAS NOT ONE — the stash so
+    // labelled has a reflog date of 2026-08-18, and #753's instance table does not list it. The
+    // retraction had been written into a review dispatch and NOT into this file, which is
+    // `fix-follows-pointer`: the correction travelled to the prose and not to the instance, leaving
+    // this comment arguing with the line eight below it. IDENTIFIED ONCE, 2026-08-21; fixed 18
+    // minutes later. Rule 25.c is EXACTLY this shape — the path is right, so the explicit-path habit
+    // that protects against the wrong FILE cannot see the wrong CONTENT — and the incident was
+    // misread as another session writing into this clone. It was never that.
+    // THE RESET clears the index; the refresh still lands in the working tree.
     try {
       run(['checkout', REMOTE_REF, '--', path]);
-      try { run(['reset', '--quiet', '--', path]); } catch { /* nothing staged to clear */ }
+      let resetFailed = null;
+      try { run(['reset', '--quiet', '--', path]); }
+      catch (e) { resetFailed = e?.message ?? 'reset failed'; }
+
+      // ★ B-CROSS-SESSION-BLEED P2/P3 — ASSERT THE POST-CONDITION; DO NOT TRUST THE COMMAND.
+      // The reset used to sit in a bare `catch {}`, so a failure was swallowed and never reached the
+      // run record — the instrument that would have caught the original defect could not see it.
+      // A guard that cannot tell whether it worked is the shape of every instance in #753.
+      // FAIL-OPEN IS PRESERVED (see the header): a leak is REPORTED, never thrown, never blocking.
+      let leaked = '';
+      try { leaked = run(['diff', '--cached', '--name-only', '--', path]); } catch { leaked = ''; }
+      if (leaked || resetFailed) indexLeaks.push([path, resetFailed ?? 'index still staged after reset']);
       changed.push([path, why]);
     } catch { }
   }
@@ -133,10 +188,18 @@ try {
     refreshed: changed.map(([p]) => p),
     skipped_dirty: skippedDirty.map(([p]) => p),
     skipped_unpushed: skippedUnpushed.map(([p]) => p),
+    // ★ P4 — the run record could not previously answer "did the index stay clean?", which is the
+    // one question the original defect turned on. It can now, and a leak is named rather than lost.
+    residue_refreshed: residueRefreshed.map(([p]) => p),
+    index_leaks: indexLeaks.map(([p, why2]) => `${p}: ${why2}`),
     quiet: changed.length === 0 && skippedDirty.length === 0 && skippedUnpushed.length === 0,
   });
 
-  if (changed.length === 0 && skippedDirty.length === 0 && skippedUnpushed.length === 0) process.exit(0);
+  // The two new arrays are included deliberately: a residue refresh also pushes to `changed`, so
+  // this is correct today by coincidence rather than by construction — and a later edit that
+  // separated them would silence the report without any test noticing.
+  if (changed.length === 0 && skippedDirty.length === 0 && skippedUnpushed.length === 0
+      && residueRefreshed.length === 0 && indexLeaks.length === 0) process.exit(0);
 
   let out = '[RULES FRESHNESS — this session was running an out-of-date copy]\n';
   if (changed.length) {
@@ -151,10 +214,27 @@ try {
     for (const [p, why] of skippedUnpushed) out += `  - ${p}  (${why})\n`;
     out += '  PUSH them so the other sessions get them.\n';
   }
+  // ★★ B-CROSS-SESSION-BLEED P5(a) / A5 — THE WORDING WAS THE MISATTRIBUTION ENGINE.
+  // This block used to assert "you have UNCOMMITTED local edits here" for EVERY skip. When the
+  // content was origin's bytes left by this hook's own earlier run, that sentence told the session
+  // its own tool's work was its personal edit — and 19 stashes across four clones were filed as
+  // "another session's work in my tree" on the strength of it. The batch's own name came from this
+  // sentence. Residue is now refreshed (above) rather than described, and what remains here is only
+  // content origin never held — genuinely the session's.
+  if (residueRefreshed.length) {
+    out += 'REFRESHED (these looked modified, but the content was MINE — this hook left it on an earlier run,\n' +
+           'not you, and not another session; it is now advanced to origin):\n';
+    for (const [p, why] of residueRefreshed) out += `  - ${p}  (${why})\n`;
+  }
   if (skippedDirty.length) {
-    out += 'NOT refreshed — you have UNCOMMITTED local edits here, so they were left untouched:\n';
+    out += 'NOT refreshed — these hold content ORIGIN HAS NEVER HELD, so they are genuinely YOUR edits\n' +
+           'and were left untouched:\n';
     for (const [p, why] of skippedDirty) out += `  - ${p}  (${why})\n`;
     out += '  Commit and push them; until then this session is intentionally diverged from the branch.\n';
+  }
+  if (indexLeaks.length) {
+    out += '⚠️ INDEX NOT CLEAN after refresh — report this, do NOT commit these paths:\n';
+    for (const l of indexLeaks) out += `  - ${l}\n`;
   }
   process.stdout.write(out);
   process.exit(0);
