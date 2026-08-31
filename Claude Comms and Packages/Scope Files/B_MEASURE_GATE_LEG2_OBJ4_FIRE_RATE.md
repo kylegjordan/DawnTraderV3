@@ -88,6 +88,26 @@ A fresh reader traced it to the object. **The predicate did not match the author
 
 ---
 
+## 4c. ⛔⛔ **PRE-REGISTRATION — THE THRESHOLD, NAMED BEFORE THE WINDOW OPENS**
+
+**Langston: *"Pre-register the fold-into-6c threshold BEFORE the window opens — you pick the number, I hold you to having named it first. Below it, the PreToolUse leg is DELETED, not deprecated."*** ✅ **Named here, at `5a0ca40ef`+, with the window at n=0 and no adjudication performed.**
+
+| | |
+|---|---|
+| **denominator** | real-traffic fires — rows with `synthetic: false` |
+| **numerator** | hand-adjudicated: **did the reading this fired on actually become a claim?** |
+| **n required before ANY verdict** | **≥ 50 real-traffic fires** |
+| ✅ **KEEP threshold** | ⭐ **PRECISION ≥ 20%** — at least 1 fire in 5 sits on a reading that became a claim |
+| ✅ **AND a second condition, both must hold** | ⛔ **at least ONE adjudicated catch must be a reading that would have reached a PUBLISHED claim** — a document, a dispatch, or a report |
+| ⛔ **BELOW EITHER** | **THE `PreToolUse` LEG IS DELETED, NOT DEPRECATED** (§15). Its work, if any survives, folds into OBJ-6c where the result is visible. |
+
+**WHY 20% AND NOT THE ORIGINAL 2%:** the 2% figure was a **false-BLOCK** budget from a design that could block. **This leg cannot block and a false positive costs one line of context**, so the question is not "is it safe" but **"does it change behaviour often enough to be read rather than skipped."** ★ **At 20% precision and a realistic fire volume, a session gets a real catch most days; at 5% it is wallpaper.**
+⛔⛔ **THE SECOND CONDITION IS THE ONE THAT MATTERS AND IT EXISTS BECAUSE PRECISION ALONE IS GAMEABLE:** 20% made entirely of trivial catches — a count that became a number in a scratch check nobody read — clears the bar and buys nothing. **A guard justified by catches that never mattered is a guard justified by its own noise.**
+
+⚠️ **AND THE DENOMINATOR CARRIES A KNOWN CONTAMINANT THAT MUST BE STATED WITH THE RESULT, NOT DISCOVERED AFTER IT:** §4b's self-contamination. **Sessions working ON this batch are enriched in the audited shapes.** ⇒ **the window either excludes this batch's own sessions or says plainly that it does not.** *(The sink carries no session id, so today it CANNOT exclude them — which means the first honest window is one accrued after this batch closes.)*
+
+---
+
 ## 5. ⇒ THE DISPOSITION
 
 ⛔ **NOTHING IS DECIDED ABOUT SHIPPING OBJ-4 UNTIL A REAL-TRAFFIC WINDOW EXISTS.** The hook is warn-only, fail-open, and live; it costs nothing to leave running while the window accrues. **That window is the deliverable, and it did not exist when `r1` declared its verdict.**

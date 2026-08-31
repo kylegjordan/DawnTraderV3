@@ -255,6 +255,36 @@ plus **any new `MISTAKE:` trailer whose slug is `skipped-the-gate` or names a wo
 ✅ **THE FIX, and it is available today: write any script containing backticks with the Write tool, then run the FILE.** ⛔ **Do not inline it.**
 **Mechanism that would retire it:** a pre-execution check refusing a Bash heredoc whose body contains an unescaped backtick. **HOME: `B-GATE-GUARD` (#744), owner CC-A, queue position 10** — same hook family, and it is a shell-shape check exactly like the bare-commit guard.
 
+### `product-not-arms` — **TWO FIXES TOUCHING THE SAME INPUT IN ONE COMMIT NEED AN ARM AT THEIR *PRODUCT*, NOT ONE ARM EACH** — **NEW 2026-09-01, n=1** · mechanism: ✅ **the product arm itself**
+
+★★ **LANGSTON NAMED IT AND DIRECTED IT FILED SEPARATELY: *"not shell and not `fix-follows-pointer`"*.**
+
+**INSTANCE 1 — `B-MEASURE-GATE` OBJ-4 `r3`.** Two fixes landed in one commit, both touching the command string before matching: **(a)** the quoted-prose pass was moved AHEAD of the heredoc pass so a `<<` in message text is elided first; **(b)** an `execRe` guard was added so a quoted region containing `$( )` is KEPT rather than elided.
+⛔ **(b) CREATES THE BRANCH ON WHICH (a) IS FALSE.** On the kept branch the `<<` is still present when the heredoc rule runs, and that rule eats to end of command:
+```
+cc-send --message "cat <<EOF then $(date)" && wc -c CLAUDE.md   -> SILENT
+cc-send --message "cat <<EOF then x"       && wc -c CLAUDE.md   -> fires
+```
+⛔⛔ **AND THE SUITE PASSED, BECAUSE EACH HALF HAD ITS OWN ARM AND NOTHING TESTED THE COMBINATION** — one arm had the `<<` without a substitution, another had the substitution without a `<<`. **Each half covered; the product not.**
+★ **The guard went blind precisely when the message contained a RUNNING instrument — the condition (b) was added to protect.**
+
+✅ **MECHANISM — CHECKABLE, AND IT IS THE ARM ITSELF: when a commit changes two things that read the SAME INPUT, add a case where BOTH conditions hold at once, in both orders.** ⇒ *"I tested the fix"* is not *"I tested the fixes together."*
+⚠️ **n=1, not promoted.** Floor unchanged: 3+ instances across 2+ distinct batches, no severity override.
+
+---
+
+### `retraction-unscrutinised` — **A RETRACTION IS THE HIGHEST-CONFIDENCE DOCUMENT YOU WRITE AND GETS THE LEAST SCRUTINY, BECAUSE IT ALREADY SOUNDS SELF-CRITICAL** — **NEW 2026-09-01, n=2** · mechanism: **NONE YET**
+
+★★ **LANGSTON’S FORMULATION, VERBATIM, AND HE IS RIGHT THAT IT IS THE SHAPE WORTH HOLDING.** A document that opens by admitting error reads as already-audited. **The admission is mistaken for the audit.**
+
+**INSTANCE 1 — the OBJ-4 fire-rate retraction, `r2`.** Written to withdraw a contaminated number, it asserted *"the same instrument had already run twice, silently, 34 and 17 minutes earlier."* ⛔ **THE SINK STORES NO COMMAND TEXT AND ITS EARLIEST ROW POSTDATES THOSE TIMES.** The claim came from a reader’s transcript analysis and was restated as though my own instrument carried it — `RULED ON REPORTED FACT`, **inside a retraction written to fix exactly that.**
+**INSTANCE 2 — the same document, same revision.** Its co-occurrence claim was labelled ✅ *"measured rather than argued"* and **derived from the very rows the document declares two sections earlier to be unusable.** The figure did not reproduce either.
+
+★ **BOTH SURVIVED A ROUND OF REVIEW THAT CAUGHT OTHER THINGS IN THE SAME FILE.** ⇒ **the self-critical register is itself a form of authority, and it suppresses the reader’s scepticism at exactly the moment the author’s is lowest.**
+⚠️ **n=2, both in ONE batch — NOT promoted.** *(Same standing as `contaminated-feed`: the floor is instances across 2+ DISTINCT batches, and severity does not override it.)*
+
+---
+
 ### `contaminated-feed` — **THE CHECK WAS RIGHT, THE OBJECT WAS RIGHT, AND THE *INPUT* WAS WRONG** — **NEW 2026-08-31, n=1** · mechanism: **NONE YET — candidate, see below**
 
 ★★ **LANGSTON NAMED THIS AND DIRECTED IT FILED SEPARATELY, 2026-08-31: *"A correct instrument that didn’t fire because its FEED was contaminated is a DISTINCT CLASS from `wrong-object`: the check was right, the object was right, the input was wrong. Don’t fold it into `wrong-object` — a pattern index that merges those loses the one guard that would have caught this."***

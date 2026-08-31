@@ -6448,3 +6448,25 @@ CC-A's batch argues the workflow is not reliably firing. **This is that thesis, 
 
 ⇒ ✅ **DISPOSITION UNCHANGED IN DESTINATION, STRONGER IN GROUND: `#959` VOID as framed. The 00:15 residual that survives is NOT the widening (answered) but §14.4's ONE unexplained case — `NOW/USD`, a TIGHT venue book (143.20/143.30) coexisting with a bad mark (118.75) — which §14.2 explicitly does NOT cover and which is already homed at 3b.b with the raw-frame capture armed.**
 ⚠️ **THREE CORRECTIONS ON ONE ISSUE IN ONE DAY, AND ALL THREE WERE READS OF MY OWN DOCUMENTS: I cited `#943` but not the audit §14 that supersedes half of it, and I re-derived from a live query what was already measured at n=77,060 with two controls.** ★ **The instrument that caught it was Kyle's memory, twice.**
+
+### #980 OPEN 2026-09-01 (CC-A; Langston named it, and named a home that has since closed) — ⛔ THE PER-TURN MANDATED READS ARE SPECIFIED THREE TIMES AND THE THREE DO NOT AGREE
+
+★★ **SURFACED BY `B-MEASURE-GATE` OBJ-4: a guard fired on a command the rules OBLIGE every session to run every turn.** Building the fixture that must never fire required enumerating the mandated set — **and it is not single-homed.** Langston named two homes; **there are THREE.**
+
+| home | `path:line` | what it mandates |
+|---|---|---|
+| repo `CLAUDE.md` | `:564` | CC sessions — `ssh root@188.245.193.8 'tail -50 …/system-alerts.jsonl'` |
+| repo `CLAUDE.md` | `:565` | Langston sessions — `ssh staging 'tail -50 …'` |
+| repo `CLAUDE.md` | `:279` | `ssh root@204.168.141.77 "tail -n 30 …/cc-discord-inbox.jsonl"` |
+| ⛔ `/home/langston/CLAUDE.md` | `:356` | **`cat` — UNBOUNDED**, and `deploy@` rather than `root@` |
+| ⛔ shared `MEMORY.md` | `:16`, `:17` | `tail -50` and `tail -30` — **the third home, which Langston did not name** |
+
+⛔ **THE DIVERGENCES ARE SUBSTANTIVE, NOT COSMETIC:** the repo tells Langston sessions to read a **TRUNCATED 50 lines**; his own file tells him to read the **WHOLE FILE**. ★ **He read the full file this turn — 763 rows enumerated, not tailed — so the two homes produce DIFFERENT POPULATIONS for the alert check, and the repo’s form is the one that can miss a due alert older than 50 rows.** Also `tail -n 30` vs `tail -30`, and `root@` vs `deploy@`.
+
+⚠️ **`#641` SHAPE: three copies, one truth, nothing comparing them.** And it is `#978` shape A in the mandated-command set itself — an asserted procedure with no single read-site.
+
+⛔⛔ **HOME — AND LANGSTON’S NAMED HOME DOES NOT EXIST.** He wrote *"placed in `B-CLAUDEMD-SLIM` — already the batch touching both files."* ✅ **`B-CLAUDEMD-SLIM` CLOSED 2026-08-29** (`PHASE_19_PLAN` queue row 12). He is stateless per-invoke and could not have known. **Flagged to him rather than silently re-homed.**
+⇒ **`HOME: B-GOV-REPORTING`, owner CC-A, `PHASE_19_PLAN.md` governance queue ROW 8** — the batch that already owns the change-class matrix and its missing `BLOCKED` state, i.e. governance-document consistency defects. **The repo `CLAUDE.md` and shared `MEMORY.md` halves are mine and actionable there.**
+⚠️ **THE `/home/langston/CLAUDE.md` HALF IS NOT MINE.** Kyle ruled 2026-08-30 that Langston’s instruction file is **Infra Claude’s** responsibility (*"I don’t wanna mix that work"*). **Reconciling that copy needs Kyle’s placement in Infra’s ordering; I am not assigning it.**
+
+✅ **ALREADY MITIGATED, INDEPENDENT OF THE FIX:** all eight mandated forms from all three homes are now a committed regression fixture (`scripts/measure-gate/test-guard-measurement-shape.mjs` §M) that requires **ZERO fires**. **The guard cannot regress onto the mandated set without the suite failing** — which is Langston’s condition that this ship as a test arm, not a review step.

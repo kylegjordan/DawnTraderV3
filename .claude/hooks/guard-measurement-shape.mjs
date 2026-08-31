@@ -36,6 +36,32 @@
 // FAIL-OPEN by construction. `decided:false` in the sink distinguishes "clean" from "bailed" —
 // without it a fail-open hook's silence reads as a pass, which is the lookalike failure in the
 // enforcement layer that this batch exists to prevent.
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+// ⛔⛔ KNOWN GAPS — WHAT THIS GUARD DOES **NOT** CATCH. READ THIS BEFORE TRUSTING ITS SILENCE.
+//
+// Stated as its own block on Langston's condition, because these previously lived inside
+// justification comments and A JUSTIFICATION READS AS "HANDLED". Its silence is not a clean bill
+// of health; these are the cases where it is quiet BY CONSTRUCTION. Each is pinned by an arm in
+// scripts/measure-gate/test-guard-measurement-shape.mjs §K, asserting CURRENT behaviour, so an
+// edit that changes one fails the suite loudly instead of silently widening or closing a hole.
+//
+//  1. `tail` WAS DELIBERATELY REMOVED FROM THE TRUNCATION SHAPE, AND THAT SOLD COVERAGE.
+//     `tail -200 log | wc -l` and `tail -200 log > slice` are NOT caught. The trade bought
+//     freedom from a permanent false-positive floor (see the shape's own note) and it is a real
+//     loss, not a clean win. ⚠️ `tail -200 log | grep -c X` IS still caught — by
+//     `count-from-search`, not by the truncation shape.
+//  2. `stages()` IS QUOTE-UNAWARE: a quoted separator (`grep ';' f -c`) splits a stage that
+//     should not split, so locality is defeated and the command goes silent.
+//  3. `stages()` IS SUBSTITUTION-UNAWARE: a pipe inside `$( )` splits one instrument into two.
+//     STRUCTURAL, but NOT demonstrable with the three shapes that exist today — recorded as
+//     unproven rather than asserted, because the first attempt to assert it was itself wrong.
+//  4. THE MENTION LEG IS REGEX, NOT A PARSER. Three rounds produced three new blind spots, each
+//     found by the next reader. ⛔ FROZEN ON LANGSTON'S RULING — no fourth round: a tokenizer
+//     buys a new failure class in an always-run hook to sharpen a warning that never blocks, and
+//     a false negative here is the cheapest failure in the batch.
+//  5. IT SEES THE INSTRUMENT, NEVER THE USE. Whether a reading is about to become a claim is not
+//     visible before execution. That is the objective's central open question, not a bug.
+// ═══════════════════════════════════════════════════════════════════════════════════════════
 import { readFileSync, appendFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';

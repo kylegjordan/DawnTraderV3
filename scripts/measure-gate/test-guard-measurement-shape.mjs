@@ -152,6 +152,39 @@ console.log('\n=== D7-D12. OVER-ELISION — a swallowed instrument is worse than
   check('D12 the --message= form does not fire', r.ctx === null, 'fired: ' + String(r.ctx).slice(0, 60));
 }
 
+// ---------------------------------------------------------------------------
+// M. THE MANDATED-COMMAND FIXTURE — Langston's Q1 condition 1, and it ships as a TEST ARM
+// rather than a review step, because a manual step measured at 75% compliance (#451) is the
+// argument FOR a predicate, not a substitute for one.
+//
+// ⛔⛔ ON THIS SET THE FIRE RATE IS 100% AND THE PRECISION IS STRUCTURALLY 0%, FOREVER — the
+// mistake lives in the USE and the predicate sees only the INSTRUMENT. These commands cannot
+// become a claim, and the rules oblige every session to run them every turn.
+//
+// ⚠️ ENUMERATED FROM EVERY HOME, WITH `path:line`, BECAUSE THE SET IS NOT SINGLE-HOMED.
+// Langston named two homes and there are THREE — the shared MEMORY.md mandates its own pair,
+// and the three do not agree (`tail -50` vs `tail -n 30` vs unbounded `cat`; `root@` vs
+// `deploy@`). Enumerating from one home under-counts, which is the #641 shape.
+// ---------------------------------------------------------------------------
+console.log('\n=== M. MANDATED COMMANDS — every home, verbatim, must produce ZERO fires ===');
+const MANDATED = [
+  // HOME A — repo CLAUDE.md
+  ['CLAUDE.md:279', 'ssh root@204.168.141.77 "tail -n 30 /var/log/cc-discord-inbox.jsonl"'],
+  ['CLAUDE.md:564', `ssh root@188.245.193.8 'tail -50 /var/log/dawntrader/system-alerts.jsonl'`],
+  ['CLAUDE.md:565', `ssh staging 'tail -50 /var/log/dawntrader/system-alerts.jsonl'`],
+  // HOME B — /home/langston/CLAUDE.md (Langston's own copy, unbounded `cat`, different user)
+  ['langston/CLAUDE.md:356', `ssh deploy@188.245.193.8 'cat /var/log/dawntrader/system-alerts.jsonl 2>/dev/null'`],
+  ['langston/CLAUDE.md:356', `ssh staging 'cat /var/log/dawntrader/system-alerts.jsonl'`],
+  // HOME C — shared MEMORY.md, the home Langston did not name
+  ['MEMORY.md:16', 'ssh root@188.245.193.8 "tail -50 /var/log/dawntrader/system-alerts.jsonl"'],
+  ['MEMORY.md:17', 'ssh root@204.168.141.77 "tail -30 /var/log/cc-discord-inbox.jsonl"'],
+  ['MEMORY.md:19', `ssh -o ServerAliveInterval=60 root@204.168.141.77 'tail -n0 -F /var/log/cc-discord-inbox.jsonl /var/log/cc-wake.log'`],
+];
+for (const [site, c] of MANDATED) {
+  const r = run(bash(c));
+  check('M ' + site + ' silent', r.ctx === null, 'FIRED ' + String(r.ctx).slice(0, 55));
+}
+
 console.log('\n=== E. LOCALITY — tokens must co-occur in ONE pipeline stage ===');
 {
   // Single `&` was not a separator in r2, and background chains are where unrelated commands
@@ -178,6 +211,50 @@ console.log('\n=== E. LOCALITY — tokens must co-occur in ONE pipeline stage ==
 {
   const r = run(bash('git grep -c PostToolUse -- .claude/'));
   check('E2 same-stage search+count DOES fire', !!r.ctx && r.ctx.includes('count-from-search'));
+}
+
+// ---------------------------------------------------------------------------
+// K. THE FROZEN LIMITS. Langston: STOP HARDENING, no fourth round — a tokenizer is not the exit
+// either, because a dependency in an always-run hook buys a new failure class to sharpen a
+// warning that never blocks, and a false negative here is the cheapest failure in the batch.
+// ⇒ these arms assert CURRENT behaviour, holes included, SO THE NEXT EDIT REOPENS THEM LOUDLY.
+// They are not aspirations. If one starts failing, someone changed the elision or the splitter.
+// ---------------------------------------------------------------------------
+console.log('\n=== K. FROZEN LIMITS — asserting the KNOWN HOLES so an edit reopens them loudly ===');
+{
+  // K1: stages() is quote-unaware — a quoted `;` splits a stage that should not split.
+  const r = run(bash(`grep ';' notes.md -c`));
+  check('K1 KNOWN HOLE: a quoted separator defeats locality (silent today)', r.ctx === null,
+        'this now FIRES — the splitter changed; re-read the frozen-limits note');
+}
+{
+  // ⛔ K2 — I COULD NOT CONSTRUCT A CASE THAT ISOLATES THE SUBSTITUTION-SPLITTING HOLE with the
+  // three shapes that exist, and my first attempt asserted a hole WITHOUT MEASURING whether it
+  // was one: `$(grep pattern f | wc -c)` fires, but on `worktree-not-ref`, not because of any
+  // splitting. The nearest silent case is silent because `wc -l` is not a matched token at all.
+  // ⇒ the hole is STRUCTURAL (stages() splits inside `$( )`) and NOT DEMONSTRABLE today, so it
+  // is recorded as such rather than asserted. Both nearest cases are pinned so an edit moves them.
+  const a = run(bash('n=$(git grep pattern -- . | wc -l) ; echo $n'));
+  check('K2a nearest silent case stays silent (wc -l is not a matched token)', a.ctx === null,
+        'moved — re-derive whether the substitution hole is now demonstrable');
+  const b = run(bash('n=$(grep pattern f.md | wc -c) && echo "$n"'));
+  check('K2b and this fires on worktree-not-ref, NOT on splitting', !!b.ctx && b.ctx.includes('worktree-not-ref'),
+        'moved — the reason this fires has changed');
+}
+{
+  // ⛔⛔ K3 — AND LANGSTON'S OWN EXAMPLE OF THE GAP IS COVERED. He wrote "nothing now catches
+  // `tail -200 log | grep -c X`". MEASURED: it FIRES, on `count-from-search`, because the second
+  // stage carries `grep -c` regardless of how the first stage truncated. My first version of
+  // this arm asserted his example verbatim and failed — I had inherited the claim instead of
+  // running it. The REAL gap is narrower and is pinned below.
+  const covered = run(bash('tail -200 /var/log/app.log | grep -c ERROR'));
+  check('K3a his stated gap example IS caught (by count-from-search)', !!covered.ctx && covered.ctx.includes('count-from-search'));
+  const gap1 = run(bash('tail -200 /var/log/app.log | wc -l'));
+  check('K3b KNOWN GAP: tail -N into a bare line-count is NOT caught', gap1.ctx === null,
+        'this now FIRES — someone re-added tail; re-run the M fixture before keeping it');
+  const gap2 = run(bash('tail -200 /var/log/app.log > /tmp/slice.txt'));
+  check('K3c KNOWN GAP: tail -N into a file, counted later, is NOT caught', gap2.ctx === null,
+        'this now FIRES — check the M fixture');
 }
 
 console.log('\n=== F. FAIL-OPEN ===');
