@@ -824,6 +824,34 @@ MSYS2_ARG_CONV_EXCL='*' git show "…:.claude/memory/MEMORY.md"               ->
 
 ## B79.0n.SCORING + B79.0n.TEC closure entries (2026-05-26)
 
+### #973 OPEN 2026-08-31 (CC-INFRA, found 10 minutes into B-TOKEN-WATCH's live collection) — THE TRAIT DEFINITION'S SOCIALS LIMB IS STRUCTURALLY DEAD: THIS PROVIDER'S CREATION EVENT CARRIES NO SOCIAL FIELDS AT ALL
+
+**The pre-registered trait definition is *"any advertised channel OR initial size above the platform default."* The first half CANNOT FIRE, and it is not intermittent — the data never arrives.**
+
+⛔ **MEASURED ON LIVE DATA, 116 real launches: ZERO carry any social channel, and the carrier count (40) is EXACTLY the count above the 1.0 SOL size threshold (40). Carriers selected by socials alone: 0.**
+
+**MECHANISM, established at the object rather than inferred** — `receiver.parse_creation` reads two branches, and BOTH are empty on every real payload:
+- `event.telegram` / `event.twitter` / `event.website` → **all `None`.** The keys do not exist. A real creation event's top-level keys are: `accountData, description, events, fee, feePayer, instructions, lighthouseData, nativeTransfers, signature, slot, source, timestamp, tokenTransfers, transactionError, type`.
+- `event.events.nft` → **`None`.** `events` is an EMPTY object on these transactions; `description` is `''`.
+
+★ **The social handles live in the token's off-chain metadata URI, not in the transaction.** The enhanced-transaction webhook was never going to carry them, and nothing in the build would have revealed that without real traffic — the synthetic test events set `telegram` at the top level, so every test passed while the field it exercised does not exist in production.
+
+⚠️ **THIS IS THE MIRROR OF THE FAILURE THE PRE-REGISTRATION NAMED.** It warned that an extraction break would make *"the size limb switch off silently and the study degrade to socials-only with no alarm."* What happened is the reverse: **the SOCIALS limb switched off and the study degraded to SIZE-ONLY.** The prediction was right about the shape and wrong about which half.
+
+⇒ **RULE 24 OUTCOME (2) — WORKING-AS-DESIGNED BUT UNADDRESSED. The code does what it was written to do; what is missing is a DECISION, and it is Kyle's, not mine.** The options and their measured costs:
+| | cost | verdict |
+|---|---|---|
+| **(a) amend the trait definition to SIZE-ONLY** | zero | **my recommendation** |
+| (b) fetch each launch's metadata URI for socials | +20,700 calls/day ⇒ **~1.38M credits/month against a 1M free tier** | **breaks the budget** |
+| (c) fetch metadata only for already-followed tokens | ~251k/month on top of ~739k ⇒ **~990k of 1M** | no headroom; one bad day breaches |
+| (d) fetch metadata for a SAMPLE, to measure what (a) gives up | small, bounded | **worth doing under (a)** |
+
+⛔ **AND THE CLOCK MATTERS, WHICH IS WHY THIS IS NOT FILED-AND-FORGOTTEN.** Collection is RUNNING. Rows written now are honest — `socials: all false` is a true record of what the event contained — but `followed` is computed AT WRITE TIME, so **if the definition later changes, the early cohort is not comparable to the later one.** The exposure is bounded by how long the decision takes, not by anything in the code. **I did NOT pause the feed:** the rows are truthful and the definition in force is well-defined, so pausing would lose data to buy nothing.
+
+**HOME: folded into `B-TOKEN-WATCH` — it is this batch's own instrument, found by this batch's own first live data, and it cannot wait for another one.** Pre-registration AMENDMENT 6 records it either way, because the change of an in-force definition must be in the append-only record before the analysis reads it.
+
+★ **NOT A DEFECT AND CHECKED: the SIZE limb is verified working on real data** — 116 of 116 sizes resolved, 19+ distinct values, range 0.0025-85.0 SOL (AMENDMENT 5).
+
 ### #972 OPEN 2026-08-30 (Langston MEASURED it while re-deriving my `#602` alert sweep; CC-A filing at his direction, OWNER CC-B) — ⚠️ xSTOCK ATR READS EMPTY ON **BOTH** SIDES OF THE OPEN/CLOSE BOUNDARY
 
 ⛔⛔ **THIS IS A HYPOTHESIS, NOT A DEFECT CLAIM — and it is labelled that way because rule 29(c) requires it and because the innocent explanation is live: xStock ATR may be HONESTLY UNSOURCED.**

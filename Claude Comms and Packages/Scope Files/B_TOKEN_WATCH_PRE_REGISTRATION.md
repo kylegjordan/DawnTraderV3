@@ -271,3 +271,28 @@ A1.3's *"45,000 controls -> ~75 expected events"* is across the **full 90 days**
 ★ **A +49% overshoot that is MEASURED, BOUNDED and PRE-REGISTERED is a weaker instrument than a 15-minute sweep. An unmeasured consumption-tracking bug is a CORRUPT one.** Given that the deliverable is the machinery rather than the token result, I take the weaker-but-honest instrument.
 
 ⚠️ **AND THE DECISION IS REVERSIBLE ON EVIDENCE, WITH THE TRIGGER NAMED NOW:** if the read-out shows the `1h` leg is materially less informative than the published comparator - i.e. if H1/H2 reproduce at 6h and later but NOT at 1h - **that is an instrument finding under §8.1, and the sweep granularity is the first thing to change.** It is a stated hypothesis about our own instrument, not an open question we will re-litigate from taste.
+
+### AMENDMENT 5 - 2026-08-31, STILL PRE-DATA (the census is empty; the feed is not yet connected)
+
+**DISCHARGES THE RISK NAMED IN THIS DOCUMENT AS UNRECOVERABLE.** Section 10 stated: *"the code's extraction of [initial size] has never been verified against a real provider payload - the 'verified against a real token' evidence covers the event-type filter, not this field. If the extracted number is a platform fee or account rent rather than the creator's own buy, then every token records a near-constant value, the size limb of the trait definition fires for everyone or for nobody, and it does so silently with a plausible number attached."**
+
+**MEASURED, 2026-08-31, against 8 REAL creations pulled from the launchpad program with the provider's own `type=CREATE` filter, run through the PRODUCTION parser (`receiver.parse_creation`):**
+
+| | result |
+|---|---|
+| creations parsed | **8 of 8** — none refused |
+| size resolved | **8 of 8** — zero `unresolved` |
+| distinct values | **8 of 8** |
+| range | **0.01 to 3.457 SOL** |
+| `size_source` | `feePayer_largest_of_10` … `_of_12` — every creation carries **10-12** creator transfers |
+
+⇒ **THE VALUES ARE NOT NEAR-CONSTANT, so the extractor is reading the creator's own buy and not a fee or rent.** The named failure did not occur.
+
+⛔⛔ **AND THE COUNTERFACTUAL IS THE PART THAT MATTERS, because it measures how close this came to happening.** The pre-fix code took `nativeTransfers[0]`. Against the same 8 real creations, the first creator transfer would have recorded **0.0000000010, 0.00001, 0.0022, 0.00251952, 0.00251952, 0.003, 0.008, 0.03 SOL** — **wrong in 8 of 8.**
+
+★ **EVERY ONE OF THOSE WRONG VALUES IS BELOW `PLATFORM_DEFAULT_SIZE` (1.0 SOL). The size limb of the trait definition would therefore have fired for NOBODY**, the study would have degraded to socials-only, and it would have done so silently with a plausible number attached — which is precisely the sentence above, realised. The fix from position-0 to largest-creator-transfer was load-bearing, and this is the first evidence of it against real data rather than synthetic events.
+
+⚠️ **WHAT THIS DOES NOT DISCHARGE, STATED SO THE AMENDMENT IS NOT READ AS WIDER THAN IT IS:**
+- **n = 8.** It refutes *near-constant*; it does not establish the DISTRIBUTION of launch sizes, and no rate in this study may be computed from it.
+- **`PLATFORM_DEFAULT_SIZE = 1.0` REMAINS MY ASSUMPTION, NOT THE LITERATURE'S.** 3 of these 8 sit above it and 5 below, which is the first real-data signal that the threshold splits the population at all rather than degenerately — but 8 observations cannot calibrate it, and **AMENDMENT 3's PROVISIONAL marking on the trait definition STANDS UNCHANGED.**
+- The sample is 8 consecutive creations from one moment, so it carries whatever composition that moment had.
