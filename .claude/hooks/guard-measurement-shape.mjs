@@ -106,7 +106,16 @@ function stripQuotedProse(cmd) {
   // `--message=` as well as `--message ` — r2 required whitespace, and the motivating incident
   // recurred verbatim with an `=`. Reader-found.
   s = s.replace(/(--message|--body|--text|--note|-m)(\s+|=)(['"])([\s\S]*?)\3/g,
-    (m, _f, _sep, _q, body) => (execRe.test(body) ? m : ' [quoted-message-elided] '));
+    // ⛔⛔ THE `execRe` BRANCH MUST STILL NEUTRALISE `<<`, OR THE TWO r3 FIXES CANCEL EACH OTHER.
+    // Ordering was changed so the quoted region is gone before the heredoc rules run — but that
+    // only holds on the branch where it IS elided. On the KEPT branch a `<<` in message text
+    // survived into the unterminated-heredoc rule and ate to end of command, so
+    //   cc-send --message "cat <<EOF then $(date)" && wc -c CLAUDE.md
+    // went SILENT — precisely when the message contains a running instrument, which is the
+    // condition execRe exists to protect. Same command without the substitution fired.
+    // ⇒ keep the region for matching, but blind the heredoc rules to its `<<`. Reader-found;
+    // neither half was covered because no arm combined `<<` with `$(`.
+    (m, _f, _sep, _q, body) => (execRe.test(body) ? m.replace(/<</g, '[lt-lt]') : ' [quoted-message-elided] '));
   // Payload side of a write redirection. ⚠️ ANCHORED WITHIN ONE STAGE: r2's was unanchored and
   // backtracked until it found a `>`, so a second quote later let it swallow every stage in
   // between — `echo "a" ; grep -c TODO f ; echo "b" > log` went silent on a real instrument.
@@ -141,8 +150,16 @@ const SHAPES = [
   },
   {
     id: 'truncation-is-not-population',
-    test: (st) => /\b(head|tail)\s+-n?\s*\d+/.test(st) || /\bgit\s+log\b[^\n]*\s-\d+\b/.test(st),
-    say: 'This read is TRUNCATED. A head/tail/-N slice is not the population — if the result becomes a count, a share or an absence claim, re-run it unbounded or state the truncation beside the number.',
+    // ⛔⛔ `tail` IS DELIBERATELY NOT IN THIS SHAPE, AND THE REASON IS A PERMANENT FLOOR RATHER
+    // THAN A JUDGEMENT CALL. Governance MANDATES a tail on every turn — CLAUDE.md §10.5 requires
+    // `tail -50 …/system-alerts.jsonl` BEFORE RESPONDING TO ANY USER MESSAGE, and MEMORY.md item
+    // 4 requires `tail -30 …/cc-discord-inbox.jsonl` at session start. Both matched, both fired,
+    // on a shape that CAN NEVER BECOME A CLAIM. ⇒ unlike batch-session contamination this never
+    // washes out: it scales with turn count, in every session, forever. A guard that fires on a
+    // command the rules oblige you to run every turn is a banner-blindness generator by
+    // construction. Reader-found; `head` and `git log -N` are kept because neither is mandated.
+    test: (st) => /\bhead\s+-n?\s*\d+/.test(st) || /\bgit\s+log\b[^\n]*\s-\d+\b/.test(st),
+    say: 'This read is TRUNCATED. A head/-N slice is not the population — if the result becomes a count, a share or an absence claim, re-run it unbounded or state the truncation beside the number.',
   },
   {
     id: 'count-from-search',

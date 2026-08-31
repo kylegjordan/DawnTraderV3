@@ -19,12 +19,18 @@
 The suite sets `GUARD_SYNTHETIC=1`; the hook records `synthetic: true`. **Rows are separable at read time from here on.**
 ⛔ **RETROACTIVELY THEY ARE NOT.** Every row written before the marker is unlabelled, so **the earlier session's rows cannot be cleaned and are not usable as a rate.** Stated rather than quietly re-baselined.
 
-**Current version `ffa833100dbe`, first minutes of life:**
+⛔⛔ **`r4` — THIS TABLE NAMED A `hook_sha` AND THE NAME WENT STALE ONE COMMIT LATER, WHICH IS `#978` SHAPE A IN THE DOCUMENT THAT EXISTS TO CATCH IT.** It read *"current version `ffa833100dbe`"*; that is the **r2** hook. The r3 commit changed elision and stage-splitting — **the very behaviour the table is about** — and the label did not follow. **A reader accruing the real-traffic window against the named sha would have measured r2.**
+⛔ **AND THE `REAL` ROW DID NOT REPRODUCE (2 decided / 1 fired, not 1/1), because under that sha the key was written `|| undefined` and omitted on real traffic — so real, bail and pre-marker rows are ONE UNDIFFERENTIATED SET.** That is precisely the ambiguity the explicit `false` was added to remove; **the table predated its own fix.**
+
+✅ **CORRECTED FORM — NAME THE READ-SITE, NEVER THE VALUE:**
+> **The current identity is whatever `.claude/hooks/guard-measurement-shape.mjs` hashes to THROUGH ITS OWN CODE PATH** (sha256 of the file with `\r\n` normalised to `\n`, first 12 chars). **Compute it; do not copy it from here.** Any figure below is pinned to the moment it was taken and is superseded by the next change to the hook.
+
+**Taken at `37706d574`, first minutes of that version's life:**
 
 | population | decided | fired | rate |
 |---|---|---|---|
 | SYNTHETIC (payloads chosen to fire) | 21 | 10 | 47.6% |
-| **REAL session traffic** | **1** | 1 | ⛔ **n=1 — NOT A RATE** |
+| **REAL session traffic** | **small** | — | ⛔ **NOT A RATE — see the self-contamination limit in §4b** |
 
 ⇒ ⛔⛔ **THE REAL-TRAFFIC FIRE RATE IS UNMEASURED. It is not high, it is not low, it is UNKNOWN, and no disposition may rest on it until a real window exists.**
 
@@ -76,6 +82,9 @@ A fresh reader traced it to the object. **The predicate did not match the author
 - ⛔ **`hook_sha` WAS SPLITTING ONE SOURCE VERSION INTO TWO IDENTITIES BY LINE ENDING** — LF blob vs CRLF checkout — **so the live hook stamped one sha while `r2`'s own table filtered on the other.** ★ **That is this hook's own `worktree-not-ref` shape landing on the hook's own identity field.** ✅ Fixed: the hash normalises line endings, so it identifies SOURCE rather than checkout form.
 - ⛔ **The sink carries NO SESSION OR CLONE ID**, so "real traffic" pools every session.
 - ⛔⛔ **AND THE REAL WINDOW IS SELF-CONTAMINATING: auditing this guard is itself real-marked traffic, enriched in the very shapes being audited.** A window accrued while the batch is under active development measures the developer working on the guard. **Any future rate must exclude the batch's own sessions or say plainly that it does not.**
+- ⛔⛔ **`r4` — AND THERE WAS A PERMANENT FLOOR UNDERNEATH THAT ONE, WHICH DOES NOT WASH OUT: GOVERNANCE MANDATES A FIRING COMMAND EVERY TURN.** `CLAUDE.md` §10.5 requires `tail -50 …/system-alerts.jsonl` **before responding to any user message**, and shared `MEMORY.md` item 4 requires `tail -30 …/cc-discord-inbox.jsonl` at session start. **Both matched `truncation-is-not-population`. Both fired. Neither can ever become a claim.**
+  ★ **Unlike batch-session contamination this scales with TURN COUNT, in EVERY session, FOREVER.** ⇒ ⛔ **a guard that fires on a command the rules oblige you to run every turn is a banner-blindness generator by construction, and no amount of window accrual fixes it.**
+  ✅ **FIXED BY REMOVING `tail` FROM THE SHAPE**, keeping `head` and `git log -N`, which are not mandated. **Both mandated reads are now regression cases (D13, D14).** ⚠️ **Reader-found — I had named self-contamination and missed the floor beneath it.**
 
 ---
 
