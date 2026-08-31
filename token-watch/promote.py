@@ -1,0 +1,278 @@
+"""
+token-watch — THE SOCIALS CHECK AND PROMOTION SWEEP. (#973)
+
+★ WHY IT EXISTS: the trait definition is *"any advertised channel OR initial
+  size above the platform default."* The webhook's creation event carries NO
+  social fields at all — measured on 116 real launches, zero had any, and both
+  branches `receiver.parse_creation` reads are empty on every real payload. So
+  the socials half of the definition was structurally dead and the study had
+  silently degraded to size-only.
+
+★ THE FIX COSTS NOTHING, and that is why the design is this shape rather than a
+  rationed one. Kyle asked which tokens we could afford to look up. The answer
+  turned out to be ALL of them: the follow-up provider we ALREADY call, for
+  free, returns the channels in its `info` block — verified on a 12-minute-old
+  token of exactly the age we would check. ~43k requests/day against a 432k/day
+  ceiling, and ZERO provider credits.
+
+⛔ WHY AT THE HOURLY SWEEP AND NOT AT BIRTH (Kyle's ruling): the follow decision
+   is made the instant a launch arrives, and adding a network call to the path
+   that must keep up with ~24,000 launches/day risks the one thing that must
+   never fall behind — RECORDING. The first checkpoint is not until age 1h, so
+   a token promoted within the hour loses at most its 1h observation, and that
+   loss is RECORDED AS A MISS rather than hidden.
+
+⛔⛔ THE CONTROL ARM IS THE REASON THIS IS NOT A COSMETIC FIX. `follow_decision`
+   tests the carrier limbs FIRST and draws the random control from whatever is
+   left — so at birth the control is drawn from *"not big enough"*, which is
+   NOT the same set as *"not a carrier"* once socials are known. A control
+   token later found to have a channel is a CARRIER SITTING INSIDE THE
+   COMPARISON GROUP, which biases every rate the study reports, quietly.
+   ⇒ a promoted control token is RECLASSIFIED. The control arm shrinks, and
+     the pre-registration already requires the analysis to use the REALISED
+     inclusion rate from the daily log rather than the planned constant — so
+     the shrinkage is self-correcting by a decision made before any data.
+
+⛔ THE CENSUS IS APPEND-ONLY AND IS NOT REWRITTEN. A promotion is a NEW record
+   joined to the birth on `mint`. Editing the birth row would destroy the
+   evidence of what we believed at the time, which is the one thing a
+   left-truncation study cannot afford to lose.
+
+⚠️ AND EVERY CHECK IS RECORDED, NOT ONLY THE PROMOTIONS. "Checked, no channels"
+   and "never checked" are different facts, and a store that only holds the
+   hits cannot tell them apart — the absent-as-valid failure this batch has now
+   paid for five times.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import os
+import time
+from datetime import datetime, timezone
+
+import providers
+from receiver import in_control_sample
+from config import BIRTHS_DIR, ROOT
+from store import _append, load_state, save_state, schedule_grid
+
+UTC = timezone.utc
+LOG = logging.getLogger("token-watch.promote")
+
+CHECKS_PATH = f"{ROOT}/social-checks.jsonl"
+STATE = "promote"
+
+# ⛔ A BOUND, so one run cannot become unbounded work on the box that also runs
+#    live trading. ~24,000 launches/day is ~1,000/hour, of which ~68% are
+#    non-carriers ⇒ ~680/hour. 1,500 leaves headroom for a catch-up after an
+#    outage without letting a long backlog run away in a single pass.
+MAX_CHECKS_PER_RUN = 1500
+
+# ⛔ PACING, AND IT IS NOT POLITENESS — THE FIRST LIVE RUN HIT IT. The sweep
+#    fired 384 requests as fast as the loop ran and the provider answered 429.
+#    Its published ceiling is 300/min, so requests are spaced to stay under it.
+#    Measured: 384 checks, 16 promotions, then a rate-limit stop.
+# ⚠️ OVERRIDABLE so a test suite can run without sitting through real
+#    pacing. It is a REAL delay — 1,500 checks at 240/min is ~6 minutes —
+#    and a suite that waited it out would be timing the sleep, not the code.
+REQUESTS_PER_MIN = int(os.environ.get("TOKEN_WATCH_REQ_PER_MIN", "240"))
+_MIN_INTERVAL_S = (60.0 / REQUESTS_PER_MIN) if REQUESTS_PER_MIN > 0 else 0.0
+
+
+def _now() -> datetime:
+    return datetime.now(UTC)
+
+
+def _birth_files() -> list:
+    if not os.path.isdir(BIRTHS_DIR):
+        return []
+    return sorted(f for f in os.listdir(BIRTHS_DIR) if f.endswith(".jsonl"))
+
+
+def _read_new(path: str, offset: int):
+    """Complete lines from `offset`, WITH each row's byte length.
+
+    ⛔ THE BYTE LENGTHS ARE NOT BOOKKEEPING — THEY ARE THE SHED FIX. The first
+       version advanced the cursor to the end of everything it READ, then did
+       the lookups. A shed part-way through therefore skipped every remaining
+       row FOR EVER: the cursor had already moved past them. Returning per-row
+       sizes lets the caller advance to exactly the last row it PROCESSED, so a
+       shed defers work instead of discarding it. Caught by the suite, not by
+       reading the code.
+    """
+    if not os.path.exists(path):
+        return [], [], offset
+    size = os.path.getsize(path)
+    if size < offset:
+        LOG.error("promote: %s shrank (%d -> %d) — cursor restarted", path, offset, size)
+        offset = 0
+    if size == offset:
+        return [], [], offset
+    with open(path, "r", encoding="utf-8") as fh:
+        fh.seek(offset)
+        raw = fh.read()
+    if not raw:
+        return [], [], offset
+    if not raw.endswith("\n"):
+        cut = raw.rfind("\n")
+        if cut < 0:
+            return [], [], offset
+        raw = raw[: cut + 1]
+    rows, sizes = [], []
+    for line in raw.splitlines(keepends=True):
+        nbytes = len(line.encode("utf-8"))
+        body = line.strip()
+        if not body:
+            # a blank line is still consumed, or the cursor would stick on it
+            if rows:
+                sizes[-1] += nbytes
+            else:
+                offset += nbytes
+            continue
+        try:
+            rows.append(json.loads(body))
+            sizes.append(nbytes)
+        except ValueError:
+            if rows:
+                sizes[-1] += nbytes
+            else:
+                offset += nbytes
+    return rows, sizes, offset
+
+
+def _has_channel(socials: dict) -> bool:
+    return any(bool(v) for v in (socials or {}).values())
+
+
+def run(now: datetime = None) -> dict:
+    """One socials pass over births not yet checked.
+
+    ⚠️ CALLED FROM INSIDE THE HOURLY JOB'S LOCK. It appends to the census
+       directory's sibling stores and rewrites its own cursor state, and
+       `store`'s rule is that every read-modify-write holds the lock.
+    """
+    now = now or _now()
+    st = load_state(STATE, {})
+    cursors = st.setdefault("cursors", {})
+    stats = {"checked": 0, "with_channel": 0, "scheduled": 0,
+             "control_drawn": 0, "errors": 0, "shed": False, "shed_reason": None,
+             "bounded_out": 0}
+
+    # ⛔ PROCESS FILE BY FILE, ADVANCING THE CURSOR TO THE LAST ROW ACTUALLY
+    #    HANDLED. The first version advanced past everything it READ before
+    #    doing any lookups, so a shed part-way through discarded the remainder
+    #    permanently. A shed must DEFER work, never drop it.
+    budget = MAX_CHECKS_PER_RUN
+    last_call = [0.0]                  # monotonic clock for pacing
+    stop = False
+    for name in _birth_files():
+        if stop or budget <= 0:
+            break
+        path = os.path.join(BIRTHS_DIR, name)
+        rows, sizes, base = _read_new(path, cursors.get(name, 0))
+        consumed = base
+        for birth, nbytes in zip(rows, sizes):
+            if budget <= 0:
+                stats["bounded_out"] += 1
+                continue
+            mint = birth.get("mint")
+            reason = birth.get("follow_reason")
+            # An existing carrier needs no lookup — its channels cannot change
+            # what we already do with it. It still consumes its bytes.
+            # ⛔ ONLY `deferred` TOKENS ARE RESOLVED HERE. A size-carrier was
+            #    assigned at birth from a fact nothing later can change, and an
+            #    already-resolved token must never be reconsidered — a second
+            #    look is how an arm assignment starts moving again.
+            if reason != "deferred" or not mint:
+                consumed += nbytes
+                continue
+            wait = _MIN_INTERVAL_S - (time.monotonic() - last_call[0])
+            if wait > 0:
+                time.sleep(wait)
+            last_call[0] = time.monotonic()
+            try:
+                state = providers.token_state(mint)
+            except providers.Shed as exc:
+                # ⛔ STOP WITHOUT CONSUMING THIS ROW, so it is retried next hour.
+                # ⛔⛔ AND NAME WHICH SHED IT WAS. The first live run reported
+                #    `shed: True` with the budget at 0.4% of cap — because a
+                #    429 from the provider and an exhausted credit budget both
+                #    raised the same bare flag. Two different causes, one
+                #    indistinguishable signal, which is this batch's most
+                #    expensive recurring shape. They need different responses:
+                #    a rate limit means slow down, an exhausted budget means
+                #    stop until the month rolls.
+                stats["shed"] = True
+                stats["shed_reason"] = ("rate_limited"
+                                        if "rate" in str(exc).lower()
+                                        else "budget")
+                stop = True
+                break
+            except Exception as exc:
+                stats["errors"] += 1
+                LOG.warning("socials lookup failed for %s: %s", mint, exc)
+                consumed += nbytes          # a hard failure is not retried for ever
+                continue
+
+            budget -= 1
+            socials = state.get("socials") or {}
+            found = _has_channel(socials)
+            stats["checked"] += 1
+
+            age_s = None
+            created = birth.get("created_at")
+            if created:
+                try:
+                    age_s = round((now - datetime.fromisoformat(created)).total_seconds(), 1)
+                except (ValueError, TypeError):
+                    age_s = None
+
+            rec = {
+                "mint": mint,
+                "checked_at": now.isoformat(),
+                # ★ THE AGE THE OBSERVATION WAS TAKEN AT. Without it this field
+                #   would read as "socials at launch", a stronger claim than the
+                #   data supports — a token can add a channel on day three.
+                "observed_at_age_s": age_s,
+                "socials": socials,
+                "had_channel": found,
+                "was": reason,
+            }
+
+            # ⛔⛔ ONE ASSIGNMENT, MADE ONCE, FROM COMPLETE INFORMATION. Both
+            #    facts are now known — size (at birth) and channels (just
+            #    fetched) — so the arm decided here is final and no later
+            #    observation can move it.
+            if found:
+                stats["with_channel"] += 1
+                arm = "trait_carrier"
+            elif in_control_sample(mint):
+                # ★ THE CONTROL IS DRAWN FROM CONFIRMED NON-CARRIERS, which is
+                #   the population it was always meant to sample. Drawn at
+                #   birth it came from "not big enough" — a different and wrong
+                #   set, because the socials answer did not exist yet.
+                arm = "control_sample"
+                stats["control_drawn"] += 1
+            else:
+                arm = "not_sampled"
+
+            rec["becomes"] = arm
+            if arm != "not_sampled":
+                try:
+                    schedule_grid(mint, datetime.fromisoformat(created))
+                    stats["scheduled"] += 1
+                except Exception as exc:
+                    stats["errors"] += 1
+                    LOG.warning("could not schedule %s (%s): %s", mint, arm, exc)
+
+            _append(CHECKS_PATH, rec)
+            consumed += nbytes
+
+        cursors[name] = consumed
+
+    st["cursors"] = cursors
+    st["checked_at"] = now.isoformat()
+    save_state(STATE, st)
+    LOG.info("promote %s", stats)
+    return stats

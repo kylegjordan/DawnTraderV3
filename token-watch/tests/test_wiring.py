@@ -26,11 +26,25 @@ except Exception:
 
 ROOT = tempfile.mkdtemp(prefix="token-watch-wire-")
 os.environ["TOKEN_WATCH_ROOT"] = ROOT
+# The socials sweep paces its requests for real (240/min). This suite drives
+# run_hour repeatedly, so it would spend minutes asleep proving nothing.
+os.environ["TOKEN_WATCH_REQ_PER_MIN"] = "0"
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import budget  # noqa: E402
 import receiver  # noqa: E402
 import store  # noqa: E402
+import providers as _pv2  # noqa: E402
+
+# THIS SUITE MAKES NO NETWORK CALLS, and the socials sweep inside run_hour
+# would have made hundreds - the header promised otherwise, and the run took
+# three minutes against a live provider before it was noticed. Installed HERE,
+# above every run_hour call, because a stub placed at the block that needed it
+# was already too late: earlier sections drive run_hour too. Only the socket is
+# replaced; real token_state, promote.run and run_hour all still execute.
+_pv2._get = lambda url, headers=None: {
+    "pairs": [{"volume": {"h24": 1.0}, "txns": {"h24": {}},
+               "liquidity": {"usd": 1.0}, "dexId": "pumpfun", "info": {}}]}
 from config import BIRTHS_RESERVED, MONTHLY_CREDIT_CAP  # noqa: E402
 
 UTC = timezone.utc
@@ -300,6 +314,16 @@ check("and it carries the census the receiver actually recorded",
       _pub["launches"]["total"] > 0, _pub["launches"]["total"])
 check("★ and it states the tracked denominator, so the page cannot mislabel it",
       "never over all launches" in _pub["tracked"]["note"])
+
+import promote as _pm  # noqa: E402
+section("10. THE SOCIALS SWEEP IS REACHED BY THE HOURLY JOB (#973)")
+# The trait definition's first limb is dead without this. If nothing calls the
+# sweep, the study silently stays size-only and the page still looks healthy.
+store.save_state("promote", {})
+_fu.run_hour(now=now + timedelta(hours=3))
+_pst = store.load_state("promote", {})
+check("* run_hour REACHED the socials sweep - production wiring",
+      bool(_pst.get("checked_at")), _pst)
 
 print("\n" + "=" * 60)
 print(f"FAILED: {len(FAILURES)} -> {FAILURES}" if FAILURES else "ALL CHECKS PASSED")

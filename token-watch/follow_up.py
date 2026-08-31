@@ -22,6 +22,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 
 import liveness
+import promote
 import summary
 import budget
 import providers
@@ -331,6 +332,18 @@ def run_hour(now: datetime | None = None) -> dict:
             for age, c in unclassified_by_age.items():
                 un[age] = un.get(age, 0) + c
             save_state("unclassified", un)
+
+        # ⛔ THE SOCIALS SWEEP (#973). The webhook's creation event carries no
+        #    social fields, so the trait definition's first limb was dead and
+        #    the study had silently degraded to size-only. This reads the
+        #    channels off the follow-up response we already fetch — free — and
+        #    promotes anything that qualifies. Inside the lock: it appends to
+        #    the store and rewrites its own cursor state.
+        try:
+            stats["promote"] = promote.run(now)
+        except Exception as exc:
+            LOG.error("socials sweep failed: %s", exc)
+            stats["promote"] = {"error": str(exc)}
 
         # ⛔ THE PUBLISHED SUMMARY — INSIDE the lock, unlike the dead-man's
         #    switch above. It uses save_state, which is read-modify-write, and

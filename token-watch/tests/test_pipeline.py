@@ -84,8 +84,14 @@ check("carriers are followed with reason 'trait_carrier'",
       followed and reason == "trait_carrier", reason)
 non = [m for m in mints[:300] if not receiver.in_control_sample(m)][0]
 followed2, reason2 = receiver.follow_decision(non, {}, 0.1)
-check("POSITIVE CONTROL: an unsampled non-carrier is NOT followed",
-      (not followed2) and reason2 == "not_sampled", reason2)
+# The control draw NO LONGER happens at birth (Kyle, 2026-08-31): at birth only
+# SIZE is knowable, so a non-carrier is DEFERRED, not assigned to an arm. The
+# arm is decided once, at the first sweep, when the socials answer exists.
+check("a non-carrier is NOT followed at birth",
+      followed2 is False, (followed2, reason2))
+check("* and it is DEFERRED, not assigned - not-decided-yet and decided-not-to "
+      "are different facts",
+      reason2 == "deferred", reason2)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

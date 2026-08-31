@@ -133,12 +133,41 @@ def in_control_sample(mint: str) -> bool:
 def follow_decision(mint: str, socials: dict, initial_size) -> tuple:
     """Returns (followed, reason). Census on birth is unconditional — this
     decides only who gets FOLLOWED UP, which is where the cost lives.
+
+    ⛔⛔ THE ARM IS ASSIGNED ONCE, FROM COMPLETE INFORMATION (Kyle, 2026-08-31),
+       and that is why the control draw is NOT here any more.
+
+       The old order drew the random control at BIRTH, from whatever failed the
+       carrier test. But at birth the only thing knowable is SIZE — the
+       creation event carries no social channels at all (#973) — so "failed the
+       carrier test" really meant "not big enough", which is NOT the same set.
+       A control token later found to have a channel was a CARRIER SITTING
+       INSIDE THE COMPARISON GROUP, and the fix was to move it between arms
+       after the fact.
+
+    ★ KYLE'S CORRECTION, AND IT IS BETTER THAN THE ONE I PROPOSED: do not make
+      the wrong assignment and then correct it — do not make it yet. A logged
+      reclassification is honest and still an artifact a reviewer is right to
+      distrust; a single assignment made once has nothing to explain.
+
+    ⇒ AT BIRTH: size is final and no later fact can change it, so a big launch
+      is followed immediately and never reconsidered. EVERYTHING ELSE IS
+      `deferred` — recorded in the census like every launch, simply not yet
+      assigned to an arm. `promote.run` resolves it at the first sweep, when
+      the socials answer exists, and assigns ONE arm for good.
+
+    ⚠️ THE COST, STATED: a deferred token starts being observed ~1h later than
+       a size-carrier, so the arms have slightly different left-truncation.
+       That is unavoidable without a sub-hourly sweep, which AMENDMENT 4
+       rejected on measured grounds — and it is now MEASURED rather than
+       unknown, because every socials check records the token's age.
     """
     if is_trait_carrier(socials, initial_size):
         return True, "trait_carrier"
-    if in_control_sample(mint):
-        return True, "control_sample"
-    return False, "not_sampled"
+    # ⛔ NOT `not_sampled`. "We decided not to follow it" and "we have not
+    #    decided yet" are different facts, and collapsing them would make the
+    #    deferred set invisible to the sweep that has to resolve it.
+    return False, "deferred"
 
 
 def _journal_launch(day: str, followed: bool, reason: str, size_source: str,

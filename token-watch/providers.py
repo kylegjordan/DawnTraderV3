@@ -82,6 +82,23 @@ def helius_key() -> str:
 #    which is the same headroom the liquidity leg uses, so the fallback and the
 #    liquidity budget compete. Stated rather than discovered later.
 # ─────────────────────────────────────────────────────────────────────────────
+def _socials(pair: dict) -> dict:
+    """Advertised channels, as reported by the follow-up provider.
+
+    ⚠️ THIS IS *SOCIALS AS OBSERVED NOW*, NOT *SOCIALS AT LAUNCH*, and the two
+       are different claims. A token can add a channel on day three. The
+       observation carries the age it was taken at, so the analysis can say
+       which it is; the field name must never imply the stronger one.
+    """
+    info = pair.get("info") or {}
+    kinds = {str(s.get("type") or "").lower() for s in (info.get("socials") or [])}
+    return {
+        "telegram": "telegram" in kinds,
+        "twitter": "twitter" in kinds or "x" in kinds,
+        "website": bool(info.get("websites")),
+    }
+
+
 def token_state(mint: str) -> dict:
     """One call returns everything a checkpoint needs.
 
@@ -127,6 +144,12 @@ def token_state(mint: str) -> dict:
         "sells_h24": txns.get("sells"),
         "liquidity_usd": liq,          # None on a bonding curve — a field gap
         "pair_created_at": p.get("pairCreatedAt"),
+        # SOCIALS RIDE THIS RESPONSE, FREE. The webhook payload carries none —
+        # both branches receiver.parse_creation reads are empty on every real
+        # creation (#973) — but the follow-up call we ALREADY make returns them
+        # in `info`. Verified on a 12-minute-old pump.fun token: `info.socials`
+        # held its twitter link. Zero provider credits; this is the same request.
+        "socials": _socials(p),
     }
 
 
