@@ -59,10 +59,18 @@ const FILES = [
   ['1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md', 'the rule narration — why each rule exists'],
 ];
 
-const NL = String.fromCharCode(10);   // written this way so a generator cannot mangle the escape
 const CWD = process.env.CLAUDE_PROJECT_DIR || process.cwd();
 const run = (args) =>
   execFileSync('git', args, { cwd: CWD, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+
+// ⛔⛔ RAW — NO .trim(). `run` trims, and porcelain's FIRST record begins with the status
+// space (` M path`), so trimming eats it and slice(3) then cuts ONE CHARACTER INTO THE PATH:
+// `.claude/hooks/a b.mjs` came back as `claude/hooks/a b.mjs`. That path cannot be hashed ⇒ the
+// member scores false ⇒ THE WHOLE ENTRY FREEZES. A FIFTH instance of this exact shape, and I
+// wrote it myself while fixing the fourth. It surfaced only because the mangled name was PRINTED
+// in the blocker line; on the residue path it would have been a silent permanent freeze.
+const runRaw = (args) =>
+  execFileSync('git', args, { cwd: CWD, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
 
 const record = (obj) => {
   try {
@@ -113,6 +121,34 @@ try {
    *   genuine edit       → PRESERVED, unstaged and staged forms both
    */
   /** One FILE: did origin ever hold these exact bytes on this exact path? */
+  // ⛔⛔ ONE ENUMERATOR, DEFINED ONCE, BECAUSE THE BUG WAS NEVER THE FLAG — IT WAS HAVING
+  // TWO CALL SITES EACH FREE TO BE BLIND TO A DIFFERENT MEMBER CLASS. Four instances of the
+  // same shape landed in this function in a row, and every one of them looked right:
+  //   1. `diff --name-only` — blind to UNTRACKED members, and a new guard arriving untracked
+  //      is the modal case a behind clone produces.
+  //   2. `-unormal` — collapses an untracked SUBDIRECTORY to one entry, `?? .claude/hooks/lib/`.
+  //   3. two spellings of one newline (a literal at one site, the NL const at the other) —
+  //      same value today, and nothing stopped them drifting apart.
+  //   4. QUOTED PATHS — porcelain quotes any path containing a space, and slice(3) hands the
+  //      quotes straight to hash-object: could not open '".claude/hooks/a b.mjs"'.
+  // Each blind spot ends in the SAME place: hash-object throws, the member scores false, and
+  // the WHOLE ENTRY FREEZES with nothing able to clear it. That is the defect this batch exists
+  // to fix, reproduced inside its own fix four times.
+  // ★ `-z` emits the raw, unquoted path and is immune to embedded newlines, so it closes 3 and 4
+  // together and retires the NL constant. One enumerator means a fifth blind spot has one place
+  // to be fixed rather than two places to be fixed consistently.
+  // ⚠️ HONEST LIMIT — `-z` IS NOT TOTAL: it does not cover renames. `R` arrives as two NUL
+  // fields and the second carries no XY prefix, so slice(3) mangles it into a path that cannot
+  // be hashed. That scores false ⇒ PRESERVE, which is the safe direction; and a staged rename
+  // cannot reach isHookResidue at all, since it early-returns on anything staged. It can still
+  // MISNAME in the blocker line below, which is best-effort by construction.
+  function dirtyMembers(p) {
+    return runRaw(['status', '--porcelain', '-uall', '-z', '--', p])
+      .split(String.fromCharCode(0))
+      .map((l) => l.slice(3))
+      .filter(Boolean);
+  }
+
   function blobWasAtOrigin(file) {
     try {
       const wt = run(['hash-object', '--', file]);
@@ -150,8 +186,7 @@ try {
         // throws, the member scores false, and the whole entry freezes with nothing able to
         // clear it. That is BLOCKER-1 reproduced one level down. LATENT today (the hooks dir
         // is flat, 10 files) and it would re-arm silently the day anyone adds a `lib/`.
-        const members = run(['status', '--porcelain', '-uall', '--', p])
-          .split('\n').map((l) => l.slice(3).trim()).filter(Boolean);
+        const members = dirtyMembers(p);
         if (!members.length) return false;         // nothing enumerable ⇒ preserve
         return members.every(blobWasAtOrigin);
       }
@@ -188,9 +223,19 @@ try {
       // "content ORIGIN HAS NEVER HELD" is true of ONE member and false of nine.
       let blocker = '';
       try {
-        const ms = run(['status', '--porcelain', '-uall', '--', path])
-          .split(NL).map((l) => l.slice(3).trim()).filter(Boolean);
-        if (ms.length > 1) blocker = ms.find((m) => !blobWasAtOrigin(m)) || '';
+        const ms = dirtyMembers(path);
+        // ⛔ `ms.length > 1` SUPPRESSED THE RIDER'S OWN MODAL CASE (Langston FINDING-2, measured
+        // in his rig and re-derived in mine). `git status --porcelain -- <dir>` lists only the
+        // CHANGED members, so ONE edited guard among ten returns EXACTLY ONE LINE — the nine
+        // clean ones are simply absent — and the name was therefore withheld in precisely the
+        // situation the rider was added for. My own regression dirtied two members, which is
+        // the only reason it read as green: the test agreed with the code because both made
+        // the same assumption, not because the behaviour was right.
+        // ★ The count was standing in for "is this entry a directory". Say THAT instead —
+        // ms[0] !== path is the direct test, since a single-file entry reports its own path.
+        if (ms.length > 1 || (ms[0] && ms[0] !== path)) {
+          blocker = ms.find((m) => !blobWasAtOrigin(m)) || '';
+        }
       } catch { /* naming is best-effort; never block the report */ }
       skippedDirty.push([path, blocker ? `${why} — held by ${blocker}` : why]);
       continue;

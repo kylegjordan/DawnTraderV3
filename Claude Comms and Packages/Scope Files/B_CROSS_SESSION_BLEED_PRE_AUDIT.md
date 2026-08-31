@@ -1,6 +1,6 @@
 # B-CROSS-SESSION-BLEED — PRE-IMPLEMENTATION AUDIT **AND** IMPLEMENTATION PLAN
 
-**Owner:** CC-B · **Issue:** #753 · **change-class: non_architecture** *(see A7 — I am asking Langston to overrule this to `architecture`)*
+**Owner:** CC-B · **Issue:** #753 · **change-class: architecture** *(A7 asked Langston to overrule `non_architecture`; he DID — ruled `architecture` 2026-08-31, so both this file and the scope header now carry it. The scope header is what the governance checker parses.)*
 
 ---
 
