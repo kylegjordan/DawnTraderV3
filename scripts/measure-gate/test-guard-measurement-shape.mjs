@@ -95,7 +95,45 @@ console.log('\n=== D. USE-vs-MENTION — every quoting form the corpus actually 
         'ctx=' + String(r.ctx).slice(0, 70));
 }
 
+console.log('\n=== D7-D12. OVER-ELISION — a swallowed instrument is worse than a missed mention ===');
+{
+  // ⛔ THE HIGHEST-STAKES CASE, reader-found: the instrument RUNS inside the quoted argument and
+  // its output goes straight into a crew post as a claim. r2 elided the whole quote and was silent.
+  const r = run(bash(`cc-send --sender "OLD Claude" --message "count: $(grep -c MISTAKE file.md)"`));
+  check('D7 a command substitution INSIDE a message still fires', !!r.ctx, 'SILENT — the guard is blind here');
+}
+{
+  const r = run(bash(`ssh root@h 'cc-send --message "CLAUDE.md is $(wc -c CLAUDE.md) bytes"'`));
+  check('D8 substitution inside a quoted remote message still fires', !!r.ctx, 'SILENT');
+}
+{
+  // r2's write-payload regex was unanchored and backtracked to the next `>`, swallowing every
+  // stage in between.
+  const r = run(bash('echo "starting" ; grep -c TODO server/index.ts ; echo "done" > /tmp/log.txt'));
+  check('D9 elision does not swallow stages between two quotes', !!r.ctx, 'SILENT');
+}
+{
+  const r = run(bash('echo "a" && wc -c CLAUDE.md && echo "b" > out.txt'));
+  check('D10 same, with && separators', !!r.ctx, 'SILENT');
+}
+{
+  // `<<` inside message TEXT re-created the marker bug the comment says was fixed.
+  const r = run(bash(`cc-send --message "paste this: cat <<EOF ... EOF" && wc -c CLAUDE.md`));
+  check('D11 a `<<` inside message text does not eat the next stage', !!r.ctx, 'SILENT');
+}
+{
+  // UNDER-elision: the motivating incident with `=` instead of a space.
+  const r = run(bash(`cc-send --sender "OLD Claude" --message="the guard fires on grep -c, heads up"`));
+  check('D12 the --message= form does not fire', r.ctx === null, 'fired: ' + String(r.ctx).slice(0, 60));
+}
+
 console.log('\n=== E. LOCALITY — tokens must co-occur in ONE pipeline stage ===');
+{
+  // Single `&` was not a separator in r2, and background chains are where unrelated commands
+  // most plausibly sit side by side.
+  const r = run(bash('grep -v skip notes.md & tail -c 200 notes.md'));
+  check('E0 single & separates stages', r.ctx === null, 'fired: ' + String(r.ctx).slice(0, 60));
+}
 {
   // ⛔⛔ E1 IS THE ARM THE MUTATION CAUGHT. Its first version used the author's own flagged
   // command — but that command stopped firing because the PREDICATE was narrowed (r1 also
@@ -135,14 +173,35 @@ if (!process.env.GUARD_UNDER_TEST) {
   console.log('\n=== G. MUTATION ARMS — break a leg, the suite must NOTICE ===');
   const src = readFileSync(HOOK, 'utf8');
   const dir = mkdtempSync(join(tmpdir(), 'guardmut-'));
+  // ⛔ r3, all reader-found: the drop-arm covered ONE of three shapes; the "make it block" arm
+  // proved only that the suite notices a non-zero EXIT, never that it notices a hook emitting a
+  // permission decision — the leg the file's own headline claim rests on; and two mutant copies
+  // collided on one filename because it was derived from `name.length`.
+  const dropShape = (id) => (s) => {
+    const i = s.indexOf("id: '" + id + "',");
+    if (i < 0) return s;
+    const start = s.lastIndexOf('{', i);
+    const end = s.indexOf('\n  },', i);
+    return end < 0 ? s : s.slice(0, start) + s.slice(end + 5);
+  };
   const MUTS = [
     ['remove mention-elision', (s) => s.replace('function stripMentions(cmd) {', 'function stripMentions(cmd) { return cmd;')],
     ['remove locality (match whole command)', (s) => s.replace('stages(stripped).some((st) => sh.test(st))', 'sh.test(stripped)')],
-    ['drop the worktree-not-ref shape', (s) => s.replace(/\{\s*\n\s*id: 'worktree-not-ref',[\s\S]*?\n\s*\},\n/, '')],
-    ['make it block (exit 2)', (s) => s.replace(/process\.exit\(0\);\s*$/, 'process.exit(2);')],
+    ['drop shape worktree-not-ref', dropShape('worktree-not-ref')],
+    ['drop shape truncation-is-not-population', dropShape('truncation-is-not-population')],
+    ['drop shape count-from-search', dropShape('count-from-search')],
+    ['make it exit non-zero', (s) => s.replace(/process\.exit\(0\);\s*$/, 'process.exit(2);')],
+    // The one that tests the headline claim rather than the exit code.
+    ['make it emit a permission decision', (s) => s.replace(
+      "hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext: text },",
+      "hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext: text, permissionDecision: 'deny', permissionDecisionReason: text },")],
+    // Over-elision is worse than under-elision: a swallowed instrument is a BLIND guard that
+    // reads as a clean one. This mutation removes the execRe guard that keeps `$( )` alive.
+    ['let elision swallow command substitutions', (s) => s.replace('const execRe = /\\$\\(|`/;', 'const execRe = /$^/;')],
   ];
+  let mi = 0;
   for (const [name, mut] of MUTS) {
-    const p = join(dir, 'm' + Math.abs(name.length * 7) + '.mjs');
+    const p = join(dir, 'm' + (mi++) + '.mjs');
     const mutated = mut(src);
     if (mutated === src) { check('G mutation applied: ' + name, false, 'patch did not change the source'); continue; }
     writeFileSync(p, mutated, 'utf8');
