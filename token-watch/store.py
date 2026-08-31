@@ -326,6 +326,31 @@ def schedule_grid(mint: str, created_at: datetime) -> None:
                  "created_at": created_at.astimezone(UTC).isoformat()})
 
 
+def due_indexed(hour: datetime, start_line: int = 0):
+    """`due_now`, but yielding (LINE_INDEX, entry) and able to resume.
+
+    ⛔ THE INDEX IS OVER RAW LINES, NOT OVER YIELDED ENTRIES. Dead tokens are
+       filtered out here, so a counter over what this yields would drift from
+       the file's real position the first time anything died -- and a drifting
+       resume point silently skips live entries. The index is what a later run
+       must be able to trust.
+
+    ★ WHY A RESUME POINT EXISTS AT ALL (measured 2026-08-31): the sweep read
+      the CURRENT hour's bucket and then marked that hour consumed -- while
+      the hour was still open and entries were still being appended to it.
+      1,130 of bucket 18's 2,375 checkpoints were never attempted and left NO
+      RECORD OF ANY KIND. That is strictly worse than a shed: a shed row is
+      written down, which is why survival is published as an upper bound. A
+      dropped entry is indistinguishable from a token nobody needed to check.
+    """
+    dead = dead_set()
+    for idx, entry in enumerate(_read(due_path(hour))):
+        if idx < start_line:
+            continue
+        if entry["mint"] not in dead:
+            yield idx, entry
+
+
 def due_now(hour: datetime):
     """Everything scheduled for this hour, minus anything already dead.
 
