@@ -12,7 +12,7 @@
 | # | piece | deploy-eligible | note |
 |---|---|---|---|
 | **1** | **`F-G-2` — CRYPTO half** | now | Step-2 doc is **not** soak-gated. ⛔ **Langston's condition: it absorbs the three last-48h inputs BEFORE it reaches him, or he bounces it at Step 2 without reading the substance.** |
-| **2** | **`3b.b` `B-XSTOCK-FEED-SANITY`** | ⛔ **≥ 09-07** | scope + build now, **deploy after the last window closes** — it changes the xStock exit price path. ⛔⛔ **DO NOT BUILD A 20:15 RULE.** ⛔ **BLOCKED ON A KYLE DECISION THAT IS NOT YET ASKABLE — see ⓹.** |
+| **2** | **`3b.b` `B-XSTOCK-FEED-SANITY`** | ⛔ **≥ 09-07** | scope + build now, **deploy after the last window closes** — it changes the xStock exit price path. ⛔⛔ **DO NOT BUILD A 20:15 RULE.** ⭐ **ITS `OBJ-0` IS THE BID-DROP DISCRIMINATOR — see ⓹. The result BRANCHES the batch's size, so it runs before the remedy is scoped.** |
 | **3** | `3b.d` `B-XSTOCK-BOOK-LADDER` | ⛔ capture-only until 09-07 | ⛔⛔ **ANSWER THIS BEFORE SCOPING IT: does `F-G-2`'s xStock half need DEPTH, or only SIDE?** We already have both sides at top-of-book. **If only side, this is NOT F-G-2's prerequisite and drops to the tail.** |
 | **4** | `3b.e` `B-XSTOCK-LIVE-FEED` | after 3 | the feed was built as an archive and became the trading feed without a decision |
 | **5** | `F-5` — per-strategy reach | — | Kyle's 4th. **BUILD only; the FIT stays gated on `F-E`.** |
@@ -75,7 +75,7 @@
 
 ---
 
-## ⓹ ⛔⛔ THE OPEN QUESTION THAT IS **NOT YET ASKABLE** — and why row 2 cannot start
+## ⓹ THE STUB QUESTION — TABLED INTO ROW 2 AS ITS FIRST OBJECTIVE (Kyle, 2026-08-31)
 
 **Langston ruled that `C3` folds into row 2 and that both go to Kyle in one breath:** *"if the book is a stub for most of the day and we now trade all four sessions, what is the intended behaviour off a stub book?"*
 
@@ -84,7 +84,10 @@
 ⇒ ⚠️ **MY *"stub for ~19 hours a weekday"* FIGURE IS SUSPECT FOR A NAMED REASON: `B_XSTOCK_FEED_SANITY_SCOPE.md` §11 defines a stub as `spread > 20%` — WHICH IS A WIDTH TEST, NOT A BID-DROP TEST.** A genuinely thin overnight market has a wide spread and no collapsed side, **and `EXIT_PATH_MACHINERY_AUDIT` §14 already established that overnight widening is real, symmetric and Kraken's own.** ⇒ **§11 may be counting honest wide quotes as stubs.**
 
 ✅ **THE VERIFICATION OWED BEFORE KYLE IS ASKED ANYTHING — a discriminator, not a re-count:** measure a **BID DROP** (a bid falling sharply against its OWN previous value while the ask holds) separately from a **WIDE SPREAD**, across the full off-hours window. **If bid drops occur only at 20:15, this is a transition-instant batch. If they recur through the session, it is a session-behaviour decision and Kyle decides then.**
-⛔ **UNTIL THAT MEASUREMENT EXISTS, ROW 2 DOES NOT START AND KYLE IS NOT ASKED.**
+✅ **KYLE'S DIRECTION, 2026-08-31: THIS IS TABLED INTO ROW 2 AS `OBJ-0`, NOT A GATE ON THE LIST.** *"Table that in for the batch where that needs to be measured and determined … proceed with task zero and then just work our way through the list. And when we get to the point where it's time to measure that, we'll measure it."*
+⇒ **THE SEQUENCE PROCEEDS NOW.** The discriminator is `3b.b`'s **first objective**, run when row 2 comes up.
+⛔ **WHAT STAYS BINDING: KYLE IS NOT ASKED THE STUB QUESTION UNTIL `OBJ-0` HAS RUN.** The question and its premise travel together — he refused it once on an unverified premise and that refusal stands until the measurement replaces it.
+★ **AND THE OUTCOME BRANCHES THE BATCH, WHICH IS WHY IT IS OBJECTIVE ZERO:** bid drops **only at 20:15** ⇒ a transition-instant batch, small. Bid drops **through the session** ⇒ a session-behaviour decision, Kyle's, and a materially bigger piece. **Do not scope the remedy before this reads out.**
 
 ---
 ---
