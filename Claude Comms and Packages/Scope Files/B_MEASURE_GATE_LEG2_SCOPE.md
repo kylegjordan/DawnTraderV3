@@ -174,6 +174,32 @@ The shapes with a genuine **command-string** signature, each drawn from a real e
 
 ---
 
+## ⛔⛔ `[r4]` **THE SELF-REFERENCE HAZARD — A SHAPE-MATCHER FIRES ON TEXT *ABOUT* ITS TRIGGER, NOT ONLY ON *USE* OF IT.** *(§9.4 disposition 1 — folded into the work in hand)*
+
+★★ **DISCOVERED BY ACCIDENT, LIVE, AND IT COULD NOT HAVE BEEN STAGED BETTER: THE HOOK BLOCKED THE POST THAT WAS WARNING THE OTHER SESSIONS ABOUT THE HOOK.** OBJ-0’s notice named the probe’s sentinel strings so the crew would know what to avoid; `probe-warn-delivery.mjs` matches `cmd.includes(sentinel)` against the **whole command string**, the heredoc carrying the notice contained them, and the blocking arm refused the command.
+
+⛔⛔ **THE GENERALISATION IS THE POINT, AND IT LANDS DIRECTLY ON OBJ-4 AND OBJ-6c: THEY SCAN COMMAND STRINGS FOR BAD MEASUREMENT SHAPES, SO BY CONSTRUCTION THEY FIRE ON A SESSION WRITING A SCOPE, A REVIEW, A MISTAKE RECORD OR A COMPLETION REPORT THAT *QUOTES* A BAD MEASUREMENT SHAPE.**
+★ **That is not a rare edge: it is what this project does constantly, in this batch, in these documents, in the commit messages that record the very instances the matcher is built from.** `MISTAKE_PATTERNS.md` is a file whose PURPOSE is to quote bad measurement shapes.
+⇒ **A GUARD AGAINST WRONG MEASUREMENT THAT FIRES ON DOCUMENTATION *ABOUT* WRONG MEASUREMENT IS A BANNER-BLINDNESS GENERATOR** — exactly the outcome Langston rejected the output-anomaly arm to avoid, arriving by a different route.
+
+### ✅ WHAT IT CHANGES, and none of it is a new objective
+
+**1. IT IS A SECOND, INDEPENDENT ARGUMENT FOR WARN-ONLY — AND A BETTER ONE THAN MINE.** My case was *"the channel does not require blocking."* **This is: had it warned, I would have read it and moved on; because it BLOCKED, it cost a round trip — on my own hook, on the message warning others about that hook.** ★ **A false positive on a warn-only hook is noise. The same false positive on a blocking hook is a wedge.**
+
+**2. THE PREDICATE NEEDS A USE-vs-MENTION LEG, AND IT IS PARTLY DETECTABLE WITHOUT A MODEL.** The distinguishing features are on the wire in the command string:
+| signal | detectable? |
+|---|---|
+| the match sits inside a **heredoc body** (`<<` delimiter opened, not yet closed) | ✅ **yes — delimiters are literal text in the command** |
+| the match sits inside a **quoted string being written to a file** (`cat >`, `tee`, a `-F <msgfile>` payload) | ✅ **mostly — the redirection operator is on the wire** |
+| the match is in a **path or a filename** rather than an executed clause | ✅ yes |
+| the command is *genuinely* running the bad shape | ⚠️ **the residual — and it is the case the objective exists for** |
+
+⚠️ **STATED HONESTLY: THIS IS A HEURISTIC ON TOP OF A HEURISTIC AND IT WILL BE IMPERFECT.** A heredoc can contain a command that is then executed elsewhere. ✅ **But it is cheap, it is derivable from the command string alone with NO MODEL CALL, and it removes the single most common false-positive source in a corpus that documents its own mistakes for a living.**
+
+**3. IT IS PRE-REGISTERED AS AN FP CATEGORY BEFORE ANY WINDOW IS MEASURED.** ⛔ **A self-referential fire counts as a FALSE POSITIVE against the ≤2% bar** — it may not be excused post hoc as *"not a real case"*. ★ **Writing this down before the measurement is the whole point; discovering it afterwards is how a bar gets renegotiated into a pass.**
+
+---
+
 ## 3. EXPLICITLY OUT OF SCOPE
 
 - **Leg 3** (collapsing rule text to pointers) — separate batch, **per-rule gated on that rule's hook having been OBSERVED firing.** Langston: *"converting rules to mechanisms before the mechanisms are trusted loses both."*
