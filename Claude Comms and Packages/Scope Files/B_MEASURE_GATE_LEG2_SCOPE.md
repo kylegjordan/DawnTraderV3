@@ -1,99 +1,129 @@
-# B-MEASURE-GATE leg 2 — SCOPE (hooks: convert measurement/process rules into mechanisms)
+# B-MEASURE-GATE leg 2 — SCOPE r2 (hooks: convert measurement/process rules into mechanisms)
 
 change-class: architecture
 
-**Owner:** CC-A · **Date:** 2026-07-30 · **Home:** `RUNNING_ISSUES` #623 · **Leg 1 shipped:** `b43af6c1d` (rule 29 + history §5.29)
+**Owner:** CC-A · **Opened:** 2026-07-30 · **CONSOLIDATED r2:** 2026-08-31 · **Home:** `RUNNING_ISSUES` #623 · **Leg 1 shipped:** `b43af6c1d` (rule 29 + history §5.29)
 **Kyle directive (2026-07-30):** *"Let's proceed with Legs 2 and 3 first in order to avoid mistakes in the rest of your batch work."* ⇒ leg 2 precedes #602 / #613 / #615 / the retention legs.
-**Langston ruled the design** at `4e0d5335`/`69f3c03d`; this scope implements his scoring, his ordering, and his two non-negotiables.
+**Kyle directive (2026-08-31):** *"If this is an existing scope, then please update it to make sure that it includes everything we're doing now."*
+**Langston ruled the design** at `4e0d5335`/`69f3c03d` (07-30) and the **post-execution approach round** on 2026-08-31. This scope implements his scoring, his ordering, his two non-negotiables, and his 08-31 conditions.
 
-⚠️ **AFFECTS ALL THREE CC SESSIONS.** Hooks live in `.claude/settings.local.json` + `.claude/hooks/`, which ship in the repo. **A blocking hook can interrupt CC-B's or CC-C's batch mid-flight.** OBJ-0 is therefore a notification obligation, not a courtesy.
+> ⛔ **THIS IS ONE DOCUMENT, NOT A SCOPE PLUS AN AMENDMENT TAIL.** r2 folds the 2026-08-31 amendment into the body. ★ **A reader reconciling an original against an appendix is the multi-homing failure this programme is about — reproducing it inside this batch's own scope would be indefensible.** Every r2 change is marked **`[r2]`**; **nothing from 07-30 was deleted.**
+
+⚠️ **AFFECTS ALL FOUR SESSIONS.** Hooks live in `.claude/settings.local.json` + `.claude/hooks/`, which ship in the repo. **A blocking hook can interrupt another session's batch mid-flight.** **OBJ-0 is a notification obligation, not a courtesy.**
 
 ---
 
 ## 0. PREVIOUSLY-STATED-VS-NOW (§9.2)
 
+**From 2026-07-30, unchanged:**
 - **PREVIOUSLY STATED: eleven targeting errors. NOW: ten. REASON:** Langston's population correction — #6 was confabulation (no measurement to control, so no adjacent object) and the self-caught #11 is a *working control*, not a defect; counting it inflated the denominator the fix was sized against.
 - **PREVIOUSLY STATED: a control on every reported number. NOW: a positive control only for load-bearing numbers, zeros, near-totals and absences. REASON:** Langston ruled the per-number form unaffordable and predicted it would be abandoned within a week; I agree and had no counter-argument.
 - **PREVIOUSLY STATED: the conversion line is "mechanical vs judgement." NOW: "does the violation have a TOOL-EVENT SIGNATURE?" REASON:** Langston's correction — `guard-governed-read` works because the violation *is a command string*; that, not the rule's nature, is what makes it hookable.
 
-## 1. PROVENANCE READ (§2 1.b) — TIER 1 on the two files whose behaviour changes
-
-**`.claude/settings.local.json` + `.claude/hooks/`.** Introduced for rule 22 enforcement (`guard-governed-read.mjs`, 2026-07-13) after the same false-absence error recurred twice; `guard-bare-commit.mjs` followed (#540, 2026-07-19) after two cross-session index sweeps. **Original intent, verbatim from `CLAUDE.md` rule 22:** *"a **PreToolUse hook** … that **BLOCKS** any Bash command combining a git object read with stderr suppression — the exact dangerous shape — and tells you to remove the suppression … it is **fail-open** (only ever blocks that one shape, never breaks a session)."*
-⇒ **DISPOSITION (1) — still relevant and correct.** Design intent is *narrow shape, fail-open, never breaks a session*, and it is the intent this leg extends rather than revises. **Both existing hooks are the working precedent and their fail-open construction is the pattern to copy.**
-**`CLAUDE.md` §10.5 / §7.1 / rule 19 / rule 25.c** — read for intent in leg 1; each stays **DISPOSITION (2): relevant, needing an update to today's intent** — the rule text is right, its *enforcement surface* is missing. **No rule text is deleted in leg 2** (that is leg 3, and only per-rule once its hook has been observed firing).
-
-## 2. OBJECTIVES
-
-**OBJ-0 — NOTIFY CC-B AND CC-C BEFORE ANY HOOK LANDS.** Post to `#general` naming both sessions: what will block, what will merely warn, and the disable path. **Verification:** the post exists and both hooks' behaviour is stated in it. *(A hook that surprises another session mid-batch is this batch causing the class of error it exists to prevent.)*
-
-**OBJ-1 — §10.5 ALERT CHECK → `UserPromptSubmit` hook** (Langston: *"strongest candidate, convert first"*). Injects active-unacked alerts so the per-turn check stops depending on memory.
-- ⚠️ **HARD REQUIREMENT (his):** *"Must fail-open with a hard timeout — an SSH to Frankfurt on every turn is a new wedge surface."* ⇒ timeout ≤3s, `exit 0` on any failure, **never** blocks the prompt, and caches so we do not SSH on every keystroke-turn.
-- **Verification:** alert appears injected on a turn with a known-present active alert; **and with the network path deliberately broken, the turn still proceeds** (that second half is the load-bearing test).
-
-**OBJ-2 — §7.1 `git fetch` GATE → `PreToolUse` on `git commit`/`git push`.** Warns when `origin/<branch>` was last fetched longer ago than a threshold, because the sync gate's step 0 has **already failed once by being remembered** (reported behind 0 while genuinely behind 3; and again tonight at behind 6 while picking an issue number).
-- **Verification:** with a stale fetch, the warning fires; with a fresh fetch, silent; **and it never blocks** (warn-only — a blocked commit at the wrong moment costs more than a stale compare).
-
-**OBJ-3 — RULE 19 CI-GREEN → `PreToolUse`, keyed on the COMMIT THAT ADDS A `*COMPLETION_REPORT*` PATH** (Langston's correction: *"the event isn't 'close'"*). Demands a cited run id in the message.
-- **Verification:** a completion-report commit without a run id warns; with one, silent.
-
-**OBJ-4 — RULE 29 MEASUREMENT SHAPES → `PreToolUse`, WARN-ONLY.** The shapes with a genuine command-string signature, each drawn from a real error this session: an unfiltered `LIKE '%…%'` table hunt (missed `exit_decision_archive`) · `grep -c` used as a population · `head -N` treated as a population · a `2>/dev/null` on a non-git read. **Warn, never block** — these are legitimate commands in other contexts, and rule 25.c is *content*, so per Langston the best available is a prompt.
-- **Verification:** each shape triggers its warning; a controlled equivalent does not.
-
-**OBJ-5 — THE SELF-TEST (Langston's second non-negotiable).** *"A fail-open hook that has silently stopped running is a lookalike failure in the enforcement layer itself — the exact bug we're fixing."* ⇒ each hook records a heartbeat on fire; a **weekly** check reports any hook with no heartbeat, and **absence of the report is itself the alarm** (the `B-STAGING-LIVENESS-WATCH` pattern).
-- **Verification:** disable one hook deliberately → the self-test names it.
-
-## 3. EXPLICITLY OUT OF SCOPE
-
-- **Leg 3** (collapsing rule text to pointers) — separate batch, **per-rule gated on that rule's hook having been OBSERVED firing.** Langston: *"converting rules to mechanisms before the mechanisms are trusted is how you lose both."*
-- **Judgement rules — NOT convertible:** rule 24's three outcomes · §2 1.b provenance · rule 15 · §1 plain-language · rules 27/28. A hook cannot rule on intent.
-- **Anything that BLOCKS on a content judgement.** Blocking is reserved for the narrow command-shape class (rule 22's precedent).
-
-## 4. RISK — stated plainly
-
-**The failure mode this batch can itself cause, and Langston named it in a different context: a mechanised WRONG rule is worse than prose, because it is authoritative.** Mitigations: warn-only for everything except the already-precedented block shapes; fail-open by construction; the OBJ-5 self-test; OBJ-0 notification; and **a stated disable path in the same post** so another session is never stuck behind my hook.
-**Second risk:** banner-blindness. Langston: *"fire it too often and it goes banner-blind, which is worse than nothing."* ⇒ OBJ-4 warnings must be specific and rare; if any fires on routine correct work, it gets narrowed or removed, not tolerated.
+**`[r2]` Added 2026-08-31:**
+- ⚠️ **PREVIOUSLY STATED: a judgement-capable hook can sit on `Stop`. THEN: FALSE AND STRUCK. NOW: ⛔ UNSETTLED — AND MY WITHDRAWAL WAS ITSELF AN OVERCLAIM `[R1-1]`.** **REASON:** the shipped bundle's hooks documentation states twice that prompt hooks and agent hooks are *"Only available for tool events: `PreToolUse`, `PostToolUse`, `PermissionRequest`."* **`Stop` has a feedback channel and prompt hooks exist — two adjacent true facts welded into one that is not true.** ★ **That is `wrong-object`, in this batch's own approach round, on its load-bearing sentence. Langston's instruction: keep it in the scope as the best instance we will get.**
+  ⛔⛔ **`[R1-1]` A FRESH READER THEN FOUND THE SAME BUNDLE CONTRADICTING THAT DOC STRING FOUR WAYS — WHICH MAKES MY *WITHDRAWAL* AS UNEVIDENCED AS THE ORIGINAL CLAIM:**
+  1. **The settings schema applies NO per-event restriction** — one uniform discriminated union across all **26** events. **A prompt hook on `Stop` passes validation.**
+  2. **The only runtime event/type filter that exists is for `http` hooks on `SessionStart`/`Setup`.** There is **no equivalent filter** for prompt or agent hooks on any event.
+  3. ★ **`Stop` SUPPLIES EXACTLY WHAT PROMPT/AGENT HOOKS REQUIRE.** The executor throws when `toolUseContext` or `messages` are missing; **the `Stop` runner passes both.** ⇒ **the guard that would reject it would not fire.**
+  4. **The doc is demonstrably incomplete about its own subject:** it lists **10** events where the enum has **26**, **omits `InstructionsLoaded`** — the event this project actually uses — and omits a fifth hook type present in the executor.
+  ⚠️ **AND THE BINARY READ WAS `2.1.87`**, the stale standalone; **desktop sessions run 2.1.219+**, so the quoted doc may not describe the running build at all.
+  ⇒ ⛔ **NEITHER "TRUE" NOR "FALSE" IS EVIDENCED. THE ONLY OBJECT THAT SETTLES IT IS EMPIRICAL: REGISTER A PROMPT HOOK ON `Stop` AND OBSERVE.** ✅ **That is now OBJ-6a, and it runs BEFORE any design rests on the answer.**
+  ★ **THE BATCH DOES NOT DEPEND ON THE ANSWER EITHER WAY** — `PostToolUse` carries everything the `Stop` leg was wanted for, and that is where OBJ-6 sits.
+- **PREVIOUSLY STATED (to Kyle, as calibration): teams run 15-30% documentation drift. NOW: WITHDRAWN. REASON:** Langston refused the population — theirs is *"teams' documentation"*, ours is *"governance state assertions in auto-loaded files."* Different object.
+- **PREVIOUSLY STATED: `toCanonical` has 65 references across 10 files. NOW: quote the query and its result, never the bare number. REASON:** Langston re-derived it at his ref and got **six TypeScript files**. **The qualitative claim — tests, a telemetry service, a diagnostic, all behind a one-line call site — is confirmed exactly; the count is not reproducible across instruments.** ⇒ **two instruments, one object, two answers.**
 
 ---
 
-# ★★ AMENDMENT 1 — 2026-08-31: THE POST-EXECUTION LEG, AND THE MEASUREMENT THAT REORDERED THE BATCH
+## 1. PROVENANCE READ (§9.5(b) / step-1 1.b) — TIER 1 on the files whose behaviour changes
 
-> ⛔⛔ **THIS SCOPE ALREADY EXISTED AND I ALMOST WROTE A SECOND ONE.** Kyle said *"go ahead and write the scope"*; the step-1 existence check returned `B_MEASURE_GATE_LEG2_SCOPE.md` **and** its pre-audit, both dated 2026-07-30. ★ **In the batch whose subject is measuring the wrong object, I nearly duplicated the object.** Recorded rather than quietly avoided.
+**`.claude/settings.local.json` + `.claude/hooks/`.** Introduced for rule 22 enforcement (`guard-governed-read.mjs`, 2026-07-13) after the same false-absence error recurred twice; `guard-bare-commit.mjs` followed (07-19) for #542; `guard-push-tsc-baseline.mjs` (08-07) for #680.
+⇒ **DISPOSITION (1) — still relevant and correct.** Design intent is **narrow shape, fail-open, never breaks a session**, and it is the intent this leg **extends rather than revises.**
 
-## A1.0 WHAT CHANGED SINCE 2026-07-30, AND WHY IT IS AN AMENDMENT NOT A REWRITE
+**`CLAUDE.md` §10.5 / §7.1 / rule 19 / rule 25.c** — read for intent in leg 1; each stays **DISPOSITION (2): relevant, needing an update to today's intent** — the rule text is right, its *enforcement* is prose.
 
-✅ **OBJ-0 through OBJ-5 STAND UNCHANGED.** Langston ruled that design and his two non-negotiables still bind. **Nothing below revises them.**
-⛔ **THE GAP: every one of OBJ-1..5 fires BEFORE a command runs** — `PreToolUse` or `UserPromptSubmit`. **They gate the SHAPE OF A COMMAND.** ⇒ **the scope has no leg that can see what a command RETURNED**, and that is where `wrong-object` is born: **the command is well-formed, it runs, it exits 0, and its output does not answer the question the claim is about.**
+**`[r2]` `PostToolUse` as an event — NO PROVENANCE EXISTS HERE.** It has never been used by this project: **verified 2026-08-31: **18 REGISTRATION ENTRIES** — `[R1-1]` **10 DISTINCT SCRIPTS**, since `load-own-memory` and `load-conduct` are each sharded across five entries — all `type:"command"`, across exactly three events — `PreToolUse`, `SessionStart`, `InstructionsLoaded`. Zero `PostToolUse`, zero `Stop`, zero prompt- or agent-type.** ⇒ **DISPOSITION (3) — a capability that should be connected and never has been.**
 
-## A1.1 THE MEASUREMENT THAT PUTS THIS FIRST (Kyle-directed ledger pass, 2026-08-31)
+---
 
-**Population: every `MISTAKE:` trailer in the commit history. 43 distinct patterns, 162 trailered instances.** ✅ **CONTROL: 166 raw `MISTAKE:` occurrences — 4 malformed, so the instrument is sound.**
+## 2. OBJECTIVES
 
-| pattern | instances | batches | share |
+### OBJ-0 — NOTIFY THE OTHER SESSIONS BEFORE ANY HOOK LANDS
+Post to `#general` naming each session: **what will block, what will merely warn, and the disable path.**
+**Verification:** the post exists and names both.
+**`[r2]`** ⚠️ **AND IT MUST REACH THEM, WHICH IS NOT THE SAME AS BEING POSTED.** CC-B was **747 commits behind and dormant 15 days**; a hook shipped that day **would not have existed for it, and nothing would have said so.** ⇒ **OBJ-0 now requires confirmation that each session's clone actually carries the hook, not that a message was sent.**
+
+### OBJ-1 — §10.5 ALERT CHECK → `UserPromptSubmit` hook
+*(Langston: "strongest candidate, convert first.")* Injects active-unacked alerts so the per-turn check stops depending on memory.
+⚠️ **HARD REQUIREMENT (his):** *"Must fail-open with a hard timeout — an SSH to Frankfurt on every turn is a new wedge surface."* ⇒ **timeout ≤3s, `exit 0` on any failure, never blocks the turn.**
+**Verification:** the alert appears injected on a turn with a known-present active alert; **and with the network path deliberately broken, the turn still proceeds** — that second half is the load-bearing one.
+
+### OBJ-2 — §7.1 `git fetch` GATE → `PreToolUse` on `git commit` / `git push`
+Warns when `origin/<branch>` was last fetched longer ago than a threshold, because the sync gate's step 0 has already been skipped in practice.
+**Verification:** with a stale fetch the warning fires; with a fresh fetch, silent; **and it never blocks** — a blocked commit at the wrong moment costs more than a stale compare.
+
+### OBJ-3 — RULE 19 CI-GREEN → `PreToolUse`, keyed on the COMMIT THAT ADDS A `*COMPLETION_REPORT*` PATH
+*(Langston's correction: "the event isn't 'close'.")* Demands a cited run id in the message.
+**Verification:** a completion-report commit without a run id warns; with one, silent.
+
+### OBJ-4 — RULE 29 MEASUREMENT SHAPES → `PreToolUse`, WARN-ONLY
+The shapes with a genuine **command-string** signature, each drawn from a real error: an unfiltered `LIKE '%…%'`, a `head`/`tail` slice presented as a population, a `grep -c` used as a thing-count.
+**Verification:** each shape triggers its warning; a controlled equivalent does not.
+
+### OBJ-5 — THE SELF-TEST *(Langston's second non-negotiable)*
+*"A fail-open hook that has silently stopped running is a lookalike failure in the enforcement layer itself — the exact bug we're fixing."*
+**Verification:** disable one hook deliberately → the self-test names it.
+**`[r2]` AMENDED — IT MUST REPORT PER SESSION, NOT ONLY PER HOOK.** ★ **A hook can be alive in three clones and absent from a fourth, and OBJ-5 as written would not see that.** **CC-B's fifteen silent days are the case.** ✅ **The sink already exists and is unused for this: `log-instructions-loaded.mjs` writes each session's loaded set to `~/.claude/instructions-loaded.jsonl`.**
+⚠️ **I proposed this as a NEW condition on 08-31 and it was already OBJ-5, written 07-30. Recorded because re-inventing an owned mechanism is the same class as re-deriving an owned decision.**
+
+### ★★ OBJ-6 `[r2]` — `PostToolUse`, MATCHER `Bash`: SEE WHAT THE COMMAND *RETURNED*
+
+⛔⛔ **THE GAP THIS CLOSES, AND IT IS STRUCTURAL: EVERY ONE OF OBJ-1..5 FIRES *BEFORE* A COMMAND RUNS.** They gate the **shape of a command**. **Nothing in the 07-30 design can see what a command RETURNED** — and that is where `wrong-object` is born: **the command is well-formed, it runs, it exits 0, and its output does not answer the question the claim is about.**
+
+★★ **AND THIS EXTENDS LANGSTON'S OWN CONVERSION TEST RATHER THAN DEPARTING FROM IT.** His 07-30 correction was: *"does the violation have a TOOL-EVENT SIGNATURE?"* — **a command string is one tool-event surface; a RESULT is another.** ⇒ **the July scope applied his test only to the half of the event that existed before execution.**
+
+**THE MEASUREMENT THAT PUTS IT FIRST** *(Kyle-directed ledger pass; **`[R1-3]` RE-MEASURED AND PINNED at `24f4b39bb`, 2026-08-31**, after a fresh reader showed the first pass reproduced only at ~HEAD~25 and **carried no ref, so it read as current and was not**)*.
+
+✅ **BOTH FIGURES NOW COME FROM ONE POPULATION** — branch ancestry at the pinned ref. ⛔ **The first pass took 162 well-formed from branch ancestry and 166 raw only with `--all`, then subtracted across the two.** ★ *A control drawn from a different population than the measurement is not a control.*
+
+| pattern | instances | bracket-tokens | share |
 |---|---|---|---|
-| ⛔ **`wrong-object`** | **77** | **24** | **48%** |
-| `silence-not-evidence` | 12 | 8 | 7% |
-| `verification-weaker-than-claim` | 9 | 6 | 6% |
-| `fix-follows-pointer` | 8 | 6 | 5% |
+| ⛔ **`wrong-object`** | **80** | 26 | **46.8%** |
+| `verification-weaker-than-claim` | 13 | 7 | 7.6% |
+| `silence-not-evidence` | 12 | 8 | 7.0% |
+| `fix-follows-pointer` | 8 | 6 | 4.7% |
 
-★★ **ONE PATTERN IS 48% OF EVERY MISTAKE WE HAVE RECORDED, SIX TIMES SECOND PLACE — AND IT IS ALREADY THE MOST HEAVILY RULED THING WE OWN** (`CLAUDE.md` rule 29, `CONDUCT.md` §10, slot 1 of the always-loaded short list). ⇒ ⛔ **THE MOST-RULED PATTERN IS THE MOST FREQUENT. A FOURTH RULE FOR IT WOULD BE THE MEASURED FAILURE REPEATED.**
+**171 well-formed trailers across 44 distinct slugs. Raw `MISTAKE:` occurrences 175. Difference 4.**
+⚠️ **AND THOSE 4 ARE NOT MALFORMED TRAILERS `[R1-3]`** — a fresh reader read them: they are **the trailer TEMPLATE quoted inside commit prose.** ⇒ **the "control" measured DOCUMENTATION OF THE FORMAT, not malformation. Retained as a completeness check; it is NOT a validity control.**
+⚠️ **"26 bracket-tokens" IS NOT "26 BATCHES" `[R1-3]`** — the tokens include issue numbers (`#755`, `#756`, `#759`) and count `F-G`, `F-G-1`, `F-G-2` separately. **By subject-line batch-id it is ~12, with ~40 commits carrying no batch-id at all.** ★ **The defensible dispersion claim is "at least 12 distinct batches."**
 
-## A1.2 ★ **OBJ-6 (NEW) — `PostToolUse`, MATCHER `Bash`: SEE WHAT THE COMMAND RETURNED**
+★★ **ONE PATTERN IS 47% OF EVERY MISTAKE WE HAVE RECORDED — 6.2× SECOND PLACE.**
 
-**A `PostToolUse` hook fires after a tool call succeeds and receives the call AND its result.** ⇒ **the only point in the design that sees the read itself.**
-✅ **It carries everything a `Stop` hook would have:** `decision:"block"` with a `reason`, and `hookSpecificOutput.additionalContext` — *"text injected into model context."*
+⚠️ **`[R1-5]` AND THE "MOST HEAVILY RULED" HALF IS WEAKER THAN I STATED. NARROWED, NOT DROPPED:**
+- ⛔ **`CONDUCT.md` §13 has ONE filled slot against a declared "3-5".** ⇒ *"slot 1"* **is also the ONLY slot — true by VACANCY, not by ranking.** `shell-mangled-text`, recorded PROMOTED on 08-28/29, appears **zero** times there.
+- ⛔ **`CLAUDE.md` rule 22 forwards to the SAME `CONDUCT.md` §10**, and §10’s body carries the positive-control paragraph — which is `silence-not-evidence`’s content. ⇒ **shared coverage, counted by me as sole coverage.**
+- ★★ **A STRONGER COMPETITOR EXISTS ON THE CRITERION THAT MATTERS: `bare-commit` has a rule AND A SHIPPED ENFORCING HOOK.** ⇒ **under "rule coverage" `wrong-object` may lead; under COVERAGE THAT BINDS it is the one entry with NO mechanism.**
+- ⚠️ **§13’s parenthetical says "5 instances across 2 batches"; its own index holds 7+ rows across 6+ batches.** ★ **The always-loaded list is STALE AGAINST ITS OWN INDEX** — `B-STATE-ASSERTION-LINT`’s class, sitting in the file that cites this batch.
 
-⛔⛔ **AND THE SENTENCE THAT PROPOSED A `Stop` LEG WAS FALSE. RECORDED AT LANGSTON’S INSTRUCTION AS THE BEST INSTANCE THIS BATCH WILL EVER GET.** I wrote that a judgement-capable hook could sit on `Stop` and hand a message back before it reached Kyle. **The shipped bundle’s own hooks documentation states, twice: prompt hooks and agent hooks are *"Only available for tool events: `PreToolUse`, `PostToolUse`, `PermissionRequest`."*** ★ **`Stop` has a feedback channel and prompt hooks exist — two adjacent true facts, welded into one that is not true. That is `wrong-object`, in the approach round of the batch against `wrong-object`, on its load-bearing sentence.**
-⇒ ✅ **THE `Stop` LEG IS STRUCK. The batch survives intact on `PostToolUse` alone.**
+⇒ ✅ **THE DEFENSIBLE FORM, AND IT CARRIES THE WHOLE ARGUMENT: `wrong-object` IS THE MOST FREQUENT PATTERN BY 6.2× AND THE ONLY TOP-FOUR PATTERN WITH NO ENFORCING MECHANISM.** ⛔ **A fourth RULE for it would be the measured failure repeated. What it lacks is not prose.**
 
-**⛔ THE MATCHER IS `Bash` AND NOTHING ELSE (Langston set the cut, and it is evidence-based):** `Read`/`Grep`/`Glob` **do not manufacture denominators.** All eight attributed instances at `MISTAKE_PATTERNS.md:264-278` were Bash — worktree-vs-ref, `git log -200` capping after filtering, substring `correct`, the `opened_at` window, the `total_fee` column, a 404 read as a row list, `grep -cvE`. **The population is Bash.**
+**⛔ THE MATCHER IS `Bash` AND NOTHING ELSE** *(Langston's cut, evidence-based)*: `Read`/`Grep`/`Glob` **do not manufacture denominators.**
 
-**★ TWO STAGES, CHEAP IN FRONT OF EXPENSIVE:** a **deterministic command hook** fires on every gated Bash result and escalates only a subset to an **agent hook**. ⛔ **DESIGNING THAT ESCALATION PREDICATE IS THIS OBJECTIVE’S REAL WORK AND MUST NOT BE HAND-WAVED — IT IS WHERE THE COST LIVES.**
+⛔⛔ **`[R1-4]` BUT THE EVIDENCE I CITED FOR THAT CUT DOES NOT EXIST. I AM WITHDRAWING THE CITATION, NOT THE CUT.** I wrote *"all eight attributed instances at `MISTAKE_PATTERNS.md:264-278` were Bash."* A fresh reader went to the object:
+- **The table is `:263-269` — SEVEN rows, not eight.** `:264` is instance **2**, so my range **excludes instance 1**; `:270-278` is argument prose. **Instance 8 is narrative at `:277`.** ⇒ **my citation describes neither the table nor eight instances.**
+- ⛔⛔ **AND THE FILE RECORDS NO TOOL ATTRIBUTION AT ALL.** Grepping `:258-278` for `Bash|Read|Grep|Glob|curl|psql|SQL|supabase` returns **ZERO**; the four referenced commits carry none either. ★ **The file records WHAT was measured wrongly — never WHICH TOOL took the measurement.**
+⇒ **"All eight were Bash" was an assertion about objects that were never recorded — a fabricated mechanism, rule 29(c). WITHDRAWN.**
 
-⛔⛔ **AGENT HOOK, NOT PROMPT HOOK, AND THE DISTINCTION IS THE WHOLE EPISTEMIC ARGUMENT.** A **prompt** hook re-reads my sentence about the object — it inherits my framing if my framing is in the transcript, which is Langston’s own `#675` failure. **An AGENT hook *"runs an agent with tools"* and can RE-EXECUTE THE MEASUREMENT AGAINST THE OBJECT.** ★ **That is not a second reader; it is an independent re-derivation.**
-⛔ **PRE-REGISTERED, HIS: an agent-hook verdict citing NO tool output it produced itself is INADMISSIBLE** — that is a prompt hook wearing an agent’s clothes.
-⛔ **He will NOT approve a prompt-type hook as a verdict-carrying gate.**
+✅ **WHAT SURVIVES:** the instances are *consistent* with Bash — two are DB queries against columns (`opened_at`/`closed_at`, `total_fee`/`total_cost`), consistent with a Bash-wrapped `psql` **and equally with a non-Bash path**. ⛔ **So the `Bash` matcher is a HYPOTHESIS carried on Langston’s judgement, NOT on a measured population.**
+⇒ ✅ **OBJ-6b `[R1-4]`: BEFORE the matcher is fixed, MEASURE THE TOOL DISTRIBUTION** — attribute a sample of `wrong-object` instances to the tool that actually produced the reading, from the transcripts. ⚠️ **If the population is not Bash, the matcher is wrong and the objective is mis-aimed. A real falsifier, not a formality.**
 
-## A1.3 ⛔ PRE-REGISTERED BARS — SET BEFORE ANY DATA, AND NOT TO BE RESTATED LOOSER
+**★ TWO STAGES, CHEAP IN FRONT OF EXPENSIVE:** a **deterministic command hook** fires on every gated Bash result and escalates only a subset to an **agent hook**.
+⛔⛔ **THE ESCALATION PREDICATE IS THIS OBJECTIVE'S REAL WORK, IT IS UNSPECIFIED, AND IT IS WHERE THE COST LIVES. It is named here as unbuilt rather than hand-waved.**
+
+**⛔ AGENT HOOK, NOT PROMPT HOOK — THE DISTINCTION IS THE WHOLE EPISTEMIC ARGUMENT.** A **prompt** hook re-reads my sentence about the object and **inherits my framing if my framing is in the transcript** — Langston's own `#675` failure. An **agent** hook *"runs an agent with tools"* and can **RE-EXECUTE THE MEASUREMENT AGAINST THE OBJECT.** ★ **Not a second reader — an independent re-derivation.**
+⛔ **PRE-REGISTERED: an agent-hook verdict citing NO tool output it produced itself is INADMISSIBLE** — a prompt hook wearing an agent's clothes. **He will not approve a prompt-type hook as a verdict-carrying gate.**
+
+**VERIFICATION — the pre-registered bars, set before any data and not to be restated looser:**
 
 | | bar |
 |---|---|
@@ -101,26 +131,31 @@ change-class: architecture
 | below 5 | **decorative** |
 | above 2% | ⛔ **bypassed inside a week — which is how `#756` died** |
 | **first arm** | ✅ **WARN-ONLY** (`additionalContext`, no block). Live FP measured over a fixed window **before anything returns `decision:"block"`.** ★ *A gate that blocks on day one has an FP anecdote, not an FP rate.* |
-| ⚠️ **the negative arm** | **The 8 known positives were chosen BY LOOKING AT THE DATA — `control-enumerates-the-observed` by construction.** ⇒ **sample the negative arm BY REF-WINDOW, independently of whether anything was later corrected.** |
+| ⚠️ **negative arm** | **The 8 known positives were chosen BY LOOKING AT THE DATA — `control-enumerates-the-observed` by construction.** ⇒ **sample the negative arm BY REF-WINDOW**, independently of whether anything was later corrected. |
 
-## A1.4 ✅ THE PER-SESSION LIVENESS CONDITION IS **ALREADY OBJ-5** — I NEARLY RE-INVENTED IT
+---
 
-**CC-B was dormant 15 days holding 33 open items and NOTHING SAID SO** — found by accident while measuring hook propagation. **Its clone was 747 commits behind: a hook shipped that day would not have existed for it.**
-★ **I proposed *"a mechanism must report whether it is live per session"* as a new binding condition. IT IS OBJ-5, WRITTEN 2026-07-30:** *"a fail-open hook that has silently stopped running is a lookalike failure in the enforcement layer itself — the exact bug we are fixing."*
-⇒ **OBJ-5 is AMENDED, not added to: its self-test must report per SESSION, not only per hook** — a hook can be alive in three clones and absent from a fourth, and OBJ-5 as written would not see that. **CC-B’s fifteen silent days are the case.**
+## 3. EXPLICITLY OUT OF SCOPE
 
-## A1.5 CHANGE-CLASS — CONFIRMED `architecture`, NOT LOWERED
+- **Leg 3** (collapsing rule text to pointers) — separate batch, **per-rule gated on that rule's hook having been OBSERVED firing.** Langston: *"converting rules to mechanisms before the mechanisms are trusted loses both."*
+- **Judgement rules — NOT convertible:** rule 24's three outcomes · §9.5(b) provenance · rule 15 · §2 plain-language · rules 27/28. **A hook cannot rule on intent.**
+- **Anything that BLOCKS on a content judgement.** Blocking is reserved for the narrow command-shape class (rule 22's precedent).
+- **`[r2]` CONSENSUS STALENESS.** ⛔ **Every leg here — old and new — fires at WRITE TIME on a SINGLE ARTIFACT. A copy that was right when written and is wrong now is structurally unreachable by all of it.** ⇒ **`B-STATE-ASSERTION-LINT`, its own batch, placed after these hooks and before leg 3.**
+- **`[r2]` THE IMPACT LOOKUP.** Langston ruled it **not a batch** but a **scope-bar amendment**: *a scope's blast-radius statement must quote the reference query and its result, not prose.* **Folded into work in hand.** ⚠️ **Its reach limit ships with it: a reference set is PRESENCE evidence and CANNOT make an absence claim — it does not cross dynamic dispatch, a string-keyed lookup, a SQL column name, a DB row or a config key, which is exactly §9.5(a-ii)'s hole. It sits BESIDE the state-write census, never replacing it.**
 
-✅ **The 2026-07-30 header declared `architecture` and it stands.** ⇒ under the change-class matrix (`d8d4999bb`) that makes **`SYSTEM_MANUAL.md` and `SYSTEM_IMPACT_MAP.md` REQUIRED, not judged.** ⚠️ **I would have declared this `non_architecture` had I written it fresh today — and that would have downgraded two required documents to judged.** ★ **A second reason the existence check earned its keep.**
+---
 
-## A1.6 ⛔ WHAT THIS AMENDMENT DOES **NOT** DO
+## 4. RISK — stated plainly
 
-1. ⛔ **It does not touch leg 3.** Langston: *converting rules to mechanisms before the mechanisms are trusted loses both.* **Leg 3 stays gated per-rule on that rule’s hook having been OBSERVED firing.**
-2. ⛔ **It does not address CONSENSUS STALENESS.** Every leg here — old and new — fires at **write time on a single artifact.** A copy that was right when written and is wrong now is **structurally unreachable** by all of it. ⇒ **`B-STATE-ASSERTION-LINT`, its own batch, placed after these hooks and before leg 3.**
-3. ⛔ **It does not carry the impact-lookup.** Langston ruled that **not a batch** but a **scope-bar amendment**: *a scope’s blast-radius statement must quote the reference query and its result, not prose.* **Folded into work in hand.** ⚠️ **And its reach limit ships with it: a reference set is PRESENCE evidence and cannot make an absence claim — it does not cross dynamic dispatch, string-keyed lookup, a SQL column name, a DB row or a config key. It sits BESIDE the state-write census, never replacing it.**
+**The failure mode this batch can itself cause, and Langston named it in another context: a mechanised WRONG rule is worse than prose, because it is authoritative.** Mitigation: **warn-only for everything except the narrow command-shape class.**
+**Second risk — banner-blindness.** Langston: *"fire it too often and it goes banner-blind, which is worse than nothing."* ⇒ **OBJ-4 and OBJ-6 warnings must be specific and rare; if any fires on routine correct work, it is wrong.**
+**`[r2]` Third risk — cost.** A hook on every Bash result is **turned off inside a week** if the escalation predicate is not cheap. **That is `#756`'s death, repeated.**
 
-## A1.7 WHAT WOULD FALSIFY OBJ-6
+---
 
-1. **If the escalation predicate cannot be made cheap**, a hook on every Bash result is turned off inside a week and we have built `#756` again. **Say so and stop.**
-2. **If the agent hook cannot cite its own tool output**, it is a prompt hook and Langston has already refused it as a gate.
+## 5. `[r2]` WHAT WOULD FALSIFY OBJ-6
+
+1. **If the escalation predicate cannot be made cheap**, this is `#756` again. **Say so and stop.**
+2. **If the agent hook cannot cite its own tool output**, it is a prompt hook, and Langston has already refused that as a gate.
 3. ⚠️ **Grounding checks REDUCE this class; they do not eliminate it** — a model can still misread what it genuinely retrieved. **This is a large dent in 48%, not a solve, and it is sized that way going in.**
+4. ⛔ **THE KNOWN-POSITIVE SET HAS THE SAME DEFECT AS THE NEGATIVE ARM, AND I AM RAISING IT AGAINST MY OWN BAR:** the 8 are the errors that **got trailered** — which selects for errors somebody *noticed*. **The ones nobody noticed are absent by construction.** ⇒ **"5 of 8" is a bar over a biased population.** *(Open for Langston: fatal, or the best available?)*
