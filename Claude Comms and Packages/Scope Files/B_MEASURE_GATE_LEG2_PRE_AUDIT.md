@@ -10,8 +10,8 @@
 |---|---|---|---|
 | **hook files** | *"all 5 hook files"* — §1’s table, presented as the POPULATION | **10** | Five landed between 07-30 and today: `guard-push-tsc-baseline.mjs` · `instructions-loaded-native.mjs` · `load-conduct.mjs` · `log-instructions-loaded.mjs` · `probe-warn-delivery.mjs`. **The layer this batch modifies DOUBLED while the audit of it sat still.** |
 | **wired events** | *"Two events wired"* — `PreToolUse`, `SessionStart` | **THREE** — `PreToolUse` · `SessionStart` · **`InstructionsLoaded`** | `instructions-loaded-native.mjs` wired the native event after 07-30. **Directly load-bearing: §1 FINDING B’s argument was *"OBJ-1 introduces a NEW event surface"* — still true, but it is now the third such precedent, not the first.** |
-| **the probe** | *"wired **LOCALLY and deliberately NOT committed**"*, disposition *"stays wired locally (uncommitted)"* | ⛔ **COMMITTED AND LIVE IN ALL THREE CLONES** since `3fd7ed119` (2026-08-03) | See FINDING C. **The recorded disposition was reversed by a different process and nothing reconciled the two.** |
-| **`wrong-object` magnitude** | *"77 instances across 24 batches = 48% … six times second place"* (`PHASE_19_PLAN` row 6) | ✅ **80 instances · 46.8% of 171 well-formed trailers across 44 slugs · 6.2× second place, pinned at `24f4b39bb`** | First pass carried **no ref**, reproduced only at `~HEAD~25`, and drew its control from a **different population** (`--all` against branch ancestry). ⛔ **THE ACROSS-BATCHES DENOMINATOR IS WITHDRAWN OUTRIGHT** — 26 bracket-tokens is not 26 batches (~12 by subject-line id), so **no across-batches figure is claimed at all.** Row 6 corrected this commit `[C1]`. |
+| **the probe** | *"wired **LOCALLY and deliberately NOT committed**"*, disposition *"stays wired locally (uncommitted)"* | ✅ **COMMITTED since `3fd7ed119` (2026-08-07 — `[r4]`, this cell said 08-03 while §6 said 08-07; **the document contradicted itself on its own front page for one commit**)** and therefore PRESENT in all three clones. ⚠️ **`[r4]` "LIVE" IS STRICKEN AS UNCITED** — present is a fact about a tracked file; **live additionally requires each session to have restarted since and to hold no local edit to `settings.local.json`, and neither was checked** | See FINDING C. **The recorded disposition was reversed by a different process and nothing reconciled the two.** |
+| **`wrong-object` magnitude** | *"77 instances across 24 batches = 48% … six times second place"* (`PHASE_19_PLAN` row 6) | ✅ **80 · 46.8% of 171 well-formed trailers across 44 slugs · 6.2× second place — PINNED AT `24f4b39bb`.** ⚠️ **`[r4]` TWO CORRECTIONS AGAINST THIS ROW’S OWN HEADER, BOTH FROM AN OBJECT ROUND.** **(i) THE COLUMN HEADER SAID "re-derived at `origin/migration/aws-supabase`" AND IT WAS NOT** — `24f4b39bb` is **17 commits behind the ref head**, and at the head the same walk returns **85 / 180 / 47.2%.** ✅ **The pinned figure is what the scope commits to and it reproduces exactly at its own sha; the DIRECTION is unchanged and the ratio is stable. But a figure pinned at one sha may not be captioned as re-derived at another, which is this batch’s own subject.** **(ii) THE 171/44 DENOMINATOR IS NOT REPRODUCIBLE FROM THE DOCUMENT AS WRITTEN:** it requires dropping the literal `MISTAKE: none` trailer, **a real row in the corpus.** The exclusion is correct — a declared no-mistake is not a mistake — **and it was nowhere stated, so the raw walk returns 172/45.** ✅ **Stated now.** | First pass carried **no ref**, reproduced only at `~HEAD~25`, and drew its control from a **different population** (`--all` against branch ancestry). ⛔ **THE ACROSS-BATCHES DENOMINATOR IS WITHDRAWN OUTRIGHT** — 26 bracket-tokens is not 26 batches (~12 by subject-line id), so **no across-batches figure is claimed at all.** Row 6 corrected this commit `[C1]`. |
 | **rank in the queue** | *"RE-RANKED TO THE TOP OF THE UNSTARTED WORK"* | ⛔ **FALSE ON ITS OWN PAGE — position 6, four unstarted items above it** | Position was true when written and drifted as items were placed above. ★ **Langston’s transferable form, filed on `#978`: a queue position is an integer that every insertion above it silently decrements — cite the ANCHOR or the READ-SITE, never the number.** |
 
 ---
@@ -46,7 +46,7 @@ Mechanics confirmed at the source: payload arrives as JSON on **stdin**, command
 
 He ruled §10.5 *"strongest candidate, convert first."* **I am not reordering on my own judgement — I am putting the argument to him**, because two measured facts cut against it:
 
-1. **OBJ-1 is the ONLY hook that runs on EVERY TURN in ALL THREE sessions** (Finding A + Finding B). Its blast radius is every session's every turn; every other objective fires on a specific command shape.
+1. **OBJ-1 runs on every turn in all three sessions** (Finding A + Finding B). ⚠️ **`[r4]` THE WORD "ONLY" IS STRICKEN AS UNCITED AND WRONG TWICE OVER: `PreToolUse`/`Bash` fires PER BASH CALL, which on a working turn is MANY TIMES per turn rather than once — measured today at 44 probe rows in nine minutes — and OBJ-6c puts `PostToolUse` on the same footing inside this same batch.** ✅ **The argument does not need "only": what it needs is that OBJ-1’s blast radius is every session, which stands.** Its blast radius is every session's every turn; every other objective fires on a specific command shape.
 2. **OBJ-1 is fail-open on a NETWORK call — so its failure mode is SILENT BY DESIGN.** A wedged or dead alert-injector looks exactly like "no active alerts," which is **the absent-as-valid class this entire batch exists to kill**, now installed in the enforcement layer itself.
 
 ⇒ **His own second non-negotiable — the self-test, because *"a fail-open hook that has silently stopped running is a lookalike failure in the enforcement layer itself"* — applies MOST SHARPLY to OBJ-1, and therefore should EXIST BEFORE IT, not after.** ⇒ **Proposed order: OBJ-4 (lowest-risk, establishes the warn-only pattern) → OBJ-5 (the self-test) → OBJ-1 → OBJ-2 → OBJ-3.** His call; I will build his order if he holds it.
@@ -94,10 +94,20 @@ A sentinel-gated probe (`.claude/hooks/probe-warn-delivery.mjs`, fires only on t
 | `load-conduct.mjs` | 11,279 | ⛔ **NEW** |
 | `load-own-memory.mjs` | 7,253 | ✅ (was 4,565) |
 | `log-instructions-loaded.mjs` | 6,523 | ⛔ **NEW** |
-| `probe-warn-delivery.mjs` | 625 | ⛔ **NEW — and it is this batch’s own, see FINDING C** |
+| `probe-warn-delivery.mjs` | **3,414** *(`[r4]`)* | ⛔ **NEW — this batch’s own, see FINDING C.** ⚠️ **THIS CELL READ `625` — the size at `24f4b39bb`, under a column headed "bytes at ref", stale against the very commit that carries the table** (`0e6139405` rewrote the probe; that rewrite IS FINDING D’s fix). |
 | `session-reminder.mjs` | 1,242 | ✅ (was 1,258) |
 
-**Wired events at the ref: `PreToolUse` (4 hooks, chained) · `SessionStart` (3, plus the chunked loaders) · `InstructionsLoaded` (1).** `.claude/settings.json` is **NOT PRESENT AT THE REF** — stated rather than assumed, because §1 named only `settings.local.json` and an absent second settings file is a thing a reader would otherwise have to take on trust.
+⛔⛔ **`[r4]` THE "was N" COLUMN IS COMPARING TWO DIFFERENT SURFACES, AND FOR THREE OF THE FIVE THE ENTIRE DELTA IS LINE ENDINGS — NOT CONTENT.** §1 measured a **Windows working tree (CRLF)**; this table measures the **git object store (LF)**.
+| file | §1 "was" | at ref | delta | LINES at ref |
+|---|---|---|---|---|
+| `guard-governed-read.mjs` | 2,205 | 2,167 | **38** | **38** |
+| `session-reminder.mjs` | 1,258 | 1,242 | **16** | **16** |
+| `guard-bare-commit.mjs` | 15,435 | 15,130 | **305** | **305** |
+
+✅ **DELTA ≡ LINE COUNT ⇒ ONE BYTE PER LINE ⇒ CRLF-vs-LF. THOSE THREE FILES ARE BYTE-IDENTICAL IN CONTENT AND NOTHING DRIFTED.** ⛔ **Only `fresh-rules.mjs` (+946 over 164 lines) and `load-own-memory.mjs` (+2,688 over 127 lines) changed for real.**
+★★ **THIS IS `#751` — CRLF INFLATION READ AS CONTENT — INSIDE THE TABLE I WROTE TO CATCH DRIFT, ON THE SAME DAY, IN THE BATCH ABOUT MEASURING THE WRONG THING.** The rule I hold is *"measure at the ref, never your checkout"*; **I obeyed it for the NOW column and compared it against a THEN column measured the other way.** ⇒ **the rule is not "measure at the ref" — it is "BOTH SIDES OF A COMPARISON MUST COME FROM ONE SURFACE."**
+
+**Wired events at the ref: `PreToolUse` (4 hooks in TWO separate matcher blocks, both matcher `Bash` — `[r4]`, this read "chained", which they are not) · `SessionStart` (3, plus the chunked loaders) · `InstructionsLoaded` (1).** `.claude/settings.json` is **NOT PRESENT AT THE REF** — stated rather than assumed, because §1 named only `settings.local.json` and an absent second settings file is a thing a reader would otherwise have to take on trust.
 
 ## 6. ⛔⛔ `[r3]` **FINDING C — §4.1 ASSERTED THE PROBE WAS "WIRED LOCALLY". IT WAS NEVER REGISTERED. THE SENTENCE WAS FALSE WHEN WRITTEN AND IT IS STILL THERE.**
 
@@ -108,7 +118,11 @@ A sentinel-gated probe (`.claude/hooks/probe-warn-delivery.mjs`, fires only on t
 
 **WHAT THE ARMING COMMIT SAYS — `3fd7ed119`, 2026-08-07, quoted not summarised:** *"a probe written during the B-MEASURE-GATE leg 2 pre-audit, **never registered**, sitting untracked for days — **an instrument measuring nothing**."* … *"**Now registered.**"* ✅ **And `RUNNING_ISSUES:2198` records the same: found by the §7.1 gate-4 untracked-file review, orphaned and unregistered.**
 
-⛔⛔ **SO IT WAS NEVER WIRED. IT COULD NOT HAVE ANSWERED ANYTHING, AND §4.1’S DISPOSITION — *"stays wired locally so it answers on the next session start"* — WAS NEVER TRUE FOR A SINGLE SESSION.**
+⚠️ **`[r4]` AND THAT INFERENCE OVERREACHED — AN OBJECT ROUND CAUGHT IT, AND THE CORRECTION IS THE SECOND ONE THIS FINDING HAS TAKEN.** **BOTH CITED OBJECTS ARE THE SAME AUTHOR ASSERTING THE SAME THING ON THE SAME DAY**, and **neither says what `settings.local.json` held on 07-30.**
+✅ **WHAT IS ESTABLISHED, AND IT IS NARROWER: on 08-07 the `.mjs` was untracked and the COMMITTED settings carried no entry** — the diff adds a 9-line block.
+**EQUALLY CONSISTENT WITH THAT EVIDENCE:** (a) never wired · (b) **wired by a LOCAL, UNCOMMITTED edit to `settings.local.json` — exactly what §4.1 described — later lost to a `checkout`, a stash, or the `fresh-rules.mjs` re-staging this document flags in §3, leaving no artifact** · (c) wired at USER level, which nobody read on 08-07 · (d) wired and deliberately un-wired before the review.
+⇒ ⛔ **"THE COMMITTED SETTINGS HAD NO ENTRY ON 08-07" IS NOT "NOTHING WAS ARMED FOR EIGHT DAYS", AND I CONVERTED ONE INTO THE OTHER.**
+★★ **THE WITHDRAWAL OF THE CHECK-4 DEFECT STANDS ON FIRMER GROUND THAN THE REPLACEMENT FINDING, AND THAT ASYMMETRY IS THE HONEST SUMMARY: `[r2]` WAS REFUTED; `[r3]` IS NOT THEREBY ESTABLISHED.**
 
 ★★ **AND THAT IS `#978` SHAPE A, IN THIS BATCH’S OWN PRE-AUDIT, ABOUT THIS BATCH’S OWN INSTRUMENT: AN ASSERTED LIVE STATE WITH NO READ-SITE.** The sentence names a condition of the world (*"wired"*), cites nothing that would show it, and **nothing ever compared it to `settings.local.json`.** ⇒ **for eight days the document told every reader the gate was armed and waiting, and there was nothing armed.**
 
@@ -116,7 +130,7 @@ A sentinel-gated probe (`.claude/hooks/probe-warn-delivery.mjs`, fires only on t
 
 ⚠️ **TWO FIGURES IN THE `[r2]` VERSION WERE ALSO WRONG AND ARE CORRECTED HERE: the arming commit is 2026-08-07, NOT 08-03, so the probe has been registered for 24 days, NOT 28.** Both were asserted without opening the commit.
 
-✅ **WHAT SURVIVES, AND IT IS THE HALF THAT MATTERS: OBJ-4’S GATE HAS NEVER CLOSED.** The objective was made conditional on the probe answering. **In 24 registered days nobody typed the sentinel and nothing ever asked why the answer had not arrived** — and both the commit body and `RUNNING_ISSUES:2198` set *"once the answer is recorded, unregister and delete it"* as its exit condition, **which no document at the ref records ever happening.** ⛔ **AN OPEN GATE WITH NO EXPIRY READS EXACTLY LIKE A CLOSED ONE.**
+✅ **WHAT SURVIVED UNTIL TODAY, AND IT IS THE HALF THAT MATTERED: OBJ-4’S GATE HAD NEVER CLOSED — ✅✅ **AND §16 CLOSES IT.** The objective was made conditional on the probe answering. **In 24 registered days the answer never arrived and nothing ever asked why** *(`[r4]` — this read "nobody typed the sentinel", **an absence claim with no instrument**: the sink did not exist until today, so nothing could have shown it either way. **The claim is narrowed to what the documents DO show — no record of an answer anywhere at the ref, which both the commit body and `RUNNING_ISSUES:2198` set as the condition for retiring the probe.**)* — and both the commit body and `RUNNING_ISSUES:2198` set *"once the answer is recorded, unregister and delete it"* as its exit condition, **which no document at the ref records ever happening.** ⛔ **AN OPEN GATE WITH NO EXPIRY READS EXACTLY LIKE A CLOSED ONE.**
 
 **DISPOSITION (§9.4 #1 — fold into the work in hand):** the probe is re-armed with a real liveness leg (FINDING D), **OBJ-4 stays gated on it with a stated read-site**, and **§4.1’s false sentence is left in place with this correction beside it** rather than edited away — it is the batch’s own best worked example of the class it exists to catch.
 
@@ -153,6 +167,9 @@ I wrote the trace **INSIDE the sentinel branch**, so every failure that happens 
 - **Three hooks exit 2 (block) by design:** `guard-governed-read.mjs:36` · `guard-bare-commit.mjs:249,:304` · `guard-push-tsc-baseline.mjs:111`.
 - ⛔⛔ **AND `guard-push-tsc-baseline` IS EXPLICITLY FAIL-*CLOSED* IN NAMED BRANCHES:** no upstream ⇒ *"FAIL CLOSED by running the check rather than skipping it"* (`:123-126`); **comparator missing ⇒ `refuse()` — an ERROR CONDITION THAT BLOCKS THE PUSH** (`:138-144`); touched-set uncomputable ⇒ refuse (`:154`).
 - ✅ **Six ARE fail-open** — the three loaders, the reminder, and the two logging hooks.
+- ⛔ **`[r4]` THAT IS NINE, AND THE CENSUS CLAIMED TEN. THE UNCLASSIFIED TENTH IS THE PROBE — THIS BATCH’S OWN FILE, AND THE ONE THE REST OF THE DOCUMENT IS ABOUT.** ✅ **Classified: fail-open, `process.exit(0)` on every path, and its sink write is inside a swallowing `catch`.** ★ **A census that omits the object under discussion is the census-at-every-hop failure (§9.5(a)) applied to itself.**
+- ⚠️ **`[r4]` AND THE METHOD’S REACH IS NARROWER THAN THE CONCLUSION: `process.exit(2)` is not the only way to block.** A hook can deny via JSON output (`hookSpecificOutput` / `permissionDecision`) or by an uncaught throw. **Measured: `exitCode|permissionDecision|hookSpecificOutput|"deny"|additionalContext|throw ` across `.claude/hooks/` at the ref returns ZERO** ⇒ **the conclusion holds for this corpus — by the luck of the corpus, not by the method’s reach.** ★ **Load-bearing for §16, which needs exactly that channel.**
+- ⚠️ **`[r4]` "FAIL-OPEN" IS NOT "HARMLESS".** `fresh-rules.mjs` exits 0 on every path **and re-stages `CLAUDE.md` / `.claude/*` into the index** — §3 says so. **A hook can be fail-open and still be the most consequential thing in the layer.**
 
 ★ **WHY IT MATTERS TO THIS BATCH RATHER THAN BEING TRIVIA: §1’s sentence is the DESIGN PRECEDENT every leg-2 hook was to be built on.** ⇒ **the honest statement is that fail-open is a CHOICE MADE PER HOOK against its own failure cost, not a property of the layer** — and `guard-push-tsc-baseline` is the standing proof that fail-CLOSED is sometimes the right one **and that it has already fired wrongly in production once** (`:40-47`, a cwd-relative path refused every push while the file was present).
 ★ **Langston’s non-negotiable that leg-2 hooks be fail-open still stands — it is a constraint on THESE hooks, not a description of the layer. Both things are true and §1 collapsed them.**
@@ -172,6 +189,10 @@ I wrote the trace **INSIDE the sentinel branch**, so every failure that happens 
 **C3 asked for the `UserPromptSubmit` disposition to be stated rather than left implicit. It is the same disposition as `PostToolUse`’s, and stating it once for both is the honest form:**
 
 > ✅ **DISPOSITION FOR BOTH NEW EVENTS: a payload-logging no-op ships FIRST and its observed shape is recorded, before any matcher is written against it.** ⛔ **Reasoning from the documented `PreToolUse` contract to an unread event is precisely `wrong-object` — assuming an adjacent thing behaves like the one you actually read.** ★ **`InstructionsLoaded` is now a THIRD in-house precedent for wiring a new event safely (`instructions-loaded-native.mjs`), so this is a walked path, not a first.**
+
+⚠️ **`[r4]` NAME THE POPULATION, BECAUSE IT IS NARROWER THAN "FROM ZERO" SOUNDS: THE COUNTS COVER `.claude/` IN THE REPO AT THE REF.** **Repo-wide the tokens are NOT zero** — `PostToolUse` appears in `MECHANISM_INTEGRATION_PLAN.md` (2) and a June cross-session brief (1); `UserPromptSubmit` in the same brief (1). ★ **That is PRIOR DESIGN DISCUSSION the census excludes — and it sharpens the point below rather than blunting it: the idea was written down in June and still arrived unflagged in August.**
+✅ **The population also excludes USER-LEVEL `~/.claude/settings.json` and any per-clone uncommitted `settings.local.json` edit — the only places a live registration could hide from the ref. The user file was read and carries no `hooks` key, so the state is excluded IN FACT; the CENSUS does not exclude it, and that distinction is the whole of rule 29(b).**
+✅ **`Stop` returns 3 and `InstructionsLoaded` 5 under the same population — worth stating because §15 rests on `Stop`.**
 
 ★ **The generalisation is worth more than the condition: the July audit flagged the from-zero risk for `UserPromptSubmit` and the same risk arrived unflagged with `PostToolUse` a month later.** ⇒ **the plan carries ONE rule covering any new event surface, rather than a note per event.**
 
@@ -212,6 +233,18 @@ I wrote the trace **INSIDE the sentinel branch**, so every failure that happens 
 ⛔⛔ **HE WOULD HAVE REVIEWED THE WRONG BATCH’S SCOPE AND IT WOULD HAVE READ AS COMPLETE.** Well-formed request, `200`, plausible document, no error anywhere.
 
 ✅ **CAUGHT ONLY BECAUSE THE H1 NAMED A DIFFERENT BATCH — A SELF-IDENTIFYING HEADER CONTRADICTING THE REQUEST, WHICH IS THE §10 PREDICATE, ARRIVING INDEPENDENTLY AND FROM A DIFFERENT DIRECTION.**
+
+⚠️⚠️ **`[r4]` AND AN OBJECT ROUND WIDENED THE HYPOTHESIS SPACE RATHER THAN CONFIRMING IT — THE 7,968-BYTE OBJECT IS NOT NOISE. IT IS A REAL HISTORICAL REVISION OF `B_GOV_HYGIENE_ANALYST_1_SCOPE.md`, AT `aa274b3d1`, FOUND BY SIZE ACROSS THAT FILE’S OWN HISTORY.**
+✅ **The pinned figures check out: at `1246293e0` the scope blob is `b5585b95a`, and `git cat-file -s` returns exactly 22,950.**
+⛔ **BUT A GENUINE PAST BLOB OF A DIFFERENT PATH IS CONSISTENT WITH MORE THAN ONE MECHANISM, AND THEY DO NOT COST THE SAME:**
+| | state | what it would mean |
+|---|---|---|
+| **(a)** | an edge cache served a stale object for the requested path | ✅ **the labelled hypothesis — the failure is in the INFRASTRUCTURE** |
+| **(b)** | ⛔ **the REQUEST named the hygiene path or an old sha, and the CDN returned exactly what was asked for** | ⛔ **the `wrong-object` is at the REQUESTER end — which makes this a DIFFERENT worked example than §10’s predicate needs** |
+| **(c)** | a cache-key collision between the two `Scope Files/` paths | infrastructure again, different fix |
+
+★★ **"ONE OCCURRENCE AT FIRST TOUCH, NOT REPRODUCIBLE" IS EQUALLY THE SIGNATURE OF (b) — A TYPO IS NOT REPRODUCIBLE EITHER.** ✅ **Labelling (a) a hypothesis was the right posture; committing to it as THE mechanism was not, and this is the same class the finding is ABOUT, one level up.**
+✅ **WHAT SURVIVES INTACT AND CARRIES BOTH PLAN ITEMS: whatever produced it, a well-formed request returned `200` and a plausible document that was NOT the one asked for, and the ONLY thing that caught it was a SELF-IDENTIFYING HEADER CONTRADICTING THE REQUEST.** ⛔ **Under (b) the read-protocol assertion is MORE valuable, not less — it is the only check that fires on a mistyped request too.**
 
 ⇒ **TWO PLAN ITEMS FALL OUT OF IT:** it is 6c’s worked example, **and** a one-line assertion in the read protocol — **check the size or the H1 against the expected batch** — because **that curl is in every session’s always-loaded file and in the dispatch header itself.**
 
@@ -255,6 +288,35 @@ I wrote the trace **INSIDE the sentinel branch**, so every failure that happens 
 | **P9** | File the check-4 gap and the matrix `BLOCKED` state on `B-GOV-REPORTING` (row 8) | **FINDING C + §13** |
 
 ✅ **NOTHING IN THIS PLAN IS `UNAUDITED`.**
+
+## 16. ✅✅ `[r4]` **THE 24-DAY-OLD GATE IS CLOSED. WARN-ONLY `stderr` DOES NOT REACH THE MODEL, AND THAT CHANGES THE DESIGN.**
+
+★★ **THE QUESTION, unchanged since 2026-07-30 and blocking OBJ-4 the whole time: DOES A `PreToolUse` HOOK’S `stderr` REACH THE MODEL WHEN IT EXITS 0 (warn, not block)?**
+
+✅ **ANSWERED TODAY, AND THE INSTRUMENT NOW DISCRIMINATES. Sink `~/.claude/probe-warn-delivery.jsonl`, 44 rows, `12:44:49Z`–`12:53:35Z`:**
+```
+{"ts":"2026-08-31T12:53:28.402Z","stage":"ran","tool":"Bash","spelling":"tool_input",
+ "command_present":true,"matched_sentinel":true,"about_to_write_stderr":true,"exit_code":0}
+```
+✅ **THE HOOK RAN. IT MATCHED. IT WROTE TO `stderr`. IT EXITED 0.** ⛔ **AND NO `PROBE-WARN-DELIVERY` TEXT APPEARED IN THE TOOL RESULT — THE RESULT CARRIED ONLY THE COMMAND’S OWN OUTPUT.**
+
+⇒ ⛔⛔ **STATE (a). WARN-ONLY `stderr` ON EXIT 0 IS NOT A DELIVERY CHANNEL.**
+
+★ **THE POSITIVE CONTROL IS THE DISCRIMINATING PAIR, AND IT ISOLATES THE ONE VARIABLE: `stderr` ON EXIT 2 DEMONSTRABLY REACHES THE MODEL** — that is how `guard-governed-read` and `guard-push-tsc-baseline` deliver their refusals, and both have surfaced in this session. **Same channel, same writer, different exit code, opposite outcome.** ⇒ **the exit code gates the channel; the channel is not simply broken.**
+
+⚠️ **THE ONE THING THIS DOES NOT ESTABLISH, STATED RATHER THAN GLOSSED: n = 1 SENTINEL, ONE SESSION, ONE HARNESS BUILD.** The 43 non-matching rows prove the hook runs constantly; **they say nothing about delivery, because only the matching row wrote anything.** ★ **It is nevertheless decisive for the DESIGN QUESTION, because the design needed a channel that works, and a channel that failed its only trial is not one.**
+
+### ✅ WHAT IT CHANGES — AND IT IS A DESIGN CHANGE, EXACTLY AS `3fd7ed119` PREDICTED
+
+The arming commit said it in advance: *"If it does not, 'warn-mode hook' is not an available shape, and every leg-2 hook must block or find another channel. **That changes the design, not its wording.**"*
+
+✅✅ **AND THE OTHER CHANNEL EXISTS — THE SCOPE ALREADY NAMES IT AND I HAD NOT CONNECTED THE TWO: OBJ-6’s first arm is *"WARN-ONLY (`additionalContext`, no block)"*.** ⇒ **warn-mode IS available; it is delivered by STRUCTURED JSON ON STDOUT, not by `stderr`.**
+⛔ **SO EVERY WARN-ONLY OBJECTIVE — OBJ-4 AND OBJ-6c — IS RE-SPECIFIED ONTO `additionalContext`, AND `stderr` IS RESERVED FOR THE BLOCKING PATH.**
+⚠️ **AND THAT CHANNEL IS ITSELF UNMEASURED: `additionalContext` appears ZERO times across `.claude/hooks/` at the ref** (§9′). ⇒ **it takes the SAME disposition as the two new event surfaces (§8): A NO-OP SHIPS FIRST AND ITS DELIVERY IS OBSERVED BEFORE ANY OBJECTIVE RESTS ON IT.** ⛔ **I am not replacing a measured dead end with an assumed live one — that is the trade this whole batch exists to refuse.**
+
+★★ **THE KEEPER, AND IT IS THE BATCH IN ONE LINE: THE QUESTION WAS ANSWERABLE IN UNDER A MINUTE AND SAT OPEN FOR 24 DAYS, BECAUSE THE INSTRUMENT COULD NOT TELL ITS OWN SILENCE FROM ITS OWN ABSENCE.** **Adding six fields to one JSON row converted an unfalsifiable null into a decisive answer.** ⇒ **that is OBJ-5’s entire thesis, demonstrated on this batch’s own gate before a single objective was built.**
+
+---
 
 ## 15. `[r2]` WHAT I STILL WILL NOT ASSERT
 
