@@ -6470,3 +6470,28 @@ CC-A's batch argues the workflow is not reliably firing. **This is that thesis, 
 ⚠️ **THE `/home/langston/CLAUDE.md` HALF IS NOT MINE.** Kyle ruled 2026-08-30 that Langston’s instruction file is **Infra Claude’s** responsibility (*"I don’t wanna mix that work"*). **Reconciling that copy needs Kyle’s placement in Infra’s ordering; I am not assigning it.**
 
 ✅ **ALREADY MITIGATED, INDEPENDENT OF THE FIX:** all eight mandated forms from all three homes are now a committed regression fixture (`scripts/measure-gate/test-guard-measurement-shape.mjs` §M) that requires **ZERO fires**. **The guard cannot regress onto the mandated set without the suite failing** — which is Langston’s condition that this ship as a test arm, not a review step.
+
+---
+
+### #949 UPDATE 2026-08-31 — ✅ THE RE-PROBE RAN ON A LIVE MARKET. **THE LADDER IS REAL, AND IT IS NOT UNIFORM.**
+
+**This is the ROW-0 fact Langston required before `3b.d` could be scoped** — his words: *"until you have the observed level count per side on a liquid and a thin name, 3b.d has no scope to write."*
+
+⛔ **THE 2026-08-30 PROBE WAS NOT EVIDENCE AND IS SUPERSEDED:** it returned `success:true` and **zero frames in 25 s because it was a Saturday** — a silent instrument with zero opportunity (`#661` leg 2).
+✅ **LIVENESS ESTABLISHED BEFORE READING ANYTHING THIS TIME:** at the probe instant the feed had produced **4,476 frames across 447 symbols in the preceding 5 minutes**, latest frame **0.1 s old**. Probe at **2026-08-31T20:39Z**, read-only, no credentials, no order, no deploy.
+
+**ALL FOUR SUBSCRIPTIONS ACKNOWLEDGED `success:true, snapshot:true`, ALL FOUR DELIVERED A SNAPSHOT:**
+| symbol | liquidity | **SNAPSHOT bid levels** | **SNAPSHOT ask levels** | top of book |
+|---|---|---|---|---|
+| `TSLA/USD` | liquid | ⭐ **20** | ⭐ **21** | 367.49 x 40 / 367.51 x 80 |
+| `KRAQ/USD` | thin | **2** | **1** | 9.99 x 800 / 10.16 x 100 |
+| `AMBR/USD` | thin | **2** | **2** | 1.11 x 200 / 1.24 x 100 |
+| `SLMT/USD` | thin | **2** | **2** | 4.02 x 100 / 4.41 x 100 |
+
+⇒ ★★ **THE `book` CHANNEL SERVES A GENUINE ~20-LEVEL LADDER WHERE A MARKET EXISTS TO FILL IT, AND 1-2 LEVELS WHERE ONE DOES NOT.** **That is real depth, not a feed defect.**
+⇒ ⛔ **AND IT REFRAMES `3b.d`: subscribing does NOT uniformly buy us a ladder. It buys a real one on liquid names and almost nothing on thin ones — which is where fill modelling matters MOST.** The batch must be scoped on that asymmetry, not on "we get 10 levels."
+
+⚠️ **AN ERROR MADE AND CAUGHT INSIDE THIS MEASUREMENT, recorded because the wrong number was plausible:** my first multi-symbol run reported `TSLA` at **2 levels**, contradicting a same-hour run that showed 20. **Cause: I recorded whichever frame arrived FIRST, and an `update` frame carries only the CHANGED levels — so I was measuring the size of a delta and calling it the depth of a book.** Fixed by keying on `type === 'snapshot'`; the corrected run reproduces 20 on `TSLA` while still showing 2 on the thin names. ★ **The thin numbers were right by accident; the liquid one was wrong. A control that agrees with your expectation is the one that hides the bug.**
+**Instrument: `/tmp/bookprobe_thin.cjs` on staging (read-only, snapshot-keyed).**
+
+⇒ **`3b.d` NOW HAS ITS SCOPING FACT.** ⛔ **STILL UNANSWERED AND STILL GATING IT (Langston): does `F-G-2`'s xStock half need DEPTH, or only SIDE? We already hold both sides at top-of-book. If only SIDE, `3b.d` is not `F-G-2`'s prerequisite at all and drops to the tail.**
