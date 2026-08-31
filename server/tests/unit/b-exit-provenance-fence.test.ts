@@ -14,7 +14,8 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { toCachedProducer, type PriceProducer } from '../../services/live-pricing-adapter';
+import { toCachedProducer, livePricingAdapter, type PriceProducer } from '../../services/live-pricing-adapter';
+import { restRateLimiter } from '../../services/market-data/rest-rate-limiter';
 
 const SERVER = join(__dirname, '..', '..');
 const AEE = readFileSync(join(SERVER, 'services', 'active-execution-engine.ts'), 'utf8');
@@ -278,7 +279,7 @@ describe('B-EXIT-PROVENANCE — the exit stamp cannot be satisfied by a non-prov
     expect(fn).toContain("producer: 'kraken_rest_rate_limited_reserve'");
   });
 
-  it('#951 P1 - the null test is on the PRICE, not the row (refactor-divergence fence)', () => {
+  it('#951 P1 - the nullish predicate SUBSTRING is present (static fence; the behavioural one below is the real guard)', () => {
     // The original was `return cached?.price ?? null`. Rewriting it as `cached ? {...} : null`
     // tests the ROW, which diverges on exactly one input: a row present with an absent price.
     // That would return `price: undefined`, and fetchPrice's cache-write guard is
@@ -287,12 +288,18 @@ describe('B-EXIT-PROVENANCE — the exit stamp cannot be satisfied by a non-prov
     // semantics if they ever stop forbidding it.
     const src = code(LPA);
     const start = src.indexOf('private async fetchFromKrakenRest');
-    const fn = src.slice(start, src.indexOf('private async fetchMockPrice', start));
+    expect(start).toBeGreaterThan(-1);
+    const end = src.indexOf('private async fetchMockPrice', start);
+    // ⛔ SAME GUARD AS THE SIBLING TEST. The commit that hardened that one shipped THIS one
+    // unguarded, twenty lines below it — hardening an instance while adding a fresh copy of the
+    // defect. Without this, a renamed end-marker makes slice(start, -1) the rest of the file.
+    expect(end).toBeGreaterThan(start);
+    const fn = src.slice(start, end);
     expect(fn).toContain('cached && cached.price != null');
     expect(fn).not.toMatch(/return cached\s*\n?\s*\?/);
   });
 
-  it('#951 P1 - the STAMPING SITE emits an unconditional `source`, so no re-serve is made non-actionable', () => {
+  it('#951 P1 - the stamping literal carries an INLINE-UNCONDITIONAL `source` (narrow fence, see note)', () => {
     // ⛔ THIS TEST REPLACES ONE THAT COULD NOT FAIL. The first version sliced the CachedPrice type
     // DECLARATION and asserted it still said 'kraken_rest'. A second reader mutated the actual
     // stamping site to `krakenResult.producer === 'kraken_rest_rate_limited_reserve' ?
@@ -314,6 +321,81 @@ describe('B-EXIT-PROVENANCE — the exit stamp cannot be satisfied by a non-prov
     expect(block).not.toMatch(/source:\s*[^'\n]*\?/);      // no ternary
     expect(block).not.toMatch(/source:\s*krakenResult/);     // not derived from the fetch result
     expect(block).not.toContain('last_known_good');
+  });
+
+  describe('#951 P1 BEHAVIOURAL - the rate-limited branch, actually executed', () => {
+    // ⛔ WHY THIS EXISTS: every other fence in this file matches STRINGS, and a second reader
+    // defeated the static ones FOUR ways — by moving the mutation outside the sliced block, by
+    // refusing on age inside the branch (never touching `source` at all), by spreading a
+    // conditional override into the same literal, and by parenthesising `(cached)` to keep the
+    // pinned substring alive while re-introducing the regression. A fence that reads source text
+    // cannot see the predicate that actually governs the return. This one calls the code.
+    //
+    // The limiter is deterministic: one check() arms a per-symbol cooldown, so the NEXT call is
+    // blocked without any mocking, timing, or network.
+    const SYM = 'ZZZTEST/USD';
+    const OLD_OBSERVED = 1_600_000_000_000; // fixed, and far from Date.now()
+
+    const seed = (price: unknown) => {
+      const a = livePricingAdapter as unknown as { priceCache: Map<string, unknown> };
+      a.priceCache.set(SYM, {
+        symbol: SYM, price, timestamp: new Date(OLD_OBSERVED).toISOString(),
+        source: 'kraken_rest', producer: 'kraken_rest_poller',
+        observedAt: OLD_OBSERVED, cachedAt: Date.now(),
+      });
+    };
+    const callBlocked = async () => {
+      restRateLimiter.check(SYM);            // arms the cooldown -> next call is blocked
+      const a = livePricingAdapter as unknown as {
+        fetchFromKrakenRest: (s: string) => Promise<{ price: number; observedAt: number; producer: string } | null>;
+      };
+      return a.fetchFromKrakenRest(SYM);
+    };
+
+    it('carries the ORIGINAL observedAt, never a fresh stamp', async () => {
+      seed(123.45);
+      const r = await callBlocked();
+      expect(r).not.toBeNull();
+      expect(r!.observedAt).toBe(OLD_OBSERVED);           // the whole batch, in one assertion
+      expect(r!.producer).toBe('kraken_rest_rate_limited_reserve');
+      expect(r!.price).toBe(123.45);
+      expect(Math.abs(Date.now() - r!.observedAt)).toBeGreaterThan(1_000_000);
+    });
+
+    it('returns null when the cached PRICE is absent (the row-vs-price regression)', async () => {
+      seed(undefined);
+      // Defeats the parenthesise-the-row evasion: this asserts the PREDICATE's effect, not its text.
+      expect(await callBlocked()).toBeNull();
+    });
+
+    it('the EMITTED QUOTE keeps source=kraken_rest — the actionability property, executed', async () => {
+      // ⛔ THE OTHER TWO EVASIONS. The three fences above call fetchFromKrakenRest directly, so
+      // they cannot see a mutation at the CALLER — where `source` is stamped. A reader defeated
+      // the static fence by assigning the literal to a const and mutating it after the block, and
+      // again by spreading a conditional override into the literal itself. Both are caller-side.
+      // This calls fetchLivePrice, so the quote it returns is the one the engine would gate on.
+      seed(77.5);
+      restRateLimiter.check(SYM);            // arm the cooldown -> the REST leg will be blocked
+      const a = livePricingAdapter as unknown as {
+        fetchLivePrice: (s: string) => Promise<{ source: string; producer: string; observedAt: number | null } | null>;
+      };
+      const q = await a.fetchLivePrice(SYM);
+      expect(q).not.toBeNull();
+      // the actionability property, asserted on the EMITTED value rather than on source text
+      expect(q!.source).toBe('kraken_rest');
+      // and the provenance half this batch ships
+      expect(q!.producer).toBe('kraken_rest_rate_limited_reserve');
+      expect(q!.observedAt).toBe(OLD_OBSERVED);
+    });
+
+    it('still serves a cached price of 0 — the predicate must not be STRENGTHENED', async () => {
+      seed(0);
+      // The original was `cached?.price ?? null`, which returns 0. A `> 0` test would return null
+      // here, changing source, producer AND actionability. Equivalence cuts both ways.
+      const r = await callBlocked();
+      expect(r).not.toBeNull();
+      expect(r!.price).toBe(0);
+    });
   });
 
   it('P11 - the SPLIT is pure re-description: coarse names gone, nothing merged or deleted', () => {

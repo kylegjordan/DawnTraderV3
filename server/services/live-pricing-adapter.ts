@@ -706,7 +706,15 @@ export class LivePricingAdapter {
         //    and handed to the exit evaluation. `!= null` reproduces the old `??` exactly.
         //    Caught by a second reader on the implementation; the types forbid it today, which is
         //    precisely why nothing would have failed until something else changed.
-        return cached && cached.price != null
+        // ⛔ `observedAt` IS GUARDED FOR THE SAME REASON AS `price`, and leaving it out was
+        //    MY OWN INCONSISTENCY: the first fix reasoned "the types forbid an absent price
+        //    today, which is precisely why nothing would fail until something else changed"
+        //    — and then relied on exactly that posture for `observedAt` in the same
+        //    expression. Worse, this one is a NEW exposure: the old code emitted
+        //    `Date.now()` here, so an absent origin time could not reach the exit stamp.
+        // ⇒ IF WE CANNOT STATE THE AGE HONESTLY, WE DO NOT SERVE THE PRICE. That is this
+        //    batch's whole premise applied to its own edge case, not a new policy.
+        return cached && cached.price != null && cached.observedAt != null
           ? { price: cached.price, observedAt: cached.observedAt, producer: 'kraken_rest_rate_limited_reserve' }
           : null;
       }
