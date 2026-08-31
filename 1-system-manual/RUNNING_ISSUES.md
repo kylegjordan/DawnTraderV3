@@ -6333,3 +6333,29 @@ CC-A's batch argues the workflow is not reliably firing. **This is that thesis, 
 ⛔ **WHAT MUST BE RE-BASED BEFORE THE BATCH IS SCOPED: the SEVERITY argument.** It now rests on **selection-path staleness** (the RTB pool ranks on prices up to a minute old, and `fx5Snapshot` — the scanner's own lane — is the other dead one) **and on xStock**, NOT on crypto exits. ⇒ **`3b.f-a`'s PLACEMENT ahead of the freshness work is referred to Langston to re-rule on, since I placed it partly on the claim I have just narrowed.**
 
 ★ **METHOD NOTE, recorded because it is the batch's own lesson landing on me twice in one day:** this is the SECOND time in this arc that an inferred MECHANISM survived a correct MEASUREMENT (the first was Langston's condition 1 — right arithmetic, wrong consumer). **The number was never wrong; the story about the number was.** ⇒ **`wrong-object`, and the discriminator that caught it was tracing ONE symbol end-to-end instead of reading an aggregate.**
+
+---
+
+### #959 AMENDMENT 1 — ⛔⛔ THE FRAMING IS WRONG AND `#943` HAD IT RIGHT. **THE FILL IS CORRECT; THE *DECISION* IS WRONG.** NARROWED TO THE 00:15 WINDOW.
+
+**Corrected 2026-08-31 by CC-C after KYLE PUSHED BACK — he said he believed this was already addressed and told me to check I was looking at it correctly. He was right that I was not.** Re-measured at the live DB before amending.
+
+⛔ **THE GENERAL CLAIM IS REFUTED. Outside the 00:15 window the exit TRIGGER and the exit FILL AGREE CLOSELY — on xStock more closely than on crypto.**
+| class | window | n | mean abs gap | max | mean signed |
+|---|---|---|---|---|---|
+| `crypto_spot` | not 00:15 | 20 | **0.184%** | 1.08% | −0.182% |
+| `xstock_spot` | **AT 00:15** | **5** | ⛔ **26.211%** | **48.01%** | +3.233% |
+| `xstock_spot` | not 00:15 | 6 | ✅ **0.112%** | 0.38% | +0.049% |
+⇒ ★ **THE ENTIRE HEADLINE — *"n=9 mean abs gap 14.038%"* — IS FIVE ROWS AT ONE MINUTE OF THE DAY.** The row reported it as a property of the exit ARCHITECTURE; it is a property of **one daily window**. **Zero crypto rows fall at 00:15.**
+
+⛔⛔ **AND THE DIAGNOSIS WAS BACKWARDS. `#943` states it correctly and this entry did not:** *"`exit_price` and `exit_ticker_bid` are CORRECT; only the DECISION was wrong."*
+**MEASURED ON THE ROWS THEMSELVES — the fill EQUALS the ticker bid, which is the correct read for a forced sale:** `NOW` fill 143.200 = bid 143.200 · `TGT` 157.000 = 157.000 · `BE` 207.140 = 207.140 · `CRM` 226.540 = 226.540 · `MRNA` 141.800 = 141.800.
+**What is deranged at 00:15 is the BOOK the decision was taken against:** spreads of **6.4%** (`TGT`), **8.6%** (`WEN`), **17.9%** (`BABA`) against **0.0–0.4%** in normal hours. ⇒ **a correct fill rule reading a collapsed book, not two samples disagreeing by design.**
+
+⇒ ⛔ **DISPOSITION — §9.4 (5), WITHDRAWN AS A SEPARATE DEFECT, CARRYING THE CITATION THAT DISSOLVES IT: this is `#943` / plan row 3b.b SEEN FROM THE OTHER END.** `#943` already owns it with a larger population — **65 closes since 2026-07-17, 27.1% of all xStock stop-outs and 29.5% of target-hits, ZERO crypto ever** — and already carries the eliminations (not stale, not a restart, not `last_known_good`, not a cron, entries unaffected). **Re-scoping it as a trigger/fill parity batch would have burned a review cycle on a defect that is not there and MISSED the one that is.**
+⚠️ **`3b.c` IS THEREFORE VACATED AS FRAMED.** The residual worth keeping is one sentence, folded into `#943`: **the 00:15 bad print is what the DECISION reads, and the fill's correctness is what makes the rows look ordinary** — which is precisely why the cohort survived seven weeks.
+
+⛔ **STILL OCCURRING — KYLE'S SECOND QUESTION, ANSWERED WITH A SPECIMEN, NOT A REASSURANCE: `BABA/USD`, 2026-08-31 00:15, `stop_hit`, trigger 112.750 → booked 118.400 (+5.01%) against a book quoted 112.000 / 132.000 — a 17.9% spread.** That is **today**, and it is **after** the F-G-1 grid deploy (`56ac8067a`, 2026-08-28).
+⚠️ **WHETHER RECENT WORK REDUCED THE MAGNITUDE IS *NOT* ESTABLISHED AND I WILL NOT CLAIM IT: 48.01 / 35.67 / 20.59% on 08-29 versus 5.01% on 08-31 is THREE ROWS AGAINST ONE.** ★ **A drop across n=3 → n=1 is an anecdote, not a trend** — and the 00:15 cohort is exactly the population where I have already been caught reading a shape into too few rows.
+
+★ **METHOD NOTE: THE LEDGER SEARCH `§9.5(b-ii)` MANDATES WOULD HAVE CAUGHT THIS AND I RAN IT TOO NARROWLY.** I searched for the FILL convention (and found `BATCH_65`'s deliberate split, correctly) but never searched the SYMPTOM's own window — the specimens `NOW`/`TGT`/`WEN` sit in `#943`'s entry **by name**. **Kyle's memory was the instrument that caught it.**
