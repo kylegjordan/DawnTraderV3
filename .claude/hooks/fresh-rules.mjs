@@ -200,8 +200,14 @@ try {
     if (!differs) continue;
 
     // (a) UNCOMMITTED local edits — never overwrite.
-    let dirty = '';
-    try { dirty = run(['status', '--porcelain', '--', path]); } catch { dirty = ''; }
+    // ★ THE THIRD ENUMERATOR, RETIRED (Langston's rider on the approval). This asked the same
+    // question with different flags — `--porcelain`, no `-uall`, trimmed — and was identical to
+    // dirtyMembers() only AS A TRUTHINESS TEST, and only today: an untracked subdir reports
+    // `?? .claude/hooks/lib/` either way, so both are non-empty. That is "correct by coincidence",
+    // which is the exact charge I level a hundred lines below at the quiet-condition. One
+    // enumerator or the comment is a lie.
+    let dirty = false;
+    try { dirty = dirtyMembers(path).length > 0; } catch { dirty = false; }
     // ★★ B-CROSS-SESSION-BLEED P5(b) — DIRTY IS NOT THE SAME QUESTION AS "YOURS".
     //
     // THE DEFECT THIS FIXES (#753, A14): once this hook refreshed a path, that path was dirty
@@ -215,7 +221,7 @@ try {
     // PRIOR REFRESH — not the session's work. Refresh it; do not freeze it.
     if (dirty && isHookResidue(path)) {
       residueRefreshed.push([path, why]);
-      dirty = '';                       // fall through to the refresh below
+      dirty = false;                    // fall through to the refresh below
     }
     if (dirty) {
       // Langston's rider: name the member that held the entry back. A session otherwise
