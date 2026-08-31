@@ -207,10 +207,14 @@ describe('B-EXIT-PROVENANCE — the exit stamp cannot be satisfied by a non-prov
     // rejected or a position to be skipped THROUGH IT.
     // NARROWED 2026-08-30 (B-EXIT-BOOK-AGE-STAMP). This said the risk was 'structurally absent
     // rather than merely guarded', FULL STOP. Too strong, and withdrawn over two reader rounds:
-    // toCachedProducer's null arm IS a producer-dependent branch - it gates the cache write, a
-    // miss there reaches last_known_good, fails this very gate, and falls to direct REST, which
-    // is a SKIPPED POSITION if REST also fails. Unreachable TODAY only because of today's call
-    // sites, which is #546's entire lesson. The P11 test below is what holds the property now.
+    // toCachedProducer's null arm IS a producer-dependent branch - it gates the cache write.
+    // CORRECTED 2026-08-31 (#951): this comment used to say a miss "reaches last_known_good, fails
+    // this very gate, and falls to direct REST, which is a SKIPPED POSITION". That is FALSE, and
+    // it is the third copy of the same wrong mechanism (the other two were in the source). A
+    // suppressed write leaves the PREVIOUS row in the map; getPriceWithFallback finds it and
+    // returns it under its ORIGINAL tag WITHOUT re-checking age, so it passes this gate as
+    // venue-fresh. Worse than a skip, not safer. Unreachable TODAY only because of today's call
+    // sites, which is #546's entire lesson. The P11 tests below are what hold the property now.
     const gate = code(LPA).match(/export function isKrakenVenueSource[\s\S]{0,220}?\n\}/)?.[0] ?? '';
     expect(gate).toContain('source ===');
     expect(gate).not.toContain('producer');
@@ -235,6 +239,51 @@ describe('B-EXIT-PROVENANCE — the exit stamp cannot be satisfied by a non-prov
     ] as PriceProducer[]) {
       expect(toCachedProducer(m)).toBe(m);
     }
+  });
+
+  it('#951 P3 FENCE - the rate-limited re-serve producer is CACHEABLE, not suppressed', () => {
+    // MUTATION-PROVABLE BY CONSTRUCTION, and that is the point: move
+    // 'kraken_rest_rate_limited_reserve' into toCachedProducer's `return null` arm and THIS LINE
+    // FAILS. The `never` default cannot catch that - a member in the null arm still belongs to
+    // CachedProducer (an Exclude of two hardcoded names), so it compiles.
+    // WHY IT IS LOAD-BEARING RATHER THAN HYGIENE (Langston, #951 Step-2 condition 2): a null-arm
+    // placement suppresses the cache write, which leaves the PREVIOUS row in the map to be
+    // re-served under its ORIGINAL tag with NO age re-check. That is not a safe failure - it is
+    // this batch's own defect, re-created by the fix meant to remove it.
+    expect(toCachedProducer('kraken_rest_rate_limited_reserve' as PriceProducer)).toBe('kraken_rest_rate_limited_reserve');
+  });
+
+  it('#951 P1 - the rate-limited branch carries the age instead of discarding it', () => {
+    // The defect was a BARE `return cached?.price ?? null`: the caller could not distinguish a
+    // re-served cached price from a genuine venue read, so it stamped `observedAt: Date.now()`.
+    // Assert the shape is gone and the carry is present.
+    const src = code(LPA);
+    // Sliced by index, not matched by a length-capped regex: the function is ~90 lines and a
+    // capped pattern silently returned '' — a test that fails for the wrong reason is no test.
+    const start = src.indexOf('private async fetchFromKrakenRest');
+    expect(start).toBeGreaterThan(-1);
+    const fn = src.slice(start, src.indexOf('private async fetchMockPrice', start));
+    expect(fn).toBeTruthy();
+    // the laundering shape must be gone
+    expect(fn).not.toContain('return cached?.price ?? null');
+    // and the true observation time must be carried through
+    expect(fn).toContain('observedAt: cached.observedAt');
+    expect(fn).toContain("producer: 'kraken_rest_rate_limited_reserve'");
+  });
+
+  it('#951 P1 - `source` is UNCHANGED, so this batch changes no trading decision', () => {
+    // THE SPLIT'S OWN FALSIFIER (Langston condition 1). B-PRICE-AGE-TRUTH ships the provenance
+    // half only; making the re-serve NON-actionable is B-PRICE-AGE-REFUSAL, carved out and gated
+    // because relabelling `source` routes the blocked population onto the engine's
+    // un-rate-limited direct REST leg.
+    // If a future edit adds a new literal to the CachedPrice source union, this fails - which is
+    // the intended alarm, not a nuisance.
+    const src = code(LPA);
+    const i = src.indexOf('interface CachedPrice {');
+    const union = src.slice(i, src.indexOf('}', i));
+    expect(union).toContain("'kraken_rest'");
+    expect(union).not.toContain('rate_limited');
+    expect(union).not.toContain('reserve');
   });
 
   it('P11 - the SPLIT is pure re-description: coarse names gone, nothing merged or deleted', () => {

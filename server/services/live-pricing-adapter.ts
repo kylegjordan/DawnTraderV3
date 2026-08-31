@@ -77,14 +77,25 @@ export type PriceProducer =
   | 'kraken_equities_ws_last'          // same site; the archiver's `latestEquityTick.kind` decides which
   | 'kraken_rest_engine_fallback_mid'  // active-execution-engine.ts:1309 (+ the updateCache arg at :1332)
   | 'kraken_rest_engine_fallback_last' // same site — `ask`/`bid` are in scope at :1301-1303
-  | 'kraken_rest_poller'               // this file :547, inside fetchLivePrice (mid computed at :692)
-                                       // ⛔ DELIBERATELY *NOT* SPLIT (Langston condition 2). This producer
-                                       //    has THREE arms, not two: the mid and the last (both :692), and
-                                       //    the RATE-LIMITED branch at :631 which returns
-                                       //    `cached?.price` — a BARE NUMBER with no age and no kind. A
-                                       //    `_mid`/`_last` dichotomy here would stamp a laundered cached
-                                       //    value with a confident kind: #951 wearing a new label, and
-                                       //    #546 exactly. #951 splits it when it fixes that branch.
+  | 'kraken_rest_poller'               // fetchLivePrice's REST leg — a GENUINE venue read.
+                                       // ⛔ STILL NOT SPLIT BY KIND (mid vs last), and that is Langston
+                                       //    condition 2 from B-EXIT-BOOK-AGE-STAMP, unchanged.
+                                       // ✅ B-PRICE-AGE-TRUTH (#951) HAS NOW SPLIT OFF ITS THIRD ARM —
+                                       //    the rate-limited re-serve below. The union comment used to say
+                                       //    "#951 splits it when it fixes that branch"; this is that split.
+  | 'kraken_rest_rate_limited_reserve' // fetchFromKrakenRest's rate-limiter branch: the venue was NOT
+                                       //    asked, and a previously-cached price is re-served. It carries
+                                       //    that row's ORIGINAL observedAt, never a fresh stamp.
+                                       // ⛔ IT IS A DISTINCT TOKEN, NOT A REUSE OF `last_known_good_*`,
+                                       //    for the reason those four were split from each other: one
+                                       //    token cannot answer "outage, or gate?" from a row. An outage
+                                       //    means the venue failed us; this means WE CHOSE NOT TO ASK.
+                                       //    Different cause, different remediation, different duration.
+                                       // ⚠️ THIS TOKEN CHANGES NO TRADING DECISION. The engine's
+                                       //    actionable gate reads `source` and never `producer`, and
+                                       //    `source` is deliberately UNCHANGED here — making the
+                                       //    re-serve non-actionable is B-PRICE-AGE-REFUSAL, carved out
+                                       //    and gated, NOT this batch.
   | 'xstock_rest_gate_reserve'         // :522 — BY DESIGN, not a failure: the B8.9 xStock REST
                                        //        class-gate makes no venue ask, so nothing failed.
                                        //        Splitting it from the outage legs is what lets a row
@@ -124,9 +135,15 @@ export type PriceProducer =
                                        //        ⛔ THIS LINE USED TO SAY THE RISK WAS "STRUCTURALLY
                                        //        ABSENT" FULL STOP. IT IS NOT. `toCachedProducer`'s
                                        //        `null` arm IS a producer-dependent branch: it gates the
-                                       //        cache write at :473 and :1248, and a miss there reaches
-                                       //        `last_known_good`, fails the venue gate, and falls to
-                                       //        direct REST — a SKIPPED POSITION if REST also fails.
+                                       //        cache write at the fetchPrice writer and the priceTick
+                                       //        subscriber below. ⛔ CORRECTED (#951): the old text here
+                                       //        said a miss "reaches last_known_good, fails the venue gate
+                                       //        and falls to direct REST — a skipped position". THAT IS
+                                       //        FALSE. A suppressed write leaves the PREVIOUS row in the
+                                       //        map, so getPriceWithFallback finds it and returns it under
+                                       //        its ORIGINAL tag, WITH NO AGE RE-CHECK — bypassing the
+                                       //        freshness window as well as the predicate. A stale price
+                                       //        served as venue-fresh, which is worse than a skip.
                                        //        It is unreachable TODAY only because of today's call
                                        //        sites, which is #546's entire lesson. A new member goes
                                        //        in the PASSTHROUGH arm, and the fence asserts it.
@@ -159,9 +176,14 @@ export function toCachedProducer(p: PriceProducer): CachedProducer | null {
       return p;
     // ⛔ B-EXIT-BOOK-AGE-STAMP P11 — THE SIX SPLIT MEMBERS BELONG IN *THIS* ARM, NOT THE `null` ONE
     //    ABOVE. The `never` default forces a DECISION for every new member; it cannot force the
-    //    CORRECT one. A member placed in the null arm suppresses the cache write at :429 and :1201,
-    //    which reaches `last_known_good`, fails the venue gate, and falls to direct REST — a skip if
-    //    REST also fails. Unreachable today only because of today's call sites (#546's whole lesson).
+    //    CORRECT one. A member placed in the null arm suppresses the cache write at the fetchPrice
+    //    writer and the priceTick subscriber.
+    //    ⛔ CORRECTED (#951): the old text said that suppression "reaches last_known_good, fails the
+    //    venue gate, and falls to direct REST — a skip". THAT IS FALSE, and it is what a prior audit
+    //    propagated. A suppressed write leaves the PREVIOUS row in the map; getPriceWithFallback
+    //    finds it, returns it under its ORIGINAL tag, and RE-CHECKS NO AGE — so it passes the gate
+    //    as venue-fresh. Worse than a skip, not safer. Unreachable today only because of today's
+    //    call sites (#546's whole lesson).
     //    `b-exit-provenance-fence.test.ts` asserts each of these returns NON-NULL.
     case 'kraken_ws_ticker_mid':
     case 'kraken_ws_ticker_last':
@@ -172,6 +194,7 @@ export function toCachedProducer(p: PriceProducer): CachedProducer | null {
     case 'kraken_rest_engine_fallback_mid':
     case 'kraken_rest_engine_fallback_last':
     case 'kraken_rest_poller':
+    case 'kraken_rest_rate_limited_reserve':
     case 'xstock_rest_gate_reserve':
     case 'last_known_good_all_apis_failed':
     case 'last_known_good_fetch_exception':
@@ -202,6 +225,19 @@ interface PriceQuote {
    * price reads as seconds old for ever. `null` only on the no-price arm.
    */
   observedAt: number | null;
+}
+
+/**
+ * B-PRICE-AGE-TRUTH (#951): what the Kraken REST leg returns.
+ * It replaces a bare `number`, whose whole problem was that the caller could not tell a genuine
+ * venue read from a re-served cached price and stamped both as observed-now.
+ */
+interface RestFetchResult {
+  price: number;
+  /** The ORIGINAL observation time. Fresh only when the venue was actually asked. */
+  observedAt: number;
+  /** Which of the two arms produced it — the caller must not infer this. */
+  producer: 'kraken_rest_poller' | 'kraken_rest_rate_limited_reserve';
 }
 
 interface CachedPrice {
@@ -537,15 +573,21 @@ export class LivePricingAdapter {
       // Binance-first + CoinGecko legs are DELETED — the display venue now matches the
       // venue the engine prices and exits against (no UI showing a Binance number for a
       // position Kraken will fill).
-      const krakenPrice = await this.fetchFromKrakenRest(symbol);
-      if (krakenPrice !== null) {
+      const krakenResult = await this.fetchFromKrakenRest(symbol);
+      if (krakenResult !== null) {
         return {
           symbol,
-          price: krakenPrice,
+          price: krakenResult.price,
           timestamp: new Date().toISOString(),
+          // ⛔ `source` UNCHANGED, deliberately. Relabelling it is what makes the re-serve
+          //    non-actionable, and that is carved out to B-PRICE-AGE-REFUSAL because it would
+          //    route the blocked population onto the engine's un-rate-limited direct REST leg.
           source: 'kraken_rest',
-          producer: 'kraken_rest_poller',
-          observedAt: Date.now(),            // a genuine venue read: observed now
+          // ✅ B-PRICE-AGE-TRUTH (#951): both of these now come FROM the fetch, which knows
+          //    whether the venue was actually asked. The old code hard-coded a poller producer
+          //    and `Date.now()` here, which is what laundered the rate-limited re-serve.
+          producer: krakenResult.producer,
+          observedAt: krakenResult.observedAt,
         };
       }
 
@@ -621,14 +663,25 @@ export class LivePricingAdapter {
    * This is the PRIMARY fallback for Kraken-specific pairs when WebSocket is stale
    * Phase 8.8.5: Integrated RestRateLimiter to prevent Kraken bans
    */
-  private async fetchFromKrakenRest(symbol: string): Promise<number | null> {
+  private async fetchFromKrakenRest(symbol: string): Promise<RestFetchResult | null> {
     try {
       // Phase 8.8.5: Check rate limiter before making REST call
       if (!restRateLimiter.check(symbol)) {
         const cached = this.priceCache.get(this.normalizeSymbol(symbol));
-        console.log(`[8.8.5][REST_BLOCKED] ${symbol}: Rate limited, using cached price=${cached?.price ?? 'none'}`);
+        console.log(`[8.8.5][REST_BLOCKED] ${symbol}: Rate limited, using cached price=${cached?.price ?? 'none'} observedAt=${cached?.observedAt ?? 'none'}`);
         krakenWebSocketAdapter.incrementRestFallbackBlocked();
-        return cached?.price ?? null;
+        // ⛔ B-PRICE-AGE-TRUTH (#951): this branch used to `return cached?.price ?? null` — a BARE
+        //    NUMBER. The caller could not tell it from a genuine venue read and stamped it
+        //    `observedAt: Date.now()`, so a price of arbitrary age was recorded as observed-now.
+        //    The row already HELD its true age: the honest last-known-good leg further down reads
+        //    the SAME cache object and carries `cached.observedAt` through. This branch simply
+        //    discarded it. It no longer does.
+        // ⚠️ `source` is intentionally unchanged by this batch, so the engine's actionable gate
+        //    still admits this price exactly as before — the age becomes RECOVERABLE, it does not
+        //    become REFUSED. Refusal is B-PRICE-AGE-REFUSAL, carved out and gated.
+        return cached
+          ? { price: cached.price, observedAt: cached.observedAt, producer: 'kraken_rest_rate_limited_reserve' }
+          : null;
       }
       
       // Phase 8.8.5: REST call allowed
@@ -703,7 +756,9 @@ export class LivePricingAdapter {
       const normalized = this.normalizeSymbol(symbol);
       priceCache.updateFromRest(normalized, midpoint);
       
-      return midpoint;
+      // A real venue read: `observedAt` is genuinely now, and it is the ONLY return here that
+      // may say so.
+      return { price: midpoint, observedAt: Date.now(), producer: 'kraken_rest_poller' };
 
     } catch (error) {
       console.error(`[8.8.3-I6][KRAKEN_REST_EXCEPTION] ${symbol}:`, error);
