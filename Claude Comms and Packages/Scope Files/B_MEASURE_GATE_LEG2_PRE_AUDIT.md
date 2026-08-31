@@ -264,7 +264,21 @@ I wrote the trace **INSIDE the sentinel branch**, so every failure that happens 
 
 | doc | ✅ DECIDED NOW |
 |---|---|
-| **`SYSTEM_IMPACT_MAP.md`** | ✅ **DISCHARGEABLE FOR REAL, AND IT IS NOT PADDING — BUT `[r5]` THE JUSTIFICATION IS REWRITTEN, BECAUSE LANGSTON CAUGHT IT RESTING ON A PHRASE THIS DOCUMENT STRIKES AS UNCITED FOUR PARAGRAPHS EARLIER.** I wrote *"a hook running in every session in all three clones"* here, and §0 strikes *"live in all three clones"* as unmeasured. **Two readings of the same fact, in one document, one of them retracted.** ★ **THE ENTRY NOW RESTS ON THE TEN-HOOK LIVENESS GAP, WHICH STANDS ALONE AND NEEDS NO REACH CLAIM: the SIM opens with the Cross-Cutting Runtime State, Singletons & Liveness Registry, and a layer of TEN executing hooks is absent from it entirely.** ✅ **AND THE REACH IS NOW MEASURED RATHER THAN DROPPED, because he was also right that the number was wrong: FOUR clones on this laptop each carry all ten hooks and a `settings.local.json` (`-old`, `-new`, `-analyst`, and the spare `C:\DawnTraderV3`), and the roster binds FOUR sessions (CC-A, CC-B, CC-C, CC-INFRA).** ⚠️ **Stated as two separate counts, NOT collapsed: clones are not sessions, and I have no read-site for how many sessions are running at any moment.** ⇒ **the registry entry records: what fires, on which event, fail-open or blocking, its liveness read-site, and the clone count with its date.** |
+| **`SYSTEM_IMPACT_MAP.md`** | ✅ **DISCHARGEABLE FOR REAL, AND IT IS NOT PADDING — BUT `[r5]` THE JUSTIFICATION IS REWRITTEN, BECAUSE LANGSTON CAUGHT IT RESTING ON A PHRASE THIS DOCUMENT STRIKES AS UNCITED FOUR PARAGRAPHS EARLIER.** I wrote *"a hook running in every session in all three clones"* here, and §0 strikes *"live in all three clones"* as unmeasured. **Two readings of the same fact, in one document, one of them retracted.** ★ **THE ENTRY NOW RESTS ON THE TEN-HOOK LIVENESS GAP, WHICH STANDS ALONE AND NEEDS NO REACH CLAIM: the SIM opens with the Cross-Cutting Runtime State, Singletons & Liveness Registry, and a layer of TEN executing hooks is absent from it entirely.** ⛔⛔ **`[r6]` AND MY "FOUR CLONES" WAS ALSO WRONG — CAUGHT WITHIN THE HOUR, AND THE CAUSE IS THIS BATCH’S OWN SUBJECT: I ENUMERATED A LIST I HAD WRITTEN INSTEAD OF GLOBBING THE DISK.** My loop tested four hard-coded paths; **`C:\DawnTraderV3-infra` exists and was never in the list, so it could not have been found.**
+✅ **GLOBBED: FIVE CLONES, ALL ON `migration/aws-supabase`, AT FIVE DIFFERENT HEADS:**
+
+| clone | head | its copy of `probe-warn-delivery.mjs` |
+|---|---|---|
+| `-old` | `d04c3f902` | **3,912 B** (current) |
+| `-new` | `b15db3936` | **3,912 B** (current) |
+| `-analyst` | `81f181e76` | **3,912 B** (current) |
+| `-infra` | `7c1a3d034` | ⚠️ **3,480 B — an intermediate revision** |
+| `C:\DawnTraderV3` (spare) | `38e0a539c` | ⛔ **637 B — THE ORIGINAL 08-07 PROBE** |
+
+★★ **THREE DIFFERENT VERSIONS OF ONE HOOK ARE EXECUTING SIMULTANEOUSLY, AND HEAD DOES NOT TELL YOU WHICH.** `-new` and `-analyst` sit BEHIND `-old` yet hold the SAME current hook — because `fresh-rules.mjs` writes `.claude/*` from origin into the working tree at session start. ⇒ **THE HOOK ESTATE IS VERSIONED BY WHEN EACH SESSION LAST STARTED, NOT BY ITS COMMIT.** The spare has never been freshened because no session runs there.
+
+★ **THAT IS OBJ-5’S JUSTIFICATION, MEASURED RATHER THAN ARGUED: a hook shipped today is current in three clones, stale in a fourth, and 24 days out of date in a fifth — AND NOTHING REPORTS THAT.** Same shape as CC-B sitting 747 commits behind for 15 days. ⇒ **`project_dir` is now stamped on every probe row so a reader can tell WHICH COPY spoke.**
+⚠️ **Stated as separate counts, not collapsed: FIVE clones · FOUR rostered sessions (CC-A, CC-B, CC-C, CC-INFRA) · and NO read-site for how many are running at any moment.** Clones are not sessions and the counts do not pair off — the spare belongs to no session, and `-infra` is not named in the roster entry binding CC-INFRA. ⚠️ **Stated as two separate counts, NOT collapsed: clones are not sessions, and I have no read-site for how many sessions are running at any moment.** ⇒ **the registry entry records: what fires, on which event, fail-open or blocking, its liveness read-site, and the clone count with its date.** |
 | **`SYSTEM_MANUAL.md`** | ⛔⛔ **BLOCKED — NOT `N/A`, AND I AM NAMING IT RATHER THAN TICKING IT.** Its scope is architecture, strategy logic, regime detection, filter design, the signal pipeline and the maths. **This batch touches none of them and inventing a chapter to discharge a row would be padding a governance document to satisfy a matrix, which is worse than the gap.** |
 
 ★★ **THE MATRIX HAS NO CLASS FOR *"AFFECTS EVERY SESSION’S TOOLING, TOUCHES ZERO TRADING ARCHITECTURE"* — and it has no `BLOCKED` state either, only `REQUIRED` and `JUDGED`.** ⇒ **a required row that genuinely cannot be discharged takes a ✅ it has not earned. THAT IS HOW A FALSE TICK GETS WRITTEN, and I wrote two of them on `B-DISAGREEMENT-FINDER` three days after building the ledger format.**
@@ -333,8 +347,25 @@ The arming commit said it in advance: *"If it does not, 'warn-mode hook' is not 
 | `warn_exit0` | 139 | **139** | **0** | ⛔ **NO — the tool result carried only the command’s own output** |
 | `block_exit2` | 140 | **140** | **2** | ✅ **YES — surfaced VERBATIM, quoted back in the tool result** |
 
-⇒ ✅✅ **THE WRITE COMPLETED IN BOTH CASES. IT IS NOT A LOST FLUSH. THE BYTES ARE ACCEPTED AND DISCARDED.**
-⇒ ⛔⛔ **THE EXIT CODE GATES DELIVERY.**
+⚠️⚠️ **`[r6]` AND THAT PAIR WAS STILL CONFOUNDED. A SECOND READER REFUTED *"EVERYTHING ELSE HELD CONSTANT"* ON TWO COUNTS, AND BOTH HAD TO BE FIXED RATHER THAN CAVEATED.**
+**(i) THE ARMS WROTE DIFFERENT TEXT** — the arm name was interpolated into the message, which IS the 139-vs-140. **Payload varied alongside exit code.**
+**(ii) EXIT CODE CO-VARIED WITH BLOCKED / NOT-BLOCKED.** Exit 2 aborts the tool call; exit 0 lets it run. ⛔ **So *"the exit code gates delivery"* and *"a hook that BLOCKS gets its stderr shown as the block reason"* FIT THE SAME TWO ROWS, and the pair could not separate them.**
+
+✅✅ **FIXED WITH A THIRD ARM AND A CONSTANT PAYLOAD: `exit 1` — NON-ZERO BUT NON-BLOCKING — IS THE DISCRIMINATOR, AND ALL THREE ARMS NOW WRITE IDENTICAL TEXT THROUGH ONE `emit()`.**
+
+| arm | exit | blocks? | bytes written | did it reach the model? |
+|---|---|---|---|---|
+| `warn_exit0` | 0 | no | **93 / 93** | ⛔ **NO** |
+| `error_exit1` | **1** | **no** | **93 / 93** | ⛔ **NO** |
+| `block_exit2` | 2 | **YES** | **93 / 93** | ✅ **YES — verbatim** |
+
+⇒ ⛔⛔ **"THE EXIT CODE GATES DELIVERY" IS THE WRONG FRAME AND I HAD ALREADY COMMITTED IT. NON-ZERO IS NOT THE GATE — `exit 1` IS NON-ZERO AND SILENT.**
+⇒ ✅✅ **THE CORRECT STATEMENT: STDERR IS DELIVERED ONLY WHEN THE HOOK *BLOCKS THE CALL*. `exit 2` IS SIMPLY HOW A HOOK SIGNALS A BLOCK. A NON-BLOCKING HOOK’S STDERR IS WRITTEN AND DISCARDED AT ANY EXIT CODE.**
+
+★★ **AND THIS IS STRONGER FOR THE DESIGN, NOT WEAKER — IT FORECLOSES A WHOLE FAMILY RATHER THAN ONE MEMBER.** Under the old frame *"try exit 1"* was an obvious unexplored option a later session would reach for. ⇒ **THERE IS NO NON-BLOCKING STDERR CHANNEL AT ALL**, so warn-only MUST be structured stdout (`additionalContext`). ✅ **The disposition is unchanged and now rests on a three-arm result instead of a confounded pair.**
+
+✅ **The write completed in all three cases — 93 of 93 bytes every time — SO A SHORT OR FAILED WRITE IS EXCLUDED.**
+⚠️ **`[r6]` BUT NOT "A LOST BUFFER", WHICH IS WHAT `[r5]` SAID, AND IT REACHES PAST WHAT THE INSTRUMENT CAN WITNESS: `writeSync` RETURNS BYTES ACCEPTED BY THE `write(2)` SYSCALL — bytes that entered the kernel pipe buffer.** ✅ **A userspace Node flush is excluded; NOTHING DOWNSTREAM IS** — a parent that never read the pipe, read and discarded it, or closed the read end all return the same count. ★ **The conclusion is unaffected: dropped in transport or dropped by policy, no objective may rest on the channel.**
 
 ★ **This is stronger than the warrant Langston offered me and stronger than the one I offered him.** His was *"no objective may rest on a channel with zero demonstrated deliveries"* — sound, and needs no n. **What the two-arm run adds: the channel is not merely undemonstrated, it demonstrably ACCEPTS THE BYTES AND DROPS THEM**, with the writer held constant.
 
