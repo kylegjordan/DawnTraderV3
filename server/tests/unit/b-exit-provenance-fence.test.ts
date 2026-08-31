@@ -262,7 +262,14 @@ describe('B-EXIT-PROVENANCE — the exit stamp cannot be satisfied by a non-prov
     // capped pattern silently returned '' — a test that fails for the wrong reason is no test.
     const start = src.indexOf('private async fetchFromKrakenRest');
     expect(start).toBeGreaterThan(-1);
-    const fn = src.slice(start, src.indexOf('private async fetchMockPrice', start));
+    const end = src.indexOf('private async fetchMockPrice', start);
+    // ⛔ ASSERT THE END MARKER EXISTS. If fetchMockPrice is renamed or moved above this function,
+    // indexOf returns -1, slice(start, -1) silently becomes the REST OF THE FILE, and
+    // `observedAt: cached.observedAt` appears on 8 lines — so the assertions below would pass
+    // against a different function entirely. A slice whose bound can silently become the whole
+    // file is the same wrong-object failure this suite exists to catch.
+    expect(end).toBeGreaterThan(start);
+    const fn = src.slice(start, end);
     expect(fn).toBeTruthy();
     // the laundering shape must be gone
     expect(fn).not.toContain('return cached?.price ?? null');
@@ -271,19 +278,42 @@ describe('B-EXIT-PROVENANCE — the exit stamp cannot be satisfied by a non-prov
     expect(fn).toContain("producer: 'kraken_rest_rate_limited_reserve'");
   });
 
-  it('#951 P1 - `source` is UNCHANGED, so this batch changes no trading decision', () => {
-    // THE SPLIT'S OWN FALSIFIER (Langston condition 1). B-PRICE-AGE-TRUTH ships the provenance
-    // half only; making the re-serve NON-actionable is B-PRICE-AGE-REFUSAL, carved out and gated
-    // because relabelling `source` routes the blocked population onto the engine's
-    // un-rate-limited direct REST leg.
-    // If a future edit adds a new literal to the CachedPrice source union, this fails - which is
-    // the intended alarm, not a nuisance.
+  it('#951 P1 - the null test is on the PRICE, not the row (refactor-divergence fence)', () => {
+    // The original was `return cached?.price ?? null`. Rewriting it as `cached ? {...} : null`
+    // tests the ROW, which diverges on exactly one input: a row present with an absent price.
+    // That would return `price: undefined`, and fetchPrice's cache-write guard is
+    // `quote.price !== null` — TRUE for undefined — so undefined would be written to the cache
+    // and reach the exit evaluation. The types forbid it today; this fence is what keeps the
+    // semantics if they ever stop forbidding it.
     const src = code(LPA);
-    const i = src.indexOf('interface CachedPrice {');
-    const union = src.slice(i, src.indexOf('}', i));
-    expect(union).toContain("'kraken_rest'");
-    expect(union).not.toContain('rate_limited');
-    expect(union).not.toContain('reserve');
+    const start = src.indexOf('private async fetchFromKrakenRest');
+    const fn = src.slice(start, src.indexOf('private async fetchMockPrice', start));
+    expect(fn).toContain('cached && cached.price != null');
+    expect(fn).not.toMatch(/return cached\s*\n?\s*\?/);
+  });
+
+  it('#951 P1 - the STAMPING SITE emits an unconditional `source`, so no re-serve is made non-actionable', () => {
+    // ⛔ THIS TEST REPLACES ONE THAT COULD NOT FAIL. The first version sliced the CachedPrice type
+    // DECLARATION and asserted it still said 'kraken_rest'. A second reader mutated the actual
+    // stamping site to `krakenResult.producer === 'kraken_rest_rate_limited_reserve' ?
+    // 'last_known_good' : 'kraken_rest'` — which IS the carved-out B-PRICE-AGE-REFUSAL behaviour,
+    // a real trading-decision change — and ALL 19 TESTS PASSED. A falsifier that inspects the
+    // vocabulary instead of the emission falsifies nothing.
+    //
+    // What this asserts instead: at the REST-leg return, `source` is a bare literal with no
+    // conditional. If anyone makes it depend on the producer, the arm, or the age, this fails —
+    // which is the entire safety property of the split (B-PRICE-AGE-TRUTH ships provenance only;
+    // refusal is carved out and gated on #971).
+    const src = code(LPA);
+    const call = src.indexOf('const krakenResult = await this.fetchFromKrakenRest(symbol);');
+    expect(call).toBeGreaterThan(-1);
+    const block = src.slice(call, src.indexOf('}', src.indexOf('};', call)));
+    // the emission must be the unconditional literal
+    expect(block).toContain("source: 'kraken_rest',");
+    // ...and must NOT be computed from anything
+    expect(block).not.toMatch(/source:\s*[^'\n]*\?/);      // no ternary
+    expect(block).not.toMatch(/source:\s*krakenResult/);     // not derived from the fetch result
+    expect(block).not.toContain('last_known_good');
   });
 
   it('P11 - the SPLIT is pure re-description: coarse names gone, nothing merged or deleted', () => {

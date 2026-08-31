@@ -91,11 +91,30 @@ export type PriceProducer =
                                        //    token cannot answer "outage, or gate?" from a row. An outage
                                        //    means the venue failed us; this means WE CHOSE NOT TO ASK.
                                        //    Different cause, different remediation, different duration.
-                                       // ⚠️ THIS TOKEN CHANGES NO TRADING DECISION. The engine's
-                                       //    actionable gate reads `source` and never `producer`, and
-                                       //    `source` is deliberately UNCHANGED here — making the
-                                       //    re-serve non-actionable is B-PRICE-AGE-REFUSAL, carved out
-                                       //    and gated, NOT this batch.
+                                       // ⚠️ WHAT THIS TOKEN DOES AND DOES NOT DO — stated precisely,
+                                       //    because the flat form ("changes no trading decision") is
+                                       //    FALSE and a reader produced the counterexample.
+                                       //    `toCachedProducer` IS a producer-dependent branch: its
+                                       //    `null` arm gates the cache write. The correct claim is
+                                       //    that THE ONE EXISTING PRODUCER BRANCH ROUTES THIS TOKEN
+                                       //    IDENTICALLY TO THE ONE IT REPLACES — a fact about its
+                                       //    PLACEMENT, fence-tested and mutation-proved, not an
+                                       //    absolute about producers.
+                                       //    The engine's actionable gate does read `source` and never
+                                       //    `producer`, and `source` is deliberately UNCHANGED here —
+                                       //    making the re-serve non-actionable is B-PRICE-AGE-REFUSAL,
+                                       //    carved out and gated, NOT this batch.
+                                       // ★ SECOND-ORDER EFFECT, OUTSIDE THE BRANCH THIS BATCH EDITS,
+                                       //    and it is the most valuable thing the change does:
+                                       //    the re-serve is SELF-FEEDING — fetchFromKrakenRest reads
+                                       //    the cache and fetchPrice writes back into it. Under the
+                                       //    old code a rate-limited re-serve wrote `Date.now()` into
+                                       //    the row on EVERY poll, so the row's `observedAt` was
+                                       //    refreshed indefinitely. ⇒ the four legs that already
+                                       //    carried `cached.observedAt` HONESTLY were carrying a
+                                       //    LAUNDERED value whenever a rate-limited re-serve had
+                                       //    recently touched that symbol. Pinning it here makes all
+                                       //    four emit the true origin time.
   | 'xstock_rest_gate_reserve'         // :522 — BY DESIGN, not a failure: the B8.9 xStock REST
                                        //        class-gate makes no venue ask, so nothing failed.
                                        //        Splitting it from the outage legs is what lets a row
@@ -679,7 +698,15 @@ export class LivePricingAdapter {
         // ⚠️ `source` is intentionally unchanged by this batch, so the engine's actionable gate
         //    still admits this price exactly as before — the age becomes RECOVERABLE, it does not
         //    become REFUSED. Refusal is B-PRICE-AGE-REFUSAL, carved out and gated.
-        return cached
+        // ⛔ THE NULL TEST IS ON THE PRICE, NOT ON THE ROW — and that is not a style choice.
+        //    The old code was `return cached?.price ?? null`, so a row present with an absent
+        //    price returned null. Testing the ROW instead would return an object carrying
+        //    `price: undefined`, and the cache-write guard above is `quote.price !== null`,
+        //    which is TRUE for undefined — so an undefined price would be written into the cache
+        //    and handed to the exit evaluation. `!= null` reproduces the old `??` exactly.
+        //    Caught by a second reader on the implementation; the types forbid it today, which is
+        //    precisely why nothing would have failed until something else changed.
+        return cached && cached.price != null
           ? { price: cached.price, observedAt: cached.observedAt, producer: 'kraken_rest_rate_limited_reserve' }
           : null;
       }

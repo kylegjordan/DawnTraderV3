@@ -6144,3 +6144,20 @@ CC-A's batch argues the workflow is not reliably firing. **This is that thesis, 
 ⛔ **Pre-labelling a consequence is how a census MANUFACTURES defects — which is the exact failure this item was created to avoid.** ⇒ **`#976`'s three-outcome read per instance must reach the CONSUMER's guard, not stop at the substitution site.** ★ **I refused to file these as defects and was right to; then I described one as harmful in prose. The discipline has to survive the summary, not just the document.**
 
 **MISTAKE: verification-weaker-than-claim [#976] — the document stated the finding correctly and the covering message asserted a consequence I had not traced.**
+
+
+---
+
+### #951 AMENDMENT — ⚠️ **THE NEW PRODUCER TOKEN CHANGES WHAT AN EXISTING ANALYTIC POPULATION MEASURES. NAMED BEFORE DEPLOY, NOT AFTER.**
+
+**Surfaced 2026-08-31 by a claim-only reader on the Step-3 implementation. No code defect — an INSTRUMENT consequence, which is the kind this project keeps discovering late.**
+
+**`exit_price_producer` is already read back as an analytic population.** `EXIT_PATH_MACHINERY_AUDIT_2026-08-30.md:452` records *"of 23 stamped closes, 14 `kraken_ws_book_mid` + 9 `kraken_equities_ws`; ZERO from any last-trade producer"* — and calls that partition **"F-G-2's entire premise."**
+
+⇒ ⛔ **`kraken_rest_rate_limited_reserve` carries NO mid/last kind — deliberately, because a re-served cached price has no knowable kind.** *(That is the same reason `kraken_rest_poller` was never split by kind; see the union comment.)*
+⇒ **So post-deploy a slice of the crypto-adapter cohort answers NEITHER side of that census.** ⚠️ **A future reader re-running the mid/last partition will find it no longer covers the population, and the honest reading is "this class has no kind", NOT "the kind is missing".**
+
+⚠️ **AND A SECOND, SHARPER HAZARD — the token shares a PREFIX.** `kraken_rest_rate_limited_reserve`, `kraken_rest_poller` and `kraken_rest_engine_fallback_*` all match `LIKE 'kraken_rest%'`. ⇒ **any hand-written SQL cohort using that prefix SILENTLY GAINS MEMBERS after this deploy.**
+⛔⛔ **AND THAT CLASS OF INSTRUMENT IS SQL RUN BY PEOPLE — invisible to every repo grep, which is the stated reach limit on the reader's "no code reader exists" finding.** ⇒ **ENUMERATE `exit_price_producer`, never `LIKE` it** — the same rule already standing for this column in `MEMORY_CC_C`.
+
+✅ **NOT a reason to hold the batch:** the partition was already incomplete for `kraken_rest_poller`, which likewise carries no kind. **This makes an existing gap bigger and NAMES it, rather than creating one.**

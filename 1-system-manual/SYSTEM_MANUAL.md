@@ -4668,7 +4668,7 @@ For each open position:
    | field | question it answers | why it cannot answer the other |
    |---|---|---|
    | `price_source` | **POLICY** — *may the engine ACT on this price?* | it is a FEED label. The book-midpoint handler and the last-trade-print handler **both stamp `kraken_ws`** |
-   | `price_producer` | **PROVENANCE** — *which HANDLER produced this number?* | it is deliberately NOT consulted by any gate, so widening it can never change a trading decision |
+   | `price_producer` | **PROVENANCE** — *which HANDLER produced this number?* | it is not consulted by the ENGINE'S ACTIONABLE GATE (`isKrakenVenueSource` reads `source` only) ⛔ **BUT THE ABSOLUTE THAT USED TO STAND HERE — *"NOT consulted by any gate, so widening it can never change a trading decision"* — IS WITHDRAWN (2026-08-31, `B-PRICE-AGE-TRUTH`).** `toCachedProducer` IS a producer-consulted branch: a member placed in its `null` arm suppresses the cache write, and the consequence is NOT a safe skip — the previous row is re-served under its ORIGINAL tag with **no age re-check**, i.e. a stale price passing the gate as venue-fresh. **The source withdrew this absolute and this manual kept it.** ⇒ widening the producer union is safe **only when the new member is placed in the passthrough arm**, which is now fence-tested and mutation-proved |
 
    ⛔ **CONFLATING THEM IS `#741` ITSELF.** `handleV2BookUpdate` emits a book **MIDPOINT** and `handleV2TickerUpdate` emits a **LAST-TRADE PRINT**; both write the same cache key under the same `source`, last-writer-wins. A ghost-contaminated mid and a clean print therefore arrived **indistinguishable**, and a downstream reader took `kraken_ws` as evidence of a ticker print. **The two fields must never be re-merged.**
 
