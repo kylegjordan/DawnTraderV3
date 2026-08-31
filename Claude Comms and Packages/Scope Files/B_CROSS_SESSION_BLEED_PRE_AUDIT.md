@@ -224,3 +224,19 @@ The run log, the stash corpus and A12/A13's byte-identity **live on laptop clone
 
 ## ⚠️ AND A COUNT I MISSTATED THREE TIMES
 The run log was cited as **396** (audit), **403** (dispatch), **409** (now). **Not an inconsistency — a live counter read at three different moments.** The error was presenting a moving figure as a fixed one. **Any count of a growing artifact is stamped with its read time from here on.**
+
+---
+
+## ⚠️ STEP-7 FINDING — MY OWN RIG CONTAMINATED THE LIVE RUN-RECORD LOG. Recorded, not buried.
+
+**MEASURED 2026-08-31 at Step 7:** `~/.claude/dt-fresh-rules.jsonl` holds **459 records; 29 of them (6.3%) are my offline rig's**, all after `2026-08-31T17:10:49Z`, all stamped `clone: "c1"`.
+
+**WHY IT MATTERS AND IS NOT COSMETIC:** the rig existed to manufacture **freezes and residue refreshes on demand** — so the synthetic records are concentrated in exactly the two event classes the log is meant to make detectable. A reader that counted `skipped_dirty` streaks or `residue_refreshed` across the whole file would read my test fixtures as live system behaviour. ★ **This is the same shape as the contaminated rig run earlier in this batch: the instrument polluted by the thing under test.**
+
+**WHY IT IS RECOVERABLE, and why nothing is being rewritten:** the hook stamps `clone = basename(CWD)` on every record, so the synthetic rows are **self-identifying**. The log is append-only and is itself a record; editing it to tidy my own mess would destroy the provenance that makes the contamination visible — the same error as dropping the stash before the cause was established (rule 25.c).
+
+⇒ **DISPOSITION (§9.4 #1 — FOLD INTO THE WORK IN HAND, with a binding requirement carried to the next batch):**
+**`B-FRESHNESS-LOG-READER` (owner CC-B, next) MUST filter `clone` to the five real clone basenames** — `DawnTraderV3-old|-new|-analyst|-infra|DawnTraderV3` — **and REPORT the count it excluded rather than dropping it silently.** An unfiltered reader over this file is wrong by 6.3% today and by an unknown amount after the next person tests a hook.
+⚠️ **Deliberately NOT fixed by making the hook refuse to log outside a known clone:** that would make the offline rig — the thing that caught four of the five defects in this batch — unable to exercise the logging path at all. **The discriminator already exists and worked; the obligation belongs on the reader.**
+
+**Distribution at this write, for whoever picks that up:** `DawnTraderV3-old` 174 · `-analyst` 132 · `-new` 58 · `-infra` 55 · `c1` **29 (synthetic)** · `DawnTraderV3` 11.
