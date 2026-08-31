@@ -59,7 +59,6 @@ from __future__ import annotations
 import json
 import logging
 import os
-import time
 from datetime import datetime, timezone
 
 import providers
@@ -97,15 +96,6 @@ MAX_CHECKS_PER_RUN = 1500
 # contaminate the comparison group, and it is excludable by name.
 MAX_RESOLUTION_ATTEMPTS = 3
 
-# ⛔ PACING, AND IT IS NOT POLITENESS — THE FIRST LIVE RUN HIT IT. The sweep
-#    fired 384 requests as fast as the loop ran and the provider answered 429.
-#    Its published ceiling is 300/min, so requests are spaced to stay under it.
-#    Measured: 384 checks, 16 promotions, then a rate-limit stop.
-# ⚠️ OVERRIDABLE so a test suite can run without sitting through real
-#    pacing. It is a REAL delay — 1,500 checks at 240/min is ~6 minutes —
-#    and a suite that waited it out would be timing the sleep, not the code.
-REQUESTS_PER_MIN = int(os.environ.get("TOKEN_WATCH_REQ_PER_MIN", "240"))
-_MIN_INTERVAL_S = (60.0 / REQUESTS_PER_MIN) if REQUESTS_PER_MIN > 0 else 0.0
 
 
 def _now() -> datetime:
@@ -264,7 +254,6 @@ def run(now: datetime = None) -> dict:
     #    doing any lookups, so a shed part-way through discarded the remainder
     #    permanently. A shed must DEFER work, never drop it.
     budget = MAX_CHECKS_PER_RUN
-    last_call = [0.0]                  # monotonic clock for pacing
     stop = False
     for name in _birth_files():
         if stop or budget <= 0:
@@ -294,10 +283,13 @@ def run(now: datetime = None) -> dict:
             if reason != "deferred" or not mint:
                 consumed += nbytes
                 continue
-            wait = _MIN_INTERVAL_S - (time.monotonic() - last_call[0])
-            if wait > 0:
-                time.sleep(wait)
-            last_call[0] = time.monotonic()
+            # ⛔ PACING MOVED TO THE PROVIDER CHOKEPOINT, AND THE REASON IS THE
+            #    COMMENT THAT USED TO SIT HERE. It recorded that THIS sweep hit
+            #    429 on its first live run and was paced in response -- and the
+            #    fix never travelled to the OBSERVATION sweep, which shares the
+            #    same provider and the same ceiling and paced itself not at all.
+            #    Two callers, one limit, two notions of the rate, neither aware
+            #    of the other. `providers._get` now paces every call by host, so
             try:
                 state = providers.token_state(mint)
             except providers.Shed as exc:

@@ -31,6 +31,7 @@ os.environ["TOKEN_WATCH_ROOT"] = ROOT
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import promote  # noqa: E402
+import config  # noqa: E402
 import providers  # noqa: E402
 import store  # noqa: E402
 
@@ -270,8 +271,23 @@ finally:
     providers._get = _r
 _elapsed = __import__("time").monotonic() - _t0
 check("all three were checked", _pst["checked"] == 3, _pst)
-check("* requests are PACED - three checks take at least two intervals",
-      _elapsed >= promote._MIN_INTERVAL_S * 2, "%.3fs for 3 checks" % _elapsed)
+# ⛔ PACING IS NO LONGER OBSERVABLE FROM HERE, AND THAT IS A PROPERTY OF THE
+#    FIX RATHER THAN A GAP. It moved to `providers._get`, the one function
+#    every provider call passes through -- and this block STUBS `_get`, so it
+#    replaces the pacer along with the request. A test that stubs `_get` and
+#    then believes it is measuring paced behaviour is measuring its own stub.
+# ⇒ The real proof stubs one level LOWER, at `urlopen`, and lives in
+#   tests/test_pacing.py -- which also proves the property this file never
+#   could: that the socials sweep and the observation sweep share ONE budget.
+#   What is asserted HERE is only that this sweep is subject to the pacer.
+check("* the socials sweep calls through the PACED chokepoint",
+      providers._get.__module__ == "providers"
+      and hasattr(providers, "_pace"),
+      "no chokepoint pacer on the module this sweep calls")
+check("* and the provider it calls is one we pace",
+      __import__("urllib.parse", fromlist=["urlsplit"]).urlsplit(
+          config.DEXSCREENER_BASE).hostname in config.RATE_PER_MIN_BY_HOST,
+      config.DEXSCREENER_BASE)
 
 print(chr(10) + "=== 9. THE CONTROL IS DRAWN FROM CONFIRMED NON-CARRIERS")
 # The whole point of the deferral. C00012 hashes INTO the control draw.

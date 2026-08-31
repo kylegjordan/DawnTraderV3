@@ -235,6 +235,25 @@ HELIUS_ENV = "/etc/token-watch/helius.env"
 DEXSCREENER_BASE = "https://api.dexscreener.com"
 DEXSCREENER_RATE_PER_MIN = 300
 
+# ⛔ THE PACE WE ACTUALLY CALL AT, AND WHY IT IS BELOW THE CEILING.
+#    MEASURED 2026-08-31: the observation sweep fired ~1,250 calls/hour -- 7%
+#    of what this provider allows per DAY -- and still had 40.5% REFUSED with
+#    HTTP 429, because it fired them in an unspaced burst. Being far under a
+#    daily limit says nothing about a per-MINUTE one.
+# ★ 240 rather than 300 is a deliberate 20% margin: the ceiling is the
+#   provider's and we do not control their accounting window, so calling AT
+#   the limit means any clock skew between us and them is a refusal.
+# ⛔ KEYED BY HOST, AND APPLIED AT THE ONE FUNCTION EVERY PROVIDER CALL PASSES
+#   THROUGH -- not per caller. Two callers (the socials sweep and the
+#   observation sweep) share this provider and ran with two different notions
+#   of the rate: one paced itself at 240/min, the other did not pace at all,
+#   and NEITHER knew the other was spending the same budget. A per-caller
+#   pacer is correct for each caller and wrong for the provider.
+RATE_PER_MIN_BY_HOST = {
+    "api.dexscreener.com": int(os.environ.get("TOKEN_WATCH_REQ_PER_MIN", "240")),
+}
+
+
 CREDITS = {"birth": 1, "follow_up": 0, "liquidity": 1,
            # `delivery` is NOT spend. It is a webhook-delivery note carried on
            # the same journal so the received/recorded ratio survives beyond a

@@ -34,7 +34,7 @@ from datetime import datetime, timezone
 
 import budget
 import provenance
-from config import DEXSCREENER_BASE, HELIUS_ENV
+from config import DEXSCREENER_BASE, HELIUS_ENV, RATE_PER_MIN_BY_HOST
 
 UTC = timezone.utc
 TIMEOUT = 20
@@ -49,7 +49,43 @@ class Shed(Exception):
     """
 
 
+import threading
+import time
+import urllib.parse
+
+# Shared by every caller in this process, because the LIMIT is the provider's,
+# not the caller's. Module-level state is the right scope: both sweeps run in
+# the same process (the follow-up service invokes the socials sweep).
+_LAST_CALL: dict = {}
+_PACE_LOCK = threading.Lock()
+
+def _pace(url: str) -> None:
+    """Space calls to a rate-limited host, at the ONE point they all pass.
+
+    ⛔ THIS IS NOT A RETRY AND MUST NOT BECOME ONE. A retry would convert a
+       refusal into a delay and delete the signal: the shed record is how the
+       study knows a checkpoint was missed, and survival is reported as an
+       UPPER BOUND precisely because those records exist. Pacing prevents the
+       refusal; it never hides one that happens anyway.
+    """
+    host = urllib.parse.urlsplit(url).hostname or ""
+    per_min = RATE_PER_MIN_BY_HOST.get(host)
+    if not per_min:
+        return
+    interval = 60.0 / per_min
+    with _PACE_LOCK:
+        last = _LAST_CALL.get(host)
+        now = time.monotonic()
+        if last is not None:
+            wait = interval - (now - last)
+            if wait > 0:
+                time.sleep(wait)
+                now = time.monotonic()
+        _LAST_CALL[host] = now
+
+
 def _get(url: str, headers: dict | None = None):
+    _pace(url)
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, **(headers or {})})
     with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
         return json.loads(resp.read().decode("utf-8"))
