@@ -6359,3 +6359,30 @@ CC-A's batch argues the workflow is not reliably firing. **This is that thesis, 
 ⚠️ **WHETHER RECENT WORK REDUCED THE MAGNITUDE IS *NOT* ESTABLISHED AND I WILL NOT CLAIM IT: 48.01 / 35.67 / 20.59% on 08-29 versus 5.01% on 08-31 is THREE ROWS AGAINST ONE.** ★ **A drop across n=3 → n=1 is an anecdote, not a trend** — and the 00:15 cohort is exactly the population where I have already been caught reading a shape into too few rows.
 
 ★ **METHOD NOTE: THE LEDGER SEARCH `§9.5(b-ii)` MANDATES WOULD HAVE CAUGHT THIS AND I RAN IT TOO NARROWLY.** I searched for the FILL convention (and found `BATCH_65`'s deliberate split, correctly) but never searched the SYMPTOM's own window — the specimens `NOW`/`TGT`/`WEN` sit in `#943`'s entry **by name**. **Kyle's memory was the instrument that caught it.**
+
+---
+
+### #959 AMENDMENT 2 — ⛔⛔ I CALLED IT A "COLLAPSED BOOK". **§14 OF THE MACHINERY AUDIT ALREADY MEASURED THAT AND REFUTED IT — n=77,060, TWO CONTROLS.** MY OWN DOCUMENT, WRITTEN YESTERDAY.
+
+**Corrected 2026-08-31 after KYLE said I was working from amnesia and told me to read back through the F-series and the book work. He was right.** Amendment 1 said the 00:15 rows were *"a correct fill rule reading a collapsed book"*. **THE COLLAPSE HALF IS FALSE AND WAS ALREADY DISPROVED IN WRITING.**
+
+⛔ **`EXIT_PATH_MACHINERY_AUDIT_2026-08-30.md` §14 — "THE LOW BID IS ANSWERED. IT IS REAL, IT IS KRAKEN'S, AND IT IS NOT A COLLAPSED BID."** The discriminator is the last trade's position in the spread, `pos = (last − bid)/(ask − bid)`: a collapsed bid drives `pos → 1.0`.
+| cohort | n | mean `pos` | mid-ish |
+|---|---|---|---|
+| MODERATE 5-20% | 65,959 | 0.459 | 57.3% |
+| WIDE 20-50% | 8,541 | 0.548 | 47.4% |
+| **EXTREME >50%** | **2,560** | **0.446** | **71.4%** |
+| ✅ CONTROL — TIGHT <1% | **5,282,570** | 0.492 | 57.5% |
+| ✅ **CONTROL — the 00:15 minute, wide rows** | **2,085** | **0.511** | **59.5%** |
+⇒ ⭐ **THE WIDE QUOTES ARE STRUCTURALLY INDISTINGUISHABLE FROM 5.28 MILLION TIGHT ONES — INCLUDING AT 00:15. BOTH SIDES WIDEN TOGETHER, SYMMETRICALLY, AROUND THE TRADED PRICE.** It is **a genuinely thin overnight market in which the market maker pulls both sides** — Kyle's four xStock sessions; extended hours carry **76,321** wide rows against **748** in regular hours, ~**100:1**, mean spread **13.80%** vs **7.50%**.
+✅ **MY `BABA` SPECIMEN FITS IT, NOT AGAINST IT:** bid 112.00 / ask 132.00, booked 118.40 ⇒ `pos = 0.32` — **mid-ish, not bid-hugging.** **A normal wide overnight quote, not a defect.**
+
+⛔⛔ **AND THE DEEPER ERROR: I REPORTED THE INTENDED ARCHITECTURE AS A DEFECT.** §14.5 records the founding design (`§8.2`, deleted 2026-01-18) as **"DECIDE ON ONE PRICE, FILL AT ANOTHER"** — so *"the trigger and the fill read different prices"* is **THE DESIGN**, not the bug. **Rule 24 outcome (2), working-as-designed.** ⇒ **`#959` as framed is void, not merely narrow.**
+
+★ **WHAT IS ACTUALLY WRONG IS ALREADY STATED THERE AND IS F-G-2's SUBJECT:** *"WE MAKE EXIT DECISIONS ON THE MIDPOINT OF A QUOTE THAT AVERAGES 13.8% WIDE, AS THOUGH IT WERE A PRICE."*
+⛔ **AND §14.5 MOVES F-G-2 AWAY FROM ITS ORIGINAL FIX: in a symmetric widening THE BID IS NOT "THE HONEST PRICE" — IT IS THE WORST CASE, as far from value as the ask.** Moving the exit **trigger** onto the bid *"would fire stops the market never justified."* ⇒ **trigger = a value estimate; FILL = transactable side, depth-walked.** *(Recorded there as a PROPOSAL resting on §14.2, not an outcome test; `OBJ-0` remains the instrument and its arms become TRIGGER-side vs FILL-side.)*
+
+⛔ **I ALSO POOLED ACROSS A NAMED EPOCH BOUNDARY.** Plan row 3c states it explicitly: **post-epoch (≥ `2026-08-22T22:01Z`, the book-truncate hotfix `e6f7c70b3`, `#507`) 24 of 24 crypto stop-outs fill BELOW their stop, median 0.166%; pre-epoch is a DIFFERENT INSTRUMENT (crossed book 31.08% → 0) and "the two eras must never be pooled."** **24/24 filling below the stop is the CORRECT direction for a forced sale and directly contradicts my "stop-outs book gains" headline for crypto.**
+
+⇒ ✅ **DISPOSITION UNCHANGED IN DESTINATION, STRONGER IN GROUND: `#959` VOID as framed. The 00:15 residual that survives is NOT the widening (answered) but §14.4's ONE unexplained case — `NOW/USD`, a TIGHT venue book (143.20/143.30) coexisting with a bad mark (118.75) — which §14.2 explicitly does NOT cover and which is already homed at 3b.b with the raw-frame capture armed.**
+⚠️ **THREE CORRECTIONS ON ONE ISSUE IN ONE DAY, AND ALL THREE WERE READS OF MY OWN DOCUMENTS: I cited `#943` but not the audit §14 that supersedes half of it, and I re-derived from a live query what was already measured at n=77,060 with two controls.** ★ **The instrument that caught it was Kyle's memory, twice.**
