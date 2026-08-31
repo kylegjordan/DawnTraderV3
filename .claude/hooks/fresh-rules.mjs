@@ -120,6 +120,7 @@ try {
   const changed = [];
   const skippedDirty = [];
   const skippedUnpushed = [];
+  const refreshFailed = [];    // OBJ-3: a failed checkout was previously invisible in every channel
   const residueRefreshed = [];   // P5(b): dirty-but-ours, refreshed instead of frozen
   const indexLeaks = [];         // P2/P3: the reset did not leave the index clean
 
@@ -307,7 +308,16 @@ try {
       try { leaked = run(['diff', '--cached', '--name-only', '--', path]); } catch { leaked = ''; }
       if (leaked || resetFailed) indexLeaks.push([path, resetFailed ?? 'index still staged after reset']);
       changed.push([path, why]);
-    } catch { }
+    } catch (e) {
+      // ⛔ THE LAST SILENT CATCH IN THE REFRESH PATH, AND IT IS THIS BATCH'S OWN SHAPE ONE LEVEL OUT.
+      // OBJ-3 was written about the RESET, and the reset is now reported - but a failed CHECKOUT
+      // fell through this bare catch: the path was simply absent from `changed`, so the run record
+      // showed `behind > 0` with nothing refreshed and nothing skipped, and the session was told
+      // NOTHING AT ALL. A path could therefore fail to refresh forever while every visible signal
+      // said the hook had run cleanly - which is A14 with a different cause.
+      // ★ Fail-open is untouched: this RECORDS and continues to the next path. It never throws.
+      refreshFailed.push([path, e?.message ?? 'checkout failed']);
+    }
   }
 
   record({
@@ -322,12 +332,13 @@ try {
     self_at_origin: selfAtOrigin,
     residue_refreshed: residueRefreshed.map(([p]) => p),
     index_leaks: indexLeaks.map(([p, why2]) => `${p}: ${why2}`),
+    refresh_failed: refreshFailed.map(([p3, why3]) => `${p3}: ${why3}`),
     // Langston Step-4 FINDING-2: this keyed on the three ORIGINAL arrays while its twin six
     // lines below had been amended — I wrote the "correct by coincidence is not good enough"
     // argument and then left the identical gap here. No consumer reads it yet, which is
     // exactly why it would have rotted unnoticed.
     quiet: changed.length === 0 && skippedDirty.length === 0 && skippedUnpushed.length === 0
-           && residueRefreshed.length === 0 && indexLeaks.length === 0 && selfAtOrigin !== false,
+           && residueRefreshed.length === 0 && indexLeaks.length === 0 && refreshFailed.length === 0 && selfAtOrigin !== false,
   });
 
   // The two new arrays are included deliberately: a residue refresh also pushes to `changed`, so
@@ -337,7 +348,7 @@ try {
   // ⛔ `selfAtOrigin === false` BREAKS THE QUIET EXIT DELIBERATELY: a stale hook with nothing
   // else to say is the single case where silence is most wrong, because everything it reports
   // below was produced by the out-of-date copy. `null` does NOT break it - unknown is not bad news.
-      && residueRefreshed.length === 0 && indexLeaks.length === 0 && selfAtOrigin !== false) process.exit(0);
+      && residueRefreshed.length === 0 && indexLeaks.length === 0 && refreshFailed.length === 0 && selfAtOrigin !== false) process.exit(0);
 
   let out = '[RULES FRESHNESS — this session was running an out-of-date copy]\n';
   if (selfAtOrigin === false) {
@@ -394,6 +405,11 @@ try {
            'and were left untouched:\n';
     for (const [p, why] of skippedDirty) out += `  - ${p}  (${why})\n`;
     out += '  Commit and push them; until then this session is intentionally diverged from the branch.\n';
+  }
+  if (refreshFailed.length) {
+    out += '⛔ COULD NOT REFRESH these - they are STILL STALE and this hook could not fix them:\n';
+    for (const [p4, why4] of refreshFailed) out += `  - ${p4}  (${why4})\n`;
+    out += '  Pull manually before trusting anything they contain.\n';
   }
   if (indexLeaks.length) {
     out += '⚠️ INDEX NOT CLEAN after refresh — report this, do NOT commit these paths:\n';
