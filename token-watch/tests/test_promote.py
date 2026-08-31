@@ -386,6 +386,46 @@ finally:
 check("* POSITIVE CONTROL - the failed token returns and is assigned",
       st2["checked"] == 1 and checks()[-1]["becomes"] == "trait_carrier", st2)
 
+print(chr(10) + "=== 13. BLOCKER-C: A COLLAPSED MINT IS SUBSTITUTED, NOT SWEPT AS-IS")
+# The census is append-only, so the 19 pre-fix birth rows still carry USDC. A
+# sweep reading them at face value would look up USDC (whose channels always
+# resolve), assign it to the TREATMENT arm, and re-create the contamination
+# the conservation fix removed.
+reset()
+USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+REAL = "3ESCWpPJQbau34D77Pw1bGB19E2kXZSeWvedqC9apump"
+birth(USDC, "deferred", False)
+os.makedirs(os.path.dirname(promote.CORRECTIONS_PATH), exist_ok=True)
+with open(promote.CORRECTIONS_PATH, "w", encoding="utf-8") as fh:
+    fh.write(json.dumps({"recorded_mint": USDC, "corrected_mint": REAL}) + chr(10))
+_r = stub({USDC: ["twitter", "telegram"]})   # USDC always resolves channels
+try:
+    st = promote.run(NOW)
+finally:
+    providers._get = _r
+rec = checks()[0]
+check("* the substitution happened and is COUNTED", st["mint_corrected"] == 1, st)
+check("** the REAL launched token is studied, not the payment currency",
+      rec["mint"] == REAL, rec["mint"])
+check("* and the collapsed mint is kept on the record, so it is auditable",
+      rec["recorded_mint"] == USDC, rec)
+check("** USDC did NOT reach the treatment arm off its own channels",
+      rec["mint"] != USDC)
+
+# POSITIVE CONTROL: an uncorrected mint is untouched.
+reset()
+os.makedirs(os.path.dirname(promote.CORRECTIONS_PATH), exist_ok=True)
+with open(promote.CORRECTIONS_PATH, "w", encoding="utf-8") as fh:
+    fh.write(json.dumps({"recorded_mint": USDC, "corrected_mint": REAL}) + chr(10))
+birth("ORDINARY", "deferred", False)
+_r = stub({})
+try:
+    st = promote.run(NOW)
+finally:
+    providers._get = _r
+check("POSITIVE CONTROL - an uncorrected mint is swept unchanged",
+      st["mint_corrected"] == 0 and checks()[0]["mint"] == "ORDINARY", st)
+
 print("\n%d passed, %d failed" % (PASS, FAIL))
 shutil.rmtree(ROOT, ignore_errors=True)
 sys.exit(1 if FAIL else 0)

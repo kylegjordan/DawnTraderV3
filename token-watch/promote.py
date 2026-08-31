@@ -71,6 +71,7 @@ UTC = timezone.utc
 LOG = logging.getLogger("token-watch.promote")
 
 CHECKS_PATH = f"{ROOT}/social-checks.jsonl"
+CORRECTIONS_PATH = f"{ROOT}/provenance/mint-corrections.jsonl"
 STATE = "promote"
 
 # ⛔ A BOUND, so one run cannot become unbounded work on the box that also runs
@@ -161,6 +162,44 @@ def _read_new(path: str, offset: int):
     return rows, sizes, offset
 
 
+def _mint_corrections() -> dict:
+    """`recorded mint -> corrected mint`, from BLOCKER-C's repair store.
+
+    ⛔ WHY THE SWEEP HAS TO KNOW ABOUT THIS. The census is APPEND-ONLY, so the
+       19 birth rows written before the conservation fix still carry the
+       collapsed mint -- USDC. A sweep reading them at face value would look up
+       USDC's channels (which always resolve), assign it to the treatment arm,
+       and re-create the exact contamination the fix removed. The correction is
+       recorded rather than rewritten, so every READER has to apply it.
+
+    ★ AND IT SUBSTITUTES RATHER THAN SKIPS, which is the better of the two. The
+      real launched token behind each collapse is known; skipping would discard
+      19 genuine launches to avoid 19 wrong ones. Substituting studies the token
+      that actually launched, and `in_control_sample` then hashes the REAL
+      identity, so the arm draw is the one that token was always entitled to.
+    """
+    out = {}
+    if not os.path.exists(CORRECTIONS_PATH):
+        return out
+    try:
+        with open(CORRECTIONS_PATH, encoding="utf-8") as fh:
+            for line in fh:
+                if not line.strip():
+                    continue
+                try:
+                    r = json.loads(line)
+                except ValueError:
+                    continue
+                rec, cor = r.get("recorded_mint"), r.get("corrected_mint")
+                if rec and cor and rec != cor:
+                    out[rec] = cor
+    except OSError as exc:
+        # Loud: reading nothing here would silently reinstate the collapse.
+        LOG.error("could not read mint corrections (%s) -- collapsed mints will "
+                  "be swept at face value", exc)
+    return out
+
+
 def _has_channel(socials: dict) -> bool:
     return any(bool(v) for v in (socials or {}).values())
 
@@ -176,10 +215,12 @@ def run(now: datetime = None) -> dict:
     st = load_state(STATE, {})
     cursors = st.setdefault("cursors", {})
     tries = st.setdefault("attempts", {})   # mint -> unresolved lookups so far
+    corrections = _mint_corrections()       # BLOCKER-C: recorded -> real
     stats = {"checked": 0, "with_channel": 0, "scheduled": 0,
              "control_drawn": 0, "errors": 0, "shed": False, "shed_reason": None,
              "bounded_out": 0, "unresolved_no_pairs": 0,
-             "unresolved_error": 0, "resolution_exhausted": 0}
+             "unresolved_error": 0, "resolution_exhausted": 0,
+             "mint_corrected": 0}
 
     # ⛔ PROCESS FILE BY FILE, ADVANCING THE CURSOR TO THE LAST ROW ACTUALLY
     #    HANDLED. The first version advanced past everything it READ before
@@ -198,7 +239,12 @@ def run(now: datetime = None) -> dict:
             if budget <= 0:
                 stats["bounded_out"] += 1
                 continue
-            mint = birth.get("mint")
+            recorded_mint = birth.get("mint")
+            # BLOCKER-C: the birth row may carry a collapsed mint. Study the
+            # token that actually launched, not the payment currency.
+            mint = corrections.get(recorded_mint, recorded_mint)
+            if mint != recorded_mint:
+                stats["mint_corrected"] += 1
             reason = birth.get("follow_reason")
             # An existing carrier needs no lookup — its channels cannot change
             # what we already do with it. It still consumes its bytes.
@@ -288,6 +334,7 @@ def run(now: datetime = None) -> dict:
             attempts = int(tries.get(mint, 0)) + 1
             rec = {
                 "mint": mint,
+                "recorded_mint": recorded_mint if mint != recorded_mint else None,
                 "checked_at": now.isoformat(),
                 # THE AGE THE OBSERVATION WAS TAKEN AT. Without it this field
                 # would read as "socials at launch", a stronger claim than the
