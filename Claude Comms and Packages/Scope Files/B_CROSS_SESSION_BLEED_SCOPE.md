@@ -170,3 +170,21 @@ The pin arms when a new hook fix lands while residue is present, **and this batc
 ## THE PREMISE, IN LANGSTON'S WORDS — DOWNGRADED, NOT REFUTED
 I over-claimed "refuted". His formulation, adopted verbatim into #753: **from *"cross-session write, cause unknown"* to *"no cross-session write in any surviving artifact; one permanently untestable."*** That is sufficient **because OBJ-1/2(b)/3/5 all key on a SIGNATURE (index blob vs origin blob), not on a cause** — origin bytes get cleared, novel bytes get preserved as local work. **It fails safe against the untestable case in both directions.**
 
+
+---
+
+## ⛔ OBJECTIVE DISPOSITIONS — Langston's Step-8 close condition (§9.4, one of the five in writing for each)
+
+**He was right that both of these were in the objective set, absent from the code, AND absent from my own "still open" list — which is the silent-drop this rule exists to prevent.**
+
+### OBJ-1 — *hook reports whether its own on-disk bytes are origin's bytes at run time* → **DISPOSITION 1: FOLDED INTO THE WORK IN HAND. DELIVERED, not deferred.**
+Implemented in `fresh-rules.mjs`: `self_at_origin` in the run record, a loud block in the session output when `false`, and it **breaks the quiet exit** so a stale hook with nothing else to say still speaks. Asked of the file node actually loaded (`import.meta.url`), not of whatever sits at the canonical path. **`null` = could not tell, reported as null, never assumed true.**
+★ **It REPORTS, it never REFUSES** — a hook that declined to run when stale would disarm itself in exactly the clone that needs it most, which is A4 one level up.
+⛔ **NOT handed to `B-HOOK-ESTATE-VERSION` (CC-C, queue 7.5), which Langston reasonably read as the home.** That batch is about the *estate's* version story — five clones, three versions, HEAD not telling you which. **This objective is one hook answering for itself, it was assigned to ME, and it is ~15 lines reusing a predicate already in the file.** Handing my own scope objective to another session's batch would have left **A4 with no delivered mitigation at all** in the interim — his exact words, and the reason he raised it.
+
+### P10 — *per-skipped-path staleness ceiling* → **DISPOSITION 2: ADDED AS AN ITEM TO AN EXISTING BATCH.**
+**HOME: `B-FRESHNESS-LOG-READER`, owner CC-B, placed in `PHASE_19_PLAN.md` §governance queue at position 2.5, after `B-CROSS-SESSION-BLEED`** — deliverable (b) on that row.
+⚠️ **NOT disposition 5.** Langston offered *"P10 may well be dissolved by P5, since post-fix there is no permanently-skipped residue path left to age"* — **and that is true of RESIDUE only.** A **genuine** local edit still holds a whole directory entry skipped indefinitely, all-or-nothing, by design and with his agreement. **14 days of exactly that produced no signal at all**, which is what P10 was written for. ⇒ the ceiling still has a job; what changed is only *which* skips can persist.
+★ **And it belongs on the READER, not in the hook — his own framing for the force-push residual:** *"the run record can already see it — a path in `skipped_dirty` on N consecutive runs is a freeze detector; that belongs on the monitoring routine, not in the hook."* Same argument, same home.
+
+⛔⛔ **AND THE THING I HAVE TO OWN: `B-FRESHNESS-LOG-READER` WAS NOT IN ANY PLAN FILE WHEN I WROTE THAT SENTENCE.** I told Langston twice — Step 4 and Step 8 — that it was *"already homed, owner CC-B, `PHASE_19_PLAN` §governance queue, immediately after this batch."* **It was in no plan at all; the only occurrences in the repo were the ones I had just written into `#753` today.** ★ **That is §9.4's own named failure verbatim — *"every ceremony of homing was performed and the item still had no place"* — committed by the session quoting the rule at the reviewer.** It is placed now, at 2.5, and the claim is true as of this commit rather than as of when I made it.
