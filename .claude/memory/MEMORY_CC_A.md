@@ -11,7 +11,7 @@
 > **If BLOCKED-ON says Kyle, say NOTHING and do not work the item.** Otherwise continue to the next step and report only at the step boundary, in the `CONDUCT.md` §6 format.
 > ⚠️ **UPDATE THESE FOUR LINES AT EVERY STEP BOUNDARY.** They were left stale for weeks and Kyle found it before I did.
 
-- **STEP: 2 of 11** (`B-RULES-1e` — the merged Pre-Implementation Audit AND Implementation Plan, with Langston). ✅ **`B-CLAUDEMD-SLIM` CLOSED** (−5,110 B at the ref; `PHASE_19_PLAN` row 12 marked closed — it read "NAMED, NOW PLACED" for a day after closing). **Docs exist: `B_RULES_1E_SCOPE.md` (Step-1 approved w/ conditions @ `650dd2209`) + `B_RULES_1E_PRE_AUDIT.md`.** ⛔ **RE-READ THE AUDIT DOC; DO NOT RE-DERIVE A1-A4.**
+- **STEP: 2 of 11** · **NEXT STEP: 3 of 11** — `B-MEASURE-GATE` leg 2 (queue row 6). ✅ **Step 1 APPROVED by Langston 2026-08-31 12:22Z** — three conditions + four attack-questions, **ALL APPLIED at `0e6139405`.** Docs: `B_MEASURE_GATE_LEG2_SCOPE.md` (r3) + `B_MEASURE_GATE_LEG2_PRE_AUDIT.md` (r3). ⛔ **RE-READ THEM; DO NOT RE-DERIVE.** **Loop state: r1 claim-only → 4 HITs re-derived · r2 OBJECT round RUNNING. Dispatch to Langston only after the object round closes.** ⛔ **`B-RULES-1e` IS PARKED AT ITS OWN STEP 2, NOT ABANDONED** — its scope + pre-audit exist and are approved-with-conditions at `650dd2209`.
 - ⛔⛔ **`#946` LANGSTON’S `MEMORY.md` TRIM IS NOT MINE — KYLE REMOVED IT 2026-08-30** (*"that is the responsibility of Infra Claude … I don’t wanna mix that work"*). **Out of `B-GOV-REPORTING` and out of my queue; NOT in the `PHASE_19_PLAN` queue, because Kyle owns its placement in Infra’s ordering.** ★ **Langston TOLD TO STOP mid-split.** ✅ **His full ruling is the handover on `#946` — (B) compress-in-place, (A) dead for retractions, (D) govern on per-line assertion class not bytes; and his `B-MISTAKES-FILE` clearance DID land at `ec7519410`.**
 - ★ **WHAT STAYED WITH ME FROM IT: the matrix’s MISSING `BLOCKED` STATE** — `REQUIRED`/`JUDGED` with no third option, so a required row that cannot be discharged takes a ✅ it has not earned. Rides in `B-GOV-REPORTING`, queue 8. **Surfaced BY the trim, not part of it.**
 - **QUEUE, read from `PHASE_19_PLAN` §governance (NOT from memory): 1 `B-RULES-1e` IN FLIGHT · 2 `B-CROSS-SESSION-BLEED` (#753) · 3 `B-GDRIVE-UNMOUNT` (#757/#759) — **INFRA CLAUDE, not me** · 4 `B-REVIEWER-LOOP` (#758) · 5 `B-CHUNK-ADDRESSING` (#749/#761) · 6 `B-MEASURE-GATE` · 7 `B-EXIT-LATCH-INVESTIGATION` (#732) · 8 `B-GOV-REPORTING` · 9 `B-EOL-NORMALISE` (#751) · 10 `B-GATE-GUARD`+`B-ISSUE-BLOCK-GUARD` (#744/#745) · 11 `B-CREW-BOARD-REMOVAL` (gated on Kyle) · 12 `B-CLAUDEMD-SLIM` ✅ CLOSED.**
@@ -22,17 +22,10 @@
 **Patched `discord_common.py` for `#749`, restarted the bridge, every `cc-send` returned `send FAILED`. Reverted from backup; verified restored.** ⛔ **CAUSE STILL UNKNOWN — I had two theories, tested BOTH offline against the real functions, and both were REFUTED.** Broken copy preserved at `/tmp/discord_common.py.broken-749`.
 ★★ **THE PROCESS FAILURE IS THE KEEPER: I DEPLOYED TO A LIVE SERVICE AND TESTED IN PRODUCTION.** ⇒ **prove chunking OFFLINE on real bodies FIRST.** ⚠️ **Pulled out of the slim into `B-CHUNK-ADDRESSING` (queue 5) — a doc batch is how a live-service change came to be attempted at the tail end of one.**
 
-# ⚠⚠ SIX INSTRUMENTS CALLED CONTENT "ABSENT" AND ALL SIX WERE WRONG — IN ONE DAY
-**exact-phrase (5 false) · concept-word (3) · a checker that could not tell a POINTER from a BODY (3) · a case-sensitive grep against capitalised text · and TWO of Langston’s own (`lstrip` strips a CHARACTER SET not a prefix → 22 false; phrase probes → 5).**
-★★ **THE ONLY METHOD THAT DID NOT FAIL: READ THE DESTINATION END TO END AND CITE THE LINE YOU REJECTED BESIDE THE ONE YOU ACCEPTED.** ⛔ **A BETTER MATCHER IS NOT THE FIX — FOUR OF THE SIX WERE BETTER MATCHERS.**
-⚠️ **My two misses were NOT paraphrase failures: I read one plausible line and stopped — §9.5(a) first-sufficient-explanation, applied to a FILE.** ★ **CHECK EVERY ZERO BEFORE ACTING ON IT.**
-★ **23 `wrong-object` trailers in one day vs 22 for the whole prior week. `B-MEASURE-GATE` (queue 6) is the mechanism; logged mid-week in `MISTAKE_PATTERNS.md` rather than waiting for the pass.**
-
-# ⛔⛔ SCOPE BEFORE YOU PUSH — and VERIFY THE LABEL, not just the content
-★ **KYLE DECIDES *WHAT*. LANGSTON REVIEWS *HOW*. "Kyle asked for it" is not a review gate** — no moment presents itself as *"you are shipping a rules change."*
-⚠️ **`cc505f452` shipped correct work under ANOTHER batch’s name** (`#760`): the message heredoc failed, `git commit -F` took a stale file, `-q` hid it, and **I verified the CONTENT reached origin and never looked at the label.** ⇒ **the checker attributes batches from commit SUBJECTS.** ★ **A matching name is not a matching thing — here it was RIGHT CONTENT, WRONG NAME.**
-⛔ **STOP PUTTING BACKTICKS IN BASH-EMBEDDED PYTHON.** They are command-substituted, the heredoc dies, and a stale file survives to be picked up. **This caused `#760` and mangled four other edits today. Use the Write tool for any script with backticks.**
-
+# ⚠⚠ `B-CLAUDEMD-SLIM` — CLOSED; its completion report + `#749`-`#762` + `MISTAKE_PATTERNS.md` are authoritative. **THE THREE THAT ARE STILL LIVE BEHAVIOUR:**
+★★ **SIX INSTRUMENTS CALLED CONTENT "ABSENT" IN ONE DAY AND ALL SIX WERE WRONG — FOUR OF THEM BETTER MATCHERS THAN THE ONE BEFORE.** ⇒ **A BETTER MATCHER IS NOT THE FIX: READ THE DESTINATION END TO END AND CITE THE LINE YOU REJECTED BESIDE THE ONE YOU ACCEPTED.** ⛔ **CHECK EVERY ZERO BEFORE ACTING ON IT.**
+⛔ **SCOPE BEFORE YOU PUSH, AND VERIFY THE *LABEL*, NOT JUST THE CONTENT** — `cc505f452` shipped correct work under another batch’s name (`#760`); **the checker attributes batches from SUBJECTS.** ★ **KYLE DECIDES *WHAT*; LANGSTON REVIEWS *HOW*.**
+⛔ **STOP PUTTING BACKTICKS IN BASH-EMBEDDED PYTHON** — command-substituted, the heredoc dies and a stale file survives. **Use the Write tool.**
 # ⚠⚠ CAP + BYTE CLAIMS: MEASURE AT THE REF, NEVER YOUR CHECKOUT
 ★ **`git show <ref>:FILE | wc -c` — the blob is one object, identical for every clone.** ⛔ **A working-copy `wc -c` is CRLF-inflated (~1 B/line) and re-opens the hole: three false "over cap" readings in one day (`#751`).** ⚠️ **119 md files DO store CRLF; `CLAUDE.md` does not.**
 
@@ -73,29 +66,16 @@ When something looks like an error or a thing to fix, **go and understand what i
 **Then: symptom + evidence only. No cause, magnitude or adjective until measured. Write it SHORT — no self-flagellation, no narrated corrections to Kyle (those go in RUNNING_ISSUES + commits). Give him: what it is, what it means, what I'm doing, what he must decide.**
 ★ **PLAIN NAMES, NOT NUMBERS, when talking to Kyle.** #591 = *the settings-adjustment routine still using the retired score* (batch **B-EVIDENCE-GATE**). #593 = *the AMR context-bonus arm*. #582/Phase-B = *the retired-score cleanup*. #599 = *trade-record retention*.
 
-## ▶▶ GOVERNANCE / RULES PROGRAMME — LIVE STATE (closed work collapsed 2026-08-20; repo is authoritative)
-
-**Delivery board** `https://github.com/users/kylegjordan/projects/1`, protocol `1-system-manual/DELIVERY_BOARD_PROTOCOL.md`. Langston sets `Review`; the OWNER moves the card. ⚠ Nothing automates it, and a board audit has already found **false states** — an un-updated board is a confidently wrong second record.
-★ **KYLE RULED (08-05): the governance/rules-file work CONTINUES and is NOT interrupted by Phase-19 cards.**
-
-**IN FLIGHT / NEXT:** **B-RULES-1c** parked at Step-1 (PROCEED on r3) · **B-RULES-1d** scope dispatched — its §3 holds Kyle's full proposed skill list, **do NOT re-derive it here** · **#694 pieces 4 + 5 NOT STARTED**: the mistakes file, and pre-audit + implementation plan as ONE document.
-
-**DURABLE TECHNICAL FACTS (measured; do not re-derive):**
-- ⛔ **Desktop sessions run 2.1.219** (above all three `.claude/rules` defect gates); **PATH `claude` is 2.1.87, a STALE STANDALONE that never loaded instruction files.** Judge capability by the DESKTOP binary.
-- ⛔ **Skill BODIES are free; skill LISTINGS are NOT.** The listing has a character budget and on overflow **drops descriptions least-invoked-first**. Kyle's model confirmed verbatim: *"a skill's body loads only when it's used."*
-- ⛔ **Parent→child skill references are NOT a documented mechanism** — 8 of 11 composition patterns matched nothing. What exists is the Skill tool.
-- **`@path` imports load EAGERLY at launch** — dead end for lazy loading, correctly abandoned.
-- **Native `InstructionsLoaded` hook exists (v2.1.69)**, landed `f8c537dbe`; sink `~/.claude/instructions-loaded.jsonl`. ⚠ **Unreachable from Hetzner ⇒ anything resting on it is `RULED ON REPORTED FACT` unless the derivation is committed.**
-
-**CLOSED, repo-recorded, do NOT re-narrate:** #651 · #599 · #602 · #661 · #668 · B-RULES-1a/1b · B-ARM · Wave D · B-TEC-REGIME-PARAM-REMOVAL · B-CONDUCT-FILE.
-
-## ▶▶ GOVERNANCE PROGRAMME — THE STANDING FRAME (the 07-31 blow-by-blow is CLOSED and repo-recorded; see #668 for live status)
-★★ **KYLE’S GOVERNING INSTRUCTION, the one that changes how I work:** *"all of these little rules … are only going to cause more instruction-file bloat. Note the rules we want followed, but then … have them enforced by runbooks."* Plan: `B_GOVERNANCE_REMEDIATION_PLAN_r1.md` @ `8f68b7ec3` (Part 1 APPROVED TO SCOPE; Parts 2+3 stand → now #671 + #672).
-★ **THE STANDARD, CITED: ≤200 lines** (*"longer files consume more context and reduce adherence"*, `code.claude.com/docs/en/memory`). ⛔ **`@path` IMPORTS DO NOT REDUCE CONTEXT** (*"imported files load at launch"*) — **struck as a lever, do NOT re-litigate.** ★ **SUCCESS METRIC = BYTES ACTUALLY LOADED AT SESSION START, NOT a line count (gameable).** **SKILLS are the real lever** — progressive disclosure: only name+description at startup, BODY loads on invoke.
-★ **APPROVED SEQUENCE: 1a → 1b → 1c (path-scoped rules) → 1d (skills) → 1e (ORDERING last).** Rulings that still bind: **rule 29’s home is the HOOK, not a skill** (nobody invokes a skill in the seconds before mis-measuring) · rule 20 STAYS (a glossary is a document, not an enforcement home) · **observe what loads BEFORE restructuring what loads.**
-✅ **CLOSED, pointer only:** Langston’s `MEMORY.md`-never-loaded (fixed, #651) · #602 · B-ARM-REMOVAL · B-TRADE-RECORD-RETENTION legs 1+2 · B-EVIDENCE-GATE (no build; `ml-calibration.ts` removal → Kyle booked **Phase 16**, roadmap 16.8).
-▶ **STILL OPEN, not mine to progress alone:** #592 signal_eval growth → **CC-B** · #621 deploy-head → **CC-C** · AMR panel = **CC-B’s arc** (Kyle: contribute on Discord, explain NONE of it in his chat) · pool I/R column removal — **I flagged the POOLS SURVIVE so the column still carries provenance ⇒ awaiting Kyle’s decision** · leg-3 corrections live in `RUNNING_ISSUES` #599/#630/#631 — **re-read there, do NOT re-derive.**
-
+## ▶▶ GOVERNANCE / RULES PROGRAMME — LIVE STATE (closed work collapsed; repo is authoritative)
+**Delivery board** `https://github.com/users/kylegjordan/projects/1`, protocol `DELIVERY_BOARD_PROTOCOL.md`. **Langston sets `Review`; the OWNER moves the card.** ⚠ **Nothing automates it and an audit has already found FALSE states.** ★ **KYLE RULED (08-05): this work CONTINUES and is NOT interrupted by Phase-19 cards.**
+**IN FLIGHT / NEXT:** **`B-RULES-1c`** parked at Step-1 (PROCEED on r3) · **`B-RULES-1d`** scope dispatched — **its §3 holds Kyle’s full proposed skill list, do NOT re-derive it here** · **`#694` pieces 4 + 5 NOT STARTED.**
+**DURABLE TECHNICAL FACTS (measured; do NOT re-derive):** ⛔ Desktop runs **2.1.219**; **PATH `claude` is 2.1.87, a stale standalone that never loaded instruction files** — judge by the DESKTOP binary. ⛔ **Skill BODIES are free; skill LISTINGS are NOT** — the listing has a character budget and drops descriptions least-invoked-first on overflow. ⛔ **Parent→child skill references are NOT a documented mechanism**; what exists is the Skill tool. **`@path` imports load EAGERLY at launch** — dead end, correctly abandoned. **Native `InstructionsLoaded` hook exists (2.1.69)**, sink `~/.claude/instructions-loaded.jsonl` — ⚠ **unreachable from Hetzner, so anything resting on it is `RULED ON REPORTED FACT` unless the derivation is committed.**
+**CLOSED, repo-recorded, do NOT re-narrate:** `#651` · `#599` · `#602` · `#661` · `#668` · `B-RULES-1a/1b` · `B-ARM` · Wave D · `B-TEC-REGIME-PARAM-REMOVAL` · `B-CONDUCT-FILE` · **`B-CLAUDEMD-SLIM`.**
+## ▶▶ GOVERNANCE PROGRAMME — THE STANDING FRAME (blow-by-blow CLOSED + repo-recorded; live status `#668`)
+★★ **KYLE’S GOVERNING INSTRUCTION:** *"all of these little rules … are only going to cause more instruction-file bloat. Note the rules we want followed, but then … have them enforced by runbooks."* Plan: `B_GOVERNANCE_REMEDIATION_PLAN_r1.md` @ `8f68b7ec3` (Part 1 APPROVED; Parts 2+3 → `#671`/`#672`).
+★ **THE STANDARD: ≤200 lines** (*"longer files consume more context and reduce adherence"*). ⛔ **`@path` IMPORTS DO NOT REDUCE CONTEXT — struck, do NOT re-litigate.** ★ **SUCCESS METRIC = BYTES ACTUALLY LOADED AT SESSION START, not a gameable line count. SKILLS are the real lever** (name+description at startup; BODY on invoke).
+★ **SEQUENCE: 1a → 1b → 1c → 1d → 1e (ORDERING last).** Binding rulings: **rule 29’s home is the HOOK, not a skill** (nobody invokes a skill in the seconds before mis-measuring) · **rule 20 STAYS** (a glossary is not an enforcement home) · **observe what loads BEFORE restructuring what loads.**
+▶ **STILL OPEN, NOT MINE TO PROGRESS ALONE:** `#592` → CC-B · `#621` → CC-C · the AMR arc → CC-B (**contribute on Discord, explain NONE of it in Kyle’s chat**) · pool I/R column — **awaiting Kyle** · leg-3 corrections in `RUNNING_ISSUES` `#599`/`#630`/`#631` — **re-read, do NOT re-derive.**
 ## ▶ PARKED — **B-RETIRED-SCORE-REMOVAL (#558)**: A0-A3 deployed+verified; **Phase B HALTED before any drop, awaiting a Kyle scope call.** Census authoritative in `RUNNING_ISSUES` #582/#591/#592 — nothing droppable yet.
 
 ## ★★ RULE 29 — shipped leg 1 (`b43af6c1d`); full text CLAUDE.md rule 29 + history §5.29. Leg 2 hooks = B-MEASURE-GATE (approved, unbuilt — gates the rule-29 CLAUDE.md conversion).
@@ -128,11 +108,9 @@ When something looks like an error or a thing to fix, **go and understand what i
 - **#582** — finalScore telemetry-reader retirement (`B-FINALSCORE-TELEMETRY-RETIRE`, Phase-B prereq). Owner CC-A. Langston Step-4 condition, homed.
 - **#578** — legacy `TradingEngine` (runs in neither mode; paper never `.start()`ed, live Phase-21-gated-refuses; `active-execution-engine` is the real paper+live pipeline). Kyle-ruled legacy → its own removal batch `B-TRADING-ENGINE-REMOVAL`, owner CC-A. Not #558.
 - **#580** — A0 predictiveConfidence-not-persisted seam; superseded-by-A1-removal; owner CC-A.
-- **#570** — RTB bucket-2 refresh gap → **HANDED to CC-C/Analyst** (rides their item 1). Not mine anymore.
-- **#579** — CI `check-tsc-baseline` dedup hole → **CC-B owns** (after B8.5k).
+- **NOT MINE, do not re-triage:** `#570` → CC-C · `#579` → CC-B · the **xStock exit-check-skip staleness family** (`#566`) → CC-B — ack instances, do not chase.
 - **#571** `B-WS-SUBSCRIBE-BOUNDARY-CLASS` (mine, Phase 19). Obligations **#44** (2026-08-01, alert `74a661e5`), **#45** (2026-08-30, alert `27860643`).
 - Kyle: crypto uses VOLUME not order-book — confirm Phase 25, don't act. Consolidate freshness work (#441/#526/#531/#548/#559) — unstarted.
-- **xStock exit-check-skip staleness family** (PGR/GM/TER/QCOM/BX/BAX…) = #566, CC-B's line. Ack instances, don't chase; don't re-triage.
 
 ---
 
