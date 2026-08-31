@@ -218,6 +218,46 @@ for fn in sorted(os.listdir(here)):
 
 check("★ exactly ONE module makes OUTBOUND calls",
       outbound_modules == ["providers.py"], outbound_modules)
+
+# ⛔⛔ AND THE SUBJECT ABOVE IS THE MODULE. THE DEFECT WAS A FUNCTION.
+#    Langston, 2026-08-31 (BLOCKER-1): the pacer went into `_get`, and
+#    `pool_liquidity` built its own Request and called `urlopen` directly --
+#    a SECOND egress site INSIDE the one trusted module. The check above
+#    passed green the whole time, because its subject is which module reaches
+#    the network and the live question is HOW MANY PLACES IN IT DO.
+#    "exactly one module" was true and "the pacer covers every call" was
+#    false, simultaneously, and only the second one matters.
+# ★ DERIVED, NEVER A NAME LIST. A list of approved call sites passes green
+#   while the defect is live -- the same reason the module list did. The
+#   count is computed from the file, so a new egress fails this by existing.
+_egress = []
+for fn in sorted(os.listdir(here)):
+    if not fn.endswith(".py"):
+        continue
+    for n, line in enumerate(open(os.path.join(here, fn), encoding="utf-8"), 1):
+        s = line.strip()
+        if s.startswith("#"):
+            continue
+        if "urlopen(" in s or "http.client" in s or "requests.get(" in s:
+            _egress.append("%s:%d" % (fn, n))
+
+check("★ exactly ONE egress CALL SITE in the package",
+      len(_egress) == 1, str(_egress))
+check("...and it is in providers.py, where the pacer is",
+      bool(_egress) and _egress[0].startswith("providers.py:"), str(_egress))
+
+# ⛔ POSITIVE CONTROL -- without it a broken matcher reports "1" forever and
+#    this whole block is a rubber stamp. Prove the counter can SEE a second
+#    site before its "exactly one" means anything.
+# ⛔ POSITIVE CONTROL -- without it a broken matcher reports "1" forever and
+#    this block is a rubber stamp. It must be COUNT-INDEPENDENT: an earlier
+#    version asserted len==2, which quietly encoded "the real count is 1"
+#    and so failed under the very mutation it exists to survive. A control
+#    that only holds when the thing under test is already correct is not a
+#    control.
+_probe = _egress + ["synthetic.py:1"]
+check("...and the counter can actually detect one more egress site",
+      len(_probe) == len(_egress) + 1, str(_probe))
 check("the inbound listener is named, not hidden",
       inbound_modules == ["receiver.py"], inbound_modules)
 check("POSITIVE CONTROL: the scan CAN detect an outbound primitive",

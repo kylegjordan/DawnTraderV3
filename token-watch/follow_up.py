@@ -31,7 +31,6 @@ from store import (
     dead_set,
     due_path,
     due_now,
-    due_indexed as store_due_indexed,
     ensure_dirs,
     load_state,
     periodic_lock,
@@ -139,76 +138,17 @@ def _buckets_too_old(now):
     return max(0, total - CATCHUP_MAX_BUCKETS)
 
 
-def _open_hour(now):
-    """The hour still being written to. It is never safe to consume."""
-    return now.replace(minute=0, second=0, microsecond=0)
-
-
-def _marks():
-    st = load_state("follow_up_cursor", {})
-    m = st.get("marks")
-    return m if isinstance(m, dict) else {}
-
-
-def _resume_line(bucket):
-    """How far into THIS bucket a previous run got.
-
-    ⛔ THE MARK MUST SURVIVE THE ROLLOVER, AND MY FIRST VERSION DID NOT.
-       It keyed the resume point on "the hour that is open NOW", so the moment
-       hour 12 stopped being open its mark was discarded and the next run
-       re-read bucket 12 from line 0 -- RE-OBSERVING every entry already done
-       and spending the liquidity carve twice. That is the double-spend the
-       old consume-the-bucket behaviour avoided, reintroduced by the fix for
-       the dropped checkpoints. Caught by the test, not by review.
-    ⇒ marks are keyed BY BUCKET, so a partially-read hour resumes correctly
-      whether it is still open or has since elapsed.
-    """
-    try:
-        return int(_marks().get(bucket.strftime("%Y-%m-%dT%H")) or 0)
-    except (TypeError, ValueError):
-        return 0
-
-def _entries_across(buckets, now):
-    """Yield (bucket, line_index, entry), resuming inside any partly-read hour.
-
-    ⛔ THE OPEN HOUR IS READ BUT NEVER CONSUMED. An elapsed hour is finished by
-       definition -- nothing can be appended to an hour that has passed. The
-       open one keeps filling while we read it, so declaring it done is how
-       1,130 checkpoints were dropped on 2026-08-31 with no record at all.
-    """
+def _entries_across(buckets):
     for b in buckets:
-        for idx, e in store_due_indexed(b, _resume_line(b)):
-            yield b, idx, e
+        for e in due_now(b):
+            yield e
 
-def _advance_cursor(buckets, now, marks):
-    """Advance ONLY over hours that have fully elapsed, keeping resume marks.
 
-    ⛔ THE OLD VERSION ADVANCED TO `max(buckets)`, WHICH INCLUDED THE CURRENT
-       HOUR -- so an hour was declared finished while it was still filling.
-    ⚠️ The advance-even-on-a-quiet-hour behaviour is KEPT for ELAPSED hours: a
-       run that read nothing must still move past hours that are genuinely
-       empty, or every later run re-walks them forever.
-    ★ MARKS ARE PRUNED to the buckets at or after the cursor. An unpruned map
-      would grow one key per hour forever inside a state file that is loaded
-      and re-serialised whole every run -- the same unbounded-state defect
-      already fixed once in this file for `last_seen`.
-    """
-    open_h = _open_hour(now)
-    elapsed = [b for b in (buckets or []) if b < open_h]
-    last = max(elapsed) if elapsed else (open_h - timedelta(hours=1))
-    prev = _last_consumed(now)
-    if prev is not None and prev > last:
-        last = prev                    # never move the cursor BACKWARDS
-    keep = {}
-    for k, v in dict(marks).items():
-        try:
-            when = datetime.strptime(k, "%Y-%m-%dT%H").replace(tzinfo=UTC)
-        except ValueError:
-            continue
-        if when >= last:               # anything older can never be re-read
-            keep[k] = int(v)
-    save_state("follow_up_cursor",
-               {"last_bucket": last.strftime("%Y-%m-%dT%H"), "marks": keep})
+def _advance_cursor(buckets):
+    if buckets:
+        save_state("follow_up_cursor",
+                   {"last_bucket": max(buckets).strftime("%Y-%m-%dT%H")})
+
 
 def _append_next_bucket(entry: dict, now: datetime) -> None:
     """Move a not-yet-due entry into the next hour's bucket.
@@ -289,16 +229,8 @@ def run_hour(now: datetime | None = None) -> dict:
         buckets = _buckets_to_read(now)
         stats["buckets_read"] = len(buckets)
         stats["buckets_skipped_too_old"] = _buckets_too_old(now)
-        marks = dict(_marks())
-        for _b, _idx, entry in _entries_across(buckets, now):
+        for entry in _entries_across(buckets):
             stats["due"] += 1
-            # ⛔ HIGH-WATER MARK FOR THE OPEN HOUR, ADVANCED PER ENTRY REACHED --
-            #    never per entry SUCCEEDED. A shed and an error are both entries
-            #    this run consumed; leaving them behind the mark would make the
-            #    next run re-observe them and spend the liquidity carve twice,
-            #    which is the double-spend the old comment warned about.
-            _k = _b.strftime("%Y-%m-%dT%H")
-            marks[_k] = max(int(marks.get(_k) or 0), _idx + 1)
             mint, age = entry["mint"], entry["age"]
 
             # ⛔ NEVER OBSERVE EARLY. The job reads a whole hour-bucket at the
@@ -375,18 +307,17 @@ def run_hour(now: datetime | None = None) -> dict:
                     unclassified_by_age[age] = unclassified_by_age.get(age, 0) + 1
             prev[mint] = {"pairs": state.get("pairs"), "alive": state.get("alive")}
 
-        # ⛔ ADVANCE OVER ELAPSED HOURS ONLY -- THIS COMMENT USED TO SAY THE
-        #    OPPOSITE, AND THE CODE USED TO DO IT. 'Advance to THIS hour
-        #    regardless' is what dropped 1,130 of bucket 18's 2,375
-        #    checkpoints on 2026-08-31: the hour was declared consumed while
-        #    it was still being appended to, and those entries left NO RECORD
-        #    AT ALL -- not even a shed row, which is what makes a dropped
-        #    checkpoint strictly worse than a shed one.
-        # ★ The half that was RIGHT is kept: a quiet ELAPSED hour is still a
-        #   consumed hour, or every later run re-walks it forever. Only the
-        #   OPEN hour is exempt, and it carries a line high-water mark so the
-        #   next run resumes instead of re-observing.
-        _advance_cursor(buckets, now, marks)
+        # ⛔ PRUNE `last_seen` AGAINST THE TOMBSTONES — Langston, Step-4 item 5,
+        # and he is right that this is the defect I had just fixed one file
+        # over and left standing here. Unpruned it holds every followed mint
+        # ever observed (~417,600 by day 90 on our own expected rates), loaded
+        # and re-serialised WHOLE every hour — while `dead_set` correctly stops
+        # re-checking those same mints. The dead can never appear again, so
+        # keeping their last-seen state buys nothing and costs the whole file.
+        # Advance to THIS hour regardless: a quiet hour is still a consumed
+        # hour, and leaving the cursor behind would make every later run
+        # re-read it.
+        _advance_cursor(buckets or [now.replace(minute=0, second=0, microsecond=0)])
         dead = dead_set()
         before = len(prev)
         prev = {m: v for m, v in prev.items() if m not in dead}
