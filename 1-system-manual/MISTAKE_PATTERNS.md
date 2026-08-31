@@ -58,13 +58,25 @@ When one of those two holds: it is recorded as a **DELIBERATE EXPERIMENT, never 
 `git log --grep='^MISTAKE:' --since=1.week` → group by slug → update counts → promote/displace/retire.
 **Owner CC-A · weekly · fired by a self-chaining `verification` alert.**
 ⛔ **DISCHARGE ORDER MATTERS AND THE VERB IS THE MECHANISM: no `dedupe_key`; MINT THE NEXT ROW FIRST, THEN `resolve` the current one with evidence.** `resolve` is the ONLY verb that frees a dedupe key (`system-alerts.ts:389`); an `ack` silences the row permanently **and** drops it out of the §10.5 sweep. *"Avoid resolve"* would make the pass fire once and stop, silently.
+### ⛔⛔ SUPERSEDED 2026-08-27 — THE TRIPWIRE BELOW IS RETAINED AS A RECORD AND IS **NO LONGER THE GUARD** (`#732`)
+
+⛔⛔ **KYLE RE-OPENED `#732` ON 2026-08-27 AS `B-EXIT-LATCH-INVESTIGATION`, PLACED IN THE `PHASE_19_PLAN` GOVERNANCE QUEUE AT POSITION 7. THE DEFERRAL BELOW NO LONGER HOLDS.**
+★ **AND THE REASON IS THE TRIPWIRE ITSELF, NOT THE DATA: ITS POPULATION *IS* THE MISLABELLED ROWS.** It selects on `close_reason = 'trailing_stop_hit'` — so if rows are being mislabelled, the mislabelled ones are the ones it can never count. **A clear reading proves nothing about the bigger version of the defect** (`RUNNING_ISSUES` `#732`, 2026-08-28).
+⚠️ **SO THE `tripwire CLEAR` ENTRY LOGGED ON 2026-08-27 IS TRUE AND MEANS LESS THAN IT READS.** Left in place, not deleted — a run-log row is a record of what was run.
+
+★★ **HOW THIS WAS FOUND, RECORDED BECAUSE IT IS THE POINT: `B-DISAGREEMENT-FINDER`’s census flagged this paragraph against the register, and Langston ruled it SUBSTANTIVE — one of only 2 real findings in 9.** ⚠️ **He had independently found the SAME withdrawn posture by hand in two OTHER copies the same day; the detector reached a third. THREE COPIES OF A POSITION THAT HAD BEEN WITHDRAWN.**
+⇒ ⛔ **THAT IS `fix-follows-pointer` AT SCALE — 8 recorded instances across 6 batches — and it is the class Langston names CONSENSUS STALENESS: every copy agreeing, all of them lagging the system.**
+
+---
+
+#### ⚠️ THE ORIGINAL ENTRY, PRESERVED VERBATIM BELOW — SUPERSEDED, NOT DELETED (`#339` NO-TRIM)
 ### ⚠️ THE PASS ALSO CARRIES ONE TRIPWIRE THAT IS NOT ABOUT MISTAKES (#732, added 2026-08-20)
 **#732 was DEPRIORITISED on a measured 7-for-7 record: all seven `trailing_stop_hit` rows are winners that exited at or above target.** The deferral rests entirely on that pattern holding. **So the pass checks it, because a deferral with no tripwire is an intention:**
 ```sql
 select symbol, net_pnl, exit_price, take_profit, closed_at from closed_trades
  where close_reason = 'trailing_stop_hit' and (net_pnl < 0 or exit_price < take_profit);
 ```
-**ANY row ⇒ #732 returns to priority and is reported to Kyle that week.** **Zero rows ⇒ record "tripwire clear" in the run-log row.** *It rides this pass deliberately — no second scheduled job and no additional token cost.*
+**ANY row ⇒ #732 returns to priority and is reported to Kyle that week.** **Zero rows ⇒ record "tripwire clear" in the run-log row.** ⛔ **[SUPERSEDED — see the banner above; it no longer rides this pass as a guard]** *It rides this pass deliberately — no second scheduled job and no additional token cost.*
 
 ### ⚠️ SECOND TRIPWIRE — `#754` STEP-SKIP RECURRENCE (added 2026-08-28, Langston’s condition)
 **`#754` was scoped down to a format change; three checker-side fixes were designed and NOT built — unscheduled on FREQUENCY, not refuted on merit.** ⛔ **Langston’s catch: *"`#754` holds the design if it recurs" is a trigger with no owner and no pass that looks for it — that is the line between DEPRIORITISED and DROPPED.*** ★ **So the pass looks for it, the same way it looks for `#732`.**
