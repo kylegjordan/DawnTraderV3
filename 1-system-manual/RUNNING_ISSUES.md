@@ -842,6 +842,14 @@ MSYS2_ARG_CONV_EXCL='*' git show "…:.claude/memory/MEMORY.md"               ->
 
 ⛔ **BLIND SPOT AT BIRTH, NAMED RATHER THAN DISCOVERED: the delivery-board recipe case — a correct fix that landed in ONE of two homes — has NO REGISTER ENTRY, so claimed-vs-register returns CLEAR over a corpus that EXCLUDES it.** ★ **The tripwire shape (`#661` leg 2). Say it in the scope or the mechanism inherits a blindness at birth.**
 
+★★ **A THIRD SHAPE, FILED AT BIRTH ON LANGSTON’S RULING (2026-08-31) — SHAPE C: A POSITION IN AN ORDERED LIST.**
+⛔ **A QUEUE POSITION IS AN INTEGER THAT EVERY INSERTION ABOVE IT SILENTLY DECREMENTS.** ⇒ **CITE THE ANCHOR (*"after `B-CHUNK-ADDRESSING`"*) OR THE READ-SITE — NEVER THE NUMBER.**
+
+**THE INSTANCE, and it is this issue’s own batch:** `MISTAKE_PATTERNS.md` homed `B-MEASURE-GATE` at *"position 5, after `B-GATE-GUARD`/`B-ISSUE-BLOCK-GUARD`."* **At the ref it sits at position 6, and those two sit at position 10 — AFTER it, not before.** ★ **Langston checked his own record and the relative-ordering clause was NEVER HIS RULING**: the 08-27 weekly pass recorded only *"due-date STRUCK → placed at queue position 5"*, with no ordering claim at all. **Position 5 was TRUE WHEN WRITTEN; it drifted to 6 when `B-REVIEWER-LOOP` (08-28) and `B-CHUNK-ADDRESSING` (08-29) were placed above it.**
+
+★ **WHY IT IS ITS OWN SHAPE AND NOT SHAPE A: THE NUMBER HAS A READ-SITE.** It is checkable, it was correct, and nothing was asserted without a pointer. **It went wrong because the VALUE IS RELATIVE TO A LIST THAT OTHER SESSIONS EDIT** — so the write that invalidates it is not a write to the sentence, or to the same file, or by the same author. ⇒ **no diff, no conflict, no register entry, and nothing to compare against.**
+
+⚠️ **AND IT COMPOUNDED INTO THE `fix-follows-pointer` SHAPE ONE FILE OVER:** I corrected the stale HOME in `MISTAKE_PATTERNS.md` and left the withdrawn MEASUREMENT in `PHASE_19_PLAN.md:486` — **the row anyone actually reads to decide priority.** Corrected 2026-08-31 under Langston condition C1.
 ⇒ **HOME: `B-STATE-ASSERTION-LINT`, owner CC-A, `PHASE_19_PLAN.md` §governance queue ROW 6.5 — AFTER `B-MEASURE-GATE` leg 2, BEFORE the leg-3 rule-conversion sweep** *(Langston: converting rules to mechanisms before the mechanisms are trusted loses both; and converting while duplicate copies survive multiplies the copies)*.
 
 ⚠️ **FILED BECAUSE A FRESH READER CAUGHT IT NAMED BUT NOT PLACED — it existed only in `MECHANISM_INTEGRATION_PLAN.md` and one scope, with no number, no owner and no queue position. §9.4’s own failure, committed while citing §9.4 repeatedly the same day.**

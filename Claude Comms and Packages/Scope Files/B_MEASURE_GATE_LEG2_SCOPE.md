@@ -44,6 +44,16 @@ change-class: architecture
 
 **`[r2]` `PostToolUse` as an event — NO PROVENANCE EXISTS HERE.** It has never been used by this project: **verified 2026-08-31: **18 REGISTRATION ENTRIES** — `[R1-1]` **10 DISTINCT SCRIPTS**, since `load-own-memory` and `load-conduct` are each sharded across five entries — all `type:"command"`, across exactly three events — `PreToolUse`, `SessionStart`, `InstructionsLoaded`. Zero `PostToolUse`, zero `Stop`, zero prompt- or agent-type.** ⇒ **DISPOSITION (3) — a capability that should be connected and never has been.**
 
+⛔⛔ **`[r3]` C3 — AND `UserPromptSubmit` IS IN EXACTLY THE SAME POSITION, WHICH THE SCOPE LEFT IMPLICIT.** Langston: *"§1 gives `PostToolUse` disposition (3) but says nothing about `UserPromptSubmit`, which OBJ-1 also introduces from zero."* **He is right, and the omission is the more interesting half: I stated the from-zero risk for the event I had just been arguing about, and not for the one the July audit had ALREADY FLAGGED under the same heading.**
+
+✅ **MEASURED AT THE REF 2026-08-31, `git grep -c` under `.claude/`, WITH A CONTROL so the zeros are readable:** `PreToolUse` **11** · `SessionStart` **15** · `UserPromptSubmit` **0** · `PostToolUse` **0**.
+
+⇒ ✅ **ONE DISPOSITION COVERS BOTH, AND IT IS STATED ONCE RATHER THAN PER EVENT: DISPOSITION (3) — NO PROVENANCE, THEREFORE A PAYLOAD-LOGGING NO-OP SHIPS FIRST AND ITS OBSERVED SHAPE IS RECORDED BEFORE ANY MATCHER IS WRITTEN AGAINST IT.**
+⛔ **Reasoning from the documented `PreToolUse` contract to an UNREAD event is precisely `wrong-object`** — assuming an adjacent thing behaves like the one you actually read, which is this batch’s entire subject.
+★ **`InstructionsLoaded` (`instructions-loaded-native.mjs`) is a THIRD in-house precedent for wiring a new event safely, so this is a walked path rather than a first.**
+
+★★ **AND THE GENERALISATION IS WORTH MORE THAN THE CONDITION: the July audit flagged the from-zero risk for `UserPromptSubmit`, and the identical risk arrived UNFLAGGED with `PostToolUse` a month later.** ⇒ **the plan carries ONE STANDING RULE for any new event surface, never a note per event — a per-event note is a thing you have to remember to write again.**
+
 ---
 
 ## 2. OBJECTIVES
@@ -121,8 +131,31 @@ The shapes with a genuine **command-string** signature, each drawn from a real e
 ✅ **WHAT SURVIVES:** the instances are *consistent* with Bash — two are DB queries against columns (`opened_at`/`closed_at`, `total_fee`/`total_cost`), consistent with a Bash-wrapped `psql` **and equally with a non-Bash path**. ⛔ **So the `Bash` matcher is a HYPOTHESIS carried on Langston’s judgement, NOT on a measured population.**
 ⇒ ✅ **OBJ-6b `[R1-4]`: BEFORE the matcher is fixed, MEASURE THE TOOL DISTRIBUTION** — attribute a sample of `wrong-object` instances to the tool that actually produced the reading, from the transcripts. ⚠️ **If the population is not Bash, the matcher is wrong and the objective is mis-aimed. A real falsifier, not a formality.**
 
+## ★★ `[r3]` **OBJ-6 IS FOUR OBJECTIVES, NOT ONE — AND 6c AND 6d MUST NOT SHARE A BAR** *(Langston Q1: "two is right, and I want four")*
+
+| # | objective | it is a… | ✅ ITS OWN BAR, AND ONLY ITS OWN |
+|---|---|---|---|
+| **6a** | register a `Stop` hook and **OBSERVE** whether it fires | **an OBSERVATION, not a build** | ✅ **it fires or it does not — either is an answer.** ⛔ **No design may rest on it before it exists, and the batch does NOT depend on it.** |
+| **6b** | measure the **TOOL DISTRIBUTION** of recorded `wrong-object` instances, from the transcripts | ⛔ **A GATE. IT RUNS FIRST AND IT CAN KILL 6c AND 6d OUTRIGHT.** | ⛔ **If the population is not predominantly `Bash`, the matcher is MIS-AIMED and 6c/6d are not built.** |
+| **6c** | deterministic `PostToolUse` inspection, **warn-only** | **the affordable half** | ✅ **FIRES ON THE SHAPE, SILENT ON THE CONTROL.** No FP budget, no model call, no rate target. |
+| **6d** | **agent** escalation on 6c’s survivors | **the expensive half** | ✅ **≥5 of 8 as a FLOOR (§below) AND ≤2% escalation on the clean ref-window.** |
+
+⛔⛔ **THE SPLIT IS LOAD-BEARING, NOT BOOKKEEPING — in Langston’s form: bundled, *"OBJ-6 failed"* reads as *"result-inspection failed"* WHEN THE AFFORDABLE HALF PASSED.** ✅ **§5 falsifier 1 must be able to stop 6d and KEEP 6c.**
+
 **★ TWO STAGES, CHEAP IN FRONT OF EXPENSIVE:** a **deterministic command hook** fires on every gated Bash result and escalates only a subset to an **agent hook**.
-⛔⛔ **THE ESCALATION PREDICATE IS THIS OBJECTIVE'S REAL WORK, IT IS UNSPECIFIED, AND IT IS WHERE THE COST LIVES. It is named here as unbuilt rather than hand-waved.**
+✅✅ **`[r3]` THE ESCALATION PREDICATE IS NOW SET — LANGSTON RULED IT AT STEP 1 RATHER THAN LET ME DEFEND A GUESS. IT IS A PRINCIPLE, NOT A SPEC:**
+
+> ✅ **ESCALATE ON A RESULT THAT COULD NOT HAVE ANSWERED THE REQUEST — a SELF-IDENTIFYING property of the output contradicting the command that asked for it.**
+
+⛔ **THE OUTPUT-ANOMALY ARM IS REJECTED OUTRIGHT.** A zero, a suspiciously round number, an empty result are properties of the **result alone**, with no link to any claim — **correct constantly, and therefore a banner-blindness generator.** ★ **`MISTAKE_PATTERNS:274` already settles it: four of the six instruments that failed in one day were BETTER MATCHERS than the one before.**
+⛔ **AND COMMAND-SHAPE-PLUS-RESULT IS OBJ-4’S, NOT THIS ONE’S:** where the shape is visible BEFORE execution, **OBJ-4 owns it, because a pre-execution warning is strictly cheaper.**
+
+**EVERY RECORDED INSTANCE HAS THE PROPERTY — which is what makes it a predicate rather than a preference:** `-200` capping **after** filtering, so the returned count **equals the cap** ⇒ the cap did the filtering · a query naming `total_fee` where the identity is defined from `total_cost` · instance 8’s **404 body read as a row list** · ★ **and Langston’s own live instance while reviewing this scope: `HTTP 200`, 7,968 B, `# B-GOV-HYGIENE-ANALYST-1` — a DIFFERENT BATCH’S SCOPE, caught ONLY because the H1 named it.**
+
+**THREE BINDING CONSTRAINTS, pre-registered:**
+1. ⛔ **Derivable from command + exit code + output with NO MODEL CALL.** If it needs to know what the CLAIM was, that is 6d’s job, not the predicate’s.
+2. ⛔ **Tuned for RECALL, not precision.** Its measured bar is escalation **RATE** — never *"each escalation is real."*
+3. ⛔ **It must NEVER fire on a value.**
 
 **⛔ AGENT HOOK, NOT PROMPT HOOK — THE DISTINCTION IS THE WHOLE EPISTEMIC ARGUMENT.** A **prompt** hook re-reads my sentence about the object and **inherits my framing if my framing is in the transcript** — Langston's own `#675` failure. An **agent** hook *"runs an agent with tools"* and can **RE-EXECUTE THE MEASUREMENT AGAINST THE OBJECT.** ★ **Not a second reader — an independent re-derivation.**
 ⛔ **PRE-REGISTERED: an agent-hook verdict citing NO tool output it produced itself is INADMISSIBLE** — a prompt hook wearing an agent's clothes. **He will not approve a prompt-type hook as a verdict-carrying gate.**
@@ -131,8 +164,10 @@ The shapes with a genuine **command-string** signature, each drawn from a real e
 
 | | bar |
 |---|---|
-| **ship** | **≥5 of the 8 known positives caught, AND ≤1 false block per 50 gated Bash results (2%)** |
-| below 5 | **decorative** |
+| **ship (6d)** | ✅ **`[r3]` ≥5 of the 8 known positives — AS A NECESSARY-CONDITION FLOOR AND A KILL-SWITCH, NOT A HIT RATE** · AND ≤1 false block per 50 gated Bash results (2%) |
+| below 5 | **decorative — and THAT inference is sound, because the two biases are NOT symmetric: the ≤2% is measured on a CLEAN ref-window population; only the 5-of-8 sits on the dirty one** |
+| ⛔⛔ above 5 | **IT HAS PROVEN ONLY THE FLOOR.** ⛔ **PRE-REGISTERED NOW, BEFORE ANY RESULT EXISTS: THE COMPLETION REPORT MAY NOT SAY "CATCHES N% OF `wrong-object`" — that inference is NOT AVAILABLE from a set selected on *noticed*, whatever the number turns out to be.** |
+| ✅ **`[r3]` the free un-biasing, and therefore NOT optional** | **ADJUDICATE THE REF-WINDOW SAMPLE IN BOTH DIRECTIONS.** That window is already being run for the FP bar. **Any escalation in it that turns out to be a REAL `wrong-object` nobody trailered is a positive the trailer set COULD NOT CONTAIN BY CONSTRUCTION.** ★ **Same window, same cost — and it is the ONLY instrument in this batch that reaches the unnoticed arm at all.** |
 | above 2% | ⛔ **bypassed inside a week — which is how `#756` died** |
 | **first arm** | ✅ **WARN-ONLY** (`additionalContext`, no block). Live FP measured over a fixed window **before anything returns `decision:"block"`.** ★ *A gate that blocks on day one has an FP anecdote, not an FP rate.* |
 | ⚠️ **negative arm** | **The 8 known positives were chosen BY LOOKING AT THE DATA — `control-enumerates-the-observed` by construction.** ⇒ **sample the negative arm BY REF-WINDOW**, independently of whether anything was later corrected. |
