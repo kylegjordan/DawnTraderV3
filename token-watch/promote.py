@@ -70,7 +70,14 @@ from store import _append, load_state, save_state, schedule_grid
 UTC = timezone.utc
 LOG = logging.getLogger("token-watch.promote")
 
-CHECKS_PATH = f"{ROOT}/social-checks.jsonl"
+# IN A 0700 SUBDIRECTORY, NOT AT THE STORE ROOT. The root is 0751 so the
+#    app's user can TRAVERSE to `public/`; a file sitting directly in it had
+#    its own 0600 as the ONLY control between it and that user, in the one
+#    directory where `others` can traverse and where the umask had already
+#    drifted once (Langston, 2026-08-31). Every other study file was already
+#    behind a 0700 directory. Moving this one leaves NO regular file at the
+#    store root, so traversal reaches nothing but the published summary.
+CHECKS_PATH = f"{ROOT}/study/social-checks.jsonl"
 CORRECTIONS_PATH = f"{ROOT}/provenance/mint-corrections.jsonl"
 STATE = "promote"
 

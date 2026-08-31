@@ -47,6 +47,7 @@ import time
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 
+from config import harden as _harden
 from config import (
     BIRTHS_DIR,
     COLD_DIR,
@@ -92,7 +93,15 @@ def _append(path: str, record: dict) -> None:
     measures as unaffordable at every tier. One fsync per ~0.24 writes/second
     is nothing; a hole in the base rate is the study.
     """
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    _dir = os.path.dirname(path)
+    # `_append` MUST NEVER WRITE INTO THE PUBLISHED DIRECTORY. `_harden` sets
+    #    0700; applied to `public/` that would make the tracking page
+    #    unreadable to the app -- an EMPTY PAGE, not an error, which is the
+    #    exact failure mode `summary._publish_dir` already documents. Fail
+    #    loudly rather than silently breaking the only visible surface.
+    if os.path.basename(_dir) == "public":
+        raise ValueError("_append must not write into the published dir: %s" % path)
+    os.makedirs(_dir, exist_ok=True)
     # ⛔ THE MODE IS SET IN CODE, NOT INHERITED FROM WHOEVER RAN THE PROCESS.
     #    MEASURED 2026-08-31: `social-checks.jsonl` was 0644 inside a 0751
     #    store, so the trading app's user could read it — against the stated
@@ -100,16 +109,11 @@ def _append(path: str, record: dict) -> None:
     #    CALLER'S umask: the service sets UMask=0077, a manual repair run does
     #    not. A permission that varies by who happened to create the file is
     #    not a permission, and the claim about it cannot be true twice.
-    _new = not os.path.exists(path)
     with open(path, "a", encoding="utf-8") as fh:
         fh.write(json.dumps(record, separators=(",", ":"), sort_keys=True) + "\n")
         fh.flush()
         os.fsync(fh.fileno())
-    if _new:
-        try:
-            os.chmod(path, 0o600)
-        except OSError:
-            pass
+    _harden(_dir, path)
 
 
 
@@ -482,10 +486,19 @@ def save_state(name: str, value: dict) -> None:
     a plausible-but-wrong budget, which is worse than no budget at all.
     """
     path = state_path(name)
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    _dir = os.path.dirname(path)
+    os.makedirs(_dir, exist_ok=True)
     tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as fh:
         json.dump(value, fh, sort_keys=True)
         fh.flush()
         os.fsync(fh.fileno())
     os.replace(tmp, path)
+    # THE SAME HARDENING AS `_append`, AND IT IS NOT DECORATIVE HERE: `state/`
+    #    holds the study's IDENTITY -- the sampling cursor, the inclusion
+    #    record and the budget. Hardening the append path and leaving the
+    #    state path to the umask is the fix-follows-the-pointer failure: the
+    #    correction travels to the line that was REPORTED and not to the class
+    #    it belongs to. `path` carries the tmp file's mode after the replace,
+    #    so harden AFTER it, never before.
+    _harden(_dir, path)

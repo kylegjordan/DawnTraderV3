@@ -45,7 +45,7 @@ import logging
 import os
 from datetime import datetime, timezone
 
-from config import ROOT
+from config import ROOT, harden
 
 UTC = timezone.utc
 LOG = logging.getLogger("token-watch.provenance")
@@ -135,6 +135,7 @@ def record_accepted(raw_body: bytes, remote: str, when: datetime = None) -> dict
         fh.write(json.dumps(rec, sort_keys=True) + "\n")
         fh.flush()
         os.fsync(fh.fileno())
+    harden(RAW_DIR, path)
     return rec
 
 
@@ -164,6 +165,7 @@ def record_rejected(reason: str, remote: str, body_len: int,
         fh.write(json.dumps(rec, sort_keys=True) + "\n")
         fh.flush()
         os.fsync(fh.fileno())
+    harden(PROVENANCE_DIR, REJECTED_PATH)
     LOG.warning("webhook REJECTED (%s) from %s — %d bytes", reason, remote, body_len)
     return rec
 
@@ -209,6 +211,7 @@ def record_follow_up(mint: str, source: str, raw, when: datetime = None) -> None
         fh.write(json.dumps(rec, sort_keys=True) + "\n")
         fh.flush()
         os.fsync(fh.fileno())
+    harden(FOLLOW_UP_DIR, _follow_up_path(when))
 
 
 def stats() -> dict:

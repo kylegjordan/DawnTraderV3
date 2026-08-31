@@ -307,3 +307,31 @@ assert LIVENESS_GAP_SECONDS < LIVENESS_CHECK_INTERVAL_SECONDS, (
     "a gap threshold at or above the check interval can only ever fire on "
     "still-open gaps — the retrospective leg exists precisely to avoid that")
 assert STORE_CAP_WARN_BYTES < STORE_CAP_BYTES, "warn must leave room to act"
+
+
+def harden(directory: str, path: str) -> None:
+    """Set the store's modes IN CODE, on every write, for the file AND its
+    directory.
+
+    ⛔ IT LIVES IN `config` BECAUSE THE DEFECT SPANS TWO MODULES AND A SECOND
+       COPY WOULD DRIFT. `store` and `provenance` both write into the study
+       tree; `provenance` deliberately does NOT import `store` (the accept
+       path stays independent of the census path), and `config` is the only
+       module both already import.
+
+    Two defects, one cause. (1) The file chmod was `if _new`, so it fixed the
+    causal path -- creation under the wrong umask -- but could not repair a
+    mode that had already drifted; four files were still 0644/0664 when
+    Langston measured on 2026-08-31. (2) `os.makedirs` takes its mode from the
+    CALLER'S umask, so the same directory was 0700 created by the service
+    (UMask=0077) and 0755 created by a manual repair run -- the very umask
+    dependency this hardening exists to kill, reproduced inside the fix for it.
+
+    Unconditional is affordable: the whole store takes ~0.24 writes/second.
+    """
+    for target, mode in ((directory, 0o700), (path, 0o600)):
+        try:
+            os.chmod(target, mode)
+        except OSError:
+            pass
+
