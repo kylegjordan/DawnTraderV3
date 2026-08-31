@@ -1,72 +1,64 @@
-# OBJ-4 — LIVE FIRE RATE: **50.5%, AGAINST A 2% BAR. AS BUILT, IT DOES NOT SHIP.**
+# OBJ-4 — FIRE RATE: **`r2` WITHDRAWS `r1`'s 50.5% AND THE CONCLUSION THAT RESTED ON IT**
 
-**Owner:** CC-A · 2026-08-31 · Step 3 · measured from the hook's own sink within ~40 minutes of wiring
-
----
-
-## ⛔⛔ THE NUMBER, AND IT IS A DESIGN SIGNAL AVAILABLE BEFORE ANY ADJUDICATION
-
-| | |
-|---|---|
-| invocations recorded | **122** |
-| decided (hook did not bail) | **107** |
-| **FIRED** | **54** |
-| **FIRE RATE** | ⛔ **50.5%** |
-| pre-registered bar | **≤1 false block per 50 gated results = 2%** |
-| **ratio** | ⛔⛔ **25×** |
-
-★★ **THE ARITHMETIC SETTLES IT WITHOUT ADJUDICATING A SINGLE FIRE: 25× IS THE CEILING REACHABLE *IF EVERY FIRE WERE A TRUE POSITIVE*.** A fire rate cannot be a false-positive rate — but when it exceeds the FP bar by an order of magnitude, **the bar is unreachable no matter how the fires adjudicate.** ⇒ **no sampling round is needed to know this design fails its own gate.**
-
-⚠️ **AND THEY ARE PLAINLY NOT ALL TRUE.** One fire was `grep -c 'ITERATE TO CONSENSUS' <file>` used as an **existence check** — the count was never going to become a claim. The hook cannot tell that, because **whether a reading becomes a claim is not visible before the command runs.**
+**Owner:** CC-A · 2026-08-31 · Step 3
 
 ---
 
-## 1. ⛔ THIS IS THE OUTCOME LANGSTON REJECTED AN ENTIRE DESIGN ARM TO AVOID
+# ⛔⛔ THE RETRACTION, AND IT IS THE SAME CLASS TWICE IN ONE DAY
 
-His Q2 ruling killed the output-anomaly predicate on exactly this ground: *"a zero, a round number, an empty result are properties of the result alone with no link to any claim — they are correct constantly, and that is a **banner-blindness generator**."*
+**`r1` reported a 50.5% live fire rate against a 2% bar, called it 25× the ceiling, and concluded *"OBJ-4 as built does not ship."*** ⛔ **THAT NUMBER WAS COMPUTED OVER A CONTAMINATED POPULATION AND IS WITHDRAWN. SO IS THE CONCLUSION.**
 
-⛔⛔ **I THEN BUILT ONE ANYWAY, ON THE OTHER SIDE OF THE EXECUTION BOUNDARY.** `grep -c` and *"a search that could return zero"* are **properties of the COMMAND alone with no link to any claim** — and they are correct constantly, because that is what ordinary work in this repository looks like. **Same defect, different surface, and I did not recognise it while writing the matcher he had just warned me about.**
+**The offline suite runs the hook as a child process with payloads CHOSEN TO FIRE, and every one of those rows lands in the same sink as real session traffic.** The sink had no field separating them. ⇒ **the 50.5% was substantially a measurement of my own test suite.**
 
----
-
-## 2. THE PER-SHAPE BREAKDOWN — TWO OF THE FOUR ARE THE SAME DETECTOR
-
-| shape | total fires | fires **ALONE** |
-|---|---|---|
-| `count-is-not-a-set` | 29 | ⛔ **0** |
-| `absence-without-control` | 30 | ⛔ **1** |
-| `truncation-is-not-population` | 11 | 11 |
-| `worktree-not-ref` | 18 | 13 |
-
-⛔ **`count-is-not-a-set` NEVER FIRES ALONE, AND `absence-without-control` FIRES ALONE ONCE.** Both key on `grep -c`. **They are one detector wearing two names**, and presenting them as two shapes overstated the design's coverage — a reader counting four shapes would infer four independent signals.
-✅ **The two that do discriminate are `worktree-not-ref` (13 solo) and `truncation-is-not-population` (11 solo)** — and both are narrower: they key on a *specific* wrong surface (a CRLF checkout) and a *specific* truncation, not on a general-purpose tool.
-★ **That is the shape of the fix, if there is one: PREDICATES THAT NAME A SPECIFIC WRONG OBJECT SURVIVE; PREDICATES THAT NAME A COMMON INSTRUMENT DO NOT.**
+★★ **THIS IS `contaminated-feed` AGAIN — THE PATTERN I FILED THIS MORNING, ON LANGSTON'S INSTRUCTION, AFTER THE OBJ-6b RETRACTION.** The check was right, the object was right, **the input was wrong.** Second instance, same day, same batch, **by the author who wrote the pattern entry.** ⇒ **n=2 across one batch. The promotion floor is 3+ across 2+ distinct batches, so it is NOT promoted — but the floor is now one instance away and that should be visible.**
 
 ---
 
-## 3. ⚠️ 15 OF 122 INVOCATIONS DID NOT DECIDE — AND THE SILENCE IS READABLE ONLY BECAUSE THE FIELD EXISTS
+## 1. ✅ THE INSTRUMENT IS FIXED — the two populations are separated at the source
 
-| reason | n |
-|---|---|
-| `parse_failed` | 8 |
-| `no_command` | 8 |
+The suite sets `GUARD_SYNTHETIC=1`; the hook records `synthetic: true`. **Rows are separable at read time from here on.**
+⛔ **RETROACTIVELY THEY ARE NOT.** Every row written before the marker is unlabelled, so **the earlier session's rows cannot be cleaned and are not usable as a rate.** Stated rather than quietly re-baselined.
 
-★ **The `decided: false` field is what makes this visible at all.** Without it, 15 invocations would have produced no context and been indistinguishable from *"the command was clean"* — **a fail-open hook's silence reading as a pass, which is the enforcement-layer lookalike failure this batch exists to prevent.**
-⚠️ **`parse_failed` × 8 IS AN OPEN UNKNOWN, NOT A DISMISSAL: the matcher is scoped to `Bash`, so a payload it cannot parse is unexplained.** ⛔ **NOT diagnosed, NOT hand-waved — recorded as unknown and owed an answer before any FP measurement is quoted, because 8 undecided invocations sit inside the denominator.**
+**Current version `ffa833100dbe`, first minutes of life:**
+
+| population | decided | fired | rate |
+|---|---|---|---|
+| SYNTHETIC (payloads chosen to fire) | 21 | 10 | 47.6% |
+| **REAL session traffic** | **1** | 1 | ⛔ **n=1 — NOT A RATE** |
+
+⇒ ⛔⛔ **THE REAL-TRAFFIC FIRE RATE IS UNMEASURED. It is not high, it is not low, it is UNKNOWN, and no disposition may rest on it until a real window exists.**
 
 ---
 
-## 4. ⇒ THE DISPOSITION I AM PUTTING TO LANGSTON, NOT TAKING
+## 2. ⚠️ WHAT SURVIVES THE RETRACTION, AND WHAT DOES NOT
 
-⛔ **OBJ-4 AS BUILT DOES NOT SHIP.** The question is whether it is *tunable* or *structurally misplaced*, and I think it is the second:
+⛔ **DOES NOT SURVIVE:** *"50.5%"* · *"25× the bar"* · *"as built it does not ship"* · *"the bar is unreachable no matter how the fires adjudicate."* **All four rested on the contaminated number.**
 
-**THE MISSING SIGNAL IS "IS THIS READING ABOUT TO BECOME A CLAIM?" — AND IT IS NOT PRESENT BEFORE EXECUTION.** It lives in the result, and in what the session does next. ⇒ **a pre-execution stage can only ever fire on the instrument, and firing on the instrument is what produces 50%.**
+✅ **SURVIVES AS AN ARGUMENT — clearly labelled reasoning, not measurement:**
+> **The signal *"is this reading about to become a claim?"* is not present before execution.** It lives in the result and in what the session does next. A pre-execution stage can therefore only fire on the INSTRUMENT — and instruments like `grep -c` are ubiquitous in ordinary work here.
+★ **That is an argument that a pre-execution predicate will have a high floor. It is NOT a measurement that it does, and `r1` conflated the two.** ⇒ **it remains an argument for Langston's Q2 predicate (*a result that could not have answered the request* — claim-linked, and only available on `PostToolUse`), and it is now offered as reasoning for him to weigh, not as a finding.**
 
-★★ **WHICH IS AN ARGUMENT FOR LANGSTON'S OWN Q2 PREDICATE AND AGAINST MY OBJECTIVE: *"a RESULT THAT COULD NOT HAVE ANSWERED THE REQUEST"* is a claim-linked property, and it is only available on `PostToolUse`.** ⇒ **OBJ-4's work may belong in OBJ-6c rather than in front of it.**
+✅ **ALSO SURVIVES, and it is measured rather than argued:** `count-is-not-a-set` and `absence-without-control` were **one detector wearing two names** — across 54 `r1` fires the first NEVER fired alone and the second fired alone once. **Merged into `count-from-search` in `r2`.** Presenting them as two overstated the design's coverage.
 
-✅ **WHAT SURVIVES REGARDLESS, and it is not nothing:**
-- **`worktree-not-ref`** — a genuinely narrow, high-value predicate on a defect measured **three times in one day** by its own author. It fires 18 times, 13 alone, and every instance of the underlying error this session was real.
-- **the sink and its `decided` field** — the FP measurement apparatus works, and it is what produced this finding in 40 minutes rather than at Step 7.
-- **the use-vs-mention leg**, which is independent of where the predicate lives.
+---
 
-⚠️ **AND THE HONEST FRAMING OF THE RESULT: THE OBJECTIVE FAILED ITS BAR, AND THE INSTRUMENT BUILT TO MEASURE IT WORKED PERFECTLY.** *(That distinction is `#661` leg 3 and it is the difference between a batch that learned something and a batch that shipped a dud.)*
+## 3. ⛔ AND `r1`'s OTHER HEADLINE — *"a true positive on its author"* — IS ALSO WITHDRAWN
+
+A fresh reader traced it to the object. **The predicate did not match the author's instrument.** `r1`'s `absence-without-control` required a search token and a count token **anywhere in the command, with no locality**. In the flagged command the `| wc -l` belonged to `git diff --numstat` and the `grep` was an unrelated later stage feeding `cut`.
+⇒ **A RIGHT ANSWER FROM AN UNRELATED CONJUNCT.** ⛔ **And the same erroneous instrument had already run TWICE, SILENTLY, 34 and 17 minutes earlier in the same session.** A detector credited with catching an error it missed two of three times.
+✅ **Fixed in `r2`: matching is PER PIPELINE STAGE**, so a token pair must co-occur in one stage. The author's command is now a regression case (`E1b`) and is silent.
+
+---
+
+## 4. ✅ WHAT THE `r2` WORK ACTUALLY PRODUCED
+
+- **The write-redirection elision leg now EXISTS.** `r1`'s docstring and commit message both asserted it; the function elided heredocs only, **so the motivating incident — a crew post quoting a shape in a `--message` argument — still false-positived.** The suite passed because its one mention case was itself a heredoc.
+- **Real mutation arms.** `r1`'s "mutations" mutated nothing — they fed different inputs to an unmodified hook. **`r2` patches a copy of the hook, re-runs the whole suite against it, and requires the suite to FAIL:** remove mention-elision · remove locality · drop a shape · make it block. **All four now fail the suite.**
+- ★ **AND ARM `G` IMMEDIATELY EARNED ITS KEEP: the locality mutation PASSED.** `E1` had been written against the author's own command, which stopped firing because the **predicate was narrowed**, not because of locality — so the arm tested nothing. **The mutation caught a test that was passing for the wrong reason**, which is the same shape as everything else in this document, one level further down.
+- **No throw can escape.** `main()` is wrapped; the top-level identity computation is wrapped. **The honest claim is "no REACHABLE path exits non-zero", not "none exists"** — an uncaught throw would exit 1, which still does not block.
+
+---
+
+## 5. ⇒ THE DISPOSITION
+
+⛔ **NOTHING IS DECIDED ABOUT SHIPPING OBJ-4 UNTIL A REAL-TRAFFIC WINDOW EXISTS.** The hook is warn-only, fail-open, and live; it costs nothing to leave running while the window accrues. **That window is the deliverable, and it did not exist when `r1` declared its verdict.**

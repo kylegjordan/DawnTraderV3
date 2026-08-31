@@ -1,163 +1,170 @@
 #!/usr/bin/env node
-// OBJ-4 — B-MEASURE-GATE leg 2 (#623). Rule 29 measurement discipline, converted from prose
-// into a PreToolUse check on the shape of a command BEFORE it runs.
+// OBJ-4 — B-MEASURE-GATE leg 2 (#623). Rule 29 measurement discipline as a PreToolUse check on
+// the SHAPE of a command, before it runs.
 //
-// ⛔⛔ WARN-ONLY. IT NEVER BLOCKS. IT CANNOT BLOCK — there is no code path here that exits
-// non-zero or emits a permissionDecision. That is a Langston ruling and a measured one:
+// ⛔⛔ WARN-ONLY. It emits `additionalContext` and nothing else; the string `permissionDecision`
+// does not appear in this file. Every written exit is `process.exit(0)`.
+// ⚠️ "CANNOT BLOCK" IS A CLAIM ABOUT UNREACHABILITY THAT THE FILE'S STRUCTURE DOES NOT BY ITSELF
+// ESTABLISH — an uncaught throw exits 1, not 0. r2 therefore wraps EVERY stage, including the
+// top-level identity computation, so no throw can escape. Exit 1 would still not block (measured
+// below), but the honest statement is "no reachable path exits non-zero", not "none exists".
 //
 //   MEASURED 2026-08-31, PreToolUse/Bash, identical payload across arms, one write call site:
-//     stderr  exit 0, no block  -> NOT delivered
-//     stderr  exit 1, no block  -> NOT delivered
-//     stderr  exit 2, BLOCKS    -> delivered verbatim
+//     stderr exit 0 no block -> NOT delivered · exit 1 no block -> NOT delivered
+//     stderr exit 2 BLOCKS   -> delivered verbatim
 //     stdout JSON additionalContext, exit 0, NO BLOCK -> DELIVERED
-//   ⇒ a non-blocking hook CAN reach the model, so nothing here needs to block to be heard.
-//   Population: n=1 per arm, ONE session, ONE harness build, ONE event, ONE matcher.
-//   ⛔ NOT citable as "stderr never delivers on exit 0" and NOT citable for any other event —
-//      availability is event-scoped and one event was measured.
+//   Population: n=1 per arm, ONE session, ONE build, ONE event, ONE matcher.
+//   ⛔ NOT citable as "stderr never delivers on exit 0", and NOT citable for any other event.
+//   Langston's boundary, verbatim: NON-BLOCKING IS THE DEFAULT, NOT THE CEILING.
 //
-//   Langston's boundary, recorded verbatim so it cannot drift: NON-BLOCKING IS THE DEFAULT,
-//   NOT THE CEILING. A deterministic predicate with a measured near-zero FP rate remains
-//   eligible to block. "No forced escalation" must not harden into "blocking retired."
+// ⛔⛔ r2 — A FRESH READER REFUTED TWO CLAIMS THE r1 FILE MADE ABOUT ITSELF. Both are fixed here,
+// and both were the kind that read as covered:
 //
-// ⛔⛔ THE USE-vs-MENTION LEG IS NOT A REFINEMENT. IT IS LOAD-BEARING, AND IT EXISTS BECAUSE
-// THIS HOOK'S PREDECESSOR BLOCKED THE POST THAT WAS WARNING THE CREW ABOUT IT.
-//   A shape-matcher scanning a whole command fires on text ABOUT its trigger, not only on USE
-//   of it. This project documents its own bad measurements for a living — MISTAKE_PATTERNS.md
-//   is a file whose entire purpose is to quote them — so without this leg the guard would fire
-//   on every scope, review and completion report that cites a bad shape. A guard against wrong
-//   measurement that fires on documentation about wrong measurement is a banner-blindness
-//   generator, which is the outcome the design exists to avoid.
-//   ⚠️ It is a heuristic on top of a heuristic and it WILL be imperfect: a heredoc can carry a
-//   command that is executed elsewhere. It is cheap, needs no model call, and removes the
-//   largest false-positive source in this corpus. A self-referential fire COUNTS as a false
-//   positive against the ≤2% bar and may not be excused post hoc.
+//   (1) THE WRITE-REDIRECTION ELISION LEG DID NOT EXIST. r1's docstring and its commit message
+//       both asserted that redirection payloads were elided. `executablePart()` elided heredocs
+//       and nothing else. ⇒ THE MOTIVATING INCIDENT STILL FALSE-POSITIVED: a crew post warning
+//       about the guard (`cc-send --message "...grep -c..."`) fired it, which is the exact case
+//       the leg was written for. The suite passed because its only mention case WAS a heredoc.
 //
-// FAIL-OPEN by construction: every error path exits 0 emitting nothing. This hook must never
-// break a session, and its silence must never be read as "the command was clean" — see the
-// `decided` field in the sink, which distinguishes a clean verdict from a hook that bailed.
+//   (2) THE MATCHERS HAD NO LOCALITY. `absence-without-control` required a search token and a
+//       count token ANYWHERE in the command. In the author's own flagged command the `| wc -l`
+//       belonged to `git diff --numstat` and the `grep` was an unrelated later stage feeding
+//       `cut` — so the fire was a right answer from an UNRELATED CONJUNCT, and the same
+//       erroneous instrument had already run twice, silently, earlier in the session.
+//       ⇒ r2 matches PER PIPELINE STAGE, so a token pair must occur in one stage to count.
+//
+// FAIL-OPEN by construction. `decided:false` in the sink distinguishes "clean" from "bailed" —
+// without it a fail-open hook's silence reads as a pass, which is the lookalike failure in the
+// enforcement layer that this batch exists to prevent.
 import { readFileSync, appendFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
-const SINK = join(homedir(), '.claude', 'measurement-shape.jsonl');
-
-// OBJ-5 leg: the hook stamps its own hash on every row. Five clones on this machine have been
-// measured running three different versions of one hook file, and HEAD does not tell you which
-// — the estate is versioned by when each session last started, not by its commit. Without this
-// the FP rate is computed over an unknown mixture of hook versions.
-let SELF = null;
+let SINK = null, SELF = null;
 try {
+  SINK = join(homedir(), '.claude', 'measurement-shape.jsonl');
+  // The hook stamps its own hash: five clones have been measured running three versions of one
+  // hook concurrently, and HEAD does not say which. Without it an FP rate is computed over an
+  // unknown mixture of versions — the sink already holds three distinct hook_sha values.
   SELF = createHash('sha256').update(readFileSync(fileURLToPath(import.meta.url))).digest('hex').slice(0, 12);
 } catch { /* identity is diagnostic, never a precondition */ }
 
 function note(row) {
+  if (!SINK) return;
   try {
     appendFileSync(SINK, JSON.stringify({ ts: new Date().toISOString(), hook_sha: SELF, ...row }) + '\n', 'utf8');
   } catch { /* a sink we cannot write must never affect the session */ }
 }
 
 /**
- * Remove the regions of a command where a measurement shape is being QUOTED rather than RUN:
- * heredoc bodies, and the payload side of a write redirection. Returns the executable remainder.
- * Conservative by design — when the structure cannot be parsed we return the whole command and
- * accept the false positive, because dropping text is how a guard goes silently blind.
+ * Strip the regions where a shape is being QUOTED rather than RUN. Conservative: when structure
+ * cannot be parsed we keep the text and accept a false positive, because dropping text silently
+ * is how a guard goes blind.
  */
-function executablePart(cmd) {
+function stripMentions(cmd) {
   let s = cmd;
-  // Heredocs: <<EOF ... EOF and <<'EOF' ... EOF (and <<- variants). The delimiter is literal
-  // text on the wire, which is what makes this detectable with no model call.
-  const heredoc = /<<-?\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\1[\s\S]*?^\s*\2\s*$/gm;
-  // ⚠️ THE MARKER MUST NOT CONTAIN `<<`. The first version did, and the unterminated-heredoc
-  // pattern below then matched the MARKER ITSELF and ate the rest of the command — so a shape
-  // that was genuinely executed after a closed heredoc went unreported. Caught by arm D of the
-  // offline suite, and it is this leg's own class one level down: the elision text was mistaken
-  // for the thing it was eliding.
-  s = s.replace(heredoc, ' [heredoc-body-elided] ');
-  // An unterminated heredoc (the body is still being written) — elide to end of command.
+  // Heredoc bodies. The delimiter is literal text on the wire, which is what makes this
+  // detectable with no model call.
+  // ⚠️ THE MARKER MUST NOT CONTAIN `<<` — r1's did, the unterminated pattern below then matched
+  // the MARKER and ate the rest of the command, so a shape executed after a closed heredoc went
+  // unreported. This leg's own class, one level down: the elision text mistaken for its target.
+  s = s.replace(/<<-?\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\1[\s\S]*?^\s*\2\s*$/gm, ' [heredoc-elided] ');
   s = s.replace(/<<-?\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\1[\s\S]*$/m, ' [unterminated-heredoc-elided] ');
+  // ⛔ THE LEG r1 CLAIMED AND DID NOT HAVE. A quoted argument is PROSE unless the quote itself is
+  // the command. This is what makes `cc-send --message "...grep -c..."` — the motivating
+  // incident — stop firing, while `bash -c "grep -c x y"` still fires because the flag says the
+  // quote is a command.
+  const QUOTE = /(--message|--body|--text|--note|-m)\s+(['"])([\s\S]*?)\2/g;
+  s = s.replace(QUOTE, ' [quoted-message-elided] ');
+  // Payload side of a write redirection: `echo "..." > f`, `printf %s "..." >> f`.
+  s = s.replace(/\b(echo|printf|cat)\b[^|;&\n]*?(['"])([\s\S]*?)\2([^|;&\n]*?>>?)/g, ' [write-payload-elided] $4');
   return s;
 }
 
+/** Split into pipeline / sequence stages so a token pair must co-occur in ONE stage. */
+function stages(s) {
+  return s.split(/\|\||&&|[|;\n]/).map((x) => x.trim()).filter(Boolean);
+}
+
 /**
- * The shapes. Each is a rule-29 failure that is visible in the COMMAND ALONE, before execution,
- * with no model call and no inspection of any value. Deliberately few: a matcher that fires
- * often is a matcher that gets ignored, and Langston rejected a whole arm of this design on
- * exactly that ground.
+ * Each shape is a rule-29 failure visible in one command stage, with no model call, never firing
+ * on a value. Deliberately few — a matcher that fires often is a matcher that gets ignored.
  */
 const SHAPES = [
   {
-    id: 'count-is-not-a-set',
-    // `grep -c` counts LINES CONTAINING a match, not occurrences and not distinct things.
-    test: (s) => /\bgrep\b[^|;&\n]*\s-[A-Za-z]*c/.test(s),
-    say: 'grep -c counts MATCHING LINES, not occurrences and not distinct items. If this number is about to become "N instances" or a denominator, name which of the three you mean and confirm the instrument returns that.',
+    id: 'worktree-not-ref',
+    // Size/hash taken from a CRLF checkout and compared against LF blobs. Measured three times
+    // in one day by this file's author, including once across all five clones at once.
+    test: (st) => /\bwc\s+-[cm]\b/.test(st) || /\b(md5sum|sha1sum|sha256sum)\b/.test(st),
+    say: 'Size/hash from the WORKING TREE. This repo stores LF and checks out CRLF, so a worktree byte-count or hash will not equal the object-store one. If this is a cap check or a comparison against a ref, read the blob (git show <ref>:<path>). BOTH SIDES OF A COMPARISON MUST COME FROM ONE SURFACE, and each side names its surface.',
   },
   {
     id: 'truncation-is-not-population',
-    // `-n N`, `head -N`, `git log -N` read back as though N were the population.
-    test: (s) => /\b(head|tail)\s+-n?\s*\d+/.test(s) || /\bgit\s+log\b[^|;&\n]*\s-\d+\b/.test(s),
+    test: (st) => /\b(head|tail)\s+-n?\s*\d+/.test(st) || /\bgit\s+log\b[^\n]*\s-\d+\b/.test(st),
     say: 'This read is TRUNCATED. A head/tail/-N slice is not the population — if the result becomes a count, a share or an absence claim, re-run it unbounded or state the truncation beside the number.',
   },
   {
-    id: 'worktree-not-ref',
-    // Byte/size/hash claims taken from the checkout instead of the object store. On this repo
-    // the working tree is CRLF and the blobs are LF, so the two disagree by one byte per line.
-    test: (s) => /\bwc\s+-[cm]\b/.test(s) || /\b(md5sum|sha1sum|sha256sum)\b/.test(s),
-    say: 'Size/hash from the WORKING TREE. This repo stores LF and checks out CRLF, so a worktree byte-count or hash will not equal the object-store one — it differs by about one byte per line. If this is a cap check or a comparison against a ref, read the blob (git show <ref>:<path>) instead. BOTH SIDES OF A COMPARISON MUST COME FROM ONE SURFACE, and each side names its surface.',
-  },
-  {
-    id: 'absence-without-control',
-    // A search whose interesting outcome is zero, with no positive control alongside it.
-    test: (s) => /\b(grep|rg|git\s+grep)\b/.test(s) && /(\|\s*wc\s+-l|-c\b|--count\b)/.test(s),
-    say: 'If this returns ZERO you cannot yet call it an absence. Rule 29(b): show the instrument returning a KNOWN POSITIVE first, or its silence carries no information.',
+    id: 'count-from-search',
+    // r2: ONE shape, not two. r1 had `count-is-not-a-set` and `absence-without-control` as
+    // separate entries; measured over 54 fires, the first NEVER fired alone and the second fired
+    // alone once. They were one detector wearing two names, and presenting them as two overstated
+    // the coverage. Now locality-scoped: the count must belong to the SAME stage as the search.
+    test: (st) => /\b(grep|rg|git\s+grep)\b/.test(st) && /(-c\b|--count\b)/.test(st),
+    say: 'grep -c counts MATCHING LINES — not occurrences, not distinct items. And if it returns ZERO that is not yet an absence: rule 29(b) wants the instrument shown returning a KNOWN POSITIVE first, or its silence carries no information.',
   },
 ];
 
-let raw = '';
-try { raw = readFileSync(0, 'utf8'); }
-catch (e) { note({ decided: false, reason: 'stdin_failed', error: String(e && e.message) }); process.exit(0); }
+function main() {
+  let raw = '';
+  try { raw = readFileSync(0, 'utf8'); }
+  catch (e) { note({ decided: false, reason: 'stdin_failed', error: String(e && e.message) }); return; }
 
-let payload;
-try { payload = JSON.parse(raw); }
-catch (e) { note({ decided: false, reason: 'parse_failed', raw_bytes: raw.length }); process.exit(0); }
+  let payload;
+  try { payload = JSON.parse(raw); }
+  catch { note({ decided: false, reason: 'parse_failed', raw_bytes: raw.length }); return; }
 
-const input = payload.tool_input || payload.toolInput || {};
-const cmd = typeof input.command === 'string' ? input.command : '';
-if (!cmd) { note({ decided: false, reason: 'no_command' }); process.exit(0); }
+  const input = (payload && (payload.tool_input || payload.toolInput)) || {};
+  const cmd = typeof input.command === 'string' ? input.command : '';
+  if (!cmd) { note({ decided: false, reason: 'no_command' }); return; }
 
-const exec = executablePart(cmd);
-const elided = exec.length !== cmd.length;
+  const stripped = stripMentions(cmd);
+  const hits = [];
+  for (const sh of SHAPES) {
+    if (stages(stripped).some((st) => sh.test(st))) hits.push(sh);
+  }
 
-let hits = [];
-try {
-  hits = SHAPES.filter((s) => s.test(exec));
-} catch (e) {
-  note({ decided: false, reason: 'matcher_threw', error: String(e && e.message) });
-  process.exit(0);
+  // Written on EVERY decided invocation, fired or not: the denominator has to exist before the
+  // numerator means anything.
+  // ⛔⛔ SYNTHETIC MARKER. The offline suite runs this hook as a child process with payloads
+  // CHOSEN to fire, and every one of those rows lands in the same sink as real session traffic.
+  // r2's first fire-rate reading was computed over the mixture and was therefore meaningless —
+  // it measured the test suite. The suite sets GUARD_SYNTHETIC=1, so the two populations can be
+  // separated at read time. Without this the denominator is not the thing the bar is about.
+  note({
+    decided: true,
+    synthetic: process.env.GUARD_SYNTHETIC === '1' || undefined,
+    tool: (payload && (payload.tool_name || payload.toolName)) || null,
+    cmd_bytes: cmd.length,
+    mention_elided: stripped.length !== cmd.length,
+    stages: stages(stripped).length,
+    fired: hits.map((h) => h.id),
+  });
+
+  if (!hits.length) return;
+  const text =
+    'MEASUREMENT-SHAPE WARNING (rule 29, warn-only — nothing was blocked, and this hook does not block):\n' +
+    hits.map((h) => '• ' + h.id + ': ' + h.say).join('\n') +
+    '\nIf the reading is not about to become a claim, ignore this.';
+  try {
+    process.stdout.write(JSON.stringify({
+      hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext: text },
+    }));
+  } catch { /* fail-open */ }
 }
 
-// Recorded on EVERY invocation, fired or not — the denominator for the FP rate has to exist
-// before the numerator means anything.
-note({
-  decided: true,
-  tool: payload.tool_name || payload.toolName || null,
-  cmd_bytes: cmd.length,
-  mention_elided: elided,
-  fired: hits.map((h) => h.id),
-});
-
-if (!hits.length) process.exit(0);
-
-const body = hits.map((h) => `• ${h.id}: ${h.say}`).join('\n');
-const text =
-  'MEASUREMENT-SHAPE WARNING (rule 29, warn-only — nothing was blocked, and this hook cannot block):\n' +
-  body +
-  '\nIf the reading is not about to become a claim, ignore this.';
-
-try {
-  process.stdout.write(JSON.stringify({
-    hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext: text },
-  }));
-} catch { /* fail-open */ }
+// Nothing may escape. An uncaught throw would exit 1 — which does not block, but does make the
+// "no reachable non-zero exit" property untrue.
+try { main(); } catch (e) { try { note({ decided: false, reason: 'main_threw', error: String(e && e.message) }); } catch { /* */ } }
 process.exit(0);
