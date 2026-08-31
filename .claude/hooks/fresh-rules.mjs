@@ -59,6 +59,7 @@ const FILES = [
   ['1-system-manual/_archive/CLAUDE_MD_RULE_HISTORY.md', 'the rule narration — why each rule exists'],
 ];
 
+const NL = String.fromCharCode(10);   // written this way so a generator cannot mangle the escape
 const CWD = process.env.CLAUDE_PROJECT_DIR || process.cwd();
 const run = (args) =>
   execFileSync('git', args, { cwd: CWD, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
@@ -143,7 +144,13 @@ try {
         // list came back empty, the arm returned false, and the directory stayed frozen exactly
         // as before the fix. Caught in the rig, not in review: the arm was right and its
         // enumerator was blind to the commonest member.
-        const members = run(['status', '--porcelain', '--', p])
+        // ⛔ `-uall` IS LOAD-BEARING, NOT TIDINESS (Langston BLOCKER-2, third instance of this
+        // shape). Default `-unormal` COLLAPSES an untracked subdirectory to one entry —
+        // `?? .claude/hooks/lib/` — which is itself a directory pathspec, so `hash-object`
+        // throws, the member scores false, and the whole entry freezes with nothing able to
+        // clear it. That is BLOCKER-1 reproduced one level down. LATENT today (the hooks dir
+        // is flat, 10 files) and it would re-arm silently the day anyone adds a `lib/`.
+        const members = run(['status', '--porcelain', '-uall', '--', p])
           .split('\n').map((l) => l.slice(3).trim()).filter(Boolean);
         if (!members.length) return false;         // nothing enumerable ⇒ preserve
         return members.every(blobWasAtOrigin);
@@ -175,7 +182,19 @@ try {
       residueRefreshed.push([path, why]);
       dirty = '';                       // fall through to the refresh below
     }
-    if (dirty) { skippedDirty.push([path, why]); continue; }
+    if (dirty) {
+      // Langston's rider: name the member that held the entry back. A session otherwise
+      // sees ten guards frozen with no way to tell which file is responsible — and
+      // "content ORIGIN HAS NEVER HELD" is true of ONE member and false of nine.
+      let blocker = '';
+      try {
+        const ms = run(['status', '--porcelain', '-uall', '--', path])
+          .split(NL).map((l) => l.slice(3).trim()).filter(Boolean);
+        if (ms.length > 1) blocker = ms.find((m) => !blobWasAtOrigin(m)) || '';
+      } catch { /* naming is best-effort; never block the report */ }
+      skippedDirty.push([path, blocker ? `${why} — held by ${blocker}` : why]);
+      continue;
+    }
 
     // (b) ★ COMMITTED-BUT-NOT-YET-PUSHED work — also never overwrite. THIS WAS MISSING IN THE
     // FIRST CUT AND THE HOOK PROVED IT BY EATING ITS OWN IMPROVEMENT (2026-07-24): I committed a
