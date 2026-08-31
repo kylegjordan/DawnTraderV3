@@ -547,3 +547,33 @@ Langston: *"P6 gates nothing here now — move it with P2 or label it explicitly
 ## B2.5.5 ✅ THE TWO NOTES
 - **`ACTIVE_PATH_FLOW.md:316-317` is marked "HALF-FIXED, pointer to 3b.f-b" — NOT "fixed."** *(His wording, adopted verbatim.)*
 - **B2.4 goes VERBATIM into the completion report and the catalog row**, so the batch's own limits travel with its name.
+
+
+---
+
+# PART B2.6 — ⛔⛔ **APPLYING A CONDITION IS NOT NEW WORK. DISCHARGING AN OBJECTIVE IS. I NEARLY SHIPPED THE SECOND AS THE FIRST.**
+
+> **KYLE, 2026-08-31:** *"So if you move these original objectives back into the scope and into the plan, then don't you need to send this to the second readers and to Langston to review?"*
+> ✅ **Yes. And I was about to skip it on a technicality that does not hold.**
+
+## B2.6.1 THE DISTINCTION, STATED SO IT BINDS NEXT TIME
+| kind of change | needs a fresh reader + Langston? |
+|---|---|
+| **APPLYING a reviewer's stated condition** — he named the gap, I filled it his way | ⚠️ **No re-review needed in principle; he confirms it on the next pass.** |
+| ⛔ **DISCHARGING AN OBJECTIVE, or adding a FINDING, or asserting a CENSUS RESULT** | ⛔⛔ **YES. It is new load-bearing work that no reader and no reviewer has seen.** |
+
+★ **THE TRAP: both arrive in the same edit, in the same turn, under the same heading — "responding to the verdict." That framing makes the second one feel like the first.**
+
+## B2.6.2 ⇒ THE HONEST SPLIT OF WHAT I JUST DID
+**CONDITION-APPLICATION — Langston asked for each, in these words, and they do not need re-derivation by him:**
+- **C1** P1's verification rewritten as the mirror of P2's · **C2** P3's fence escalated + mutation-prove + the column side · **C3** *"the gate must not become a park"* written into plan row 3b.f-b · **C4** P4 restored and carved with P2 · plus the two notes (**P6** disposition, **`ACTIVE_PATH_FLOW.md` marked half-fixed**, **B2.4 verbatim into the completion report**).
+
+⛔ **NEW WORK, WHICH HE HAS NEVER SEEN AND WHICH NO READER HAS CHECKED:**
+1. ⭐ **`OBJ-3`'s DISCHARGE (new item P10) — a CENSUS with a NEGATIVE RESULT: *"the price-substitution shape occurs at EXACTLY ONE site."*** ⛔⛔ **That is an ABSENCE CLAIM, and my own standing rule makes a claim-only (mode B) reader MANDATORY for exactly that.** ⇒ **reader spawned; its round record lands in B2.6.3 before this reaches Langston.**
+2. **The `getPairHistoryDays` disposition** — *"same shape, NOT a defect, because the quantity is history-days"*. **A judgement, not a measurement.**
+3. **B2.5's objective ledger** — a structural change to the plan, and with it the measurement *"of `OBJ-1`…`OBJ-5`, ZERO appear anywhere in Part B2."*
+
+## B2.6.3 ⚠️ WHY THIS MATTERS BEYOND THIS BATCH
+**The reason `OBJ-3` was droppable in the first place is that it was the ONLY objective with no plan item** — it existed as a numbered promise in the scope and as nothing else. **A reviewer reading Part B would see a complete-looking item list and no gap**, because the gap was in a document he was not re-reading.
+⇒ ★★ **THE LEDGER IN B2.5 IS THE STRUCTURAL FIX AND IT IS CHEAP: an objective with no item is visible in one line. Without it, "no longer gating" and "silently dropped" are indistinguishable from the outside — which is precisely Kyle's objection.**
+⚠️ **AND THE LEDGER ITSELF IS NEW AND UNREVIEWED. It is not exempt from its own rule.**
