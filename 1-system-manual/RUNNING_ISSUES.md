@@ -6102,7 +6102,7 @@ CC-A's batch argues the workflow is not reliably firing. **This is that thesis, 
 
 ---
 
-### #973 — PROVENANCE IS LOST AT **SUBSTITUTION BOUNDARIES** ACROSS THE PRICING LAYER, AND A RETURN-SITE SEARCH CANNOT SEE MOST OF IT
+### #976 — PROVENANCE IS LOST AT **SUBSTITUTION BOUNDARIES** ACROSS THE PRICING LAYER, AND A RETURN-SITE SEARCH CANNOT SEE MOST OF IT
 
 **OPEN** · surfaced 2026-08-31 by a claim-only reader during `B-PRICE-AGE-TRUTH` Step 2, **after Kyle required that a restored objective go back through review** · owner **CC-C**
 **HOME: `B-PROVENANCE-LOSS-CENSUS`, owner CC-C, placed in `PHASE_19_PLAN.md` at row 3b.m, after 3b.l.**
@@ -6121,3 +6121,26 @@ CC-A's batch argues the workflow is not reliably firing. **This is that thesis, 
 
 ★★ **WHY THIS EXISTS AS AN ITEM AT ALL: I asserted *"the shape occurs at EXACTLY ONE site"* one line after correctly stating that my search was bounded to two idioms in three files.** ⇒ **A correctly-stated limit does not neutralise an overclaim sitting beside it, and the headline is what a reader carries away.**
 ⚠️ **NOT a prerequisite of `B-PRICE-AGE-TRUTH`** — that batch fixes the instance on its own path.
+
+
+---
+
+### #976 AMENDMENT 1 — ⛔ **MY DISPATCH PROSE OVERREACHED WHERE THE DOCUMENT DID NOT. THE GUARDS EXIST. RE-DERIVED.**
+
+**Langston, 2026-08-31, and he placed it correctly: this belongs to this item's FIRST DELIVERABLE, not to his ruling on the parent batch.**
+
+**All three re-derived at `origin/migration/aws-supabase`:**
+
+| I said in the dispatch | what the code does | verdict |
+|---|---|---|
+| *"`\|\| 0` turns an absent price into ZERO — a fabricated value"* | `signal-orchestrator.ts:2390-2393` — `if (!rawPrice \|\| rawPrice === 0) { console.log('[37.A][SIGNAL] Invalid price…'); return signals; }` | ⛔ **THE ZERO IS CAUGHT AT THE SITE, two lines later. It never propagates.** |
+| *"same unbounded read at `routes.ts:4631`, `trading-state-sync.ts:296`"* — implying the same `\|\| 0` shape | **Neither has `\|\| 0` at all.** Both guard: `if (livePrice && livePrice.price > 0)` (`routes.ts:4632`, `tss:296`) | ⛔ **The grouping conflated the guard behaviour.** |
+| *"`price-cache.ts:402-431` — the same reset-on-carry-forward"* | `:402-410` carries forward **`ask`, `bid`, `volume24h`** via `existing?.x ?? …` — **`price` is the FRESH parameter** | ⚠️ **Still the shape, but on the BBO, not the price.** |
+
+⇒ ✅ **WHAT SURVIVES ACROSS ALL THREE — AND IT IS WHAT THE DOCUMENT ACTUALLY SAID: the TTL-less read.** `price-cache.ts:247-248` `getCachedPrice(){ return this.cache.get(symbol) \|\| null }` enforces **no age bound at all**, and all three sites consume it. **`B2.7` is right; the dispatch prose that summarised it was not.**
+⇒ ⚠️ **AND `price-cache.ts:402-431` REMAINS MATERIAL, stated correctly: a FRESH `lastUpdatedAt` stamped over a STALE bid/ask.** Any spread computed from that BBO inherits a fresh-looking age it did not earn. **That is this item's shape, on a different field.**
+
+★★ **THE DELIVERABLE THIS SHARPENS, AND IT IS THE MOST USEFUL LINE IN THE ROUND: TRACE THE GUARD BEFORE NAMING THE CONSEQUENCE.**
+⛔ **Pre-labelling a consequence is how a census MANUFACTURES defects — which is the exact failure this item was created to avoid.** ⇒ **`#976`'s three-outcome read per instance must reach the CONSUMER's guard, not stop at the substitution site.** ★ **I refused to file these as defects and was right to; then I described one as harmful in prose. The discipline has to survive the summary, not just the document.**
+
+**MISTAKE: verification-weaker-than-claim [#976] — the document stated the finding correctly and the covering message asserted a consequence I had not traced.**

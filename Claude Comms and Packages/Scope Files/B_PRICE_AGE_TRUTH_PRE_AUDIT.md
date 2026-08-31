@@ -504,12 +504,15 @@ BLOCKER-1 establishes that P2 — the honest `source` literal — **cannot ship 
 > ⛔ **He is right, and the audit of my own rebuild is worse than the one item Langston named.** **Measured: of `OBJ-1`…`OBJ-5`, ZERO appear anywhere in Part B2** — the rebuilt plan carried plan-items and **silently stopped tracing the objectives they exist to discharge.** `P4` was gone outright. **A plan that renumbers its items and drops its objectives reads as complete while covering less.**
 
 ## B2.5.1 EVERY OBJECTIVE, ITS ITEM, AND ITS DISPOSITION — **no row may be blank**
+> ⛔⛔ **THE DISPOSITION VOCABULARY IS SIX STATES, NOT FIVE (Langston, 2026-08-31, and the ledger's FIRST LIVE TEST is what exposed it).** `SHIPS HERE` · `CARVED OUT` · `DISCHARGED` · `RESTORED` · `NON-GATING` · ⭐ **`WITHDRAWN — NOT DISCHARGED, remainder homed to <batch/issue>`.**
+> ★ **OBJ-3 was none of the first five, so the nearest available token got written — and the nearest token was `✅ DISCHARGED`.** ⇒ **a ledger with an incomplete vocabulary does not fail loudly; it coerces the wrong state and looks complete. Without the sixth, the next author reaches for the same wrong token for the same reason.**
+> ⛔ **AND THE LEFT COLUMN IS BUILT BY QUOTING THE SCOPE'S OBJECTIVE HEADINGS AT THE REF, NEVER FROM MEMORY** — otherwise the ledger inherits the same failure one level up, and **a ledger listing four of five objectives looks exactly as complete as Part B did.**
 
 | objective (from the scope) | plan item | disposition |
 |---|---|---|
 | **OBJ-1** — the rate-limited branch stops discarding age | **P1** | ✅ **SHIPS HERE** |
 | **OBJ-2** — the labels tell the truth, actionability measured first | **P2 + P8** | ⛔ **CARVED OUT** → `B-PRICE-AGE-REFUSAL`, row 3b.f-b, gated on `#971` |
-| **OBJ-3** — census of price-**SUBSTITUTION** sites, not quote-construction sites | ⭐ **P10 (NEW — it had no plan item at all)** | ✅ **DISCHARGED IN THIS DOCUMENT — see B2.5.2** |
+| **OBJ-3** — census of price-**SUBSTITUTION** sites, not quote-construction sites | ⭐ **P10 (NEW — it had no plan item at all)** | ⛔ **WITHDRAWN — NOT DISCHARGED. Remainder homed to `#976` / `B-PROVENANCE-LOSS-CENSUS`, plan row 3b.m. See B2.7.** |
 | **OBJ-4** — the persisted poison | **P5** | ✅ **SHIPS HERE** *(falsifier replaced — §7.3)* |
 | **OBJ-5** — `#743`/F-C not folded in, boundary written | scope §5 | ✅ **DISCHARGED** — boundary written and Langston-confirmed |
 | — | **P4** ⛔ **WAS DROPPED FROM B2 ENTIRELY** | ✅ **RESTORED — CARVED OUT with P2** *(it is the union/cast item FOR P2's literal; it has no meaning without P2)* |
@@ -524,10 +527,9 @@ BLOCKER-1 establishes that P2 — the honest `source` literal — **cannot ship 
 |---|---|---|
 | **`live-pricing-adapter.ts:624` `fetchFromKrakenRest`** | `Promise<number \| null>`, `return cached?.price ?? null` (`:631`) | ⛔ **THE INSTANCE — this batch's subject** |
 | **`kraken.ts:624` `getPairHistoryDays`** | `Promise<number \| null>`, `return cached.days` on a 24 h-TTL hit | ✅ **SAME SHAPE, NOT A DEFECT — the quantity is HISTORY-DAYS, not a price.** A day-count re-served up to 24 h stale is immaterial to the pass/fail its caller makes, and it carries a real TTL rather than none. **Recorded so the next census does not re-open it.** |
-| sites returning `cached?.price` as a bare value | — | **EXACTLY ONE: `:631`** |
+| sites returning `cached?.price` as a bare value **within the three files searched** | — | ⛔ **ONE HERE — and that is a statement about MY SEARCH, not about the codebase. `signal-orchestrator.ts:2387` is the same idiom outside the bound. See B2.7.** |
 
-> ⛔⛔ **WITHDRAWN — SEE B2.7. A claim-only reader found SIX mechanisms that evade my search; I re-derived two at the ref and both hold. The shape occurs at MANY sites. What survives: `:631` is an instance, it is the one on this batch's path, and P1 fixes it.**
-⇒ ✅ **OBJ-3's ANSWER: the price-substitution shape occurs at EXACTLY ONE site, and this batch fixes it.**
+⇒ ⛔ **OBJ-3 HAS NO ANSWER HERE. The claim that the shape occurs at exactly one site is WITHDRAWN — a claim-only reader found six evading mechanisms and I re-derived two. What survives: `:631` is AN instance, it is the one on this batch's path, and P1 fixes it.**
 ⚠️ **REACH, STATED: the search was `Promise<number | null>` + `cached?.price`-style returns across three pricing files.** A substitution returning a differently-typed primitive, or living outside those three files, would not have been found. **The negative result is bounded by that, and I am not claiming a repo-wide absence.**
 
 ## B2.5.3 ⚠️ **P6 — WHY "NON-GATING" IS WRITTEN DOWN RATHER THAN LEFT IMPLICIT**
@@ -628,6 +630,6 @@ cache.set(symbol, { v: clamped, t: Date.now() });
 
 ## B2.7.4 ✅ §9.4 DISPOSITION — **HOMED, NOT FOLDED IN, AND NOT ASSERTED AS DEFECTS**
 ⛔ **These are NOT filed as defects.** The reader was scoped to *"what other states of the world are consistent"* and explicitly gave **no verdict**; `getPairHistoryDays` is already an example of the same shape being harmless. **Calling them defects would be the `#453`-inverse — asserting a problem from a pattern match.**
-➕ **OWN ITEM: `B-PROVENANCE-LOSS-CENSUS`, owner CC-C, `RUNNING_ISSUES` `#973` (⚠️ minted as #972; CC-A/Langston took that number first, so the newer entry renumbers), placed in `PHASE_19_PLAN.md` at row 3b.m, after 3b.l.**
+➕ **OWN ITEM: `B-PROVENANCE-LOSS-CENSUS`, owner CC-C, `RUNNING_ISSUES` `#976` (⚠️ minted as #972; CC-A/Langston took that number first, so the newer entry renumbers), placed in `PHASE_19_PLAN.md` at row 3b.m, after 3b.l.**
 ⛔ **ITS FIRST DELIVERABLE IS THE WRITE-SIDE SEARCH ABOVE PLUS A THREE-OUTCOME READ PER INSTANCE** — real defect / working-as-designed-but-undecided / legacy — **not a fix.**
 ⚠️ **AND IT IS EXPLICITLY NOT A PREREQUISITE OF THIS BATCH.** `P1` fixes the instance on this batch's path; the class is larger and is now visible instead of hidden behind a false "exactly one."
