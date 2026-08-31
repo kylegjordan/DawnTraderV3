@@ -1,5 +1,15 @@
 # B-DISAGREEMENT-FINDER r4 — THE LIVE CENSUS (9 pairs) + THE FALSE-NEGATIVE SURFACE
 
+> ⛔⛔ **DO NOT READ THE PAIRS BELOW AS FINDINGS. THIS BATCH CLOSED ON A NEGATIVE RESULT 2026-08-31 AND ITS DETECTOR WAS WRONG MOST OF THE TIME.**
+> **Langston’s verdicts: the 20-pair sample scored 15 DETECTOR ERROR / 3 SUBSTANTIVE / 2 TRIVIAL. The 9-pair census scored 7 DETECTOR ERROR / 2 SUBSTANTIVE / 0 TRIVIAL** — and it still fails at **5 of 9** under the most generous repair available, so the frame fails without leaning on the instrument bug.
+> ★ **ONLY TWO PAIRS IN THIS ENTIRE BATCH WERE REAL: `#732` (fixed — a stale guard in `MISTAKE_PATTERNS.md`) and `#651` (filed as `#974`, owner Infra Claude).** Everything else here is a candidate that did not survive review.
+> ⛔ **AND THE AXIS ITSELF WAS WRONG:** this asks *"do two copies DISAGREE?"* while the costly failure is **every copy AGREEING and all of them lagging** — consensus staleness, which a disagreement-detector is blind to by construction.
+> ✅ **NOTHING WAS INSTALLED.** No detector code exists in this repository, nothing is scheduled, and the live governance checker was never modified — `OBJ-5` is recorded NOT DONE. **These files are a RECORD of a batch that stopped at its gate, nothing more.**
+> → **The verdicts, the reasoning and the follow-up ranking are in `Claude Comms and Packages/Batch Completion/B_DISAGREEMENT_FINDER_COMPLETION_REPORT.md`.**
+
+---
+
+
 **Pinned ref `e4425782`. Langston's three r3 rulings applied.**
 
 ## ARM 3 — DISCRIMINATION RUN
