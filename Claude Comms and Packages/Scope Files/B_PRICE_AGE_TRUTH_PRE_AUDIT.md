@@ -90,6 +90,7 @@ Langston requires a second column: **whether a concurrent WS-write gap existed o
 
 ## A5. SOURCE 5 — LEDGER, BATCH REPORTS, AND THE PRE-GOVERNANCE ARCHIVE
 - **`#951`** is this batch (mine). **`#743`** is adjacent — boundary held in scope §5. **`#742`** is the v1 residue, unrelated.
+> ⛔⛔ **A5's "sole provenance" CLAIM IS FALSE — SEE §H3. `ACTIVE_PATH_FLOW.md:316-317`, a document I OWN, already documented this defect in full. I ran a six-source audit and did not read my own map.**
 - ⛔ **`CHANGES_AND_FIXES.md` has NO record of the rate limiter under its own phase tag** — the only `8.8.5` hit is a WebSocket ping line (`:1322`). **The branch's sole provenance is the git commit.**
 - **Pre-governance archive (71 files):** `MARKET_DATA_INTEGRATION_AND_CACHING_REPORT.md` covers a **CoinGecko-primary, Kraken-fallback, 60-second display cache** — **a different, since-deleted layer** (P19-B8.9 removed the CoinGecko/Binance legs). ⇒ **NO COVERAGE of this branch. Recorded as a finding, per the recording rule.**
 
@@ -132,10 +133,12 @@ Langston requires a second column: **whether a concurrent WS-write gap existed o
 | # | plan item | falls out of | verification |
 |---|---|---|---|
 | **P1** | **Carry the age.** `fetchFromKrakenRest`'s rate-limited branch returns the cache **row** (or `{price, observedAt}`), not a bare number; the caller propagates `observedAt` instead of stamping `Date.now()`. | **A1** | a rate-limited re-serve carries `observedAt !== Date.now()`, **against a control**: a genuine REST read in the same window whose `observedAt` IS ≈ now |
+> ⛔⛔ **P2's CRITERION COULD NOT FAIL — SEE §H1. "the gate's own source list is byte-unchanged" PASSES IF P2 IS NEVER IMPLEMENTED. Replaced with the engine's own `:1277` behaviour, with a control. And P2's DOWNSTREAM was unnamed: it routes the blocked population AROUND the rate limiter.**
 | **P2** | **Tell the truth in `source`** — a **new literal**, added to `CachedPrice['source']` (`:211` — ⛔ cited as `:210` three times, corrected per §E11). Non-actionability is inherited because `isKrakenVenueSource` (`:224`) does not list it. ⛔ **The gate is NOT touched.** | **A1.1, A3** | the gate's own source list is byte-unchanged in the diff |
 | **P3** | **A new fifth `producer` token, with its `toCachedProducer` placement STATED.** ⛔ **It must NOT map to `null`** — that suppresses the cache write and breaks re-serve. | **A1.3** | a re-served row still appears in the cache after the change; **the falsifier is the absence of that row** |
 | **P4** | **Extend the union properly, do not ride the cast.** The `as` at `:478` would admit the new literal silently. | **A1.1** | removing the new literal from `CachedPrice['source']` **must produce a compile error** — if it does not, P4 failed |
 | **P5** | **OBJ-4 replacement — re-serve monotonicity.** For a symbol, `observedAt` may advance only when a genuine venue read occurred. | **§7.3 (condition 3)** | a tick logging `REST_BLOCKED` on symbol S **must not** advance S's `observedAt` |
+> ⛔ **P6 HAD NO DECISION RULE — SEE §H2, where one is now pre-registered before any measurement.**
 | **P6** | ⛔ **PRECONDITION OF P2, NOT OF P1: measure condition 2's column (2)** — concurrent WS-write gap per symbol during a `REST_BLOCKED` burst — **plus the AGE DISTRIBUTION of the refused population** (condition 2b). | **A2.3** | if the distribution is dominated by sub-second re-serves, **the conclusion is to pull `#743`/F-C forward, not to weaken this batch** (his ruling, adopted in advance) |
 | **P7** | Comments reference **by name or "above/below", never by line number.** | **A1.4** | no absolute line citation in any comment this batch adds |
 
@@ -375,3 +378,65 @@ E1's counts and the five assignment sites (**complete — `peekCachedPrice`'s co
 | **P6** | **Primary instrument becomes `GET /api/diagnostics/8.8.5/rate-limiter`** (cumulative counters + `perSymbolCooldowns`); the log grep demotes to cross-check. **Adds: why only the 5 seeds appear when `trackedSymbols` grows.** | **G3, G4** |
 | **P3** | ⛔ **Escalated: a suppressed write does NOT fail closed — it re-serves the OLD row under its ORIGINAL venue tag and PASSES the actionability gate.** And it removes the mechanism that produces today's honest tag. | **G5** |
 | **P7** | **Strengthened by evidence: 4 stale absolute citations in this one file, 0 stale relative ones.** | **G7** |
+
+
+---
+
+# H. ⛔⛔ STEP-2 VERDICT: **CHANGES-NEEDED. FOUR BLOCKERS, ALL RE-DERIVED, ALL CORRECT.**
+
+**Langston at `38e0a539c` + staging. He independently re-derived both unions, the gate, the predicate, the guard/cast, the null arm, the blocked branch, the stamp, the honest leg, `getPriceWithFallback:1060-1145`, and — on staging — `exit_price_producer='kraken_rest_poller'` = 0 against a control of 26 over 665, open positions 2/both xStock/zero crypto, and 19 of 420 across 104 symbols.**
+✅ **§D3 and §A2.2 therefore STAND RE-DERIVED, not reported.** *(His first denominator pass added `symbol LIKE '%/USD'` and got 295/68 — his predicate was narrower than the population; mine was right.)*
+
+## H1. ⛔⛔ BLOCKER-1 — **P2 WOULD ROUTE THE RATE-LIMITED POPULATION *AROUND* THE RATE LIMITER. I NEVER NAMED THE DOWNSTREAM.**
+**RE-DERIVED at the ref:**
+- The engine gate is **`active-execution-engine.ts:1277`** — `if (priceResult !== null && priceResult.price !== null && isKrakenVenueSource(priceResult.source))`. ⛔ **My audit never cites it.**
+- Its **else-arm at `:1289-1300`** calls `this.krakenService.getTicker(restPair)` → `kraken.ts:259` → `makePublicRequest` (`:177`) → **a bare `fetch`. No limiter.**
+- **`restRateLimiter.check` has EXACTLY ONE production caller: `live-pricing-adapter.ts:627`.**
+⇒ ⛔⛔ **TODAY the laundered `kraken_rest` tag PASSES the gate and thereby SUPPRESSES a direct call. AFTER P2 the honest literal FAILS it, and every such tick issues ONE UN-RATE-LIMITED KRAKEN PUBLIC REST CALL** — sending exactly the blocked population around the limiter **whose stated purpose (`:622`) is ban prevention.**
+**Population, stated honestly:** `{open crypto position} × {WS quiet} × {block}`. **Crypto open positions are 0, so today's added volume is ≈0 and scales with positions.** ⛔ **Not a live-risk claim — an UNNAMED LIMB, which is worse in a plan than a named risk.**
+
+### ⛔ AND MY P2 VERIFICATION CANNOT FAIL — **THE THIRD NON-DISCRIMINATING CHECK I HAVE WRITTEN IN TWO DAYS**
+P2's criterion was *"the gate's own source list is byte-unchanged in the diff."* ⇒ **that PASSES IF P2 IS NEVER IMPLEMENTED.** ★ **Same shape as `threshold=0` and as the withdrawn OBJ-4 falsifier. A criterion satisfied by doing nothing is not a criterion.**
+✅ **REPLACED:** P2 is verified by **the engine's own behaviour at `:1277`** — a post-change tick on a rate-limited re-serve must take the **else-arm**, evidenced by its `[P19-B8.5][VENUE_ONLY]` warn line naming the new literal, **with a control**: a genuine venue read in the same window that still takes the `if`-arm.
+
+## H2. ⛔⛔ BLOCKER-2 — **P6 HAD NO DECISION RULE. WRITTEN NOW, BEFORE THE MEASUREMENT.**
+The document made P6 a precondition of P2 and **never said what P6 must RETURN for P2 to proceed** ⇒ it would decay into measure-then-argue with the answer already in hand.
+
+> ### ⛔ P6 PRE-REGISTERED DECISION RULE — written 2026-08-31, BEFORE any P6 measurement
+> **P2 SHIPS ONLY IF the engine's direct-REST else-arm (`active-execution-engine.ts:1289-1300`) FIRST passes through `restRateLimiter`. Otherwise P2 is HELD — regardless of the measured rate.**
+> ★ **This deliberately converts a magnitude question into a STRUCTURAL precondition, and the reason is that routing around a ban-prevention limiter is not a thing to trade off against a percentage.** ⛔ **I am NOT inventing a tolerable-calls-per-minute threshold; I would be picking it to clear.**
+> **P6 still MEASURES and REPORTS, for the record and for `#971`:** (a) the **reach-rate** — blocked-branch entries/hour, via the `getStats()` endpoint, **two reads ≥1 h apart with no reset between**; (b) the **projected added un-limited call rate** = reach-rate × the fraction of the window with ≥1 open crypto position; (c) **Langston's column (2)** — concurrent WS-write gap per symbol during a burst.
+> **FALSIFIER: if (a) cannot be obtained without a log grep, P6 is NOT discharged** — that dependency is what produced §F1's 27× error.
+
+## H3. ⛔⛔ BLOCKER-3 — **MY SIX SOURCES MISSED A DOCUMENT I *OWN*, AND IT ALREADY DOCUMENTED THIS DEFECT IN FULL**
+**`1-system-manual/ACTIVE_PATH_FLOW.md:316-317` — a file that is MY STANDING ASSIGNMENT** — already traces both hops, classifies hop 6 as *"NOT A PENDING DECISION — A DEFECT (`#951`, plan 3b.f)"*, names the engine gate at hop 7 **and states the skip consequence.**
+⇒ ⛔ **§A5's *"the branch's sole provenance is the git commit"* IS FALSE — an asserted absence with presence-grade evidence sitting in a document I maintain.** ★ **I ran a six-source audit and did not read my own map.**
+⇒ ✅ **`ACTIVE_PATH_FLOW.md` JOINS THIS BATCH'S TIER-1 SET.**
+
+### ⛔ AND THE CITATION CLASS WAS FIXED ONE POINTER AT A TIME UNTIL A REVIEWER MADE ME GREP IT
+APF carried **the same stale triple** §D4 "corrected" in `#951`, and its gate cite was `:1020`/`:1025` for `:1277`/`:1289`.
+⛔⛔ **WORSE, AND IT IS MINE: THE GREP FOUND THREE MORE STALE CITATIONS *INSIDE `#951` ITSELF* THAT MY OWN D4 FIX DID NOT REACH** (`:1267`, `:1268`, `:1270`).
+✅ **GREPPED THE CLASS AND FIXED EVERY INSTANCE — 18 replacements across 3 documents:** `ACTIVE_PATH_FLOW.md` **5** · `EXIT_PATH_MACHINERY_AUDIT_2026-08-30.md` **2** · `RUNNING_ISSUES.md` **11**. **Read back: zero remaining, excluding two of my own passages that quote the old numbers as history.**
+★★ **THIS IS `fix-follows-pointer` LANDING ON THE BATCH THAT NAMED IT — TWICE.** **FIFTH drift instance in two days. The lesson is now measured rather than asserted: fixing where the reviewer points fixes ONE instance; only grepping the CLASS fixes the defect.**
+
+## H4. ⛔⛔ BLOCKER-4 — **TWO PRODUCTION COMMENTS ASSERT THE CHAIN §G5 REFUTED, AND THEY ARE WHAT FED MY E8**
+**`live-pricing-adapter.ts:127-129` and `:162-164`** both state a null-arm placement *"reaches `last_known_good`, fails the venue gate, and falls to direct REST — a SKIPPED POSITION."*
+**RE-DERIVED FALSE:** the suppressed write leaves the old row; `:1113` finds it; **`:1115-1122` returns it under its ORIGINAL tag** — and **performs NO age re-check whatsoever.**
+⇒ ⛔⛔ **THE RE-SERVE BYPASSES THE 2000 ms WINDOW AS WELL AS THE PREDICATE — worse than §G5 reached.**
+⇒ ✅ **"the new producer must not map to `null`" is promoted from a plan note to a FENCED INVARIANT.**
+⇒ ✅ **P7 IS WIDENED: it covers FALSE MECHANISM PROSE, not only line-number drift.** ★ **I read those two comments and propagated their claim into E8 — a comment's provenance is not its correctness.**
+
+## H5. ✅ NON-BLOCKING, ALL ACCEPTED
+- **P1's inertness is asserted, not measured.** `getAllPrices():418` ships `observedAt` to two out-of-module consumers and P9 checks them against the new **literal** only. ⇒ **P9 extended to the read sites, not just the literal.**
+- **P3 persists a fifth producer into `closed_trades.exit_price_producer`** and its verification tested only the in-memory map ⇒ **state whether the column/schema side is constrained, or it is the `#704` shape again.**
+- **The doc said `#970`; the renumber to `#971` is at `RUNNING_ISSUES:5999`.** ✅ Corrected.
+- **G4's endpoint has a sibling RESET route (`routes.ts:10929-10931`)** — a reset mid-window voids a cumulative-delta read — **and it needs auth** (he got `No authentication credentials provided`). ⇒ **P6 names who can reach it and asserts no reset in-window.**
+
+## H6. ✅ HIS ANSWERS TO MY THREE QUESTIONS
+**(a)** The split is real **given today's read sites** — *"state it as that, not as a property"* ✅ — **and P2's behaviour change is a skip-or-direct-REST at `:1277`, which the plan never named.** ✅ now named.
+**(b)** The escalation is correct and independently verified, **and worse in one respect round 3 did not reach: the re-serve bypasses the age window entirely.** ⇒ fenced invariant.
+**(c)** `#971` correctly scoped out; the §13 form is right — **named batch, owner, placed by position, no date.** ✅ **And BLOCKER-1's un-limited direct-REST leg FOLDS INTO `#971`** — *"it is literally the same 'no direct Kraken calls' divergence, so it gets a home without manufacturing a batch."*
+
+## H7. ⚠️ WHAT HE COULD **NOT** RE-DERIVE, AND HE REPORTED NO NUMBER RATHER THAN A ZERO
+**He did not locate the app stdout stream this turn, and his own note says that path returns false zeros** ⇒ **he reported NO number for the 56/19 burst and the 3.5-minute span.** ⇒ **§F1/§F2 remain SINGLE-SOURCED TO ME** — consistent with P2 being gated anyway. ★ **Refusing to publish a zero from an unvalidated instrument is the same discipline this batch keeps having to relearn.**
+**Board: Review = SENT BACK TO OWNER, read back, census 71 of 71.**

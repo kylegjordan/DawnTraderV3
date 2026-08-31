@@ -1242,7 +1242,7 @@ await storage.closeTrade(targetTrade.id, exitPrice, exitFee, exitSlippage);
 
 **SEVERITY: high. OWNER: CC-C. DISPOSITION: §9.4 (3) — own batch, `B-PRICE-AGE-TRUTH`, placed in `PHASE_19_PLAN` at row **3b.f**, WITH the other price-provenance prerequisites and BEFORE `F-G-2`, because F-G-2's before/after arms both read a price whose age this branch can fabricate.**
 
-**RE-DERIVED VERBATIM AT THE REF.** `live-pricing-adapter.ts:627-631` (was `:582-586` — STALE, corrected 2026-08-31; the adapter gained ~45 lines), inside `fetchFromKrakenRest`:
+**RE-DERIVED VERBATIM AT THE REF.** `live-pricing-adapter.ts:627-631` (was `:627-631` — STALE, corrected 2026-08-31; the adapter gained ~45 lines), inside `fetchFromKrakenRest`:
 ```
 if (!restRateLimiter.check(symbol)) {
   const cached = this.priceCache.get(this.normalizeSymbol(symbol));
@@ -1251,7 +1251,7 @@ if (!restRateLimiter.check(symbol)) {
   return cached?.price ?? null;      // <- a bare number. No age. No provenance.
 }
 ```
-The caller, `:496-505`, stamps that number unconditionally:
+The caller, `:540-549`, stamps that number unconditionally:
 ```
 source: 'kraken_rest',
 producer: 'kraken_rest_poller',
@@ -1264,10 +1264,10 @@ observedAt: Date.now(),            // a genuine venue read: observed now
 ⚠️ **POPULATION AND ITS LIMIT, STATED (rule 29).** The reader measured **995 `REST_BLOCKED` against 264 allowed** over a busy 25-minute window; **I did not reproduce that ratio.** My own scan of **10,613 live log lines on a closed-market Saturday** returned **6 blocked / 5 allowed** — enough to establish the branch is live and frequently taken, **far too small and from too quiet a period to carry a proportion.** ⇒ **THE CODE DEFECT IS RE-DERIVED AND CERTAIN; THE RATE IS NOT MINE AND IS NOT RE-DERIVED.** First deliverable of the batch is an honest rate over a representative open-market window.
 
 ⛔⛔ **THE FOUR HOPS — CITED 2026-08-30 ON LANGSTON'S CONDITION 1, AND MY OWN CLAIM IS CORRECTED IN THE PROCESS.**
-1. `fetchLivePrice` (**private**, `live-pricing-adapter.ts:460`) — the rate-limited branch `:582-586` returns `cached?.price`, **a bare number**; the caller `:496-505` stamps `source:'kraken_rest'`, `producer:'kraken_rest_poller'`, `observedAt: Date.now()`.
-2. `fetchPrice:412` calls it at `:419` and **writes the quote into `this.priceCache` at `:425-441`** — `observedAt: quote.observedAt ?? Date.now()` **and `cachedAt: Date.now()`**. ★ *The comment at `:421-423` names this very writer as* **"the one #743 calls the launderer."**
+1. `fetchLivePrice` (**private**, `live-pricing-adapter.ts:504`) — the rate-limited branch `:627-631` returns `cached?.price`, **a bare number**; the caller `:540-549` stamps `source:'kraken_rest'`, `producer:'kraken_rest_poller'`, `observedAt: Date.now()`.
+2. `fetchPrice:456` calls it at `:463` and **writes the quote into `this.priceCache` at `:470-486`** — `observedAt: quote.observedAt ?? Date.now()` **and `cachedAt: Date.now()`**. ★ *The comment at `:421-423` names this very writer as* **"the one #743 calls the launderer."**
 3. `getPriceWithFallback:1013` reads `this.priceCache.get(normalized)`, gates at `:1025` on `age <= WS_CACHE_FRESH_MS && isKrakenVenueSource(cached.source)` — **`kraken_rest` PASSES** — and returns `observedAt: cached.observedAt` (`:1032`).
-4. `active-execution-engine.ts:1249` — **the CRYPTO exit read** — calls `getPriceWithFallback(position.symbol, 2000)`.
+4. `active-execution-engine.ts:1257` — **the CRYPTO exit read** — calls `getPriceWithFallback(position.symbol, 2000)`.
 
 ⛔ **CORRECTION TO MY OWN MECHANISM, AND IT MATTERS: THE LAUNDERED `observedAt` IS CARRIED AS *PROVENANCE*, NOT AS THE CRYPTO FRESHNESS GATE.** It lands at `:1277 priceObservedAtMs` and flows to `:1367`/`:1387` (the exit-provenance record and the pending-maker path). **The engine says so itself at `:1266-1267`:** *"Provenance ruled here; freshness is `getPriceWithFallback`'s 2000ms window."*
 ★★ **BUT THE SHARPER MECHANISM IS THE *OTHER* CLOCK, AND IT DOES GATE: `fetchPrice:440` writes `cachedAt: Date.now()` ON THE SAME LAUNDERED QUOTE, and `getPriceWithFallback:1020` computes `age = now - cached.cachedAt`.** ⇒ **A rate-limited poll re-writes an unchanged, arbitrarily old price with a BRAND-NEW `cachedAt`, so the 2000 ms freshness window — the gate the engine explicitly relies on — is satisfied by a price that may be far older.**
@@ -1288,7 +1288,7 @@ observedAt: Date.now(),            // a genuine venue read: observed now
 ---
 
 
-⚠️ **CITATION DRIFT CORRECTED 2026-08-31 (found by a fresh reader during `B-PRICE-AGE-TRUTH` Step 2).** This entry's line numbers were resolved against HEAD and are stale by ~45 lines in the adapter: `:582-586`→**`:627-631`**, `:496-505`→**`:540-549`**, `:425-441`→**`:470-486`**, `:1013`→**`:1058`**, and in the engine `:1249`→**`:1257`**. ⛔ **The failure mode is specific and worth naming: a reader resolving the OLD numbers at HEAD lands on unrelated code and could conclude EITHER *"already fixed"* OR *"never existed."*** ★ Fourth drift instance in one day (this entry, my own scope, the `SYSTEM_IMPACT_MAP`, and a code header comment) — **and the one comment that survived said *"the guard above"* instead of a number.**
+⚠️ **CITATION DRIFT CORRECTED 2026-08-31 (found by a fresh reader during `B-PRICE-AGE-TRUTH` Step 2).** This entry's line numbers were resolved against HEAD and are stale by ~45 lines in the adapter: `:627-631`→**`:627-631`**, `:540-549`→**`:540-549`**, `:470-486`→**`:470-486`**, `:1013`→**`:1058`**, and in the engine `:1249`→**`:1257`**. ⛔ **The failure mode is specific and worth naming: a reader resolving the OLD numbers at HEAD lands on unrelated code and could conclude EITHER *"already fixed"* OR *"never existed."*** ★ Fourth drift instance in one day (this entry, my own scope, the `SYSTEM_IMPACT_MAP`, and a code header comment) — **and the one comment that survived said *"the guard above"* instead of a number.**
 
 ### #950 OPEN 2026-08-30 (CC-C, provenance read under Kyle's machinery-audit directive) — ⛔ THE xSTOCK FEED WAS BUILT AS AN ARCHIVE THAT WAS TO SHARE **NO STATE** WITH TRADING, AND BECAME THE TRADING FEED WITHOUT A DECISION — AND ITS NAMED REPLACEMENT WAS TRIGGERED AND NEVER BUILT
 
@@ -6023,3 +6023,6 @@ CC-A's batch argues the workflow is not reliably firing. **This is that thesis, 
 
 ⛔ **THE THREE-OUTCOME READ IS THE BATCH'S FIRST DELIVERABLE, NOT A FIX:** (1) a deliberate, correct split serving two different purposes — then **record it and close**; (2) correct-but-undecided — then a decision is owed, and it is Kyle's; (3) drift that should converge — then it is a real consolidation and needs its own plan. ⛔ **No code changes on this item until that read is done.**
 ↔ Same family as `#229` (four competing symbol modules) — **a second implementation nobody decided to have.**
+
+
+> ⚠️ **STALE LINE CITATIONS CORRECTED 2026-08-31 (`B-PRICE-AGE-TRUTH` Step 2, BLOCKER-3).** The adapter gained ~45 lines and the engine ~8, so every absolute citation to them written before 2026-08-30 resolves to unrelated code. Mapping applied: `:582-586`→`:627-631` · `:496-505`→`:540-549` · `:425-441`→`:470-486` · `lpa:1013`→`:1058` · `aee:1249`→`:1257` · `aee:1020`/`:1025`→`:1277`/`:1289` · `fetchLivePrice:460`→`:504` · `fetchPrice:412`/`:419`→`:456`/`:463`. ⛔ **A reader resolving the OLD numbers at HEAD lands on unrelated code and could conclude either "already fixed" or "never existed."** ★ **This is the FIFTH drift instance in two days, and the class was fixed one document at a time until a reviewer made me grep it — `fix-follows-pointer`.**
