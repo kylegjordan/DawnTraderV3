@@ -24,3 +24,14 @@ per-commit coverage.** Both give the same answer here; only one of them was evid
 ⚠️ **`obj6b_tools.py` prints its baseline as ALL sampled activity, which CONTAINS the
 erroring windows.** The result document reports the corrected windows-vs-NON-window
 contrast (+11.1 pp), not the contaminated one the script prints (+9.9 pp).
+
+---
+
+## ⛔⛔ `r2` — SCRIPTS 5 AND 6 REFUTED THE RESULT SCRIPTS 1-4 PRODUCED
+
+| # | script | what it establishes |
+|---|---|---|
+| 5 | `obj6b_control.py` | ⛔ **THE CONTROL THAT KILLED THE HEADLINE.** Same era, same window shape, around commits carrying NO trailer. **Enrichment `+0.3 pp`, not `+11.1 pp`.** Also proves confound (i) at the object: three of six sampled transcripts contribute ZERO era calls. |
+| 6 | `obj6b_counts.py` | the `%b`-vs-`%B` field split (189/90 vs 190/91), trailers-vs-commits (90 trailers on 87 commits), the empty `MISTAKE: none` exclusion, and that the per-commit coverage test has **ONE distinct covering-set** and therefore cannot discriminate |
+
+⚠️ **`obj6b_tools.py` (4) IS KEPT AS RUN, INCLUDING ITS CONTAMINATED BASELINE.** Its `else` branch already contains the correct conclusion — that the finding would be *"true and nearly vacuous"* — and it did not fire because the comparison fed to it was wrong. **It is left unmodified because that is the evidence.**

@@ -1,107 +1,127 @@
 # B-MEASURE-GATE leg 2 — OBJ-6b RESULT: the tool-distribution gate
 
-**Owner:** CC-A · 2026-08-31 · Step 3 · pinned ref `a758ce6f3` · change-class `architecture`
+**Owner:** CC-A · 2026-08-31 · Step 3 · change-class `architecture`
+**`r2` — the `r1` version's headline finding was REFUTED by a second reader and re-derived here as refuted. Nothing is silently swapped; the retraction is the record.**
 
 ---
 
-## ⛔ WHAT THIS GATE IS FOR, AND WHY IT RAN FIRST
+# ⛔⛔ THE HEADLINE, AND IT IS A RETRACTION OF MY OWN
 
-**Langston, Q1 ruling:** OBJ-6b *"is a **GATE**. It runs first and it can kill the matcher."*
-⇒ **If `wrong-object` instances were not predominantly produced through `Bash`, a `PostToolUse` hook scoped to `Bash` is MIS-AIMED, and OBJ-6c and OBJ-6d do not get built.**
+**`r1` reported the erroring windows to be Bash-enriched by +11.1 pp over other activity, and argued from that: *"the enrichment is what makes the result mean something."*** ⛔ **THAT IS WRONG. AGAINST A PROPER CONTROL THE ENRICHMENT IS `+0.3 pp`.**
 
-★★ **THE POINT IS THAT IT COULD HAVE COME OUT THE OTHER WAY.** The scope's own `[R2-A]` correction records that *"all eight instances were Bash"* was a **fabricated mechanism claim, withdrawn** — the attribution it rested on was never recorded. **This objective exists because that claim was made without evidence, and it is run so the design does not rest on it a second time.**
+★★ **AND THE BRANCH THAT ACTUALLY OBTAINS IS THE ONE MY OWN SCRIPT WAS WRITTEN TO DETECT, WHOSE TEXT I HAD ALREADY TYPED:**
+> *"`wrong-object` is mostly Bash" is TRUE AND NEARLY VACUOUS — everything is mostly Bash, so the matcher is aimed at the right tool for a trivial reason. The population test PASSES but it is NOT evidence that a Bash-scoped hook catches the class.*
+
+**The script printed the other branch because the comparison I fed it was contaminated, and I took the printout.**
 
 ---
 
-## 1. THE POPULATION, PINNED — one ref, one walk
+## 1. ⛔ HOW THE `+11.1 pp` WAS MANUFACTURED — TWO CONFOUNDS, BOTH MEASURED
+
+**THE CONTROL THAT SETTLES IT: windows of the SAME SHAPE (60 min, ending at a commit) in the SAME ERA, around commits carrying NO mistake trailer at all.**
+
+| window population, era-gated at `2026-08-20T14:52:55` | n calls | Bash |
+|---|---|---|
+| **`wrong-object`** (88 commits) | 4,110 | **89.5%** |
+| other-slug `MISTAKE` (85) | 3,981 | 88.1% |
+| ⭐ **NO-trailer commits (496)** | 7,512 | **89.3%** |
+| ALL era activity | 7,927 | 89.4% |
+
+⇒ ⛔ **ENRICHMENT vs no-trailer commits in the same era: `+0.3 pp`. There is no effect.**
+
+**CONFOUND (i) — PERIOD, and it is provable at the object.** Three of the six sampled transcripts contribute **ZERO** calls to the era:
+
+| transcript | span | era calls |
+|---|---|---|
+| `4dfcc10e` · `0fe1c46a` · `66dbb030` | → 2026-08-31 | 5,715 · 181 · 2,031 |
+| ⛔ `f9ed24c3` · `3ce652e6` · `7f66d970` | **all end 2026-07-24** | **0 · 0 · 0** |
+
+**The first `wrong-object` commit is 2026-08-20.** ⇒ **my "non-window baseline" was largely May–July activity compared against August windows. I measured a PERIOD, not an ERROR.**
+
+⛔⛔ **THIS IS EXACTLY THE DEFECT LANGSTON CORRECTED IN THIS BATCH'S OWN `[R1-3]` MEASUREMENT ONE WEEK AGO — *"a control from a different population than the measurement is not a control."* SAME ERROR, SAME BATCH, IN THE OBJECTIVE BUILT TO CATCH IT.**
+
+**CONFOUND (ii) — WINDOW SHAPE.** **Every window ENDS AT A COMMIT, and committing IS Bash** (`git add` / `commit` / `push`). **Any** window terminating at a commit is Bash-enriched whether or not an error occurred — which is precisely what the 89.3% no-trailer row shows. **My window definition guaranteed the finding.**
+
+⚠️ **`r1` also compared the windows against a baseline that CONTAINED them.** I caught and corrected that one myself (+9.9 → +11.1). ★ **Correcting the small confound while the two large ones stood is the more instructive failure: a visible arithmetic fix reads as diligence and can leave the design error untouched.**
+
+---
+
+## 2. THE POPULATION — reproduces, with a declaration `r1` did not make
 
 | | |
 |---|---|
-| **ref** | `a758ce6f32bebfb3ce39129ada114f224d70988b` |
-| commits walked (branch ancestry, `--no-merges`) | **9,831** |
-| well-formed `MISTAKE:` trailers | **189** across **44** slugs |
-| ⛔ `MISTAKE: none` rows **EXCLUDED** | **1** |
-| **`wrong-object`** | **90 · 47.6% · 6.0× second place** |
+| ref | `origin/migration/aws-supabase` @ `a758ce6f3` |
+| commits walked, `--no-merges` | 9,831 |
+| **`%b` (body only)** | **189 trailers · 44 slugs · `wrong-object` 90** |
+| **`%B` (subject + body)** | **190 trailers · 44 slugs · `wrong-object` 91** |
 
-⛔ **THE EXCLUSION IS STATED HERE BECAUSE ITS SILENCE WAS A DEFECT ONCE ALREADY.** A declared *no-mistake* is not a mistake, so it does not belong in the denominator — but the pre-audit's `[r4]` records that this exclusion was previously applied **without being written down**, which made the published denominator unreproducible from the document. **Now it is a row in the table.**
+⛔ **THE FIELD CHOICE MOVES THE TOTAL, AND `r1` DID NOT DECLARE WHICH IT USED.** One trailer lives in a commit **subject** line. **Neither field is wrong; an undeclared one is** — a reader re-deriving with `%B` gets different numbers and cannot tell whether they have found an error. **Declared: `%b`.**
 
-⚠️ **One sha carries TWO trailer lines**, so the sha-set is 89 while the instance count is 90. Stated rather than smoothed.
+⛔⛔ **AND `r1` SAID "90 wrong-object COMMITS". IT IS 90 TRAILERS ON 87 COMMITS** — three commits carry two each. **Trailers and commits are two different objects and I named the wrong one, in the objective about naming the wrong object.**
 
----
-
-## 2. TWO INSTRUMENTS, CHOSEN BECAUSE THEY FAIL DIFFERENTLY
-
-★ **My own standing lesson, and the reason this is not one measurement run twice: TWO INSTRUMENTS AGREEING IS NOT A CONTROL — A CONTROL IS ONE THAT WOULD FAIL DIFFERENTLY.**
-
-| | instrument | what it sees | ⛔ how it fails |
-|---|---|---|---|
-| **1** | **commit-body attribution** | the instrument the author named in prose | ⛔ **depends on somebody having written the command down** — Langston's `[R2-A]`: attribution is *incidental, never systematic* |
-| **2** | **transcript tool distribution** | every tool call actually made | ⛔ **attributes AMBIENTLY, not causally** — it sees the hour, not the read |
-
-⇒ **Neither carries the gate alone. Their blind spots do not overlap, which is the whole design.**
+⚠️ **THE `MISTAKE: none` EXCLUSION IS EFFECTIVELY A NO-OP, AND `r1` GAVE IT A TABLE ROW.** The single literal occurrence is `0690fa25d`'s *"MISTAKE: none new."* — **no `[batch]`, no dash, so no well-formed matcher ever admitted it.** My permissive regex caught and excluded it. ⇒ **the exclusion protected nothing; presenting it as material overstated the denominator's fragility.** *(The underlying lesson from `[r4]` stands: state your exclusions. This one was stated and was empty.)*
 
 ---
 
-## 3. INSTRUMENT 1 — commit-body attribution
+## 3. ⛔ THE COVERAGE CHECK CARRIES NO INFORMATION — THE THIRD LAYER OF ONE ERROR
+
+`r1` replaced a corpus-**HULL** test with a **per-commit** test and said so proudly. **Measured: all 88 windows are covered by exactly the same four intervals. There is ONE distinct covering-set.**
+
+> `windows by number of covering intervals: {4: 88}` · `distinct covering-SETS: 1`
+
+⛔⛔ **A TEST THAT RETURNS THE IDENTICAL ANSWER FOR EVERY MEMBER OF THE POPULATION CANNOT DISCRIMINATE. The per-commit test was the hull test again at finer granularity** — those four transcripts each span the whole `wrong-object` era, so an interval test against them returns *covered* for any commit in that month whether or not a single event occurred in the hour.
+
+✅ **COVERAGE IS NEVERTHELESS REAL, ON EVIDENCE THAT DOES DISCRIMINATE: every window contains actual `tool_use` EVENTS — 4,110 calls across 88 windows, minimum 5, median 93.** ⇒ **the conclusion survives; the check that `r1` offered for it does not.**
+
+⚠️ **AND A REACH LIMIT `r1` MISSED: 64 of 88 windows contain activity from two or more transcripts**, so for most commits the objects do **not** identify which session produced the error.
+
+---
+
+## 4. INSTRUMENT 1 — commit-body attribution *(unchanged from `r1`, and it was never the disputed part)*
 
 | bucket | n | share |
 |---|---|---|
-| **BASH-only signals** | **42** | 46.7% |
-| non-Bash-only signals | **4** | 4.4% |
+| BASH-only signals | 42 | 46.7% |
+| non-Bash-only | 4 | 4.4% |
 | both (ambiguous) | 4 | 4.4% |
-| ⛔ **UNATTRIBUTED — the instrument is SILENT** | **40** | **44.4%** |
+| ⛔ **UNATTRIBUTED — instrument SILENT** | **40** | **44.4%** |
 
-⛔⛔ **THE SILENCE IS THE HEADLINE, NOT A GAP TO PAPER OVER: THIS INSTRUMENT CANNOT SPEAK TO 44% OF THE POPULATION.**
-✅ **Restated on what it CAN attribute: 42 of 46 = 91% Bash-only, 4 of 46 = 9% non-Bash.**
-⚠️ **AND THAT CONDITIONAL RATE IS BIASED IN A KNOWN DIRECTION: attributability is not random.** A shell command is quotable and gets quoted; *"I asserted it from memory"* often is not. **Same shape as the 5-of-8 selection bias Langston made me pre-register — a set selected on *written down*.** ⇒ **instrument 2 is not optional.**
-
-**The four non-Bash rows are listed rather than counted**, because they are the ones that would kill the matcher: `179f7667e` · `c6770d73a` · `42abd1a5f` · `d613ea775`.
+**On what it can attribute: 42 of 46 = 91% Bash.** ⚠️ **Biased in a known direction — a shell command is quotable and gets quoted; *"I asserted it from memory"* often is not.**
 
 ---
 
-## 4. INSTRUMENT 2 — transcript tool distribution
+## 5. ✅ THE VERDICT — THE GATE PASSES ON THE LETTER, AND ONLY ON THE LETTER
 
-**REACH ESTABLISHED BEFORE USE (rule 29(b)).** 36 transcript intervals; **every one of the 90 commits has a transcript covering its window** (commit time minus a 60-minute lookback, since the erroring read precedes the commit). **Summed transcript wall-clock is 470% of the 138-day hull** — four sessions overlap — so coverage is genuine, not a hull artefact.
+**Langston's gate: *"if the population is not predominantly Bash, the matcher is mis-aimed."*** ✅ **It IS predominantly Bash — 89.5% of tool calls in erroring windows, 91% of attributable commit-body signals.** ⇒ ✅ **OBJ-6c AND OBJ-6d ARE CLEARED TO BUILD.**
 
-⚠️ **A PRIOR VERSION OF THIS CHECK ASKED THE WRONG QUESTION AND PASSED.** It tested whether each commit fell inside the corpus's `min(first)..max(last)` **HULL**, and reported *"100% inside the transcript span."* **A hull is not coverage** — most transcripts cover minutes, and a commit can sit inside the hull with nothing covering its moment. ★ **The per-commit test replaced it and happens to give the same answer, which is exactly why it had to be run: the wrong check and the right check agreed, and only one of them was evidence.**
+⛔⛔ **BUT THE AFFIRMATIVE CASE IS GONE, AND THE DIFFERENCE MATTERS FOR WHAT THE COMPLETION REPORT MAY CLAIM:**
+- ✅ what is established: **the matcher is not MIS-aimed.**
+- ⛔ what is NOT established, and what `r1` claimed: **that `Bash` is where this error class DISTINCTIVELY lives.** It is where *everything* lives. **89.4% of all era activity is Bash.**
 
-**Sampling stated: 6 of 36 files, largest first, 383,545 lines streamed.** Not a full census.
-
-| | Bash share |
-|---|---|
-| **erroring windows** (the hour before a `wrong-object` commit), n=4,055 | **89.6%** |
-| **non-window activity**, n=33,385 | **78.5%** |
-| ✅ **ENRICHMENT** | **+11.1 pp** |
-
-⚠️ **CORRECTED IN THE RUN: I first reported +9.9 pp against a baseline that CONTAINED the windows.** A subset compared against a superset that includes it is dragged toward it, so that figure understated the effect. **The contrast above is windows vs NON-window.**
+⇒ **Scoping to `Bash` is correct because there is nowhere else to look, NOT because the evidence points there.**
 
 ---
 
-## 5. ✅ THE GATE PASSES — AND IT IS NOT VACUOUS
+## 6. ⛔ THE CEILINGS — one restated as a RANGE, because `r1` gave a number it could not support
 
-**Both instruments agree the population is Bash-dominant, and they reach it by different routes with non-overlapping blind spots:**
-- **instrument 1:** 91% of what it can attribute;
-- **instrument 2:** 89.6% of tool calls in erroring windows, **enriched +11.1 pp over everything else**.
+**`r1`: *"8 rows carry an explicit no-instrument signature ⇒ ~16% out of reach."*** ⚠️ **8 is ONE DEFENSIBLE CODING AND NO RUBRIC WAS RECORDED.** A coding that treats *reading the wrong artifact* as *no instrument* yields ~13; one demanding an explicit assertion verb yields ~5.
+⛔ **AND THE DEEPER LIMIT: these trailers are the author's RECONSTRUCTION, written after the fact — not a record of what instrument was used.** The transcripts would settle it; **no such derivation exists.**
 
-★★ **THE ENRICHMENT IS WHAT MAKES THE RESULT MEAN SOMETHING.** Had the windows merely matched baseline, *"wrong-object is mostly Bash"* would be **true and nearly vacuous** — everything is mostly Bash, and the matcher would be right for a trivial reason. **It is not: erroring windows are measurably more Bash-heavy than ordinary work.**
-
-⇒ ✅ **OBJ-6c AND OBJ-6d ARE CLEARED TO BUILD.**
+⇒ ✅ **STATED HONESTLY: ROUGHLY 5–13 OF 50 ATTRIBUTABLE INSTANCES (≈10–26%) INVOLVE NO TOOL CALL AT ALL AND ARE BLIND TO ANY `PostToolUse` HOOK BY CONSTRUCTION.** Second ceiling, alongside §5 falsifier 3.
 
 ---
 
-## 6. ⛔ THE CEILING NEITHER INSTRUMENT CAN LIFT — STATED NOW, BEFORE ANY CODE
+## 7. ⛔ WHAT THIS RESULT MAY NOT BE CITED AS
 
-**8 rows carry an explicit *"no instrument — recalled / asserted from memory"* signature.**
-⛔⛔ **A `PostToolUse` HOOK IS BLIND TO THESE BY CONSTRUCTION. THERE IS NO TOOL RESULT TO INSPECT.** A claim asserted without ever running a command produces no event at any hook point in the design.
-
-⇒ **≈16% of the attributable population (8 of 50) is OUT OF REACH OF THE ENTIRE OBJECTIVE, and the completion report must say so.** ★ **This is pre-registered now precisely so it cannot be discovered later and reported as a shortfall in the implementation rather than a property of the approach.**
-
-⚠️ **AND IT IS THE SECOND STATED CEILING ON THIS BATCH.** §5 falsifier 3 already holds the first: *"grounding checks REDUCE this class; they do not eliminate it — a model can still misread what it genuinely retrieved."* **Neither is a reason not to build; both are reasons not to claim a coverage figure the design cannot support.**
+- ⛔ **NOT** *"erroring windows are Bash-enriched."* **Refuted: `+0.3 pp` against a same-era, same-shape control.**
+- ⛔ **NOT** *"89.5% of `wrong-object` errors are caused by Bash."* This is **ambient tool use in a window**, not the erroring read — and the window ends at a commit, which is itself a Bash operation.
+- ⛔ **NOT** a coverage figure for 6c/6d. What is cleared is the **AIM**, nothing about hit rate.
+- ⛔ **NOT** transferable to another tool, event, era or corpus.
 
 ---
 
-## 7. WHAT THIS RESULT MAY NOT BE CITED AS
+## 8. ★ WHAT THIS COST AND WHAT IT BOUGHT
 
-- ⛔ **NOT** *"89.6% of `wrong-object` errors are caused by Bash."* Instrument 2 measures **ambient tool use in a window**, not the erroring read.
-- ⛔ **NOT** a coverage figure for OBJ-6c/6d. **What is cleared is the AIM of the matcher, nothing about its hit rate** — that is 6d's bar, and the completion report is already pre-registered as forbidden from claiming *"catches N%"*.
-- ⛔ **NOT** transferable to another tool or event. One tool scope, one corpus, one ref.
+**The gate reached the right verdict through a refuted argument.** Had the second reader not run, `B-MEASURE-GATE` would have shipped carrying *"erroring windows are Bash-enriched by 11 points"* — **a manufactured effect, in the batch whose entire subject is manufactured effects, published as its justification.**
+
+★★ **AND THE MECHANISM IS THE ONE THIS BATCH EXISTS TO MECHANISE: I HAD THE CORRECT CONCLUSION PRE-WRITTEN IN THE SCRIPT AND ARGUED PAST IT BECAUSE THE NUMBER CAME OUT THE OTHER WAY.** The `else` branch of `obj6b_tools.py` states the vacuity finding almost verbatim. **A predicate that fires on the shape of a comparison — a control drawn from a different period than the measurement — would have caught this before the number was ever read.** ⇒ **that is OBJ-6c's job, and this is now its worked example.**
