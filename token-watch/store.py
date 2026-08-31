@@ -56,6 +56,7 @@ from config import (
     GRID_LABELS,
     LOCK_PATH,
     OBSERVATIONS_DIR,
+    ROOT,
     STATE_DIR,
     TOMBSTONE_DIR,
 )
@@ -324,6 +325,88 @@ def schedule_grid(mint: str, created_at: datetime) -> None:
         _append(due_path(due_bucket),
                 {"mint": mint, "age": label, "due_at": due.isoformat(),
                  "created_at": created_at.astimezone(UTC).isoformat()})
+
+
+MINT_CORRECTIONS_PATH = f"{ROOT}/provenance/mint-corrections.jsonl"
+
+
+def _correction_index():
+    """(recorded_mint, created_at) -> real mint, for births written before the
+    conservation rule landed.
+
+    BACKGROUND, measured 2026-09-01: 19 census rows carry a QUOTE CURRENCY
+    where the launched mint belongs -- USDC or wrapped SOL standing in for a
+    real launch. All 19 predate the conservation fix, which went live at the
+    10h->11h boundary; every event after it was born under the right mint,
+    both currencies included, so this is a bounded historical set and not an
+    open hole.
+
+    WHAT IT DOES AND DOES NOT CORRUPT, because I overstated this once: a
+    per-day COUNT of births is UNAFFECTED -- a collapsed row is still one
+    launch, counted once. What breaks is identity: distinct-mint counts are
+    short, and any mint-keyed JOIN misses those rows.
+
+    AMBIGUOUS KEYS ARE DROPPED, NOT GUESSED. A collapse is detectable; a
+    wrong substitution is not.
+    """
+    idx, seen = {}, {}
+    for rec in _read(MINT_CORRECTIONS_PATH):
+        key = (rec.get("recorded_mint"), rec.get("created_at"))
+        real = rec.get("corrected_mint")
+        if not all(key) or not real:
+            continue
+        if key in seen and seen[key] != real:
+            idx[key] = None             # two launches, one key -- UNRESOLVABLE
+            continue
+        seen[key] = real
+        idx[key] = real
+    return idx
+
+
+def read_census_uncorrected(day_file: str):
+    """The RAW census rows, mint identity exactly as first recorded.
+
+    THE NAME IS THE MECHANISM (Langston, 2026-09-01). A raw census plus a
+    correction set joined by convention is two objects that must be combined
+    correctly by every reader forever, and it fails quietly in whichever one
+    forgot. So the DEFAULT read path corrects, and reading raw requires
+    calling this -- which makes every bypass a greppable string rather than
+    an omission. An omission is invisible; a named call is a census.
+
+    Legitimate callers: anything auditing the correction itself, and anything
+    that must reproduce what was recorded at the time.
+    """
+    return list(_read(f"{BIRTHS_DIR}/{day_file}"))
+
+
+def census(day_file: str, _idx=None):
+    """Census rows with mint identity CORRECTED. The default read path.
+
+    Returns rows carrying `mint` (corrected) and, where a substitution
+    happened, `recorded_mint` (what was originally written) so the repair is
+    auditable from the row itself rather than only from the index.
+    """
+    idx = _correction_index() if _idx is None else _idx
+    out = []
+    for r in read_census_uncorrected(day_file):
+        key = (r.get("mint"), r.get("created_at"))
+        if key in idx:
+            real = idx[key]
+            if real is None:
+                # KNOWN-BAD AND UNREPAIRABLE. Its key is in the corrections
+                # store -- so we KNOW this row records a quote currency rather
+                # than a launch -- but two launches share the key and a wrong
+                # substitution is not detectable, so we refuse to guess.
+                # ⛔ IT MUST STILL NOT BE PRESENTED AS A LAUNCH. Marking it
+                #    here is derived FROM THE CORRECTIONS DATA, not from a
+                #    hard-coded list of currencies -- a denylist is exactly
+                #    what the conservation rule was chosen over, and it would
+                #    go stale the first time a new quote currency appeared.
+                r = dict(r, mint_unresolved=True)
+            elif real != r.get("mint"):
+                r = dict(r, mint=real, recorded_mint=r.get("mint"))
+        out.append(r)
+    return out
 
 
 def due_now(hour: datetime):

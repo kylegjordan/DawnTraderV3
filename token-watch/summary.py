@@ -46,7 +46,8 @@ import os
 from datetime import datetime, timedelta, timezone
 
 from config import BIRTHS_DIR, DISPLAY_AGES, GRID, GRID_LABELS, ROOT
-from store import load_state, save_state, tombstone_path
+from store import (census as store_census, load_state, save_state,
+                   tombstone_path, _correction_index)
 
 UTC = timezone.utc
 LOG = logging.getLogger("token-watch.summary")
@@ -171,16 +172,36 @@ def _oldest_survivors(dead: set, limit: int, now: datetime) -> list:
       never be tombstoned, and listing it as a "survivor" would be listing our
       own blind spot as a result.
     """
+    # One index for the whole walk -- re-reading it per day-file would turn a
+    # two-file walk into N reads of the corrections store for no benefit.
+    _corrections = _correction_index()
+    _unresolved = 0   # counted, never silently dropped
     out = []
     for name in _birth_files():
-        path = os.path.join(BIRTHS_DIR, name)
+        # ⛔ THE CORRECTED READ PATH, NOT A RAW open(). 19 census rows carry a
+        #    QUOTE CURRENCY where the launched mint belongs, written before the
+        #    conservation rule landed. THIS TABLE IS MINT-KEYED AND USER-FACING, so
+        #    an uncorrected read would print USDC or wrapped SOL as a launch.
+        # ★ `store.census` is the DEFAULT path and corrects; reading raw requires
+        #   `read_census_uncorrected`, a greppable string rather than an omission.
+        #   The naming IS the mechanism -- documentation would not survive the next
+        #   reader, which is the two-objects-joined-by-convention trap.
+        # ⚠️ The row-COUNTING fold above is deliberately left uncorrected: it counts
+        #    rows per day and a collapsed row is still one launch, counted once.
+        #    Counts were never the broken thing; identity was.
         try:
-            with open(path, encoding="utf-8") as fh:
-                rows = [json.loads(l) for l in fh if l.strip()]
+            rows = store_census(name, _corrections)
         except (OSError, ValueError):
             continue
         rows.sort(key=lambda r: r.get("created_at") or "")
         for r in rows:
+            # ⛔ A ROW WE KNOW IS A QUOTE CURRENCY BUT COULD NOT REPAIR IS NOT A
+            #    LAUNCH, AND MUST NOT BE LISTED AS ONE. Its key is in the corrections
+            #    store, so this is derived from the data rather than from a hard-coded
+            #    currency list -- the denylist the conservation rule was chosen over.
+            if r.get("mint_unresolved"):
+                _unresolved += 1
+                continue
             if not r.get("followed") or r.get("mint") in dead:
                 continue
             created = r.get("created_at")
