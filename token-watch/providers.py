@@ -34,7 +34,8 @@ from datetime import datetime, timezone
 
 import budget
 import provenance
-from config import DEXSCREENER_BASE, HELIUS_ENV, RATE_PER_MIN_BY_HOST
+from config import (DEXSCREENER_BASE, HELIUS_ENV, RATE_PER_MIN_BY_HOST,
+                    UNPACED_HOSTS)
 
 UTC = timezone.utc
 TIMEOUT = 20
@@ -70,7 +71,14 @@ def _pace(url: str) -> None:
     """
     host = urllib.parse.urlsplit(url).hostname or ""
     per_min = RATE_PER_MIN_BY_HOST.get(host)
-    if not per_min:
+    if per_min is None:
+        # ⛔ REFUSE AN UNCLASSIFIED HOST RATHER THAN SILENTLY NOT PACING IT.
+        #    Unlisted-by-omission and deliberately-exempt used to be the same
+        #    code path, so a new host was unpaced and looked fine.
+        if host not in UNPACED_HOSTS:
+            raise RuntimeError(
+                "unclassified host %r: add it to RATE_PER_MIN_BY_HOST with a "
+                "rate, or to UNPACED_HOSTS with the reason it needs none" % host)
         return
     interval = 60.0 / per_min
     with _PACE_LOCK:

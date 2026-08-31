@@ -230,34 +230,54 @@ check("★ exactly ONE module makes OUTBOUND calls",
 # ★ DERIVED, NEVER A NAME LIST. A list of approved call sites passes green
 #   while the defect is live -- the same reason the module list did. The
 #   count is computed from the file, so a new egress fails this by existing.
-_egress = []
-for fn in sorted(os.listdir(here)):
-    if not fn.endswith(".py"):
-        continue
-    for n, line in enumerate(open(os.path.join(here, fn), encoding="utf-8"), 1):
+def _egress_sites(text, name):
+    """THE DETECTOR, FACTORED OUT SO THE CONTROL CAN DRIVE THE SAME CODE.
+
+    A control has to run the thing under test against a known positive. With
+    the scan inline, the only control available was arithmetic on its output,
+    which is why the previous one could not fail.
+    """
+    out = []
+    for n, line in enumerate(text.splitlines(), 1):
         s = line.strip()
         if s.startswith("#"):
             continue
         if "urlopen(" in s or "http.client" in s or "requests.get(" in s:
-            _egress.append("%s:%d" % (fn, n))
+            out.append("%s:%d" % (name, n))
+    return out
+
+
+_egress = []
+for fn in sorted(os.listdir(here)):
+    if fn.endswith(".py"):
+        _egress += _egress_sites(
+            open(os.path.join(here, fn), encoding="utf-8").read(), fn)
 
 check("★ exactly ONE egress CALL SITE in the package",
       len(_egress) == 1, str(_egress))
 check("...and it is in providers.py, where the pacer is",
       bool(_egress) and _egress[0].startswith("providers.py:"), str(_egress))
 
-# ⛔ POSITIVE CONTROL -- without it a broken matcher reports "1" forever and
-#    this whole block is a rubber stamp. Prove the counter can SEE a second
-#    site before its "exactly one" means anything.
-# ⛔ POSITIVE CONTROL -- without it a broken matcher reports "1" forever and
-#    this block is a rubber stamp. It must be COUNT-INDEPENDENT: an earlier
-#    version asserted len==2, which quietly encoded "the real count is 1"
-#    and so failed under the very mutation it exists to survive. A control
-#    that only holds when the thing under test is already correct is not a
-#    control.
-_probe = _egress + ["synthetic.py:1"]
-check("...and the counter can actually detect one more egress site",
-      len(_probe) == len(_egress) + 1, str(_probe))
+# POSITIVE CONTROL -- IT DRIVES THE DETECTOR, NOT A LIST.
+# The previous version compared list lengths --
+#     len(_egress + ["x"]) == len(_egress) + 1
+# -- which is true for EVERY possible value and so could not fail. Langston
+# caught it one ruling after I fixed the identical shape elsewhere, and it is
+# my own stated rule: a verification that cannot fail is not a verification.
+# This one hands the detector synthetic source and demands it find the site,
+# so if the matcher breaks the count above reports 0 forever and THIS fails.
+_synthetic = ("import urllib.request" + chr(10) + "def f(r):" + chr(10) +
+              "    return urllib.request.urlopen(r)" + chr(10))
+check("...and the detector actually FINDS a known egress site",
+      _egress_sites(_synthetic, "synthetic.py") == ["synthetic.py:3"],
+      str(_egress_sites(_synthetic, "synthetic.py")))
+
+# ...and does NOT fire on a commented-out call, or every comment is a site
+# and the fence above becomes noise rather than a bound.
+_commented = "# urllib.request.urlopen(r)" + chr(10)
+check("...and does NOT fire on a commented-out call",
+      _egress_sites(_commented, "synthetic.py") == [],
+      str(_egress_sites(_commented, "synthetic.py")))
 check("the inbound listener is named, not hidden",
       inbound_modules == ["receiver.py"], inbound_modules)
 check("POSITIVE CONTROL: the scan CAN detect an outbound primitive",
