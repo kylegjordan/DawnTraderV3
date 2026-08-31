@@ -6279,3 +6279,27 @@ CC-A's batch argues the workflow is not reliably firing. **This is that thesis, 
 ★ **`wrong-object`, FOURTH INSTANCE THIS BATCH** — and the first three were caught by readers, this one by Langston. **All four were in my CORRECTIONS, not in the original code.**
 
 ✅ **WHERE THE `SYSTEM_MANUAL` WITHDRAWAL WENT (Langston's non-blocking note: he found zero hits for `#951` and zero for the withdrawn absolute, consistent with withdrawal-by-deletion but not RECORDED anywhere).** The absolute — *"`price_producer` is NOT consulted by any gate, so widening it can never change a trading decision"* — **was not deleted. It was REWRITTEN IN PLACE at `SYSTEM_MANUAL.md:4671`**, which now carries the withdrawal explicitly, dated, attributed to `B-PRICE-AGE-TRUTH`, with the reason (`toCachedProducer` IS a producer-consulted branch) and the surviving narrower claim. **Verified at the ref. The grep-shaped hole was the search term, not the record.**
+
+---
+
+### #977 AMENDMENT 1 — ⛔ I TRACED MY OWN CLAIM AND THE SEVERITY ARGUMENT WAS TOO STRONG. THE STALENESS IS REAL; ITS CONSEQUENCE IS ON **SELECTION**, NOT ON CRYPTO **EXITS**.
+
+**Self-corrected 2026-08-31, before Langston ruled and before the batch started.** The original entry argued the empty `openTrade` lane matters because *"the exit path runs on a 60 s floor."* **Measured post-deploy, that is TOO STRONG for crypto open positions.**
+
+⛔ **WHAT I GOT WRONG AND HOW.** I reported the near-zero tail of the re-serve ages as *"first-re-serves following a genuine REST read."* **I INFERRED that from a pattern and never traced it.** Tracing `ZEC/USD` through consecutive events shows its `observedAt` **ADVANCING ~15 s between consecutive BLOCKED re-serves** — so something refreshes the cache while the REST leg is blocked. **It is the WebSocket book feed.**
+
+**FRAME CENSUS, post-deploy log:** `ZEC/USD` **73,776** ws book frames · **every other symbol 0**. `ZEC/USD` is the **one open crypto position** ⇒ **the mini-book subscription is scoped to open positions.** ⚠️ **`XBT/USD` was checked as well as `BTC/USD` before concluding the others have no feed — the Kraken naming trap would have inverted this conclusion.**
+
+⇒ **THE POPULATION SPLITS CLEANLY, ZERO OVERLAP (n=448 post-deploy re-serves):**
+| cohort | n | min | median | max | older than 2 s |
+|---|---|---|---|---|---|
+| `ZEC/USD` — open position, **live WS book** | 75 | −0.8 s | **−0.6 s** | 0.7 s | **0.0%** |
+| all others — **REST-fed only** | 373 | 13.3 s | **29.3 s** | 59.3 s | **100.0%** |
+
+★ **THE CORRECTED READING: the symbols the exit monitor actually holds open are exactly the WS-fed ones, and for those the price genuinely IS fresh — the honest stamp now says so truthfully (~0 s).** The 13–59 s ages land on symbols that are **NOT** open positions: **the ready-to-buy pool and the scanner universe.** ⇒ **the staleness this batch exposes is real, and its consequence is on SELECTION, not on crypto EXIT.**
+⚠️ **xSTOCK IS UNMEASURED AND IS NOT COVERED BY THAT MITIGATION:** `BE/USD` and `PLTR/USD` are open and take `observedAt` from the equities tick at `active-execution-engine.ts:1244` — **a different path, which `B-PRICE-AGE-TRUTH` does not touch and which I have not measured.**
+
+✅ **WHAT SURVIVES UNCHANGED:** the `openTrade` (2000 ms) and `fx5Snapshot` (30000 ms) buckets **are still empty and still unsubscribed** — `open=0 fx5=0` on the service's own health line; the refresh loop still runs; the five uncoordinated limiters still exist; and **we are still nowhere near Kraken's limits (1 token-exhaustion event in 58,236 decisions; zero venue-side rate-limit rejections on a proven instrument).** **None of that rests on the exit-path claim.**
+⛔ **WHAT MUST BE RE-BASED BEFORE THE BATCH IS SCOPED: the SEVERITY argument.** It now rests on **selection-path staleness** (the RTB pool ranks on prices up to a minute old, and `fx5Snapshot` — the scanner's own lane — is the other dead one) **and on xStock**, NOT on crypto exits. ⇒ **`3b.f-a`'s PLACEMENT ahead of the freshness work is referred to Langston to re-rule on, since I placed it partly on the claim I have just narrowed.**
+
+★ **METHOD NOTE, recorded because it is the batch's own lesson landing on me twice in one day:** this is the SECOND time in this arc that an inferred MECHANISM survived a correct MEASUREMENT (the first was Langston's condition 1 — right arithmetic, wrong consumer). **The number was never wrong; the story about the number was.** ⇒ **`wrong-object`, and the discriminator that caught it was tracing ONE symbol end-to-end instead of reading an aggregate.**
