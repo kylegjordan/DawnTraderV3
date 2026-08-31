@@ -122,6 +122,31 @@ console.log('\n=== D7-D12. OVER-ELISION — a swallowed instrument is worse than
   check('D11 a `<<` inside message text does not eat the next stage', !!r.ctx, 'SILENT');
 }
 {
+  // ⛔ THE PRODUCT CASE. D11 had `<<` without a substitution; D7/D8 had a substitution without a
+  // `<<`. Each half was covered and the COMBINATION was not — and it is the combination that
+  // went silent, because execRe kept the region and the `<<` then reached the heredoc rule.
+  const r = run(bash(`cc-send --message "cat <<EOF then $(date)" && wc -c CLAUDE.md`));
+  check('D11b `<<` AND a substitution together still fires', !!r.ctx, 'SILENT — the two fixes cancel');
+}
+{
+  const r = run(bash('cc-send --message "the count is $(grep -c X f.md) -- paste with cat <<EOF" && wc -c CLAUDE.md && grep -c TODO server/index.ts'));
+  check('D11c later stages survive a message holding both', !!r.ctx && r.ctx.includes('worktree-not-ref'),
+        'ctx=' + String(r.ctx).slice(0, 70));
+}
+{
+  // ⛔ GOVERNANCE MANDATES THESE EVERY TURN. A guard that fires on them is unshippable.
+  const r = run(bash('ssh root@188.245.193.8 "tail -50 /var/log/dawntrader/system-alerts.jsonl"'));
+  check('D13 the §10.5 per-turn alert read does NOT fire', r.ctx === null, 'fired: ' + String(r.ctx).slice(0, 60));
+}
+{
+  const r = run(bash('ssh root@204.168.141.77 "tail -30 /var/log/cc-discord-inbox.jsonl"'));
+  check('D14 the session-start inbox read does NOT fire', r.ctx === null, 'fired: ' + String(r.ctx).slice(0, 60));
+}
+{
+  const r = run(bash('git log -200 --grep=MISTAKE'));
+  check('D15 but git log -N still fires (not mandated)', !!r.ctx && r.ctx.includes('truncation'));
+}
+{
   // UNDER-elision: the motivating incident with `=` instead of a space.
   const r = run(bash(`cc-send --sender "OLD Claude" --message="the guard fires on grep -c, heads up"`));
   check('D12 the --message= form does not fire', r.ctx === null, 'fired: ' + String(r.ctx).slice(0, 60));
