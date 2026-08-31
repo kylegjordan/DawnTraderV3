@@ -166,23 +166,64 @@ console.log('\n=== D7-D12. OVER-ELISION — a swallowed instrument is worse than
 // and the three do not agree (`tail -50` vs `tail -n 30` vs unbounded `cat`; `root@` vs
 // `deploy@`). Enumerating from one home under-counts, which is the #641 shape.
 // ---------------------------------------------------------------------------
-console.log('\n=== M. MANDATED COMMANDS — every home, verbatim, must produce ZERO fires ===');
-const MANDATED = [
-  // HOME A — repo CLAUDE.md
-  ['CLAUDE.md:279', 'ssh root@204.168.141.77 "tail -n 30 /var/log/cc-discord-inbox.jsonl"'],
-  ['CLAUDE.md:564', `ssh root@188.245.193.8 'tail -50 /var/log/dawntrader/system-alerts.jsonl'`],
-  ['CLAUDE.md:565', `ssh staging 'tail -50 /var/log/dawntrader/system-alerts.jsonl'`],
-  // HOME B — /home/langston/CLAUDE.md (Langston's own copy, unbounded `cat`, different user)
-  ['langston/CLAUDE.md:356', `ssh deploy@188.245.193.8 'cat /var/log/dawntrader/system-alerts.jsonl 2>/dev/null'`],
-  ['langston/CLAUDE.md:356', `ssh staging 'cat /var/log/dawntrader/system-alerts.jsonl'`],
-  // HOME C — shared MEMORY.md, the home Langston did not name
-  ['MEMORY.md:16', 'ssh root@188.245.193.8 "tail -50 /var/log/dawntrader/system-alerts.jsonl"'],
-  ['MEMORY.md:17', 'ssh root@204.168.141.77 "tail -30 /var/log/cc-discord-inbox.jsonl"'],
-  ['MEMORY.md:19', `ssh -o ServerAliveInterval=60 root@204.168.141.77 'tail -n0 -F /var/log/cc-discord-inbox.jsonl /var/log/cc-wake.log'`],
+// ⛔⛔ r2 OF THIS FIXTURE — IT IS DERIVED FROM THE FILES AT TEST TIME, NOT HARDCODED.
+// The first version was a literal list of eight strings copied out of the homes. A fresh reader
+// named it exactly right: THAT ENFORCES THE GUARD AGAINST EIGHT STRINGS, NOT AGAINST THE
+// MANDATED SET — reword any home and the suite still passes on the stale literal. It is the
+// INVERSE of the #641 shape the fixture was written to invoke: two copies, nothing comparing
+// them. And one of the eight was not even verbatim: the wake-watcher line had been abbreviated.
+// ⇒ the commands are now EXTRACTED from the files themselves, so a reworded home is picked up.
+console.log('\n=== M. MANDATED COMMANDS — EXTRACTED from each home at test time, ZERO fires ===');
+function extractCommands(path, label) {
+  let text;
+  try { text = readFileSync(path, 'utf8'); }
+  catch { return [{ site: label + ' (UNREADABLE)', cmd: null }]; }
+  const out = [];
+  text.split('\n').forEach((line, i) => {
+    const at = label + ':' + (i + 1);
+    // Markdown homes: a backticked span that reads like one of the mandated reads.
+    for (const m of line.matchAll(/`([^`]*(?:tail|cat)\s[^`]*(?:system-alerts|cc-discord-inbox|cc-wake)[^`]*)`/g)) {
+      out.push({ site: at, cmd: m[1].trim() });
+    }
+    // ⛔ JSON ALLOWLIST HOME: entries are `"Bash(<command>)"`, NOT backticked — so the markdown
+    // pattern above found NOTHING here and the aggregate control still passed on the other
+    // homes' hits. A control that cannot fail for the case it was added for. Reader-found.
+    for (const m of line.matchAll(/"Bash\(([^"]*(?:tail|cat)\s[^"]*(?:system-alerts|cc-discord-inbox|cc-wake)[^"]*)\)"/g)) {
+      out.push({ site: at, cmd: m[1].replace(/:\*$/, '').trim() });
+    }
+  });
+  return out;
+}
+const HOMES = [
+  [join(ROOT, 'CLAUDE.md'), 'CLAUDE.md'],
+  [join(ROOT, '.claude', 'memory', 'MEMORY.md'), 'MEMORY.md'],
+  // ⚠️ The permission ALLOWLIST is a fourth site with its own forms, reader-found. It is not an
+  // instruction, but it pins what a session may actually run — and one of its forms FIRED.
+  [join(ROOT, '.claude', 'settings.local.json'), 'settings.local.json'],
 ];
-for (const [site, c] of MANDATED) {
-  const r = run(bash(c));
-  check('M ' + site + ' silent', r.ctx === null, 'FIRED ' + String(r.ctx).slice(0, 55));
+// ⛔ THE CONTROL IS PER-HOME, NOT AGGREGATE. The first version required `total >= 5` and PASSED
+// while finding ZERO in the allowlist home — the other homes carried it. An aggregate control
+// over a heterogeneous population cannot fail for the one member that differs.
+let extracted = [];
+for (const [p, label] of HOMES) {
+  const found = extractCommands(p, label);
+  check('M0 extractor found commands in ' + label, found.length > 0 && found.every((f) => f.cmd),
+        'found ' + found.length + ' — a home this cannot read contributes SILENCE, which reads as a pass');
+  extracted = extracted.concat(found);
+}
+for (const { site, cmd } of extracted) {
+  if (!cmd) { check('M ' + site, false, 'home unreadable'); continue; }
+  const r = run(bash(cmd));
+  check('M ' + site + ' silent', r.ctx === null, 'FIRED ' + String(r.ctx).slice(0, 50) + ' :: ' + cmd.slice(0, 70));
+}
+{
+  // ⛔ THE ONE HOME THAT CANNOT BE DERIVED: Langston's own CLAUDE.md lives on the Helsinki box,
+  // outside this repo, and a test must not depend on SSH. Pinned as a literal AND MARKED AS SUCH,
+  // because a literal that is not labelled a literal is the defect this fixture just fixed.
+  // Verified verbatim at /home/langston/CLAUDE.md:356 on 2026-09-01; re-verify when it changes.
+  const r = run(bash(`ssh deploy@188.245.193.8 'cat /var/log/dawntrader/system-alerts.jsonl 2>/dev/null'`));
+  check('M langston/CLAUDE.md:356 silent (PINNED LITERAL — off-repo, not derived)', r.ctx === null,
+        'FIRED ' + String(r.ctx).slice(0, 55));
 }
 
 console.log('\n=== E. LOCALITY — tokens must co-occur in ONE pipeline stage ===');
@@ -288,7 +329,7 @@ if (!process.env.GUARD_UNDER_TEST) {
   };
   const MUTS = [
     ['remove mention-elision', (s) => s.replace('function stripMentions(cmd) {', 'function stripMentions(cmd) { return cmd;')],
-    ['remove locality (match whole command)', (s) => s.replace('stages(stripped).some((st) => sh.test(st))', 'sh.test(stripped)')],
+    ['remove locality (match whole command)', (s) => s.replace('stages(stripped).some((st) => sh.test(st, stripped))', 'sh.test(stripped, stripped)')],
     ['drop shape worktree-not-ref', dropShape('worktree-not-ref')],
     ['drop shape truncation-is-not-population', dropShape('truncation-is-not-population')],
     ['drop shape count-from-search', dropShape('count-from-search')],
