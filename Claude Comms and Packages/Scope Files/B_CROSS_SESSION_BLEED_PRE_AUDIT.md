@@ -131,3 +131,33 @@ A7 said the defect survived 28 days (introduction 07-24 → fix 08-21). **The re
 | **P7** | unchanged, but its justification weakens: with the pin frequency withdrawn (A9) the census is prudence, not a measured need. **Still a gate — the mechanism is sound even with no observed instance** |
 
 **REVIEWER: claim-only (mode B) · "what other states of the world are consistent with these objects?" · 6 claims, 4 hits · re-derived y — A8/A9/A10/A11 all confirmed at the ref.**
+
+---
+
+# AUDIT r3 — READER LOOP ROUND 2 (object round). TWO CORRECTIONS TO MY CORRECTION, AND A BETTER FINDING THAN ANY OF MINE.
+
+## A12 — ⛔ THE 2026-08-21 BOUNDARY IS WRONG. THE CONTENT WAS **NEVER** FOREIGN — NOT BEFORE THE FIX EITHER.
+r2/A8 scoped the finding to *"since 2026-08-21"*. The reviewer tested **three PRE-fix artifacts** — `-old stash@{5}` (08-21 14:26, **18 minutes before** the fix), `-old stash@{6}` (08-18), `-analyst stash@{4}` (08-20, labelled *"FOREIGN: unexplained local variant"*) — and **all three are also exact origin blobs at hook-run time.**
+⇒ **13/13 artifacts, pre- AND post-fix, are byte-identical to what origin held at the moment the hook ran.** **What 2026-08-21 changed is ONLY whether the index was written too. It never changed whether the content was foreign, because it was never foreign.** My scoping implied the earlier instances were a different thing. They were not. **★ And byte-identity also proves no session's own work was ever mixed in — nothing was ever at risk in any of the 13.**
+
+## A13 — ⛔ "POST-FIX THE STAGED FORM CANNOT HAPPEN" IS FALSE, AND MY OWN STASH IS THE COUNTEREXAMPLE
+`-new stash@{0}` was created **2026-08-31, ten days after the fix**, and holds **9 STAGED paths** — because that clone was 755 behind, so the **on-disk** hook was still pre-fix when it ran. ⇒ **a stale clone reproduces the pre-fix index symptom INDEFINITELY after the fix date.** This is A4 restated, but my r2 wording contradicted it. **The staged form is not historical; it is available to any clone that has not started a session since 2026-08-21.**
+
+## A14 — ★★ THE MECHANISM I MISSED, AND IT IS THE BEST FINDING IN THE BATCH: **THE HOOK PERMANENTLY STOPS REFRESHING THE FILE IT REFRESHED.**
+Once a path is refreshed it is **dirty relative to HEAD** — and every subsequent run hits the `skippedDirty` branch (`:101`) and **leaves it alone forever.** ⇒ **the worktree holds origin-tip-AS-OF-THE-FIRST-REFRESH, not origin-tip-now, and it never advances again until the session pulls.**
+
+**MEASURED IN MY OWN CLONE:** `RUNNING_ISSUES.md` was refreshed **2026-08-16**, went dirty, and was therefore **correctly absent from the 08-31 refresh list** — it had been skipped as dirty for **14 days**, holding a blob from 08-17 while origin moved 755 commits.
+
+⛔⛔ **THIS IS THE HOOK DEFEATING ITS OWN PURPOSE.** It exists so no session runs stale rules. **Its own refresh marks the file dirty, and dirty means never refreshed again.** ⇒ **one refresh converts a file from auto-maintained into permanently frozen**, and the session is told the frozen copy is its own local work (A5). **The two findings compound: the hook freezes the file, then misattributes the freeze to you.**
+
+## PLAN — A14 CHANGES THE DELIVERABLE AGAIN
+| # | change |
+|---|---|
+| **P5** | **Now covers BOTH halves and is unambiguously the batch:** (a) tell the session a refreshed file is the hook's work, not its edit — **and (b) recognise hook-residue as refreshable rather than skipping it forever.** Residue = worktree matches SOME origin commit for that path and the index is clean ⇒ **refresh it again**, do not skip |
+| **P10** *(NEW)* | **Staleness ceiling:** the run record carries, per skipped path, how long it has been skipped and how far its content is behind origin. **Falls out of A14** — 14 days of silent staleness produced no signal at all |
+| **P2** | **Re-promoted from regression fence** — A13 shows the staged form is live for any clone that has not started since 08-21, which at five clones is not hypothetical |
+
+## ROUND RECORD
+`REVIEWER r1: claim-only (mode B) · 6 claims · 4 HITS (A8/A9/A10/A11) · re-derived y`
+`REVIEWER r2: object round · corrected-claim · 2 HITS (A12/A13) + 1 new mechanism (A14) · re-derived y`
+⚠️ **STOPPING AT TWO ROUNDS, AND SAYING SO RATHER THAN CLAIMING CONVERGENCE: r2's corrections are themselves UNREVIEWED.** A12/A13 are scoping fixes I can state precisely; **A14 is a NEW mechanism claim and has had NO independent round.** Per the loop's own rule the correction is exactly as likely to be wrong as what it replaced — **so A14 goes to Langston flagged as single-sourced, not as established.**
