@@ -314,7 +314,22 @@ describe('B-EXIT-PROVENANCE — the exit stamp cannot be satisfied by a non-prov
     const src = code(LPA);
     const call = src.indexOf('const krakenResult = await this.fetchFromKrakenRest(symbol);');
     expect(call).toBeGreaterThan(-1);
-    const block = src.slice(call, src.indexOf('}', src.indexOf('};', call)));
+    // ⛔ ROUND 3 FOUND THIS SLICE UNGUARDED **AND MISFIRING**, and the commit that claimed to
+    //    harden "both slices" missed it because there are THREE, not two. Its old bound was the
+    //    first `};` after the call — not anchored to the literal at all. A reader wrapped the
+    //    return in a behaviour-identical helper, which made the literal end `});` instead of
+    //    `};`; the slice then ran twenty lines past the block, swallowed the last-known-good
+    //    leg, and the fence went RED on a pure no-op. A fence that cries wolf on a refactor
+    //    trains people to ignore fences, which is worse than not having one.
+    // ⇒ bound it at the next section's first stable line of CODE, and assert that bound is
+    //    actually there — so the slice can never silently become "the rest of the file".
+    // ⛔ THE ANCHOR MUST BE CODE, NEVER A COMMENT. `code()` strips comments before any of this
+    //    runs, so a comment marker resolves to -1 — I picked one by reading the RAW file while
+    //    the test operates on the STRIPPED copy, and the new guard caught it immediately. That
+    //    is the guard earning its place on its first run.
+    const blockEnd = src.indexOf('if (this.useMockMode) {', call);
+    expect(blockEnd).toBeGreaterThan(call);
+    const block = src.slice(call, blockEnd);
     // the emission must be the unconditional literal
     expect(block).toContain("source: 'kraken_rest',");
     // ...and must NOT be computed from anything
@@ -344,17 +359,36 @@ describe('B-EXIT-PROVENANCE — the exit stamp cannot be satisfied by a non-prov
         observedAt: OLD_OBSERVED, cachedAt: Date.now(),
       });
     };
+    // ⛔ POSITIVE CONTROL, ADDED IN ROUND 3. `blockedCount` rises ONLY when check() returns
+    //    false, i.e. only when the rate-limited branch is actually taken. Without it, a test
+    //    whose sole assertion is `toBeNull()` passes identically when the limiter ALLOWS the
+    //    call and a real request to Kraken fails — proved empirically by a reader, which is
+    //    this file's own "a control that cannot fire is the defect it guards" warning landing
+    //    on the file itself.
     const callBlocked = async () => {
       restRateLimiter.check(SYM);            // arms the cooldown -> next call is blocked
+      const before = restRateLimiter.getStats().blockedCount;
       const a = livePricingAdapter as unknown as {
         fetchFromKrakenRest: (s: string) => Promise<{ price: number; observedAt: number; producer: string } | null>;
       };
-      return a.fetchFromKrakenRest(SYM);
+      const out = await a.fetchFromKrakenRest(SYM);
+      const took = restRateLimiter.getStats().blockedCount > before;
+      return { out, took };
     };
+
+    // ⛔ THE FIXTURE LEAKS INTO TWO MODULE-LEVEL SINGLETONS — a poisoned cache row and a live
+    //    60s cooldown. Vitest's DEFAULT isolation contains it, but `isolate: false` is a
+    //    routine CI speed-up and nothing in this repo pins the default. Clean up explicitly
+    //    rather than relying on a config value we do not control.
+    afterEach(() => {
+      (livePricingAdapter as unknown as { priceCache: Map<string, unknown> }).priceCache.delete(SYM);
+      restRateLimiter.clearSymbolCooldown(SYM);
+    });
 
     it('carries the ORIGINAL observedAt, never a fresh stamp', async () => {
       seed(123.45);
-      const r = await callBlocked();
+      const { out: r, took } = await callBlocked();
+      expect(took).toBe(true);              // positive control: the branch was ENTERED
       expect(r).not.toBeNull();
       expect(r!.observedAt).toBe(OLD_OBSERVED);           // the whole batch, in one assertion
       expect(r!.producer).toBe('kraken_rest_rate_limited_reserve');
@@ -365,7 +399,9 @@ describe('B-EXIT-PROVENANCE — the exit stamp cannot be satisfied by a non-prov
     it('returns null when the cached PRICE is absent (the row-vs-price regression)', async () => {
       seed(undefined);
       // Defeats the parenthesise-the-row evasion: this asserts the PREDICATE's effect, not its text.
-      expect(await callBlocked()).toBeNull();
+      const { out, took } = await callBlocked();
+      expect(took).toBe(true);              // ⛔ WITHOUT THIS, null proves nothing (see above)
+      expect(out).toBeNull();
     });
 
     it('the EMITTED QUOTE keeps source=kraken_rest — the actionability property, executed', async () => {
@@ -392,9 +428,59 @@ describe('B-EXIT-PROVENANCE — the exit stamp cannot be satisfied by a non-prov
       seed(0);
       // The original was `cached?.price ?? null`, which returns 0. A `> 0` test would return null
       // here, changing source, producer AND actionability. Equivalence cuts both ways.
-      const r = await callBlocked();
+      const { out: r, took } = await callBlocked();
+      expect(took).toBe(true);
       expect(r).not.toBeNull();
       expect(r!.price).toBe(0);
+    });
+  });
+
+  describe('#951 P1 END-TO-END - the age must survive the CACHE WRITE, which is what the ENGINE reads', () => {
+    // ⛔⛔ THE GAP ROUND 3 FOUND, AND IT IS THE MOST SERIOUS THING IN THIS BATCH'S TEST SET.
+    //    Every other fence here asserts on fetchFromKrakenRest or fetchLivePrice. THE ENGINE
+    //    CALLS NEITHER. It calls getPriceWithFallback (active-execution-engine.ts:1257) and
+    //    reads priceResult.observedAt (:1285) — and getPriceWithFallback returns CACHE ROWS,
+    //    which are written at exactly one place: live-pricing-adapter.ts:538,
+    //    `observedAt: quote.observedAt ?? Date.now()`.
+    // ⇒ changing that single line to `Date.now()` re-introduces the whole #743/#951 laundering
+    //    — every poll re-stamps the row, so the branch "carries the true age" of a value that
+    //    was itself just re-stamped — and a reader ran the FULL suite against that mutation:
+    //    2851 tests, all green. `quote.observedAt` is the only occurrence in the repo.
+    // ⇒ so this test seeds an OLD row, forces the rate-limited re-serve, drives the real
+    //    CACHE WRITER (fetchPrice), and then reads back through the engine's own entry point.
+    //    It is the only fence here that spans the write.
+    const SYM = 'ZZZTEST2/USD';
+    const OLD_OBSERVED = 1_600_000_000_000;
+
+    afterEach(() => {
+      (livePricingAdapter as unknown as { priceCache: Map<string, unknown> }).priceCache.delete(SYM);
+      restRateLimiter.clearSymbolCooldown(SYM);
+    });
+
+    it('a rate-limited re-serve reaches getPriceWithFallback carrying its ORIGINAL age', async () => {
+      const a = livePricingAdapter as unknown as {
+        priceCache: Map<string, unknown>;
+        fetchPrice: (s: string) => Promise<void>;
+        getPriceWithFallback: (s: string, ms?: number) => Promise<{ observedAt: number | null; producer: string; source: string } | null>;
+      };
+      a.priceCache.set(SYM, {
+        symbol: SYM, price: 555.5, timestamp: new Date(OLD_OBSERVED).toISOString(),
+        source: 'kraken_rest', producer: 'kraken_rest_poller',
+        observedAt: OLD_OBSERVED, cachedAt: Date.now(),
+      });
+
+      restRateLimiter.check(SYM);                 // arm -> the next REST ask is blocked
+      const before = restRateLimiter.getStats().blockedCount;
+      await a.fetchPrice(SYM);                    // the REAL cache writer, through :538
+      expect(restRateLimiter.getStats().blockedCount).toBeGreaterThan(before);  // positive control
+
+      const q = await a.getPriceWithFallback(SYM, 2000);   // exactly what the engine calls
+      expect(q).not.toBeNull();
+      // ⛔ THE ASSERTION THE ENGINE ACTUALLY DEPENDS ON. Mutate :538 to a bare Date.now() and
+      //    this is the only test in the repo that goes red.
+      expect(q!.observedAt).toBe(OLD_OBSERVED);
+      expect(q!.producer).toBe('kraken_rest_rate_limited_reserve');
+      expect(q!.source).toBe('kraken_rest');
     });
   });
 

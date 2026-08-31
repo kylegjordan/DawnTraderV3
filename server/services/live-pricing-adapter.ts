@@ -712,9 +712,22 @@ export class LivePricingAdapter {
         //    — and then relied on exactly that posture for `observedAt` in the same
         //    expression. Worse, this one is a NEW exposure: the old code emitted
         //    `Date.now()` here, so an absent origin time could not reach the exit stamp.
-        // ⇒ IF WE CANNOT STATE THE AGE HONESTLY, WE DO NOT SERVE THE PRICE. That is this
-        //    batch's whole premise applied to its own edge case, not a new policy.
-        return cached && cached.price != null && cached.observedAt != null
+        // ⛔ CORRECTED IN ROUND 3, AND THE PREVIOUS COMMENT HERE WAS OVERSTATED. It read
+        //    "IF WE CANNOT STATE THE AGE HONESTLY, WE DO NOT SERVE THE PRICE." That is NOT
+        //    what returning null does. Null falls through to the last-known-good leg at :620,
+        //    which re-serves the SAME row and emits `observedAt: cached.observedAt` UNGUARDED
+        //    at :631 — the same value, one leg down. What actually changes is the TAG: it is
+        //    emitted `source: 'last_known_good'`, which fails isKrakenVenueSource and is
+        //    therefore NON-ACTIONABLE. ⇒ the honest statement is "we do not serve it AS
+        //    ACTIONABLE VENUE DATA", not "we do not serve it."
+        // ⛔ AND THE PREDICATE WAS SELECTING ON THE WRONG PROPERTY. `!= null` blocks null and
+        //    undefined — which the type forbids and no writer produces — while ADMITTING NaN,
+        //    the one value that actually hurts: isPriceVenueQuiet(:293) computes
+        //    `ageMs > VENUE_QUIET_MS`, and `NaN > 60000` is FALSE, so a NaN age reads as
+        //    NOT QUIET, i.e. a price of unknown age passes as fresh venue data.
+        // ⇒ Number.isFinite covers null, undefined, NaN and Infinity in one, and is the
+        //    property actually wanted: an age we can do arithmetic on.
+        return cached && cached.price != null && Number.isFinite(cached.observedAt)
           ? { price: cached.price, observedAt: cached.observedAt, producer: 'kraken_rest_rate_limited_reserve' }
           : null;
       }
