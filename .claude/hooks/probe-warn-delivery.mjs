@@ -1,39 +1,48 @@
 #!/usr/bin/env node
-// TEMPORARY PROBE (CC-A, B-MEASURE-GATE leg 2 pre-audit, #623). Measures ONE thing: does a
-// PreToolUse hook's stderr reach the model when it exits 0 (warn, not block)?
+// TEMPORARY PROBE (CC-A, B-MEASURE-GATE leg 2, #623). Measures whether a PreToolUse hook's
+// stderr reaches the model, and — from r4 — whether the EXIT CODE is what gates it.
 //
-// r3 2026-08-31 — TWO DEFECTS FIXED, BOTH FOUND BY A FRESH READER AGAINST THIS FILE, AND THE
-// SECOND ONE IS RECORDED IN A SIBLING HOOK'S OWN HEADER AS HAVING ALREADY HAPPENED ONCE.
+// r4 2026-08-31, Langston condition D1. The r3 answer (matched, wrote, exited 0, nothing
+// surfaced) had two instrument gaps he would not let it rest on:
 //
-// (1) THE INSTRUMENT HAD NO LIVENESS SIGNAL. Its only output was the very thing being measured,
-//     so a silent run was equally consistent with "warn-only stderr does not reach the model"
-//     and "the hook never ran". An instrument whose silence cannot be told from its absence is
-//     not an instrument (rule 29(b), #453) — and it was sitting inside this batch's own gate.
+//   (1) `about_to_write_stderr` RECORDED INTENT, NOT COMPLETION. A lost flush and a
+//       non-delivering channel are indistinguishable from that field. ⇒ we now record
+//       BYTES ACTUALLY WRITTEN, from the return of a synchronous write to fd 2. Note that
+//       process.stderr.write() returns a BACKPRESSURE BOOLEAN, not a byte count — which is
+//       why it could never have closed this gap; writeSync returns the count.
 //
-// (2) r2's fix WAS NOT SUFFICIENT, and the reason is the whole point: it wrote its trace INSIDE
-//     the sentinel branch, so every failure that happens BEFORE the match — no stdin, invalid
-//     JSON, or the payload arriving under a spelling this file does not read — still produced
-//     no row and no stderr, i.e. exactly the ambiguity (1) was meant to remove, one step earlier.
-//     guard-push-tsc-baseline.mjs:63-69 records that failure happening for real: its first
-//     revision read `process.env.CLAUDE_TOOL_INPUT`, which is never set, so a guard documented
-//     fail-CLOSED was silently fail-OPEN on every push — "an inert hook and a satisfied hook
-//     look identical from outside." And measured at the ref, the two working guards accept BOTH
-//     `tool_input` and `toolInput`; this probe accepted only the first.
+//   (2) THE CONTROL WAS NOT CONTROLLED. The exit-2 deliveries that made the comparison came
+//       from OTHER hooks — guard-governed-read and guard-push-tsc-baseline — i.e. different
+//       files and different write call sites. So the pair varied exit code AND writer, and
+//       isolated neither. ⇒ this file now carries BOTH arms itself: one sentinel exits 0,
+//       the other exits 2, and they share ONE write call site (`emit()` below). Everything
+//       is held constant except the exit code, which is the variable under test.
 //
-// ⇒ SO: the row is written UNCONDITIONALLY, on every invocation, BEFORE any decision — and it
-//   records what was actually parsed. Absence of a row now means one thing only: the hook did
-//   not run. Both spellings are accepted, mirroring the guards that work.
-// FAIL-OPEN throughout: any error exits 0. This hook must never block a session.
-import { readFileSync, appendFileSync } from 'node:fs';
+// ⚠️ THE EXIT-2 ARM GENUINELY BLOCKS ITS COMMAND. That is the point — it is what a delivering
+// hook does — and it fires only on its own distinctive sentinel, so it is inert otherwise.
+// FAIL-OPEN otherwise: any error exits 0. Sink rows are written unconditionally, before any
+// decision, so an absent row means one thing only: the hook did not run.
+import { readFileSync, appendFileSync, writeSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 
 const SINK = join(homedir(), '.claude', 'probe-warn-delivery.jsonl');
+const SENTINEL_WARN = 'CCA_HOOK_PROBE_9f3';   // arm A: write, then exit 0
+const SENTINEL_BLOCK = 'CCA_HOOK_PROBE_2e7';  // arm B: write, then exit 2 — same call site
 
 function note(row) {
   try {
     appendFileSync(SINK, JSON.stringify({ ts: new Date().toISOString(), ...row }) + '\n', 'utf8');
   } catch { /* a sink we cannot write must never block the session */ }
+}
+
+// THE ONE WRITE CALL SITE. Both arms go through here; only the caller's exit code differs.
+function emit(text) {
+  try {
+    return writeSync(2, Buffer.from(text, 'utf8')); // returns bytes actually written
+  } catch (e) {
+    return { error: String(e && e.message) };
+  }
 }
 
 let raw = '';
@@ -44,23 +53,26 @@ let payload;
 try { payload = JSON.parse(raw); }
 catch (e) { note({ stage: 'parse_failed', raw_bytes: raw.length, error: String(e && e.message) }); process.exit(0); }
 
-// Both spellings, as the two working guards do.
 const input = payload.tool_input || payload.toolInput || {};
 const cmd = input.command || '';
-const matched = cmd.includes('CCA_HOOK_PROBE_9f3');
+const arm = cmd.includes(SENTINEL_BLOCK) ? 'block_exit2'
+          : cmd.includes(SENTINEL_WARN) ? 'warn_exit0'
+          : null;
 
-note({
+const base = {
   stage: 'ran',
   tool: payload.tool_name || payload.toolName || null,
-  // which spelling actually carried the payload — the thing that was never checked
   spelling: payload.tool_input ? 'tool_input' : (payload.toolInput ? 'toolInput' : 'neither'),
   command_present: Boolean(cmd),
-  matched_sentinel: matched,
-  about_to_write_stderr: matched,
-  exit_code: 0,
-});
+  arm,
+};
 
-if (matched) {
-  process.stderr.write('PROBE-WARN-DELIVERY: this text was written to stderr by a PreToolUse hook that then exited 0.\n');
-}
-process.exit(0);
+if (!arm) { note({ ...base, exit_code: 0 }); process.exit(0); }
+
+const text = `PROBE-WARN-DELIVERY [${arm}]: written to stderr by a PreToolUse hook at one shared call site; only the exit code differs between arms.\n`;
+const bytes_written = emit(text);
+const exit_code = arm === 'block_exit2' ? 2 : 0;
+
+// Recorded AFTER the write returns, so this is completion, not intent.
+note({ ...base, bytes_intended: Buffer.byteLength(text, 'utf8'), bytes_written, exit_code });
+process.exit(exit_code);

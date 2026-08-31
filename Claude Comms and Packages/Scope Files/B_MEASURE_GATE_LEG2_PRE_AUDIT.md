@@ -264,7 +264,7 @@ I wrote the trace **INSIDE the sentinel branch**, so every failure that happens 
 
 | doc | ✅ DECIDED NOW |
 |---|---|
-| **`SYSTEM_IMPACT_MAP.md`** | ✅ **DISCHARGEABLE FOR REAL, AND IT IS NOT PADDING.** The SIM opens with the **Cross-Cutting Runtime State, Singletons & Liveness Registry**, and **a hook that runs in every session on every turn in all three clones is exactly that.** The layer is **absent from it today** and has been through ten hooks. ⇒ **the hook layer gets a registry entry: what fires, on which event, in which clones, fail-open or blocking, and its liveness read-site.** |
+| **`SYSTEM_IMPACT_MAP.md`** | ✅ **DISCHARGEABLE FOR REAL, AND IT IS NOT PADDING — BUT `[r5]` THE JUSTIFICATION IS REWRITTEN, BECAUSE LANGSTON CAUGHT IT RESTING ON A PHRASE THIS DOCUMENT STRIKES AS UNCITED FOUR PARAGRAPHS EARLIER.** I wrote *"a hook running in every session in all three clones"* here, and §0 strikes *"live in all three clones"* as unmeasured. **Two readings of the same fact, in one document, one of them retracted.** ★ **THE ENTRY NOW RESTS ON THE TEN-HOOK LIVENESS GAP, WHICH STANDS ALONE AND NEEDS NO REACH CLAIM: the SIM opens with the Cross-Cutting Runtime State, Singletons & Liveness Registry, and a layer of TEN executing hooks is absent from it entirely.** ✅ **AND THE REACH IS NOW MEASURED RATHER THAN DROPPED, because he was also right that the number was wrong: FOUR clones on this laptop each carry all ten hooks and a `settings.local.json` (`-old`, `-new`, `-analyst`, and the spare `C:\DawnTraderV3`), and the roster binds FOUR sessions (CC-A, CC-B, CC-C, CC-INFRA).** ⚠️ **Stated as two separate counts, NOT collapsed: clones are not sessions, and I have no read-site for how many sessions are running at any moment.** ⇒ **the registry entry records: what fires, on which event, fail-open or blocking, its liveness read-site, and the clone count with its date.** |
 | **`SYSTEM_MANUAL.md`** | ⛔⛔ **BLOCKED — NOT `N/A`, AND I AM NAMING IT RATHER THAN TICKING IT.** Its scope is architecture, strategy logic, regime detection, filter design, the signal pipeline and the maths. **This batch touches none of them and inventing a chapter to discharge a row would be padding a governance document to satisfy a matrix, which is worse than the gap.** |
 
 ★★ **THE MATRIX HAS NO CLASS FOR *"AFFECTS EVERY SESSION’S TOOLING, TOUCHES ZERO TRADING ARCHITECTURE"* — and it has no `BLOCKED` state either, only `REQUIRED` and `JUDGED`.** ⇒ **a required row that genuinely cannot be discharged takes a ✅ it has not earned. THAT IS HOW A FALSE TICK GETS WRITTEN, and I wrote two of them on `B-DISAGREEMENT-FINDER` three days after building the ledger format.**
@@ -315,6 +315,54 @@ The arming commit said it in advance: *"If it does not, 'warn-mode hook' is not 
 ⚠️ **AND THAT CHANNEL IS ITSELF UNMEASURED: `additionalContext` appears ZERO times across `.claude/hooks/` at the ref** (§9′). ⇒ **it takes the SAME disposition as the two new event surfaces (§8): A NO-OP SHIPS FIRST AND ITS DELIVERY IS OBSERVED BEFORE ANY OBJECTIVE RESTS ON IT.** ⛔ **I am not replacing a measured dead end with an assumed live one — that is the trade this whole batch exists to refuse.**
 
 ★★ **THE KEEPER, AND IT IS THE BATCH IN ONE LINE: THE QUESTION WAS ANSWERABLE IN UNDER A MINUTE AND SAT OPEN FOR 24 DAYS, BECAUSE THE INSTRUMENT COULD NOT TELL ITS OWN SILENCE FROM ITS OWN ABSENCE.** **Adding six fields to one JSON row converted an unfalsifiable null into a decisive answer.** ⇒ **that is OBJ-5’s entire thesis, demonstrated on this batch’s own gate before a single objective was built.**
+
+---
+
+## 17. ✅✅ `[r5]` **LANGSTON’S D1 AND D2, RUN BEFORE STEP 3. ONE UPGRADES THE ANSWER TO A CONTROLLED EXPERIMENT; THE OTHER KILLS THE TEST HE PROPOSED, AND THE DOCUMENT SAYS SO.**
+
+### ✅ D1 — BOTH INSTRUMENT GAPS CLOSED, AND THE RESULT IS STRONGER THAN §16’S
+
+**His two objections, taken as ruled:** `about_to_write_stderr` recorded **INTENT, not completion** — a lost flush and a non-delivering channel are indistinguishable from it; and **the control was not controlled**, because the exit-2 deliveries came from OTHER hooks, so the pair varied **exit code AND writer** and isolated neither.
+
+★ **AND THE FIRST GAP HAD A CAUSE WORTH RECORDING: `process.stderr.write()` RETURNS A BACKPRESSURE BOOLEAN, NOT A BYTE COUNT.** It could never have closed that gap. `writeSync(2, buf)` returns the count. **The field looked like evidence and was structurally incapable of being any** — the same class as everything else in this batch.
+
+✅✅ **THE PROBE NOW CARRIES BOTH ARMS ITSELF, THROUGH ONE SHARED `emit()` CALL SITE. Same file, same fd, same buffer, 2.5 seconds apart. THE EXIT CODE IS THE ONLY VARIABLE.**
+
+| arm | bytes intended | **bytes WRITTEN (post-call, from the return)** | exit | did the text reach the model? |
+|---|---|---|---|---|
+| `warn_exit0` | 139 | **139** | **0** | ⛔ **NO — the tool result carried only the command’s own output** |
+| `block_exit2` | 140 | **140** | **2** | ✅ **YES — surfaced VERBATIM, quoted back in the tool result** |
+
+⇒ ✅✅ **THE WRITE COMPLETED IN BOTH CASES. IT IS NOT A LOST FLUSH. THE BYTES ARE ACCEPTED AND DISCARDED.**
+⇒ ⛔⛔ **THE EXIT CODE GATES DELIVERY.**
+
+★ **This is stronger than the warrant Langston offered me and stronger than the one I offered him.** His was *"no objective may rest on a channel with zero demonstrated deliveries"* — sound, and needs no n. **What the two-arm run adds: the channel is not merely undemonstrated, it demonstrably ACCEPTS THE BYTES AND DROPS THEM**, with the writer held constant.
+
+⛔⛔ **D1’S STAMP, AND IT IS BINDING ON EVERY LATER CITATION OF THIS RESULT:**
+> **POPULATION: n=2 sentinel invocations, ONE session, ONE harness build (desktop 2.1.219), ONE hook file, event `PreToolUse`, matcher `Bash`.**
+> ⛔ **THIS MAY NOT BE CITED AS "stderr NEVER DELIVERS ON EXIT 0."** It licenses exactly one inference: **no objective in this batch may rest on warn-only stderr.** ★ **Langston’s reason for the prohibition, and he is right that it is the operative risk: that sentence is exactly the shape that gets re-asserted in six months from an always-loaded file** — which is `#978` shape A, the thing the next batch in the queue exists to catch.
+
+### ⛔⛔ D2 — **THE TEST CANNOT DISCRIMINATE, AND NEITHER OF THE TWO BRANCHES HE OFFERED IS AVAILABLE. THE INSTRUMENT DID NOT EXIST DURING THE PERIOD IN QUESTION.**
+
+**His test:** enumerate the sink’s full date range, inode and birth time — *"rows spanning 08-07→08-31 ⇒ the probe was live all along and Finding C withdraws; only today’s rows ⇒ Finding C is MADE, on a far stronger object."*
+
+**MEASURED:** `~/.claude/probe-warn-delivery.jsonl` · inode `9007199256282573` · **creation `2026-08-31T12:44:49.751Z`** · 76 rows at the time of the test · **first row `2026-08-31T12:44:49.750Z`** · **ONE distinct day.**
+
+⛔⛔ **THE BIRTH TIME EQUALS THE FIRST ROW TO THE MILLISECOND, BECAUSE I CREATED THE SINK TODAY.** §7 is the record of it: **the probe as committed on 08-07 had NO SINK AT ALL** — its only output was stderr. ⇒ **"only today’s rows" is not evidence that the hook was dormant; it is evidence that THE RECORDER WAS BORN TODAY.**
+
+★★ **SO THE "FINDING C IS MADE" BRANCH IS A FALSE POSITIVE, AND I AM DECLINING IT RATHER THAN BANKING IT.** It was offered by the reviewer, it favours my own finding, and **it rests on an instrument whose reach does not cover the interval** — which is rule 29(b) exactly, arriving as a gift. ⛔ **A HIT IS A LEAD, INCLUDING WHEN THE HIT IS IN MY FAVOUR.**
+
+### ✅ AND FINDING C IS NOW WITHDRAWN — §9.4 DISPOSITION 5, CARRYING THE CITATION THAT DISSOLVES IT
+
+**Two independent reasons, and the second is the one that settles it:**
+1. **No object can settle it.** `settings.local.json` history is enumerated (`3fd7ed119` adds the registration, prior touch `4610466c8` on 07-24), which kills the committed-state question; the residual is a **local uncommitted edit, which git cannot see and the sink cannot see either.**
+2. ★★ **AND §16 MAKES THE JULY OBSERVATION OVER-DETERMINED.** The July session’s *"No warning appeared"* is now **fully explained by the channel alone** — warn-only stderr does not deliver, **so nothing would have appeared WHETHER OR NOT the probe was wired.** ⇒ **the wiring question is not merely unanswered; the observation that raised it carries NO INFORMATION about it, and the design no longer depends on the answer.**
+
+✅ **WHAT SURVIVES, INDEPENDENT OF ALL OF IT, AND IT IS THE PART WORTH KEEPING:** §4.1 asserted a live state — *"wired LOCALLY"* — **with no read-site.** ★ **That is `#978` shape A, and it stands on the SENTENCE, not on the state: the defect is the missing read-site, NOT the truth value.** ⇒ **it would have been the same defect had the assertion been true, which is exactly why the class is worth catching.**
+
+### ✅ D4 — RATIFIED AS A STANDING FORM, IN HIS WORDS
+> **BOTH SIDES OF A COMPARISON MUST COME FROM ONE SURFACE, AND EACH SIDE NAMES ITS SURFACE.**
+★ **Better than *"measure at the ref"*, and it generalises past CRLF.** Homed on `#751` / `B-EOL-NORMALISE` and offered to `MISTAKE_PATTERNS.md` as the mechanism line for `wrong-object`.
 
 ---
 
