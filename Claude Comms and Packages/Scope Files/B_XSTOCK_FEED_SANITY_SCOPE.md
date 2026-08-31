@@ -337,3 +337,36 @@ With the mechanism known, two predicates looked obvious. **Neither works, and I 
 - ✅ **`F-G-2`'s xStock legs are unblocked** - it can exclude on a mechanism-based predicate instead of a time proxy. ⚠️ **Langston's both-populations condition should still stand** until the threshold is pre-registered.
 - ⛔ **`§10.2`'s claim that the identifier requires `#911` IS WITHDRAWN.** `#911` remains valuable on its own merits; it is not a prerequisite for this.
 
+---
+
+## 13. ⭐⭐ KYLE'S DECISION, 2026-08-31 — Q3 IS ANSWERED, AND `#911`'s BLOCKER HAS LIFTED
+
+> **KYLE, 2026-08-31:** *"xStocks can trade in all four sessions, but there needs to be a way of handling the 8:15 PM price anomaly that happens every night."*
+
+✅ **THIS ANSWERS `XSTOCK_PRICING_DECISION_PATH.md` Q3 — *"may the exit path act during every session?"* — YES.** ⛔ **A session blackout is DECIDED AGAINST and may not be proposed.**
+
+⛔⛔ **BUT §11 AND §12 RESHAPE WHAT HIS DECISION HAS TO COVER, AND HE SHOULD BE TOLD PLAINLY: THE STUB BOOK IS NOT AN 8:15 EVENT.** **ZERO stub books in 8,172,799 snaps during US regular trading; they appear ONLY while the underlying is shut**, across **~19 hours of every weekday and all weekend**. `00:15` is where the CLOSES cluster (82% of the book goes stub in that one minute) — **it is the worst instant of a condition that runs almost all day.**
+⇒ ★ **So "handle the 8:15 anomaly" cannot be implemented as an 8:15 rule.** Whatever is chosen governs the entire underlying-shut period. **§11.2 already recorded this: *"refuse the exit" for that whole window is a different proposition from refusing it for one minute."***
+
+### 13.1 ✅ `OBJ-2`'s BLOCKER HAS MATERIALLY LIFTED — RE-MEASURED 2026-08-31
+
+§10.2 recorded OBJ-2's identifier as `exit_ticker_bid`/`exit_ticker_ask` at the decision instant, **blocked on `#911` reaching coverage**, then cited *"6 xStock rows out of 232."*
+⛔ **THAT FIGURE POOLED TWO ERAS AND UNDERSTATES TODAY'S STATE.** Split at the `B-EXIT-PROVENANCE` deploy (`2026-08-26 21:23Z`):
+| era | xStock closes | carry `exit_ticker_bid` | |
+|---|---|---|---|
+| pre-deploy | 234 | **0** | 0.0% |
+| **post-deploy** | **11** | ⭐ **8** | **72.7%** |
+⇒ **the instrument is live and populating.** ⚠️ **n=11 is small and 3 of 11 still lack it — establish WHY those three are unstamped before treating the identifier as available.**
+
+### 13.2 ⭐ A HARM CUT THAT SURVIVES THE SCHEDULING-ARTIFACT OBJECTION
+
+Everything in §10-§12 keys on the feed. This keys on the **trade outcome**, which no scheduler can fake:
+| cohort | n | median (exit − stop)/stop | exits **above** their own stop |
+|---|---|---|---|
+| **`stop_hit` inside `00:15`** | **18** | ⛔ **+4%** (max +25.9%) | ⛔ **16 of 18 = 89%** |
+| `stop_hit` outside `00:15` | 48 | ✅ **−0.004%** | 24 of 48 = 50% |
+⇒ **A forced sale must fill at or worse than its stop. Outside the window it does, to four decimals. Inside it, 89% book a price ABOVE the stop they were cut at.** ★ **This is §9.2's mechanism arriving in the P&L: the stub-dragged mid fires the stop, and the booking happens at a real price.**
+
+### 13.3 ⛔ PROCESS — A REDISCOVERY WAS OPENED AND WITHDRAWN THE SAME DAY
+`B-XSTOCK-SESSION-TRANSITION` was scoped 2026-08-31 against this same phenomenon and taken through **two reader rounds** before Kyle caught it: *"the answer was already determined."* **WITHDRAWN** — see that file for the full error record.
+★★ **THE LESSON, AND IT IS ABOUT THE LEDGER SEARCH ITSELF: I ran `§9.5(b-ii)`, it returned `#943`, and I read the ISSUE while never opening THE SCOPE FILE OF THE BATCH I WAS RE-SCOPING.** ⇒ **the search must ask "has this been WORKED", not "does an issue exist" — a batch with a 35 KB Step-1 scope reads identically to a bare issue number if you only ever grep the ledger.**
