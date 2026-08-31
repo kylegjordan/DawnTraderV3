@@ -3758,6 +3758,18 @@ The COMMITTED copy carries the five **pre-Phase-14 regime keys** (`BULL_STABLE`/
 
 ⇔ `25.c` (the rule this class produced) · `#702` (number blocks — a DIFFERENT failure in the same file) · `MISTAKE_PATTERNS` `wrong-object` (a matching name is not a matching thing).
 
+✅✅ **OWNER TRANSFERRED CC-A → CC-B, 2026-08-31, KYLE-DIRECTED. AND THE HANDOVER IS EVIDENCE-DRIVEN, NOT LOAD-BALANCING.**
+
+★ **CC-B HOLDS THE LARGER HALF OF THE DATASET AND PRODUCED IT ON ITS FIRST TURN BACK.** Woken 2026-08-31 after 15 days dormant at a **755-commit gap**, its `git status` held **NINE foreign files, NOT ONE of them its own** — all traced to their source commits and **preserved in a labelled stash.** ⇒ **CC-A: 3 files at a 43-commit gap. CC-B: 9 at 755.** ⚠️ **Two points is a suggestion, NOT a curve — do not report it as one.**
+⛔ **AND CC-A IS COMPROMISED AS THE INVESTIGATOR: it has been editing this hook all week and THREE OF THE INSTANCES ARE ITS OWN.** Same reasoning as every review — the reader who has not touched it is the better reader.
+
+⛔⛔ **THE MECHANISM IS ALREADY HALF-DOCUMENTED — IN THE HOOK’S OWN COMMENTS, AND THAT NARROWS THE BATCH SHARPLY.** `.claude/hooks/fresh-rules.mjs:113-125` states it: **`git checkout <ref> -- <path>` WRITES THE INDEX AS WELL AS THE WORKING TREE** — documented git behaviour, not a git bug — which had the hook **silently staging every file it refreshed**, with another session’s entries *"one `git commit` away from being published."*
+✅ **AND A PARTIAL FIX IS ALREADY IN PLACE:** `:125` runs `git reset --quiet -- <path>` after each checkout, clearing the index.
+⇒ ★★ **SO THE STAGING HALF IS FIXED AND THE WORKING-TREE HALF IS NOT** — `reset` unstages but leaves the file MODIFIED ON DISK. **That is exactly what both sessions observed: ` M` entries, not staged ones.**
+⇒ **THE OPEN QUESTION IS THEREFORE NOT *"why does it stage things"* BUT *"why does it write files into the working tree the session never asked for, and should it write anything at all when the session is behind?"***
+⚠️ **CC-A read `:113-125` TODAY AND NOTHING ELSE OF THE 164 LINES. Treat the above as a LEAD, not a finding.**
+
+⛔ **STANDING CONDITION CARRIED INTO THE HANDOVER: KEEP THE STASH UNTIL THE CAUSE IS ESTABLISHED, NOT UNTIL THE CONTENT IS PROVEN SAFE.** ★ **We lost this once: a session proved nothing was missing, dropped the stash, and destroyed the only artifact showing HOW it got there. Recovering the work and diagnosing the incident are two different jobs.**
 ### #752 OPEN 2026-08-27 (CC-A, Kyle-directed; Langston condition on `B-GOV-REPORTING` edit 6) — ★★ **§9.4 HAD THREE DECISION-GATES IN FRONT OF ITS OWN TRIGGER, SO THE RULE COULD NOT FIRE UNTIL THE DECIDING HAD ALREADY HAPPENED.**
 
 **THE PRIOR WORDING, verbatim:** *"when CC and/or Langston surface an issue **worth fixing** and **agree it should be fixed**, it MUST be given a home **at the moment of agreement**."* ⇒ worth-fixing, agree-it-should-be-fixed, and a moment-of-agreement — **three gates, all of them decisions, all upstream of the trigger.** Kyle: *"the decision on what to do with the issue should NOT be the trigger for the rule to fire."*
