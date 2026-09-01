@@ -83,6 +83,8 @@ function AgeTable({
   ages,
   caption,
   denominator,
+  total,
+  totalLabel,
 }: {
   title: string;
   icon: React.ReactNode;
@@ -90,6 +92,8 @@ function AgeTable({
   ages: string[];
   caption: string;
   denominator: number;
+  total: number;
+  totalLabel: string;
 }) {
   return (
     <div className="rounded-lg border border-border bg-card">
@@ -119,6 +123,20 @@ function AgeTable({
                 </tr>
               );
             })}
+            {/* ⛔ THE TOTAL IS PASSED IN, NEVER SUMMED FROM THE COLUMN. The
+                survival column is CUMULATIVE -- a token alive at 30 days is
+                also counted at 3 and 7 -- so adding it up would count the same
+                token several times and print a number larger than the study.
+                The deaths column is mutually exclusive (a token dies once, at
+                one checkpoint) and its total IS the sum. Two different
+                columns, two different meanings, so the label says which. */}
+            <tr className="border-t-2 border-border bg-muted/30 font-medium">
+              <td className="px-4 py-2">{totalLabel}</td>
+              <td className="px-4 py-2 text-right tabular-nums">{total.toLocaleString()}</td>
+              <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">
+                {denominator > 0 ? `${((total / denominator) * 100).toFixed(2)}%` : '—'}
+              </td>
+            </tr>
           </tbody>
         </table>
       </div>
@@ -237,7 +255,9 @@ export default function TokenWatchPage() {
           counts={s.alive.by_age}
           ages={s.display_ages}
           denominator={tracked}
-          caption="Cumulative: a token counted at 30 days is also counted at 3 and 7."
+          total={s.alive.total}
+          totalLabel="Alive now (distinct tokens)"
+          caption="Cumulative: a token counted at 30 days is also counted at 3 and 7 — so the total is the number of DISTINCT tokens not observed dead, not the sum of the column above."
         />
         <AgeTable
           title="Died — where they died"
@@ -245,6 +265,8 @@ export default function TokenWatchPage() {
           counts={s.died.by_age_at_death}
           ages={deathAges}
           denominator={tracked}
+          total={s.died.total}
+          totalLabel="Died in total"
           caption={s.died.note}
         />
       </section>

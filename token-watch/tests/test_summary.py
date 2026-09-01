@@ -239,6 +239,49 @@ birth("EXTRA", NOW - timedelta(days=1), True)
 check("POSITIVE CONTROL — but a NEW birth still lands",
       summary.build(NOW)["launches"]["total"] == before + 1)
 
+print("\nBLOCK: THE SURVIVAL TABLE OFFERS EVERY AGE WE OBSERVE")
+# THE DEFECT (Kyle, 2026-09-01): the survival table offered 3d and up while
+#   the DEATHS table offered 1h/6h/24h. On a study one day old the deaths
+#   table was full and the survival table was four zeros -- both numbers
+#   correct, and the page reading as broken, because the two tables answered
+#   at different ages.
+# The original rule STANDS and is asserted below: the display may only offer
+#   ages the grid actually observes. 1h/6h/24h are observed, so offering them
+#   satisfies that rule rather than bending it.
+from config import GRID_LABELS as _GL, DISPLAY_AGES as _DA  # noqa: E402
+check("the survival table offers every age the grid observes",
+      list(_DA) == list(_GL), "%s vs %s" % (_DA, _GL))
+check("...and offers NO age the grid does not observe",
+      set(_DA) <= set(_GL), str(set(_DA) - set(_GL)))
+
+reset()
+# Two tokens old enough for the 1h column, one of them dead.
+birth("ALIVE1", NOW - timedelta(hours=5), True)
+birth("DEAD1", NOW - timedelta(hours=5), True)
+store.record_death("DEAD1", NOW - timedelta(hours=4), "faded", "1h", {})
+_p = summary.build(NOW)
+check("★ the 1h survival column is POPULATED, not structurally zero",
+      _p["alive"]["by_age"]["1h"] == 1, _p["alive"]["by_age"])
+check("...and the dead one is not counted alive at it",
+      _p["alive"]["by_age"]["1h"] != 2, _p["alive"]["by_age"])
+# ⛔ POSITIVE CONTROL -- a column too deep for the cohort must still be zero,
+#    or "populated" would just mean the loop stopped filtering by age.
+check("POSITIVE CONTROL: an age the cohort has not reached is still zero",
+      _p["alive"]["by_age"]["90d"] == 0, _p["alive"]["by_age"])
+
+# ⛔ THE TOTALS THE PAGE SHOWS. The survival column is CUMULATIVE, so its
+#    total must be the DISTINCT count and never the column sum -- summing it
+#    would count one token at several ages and print more tokens than exist.
+_col = sum(_p["alive"]["by_age"][a] for a in _p["display_ages"])
+check("the alive TOTAL is the distinct count, not the column sum",
+      _p["alive"]["total"] == 1 and _col >= _p["alive"]["total"],
+      "total=%s column_sum=%s" % (_p["alive"]["total"], _col))
+# The deaths column IS mutually exclusive -- a token dies once, at one
+#    checkpoint -- so there its total genuinely equals the sum.
+_dcol = sum(_p["died"]["by_age_at_death"].values())
+check("the died TOTAL equals its column sum, because deaths are exclusive",
+      _p["died"]["total"] == _dcol, "total=%s sum=%s" % (_p["died"]["total"], _dcol))
+
 print("\n%d passed, %d failed" % (PASS, FAIL))
 shutil.rmtree(ROOT, ignore_errors=True)
 sys.exit(1 if FAIL else 0)

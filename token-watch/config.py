@@ -72,7 +72,17 @@ assert min(GRID) >= timedelta(hours=1), (
 # actually observes. Kyle's original request included 5/15/45/60/75d; those
 # are NOT here because we do not look on those days and a column we cannot
 # fill is worse than a column we did not offer.
-DISPLAY_AGES = ("3d", "7d", "30d", "90d")
+# ⛔ THE SURVIVAL TABLE NOW OFFERS EVERY AGE WE OBSERVE (Kyle, 2026-09-01).
+#    It offered 3d and up, while the DEATHS table offers 1h/6h/24h -- so on
+#    a study one day old the deaths table was full and the survival table
+#    was four zeros. Both numbers were correct and the page read as broken,
+#    because the two tables were answering at different ages.
+# ★ THIS DOES NOT WEAKEN THE ORIGINAL RULE, WHICH STANDS: the display may
+#   only offer ages the grid ACTUALLY OBSERVES. Kyle struck 5d/15d/45d/60d/
+#   75d for exactly that reason -- a column we cannot fill is worse than a
+#   column we did not offer. 1h, 6h and 24h ARE observed, so offering them
+#   satisfies the rule rather than bending it.
+DISPLAY_AGES = GRID_LABELS
 assert set(DISPLAY_AGES) <= set(GRID_LABELS), "display cannot offer an unobserved age"
 
 # ─────────────────────────────────────────────────────────────────────────────
